@@ -146,11 +146,32 @@ export type TForm<T extends TProperties = TProperties> = TUnsafe<
 	ElysiaFormData<TObject<T>['static']>
 >
 
-export type ElysiaTypeCustomError =
-	| string
-	| boolean
-	| number
-	| ElysiaTypeCustomErrorCallback
+/**
+ * Augment this interface to extend allowed values for SchemaOptions['error'].
+ * Defining custom string templates will add autocomplete while allowing any arbitrary string, number, etc.
+ *
+ * The names of keys only used to map to the values, unless you globally augment a specific key.
+ *
+ * ```ts
+ * declare module 'elysia/type-system/types' {
+ *   interface ElysiaTypeCustomErrors {
+ *     myPlugin: 'my.plugin.error' | `my.plugin.${string}`
+ *   }
+ * }
+ *
+ * const schema = t.String({ error: 'my.plugin.hello' })
+ * ```
+ */
+export interface ElysiaTypeCustomErrors {
+  /**
+   * The default error types that the library supports.
+   *
+   * `string & {}` `number & {}` are used to allow string templates and numbers respectively.
+   */
+  default: (string & {}) | boolean | (number & {}) | ElysiaTypeCustomErrorCallback
+}
+
+export type ElysiaTypeCustomError = ElysiaTypeCustomErrors[keyof ElysiaTypeCustomErrors]
 
 export type ElysiaTypeCustomErrorCallback = (
 	error: {
