@@ -988,25 +988,30 @@ type ExtractOnlyResponseFromMacro<A> =
 						}
 				: {}
 
-export type ExtractAllResponseFromMacro<A> =
+type MergeResponseStatus<A> = {
+	[status in keyof UnionToIntersect<
+		// Must be using generic to separate literal from Box<T>
+		A extends ElysiaCustomStatusResponse<any, any, infer Status>
+			? { [A in Status]: 1 }
+			: never
+		// @ts-ignore A is checked in key computation
+	>]: Extract<A, { code: status }>['response']
+}
+
+type MergeAllStatus<T> = {
+	[K in T extends any ? keyof T : never]: T extends Record<K, infer V>
+		? V
+		: never
+}
+
+type ExtractAllResponseFromMacro<A> =
 	IsNever<A> extends true
 		? {}
 		: {
 				// Merge all status to single object first
-				return: UnionToIntersect<
-					// Must be using generic to separate literal from Box<T>
-					A extends ElysiaCustomStatusResponse<any, any, infer Status>
-						? { [A in Status]: 1 }
-						: never
-				> extends infer B
-					? // Compute each one individually
-						{
-							// @ts-ignore A is checked in B computation
-							[status in keyof B]: Extract<
-								A,
-								{ code: status }
-							>['response']
-						} & (Exclude<
+				return: Prettify<
+					MergeResponseStatus<A> &
+						(Exclude<
 							A,
 							AnyElysiaCustomStatusResponse
 						> extends infer A
@@ -1023,93 +1028,124 @@ export type ExtractAllResponseFromMacro<A> =
 													200: A
 												}
 							: {})
-					: Exclude<A, AnyElysiaCustomStatusResponse> extends infer A
-						? IsAny<A> extends true
-							? {}
-							: IsNever<A> extends true
-								? {}
-								: // FunctionArrayReturnType
-									NonNullable<void> extends A
-									? {}
-									: undefined extends A
-										? {}
-										: {
-												200: A
-											}
-						: {}
+				>
 			}
 
-// There's only resolve that can add new properties to Context
+type FlattenMacroResponse<T> = T extends object
+	? '_' extends keyof T
+		? MergeFlattenMacroResponse<
+				Omit<T, '_'>,
+				FlattenMacroResponse<MergeAllStatus<T['_']>>
+			>
+		: T
+	: T
+
+type MergeFlattenMacroResponse<A, B> = {
+	[K in keyof A | keyof B]: K extends keyof A
+		? K extends keyof B
+			? A[K] | B[K]
+			: A[K]
+		: K extends keyof B
+			? B[K]
+			: never
+}
+type UnionMacroContext<A> = UnionToIntersect<{
+	[K in Exclude<keyof A, 'return'>]: A[K]
+}> & {
+	// @ts-ignore Allow recursive Macro.return without collapse into
+	return: { _: A['return'] }
+}
+
 export type MacroToContext<
 	in out MacroFn extends Macro = {},
 	in out SelectedMacro extends BaseMacro = {},
 	in out Definitions extends DefinitionBase['typebox'] = {},
 	in out R extends 1[] = []
 > = Prettify<
-	{} extends SelectedMacro
-		? {}
-		: R['length'] extends 15
-			? {}
-			: UnionToIntersect<
-					{
-						[key in keyof SelectedMacro]: ReturnTypeIfPossible<
-							MacroFn[key],
-							SelectedMacro[key]
-						> extends infer Value
-							? {
-									resolve: ExtractResolveFromMacro<
-										Extract<
-											Exclude<
-												FunctionArrayReturnType<
-													// @ts-ignore Trust me bro
-													Value['resolve']
-												>,
-												AnyElysiaCustomStatusResponse
-											>,
-											Record<any, unknown>
-										>
-									>
-								} & UnwrapMacroSchema<
-									// @ts-ignore Trust me bro
-									Value,
-									Definitions
-								> &
-									ExtractAllResponseFromMacro<
-										FunctionArrayReturnTypeNonNullable<
-											// @ts-expect-error type is checked in key mapping
-											Value['beforeHandle']
-										>
-									> &
-									ExtractAllResponseFromMacro<
-										FunctionArrayReturnTypeNonNullable<
-											// @ts-expect-error type is checked in key mapping
-											Value['afterHandle']
-										>
-									> &
-									ExtractAllResponseFromMacro<
-										// @ts-expect-error type is checked in key mapping
-										FunctionArrayReturnType<Value['error']>
-									> &
-									ExtractOnlyResponseFromMacro<
-										FunctionArrayReturnTypeNonNullable<
-											// @ts-expect-error type is checked in key mapping
-											Value['resolve']
-										>
-									> &
-									MacroToContext<
-										MacroFn,
-										// @ts-ignore trust me bro
-										Pick<
-											Value,
-											Extract<keyof MacroFn, keyof Value>
-										>,
-										Definitions,
-										[...R, 1]
-									>
-							: {}
-					}[keyof SelectedMacro]
-				>
+	InnerMacroToContext<
+		MacroFn,
+		Pick<SelectedMacro, Extract<keyof MacroFn, keyof SelectedMacro>>,
+		Definitions,
+		R
+	> extends infer A
+		? {
+				[K in Exclude<keyof A, 'return'>]: A[K]
+			} & Prettify<{
+				// @ts-ignore
+				return: FlattenMacroResponse<A['return']>
+			}>
+		: {}
 >
+
+// There's only resolve that can add new properties to Context
+type InnerMacroToContext<
+	MacroFn extends Macro = {},
+	SelectedMacro extends BaseMacro = {},
+	Definitions extends DefinitionBase['typebox'] = {},
+	R extends 1[] = []
+> = {} extends SelectedMacro
+	? {}
+	: R['length'] extends 15
+		? {}
+		: UnionMacroContext<
+				{
+					[key in keyof SelectedMacro]: ReturnTypeIfPossible<
+						MacroFn[key],
+						SelectedMacro[key]
+					> extends infer Value
+						? {
+								resolve: ExtractResolveFromMacro<
+									Extract<
+										Exclude<
+											FunctionArrayReturnType<
+												// @ts-ignore Trust me bro
+												Value['resolve']
+											>,
+											AnyElysiaCustomStatusResponse
+										>,
+										Record<any, unknown>
+									>
+								>
+							} & UnwrapMacroSchema<
+								// @ts-ignore Trust me bro
+								Value,
+								Definitions
+							> &
+								ExtractAllResponseFromMacro<
+									FunctionArrayReturnTypeNonNullable<
+										// @ts-expect-error type is checked in key mapping
+										Value['beforeHandle']
+									>
+								> &
+								ExtractAllResponseFromMacro<
+									FunctionArrayReturnTypeNonNullable<
+										// @ts-expect-error type is checked in key mapping
+										Value['afterHandle']
+									>
+								> &
+								ExtractAllResponseFromMacro<
+									// @ts-expect-error type is checked in key mapping
+									FunctionArrayReturnType<Value['error']>
+								> &
+								ExtractOnlyResponseFromMacro<
+									FunctionArrayReturnTypeNonNullable<
+										// @ts-expect-error type is checked in key mapping
+										Value['resolve']
+									>
+								> &
+								InnerMacroToContext<
+									MacroFn,
+									// @ts-ignore trust me bro
+									Pick<
+										Value,
+										Extract<keyof MacroFn, keyof Value>
+									>,
+									Definitions,
+									[...R, 1]
+								>
+						: {}
+				}[keyof SelectedMacro]
+			>
 
 type UnwrapMacroSchema<
 	T extends Partial<InputSchema<any>>,
@@ -1766,6 +1802,7 @@ export type AnyBaseHookLifeCycle = BaseHookLifeCycle<any, any, any, any>
 export type NonResolvableMacroKey =
 	| keyof AnyBaseHookLifeCycle
 	| keyof InputSchema
+	| 'resolve'
 
 interface RouteSchemaWithResolvedMacro extends RouteSchema {
 	response: PossibleResponse

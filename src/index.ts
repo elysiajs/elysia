@@ -4141,7 +4141,8 @@ export default class Elysia<
 		>,
 		const MacroContext extends MacroToContext<
 			Metadata['macroFn'],
-			NoInfer<Omit<Input, keyof InputSchema>>
+			Omit<Input, NonResolvableMacroKey | 'as'>,
+			Definitions['typebox']
 		>,
 		const GuardType extends GuardSchemaType,
 		const AsType extends LifeCycleType,
@@ -4409,7 +4410,7 @@ export default class Elysia<
 			? {}
 			: MacroToContext<
 					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
+					Omit<Input, NonResolvableMacroKey | 'as'>,
 					Definitions['typebox']
 				>,
 		const BeforeHandle extends MaybeArray<
@@ -5728,6 +5729,7 @@ export default class Elysia<
 				>
 	>(
 		path: Path,
+		// handler: (a: { a: MacroContext }) => any,
 		handler: Handle,
 		hook?: LocalHook<
 			Input,
