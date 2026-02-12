@@ -2305,7 +2305,7 @@ import { Prettify } from '../../../src/types'
 				}
 			},
 			b: {
-				resolve({ status }) {
+				beforeHandle({ status }) {
 					if (Math.random()) return status(401, 'b')
 				},
 				a: true
@@ -2315,13 +2315,49 @@ import { Prettify } from '../../../src/types'
 			b: true
 		})
 
-
 	type Routes = (typeof app)['~Routes']['get']['response']
 
 	expectTypeOf<Routes>().toEqualTypeOf<{
 		200: 'before handler' | 'handler'
 		400: 'a'
 		401: 'a' | 'b'
+	}>
+}
+
+// Recursive macro with conflict value per status
+{
+	const app = new Elysia()
+		.macro({
+			a: {
+				resolve({ status }) {
+					if (Math.random()) return status(400, 'a')
+					if (Math.random()) return status(401, 'b')
+					if (Math.random()) return status(401, 'c')
+
+					return { a: 'a' }
+				}
+			},
+			b: {
+				resolve({ status }) {
+					if (Math.random()) return status(400, 'x')
+					if (Math.random()) return status(401, 'y')
+					if (Math.random()) return status(401, 'z')
+
+					return { b: 'b' }
+				},
+				a: true
+			}
+		})
+		.get('/', () => 'handler' as const, {
+			b: true
+		})
+
+	type Routes = (typeof app)['~Routes']['get']['response']
+
+	expectTypeOf<Routes>().toEqualTypeOf<{
+		200: 'handler'
+		400: 'a' | 'x'
+		401: 'b' | 'c' | 'y' | 'z'
 	}>
 }
 

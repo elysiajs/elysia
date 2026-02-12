@@ -967,26 +967,9 @@ type ExtractOnlyResponseFromMacro<A> =
 		? {}
 		: {} extends A
 			? {}
-			: Extract<A, AnyElysiaCustomStatusResponse> extends infer A
-				? IsNever<A> extends true
-					? {}
-					: {
-							return: UnionToIntersect<
-								A extends ElysiaCustomStatusResponse<
-									any,
-									infer Value,
-									infer Status
-								>
-									? {
-											[status in Status]: IsAny<Value> extends true
-												? // @ts-ignore status is always in Status Map
-													InvertedStatusMap[Status]
-												: Value
-										}
-									: {}
-							>
-						}
-				: {}
+			: {
+					return: MergeResponseStatus<A>
+				}
 
 type MergeResponseStatus<A> = {
 	[status in keyof UnionToIntersect<
@@ -1007,10 +990,11 @@ type MergeAllStatus<T> = {
 type ExtractAllResponseFromMacro<A> =
 	IsNever<A> extends true
 		? {}
-		: {
-				// Merge all status to single object first
-				return: Prettify<
-					MergeResponseStatus<A> &
+		: {} extends A
+			? {}
+			: {
+					// Merge all status to single object first
+					return: MergeResponseStatus<A> &
 						(Exclude<
 							A,
 							AnyElysiaCustomStatusResponse
@@ -1028,8 +1012,7 @@ type ExtractAllResponseFromMacro<A> =
 													200: A
 												}
 							: {})
-				>
-			}
+				}
 
 type FlattenMacroResponse<T> = T extends object
 	? '_' extends keyof T

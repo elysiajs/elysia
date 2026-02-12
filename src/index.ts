@@ -8235,6 +8235,7 @@ export {
 	InternalServerError,
 	InvalidCookieSignature,
 	ERROR_CODE,
+	ElysiaStatus,
 	ElysiaCustomStatusResponse,
 	type SelectiveStatus
 } from './error'

@@ -1,4 +1,7 @@
 # 1.4.25 - 12 Feb 2025
+Feature:
+- export ElysiaStatus
+
 Bug fix:
 - macro with conflict literal value per status
 - recursive macro with conflict value per status

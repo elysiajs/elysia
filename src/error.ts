@@ -105,6 +105,8 @@ export class ElysiaCustomStatusResponse<
 	}
 }
 
+export const ElysiaStatus = ElysiaCustomStatusResponse
+
 export const status = <
 	const Code extends number | keyof StatusMap,
 	const T = Code extends keyof InvertedStatusMap
