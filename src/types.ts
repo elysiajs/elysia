@@ -1069,7 +1069,7 @@ export type MacroToContext<
 		R
 	> extends infer A
 		? {
-				[K in Exclude<keyof A, 'return'>]: A[K]
+				[K in Exclude<keyof A, 'return'>]: UnionToIntersect<A[K]>
 			} & Prettify<{
 				// @ts-ignore
 				return: FlattenMacroResponse<A['return']>

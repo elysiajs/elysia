@@ -2297,29 +2297,29 @@ import { Prettify } from '../../../src/types'
 	const app = new Elysia()
 		.macro({
 			a: {
-				resolve: () => ({ a: 'resolved' }) as const,
 				beforeHandle({ status }) {
 					if (Math.random()) return status(400, 'a')
 					if (Math.random()) return status(401, 'a')
 
-					return 'b'
+					return 'before handler' as const
 				}
 			},
 			b: {
-				a: true,
-				beforeHandle({ status }) {
+				resolve({ status }) {
 					if (Math.random()) return status(401, 'b')
-				}
+				},
+				a: true
 			}
 		})
-		.get('/', ({ a }) => a, {
+		.get('/', () => 'handler' as const, {
 			b: true
 		})
 
-	type Route = (typeof app)['~Routes']['get']['response']
 
-	expectTypeOf<Route>().toEqualTypeOf<{
-		200: 'b' | 'resolved'
+	type Routes = (typeof app)['~Routes']['get']['response']
+
+	expectTypeOf<Routes>().toEqualTypeOf<{
+		200: 'before handler' | 'handler'
 		400: 'a'
 		401: 'a' | 'b'
 	}>
