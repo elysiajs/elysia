@@ -174,6 +174,41 @@ describe('WebSocket connection', () => {
 		})
 	})
 
+	it('should maintain ws object identity across open/message/close', async () => {
+		let openWs: unknown
+		let messageWs: unknown
+		let closeWs: unknown
+
+		const app = new Elysia()
+			.ws('/ws', {
+				open(ws) {
+					openWs = ws
+				},
+				message(ws) {
+					messageWs = ws
+					ws.close()
+				},
+				close(ws) {
+					closeWs = ws
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+
+		await wsOpen(ws)
+		ws.send('hello')
+		await wsClose(ws)
+
+		expect(openWs).toBeDefined()
+		expect(messageWs).toBeDefined()
+		expect(closeWs).toBeDefined()
+		expect(openWs).toBe(messageWs)
+		expect(openWs).toBe(closeWs)
+
+		app.stop()
+	})
+
 	it('call ping/pong', async () => {
 		let pinged = false
 		let ponged = false
