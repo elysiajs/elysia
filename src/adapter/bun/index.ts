@@ -557,12 +557,11 @@ export const BunAdapter: ElysiaAdapter = {
 							},
 							open: async (ws: ServerWebSocket<any>) => {
 								try {
-									const elysiaWS = new ElysiaWS(ws, context as any)
-									ws.data._elysiaWS = elysiaWS
+									ws.data._elysiaWS = new ElysiaWS(ws, context as any)
 
 									await handleResponse(
 										ws,
-										options.open?.(elysiaWS)
+										options.open?.(ws.data._elysiaWS)
 									)
 								} catch (error) {
 									handleErrors(ws, error)
