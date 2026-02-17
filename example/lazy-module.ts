@@ -2,7 +2,7 @@ import { Elysia } from '../src'
 
 const plugin = (app: Elysia) => app.get('/plugin', () => 'Plugin')
 const asyncPlugin = async (app: Elysia) => app.get('/async', () => 'A')
-const protocol = app.server?.tls ? "https" : "http"
+
 const app = new Elysia()
 	.decorate('a', () => 'hello')
 	.use(plugin)
@@ -12,7 +12,7 @@ const app = new Elysia()
 	.listen(3000)
 
 await app.modules
-
+const protocol = app.server?.tls ? "https" : "http"
 
 
 console.log(
