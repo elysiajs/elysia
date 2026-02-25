@@ -5582,21 +5582,7 @@ export default class Elysia<
 									})()
 
 			const handler: Handler = ({ request, path }) =>
-				run(
-					new Request(replaceUrlPath(request.url, path), {
-						method: request.method,
-						headers: request.headers,
-						signal: request.signal,
-						credentials: request.credentials,
-						referrerPolicy: request.referrerPolicy as any,
-						duplex: request.duplex,
-						redirect: request.redirect,
-						mode: request.mode,
-						keepalive: request.keepalive,
-						integrity: request.integrity,
-						body: request.body
-					})
-				)
+				run(new Request(replaceUrlPath(request.url, path), request))
 
 			this.route('ALL', '/*', handler as any, {
 				parse: 'none',
@@ -5632,19 +5618,7 @@ export default class Elysia<
 			handle(
 				new Request(
 					replaceUrlPath(request.url, path.slice(length) || '/'),
-					{
-						method: request.method,
-						headers: request.headers,
-						signal: request.signal,
-						credentials: request.credentials,
-						referrerPolicy: request.referrerPolicy as any,
-						duplex: request.duplex,
-						redirect: request.redirect,
-						mode: request.mode,
-						keepalive: request.keepalive,
-						integrity: request.integrity,
-						body: request.body
-					}
+					request
 				)
 			)
 
