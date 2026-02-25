@@ -1478,7 +1478,7 @@ describe('Macro', () => {
 
 			expect(order).toEqual(['sessions', 'auth'])
 			expect(response.auth).toEqual({ currentUser: 'session-data' })
-			expect(response.hasessions).not.toBeUndefined
+			expect(response.hasSessions).toBeTruthy()
 		})
 
 		it('chained dependencies (3 levels deep)', async () => {
@@ -1622,6 +1622,7 @@ describe('Macro', () => {
 				ext1: 'base-value-ext1',
 				ext2: 'base-value-ext2'
 			})
+			expect(baseCallCount).toEqual(1)
 		})
 
 		it('guard with dependent macros', async () => {
