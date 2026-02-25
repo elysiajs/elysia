@@ -192,8 +192,8 @@ const mergeRoutes = (r1: Routes, r2?: Routes) => {
 	return r1
 }
 
-// https://github.com/elysiajs/elysia/issues/1752
-// Bun.routes need to be sort for some reason?
+// // https://github.com/elysiajs/elysia/issues/1752
+// inconsistent behavior between trailing slash and non-trailing slash
 export const removeTrailingPath = (routes: Routes) => {
 	for (const key of Object.keys(routes)) {
 		if (key.charCodeAt(key.length - 1) === 47) {

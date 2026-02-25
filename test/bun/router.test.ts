@@ -311,7 +311,8 @@ describe('Bun router', () => {
 		expect(response).toBe('OK!! XD')
 	})
 
-	it('mapEarlyResponse onRequest', async () => {
+	// https://github.com/elysiajs/elysia/issues/1752
+	it('trailing slash should be consistent with non-trailing slash', async () => {
 		const app = new Elysia()
 			.get('/items/types/', () => '/items/types')
 			.get('/items/types/:id', () => '/items/types/:id')
