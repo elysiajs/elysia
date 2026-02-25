@@ -16,6 +16,8 @@ export namespace Sucrose {
 		route: boolean
 		url: boolean
 		path: boolean
+		/** Whether code accesses request.body, request.arrayBuffer, etc. */
+		request: boolean
 	}
 
 	export interface LifeCycle extends Partial<LifeCycleStore> {
@@ -290,6 +292,7 @@ export const findParameterReference = (
 	if (parameters.route) inference.route = true
 	if (parameters.url) inference.url = true
 	if (parameters.path) inference.path = true
+	if (parameters.request) inference.request = true
 
 	if (hasParenthesis) return `{ ${Object.keys(parameters).join(', ')} }`
 
@@ -470,6 +473,7 @@ export const inferBodyReference = (
 			if (parameters.url) inference.url = true
 			if (parameters.route) inference.route = true
 			if (parameters.path) inference.path = true
+			if (parameters.request) inference.request = true
 
 			continue
 		}
@@ -497,6 +501,8 @@ export const inferBodyReference = (
 		if (!inference.route && access('route', alias)) inference.route = true
 		if (!inference.url && access('url', alias)) inference.url = true
 		if (!inference.path && access('path', alias)) inference.path = true
+		if (!inference.request && access('request', alias))
+			inference.request = true
 
 		if (
 			inference.query &&
@@ -507,7 +513,8 @@ export const inferBodyReference = (
 			inference.server &&
 			inference.route &&
 			inference.url &&
-			inference.path
+			inference.path &&
+			inference.request
 		)
 			break
 	}
@@ -646,7 +653,8 @@ export const mergeInference = (a: Sucrose.Inference, b: Sucrose.Inference) => {
 		server: a.server || b.server,
 		url: a.url || b.url,
 		route: a.route || b.route,
-		path: a.path || b.path
+		path: a.path || b.path,
+		request: a.request || b.request
 	}
 }
 
@@ -661,7 +669,8 @@ export const sucrose = (
 		server: false,
 		url: false,
 		route: false,
-		path: false
+		path: false,
+		request: false
 	},
 	settings: Sucrose.Settings = {}
 ): Sucrose.Inference => {
@@ -675,6 +684,8 @@ export const sucrose = (
 	if (lifeCycle.afterHandle?.length) events.push(...lifeCycle.afterHandle)
 	if (lifeCycle.mapResponse?.length) events.push(...lifeCycle.mapResponse)
 	if (lifeCycle.afterResponse?.length) events.push(...lifeCycle.afterResponse)
+	if (lifeCycle.derive?.length) events.push(...lifeCycle.derive)
+	if (lifeCycle.resolve?.length) events.push(...lifeCycle.resolve)
 
 	if (lifeCycle.handler && typeof lifeCycle.handler === 'function')
 		events.push(lifeCycle.handler as Handler)
@@ -711,7 +722,8 @@ export const sucrose = (
 			server: false,
 			url: false,
 			route: false,
-			path: false
+			path: false,
+			request: false
 		}
 
 		const [parameter, body] = separateFunction(content)
@@ -754,7 +766,8 @@ export const sucrose = (
 			inference.server &&
 			inference.url &&
 			inference.route &&
-			inference.path
+			inference.path &&
+			inference.request
 		)
 			break
 	}
