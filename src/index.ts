@@ -5469,8 +5469,25 @@ export default class Elysia<
 
 			applied[seed] = true
 
-			for (let [k, value] of Object.entries(macroHook)) {
+			const entries = Object.entries(macroHook)
+
+			for (const [k, value] of entries) {
 				if (k === 'seed') continue
+
+				if (k in macro) {
+					this.applyMacro(
+						localHook,
+						{ [k]: value },
+						{ applied, iteration: iteration + 1 }
+					)
+
+					delete localHook[key]
+				}
+			}
+
+			for (let [k, value] of entries) {
+				if (k === 'seed') continue
+				if (k in macro) continue
 
 				if (k in emptySchema) {
 					insertStandaloneValidator(
@@ -5494,17 +5511,6 @@ export default class Elysia<
 					localHook.detail = mergeDeep(localHook.detail, value, {
 						mergeArray: true
 					})
-
-					delete localHook[key]
-					continue
-				}
-
-				if (k in macro) {
-					this.applyMacro(
-						localHook,
-						{ [k]: value },
-						{ applied, iteration: iteration + 1 }
-					)
 
 					delete localHook[key]
 					continue
