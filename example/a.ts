@@ -1,71 +1,31 @@
-import { Elysia, ElysiaStatus, t, type UnwrapSchema } from '../src'
+import { Elysia } from '../src'
 
-const Models = {
-	'user.update': t.Object({
-		id: t.String(),
-		name: t.Optional(t.String())
-	})
-}
-
-type Models = {
-	[k in keyof typeof Models]: UnwrapSchema<(typeof Models)[k]>
-}
-
-const app = new Elysia()
-	.macro('isAuth', {
-		headers: t.Object({
-			authorization: t.TemplateLiteral('Authorization ${string}')
-		}),
-		async resolve({ headers, status }) {
-			// Mock authentication logic
-			if (Math.random() > 0.5) return status(401, 'Not signed in')
-			if (Math.random() > 0.5) return status(401, 'Deactivated account')
-
-
-
-			headers.authorization
-
-			return {
-				user: 'saltyaom'
-			}
+const ip = new Elysia({ name: 'ip', seed: 'ip' })
+	.derive({ as: 'global' }, ({ server, request }) => {
+		return {
+			ip: server?.requestIP(request)
 		}
 	})
-	.model(Models)
-	.macro('isAdmin', {
-		isAuth: true,
-		async resolve({ headers, status, user }) {
-			// Mock admin check logic
-			if (Math.random() > 0.5) return status(403, 'Not allowed')
-
-
-
-			headers.authorization
-
-			return {
-				admin: {
-					async updateUser({ id, ...rest }: Models['user.update']) {
-						if (Math.random() > 0.5) return status(404, 'No user')
-
-
-						return { id, by: user }
-					}
-				}
-			}
-		}
+	.onBeforeHandle(() => {
+		console.log('11')
 	})
-	.post(
-		'/',
-		async ({ user, admin, body, headers }) => {
-			const updated = await admin.updateUser(body)
+	.get('/ip', ({ ip }) => ip)
 
-			if (updated instanceof ElysiaStatus) return updated
+const router1 = new Elysia({ name: 'ip1', seed: 'ip1' })
+	.use(ip)
+	.get('/ip-1', ({ ip }) => ip)
 
-			return `User ${user} updated user ${updated.id}` as const
-		},
-		{
-			isAdmin: true,
-			body: 'user.update'
-		}
-	)
+const router2 = new Elysia({ name: 'ip2', seed: 'ip2' })
+	.use(ip)
+	.get('/ip-2', ({ ip }) => ip)
 
-type Result = (typeof app)['~Routes']['post']['response']
+const router3 = new Elysia({ name: 'ip2', seed: 'ip2' })
+	.use(ip)
+	.get('/ip-3', ({ ip }) => ip)
+
+const server = new Elysia({ name: 'server' })
+	.use(router1)
+	.use(router2)
+	.listen(3000)
+
+console.log(server.routes[0])

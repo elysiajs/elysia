@@ -323,9 +323,12 @@ describe('Checksum', () => {
 	})
 
 	it('handle reference parent-child', async () => {
-		const parent = new Elysia({ name: 'parent' }).derive({ as: 'global' }, () => ({
-			bye: () => 'bye'
-		}))
+		const parent = new Elysia({ name: 'parent' }).derive(
+			{ as: 'global' },
+			() => ({
+				bye: () => 'bye'
+			})
+		)
 
 		const child = new Elysia({ name: 'child' })
 			.use(parent)
@@ -341,5 +344,36 @@ describe('Checksum', () => {
 		const response = await app.handle(req('/')).then((res) => res.text())
 
 		expect(response).toBe('hi + bye')
+	})
+
+	it('deduplicate local handler from global event', () => {
+		const ip = new Elysia({ name: 'ip', seed: 'ip' })
+			.derive({ as: 'global' }, ({ server, request }) => {
+				return {
+					ip: server?.requestIP(request)
+				}
+			})
+			.onBeforeHandle(() => {
+				console.log('11')
+			})
+			.get('/ip', ({ ip }) => ip)
+
+		const router1 = new Elysia({ name: 'ip1', seed: 'ip1' })
+			.use(ip)
+			.get('/ip-1', ({ ip }) => ip)
+
+		const router2 = new Elysia({ name: 'ip2', seed: 'ip2' })
+			.use(ip)
+			.get('/ip-2', ({ ip }) => ip)
+
+		const router3 = new Elysia({ name: 'ip2', seed: 'ip2' })
+			.use(ip)
+			.get('/ip-3', ({ ip }) => ip)
+
+		const server = new Elysia({ name: 'server' }).use(router1).use(router2)
+
+		expect(
+			server.routes.find((x) => x.path === '/ip')?.hooks.transform
+		).toHaveLength(1)
 	})
 })

@@ -1,3 +1,8 @@
+# 1.4.26 - 25 Feb 2025
+Bug fix:
+- [#1755](https://github.com/elysiajs/elysia/issues/1755) deduplicate local handler from global event
+- url format redos
+
 # 1.4.25 - 12 Feb 2025
 Feature:
 - export ElysiaStatus

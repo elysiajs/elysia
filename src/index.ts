@@ -800,6 +800,10 @@ export default class Elysia<
 				localHook.detail
 			)
 
+		if (path === '/ip') {
+			// console.log(path, this.event, localHookToLifeCycleStore(localHook))
+		}
+
 		const hooks = isNotEmpty(this.event)
 			? mergeHook(this.event, localHookToLifeCycleStore(localHook))
 			: { ...lifeCycleToArray(localHookToLifeCycleStore(localHook)) }
@@ -3644,6 +3648,10 @@ export default class Elysia<
 
 		for (const handle of handles) {
 			const fn = asHookType(handle, 'global', { skipIfHasType: true })
+			if (this.config.name || this.config.seed)
+				fn.checksum = checksum(
+					this.config.name + JSON.stringify(this.config.seed)
+				)
 
 			switch (type) {
 				case 'start':
