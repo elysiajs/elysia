@@ -310,4 +310,36 @@ describe('Bun router', () => {
 
 		expect(response).toBe('OK!! XD')
 	})
+
+	it('mapEarlyResponse onRequest', async () => {
+		const app = new Elysia()
+			.get('/items/types/', () => '/items/types')
+			.get('/items/types/:id', () => '/items/types/:id')
+			.get('/items/:id', () => '/items/:id')
+			.listen(0)
+
+		expect(
+			fetch(`http://localhost:${app.server?.port}/items/types`).then(
+				(x) => x.text()
+			)
+		).resolves.toBe('/items/types')
+
+		expect(
+			fetch(`http://localhost:${app.server?.port}/items/types/`).then(
+				(x) => x.text()
+			)
+		).resolves.toBe('/items/types')
+
+		expect(
+			fetch(`http://localhost:${app.server?.port}/items/1`).then((x) =>
+				x.text()
+			)
+		).resolves.toBe('/items/:id')
+
+		expect(
+			fetch(`http://localhost:${app.server?.port}/items/types/a`).then(
+				(x) => x.text()
+			)
+		).resolves.toBe('/items/types/:id')
+	})
 })

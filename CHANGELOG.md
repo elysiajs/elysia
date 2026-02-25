@@ -1,6 +1,7 @@
 # 1.4.26 - 25 Feb 2025
 Bug fix:
 - [#1755](https://github.com/elysiajs/elysia/issues/1755) deduplicate local handler from global event
+- [#1752](https://github.com/elysiajs/elysia/issues/1752) system router with trailing path doesn't match with non-trailing
 - url format redos
 
 # 1.4.25 - 12 Feb 2025
