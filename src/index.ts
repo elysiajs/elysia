@@ -97,6 +97,9 @@ import type {
 	MergeSchema,
 	RouteSchema,
 	UnwrapRoute,
+	UnwrapRouteInput,
+	InferRouteInput,
+	StripRouteInput,
 	InternalRoute,
 	HTTPMethod,
 	SchemaValidator,
@@ -223,7 +226,9 @@ export default class Elysia<
 		schema: {}
 		standaloneSchema: {}
 		response: {}
-	}
+	},
+	const in out RoutesInput extends RouteBase = RouteBase &
+		InferRouteInput<Routes>
 > {
 	config: ElysiaConfig<BasePath>
 
@@ -236,7 +241,8 @@ export default class Elysia<
 	'~Metadata' = null as unknown as Metadata
 	'~Ephemeral' = null as unknown as Ephemeral
 	'~Volatile' = null as unknown as Volatile
-	'~Routes' = null as unknown as Routes
+	'~Routes' = null as unknown as StripRouteInput<Routes>
+	'~RoutesInput' = null as unknown as RoutesInput
 
 	protected singleton = {
 		decorator: {},
@@ -5771,6 +5777,12 @@ export default class Elysia<
 								>
 							>
 						>
+					,
+						UnwrapRouteInput<
+							Input,
+							Definitions['typebox'],
+							JoinPath<BasePath, Path>
+						>
 					>
 				}
 			>,
@@ -5879,6 +5891,12 @@ export default class Elysia<
 									>
 								>
 							>
+						>
+					,
+						UnwrapRouteInput<
+							Input,
+							Definitions['typebox'],
+							JoinPath<BasePath, Path>
 						>
 					>
 				}
@@ -5989,6 +6007,12 @@ export default class Elysia<
 								>
 							>
 						>
+					,
+						UnwrapRouteInput<
+							Input,
+							Definitions['typebox'],
+							JoinPath<BasePath, Path>
+						>
 					>
 				}
 			>,
@@ -6095,6 +6119,12 @@ export default class Elysia<
 									>
 								>
 							>
+						>
+					,
+						UnwrapRouteInput<
+							Input,
+							Definitions['typebox'],
+							JoinPath<BasePath, Path>
 						>
 					>
 				}
@@ -6203,6 +6233,12 @@ export default class Elysia<
 								>
 							>
 						>
+					,
+						UnwrapRouteInput<
+							Input,
+							Definitions['typebox'],
+							JoinPath<BasePath, Path>
+						>
 					>
 				}
 			>,
@@ -6309,6 +6345,12 @@ export default class Elysia<
 									>
 								>
 							>
+						>
+					,
+						UnwrapRouteInput<
+							Input,
+							Definitions['typebox'],
+							JoinPath<BasePath, Path>
 						>
 					>
 				}
@@ -6417,6 +6459,12 @@ export default class Elysia<
 								>
 							>
 						>
+					,
+						UnwrapRouteInput<
+							Input,
+							Definitions['typebox'],
+							JoinPath<BasePath, Path>
+						>
 					>
 				}
 			>,
@@ -6524,6 +6572,12 @@ export default class Elysia<
 								>
 							>
 						>
+					,
+						UnwrapRouteInput<
+							Input,
+							Definitions['typebox'],
+							JoinPath<BasePath, Path>
+						>
 					>
 				}
 			>,
@@ -6630,6 +6684,12 @@ export default class Elysia<
 									>
 								>
 							>
+						>
+					,
+						UnwrapRouteInput<
+							Input,
+							Definitions['typebox'],
+							JoinPath<BasePath, Path>
 						>
 					>
 				}
@@ -6745,6 +6805,12 @@ export default class Elysia<
 								>
 							>
 						>
+					,
+						UnwrapRouteInput<
+							Input,
+							Definitions['typebox'],
+							JoinPath<BasePath, Path>
+						>
 					>
 				}
 			>,
@@ -6845,6 +6911,12 @@ export default class Elysia<
 									>
 								>
 							>
+						>
+					,
+						UnwrapRouteInput<
+							Input,
+							Definitions['typebox'],
+							JoinPath<BasePath, Path>
 						>
 					>
 				}
@@ -8269,6 +8341,8 @@ export type {
 	LifeCycleType,
 	MaybePromise,
 	UnwrapSchema,
+	UnwrapSchemaInput,
+	UnwrapSchemaOutput,
 	Checksum,
 	DocumentDecoration,
 	InferContext,
@@ -8283,6 +8357,11 @@ export type {
 	ModelValidator,
 	MetadataBase,
 	UnwrapBodySchema,
+	UnwrapBodySchemaInput,
+	UnwrapBodySchemaOutput,
+	UnwrapRouteInput,
+	InferRouteInput,
+	InferElysiaRoutesInput,
 	UnwrapGroupGuardRoute,
 	ModelValidatorError,
 	ExcludeElysiaResponse,
