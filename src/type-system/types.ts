@@ -140,6 +140,13 @@ export interface TUnionEnum<
 	enum: T
 }
 
+export const WrappedKind = Symbol('WrappedKind');
+
+export interface TMaybeNull extends TSchema {
+	[Kind]: 'MaybeNull',
+	[WrappedKind]: string,
+}
+
 export interface TArrayBuffer extends Uint8ArrayOptions {}
 
 export type TForm<T extends TProperties = TProperties> = TUnsafe<
