@@ -138,3 +138,140 @@ import z from 'zod'
 		value: string
 	}>()
 }
+
+{
+	const deepZod = z.object({
+		level1: z.object({
+			level2: z.object({
+				numericText: z.string().transform((value) => parseInt(value)),
+				obj: z.object({
+					toggled: z.string().transform((value) => value === 'true')
+				})
+			}),
+			list: z.array(
+				z.object({
+					count: z.string().transform((value) => Number(value))
+				})
+			)
+		})
+	})
+
+	const app = new Elysia().post(
+		'/zod-deep',
+		({ body }) => ({
+			sum: body.level1.level2.numericText + body.level1.list[0].count,
+			flag: body.level1.level2.obj.toggled
+		}),
+		{
+			body: deepZod,
+			response: z.object({
+				sum: z.number(),
+				flag: z.boolean()
+			})
+		}
+	)
+
+	expectTypeOf<(typeof app)['~Routes']['zod-deep']['post']['body']>().toEqualTypeOf<{
+		level1: {
+			level2: {
+				numericText: number
+				obj: {
+					toggled: boolean
+				}
+			}
+			list: {
+				count: number
+			}[]
+		}
+	}>()
+
+	expectTypeOf<(typeof app)['~RoutesInput']['zod-deep']['post']['body']>().toEqualTypeOf<{
+		level1: {
+			level2: {
+				numericText: string
+				obj: {
+					toggled: string
+				}
+			}
+			list: {
+				count: string
+			}[]
+		}
+	}>()
+}
+
+{
+	const deepTypebox = t.Object({
+		level1: t.Object({
+			level2: t.Object({
+				numericText: t
+					.Transform(t.String())
+					.Decode((value) => Number(value))
+					.Encode((value) => value.toString()),
+				obj: t.Object({
+					toggled: t
+						.Transform(t.String())
+						.Decode((value) => value === 'true')
+						.Encode((value) => (value ? 'true' : 'false'))
+				})
+			}),
+			list: t.Array(
+				t.Object({
+					count: t
+						.Transform(t.String())
+						.Decode((value) => Number(value))
+						.Encode((value) => value.toString())
+				})
+			)
+		})
+	})
+
+	expectTypeOf<
+		UnwrapBodySchemaInput<typeof deepTypebox>['level1']['level2']['numericText']
+	>().toEqualTypeOf<string>()
+	expectTypeOf<
+		UnwrapBodySchemaInput<typeof deepTypebox>['level1']['level2']['obj']['toggled']
+	>().toEqualTypeOf<string>()
+	expectTypeOf<
+		UnwrapBodySchemaInput<typeof deepTypebox>['level1']['list'][number]['count']
+	>().toEqualTypeOf<string>()
+
+	const app = new Elysia().post(
+		'/typebox-deep',
+		({ body }) => ({
+			sum: body.level1.level2.numericText + body.level1.list[0].count,
+			flag: body.level1.level2.obj.toggled
+		}),
+		{
+			body: deepTypebox,
+			response: t.Object({
+				sum: t.Number(),
+				flag: t.Boolean()
+			})
+		}
+	)
+
+	expectTypeOf<(typeof app)['~Routes']['typebox-deep']['post']['body']>().toEqualTypeOf<{
+		level1: {
+			level2: {
+				numericText: number
+				obj: {
+					toggled: boolean
+				}
+			}
+			list: {
+				count: number
+			}[]
+		}
+	}>()
+
+	expectTypeOf<
+		(typeof app)['~RoutesInput']['typebox-deep']['post']['body']['level1']['level2']['numericText']
+	>().toEqualTypeOf<string>()
+	expectTypeOf<
+		(typeof app)['~RoutesInput']['typebox-deep']['post']['body']['level1']['level2']['obj']['toggled']
+	>().toEqualTypeOf<string>()
+	expectTypeOf<
+		(typeof app)['~RoutesInput']['typebox-deep']['post']['body']['level1']['list'][number]['count']
+	>().toEqualTypeOf<string>()
+}

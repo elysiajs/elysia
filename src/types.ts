@@ -14,7 +14,10 @@ import {
 	TImport,
 	TProperties,
 	TObject,
-	Static
+	TArray,
+	TTransform,
+	Static,
+	StaticDecode
 } from '@sinclair/typebox'
 import type { TypeCheck, ValueError } from '@sinclair/typebox/compiler'
 
@@ -464,47 +467,61 @@ type UnwrapWrappers<T extends TSchema> =
   T extends TReadonly<infer I extends TSchema> ? UnwrapWrappers<I> :
   T;
 
+type TransformMetadata<T extends TSchema> =
+	UnwrapWrappers<T> extends { [TransformKind]: infer Metadata }
+		? Metadata
+		: never
+
 type TypeBoxTransformInput<T extends TSchema, Params extends unknown[] = []> =
-  UnwrapWrappers<T> extends { 
-		[TransformKind]: { Decode: (value: infer Input) => unknown } 
+	TransformMetadata<T> extends {
+		Encode: (...args: any[]) => infer Encoded
 	}
-    ? Input
-    : Static<T, Params>;
+		? Encoded
+		: UnwrapWrappers<T> extends TTransform<
+				infer InputSchema extends TSchema,
+				unknown
+			>
+			? StaticDecode<InputSchema>
+			: TransformMetadata<T> extends {
+					Decode: (...args: infer Args) => unknown
+				}
+				? Args[0]
+				: Static<T, Params>
 
-type HasTransformInput<T extends TSchema> =
-	UnwrapWrappers<T> extends { 
-		[TransformKind]: { Decode: (value: unknown) => unknown } 
-	}
-    ? true
-    : false;
-
-type IsOptionalSchema<Type extends TSchema> = Type extends TOptional<any>
+type IsOptionalSchema<Type extends TSchema> = Type extends {
+	[OptionalKind]: 'Optional'
+}
 	? true
 	: false
-
-type TransformRequiredProperties<Properties extends TProperties> = {
-	[K in keyof Properties as HasTransformInput<Properties[K]> extends true
-		? IsOptionalSchema<Properties[K]> extends true
-			? never
-			: K
-		: never]: TypeBoxTransformInput<Properties[K]>
-}
-
-type TransformOptionalProperties<Properties extends TProperties> = {
-	[K in keyof Properties as HasTransformInput<Properties[K]> extends true
-		? IsOptionalSchema<Properties[K]> extends true
-			? K
-			: never
-		: never]?: TypeBoxTransformInput<Properties[K]>
-}
 
 type TypeBoxStaticEncode<
 	Type extends TSchema,
 	Params extends unknown[] = []
 > = Type extends TObject<infer Properties extends TProperties>
-	? Omit<Static<Type, Params>, keyof TransformRequiredProperties<Properties>> &
-			TransformRequiredProperties<Properties> &
-			TransformOptionalProperties<Properties>
+	? Static<Type, Params> extends infer SchemaStatic extends Record<
+				PropertyKey,
+				unknown
+			>
+		? {
+					[K in keyof Properties as IsOptionalSchema<
+						Properties[K]
+					> extends true
+						? never
+						: K]: K extends keyof SchemaStatic
+						? TypeBoxStaticEncode<Properties[K], Params>
+						: never
+				} & {
+					[K in keyof Properties as IsOptionalSchema<
+						Properties[K]
+					> extends true
+						? K
+						: never]?: K extends keyof SchemaStatic
+						? TypeBoxStaticEncode<Properties[K], Params>
+						: never
+				} & Omit<SchemaStatic, keyof Properties>
+		: Static<Type, Params>
+	: Type extends TArray<infer Item extends TSchema>
+		? TypeBoxStaticEncode<Item, Params>[]
 	: TypeBoxTransformInput<Type>
 
 export type UnwrapSchema<
