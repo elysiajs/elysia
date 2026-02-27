@@ -54,15 +54,16 @@ export const mapResponse = (
 	request?: Request
 ): Response => {
 	if (isNotEmpty(set.headers) || set.status !== 200 || set.cookie) {
-		switch (response?.constructor?.name) {
-			case 'String':
-				set.headers['content-type'] = 'text/plain'
-				break
-			case 'Array':
-			case 'Object':
-				set.headers['content-type'] = 'application/json'
-				break
-		}
+		if (!set.headers['content-type'])
+			switch (response?.constructor?.name) {
+				case 'String':
+					set.headers['content-type'] = 'text/plain'
+					break
+				case 'Array':
+				case 'Object':
+					set.headers['content-type'] = 'application/json'
+					break
+			}
 
 		handleSet(set)
 
@@ -215,15 +216,16 @@ export const mapEarlyResponse = (
 	if (response === undefined || response === null) return
 
 	if (isNotEmpty(set.headers) || set.status !== 200 || set.cookie) {
-		switch (response?.constructor?.name) {
-			case 'String':
-				set.headers['content-type'] = 'text/plain'
-				break
-			case 'Array':
-			case 'Object':
-				set.headers['content-type'] = 'application/json'
-				break
-		}
+		if (!set.headers['content-type'])
+			switch (response?.constructor?.name) {
+				case 'String':
+					set.headers['content-type'] = 'text/plain'
+					break
+				case 'Array':
+				case 'Object':
+					set.headers['content-type'] = 'application/json'
+					break
+			}
 
 		handleSet(set)
 
