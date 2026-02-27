@@ -3883,7 +3883,8 @@ export default class Elysia<
 		Metadata,
 		Routes & NewElysia['~Routes'],
 		Ephemeral,
-		Volatile
+		Volatile,
+		RoutesInput & NewElysia['~RoutesInput']
 	>
 
 	group<
@@ -3976,7 +3977,8 @@ export default class Elysia<
 		Metadata,
 		Routes & NewElysia['~Routes'],
 		Ephemeral,
-		Volatile
+		Volatile,
+		RoutesInput & NewElysia['~RoutesInput']
 	>
 
 	/**
@@ -4490,7 +4492,8 @@ export default class Elysia<
 			response: Volatile['response'] &
 				// @ts-ignore
 				MacroContext['response']
-		}
+		},
+		RoutesInput & NewElysia['~RoutesInput']
 	>
 
 	/**
@@ -4708,7 +4711,10 @@ export default class Elysia<
 			? Routes & NewElysia['~Routes']
 			: Routes & CreateEden<BasePath, NewElysia['~Routes']>,
 		Ephemeral,
-		Volatile & NewElysia['~Ephemeral']
+		Volatile & NewElysia['~Ephemeral'],
+		BasePath extends ``
+			? RoutesInput & NewElysia['~RoutesInput']
+			: RoutesInput & CreateEden<BasePath, NewElysia['~RoutesInput']>
 	>
 
 	/**
@@ -4742,7 +4748,10 @@ export default class Elysia<
 			? Routes & NewElysia['~Routes']
 			: Routes & CreateEden<BasePath, NewElysia['~Routes']>,
 		Ephemeral & NewElysia['~Ephemeral'],
-		Volatile & NewElysia['~Volatile']
+		Volatile & NewElysia['~Volatile'],
+		BasePath extends ``
+			? RoutesInput & NewElysia['~RoutesInput']
+			: RoutesInput & CreateEden<BasePath, NewElysia['~RoutesInput']>
 	>
 
 	/**
@@ -4783,7 +4792,10 @@ export default class Elysia<
 				Partial<LazyLoadElysia['~Ephemeral']['derive']>
 			response: Volatile['response'] &
 				LazyLoadElysia['~Ephemeral']['response']
-		}
+		},
+		BasePath extends ``
+			? RoutesInput & LazyLoadElysia['~RoutesInput']
+			: RoutesInput & CreateEden<BasePath, LazyLoadElysia['~RoutesInput']>
 	>
 
 	/**
@@ -4811,7 +4823,10 @@ export default class Elysia<
 			? Routes & NewElysia['~Routes']
 			: Routes & CreateEden<BasePath, NewElysia['~Routes']>,
 		Ephemeral & NewElysia['~Ephemeral'],
-		Volatile & NewElysia['~Volatile']
+		Volatile & NewElysia['~Volatile'],
+		BasePath extends ``
+			? RoutesInput & NewElysia['~RoutesInput']
+			: RoutesInput & CreateEden<BasePath, NewElysia['~RoutesInput']>
 	>
 
 	/**
@@ -4864,7 +4879,10 @@ export default class Elysia<
 			derive: Volatile['derive'] &
 				Partial<NewElysia['~Volatile']['derive']>
 			response: Volatile['response'] & NewElysia['~Volatile']['response']
-		}
+		},
+		BasePath extends ``
+			? RoutesInput & NewElysia['~RoutesInput']
+			: RoutesInput & CreateEden<BasePath, NewElysia['~RoutesInput']>
 	>
 
 	/**
