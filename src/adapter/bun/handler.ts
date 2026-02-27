@@ -26,9 +26,8 @@ export const mapResponse = (
 ): Response => {
 	if (isNotEmpty(set.headers) || set.status !== 200 || set.cookie) {
 		if (
-			!set.headers['content-type'] &&
-			(response?.constructor?.name === 'Object' ||
-				response?.constructor?.name === 'Array')
+			response?.constructor?.name === 'Object' ||
+			response?.constructor?.name === 'Array'
 		)
 			set.headers['content-type'] = 'application/json'
 
@@ -184,9 +183,8 @@ export const mapEarlyResponse = (
 
 	if (isNotEmpty(set.headers) || set.status !== 200 || set.cookie) {
 		if (
-			!set.headers['content-type'] &&
-			(response?.constructor?.name === 'Object' ||
-				response?.constructor?.name === 'Array')
+			response?.constructor?.name === 'Object' ||
+			response?.constructor?.name === 'Array'
 		)
 			set.headers['content-type'] = 'application/json'
 
