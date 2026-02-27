@@ -25,6 +25,12 @@ export const mapResponse = (
 	request?: Request
 ): Response => {
 	if (isNotEmpty(set.headers) || set.status !== 200 || set.cookie) {
+		if (
+			response?.constructor?.name === 'Object' ||
+			response?.constructor?.name === 'Array'
+		)
+			set.headers['content-type'] = 'application/json'
+
 		handleSet(set)
 
 		switch (response?.constructor?.name) {
@@ -33,7 +39,6 @@ export const mapResponse = (
 
 			case 'Array':
 			case 'Object':
-				set.headers['content-type'] = 'application/json'
 				return new Response(JSON.stringify(response), set as any)
 
 			case 'ElysiaFile':
@@ -141,7 +146,10 @@ export const mapResponse = (
 					const code = (response as any).charCodeAt(0)
 
 					if (code === 123 || code === 91) {
-						if (!set.headers['Content-Type'])
+						if (set.headers instanceof Headers) {
+							if (!set.headers.has('Content-Type'))
+								set.headers.set('Content-Type', 'application/json')
+						} else if (!set.headers['Content-Type'])
 							set.headers['Content-Type'] = 'application/json'
 
 						return new Response(
@@ -174,6 +182,12 @@ export const mapEarlyResponse = (
 	if (response === undefined || response === null) return
 
 	if (isNotEmpty(set.headers) || set.status !== 200 || set.cookie) {
+		if (
+			response?.constructor?.name === 'Object' ||
+			response?.constructor?.name === 'Array'
+		)
+			set.headers['content-type'] = 'application/json'
+
 		handleSet(set)
 
 		switch (response?.constructor?.name) {
@@ -182,7 +196,6 @@ export const mapEarlyResponse = (
 
 			case 'Array':
 			case 'Object':
-				set.headers['content-type'] = 'application/json'
 				return new Response(JSON.stringify(response), set as any)
 
 			case 'ElysiaFile':
@@ -289,7 +302,10 @@ export const mapEarlyResponse = (
 					const code = (response as any).charCodeAt(0)
 
 					if (code === 123 || code === 91) {
-						if (!set.headers['Content-Type'])
+						if (set.headers instanceof Headers) {
+							if (!set.headers.has('Content-Type'))
+								set.headers.set('Content-Type', 'application/json')
+						} else if (!set.headers['Content-Type'])
 							set.headers['Content-Type'] = 'application/json'
 
 						return new Response(
