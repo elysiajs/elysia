@@ -196,10 +196,10 @@ const mergeRoutes = (r1: Routes, r2?: Routes) => {
 // inconsistent behavior between trailing slash and non-trailing slash
 export const removeTrailingPath = (routes: Routes) => {
 	for (const key of Object.keys(routes)) {
-		if (key.charCodeAt(key.length - 1) === 47) {
+		if (key.length > 1 && key.charCodeAt(key.length - 1) === 47) {
 			routes[key.slice(0, -1)] = routes[key]
 			delete routes[key]
-		}
+    }
 	}
 
 	return routes
