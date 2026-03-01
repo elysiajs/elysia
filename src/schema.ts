@@ -26,6 +26,7 @@ import type {
 	AnySchema,
 	ElysiaConfig,
 	InputSchema,
+	IsAny,
 	MaybeArray,
 	StandaloneInputSchema,
 	StandardSchemaV1LikeValidate,
@@ -47,7 +48,7 @@ export interface ElysiaTypeCheck<T extends AnySchema>
 	schema: T
 	config: Object
 	Check(value: unknown): T extends TSchema
-		? UnwrapSchema<T>
+		? boolean
 		:
 				| {
 						value: UnwrapSchema<T>
@@ -432,9 +433,11 @@ export const getSchemaValidator = <T extends AnySchema | string | undefined>(
 		validators?: InputSchema['body'][]
 		sanitize?: () => ExactMirrorInstruction['sanitize']
 	} = {}
-): undefined extends T
-	? undefined
-	: ElysiaTypeCheck<NonNullable<Exclude<T, string>>> => {
+): IsAny<T> extends true
+	? ElysiaTypeCheck<TAnySchema>
+	: undefined extends T
+		? undefined
+		: ElysiaTypeCheck<NonNullable<Exclude<T, string>>> => {
 	validators = validators?.filter((x) => x)
 
 	if (!s) {
@@ -782,10 +785,10 @@ export const getSchemaValidator = <T extends AnySchema | string | undefined>(
 			const validator: ElysiaTypeCheck<any> = {
 				provider: 'typebox',
 				schema,
+				// @ts-ignore
 				references: '',
 				checkFunc: () => {},
 				code: '',
-				// @ts-expect-error
 				Check: (value: unknown) => Value.Check(schema, value),
 				Errors: (value: unknown) => Value.Errors(schema, value),
 				Code: () => '',

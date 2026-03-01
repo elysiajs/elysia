@@ -417,7 +417,7 @@ export default class Elysia<
 
 	'~adapter': ElysiaAdapter
 
-	env(model: TObject<any>, _env = env) {
+	env(model: TObject, _env = env) {
 		const validator = getSchemaValidator(model, {
 			modules: this.definitions.typebox,
 			dynamic: true,
