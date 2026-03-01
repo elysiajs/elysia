@@ -4,6 +4,7 @@ Bug fix:
 
 Improvement:
 - conditional async on getSchemaValidator when schema is Standard Schema
+- use Response.json on Bun
 
 # 1.4.26 - 25 Feb 2025
 Bug fix:
