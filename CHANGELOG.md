@@ -1,3 +1,10 @@
+# 1.4.27 - 1 Mar 2025
+Bug fix:
+- getSchemaValidator: handle TypeBox as sub type
+
+Improvement:
+- conditional async on getSchemaValidator when schema is Standard Schema
+
 # 1.4.26 - 25 Feb 2025
 Bug fix:
 - [#1755](https://github.com/elysiajs/elysia/issues/1755) deduplicate local handler from global event

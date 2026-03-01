@@ -1,37 +1,36 @@
-import { Elysia } from '../src'
+import { Elysia, t, getSchemaValidator, fileType } from '../src'
+import { z } from 'zod'
+import { post } from '../test/utils'
 
-const useMount = true // true => hangs, false => works
+const bunFilePath6 = `test/images/aris-yuzu.jpg`
+const bunFile = Bun.file(bunFilePath6) as File
 
-const handler = async (request: Request) => {
-	console.log("A")
-	// Rebuild request with new headers (problematic in mount mode)
-	const headers = new Headers(request.headers)
-	headers.set('x-request-id', 'req_test')
-	const patched = new Request(request, { headers })
-
-	// This is where it hangs when mounted
-	const body = await patched.text()
-
-	return Response.json({
-		ok: true,
-		body,
-		requestId: patched.headers.get('x-request-id')
+const app = new Elysia().post('/upload', ({ body }) => body, {
+	body: z.object({
+		name: z.string(),
+		file: z.file().refine((file) => fileType(file, 'image/jpeg')),
+		metadata: z.object({
+			age: z.coerce.number()
+		})
 	})
-}
+})
 
-const app = useMount
-	? new Elysia().mount('/v1/', handler)
-	: new Elysia().all('/v1/*', ({ request }) => handler(request))
+const formData = new FormData()
+formData.append('name', 'John')
+formData.append('file', bunFile)
+formData.append('metadata', JSON.stringify({ age: '25' }))
 
-app.listen(3000)
-
-app.handle(
-	new Request('http://localhost:3000/v1/test', {
-		headers: {
-			'content-type': 'hello'
-		},
-		body: 'hello'
+const response = await app.handle(
+	new Request('http://localhost/upload', {
+		method: 'POST',
+		body: formData
 	})
 )
-	.then((x) => x.status)
-	.then(console.log)
+
+const result = await response.json()
+console.log(result)
+// expect(response.status).toBe(200)
+// expect(result).toMatchObject({
+// 	name: 'John',
+// 	metadata: { age: 25 }
+// })

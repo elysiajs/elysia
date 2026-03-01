@@ -158,6 +158,8 @@ import type {
 	MaybeValueOrVoidFunction,
 	IntersectIfObject,
 	IntersectIfObjectSchema,
+	AnySchema,
+	UnwrapSchema,
 	EmptyRouteSchema,
 	UnknownRouteSchema,
 	MaybeFunction,
