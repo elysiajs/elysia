@@ -1,4 +1,4 @@
-# 1.4.27 - 1 Mar 2025
+# 1.4.27 - 1 Mar 2026
 Bug fix:
 - getSchemaValidator: handle TypeBox as sub type
 - handle cookie prototype pollution when parsing cookie
@@ -8,14 +8,14 @@ Improvement:
 - use Response.json on Bun
 - export `AnySchema`, `UnwrapSchema`, `ModelsToTypes` from root
 
-# 1.4.26 - 25 Feb 2025
+# 1.4.26 - 25 Feb 2026
 Bug fix:
 - [#1755](https://github.com/elysiajs/elysia/issues/1755) deduplicate local handler from global event
 - [#1752](https://github.com/elysiajs/elysia/issues/1752) system router with trailing path doesn't match with non-trailing
 - url format redos
 - [#1747](https://github.com/elysiajs/elysia/issues/1747) parsing request from mount hang
 
-# 1.4.25 - 12 Feb 2025
+# 1.4.25 - 12 Feb 2026
 Feature:
 - export ElysiaStatus
 
@@ -23,7 +23,7 @@ Bug fix:
 - macro with conflict literal value per status
 - recursive macro with conflict value per status
 
-# 1.4.24 - 11 Feb 2025
+# 1.4.24 - 11 Feb 2026
 Feature:
 - graceful unsigned cookie transition
 
@@ -31,7 +31,7 @@ Bug fix:
 - [#1733](https://github.com/elysiajs/elysia/pull/1733) preserve multiple set-cookie headers in mounted handlers 
 - object cookie with secret doesn't deserialized after parsed
 
-# 1.4.23 - 9 Feb 2025
+# 1.4.23 - 9 Feb 2026
 Feature:
 - [#1719](https://github.com/elysiajs/elysia/pull/1719) add t.Union/t.Intersection handling in property enumerations/checks
 - [#1697](https://github.com/elysiajs/elysia/pull/1697) extend complex formdata support to StandardSchema
