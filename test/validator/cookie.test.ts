@@ -638,4 +638,38 @@ describe('Cookie Validation', () => {
 
 		expect(second.status).toBe(200)
 	})
+
+	it('handle prototype pollution', () => {
+		const app = new Elysia().get('/profile', ({ cookie }) => {
+			const proto = Object.getPrototypeOf(cookie)
+			const protoIsClean = proto === Object.prototype || proto === null
+			return {
+				hasPhantomValue: 'value' in cookie,
+				prototypeIsClean: protoIsClean,
+				prototype: proto,
+				enumeratedKeys: (() => {
+					const keys: string[] = []
+					for (const k in cookie) keys.push(k)
+					return keys
+				})()
+			}
+		})
+
+		expect(
+			app
+				.handle(
+					new Request('http://localhost/profile', {
+						headers: {
+							cookie: 'a=hi;__proto__=%7B%22injected%22%3A%22polluted%22%7D'
+						}
+					})
+				)
+				.then((x) => x.json())
+		).resolves.toEqual({
+			hasPhantomValue: false,
+			prototypeIsClean: true,
+			prototype: null,
+			enumeratedKeys: ['a']
+		})
+	})
 })

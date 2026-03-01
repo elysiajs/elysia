@@ -1,10 +1,12 @@
 # 1.4.27 - 1 Mar 2025
 Bug fix:
 - getSchemaValidator: handle TypeBox as sub type
+- handle cookie prototype pollution when parsing cookie
 
 Improvement:
 - conditional async on getSchemaValidator when schema is Standard Schema
 - use Response.json on Bun
+- export `AnySchema`, `UnwrapSchema`, `ModelsToTypes` from root
 
 # 1.4.26 - 25 Feb 2025
 Bug fix:

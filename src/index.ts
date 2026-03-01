@@ -164,7 +164,8 @@ import type {
 	UnknownRouteSchema,
 	MaybeFunction,
 	InlineHandlerNonMacro,
-	Router
+	Router,
+	ModelsToTypes
 } from './types'
 import {
 	coercePrimitiveRoot,
