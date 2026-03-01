@@ -569,11 +569,11 @@ export const BunAdapter: ElysiaAdapter = {
 							},
 							open: async (ws: ServerWebSocket<any>) => {
 								try {
+									ws.data._elysiaWS = new ElysiaWS(ws, context as any)
+
 									await handleResponse(
 										ws,
-										options.open?.(
-											new ElysiaWS(ws, context as any)
-										)
+										options.open?.(ws.data._elysiaWS)
 									)
 								} catch (error) {
 									handleErrors(ws, error)
@@ -604,14 +604,13 @@ export const BunAdapter: ElysiaAdapter = {
 								}
 
 								try {
+									const elysiaWS = ws.data._elysiaWS ??= new ElysiaWS(ws, context as any)
+									elysiaWS.body = message
+
 									await handleResponse(
 										ws,
 										options.message?.(
-											new ElysiaWS(
-												ws,
-												context as any,
-												message
-											),
+											elysiaWS,
 											message as any
 										)
 									)
@@ -624,7 +623,7 @@ export const BunAdapter: ElysiaAdapter = {
 									await handleResponse(
 										ws,
 										options.drain?.(
-											new ElysiaWS(ws, context as any)
+											ws.data._elysiaWS ??= new ElysiaWS(ws, context as any)
 										)
 									)
 								} catch (error) {
@@ -640,7 +639,7 @@ export const BunAdapter: ElysiaAdapter = {
 									await handleResponse(
 										ws,
 										options.close?.(
-											new ElysiaWS(ws, context as any),
+											ws.data._elysiaWS ??= new ElysiaWS(ws, context as any),
 											code,
 											reason
 										)
