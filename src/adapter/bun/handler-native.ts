@@ -34,14 +34,8 @@ export const createNativeStaticHandler = (
 			return response.then((response) => {
 				if (!response) return
 
-				if (!response.headers.has('content-type'))
-					response.headers.append('content-type', 'text/plain')
-
 				return response.clone()
 			}) as any as () => Promise<Response>
-
-		if (!response.headers.has('content-type'))
-			response.headers.append('content-type', 'text/plain')
 
 		return () => response.clone() as Response
 	}

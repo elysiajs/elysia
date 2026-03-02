@@ -1,9 +1,3 @@
-import { Elysia, t, getSchemaValidator, fileType } from '../src'
-import { z } from 'zod'
-import { post } from '../test/utils'
+import { Elysia } from '../src'
 
-console.log(
-	Response.json({
-		a: 'a'
-	})
-)
+new Elysia().get('/', 'Hi').listen(3000)
