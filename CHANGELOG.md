@@ -1,3 +1,7 @@
+# 1.4.28 - 3 Mar 2026
+Bug fix:
+- conditional set headers of String and Object when no set.headers is set
+
 # 1.4.27 - 1 Mar 2026
 Bug fix:
 - getSchemaValidator: handle TypeBox as sub type

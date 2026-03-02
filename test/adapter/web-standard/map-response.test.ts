@@ -12,15 +12,6 @@ const createContext = () => ({
 	status: 200
 })
 
-const context = {
-	cookie: {},
-	headers: {
-		'x-powered-by': 'Elysia',
-		'coffee-scheme': 'Coffee'
-	},
-	status: 418
-}
-
 class Student {
 	constructor(public name: string) {}
 
@@ -186,33 +177,37 @@ describe('Web Standard - Map Response', () => {
 	})
 
 	it('map primitive with custom context', async () => {
+		const context = createContext()
 		const response = mapResponse('Shiroko', context)
 
 		expect(response).toBeInstanceOf(Response)
 		expect(await response.text()).toBe('Shiroko')
 		expect(response.headers.toJSON()).toEqual(context.headers)
-		expect(response.status).toBe(418)
+		expect(response.status).toBe(200)
 	})
 
 	it('map undefined with context', async () => {
+		const context = createContext()
 		const response = mapResponse(undefined, context)
 
 		expect(response).toBeInstanceOf(Response)
 		expect(await response.text()).toEqual('')
 		expect(response.headers.toJSON()).toEqual(context.headers)
-		expect(response.status).toBe(418)
+		expect(response.status).toBe(200)
 	})
 
 	it('map null with custom context', async () => {
+		const context = createContext()
 		const response = mapResponse(null, context)
 
 		expect(response).toBeInstanceOf(Response)
 		expect(await response.text()).toEqual('')
 		expect(response.headers.toJSON()).toEqual(context.headers)
-		expect(response.status).toBe(418)
+		expect(response.status).toBe(200)
 	})
 
 	it('map Function with custom context', async () => {
+		const context = createContext()
 		const response = await mapResponse(() => 1, context)
 
 		expect(response).toBeInstanceOf(Response)
@@ -220,10 +215,12 @@ describe('Web Standard - Map Response', () => {
 		expect(response.headers.toJSON()).toEqual({
 			...context.headers
 		})
-		expect(response.status).toBe(418)
+		expect(response.status).toBe(200)
 	})
 
 	it('map Promise with custom context', async () => {
+		const context = createContext()
+
 		const body = {
 			name: 'Shiroko'
 		}
@@ -239,10 +236,12 @@ describe('Web Standard - Map Response', () => {
 			...context.headers,
 			'content-type': 'application/json'
 		})
-		expect(response.status).toBe(418)
+		expect(response.status).toBe(200)
 	})
 
 	it('map Error with custom context', async () => {
+		const context = createContext()
+
 		const response = mapResponse(new Error('Hello'), context)
 
 		expect(response).toBeInstanceOf(Response)
@@ -251,10 +250,12 @@ describe('Web Standard - Map Response', () => {
 			message: 'Hello'
 		})
 		expect(response.headers.toJSON()).toEqual(context.headers)
-		expect(response.status).toBe(418)
+		expect(response.status).toBe(500)
 	})
 
 	it('map Response with custom context', async () => {
+		const context = createContext()
+
 		const response = await mapResponse(new Response('Shiroko'), context)
 		const headers = response.headers.toJSON()
 
@@ -264,6 +265,8 @@ describe('Web Standard - Map Response', () => {
 	})
 
 	it('map Response and merge Headers', async () => {
+		const context = createContext()
+
 		const response = await mapResponse(
 			new Response('Shiroko', {
 				headers: {
@@ -437,5 +440,21 @@ describe('Web Standard - Map Response', () => {
 		const response = await app.handle(req('/')).then((x) => x.text())
 
 		expect(response).toBe('b')
+	})
+
+	it('respect set.headers on string response', async () => {
+		const app = new Elysia()
+			.onAfterHandle(({ set }) => {
+				set.headers['content-type'] = 'text/html; charset=utf8'
+
+				return '<h1>Hina</h1>'
+			})
+			.get('/', () => 'a')
+
+		const response = await app.handle(req('/'))
+
+		expect(response.headers.get('content-type')).toBe(
+			'text/html; charset=utf8'
+		)
 	})
 })

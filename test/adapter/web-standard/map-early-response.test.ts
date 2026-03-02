@@ -10,14 +10,14 @@ const defaultContext = {
 	cookie: {}
 }
 
-const context = {
+const createContext = () => ({
 	headers: {
 		'x-powered-by': 'Elysia',
 		'coffee-scheme': 'Coffee'
 	},
 	status: 418,
 	cookie: {}
-}
+})
 
 class Student {
 	constructor(public name: string) {}
@@ -160,6 +160,7 @@ describe('Web Standard - Map Early Response', () => {
 	})
 
 	it('map primitive with custom context', async () => {
+		const context = createContext()
 		const response = mapEarlyResponse('Shiroko', context)
 
 		expect(response).toBeInstanceOf(Response)
@@ -169,6 +170,7 @@ describe('Web Standard - Map Early Response', () => {
 	})
 
 	it('map Function with custom context', async () => {
+		const context = createContext()
 		const response = await mapEarlyResponse(() => 1, context)
 
 		expect(response).toBeInstanceOf(Response)
@@ -180,6 +182,8 @@ describe('Web Standard - Map Early Response', () => {
 	})
 
 	it('map Promise with custom context', async () => {
+		const context = createContext()
+
 		const body = {
 			name: 'Shiroko'
 		}
@@ -199,6 +203,7 @@ describe('Web Standard - Map Early Response', () => {
 	})
 
 	it('map Error with custom context', async () => {
+		const context = createContext()
 		const response = mapEarlyResponse(new Error('Hello'), context)
 
 		expect(response).toBeInstanceOf(Response)
@@ -211,6 +216,7 @@ describe('Web Standard - Map Early Response', () => {
 	})
 
 	it('map Response with custom context', async () => {
+		const context = createContext()
 		const response = await mapEarlyResponse(
 			new Response('Shiroko'),
 			context
@@ -223,6 +229,8 @@ describe('Web Standard - Map Early Response', () => {
 	})
 
 	it('map Response and merge Headers', async () => {
+		const context = createContext()
+
 		const response = await mapEarlyResponse(
 			new Response('Shiroko', {
 				headers: {
