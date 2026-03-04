@@ -5560,6 +5560,9 @@ export default class Elysia<
 						{ applied, iteration: iteration + 1 }
 					)
 
+					// Remove the raw macro flag key (e.g. `auth`) from localHook now
+					// that its dependency has been recursively expanded. This prevents
+					// the flag from leaking as an unrecognised property into the final hook.
 					delete localHook[key]
 				}
 			}

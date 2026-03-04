@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { describe, it, expect } from 'bun:test'
-import { Elysia, t, status } from '../../src'
+import { describe, expect, it } from 'bun:test'
+import { Elysia, status, t } from '../../src'
 import { post, req } from '../utils'
 
 describe('Macro', () => {
@@ -447,7 +447,7 @@ describe('Macro', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia().get('/hello', () => 'hello', {
-			// @ts-ignore
+			// @ts-expect-error
 			hello: 'nagisa'
 		})
 
@@ -1470,9 +1470,13 @@ describe('Macro', () => {
 						}
 					}
 				})
-				.get('/', ({ auth, sessions }) => ({ auth, hasSessions: !!sessions }), {
-					auth: true
-				})
+				.get(
+					'/',
+					({ auth, sessions }) => ({ auth, hasSessions: !!sessions }),
+					{
+						auth: true
+					}
+				)
 
 			const response = await app.handle(req('/')).then((x) => x.json())
 
@@ -1550,18 +1554,32 @@ describe('Macro', () => {
 						base: true
 					}
 				})
-				.get('/before', ({ depBefore, base }) => ({ depBefore, base }), {
-					depBefore: true
-				})
+				.get(
+					'/before',
+					({ depBefore, base }) => ({ depBefore, base }),
+					{
+						depBefore: true
+					}
+				)
 				.get('/after', ({ depAfter, base }) => ({ depAfter, base }), {
 					depAfter: true
 				})
 
-			const resBefore = await app.handle(req('/before')).then((x) => x.json())
-			const resAfter = await app.handle(req('/after')).then((x) => x.json())
+			const resBefore = await app
+				.handle(req('/before'))
+				.then((x) => x.json())
+			const resAfter = await app
+				.handle(req('/after'))
+				.then((x) => x.json())
 
-			expect(resBefore).toEqual({ base: 'base-value', depBefore: 'base-value-before' })
-			expect(resAfter).toEqual({ base: 'base-value', depAfter: 'base-value-after' })
+			expect(resBefore).toEqual({
+				base: 'base-value',
+				depBefore: 'base-value-before'
+			})
+			expect(resAfter).toEqual({
+				base: 'base-value',
+				depAfter: 'base-value-after'
+			})
 		})
 
 		it('async resolve in dependency chain', async () => {
@@ -1676,9 +1694,30 @@ describe('Macro', () => {
 					app.get('/', ({ auth }) => auth)
 				)
 
-			const response = await app.handle(req('/api/')).then((x) => x.json())
+			const response = await app
+				.handle(req('/api/'))
+				.then((x) => x.json())
 
 			expect(response).toEqual({ user: 'group-session' })
+		})
+		it('cycle between macros does not hang (stopped by iteration limit)', async () => {
+			// `as any` bypasses TS2589 — cyclic macros are correctly rejected at the
+			// type level by DiscriminatedMacroEntry; this test exercises the runtime guard.
+			const app = new Elysia()
+				.macro({
+					a: {
+						b: true, // a depends on b
+						resolve: () => ({ a: 'a' })
+					} as any,
+					b: {
+						a: true, // b depends on a  ← cycle
+						resolve: () => ({ b: 'b' })
+					} as any
+				})
+				.get('/', () => 'ok', { a: true } as any)
+
+			const response = await app.handle(req('/'))
+			expect(response.status).toBe(200)
 		})
 	})
 })
