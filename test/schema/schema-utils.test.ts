@@ -1,7 +1,11 @@
 import { describe, it, expect } from 'bun:test'
 
 import { t } from '../../src'
-import { hasProperty, getSchemaProperties } from '../../src/schema'
+import {
+	hasProperty,
+	getSchemaProperties,
+	hasElysiaMeta
+} from '../../src/schema'
 
 describe('getSchemaProperties', () => {
 	it('returns properties for Object schema', () => {
@@ -173,8 +177,6 @@ describe('hasProperty', () => {
 })
 
 describe('hasElysiaMeta', () => {
-	const { hasElysiaMeta } = require('../../src/schema')
-
 	it('finds elysiaMeta in Object properties even if placed after another property', () => {
 		const schema = t.Object({
 			a: t.String(),

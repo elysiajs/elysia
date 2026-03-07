@@ -165,7 +165,7 @@ export const mapEarlyResponse = (
 	set: Context['set'],
 	request?: Request
 ): Response | undefined => {
-	if (response === undefined || response === null) return new Response('')
+	if (response === undefined || response === null) return undefined
 
 	if (isNotEmpty(set.headers) || set.status !== 200 || set.cookie) {
 		handleSet(set)
