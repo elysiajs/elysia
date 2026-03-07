@@ -8,6 +8,7 @@ import type { Serve } from '../../universal/server'
 
 import { createBunRouteHandler } from './compose'
 import { createNativeStaticHandler } from './handler-native'
+import { isHTMLBundle } from './utils'
 
 import { serializeCookie } from '../../cookies'
 import { isProduction, status, ValidationError } from '../../error'
@@ -64,14 +65,6 @@ const getPossibleParams = (path: string) => {
 	return routes
 }
 
-export const isHTMLBundle = (handle: any) => {
-	return (
-		typeof handle === 'object' &&
-		handle !== null &&
-		(handle.toString() === '[object HTMLBundle]' ||
-			typeof handle.index === 'string')
-	)
-}
 
 const supportedMethods = {
 	GET: true,
@@ -143,12 +136,12 @@ const mapRoutes = (app: AnyElysia) => {
 		const handler = app.config.precompile
 			? createBunRouteHandler(app, route)
 			: (request: Request) => {
-					if (compiled) return compiled(request)
+				if (compiled) return compiled(request)
 
-					return (compiled = createBunRouteHandler(app, route))(
-						request
-					)
-				}
+				return (compiled = createBunRouteHandler(app, route))(
+					request
+				)
+			}
 
 		for (const path of getPossibleParams(route.path))
 			add(
@@ -219,8 +212,8 @@ export const BunAdapter: ElysiaAdapter = {
 		headers: hasHeaderShorthand
 			? 'c.headers=c.request.headers.toJSON()\n'
 			: 'c.headers={}\n' +
-				'for(const [k,v] of c.request.headers.entries())' +
-				'c.headers[k]=v\n'
+			'for(const [k,v] of c.request.headers.entries())' +
+			'c.headers[k]=v\n'
 	},
 	listen(app) {
 		return (options, callback) => {
@@ -245,22 +238,22 @@ export const BunAdapter: ElysiaAdapter = {
 				{ withAsync = false }: { withAsync?: WithAsync } = {}
 			): true extends WithAsync
 				? Promise<{
-						[path: string]:
-							| Response
-							| { [method: string]: Response }
-					}>
+					[path: string]:
+					| Response
+					| { [method: string]: Response }
+				}>
 				: {
-						[path: string]:
-							| Response
-							| { [method: string]: Response }
-					} => {
+					[path: string]:
+					| Response
+					| { [method: string]: Response }
+				} => {
 				const staticRoutes = <
 					{
 						[path: string]:
-							| Response
-							| { [method: string]: Response }
+						| Response
+						| { [method: string]: Response }
 					}
-				>{}
+					>{}
 				const ops = <Promise<any>[]>[]
 
 				for (let [path, route] of Object.entries(iterator)) {
@@ -352,32 +345,32 @@ export const BunAdapter: ElysiaAdapter = {
 			const serve =
 				typeof options === 'object'
 					? ({
-							development: !isProduction,
-							reusePort: true,
-							idleTimeout: 30,
-							...(app.config.serve || {}),
-							...(options || {}),
-							routes,
-							websocket: {
-								...(app.config.websocket || {}),
-								...(websocket || {}),
-								...(options.websocket || {})
-							},
-							fetch: app.fetch
-						} as Serve)
+						development: !isProduction,
+						reusePort: true,
+						idleTimeout: 30,
+						...(app.config.serve || {}),
+						...(options || {}),
+						routes,
+						websocket: {
+							...(app.config.websocket || {}),
+							...(websocket || {}),
+							...(options.websocket || {})
+						},
+						fetch: app.fetch
+					} as Serve)
 					: ({
-							development: !isProduction,
-							reusePort: true,
-							idleTimeout: 30,
-							...(app.config.serve || {}),
-							routes,
-							websocket: {
-								...(app.config.websocket || {}),
-								...(websocket || {})
-							},
-							port: options,
-							fetch: app.fetch
-						} as Serve)
+						development: !isProduction,
+						reusePort: true,
+						idleTimeout: 30,
+						...(app.config.serve || {}),
+						routes,
+						websocket: {
+							...(app.config.websocket || {}),
+							...(websocket || {})
+						},
+						port: options,
+						fetch: app.fetch
+					} as Serve)
 
 			app.server = Bun.serve(serve as any) as any
 
@@ -455,8 +448,8 @@ export const BunAdapter: ElysiaAdapter = {
 		const validateMessage = messageValidator
 			? messageValidator.provider === 'standard'
 				? (data: unknown) =>
-						messageValidator.schema['~standard'].validate(data)
-							.issues
+					messageValidator.schema['~standard'].validate(data)
+						.issues
 				: (data: unknown) => messageValidator.Check(data) === false
 			: undefined
 
@@ -532,20 +525,20 @@ export const BunAdapter: ElysiaAdapter = {
 				const hasCustomErrorHandlers = errorHandlers.length > 0
 
 				const handleErrors = !hasCustomErrorHandlers
-					? () => {}
+					? () => { }
 					: async (ws: ServerWebSocket<any>, error: unknown) => {
-							for (const handleError of errorHandlers) {
-								let response = handleError(
-									Object.assign(context, { error })
-								)
-								if (response instanceof Promise)
-									response = await response
+						for (const handleError of errorHandlers) {
+							let response = handleError(
+								Object.assign(context, { error })
+							)
+							if (response instanceof Promise)
+								response = await response
 
-								await handleResponse(ws, response)
+							await handleResponse(ws, response)
 
-								if (response) break
-							}
+							if (response) break
 						}
+					}
 
 				if (
 					server?.upgrade(context.request, {
