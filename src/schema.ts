@@ -114,23 +114,14 @@ export const hasAdditionalProperties = (
 	if (schema.type === 'object') {
 		const properties = schema.properties as Record<string, TAnySchema>
 
-		if ('additionalProperties' in schema) return schema.additionalProperties
-		if ('patternProperties' in schema) return false
+		if (properties)
+			for (const key of Object.keys(properties)) {
+				const property = properties[key]
 
-		for (const key of Object.keys(properties)) {
-			const property = properties[key]
-
-			if (property.type === 'object') {
 				if (hasAdditionalProperties(property)) return true
-			} else if (property.anyOf) {
-				for (let i = 0; i < property.anyOf.length; i++)
-					if (hasAdditionalProperties(property.anyOf[i])) return true
 			}
 
-			return property.additionalProperties
-		}
-
-		return false
+		return schema.additionalProperties === true
 	}
 
 	if (schema.type === 'array' && schema.items && !Array.isArray(schema.items))
@@ -726,7 +717,7 @@ export const getSchemaValidator = <T extends AnySchema | string | undefined>(
 					error: null
 				}
 			} catch (error) {
-				const errors = [...compiled.Errors(v)].map(mapValueError)
+				const errors = [...validator.Errors(v)].map(mapValueError)
 
 				return {
 					success: false,
@@ -886,7 +877,7 @@ export const getSchemaValidator = <T extends AnySchema | string | undefined>(
 						error: null
 					}
 				} catch (error) {
-					const errors = [...compiled.Errors(v)].map(mapValueError)
+					const errors = [...validator.Errors(v)].map(mapValueError)
 
 					return {
 						success: false,
@@ -959,7 +950,7 @@ export const getSchemaValidator = <T extends AnySchema | string | undefined>(
 						error: null
 					}
 				} catch (error) {
-					const errors = [...compiled.Errors(v)].map(mapValueError)
+					const errors = [...validator.Errors(v)].map(mapValueError)
 
 					return {
 						success: false,
