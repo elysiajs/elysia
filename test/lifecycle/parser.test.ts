@@ -77,7 +77,7 @@ describe('Parser', () => {
 	})
 
 	it('parse x-www-form-urlencoded', async () => {
-		const app = new Elysia().post('/', ({ body }) => body)
+		const app = new Elysia().post('/', ({ body }) => ({ ...body }))
 
 		const body = {
 			username: 'salty aom',

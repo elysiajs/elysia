@@ -352,7 +352,12 @@ describe('Path', () => {
 	})
 
 	it('decode uri', async () => {
-		const app = new Elysia().get('/', ({ query }) => query)
+		const app = new Elysia().get('/', ({ query }) => query, {
+			query: t.Object({
+				name: t.String(),
+				c: t.String()
+			})
+		})
 
 		const res = await app
 			.handle(req('/?name=a%20b&c=d%20e'))

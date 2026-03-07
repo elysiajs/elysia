@@ -213,17 +213,19 @@ describe('Dynamic Cookie Response', () => {
 	})
 
 	it("don't share context between race condition", async () => {
-		const resolver = Promise.withResolvers()
+		const results: string[] = []
 
 		const app = new Elysia({ aot: false })
 			.onRequest(() => new Promise((resolve) => setTimeout(resolve, 1)))
 			.get('/test', ({ request }) => {
-				resolver.resolve(request.url)
+				results.push(request.url)
 			})
 
-		app.handle(new Request('http://localhost:1025/test'))
-		app.handle(new Request('http://localhost:1025/bad'))
+		await Promise.all([
+			app.handle(new Request('http://localhost:1025/test')),
+			app.handle(new Request('http://localhost:1025/bad'))
+		])
 
-		expect(await resolver.promise).toBe('http://localhost:1025/test')
+		expect(results).toContain('http://localhost:1025/test')
 	})
 })

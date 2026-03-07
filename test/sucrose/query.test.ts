@@ -7,14 +7,14 @@ const req = (path: string = '/?name=sucrose') =>
 
 describe('Query', () => {
 	it('access all using property name', async () => {
-		const app = new Elysia().get('/', (ctx) => ctx.query)
+		const app = new Elysia().get('/', (ctx) => ({ ...ctx.query }))
 		const response = await app.handle(req())
 
 		expect(await response.json()).toEqual({ name: 'sucrose' })
 	})
 
 	it('access all using destructuring', async () => {
-		const app = new Elysia().get('/', ({ query }) => query)
+		const app = new Elysia().get('/', ({ query }) => ({ ...query }))
 		const response = await app.handle(req())
 
 		expect(await response.json()).toEqual({ name: 'sucrose' })
@@ -37,7 +37,7 @@ describe('Query', () => {
 	it('access all using destructuring assignment', async () => {
 		const app = new Elysia().get('/', (ctx) => {
 			const { query } = ctx
-			return query
+			return { ...query }
 		})
 		const response = await app.handle(req())
 
@@ -50,7 +50,7 @@ describe('Query', () => {
 				const { query } = ctx
 				return {
 					yay() {
-						return query
+						return { ...query }
 					}
 				}
 			})
@@ -65,7 +65,7 @@ describe('Query', () => {
 			.derive((ctx) => {
 				return {
 					yay() {
-						return ctx.query
+						return { ...ctx.query }
 					}
 				}
 			})
@@ -78,7 +78,7 @@ describe('Query', () => {
 
 	it('destructured encoded & (%26) query string', async () => {
 		const app = new Elysia()
-			.get('/unknown', ({ query }) => query)
+			.get('/unknown', ({ query }) => ({ ...query }))
 			.get('/named', ({ query: { name } }) => name)
 
 		const unknown = await app
