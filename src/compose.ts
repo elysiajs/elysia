@@ -1645,7 +1645,7 @@ export const composeHandler = ({
 				if (validator.cookie.hasTransform)
 					fnLiteral += coerceTransformDecodeError(
 						`for(const [key,value] of Object.entries(validator.cookie.Decode(cookieValue))){` +
-							`c.cookie[key].cookie.value = value` +
+							`c.cookie[key].value = value` +
 							`}`,
 						'cookie',
 						allowUnsafeValidationDetails
