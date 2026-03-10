@@ -1636,7 +1636,7 @@ export const composeHandler = ({
 				fnLiteral +=
 					`for(const k of Object.keys(cookieValue))` +
 					`c.cookie[k].value=cookieValue[k]\n`
-			} else if (validator.body?.schema?.noValidate !== true) {
+			} else if (validator.cookie?.schema?.noValidate !== true) {
 				fnLiteral +=
 					`if(validator.cookie.Check(cookieValue)===false){` +
 					validation.validate('cookie', 'cookieValue') +
