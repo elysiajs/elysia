@@ -220,7 +220,28 @@ export const BunAdapter: ElysiaAdapter = {
 			? 'c.headers=c.request.headers.toJSON()\n'
 			: 'c.headers={}\n' +
 				'for(const [k,v] of c.request.headers.entries())' +
-				'c.headers[k]=v\n'
+				'c.headers[k]=v\n',
+		specializedResponse(kind, r, hasSet, saveResponse) {
+			// Bun's Response.json() is faster than new Response(JSON.stringify())
+			switch (kind) {
+				case 'Object':
+				case 'Array':
+					return hasSet
+						? `Response.json(${saveResponse}${r},c.set)`
+						: `Response.json(${saveResponse}${r})`
+				case 'String':
+					return hasSet
+						? `new Response(${saveResponse}${r},c.set)`
+						: `new Response(${saveResponse}${r})`
+				case 'Number':
+				case 'Boolean':
+					return hasSet
+						? `new Response(${saveResponse}''+${r},c.set)`
+						: `new Response(${saveResponse}''+${r})`
+				default:
+					return undefined
+			}
+		}
 	},
 	listen(app) {
 		return (options, callback) => {
