@@ -341,7 +341,7 @@ const composeValidationFactory = ({
 							`}catch{` +
 							`throw new ValidationError('response',validator.response[${status}],${name},${allowUnsafeValidationDetails})` +
 							`}`
-						: `throw new ValidationError('response',validator.response[${status}],${name}),${allowUnsafeValidationDetails}`) +
+						: `throw new ValidationError('response',validator.response[${status}],${name},${allowUnsafeValidationDetails})`) +
 					`}`
 			} else {
 				if (!appliedCleaner) code += clean()
