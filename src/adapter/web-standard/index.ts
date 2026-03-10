@@ -24,11 +24,11 @@ export const WebStandardAdapter: ElysiaAdapter = {
 				case 'Object':
 				case 'Array':
 					return hasSet
-						? `new Response(JSON.stringify(${saveResponse}${r}),c.set)`
+						? `(c.set.headers['content-type']||(c.set.headers['content-type']='application/json'),new Response(JSON.stringify(${saveResponse}${r}),c.set))`
 						: `new Response(JSON.stringify(${saveResponse}${r}),{headers:{'content-type':'application/json'}})`
 				case 'String':
 					return hasSet
-						? `new Response(${saveResponse}${r},c.set)`
+						? `(c.set.headers['content-type']||(c.set.headers['content-type']='text/plain'),new Response(${saveResponse}${r},c.set))`
 						: `new Response(${saveResponse}${r})`
 				case 'Number':
 				case 'Boolean':
