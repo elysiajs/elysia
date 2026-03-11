@@ -1614,7 +1614,7 @@ export const composeHandler = ({
 			// ! Get latest app.config.cookie
 			validator.cookie.config = mergeCookie(
 				validator.cookie.config,
-				validator.cookie?.config ?? {}
+				app.config.cookie ?? {}
 			)
 
 			fnLiteral +=
