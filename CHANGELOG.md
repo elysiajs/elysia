@@ -1,4 +1,9 @@
 # 1.4.29
+Bug fix:
+- [#1771](https://github.com/elysiajs/elysia/issues/1771) breaks Bun HTML imports
+- [#1797](https://github.com/elysiajs/elysia/pull/1797) await mapped error response promise
+- [#1794](https://github.com/elysiajs/elysia/pull/1794) merge app cookie config into route cookie validator config
+
 Change:
 - remove Bun specific built
 - export `AnySchema`, `UnwrapSchema`, `ModelsToTypes` from root
