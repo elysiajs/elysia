@@ -276,16 +276,16 @@ describe('Bun router', () => {
 
 	it('handle wildcard', async () => {
 		const app = new Elysia()
-			.get('/hi/:id', ({ params }) => params)
-			.get('/hi/*', ({ params }) => params)
+			.get('/hi/:id', ({ params }) => ({ ...params }))
+			.get('/hi/*', ({ params }) => ({ ...params }))
 			.listen(0)
 
 		const [response1, response2] = await Promise.all([
 			fetch(
-				`http://${app.server?.hostname}:${app.server?.port}/hi/saltyaom`
+				`http://localhost:${app.server?.port}/hi/saltyaom`
 			).then((x) => x.json()),
 			fetch(
-				`http://${app.server?.hostname}:${app.server?.port}/hi/salty/aom`
+				`http://localhost:${app.server?.port}/hi/salty/aom`
 			).then((x) => x.json())
 		])
 
@@ -296,6 +296,8 @@ describe('Bun router', () => {
 		expect(response2).toEqual({
 			'*': 'salty/aom'
 		})
+
+		await app.stop()
 	})
 
 	it('mapEarlyResponse onRequest', async () => {

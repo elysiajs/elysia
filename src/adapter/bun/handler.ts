@@ -16,6 +16,7 @@ import { isNotEmpty } from '../../utils'
 import { Cookie } from '../../cookies'
 import { ElysiaCustomStatusResponse } from '../../error'
 
+import { isHTMLBundle } from './utils'
 import type { Context } from '../../context'
 import type { AnyLocalHook } from '../../types'
 
@@ -140,6 +141,9 @@ export const mapResponse = (
 					if (code === 123 || code === 91)
 						return Response.json(response, set as any) as any
 				}
+
+				if (isHTMLBundle(response))
+					return handleFile(Bun.file((response as any).index), set)
 
 				return new Response(response as any, set as any)
 		}
@@ -277,6 +281,9 @@ export const mapEarlyResponse = (
 						return Response.json(response, set as any) as any
 				}
 
+				if (isHTMLBundle(response))
+					return handleFile(Bun.file((response as any).index), set)
+
 				return new Response(response as any, set as any)
 		}
 	} else
@@ -307,9 +314,7 @@ export const mapEarlyResponse = (
 				)
 
 			case undefined:
-				if (!response) return new Response('')
-
-				return Response.json(response)
+				return Response.json(response ?? null)
 
 			case 'Response':
 				return response as Response
@@ -388,6 +393,9 @@ export const mapEarlyResponse = (
 						return Response.json(response, set as any) as any
 				}
 
+				if (isHTMLBundle(response))
+					return handleFile(Bun.file((response as any).index))
+
 				return new Response(response as any)
 		}
 }
@@ -396,6 +404,9 @@ export const mapCompactResponse = (
 	response: unknown,
 	request?: Request
 ): Response => {
+	if (isHTMLBundle(response))
+		return handleFile(Bun.file((response as any).index))
+
 	switch (response?.constructor?.name) {
 		case 'String':
 			return new Response(response as string)

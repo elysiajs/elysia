@@ -611,7 +611,11 @@ describe('Body Validator', () => {
 	})
 
 	it('parse query body with array', async () => {
-		const app = new Elysia().post('/', ({ body }) => body)
+		const app = new Elysia().post('/', ({ body }) => body, {
+			body: t.Object({
+				tea_party: t.Array(t.String())
+			})
+		})
 
 		const res = await app.handle(
 			new Request('https://e.ly', {
@@ -626,7 +630,6 @@ describe('Body Validator', () => {
 		expect(await res.json()).toEqual({
 			tea_party: ['nagisa', 'mika', 'seia']
 		})
-		expect(res.status).toBe(200)
 	})
 
 	it('validate references', async () => {

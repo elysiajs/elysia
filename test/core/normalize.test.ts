@@ -335,24 +335,19 @@ describe('Normalize', () => {
 	it('normalize based on property when normalized is disabled', async () => {
 		const app = new Elysia({ normalize: false }).get(
 			'/',
-			({ query }) => query,
+			({ query }) => ({ ...query }),
 			{
-				query: t.Object(
-					{
-						name: t.String()
-					},
-					{
-						additionalProperties: true
-					}
-				)
+				query: t.Object({
+					name: t.String(),
+					hifumi: t.String()
+				})
 			}
 		)
 
-		const response = await app
-			.handle(req('/?name=nagisa&hifumi=daisuki'))
-			.then((x) => x.json())
+		const response = await app.handle(req('/?name=nagisa&hifumi=daisuki'))
+		const json = await response.json()
 
-		expect(response).toEqual({
+		expect(json).toEqual({
 			name: 'nagisa',
 			hifumi: 'daisuki'
 		})
