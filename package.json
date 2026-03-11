@@ -14,7 +14,6 @@
 		"./package.json": "./package.json",
 		".": {
 			"types": "./dist/index.d.ts",
-			"bun": "./dist/bun/index.js",
 			"import": "./dist/index.mjs",
 			"require": "./dist/index.js"
 		},

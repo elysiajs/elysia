@@ -1,22 +1,25 @@
-import { Elysia } from '../src'
-import { mapEarlyResponse } from '../src/adapter/web-standard/handler'
+import { Elysia, t } from '../src'
 
-const body = {
-	name: 'Shiroko'
-}
-
-const context = {
-	headers: {
-		'x-powered-by': 'Elysia',
-		'coffee-scheme': 'Coffee'
-	},
-	status: 418,
-	cookie: {}
-}
-
-const response = await mapEarlyResponse(
-	new Promise((resolve) => resolve(body)),
-	context
+const app = new Elysia().post(
+	'/test',
+	({ body }) => ({
+		date: '2026-03-05T00:00:00.000Z',
+		body,
+		'typeof body.date': typeof body.date
+	}),
+	{
+		body: t.Object({
+			date: t.String()
+		})
+	}
 )
 
-console.log(response?.headers)
+app.handle(
+	new Request('http://localhost/test', {
+		method: 'POST',
+		headers: { 'content-type': 'application/json' },
+		body: JSON.stringify({
+			date: '2026-03-05T00:00:00.000Z'
+		})
+	})
+).then((res) => res.json()).then(console.log)

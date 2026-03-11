@@ -1,3 +1,7 @@
+# 1.4.29
+Change:
+- remove Bun specific built
+
 # 1.4.28 - 3 Mar 2026
 Bug fix:
 - conditional set headers of String and Object when no set.headers is set
