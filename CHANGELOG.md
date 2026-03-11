@@ -1,6 +1,7 @@
 # 1.4.29
 Change:
 - remove Bun specific built
+- export `AnySchema`, `UnwrapSchema`, `ModelsToTypes` from root
 
 # 1.4.28 - 3 Mar 2026
 Bug fix:
@@ -14,7 +15,6 @@ Bug fix:
 Improvement:
 - conditional async on getSchemaValidator when schema is Standard Schema
 - use Response.json on Bun
-- export `AnySchema`, `UnwrapSchema`, `ModelsToTypes` from root
 
 # 1.4.26 - 25 Feb 2026
 Bug fix:
