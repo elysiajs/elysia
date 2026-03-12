@@ -486,6 +486,70 @@ describe('Stream', () => {
 		expect(result).toEqual(['Elysia', 'Eden'])
 	})
 
+	it('stream ReadableStream binary chunks', async () => {
+		const payload = new Uint8Array(128 * 1024)
+
+		for (let i = 0; i < payload.length; i++) payload[i] = i % 251
+
+		const app = new Elysia().get(
+			'/',
+			() =>
+				new ReadableStream({
+					start(controller) {
+						controller.enqueue(payload.subarray(0, 32768))
+						controller.enqueue(payload.subarray(32768, 65536))
+						controller.enqueue(payload.subarray(65536, 98304))
+						controller.enqueue(payload.subarray(98304))
+						controller.close()
+					}
+				})
+		)
+
+		const response = await app.handle(req('/'))
+		const result = new Uint8Array(await response.arrayBuffer())
+
+		expect(result.byteLength).toBe(payload.byteLength)
+		expect(result).toEqual(payload)
+	})
+
+	it('stream ReadableStream binary views and blob chunks', async () => {
+		const source = new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+		const expected = new Uint8Array([6, 7, 8, 9, 2, 3, 4, 5, 10, 11, 12])
+
+		const app = new Elysia().get(
+			'/',
+			() =>
+				new ReadableStream({
+					start(controller) {
+						controller.enqueue(source.subarray(6, 10))
+						controller.enqueue(new DataView(source.buffer, 2, 4))
+						controller.enqueue(
+							new Blob([new Uint8Array([10, 11, 12])])
+						)
+						controller.close()
+					}
+				})
+		)
+
+		const response = await app.handle(req('/'))
+		const result = new Uint8Array(await response.arrayBuffer())
+
+		expect(result).toEqual(expected)
+	})
+
+	it('stream generator Uint8Array chunks as binary', async () => {
+		const app = new Elysia().get('/', async function* () {
+			yield new Uint8Array([1, 2])
+			await Bun.sleep(1)
+			yield new Uint8Array([3, 4])
+		})
+
+		const response = await app.handle(req('/'))
+		const result = new Uint8Array(await response.arrayBuffer())
+
+		expect(result).toEqual(new Uint8Array([1, 2, 3, 4]))
+	})
+
 	it('stream ReadableStream return from generator function', async () => {
 		const app = new Elysia().get('/', function* () {
 			return new ReadableStream({

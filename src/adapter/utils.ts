@@ -147,6 +147,44 @@ interface CreateHandlerParameter {
 
 const allowRapidStream = env.ELYSIA_RAPID_STREAM === 'true'
 
+const isPromiseLike = (value: unknown): value is PromiseLike<unknown> =>
+	typeof (value as PromiseLike<unknown>)?.then === 'function'
+
+const isBinaryChunk = (
+	chunk: unknown
+): chunk is Blob | ArrayBuffer | ArrayBufferView =>
+	chunk instanceof Blob ||
+	chunk instanceof ArrayBuffer ||
+	ArrayBuffer.isView(chunk)
+
+const enqueueBinaryChunk = (
+	controller: ReadableStreamDefaultController,
+	chunk: Blob | ArrayBuffer | ArrayBufferView
+): true | Promise<true> => {
+	if (chunk instanceof Blob) {
+		return chunk.arrayBuffer().then((buffer) => {
+			controller.enqueue(new Uint8Array(buffer))
+			return true as const
+		})
+	}
+
+	if (chunk instanceof Uint8Array) {
+		controller.enqueue(chunk)
+		return true
+	}
+
+	if (chunk instanceof ArrayBuffer) {
+		controller.enqueue(new Uint8Array(chunk))
+		return true
+	}
+
+	controller.enqueue(
+		new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength)
+	)
+
+	return true
+}
+
 export const createStreamHandler =
 	({ mapResponse, mapCompactResponse }: CreateHandlerParameter) =>
 	async (
@@ -215,6 +253,32 @@ export const createStreamHandler =
 		return new Response(
 			new ReadableStream({
 				async start(controller) {
+					const enqueueChunk = (chunk: unknown) => {
+						if (chunk === undefined || chunk === null) return false
+
+						// @ts-ignore
+						if (chunk.toSSE) {
+							// @ts-ignore
+							controller.enqueue(chunk.toSSE())
+							return false
+						}
+
+						if (!isSSE && isBinaryChunk(chunk))
+							return enqueueBinaryChunk(controller, chunk)
+
+						if (typeof chunk === 'object')
+							try {
+								controller.enqueue(
+									format(JSON.stringify(chunk))
+								)
+							} catch {
+								controller.enqueue(format(chunk.toString()))
+							}
+						else controller.enqueue(format(chunk.toString()))
+
+						return false
+					}
+
 					let end = false
 
 					request?.signal?.addEventListener('abort', () => {
@@ -230,21 +294,9 @@ export const createStreamHandler =
 						init.value !== undefined &&
 						init.value !== null
 					) {
-						// @ts-ignore
-						if (init.value.toSSE)
-							// @ts-ignore
-							controller.enqueue(init.value.toSSE())
-						else if (typeof init.value === 'object')
-							try {
-								controller.enqueue(
-									format(JSON.stringify(init.value))
-								)
-							} catch {
-								controller.enqueue(
-									format(init.value.toString())
-								)
-							}
-						else controller.enqueue(format(init.value.toString()))
+						const enqueued = enqueueChunk(init.value)
+
+						if (isPromiseLike(enqueued)) await enqueued
 					}
 
 					try {
@@ -252,35 +304,26 @@ export const createStreamHandler =
 							if (end) break
 							if (chunk === undefined || chunk === null) continue
 
-							// @ts-ignore
-							if (chunk.toSSE) {
-								// @ts-ignore
-								controller.enqueue(chunk.toSSE())
-							} else {
-								if (typeof chunk === 'object')
-									try {
-										controller.enqueue(
-											format(JSON.stringify(chunk))
-										)
-									} catch {
-										controller.enqueue(
-											format(chunk.toString())
-										)
-									}
-								else
-									controller.enqueue(format(chunk.toString()))
+							const enqueued = enqueueChunk(chunk)
+							const isRawBinaryChunk = isPromiseLike(enqueued)
+								? await enqueued
+								: enqueued
 
-								if (!allowRapidStream && isBrowser && !isSSE)
-									/**
-									 * Wait for the next event loop
-									 * otherwise the data will be mixed up
-									 *
-									 * @see https://github.com/elysiajs/elysia/issues/741
-									 */
-									await new Promise<void>((resolve) =>
-										setTimeout(() => resolve(), 0)
-									)
-							}
+							if (
+								!isRawBinaryChunk &&
+								!allowRapidStream &&
+								isBrowser &&
+								!isSSE
+							)
+								/**
+								 * Wait for the next event loop
+								 * otherwise the data will be mixed up
+								 *
+								 * @see https://github.com/elysiajs/elysia/issues/741
+								 */
+								await new Promise<void>((resolve) =>
+									setTimeout(() => resolve(), 0)
+								)
 						}
 					} catch (error) {
 						console.warn(error)
