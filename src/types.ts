@@ -7,9 +7,17 @@ import {
 	TSchema,
 	TAnySchema,
 	OptionalKind,
+	TOptional,
+	TReadonly,
+	TransformKind,
 	TModule,
 	TImport,
-	TProperties
+	TProperties,
+	TObject,
+	TArray,
+	TTransform,
+	Static,
+	StaticDecode
 } from '@sinclair/typebox'
 import type { TypeCheck, ValueError } from '@sinclair/typebox/compiler'
 
@@ -454,7 +462,74 @@ interface OptionalField {
 	[OptionalKind]: 'Optional'
 }
 
+type UnwrapWrappers<T extends TSchema> =
+  T extends TOptional<infer I extends TSchema> ? UnwrapWrappers<I> :
+  T extends TReadonly<infer I extends TSchema> ? UnwrapWrappers<I> :
+  T;
+
+type TransformMetadata<T extends TSchema> =
+	UnwrapWrappers<T> extends { [TransformKind]: infer Metadata }
+		? Metadata
+		: never
+
+type TypeBoxTransformInput<T extends TSchema, Params extends unknown[] = []> =
+	TransformMetadata<T> extends {
+		Encode: (...args: any[]) => infer Encoded
+	}
+		? Encoded
+		: UnwrapWrappers<T> extends TTransform<
+				infer InputSchema extends TSchema,
+				unknown
+			>
+			? StaticDecode<InputSchema>
+			: TransformMetadata<T> extends {
+					Decode: (...args: infer Args) => unknown
+				}
+				? Args[0]
+				: Static<T, Params>
+
+type IsOptionalSchema<Type extends TSchema> = Type extends {
+	[OptionalKind]: 'Optional'
+}
+	? true
+	: false
+
+type TypeBoxStaticEncode<
+	Type extends TSchema,
+	Params extends unknown[] = []
+> = Type extends TObject<infer Properties extends TProperties>
+	? Static<Type, Params> extends infer SchemaStatic extends Record<
+				PropertyKey,
+				unknown
+			>
+		? {
+					[K in keyof Properties as IsOptionalSchema<
+						Properties[K]
+					> extends true
+						? never
+						: K]: K extends keyof SchemaStatic
+						? TypeBoxStaticEncode<Properties[K], Params>
+						: never
+				} & {
+					[K in keyof Properties as IsOptionalSchema<
+						Properties[K]
+					> extends true
+						? K
+						: never]?: K extends keyof SchemaStatic
+						? TypeBoxStaticEncode<Properties[K], Params>
+						: never
+				} & Omit<SchemaStatic, keyof Properties>
+		: Static<Type, Params>
+	: Type extends TArray<infer Item extends TSchema>
+		? TypeBoxStaticEncode<Item, Params>[]
+	: TypeBoxTransformInput<Type>
+
 export type UnwrapSchema<
+	Schema extends AnySchema | string | undefined,
+	Definitions extends DefinitionBase['typebox'] = {}
+> = UnwrapSchemaOutput<Schema, Definitions>
+
+export type UnwrapSchemaOutput<
 	Schema extends AnySchema | string | undefined,
 	Definitions extends DefinitionBase['typebox'] = {}
 > = Schema extends undefined
@@ -494,7 +569,40 @@ export type UnwrapSchema<
 					: unknown
 				: unknown
 
+export type UnwrapSchemaInput<
+	Schema extends AnySchema | string | undefined,
+	Definitions extends DefinitionBase['typebox'] = {}
+> = Schema extends undefined
+	? unknown
+	: Schema extends TSchema
+		? Schema extends OptionalField
+			? Partial<TypeBoxStaticEncode<Schema>>
+			: TypeBoxStaticEncode<Schema>
+		: Schema extends FastStandardSchemaV1Like
+			? // @ts-ignore Schema is StandardSchemaV1Like
+				NonNullable<Schema['~standard']['types']>['input']
+			: Schema extends string
+				? Schema extends keyof Definitions
+					? Definitions[Schema] extends TAnySchema
+						? TypeBoxStaticEncode<
+								TImport<
+									// @ts-expect-error Internal typebox already filter for TSchema
+									Definitions,
+									Schema
+								>
+							>
+						: NonNullable<
+								Definitions[Schema]['~standard']['types']
+							>['input']
+					: unknown
+				: unknown
+
 export type UnwrapBodySchema<
+	Schema extends AnySchema | string | undefined,
+	Definitions extends DefinitionBase['typebox'] = {}
+> = UnwrapBodySchemaOutput<Schema, Definitions>
+
+export type UnwrapBodySchemaOutput<
 	Schema extends AnySchema | string | undefined,
 	Definitions extends DefinitionBase['typebox'] = {}
 > = undefined extends Schema
@@ -535,23 +643,52 @@ export type UnwrapBodySchema<
 					: unknown
 				: unknown
 
+export type UnwrapBodySchemaInput<
+	Schema extends AnySchema | string | undefined,
+	Definitions extends DefinitionBase['typebox'] = {}
+> = undefined extends Schema
+	? unknown
+	: Schema extends TSchema
+		? Schema extends OptionalField
+			? Partial<TypeBoxStaticEncode<Schema>> | null
+			: TypeBoxStaticEncode<Schema>
+		: Schema extends FastStandardSchemaV1Like
+			? // @ts-ignore Schema is StandardSchemaV1Like
+				NonNullable<Schema['~standard']['types']>['input']
+			: Schema extends string
+				? Schema extends keyof Definitions
+					? Definitions[Schema] extends TAnySchema
+						? TypeBoxStaticEncode<
+								TImport<
+								// @ts-expect-error Internal typebox already filter for TSchema
+								Definitions,
+								Schema
+							>
+						>
+						: // @ts-ignore Schema is StandardSchemaV1Like
+							NonNullable<
+								Definitions[Schema]['~standard']['types']
+							>['input']
+					: unknown
+				: unknown
+
 export interface UnwrapRoute<
 	in out Schema extends InputSchema<any>,
 	in out Definitions extends DefinitionBase['typebox'] = {},
 	in out Path extends string = ''
 > {
-	body: UnwrapBodySchema<Schema['body'], Definitions>
-	headers: UnwrapSchema<Schema['headers'], Definitions>
-	query: UnwrapSchema<Schema['query'], Definitions>
+	body: UnwrapBodySchemaOutput<Schema['body'], Definitions>
+	headers: UnwrapSchemaOutput<Schema['headers'], Definitions>
+	query: UnwrapSchemaOutput<Schema['query'], Definitions>
 	params: {} extends Schema['params']
 		? ResolvePath<Path>
 		: {} extends Schema
 			? ResolvePath<Path>
-			: UnwrapSchema<Schema['params'], Definitions>
-	cookie: UnwrapSchema<Schema['cookie'], Definitions>
+			: UnwrapSchemaOutput<Schema['params'], Definitions>
+	cookie: UnwrapSchemaOutput<Schema['cookie'], Definitions>
 	response: Schema['response'] extends FastAnySchema | string
 		? {
-				200: UnwrapSchema<
+				200: UnwrapSchemaOutput<
 					Schema['response'],
 					Definitions
 				> extends infer A
@@ -564,7 +701,48 @@ export interface UnwrapRoute<
 					[status in number]: FastAnySchema | string
 			  }
 			? {
-					[k in keyof Schema['response']]: UnwrapSchema<
+					[k in keyof Schema['response']]: UnwrapSchemaOutput<
+						Schema['response'][k],
+						Definitions
+					> extends infer A
+						? A extends File
+							? File | ElysiaFile
+							: A
+						: unknown
+				}
+			: unknown | void
+}
+
+export interface UnwrapRouteInput<
+	in out Schema extends InputSchema<any>,
+	in out Definitions extends DefinitionBase['typebox'] = {},
+	in out Path extends string = ''
+> {
+	body: UnwrapBodySchemaInput<Schema['body'], Definitions>
+	headers: UnwrapSchemaInput<Schema['headers'], Definitions>
+	query: UnwrapSchemaInput<Schema['query'], Definitions>
+	params: {} extends Schema['params']
+		? ResolvePath<Path>
+		: {} extends Schema
+			? ResolvePath<Path>
+			: UnwrapSchemaInput<Schema['params'], Definitions>
+	cookie: UnwrapSchemaInput<Schema['cookie'], Definitions>
+	response: Schema['response'] extends FastAnySchema | string
+		? {
+				200: UnwrapSchemaOutput<
+					Schema['response'],
+					Definitions
+				> extends infer A
+					? A extends File
+						? File | ElysiaFile
+						: A
+					: unknown
+			}
+		: Schema['response'] extends {
+					[status in number]: FastAnySchema | string
+			  }
+			? {
+					[k in keyof Schema['response']]: UnwrapSchemaOutput<
 						Schema['response'][k],
 						Definitions
 					> extends infer A
@@ -2306,7 +2484,8 @@ export type MergeElysiaInstances<
 		standaloneSchema: {}
 		response: {}
 	},
-	Routes extends RouteBase = {}
+	Routes extends RouteBase = {},
+	RoutesInput extends RouteBase = {}
 > = Instances extends [
 	infer Current extends AnyElysia,
 	...infer Rest extends AnyElysia[]
@@ -2322,7 +2501,11 @@ export type MergeElysiaInstances<
 			Routes &
 				(Prefix extends ``
 					? Current['~Routes']
-					: CreateEden<Prefix, Current['~Routes']>)
+					: CreateEden<Prefix, Current['~Routes']>),
+			RoutesInput &
+				(Prefix extends ``
+					? Current['~RoutesInput']
+					: CreateEden<Prefix, Current['~RoutesInput']>)
 		>
 	: Elysia<
 			Prefix,
@@ -2336,7 +2519,8 @@ export type MergeElysiaInstances<
 			Metadata,
 			Routes,
 			Ephemeral,
-			Volatile
+			Volatile,
+			RoutesInput
 		>
 
 export type LifeCycleType = 'global' | 'local' | 'scoped'
@@ -2665,7 +2849,9 @@ export type CreateEdenResponse<
 	Schema extends RouteSchema,
 	MacroContext extends RouteSchema,
 	// This should be handled by ComposeElysiaResponse
-	Res extends PossibleResponse
+	Res extends PossibleResponse,
+	InputSchema extends RouteSchema = Schema,
+	InputMacroContext extends RouteSchema = MacroContext
 > = RouteSchema extends MacroContext
 	? {
 			body: Schema['body']
@@ -2675,6 +2861,14 @@ export type CreateEdenResponse<
 			query: Schema['query']
 			headers: Schema['headers']
 			response: Prettify<Res>
+			[routeInputSymbol]?: {
+				body: InputSchema['body']
+				params: IsNever<keyof InputSchema['params']> extends true
+					? ResolvePath<Path>
+					: InputSchema['params']
+				query: InputSchema['query']
+				headers: InputSchema['headers']
+			}
 		}
 	: {
 			body: Prettify<Schema['body'] & MacroContext['body']>
@@ -2686,7 +2880,43 @@ export type CreateEdenResponse<
 			query: Prettify<Schema['query'] & MacroContext['query']>
 			headers: Prettify<Schema['headers'] & MacroContext['headers']>
 			response: Prettify<Res>
+			[routeInputSymbol]?: {
+				body: Prettify<InputSchema['body'] & InputMacroContext['body']>
+				params: IsNever<
+					keyof (InputSchema['params'] & InputMacroContext['params'])
+				> extends true
+					? ResolvePath<Path>
+					: Prettify<
+							InputSchema['params'] & InputMacroContext['params']
+						>
+				query: Prettify<InputSchema['query'] & InputMacroContext['query']>
+				headers: Prettify<
+					InputSchema['headers'] & InputMacroContext['headers']
+				>
+			}
 		}
+
+export declare const routeInputSymbol: unique symbol
+
+export type StripRouteInput<TRoutes> = TRoutes extends Record<string, unknown>
+	? {
+			[K in keyof TRoutes as K extends typeof routeInputSymbol
+				? never
+				: K]: StripRouteInput<TRoutes[K]>
+		}
+	: TRoutes
+
+export type InferRouteInput<TRoutes> = TRoutes extends {
+	[routeInputSymbol]?: infer Input
+}
+	? Input
+	: TRoutes extends Record<string, unknown>
+		? {
+				[K in keyof TRoutes]: InferRouteInput<TRoutes[K]>
+			}
+		: TRoutes
+
+export type InferElysiaRoutesInput<T extends AnyElysia> = T['~RoutesInput']
 
 export interface Router {
 	'~http':
