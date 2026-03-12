@@ -144,6 +144,7 @@ import type {
 	DocumentDecoration,
 	AfterHandler,
 	NonResolvableMacroKey,
+	DiscriminatedMacroEntry,
 	StandardSchemaV1Like,
 	ElysiaHandlerToResponseSchema,
 	ElysiaHandlerToResponseSchemas,
@@ -5303,8 +5304,7 @@ export default class Elysia<
 					resolve: Partial<
 						Ephemeral['resolve'] & Volatile['resolve']
 					> &
-						// @ts-ignore
-						MacroContext['resolve']
+						(MacroContext & { resolve: {} })['resolve']
 				},
 				Definitions['error']
 			>
@@ -5335,9 +5335,77 @@ export default class Elysia<
 		Volatile
 	>
 
+	// Discriminated overload: precise macro context based on activated flags
+	// Only matches when prior macros exist (non-empty macroFn)
+	macro<
+		const Entry extends Record<
+			string,
+			DiscriminatedMacroEntry<
+				Metadata['macroFn'],
+				IntersectIfObjectSchema<
+					MergeSchema<
+						UnwrapRoute<
+							Metadata['macro'] &
+								InputSchema<
+									keyof Definitions['typebox'] & string
+								>,
+							Definitions['typebox'],
+							BasePath
+						>,
+						MergeSchema<
+							Volatile['schema'],
+							MergeSchema<
+								Ephemeral['schema'],
+								Metadata['schema']
+							>
+						>
+					>,
+					Metadata['standaloneSchema'] &
+						Ephemeral['standaloneSchema'] &
+						Volatile['standaloneSchema']
+				>,
+				Singleton & {
+					derive: Partial<
+						Ephemeral['derive'] & Volatile['derive']
+					>
+					resolve: Partial<
+						Ephemeral['resolve'] & Volatile['resolve']
+					>
+				},
+				Definitions['error'],
+				Definitions['typebox']
+			>
+		>,
+		const NewMacro extends Entry
+	>(
+		macro: Entry
+	): Elysia<
+		BasePath,
+		Singleton,
+		Definitions,
+		{
+			schema: Metadata['schema']
+			standaloneSchema: Metadata['standaloneSchema']
+			macro: Metadata['macro'] & Partial<MacroToProperty<NewMacro>>
+			macroFn: Metadata['macroFn'] & NewMacro
+			parser: Metadata['parser']
+			response: Metadata['response']
+		},
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
 	macro<
 		const Input extends Metadata['macro'] &
 			InputSchema<keyof Definitions['typebox'] & string>,
+		const MacroContext extends {} extends Metadata['macroFn']
+			? {}
+			: MacroToContext<
+					Metadata['macroFn'],
+					Record<keyof Metadata['macroFn'], true>,
+					Definitions['typebox']
+				>,
 		const NewMacro extends Macro<
 			Metadata['macro'] &
 				InputSchema<keyof Definitions['typebox'] & string>,
@@ -5353,10 +5421,12 @@ export default class Elysia<
 				Metadata['standaloneSchema'] &
 					Ephemeral['standaloneSchema'] &
 					Volatile['standaloneSchema']
-			>,
+			> &
+				MacroContext,
 			Singleton & {
 				derive: Partial<Ephemeral['derive'] & Volatile['derive']>
-				resolve: Partial<Ephemeral['resolve'] & Volatile['resolve']>
+				resolve: Partial<Ephemeral['resolve'] & Volatile['resolve']> &
+					(MacroContext & { resolve: {} })['resolve']
 			},
 			Definitions['error']
 		>
@@ -5382,6 +5452,13 @@ export default class Elysia<
 	macro<
 		const Input extends Metadata['macro'] &
 			InputSchema<keyof Definitions['typebox'] & string>,
+		const MacroContext extends {} extends Metadata['macroFn']
+			? {}
+			: MacroToContext<
+					Metadata['macroFn'],
+					Record<keyof Metadata['macroFn'], true>,
+					Definitions['typebox']
+				>,
 		const NewMacro extends MaybeFunction<
 			Macro<
 				Input,
@@ -5397,10 +5474,12 @@ export default class Elysia<
 					Metadata['standaloneSchema'] &
 						Ephemeral['standaloneSchema'] &
 						Volatile['standaloneSchema']
-				>,
+				> &
+					MacroContext,
 				Singleton & {
 					derive: Partial<Ephemeral['derive'] & Volatile['derive']>
-					resolve: Partial<Ephemeral['resolve'] & Volatile['resolve']>
+					resolve: Partial<Ephemeral['resolve'] & Volatile['resolve']> &
+						(MacroContext & { resolve: {} })['resolve']
 				},
 				Definitions['error']
 			>
@@ -5469,8 +5548,28 @@ export default class Elysia<
 
 			applied[seed] = true
 
-			for (let [k, value] of Object.entries(macroHook)) {
+			const entries = Object.entries(macroHook)
+
+			for (const [k, value] of entries) {
 				if (k === 'seed') continue
+
+				if (k in macro) {
+					this.applyMacro(
+						localHook,
+						{ [k]: value },
+						{ applied, iteration: iteration + 1 }
+					)
+
+					// Remove the raw macro flag key (e.g. `auth`) from localHook now
+					// that its dependency has been recursively expanded. This prevents
+					// the flag from leaking as an unrecognised property into the final hook.
+					delete localHook[key]
+				}
+			}
+
+			for (let [k, value] of entries) {
+				if (k === 'seed') continue
+				if (k in macro) continue
 
 				if (k in emptySchema) {
 					insertStandaloneValidator(
@@ -5494,17 +5593,6 @@ export default class Elysia<
 					localHook.detail = mergeDeep(localHook.detail, value, {
 						mergeArray: true
 					})
-
-					delete localHook[key]
-					continue
-				}
-
-				if (k in macro) {
-					this.applyMacro(
-						localHook,
-						{ [k]: value },
-						{ applied, iteration: iteration + 1 }
-					)
 
 					delete localHook[key]
 					continue
