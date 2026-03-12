@@ -975,7 +975,7 @@ export const composeHandler = ({
 					break
 
 				default:
-					if ((parser[0] as string) in app['~parser']) {
+					if (parser in app['~parser']) {
 						fnLiteral += hasHeaders
 							? `let contentType = c.headers['content-type']`
 							: `let contentType = c.request.headers.get('content-type')`
