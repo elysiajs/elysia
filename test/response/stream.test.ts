@@ -640,4 +640,35 @@ describe('Stream', () => {
 			'event: message\ndata: {"meow":"3"}\n\n'
 		])
 	})
+
+	// Regression test for https://github.com/elysiajs/elysia/issues/1801
+	// The generator must not be drained ahead of the consumer (backpressure).
+	it('does not eagerly drain generator ahead of consumer', async () => {
+		let nextCallCount = 0
+
+		async function* lazyGenerator() {
+			for (let i = 0; i < 10; i++) {
+				nextCallCount++
+				yield String(i)
+			}
+		}
+
+		const app = new Elysia().get('/', lazyGenerator)
+
+		const response = await app.handle(req('/'))
+		const reader = response.body!.getReader()
+
+		// Read only the first 3 chunks
+		await reader.read()
+		await reader.read()
+		await reader.read()
+
+		// With pull()-based backpressure the generator should not have
+		// been advanced far beyond what was consumed. Allow a small buffer
+		// (ReadableStream may prefetch one extra chunk via pull()) but it
+		// must not have drained all 10.
+		expect(nextCallCount).toBeLessThan(10)
+
+		reader.cancel()
+	})
 })
