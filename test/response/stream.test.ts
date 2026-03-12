@@ -641,6 +641,42 @@ describe('Stream', () => {
 		])
 	})
 
+	// Regression: proxying a large upstream SSE stream caused OOM (#1801).
+	// The upstream generator must not be drained ahead of the slow consumer.
+	it('does not buffer unboundedly when proxying a slow-consuming SSE stream', async () => {
+		const TOTAL = 50
+		let produced = 0
+
+		const upstream = new Elysia().get('/', async function* () {
+			for (let i = 0; i < TOTAL; i++) {
+				produced++
+				yield sse(`message ${i}`)
+			}
+		})
+
+		// Simulate the OOM scenario: one Elysia instance re-streams another's
+		// SSE response while the consumer reads slowly.
+		const proxy = new Elysia().get('/', () =>
+			upstream.handle(new Request('http://e.ly'))
+		)
+
+		const response = await proxy.handle(req('/'))
+		const reader = response.body!.getReader()
+
+		// Slow consumer: read 3 chunks with pauses between each
+		await reader.read()
+		await Bun.sleep(20)
+		await reader.read()
+		await Bun.sleep(20)
+		await reader.read()
+
+		// The upstream generator must not have raced ahead and produced all
+		// TOTAL chunks. A small prefetch buffer is fine, but nowhere near 50.
+		expect(produced).toBeLessThan(TOTAL)
+
+		reader.cancel()
+	})
+
 	// Regression test for https://github.com/elysiajs/elysia/issues/1801
 	// The generator must not be drained ahead of the consumer (backpressure).
 	it('does not eagerly drain generator ahead of consumer', async () => {
