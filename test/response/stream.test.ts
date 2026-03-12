@@ -640,4 +640,71 @@ describe('Stream', () => {
 			'event: message\ndata: {"meow":"3"}\n\n'
 		])
 	})
+
+	// Regression: proxying a large upstream SSE stream caused OOM (#1801).
+	// The upstream generator must not be drained ahead of the slow consumer.
+	it('does not buffer unboundedly when proxying a slow-consuming SSE stream', async () => {
+		const TOTAL = 50
+		let produced = 0
+
+		const upstream = new Elysia().get('/', async function* () {
+			for (let i = 0; i < TOTAL; i++) {
+				produced++
+				yield sse(`message ${i}`)
+			}
+		})
+
+		// Simulate the OOM scenario: one Elysia instance re-streams another's
+		// SSE response while the consumer reads slowly.
+		const proxy = new Elysia().get('/', () =>
+			upstream.handle(new Request('http://e.ly'))
+		)
+
+		const response = await proxy.handle(req('/'))
+		const reader = response.body!.getReader()
+
+		// Slow consumer: read 3 chunks with pauses between each
+		await reader.read()
+		await Bun.sleep(20)
+		await reader.read()
+		await Bun.sleep(20)
+		await reader.read()
+
+		// The upstream generator must not have raced ahead and produced all
+		// TOTAL chunks. A small prefetch buffer is fine, but nowhere near 50.
+		expect(produced).toBeLessThan(TOTAL)
+
+		reader.cancel()
+	})
+
+	// Regression test for https://github.com/elysiajs/elysia/issues/1801
+	// The generator must not be drained ahead of the consumer (backpressure).
+	it('does not eagerly drain generator ahead of consumer', async () => {
+		let nextCallCount = 0
+
+		async function* lazyGenerator() {
+			for (let i = 0; i < 10; i++) {
+				nextCallCount++
+				yield String(i)
+			}
+		}
+
+		const app = new Elysia().get('/', lazyGenerator)
+
+		const response = await app.handle(req('/'))
+		const reader = response.body!.getReader()
+
+		// Read only the first 3 chunks
+		await reader.read()
+		await reader.read()
+		await reader.read()
+
+		// With pull()-based backpressure the generator should not have
+		// been advanced far beyond what was consumed. Allow a small buffer
+		// (ReadableStream may prefetch one extra chunk via pull()) but it
+		// must not have drained all 10.
+		expect(nextCallCount).toBeLessThan(10)
+
+		reader.cancel()
+	})
 })
