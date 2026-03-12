@@ -16,13 +16,16 @@ export const handleFile = (
 	const size = response.size
 
 	const rangeHeader = request?.headers.get('range')
-	if (rangeHeader && size) {
+	if (rangeHeader) {
 		const match = /bytes=(\d*)-(\d*)/.exec(rangeHeader)
 		if (match) {
 			if (!match[1] && !match[2])
 				return new Response(null, {
 					status: 416,
-					headers: { 'content-range': `bytes */${size}` }
+					headers: mergeHeaders(
+						new Headers({ 'content-range': `bytes */${size}` }),
+						set?.headers ?? {}
+					)
 				})
 
 			let start: number
@@ -42,34 +45,34 @@ export const handleFile = (
 			if (start >= size || start > end) {
 				return new Response(null, {
 					status: 416,
-					headers: { 'content-range': `bytes */${size}` }
+					headers: mergeHeaders(
+						new Headers({ 'content-range': `bytes */${size}` }),
+						set?.headers ?? {}
+					)
 				})
 			}
 
 			const contentLength = end - start + 1
-			const rangeHeaders: Record<string, string | number> = {
+			const rangeHeaders = new Headers({
 				'accept-ranges': 'bytes',
 				'content-range': `bytes ${start}-${end}/${size}`,
-				'content-length': contentLength
-			}
-
-			if (set?.headers && isNotEmpty(set.headers as Record<string, unknown>))
-				Object.assign(rangeHeaders, set.headers, {
-					'content-range': `bytes ${start}-${end}/${size}`,
-					'content-length': contentLength
-				})
+				'content-length': String(contentLength)
+			})
 
 			// Blob.slice() exists at runtime but is absent from the ESNext lib typings
-		// (no DOM lib). Cast through unknown to the minimal interface we need.
-		return new Response(
-			(response as unknown as { slice(start: number, end: number): Blob }).slice(
-				start,
-				end + 1
-			),
-			{
-				status: 206,
-				headers: rangeHeaders as any
-			})
+			// (no DOM lib). Cast through unknown to the minimal interface we need.
+			// Pass response.type as third arg so the sliced blob preserves MIME type.
+			return new Response(
+				(
+					response as unknown as {
+						slice(start: number, end: number, contentType?: string): Blob
+					}
+				).slice(start, end + 1, response.type),
+				{
+					status: 206,
+					headers: mergeHeaders(rangeHeaders, set?.headers ?? {})
+				}
+			)
 		}
 	}
 
