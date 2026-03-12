@@ -1614,7 +1614,7 @@ export const composeHandler = ({
 			// ! Get latest app.config.cookie
 			validator.cookie.config = mergeCookie(
 				validator.cookie.config,
-				validator.cookie?.config ?? {}
+				app.config.cookie ?? {}
 			)
 
 			fnLiteral +=
@@ -2093,7 +2093,7 @@ export const composeHandler = ({
 					fnLiteral +=
 						`c.response=c.responseValue=er\n` +
 						`mep=e.mapResponse[${i}](c)\n` +
-						`if(mep instanceof Promise)er=await er\n` +
+						`if(mep instanceof Promise)mep=await mep\n` +
 						`if(mep!==undefined)er=mep\n`
 
 					endUnit()

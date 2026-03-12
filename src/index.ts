@@ -165,7 +165,7 @@ import type {
 	UnknownRouteSchema,
 	MaybeFunction,
 	InlineHandlerNonMacro,
-	Router
+	Router,
 } from './types'
 import {
 	coercePrimitiveRoot,
@@ -420,7 +420,7 @@ export default class Elysia<
 
 	'~adapter': ElysiaAdapter
 
-	env(model: TObject<any>, _env = env) {
+	env(model: TObject, _env = env) {
 		const validator = getSchemaValidator(model, {
 			modules: this.definitions.typebox,
 			dynamic: true,
@@ -805,6 +805,10 @@ export default class Elysia<
 				Object.assign({}, this.config.detail!),
 				localHook.detail
 			)
+
+		if (path === '/ip') {
+			// console.log(path, this.event, localHookToLifeCycleStore(localHook))
+		}
 
 		const hooks = isNotEmpty(this.event)
 			? mergeHook(this.event, localHookToLifeCycleStore(localHook))
@@ -3650,6 +3654,10 @@ export default class Elysia<
 
 		for (const handle of handles) {
 			const fn = asHookType(handle, 'global', { skipIfHasType: true })
+			if (this.config.name || this.config.seed)
+				fn.checksum = checksum(
+					this.config.name + JSON.stringify(this.config.seed)
+				)
 
 			switch (type) {
 				case 'start':
@@ -5598,21 +5606,7 @@ export default class Elysia<
 									})()
 
 			const handler: Handler = ({ request, path }) =>
-				run(
-					new Request(replaceUrlPath(request.url, path), {
-						method: request.method,
-						headers: request.headers,
-						signal: request.signal,
-						credentials: request.credentials,
-						referrerPolicy: request.referrerPolicy as any,
-						duplex: request.duplex,
-						redirect: request.redirect,
-						mode: request.mode,
-						keepalive: request.keepalive,
-						integrity: request.integrity,
-						body: request.body
-					})
-				)
+				run(new Request(replaceUrlPath(request.url, path), request))
 
 			this.route('ALL', '/*', handler as any, {
 				parse: 'none',
@@ -5648,19 +5642,7 @@ export default class Elysia<
 			handle(
 				new Request(
 					replaceUrlPath(request.url, path.slice(length) || '/'),
-					{
-						method: request.method,
-						headers: request.headers,
-						signal: request.signal,
-						credentials: request.credentials,
-						referrerPolicy: request.referrerPolicy as any,
-						duplex: request.duplex,
-						redirect: request.redirect,
-						mode: request.mode,
-						keepalive: request.keepalive,
-						integrity: request.integrity,
-						body: request.body
-					}
+					request
 				)
 			)
 
@@ -8361,6 +8343,8 @@ export type {
 	UnwrapSchema,
 	UnwrapSchemaInput,
 	UnwrapSchemaOutput,
+	AnySchema,
+	ModelsToTypes,
 	Checksum,
 	DocumentDecoration,
 	InferContext,

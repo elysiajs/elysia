@@ -23,8 +23,10 @@ import { mapValueError } from './error'
 
 import type { CookieOptions } from './cookies'
 import type {
+	AnySchema,
 	ElysiaConfig,
 	InputSchema,
+	IsAny,
 	MaybeArray,
 	StandaloneInputSchema,
 	StandardSchemaV1LikeValidate,
@@ -40,11 +42,18 @@ import {
 
 type MapValueError = ReturnType<typeof mapValueError>
 
-export interface ElysiaTypeCheck<T extends TSchema>
-	extends Omit<TypeCheck<T>, 'schema'> {
+export interface ElysiaTypeCheck<T extends AnySchema>
+	extends Omit<TypeCheck<TSchema>, 'schema' | 'Check'> {
 	provider: 'typebox' | 'standard'
 	schema: T
 	config: Object
+	Check(value: unknown): T extends TSchema
+		? boolean
+		:
+				| {
+						value: UnwrapSchema<T>
+				  }
+				| { issues: unknown[] }
 	Clean?(v: unknown): UnwrapSchema<T>
 	parse(v: unknown): UnwrapSchema<T>
 	safeParse(v: unknown):
@@ -399,9 +408,7 @@ const createCleaner = (schema: TAnySchema) => (value: unknown) => {
 
 // const caches = <Record<string, ElysiaTypeCheck<any>>>{}
 
-export const getSchemaValidator = <
-	T extends TSchema | StandardSchemaV1Like | string | undefined
->(
+export const getSchemaValidator = <T extends AnySchema | string | undefined>(
 	s: T,
 	{
 		models = {},
@@ -415,7 +422,7 @@ export const getSchemaValidator = <
 		validators,
 		sanitize
 	}: {
-		models?: Record<string, TSchema | StandardSchemaV1Like>
+		models?: Record<string, AnySchema>
 		modules?: TModule<any, any>
 		additionalProperties?: boolean
 		forceAdditionalProperties?: boolean
@@ -426,7 +433,11 @@ export const getSchemaValidator = <
 		validators?: InputSchema['body'][]
 		sanitize?: () => ExactMirrorInstruction['sanitize']
 	} = {}
-): T extends TSchema ? ElysiaTypeCheck<T> : undefined => {
+): IsAny<T> extends true
+	? ElysiaTypeCheck<TAnySchema>
+	: undefined extends T
+		? undefined
+		: ElysiaTypeCheck<NonNullable<Exclude<T, string>>> => {
 	validators = validators?.filter((x) => x)
 
 	if (!s) {
@@ -559,21 +570,23 @@ export const getSchemaValidator = <
 			// @ts-ignore
 			vali.Decode = mirror
 
-			// @ts-ignore
-			return (v) => {
-				if (vali.Check(v)) {
-					return {
-						value: vali.Decode(v)
-					}
-				} else
-					return {
-						issues: [...vali.Errors(v)]
-					}
+			return {
+				// @ts-ignore
+				validate: (v) => {
+					if (vali.Check(v))
+						return {
+							value: mirror ? mirror(v) : v
+						}
+					else
+						return {
+							issues: [...vali.Errors(v)]
+						}
+				}
 			}
 		}
 
 		const mainCheck = schema['~standard']
-			? schema['~standard'].validate
+			? schema['~standard']
 			: typeboxSubValidator(schema as TSchema)
 
 		let checkers = <StandardSchemaV1LikeValidate[]>[]
@@ -593,32 +606,64 @@ export const getSchemaValidator = <
 				}
 			}
 
-		async function Check(value: unknown) {
-			let v = mainCheck(value)
-			if (v instanceof Promise) v = await v
+		function Check(
+			value: unknown,
+			validated = false
+		): value is UnwrapSchema<T> {
+			let v = validated ? value : mainCheck.validate(value)
+
+			if (v instanceof Promise)
+				return v.then((v) => Check(v, true)) as any
+
 			if (v.issues) return v
 
 			const values = <(Record<string, unknown> | unknown[])[]>[]
-
 			if (v && typeof v === 'object') values.push(v.value as any)
 
-			for (let i = 0; i < checkers.length; i++) {
-				// @ts-ignore
-				v = checkers[i].validate(value)
-				if (v instanceof Promise) v = await v
-				if (v.issues) return v
+			return runCheckers(value, 0, values, v)
+		}
 
+		function runCheckers(
+			value: unknown,
+			startIndex: number,
+			values: (Record<string, unknown> | unknown[])[],
+			lastV: any
+		): any {
+			for (let i = startIndex; i < checkers.length; i++) {
+				// @ts-ignore
+				let v = checkers[i].validate(value)
+
+				if (v instanceof Promise)
+					return v.then((resolved) => {
+						if (resolved.issues) return resolved
+
+						const nextValues = [...values]
+
+						if (resolved && typeof resolved === 'object')
+							nextValues.push(resolved.value)
+
+						return runCheckers(value, i + 1, nextValues, resolved)
+					})
+
+				if (v.issues) return v
 				// @ts-ignore
 				if (v && typeof v === 'object') values.push(v.value)
+				lastV = v
 			}
 
-			if (!values.length) return { value: v }
+			return mergeValues(values, lastV)
+		}
+
+		function mergeValues(
+			values: (Record<string, unknown> | unknown[])[],
+			lastV: any
+		) {
+			if (!values.length) return { value: lastV }
 			if (values.length === 1) return { value: values[0] }
 			if (values.length === 2)
 				return { value: mergeDeep(values[0], values[1]) }
 
 			let newValue = mergeDeep(values[0], values[1])
-
 			for (let i = 2; i < values.length; i++)
 				newValue = mergeDeep(newValue, values[i])
 
@@ -740,10 +785,10 @@ export const getSchemaValidator = <
 			const validator: ElysiaTypeCheck<any> = {
 				provider: 'typebox',
 				schema,
+				// @ts-ignore
 				references: '',
 				checkFunc: () => {},
 				code: '',
-				// @ts-expect-error
 				Check: (value: unknown) => Value.Check(schema, value),
 				Errors: (value: unknown) => Value.Errors(schema, value),
 				Code: () => '',

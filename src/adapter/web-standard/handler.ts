@@ -58,12 +58,16 @@ export const mapResponse = (
 
 		switch (response?.constructor?.name) {
 			case 'String':
-				set.headers['content-type'] = 'text/plain'
+				if (!set.headers['content-type'])
+					set.headers['content-type'] = 'text/plain'
+
 				return new Response(response as string, set as any)
 
 			case 'Array':
 			case 'Object':
-				set.headers['content-type'] = 'application/json'
+				if (!set.headers['content-type'])
+					set.headers['content-type'] = 'application/json'
+
 				return new Response(JSON.stringify(response), set as any)
 
 			case 'ElysiaFile':
@@ -208,12 +212,16 @@ export const mapEarlyResponse = (
 
 		switch (response?.constructor?.name) {
 			case 'String':
-				set.headers['content-type'] = 'text/plain'
+				if (!set.headers['content-type'])
+					set.headers['content-type'] = 'text/plain'
+
 				return new Response(response as string, set as any)
 
 			case 'Array':
 			case 'Object':
-				set.headers['content-type'] = 'application/json'
+				if (!set.headers['content-type'])
+					set.headers['content-type'] = 'application/json'
+
 				return new Response(JSON.stringify(response), set as any)
 
 			case 'ElysiaFile':
@@ -335,12 +343,16 @@ export const mapEarlyResponse = (
 	} else
 		switch (response?.constructor?.name) {
 			case 'String':
-				set.headers['content-type'] = 'text/plain'
+				if (!set.headers['content-type'])
+					set.headers['content-type'] = 'text/plain'
+
 				return new Response(response as string)
 
 			case 'Array':
 			case 'Object':
-				set.headers['content-type'] = 'application/json'
+				if (!set.headers['content-type'])
+					set.headers['content-type'] = 'application/json'
+
 				return new Response(JSON.stringify(response), set as any)
 
 			case 'ElysiaFile':

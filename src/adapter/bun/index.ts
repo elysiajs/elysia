@@ -64,14 +64,11 @@ const getPossibleParams = (path: string) => {
 	return routes
 }
 
-export const isHTMLBundle = (handle: any) => {
-	return (
-		typeof handle === 'object' &&
-		handle !== null &&
-		(handle.toString() === '[object HTMLBundle]' ||
-			typeof handle.index === 'string')
-	)
-}
+export const isHTMLBundle = (handle: any) =>
+	typeof handle === 'object' &&
+	handle !== null &&
+	(handle.toString() === '[object HTMLBundle]' ||
+		typeof handle.index === 'string')
 
 const supportedMethods = {
 	GET: true,
@@ -190,6 +187,18 @@ const mergeRoutes = (r1: Routes, r2?: Routes) => {
 	}
 
 	return r1
+}
+
+// // https://github.com/elysiajs/elysia/issues/1752
+// inconsistent behavior between trailing slash and non-trailing slash
+export const removeTrailingPath = (routes: Routes) => {
+	for (const key of Object.keys(routes))
+		if (key.length > 1 && key.charCodeAt(key.length - 1) === 47) {
+			routes[key.slice(0, -1)] = routes[key]
+			delete routes[key]
+		}
+
+	return routes
 }
 
 export const BunAdapter: ElysiaAdapter = {
@@ -326,6 +335,17 @@ export const BunAdapter: ElysiaAdapter = {
 				return staticRoutes as any
 			}
 
+			const routes = removeTrailingPath(
+				mergeRoutes(
+					mergeRoutes(
+						createStaticRoute(app.router.response),
+						mapRoutes(app)
+					),
+					// @ts-ignore
+					app.config.serve?.routes
+				)
+			)
+
 			const serve =
 				typeof options === 'object'
 					? ({
@@ -334,15 +354,7 @@ export const BunAdapter: ElysiaAdapter = {
 							idleTimeout: 30,
 							...(app.config.serve || {}),
 							...(options || {}),
-							// @ts-ignore
-							routes: mergeRoutes(
-								mergeRoutes(
-									createStaticRoute(app.router.response),
-									mapRoutes(app)
-								),
-								// @ts-ignore
-								app.config.serve?.routes
-							),
+							routes,
 							websocket: {
 								...(app.config.websocket || {}),
 								...(websocket || {}),
@@ -355,15 +367,7 @@ export const BunAdapter: ElysiaAdapter = {
 							reusePort: true,
 							idleTimeout: 30,
 							...(app.config.serve || {}),
-							// @ts-ignore
-							routes: mergeRoutes(
-								mergeRoutes(
-									createStaticRoute(app.router.response),
-									mapRoutes(app)
-								),
-								// @ts-ignore
-								app.config.serve?.routes
-							),
+							routes,
 							websocket: {
 								...(app.config.websocket || {}),
 								...(websocket || {})
@@ -395,11 +399,8 @@ export const BunAdapter: ElysiaAdapter = {
 			app.promisedModules.then(async () => {
 				if (typeof app.config.aot) app.compile()
 
-				app.server?.reload({
-					...serve,
-					fetch: app.fetch,
-					// @ts-ignore
-					routes: mergeRoutes(
+				const routes = removeTrailingPath(
+					mergeRoutes(
 						mergeRoutes(
 							await createStaticRoute(app.router.response, {
 								withAsync: true
@@ -409,6 +410,13 @@ export const BunAdapter: ElysiaAdapter = {
 						// @ts-ignore
 						app.config.serve?.routes
 					)
+				)
+
+				app.server?.reload({
+					...serve,
+					fetch: app.fetch,
+					// @ts-ignore
+					routes
 				})
 
 				Bun?.gc(false)

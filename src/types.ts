@@ -2941,3 +2941,7 @@ export interface Router {
 	}
 	history: InternalRoute[]
 }
+
+export type ModelsToTypes<T extends Record<keyof any, AnySchema>> = {
+	[K in keyof T]: UnwrapSchema<T[K]>
+}

@@ -19,6 +19,8 @@ import { ElysiaCustomStatusResponse } from '../../error'
 import type { Context } from '../../context'
 import type { AnyLocalHook } from '../../types'
 
+// Response.json is faster than new Response(JSON.stringify()) in Bun
+// https://x.com/jarredsumner/status/2023328556210921948
 export const mapResponse = (
 	response: unknown,
 	set: Context['set'],
@@ -33,8 +35,7 @@ export const mapResponse = (
 
 			case 'Array':
 			case 'Object':
-				set.headers['content-type'] = 'application/json'
-				return new Response(JSON.stringify(response), set as any)
+				return Response.json(response, set as any)
 
 			case 'ElysiaFile':
 				return handleFile((response as ElysiaFile).value as File, set)
@@ -57,7 +58,7 @@ export const mapResponse = (
 			case undefined:
 				if (!response) return new Response('', set as any)
 
-				return new Response(JSON.stringify(response), set as any)
+				return Response.json(response, set as any)
 
 			case 'Response':
 				return handleResponse(response as Response, set, request)
@@ -127,11 +128,7 @@ export const mapResponse = (
 				// custom class with an array-like value
 				// eg. Bun.sql`` result
 				if (Array.isArray(response))
-					return new Response(JSON.stringify(response), {
-						headers: {
-							'Content-Type': 'application/json'
-						}
-					}) as any
+					return Response.json(response) as any
 
 				// @ts-expect-error
 				if (typeof response?.toResponse === 'function')
@@ -140,15 +137,8 @@ export const mapResponse = (
 				if ('charCodeAt' in (response as any)) {
 					const code = (response as any).charCodeAt(0)
 
-					if (code === 123 || code === 91) {
-						if (!set.headers['Content-Type'])
-							set.headers['Content-Type'] = 'application/json'
-
-						return new Response(
-							JSON.stringify(response),
-							set as any
-						) as any
-					}
+					if (code === 123 || code === 91)
+						return Response.json(response, set as any) as any
 				}
 
 				return new Response(response as any, set as any)
@@ -182,8 +172,7 @@ export const mapEarlyResponse = (
 
 			case 'Array':
 			case 'Object':
-				set.headers['content-type'] = 'application/json'
-				return new Response(JSON.stringify(response), set as any)
+				return Response.json(response, set as any)
 
 			case 'ElysiaFile':
 				return handleFile((response as ElysiaFile).value as File, set)
@@ -206,7 +195,7 @@ export const mapEarlyResponse = (
 			case undefined:
 				if (!response) return
 
-				return new Response(JSON.stringify(response), set as any)
+				return Response.json(response, set as any)
 
 			case 'Response':
 				return handleResponse(response as Response, set, request)
@@ -279,24 +268,13 @@ export const mapEarlyResponse = (
 				// custom class with an array-like value
 				// eg. Bun.sql`` result
 				if (Array.isArray(response))
-					return new Response(JSON.stringify(response), {
-						headers: {
-							'Content-Type': 'application/json'
-						}
-					}) as any
+					return Response.json(response) as any
 
 				if ('charCodeAt' in (response as any)) {
 					const code = (response as any).charCodeAt(0)
 
-					if (code === 123 || code === 91) {
-						if (!set.headers['Content-Type'])
-							set.headers['Content-Type'] = 'application/json'
-
-						return new Response(
-							JSON.stringify(response),
-							set as any
-						) as any
-					}
+					if (code === 123 || code === 91)
+						return Response.json(response, set as any) as any
 				}
 
 				return new Response(response as any, set as any)
@@ -308,8 +286,7 @@ export const mapEarlyResponse = (
 
 			case 'Array':
 			case 'Object':
-				set.headers['content-type'] = 'application/json'
-				return new Response(JSON.stringify(response), set as any)
+				return Response.json(response, set as any)
 
 			case 'ElysiaFile':
 				return handleFile((response as ElysiaFile).value as File, set)
@@ -332,11 +309,7 @@ export const mapEarlyResponse = (
 			case undefined:
 				if (!response) return new Response('')
 
-				return new Response(JSON.stringify(response), {
-					headers: {
-						'content-type': 'application/json'
-					}
-				})
+				return Response.json(response)
 
 			case 'Response':
 				return response as Response
@@ -406,24 +379,13 @@ export const mapEarlyResponse = (
 				// custom class with an array-like value
 				// eg. Bun.sql`` result
 				if (Array.isArray(response))
-					return new Response(JSON.stringify(response), {
-						headers: {
-							'Content-Type': 'application/json'
-						}
-					}) as any
+					return Response.json(response) as any
 
 				if ('charCodeAt' in (response as any)) {
 					const code = (response as any).charCodeAt(0)
 
-					if (code === 123 || code === 91) {
-						if (!set.headers['Content-Type'])
-							set.headers['Content-Type'] = 'application/json'
-
-						return new Response(
-							JSON.stringify(response),
-							set as any
-						) as any
-					}
+					if (code === 123 || code === 91)
+						return Response.json(response, set as any) as any
 				}
 
 				return new Response(response as any)
@@ -440,11 +402,7 @@ export const mapCompactResponse = (
 
 		case 'Object':
 		case 'Array':
-			return new Response(JSON.stringify(response), {
-				headers: {
-					'Content-Type': 'application/json'
-				}
-			})
+			return Response.json(response)
 
 		case 'ElysiaFile':
 			return handleFile((response as ElysiaFile).value as File)
@@ -467,11 +425,7 @@ export const mapCompactResponse = (
 		case undefined:
 			if (!response) return new Response('')
 
-			return new Response(JSON.stringify(response), {
-				headers: {
-					'content-type': 'application/json'
-				}
-			})
+			return Response.json(response)
 
 		case 'Response':
 			return response as Response
@@ -534,23 +488,13 @@ export const mapCompactResponse = (
 
 			// custom class with an array-like value
 			// eg. Bun.sql`` result
-			if (Array.isArray(response))
-				return new Response(JSON.stringify(response), {
-					headers: {
-						'Content-Type': 'application/json'
-					}
-				}) as any
+			if (Array.isArray(response)) return Response.json(response) as any
 
 			if ('charCodeAt' in (response as any)) {
 				const code = (response as any).charCodeAt(0)
 
-				if (code === 123 || code === 91) {
-					return new Response(JSON.stringify(response), {
-						headers: {
-							'Content-Type': 'application/json'
-						}
-					}) as any
-				}
+				if (code === 123 || code === 91)
+					return Response.json(response) as any
 			}
 
 			return new Response(response as any)
@@ -573,12 +517,12 @@ export const errorToResponse = (error: Error, set?: Context['set']) => {
 		return typeof raw?.then === 'function' ? raw.then(apply) : apply(raw)
 	}
 
-	return new Response(
-		JSON.stringify({
+	return Response.json(
+		{
 			name: error?.name,
 			message: error?.message,
 			cause: error?.cause
-		}),
+		},
 		{
 			status:
 				set?.status !== 200 ? ((set?.status as number) ?? 500) : 500,
