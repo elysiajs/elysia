@@ -7,12 +7,66 @@ import { isBun } from '../universal/utils'
 
 export const handleFile = (
 	response: File | Blob,
-	set?: Context['set']
+	set?: Context['set'],
+	request?: Request
 ): Response => {
 	if (!isBun && response instanceof Promise)
-		return response.then((res) => handleFile(res, set)) as any
+		return response.then((res) => handleFile(res, set, request)) as any
 
 	const size = response.size
+
+	const rangeHeader = request?.headers.get('range')
+	if (rangeHeader && size) {
+		const match = /bytes=(\d*)-(\d*)/.exec(rangeHeader)
+		if (match) {
+			let start: number
+			let end: number
+
+			if (!match[1] && match[2]) {
+				const suffix = parseInt(match[2])
+				start = Math.max(0, size - suffix)
+				end = size - 1
+			} else {
+				start = match[1] ? parseInt(match[1]) : 0
+				end = match[2]
+					? Math.min(parseInt(match[2]), size - 1)
+					: size - 1
+			}
+
+			if (start >= size || start > end) {
+				return new Response(null, {
+					status: 416,
+					headers: { 'content-range': `bytes */${size}` }
+				})
+			}
+
+			const contentLength = end - start + 1
+			const rangeHeaders: Record<string, string | number> = {
+				'accept-ranges': 'bytes',
+				'content-range': `bytes ${start}-${end}/${size}`,
+				'content-length': contentLength
+			}
+
+			if (set?.headers && isNotEmpty(set.headers as Record<string, unknown>))
+				Object.assign(rangeHeaders, set.headers, {
+					'content-range': `bytes ${start}-${end}/${size}`,
+					'content-length': contentLength
+				})
+
+			// Blob.slice() exists at runtime but is absent from the ESNext lib typings
+		// (no DOM lib). Cast through unknown to the minimal interface we need.
+		return new Response(
+			(response as unknown as { slice(start: number, end: number): Blob }).slice(
+				start,
+				end + 1
+			),
+			{
+				status: 206,
+				headers: rangeHeaders as any
+			})
+		}
+	}
+
 	const immutable =
 		set &&
 		(set.status === 206 ||
