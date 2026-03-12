@@ -19,6 +19,12 @@ export const handleFile = (
 	if (rangeHeader && size) {
 		const match = /bytes=(\d*)-(\d*)/.exec(rangeHeader)
 		if (match) {
+			if (!match[1] && !match[2])
+				return new Response(null, {
+					status: 416,
+					headers: { 'content-range': `bytes */${size}` }
+				})
+
 			let start: number
 			let end: number
 

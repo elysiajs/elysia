@@ -61,4 +61,22 @@ describe('Range header', () => {
 		expect(res.status).toBe(416)
 		expect(res.headers.get('content-range')).toBe('bytes */5')
 	})
+
+	it('returns 416 for invalid "bytes=-" (both positions empty)', async () => {
+		const res = await app.handle(
+			req('/file', { headers: { range: 'bytes=-' } })
+		)
+		expect(res.status).toBe(416)
+		expect(res.headers.get('content-range')).toBe('bytes */5')
+	})
+
+	it('ignores subsequent ranges in multi-range requests, uses first range only', async () => {
+		// Multi-range (e.g. bytes=0-1,3-4) is not supported; only the first range is applied.
+		const res = await app.handle(
+			req('/file', { headers: { range: 'bytes=0-1,3-4' } })
+		)
+		expect(res.status).toBe(206)
+		expect(res.headers.get('content-range')).toBe('bytes 0-1/5')
+		expect(await res.text()).toBe('12')
+	})
 })
