@@ -4685,6 +4685,77 @@ export default class Elysia<
 			}
 		)
 
+		// Handle dynamic imports (Promises) used inside guard callback
+		if (instance.promisedModules.size > 0) {
+			const syncCount = instance.router.history.length
+
+			for (const promise of instance.promisedModules.promises) {
+				this.promisedModules.add(
+					promise.then(() => {
+						const {
+							body,
+							headers,
+							query,
+							params,
+							cookie,
+							response,
+							...guardHook
+						} = hook
+
+						const hasStandaloneSchema =
+							body || headers || query || params || cookie || response
+
+						for (
+							let i = syncCount;
+							i < instance.router.history.length;
+							i++
+						) {
+							const {
+								method,
+								path,
+								handler,
+								hooks: localHook
+							} = instance.router.history[i]
+
+							this.add(
+								method,
+								path,
+								handler,
+								mergeHook(guardHook as AnyLocalHook, {
+									...((localHook || {}) as AnyLocalHook),
+									error: !localHook.error
+										? sandbox.event.error
+										: Array.isArray(localHook.error)
+											? [
+													...(localHook.error ?? []),
+													...(sandbox.event.error ?? [])
+												]
+											: [
+													localHook.error,
+													...(sandbox.event.error ?? [])
+												],
+									standaloneValidator: !hasStandaloneSchema
+										? localHook.standaloneValidator
+										: [
+												...(localHook.standaloneValidator ??
+													[]),
+												{
+													body,
+													headers,
+													query,
+													params,
+													cookie,
+													response
+												}
+											]
+								})
+							)
+						}
+					})
+				)
+			}
+		}
+
 		return this as any
 	}
 

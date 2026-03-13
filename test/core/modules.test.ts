@@ -248,4 +248,37 @@ describe('Modules', () => {
 		const text = await response.text()
 		expect(text).toEqual('GET /plugin')
 	})
+
+	it('register dynamic import routes inside guard', async () => {
+		const app = new Elysia().guard(
+			{},
+			(app) => app.use(import('../modules').then((m) => m.lazyInstance))
+		)
+
+		await app.modules
+
+		const res = await app.handle(req('/lazy-instance'))
+
+		expect(res.status).toBe(200)
+		expect(await res.text()).toBe('lazy-instance')
+	})
+
+	it('register dynamic import routes inside guard with hook', async () => {
+		let called = false
+
+		const app = new Elysia().guard(
+			{
+				beforeHandle: () => {
+					called = true
+				}
+			},
+			(app) => app.use(import('../modules').then((m) => m.lazyInstance))
+		)
+
+		await app.modules
+
+		await app.handle(req('/lazy-instance'))
+
+		expect(called).toBe(true)
+	})
 })
