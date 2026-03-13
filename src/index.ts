@@ -4687,7 +4687,7 @@ export default class Elysia<
 
 		// Handle dynamic imports (Promises) used inside guard callback
 		if (instance.promisedModules.size > 0) {
-			const syncCount = instance.router.history.length
+			let processedUntil = instance.router.history.length
 
 			for (const promise of instance.promisedModules.promises) {
 				this.promisedModules.add(
@@ -4705,8 +4705,11 @@ export default class Elysia<
 						const hasStandaloneSchema =
 							body || headers || query || params || cookie || response
 
+						const startIndex = processedUntil
+						processedUntil = instance.router.history.length
+
 						for (
-							let i = syncCount;
+							let i = startIndex;
 							i < instance.router.history.length;
 							i++
 						) {
