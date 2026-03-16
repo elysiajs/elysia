@@ -210,21 +210,34 @@ export const createStreamHandler =
 				}
 			}
 
-		const isBrowser = request?.headers.has('Origin')
+		// Get an explicit async iterator so pull() can advance one step at a time.
+		// Generators already implement the iterator protocol directly (.next()),
+		// while ReadableStream (which generator may be reassigned to above) needs
+		// [Symbol.asyncIterator]() to produce one.
+		const iterator: AsyncIterator<unknown> =
+			typeof (generator as any).next === 'function'
+				? (generator as AsyncIterator<unknown>)
+				: (generator as any)[Symbol.asyncIterator]()
+
+		let end = false
 
 		return new Response(
 			new ReadableStream({
-				async start(controller) {
-					let end = false
-
+				start(controller) {
+					// Register abort handler once — terminates the iterator and
+					// closes the stream so pull() won't be called again.
 					request?.signal?.addEventListener('abort', () => {
 						end = true
+						iterator.return?.()
 
 						try {
 							controller.close()
 						} catch {}
 					})
 
+					// Enqueue the already-extracted init value (first generator
+					// result, used above for SSE detection). Subsequent values
+					// are produced on-demand by pull().
 					if (!init || init.value instanceof ReadableStream) {
 					} else if (
 						init.value !== undefined &&
@@ -246,51 +259,61 @@ export const createStreamHandler =
 							}
 						else controller.enqueue(format(init.value.toString()))
 					}
+				},
+
+				async pull(controller) {
+					// Respect abort/cancel that happened between pull() calls.
+					if (end) {
+						try {
+							controller.close()
+						} catch {}
+						return
+					}
 
 					try {
-						for await (const chunk of generator) {
-							if (end) break
-							if (chunk === undefined || chunk === null) continue
+						const { value: chunk, done } = await iterator.next()
 
+						if (done || end) {
+							try {
+								controller.close()
+							} catch {}
+							return
+						}
+
+						// null/undefined chunks are skipped; the runtime will
+						// call pull() again since nothing was enqueued.
+						if (chunk === undefined || chunk === null) return
+
+						// @ts-ignore
+						if (chunk.toSSE) {
 							// @ts-ignore
-							if (chunk.toSSE) {
-								// @ts-ignore
-								controller.enqueue(chunk.toSSE())
-							} else {
-								if (typeof chunk === 'object')
-									try {
-										controller.enqueue(
-											format(JSON.stringify(chunk))
-										)
-									} catch {
-										controller.enqueue(
-											format(chunk.toString())
-										)
-									}
-								else
-									controller.enqueue(format(chunk.toString()))
-
-								if (!allowRapidStream && isBrowser && !isSSE)
-									/**
-									 * Wait for the next event loop
-									 * otherwise the data will be mixed up
-									 *
-									 * @see https://github.com/elysiajs/elysia/issues/741
-									 */
-									await new Promise<void>((resolve) =>
-										setTimeout(() => resolve(), 0)
+							controller.enqueue(chunk.toSSE())
+						} else {
+							if (typeof chunk === 'object')
+								try {
+									controller.enqueue(
+										format(JSON.stringify(chunk))
 									)
-							}
+								} catch {
+									controller.enqueue(
+										format(chunk.toString())
+									)
+								}
+							else
+								controller.enqueue(format(chunk.toString()))
 						}
 					} catch (error) {
 						console.warn(error)
-					}
 
-					try {
-						controller.close()
-					} catch {
-						// nothing
+						try {
+							controller.close()
+						} catch {}
 					}
+				},
+
+				cancel() {
+					end = true
+					iterator.return?.()
 				}
 			}),
 			set as any
