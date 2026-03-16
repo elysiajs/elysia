@@ -10,10 +10,10 @@ import type {
 	TUnsafe,
 	Uint8ArrayOptions
 } from '@sinclair/typebox'
-import { ValueError } from '@sinclair/typebox/errors'
+import type { ValueError } from '@sinclair/typebox/errors'
 import type { TypeCheck } from '@sinclair/typebox/compiler'
 
-import { ElysiaFormData } from '../utils'
+import type { ElysiaFormData } from '../utils'
 import type { CookieOptions } from '../cookies'
 import type { MaybeArray } from '../types'
 
@@ -146,6 +146,9 @@ export type TForm<T extends TProperties = TProperties> = TUnsafe<
 >
 
 /**
+ * !important
+ * @see https://github.com/elysiajs/elysia/pull/1613
+ *
  * Augment this interface to extend allowed values for SchemaOptions['error'].
  * Defining custom string templates will add autocomplete while allowing any arbitrary string, number, etc.
  *
