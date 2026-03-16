@@ -673,37 +673,37 @@ describe('Cookie Validation', () => {
 		})
 	})
 
-	// it('transform cookie value', async () => {
-	// 	let innerValue: any = null
+	it('transform cookie value', async () => {
+		let innerValue: any = null
 
-	// 	const app = new Elysia().get(
-	// 		'/',
-	// 		({ cookie: { thing } }) => {
-	// 			innerValue = thing.value
+		const app = new Elysia().get(
+			'/',
+			({ cookie: { thing } }) => {
+				innerValue = thing.value
 
-	// 			return thing.value
-	// 		},
-	// 		{
-	// 			cookie: t.Object({
-	// 				thing: t.Number()
-	// 			})
-	// 		}
-	// 	)
+				return thing.value
+			},
+			{
+				cookie: t.Object({
+					thing: t.Number()
+				})
+			}
+		)
 
-	// 	const value = await app
-	// 		.handle(
-	// 			new Request('http://localhost:3000/', {
-	// 				headers: {
-	// 					cookie: 'thing=9'
-	// 				}
-	// 			})
-	// 		)
-	// 		.then((response) => response.json())
+		const value = await app
+			.handle(
+				new Request('http://localhost:3000/', {
+					headers: {
+						cookie: 'thing=9'
+					}
+				})
+			)
+			.then((response) => response.json())
 
-	// 	expect(value).toBe(9)
-	// 	expect(typeof value).toBe('number')
+		expect(value).toBe(9)
+		expect(typeof value).toBe('number')
 
-	// 	expect(innerValue).toBe(9)
-	// 	expect(typeof innerValue).toBe('number')
-	// })
+		expect(innerValue).toBe(9)
+		expect(typeof innerValue).toBe('number')
+	})
 })
