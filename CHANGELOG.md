@@ -1,4 +1,4 @@
-# 1.4.29 - 17 Mar 2025
+# 1.4.28 - 17 Mar 2025
 Feature:
 - [#1803](https://github.com/elysiajs/elysia/pull/1803) stream response with pull based backpressure
 - [#1802](https://github.com/elysiajs/elysia/pull/1802) handle range header for file/blob response
@@ -19,9 +19,6 @@ Change:
 - [#1613](https://github.com/elysiajs/elysia/pull/1613) export `ElysiaTypeCustomErrors`
 - remove Bun specific built
 - export `AnySchema`, `UnwrapSchema`, `ModelsToTypes` from root
-
-# 1.4.28 - 3 Mar 2026
-Bug fix:
 - conditional set headers of String and Object when no set.headers is set
 
 # 1.4.27 - 1 Mar 2026
