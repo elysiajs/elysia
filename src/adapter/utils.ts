@@ -4,6 +4,7 @@ import { hasHeaderShorthand, isNotEmpty, StatusMap } from '../utils'
 import type { Context } from '../context'
 import { env } from '../universal'
 import { isBun } from '../universal/utils'
+import { MaybePromise } from '../types'
 
 export const handleFile = (
 	response: File | Blob,
@@ -65,7 +66,11 @@ export const handleFile = (
 			return new Response(
 				(
 					response as unknown as {
-						slice(start: number, end: number, contentType?: string): Blob
+						slice(
+							start: number,
+							end: number,
+							contentType?: string
+						): Blob
 					}
 				).slice(start, end + 1, response.type),
 				{
@@ -208,7 +213,35 @@ interface CreateHandlerParameter {
 	mapCompactResponse(response: unknown, request?: Request): Response
 }
 
-const allowRapidStream = env.ELYSIA_RAPID_STREAM === 'true'
+const enqueueBinaryChunk = (
+	controller: ReadableStreamDefaultController,
+	chunk: unknown
+): MaybePromise<boolean> => {
+	if (chunk instanceof Blob)
+		return chunk.arrayBuffer().then((buffer) => {
+			controller.enqueue(new Uint8Array(buffer))
+			return true as const
+		})
+
+	if (chunk instanceof Uint8Array) {
+		controller.enqueue(chunk)
+		return true
+	}
+
+	if (chunk instanceof ArrayBuffer) {
+		controller.enqueue(new Uint8Array(chunk))
+		return true
+	}
+
+	if (ArrayBuffer.isView(chunk)) {
+		controller.enqueue(
+			new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength)
+		)
+		return true
+	}
+
+	return false
+}
 
 export const createStreamHandler =
 	({ mapResponse, mapCompactResponse }: CreateHandlerParameter) =>
@@ -301,27 +334,28 @@ export const createStreamHandler =
 					// Enqueue the already-extracted init value (first generator
 					// result, used above for SSE detection). Subsequent values
 					// are produced on-demand by pull().
-					if (!init || init.value instanceof ReadableStream) {
-					} else if (
-						init.value !== undefined &&
-						init.value !== null
-					) {
+					if (
+						!init ||
+						init.value instanceof ReadableStream ||
+						init.value === undefined ||
+						init.value === null
+					)
+						return
+
+					// @ts-ignore
+					if (init.value.toSSE)
 						// @ts-ignore
-						if (init.value.toSSE)
-							// @ts-ignore
-							controller.enqueue(init.value.toSSE())
-						else if (typeof init.value === 'object')
-							try {
-								controller.enqueue(
-									format(JSON.stringify(init.value))
-								)
-							} catch {
-								controller.enqueue(
-									format(init.value.toString())
-								)
-							}
-						else controller.enqueue(format(init.value.toString()))
-					}
+						controller.enqueue(init.value.toSSE())
+					else if (enqueueBinaryChunk(controller, init.value)) return
+					else if (typeof init.value === 'object')
+						try {
+							controller.enqueue(
+								format(JSON.stringify(init.value))
+							)
+						} catch {
+							controller.enqueue(format(init.value.toString()))
+						}
+					else controller.enqueue(format(init.value.toString()))
 				},
 
 				async pull(controller) {
@@ -348,23 +382,19 @@ export const createStreamHandler =
 						if (chunk === undefined || chunk === null) return
 
 						// @ts-ignore
-						if (chunk.toSSE) {
+						if (chunk.toSSE)
 							// @ts-ignore
 							controller.enqueue(chunk.toSSE())
-						} else {
-							if (typeof chunk === 'object')
-								try {
-									controller.enqueue(
-										format(JSON.stringify(chunk))
-									)
-								} catch {
-									controller.enqueue(
-										format(chunk.toString())
-									)
-								}
-							else
+						else if (enqueueBinaryChunk(controller, chunk)) return
+						else if (typeof chunk === 'object')
+							try {
+								controller.enqueue(
+									format(JSON.stringify(chunk))
+								)
+							} catch {
 								controller.enqueue(format(chunk.toString()))
-						}
+							}
+						else controller.enqueue(format(chunk.toString()))
 					} catch (error) {
 						console.warn(error)
 

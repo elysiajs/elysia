@@ -2,6 +2,7 @@
 Feature:
 - [#1803](https://github.com/elysiajs/elysia/pull/1803) stream response with pull based backpressure
 - [#1802](https://github.com/elysiajs/elysia/pull/1802) handle range header for file/blob response
+- [#1722](https://github.com/elysiajs/elysia/pull/1772), [#1741](https://github.com/elysiajs/elysia/issues/1741) direct ReadableStream perf blow-up
 
 Bug fix:
 - [#1805](https://github.com/elysiajs/elysia/pull/1805) dynamic imports inside .guard not registering routes
@@ -10,6 +11,8 @@ Bug fix:
 - [#1794](https://github.com/elysiajs/elysia/pull/1794) merge app cookie config into route cookie validator config
 - [#1796](https://github.com/elysiajs/elysia/pull/1796) check custom parser by full name
 - [#1795](https://github.com/elysiajs/elysia/pull/1795)  write transformed cookie value to cookie entry directly
+- [#1793](https://github.com/elysiajs/elysia/pull/1793) use cookie schema for cookie noValidate check
+- [#1792](https://github.com/elysiajs/elysia/pull/1792) throw ValidationError instead of boolean in response encode path
 - detect HTML bundle when inline response is Promise
 
 Change:
