@@ -672,4 +672,38 @@ describe('Cookie Validation', () => {
 			enumeratedKeys: ['a']
 		})
 	})
+
+	// it('transform cookie value', async () => {
+	// 	let innerValue: any = null
+
+	// 	const app = new Elysia().get(
+	// 		'/',
+	// 		({ cookie: { thing } }) => {
+	// 			innerValue = thing.value
+
+	// 			return thing.value
+	// 		},
+	// 		{
+	// 			cookie: t.Object({
+	// 				thing: t.Number()
+	// 			})
+	// 		}
+	// 	)
+
+	// 	const value = await app
+	// 		.handle(
+	// 			new Request('http://localhost:3000/', {
+	// 				headers: {
+	// 					cookie: 'thing=9'
+	// 				}
+	// 			})
+	// 		)
+	// 		.then((response) => response.json())
+
+	// 	expect(value).toBe(9)
+	// 	expect(typeof value).toBe('number')
+
+	// 	expect(innerValue).toBe(9)
+	// 	expect(typeof innerValue).toBe('number')
+	// })
 })

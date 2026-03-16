@@ -1,13 +1,15 @@
 # 1.4.29
-Bug fix:
-- [#1805](https://github.com/elysiajs/elysia/pull/1805) dynamic imports inside .guard not registering routes
+Feature:
 - [#1803](https://github.com/elysiajs/elysia/pull/1803) stream response with pull based backpressure
 - [#1802](https://github.com/elysiajs/elysia/pull/1802) handle range header for file/blob response
+
+Bug fix:
+- [#1805](https://github.com/elysiajs/elysia/pull/1805) dynamic imports inside .guard not registering routes
 - [#1771](https://github.com/elysiajs/elysia/issues/1771) breaks Bun HTML imports
 - [#1797](https://github.com/elysiajs/elysia/pull/1797) await mapped error response promise
 - [#1794](https://github.com/elysiajs/elysia/pull/1794) merge app cookie config into route cookie validator config
 - [#1796](https://github.com/elysiajs/elysia/pull/1796) check custom parser by full name
-#1796
+- [#1795](https://github.com/elysiajs/elysia/pull/1795)  write transformed cookie value to cookie entry directly
 - detect HTML bundle when inline response is Promise
 
 Change:
