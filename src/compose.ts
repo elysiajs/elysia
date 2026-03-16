@@ -894,10 +894,9 @@ export const composeHandler = ({
 		return `const _res=${response}` + after + `return _res`
 	}
 
-	const mapResponseContext =
-		maybeStream && adapter.mapResponseContext
-			? `,${adapter.mapResponseContext}`
-			: ''
+	const mapResponseContext = adapter.mapResponseContext
+		? `,${adapter.mapResponseContext}`
+		: ''
 
 	if (hasTrace || inference.route) fnLiteral += `c.route=\`${path}\`\n`
 	if (hasTrace || hooks.afterResponse?.length)

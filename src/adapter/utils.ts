@@ -7,12 +7,75 @@ import { isBun } from '../universal/utils'
 
 export const handleFile = (
 	response: File | Blob,
-	set?: Context['set']
+	set?: Context['set'],
+	request?: Request
 ): Response => {
 	if (!isBun && response instanceof Promise)
-		return response.then((res) => handleFile(res, set)) as any
+		return response.then((res) => handleFile(res, set, request)) as any
 
 	const size = response.size
+
+	const rangeHeader = request?.headers.get('range')
+	if (rangeHeader) {
+		const match = /bytes=(\d*)-(\d*)/.exec(rangeHeader)
+		if (match) {
+			if (!match[1] && !match[2])
+				return new Response(null, {
+					status: 416,
+					headers: mergeHeaders(
+						new Headers({ 'content-range': `bytes */${size}` }),
+						set?.headers ?? {}
+					)
+				})
+
+			let start: number
+			let end: number
+
+			if (!match[1] && match[2]) {
+				const suffix = parseInt(match[2])
+				start = Math.max(0, size - suffix)
+				end = size - 1
+			} else {
+				start = match[1] ? parseInt(match[1]) : 0
+				end = match[2]
+					? Math.min(parseInt(match[2]), size - 1)
+					: size - 1
+			}
+
+			if (start >= size || start > end) {
+				return new Response(null, {
+					status: 416,
+					headers: mergeHeaders(
+						new Headers({ 'content-range': `bytes */${size}` }),
+						set?.headers ?? {}
+					)
+				})
+			}
+
+			const contentLength = end - start + 1
+			const rangeHeaders = new Headers({
+				'accept-ranges': 'bytes',
+				'content-range': `bytes ${start}-${end}/${size}`,
+				'content-length': String(contentLength)
+			})
+
+			// Blob.slice() exists at runtime but is absent from the ESNext lib typings
+			// (no DOM lib). Cast through unknown to the minimal interface we need.
+			// Pass response.type as third arg so the sliced blob preserves MIME type.
+			return new Response(
+				(
+					response as unknown as {
+						slice(start: number, end: number, contentType?: string): Blob
+					}
+				).slice(start, end + 1, response.type),
+				{
+					status: 206,
+					headers: mergeHeaders(rangeHeaders, set?.headers ?? {})
+				}
+			)
+		}
+	}
+
 	const immutable =
 		set &&
 		(set.status === 206 ||
