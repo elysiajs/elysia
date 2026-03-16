@@ -17,7 +17,13 @@ export const createNativeStaticHandler = (
 		handle instanceof Response
 			? handle.clone()
 			: handle instanceof Promise
-				? handle.then((x) => (x instanceof Response ? x.clone() : x))
+				? handle.then((x) =>
+						x instanceof Response
+							? x.clone()
+							: isHTMLBundle(x)
+								? () => x
+								: x
+					)
 				: handle,
 		set ?? {
 			headers: {}
