@@ -2185,7 +2185,7 @@ export type IsUnknown<T> = [unknown] extends [T]
 
 export type ValueToResponseSchema<Value> = ExtractErrorFromHandle<Value> &
 	(Extract200<Value> extends infer R200
-		? undefined extends R200
+		? Exclude<R200, undefined | void> extends never
 			? {}
 			: IsNever<R200> extends true
 				? {}
