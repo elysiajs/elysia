@@ -162,7 +162,7 @@ import type {
 	UnknownRouteSchema,
 	MaybeFunction,
 	InlineHandlerNonMacro,
-	Router,
+	Router
 } from './types'
 import {
 	coercePrimitiveRoot,
@@ -4703,7 +4703,12 @@ export default class Elysia<
 						} = hook
 
 						const hasStandaloneSchema =
-							body || headers || query || params || cookie || response
+							body ||
+							headers ||
+							query ||
+							params ||
+							cookie ||
+							response
 
 						const startIndex = processedUntil
 						processedUntil = instance.router.history.length
@@ -4731,11 +4736,13 @@ export default class Elysia<
 										: Array.isArray(localHook.error)
 											? [
 													...(localHook.error ?? []),
-													...(sandbox.event.error ?? [])
+													...(sandbox.event.error ??
+														[])
 												]
 											: [
 													localHook.error,
-													...(sandbox.event.error ?? [])
+													...(sandbox.event.error ??
+														[])
 												],
 									standaloneValidator: !hasStandaloneSchema
 										? localHook.standaloneValidator
@@ -5655,8 +5662,20 @@ export default class Elysia<
 										throw new Error('Invalid handler')
 									})()
 
+			const prefix = this.config.prefix
+			const prefixLength = prefix?.length ?? 0
 			const handler: Handler = ({ request, path }) =>
-				run(new Request(replaceUrlPath(request.url, path), request))
+				run(
+					new Request(
+						replaceUrlPath(
+							request.url,
+							prefixLength
+								? path.slice(prefixLength) || '/'
+								: path
+						),
+						request
+					)
+				)
 
 			this.route('ALL', '/*', handler as any, {
 				parse: 'none',
