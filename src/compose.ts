@@ -845,7 +845,7 @@ export const composeHandler = ({
 		let afterResponse = ''
 
 		afterResponse +=
-			`\n${setImmediateFn}(async()=>{` +
+			`\n${setImmediateFn}(async()=>{try{` +
 			`if(c.responseValue){` +
 			`if(c.responseValue instanceof ElysiaCustomStatusResponse) c.set.status=c.responseValue.code\n` +
 			(hasStream
@@ -875,7 +875,7 @@ export const composeHandler = ({
 
 		reporter.resolve()
 
-		afterResponse += '})\n'
+		afterResponse += '}catch{}})\n'
 
 		return (_afterResponse = afterResponse)
 	}
@@ -2389,7 +2389,7 @@ export const composeGeneralHandler = (
 
 		const prefix = app.event.afterResponse.some(isAsync) ? 'async' : ''
 		afterResponse +=
-			`\n${setImmediateFn}(${prefix}()=>{` +
+			`\n${setImmediateFn}(${prefix}()=>{try{` +
 			`if(c.responseValue instanceof ElysiaCustomStatusResponse) c.set.status=c.responseValue.code\n`
 
 		for (let i = 0; i < app.event.afterResponse.length; i++) {
@@ -2398,7 +2398,7 @@ export const composeGeneralHandler = (
 			afterResponse += `\n${isAsyncName(fn) ? 'await ' : ''}afterResponse[${i}](c)\n`
 		}
 
-		afterResponse += `})\n`
+		afterResponse += `}catch{}})\n`
 	}
 
 	// @ts-ignore
@@ -2623,7 +2623,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 
 		let afterResponse = ''
 		const prefix = hooks.afterResponse?.some(isAsync) ? 'async' : ''
-		afterResponse += `\n${setImmediateFn}(${prefix}()=>{`
+		afterResponse += `\n${setImmediateFn}(${prefix}()=>{try{`
 
 		const reporter = createReport({
 			context: 'context',
@@ -2649,7 +2649,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 
 		reporter.resolve()
 
-		afterResponse += `})\n`
+		afterResponse += `}catch{}})\n`
 
 		return afterResponse
 	}

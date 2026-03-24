@@ -858,13 +858,17 @@ export const createDynamicHandler = (app: AnyElysia) => {
 			if (afterResponses) {
 				if (hasSetImmediate)
 					setImmediate(async () => {
-						for (const afterResponse of afterResponses)
-							await afterResponse.fn(context as any)
+						try {
+							for (const afterResponse of afterResponses)
+								await afterResponse.fn(context as any)
+						} catch {}
 					})
 				else
 					Promise.resolve().then(async () => {
-						for (const afterResponse of afterResponses)
-							await afterResponse.fn(context as any)
+						try {
+							for (const afterResponse of afterResponses)
+								await afterResponse.fn(context as any)
+						} catch {}
 					})
 			}
 		}
