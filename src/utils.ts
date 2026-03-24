@@ -5,7 +5,6 @@ import type {
 	LifeCycleStore,
 	MaybeArray,
 	InputSchema,
-	BaseMacro,
 	LifeCycleType,
 	HookContainer,
 	GracefulHandler,
@@ -24,13 +23,16 @@ import type {
 	RouteSchema
 } from './types'
 import { ElysiaFile } from './universal/file'
-
-export const hasHeaderShorthand = 'toJSON' in new Headers()
+import { isBun, isCloudflareWorker } from './universal/utils'
 
 export const replaceUrlPath = (url: string, pathname: string) => {
-	const urlObject = new URL(url)
-	urlObject.pathname = pathname
-	return urlObject.toString()
+	const pathStartIndex = url.indexOf('/', 11)
+	const queryIndex = url.indexOf('?', pathStartIndex)
+
+	if (queryIndex === -1)
+		return `${url.slice(0, pathStartIndex)}${pathname.charCodeAt(0) === 47 ? '' : '/'}${pathname}`
+
+	return `${url.slice(0, pathStartIndex)}${pathname.charCodeAt(0) === 47 ? '' : '/'}${pathname}${url.slice(queryIndex)}`
 }
 
 export const isClass = (v: Object) =>
@@ -397,8 +399,7 @@ export const lifeCycleToArray = (a: LifeCycleStore) => {
 	return a
 }
 
-const isBun = typeof Bun !== 'undefined'
-const hasBunHash = isBun && typeof Bun.hash === 'function'
+export const hasHeaderShorthand = isBun ? 'toJSON' in new Headers() : false
 export const hasSetImmediate = typeof setImmediate === 'function'
 
 // https://stackoverflow.com/a/52171480
@@ -656,7 +657,8 @@ export const signCookie = async (val: string, secret: string | null) => {
 	if (typeof val === 'object') val = JSON.stringify(val)
 	else if (typeof val !== 'string') val = val + ''
 
-	if (secret === null) throw new TypeError('Secret key must be provided.')
+	if (secret === null || secret === undefined)
+		throw new TypeError('Secret key must be provided')
 
 	const secretKey = await crypto.subtle.importKey(
 		'raw',
@@ -685,16 +687,33 @@ export const signCookie = async (val: string, secret: string | null) => {
 	)
 }
 
+const constantTimeEqual =
+	typeof crypto?.timingSafeEqual === 'function'
+		? (a: string, b: string) => {
+				// Compare as UTF-8 bytes; timingSafeEqual requires equal length
+				const ab = Buffer.from(a, 'utf8')
+				const bb = Buffer.from(b, 'utf8')
+
+				if (ab.length !== bb.length) return false
+				return crypto.timingSafeEqual(ab, bb)
+			}
+		: (a: string, b: string) => a === b
+
 export const unsignCookie = async (input: string, secret: string | null) => {
 	if (typeof input !== 'string')
 		throw new TypeError('Signed cookie string must be provided.')
 
-	if (null === secret) throw new TypeError('Secret key must be provided.')
+	const dot = input.lastIndexOf('.')
+	if (dot === -1) {
+		if (secret === null) return input
 
-	const tentativeValue = input.slice(0, input.lastIndexOf('.'))
+		return false
+	}
+
+	const tentativeValue = input.slice(0, dot)
 	const expectedInput = await signCookie(tentativeValue, secret)
 
-	return expectedInput === input ? tentativeValue : false
+	return constantTimeEqual(expectedInput, input) ? tentativeValue : false
 }
 
 export const insertStandaloneValidator = <const Name extends keyof InputSchema>(
@@ -961,23 +980,32 @@ export const form = <const T extends Record<keyof any, unknown>>(
 	return formData as any
 }
 
+/**
+ * Generates a random ID for schema identification.
+ *
+ * Uses crypto.randomUUID() when available, with a Math.random() fallback
+ * for environments where crypto.randomUUID() throws an error
+ * (e.g., Cloudflare Workers global scope).
+ *
+ * @see https://developers.cloudflare.com/workers/runtime-apis/handlers/
+ */
 export const randomId =
-	typeof crypto === 'undefined'
-		? () => {
+	typeof crypto === 'undefined' || isCloudflareWorker()
+		? (): string => {
 				let result = ''
 
 				const characters =
 					'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
-				const charactersLength = characters.length
 
 				for (let i = 0; i < 16; i++)
 					result += characters.charAt(
-						Math.floor(Math.random() * charactersLength)
+						// 62 is characters.length
+						Math.floor(Math.random() * 62)
 					)
 
 				return result
 			}
-		: () => {
+		: (): string => {
 				const uuid = crypto.randomUUID()
 				return uuid.slice(0, 8) + uuid.slice(24, 32)
 			}

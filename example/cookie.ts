@@ -3,7 +3,7 @@ import { Elysia, t } from '../src'
 const app = new Elysia({
 	cookie: {
 		secrets: 'Fischl von Luftschloss Narfidort',
-		sign: ['name']
+		sign: 'name'
 	}
 })
 	.get(

@@ -3,7 +3,6 @@ import { AnyElysia, Cookie } from './index'
 import { Value, TransformDecodeError } from '@sinclair/typebox/value'
 import {
 	Kind,
-	OptionalKind,
 	TypeBoxError,
 	type TAnySchema,
 	type TSchema
@@ -43,6 +42,7 @@ import { ELYSIA_TRACE, type TraceHandler } from './trace'
 import {
 	ElysiaTypeCheck,
 	getCookieValidator,
+	getSchemaProperties,
 	getSchemaValidator,
 	hasElysiaMeta,
 	hasType,
@@ -60,6 +60,7 @@ import type {
 	Handler,
 	HookContainer,
 	LifeCycleStore,
+	MaybePromise,
 	SchemaValidator
 } from './types'
 import { tee } from './adapter/utils'
@@ -340,7 +341,7 @@ const composeValidationFactory = ({
 							`}catch{` +
 							`throw new ValidationError('response',validator.response[${status}],${name},${allowUnsafeValidationDetails})` +
 							`}`
-						: `throw new ValidationError('response',validator.response[${status}],${name}),${allowUnsafeValidationDetails}`) +
+						: `throw new ValidationError('response',validator.response[${status}],${name},${allowUnsafeValidationDetails})`) +
 					`}`
 			} else {
 				if (!appliedCleaner) code += clean()
@@ -371,12 +372,17 @@ const matchFnReturn = /(?:return|=>)\s?\S+\(|a(?:sync|wait)/
 
 export const isAsync = (v: Function | HookContainer) => {
 	const isObject = typeof v === 'object'
-
 	if (isObject && v.isAsync !== undefined) return v.isAsync
 
 	const fn = isObject ? v.fn : v
-
-	if (fn.constructor.name === 'AsyncFunction') return true
+	// Check for both AsyncFunction and AsyncGeneratorFunction
+	// AsyncGeneratorFunction needs to be treated as async because generator.next()
+	// returns a Promise that may reject (e.g., when throwing from the generator)
+	if (
+		fn.constructor.name === 'AsyncFunction' ||
+		fn.constructor.name === 'AsyncGeneratorFunction'
+	)
+		return true
 
 	const literal: string = fn.toString()
 
@@ -387,7 +393,6 @@ export const isAsync = (v: Function | HookContainer) => {
 	}
 
 	const result = matchFnReturn.test(literal)
-
 	if (isObject) v.isAsync = result
 
 	return result
@@ -402,18 +407,37 @@ const hasReturn = (v: string | HookContainer<any> | Function) => {
 		? v.fn.toString()
 		: typeof v === 'string'
 			? v.toString()
-			: v
+			: v.toString()
 
 	const parenthesisEnd = fnLiteral.indexOf(')')
 
-	// Is direct arrow function return eg. () => 1
-	if (
-		fnLiteral.charCodeAt(parenthesisEnd + 2) === 61 &&
-		fnLiteral.charCodeAt(parenthesisEnd + 5) !== 123
-	) {
-		if (isObject) v.hasReturn = true
+	// Check for arrow function expression (direct return without braces)
+	// Handle both `) => x` and `)=>x` formats (with or without spaces)
+	const arrowIndex = fnLiteral.indexOf('=>', parenthesisEnd)
 
-		return true
+	if (arrowIndex !== -1) {
+		// Skip any whitespace after `=>` (space, tab, newline, carriage return)
+		let afterArrow = arrowIndex + 2
+		let charCode: number
+		while (
+			afterArrow < fnLiteral.length &&
+			((charCode = fnLiteral.charCodeAt(afterArrow)) === 32 || // space
+				charCode === 9 || // tab
+				charCode === 10 || // newline
+				charCode === 13) // carriage return
+		) {
+			afterArrow++
+		}
+
+		// If the first non-whitespace char after `=>` is not `{`, it's a direct return
+		if (
+			afterArrow < fnLiteral.length &&
+			fnLiteral.charCodeAt(afterArrow) !== 123
+		) {
+			if (isObject) v.hasReturn = true
+
+			return true
+		}
 	}
 
 	const result = fnLiteral.includes('return')
@@ -587,9 +611,20 @@ export const composeHandler = ({
 		if (_encodeCookie) return _encodeCookie
 
 		if (cookieMeta?.sign) {
+			if (cookieMeta.secrets === '')
+				throw new Error(
+					`cookie secret can't be an empty string at (${method}) ${path}`,
+					{
+						cause: `(${method}) ${path}`
+					}
+				)
+
 			if (!cookieMeta.secrets)
 				throw new Error(
-					`t.Cookie required secret which is not set in (${method}) ${path}.`
+					`cookie secret must be defined (${method}) ${path}`,
+					{
+						cause: `(${method}) ${path}`
+					}
 				)
 
 			const secret = !cookieMeta.secrets
@@ -670,7 +705,7 @@ export const composeHandler = ({
 
 		const options = cookieMeta
 			? `{secrets:${
-					cookieMeta.secrets !== undefined
+					cookieMeta.secrets !== undefined && cookieMeta.secrets !== null
 						? typeof cookieMeta.secrets === 'string'
 							? JSON.stringify(cookieMeta.secrets)
 							: '[' +
@@ -718,9 +753,10 @@ export const composeHandler = ({
 
 		if (validator.query?.schema) {
 			const schema = unwrapImportSchema(validator.query?.schema)
+			const properties = getSchemaProperties(schema)
 
-			if (Kind in schema && schema.properties) {
-				for (const [key, value] of Object.entries(schema.properties)) {
+			if (properties) {
+				for (const [key, value] of Object.entries(properties)) {
 					if (hasElysiaMeta('ArrayQuery', value as TSchema)) {
 						arrayProperties[key] = true
 						hasArrayProperty = true
@@ -846,17 +882,21 @@ export const composeHandler = ({
 
 	const mapResponse = (r = 'r') => {
 		const after = afterResponse()
-		const response = `${hasSet ? 'mapResponse' : 'mapCompactResponse'}(${saveResponse}${r}${hasSet ? ',c.set' : ''}${mapResponseContext})\n`
+		// When maybeStream is true, mapResponse may return a Promise (from handleStream)
+		// that can reject if the generator throws. We need to await it so the try-catch
+		// can properly catch the rejection and route it to error handling.
+		// Only add await if the function is async (maybeAsync), otherwise it would be a syntax error.
+		const awaitStream = maybeStream && maybeAsync ? 'await ' : ''
+		const response = `${awaitStream}${hasSet ? 'mapResponse' : 'mapCompactResponse'}(${saveResponse}${r}${hasSet ? ',c.set' : ''}${mapResponseContext})\n`
 
 		if (!after) return `return ${response}`
 
 		return `const _res=${response}` + after + `return _res`
 	}
 
-	const mapResponseContext =
-		maybeStream && adapter.mapResponseContext
-			? `,${adapter.mapResponseContext}`
-			: ''
+	const mapResponseContext = adapter.mapResponseContext
+		? `,${adapter.mapResponseContext}`
+		: ''
 
 	if (hasTrace || inference.route) fnLiteral += `c.route=\`${path}\`\n`
 	if (hasTrace || hooks.afterResponse?.length)
@@ -1017,6 +1057,8 @@ export const composeHandler = ({
 								`if(result!==undefined)c.body=result\n` +
 								'delete c.contentType\n'
 						}
+
+						break
 				}
 			}
 
@@ -1574,22 +1616,10 @@ export const composeHandler = ({
 
 						if (candidate) {
 							const isFirst = fileUnions.length === 0
-							// Handle case where schema is wrapped in a Union (e.g., ObjectString coercion)
-							let properties =
-								candidate.schema?.properties ?? type.properties
-
-							// If no properties but schema is a Union, try to find the Object in anyOf
-							if (!properties && candidate.schema?.anyOf) {
-								const objectSchema =
-									candidate.schema.anyOf.find(
-										(s: any) =>
-											s.type === 'object' ||
-											(Kind in s && s[Kind] === 'Object')
-									)
-								if (objectSchema) {
-									properties = objectSchema.properties
-								}
-							}
+							// Handle case where schema is wrapped in a Union/Intersect (e.g., ObjectString coercion)
+							const properties =
+								getSchemaProperties(candidate.schema) ??
+								getSchemaProperties(type)
 
 							if (!properties) continue
 
@@ -1646,20 +1676,27 @@ export const composeHandler = ({
 			) {
 				let validateFile = ''
 
+				const bodyProperties = getSchemaProperties(
+					unwrapImportSchema(validator.body.schema)
+				)
+
 				let i = 0
-				for (const [k, v] of Object.entries(
-					unwrapImportSchema(validator.body.schema).properties
-				) as [string, TSchema][]) {
-					if (
-						!v.extension ||
-						(v[Kind] !== 'File' && v[Kind] !== 'Files')
-					)
-						continue
+				if (bodyProperties) {
+					for (const [k, v] of Object.entries(bodyProperties) as [
+						string,
+						TSchema
+					][]) {
+						if (
+							!v.extension ||
+							(v[Kind] !== 'File' && v[Kind] !== 'Files')
+						)
+							continue
 
-					if (i) validateFile += ','
-					validateFile += `fileType(c.body.${k},${JSON.stringify(v.extension)},'body.${k}')`
+						if (i) validateFile += ','
+						validateFile += `fileType(c.body.${k},${JSON.stringify(v.extension)},'body.${k}')`
 
-					i++
+						i++
+					}
 				}
 
 				if (i) fnLiteral += '\n'
@@ -1674,7 +1711,7 @@ export const composeHandler = ({
 			// ! Get latest app.config.cookie
 			validator.cookie.config = mergeCookie(
 				validator.cookie.config,
-				validator.cookie?.config ?? {}
+				app.config.cookie ?? {}
 			)
 
 			fnLiteral +=
@@ -1696,7 +1733,7 @@ export const composeHandler = ({
 				fnLiteral +=
 					`for(const k of Object.keys(cookieValue))` +
 					`c.cookie[k].value=cookieValue[k]\n`
-			} else if (validator.body?.schema?.noValidate !== true) {
+			} else if (validator.cookie?.schema?.noValidate !== true) {
 				fnLiteral +=
 					`if(validator.cookie.Check(cookieValue)===false){` +
 					validation.validate('cookie', 'cookieValue') +
@@ -1705,7 +1742,7 @@ export const composeHandler = ({
 				if (validator.cookie.hasTransform)
 					fnLiteral += coerceTransformDecodeError(
 						`for(const [key,value] of Object.entries(validator.cookie.Decode(cookieValue))){` +
-							`c.cookie[key].cookie.value = value` +
+							`c.cookie[key].value = value` +
 							`}`,
 						'cookie',
 						allowUnsafeValidationDetails
@@ -1877,6 +1914,9 @@ export const composeHandler = ({
 					(maybeAsync ? '' : `(async()=>{`) +
 					`const stream=await tee(r,3)\n` +
 					`r=stream[0]\n` +
+					(hooks.afterHandle?.length
+						? `c.response=c.responseValue=r\n`
+						: '') +
 					`const listener=stream[1]\n` +
 					(hasTrace || hooks.afterResponse?.length
 						? `afterHandlerStreamListener=stream[2]\n`
@@ -2150,7 +2190,7 @@ export const composeHandler = ({
 					fnLiteral +=
 						`c.response=c.responseValue=er\n` +
 						`mep=e.mapResponse[${i}](c)\n` +
-						`if(mep instanceof Promise)er=await er\n` +
+						`if(mep instanceof Promise)mep=await mep\n` +
 						`if(mep!==undefined)er=mep\n`
 
 					endUnit()
@@ -2404,7 +2444,9 @@ export const createHoc = (app: AnyElysia, fnName = 'map') => {
 	return `return function hocMap(${adapter.parameters}){return ${handler}(${adapter.parameters})}`
 }
 
-export const composeGeneralHandler = (app: AnyElysia) => {
+export const composeGeneralHandler = (
+	app: AnyElysia
+): ((request: Request) => MaybePromise<Response>) => {
 	const adapter = app['~adapter'].composeGeneralHandler
 	app.router.http.build()
 
@@ -2754,7 +2796,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 					`return mapResponse(_r,set${adapter.mapResponseContext})}` +
 					`if(_r instanceof ElysiaCustomStatusResponse){` +
 					`error.status=error.code\n` +
-					`error.message = error.response` +
+					`error.message=error.response` +
 					`}` +
 					`if(set.status===200||!set.status)set.status=error.status\n`
 
@@ -2772,7 +2814,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 						)
 
 						fnLiteral +=
-							`context.response=context.responseValue=_r` +
+							`context.response=context.responseValue=_r\n` +
 							`_r=${isAsyncName(mapResponse) ? 'await ' : ''}onMapResponse[${i}](context)\n`
 
 						endUnit()

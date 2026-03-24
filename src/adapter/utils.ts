@@ -2,17 +2,85 @@ import { serializeCookie } from '../cookies'
 import { hasHeaderShorthand, isNotEmpty, StatusMap } from '../utils'
 
 import type { Context } from '../context'
-import { isBun } from '../universal/utils'
 import { env } from '../universal'
+import { isBun } from '../universal/utils'
+import { MaybePromise } from '../types'
 
 export const handleFile = (
 	response: File | Blob,
-	set?: Context['set']
+	set?: Context['set'],
+	request?: Request
 ): Response => {
 	if (!isBun && response instanceof Promise)
-		return response.then((res) => handleFile(res, set)) as any
+		return response.then((res) => handleFile(res, set, request)) as any
 
 	const size = response.size
+
+	const rangeHeader = request?.headers.get('range')
+	if (rangeHeader) {
+		const match = /bytes=(\d*)-(\d*)/.exec(rangeHeader)
+		if (match) {
+			if (!match[1] && !match[2])
+				return new Response(null, {
+					status: 416,
+					headers: mergeHeaders(
+						new Headers({ 'content-range': `bytes */${size}` }),
+						set?.headers ?? {}
+					)
+				})
+
+			let start: number
+			let end: number
+
+			if (!match[1] && match[2]) {
+				const suffix = parseInt(match[2])
+				start = Math.max(0, size - suffix)
+				end = size - 1
+			} else {
+				start = match[1] ? parseInt(match[1]) : 0
+				end = match[2]
+					? Math.min(parseInt(match[2]), size - 1)
+					: size - 1
+			}
+
+			if (start >= size || start > end) {
+				return new Response(null, {
+					status: 416,
+					headers: mergeHeaders(
+						new Headers({ 'content-range': `bytes */${size}` }),
+						set?.headers ?? {}
+					)
+				})
+			}
+
+			const contentLength = end - start + 1
+			const rangeHeaders = new Headers({
+				'accept-ranges': 'bytes',
+				'content-range': `bytes ${start}-${end}/${size}`,
+				'content-length': String(contentLength)
+			})
+
+			// Blob.slice() exists at runtime but is absent from the ESNext lib typings
+			// (no DOM lib). Cast through unknown to the minimal interface we need.
+			// Pass response.type as third arg so the sliced blob preserves MIME type.
+			return new Response(
+				(
+					response as unknown as {
+						slice(
+							start: number,
+							end: number,
+							contentType?: string
+						): Blob
+					}
+				).slice(start, end + 1, response.type),
+				{
+					status: 206,
+					headers: mergeHeaders(rangeHeaders, set?.headers ?? {})
+				}
+			)
+		}
+	}
+
 	const immutable =
 		set &&
 		(set.status === 206 ||
@@ -136,7 +204,7 @@ export const responseToSetHeaders = (
 	return set
 }
 
-type CreateHandlerParameter = {
+interface CreateHandlerParameter {
 	mapResponse(
 		response: unknown,
 		set: Context['set'],
@@ -145,14 +213,43 @@ type CreateHandlerParameter = {
 	mapCompactResponse(response: unknown, request?: Request): Response
 }
 
-const allowRapidStream = env.ELYSIA_RAPID_STREAM === 'true'
+const enqueueBinaryChunk = (
+	controller: ReadableStreamDefaultController,
+	chunk: unknown
+): MaybePromise<boolean> => {
+	if (chunk instanceof Blob)
+		return chunk.arrayBuffer().then((buffer) => {
+			controller.enqueue(new Uint8Array(buffer))
+			return true as const
+		})
+
+	if (chunk instanceof Uint8Array) {
+		controller.enqueue(chunk)
+		return true
+	}
+
+	if (chunk instanceof ArrayBuffer) {
+		controller.enqueue(new Uint8Array(chunk))
+		return true
+	}
+
+	if (ArrayBuffer.isView(chunk)) {
+		controller.enqueue(
+			new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength)
+		)
+		return true
+	}
+
+	return false
+}
 
 export const createStreamHandler =
 	({ mapResponse, mapCompactResponse }: CreateHandlerParameter) =>
 	async (
 		generator: Generator | AsyncGenerator | ReadableStream,
 		set?: Context['set'],
-		request?: Request
+		request?: Request,
+		skipFormat?: boolean
 	) => {
 		// Since ReadableStream doesn't have next, init might be undefined
 		let init = (generator as Generator).next?.() as
@@ -171,13 +268,15 @@ export const createStreamHandler =
 			return mapCompactResponse(init.value, request)
 		}
 
+		// Check if stream is from a pre-formatted Response body
 		const isSSE =
+			!skipFormat &&
 			// @ts-ignore First SSE result is wrapped with sse()
-			init?.value?.sse ??
-			// @ts-ignore ReadableStream is wrapped with sse()
-			generator?.sse ??
-			// User explicitly set content-type to SSE
-			set?.headers['content-type']?.startsWith('text/event-stream')
+			(init?.value?.sse ??
+				// @ts-ignore ReadableStream is wrapped with sse()
+				generator?.sse ??
+				// User explicitly set content-type to SSE
+				set?.headers['content-type']?.startsWith('text/event-stream'))
 
 		const format = isSSE
 			? (data: string) => `data: ${data}\n\n`
@@ -207,87 +306,107 @@ export const createStreamHandler =
 				}
 			}
 
-		const isBrowser = request?.headers.has('Origin')
+		// Get an explicit async iterator so pull() can advance one step at a time.
+		// Generators already implement the iterator protocol directly (.next()),
+		// while ReadableStream (which generator may be reassigned to above) needs
+		// [Symbol.asyncIterator]() to produce one.
+		const iterator: AsyncIterator<unknown> =
+			typeof (generator as any).next === 'function'
+				? (generator as AsyncIterator<unknown>)
+				: (generator as any)[Symbol.asyncIterator]()
+
+		let end = false
 
 		return new Response(
 			new ReadableStream({
-				async start(controller) {
-					let end = false
-
+				start(controller) {
+					// Register abort handler once — terminates the iterator and
+					// closes the stream so pull() won't be called again.
 					request?.signal?.addEventListener('abort', () => {
 						end = true
+						iterator.return?.()
 
 						try {
 							controller.close()
 						} catch {}
 					})
 
-					if (!init || init.value instanceof ReadableStream) {
-					} else if (
-						init.value !== undefined &&
-						init.value !== null
-					) {
+					// Enqueue the already-extracted init value (first generator
+					// result, used above for SSE detection). Subsequent values
+					// are produced on-demand by pull().
+					if (
+						!init ||
+						init.value instanceof ReadableStream ||
+						init.value === undefined ||
+						init.value === null
+					)
+						return
+
+					// @ts-ignore
+					if (init.value.toSSE)
 						// @ts-ignore
-						if (init.value.toSSE)
+						controller.enqueue(init.value.toSSE())
+					else if (enqueueBinaryChunk(controller, init.value)) return
+					else if (typeof init.value === 'object')
+						try {
+							controller.enqueue(
+								format(JSON.stringify(init.value))
+							)
+						} catch {
+							controller.enqueue(format(init.value.toString()))
+						}
+					else controller.enqueue(format(init.value.toString()))
+				},
+
+				async pull(controller) {
+					// Respect abort/cancel that happened between pull() calls.
+					if (end) {
+						try {
+							controller.close()
+						} catch {}
+						return
+					}
+
+					try {
+						const { value: chunk, done } = await iterator.next()
+
+						if (done || end) {
+							try {
+								controller.close()
+							} catch {}
+							return
+						}
+
+						// null/undefined chunks are skipped; the runtime will
+						// call pull() again since nothing was enqueued.
+						if (chunk === undefined || chunk === null) return
+
+						// @ts-ignore
+						if (chunk.toSSE)
 							// @ts-ignore
-							controller.enqueue(init.value.toSSE())
-						else if (typeof init.value === 'object')
+							controller.enqueue(chunk.toSSE())
+						else if (enqueueBinaryChunk(controller, chunk)) return
+						else if (typeof chunk === 'object')
 							try {
 								controller.enqueue(
-									format(JSON.stringify(init.value))
+									format(JSON.stringify(chunk))
 								)
 							} catch {
-								controller.enqueue(
-									format(init.value.toString())
-								)
+								controller.enqueue(format(chunk.toString()))
 							}
-						else controller.enqueue(format(init.value.toString()))
-					}
-
-					try {
-						for await (const chunk of generator) {
-							if (end) break
-							if (chunk === undefined || chunk === null) continue
-
-							// @ts-ignore
-							if (chunk.toSSE) {
-								// @ts-ignore
-								controller.enqueue(chunk.toSSE())
-							} else {
-								if (typeof chunk === 'object')
-									try {
-										controller.enqueue(
-											format(JSON.stringify(chunk))
-										)
-									} catch {
-										controller.enqueue(
-											format(chunk.toString())
-										)
-									}
-								else
-									controller.enqueue(format(chunk.toString()))
-
-								if (!allowRapidStream && isBrowser && !isSSE)
-									/**
-									 * Wait for the next event loop
-									 * otherwise the data will be mixed up
-									 *
-									 * @see https://github.com/elysiajs/elysia/issues/741
-									 */
-									await new Promise<void>((resolve) =>
-										setTimeout(() => resolve(), 0)
-									)
-							}
-						}
+						else controller.enqueue(format(chunk.toString()))
 					} catch (error) {
 						console.warn(error)
-					}
 
-					try {
-						controller.close()
-					} catch {
-						// nothing
+						try {
+							controller.close()
+						} catch {}
 					}
+				},
+
+				cancel() {
+					end = true
+					iterator.return?.()
 				}
 			}),
 			set as any
@@ -332,77 +451,71 @@ export const handleSet = (set: Context['set']) => {
 	}
 }
 
+// Merge header by allocating a new one
+// In Bun, response.headers can be mutable
+// while in Node and Cloudflare Worker is not
+// default to creating a new one instead
+export function mergeHeaders(
+	responseHeaders: Headers,
+	setHeaders: Context['set']['headers']
+) {
+	// Direct clone preserves all headers including multiple set-cookie
+	const headers = new Headers(responseHeaders)
+
+	// Merge headers: Response headers take precedence, set.headers fill in non-conflicting ones
+	if (setHeaders instanceof Headers)
+		for (const key of setHeaders.keys()) {
+			if (key === 'set-cookie') {
+				if (headers.has('set-cookie')) continue
+
+				for (const cookie of setHeaders.getSetCookie())
+					headers.append('set-cookie', cookie)
+			} else if (!responseHeaders.has(key))
+				headers.set(key, setHeaders?.get(key) ?? '')
+		}
+	else
+		for (const key in setHeaders)
+			if (key === 'set-cookie')
+				headers.append(key, setHeaders[key] as any)
+			else if (!responseHeaders.has(key))
+				headers.set(key, setHeaders[key] as any)
+
+	return headers
+}
+
+export function mergeStatus(
+	responseStatus: number,
+	setStatus: Context['set']['status']
+) {
+	if (typeof setStatus === 'string') setStatus = StatusMap[setStatus]
+
+	if (responseStatus === 200) return setStatus
+
+	return responseStatus
+}
+
 export const createResponseHandler = (handler: CreateHandlerParameter) => {
 	const handleStream = createStreamHandler(handler)
 
 	return (response: Response, set: Context['set'], request?: Request) => {
-		let isCookieSet = false
-
-		// Merge headers: Response headers take precedence, set.headers fill in non-conflicting ones
-		if (set.headers instanceof Headers)
-			for (const key of set.headers.keys()) {
-				if (key === 'set-cookie') {
-					if (isCookieSet) continue
-
-					isCookieSet = true
-
-					for (const cookie of set.headers.getSetCookie())
-						response.headers.append('set-cookie', cookie)
-				} else if (!response.headers.has(key))
-					response.headers.set(key, set.headers?.get(key) ?? '')
-			}
-		else
-			for (const key in set.headers)
-				if (key === 'set-cookie')
-					(response as Response).headers.append(
-						key,
-						set.headers[key] as any
-					)
-				else if (!response.headers.has(key))
-					(response as Response).headers.set(
-						key,
-						set.headers[key] as any
-					)
-
-		const status = set.status ?? 200
+		const newResponse = new Response(response.body, {
+			headers: mergeHeaders(response.headers, set.headers),
+			status: mergeStatus(response.status, set.status)
+		})
 
 		if (
-			(response as Response).status !== status &&
-			status !== 200 &&
-			((response.status as number) <= 300 ||
-				(response.status as number) > 400)
-		) {
-			const newResponse = new Response(response.body, {
-				headers: response.headers,
-				status: set.status as number
-			})
-
-			if (
-				!(newResponse as Response).headers.has('content-length') &&
-				(newResponse as Response).headers.get('transfer-encoding') ===
-					'chunked'
-			)
-				return handleStream(
-					streamResponse(newResponse as Response),
-					responseToSetHeaders(newResponse as Response, set),
-					request
-				) as any
-
-			return newResponse
-		}
-
-		if (
-			!(response as Response).headers.has('content-length') &&
-			(response as Response).headers.get('transfer-encoding') ===
+			!(newResponse as Response).headers.has('content-length') &&
+			(newResponse as Response).headers.get('transfer-encoding') ===
 				'chunked'
 		)
 			return handleStream(
-				streamResponse(response as Response),
-				responseToSetHeaders(response as Response, set),
-				request
+				streamResponse(newResponse as Response),
+				responseToSetHeaders(newResponse as Response, set),
+				request,
+				true // don't auto-format SSE for pre-formatted Response
 			) as any
 
-		return response
+		return newResponse
 	}
 }
 

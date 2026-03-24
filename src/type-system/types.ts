@@ -10,13 +10,12 @@ import type {
 	TUnsafe,
 	Uint8ArrayOptions
 } from '@sinclair/typebox'
-import { ValueError } from '@sinclair/typebox/errors'
+import type { ValueError } from '@sinclair/typebox/errors'
 import type { TypeCheck } from '@sinclair/typebox/compiler'
 
-import { ElysiaFormData } from '../utils'
+import type { ElysiaFormData } from '../utils'
 import type { CookieOptions } from '../cookies'
 import type { MaybeArray } from '../types'
-import { ElysiaFile } from '../universal/file'
 
 export type FileUnit = number | `${number}${'k' | 'm'}`
 
@@ -146,11 +145,35 @@ export type TForm<T extends TProperties = TProperties> = TUnsafe<
 	ElysiaFormData<TObject<T>['static']>
 >
 
-export type ElysiaTypeCustomError =
-	| string
-	| boolean
-	| number
-	| ElysiaTypeCustomErrorCallback
+/**
+ * !important
+ * @see https://github.com/elysiajs/elysia/pull/1613
+ *
+ * Augment this interface to extend allowed values for SchemaOptions['error'].
+ * Defining custom string templates will add autocomplete while allowing any arbitrary string, number, etc.
+ *
+ * The names of keys only used to map to the values, unless you globally augment a specific key.
+ *
+ * ```ts
+ * declare module 'elysia/type-system/types' {
+ *   interface ElysiaTypeCustomErrors {
+ *     myPlugin: 'my.plugin.error' | `my.plugin.${string}`
+ *   }
+ * }
+ *
+ * const schema = t.String({ error: 'my.plugin.hello' })
+ * ```
+ */
+export interface ElysiaTypeCustomErrors {
+  /**
+   * The default error types that the library supports.
+   *
+   * `string & {}` `number & {}` are used to allow string templates and numbers respectively.
+   */
+  default: (string & {}) | boolean | (number & {}) | ElysiaTypeCustomErrorCallback
+}
+
+export type ElysiaTypeCustomError = ElysiaTypeCustomErrors[keyof ElysiaTypeCustomErrors]
 
 export type ElysiaTypeCustomErrorCallback = (
 	error: {

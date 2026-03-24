@@ -10,7 +10,7 @@ import {
 } from './error'
 import type { AnyElysia, CookieOptions } from './index'
 import { parseQuery } from './parse-query'
-import type { ElysiaTypeCheck } from './schema'
+import { getSchemaProperties, type ElysiaTypeCheck } from './schema'
 import type { TypeCheck } from './type-system'
 import type { Handler, LifeCycleStore, SchemaValidator } from './types'
 import { hasSetImmediate, redirect, StatusMap, signCookie } from './utils'
@@ -24,6 +24,150 @@ export type DynamicHandler = {
 	route: string
 }
 
+/**
+ * Matches array index notation in property paths
+ * Examples:
+ *   "users[0]"  → Group 1: "users", Group 2: "0"
+ *   "items[42]" → Group 1: "items", Group 2: "42"
+ *   "a[123]"    → Group 1: "a",     Group 2: "123"
+ *
+ * Does not match:
+ *   "users"     → no brackets
+ *   "users[]"   → no index
+ *   "users[ab]" → non-numeric index
+ */
+const ARRAY_INDEX_REGEX = /^(.+)\[(\d+)\]$/
+const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
+
+const isDangerousKey = (key: string): boolean => {
+	if (DANGEROUS_KEYS.has(key)) return true
+
+	const match = key.match(ARRAY_INDEX_REGEX)
+	return match ? DANGEROUS_KEYS.has(match[1]) : false
+}
+
+const parseArrayKey = (key: string) => {
+	const match = key.match(ARRAY_INDEX_REGEX)
+	if (!match) return null
+
+	return {
+		name: match[1],
+		index: parseInt(match[2], 10)
+	}
+}
+
+const parseObjectString = (entry: unknown) => {
+	if (typeof entry !== 'string' || entry.charCodeAt(0) !== 123) return
+
+	try {
+		const parsed = JSON.parse(entry)
+		if (parsed && typeof parsed === 'object' && !Array.isArray(parsed))
+			return parsed
+	} catch {
+		return
+	}
+}
+
+const setNestedValue = (obj: Record<string, any>, path: string, value: any) => {
+	const keys = path.split('.')
+	const lastKey = keys.pop() as string
+
+	// Validate all keys upfront
+	if (isDangerousKey(lastKey) || keys.some(isDangerousKey)) return
+
+	let current = obj
+
+	// Traverse intermediate keys
+	for (const key of keys) {
+		const arrayInfo = parseArrayKey(key)
+
+		if (arrayInfo) {
+			// Initialize array if needed
+			if (!Array.isArray(current[arrayInfo.name]))
+				current[arrayInfo.name] = []
+
+			const existing = current[arrayInfo.name][arrayInfo.index]
+			const isFile =
+				typeof File !== 'undefined' && existing instanceof File
+
+			// Initialize object at index if needed
+			if (
+				!existing ||
+				typeof existing !== 'object' ||
+				Array.isArray(existing) ||
+				isFile
+			)
+				current[arrayInfo.name][arrayInfo.index] =
+					parseObjectString(existing) ?? {}
+
+			current = current[arrayInfo.name][arrayInfo.index]
+		} else {
+			// Initialize object property if needed
+			if (!current[key] || typeof current[key] !== 'object')
+				current[key] = {}
+
+			current = current[key]
+		}
+	}
+
+	// Set final value
+	const arrayInfo = parseArrayKey(lastKey)
+
+	if (arrayInfo) {
+		if (!Array.isArray(current[arrayInfo.name]))
+			current[arrayInfo.name] = []
+
+		current[arrayInfo.name][arrayInfo.index] = value
+	} else {
+		current[lastKey] = value
+	}
+}
+
+const normalizeFormValue = (value: unknown[]) => {
+    if (value.length === 1) {
+        const stringValue = value[0]
+        if (typeof stringValue === 'string') {
+            // Try to parse JSON objects (starting with '{') or arrays (starting with '[')
+            if (stringValue.charCodeAt(0) === 123 || stringValue.charCodeAt(0) === 91) {
+                try {
+                    const parsed = JSON.parse(stringValue)
+                    if (parsed && typeof parsed === 'object') {
+                        return parsed
+                    }
+                } catch {}
+            }
+        }
+        return value[0]
+    }
+
+	const stringValue = value.find(
+		(entry): entry is string => typeof entry === 'string'
+	)
+	if (!stringValue) return value
+
+	if (typeof File === 'undefined') return value
+	const files = value.filter((entry): entry is File => entry instanceof File)
+	if (!files.length) return value
+
+	if (stringValue.charCodeAt(0) !== 123) return value
+
+	let parsed: unknown
+	try {
+		parsed = JSON.parse(stringValue)
+	} catch {
+		return value
+	}
+
+	if (typeof parsed !== 'object' || parsed === null) return value
+
+	if (!('file' in parsed) && files.length === 1)
+		(parsed as Record<string, unknown>).file = files[0]
+	else if (!('files' in parsed) && files.length > 1)
+		(parsed as Record<string, unknown>).files = files
+
+	return parsed
+}
+
 const injectDefaultValues = (
 	typeChecker: TypeCheck<any> | ElysiaTypeCheck<any>,
 	obj: Record<string, any>
@@ -34,10 +178,10 @@ const injectDefaultValues = (
 
 	if (schema.$defs?.[schema.$ref]) schema = schema.$defs[schema.$ref]
 
-	if (!schema?.properties) return
+	const properties = getSchemaProperties(schema)
+	if (!properties) return
 
-	for (const [key, keySchema] of Object.entries(schema.properties)) {
-		// @ts-expect-error private
+	for (const [key, keySchema] of Object.entries(properties)) {
 		obj[key] ??= keySchema.default
 	}
 }
@@ -114,6 +258,11 @@ export const createDynamicHandler = (app: AnyElysia) => {
 			const { handle, validator, content, route } = handler.store
 			hooks = handler.store.hooks
 
+			// @ts-ignore
+			if (hooks.config?.mount)
+				// @ts-ignore
+				return await hooks.config.mount(request)
+
 			let body: string | Record<string, any> | undefined
 			if (request.method !== 'GET' && request.method !== 'HEAD') {
 				if (content) {
@@ -142,8 +291,11 @@ export const createDynamicHandler = (app: AnyElysia) => {
 								if (body[key]) continue
 
 								const value = form.getAll(key)
-								if (value.length === 1) body[key] = value[0]
-								else body[key] = value
+								const finalValue = normalizeFormValue(value)
+
+								if (key.includes('.') || key.includes('['))
+									setNestedValue(body, key, finalValue)
+								else body[key] = finalValue
 							}
 
 							break
@@ -194,15 +346,16 @@ export const createDynamicHandler = (app: AnyElysia) => {
 										case 'multipart/form-data': {
 											body = {}
 
-											const form =
-												await request.formData()
+											const form = await request.formData()
 											for (const key of form.keys()) {
 												if (body[key]) continue
 
 												const value = form.getAll(key)
-												if (value.length === 1)
-													body[key] = value[0]
-												else body[key] = value
+												const finalValue = normalizeFormValue(value)
+
+												if (key.includes('.') || key.includes('['))
+													setNestedValue(body, key, finalValue)
+												else body[key] = finalValue
 											}
 
 											break
@@ -268,9 +421,11 @@ export const createDynamicHandler = (app: AnyElysia) => {
 										if (body[key]) continue
 
 										const value = form.getAll(key)
-										if (value.length === 1)
-											body[key] = value[0]
-										else body[key] = value
+										const finalValue = normalizeFormValue(value)
+
+										if (key.includes('.') || key.includes('['))
+											setNestedValue(body, key, finalValue)
+										else body[key] = finalValue
 									}
 
 									break
@@ -406,19 +561,21 @@ export const createDynamicHandler = (app: AnyElysia) => {
 					if (schema.$defs?.[schema.$ref])
 						schema = schema.$defs[schema.$ref]
 
-					const properties = schema.properties
+					const properties = getSchemaProperties(schema)
 
-					for (const property of Object.keys(properties)) {
-						const value = properties[property]
-						if (
-							(value.type === 'array' ||
-								value.items?.type === 'string') &&
-							typeof context.query[property] === 'string' &&
-							context.query[property]
-						) {
-							// @ts-expect-error
-							context.query[property] =
-								context.query[property].split(',')
+					if (properties) {
+						for (const property of Object.keys(properties)) {
+							const value = properties[property]
+							if (
+								(value.type === 'array' ||
+									value.items?.type === 'string') &&
+								typeof context.query[property] === 'string' &&
+								context.query[property]
+							) {
+								// @ts-expect-error
+								context.query[property] =
+									context.query[property].split(',')
+							}
 						}
 					}
 				}
@@ -451,8 +608,14 @@ export const createDynamicHandler = (app: AnyElysia) => {
 
 				if (validator.createBody?.()?.Check(body) === false)
 					throw new ValidationError('body', validator.body!, body)
-				else if (validator.body?.Decode)
-					context.body = validator.body.Decode(body) as any
+				else if (validator.body?.Decode) {
+						let decoded = validator.body.Decode(body) as any
+						if (decoded instanceof Promise)
+							decoded = await decoded
+
+						// Zod returns { value: ... } wrapper
+						context.body = decoded?.value ?? decoded
+				}
 			}
 
 			if (hooks.beforeHandle)
@@ -525,15 +688,25 @@ export const createDynamicHandler = (app: AnyElysia) => {
 
 				if (responseValidator?.Check(response) === false) {
 					if (responseValidator?.Clean) {
-						const temp = responseValidator.Clean(response)
-						if (responseValidator?.Check(temp) === false)
+						try {
+							const temp = responseValidator.Clean(response)
+							if (responseValidator?.Check(temp) === false)
+								throw new ValidationError(
+									'response',
+									responseValidator,
+									response
+								)
+
+							response = temp
+						} catch (error) {
+							if (error instanceof ValidationError) throw error
+
 							throw new ValidationError(
 								'response',
 								responseValidator,
 								response
 							)
-
-						response = temp
+						}
 					} else
 						throw new ValidationError(
 							'response',
@@ -546,7 +719,9 @@ export const createDynamicHandler = (app: AnyElysia) => {
 					response = responseValidator.Encode(response)
 
 				if (responseValidator?.Clean)
-					response = responseValidator.Clean(response)
+					try {
+						response = responseValidator.Clean(response)
+					} catch {}
 			} else {
 				;(
 					context as Context & {
@@ -584,15 +759,25 @@ export const createDynamicHandler = (app: AnyElysia) => {
 
 					if (responseValidator?.Check(response) === false) {
 						if (responseValidator?.Clean) {
-							const temp = responseValidator.Clean(response)
-							if (responseValidator?.Check(temp) === false)
+							try {
+								const temp = responseValidator.Clean(response)
+								if (responseValidator?.Check(temp) === false)
+									throw new ValidationError(
+										'response',
+										responseValidator,
+										response
+									)
+
+								response = temp
+							} catch (error) {
+								if (error instanceof ValidationError) throw error
+
 								throw new ValidationError(
 									'response',
 									responseValidator,
 									response
 								)
-
-							response = temp
+							}
 						} else
 							throw new ValidationError(
 								'response',
@@ -606,8 +791,10 @@ export const createDynamicHandler = (app: AnyElysia) => {
 							responseValidator.Encode(response)
 
 					if (responseValidator?.Clean)
-						context.response = response =
-							responseValidator.Clean(response)
+						try {
+							context.response = response =
+								responseValidator.Clean(response)
+						} catch {}
 
 					const result = mapEarlyResponse(response, context.set)
 					// @ts-expect-error
@@ -632,11 +819,11 @@ export const createDynamicHandler = (app: AnyElysia) => {
 								secret
 							)
 				} else {
-					const properties = validator?.cookie?.schema?.properties
+					const properties = getSchemaProperties(validator?.cookie?.schema)
 
 					if (secret)
 						for (const name of cookieMeta.sign) {
-							if (!(name in properties)) continue
+							if (!properties || !(name in properties)) continue
 
 							if (context.set.cookie[name]?.value) {
 								context.set.cookie[name].value =

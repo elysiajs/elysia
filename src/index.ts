@@ -162,7 +162,7 @@ import type {
 	UnknownRouteSchema,
 	MaybeFunction,
 	InlineHandlerNonMacro,
-	Router
+	Router,
 } from './types'
 import {
 	coercePrimitiveRoot,
@@ -414,7 +414,7 @@ export default class Elysia<
 
 	'~adapter': ElysiaAdapter
 
-	env(model: TObject<any>, _env = env) {
+	env(model: TObject, _env = env) {
 		const validator = getSchemaValidator(model, {
 			modules: this.definitions.typebox,
 			dynamic: true,
@@ -467,7 +467,10 @@ export default class Elysia<
 
 		for (const name of Object.keys(this.definitions.type))
 			models[name] = getSchemaValidator(
-				this.definitions.typebox.Import(name as never)
+				this.definitions.typebox.Import(name as never),
+				{
+					models: this.definitions.type
+				}
 			)
 
 		// @ts-expect-error
@@ -796,6 +799,10 @@ export default class Elysia<
 				Object.assign({}, this.config.detail!),
 				localHook.detail
 			)
+
+		if (path === '/ip') {
+			// console.log(path, this.event, localHookToLifeCycleStore(localHook))
+		}
 
 		const hooks = isNotEmpty(this.event)
 			? mergeHook(this.event, localHookToLifeCycleStore(localHook))
@@ -3641,6 +3648,10 @@ export default class Elysia<
 
 		for (const handle of handles) {
 			const fn = asHookType(handle, 'global', { skipIfHasType: true })
+			if (this.config.name || this.config.seed)
+				fn.checksum = checksum(
+					this.config.name + JSON.stringify(this.config.seed)
+				)
 
 			switch (type) {
 				case 'start':
@@ -4042,6 +4053,10 @@ export default class Elysia<
 					} = schemaOrRun
 					const localHook = hooks as AnyLocalHook
 
+					// Apply macros to expand group options before merging
+					// This ensures macro-defined hooks run before nested plugin hooks
+					this.applyMacro(hook)
+
 					const hasStandaloneSchema =
 						body || headers || query || params || cookie || response
 
@@ -4062,20 +4077,29 @@ export default class Elysia<
 											localHook.error,
 											...(sandbox.event.error ?? [])
 										],
-							standaloneValidator: !hasStandaloneSchema
-								? localHook.standaloneValidator
-								: [
-										...(localHook.standaloneValidator ??
-											[]),
-										{
-											body,
-											headers,
-											query,
-											params,
-											cookie,
-											response
-										}
-									]
+							// Merge macro's standaloneValidator with local and group schema
+							standaloneValidator:
+								hook.standaloneValidator ||
+								localHook.standaloneValidator ||
+								hasStandaloneSchema
+									? [
+											...(hook.standaloneValidator ?? []),
+											...(localHook.standaloneValidator ??
+												[]),
+											...(hasStandaloneSchema
+												? [
+														{
+															body,
+															headers,
+															query,
+															params,
+															cookie,
+															response
+														}
+													]
+												: [])
+										]
+									: undefined
 						}),
 						undefined
 					)
@@ -4125,7 +4149,8 @@ export default class Elysia<
 		>,
 		const MacroContext extends MacroToContext<
 			Metadata['macroFn'],
-			NoInfer<Omit<Input, keyof InputSchema>>
+			Omit<Input, NonResolvableMacroKey | 'as'>,
+			Definitions['typebox']
 		>,
 		const GuardType extends GuardSchemaType,
 		const AsType extends LifeCycleType,
@@ -4393,7 +4418,7 @@ export default class Elysia<
 			? {}
 			: MacroToContext<
 					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
+					Omit<Input, NonResolvableMacroKey | 'as'>,
 					Definitions['typebox']
 				>,
 		const BeforeHandle extends MaybeArray<
@@ -4659,6 +4684,80 @@ export default class Elysia<
 				)
 			}
 		)
+
+		// Handle dynamic imports (Promises) used inside guard callback
+		if (instance.promisedModules.size > 0) {
+			let processedUntil = instance.router.history.length
+
+			for (const promise of instance.promisedModules.promises) {
+				this.promisedModules.add(
+					promise.then(() => {
+						const {
+							body,
+							headers,
+							query,
+							params,
+							cookie,
+							response,
+							...guardHook
+						} = hook
+
+						const hasStandaloneSchema =
+							body || headers || query || params || cookie || response
+
+						const startIndex = processedUntil
+						processedUntil = instance.router.history.length
+
+						for (
+							let i = startIndex;
+							i < instance.router.history.length;
+							i++
+						) {
+							const {
+								method,
+								path,
+								handler,
+								hooks: localHook
+							} = instance.router.history[i]
+
+							this.add(
+								method,
+								path,
+								handler,
+								mergeHook(guardHook as AnyLocalHook, {
+									...((localHook || {}) as AnyLocalHook),
+									error: !localHook.error
+										? sandbox.event.error
+										: Array.isArray(localHook.error)
+											? [
+													...(localHook.error ?? []),
+													...(sandbox.event.error ?? [])
+												]
+											: [
+													localHook.error,
+													...(sandbox.event.error ?? [])
+												],
+									standaloneValidator: !hasStandaloneSchema
+										? localHook.standaloneValidator
+										: [
+												...(localHook.standaloneValidator ??
+													[]),
+												{
+													body,
+													headers,
+													query,
+													params,
+													cookie,
+													response
+												}
+											]
+								})
+							)
+						}
+					})
+				)
+			}
+		}
 
 		return this as any
 	}
@@ -5557,21 +5656,7 @@ export default class Elysia<
 									})()
 
 			const handler: Handler = ({ request, path }) =>
-				run(
-					new Request(replaceUrlPath(request.url, path), {
-						method: request.method,
-						headers: request.headers,
-						signal: request.signal,
-						credentials: request.credentials,
-						referrerPolicy: request.referrerPolicy as any,
-						duplex: request.duplex,
-						redirect: request.redirect,
-						mode: request.mode,
-						keepalive: request.keepalive,
-						integrity: request.integrity,
-						body: request.body
-					})
-				)
+				run(new Request(replaceUrlPath(request.url, path), request))
 
 			this.route('ALL', '/*', handler as any, {
 				parse: 'none',
@@ -5597,25 +5682,17 @@ export default class Elysia<
 							throw new Error('Invalid handler')
 						})()
 
-		const length = path.length - (path.endsWith('*') ? 1 : 0)
+		const fullPath =
+			typeof path === 'string' && this.config.prefix
+				? this.config.prefix + path
+				: path
 
+		const length = fullPath.length - (path.endsWith('*') ? 1 : 0)
 		const handler: Handler = ({ request, path }) =>
 			handle(
 				new Request(
 					replaceUrlPath(request.url, path.slice(length) || '/'),
-					{
-						method: request.method,
-						headers: request.headers,
-						signal: request.signal,
-						credentials: request.credentials,
-						referrerPolicy: request.referrerPolicy as any,
-						duplex: request.duplex,
-						redirect: request.redirect,
-						mode: request.mode,
-						keepalive: request.keepalive,
-						integrity: request.integrity,
-						body: request.body
-					}
+					request
 				)
 			)
 
@@ -5708,6 +5785,7 @@ export default class Elysia<
 				>
 	>(
 		path: Path,
+		// handler: (a: { a: MacroContext }) => any,
 		handler: Handle,
 		hook?: LocalHook<
 			Input,
@@ -8051,7 +8129,7 @@ export default class Elysia<
 	 *
 	 * Beside benchmark purpose, please use 'handle' instead.
 	 */
-	get fetch() {
+	get fetch(): (request: Request) => MaybePromise<Response> {
 		const fetch = this.config.aot
 			? composeGeneralHandler(this)
 			: createDynamicHandler(this)
@@ -8213,6 +8291,7 @@ export {
 	InternalServerError,
 	InvalidCookieSignature,
 	ERROR_CODE,
+	ElysiaStatus,
 	ElysiaCustomStatusResponse,
 	type SelectiveStatus
 } from './error'
@@ -8246,6 +8325,8 @@ export type {
 	LifeCycleType,
 	MaybePromise,
 	UnwrapSchema,
+	AnySchema,
+	ModelsToTypes,
 	Checksum,
 	DocumentDecoration,
 	InferContext,

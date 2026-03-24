@@ -8,7 +8,7 @@ import type {
 
 import { StatusMap, InvertedStatusMap } from './utils'
 import type { ElysiaTypeCheck } from './schema'
-import { Prettify, StandardSchemaV1Like } from './types'
+import { StandardSchemaV1Like } from './types'
 
 // ? Cloudflare worker support
 const env =
@@ -44,7 +44,9 @@ type CheckExcessProps<T, U> = 0 extends 1 & T
 	: U extends U
 		? Exclude<keyof T, keyof U> extends never
 			? T
-			: { [K in keyof U]: U[K] } & { [K in Exclude<keyof T, keyof U>]: never }
+			: { [K in keyof U]: U[K] } & {
+					[K in Exclude<keyof T, keyof U>]: never
+				}
 		: never
 
 export type SelectiveStatus<in out Res> = <
@@ -103,6 +105,8 @@ export class ElysiaCustomStatusResponse<
 	}
 }
 
+export const ElysiaStatus = ElysiaCustomStatusResponse
+
 export const status = <
 	const Code extends number | keyof StatusMap,
 	const T = Code extends keyof InvertedStatusMap
@@ -154,27 +158,16 @@ export class InvalidCookieSignature extends Error {
 	}
 }
 
-type MapValueError =
-	| {
-			summary: undefined
-	  }
-	| {
-			summary: string
-	  }
-	| Prettify<
-			{
-				summary: string
-			} & ValueError
-	  >
+interface ValueErrorWithSummary extends ValueError {
+	summary?: string
+}
 
-export const mapValueError = (error: ValueError | undefined): MapValueError => {
-	if (!error)
-		return {
-			summary: undefined
-		}
+export const mapValueError = (
+	error: ValueError | undefined
+): ValueErrorWithSummary | undefined => {
+	if (!error) return error
 
 	let { message, path, value, type } = error
-
 	if (Array.isArray(path)) path = path[0]
 
 	const property =
@@ -357,7 +350,7 @@ export class ValidationError extends Error {
 
 			error = _errors?.[0]
 
-			if (isProduction)
+			if (isProduction && !allowUnsafeValidationDetails)
 				message = JSON.stringify({
 					type: 'validation',
 					on: type,
@@ -399,7 +392,7 @@ export class ValidationError extends Error {
 			// @ts-ignore private field
 			const schema = validator?.schema ?? validator
 
-			if (!isProduction && !allowUnsafeValidationDetails) {
+			if (!isProduction && !allowUnsafeValidationDetails)
 				try {
 					expected = Value.Create(schema)
 				} catch (error) {
@@ -410,7 +403,6 @@ export class ValidationError extends Error {
 						error
 					}
 				}
-			}
 
 			customError =
 				error?.schema?.message || error?.schema?.error !== undefined
@@ -429,7 +421,7 @@ export class ValidationError extends Error {
 											property: accessor,
 											message: error?.message,
 											summary:
-												mapValueError(error).summary,
+												mapValueError(error)?.summary,
 											found: value,
 											expected,
 											errors:
@@ -469,7 +461,7 @@ export class ValidationError extends Error {
 						on: type,
 						property: accessor,
 						message: error?.message,
-						summary: mapValueError(error).summary,
+						summary: mapValueError(error)?.summary,
 						expected,
 						found: value,
 						errors:
@@ -495,7 +487,7 @@ export class ValidationError extends Error {
 		Object.setPrototypeOf(this, ValidationError.prototype)
 	}
 
-	get all(): MapValueError[] {
+	get all(): ValueErrorWithSummary[] {
 		// Handle standard schema validators (Zod, Valibot, etc.)
 		if (
 			// @ts-ignore
@@ -531,7 +523,9 @@ export class ValidationError extends Error {
 
 		// Handle TypeBox validators
 		return 'Errors' in this.validator
-			? [...this.validator.Errors(this.value)].map(mapValueError)
+			? [...this.validator.Errors(this.value)]
+					.filter((x) => x)
+					.map((x) => mapValueError(x) as ValueErrorWithSummary)
 			: // @ts-ignore
 				[...Value.Errors(this.validator, this.value)].map(mapValueError)
 	}
@@ -607,7 +601,7 @@ export class ValidationError extends Error {
 					on: this.type,
 					property: this.valueError?.path || 'root',
 					message,
-					summary: mapValueError(this.valueError).summary,
+					summary: mapValueError(this.valueError)?.summary,
 					found: value,
 					expected,
 					errors

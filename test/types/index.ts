@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 
-import { expectTypeOf } from 'expect-type'
 import {
 	type Cookie,
 	Elysia,
@@ -11,6 +10,8 @@ import {
 	status,
 	t
 } from '../../src'
+
+import { expectTypeOf } from 'expect-type'
 
 const app = new Elysia()
 
@@ -1222,40 +1223,28 @@ const a = app
 
 	const app = new Elysia().group('/api', (app) => app.use(testController))
 
-	expectTypeOf<(typeof app)['~Routes']>().toEqualTypeOf<{
-		api: {
-			test: {
-				'could-be-error': {
-					right: {
-						get: {
-							body: unknown
-							params: {}
-							query: unknown
-							headers: unknown
-							response: {
-								200: {
-									couldBeError: boolean
-								}
-							}
-						}
-					}
-				}
-			}
-		} & {
-			test: {
-				deep: {
-					ws: {
-						subscribe: {
-							body: unknown
-							params: {}
-							query: unknown
-							headers: unknown
-							response: {}
-						}
-					}
-				}
+	expectTypeOf<
+		(typeof app)['~Routes']['api']['test']['could-be-error']['right']['get']
+	>().toEqualTypeOf<{
+		body: unknown
+		params: {}
+		query: unknown
+		headers: unknown
+		response: {
+			200: {
+				couldBeError: boolean
 			}
 		}
+	}>()
+
+	expectTypeOf<
+		(typeof app)['~Routes']['api']['test']['deep']['ws']['subscribe']
+	>().toEqualTypeOf<{
+		body: {}
+		params: {}
+		query: {}
+		headers: {}
+		response: {}
 	}>()
 }
 
@@ -2511,27 +2500,42 @@ type a = keyof {}
 
 // onAfterHandle should have response
 {
-	new Elysia().onAfterHandle({ as: 'scoped' }, ({ response }) => response)
+	new Elysia().onAfterHandle(
+		{ as: 'scoped' },
+		({ responseValue }) => responseValue
+	)
 }
 
+/* Neither `a` or `b` exist at the type level, even though they do exist at runtime */
 {
 	new Elysia()
 		.macro({
 			a: {
+				body: t.Object({
+					a: t.String()
+				}),
 				resolve: () => ({ a: 'a' as const })
 			},
 			b: {
+				body: t.Object({
+					b: t.String()
+				}),
 				resolve: () => ({ b: 'b' as const })
 			}
 		})
 		.get(
 			'/test',
-			(
-				{
-					a,
-					b
-				} /* Neither `a` or `b` exist at the type level, even though they do exist at runtime */
-			) => ({ a, b }),
+			({ a, b, body }) => {
+				expectTypeOf<typeof body>().toEqualTypeOf<{
+					a: string
+					b: string
+				}>()
+
+				expectTypeOf<typeof a>().toEqualTypeOf<'a'>()
+				expectTypeOf<typeof b>().toEqualTypeOf<'b'>()
+
+				return { a, b }
+			},
 			{
 				a: true,
 				b: true
@@ -2951,4 +2955,35 @@ type a = keyof {}
 			}
 		)
 	)
+}
+
+// ? params with model
+{
+	new Elysia()
+		.model({
+			'character.name': t.String(),
+			'character.thing': t.Object({
+				name: t.String()
+			})
+		})
+		.get('/id/:id/name/:name', ({ params }) => {
+			expectTypeOf<typeof params>().toEqualTypeOf<{
+				id: string
+				name: string
+			}>()
+		})
+}
+
+// ? Promise<Response>
+{
+	async function handler() {
+		return new Response(JSON.stringify({ text: 'hello' }), {
+			status: 200,
+			headers: { 'Content-Type': 'application/json' }
+		})
+	}
+
+	new Elysia().get('/hello', () => handler(), {
+		response: { 200: t.Object({ text: t.String() }) }
+	})
 }

@@ -1,3 +1,115 @@
+# 1.4.28 - 17 Mar 2025
+Feature:
+- [#1803](https://github.com/elysiajs/elysia/pull/1803) stream response with pull based backpressure
+- [#1802](https://github.com/elysiajs/elysia/pull/1802) handle range header for file/blob response
+- [#1722](https://github.com/elysiajs/elysia/pull/1772), [#1741](https://github.com/elysiajs/elysia/issues/1741) direct ReadableStream perf blow-up
+
+Bug fix:
+- [#1805](https://github.com/elysiajs/elysia/pull/1805) dynamic imports inside .guard not registering routes
+- [#1771](https://github.com/elysiajs/elysia/issues/1771) breaks Bun HTML imports
+- [#1797](https://github.com/elysiajs/elysia/pull/1797) await mapped error response promise
+- [#1794](https://github.com/elysiajs/elysia/pull/1794) merge app cookie config into route cookie validator config
+- [#1796](https://github.com/elysiajs/elysia/pull/1796) check custom parser by full name
+- [#1795](https://github.com/elysiajs/elysia/pull/1795)  write transformed cookie value to cookie entry directly
+- [#1793](https://github.com/elysiajs/elysia/pull/1793) use cookie schema for cookie noValidate check
+- [#1792](https://github.com/elysiajs/elysia/pull/1792) throw ValidationError instead of boolean in response encode path
+- detect HTML bundle when inline response is Promise
+
+Change:
+- [#1613](https://github.com/elysiajs/elysia/pull/1613) export `ElysiaTypeCustomErrors`
+- remove Bun specific built
+- export `AnySchema`, `UnwrapSchema`, `ModelsToTypes` from root
+- conditional set headers of String and Object when no set.headers is set
+
+# 1.4.27 - 1 Mar 2026
+Bug fix:
+- getSchemaValidator: handle TypeBox as sub type
+- handle cookie prototype pollution when parsing cookie
+
+Improvement:
+- conditional async on getSchemaValidator when schema is Standard Schema
+- use Response.json on Bun
+
+# 1.4.26 - 25 Feb 2026
+Bug fix:
+- [#1755](https://github.com/elysiajs/elysia/issues/1755) deduplicate local handler from global event
+- [#1752](https://github.com/elysiajs/elysia/issues/1752) system router with trailing path doesn't match with non-trailing
+- url format redos
+- [#1747](https://github.com/elysiajs/elysia/issues/1747) parsing request from mount hang
+
+# 1.4.25 - 12 Feb 2026
+Feature:
+- export ElysiaStatus
+
+Bug fix:
+- macro with conflict literal value per status
+- recursive macro with conflict value per status
+
+# 1.4.24 - 11 Feb 2026
+Feature:
+- graceful unsigned cookie transition
+
+Bug fix:
+- [#1733](https://github.com/elysiajs/elysia/pull/1733) preserve multiple set-cookie headers in mounted handlers 
+- object cookie with secret doesn't deserialized after parsed
+
+# 1.4.23 - 9 Feb 2026
+Feature:
+- [#1719](https://github.com/elysiajs/elysia/pull/1719) add t.Union/t.Intersection handling in property enumerations/checks
+- [#1697](https://github.com/elysiajs/elysia/pull/1697) extend complex formdata support to StandardSchema
+- [#1656](https://github.com/elysiajs/elysia/pull/1675) serialize custom array-like custom class with array sub class
+
+Bug fix:
+- [#1721](https://github.com/elysiajs/elysia/issues/1721) Promise<Response> with response schema
+- [#1700](https://github.com/elysiajs/elysia/issues/1700) distinct union object
+- [#1683](https://github.com/elysiajs/elysia/pull/1683) response validation returns 500 instead of 422 for nested schemas in dynamic mode
+- [#1679](https://github.com/elysiajs/elysia/pull/1679) preserve headers when throwing from AsyncGenerator
+- [#1595](https://github.com/elysiajs/elysia/pull/1595) stream reference should point to teed value
+- fix can't modify immutable headers error
+
+Change:
+- update exact-mirror to 0.2.7
+
+# 1.4.22 - 14 Jan 2026
+Improvement:
+- use imperative check for `replaceURLPath` instead of allocating `new URL`
+- reduce ts-ignore/ts-expect-error on promise map handler
+- [#1655](https://github.com/elysiajs/elysia/pull/1655) decode single values in ArrayQuery
+
+Bug fix:
+- [#1671](https://github.com/elysiajs/elysia/issues/1671) mount produces incorrect URL path when Elysia instance has prefix option
+- [https://github.com/elysiajs/elysia/issues/1617](https://github.com/elysiajs/elysia/issues/1617), [#1623](https://github.com/elysiajs/elysia/pull/1623) AOT compilation removes beforeHandle when using arrow function expression
+- [#1667](https://github.com/elysiajs/elysia/issues/1667) skip body parsing on mount with dynamic mode
+- [#1662](https://github.com/elysiajs/elysia/pull/1662) custom thenable fallback in `mapCompactResponse` causing runtime crash with undefined variable
+- [#1661](https://github.com/elysiajs/elysia/pull/1661), [#1663](https://github.com/elysiajs/elysia/pull/1663) fix SSE double-wrapping bug when returning pre-formatted Response
+- ValueError with summary missing types
+- Elysia not using Bun.routes by default
+
+# 1.4.21 - 4 Jan 2026
+Improvement:
+- [#1654](https://github.com/elysiajs/elysia/pull/1654) encode t.Date() to iso string
+- [#1624](https://github.com/elysiajs/elysia/pull/1624) apply macros before merging hooks in group method
+
+Bug fix:
+- call Sucrose GC unref when possible (browser fallback)
+- add allowUnsafeValidationDetails to Standard Validator
+
+# 1.4.20 - 3 Jan 2026
+Improvement:
+- add `ModelValidator.schema` for accessing raw schema
+- [#1636](https://github.com/elysiajs/elysia/issues/1636) add `subscriptions` to `Elysia.ws` context
+- [#1638](https://github.com/elysiajs/elysia/pull/1638) unref Sucrose gc
+
+Bug fix:
+- [#1649](https://github.com/elysiajs/elysia/pull/1649) add null check for object properties (t.Record)
+- [#1646](https://github.com/elysiajs/elysia/pull/1646) use constant-time comparison for signed cookie verification
+- [#1639](https://github.com/elysiajs/elysia/issues/1639) compose: ReferenceError: "_r_r is not defined" when onError returns plain object & mapResponse exists
+- [#1631](https://github.com/elysiajs/elysia/issues/1631) update Exact Mirror to 0.2.6
+- [#1630](https://github.com/elysiajs/elysia/issues/1630) enforce fetch to return MaybePromise<Response>
+
+Bug fix:
+- `Elysia.models` broke when referencing non typebox model
+
 # 1.4.19 - 13 Dec 2025
 Security:
 - reject invalid cookie signature when using cookie rotation

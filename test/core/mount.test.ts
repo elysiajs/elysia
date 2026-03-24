@@ -137,4 +137,95 @@ describe('Mount', () => {
 			'x-test': 'test'
 		})
 	})
+
+	it('without prefix - strips mount path', async () => {
+		const app = new Elysia().mount('/sdk/problems-domain', (request) => {
+			return Response.json({ path: new URL(request.url).pathname })
+		})
+
+		const response = await app
+			.handle(
+				new Request('http://localhost/sdk/problems-domain/problems')
+			)
+			.then((x) => x.json() as Promise<{ path: string }>)
+
+		expect(response.path).toBe('/problems')
+	})
+
+	it('with prefix - should strip both prefix and mount path', async () => {
+		const sdkApp = new Elysia({ prefix: '/sdk' }).mount(
+			'/problems-domain',
+			(request) => {
+				return Response.json({ path: new URL(request.url).pathname })
+			}
+		)
+
+		const app = new Elysia().use(sdkApp)
+
+		const response = await app
+			.handle(
+				new Request('http://localhost/sdk/problems-domain/problems')
+			)
+			.then((x) => x.json() as Promise<{ path: string }>)
+
+		expect(response.path).toBe('/problems')
+	})
+
+	it('handle body in aot: false', async () => {
+		const app = new Elysia({ aot: false }).mount('/api', async (request) =>
+			Response.json(await request.json())
+		)
+
+		const response = await app
+			.handle(
+				new Request('http://localhost/api', {
+					method: 'POST',
+					headers: {
+						'content-type': 'application/json'
+					},
+					body: JSON.stringify({ message: 'hello world' })
+				})
+			)
+
+			.then((x) => x.json())
+
+		expect(response).toEqual({
+			message: 'hello world'
+		})
+	})
+
+	it('preserve set-cookie headers from Response with CORS', async () => {
+		const handler = async () => {
+			const headers = new Headers()
+			headers.set('location', '/redirect')
+			headers.append('set-cookie', 'session=abc123; Path=/; HttpOnly')
+			headers.append('set-cookie', 'token=xyz789; Path=/; Secure')
+
+			return new Response('OK', {
+				status: 302,
+				headers
+			})
+		}
+
+		const app = new Elysia()
+			.use((app) =>
+				app.onBeforeHandle(({ set }) => {
+					set.headers['access-control-allow-origin'] = '*'
+				})
+			)
+			.mount('/auth', handler)
+
+		const response = await app.handle(
+			new Request('http://localhost/auth/login', {
+				method: 'POST'
+			})
+		)
+
+		const cookies = response.headers.getSetCookie()
+		expect(cookies).toHaveLength(2)
+		expect(cookies).toContain('session=abc123; Path=/; HttpOnly')
+		expect(cookies).toContain('token=xyz789; Path=/; Secure')
+		expect(response.status).toBe(302)
+		expect(response.headers.get('location')).toBe('/redirect')
+	})
 })

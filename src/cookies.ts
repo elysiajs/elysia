@@ -128,8 +128,12 @@ export interface CookieOptions {
 	 *
 	 * Key rotation is when an encryption key is retired
 	 * and replaced by generating a new cryptographic key.
+	 *
+	 * When null is provided in array,
+	 * Elysia will allow unsigned cookie for smooth
+	 * transition from unsign to sign
 	 */
-	secrets?: string | string[]
+	secrets?: string | null | (string | null)[]
 }
 
 export type ElysiaCookie = Prettify<
@@ -146,7 +150,7 @@ export class Cookie<T> implements ElysiaCookie {
 	constructor(
 		private name: string,
 		private jar: Record<string, ElysiaCookie>,
-		private initial: Partial<ElysiaCookie> = {}
+		private initial: Partial<ElysiaCookie> = Object.create(null)
 	) {}
 
 	get cookie() {
@@ -197,7 +201,10 @@ export class Cookie<T> implements ElysiaCookie {
 				const newHash = hashString(valueStr)
 
 				// If hash differs from cached hash, value definitely changed
-				if (this.valueHash !== undefined && this.valueHash !== newHash) {
+				if (
+					this.valueHash !== undefined &&
+					this.valueHash !== newHash
+				) {
 					this.valueHash = newHash
 				}
 				// First set (valueHash undefined) OR hashes match: do deep comparison
@@ -229,7 +236,7 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set maxAge(maxAge: number | undefined) {
-		this.setCookie.maxAge = maxAge;
+		this.setCookie.maxAge = maxAge
 	}
 
 	get domain() {
@@ -237,7 +244,7 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set domain(domain: string | undefined) {
-		this.setCookie.domain = domain;
+		this.setCookie.domain = domain
 	}
 
 	get path() {
@@ -294,7 +301,7 @@ export class Cookie<T> implements ElysiaCookie {
 		return this.cookie.secrets
 	}
 
-	set secrets(secrets: string | string[] | undefined) {
+	set secrets(secrets: ElysiaCookie['secrets']) {
 		this.setCookie.secrets = secrets
 	}
 
@@ -343,7 +350,7 @@ export const createCookieJar = (
 	store: Record<string, ElysiaCookie>,
 	initial?: Partial<ElysiaCookie>
 ): Record<string, Cookie<unknown>> => {
-	if (!set.cookie) set.cookie = {}
+	if (!set.cookie) set.cookie = Object.create(null)
 
 	return new Proxy(store, {
 		get(_, key: string) {
@@ -372,47 +379,46 @@ export const parseCookie = async (
 		...initial
 	}: CookieOptions & {
 		sign?: true | string | string[]
-	} = {}
+	} = Object.create(null)
 ) => {
-	if (!cookieString) return createCookieJar(set, {}, initial)
+	if (!cookieString) return createCookieJar(set, Object.create(null), initial)
 
 	const isStringKey = typeof secrets === 'string'
 	if (sign && sign !== true && !Array.isArray(sign)) sign = [sign]
 
-	const jar: Record<string, ElysiaCookie> = {}
+	const jar: Record<string, ElysiaCookie> = Object.create(null)
 
 	const cookies = parse(cookieString)
 	for (const [name, v] of Object.entries(cookies)) {
-		if (v === undefined) continue
+		if (
+			v === undefined ||
+			name === '__proto__' ||
+			name === 'constructor' ||
+			name === 'prototype'
+		)
+			continue
 
 		let value = decode(v)
-
-		if (value) {
-			const starts = value.charCodeAt(0)
-			const ends = value.charCodeAt(value.length - 1)
-
-			if (
-				(starts === 123 && ends === 125) ||
-				(starts === 91 && ends === 93)
-			)
-				try {
-					value = JSON.parse(value)
-				} catch {}
-		}
 
 		if (sign === true || sign?.includes(name)) {
 			if (!secrets)
 				throw new Error('No secret is provided to cookie plugin')
 
 			if (isStringKey) {
-				const temp = await unsignCookie(value as string, secrets)
+				if (typeof value !== 'string')
+					throw new InvalidCookieSignature(name)
+
+				const temp = await unsignCookie(value, secrets)
 				if (temp === false) throw new InvalidCookieSignature(name)
 
 				value = temp
 			} else {
 				let decoded = false
 				for (let i = 0; i < secrets.length; i++) {
-					const temp = await unsignCookie(value as string, secrets[i])
+					if (typeof value !== 'string')
+						throw new InvalidCookieSignature(name)
+
+					const temp = await unsignCookie(value, secrets[i])
 
 					if (temp !== false) {
 						decoded = true
@@ -426,9 +432,22 @@ export const parseCookie = async (
 			}
 		}
 
-		jar[name] = {
-			value
+		// decode cookie after unsigned
+		if (value) {
+			const starts = value.charCodeAt(0)
+			const ends = value.charCodeAt(value.length - 1)
+
+			if (
+				(starts === 123 && ends === 125) ||
+				(starts === 91 && ends === 93)
+			)
+				try {
+					value = JSON.parse(value)
+				} catch {}
 		}
+
+		jar[name] = Object.create(null)
+		jar[name].value = value
 	}
 
 	return createCookieJar(set, jar, initial)

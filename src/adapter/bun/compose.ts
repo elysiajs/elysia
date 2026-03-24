@@ -33,7 +33,7 @@ const createContext = (
 	const getQi =
 		`const u=request.url,` +
 		`s=u.indexOf('/',${standardHostname ? 11 : 7}),` +
-		`qi=u.indexOf('?', s + 1)\n`
+		`qi=u.indexOf('?',s+1)\n`
 
 	const needsQuery =
 		inference.query ||

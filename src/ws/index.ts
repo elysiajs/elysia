@@ -69,6 +69,7 @@ export class ElysiaWS<Context = unknown, Route extends RouteSchema = {}>
 		this.remoteAddress = raw.remoteAddress
 		this.binaryType = raw.binaryType
 		this.data = raw.data as any
+		this.subscriptions = raw.subscriptions
 
 		this.send = this.send.bind(this)
 		this.ping = this.ping.bind(this)
@@ -190,6 +191,7 @@ export class ElysiaWS<Context = unknown, Route extends RouteSchema = {}>
 	cork: ServerWebSocket['cork']
 	remoteAddress: ServerWebSocket['remoteAddress']
 	binaryType: ServerWebSocket['binaryType']
+	subscriptions: ServerWebSocket['subscriptions']
 
 	get readyState() {
 		return this.raw.readyState
@@ -286,8 +288,11 @@ export const createHandleWSResponse = (
 
 				if (validateResponse && validateResponse(first))
 					return ws.send(
-						new ValidationError('message', responseValidator!, first)
-							.message
+						new ValidationError(
+							'message',
+							responseValidator!,
+							first
+						).message
 					)
 
 				send(first.value as any)

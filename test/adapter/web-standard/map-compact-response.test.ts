@@ -203,4 +203,27 @@ describe('Web Standard - Map Compact Response', () => {
 		expect(response.status).toBe(200)
 		expect(await response.formData()).toBeInstanceOf(FormData)
 	})
+
+	it('map custom thenable', async () => {
+		// Custom thenable object (e.g., like some ORMs return such as Drizzle)
+		// Using a class to avoid being caught by the 'Object' case
+		class CustomThenable {
+			then(onFulfilled: (value: any) => any) {
+				const data = { name: 'Shiroko', id: 42 }
+				return Promise.resolve(data).then(onFulfilled)
+			}
+		}
+
+		const customThenable = new CustomThenable()
+		const responsePromise = mapCompactResponse(customThenable)
+		expect(responsePromise).toBeInstanceOf(Promise)
+		
+		const response = await responsePromise
+
+		expect(response).toBeInstanceOf(Response)
+		const body = await response.text()
+		const parsed = JSON.parse(body)
+		expect(parsed).toEqual({ name: 'Shiroko', id: 42 })
+		expect(response.status).toBe(200)
+	})
 })

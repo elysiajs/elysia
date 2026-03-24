@@ -153,7 +153,10 @@ export const ElysiaType = {
 			.Encode((value) => value) as any as TNumber
 	},
 
-	NumericEnum<T extends AssertNumericEnum<T>>(item: T, property?: SchemaOptions) {
+	NumericEnum<T extends AssertNumericEnum<T>>(
+		item: T,
+		property?: SchemaOptions
+	) {
 		const schema = Type.Enum(item, property)
 		const compiler = compile(schema)
 
@@ -246,14 +249,12 @@ export const ElysiaType = {
 			.Encode((value) => {
 				if (value instanceof Date) return value.toISOString()
 				if (typeof value === 'string') {
-					if (
-						isNaN(
-							new Date(parseDateTimeEmptySpace(value)).getTime()
-						)
-					)
+					const parsed = new Date(parseDateTimeEmptySpace(value))
+
+					if (isNaN(parsed.getTime()))
 						throw new ValidationError('property', schema, value)
 
-					return value
+					return parsed.toISOString()
 				}
 
 				if (!compiler.Check(value)) throw compiler.Error(value)
@@ -303,7 +304,7 @@ export const ElysiaType = {
 					[
 						t.String({
 							format: 'ObjectString',
-                            default: options?.default
+							default: options?.default
 						}),
 						schema
 					],
@@ -367,16 +368,18 @@ export const ElysiaType = {
 
 		return t
 			.Transform(
-				t.Union([
-					t.String({
-						format: 'ArrayString',
-						default: options?.default
-					}),
-					schema
-				],
-				{
-					elysiaMeta: 'ArrayString'
-				})
+				t.Union(
+					[
+						t.String({
+							format: 'ArrayString',
+							default: options?.default
+						}),
+						schema
+					],
+					{
+						elysiaMeta: 'ArrayString'
+					}
+				)
 			)
 			.Decode((value) => {
 				if (Array.isArray(value)) {
@@ -427,7 +430,7 @@ export const ElysiaType = {
 			if (value.indexOf(',') !== -1)
 				return compiler.Decode(value.split(','))
 
-			return [value]
+			return compiler.Decode([value])
 		}
 
 		return t
