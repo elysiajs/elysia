@@ -306,6 +306,52 @@ export const createStreamHandler =
 				}
 			}
 
+		// Plain ReadableStream (not SSE, not a generator) can be passed through
+		// directly. Re-wrapping it would add per-chunk async overhead (#1741)
+		// and break the native cancel callback (#1768).
+		if (
+			!isSSE &&
+			generator instanceof ReadableStream &&
+			typeof (generator as any).next !== 'function'
+		)
+			return new Response(
+				generator.pipeThrough(
+					new TransformStream({
+						transform(chunk, controller) {
+							if (
+								chunk instanceof Uint8Array ||
+								chunk instanceof ArrayBuffer ||
+								typeof chunk === 'string'
+							)
+								controller.enqueue(chunk)
+							else if (ArrayBuffer.isView(chunk))
+								controller.enqueue(
+									new Uint8Array(
+										chunk.buffer,
+										chunk.byteOffset,
+										chunk.byteLength
+									)
+								)
+							else if (chunk instanceof Blob)
+								return chunk
+									.arrayBuffer()
+									.then((buf) =>
+										controller.enqueue(
+											new Uint8Array(buf)
+										)
+									)
+							else
+								controller.enqueue(
+									typeof chunk === 'object'
+										? JSON.stringify(chunk)
+										: String(chunk)
+								)
+						}
+					})
+				),
+				set as any
+			)
+
 		// Get an explicit async iterator so pull() can advance one step at a time.
 		// Generators already implement the iterator protocol directly (.next()),
 		// while ReadableStream (which generator may be reassigned to above) needs
