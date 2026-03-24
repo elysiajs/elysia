@@ -867,7 +867,7 @@ export const composeHandler = ({
 				const endUnit = reporter.resolveChild(
 					hooks.afterResponse[i].fn.name
 				)
-				afterResponse += `\nawait e.afterResponse[${i}](c)\n`
+				afterResponse += `\ntry{await e.afterResponse[${i}](c)}catch{}\n`
 				endUnit()
 			}
 		}
@@ -2391,7 +2391,7 @@ export const composeGeneralHandler = (
 			`if(c.responseValue instanceof ElysiaCustomStatusResponse) c.set.status=c.responseValue.code\n`
 
 		for (let i = 0; i < app.event.afterResponse.length; i++) {
-			afterResponse += `\nawait afterResponse[${i}](c)\n`
+			afterResponse += `\ntry{await afterResponse[${i}](c)}catch{}\n`
 		}
 
 		afterResponse += `}catch{}})\n`
@@ -2637,7 +2637,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 					hooks.afterResponse[i].fn.name
 				)
 
-				afterResponse += `\nawait afterResponse[${i}](context)\n`
+				afterResponse += `\ntry{await afterResponse[${i}](context)}catch{}\n`
 
 				endUnit()
 			}
