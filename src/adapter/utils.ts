@@ -341,11 +341,15 @@ export const createStreamHandler =
 										)
 									)
 							else
-								controller.enqueue(
-									typeof chunk === 'object'
-										? JSON.stringify(chunk)
-										: String(chunk)
-								)
+								try {
+									controller.enqueue(
+										typeof chunk === 'object'
+											? JSON.stringify(chunk)
+											: String(chunk)
+									)
+								} catch {
+									controller.enqueue(String(chunk))
+								}
 						}
 					})
 				),
