@@ -4,6 +4,7 @@ import { parseCookie } from './cookies'
 import {
 	ElysiaCustomStatusResponse,
 	type ElysiaErrors,
+	ERROR_CODE,
 	NotFoundError,
 	status,
 	ValidationError
@@ -880,7 +881,10 @@ export const createDynamicErrorHandler = (app: AnyElysia) => {
 		},
 		error: ElysiaErrors
 	) => {
-		const errorContext = Object.assign(context, { error, code: error.code })
+		const errorContext = Object.assign(context, {
+			error,
+			code: (error as any)[ERROR_CODE] ?? 'UNKNOWN'
+		})
 		errorContext.set = context.set
 
 		if (

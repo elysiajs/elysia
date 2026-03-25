@@ -118,7 +118,8 @@ export const status = <
 ) => new ElysiaCustomStatusResponse<Code, T>(code, response as T)
 
 export class InternalServerError extends Error {
-	code = 'INTERNAL_SERVER_ERROR'
+	code = 'INTERNAL_SERVER_ERROR';
+	[ERROR_CODE] = 'INTERNAL_SERVER_ERROR' as const
 	status = 500
 
 	constructor(message?: string) {
@@ -127,7 +128,8 @@ export class InternalServerError extends Error {
 }
 
 export class NotFoundError extends Error {
-	code = 'NOT_FOUND'
+	code = 'NOT_FOUND';
+	[ERROR_CODE] = 'NOT_FOUND' as const
 	status = 404
 
 	constructor(message?: string) {
@@ -136,7 +138,8 @@ export class NotFoundError extends Error {
 }
 
 export class ParseError extends Error {
-	code = 'PARSE'
+	code = 'PARSE';
+	[ERROR_CODE] = 'PARSE' as const
 	status = 400
 
 	constructor(cause?: Error) {
@@ -147,7 +150,8 @@ export class ParseError extends Error {
 }
 
 export class InvalidCookieSignature extends Error {
-	code = 'INVALID_COOKIE_SIGNATURE'
+	code = 'INVALID_COOKIE_SIGNATURE';
+	[ERROR_CODE] = 'INVALID_COOKIE_SIGNATURE' as const
 	status = 400
 
 	constructor(
@@ -287,7 +291,8 @@ export class InvalidFileType extends Error {
 }
 
 export class ValidationError extends Error {
-	code = 'VALIDATION'
+	code = 'VALIDATION';
+	[ERROR_CODE] = 'VALIDATION' as const
 	status = 422
 
 	/**
