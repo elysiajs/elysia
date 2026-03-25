@@ -288,6 +288,32 @@ describe('Parser', () => {
 		expect(response).toEqual({ name: 'Aru' })
 	})
 
+	it('stops after named parser in parse array', async () => {
+		let called = false
+
+		const app = new Elysia({ aot: false }).post('/json', ({ body }) => body, {
+			parse: [
+				'json',
+				() => {
+					called = true
+					return { name: 'Mutsuki' }
+				}
+			]
+		})
+
+		const response = await app
+			.handle(
+				new Request('http://localhost:3000/json', {
+					method: 'POST',
+					body: JSON.stringify({ name: 'Aru' })
+				})
+			)
+			.then((x) => x.json())
+
+		expect(response).toEqual({ name: 'Aru' })
+		expect(called).toBe(false)
+	})
+
 	it('handle custom parser then fallback to named default', async () => {
 		const app = new Elysia()
 			.parser('custom', ({ contentType, request }) => {
