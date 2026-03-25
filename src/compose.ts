@@ -919,7 +919,10 @@ export const composeHandler = ({
 		// Skip if custom parse hooks exist - they'll read the request themselves
 		// Note: FormData requests cannot be cloned for reuse - derive/resolve cannot
 		// re-read the body for multipart/form-data requests (protocol limitation)
-		if (inference.request && !hooks.parse?.length) {
+		const hasCustomParseHook = hooks.parse?.some(
+			(h: any) => typeof h !== 'string' && typeof h.fn !== 'string'
+		)
+		if (inference.request && !hasCustomParseHook) {
 			fnLiteral +=
 				`const _ct=c.request.headers.get('content-type')\n` +
 				`if(!_ct||!_ct.includes('multipart/form-data')){` +

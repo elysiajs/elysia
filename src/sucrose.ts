@@ -292,7 +292,6 @@ export const findParameterReference = (
 	if (parameters.route) inference.route = true
 	if (parameters.url) inference.url = true
 	if (parameters.path) inference.path = true
-	if (parameters.request) inference.request = true
 
 	if (hasParenthesis) return `{ ${Object.keys(parameters).join(', ')} }`
 
@@ -444,6 +443,38 @@ export const extractMainParameter = (parameter: string) => {
 	return parameter.slice(spreadIndex + 3).trimEnd()
 }
 
+const bodyConsumingMethods = /\.(json|text|arrayBuffer|formData|blob|body)\b/
+
+// check if request body is accessed (not just headers/method/url)
+const accessRequestBody = (alias: string, code: string) => {
+	const requestAccess = new RegExp(
+		`${alias}\\.request`,
+		'g'
+	)
+
+	let match
+	while ((match = requestAccess.exec(code)) !== null) {
+		const rest = code.slice(match.index + match[0].length)
+		if (bodyConsumingMethods.test(rest.slice(0, 20)))
+			return true
+	}
+
+	// for destructured request variable
+	if (alias === 'request') {
+		const directAccess = new RegExp(
+			`\\brequest\\b`,
+			'g'
+		)
+		while ((match = directAccess.exec(code)) !== null) {
+			const rest = code.slice(match.index + match[0].length)
+			if (bodyConsumingMethods.test(rest.slice(0, 20)))
+				return true
+		}
+	}
+
+	return false
+}
+
 /**
  * Analyze if context is mentioned in body
  */
@@ -473,7 +504,6 @@ export const inferBodyReference = (
 			if (parameters.url) inference.url = true
 			if (parameters.route) inference.route = true
 			if (parameters.path) inference.path = true
-			if (parameters.request) inference.request = true
 
 			continue
 		}
@@ -501,7 +531,10 @@ export const inferBodyReference = (
 		if (!inference.route && access('route', alias)) inference.route = true
 		if (!inference.url && access('url', alias)) inference.url = true
 		if (!inference.path && access('path', alias)) inference.path = true
-		if (!inference.request && access('request', alias))
+		if (
+			!inference.request &&
+			accessRequestBody(alias, code)
+		)
 			inference.request = true
 
 		if (
@@ -581,6 +614,7 @@ export const isContextPassToFunction = (
 				inference.url = true
 				inference.route = true
 				inference.path = true
+				inference.request = true
 
 				return true
 			}
@@ -605,6 +639,7 @@ export const isContextPassToFunction = (
 			inference.url = true
 			inference.route = true
 			inference.path = true
+			inference.request = true
 
 			return true
 		}
@@ -751,6 +786,22 @@ export const sucrose = (
 				code.includes('return ' + mainParameter + '.query')
 			)
 				fnInference.query = true
+		} else if (
+			!fnInference.request &&
+			rootParameters.charCodeAt(0) === 123
+		) {
+			// single destructured param without spread — extractMainParameter
+			// returns undefined but we still need to check body consumption
+			let code = body
+			if (
+				code.charCodeAt(0) === 123 &&
+				code.charCodeAt(body.length - 1) === 125
+			)
+				code = code.slice(1, -1).trim()
+
+			const params = retrieveRootparameters(rootParameters).parameters
+			if (params.request && bodyConsumingMethods.test(code))
+				fnInference.request = true
 		}
 
 		if (!caches[key]) caches[key] = fnInference
