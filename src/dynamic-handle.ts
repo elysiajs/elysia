@@ -851,10 +851,10 @@ export const createDynamicHandler = (app: AnyElysia) => {
 			// @ts-expect-error private
 			return app.handleError(context, reportedError)
 		} finally {
-			if (context.response instanceof Response)
-				set.status = context.response.status
-			else if (context.response instanceof ElysiaCustomStatusResponse)
+			if (context.response instanceof ElysiaCustomStatusResponse)
 				set.status = (context.response as any).code
+			else if (context.response instanceof Response)
+				set.status = context.response.status
 
 			const afterResponses = hooks!
 				? hooks.afterResponse
