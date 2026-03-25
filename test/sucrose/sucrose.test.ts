@@ -195,7 +195,7 @@ describe('sucrose', () => {
 			path: true,
 			url: true,
 			route: true,
-			request: false
+			request: true
 		})
 	})
 
@@ -227,7 +227,7 @@ describe('sucrose', () => {
 			path: true,
 			url: true,
 			route: true,
-			request: false
+			request: true
 		})
 	})
 
@@ -333,7 +333,7 @@ describe('sucrose', () => {
 			path: true,
 			url: true,
 			route: true,
-			request: false
+			request: true
 		})
 	})
 })
