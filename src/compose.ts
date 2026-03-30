@@ -465,8 +465,11 @@ const coerceTransformDecodeError = (
 ) =>
 	`try{${fnLiteral}}catch(error){` +
 	`if(error.constructor.name === 'TransformDecodeError'){` +
+	`if(error.error&&!(error.error instanceof TypeError))throw error.error\n` +
 	`c.set.status=422\n` +
-	`throw error.error ?? new ValidationError('${type}',validator.${type},${value},${allowUnsafeValidationDetails})}` +
+	`const _tde=error.path?{First(){return{path:error.path,message:error.message,value:error.value,type:error.type??0,schema:error.schema??{}}},` +
+	`[Symbol.iterator](){let d=false;const s=this;return{next(){if(d)return{done:true};d=true;return{done:false,value:s.First()}}}}}:undefined\n` +
+	`throw new ValidationError('${type}',validator.${type},${value},${allowUnsafeValidationDetails},_tde)}` +
 	`}`
 
 const setImmediateFn = hasSetImmediate
