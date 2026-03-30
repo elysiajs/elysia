@@ -16,6 +16,8 @@ export namespace Sucrose {
 		route: boolean
 		url: boolean
 		path: boolean
+		/** Whether code accesses request.body, request.arrayBuffer, etc. */
+		request: boolean
 	}
 
 	export interface LifeCycle extends Partial<LifeCycleStore> {
@@ -441,6 +443,38 @@ export const extractMainParameter = (parameter: string) => {
 	return parameter.slice(spreadIndex + 3).trimEnd()
 }
 
+const bodyConsumingMethods = /\.(json|text|arrayBuffer|formData|blob|body)\b/
+
+// check if request body is accessed (not just headers/method/url)
+const accessRequestBody = (alias: string, code: string) => {
+	const requestAccess = new RegExp(
+		`${alias}\\.request`,
+		'g'
+	)
+
+	let match
+	while ((match = requestAccess.exec(code)) !== null) {
+		const rest = code.slice(match.index + match[0].length)
+		if (bodyConsumingMethods.test(rest.slice(0, 20)))
+			return true
+	}
+
+	// for destructured request variable
+	if (alias === 'request') {
+		const directAccess = new RegExp(
+			`\\brequest\\b`,
+			'g'
+		)
+		while ((match = directAccess.exec(code)) !== null) {
+			const rest = code.slice(match.index + match[0].length)
+			if (bodyConsumingMethods.test(rest.slice(0, 20)))
+				return true
+		}
+	}
+
+	return false
+}
+
 /**
  * Analyze if context is mentioned in body
  */
@@ -497,6 +531,11 @@ export const inferBodyReference = (
 		if (!inference.route && access('route', alias)) inference.route = true
 		if (!inference.url && access('url', alias)) inference.url = true
 		if (!inference.path && access('path', alias)) inference.path = true
+		if (
+			!inference.request &&
+			accessRequestBody(alias, code)
+		)
+			inference.request = true
 
 		if (
 			inference.query &&
@@ -507,7 +546,8 @@ export const inferBodyReference = (
 			inference.server &&
 			inference.route &&
 			inference.url &&
-			inference.path
+			inference.path &&
+			inference.request
 		)
 			break
 	}
@@ -574,6 +614,7 @@ export const isContextPassToFunction = (
 				inference.url = true
 				inference.route = true
 				inference.path = true
+				inference.request = true
 
 				return true
 			}
@@ -598,6 +639,7 @@ export const isContextPassToFunction = (
 			inference.url = true
 			inference.route = true
 			inference.path = true
+			inference.request = true
 
 			return true
 		}
@@ -646,7 +688,8 @@ export const mergeInference = (a: Sucrose.Inference, b: Sucrose.Inference) => {
 		server: a.server || b.server,
 		url: a.url || b.url,
 		route: a.route || b.route,
-		path: a.path || b.path
+		path: a.path || b.path,
+		request: a.request || b.request
 	}
 }
 
@@ -661,7 +704,8 @@ export const sucrose = (
 		server: false,
 		url: false,
 		route: false,
-		path: false
+		path: false,
+		request: false
 	},
 	settings: Sucrose.Settings = {}
 ): Sucrose.Inference => {
@@ -675,6 +719,8 @@ export const sucrose = (
 	if (lifeCycle.afterHandle?.length) events.push(...lifeCycle.afterHandle)
 	if (lifeCycle.mapResponse?.length) events.push(...lifeCycle.mapResponse)
 	if (lifeCycle.afterResponse?.length) events.push(...lifeCycle.afterResponse)
+	if (lifeCycle.derive?.length) events.push(...lifeCycle.derive)
+	if (lifeCycle.resolve?.length) events.push(...lifeCycle.resolve)
 
 	if (lifeCycle.handler && typeof lifeCycle.handler === 'function')
 		events.push(lifeCycle.handler as Handler)
@@ -711,7 +757,8 @@ export const sucrose = (
 			server: false,
 			url: false,
 			route: false,
-			path: false
+			path: false,
+			request: false
 		}
 
 		const [parameter, body] = separateFunction(content)
@@ -739,6 +786,22 @@ export const sucrose = (
 				code.includes('return ' + mainParameter + '.query')
 			)
 				fnInference.query = true
+		} else if (
+			!fnInference.request &&
+			rootParameters.charCodeAt(0) === 123
+		) {
+			// single destructured param without spread — extractMainParameter
+			// returns undefined but we still need to check body consumption
+			let code = body
+			if (
+				code.charCodeAt(0) === 123 &&
+				code.charCodeAt(body.length - 1) === 125
+			)
+				code = code.slice(1, -1).trim()
+
+			const params = retrieveRootparameters(rootParameters).parameters
+			if (params.request && bodyConsumingMethods.test(code))
+				fnInference.request = true
 		}
 
 		if (!caches[key]) caches[key] = fnInference
@@ -754,7 +817,8 @@ export const sucrose = (
 			inference.server &&
 			inference.url &&
 			inference.route &&
-			inference.path
+			inference.path &&
+			inference.request
 		)
 			break
 	}
