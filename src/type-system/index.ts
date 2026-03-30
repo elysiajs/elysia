@@ -426,7 +426,6 @@ export const ElysiaType = {
 		const compiler = compile(schema)
 
 		const tryParseItem = (v: string) => {
-			// try to parse JSON objects/arrays from string
 			const c = v.charCodeAt(0)
 			if (c === 123 || c === 91) {
 				try { return JSON.parse(v) } catch {}
@@ -434,14 +433,44 @@ export const ElysiaType = {
 			return v
 		}
 
+		// split by commas but respect {} [] and quoted strings
+		const splitTopLevel = (value: string) => {
+			const parts: string[] = []
+			let depth = 0
+			let inStr = 0 // 0=none, 34=", 39='
+			let start = 0
+
+			for (let i = 0; i < value.length; i++) {
+				const ch = value.charCodeAt(i)
+
+				if (inStr) {
+					if (ch === inStr && value.charCodeAt(i - 1) !== 92)
+						inStr = 0
+					continue
+				}
+
+				if (ch === 34 || ch === 39) { inStr = ch; continue }
+				if (ch === 123 || ch === 91) { depth++; continue }
+				if (ch === 125 || ch === 93) { depth--; continue }
+
+				if (ch === 44 && depth === 0) {
+					parts.push(value.slice(start, i))
+					start = i + 1
+				}
+			}
+
+			parts.push(value.slice(start))
+			return parts
+		}
+
 		const decode = (value: string) => {
-			// has , (as used in nuqs)
 			if (value.indexOf(',') !== -1) {
-				// try wrapping as JSON array to correctly handle objects in unions
 				try {
 					return compiler.Decode(JSON.parse(`[${value}]`))
 				} catch {
-					return compiler.Decode(value.split(','))
+					return compiler.Decode(
+						splitTopLevel(value).map(tryParseItem)
+					)
 				}
 			}
 
