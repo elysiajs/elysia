@@ -265,28 +265,31 @@ export const createDynamicHandler = (app: AnyElysia) => {
 
 			let body: string | Record<string, any> | undefined
 			if (request.method !== 'GET' && request.method !== 'HEAD') {
+				// clone before parsing so handlers/hooks can still read from original
+				const parseRequest = request.clone()
+
 				if (content) {
 					switch (content) {
 						case 'application/json':
-							body = (await request.json()) as any
+							body = (await parseRequest.json()) as any
 							break
 
 						case 'text/plain':
-							body = await request.text()
+							body = await parseRequest.text()
 							break
 
 						case 'application/x-www-form-urlencoded':
-							body = parseQuery(await request.text())
+							body = parseQuery(await parseRequest.text())
 							break
 
 						case 'application/octet-stream':
-							body = await request.arrayBuffer()
+							body = await parseRequest.arrayBuffer()
 							break
 
 						case 'multipart/form-data': {
 							body = {}
 
-							const form = await request.formData()
+							const form = await parseRequest.formData()
 							for (const key of form.keys()) {
 								if (body[key]) continue
 
@@ -322,31 +325,31 @@ export const createDynamicHandler = (app: AnyElysia) => {
 									switch (hook) {
 										case 'json':
 										case 'application/json':
-											body = (await request.json()) as any
+											body = (await parseRequest.json()) as any
 											break
 
 										case 'text':
 										case 'text/plain':
-											body = await request.text()
+											body = await parseRequest.text()
 											break
 
 										case 'urlencoded':
 										case 'application/x-www-form-urlencoded':
 											body = parseQuery(
-												await request.text()
+												await parseRequest.text()
 											)
 											break
 
 										case 'arrayBuffer':
 										case 'application/octet-stream':
-											body = await request.arrayBuffer()
+											body = await parseRequest.arrayBuffer()
 											break
 
 										case 'formdata':
 										case 'multipart/form-data': {
 											body = {}
 
-											const form = await request.formData()
+											const form = await parseRequest.formData()
 											for (const key of form.keys()) {
 												if (body[key]) continue
 
@@ -398,25 +401,25 @@ export const createDynamicHandler = (app: AnyElysia) => {
 						if (body === undefined) {
 							switch (contentType) {
 								case 'application/json':
-									body = (await request.json()) as any
+									body = (await parseRequest.json()) as any
 									break
 
 								case 'text/plain':
-									body = await request.text()
+									body = await parseRequest.text()
 									break
 
 								case 'application/x-www-form-urlencoded':
-									body = parseQuery(await request.text())
+									body = parseQuery(await parseRequest.text())
 									break
 
 								case 'application/octet-stream':
-									body = await request.arrayBuffer()
+									body = await parseRequest.arrayBuffer()
 									break
 
 								case 'multipart/form-data': {
 									body = {}
 
-									const form = await request.formData()
+									const form = await parseRequest.formData()
 									for (const key of form.keys()) {
 										if (body[key]) continue
 
