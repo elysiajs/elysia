@@ -91,9 +91,11 @@ export function parseQueryFromURL(
 
 		if (array && array?.[finalKey]) {
 			if (finalValue.charCodeAt(0) === 91) {
-				if (object && object?.[finalKey])
+				try {
 					finalValue = JSON.parse(finalValue) as any
-				else finalValue = finalValue.slice(1, -1).split(',') as any
+				} catch {
+					finalValue = finalValue.slice(1, -1).split(',') as any
+				}
 
 				if (currentValue === undefined) result[finalKey] = finalValue
 				else if (Array.isArray(currentValue))
@@ -103,10 +105,10 @@ export function parseQueryFromURL(
 					result[finalKey].unshift(currentValue)
 				}
 			} else {
+				// join multi-param values as comma-separated so ArrayQuery
+				// Decode handles them uniformly (same as comma format)
 				if (currentValue === undefined) result[finalKey] = finalValue
-				else if (Array.isArray(currentValue))
-					currentValue.push(finalValue)
-				else result[finalKey] = [currentValue, finalValue]
+				else result[finalKey] = currentValue + ',' + finalValue
 			}
 		} else {
 			result[finalKey] = finalValue

@@ -425,12 +425,27 @@ export const ElysiaType = {
 		const schema = t.Array(children, options)
 		const compiler = compile(schema)
 
+		const tryParseItem = (v: string) => {
+			// try to parse JSON objects/arrays from string
+			const c = v.charCodeAt(0)
+			if (c === 123 || c === 91) {
+				try { return JSON.parse(v) } catch {}
+			}
+			return v
+		}
+
 		const decode = (value: string) => {
 			// has , (as used in nuqs)
-			if (value.indexOf(',') !== -1)
-				return compiler.Decode(value.split(','))
+			if (value.indexOf(',') !== -1) {
+				// try wrapping as JSON array to correctly handle objects in unions
+				try {
+					return compiler.Decode(JSON.parse(`[${value}]`))
+				} catch {
+					return compiler.Decode(value.split(','))
+				}
+			}
 
-			return compiler.Decode([value])
+			return compiler.Decode([tryParseItem(value)])
 		}
 
 		return t
