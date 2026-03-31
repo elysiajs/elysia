@@ -56,7 +56,7 @@ export const mapResponse = (
 				)
 
 			case undefined:
-				if (!response) return new Response('', set as any)
+				if (!response) return new Response(null, set as any)
 
 				return Response.json(response, set as any)
 
@@ -307,7 +307,7 @@ export const mapEarlyResponse = (
 				)
 
 			case undefined:
-				if (!response) return new Response('')
+				if (!response) return new Response(null)
 
 				return Response.json(response)
 
@@ -423,7 +423,7 @@ export const mapCompactResponse = (
 			)
 
 		case undefined:
-			if (!response) return new Response('')
+			if (!response) return new Response(null)
 
 			return Response.json(response)
 

@@ -98,7 +98,7 @@ export class ElysiaCustomStatusResponse<
 		// @ts-ignore Trust me bro
 		this.code = StatusMap[code] ?? code
 
-		if (code in emptyHttpStatus) this.response = undefined as any
+		if (this.code in emptyHttpStatus) this.response = undefined as any
 		else
 			// @ts-ignore Trust me bro
 			this.response = res
