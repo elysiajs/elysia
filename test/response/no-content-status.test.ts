@@ -2,7 +2,7 @@ import { Elysia } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
 
-describe('204 No Content', () => {
+describe('Empty HTTP statuses', () => {
 	it('should return null body for status No Content', async () => {
 		const app = new Elysia().delete('/item', ({ status }) => {
 			return status('No Content')
