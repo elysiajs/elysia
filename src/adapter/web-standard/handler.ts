@@ -90,7 +90,7 @@ export const mapResponse = (
 				)
 
 			case undefined:
-				if (!response) return new Response('', set as any)
+				if (!response) return new Response(null, set as any)
 
 				return new Response(JSON.stringify(response), set as any)
 
