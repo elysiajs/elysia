@@ -1,14 +1,8 @@
-import type {
-	TObjectOptions,
-	TProperties,
-	TSchema,
-	TUnsafe,
-	TSchemaOptions
-} from 'typebox'
-import { TLocalizedValidationError } from 'typebox/error'
-import { Validator } from 'typebox/compile'
+import type { TObjectOptions, TSchemaOptions } from 'typebox'
+import type { TLocalizedValidationError } from 'typebox/error'
+import type { Validator } from 'typebox/compile'
 
-import type { ElysiaFormData } from '../utils'
+import type { ELYSIA_TYPES } from './index'
 import type { CookieOptions } from '../cookies'
 import type { MaybeArray } from '../types'
 
@@ -110,16 +104,7 @@ export interface CookieValidatorOptions<T extends Object = {}>
 	sign?: Readonly<(keyof T | (string & {}))[]>
 }
 
-export type TFile = (
-	options?: Partial<FileOptions> | undefined
-) => TUnsafe<File>
-
-export type TFiles = (
-	options?: Partial<FilesOptions> | undefined
-) => TUnsafe<File[]>
-
 export type NonEmptyArray<T> = [T, ...T[]]
-
 export type TEnumValue = number | string | null
 
 export interface TUnionEnum<
@@ -152,10 +137,6 @@ export interface Uint8ArrayOptions extends TSchemaOptions {
 }
 
 export interface ArrayBufferOptions extends Uint8ArrayOptions {}
-
-export type TForm<T extends TProperties = TProperties> = TUnsafe<
-	ElysiaFormData<T>
->
 
 /**
  * !important
@@ -235,6 +216,52 @@ export type ElysiaTypeCustomErrorCallback = (
 	},
 	validator: Validator<any>
 ) => unknown
+
+export interface BaseSchema {
+	'~kind': string
+	'~elyTyp'?: ELYSIA_TYPES[keyof ELYSIA_TYPES]
+	id?: string
+	type?: string
+	$schema?: string
+	// title?: string
+	// description?: string
+	// multipleOf?: number
+	// maximum?: number
+	// exclusiveMaximum?: boolean
+	// minimum?: number
+	// exclusiveMinimum?: boolean
+	// maxLength?: number
+	// minLength?: number
+	pattern?: string
+	additionalItems?: boolean | BaseSchema
+	items?: BaseSchema | BaseSchema[]
+	// maxItems?: number
+	// minItems?: number
+	// uniqueItems?: boolean
+	// maxProperties?: number
+	// minProperties?: number
+	required?: string[]
+	additionalProperties?: boolean | BaseSchema
+	definitions?: {
+		[name: string]: BaseSchema
+	}
+	properties?: {
+		[name: string]: BaseSchema
+	}
+	patternProperties?: {
+		[name: string]: BaseSchema
+	}
+	dependencies?: {
+		[name: string]: BaseSchema | string[]
+	}
+	enum?: any[]
+	allOf?: BaseSchema[]
+	anyOf?: BaseSchema[]
+	oneOf?: BaseSchema[]
+	not?: BaseSchema
+	$ref?: string
+	$defs?: Record<string, BaseSchema>
+}
 
 declare module 'typebox' {
 	interface TSchemaOptions {

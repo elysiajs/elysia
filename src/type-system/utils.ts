@@ -1,28 +1,3 @@
-import { ElysiaFile } from '../universal/file'
-import { InvalidFileType } from '../error'
-import type {
-	ElysiaTypeCustomErrorCallback,
-	FileOptions,
-	FileUnit,
-	FileType
-} from './types'
-import type { MaybeArray } from '../types'
-
-export const parseFileUnit = (size: FileUnit) => {
-	if (typeof size !== 'string') return size
-
-	switch (size.slice(-1)) {
-		case 'k':
-			return +size.slice(0, size.length - 1) * 1024
-
-		case 'm':
-			return +size.slice(0, size.length - 1) * 1048576
-
-		default:
-			return +size
-	}
-}
-
 /**
  * Utility function to inherit add custom error and keep the original Validation error
  *

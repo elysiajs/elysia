@@ -1,21 +1,20 @@
-import { Kind, type TAnySchema, type TSchema } from "@sinclair/typebox";
-import { t } from "./type-system";
-import type { MaybeArray } from "./types";
+import { Kind, type TAnySchema, type TSchema } from '@sinclair/typebox'
+import { t } from './type-system'
+import type { MaybeArray } from './types'
 
 export interface ReplaceSchemaTypeOptions {
-	from: TSchema;
-	to(schema: TSchema): TSchema | null;
-	excludeRoot?: boolean;
-	rootOnly?: boolean;
-	original?: TAnySchema;
+	from: TSchema
+	to(schema: TSchema): TSchema | null
+	excludeRoot?: boolean
+	rootOnly?: boolean
 	/**
 	 * Traverse until object is found except root object
 	 **/
-	untilObjectFound?: boolean;
+	untilObjectFound?: boolean
 	/**
 	 * Only replace first object type, can be paired with excludeRoot
 	 **/
-	onlyFirst?: "object" | "array" | (string & {});
+	onlyFirst?: 'object' | 'array' | (string & {})
 }
 
 /**
@@ -36,120 +35,120 @@ export interface ReplaceSchemaTypeOptions {
  */
 export const replaceSchemaTypeFromManyOptions = (
 	schema: TSchema,
-	options: MaybeArray<ReplaceSchemaTypeOptions>,
+	options: MaybeArray<ReplaceSchemaTypeOptions>
 ): TSchema => {
 	if (Array.isArray(options)) {
-		let result = schema;
+		let result = schema
 		for (const option of options) {
-			result = replaceSchemaTypeFromOption(result, option);
+			result = replaceSchemaTypeFromOption(result, option)
 		}
-		return result;
+		return result
 	}
 
-	return replaceSchemaTypeFromOption(schema, options);
-};
+	return replaceSchemaTypeFromOption(schema, options)
+}
 
 const replaceSchemaTypeFromOption = (
 	schema: TSchema,
-	option: ReplaceSchemaTypeOptions,
+	option: ReplaceSchemaTypeOptions
 ): TSchema => {
 	if (option.rootOnly && option.excludeRoot) {
-		throw new Error("Can't set both rootOnly and excludeRoot");
+		throw new Error("Can't set both rootOnly and excludeRoot")
 	}
 	if (option.rootOnly && option.onlyFirst) {
-		throw new Error("Can't set both rootOnly and onlyFirst");
+		throw new Error("Can't set both rootOnly and onlyFirst")
 	}
 	if (option.rootOnly && option.untilObjectFound) {
-		throw new Error("Can't set both rootOnly and untilObjectFound");
+		throw new Error("Can't set both rootOnly and untilObjectFound")
 	}
 
-	type WalkProps = { s: TSchema; isRoot: boolean; treeLvl: number };
+	type WalkProps = { s: TSchema; isRoot: boolean; treeLvl: number }
 	const walk = ({ s, isRoot, treeLvl }: WalkProps): TSchema => {
-		if (!s) return s;
+		if (!s) return s
 		// console.log("walk iteration", { s, isRoot, treeLvl, transformTo: option.to.toString() })
 
-		const skipRoot = isRoot && option.excludeRoot;
-		const fromKind = option.from[Kind];
+		const skipRoot = isRoot && option.excludeRoot
+		const fromKind = option.from[Kind]
 
 		// Double-wrapping check
 		if (s.elysiaMeta) {
-			const fromElysiaMeta = option.from.elysiaMeta;
+			const fromElysiaMeta = option.from.elysiaMeta
 			if (fromElysiaMeta === s.elysiaMeta && !skipRoot) {
-				return option.to(s) as TSchema;
+				return option.to(s) as TSchema
 			}
-			return s;
+			return s
 		}
 
-		const shouldTransform = fromKind && s[Kind] === fromKind;
+		const shouldTransform = fromKind && s[Kind] === fromKind
 		if (!skipRoot && option.onlyFirst && s.type === option.onlyFirst) {
 			if (shouldTransform) {
-				return option.to(s) as TSchema;
+				return option.to(s) as TSchema
 			}
-            return s;
+			return s
 		}
 
 		if (isRoot && option.rootOnly) {
 			if (shouldTransform) {
-				return option.to(s) as TSchema;
+				return option.to(s) as TSchema
 			}
-			return s;
+			return s
 		}
 
-		if (!isRoot && option.untilObjectFound && s.type === "object") {
-			return s;
+		if (!isRoot && option.untilObjectFound && s.type === 'object') {
+			return s
 		}
 
-		const newWalkInput = { isRoot: false, treeLvl: treeLvl + 1 };
-		const withTransformedChildren = { ...s };
+		const newWalkInput = { isRoot: false, treeLvl: treeLvl + 1 }
+		const withTransformedChildren = { ...s }
 
 		if (s.oneOf) {
 			withTransformedChildren.oneOf = s.oneOf.map((x: TSchema) =>
-				walk({ ...newWalkInput, s: x }),
-			);
+				walk({ ...newWalkInput, s: x })
+			)
 		}
 		if (s.anyOf) {
 			withTransformedChildren.anyOf = s.anyOf.map((x: TSchema) =>
-				walk({ ...newWalkInput, s: x }),
-			);
+				walk({ ...newWalkInput, s: x })
+			)
 		}
 		if (s.allOf) {
 			withTransformedChildren.allOf = s.allOf.map((x: TSchema) =>
-				walk({ ...newWalkInput, s: x }),
-			);
+				walk({ ...newWalkInput, s: x })
+			)
 		}
 		if (s.not) {
-			withTransformedChildren.not = walk({ ...newWalkInput, s: s.not });
+			withTransformedChildren.not = walk({ ...newWalkInput, s: s.not })
 		}
 
 		if (s.properties) {
-			withTransformedChildren.properties = {};
+			withTransformedChildren.properties = {}
 			for (const [k, v] of Object.entries(s.properties)) {
 				withTransformedChildren.properties[k] = walk({
 					...newWalkInput,
-					s: v as TSchema,
-				});
+					s: v as TSchema
+				})
 			}
 		}
 
 		if (s.items) {
-			const items = s.items;
+			const items = s.items
 			withTransformedChildren.items = Array.isArray(items)
 				? items.map((x: TSchema) => walk({ ...newWalkInput, s: x }))
-				: walk({ ...newWalkInput, s: items as TSchema });
+				: walk({ ...newWalkInput, s: items as TSchema })
 		}
 
 		// Transform THIS node (with children already transformed)
 		const shouldTransformThis =
-			!skipRoot && fromKind && withTransformedChildren[Kind] === fromKind;
+			!skipRoot && fromKind && withTransformedChildren[Kind] === fromKind
 		if (shouldTransformThis) {
-			return option.to(withTransformedChildren) as TSchema;
+			return option.to(withTransformedChildren) as TSchema
 		}
 
-		return withTransformedChildren;
-	};
+		return withTransformedChildren
+	}
 
-	return walk({ s: schema, isRoot: true, treeLvl: 0 });
-};
+	return walk({ s: schema, isRoot: true, treeLvl: 0 })
+}
 
 /**
  * Helper: Extract plain Object from ObjectString
@@ -173,17 +172,20 @@ const replaceSchemaTypeFromOption = (
  * }
  */
 export const revertObjAndArrStr = (schema: TSchema): TSchema => {
-	if (schema.elysiaMeta !== "ObjectString" && schema.elysiaMeta !== "ArrayString")
-	    return schema;
+	if (
+		schema.elysiaMeta !== 'ObjectString' &&
+		schema.elysiaMeta !== 'ArrayString'
+	)
+		return schema
 
-	const anyOf = schema.anyOf;
-	if (!anyOf?.[1]) return schema;
+	const anyOf = schema.anyOf
+	if (!anyOf?.[1]) return schema
 
 	// anyOf[1] is the object branch (already clean, no elysiaMeta)
-	return anyOf[1];
-};
+	return anyOf[1]
+}
 
-let _stringToStructureCoercions: ReplaceSchemaTypeOptions[];
+let _stringToStructureCoercions: ReplaceSchemaTypeOptions[]
 
 export const stringToStructureCoercions = () => {
 	if (!_stringToStructureCoercions) {
@@ -191,19 +193,19 @@ export const stringToStructureCoercions = () => {
 			{
 				from: t.Object({}),
 				to: (schema) => t.ObjectString(schema.properties || {}, schema),
-				excludeRoot: true,
+				excludeRoot: true
 			},
 			{
 				from: t.Array(t.Any()),
-				to: (schema) => t.ArrayString(schema.items || t.Any(), schema),
-			},
-		] satisfies ReplaceSchemaTypeOptions[];
+				to: (schema) => t.ArrayString(schema.items || t.Any(), schema)
+			}
+		] satisfies ReplaceSchemaTypeOptions[]
 	}
 
-	return _stringToStructureCoercions;
-};
+	return _stringToStructureCoercions
+}
 
-let _queryCoercions: ReplaceSchemaTypeOptions[];
+let _queryCoercions: ReplaceSchemaTypeOptions[]
 
 export const queryCoercions = () => {
 	if (!_queryCoercions) {
@@ -211,19 +213,19 @@ export const queryCoercions = () => {
 			{
 				from: t.Object({}),
 				to: (schema) => t.ObjectString(schema.properties ?? {}, schema),
-				excludeRoot: true,
+				excludeRoot: true
 			},
 			{
 				from: t.Array(t.Any()),
-				to: (schema) => t.ArrayQuery(schema.items ?? t.Any(), schema),
-			},
-		] satisfies ReplaceSchemaTypeOptions[];
+				to: (schema) => t.ArrayQuery(schema.items ?? t.Any(), schema)
+			}
+		] satisfies ReplaceSchemaTypeOptions[]
 	}
 
-	return _queryCoercions;
-};
+	return _queryCoercions
+}
 
-let _coercePrimitiveRoot: ReplaceSchemaTypeOptions[];
+let _coercePrimitiveRoot: ReplaceSchemaTypeOptions[]
 
 export const coercePrimitiveRoot = () => {
 	if (!_coercePrimitiveRoot)
@@ -231,19 +233,19 @@ export const coercePrimitiveRoot = () => {
 			{
 				from: t.Number(),
 				to: (schema) => t.Numeric(schema),
-				rootOnly: true,
+				rootOnly: true
 			},
 			{
 				from: t.Boolean(),
 				to: (schema) => t.BooleanString(schema),
-				rootOnly: true,
-			},
-		] satisfies ReplaceSchemaTypeOptions[];
+				rootOnly: true
+			}
+		] satisfies ReplaceSchemaTypeOptions[]
 
-	return _coercePrimitiveRoot;
-};
+	return _coercePrimitiveRoot
+}
 
-let _coerceFormData: ReplaceSchemaTypeOptions[];
+let _coerceFormData: ReplaceSchemaTypeOptions[]
 
 export const coerceFormData = () => {
 	if (!_coerceFormData)
@@ -259,8 +261,8 @@ export const coerceFormData = () => {
 				to: (schema) => t.ArrayString(schema.items ?? t.Any(), schema),
 				onlyFirst: 'array',
 				excludeRoot: true
-			},
-		] satisfies ReplaceSchemaTypeOptions[];
+			}
+		] satisfies ReplaceSchemaTypeOptions[]
 
-	return _coerceFormData;
-};
+	return _coerceFormData
+}

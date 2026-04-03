@@ -1,9 +1,11 @@
+import { hasType, hasTypes } from '../src/schema/utils'
 import { t } from '../src/type-system'
-import Compile from 'typebox/compile'
 
-const a = t.Numeric()
+const type = t.Form({
+	a: t.Numeric(),
+	b: t.Object({
+		c: t.Number()
+	})
+})
 
-console.log(a)
-
-const comp = Compile(a)
-console.log(comp.Check(4))
+console.log(hasType('String', type))

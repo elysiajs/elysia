@@ -21,6 +21,7 @@ import type {
 } from './types'
 
 import { ElysiaFile } from '../universal/file'
+import { ElysiaFormData, isEmpty, isNotEmpty } from '../utils'
 
 function assignOrNew<
 	T extends Record<keyof any, unknown> | undefined,
@@ -38,6 +39,36 @@ function Refines<T extends TSchema>(schema: T, refines: Refines<Static<T>>) {
 	return schema
 }
 
+// Start at 1 to prevent falsy value check
+export const ELYSIA_TYPES = {
+	Numeric: 1,
+	Integer: 2,
+	BooleanString: 3,
+	StringifiedObject: 4,
+	StringifiedArray: 5,
+	Date: 6,
+	Nullable: 7,
+	MaybeEmpty: 8,
+	UnionEnum: 9,
+	File: 10,
+	Files: 11,
+	Form: 12,
+	ArrayBuffer: 13,
+	Uint8Array: 14,
+	NoValidate: 15
+} as const
+
+export type ELYSIA_TYPES = typeof ELYSIA_TYPES
+
+function elyType<T extends TSchema>(
+	name: ELYSIA_TYPES[keyof ELYSIA_TYPES],
+	schema: T
+): T {
+	// @ts-expect-error
+	schema['~elyTyp'] = name
+	return schema
+}
+
 type Refines<T> = [refine: (value: T) => boolean, message: string][]
 
 let _StringifiedNumber: Type.TCodec<Type.TRefine<Type.TString>, number>
@@ -46,22 +77,21 @@ let _emptyNumeric: Type.TUnion<
 >
 function Numeric(property?: TNumberOptions) {
 	_StringifiedNumber ??= Type.Decode(
-		Type.Refine(
-			Type.String(),
-			(value) => !isNaN(+value),
-			'Expect value to be number'
-		),
+		Type.Refine(Type.String(), (value) => !isNaN(+value), 'must be number'),
 		(value) => +value
 	)
 
-	if (!property)
-		return (_emptyNumeric ??= Type.Union([
-			Type.Number(),
-			_StringifiedNumber
-		]))
+	if (isEmpty(property))
+		return (_emptyNumeric ??= elyType(
+			ELYSIA_TYPES.Numeric,
+			Type.Union([Type.Number(), _StringifiedNumber])
+		))
 
 	const number = Type.Number(property)
-	return Type.Union([number, Type.Union([_StringifiedNumber, number])])
+	return elyType(
+		ELYSIA_TYPES.Numeric,
+		Type.Union([number, Type.Union([_StringifiedNumber, number])])
+	)
 }
 
 let _StringifiedInteger: Type.TCodec<Type.TRefine<Type.TString>, number>
@@ -73,33 +103,48 @@ function Integer(property?: TNumberOptions) {
 		Type.Refine(
 			Type.String(),
 			(value) => !isNaN(+value) && Number.isInteger(+value),
-			'Expect value to be integer'
+			'must be integer'
 		),
 		(value) => +value
 	)
 
-	if (!property)
-		return (_emptyInteger ??= Type.Union([
-			Type.Integer(),
-			_StringifiedInteger
-		]))
+	if (isEmpty(property))
+		return (_emptyInteger ??= elyType(
+			ELYSIA_TYPES.Integer,
+			Type.Union([Type.Integer(), _StringifiedInteger])
+		))
 
 	const integer = Type.Integer(property)
-	return Type.Union([integer, Type.Union([_StringifiedInteger, integer])])
+	return elyType(
+		ELYSIA_TYPES.Integer,
+		Type.Union([integer, Type.Union([_StringifiedInteger, integer])])
+	)
 }
 
 let _StringifiedBoolean: Type.TCodec<Type.TRefine<Type.TString>, boolean>
+let _emptyBoolean: Type.TUnion<
+	[Type.TCodec<Type.TRefine<Type.TString>, boolean>, Type.TBoolean]
+>
 function BooleanString(property?: TSchemaOptions) {
 	_StringifiedBoolean ??= Type.Decode(
 		Type.Refine(
 			Type.String(),
 			(value) => value === 'true' || value === 'false',
-			'Expect value to be boolean'
+			'must be boolean'
 		),
 		(value) => (value === 'true' ? true : false)
 	)
 
-	return Type.Union([Type.Boolean(property), _StringifiedBoolean])
+	if (isEmpty(property))
+		return (_emptyBoolean ??= elyType(
+			ELYSIA_TYPES.BooleanString,
+			Type.Union([_StringifiedBoolean, Type.Boolean()])
+		))
+
+	return elyType(
+		ELYSIA_TYPES.BooleanString,
+		Type.Union([Type.Boolean(property), _StringifiedBoolean])
+	)
 }
 
 function StringifiedObject<T extends TProperties>(
@@ -127,13 +172,16 @@ function StringifiedObject<T extends TProperties>(
 					return false
 				}
 			},
-			'Expect value to be an object'
+			'must be an object'
 		),
 		(value) => (parsed ??= JSON.parse(value))
 	)
 
 	const object = Type.Object(property, options)
-	return Type.Union([object, Type.Union([_StringifiedObject, object])])
+	return elyType(
+		ELYSIA_TYPES.StringifiedObject,
+		Type.Union([object, Type.Union([_StringifiedObject, object])])
+	)
 }
 
 function StringifiedArray<T extends TProperties>(
@@ -159,13 +207,16 @@ function StringifiedArray<T extends TProperties>(
 					return false
 				}
 			},
-			'Expect value to be an array'
+			'must be an array'
 		),
 		(value) => (parsed ??= JSON.parse(value))
 	)
 
 	const array = Type.Array(property, options)
-	return Type.Union([array, Type.Union([_StringifiedArray, array])])
+	return elyType(
+		ELYSIA_TYPES.StringifiedArray,
+		Type.Union([array, Type.Union([_StringifiedArray, array])])
+	)
 }
 
 let _EmptyDate: Type.TCodec<
@@ -178,71 +229,80 @@ let _EmptyDate: Type.TCodec<
 	unknown
 >
 function DateType(property?: DateOptions) {
-	if (!property)
-		return (_EmptyDate ??= Type.Encode(
-			Type.Union([
-				Type.Refine(
-					Type.Unsafe<Date>({ type: 'Date' }),
-					(value) => value instanceof Date,
-					'Expect value to be Date'
-				),
-				Type.Decode(
-					Type.Union([
-						Type.String({
-							format: 'date',
-							default: new Date(0).toISOString()
-						}),
-						Type.String({
-							format: new Date(0).toISOString()
-						})
-					]),
-					(value) => new Date(value)
-				)
-			]),
-			(value) =>
-				(value instanceof Date ? value.toISOString() : value) as any
+	if (isEmpty(property))
+		return (_EmptyDate ??= elyType(
+			ELYSIA_TYPES.Date,
+			Type.Encode(
+				Type.Union([
+					Type.Refine(
+						Type.Unsafe<Date>({ '~kind': 'Date' }),
+						(value) => value instanceof Date,
+						'must be Date'
+					),
+					Type.Decode(
+						Type.Union([
+							Type.String({
+								format: 'date',
+								default: new Date(0).toISOString()
+							}),
+							Type.String({
+								format: new Date(0).toISOString()
+							})
+						]),
+						(value) => new Date(value)
+					)
+				]),
+				(value) =>
+					(value instanceof Date ? value.toISOString() : value) as any
+			)
 		))
 
-	return Type.Encode(
-		Type.Union(
-			[
-				Type.Refine(
-					Type.Unsafe<Date>({ type: 'Date' }),
-					(value) => value instanceof Date,
-					'Expect value to be Date'
-				),
-				Type.Decode(
-					Type.Union([
-						Type.String({
-							format: 'date',
-							default: new Date(0).toISOString()
-						}),
-						Type.String({
-							format: new Date(0).toISOString()
-						})
-					]),
-					(value) => new Date(value)
-				)
-			],
-			property
-		),
-		(value) => (value instanceof Date ? value.toISOString() : value) as any
+	return elyType(
+		ELYSIA_TYPES.Date,
+		Type.Encode(
+			Type.Union(
+				[
+					Type.Refine(
+						Type.Unsafe<Date>({ '~kind': 'Date' }),
+						(value) => value instanceof Date,
+						'must be Date'
+					),
+					Type.Decode(
+						Type.Union([
+							Type.String({
+								format: 'date',
+								default: new Date(0).toISOString()
+							}),
+							Type.String({
+								format: new Date(0).toISOString()
+							})
+						]),
+						(value) => new Date(value)
+					)
+				],
+				property
+			),
+			(value) =>
+				(value instanceof Date ? value.toISOString() : value) as any
+		)
 	)
 }
 
-function Nullable<T extends TSchema>(schema: T, options?: TSchemaOptions) {
-	return Type.Union(
-		[schema, t.Null()],
-		assignOrNew(options, { nullable: true })
+const Nullable = <T extends TSchema>(schema: T, options?: TSchemaOptions) =>
+	elyType(
+		ELYSIA_TYPES.Nullable,
+		Type.Union([schema, t.Null()], assignOrNew(options, { nullable: true }))
 	)
-}
 
 function MaybeEmpty<T extends TSchema>(schema: T, options?: TSchemaOptions) {
 	if (options && !('nullable' in options)) options.nullable = true
 
-	return t.Union(
-		[schema, t.Null(), t.Undefined()],
-		assignOrNew(options, { nullable: true })
+	return elyType(
+		ELYSIA_TYPES.MaybeEmpty,
+		t.Union(
+			[schema, t.Null(), t.Undefined()],
+			assignOrNew(options, { nullable: true })
+		)
 	)
 }
 
@@ -266,14 +326,14 @@ function UnionEnum<
 
 	const schema = assignOrNew(options, {
 		default: values[0],
-		type: 'UnionEnum',
+		'~kind': 'UnionEnum',
 		'~kind': 'UnionEnum',
 		enum: values
 	}) as any as TUnionEnum<T>
 
 	if (!mixed) schema.type = kind
 
-	return t.Unsafe<TUnionEnum<T>>(schema)
+	return elyType(ELYSIA_TYPES.UnionEnum, t.Unsafe<TUnionEnum<T>>(schema))
 }
 
 function _checkFileExtension(type: string, extension: string) {
@@ -306,7 +366,7 @@ function File(options?: FileOptions) {
 		[
 			// @ts-expect-error
 			(value) => value instanceof Blob || value instanceof ElysiaFile,
-			'Expect value to be instance of Blob'
+			'must be instance of Blob'
 		]
 	]
 
@@ -358,7 +418,10 @@ function File(options?: FileOptions) {
 		}
 	}
 
-	return Refines(Type.Unsafe<File>({ type: 'File' }), refines)
+	return elyType(
+		ELYSIA_TYPES.File,
+		Refines(Type.Unsafe<File>({ '~kind': 'File' }), refines)
+	)
 }
 
 function Files(options?: FilesOptions) {
@@ -380,55 +443,60 @@ function Files(options?: FilesOptions) {
 			])
 	}
 
-	return Refines(
-		Type.Decode(
-			Type.Union([
-				Type.Unsafe<File[]>({ ...options, type: 'Files' }),
-				Type.Array(Type.Unsafe<File>({ ...options, type: 'File' }))
-			]),
-			(value) => (Array.isArray(value) ? value : [value])
-		),
-		refines
+	return elyType(
+		ELYSIA_TYPES.Files,
+		Refines(
+			Type.Decode(
+				Type.Union([
+					Type.Unsafe<File[]>({ ...options, '~kind': 'Files' }),
+					Type.Array(
+						Type.Unsafe<File>({ ...options, '~kind': 'File' })
+					)
+				]),
+				(value) => (Array.isArray(value) ? value : [value])
+			),
+			refines
+		)
 	)
 }
 
-function Form<T extends TProperties>(property: T, options?: TObjectOptions) {
-	return Type.Union([
-		Type.Decode(
-			Type.Refine(
-				Type.Unsafe<
-					FormData & { '~ely-form': Record<keyof any, unknown> }
-				>({ type: 'FormData' }),
-				(value) => '~ely-form' in value,
-				'Expect value to be instance of Elysia.form'
+const Form = <T extends TProperties>(property: T, options?: TObjectOptions) =>
+	elyType(
+		ELYSIA_TYPES.Form,
+		Type.Union([
+			Type.Decode(
+				Type.Refine(
+					Type.Unsafe<ElysiaFormData<T>>({ '~kind': 'FormData' }),
+					(value) => '~ely-form' in value,
+					'must be instance of Elysia.form'
+				),
+				(value) => value['~ely-form']
 			),
-			(value) => value['~ely-form']
-		),
-		Type.Object(property, options)
-	])
-}
+			Type.Object(property, options)
+		])
+	)
 
 function NoValidate<T extends TSchema>(v: T, enabled = true) {
 	// @ts-ignore
 	if (enabled) v.noValidate = true
 
-	return v
+	return elyType(ELYSIA_TYPES.NoValidate, v)
 }
 
 let _emptyArrayBuffer: Type.TRefine<Type.TUnsafe<ArrayBuffer>>
 function ArrayBufferType(property?: ArrayBufferOptions) {
-	if (!property)
-		return (_emptyArrayBuffer ??= Type.Refine(
-			Type.Unsafe<ArrayBuffer>({ type: 'ArrayBuffer' }),
-			(value) => value instanceof ArrayBuffer,
-			'Expect value to be ArrayBuffer'
+	if (isEmpty(property))
+		return (_emptyArrayBuffer ??= elyType(
+			ELYSIA_TYPES.ArrayBuffer,
+			Type.Refine(
+				Type.Unsafe<ArrayBuffer>({ '~kind': 'ArrayBuffer' }),
+				(value) => value instanceof ArrayBuffer,
+				'must be ArrayBuffer'
+			)
 		))
 
 	const refines: Refines<ArrayBuffer> = [
-		[
-			(value) => value instanceof ArrayBuffer,
-			'Expect value to be ArrayBuffer'
-		]
+		[(value) => value instanceof ArrayBuffer, 'must be ArrayBuffer']
 	]
 
 	if (property.minByteLength)
@@ -443,28 +511,31 @@ function ArrayBufferType(property?: ArrayBufferOptions) {
 			`Expect byte to be less than ${property.maxByteLength}`
 		])
 
-	return Refines(
-		Type.Unsafe<ArrayBuffer>(
-			assignOrNew(property, { type: 'ArrayBuffer' })
-		),
-		refines
+	return elyType(
+		ELYSIA_TYPES.ArrayBuffer,
+		Refines(
+			Type.Unsafe<ArrayBuffer>(
+				assignOrNew(property, { '~kind': 'ArrayBuffer' })
+			),
+			refines
+		)
 	)
 }
 
 let _emptyUint8Array: Type.TRefine<Type.TUnsafe<Uint8Array>>
 function Uint8ArrayType(property?: ArrayBufferOptions) {
-	if (!property)
-		return (_emptyUint8Array ??= Type.Refine(
-			Type.Unsafe<Uint8Array>({ type: 'Uint8Array' }),
-			(value) => value instanceof Uint8Array,
-			'Expect value to be Uint8Array'
+	if (isEmpty(property))
+		return (_emptyUint8Array ??= elyType(
+			ELYSIA_TYPES.Uint8Array,
+			Type.Refine(
+				Type.Unsafe<Uint8Array>({ '~kind': 'Uint8Array' }),
+				(value) => value instanceof Uint8Array,
+				'must be Uint8Array'
+			)
 		))
 
 	const refines: Refines<Uint8Array> = [
-		[
-			(value) => value instanceof Uint8Array,
-			'Expect value to be Uint8Array'
-		]
+		[(value) => value instanceof Uint8Array, 'must be Uint8Array']
 	]
 
 	if (property.minByteLength) {
@@ -480,9 +551,14 @@ function Uint8ArrayType(property?: ArrayBufferOptions) {
 			`Expect byte to be less than ${property.maxByteLength}`
 		])
 
-	return Refines(
-		Type.Unsafe<Uint8Array>(assignOrNew(property, { type: 'Uint8Array' })),
-		refines
+	return elyType(
+		ELYSIA_TYPES.Uint8Array,
+		Refines(
+			Type.Unsafe<Uint8Array>(
+				assignOrNew(property, { '~kind': 'Uint8Array' })
+			),
+			refines
+		)
 	)
 }
 
@@ -537,3 +613,4 @@ export const t = Object.assign({}, Type, {
 // },
 
 export { System } from 'typebox/system'
+export type { BaseSchema } from './types'

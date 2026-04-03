@@ -312,22 +312,22 @@ const findEndIndex = (
 	return match ? match.index : -1
 }
 
-const findEndQueryBracketIndex = (
-	type: string,
-	content: string,
-	index?: number | undefined
-) => {
-	const bracketEndIndex = content.indexOf(type + ']', index)
-	const singleQuoteIndex = content.indexOf(type + "'", index)
-	const doubleQuoteIndex = content.indexOf(type + '"', index)
+// const findEndQueryBracketIndex = (
+// 	type: string,
+// 	content: string,
+// 	index?: number | undefined
+// ) => {
+// 	const bracketEndIndex = content.indexOf(type + ']', index)
+// 	const singleQuoteIndex = content.indexOf(type + "'", index)
+// 	const doubleQuoteIndex = content.indexOf(type + '"', index)
 
-	// Pick the smallest index that is not -1 or 0
-	return (
-		[bracketEndIndex, singleQuoteIndex, doubleQuoteIndex]
-			.filter((i) => i > 0)
-			.sort((a, b) => a - b)[0] || -1
-	)
-}
+// 	// Pick the smallest index that is not -1 or 0
+// 	return (
+// 		[bracketEndIndex, singleQuoteIndex, doubleQuoteIndex]
+// 			.filter((i) => i > 0)
+// 			.sort((a, b) => a - b)[0] || -1
+// 	)
+// }
 
 /**
  * Find alias of variable from function body

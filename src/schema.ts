@@ -1,22 +1,16 @@
 /* eslint-disable sonarjs/no-duplicate-string */
-import {
-	Kind,
-	OptionalKind,
-	TModule,
-	TObject,
-	TransformKind,
-	TSchema,
-	type TAnySchema
-} from '@sinclair/typebox'
-import { Value } from '@sinclair/typebox/value'
-import { TypeCompiler } from '@sinclair/typebox/compiler'
+import type { TModule, TObject, TSchema } from 'typebox'
+import { Compile, type Validator } from 'typebox/compile'
+
+// import { Value } from '@sinclair/typebox/value'
+// import { TypeCompiler } from '@sinclair/typebox/compiler'
 
 import {
 	createMirror,
 	type Instruction as ExactMirrorInstruction
 } from 'exact-mirror'
 
-import { t, type TypeCheck } from './type-system'
+import { t } from './type-system'
 
 import { mergeCookie, mergeDeep, randomId } from './utils'
 import { mapValueError } from './error'
@@ -39,11 +33,14 @@ import {
 	type ReplaceSchemaTypeOptions,
 	stringToStructureCoercions
 } from './replace-schema'
+import type { BaseSchema } from './type-system'
 
 type MapValueError = ReturnType<typeof mapValueError>
 
-export interface ElysiaTypeCheck<T extends AnySchema>
-	extends Omit<TypeCheck<TSchema>, 'schema' | 'Check'> {
+export interface ElysiaTypeCheck<T extends AnySchema> extends Omit<
+	Validator<TSchema>,
+	'schema' | 'Check'
+> {
 	provider: 'typebox' | 'standard'
 	schema: T
 	config: Object
@@ -85,10 +82,7 @@ export const isOptional = (
 	if (schema?.[Kind] === 'Import' && schema.References)
 		return schema.References().some(isOptional as any)
 
-	// @ts-expect-error private property
-	if (schema.schema)
-		// @ts-expect-error private property
-		schema = schema.schema
+	if (schema.schema) schema = schema.schema
 
 	return !!schema && OptionalKind in schema
 }
@@ -137,74 +131,47 @@ export const hasAdditionalProperties = (
 	return false
 }
 
-/**
- * Resolve a schema that might be a model reference (string) to the actual schema
- */
-export const resolveSchema = (
-	schema: TAnySchema | string | undefined,
-	models?: Record<string, TAnySchema | StandardSchemaV1Like>,
-	modules?: TModule<any, any>
-): TAnySchema | StandardSchemaV1Like | undefined => {
-	if (!schema) return undefined
-	if (typeof schema !== 'string') return schema
+export const hasType = (type: string, schema: BaseSchema): boolean => {
+	if (!schema || typeof schema !== 'object') return false
+	if (schema['~kind'] === type) return true
 
-	// Check modules first (higher priority)
-	// @ts-expect-error private property
-	if (modules && schema in modules.$defs) {
-		return (modules as TModule<{}, {}>).Import(schema as never)
-	}
+	if (
+		schema['~kind'] === 'Cyclic' &&
+		schema.$defs &&
+		schema.$ref &&
+		schema.$defs[schema.$ref]
+	)
+		return hasType(type, schema.$defs[schema.$ref])
 
-	// Then check models
-	return models?.[schema]
-}
+	if (schema.anyOf) return schema.anyOf.some((s) => hasType(type, s))
+	if (schema.oneOf) return schema.oneOf.some((s) => hasType(type, s))
+	if (schema.allOf) return schema.allOf.some((s) => hasType(type, s))
+	if (schema.not) return hasType(type, schema.not)
+	if (schema.items)
+		return Array.isArray(schema.items)
+			? schema.items.some((s) => hasType(type, s))
+			: hasType(type, schema.items)
 
-export const hasType = (type: string, schema: TAnySchema): boolean => {
-	if (!schema) return false
+	if (schema.properties)
+		for (const v of Object.values(schema.properties))
+			if (hasType(type, v)) return true
 
-	if (Kind in schema && schema[Kind] === type) return true
+	// additionalProperties (when schema, not boolean)
+	if (typeof schema.additionalProperties === 'object')
+		return hasType(type, schema.additionalProperties)
 
-	// Handle Import/Ref schemas (unwrap)
-	if (Kind in schema && schema[Kind] === 'Import') {
-		if (schema.$defs && schema.$ref) {
-			const ref = schema.$ref.replace('#/$defs/', '')
-			if (schema.$defs[ref]) {
-				return hasType(type, schema.$defs[ref])
-			}
-		}
-	}
-
-	if (schema.anyOf) return schema.anyOf.some((s: TSchema) => hasType(type, s))
-	if (schema.oneOf) return schema.oneOf.some((s: TSchema) => hasType(type, s))
-	if (schema.allOf) return schema.allOf.some((s: TSchema) => hasType(type, s))
-
-	if (schema.type === 'array' && schema.items) {
-		if (
-			type === 'Files' &&
-			Kind in schema.items &&
-			schema.items[Kind] === 'File'
-		) {
-			return true
-		}
-		return hasType(type, schema.items)
-	}
-
-	if (schema.type === 'object') {
-		const properties = schema.properties as Record<string, TAnySchema>
-		if (!properties) return false
-
-		for (const key of Object.keys(properties)) {
-			if (hasType(type, properties[key])) return true
-		}
-	}
+	// Record (patternProperties)
+	if (schema.patternProperties)
+		for (const v of Object.values(schema.patternProperties))
+			if (hasType(type, v)) return true
 
 	return false
 }
 
-export const hasElysiaMeta = (meta: string, _schema: TAnySchema): boolean => {
+export const hasElysiaMeta = (meta: string, _schema: TSchema): boolean => {
 	if (!_schema) return false
 
-	// @ts-expect-error private property
-	const schema: TAnySchema = (_schema as TypeCheck<any>)?.schema ?? _schema
+	const schema: TSchema = (_schema as TypeCheck<any>)?.schema ?? _schema
 
 	if (schema.elysiaMeta === meta) return true
 

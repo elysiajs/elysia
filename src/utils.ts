@@ -1111,7 +1111,15 @@ export const getLoosePath = (path: string) => {
 	return path + '/'
 }
 
-export const isNotEmpty = (obj?: Object) => {
+export function isEmpty(obj?: Object): obj is undefined {
+	if (!obj) return true
+
+	for (const _ in obj) return false
+
+	return true
+}
+
+export function isNotEmpty(obj?: Object) {
 	if (!obj) return false
 
 	for (const _ in obj) return true
