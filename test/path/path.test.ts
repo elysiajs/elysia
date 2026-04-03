@@ -373,6 +373,294 @@ describe('Path', () => {
 		expect(res2).toBe('Hi')
 	})
 
+	it('specific method takes priority over all on same path', async () => {
+		const app = new Elysia()
+			.all('/api', () => 'all handler')
+			.get('/api', () => 'GET handler')
+
+		const getRes = await app.handle(req('/api')).then((r) => r.text())
+		const postRes = await app
+			.handle(post('/api', {}))
+			.then((r) => r.text())
+
+		expect(getRes).toBe('GET handler')
+		expect(postRes).toBe('all handler')
+	})
+
+	it('specific method takes priority over all regardless of registration order', async () => {
+		const app = new Elysia()
+			.get('/api', () => 'GET handler')
+			.all('/api', () => 'all handler')
+
+		const getRes = await app.handle(req('/api')).then((r) => r.text())
+		const postRes = await app
+			.handle(post('/api', {}))
+			.then((r) => r.text())
+
+		expect(getRes).toBe('GET handler')
+		expect(postRes).toBe('all handler')
+	})
+
+	it('specific method wildcard takes priority over all wildcard', async () => {
+		const app = new Elysia()
+			.all('/api/*', () => 'all handler')
+			.get('/api/*', () => 'GET handler')
+
+		const getRes = await app
+			.handle(req('/api/test'))
+			.then((r) => r.text())
+		const postRes = await app
+			.handle(post('/api/test', {}))
+			.then((r) => r.text())
+
+		expect(getRes).toBe('GET handler')
+		expect(postRes).toBe('all handler')
+	})
+
+	it('broad specific method matches before narrow all', async () => {
+		const app = new Elysia()
+			.all('/api/*', () => 'API proxy')
+			.get('/*', () => 'SPA fallback')
+
+		const getApi = await app
+			.handle(req('/api/test'))
+			.then((r) => r.text())
+		const postApi = await app
+			.handle(post('/api/test', {}))
+			.then((r) => r.text())
+		const getOther = await app
+			.handle(req('/other'))
+			.then((r) => r.text())
+
+		expect(getApi).toBe('SPA fallback')
+		expect(postApi).toBe('API proxy')
+		expect(getOther).toBe('SPA fallback')
+	})
+
+	it('static all path beats wildcard get path', async () => {
+		const app = new Elysia()
+			.all('/api/users', () => 'all handler')
+			.get('/*', () => 'GET wildcard')
+
+		const getExact = await app
+			.handle(req('/api/users'))
+			.then((r) => r.text())
+		const postExact = await app
+			.handle(post('/api/users', {}))
+			.then((r) => r.text())
+		const getOther = await app
+			.handle(req('/other'))
+			.then((r) => r.text())
+
+		expect(getExact).toBe('all handler')
+		expect(postExact).toBe('all handler')
+		expect(getOther).toBe('GET wildcard')
+	})
+
+	it('static all path beats dynamic get path', async () => {
+		const app = new Elysia()
+			.all('/api/users', () => 'all handler')
+			.get('/api/:resource', () => 'GET dynamic')
+
+		const getExact = await app
+			.handle(req('/api/users'))
+			.then((r) => r.text())
+		const postExact = await app
+			.handle(post('/api/users', {}))
+			.then((r) => r.text())
+
+		expect(getExact).toBe('all handler')
+		expect(postExact).toBe('all handler')
+	})
+
+	it('dynamic all path vs wildcard get path resolves get first', async () => {
+		const app = new Elysia()
+			.all('/:a/:b', () => 'dynamic ALL')
+			.get('/*', () => 'GET wildcard')
+
+		const getRes = await app
+			.handle(req('/api/users'))
+			.then((r) => r.text())
+		const postRes = await app
+			.handle(post('/api/users', {}))
+			.then((r) => r.text())
+
+		expect(getRes).toBe('GET wildcard')
+		expect(postRes).toBe('dynamic ALL')
+	})
+
+	it('dynamic all vs wildcard get resolves get first', async () => {
+		const app = new Elysia()
+			.all('/api/:id', () => 'all dynamic')
+			.get('/*', () => 'GET wildcard')
+
+		const getRes = await app
+			.handle(req('/api/123'))
+			.then((r) => r.text())
+		const postRes = await app
+			.handle(post('/api/123', {}))
+			.then((r) => r.text())
+
+		expect(getRes).toBe('GET wildcard')
+		expect(postRes).toBe('all dynamic')
+	})
+
+	it('multi-segment dynamic all vs wildcard get resolves get first', async () => {
+		const app = new Elysia()
+			.all('/api/:group/:id', () => 'all multi-dyn')
+			.get('/*', () => 'GET wildcard')
+
+		const getRes = await app
+			.handle(req('/api/a/b'))
+			.then((r) => r.text())
+		const postRes = await app
+			.handle(post('/api/a/b', {}))
+			.then((r) => r.text())
+
+		expect(getRes).toBe('GET wildcard')
+		expect(postRes).toBe('all multi-dyn')
+	})
+
+	it('multi-segment dynamic all vs same dynamic get resolves get first', async () => {
+		const app = new Elysia()
+			.all('/api/:group/:id', () => 'all handler')
+			.get('/api/:group/:id', () => 'GET handler')
+
+		const getRes = await app
+			.handle(req('/api/a/b'))
+			.then((r) => r.text())
+		const postRes = await app
+			.handle(post('/api/a/b', {}))
+			.then((r) => r.text())
+
+		expect(getRes).toBe('GET handler')
+		expect(postRes).toBe('all handler')
+	})
+
+	it('dynamic+wildcard all vs wildcard get resolves get first', async () => {
+		const app = new Elysia()
+			.all('/api/:group/*', () => 'all dyn+wild')
+			.get('/*', () => 'GET wildcard')
+
+		const getRes = await app
+			.handle(req('/api/a/b/c'))
+			.then((r) => r.text())
+		const postRes = await app
+			.handle(post('/api/a/b/c', {}))
+			.then((r) => r.text())
+
+		expect(getRes).toBe('GET wildcard')
+		expect(postRes).toBe('all dyn+wild')
+	})
+
+	it('method priority applies across plugin instances', async () => {
+		const api = new Elysia({ prefix: '/api' }).all('/*', () => 'API proxy')
+
+		const app = new Elysia().use(api).get('/*', () => 'SPA fallback')
+
+		const getApi = await app
+			.handle(req('/api/test'))
+			.then((r) => r.text())
+		const postApi = await app
+			.handle(post('/api/test', {}))
+			.then((r) => r.text())
+
+		expect(getApi).toBe('SPA fallback')
+		expect(postApi).toBe('API proxy')
+	})
+
+	it('multi-segment dynamic beats wildcard per-segment', async () => {
+		const app = new Elysia()
+			.get('/api/:a/:b', () => 'multi dynamic')
+			.get('/api/*', () => 'wildcard')
+
+		const two = await app.handle(req('/api/x/y')).then((r) => r.text())
+		const three = await app
+			.handle(req('/api/x/y/z'))
+			.then((r) => r.text())
+		const one = await app.handle(req('/api/x')).then((r) => r.text())
+
+		expect(two).toBe('multi dynamic')
+		expect(three).toBe('wildcard')
+		expect(one).toBe('wildcard')
+	})
+
+	it('static prefix segment beats dynamic at same position', async () => {
+		const app = new Elysia()
+			.get('/api/v1/:id', () => 'static+dynamic')
+			.get('/api/:version/:id', () => 'double dynamic')
+
+		const v1 = await app
+			.handle(req('/api/v1/123'))
+			.then((r) => r.text())
+		const v2 = await app
+			.handle(req('/api/v2/123'))
+			.then((r) => r.text())
+
+		expect(v1).toBe('static+dynamic')
+		expect(v2).toBe('double dynamic')
+	})
+
+	it('dynamic+wildcard vs dynamic resolves by segment count', async () => {
+		const app = new Elysia()
+			.get('/api/:id/*', () => 'dynamic+wildcard')
+			.get('/api/:id/:name', () => 'multi dynamic')
+
+		const two = await app
+			.handle(req('/api/x/y'))
+			.then((r) => r.text())
+		const three = await app
+			.handle(req('/api/x/y/z'))
+			.then((r) => r.text())
+
+		expect(two).toBe('multi dynamic')
+		expect(three).toBe('dynamic+wildcard')
+	})
+
+	it('earlier static segment wins over later static in alternative route', async () => {
+		const app = new Elysia()
+			.get('/api/hello/*', () => 'static+wildcard')
+			.get('/api/:id/hello', () => 'dynamic+static')
+
+		const helloHello = await app
+			.handle(req('/api/hello/hello'))
+			.then((r) => r.text())
+		const helloOther = await app
+			.handle(req('/api/hello/other'))
+			.then((r) => r.text())
+		const otherHello = await app
+			.handle(req('/api/other/hello'))
+			.then((r) => r.text())
+		const helloMulti = await app
+			.handle(req('/api/hello/a/b'))
+			.then((r) => r.text())
+
+		expect(helloHello).toBe('static+wildcard')
+		expect(helloOther).toBe('static+wildcard')
+		expect(otherHello).toBe('dynamic+static')
+		expect(helloMulti).toBe('static+wildcard')
+	})
+
+	it('static+wildcard does not match without trailing segment', async () => {
+		const app = new Elysia()
+			.get('/api/hello/*', () => 'static+wildcard')
+			.get('/api/:id', () => 'dynamic')
+
+		const hello = await app
+			.handle(req('/api/hello'))
+			.then((r) => r.text())
+		const helloX = await app
+			.handle(req('/api/hello/x'))
+			.then((r) => r.text())
+		const other = await app
+			.handle(req('/api/other'))
+			.then((r) => r.text())
+
+		expect(hello).toBe('dynamic')
+		expect(helloX).toBe('static+wildcard')
+		expect(other).toBe('dynamic')
+	})
+
 	it('add path if onRequest is used', async () => {
 		const app = new Elysia()
 			.onRequest(() => {})
