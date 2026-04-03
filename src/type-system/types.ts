@@ -1,17 +1,12 @@
 import type {
-	Kind,
-	ObjectOptions,
-	SchemaOptions,
-	StaticDecode,
-	TObject,
+	TObjectOptions,
 	TProperties,
-	TransformKind,
 	TSchema,
 	TUnsafe,
-	Uint8ArrayOptions
-} from '@sinclair/typebox'
-import type { ValueError } from '@sinclair/typebox/errors'
-import type { TypeCheck } from '@sinclair/typebox/compiler'
+	TSchemaOptions
+} from 'typebox'
+import { TLocalizedValidationError } from 'typebox/error'
+import { Validator } from 'typebox/compile'
 
 import type { ElysiaFormData } from '../utils'
 import type { CookieOptions } from '../cookies'
@@ -77,7 +72,7 @@ export type StrictFileType =
 
 export type FileType = (string & {}) | StrictFileType
 
-export interface FileOptions extends SchemaOptions {
+export interface FileOptions extends TSchemaOptions {
 	type?: MaybeArray<FileType>
 	/**
 	 * Each file must be at least the specified size.
@@ -99,8 +94,7 @@ export interface FilesOptions extends FileOptions {
 }
 
 export interface CookieValidatorOptions<T extends Object = {}>
-	extends ObjectOptions,
-		CookieOptions {
+	extends TObjectOptions, CookieOptions {
 	/**
 	 * Secret key for signing cookie
 	 *
@@ -129,20 +123,38 @@ export type NonEmptyArray<T> = [T, ...T[]]
 export type TEnumValue = number | string | null
 
 export interface TUnionEnum<
-	T extends
-		| NonEmptyArray<TEnumValue>
-		| Readonly<NonEmptyArray<TEnumValue>> = [TEnumValue]
-> extends TSchema {
+	T extends NonEmptyArray<TEnumValue> | Readonly<NonEmptyArray<TEnumValue>> =
+		[TEnumValue]
+> {
+	'~kind': 'UnionEnum'
 	type?: 'number' | 'string' | 'null'
-	[Kind]: 'UnionEnum'
 	static: T[number]
 	enum: T
 }
 
-export interface TArrayBuffer extends Uint8ArrayOptions {}
+export interface DateOptions extends TSchemaOptions {
+	/** The exclusive maximum timestamp value */
+	exclusiveMaximumTimestamp?: number
+	/** The exclusive minimum timestamp value */
+	exclusiveMinimumTimestamp?: number
+	/** The maximum timestamp value */
+	maximumTimestamp?: number
+	/** The minimum timestamp value */
+	minimumTimestamp?: number
+	/** The multiple of timestamp value */
+	multipleOfTimestamp?: number
+	default?: string | Date | number
+}
+
+export interface Uint8ArrayOptions extends TSchemaOptions {
+	maxByteLength?: number
+	minByteLength?: number
+}
+
+export interface ArrayBufferOptions extends Uint8ArrayOptions {}
 
 export type TForm<T extends TProperties = TProperties> = TUnsafe<
-	ElysiaFormData<TObject<T>['static']>
+	ElysiaFormData<T>
 >
 
 /**
@@ -165,15 +177,20 @@ export type TForm<T extends TProperties = TProperties> = TUnsafe<
  * ```
  */
 export interface ElysiaTypeCustomErrors {
-  /**
-   * The default error types that the library supports.
-   *
-   * `string & {}` `number & {}` are used to allow string templates and numbers respectively.
-   */
-  default: (string & {}) | boolean | (number & {}) | ElysiaTypeCustomErrorCallback
+	/**
+	 * The default error types that the library supports.
+	 *
+	 * `string & {}` `number & {}` are used to allow string templates and numbers respectively.
+	 */
+	default:
+		| (string & {})
+		| boolean
+		| (number & {})
+		| ElysiaTypeCustomErrorCallback
 }
 
-export type ElysiaTypeCustomError = ElysiaTypeCustomErrors[keyof ElysiaTypeCustomErrors]
+export type ElysiaTypeCustomError =
+	ElysiaTypeCustomErrors[keyof ElysiaTypeCustomErrors]
 
 export type ElysiaTypeCustomErrorCallback = (
 	error: {
@@ -214,60 +231,13 @@ export type ElysiaTypeCustomErrorCallback = (
 		 * Array of validation errors
 		 * (omitted on production)
 		 */
-		errors: ValueError[]
+		errors: TLocalizedValidationError[]
 	},
-	validator: TypeCheck<any>
+	validator: Validator<any>
 ) => unknown
 
-declare module '@sinclair/typebox' {
-	interface SchemaOptions {
+declare module 'typebox' {
+	interface TSchemaOptions {
 		error?: ElysiaTypeCustomError
 	}
-}
-
-export declare class ElysiaTransformDecodeBuilder<T extends TSchema> {
-	private readonly schema
-	constructor(schema: T)
-	Decode<U extends unknown, D extends TransformFunction<StaticDecode<T>, U>>(
-		decode: D
-	): ElysiaTransformEncodeBuilder<T, D>
-}
-export declare class ElysiaTransformEncodeBuilder<
-	T extends TSchema,
-	D extends TransformFunction
-> {
-	private readonly schema
-	private readonly decode
-	constructor(schema: T, decode: D)
-	private EncodeTransform
-	private EncodeSchema
-	Encode<E extends TransformFunction<ReturnType<D>, StaticDecode<T>>>(
-		encode: E
-	): TTransform<T, ReturnType<D>>
-}
-export type TransformFunction<T = any, U = any> = (value: T) => U
-export interface TransformOptions<
-	I extends TSchema = TSchema,
-	O extends unknown = unknown
-> {
-	Decode: TransformFunction<StaticDecode<I>, O>
-	Encode: TransformFunction<O, StaticDecode<I>>
-}
-export interface TTransform<
-	I extends TSchema = TSchema,
-	O extends unknown = unknown
-> extends TSchema {
-	static: O
-	[TransformKind]: TransformOptions<I, O>
-	[key: string]: any
-}
-
-export type AssertNumericEnum<T extends Record<string, string | number>> = {
-	[K in keyof T]: K extends number
-		? string
-		: K extends `${number}`
-			? string
-			: K extends string
-				? number
-				: never
 }

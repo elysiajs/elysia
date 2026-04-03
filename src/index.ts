@@ -162,7 +162,7 @@ import type {
 	UnknownRouteSchema,
 	MaybeFunction,
 	InlineHandlerNonMacro,
-	Router,
+	Router
 } from './types'
 import {
 	coercePrimitiveRoot,
@@ -4703,7 +4703,12 @@ export default class Elysia<
 						} = hook
 
 						const hasStandaloneSchema =
-							body || headers || query || params || cookie || response
+							body ||
+							headers ||
+							query ||
+							params ||
+							cookie ||
+							response
 
 						const startIndex = processedUntil
 						processedUntil = instance.router.history.length
@@ -4731,11 +4736,13 @@ export default class Elysia<
 										: Array.isArray(localHook.error)
 											? [
 													...(localHook.error ?? []),
-													...(sandbox.event.error ?? [])
+													...(sandbox.event.error ??
+														[])
 												]
 											: [
 													localHook.error,
-													...(sandbox.event.error ?? [])
+													...(sandbox.event.error ??
+														[])
 												],
 									standaloneValidator: !hasStandaloneSchema
 										? localHook.standaloneValidator
@@ -8245,7 +8252,7 @@ export default class Elysia<
 export { Elysia }
 
 export { t } from './type-system'
-export { validationDetail, fileType } from './type-system/utils'
+export { validationDetail } from './type-system/utils'
 export type {
 	ElysiaTypeCustomError,
 	ElysiaTypeCustomErrorCallback
@@ -8276,7 +8283,6 @@ export {
 	checksum,
 	cloneInference,
 	deduplicateChecksum,
-	ELYSIA_FORM_DATA,
 	ELYSIA_REQUEST_ID,
 	sse
 } from './utils'

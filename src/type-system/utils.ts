@@ -1,15 +1,5 @@
-import {
-	Kind,
-	TUnsafe,
-	TypeRegistry,
-	Unsafe,
-	type TAnySchema
-} from '@sinclair/typebox'
-import { Value } from '@sinclair/typebox/value'
-import { TypeCheck, TypeCompiler } from '@sinclair/typebox/compiler'
-
 import { ElysiaFile } from '../universal/file'
-import { InvalidFileType, ValidationError } from '../error'
+import { InvalidFileType } from '../error'
 import type {
 	ElysiaTypeCustomErrorCallback,
 	FileOptions,
@@ -18,170 +8,19 @@ import type {
 } from './types'
 import type { MaybeArray } from '../types'
 
-export const tryParse = (v: unknown, schema: TAnySchema) => {
-	try {
-		return JSON.parse(v as string)
-	} catch {
-		throw new ValidationError('property', schema, v)
-	}
-}
-
-export function createType<TSchema = unknown, TReturn = unknown>(
-	kind: string,
-	func: TypeRegistry.TypeRegistryValidationFunction<TSchema>
-): TUnsafe<TReturn> {
-	if (!TypeRegistry.Has(kind)) TypeRegistry.Set<TSchema>(kind, func)
-
-	return ((options = {}) => Unsafe({ ...options, [Kind]: kind })) as any
-}
-
-export const compile = <T extends TAnySchema>(schema: T) => {
-	try {
-		const compiler = TypeCompiler.Compile(schema) as TypeCheck<T> & {
-			Create(): T['static']
-			Error(v: unknown): asserts v is T['static']
-		}
-
-		compiler.Create = () => Value.Create(schema)
-		compiler.Error = (v: unknown) =>
-			// @ts-ignore
-			new ValidationError('property', schema, v, compiler.Errors(v))
-
-		return compiler
-	} catch {
-		return {
-			Check: (v: unknown) => Value.Check(schema, v),
-			CheckThrow: (v: unknown) => {
-				if (!Value.Check(schema, v))
-					throw new ValidationError(
-						'property',
-						schema,
-						v,
-						// @ts-ignore
-						Value.Errors(schema, v)
-					)
-			},
-			Decode: (v: unknown) => Value.Decode(schema, v),
-			Create: () => Value.Create(schema),
-			Error: (v: unknown) =>
-				new ValidationError(
-					'property',
-					schema,
-					v,
-					// @ts-ignore
-					Value.Errors(schema, v)
-				)
-		}
-	}
-}
-
 export const parseFileUnit = (size: FileUnit) => {
-	if (typeof size === 'string')
-		switch (size.slice(-1)) {
-			case 'k':
-				return +size.slice(0, size.length - 1) * 1024
+	if (typeof size !== 'string') return size
 
-			case 'm':
-				return +size.slice(0, size.length - 1) * 1048576
+	switch (size.slice(-1)) {
+		case 'k':
+			return +size.slice(0, size.length - 1) * 1024
 
-			default:
-				return +size
-		}
+		case 'm':
+			return +size.slice(0, size.length - 1) * 1048576
 
-	return size
-}
-
-export const checkFileExtension = (type: string, extension: string) => {
-	if (type.startsWith(extension)) return true
-
-	return (
-		extension.charCodeAt(extension.length - 1) === 42 &&
-		extension.charCodeAt(extension.length - 2) === 47 &&
-		type.startsWith(extension.slice(0, -1))
-	)
-}
-
-let _fileTypeFromBlobWarn = false
-const warnIfFileTypeIsNotInstalled = () => {
-	if (!_fileTypeFromBlobWarn) {
-		console.warn(
-			"[Elysia] Attempt to validate file type without 'file-type'. This may lead to security risks. We recommend installing 'file-type' to properly validate file extension."
-		)
-		_fileTypeFromBlobWarn = true
+		default:
+			return +size
 	}
-}
-
-export const loadFileType = async () =>
-	import('file-type')
-		.then((x) => {
-			_fileTypeFromBlob = x.fileTypeFromBlob
-			return _fileTypeFromBlob
-		})
-		.catch(warnIfFileTypeIsNotInstalled)
-
-let _fileTypeFromBlob: Function
-export const fileTypeFromBlob = (file: Blob | File) => {
-	if (_fileTypeFromBlob) return _fileTypeFromBlob(file)
-
-	return loadFileType().then((mod) => {
-		if (mod) return mod(file)
-	})
-}
-
-export const fileType = async (
-	file: MaybeArray<Blob | File | undefined>,
-	extension: FileType | FileType[],
-	// @ts-ignore
-	name = file?.name ?? ''
-): Promise<boolean> => {
-	if (Array.isArray(file)) {
-		await Promise.all(file.map((f) => fileType(f, extension, name)))
-
-		return true
-	}
-
-	if (!file) return false
-
-	const result = await fileTypeFromBlob(file)
-	if (!result) throw new InvalidFileType(name, extension)
-
-	if (typeof extension === 'string')
-		if (!checkFileExtension(result.mime, extension))
-			throw new InvalidFileType(name, extension)
-
-	for (let i = 0; i < extension.length; i++)
-		if (checkFileExtension(result.mime, extension[i])) return true
-
-	throw new InvalidFileType(name, extension)
-}
-
-/**
- * This only check file extension based on it's name / mimetype
- * to actual check the file type, use `validateFileExtension` instead
- */
-export const validateFile = (options: FileOptions, value: any) => {
-	if (value instanceof ElysiaFile) return true
-
-	if (!(value instanceof Blob)) return false
-
-	if (options.minSize && value.size < parseFileUnit(options.minSize))
-		return false
-
-	if (options.maxSize && value.size > parseFileUnit(options.maxSize))
-		return false
-
-	if (options.extension) {
-		if (typeof options.extension === 'string')
-			return checkFileExtension(value.type, options.extension)
-
-		for (let i = 0; i < options.extension.length; i++)
-			if (checkFileExtension(value.type, options.extension[i]))
-				return true
-
-		return false
-	}
-
-	return true
 }
 
 /**

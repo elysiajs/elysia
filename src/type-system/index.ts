@@ -1,688 +1,539 @@
-import { Type, Kind } from '@sinclair/typebox'
+import { Type } from 'typebox'
 import type {
-	ArrayOptions,
-	DateOptions,
-	IntegerOptions,
-	ObjectOptions,
-	SchemaOptions,
-	TAnySchema,
-	TArray,
-	TBoolean,
-	TDate,
+	TSchemaOptions,
 	TEnumValue,
-	TInteger,
-	TNumber,
-	TObject,
 	TProperties,
 	TSchema,
-	TString,
-	NumberOptions,
-	JavaScriptTypeBuilder,
-	StringOptions,
-	TUnsafe,
-	Uint8ArrayOptions,
-	TEnum
-} from '@sinclair/typebox'
+	TNumberOptions,
+	TObjectOptions,
+	Static
+} from 'typebox'
 
-import {
-	compile,
-	createType,
-	loadFileType,
-	tryParse,
-	validateFile
-} from './utils'
-import {
-	CookieValidatorOptions,
-	TFile,
-	TFiles,
-	FileOptions,
+import type {
 	FilesOptions,
 	NonEmptyArray,
-	TForm,
 	TUnionEnum,
-	ElysiaTransformDecodeBuilder,
-	TArrayBuffer,
-	AssertNumericEnum
+	DateOptions,
+	ArrayBufferOptions,
+	FileOptions,
+	FileUnit,
+	FileType
 } from './types'
 
-import { ELYSIA_FORM_DATA, form } from '../utils'
-import { ValidationError } from '../error'
-import { parseDateTimeEmptySpace } from './format'
+import { ElysiaFile } from '../universal/file'
 
-const t = Object.assign({}, Type) as unknown as Omit<
-	JavaScriptTypeBuilder,
-	'String' | 'Transform'
-> &
-	typeof ElysiaType & {
-		Transform<Type extends TSchema>(
-			type: Type
-		): ElysiaTransformDecodeBuilder<Type>
-	}
+function assignOrNew<
+	T extends Record<keyof any, unknown> | undefined,
+	R extends Record<keyof any, unknown>
+>(target: T, source: R): undefined extends T ? R : T & R {
+	if (target) return Object.assign(target, source)
 
-createType<TUnionEnum>(
-	'UnionEnum',
-	(schema, value) =>
-		(typeof value === 'number' ||
-			typeof value === 'string' ||
-			value === null) &&
-		schema.enum.includes(value as never)
-)
-
-createType<TArrayBuffer>(
-	'ArrayBuffer',
-	(schema, value) => value instanceof ArrayBuffer
-)
-
-const internalFiles = createType<FilesOptions, File[]>(
-	'Files',
-	(options, value) => {
-		if (options.minItems && options.minItems > 1 && !Array.isArray(value))
-			return false
-
-		if (!Array.isArray(value)) return validateFile(options, value)
-
-		if (options.minItems && value.length < options.minItems) return false
-		if (options.maxItems && value.length > options.maxItems) return false
-
-		for (let i = 0; i < value.length; i++)
-			if (!validateFile(options, value[i])) return false
-
-		return true
-	}
-) as unknown as TFiles
-
-const internalFormData = createType<TForm, FormData>(
-	'ElysiaForm',
-	({ compiler, ...schema }, value) => {
-		if (!(value instanceof FormData)) return false
-
-		if (compiler) {
-			if (!(ELYSIA_FORM_DATA in value))
-				throw new ValidationError('property', schema, value)
-
-			if (!compiler.Check(value[ELYSIA_FORM_DATA]))
-				throw compiler.Error(value[ELYSIA_FORM_DATA])
-		}
-
-		return true
-	}
-) as unknown as TForm
-
-interface ElysiaStringOptions extends StringOptions {
-	/**
-	 * Whether the value include JSON escape sequences or not
-	 *
-	 * When using JSON Accelerator, this will bypass the JSON escape sequence validation
-	 *
-	 * Set to `true` if the value doesn't include JSON escape sequences
-	 *
-	 * @default false
-	 */
-	trusted?: boolean
+	return source as unknown as T & R
 }
 
-export const ElysiaType = {
-	// @ts-ignore
-	String: (property?: ElysiaStringOptions) => Type.String(property),
-	Numeric: (property?: NumberOptions) => {
-		const schema = Type.Number(property)
-		const compiler = compile(schema)
+function Refines<T extends TSchema>(schema: T, refines: Refines<Static<T>>) {
+	for (const [refine, message] of refines)
+		schema = Type.Refine(schema, refine, message)
 
-		return t
-			.Transform(
-				t.Union(
-					[
-						t.String({
-							format: 'numeric',
-							default: 0
-						}),
-						t.Number(property)
-					],
-					property
+	return schema
+}
+
+type Refines<T> = [refine: (value: T) => boolean, message: string][]
+
+let _StringifiedNumber: Type.TCodec<Type.TRefine<Type.TString>, number>
+let _emptyNumeric: Type.TUnion<
+	[Type.TNumber, Type.TCodec<Type.TRefine<Type.TString>, number>]
+>
+function Numeric(property?: TNumberOptions) {
+	_StringifiedNumber ??= Type.Decode(
+		Type.Refine(
+			Type.String(),
+			(value) => !isNaN(+value),
+			'Expect value to be number'
+		),
+		(value) => +value
+	)
+
+	if (!property)
+		return (_emptyNumeric ??= Type.Union([
+			Type.Number(),
+			_StringifiedNumber
+		]))
+
+	const number = Type.Number(property)
+	return Type.Union([number, Type.Union([_StringifiedNumber, number])])
+}
+
+let _StringifiedInteger: Type.TCodec<Type.TRefine<Type.TString>, number>
+let _emptyInteger: Type.TUnion<
+	[Type.TInteger, Type.TCodec<Type.TRefine<Type.TString>, number>]
+>
+function Integer(property?: TNumberOptions) {
+	_StringifiedInteger = Type.Decode(
+		Type.Refine(
+			Type.String(),
+			(value) => !isNaN(+value) && Number.isInteger(+value),
+			'Expect value to be integer'
+		),
+		(value) => +value
+	)
+
+	if (!property)
+		return (_emptyInteger ??= Type.Union([
+			Type.Integer(),
+			_StringifiedInteger
+		]))
+
+	const integer = Type.Integer(property)
+	return Type.Union([integer, Type.Union([_StringifiedInteger, integer])])
+}
+
+let _StringifiedBoolean: Type.TCodec<Type.TRefine<Type.TString>, boolean>
+function BooleanString(property?: TSchemaOptions) {
+	_StringifiedBoolean ??= Type.Decode(
+		Type.Refine(
+			Type.String(),
+			(value) => value === 'true' || value === 'false',
+			'Expect value to be boolean'
+		),
+		(value) => (value === 'true' ? true : false)
+	)
+
+	return Type.Union([Type.Boolean(property), _StringifiedBoolean])
+}
+
+function StringifiedObject<T extends TProperties>(
+	property: T,
+	options?: TObjectOptions
+) {
+	let parsed: Record<keyof any, unknown>
+	const _StringifiedObject = Type.Decode(
+		Type.Refine(
+			Type.String(),
+			(value) => {
+				if (
+					(value.charCodeAt(0) !== 123 &&
+						value.charCodeAt(value.length - 1) !== 125) ||
+					(value.charCodeAt(0) !== 91 &&
+						value.charCodeAt(value.length - 1) !== 93)
 				)
-			)
-			.Decode((value) => {
-				const number = +value
-				if (isNaN(number)) return value
+					return false
 
-				if (property && !compiler.Check(number))
-					throw compiler.Error(number)
+				try {
+					parsed = JSON.parse(value)
 
-				return number
-			})
-			.Encode((value) => value) as any as TNumber
-	},
+					return true
+				} catch {
+					return false
+				}
+			},
+			'Expect value to be an object'
+		),
+		(value) => (parsed ??= JSON.parse(value))
+	)
 
-	NumericEnum<T extends AssertNumericEnum<T>>(
-		item: T,
-		property?: SchemaOptions
-	) {
-		const schema = Type.Enum(item, property)
-		const compiler = compile(schema)
+	const object = Type.Object(property, options)
+	return Type.Union([object, Type.Union([_StringifiedObject, object])])
+}
 
-		return t
-			.Transform(
-				t.Union([t.String({ format: 'numeric' }), t.Number()], property)
-			)
-			.Decode((value) => {
-				const number = +value
-				if (isNaN(number)) throw compiler.Error(number)
-				if (!compiler.Check(number)) throw compiler.Error(number)
-				return number
-			})
-			.Encode((value) => value) as any as TEnum<T>
-	},
-
-	Integer: (property?: IntegerOptions): TInteger => {
-		const schema = Type.Integer(property)
-		const compiler = compile(schema)
-
-		return t
-			.Transform(
-				t.Union(
-					[
-						t.String({
-							format: 'integer',
-							default: 0
-						}),
-						Type.Integer(property)
-					],
-					property
+function StringifiedArray<T extends TProperties>(
+	property: T,
+	options?: TObjectOptions
+) {
+	let parsed: unknown[]
+	const _StringifiedArray = Type.Decode(
+		Type.Refine(
+			Type.String(),
+			(value) => {
+				if (
+					value.charCodeAt(0) !== 91 &&
+					value.charCodeAt(value.length - 1) !== 93
 				)
-			)
-			.Decode((value) => {
-				const number = +value
+					return false
 
-				if (!compiler.Check(number)) throw compiler.Error(number)
+				try {
+					parsed = JSON.parse(value)
 
-				return number
-			})
-			.Encode((value) => value) as any as TInteger
-	},
+					return true
+				} catch {
+					return false
+				}
+			},
+			'Expect value to be an array'
+		),
+		(value) => (parsed ??= JSON.parse(value))
+	)
 
-	Date: (property?: DateOptions) => {
-		const schema = Type.Date(property)
-		const compiler = compile(schema)
+	const array = Type.Array(property, options)
+	return Type.Union([array, Type.Union([_StringifiedArray, array])])
+}
 
-		const _default = property?.default
-			? new Date(property.default) // in case the default is an ISO string or milliseconds from epoch
-			: undefined
-
-		return t
-			.Transform(
-				t.Union(
-					[
-						Type.Date(property),
-						t.String({
-							format: 'date-time',
-							default: _default?.toISOString()
-						}),
-						t.String({
+let _EmptyDate: Type.TCodec<
+	Type.TUnion<
+		[
+			Type.TRefine<Type.TUnsafe<Date>>,
+			Type.TCodec<Type.TUnion<[Type.TString, Type.TString]>, Date>
+		]
+	>,
+	unknown
+>
+function DateType(property?: DateOptions) {
+	if (!property)
+		return (_EmptyDate ??= Type.Encode(
+			Type.Union([
+				Type.Refine(
+					Type.Unsafe<Date>({ type: 'Date' }),
+					(value) => value instanceof Date,
+					'Expect value to be Date'
+				),
+				Type.Decode(
+					Type.Union([
+						Type.String({
 							format: 'date',
-							default: _default?.toISOString()
+							default: new Date(0).toISOString()
 						}),
-						t.Number({ default: _default?.getTime() })
-					],
-					property
-				)
-			)
-			.Decode((value) => {
-				if (typeof value === 'number') {
-					const date = new Date(value)
-
-					if (!compiler.Check(date)) throw compiler.Error(date)
-
-					return date
-				}
-
-				if (value instanceof Date) return value
-
-				const date = new Date(parseDateTimeEmptySpace(value))
-
-				if (!date || isNaN(date.getTime()))
-					throw new ValidationError('property', schema, date)
-
-				if (!compiler.Check(date)) throw compiler.Error(date)
-
-				return date
-			})
-			.Encode((value) => {
-				if (value instanceof Date) return value.toISOString()
-				if (typeof value === 'string') {
-					const parsed = new Date(parseDateTimeEmptySpace(value))
-
-					if (isNaN(parsed.getTime()))
-						throw new ValidationError('property', schema, value)
-
-					return parsed.toISOString()
-				}
-
-				if (!compiler.Check(value)) throw compiler.Error(value)
-
-				return value
-			}) as any as TDate
-	},
-
-	BooleanString: (property?: SchemaOptions) => {
-		const schema = Type.Boolean(property)
-		const compiler = compile(schema)
-
-		return t
-			.Transform(
-				t.Union(
-					[
-						t.Boolean(property),
-						t.String({
-							format: 'boolean',
-							default: false
+						Type.String({
+							format: new Date(0).toISOString()
 						})
-					],
-					property
+					]),
+					(value) => new Date(value)
 				)
-			)
-			.Decode((value) => {
-				if (typeof value === 'string') return value === 'true'
+			]),
+			(value) =>
+				(value instanceof Date ? value.toISOString() : value) as any
+		))
 
-				if (value !== undefined && !compiler.Check(value))
-					throw compiler.Error(value)
-
-				return value
-			})
-			.Encode((value) => value) as any as TBoolean
-	},
-
-	ObjectString: <T extends TProperties>(
-		properties: T,
-		options?: ObjectOptions
-	) => {
-		const schema = t.Object(properties, options)
-		const compiler = compile(schema)
-
-		return t
-			.Transform(
-				t.Union(
-					[
-						t.String({
-							format: 'ObjectString',
-							default: options?.default
+	return Type.Encode(
+		Type.Union(
+			[
+				Type.Refine(
+					Type.Unsafe<Date>({ type: 'Date' }),
+					(value) => value instanceof Date,
+					'Expect value to be Date'
+				),
+				Type.Decode(
+					Type.Union([
+						Type.String({
+							format: 'date',
+							default: new Date(0).toISOString()
 						}),
-						schema
-					],
-					{
-						elysiaMeta: 'ObjectString'
-					}
+						Type.String({
+							format: new Date(0).toISOString()
+						})
+					]),
+					(value) => new Date(value)
 				)
-			)
-			.Decode((value) => {
-				if (typeof value === 'string') {
-					if (value.charCodeAt(0) !== 123)
-						throw new ValidationError('property', schema, value)
+			],
+			property
+		),
+		(value) => (value instanceof Date ? value.toISOString() : value) as any
+	)
+}
 
-					if (!compiler.Check((value = tryParse(value, schema))))
-						throw compiler.Error(value)
+function Nullable<T extends TSchema>(schema: T, options?: TSchemaOptions) {
+	return Type.Union(
+		[schema, t.Null()],
+		assignOrNew(options, { nullable: true })
+	)
+}
 
-					return compiler.Decode(value)
-				}
+function MaybeEmpty<T extends TSchema>(schema: T, options?: TSchemaOptions) {
+	if (options && !('nullable' in options)) options.nullable = true
 
-				return value
-			})
-			.Encode((value) => {
-				let original
-				if (typeof value === 'string')
-					value = tryParse((original = value), schema)
+	return t.Union(
+		[schema, t.Null(), t.Undefined()],
+		assignOrNew(options, { nullable: true })
+	)
+}
 
-				if (!compiler.Check(value)) throw compiler.Error(value)
+function UnionEnum<
+	const T extends
+		| NonEmptyArray<TEnumValue>
+		| Readonly<NonEmptyArray<TEnumValue>>
+>(values: T, options?: TSchemaOptions) {
+	let kind: 'string' | 'number' | 'null' | undefined
+	let mixed = false
 
-				return original ?? JSON.stringify(value)
-			}) as any as TObject<T>
-	},
-
-	ArrayString: <T extends TSchema = TString>(
-		children: T = t.String() as any,
-		options?: ArrayOptions
-	) => {
-		const schema = t.Array(children, options)
-		const compiler = compile(schema)
-
-		const decode = (value: string, isProperty = false) => {
-			if (value.charCodeAt(0) === 91) {
-				if (!compiler.Check((value = tryParse(value, schema))))
-					throw compiler.Error(value)
-
-				return compiler.Decode(value)
-			}
-
-			// has , (as used in nuqs)
-			// if (value.indexOf(',') !== -1) {
-			// 	// const newValue = value.split(',').map((v) => v.trim())
-
-			// 	if (!compiler.Check(value)) throw compiler.Error(value)
-
-			// 	return compiler.Decode(value)
-			// }
-
-			if (isProperty) return value
-
-			throw new ValidationError('property', schema, value)
-		}
-
-		return t
-			.Transform(
-				t.Union(
-					[
-						t.String({
-							format: 'ArrayString',
-							default: options?.default
-						}),
-						schema
-					],
-					{
-						elysiaMeta: 'ArrayString'
-					}
-				)
-			)
-			.Decode((value) => {
-				if (Array.isArray(value)) {
-					let values = <unknown[]>[]
-
-					for (let i = 0; i < value.length; i++) {
-						const v = value[i]
-						if (typeof v === 'string') {
-							const t = decode(v, true)
-							if (Array.isArray(t)) values = values.concat(t)
-							else values.push(t)
-
-							continue
-						}
-
-						values.push(v)
-					}
-
-					return values
-				}
-
-				if (typeof value === 'string') return decode(value)
-
-				// Is probably transformed, unable to check schema
-				return value
-			})
-			.Encode((value) => {
-				let original
-				if (typeof value === 'string')
-					value = tryParse((original = value), schema)
-
-				if (!compiler.Check(value))
-					throw new ValidationError('property', schema, value)
-
-				return original ?? JSON.stringify(value)
-			}) as any as TArray<T>
-	},
-
-	ArrayQuery: <T extends TSchema = TString>(
-		children: T = t.String() as any,
-		options?: ArrayOptions
-	) => {
-		const schema = t.Array(children, options)
-		const compiler = compile(schema)
-
-		const decode = (value: string) => {
-			// has , (as used in nuqs)
-			if (value.indexOf(',') !== -1)
-				return compiler.Decode(value.split(','))
-
-			return compiler.Decode([value])
-		}
-
-		return t
-			.Transform(
-				t.Union(
-					[
-						t.String({
-							default: options?.default
-						}),
-						schema
-					],
-					{
-						elysiaMeta: 'ArrayQuery'
-					}
-				)
-			)
-			.Decode((value) => {
-				if (Array.isArray(value)) {
-					let values = <unknown[]>[]
-
-					for (let i = 0; i < value.length; i++) {
-						const v = value[i]
-						if (typeof v === 'string') {
-							const t = decode(v)
-							if (Array.isArray(t)) values = values.concat(t)
-							else values.push(t)
-
-							continue
-						}
-
-						values.push(v)
-					}
-
-					return values
-				}
-
-				if (typeof value === 'string') return decode(value)
-
-				// Is probably transformed, unable to check schema
-				return value
-			})
-			.Encode((value) => {
-				let original
-				if (typeof value === 'string')
-					value = tryParse((original = value), schema)
-
-				if (!compiler.Check(value))
-					throw new ValidationError('property', schema, value)
-
-				return original ?? JSON.stringify(value)
-			}) as any as TArray<T>
-	},
-
-	File: createType<FileOptions, File>(
-		'File',
-		validateFile
-	) as unknown as TFile,
-
-	Files: (options: FilesOptions = {}): TUnsafe<File[]> =>
-		t
-			.Transform(internalFiles(options))
-			.Decode((value) => {
-				if (Array.isArray(value)) return value
-				return [value]
-			})
-			.Encode((value) => value) as unknown as TUnsafe<File[]>,
-
-	Nullable: <T extends TSchema>(schema: T, options?: SchemaOptions) =>
-		t.Union([schema, t.Null()], {
-			...options,
-			nullable: true
-		}),
-
-	/**
-	 * Allow Optional, Nullable and Undefined
-	 */
-	MaybeEmpty: <T extends TSchema>(schema: T, options?: SchemaOptions) =>
-		t.Union([schema, t.Null(), t.Undefined()], options),
-
-	Cookie: <T extends TProperties>(
-		properties: T,
-		{
-			domain,
-			expires,
-			httpOnly,
-			maxAge,
-			path,
-			priority,
-			sameSite,
-			secure,
-			secrets,
-			sign,
-			...options
-		}: CookieValidatorOptions<T> = {}
-	) => {
-		const v = t.Object(properties, options)
-
-		v.config = {
-			domain,
-			expires,
-			httpOnly,
-			maxAge,
-			path,
-			priority,
-			sameSite,
-			secure,
-			secrets,
-			sign
-		}
-
-		return v
-	},
-
-	UnionEnum: <
-		const T extends
-			| NonEmptyArray<TEnumValue>
-			| Readonly<NonEmptyArray<TEnumValue>>
-	>(
-		values: T,
-		options: SchemaOptions = {}
-	) => {
-		const type = values.every((value) => typeof value === 'string')
-			? { type: 'string' }
-			: values.every((value) => typeof value === 'number')
-				? { type: 'number' }
-				: values.every((value) => value === null)
-					? { type: 'null' }
-					: {}
-
-		if (values.some((x) => typeof x === 'object' && x !== null))
+	for (const v of values) {
+		if (typeof v === 'object' && v !== null)
 			throw new Error('This type does not support objects or arrays')
 
-		return {
-			// default is need for generating error message
-			default: values[0],
-			...options,
-			[Kind]: 'UnionEnum',
-			...type,
-			enum: values
-		} as any as TUnionEnum<T>
-	},
+		const type = v === null ? 'null' : typeof v
 
-	NoValidate: <T extends TAnySchema>(v: T, enabled = true) => {
-		v.noValidate = enabled
+		if (!kind) kind = type as any
+		else if (kind !== type) mixed = true
+	}
 
-		return v
-	},
+	const schema = assignOrNew(options, {
+		default: values[0],
+		type: 'UnionEnum',
+		'~kind': 'UnionEnum',
+		enum: values
+	}) as any as TUnionEnum<T>
 
-	Form: <T extends TProperties>(
-		v: T,
-		options: ObjectOptions = {}
-	): TForm<T> => {
-		const schema = t.Object(v, {
-			default: form({}),
-			...options
-		})
-		const compiler = compile(schema)
+	if (!mixed) schema.type = kind
 
-		return t.Union([
-			schema,
-			// @ts-expect-error
-			internalFormData({
-				compiler
-			})
-		])
-	},
+	return t.Unsafe<TUnionEnum<T>>(schema)
+}
 
-	ArrayBuffer(options: TArrayBuffer = {}) {
-		return {
-			// default is need for generating error message
-			default: [1, 2, 3],
-			...options,
-			[Kind]: 'ArrayBuffer'
-		} as any as TUnsafe<ArrayBuffer>
-	},
+function _checkFileExtension(type: string, extension: string) {
+	if (type.startsWith(extension)) return true
 
-	Uint8Array: (options: Uint8ArrayOptions) => {
-		const schema = Type.Uint8Array(options)
-		const compiler = compile(schema)
+	return (
+		extension.charCodeAt(extension.length - 1) === 42 &&
+		extension.charCodeAt(extension.length - 2) === 47 &&
+		type.startsWith(extension.slice(0, -1))
+	)
+}
 
-		return t
-			.Transform(t.Union([t.ArrayBuffer(), Type.Uint8Array(options)]))
-			.Decode((value) => {
-				if (value instanceof ArrayBuffer) {
-					if (!compiler.Check((value = new Uint8Array(value))))
-						throw compiler.Error(value)
+function _parseFileUnit(size: FileUnit) {
+	if (typeof size !== 'string') return size
 
-					return value
-				}
+	switch (size.slice(-1)) {
+		case 'k':
+			return +size.slice(0, size.length - 1) * 1024
 
-				return value
-			})
-			.Encode((value) => value) as any as TUnsafe<Uint8Array>
+		case 'm':
+			return +size.slice(0, size.length - 1) * 1048576
+
+		default:
+			return +size
 	}
 }
 
-t.BooleanString = ElysiaType.BooleanString
-t.ObjectString = ElysiaType.ObjectString
-t.ArrayString = ElysiaType.ArrayString
-t.ArrayQuery = ElysiaType.ArrayQuery
-t.Numeric = ElysiaType.Numeric
-t.NumericEnum = ElysiaType.NumericEnum
-t.Integer = ElysiaType.Integer
+function File(options?: FileOptions) {
+	const refines: Refines<File> = [
+		[
+			// @ts-expect-error
+			(value) => value instanceof Blob || value instanceof ElysiaFile,
+			'Expect value to be instance of Blob'
+		]
+	]
 
-t.File = (arg) => {
-	if (arg?.type) loadFileType()
+	if (options) {
+		if (options.minSize) {
+			const minSize = _parseFileUnit(options.minSize!)
 
-	return ElysiaType.File({
-		default: 'File',
-		...arg,
-		extension: arg?.type,
-		type: 'string',
-		format: 'binary'
-	})
-}
-
-t.Files = (arg) => {
-	if (arg?.type) loadFileType()
-
-	return ElysiaType.Files({
-		...arg,
-		elysiaMeta: 'Files',
-		default: 'Files',
-		extension: arg?.type,
-		type: 'array',
-		items: {
-			...arg,
-			default: 'Files',
-			type: 'string',
-			format: 'binary'
+			refines.push([
+				(value) => value.size > minSize,
+				`Expect file size to be more than ${options.minSize}`
+			])
 		}
-	})
+
+		if (options.maxSize) {
+			const maxSize = _parseFileUnit(options.maxSize!)
+
+			refines.push([
+				(value) => value.size < maxSize,
+				`Expect file size to be less than ${options.maxSize}`
+			])
+		}
+
+		if (options.type) {
+			if (typeof options.type === 'string')
+				refines.push([
+					(value) =>
+						_checkFileExtension(
+							value.type,
+							options.type as FileType
+						),
+					`Expect file type to be ${options.type}`
+				])
+			else
+				refines.push([
+					(value) => {
+						for (let i = 0; i < options.type!.length; i++)
+							if (
+								_checkFileExtension(
+									value.type,
+									options.type![i]
+								)
+							)
+								return true
+
+						return false
+					},
+					`Expect file type to be one of ${options.type.join(', ')}`
+				])
+		}
+	}
+
+	return Refines(Type.Unsafe<File>({ type: 'File' }), refines)
 }
 
-t.Nullable = ElysiaType.Nullable
-t.MaybeEmpty = ElysiaType.MaybeEmpty
-t.Cookie = ElysiaType.Cookie
-t.Date = ElysiaType.Date
-t.UnionEnum = ElysiaType.UnionEnum
-t.NoValidate = ElysiaType.NoValidate
-t.Form = ElysiaType.Form
+function Files(options?: FilesOptions) {
+	const refines: Refines<File[]> = []
 
-t.ArrayBuffer = ElysiaType.ArrayBuffer
-t.Uint8Array = ElysiaType.Uint8Array as any
+	if (options) {
+		if (options.minItems && options.minItems > 1)
+			refines.push([
+				(value) =>
+					Array.isArray(value) && value.length >= options.minItems!,
+				`Expect at least ${options.minItems} files`
+			])
 
-export { t }
+		if (options.maxItems)
+			refines.push([
+				(value) =>
+					Array.isArray(value) && value.length <= options.maxItems!,
+				`Expect less than ${options.maxItems} files`
+			])
+	}
 
-export {
-	TypeSystemPolicy,
-	TypeSystem,
-	TypeSystemDuplicateFormat,
-	TypeSystemDuplicateTypeKind
-} from '@sinclair/typebox/system'
-export { TypeRegistry, FormatRegistry } from '@sinclair/typebox'
-export { TypeCompiler, TypeCheck } from '@sinclair/typebox/compiler'
+	return Refines(
+		Type.Decode(
+			Type.Union([
+				Type.Unsafe<File[]>({ ...options, type: 'Files' }),
+				Type.Array(Type.Unsafe<File>({ ...options, type: 'File' }))
+			]),
+			(value) => (Array.isArray(value) ? value : [value])
+		),
+		refines
+	)
+}
+
+function Form<T extends TProperties>(property: T, options?: TObjectOptions) {
+	return Type.Union([
+		Type.Decode(
+			Type.Refine(
+				Type.Unsafe<
+					FormData & { '~ely-form': Record<keyof any, unknown> }
+				>({ type: 'FormData' }),
+				(value) => '~ely-form' in value,
+				'Expect value to be instance of Elysia.form'
+			),
+			(value) => value['~ely-form']
+		),
+		Type.Object(property, options)
+	])
+}
+
+function NoValidate<T extends TSchema>(v: T, enabled = true) {
+	// @ts-ignore
+	if (enabled) v.noValidate = true
+
+	return v
+}
+
+let _emptyArrayBuffer: Type.TRefine<Type.TUnsafe<ArrayBuffer>>
+function ArrayBufferType(property?: ArrayBufferOptions) {
+	if (!property)
+		return (_emptyArrayBuffer ??= Type.Refine(
+			Type.Unsafe<ArrayBuffer>({ type: 'ArrayBuffer' }),
+			(value) => value instanceof ArrayBuffer,
+			'Expect value to be ArrayBuffer'
+		))
+
+	const refines: Refines<ArrayBuffer> = [
+		[
+			(value) => value instanceof ArrayBuffer,
+			'Expect value to be ArrayBuffer'
+		]
+	]
+
+	if (property.minByteLength)
+		refines.push([
+			(value) => value.byteLength > property.minByteLength!,
+			`Expect byte to be more than ${property.minByteLength}`
+		])
+
+	if (property.maxByteLength)
+		refines.push([
+			(value) => value.byteLength < property.maxByteLength!,
+			`Expect byte to be less than ${property.maxByteLength}`
+		])
+
+	return Refines(
+		Type.Unsafe<ArrayBuffer>(
+			assignOrNew(property, { type: 'ArrayBuffer' })
+		),
+		refines
+	)
+}
+
+let _emptyUint8Array: Type.TRefine<Type.TUnsafe<Uint8Array>>
+function Uint8ArrayType(property?: ArrayBufferOptions) {
+	if (!property)
+		return (_emptyUint8Array ??= Type.Refine(
+			Type.Unsafe<Uint8Array>({ type: 'Uint8Array' }),
+			(value) => value instanceof Uint8Array,
+			'Expect value to be Uint8Array'
+		))
+
+	const refines: Refines<Uint8Array> = [
+		[
+			(value) => value instanceof Uint8Array,
+			'Expect value to be Uint8Array'
+		]
+	]
+
+	if (property.minByteLength) {
+		refines.push([
+			(value) => value.byteLength >= property.minByteLength!,
+			`Expect byte to be more than ${property.minByteLength}`
+		])
+	}
+
+	if (property.maxByteLength)
+		refines.push([
+			(value) => value.byteLength <= property.maxByteLength!,
+			`Expect byte to be less than ${property.maxByteLength}`
+		])
+
+	return Refines(
+		Type.Unsafe<Uint8Array>(assignOrNew(property, { type: 'Uint8Array' })),
+		refines
+	)
+}
+
+export const t = Object.assign({}, Type, {
+	Numeric,
+	Integer,
+	BooleanString,
+	StringifiedObject,
+	StringifiedArray,
+	Date: DateType,
+	Nullable,
+	MaybeEmpty,
+	UnionEnum,
+	NoValidate,
+	File,
+	Files,
+	Form,
+	ArrayBuffer: ArrayBufferType,
+	Uint8Array: Uint8ArrayType
+})
+
+// Cookie: <T extends TProperties>(
+// 	property: T,
+// 	{
+// 		domain,
+// 		expires,
+// 		httpOnly,
+// 		maxAge,
+// 		path,
+// 		priority,
+// 		sameSite,
+// 		secure,
+// 		secrets,
+// 		sign,
+// 		...options
+// 	}: CookieValidatorOptions<T> = {}
+// ) => {
+// 	const v = t.Object(properties, options)
+// 	v.config = {
+// 		domain,
+// 		expires,
+// 		httpOnly,
+// 		maxAge,
+// 		path,
+// 		priority,
+// 		sameSite,
+// 		secure,
+// 		secrets,
+// 		sign
+// 	}
+// 	return v
+// },
+
+export { System } from 'typebox/system'

@@ -915,9 +915,6 @@ export const redirect = (
 
 export type redirect = typeof redirect
 
-export const ELYSIA_FORM_DATA = Symbol('ElysiaFormData')
-export type ELYSIA_FORM_DATA = typeof ELYSIA_FORM_DATA
-
 type IsTuple<T> = T extends readonly any[]
 	? number extends T['length']
 		? false
@@ -925,7 +922,7 @@ type IsTuple<T> = T extends readonly any[]
 	: false
 
 export type ElysiaFormData<T extends Record<keyof any, unknown>> = FormData & {
-	[ELYSIA_FORM_DATA]: Replace<T, Blob | ElysiaFile, File> extends infer A
+	['~ely-form']: Replace<T, Blob | ElysiaFile, File> extends infer A
 		? {
 				[key in keyof A]: IsTuple<A[key]> extends true
 					? // @ts-ignore Trust me bro
@@ -944,14 +941,14 @@ export const form = <const T extends Record<keyof any, unknown>>(
 	items: T
 ): ElysiaFormData<T> => {
 	const formData = new FormData()
-	// @ts-ignore
-	formData[ELYSIA_FORM_DATA] = {}
+	// @ts-expect-error
+	formData['~ely-form'] = {}
 
 	if (items)
 		for (const [key, value] of Object.entries(items)) {
 			if (Array.isArray(value)) {
 				// @ts-expect-error
-				formData[ELYSIA_FORM_DATA][key] = []
+				formData['~ely-form'][key] = []
 
 				for (const v of value) {
 					if (value instanceof File)
@@ -962,7 +959,7 @@ export const form = <const T extends Record<keyof any, unknown>>(
 					else formData.append(key, value as any)
 
 					// @ts-expect-error
-					formData[ELYSIA_FORM_DATA][key].push(value)
+					formData[`~ely-form`][key].push(value)
 				}
 
 				continue
@@ -974,7 +971,7 @@ export const form = <const T extends Record<keyof any, unknown>>(
 				formData.append(key, value.value, value.value?.name)
 			else formData.append(key, value as any)
 			// @ts-expect-error
-			formData[ELYSIA_FORM_DATA][key] = value
+			formData['~ely-form'][key] = value
 		}
 
 	return formData as any

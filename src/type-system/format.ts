@@ -235,9 +235,6 @@ const isFormalDate =
 const isShortenDate =
 	/^(?:(?:(?:(?:0?[1-9]|[12][0-9]|3[01])[/\s-](?:0?[1-9]|1[0-2])[/\s-](?:19|20)\d{2})|(?:(?:19|20)\d{2}[/\s-](?:0?[1-9]|1[0-2])[/\s-](?:0?[1-9]|[12][0-9]|3[01]))))(?:\s(?:1[012]|0?[1-9]):[0-5][0-9](?::[0-5][0-9])?(?:\s[AP]M)?)?$/
 
-const _validateDate = fullFormats.date
-const _validateDateTime = fullFormats['date-time']
-
 if (!FormatRegistry.Has('date'))
 	FormatRegistry.Set('date', (value: string) => {
 		// Remove quote from stringified date
@@ -247,7 +244,7 @@ if (!FormatRegistry.Has('date'))
 			isISO8601.test(temp) ||
 			isFormalDate.test(temp) ||
 			isShortenDate.test(temp) ||
-			_validateDate(temp)
+			fullFormats.date(temp)
 		) {
 			const date = new Date(temp)
 			if (!Number.isNaN(date.getTime())) return true
@@ -265,7 +262,7 @@ if (!FormatRegistry.Has('date-time'))
 			isISO8601.test(temp) ||
 			isFormalDate.test(temp) ||
 			isShortenDate.test(temp) ||
-			_validateDateTime(temp)
+			fullFormats['date-time'](temp)
 		) {
 			const date = new Date(temp)
 			if (!Number.isNaN(date.getTime())) return true
@@ -284,56 +281,3 @@ Object.entries(fullFormats).forEach((formatEntry) => {
 			FormatRegistry.Set(formatName, formatValue)
 	}
 })
-
-if (!FormatRegistry.Has('numeric'))
-	FormatRegistry.Set('numeric', (value) => !!value && !isNaN(+value))
-
-if (!FormatRegistry.Has('integer'))
-	FormatRegistry.Set(
-		'integer',
-		(value) => !!value && Number.isInteger(+value)
-	)
-
-if (!FormatRegistry.Has('boolean'))
-	FormatRegistry.Set(
-		'boolean',
-		(value) => value === 'true' || value === 'false'
-	)
-
-if (!FormatRegistry.Has('ObjectString'))
-	FormatRegistry.Set('ObjectString', (value) => {
-		let start = value.charCodeAt(0)
-
-		// If starts with ' ', '\t', '\n', then trim first
-		if (start === 9 || start === 10 || start === 32)
-			start = value.trimStart().charCodeAt(0)
-
-		if (start !== 123 && start !== 91) return false
-
-		try {
-			JSON.parse(value)
-
-			return true
-		} catch {
-			return false
-		}
-	})
-
-if (!FormatRegistry.Has('ArrayString'))
-	FormatRegistry.Set('ArrayString', (value) => {
-		let start = value.charCodeAt(0)
-
-		// If starts with ' ', '\t', '\n', then trim first
-		if (start === 9 || start === 10 || start === 32)
-			start = value.trimStart().charCodeAt(0)
-
-		if (start !== 123 && start !== 91) return false
-
-		try {
-			JSON.parse(value)
-
-			return true
-		} catch {
-			return false
-		}
-	})
