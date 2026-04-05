@@ -1,4 +1,4 @@
-import { FormatRegistry } from '@sinclair/typebox'
+import { Format } from 'typebox/format'
 
 /**
  * ? Fork of ajv-formats without ajv as dependencies
@@ -7,7 +7,7 @@ import { FormatRegistry } from '@sinclair/typebox'
  **/
 
 /* eslint-disable no-control-regex */
-export type FormatName =
+type FormatName =
 	| 'date'
 	| 'time'
 	| 'date-time'
@@ -235,8 +235,8 @@ const isFormalDate =
 const isShortenDate =
 	/^(?:(?:(?:(?:0?[1-9]|[12][0-9]|3[01])[/\s-](?:0?[1-9]|1[0-2])[/\s-](?:19|20)\d{2})|(?:(?:19|20)\d{2}[/\s-](?:0?[1-9]|1[0-2])[/\s-](?:0?[1-9]|[12][0-9]|3[01]))))(?:\s(?:1[012]|0?[1-9]):[0-5][0-9](?::[0-5][0-9])?(?:\s[AP]M)?)?$/
 
-if (!FormatRegistry.Has('date'))
-	FormatRegistry.Set('date', (value: string) => {
+if (!Format.Has('date'))
+	Format.Set('date', (value) => {
 		// Remove quote from stringified date
 		const temp = parseDateTimeEmptySpace(value).replace(/"/g, '')
 
@@ -253,8 +253,8 @@ if (!FormatRegistry.Has('date'))
 		return false
 	})
 
-if (!FormatRegistry.Has('date-time'))
-	FormatRegistry.Set('date-time', (value: string) => {
+if (!Format.Has('date-time'))
+	Format.Set('date-time', (value) => {
 		// Remove quote from stringified date
 		const temp = value.replace(/"/g, '')
 
@@ -271,13 +271,9 @@ if (!FormatRegistry.Has('date-time'))
 		return false
 	})
 
-Object.entries(fullFormats).forEach((formatEntry) => {
-	const [formatName, formatValue] = formatEntry
-
-	if (!FormatRegistry.Has(formatName)) {
-		if (formatValue instanceof RegExp)
-			FormatRegistry.Set(formatName, (value) => formatValue.test(value))
-		else if (typeof formatValue === 'function')
-			FormatRegistry.Set(formatName, formatValue)
+for (const [name, format] of Object.entries(fullFormats))
+	if (!Format.Has(name)) {
+		if (format instanceof RegExp)
+			Format.Set(name, (value) => format.test(value))
+		else if (typeof format === 'function') Format.Set(name, format)
 	}
-})

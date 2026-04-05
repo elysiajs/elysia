@@ -21,8 +21,8 @@ import type {
 } from './types'
 
 import { ElysiaFile } from '../universal/file'
-import { ElysiaFormData, isEmpty, isNotEmpty } from '../utils'
-import { StandardJSONSchemaV1Like } from '../types'
+import { isEmpty, type ElysiaFormData } from '../utils'
+import type { StandardJSONSchemaV1Like } from '../types'
 
 function assignOrNew<
 	T extends Record<keyof any, unknown> | undefined,

@@ -217,12 +217,15 @@ export type ElysiaTypeCustomErrorCallback = (
 	validator: Validator<any>
 ) => unknown
 
+type BaseSchemaRecord = Record<string, BaseSchema>
+
 export interface BaseSchema {
 	'~kind': string
 	'~elyTyp'?: ELYSIA_TYPES[keyof ELYSIA_TYPES]
 	id?: string
 	type?: string
 	$schema?: string
+	const?: unknown[]
 	// title?: string
 	// description?: string
 	// multipleOf?: number
@@ -232,7 +235,7 @@ export interface BaseSchema {
 	// exclusiveMinimum?: boolean
 	// maxLength?: number
 	// minLength?: number
-	pattern?: string
+	// pattern?: string
 	additionalItems?: boolean | BaseSchema
 	items?: BaseSchema | BaseSchema[]
 	// maxItems?: number
@@ -242,25 +245,17 @@ export interface BaseSchema {
 	// minProperties?: number
 	required?: string[]
 	additionalProperties?: boolean | BaseSchema
-	definitions?: {
-		[name: string]: BaseSchema
-	}
-	properties?: {
-		[name: string]: BaseSchema
-	}
-	patternProperties?: {
-		[name: string]: BaseSchema
-	}
-	dependencies?: {
-		[name: string]: BaseSchema | string[]
-	}
-	enum?: any[]
+	definitions?: BaseSchemaRecord
+	properties?: BaseSchemaRecord
+	patternProperties?: BaseSchemaRecord
+	dependencies?: BaseSchemaRecord
+	enum?: unknown[]
 	allOf?: BaseSchema[]
 	anyOf?: BaseSchema[]
 	oneOf?: BaseSchema[]
 	not?: BaseSchema
 	$ref?: string
-	$defs?: Record<string, BaseSchema>
+	$defs?: BaseSchema
 }
 
 declare module 'typebox' {

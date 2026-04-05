@@ -2,13 +2,17 @@ import type { TSchema } from 'typebox'
 import { Compile } from 'typebox/compile'
 import type { Validator } from 'typebox/compile'
 import type { TLocalizedValidationError } from 'typebox/error'
-import { MaybeArray, StandardSchemaV1Like } from '../types'
+import { createMirror } from 'exact-mirror'
+
 import { t } from '../type-system'
-import { applyCoercions, coerce, type CoerceOption } from './coerce'
+import { applyCoercions, type CoerceOption } from './coerce'
+import type { ElysiaConfig, MaybeArray, StandardSchemaV1Like } from '../types'
 
 interface ElysiaValidatorParams {
 	schemas?: (TSchema | StandardSchemaV1Like)[]
 	coerces?: CoerceOption[]
+	normalize?: boolean | 'exactMirror' | 'typebox'
+	sanitize?: ElysiaConfig<any>['sanitize']
 }
 
 const returnAsIs = (v: unknown) => v
@@ -139,7 +143,16 @@ export class ElysiaValidator {
 			this.Errors = this.tb.Errors.bind(this.tb)
 			this.Decode = this.tb.Decode.bind(this.tb)
 			this.Encode = this.tb.Encode.bind(this.tb)
-			this.Clean = this.tb.Clean.bind(this.tb)
+
+			this.Clean =
+				!params?.normalize || params.normalize === 'exactMirror'
+					? createMirror(schema, {
+							Compile,
+							sanitize: params?.sanitize
+						})
+					: params.normalize === 'typebox'
+						? this.tb.Clean.bind(this.tb)
+						: returnAsIs
 		} else if ('~standard' in schema) {
 			const standard = schema['~standard']
 

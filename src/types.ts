@@ -198,11 +198,10 @@ export interface ElysiaConfig<in out Prefix extends string | undefined> {
 	 */
 	analytic?: boolean
 	/**
-	 * If enabled, the schema with `t.Transform` will call `Encode` before sending the response
+	 * If enabled, Elysia will call `Encode` before sending the response
 	 *
 	 * @default true
 	 * @since 1.3.0
-	 * @since 1.2.16 (experimental)
 	 **/
 	encodeSchema?: boolean
 	/**
@@ -224,7 +223,7 @@ export interface ElysiaConfig<in out Prefix extends string | undefined> {
 	 *
 	 * Note: This option only works when Elysia schema is provided, doesn't work with Standard Schema
 	 *
-	 * @default true
+	 * @default 'exactMirror'
 	 */
 	normalize?: boolean | 'exactMirror' | 'typebox'
 	handler?: ComposerGeneralHandlerOptions
@@ -2644,10 +2643,10 @@ export type MergeTypeModule<
 	B extends TModule<any, any>
 > = TModule<Prettify<UnwrapTypeModule<A> & UnwrapTypeModule<B>>>
 
-export type SSEPayload<
+export interface SSEPayload<
 	Data extends unknown = unknown,
 	Event extends string | undefined = string | undefined
-> = {
+> {
 	/** id of the event */
 	id?: string | number | null
 	/** event name */

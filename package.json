@@ -190,7 +190,7 @@
 	},
 	"dependencies": {
 		"cookie": "^1.1.1",
-		"exact-mirror": "^0.2.7",
+		"exact-mirror": "^1.0.0",
 		"fast-decode-uri-component": "^1.0.1",
 		"memoirist": "^0.4.0",
 		"typebox": "^1.1.14"
@@ -211,12 +211,12 @@
 		"eslint-plugin-security": "^4.0.0",
 		"eslint-plugin-sonarjs": "^4.0.2",
 		"expect-type": "^1.2.1",
-		"file-type": "^20.4.1",
+		"file-type": "^22.0.0",
 		"globals": "^17.4.0",
 		"knip": "^5.64.1",
 		"prettier": "^3.5.3",
 		"tsup": "^8.4.0",
-		"typescript": "^5.8.3",
+		"typescript": "^6.0.2",
 		"valibot": "^1.1.0",
 		"zod": "^4.1.5"
 	},

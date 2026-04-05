@@ -1,6 +1,5 @@
 import Compile from 'typebox/compile'
 import { ElysiaValidator } from '../src/schema/validator'
-import { hasType, hasTypes } from '../src/schema/utils'
 import { t } from '../src/type-system'
 import { z } from 'zod'
 import { coerceRoot } from '../src/schema/coerce'
@@ -25,3 +24,13 @@ const q = new ElysiaValidator(a, {
 		)
 	]
 })
+
+console.log(
+	q.Clean({
+		hello: 'world',
+		a: '1',
+		b: 2,
+		c: 3,
+		asdf: 'a'
+	})
+)
