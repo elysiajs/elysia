@@ -60,12 +60,24 @@ export interface StandardSchemaV1Like<
 	in out Output = Input
 > {
 	readonly '~standard': {
-		readonly types?:
-			| {
-					readonly input: Input
-					readonly output: Output
-			  }
-			| undefined
+		readonly types: {
+			readonly input: Input
+			readonly output: Output
+		}
+	}
+}
+
+type StandardJSONSchemaV1LikeIO = (params: {
+	readonly target: string
+}) => Record<string, unknown>
+
+// Standard JSON Schema reduce to bare minimum to save inference time
+export interface StandardJSONSchemaV1Like {
+	readonly '~standard': {
+		readonly jsonSchema: {
+			readonly input: StandardJSONSchemaV1LikeIO
+			readonly output: StandardJSONSchemaV1LikeIO
+		}
 	}
 }
 

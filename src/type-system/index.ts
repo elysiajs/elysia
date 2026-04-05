@@ -22,6 +22,7 @@ import type {
 
 import { ElysiaFile } from '../universal/file'
 import { ElysiaFormData, isEmpty, isNotEmpty } from '../utils'
+import { StandardJSONSchemaV1Like } from '../types'
 
 function assignOrNew<
 	T extends Record<keyof any, unknown> | undefined,
@@ -44,8 +45,8 @@ export const ELYSIA_TYPES = {
 	Numeric: 1,
 	Integer: 2,
 	BooleanString: 3,
-	StringifiedObject: 4,
-	StringifiedArray: 5,
+	ObjectString: 4,
+	ArrayString: 5,
 	Date: 6,
 	Nullable: 7,
 	MaybeEmpty: 8,
@@ -147,12 +148,12 @@ function BooleanString(property?: TSchemaOptions) {
 	)
 }
 
-function StringifiedObject<T extends TProperties>(
+function ObjectString<T extends TProperties>(
 	property: T,
 	options?: TObjectOptions
 ) {
 	let parsed: Record<keyof any, unknown>
-	const _StringifiedObject = Type.Decode(
+	const _ObjectString = Type.Decode(
 		Type.Refine(
 			Type.String(),
 			(value) => {
@@ -179,17 +180,17 @@ function StringifiedObject<T extends TProperties>(
 
 	const object = Type.Object(property, options)
 	return elyType(
-		ELYSIA_TYPES.StringifiedObject,
-		Type.Union([object, Type.Union([_StringifiedObject, object])])
+		ELYSIA_TYPES.ObjectString,
+		Type.Union([object, Type.Union([_ObjectString, object])])
 	)
 }
 
-function StringifiedArray<T extends TProperties>(
+function ArrayString<T extends TProperties>(
 	property: T,
 	options?: TObjectOptions
 ) {
 	let parsed: unknown[]
-	const _StringifiedArray = Type.Decode(
+	const _ArrayString = Type.Decode(
 		Type.Refine(
 			Type.String(),
 			(value) => {
@@ -214,8 +215,8 @@ function StringifiedArray<T extends TProperties>(
 
 	const array = Type.Array(property, options)
 	return elyType(
-		ELYSIA_TYPES.StringifiedArray,
-		Type.Union([array, Type.Union([_StringifiedArray, array])])
+		ELYSIA_TYPES.ArrayString,
+		Type.Union([array, Type.Union([_ArrayString, array])])
 	)
 }
 
@@ -326,7 +327,6 @@ function UnionEnum<
 
 	const schema = assignOrNew(options, {
 		default: values[0],
-		'~kind': 'UnionEnum',
 		'~kind': 'UnionEnum',
 		enum: values
 	}) as any as TUnionEnum<T>
@@ -562,12 +562,27 @@ function Uint8ArrayType(property?: ArrayBufferOptions) {
 	)
 }
 
+function Accelerate(schema: StandardJSONSchemaV1Like) {
+	const jsonSchema =
+		// @ts-expect-error
+		schema.toJSONSchema?.() ??
+		// @ts-expect-error
+		schema.toJsonSchema?.() ??
+		schema['~standard'].jsonSchema.input({
+			target: 'draft-2020-12'
+		})
+
+	jsonSchema['~elyAcl'] = true
+
+	return jsonSchema
+}
+
 export const t = Object.assign({}, Type, {
 	Numeric,
 	Integer,
 	BooleanString,
-	StringifiedObject,
-	StringifiedArray,
+	ObjectString,
+	ArrayString,
 	Date: DateType,
 	Nullable,
 	MaybeEmpty,
@@ -577,7 +592,8 @@ export const t = Object.assign({}, Type, {
 	Files,
 	Form,
 	ArrayBuffer: ArrayBufferType,
-	Uint8Array: Uint8ArrayType
+	Uint8Array: Uint8ArrayType,
+	Accelerate
 })
 
 // Cookie: <T extends TProperties>(

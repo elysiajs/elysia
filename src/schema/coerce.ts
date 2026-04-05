@@ -1,12 +1,13 @@
-import type { BaseSchema } from '../type-system'
+import { TSchema } from 'typebox'
+import { t, type BaseSchema } from '../type-system'
 
-export interface CoercionOptions {
+interface CoerceOptions {
 	/**
-	 * Replace schema
+	 * Replace root
 	 *
 	 * - `true`: Replace only schema on root level
-	 * - `false`: Replace schema that is not on root level
-	 * - `undefined`: Replace all schemas regardless of their level
+	 * - `false`: Replace schema NOT on root level
+	 * - `undefined`: Replace all schemas regardless of level
 	 */
 	root?: boolean | undefined
 	/**
@@ -25,9 +26,9 @@ type CoerceTo = (schema: BaseSchema) => BaseSchema | null
  * Replace schema types with custom transformation
  */
 export function coerce(
-	schema: BaseSchema,
+	schema: BaseSchema | TSchema,
 	fromTo: [from: string, to: CoerceTo][],
-	options?: CoercionOptions
+	options?: CoerceOptions
 ): BaseSchema {
 	const transformMap = new Map<string, CoerceTo>(fromTo)
 
@@ -200,5 +201,69 @@ export function coerce(
 		return out
 	}
 
-	return walk(schema, true)
+	return walk(schema as any, true)
+}
+
+type CoerceParameters = Parameters<typeof coerce>
+export type CoerceOption =
+	| [CoerceParameters[1]]
+	| [CoerceParameters[1], CoerceParameters[2]]
+
+const q: CoerceOption[] = [
+	[
+		[['Number', (a) => t.Numeric()]],
+		{
+			root: true
+		}
+	],
+	[
+		[['Number', (a) => t.Numeric()]],
+		{
+			root: true
+		}
+	]
+]
+
+let _coerceRoot: CoerceOption[]
+export const coerceRoot = () =>
+	(_coerceRoot ??= [
+		[
+			[
+				['Number', (x) => t.Numeric(x as any)],
+				['Boolean', (x) => t.BooleanString(x as any)]
+			],
+			{
+				onlyFirst: 'object'
+			}
+		]
+	])
+
+let _coerceQuery: CoerceOption[]
+export const coerceQuery = () =>
+	(_coerceQuery ??= [
+		[
+			[['Object', (x) => t.ObjectString(x.properties ?? {}, x as any)]],
+			{
+				root: false
+			}
+		],
+		[
+			[
+				[
+					'Array',
+					(x) => t.ArrayString((x.items as any) ?? t.Any(), x as any)
+				]
+			]
+		]
+	])
+
+export function applyCoercions(
+	schema: BaseSchema | TSchema,
+	coerces: CoerceOption[] | undefined
+) {
+	if (coerces)
+		for (const coercion of coerces)
+			schema = coerce(schema, coercion[0], coercion[1])
+
+	return schema
 }

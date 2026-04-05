@@ -113,6 +113,7 @@ export const mergeDeep = <
 
 	return target as A & B
 }
+
 export const mergeCookie = <const A extends Object, const B extends Object>(
 	a: A,
 	b: B
