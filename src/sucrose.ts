@@ -663,7 +663,7 @@ export const sucrose = (
 		route: false,
 		path: false
 	},
-	settings: Sucrose.Settings = {}
+	settings?: Sucrose.Settings
 ): Sucrose.Inference => {
 	const events = <(Handler | HookContainer)[]>[]
 
@@ -700,7 +700,7 @@ export const sucrose = (
 		// it's likely that server is either idle or
 		// no new compilation is happening
 		// Clear the cache to free up memory
-		clearSucroseCache(settings.gcTime)
+		clearSucroseCache(settings?.gcTime)
 
 		const fnInference: Sucrose.Inference = {
 			query: false,

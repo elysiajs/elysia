@@ -1,5 +1,5 @@
 import { TSchema } from 'typebox'
-import { t, type BaseSchema } from '../type-system'
+import { primitiveElysiaTypes, t, type BaseSchema } from '../type'
 
 interface CoerceOptions {
 	/**
@@ -31,16 +31,21 @@ export function coerce(
 	options?: CoerceOptions
 ): BaseSchema {
 	const transformMap = new Map<string, CoerceTo>(fromTo)
-
-	// Cache options to avoid repeated optional chaining
 	const rootOption = options?.root
-
 	const seen = new WeakSet()
 	let stopped = false
 
 	function walk(node: BaseSchema, isRoot: boolean): BaseSchema {
-		if (!node || typeof node !== 'object' || stopped) return node
-		if (seen.has(node)) return node
+		if (
+			!node ||
+			stopped ||
+			seen.has(node) ||
+			typeof node !== 'object' ||
+			(node['~elyTyp'] &&
+				primitiveElysiaTypes.has(node['~elyTyp'] as any))
+		)
+			return node
+
 		seen.add(node)
 
 		const kind = node['~kind'] as string | undefined
@@ -76,7 +81,7 @@ export function coerce(
 
 		// Inline copy-on-write helper to avoid closure allocation
 		// `~kind` is non-enumerable in TypeBox, so we reassign it after spread
-		const copyNode = () => {
+		function copyNode() {
 			if (out === node) out = { ...node, '~kind': kind }
 		}
 
@@ -110,8 +115,8 @@ export function coerce(
 		}
 
 		// Items (array or tuple)
-		const items = node.items
-		if (items) {
+		if (node.items) {
+			const items = node.items
 			if (Array.isArray(items)) {
 				let newItems: BaseSchema[] | undefined
 				for (let i = 0, len = items.length; i < len; i++) {
@@ -137,9 +142,9 @@ export function coerce(
 		}
 
 		// Object properties - use for...in instead of Object.entries()
-		const props = node.properties
-		if (props) {
+		if (node.properties) {
 			let newProps: Record<string, BaseSchema> | undefined
+			const props = node.properties
 			for (const k in props) {
 				const v = props[k]!
 				const r = walk(v, false)
@@ -184,16 +189,16 @@ export function coerce(
 			}
 		}
 
-		// Cyclic — unwrap only the referenced def
-		const $ref = node.$ref
-		const $defs = node.$defs
-		if (kind === 'Cyclic' && $defs && $ref) {
-			const def = $defs[$ref] as BaseSchema | undefined
+		if (kind === 'Cyclic') {
+			const def = node.$defs![
+				node.$ref as keyof typeof node.$defs
+			] as unknown as BaseSchema | undefined
+
 			if (def) {
 				const r = walk(def, false)
 				if (r !== def) {
 					copyNode()
-					out.$defs = { ...$defs, [$ref]: r }
+					out.$defs = { ...node.$defs, [node.$ref!]: r }
 				}
 			}
 		}
@@ -245,6 +250,50 @@ export const coerceQuery = () =>
 			[['Object', (x) => t.ObjectString(x.properties ?? {}, x as any)]],
 			{
 				root: false
+			}
+		],
+		[
+			[
+				[
+					'Array',
+					(x) => t.ArrayString((x.items as any) ?? t.Any(), x as any)
+				]
+			]
+		]
+	])
+
+let _coerceFormData: CoerceOption[]
+export const coerceFormData = () =>
+	(_coerceFormData ??= [
+		[
+			[['Object', (x) => t.ObjectString(x.properties ?? {}, x as any)]],
+			{
+				root: false,
+				onlyFirst: 'object'
+			}
+		],
+		[
+			[
+				[
+					'Array',
+					(x) => t.ArrayString((x.items as any) ?? t.Any(), x as any)
+				]
+			],
+			{
+				root: false,
+				onlyFirst: 'array'
+			}
+		]
+	])
+
+// headers, params
+let _coerceStringToStructure: CoerceOption[]
+export const coerceStringToStructure = () =>
+	(_coerceStringToStructure ??= [
+		[
+			[['Object', (x) => t.ObjectString(x.properties ?? {}, x as any)]],
+			{
+				untilNonRootObjectFound: true
 			}
 		],
 		[

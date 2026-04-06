@@ -1,36 +1,22 @@
-import Compile from 'typebox/compile'
-import { ElysiaValidator } from '../src/schema/validator'
-import { t } from '../src/type-system'
-import { z } from 'zod'
-import { coerceRoot } from '../src/schema/coerce'
+import { coerce } from '../src/schema/coerce'
+import { hasType } from '../src/schema/utils'
+import { ELYSIA_TYPES, t } from '../src/type'
 
-const a = t.Object({
-	hello: t.String()
-})
-
-const q = new ElysiaValidator(a, {
-	coerces: coerceRoot(),
-	schemas: [
-		t.Object({
-			a: t.Number()
-		}),
-		t.Object({
-			b: t.String()
-		}),
-		t.Accelerate(
-			z.object({
-				c: z.string()
-			})
-		)
-	]
-})
-
-console.log(
-	q.Clean({
-		hello: 'world',
-		a: '1',
-		b: 2,
-		c: 3,
-		asdf: 'a'
+const schema = t.Object({
+	hello: t.String(),
+	b: t.Object({
+		a: t.Numeric()
 	})
-)
+})
+
+console.dir(schema, {
+	depth: null
+})
+
+const q = coerce(schema, [['String', () => t.Number()]])
+
+console.dir(q, {
+	depth: null
+})
+
+console.log(hasType(ELYSIA_TYPES.File, schema))

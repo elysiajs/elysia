@@ -4,7 +4,7 @@ import type { Validator } from 'typebox/compile'
 import type { TLocalizedValidationError } from 'typebox/error'
 import { createMirror } from 'exact-mirror'
 
-import { t } from '../type-system'
+import { t } from '../type'
 import { applyCoercions, type CoerceOption } from './coerce'
 import type { ElysiaConfig, MaybeArray, StandardSchemaV1Like } from '../types'
 
@@ -144,15 +144,25 @@ export class ElysiaValidator {
 			this.Decode = this.tb.Decode.bind(this.tb)
 			this.Encode = this.tb.Encode.bind(this.tb)
 
-			this.Clean =
-				!params?.normalize || params.normalize === 'exactMirror'
-					? createMirror(schema, {
-							Compile,
-							sanitize: params?.sanitize
-						})
-					: params.normalize === 'typebox'
-						? this.tb.Clean.bind(this.tb)
-						: returnAsIs
+			try {
+				this.Clean =
+					!params?.normalize || params.normalize === 'exactMirror'
+						? createMirror(schema, {
+								Compile,
+								sanitize: params?.sanitize
+							})
+						: params.normalize === 'typebox'
+							? this.tb.Clean.bind(this.tb)
+							: returnAsIs
+			} catch (error) {
+				console.warn(
+					'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
+				)
+				console.warn(schema)
+				console.warn(error)
+
+				this.Clean = this.tb.Clean.bind(this.tb)
+			}
 		} else if ('~standard' in schema) {
 			const standard = schema['~standard']
 

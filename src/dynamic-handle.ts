@@ -11,7 +11,7 @@ import {
 import type { AnyElysia, CookieOptions } from './index'
 import { parseQuery } from './parse-query'
 import { getSchemaProperties, type ElysiaTypeCheck } from './schema'
-import type { TypeCheck } from './type-system'
+import type { TypeCheck } from './type'
 import type { Handler, LifeCycleStore, SchemaValidator } from './types'
 import { hasSetImmediate, redirect, StatusMap, signCookie } from './utils'
 

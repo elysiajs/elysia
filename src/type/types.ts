@@ -1,6 +1,6 @@
 import type { TObjectOptions, TSchemaOptions } from 'typebox'
 import type { TLocalizedValidationError } from 'typebox/error'
-import type { Validator } from 'typebox/compile'
+import type { Validator } from 'typebox/schema'
 
 import type { ELYSIA_TYPES } from './index'
 import type { CookieOptions } from '../cookies'

@@ -1,5 +1,5 @@
 import { Kind, type TAnySchema, type TSchema } from '@sinclair/typebox'
-import { t } from './type-system'
+import { t } from './type'
 import type { MaybeArray } from './types'
 
 export interface ReplaceSchemaTypeOptions {
@@ -148,41 +148,6 @@ const replaceSchemaTypeFromOption = (
 	}
 
 	return walk({ s: schema, isRoot: true, treeLvl: 0 })
-}
-
-/**
- * Helper: Extract plain Object from ObjectString
- *
- * @example
- * ObjectString structure:
- * {
- *   elysiaMeta: "ObjectString",
- *   anyOf: [
- *     { type: "string", format: "ObjectString" },  // ← String branch
- *     { type: "object", properties: {...} }        // ← Object branch (we want this)
- *   ]
- * }
- * ArrayString structure:
- * {
- *   elysiaMeta: "ArrayString",
- *   anyOf: [
- *     { type: "string", format: "ArrayString" },  // ← String branch
- *     { type: "array", items: {...} }             // ← Array branch (we want this)
- *   ]
- * }
- */
-export const revertObjAndArrStr = (schema: TSchema): TSchema => {
-	if (
-		schema.elysiaMeta !== 'ObjectString' &&
-		schema.elysiaMeta !== 'ArrayString'
-	)
-		return schema
-
-	const anyOf = schema.anyOf
-	if (!anyOf?.[1]) return schema
-
-	// anyOf[1] is the object branch (already clean, no elysiaMeta)
-	return anyOf[1]
 }
 
 let _stringToStructureCoercions: ReplaceSchemaTypeOptions[]

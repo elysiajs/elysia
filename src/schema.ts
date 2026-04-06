@@ -1,6 +1,6 @@
 /* eslint-disable sonarjs/no-duplicate-string */
 import type { TModule, TObject, TSchema } from 'typebox'
-import { Compile, type Validator } from 'typebox/compile'
+import { type Validator } from 'typebox/schema'
 
 // import { Value } from '@sinclair/typebox/value'
 // import { TypeCompiler } from '@sinclair/typebox/compiler'
@@ -10,7 +10,7 @@ import {
 	type Instruction as ExactMirrorInstruction
 } from 'exact-mirror'
 
-import { t } from './type-system'
+import { t } from './type'
 
 import { mergeCookie, mergeDeep, randomId } from './utils'
 import { mapValueError } from './error'
@@ -33,7 +33,7 @@ import {
 	type ReplaceSchemaTypeOptions,
 	stringToStructureCoercions
 } from './replace-schema'
-import type { BaseSchema } from './type-system'
+import type { BaseSchema } from './type'
 
 type MapValueError = ReturnType<typeof mapValueError>
 

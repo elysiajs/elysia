@@ -1,14 +1,16 @@
 import { Type } from 'typebox'
 import type {
+	Static,
 	TSchemaOptions,
 	TEnumValue,
 	TProperties,
 	TSchema,
 	TNumberOptions,
-	TObjectOptions,
-	Static
+	TObjectOptions
 } from 'typebox'
 
+import { isEmpty, type ElysiaFormData } from '../utils'
+import { ElysiaFile } from '../universal/file'
 import type {
 	FilesOptions,
 	NonEmptyArray,
@@ -19,26 +21,7 @@ import type {
 	FileUnit,
 	FileType
 } from './types'
-
-import { ElysiaFile } from '../universal/file'
-import { isEmpty, type ElysiaFormData } from '../utils'
 import type { StandardJSONSchemaV1Like } from '../types'
-
-function assignOrNew<
-	T extends Record<keyof any, unknown> | undefined,
-	R extends Record<keyof any, unknown>
->(target: T, source: R): undefined extends T ? R : T & R {
-	if (target) return Object.assign(target, source)
-
-	return source as unknown as T & R
-}
-
-function Refines<T extends TSchema>(schema: T, refines: Refines<Static<T>>) {
-	for (const [refine, message] of refines)
-		schema = Type.Refine(schema, refine, message)
-
-	return schema
-}
 
 // Start at 1 to prevent falsy value check
 export const ELYSIA_TYPES = {
@@ -70,7 +53,33 @@ function elyType<T extends TSchema>(
 	return schema
 }
 
+export const primitiveElysiaTypes = new Set([
+	ELYSIA_TYPES.Numeric,
+	ELYSIA_TYPES.Integer,
+	ELYSIA_TYPES.BooleanString,
+	ELYSIA_TYPES.Date,
+	ELYSIA_TYPES.File,
+	ELYSIA_TYPES.Files,
+	ELYSIA_TYPES.ArrayBuffer,
+	ELYSIA_TYPES.Uint8Array
+])
+
+function assignOrNew<
+	T extends Record<keyof any, unknown> | undefined,
+	R extends Record<keyof any, unknown>
+>(target: T, source: R): undefined extends T ? R : T & R {
+	if (target) return Object.assign(target, source)
+
+	return source as unknown as T & R
+}
+
 type Refines<T> = [refine: (value: T) => boolean, message: string][]
+function Refines<T extends TSchema>(schema: T, refines: Refines<Static<T>>) {
+	for (const [refine, message] of refines)
+		schema = Type.Refine(schema, refine, message)
+
+	return schema
+}
 
 let _StringifiedNumber: Type.TCodec<Type.TRefine<Type.TString>, number>
 let _emptyNumeric: Type.TUnion<
