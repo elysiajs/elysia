@@ -1,25 +1,27 @@
-import { Compile } from 'typebox/schema'
 import { t } from '../src/type'
-import { run, bench, boxplot, summary } from 'mitata'
-import { Errors } from 'typebox/value'
+import { RouteValidator } from '../src/schema/route'
 
-const schema = t.Object({
-	hello: t.String(),
-	a: t.Decode(t.String(), (value) => +value)
+const route = new RouteValidator({
+	body: t.Object({
+		name: t.String(),
+		age: t.Number()
+	}),
+	response: {
+		200: t.Object({
+			name: t.String(),
+			age: t.Number()
+		})
+	}
 })
 
-const a = Compile(schema)
+const body = route.body
 
-bench('Compile.Errors', () => {
-	a.Errors({
-		hello: 'world'
-	})
-})
-
-bench('Value.Errors', () => {
-	Errors(a.Schema(), {
-		hello: 'world'
-	})
-})
-
-await run()
+console.log(
+	body.Check(
+		body.Decode({
+			name: 'Jane Doe',
+			// @ts-expect-error
+			age: '30'
+		})
+	)
+)

@@ -39,6 +39,7 @@ import { BunHTMLBundlelike } from './universal/types'
 import { Sucrose } from './sucrose'
 import type Memoirist from 'memoirist'
 import type { DynamicHandler } from './dynamic-handle'
+import { BaseSchema } from './type/types'
 
 export type Equal<X, Y> =
 	(<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2
@@ -92,8 +93,8 @@ export type StandardSchemaV1LikeValidate = <T>(
 	{ value: T; issues?: never } | { value?: never; issues: unknown[] }
 >
 
-export type AnySchema = TSchema | StandardSchemaV1Like
-export type FastAnySchema = TAnySchema | FastStandardSchemaV1Like
+export type AnySchema = BaseSchema | StandardSchemaV1Like
+export type FastAnySchema = BaseSchema | FastStandardSchemaV1Like
 
 export interface ElysiaConfig<in out Prefix extends string | undefined> {
 	/**

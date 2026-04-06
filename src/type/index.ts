@@ -100,7 +100,7 @@ function Numeric(property?: TNumberOptions) {
 	const number = Type.Number(property)
 	return elyType(
 		ELYSIA_TYPES.Numeric,
-		Type.Union([number, Type.Union([_StringifiedNumber, number])])
+		Type.Union([number, Type.Intersect([_StringifiedNumber, number])])
 	)
 }
 
@@ -127,7 +127,7 @@ function Integer(property?: TNumberOptions) {
 	const integer = Type.Integer(property)
 	return elyType(
 		ELYSIA_TYPES.Integer,
-		Type.Union([integer, Type.Union([_StringifiedInteger, integer])])
+		Type.Union([integer, Type.Intersect([_StringifiedInteger, integer])])
 	)
 }
 
@@ -153,7 +153,7 @@ function BooleanString(property?: TSchemaOptions) {
 
 	return elyType(
 		ELYSIA_TYPES.BooleanString,
-		Type.Union([Type.Boolean(property), _StringifiedBoolean])
+		Type.Intersect([Type.Boolean(property), _StringifiedBoolean])
 	)
 }
 
@@ -190,7 +190,7 @@ function ObjectString<T extends TProperties>(
 	const object = Type.Object(property, options)
 	return elyType(
 		ELYSIA_TYPES.ObjectString,
-		Type.Union([object, Type.Union([_ObjectString, object])])
+		Type.Union([object, Type.Intersect([_ObjectString, object])])
 	)
 }
 
@@ -225,16 +225,13 @@ function ArrayString<T extends TProperties>(
 	const array = Type.Array(property, options)
 	return elyType(
 		ELYSIA_TYPES.ArrayString,
-		Type.Union([array, Type.Union([_ArrayString, array])])
+		Type.Union([array, Type.Intersect([_ArrayString, array])])
 	)
 }
 
 let _EmptyDate: Type.TCodec<
 	Type.TUnion<
-		[
-			Type.TRefine<Type.TUnsafe<Date>>,
-			Type.TCodec<Type.TUnion<[Type.TString, Type.TString]>, Date>
-		]
+		[Type.TRefine<Type.TUnsafe<Date>>, Type.TCodec<Type.TString, Date>]
 	>,
 	unknown
 >
@@ -250,15 +247,10 @@ function DateType(property?: DateOptions) {
 						'must be Date'
 					),
 					Type.Decode(
-						Type.Union([
-							Type.String({
-								format: 'date',
-								default: new Date(0).toISOString()
-							}),
-							Type.String({
-								format: new Date(0).toISOString()
-							})
-						]),
+						Type.String({
+							format: 'date',
+							default: new Date(0).toISOString()
+						}),
 						(value) => new Date(value)
 					)
 				]),
@@ -270,28 +262,20 @@ function DateType(property?: DateOptions) {
 	return elyType(
 		ELYSIA_TYPES.Date,
 		Type.Encode(
-			Type.Union(
-				[
-					Type.Refine(
-						Type.Unsafe<Date>({ '~kind': 'Date' }),
-						(value) => value instanceof Date,
-						'must be Date'
-					),
-					Type.Decode(
-						Type.Union([
-							Type.String({
-								format: 'date',
-								default: new Date(0).toISOString()
-							}),
-							Type.String({
-								format: new Date(0).toISOString()
-							})
-						]),
-						(value) => new Date(value)
-					)
-				],
-				property
-			),
+			Type.Union([
+				Type.Refine(
+					Type.Unsafe<Date>({ '~kind': 'Date' }),
+					(value) => value instanceof Date,
+					'must be Date'
+				),
+				Type.Decode(
+					Type.String({
+						format: 'date',
+						default: new Date(0).toISOString()
+					}),
+					(value) => new Date(value)
+				)
+			]),
 			(value) =>
 				(value instanceof Date ? value.toISOString() : value) as any
 		)
@@ -472,7 +456,7 @@ function Files(options?: FilesOptions) {
 const Form = <T extends TProperties>(property: T, options?: TObjectOptions) =>
 	elyType(
 		ELYSIA_TYPES.Form,
-		Type.Union([
+		Type.Intersect([
 			Type.Decode(
 				Type.Refine(
 					Type.Unsafe<ElysiaFormData<T>>({ '~kind': 'FormData' }),

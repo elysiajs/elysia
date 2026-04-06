@@ -1108,7 +1108,7 @@ export const getLoosePath = (path: string) => {
 	return path + '/'
 }
 
-export function isEmpty(obj?: Object): obj is undefined {
+export function isEmpty<T extends Object>(obj?: T): obj is undefined {
 	if (!obj) return true
 
 	for (const _ in obj) return false

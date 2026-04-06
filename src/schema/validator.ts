@@ -1,36 +1,61 @@
-import type { TSchema } from 'typebox'
+import type { Static, StaticDecode, StaticEncode, TSchema } from 'typebox'
 import { Compile } from 'typebox/schema'
-import type { Validator as TypeBoxValidator } from 'typebox/schema'
+import type { Validator as BaseTypeBoxValidator } from 'typebox/schema'
 import type { TLocalizedValidationError } from 'typebox/error'
 import { createMirror } from 'exact-mirror'
 
 import { t } from '../type'
 import { applyCoercions, type CoerceOption } from './coerce'
-import type { ElysiaConfig, StandardSchemaV1Like } from '../types'
+import type { AnySchema, ElysiaConfig, StandardSchemaV1Like } from '../types'
 import { Clean, Decode, Encode, Errors, HasCodec } from 'typebox/value'
 
-interface ValidatorOptions {
-	schemas?: (TSchema | StandardSchemaV1Like)[]
+export interface ValidatorOptions {
+	schemas?: AnySchema[]
 	coerces?: CoerceOption[]
 	normalize?: boolean | 'exactMirror' | 'typebox'
 	sanitize?: ElysiaConfig<any>['sanitize']
 }
 
-const returnAsIs = (v: unknown) => v
+export interface ResponseValidatorOptions extends Omit<
+	ValidatorOptions,
+	'schemas'
+> {
+	schemas?: Record<number, AnySchema>[]
+}
 
-export class Validator {
-	tb?: TypeBoxValidator
+export type ToSubTypeValidator<T> = T extends AnySchema
+	? T extends TSchema
+		? TypeBoxValidator<T>
+		: StandardValidator
+	: never
 
-	Check: (data: unknown) => boolean
-	Errors: (value: unknown) => TLocalizedValidationError[]
-	Decode?: (data: unknown) => unknown
-	Encode?: (data: unknown) => unknown
-	Clean?: (data: unknown) => unknown
+export abstract class Validator {
+	abstract Check(value: unknown): boolean
+	abstract Errors(value: unknown): TLocalizedValidationError[]
 
-	constructor(
-		schema: TSchema | StandardSchemaV1Like,
+	Decode(value: unknown): unknown {
+		return value
+	}
+
+	Encode(value: unknown): unknown {
+		return value
+	}
+
+	Clean(value: unknown): unknown {
+		return value
+	}
+
+	static create<const Schema extends TSchema>(
+		schema: Schema,
 		options?: ValidatorOptions
-	) {
+	): TypeBoxValidator<Schema>
+
+	static create<const Schema extends StandardSchemaV1Like>(
+		schema: Schema,
+		options?: ValidatorOptions
+	): StandardValidator
+
+	static create(schema: AnySchema, options?: ValidatorOptions) {
 		if (options?.schemas?.length) {
 			if (
 				'~kind' in schema &&
@@ -38,175 +63,216 @@ export class Validator {
 			)
 				schema = t.Evaluate(
 					t.Intersect([schema as TSchema].concat(options.schemas))
-				)
-			else {
-				let typeboxObjects
-				const schemas = [schema].concat(options.schemas)
-				const codexIndexes = new Set<number>()
-
-				for (let i = 0; i < schemas.length; i++) {
-					const schema = schemas[i]
-					const isTypeBox = '~kind' in schema
-
-					if (!isTypeBox && !('~standard' in schema))
-						throw new Error(
-							'Elysia Validator support only TypeBox and Standard Schema'
-						)
-
-					if (isTypeBox) {
-						if (HasCodec(schema)) codexIndexes.add(i)
-
-						if (schema['~kind'] === 'Object') {
-							typeboxObjects ??= []
-							typeboxObjects.push(schema as TSchema)
-							schemas.splice(i, 1)
-							i--
-						} else
-							schemas[i] = Compile(
-								applyCoercions(schema, options?.coerces)
-							)
-					}
-				}
-
-				if (typeboxObjects) {
-					schemas.push(
-						Compile(
-							applyCoercions(
-								t.Evaluate(t.Intersect(typeboxObjects)),
-								options?.coerces
-							)
-						)
-					)
-					typeboxObjects = undefined
-				}
-
-				this.Check = (value) =>
-					schemas.every((validator) =>
-						'~standard' in validator
-							? // @ts-expect-error
-								validator['~standard'].validate(value).value
-							: (validator as TypeBoxValidator).Check(value)
-					)
-
-				this.Errors = (value) => {
-					const errors: TLocalizedValidationError[] = []
-
-					for (const schema of schemas)
-						if ('~standard' in schema) {
-							const issues =
-								// @ts-expect-error
-								schema['~standard'].validate(value).issues
-
-							if (issues) errors.push(...issues)
-						} else {
-							errors.push(
-								...Errors(
-									(schema as TypeBoxValidator).Schema(),
-									value
-								)
-							)
-						}
-
-					return errors
-				}
-
-				this.Decode = (input) => {
-					let snapshot: Record<string, unknown> | unknown[]
-
-					for (let i = 0; i < schemas.length; i++) {
-						const validator = schemas[i]
-
-						const value =
-							'~standard' in validator
-								? // @ts-expect-error
-									validator['~standard'].validate(input).value
-								: codexIndexes.has(i)
-									? Decode(
-											validator as TypeBoxValidator,
-											input
-										)
-									: input
-
-						if (snapshot! === undefined) snapshot = value
-						else if (
-							typeof snapshot === 'object' &&
-							typeof value === 'object'
-						)
-							snapshot = Object.assign(snapshot, value)
-						else if (
-							Array.isArray(snapshot) &&
-							Array.isArray(value)
-						)
-							snapshot.push(...value)
-						else
-							throw new Error(
-								'Unable to merged value with different type'
-							)
-					}
-
-					return snapshot!
-				}
-
-				this.Encode = returnAsIs
-				this.Clean = returnAsIs
-
-				return
-			}
+				) as AnySchema
+			else return new MultiValidator(schema, options) as any
 		}
 
-		if ('~kind' in schema || '~elyAcl' in schema) {
-			this.tb = Compile(applyCoercions(schema, options?.coerces))
+		if ('~kind' in schema || '~elyAcl' in schema)
+			return new TypeBoxValidator(schema, options) as any
 
-			this.Check = this.tb.Check.bind(this.tb)
-			this.Errors = (value: unknown) => Errors(this.tb!, value)
-			if (HasCodec(schema)) {
-				this.Decode = (value: unknown) => Decode(this.tb!, value)
-				this.Encode = (value: unknown) => Encode(this.tb!, value)
-			}
+		if ('~standard' in schema) return new StandardValidator(schema) as any
 
-			try {
-				this.Clean =
-					!options?.normalize || options.normalize === 'exactMirror'
-						? createMirror(schema, {
-								Compile,
-								sanitize: options?.sanitize
-							})
-						: options.normalize === 'typebox'
-							? (value) => Clean(this.tb!, value)
-							: returnAsIs
-			} catch (error) {
-				console.warn(
-					'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
-				)
-				console.warn(schema)
-				console.warn(error)
-
-				this.Clean = (value) => Clean(this.tb!, value)
-			}
-		} else if ('~standard' in schema) {
-			const standard = schema['~standard']
-
-			// @ts-expect-error
-			this.Check = (value) => 'value' in standard.validate(value)
-			this.Errors = (value) =>
-				// @ts-expect-error
-				standard.validate(value).issues ?? []
-			// @ts-expect-error
-			this.Decode = (value) => standard.validate(value).value
-		} else
-			throw new Error(
-				'Elysia Validator support only TypeBox and Standard Schema'
-			)
+		throw new Error(
+			'Elysia Validator support only TypeBox and Standard Schema'
+		)
 	}
 
 	static response = (
 		schema: Record<number, TSchema | StandardSchemaV1Like>,
-		options?: ValidatorOptions
+		options?: ResponseValidatorOptions
 	): Record<number, Validator> =>
 		Object.fromEntries(
 			Object.entries(schema).map(([k, v]) => [
 				k,
-				v instanceof Validator ? v : new Validator(v, options)
+				v instanceof Validator
+					? v
+					: Validator.create(v, {
+							normalize: options?.normalize,
+							sanitize: options?.sanitize,
+							coerces: options?.coerces,
+							schemas: options?.schemas?.map(
+								(s) => s[k as unknown as keyof typeof s]
+							)
+						})
 			])
 		)
+}
+
+export class TypeBoxValidator<
+	const in out T extends TSchema
+> extends Validator {
+	tb: BaseTypeBoxValidator
+	hasCodec: boolean
+	schema: T
+
+	constructor(schema: T, options?: ValidatorOptions) {
+		super()
+
+		this.schema = applyCoercions(schema, options?.coerces) as T
+		this.tb = Compile(this.schema)
+		this.hasCodec = HasCodec(this.schema)
+
+		try {
+			this.Clean =
+				!options?.normalize || options.normalize === 'exactMirror'
+					? createMirror(schema, {
+							Compile,
+							sanitize: options?.sanitize
+						})
+					: options.normalize === 'typebox'
+						? (value) => Clean(this.tb!, value)
+						: (value) => value
+		} catch (error) {
+			console.warn(
+				'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
+			)
+			console.warn(schema)
+			console.warn(error)
+
+			this.Clean = (value) => Clean(this.tb!, value)
+		}
+	}
+
+	// Do not convert to arrow function
+	// otherwise memory usage will increase drastically somehow
+	Check(value: Static<T>): boolean {
+		return this.tb.Check(value)
+	}
+
+	Errors(value: unknown): TLocalizedValidationError[] {
+		return Errors(this.schema, value)
+	}
+
+	Decode(value: Static<T>): StaticDecode<T> {
+		return this.hasCodec ? Decode(this.schema, value) : (value as any)
+	}
+
+	Encode(value: Static<T>): StaticEncode<T> {
+		return this.hasCodec ? Encode(this.schema, value) : (value as any)
+	}
+}
+
+class StandardValidator extends Validator {
+	private validate: (value: unknown) => any
+
+	constructor(schema: StandardSchemaV1Like) {
+		super()
+		// @ts-expect-error
+		this.validate = schema['~standard'].validate
+	}
+
+	Check(value: unknown): boolean {
+		return 'value' in this.validate(value)
+	}
+
+	Errors(value: unknown): TLocalizedValidationError[] {
+		return this.validate(value).issues ?? []
+	}
+
+	Decode(value: unknown): unknown {
+		return this.validate(value).value
+	}
+}
+
+class MultiValidator extends Validator {
+	private schemas: (TSchema | StandardSchemaV1Like)[]
+	private codexIndexes: Set<number>
+
+	constructor(
+		schema: TSchema | StandardSchemaV1Like,
+		options: ValidatorOptions
+	) {
+		super()
+
+		let typeboxObjects
+		const schemas = [schema].concat(options.schemas!)
+		const codexIndexes = new Set<number>()
+
+		for (let i = 0; i < schemas.length; i++) {
+			const schema = schemas[i]
+			const isTypeBox = '~kind' in schema
+
+			if (!isTypeBox && !('~standard' in schema))
+				throw new Error(
+					'Elysia Validator support only TypeBox and Standard Schema'
+				)
+
+			if (isTypeBox) {
+				if (HasCodec(schema)) codexIndexes.add(i)
+
+				if (schema['~kind'] === 'Object') {
+					typeboxObjects ??= []
+					typeboxObjects.push(schema as TSchema)
+					schemas.splice(i, 1)
+					i--
+				} else
+					schemas[i] = Compile(
+						applyCoercions(schema, options?.coerces)
+					)
+			}
+		}
+
+		if (typeboxObjects)
+			schemas.push(
+				Compile(
+					applyCoercions(
+						t.Evaluate(t.Intersect(typeboxObjects)),
+						options?.coerces
+					)
+				)
+			)
+
+		this.schemas = schemas
+		this.codexIndexes = codexIndexes
+	}
+
+	Check(value: unknown): boolean {
+		return this.schemas.every((validator) =>
+			'~standard' in validator
+				? // @ts-expect-error
+					validator['~standard'].validate(value).value
+				: (validator as TypeBoxValidator).Check(value)
+		)
+	}
+
+	Errors(value: unknown): TLocalizedValidationError[] {
+		const errors: TLocalizedValidationError[] = []
+
+		for (const schema of this.schemas)
+			if ('~standard' in schema) {
+				// @ts-expect-error
+				const issues = schema['~standard'].validate(value).issues
+				if (issues) errors.push(...issues)
+			} else
+				errors.push(
+					...Errors((schema as BaseTypeBoxValidator).Schema(), value)
+				)
+
+		return errors
+	}
+
+	Decode(value: unknown): unknown {
+		let snapshot: Record<string, unknown> | unknown[]
+
+		for (let i = 0; i < this.schemas.length; i++) {
+			const validator = this.schemas[i]
+
+			const result =
+				'~standard' in validator
+					? // @ts-expect-error
+						validator['~standard'].validate(value).value
+					: this.codexIndexes.has(i)
+						? Decode(validator as TypeBoxValidator, value)
+						: value
+
+			if (snapshot! === undefined) snapshot = result
+			else if (typeof snapshot === 'object' && typeof result === 'object')
+				snapshot = Object.assign(snapshot, result)
+			else if (Array.isArray(snapshot) && Array.isArray(result))
+				snapshot.push(...result)
+			else throw new Error('Unable to merged value with different type')
+		}
+
+		return snapshot!
+	}
 }

@@ -162,7 +162,7 @@ import type {
 // 	queryCoercions,
 // 	stringToStructureCoercions
 // } from './replace-schema'
-import { ElysiaValidator } from './schema/validator'
+import { Validator, Validator } from './schema/validator'
 import { hasTypes } from './schema/utils'
 import {
 	coerceFormData,
@@ -662,7 +662,7 @@ export default class Elysia<
 						createBody() {
 							if (this.body) return this.body
 
-							return (this.body = new ElysiaValidator(
+							return (this.body = new Validator(
 								cloned.body,
 								{
 									normalize,
@@ -682,7 +682,7 @@ export default class Elysia<
 						createHeaders() {
 							if (this.headers) return this.headers
 
-							return (this.headers = new ElysiaValidator(
+							return (this.headers = new Validator(
 								cloned.headers,
 								{
 									normalize,
@@ -697,7 +697,7 @@ export default class Elysia<
 						createParams() {
 							if (this.params) return this.params
 
-							return (this.params = new ElysiaValidator(
+							return (this.params = new Validator(
 								cloned.params,
 								{
 									normalize,
@@ -712,7 +712,7 @@ export default class Elysia<
 						createQuery() {
 							if (this.query) return this.query
 
-							return (this.query = new ElysiaValidator(
+							return (this.query = new Validator(
 								cloned.query,
 								{
 									normalize,
@@ -732,7 +732,7 @@ export default class Elysia<
 						createResponse() {
 							if (this.response) return this.response
 
-							return (this.response = ElysiaValidator.response(
+							return (this.response = Validator.response(
 								cloned.response,
 								{
 									normalize,

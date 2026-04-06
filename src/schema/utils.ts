@@ -1,4 +1,5 @@
 import { primitiveElysiaTypes, ELYSIA_TYPES, type BaseSchema } from '../type'
+import { AnyBaseHookLifeCycle, AnySchema } from '../types'
 
 export function hasType(
 	type: string | ELYSIA_TYPES[keyof ELYSIA_TYPES],
@@ -6,15 +7,12 @@ export function hasType(
 ): boolean {
 	if (!schema) return false
 
-	if (typeof type === 'string') {
-		if (schema['~kind'] === type) return true
-	} else {
-		if (schema['~elyTyp'] === type) return true
-	}
+	if (schema[typeof type === 'string' ? '~kind' : '~elyTyp'] === type)
+		return true
 
 	if (
 		typeof schema !== 'object' ||
-		(schema['~elyTyp'] &&
+		('~elyTyp' in schema &&
 			primitiveElysiaTypes.has(schema['~elyTyp'] as any))
 	)
 		return false
@@ -61,10 +59,14 @@ export function hasType(
 	return false
 }
 
-export const hasTypes = (
+export function hasTypes(
 	types: (string | ELYSIA_TYPES[keyof ELYSIA_TYPES])[],
-	schema: BaseSchema
-) => _hasTypes(new Set(types), schema)
+	schema: AnySchema
+) {
+	if ('~standard' in schema) return false
+
+	return _hasTypes(new Set(types), schema as BaseSchema)
+}
 
 function _hasTypes(
 	types: Set<string | ELYSIA_TYPES[keyof ELYSIA_TYPES]>,
@@ -74,13 +76,13 @@ function _hasTypes(
 
 	if (
 		types.has(schema['~kind']) ||
-		(schema['~elyTyp'] && types.has(schema['~elyTyp']))
+		('~elyTyp' in schema && types.has(schema['~elyTyp']!))
 	)
 		return true
 
 	if (
 		typeof schema !== 'object' ||
-		(schema['~elyTyp'] &&
+		('~elyTyp' in schema &&
 			primitiveElysiaTypes.has(schema['~elyTyp'] as any))
 	)
 		return false

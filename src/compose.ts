@@ -57,7 +57,7 @@ import type {
 	SchemaValidator
 } from './types'
 import { tee } from './adapter/utils'
-import { ElysiaValidator } from './schema/validator'
+import { Validator } from './schema/validator'
 import { hasType, hasTypes } from './schema/utils'
 import { BaseSchema, ELYSIA_TYPES } from './type'
 import Value from 'typebox/value'
@@ -210,7 +210,7 @@ const composeCleaner = ({
 	normalize,
 	ignoreTryCatch = false
 }: {
-	schema: ElysiaValidator
+	schema: Validator
 	name: string
 	type: keyof SchemaValidator
 	typeAlias?: string
@@ -1222,7 +1222,7 @@ export const composeHandler = ({
 		reporter.resolve()
 	}
 
-	const fileUnions = <ElysiaValidator[]>[]
+	const fileUnions = <Validator[]>[]
 
 	if (validator) {
 		if (validator.headers) {
@@ -1504,7 +1504,7 @@ export const composeHandler = ({
 					if (
 						hasTypes([ELYSIA_TYPES.File, ELYSIA_TYPES.Files], type)
 					) {
-						const candidate = new ElysiaValidator(type, {
+						const candidate = new Validator(type, {
 							normalize: app.config.normalize,
 							sanitize: app.config.sanitize
 						})
