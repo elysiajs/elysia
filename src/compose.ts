@@ -1,12 +1,6 @@
-import { AnyElysia, Cookie } from './index'
+import { AnyElysia, Cookie, TSchema } from './index'
 
-import { Value, TransformDecodeError } from '@sinclair/typebox/value'
-import {
-	Kind,
-	TypeBoxError,
-	type TAnySchema,
-	type TSchema
-} from '@sinclair/typebox'
+// import { Value, TransformDecodeError } from '@sinclair/typebox/value'
 
 import decode from 'fast-decode-uri-component'
 import {
@@ -39,16 +33,16 @@ import {
 } from './error'
 import { ELYSIA_TRACE, type TraceHandler } from './trace'
 
-import {
-	ElysiaTypeCheck,
-	getCookieValidator,
-	getSchemaProperties,
-	getSchemaValidator,
-	hasElysiaMeta,
-	hasType,
-	isUnion,
-	unwrapImportSchema
-} from './schema'
+// import {
+// 	ElysiaTypeCheck,
+// 	getCookieValidator,
+// 	getSchemaProperties,
+// 	getSchemaValidator,
+// 	hasElysiaMeta,
+// 	hasType,
+// 	isUnion,
+// 	unwrapImportSchema
+// } from './schema'
 import { Sucrose, sucrose } from './sucrose'
 import { parseCookie, type CookieOptions } from './cookies'
 
@@ -63,7 +57,10 @@ import type {
 	SchemaValidator
 } from './types'
 import { tee } from './adapter/utils'
-import { coercePrimitiveRoot } from './replace-schema'
+import { ElysiaValidator } from './schema/validator'
+import { hasType, hasTypes } from './schema/utils'
+import { BaseSchema, ELYSIA_TYPES } from './type'
+import Value from 'typebox/value'
 
 const allocateIf = (value: string, condition: unknown) =>
 	condition ? value : ''
@@ -213,7 +210,7 @@ const composeCleaner = ({
 	normalize,
 	ignoreTryCatch = false
 }: {
-	schema: ElysiaTypeCheck<any>
+	schema: ElysiaValidator
 	name: string
 	type: keyof SchemaValidator
 	typeAlias?: string
@@ -704,7 +701,8 @@ export const composeHandler = ({
 
 		const options = cookieMeta
 			? `{secrets:${
-					cookieMeta.secrets !== undefined && cookieMeta.secrets !== null
+					cookieMeta.secrets !== undefined &&
+					cookieMeta.secrets !== null
 						? typeof cookieMeta.secrets === 'string'
 							? JSON.stringify(cookieMeta.secrets)
 							: '[' +
@@ -750,21 +748,19 @@ export const composeHandler = ({
 		let hasArrayProperty = false
 		let hasObjectProperty = false
 
-		if (validator.query?.schema) {
-			const schema = unwrapImportSchema(validator.query?.schema)
-			const properties = getSchemaProperties(schema)
+		if (validator.query?.schema?.properties) {
+			// May need to unwrap
+			for (const [key, value] of Object.entries(
+				validator.query.schema.properties
+			)) {
+				if (hasType('ArrayQuery', value as any)) {
+					hasArrayProperty = true
+					arrayProperties[key] = true
+				}
 
-			if (properties) {
-				for (const [key, value] of Object.entries(properties)) {
-					if (hasElysiaMeta('ArrayQuery', value as TSchema)) {
-						arrayProperties[key] = true
-						hasArrayProperty = true
-					}
-
-					if (hasElysiaMeta('ObjectString', value as TSchema)) {
-						objectProperties[key] = true
-						hasObjectProperty = true
-					}
+				if (hasType('ObjectString', value as any)) {
+					objectProperties[key] = true
+					hasObjectProperty = true
 				}
 			}
 		}
@@ -929,9 +925,11 @@ export const composeHandler = ({
 			if (
 				schema &&
 				schema.anyOf &&
-				schema[Kind] === 'Union' &&
+				schema['~kind'] === 'Union' &&
 				schema.anyOf?.length === 2 &&
-				schema.anyOf?.find((x: TAnySchema) => x[Kind] === 'ElysiaForm')
+				schema.anyOf?.find(
+					(x: BaseSchema) => x['~kind'] === 'ElysiaForm'
+				)
 			)
 				parser = 'formdata'
 		}
@@ -1224,7 +1222,7 @@ export const composeHandler = ({
 		reporter.resolve()
 	}
 
-	const fileUnions = <ElysiaTypeCheck<any>[]>[]
+	const fileUnions = <ElysiaValidator[]>[]
 
 	if (validator) {
 		if (validator.headers) {
@@ -1387,14 +1385,14 @@ export const composeHandler = ({
 			if (validator.body.hasTransform || validator.body.isOptional)
 				fnLiteral += `const isNotEmptyObject=c.body&&(typeof c.body==="object"&&(isNotEmpty(c.body)||c.body instanceof ArrayBuffer))\n`
 
-			const hasUnion = isUnion(validator.body.schema)
+			const hasUnion = hasType('union', validator.body.schema)
 			let hasNonUnionFileWithDefault = false
 
 			if (validator.body.hasDefault) {
 				let value = Value.Default(
 					validator.body.schema,
 					validator.body.schema.type === 'object' ||
-						unwrapImportSchema(validator.body.schema)[Kind] ===
+						unwrapImportSchema(validator.body.schema)['~kind'] ===
 							'Object'
 						? {}
 						: undefined
@@ -1467,7 +1465,7 @@ export const composeHandler = ({
 					normalize
 				})
 
-				if (validator.body.provider === 'standard') {
+				if (!validator.body.tb) {
 					fnLiteral +=
 						`let vab=validator.body.Check(c.body)\n` +
 						`if(vab instanceof Promise)vab=await vab\n` +
@@ -1488,7 +1486,7 @@ export const composeHandler = ({
 				}
 			}
 
-			if (validator.body.hasTransform)
+			if (validator.body.tb?.hasCodec)
 				fnLiteral += coerceTransformDecodeError(
 					`if(isNotEmptyObject)c.body=validator.body.Decode(c.body)\n`,
 					'body',
@@ -1498,22 +1496,29 @@ export const composeHandler = ({
 			if (hasUnion && validator.body.schema.anyOf?.length) {
 				const iterator = Object.values(
 					validator.body.schema.anyOf
-				) as TAnySchema[]
+				) as TSchema[]
 
 				for (let i = 0; i < iterator.length; i++) {
 					const type = iterator[i]
 
-					if (hasType('File', type) || hasType('Files', type)) {
-						const candidate = getSchemaValidator(type, {
-							// @ts-expect-error private property
-							modules: app.definitions.typebox,
-							dynamic: !app.config.aot,
-							// @ts-expect-error private property
-							models: app.definitions.type,
+					if (
+						hasTypes([ELYSIA_TYPES.File, ELYSIA_TYPES.Files], type)
+					) {
+						const candidate = new ElysiaValidator(type, {
 							normalize: app.config.normalize,
-							additionalCoerce: coercePrimitiveRoot(),
-							sanitize: () => app.config.sanitize
+							sanitize: app.config.sanitize
 						})
+
+						// const candidate = getSchemaValidator(type, {
+						// 	// @ts-expect-error private property
+						// 	modules: app.definitions.typebox,
+						// 	dynamic: !app.config.aot,
+						// 	// @ts-expect-error private property
+						// 	models: app.definitions.type,
+						// 	normalize: app.config.normalize,
+						// 	additionalCoerce: coercePrimitiveRoot(),
+						// 	sanitize: () => app.config.sanitize
+						// })
 
 						if (candidate) {
 							const isFirst = fileUnions.length === 0
@@ -1539,7 +1544,8 @@ export const composeHandler = ({
 
 								if (
 									!v.extension ||
-									(v[Kind] !== 'File' && v[Kind] !== 'Files')
+									(v['~kind'] !== 'File' &&
+										v['~kind'] !== 'Files')
 								)
 									continue
 
@@ -1566,14 +1572,10 @@ export const composeHandler = ({
 			} else if (
 				hasNonUnionFileWithDefault ||
 				(!hasUnion &&
-					(hasType(
-						'File',
-						unwrapImportSchema(validator.body.schema)
-					) ||
-						hasType(
-							'Files',
-							unwrapImportSchema(validator.body.schema)
-						)))
+					hasTypes(
+						[ELYSIA_TYPES.File, ELYSIA_TYPES.Files],
+						validator.body.schema
+					))
 			) {
 				let validateFile = ''
 
@@ -1589,7 +1591,7 @@ export const composeHandler = ({
 					][]) {
 						if (
 							!v.extension ||
-							(v[Kind] !== 'File' && v[Kind] !== 'Files')
+							(v['~kind'] !== 'File' && v['~kind'] !== 'Files')
 						)
 							continue
 

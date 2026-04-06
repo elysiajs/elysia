@@ -1,22 +1,25 @@
-import { coerce } from '../src/schema/coerce'
-import { hasType } from '../src/schema/utils'
-import { ELYSIA_TYPES, t } from '../src/type'
+import { Compile } from 'typebox/schema'
+import { t } from '../src/type'
+import { run, bench, boxplot, summary } from 'mitata'
+import { Errors } from 'typebox/value'
 
 const schema = t.Object({
 	hello: t.String(),
-	b: t.Object({
-		a: t.Numeric()
+	a: t.Decode(t.String(), (value) => +value)
+})
+
+const a = Compile(schema)
+
+bench('Compile.Errors', () => {
+	a.Errors({
+		hello: 'world'
 	})
 })
 
-console.dir(schema, {
-	depth: null
+bench('Value.Errors', () => {
+	Errors(a.Schema(), {
+		hello: 'world'
+	})
 })
 
-const q = coerce(schema, [['String', () => t.Number()]])
-
-console.dir(q, {
-	depth: null
-})
-
-console.log(hasType(ELYSIA_TYPES.File, schema))
+await run()

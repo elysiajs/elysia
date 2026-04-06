@@ -11,7 +11,7 @@ import {
 import fastDecodeURIComponent from 'fast-decode-uri-component'
 import type { Context, PreContext } from './context'
 
-import { t } from './type'
+import { ELYSIA_TYPES, t } from './type'
 import { mergeInference, sucrose, type Sucrose } from './sucrose'
 
 import type { WSLocalHook } from './ws/types'
@@ -42,14 +42,6 @@ import {
 	insertStandaloneValidator
 } from './utils'
 
-import {
-	getSchemaValidator,
-	getResponseSchemaValidator,
-	getCookieValidator,
-	ElysiaTypeCheck,
-	hasType,
-	resolveSchema
-} from './schema'
 import {
 	composeHandler,
 	composeGeneralHandler,
@@ -164,12 +156,20 @@ import type {
 	InlineHandlerNonMacro,
 	Router
 } from './types'
+// import {
+// 	coercePrimitiveRoot,
+// 	coerceFormData,
+// 	queryCoercions,
+// 	stringToStructureCoercions
+// } from './replace-schema'
+import { ElysiaValidator } from './schema/validator'
+import { hasTypes } from './schema/utils'
 import {
-	coercePrimitiveRoot,
 	coerceFormData,
-	queryCoercions,
-	stringToStructureCoercions
-} from './replace-schema'
+	coerceQuery,
+	coerceRoot,
+	coerceStringToStructure
+} from './schema/coerce'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any>
 
@@ -414,23 +414,23 @@ export default class Elysia<
 
 	'~adapter': ElysiaAdapter
 
-	env(model: TObject, _env = env) {
-		const validator = getSchemaValidator(model, {
-			modules: this.definitions.typebox,
-			dynamic: true,
-			additionalProperties: true,
-			coerce: true,
-			sanitize: () => this.config.sanitize
-		})
+	// env(model: TObject, _env = env) {
+	// 	const validator = getSchemaValidator(model, {
+	// 		modules: this.definitions.typebox,
+	// 		dynamic: true,
+	// 		additionalProperties: true,
+	// 		coerce: true,
+	// 		sanitize: () => this.config.sanitize
+	// 	})
 
-		if (validator.Check(_env) === false) {
-			const error = new ValidationError('env', model, _env)
+	// 	if (validator.Check(_env) === false) {
+	// 		const error = new ValidationError('env', model, _env)
 
-			throw new Error(error.all.map((x) => x.summary).join('\n'))
-		}
+	// 		throw new Error(error.all.map((x) => x.summary).join('\n'))
+	// 	}
 
-		return this
-	}
+	// 	return this
+	// }
 
 	/**
 	 * @private DO_NOT_USE_OR_YOU_WILL_BE_FIRED
@@ -473,7 +473,6 @@ export default class Elysia<
 				}
 			)
 
-		// @ts-expect-error
 		models.modules = this.definitions.typebox
 
 		return models as any
@@ -571,7 +570,7 @@ export default class Elysia<
 			const normalize = this.config.normalize
 			const modules = this.definitions.typebox
 
-			const sanitize = () => this.config.sanitize
+			const sanitize = this.config.sanitize
 
 			const cookieValidator = () => {
 				if (cloned.cookie || standaloneValidators.find((x) => x.cookie))
@@ -663,28 +662,17 @@ export default class Elysia<
 						createBody() {
 							if (this.body) return this.body
 
-							return (this.body = getSchemaValidator(
+							return (this.body = new ElysiaValidator(
 								cloned.body,
 								{
-									modules,
-									dynamic,
-									models,
 									normalize,
-									additionalCoerce: (() => {
-										const resolved = resolveSchema(
-											cloned.body,
-											models,
-											modules
-										)
-										// Only check for Files if resolved schema is a TypeBox schema (has Kind symbol)
-										return resolved &&
-											Kind in resolved &&
-											(hasType('File', resolved) ||
-												hasType('Files', resolved))
-											? coerceFormData()
-											: coercePrimitiveRoot()
-									})(),
-									validators: standaloneValidators.map(
+									coerces: hasTypes(
+										[ELYSIA_TYPES.File, ELYSIA_TYPES.Files],
+										cloned.body
+									)
+										? coerceFormData()
+										: coerceRoot(),
+									schemas: standaloneValidators.map(
 										(x) => x.body
 									),
 									sanitize
@@ -694,18 +682,12 @@ export default class Elysia<
 						createHeaders() {
 							if (this.headers) return this.headers
 
-							return (this.headers = getSchemaValidator(
+							return (this.headers = new ElysiaValidator(
 								cloned.headers,
 								{
-									modules,
-									dynamic,
-									models,
 									normalize,
-									additionalProperties: !normalize,
-									coerce: true,
-									additionalCoerce:
-										stringToStructureCoercions(),
-									validators: standaloneValidators.map(
+									coerces: coerceStringToStructure(),
+									schemas: standaloneValidators.map(
 										(x) => x.headers
 									),
 									sanitize
@@ -715,17 +697,12 @@ export default class Elysia<
 						createParams() {
 							if (this.params) return this.params
 
-							return (this.params = getSchemaValidator(
+							return (this.params = new ElysiaValidator(
 								cloned.params,
 								{
-									modules,
-									dynamic,
-									models,
 									normalize,
-									coerce: true,
-									additionalCoerce:
-										stringToStructureCoercions(),
-									validators: standaloneValidators.map(
+									coerces: coerceStringToStructure(),
+									schemas: standaloneValidators.map(
 										(x) => x.params
 									),
 									sanitize
@@ -735,16 +712,12 @@ export default class Elysia<
 						createQuery() {
 							if (this.query) return this.query
 
-							return (this.query = getSchemaValidator(
+							return (this.query = new ElysiaValidator(
 								cloned.query,
 								{
-									modules,
-									dynamic,
-									models,
 									normalize,
-									coerce: true,
-									additionalCoerce: queryCoercions(),
-									validators: standaloneValidators.map(
+									coerces: coerceQuery(),
+									schemas: standaloneValidators.map(
 										(x) => x.query
 									),
 									sanitize
@@ -759,15 +732,12 @@ export default class Elysia<
 						createResponse() {
 							if (this.response) return this.response
 
-							return (this.response = getResponseSchemaValidator(
+							return (this.response = ElysiaValidator.response(
 								cloned.response,
 								{
-									modules,
-									dynamic,
-									models,
 									normalize,
-									validators: standaloneValidators.map(
-										(x) => x.response as any
+									schemas: standaloneValidators.map(
+										(x) => x.response
 									),
 									sanitize
 								}

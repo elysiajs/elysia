@@ -65,9 +65,8 @@ export function coerce(
 		if (canReplace && kind) {
 			const to = transformMap.get(kind)
 			if (to) {
-				const properties = Object.assign({}, node)
-				delete properties['type']
-				const result = to(properties)
+				delete node['type']
+				const result = to(node)
 				if (result !== null) {
 					if (options?.onlyFirst === kind) stopped = true
 					return result
@@ -81,6 +80,7 @@ export function coerce(
 
 		// Inline copy-on-write helper to avoid closure allocation
 		// `~kind` is non-enumerable in TypeBox, so we reassign it after spread
+		// https://sinclairzx81.github.io/typebox/#/docs/system/1_settings
 		function copyNode() {
 			if (out === node) out = { ...node, '~kind': kind }
 		}

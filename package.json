@@ -214,6 +214,7 @@
 		"file-type": "^22.0.0",
 		"globals": "^17.4.0",
 		"knip": "^5.64.1",
+		"mitata": "^1.0.34",
 		"prettier": "^3.5.3",
 		"tsup": "^8.4.0",
 		"typescript": "^6.0.2",

@@ -1,14 +1,15 @@
 import type { TSchema } from 'typebox'
-import { Compile } from 'typebox/compile'
-import type { Validator } from 'typebox/compile'
+import { Compile } from 'typebox/schema'
+import type { Validator as TypeBoxValidator } from 'typebox/schema'
 import type { TLocalizedValidationError } from 'typebox/error'
 import { createMirror } from 'exact-mirror'
 
 import { t } from '../type'
 import { applyCoercions, type CoerceOption } from './coerce'
-import type { ElysiaConfig, MaybeArray, StandardSchemaV1Like } from '../types'
+import type { ElysiaConfig, StandardSchemaV1Like } from '../types'
+import { Clean, Decode, Encode, Errors, HasCodec } from 'typebox/value'
 
-interface ElysiaValidatorParams {
+interface ValidatorOptions {
 	schemas?: (TSchema | StandardSchemaV1Like)[]
 	coerces?: CoerceOption[]
 	normalize?: boolean | 'exactMirror' | 'typebox'
@@ -17,30 +18,32 @@ interface ElysiaValidatorParams {
 
 const returnAsIs = (v: unknown) => v
 
-export class ElysiaValidator {
-	tb?: Validator
+export class Validator {
+	tb?: TypeBoxValidator
 
 	Check: (data: unknown) => boolean
 	Errors: (value: unknown) => TLocalizedValidationError[]
-	Decode: (data: unknown) => unknown
-	Encode: (data: unknown) => unknown
-	Clean: (data: unknown) => unknown
+	Decode?: (data: unknown) => unknown
+	Encode?: (data: unknown) => unknown
+	Clean?: (data: unknown) => unknown
 
 	constructor(
 		schema: TSchema | StandardSchemaV1Like,
-		params?: ElysiaValidatorParams
+		options?: ValidatorOptions
 	) {
-		if (params?.schemas?.length) {
+		if (options?.schemas?.length) {
 			if (
 				'~kind' in schema &&
-				params.schemas.every((v) => '~kind' in v || '~elyAcl' in v)
+				options.schemas.every((v) => '~kind' in v || '~elyAcl' in v)
 			)
 				schema = t.Evaluate(
-					t.Intersect([schema as TSchema].concat(params.schemas))
+					t.Intersect([schema as TSchema].concat(options.schemas))
 				)
 			else {
 				let typeboxObjects
-				const schemas = [schema].concat(params.schemas)
+				const schemas = [schema].concat(options.schemas)
+				const codexIndexes = new Set<number>()
+
 				for (let i = 0; i < schemas.length; i++) {
 					const schema = schemas[i]
 					const isTypeBox = '~kind' in schema
@@ -51,6 +54,8 @@ export class ElysiaValidator {
 						)
 
 					if (isTypeBox) {
+						if (HasCodec(schema)) codexIndexes.add(i)
+
 						if (schema['~kind'] === 'Object') {
 							typeboxObjects ??= []
 							typeboxObjects.push(schema as TSchema)
@@ -58,7 +63,7 @@ export class ElysiaValidator {
 							i--
 						} else
 							schemas[i] = Compile(
-								applyCoercions(schema, params?.coerces)
+								applyCoercions(schema, options?.coerces)
 							)
 					}
 				}
@@ -68,7 +73,7 @@ export class ElysiaValidator {
 						Compile(
 							applyCoercions(
 								t.Evaluate(t.Intersect(typeboxObjects)),
-								params?.coerces
+								options?.coerces
 							)
 						)
 					)
@@ -80,7 +85,7 @@ export class ElysiaValidator {
 						'~standard' in validator
 							? // @ts-expect-error
 								validator['~standard'].validate(value).value
-							: (validator as Validator).Check(value)
+							: (validator as TypeBoxValidator).Check(value)
 					)
 
 				this.Errors = (value) => {
@@ -93,8 +98,14 @@ export class ElysiaValidator {
 								schema['~standard'].validate(value).issues
 
 							if (issues) errors.push(...issues)
-						} else
-							errors.push(...(schema as Validator).Errors(value))
+						} else {
+							errors.push(
+								...Errors(
+									(schema as TypeBoxValidator).Schema(),
+									value
+								)
+							)
+						}
 
 					return errors
 				}
@@ -102,12 +113,19 @@ export class ElysiaValidator {
 				this.Decode = (input) => {
 					let snapshot: Record<string, unknown> | unknown[]
 
-					for (const validator of schemas) {
+					for (let i = 0; i < schemas.length; i++) {
+						const validator = schemas[i]
+
 						const value =
 							'~standard' in validator
 								? // @ts-expect-error
 									validator['~standard'].validate(input).value
-								: (validator as Validator).Decode(input)
+								: codexIndexes.has(i)
+									? Decode(
+											validator as TypeBoxValidator,
+											input
+										)
+									: input
 
 						if (snapshot! === undefined) snapshot = value
 						else if (
@@ -137,22 +155,24 @@ export class ElysiaValidator {
 		}
 
 		if ('~kind' in schema || '~elyAcl' in schema) {
-			this.tb = Compile(applyCoercions(schema, params?.coerces))
+			this.tb = Compile(applyCoercions(schema, options?.coerces))
 
 			this.Check = this.tb.Check.bind(this.tb)
-			this.Errors = this.tb.Errors.bind(this.tb)
-			this.Decode = this.tb.Decode.bind(this.tb)
-			this.Encode = this.tb.Encode.bind(this.tb)
+			this.Errors = (value: unknown) => Errors(this.tb!, value)
+			if (HasCodec(schema)) {
+				this.Decode = (value: unknown) => Decode(this.tb!, value)
+				this.Encode = (value: unknown) => Encode(this.tb!, value)
+			}
 
 			try {
 				this.Clean =
-					!params?.normalize || params.normalize === 'exactMirror'
+					!options?.normalize || options.normalize === 'exactMirror'
 						? createMirror(schema, {
 								Compile,
-								sanitize: params?.sanitize
+								sanitize: options?.sanitize
 							})
-						: params.normalize === 'typebox'
-							? this.tb.Clean.bind(this.tb)
+						: options.normalize === 'typebox'
+							? (value) => Clean(this.tb!, value)
 							: returnAsIs
 			} catch (error) {
 				console.warn(
@@ -161,7 +181,7 @@ export class ElysiaValidator {
 				console.warn(schema)
 				console.warn(error)
 
-				this.Clean = this.tb.Clean.bind(this.tb)
+				this.Clean = (value) => Clean(this.tb!, value)
 			}
 		} else if ('~standard' in schema) {
 			const standard = schema['~standard']
@@ -173,11 +193,20 @@ export class ElysiaValidator {
 				standard.validate(value).issues ?? []
 			// @ts-expect-error
 			this.Decode = (value) => standard.validate(value).value
-			this.Encode = returnAsIs
-			this.Clean = returnAsIs
 		} else
 			throw new Error(
 				'Elysia Validator support only TypeBox and Standard Schema'
 			)
 	}
+
+	static response = (
+		schema: Record<number, TSchema | StandardSchemaV1Like>,
+		options?: ValidatorOptions
+	): Record<number, Validator> =>
+		Object.fromEntries(
+			Object.entries(schema).map(([k, v]) => [
+				k,
+				v instanceof Validator ? v : new Validator(v, options)
+			])
+		)
 }

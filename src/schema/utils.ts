@@ -61,8 +61,10 @@ export function hasType(
 	return false
 }
 
-export const hasTypes = (types: string[], schema: BaseSchema) =>
-	_hasTypes(new Set(types), schema)
+export const hasTypes = (
+	types: (string | ELYSIA_TYPES[keyof ELYSIA_TYPES])[],
+	schema: BaseSchema
+) => _hasTypes(new Set(types), schema)
 
 function _hasTypes(
 	types: Set<string | ELYSIA_TYPES[keyof ELYSIA_TYPES]>,

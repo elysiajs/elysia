@@ -652,7 +652,7 @@ function removeTrailingEquals(digest: string): string {
 	return trimmedDigest
 }
 
-const encoder = new TextEncoder()
+let encoder: TextEncoder
 
 export const signCookie = async (val: string, secret: string | null) => {
 	if (typeof val === 'object') val = JSON.stringify(val)
@@ -660,6 +660,8 @@ export const signCookie = async (val: string, secret: string | null) => {
 
 	if (secret === null || secret === undefined)
 		throw new TypeError('Secret key must be provided')
+
+	encoder ??= new TextEncoder()
 
 	const secretKey = await crypto.subtle.importKey(
 		'raw',
@@ -674,12 +676,6 @@ export const signCookie = async (val: string, secret: string | null) => {
 		secretKey,
 		encoder.encode(val)
 	)
-
-	// console.log({
-	// 	val,
-	// 	secret,
-	// 	hash: removeTrailingEquals(Buffer.from(hmacBuffer).toString('base64'))
-	// })
 
 	return (
 		val +
@@ -1248,6 +1244,7 @@ export const emptySchema = {
 	response: true
 } as const satisfies RouteSchema
 
+// Not used?
 export function deepClone<T>(source: T, weak = new WeakMap<object, any>()): T {
 	if (
 		source === null ||
