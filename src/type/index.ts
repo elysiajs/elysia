@@ -7,7 +7,8 @@ import type {
 	TSchema,
 	TNumberOptions,
 	TObjectOptions,
-	StaticDecode
+	StaticDecode,
+	TNumber
 } from 'typebox'
 
 import { checksum, isEmpty, type ElysiaFormData } from '../utils'
@@ -76,6 +77,24 @@ function assignOrNew<
 }
 
 const sharedReferences = new Set<Map<number, unknown>>()
+
+function createPrimitiveReference<
+	const P extends Record<keyof any, unknown>,
+	const T extends TSchema,
+	const B extends TSchema
+>(primitive: B) {
+	let shared: T
+
+	return (
+		property: P,
+		createType: (property: P, primitive: B) => T,
+		patch: (schema: T, property: P, primitive: B) => T
+	): Readonly<T> => {
+		if (shared) return patch(shared, property, primitive)
+
+		return (shared = Object.freeze(createType(property, primitive)))
+	}
+}
 
 function createSharedReference<
 	const P extends Record<keyof any, unknown>,
@@ -172,11 +191,11 @@ let StringifiedNumber: Type.TCodec<Type.TRefine<Type.TString>, number>
 let emptyNumeric: Readonly<
 	Type.TUnion<[Type.TNumber, Type.TCodec<Type.TRefine<Type.TString>, number>]>
 >
-
 let sharedNumeric: ReturnType<
-	typeof createSharedReference<
+	typeof createPrimitiveReference<
 		TNumberOptions,
-		ReturnType<typeof NumericWithProperty>
+		ReturnType<typeof NumericWithProperty>,
+		TNumber
 	>
 >
 function Numeric(property?: TNumberOptions) {
@@ -193,16 +212,35 @@ function Numeric(property?: TNumberOptions) {
 			)
 		))
 
-	sharedNumeric ??= createSharedReference()
-	return sharedNumeric(property, NumericWithProperty)
+	sharedNumeric ??= createPrimitiveReference(t.Number())
+
+	return sharedNumeric(property, NumericWithProperty, NumericPatch)
 }
 
-function NumericWithProperty(property: TNumberOptions) {
-	const number = Type.Number(property)
+function NumericWithProperty(property: TNumberOptions, primitive: TNumber) {
+	const number = Object.assign(property, primitive)
+
 	return elyType(
 		ELYSIA_TYPES.Numeric,
 		Type.Union([number, Type.Intersect([StringifiedNumber, number])])
 	)
+}
+
+function NumericPatch(
+	schema: ReturnType<typeof NumericWithProperty>,
+	property: TNumberOptions,
+	primitive: TNumber
+) {
+	const number = Object.assign(property, primitive)
+
+	return Object.assign({}, schema, {
+		anyOf: [
+			number,
+			{
+				allOf: [schema.anyOf[1].allOf[0], number]
+			}
+		]
+	})
 }
 
 let StringifiedInteger: Type.TCodec<Type.TRefine<Type.TString>, number>
