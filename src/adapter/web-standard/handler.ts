@@ -160,13 +160,14 @@ export const mapResponse = (
 					) as any
 
 				// custom class with an array-like value
-				// eg. Bun.sql`` result
-				if (Array.isArray(response))
-					return new Response(JSON.stringify(response), {
-						headers: {
-							'Content-Type': 'application/json'
-						}
-					}) as any
+				// eg. Bun.sql`` result, postgres.js RowList
+				if (Array.isArray(response)) {
+					set.headers['content-type'] ||= 'application/json'
+					return new Response(
+						JSON.stringify(response),
+						set as any
+					) as any
+				}
 
 				// @ts-expect-error
 				if (typeof response?.toResponse === 'function')
@@ -317,13 +318,14 @@ export const mapEarlyResponse = (
 					return mapEarlyResponse((response as any).toResponse(), set)
 
 				// custom class with an array-like value
-				// eg. Bun.sql`` result
-				if (Array.isArray(response))
-					return new Response(JSON.stringify(response), {
-						headers: {
-							'Content-Type': 'application/json'
-						}
-					}) as any
+				// eg. Bun.sql`` result, postgres.js RowList
+				if (Array.isArray(response)) {
+					set.headers['content-type'] ||= 'application/json'
+					return new Response(
+						JSON.stringify(response),
+						set as any
+					) as any
+				}
 
 				if ('charCodeAt' in (response as any)) {
 					const code = (response as any).charCodeAt(0)
@@ -449,13 +451,14 @@ export const mapEarlyResponse = (
 					return mapEarlyResponse((response as any).toResponse(), set)
 
 				// custom class with an array-like value
-				// eg. Bun.sql`` result
-				if (Array.isArray(response))
-					return new Response(JSON.stringify(response), {
-						headers: {
-							'Content-Type': 'application/json'
-						}
-					}) as any
+				// eg. Bun.sql`` result, postgres.js RowList
+				if (Array.isArray(response)) {
+					set.headers['content-type'] ||= 'application/json'
+					return new Response(
+						JSON.stringify(response),
+						set as any
+					) as any
+				}
 
 				if ('charCodeAt' in (response as any)) {
 					const code = (response as any).charCodeAt(0)
