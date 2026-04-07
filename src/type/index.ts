@@ -6,10 +6,11 @@ import type {
 	TProperties,
 	TSchema,
 	TNumberOptions,
-	TObjectOptions
+	TObjectOptions,
+	StaticDecode
 } from 'typebox'
 
-import { isEmpty, type ElysiaFormData } from '../utils'
+import { checksum, isEmpty, type ElysiaFormData } from '../utils'
 import { ElysiaFile } from '../universal/file'
 import type {
 	FilesOptions,
@@ -19,7 +20,8 @@ import type {
 	ArrayBufferOptions,
 	FileOptions,
 	FileUnit,
-	FileType
+	FileType,
+	BaseSchema
 } from './types'
 import type { StandardJSONSchemaV1Like } from '../types'
 
@@ -73,6 +75,91 @@ function assignOrNew<
 	return source as unknown as T & R
 }
 
+const sharedReferences = new Set<Map<number, unknown>>()
+
+function createSharedReference<
+	const P extends Record<keyof any, unknown>,
+	const T extends TSchema
+>() {
+	let shared: Map<number, T>
+
+	return (property: P, createType: (property: P) => T): Readonly<T> => {
+		const hash = propertyChecksum(property)
+		if (shared?.has(hash[0])) {
+			const cached = shared.get(hash[0])!
+
+			if (hash[1])
+				return Object.assign(
+					hash[1],
+					cached as Record<string, unknown>
+				) as Readonly<T>
+
+			return cached
+		}
+
+		const type = Object.freeze(createType(property))
+		if (!shared) {
+			shared = new Map()
+			sharedReferences.add(shared)
+		}
+		shared.set(hash[0], type)
+
+		return type
+	}
+}
+
+export function clearSharedReferences() {
+	for (const shared of sharedReferences) shared.clear()
+}
+
+function propertyChecksum(
+	property: Partial<BaseSchema> & Record<keyof any, unknown>
+) {
+	if (
+		'title' in property ||
+		'description' in property ||
+		'tags' in property ||
+		'examples' in property ||
+		'error' in property ||
+		'default' in property
+	) {
+		const {
+			title,
+			description,
+			tags,
+			examples,
+			error,
+			default: defaultValue,
+			...rest
+		} = property
+
+		const meta: Record<string, unknown> = {}
+		if (title !== undefined) meta['title'] = title
+		if (description !== undefined) meta['description'] = description
+		if (tags !== undefined) meta['tags'] = tags
+		if (examples !== undefined) meta['examples'] = examples
+		if (error !== undefined) meta['error'] = error
+		if (defaultValue !== undefined) meta['default'] = defaultValue
+
+		const entries = Object.entries(rest)
+		switch (entries.length) {
+			case 0:
+				return [0, meta] as const
+
+			case 1:
+				return [checksum(entries[0].toString()), meta] as const
+
+			default:
+				return [checksum(entries.toSorted().toString()), meta] as const
+		}
+	}
+
+	const entries = Object.entries(property)
+	if (!entries.length) return [0] as const
+
+	return [checksum(JSON.stringify(entries))] as const
+}
+
 type Refines<T> = [refine: (value: T) => boolean, message: string][]
 function Refines<T extends TSchema>(schema: T, refines: Refines<Static<T>>) {
 	for (const [refine, message] of refines)
@@ -81,35 +168,57 @@ function Refines<T extends TSchema>(schema: T, refines: Refines<Static<T>>) {
 	return schema
 }
 
-let _StringifiedNumber: Type.TCodec<Type.TRefine<Type.TString>, number>
-let _emptyNumeric: Type.TUnion<
-	[Type.TNumber, Type.TCodec<Type.TRefine<Type.TString>, number>]
+let StringifiedNumber: Type.TCodec<Type.TRefine<Type.TString>, number>
+let emptyNumeric: Readonly<
+	Type.TUnion<[Type.TNumber, Type.TCodec<Type.TRefine<Type.TString>, number>]>
+>
+
+let sharedNumeric: ReturnType<
+	typeof createSharedReference<
+		TNumberOptions,
+		ReturnType<typeof NumericWithProperty>
+	>
 >
 function Numeric(property?: TNumberOptions) {
-	_StringifiedNumber ??= Type.Decode(
+	StringifiedNumber ??= Type.Decode(
 		Type.Refine(Type.String(), (value) => !isNaN(+value), 'must be number'),
 		(value) => +value
 	)
 
 	if (isEmpty(property))
-		return (_emptyNumeric ??= elyType(
-			ELYSIA_TYPES.Numeric,
-			Type.Union([Type.Number(), _StringifiedNumber])
+		return (emptyNumeric ??= Object.freeze(
+			elyType(
+				ELYSIA_TYPES.Numeric,
+				Type.Union([Type.Number(), StringifiedNumber])
+			)
 		))
 
+	sharedNumeric ??= createSharedReference()
+	return sharedNumeric(property, NumericWithProperty)
+}
+
+function NumericWithProperty(property: TNumberOptions) {
 	const number = Type.Number(property)
 	return elyType(
 		ELYSIA_TYPES.Numeric,
-		Type.Union([number, Type.Intersect([_StringifiedNumber, number])])
+		Type.Union([number, Type.Intersect([StringifiedNumber, number])])
 	)
 }
 
-let _StringifiedInteger: Type.TCodec<Type.TRefine<Type.TString>, number>
-let _emptyInteger: Type.TUnion<
-	[Type.TInteger, Type.TCodec<Type.TRefine<Type.TString>, number>]
+let StringifiedInteger: Type.TCodec<Type.TRefine<Type.TString>, number>
+let emptyInteger: Readonly<
+	Type.TUnion<
+		[Type.TInteger, Type.TCodec<Type.TRefine<Type.TString>, number>]
+	>
+>
+let sharedInteger: ReturnType<
+	typeof createSharedReference<
+		TNumberOptions,
+		ReturnType<typeof IntegerWithProperty>
+	>
 >
 function Integer(property?: TNumberOptions) {
-	_StringifiedInteger = Type.Decode(
+	StringifiedInteger = Type.Decode(
 		Type.Refine(
 			Type.String(),
 			(value) => !isNaN(+value) && Number.isInteger(+value),
@@ -119,24 +228,37 @@ function Integer(property?: TNumberOptions) {
 	)
 
 	if (isEmpty(property))
-		return (_emptyInteger ??= elyType(
+		return (emptyInteger ??= elyType(
 			ELYSIA_TYPES.Integer,
-			Type.Union([Type.Integer(), _StringifiedInteger])
+			Type.Union([Type.Integer(), StringifiedInteger])
 		))
 
+	sharedInteger ??= createSharedReference()
+	return sharedInteger(property, IntegerWithProperty)
+}
+
+function IntegerWithProperty(property?: TNumberOptions) {
 	const integer = Type.Integer(property)
 	return elyType(
 		ELYSIA_TYPES.Integer,
-		Type.Union([integer, Type.Intersect([_StringifiedInteger, integer])])
+		Type.Union([integer, Type.Intersect([StringifiedInteger, integer])])
 	)
 }
 
-let _StringifiedBoolean: Type.TCodec<Type.TRefine<Type.TString>, boolean>
-let _emptyBoolean: Type.TUnion<
-	[Type.TCodec<Type.TRefine<Type.TString>, boolean>, Type.TBoolean]
+let StringifiedBoolean: Type.TCodec<Type.TRefine<Type.TString>, boolean>
+let emptyBoolean: Readonly<
+	Type.TUnion<
+		[Type.TCodec<Type.TRefine<Type.TString>, boolean>, Type.TBoolean]
+	>
+>
+let sharedBooleanString: ReturnType<
+	typeof createSharedReference<
+		TSchemaOptions,
+		ReturnType<typeof BooleanStringWithProperty>
+	>
 >
 function BooleanString(property?: TSchemaOptions) {
-	_StringifiedBoolean ??= Type.Decode(
+	StringifiedBoolean ??= Type.Decode(
 		Type.Refine(
 			Type.String(),
 			(value) => value === 'true' || value === 'false',
@@ -146,60 +268,71 @@ function BooleanString(property?: TSchemaOptions) {
 	)
 
 	if (isEmpty(property))
-		return (_emptyBoolean ??= elyType(
+		return (emptyBoolean ??= elyType(
 			ELYSIA_TYPES.BooleanString,
-			Type.Union([_StringifiedBoolean, Type.Boolean()])
+			Type.Union([StringifiedBoolean, Type.Boolean()])
 		))
 
+	sharedBooleanString ??= createSharedReference()
+	return sharedBooleanString(property, BooleanStringWithProperty)
+}
+
+function BooleanStringWithProperty(property?: TSchemaOptions) {
+	const boolean = Type.Boolean(property)
 	return elyType(
 		ELYSIA_TYPES.BooleanString,
-		Type.Intersect([Type.Boolean(property), _StringifiedBoolean])
+		Type.Union([boolean, Type.Intersect([StringifiedBoolean, boolean])])
 	)
 }
 
+let BaseObjectString: Type.TCodec<
+	Type.TRefine<Type.TString>,
+	Record<string | number | symbol, unknown>
+>
 function ObjectString<T extends TProperties>(
 	property: T,
 	options?: TObjectOptions
 ) {
-	let parsed: Record<keyof any, unknown>
-	const _ObjectString = Type.Decode(
-		Type.Refine(
-			Type.String(),
-			(value) => {
-				if (
-					(value.charCodeAt(0) !== 123 &&
-						value.charCodeAt(value.length - 1) !== 125) ||
-					(value.charCodeAt(0) !== 91 &&
-						value.charCodeAt(value.length - 1) !== 93)
-				)
-					return false
+	BaseObjectString ??= Object.freeze(
+		Type.Decode(
+			Type.Refine(
+				Type.String(),
+				(value) => {
+					if (
+						(value.charCodeAt(0) !== 123 &&
+							value.charCodeAt(value.length - 1) !== 125) ||
+						(value.charCodeAt(0) !== 91 &&
+							value.charCodeAt(value.length - 1) !== 93)
+					)
+						return false
 
-				try {
-					parsed = JSON.parse(value)
+					try {
+						JSON.parse(value)
 
-					return true
-				} catch {
-					return false
-				}
-			},
-			'must be an object'
-		),
-		(value) => (parsed ??= JSON.parse(value))
+						return true
+					} catch {
+						return false
+					}
+				},
+				'must be an object'
+			),
+			(value) => JSON.parse(value)
+		)
 	)
 
 	const object = Type.Object(property, options)
 	return elyType(
 		ELYSIA_TYPES.ObjectString,
-		Type.Union([object, Type.Intersect([_ObjectString, object])])
+		Type.Union([object, Type.Intersect([BaseObjectString, object])])
 	)
 }
 
+let BaseArrayString: Type.TCodec<Type.TRefine<Type.TString>, any>
 function ArrayString<T extends TProperties>(
 	property: T,
 	options?: TObjectOptions
 ) {
-	let parsed: unknown[]
-	const _ArrayString = Type.Decode(
+	BaseArrayString ??= Type.Decode(
 		Type.Refine(
 			Type.String(),
 			(value) => {
@@ -210,7 +343,7 @@ function ArrayString<T extends TProperties>(
 					return false
 
 				try {
-					parsed = JSON.parse(value)
+					JSON.parse(value)
 
 					return true
 				} catch {
@@ -219,67 +352,85 @@ function ArrayString<T extends TProperties>(
 			},
 			'must be an array'
 		),
-		(value) => (parsed ??= JSON.parse(value))
+		(value) => JSON.parse(value)
 	)
 
 	const array = Type.Array(property, options)
 	return elyType(
 		ELYSIA_TYPES.ArrayString,
-		Type.Union([array, Type.Intersect([_ArrayString, array])])
+		Type.Union([array, Type.Intersect([BaseArrayString, array])])
 	)
 }
 
-let _EmptyDate: Type.TCodec<
-	Type.TUnion<
-		[Type.TRefine<Type.TUnsafe<Date>>, Type.TCodec<Type.TString, Date>]
-	>,
-	unknown
+let StringifiedDate: Type.TCodec<
+	Type.TUnion<[Type.TRefine<Type.TUnsafe<Date>>, Type.TString]>,
+	Date
+>
+let emptyDate: Type.TCodec<
+	Type.TUnion<[Type.TRefine<Type.TUnsafe<Date>>, Type.TString]>,
+	Date
+>
+let sharedDate: ReturnType<
+	typeof createSharedReference<
+		DateOptions,
+		ReturnType<typeof DateWithProperty>
+	>
 >
 function DateType(property?: DateOptions) {
+	StringifiedDate ??= Type.Codec(
+		Type.Union([
+			Type.Refine(
+				Type.Unsafe<Date>({ '~kind': 'Date' }),
+				(value) => value instanceof Date,
+				'must be Date'
+			),
+			Type.String({
+				format: 'date'
+			})
+		])
+	)
+		.Decode((value) => (value instanceof Date ? value : new Date(value)))
+		.Encode((value) =>
+			value instanceof Date ? value.toISOString() : value + ''
+		)
+
 	if (isEmpty(property))
-		return (_EmptyDate ??= elyType(
-			ELYSIA_TYPES.Date,
-			Type.Encode(
-				Type.Union([
-					Type.Refine(
-						Type.Unsafe<Date>({ '~kind': 'Date' }),
-						(value) => value instanceof Date,
-						'must be Date'
-					),
-					Type.Decode(
-						Type.String({
-							format: 'date',
-							default: new Date(0).toISOString()
-						}),
-						(value) => new Date(value)
-					)
-				]),
-				(value) =>
-					(value instanceof Date ? value.toISOString() : value) as any
-			)
+		return (emptyDate ??= Object.freeze(
+			elyType(ELYSIA_TYPES.Date, StringifiedDate)
 		))
 
-	return elyType(
-		ELYSIA_TYPES.Date,
-		Type.Encode(
-			Type.Union([
-				Type.Refine(
-					Type.Unsafe<Date>({ '~kind': 'Date' }),
-					(value) => value instanceof Date,
-					'must be Date'
-				),
-				Type.Decode(
-					Type.String({
-						format: 'date',
-						default: new Date(0).toISOString()
-					}),
-					(value) => new Date(value)
-				)
-			]),
-			(value) =>
-				(value instanceof Date ? value.toISOString() : value) as any
-		)
-	)
+	sharedDate ??= createSharedReference()
+	return sharedDate(property, DateWithProperty)
+}
+
+function DateWithProperty(options: DateOptions) {
+	const refines: Refines<Date> = []
+
+	if (options.minimumTimestamp)
+		refines.push([
+			(value) => value.getTime() > options.minimumTimestamp!,
+			`date must be after ${new Date(options.minimumTimestamp!).toISOString()}`
+		])
+
+	if (options.maximumTimestamp)
+		refines.push([
+			(value) => value.getTime() < options.maximumTimestamp!,
+			`date must be before ${new Date(options.maximumTimestamp!).toISOString()}`
+		])
+
+	if (options.exclusiveMinimumTimestamp)
+		refines.push([
+			(value) => value.getTime() >= options.exclusiveMinimumTimestamp!,
+			`date must be after or equal to ${new Date(options.exclusiveMinimumTimestamp!).toISOString()}`
+		])
+
+	if (options.exclusiveMaximumTimestamp)
+		refines.push([
+			(value) => value.getTime() <= options.exclusiveMaximumTimestamp!,
+			`date must be before or equal to ${new Date(options.exclusiveMaximumTimestamp!).toISOString()}`
+		])
+
+	return elyType(ELYSIA_TYPES.Date, Refines(StringifiedDate, refines as any))
 }
 
 const Nullable = <T extends TSchema>(schema: T, options?: TSchemaOptions) =>
@@ -329,7 +480,7 @@ function UnionEnum<
 	return elyType(ELYSIA_TYPES.UnionEnum, t.Unsafe<TUnionEnum<T>>(schema))
 }
 
-function _checkFileExtension(type: string, extension: string) {
+function checkFileExtension(type: string, extension: string) {
 	if (type.startsWith(extension)) return true
 
 	return (
@@ -339,7 +490,7 @@ function _checkFileExtension(type: string, extension: string) {
 	)
 }
 
-function _parseFileUnit(size: FileUnit) {
+function parseFileUnit(size: FileUnit) {
 	if (typeof size !== 'string') return size
 
 	switch (size.slice(-1)) {
@@ -354,103 +505,130 @@ function _parseFileUnit(size: FileUnit) {
 	}
 }
 
+let BaseFile: Type.TRefine<Type.TUnsafe<File>>
+let emptyFile: Readonly<Type.TRefine<Type.TUnsafe<File>>>
+let sharedFile: ReturnType<
+	typeof createSharedReference<
+		FileOptions,
+		ReturnType<typeof FileWithProperty>
+	>
+>
 function File(options?: FileOptions) {
-	const refines: Refines<File> = [
-		[
+	BaseFile ??= Type.Refine(
+		Type.Unsafe<File>({ '~kind': 'File' }),
+		(value) =>
 			// @ts-expect-error
-			(value) => value instanceof Blob || value instanceof ElysiaFile,
-			'must be instance of Blob'
-		]
-	]
-
-	if (options) {
-		if (options.minSize) {
-			const minSize = _parseFileUnit(options.minSize!)
-
-			refines.push([
-				(value) => value.size > minSize,
-				`Expect file size to be more than ${options.minSize}`
-			])
-		}
-
-		if (options.maxSize) {
-			const maxSize = _parseFileUnit(options.maxSize!)
-
-			refines.push([
-				(value) => value.size < maxSize,
-				`Expect file size to be less than ${options.maxSize}`
-			])
-		}
-
-		if (options.type) {
-			if (typeof options.type === 'string')
-				refines.push([
-					(value) =>
-						_checkFileExtension(
-							value.type,
-							options.type as FileType
-						),
-					`Expect file type to be ${options.type}`
-				])
-			else
-				refines.push([
-					(value) => {
-						for (let i = 0; i < options.type!.length; i++)
-							if (
-								_checkFileExtension(
-									value.type,
-									options.type![i]
-								)
-							)
-								return true
-
-						return false
-					},
-					`Expect file type to be one of ${options.type.join(', ')}`
-				])
-		}
-	}
-
-	return elyType(
-		ELYSIA_TYPES.File,
-		Refines(Type.Unsafe<File>({ '~kind': 'File' }), refines)
+			value instanceof Blob || value instanceof ElysiaFile,
+		'must be instance of Blob'
 	)
+
+	if (isEmpty(options))
+		return (emptyFile ??= Object.freeze(
+			elyType(ELYSIA_TYPES.File, BaseFile)
+		))
+
+	sharedFile ??= createSharedReference()
+	return sharedFile(options, FileWithProperty)
 }
 
-function Files(options?: FilesOptions) {
-	const refines: Refines<File[]> = []
+function FileWithProperty(options: FilesOptions) {
+	const refines: Refines<File> = []
 
-	if (options) {
-		if (options.minItems && options.minItems > 1)
+	if (options.minSize) {
+		const minSize = parseFileUnit(options.minSize!)
+
+		refines.push([
+			(value) => value.size > minSize,
+			`Expect file size to be more than ${options.minSize}`
+		])
+	}
+
+	if (options.maxSize) {
+		const maxSize = parseFileUnit(options.maxSize!)
+
+		refines.push([
+			(value) => value.size < maxSize,
+			`Expect file size to be less than ${options.maxSize}`
+		])
+	}
+
+	if (options.type) {
+		if (typeof options.type === 'string')
 			refines.push([
 				(value) =>
-					Array.isArray(value) && value.length >= options.minItems!,
-				`Expect at least ${options.minItems} files`
+					checkFileExtension(value.type, options.type as FileType),
+				`Expect file type to be ${options.type}`
 			])
-
-		if (options.maxItems)
+		else
 			refines.push([
-				(value) =>
-					Array.isArray(value) && value.length <= options.maxItems!,
-				`Expect less than ${options.maxItems} files`
+				(value) => {
+					for (let i = 0; i < options.type!.length; i++)
+						if (checkFileExtension(value.type, options.type![i]))
+							return true
+
+					return false
+				},
+				`Expect file type to be one of ${options.type.join(', ')}`
 			])
 	}
 
-	return elyType(
-		ELYSIA_TYPES.Files,
-		Refines(
-			Type.Decode(
-				Type.Union([
-					Type.Unsafe<File[]>({ ...options, '~kind': 'Files' }),
-					Type.Array(
-						Type.Unsafe<File>({ ...options, '~kind': 'File' })
-					)
-				]),
-				(value) => (Array.isArray(value) ? value : [value])
-			),
-			refines
-		)
-	)
+	return elyType(ELYSIA_TYPES.File, Refines(BaseFile, refines))
+}
+
+let BaseFiles: Type.TUnion<
+	[
+		Type.TArray<Readonly<Type.TRefine<Type.TUnsafe<File>>>>,
+		Type.TCodec<Readonly<Type.TRefine<Type.TUnsafe<File>>>, File[]>
+	]
+>
+let emptyFiles: Readonly<
+	Type.TUnion<
+		[
+			Type.TArray<Type.TUnsafe<File>>,
+			Type.TCodec<Readonly<Type.TRefine<Type.TUnsafe<File>>>, File[]>
+		]
+	>
+>
+let sharedFiles: ReturnType<
+	typeof createSharedReference<
+		FilesOptions,
+		ReturnType<typeof FilesWithProperty>
+	>
+>
+function Files(options?: FilesOptions) {
+	BaseFiles ??= Type.Union([
+		Type.Array(File()),
+		Type.Decode(File(), (value) => [value])
+	])
+
+	if (isEmpty(options))
+		return (emptyFiles ??= Object.freeze(
+			elyType(ELYSIA_TYPES.Files, BaseFiles)
+		))
+
+	sharedFiles ??= createSharedReference()
+	return sharedFiles(options, FilesWithProperty)
+}
+
+function FilesWithProperty(options: FilesOptions) {
+	const refines: Refines<File[]> = []
+
+	if (options.minItems && options.minItems > 1)
+		refines.push([
+			(value) =>
+				Array.isArray(value) && value.length >= options.minItems!,
+			`Expect at least ${options.minItems} files`
+		])
+
+	if (options.maxItems)
+		refines.push([
+			(value) =>
+				Array.isArray(value) && value.length <= options.maxItems!,
+			`Expect less than ${options.maxItems} files`
+		])
+
+	// refines not matched, expected Decode first
+	return elyType(ELYSIA_TYPES.Files, Refines(BaseFiles, refines as any))
 }
 
 const Form = <T extends TProperties>(property: T, options?: TObjectOptions) =>
@@ -469,23 +647,21 @@ const Form = <T extends TProperties>(property: T, options?: TObjectOptions) =>
 		])
 	)
 
-function NoValidate<T extends TSchema>(v: T, enabled = true) {
-	// @ts-ignore
-	if (enabled) v.noValidate = true
+const NoValidate = <T extends TSchema>(v: T, enabled = true) =>
+	enabled ? elyType(ELYSIA_TYPES.NoValidate, v) : v
 
-	return elyType(ELYSIA_TYPES.NoValidate, v)
-}
-
-let _emptyArrayBuffer: Type.TRefine<Type.TUnsafe<ArrayBuffer>>
+let BaseArrayBuffer: Type.TRefine<Type.TUnsafe<ArrayBuffer>>
+let emptyArrayBuffer: Type.TRefine<Type.TUnsafe<ArrayBuffer>>
 function ArrayBufferType(property?: ArrayBufferOptions) {
+	BaseArrayBuffer ??= Type.Refine(
+		Type.Unsafe<ArrayBuffer>({ '~kind': 'ArrayBuffer' }),
+		(value) => value instanceof ArrayBuffer,
+		'must be ArrayBuffer'
+	)
+
 	if (isEmpty(property))
-		return (_emptyArrayBuffer ??= elyType(
-			ELYSIA_TYPES.ArrayBuffer,
-			Type.Refine(
-				Type.Unsafe<ArrayBuffer>({ '~kind': 'ArrayBuffer' }),
-				(value) => value instanceof ArrayBuffer,
-				'must be ArrayBuffer'
-			)
+		return (emptyArrayBuffer ??= Object.freeze(
+			elyType(ELYSIA_TYPES.ArrayBuffer, BaseArrayBuffer)
 		))
 
 	const refines: Refines<ArrayBuffer> = [
@@ -504,27 +680,21 @@ function ArrayBufferType(property?: ArrayBufferOptions) {
 			`Expect byte to be less than ${property.maxByteLength}`
 		])
 
-	return elyType(
-		ELYSIA_TYPES.ArrayBuffer,
-		Refines(
-			Type.Unsafe<ArrayBuffer>(
-				assignOrNew(property, { '~kind': 'ArrayBuffer' })
-			),
-			refines
-		)
-	)
+	return elyType(ELYSIA_TYPES.ArrayBuffer, Refines(BaseArrayBuffer, refines))
 }
 
-let _emptyUint8Array: Type.TRefine<Type.TUnsafe<Uint8Array>>
+let BaseUint8Array: Type.TRefine<Type.TUnsafe<Uint8Array>>
+let emptyUint8Array: Readonly<Type.TRefine<Type.TUnsafe<Uint8Array>>>
 function Uint8ArrayType(property?: ArrayBufferOptions) {
+	BaseUint8Array ??= Type.Refine(
+		Type.Unsafe<Uint8Array>({ '~kind': 'Uint8Array' }),
+		(value) => value instanceof Uint8Array,
+		'must be Uint8Array'
+	)
+
 	if (isEmpty(property))
-		return (_emptyUint8Array ??= elyType(
-			ELYSIA_TYPES.Uint8Array,
-			Type.Refine(
-				Type.Unsafe<Uint8Array>({ '~kind': 'Uint8Array' }),
-				(value) => value instanceof Uint8Array,
-				'must be Uint8Array'
-			)
+		return (emptyUint8Array ??= Object.freeze(
+			elyType(ELYSIA_TYPES.Uint8Array, BaseUint8Array)
 		))
 
 	const refines: Refines<Uint8Array> = [
@@ -544,15 +714,7 @@ function Uint8ArrayType(property?: ArrayBufferOptions) {
 			`Expect byte to be less than ${property.maxByteLength}`
 		])
 
-	return elyType(
-		ELYSIA_TYPES.Uint8Array,
-		Refines(
-			Type.Unsafe<Uint8Array>(
-				assignOrNew(property, { '~kind': 'Uint8Array' })
-			),
-			refines
-		)
-	)
+	return elyType(ELYSIA_TYPES.Uint8Array, Refines(BaseUint8Array, refines))
 }
 
 function Accelerate(schema: StandardJSONSchemaV1Like) {
