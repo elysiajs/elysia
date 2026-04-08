@@ -66,26 +66,28 @@ export function coerce(
 			const to = transformMap.get(kind)
 			if (to) {
 				const { type, ...rest } = node
-				const result = to(rest)
+				let result = to(rest)
 				if (result !== null) {
 					if (options?.onlyFirst === kind) stopped = true
 
-					if ('~optional' in node)
-						Object.defineProperty(
-							Object.defineProperties(
-								{},
-								Object.getOwnPropertyDescriptors(result)
-							),
-							'~optional',
-							{
+					if ('~optional' in node) {
+						if (Object.isFrozen(result))
+							result = Object.defineProperty(
+								Object.create(result),
+								'~optional',
+								{
+									value: node['~optional'],
+									enumerable: false
+								}
+							)
+						else
+							Object.defineProperty(result, '~optional', {
 								value: node['~optional'],
-								enumerable: false,
-								configurable: true,
-								writable: true
-							}
-						) as any
+								enumerable: false
+							})
+					}
 
-					return result
+					return result!
 				}
 			}
 		}
@@ -248,18 +250,16 @@ let _coerceQuery: CoerceOption[]
 export const coerceQuery = () =>
 	(_coerceQuery ??= [
 		[
-			[['Object', (x) => t.ObjectString(x.properties ?? {}, x as any)]],
-			{
-				root: false
-			}
-		],
-		[
 			[
+				['Object', (x) => t.ObjectString(x.properties ?? {}, x as any)],
 				[
 					'Array',
 					(x) => t.ArrayString((x.items as any) ?? t.Any(), x as any)
 				]
-			]
+			],
+			{
+				root: false
+			}
 		]
 	])
 

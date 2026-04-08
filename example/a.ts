@@ -1,6 +1,8 @@
 import { t } from '../src/type'
 import { RouteValidator } from '../src/schema/route'
 
+console.log(t.Optional(t.String()))
+
 const route = new RouteValidator({
 	body: t.Object({
 		name: t.String(),
@@ -22,7 +24,7 @@ console.dir(body.tb.Schema(), {
 
 console.log(
 	body.Check({
-		name: 'Jane Doe',
+		name: 'Jane Doe'
 		// age: 200
 	})
 )

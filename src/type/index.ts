@@ -231,7 +231,7 @@ function Numeric(property?: TNumberOptions) {
 }
 
 function NumericWithProperty(property: TNumberOptions, primitive: TNumber) {
-	const number = Object.assign(property, primitive)
+	const number: TNumber = Object.assign(property, primitive)
 
 	return elyType(
 		ELYSIA_TYPES.Numeric,
@@ -244,7 +244,7 @@ function NumericPatch(
 	property: TNumberOptions,
 	primitive: TNumber
 ) {
-	const number = Object.assign(property, primitive)
+	const number: TNumber = Object.assign(property, primitive)
 
 	return Object.assign({}, schema, {
 		anyOf: [
@@ -853,51 +853,35 @@ type GetOwnPropertyDescriptor<T> = {
 	[x: string]: PropertyDescriptor
 }
 
-const defineKind = <T extends TSchema>(kind: string, schema: T) =>
-	Object.defineProperty(schema, '~kind', {
-		value: kind,
-		enumerable: false,
-		configurable: true,
-		writable: true
-	})
+const noEnumerable = {
+	enumerable: false
+} as const
 
-let emptyString: TString
-let stringDescriptor: GetOwnPropertyDescriptor<TString>
+const emptyString = Object.freeze(Type.String())
 function StringType(options?: TStringOptions): TString {
-	emptyString ??= Object.freeze(Type.String())
-
 	if (isEmpty(options)) return emptyString
 
-	return Object.defineProperties(
-		options,
-		(stringDescriptor ??= Object.getOwnPropertyDescriptors(Type.String()))
-	) as any
+	options.type = 'string'
+	options['~kind'] = 'String'
+	return Object.defineProperty(options, '~kind', noEnumerable) as any
 }
 
-let emptyBoolean: Readonly<TBoolean>
-let booleanDescriptor: GetOwnPropertyDescriptor<TBoolean>
+const emptyBoolean = Object.freeze(Type.Boolean())
 function BooleanType(options?: TSchemaOptions): TBoolean {
-	emptyBoolean ??= Object.freeze(Type.Boolean())
-
 	if (isEmpty(options)) return emptyBoolean
 
-	return Object.defineProperties(
-		options,
-		(booleanDescriptor ??= Object.getOwnPropertyDescriptors(Type.Boolean()))
-	) as any
+	options.type = 'boolean'
+	options['~kind'] = 'Boolean'
+	return Object.defineProperty(options, '~kind', noEnumerable) as any
 }
 
-let emptyNumber: Readonly<TNumber>
-let numberDescriptor: GetOwnPropertyDescriptor<TNumber>
+const emptyNumber = Object.freeze(Type.Number())
 function NumberType(options?: TNumberOptions): TNumber {
-	emptyNumber ??= Object.freeze(Type.Number())
-
 	if (isEmpty(options)) return emptyNumber
 
-	return Object.defineProperties(
-		options,
-		(numberDescriptor ??= Object.getOwnPropertyDescriptors(Type.Number()))
-	) as any
+	options.type = 'number'
+	options['~kind'] = 'Number'
+	return Object.defineProperty(options, '~kind', noEnumerable) as any
 }
 
 function ObjectType<T extends TProperties>(
@@ -910,16 +894,22 @@ function ObjectType<T extends TProperties>(
 		if (properties[required[i]]['~optional']) required.splice(i--, 1)
 
 	if (isEmpty(options))
-		return defineKind('Object', {
-			type: 'object',
-			properties,
-			required
-		}) as any
+		return Object.defineProperty(
+			{
+				'~kind': 'Object',
+				type: 'object',
+				properties,
+				required
+			},
+			'~kind',
+			noEnumerable
+		) as any
 
+	options['~kind'] = 'Object'
 	options.type = 'object'
 	options.properties = properties
 	options.required = required
-	return defineKind('Object', options) as any
+	return Object.defineProperty(options, '~kind', noEnumerable) as any
 }
 
 function ArrayType<T extends TSchema>(
@@ -927,67 +917,84 @@ function ArrayType<T extends TSchema>(
 	options?: TSchemaOptions
 ): TArray<T> {
 	if (isEmpty(options))
-		return defineKind('Array', {
-			type: 'array',
-			items
-		}) as any
+		return Object.defineProperty(
+			{
+				'~kind': 'Array',
+				type: 'array',
+				items
+			},
+			'~kind',
+			noEnumerable
+		) as any
 
+	options['~kind'] = 'Array'
 	options.type = 'array'
 	options.items = items
-	return defineKind('Array', options) as any
+	return Object.defineProperty(options, '~kind', noEnumerable) as any
 }
 
-let optionalDescriptor: {
-	value: true
+const optionalProperty = {
 	enumerable: false
-	configurable: true
-	writable: true
+}
+const optionalPropertyWithValue = {
+	value: true,
+	enumerable: false
 }
 function Optional<T extends TSchema>(schema: T): TOptional<T> {
-	if ('~optional' in schema) return schema as any
+	if (Object.isFrozen(schema))
+		return Object.defineProperty(
+			Object.create(schema),
+			'~optional',
+			optionalPropertyWithValue
+		) as any
 
-	return Object.defineProperty(
-		Object.defineProperties({}, Object.getOwnPropertyDescriptors(schema)),
-		'~optional',
-		(optionalDescriptor ??= {
-			value: true,
-			enumerable: false,
-			configurable: true,
-			writable: true
-		})
-	) as any
+	// @ts-expect-error
+	schema['~optional'] = true
+	return Object.defineProperty(schema, '~optional', optionalProperty) as any
 }
 
 function Intersect<T extends TSchema[]>(schemas: T, options?: TSchemaOptions) {
 	if (isEmpty(options))
-		return defineKind('Intersect', {
-			allOf: schemas
-		}) as any
+		return Object.defineProperty(
+			{
+				'~kind': 'Intersect',
+				allOf: schemas
+			},
+			'~kind',
+			noEnumerable
+		) as any
 
+	options['~kind'] = 'Intersect'
 	options.allOf = schemas
-	return defineKind('Intersect', options) as any
+	return Object.defineProperty(options, '~kind', noEnumerable) as any
 }
 
 function Union<T extends TSchema[]>(schemas: T, options?: TSchemaOptions) {
 	if (isEmpty(options))
-		return defineKind('Union', {
-			anyOf: schemas
-		}) as any
+		return Object.defineProperty(
+			{
+				'~kind': 'Union',
+				anyOf: schemas
+			},
+			'~kind',
+			noEnumerable
+		) as any
 
+	options['~kind'] = 'Union'
 	options.anyOf = schemas
-	return defineKind('Union', options) as any
+	return Object.defineProperty(options, '~kind', noEnumerable) as any
 }
 
 export const t = Object.freeze(
 	Object.assign({}, Type, {
-		String: StringType,
-		Boolean: BooleanType,
-		Number: NumberType,
-		Object: ObjectType,
-		Array: ArrayType,
-		Intersect,
-		Union,
-		Optional,
+		// String: StringType,
+		// Boolean: BooleanType,
+		// Number: NumberType,
+		// Object: ObjectType,
+		// Array: ArrayType,
+		// Intersect,
+		// Union,
+		// Optional,
 		Numeric,
 		Integer,
 		BooleanString,
