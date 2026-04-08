@@ -117,17 +117,19 @@ export function clearSharedReferences() {
 	for (const shared of sharedReferences) shared.clear()
 }
 
-function propertyChecksum(
-	property: Partial<BaseSchema> & Record<keyof any, unknown>
+const hasMeta = (property: Partial<BaseSchema> & Record<keyof any, unknown>) =>
+	'title' in property ||
+	'description' in property ||
+	'tags' in property ||
+	'examples' in property ||
+	'error' in property ||
+	'default' in property
+
+function getMeta(
+	property: Partial<BaseSchema> & Record<keyof any, unknown>,
+	doHaveMeta = hasMeta(property)
 ) {
-	if (
-		'title' in property ||
-		'description' in property ||
-		'tags' in property ||
-		'examples' in property ||
-		'error' in property ||
-		'default' in property
-	) {
+	if (doHaveMeta) {
 		const {
 			title,
 			description,
@@ -146,7 +148,19 @@ function propertyChecksum(
 		if (error !== undefined) meta['error'] = error
 		if (defaultValue !== undefined) meta['default'] = defaultValue
 
-		const entries = Object.entries(rest)
+		return [rest, meta]
+	}
+
+	return [property] as const
+}
+
+function propertyChecksum(
+	property: Partial<BaseSchema> & Record<keyof any, unknown>
+) {
+	if (hasMeta(property)) {
+		const [constraints, meta] = getMeta(property, true)
+		const entries = Object.entries(constraints)
+
 		switch (entries.length) {
 			case 0:
 				return [0, meta] as const
@@ -191,10 +205,12 @@ function Numeric(property?: TNumberOptions) {
 			)
 		))
 
-	const number = NumberType(property)
+	const [constraints, meta] = getMeta(property)
+	const number = NumberType(constraints)
+
 	return elyType(
 		ELYSIA_TYPES.Numeric,
-		Union([number, Intersect([StringifiedNumber, number])])
+		Union([number, Intersect([StringifiedNumber, number])], meta)
 	)
 }
 
@@ -220,10 +236,12 @@ function IntegerString(property?: TNumberOptions) {
 			Union([Type.Integer(), StringifiedInteger])
 		))
 
-	const integer = Type.Integer(property)
+	const [constraints, meta] = getMeta(property)
+	const integer = Type.Integer(constraints)
+
 	return elyType(
 		ELYSIA_TYPES.Integer,
-		Union([integer, Type.Intersect([StringifiedInteger, integer])])
+		Union([integer, Type.Intersect([StringifiedInteger, integer])], meta)
 	)
 }
 
@@ -249,10 +267,12 @@ function BooleanString(property?: TSchemaOptions) {
 			Union([StringifiedBoolean, Type.Boolean()])
 		))
 
+	const [constraints, meta] = getMeta(property)
 	const boolean = BooleanType(property)
+
 	return elyType(
 		ELYSIA_TYPES.BooleanString,
-		Union([boolean, Type.Intersect([StringifiedBoolean, boolean])])
+		Union([boolean, Type.Intersect([StringifiedBoolean, boolean])], meta)
 	)
 }
 
@@ -291,10 +311,12 @@ function ObjectString<T extends TProperties>(
 		)
 	)
 
-	const object = ObjectType(property, options)
+	const [constraints, meta] = getMeta(property)
+	const object = ObjectType(property, constraints)
+
 	return elyType(
 		ELYSIA_TYPES.ObjectString,
-		Union([object, Type.Intersect([BaseObjectString, object])])
+		Union([object, Type.Intersect([BaseObjectString, object])], meta)
 	)
 }
 
@@ -326,10 +348,12 @@ function ArrayString<T extends TProperties>(
 		(value) => JSON.parse(value)
 	)
 
-	const array = ArrayType(property, options)
+	const [constraints, meta] = getMeta(property)
+	const array = ArrayType(property, constraints)
+
 	return elyType(
 		ELYSIA_TYPES.ArrayString,
-		Union([array, Type.Intersect([BaseArrayString, array])])
+		Union([array, Type.Intersect([BaseArrayString, array])], meta)
 	)
 }
 
@@ -422,6 +446,10 @@ function MaybeEmpty<T extends TSchema>(schema: T, options?: TSchemaOptions) {
 	)
 }
 
+let unionEnumNoEnumerable: {
+	value: 'UnionEnum'
+	enumerable: false
+}
 function UnionEnum<
 	const T extends
 		| NonEmptyArray<TEnumValue>
@@ -440,11 +468,17 @@ function UnionEnum<
 		else if (kind !== type) mixed = true
 	}
 
-	const schema = assignOrNew(options, {
-		default: values[0],
-		'~kind': 'UnionEnum',
-		enum: values
-	}) as any as TUnionEnum<T>
+	const schema = Object.defineProperty(
+		assignOrNew(options, {
+			default: values[0],
+			enum: values
+		}),
+		'~kind',
+		(unionEnumNoEnumerable ??= {
+			value: 'UnionEnum',
+			enumerable: false
+		})
+	) as any as TUnionEnum<T>
 
 	if (!mixed) schema.type = kind
 

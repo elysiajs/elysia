@@ -36,58 +36,60 @@ const t1 = performance.now()
 // 	])
 
 for (let i = 0; i <= 100_000; i++)
-	stacks[i] =
-		// coerce(
-		t.Array(
-			t.Object({
-				id: t.Number(),
-				name: t.String(),
-				bio: t.String(),
-				user: t.Object({
-					name: t.String(),
-					password: t.String(),
-					email: t.Optional(t.String({ format: 'email' })),
-					age: t.Optional(t.Number()),
-					avatar: t.Optional(t.String({ format: 'uri' })),
-					cover: t.Optional(t.String({ format: 'uri' }))
-				}),
-				playing: t.Optional(t.String()),
-				wishlist: t.Optional(t.Array(t.Number())),
-				games: t.Array(
-					t.Object({
-						id: t.Number(),
-						name: t.String(),
-						hoursPlay: t.Number(),
-						tags: t.Array(
-							t.Object({
-								name: t.String({
-									title: 'a'
-								}),
-								count: t.Number({
-									title: 'a'
-								})
-							})
-						)
-					})
-				),
-				metadata: t.Intersect([
-					t.Object({
-						alias: t.String()
-					}),
-					t.Object({
-						country: t.Optional(t.String()),
-						region: t.Optional(t.String())
-					})
-				]),
-				social: t.Optional(
-					t.Object({
-						facebook: t.Optional(t.String()),
-						twitter: t.Optional(t.String()),
-						youtube: t.Optional(t.String())
-					})
-				)
-			})
-		)
+	stacks[i] = t.Numeric({
+		title: 'q'
+	})
+// coerce(
+// t.Array(
+// 	t.Object({
+// 		id: t.Number(),
+// 		name: t.String(),
+// 		bio: t.String(),
+// 		user: t.Object({
+// 			name: t.String(),
+// 			password: t.String(),
+// 			email: t.Optional(t.String({ format: 'email' })),
+// 			age: t.Optional(t.Number()),
+// 			avatar: t.Optional(t.String({ format: 'uri' })),
+// 			cover: t.Optional(t.String({ format: 'uri' }))
+// 		}),
+// 		playing: t.Optional(t.String()),
+// 		wishlist: t.Optional(t.Array(t.Number())),
+// 		games: t.Array(
+// 			t.Object({
+// 				id: t.Number(),
+// 				name: t.String(),
+// 				hoursPlay: t.Number(),
+// 				tags: t.Array(
+// 					t.Object({
+// 						name: t.String({
+// 							title: 'a'
+// 						}),
+// 						count: t.Number({
+// 							title: 'a'
+// 						})
+// 					})
+// 				)
+// 			})
+// 		),
+// 		metadata: t.Intersect([
+// 			t.Object({
+// 				alias: t.String()
+// 			}),
+// 			t.Object({
+// 				country: t.Optional(t.String()),
+// 				region: t.Optional(t.String())
+// 			})
+// 		]),
+// 		social: t.Optional(
+// 			t.Object({
+// 				facebook: t.Optional(t.String()),
+// 				twitter: t.Optional(t.String()),
+// 				youtube: t.Optional(t.String())
+// 			})
+// 		)
+// 	})
+// )
 // )
 
 const t2 = performance.now()
