@@ -4,7 +4,7 @@ import { RouteValidator } from '../src/schema/route'
 const route = new RouteValidator({
 	body: t.Object({
 		name: t.String(),
-		age: t.Number()
+		age: t.Optional(t.Number())
 	}),
 	response: {
 		200: t.Object({
@@ -16,12 +16,13 @@ const route = new RouteValidator({
 
 const body = route.body
 
+console.dir(body.tb.Schema(), {
+	depth: null
+})
+
 console.log(
-	body.Check(
-		body.Decode({
-			name: 'Jane Doe',
-			// @ts-expect-error
-			age: '30'
-		})
-	)
+	body.Check({
+		name: 'Jane Doe',
+		// age: 200
+	})
 )

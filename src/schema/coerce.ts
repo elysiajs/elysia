@@ -65,10 +65,26 @@ export function coerce(
 		if (canReplace && kind) {
 			const to = transformMap.get(kind)
 			if (to) {
-				delete node['type']
-				const result = to(node)
+				const { type, ...rest } = node
+				const result = to(rest)
 				if (result !== null) {
 					if (options?.onlyFirst === kind) stopped = true
+
+					if ('~optional' in node)
+						Object.defineProperty(
+							Object.defineProperties(
+								{},
+								Object.getOwnPropertyDescriptors(result)
+							),
+							'~optional',
+							{
+								value: node['~optional'],
+								enumerable: false,
+								configurable: true,
+								writable: true
+							}
+						) as any
+
 					return result
 				}
 			}
@@ -213,21 +229,6 @@ type CoerceParameters = Parameters<typeof coerce>
 export type CoerceOption =
 	| [CoerceParameters[1]]
 	| [CoerceParameters[1], CoerceParameters[2]]
-
-const q: CoerceOption[] = [
-	[
-		[['Number', (a) => t.Numeric()]],
-		{
-			root: true
-		}
-	],
-	[
-		[['Number', (a) => t.Numeric()]],
-		{
-			root: true
-		}
-	]
-]
 
 let _coerceRoot: CoerceOption[]
 export const coerceRoot = () =>

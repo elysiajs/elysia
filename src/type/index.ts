@@ -8,10 +8,17 @@ import type {
 	TNumberOptions,
 	TObjectOptions,
 	StaticDecode,
-	TNumber
+	TNumber,
+	TInteger,
+	TBoolean,
+	TStringOptions,
+	TString,
+	TObject,
+	TArray,
+	TOptional
 } from 'typebox'
 
-import { checksum, isEmpty, type ElysiaFormData } from '../utils'
+import { checksum, isEmpty, IsTuple, type ElysiaFormData } from '../utils'
 import { ElysiaFile } from '../universal/file'
 import type {
 	FilesOptions,
@@ -24,7 +31,7 @@ import type {
 	FileType,
 	BaseSchema
 } from './types'
-import type { StandardJSONSchemaV1Like } from '../types'
+import type { Prettify, StandardJSONSchemaV1Like } from '../types'
 
 // Start at 1 to prevent falsy value check
 export const ELYSIA_TYPES = {
@@ -51,9 +58,15 @@ function elyType<T extends TSchema>(
 	name: ELYSIA_TYPES[keyof ELYSIA_TYPES],
 	schema: T
 ): T {
-	// @ts-expect-error
-	schema['~elyTyp'] = name
-	return schema
+	try {
+		// @ts-expect-error
+		schema['~elyTyp'] = name
+		return schema
+	} catch {
+		if ('~elyTyp' in schema) return schema
+
+		return Object.assign({}, schema, { '~elyTyp': name })
+	}
 }
 
 export const primitiveElysiaTypes = new Set([
@@ -208,7 +221,7 @@ function Numeric(property?: TNumberOptions) {
 		return (emptyNumeric ??= Object.freeze(
 			elyType(
 				ELYSIA_TYPES.Numeric,
-				Type.Union([Type.Number(), StringifiedNumber])
+				Union([Type.Number(), StringifiedNumber])
 			)
 		))
 
@@ -222,7 +235,7 @@ function NumericWithProperty(property: TNumberOptions, primitive: TNumber) {
 
 	return elyType(
 		ELYSIA_TYPES.Numeric,
-		Type.Union([number, Type.Intersect([StringifiedNumber, number])])
+		Union([number, Type.Intersect([StringifiedNumber, number])])
 	)
 }
 
@@ -250,9 +263,10 @@ let emptyInteger: Readonly<
 	>
 >
 let sharedInteger: ReturnType<
-	typeof createSharedReference<
+	typeof createPrimitiveReference<
 		TNumberOptions,
-		ReturnType<typeof IntegerWithProperty>
+		ReturnType<typeof IntegerWithProperty>,
+		TInteger
 	>
 >
 function Integer(property?: TNumberOptions) {
@@ -268,31 +282,50 @@ function Integer(property?: TNumberOptions) {
 	if (isEmpty(property))
 		return (emptyInteger ??= elyType(
 			ELYSIA_TYPES.Integer,
-			Type.Union([Type.Integer(), StringifiedInteger])
+			Union([Type.Integer(), StringifiedInteger])
 		))
 
-	sharedInteger ??= createSharedReference()
-	return sharedInteger(property, IntegerWithProperty)
+	sharedInteger ??= createPrimitiveReference(t.Integer())
+	return sharedInteger(property, IntegerWithProperty, IntegerPatch)
 }
 
-function IntegerWithProperty(property?: TNumberOptions) {
-	const integer = Type.Integer(property)
+function IntegerWithProperty(property: TNumberOptions, primitive: TInteger) {
+	const integer = Object.assign(property, primitive)
+
 	return elyType(
 		ELYSIA_TYPES.Integer,
-		Type.Union([integer, Type.Intersect([StringifiedInteger, integer])])
+		Union([integer, Type.Intersect([StringifiedInteger, integer])])
 	)
 }
 
+function IntegerPatch(
+	schema: ReturnType<typeof IntegerWithProperty>,
+	property: TNumberOptions,
+	primitive: TInteger
+) {
+	const integer = Object.assign(property, primitive)
+
+	return Object.assign({}, schema, {
+		anyOf: [
+			integer,
+			{
+				allOf: [schema.anyOf[1].allOf[0], integer]
+			}
+		]
+	})
+}
+
 let StringifiedBoolean: Type.TCodec<Type.TRefine<Type.TString>, boolean>
-let emptyBoolean: Readonly<
+let emptyBooleanString: Readonly<
 	Type.TUnion<
 		[Type.TCodec<Type.TRefine<Type.TString>, boolean>, Type.TBoolean]
 	>
 >
 let sharedBooleanString: ReturnType<
-	typeof createSharedReference<
+	typeof createPrimitiveReference<
 		TSchemaOptions,
-		ReturnType<typeof BooleanStringWithProperty>
+		ReturnType<typeof BooleanStringWithProperty>,
+		TBoolean
 	>
 >
 function BooleanString(property?: TSchemaOptions) {
@@ -306,21 +339,40 @@ function BooleanString(property?: TSchemaOptions) {
 	)
 
 	if (isEmpty(property))
-		return (emptyBoolean ??= elyType(
+		return (emptyBooleanString ??= elyType(
 			ELYSIA_TYPES.BooleanString,
-			Type.Union([StringifiedBoolean, Type.Boolean()])
+			Union([StringifiedBoolean, Type.Boolean()])
 		))
 
-	sharedBooleanString ??= createSharedReference()
-	return sharedBooleanString(property, BooleanStringWithProperty)
+	sharedBooleanString ??= createPrimitiveReference(t.Boolean())
+	return sharedBooleanString(
+		property,
+		BooleanStringWithProperty,
+		BooleanPatch
+	)
 }
 
-function BooleanStringWithProperty(property?: TSchemaOptions) {
-	const boolean = Type.Boolean(property)
+function BooleanStringWithProperty(
+	property: TSchemaOptions,
+	primitive: TBoolean
+) {
+	const boolean = Object.assign(property, primitive)
 	return elyType(
 		ELYSIA_TYPES.BooleanString,
-		Type.Union([boolean, Type.Intersect([StringifiedBoolean, boolean])])
+		Union([boolean, Type.Intersect([StringifiedBoolean, boolean])])
 	)
+}
+
+function BooleanPatch(
+	schema: ReturnType<typeof BooleanStringWithProperty>,
+	property: TSchemaOptions,
+	primitive: TBoolean
+) {
+	const boolean = Object.assign(property, primitive)
+
+	return Object.assign({}, schema, {
+		anyOf: [boolean, schema.anyOf[1]]
+	})
 }
 
 let BaseObjectString: Type.TCodec<
@@ -358,10 +410,10 @@ function ObjectString<T extends TProperties>(
 		)
 	)
 
-	const object = Type.Object(property, options)
+	const object = ObjectType(property, options)
 	return elyType(
 		ELYSIA_TYPES.ObjectString,
-		Type.Union([object, Type.Intersect([BaseObjectString, object])])
+		Union([object, Type.Intersect([BaseObjectString, object])])
 	)
 }
 
@@ -393,10 +445,10 @@ function ArrayString<T extends TProperties>(
 		(value) => JSON.parse(value)
 	)
 
-	const array = Type.Array(property, options)
+	const array = ArrayType(property, options)
 	return elyType(
 		ELYSIA_TYPES.ArrayString,
-		Type.Union([array, Type.Intersect([BaseArrayString, array])])
+		Union([array, Type.Intersect([BaseArrayString, array])])
 	)
 }
 
@@ -416,7 +468,7 @@ let sharedDate: ReturnType<
 >
 function DateType(property?: DateOptions) {
 	StringifiedDate ??= Type.Codec(
-		Type.Union([
+		Union([
 			Type.Refine(
 				Type.Unsafe<Date>({ '~kind': 'Date' }),
 				(value) => value instanceof Date,
@@ -474,7 +526,7 @@ function DateWithProperty(options: DateOptions) {
 const Nullable = <T extends TSchema>(schema: T, options?: TSchemaOptions) =>
 	elyType(
 		ELYSIA_TYPES.Nullable,
-		Type.Union([schema, t.Null()], assignOrNew(options, { nullable: true }))
+		Union([schema, t.Null()], assignOrNew(options, { nullable: true }))
 	)
 
 function MaybeEmpty<T extends TSchema>(schema: T, options?: TSchemaOptions) {
@@ -634,8 +686,8 @@ let sharedFiles: ReturnType<
 	>
 >
 function Files(options?: FilesOptions) {
-	BaseFiles ??= Type.Union([
-		Type.Array(File()),
+	BaseFiles ??= Union([
+		ArrayType(File()),
 		Type.Decode(File(), (value) => [value])
 	])
 
@@ -669,21 +721,46 @@ function FilesWithProperty(options: FilesOptions) {
 	return elyType(ELYSIA_TYPES.Files, Refines(BaseFiles, refines as any))
 }
 
-const Form = <T extends TProperties>(property: T, options?: TObjectOptions) =>
-	elyType(
+type BaseFormType<T extends Record<keyof any, unknown>> = Type.TCodec<
+	Type.TRefine<Type.TUnsafe<ElysiaFormData<T>>>,
+	(
+		T extends Record<string, unknown>
+			? { [K in keyof T]: T[K] extends Blob | ElysiaFile ? File : T[K] }
+			: T extends Blob | ElysiaFile
+				? File
+				: T
+	) extends infer A
+		? {
+				[key in keyof A]: IsTuple<A[key]> extends true
+					? // @ts-expect-error
+						A[key][number] extends Blob | ElysiaFile
+						? File[]
+						: A[key]
+					: A[key]
+			}
+		: T
+>
+let BaseForm: BaseFormType<any>
+const Form = <T extends TProperties>(property: T, options?: TObjectOptions) => {
+	BaseForm ??= Object.freeze(
+		Type.Decode(
+			Type.Refine(
+				Type.Unsafe<any>({ '~kind': 'FormData' }),
+				(value) => '~ely-form' in value,
+				'must be instance of Elysia.form'
+			),
+			(value) => value['~ely-form']
+		)
+	)
+
+	return elyType(
 		ELYSIA_TYPES.Form,
 		Type.Intersect([
-			Type.Decode(
-				Type.Refine(
-					Type.Unsafe<ElysiaFormData<T>>({ '~kind': 'FormData' }),
-					(value) => '~ely-form' in value,
-					'must be instance of Elysia.form'
-				),
-				(value) => value['~ely-form']
-			),
+			BaseForm as unknown as BaseFormType<T>,
 			Type.Object(property, options)
 		])
 	)
+}
 
 const NoValidate = <T extends TSchema>(v: T, enabled = true) =>
 	enabled ? elyType(ELYSIA_TYPES.NoValidate, v) : v
@@ -770,24 +847,165 @@ function Accelerate(schema: StandardJSONSchemaV1Like) {
 	return jsonSchema
 }
 
-export const t = Object.assign({}, Type, {
-	Numeric,
-	Integer,
-	BooleanString,
-	ObjectString,
-	ArrayString,
-	Date: DateType,
-	Nullable,
-	MaybeEmpty,
-	UnionEnum,
-	NoValidate,
-	File,
-	Files,
-	Form,
-	ArrayBuffer: ArrayBufferType,
-	Uint8Array: Uint8ArrayType,
-	Accelerate
-})
+type GetOwnPropertyDescriptor<T> = {
+	[P in keyof T]: TypedPropertyDescriptor<T[P]>
+} & {
+	[x: string]: PropertyDescriptor
+}
+
+const defineKind = <T extends TSchema>(kind: string, schema: T) =>
+	Object.defineProperty(schema, '~kind', {
+		value: kind,
+		enumerable: false,
+		configurable: true,
+		writable: true
+	})
+
+let emptyString: TString
+let stringDescriptor: GetOwnPropertyDescriptor<TString>
+function StringType(options?: TStringOptions): TString {
+	emptyString ??= Object.freeze(Type.String())
+
+	if (isEmpty(options)) return emptyString
+
+	return Object.defineProperties(
+		options,
+		(stringDescriptor ??= Object.getOwnPropertyDescriptors(Type.String()))
+	) as any
+}
+
+let emptyBoolean: Readonly<TBoolean>
+let booleanDescriptor: GetOwnPropertyDescriptor<TBoolean>
+function BooleanType(options?: TSchemaOptions): TBoolean {
+	emptyBoolean ??= Object.freeze(Type.Boolean())
+
+	if (isEmpty(options)) return emptyBoolean
+
+	return Object.defineProperties(
+		options,
+		(booleanDescriptor ??= Object.getOwnPropertyDescriptors(Type.Boolean()))
+	) as any
+}
+
+let emptyNumber: Readonly<TNumber>
+let numberDescriptor: GetOwnPropertyDescriptor<TNumber>
+function NumberType(options?: TNumberOptions): TNumber {
+	emptyNumber ??= Object.freeze(Type.Number())
+
+	if (isEmpty(options)) return emptyNumber
+
+	return Object.defineProperties(
+		options,
+		(numberDescriptor ??= Object.getOwnPropertyDescriptors(Type.Number()))
+	) as any
+}
+
+function ObjectType<T extends TProperties>(
+	properties: T,
+	options?: TObjectOptions
+): TObject<T> {
+	const required = Object.keys(properties)
+	for (let i = 0; i < required.length; i++)
+		// @ts-expect-error
+		if (properties[required[i]]['~optional']) required.splice(i--, 1)
+
+	if (isEmpty(options))
+		return defineKind('Object', {
+			type: 'object',
+			properties,
+			required
+		}) as any
+
+	options.type = 'object'
+	options.properties = properties
+	options.required = required
+	return defineKind('Object', options) as any
+}
+
+function ArrayType<T extends TSchema>(
+	items: T,
+	options?: TSchemaOptions
+): TArray<T> {
+	if (isEmpty(options))
+		return defineKind('Array', {
+			type: 'array',
+			items
+		}) as any
+
+	options.type = 'array'
+	options.items = items
+	return defineKind('Array', options) as any
+}
+
+let optionalDescriptor: {
+	value: true
+	enumerable: false
+	configurable: true
+	writable: true
+}
+function Optional<T extends TSchema>(schema: T): TOptional<T> {
+	if ('~optional' in schema) return schema as any
+
+	return Object.defineProperty(
+		Object.defineProperties({}, Object.getOwnPropertyDescriptors(schema)),
+		'~optional',
+		(optionalDescriptor ??= {
+			value: true,
+			enumerable: false,
+			configurable: true,
+			writable: true
+		})
+	) as any
+}
+
+function Intersect<T extends TSchema[]>(schemas: T, options?: TSchemaOptions) {
+	if (isEmpty(options))
+		return defineKind('Intersect', {
+			allOf: schemas
+		}) as any
+
+	options.allOf = schemas
+	return defineKind('Intersect', options) as any
+}
+
+function Union<T extends TSchema[]>(schemas: T, options?: TSchemaOptions) {
+	if (isEmpty(options))
+		return defineKind('Union', {
+			anyOf: schemas
+		}) as any
+
+	options.anyOf = schemas
+	return defineKind('Union', options) as any
+}
+
+export const t = Object.freeze(
+	Object.assign({}, Type, {
+		String: StringType,
+		Boolean: BooleanType,
+		Number: NumberType,
+		Object: ObjectType,
+		Array: ArrayType,
+		Intersect,
+		Union,
+		Optional,
+		Numeric,
+		Integer,
+		BooleanString,
+		ObjectString,
+		ArrayString,
+		Date: DateType,
+		Nullable,
+		MaybeEmpty,
+		UnionEnum,
+		NoValidate,
+		File,
+		Files,
+		Form,
+		ArrayBuffer: ArrayBufferType,
+		Uint8Array: Uint8ArrayType,
+		Accelerate
+	})
+)
 
 // Cookie: <T extends TProperties>(
 // 	property: T,

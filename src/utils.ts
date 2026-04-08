@@ -912,7 +912,7 @@ export const redirect = (
 
 export type redirect = typeof redirect
 
-type IsTuple<T> = T extends readonly any[]
+export type IsTuple<T> = T extends readonly any[]
 	? number extends T['length']
 		? false
 		: true
