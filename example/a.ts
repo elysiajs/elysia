@@ -1,8 +1,6 @@
 import { t } from '../src/type'
 import { RouteValidator } from '../src/schema/route'
 
-console.log(t.Optional(t.String()))
-
 const route = new RouteValidator({
 	body: t.Object({
 		name: t.String(),

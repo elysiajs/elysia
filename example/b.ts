@@ -1,19 +1,43 @@
-import { applyCoercions, coerce, coerceRoot } from '../src/schema/coerce'
+import { applyCoercions } from '../src/schema/coerce'
 import { t } from '../src/type'
 // import { Type as t } from 'typebox'
+// import { Type as t } from '@sinclair/typebox'
 
 function gc() {
-	if (typeof Bun !== 'undefined') Bun.gc()
-	if (typeof global.gc === 'function') global.gc()
+	if (typeof Bun !== 'undefined') Bun.gc(true)
+	else if (typeof global.gc === 'function') global.gc()
 }
 
-const stacks = <any[]>[]
-gc()
-const m1 = process.memoryUsage().heapUsed
+function memoryUsage() {
+	if (typeof Bun !== 'undefined') {
+		const { memoryUsage } = require('bun:jsc')
+
+		gc()
+		return memoryUsage().current
+	}
+
+	gc()
+	return process.memoryUsage().heapUsed
+}
+
+const total = 100_000
+const stacks = <any[]>Array(total)
+const m1 = memoryUsage()
 const t1 = performance.now()
 
-for (let i = 0; i <= 10_000; i++)
-	stacks.push(
+// const coerce = (schema: any) =>
+// 	applyCoercions(schema, [
+// 		[
+// 			[
+// 				['Number', (x) => t.Numeric(x)],
+// 				['Boolean', (x) => t.BooleanString(x)]
+// 			]
+// 		]
+// 	])
+
+for (let i = 0; i <= 100_000; i++)
+	stacks[i] =
+		// coerce(
 		t.Array(
 			t.Object({
 				id: t.Number(),
@@ -36,8 +60,12 @@ for (let i = 0; i <= 10_000; i++)
 						hoursPlay: t.Number(),
 						tags: t.Array(
 							t.Object({
-								name: t.String(),
-								count: t.Number()
+								name: t.String({
+									title: 'a'
+								}),
+								count: t.Number({
+									title: 'a'
+								})
 							})
 						)
 					})
@@ -60,18 +88,19 @@ for (let i = 0; i <= 10_000; i++)
 				)
 			})
 		)
-	)
+// )
 
 const t2 = performance.now()
 gc()
-const m2 = process.memoryUsage().heapUsed
+const m2 = memoryUsage()
 
 console.log('Elysia 2')
 console.log('Time:', (t2 - t1).toFixed(2), 'ms')
-console.log('Heap used:', ((m2 - m1) / 1024 / 1024).toFixed(2), 'MB')
-console.log()
+console.log('Memory usage:', ((m2 - m1) / 1024 / 1024).toFixed(2), 'MB')
 
-stacks[0]
+// console.dir(stacks[0], {
+// 	depth: null
+// })
 
 // import { Compile } from 'typebox/schema'
 

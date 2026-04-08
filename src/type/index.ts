@@ -7,15 +7,15 @@ import type {
 	TSchema,
 	TNumberOptions,
 	TObjectOptions,
-	StaticDecode,
 	TNumber,
-	TInteger,
 	TBoolean,
 	TStringOptions,
 	TString,
 	TObject,
 	TArray,
-	TOptional
+	TOptional,
+	TUnion,
+	TIntersect
 } from 'typebox'
 
 import { checksum, isEmpty, IsTuple, type ElysiaFormData } from '../utils'
@@ -58,15 +58,12 @@ function elyType<T extends TSchema>(
 	name: ELYSIA_TYPES[keyof ELYSIA_TYPES],
 	schema: T
 ): T {
-	try {
-		// @ts-expect-error
-		schema['~elyTyp'] = name
-		return schema
-	} catch {
-		if ('~elyTyp' in schema) return schema
+	if (Object.isFrozen(schema))
+		return Object.assign({ ...schema }, { '~elyTyp': name })
 
-		return Object.assign({}, schema, { '~elyTyp': name })
-	}
+	// @ts-expect-error
+	schema['~elyTyp'] = name
+	return schema
 }
 
 export const primitiveElysiaTypes = new Set([
@@ -91,52 +88,28 @@ function assignOrNew<
 
 const sharedReferences = new Set<Map<number, unknown>>()
 
-function createPrimitiveReference<
-	const P extends Record<keyof any, unknown>,
-	const T extends TSchema,
-	const B extends TSchema
->(primitive: B) {
-	let shared: T
-
-	return (
-		property: P,
-		createType: (property: P, primitive: B) => T,
-		patch: (schema: T, property: P, primitive: B) => T
-	): Readonly<T> => {
-		if (shared) return patch(shared, property, primitive)
-
-		return (shared = Object.freeze(createType(property, primitive)))
-	}
-}
-
 function createSharedReference<
 	const P extends Record<keyof any, unknown>,
 	const T extends TSchema
->() {
-	let shared: Map<number, T>
+>(createType: (property: P) => T) {
+	const shared = Object.create(null)
 
-	return (property: P, createType: (property: P) => T): Readonly<T> => {
+	return (property: P) => {
 		const hash = propertyChecksum(property)
-		if (shared?.has(hash[0])) {
-			const cached = shared.get(hash[0])!
+		if (hash[0] in shared) {
+			const cached = shared[hash[0]]
 
 			if (hash[1])
-				return Object.assign(
-					hash[1],
-					cached as Record<string, unknown>
-				) as Readonly<T>
+				return Object.defineProperty(
+					Object.assign(hash[1], cached as Record<string, unknown>),
+					'~kind',
+					{ value: cached['~kind'], enumerable: false }
+				) as T
 
 			return cached
 		}
 
-		const type = Object.freeze(createType(property))
-		if (!shared) {
-			shared = new Map()
-			sharedReferences.add(shared)
-		}
-		shared.set(hash[0], type)
-
-		return type
+		return (shared[hash[0]] = Object.freeze(createType(property)))
 	}
 }
 
@@ -204,13 +177,6 @@ let StringifiedNumber: Type.TCodec<Type.TRefine<Type.TString>, number>
 let emptyNumeric: Readonly<
 	Type.TUnion<[Type.TNumber, Type.TCodec<Type.TRefine<Type.TString>, number>]>
 >
-let sharedNumeric: ReturnType<
-	typeof createPrimitiveReference<
-		TNumberOptions,
-		ReturnType<typeof NumericWithProperty>,
-		TNumber
-	>
->
 function Numeric(property?: TNumberOptions) {
 	StringifiedNumber ??= Type.Decode(
 		Type.Refine(Type.String(), (value) => !isNaN(+value), 'must be number'),
@@ -225,51 +191,20 @@ function Numeric(property?: TNumberOptions) {
 			)
 		))
 
-	sharedNumeric ??= createPrimitiveReference(t.Number())
-
-	return sharedNumeric(property, NumericWithProperty, NumericPatch)
-}
-
-function NumericWithProperty(property: TNumberOptions, primitive: TNumber) {
-	const number: TNumber = Object.assign(property, primitive)
-
+	const number = NumberType(property)
 	return elyType(
 		ELYSIA_TYPES.Numeric,
-		Union([number, Type.Intersect([StringifiedNumber, number])])
+		Union([number, Intersect([StringifiedNumber, number])])
 	)
 }
 
-function NumericPatch(
-	schema: ReturnType<typeof NumericWithProperty>,
-	property: TNumberOptions,
-	primitive: TNumber
-) {
-	const number: TNumber = Object.assign(property, primitive)
-
-	return Object.assign({}, schema, {
-		anyOf: [
-			number,
-			{
-				allOf: [schema.anyOf[1].allOf[0], number]
-			}
-		]
-	})
-}
-
 let StringifiedInteger: Type.TCodec<Type.TRefine<Type.TString>, number>
-let emptyInteger: Readonly<
+let emptyIntegerString: Readonly<
 	Type.TUnion<
 		[Type.TInteger, Type.TCodec<Type.TRefine<Type.TString>, number>]
 	>
 >
-let sharedInteger: ReturnType<
-	typeof createPrimitiveReference<
-		TNumberOptions,
-		ReturnType<typeof IntegerWithProperty>,
-		TInteger
-	>
->
-function Integer(property?: TNumberOptions) {
+function IntegerString(property?: TNumberOptions) {
 	StringifiedInteger = Type.Decode(
 		Type.Refine(
 			Type.String(),
@@ -280,52 +215,22 @@ function Integer(property?: TNumberOptions) {
 	)
 
 	if (isEmpty(property))
-		return (emptyInteger ??= elyType(
+		return (emptyIntegerString ??= elyType(
 			ELYSIA_TYPES.Integer,
 			Union([Type.Integer(), StringifiedInteger])
 		))
 
-	sharedInteger ??= createPrimitiveReference(t.Integer())
-	return sharedInteger(property, IntegerWithProperty, IntegerPatch)
-}
-
-function IntegerWithProperty(property: TNumberOptions, primitive: TInteger) {
-	const integer = Object.assign(property, primitive)
-
+	const integer = Type.Integer(property)
 	return elyType(
 		ELYSIA_TYPES.Integer,
 		Union([integer, Type.Intersect([StringifiedInteger, integer])])
 	)
 }
 
-function IntegerPatch(
-	schema: ReturnType<typeof IntegerWithProperty>,
-	property: TNumberOptions,
-	primitive: TInteger
-) {
-	const integer = Object.assign(property, primitive)
-
-	return Object.assign({}, schema, {
-		anyOf: [
-			integer,
-			{
-				allOf: [schema.anyOf[1].allOf[0], integer]
-			}
-		]
-	})
-}
-
 let StringifiedBoolean: Type.TCodec<Type.TRefine<Type.TString>, boolean>
 let emptyBooleanString: Readonly<
 	Type.TUnion<
 		[Type.TCodec<Type.TRefine<Type.TString>, boolean>, Type.TBoolean]
-	>
->
-let sharedBooleanString: ReturnType<
-	typeof createPrimitiveReference<
-		TSchemaOptions,
-		ReturnType<typeof BooleanStringWithProperty>,
-		TBoolean
 	>
 >
 function BooleanString(property?: TSchemaOptions) {
@@ -344,35 +249,11 @@ function BooleanString(property?: TSchemaOptions) {
 			Union([StringifiedBoolean, Type.Boolean()])
 		))
 
-	sharedBooleanString ??= createPrimitiveReference(t.Boolean())
-	return sharedBooleanString(
-		property,
-		BooleanStringWithProperty,
-		BooleanPatch
-	)
-}
-
-function BooleanStringWithProperty(
-	property: TSchemaOptions,
-	primitive: TBoolean
-) {
-	const boolean = Object.assign(property, primitive)
+	const boolean = BooleanType(property)
 	return elyType(
 		ELYSIA_TYPES.BooleanString,
 		Union([boolean, Type.Intersect([StringifiedBoolean, boolean])])
 	)
-}
-
-function BooleanPatch(
-	schema: ReturnType<typeof BooleanStringWithProperty>,
-	property: TSchemaOptions,
-	primitive: TBoolean
-) {
-	const boolean = Object.assign(property, primitive)
-
-	return Object.assign({}, schema, {
-		anyOf: [boolean, schema.anyOf[1]]
-	})
 }
 
 let BaseObjectString: Type.TCodec<
@@ -489,8 +370,8 @@ function DateType(property?: DateOptions) {
 			elyType(ELYSIA_TYPES.Date, StringifiedDate)
 		))
 
-	sharedDate ??= createSharedReference()
-	return sharedDate(property, DateWithProperty)
+	sharedDate ??= createSharedReference(DateWithProperty)
+	return sharedDate(property)
 }
 
 function DateWithProperty(options: DateOptions) {
@@ -617,8 +498,8 @@ function File(options?: FileOptions) {
 			elyType(ELYSIA_TYPES.File, BaseFile)
 		))
 
-	sharedFile ??= createSharedReference()
-	return sharedFile(options, FileWithProperty)
+	sharedFile ??= createSharedReference(FileWithProperty)
+	return sharedFile(options)
 }
 
 function FileWithProperty(options: FilesOptions) {
@@ -696,8 +577,8 @@ function Files(options?: FilesOptions) {
 			elyType(ELYSIA_TYPES.Files, BaseFiles)
 		))
 
-	sharedFiles ??= createSharedReference()
-	return sharedFiles(options, FilesWithProperty)
+	sharedFiles ??= createSharedReference(FilesWithProperty)
+	return sharedFiles(options)
 }
 
 function FilesWithProperty(options: FilesOptions) {
@@ -755,7 +636,7 @@ const Form = <T extends TProperties>(property: T, options?: TObjectOptions) => {
 
 	return elyType(
 		ELYSIA_TYPES.Form,
-		Type.Intersect([
+		Intersect([
 			BaseForm as unknown as BaseFormType<T>,
 			Type.Object(property, options)
 		])
@@ -858,8 +739,29 @@ const noEnumerable = {
 } as const
 
 const emptyString = Object.freeze(Type.String())
+const stringFormatCache: Record<string, TString> = Object.create(null)
 function StringType(options?: TStringOptions): TString {
-	if (isEmpty(options)) return emptyString
+	if (!options) return emptyString
+
+	const totalOptions = Object.keys(options).length
+	if (!totalOptions) return emptyString
+
+	if (totalOptions === 1 && options.format) {
+		if (options.format in stringFormatCache)
+			return stringFormatCache[options.format]
+
+		return (stringFormatCache[options.format] = Object.freeze(
+			Object.defineProperty(
+				{
+					type: 'string',
+					format: options.format,
+					'~kind': 'String'
+				},
+				'~kind',
+				noEnumerable
+			) as any as TString
+		))
+	}
 
 	options.type = 'string'
 	options['~kind'] = 'String'
@@ -881,6 +783,15 @@ function NumberType(options?: TNumberOptions): TNumber {
 
 	options.type = 'number'
 	options['~kind'] = 'Number'
+	return Object.defineProperty(options, '~kind', noEnumerable) as any
+}
+
+const emptyInteger = Object.freeze(Type.Integer())
+function Integer(options?: TNumberOptions): TNumber {
+	if (isEmpty(options)) return emptyInteger
+
+	options.type = 'integer'
+	options['~kind'] = 'Integer'
 	return Object.defineProperty(options, '~kind', noEnumerable) as any
 }
 
@@ -933,27 +844,50 @@ function ArrayType<T extends TSchema>(
 	return Object.defineProperty(options, '~kind', noEnumerable) as any
 }
 
-const optionalProperty = {
+let optionalProperty: {
 	enumerable: false
 }
-const optionalPropertyWithValue = {
-	value: true,
+let optionalPropertyWithValue: {
+	value: true
 	enumerable: false
 }
+let OptionalShared: WeakMap<TSchema, TSchema>
 function Optional<T extends TSchema>(schema: T): TOptional<T> {
-	if (Object.isFrozen(schema))
-		return Object.defineProperty(
-			Object.create(schema),
-			'~optional',
-			optionalPropertyWithValue
+	if (OptionalShared?.has(schema)) return OptionalShared.get(schema) as any
+
+	if (Object.isFrozen(schema)) {
+		const result = Object.freeze(
+			Object.defineProperty(
+				Object.create(schema),
+				'~optional',
+				(optionalPropertyWithValue ??= {
+					value: true,
+					enumerable: false
+				})
+			)
 		) as any
+
+		OptionalShared ??= new WeakMap()
+		OptionalShared.set(schema, result)
+
+		return result
+	}
 
 	// @ts-expect-error
 	schema['~optional'] = true
-	return Object.defineProperty(schema, '~optional', optionalProperty) as any
+	return Object.defineProperty(
+		schema,
+		'~optional',
+		(optionalProperty ??= {
+			enumerable: false
+		})
+	) as any
 }
 
-function Intersect<T extends TSchema[]>(schemas: T, options?: TSchemaOptions) {
+function Intersect<T extends TSchema[]>(
+	schemas: [...T],
+	options?: TSchemaOptions
+): TIntersect<T> {
 	if (isEmpty(options))
 		return Object.defineProperty(
 			{
@@ -969,7 +903,10 @@ function Intersect<T extends TSchema[]>(schemas: T, options?: TSchemaOptions) {
 	return Object.defineProperty(options, '~kind', noEnumerable) as any
 }
 
-function Union<T extends TSchema[]>(schemas: T, options?: TSchemaOptions) {
+function Union<T extends TSchema[]>(
+	schemas: [...T],
+	options?: TSchemaOptions
+): TUnion<T> {
 	if (isEmpty(options))
 		return Object.defineProperty(
 			{
@@ -986,32 +923,36 @@ function Union<T extends TSchema[]>(schemas: T, options?: TSchemaOptions) {
 }
 
 export const t = Object.freeze(
-	Object.assign({}, Type, {
-		// String: StringType,
-		// Boolean: BooleanType,
-		// Number: NumberType,
-		// Object: ObjectType,
-		// Array: ArrayType,
-		// Intersect,
-		// Union,
-		// Optional,
-		Numeric,
-		Integer,
-		BooleanString,
-		ObjectString,
-		ArrayString,
-		Date: DateType,
-		Nullable,
-		MaybeEmpty,
-		UnionEnum,
-		NoValidate,
-		File,
-		Files,
-		Form,
-		ArrayBuffer: ArrayBufferType,
-		Uint8Array: Uint8ArrayType,
-		Accelerate
-	})
+	Object.assign(
+		{ ...Type },
+		{
+			String: StringType,
+			Boolean: BooleanType,
+			Number: NumberType,
+			Object: ObjectType,
+			Array: ArrayType,
+			Integer,
+			Intersect,
+			Union,
+			Optional,
+			Numeric,
+			IntegerString,
+			BooleanString,
+			ObjectString,
+			ArrayString,
+			Date: DateType,
+			Nullable,
+			MaybeEmpty,
+			UnionEnum,
+			NoValidate,
+			File,
+			Files,
+			Form,
+			ArrayBuffer: ArrayBufferType,
+			Uint8Array: Uint8ArrayType,
+			Accelerate
+		}
+	)
 )
 
 // Cookie: <T extends TProperties>(

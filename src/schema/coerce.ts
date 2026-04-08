@@ -30,10 +30,24 @@ export function coerce(
 	fromTo: [from: string, to: CoerceTo][],
 	options?: CoerceOptions
 ): BaseSchema {
-	const transformMap = new Map<string, CoerceTo>(fromTo)
-	const rootOption = options?.root
-	const seen = new WeakSet()
+	let transformMap = new Map<string, CoerceTo>(fromTo)
+	let rootOption = options?.root
+	let seen = new WeakSet()
 	let stopped = false
+
+	// Inline copy-on-write helper to avoid closure allocation
+	// `~kind` is non-enumerable in TypeBox, so we reassign it after spread
+	// https://sinclairzx81.github.io/typebox/#/docs/system/1_settings
+	function copyNode(node: BaseSchema | TSchema) {
+		return Object.defineProperty(
+			// @ts-expect-error
+			{ ...node, '~kind': node['~kind'] },
+			'~kind',
+			{
+				enumerable: false
+			}
+		)
+	}
 
 	function walk(node: BaseSchema, isRoot: boolean): BaseSchema {
 		if (
@@ -96,13 +110,6 @@ export function coerce(
 
 		let out: any = node
 
-		// Inline copy-on-write helper to avoid closure allocation
-		// `~kind` is non-enumerable in TypeBox, so we reassign it after spread
-		// https://sinclairzx81.github.io/typebox/#/docs/system/1_settings
-		function copyNode() {
-			if (out === node) out = { ...node, '~kind': kind }
-		}
-
 		// Combinators
 		for (const key of ['anyOf', 'oneOf', 'allOf'] as const) {
 			const arr = node[key]
@@ -118,7 +125,7 @@ export function coerce(
 				}
 			}
 			if (newArr) {
-				copyNode()
+				out = copyNode(node)
 				out[key] = newArr
 			}
 		}
@@ -126,8 +133,8 @@ export function coerce(
 		// Not
 		if (node.not) {
 			const r = walk(node.not, false)
-			if (r !== node.not) {
-				copyNode()
+			if (r !== node.not && out === node) {
+				out = copyNode(node)
 				out.not = r
 			}
 		}
@@ -146,20 +153,19 @@ export function coerce(
 					}
 				}
 
-				if (newItems) {
-					copyNode()
+				if (newItems && out === node) {
+					out = copyNode(node)
 					out.items = newItems
 				}
 			} else {
 				const r = walk(items, false)
-				if (r !== items) {
-					copyNode()
+				if (r !== items && out === node) {
+					out = copyNode(node)
 					out.items = r
 				}
 			}
 		}
 
-		// Object properties - use for...in instead of Object.entries()
 		if (node.properties) {
 			let newProps: Record<string, BaseSchema> | undefined
 			const props = node.properties
@@ -172,26 +178,24 @@ export function coerce(
 				}
 			}
 
-			if (newProps) {
-				copyNode()
+			if (newProps && out === node) {
+				out = copyNode(node)
 				out.properties = newProps
 			}
 		}
 
-		// additionalProperties
-		const addProps = node.additionalProperties
-		if (typeof addProps === 'object') {
-			const r = walk(addProps, false)
-			if (r !== addProps) {
-				copyNode()
+		if (typeof node.additionalProperties === 'object') {
+			const r = walk(node.additionalProperties, false)
+			if (r !== node.additionalProperties && out === node) {
+				out = copyNode(node)
 				out.additionalProperties = r
 			}
 		}
 
 		// Record (patternProperties) - use for...in instead of Object.entries()
-		const patternProps = node.patternProperties
-		if (patternProps) {
+		if (node.patternProperties) {
 			let newPP: Record<string, BaseSchema> | undefined
+			const patternProps = node.patternProperties
 			for (const k in patternProps) {
 				const v = patternProps[k]!
 				const r = walk(v, false)
@@ -201,8 +205,8 @@ export function coerce(
 				}
 			}
 
-			if (newPP) {
-				copyNode()
+			if (newPP && out === node) {
+				out = copyNode(node)
 				out.patternProperties = newPP
 			}
 		}
@@ -214,8 +218,8 @@ export function coerce(
 
 			if (def) {
 				const r = walk(def, false)
-				if (r !== def) {
-					copyNode()
+				if (r !== def && out === node) {
+					out = copyNode(node)
 					out.$defs = { ...node.$defs, [node.$ref!]: r }
 				}
 			}
@@ -224,7 +228,18 @@ export function coerce(
 		return out
 	}
 
-	return walk(schema as any, true)
+	const q = walk(schema as any, true)
+
+	transformMap.clear()
+	// @ts-expect-error
+	transformMap = undefined
+	rootOption = undefined
+	// @ts-expect-error
+	seen = undefined
+	// @ts-expect-error
+	stopped = undefined
+
+	return q
 }
 
 type CoerceParameters = Parameters<typeof coerce>
