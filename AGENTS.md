@@ -24,10 +24,10 @@ TypeScript
 ## Core Modules (by structural importance)
 
 - `src/types.ts`
-- `src/universal/utils.ts`
 - `src/utils.ts`
 - `src/error.ts`
 - `src/context.ts`
+- `src/cookies.ts`
 
 ## Conventions
 
