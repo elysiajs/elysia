@@ -1,5 +1,5 @@
-import { TSchema } from 'typebox'
 import { primitiveElysiaTypes, t, type BaseSchema } from '../type'
+import type { TProperties, TSchema } from 'typebox'
 
 interface CoerceOptions {
 	/**
@@ -20,7 +20,7 @@ interface CoerceOptions {
 	untilNonRootObjectFound?: boolean
 }
 
-type CoerceTo = (schema: BaseSchema) => BaseSchema | null
+type CoerceTo = (schema: TProperties) => TSchema | BaseSchema | null
 
 /**
  * Replace schema types with custom transformation
@@ -101,7 +101,7 @@ export function coerce(
 							})
 					}
 
-					return result!
+					return result! as s
 				}
 			}
 		}
@@ -228,7 +228,7 @@ export function coerce(
 		return out
 	}
 
-	const q = walk(schema as any, true)
+	const q = walk(schema as BaseSchema, true)
 
 	transformMap.clear()
 	// @ts-expect-error
@@ -252,8 +252,8 @@ export const coerceRoot = () =>
 	(_coerceRoot ??= [
 		[
 			[
-				['Number', (x) => t.Numeric(x as any)],
-				['Boolean', (x) => t.BooleanString(x as any)]
+				['Number', (x) => t.Numeric(x)],
+				['Boolean', (x) => t.BooleanString(x)]
 			],
 			{
 				onlyFirst: 'object'
@@ -266,10 +266,14 @@ export const coerceQuery = () =>
 	(_coerceQuery ??= [
 		[
 			[
-				['Object', (x) => t.ObjectString(x.properties ?? {}, x as any)],
+				[
+					'Object',
+					(x) =>
+						t.ObjectString((x.properties as TProperties) ?? {}, x)
+				],
 				[
 					'Array',
-					(x) => t.ArrayString((x.items as any) ?? t.Any(), x as any)
+					(x) => t.ArrayString((x.items as TProperties) ?? t.Any(), x)
 				]
 			],
 			{
@@ -282,7 +286,13 @@ let _coerceFormData: CoerceOption[]
 export const coerceFormData = () =>
 	(_coerceFormData ??= [
 		[
-			[['Object', (x) => t.ObjectString(x.properties ?? {}, x as any)]],
+			[
+				[
+					'Object',
+					(x) =>
+						t.ObjectString((x.properties as TProperties) ?? {}, x)
+				]
+			],
 			{
 				root: false,
 				onlyFirst: 'object'
@@ -292,7 +302,7 @@ export const coerceFormData = () =>
 			[
 				[
 					'Array',
-					(x) => t.ArrayString((x.items as any) ?? t.Any(), x as any)
+					(x) => t.ArrayString((x.items as TProperties) ?? t.Any(), x)
 				]
 			],
 			{
@@ -307,7 +317,13 @@ let _coerceStringToStructure: CoerceOption[]
 export const coerceStringToStructure = () =>
 	(_coerceStringToStructure ??= [
 		[
-			[['Object', (x) => t.ObjectString(x.properties ?? {}, x as any)]],
+			[
+				[
+					'Object',
+					(x) =>
+						t.ObjectString((x.properties as TProperties) ?? {}, x)
+				]
+			],
 			{
 				untilNonRootObjectFound: true
 			}
@@ -316,7 +332,7 @@ export const coerceStringToStructure = () =>
 			[
 				[
 					'Array',
-					(x) => t.ArrayString((x.items as any) ?? t.Any(), x as any)
+					(x) => t.ArrayString((x.items as TProperties) ?? t.Any(), x)
 				]
 			]
 		]

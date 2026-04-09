@@ -25,15 +25,15 @@ const stacks = <any[]>Array(total)
 const m1 = memoryUsage()
 const t1 = performance.now()
 
-// const coerce = (schema: any) =>
-// 	applyCoercions(schema, [
-// 		[
-// 			[
-// 				['Number', (x) => t.Numeric(x)],
-// 				['Boolean', (x) => t.BooleanString(x)]
-// 			]
-// 		]
-// 	])
+const coerce = (schema: any) =>
+	applyCoercions(schema, [
+		[
+			[
+				['Number', (x) => t.Numeric(x)],
+				['Boolean', (x) => t.BooleanString(x)]
+			]
+		]
+	])
 
 for (let i = 0; i <= 100_000; i++)
 	stacks[i] =
@@ -84,13 +84,13 @@ for (let i = 0; i <= 100_000; i++)
 				)
 			})
 		)
-// )
+	// )
 
 const t2 = performance.now()
 gc()
 const m2 = memoryUsage()
 
-console.log('Elysia 2')
+console.log('Elysia 2 large object coerce x100,000')
 console.log('Time:', (t2 - t1).toFixed(2), 'ms')
 console.log('Memory usage:', ((m2 - m1) / 1024 / 1024).toFixed(2), 'MB')
 

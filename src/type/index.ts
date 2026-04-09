@@ -87,8 +87,6 @@ function assignOrNew<
 	return source as unknown as T & R
 }
 
-const sharedReferences = new Set<Map<number, unknown>>()
-
 function createSharedReference<
 	const P extends Record<keyof any, unknown>,
 	const T extends TSchema
@@ -112,10 +110,6 @@ function createSharedReference<
 
 		return (shared[hash[0]] = Object.freeze(createType(property)))
 	}
-}
-
-export function clearSharedReferences() {
-	for (const shared of sharedReferences) shared.clear()
 }
 
 const hasMeta = (property: Partial<BaseSchema> & Record<keyof any, unknown>) =>
@@ -198,7 +192,7 @@ function Numeric(property?: TNumberOptions) {
 		(value) => +value
 	)
 
-	if (isEmpty(property))
+	if (!property || isEmpty(property))
 		return (emptyNumeric ??= Object.freeze(
 			elyType(
 				ELYSIA_TYPES.Numeric,
@@ -231,7 +225,7 @@ function IntegerString(property?: TNumberOptions) {
 		(value) => +value
 	)
 
-	if (isEmpty(property))
+	if (!property || isEmpty(property))
 		return (emptyIntegerString ??= elyType(
 			ELYSIA_TYPES.Integer,
 			Union([Type.Integer(), StringifiedInteger])
@@ -262,7 +256,7 @@ function BooleanString(property?: TSchemaOptions) {
 		(value) => (value === 'true' ? true : false)
 	)
 
-	if (isEmpty(property))
+	if (!property || isEmpty(property))
 		return (emptyBooleanString ??= elyType(
 			ELYSIA_TYPES.BooleanString,
 			Union([StringifiedBoolean, Type.Boolean()])
@@ -390,7 +384,7 @@ function DateType(property?: DateOptions) {
 			value instanceof Date ? value.toISOString() : value + ''
 		)
 
-	if (isEmpty(property))
+	if (!property || isEmpty(property))
 		return (emptyDate ??= Object.freeze(
 			elyType(ELYSIA_TYPES.Date, StringifiedDate)
 		))
@@ -528,7 +522,7 @@ function File(options?: FileOptions) {
 		'must be instance of Blob'
 	)
 
-	if (isEmpty(options))
+	if (!options || isEmpty(options))
 		return (emptyFile ??= Object.freeze(
 			elyType(ELYSIA_TYPES.File, BaseFile)
 		))
@@ -607,7 +601,7 @@ function Files(options?: FilesOptions) {
 		Type.Decode(File(), (value) => [value])
 	])
 
-	if (isEmpty(options))
+	if (!options || isEmpty(options))
 		return (emptyFiles ??= Object.freeze(
 			elyType(ELYSIA_TYPES.Files, BaseFiles)
 		))
@@ -690,7 +684,7 @@ function ArrayBufferType(property?: ArrayBufferOptions) {
 		'must be ArrayBuffer'
 	)
 
-	if (isEmpty(property))
+	if (!property || isEmpty(property))
 		return (emptyArrayBuffer ??= Object.freeze(
 			elyType(ELYSIA_TYPES.ArrayBuffer, BaseArrayBuffer)
 		))
@@ -723,7 +717,7 @@ function Uint8ArrayType(property?: ArrayBufferOptions) {
 		'must be Uint8Array'
 	)
 
-	if (isEmpty(property))
+	if (!property || isEmpty(property))
 		return (emptyUint8Array ??= Object.freeze(
 			elyType(ELYSIA_TYPES.Uint8Array, BaseUint8Array)
 		))
@@ -805,7 +799,7 @@ function StringType(options?: TStringOptions): TString {
 
 const emptyBoolean = Object.freeze(Type.Boolean())
 function BooleanType(options?: TSchemaOptions): TBoolean {
-	if (isEmpty(options)) return emptyBoolean
+	if (!options || isEmpty(options)) return emptyBoolean
 
 	options.type = 'boolean'
 	options['~kind'] = 'Boolean'
@@ -814,7 +808,7 @@ function BooleanType(options?: TSchemaOptions): TBoolean {
 
 const emptyNumber = Object.freeze(Type.Number())
 function NumberType(options?: TNumberOptions): TNumber {
-	if (isEmpty(options)) return emptyNumber
+	if (!options || isEmpty(options)) return emptyNumber
 
 	options.type = 'number'
 	options['~kind'] = 'Number'
@@ -823,7 +817,7 @@ function NumberType(options?: TNumberOptions): TNumber {
 
 const emptyInteger = Object.freeze(Type.Integer())
 function Integer(options?: TNumberOptions): TInteger {
-	if (isEmpty(options)) return emptyInteger as any
+	if (!options || isEmpty(options)) return emptyInteger as any
 
 	options.type = 'integer'
 	options['~kind'] = 'Integer'
@@ -839,7 +833,7 @@ function ObjectType<T extends TProperties>(
 		// @ts-expect-error
 		if (properties[required[i]]['~optional']) required.splice(i--, 1)
 
-	if (isEmpty(options))
+	if (!options || isEmpty(options))
 		return Object.defineProperty(
 			{
 				'~kind': 'Object',
@@ -862,7 +856,7 @@ function ArrayType<T extends TSchema>(
 	items: T,
 	options?: TSchemaOptions
 ): TArray<T> {
-	if (isEmpty(options))
+	if (!options || isEmpty(options))
 		return Object.defineProperty(
 			{
 				'~kind': 'Array',
@@ -923,7 +917,7 @@ function Intersect<T extends TSchema[]>(
 	schemas: [...T],
 	options?: TSchemaOptions
 ): TIntersect<T> {
-	if (isEmpty(options))
+	if (!options || isEmpty(options))
 		return Object.defineProperty(
 			{
 				'~kind': 'Intersect',
@@ -942,7 +936,7 @@ function Union<T extends TSchema[]>(
 	schemas: [...T],
 	options?: TSchemaOptions
 ): TUnion<T> {
-	if (isEmpty(options))
+	if (!options || isEmpty(options))
 		return Object.defineProperty(
 			{
 				'~kind': 'Union',
