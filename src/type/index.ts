@@ -32,6 +32,7 @@ import type {
 	BaseSchema
 } from './types'
 import type { Prettify, StandardJSONSchemaV1Like } from '../types'
+import { TInteger } from '@sinclair/typebox'
 
 // Start at 1 to prevent falsy value check
 export const ELYSIA_TYPES = {
@@ -58,8 +59,8 @@ function elyType<T extends TSchema>(
 	name: ELYSIA_TYPES[keyof ELYSIA_TYPES],
 	schema: T
 ): T {
-	if (Object.isFrozen(schema))
-		return Object.assign({ ...schema }, { '~elyTyp': name })
+	// if (Object.isFrozen(schema))
+	// 	return Object.assign({ ...schema }, { '~elyTyp': name })
 
 	// @ts-expect-error
 	schema['~elyTyp'] = name
@@ -821,8 +822,8 @@ function NumberType(options?: TNumberOptions): TNumber {
 }
 
 const emptyInteger = Object.freeze(Type.Integer())
-function Integer(options?: TNumberOptions): TNumber {
-	if (isEmpty(options)) return emptyInteger
+function Integer(options?: TNumberOptions): TInteger {
+	if (isEmpty(options)) return emptyInteger as any
 
 	options.type = 'integer'
 	options['~kind'] = 'Integer'
