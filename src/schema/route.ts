@@ -28,7 +28,8 @@ interface RouteValidatorOptions extends Omit<
 	ValidatorOptions,
 	'coerces' | 'schemas'
 > {
-	schemas: {
+	body?: boolean
+	schemas?: {
 		body: AnySchema
 		headers: AnySchema
 		query: AnySchema
@@ -39,100 +40,70 @@ interface RouteValidatorOptions extends Omit<
 }
 
 export class RouteValidator<const in out T extends RouteSchema> {
-	#body?: ToSubTypeValidator<T['body']>
-	#headers?: ToSubTypeValidator<T['headers']>
-	#query?: ToSubTypeValidator<T['query']>
-	#params?: ToSubTypeValidator<T['params']>
-	#cookie?: ToSubTypeValidator<T['cookie']>
-	#response?: {
-		[Status in keyof T['response']]: ToSubTypeValidator<
-			T['response'][Status]
-		>
-	}
+	body: ToSubTypeValidator<T['body']> | undefined
+	headers: ToSubTypeValidator<T['headers']> | undefined
+	query: ToSubTypeValidator<T['query']> | undefined
+	params: ToSubTypeValidator<T['params']> | undefined
+	cookie: ToSubTypeValidator<T['cookie']> | undefined
+	response:
+		| {
+				[Status in keyof T['response']]: ToSubTypeValidator<
+					T['response'][Status]
+				>
+		  }
+		| undefined
 
-	constructor(
-		public route: T,
-		public options?: RouteValidatorOptions
-	) {}
+	constructor(route: T, options?: RouteValidatorOptions) {
+		if (route.body && options?.body !== false)
+			this.body = Validator.create(route.body, {
+				normalize: options?.normalize,
+				sanitize: options?.sanitize,
+				schemas: options?.schemas?.map((s) => s.body),
+				coerces: hasTypes(
+					[ELYSIA_TYPES.File, ELYSIA_TYPES.Files],
+					route.body
+				)
+					? coerceFormData()
+					: coerceRoot()
+			}) as any
 
-	get body(): ToSubTypeValidator<T['body']> {
-		if (this.#body) return this.#body
-		if (!this.route.body) return undefined as any
+		if (route.headers)
+			this.headers = Validator.create(route.headers, {
+				normalize: options?.normalize,
+				sanitize: options?.sanitize,
+				schemas: options?.schemas?.map((s) => s.headers),
+				coerces: coerceStringToStructure()
+			}) as any
 
-		return (this.#body = Validator.create(this.route.body, {
-			// Don't use ...rest to avoid unnecessary object creation
-			normalize: this.options?.normalize,
-			sanitize: this.options?.sanitize,
-			schemas: this.options?.schemas?.map((s) => s.body),
-			coerces: hasTypes(
-				[ELYSIA_TYPES.File, ELYSIA_TYPES.Files],
-				this.route.body
-			)
-				? coerceFormData()
-				: coerceRoot()
-		}) as any)
-	}
+		if (route.query)
+			this.query = Validator.create(route.query, {
+				normalize: options?.normalize,
+				sanitize: options?.sanitize,
+				schemas: options?.schemas?.map((s) => s.query),
+				coerces: coerceQuery()
+			}) as any
 
-	get headers(): ToSubTypeValidator<T['body']> {
-		if (this.#headers) return this.#headers
-		if (!this.route.headers) return undefined as any
+		if (route.params)
+			this.params = Validator.create(route.params, {
+				normalize: options?.normalize,
+				sanitize: options?.sanitize,
+				schemas: options?.schemas?.map((s) => s.params),
+				coerces: coerceStringToStructure()
+			}) as any
 
-		return (this.#headers = Validator.create(this.route.headers, {
-			normalize: this.options?.normalize,
-			sanitize: this.options?.sanitize,
-			schemas: this.options?.schemas?.map((s) => s.headers),
-			coerces: coerceStringToStructure()
-		}) as any)
-	}
+		if (route.cookie)
+			this.cookie = Validator.create(route.cookie, {
+				normalize: options?.normalize,
+				sanitize: options?.sanitize,
+				schemas: options?.schemas?.map((s) => s.cookie),
+				coerces: coerceStringToStructure()
+			}) as any
 
-	get query(): ToSubTypeValidator<T['query']> {
-		if (this.#query) return this.#query
-		if (!this.route.query) return undefined as any
-
-		return (this.#query = Validator.create(this.route.query, {
-			normalize: this.options?.normalize,
-			sanitize: this.options?.sanitize,
-			schemas: this.options?.schemas?.map((s) => s.query),
-			coerces: coerceQuery()
-		}) as any)
-	}
-
-	get params(): ToSubTypeValidator<T['params']> {
-		if (this.#params) return this.#params
-		if (!this.route.params) return undefined as any
-
-		return (this.#params = Validator.create(this.route.params, {
-			normalize: this.options?.normalize,
-			sanitize: this.options?.sanitize,
-			schemas: this.options?.schemas?.map((s) => s.params),
-			coerces: coerceStringToStructure()
-		}) as any)
-	}
-
-	get cookie(): ToSubTypeValidator<T['cookie']> {
-		if (this.#cookie) return this.#cookie
-		if (!this.route.cookie) return undefined as any
-
-		return (this.#cookie = Validator.create(this.route.cookie, {
-			normalize: this.options?.normalize,
-			sanitize: this.options?.sanitize,
-			schemas: this.options?.schemas?.map((s) => s.cookie),
-			coerces: coerceStringToStructure()
-		}) as any)
-	}
-
-	get response(): {
-		[Status in keyof T['response']]: ToSubTypeValidator<
-			T['response'][Status]
-		>
-	} {
-		if (this.#response) return this.#response
-		if (!this.route.response) return undefined as any
-
-		return (this.#response = Validator.response(this.route.response, {
-			normalize: this.options?.normalize,
-			sanitize: this.options?.sanitize,
-			schemas: this.options?.schemas?.map((s) => s.response)
-		}) as any)
+		if (route.response)
+			this.response = Validator.response(route.response, {
+				normalize: options?.normalize,
+				sanitize: options?.sanitize,
+				schemas: options?.schemas?.map((s) => s.response)
+			}) as any
 	}
 }

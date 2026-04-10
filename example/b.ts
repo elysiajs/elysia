@@ -84,15 +84,17 @@ for (let i = 0; i <= 100_000; i++)
 				)
 			})
 		)
-	// )
+// )
 
 const t2 = performance.now()
 gc()
 const m2 = memoryUsage()
 
-console.log('Elysia 2 large object coerce x100,000')
+console.log('\n\n\n')
+console.log('Elysia 2 schema with 45 types x100,000')
 console.log('Time:', (t2 - t1).toFixed(2), 'ms')
 console.log('Memory usage:', ((m2 - m1) / 1024 / 1024).toFixed(2), 'MB')
+console.log('\n\n\n\n\n\n')
 
 // console.dir(stacks[0], {
 // 	depth: null

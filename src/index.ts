@@ -162,7 +162,7 @@ import type {
 // 	queryCoercions,
 // 	stringToStructureCoercions
 // } from './replace-schema'
-import { Validator, Validator } from './schema/validator'
+import { Validator } from './schema/validator'
 import { hasTypes } from './schema/utils'
 import {
 	coerceFormData,
@@ -769,10 +769,6 @@ export default class Elysia<
 				Object.assign({}, this.config.detail!),
 				localHook.detail
 			)
-
-		if (path === '/ip') {
-			// console.log(path, this.event, localHookToLifeCycleStore(localHook))
-		}
 
 		const hooks = isNotEmpty(this.event)
 			? mergeHook(this.event, localHookToLifeCycleStore(localHook))
@@ -8238,9 +8234,6 @@ export {
 	type TraceProcess,
 	type TraceStream
 } from './trace'
-
-export { getSchemaValidator, getResponseSchemaValidator } from './schema'
-export { replaceSchemaTypeFromManyOptions as replaceSchemaType } from './replace-schema'
 
 export {
 	mergeHook,

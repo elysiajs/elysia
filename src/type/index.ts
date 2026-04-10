@@ -505,6 +505,9 @@ function parseFileUnit(size: FileUnit) {
 	}
 }
 
+export const isBlob = (value: unknown): value is Blob =>
+	value instanceof Blob || value instanceof ElysiaFile
+
 let BaseFile: Type.TRefine<Type.TUnsafe<File>>
 let emptyFile: Readonly<Type.TRefine<Type.TUnsafe<File>>>
 let sharedFile: ReturnType<
@@ -516,9 +519,7 @@ let sharedFile: ReturnType<
 function File(options?: FileOptions) {
 	BaseFile ??= Type.Refine(
 		Type.Unsafe<File>({ '~kind': 'File' }),
-		(value) =>
-			// @ts-expect-error
-			value instanceof Blob || value instanceof ElysiaFile,
+		isBlob,
 		'must be instance of Blob'
 	)
 

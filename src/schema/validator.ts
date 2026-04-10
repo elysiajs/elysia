@@ -1,13 +1,19 @@
-import type { Static, StaticDecode, StaticEncode, TSchema } from 'typebox'
-import { Compile } from 'typebox/schema'
-import type { Validator as BaseTypeBoxValidator } from 'typebox/schema'
+import type { Static, StaticDecode, StaticEncode, TAny, TSchema } from 'typebox'
+import { Compile, type Validator as BaseTypeBoxValidator } from 'typebox/schema'
+import { Clean, Decode, Encode, Errors, HasCodec } from 'typebox/value'
 import type { TLocalizedValidationError } from 'typebox/error'
+
 import { createMirror } from 'exact-mirror'
 
-import { t } from '../type'
+import { isBlob, t } from '../type'
 import { applyCoercions, type CoerceOption } from './coerce'
-import type { AnySchema, ElysiaConfig, StandardSchemaV1Like } from '../types'
-import { Clean, Decode, Encode, Errors, HasCodec } from 'typebox/value'
+import type {
+	AnySchema,
+	ElysiaConfig,
+	MaybePromise,
+	StandardSchemaV1Like
+} from '../types'
+import { isAsyncFunction } from '../compile/utils'
 
 export interface ValidatorOptions {
 	schemas?: AnySchema[]
@@ -41,9 +47,12 @@ export abstract class Validator {
 		return value
 	}
 
-	Clean(value: unknown): unknown {
-		return value
-	}
+	From?(
+		value: unknown,
+		error: (value: unknown) => MaybePromise<void>
+	): unknown
+
+	Clean: ((value: unknown) => unknown) | undefined
 
 	static create<const Schema extends TSchema>(
 		schema: Schema,
@@ -99,11 +108,12 @@ export abstract class Validator {
 }
 
 export class TypeBoxValidator<
-	const in out T extends TSchema
+	const in out T extends TSchema = TAny
 > extends Validator {
 	tb: BaseTypeBoxValidator
 	hasCodec: boolean
 	schema: T
+	isAsync: boolean
 
 	constructor(schema: T, options?: ValidatorOptions) {
 		super()
@@ -111,25 +121,39 @@ export class TypeBoxValidator<
 		this.schema = applyCoercions(schema, options?.coerces) as T
 		this.tb = Compile(this.schema)
 		this.hasCodec = HasCodec(this.schema)
+		// @ts-expect-error private property
+		this.isAsync = this.tb.build.external.variables.some((array) =>
+			array.some((x) => isAsyncFunction(x.refine) || x.refine === isBlob)
+		)
+
+		if (this.isAsync)
+			// @ts-expect-error
+			this.From = async (value: unknown) => {
+				if (this.hasCodec) value = await Decode(this.schema, value)
+				else if (!(await this.Check(value as any)))
+					throw this.Errors(value)
+
+				if (this.Clean) value = await this.Clean(value)
+
+				return value
+			}
 
 		try {
 			this.Clean =
 				!options?.normalize || options.normalize === 'exactMirror'
-					? createMirror(schema, {
+					? (createMirror(schema, {
 							Compile,
 							sanitize: options?.sanitize
-						})
+						}) as any)
 					: options.normalize === 'typebox'
 						? (value) => Clean(this.tb!, value)
-						: (value) => value
+						: undefined
 		} catch (error) {
 			console.warn(
 				'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
 			)
 			console.warn(schema)
 			console.warn(error)
-
-			this.Clean = (value) => Clean(this.tb!, value)
 		}
 	}
 
@@ -150,10 +174,21 @@ export class TypeBoxValidator<
 	Encode(value: Static<T>): StaticEncode<T> {
 		return this.hasCodec ? Encode(this.schema, value) : (value as any)
 	}
+
+	From(value: Static<T>, error?: (value: unknown) => void): StaticDecode<T> {
+		if (this.hasCodec) value = this.Decode(value) as Static<T>
+		else if (!this.Check(value)) throw this.Errors(value)
+
+		if (this.Clean) value = this.Clean(value) as Static<T>
+
+		return value as StaticDecode<T>
+	}
 }
 
-class StandardValidator extends Validator {
-	private validate: (value: unknown) => any
+export class StandardValidator extends Validator {
+	private validate: (
+		value: unknown
+	) => { value: unknown } | { issues: unknown[] }
 
 	constructor(schema: StandardSchemaV1Like) {
 		super()
@@ -166,15 +201,26 @@ class StandardValidator extends Validator {
 	}
 
 	Errors(value: unknown): TLocalizedValidationError[] {
+		// @ts-expect-error
 		return this.validate(value).issues ?? []
 	}
 
 	Decode(value: unknown): unknown {
+		// @ts-expect-error
 		return this.validate(value).value
+	}
+
+	From(value: unknown, error: (value: unknown) => void): unknown {
+		const q = this.validate(value)
+		// @ts-expect-error
+		if (q.issues) return void error(value)
+
+		// @ts-expect-error
+		return q.value
 	}
 }
 
-class MultiValidator extends Validator {
+export class MultiValidator extends Validator {
 	private schemas: (TSchema | StandardSchemaV1Like)[]
 	private codexIndexes: Set<number>
 
@@ -231,7 +277,7 @@ class MultiValidator extends Validator {
 			'~standard' in validator
 				? // @ts-expect-error
 					validator['~standard'].validate(value).value
-				: (validator as TypeBoxValidator).Check(value)
+				: (validator as TypeBoxValidator).Decode(value) || true
 		)
 	}
 
@@ -274,5 +320,11 @@ class MultiValidator extends Validator {
 		}
 
 		return snapshot!
+	}
+
+	From(value: unknown, error: (value: unknown) => void): unknown {
+		if (!this.Check(value)) return void error(value)
+
+		return this.Decode(value)!
 	}
 }

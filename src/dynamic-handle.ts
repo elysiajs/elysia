@@ -172,18 +172,17 @@ const injectDefaultValues = (
 	typeChecker: TypeCheck<any> | ElysiaTypeCheck<any>,
 	obj: Record<string, any>
 ) => {
-	// @ts-expect-error private property
 	let schema = typeChecker.schema
 	if (!schema) return
 
 	if (schema.$defs?.[schema.$ref]) schema = schema.$defs[schema.$ref]
 
-	const properties = getSchemaProperties(schema)
-	if (!properties) return
+	// const properties = getSchemaProperties(schema)
+	// if (!properties) return
 
-	for (const [key, keySchema] of Object.entries(properties)) {
-		obj[key] ??= keySchema.default
-	}
+	// for (const [key, keySchema] of Object.entries(properties)) {
+	// 	obj[key] ??= keySchema.default
+	// }
 }
 
 export const createDynamicHandler = (app: AnyElysia) => {

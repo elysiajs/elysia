@@ -15,8 +15,7 @@ import type { TypeCheck, ValueError } from '@sinclair/typebox/compiler'
 
 import type { OpenAPIV3 } from 'openapi-types'
 
-import type { ElysiaAdapter } from './adapter'
-import type { ElysiaTypeCheck } from './schema'
+import type { ElysiaAdapter } from './adapter2'
 import type { Context, ErrorContext, PreContext } from './context'
 import type { ComposerGeneralHandlerOptions } from './compose'
 import type { CookieOptions } from './cookies'
@@ -39,7 +38,7 @@ import { BunHTMLBundlelike } from './universal/types'
 import { Sucrose } from './sucrose'
 import type Memoirist from 'memoirist'
 import type { DynamicHandler } from './dynamic-handle'
-import { BaseSchema } from './type/types'
+import type { BaseSchema } from './type/types'
 
 export type Equal<X, Y> =
 	(<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2

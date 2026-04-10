@@ -18,9 +18,7 @@ export namespace Sucrose {
 		path: boolean
 	}
 
-	export interface LifeCycle extends Partial<LifeCycleStore> {
-		handler?: Handler
-	}
+	export type LifeCycle = Partial<LifeCycleStore>
 
 	export interface Settings {
 		/**
@@ -43,9 +41,9 @@ export namespace Sucrose {
  * separateFunction('async ({ hello }) => { return hello }') // => ['({ hello })', '{ return hello }']
  * ```
  */
-export const separateFunction = (
+function separateFunction(
 	code: string
-): [string, string, { isArrowReturn: boolean }] => {
+): [string, string, { isArrowReturn: boolean }] {
 	// Remove async keyword without removing space (both minify and non-minify)
 	if (code.startsWith('async')) code = code.slice(5)
 	code = code.trimStart()
@@ -140,7 +138,7 @@ export const separateFunction = (
  * bracketPairRange('hello: { world: { a } }, elysia') // [6, 20]
  * ```
  */
-export const bracketPairRange = (parameter: string): [number, number] => {
+function bracketPairRange(parameter: string): [number, number] {
 	const start = parameter.indexOf('{')
 	if (start === -1) return [-1, 0]
 
@@ -172,9 +170,7 @@ export const bracketPairRange = (parameter: string): [number, number] => {
  * bracketPairRange('hello: { world: { a } }, elysia') // [6, 20]
  * ```
  */
-export const bracketPairRangeReverse = (
-	parameter: string
-): [number, number] => {
+function bracketPairRangeReverse(parameter: string): [number, number] {
 	const end = parameter.lastIndexOf('}')
 	if (end === -1) return [-1, 0]
 
@@ -197,7 +193,7 @@ export const bracketPairRangeReverse = (
 	return [start, end + 1]
 }
 
-export const removeColonAlias = (parameter: string) => {
+function removeColonAlias(parameter: string) {
 	while (true) {
 		const start = parameter.indexOf(':')
 		if (start === -1) break
@@ -223,7 +219,7 @@ export const removeColonAlias = (parameter: string) => {
  * }
  * ```
  */
-export const retrieveRootparameters = (parameter: string) => {
+function retrieveRootparameters(parameter: string) {
 	let hasParenthesis = false
 
 	// Remove () from parameter
@@ -274,10 +270,10 @@ export const retrieveRootparameters = (parameter: string) => {
  *
  * @param parameter stringified parameter
  */
-export const findParameterReference = (
+function findParameterReference(
 	parameter: string,
 	inference: Sucrose.Inference
-) => {
+) {
 	const { parameters, hasParenthesis } = retrieveRootparameters(parameter)
 
 	// Check if root is an object destructuring
@@ -296,11 +292,11 @@ export const findParameterReference = (
 	return Object.keys(parameters).join(', ')
 }
 
-const findEndIndex = (
+function findEndIndex(
 	type: string,
 	content: string,
 	index?: number | undefined
-) => {
+) {
 	const regex = new RegExp(
 		`${type.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\n\\t,; ]`
 	)
@@ -337,7 +333,7 @@ const findEndIndex = (
  * findAlias('body', '{ const a = body, b = body }') // => ['a', 'b']
  * ```
  */
-export const findAlias = (type: string, body: string, depth = 0) => {
+function findAlias(type: string, body: string, depth = 0) {
 	if (depth > 5) return []
 
 	const aliases: string[] = []
@@ -418,7 +414,7 @@ export const findAlias = (type: string, body: string, depth = 0) => {
 // 		parent + "['" + prop + "']"
 // 	] as const
 
-export const extractMainParameter = (parameter: string) => {
+function extractMainParameter(parameter: string) {
 	if (!parameter) return
 
 	if (parameter.charCodeAt(0) !== 123) return parameter
@@ -444,11 +440,11 @@ export const extractMainParameter = (parameter: string) => {
 /**
  * Analyze if context is mentioned in body
  */
-export const inferBodyReference = (
+function inferBodyReference(
 	code: string,
 	aliases: string[],
 	inference: Sucrose.Inference
-) => {
+) {
 	const access = (type: string, alias: string) =>
 		new RegExp(
 			`${alias}\\.(${type})|${alias}\\["${type}"\\]|${alias}\\['${type}'\\]`
@@ -515,7 +511,7 @@ export const inferBodyReference = (
 	return aliases
 }
 
-export const removeDefaultParameter = (parameter: string) => {
+function removeDefaultParameter(parameter: string) {
 	while (true) {
 		const index = parameter.indexOf('=')
 		if (index === -1) break
@@ -543,11 +539,11 @@ export const removeDefaultParameter = (parameter: string) => {
 		.join(', ')
 }
 
-export const isContextPassToFunction = (
+function isContextPassToFunction(
 	context: string,
 	body: string,
 	inference: Sucrose.Inference
-) => {
+) {
 	// ! Function is passed to another function, assume as all is accessed
 	try {
 		const captureFunction = new RegExp(
@@ -619,7 +615,7 @@ export const isContextPassToFunction = (
 let pendingGC: Timer | undefined
 let caches = <Record<number, Sucrose.Inference>>{}
 
-export const clearSucroseCache = (delay: Sucrose.Settings['gcTime']) => {
+export function clearSucroseCache(delay: Sucrose.Settings['gcTime']) {
 	// Can't setTimeout outside fetch in Cloudflare Worker
 	if (delay === null || isCloudflareWorker()) return
 	if (delay === undefined) delay = 4 * 60 * 1000 + 55 * 1000
@@ -636,7 +632,7 @@ export const clearSucroseCache = (delay: Sucrose.Settings['gcTime']) => {
 	pendingGC.unref?.()
 }
 
-export const mergeInference = (a: Sucrose.Inference, b: Sucrose.Inference) => {
+export function mergeInference(a: Sucrose.Inference, b: Sucrose.Inference) {
 	return {
 		body: a.body || b.body,
 		cookie: a.cookie || b.cookie,
@@ -650,34 +646,39 @@ export const mergeInference = (a: Sucrose.Inference, b: Sucrose.Inference) => {
 	}
 }
 
-export const sucrose = (
+export const defaultSucrose = () => ({
+	query: false,
+	headers: false,
+	body: false,
+	cookie: false,
+	set: false,
+	server: false,
+	url: false,
+	route: false,
+	path: false
+})
+
+function push(target: unknown[], array: unknown[]) {
+	for (let i = 0; i < array.length; i++) target.push(array[i])
+}
+
+export function sucrose(
+	handler: Handler | undefined,
 	lifeCycle: Sucrose.LifeCycle,
-	inference: Sucrose.Inference = {
-		query: false,
-		headers: false,
-		body: false,
-		cookie: false,
-		set: false,
-		server: false,
-		url: false,
-		route: false,
-		path: false
-	},
+	inference: Sucrose.Inference = defaultSucrose(),
 	settings?: Sucrose.Settings
-): Sucrose.Inference => {
+): Sucrose.Inference {
 	const events = <(Handler | HookContainer)[]>[]
 
-	if (lifeCycle.request?.length) events.push(...lifeCycle.request)
-	if (lifeCycle.beforeHandle?.length) events.push(...lifeCycle.beforeHandle)
-	if (lifeCycle.parse?.length) events.push(...lifeCycle.parse)
-	if (lifeCycle.error?.length) events.push(...lifeCycle.error)
-	if (lifeCycle.transform?.length) events.push(...lifeCycle.transform)
-	if (lifeCycle.afterHandle?.length) events.push(...lifeCycle.afterHandle)
-	if (lifeCycle.mapResponse?.length) events.push(...lifeCycle.mapResponse)
-	if (lifeCycle.afterResponse?.length) events.push(...lifeCycle.afterResponse)
-
-	if (lifeCycle.handler && typeof lifeCycle.handler === 'function')
-		events.push(lifeCycle.handler as Handler)
+	if (handler && typeof handler === 'function') events.push(handler)
+	if (lifeCycle.request?.length) push(events, lifeCycle.request)
+	if (lifeCycle.beforeHandle?.length) push(events, lifeCycle.beforeHandle)
+	if (lifeCycle.parse?.length) push(events, lifeCycle.parse)
+	if (lifeCycle.error?.length) push(events, lifeCycle.error)
+	if (lifeCycle.transform?.length) push(events, lifeCycle.transform)
+	if (lifeCycle.afterHandle?.length) push(events, lifeCycle.afterHandle)
+	if (lifeCycle.mapResponse?.length) push(events, lifeCycle.mapResponse)
+	if (lifeCycle.afterResponse?.length) push(events, lifeCycle.afterResponse)
 
 	for (let i = 0; i < events.length; i++) {
 		const e = events[i]
@@ -702,18 +703,7 @@ export const sucrose = (
 		// Clear the cache to free up memory
 		clearSucroseCache(settings?.gcTime)
 
-		const fnInference: Sucrose.Inference = {
-			query: false,
-			headers: false,
-			body: false,
-			cookie: false,
-			set: false,
-			server: false,
-			url: false,
-			route: false,
-			path: false
-		}
-
+		let fnInference: Sucrose.Inference | undefined = defaultSucrose()
 		const [parameter, body] = separateFunction(content)
 
 		const rootParameters = findParameterReference(parameter, fnInference)
@@ -744,6 +734,7 @@ export const sucrose = (
 		if (!caches[key]) caches[key] = fnInference
 
 		inference = mergeInference(inference, fnInference)
+		fnInference = undefined
 
 		if (
 			inference.query &&
@@ -759,5 +750,6 @@ export const sucrose = (
 			break
 	}
 
+	events.length = 0
 	return inference
 }
