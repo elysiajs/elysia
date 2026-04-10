@@ -123,6 +123,28 @@ const setNestedValue = (obj: Record<string, any>, path: string, value: any) => {
 	}
 }
 
+const dangerousKeys = ['__proto__', 'constructor', 'prototype']
+
+const stripDangerousKeys = (obj: unknown): unknown => {
+	if (typeof obj !== 'object' || obj === null) return obj
+
+	if (Array.isArray(obj)) {
+		for (let i = 0; i < obj.length; i++)
+			obj[i] = stripDangerousKeys(obj[i])
+		return obj
+	}
+
+	for (const key of dangerousKeys)
+		if (key in obj) delete (obj as Record<string, unknown>)[key]
+
+	for (const key of Object.keys(obj))
+		(obj as Record<string, unknown>)[key] = stripDangerousKeys(
+			(obj as Record<string, unknown>)[key]
+		)
+
+	return obj
+}
+
 const normalizeFormValue = (value: unknown[]) => {
     if (value.length === 1) {
         const stringValue = value[0]
@@ -132,7 +154,7 @@ const normalizeFormValue = (value: unknown[]) => {
                 try {
                     const parsed = JSON.parse(stringValue)
                     if (parsed && typeof parsed === 'object') {
-                        return parsed
+                        return stripDangerousKeys(parsed)
                     }
                 } catch {}
             }
@@ -159,6 +181,8 @@ const normalizeFormValue = (value: unknown[]) => {
 	}
 
 	if (typeof parsed !== 'object' || parsed === null) return value
+
+	stripDangerousKeys(parsed)
 
 	if (!('file' in parsed) && files.length === 1)
 		(parsed as Record<string, unknown>).file = files[0]

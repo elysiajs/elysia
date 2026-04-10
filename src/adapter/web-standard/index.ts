@@ -58,6 +58,13 @@ export const WebStandardAdapter: ElysiaAdapter = {
 					`const m=k.match(/^(.+)\\[(\\d+)\\]$/);` +
 					`return m?{name:m[1],index:parseInt(m[2],10)}:null` +
 					`}\n` +
+					`const stripDangerousKeys=(obj)=>{` +
+					`if(typeof obj!=='object'||obj===null)return obj;` +
+					`if(Array.isArray(obj)){for(let i=0;i<obj.length;i++)obj[i]=stripDangerousKeys(obj[i]);return obj}` +
+					`for(const dk of dangerousKeys)if(dk in obj)delete obj[dk];` +
+					`for(const k of Object.keys(obj))obj[k]=stripDangerousKeys(obj[k]);` +
+					`return obj` +
+					`}\n` +
 					`for(const key of form.keys()){` +
 					`if(c.body[key])continue\n` +
 					`const value=form.getAll(key)\n` +
@@ -67,7 +74,7 @@ export const WebStandardAdapter: ElysiaAdapter = {
     				`if(typeof sv==='string'&&(sv.charCodeAt(0)===123||sv.charCodeAt(0)===91)){\n` +
     				`try{\n` +
     				`const p=JSON.parse(sv)\n` +
-    				`if(p&&typeof p==='object')finalValue=p\n` +
+    				`if(p&&typeof p==='object')finalValue=stripDangerousKeys(p)\n` +
     				`}catch{}\n` +
     				`}\n` +
     				`if(finalValue===undefined)finalValue=sv\n` +
@@ -79,6 +86,7 @@ export const WebStandardAdapter: ElysiaAdapter = {
 					`try{\n` +
 					`const parsed=JSON.parse(stringValue)\n` +
 					`if(parsed&&typeof parsed==='object'&&!Array.isArray(parsed)){\n` +
+					`stripDangerousKeys(parsed)\n` +
 					`if(!('file' in parsed)&&files.length===1)parsed.file=files[0]\n` +
 					`else if(!('files' in parsed)&&files.length>1)parsed.files=files\n` +
 					`finalValue=parsed\n` +
