@@ -123,6 +123,7 @@ export class TypeBoxValidator<
 		this.hasCodec = HasCodec(this.schema)
 		// @ts-expect-error private property
 		this.isAsync = this.tb.build.external.variables.some((array) =>
+			// @ts-expect-error private property
 			array.some((x) => isAsyncFunction(x.refine) || x.refine === isBlob)
 		)
 
@@ -175,7 +176,7 @@ export class TypeBoxValidator<
 		return this.hasCodec ? Encode(this.schema, value) : (value as any)
 	}
 
-	From(value: Static<T>, error?: (value: unknown) => void): StaticDecode<T> {
+	From(value: Static<T>): StaticDecode<T> {
 		if (this.hasCodec) value = this.Decode(value) as Static<T>
 		else if (!this.Check(value)) throw this.Errors(value)
 
@@ -210,10 +211,10 @@ export class StandardValidator extends Validator {
 		return this.validate(value).value
 	}
 
-	From(value: unknown, error: (value: unknown) => void): unknown {
+	From(value: unknown): unknown {
 		const q = this.validate(value)
 		// @ts-expect-error
-		if (q.issues) return void error(value)
+		if (q.issues) throw this.Errors(value)
 
 		// @ts-expect-error
 		return q.value

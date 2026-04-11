@@ -6,6 +6,7 @@ import {
 	mapResponse,
 	mapStaticHandler
 } from './handler'
+import { formDataToObject } from './utils'
 
 export const webStandardAdapter = {
 	name: 'web-standard',
@@ -16,8 +17,13 @@ export const webStandardAdapter = {
 	},
 	parse: {
 		arrayBuffer: (context) => context.request.arrayBuffer(),
-		formData: (context) => context.request.formData(),
-		json: (context) => context.request.json(),
+		formData: async (context) =>
+			// @ts-ignore
+			context.request.formData().then(formDataToObject),
+		json: (context) =>
+			context.request.json() as any as Promise<
+				Record<keyof any, undefined> | unknown[]
+			>,
 		text: (context) => context.request.text(),
 		urlencoded: (context) => context.request.text().then(parseQuery)
 	},

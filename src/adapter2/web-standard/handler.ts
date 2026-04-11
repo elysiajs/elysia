@@ -15,13 +15,13 @@ import { ElysiaCustomStatusResponse } from '../../error'
 import type { Context } from '../../context'
 import type { AnyLocalHook, MaybePromise } from '../../types'
 
-const handleElysiaFile = (
+function handleElysiaFile(
 	file: ElysiaFile,
 	set: Context['set'] = {
 		headers: {}
 	},
 	request?: Request
-) => {
+) {
 	const path = file.path
 	const contentType =
 		mime[path.slice(path.lastIndexOf('.') + 1) as any as keyof typeof mime]
@@ -49,11 +49,11 @@ const handleElysiaFile = (
 	return handleFile(file.value as any, set, request)
 }
 
-export const mapResponse = (
+export function mapResponse(
 	response: unknown,
 	set: Context['set'],
 	request?: Request
-): Response => {
+): Response {
 	if (isNotEmpty(set.headers) || set.status !== 200 || set.cookie) {
 		handleSet(set)
 
@@ -201,11 +201,11 @@ export const mapResponse = (
 	return mapCompactResponse(response, request)
 }
 
-export const mapEarlyResponse = (
+export function mapEarlyResponse(
 	response: unknown,
 	set: Context['set'],
 	request?: Request
-): Response | undefined => {
+): Response | undefined {
 	if (response === undefined || response === null) return
 
 	if (isNotEmpty(set.headers) || set.status !== 200 || set.cookie) {
@@ -475,10 +475,10 @@ export const mapEarlyResponse = (
 		}
 }
 
-export const mapCompactResponse = (
+export function mapCompactResponse(
 	response: unknown,
 	request?: Request
-): Response => {
+): Response {
 	switch (response?.constructor?.name) {
 		case 'String':
 			return new Response(response as string, {
@@ -639,11 +639,11 @@ export const errorToResponse = (
 	)
 }
 
-export const mapStaticHandler = (
+export function mapStaticHandler(
 	handle: unknown,
 	hooks: Partial<AnyLocalHook>,
 	setHeaders: Context['set']['headers'] = {}
-): (() => Response) | undefined => {
+): (() => Response) | undefined {
 	if (typeof handle === 'function') return
 
 	const response = mapResponse(handle, {

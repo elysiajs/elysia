@@ -31,8 +31,7 @@ import type {
 	FileType,
 	BaseSchema
 } from './types'
-import type { Prettify, StandardJSONSchemaV1Like } from '../types'
-import { TInteger } from '@sinclair/typebox'
+import type { StandardJSONSchemaV1Like } from '../types'
 
 // Start at 1 to prevent falsy value check
 export const ELYSIA_TYPES = {

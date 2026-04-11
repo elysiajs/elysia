@@ -56,10 +56,21 @@ export interface ElysiaAdapter {
 	 * ```
 	 */
 	stop?(app: AnyElysia, closeActiveConnections?: boolean): Promise<void>
-	parse: Record<
-		'json' | 'text' | 'urlencoded' | 'arrayBuffer' | 'formData',
-		(context: Context) => unknown
-	>
+	parse: {
+		json: (
+			context: Context
+		) => MaybePromise<Record<keyof any, undefined> | unknown[]>
+		text: (context: Context) => MaybePromise<string>
+		urlencoded: (
+			context: Context
+		) => MaybePromise<Record<string, string | string[]>>
+		arrayBuffer: (context: Context) => MaybePromise<ArrayBuffer>
+		formData: (context: Context) => MaybePromise<Record<string, unknown>>
+	}
+	// Record<
+	// 	'json' | 'text' | 'urlencoded' | 'arrayBuffer' | 'formData',
+	// 	(context: Context) => unknown
+	// >
 	response: {
 		/**
 		 * Map return response on every case
