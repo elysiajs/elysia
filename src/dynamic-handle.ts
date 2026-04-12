@@ -39,6 +39,22 @@ export type DynamicHandler = {
 const ARRAY_INDEX_REGEX = /^(.+)\[(\d+)\]$/
 const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
 
+/**
+ * Recursively removes prototype pollution keys (__proto__, constructor, prototype)
+ * from parsed JSON objects to prevent prototype pollution attacks via FormData.
+ */
+const stripDangerousKeys = (obj: any): any => {
+	if (obj === null || typeof obj !== 'object') return obj
+	if (Array.isArray(obj)) return obj.map(stripDangerousKeys)
+
+	const result: Record<string, any> = {}
+	for (const key of Object.keys(obj)) {
+		if (DANGEROUS_KEYS.has(key)) continue
+		result[key] = stripDangerousKeys(obj[key])
+	}
+	return result
+}
+
 const isDangerousKey = (key: string): boolean => {
 	if (DANGEROUS_KEYS.has(key)) return true
 
@@ -62,7 +78,7 @@ const parseObjectString = (entry: unknown) => {
 	try {
 		const parsed = JSON.parse(entry)
 		if (parsed && typeof parsed === 'object' && !Array.isArray(parsed))
-			return parsed
+			return stripDangerousKeys(parsed)
 	} catch {
 		return
 	}
@@ -132,7 +148,7 @@ const normalizeFormValue = (value: unknown[]) => {
                 try {
                     const parsed = JSON.parse(stringValue)
                     if (parsed && typeof parsed === 'object') {
-                        return parsed
+                        return stripDangerousKeys(parsed)
                     }
                 } catch {}
             }
@@ -153,7 +169,7 @@ const normalizeFormValue = (value: unknown[]) => {
 
 	let parsed: unknown
 	try {
-		parsed = JSON.parse(stringValue)
+		parsed = stripDangerousKeys(JSON.parse(stringValue))
 	} catch {
 		return value
 	}
