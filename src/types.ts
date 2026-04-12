@@ -636,17 +636,17 @@ export type HookContainer<T extends Function = Function> = {
 
 export interface LifeCycleStore {
 	type?: ContentType
-	start: HookContainer<GracefulHandler<any>>[]
-	request: HookContainer<PreHandler<any, any>>[]
-	parse: HookContainer<BodyHandler<any, any>>[]
-	transform: HookContainer<TransformHandler<any, any>>[]
-	beforeHandle: HookContainer<OptionalHandler<any, any>>[]
-	afterHandle: HookContainer<OptionalHandler<any, any>>[]
-	mapResponse: HookContainer<MapResponse<any, any>>[]
-	afterResponse: HookContainer<AfterResponseHandler<any, any>>[]
-	trace: HookContainer<TraceHandler<any, any>>[]
-	error: HookContainer<ErrorHandler<any, any, any>>[]
-	stop: HookContainer<GracefulHandler<any>>[]
+	start: GracefulHandler<any>[]
+	request: PreHandler<any, any>[]
+	parse: BodyHandler<any, any>[]
+	transform: TransformHandler<any, any>[]
+	beforeHandle: OptionalHandler<any, any>[]
+	afterHandle: OptionalHandler<any, any>[]
+	mapResponse: MapResponse<any, any>[]
+	afterResponse: AfterResponseHandler<any, any>[]
+	trace: TraceHandler<any, any>[]
+	error: ErrorHandler<any, any, any>[]
+	stop: GracefulHandler<any>[]
 }
 
 export type LifeCycleEvent =
@@ -1733,7 +1733,7 @@ type _ResolveReturnTypeArray<T, Carry = {}> = T extends [
 		: _ResolveReturnTypeArray<Rest, Carry & {}>
 	: Prettify<Carry>
 
-export type AnyLocalHook = LocalHook<any, any, any, any, any>
+export type AnyLocalHook = LocalHook<{}, any, any, any, any>
 
 export interface BaseHookLifeCycle<
 	in out Schema extends RouteSchema,

@@ -3,6 +3,7 @@ Breaking Change:
 - [Internal] remove ArrayQuery
 - [Internal] remove format: `numeric`, `integer`, `objectString`, `booleanString`
 - `getSchemaValidator` renamed to `Validator.create`
+- remove `context.contentType` from `Context` in `parse`
 
 # 1.4.28 - 17 Mar 2025
 Feature:

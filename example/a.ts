@@ -8,24 +8,22 @@ const handler = compileHandler(
 		'/',
 		'POST',
 		({ body }) => {
-			return body.name.name
+			return body.name
 		},
 		{
-			// body: t.Object({
-			// 	name: t.File()
-			// }),
-			// query: t.Object({
-			// 	a: t.String()
-			// }),
-			parse: 'form'
+			body: t.Array(
+				t.Object({
+					name: t.String(),
+					age: t.Number({
+						default: 1
+					})
+				})
+			)
 		},
 		new Elysia()
 	],
 	new Elysia()
 )
-
-const form = new FormData()
-form.append('name', Bun.file('test/images/midori.png'))
 
 await handler({
 	set: {
@@ -34,7 +32,14 @@ await handler({
 	},
 	request: new Request('http://localhost?a=b', {
 		method: 'GET',
-		body: form
+		headers: {
+			'content-type': 'application/json'
+		},
+		body: JSON.stringify([
+			{
+				name: 'q'
+			}
+		])
 	})
 })
 	.then((res) => res.text())

@@ -18,6 +18,10 @@ interface CoerceOptions {
 	 * Traverse until object is found except root object
 	 **/
 	untilNonRootObjectFound?: boolean
+	/**
+	 * Only root object
+	 */
+	rootPropertiesOnly?: boolean
 }
 
 type CoerceTo = (schema: TProperties) => TSchema | BaseSchema | null
@@ -49,7 +53,11 @@ export function coerce(
 		)
 	}
 
-	function walk(node: BaseSchema, isRoot: boolean): BaseSchema {
+	function walk(
+		node: BaseSchema,
+		isRoot: boolean,
+		isRootProperty = false
+	): BaseSchema {
 		if (
 			!node ||
 			stopped ||
@@ -71,12 +79,16 @@ export function coerce(
 		)
 			return node
 
+		if (options?.rootPropertiesOnly && !isRoot && !isRootProperty)
+			return node
+
 		const canReplace =
 			rootOption === undefined ||
 			(rootOption === true && isRoot) ||
 			(rootOption === false && !isRoot)
 
-		if (canReplace && kind) {
+		const isRootProperties = options?.rootPropertiesOnly && isRoot
+		if (canReplace && kind && !isRootProperties) {
 			const to = transformMap.get(kind)
 			if (to) {
 				const { type, ...rest } = node
@@ -101,12 +113,13 @@ export function coerce(
 							})
 					}
 
-					return result! as s
+					return result! as BaseSchema
 				}
 			}
 		}
 
 		if (stopped) return node
+		if (options?.rootPropertiesOnly && isRootProperty) return node
 
 		let out: any = node
 
@@ -117,7 +130,7 @@ export function coerce(
 			let newArr: BaseSchema[] | undefined
 			for (let i = 0, len = arr.length; i < len; i++) {
 				const item = arr[i]!
-				const r = walk(item, false)
+				const r = walk(item, false, isRootProperties)
 				if (stopped && !newArr) return node
 				if (r !== item) {
 					newArr ??= arr.slice()
@@ -146,7 +159,7 @@ export function coerce(
 				let newItems: BaseSchema[] | undefined
 				for (let i = 0, len = items.length; i < len; i++) {
 					const item = items[i]!
-					const r = walk(item, false)
+					const r = walk(item, false, isRootProperties)
 					if (r !== item) {
 						newItems ??= items.slice()
 						newItems[i] = r
@@ -158,7 +171,7 @@ export function coerce(
 					out.items = newItems
 				}
 			} else {
-				const r = walk(items, false)
+				const r = walk(items, false, isRootProperties)
 				if (r !== items && out === node) {
 					out = copyNode(node)
 					out.items = r
@@ -171,7 +184,7 @@ export function coerce(
 			const props = node.properties
 			for (const k in props) {
 				const v = props[k]!
-				const r = walk(v, false)
+				const r = walk(v, false, isRootProperties)
 				if (r !== v) {
 					newProps ??= { ...props }
 					newProps[k] = r
@@ -256,7 +269,7 @@ export const coerceRoot = () =>
 				['Boolean', (x) => t.BooleanString(x)]
 			],
 			{
-				onlyFirst: 'object'
+				root: true
 			}
 		]
 	])
@@ -294,8 +307,7 @@ export const coerceFormData = () =>
 				]
 			],
 			{
-				root: false,
-				onlyFirst: 'object'
+				rootPropertiesOnly: true
 			}
 		],
 		[
@@ -322,19 +334,15 @@ export const coerceStringToStructure = () =>
 					'Object',
 					(x) =>
 						t.ObjectString((x.properties as TProperties) ?? {}, x)
-				]
-			],
-			{
-				untilNonRootObjectFound: true
-			}
-		],
-		[
-			[
+				],
 				[
 					'Array',
 					(x) => t.ArrayString((x.items as TProperties) ?? t.Any(), x)
 				]
-			]
+			],
+			{
+				rootPropertiesOnly: true
+			}
 		]
 	])
 

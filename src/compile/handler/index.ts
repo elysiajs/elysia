@@ -1,5 +1,5 @@
 import type { AnyElysia } from '../../elysia'
-import { sucrose } from '../../sucrose'
+import { Sucrose, sucrose } from '../../sucrose'
 import { ElysiaAdapter } from '../../adapter2'
 
 import { Validator, type TypeBoxValidator } from '../../schema/validator'
@@ -40,67 +40,111 @@ type Route = readonly [
 	instance: AnyElysia
 ]
 
+function builtinParser(
+	adapter: ElysiaAdapter['parse'],
+	parse: string,
+	link: Link
+) {
+	switch (parse) {
+		case 'formdata':
+		case 'multipart/form-data':
+			link(adapter.formData, 'pf')
+			return parseFormData
+
+		case 'json':
+		case 'application/json':
+			link(adapter.json, 'pj')
+			return parseJson
+
+		case 'urlencoded':
+		case 'application/x-www-form-urlencoded':
+			link(adapter.urlencoded, 'pu')
+			return parseUrlencoded
+
+		case 'arrayBuffer':
+		case 'application/octet-stream':
+			link(adapter.arrayBuffer, 'pa')
+			return parseArrayBuffer
+
+		case 'text':
+		case 'text/plain':
+			link(adapter.text, 'pt')
+			return parseText
+
+		case 'none':
+			return ''
+
+		default:
+			throw new Error(`Unsupported content type: ${parse}`)
+	}
+}
+
 function parse(
-	parse: ElysiaAdapter['parse'],
+	adapter: ElysiaAdapter['parse'],
 	parsers: ContentType | (ContentType | BodyHandler)[],
 	bodyVali: Validator | undefined,
 	link: Link
 ) {
-	if (parsers.length === 0 && typeof parsers === 'string')
-		switch (parsers) {
-			case 'formdata':
-			case 'multipart/form-data':
-				link(parse.formData, 'pf')
-				return parseFormData
+	const hasFile = // @ts-expect-error
+		bodyVali?.tb?.build.external.variables.some((array) =>
+			// @ts-expect-error
+			array.some((x) => x.refine === isBlob)
+		)
 
-			case 'json':
-			case 'application/json':
-				link(parse.json, 'pj')
-				return parseJson
+	if (
+		typeof parsers === 'string' ||
+		// is probably array
+		(parsers?.length === 1 && typeof parsers[0] === 'string')
+	) {
+		if (parsers.length === 1) parsers = parsers[0] as any
 
-			case 'urlencoded':
-			case 'application/x-www-form-urlencoded':
-				link(parse.urlencoded, 'pu')
-				return parseUrlencoded
-
-			case 'arrayBuffer':
-			case 'application/octet-stream':
-				link(parse.arrayBuffer, 'pa')
-				return parseArrayBuffer
-
-			case 'text':
-			case 'text/plain':
-				link(parse.text, 'pt')
-				return parseText
-
-			case 'none':
-				return ''
+		if (hasFile) {
+			link(adapter.formData, 'pf')
+			return parseFormData
 		}
 
-	let code = ''
-
-	code += `const contentType=c.request.headers.get('content-type')\n`
-
-	// @ts-expect-error
-	const isFile = bodyVali?.tb?.build.external.variables.some((array) =>
-		// @ts-expect-error
-		array.some((x) => isAsyncFunction(x.refine) || x.refine === isBlob)
-	)
-
-	if (isFile) {
-		link(parse.formData, 'pf')
-		return parseFormData
+		return builtinParser(adapter, parsers as string, link)
 	}
 
-	code += defaultParse
+	let code = "const ct=c.request.headers.get('content-type')\n"
 
-	link(parse.json, 'pj')
-	link(parse.urlencoded, 'pu')
-	link(parse.arrayBuffer, 'pa')
-	link(parse.formData, 'pf')
-	link(parse.text, 'pt')
+	let hasFn = false
+	let hasType = false
+	if (parsers)
+		for (let i = 0; i < parsers.length; i++) {
+			const parser = parsers[i]
 
-	return code
+			if (typeof parser === 'function') {
+				hasFn = true
+				link(0, '')
+
+				if (i) code += 'if(hasBody){'
+				code +=
+					`c.body=await ho.parse[${i}](c)\n` +
+					'hasBody=c.body!==undefined\n'
+				if (i) code += '}\n'
+			} else {
+				hasType = true
+				code += builtinParser(adapter, parser as string, link)
+				break
+			}
+		}
+
+	if (!hasType) {
+		if (hasFile) {
+			link(adapter.formData, 'pf')
+			return code + parseFormData
+		} else {
+			code += defaultParse
+			link(adapter.json, 'pj')
+			link(adapter.urlencoded, 'pu')
+			link(adapter.arrayBuffer, 'pa')
+			link(adapter.formData, 'pf')
+			link(adapter.text, 'pt')
+		}
+	}
+
+	return hasFn ? 'let hasBody=false\n' + code : code
 }
 
 const isAsyncValidator = (vali: Validator | undefined) =>
@@ -111,14 +155,26 @@ export function compileHandler(
 	root: AnyElysia
 ): CompiledHandler {
 	const adapter = root.config.adapter!
-	const inference = sucrose(handler as any, hook)
+	const inference = sucrose(handler as any, hook as Sucrose.LifeCycle)
 
-	const params: unknown[] = [handler]
+	const params = new Set<unknown>([handler])
 	let alias = ''
 
+	let hookNotLinked = true
 	function link(v: unknown, key: string) {
-		params.push(v)
-		alias += `,${key}`
+		if (v === 0) {
+			if (hookNotLinked) {
+				hookNotLinked = false
+				params.add(hook)
+				alias += ',ho'
+			}
+			return
+		}
+
+		if (!params.has(v)) {
+			params.add(v)
+			alias += `,${key}`
+		}
 	}
 
 	const hasBody =
@@ -160,34 +216,35 @@ export function compileHandler(
 	if (hasBody) {
 		code += parse(adapter.parse, hook.parse, vali.body, link)
 
-		if (vali.body)
+		if (vali.body) {
+			link(vali, 'va')
 			code += `c.body=${bodyValiIsAsync ? 'await ' : ''}va.body.From(c.body)\n`
+		}
 	}
 
-	if (
-		(vali.headers && !headersValiIsAsync) ||
-		(vali.params && !paramsValiIsAsync) ||
-		(vali.query && !queryValiIsAsync) ||
-		(vali.cookie && !cookieValidIsAsync)
-	)
-		code += nonAsyncValidationGroup
-	else {
-		if (vali.headers)
-			code += `c.headers=${headersValiIsAsync ? 'await ' : ''}va.headers.From(c.headers)\n`
-		if (vali.params)
-			code += `c.params=${paramsValiIsAsync ? 'await ' : ''}va.params.From(c.params)\n`
-		if (vali.query)
-			code += `c.query=${queryValiIsAsync ? 'await ' : ''}va.query.From(c.query)\n`
-		if (vali.cookie)
-			code += `c.cookie=${cookieValidIsAsync ? 'await ' : ''}va.cookie.From(c.cookie)\n`
-	}
-
-	if (vali.body || vali.headers || vali.params || vali.query || vali.cookie)
+	if (vali.headers) {
 		link(vali, 'va')
+		code += `c.headers=${headersValiIsAsync ? 'await ' : ''}va.headers.From(c.headers)\n`
+	}
+
+	if (vali.params) {
+		link(vali, 'va')
+		code += `c.params=${paramsValiIsAsync ? 'await ' : ''}va.params.From(c.params)\n`
+	}
+
+	if (vali.query) {
+		link(vali, 'va')
+		code += `c.query=${queryValiIsAsync ? 'await ' : ''}va.query.From(c.query)\n`
+	}
+
+	if (vali.cookie) {
+		link(vali, 'va')
+		code += `c.cookie=${cookieValidIsAsync ? 'await ' : ''}va.cookie.From(c.cookie)\n`
+	}
 
 	// has mapResponse
 	if (true) {
-		params.push(adapter.response.map)
+		params.add(adapter.response.map)
 		alias += ',rm'
 	}
 

@@ -1,6 +1,20 @@
 import type { Static, StaticDecode, StaticEncode, TAny, TSchema } from 'typebox'
-import { Compile, type Validator as BaseTypeBoxValidator } from 'typebox/schema'
-import { Clean, Decode, Encode, Errors, HasCodec } from 'typebox/value'
+import {
+	Compile,
+	IsDefault,
+	type Validator as BaseTypeBoxValidator
+} from 'typebox/schema'
+import {
+	Assert,
+	Clean,
+	Decode,
+	DecodeUnsafe,
+	Default,
+	Encode,
+	Errors,
+	HasCodec,
+	Pipeline
+} from 'typebox/value'
 import type { TLocalizedValidationError } from 'typebox/error'
 
 import { createMirror } from 'exact-mirror'
@@ -14,6 +28,7 @@ import type {
 	StandardSchemaV1Like
 } from '../types'
 import { isAsyncFunction } from '../compile/utils'
+import { hasProperty } from './utils'
 
 export interface ValidatorOptions {
 	schemas?: AnySchema[]
@@ -107,6 +122,10 @@ export abstract class Validator {
 		)
 }
 
+const Decoder = Pipeline([
+	(context, type, value) => DecodeUnsafe(context, type, value)
+])
+
 export class TypeBoxValidator<
 	const in out T extends TSchema = TAny
 > extends Validator {
@@ -114,6 +133,7 @@ export class TypeBoxValidator<
 	hasCodec: boolean
 	schema: T
 	isAsync: boolean
+	hasDefault: boolean
 
 	constructor(schema: T, options?: ValidatorOptions) {
 		super()
@@ -126,15 +146,18 @@ export class TypeBoxValidator<
 			// @ts-expect-error private property
 			array.some((x) => isAsyncFunction(x.refine) || x.refine === isBlob)
 		)
+		this.hasDefault = hasProperty('default', this.schema as any)
 
 		if (this.isAsync)
 			// @ts-expect-error
 			this.From = async (value: unknown) => {
-				if (this.hasCodec) value = await Decode(this.schema, value)
-				else if (!(await this.Check(value as any)))
-					throw this.Errors(value)
-
-				if (this.Clean) value = await this.Clean(value)
+				if (this.hasDefault)
+					value = Default(this.schema, value) as Static<T>
+				if (this.hasCodec)
+					value = (await Decoder(this.schema, value)) as Static<T>
+				// @ts-expect-error
+				if (!(await this.Check(value))) throw this.Errors(value)
+				if (this.Clean) value = this.Clean(value) as Static<T>
 
 				return value
 			}
@@ -169,7 +192,7 @@ export class TypeBoxValidator<
 	}
 
 	Decode(value: Static<T>): StaticDecode<T> {
-		return this.hasCodec ? Decode(this.schema, value) : (value as any)
+		return Decode(this.schema, value)
 	}
 
 	Encode(value: Static<T>): StaticEncode<T> {
@@ -177,9 +200,9 @@ export class TypeBoxValidator<
 	}
 
 	From(value: Static<T>): StaticDecode<T> {
-		if (this.hasCodec) value = this.Decode(value) as Static<T>
-		else if (!this.Check(value)) throw this.Errors(value)
-
+		if (this.hasDefault) value = Default(this.schema, value) as Static<T>
+		if (this.hasCodec) value = Decoder(this.schema, value) as Static<T>
+		if (!this.Check(value)) throw this.Errors(value)
 		if (this.Clean) value = this.Clean(value) as Static<T>
 
 		return value as StaticDecode<T>

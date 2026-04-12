@@ -1,5 +1,7 @@
 import { primitiveElysiaTypes, ELYSIA_TYPES, type BaseSchema } from '../type'
-import { AnyBaseHookLifeCycle, AnySchema } from '../types'
+import { AnySchema } from '../types'
+
+const iterators = ['anyOf', 'oneOf', 'allOf'] as const
 
 export function hasType(
 	type: string | ELYSIA_TYPES[keyof ELYSIA_TYPES],
@@ -26,7 +28,7 @@ export function hasType(
 			schema.$defs![schema.$ref as keyof typeof schema.$defs]
 		)
 
-	for (const key of ['anyOf', 'oneOf', 'allOf'] as const)
+	for (const key of iterators)
 		if (
 			schema[key] &&
 			schema[key].some((s: BaseSchema) => hasType(type, s))
@@ -94,7 +96,7 @@ function _hasTypes(
 				schema.$defs![schema.$ref as keyof typeof schema.$defs]
 			)
 
-	for (const key of ['anyOf', 'oneOf', 'allOf'] as const)
+	for (const key of iterators)
 		if (schema[key] && schema[key].some((s) => _hasTypes(types, s)))
 			return true
 
@@ -118,6 +120,57 @@ function _hasTypes(
 	if (schema.patternProperties)
 		for (const v of Object.values(schema.patternProperties))
 			if (_hasTypes(types, v)) return true
+
+	return false
+}
+
+export function hasProperty(
+	key: string | ELYSIA_TYPES[keyof ELYSIA_TYPES],
+	schema: BaseSchema
+): boolean {
+	if (!schema) return false
+
+	if (key in schema) return true
+
+	if (
+		typeof schema !== 'object' ||
+		('~elyTyp' in schema &&
+			primitiveElysiaTypes.has(schema['~elyTyp'] as any))
+	)
+		return false
+
+	if (
+		schema['~kind'] === 'Cyclic' &&
+		schema.$defs?.[schema.$ref as keyof typeof schema.$defs]
+	)
+		return hasProperty(
+			key,
+			schema.$defs[schema.$ref as keyof typeof schema.$defs] as any
+		)
+
+	for (const k of iterators)
+		if (schema[k]?.some((s: BaseSchema) => hasProperty(key, s))) return true
+
+	if (schema.not && hasProperty(key, schema.not)) return true
+
+	if (schema.items)
+		return Array.isArray(schema.items)
+			? schema.items.some((s) => hasProperty(key, s))
+			: hasProperty(key, schema.items)
+
+	if (schema.properties)
+		for (const v of Object.values(schema.properties))
+			if (hasProperty(key, v)) return true
+
+	if (
+		typeof schema.additionalProperties === 'object' &&
+		hasProperty(key, schema.additionalProperties)
+	)
+		return true
+
+	if (schema.patternProperties)
+		for (const v of Object.values(schema.patternProperties))
+			if (hasProperty(key, v)) return true
 
 	return false
 }
