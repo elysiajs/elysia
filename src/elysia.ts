@@ -47,14 +47,7 @@ export class Elysia<
 		response: {}
 	}
 > {
-	config: ElysiaConfig<any>
-
-	constructor() {
-		this.config = {
-			adapter: webStandardAdapter
-		}
-	}
-
+	config?: ElysiaConfig<any>
 	event?: Partial<LifeCycleStore>
 
 	/**

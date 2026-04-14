@@ -1,5 +1,3 @@
-import { parseQuery } from '../../parse-query'
-import { ElysiaAdapter } from '../types'
 import {
 	mapCompactResponse,
 	mapEarlyResponse,
@@ -8,7 +6,10 @@ import {
 } from './handler'
 import { formDataToObject } from './utils'
 
-export const webStandardAdapter = {
+import { createAdapter } from '..'
+import { parseQuery } from '../../parse-query'
+
+export const webStandardAdapter = createAdapter({
 	name: 'web-standard',
 	runtime: 'unknown',
 	isWebStandard: true,
@@ -33,4 +34,4 @@ export const webStandardAdapter = {
 		compact: mapCompactResponse,
 		static: mapStaticHandler
 	}
-} satisfies ElysiaAdapter
+})

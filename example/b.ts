@@ -35,7 +35,7 @@ const coerce = (schema: any) =>
 		]
 	])
 
-for (let i = 0; i <= 100_000; i++)
+for (let i = 0; i <= 50; i++)
 	stacks[i] =
 		// coerce(
 		t.Array(

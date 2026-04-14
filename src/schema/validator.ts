@@ -86,13 +86,22 @@ export abstract class Validator {
 				options.schemas.every((v) => '~kind' in v || '~elyAcl' in v)
 			)
 				schema = t.Evaluate(
-					t.Intersect([schema as TSchema].concat(options.schemas))
+					t.Intersect([schema as TSchema, ...options.schemas])
 				) as AnySchema
 			else return new MultiValidator(schema, options) as any
 		}
 
-		if ('~kind' in schema || '~elyAcl' in schema)
-			return new TypeBoxValidator(schema, options) as any
+		if ('~kind' in schema || '~elyAcl' in schema) {
+			if (tbCache) {
+				const cached = tbCache.get(schema, options?.coerces)
+				if (cached) return cached
+			} else tbCache = new TypeBoxValidatorCache()
+
+			const validator = new TypeBoxValidator(schema, options) as any
+			tbCache.set(schema, options?.coerces, validator)
+
+			return validator
+		}
 
 		if ('~standard' in schema) return new StandardValidator(schema) as any
 
@@ -352,3 +361,51 @@ export class MultiValidator extends Validator {
 		return this.Decode(value)!
 	}
 }
+
+class TypeBoxValidatorCache {
+	static EMPTY = {} as const
+
+	private cache = new Map<
+		string,
+		WeakMap<
+			CoerceOption[] | typeof TypeBoxValidatorCache.EMPTY,
+			BaseTypeBoxValidator
+		>
+	>()
+
+	get(
+		schema: TSchema,
+		coercions:
+			| CoerceOption[]
+			| typeof TypeBoxValidatorCache.EMPTY = TypeBoxValidatorCache.EMPTY
+	) {
+		const key = JSON.stringify(schema)
+		if (this.cache.get(key)) {
+			const coercionsCache = this.cache.get(key)!
+
+			if (coercionsCache.has(coercions))
+				return coercionsCache.get(coercions)!
+		}
+	}
+
+	set(
+		schema: TSchema,
+		coercions:
+			| CoerceOption[]
+			| typeof TypeBoxValidatorCache.EMPTY = TypeBoxValidatorCache.EMPTY,
+		validator: BaseTypeBoxValidator
+	) {
+		const key = JSON.stringify(schema)
+		if (!this.cache.has(key)) {
+			this.cache.set(key, new WeakMap().set(coercions, validator))
+			return
+		}
+
+		const coercionsCache = this.cache.get(key)!
+		coercionsCache.set(coercions, validator)
+	}
+
+	clear() {}
+}
+
+let tbCache: TypeBoxValidatorCache

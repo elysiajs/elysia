@@ -9,7 +9,7 @@ import { AnyLocalHook, MaybePromise } from '../types'
  *
  * @since 2.0.0
  */
-export interface ElysiaAdapter {
+export interface ElysiaAdapterOptions {
 	/**
 	 * Name of the adapter, preferably runtime
 	 */

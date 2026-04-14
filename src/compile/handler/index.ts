@@ -1,13 +1,11 @@
 import type { AnyElysia } from '../../elysia'
-import { Sucrose, sucrose } from '../../sucrose'
-import { ElysiaAdapter } from '../../adapter2'
+import { sucrose, type Sucrose } from '../../sucrose'
+import type { ElysiaAdapter } from '../../adapter2'
 
 import { Validator, type TypeBoxValidator } from '../../schema/validator'
 import { RouteValidator } from '../../schema/route'
 import { isAsyncFunction } from '../utils'
 import {
-	defaultParse,
-	nonAsyncValidationGroup,
 	parseArrayBuffer,
 	parseFormData,
 	parseJson,
@@ -24,6 +22,7 @@ import type {
 	MaybePromise
 } from '../../types'
 import { isBlob } from '../../type'
+import { webStandardAdapter } from '../../adapter2/web-standard'
 
 type Handler = (context: Context) => unknown
 type CompiledHandler = (context: Partial<Context>) => MaybePromise<Response>
@@ -135,12 +134,8 @@ function parse(
 			link(adapter.formData, 'pf')
 			return code + parseFormData
 		} else {
-			code += defaultParse
-			link(adapter.json, 'pj')
-			link(adapter.urlencoded, 'pu')
-			link(adapter.arrayBuffer, 'pa')
-			link(adapter.formData, 'pf')
-			link(adapter.text, 'pt')
+			code += `if(ct)c.body=await pd(c,ct)\n`
+			link(adapter.default, 'pd')
 		}
 	}
 
@@ -154,7 +149,7 @@ export function compileHandler(
 	[path, method, handler, hook, instance]: Route,
 	root: AnyElysia
 ): CompiledHandler {
-	const adapter = root.config.adapter!
+	const adapter = root?.config?.adapter ?? webStandardAdapter
 	const inference = sucrose(handler as any, hook as Sucrose.LifeCycle)
 
 	const params = new Set<unknown>([handler])
@@ -180,7 +175,7 @@ export function compileHandler(
 	const hasBody =
 		method !== 'GET' &&
 		method !== 'HEAD' &&
-		(inference.body || !!hook.body) &&
+		inference.body &&
 		hook.parse?.[0] !== 'none'
 
 	const vali = new RouteValidator(hook, {
@@ -252,7 +247,7 @@ export function compileHandler(
 
 	code += '}'
 
-	console.log(`const [h${alias}]=a\nreturn ` + code)
+	// console.log(`const [h${alias}]=a\nreturn ` + code)
 
 	return new Function('a', `const [h${alias}]=a\nreturn ` + code)(params)
 }

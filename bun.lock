@@ -9,7 +9,7 @@
         "exact-mirror": "^1.0.0",
         "fast-decode-uri-component": "^1.0.1",
         "memoirist": "^0.4.0",
-        "typebox": "1.1.20",
+        "typebox": "1.1.23",
       },
       "devDependencies": {
         "@elysiajs/openapi": "^1.4.1",
@@ -589,7 +589,7 @@
 
     "type-check": ["type-check@0.4.0", "", { "dependencies": { "prelude-ls": "^1.2.1" } }, "sha512-XleUoc9uwGXqjWwXaUTZAmzMcFZ5858QA2vvx1Ur5xIcixXIP+8LnFDgRplU30us6teqdlskFfu+ae4K79Ooew=="],
 
-    "typebox": ["typebox@1.1.20", "", {}, "sha512-JG7irhA/QcY4c2BD19/AaFdltaXC/1l6Pa8Vp9ExbXU3t45LLobgqKNCtrvaxcVgK+RES0jNv+Tw8KWtgTymUg=="],
+    "typebox": ["typebox@1.1.23", "", {}, "sha512-LOGT/+DLfGsFzAVoYAYzLWT3iV5LfAHebW1pg336lwZg5fkaL3uBKqNXsA7aGb9rkOsVu9QohSkImHwwfHDC0A=="],
 
     "typescript": ["typescript@6.0.2", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-bGdAIrZ0wiGDo5l8c++HWtbaNCWTS4UTv7RaTH/ThVIgjkveJt83m74bBHMJkuCbslY8ixgLBVZJIOiQlQTjfQ=="],
 

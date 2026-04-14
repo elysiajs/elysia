@@ -5,6 +5,12 @@ Breaking Change:
 - `getSchemaValidator` renamed to `Validator.create`
 - remove `context.contentType` from `Context` in `parse`
 
+Feature:
+- Adapter v2
+- sub type validator
+- shared validator cached
+- shared schema reference
+
 # 1.4.28 - 17 Mar 2025
 Feature:
 - [#1803](https://github.com/elysiajs/elysia/pull/1803) stream response with pull based backpressure
