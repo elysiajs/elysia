@@ -26,35 +26,31 @@ const stacks = <any[]>Array(total)
 const m1 = memoryUsage()
 const t1 = performance.now()
 
-for (let i = 0; i <= total; i++)
-	stacks.push(
-		compileHandler(
-			[
-				'/',
-				'POST',
-				({ body }) => 'q',
-				{
-					body: t.Array(
-						t.Object({
-							name: t.String(),
-							age: t.Number({
-								default: 1
-							})
-						})
-					)
-				},
-				app
-			],
-			app
+const route = [
+	'/',
+	'POST',
+	({ body }) => 'q',
+	{
+		body: t.Array(
+			t.Object({
+				name: t.String(),
+				age: t.Number({
+					default: 1
+				})
+			})
 		)
-	)
+	},
+	app
+]
+
+for (let i = 0; i <= total; i++) stacks.push(compileHandler(route, app))
 
 const t2 = performance.now()
 gc()
 const m2 = memoryUsage()
 
 // console.log('\n\n\n')
-console.log('Elysia 2 schema with 45 types x100,000')
+console.log('Elysia 2 incomplete compile x100_000')
 console.log('Time:', (t2 - t1).toFixed(2), 'ms')
 console.log('Memory usage:', ((m2 - m1) / 1024 / 1024).toFixed(2), 'MB')
 // console.log('\n\n\n\n\n\n')

@@ -372,6 +372,13 @@ class TypeBoxValidatorCache {
 			BaseTypeBoxValidator
 		>
 	>()
+	private referenceCache = new WeakMap<
+		TSchema,
+		WeakMap<
+			CoerceOption[] | typeof TypeBoxValidatorCache.EMPTY,
+			BaseTypeBoxValidator
+		>
+	>()
 
 	get(
 		schema: TSchema,
@@ -379,8 +386,14 @@ class TypeBoxValidatorCache {
 			| CoerceOption[]
 			| typeof TypeBoxValidatorCache.EMPTY = TypeBoxValidatorCache.EMPTY
 	) {
+		if (this.referenceCache.has(schema)) {
+			const coercionsCache = this.referenceCache.get(schema)!
+			if (coercionsCache.has(coercions))
+				return coercionsCache.get(coercions)!
+		}
+
 		const key = JSON.stringify(schema)
-		if (this.cache.get(key)) {
+		if (this.cache.has(key)) {
 			const coercionsCache = this.cache.get(key)!
 
 			if (coercionsCache.has(coercions))
@@ -396,13 +409,18 @@ class TypeBoxValidatorCache {
 		validator: BaseTypeBoxValidator
 	) {
 		const key = JSON.stringify(schema)
-		if (!this.cache.has(key)) {
-			this.cache.set(key, new WeakMap().set(coercions, validator))
-			return
+		if (this.cache.has(key)) {
+			const cache = this.cache.get(key)!.set(coercions, validator)
+
+			if (this.referenceCache.has(schema))
+				this.referenceCache.get(schema)!.set(coercions, validator)
+			else this.referenceCache.set(schema, cache)
 		}
 
-		const coercionsCache = this.cache.get(key)!
-		coercionsCache.set(coercions, validator)
+		const cache = new WeakMap().set(coercions, validator)
+
+		this.cache.set(key, cache)
+		this.referenceCache.set(schema, cache)
 	}
 
 	clear() {}
