@@ -9,8 +9,8 @@ import {
 
 import { ElysiaFile, mime } from '../../universal/file'
 import { isNotEmpty } from '../../utils'
-import { Cookie } from '../../cookies'
-import { ElysiaCustomStatusResponse } from '../../error'
+import { Cookie } from '../../cookie'
+import { ElysiaCustomStatusResponse } from '../../../error'
 
 import type { Context } from '../../context'
 import type { AnyLocalHook, MaybePromise } from '../../types'

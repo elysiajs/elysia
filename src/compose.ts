@@ -57,9 +57,9 @@ import type {
 	SchemaValidator
 } from './types'
 import { tee } from './adapter/utils'
-import { Validator } from './schema/validator'
-import { hasType, hasTypes } from './schema/utils'
-import { BaseSchema, ELYSIA_TYPES } from './type'
+import { Validator } from './2/schema/validator'
+import { hasType, hasTypes } from './2/schema/utils'
+import { BaseSchema, ELYSIA_TYPES } from './2/type'
 import Value from 'typebox/value'
 
 const allocateIf = (value: string, condition: unknown) =>

@@ -1,9 +1,9 @@
-import { serializeCookie } from '../cookies'
-import { hasHeaderShorthand, isNotEmpty, StatusMap } from '../utils'
+import { serializeCookie } from '../cookie'
+import { isNotEmpty, StatusMap } from '../utils'
 
 import type { Context } from '../context'
-import { isBun } from '../universal/utils'
-import { MaybePromise } from '../types'
+import { isBun, hasHeaderShorthand } from '../universal/utils'
+import type { MaybePromise } from '../types'
 
 export const handleFile = (
 	response: File | Blob,
@@ -434,7 +434,8 @@ export async function* streamResponse(response: Response) {
 }
 
 export const handleSet = (set: Context['set']) => {
-	if (typeof set.status === 'string') set.status = StatusMap[set.status]
+	if (typeof set.status === 'string')
+		set.status = StatusMap[set.status as keyof typeof StatusMap]
 
 	if (set.cookie && isNotEmpty(set.cookie)) {
 		const cookie = serializeCookie(set.cookie)
@@ -486,7 +487,8 @@ export function mergeStatus(
 	responseStatus: number,
 	setStatus: Context['set']['status']
 ) {
-	if (typeof setStatus === 'string') setStatus = StatusMap[setStatus]
+	if (typeof setStatus === 'string')
+		setStatus = StatusMap[setStatus as keyof typeof StatusMap]
 
 	if (responseStatus === 200) return setStatus
 
@@ -499,7 +501,7 @@ export const createResponseHandler = (handler: CreateHandlerParameter) => {
 	return (response: Response, set: Context['set'], request?: Request) => {
 		const newResponse = new Response(response.body, {
 			headers: mergeHeaders(response.headers, set.headers),
-			status: mergeStatus(response.status, set.status)
+			status: mergeStatus(response.status, set.status) as any
 		})
 
 		if (

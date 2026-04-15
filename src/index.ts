@@ -11,7 +11,7 @@ import {
 import fastDecodeURIComponent from 'fast-decode-uri-component'
 import type { Context, PreContext } from './context'
 
-import { ELYSIA_TYPES, t } from './type'
+import { ELYSIA_TYPES, t } from './2/type'
 import { mergeInference, sucrose, type Sucrose } from './sucrose'
 
 import type { WSLocalHook } from './ws/types'
@@ -162,14 +162,14 @@ import type {
 // 	queryCoercions,
 // 	stringToStructureCoercions
 // } from './replace-schema'
-import { Validator } from './schema/validator'
-import { hasTypes } from './schema/utils'
+import { Validator } from './2/schema/validator'
+import { hasTypes } from './2/schema/utils'
 import {
 	coerceFormData,
 	coerceQuery,
 	coerceRoot,
 	coerceStringToStructure
-} from './schema/coerce'
+} from './2/schema/coerce'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any>
 
@@ -8217,12 +8217,12 @@ export default class Elysia<
 
 export { Elysia }
 
-export { t } from './type'
-export { validationDetail } from './type/utils'
+export { t } from './2/type'
+export { validationDetail } from './2/type/utils'
 export type {
 	ElysiaTypeCustomError,
 	ElysiaTypeCustomErrorCallback
-} from './type/types'
+} from './2/type/types'
 
 export { serializeCookie, Cookie, type CookieOptions } from './cookies'
 export type { Context, PreContext, ErrorContext } from './context'

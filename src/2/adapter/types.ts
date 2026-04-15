@@ -1,4 +1,4 @@
-import type { AnyElysia } from '../elysia'
+import type { AnyElysia } from '../'
 import type { Serve, ListenCallback } from '../universal'
 
 import type { Context } from '../context'

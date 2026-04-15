@@ -1,5 +1,3 @@
-import { BunAdapter } from './adapter/bun'
-import { webStandardAdapter } from './adapter2/web-standard'
 import type {
 	ElysiaConfig,
 	LifeCycleStore,
@@ -49,6 +47,9 @@ export class Elysia<
 > {
 	config?: ElysiaConfig<any>
 	event?: Partial<LifeCycleStore>
+
+	#scoped?: WeakSet<any>
+	#global?: WeakSet<any>
 
 	/**
 	 * ### on
@@ -107,6 +108,31 @@ export class Elysia<
 
 		if (this.event![type]) this.event![type]!.push(fns as any)
 		else this.event![type] = [fns as any]
+
+		return this
+	}
+
+	#on3<Event extends keyof Omit<LifeCycleStore, 'type'>>(
+		options: { as: LifeCycleType },
+		type: Event,
+		fns: MaybeArray<LifeCycleStore[Event]>
+	): this {
+		this.event ??= Object.create(null)
+
+		if (this.event![type]) this.event![type]!.push(fns as any)
+		else this.event![type] = [fns as any]
+
+		switch (options.as) {
+			case 'scoped':
+				this.#scoped ??= new WeakSet()
+				this.#scoped.add(fns)
+				break
+
+			case 'global':
+				this.#global ??= new WeakSet()
+				this.#global.add(fns)
+				break
+		}
 
 		return this
 	}

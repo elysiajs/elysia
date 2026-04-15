@@ -1,5 +1,5 @@
-import { applyCoercions } from '../src/schema/coerce'
-import { t } from '../src/type'
+import { applyCoercions } from '../src/2/schema/coerce'
+import { t } from '../src/2/type'
 // import { Type as t } from 'typebox'
 // import { Type as t } from '@sinclair/typebox'
 

@@ -1,10 +1,16 @@
-import type { AnyElysia } from '../../elysia'
+import type { AnyElysia } from '../..'
 import { sucrose, type Sucrose } from '../../sucrose'
-import type { ElysiaAdapter } from '../../adapter2'
+
+import type { ElysiaAdapter } from '../../adapter'
+import { webStandardAdapter } from '../../adapter/web-standard'
 
 import { Validator, type TypeBoxValidator } from '../../schema/validator'
 import { RouteValidator } from '../../schema/route'
 import { isAsyncFunction } from '../utils'
+
+import type { Context } from '../../context'
+import { isBlob } from '../../type'
+
 import {
 	parseArrayBuffer,
 	parseFormData,
@@ -12,17 +18,13 @@ import {
 	parseText,
 	parseUrlencoded
 } from './constants'
-
-import type { Context } from '../../context'
 import type { Link } from '../types'
 import type {
 	AnyLocalHook,
 	BodyHandler,
 	ContentType,
 	MaybePromise
-} from '../../types'
-import { isBlob } from '../../type'
-import { webStandardAdapter } from '../../adapter2/web-standard'
+} from '../../../types'
 
 type Handler = (context: Context) => unknown
 type CompiledHandler = (context: Partial<Context>) => MaybePromise<Response>

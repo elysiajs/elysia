@@ -15,7 +15,7 @@ import type { TypeCheck, ValueError } from '@sinclair/typebox/compiler'
 
 import type { OpenAPIV3 } from 'openapi-types'
 
-import type { ElysiaAdapter } from './adapter2'
+import type { ElysiaAdapter } from './2/adapter2'
 import type { Context, ErrorContext, PreContext } from './context'
 import type { ComposerGeneralHandlerOptions } from './compose'
 import type { CookieOptions } from './cookies'
@@ -38,7 +38,7 @@ import { BunHTMLBundlelike } from './universal/types'
 import { Sucrose } from './sucrose'
 import type Memoirist from 'memoirist'
 import type { DynamicHandler } from './dynamic-handle'
-import type { BaseSchema } from './type/types'
+import type { BaseSchema } from './2/type/types'
 
 export type Equal<X, Y> =
 	(<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2
@@ -101,34 +101,40 @@ export interface ElysiaConfig<in out Prefix extends string | undefined> {
 	 * @since 1.1.11
 	 */
 	adapter?: ElysiaAdapter
+
 	/**
 	 * Path prefix of the instance
 	 *
 	 * @default '''
 	 */
 	prefix?: Prefix
+
 	/**
 	 * Name of the instance for debugging, and plugin deduplication purpose
 	 */
 	name?: string
+
 	/**
 	 * Seed for generating checksum for plugin deduplication
 	 *
 	 * @see https://elysiajs.com/essential/plugin.html#plugin-deduplication
 	 */
 	seed?: unknown
+
 	/**
 	 * Bun serve
 	 *
 	 * @see https://bun.sh/docs/api/http
 	 */
 	serve?: Partial<Serve>
+
 	/**
 	 * OpenAPI documentation (use in Swagger)
 	 *
 	 * @see https://swagger.io/specification/
 	 */
 	detail?: DocumentDecoration
+
 	/**
 	 * OpenAPI tags
 	 *
@@ -137,6 +143,7 @@ export interface ElysiaConfig<in out Prefix extends string | undefined> {
 	 * @see https://swagger.io/specification/#tag-object
 	 */
 	tags?: DocumentDecoration['tags']
+
 	/**
 	 * Warm up Elysia before starting the server
 	 *
@@ -150,34 +157,22 @@ export interface ElysiaConfig<in out Prefix extends string | undefined> {
 	 *
 	 * @default false
 	 */
-	precompile?:
-		| boolean
-		| {
-				/**
-				 * Perform dynamic code generation for route handlers before starting the server
-				 *
-				 * @default false
-				 */
-				compose?: boolean
-				/**
-				 * Perform Ahead of Time compilation for schema before starting the server
-				 *
-				 * @default false
-				 */
-				schema?: boolean
-		  }
+	precompile?: boolean
+
 	/**
 	 * Enable Ahead of Time compilation
 	 *
 	 * Trade significant performance with slightly faster startup time and reduced memory usage
 	 */
 	aot?: boolean
+
 	/**
 	 * Whether should Elysia tolerate suffix '/' or vice-versa
 	 *
 	 * @default false
 	 */
 	strictPath?: boolean
+
 	/**
 	 * Override websocket configuration
 	 *
@@ -187,16 +182,19 @@ export interface ElysiaConfig<in out Prefix extends string | undefined> {
 		WebSocketHandler<any>,
 		'open' | 'close' | 'message' | 'drain'
 	>
+
 	cookie?: CookieOptions & {
 		/**
 		 * Specified cookie name to be signed globally
 		 */
 		sign?: true | string | string[]
 	}
+
 	/**
 	 * Capture more detail information for each dependencies
 	 */
 	analytic?: boolean
+
 	/**
 	 * If enabled, Elysia will call `Encode` before sending the response
 	 *
@@ -204,6 +202,7 @@ export interface ElysiaConfig<in out Prefix extends string | undefined> {
 	 * @since 1.3.0
 	 **/
 	encodeSchema?: boolean
+
 	/**
 	 * Enable experimental features
 	 */
@@ -226,7 +225,9 @@ export interface ElysiaConfig<in out Prefix extends string | undefined> {
 	 * @default 'exactMirror'
 	 */
 	normalize?: boolean | 'exactMirror' | 'typebox'
-	handler?: ComposerGeneralHandlerOptions
+
+	// ? Might delete
+	// handler?: ComposerGeneralHandlerOptions
 	/**
 	 * Enable Bun static response
 	 *
@@ -234,6 +235,7 @@ export interface ElysiaConfig<in out Prefix extends string | undefined> {
 	 * @since 1.1.11
 	 */
 	nativeStaticResponse?: boolean
+
 	/**
 	 * Use runtime/framework provided router if possible
 	 *
@@ -252,6 +254,7 @@ export interface ElysiaConfig<in out Prefix extends string | undefined> {
 	 * @since 1.3.0
 	 */
 	sanitize?: ExactMirrorInstruction['sanitize']
+
 	/**
 	 * Sucrose (Static Code Analysis) configuration
 	 */

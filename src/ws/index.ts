@@ -8,7 +8,7 @@ import type {
 } from './bun'
 
 import type { TSchema } from '@sinclair/typebox'
-import type { TypeCheck } from '../type'
+import type { TypeCheck } from '../2/type'
 import type { ElysiaTypeCheck } from '../schema'
 
 import type { FlattenResponse, WSParseHandler } from './types'

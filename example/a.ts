@@ -1,6 +1,7 @@
-import { t } from '../src/type'
-import { Elysia } from '../src/elysia'
-import { compileHandler } from '../src/compile'
+import { t } from '../src/2/type'
+import { Elysia } from '../src/2'
+import { compileHandler } from '../src/2/compile'
+import { Validator } from '../src/2/schema/validator'
 
 function gc() {
 	if (typeof Bun !== 'undefined') Bun.gc(true)
@@ -21,11 +22,6 @@ function memoryUsage() {
 
 const app = new Elysia()
 
-const total = 100_000
-const stacks = <any[]>Array(total)
-const m1 = memoryUsage()
-const t1 = performance.now()
-
 const route = [
 	'/',
 	'POST',
@@ -43,14 +39,21 @@ const route = [
 	app
 ]
 
-for (let i = 0; i <= total; i++) stacks.push(compileHandler(route, app))
+compileHandler(route, app)
+const total = 100_000
+const stacks = <any[]>Array(total)
+const m1 = memoryUsage()
+const t1 = performance.now()
+
+compileHandler(route, app)
 
 const t2 = performance.now()
+Validator.clear()
 gc()
 const m2 = memoryUsage()
 
 // console.log('\n\n\n')
-console.log('Elysia 2 incomplete compile x100_000')
+console.log('Elysia 2 incomplete compile x1')
 console.log('Time:', (t2 - t1).toFixed(2), 'ms')
 console.log('Memory usage:', ((m2 - m1) / 1024 / 1024).toFixed(2), 'MB')
 // console.log('\n\n\n\n\n\n')
