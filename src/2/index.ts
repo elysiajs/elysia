@@ -1,16 +1,24 @@
+import Memoirist from 'memoirist'
+import { createFetchHandler } from './handler'
 import { compileHandler } from './compile'
 import { MethodMap, MethodMapBack } from './constants'
-import { InvalidArgument } from './error'
 
 import type {
 	CompiledHandler,
+	DefinitionBase,
 	ElysiaConfig,
+	EphemeralType,
 	InternalRoute,
 	LifeCycleStore,
 	LifeCycleType,
 	MaybeArray,
-	PublicRoute
+	MaybePromise,
+	MetadataBase,
+	PublicRoute,
+	RouteBase,
+	SingletonBase
 } from './types'
+import decodeURIComponent from 'fast-decode-uri-component'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any>
 
@@ -58,8 +66,15 @@ export class Elysia<
 	#scoped?: WeakSet<any>
 	#global?: WeakSet<any>
 
+	decorator?: Singleton['decorator']
+	store?: Singleton['store']
+	'~headers'?: Record<string, string>
+
 	#routes?: InternalRoute[]
 	#compiled?: CompiledHandler[]
+
+	'~router'?: Memoirist<CompiledHandler>
+	'~routeMap'?: { [method: string]: { [path: string]: CompiledHandler } }
 
 	get routes(): PublicRoute[] {
 		return (
@@ -128,8 +143,6 @@ export class Elysia<
 		const a = arguments
 		if (a.length === 2) return this.#on2(a[0], a[1])
 		if (a.length === 3) return this.#on3(a[0], a[1], a[2])
-
-		throw new InvalidArgument()
 	}
 
 	#on2<Event extends keyof Omit<LifeCycleStore, 'type'>>(
@@ -175,10 +188,9 @@ export class Elysia<
 		fn: Function,
 		hook?: unknown
 	) {
-		const route = [method, path, fn, hook, this]
-
-		this.#routes ??= []
-		this.#routes.push(route as any)
+		if (this.#routes)
+			this.#routes.push([method, path, fn, hook, this] as any)
+		else this.#routes = [[method, path, fn, hook, this] as any]
 
 		return this
 	}
@@ -198,6 +210,45 @@ export class Elysia<
 
 		return this
 	}
+
+	#build() {
+		this['~routeMap'] ??= Object.create(null)
+
+		if (!this.#routes) return
+
+		this['~router'] ??= new Memoirist({
+			onParam: decodeURIComponent
+		})
+
+		for (const route of this.#routes) {
+			const [_method, path] = route
+			const method =
+				MethodMapBack[_method as keyof MethodMapBack] ?? _method
+
+			if (/\:|\*/.test(path))
+				this['~router'].add(
+					method,
+					path,
+					route as any
+				)
+			else {
+				this['~routeMap']![method] ??= Object.create(null)
+				this['~routeMap']![method]![path] = compileHandler(route, this)
+			}
+		}
+	}
+
+	#fetchFn?: (request: Request) => MaybePromise<Response>
+	get fetch() {
+		if (this.#fetchFn) return this.#fetchFn
+
+		this.#build()
+		this.#fetchFn ??= createFetchHandler(this)
+
+		return this.#fetchFn
+	}
+
+	handle = async (request: Request) => this.fetch(request)
 }
 
 export {

@@ -1,6 +1,6 @@
 import { Elysia, t } from '../src/2'
 
-const q = new Elysia().post(
+const app = new Elysia().post(
 	'/',
 	({ body }) => {
 		console.log(body)
@@ -12,19 +12,11 @@ const q = new Elysia().post(
 			name: t.String()
 		})
 	}
-).compile()
+)
 
-const handler = q.routes[0].compile()
-
-console.log(handler)
-
-await handler({
-	set: {
-		status: 200,
-		headers: {}
-	},
-	request: new Request('http://localhost', {
-		method: 'GET',
+app.handle(
+	new Request('http://localhost', {
+		method: 'POST',
 		headers: {
 			'content-type': 'application/json'
 		},
@@ -32,6 +24,6 @@ await handler({
 			name: 'q'
 		})
 	})
-})
-	.then((res) => res.text())
+)
+	.then(x => x.json())
 	.then(console.log)

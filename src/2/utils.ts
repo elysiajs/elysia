@@ -20,3 +20,13 @@ export function checksum(s: string): number {
 
 	return (h = h ^ (h >>> 9))
 }
+
+/**
+ *
+ * @param url URL to redirect to
+ * @param HTTP status code to send,
+ */
+export const redirect = (
+	url: string,
+	status: 301 | 302 | 303 | 307 | 308 = 302
+) => Response.redirect(url, status)

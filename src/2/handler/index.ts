@@ -1,0 +1,1 @@
+export { createFetchHandler } from './fetch'
