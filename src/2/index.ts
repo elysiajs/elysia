@@ -19,6 +19,7 @@ import type {
 	SingletonBase
 } from './types'
 import decodeURIComponent from 'fast-decode-uri-component'
+import { getLoosePath } from './utils'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any>
 
@@ -61,7 +62,7 @@ export class Elysia<
 	}
 > {
 	config?: ElysiaConfig<any>
-	event?: Partial<LifeCycleStore>
+	'~event'?: Partial<LifeCycleStore>
 
 	#scoped?: WeakSet<any>
 	#global?: WeakSet<any>
@@ -77,6 +78,10 @@ export class Elysia<
 	'~routeMap'?: { [method: string]: { [path: string]: CompiledHandler } }
 
 	get routes(): PublicRoute[] {
+		if (!this.#routes) return []
+
+		this.#compiled = Array(this.#routes.length)
+
 		return (
 			this.#routes?.map(
 				([method, path, handler, hook, instance], index) => ({
@@ -86,11 +91,10 @@ export class Elysia<
 					handler,
 					hook,
 					compile: () =>
-						this.#compiled?.[index] ??
-						compileHandler(
+						(this.#compiled[index] ??= compileHandler(
 							[method, path, handler, hook, instance],
 							this
-						)
+						))
 				})
 			) ?? []
 		)
@@ -149,10 +153,10 @@ export class Elysia<
 		type: Event,
 		fns: MaybeArray<LifeCycleStore[Event]>
 	): this {
-		this.event ??= Object.create(null)
+		const event = (this['~event'] ??= Object.create(null))
 
-		if (this.event![type]) this.event![type]!.push(fns as any)
-		else this.event![type] = [fns as any]
+		if (event![type]) event![type]!.push(fns as any)
+		else event![type] = [fns as any]
 
 		return this
 	}
@@ -162,10 +166,10 @@ export class Elysia<
 		type: Event,
 		fns: MaybeArray<LifeCycleStore[Event]>
 	): this {
-		this.event ??= Object.create(null)
+		const event = (this['~event'] ??= Object.create(null))
 
-		if (this.event![type]) this.event![type]!.push(fns as any)
-		else this.event![type] = [fns as any]
+		if (event![type]) event![type]!.push(fns as any)
+		else event![type] = [fns as any]
 
 		if (options.as === 'scoped') {
 			this.#scoped ??= new WeakSet()
@@ -188,6 +192,18 @@ export class Elysia<
 		fn: Function,
 		hook?: unknown
 	) {
+		if (this['~event']) {
+			hook ??= {}
+			const event = this['~event']
+
+			if (event.beforeHandle)
+				hook.beforeHandle = [
+					...(hook.beforeHandle ?? []),
+					...event.beforeHandle
+				]
+			else hook.beforeHandle = event.beforeHandle
+		}
+
 		if (this.#routes)
 			this.#routes.push([method, path, fn, hook, this] as any)
 		else this.#routes = [[method, path, fn, hook, this] as any]
@@ -196,6 +212,8 @@ export class Elysia<
 	}
 
 	get(path: string, fn: Function, hook?: unknown) {
+		if (hook?.body) delete hook.body
+
 		return this.#add(MethodMap.GET, path, fn, hook)
 	}
 
@@ -203,7 +221,17 @@ export class Elysia<
 		return this.#add(MethodMap.POST, path, fn, hook)
 	}
 
-	compile() {
+	handler(index: number) {
+		if (!this.#compiled)
+			this.#compiled = new Array(this.#routes?.length ?? 0)
+
+		return (
+			(this.#compiled[index] ??= compileHandler(this.#routes[index])),
+			this
+		)
+	}
+
+	compile(index: number) {
 		this.#compiled = this.#routes?.map((route) =>
 			compileHandler(route, this)
 		)
@@ -211,29 +239,28 @@ export class Elysia<
 		return this
 	}
 
-	#build() {
+	#buildRouter() {
 		this['~routeMap'] ??= Object.create(null)
-
-		if (!this.#routes) return
-
 		this['~router'] ??= new Memoirist({
 			onParam: decodeURIComponent
 		})
 
+		if (!this.#routes) return
+
 		for (const route of this.#routes) {
+			const handler = compileHandler(route, this)
+
 			const [_method, path] = route
 			const method =
 				MethodMapBack[_method as keyof MethodMapBack] ?? _method
 
-			if (/\:|\*/.test(path))
-				this['~router'].add(
-					method,
-					path,
-					route as any
-				)
+			if (/\:|\*/.test(path)) this['~router'].add(method, path, handler)
 			else {
 				this['~routeMap']![method] ??= Object.create(null)
-				this['~routeMap']![method]![path] = compileHandler(route, this)
+				this['~routeMap']![method]![path] = handler
+
+				if (this.config?.strictPath !== true)
+					this['~routeMap']![method]![getLoosePath(path)] = handler
 			}
 		}
 	}
@@ -242,7 +269,7 @@ export class Elysia<
 	get fetch() {
 		if (this.#fetchFn) return this.#fetchFn
 
-		this.#build()
+		this.#buildRouter()
 		this.#fetchFn ??= createFetchHandler(this)
 
 		return this.#fetchFn

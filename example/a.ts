@@ -1,29 +1,16 @@
 import { Elysia, t } from '../src/2'
 
-const app = new Elysia().post(
-	'/',
-	({ body }) => {
-		console.log(body)
-
-		return body
-	},
-	{
-		body: t.Object({
-			name: t.String()
-		})
-	}
-)
-
-app.handle(
-	new Request('http://localhost', {
-		method: 'POST',
-		headers: {
-			'content-type': 'application/json'
-		},
-		body: JSON.stringify({
-			name: 'q'
-		})
+const app = new Elysia()
+	.onBeforeHandle(() => {
+		console.log('T')
 	})
-)
-	.then(x => x.json())
-	.then(console.log)
+	.get('/:id/a', ({ body }) => {
+		return body ?? 'Hello'
+	})
+
+console.log(app.routes[0].compile().toString())
+
+Bun.serve({
+	port: 3000,
+	fetch: app.fetch
+})

@@ -20,8 +20,6 @@ function memoryUsage() {
 	return process.memoryUsage().heapUsed
 }
 
-const app = new Elysia().get('/', () => 'q')
-
 // new Elysia().get('/', () => 'q').compile()
 
 const total = 100000
@@ -29,7 +27,12 @@ const stacks = <any[]>Array(total)
 const m1 = memoryUsage()
 const t1 = performance.now()
 
-for (let i = 0; i < total; i++) stacks.push[i] = new Elysia()
+for (let i = 0; i < total; i++)
+	stacks[i] = new Elysia()
+		.get('/:id/a', ({ body }) => {
+			return body ?? 'Hello'
+		})
+		.handler(0)
 
 const t2 = performance.now()
 Validator.clear()

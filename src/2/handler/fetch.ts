@@ -25,7 +25,7 @@ export function createFetchHandler(
 	}
 
 	const map = app['~routeMap']!
-	const router = app['~router']
+	const router = app['~router']!
 
 	return (request: Request) => {
 		const url = request.url,
@@ -38,13 +38,12 @@ export function createFetchHandler(
 		const handler: CompiledHandler = map[request.method]?.[path]
 		if (handler) return handler(context)
 
-		if (router) {
-			const result = router.find(request.method, path)
-			if (result) {
-				// @ts-expect-error
-				context.params = result.params
-				return result.store(context)
-			}
+		const result = router.find(request.method, path)
+		if (result) {
+			// @ts-expect-error
+			context.params = result.params
+			console.log(result)
+			return result.store(context)
 		}
 
 		return new Response('Not Found', { status: 404 })

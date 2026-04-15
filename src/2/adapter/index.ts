@@ -1,5 +1,5 @@
-import { Context } from '../context'
-import { ElysiaAdapterOptions } from './types'
+import type { Context } from '../context'
+import type { ElysiaAdapterOptions } from './types'
 
 export function createAdapter(adapter: ElysiaAdapterOptions) {
 	return {

@@ -9,7 +9,7 @@ import { formDataToObject } from './utils'
 import { createAdapter } from '..'
 import { parseQuery } from '../../parse-query'
 
-export const webStandardAdapter = createAdapter({
+export const WebStandardAdapter = createAdapter({
 	name: 'web-standard',
 	runtime: 'unknown',
 	isWebStandard: true,

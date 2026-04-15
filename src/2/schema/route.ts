@@ -28,7 +28,6 @@ interface RouteValidatorOptions extends Omit<
 	ValidatorOptions,
 	'coerces' | 'schemas'
 > {
-	body?: boolean
 	schemas?: {
 		body: AnySchema
 		headers: AnySchema
@@ -56,7 +55,7 @@ export class RouteValidator<const in out T extends RouteSchema> {
 	constructor(route: T, options?: RouteValidatorOptions) {
 		if (!route) return
 
-		if (route.body && options?.body !== false)
+		if (route.body)
 			this.body = Validator.create(route.body, {
 				normalize: options?.normalize,
 				sanitize: options?.sanitize,

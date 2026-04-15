@@ -2,7 +2,7 @@ import type { AnyElysia } from '../..'
 import { sucrose, type Sucrose } from '../../sucrose'
 
 import type { ElysiaAdapter } from '../../adapter'
-import { webStandardAdapter } from '../../adapter/web-standard'
+import { WebStandardAdapter } from '../../adapter/web-standard'
 
 import { Validator, type TypeBoxValidator } from '../../schema/validator'
 import { RouteValidator } from '../../schema/route'
@@ -134,14 +134,16 @@ const isAsyncValidator = (vali: Validator | undefined) =>
 	!(vali as TypeBoxValidator)?.tb || (vali as TypeBoxValidator)?.isAsync
 
 export function compileHandler(
-	[path, method, handler, hook, instance]: InternalRoute,
+	[method, path, handler, _hook, instance]: InternalRoute,
 	root: AnyElysia
 ): CompiledHandler {
-	const adapter = root?.config?.adapter ?? webStandardAdapter
-	const inference = sucrose(handler as any, hook as Sucrose.LifeCycle)
+	const adapter = root?.config?.adapter ?? WebStandardAdapter
+	const inference = sucrose(handler as any, _hook as Sucrose.LifeCycle)
 
 	const params = new Set<unknown>([handler])
 	let alias = ''
+
+	let hook = _hook ?? {}
 
 	let hookNotLinked = true
 	function link(v: unknown, key: string) {
@@ -160,15 +162,9 @@ export function compileHandler(
 		}
 	}
 
-	const hasBody =
-		method !== 'GET' &&
-		method !== 'HEAD' &&
-		inference.body &&
-		hook.parse?.[0] !== 'none'
+	const hasBody = inference.body && hook.parse?.[0] !== 'none'
 
-	const vali = new RouteValidator(hook, {
-		body: hasBody
-	})
+	const vali = new RouteValidator(hook)
 
 	const bodyValiIsAsync = hasBody && isAsyncValidator(vali.body)
 	const headersValiIsAsync = vali.headers && isAsyncValidator(vali.headers)
@@ -179,11 +175,11 @@ export function compileHandler(
 	const isAsync =
 		hasBody ||
 		isAsyncFunction(handler as Function) ||
-		!!hook?.parse?.length ||
-		!!hook?.afterHandle?.some(isAsyncFunction) ||
-		!!hook?.beforeHandle?.some(isAsyncFunction) ||
-		!!hook?.transform?.some(isAsyncFunction) ||
-		!!hook?.mapResponse?.some(isAsyncFunction) ||
+		!!hook.parse?.length ||
+		!!hook.afterHandle?.some(isAsyncFunction) ||
+		!!hook.beforeHandle?.some(isAsyncFunction) ||
+		!!hook.transform?.some(isAsyncFunction) ||
+		!!hook.mapResponse?.some(isAsyncFunction) ||
 		bodyValiIsAsync ||
 		headersValiIsAsync ||
 		paramsValiIsAsync ||
@@ -223,6 +219,13 @@ export function compileHandler(
 		code += `c.cookie=${cookieValidIsAsync ? 'await ' : ''}va.cookie.From(c.cookie)\n`
 	}
 
+	if (hook.beforeHandle?.length) {
+		link(hook.beforeHandle, 'bh')
+
+		for (let i = 0; i < hook.beforeHandle.length; i++)
+			code += `${isAsyncFunction(hook.beforeHandle[i]) ? 'await ' : ''}bh[${i}](c)\n`
+	}
+
 	// has mapResponse
 	if (true) {
 		params.add(adapter.response.map)
@@ -235,5 +238,12 @@ export function compileHandler(
 
 	// console.log(`const [h${alias}]=a\nreturn ` + code)
 
-	return new Function('a', `const [h${alias}]=a\nreturn ` + code)(params)
+	const fn = new Function('a', `const [h${alias}]=a\nreturn ` + code)(params)
+
+	hook = undefined
+	// @ts-ignore
+	code = undefined
+	params.clear()
+
+	return fn
 }
