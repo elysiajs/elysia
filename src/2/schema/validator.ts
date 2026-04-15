@@ -358,7 +358,18 @@ export class MultiValidator extends Validator {
 }
 
 class TypeBoxValidatorCache {
-	static EMPTY = {} as const
+	private static EMPTY = {} as const
+	private static ignoreKeys = new Set([
+		'title',
+		'description',
+		'tags',
+		'examples',
+		'error',
+		'defaultValue'
+	])
+	private static ignoreMeta = (k) => {
+		if (TypeBoxValidatorCache.ignoreKeys.has(k)) return undefined
+	}
 
 	private cache = new Map<
 		string,
@@ -387,7 +398,7 @@ class TypeBoxValidatorCache {
 				return coercionsCache.get(coercions)!
 		}
 
-		const key = JSON.stringify(schema)
+		const key = JSON.stringify(schema, TypeBoxValidatorCache.ignoreMeta)
 		if (this.cache.has(key)) {
 			const coercionsCache = this.cache.get(key)!
 
@@ -403,7 +414,7 @@ class TypeBoxValidatorCache {
 			| typeof TypeBoxValidatorCache.EMPTY = TypeBoxValidatorCache.EMPTY,
 		validator: BaseTypeBoxValidator
 	) {
-		const key = JSON.stringify(schema)
+		const key = JSON.stringify(schema, TypeBoxValidatorCache.ignoreMeta)
 		if (this.cache.has(key)) {
 			const cache = this.cache.get(key)!.set(coercions, validator)
 
