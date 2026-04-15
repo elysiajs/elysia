@@ -1,5 +1,6 @@
 import type { TProperties, TSchema } from 'typebox'
 import { primitiveElysiaTypes, t, type BaseSchema } from '../type'
+import { transform } from 'valibot'
 
 interface CoerceOptions {
 	/**
@@ -68,6 +69,10 @@ export function coerce(
 		)
 			return node
 
+		// Early exit if we're deeper than root properties
+		if (options?.rootPropertiesOnly && !isRoot && !isRootProperty)
+			return node
+
 		seen.add(node)
 
 		const kind = node['~kind'] as string | undefined
@@ -79,16 +84,15 @@ export function coerce(
 		)
 			return node
 
-		if (options?.rootPropertiesOnly && !isRoot && !isRootProperty)
-			return node
-
 		const canReplace =
 			rootOption === undefined ||
 			(rootOption === true && isRoot) ||
 			(rootOption === false && !isRoot)
 
-		const isRootProperties = options?.rootPropertiesOnly && isRoot
-		if (canReplace && kind && !isRootProperties) {
+		// Skip transforming root itself when rootPropertiesOnly
+		const skipRootTransform = options?.rootPropertiesOnly && isRoot
+
+		if (canReplace && kind && !skipRootTransform) {
 			const to = transformMap.get(kind)
 			if (to) {
 				const { type, ...rest } = node
@@ -119,6 +123,8 @@ export function coerce(
 		}
 
 		if (stopped) return node
+
+		// Don't recurse children of root properties
 		if (options?.rootPropertiesOnly && isRootProperty) return node
 
 		let out: any = node
@@ -130,7 +136,7 @@ export function coerce(
 			let newArr: BaseSchema[] | undefined
 			for (let i = 0, len = arr.length; i < len; i++) {
 				const item = arr[i]!
-				const r = walk(item, false, isRootProperties)
+				const r = walk(item, false)
 				if (stopped && !newArr) return node
 				if (r !== item) {
 					newArr ??= arr.slice()
@@ -159,7 +165,7 @@ export function coerce(
 				let newItems: BaseSchema[] | undefined
 				for (let i = 0, len = items.length; i < len; i++) {
 					const item = items[i]!
-					const r = walk(item, false, isRootProperties)
+					const r = walk(item, false)
 					if (r !== item) {
 						newItems ??= items.slice()
 						newItems[i] = r
@@ -171,7 +177,7 @@ export function coerce(
 					out.items = newItems
 				}
 			} else {
-				const r = walk(items, false, isRootProperties)
+				const r = walk(items, false)
 				if (r !== items && out === node) {
 					out = copyNode(node)
 					out.items = r
@@ -182,9 +188,10 @@ export function coerce(
 		if (node.properties) {
 			let newProps: Record<string, BaseSchema> | undefined
 			const props = node.properties
+			const childIsRootProp = options?.rootPropertiesOnly && isRoot
 			for (const k in props) {
 				const v = props[k]!
-				const r = walk(v, false, isRootProperties)
+				const r = walk(v, false, childIsRootProp)
 				if (r !== v) {
 					newProps ??= { ...props }
 					newProps[k] = r
@@ -205,7 +212,7 @@ export function coerce(
 			}
 		}
 
-		// Record (patternProperties) - use for...in instead of Object.entries()
+		// Record (patternProperties)
 		if (node.patternProperties) {
 			let newPP: Record<string, BaseSchema> | undefined
 			const patternProps = node.patternProperties
@@ -269,7 +276,7 @@ export const coerceRoot = () =>
 				['Boolean', (x) => t.BooleanString(x)]
 			],
 			{
-				root: true
+				rootPropertiesOnly: true
 			}
 		]
 	])
@@ -343,7 +350,8 @@ export const coerceStringToStructure = () =>
 			{
 				rootPropertiesOnly: true
 			}
-		]
+		],
+		...coerceRoot()
 	])
 
 export function applyCoercions(

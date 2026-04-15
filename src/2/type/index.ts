@@ -307,7 +307,7 @@ function ObjectString<T extends TProperties>(
 		)
 	)
 
-	const [constraints, meta] = getMeta(property)
+	const [{ properties, ...constraints }, meta] = getMeta(property)
 	const object = ObjectType(property, constraints)
 
 	return elyType(
@@ -344,7 +344,7 @@ function ArrayString<T extends TProperties>(
 		(value) => JSON.parse(value)
 	)
 
-	const [constraints, meta] = getMeta(property)
+	const [{ items, ...constraints }, meta] = getMeta(property)
 	const array = ArrayType(property, constraints)
 
 	return elyType(
@@ -851,7 +851,9 @@ function ObjectType<T extends TProperties>(
 	options.type = 'object'
 	options.properties = properties
 	options.required = required
-	return Object.defineProperty(options, '~kind', noEnumerable) as any
+	Object.defineProperty(options, '~kind', noEnumerable) as any
+
+	return options
 }
 
 function ArrayType<T extends TSchema>(

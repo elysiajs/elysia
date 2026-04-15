@@ -142,6 +142,7 @@ export class TypeBoxValidator<
 		super()
 
 		this.schema = applyCoercions(schema, options?.coerces) as T
+
 		this.tb = Compile(this.schema)
 		this.hasCodec = HasCodec(this.schema)
 		// @ts-expect-error private property

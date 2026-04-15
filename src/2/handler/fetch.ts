@@ -42,7 +42,6 @@ export function createFetchHandler(
 		if (result) {
 			// @ts-expect-error
 			context.params = result.params
-			console.log(result)
 			return result.store(context)
 		}
 

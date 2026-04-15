@@ -31,8 +31,12 @@ for (let i = 0; i < total; i++)
 	stacks[i] = new Elysia()
 		.get('/:id/a', ({ body }) => {
 			return body ?? 'Hello'
+		}, {
+			params: t.Object({
+				id: t.Number()
+			})
 		})
-		.handler(0)
+		.compile(0)
 
 const t2 = performance.now()
 Validator.clear()

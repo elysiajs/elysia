@@ -89,7 +89,7 @@ export class RouteValidator<const in out T extends RouteSchema> {
 				normalize: options?.normalize,
 				sanitize: options?.sanitize,
 				schemas: options?.schemas?.map((s) => s.params),
-				coerces: coerceStringToStructure()
+				coerces: coerceRoot()
 			}) as any
 
 		if (route.cookie)

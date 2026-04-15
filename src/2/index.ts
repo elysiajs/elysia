@@ -196,6 +196,13 @@ export class Elysia<
 			hook ??= {}
 			const event = this['~event']
 
+			if (event.transform)
+				hook.transform = [
+					...(hook.transform ?? []),
+					...event.transform
+				]
+			else hook.transform = event.transform
+
 			if (event.beforeHandle)
 				hook.beforeHandle = [
 					...(hook.beforeHandle ?? []),

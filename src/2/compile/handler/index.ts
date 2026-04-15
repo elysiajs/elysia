@@ -190,6 +190,13 @@ export function compileHandler(
 	// ,va,rm,rc,re,pa,pf,pj,pt,pu
 	let code = `${isAsync ? 'async ' : 'async '}function route(c){\n`
 
+	if (hook.transform?.length) {
+		link(hook.transform, 'tf')
+
+		for (let i = 0; i < hook.transform.length; i++)
+			code += `${isAsyncFunction(hook.transform[i]) ? 'await ' : ''}tf[${i}](c)\n`
+	}
+
 	if (hasBody) {
 		code += parse(adapter.parse, hook.parse, vali.body, link)
 
