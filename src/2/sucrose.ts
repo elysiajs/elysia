@@ -664,21 +664,24 @@ function push(target: unknown[], array: unknown[]) {
 
 export function sucrose(
 	handler: Handler | undefined,
-	lifeCycle: Sucrose.LifeCycle,
+	lifeCycle: Sucrose.LifeCycle | undefined,
 	inference: Sucrose.Inference = defaultSucrose(),
 	settings?: Sucrose.Settings
 ): Sucrose.Inference {
 	const events = <(Handler | HookContainer)[]>[]
 
 	if (handler && typeof handler === 'function') events.push(handler)
-	if (lifeCycle.request?.length) push(events, lifeCycle.request)
-	if (lifeCycle.beforeHandle?.length) push(events, lifeCycle.beforeHandle)
-	if (lifeCycle.parse?.length) push(events, lifeCycle.parse)
-	if (lifeCycle.error?.length) push(events, lifeCycle.error)
-	if (lifeCycle.transform?.length) push(events, lifeCycle.transform)
-	if (lifeCycle.afterHandle?.length) push(events, lifeCycle.afterHandle)
-	if (lifeCycle.mapResponse?.length) push(events, lifeCycle.mapResponse)
-	if (lifeCycle.afterResponse?.length) push(events, lifeCycle.afterResponse)
+	if (lifeCycle) {
+		if (lifeCycle.request?.length) push(events, lifeCycle.request)
+		if (lifeCycle.beforeHandle?.length) push(events, lifeCycle.beforeHandle)
+		if (lifeCycle.parse?.length) push(events, lifeCycle.parse)
+		if (lifeCycle.error?.length) push(events, lifeCycle.error)
+		if (lifeCycle.transform?.length) push(events, lifeCycle.transform)
+		if (lifeCycle.afterHandle?.length) push(events, lifeCycle.afterHandle)
+		if (lifeCycle.mapResponse?.length) push(events, lifeCycle.mapResponse)
+		if (lifeCycle.afterResponse?.length)
+			push(events, lifeCycle.afterResponse)
+	}
 
 	for (let i = 0; i < events.length; i++) {
 		const e = events[i]

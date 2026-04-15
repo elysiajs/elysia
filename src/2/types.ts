@@ -10,6 +10,7 @@ import { ElysiaFile } from './universal/file'
 import { TraceEvent, TraceListener } from './trace'
 import { ElysiaCustomStatusResponse } from '../error'
 import { AnyElysia } from '..'
+import { MethodMap } from './constants'
 
 export interface ElysiaConfig<in out Prefix extends string | undefined> {
 	/**
@@ -210,19 +211,6 @@ export type IsTuple<T> = T extends readonly any[]
 		: true
 	: false
 
-export type ElysiaFormData<T extends Record<keyof any, unknown>> = FormData & {
-	['~ely-form']: Replace<T, Blob | ElysiaFile, File> extends infer A
-		? {
-				[key in keyof A]: IsTuple<A[key]> extends true
-					? // @ts-ignore Trust me bro
-						A[key][number] extends Blob | ElysiaFile
-						? File[]
-						: A[key]
-					: A[key]
-			}
-		: T
-}
-
 export type Replace<Original, Target, With> =
 	IsAny<Target> extends true
 		? Original
@@ -235,6 +223,22 @@ export type Replace<Original, Target, With> =
 			: Original extends Target
 				? With
 				: Original
+
+export type LifeCycleType = 'global' | 'local' | 'scoped'
+export type GuardSchemaType = 'override' | 'standalone'
+
+export type ElysiaFormData<T extends Record<keyof any, unknown>> = FormData & {
+	['~ely-form']: Replace<T, Blob | ElysiaFile, File> extends infer A
+		? {
+				[key in keyof A]: IsTuple<A[key]> extends true
+					? // @ts-ignore Trust me bro
+						A[key][number] extends Blob | ElysiaFile
+						? File[]
+						: A[key]
+					: A[key]
+			}
+		: T
+}
 
 export type ContentType = MaybeArray<
 	| 'none'
@@ -559,4 +563,30 @@ export type TraceHandler<
 			}
 		>
 	): unknown
+}
+
+export type Handler = (context: Context) => unknown
+export type CompiledHandler = (
+	context: Partial<Context>
+) => MaybePromise<Response>
+
+export type InternalRoute = readonly [
+	method: string | MethodMap[keyof MethodMap],
+	path: string,
+	handler: Handler,
+	hook: AnyLocalHook | undefined,
+	/**
+	 * Instance that this route was registered in
+	 * This is important to get a local hook, other meta
+	 */
+	instance: AnyElysia
+]
+
+export interface PublicRoute {
+	method: HTTPMethod
+	path: string
+	handler: Handler
+	hook: AnyLocalHook
+	compile(): ComposedHandler
+	websocket?: AnyWSLocalHook
 }

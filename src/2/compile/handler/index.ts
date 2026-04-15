@@ -25,21 +25,7 @@ import type {
 	ContentType,
 	MaybePromise
 } from '../../../types'
-
-type Handler = (context: Context) => unknown
-type CompiledHandler = (context: Partial<Context>) => MaybePromise<Response>
-
-type Route = readonly [
-	path: string,
-	method: string,
-	handler: Handler,
-	hook: AnyLocalHook,
-	/**
-	 * Instance that this route was registered in
-	 * This is important to get a local hook, other meta
-	 */
-	instance: AnyElysia
-]
+import { CompiledHandler, InternalRoute } from '../../types'
 
 function builtinParser(
 	adapter: ElysiaAdapter['parse'],
@@ -148,7 +134,7 @@ const isAsyncValidator = (vali: Validator | undefined) =>
 	!(vali as TypeBoxValidator)?.tb || (vali as TypeBoxValidator)?.isAsync
 
 export function compileHandler(
-	[path, method, handler, hook, instance]: Route,
+	[path, method, handler, hook, instance]: InternalRoute,
 	root: AnyElysia
 ): CompiledHandler {
 	const adapter = root?.config?.adapter ?? webStandardAdapter
@@ -193,19 +179,17 @@ export function compileHandler(
 	const isAsync =
 		hasBody ||
 		isAsyncFunction(handler as Function) ||
-		!!hook.parse?.length ||
-		!!hook.afterHandle?.some(isAsyncFunction) ||
-		!!hook.beforeHandle?.some(isAsyncFunction) ||
-		!!hook.transform?.some(isAsyncFunction) ||
-		!!hook.mapResponse?.some(isAsyncFunction) ||
+		!!hook?.parse?.length ||
+		!!hook?.afterHandle?.some(isAsyncFunction) ||
+		!!hook?.beforeHandle?.some(isAsyncFunction) ||
+		!!hook?.transform?.some(isAsyncFunction) ||
+		!!hook?.mapResponse?.some(isAsyncFunction) ||
 		bodyValiIsAsync ||
 		headersValiIsAsync ||
 		paramsValiIsAsync ||
 		queryValiIsAsync ||
 		cookieValidIsAsync ||
-		(vali.response &&
-			// @ts-expect-error
-			Object.values(vali.response).find((x) => !x?.tb))
+		(vali.response && Object.values(vali.response).find((x) => !x?.tb))
 
 	// ,va,rm,rc,re,pa,pf,pj,pt,pu
 	let code = `${isAsync ? 'async ' : 'async '}function route(c){\n`

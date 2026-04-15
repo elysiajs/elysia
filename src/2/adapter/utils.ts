@@ -1,5 +1,6 @@
 import { serializeCookie } from '../cookie'
-import { isNotEmpty, StatusMap } from '../utils'
+import { isNotEmpty } from '../utils'
+import { StatusMap } from '../constants'
 
 import type { Context } from '../context'
 import { isBun, hasHeaderShorthand } from '../universal/utils'

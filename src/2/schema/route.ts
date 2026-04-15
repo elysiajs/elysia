@@ -54,6 +54,8 @@ export class RouteValidator<const in out T extends RouteSchema> {
 		| undefined
 
 	constructor(route: T, options?: RouteValidatorOptions) {
+		if (!route) return
+
 		if (route.body && options?.body !== false)
 			this.body = Validator.create(route.body, {
 				normalize: options?.normalize,
