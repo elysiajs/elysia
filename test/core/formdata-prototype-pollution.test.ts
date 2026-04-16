@@ -19,13 +19,14 @@ describe('FormData Prototype Pollution', () => {
 	it('strips __proto__ key from JSON-parsed FormData value', async () => {
 		const app = new Elysia().post('/', ({ body }) => body)
 
+		// Construct the JSON string manually: in an object literal `__proto__`
+		// acts as a prototype setter and `JSON.stringify` would drop it, so
+		// the encoded payload needs to be assembled by hand to actually carry
+		// the dangerous key on the wire.
 		const response = await app
 			.handle(
 				formPost('/', {
-					data: JSON.stringify({
-						safe: 'value',
-						__proto__: { polluted: true }
-					})
+					data: '{"safe":"value","__proto__":{"polluted":true}}'
 				})
 			)
 			.then((x) => x.json())
@@ -75,19 +76,12 @@ describe('FormData Prototype Pollution', () => {
 	it('strips nested dangerous keys from deeply nested JSON', async () => {
 		const app = new Elysia().post('/', ({ body }) => body)
 
+		// Raw JSON string: see note in the __proto__ test above about why
+		// `JSON.stringify` on an object literal drops the `__proto__` key.
 		const response = await app
 			.handle(
 				formPost('/', {
-					data: JSON.stringify({
-						level1: {
-							safe: 'ok',
-							__proto__: { polluted: true },
-							level2: {
-								constructor: { bad: true },
-								value: 'kept'
-							}
-						}
-					})
+					data: '{"level1":{"safe":"ok","__proto__":{"polluted":true},"level2":{"constructor":{"bad":true},"value":"kept"}}}'
 				})
 			)
 			.then((x) => x.json())
@@ -101,8 +95,20 @@ describe('FormData Prototype Pollution', () => {
 	it('skips __proto__ as a top-level FormData key', async () => {
 		const app = new Elysia().post('/', ({ body }) => body)
 
+		// Build FormData directly — `{ __proto__: 'polluted' }` in an object
+		// literal sets the prototype instead of creating an own property, so
+		// the helper would never call `FormData.append('__proto__', ...)`.
+		const body = new FormData()
+		body.append('__proto__', 'polluted')
+		body.append('safe', 'ok')
+
 		const response = await app
-			.handle(formPost('/', { __proto__: 'polluted', safe: 'ok' }))
+			.handle(
+				new Request('http://localhost/', {
+					method: 'POST',
+					body
+				})
+			)
 			.then((x) => x.json())
 
 		expect(response.safe).toBe('ok')
@@ -116,10 +122,7 @@ describe('FormData Prototype Pollution', () => {
 		const response = await app
 			.handle(
 				formPost('/', {
-					'user.profile': JSON.stringify({
-						name: 'ok',
-						__proto__: { polluted: true }
-					})
+					'user.profile': '{"name":"ok","__proto__":{"polluted":true}}'
 				})
 			)
 			.then((x) => x.json())
@@ -152,11 +155,7 @@ describe('FormData Prototype Pollution', () => {
 			.handle(
 				formPost('/', {
 					name: 'Alice',
-					metadata: JSON.stringify({
-						age: 30,
-						__proto__: { admin: true },
-						role: 'user'
-					})
+					metadata: '{"age":30,"__proto__":{"admin":true},"role":"user"}'
 				})
 			)
 			.then((x) => x.json())
