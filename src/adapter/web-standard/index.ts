@@ -58,6 +58,15 @@ export const WebStandardAdapter: ElysiaAdapter = {
 					`const m=k.match(/^(.+)\\[(\\d+)\\]$/);` +
 					`return m?{name:m[1],index:parseInt(m[2],10)}:null` +
 					`}\n` +
+					`const stripDangerousKeys=(o)=>{` +
+					`if(o===null||typeof o!=='object')return o;` +
+					`if(Array.isArray(o))return o.map(stripDangerousKeys);` +
+					`const r={};` +
+					`for(const k of Object.keys(o)){` +
+					`if(dangerousKeys.has(k))continue;` +
+					`r[k]=stripDangerousKeys(o[k])` +
+					`}return r` +
+					`}\n` +
 					`for(const key of form.keys()){` +
 					`if(c.body[key])continue\n` +
 					`const value=form.getAll(key)\n` +
@@ -67,7 +76,7 @@ export const WebStandardAdapter: ElysiaAdapter = {
     				`if(typeof sv==='string'&&(sv.charCodeAt(0)===123||sv.charCodeAt(0)===91)){\n` +
     				`try{\n` +
     				`const p=JSON.parse(sv)\n` +
-    				`if(p&&typeof p==='object')finalValue=p\n` +
+    				`if(p&&typeof p==='object')finalValue=stripDangerousKeys(p)\n` +
     				`}catch{}\n` +
     				`}\n` +
     				`if(finalValue===undefined)finalValue=sv\n` +
@@ -77,7 +86,7 @@ export const WebStandardAdapter: ElysiaAdapter = {
 					`const files=typeof File==='undefined'?[]:finalValue.filter((entry)=>entry instanceof File)\n` +
 					`if(stringValue&&files.length&&stringValue.charCodeAt(0)===123){\n` +
 					`try{\n` +
-					`const parsed=JSON.parse(stringValue)\n` +
+					`const parsed=stripDangerousKeys(JSON.parse(stringValue))\n` +
 					`if(parsed&&typeof parsed==='object'&&!Array.isArray(parsed)){\n` +
 					`if(!('file' in parsed)&&files.length===1)parsed.file=files[0]\n` +
 					`else if(!('files' in parsed)&&files.length>1)parsed.files=files\n` +
@@ -101,7 +110,7 @@ export const WebStandardAdapter: ElysiaAdapter = {
 					`let parsed\n` +
 					`if(typeof existing==='string'&&existing.charCodeAt(0)===123){\n` +
 					`try{` +
-					`parsed=JSON.parse(existing)\n` +
+					`parsed=stripDangerousKeys(JSON.parse(existing))\n` +
 					`if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))parsed=undefined` +
 					`}catch{}\n` +
 					`}\n` +
