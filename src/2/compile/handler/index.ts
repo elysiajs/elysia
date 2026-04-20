@@ -8,7 +8,6 @@ import { Validator, type TypeBoxValidator } from '../../schema/validator'
 import { RouteValidator } from '../../schema/route'
 import { isAsyncFunction } from '../utils'
 
-import type { Context } from '../../context'
 import { isBlob } from '../../type'
 
 import {
@@ -24,7 +23,7 @@ import type {
 	BodyHandler,
 	ContentType,
 	MaybePromise
-} from '../../../types'
+} from '../../types'
 import { CompiledHandler, InternalRoute } from '../../types'
 import { isBun } from '../../universal/utils'
 
@@ -264,23 +263,24 @@ export function compileHandler(
 
 	code += '}'
 
-	const fn = new Function('h', 'a', `const [${alias}]=a\nreturn ` + code)(
-		handler,
-		params
-	)
+	function clear() {
+		hook = undefined
+		// @ts-ignore
+		code = undefined
+		params.clear()
+		// @ts-ignore
+		params = undefined
+		// @ts-ignore
+		code = undefined
+		// @ts-ignore
+		link = undefined
+	}
 
-	// console.log(fn.toString())
+	const fn = new Function('h', 'a', `const [${alias}]=a\nreturn ` + code)
 
-	hook = undefined
-	// @ts-ignore
-	code = undefined
-	params.clear()
-	// @ts-ignore
-	params = undefined
-	// @ts-ignore
-	code = undefined
-	// @ts-ignore
-	link = undefined
+	const result = fn(handler, params)
 
-	return fn
+	clear()
+
+	return result
 }

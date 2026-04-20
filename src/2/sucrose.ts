@@ -615,21 +615,27 @@ function isContextPassToFunction(
 let pendingGC: Timer | undefined
 let caches = <Record<number, Sucrose.Inference>>{}
 
+function clearCache() {
+	caches = {}
+
+	pendingGC = undefined
+	if (isBun) Bun.gc(false)
+}
+
 export function clearSucroseCache(delay: Sucrose.Settings['gcTime']) {
 	// Can't setTimeout outside fetch in Cloudflare Worker
 	if (delay === null || isCloudflareWorker()) return
-	if (delay === undefined) delay = 4 * 60 * 1000 + 55 * 1000
+	if (delay === undefined) delay = 1 * 60 * 1000
 
 	if (pendingGC) clearTimeout(pendingGC)
 
-	pendingGC = setTimeout(() => {
-		caches = {}
-
+	if (delay) {
+		pendingGC = setTimeout(clearCache, delay)
+		pendingGC.unref?.()
+	} else {
 		pendingGC = undefined
-		if (isBun) Bun.gc(false)
-	}, delay)
-
-	pendingGC.unref?.()
+		clearCache()
+	}
 }
 
 export function mergeInference(a: Sucrose.Inference, b: Sucrose.Inference) {

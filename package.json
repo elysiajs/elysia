@@ -193,7 +193,7 @@
 		"exact-mirror": "^1.0.0",
 		"fast-decode-uri-component": "^1.0.1",
 		"memoirist": "^0.4.0",
-		"typebox": "1.1.23"
+		"typebox": "~1.1.28"
 	},
 	"devDependencies": {
 		"@elysiajs/openapi": "^1.4.1",

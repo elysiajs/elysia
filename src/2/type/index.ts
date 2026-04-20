@@ -853,7 +853,7 @@ function ObjectType<T extends TProperties>(
 	options.required = required
 	Object.defineProperty(options, '~kind', noEnumerable) as any
 
-	return options
+	return options as any
 }
 
 function ArrayType<T extends TSchema>(

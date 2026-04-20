@@ -16,7 +16,7 @@ import { createMirror } from 'exact-mirror'
 import { isAsyncFunction } from '../compile/utils'
 
 import { t, isBlob, type AnySchema, type StandardSchemaV1Like } from '../type'
-import { applyCoercions, type CoerceOption } from './coerce'
+import { applyCoercions, deferCoercions, type CoerceOption } from './coerce'
 import { hasProperty } from './utils'
 import type { ElysiaConfig, MaybePromise } from '../types'
 
@@ -152,20 +152,6 @@ export class TypeBoxValidator<
 		)
 		this.hasDefault = hasProperty('default', this.schema as any)
 
-		if (this.isAsync)
-			// @ts-expect-error
-			this.From = async (value: unknown) => {
-				if (this.hasDefault)
-					value = Default(this.schema, value) as Static<T>
-				if (this.hasCodec)
-					value = (await Decoder(this.schema, value)) as Static<T>
-				// @ts-expect-error
-				if (!(await this.Check(value))) throw this.Errors(value)
-				if (this.Clean) value = this.Clean(value) as Static<T>
-
-				return value
-			}
-
 		try {
 			this.Clean =
 				!options?.normalize || options.normalize === 'exactMirror'
@@ -185,8 +171,6 @@ export class TypeBoxValidator<
 		}
 	}
 
-	// Do not convert to arrow function
-	// otherwise memory usage will increase drastically somehow
 	Check(value: Static<T>): boolean {
 		return this.tb.Check(value)
 	}
@@ -203,13 +187,30 @@ export class TypeBoxValidator<
 		return this.hasCodec ? Encode(this.schema, value) : (value as any)
 	}
 
-	From(value: Static<T>): StaticDecode<T> {
+	From(value: Static<T>): MaybePromise<Static<T>> {
+		return this.isAsync
+			? (this.FromAsync(value) as any)
+			: this.FromSync(value)
+	}
+
+	async FromAsync(value: Static<T>): Promise<Static<T>> {
+		if (this.hasDefault) value = Default(this.schema, value) as any
+		// @ts-ignore
+		if (this.hasCodec) value = await Decoder(this.schema, value)
+		// @ts-ignore
+		if (!(await this.Check(value))) throw this.Errors(value)
+		// @ts-ignore
+		if (this.Clean) value = this.Clean(value)
+
+		return value
+	}
+
+	FromSync(value: Static<T>): Static<T> {
 		if (this.hasDefault) value = Default(this.schema, value) as Static<T>
 		if (this.hasCodec) value = Decoder(this.schema, value) as Static<T>
 		if (!this.Check(value)) throw this.Errors(value)
 		if (this.Clean) value = this.Clean(value) as Static<T>
-
-		return value as StaticDecode<T>
+		return value
 	}
 }
 
@@ -367,7 +368,8 @@ class TypeBoxValidatorCache {
 		'error',
 		'defaultValue'
 	])
-	private static ignoreMeta = (k) => {
+
+	static ignoreMeta(k: string) {
 		if (TypeBoxValidatorCache.ignoreKeys.has(k)) return undefined
 	}
 
@@ -421,6 +423,8 @@ class TypeBoxValidatorCache {
 			if (this.referenceCache.has(schema))
 				this.referenceCache.get(schema)!.set(coercions, validator)
 			else this.referenceCache.set(schema, cache)
+
+			return
 		}
 
 		const cache = new WeakMap().set(coercions, validator)
@@ -432,6 +436,7 @@ class TypeBoxValidatorCache {
 	clear() {
 		this.cache.clear()
 		this.referenceCache = new WeakMap()
+		deferCoercions()
 		tbCache = undefined
 	}
 }

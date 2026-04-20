@@ -2,6 +2,9 @@ import { createAdapter } from '..'
 import { WebStandardAdapter } from '../web-standard'
 
 import { createRouteMap } from './utils'
+import { clearSucroseCache } from '../../sucrose'
+import { Validator } from '../../schema/validator'
+
 import type { AnyElysia } from '../..'
 
 export const BunAdapter = createAdapter({
@@ -15,14 +18,20 @@ export const BunAdapter = createAdapter({
 			typeof options === 'object'
 				? ({
 						...options,
-						routes
+						routes,
+						reusePort: true
 					} as any)
 				: {
 						port: +options,
-						routes
+						routes,
+						reusePort: true
 					}
 		)
 
 		callback?.(server)
+
+		clearSucroseCache(0)
+		Validator.clear()
+		Bun.gc(true)
 	}
 })

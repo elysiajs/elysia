@@ -1,6 +1,5 @@
 import type { TProperties, TSchema } from 'typebox'
 import { primitiveElysiaTypes, t, type BaseSchema } from '../type'
-import { transform } from 'valibot'
 
 interface CoerceOptions {
 	/**
@@ -363,4 +362,15 @@ export function applyCoercions(
 			schema = coerce(schema, coercion[0], coercion[1])
 
 	return schema
+}
+
+export function deferCoercions() {
+	// @ts-expect-error
+	_coerceRoot = undefined
+	// @ts-expect-error
+	_coerceQuery = undefined
+	// @ts-expect-error
+	_coerceFormData = undefined
+	// @ts-expect-error
+	_coerceStringToStructure = undefined
 }

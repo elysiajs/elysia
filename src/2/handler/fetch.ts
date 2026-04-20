@@ -22,17 +22,15 @@ export function createContext(
 	const headers = app['~ext']?.headers
 		? Object.assign(
 				Object.create(null),
-				structuredClone(app['~ext']?.headers)
+				structuredClone(app['~ext'].headers)
 			)
-		: undefined
+		: null
 
 	return class Context extends createBaseContext(app) {
 		params?: Record<string, string>
 		headers?: Record<string, string>
 		path: string
-		set = {
-			headers: headers ? Object.create(headers) : Object.create(null)
-		}
+		set: { headers: Record<string, string> }
 
 		constructor(public request: Request) {
 			super()
@@ -42,6 +40,9 @@ export function createContext(
 				qi = url.indexOf('?', s + 1)
 
 			this.path = url.substring(s, qi !== -1 ? qi : undefined)
+			this.set = {
+				headers: headers ? Object.create(headers) : Object.create(null)
+			}
 		}
 	} as any
 }
@@ -80,8 +81,8 @@ export function createFetchHandler(
 	const map = app['~map']!
 	const router = app['~router']!
 
-	if (app['~evt']?.request) {
-		const onRequests = app['~evt'].request
+	if (app['~ext']?.event?.request) {
+		const onRequests = app['~ext'].event.request
 		const asyncIndexes = getAsyncIndexes(onRequests)
 
 		if (asyncIndexes)

@@ -70,7 +70,6 @@ export class Elysia<
 	}
 > {
 	'~config'?: ElysiaConfig<any>
-	'~evt'?: Partial<LifeCycleStore>
 
 	#scoped?: WeakSet<any>
 	#global?: WeakSet<any>
@@ -79,6 +78,7 @@ export class Elysia<
 		decorator?: Singleton['decorator']
 		store?: Singleton['store']
 		headers?: Record<string, string>
+		event?: Partial<LifeCycleStore>
 	}
 
 	#routes?: InternalRoute[]
@@ -97,14 +97,16 @@ export class Elysia<
 
 		return (
 			this.#routes?.map(
-				([method, path, handler, hook, instance], index) => ({
-					method:
-						MethodMapBack[method as keyof MethodMapBack] ?? method,
-					path,
-					handler,
-					hook,
-					compile: () => this.handler(index)
-				} as PublicRoute)
+				([method, path, handler, hook, instance], index) =>
+					({
+						method:
+							MethodMapBack[method as keyof MethodMapBack] ??
+							method,
+						path,
+						handler,
+						hook,
+						compile: () => this.handler(index, true)
+					}) as PublicRoute
 			) ?? []
 		)
 	}
@@ -162,7 +164,8 @@ export class Elysia<
 		type: Event,
 		fns: MaybeArray<LifeCycleStore[Event]>
 	): this {
-		const event = (this['~evt'] ??= Object.create(null))
+		const ext = (this['~ext'] ??= Object.create(null))
+		const event = (ext.event ??= Object.create(null))
 
 		if (event![type]) event![type]!.push(fns as any)
 		else event![type] = [fns as any]
@@ -175,7 +178,8 @@ export class Elysia<
 		type: Event,
 		fns: MaybeArray<LifeCycleStore[Event]>
 	): this {
-		const event = (this['~evt'] ??= Object.create(null))
+		const ext = (this['~ext'] ??= Object.create(null))
+		const event = (ext.event ??= Object.create(null))
 
 		if (event![type]) event![type]!.push(fns as any)
 		else event![type] = [fns as any]
@@ -201,9 +205,11 @@ export class Elysia<
 		fn: Function,
 		hook?: unknown
 	) {
-		if (this['~evt']) {
+		const ext = (this['~ext'] ??= Object.create(null))
+		const event = (ext.event ??= Object.create(null))
+
+		if (event) {
 			hook ??= {}
-			const event = this['~evt']
 
 			if (event.transform)
 				hook.transform = [...(hook.transform ?? []), ...event.transform]
@@ -246,8 +252,18 @@ export class Elysia<
 		return this.#add(MethodMap.POST, path, fn, hook)
 	}
 
-	handler(index: number): CompiledHandler {
+	handler(index: number, immediate = false): CompiledHandler {
 		if (this.#compiled?.[index]) return this.#compiled![index]
+
+		if (immediate) {
+			const routes = this.#routes
+			const compiled = (this.#compiled ??= new Array(routes!.length))
+
+			return (compiled![index] ??= compileHandler(
+				routes![index],
+				this
+			)) as CompiledHandler
+		}
 
 		const routes = this.#routes
 		const compiled = (this.#compiled ??= new Array(routes!.length))
