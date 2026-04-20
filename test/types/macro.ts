@@ -250,6 +250,40 @@ import { expectTypeOf } from 'expect-type'
 		})
 }
 
+// #1773: resolve branches that return the same key with different shapes
+// should surface a union on that key, not collapse to `never`.
+{
+	type License = { kind: 'license'; did: string }
+	type Admin = { kind: 'admin'; role: string }
+
+	new Elysia()
+		.macro({
+			isLicenseOrAdmin: {
+				async resolve({ status }) {
+					if (Math.random() > 0.5) {
+						const license: License | null = null as any
+						if (!license) return status(401, 'Invalid License')
+						return { user: license }
+					}
+
+					const admin: Admin | null = null as any
+					if (admin) return { user: admin }
+
+					return status(401, 'Not Authorized')
+				}
+			}
+		})
+		.get(
+			'/',
+			({ user }) => {
+				expectTypeOf(user).toEqualTypeOf<License | Admin>()
+			},
+			{
+				isLicenseOrAdmin: true
+			}
+		)
+}
+
 // retrieve resolve conditionally
 const app = new Elysia()
 	.macro({
