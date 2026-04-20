@@ -966,16 +966,14 @@ type UnionToSharedKeyObject<A> = [A] extends [never]
 				: never
 		}
 
-type ExtractResolveFromMacro<A> =
-	IsNever<A> extends true
+// Caller already filters `AnyElysiaCustomStatusResponse` out via `Exclude`
+// and narrows to `Record<any, unknown>` via `Extract`, so here `A` is only
+// the object-returning branches of the resolve return type.
+type ExtractResolveFromMacro<A> = IsNever<A> extends true
+	? {}
+	: IsAny<A> extends true
 		? {}
-		: [A] extends [AnyElysiaCustomStatusResponse]
-			? A
-			: Exclude<A, AnyElysiaCustomStatusResponse> extends infer A
-				? IsAny<A> extends true
-					? {}
-					: UnionToSharedKeyObject<A>
-				: {}
+		: UnionToSharedKeyObject<A>
 
 type ExtractOnlyResponseFromMacro<A> =
 	IsNever<A> extends true

@@ -256,17 +256,18 @@ import { expectTypeOf } from 'expect-type'
 	type License = { kind: 'license'; did: string }
 	type Admin = { kind: 'admin'; role: string }
 
+	const license = null as License | null
+	const admin = null as Admin | null
+
 	new Elysia()
 		.macro({
 			isLicenseOrAdmin: {
 				async resolve({ status }) {
 					if (Math.random() > 0.5) {
-						const license: License | null = null as any
 						if (!license) return status(401, 'Invalid License')
 						return { user: license }
 					}
 
-					const admin: Admin | null = null as any
 					if (admin) return { user: admin }
 
 					return status(401, 'Not Authorized')
