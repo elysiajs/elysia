@@ -1,50 +1,108 @@
-import type { AnyElysia } from '../'
-import { CompiledHandler } from '../types'
 import { redirect } from '../utils'
 
-export function createFetchHandler(
-	app: AnyElysia
-): (request: Request) => Promise<Response> {
-	const headers = app['~headers']
+import type { AnyElysia } from '../'
+import type { Context } from '../context'
+import type { CompiledHandler, MaybePromise } from '../types'
+import { isAsyncFunction } from '../compile/utils'
 
+export function createBaseContext(app: AnyElysia) {
 	class Decorator {}
 	Object.assign(Decorator.prototype, {
-		...app.decorator,
-		store: app.store,
+		...app['~ext']?.decorator,
+		store: app['~ext']?.store,
 		redirect
 	})
 
-	class Context extends Decorator {
+	return Decorator
+}
+
+export function createContext(
+	app: AnyElysia
+): new (request: Request) => Context {
+	const headers = app['~ext']?.headers
+		? Object.assign(
+				Object.create(null),
+				structuredClone(app['~ext']?.headers)
+			)
+		: undefined
+
+	return class Context extends createBaseContext(app) {
+		params?: Record<string, string>
+		headers?: Record<string, string>
+		path: string
 		set = {
-			headers: headers || Object.create(null)
+			headers: headers ? Object.create(headers) : Object.create(null)
 		}
 
 		constructor(public request: Request) {
 			super()
+
+			const url = request.url,
+				s = url.indexOf('/', 11),
+				qi = url.indexOf('?', s + 1)
+
+			this.path = url.substring(s, qi !== -1 ? qi : undefined)
 		}
+	} as any
+}
+
+export function getAsyncIndexes(onRequests: Function[]) {
+	let asyncIndexes: number[] | undefined
+	for (let i = 0; i < onRequests.length; i++)
+		if (isAsyncFunction(onRequests[i])) {
+			asyncIndexes ??= new Array(onRequests.length)
+			asyncIndexes[i] = i
+		}
+
+	return asyncIndexes
+}
+
+export function createFetchHandler(
+	app: AnyElysia
+): (request: Request) => MaybePromise<Response> {
+	const Context = createContext(app)
+	const notFound = new Response('Not Found', { status: 404 })
+
+	function findRoute(context: Context): Response {
+		const handler: CompiledHandler =
+			map[context.request.method]?.[context.path]
+		if (handler) return handler(context) as Response
+
+		const result = router.find(context.request.method, context.path)
+		if (result) {
+			context.params = result.params
+			return result.store(context) as Response
+		}
+
+		return notFound.clone() as Response
 	}
 
-	const map = app['~routeMap']!
+	const map = app['~map']!
 	const router = app['~router']!
 
-	return (request: Request) => {
-		const url = request.url,
-			s = url.indexOf('/', 11),
-			qi = url.indexOf('?', s + 1),
-			path = url.substring(s, qi !== -1 ? qi : undefined)
+	if (app['~evt']?.request) {
+		const onRequests = app['~evt'].request
+		const asyncIndexes = getAsyncIndexes(onRequests)
 
-		const context = new Context(request)
+		if (asyncIndexes)
+			return async (request: Request): Promise<Response> => {
+				const context = new Context(request)
 
-		const handler: CompiledHandler = map[request.method]?.[path]
-		if (handler) return handler(context)
+				for (let i = 0; i < onRequests.length; i++)
+					if (asyncIndexes?.[i]) await onRequests[i](context)
+					else onRequests[i](context)
 
-		const result = router.find(request.method, path)
-		if (result) {
-			// @ts-expect-error
-			context.params = result.params
-			return result.store(context)
+				return findRoute(context)
+			}
+
+		return (request: Request): Response => {
+			const context = new Context(request)
+
+			for (let i = 0; i < onRequests.length; i++) onRequests[i](context)
+
+			return findRoute(context)
 		}
-
-		return new Response('Not Found', { status: 404 })
 	}
+
+	return (request: Request): Response => findRoute(new Context(request))
 }

@@ -1,6 +1,5 @@
 import { t } from '../src/2/type'
 import { Elysia } from '../src/2'
-import { compileHandler } from '../src/2/compile'
 import { Validator } from '../src/2/schema/validator'
 
 function gc() {
@@ -24,7 +23,7 @@ function memoryUsage() {
 
 const m1 = memoryUsage()
 const t1 = performance.now()
-const total = 30000
+const total = 32_500
 const stacks = <any[]>Array(total)
 
 for (let i = 0; i < total; i++)
@@ -36,7 +35,7 @@ for (let i = 0; i < total; i++)
 				})
 			})
 		})
-		.compile(0)
+		// .compile(0)
 
 const t2 = performance.now()
 Validator.clear()

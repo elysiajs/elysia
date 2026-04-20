@@ -87,6 +87,7 @@ export interface ElysiaAdapter {
 		 * Inject variable to the general handler
 		 */
 		inject?: Record<string, unknown>
+
 		/**
 		 * Whether retriving headers should be using webstandard headers
 		 *

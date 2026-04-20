@@ -26,6 +26,7 @@ import type {
 	MaybePromise
 } from '../../../types'
 import { CompiledHandler, InternalRoute } from '../../types'
+import { isBun } from '../../universal/utils'
 
 function builtinParser(
 	adapter: ElysiaAdapter['parse'],
@@ -70,6 +71,7 @@ function parse(
 	adapter: ElysiaAdapter['parse'],
 	parsers: ContentType | (ContentType | BodyHandler)[],
 	bodyVali: Validator | undefined,
+	hasHeaders: boolean,
 	link: Link
 ) {
 	const hasFile = // @ts-expect-error
@@ -93,7 +95,7 @@ function parse(
 		return builtinParser(adapter, parsers as string, link)
 	}
 
-	let code = "const ct=c.request.headers.get('content-type')\n"
+	let code = `const ct=${hasHeaders ? "c.headers['content-type']" : "c.request.headers.get('content-type')"}\n`
 
 	let hasFn = false
 	let hasType = false
@@ -137,10 +139,10 @@ export function compileHandler(
 	[method, path, handler, _hook, instance]: InternalRoute,
 	root: AnyElysia
 ): CompiledHandler {
-	const adapter = root?.config?.adapter ?? WebStandardAdapter
+	const adapter = root['~config']?.adapter ?? WebStandardAdapter
 	const inference = sucrose(handler as any, _hook as Sucrose.LifeCycle)
 
-	const params = new Set<unknown>([handler])
+	let params = new Set<unknown>()
 	let alias = ''
 
 	let hook = _hook ?? {}
@@ -151,14 +153,14 @@ export function compileHandler(
 			if (hookNotLinked) {
 				hookNotLinked = false
 				params.add(hook)
-				alias += ',ho'
+				alias += 'ho,'
 			}
 			return
 		}
 
 		if (!params.has(v)) {
 			params.add(v)
-			alias += `,${key}`
+			alias += `${key},`
 		}
 	}
 
@@ -188,7 +190,7 @@ export function compileHandler(
 		(vali.response && Object.values(vali.response).find((x) => !x?.tb))
 
 	// ,va,rm,rc,re,pa,pf,pj,pt,pu
-	let code = `${isAsync ? 'async ' : 'async '}function route(c){\n`
+	let code = `${isAsync ? 'async ' : ''}function route(c){\n`
 
 	if (hook.transform?.length) {
 		link(hook.transform, 'tf')
@@ -197,13 +199,13 @@ export function compileHandler(
 			code += `${isAsyncFunction(hook.transform[i]) ? 'await ' : ''}tf[${i}](c)\n`
 	}
 
-	if (hasBody) {
-		code += parse(adapter.parse, hook.parse, vali.body, link)
+	// ? defaultHeaders doesn't imply that user will use headers in handler
+	const hasHeaders = inference.headers || !!vali.headers || inference.body
 
-		if (vali.body) {
-			link(vali, 'va')
-			code += `c.body=${bodyValiIsAsync ? 'await ' : ''}va.body.From(c.body)\n`
-		}
+	if (hasHeaders) {
+		code += isBun
+			? `c.headers=c.request.headers.toJSON()\n`
+			: `c.headers=Object.fromEntries(c.request.headers.headers)\n`
 	}
 
 	if (vali.headers) {
@@ -221,6 +223,15 @@ export function compileHandler(
 		code += `c.query=${queryValiIsAsync ? 'await ' : ''}va.query.From(c.query)\n`
 	}
 
+	if (hasBody) {
+		code += parse(adapter.parse, hook.parse, vali.body, hasHeaders, link)
+
+		if (vali.body) {
+			link(vali, 'va')
+			code += `c.body=${bodyValiIsAsync ? 'await ' : ''}va.body.From(c.body)\n`
+		}
+	}
+
 	if (vali.cookie) {
 		link(vali, 'va')
 		code += `c.cookie=${cookieValidIsAsync ? 'await ' : ''}va.cookie.From(c.cookie)\n`
@@ -233,24 +244,43 @@ export function compileHandler(
 			code += `${isAsyncFunction(hook.beforeHandle[i]) ? 'await ' : ''}bh[${i}](c)\n`
 	}
 
-	// has mapResponse
-	if (true) {
-		params.add(adapter.response.map)
-		alias += ',rm'
-	}
+	const hasSet =
+		inference.cookie ||
+		inference.set ||
+		hasHeaders ||
+		!!root['~ext']?.['headers']
+	// || hasTrace ||
+	// hasMultipleResponses ||
+	// !hasSingle200 ||
+	// maybeStream
 
-	code += 'return rm(h(c),c.set)\n'
+	if (hasSet) {
+		link(adapter.response.map, 'rm')
+		code += 'return rm(h(c),c.set)\n'
+	} else {
+		link(adapter.response.compact, 'rc')
+		code += 'return rc(h(c))\n'
+	}
 
 	code += '}'
 
-	// console.log(`const [h${alias}]=a\nreturn ` + code)
+	const fn = new Function('h', 'a', `const [${alias}]=a\nreturn ` + code)(
+		handler,
+		params
+	)
 
-	const fn = new Function('a', `const [h${alias}]=a\nreturn ` + code)(params)
+	// console.log(fn.toString())
 
 	hook = undefined
 	// @ts-ignore
 	code = undefined
 	params.clear()
+	// @ts-ignore
+	params = undefined
+	// @ts-ignore
+	code = undefined
+	// @ts-ignore
+	link = undefined
 
 	return fn
 }

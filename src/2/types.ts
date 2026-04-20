@@ -573,7 +573,7 @@ export type CompiledHandler = (
 export type InternalRoute = readonly [
 	method: string | MethodMap[keyof MethodMap],
 	path: string,
-	handler: Handler,
+	handler: Handler | Response,
 	hook: AnyLocalHook | undefined,
 	/**
 	 * Instance that this route was registered in

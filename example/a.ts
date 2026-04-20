@@ -1,22 +1,24 @@
 import { Elysia, t } from '../src/2'
 
-const app = new Elysia().get(
-	'/:id/a',
-	({ body, params: { id } }) => {
-		console.log(typeof id)
+const app = new Elysia()
+	.get('/:id/a', ({ set }) => {
+		set.headers['x-hello'] = 'world'
 
-		return id ?? 'Hello'
-	},
-	{
-		params: t.Object({
-			id: t.Number()
-		})
-	}
-)
+		return 'ok'
+	})
+	.post(
+		'/:id/a',
+		({ params: { id }, set }) => {
+			set.headers['x-hello'] = 'world'
 
-// console.log(app.routes[0].compile().toString())
-
-Bun.serve({
-	port: 3000,
-	fetch: app.fetch
-})
+			return id ?? 'Hello'
+		},
+		{
+			params: t.Object({
+				id: t.Number()
+			})
+		}
+	)
+	.listen(3000, () => {
+		console.log('Listening on http://localhost:3000')
+	})

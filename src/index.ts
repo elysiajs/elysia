@@ -8333,3 +8333,5 @@ export type { ElysiaAdapter } from './adapter'
 
 export { TypeSystemPolicy } from '@sinclair/typebox/system'
 export type { Static, TSchema } from '@sinclair/typebox'
+
+console.log("QQ", new Error())

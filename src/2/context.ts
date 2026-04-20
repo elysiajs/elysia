@@ -1,5 +1,5 @@
 import type { Server } from './universal/server'
-import type { Cookie, ElysiaCookie } from './cookies'
+import type { Cookie, ElysiaCookie } from './cookie'
 import type {
 	StatusMap,
 	InvertedStatusMap,
