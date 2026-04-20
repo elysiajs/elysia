@@ -2,27 +2,11 @@ import { parse, serialize } from 'cookie'
 
 import decode from 'fast-decode-uri-component'
 
-import { isNotEmpty, unsignCookie } from '../utils'
-import { InvalidCookieSignature } from '../error'
+import { constantTimeEqual, isNotEmpty } from './utils'
+// import { InvalidCookieSignature } from '../old/error'
 
 import type { Context } from './context'
 import type { Prettify } from './types'
-
-// FNV-1a hash for fast string hashing
-const hashString = (str: string): number => {
-	const FNV_OFFSET_BASIS = 2166136261
-	const FNV_PRIME = 16777619
-
-	let hash = FNV_OFFSET_BASIS
-	const len = str.length
-
-	for (let i = 0; i < len; i++) {
-		hash ^= str.charCodeAt(i)
-		hash = Math.imul(hash, FNV_PRIME)
-	}
-
-	return hash >>> 0
-}
 
 export interface CookieOptions {
 	/**
@@ -477,4 +461,72 @@ export const serializeCookie = (cookies: Context['set']['cookie']) => {
 	if (set.length === 1) return set[0]
 
 	return set
+}
+
+let encoder: TextEncoder
+let removeTrailingEqualsRegex: RegExp
+
+async function signCookie(val: string, secret: string | null) {
+	if (typeof val === 'object') val = JSON.stringify(val)
+	else if (typeof val !== 'string') val = val + ''
+
+	if (secret === null || secret === undefined)
+		throw new TypeError('Secret key must be provided')
+
+	encoder ??= new TextEncoder()
+
+	const secretKey = await crypto.subtle.importKey(
+		'raw',
+		encoder.encode(secret),
+		{ name: 'HMAC', hash: 'SHA-256' },
+		false,
+		['sign']
+	)
+
+	const hmacBuffer = await crypto.subtle.sign(
+		'HMAC',
+		secretKey,
+		encoder.encode(val)
+	)
+
+	return (
+		val +
+		'.' +
+		Buffer.from(hmacBuffer)
+			.toString('base64')
+			.replace((removeTrailingEqualsRegex ??= /=+$/g), '')
+	)
+}
+
+async function unsignCookie(input: string, secret: string | null) {
+	if (typeof input !== 'string')
+		throw new TypeError('Signed cookie string must be provided.')
+
+	const dot = input.lastIndexOf('.')
+	if (dot === -1) {
+		if (secret === null) return input
+
+		return false
+	}
+
+	const tentativeValue = input.slice(0, dot)
+	const expectedInput = await signCookie(tentativeValue, secret)
+
+	return constantTimeEqual(expectedInput, input) ? tentativeValue : false
+}
+
+// FNV-1a hash for fast string hashing
+function hashString(str: string) {
+	const FNV_OFFSET_BASIS = 2166136261
+	const FNV_PRIME = 16777619
+
+	let hash = FNV_OFFSET_BASIS
+	const len = str.length
+
+	for (let i = 0; i < len; i++) {
+		hash ^= str.charCodeAt(i)
+		hash = Math.imul(hash, FNV_PRIME)
+	}
+
+	return hash >>> 0
 }

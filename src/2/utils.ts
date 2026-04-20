@@ -35,3 +35,15 @@ export const getLoosePath = (path: string) =>
 	path.charCodeAt(path.length - 1) === 47
 		? path.slice(0, path.length - 1)
 		: path + '/'
+
+export const constantTimeEqual =
+	typeof crypto?.timingSafeEqual === 'function'
+		? (a: string, b: string) => {
+				// Compare as UTF-8 bytes; timingSafeEqual requires equal length
+				const ab = Buffer.from(a, 'utf8')
+				const bb = Buffer.from(b, 'utf8')
+
+				if (ab.length !== bb.length) return false
+				return crypto.timingSafeEqual(ab, bb)
+			}
+		: (a: string, b: string) => a === b
