@@ -1,3 +1,12 @@
+const mapBack = <const T extends Record<string, number>>(
+	map: T
+): {
+	[K in keyof T as T[K]]: K
+} =>
+	Object.fromEntries(
+		Object.entries(map).map(([key, value]) => [value, key])
+	) as any
+
 export const MethodMap = {
 	GET: 0,
 	HEAD: 1,
@@ -9,21 +18,9 @@ export const MethodMap = {
 	CONNECT: 7,
 	TRACE: 8
 } as const
-
 export type MethodMap = typeof MethodMap
 
-export const MethodMapBack = {
-	0: 'GET',
-	1: 'HEAD',
-	2: 'POST',
-	3: 'PUT',
-	4: 'DELETE',
-	5: 'PATCH',
-	6: 'OPTIONS',
-	7: 'CONNECT',
-	8: 'TRACE'
-} as const
-
+export const MethodMapBack = mapBack(MethodMap)
 export type MethodMapBack = typeof MethodMapBack
 
 export const StatusMap = {
@@ -89,3 +86,22 @@ export const StatusMap = {
 	'Not Extended': 510,
 	'Network Authentication Required': 511
 } as const
+export type StatusMap = typeof StatusMap
+
+export const EventMap = {
+	request: 0,
+	parse: 1,
+	transform: 2,
+	beforeHandle: 3,
+	afterHandle: 4,
+	mapResponse: 5,
+	afterResponse: 6,
+	error: 7,
+	trace: 8,
+	start: 9,
+	stop: 10
+} as const
+export type EventMap = typeof EventMap
+
+export const EventMapBack = mapBack(EventMap)
+export type EventMapBack = typeof EventMapBack

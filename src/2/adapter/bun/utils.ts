@@ -1,11 +1,20 @@
 import type { BunRequest } from 'bun'
 
-import { MethodMapBack } from '../../constants'
-import { createBaseContext, getAsyncIndexes } from '../../handler/fetch'
+import { MethodMapBack, EventMap } from '../../constants'
+import {
+	createBaseContext,
+	createErrorHandler,
+	getAsyncIndexes
+} from '../../handler/fetch'
 
 import type { AnyElysia } from '../..'
 import type { Context } from '../../context'
-import type { CompiledHandler, MaybePromise } from '../../types'
+import type {
+	CompiledHandler,
+	InternalAppEvent,
+	MaybePromise
+} from '../../types'
+import { WebStandardAdapter } from '../web-standard'
 
 export function createBunContext(
 	app: AnyElysia
@@ -36,43 +45,73 @@ export function createBunContext(
 export function createFetchHandler(
 	app: AnyElysia,
 	Context: new (request: Request) => Context,
-	handler: CompiledHandler
+	handler: CompiledHandler,
+	handleError: (context: Context, error: Error) => unknown
 ) {
-	const onRequests = app['~ext']?.event?.request
-	if (onRequests) {
+	if (app['~ext']?.event?.[EventMap['request']]) {
+		const onRequests = app['~ext'].event[EventMap['request']]!
 		const asyncIndexes = getAsyncIndexes(onRequests)
 
 		if (asyncIndexes)
 			return async (request: Request): Promise<Response> => {
 				const context = new Context(request)
 
-				for (let i = 0; i < onRequests.length; i++)
-					if (asyncIndexes?.[i]) await onRequests[i](context)
-					else onRequests[i](context)
+				try {
+					for (let i = 0; i < onRequests.length; i++)
+						if (asyncIndexes?.[i]) await onRequests[i](context)
+						else onRequests[i](context)
 
-				return handler(context)
+					return handler(context)
+				} catch (error) {
+					return handleError(context, error as Error) as Response
+				}
 			}
 
 		return (request: Request): MaybePromise<Response> => {
 			const context = new Context(request)
 
-			for (let i = 0; i < onRequests.length; i++) onRequests[i](context)
+			try {
+				for (let i = 0; i < onRequests.length; i++)
+					onRequests[i](context)
 
-			return handler(context)
+				return handler(context)
+			} catch (error) {
+				return handleError(context, error as Error) as Response
+			}
 		}
 	}
 
-	return (request: Request) => handler(new Context(request) as any)
+	return (request: Request) => {
+		const context = new Context(request)
+
+		try {
+			return handler(context)
+		} catch (error) {
+			return handleError(context, error as Error) as Response
+		}
+	}
 }
 
 export function createRouteMap(app: AnyElysia) {
+	function fetch(request: Request) {
+		return handleError(new Context(request), new Error()) as Response
+	}
+
 	if (!app['~mapIdx'])
-		return {
-			'/_elysia': { GET: new Response('hi') }
-		}
+		return [
+			{
+				'/_elysia': { GET: new Response('hi') }
+			},
+			fetch
+		]
 
 	const routes = Object.create(null)
 	const Context = createBunContext(app)
+
+	const handleError = createErrorHandler(
+		app['~ext']?.event?.[EventMap['error']],
+		WebStandardAdapter.response.map
+	)
 
 	for (const path in app['~mapIdx']) {
 		const methods = app['~mapIdx'][path]
@@ -82,9 +121,14 @@ export function createRouteMap(app: AnyElysia) {
 			routes[path][
 				MethodMapBack[method as unknown as keyof MethodMapBack] ??
 					method
-			] = createFetchHandler(app, Context, app.handler(methods[method]))
+			] = createFetchHandler(
+				app,
+				Context,
+				app.handler(methods[method]),
+				handleError
+			)
 		}
 	}
 
-	return routes
+	return [routes, fetch]
 }

@@ -12,18 +12,20 @@ export const BunAdapter = createAdapter({
 	name: 'bun',
 	runtime: 'bun',
 	listen(app, options, callback) {
-		const routes = createRouteMap(app as AnyElysia)
+		const [routes, fetch] = createRouteMap(app as AnyElysia)
 
 		const server = Bun.serve(
 			typeof options === 'object'
 				? ({
 						...options,
 						routes,
+						fetch,
 						reusePort: true
 					} as any)
 				: {
 						port: +options,
 						routes,
+						fetch,
 						reusePort: true
 					}
 		)

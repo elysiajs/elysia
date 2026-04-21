@@ -2,22 +2,24 @@ import Memoirist from 'memoirist'
 
 import { createFetchHandler } from './handler'
 import { compileHandler } from './compile'
-import { MethodMap, MethodMapBack } from './constants'
+import { EventMap, MethodMap, MethodMapBack } from './constants'
 
 import type {
 	CompiledHandler,
 	DefinitionBase,
 	ElysiaConfig,
 	EphemeralType,
+	EventScope,
+	InternalAppEvent,
 	InternalRoute,
-	LifeCycleStore,
-	LifeCycleType,
 	MaybeArray,
 	MaybePromise,
 	MetadataBase,
 	PublicRoute,
 	RouteBase,
-	SingletonBase
+	SingletonBase,
+	UnwrapArray,
+	EventFn
 } from './types'
 
 import decodeURIComponent from 'fast-decode-uri-component'
@@ -78,7 +80,7 @@ export class Elysia<
 		decorator?: Singleton['decorator']
 		store?: Singleton['store']
 		headers?: Record<string, string>
-		event?: Partial<LifeCycleStore>
+		event?: Partial<InternalAppEvent>
 	}
 
 	#routes?: InternalRoute[]
@@ -107,92 +109,34 @@ export class Elysia<
 		)
 	}
 
-	/**
-	 * ### on
-	 * Syntax sugar for attaching life cycle event by name
-	 *
-	 * Does the exact same thing as `.on[Event]()`
-	 *
-	 * ---
-	 * @example
-	 * ```typescript
-	 * new Elysia()
-	 *     .on('error', ({ code }) => {
-	 *         if(code === "NOT_FOUND")
-	 *             return "Path not found :("
-	 *     })
-	 * ```
-	 */
-	on<Event extends keyof Omit<LifeCycleStore, 'type'>>(
+	#on<Event extends keyof InternalAppEvent>(
 		type: Event,
-		handlers: MaybeArray<LifeCycleStore[Event]>
-	): this
-
-	/**
-	 * ### on
-	 * Syntax sugar for attaching life cycle event by name
-	 *
-	 * Does the exact same thing as `.on[Event]()`
-	 *
-	 * ---
-	 * @example
-	 * ```typescript
-	 * new Elysia()
-	 *     .on('error', ({ code }) => {
-	 *         if(code === "NOT_FOUND")
-	 *             return "Path not found :("
-	 *     })
-	 * ```
-	 */
-	on<const Event extends keyof Omit<LifeCycleStore, 'type'>>(
-		options: { as: LifeCycleType },
-		type: Event,
-		handlers: MaybeArray<LifeCycleStore[Event]>
-	): this
-
-	on() {
-		const a = arguments
-		if (a.length === 2) return this.#on2(a[0], a[1])
-		if (a.length === 3) return this.#on3(a[0], a[1], a[2])
-	}
-
-	#on2<Event extends keyof Omit<LifeCycleStore, 'type'>>(
-		type: Event,
-		fns: MaybeArray<LifeCycleStore[Event]>
+		fn: UnwrapArray<InternalAppEvent[Event]>,
+		scope?: EventScope
 	): this {
 		const ext = (this['~ext'] ??= Object.create(null))
 		const event = (ext.event ??= Object.create(null))
 
-		if (event![type]) event![type]!.push(fns as any)
-		else event![type] = [fns as any]
+		if (event![type]) event![type]!.push(fn as any)
+		else event![type] = [fn as any]
 
-		return this
-	}
-
-	#on3<Event extends keyof Omit<LifeCycleStore, 'type'>>(
-		options: { as: LifeCycleType },
-		type: Event,
-		fns: MaybeArray<LifeCycleStore[Event]>
-	): this {
-		const ext = (this['~ext'] ??= Object.create(null))
-		const event = (ext.event ??= Object.create(null))
-
-		if (event![type]) event![type]!.push(fns as any)
-		else event![type] = [fns as any]
-
-		if (options.as === 'scoped') {
+		if (scope === 'scoped') {
 			this.#scoped ??= new WeakSet()
-			this.#scoped.add(fns)
-		} else if (options.as === 'global') {
+			this.#scoped.add(fn)
+		} else if (scope === 'global') {
 			this.#global ??= new WeakSet()
-			this.#global.add(fns)
+			this.#global.add(fn)
 		}
 
 		return this
 	}
 
-	onBeforeHandle(fn: LifeCycleStore['beforeHandle']) {
-		return this.on('beforeHandle', fn)
+	onBeforeHandle(fn: EventFn<'beforeHandle'>): this {
+		return this.#on(EventMap.beforeHandle, fn)
+	}
+
+	onError(fn: EventFn<'error'>): this {
+		return this.#on(EventMap.error, fn)
 	}
 
 	#add(
@@ -201,23 +145,6 @@ export class Elysia<
 		fn: Function,
 		hook?: unknown
 	) {
-		if (this['~ext']?.event) {
-			const ext = (this['~ext'] ??= Object.create(null))
-			const event = (ext.event ??= Object.create(null))
-			hook ??= {}
-
-			if (event.transform)
-				hook.transform = [...(hook.transform ?? []), ...event.transform]
-			else hook.transform = event.transform
-
-			if (event.beforeHandle)
-				hook.beforeHandle = [
-					...(hook.beforeHandle ?? []),
-					...event.beforeHandle
-				]
-			else hook.beforeHandle = event.beforeHandle
-		}
-
 		if (this.#routes) {
 			this['~mapIdx']![path] ??= Object.create(null)
 			this['~mapIdx']![path]![method] = this.#routes.push([
@@ -273,12 +200,12 @@ export class Elysia<
 	}
 
 	#buildRouter() {
+		if (!this.#routes) return
+
 		this['~map'] ??= Object.create(null)
 		this['~router'] ??= new Memoirist({
 			onParam: decodeURIComponent
 		})
-
-		if (!this.#routes) return
 
 		for (let i = 0; i < this.#routes.length; i++) {
 			const route: InternalRoute = this.#routes[i]
@@ -309,9 +236,17 @@ export class Elysia<
 		return this.#fetchFn
 	}
 
-	// for whatever reason, this use least less memory than declaraing as arrow function
-	get handle() {
-		return async (request: Request) => this.fetch(request)
+	// for whatever reason, this use less memory than declaraing as method/arrow function
+	get handle(): (
+		url: string | Request,
+		options?: RequestInit
+	) => Promise<Response> {
+		return async (requestOrUrl: Request | string, options?: RequestInit) =>
+			this.fetch(
+				typeof requestOrUrl === 'string'
+					? new Request(requestOrUrl, options)
+					: (requestOrUrl as Request)
+			)
 	}
 
 	listen(

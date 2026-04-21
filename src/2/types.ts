@@ -1,6 +1,7 @@
 import type { Instruction as ExactMirrorInstruction } from 'exact-mirror'
 import type { OpenAPIV3 } from 'openapi-types'
 
+import type { AnyElysia } from '.'
 import type { ElysiaAdapter } from './adapter'
 import type { Sucrose } from './sucrose'
 import type { Serve } from './universal'
@@ -9,8 +10,7 @@ import { Context, PreContext } from './context'
 import { ElysiaFile } from './universal/file'
 import { TraceEvent, TraceListener } from './trace'
 import { ElysiaCustomStatusResponse } from '../error'
-import { AnyElysia } from '..'
-import { MethodMap } from './constants'
+import { EventMap, MethodMap } from './constants'
 
 export interface ElysiaConfig<in out Prefix extends string | undefined> {
 	/**
@@ -224,7 +224,7 @@ export type Replace<Original, Target, With> =
 				? With
 				: Original
 
-export type LifeCycleType = 'global' | 'local' | 'scoped'
+export type EventScope = 'global' | 'local' | 'scoped'
 export type GuardSchemaType = 'override' | 'standalone'
 
 export type ElysiaFormData<T extends Record<keyof any, unknown>> = FormData & {
@@ -292,20 +292,35 @@ export type HTTPMethod =
 	| 'UNSUBSCRIBE'
 	| 'ALL'
 
-export interface LifeCycleStore {
-	type?: ContentType
-	start: GracefulHandler<any>[]
-	request: PreHandler<any, any>[]
-	parse: BodyHandler<any, any>[]
-	transform: TransformHandler<any, any>[]
-	beforeHandle: OptionalHandler<any, any>[]
-	afterHandle: OptionalHandler<any, any>[]
-	mapResponse: MapResponse<any, any>[]
-	afterResponse: AfterResponseHandler<any, any>[]
-	trace: TraceHandler<any, any>[]
-	error: ErrorHandler<any, any, any>[]
-	stop: GracefulHandler<any>[]
+export type UnwrapArray<T> = T extends (infer U)[] ? U : T
+
+export interface InternalHookEvent {
+	[EventMap.parse]: BodyHandler<any, any>[]
+	[EventMap.transform]: TransformHandler<any, any>[]
+	[EventMap.beforeHandle]: OptionalHandler<any, any>[]
+	[EventMap.afterHandle]: AfterHandler<any, any>[]
+	[EventMap.mapResponse]: MapResponse<any, any>[]
+	[EventMap.afterResponse]: AfterResponseHandler<any, any>[]
+	[EventMap.error]: ErrorHandler<any, any, any>[]
 }
+
+export interface InternalAppEvent {
+	[EventMap.start]: GracefulHandler<any>[]
+	[EventMap.stop]: GracefulHandler<any>[]
+	[EventMap.request]: VoidHandler<any, any>[]
+	[EventMap.parse]: BodyHandler<any, any>[]
+	[EventMap.transform]: TransformHandler<any, any>[]
+	[EventMap.beforeHandle]: OptionalHandler<any, any>[]
+	[EventMap.afterHandle]: AfterHandler<any, any>[]
+	[EventMap.mapResponse]: MapResponse<any, any>[]
+	[EventMap.afterResponse]: AfterResponseHandler<any, any>[]
+	[EventMap.error]: ErrorHandler<any, any, any>[]
+	[EventMap.trace]: TraceHandler<any, any>[]
+}
+
+export type EventFn<T extends keyof EventMap> = UnwrapArray<
+	InternalAppEvent[EventMap[T]]
+>
 
 export interface SingletonBase {
 	decorator: Record<string, unknown>
@@ -581,6 +596,8 @@ export type InternalRoute = readonly [
 	 */
 	instance: AnyElysia
 ]
+
+export type ErrorHandler<A, B, C> = (context: Context) => unknown
 
 export interface PublicRoute {
 	method: HTTPMethod
