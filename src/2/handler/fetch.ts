@@ -58,26 +58,29 @@ export function getAsyncIndexes(onRequests: Function[]) {
 	return asyncIndexes
 }
 
+const notFound = new Response('Not Found', { status: 404 })
+
+function findRoute(
+	context: Context,
+	map: NonNullable<AnyElysia['~map']>,
+	router: NonNullable<AnyElysia['~router']>
+): Response {
+	const handler: CompiledHandler = map[context.request.method]?.[context.path]
+	if (handler) return handler(context) as Response
+
+	const result = router.find(context.request.method, context.path)
+	if (result) {
+		context.params = result.params
+		return result.store(context) as Response
+	}
+
+	return notFound.clone() as Response
+}
+
 export function createFetchHandler(
 	app: AnyElysia
 ): (request: Request) => MaybePromise<Response> {
 	const Context = createContext(app)
-	const notFound = new Response('Not Found', { status: 404 })
-
-	function findRoute(context: Context): Response {
-		const handler: CompiledHandler =
-			map[context.request.method]?.[context.path]
-		if (handler) return handler(context) as Response
-
-		const result = router.find(context.request.method, context.path)
-		if (result) {
-			context.params = result.params
-			return result.store(context) as Response
-		}
-
-		return notFound.clone() as Response
-	}
-
 	const map = app['~map']!
 	const router = app['~router']!
 
@@ -93,7 +96,7 @@ export function createFetchHandler(
 					if (asyncIndexes?.[i]) await onRequests[i](context)
 					else onRequests[i](context)
 
-				return findRoute(context)
+				return findRoute(context, map, router)
 			}
 
 		return (request: Request): Response => {
@@ -101,9 +104,10 @@ export function createFetchHandler(
 
 			for (let i = 0; i < onRequests.length; i++) onRequests[i](context)
 
-			return findRoute(context)
+			return findRoute(context, map, router)
 		}
 	}
 
-	return (request: Request): Response => findRoute(new Context(request))
+	return (request: Request): Response =>
+		findRoute(new Context(request), map, router)
 }

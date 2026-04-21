@@ -189,7 +189,7 @@ let emptyNumeric: Readonly<
 >
 function Numeric(property?: TNumberOptions) {
 	StringifiedNumber ??= Type.Decode(
-		Type.Refine(Type.String(), (value) => !isNaN(+value), 'must be number'),
+		Type.Refine(StringType(), (value) => !isNaN(+value), 'must be number'),
 		(value) => +value
 	)
 
@@ -197,7 +197,7 @@ function Numeric(property?: TNumberOptions) {
 		return (emptyNumeric ??= Object.freeze(
 			elyType(
 				ELYSIA_TYPES.Numeric,
-				Union([Type.Number(), StringifiedNumber])
+				Union([NumberType(), StringifiedNumber])
 			)
 		))
 
@@ -219,7 +219,7 @@ let emptyIntegerString: Readonly<
 function IntegerString(property?: TNumberOptions) {
 	StringifiedInteger = Type.Decode(
 		Type.Refine(
-			Type.String(),
+			StringType(),
 			(value) => !isNaN(+value) && Number.isInteger(+value),
 			'must be integer'
 		),
@@ -229,15 +229,15 @@ function IntegerString(property?: TNumberOptions) {
 	if (!property || isEmpty(property))
 		return (emptyIntegerString ??= elyType(
 			ELYSIA_TYPES.Integer,
-			Union([Type.Integer(), StringifiedInteger])
+			Union([Integer(), StringifiedInteger])
 		))
 
 	const [constraints, meta] = getMeta(property)
-	const integer = Type.Integer(constraints)
+	const integer = Integer(constraints)
 
 	return elyType(
 		ELYSIA_TYPES.Integer,
-		Union([integer, Type.Intersect([StringifiedInteger, integer])], meta)
+		Union([integer, Intersect([StringifiedInteger, integer])], meta)
 	)
 }
 
@@ -250,7 +250,7 @@ let emptyBooleanString: Readonly<
 function BooleanString(property?: TSchemaOptions) {
 	StringifiedBoolean ??= Type.Decode(
 		Type.Refine(
-			Type.String(),
+			StringType(),
 			(value) => value === 'true' || value === 'false',
 			'must be boolean'
 		),
@@ -260,7 +260,7 @@ function BooleanString(property?: TSchemaOptions) {
 	if (!property || isEmpty(property))
 		return (emptyBooleanString ??= elyType(
 			ELYSIA_TYPES.BooleanString,
-			Union([StringifiedBoolean, Type.Boolean()])
+			Union([StringifiedBoolean, BooleanType()])
 		))
 
 	const [constraints, meta] = getMeta(property)
@@ -268,7 +268,7 @@ function BooleanString(property?: TSchemaOptions) {
 
 	return elyType(
 		ELYSIA_TYPES.BooleanString,
-		Union([boolean, Type.Intersect([StringifiedBoolean, boolean])], meta)
+		Union([boolean, Intersect([StringifiedBoolean, boolean])], meta)
 	)
 }
 
@@ -283,7 +283,7 @@ function ObjectString<T extends TProperties>(
 	BaseObjectString ??= Object.freeze(
 		Type.Decode(
 			Type.Refine(
-				Type.String(),
+				StringType(),
 				(value) => {
 					if (
 						(value.charCodeAt(0) !== 123 &&
@@ -312,7 +312,7 @@ function ObjectString<T extends TProperties>(
 
 	return elyType(
 		ELYSIA_TYPES.ObjectString,
-		Union([object, Type.Intersect([BaseObjectString, object])], meta)
+		Union([object, Intersect([BaseObjectString, object])], meta)
 	)
 }
 
@@ -323,7 +323,7 @@ function ArrayString<T extends TProperties>(
 ) {
 	BaseArrayString ??= Type.Decode(
 		Type.Refine(
-			Type.String(),
+			StringType(),
 			(value) => {
 				if (
 					value.charCodeAt(0) !== 91 &&
@@ -349,7 +349,7 @@ function ArrayString<T extends TProperties>(
 
 	return elyType(
 		ELYSIA_TYPES.ArrayString,
-		Union([array, Type.Intersect([BaseArrayString, array])], meta)
+		Union([array, Intersect([BaseArrayString, array])], meta)
 	)
 }
 
@@ -375,7 +375,7 @@ function DateType(property?: DateOptions) {
 				(value) => value instanceof Date,
 				'must be Date'
 			),
-			Type.String({
+			StringType({
 				format: 'date'
 			})
 		])
@@ -669,7 +669,7 @@ const Form = <T extends TProperties>(property: T, options?: TObjectOptions) => {
 		ELYSIA_TYPES.Form,
 		Intersect([
 			BaseForm as unknown as BaseFormType<T>,
-			Type.Object(property, options)
+			ObjectType(property, options)
 		])
 	)
 }
@@ -847,10 +847,12 @@ function ObjectType<T extends TProperties>(
 			noEnumerable
 		) as any
 
-	options['~kind'] = 'Object'
-	options.type = 'object'
-	options.properties = properties
-	options.required = required
+	Object.assign(options, {
+		'~kind': 'Object',
+		type: 'object',
+		properties,
+		required
+	})
 	Object.defineProperty(options, '~kind', noEnumerable) as any
 
 	return options as any
@@ -871,10 +873,14 @@ function ArrayType<T extends TSchema>(
 			noEnumerable
 		) as any
 
-	options['~kind'] = 'Array'
-	options.type = 'array'
-	options.items = items
-	return Object.defineProperty(options, '~kind', noEnumerable) as any
+	Object.assign(options, {
+		'~kind': 'Array',
+		type: 'array',
+		items
+	})
+	Object.defineProperty(options, '~kind', noEnumerable) as any
+
+	return options as any
 }
 
 let optionalProperty: {

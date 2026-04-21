@@ -32,6 +32,6 @@ export const BunAdapter = createAdapter({
 
 		clearSucroseCache(0)
 		Validator.clear()
-		Bun.gc(true)
+		Bun.gc()
 	}
 })

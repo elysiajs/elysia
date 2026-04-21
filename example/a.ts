@@ -1,4 +1,5 @@
 import { Elysia, t } from '../src/2'
+// import { profile } from './vis'
 
 function gc() {
 	if (typeof Bun !== 'undefined') Bun.gc(true)
@@ -20,8 +21,10 @@ function memoryUsage() {
 gc()
 const m1 = memoryUsage()
 const t1 = performance.now()
+// const stop = profile('a')
 
 const app = new Elysia()
+
 for (let i = 0; i < 300; i++) {
 	app.get(
 		`/${i}/a`,
@@ -30,19 +33,20 @@ for (let i = 0; i < 300; i++) {
 
 			return 'ok'
 		},
-		{
-			params: t.Object({
-				id: t.Number()
-			})
-		}
+		// {
+		// 	query: t.Object({
+		// 		name: t.Number()
+		// 	})
+		// }
 	)
-	app.routes[i].compile()
+
+	// app.handler(i, true)
 }
 
-app.listen(3000)
+app.listen(4002)
 
 const t2 = performance.now()
-gc()
+// gc()
 const m2 = memoryUsage()
 
 console.log('Time:', t2 - t1, 'ms')

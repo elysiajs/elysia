@@ -93,21 +93,17 @@ export class Elysia<
 	get routes(): PublicRoute[] {
 		if (!this.#routes) return []
 
-		this.#compiled = Array(this.#routes.length)
+		this.#compiled ??= Array(this.#routes.length)
 
-		return (
-			this.#routes?.map(
-				([method, path, handler, hook, instance], index) =>
-					({
-						method:
-							MethodMapBack[method as keyof MethodMapBack] ??
-							method,
-						path,
-						handler,
-						hook,
-						compile: () => this.handler(index, true)
-					}) as PublicRoute
-			) ?? []
+		return this.#routes.map(
+			([method, path, handler, hook]) =>
+				({
+					method:
+						MethodMapBack[method as keyof MethodMapBack] ?? method,
+					path,
+					handler,
+					hook
+				}) as PublicRoute
 		)
 	}
 
@@ -205,10 +201,9 @@ export class Elysia<
 		fn: Function,
 		hook?: unknown
 	) {
-		const ext = (this['~ext'] ??= Object.create(null))
-		const event = (ext.event ??= Object.create(null))
-
-		if (event) {
+		if (this['~ext']?.event) {
+			const ext = (this['~ext'] ??= Object.create(null))
+			const event = (ext.event ??= Object.create(null))
 			hook ??= {}
 
 			if (event.transform)

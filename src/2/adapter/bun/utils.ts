@@ -38,8 +38,8 @@ export function createFetchHandler(
 	Context: new (request: Request) => Context,
 	handler: CompiledHandler
 ) {
-	if (app['~ext']?.event?.request) {
-		const onRequests = app['~ext']?.event?.request
+	const onRequests = app['~ext']?.event?.request
+	if (onRequests) {
 		const asyncIndexes = getAsyncIndexes(onRequests)
 
 		if (asyncIndexes)
@@ -66,6 +66,11 @@ export function createFetchHandler(
 }
 
 export function createRouteMap(app: AnyElysia) {
+	if (!app['~mapIdx'])
+		return {
+			'/_elysia': { GET: new Response('hi') }
+		}
+
 	const routes = Object.create(null)
 	const Context = createBunContext(app)
 
