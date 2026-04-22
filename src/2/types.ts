@@ -10,7 +10,8 @@ import { Context, PreContext } from './context'
 import { ElysiaFile } from './universal/file'
 import { TraceEvent, TraceListener } from './trace'
 import { ElysiaCustomStatusResponse } from '../error'
-import { EventMap, MethodMap } from './constants'
+import { EventMap, HookMap, MethodMap } from './constants'
+import { AnySchema } from '../1'
 
 export interface ElysiaConfig<in out Prefix extends string | undefined> {
 	/**
@@ -294,14 +295,46 @@ export type HTTPMethod =
 
 export type UnwrapArray<T> = T extends (infer U)[] ? U : T
 
-export interface InternalHookEvent {
-	[EventMap.parse]: BodyHandler<any, any>[]
+export interface InternalHook {
+	[EventMap.start]: GracefulHandler<any>[]
+	[EventMap.stop]: GracefulHandler<any>[]
+	[EventMap.request]: VoidHandler<any, any>[]
+	[EventMap.parse]: (string | BodyHandler<any, any>)[]
 	[EventMap.transform]: TransformHandler<any, any>[]
 	[EventMap.beforeHandle]: OptionalHandler<any, any>[]
 	[EventMap.afterHandle]: AfterHandler<any, any>[]
 	[EventMap.mapResponse]: MapResponse<any, any>[]
 	[EventMap.afterResponse]: AfterResponseHandler<any, any>[]
 	[EventMap.error]: ErrorHandler<any, any, any>[]
+	[EventMap.trace]: TraceHandler<any, any>[]
+	[HookMap.body]: AnySchema
+	[HookMap.headers]: AnySchema
+	[HookMap.query]: AnySchema
+	[HookMap.params]: AnySchema
+	[HookMap.cookie]: AnySchema
+	[HookMap.response]: AnySchema | Record<number, AnySchema>
+	[HookMap.schema]: RouteSchema
+	[HookMap.type]: ContentType
+}
+
+export interface InputSchema {
+	body: string | AnySchema
+	headers: string | AnySchema
+	query: string | AnySchema
+	params: string | AnySchema
+	cookie: string | AnySchema
+	response: string | AnySchema | Record<number, string | AnySchema>
+}
+
+export interface InputHook extends InputSchema {
+	type: ContentType
+	parse: BodyHandler<any, any>[]
+	transform: TransformHandler<any, any>[]
+	beforeHandle: OptionalHandler<any, any>[]
+	afterHandle: AfterHandler<any, any>[]
+	mapResponse: MapResponse<any, any>[]
+	afterResponse: AfterResponseHandler<any, any>[]
+	error: ErrorHandler<any, any, any>[]
 }
 
 export interface InternalAppEvent {
@@ -589,7 +622,7 @@ export type InternalRoute = readonly [
 	method: string | MethodMap[keyof MethodMap],
 	path: string,
 	handler: Handler | Response,
-	hook: AnyLocalHook | undefined,
+	hook: InternalHook | undefined,
 	/**
 	 * Instance that this route was registered in
 	 * This is important to get a local hook, other meta

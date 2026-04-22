@@ -49,8 +49,8 @@ export function createFetchHandler(
 	handler: CompiledHandler,
 	handleError: (context: Context, error: Error) => unknown
 ) {
-	if (app['~ext']?.event?.[EventMap['request']]) {
-		const onRequests = app['~ext'].event[EventMap['request']]!
+	if (app['~ext']?.hook?.[EventMap['request']]) {
+		const onRequests = app['~ext'].hook[EventMap['request']]!
 		const asyncIndexes = getAsyncIndexes(onRequests)
 
 		if (asyncIndexes)
@@ -110,7 +110,7 @@ export function createRouteMap(app: AnyElysia) {
 	const Context = createBunContext(app)
 
 	const handleError = createErrorHandler(
-		app['~ext']?.event?.[EventMap['error']],
+		app['~ext']?.hook?.[EventMap['error']],
 		WebStandardAdapter.response.map
 	)
 

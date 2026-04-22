@@ -34,11 +34,10 @@ for (let i = 0; i < total; i++) {
 	})
 
 	app.handler(0, true)
+	// app.fetch
 
 	stacks[i] = app
 }
-
-console.log(stacks[0])
 
 const t2 = performance.now()
 gc()

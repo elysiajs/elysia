@@ -1,16 +1,29 @@
 import { Elysia, t } from '../src/2'
 
 const app = new Elysia()
-	.onError(({ error, query }) => {
-		console.log(query)
+	.onError(({ error }) => {
+		console.log(error)
 	})
-	.get('/query', (c) => c.query.name, {
-		query: t.Object({
-			name: t.String()
-		})
+	.derive(({ query }) => {
+		return {
+			hello: query
+		}
 	})
-	// .listen(3000)
+	.get(
+		'/query',
+		({ hello }) => {
+			return hello.name
+		},
+		{
+			query: t.Object({
+				name: t.String()
+			})
+		}
+	)
+	.listen(3000)
 
-app.handle('http://localhost/query?name=bb').then((res) =>
+// console.log(app.handler(0, true).toString())
+
+app.handle('query?name=bb').then((res) =>
 	res.text().then((text) => console.log(text))
 )

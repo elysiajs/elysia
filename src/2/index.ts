@@ -19,7 +19,9 @@ import type {
 	RouteBase,
 	SingletonBase,
 	UnwrapArray,
-	EventFn
+	EventFn,
+	InputHook,
+	InternalHook
 } from './types'
 
 import decodeURIComponent from 'fast-decode-uri-component'
@@ -27,7 +29,7 @@ import decodeURIComponent from 'fast-decode-uri-component'
 import { BunAdapter } from './adapter/bun'
 import { ListenCallback, Serve } from './universal'
 import { isBun } from './universal/utils'
-import { getLoosePath } from './utils'
+import { getLoosePath, localHookToInternal } from './utils'
 
 import type { Context } from './context'
 
@@ -80,18 +82,18 @@ export class Elysia<
 		decorator?: Singleton['decorator']
 		store?: Singleton['store']
 		headers?: Record<string, string>
-		event?: Partial<InternalAppEvent>
+		hook?: Partial<InternalHook>
 	}
 
 	#routes?: InternalRoute[]
 	#compiled?: CompiledHandler[]
+	private '~derive'?: WeakSet<EventFn<'beforeHandle'>>
 
 	'~router'?: Memoirist<CompiledHandler>
-	'~map'?: { [path: string]: { [method: string]: CompiledHandler } }
+	'~map'?: { [method: string]: { [path: string]: CompiledHandler } }
 	'~mapIdx'?: {
 		[path: string]: { [method: string]: number }
 	}
-	'~idxMap'?: [map: string, method: string | MethodMap[keyof MethodMap]][]
 
 	get routes(): PublicRoute[] {
 		if (!this.#routes) return []
@@ -110,16 +112,26 @@ export class Elysia<
 		)
 	}
 
+	#onBranch(
+		type: keyof InternalAppEvent,
+		scopeOrFn: { as: EventScope } | EventFn<keyof EventMap>,
+		fn?: EventFn<keyof EventMap>
+	): this {
+		return fn
+			? this.#on(type, fn, (scopeOrFn as { as: EventScope }).as)
+			: this.#on(type, scopeOrFn as EventFn<'beforeHandle'>)
+	}
+
 	#on<Event extends keyof InternalAppEvent>(
 		type: Event,
 		fn: UnwrapArray<InternalAppEvent[Event]>,
 		scope?: EventScope
 	): this {
 		const ext = (this['~ext'] ??= Object.create(null))
-		const event = (ext.event ??= Object.create(null))
+		const hook = (ext.hook ??= Object.create(null))
 
-		if (event![type]) event![type]!.push(fn as any)
-		else event![type] = [fn as any]
+		if (hook![type]) hook![type]!.push(fn as any)
+		else hook![type] = [fn as any]
 
 		if (scope === 'scoped') {
 			this.#scoped ??= new WeakSet()
@@ -132,8 +144,73 @@ export class Elysia<
 		return this
 	}
 
-	onBeforeHandle(fn: EventFn<'beforeHandle'>): this {
-		return this.#on(EventMap.beforeHandle, fn)
+	onTransform(fn: EventFn<'transform'>): this
+	onTransform(scope: { as: 'local' }, fn: EventFn<'transform'>): this
+	onTransform(scope: { as: 'global' }, fn: EventFn<'transform'>): this
+	onTransform(scope: { as: 'scoped' }, fn: EventFn<'transform'>): this
+	onTransform(
+		scopeOrFn: { as: EventScope } | EventFn<'transform'>,
+		fn?: EventFn<'transform'>
+	): this {
+		return this.#onBranch(EventMap.beforeHandle, scopeOrFn, fn)
+	}
+
+	onBeforeHandle(fn: EventFn<'beforeHandle'>): this
+	onBeforeHandle(scope: { as: 'local' }, fn: EventFn<'beforeHandle'>): this
+	onBeforeHandle(scope: { as: 'global' }, fn: EventFn<'beforeHandle'>): this
+	onBeforeHandle(scope: { as: 'scoped' }, fn: EventFn<'beforeHandle'>): this
+	onBeforeHandle(
+		scopeOrFn: { as: EventScope } | EventFn<'beforeHandle'>,
+		fn?: EventFn<'beforeHandle'>
+	): this {
+		return this.#onBranch(EventMap.beforeHandle, scopeOrFn, fn)
+	}
+
+	derive(fn: EventFn<'beforeHandle'>): this
+	derive(scope: { as: 'local' }, fn: EventFn<'beforeHandle'>): this
+	derive(scope: { as: 'global' }, fn: EventFn<'beforeHandle'>): this
+	derive(scope: { as: 'scoped' }, fn: EventFn<'beforeHandle'>): this
+	derive(
+		scopeOrFn: { as: EventScope } | EventFn<'beforeHandle'>,
+		fn?: EventFn<'beforeHandle'>
+	): this {
+		this['~derive'] ??= new WeakSet()
+		this['~derive'].add(fn ?? (scopeOrFn as EventFn<'beforeHandle'>))
+
+		return this.#onBranch(EventMap.beforeHandle, scopeOrFn, fn)
+	}
+
+	onAfterHandle(fn: EventFn<'afterHandle'>): this
+	onAfterHandle(scope: { as: 'local' }, fn: EventFn<'afterHandle'>): this
+	onAfterHandle(scope: { as: 'global' }, fn: EventFn<'afterHandle'>): this
+	onAfterHandle(scope: { as: 'scoped' }, fn: EventFn<'afterHandle'>): this
+	onAfterHandle(
+		scopeOrFn: { as: EventScope } | EventFn<'afterHandle'>,
+		fn?: EventFn<'afterHandle'>
+	): this {
+		return this.#onBranch(EventMap.afterHandle, scopeOrFn, fn)
+	}
+
+	mapResponse(fn: EventFn<'mapResponse'>): this
+	mapResponse(scope: { as: 'local' }, fn: EventFn<'mapResponse'>): this
+	mapResponse(scope: { as: 'global' }, fn: EventFn<'mapResponse'>): this
+	mapResponse(scope: { as: 'scoped' }, fn: EventFn<'mapResponse'>): this
+	mapResponse(
+		scopeOrFn: { as: EventScope } | EventFn<'mapResponse'>,
+		fn?: EventFn<'mapResponse'>
+	): this {
+		return this.#onBranch(EventMap.mapResponse, scopeOrFn, fn)
+	}
+
+	onAfterResponse(fn: EventFn<'afterResponse'>): this
+	onAfterResponse(scope: { as: 'local' }, fn: EventFn<'afterResponse'>): this
+	onAfterResponse(scope: { as: 'global' }, fn: EventFn<'afterResponse'>): this
+	onAfterResponse(scope: { as: 'scoped' }, fn: EventFn<'afterResponse'>): this
+	onAfterResponse(
+		scopeOrFn: { as: EventScope } | EventFn<'afterResponse'>,
+		fn?: EventFn<'afterResponse'>
+	): this {
+		return this.#onBranch(EventMap.afterHandle, scopeOrFn, fn)
 	}
 
 	onError(fn: EventFn<'error'>): this {
@@ -144,28 +221,35 @@ export class Elysia<
 		method: string | MethodMap[keyof MethodMap],
 		path: string,
 		fn: Function,
-		hook?: unknown
+		hook?: Partial<InputHook>
 	) {
 		if (this.#routes) {
-			const index = this.#routes.length
-			this.#routes.push([method, path, fn, hook, this] as any)
 			this['~mapIdx']![path] ??= Object.create(null)
-			this['~mapIdx']![path]![method] = index
-			this['~idxMap'] ??= []
-			this['~idxMap'][index] = [path, method]
+			this['~mapIdx']![path]![method] = this.#routes.length
+			this.#routes.push([
+				method,
+				path,
+				fn,
+				localHookToInternal(hook),
+				this
+			] as any)
 		} else {
-			this.#routes = [[method, path, fn, hook, this] as any]
 			this['~mapIdx'] = Object.create(null)
 			this['~mapIdx']![path] = Object.create(null)
 			this['~mapIdx']![path]![method] = 0
-			this['~idxMap'] ??= []
-			this['~idxMap'][0] = [path, method]
+			this.#routes = [
+				[method, path, fn, localHookToInternal(hook), this] as any
+			]
 		}
 
 		return this
 	}
 
-	get(path: string, fn: Function, hook?: unknown) {
+	get<Hook extends Partial<InputHook>>(
+		path: string,
+		fn: Function,
+		hook?: Hook
+	) {
 		if (hook?.body) delete hook.body
 
 		return this.#add(MethodMap.GET, path, fn, hook)
@@ -175,14 +259,33 @@ export class Elysia<
 		return this.#add(MethodMap.POST, path, fn, hook)
 	}
 
+	head(path: string, fn: Function, hook?: unknown) {
+		// @ts-expect-error
+		if (hook?.body) delete hook.body
+
+		return this.#add(MethodMap.HEAD, path, fn, hook)
+	}
+
 	handler(index: number, immediate = false): CompiledHandler {
 		if (this.#compiled?.[index]) return this.#compiled![index]
 
-		const [path, _method] = this['~idxMap']![index]
+		const [_method, path] = this.#routes![index]
 		const method = MethodMapBack[_method as keyof MethodMapBack] ?? _method
 
-		this['~map'] ??= Object.create(null)
-		this['~map']![path] ??= Object.create(null)
+		// Monomorphic, dictionary access
+		this['~map'] ??= {
+			GET: Object.create(null),
+			POST: Object.create(null),
+			PUT: Object.create(null),
+			DELETE: Object.create(null),
+			PATCH: Object.create(null),
+			// Cache check, not uncommon
+			HEAD: Object.create(null),
+			// CORS preflight, usuaul
+			OPTIONS: Object.create(null)
+		}
+		// Custom method
+		this['~map']![method] ??= Object.create(null)
 
 		const compiled = (this.#compiled ??= new Array(this.#routes!.length))
 
@@ -190,12 +293,10 @@ export class Elysia<
 			const handler = compileHandler(this.#routes![index], this)
 
 			compiled![index] = handler
-			this['~map']![path]![method] = handler as CompiledHandler
-			if (this['~config']?.strictPath !== true) {
-				const loosePath = getLoosePath(path)
-				this['~map']![loosePath] ??= Object.create(null)
-				this['~map']![loosePath]![method] = handler as CompiledHandler
-			}
+			this['~map']![method]![path] = handler as CompiledHandler
+			if (this['~config']?.strictPath !== true)
+				this['~map']![method][getLoosePath(path)] =
+					handler as CompiledHandler
 
 			return handler
 		}
@@ -205,12 +306,10 @@ export class Elysia<
 
 			const handler = compileHandler(this.#routes![index], this)
 			compiled![index] = handler
-			this['~map']![path]![method] = handler as CompiledHandler
-			if (this['~config']?.strictPath !== true) {
-				const loosePath = getLoosePath(path)
-				this['~map']![loosePath] ??= Object.create(null)
-				this['~map']![loosePath]![method] = handler as CompiledHandler
-			}
+			this['~map']![method]![path] = handler as CompiledHandler
+			if (this['~config']?.strictPath !== true)
+				this['~map']![method]![getLoosePath(path)] =
+					handler as CompiledHandler
 
 			return handler(context)
 		}) as CompiledHandler
@@ -218,11 +317,6 @@ export class Elysia<
 
 	#buildRouter() {
 		if (!this.#routes) return
-
-		this['~map'] ??= Object.create(null)
-		this['~router'] ??= new Memoirist({
-			onParam: decodeURIComponent
-		})
 
 		for (let i = 0; i < this.#routes.length; i++) {
 			const route: InternalRoute = this.#routes[i]
@@ -232,15 +326,30 @@ export class Elysia<
 			const method =
 				MethodMapBack[_method as keyof MethodMapBack] ?? _method
 
-			if (/\:|\*/.test(path)) this['~router'].add(method, path, handler)
-			else {
-				this['~map']![path] ??= Object.create(null)
-				this['~map']![path]![method] = handler
+			if (/\:|\*/.test(path)) {
+				this['~router'] ??= new Memoirist({
+					onParam: decodeURIComponent
+				})
 
-				if (this['~config']?.strictPath !== true) {
-					this['~map']![getLoosePath(path)] ??= Object.create(null)
-					this['~map']![getLoosePath(path)]![method] = handler
+				this['~router'].add(method, path, handler)
+			} else {
+				this['~map'] ??= {
+					GET: Object.create(null),
+					POST: Object.create(null),
+					PUT: Object.create(null),
+					DELETE: Object.create(null),
+					PATCH: Object.create(null),
+					// Cache check, not uncommon
+					HEAD: Object.create(null),
+					// CORS preflight, usuaul
+					OPTIONS: Object.create(null)
 				}
+
+				this['~map']![method] ??= Object.create(null)
+				this['~map']![method]![path] = handler
+
+				if (this['~config']?.strictPath !== true)
+					this['~map']![method]![getLoosePath(path)] = handler
 			}
 		}
 	}
@@ -261,7 +370,12 @@ export class Elysia<
 		return async (requestOrUrl: Request | string, options?: RequestInit) =>
 			this.fetch(
 				typeof requestOrUrl === 'string'
-					? new Request(requestOrUrl, options)
+					? new Request(
+							requestOrUrl.includes('://')
+								? requestOrUrl
+								: `http://e.ly${requestOrUrl.startsWith('/') ? '' : '/'}${requestOrUrl}`,
+							options
+						)
 					: (requestOrUrl as Request)
 			)
 	}

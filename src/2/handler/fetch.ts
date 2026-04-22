@@ -139,15 +139,15 @@ export function createFetchHandler(
 	const map = app['~map']!
 	const router = app['~router']!
 
-	const onErrors = app['~ext']?.event?.[EventMap.error]
+	const onErrors = app['~ext']?.hook?.[EventMap.error]
 	const hasError = !!onErrors
 	const handleError = createErrorHandler(
 		onErrors,
 		(app['~config']?.adapter ?? defaultAdapter).response.map
 	)
 
-	if (app['~ext']?.event?.[EventMap.request]) {
-		const onRequests = app['~ext'].event[EventMap.request]!
+	if (app['~ext']?.hook?.[EventMap.request]) {
+		const onRequests = app['~ext'].hook[EventMap.request]!
 		const asyncIndexes = getAsyncIndexes(onRequests)
 
 		if (asyncIndexes)
@@ -185,21 +185,19 @@ export function createFetchHandler(
 		const url = request.url,
 			s = url.indexOf('/', 11),
 			qi = url.indexOf('?', s + 1),
-			path = url.substring(s, qi !== -1 ? qi : undefined)
+			path = url.substring(s, qi === -1 ? url.length : qi)
 
 		// @ts-expect-error
 		context.qi = qi
 
-		const handler: CompiledHandler = map[path]?.[request.method]
-		if (handler) {
-			try {
-				return handler(context) as Response
-			} catch (error) {
-				return handleError(context, error as Error) as Response
-			}
+		try {
+			const handler: CompiledHandler = map[request.method][path]
+			if (handler) return handler(context) as Response
+		} catch (error) {
+			return handleError(context, error as Error) as Response
 		}
 
-		const result = router.find(request.method, path)
+		const result = router?.find(request.method, path)
 		if (result) {
 			context.params = result.params
 

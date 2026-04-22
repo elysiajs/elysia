@@ -2,7 +2,6 @@ import type { AnyElysia } from '../..'
 import { sucrose, type Sucrose } from '../../sucrose'
 
 import type { ElysiaAdapter } from '../../adapter'
-import { WebStandardAdapter } from '../../adapter/web-standard'
 
 import { Validator, type TypeBoxValidator } from '../../schema/validator'
 import { RouteValidator } from '../../schema/route'
@@ -17,17 +16,22 @@ import {
 	parseText,
 	parseUrlencoded
 } from './constants'
+
+import { isBun } from '../../universal/utils'
+import { EventMap, HookMap } from '../../constants'
+
+import { parseQueryFromURL } from '../../parse-query'
+import { defaultAdapter } from '../../adapter/constants'
+import { mergeHook } from '../../utils'
+
 import type { Link } from '../types'
 import type {
-	AnyLocalHook,
 	BodyHandler,
 	ContentType,
-	MaybePromise
+	InternalHook,
+	CompiledHandler,
+	InternalRoute
 } from '../../types'
-import { CompiledHandler, InternalRoute } from '../../types'
-import { isBun } from '../../universal/utils'
-import { parseQuery, parseQueryFromURL } from '../../parse-query'
-import { defaultAdapter } from '../../adapter/constants'
 
 function builtinParser(
 	adapter: ElysiaAdapter['parse'],
@@ -137,7 +141,7 @@ const isAsyncValidator = (vali: Validator | undefined) =>
 	!(vali as TypeBoxValidator)?.tb || (vali as TypeBoxValidator)?.isAsync
 
 export function compileHandler(
-	[method, path, handler, _hook, instance]: InternalRoute,
+	[, , handler, _hook, instance]: InternalRoute,
 	root: AnyElysia
 ): CompiledHandler {
 	const adapter = root['~config']?.adapter ?? defaultAdapter
@@ -146,7 +150,7 @@ export function compileHandler(
 	let params = new Set<unknown>()
 	let alias = ''
 
-	let hook = _hook ?? {}
+	let hook = mergeHook(Object.assign({}, _hook), root['~ext']?.hook)
 
 	let hookNotLinked = true
 	function link(v: unknown, key: string) {
@@ -165,9 +169,16 @@ export function compileHandler(
 		}
 	}
 
-	const hasBody = inference.body && hook.parse?.[0] !== 'none'
+	const hasBody = inference.body && hook[EventMap.parse]?.[0] !== 'none'
 
-	const vali = new RouteValidator(hook)
+	const vali = new RouteValidator({
+		body: hook[HookMap.body],
+		headers: hook[HookMap.headers],
+		params: hook[HookMap.params],
+		query: hook[HookMap.query],
+		cookie: hook[HookMap.cookie],
+		response: hook[HookMap.response]
+	})
 
 	const bodyValiIsAsync = hasBody && isAsyncValidator(vali.body)
 	const headersValiIsAsync = vali.headers && isAsyncValidator(vali.headers)
@@ -178,11 +189,11 @@ export function compileHandler(
 	const isAsync =
 		hasBody ||
 		isAsyncFunction(handler as Function) ||
-		!!hook.parse?.length ||
-		!!hook.afterHandle?.some(isAsyncFunction) ||
-		!!hook.beforeHandle?.some(isAsyncFunction) ||
-		!!hook.transform?.some(isAsyncFunction) ||
-		!!hook.mapResponse?.some(isAsyncFunction) ||
+		!!hook[EventMap.parse]?.length ||
+		!!hook[EventMap.afterHandle]?.some(isAsyncFunction) ||
+		!!hook[EventMap.beforeHandle]?.some(isAsyncFunction) ||
+		!!hook[EventMap.transform]?.some(isAsyncFunction) ||
+		!!hook[EventMap.mapResponse]?.some(isAsyncFunction) ||
 		bodyValiIsAsync ||
 		headersValiIsAsync ||
 		paramsValiIsAsync ||
@@ -193,20 +204,13 @@ export function compileHandler(
 	// ,va,rm,rc,re,pa,pf,pj,pt,pu
 	let code = `${isAsync ? 'async ' : ''}function route(c){\n`
 
-	if (hook.transform?.length) {
-		link(hook.transform, 'tf')
-
-		for (let i = 0; i < hook.transform.length; i++)
-			code += `${isAsyncFunction(hook.transform[i]) ? 'await ' : ''}tf[${i}](c)\n`
-	}
-
 	// ? defaultHeaders doesn't imply that user will use headers in handler
 	const hasHeaders =
 		inference.headers ||
 		!!vali.headers ||
-		(inference.body && typeof hook.parse !== 'string')
+		(inference.body && typeof hook[EventMap.parse] !== 'string')
 
-	if (inference.query) {
+	if (inference.query || vali.query) {
 		code += `c.query=pq(c.request.url,c.qi)\n`
 		link(parseQueryFromURL, 'pq')
 	}
@@ -215,6 +219,13 @@ export function compileHandler(
 		code += isBun
 			? `c.headers=c.request.headers.toJSON()\n`
 			: `c.headers=Object.fromEntries(c.request.headers.headers)\n`
+	}
+
+	if (hook[EventMap.transform]?.length) {
+		link(hook[EventMap.transform], 'tf')
+
+		for (let i = 0; i < hook[EventMap.transform].length; i++)
+			code += `${isAsyncFunction(hook[EventMap.transform][i]) ? 'await ' : ''}tf[${i}](c)\n`
 	}
 
 	if (vali.headers) {
@@ -246,11 +257,19 @@ export function compileHandler(
 		}
 	}
 
-	if (hook.beforeHandle?.length) {
-		link(hook.beforeHandle, 'bh')
+	if (hook[EventMap.beforeHandle]?.length) {
+		link(hook[EventMap.beforeHandle], 'bf')
+		if (root['~derive']) code += `let dr\n`
 
-		for (let i = 0; i < hook.beforeHandle.length; i++)
-			code += `${isAsyncFunction(hook.beforeHandle[i]) ? 'await ' : ''}bh[${i}](c)\n`
+		const beforeHandle = hook[EventMap.beforeHandle]
+
+		for (let i = 0; i < beforeHandle.length; i++)
+			if (root['~derive']?.has(beforeHandle[i]))
+				code +=
+					`dr=${isAsyncFunction(beforeHandle[i]) ? 'await ' : ''}bf[${i}](c)\n` +
+					`if(dr)Object.assign(c,dr)\n`
+			else
+				code += `${isAsyncFunction(beforeHandle[i]) ? 'await ' : ''}bf[${i}](c)\n`
 	}
 
 	const hasSet =
@@ -273,24 +292,22 @@ export function compileHandler(
 
 	code += '}'
 
-	function clear() {
-		hook = undefined
-		// @ts-ignore
-		code = undefined
-		params.clear()
-		// @ts-ignore
-		params = undefined
-		// @ts-ignore
-		code = undefined
-		// @ts-ignore
-		link = undefined
-	}
+	const fn = new Function('h', 'a', `const [${alias}]=a\nreturn ` + code)(
+		handler,
+		params
+	)
 
-	const fn = new Function('h', 'a', `const [${alias}]=a\nreturn ` + code)
+	// @ts-ignore
+	hook = undefined
+	// @ts-ignore
+	code = undefined
+	params.clear()
+	// @ts-ignore
+	params = undefined
+	// @ts-ignore
+	code = undefined
+	// @ts-ignore
+	link = undefined
 
-	const result = fn(handler, params)
-
-	clear()
-
-	return result
+	return fn
 }

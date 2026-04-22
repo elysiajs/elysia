@@ -7,9 +7,9 @@ import {
 	mapStaticHandler
 } from './handler'
 
-import { createRouteMap } from './utils'
 import { clearSucroseCache } from '../../sucrose'
 import { Validator } from '../../schema/validator'
+import { createRouteMap } from './utils'
 
 import type { AnyElysia } from '../..'
 

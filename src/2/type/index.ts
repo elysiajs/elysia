@@ -826,6 +826,10 @@ function Integer(options?: TNumberOptions): TInteger {
 	return Object.defineProperty(options, '~kind', noEnumerable) as any
 }
 
+let objectKind: {
+	value: 'Object'
+	enumerable: false
+}
 function ObjectType<T extends TProperties>(
 	properties: T,
 	options?: TObjectOptions
@@ -835,50 +839,55 @@ function ObjectType<T extends TProperties>(
 		// @ts-expect-error
 		if (properties[required[i]]['~optional']) required.splice(i--, 1)
 
-	if (!options || isEmpty(options))
-		return Object.defineProperty(
-			{
-				'~kind': 'Object',
-				type: 'object',
-				properties,
-				required
-			},
-			'~kind',
-			noEnumerable
-		) as any
+	objectKind ??= {
+		value: 'Object',
+		enumerable: false
+	}
 
-	Object.assign(options, {
-		'~kind': 'Object',
-		type: 'object',
-		properties,
-		required
-	})
-	Object.defineProperty(options, '~kind', noEnumerable) as any
+	if (!options || isEmpty(options)) {
+		const schema = {
+			type: 'object' as const,
+			properties,
+			required
+		}
+		Object.defineProperty(schema, '~kind', objectKind)
+		return schema as any
+	}
+
+	Object.defineProperty(options, '~kind', objectKind)
+	options.type = 'object'
+	options.properties = properties
+	options.required = required
 
 	return options as any
 }
 
+let arrayKind: {
+	value: 'Array'
+	enumerable: false
+}
 function ArrayType<T extends TSchema>(
 	items: T,
 	options?: TSchemaOptions
 ): TArray<T> {
-	if (!options || isEmpty(options))
-		return Object.defineProperty(
-			{
-				'~kind': 'Array',
-				type: 'array',
-				items
-			},
-			'~kind',
-			noEnumerable
-		) as any
+	arrayKind ??= {
+		value: 'Array',
+		enumerable: false
+	}
 
-	Object.assign(options, {
-		'~kind': 'Array',
-		type: 'array',
-		items
-	})
-	Object.defineProperty(options, '~kind', noEnumerable) as any
+	if (!options || isEmpty(options)) {
+		const schema = {
+			type: 'array' as const,
+			items
+		}
+
+		Object.defineProperty(schema, '~kind', arrayKind)
+		return schema as any
+	}
+
+	Object.defineProperty(options, '~kind', arrayKind)
+	options.type = 'array'
+	options.items = items
 
 	return options as any
 }
