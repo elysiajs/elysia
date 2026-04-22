@@ -58,6 +58,13 @@ export function getAsyncIndexes(onRequests: Function[]) {
 
 const notFound = new Response('Not Found', { status: 404 })
 
+export function getPath(url: string) {
+	const s = url.indexOf('/', 11),
+		qi = url.indexOf('?', s + 1)
+
+	return [url.substring(s, qi === -1 ? url.length : qi), qi] as const
+}
+
 function findRoute(
 	context: Context,
 	request: Request,
@@ -65,11 +72,7 @@ function findRoute(
 	router: NonNullable<AnyElysia['~router']>,
 	hasError: boolean
 ): Response {
-	const url = request.url,
-		s = url.indexOf('/', 11),
-		qi = url.indexOf('?', s + 1),
-		path = url.substring(s, qi !== -1 ? qi : undefined)
-
+	const [path, qi] = getPath(request.url)
 	// @ts-expect-error
 	context.qi = qi
 

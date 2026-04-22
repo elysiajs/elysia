@@ -1,7 +1,7 @@
 import { Elysia, t } from '../src/2'
 
 const app = new Elysia()
-	.onError(({ error }) => {
+	.onError(({ error, query }) => {
 		console.log(error)
 	})
 	.derive(({ query }) => {
@@ -25,5 +25,5 @@ const app = new Elysia()
 // console.log(app.handler(0, true).toString())
 
 app.handle('query?name=bb').then((res) =>
-	res.text().then((text) => console.log(text))
+	res.text().then((text) => console.log("A", text))
 )

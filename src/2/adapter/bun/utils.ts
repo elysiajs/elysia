@@ -94,6 +94,8 @@ export function createFetchHandler(
 }
 
 export function createRouteMap(app: AnyElysia) {
+	const Context = createBunContext(app)
+
 	function fetch(request: Request) {
 		return handleError(new Context(request), new Error()) as Response
 	}
@@ -107,7 +109,6 @@ export function createRouteMap(app: AnyElysia) {
 		]
 
 	const routes = Object.create(null)
-	const Context = createBunContext(app)
 
 	const handleError = createErrorHandler(
 		app['~ext']?.hook?.[EventMap['error']],
