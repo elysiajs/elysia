@@ -1,14 +1,16 @@
 import { Elysia, t } from '../src/2'
 
 const app = new Elysia()
-	// .onError(() => {
-	// 	return 'QQA'
-	// })
-	.get('/', () => {
-		throw new Error('Q')
+	.onError(({ error, query }) => {
+		console.log(query)
 	})
-	.listen(3000)
+	.get('/query', (c) => c.query.name, {
+		query: t.Object({
+			name: t.String()
+		})
+	})
+	// .listen(3000)
 
-app.handle('http://localhost').then((res) =>
+app.handle('http://localhost/query?name=bb').then((res) =>
 	res.text().then((text) => console.log(text))
 )

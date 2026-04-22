@@ -87,10 +87,11 @@ export class Elysia<
 	#compiled?: CompiledHandler[]
 
 	'~router'?: Memoirist<CompiledHandler>
-	'~map'?: { [method: string]: { [path: string]: CompiledHandler } }
+	'~map'?: { [path: string]: { [method: string]: CompiledHandler } }
 	'~mapIdx'?: {
-		[method: string]: { [path: string]: number }
+		[path: string]: { [method: string]: number }
 	}
+	'~idxMap'?: [map: string, method: string | MethodMap[keyof MethodMap]][]
 
 	get routes(): PublicRoute[] {
 		if (!this.#routes) return []
@@ -146,19 +147,19 @@ export class Elysia<
 		hook?: unknown
 	) {
 		if (this.#routes) {
+			const index = this.#routes.length
+			this.#routes.push([method, path, fn, hook, this] as any)
 			this['~mapIdx']![path] ??= Object.create(null)
-			this['~mapIdx']![path]![method] = this.#routes.push([
-				method,
-				path,
-				fn,
-				hook,
-				this
-			] as any)
+			this['~mapIdx']![path]![method] = index
+			this['~idxMap'] ??= []
+			this['~idxMap'][index] = [path, method]
 		} else {
 			this.#routes = [[method, path, fn, hook, this] as any]
 			this['~mapIdx'] = Object.create(null)
 			this['~mapIdx']![path] = Object.create(null)
 			this['~mapIdx']![path]![method] = 0
+			this['~idxMap'] ??= []
+			this['~idxMap'][0] = [path, method]
 		}
 
 		return this
@@ -177,25 +178,42 @@ export class Elysia<
 	handler(index: number, immediate = false): CompiledHandler {
 		if (this.#compiled?.[index]) return this.#compiled![index]
 
-		if (immediate) {
-			const routes = this.#routes
-			const compiled = (this.#compiled ??= new Array(routes!.length))
+		const [path, _method] = this['~idxMap']![index]
+		const method = MethodMapBack[_method as keyof MethodMapBack] ?? _method
 
-			return (compiled![index] ??= compileHandler(
-				routes![index],
-				this
-			)) as CompiledHandler
-		}
+		this['~map'] ??= Object.create(null)
+		this['~map']![path] ??= Object.create(null)
 
 		const routes = this.#routes
 		const compiled = (this.#compiled ??= new Array(routes!.length))
 
+		if (immediate) {
+			const handler = compileHandler(routes![index], this)
+
+			compiled![index] = handler
+			this['~map']![path]![method] = handler as CompiledHandler
+			if (this['~config']?.strictPath !== true) {
+				const loosePath = getLoosePath(path)
+				this['~map']![loosePath] ??= Object.create(null)
+				this['~map']![loosePath]![method] = handler as CompiledHandler
+			}
+
+			return handler
+		}
+
 		return ((context: Context): MaybePromise<Response> => {
 			if (compiled![index]) return compiled![index](context)
 
-			return (compiled![index] ??= compileHandler(routes![index], this))(
-				context
-			)
+			const handler = compileHandler(routes![index], this)
+			compiled![index] = handler
+			this['~map']![path]![method] = handler as CompiledHandler
+			if (this['~config']?.strictPath !== true) {
+				const loosePath = getLoosePath(path)
+				this['~map']![loosePath] ??= Object.create(null)
+				this['~map']![loosePath]![method] = handler as CompiledHandler
+			}
+
+			return handler(context)
 		}) as CompiledHandler
 	}
 
@@ -217,11 +235,13 @@ export class Elysia<
 
 			if (/\:|\*/.test(path)) this['~router'].add(method, path, handler)
 			else {
-				this['~map']![method] ??= Object.create(null)
-				this['~map']![method]![path] = handler
+				this['~map']![path] ??= Object.create(null)
+				this['~map']![path]![method] = handler
 
-				if (this['~config']?.strictPath !== true)
-					this['~map']![method]![getLoosePath(path)] = handler
+				if (this['~config']?.strictPath !== true) {
+					this['~map']![getLoosePath(path)] ??= Object.create(null)
+					this['~map']![getLoosePath(path)]![method] = handler
+				}
 			}
 		}
 	}
@@ -231,9 +251,7 @@ export class Elysia<
 		if (this.#fetchFn) return this.#fetchFn
 
 		this.#buildRouter()
-		this.#fetchFn ??= createFetchHandler(this)
-
-		return this.#fetchFn
+		return (this.#fetchFn ??= createFetchHandler(this))
 	}
 
 	// for whatever reason, this use less memory than declaraing as method/arrow function

@@ -18,7 +18,7 @@ export function parseQueryFromURL(
 	let flags = 0
 
 	const inputLength = input.length
-	let startingIndex = startIndex - 1
+	let startingIndex = startIndex
 	let equalityIndex = startingIndex
 
 	for (let i = 0; i < inputLength; i++)

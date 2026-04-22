@@ -1,5 +1,11 @@
 import { createAdapter } from '..'
 import { WebStandardAdapter } from '../web-standard'
+import {
+	mapCompactResponse,
+	mapEarlyResponse,
+	mapResponse,
+	mapStaticHandler
+} from './handler'
 
 import { createRouteMap } from './utils'
 import { clearSucroseCache } from '../../sucrose'
@@ -11,6 +17,12 @@ export const BunAdapter = createAdapter({
 	...WebStandardAdapter,
 	name: 'bun',
 	runtime: 'bun',
+	response: {
+		map: mapResponse,
+		compact: mapCompactResponse,
+		early: mapEarlyResponse,
+		static: mapStaticHandler
+	},
 	listen(app, options, callback) {
 		const [routes, fetch] = createRouteMap(app as AnyElysia)
 

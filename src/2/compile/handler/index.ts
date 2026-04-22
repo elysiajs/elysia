@@ -26,6 +26,8 @@ import type {
 } from '../../types'
 import { CompiledHandler, InternalRoute } from '../../types'
 import { isBun } from '../../universal/utils'
+import { parseQuery, parseQueryFromURL } from '../../parse-query'
+import { defaultAdapter } from '../../adapter/constants'
 
 function builtinParser(
 	adapter: ElysiaAdapter['parse'],
@@ -138,7 +140,7 @@ export function compileHandler(
 	[method, path, handler, _hook, instance]: InternalRoute,
 	root: AnyElysia
 ): CompiledHandler {
-	const adapter = root['~config']?.adapter ?? WebStandardAdapter
+	const adapter = root['~config']?.adapter ?? defaultAdapter
 	const inference = sucrose(handler as any, _hook as Sucrose.LifeCycle)
 
 	let params = new Set<unknown>()
@@ -199,7 +201,15 @@ export function compileHandler(
 	}
 
 	// ? defaultHeaders doesn't imply that user will use headers in handler
-	const hasHeaders = inference.headers || !!vali.headers || inference.body
+	const hasHeaders =
+		inference.headers ||
+		!!vali.headers ||
+		(inference.body && typeof hook.parse !== 'string')
+
+	if (inference.query) {
+		code += `c.query=pq(c.request.url,c.qi)\n`
+		link(parseQueryFromURL, 'pq')
+	}
 
 	if (hasHeaders) {
 		code += isBun
@@ -222,6 +232,11 @@ export function compileHandler(
 		code += `c.query=${queryValiIsAsync ? 'await ' : ''}va.query.From(c.query)\n`
 	}
 
+	if (vali.cookie) {
+		link(vali, 'va')
+		code += `c.cookie=${cookieValidIsAsync ? 'await ' : ''}va.cookie.From(c.cookie)\n`
+	}
+
 	if (hasBody) {
 		code += parse(adapter.parse, hook.parse, vali.body, hasHeaders, link)
 
@@ -229,11 +244,6 @@ export function compileHandler(
 			link(vali, 'va')
 			code += `c.body=${bodyValiIsAsync ? 'await ' : ''}va.body.From(c.body)\n`
 		}
-	}
-
-	if (vali.cookie) {
-		link(vali, 'va')
-		code += `c.cookie=${cookieValidIsAsync ? 'await ' : ''}va.cookie.From(c.cookie)\n`
 	}
 
 	if (hook.beforeHandle?.length) {

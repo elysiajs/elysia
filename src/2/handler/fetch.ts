@@ -1,12 +1,12 @@
 import { redirect } from '../utils'
 
 import { isAsyncFunction } from '../compile/utils'
+import { defaultAdapter } from '../adapter/constants'
 
 import type { AnyElysia } from '../'
 import type { Context } from '../context'
 import { EventMap } from '../constants'
 import type { CompiledHandler, InternalAppEvent, MaybePromise } from '../types'
-import { WebStandardAdapter } from '../adapter/web-standard'
 
 export function createBaseContext(app: AnyElysia) {
 	class Decorator {}
@@ -32,19 +32,14 @@ export function createContext(
 	return class Context extends createBaseContext(app) {
 		params?: Record<string, string>
 		headers?: Record<string, string>
-		path: string
+		qi!: number
 		set: { headers: Record<string, string> }
 
 		constructor(public request: Request) {
 			super()
 
-			const url = request.url,
-				s = url.indexOf('/', 11),
-				qi = url.indexOf('?', s + 1)
-
-			this.path = url.substring(s, qi !== -1 ? qi : undefined)
 			this.set = {
-				headers: headers ? Object.create(headers) : Object.create(null)
+				headers: Object.create(headers)
 			}
 		}
 	} as any
@@ -65,14 +60,23 @@ const notFound = new Response('Not Found', { status: 404 })
 
 function findRoute(
 	context: Context,
+	request: Request,
 	map: NonNullable<AnyElysia['~map']>,
 	router: NonNullable<AnyElysia['~router']>,
 	hasError: boolean
 ): Response {
-	const handler: CompiledHandler = map[context.request.method]?.[context.path]
+	const url = request.url,
+		s = url.indexOf('/', 11),
+		qi = url.indexOf('?', s + 1),
+		path = url.substring(s, qi !== -1 ? qi : undefined)
+
+	// @ts-expect-error
+	context.qi = qi
+
+	const handler: CompiledHandler = map[path]?.[request.method]
 	if (handler) return handler(context) as Response
 
-	const result = router.find(context.request.method, context.path)
+	const result = router.find(request.method, path)
 	if (result) {
 		context.params = result.params
 		return result.store(context) as Response
@@ -139,7 +143,7 @@ export function createFetchHandler(
 	const hasError = !!onErrors
 	const handleError = createErrorHandler(
 		onErrors,
-		(app['~config']?.adapter ?? WebStandardAdapter).response.map
+		(app['~config']?.adapter ?? defaultAdapter).response.map
 	)
 
 	if (app['~ext']?.event?.[EventMap.request]) {
@@ -155,7 +159,7 @@ export function createFetchHandler(
 						if (asyncIndexes?.[i]) await onRequests[i](context)
 						else onRequests[i](context)
 
-					return findRoute(context, map, router, hasError)
+					return findRoute(context, request, map, router, hasError)
 				} catch (error) {
 					return handleError(context, error as Error) as Response
 				}
@@ -167,7 +171,7 @@ export function createFetchHandler(
 				for (let i = 0; i < onRequests.length; i++)
 					onRequests[i](context)
 
-				return findRoute(context, map, router, hasError)
+				return findRoute(context, request, map, router, hasError)
 			} catch (error) {
 				return handleError(context, error as Error) as Response
 			}
@@ -177,7 +181,7 @@ export function createFetchHandler(
 	return (request: Request): Response => {
 		const context = new Context(request)
 		try {
-			return findRoute(context, map, router, hasError)
+			return findRoute(context, request, map, router, hasError)
 		} catch (error) {
 			return handleError(context, error as Error) as Response
 		}

@@ -28,6 +28,7 @@ export function createBunContext(
 
 	return class Context extends createBaseContext(app) {
 		params: Record<string, string>
+		qi!: number
 		headers?: Record<string, string>
 		set: { headers: Record<string, string> }
 
@@ -36,7 +37,7 @@ export function createBunContext(
 
 			this.params = request.params
 			this.set = {
-				headers: headers ? Object.create(headers) : Object.create(null)
+				headers: Object.create(headers)
 			}
 		}
 	} as any
