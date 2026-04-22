@@ -178,12 +178,40 @@ export function createFetchHandler(
 		}
 	}
 
+	// Fuck DRY, this is the hotest path
+	// so I'm inline the entire thing, ~4-5ns faster on M1
 	return (request: Request): Response => {
 		const context = new Context(request)
-		try {
-			return findRoute(context, request, map, router, hasError)
-		} catch (error) {
-			return handleError(context, error as Error) as Response
+		const url = request.url,
+			s = url.indexOf('/', 11),
+			qi = url.indexOf('?', s + 1),
+			path = url.substring(s, qi !== -1 ? qi : undefined)
+
+		// @ts-expect-error
+		context.qi = qi
+
+		const handler: CompiledHandler = map[path]?.[request.method]
+		if (handler) {
+			try {
+				return handler(context) as Response
+			} catch (error) {
+				return handleError(context, error as Error) as Response
+			}
 		}
+
+		const result = router.find(request.method, path)
+		if (result) {
+			context.params = result.params
+
+			try {
+				return result.store(context) as Response
+			} catch (error) {
+				return handleError(context, error as Error) as Response
+			}
+		}
+
+		if (hasError) return handleError(context, new Error()) as Response
+
+		return notFound.clone() as Response
 	}
 }

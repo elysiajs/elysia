@@ -184,11 +184,10 @@ export class Elysia<
 		this['~map'] ??= Object.create(null)
 		this['~map']![path] ??= Object.create(null)
 
-		const routes = this.#routes
-		const compiled = (this.#compiled ??= new Array(routes!.length))
+		const compiled = (this.#compiled ??= new Array(this.#routes!.length))
 
 		if (immediate) {
-			const handler = compileHandler(routes![index], this)
+			const handler = compileHandler(this.#routes![index], this)
 
 			compiled![index] = handler
 			this['~map']![path]![method] = handler as CompiledHandler
@@ -204,7 +203,7 @@ export class Elysia<
 		return ((context: Context): MaybePromise<Response> => {
 			if (compiled![index]) return compiled![index](context)
 
-			const handler = compileHandler(routes![index], this)
+			const handler = compileHandler(this.#routes![index], this)
 			compiled![index] = handler
 			this['~map']![path]![method] = handler as CompiledHandler
 			if (this['~config']?.strictPath !== true) {

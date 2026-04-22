@@ -1,6 +1,4 @@
-import { t } from '../src/2/type'
-import { Elysia } from '../src/2'
-import { Validator } from '../src/2/schema/validator'
+import { Elysia, t } from '../src/2'
 
 function gc() {
 	if (typeof Bun !== 'undefined') Bun.gc(true)
@@ -23,16 +21,26 @@ function memoryUsage() {
 
 const m1 = memoryUsage()
 const t1 = performance.now()
-const total = 100_000
+const total = 30000
 const stacks = <any[]>Array(total)
 
-for (let i = 0; i < total; i++)
-	stacks[i] = new Elysia()
-		// .get(`/a/${i}`, () => 'ok')
-		// .handler(0, true)
+for (let i = 0; i < total; i++) {
+	const app = new Elysia().get('/:id/a', () => 'ok', {
+		params: t.Object({
+			id: t.Number({
+				title: i + ''
+			})
+		})
+	})
+
+	app.handler(0, true)
+
+	stacks[i] = app
+}
+
+console.log(stacks[0])
 
 const t2 = performance.now()
-Validator.clear()
 gc()
 const m2 = memoryUsage()
 
@@ -41,23 +49,3 @@ console.log('Elysia 2α full compile x30k')
 console.log('Time:', (t2 - t1).toFixed(2), 'ms')
 console.log('Memory usage:', ((m2 - m1) / 1024 / 1024).toFixed(2), 'MB')
 // console.log('\n\n\n\n\n\n')
-
-// await handler({
-// 	set: {
-// 		status: 200,
-// 		headers: {}
-// 	},
-// 	request: new Request('http://localhost?a=b', {
-// 		method: 'GET',
-// 		headers: {
-// 			'content-type': 'application/json'
-// 		},
-// 		body: JSON.stringify([
-// 			{
-// 				name: 'q'
-// 			}
-// 		])
-// 	})
-// })
-// 	.then((res) => res.text())
-// 	.then(console.log)
