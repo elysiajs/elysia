@@ -1,4 +1,3 @@
-import { EventMap, HookMap } from './constants'
 import type { InputSchema, InternalHook, InputHook, MaybeArray } from './types'
 
 export function isEmpty<T extends Object>(obj: T): boolean {
@@ -87,30 +86,6 @@ function mergeArray<
 	return array as any
 }
 
-export function localHookToInternal(a?: Partial<InputHook>): InternalHook {
-	const hook = Object.create(null)
-	if (!a) return hook
-
-	if (a?.type) hook.type = a.type
-	if (a?.parse) hook[EventMap.parse] = a.parse
-	if (a?.transform) hook[EventMap.transform] = a.transform
-	if (a?.beforeHandle) hook[EventMap.beforeHandle] = a.beforeHandle
-	if (a?.afterHandle) hook[EventMap.afterHandle] = a.afterHandle
-	if (a?.mapResponse) hook[EventMap.mapResponse] = a.mapResponse
-	if (a?.afterResponse) hook[EventMap.afterResponse] = a.afterResponse
-	if (a?.error) hook[EventMap.error] = a.error
-	if (a.body) hook[HookMap.body] = a.body
-	if (a.headers) hook[HookMap.headers] = a.headers
-	if (a.params) hook[HookMap.params] = a.params
-	if (a.query) hook[HookMap.query] = a.query
-	if (a.cookie) hook[HookMap.cookie] = a.cookie
-	if (a.response) hook[HookMap.response] = a.response
-	// @ts-expect-error
-	if (a.schema) hook[HookMap.schema] = a.schema
-
-	return hook
-}
-
 export function mergeHook(
 	a: InternalHook,
 	b: Partial<InternalHook> | undefined
@@ -118,71 +93,71 @@ export function mergeHook(
 ): InternalHook {
 	if (!b) return a
 
-	if (!a[HookMap.body] && b[HookMap.body]) a[HookMap.body] = b[HookMap.body]
+	if (!a.body && b.body) a.body= b.body
 
-	if (!a[HookMap.headers] && b[HookMap.headers])
-		a[HookMap.headers] = b[HookMap.headers]
+	if (!a.headers && b.headers)
+		a.headers= b.headers
 
-	if (!a[HookMap.params] && b[HookMap.params])
-		a[HookMap.params] = b[HookMap.params]
+	if (!a.params && b.params)
+		a.params= b.params
 
-	if (!a[HookMap.query] && b[HookMap.query])
-		a[HookMap.query] = b[HookMap.query]
+	if (!a.query && b.query)
+		a.query= b.query
 
-	if (!a[HookMap.cookie] && b[HookMap.cookie])
-		a[HookMap.cookie] = b[HookMap.cookie]
+	if (!a.cookie && b.cookie)
+		a.cookie= b.cookie
 
-	if (a[HookMap.response] || b[HookMap.response])
-		a[HookMap.response] = mergeResponse(
-			a[HookMap.response],
-			b[HookMap.response]
+	if (a.response || b.response)
+		a.response= mergeResponse(
+			a.response,
+			b.response
 		)
 
-	if (a[EventMap.parse] || b[EventMap.parse])
-		a[EventMap.parse] = mergeArray(a[EventMap.parse], b[EventMap.parse])
+	if (a.parse || b.parse)
+		a.parse= mergeArray(a.parse, b.parse)
 
-	if (a[EventMap.transform] || b[EventMap.transform])
-		a[EventMap.transform] = mergeArray(
-			a[EventMap.transform],
-			b[EventMap.transform]
+	if (a.transform || b.transform)
+		a.transform= mergeArray(
+			a.transform,
+			b.transform
 		)
 
-	if (a[EventMap.beforeHandle] || b[EventMap.beforeHandle])
-		a[EventMap.beforeHandle] = mergeArray(
-			a[EventMap.beforeHandle],
-			b[EventMap.beforeHandle]
+	if (a.beforeHandle || b.beforeHandle)
+		a.beforeHandle= mergeArray(
+			a.beforeHandle,
+			b.beforeHandle
 		)
 
-	if (a[EventMap.afterHandle] || b[EventMap.afterHandle])
-		a[EventMap.afterHandle] = mergeArray(
-			a[EventMap.afterHandle],
-			b[EventMap.afterHandle]
+	if (a.afterHandle || b.afterHandle)
+		a.afterHandle= mergeArray(
+			a.afterHandle,
+			b.afterHandle
 		)
 
-	if (a[EventMap.mapResponse] || b[EventMap.mapResponse])
-		a[EventMap.mapResponse] = mergeArray(
-			a[EventMap.mapResponse],
-			b[EventMap.mapResponse]
+	if (a.mapResponse || b.mapResponse)
+		a.mapResponse= mergeArray(
+			a.mapResponse,
+			b.mapResponse
 		)
 
-	if (a[EventMap.afterResponse] || b[EventMap.afterResponse])
-		a[EventMap.afterResponse] = mergeArray(
-			a[EventMap.afterResponse],
-			b[EventMap.afterResponse]
+	if (a.afterResponse || b.afterResponse)
+		a.afterResponse= mergeArray(
+			a.afterResponse,
+			b.afterResponse
 		)
 
-	if (a[EventMap.error] || b[EventMap.error])
-		a[EventMap.error] = mergeArray(a[EventMap.error], b[EventMap.error])
+	if (a.error || b.error)
+		a.error= mergeArray(a.error, b.error)
 
-	if (a[HookMap.schema] || b[HookMap.schema])
-		a[HookMap.schema] = mergeArray(
-			a[HookMap.schema],
-			b[HookMap.schema]
+	if (a.schema || b.schema)
+		a.schema= mergeArray(
+			a.schema,
+			b.schema
 		) as any
 
-	if (b[HookMap.macro]) {
-		if (a[HookMap.macro]) Object.assign(a[HookMap.macro], b[HookMap.macro])
-		else a[HookMap.macro] = b[HookMap.macro]
+	if (b.macro) {
+		if (a.macro) Object.assign(a.macro, b.macro)
+		else a.macro= b.macro
 	}
 
 	return a

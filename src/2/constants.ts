@@ -87,36 +87,3 @@ export const StatusMap = {
 	'Network Authentication Required': 511
 } as const
 export type StatusMap = typeof StatusMap
-
-export const EventMap = {
-	request: 0,
-	parse: 1,
-	transform: 2,
-	beforeHandle: 3,
-	afterHandle: 4,
-	mapResponse: 5,
-	afterResponse: 6,
-	error: 7,
-	trace: 8,
-	start: 9,
-	stop: 10
-} as const
-export type EventMap = typeof EventMap
-
-export const EventMapBack = mapBack(EventMap)
-export type EventMapBack = typeof EventMapBack
-
-export const HookMap = {
-	body: 11,
-	headers: 12,
-	params: 13,
-	query: 14,
-	cookie: 15,
-	response: 16,
-	schema: 17,
-	macro: 18
-} as const
-export type HookMap = typeof HookMap
-
-const HookMapBack = mapBack(HookMap)
-export type HookMapBack = typeof HookMapBack

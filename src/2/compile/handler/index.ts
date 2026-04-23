@@ -18,7 +18,6 @@ import {
 } from './constants'
 
 import { isBun } from '../../universal/utils'
-import { EventMap, HookMap } from '../../constants'
 
 import { parseQueryFromURL } from '../../parse-query'
 import { defaultAdapter } from '../../adapter/constants'
@@ -169,16 +168,9 @@ export function compileHandler(
 		}
 	}
 
-	const hasBody = inference.body && hook[EventMap.parse]?.[0] !== 'none'
+	const hasBody = inference.body && hook.parse?.[0] !== 'none'
 
-	const vali = new RouteValidator({
-		body: hook[HookMap.body],
-		headers: hook[HookMap.headers],
-		params: hook[HookMap.params],
-		query: hook[HookMap.query],
-		cookie: hook[HookMap.cookie],
-		response: hook[HookMap.response]
-	})
+	const vali = new RouteValidator(hook)
 
 	const bodyValiIsAsync = hasBody && isAsyncValidator(vali.body)
 	const headersValiIsAsync = vali.headers && isAsyncValidator(vali.headers)
@@ -189,11 +181,11 @@ export function compileHandler(
 	const isAsync =
 		hasBody ||
 		isAsyncFunction(handler as Function) ||
-		!!hook[EventMap.parse]?.length ||
-		!!hook[EventMap.afterHandle]?.some(isAsyncFunction) ||
-		!!hook[EventMap.beforeHandle]?.some(isAsyncFunction) ||
-		!!hook[EventMap.transform]?.some(isAsyncFunction) ||
-		!!hook[EventMap.mapResponse]?.some(isAsyncFunction) ||
+		!!hook.parse?.length ||
+		!!hook.afterHandle?.some(isAsyncFunction) ||
+		!!hook.beforeHandle?.some(isAsyncFunction) ||
+		!!hook.transform?.some(isAsyncFunction) ||
+		!!hook.mapResponse?.some(isAsyncFunction) ||
 		bodyValiIsAsync ||
 		headersValiIsAsync ||
 		paramsValiIsAsync ||
@@ -208,7 +200,7 @@ export function compileHandler(
 	const hasHeaders =
 		inference.headers ||
 		!!vali.headers ||
-		(inference.body && typeof hook[EventMap.parse] !== 'string')
+		(inference.body && typeof hook.parse !== 'string')
 
 	if (inference.query || vali.query) {
 		code += `c.query=pq(c.request.url,c.qi)\n`
@@ -221,11 +213,11 @@ export function compileHandler(
 			: `c.headers=Object.fromEntries(c.request.headers.headers)\n`
 	}
 
-	if (hook[EventMap.transform]?.length) {
-		link(hook[EventMap.transform], 'tf')
+	if (hook.transform?.length) {
+		link(hook.transform, 'tf')
 
-		for (let i = 0; i < hook[EventMap.transform].length; i++)
-			code += `${isAsyncFunction(hook[EventMap.transform][i]) ? 'await ' : ''}tf[${i}](c)\n`
+		for (let i = 0; i < hook.transform.length; i++)
+			code += `${isAsyncFunction(hook.transform[i]) ? 'await ' : ''}tf[${i}](c)\n`
 	}
 
 	if (vali.headers) {
@@ -257,11 +249,11 @@ export function compileHandler(
 		}
 	}
 
-	if (hook[EventMap.beforeHandle]?.length) {
-		link(hook[EventMap.beforeHandle], 'bf')
+	if (hook.beforeHandle?.length) {
+		link(hook.beforeHandle, 'bf')
 		if (root['~derive']) code += `let dr\n`
 
-		const beforeHandle = hook[EventMap.beforeHandle]
+		const beforeHandle = hook.beforeHandle
 
 		for (let i = 0; i < beforeHandle.length; i++)
 			if (root['~derive']?.has(beforeHandle[i]))

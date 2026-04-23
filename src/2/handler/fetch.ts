@@ -5,8 +5,7 @@ import { defaultAdapter } from '../adapter/constants'
 
 import type { AnyElysia } from '../'
 import type { Context } from '../context'
-import { EventMap } from '../constants'
-import type { CompiledHandler, InternalAppEvent, MaybePromise } from '../types'
+import type { CompiledHandler, AppHook, MaybePromise } from '../types'
 
 export function createBaseContext(app: AnyElysia) {
 	class Decorator {}
@@ -91,7 +90,7 @@ function findRoute(
 }
 
 export function createErrorHandler(
-	onErrors: InternalAppEvent[EventMap['error']] | undefined,
+	onErrors: AppHook['error'] | undefined,
 	mapResponse: (
 		response: unknown,
 		set: Context['set'],
@@ -142,15 +141,15 @@ export function createFetchHandler(
 	const map = app['~map']!
 	const router = app['~router']!
 
-	const onErrors = app['~ext']?.hook?.[EventMap.error]
+	const onErrors = app['~ext']?.hook?.error
 	const hasError = !!onErrors
 	const handleError = createErrorHandler(
 		onErrors,
 		(app['~config']?.adapter ?? defaultAdapter).response.map
 	)
 
-	if (app['~ext']?.hook?.[EventMap.request]) {
-		const onRequests = app['~ext'].hook[EventMap.request]!
+	if (app['~ext']?.hook?.request) {
+		const onRequests = app['~ext'].hook.request!
 		const asyncIndexes = getAsyncIndexes(onRequests)
 
 		if (asyncIndexes)

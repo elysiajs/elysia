@@ -1,6 +1,6 @@
 import type { BunRequest } from 'bun'
 
-import { MethodMapBack, EventMap } from '../../constants'
+import { MethodMapBack } from '../../constants'
 import {
 	createBaseContext,
 	createErrorHandler,
@@ -9,11 +9,7 @@ import {
 
 import type { AnyElysia } from '../..'
 import type { Context } from '../../context'
-import type {
-	CompiledHandler,
-	InternalAppEvent,
-	MaybePromise
-} from '../../types'
+import type { CompiledHandler, MaybePromise } from '../../types'
 import { WebStandardAdapter } from '../web-standard'
 
 export function createBunContext(
@@ -49,8 +45,8 @@ export function createFetchHandler(
 	handler: CompiledHandler,
 	handleError: (context: Context, error: Error) => unknown
 ) {
-	if (app['~ext']?.hook?.[EventMap['request']]) {
-		const onRequests = app['~ext'].hook[EventMap['request']]!
+	if (app['~ext']?.hook?.request) {
+		const onRequests = app['~ext'].hook.request!
 		const asyncIndexes = getAsyncIndexes(onRequests)
 
 		if (asyncIndexes)
@@ -111,7 +107,7 @@ export function createRouteMap(app: AnyElysia) {
 	const routes = Object.create(null)
 
 	const handleError = createErrorHandler(
-		app['~ext']?.hook?.[EventMap['error']],
+		app['~ext']?.hook?.error,
 		WebStandardAdapter.response.map
 	)
 

@@ -2,7 +2,6 @@ import Memoirist from 'memoirist'
 
 import { createFetchHandler } from './handler'
 import { compileHandler } from './compile'
-import { EventMap, MethodMap, MethodMapBack } from './constants'
 
 import type {
 	CompiledHandler,
@@ -10,7 +9,6 @@ import type {
 	ElysiaConfig,
 	EphemeralType,
 	EventScope,
-	InternalAppEvent,
 	InternalRoute,
 	MaybeArray,
 	MaybePromise,
@@ -21,7 +19,7 @@ import type {
 	UnwrapArray,
 	EventFn,
 	InputHook,
-	InternalHook
+	AppHook
 } from './types'
 
 import decodeURIComponent from 'fast-decode-uri-component'
@@ -29,7 +27,8 @@ import decodeURIComponent from 'fast-decode-uri-component'
 import { BunAdapter } from './adapter/bun'
 import { ListenCallback, Serve } from './universal'
 import { isBun } from './universal/utils'
-import { getLoosePath, localHookToInternal } from './utils'
+import { getLoosePath } from './utils'
+import { MethodMap, MethodMapBack } from './constants'
 
 import type { Context } from './context'
 
@@ -82,7 +81,7 @@ export class Elysia<
 		decorator?: Singleton['decorator']
 		store?: Singleton['store']
 		headers?: Record<string, string>
-		hook?: Partial<InternalHook>
+		hook?: Partial<AppHook>
 	}
 
 	#routes?: InternalRoute[]
@@ -113,7 +112,7 @@ export class Elysia<
 	}
 
 	#onBranch(
-		type: keyof InternalAppEvent,
+		type: keyof AppHook,
 		scopeOrFn: { as: EventScope } | EventFn<keyof EventMap>,
 		fn?: EventFn<keyof EventMap>
 	): this {
@@ -122,9 +121,9 @@ export class Elysia<
 			: this.#on(type, scopeOrFn as EventFn<'beforeHandle'>)
 	}
 
-	#on<Event extends keyof InternalAppEvent>(
+	#on<Event extends keyof AppHook>(
 		type: Event,
-		fn: UnwrapArray<InternalAppEvent[Event]>,
+		fn: UnwrapArray<AppHook[Event]>,
 		scope?: EventScope
 	): this {
 		const ext = (this['~ext'] ??= Object.create(null))
@@ -152,7 +151,7 @@ export class Elysia<
 		scopeOrFn: { as: EventScope } | EventFn<'transform'>,
 		fn?: EventFn<'transform'>
 	): this {
-		return this.#onBranch(EventMap.beforeHandle, scopeOrFn, fn)
+		return this.#onBranch('transform', scopeOrFn, fn)
 	}
 
 	onBeforeHandle(fn: EventFn<'beforeHandle'>): this
@@ -163,7 +162,7 @@ export class Elysia<
 		scopeOrFn: { as: EventScope } | EventFn<'beforeHandle'>,
 		fn?: EventFn<'beforeHandle'>
 	): this {
-		return this.#onBranch(EventMap.beforeHandle, scopeOrFn, fn)
+		return this.#onBranch('beforeHandle', scopeOrFn, fn)
 	}
 
 	derive(fn: EventFn<'beforeHandle'>): this
@@ -177,7 +176,7 @@ export class Elysia<
 		this['~derive'] ??= new WeakSet()
 		this['~derive'].add(fn ?? (scopeOrFn as EventFn<'beforeHandle'>))
 
-		return this.#onBranch(EventMap.beforeHandle, scopeOrFn, fn)
+		return this.#onBranch('beforeHandle', scopeOrFn, fn)
 	}
 
 	onAfterHandle(fn: EventFn<'afterHandle'>): this
@@ -188,7 +187,7 @@ export class Elysia<
 		scopeOrFn: { as: EventScope } | EventFn<'afterHandle'>,
 		fn?: EventFn<'afterHandle'>
 	): this {
-		return this.#onBranch(EventMap.afterHandle, scopeOrFn, fn)
+		return this.#onBranch('afterHandle', scopeOrFn, fn)
 	}
 
 	mapResponse(fn: EventFn<'mapResponse'>): this
@@ -199,7 +198,7 @@ export class Elysia<
 		scopeOrFn: { as: EventScope } | EventFn<'mapResponse'>,
 		fn?: EventFn<'mapResponse'>
 	): this {
-		return this.#onBranch(EventMap.mapResponse, scopeOrFn, fn)
+		return this.#onBranch('mapResponse', scopeOrFn, fn)
 	}
 
 	onAfterResponse(fn: EventFn<'afterResponse'>): this
@@ -210,11 +209,11 @@ export class Elysia<
 		scopeOrFn: { as: EventScope } | EventFn<'afterResponse'>,
 		fn?: EventFn<'afterResponse'>
 	): this {
-		return this.#onBranch(EventMap.afterHandle, scopeOrFn, fn)
+		return this.#onBranch('afterHandle', scopeOrFn, fn)
 	}
 
 	onError(fn: EventFn<'error'>): this {
-		return this.#on(EventMap.error, fn)
+		return this.#on('error', fn)
 	}
 
 	#add(
@@ -230,7 +229,7 @@ export class Elysia<
 				method,
 				path,
 				fn,
-				localHookToInternal(hook),
+				hook,
 				this
 			] as any)
 		} else {
@@ -238,7 +237,7 @@ export class Elysia<
 			this['~mapIdx']![path] = Object.create(null)
 			this['~mapIdx']![path]![method] = 0
 			this.#routes = [
-				[method, path, fn, localHookToInternal(hook), this] as any
+				[method, path, fn, hook, this] as any
 			]
 		}
 
@@ -255,11 +254,11 @@ export class Elysia<
 		return this.#add(MethodMap.GET, path, fn, hook)
 	}
 
-	post(path: string, fn: Function, hook?: unknown) {
+	post(path: string, fn: Function, hook?: InputHook) {
 		return this.#add(MethodMap.POST, path, fn, hook)
 	}
 
-	head(path: string, fn: Function, hook?: unknown) {
+	head(path: string, fn: Function, hook?: InputHook) {
 		// @ts-expect-error
 		if (hook?.body) delete hook.body
 

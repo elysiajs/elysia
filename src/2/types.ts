@@ -1,7 +1,7 @@
 import type { Instruction as ExactMirrorInstruction } from 'exact-mirror'
 import type { OpenAPIV3 } from 'openapi-types'
 
-import type { AnyElysia } from '.'
+import type { AnyElysia, AnySchema } from '.'
 import type { ElysiaAdapter } from './adapter'
 import type { Sucrose } from './sucrose'
 import type { Serve } from './universal'
@@ -10,8 +10,7 @@ import { Context, PreContext } from './context'
 import { ElysiaFile } from './universal/file'
 import { TraceEvent, TraceListener } from './trace'
 import { ElysiaCustomStatusResponse } from '../error'
-import { EventMap, HookMap, MethodMap } from './constants'
-import { AnySchema } from '../1'
+import { MethodMap } from './constants'
 
 export interface ElysiaConfig<in out Prefix extends string | undefined> {
 	/**
@@ -295,26 +294,38 @@ export type HTTPMethod =
 
 export type UnwrapArray<T> = T extends (infer U)[] ? U : T
 
-export interface InternalHook {
-	[EventMap.start]: GracefulHandler<any>[]
-	[EventMap.stop]: GracefulHandler<any>[]
-	[EventMap.request]: VoidHandler<any, any>[]
-	[EventMap.parse]: (string | BodyHandler<any, any>)[]
-	[EventMap.transform]: TransformHandler<any, any>[]
-	[EventMap.beforeHandle]: OptionalHandler<any, any>[]
-	[EventMap.afterHandle]: AfterHandler<any, any>[]
-	[EventMap.mapResponse]: MapResponse<any, any>[]
-	[EventMap.afterResponse]: AfterResponseHandler<any, any>[]
-	[EventMap.error]: ErrorHandler<any, any, any>[]
-	[EventMap.trace]: TraceHandler<any, any>[]
-	[HookMap.body]: AnySchema
-	[HookMap.headers]: AnySchema
-	[HookMap.query]: AnySchema
-	[HookMap.params]: AnySchema
-	[HookMap.cookie]: AnySchema
-	[HookMap.response]: AnySchema | Record<number, AnySchema>
-	[HookMap.schema]: RouteSchema
-	[HookMap.type]: ContentType
+type AppEvent =
+	| 'start'
+	| 'stop'
+	| 'request'
+	| 'parse'
+	| 'transform'
+	| 'beforeHandle'
+	| 'afterHandle'
+	| 'mapResponse'
+	| 'afterResponse'
+	| 'error'
+	| 'trace'
+
+export interface AppHook {
+	start: GracefulHandler<any>[]
+	stop: GracefulHandler<any>[]
+	request: VoidHandler<any, any>[]
+	parse: (string | BodyHandler<any, any>)[]
+	transform: TransformHandler<any, any>[]
+	beforeHandle: OptionalHandler<any, any>[]
+	afterHandle: AfterHandler<any, any>[]
+	mapResponse: MapResponse<any, any>[]
+	afterResponse: AfterResponseHandler<any, any>[]
+	error: ErrorHandler<any, any, any>[]
+	trace: TraceHandler<any, any>[]
+	body: AnySchema
+	headers: AnySchema
+	query: AnySchema
+	params: AnySchema
+	cookie: AnySchema
+	response: AnySchema | Record<number, AnySchema>
+	schema: RouteSchema
 }
 
 export interface InputSchema {
@@ -337,23 +348,8 @@ export interface InputHook extends InputSchema {
 	error: ErrorHandler<any, any, any>[]
 }
 
-export interface InternalAppEvent {
-	[EventMap.start]: GracefulHandler<any>[]
-	[EventMap.stop]: GracefulHandler<any>[]
-	[EventMap.request]: VoidHandler<any, any>[]
-	[EventMap.parse]: BodyHandler<any, any>[]
-	[EventMap.transform]: TransformHandler<any, any>[]
-	[EventMap.beforeHandle]: OptionalHandler<any, any>[]
-	[EventMap.afterHandle]: AfterHandler<any, any>[]
-	[EventMap.mapResponse]: MapResponse<any, any>[]
-	[EventMap.afterResponse]: AfterResponseHandler<any, any>[]
-	[EventMap.error]: ErrorHandler<any, any, any>[]
-	[EventMap.trace]: TraceHandler<any, any>[]
-}
-
-export type EventFn<T extends keyof EventMap> = UnwrapArray<
-	InternalAppEvent[EventMap[T]]
->
+// @ts-expect-error it, in fact, can
+export type EventFn<T extends keyof AppEvent> = UnwrapArray<AppHook[T]>
 
 export interface SingletonBase {
 	decorator: Record<string, unknown>
@@ -622,7 +618,7 @@ export type InternalRoute = readonly [
 	method: string | MethodMap[keyof MethodMap],
 	path: string,
 	handler: Handler | Response,
-	hook: InternalHook | undefined,
+	hook: InputHook | undefined,
 	/**
 	 * Instance that this route was registered in
 	 * This is important to get a local hook, other meta
@@ -636,7 +632,7 @@ export interface PublicRoute {
 	method: HTTPMethod
 	path: string
 	handler: Handler
-	hook: AnyLocalHook
-	compile(): ComposedHandler
+	hook: InputHook
+	compile(): CompiledHandler
 	websocket?: AnyWSLocalHook
 }
