@@ -150,7 +150,7 @@ export function createErrorEventHandler(fn: EventFn<'error'>, error: Error) {
 			// @ts-expect-error
 			context.error instanceof
 			// @ts-expect-error
-			(fnOrError as unknown as Error)
+			(error as unknown as Error)
 		)
 			return fn!(context)
 	}

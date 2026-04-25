@@ -216,6 +216,7 @@ export class Elysia<
 
 	onError(fn: EventFn<'error'>): this
 	onError(error: AnyErrorConstructor, fn: EventFn<'error'>): this
+	onError(error: AnyErrorConstructor, fn: unknown): this
 	onError(scope: { as: 'local' }, fn: EventFn<'error'>): this
 	onError(scope: { as: 'global' }, fn: EventFn<'error'>): this
 	onError(scope: { as: 'scoped' }, fn: EventFn<'error'>): this
@@ -225,9 +226,19 @@ export class Elysia<
 		fn: EventFn<'error'>
 	): this
 	onError(
+		scope: { as: 'local' },
+		error: AnyErrorConstructor,
+		fn: unknown
+	): this
+	onError(
 		scope: { as: 'global' },
 		error: AnyErrorConstructor,
 		fn: EventFn<'error'>
+	): this
+	onError(
+		scope: { as: 'global' },
+		error: AnyErrorConstructor,
+		fn: unknown
 	): this
 	onError(
 		scope: { as: 'scoped' },
@@ -235,9 +246,17 @@ export class Elysia<
 		fn: EventFn<'error'>
 	): this
 	onError(
-		scopeOrFnOrError: { as: EventScope } | EventFn<'error'> | AnyErrorConstructor,
-		fnOrError?: AnyErrorConstructor | EventFn<'error'>,
-		fn?: EventFn<'error'>
+		scope: { as: 'scoped' },
+		error: AnyErrorConstructor,
+		fn: unknown
+	): this
+	onError(
+		scopeOrFnOrError:
+			| { as: EventScope }
+			| EventFn<'error'>
+			| AnyErrorConstructor,
+		fnOrError?: AnyErrorConstructor | EventFn<'error'> | unknown,
+		fn?: EventFn<'error'> | unknown
 	): this {
 		switch (arguments.length) {
 			case 1:
@@ -247,31 +266,44 @@ export class Elysia<
 				)
 
 			case 2:
-				// scopeOrFnOrError: { as: EventScope }
-				// fnOrError: EventFn<'error'>
-				if (typeof fnOrError === 'function')
+				if (
+					// @ts-ignore
+					scopeOrFnOrError.prototype instanceof Error
+				) {
+					const run = (
+						typeof fnOrError === 'function'
+							? fnOrError
+							: () => fnOrError
+					) as EventFn<'error'>
+
+					// scopeOrFnOrError: Error
+					// fnOrError: EventFn<'error'>
 					return this.#onBranch(
 						'error',
-						scopeOrFnOrError as { as: EventScope },
-						fnOrError as EventFn<'error'>
+						createErrorEventHandler(
+							run,
+							scopeOrFnOrError as unknown as Error
+						)
 					)
+				}
 
-				// scopeOrFnOrError: Error
-				// fnOrError: EventFn<'error'>
-				return this.#onBranch(
-					'error',
-					createErrorEventHandler(
-						fnOrError as unknown as EventFn<'error'>,
-						scopeOrFnOrError as unknown as Error
-					)
-				)
-
-			case 3:
 				return this.#onBranch(
 					'error',
 					scopeOrFnOrError as { as: EventScope },
-					createErrorEventHandler(fn!, fnOrError as unknown as Error)
+					fnOrError as EventFn<'error'>
 				)
+
+			case 3: {
+				const run = (typeof fn === 'function'
+					? fn
+					: () => fn) as unknown as EventFn<'error'>
+
+				return this.#onBranch(
+					'error',
+					scopeOrFnOrError as { as: EventScope },
+					createErrorEventHandler(run, fnOrError as unknown as Error)
+				)
+			}
 		}
 
 		return this
