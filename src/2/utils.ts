@@ -33,6 +33,8 @@ export const redirect = (
 	status: 301 | 302 | 303 | 307 | 308 = 302
 ) => Response.redirect(url, status)
 
+export type redirect = typeof redirect
+
 export const getLoosePath = (path: string) =>
 	path.charCodeAt(path.length - 1) === 47
 		? path.slice(0, path.length - 1)

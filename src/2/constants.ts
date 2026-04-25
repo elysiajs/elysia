@@ -87,3 +87,6 @@ export const StatusMap = {
 	'Network Authentication Required': 511
 } as const
 export type StatusMap = typeof StatusMap
+
+export const StatusMapBack = mapBack(StatusMap)
+export type StatusMapBack = typeof StatusMapBack

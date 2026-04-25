@@ -2,8 +2,8 @@ import { serializeCookie } from '../cookie'
 import { isNotEmpty } from '../utils'
 import { StatusMap } from '../constants'
 
-import type { Context } from '../context'
 import { isBun, hasHeaderShorthand } from '../universal/utils'
+import type { Context } from '../context'
 import type { MaybePromise } from '../types'
 
 export const handleFile = (

@@ -19,7 +19,8 @@ import type {
 	UnwrapArray,
 	EventFn,
 	InputHook,
-	AppHook
+	AppHook,
+    AppEvent
 } from './types'
 
 import decodeURIComponent from 'fast-decode-uri-component'
@@ -112,9 +113,9 @@ export class Elysia<
 	}
 
 	#onBranch(
-		type: keyof AppHook,
-		scopeOrFn: { as: EventScope } | EventFn<keyof EventMap>,
-		fn?: EventFn<keyof EventMap>
+		type: AppEvent,
+		scopeOrFn: { as: EventScope } | EventFn<AppEvent>,
+		fn?: EventFn<AppEvent>
 	): this {
 		return fn
 			? this.#on(type, fn, (scopeOrFn as { as: EventScope }).as)

@@ -1,48 +1,9 @@
-import { redirect } from '../utils'
-
 import { isAsyncFunction } from '../compile/utils'
 import { defaultAdapter } from '../adapter/constants'
 
 import type { AnyElysia } from '../'
-import type { Context } from '../context'
+import { createContext, type Context } from '../context'
 import type { CompiledHandler, AppHook, MaybePromise } from '../types'
-
-export function createBaseContext(app: AnyElysia) {
-	class Decorator {}
-	Object.assign(Decorator.prototype, {
-		...app['~ext']?.decorator,
-		store: app['~ext']?.store,
-		redirect
-	})
-
-	return Decorator
-}
-
-export function createContext(
-	app: AnyElysia
-): new (request: Request) => Context {
-	const headers = app['~ext']?.headers
-		? Object.assign(
-				Object.create(null),
-				structuredClone(app['~ext'].headers)
-			)
-		: null
-
-	return class Context extends createBaseContext(app) {
-		params?: Record<string, string>
-		headers?: Record<string, string>
-		qi!: number
-		set: { headers: Record<string, string> }
-
-		constructor(public request: Request) {
-			super()
-
-			this.set = {
-				headers: Object.create(headers)
-			}
-		}
-	} as any
-}
 
 export function getAsyncIndexes(onRequests: Function[]) {
 	let asyncIndexes: number[] | undefined

@@ -1,11 +1,8 @@
 import type { BunRequest } from 'bun'
 
 import { MethodMapBack } from '../../constants'
-import {
-	createBaseContext,
-	createErrorHandler,
-	getAsyncIndexes
-} from '../../handler/fetch'
+import { createBaseContext } from '../../context'
+import { createErrorHandler, getAsyncIndexes } from '../../handler/fetch'
 
 import type { AnyElysia } from '../..'
 import type { Context } from '../../context'

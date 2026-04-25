@@ -11,8 +11,8 @@ const app = new Elysia()
 	})
 	.get(
 		'/query',
-		({ hello }) => {
-			return hello.name
+		({ hello, status }) => {
+			return status(404, hello.name)
 		},
 		{
 			query: t.Object({
@@ -25,5 +25,9 @@ const app = new Elysia()
 // console.log(app.handler(0, true).toString())
 
 app.handle('query?name=bb').then((res) =>
-	res.text().then((text) => console.log("A", text))
+	res.text().then((text) => console.log('A', text))
 )
+
+app.handle('query?name=bb')
+	.then((res) => res.status)
+	.then(console.log)

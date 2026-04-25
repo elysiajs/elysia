@@ -294,7 +294,7 @@ export type HTTPMethod =
 
 export type UnwrapArray<T> = T extends (infer U)[] ? U : T
 
-type AppEvent =
+export type AppEvent =
 	| 'start'
 	| 'stop'
 	| 'request'
@@ -348,8 +348,7 @@ export interface InputHook extends InputSchema {
 	error: ErrorHandler<any, any, any>[]
 }
 
-// @ts-expect-error it, in fact, can
-export type EventFn<T extends keyof AppEvent> = UnwrapArray<AppHook[T]>
+export type EventFn<T extends AppEvent> = UnwrapArray<AppHook[T]>
 
 export interface SingletonBase {
 	decorator: Record<string, unknown>
@@ -635,4 +634,230 @@ export interface PublicRoute {
 	hook: InputHook
 	compile(): CompiledHandler
 	websocket?: AnyWSLocalHook
+}
+
+type IsPathParameter<Part extends string> = Part extends `:${infer Parameter}`
+	? Parameter
+	: Part extends `*`
+		? '*'
+		: never
+
+export type GetPathParameter<Path extends string> =
+	Path extends `${infer A}/${infer B}`
+		? IsPathParameter<A> | GetPathParameter<B>
+		: IsPathParameter<Path>
+
+type _ResolvePath<Path extends string> = {
+	[Param in GetPathParameter<Path> as Param extends `${string}?`
+		? never
+		: Param]: string
+} & {
+	[Param in GetPathParameter<Path> as Param extends `${infer OptionalParam}?`
+		? OptionalParam
+		: never]?: string
+}
+
+type PathParameterLike = `${string}/${':' | '*'}${string}`
+
+export type ResolvePath<Path extends string> = Path extends ''
+	? {}
+	: Path extends PathParameterLike
+		? _ResolvePath<Path>
+		: {}
+
+type SetContentType =
+	| 'application/octet-stream'
+	| 'application/vnd.ms-fontobject'
+	| 'application/epub+zip'
+	| 'application/gzip'
+	| 'application/json'
+	| 'application/ld+json'
+	| 'application/ogg'
+	| 'application/pdf'
+	| 'application/rtf'
+	| 'application/wasm'
+	| 'application/xhtml+xml'
+	| 'application/xml'
+	| 'application/zip'
+	| 'text/css'
+	| 'text/csv'
+	| 'text/calendar'
+	| 'text/event-stream'
+	| 'text/html'
+	| 'text/javascript'
+	| 'text/plain'
+	| 'text/xml'
+	| 'image/avif'
+	| 'image/bmp'
+	| 'image/gif'
+	| 'image/x-icon'
+	| 'image/jpeg'
+	| 'image/png'
+	| 'image/svg+xml'
+	| 'image/tiff'
+	| 'image/webp'
+	| 'multipart/mixed'
+	| 'multipart/alternative'
+	| 'multipart/form-data'
+	| 'audio/aac'
+	| 'audio/x-midi'
+	| 'audio/mpeg'
+	| 'audio/ogg'
+	| 'audio/opus'
+	| 'audio/webm'
+	| 'video/x-msvideo'
+	| 'video/quicktime'
+	| 'video/x-ms-wmv'
+	| 'video/x-msvideo'
+	| 'video/x-flv'
+	| 'video/av1'
+	| 'video/mp4'
+	| 'video/mpeg'
+	| 'video/ogg'
+	| 'video/mp2t'
+	| 'video/webm'
+	| 'video/3gpp'
+	| 'video/3gpp2'
+	| 'font/otf'
+	| 'font/ttf'
+	| 'font/woff'
+	| 'font/woff2'
+	| 'model/gltf+json'
+	| 'model/gltf-binary'
+
+export type HTTPHeaders = Record<string, string | number> & {
+	// Authentication
+	'www-authenticate'?: string
+	authorization?: string
+	'proxy-authenticate'?: string
+	'proxy-authorization'?: string
+
+	// Caching
+	age?: string
+	'cache-control'?: string
+	'clear-site-data'?: string
+	expires?: string
+	'no-vary-search'?: string
+	pragma?: string
+
+	// Conditionals
+	'last-modified'?: string
+	etag?: string
+	'if-match'?: string
+	'if-none-match'?: string
+	'if-modified-since'?: string
+	'if-unmodified-since'?: string
+	vary?: string
+
+	// Connection management
+	connection?: string
+	'keep-alive'?: string
+
+	// Content negotiation
+	accept?: string
+	'accept-encoding'?: string
+	'accept-language'?: string
+
+	// Controls
+	expect?: string
+	'max-forwards'?: string
+
+	// Cokies
+	cookie?: string
+	'set-cookie'?: string | string[]
+
+	// CORS
+	'access-control-allow-origin'?: string
+	'access-control-allow-credentials'?: string
+	'access-control-allow-headers'?: string
+	'access-control-allow-methods'?: string
+	'access-control-expose-headers'?: string
+	'access-control-max-age'?: string
+	'access-control-request-headers'?: string
+	'access-control-request-method'?: string
+	origin?: string
+	'timing-allow-origin'?: string
+
+	// Downloads
+	'content-disposition'?: string
+
+	// Message body information
+	'content-length'?: string | number
+	'content-type'?: SetContentType | (string & {})
+	'content-encoding'?: string
+	'content-language'?: string
+	'content-location'?: string
+
+	// Proxies
+	forwarded?: string
+	via?: string
+
+	// Redirects
+	location?: string
+	refresh?: string
+
+	// Request context
+	// from?: string
+	// host?: string
+	// referer?: string
+	// 'user-agent'?: string
+
+	// Response context
+	allow?: string
+	server?: 'Elysia' | (string & {})
+
+	// Range requests
+	'accept-ranges'?: string
+	range?: string
+	'if-range'?: string
+	'content-range'?: string
+
+	// Security
+	'content-security-policy'?: string
+	'content-security-policy-report-only'?: string
+	'cross-origin-embedder-policy'?: string
+	'cross-origin-opener-policy'?: string
+	'cross-origin-resource-policy'?: string
+	'expect-ct'?: string
+	'permission-policy'?: string
+	'strict-transport-security'?: string
+	'upgrade-insecure-requests'?: string
+	'x-content-type-options'?: string
+	'x-frame-options'?: string
+	'x-xss-protection'?: string
+
+	// Server-sent events
+	'last-event-id'?: string
+	'ping-from'?: string
+	'ping-to'?: string
+	'report-to'?: string
+
+	// Transfer coding
+	te?: string
+	trailer?: string
+	'transfer-encoding'?: string
+
+	// Other
+	'alt-svg'?: string
+	'alt-used'?: string
+	date?: string
+	dnt?: string
+	'early-data'?: string
+	'large-allocation'?: string
+	link?: string
+	'retry-after'?: string
+	'service-worker-allowed'?: string
+	'source-map'?: string
+	upgrade?: string
+
+	// Non-standard
+	'x-dns-prefetch-control'?: string
+	'x-forwarded-for'?: string
+	'x-forwarded-host'?: string
+	'x-forwarded-proto'?: string
+	'x-powered-by'?: 'Elysia' | (string & {})
+	'x-request-id'?: string
+	'x-requested-with'?: string
+	'x-robots-tag'?: string
+	'x-ua-compatible'?: string
 }

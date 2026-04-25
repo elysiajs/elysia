@@ -1,29 +1,66 @@
-import type { Server } from './universal/server'
-import type { Cookie, ElysiaCookie } from './cookie'
-import type {
-	StatusMap,
-	InvertedStatusMap,
-	redirect as Redirect
-} from './utils'
+import { ElysiaStatus, status, type SelectiveStatus } from './error'
+import { redirect } from './utils'
 
-import { ElysiaCustomStatusResponse, status, type SelectiveStatus } from './error'
+import type { AnyElysia } from '.'
+import type { Server } from './universal/server'
+import type { StatusMap, StatusMapBack } from './constants'
+import type { Cookie, ElysiaCookie } from './cookie'
+
 import type {
 	RouteSchema,
 	Prettify,
-	ResolvePath,
 	SingletonBase,
+	ResolvePath,
 	HTTPHeaders,
 	InputSchema
 } from './types'
 
-type InvertedStatusMapKey = keyof InvertedStatusMap
+export function createBaseContext(app: AnyElysia) {
+	class Decorator {}
+	Object.assign(Decorator.prototype, {
+		...app['~ext']?.decorator,
+		store: app['~ext']?.store,
+		status,
+		redirect
+	})
+
+	return Decorator
+}
+
+export function createContext(
+	app: AnyElysia
+): new (request: Request) => Context {
+	const headers = app['~ext']?.headers
+		? Object.assign(
+				Object.create(null),
+				structuredClone(app['~ext'].headers)
+			)
+		: null
+
+	return class Context extends createBaseContext(app) {
+		params?: Record<string, string>
+		headers?: Record<string, string>
+		qi!: number
+		set: { headers: Record<string, string> }
+
+		constructor(public request: Request) {
+			super()
+
+			this.set = {
+				headers: Object.create(headers)
+			}
+		}
+	} as any
+}
 
 type CheckExcessProps<T, U> = 0 extends 1 & T
 	? T // T is any
 	: U extends U
 		? Exclude<keyof T, keyof U> extends never
 			? T
-			: { [K in keyof U]: U[K] } & { [K in Exclude<keyof T, keyof U>]: never }
+			: { [K in keyof U]: U[K] } & {
+					[K in Exclude<keyof T, keyof U>]: never
+				}
 		: never
 
 export type ErrorContext<
@@ -58,12 +95,11 @@ export type ErrorContext<
 				}
 
 		server: Server | null
-		redirect: Redirect
+		redirect: redirect
 
 		set: {
 			headers: HTTPHeaders
 			status?: number | keyof StatusMap
-			redirect?: string
 			/**
 			 * ! Internal Property
 			 *
@@ -77,8 +113,8 @@ export type ErrorContext<
 			: <
 					const Code extends
 						| keyof Route['response']
-						| InvertedStatusMap[Extract<
-								InvertedStatusMapKey,
+						| StatusMapBack[Extract<
+								keyof StatusMapBack,
 								keyof Route['response']
 						  >],
 					T extends Code extends keyof Route['response']
@@ -98,7 +134,7 @@ export type ErrorContext<
 									Route['response'][StatusMap[Code]]
 								: never
 					>
-				) => ElysiaCustomStatusResponse<
+				) => ElysiaStatus<
 					// @ts-ignore trust me bro
 					Code,
 					T
@@ -178,7 +214,7 @@ export type Context<
 					>
 
 		server: Server | null
-		redirect: Redirect
+		redirect: redirect
 
 		set: {
 			headers: HTTPHeaders
@@ -228,7 +264,7 @@ export type Context<
 		Omit<Singleton['resolve'], keyof InputSchema>
 >
 
-// Use to mimic request before mapping route
+// Mimic request before mapping route
 export type PreContext<
 	in out Singleton extends SingletonBase = {
 		decorator: {}
@@ -241,7 +277,7 @@ export type PreContext<
 		store: Singleton['store']
 		request: Request
 
-		redirect: Redirect
+		redirect: redirect
 		server: Server | null
 
 		set: {

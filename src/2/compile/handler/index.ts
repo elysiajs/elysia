@@ -191,7 +191,10 @@ export function compileHandler(
 		paramsValiIsAsync ||
 		queryValiIsAsync ||
 		cookieValidIsAsync ||
-		(vali.response && Object.values(vali.response).find((x) => !x?.tb))
+		(vali.response &&
+			Object.values(vali.response).find((x) =>
+				'tb' in x ? (x as TypeBoxValidator).isAsync : true
+			))
 
 	// ,va,rm,rc,re,pa,pf,pj,pt,pu
 	let code = `${isAsync ? 'async ' : ''}function route(c){\n`

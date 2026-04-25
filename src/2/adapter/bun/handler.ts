@@ -14,7 +14,7 @@ import {
 import { ElysiaFile } from '../../universal/file'
 import { isNotEmpty } from '../../utils'
 import { Cookie } from '../../cookie'
-// import { ElysiaCustomStatusResponse } from '../../error'
+import { ElysiaStatus } from '../../error'
 
 import type { Context } from '../../context'
 import type { AnyLocalHook } from '../../types'
@@ -38,7 +38,11 @@ export const mapResponse = (
 				return Response.json(response, set as any)
 
 			case 'ElysiaFile':
-				return handleFile((response as ElysiaFile).value as File, set, request)
+				return handleFile(
+					(response as ElysiaFile).value as File,
+					set,
+					request
+				)
 
 			case 'File':
 				return handleFile(response as File, set, request)
@@ -46,11 +50,11 @@ export const mapResponse = (
 			case 'Blob':
 				return handleFile(response as Blob, set, request)
 
-			case 'ElysiaCustomStatusResponse':
-				set.status = (response as ElysiaCustomStatusResponse<200>).code
+			case 'ElysiaStatus':
+				set.status = (response as ElysiaStatus<200>).code
 
 				return mapResponse(
-					(response as ElysiaCustomStatusResponse<200>).response,
+					(response as ElysiaStatus<200>).response,
 					set,
 					request
 				)
@@ -101,13 +105,11 @@ export const mapResponse = (
 				if (response instanceof Error)
 					return errorToResponse(response as Error, set)
 
-				if (response instanceof ElysiaCustomStatusResponse) {
-					set.status = (
-						response as ElysiaCustomStatusResponse<200>
-					).code
+				if (response instanceof ElysiaStatus) {
+					set.status = (response as ElysiaStatus<200>).code
 
 					return mapResponse(
-						(response as ElysiaCustomStatusResponse<200>).response,
+						(response as ElysiaStatus<200>).response,
 						set,
 						request
 					)
@@ -175,7 +177,11 @@ export const mapEarlyResponse = (
 				return Response.json(response, set as any)
 
 			case 'ElysiaFile':
-				return handleFile((response as ElysiaFile).value as File, set, request)
+				return handleFile(
+					(response as ElysiaFile).value as File,
+					set,
+					request
+				)
 
 			case 'File':
 				return handleFile(response as File, set, request)
@@ -183,11 +189,11 @@ export const mapEarlyResponse = (
 			case 'Blob':
 				return handleFile(response as File | Blob, set, request)
 
-			case 'ElysiaCustomStatusResponse':
-				set.status = (response as ElysiaCustomStatusResponse<200>).code
+			case 'ElysiaStatus':
+				set.status = (response as ElysiaStatus<200>).code
 
 				return mapEarlyResponse(
-					(response as ElysiaCustomStatusResponse<200>).response,
+					(response as ElysiaStatus<200>).response,
 					set,
 					request
 				)
@@ -237,13 +243,11 @@ export const mapEarlyResponse = (
 				if (response instanceof Error)
 					return errorToResponse(response as Error, set)
 
-				if (response instanceof ElysiaCustomStatusResponse) {
-					set.status = (
-						response as ElysiaCustomStatusResponse<200>
-					).code
+				if (response instanceof ElysiaStatus) {
+					set.status = (response as ElysiaStatus<200>).code
 
 					return mapEarlyResponse(
-						(response as ElysiaCustomStatusResponse<200>).response,
+						(response as ElysiaStatus<200>).response,
 						set,
 						request
 					)
@@ -289,7 +293,11 @@ export const mapEarlyResponse = (
 				return Response.json(response, set as any)
 
 			case 'ElysiaFile':
-				return handleFile((response as ElysiaFile).value as File, set, request)
+				return handleFile(
+					(response as ElysiaFile).value as File,
+					set,
+					request
+				)
 
 			case 'File':
 				return handleFile(response as File, set, request)
@@ -297,11 +305,11 @@ export const mapEarlyResponse = (
 			case 'Blob':
 				return handleFile(response as File | Blob, set, request)
 
-			case 'ElysiaCustomStatusResponse':
-				set.status = (response as ElysiaCustomStatusResponse<200>).code
+			case 'ElysiaStatus':
+				set.status = (response as ElysiaStatus<200>).code
 
 				return mapEarlyResponse(
-					(response as ElysiaCustomStatusResponse<200>).response,
+					(response as ElysiaStatus<200>).response,
 					set,
 					request
 				)
@@ -348,13 +356,11 @@ export const mapEarlyResponse = (
 				if (response instanceof Error)
 					return errorToResponse(response as Error, set)
 
-				if (response instanceof ElysiaCustomStatusResponse) {
-					set.status = (
-						response as ElysiaCustomStatusResponse<200>
-					).code
+				if (response instanceof ElysiaStatus) {
+					set.status = (response as ElysiaStatus<200>).code
 
 					return mapEarlyResponse(
-						(response as ElysiaCustomStatusResponse<200>).response,
+						(response as ElysiaStatus<200>).response,
 						set,
 						request
 					)
@@ -405,7 +411,11 @@ export const mapCompactResponse = (
 			return Response.json(response)
 
 		case 'ElysiaFile':
-			return handleFile((response as ElysiaFile).value as File, undefined, request)
+			return handleFile(
+				(response as ElysiaFile).value as File,
+				undefined,
+				request
+			)
 
 		case 'File':
 			return handleFile(response as File, undefined, request)
@@ -413,14 +423,11 @@ export const mapCompactResponse = (
 		case 'Blob':
 			return handleFile(response as File | Blob, undefined, request)
 
-		case 'ElysiaCustomStatusResponse':
-			return mapResponse(
-				(response as ElysiaCustomStatusResponse<200>).response,
-				{
-					status: (response as ElysiaCustomStatusResponse<200>).code,
-					headers: {}
-				}
-			)
+		case 'ElysiaStatus':
+			return mapResponse((response as ElysiaStatus<200>).response, {
+				status: (response as ElysiaStatus<200>).code,
+				headers: {}
+			})
 
 		case undefined:
 			if (!response) return new Response('')
@@ -460,15 +467,11 @@ export const mapCompactResponse = (
 			if (response instanceof Error)
 				return errorToResponse(response as Error)
 
-			if (response instanceof ElysiaCustomStatusResponse)
-				return mapResponse(
-					(response as ElysiaCustomStatusResponse<200>).response,
-					{
-						status: (response as ElysiaCustomStatusResponse<200>)
-							.code,
-						headers: {}
-					}
-				)
+			if (response instanceof ElysiaStatus)
+				return mapResponse((response as ElysiaStatus<200>).response, {
+					status: (response as ElysiaStatus<200>).code,
+					headers: {}
+				})
 
 			if (
 				// @ts-expect-error
