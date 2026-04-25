@@ -1,4 +1,4 @@
-import { Elysia, t } from '../src/2'
+import { Elysia } from '../src/2'
 import { NotFound } from '../src/2/error'
 
 class A extends Error {

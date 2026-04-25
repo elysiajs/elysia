@@ -6,6 +6,7 @@ import { getAsyncIndexes } from './utils'
 import { createContext, type Context } from '../context'
 import type { CompiledHandler, AppHook, MaybePromise } from '../types'
 import { createErrorHandler } from './error'
+import { getLoosePath } from '../utils'
 
 const notFound = new Response('Not Found', { status: 404 })
 
@@ -21,13 +22,16 @@ function findRoute(
 	request: Request,
 	map: NonNullable<AnyElysia['~map']>,
 	router: NonNullable<AnyElysia['~router']>,
-	hasError: boolean
+	hasError: boolean,
+	loosePath: NonNullable<AnyElysia['~loosePath']>
 ): Response {
 	const [path, qi] = getPath(request.url)
 	// @ts-expect-error
 	context.qi = qi
 
-	const handler: CompiledHandler = map[path]?.[request.method]
+	const inner = map[request.method]
+	const handler: CompiledHandler =
+		inner?.[path] ?? inner?.[(loosePath[path] ??= getLoosePath(path))]
 	if (handler) return handler(context) as Response
 
 	const result = router.find(request.method, path)
@@ -47,6 +51,7 @@ export function createFetchHandler(
 	const Context = createContext(app)
 	const map = app['~map']!
 	const router = app['~router']!
+	const loosePath = (app['~loosePath'] ??= Object.create(null))
 
 	const onErrors = app['~ext']?.hook?.error
 	const hasError = !!onErrors
@@ -68,7 +73,14 @@ export function createFetchHandler(
 						if (asyncIndexes?.[i]) await onRequests[i](context)
 						else onRequests[i](context)
 
-					return findRoute(context, request, map, router, hasError)
+					return findRoute(
+						context,
+						request,
+						map,
+						router,
+						hasError,
+						loosePath
+					)
 				} catch (error) {
 					return handleError(context, error as Error) as Response
 				}
@@ -80,7 +92,14 @@ export function createFetchHandler(
 				for (let i = 0; i < onRequests.length; i++)
 					onRequests[i](context)
 
-				return findRoute(context, request, map, router, hasError)
+				return findRoute(
+					context,
+					request,
+					map,
+					router,
+					hasError,
+					loosePath
+				)
 			} catch (error) {
 				return handleError(context, error as Error) as Response
 			}
@@ -100,7 +119,10 @@ export function createFetchHandler(
 		context.qi = qi
 
 		try {
-			const handler: CompiledHandler = map[request.method][path]
+			const inner = map[request.method]
+			const handler: CompiledHandler =
+				inner?.[path] ??
+				inner?.[(loosePath[path] ??= getLoosePath(path))]
 			if (handler) return handler(context) as Response
 		} catch (error) {
 			return handleError(context, error as Error) as Response

@@ -43,9 +43,7 @@ export const redirect = (
 export type redirect = typeof redirect
 
 export const getLoosePath = (path: string) =>
-	path.charCodeAt(path.length - 1) === 47
-		? path.slice(0, path.length - 1)
-		: path + '/'
+	path.charCodeAt(path.length - 1) === 47 ? path.slice(0, -1) : path + '/'
 
 export const constantTimeEqual =
 	typeof crypto?.timingSafeEqual === 'function'

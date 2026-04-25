@@ -95,6 +95,11 @@ export class Elysia<
 	'~mapIdx'?: {
 		[method: string | number]: { [path: string]: number }
 	}
+	'~loosePath': Record<string, string>
+
+	constructor(config?: ElysiaConfig<any>) {
+		this['~config'] = config
+	}
 
 	get routes(): PublicRoute[] {
 		if (!this.#routes) return []
@@ -399,9 +404,6 @@ export class Elysia<
 					? undefined
 					: (compiled) => {
 							this['~map']![method]![path] = compiled
-							if (this['~config']?.strictPath !== true)
-								this['~map']![method][getLoosePath(path)] =
-									compiled
 						}
 			)
 
@@ -426,9 +428,6 @@ export class Elysia<
 
 				this['~map']![method] ??= Object.create(null)
 				this['~map']![method]![path] = handler
-
-				if (this['~config']?.strictPath !== true)
-					this['~map']![method]![getLoosePath(path)] = handler
 			}
 		}
 	}
