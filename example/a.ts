@@ -1,31 +1,21 @@
 import { Elysia, t } from '../src/2'
 
-const app = new Elysia()
-	.onError(({ error, query }) => {
-		console.log(error)
-	})
-	.derive(({ query }) => {
-		return {
-			hello: query
-		}
-	})
-	.get(
-		'/query',
-		({ hello, status }) => {
-			return status(404, hello.name)
-		},
-		{
-			query: t.Object({
-				name: t.String()
-			})
-		}
-	)
-	.listen(3000)
+class A extends Error {
+	status = 500
 
-// console.log(app.handler(0, true).toString())
+	constructor(public message: string) {
+		super(message)
+	}
+}
+
+const app = new Elysia()
+	.onError(A, () => 'Got A')
+	.get('/query', () => {
+		throw new A('Hello')
+	})
 
 app.handle('query?name=bb').then((res) =>
-	res.text().then((text) => console.log('A', text))
+	res.text().then((text) => console.log(text))
 )
 
 app.handle('query?name=bb')

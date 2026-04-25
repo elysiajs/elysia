@@ -1,4 +1,11 @@
-import type { InputSchema, InternalHook, InputHook, MaybeArray } from './types'
+import { Context } from './context'
+import type {
+	InputSchema,
+	InternalHook,
+	InputHook,
+	MaybeArray,
+	EventFn
+} from './types'
 
 export function isEmpty<T extends Object>(obj: T): boolean {
 	for (const _ in obj) return false
@@ -95,72 +102,56 @@ export function mergeHook(
 ): InternalHook {
 	if (!b) return a
 
-	if (!a.body && b.body) a.body= b.body
+	if (!a.body && b.body) a.body = b.body
 
-	if (!a.headers && b.headers)
-		a.headers= b.headers
+	if (!a.headers && b.headers) a.headers = b.headers
 
-	if (!a.params && b.params)
-		a.params= b.params
+	if (!a.params && b.params) a.params = b.params
 
-	if (!a.query && b.query)
-		a.query= b.query
+	if (!a.query && b.query) a.query = b.query
 
-	if (!a.cookie && b.cookie)
-		a.cookie= b.cookie
+	if (!a.cookie && b.cookie) a.cookie = b.cookie
 
 	if (a.response || b.response)
-		a.response= mergeResponse(
-			a.response,
-			b.response
-		)
+		a.response = mergeResponse(a.response, b.response)
 
-	if (a.parse || b.parse)
-		a.parse= mergeArray(a.parse, b.parse)
+	if (a.parse || b.parse) a.parse = mergeArray(a.parse, b.parse)
 
 	if (a.transform || b.transform)
-		a.transform= mergeArray(
-			a.transform,
-			b.transform
-		)
+		a.transform = mergeArray(a.transform, b.transform)
 
 	if (a.beforeHandle || b.beforeHandle)
-		a.beforeHandle= mergeArray(
-			a.beforeHandle,
-			b.beforeHandle
-		)
+		a.beforeHandle = mergeArray(a.beforeHandle, b.beforeHandle)
 
 	if (a.afterHandle || b.afterHandle)
-		a.afterHandle= mergeArray(
-			a.afterHandle,
-			b.afterHandle
-		)
+		a.afterHandle = mergeArray(a.afterHandle, b.afterHandle)
 
 	if (a.mapResponse || b.mapResponse)
-		a.mapResponse= mergeArray(
-			a.mapResponse,
-			b.mapResponse
-		)
+		a.mapResponse = mergeArray(a.mapResponse, b.mapResponse)
 
 	if (a.afterResponse || b.afterResponse)
-		a.afterResponse= mergeArray(
-			a.afterResponse,
-			b.afterResponse
-		)
+		a.afterResponse = mergeArray(a.afterResponse, b.afterResponse)
 
-	if (a.error || b.error)
-		a.error= mergeArray(a.error, b.error)
+	if (a.error || b.error) a.error = mergeArray(a.error, b.error)
 
-	if (a.schema || b.schema)
-		a.schema= mergeArray(
-			a.schema,
-			b.schema
-		) as any
+	if (a.schema || b.schema) a.schema = mergeArray(a.schema, b.schema) as any
 
 	if (b.macro) {
 		if (a.macro) Object.assign(a.macro, b.macro)
-		else a.macro= b.macro
+		else a.macro = b.macro
 	}
 
 	return a
+}
+
+export function createErrorEventHandler(fn: EventFn<'error'>, error: Error) {
+	return (context: Context) => {
+		if (
+			// @ts-expect-error
+			context.error instanceof
+			// @ts-expect-error
+			(fnOrError as unknown as Error)
+		)
+			return fn!(context)
+	}
 }

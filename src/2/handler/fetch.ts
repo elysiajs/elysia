@@ -1,20 +1,11 @@
-import { isAsyncFunction } from '../compile/utils'
 import { defaultAdapter } from '../adapter/constants'
 
 import type { AnyElysia } from '../'
+import { getAsyncIndexes } from './utils'
+
 import { createContext, type Context } from '../context'
 import type { CompiledHandler, AppHook, MaybePromise } from '../types'
-
-export function getAsyncIndexes(onRequests: Function[]) {
-	let asyncIndexes: number[] | undefined
-	for (let i = 0; i < onRequests.length; i++)
-		if (isAsyncFunction(onRequests[i])) {
-			asyncIndexes ??= new Array(onRequests.length)
-			asyncIndexes[i] = i
-		}
-
-	return asyncIndexes
-}
+import { createErrorHandler } from './error'
 
 const notFound = new Response('Not Found', { status: 404 })
 
@@ -48,51 +39,6 @@ function findRoute(
 	if (hasError) throw new Error()
 
 	return notFound.clone() as Response
-}
-
-export function createErrorHandler(
-	onErrors: AppHook['error'] | undefined,
-	mapResponse: (
-		response: unknown,
-		set: Context['set'],
-		...any: unknown[]
-	) => unknown
-) {
-	const defaultError = new Response('Internal Server Error', { status: 500 })
-	if (!onErrors) return () => defaultError.clone()
-
-	const asyncIndexes = getAsyncIndexes(onErrors)
-	if (!asyncIndexes)
-		return (context: Context, error: Error) => {
-			// @ts-expect-error
-			context.error = error
-			// @ts-expect-error
-			context.code = error.code ?? 'UNKNOWN'
-
-			for (let i = 0; i < onErrors.length; i++) {
-				const error = onErrors[i](context)
-				if (error !== undefined) return mapResponse(error, context.set)
-			}
-
-			return defaultError.clone() as Response
-		}
-
-	return async (context: Context, error: Error) => {
-		// @ts-expect-error
-		context.error = error
-		// @ts-expect-error
-		context.code = error.code ?? 'UNKNOWN'
-
-		for (let i = 0; i < onErrors.length; i++) {
-			const error = asyncIndexes?.[i]
-				? await onErrors[i](context)
-				: onErrors[i](context)
-
-			if (error !== undefined) return mapResponse(error, context.set)
-		}
-
-		return defaultError.clone()
-	}
 }
 
 export function createFetchHandler(

@@ -6,7 +6,7 @@ import type { ElysiaAdapter } from './adapter'
 import type { Sucrose } from './sucrose'
 import type { Serve } from './universal'
 import type { CookieOptions } from './cookie'
-import { Context, PreContext } from './context'
+import { Context, ErrorContext, PreContext } from './context'
 import { ElysiaFile } from './universal/file'
 import { TraceEvent, TraceListener } from './trace'
 import { ElysiaCustomStatusResponse } from '../error'
@@ -625,7 +625,42 @@ export type InternalRoute = readonly [
 	instance: AnyElysia
 ]
 
-export type ErrorHandler<A, B, C> = (context: Context) => unknown
+export type ErrorHandler<
+	in out T extends Record<string, Error> = {},
+	in out Route extends RouteSchema = {},
+	in out Singleton extends SingletonBase = {
+		decorator: {}
+		store: {}
+		derive: {}
+		resolve: {}
+	},
+	// ? scoped
+	in out Ephemeral extends EphemeralType = {
+		derive: {}
+		resolve: {}
+		schema: {}
+		standaloneSchema: {}
+		response: {}
+	},
+	// ? local
+	in out Volatile extends EphemeralType = {
+		derive: {}
+		resolve: {}
+		schema: {}
+		standaloneSchema: {}
+		response: {}
+	}
+> = (
+	context: ErrorContext<
+		Route,
+		{
+			store: Singleton['store']
+			decorator: Singleton['decorator']
+			derive: {}
+			resolve: {}
+		}
+	>
+) => unknown
 
 export interface PublicRoute {
 	method: HTTPMethod
@@ -861,3 +896,5 @@ export type HTTPHeaders = Record<string, string | number> & {
 	'x-robots-tag'?: string
 	'x-ua-compatible'?: string
 }
+
+export type AnyErrorConstructor = { prototype: Error }

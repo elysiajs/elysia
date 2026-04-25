@@ -20,7 +20,8 @@ import type {
 	EventFn,
 	InputHook,
 	AppHook,
-    AppEvent
+	AppEvent,
+	AnyErrorConstructor
 } from './types'
 
 import decodeURIComponent from 'fast-decode-uri-component'
@@ -28,7 +29,7 @@ import decodeURIComponent from 'fast-decode-uri-component'
 import { BunAdapter } from './adapter/bun'
 import { ListenCallback, Serve } from './universal'
 import { isBun } from './universal/utils'
-import { getLoosePath } from './utils'
+import { createErrorEventHandler, getLoosePath } from './utils'
 import { MethodMap, MethodMapBack } from './constants'
 
 import type { Context } from './context'
@@ -213,8 +214,67 @@ export class Elysia<
 		return this.#onBranch('afterHandle', scopeOrFn, fn)
 	}
 
-	onError(fn: EventFn<'error'>): this {
-		return this.#on('error', fn)
+	onError(fn: EventFn<'error'>): this
+	onError(error: AnyErrorConstructor, fn: EventFn<'error'>): this
+	onError(scope: { as: 'local' }, fn: EventFn<'error'>): this
+	onError(scope: { as: 'global' }, fn: EventFn<'error'>): this
+	onError(scope: { as: 'scoped' }, fn: EventFn<'error'>): this
+	onError(
+		scope: { as: 'local' },
+		error: AnyErrorConstructor,
+		fn: EventFn<'error'>
+	): this
+	onError(
+		scope: { as: 'global' },
+		error: AnyErrorConstructor,
+		fn: EventFn<'error'>
+	): this
+	onError(
+		scope: { as: 'scoped' },
+		error: AnyErrorConstructor,
+		fn: EventFn<'error'>
+	): this
+	onError(
+		scopeOrFnOrError: { as: EventScope } | EventFn<'error'> | AnyErrorConstructor,
+		fnOrError?: AnyErrorConstructor | EventFn<'error'>,
+		fn?: EventFn<'error'>
+	): this {
+		switch (arguments.length) {
+			case 1:
+				return this.#onBranch(
+					'error',
+					scopeOrFnOrError as EventFn<'error'>
+				)
+
+			case 2:
+				// scopeOrFnOrError: { as: EventScope }
+				// fnOrError: EventFn<'error'>
+				if (typeof fnOrError === 'function')
+					return this.#onBranch(
+						'error',
+						scopeOrFnOrError as { as: EventScope },
+						fnOrError as EventFn<'error'>
+					)
+
+				// scopeOrFnOrError: Error
+				// fnOrError: EventFn<'error'>
+				return this.#onBranch(
+					'error',
+					createErrorEventHandler(
+						fnOrError as unknown as EventFn<'error'>,
+						scopeOrFnOrError as unknown as Error
+					)
+				)
+
+			case 3:
+				return this.#onBranch(
+					'error',
+					scopeOrFnOrError as { as: EventScope },
+					createErrorEventHandler(fn!, fnOrError as unknown as Error)
+				)
+		}
+
+		return this
 	}
 
 	#add(
@@ -226,20 +286,12 @@ export class Elysia<
 		if (this.#routes) {
 			this['~mapIdx']![path] ??= Object.create(null)
 			this['~mapIdx']![path]![method] = this.#routes.length
-			this.#routes.push([
-				method,
-				path,
-				fn,
-				hook,
-				this
-			] as any)
+			this.#routes.push([method, path, fn, hook, this] as any)
 		} else {
 			this['~mapIdx'] = Object.create(null)
 			this['~mapIdx']![path] = Object.create(null)
 			this['~mapIdx']![path]![method] = 0
-			this.#routes = [
-				[method, path, fn, hook, this] as any
-			]
+			this.#routes = [[method, path, fn, hook, this] as any]
 		}
 
 		return this
