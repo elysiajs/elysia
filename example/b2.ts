@@ -23,13 +23,11 @@ function memoryUsage() {
 
 const m1 = memoryUsage()
 const t1 = performance.now()
-const total = 100_000
-const stacks = <any[]>Array(total)
+const total = 1000
 
-for (let i = 0; i < total; i++)
-	stacks[i] = new Elysia()
-		// .get(`/a/${i}`, () => 'ok')
-		// .handler(0, true)
+const app = new Elysia()
+
+for (let i = 0; i < total; i++) app.get(`/${i}`, () => 'ok')
 
 const t2 = performance.now()
 Validator.clear()
@@ -41,6 +39,8 @@ console.log('Elysia 2α full compile x30k')
 console.log('Time:', (t2 - t1).toFixed(2), 'ms')
 console.log('Memory usage:', ((m2 - m1) / 1024 / 1024).toFixed(2), 'MB')
 // console.log('\n\n\n\n\n\n')
+
+app.listen(3000)
 
 // await handler({
 // 	set: {

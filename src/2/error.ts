@@ -27,7 +27,7 @@ export class InternalServerError extends ElysiaError {
 	}
 }
 
-export class NotFoundError extends ElysiaError {
+export class NotFound extends ElysiaError {
 	code = 'NOT_FOUND'
 	status = 404
 

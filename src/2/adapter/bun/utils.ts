@@ -4,10 +4,12 @@ import { MethodMapBack } from '../../constants'
 import { createBaseContext } from '../../context'
 import { getAsyncIndexes, createErrorHandler } from '../../handler'
 
+import { WebStandardAdapter } from '../web-standard'
+import { NotFound } from '../../error'
+
 import type { AnyElysia } from '../..'
 import type { Context } from '../../context'
 import type { CompiledHandler, MaybePromise } from '../../types'
-import { WebStandardAdapter } from '../web-standard'
 
 export function createBunContext(
 	app: AnyElysia
@@ -90,7 +92,7 @@ export function createRouteMap(app: AnyElysia) {
 	const Context = createBunContext(app)
 
 	function fetch(request: Request) {
-		return handleError(new Context(request), new Error()) as Response
+		return handleError(new Context(request), new NotFound()) as Response
 	}
 
 	if (!app['~mapIdx'])
@@ -105,13 +107,14 @@ export function createRouteMap(app: AnyElysia) {
 
 	const handleError = createErrorHandler(
 		app['~ext']?.hook?.error,
-		WebStandardAdapter.response.map
+		WebStandardAdapter.response.map,
+		new Response('Not Found', { status: 404 })
 	)
 
-	for (const path in app['~mapIdx']) {
-		const methods = app['~mapIdx'][path]
+	for (const method in app['~mapIdx']) {
+		const paths = app['~mapIdx'][method]
 
-		for (const method in methods) {
+		for (const path in paths) {
 			routes[path] ??= Object.create(null)
 			routes[path][
 				MethodMapBack[method as unknown as keyof MethodMapBack] ??
@@ -119,7 +122,7 @@ export function createRouteMap(app: AnyElysia) {
 			] = createFetchHandler(
 				app,
 				Context,
-				app.handler(methods[method]),
+				app.handler(paths[path]),
 				handleError
 			)
 		}

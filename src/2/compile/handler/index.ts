@@ -27,7 +27,6 @@ import type { Link } from '../types'
 import type {
 	BodyHandler,
 	ContentType,
-	InternalHook,
 	CompiledHandler,
 	InternalRoute
 } from '../../types'

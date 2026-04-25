@@ -1,4 +1,5 @@
 import { Elysia, t } from '../src/2'
+import { NotFound } from '../src/2/error'
 
 class A extends Error {
 	status = 418
@@ -8,9 +9,15 @@ class A extends Error {
 	}
 }
 
-const app = new Elysia().onError(A, 'Got A').get('/query', () => {
-	throw new A('Hello')
-})
+const app = new Elysia()
+	.onError(A, 'Got A')
+	.onError(NotFound, ({ error, code }) => {
+		return ':('
+	})
+	.get('/query', () => {
+		throw new A('Hello')
+	})
+	.listen(3000)
 
 app.handle('query?name=bb').then((res) =>
 	res.text().then((text) => console.log(text))

@@ -9,9 +9,9 @@ export function createErrorHandler(
 		response: unknown,
 		set: Context['set'],
 		...any: unknown[]
-	) => unknown
+	) => unknown,
+	defaultError = new Response('Internal Server Error', { status: 500 })
 ) {
-	const defaultError = new Response('Internal Server Error', { status: 500 })
 	if (!onErrors) return () => defaultError.clone()
 
 	const asyncIndexes = getAsyncIndexes(onErrors)
@@ -37,7 +37,7 @@ export function createErrorHandler(
 				}
 			}
 
-			return defaultError.clone()
+			return mapResponse(error, context.set)
 		}
 
 	return (context: Context, error: Error) => {
@@ -53,6 +53,6 @@ export function createErrorHandler(
 			if (error !== undefined) return mapResponse(error, context.set)
 		}
 
-		return defaultError.clone() as Response
+		return defaultError.clone()
 	}
 }

@@ -93,7 +93,7 @@ export class Elysia<
 	'~router'?: Memoirist<CompiledHandler>
 	'~map'?: { [method: string]: { [path: string]: CompiledHandler } }
 	'~mapIdx'?: {
-		[path: string]: { [method: string]: number }
+		[method: string | number]: { [path: string]: number }
 	}
 
 	get routes(): PublicRoute[] {
@@ -316,13 +316,13 @@ export class Elysia<
 		hook?: Partial<InputHook>
 	) {
 		if (this.#routes) {
-			this['~mapIdx']![path] ??= Object.create(null)
-			this['~mapIdx']![path]![method] = this.#routes.length
+			this['~mapIdx']![method] ??= Object.create(null)
+			this['~mapIdx']![method]![path] = this.#routes.length
 			this.#routes.push([method, path, fn, hook, this] as any)
 		} else {
 			this['~mapIdx'] = Object.create(null)
-			this['~mapIdx']![path] = Object.create(null)
-			this['~mapIdx']![path]![method] = 0
+			this['~mapIdx']![method] = Object.create(null)
+			this['~mapIdx']![method]![path] = 0
 			this.#routes = [[method, path, fn, hook, this] as any]
 		}
 
@@ -334,8 +334,6 @@ export class Elysia<
 		fn: Function,
 		hook?: Hook
 	) {
-		if (hook?.body) delete hook.body
-
 		return this.#add(MethodMap.GET, path, fn, hook)
 	}
 
@@ -344,32 +342,15 @@ export class Elysia<
 	}
 
 	head(path: string, fn: Function, hook?: InputHook) {
-		// @ts-expect-error
-		if (hook?.body) delete hook.body
-
 		return this.#add(MethodMap.HEAD, path, fn, hook)
 	}
 
-	handler(index: number, immediate = false): CompiledHandler {
+	handler(
+		index: number,
+		immediate?: boolean,
+		then?: (handler: CompiledHandler) => void
+	): CompiledHandler {
 		if (this.#compiled?.[index]) return this.#compiled![index]
-
-		const [_method, path] = this.#routes![index]
-		const method = MethodMapBack[_method as keyof MethodMapBack] ?? _method
-
-		// Monomorphic, dictionary access
-		this['~map'] ??= {
-			GET: Object.create(null),
-			POST: Object.create(null),
-			PUT: Object.create(null),
-			DELETE: Object.create(null),
-			PATCH: Object.create(null),
-			// Cache check, not uncommon
-			HEAD: Object.create(null),
-			// CORS preflight, usuaul
-			OPTIONS: Object.create(null)
-		}
-		// Custom method
-		this['~map']![method] ??= Object.create(null)
 
 		const compiled = (this.#compiled ??= new Array(this.#routes!.length))
 
@@ -377,26 +358,28 @@ export class Elysia<
 			const handler = compileHandler(this.#routes![index], this)
 
 			compiled![index] = handler
-			this['~map']![method]![path] = handler as CompiledHandler
-			if (this['~config']?.strictPath !== true)
-				this['~map']![method][getLoosePath(path)] =
-					handler as CompiledHandler
+			then?.(handler)
 
 			return handler
 		}
 
-		return ((context: Context): MaybePromise<Response> => {
-			if (compiled![index]) return compiled![index](context)
+		return this.#jitHandler(index)
+	}
+
+	#jitHandler(
+		index: number,
+		then?: (compiled: CompiledHandler) => void
+	): CompiledHandler {
+		return (context) => {
+			if (this.#compiled?.[index]) return this.#compiled![index](context)
 
 			const handler = compileHandler(this.#routes![index], this)
-			compiled![index] = handler
-			this['~map']![method]![path] = handler as CompiledHandler
-			if (this['~config']?.strictPath !== true)
-				this['~map']![method]![getLoosePath(path)] =
-					handler as CompiledHandler
+			this.#compiled![index] = handler
+
+			then?.(handler)
 
 			return handler(context)
-		}) as CompiledHandler
+		}
 	}
 
 	#buildRouter() {
@@ -404,13 +387,25 @@ export class Elysia<
 
 		for (let i = 0; i < this.#routes.length; i++) {
 			const route: InternalRoute = this.#routes[i]
-			const handler = this.handler(i)
-
 			const [_method, path] = route
 			const method =
 				MethodMapBack[_method as keyof MethodMapBack] ?? _method
 
-			if (/\:|\*/.test(path)) {
+			const isDynamic = /\:|\*/.test(path)
+			const handler = this.handler(
+				i,
+				undefined,
+				isDynamic
+					? undefined
+					: (compiled) => {
+							this['~map']![method]![path] = compiled
+							if (this['~config']?.strictPath !== true)
+								this['~map']![method][getLoosePath(path)] =
+									compiled
+						}
+			)
+
+			if (isDynamic) {
 				this['~router'] ??= new Memoirist({
 					onParam: decodeURIComponent
 				})
