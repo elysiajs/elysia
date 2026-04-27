@@ -617,12 +617,7 @@ export type InternalRoute = readonly [
 	method: string | MethodMap[keyof MethodMap],
 	path: string,
 	handler: Handler | Response,
-	hook: InputHook | undefined,
-	/**
-	 * Instance that this route was registered in
-	 * This is important to get a local hook, other meta
-	 */
-	instance: AnyElysia
+	hook: InputHook | undefined
 ]
 
 export type ErrorHandler<

@@ -139,7 +139,7 @@ const isAsyncValidator = (vali: Validator | undefined) =>
 	!(vali as TypeBoxValidator)?.tb || (vali as TypeBoxValidator)?.isAsync
 
 export function compileHandler(
-	[, , handler, _hook, instance]: InternalRoute,
+	[, , handler, _hook]: InternalRoute,
 	root: AnyElysia
 ): CompiledHandler {
 	const adapter = root['~config']?.adapter ?? defaultAdapter

@@ -101,15 +101,10 @@ export function mergeHook(
 	if (!b) return a
 
 	if (!a.body && b.body) a.body = b.body
-
 	if (!a.headers && b.headers) a.headers = b.headers
-
 	if (!a.params && b.params) a.params = b.params
-
 	if (!a.query && b.query) a.query = b.query
-
 	if (!a.cookie && b.cookie) a.cookie = b.cookie
-
 	if (a.response || b.response)
 		a.response = mergeResponse(a.response, b.response)
 
@@ -152,4 +147,71 @@ export function createErrorEventHandler(fn: EventFn<'error'>, error: Error) {
 		)
 			return fn!(context)
 	}
+}
+
+const isObject = (item: any): item is Object =>
+	item && typeof item === 'object' && !Array.isArray(item)
+
+export function mergeDeep<
+	A extends Record<string, any>,
+	B extends Record<string, any>
+>(
+	target: A,
+	source: B,
+	options?: {
+		skipKeys?: string[]
+		override?: boolean
+		mergeArray?: boolean
+		seen?: WeakSet<object>
+	}
+): A & B {
+	const skipKeys = options?.skipKeys
+	const override = options?.override ?? true
+	const mergeArray = options?.mergeArray ?? false
+	const seen = options?.seen ?? new WeakSet<object>()
+
+	if (!isObject(target) || !isObject(source)) return target as A & B
+
+	if (seen.has(source)) return target as A & B
+	seen.add(source)
+
+	for (const [key, value] of Object.entries(source)) {
+		if (
+			skipKeys?.includes(key) ||
+			['__proto__', 'constructor', 'prototype'].includes(key)
+		)
+			continue
+
+		if (mergeArray && Array.isArray(value)) {
+			target[key as keyof typeof target] = Array.isArray(
+				(target as any)[key]
+			)
+				? [...(target as any)[key], ...value]
+				: (target[key as keyof typeof target] = value as any)
+
+			continue
+		}
+
+		if (!isObject(value) || !(key in target) || isClass(value)) {
+			if ((override || !(key in target)) && !Object.isFrozen(target))
+				try {
+					target[key as keyof typeof target] = value
+				} catch {}
+
+			continue
+		}
+
+		if (!Object.isFrozen(target[key]))
+			try {
+				target[key as keyof typeof target] = mergeDeep(
+					(target as any)[key] as any,
+					value,
+					{ skipKeys, override, mergeArray, seen }
+				)
+			} catch {}
+	}
+
+	seen.delete(source)
+
+	return target as A & B
 }

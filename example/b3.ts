@@ -25,13 +25,7 @@ const total = 30000
 const stacks = <any[]>Array(total)
 
 for (let i = 0; i < total; i++) {
-	const app = new Elysia().get('/:id/a', () => 'ok', {
-		params: t.Object({
-			id: t.Number({
-				title: i + ''
-			})
-		})
-	})
+	const app = new Elysia().get(`/${i}`, () => 'ok')
 
 	// app.handler(0, true)
 	// app.fetch

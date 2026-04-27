@@ -29,7 +29,12 @@ import decodeURIComponent from 'fast-decode-uri-component'
 import { BunAdapter } from './adapter/bun'
 import { ListenCallback, Serve } from './universal'
 import { isBun } from './universal/utils'
-import { createErrorEventHandler, getLoosePath } from './utils'
+import {
+	createErrorEventHandler,
+	getLoosePath,
+	mergeDeep,
+	mergeHook
+} from './utils'
 import { MethodMap, MethodMapBack } from './constants'
 
 import type { Context } from './context'
@@ -314,21 +319,74 @@ export class Elysia<
 		return this
 	}
 
+	use(app: AnyElysia) {
+		if (!app) return this
+
+		if (Array.isArray(app)) {
+			for (const plugin of app) this.#use(plugin)
+			return this
+		}
+
+		if (typeof app === 'function') {
+			// @ts-expect-error
+			return app(this)
+		}
+
+		return this.#use(app)
+	}
+
+	#use(app: AnyElysia) {
+		if (app.#routes)
+			for (const route of app.#routes)
+				// @ts-expect-error
+				this.#add(route[0], route[1], route[2], route[3])
+
+		if (app['~ext']) {
+			const { decorator, store, headers, hook } = app['~ext']
+			const ext: NonNullable<(typeof this)['~ext']> = (this['~ext'] ??=
+				Object.create(null))
+
+			if (decorator) {
+				if (ext.decorator) mergeDeep(ext.decorator, decorator)
+				else ext.decorator = { ...decorator }
+			}
+
+			if (store) {
+				if (ext.store) mergeDeep(ext.store, store)
+				else ext.store = { ...store }
+			}
+
+			if (headers) {
+				if (ext.headers) Object.assign(ext.headers, headers)
+				else ext.headers = { ...headers }
+			}
+
+			if (hook) {
+				if (ext.hook) mergeHook(ext.hook, hook)
+				else ext.hook = { ...hook }
+			}
+		}
+
+		return this
+	}
+
 	#add(
 		method: string | MethodMap[keyof MethodMap],
 		path: string,
 		fn: Function,
 		hook?: Partial<InputHook>
 	) {
+		const history = hook ? [method, path, fn, hook] : [method, path, fn]
+
 		if (this.#routes) {
 			this['~mapIdx']![method] ??= Object.create(null)
 			this['~mapIdx']![method]![path] = this.#routes.length
-			this.#routes.push([method, path, fn, hook, this] as any)
+			this.#routes.push(history as any)
 		} else {
 			this['~mapIdx'] = Object.create(null)
 			this['~mapIdx']![method] = Object.create(null)
 			this['~mapIdx']![method]![path] = 0
-			this.#routes = [[method, path, fn, hook, this] as any]
+			this.#routes = [history as any]
 		}
 
 		return this
