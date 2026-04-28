@@ -132,6 +132,7 @@ export function coerce(
 		for (const key of ['anyOf', 'oneOf', 'allOf'] as const) {
 			const arr = node[key]
 			if (!Array.isArray(arr)) continue
+
 			let newArr: BaseSchema[] | undefined
 			for (let i = 0, len = arr.length; i < len; i++) {
 				const item = arr[i]!
@@ -142,6 +143,7 @@ export function coerce(
 					newArr[i] = r
 				}
 			}
+
 			if (newArr) {
 				out = copyNode(node)
 				out[key] = newArr
@@ -188,6 +190,7 @@ export function coerce(
 			let newProps: Record<string, BaseSchema> | undefined
 			const props = node.properties
 			const childIsRootProp = options?.rootPropertiesOnly && isRoot
+
 			for (const k in props) {
 				const v = props[k]!
 				const r = walk(v, false, childIsRootProp)
@@ -215,6 +218,7 @@ export function coerce(
 		if (node.patternProperties) {
 			let newPP: Record<string, BaseSchema> | undefined
 			const patternProps = node.patternProperties
+
 			for (const k in patternProps) {
 				const v = patternProps[k]!
 				const r = walk(v, false)
@@ -247,18 +251,16 @@ export function coerce(
 		return out
 	}
 
-	const q = walk(schema as BaseSchema, true)
+	return walk(schema as BaseSchema, true)
 
-	transformMap.clear()
-	// @ts-expect-error
-	transformMap = undefined
-	rootOption = undefined
-	// @ts-expect-error
-	seen = undefined
-	// @ts-expect-error
-	stopped = undefined
-
-	return q
+	// transformMap.clear()
+	// // @ts-expect-error
+	// transformMap = undefined
+	// rootOption = undefined
+	// // @ts-expect-error
+	// seen = undefined
+	// // @ts-expect-error
+	// stopped = undefined
 }
 
 type CoerceParameters = Parameters<typeof coerce>
@@ -271,8 +273,8 @@ export const coerceRoot = () =>
 	(_coerceRoot ??= [
 		[
 			[
-				['Number', (x) => t.Numeric(x)],
-				['Boolean', (x) => t.BooleanString(x)]
+				['Number', t.Numeric],
+				['Boolean', t.BooleanString]
 			],
 			{
 				rootPropertiesOnly: true
@@ -280,20 +282,18 @@ export const coerceRoot = () =>
 		]
 	])
 
+const toObjectString = (x: TProperties) =>
+	t.ObjectString((x.properties as TProperties) ?? {}, x)
+const toArrayString = (x: TProperties) =>
+	t.ArrayString((x.items as TProperties) ?? t.Any(), x)
+
 let _coerceQuery: CoerceOption[]
 export const coerceQuery = () =>
 	(_coerceQuery ??= [
 		[
 			[
-				[
-					'Object',
-					(x) =>
-						t.ObjectString((x.properties as TProperties) ?? {}, x)
-				],
-				[
-					'Array',
-					(x) => t.ArrayString((x.items as TProperties) ?? t.Any(), x)
-				]
+				['Object', toObjectString],
+				['Array', toArrayString]
 			],
 			{
 				root: false
@@ -305,24 +305,13 @@ let _coerceFormData: CoerceOption[]
 export const coerceFormData = () =>
 	(_coerceFormData ??= [
 		[
-			[
-				[
-					'Object',
-					(x) =>
-						t.ObjectString((x.properties as TProperties) ?? {}, x)
-				]
-			],
+			[['Object', toObjectString]],
 			{
 				rootPropertiesOnly: true
 			}
 		],
 		[
-			[
-				[
-					'Array',
-					(x) => t.ArrayString((x.items as TProperties) ?? t.Any(), x)
-				]
-			],
+			[['Array', toArrayString]],
 			{
 				root: false,
 				onlyFirst: 'array'
@@ -336,15 +325,8 @@ export const coerceStringToStructure = () =>
 	(_coerceStringToStructure ??= [
 		[
 			[
-				[
-					'Object',
-					(x) =>
-						t.ObjectString((x.properties as TProperties) ?? {}, x)
-				],
-				[
-					'Array',
-					(x) => t.ArrayString((x.items as TProperties) ?? t.Any(), x)
-				]
+				['Object', toObjectString],
+				['Array', toArrayString]
 			],
 			{
 				rootPropertiesOnly: true

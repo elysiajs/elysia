@@ -1,11 +1,6 @@
 import { createAdapter } from '..'
 import { WebStandardAdapter } from '../web-standard'
-import {
-	mapCompactResponse,
-	mapEarlyResponse,
-	mapResponse,
-	mapStaticHandler
-} from './handler'
+import { mapStaticHandler } from './handler'
 
 import { clearSucroseCache } from '../../sucrose'
 import { Validator } from '../../schema/validator'
@@ -18,9 +13,7 @@ export const BunAdapter = createAdapter({
 	name: 'bun',
 	runtime: 'bun',
 	response: {
-		map: mapResponse,
-		compact: mapCompactResponse,
-		early: mapEarlyResponse,
+		...WebStandardAdapter.response,
 		static: mapStaticHandler
 	},
 	listen(app, options, callback) {

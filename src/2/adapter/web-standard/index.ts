@@ -1,8 +1,7 @@
 import {
 	mapCompactResponse,
 	mapEarlyResponse,
-	mapResponse,
-	mapStaticHandler
+	mapResponse
 } from './handler'
 import { formDataToObject } from './utils'
 
@@ -31,7 +30,6 @@ export const WebStandardAdapter = createAdapter({
 	response: {
 		map: mapResponse,
 		early: mapEarlyResponse,
-		compact: mapCompactResponse,
-		static: mapStaticHandler
+		compact: mapCompactResponse
 	}
 })

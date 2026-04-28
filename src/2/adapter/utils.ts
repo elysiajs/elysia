@@ -6,11 +6,13 @@ import { isBun, hasHeaderShorthand } from '../universal/utils'
 import type { Context } from '../context'
 import type { MaybePromise } from '../types'
 
-export const handleFile = (
+const setCookie = 'set-cookie' as const
+
+export function handleFile(
 	response: File | Blob,
 	set?: Context['set'],
 	request?: Request
-): Response => {
+): Response {
 	if (!isBun && response instanceof Promise)
 		return response.then((res) => handleFile(res, set, request)) as any
 
@@ -128,7 +130,7 @@ export const handleFile = (
 	})
 }
 
-export const parseSetCookies = (headers: Headers, setCookie: string[]) => {
+export function parseSetCookies(headers: Headers, setCookie: string[]) {
 	if (!headers) return headers
 
 	headers.delete('set-cookie')
@@ -147,10 +149,7 @@ export const parseSetCookies = (headers: Headers, setCookie: string[]) => {
 	return headers
 }
 
-export const responseToSetHeaders = (
-	response: Response,
-	set?: Context['set']
-) => {
+export function responseToSetHeaders(response: Response, set?: Context['set']) {
 	if (set?.headers) {
 		if (response) {
 			if (hasHeaderShorthand)
@@ -288,13 +287,12 @@ export const createStreamHandler =
 				? 'application/json'
 				: 'text/plain'
 
-		if (set?.headers) {
-			if (!set.headers['transfer-encoding'])
-				set.headers['transfer-encoding'] = 'chunked'
-			if (!set.headers['content-type'])
-				set.headers['content-type'] = contentType
-			if (!set.headers['cache-control'])
-				set.headers['cache-control'] = 'no-cache'
+		const headers = set?.headers
+		if (headers) {
+			if (!headers['transfer-encoding'])
+				headers['transfer-encoding'] = 'chunked'
+			if (!headers['content-type']) headers['content-type'] = contentType
+			if (!headers['cache-control']) headers['cache-control'] = 'no-cache'
 		} else
 			set = {
 				status: 200,
@@ -434,20 +432,20 @@ export async function* streamResponse(response: Response) {
 	}
 }
 
-export const handleSet = (set: Context['set']) => {
+export function handleSet(set: Context['set']) {
 	if (typeof set.status === 'string')
 		set.status = StatusMap[set.status as keyof typeof StatusMap]
 
 	if (set.cookie && isNotEmpty(set.cookie)) {
 		const cookie = serializeCookie(set.cookie)
 
-		if (cookie) set.headers['set-cookie'] = cookie
+		if (cookie) set.headers[setCookie] = cookie
 	}
 
-	if (set.headers['set-cookie'] && Array.isArray(set.headers['set-cookie'])) {
+	if (set.headers[setCookie] && Array.isArray(set.headers[setCookie])) {
 		set.headers = parseSetCookies(
 			new Headers(set.headers as any) as Headers,
-			set.headers['set-cookie']
+			set.headers[setCookie]
 		) as any
 	}
 }
@@ -466,18 +464,17 @@ export function mergeHeaders(
 	// Merge headers: Response headers take precedence, set.headers fill in non-conflicting ones
 	if (setHeaders instanceof Headers)
 		for (const key of setHeaders.keys()) {
-			if (key === 'set-cookie') {
-				if (headers.has('set-cookie')) continue
+			if (key === setCookie) {
+				if (headers.has(setCookie)) continue
 
 				for (const cookie of setHeaders.getSetCookie())
-					headers.append('set-cookie', cookie)
+					headers.append(setCookie, cookie)
 			} else if (!responseHeaders.has(key))
 				headers.set(key, setHeaders?.get(key) ?? '')
 		}
 	else
 		for (const key in setHeaders)
-			if (key === 'set-cookie')
-				headers.append(key, setHeaders[key] as any)
+			if (key === setCookie) headers.append(key, setHeaders[key] as any)
 			else if (!responseHeaders.has(key))
 				headers.set(key, setHeaders[key] as any)
 
@@ -499,11 +496,19 @@ export function mergeStatus(
 export const createResponseHandler = (handler: CreateHandlerParameter) => {
 	const handleStream = createStreamHandler(handler)
 
-	return (response: Response, set: Context['set'], request?: Request) => {
-		const newResponse = new Response(response.body, {
-			headers: mergeHeaders(response.headers, set.headers),
-			status: mergeStatus(response.status, set.status) as any
-		})
+	return (response: Response, set?: Context['set'], request?: Request) => {
+		const newResponse = new Response(
+			response.body,
+			set
+				? {
+						headers: mergeHeaders(response.headers, set.headers),
+						status: mergeStatus(response.status, set.status) as any
+					}
+				: {
+						headers: response.headers,
+						status: response.status
+					}
+		)
 
 		if (
 			!(newResponse as Response).headers.has('content-length') &&
