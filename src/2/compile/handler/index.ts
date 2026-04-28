@@ -148,7 +148,11 @@ export function compileHandler(
 	let params = new Set<unknown>()
 	let alias = ''
 
-	let hook = mergeHook(Object.assign({}, _hook), root['~ext']?.hook)
+	let hook = root['~ext']?.hook
+		? mergeHook(Object.assign({}, _hook), root['~ext']?.hook)
+		: _hook
+
+	root['~applyMacro'](hook)
 
 	let hookNotLinked = true
 	function link(v: unknown, key: string) {

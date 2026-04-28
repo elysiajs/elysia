@@ -11,6 +11,7 @@ import { ElysiaFile } from './universal/file'
 import { TraceEvent, TraceListener } from './trace'
 import { ElysiaCustomStatusResponse } from '../error'
 import { MethodMap } from './constants'
+import { ElysiaError } from './error'
 
 export interface ElysiaConfig<in out Prefix extends string | undefined> {
 	/**
@@ -583,6 +584,15 @@ export type GracefulHandler<in Instance extends AnyElysia> = (
 	data: Instance
 ) => any
 
+export type ResolveHandler<
+	in out Route extends RouteSchema,
+	in out Singleton extends SingletonBase,
+	Derivative extends Record<string, unknown> | ElysiaError | void =
+		| Record<string, unknown>
+		| ElysiaError
+		| void
+> = (context: Context<Route, Singleton>) => MaybePromise<Derivative>
+
 export type TraceHandler<
 	in out Route extends RouteSchema = {},
 	in out Singleton extends SingletonBase = {
@@ -664,6 +674,57 @@ export interface PublicRoute {
 	hook: InputHook
 	compile(): CompiledHandler
 	websocket?: AnyWSLocalHook
+}
+
+export type MaybeValueOrVoidFunction<T> = T | ((...a: any) => void | T)
+
+export interface MacroProperty<
+	in out Macro extends BaseMacro = {},
+	in out TypedRoute extends RouteSchema = {},
+	in out Singleton extends SingletonBase = {
+		decorator: {}
+		store: {}
+		derive: {}
+		resolve: {}
+	},
+	in out Errors extends Record<string, Error> = {}
+> {
+	/**
+	 * Deduplication similar to Elysia.constructor.seed
+	 */
+	seed?: unknown
+	parse?: MaybeArray<BodyHandler<TypedRoute, Singleton>>
+	transform?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
+	beforeHandle?: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
+	afterHandle?: MaybeArray<AfterHandler<TypedRoute, Singleton>>
+	error?: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
+	mapResponse?: MaybeArray<MapResponse<TypedRoute, Singleton>>
+	afterResponse?: MaybeArray<AfterResponseHandler<TypedRoute, Singleton>>
+	resolve?: MaybeArray<ResolveHandler<TypedRoute, Singleton>>
+	detail?: DocumentDecoration
+	/**
+	 * Introspect hook option for documentation generation or analysis
+	 *
+	 * @param option
+	 */
+	introspect?(option: Prettify<Macro>): unknown
+}
+
+export interface Macro<
+	in out Macro extends BaseMacro = {},
+	in out Input extends BaseMacro = {},
+	in out TypedRoute extends RouteSchema = {},
+	in out Singleton extends SingletonBase = {
+		decorator: {}
+		store: {}
+		derive: {}
+		resolve: {}
+	},
+	in out Errors extends Record<string, Error> = {}
+> {
+	[K: keyof any]: MaybeValueOrVoidFunction<
+		Input & MacroProperty<Macro, TypedRoute, Singleton, Errors>
+	>
 }
 
 type IsPathParameter<Part extends string> = Part extends `:${infer Parameter}`

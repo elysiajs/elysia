@@ -21,7 +21,8 @@ import type {
 	InputHook,
 	AppHook,
 	AppEvent,
-	AnyErrorConstructor
+	AnyErrorConstructor,
+	Macro
 } from './types'
 
 import decodeURIComponent from 'fast-decode-uri-component'
@@ -30,6 +31,7 @@ import { BunAdapter } from './adapter/bun'
 import { ListenCallback, Serve } from './universal'
 import { isBun } from './universal/utils'
 import {
+	checksum,
 	createErrorEventHandler,
 	getLoosePath,
 	mergeDeep,
@@ -89,6 +91,7 @@ export class Elysia<
 		store?: Singleton['store']
 		headers?: Record<string, string>
 		hook?: Partial<AppHook>
+		macro?: Macro
 	}
 
 	#routes?: InternalRoute[]
@@ -317,6 +320,102 @@ export class Elysia<
 		}
 
 		return this
+	}
+
+	macro(macroOrName: string | Macro, macro?: Macro) {
+		if (typeof macroOrName === 'string' && !macro)
+			throw new Error('Macro function is required')
+
+		const ext = (this['~ext'] ??= Object.create(null))
+		const m = (ext.macro ??= Object.create(null))
+
+		if (typeof macroOrName === 'string') m[macroOrName] = macro!
+		else Object.assign(m, macroOrName)
+
+		return this as any
+	}
+
+	'~applyMacro'(
+		input: InputHook & Macro,
+		toApply: InputHook & Macro = input,
+		iteration = 0,
+		applied?: { [key: number]: true }
+	): void {
+		if (iteration >= 16) return
+		const macro = this['~ext']?.macro
+
+		if (!macro) return
+
+		for (let [key, value] of Object.entries(toApply)) {
+			if (key in macro === false) continue
+
+			const macroHook =
+				typeof macro[key] === 'function'
+					? macro[key](value)
+					: macro[key]
+
+			if (
+				!macroHook ||
+				(typeof macro[key] === 'object' && value === false)
+			)
+				return
+
+			const seed = checksum(key + JSON.stringify(macroHook.seed ?? value))
+			if (applied && seed in applied) continue
+
+			applied ??= Object.create(null)
+			applied![seed] = true
+
+			for (let [k, v] of Object.entries(macroHook)) {
+				if (k === 'seed') continue
+
+				// if (k in emptySchema) {
+				// 	insertStandaloneValidator(
+				// 		input,
+				// 		k as keyof RouteSchema,
+				// 		value
+				// 	)
+				// 	delete input[key]
+				// 	continue
+				// }
+
+				// if (k === 'introspect') {
+				// 	value?.(input)
+
+				// 	delete input[key]
+				// 	continue
+				// }
+
+				if (k === 'detail') {
+					if (!input.detail) input.detail = {}
+					input.detail = mergeDeep(input.detail, v, {
+						mergeArray: true
+					})
+
+					delete input[key]
+					continue
+				}
+
+				if (k in macro) {
+					this['~applyMacro'](
+						input,
+						{ [k]: v },
+						{ applied, iteration: iteration + 1 }
+					)
+
+					delete input[key]
+					continue
+				}
+
+
+				if(input[k]) {
+					if (Array.isArray(input[k])) (input[k] as any[]).push(v)
+					else input[k] = [input[k], v]
+				} else input[k] = v
+
+				delete input[key]
+			}
+		}
 	}
 
 	use(app: AnyElysia) {

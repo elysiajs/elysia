@@ -29,9 +29,9 @@ function findRoute(
 	// @ts-expect-error
 	context.qi = qi
 
-	const inner = map[request.method]
+	const paths = map[request.method]
 	const handler: CompiledHandler =
-		inner?.[path] ?? inner?.[(loosePath[path] ??= getLoosePath(path))]
+		paths?.[path] ?? paths?.[(loosePath[path] ??= getLoosePath(path))]
 	if (handler) return handler(context) as Response
 
 	const result = router.find(request.method, path)

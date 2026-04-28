@@ -1,16 +1,30 @@
 import { Elysia } from '../src/2'
 import { NotFound } from '../src/2/error'
 
-const plugin = new Elysia().get('/k', () => 'ok')
-
 const app = new Elysia()
-	.use(plugin)
-	.get('/query', ({ query }) => query)
-	.listen(3000)
+	.macro({
+		a: {
+			beforeHandle() {
+				console.log('object macro')
+			}
+		},
+		b: () => ({
+			beforeHandle() {
+				console.log('function macro')
+			}
+		})
+	})
+	.get('/', () => 'ok', {
+		beforeHandle() {
+			console.log('Inline')
+		},
+		a: true,
+		b: true
+	})
 
-// app.handle('query?name=bb').then((res) =>
-// 	res.text().then((text) => console.log(text))
-// )
+app.handle('/').then((res) =>
+	res.text().then((text) => console.log(text))
+)
 
 // app.handle('query?name=bb')
 // 	.then((res) => res.status)
