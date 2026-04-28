@@ -322,7 +322,7 @@ export class Elysia<
 		return this
 	}
 
-	guard(hook: Partial<InputHook>) {
+	guard(hook: Partial<InputHook & Macro>) {
 		this['~ext'] ??= Object.create(null)
 
 		if (this['~ext']?.hook)
@@ -335,7 +335,7 @@ export class Elysia<
 		return this
 	}
 
-	macro(macroOrName: string | Macro, macro?: Macro) {
+	macro(macroOrName: string | Macro, macro?: Macro): this {
 		if (typeof macroOrName === 'string' && !macro)
 			throw new Error('Macro function is required')
 

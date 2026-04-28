@@ -340,13 +340,13 @@ export interface InputSchema {
 
 export interface InputHook extends InputSchema {
 	type: ContentType
-	parse: BodyHandler<any, any>[]
-	transform: TransformHandler<any, any>[]
-	beforeHandle: OptionalHandler<any, any>[]
-	afterHandle: AfterHandler<any, any>[]
-	mapResponse: MapResponse<any, any>[]
-	afterResponse: AfterResponseHandler<any, any>[]
-	error: ErrorHandler<any, any, any>[]
+	parse: MaybeArray<BodyHandler<any, any>>
+	transform: MaybeArray<TransformHandler<any, any>>
+	beforeHandle: MaybeArray<OptionalHandler<any, any>>
+	afterHandle: MaybeArray<AfterHandler<any, any>>
+	mapResponse: MaybeArray<MapResponse<any, any>>
+	afterResponse: MaybeArray<AfterResponseHandler<any, any>>
+	error: MaybeArray<ErrorHandler<any, any, any>>
 }
 
 export type EventFn<T extends AppEvent> = UnwrapArray<AppHook[T]>

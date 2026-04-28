@@ -73,7 +73,7 @@ function builtinParser(
 
 function parse(
 	adapter: ElysiaAdapter['parse'],
-	parsers: ContentType | (ContentType | BodyHandler)[],
+	parsers: ContentType | (ContentType | BodyHandler)[] | undefined,
 	bodyVali: Validator | undefined,
 	hasHeaders: boolean,
 	link: Link
@@ -139,33 +139,41 @@ function parse(
 const isAsyncValidator = (vali: Validator | undefined) =>
 	!(vali as TypeBoxValidator)?.tb || (vali as TypeBoxValidator)?.isAsync
 
+function applyHook(
+	localHook: InputHook | undefined,
+	appHook: InputHook | undefined,
+	app: AnyElysia
+): InputHook | undefined {
+	if (!localHook && !appHook) return undefined
+
+	if (appHook) {
+		appHook = Object.assign(Object.create(null), appHook)
+		app['~applyMacro'](appHook as any)
+	}
+
+	const rootHook = app['~ext']?.hook
+	if (rootHook) {
+		localHook = mergeHook(
+			Object.assign(Object.create(null), localHook),
+			rootHook
+		)
+		app['~applyMacro'](localHook as any)
+	}
+
+	return appHook ? mergeHook(appHook, localHook) : localHook
+}
+
 export function compileHandler(
-	[, , handler, _hook, _appHook]: InternalRoute,
+	[, , handler, localHook, appHook]: InternalRoute,
 	root: AnyElysia
 ): CompiledHandler {
 	const adapter = root['~config']?.adapter ?? defaultAdapter
-	const inference = sucrose(handler as any, _hook as Sucrose.LifeCycle)
+
+	let hook = applyHook(localHook, appHook, root)
+	let inference = sucrose(handler as any, hook as Sucrose.LifeCycle)
 
 	let params = new Set<unknown>()
 	let alias = ''
-
-	const appHook = _appHook
-		? Object.assign(Object.create(null), _appHook)
-		: undefined
-	if (appHook) root['~applyMacro'](appHook as any)
-
-	let hook = root['~ext']?.hook
-		? mergeHook(
-				Object.assign(Object.create(null), _hook),
-				root['~ext']?.hook
-			)
-		: _hook
-
-	if (hook) root['~applyMacro'](hook)
-	if (appHook) {
-		mergeHook(appHook, hook)
-		hook = appHook
-	}
 
 	let hookNotLinked = true
 	function link(v: unknown, key: string) {
@@ -197,11 +205,11 @@ export function compileHandler(
 	const isAsync =
 		hasBody ||
 		isAsyncFunction(handler as Function) ||
-		!!hook.parse?.length ||
-		!!hook.afterHandle?.some(isAsyncFunction) ||
-		!!hook.beforeHandle?.some(isAsyncFunction) ||
-		!!hook.transform?.some(isAsyncFunction) ||
-		!!hook.mapResponse?.some(isAsyncFunction) ||
+		!!hook?.parse?.length ||
+		!!hook?.afterHandle?.some(isAsyncFunction) ||
+		!!hook?.beforeHandle?.some(isAsyncFunction) ||
+		!!hook?.transform?.some(isAsyncFunction) ||
+		!!hook?.mapResponse?.some(isAsyncFunction) ||
 		bodyValiIsAsync ||
 		headersValiIsAsync ||
 		paramsValiIsAsync ||
@@ -219,7 +227,7 @@ export function compileHandler(
 	const hasHeaders =
 		inference.headers ||
 		!!vali.headers ||
-		(inference.body && typeof hook.parse !== 'string')
+		(inference.body && typeof hook?.parse !== 'string')
 
 	if (inference.query || vali.query) {
 		code += `c.query=pq(c.request.url,c.qi)\n`
@@ -232,7 +240,7 @@ export function compileHandler(
 			: `c.headers=Object.fromEntries(c.request.headers.headers)\n`
 	}
 
-	if (hook.transform?.length) {
+	if (hook?.transform?.length) {
 		link(hook.transform, 'tf')
 
 		for (let i = 0; i < hook.transform.length; i++)
@@ -260,7 +268,7 @@ export function compileHandler(
 	}
 
 	if (hasBody) {
-		code += parse(adapter.parse, hook.parse, vali.body, hasHeaders, link)
+		code += parse(adapter.parse, hook?.parse, vali.body, hasHeaders, link)
 
 		if (vali.body) {
 			link(vali, 'va')
@@ -268,7 +276,7 @@ export function compileHandler(
 		}
 	}
 
-	if (hook.beforeHandle?.length) {
+	if (hook?.beforeHandle?.length) {
 		link(hook.beforeHandle, 'bf')
 		if (root['~derive']) code += `let dr\n`
 
@@ -319,6 +327,8 @@ export function compileHandler(
 	code = undefined
 	// @ts-ignore
 	link = undefined
+	// @ts-ignore
+	inference = undefined
 
 	return fn
 }

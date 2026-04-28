@@ -1,11 +1,10 @@
 import { Elysia } from '../src/2'
-import { NotFound } from '../src/2/error'
 
 const app = new Elysia()
 	.macro({
 		a: {
-			beforeHandle() {
-				console.log('object macro')
+			beforeHandle({ query }) {
+				console.log({ query })
 			}
 		},
 		b: () => ({
@@ -24,7 +23,9 @@ const app = new Elysia()
 		b: true
 	})
 
-app.handle('/').then((res) => res.text().then((text) => console.log(text)))
+app.handle('/?name=a').then((res) =>
+	res.text().then((text) => console.log(text))
+)
 
 // app.handle('query?name=bb')
 // 	.then((res) => res.status)
