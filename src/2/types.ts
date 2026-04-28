@@ -627,7 +627,8 @@ export type InternalRoute = readonly [
 	method: string | MethodMap[keyof MethodMap],
 	path: string,
 	handler: Handler | Response,
-	hook: InputHook | undefined
+	hook: InputHook | undefined,
+	appHook: InputHook | undefined
 ]
 
 export type ErrorHandler<

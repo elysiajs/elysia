@@ -115,13 +115,13 @@ export class Elysia<
 		this.#compiled ??= Array(this.#routes.length)
 
 		return this.#routes.map(
-			([method, path, handler, hook]) =>
+			([method, path, handler, hook, appHook]) =>
 				({
 					method:
 						MethodMapBack[method as keyof MethodMapBack] ?? method,
 					path,
 					handler,
-					hook
+					hook: appHook ? mergeHook(hook ?? {}, appHook) : hook
 				}) as PublicRoute
 		)
 	}
@@ -322,6 +322,19 @@ export class Elysia<
 		return this
 	}
 
+	guard(hook: Partial<InputHook>) {
+		this['~ext'] ??= Object.create(null)
+
+		if (this['~ext']?.hook)
+			mergeHook(
+				Object.assign(Object.create(null), this['~ext'].hook),
+				hook
+			)
+		else this['~ext']!.hook = hook as Partial<AppHook>
+
+		return this
+	}
+
 	macro(macroOrName: string | Macro, macro?: Macro) {
 		if (typeof macroOrName === 'string' && !macro)
 			throw new Error('Macro function is required')
@@ -407,8 +420,7 @@ export class Elysia<
 					continue
 				}
 
-
-				if(input[k]) {
+				if (input[k]) {
 					if (Array.isArray(input[k])) (input[k] as any[]).push(v)
 					else input[k] = [input[k], v]
 				} else input[k] = v
@@ -475,7 +487,12 @@ export class Elysia<
 		fn: Function,
 		hook?: Partial<InputHook>
 	) {
-		const history = hook ? [method, path, fn, hook] : [method, path, fn]
+		const appHook = this['~ext']?.hook
+		const history = appHook
+			? [method, path, fn, hook, appHook]
+			: hook
+				? [method, path, fn, hook]
+				: [method, path, fn]
 
 		if (this.#routes) {
 			this['~mapIdx']![method] ??= Object.create(null)

@@ -14,17 +14,17 @@ const app = new Elysia()
 			}
 		})
 	})
+	.guard({
+		a: true
+	})
 	.get('/', () => 'ok', {
 		beforeHandle() {
 			console.log('Inline')
 		},
-		a: true,
 		b: true
 	})
 
-app.handle('/').then((res) =>
-	res.text().then((text) => console.log(text))
-)
+app.handle('/').then((res) => res.text().then((text) => console.log(text)))
 
 // app.handle('query?name=bb')
 // 	.then((res) => res.status)

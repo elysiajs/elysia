@@ -28,7 +28,8 @@ import type {
 	BodyHandler,
 	ContentType,
 	CompiledHandler,
-	InternalRoute
+	InternalRoute,
+	InputHook
 } from '../../types'
 
 function builtinParser(
@@ -139,7 +140,7 @@ const isAsyncValidator = (vali: Validator | undefined) =>
 	!(vali as TypeBoxValidator)?.tb || (vali as TypeBoxValidator)?.isAsync
 
 export function compileHandler(
-	[, , handler, _hook]: InternalRoute,
+	[, , handler, _hook, _appHook]: InternalRoute,
 	root: AnyElysia
 ): CompiledHandler {
 	const adapter = root['~config']?.adapter ?? defaultAdapter
@@ -148,11 +149,23 @@ export function compileHandler(
 	let params = new Set<unknown>()
 	let alias = ''
 
+	const appHook = _appHook
+		? Object.assign(Object.create(null), _appHook)
+		: undefined
+	if (appHook) root['~applyMacro'](appHook as any)
+
 	let hook = root['~ext']?.hook
-		? mergeHook(Object.assign({}, _hook), root['~ext']?.hook)
+		? mergeHook(
+				Object.assign(Object.create(null), _hook),
+				root['~ext']?.hook
+			)
 		: _hook
 
-	root['~applyMacro'](hook)
+	if (hook) root['~applyMacro'](hook)
+	if (appHook) {
+		mergeHook(appHook, hook)
+		hook = appHook
+	}
 
 	let hookNotLinked = true
 	function link(v: unknown, key: string) {
