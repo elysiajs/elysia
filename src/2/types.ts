@@ -955,3 +955,4 @@ export type HTTPHeaders = Record<string, string | number> & {
 }
 
 export type AnyErrorConstructor = { prototype: Error }
+export type ContextAppendType = 'append' | 'override'

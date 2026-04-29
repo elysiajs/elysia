@@ -22,7 +22,9 @@ import type {
 	AppHook,
 	AppEvent,
 	AnyErrorConstructor,
-	Macro
+	Macro,
+	ContextAppendType,
+	Prettify
 } from './types'
 
 import decodeURIComponent from 'fast-decode-uri-component'
@@ -34,6 +36,8 @@ import {
 	checksum,
 	createErrorEventHandler,
 	getLoosePath,
+	isEmpty,
+	isNotEmpty,
 	mergeDeep,
 	mergeHook
 } from './utils'
@@ -130,12 +134,25 @@ export class Elysia<
 		)
 	}
 
-	decorate<Decorator extends Singleton['decorator']>(
-		decorator: Decorator
+	/**
+	 * ### decorate
+	 * Define custom property to `Context` accessible for all handler.
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .decorate('getDate', () => Date.now())
+	 *     .get('/', ({ getDate }) => getDate())
+	 * ```
+	 */
+	decorate<const Name extends string, Value>(
+		name: Name,
+		value: Value
 	): Elysia<
 		BasePath,
 		{
-			decorator: Decorator
+			decorator: Prettify<Singleton['decorator'] & { [k in Name]: Value }>
 			store: Singleton['store']
 			derive: Singleton['derive']
 			resolve: Singleton['resolve']
@@ -145,30 +162,633 @@ export class Elysia<
 		Routes,
 		Ephemeral,
 		Volatile
-	> {
-		this['~ext'] ??= Object.create(null)
+	>
 
-		if (this['~ext']!.decorator)
-			Object.assign(this['~ext']!.decorator, decorator)
-		else this['~ext']!.decorator = decorator
+	decorate<NewDecorators extends Record<string, unknown>>(
+		decorators: NewDecorators
+	): Elysia<
+		BasePath,
+		{
+			decorator: Prettify<Singleton['decorator'] & NewDecorators>
+			store: Singleton['store']
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
+		},
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>
 
-		return this as any
+	decorate<NewDecorators extends Record<string, unknown>>(
+		mapper: (decorators: Singleton['decorator']) => NewDecorators
+	): Elysia<
+		BasePath,
+		{
+			decorator: NewDecorators
+			store: Singleton['store']
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
+		},
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	decorate<const Name extends string, Value>(
+		type: 'append',
+		name: Name,
+		value: Value
+	): Elysia<
+		BasePath,
+		{
+			decorator: Prettify<Singleton['decorator'] & { [k in Name]: Value }>
+			store: Singleton['store']
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
+		},
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	decorate<const Name extends string, Value>(
+		type: 'override',
+		name: Name,
+		value: Value
+	): Elysia<
+		BasePath,
+		{
+			decorator: Prettify<
+				Omit<Singleton['decorator'], Name> & { [k in Name]: Value }
+			>
+			store: Singleton['store']
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
+		},
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	/** @deprecated use `decorate('append', name, value)` instead */
+	decorate<const Name extends string, Value>(
+		type: { as: 'append' },
+		name: Name,
+		value: Value
+	): Elysia<
+		BasePath,
+		{
+			decorator: Prettify<Singleton['decorator'] & { [k in Name]: Value }>
+			store: Singleton['store']
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
+		},
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	/** @deprecated use `decorate('override', name, value)` instead */
+	decorate<const Name extends string, Value>(
+		type: { as: 'override' },
+		name: Name,
+		value: Value
+	): Elysia<
+		BasePath,
+		{
+			decorator: Prettify<
+				Omit<Singleton['decorator'], Name> & { [k in Name]: Value }
+			>
+			store: Singleton['store']
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
+		},
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	decorate<NewDecorators extends Record<string, unknown>>(
+		type: 'append',
+		decorators: NewDecorators
+	): Elysia<
+		BasePath,
+		{
+			decorator: Prettify<Singleton['decorator'] & NewDecorators>
+			store: Singleton['store']
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
+		},
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	decorate<NewDecorators extends Record<string, unknown>>(
+		type: 'override',
+		decorators: NewDecorators
+	): Elysia<
+		BasePath,
+		{
+			decorator: Prettify<
+				Omit<Singleton['decorator'], keyof NewDecorators> &
+					NewDecorators
+			>
+			store: Singleton['store']
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
+		},
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	/** @deprecated use `decorate('append', decorators)` instead */
+	decorate<NewDecorators extends Record<string, unknown>>(
+		type: { as: 'append' },
+		decorators: NewDecorators
+	): Elysia<
+		BasePath,
+		{
+			decorator: Prettify<Singleton['decorator'] & NewDecorators>
+			store: Singleton['store']
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
+		},
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	/** @deprecated use `decorate('override', decorators)` instead */
+	decorate<NewDecorators extends Record<string, unknown>>(
+		type: { as: 'override' },
+		decorators: NewDecorators
+	): Elysia<
+		BasePath,
+		{
+			decorator: Prettify<
+				Omit<Singleton['decorator'], keyof NewDecorators> &
+					NewDecorators
+			>
+			store: Singleton['store']
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
+		},
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	decorate(
+		typeOrNameOrDecorators:
+			| ContextAppendType
+			| { as: ContextAppendType }
+			| string
+			| Record<string, unknown>
+			| Function,
+		nameOrDecorators?: unknown,
+		value?: unknown
+	): AnyElysia {
+		switch (arguments.length) {
+			case 1:
+				return this.#decorate('append', '', typeOrNameOrDecorators)
+
+			case 2:
+				if (
+					typeOrNameOrDecorators === 'append' ||
+					typeOrNameOrDecorators === 'override'
+				)
+					return this.#decorate(
+						typeOrNameOrDecorators,
+						'',
+						nameOrDecorators
+					)
+
+				if (
+					typeof typeOrNameOrDecorators === 'object' &&
+					typeOrNameOrDecorators !== null &&
+					'as' in typeOrNameOrDecorators
+				)
+					return this.#decorate(
+						(typeOrNameOrDecorators as { as: ContextAppendType })
+							.as,
+						'',
+						nameOrDecorators
+					)
+
+				return this.#decorate(
+					'append',
+					typeOrNameOrDecorators as string,
+					nameOrDecorators
+				)
+
+			case 3:
+				return this.#decorate(
+					typeof typeOrNameOrDecorators === 'string'
+						? (typeOrNameOrDecorators as ContextAppendType)
+						: (
+								typeOrNameOrDecorators as {
+									as: ContextAppendType
+								}
+							).as,
+					nameOrDecorators as string,
+					value
+				)
+		}
+
+		return this
 	}
 
-	store<Store extends Singleton['store']>(store: Store) {
-		this['~ext'] ??= Object.create(null)
+	#decorate(as: ContextAppendType, name: string, value: unknown): this {
+		const ext = (this['~ext'] ??= Object.create(null))
+		const fresh = !ext.decorator
+		const decorator = (ext.decorator ??= Object.create(null)) as Record<
+			string,
+			unknown
+		>
 
-		if (this['~ext']!.store) Object.assign(this['~ext']!.store, store)
-		else this['~ext']!.store = store
+		switch (typeof value) {
+			case 'object':
+				if (value === null || value === undefined) return this
 
-		return this as any
+				if (name) {
+					if (!fresh && name in decorator)
+						decorator[name] = mergeDeep(
+							decorator[name] as any,
+							value!,
+							{ override: as === 'override' }
+						)
+					else decorator[name] = value
+
+					return this
+				}
+
+				if (fresh) Object.assign(decorator, value)
+				else
+					ext.decorator = mergeDeep(decorator, value as any, {
+						override: as === 'override'
+					})
+
+				return this
+
+			case 'function':
+				if (name) {
+					if (as === 'override' || !(name in decorator))
+						decorator[name] = value
+				} else ext.decorator = (value as Function)(decorator)
+
+				return this
+
+			default:
+				if (as === 'override' || !(name in decorator))
+					decorator[name] = value
+
+				return this
+		}
+	}
+
+	/**
+	 * ### state
+	 * Assign global mutable state accessible for all handler.
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .state('counter', 0)
+	 *     .get('/', ({ store: { counter } }) => ++counter)
+	 * ```
+	 */
+	state<const Name extends string | number | symbol, Value>(
+		name: Name,
+		value: Value
+	): Elysia<
+		BasePath,
+		{
+			decorator: Singleton['decorator']
+			store: Prettify<Singleton['store'] & { [k in Name]: Value }>
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
+		},
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	state<NewStore extends Record<string, unknown>>(
+		store: NewStore
+	): Elysia<
+		BasePath,
+		{
+			decorator: Singleton['decorator']
+			store: Prettify<Singleton['store'] & NewStore>
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
+		},
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	state<NewStore extends Record<string, unknown>>(
+		mapper: (store: Singleton['store']) => NewStore
+	): Elysia<
+		BasePath,
+		{
+			decorator: Singleton['decorator']
+			store: NewStore
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
+		},
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	state<const Name extends string | number | symbol, Value>(
+		type: 'append',
+		name: Name,
+		value: Value
+	): Elysia<
+		BasePath,
+		{
+			decorator: Singleton['decorator']
+			store: Prettify<Singleton['store'] & { [k in Name]: Value }>
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
+		},
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	state<const Name extends string | number | symbol, Value>(
+		type: 'override',
+		name: Name,
+		value: Value
+	): Elysia<
+		BasePath,
+		{
+			decorator: Singleton['decorator']
+			store: Prettify<
+				Omit<Singleton['store'], Name> & { [k in Name]: Value }
+			>
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
+		},
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	/** @deprecated use `state('append', name, value)` instead */
+	state<const Name extends string | number | symbol, Value>(
+		type: { as: 'append' },
+		name: Name,
+		value: Value
+	): Elysia<
+		BasePath,
+		{
+			decorator: Singleton['decorator']
+			store: Prettify<Singleton['store'] & { [k in Name]: Value }>
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
+		},
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	/** @deprecated use `state('override', name, value)` instead */
+	state<const Name extends string | number | symbol, Value>(
+		type: { as: 'override' },
+		name: Name,
+		value: Value
+	): Elysia<
+		BasePath,
+		{
+			decorator: Singleton['decorator']
+			store: Prettify<
+				Omit<Singleton['store'], Name> & { [k in Name]: Value }
+			>
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
+		},
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	state<NewStore extends Record<string, unknown>>(
+		type: 'append',
+		store: NewStore
+	): Elysia<
+		BasePath,
+		{
+			decorator: Singleton['decorator']
+			store: Prettify<Singleton['store'] & NewStore>
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
+		},
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	state<NewStore extends Record<string, unknown>>(
+		type: 'override',
+		store: NewStore
+	): Elysia<
+		BasePath,
+		{
+			decorator: Singleton['decorator']
+			store: Prettify<Omit<Singleton['store'], keyof NewStore> & NewStore>
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
+		},
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	/** @deprecated use `state('append', store)` instead */
+	state<NewStore extends Record<string, unknown>>(
+		type: { as: 'append' },
+		store: NewStore
+	): Elysia<
+		BasePath,
+		{
+			decorator: Singleton['decorator']
+			store: Prettify<Singleton['store'] & NewStore>
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
+		},
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	/** @deprecated use `state('override', store)` instead */
+	state<NewStore extends Record<string, unknown>>(
+		type: { as: 'override' },
+		store: NewStore
+	): Elysia<
+		BasePath,
+		{
+			decorator: Singleton['decorator']
+			store: Prettify<Omit<Singleton['store'], keyof NewStore> & NewStore>
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
+		},
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	state(
+		typeOrNameOrStore:
+			| ContextAppendType
+			| { as: ContextAppendType }
+			| string
+			| Record<string, unknown>
+			| Function,
+		nameOrStore?: unknown,
+		value?: unknown
+	): AnyElysia {
+		switch (arguments.length) {
+			case 1:
+				return this.#state('append', '', typeOrNameOrStore)
+
+			case 2:
+				if (
+					typeOrNameOrStore === 'append' ||
+					typeOrNameOrStore === 'override'
+				)
+					return this.#state(typeOrNameOrStore, '', nameOrStore)
+
+				if (
+					typeof typeOrNameOrStore === 'object' &&
+					typeOrNameOrStore !== null &&
+					'as' in typeOrNameOrStore
+				)
+					return this.#state(
+						(typeOrNameOrStore as { as: ContextAppendType }).as,
+						'',
+						nameOrStore
+					)
+
+				return this.#state(
+					'append',
+					typeOrNameOrStore as string,
+					nameOrStore
+				)
+
+			case 3:
+				return this.#state(
+					typeof typeOrNameOrStore === 'string'
+						? (typeOrNameOrStore as ContextAppendType)
+						: (typeOrNameOrStore as { as: ContextAppendType }).as,
+					nameOrStore as string,
+					value
+				)
+		}
+
+		return this
+	}
+
+	#state(as: ContextAppendType, name: string, value: unknown): this {
+		const ext = (this['~ext'] ??= Object.create(null))
+		const fresh = !ext.store
+		const store = (ext.store ??= Object.create(null)) as Record<
+			string,
+			unknown
+		>
+
+		switch (typeof value) {
+			case 'object':
+				if (!value || isEmpty(value)) return this
+
+				if (name) {
+					if (!fresh && name in store)
+						store[name] = mergeDeep(store[name] as any, value!, {
+							override: as === 'override'
+						})
+					else store[name] = value
+
+					return this
+				}
+
+				if (fresh) Object.assign(store, value)
+				else
+					ext.store = mergeDeep(store, value as any, {
+						override: as === 'override'
+					})
+
+				return this
+
+			case 'function':
+				if (name) {
+					if (as === 'override' || !(name in store))
+						store[name] = value
+				} else ext.store = (value as Function)(store)
+
+				return this
+
+			default:
+				if (as === 'override' || !(name in store)) store[name] = value
+
+				return this
+		}
 	}
 
 	headers(headers: Record<string, string>) {
-		this['~ext'] ??= Object.create(null)
+		const ext = (this['~ext'] ??= Object.create(null))
 
-		if (this['~ext']!.headers) Object.assign(this['~ext']!.headers, headers)
-		else this['~ext']!.headers = headers
+		if (ext.headers) Object.assign(ext!.headers, headers)
+		else ext.headers = headers
 
 		return this
 	}
@@ -694,8 +1314,8 @@ export class Elysia<
 		callback?: ListenCallback
 	) {
 		if (!this['~config']?.adapter && isBun) {
-			this['~config'] ??= {}
-			this['~config'].adapter = BunAdapter
+			this['~config'] ??= Object.create(null)
+			this['~config']!.adapter = BunAdapter
 		}
 
 		const listen = this['~config']?.adapter?.listen
