@@ -7,9 +7,10 @@ import { clearSucroseCache } from './sucrose'
 import type {
 	InputSchema,
 	AppHook,
-	InputHook,
 	MaybeArray,
-	EventFn
+	EventFn,
+	Macro,
+	InputHook
 } from './types'
 import { isBun } from './universal/utils'
 
@@ -87,29 +88,41 @@ function mergeArray<
 >(
 	a: A,
 	b: B,
-	reverseOrder = false
+	reverse = false
 ): (A extends unknown[] ? A : []) & (B extends unknown[] ? B : []) {
 	if (!a) return b as any
 	if (!b) return a as any
 
 	const array = new Set()
 
-	if (Array.isArray(a)) for (const item of a) array.add(item)
-	else array.add(a)
+	if (reverse) {
+		if (Array.isArray(b)) for (const item of b) array.add(item)
+		else array.add(b)
 
-	if (Array.isArray(b)) for (const item of b) array.add(item)
-	else array.add(b)
+		if (Array.isArray(a)) for (const item of a) array.add(item)
+		else array.add(a)
+	} else {
+		if (Array.isArray(a)) for (const item of a) array.add(item)
+		else array.add(a)
 
-	return reverseOrder ? ([...array].reverse() as any) : ([...array] as any)
+		if (Array.isArray(b)) for (const item of b) array.add(item)
+		else array.add(b)
+	}
+
+	return [...array]
 }
 
-const nativeProperties = new Set([
+export const schemaProperties = new Set([
 	'body',
 	'headers',
 	'params',
 	'query',
 	'cookie',
-	'response',
+	'response'
+])
+
+const nativeProperties = new Set([
+	...schemaProperties,
 	'parse',
 	'transform',
 	'beforeHandle',
@@ -120,14 +133,75 @@ const nativeProperties = new Set([
 	'schema'
 ])
 
-export function mergeHook(
-	a: AppHook,
-	b: Partial<AppHook> | undefined,
-	reverseOrder = false
-): AppHook {
+export function hookToGuard(
+	a: Partial<AppHook & Macro>
+): Partial<AppHook & Macro> {
+	if (a.body || a.headers || a.params || a.query || a.cookie) {
+		a.schema ??= []
+		const schema = Object.create(null)
+
+		if (a.body) {
+			schema.body = a.body
+			delete a.body
+		}
+
+		if (a.headers) {
+			schema.headers = a.headers
+			delete a.headers
+		}
+
+		if (a.params) {
+			schema.params = a.params
+			delete a.params
+		}
+
+		if (a.query) {
+			schema.query = a.query
+			delete a.query
+		}
+
+		if (a.cookie) {
+			schema.cookie = a.cookie
+			delete a.cookie
+		}
+
+		if (a.response) {
+			schema.response = a.response
+			delete a.response
+		}
+
+		a.schema.push(schema)
+	}
+
+	return a
+}
+
+export function mergeGuard(
+	a: Partial<AppHook & Macro>,
+	b: Partial<AppHook & Macro> | undefined
+): Partial<AppHook & Macro> {
 	if (!b) return a
 	// b is undefined but it's shorter this way
-	if (!a) return b as AppHook
+	if (!a) return b
+
+	a = mergeHook(a, b, true) as any
+
+	// let macro: Record<string, unknown> | undefined
+	for (const key in b)
+		if (!nativeProperties.has(key as any) && key in b)
+			a[key] = b[key as keyof typeof b]
+
+	return a
+}
+
+export function mergeHook(
+	a: Partial<AppHook>,
+	b: Partial<AppHook> | undefined,
+	reverse = false
+): Partial<AppHook> {
+	if (!b) return a
+	// b is undefined but it's shorter this way
+	if (!a) return b
 
 	if (!a.body && b.body) a.body = b.body
 	if (!a.headers && b.headers) a.headers = b.headers
@@ -137,39 +211,41 @@ export function mergeHook(
 	if (a.response || b.response)
 		a.response = mergeResponse(a.response, b.response)
 
-	if (a.parse || b.parse) a.parse = mergeArray(a.parse, b.parse)
+	if (a.parse || b.parse) a.parse = mergeArray(a.parse, b.parse, reverse)
 
 	if (a.transform || b.transform)
-		a.transform = mergeArray(a.transform, b.transform, reverseOrder)
+		a.transform = mergeArray(a.transform, b.transform, reverse)
 
-	if (a.beforeHandle || b.beforeHandle)
+	if (a.derive || b.derive)
 		a.beforeHandle = mergeArray(
 			a.beforeHandle,
-			b.beforeHandle,
-			reverseOrder
+			mergeArray(a.derive, b.derive),
+			true
 		)
+
+	// Remove in next version
+	if (a.resolve || b.resolve)
+		a.beforeHandle = mergeArray(
+			a.beforeHandle,
+			mergeArray(a.resolve, b.resolve, reverse),
+			true
+		)
+
+	if (a.beforeHandle || b.beforeHandle)
+		a.beforeHandle = mergeArray(a.beforeHandle, b.beforeHandle, reverse)
 
 	if (a.afterHandle || b.afterHandle)
-		a.afterHandle = mergeArray(a.afterHandle, b.afterHandle, reverseOrder)
+		a.afterHandle = mergeArray(a.afterHandle, b.afterHandle, reverse)
 
 	if (a.mapResponse || b.mapResponse)
-		a.mapResponse = mergeArray(a.mapResponse, b.mapResponse, reverseOrder)
+		a.mapResponse = mergeArray(a.mapResponse, b.mapResponse, reverse)
 
 	if (a.afterResponse || b.afterResponse)
-		a.afterResponse = mergeArray(
-			a.afterResponse,
-			b.afterResponse,
-			reverseOrder
-		)
+		a.afterResponse = mergeArray(a.afterResponse, b.afterResponse, reverse)
 
-	if (a.error || b.error) a.error = mergeArray(a.error, b.error, reverseOrder)
+	if (a.error || b.error) a.error = mergeArray(a.error, b.error, reverse)
 	if (a.schema || b.schema)
-		a.schema = mergeArray(a.schema, b.schema, reverseOrder) as any
-
-	// let macro: Record<string, unknown> | undefined
-	for (const key in b)
-		if (!nativeProperties.has(key as any) && key in b)
-			a[key] = b[key as keyof typeof b]
+		a.schema = mergeArray(a.schema, b.schema, reverse) as any
 
 	return a
 }

@@ -140,23 +140,24 @@ const isAsyncValidator = (vali: Validator | undefined) =>
 	!(vali as TypeBoxValidator)?.tb || (vali as TypeBoxValidator)?.isAsync
 
 function applyHook(
-	localHook: InputHook | undefined,
-	appHook: InputHook | undefined,
+	_localHook: InputHook | undefined,
+	_appHook: InputHook | undefined,
 	app: AnyElysia
 ): InputHook | undefined {
-	let hook =
-		localHook || appHook
-			? mergeHook(
-					Object.assign(Object.create(null), localHook as any),
-					appHook as any
-				)
-			: undefined
+	const localHook = _localHook
+		? Object.assign(Object.create(null), _localHook)
+		: undefined
 
-	const rootHooks = app['~ext']?.hook
-	if (!rootHooks?.some((appHook) => appHook === hook))
-		hook = mergeHook(hook, rootHooks?.at(-1))
+	const appHook = _appHook
+		? Object.assign(Object.create(null), _appHook)
+		: undefined
 
-	return app['~applyMacro'](hook) as InputHook | undefined
+	let hook = mergeHook(localHook, appHook)
+
+	const rootHook = app['~ext']?.hook?.at(-1)
+	if (rootHook) hook = mergeHook(hook, rootHook)
+
+	return hook as InputHook
 }
 
 export function compileHandler(

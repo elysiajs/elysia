@@ -36,10 +36,15 @@ import {
 	checksum,
 	createErrorEventHandler,
 	getLoosePath,
+	hasSchema,
+	hookToGuard,
 	isEmpty,
 	isNotEmpty,
 	mergeDeep,
-	mergeHook
+	mergeGuard,
+	mergeHook,
+	removeSchemaProperty,
+	schemaProperties
 } from './utils'
 import { MethodMap, MethodMapBack } from './constants'
 
@@ -992,7 +997,9 @@ export class Elysia<
 	guard(hook: Partial<InputHook & Macro>) {
 		const ext = (this['~ext'] ??= Object.create(null))
 
-		if (ext.hook) ext.hook.push(mergeHook(hook, ext.hook.at(-1), true))
+		this['~applyMacro'](hookToGuard(hook as any))
+
+		if (ext.hook) ext.hook.push(mergeGuard(hook as any, ext.hook.at(-1)!))
 		else ext.hook = [hook as any]
 
 		return this
@@ -1006,17 +1013,25 @@ export class Elysia<
 		const m = (ext.macro ??= Object.create(null))
 
 		if (typeof macroOrName === 'string') m[macroOrName] = macro!
-		else Object.assign(m, macroOrName)
+		else {
+			for (const key in macroOrName)
+				if (typeof macroOrName[key] === 'object')
+					macroOrName[key] = hookToGuard(
+						macroOrName[key] as any
+					) as any
+
+			Object.assign(m, macroOrName)
+		}
 
 		return this as any
 	}
 
 	'~applyMacro'(
-		input: InputHook & Macro,
-		toApply: InputHook & Macro = input,
+		input: Partial<AppHook & Macro>,
+		toApply: Partial<AppHook & Macro> = input,
 		iteration = 0,
-		applied?: { [key: number]: true }
-	): void {
+		seen = new Set<number | Partial<AppHook & Macro>>()
+	): Partial<AppHook & Macro> {
 		if (iteration >= 16) return input
 		const macro = this['~ext']?.macro
 
@@ -1025,36 +1040,30 @@ export class Elysia<
 		for (let [key, value] of Object.entries(toApply)) {
 			if (key in macro === false) continue
 
-			const macroHook =
-				typeof macro[key] === 'function'
-					? macro[key](value)
-					: macro[key]
+			const isFunction: boolean = typeof macro[key] === 'function'
+			const hook: Partial<AppHook & Macro> = isFunction
+				? (macro[key] as (v: unknown) => Partial<AppHook & Macro>)(
+						value
+					)
+				: (macro[key] as Partial<AppHook & Macro>)
 
-			if (
-				!macroHook ||
-				(typeof macro[key] === 'object' && value === false)
-			)
-				return
+			if (!hook || (!isFunction && value === false)) continue
 
-			const seed = checksum(key + JSON.stringify(macroHook.seed ?? value))
-			if (applied && seed in applied) continue
+			if (isFunction) {
+				const seed = checksum(key + JSON.stringify(hook.seed ?? value))
+				if (seen.has(seed)) continue
 
-			applied ??= Object.create(null)
-			applied![seed] = true
+				seen.add(seed)
+				hookToGuard(hook)
+			} else {
+				if (seen.has(hook)) continue
 
-			for (let [k, v] of Object.entries(macroHook)) {
-				if (k === 'seed') continue
+				seen.add(hook)
+			}
 
-				// if (k in emptySchema) {
-				// 	insertStandaloneValidator(
-				// 		input,
-				// 		k as keyof RouteSchema,
-				// 		value
-				// 	)
-				// 	delete input[key]
-				// 	continue
-				// }
+			delete hook.seed
 
+			for (let [k, v] of Object.entries(hook)) {
 				if (k === 'introspect') {
 					v?.(input)
 
@@ -1073,19 +1082,18 @@ export class Elysia<
 				}
 
 				if (k in macro) {
-					this['~applyMacro'](
-						input,
-						{ [k]: v },
-						{ applied, iteration: iteration + 1 }
-					)
+					this['~applyMacro'](input, { [k]: v }, iteration, seen)
 
 					delete input[key]
 					continue
 				}
 
-				if (input[k]) {
-					if (Array.isArray(input[k])) (input[k] as any[]).unshift(v)
-					else input[k] = [v, input[k]]
+				if (k in input) {
+					if (Array.isArray(input[k])) {
+						if (!input[k].some((item: any) => item === v))
+							input[k].unshift(v)
+						// Just in case same function is applied
+					} else if (input[k] !== v) input[k] = [v, input[k]]
 				} else input[k] = v
 
 				delete input[key]

@@ -326,7 +326,7 @@ export interface AppHook {
 	params: AnySchema
 	cookie: AnySchema
 	response: AnySchema | Record<number, AnySchema>
-	schema: RouteSchema
+	schema: RouteSchema[]
 }
 
 export interface InputSchema {
