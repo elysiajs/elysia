@@ -1,7 +1,7 @@
-import { Context } from './context'
+import type { Context } from './context'
 import type {
 	InputSchema,
-	InternalHook,
+	AppHook,
 	InputHook,
 	MaybeArray,
 	EventFn
@@ -94,10 +94,10 @@ function mergeArray<
 }
 
 export function mergeHook(
-	a: InternalHook,
-	b: Partial<InternalHook> | undefined
+	a: AppHook,
+	b: Partial<AppHook> | undefined
 	// { allowMacro = false }: { allowMacro?: boolean } = {}
-): InternalHook {
+): AppHook {
 	if (!b) return a
 
 	if (!a.body && b.body) a.body = b.body
@@ -126,13 +126,7 @@ export function mergeHook(
 		a.afterResponse = mergeArray(a.afterResponse, b.afterResponse)
 
 	if (a.error || b.error) a.error = mergeArray(a.error, b.error)
-
 	if (a.schema || b.schema) a.schema = mergeArray(a.schema, b.schema) as any
-
-	if (b.macro) {
-		if (a.macro) Object.assign(a.macro, b.macro)
-		else a.macro = b.macro
-	}
 
 	return a
 }
@@ -151,6 +145,21 @@ export function createErrorEventHandler(fn: EventFn<'error'>, error: Error) {
 
 const isObject = (item: any): item is Object =>
 	item && typeof item === 'object' && !Array.isArray(item)
+
+const isClassRegex = /^\s*class\s+/
+export const isClass = (v: Object) =>
+	(typeof v === 'function' && isClassRegex.test(v.toString())) ||
+	// Handle Object.create(null)
+	(v.toString &&
+		// Handle import * as Sentry from '@sentry/bun'
+		// This also handle [object Date], [object Array]
+		// and FFI value like [object Prisma]
+		v.toString().startsWith('[object ') &&
+		v.toString() !== '[object Object]') ||
+	// If object prototype is not pure, then probably a class-like object
+	isNotEmpty(Object.getPrototypeOf(v))
+
+const dangerousKeys = ['__proto__', 'constructor', 'prototype'] as const
 
 export function mergeDeep<
 	A extends Record<string, any>,
@@ -176,10 +185,7 @@ export function mergeDeep<
 	seen.add(source)
 
 	for (const [key, value] of Object.entries(source)) {
-		if (
-			skipKeys?.includes(key) ||
-			['__proto__', 'constructor', 'prototype'].includes(key)
-		)
+		if (skipKeys?.includes(key) || dangerousKeys.includes(key as any))
 			continue
 
 		if (mergeArray && Array.isArray(value)) {
@@ -194,21 +200,17 @@ export function mergeDeep<
 
 		if (!isObject(value) || !(key in target) || isClass(value)) {
 			if ((override || !(key in target)) && !Object.isFrozen(target))
-				try {
-					target[key as keyof typeof target] = value
-				} catch {}
+				target[key as keyof typeof target] = value
 
 			continue
 		}
 
 		if (!Object.isFrozen(target[key]))
-			try {
-				target[key as keyof typeof target] = mergeDeep(
-					(target as any)[key] as any,
-					value,
-					{ skipKeys, override, mergeArray, seen }
-				)
-			} catch {}
+			target[key as keyof typeof target] = mergeDeep(
+				(target as any)[key] as any,
+				value,
+				{ skipKeys, override, mergeArray, seen }
+			)
 	}
 
 	seen.delete(source)

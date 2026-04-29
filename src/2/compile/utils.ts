@@ -1,3 +1,5 @@
+import type { MaybeArray } from "../types"
+
 export function isAsyncFunction(fn: Function) {
 	if (
 		fn.constructor.name === 'AsyncFunction' ||
@@ -7,3 +9,10 @@ export function isAsyncFunction(fn: Function) {
 
 	return false
 }
+
+export const isAsyncLifecycle = (handlers: MaybeArray<Function> | undefined) =>
+	handlers
+		? Array.isArray(handlers)
+			? handlers.some(isAsyncFunction)
+			: isAsyncFunction(handlers)
+		: false

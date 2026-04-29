@@ -1,9 +1,10 @@
 // @ts-nocheck
 
-import { sucrose } from '../../src/sucrose'
+import { sucrose } from '../../src/2/sucrose'
+import { profile } from './utils'
 
 const total = 100_000
-const t = performance.now()
+const stop = profile('100k sucrose instances')
 
 for (let i = 0; i < total; i++) {
 	sucrose({
@@ -23,23 +24,15 @@ for (let i = 0; i < total; i++) {
 			},
 			({ query: { f } }) => {}
 		],
-		mapResponse: [],
-		onResponse: [],
-		parse: [],
-		request: [],
-		start: [],
-		stop: [],
-		trace: [],
-		transform: []
+		mapResponse: undefined,
+		onResponse: undefined,
+		parse: undefined,
+		request: undefined,
+		start: undefined,
+		stop: undefined,
+		trace: undefined,
+		transform: undefined
 	})
 }
 
-const took = performance.now() - t
-
-console.log(
-	Intl.NumberFormat().format(total),
-	'check took',
-	+took.toFixed(4),
-	'ms'
-)
-console.log('Average', +(took / total).toFixed(4), 'ms / check')
+stop()

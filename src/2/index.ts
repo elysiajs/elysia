@@ -121,19 +121,56 @@ export class Elysia<
 						MethodMapBack[method as keyof MethodMapBack] ?? method,
 					path,
 					handler,
-					hook: appHook ? mergeHook(hook ?? {}, appHook) : hook
+					hook: appHook
+						? hook
+							? mergeHook(hook as any, appHook as any)
+							: appHook
+						: hook
 				}) as PublicRoute
 		)
 	}
 
-	#onBranch(
-		type: AppEvent,
-		scopeOrFn: { as: EventScope } | EventFn<AppEvent>,
-		fn?: EventFn<AppEvent>
-	): this {
-		return fn
-			? this.#on(type, fn, (scopeOrFn as { as: EventScope }).as)
-			: this.#on(type, scopeOrFn as EventFn<'beforeHandle'>)
+	decorate<Decorator extends Singleton['decorator']>(
+		decorator: Decorator
+	): Elysia<
+		BasePath,
+		{
+			decorator: Decorator
+			store: Singleton['store']
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
+		},
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	> {
+		this['~ext'] ??= Object.create(null)
+
+		if (this['~ext']!.decorator)
+			Object.assign(this['~ext']!.decorator, decorator)
+		else this['~ext']!.decorator = decorator
+
+		return this as any
+	}
+
+	store<Store extends Singleton['store']>(store: Store) {
+		this['~ext'] ??= Object.create(null)
+
+		if (this['~ext']!.store) Object.assign(this['~ext']!.store, store)
+		else this['~ext']!.store = store
+
+		return this as any
+	}
+
+	headers(headers: Record<string, string>) {
+		this['~ext'] ??= Object.create(null)
+
+		if (this['~ext']!.headers) Object.assign(this['~ext']!.headers, headers)
+		else this['~ext']!.headers = headers
+
+		return this
 	}
 
 	#on<Event extends keyof AppHook>(
@@ -156,6 +193,16 @@ export class Elysia<
 		}
 
 		return this
+	}
+
+	#onBranch(
+		type: AppEvent,
+		scopeOrFn: { as: EventScope } | EventFn<AppEvent>,
+		fn?: EventFn<AppEvent>
+	): this {
+		return fn
+			? this.#on(type, fn, (scopeOrFn as { as: EventScope }).as)
+			: this.#on(type, scopeOrFn as EventFn<'beforeHandle'>)
 	}
 
 	onTransform(fn: EventFn<'transform'>): this
@@ -392,12 +439,12 @@ export class Elysia<
 				// 	continue
 				// }
 
-				// if (k === 'introspect') {
-				// 	value?.(input)
+				if (k === 'introspect') {
+					v?.(input)
 
-				// 	delete input[key]
-				// 	continue
-				// }
+					delete input[key]
+					continue
+				}
 
 				if (k === 'detail') {
 					if (!input.detail) input.detail = {}
@@ -561,6 +608,12 @@ export class Elysia<
 		}
 	}
 
+	#saveRoute(method: string, path: string) {
+		return (compiled: CompiledHandler) => {
+			this['~map']![method]![path] = compiled
+		}
+	}
+
 	#buildRouter() {
 		if (!this.#routes) return
 
@@ -574,11 +627,7 @@ export class Elysia<
 			const handler = this.handler(
 				i,
 				undefined,
-				isDynamic
-					? undefined
-					: (compiled) => {
-							this['~map']![method]![path] = compiled
-						}
+				isDynamic ? undefined : this.#saveRoute(method, path)
 			)
 
 			if (isDynamic) {
@@ -588,6 +637,7 @@ export class Elysia<
 
 				this['~router'].add(method, path, handler)
 			} else {
+				// monomorphic access is faster, so we ensure the shape of the map is consistent
 				this['~map'] ??= {
 					GET: Object.create(null),
 					POST: Object.create(null),
@@ -612,6 +662,13 @@ export class Elysia<
 
 		this.#buildRouter()
 		return (this.#fetchFn ??= createFetchHandler(this))
+	}
+
+	clear() {
+		this.#routes = undefined
+		this.#compiled = undefined
+		this['~mapIdx'] = undefined
+		this['~loosePath'] = Object.create(null)
 	}
 
 	// for whatever reason, this use less memory than declaraing as method/arrow function

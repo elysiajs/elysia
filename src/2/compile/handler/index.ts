@@ -5,7 +5,7 @@ import type { ElysiaAdapter } from '../../adapter'
 
 import { Validator, type TypeBoxValidator } from '../../schema/validator'
 import { RouteValidator } from '../../schema/route'
-import { isAsyncFunction } from '../utils'
+import { isAsyncFunction, isAsyncLifecycle } from '../utils'
 
 import { isBlob } from '../../type'
 
@@ -169,10 +169,10 @@ export function compileHandler(
 ): CompiledHandler {
 	const adapter = root['~config']?.adapter ?? defaultAdapter
 
-	let hook = applyHook(localHook, appHook, root)
-	let inference = sucrose(handler as any, hook as Sucrose.LifeCycle)
+	const hook = applyHook(localHook, appHook, root)
+	const inference = sucrose(handler as any, hook as Sucrose.LifeCycle)
 
-	let params = new Set<unknown>()
+	const params = new Set<unknown>()
 	let alias = ''
 
 	let hookNotLinked = true
@@ -206,19 +206,19 @@ export function compileHandler(
 		hasBody ||
 		isAsyncFunction(handler as Function) ||
 		!!hook?.parse?.length ||
-		!!hook?.afterHandle?.some(isAsyncFunction) ||
-		!!hook?.beforeHandle?.some(isAsyncFunction) ||
-		!!hook?.transform?.some(isAsyncFunction) ||
-		!!hook?.mapResponse?.some(isAsyncFunction) ||
+		!!isAsyncLifecycle(hook?.afterHandle) ||
+		!!isAsyncLifecycle(hook?.beforeHandle) ||
+		!!isAsyncLifecycle(hook?.transform) ||
+		!!isAsyncLifecycle(hook?.mapResponse) ||
 		bodyValiIsAsync ||
 		headersValiIsAsync ||
 		paramsValiIsAsync ||
 		queryValiIsAsync ||
 		cookieValidIsAsync ||
 		(vali.response &&
-			Object.values(vali.response).find((x) =>
-				'tb' in x ? (x as TypeBoxValidator).isAsync : true
-			))
+			Object.values(
+				vali.response as Record<number, TypeBoxValidator>
+			).find((x) => ('tb' in x ? x.isAsync : true)))
 
 	// ,va,rm,rc,re,pa,pf,pj,pt,pu
 	let code = `${isAsync ? 'async ' : ''}function route(c){\n`
@@ -311,24 +311,8 @@ export function compileHandler(
 
 	code += '}'
 
-	const fn = new Function('h', 'a', `const [${alias}]=a\nreturn ` + code)(
+	return new Function('h', 'a', `const [${alias}]=a\nreturn ` + code)(
 		handler,
 		params
 	)
-
-	// @ts-ignore
-	hook = undefined
-	// @ts-ignore
-	code = undefined
-	params.clear()
-	// @ts-ignore
-	params = undefined
-	// @ts-ignore
-	code = undefined
-	// @ts-ignore
-	link = undefined
-	// @ts-ignore
-	inference = undefined
-
-	return fn
 }

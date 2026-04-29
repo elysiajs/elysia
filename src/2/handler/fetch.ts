@@ -4,9 +4,10 @@ import type { AnyElysia } from '../'
 import { getAsyncIndexes } from './utils'
 
 import { createContext, type Context } from '../context'
-import type { CompiledHandler, AppHook, MaybePromise } from '../types'
 import { createErrorHandler } from './error'
 import { getLoosePath } from '../utils'
+
+import type { CompiledHandler, AppHook, MaybePromise } from '../types'
 
 const notFound = new Response('Not Found', { status: 404 })
 

@@ -1,5 +1,5 @@
 import { ElysiaStatus, status, type SelectiveStatus } from './error'
-import { redirect } from './utils'
+import { checksum, redirect } from './utils'
 
 import type { AnyElysia } from '.'
 import type { Server } from './universal/server'
@@ -15,7 +15,40 @@ import type {
 	InputSchema
 } from './types'
 
+let createBaseContextCount = 0
+let createContextCount = 0
+
+let baseCache: Map<number, new () => any>
+let contextCache: Map<number, new () => any>
+
+function getBaseKey(app: AnyElysia) {
+	const ext = app['~ext']
+	if (!ext) return 0
+
+	return checksum(
+		(ext.decorator ? checksum(JSON.stringify(ext.decorator)) : '') +
+			'-' +
+			(ext.store ? checksum(JSON.stringify(ext.store)) : '')
+	)
+}
+
+function getContextKey(app: AnyElysia) {
+	const ext = app['~ext']
+	if (!ext) return 0
+
+	return checksum(
+		(ext.decorator ? checksum(JSON.stringify(ext.decorator)) : '') +
+			'-' +
+			(ext.store ? checksum(JSON.stringify(ext.store)) : '') +
+			'-' +
+			(ext.headers ? checksum(JSON.stringify(ext.headers)) : '')
+	)
+}
+
 export function createBaseContext(app: AnyElysia) {
+	const key = baseCache ? getBaseKey(app) : undefined
+	if (key !== undefined && baseCache.has(key)) return baseCache.get(key)!
+
 	class Decorator {}
 	Object.assign(Decorator.prototype, {
 		...app['~ext']?.decorator,
@@ -24,20 +57,26 @@ export function createBaseContext(app: AnyElysia) {
 		redirect
 	})
 
+	if (createBaseContextCount > 2) {
+		baseCache ??= new Map()
+		baseCache.set(key ?? getBaseKey(app), Decorator)
+	} else createBaseContextCount++
+
 	return Decorator
 }
 
 export function createContext(
 	app: AnyElysia
 ): new (request: Request) => Context {
+	const key = contextCache ? getContextKey(app) : undefined
+	if (key !== undefined && contextCache.has(key))
+		return contextCache.get(key)!
+
 	const headers = app['~ext']?.headers
-		? Object.assign(
-				Object.create(null),
-				structuredClone(app['~ext'].headers)
-			)
+		? Object.assign(Object.create(null), app['~ext'].headers)
 		: null
 
-	return class Context extends createBaseContext(app) {
+	const context = class Context extends createBaseContext(app) {
 		params?: Record<string, string>
 		headers?: Record<string, string>
 		qi!: number
@@ -51,6 +90,13 @@ export function createContext(
 			}
 		}
 	} as any
+
+	if (createContextCount > 2) {
+		contextCache ??= new Map()
+		contextCache.set(key ?? getContextKey(app), context)
+	} else createContextCount++
+
+	return context
 }
 
 type CheckExcessProps<T, U> = 0 extends 1 & T

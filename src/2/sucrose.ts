@@ -3,7 +3,7 @@
 import { checksum } from './utils'
 import { isBun, isCloudflareWorker } from './universal/utils'
 
-import type { Handler, HookContainer, LifeCycleStore } from './types'
+import type { Handler, AppHook } from './types'
 
 export namespace Sucrose {
 	export interface Inference {
@@ -18,7 +18,7 @@ export namespace Sucrose {
 		path: boolean
 	}
 
-	export type LifeCycle = Partial<LifeCycleStore>
+	export type LifeCycle = Partial<Partial<AppHook>>
 
 	export interface Settings {
 		/**
@@ -674,7 +674,7 @@ export function sucrose(
 	inference: Sucrose.Inference = defaultSucrose(),
 	settings?: Sucrose.Settings
 ): Sucrose.Inference {
-	const events = <(Handler | HookContainer)[]>[]
+	const events = <Handler[]>[]
 
 	if (handler && typeof handler === 'function') events.push(handler)
 	if (lifeCycle) {
@@ -690,13 +690,8 @@ export function sucrose(
 	}
 
 	for (let i = 0; i < events.length; i++) {
-		const e = events[i]
-		if (!e) continue
-
-		const event = typeof e === 'object' ? e.fn : e
-
-		// parse can be either a function or string
-		if (typeof event !== 'function') continue
+		const event = events[i]
+		if (!event) continue
 
 		const content = event.toString()
 		const key = checksum(content)

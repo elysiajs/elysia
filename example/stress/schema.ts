@@ -1,29 +1,7 @@
-import { applyCoercions } from '../src/2/schema/coerce'
-import { t } from '../src/2/type'
-// import { Type as t } from 'typebox'
-// import { Type as t } from '@sinclair/typebox'
+import { applyCoercions } from '../../src/2/schema/coerce'
+import { t } from '../../src/2/type'
 
-function gc() {
-	if (typeof Bun !== 'undefined') Bun.gc(true)
-	else if (typeof global.gc === 'function') global.gc()
-}
-
-function memoryUsage() {
-	if (typeof Bun !== 'undefined') {
-		const { memoryUsage } = require('bun:jsc')
-
-		gc()
-		return memoryUsage().current
-	}
-
-	gc()
-	return process.memoryUsage().heapUsed
-}
-
-const total = 100_000
-const stacks = <any[]>Array(total)
-const m1 = memoryUsage()
-const t1 = performance.now()
+import { profile } from './utils'
 
 const coerce = (schema: any) =>
 	applyCoercions(schema, [
@@ -35,7 +13,12 @@ const coerce = (schema: any) =>
 		]
 	])
 
-for (let i = 0; i <= 50; i++)
+const total = 100_000
+const stacks = <any[]>Array(total)
+
+const stop = profile('Elysia 2 schema with 45 types x100,000')
+
+for (let i = 0; i <= total; i++)
 	stacks[i] =
 		// coerce(
 		t.Array(
@@ -86,15 +69,7 @@ for (let i = 0; i <= 50; i++)
 		)
 // )
 
-const t2 = performance.now()
-gc()
-const m2 = memoryUsage()
-
-console.log('\n\n\n')
-console.log('Elysia 2 schema with 45 types x100,000')
-console.log('Time:', (t2 - t1).toFixed(2), 'ms')
-console.log('Memory usage:', ((m2 - m1) / 1024 / 1024).toFixed(2), 'MB')
-console.log('\n\n\n\n\n\n')
+stop()
 
 // console.dir(stacks[0], {
 // 	depth: null

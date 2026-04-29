@@ -1,14 +1,11 @@
-import { Elysia, t } from '../../src'
-
-const total = 1000
-const sub = 50
+import { Elysia, t } from '../../src/2'
+import { profile } from './utils'
 
 const app = new Elysia()
+const total = 100_000
+const sub = 10
 
-const memory = process.memoryUsage().heapTotal / 1024 / 1024
-console.log(`${total} Elysia instances with ${sub} decorations each`)
-
-const t1 = performance.now()
+const stop = profile('Merge decoration x100k with 10 sub-decorations')
 
 for (let i = 0; i < total; i++) {
 	const plugin = new Elysia()
@@ -21,11 +18,4 @@ for (let i = 0; i < total; i++) {
 	app.use(plugin)
 }
 
-const t2 = performance.now()
-
-Bun.gc(true)
-
-const memoryAfter = process.memoryUsage().heapTotal / 1024 / 1024
-console.log(+(memoryAfter - memory).toFixed(2), 'MB memory used')
-console.log('total', +(t2 - t1).toFixed(2), 'ms')
-console.log(+((t2 - t1) / (total * sub)).toFixed(6), 'decoration/ms')
+stop()

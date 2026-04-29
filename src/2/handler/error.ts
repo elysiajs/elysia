@@ -3,6 +3,9 @@ import { getAsyncIndexes } from './utils'
 import type { Context } from '../context'
 import type { AppHook } from '../types'
 
+const _defaultError = new Response('Internal Server Error', { status: 500 })
+const defaultErrorHandler = () => _defaultError.clone()
+
 export function createErrorHandler(
 	onErrors: AppHook['error'] | undefined,
 	mapResponse: (
@@ -10,9 +13,12 @@ export function createErrorHandler(
 		set: Context['set'],
 		...any: unknown[]
 	) => unknown,
-	defaultError = new Response('Internal Server Error', { status: 500 })
+	defaultError?: Response
 ) {
-	if (!onErrors) return () => defaultError.clone()
+	if (defaultError && !onErrors) return () => defaultError!.clone()
+	if (!onErrors) return defaultErrorHandler
+
+	defaultError ??= _defaultError
 
 	const asyncIndexes = getAsyncIndexes(onErrors)
 	if (asyncIndexes)
