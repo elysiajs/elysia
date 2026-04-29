@@ -65,6 +65,12 @@ export function createBaseContext(app: AnyElysia) {
 	return Decorator
 }
 
+export function clearContextCache() {
+	// @ts-expect-error
+	baseCache = contextCache = undefined
+	createBaseContextCount = createContextCount = 0
+}
+
 export function createContext(
 	app: AnyElysia
 ): new (request: Request) => Context {

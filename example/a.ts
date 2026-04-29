@@ -27,6 +27,8 @@ app.handle('/?name=a').then((res) =>
 	res.text().then((text) => console.log(text))
 )
 
+app.listen(3000)
+
 // app.handle('query?name=bb')
 // 	.then((res) => res.status)
 // 	.then(console.log)

@@ -624,7 +624,7 @@ function clearCache() {
 
 export function clearSucroseCache(delay: Sucrose.Settings['gcTime']) {
 	// Can't setTimeout outside fetch in Cloudflare Worker
-	if (delay === null || isCloudflareWorker()) return
+	if (delay === null || isCloudflareWorker) return
 	if (delay === undefined) delay = 1 * 60 * 1000
 
 	if (pendingGC) clearTimeout(pendingGC)

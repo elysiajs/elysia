@@ -1251,11 +1251,8 @@ export class Elysia<
 			)
 
 			if (isDynamic) {
-				this['~router'] ??= new Memoirist({
-					onParam: decodeURIComponent
-				})
-
-				this['~router'].add(method, path, handler)
+				this['~router'] ??= new Memoirist(decodeURIComponent)
+				this['~router'].add(method, path, handler, false)
 			} else {
 				// monomorphic access is faster, so we ensure the shape of the map is consistent
 				this['~map'] ??= {
@@ -1284,6 +1281,14 @@ export class Elysia<
 		return (this.#fetchFn ??= createFetchHandler(this))
 	}
 
+	/**
+	 * Dangerous method!
+	 *
+	 * This will clear all routes and compiled handlers, effectively resetting the router.
+	 * This is useful for clearing memory if you have a large number of routes and want to free up resources after they are no longer needed.
+	 *
+	 * Only use this if you know what you're doing.
+	 */
 	clear() {
 		this.#routes = undefined
 		this.#compiled = undefined

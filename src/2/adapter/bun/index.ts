@@ -7,6 +7,7 @@ import { Validator } from '../../schema/validator'
 import { createRouteMap } from './utils'
 
 import type { AnyElysia } from '../..'
+import { flushMemory } from '../../utils'
 
 export const BunAdapter = createAdapter({
 	...WebStandardAdapter,
@@ -37,8 +38,6 @@ export const BunAdapter = createAdapter({
 
 		callback?.(server)
 
-		clearSucroseCache(0)
-		Validator.clear()
-		Bun.gc()
+		flushMemory(app)
 	}
 })

@@ -1,4 +1,9 @@
-import type { Context } from './context'
+import type { AnyElysia } from '.'
+import { clearContextCache, type Context } from './context'
+
+import { Validator } from './schema/validator'
+import { clearSucroseCache } from './sucrose'
+
 import type {
 	InputSchema,
 	AppHook,
@@ -6,6 +11,7 @@ import type {
 	MaybeArray,
 	EventFn
 } from './types'
+import { isBun } from './universal/utils'
 
 export function isEmpty<T extends Object>(obj: T): boolean {
 	for (const _ in obj) return false
@@ -216,4 +222,14 @@ export function mergeDeep<
 	seen.delete(source)
 
 	return target as A & B
+}
+
+export function flushMemory(app?: AnyElysia) {
+	clearSucroseCache(0)
+	Validator.clear()
+	clearContextCache()
+	app?.clear()
+
+	if (isBun) Bun.gc()
+	else if (typeof global?.gc === 'function') global.gc()
 }

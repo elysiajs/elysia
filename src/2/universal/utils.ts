@@ -3,7 +3,7 @@ export const isBun = typeof Bun !== 'undefined'
 // @ts-ignore
 export const isDeno = typeof Deno !== 'undefined'
 
-export function isCloudflareWorker() {
+export const isCloudflareWorker = (() => {
 	try {
 		// Check for the presence of caches.default, which is a global in Workers
 		if (
@@ -21,7 +21,7 @@ export function isCloudflareWorker() {
 	}
 
 	return false
-}
+})()
 
 export const hasHeaderShorthand = isBun ? 'toJSON' in new Headers() : false
 export const hasSetImmediate = typeof setImmediate === 'function'
