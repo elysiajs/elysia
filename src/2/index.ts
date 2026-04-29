@@ -94,7 +94,7 @@ export class Elysia<
 		decorator?: Singleton['decorator']
 		store?: Singleton['store']
 		headers?: Record<string, string>
-		hook?: Partial<AppHook>
+		hook?: Partial<AppHook>[]
 		macro?: Macro
 	}
 
@@ -990,14 +990,10 @@ export class Elysia<
 	}
 
 	guard(hook: Partial<InputHook & Macro>) {
-		this['~ext'] ??= Object.create(null)
+		const ext = (this['~ext'] ??= Object.create(null))
 
-		if (this['~ext']?.hook)
-			mergeHook(
-				Object.assign(Object.create(null), this['~ext'].hook),
-				hook
-			)
-		else this['~ext']!.hook = hook as Partial<AppHook>
+		if (ext.hook) ext.hook.push(mergeHook(hook, ext.hook.at(-1), true))
+		else ext.hook = [hook as any]
 
 		return this
 	}
@@ -1021,10 +1017,10 @@ export class Elysia<
 		iteration = 0,
 		applied?: { [key: number]: true }
 	): void {
-		if (iteration >= 16) return
+		if (iteration >= 16) return input
 		const macro = this['~ext']?.macro
 
-		if (!macro) return
+		if (!macro) return input
 
 		for (let [key, value] of Object.entries(toApply)) {
 			if (key in macro === false) continue
@@ -1088,13 +1084,15 @@ export class Elysia<
 				}
 
 				if (input[k]) {
-					if (Array.isArray(input[k])) (input[k] as any[]).push(v)
-					else input[k] = [input[k], v]
+					if (Array.isArray(input[k])) (input[k] as any[]).unshift(v)
+					else input[k] = [v, input[k]]
 				} else input[k] = v
 
 				delete input[key]
 			}
 		}
+
+		return input
 	}
 
 	use(app: AnyElysia) {
@@ -1154,7 +1152,7 @@ export class Elysia<
 		fn: Function,
 		hook?: Partial<InputHook>
 	) {
-		const appHook = this['~ext']?.hook
+		const appHook = this['~ext']?.hook?.at(-1)
 		const history = appHook
 			? [method, path, fn, hook, appHook]
 			: hook

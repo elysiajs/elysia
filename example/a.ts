@@ -3,31 +3,37 @@ import { Elysia } from '../src/2'
 const app = new Elysia()
 	.macro({
 		a: {
-			beforeHandle({ query }) {
-				console.log({ query })
+			beforeHandle() {
+				console.log('a')
 			}
 		},
-		b: () => ({
+		b: {
 			beforeHandle() {
-				console.log('function macro')
+				console.log('b')
 			}
-		})
+		}
 	})
 	.guard({
-		a: true
-	})
-	.get('/', () => 'ok', {
+		a: true,
 		beforeHandle() {
-			console.log('Inline')
-		},
-		b: true
+			console.log('a1')
+		}
 	})
+	.get('/a', () => 'ok')
+	.guard({
+		b: true,
+		beforeHandle() {
+			console.log('b1')
+		}
+	})
+	.get('/b', () => 'ok')
 
-app.handle('/?name=a').then((res) =>
-	res.text().then((text) => console.log(text))
-)
+// await app.handle('/a').then((res) => res.text().then((text) => console.log(text)))
+await app.handle('/b')
 
-app.listen(3000)
+console.log(app.routes)
+
+// app.listen(3000)
 
 // app.handle('query?name=bb')
 // 	.then((res) => res.status)

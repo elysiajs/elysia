@@ -144,23 +144,19 @@ function applyHook(
 	appHook: InputHook | undefined,
 	app: AnyElysia
 ): InputHook | undefined {
-	if (!localHook && !appHook) return undefined
+	let hook =
+		localHook || appHook
+			? mergeHook(
+					Object.assign(Object.create(null), localHook as any),
+					appHook as any
+				)
+			: undefined
 
-	if (appHook) {
-		appHook = Object.assign(Object.create(null), appHook)
-		app['~applyMacro'](appHook as any)
-	}
+	const rootHooks = app['~ext']?.hook
+	if (!rootHooks?.some((appHook) => appHook === hook))
+		hook = mergeHook(hook, rootHooks?.at(-1))
 
-	const rootHook = app['~ext']?.hook
-	if (rootHook) {
-		localHook = mergeHook(
-			Object.assign(Object.create(null), localHook),
-			rootHook
-		)
-		app['~applyMacro'](localHook as any)
-	}
-
-	return appHook ? mergeHook(appHook, localHook) : localHook
+	return app['~applyMacro'](hook) as InputHook | undefined
 }
 
 export function compileHandler(
