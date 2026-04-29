@@ -35,6 +35,7 @@ import { isBun } from './universal/utils'
 import {
 	checksum,
 	createErrorEventHandler,
+	eventProperties,
 	getLoosePath,
 	hasSchema,
 	hookToGuard,
@@ -105,7 +106,7 @@ export class Elysia<
 
 	#routes?: InternalRoute[]
 	#compiled?: CompiledHandler[]
-	private '~derive'?: WeakSet<EventFn<'beforeHandle'>>
+	private '~derive'?: Set<EventFn<'beforeHandle'>>
 
 	'~router'?: Memoirist<CompiledHandler>
 	'~map'?: { [method: string]: { [path: string]: CompiledHandler } }
@@ -804,7 +805,8 @@ export class Elysia<
 		scope?: EventScope
 	): this {
 		const ext = (this['~ext'] ??= Object.create(null))
-		const hook = (ext.hook ??= Object.create(null))
+		ext.hook ??= [Object.create(null)]
+		const hook = ext.hook.at(-1)
 
 		if (hook![type]) hook![type]!.push(fn as any)
 		else hook![type] = [fn as any]
@@ -860,7 +862,7 @@ export class Elysia<
 		scopeOrFn: { as: EventScope } | EventFn<'beforeHandle'>,
 		fn?: EventFn<'beforeHandle'>
 	): this {
-		this['~derive'] ??= new WeakSet()
+		this['~derive'] ??= new Set()
 		this['~derive'].add(fn ?? (scopeOrFn as EventFn<'beforeHandle'>))
 
 		return this.#onBranch('beforeHandle', scopeOrFn, fn)
@@ -998,6 +1000,17 @@ export class Elysia<
 		const ext = (this['~ext'] ??= Object.create(null))
 
 		this['~applyMacro'](hookToGuard(hook as any))
+
+		if (hook.derive) {
+			this['~derive'] ??= new Set<EventFn<'beforeHandle'>>()
+			this['~derive'].add(hook.derive as EventFn<'beforeHandle'>)
+		}
+
+		// Remove in 2.1
+		if (hook.resolve) {
+			this['~derive'] ??= new Set<EventFn<'beforeHandle'>>()
+			this['~derive'].add(hook.resolve as EventFn<'beforeHandle'>)
+		}
 
 		if (ext.hook) ext.hook.push(mergeGuard(hook as any, ext.hook.at(-1)!))
 		else ext.hook = [hook as any]
@@ -1145,9 +1158,43 @@ export class Elysia<
 				else ext.headers = { ...headers }
 			}
 
-			if (hook) {
-				if (ext.hook) mergeHook(ext.hook, hook)
-				else ext.hook = { ...hook }
+			if (app.#scoped || app.#global) {
+				const scoped = Object.create(null)
+				const last = hook!.at(-1)!
+				const derive = app['~derive']
+
+				for (const key in last) {
+					if (!eventProperties.has(key)) continue
+
+					const events = last[key as keyof AppHook] as Function[]
+					for (const fn of events) {
+						if (
+							derive &&
+							key === 'beforeHandle' &&
+							app['~derive']?.has(fn as EventFn<'beforeHandle'>)
+						) {
+							if (this['~derive'])
+								for (const fn of app['~derive'])
+									this['~derive'].add(fn)
+							else this['~derive'] = new Set(app['~derive'])
+						}
+
+						const isGlobal = app.#global?.has(fn)
+						if (isGlobal || app.#scoped?.has(fn)) {
+							scoped[key] ??= []
+							scoped[key].push(fn)
+
+							if (isGlobal) {
+								this.#global ??= new WeakSet()
+								this.#global.add(fn)
+							}
+						}
+					}
+				}
+
+				if (ext.hook)
+					ext.hook.push(mergeGuard(hook as any, last as any))
+				else ext.hook = [last as any]
 			}
 		}
 

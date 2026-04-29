@@ -1,41 +1,14 @@
 import { Elysia, t } from '../src/2'
 
-const app = new Elysia()
-	.macro({
-		a: {
-			body: t.String(),
-			beforeHandle: function a() {
-				console.log('a')
+const a = new Elysia().derive({ as: 'scoped' }, () => ({
+	a: 'a'
+}))
 
-				return { q: 'q' }
-			}
-		},
-		b: {
-			body: t.Number(),
-			beforeHandle: function b() {
-				console.log('b')
-			}
-		}
-	})
-	.guard({
-		a: true,
-		beforeHandle: function a1({ q }) {
-			console.log('a1')
-		}
-	})
-	.get('/a', () => 'ok')
-	.guard({
-		b: true,
-		beforeHandle: function b1() {
-			console.log('b1')
-		}
-	})
-	.get('/b', () => 'ok')
+const app = new Elysia().use(a).get('/', ({ a }) => a)
 
-// console.log(app.routes)
-
-// await app.handle('/a').then((res) => res.text().then((text) => console.log(text)))
-await app.handle('/b')
+await app
+	.handle('/')
+	.then((x) => x.text())
 
 // console.log(app.routes)
 

@@ -121,16 +121,21 @@ export const schemaProperties = new Set([
 	'response'
 ])
 
-const nativeProperties = new Set([
-	...schemaProperties,
+export const eventProperties = new Set([
 	'parse',
 	'transform',
 	'beforeHandle',
 	'afterHandle',
 	'mapResponse',
 	'afterResponse',
-	'error',
-	'schema'
+	'error'
+])
+
+const nativeProperties = new Set([
+	...schemaProperties,
+	...eventProperties,
+	'schema',
+	'detail'
 ])
 
 export function hookToGuard(
@@ -223,7 +228,7 @@ export function mergeHook(
 			true
 		)
 
-	// Remove in next version
+	// Remove in 2.1
 	if (a.resolve || b.resolve)
 		a.beforeHandle = mergeArray(
 			a.beforeHandle,
