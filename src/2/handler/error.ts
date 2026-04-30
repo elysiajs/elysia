@@ -16,7 +16,11 @@ export function createErrorHandler(
 	defaultError?: Response
 ) {
 	if (defaultError && !onErrors) return () => defaultError!.clone()
-	if (!onErrors) return defaultErrorHandler
+	if (!onErrors) return (a, error) => {
+		console.log(error)
+
+		return defaultErrorHandler()
+	}
 
 	defaultError ??= _defaultError
 

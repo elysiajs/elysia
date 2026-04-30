@@ -16,9 +16,8 @@ import { isBun } from './universal/utils'
 
 import { type MethodMap, MethodMapBack } from './constants'
 
-export const mapMethodBack = (
-	method: MethodMap[keyof MethodMap] | string
-) => MethodMapBack[method as MethodMap[keyof MethodMap]] ?? method
+export const mapMethodBack = (method: MethodMap[keyof MethodMap] | string) =>
+	MethodMapBack[method as MethodMap[keyof MethodMap]] ?? method
 
 export function isEmpty<T extends Object>(obj: T): boolean {
 	for (const _ in obj) return false
@@ -95,27 +94,48 @@ function mergeArray<
 	a: A,
 	b: B,
 	reverse = false
-): (A extends unknown[] ? A : []) & (B extends unknown[] ? B : []) {
+): (A extends unknown[] ? A : []) | (B extends unknown[] ? B : []) {
 	if (!a) return b as any
 	if (!b) return a as any
 
-	const array = new Set()
+	const aArr = Array.isArray(a)
+	const bArr = Array.isArray(b)
 
 	if (reverse) {
-		if (Array.isArray(b)) for (const item of b) array.add(item)
-		else array.add(b)
-
-		if (Array.isArray(a)) for (const item of a) array.add(item)
-		else array.add(a)
-	} else {
-		if (Array.isArray(a)) for (const item of a) array.add(item)
-		else array.add(a)
-
-		if (Array.isArray(b)) for (const item of b) array.add(item)
-		else array.add(b)
+		if (aArr && bArr) {
+			for (let i = 0; i < (a as unknown[]).length; i++)
+				(b as unknown[]).push((a as unknown[])[i])
+			return b as any
+		}
+		if (aArr) {
+			;(a as unknown[]).unshift(b)
+			return a as any
+		}
+		if (bArr) {
+			;(b as unknown[]).push(a)
+			return b as any
+		}
+		return [b, a] as any
 	}
 
-	return [...array]
+	if (aArr && bArr) {
+		for (let i = 0; i < (b as unknown[]).length; i++)
+			(a as unknown[]).push((b as unknown[])[i])
+
+		return a as any
+	}
+
+	if (aArr) {
+		;(a as unknown[]).push(b)
+		return a as any
+	}
+
+	if (bArr) {
+		;(b as unknown[]).unshift(a)
+		return b as any
+	}
+
+	return [a, b] as any
 }
 
 export const schemaProperties = new Set([

@@ -115,6 +115,8 @@ export class Elysia<
 	}
 	'~loosePath': Record<string, string>
 
+	#newHook = false
+
 	constructor(config?: ElysiaConfig<BasePath, Scope>) {
 		this['~config'] = config
 	}
@@ -1105,9 +1107,23 @@ export class Elysia<
 			this['~derive'].add(hook.resolve as EventFn<'beforeHandle'>)
 		}
 
-		if (ext.hooks)
-			ext.hooks.push(mergeGuard(hook as any, ext.hooks.at(-1)!))
-		else ext.hooks = [hook as any]
+		this.#pushHook(hook as Partial<AppHook>)
+
+		return this
+	}
+
+	#pushHook(hook: Partial<AppHook>): this {
+		const ext = (this['~ext'] ??= Object.create(null))
+
+		if (ext.hooks) {
+			if (this.#newHook) {
+				ext.hooks.push(hook)
+				this.#newHook = false
+			} else {
+				const index = ext.hooks.length - 1
+				ext.hooks[index] = mergeGuard(hook as any, ext.hooks[index])
+			}
+		} else ext.hooks = [hook]
 
 		return this
 	}
@@ -1239,17 +1255,21 @@ export class Elysia<
 
 			if (decorator) {
 				if (ext.decorator) mergeDeep(ext.decorator, decorator)
-				else ext.decorator = { ...decorator }
+				else
+					ext.decorator = Object.assign(
+						Object.create(null),
+						decorator
+					)
 			}
 
 			if (store) {
 				if (ext.store) mergeDeep(ext.store, store)
-				else ext.store = { ...store }
+				else ext.store = Object.assign(Object.create(null), store)
 			}
 
 			if (headers) {
 				if (ext.headers) Object.assign(ext.headers, headers)
-				else ext.headers = { ...headers }
+				else ext.headers = Object.assign(Object.create(null), headers)
 			}
 
 			if (app.#plugin || app.#global) {
@@ -1258,6 +1278,7 @@ export class Elysia<
 				const derive = app['~derive']
 
 				if (app.#global) this.#global ??= new WeakSet()
+				if (derive) this['~derive'] ??= new WeakSet()
 
 				if (hook)
 					for (const key in hook) {
@@ -1268,15 +1289,9 @@ export class Elysia<
 							if (
 								derive &&
 								key === 'beforeHandle' &&
-								app['~derive']?.has(
-									fn as EventFn<'beforeHandle'>
-								)
-							) {
-								this['~derive'] ??= new WeakSet()
-								this['~derive'].add(
-									fn as EventFn<'beforeHandle'>
-								)
-							}
+								app['~derive']?.has(fn as any)
+							)
+								this['~derive']!.add(fn as any)
 
 							const isGlobal = app.#global?.has(fn)
 							if (isGlobal || app.#plugin?.has(fn)) {
@@ -1288,9 +1303,7 @@ export class Elysia<
 						}
 					}
 
-				if (ext.hooks)
-					ext.hooks.push(mergeGuard(hook as any, event as any))
-				else ext.hooks = [event as any]
+				this.#pushHook(event)
 			}
 		}
 
@@ -1303,6 +1316,8 @@ export class Elysia<
 		fn: Function,
 		hook?: Partial<InputHook>
 	) {
+		this.#newHook = true
+
 		const appHook = this['~ext']?.hooks?.at(-1)
 		const history = appHook
 			? [method, path, fn, hook, appHook]

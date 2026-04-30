@@ -157,7 +157,11 @@ function applyHook(
 		? Object.assign(Object.create(null), _rootHook)
 		: undefined
 
-	return mergeHook(mergeHook(localHook, appHook), rootHook) as any
+	const hook = mergeHook(localHook, appHook)
+
+	if (_appHook === _rootHook) return hook
+
+	return mergeHook(hook, rootHook) as any
 }
 
 export function compileHandler(
