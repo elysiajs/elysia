@@ -7,13 +7,13 @@ const plugins = new Array(total)
 for (let i = 0; i < total; i++)
 	plugins[i] = new Elysia().get(`/${i}`, () => 'ok')
 
-const stop = profile('Elysia 2α start 100k plugins w/ 1 route')
+const stop = profile('Elysia 2α build 100k plugins w/ 1 route')
 const app = new Elysia()
 
 for (let i = 0; i < total; i++)
 	app.use(plugins[i])
 
-app.handle('/0')
+app.handle(new Request('http://localhost/0'))
 stop()
 
 // await handler({

@@ -54,15 +54,15 @@ export function createFetchHandler(
 	const router = app['~router']!
 	const loosePath = (app['~loosePath'] ??= Object.create(null))
 
-	const onErrors = app['~ext']?.hook?.error
+	const onErrors = app['~ext']?.hooks?.error
 	const hasError = !!onErrors
 	const handleError = createErrorHandler(
 		onErrors,
 		(app['~config']?.adapter ?? defaultAdapter).response.map
 	)
 
-	if (app['~ext']?.hook?.request) {
-		const onRequests = app['~ext'].hook.request!
+	if (app['~ext']?.hooks?.request) {
+		const onRequests = app['~ext'].hooks.request!
 		const asyncIndexes = getAsyncIndexes(onRequests)
 
 		if (asyncIndexes)
