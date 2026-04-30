@@ -1,10 +1,10 @@
 import { Elysia, t } from '../src/2'
 
-const a = new Elysia().derive('global', function a() {
+const a = new Elysia().derive('plugin', function a() {
 	console.log('a')
 })
 
-const b = new Elysia().use(a).derive('global', function b() {
+const b = new Elysia({ as: 'plugin' }).use(a).derive(function b() {
 	console.log('b')
 })
 

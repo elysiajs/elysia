@@ -1340,9 +1340,41 @@ export class Elysia<
 		return this.#add(MethodMap.HEAD, path, fn, hook)
 	}
 
+	#initMap() {
+		// monomorphic access is faster, so we ensure the shape of the map is consistent
+		this['~map'] ??= {
+			GET: Object.create(null),
+			POST: Object.create(null),
+			PUT: Object.create(null),
+			DELETE: Object.create(null),
+			PATCH: Object.create(null),
+			// Cache check, not uncommon
+			HEAD: Object.create(null),
+			// CORS preflight, usuaul
+			OPTIONS: Object.create(null)
+		}
+	}
+
+	/**
+	 * @deprecated use `config.precompile` instead
+	 *
+	 * We be removed in 2.1
+	 *
+	 * ```typescript
+	 * new Elysia({ precompile: true })
+	 * ```
+	 */
+	compile() {
+		this.fetch
+
+		for (let i = 0; i < this.#routes!.length; i++) this.handler(i, true)
+
+		return this
+	}
+
 	handler(
 		index: number,
-		immediate?: boolean,
+		immediate: boolean | undefined = this['~config']?.precompile,
 		route: InternalRoute = this.#routes![index]
 	): CompiledHandler {
 		if (this.#compiled?.[index]) return this.#compiled![index]
@@ -1353,8 +1385,10 @@ export class Elysia<
 			const handler = compileHandler(this.#routes![index], this)
 
 			compiled![index] = handler
-			if (route)
+			if (route) {
+				this.#initMap()
 				this['~map']![mapMethodBack(route[0])]![route[1]] = handler
+			}
 
 			return handler
 		}
@@ -1369,8 +1403,10 @@ export class Elysia<
 			const handler = compileHandler(this.#routes![index], this)
 			this.#compiled![index] = handler
 
-			if (route)
+			if (route) {
+				this.#initMap()
 				this['~map']![mapMethodBack(route[0])]![route[1]] = handler
+			}
 
 			return handler(context)
 		}
@@ -1385,23 +1421,11 @@ export class Elysia<
 			const path = route[1]
 
 			const isDynamic = /\:|\*/.test(path)
-			if (!isDynamic)
-				// monomorphic access is faster, so we ensure the shape of the map is consistent
-				this['~map'] ??= {
-					GET: Object.create(null),
-					POST: Object.create(null),
-					PUT: Object.create(null),
-					DELETE: Object.create(null),
-					PATCH: Object.create(null),
-					// Cache check, not uncommon
-					HEAD: Object.create(null),
-					// CORS preflight, usuaul
-					OPTIONS: Object.create(null)
-				}
+			if (!isDynamic) this.#initMap()
 
 			const handler = this.handler(
 				i,
-				false,
+				this['~config']?.precompile,
 				isDynamic ? undefined : route
 			)
 

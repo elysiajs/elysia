@@ -10,8 +10,9 @@ for (let i = 0; i < total; i++)
 const stop = profile('Elysia 2α build 100k plugins w/ 1 route')
 const app = new Elysia()
 
-for (let i = 0; i < total; i++)
+for (let i = 0; i < total; i++) {
 	app.use(plugins[i])
+}
 
 app.handle(new Request('http://localhost/0'))
 stop()
