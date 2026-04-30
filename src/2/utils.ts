@@ -14,6 +14,12 @@ import type {
 } from './types'
 import { isBun } from './universal/utils'
 
+import { type MethodMap, MethodMapBack } from './constants'
+
+export const mapMethodBack = (
+	method: MethodMap[keyof MethodMap] | string
+) => MethodMapBack[method as MethodMap[keyof MethodMap]] ?? method
+
 export function isEmpty<T extends Object>(obj: T): boolean {
 	for (const _ in obj) return false
 

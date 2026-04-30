@@ -122,7 +122,7 @@ export function createRouteMap(app: AnyElysia) {
 			] = createFetchHandler(
 				app,
 				Context,
-				app.handler(paths[path]),
+				app.handler(paths[path], false, undefined),
 				handleError
 			)
 		}

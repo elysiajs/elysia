@@ -265,7 +265,7 @@ export function mapCompactResponse(
 			})
 
 		case undefined:
-			return response ? new Response('') : Response.json(response)
+			return response ? Response.json(response) : new Response('')
 
 		case 'Response':
 			return response as Response

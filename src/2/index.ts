@@ -8,7 +8,7 @@ import type {
 	DefinitionBase,
 	ElysiaConfig,
 	EphemeralType,
-	EventScope,
+	LegacyEventScope,
 	InternalRoute,
 	MaybeArray,
 	MaybePromise,
@@ -24,7 +24,8 @@ import type {
 	AnyErrorConstructor,
 	Macro,
 	ContextAppendType,
-	Prettify
+	Prettify,
+	EventScope
 } from './types'
 
 import decodeURIComponent from 'fast-decode-uri-component'
@@ -36,25 +37,24 @@ import {
 	checksum,
 	createErrorEventHandler,
 	eventProperties,
-	getLoosePath,
-	hasSchema,
 	hookToGuard,
 	isEmpty,
 	isNotEmpty,
+	mapMethodBack,
 	mergeDeep,
 	mergeGuard,
 	mergeHook,
-	removeSchemaProperty,
 	schemaProperties
 } from './utils'
-import { MethodMap, MethodMapBack } from './constants'
+import { MethodMap } from './constants'
 
 import type { Context } from './context'
 
-export type AnyElysia = Elysia<any, any, any, any, any, any, any>
+export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
 
 export class Elysia<
 	const in out BasePath extends string = '',
+	const in out Scope extends EventScope = 'local',
 	const in out Singleton extends SingletonBase = {
 		decorator: {}
 		store: {}
@@ -91,22 +91,22 @@ export class Elysia<
 		response: {}
 	}
 > {
-	'~config'?: ElysiaConfig<any>
+	'~config'?: ElysiaConfig<BasePath, Scope>
 
-	#scoped?: WeakSet<any>
+	#plugin?: WeakSet<any>
 	#global?: WeakSet<any>
 
 	'~ext'?: {
 		decorator?: Singleton['decorator']
 		store?: Singleton['store']
 		headers?: Record<string, string>
-		hook?: Partial<AppHook>[]
+		hooks?: Partial<AppHook>[]
 		macro?: Macro
 	}
 
 	#routes?: InternalRoute[]
 	#compiled?: CompiledHandler[]
-	private '~derive'?: Set<EventFn<'beforeHandle'>>
+	private '~derive'?: WeakSet<EventFn<'beforeHandle'>>
 
 	'~router'?: Memoirist<CompiledHandler>
 	'~map'?: { [method: string]: { [path: string]: CompiledHandler } }
@@ -115,7 +115,7 @@ export class Elysia<
 	}
 	'~loosePath': Record<string, string>
 
-	constructor(config?: ElysiaConfig<any>) {
+	constructor(config?: ElysiaConfig<BasePath, Scope>) {
 		this['~config'] = config
 	}
 
@@ -127,8 +127,7 @@ export class Elysia<
 		return this.#routes.map(
 			([method, path, handler, hook, appHook]) =>
 				({
-					method:
-						MethodMapBack[method as keyof MethodMapBack] ?? method,
+					method: mapMethodBack(method),
 					path,
 					handler,
 					hook: appHook
@@ -157,6 +156,7 @@ export class Elysia<
 		value: Value
 	): Elysia<
 		BasePath,
+		Scope,
 		{
 			decorator: Prettify<Singleton['decorator'] & { [k in Name]: Value }>
 			store: Singleton['store']
@@ -174,6 +174,7 @@ export class Elysia<
 		decorators: NewDecorators
 	): Elysia<
 		BasePath,
+		Scope,
 		{
 			decorator: Prettify<Singleton['decorator'] & NewDecorators>
 			store: Singleton['store']
@@ -191,6 +192,7 @@ export class Elysia<
 		mapper: (decorators: Singleton['decorator']) => NewDecorators
 	): Elysia<
 		BasePath,
+		Scope,
 		{
 			decorator: NewDecorators
 			store: Singleton['store']
@@ -210,6 +212,7 @@ export class Elysia<
 		value: Value
 	): Elysia<
 		BasePath,
+		Scope,
 		{
 			decorator: Prettify<Singleton['decorator'] & { [k in Name]: Value }>
 			store: Singleton['store']
@@ -229,6 +232,7 @@ export class Elysia<
 		value: Value
 	): Elysia<
 		BasePath,
+		Scope,
 		{
 			decorator: Prettify<
 				Omit<Singleton['decorator'], Name> & { [k in Name]: Value }
@@ -251,6 +255,7 @@ export class Elysia<
 		value: Value
 	): Elysia<
 		BasePath,
+		Scope,
 		{
 			decorator: Prettify<Singleton['decorator'] & { [k in Name]: Value }>
 			store: Singleton['store']
@@ -271,6 +276,7 @@ export class Elysia<
 		value: Value
 	): Elysia<
 		BasePath,
+		Scope,
 		{
 			decorator: Prettify<
 				Omit<Singleton['decorator'], Name> & { [k in Name]: Value }
@@ -291,6 +297,7 @@ export class Elysia<
 		decorators: NewDecorators
 	): Elysia<
 		BasePath,
+		Scope,
 		{
 			decorator: Prettify<Singleton['decorator'] & NewDecorators>
 			store: Singleton['store']
@@ -309,6 +316,7 @@ export class Elysia<
 		decorators: NewDecorators
 	): Elysia<
 		BasePath,
+		Scope,
 		{
 			decorator: Prettify<
 				Omit<Singleton['decorator'], keyof NewDecorators> &
@@ -331,6 +339,7 @@ export class Elysia<
 		decorators: NewDecorators
 	): Elysia<
 		BasePath,
+		Scope,
 		{
 			decorator: Prettify<Singleton['decorator'] & NewDecorators>
 			store: Singleton['store']
@@ -350,6 +359,7 @@ export class Elysia<
 		decorators: NewDecorators
 	): Elysia<
 		BasePath,
+		Scope,
 		{
 			decorator: Prettify<
 				Omit<Singleton['decorator'], keyof NewDecorators> &
@@ -491,6 +501,7 @@ export class Elysia<
 		value: Value
 	): Elysia<
 		BasePath,
+		Scope,
 		{
 			decorator: Singleton['decorator']
 			store: Prettify<Singleton['store'] & { [k in Name]: Value }>
@@ -508,6 +519,7 @@ export class Elysia<
 		store: NewStore
 	): Elysia<
 		BasePath,
+		Scope,
 		{
 			decorator: Singleton['decorator']
 			store: Prettify<Singleton['store'] & NewStore>
@@ -525,6 +537,7 @@ export class Elysia<
 		mapper: (store: Singleton['store']) => NewStore
 	): Elysia<
 		BasePath,
+		Scope,
 		{
 			decorator: Singleton['decorator']
 			store: NewStore
@@ -544,6 +557,7 @@ export class Elysia<
 		value: Value
 	): Elysia<
 		BasePath,
+		Scope,
 		{
 			decorator: Singleton['decorator']
 			store: Prettify<Singleton['store'] & { [k in Name]: Value }>
@@ -563,6 +577,7 @@ export class Elysia<
 		value: Value
 	): Elysia<
 		BasePath,
+		Scope,
 		{
 			decorator: Singleton['decorator']
 			store: Prettify<
@@ -585,6 +600,7 @@ export class Elysia<
 		value: Value
 	): Elysia<
 		BasePath,
+		Scope,
 		{
 			decorator: Singleton['decorator']
 			store: Prettify<Singleton['store'] & { [k in Name]: Value }>
@@ -605,6 +621,7 @@ export class Elysia<
 		value: Value
 	): Elysia<
 		BasePath,
+		Scope,
 		{
 			decorator: Singleton['decorator']
 			store: Prettify<
@@ -625,6 +642,7 @@ export class Elysia<
 		store: NewStore
 	): Elysia<
 		BasePath,
+		Scope,
 		{
 			decorator: Singleton['decorator']
 			store: Prettify<Singleton['store'] & NewStore>
@@ -643,6 +661,7 @@ export class Elysia<
 		store: NewStore
 	): Elysia<
 		BasePath,
+		Scope,
 		{
 			decorator: Singleton['decorator']
 			store: Prettify<Omit<Singleton['store'], keyof NewStore> & NewStore>
@@ -662,6 +681,7 @@ export class Elysia<
 		store: NewStore
 	): Elysia<
 		BasePath,
+		Scope,
 		{
 			decorator: Singleton['decorator']
 			store: Prettify<Singleton['store'] & NewStore>
@@ -681,6 +701,7 @@ export class Elysia<
 		store: NewStore
 	): Elysia<
 		BasePath,
+		Scope,
 		{
 			decorator: Singleton['decorator']
 			store: Prettify<Omit<Singleton['store'], keyof NewStore> & NewStore>
@@ -804,16 +825,19 @@ export class Elysia<
 		fn: UnwrapArray<AppHook[Event]>,
 		scope?: EventScope
 	): this {
+		// @ts-expect-error Remove in 2.1
+		if (scope === 'scoped') scope = 'plugin'
+
 		const ext = (this['~ext'] ??= Object.create(null))
-		ext.hook ??= [Object.create(null)]
-		const hook = ext.hook.at(-1)
+		ext.hooks ??= [Object.create(null)]
+		const hook = ext.hooks.at(-1)
 
 		if (hook![type]) hook![type]!.push(fn as any)
 		else hook![type] = [fn as any]
 
-		if (scope === 'scoped') {
-			this.#scoped ??= new WeakSet()
-			this.#scoped.add(fn)
+		if (scope === 'plugin') {
+			this.#plugin ??= new WeakSet()
+			this.#plugin.add(fn)
 		} else if (scope === 'global') {
 			this.#global ??= new WeakSet()
 			this.#global.add(fn)
@@ -824,20 +848,38 @@ export class Elysia<
 
 	#onBranch(
 		type: AppEvent,
-		scopeOrFn: { as: EventScope } | EventFn<AppEvent>,
+		scopeOrFn: EventScope | { as: LegacyEventScope } | EventFn<AppEvent>,
 		fn?: EventFn<AppEvent>
 	): this {
 		return fn
-			? this.#on(type, fn, (scopeOrFn as { as: EventScope }).as)
+			? this.#on(
+					type,
+					fn,
+					// Remove in 2.1
+					((scopeOrFn as { as: LegacyEventScope })
+						?.as as EventScope) ?? scopeOrFn
+				)
 			: this.#on(type, scopeOrFn as EventFn<'beforeHandle'>)
 	}
 
+	// Remove in 2.1
 	onTransform(fn: EventFn<'transform'>): this
 	onTransform(scope: { as: 'local' }, fn: EventFn<'transform'>): this
-	onTransform(scope: { as: 'global' }, fn: EventFn<'transform'>): this
 	onTransform(scope: { as: 'scoped' }, fn: EventFn<'transform'>): this
+	onTransform(scope: { as: 'global' }, fn: EventFn<'transform'>): this
 	onTransform(
-		scopeOrFn: { as: EventScope } | EventFn<'transform'>,
+		scopeOrFn: { as: LegacyEventScope } | EventFn<'transform'>,
+		fn?: EventFn<'transform'>
+	): this {
+		return this.#onBranch('transform', scopeOrFn, fn)
+	}
+
+	transform(fn: EventFn<'transform'>): this
+	transform(scope: 'local', fn: EventFn<'transform'>): this
+	transform(scope: 'plugin', fn: EventFn<'transform'>): this
+	transform(scope: 'global', fn: EventFn<'transform'>): this
+	transform(
+		scopeOrFn: EventScope | EventFn<'transform'>,
 		fn?: EventFn<'transform'>
 	): this {
 		return this.#onBranch('transform', scopeOrFn, fn)
@@ -845,10 +887,21 @@ export class Elysia<
 
 	onBeforeHandle(fn: EventFn<'beforeHandle'>): this
 	onBeforeHandle(scope: { as: 'local' }, fn: EventFn<'beforeHandle'>): this
-	onBeforeHandle(scope: { as: 'global' }, fn: EventFn<'beforeHandle'>): this
 	onBeforeHandle(scope: { as: 'scoped' }, fn: EventFn<'beforeHandle'>): this
+	onBeforeHandle(scope: { as: 'global' }, fn: EventFn<'beforeHandle'>): this
 	onBeforeHandle(
-		scopeOrFn: { as: EventScope } | EventFn<'beforeHandle'>,
+		scopeOrFn: { as: LegacyEventScope } | EventFn<'beforeHandle'>,
+		fn?: EventFn<'beforeHandle'>
+	): this {
+		return this.#onBranch('beforeHandle', scopeOrFn, fn)
+	}
+
+	beforeHandle(fn: EventFn<'beforeHandle'>): this
+	beforeHandle(scope: 'local', fn: EventFn<'beforeHandle'>): this
+	beforeHandle(scope: 'plugin', fn: EventFn<'beforeHandle'>): this
+	beforeHandle(scope: 'global', fn: EventFn<'beforeHandle'>): this
+	beforeHandle(
+		scopeOrFn: EventScope | EventFn<'beforeHandle'>,
 		fn?: EventFn<'beforeHandle'>
 	): this {
 		return this.#onBranch('beforeHandle', scopeOrFn, fn)
@@ -856,13 +909,19 @@ export class Elysia<
 
 	derive(fn: EventFn<'beforeHandle'>): this
 	derive(scope: { as: 'local' }, fn: EventFn<'beforeHandle'>): this
-	derive(scope: { as: 'global' }, fn: EventFn<'beforeHandle'>): this
 	derive(scope: { as: 'scoped' }, fn: EventFn<'beforeHandle'>): this
+	derive(scope: { as: 'global' }, fn: EventFn<'beforeHandle'>): this
+	derive(scope: 'local', fn: EventFn<'beforeHandle'>): this
+	derive(scope: 'plugin', fn: EventFn<'beforeHandle'>): this
+	derive(scope: 'global', fn: EventFn<'beforeHandle'>): this
 	derive(
-		scopeOrFn: { as: EventScope } | EventFn<'beforeHandle'>,
+		scopeOrFn:
+			| EventScope
+			| { as: LegacyEventScope }
+			| EventFn<'beforeHandle'>,
 		fn?: EventFn<'beforeHandle'>
 	): this {
-		this['~derive'] ??= new Set()
+		this['~derive'] ??= new WeakSet()
 		this['~derive'].add(fn ?? (scopeOrFn as EventFn<'beforeHandle'>))
 
 		return this.#onBranch('beforeHandle', scopeOrFn, fn)
@@ -870,10 +929,21 @@ export class Elysia<
 
 	onAfterHandle(fn: EventFn<'afterHandle'>): this
 	onAfterHandle(scope: { as: 'local' }, fn: EventFn<'afterHandle'>): this
-	onAfterHandle(scope: { as: 'global' }, fn: EventFn<'afterHandle'>): this
 	onAfterHandle(scope: { as: 'scoped' }, fn: EventFn<'afterHandle'>): this
+	onAfterHandle(scope: { as: 'global' }, fn: EventFn<'afterHandle'>): this
 	onAfterHandle(
-		scopeOrFn: { as: EventScope } | EventFn<'afterHandle'>,
+		scopeOrFn: { as: LegacyEventScope } | EventFn<'afterHandle'>,
+		fn?: EventFn<'afterHandle'>
+	): this {
+		return this.#onBranch('afterHandle', scopeOrFn, fn)
+	}
+
+	afterHandle(fn: EventFn<'afterHandle'>): this
+	afterHandle(scope: 'local', fn: EventFn<'afterHandle'>): this
+	afterHandle(scope: 'plugin', fn: EventFn<'afterHandle'>): this
+	afterHandle(scope: 'global', fn: EventFn<'afterHandle'>): this
+	afterHandle(
+		scopeOrFn: EventScope | EventFn<'afterHandle'>,
 		fn?: EventFn<'afterHandle'>
 	): this {
 		return this.#onBranch('afterHandle', scopeOrFn, fn)
@@ -881,10 +951,16 @@ export class Elysia<
 
 	mapResponse(fn: EventFn<'mapResponse'>): this
 	mapResponse(scope: { as: 'local' }, fn: EventFn<'mapResponse'>): this
-	mapResponse(scope: { as: 'global' }, fn: EventFn<'mapResponse'>): this
 	mapResponse(scope: { as: 'scoped' }, fn: EventFn<'mapResponse'>): this
+	mapResponse(scope: { as: 'global' }, fn: EventFn<'mapResponse'>): this
+	mapResponse(scope: 'local', fn: EventFn<'mapResponse'>): this
+	mapResponse(scope: 'plugin', fn: EventFn<'mapResponse'>): this
+	mapResponse(scope: 'global', fn: EventFn<'mapResponse'>): this
 	mapResponse(
-		scopeOrFn: { as: EventScope } | EventFn<'mapResponse'>,
+		scopeOrFn:
+			| EventScope
+			| { as: LegacyEventScope }
+			| EventFn<'mapResponse'>,
 		fn?: EventFn<'mapResponse'>
 	): this {
 		return this.#onBranch('mapResponse', scopeOrFn, fn)
@@ -892,56 +968,73 @@ export class Elysia<
 
 	onAfterResponse(fn: EventFn<'afterResponse'>): this
 	onAfterResponse(scope: { as: 'local' }, fn: EventFn<'afterResponse'>): this
-	onAfterResponse(scope: { as: 'global' }, fn: EventFn<'afterResponse'>): this
 	onAfterResponse(scope: { as: 'scoped' }, fn: EventFn<'afterResponse'>): this
+	onAfterResponse(scope: { as: 'global' }, fn: EventFn<'afterResponse'>): this
 	onAfterResponse(
-		scopeOrFn: { as: EventScope } | EventFn<'afterResponse'>,
+		scopeOrFn: { as: LegacyEventScope } | EventFn<'afterResponse'>,
+		fn?: EventFn<'afterResponse'>
+	): this {
+		return this.#onBranch('afterHandle', scopeOrFn, fn)
+	}
+
+	afterResponse(fn: EventFn<'afterResponse'>): this
+	afterResponse(scope: 'local', fn: EventFn<'afterResponse'>): this
+	afterResponse(scope: 'plugin', fn: EventFn<'afterResponse'>): this
+	afterResponse(scope: 'global', fn: EventFn<'afterResponse'>): this
+	afterResponse(
+		scopeOrFn: EventScope | EventFn<'afterResponse'>,
 		fn?: EventFn<'afterResponse'>
 	): this {
 		return this.#onBranch('afterHandle', scopeOrFn, fn)
 	}
 
 	onError(fn: EventFn<'error'>): this
-	onError(error: AnyErrorConstructor, fn: EventFn<'error'>): this
-	onError(error: AnyErrorConstructor, fn: unknown): this
 	onError(scope: { as: 'local' }, fn: EventFn<'error'>): this
 	onError(scope: { as: 'global' }, fn: EventFn<'error'>): this
 	onError(scope: { as: 'scoped' }, fn: EventFn<'error'>): this
+	// Remove in 2.1
 	onError(
-		scope: { as: 'local' },
+		options: { as: LegacyEventScope } | MaybeArray<Function>,
+		handler?: MaybeArray<Function>
+	) {
+		if (arguments.length === 1) {
+			if (Array.isArray(options))
+				options.forEach((fn) => this.error(fn as EventFn<'error'>))
+			else this.error(options as EventFn<'error'>)
+		} else if (arguments.length === 2) {
+			let scope = (options as { as: LegacyEventScope }).as as EventScope
+			// @ts-expect-error
+			if (scope === 'scoped') scope = 'plugin'
+
+			if (Array.isArray(handler))
+				handler.forEach((fn) =>
+					this.error(scope as any, fn as EventFn<'error'>)
+				)
+			else this.error(scope as any, handler as EventFn<'error'>)
+		}
+
+		return this
+	}
+
+	error(fn: EventFn<'error'>): this
+	error(error: AnyErrorConstructor, fn: EventFn<'error'>): this
+	error(error: AnyErrorConstructor, fn: unknown): this
+	error(scope: 'local', fn: EventFn<'error'>): this
+	error(scope: 'plugin', fn: EventFn<'error'>): this
+	error(scope: 'global', fn: EventFn<'error'>): this
+	error(
+		scope: 'local',
 		error: AnyErrorConstructor,
 		fn: EventFn<'error'>
 	): this
-	onError(
-		scope: { as: 'local' },
-		error: AnyErrorConstructor,
-		fn: unknown
-	): this
-	onError(
-		scope: { as: 'global' },
+	error(
+		scope: 'plugin',
 		error: AnyErrorConstructor,
 		fn: EventFn<'error'>
 	): this
-	onError(
-		scope: { as: 'global' },
-		error: AnyErrorConstructor,
-		fn: unknown
-	): this
-	onError(
-		scope: { as: 'scoped' },
-		error: AnyErrorConstructor,
-		fn: EventFn<'error'>
-	): this
-	onError(
-		scope: { as: 'scoped' },
-		error: AnyErrorConstructor,
-		fn: unknown
-	): this
-	onError(
-		scopeOrFnOrError:
-			| { as: EventScope }
-			| EventFn<'error'>
-			| AnyErrorConstructor,
+	error(scope: 'global', error: AnyErrorConstructor, fn: unknown): this
+	error(
+		scopeOrFnOrError: EventScope | EventFn<'error'> | AnyErrorConstructor,
 		fnOrError?: AnyErrorConstructor | EventFn<'error'> | unknown,
 		fn?: EventFn<'error'> | unknown
 	): this {
@@ -976,7 +1069,7 @@ export class Elysia<
 
 				return this.#onBranch(
 					'error',
-					scopeOrFnOrError as { as: EventScope },
+					scopeOrFnOrError as EventScope,
 					fnOrError as EventFn<'error'>
 				)
 
@@ -987,7 +1080,7 @@ export class Elysia<
 
 				return this.#onBranch(
 					'error',
-					scopeOrFnOrError as { as: EventScope },
+					scopeOrFnOrError as EventScope,
 					createErrorEventHandler(run, fnOrError as unknown as Error)
 				)
 			}
@@ -1012,8 +1105,9 @@ export class Elysia<
 			this['~derive'].add(hook.resolve as EventFn<'beforeHandle'>)
 		}
 
-		if (ext.hook) ext.hook.push(mergeGuard(hook as any, ext.hook.at(-1)!))
-		else ext.hook = [hook as any]
+		if (ext.hooks)
+			ext.hooks.push(mergeGuard(hook as any, ext.hooks.at(-1)!))
+		else ext.hooks = [hook as any]
 
 		return this
 	}
@@ -1116,7 +1210,7 @@ export class Elysia<
 		return input
 	}
 
-	use(app: AnyElysia) {
+	use(app: AnyElysia): this {
 		if (!app) return this
 
 		if (Array.isArray(app)) {
@@ -1132,14 +1226,14 @@ export class Elysia<
 		return this.#use(app)
 	}
 
-	#use(app: AnyElysia) {
+	#use(app: AnyElysia): this {
 		if (app.#routes)
 			for (const route of app.#routes)
 				// @ts-expect-error
 				this.#add(route[0], route[1], route[2], route[3])
 
 		if (app['~ext']) {
-			const { decorator, store, headers, hook } = app['~ext']
+			const { decorator, store, headers, hooks } = app['~ext']
 			const ext: NonNullable<(typeof this)['~ext']> = (this['~ext'] ??=
 				Object.create(null))
 
@@ -1158,43 +1252,45 @@ export class Elysia<
 				else ext.headers = { ...headers }
 			}
 
-			if (app.#scoped || app.#global) {
-				const scoped = Object.create(null)
-				const last = hook!.at(-1)!
+			if (app.#plugin || app.#global) {
+				const event = Object.create(null)
+				const hook = hooks!.at(-1)!
 				const derive = app['~derive']
 
-				for (const key in last) {
-					if (!eventProperties.has(key)) continue
+				if (app.#global) this.#global ??= new WeakSet()
 
-					const events = last[key as keyof AppHook] as Function[]
-					for (const fn of events) {
-						if (
-							derive &&
-							key === 'beforeHandle' &&
-							app['~derive']?.has(fn as EventFn<'beforeHandle'>)
-						) {
-							if (this['~derive'])
-								for (const fn of app['~derive'])
-									this['~derive'].add(fn)
-							else this['~derive'] = new Set(app['~derive'])
-						}
+				if (hook)
+					for (const key in hook) {
+						if (!eventProperties.has(key)) continue
 
-						const isGlobal = app.#global?.has(fn)
-						if (isGlobal || app.#scoped?.has(fn)) {
-							scoped[key] ??= []
-							scoped[key].push(fn)
+						const fns = hook[key as keyof AppHook] as Function[]
+						for (const fn of fns) {
+							if (
+								derive &&
+								key === 'beforeHandle' &&
+								app['~derive']?.has(
+									fn as EventFn<'beforeHandle'>
+								)
+							) {
+								this['~derive'] ??= new WeakSet()
+								this['~derive'].add(
+									fn as EventFn<'beforeHandle'>
+								)
+							}
 
-							if (isGlobal) {
-								this.#global ??= new WeakSet()
-								this.#global.add(fn)
+							const isGlobal = app.#global?.has(fn)
+							if (isGlobal || app.#plugin?.has(fn)) {
+								event[key] ??= []
+								event[key].push(fn)
+
+								if (isGlobal) this.#global!.add(fn)
 							}
 						}
 					}
-				}
 
-				if (ext.hook)
-					ext.hook.push(mergeGuard(hook as any, last as any))
-				else ext.hook = [last as any]
+				if (ext.hooks)
+					ext.hooks.push(mergeGuard(hook as any, event as any))
+				else ext.hooks = [event as any]
 			}
 		}
 
@@ -1207,7 +1303,7 @@ export class Elysia<
 		fn: Function,
 		hook?: Partial<InputHook>
 	) {
-		const appHook = this['~ext']?.hook?.at(-1)
+		const appHook = this['~ext']?.hooks?.at(-1)
 		const history = appHook
 			? [method, path, fn, hook, appHook]
 			: hook
@@ -1247,7 +1343,7 @@ export class Elysia<
 	handler(
 		index: number,
 		immediate?: boolean,
-		then?: (handler: CompiledHandler) => void
+		route: InternalRoute = this.#routes![index]
 	): CompiledHandler {
 		if (this.#compiled?.[index]) return this.#compiled![index]
 
@@ -1257,33 +1353,26 @@ export class Elysia<
 			const handler = compileHandler(this.#routes![index], this)
 
 			compiled![index] = handler
-			then?.(handler)
+			if (route)
+				this['~map']![mapMethodBack(route[0])]![route[1]] = handler
 
 			return handler
 		}
 
-		return this.#jitHandler(index)
+		return this.#jitHandler(index, route)
 	}
 
-	#jitHandler(
-		index: number,
-		then?: (compiled: CompiledHandler) => void
-	): CompiledHandler {
+	#jitHandler(index: number, route?: InternalRoute): CompiledHandler {
 		return (context) => {
 			if (this.#compiled?.[index]) return this.#compiled![index](context)
 
 			const handler = compileHandler(this.#routes![index], this)
 			this.#compiled![index] = handler
 
-			then?.(handler)
+			if (route)
+				this['~map']![mapMethodBack(route[0])]![route[1]] = handler
 
 			return handler(context)
-		}
-	}
-
-	#saveRoute(method: string, path: string) {
-		return (compiled: CompiledHandler) => {
-			this['~map']![method]![path] = compiled
 		}
 	}
 
@@ -1292,21 +1381,11 @@ export class Elysia<
 
 		for (let i = 0; i < this.#routes.length; i++) {
 			const route: InternalRoute = this.#routes[i]
-			const [_method, path] = route
-			const method =
-				MethodMapBack[_method as keyof MethodMapBack] ?? _method
+			const method = mapMethodBack(route[0])
+			const path = route[1]
 
 			const isDynamic = /\:|\*/.test(path)
-			const handler = this.handler(
-				i,
-				undefined,
-				isDynamic ? undefined : this.#saveRoute(method, path)
-			)
-
-			if (isDynamic) {
-				this['~router'] ??= new Memoirist(decodeURIComponent)
-				this['~router'].add(method, path, handler, false)
-			} else {
+			if (!isDynamic)
 				// monomorphic access is faster, so we ensure the shape of the map is consistent
 				this['~map'] ??= {
 					GET: Object.create(null),
@@ -1320,6 +1399,16 @@ export class Elysia<
 					OPTIONS: Object.create(null)
 				}
 
+			const handler = this.handler(
+				i,
+				false,
+				isDynamic ? undefined : route
+			)
+
+			if (isDynamic) {
+				this['~router'] ??= new Memoirist(decodeURIComponent)
+				this['~router'].add(method, path, handler, false)
+			} else {
 				this['~map']![method] ??= Object.create(null)
 				this['~map']![method]![path] = handler
 			}

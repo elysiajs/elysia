@@ -13,7 +13,17 @@ import { ElysiaCustomStatusResponse } from '../error'
 import { MethodMap } from './constants'
 import { ElysiaError } from './error'
 
-export interface ElysiaConfig<in out Prefix extends string | undefined> {
+export interface ElysiaConfig<
+	in out Prefix extends string | undefined,
+	in out Scope extends EventScope
+> {
+	/**
+	 * Define event scope for the instance
+	 *
+	 * @since 2.0.0
+	 */
+	as: Scope
+
 	/**
 	 * @default BunAdapter
 	 * @since 1.1.11
@@ -225,7 +235,8 @@ export type Replace<Original, Target, With> =
 				? With
 				: Original
 
-export type EventScope = 'global' | 'local' | 'scoped'
+export type LegacyEventScope = 'global' | 'local' | 'scoped'
+export type EventScope = 'global' | 'local' | 'plugin'
 export type GuardSchemaType = 'override' | 'standalone'
 
 export type ElysiaFormData<T extends Record<keyof any, unknown>> = FormData & {

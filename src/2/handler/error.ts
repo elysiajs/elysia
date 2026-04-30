@@ -4,7 +4,7 @@ import type { Context } from '../context'
 import type { AppHook } from '../types'
 
 const _defaultError = new Response('Internal Server Error', { status: 500 })
-const defaultErrorHandler = () => _defaultError.clone()
+const defaultErrorHandler = _defaultError.clone.bind(_defaultError)
 
 export function createErrorHandler(
 	onErrors: AppHook['error'] | undefined,

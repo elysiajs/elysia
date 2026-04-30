@@ -1,14 +1,21 @@
 import { Elysia, t } from '../src/2'
 
-const a = new Elysia().derive({ as: 'scoped' }, () => ({
-	a: 'a'
-}))
+const a = new Elysia().derive('global', function a() {
+	console.log('a')
+})
 
-const app = new Elysia().use(a).get('/', ({ a }) => a)
+const b = new Elysia().use(a).derive('global', function b() {
+	console.log('b')
+})
+
+const app = new Elysia().use(b).get('/', () => {
+	return 'xd'
+})
 
 await app
 	.handle('/')
 	.then((x) => x.text())
+	.then(console.log)
 
 // console.log(app.routes)
 
