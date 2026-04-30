@@ -29,7 +29,8 @@ import type {
 	ContentType,
 	CompiledHandler,
 	InternalRoute,
-	InputHook
+	InputHook,
+	AppHook
 } from '../../types'
 
 function builtinParser(
@@ -140,9 +141,9 @@ const isAsyncValidator = (vali: Validator | undefined) =>
 	!(vali as TypeBoxValidator)?.tb || (vali as TypeBoxValidator)?.isAsync
 
 function applyHook(
-	_localHook: InputHook | undefined,
-	_appHook: InputHook | undefined,
-	app: AnyElysia
+	_localHook: Partial<InputHook> | undefined,
+	_appHook: Partial<InputHook> | undefined,
+	_rootHook: Partial<AppHook> | undefined
 ): InputHook | undefined {
 	const localHook = _localHook
 		? Object.assign(Object.create(null), _localHook)
@@ -152,12 +153,11 @@ function applyHook(
 		? Object.assign(Object.create(null), _appHook)
 		: undefined
 
-	let hook = mergeHook(localHook, appHook)
+	const rootHook = _rootHook
+		? Object.assign(Object.create(null), _rootHook)
+		: undefined
 
-	const rootHook = app['~ext']?.hook?.at(-1)
-	if (rootHook) hook = mergeHook(hook, rootHook)
-
-	return hook as InputHook
+	return mergeHook(mergeHook(localHook, appHook), rootHook) as any
 }
 
 export function compileHandler(
@@ -166,7 +166,7 @@ export function compileHandler(
 ): CompiledHandler {
 	const adapter = root['~config']?.adapter ?? defaultAdapter
 
-	const hook = applyHook(localHook, appHook, root)
+	const hook = applyHook(localHook, appHook, root['~ext']?.hooks?.at(-1))
 	const inference = sucrose(handler as any, hook as Sucrose.LifeCycle)
 
 	const params = new Set<unknown>()
@@ -189,7 +189,7 @@ export function compileHandler(
 		}
 	}
 
-	const hasBody = inference.body && hook.parse?.[0] !== 'none'
+	const hasBody = inference.body && hook?.parse?.[0] !== 'none'
 
 	const vali = new RouteValidator(hook)
 
