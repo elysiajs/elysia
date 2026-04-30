@@ -98,42 +98,46 @@ function mergeArray<
 	if (!a) return b as any
 	if (!b) return a as any
 
-	const aArr = Array.isArray(a)
-	const bArr = Array.isArray(b)
+	const aIsArray = Array.isArray(a)
+	const bIsArray = Array.isArray(b)
 
 	if (reverse) {
-		if (aArr && bArr) {
-			for (let i = 0; i < (a as unknown[]).length; i++)
-				(b as unknown[]).push((a as unknown[])[i])
-			return b as any
+		if (aIsArray && bIsArray) {
+			if (b.length === 1) {
+				a.unshift((b as unknown[])[0])
+				return a as any
+			} else if (a.length === 1) {
+				a.push((b as unknown[])[0])
+				return a as any
+			} else return b.concat(a) as any
 		}
-		if (aArr) {
+
+		if (aIsArray) {
 			;(a as unknown[]).unshift(b)
 			return a as any
 		}
-		if (bArr) {
-			;(b as unknown[]).push(a)
-			return b as any
-		}
+
+		if (bIsArray) return [...b, a] as any
+
 		return [b, a] as any
 	}
 
-	if (aArr && bArr) {
-		for (let i = 0; i < (b as unknown[]).length; i++)
-			(a as unknown[]).push((b as unknown[])[i])
-
-		return a as any
+	if (aIsArray && bIsArray) {
+		if (b.length === 1) {
+			a.push((b as unknown[])[0])
+			return a as any
+		} else if (a.length === 1) {
+			a.unshift((b as unknown[])[0])
+			return a as any
+		} else return b.concat(a) as any
 	}
 
-	if (aArr) {
+	if (aIsArray) {
 		;(a as unknown[]).push(b)
 		return a as any
 	}
 
-	if (bArr) {
-		;(b as unknown[]).unshift(a)
-		return b as any
-	}
+	if (bIsArray) return [a, ...b] as any
 
 	return [a, b] as any
 }
@@ -251,7 +255,7 @@ export function mergeHook(
 		a.beforeHandle = mergeArray(
 			a.beforeHandle,
 			mergeArray(a.derive, b.derive),
-			true
+			reverse
 		)
 
 	// Remove in 2.1
@@ -259,7 +263,7 @@ export function mergeHook(
 		a.beforeHandle = mergeArray(
 			a.beforeHandle,
 			mergeArray(a.resolve, b.resolve, reverse),
-			true
+			reverse
 		)
 
 	if (a.beforeHandle || b.beforeHandle)

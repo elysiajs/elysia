@@ -141,36 +141,60 @@ const isAsyncValidator = (vali: Validator | undefined) =>
 	!(vali as TypeBoxValidator)?.tb || (vali as TypeBoxValidator)?.isAsync
 
 function applyHook(
-	_localHook: Partial<InputHook> | undefined,
-	_appHook: Partial<InputHook> | undefined,
-	_rootHook: Partial<AppHook> | undefined
+	localHook: Partial<InputHook> | undefined,
+	appHook: Partial<InputHook> | undefined,
+	rootHook: Partial<AppHook> | undefined
 ): InputHook | undefined {
-	const localHook = _localHook
-		? Object.assign(Object.create(null), _localHook)
-		: undefined
+	if (!localHook) {
+		if (rootHook)
+			return mergeHook(
+				Object.assign(Object.create(null), appHook),
+				rootHook as any,
+				true
+			) as any
 
-	const appHook = _appHook
-		? Object.assign(Object.create(null), _appHook)
-		: undefined
+		return appHook as any
+	}
 
-	const rootHook = _rootHook
-		? Object.assign(Object.create(null), _rootHook)
-		: undefined
+	if (!appHook) {
+		if (rootHook)
+			mergeHook(
+				Object.assign(Object.create(null), localHook),
+				rootHook as any,
+				true
+			)
 
-	const hook = mergeHook(localHook, appHook)
+		return localHook as any
+	}
 
-	if (_appHook === _rootHook) return hook
+	const hook = mergeHook(
+		Object.assign(Object.create(null), localHook),
+		appHook as any
+	) as any
 
-	return mergeHook(hook, rootHook) as any
+	if (rootHook) mergeHook(hook, rootHook as any, true)
+
+	return hook
 }
 
 export function compileHandler(
-	[, , handler, localHook, appHook]: InternalRoute,
+	[, path, handler, instance, localHook, appHook]: InternalRoute,
 	root: AnyElysia
 ): CompiledHandler {
 	const adapter = root['~config']?.adapter ?? defaultAdapter
 
-	const hook = applyHook(localHook, appHook, root['~ext']?.hooks?.at(-1))
+	const hook = applyHook(
+		localHook,
+		appHook,
+		root === instance ? undefined : root['~ext']?.hooks?.at(-1)
+	)
+
+	// console.log({
+	// 	localHook,
+	// 	appHook,
+	// 	rootHook: root === instance ? undefined : root['~ext']?.hooks?.at(-1)
+	// })
+
 	const inference = sucrose(handler as any, hook as Sucrose.LifeCycle)
 
 	const params = new Set<unknown>()
@@ -276,6 +300,9 @@ export function compileHandler(
 			code += `c.body=${bodyValiIsAsync ? 'await ' : ''}va.body.From(c.body)\n`
 		}
 	}
+
+	if (hook?.beforeHandle && !Array.isArray(hook.beforeHandle))
+		hook.beforeHandle = [hook.beforeHandle]
 
 	if (hook?.beforeHandle?.length) {
 		link(hook.beforeHandle, 'bf')

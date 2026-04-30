@@ -638,6 +638,7 @@ export type InternalRoute = readonly [
 	method: string | MethodMap[keyof MethodMap],
 	path: string,
 	handler: Handler | Response,
+	instance: AnyElysia,
 	hook: InputHook | undefined,
 	appHook: InputHook | undefined
 ]

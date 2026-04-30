@@ -42,6 +42,6 @@ describe('macro order', () => {
 			.get('/b', () => 'ok')
 
 		await app.handle('/b')
-		expect(order).toEqual(['derive', 'a', 'a1', 'b', 'b1'])
+		expect(order).toEqual(['a', 'a1', 'derive', 'b', 'b1'])
 	})
 })

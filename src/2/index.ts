@@ -127,7 +127,7 @@ export class Elysia<
 		this.#compiled ??= Array(this.#routes.length)
 
 		return this.#routes.map(
-			([method, path, handler, hook, appHook]) =>
+			([method, path, handler, , hook, appHook]) =>
 				({
 					method: mapMethodBack(method),
 					path,
@@ -834,8 +834,18 @@ export class Elysia<
 		ext.hooks ??= [Object.create(null)]
 		const hook = ext.hooks.at(-1)
 
-		if (hook![type]) hook![type]!.push(fn as any)
-		else hook![type] = [fn as any]
+		if (this.#newHook) {
+			const newHook = Object.create(null)
+			newHook[type] = fn
+
+			mergeHook(newHook, hook as any, true)
+
+			ext.hooks.push(newHook)
+			this.#newHook = false
+		} else {
+			if (hook![type]) hook![type]!.push(fn as any)
+			else hook![type] = [fn as any]
+		}
 
 		if (scope === 'plugin') {
 			this.#plugin ??= new WeakSet()
@@ -859,7 +869,9 @@ export class Elysia<
 					fn,
 					// Remove in 2.1
 					((scopeOrFn as { as: LegacyEventScope })
-						?.as as EventScope) ?? scopeOrFn
+						?.as as EventScope) ??
+						scopeOrFn ??
+						this['~config']?.as
 				)
 			: this.#on(type, scopeOrFn as EventFn<'beforeHandle'>)
 	}
@@ -1097,13 +1109,13 @@ export class Elysia<
 		this['~applyMacro'](hookToGuard(hook as any))
 
 		if (hook.derive) {
-			this['~derive'] ??= new Set<EventFn<'beforeHandle'>>()
+			this['~derive'] ??= new WeakSet<EventFn<'beforeHandle'>>()
 			this['~derive'].add(hook.derive as EventFn<'beforeHandle'>)
 		}
 
 		// Remove in 2.1
 		if (hook.resolve) {
-			this['~derive'] ??= new Set<EventFn<'beforeHandle'>>()
+			this['~derive'] ??= new WeakSet<EventFn<'beforeHandle'>>()
 			this['~derive'].add(hook.resolve as EventFn<'beforeHandle'>)
 		}
 
@@ -1116,13 +1128,13 @@ export class Elysia<
 		const ext = (this['~ext'] ??= Object.create(null))
 
 		if (ext.hooks) {
+			const index = ext.hooks.length - 1
+			const current = ext.hooks[index]
+
 			if (this.#newHook) {
-				ext.hooks.push(hook)
+				ext.hooks.push(mergeHook(hook, current, true))
 				this.#newHook = false
-			} else {
-				const index = ext.hooks.length - 1
-				ext.hooks[index] = mergeGuard(hook as any, ext.hooks[index])
-			}
+			} else ext.hooks[index] = mergeHook(current, hook)
 		} else ext.hooks = [hook]
 
 		return this
@@ -1243,10 +1255,16 @@ export class Elysia<
 	}
 
 	#use(app: AnyElysia): this {
-		if (app.#routes)
+		if (app.#routes) {
+			this.#newHook = true
+
 			for (const route of app.#routes)
-				// @ts-expect-error
-				this.#add(route[0], route[1], route[2], route[3])
+				this.#mapIdx(
+					route[0],
+					route[1],
+					route as unknown as InternalRoute
+				)
+		}
 
 		if (app['~ext']) {
 			const { decorator, store, headers, hooks } = app['~ext']
@@ -1295,8 +1313,11 @@ export class Elysia<
 
 							const isGlobal = app.#global?.has(fn)
 							if (isGlobal || app.#plugin?.has(fn)) {
-								event[key] ??= []
-								event[key].push(fn)
+								if (event[key]) {
+									if (Array.isArray(event[key]))
+										event[key].push(fn)
+									else event[key] = [event[key], fn]
+								} else event[key] = fn
 
 								if (isGlobal) this.#global!.add(fn)
 							}
@@ -1320,23 +1341,33 @@ export class Elysia<
 
 		const appHook = this['~ext']?.hooks?.at(-1)
 		const history = appHook
-			? [method, path, fn, hook, appHook]
+			? [method, path, fn, this, hook, appHook]
 			: hook
-				? [method, path, fn, hook]
-				: [method, path, fn]
+				? [method, path, fn, this, hook]
+				: [method, path, fn, this]
+
+		this.#mapIdx(method, path, history as unknown as InternalRoute)
+
+		return this
+	}
+
+	#mapIdx(
+		method: string | MethodMap[keyof MethodMap],
+		path: string,
+		route: InternalRoute
+	) {
+		method = mapMethodBack(method)
 
 		if (this.#routes) {
 			this['~mapIdx']![method] ??= Object.create(null)
 			this['~mapIdx']![method]![path] = this.#routes.length
-			this.#routes.push(history as any)
+			this.#routes.push(route)
 		} else {
 			this['~mapIdx'] = Object.create(null)
 			this['~mapIdx']![method] = Object.create(null)
 			this['~mapIdx']![method]![path] = 0
-			this.#routes = [history as any]
+			this.#routes = [route]
 		}
-
-		return this
 	}
 
 	get<Hook extends Partial<InputHook>>(

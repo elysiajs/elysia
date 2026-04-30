@@ -3,7 +3,7 @@ import { Elysia } from '../../../src/2'
 
 describe('derive', () => {
 	it('from plugin', async () => {
-		const a = new Elysia().derive({ as: 'scoped' }, () => ({
+		const a = new Elysia().derive('plugin', () => ({
 			a: 'a'
 		}))
 
