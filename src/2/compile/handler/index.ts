@@ -21,6 +21,8 @@ import { isBun } from '../../universal/utils'
 
 import { parseQueryFromURL } from '../../parse-query'
 import { defaultAdapter } from '../../adapter/constants'
+
+import { mapBeforeHandle, mapTransform } from './utils'
 import { mergeHook } from '../../utils'
 
 import type { Link } from '../types'
@@ -189,12 +191,6 @@ export function compileHandler(
 		root === instance ? undefined : root['~ext']?.hooks?.at(-1)
 	)
 
-	// console.log({
-	// 	localHook,
-	// 	appHook,
-	// 	rootHook: root === instance ? undefined : root['~ext']?.hooks?.at(-1)
-	// })
-
 	const inference = sucrose(handler as any, hook as Sucrose.LifeCycle)
 
 	const params = new Set<unknown>()
@@ -259,17 +255,13 @@ export function compileHandler(
 		link(parseQueryFromURL, 'pq')
 	}
 
-	if (hasHeaders) {
-		code += isBun
-			? `c.headers=c.request.headers.toJSON()\n`
-			: `c.headers=Object.fromEntries(c.request.headers.headers)\n`
-	}
+	if (hasHeaders)
+		code += `c.headers=${isBun ? 'c.request.headers.toJSON()' : 'Object.fromEntries(c.request.headers.headers)'}\n`
 
 	if (hook?.transform?.length) {
 		link(hook.transform, 'tf')
 
-		for (let i = 0; i < hook.transform.length; i++)
-			code += `${isAsyncFunction(hook.transform[i]) ? 'await ' : ''}tf[${i}](c)\n`
+		code += mapTransform(hook.transform)
 	}
 
 	if (vali.headers) {
@@ -301,22 +293,13 @@ export function compileHandler(
 		}
 	}
 
-	if (hook?.beforeHandle && !Array.isArray(hook.beforeHandle))
-		hook.beforeHandle = [hook.beforeHandle]
-
-	if (hook?.beforeHandle?.length) {
+	if (hook?.beforeHandle) {
 		link(hook.beforeHandle, 'bf')
-		if (root['~derive']) code += `let dr\n`
 
-		const beforeHandle = hook.beforeHandle
+		const derive = root['~derive']
+		if (derive) code += `let dr\n`
 
-		for (let i = 0; i < beforeHandle.length; i++)
-			if (root['~derive']?.has(beforeHandle[i]))
-				code +=
-					`dr=${isAsyncFunction(beforeHandle[i]) ? 'await ' : ''}bf[${i}](c)\n` +
-					`if(dr)Object.assign(c,dr)\n`
-			else
-				code += `${isAsyncFunction(beforeHandle[i]) ? 'await ' : ''}bf[${i}](c)\n`
+		code += mapBeforeHandle(hook.beforeHandle, [derive])
 	}
 
 	const hasSet =

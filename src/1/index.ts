@@ -11,7 +11,7 @@ import {
 import fastDecodeURIComponent from 'fast-decode-uri-component'
 import type { Context, PreContext } from './context'
 
-import { ELYSIA_TYPES, t } from './2/type'
+import { ELYSIA_TYPES, t } from './type-system'
 import { mergeInference, sucrose, type Sucrose } from './sucrose'
 
 import type { WSLocalHook } from './ws/types'

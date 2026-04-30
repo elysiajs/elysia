@@ -1,5 +1,6 @@
 import { applyCoercions } from '../../src/2/schema/coerce'
 import { t } from '../../src/2/type'
+// import { Type as t } from 'typebox'
 
 import { profile } from './utils'
 
@@ -7,8 +8,8 @@ const coerce = (schema: any) =>
 	applyCoercions(schema, [
 		[
 			[
-				['Number', (x) => t.Numeric(x)],
-				['Boolean', (x) => t.BooleanString(x)]
+				['Number', t.Numeric],
+				['Boolean', t.BooleanString]
 			]
 		]
 	])

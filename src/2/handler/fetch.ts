@@ -50,7 +50,7 @@ export function createFetchHandler(
 	app: AnyElysia
 ): (request: Request) => MaybePromise<Response> {
 	const Context = createContext(app)
-	const map = app['~map']!
+	const map = app['~map']! ?? {}
 	const router = app['~router']!
 	const loosePath = (app['~loosePath'] ??= Object.create(null))
 
@@ -114,11 +114,9 @@ export function createFetchHandler(
 		const context = new Context(request)
 		const url = request.url,
 			s = url.indexOf('/', 11),
-			qi = url.indexOf('?', s + 1),
+			// @ts-expect-error
+			qi = (context.qi = url.indexOf('?', s + 1)),
 			path = url.substring(s, qi === -1 ? url.length : qi)
-
-		// @ts-expect-error
-		context.qi = qi
 
 		try {
 			const inner = map[request.method]

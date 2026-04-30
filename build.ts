@@ -1,6 +1,5 @@
 import { $ } from 'bun'
-import { build } from 'tsup'
-import { fixImportsPlugin } from 'esbuild-fix-imports-plugin'
+import { build } from 'tsdown'
 
 import pack from './package.json'
 
@@ -10,22 +9,18 @@ if ('elysia' in pack.dependencies)
 await $`rm -rf dist`
 
 await build({
-	entry: ['src/**/*.ts'],
 	outDir: 'dist',
+	entry: ['src/2/**/*.ts'],
+	cjsDefault: false,
+	target: 'node22',
 	format: ['esm', 'cjs'],
-	target: 'node20',
-	minifySyntax: true,
-	minifyWhitespace: false,
-	minifyIdentifiers: false,
-	splitting: false,
-	sourcemap: false,
-	cjsInterop: false,
-	clean: true,
-	bundle: false,
-	external: ['@sinclair/typebox', 'file-type'],
-	esbuildPlugins: [fixImportsPlugin()]
+	dts: false,
+	minify: false,
+	unbundle: true,
+	outExtensions(c) {
+		return {
+			dts: '.d.ts',
+			js: c.format === 'es' ? '.mjs' : '.js'
+		}
+	}
 })
-
-await $`tsc --project tsconfig.dts.json`
-
-process.exit()

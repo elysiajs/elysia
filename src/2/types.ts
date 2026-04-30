@@ -351,7 +351,7 @@ export interface InputSchema {
 
 export interface InputHook extends InputSchema {
 	type: ContentType
-	parse: MaybeArray<BodyHandler<any, any>>
+	parse: MaybeArray<string | BodyHandler<any, any>>
 	transform: MaybeArray<TransformHandler<any, any>>
 	beforeHandle: MaybeArray<OptionalHandler<any, any>>
 	afterHandle: MaybeArray<AfterHandler<any, any>>
