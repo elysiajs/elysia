@@ -668,6 +668,11 @@ function push(target: unknown[], array: unknown[]) {
 	for (let i = 0; i < array.length; i++) target.push(array[i])
 }
 
+function pushParse(target: unknown[], array: unknown[]) {
+	for (let i = 0; i < array.length; i++)
+		if (typeof array[i] === 'function') target.push(array[i])
+}
+
 export function sucrose(
 	handler: Handler | undefined,
 	lifeCycle: Sucrose.LifeCycle | undefined,
@@ -680,7 +685,7 @@ export function sucrose(
 	if (lifeCycle) {
 		if (lifeCycle.request?.length) push(events, lifeCycle.request)
 		if (lifeCycle.beforeHandle?.length) push(events, lifeCycle.beforeHandle)
-		if (lifeCycle.parse?.length) push(events, lifeCycle.parse)
+		if (lifeCycle.parse?.length) pushParse(events, lifeCycle.parse)
 		if (lifeCycle.error?.length) push(events, lifeCycle.error)
 		if (lifeCycle.transform?.length) push(events, lifeCycle.transform)
 		if (lifeCycle.afterHandle?.length) push(events, lifeCycle.afterHandle)

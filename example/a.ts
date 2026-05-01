@@ -1,14 +1,8 @@
 import { Elysia, t } from '../src/2'
 import * as z from 'zod'
 
-const app = new Elysia()
-	.get('/', () => 'ok', {
-		query: z.object({
-			name: z.string()
-		})
-	})
-	.listen(3000)
+const app = new Elysia().post('/sign-in', (c) => c.body, {
+	parse: 'json'
+})
 
-app.handle('/')
-	.then((x) => x.text())
-	.then(console.log)
+app.handler(0, true)
