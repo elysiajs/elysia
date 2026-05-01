@@ -13,15 +13,21 @@ import {
 	coerceStringToStructure
 } from './coerce'
 
-useTypebox({
-	Compile,
-	Decode,
-	Errors,
-	applyCoercions,
-	TypeBoxValidator: TypeBoxValidator as any,
-	TypeBoxValidatorCache: TypeBoxValidatorCache as any,
-	coerceFormData,
-	coerceQuery,
-	coerceRoot,
-	coerceStringToStructure
-})
+let setup = false
+export function setupTypebox() {
+	if (setup) return
+
+	setup = true
+	useTypebox({
+		Compile,
+		Decode,
+		Errors,
+		applyCoercions,
+		TypeBoxValidator: TypeBoxValidator as any,
+		TypeBoxValidatorCache: TypeBoxValidatorCache as any,
+		coerceFormData,
+		coerceQuery,
+		coerceRoot,
+		coerceStringToStructure
+	})
+}

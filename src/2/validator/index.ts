@@ -121,7 +121,7 @@ export abstract class Validator {
 		)
 
 	static clear() {
-		// tbCache?.clear()
+		tbCache?.clear()
 	}
 }
 

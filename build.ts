@@ -13,10 +13,10 @@ await build({
 	entry: ['src/2/**/*.ts'],
 	cjsDefault: false,
 	target: 'node22',
-	format: ['esm', 'cjs'],
-	dts: false,
+	format: ['esm'],
 	minify: false,
 	unbundle: true,
+	dts: true,
 	outExtensions(c) {
 		return {
 			dts: '.d.ts',

@@ -55,7 +55,7 @@ export function useTypebox(mod: {
 	coerceRoot: typeof coerceRootType
 	coerceStringToStructure: typeof coerceStringToStructureType
 }) {
-	console.log('SYNC')
+	console.debug('debug: use TypeBox')
 	Compile = mod.Compile
 	Decode = mod.Decode
 	Errors = mod.Errors

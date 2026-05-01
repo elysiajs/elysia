@@ -1,7 +1,6 @@
 export { Elysia } from './base'
 
-import * as t from './type'
-export { t }
+export { t, System } from './type'
 
 export type {
 	BaseSchema,
