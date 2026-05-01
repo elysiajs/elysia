@@ -1,9 +1,10 @@
 import { Elysia, t } from '../src/2'
+import * as z from 'zod'
 
 const app = new Elysia()
-	.get('/', ({ query }) => query ?? {}, {
-		query: t.Object({
-			name: t.String()
+	.get('/', () => 'ok', {
+		query: z.object({
+			name: z.string()
 		})
 	})
 	.listen(3000)

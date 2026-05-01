@@ -4,9 +4,9 @@ import {
 	coerceFormData,
 	coerceQuery,
 	coerceRoot,
-	coerceStringToStructure
+	coerceStringToStructure,
+	hasTypes
 } from '../type/bridge'
-import { hasTypes } from '../type/utils'
 import { ELYSIA_TYPES } from '../type/constants'
 
 import type { AnySchema } from '../type'
@@ -34,6 +34,9 @@ interface RouteValidatorOptions extends Omit<
 	}[]
 }
 
+// @ts-expect-error
+const isTb = (schema: unknown): schema is AnySchema => '~kind' in schema
+
 export class RouteValidator<const in out T extends RouteSchema> {
 	body: ToSubTypeValidator<T['body']> | undefined
 	headers: ToSubTypeValidator<T['headers']> | undefined
@@ -51,25 +54,30 @@ export class RouteValidator<const in out T extends RouteSchema> {
 	constructor(route: T, options?: RouteValidatorOptions) {
 		if (!route) return
 
-		if (route.body)
+		if (route.body) {
 			this.body = Validator.create(route.body, {
 				normalize: options?.normalize,
 				sanitize: options?.sanitize,
 				schemas: options?.schemas?.map((s) => s.body),
-				coerces: hasTypes(
-					[ELYSIA_TYPES.File, ELYSIA_TYPES.Files],
-					route.body
-				)
-					? coerceFormData()
-					: coerceRoot()
+				coerces: isTb(route.body)
+					? hasTypes(
+							[ELYSIA_TYPES.File, ELYSIA_TYPES.Files],
+							route.body
+						)
+						? coerceFormData()
+						: coerceRoot()
+					: undefined
 			}) as any
+		}
 
 		if (route.headers)
 			this.headers = Validator.create(route.headers, {
 				normalize: options?.normalize,
 				sanitize: options?.sanitize,
 				schemas: options?.schemas?.map((s) => s.headers),
-				coerces: coerceStringToStructure()
+				coerces: isTb(route.headers)
+					? coerceStringToStructure()
+					: undefined
 			}) as any
 
 		if (route.query)
@@ -77,7 +85,7 @@ export class RouteValidator<const in out T extends RouteSchema> {
 				normalize: options?.normalize,
 				sanitize: options?.sanitize,
 				schemas: options?.schemas?.map((s) => s.query),
-				coerces: coerceQuery()
+				coerces: isTb(route.query) ? coerceQuery() : undefined
 			}) as any
 
 		if (route.params)
@@ -85,7 +93,7 @@ export class RouteValidator<const in out T extends RouteSchema> {
 				normalize: options?.normalize,
 				sanitize: options?.sanitize,
 				schemas: options?.schemas?.map((s) => s.params),
-				coerces: coerceRoot()
+				coerces: isTb(route.params) ? coerceRoot() : undefined
 			}) as any
 
 		if (route.cookie)
@@ -93,7 +101,9 @@ export class RouteValidator<const in out T extends RouteSchema> {
 				normalize: options?.normalize,
 				sanitize: options?.sanitize,
 				schemas: options?.schemas?.map((s) => s.cookie),
-				coerces: coerceStringToStructure()
+				coerces: isTb(route.cookie)
+					? coerceStringToStructure()
+					: undefined
 			}) as any
 
 		if (route.response)

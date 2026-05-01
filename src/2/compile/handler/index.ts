@@ -3,7 +3,7 @@ import { sucrose, type Sucrose } from '../../sucrose'
 
 import type { ElysiaAdapter } from '../../adapter'
 
-import { Validator } from '../../validator'
+import type { Validator } from '../../validator'
 import { RouteValidator } from '../../validator/route'
 
 import type { TypeBoxValidator } from '../../type/validator'

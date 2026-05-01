@@ -6,6 +6,7 @@ import { Decode, Errors } from 'typebox/value'
 import { applyCoercions } from './coerce'
 import { TypeBoxValidator, TypeBoxValidatorCache } from './validator'
 
+import { hasTypes } from './utils'
 import {
 	coerceFormData,
 	coerceQuery,
@@ -28,6 +29,7 @@ export function setupTypebox() {
 		coerceFormData,
 		coerceQuery,
 		coerceRoot,
-		coerceStringToStructure
+		coerceStringToStructure,
+		hasTypes
 	})
 }

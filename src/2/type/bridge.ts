@@ -14,6 +14,7 @@ import type {
 	coerceRoot as coerceRootType,
 	coerceStringToStructure as coerceStringToStructureType
 } from './coerce'
+import { type hasTypes as hasTypesType } from './utils'
 
 const error = new Error("Typebox module isn't initialized yet")
 function errorFn() {
@@ -43,6 +44,8 @@ export let coerceRoot: typeof coerceRootType = errorFn as any
 export let coerceStringToStructure: typeof coerceStringToStructureType =
 	errorFn as any
 
+export let hasTypes: typeof hasTypesType = errorFn as any
+
 export function useTypebox(mod: {
 	Compile: typeof CompileType
 	Decode: typeof DecodeType
@@ -54,6 +57,7 @@ export function useTypebox(mod: {
 	coerceQuery: typeof coerceQueryType
 	coerceRoot: typeof coerceRootType
 	coerceStringToStructure: typeof coerceStringToStructureType
+	hasTypes: typeof hasTypesType
 }) {
 	console.debug('debug: use TypeBox')
 	Compile = mod.Compile
@@ -66,4 +70,5 @@ export function useTypebox(mod: {
 	coerceQuery = mod.coerceQuery
 	coerceRoot = mod.coerceRoot
 	coerceStringToStructure = mod.coerceStringToStructure
+	hasTypes = mod.hasTypes
 }
