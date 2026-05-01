@@ -15,6 +15,7 @@ export function parseQueryFromURL(
 	object?: { [key: string]: 1 }
 ): Record<string, string> {
 	const result = Object.create(null)
+	if (startIndex === -1) return result
 
 	let flags = 0
 

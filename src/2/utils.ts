@@ -1,20 +1,9 @@
-import type { AnyElysia } from '.'
-import { clearContextCache, type Context } from './context'
+import { type Context } from './context'
 
-import { Validator } from './schema/validator'
-import { clearSucroseCache } from './sucrose'
-
-import type {
-	InputSchema,
-	AppHook,
-	MaybeArray,
-	EventFn,
-	Macro,
-	InputHook
-} from './types'
-import { isBun } from './universal/utils'
+import type { AppHook, MaybeArray, EventFn, Macro, InputSchema } from './types'
 
 import { type MethodMap, MethodMapBack } from './constants'
+import { ElysiaFile } from './universal/file'
 
 export const mapMethodBack = (method: MethodMap[keyof MethodMap] | string) =>
 	MethodMapBack[method as MethodMap[keyof MethodMap]] ?? method
@@ -313,7 +302,7 @@ export const isClass = (v: Object) =>
 	// If object prototype is not pure, then probably a class-like object
 	isNotEmpty(Object.getPrototypeOf(v))
 
-const dangerousKeys = ['__proto__', 'constructor', 'prototype'] as const
+const dangerousKeys = new Set(['__proto__', 'constructor', 'prototype'])
 
 export function mergeDeep<
 	A extends Record<string, any>,
@@ -339,8 +328,7 @@ export function mergeDeep<
 	seen.add(source)
 
 	for (const [key, value] of Object.entries(source)) {
-		if (skipKeys?.includes(key) || dangerousKeys.includes(key as any))
-			continue
+		if (skipKeys?.includes(key) || dangerousKeys.has(key as any)) continue
 
 		if (mergeArray && Array.isArray(value)) {
 			target[key as keyof typeof target] = Array.isArray(
@@ -372,12 +360,5 @@ export function mergeDeep<
 	return target as A & B
 }
 
-export function flushMemory(app?: AnyElysia) {
-	clearSucroseCache(0)
-	Validator.clear()
-	clearContextCache()
-	app?.clear()
-
-	if (isBun) Bun.gc()
-	else if (typeof global?.gc === 'function') global.gc()
-}
+export const isBlob = (value: unknown): value is Blob =>
+	value instanceof Blob || value instanceof ElysiaFile

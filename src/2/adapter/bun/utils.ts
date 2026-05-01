@@ -7,7 +7,7 @@ import { getAsyncIndexes, createErrorHandler } from '../../handler'
 import { WebStandardAdapter } from '../web-standard'
 import { NotFound } from '../../error'
 
-import type { AnyElysia } from '../..'
+import type { AnyElysia } from '../../base'
 import type { Context } from '../../context'
 import type { CompiledHandler, MaybePromise } from '../../types'
 

@@ -2,8 +2,8 @@ import { parse, serialize } from 'cookie'
 
 import decode from 'fast-decode-uri-component'
 
+import { InvalidCookieSignature } from './error'
 import { constantTimeEqual, isNotEmpty } from './utils'
-// import { InvalidCookieSignature } from '../old/error'
 
 import type { Context } from './context'
 import type { Prettify } from './types'

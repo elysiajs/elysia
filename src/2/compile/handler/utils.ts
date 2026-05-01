@@ -1,6 +1,6 @@
 import { isAsyncFunction } from '../utils'
 
-import type { AnyElysia } from '../..'
+import type { AnyElysia } from '../../base'
 import type { AppEvent, AppHook, BodyHandler, MaybeArray } from '../../types'
 
 export const mapTransform = map<'transform'>(

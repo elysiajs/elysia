@@ -1,4 +1,4 @@
-import { applyCoercions } from '../../src/2/schema/coerce'
+import { applyCoercions } from '../../src/2/type/coerce'
 import { t } from '../../src/2/type'
 // import { Type as t } from 'typebox'
 

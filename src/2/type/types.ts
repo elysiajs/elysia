@@ -2,7 +2,7 @@ import type { TObjectOptions, TSchemaOptions } from 'typebox'
 import type { TLocalizedValidationError } from 'typebox/error'
 import type { Validator } from 'typebox/schema'
 
-import type { ELYSIA_TYPES } from './index'
+import type { ELYSIA_TYPES } from './constants'
 import type { CookieOptions } from '../cookie'
 import type { MaybeArray } from '../types'
 
@@ -291,3 +291,9 @@ declare module 'typebox' {
 }
 
 export type AnySchema = BaseSchema | StandardSchemaV1Like
+
+export type GetOwnPropertyDescriptor<T> = {
+	[P in keyof T]: TypedPropertyDescriptor<T[P]>
+} & {
+	[x: string]: PropertyDescriptor
+}

@@ -1,7 +1,7 @@
 import { ElysiaStatus, status, type SelectiveStatus } from './error'
 import { checksum, redirect } from './utils'
 
-import type { AnyElysia } from '.'
+import type { AnyElysia } from './base'
 import type { Server } from './universal/server'
 import type { StatusMap, StatusMapBack } from './constants'
 import type { Cookie, ElysiaCookie } from './cookie'

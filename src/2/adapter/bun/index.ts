@@ -2,12 +2,10 @@ import { createAdapter } from '..'
 import { WebStandardAdapter } from '../web-standard'
 import { mapStaticHandler } from './handler'
 
-import { clearSucroseCache } from '../../sucrose'
-import { Validator } from '../../schema/validator'
 import { createRouteMap } from './utils'
+import { flushMemory } from '../../memory'
 
-import type { AnyElysia } from '../..'
-import { flushMemory } from '../../utils'
+import type { AnyElysia } from '../../base'
 
 export const BunAdapter = createAdapter({
 	...WebStandardAdapter,
@@ -36,8 +34,8 @@ export const BunAdapter = createAdapter({
 					}
 		)
 
-		callback?.(server)
-
 		flushMemory(app)
+
+		callback?.(server)
 	}
 })

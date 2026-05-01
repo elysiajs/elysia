@@ -1,15 +1,7 @@
 import { Elysia, t } from '../src/2'
 
-const a = new Elysia()
-	.derive('plugin', () => ({
-		a: 'a'
-	}))
-	.derive('plugin', () => ({
-		b: 'b'
-	}))
+const app = new Elysia().get('/', ({ query }) => query ?? {}).listen(3000)
 
-const app = new Elysia().use(a).get('/', ({ a, b }) => [a, b])
-
-app.handle('/')
+app.handle('/?name=a')
 	.then((x) => x.text())
 	.then(console.log)

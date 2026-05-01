@@ -547,13 +547,9 @@ export async function tee<T>(
 	async function* makeIterator(): AsyncIterableIterator<T> {
 		let i = 0
 		while (true) {
-			if (i < buffer.length) {
-				yield buffer[i++]
-			} else if (done) {
-				return
-			} else {
-				await new Promise<void>((resolve) => waiting.push({ resolve }))
-			}
+			if (i < buffer.length) yield buffer[i++]
+			else if (done) return
+			else await new Promise<void>((resolve) => waiting.push({ resolve }))
 		}
 	}
 

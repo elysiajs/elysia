@@ -1,17 +1,13 @@
-import {
-	Validator,
-	ValidatorOptions,
-	type ToSubTypeValidator
-} from './validator'
+import { Validator, ValidatorOptions, type ToSubTypeValidator } from '.'
 
 import {
 	coerceFormData,
 	coerceQuery,
 	coerceRoot,
 	coerceStringToStructure
-} from './coerce'
-import { hasTypes } from './utils'
-import { ELYSIA_TYPES } from '../type'
+} from '../type/bridge'
+import { hasTypes } from '../type/utils'
+import { ELYSIA_TYPES } from '../type/constants'
 
 import type { AnySchema } from '../type'
 

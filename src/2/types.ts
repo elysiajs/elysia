@@ -1,17 +1,18 @@
 import type { Instruction as ExactMirrorInstruction } from 'exact-mirror'
 import type { OpenAPIV3 } from 'openapi-types'
 
-import type { AnyElysia, AnySchema } from '.'
+import { ElysiaFile } from './universal/file'
+import { TraceEvent, TraceListener } from './trace'
+import { MethodMap } from './constants'
+import { ElysiaError, type ElysiaStatus } from './error'
+import type { AnySchema } from './type'
+
+import type { AnyElysia } from './base'
 import type { ElysiaAdapter } from './adapter'
 import type { Sucrose } from './sucrose'
 import type { Serve } from './universal'
 import type { CookieOptions } from './cookie'
-import { Context, ErrorContext, PreContext } from './context'
-import { ElysiaFile } from './universal/file'
-import { TraceEvent, TraceListener } from './trace'
-import { ElysiaCustomStatusResponse } from '../error'
-import { MethodMap } from './constants'
-import { ElysiaError } from './error'
+import type { Context, ErrorContext, PreContext } from './context'
 
 export interface ElysiaConfig<
 	in out Prefix extends string | undefined,
@@ -480,7 +481,7 @@ export type MapResponse<
 ) => MaybePromise<Response | void>
 
 type InlineHandlerResponse<Route extends RouteSchema['response']> = {
-	[Status in keyof Route]: ElysiaCustomStatusResponse<
+	[Status in keyof Route]: ElysiaStatus<
 		// @ts-ignore Status is always a number
 		Status,
 		Route[Status],

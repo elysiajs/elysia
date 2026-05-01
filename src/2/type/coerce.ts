@@ -1,5 +1,12 @@
 import type { TProperties, TSchema } from 'typebox'
-import { primitiveElysiaTypes, t, type BaseSchema } from '../type'
+
+import type { BaseSchema } from '.'
+import { primitiveElysiaTypes } from './constants'
+
+import { ArrayString } from './elysia/array-string'
+import { ObjectString } from './elysia/object-string'
+import { Numeric } from './elysia/numeric'
+import { BooleanString } from './elysia/boolean-string'
 
 interface CoerceOptions {
 	/**
@@ -273,8 +280,8 @@ export const coerceRoot = () =>
 	(_coerceRoot ??= [
 		[
 			[
-				['Number', t.Numeric],
-				['Boolean', t.BooleanString]
+				['Number', Numeric],
+				['Boolean', BooleanString]
 			],
 			{
 				rootPropertiesOnly: true
@@ -283,9 +290,9 @@ export const coerceRoot = () =>
 	])
 
 const toObjectString = (x: TProperties) =>
-	t.ObjectString((x.properties as TProperties) ?? {}, x)
+	ObjectString((x.properties as TProperties) ?? {}, x)
 const toArrayString = (x: TProperties) =>
-	t.ArrayString((x.items as TProperties) ?? t.Any(), x)
+	ArrayString((x.items as TProperties) ?? {}, x)
 
 let _coerceQuery: CoerceOption[]
 export const coerceQuery = () =>

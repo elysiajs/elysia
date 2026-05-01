@@ -1,13 +1,13 @@
-import { defaultAdapter } from '../adapter/constants'
+import { getDefaultAdapter } from '../adapter/constants'
 
-import type { AnyElysia } from '../'
+import type { AnyElysia } from '../base'
 import { getAsyncIndexes } from './utils'
 
 import { createContext, type Context } from '../context'
 import { createErrorHandler } from './error'
 import { getLoosePath } from '../utils'
 
-import type { CompiledHandler, AppHook, MaybePromise } from '../types'
+import type { CompiledHandler, MaybePromise } from '../types'
 
 const notFound = new Response('Not Found', { status: 404 })
 
@@ -59,7 +59,7 @@ export function createFetchHandler(
 
 	const handleError = createErrorHandler(
 		hook?.error,
-		(app['~config']?.adapter ?? defaultAdapter).response.map
+		(app['~config']?.adapter ?? getDefaultAdapter()).response.map
 	)
 
 	if (hook?.request) {

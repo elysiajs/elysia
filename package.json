@@ -37,6 +37,11 @@
 			"import": "./dist/compose.mjs",
 			"require": "./dist/compose.js"
 		},
+		"./constants": {
+			"types": "./dist/constants.d.ts",
+			"import": "./dist/constants.mjs",
+			"require": "./dist/constants.js"
+		},
 		"./context": {
 			"types": "./dist/context.d.ts",
 			"import": "./dist/context.mjs",
@@ -46,6 +51,11 @@
 			"types": "./dist/cookies.d.ts",
 			"import": "./dist/cookies.mjs",
 			"require": "./dist/cookies.js"
+		},
+		"./base": {
+			"types": "./dist/base.d.ts",
+			"import": "./dist/base.mjs",
+			"require": "./dist/base.js"
 		},
 		"./error": {
 			"types": "./dist/error.d.ts",
@@ -206,7 +216,6 @@
 		"@typescript-eslint/eslint-plugin": "^8.30.1",
 		"@typescript-eslint/parser": "^8.30.1",
 		"arktype": "^2.1.22",
-		"esbuild-fix-imports-plugin": "^1.0.22",
 		"eslint": "^9.24.0",
 		"eslint-plugin-security": "^4.0.0",
 		"eslint-plugin-sonarjs": "^4.0.2",
@@ -234,8 +243,5 @@
 		"typescript": {
 			"optional": true
 		}
-	},
-	"overrides": {
-		"esbuild": "0.25.4"
 	}
 }

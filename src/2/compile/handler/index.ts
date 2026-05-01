@@ -1,13 +1,13 @@
-import type { AnyElysia } from '../..'
+import type { AnyElysia } from '../../base'
 import { sucrose, type Sucrose } from '../../sucrose'
 
 import type { ElysiaAdapter } from '../../adapter'
 
-import { Validator, type TypeBoxValidator } from '../../schema/validator'
-import { RouteValidator } from '../../schema/route'
-import { isAsyncFunction, isAsyncLifecycle } from '../utils'
+import { Validator } from '../../validator'
+import { RouteValidator } from '../../validator/route'
 
-import { isBlob } from '../../type'
+import type { TypeBoxValidator } from '../../type/validator'
+import { isAsyncFunction, isAsyncLifecycle } from '../utils'
 
 import {
 	parseArrayBuffer,
@@ -20,10 +20,10 @@ import {
 import { isBun } from '../../universal/utils'
 
 import { parseQueryFromURL } from '../../parse-query'
-import { defaultAdapter } from '../../adapter/constants'
+import { getDefaultAdapter } from '../../adapter/constants'
 
 import { mapBeforeHandle, mapTransform } from './utils'
-import { mergeHook } from '../../utils'
+import { isBlob, mergeHook } from '../../utils'
 
 import type { Link } from '../types'
 import type {
@@ -183,7 +183,7 @@ export function compileHandler(
 	[, path, handler, instance, localHook, appHook]: InternalRoute,
 	root: AnyElysia
 ): CompiledHandler {
-	const adapter = root['~config']?.adapter ?? defaultAdapter
+	const adapter = root['~config']?.adapter ?? getDefaultAdapter()
 
 	const hook = applyHook(
 		localHook,
@@ -247,7 +247,7 @@ export function compileHandler(
 	// ? defaultHeaders doesn't imply that user will use headers in handler
 	const hasHeaders =
 		inference.headers ||
-		!!vali.headers ||
+		// !!vali.headers ||
 		(inference.body && typeof hook?.parse !== 'string')
 
 	if (inference.query || vali.query) {
