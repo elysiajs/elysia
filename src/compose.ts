@@ -1241,7 +1241,7 @@ export const composeHandler = ({
 						typeof value === 'object'
 							? JSON.stringify(value)
 							: typeof value === 'string'
-								? `'${value}'`
+								? JSON.stringify(value)
 								: value
 
 					if (parsed !== undefined)
@@ -1294,7 +1294,7 @@ export const composeHandler = ({
 						typeof value === 'object'
 							? JSON.stringify(value)
 							: typeof value === 'string'
-								? `'${value}'`
+								? JSON.stringify(value)
 								: value
 
 					if (parsed !== undefined)
@@ -1335,7 +1335,7 @@ export const composeHandler = ({
 						typeof value === 'object'
 							? JSON.stringify(value)
 							: typeof value === 'string'
-								? `'${value}'`
+								? JSON.stringify(value)
 								: value
 
 					if (parsed !== undefined)
@@ -1423,7 +1423,7 @@ export const composeHandler = ({
 					typeof value === 'object'
 						? JSON.stringify(value)
 						: typeof value === 'string'
-							? `'${value}'`
+							? JSON.stringify(value)
 							: value
 
 				if (value !== undefined && value !== null) {
