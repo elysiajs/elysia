@@ -37,7 +37,7 @@ export interface ElysiaAdapterOptions {
 	 */
 	isWebStandard: boolean
 
-	listen(
+	listen?(
 		app: AnyElysia,
 		options: string | number | Partial<Serve>,
 		callback?: ListenCallback

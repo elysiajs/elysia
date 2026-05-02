@@ -1,8 +1,4 @@
-import {
-	mapCompactResponse,
-	mapEarlyResponse,
-	mapResponse
-} from './handler'
+import { mapCompactResponse, mapEarlyResponse, mapResponse } from './handler'
 import { formDataToObject } from './utils'
 
 import { createAdapter } from '..'
@@ -12,9 +8,6 @@ export const WebStandardAdapter = createAdapter({
 	name: 'web-standard',
 	runtime: 'unknown',
 	isWebStandard: true,
-	listen: () => () => {
-		throw new Error('Not supported')
-	},
 	parse: {
 		arrayBuffer: (context) => context.request.arrayBuffer(),
 		formData: async (context) =>

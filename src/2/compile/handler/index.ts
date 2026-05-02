@@ -32,8 +32,10 @@ import type {
 	CompiledHandler,
 	InternalRoute,
 	InputHook,
-	AppHook
+	AppHook,
+	MaybeArray
 } from '../../types'
+import { Context } from '../../context'
 
 function builtinParser(
 	adapter: ElysiaAdapter['parse'],
@@ -76,7 +78,7 @@ function builtinParser(
 
 function parse(
 	adapter: ElysiaAdapter['parse'],
-	parsers: ContentType | (ContentType | BodyHandler)[] | undefined,
+	parsers: MaybeArray<ContentType | BodyHandler> | undefined,
 	bodyVali: Validator | undefined,
 	hasHeaders: boolean,
 	link: Link
@@ -179,6 +181,11 @@ function applyHook(
 	return hook
 }
 
+const createInlineHandler = (
+	map: (value: unknown, ...rest: unknown[]) => unknown,
+	h: (context: Context) => unknown
+) => ((c: Context) => map(h(c))) as CompiledHandler
+
 export function compileHandler(
 	[, path, handler, instance, localHook, appHook]: InternalRoute,
 	root: AnyElysia
@@ -202,14 +209,14 @@ export function compileHandler(
 			if (hookNotLinked) {
 				hookNotLinked = false
 				params.add(hook)
-				alias += 'ho,'
+				alias += `${alias ? ',' : ''}ho`
 			}
 			return
 		}
 
 		if (!params.has(v)) {
 			params.add(v)
-			alias += `${key},`
+			alias += `${alias ? ',' : ''}${key}`
 		}
 	}
 
@@ -241,8 +248,17 @@ export function compileHandler(
 				vali.response as Record<number, TypeBoxValidator>
 			).find((x) => ('tb' in x ? x.isAsync : true)))
 
-	// ,va,rm,rc,re,pa,pf,pj,pt,pu
+	// va,rm,rc,re,pa,pf,pj,pt,pu
 	let code = `${isAsync ? 'async ' : ''}function route(c){\n`
+
+	if (
+		hook?.beforeHandle ||
+		hook?.afterHandle ||
+		hook?.mapResponse ||
+		hook?.afterResponse
+	) {
+		code += 'let tmp\n'
+	}
 
 	// ? defaultHeaders doesn't imply that user will use headers in handler
 	const hasHeaders =
@@ -293,15 +309,6 @@ export function compileHandler(
 		}
 	}
 
-	if (hook?.beforeHandle) {
-		link(hook.beforeHandle, 'bf')
-
-		const derive = root['~derive']
-		if (derive) code += `let dr\n`
-
-		code += mapBeforeHandle(hook.beforeHandle, [derive])
-	}
-
 	const hasSet =
 		inference.cookie ||
 		inference.set ||
@@ -312,15 +319,44 @@ export function compileHandler(
 	// !hasSingle200 ||
 	// maybeStream
 
-	if (hasSet) {
-		link(adapter.response.map, 'rm')
-		code += 'return rm(h(c),c.set)\n'
+	const res = adapter.response
+	const mapReturn = (() => {
+		if (hasSet) {
+			link(res.map, 'rm')
+			return 'rm(h(c),c.set)\n'
+		}
+
+		link(res.compact ?? res.map, 'rc')
+		return 'rc(h(c))\n'
+	})()
+
+	if (hook?.beforeHandle) {
+		link(hook.beforeHandle, 'bf')
+		link(res.early ?? res.map, 're')
+
+		const derive = root['~derive']
+		code += mapBeforeHandle(hook.beforeHandle, [derive, link])
+	}
+
+	if (hook?.afterHandle) {
 	} else {
-		link(adapter.response.compact, 'rc')
-		code += 'return rc(h(c))\n'
+		code += `return ${mapReturn}`
 	}
 
 	code += '}'
+
+	if (params.size === 1) {
+		if (alias === 'rc')
+			return createInlineHandler(
+				adapter.response.compact! ?? adapter.response.map,
+				handler as any
+			)
+		else if (alias === 'rm')
+			return createInlineHandler(
+				adapter.response.compact! ?? adapter.response.map,
+				handler as any
+			)
+	}
 
 	return new Function('h', 'a', `const [${alias}]=a\nreturn ` + code)(
 		handler,

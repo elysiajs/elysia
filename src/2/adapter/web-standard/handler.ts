@@ -226,22 +226,21 @@ export function mapEarlyResponse(
 	}
 }
 
+const stringHeaders = isBun
+	? undefined
+	: {
+			headers: {
+				type: 'text/plain'
+			}
+		}
+
 export function mapCompactResponse(
 	response: unknown,
 	request?: Request
 ): Response {
 	switch (response?.constructor?.name) {
 		case 'String':
-			return new Response(
-				response as string,
-				isBun
-					? undefined
-					: {
-							headers: {
-								type: 'text/plain'
-							}
-						}
-			)
+			return new Response(response as string, stringHeaders)
 
 		case 'Object':
 		case 'Array':

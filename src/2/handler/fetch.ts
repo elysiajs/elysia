@@ -10,14 +10,6 @@ import { getLoosePath } from '../utils'
 import type { CompiledHandler, MaybePromise } from '../types'
 
 const notFound = new Response('Not Found', { status: 404 })
-
-export function getPath(url: string) {
-	const s = url.indexOf('/', 11),
-		qi = url.indexOf('?', s + 1)
-
-	return [url.substring(s, qi === -1 ? url.length : qi), qi] as const
-}
-
 function findRoute(
 	context: Context,
 	request: Request,
@@ -26,9 +18,13 @@ function findRoute(
 	hasError: boolean,
 	loosePath: NonNullable<AnyElysia['~loosePath']>
 ): Response {
-	const [path, qi] = getPath(request.url)
-	// @ts-expect-error
-	context.qi = qi
+	const url = request.url,
+		s = url.indexOf('/', 11),
+		path = url.substring(
+			s,
+			// @ts-expect-error
+			(context.qi = url.indexOf('?', s) === -1 ? url.length : context.qi)
+		)
 
 	const paths = map[request.method]
 	const handler: CompiledHandler =
@@ -114,29 +110,28 @@ export function createFetchHandler(
 		const context = new Context(request)
 		const url = request.url,
 			s = url.indexOf('/', 11),
-			// @ts-expect-error
-			qi = (context.qi = url.indexOf('?', s + 1)),
-			path = url.substring(s, qi === -1 ? url.length : qi)
+			path = url.substring(
+				s,
+				// @ts-expect-error
+				(context.qi =
+					url.indexOf('?', s) === -1 ? url.length : context.qi)
+			)
+
+		const handler: CompiledHandler =
+			map[request.method]?.[path] ??
+			map[request.method]?.[(loosePath[path] ??= getLoosePath(path))]
 
 		try {
-			const inner = map[request.method]
-			const handler: CompiledHandler =
-				inner?.[path] ??
-				inner?.[(loosePath[path] ??= getLoosePath(path))]
 			if (handler) return handler(context) as Response
+
+			const result = router?.find(request.method, path)
+			if (result) {
+				context.params = result.params
+
+				return result.store(context) as Response
+			}
 		} catch (error) {
 			return handleError(context, error as Error) as Response
-		}
-
-		const result = router?.find(request.method, path)
-		if (result) {
-			context.params = result.params
-
-			try {
-				return result.store(context) as Response
-			} catch (error) {
-				return handleError(context, error as Error) as Response
-			}
 		}
 
 		if (hasError) return handleError(context, new Error()) as Response

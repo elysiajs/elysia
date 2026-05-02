@@ -1,21 +1,34 @@
 import { isAsyncFunction } from '../utils'
+import { ElysiaStatus } from '../../error'
 
 import type { AnyElysia } from '../../base'
-import type { AppEvent, AppHook, BodyHandler, MaybeArray } from '../../types'
+import type { AppEvent, AppHook, MaybeArray } from '../../types'
+import type { Link } from '../types'
 
 export const mapTransform = map<'transform'>(
 	(i, fn) => `${Await(fn)}tf${at(i)}(c)\n`
 )
 
-export const mapBeforeHandle = map<'beforeHandle', [AnyElysia['~derive']]>(
-	(i, fn, [derive]) => {
-		const body = `${Await(fn)}bf${at(i)}(c)\n`
+export const mapBeforeHandle = map<
+	'beforeHandle',
+	[AnyElysia['~derive'], Link]
+>((i, fn, [derive, link]) => {
+	const body = `tmp=${Await(fn)}bf${at(i)}(c)\n`
 
-		if (derive?.has(fn)) return `dr=${body}if(dr)Object.assign(c,dr)\n`
+	if (derive?.has(fn)) {
+		link(ElysiaStatus, 'st')
 
-		return body
+		return (
+			body +
+			'if(tmp instanceof st){\n' +
+			'c.set.status=tmp.status\n' +
+			'return re(tmp.res,c.set)\n' +
+			'}else if(tmp)Object.assign(c,tmp)\n'
+		)
 	}
-)
+
+	return body + `if(tmp!==undefined)return re(tmp,c.set)\n`
+})
 
 function map<Event extends AppEvent, T extends unknown[] = []>(
 	map: (index: number | undefined, fn: AppHook[Event][0], rest: T) => string

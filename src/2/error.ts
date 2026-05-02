@@ -69,18 +69,18 @@ export class ElysiaStatus<
 		: Code = Code extends keyof StatusMap ? StatusMap[Code] : Code
 > {
 	code: Status
-	response!: T
+	res!: T
 
-	constructor(code: Code, response: T) {
-		const res =
-			response ??
+	constructor(code: Code, res: T) {
+		const response =
+			res ??
 			(code in StatusMapBack
 				? StatusMapBack[code as keyof StatusMapBack]
 				: code)
 
 		this.code = (StatusMap[code as keyof StatusMap] as Status) ?? code
 
-		if (emptyHttpStatus.has(code as number)) this.response = res as T
+		if (!emptyHttpStatus.has(code as number)) this.res = response as T
 	}
 }
 

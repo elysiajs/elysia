@@ -1,5 +1,4 @@
 import decode from 'fast-decode-uri-component'
-import { getPath } from './handler/fetch'
 
 // bit flags
 const KEY_HAS_PLUS = 1
@@ -10,7 +9,7 @@ const VALUE_NEEDS_DECODE = 8
 // Parse query without array
 export function parseQueryFromURL(
 	input: string,
-	startIndex = getPath(input)[1],
+	startIndex = input.indexOf('?', 11),
 	array?: { [key: string]: 1 },
 	object?: { [key: string]: 1 }
 ): Record<string, string> {
