@@ -483,12 +483,14 @@ export function mergeHeaders(
 	return headers
 }
 
-// Mutate `target` in place with non-conflicting headers from `source`.
-// Used on Bun, where response.headers is mutable, to avoid having to
-// rewrap the Response. Rewrapping reads `response.body` as a generic
-// ReadableStream, which severs the Bun.file association — that breaks
-// Bun.serve's automatic Range-request handling for `new Response(Bun.file())`,
-// which is the response shape `@elysiajs/static` returns.
+// Mutate `target` Headers in place with non-conflicting entries from `source`.
+// Used on Bun against a *clone* of the handler's Response so we can preserve
+// the body's identity (e.g. Bun.file) while still merging set.headers without
+// polluting the original Response. Rewrapping the response via
+// `new Response(response.body, ...)` reads the body as a generic ReadableStream
+// and severs the Bun.file association, which is what Bun.serve relies on for
+// automatic Range-request handling of `new Response(Bun.file())` — the response
+// shape `@elysiajs/static` returns.
 function mergeHeadersInPlace(
 	target: Headers,
 	source: Context['set']['headers']
@@ -527,23 +529,35 @@ export const createResponseHandler = (handler: CreateHandlerParameter) => {
 
 	return (response: Response, set: Context['set'], request?: Request) => {
 		const mergedStatus = mergeStatus(response.status, set.status)
-		const needsStreamHandling =
-			!response.headers.has('content-length') &&
-			response.headers.get('transfer-encoding') === 'chunked'
 
-		// On Bun, when status is unchanged and the response doesn't need stream
-		// processing, mutate headers in place and return the original Response.
-		// Rewrapping reads `response.body` as a plain ReadableStream and severs
-		// any body-specific optimizations Bun.serve relies on — most importantly,
-		// automatic Range handling for `new Response(Bun.file())`, which is the
-		// response shape `@elysiajs/static` returns. Without this branch every
-		// static asset on Bun loses 206/Accept-Ranges support, breaking video
-		// playback in mobile Safari (Apple requires byte-range support for
-		// <video>). On Node/Cloudflare Workers response.headers is immutable,
-		// so we fall through to the rewrap path.
-		if (isBun && mergedStatus === response.status && !needsStreamHandling) {
-			mergeHeadersInPlace(response.headers, set.headers)
-			return response
+		// On Bun, when status is unchanged, clone the handler's Response and
+		// merge set.headers into the clone. Cloning preserves body identity
+		// (Bun.file stays Bun.file), which is what Bun.serve relies on for
+		// automatic Range-request handling of `new Response(Bun.file())` —
+		// the shape `@elysiajs/static` returns. Rewrapping via
+		// `new Response(response.body, ...)` would read the body as a plain
+		// ReadableStream and sever that association, breaking 206 / Accept-Ranges
+		// for every static asset on Bun (visible mainly as iOS Safari refusing
+		// to play <video>; Apple requires byte-range support).
+		//
+		// Mutating the handler's Response directly would pollute it across
+		// requests when the handler returns a cached/shared Response, so we
+		// always clone first. Header-merge / streaming-decision both happen
+		// against the clone's already-merged headers, so set.headers values
+		// (e.g. an explicit transfer-encoding) participate in the decision.
+		// On Node / Cloudflare Workers response.headers is immutable, so we
+		// fall through to the rewrap path.
+		if (isBun && mergedStatus === response.status) {
+			const cloned = response.clone()
+			mergeHeadersInPlace(cloned.headers, set.headers)
+
+			const needsStreamHandling =
+				!cloned.headers.has('content-length') &&
+				cloned.headers.get('transfer-encoding') === 'chunked'
+
+			if (!needsStreamHandling) return cloned
+			// Streaming required — fall through to the rewrap path. The clone
+			// is discarded; the rewrap path reads response.body directly.
 		}
 
 		const newResponse = new Response(response.body, {

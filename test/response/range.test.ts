@@ -89,8 +89,8 @@ describe('Range header', () => {
 // `@elysiajs/static` returns for every static asset, so the regression broke
 // HTTP byte-range support for static media on Bun — most visibly, mobile Safari
 // refusing to play `<video>` (Apple requires byte-range support for `<video>`).
-describe('Range header — preserves Response identity for body-specific Bun optimizations', () => {
-	it('returns the same Response object when status is unchanged and no streaming is required', async () => {
+describe('Range header — preserves body identity through createResponseHandler on Bun', () => {
+	it('merges set.headers into the response without mutating the handler-owned Response', async () => {
 		const original = new Response('hello', {
 			headers: { 'x-from-handler': 'handler' }
 		})
@@ -102,16 +102,39 @@ describe('Range header — preserves Response identity for body-specific Bun opt
 
 		const res = await app.handle(req('/file'))
 
-		// The fix keeps the original Response object so Bun.serve sees the
-		// original body (e.g. a Bun.file) and can apply its byte-range fast path.
-		expect(res).toBe(original)
-		// Headers from set are merged in place
 		expect(res.headers.get('x-from-set')).toBe('set')
-		// Headers from the handler's Response take precedence
 		expect(res.headers.get('x-from-handler')).toBe('handler')
+		// The handler's Response object must remain pristine — handlers that
+		// reuse a cached Response would otherwise leak headers across requests.
+		expect(original.headers.get('x-from-set')).toBeNull()
 	})
 
-	it('rewraps when status changes (mutate-in-place not possible)', async () => {
+	it('does not leak set.headers across requests when the handler returns a shared Response', async () => {
+		// A real bug: with in-place mutation of the handler's Response, the
+		// second request would see the first request's headers because the
+		// non-conflicting check (!target.has(key)) skips already-set keys.
+		const shared = new Response('hello')
+		let counter = 0
+		const app = new Elysia()
+			.onRequest(({ set }) => {
+				set.headers['x-request-id'] = String(++counter)
+			})
+			.get('/file', () => shared)
+
+		const port = 8092
+		const server = app.listen(port)
+		try {
+			const r1 = await fetch(`http://localhost:${port}/file`)
+			const r2 = await fetch(`http://localhost:${port}/file`)
+			expect(r1.headers.get('x-request-id')).toBe('1')
+			expect(r2.headers.get('x-request-id')).toBe('2')
+			expect(shared.headers.get('x-request-id')).toBeNull()
+		} finally {
+			await server.stop(true)
+		}
+	})
+
+	it('rewraps when status changes (the Bun fast path requires unchanged status)', async () => {
 		const original = new Response('hello', { status: 200 })
 		const app = new Elysia()
 			.onRequest(({ set }) => {
@@ -127,6 +150,11 @@ describe('Range header — preserves Response identity for body-specific Bun opt
 	})
 
 	it('serves byte-range responses for `new Response(Bun.file())` end-to-end', async () => {
+		// The whole point of this patch: under the real Bun.serve runtime,
+		// returning `new Response(Bun.file())` from a handler must still let
+		// Bun.serve auto-handle Range, which it does by inspecting the body's
+		// type. Cloning the response (rather than rewrapping or mutating)
+		// preserves that body identity through Elysia's response chain.
 		const tmp = `${import.meta.dir}/.range-fixture.bin`
 		await Bun.write(tmp, 'abcdefghij') // 10 bytes
 
