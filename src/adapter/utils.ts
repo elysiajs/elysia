@@ -483,6 +483,34 @@ export function mergeHeaders(
 	return headers
 }
 
+// Mutate `target` in place with non-conflicting headers from `source`.
+// Used on Bun, where response.headers is mutable, to avoid having to
+// rewrap the Response. Rewrapping reads `response.body` as a generic
+// ReadableStream, which severs the Bun.file association — that breaks
+// Bun.serve's automatic Range-request handling for `new Response(Bun.file())`,
+// which is the response shape `@elysiajs/static` returns.
+function mergeHeadersInPlace(
+	target: Headers,
+	source: Context['set']['headers']
+) {
+	if (source instanceof Headers) {
+		for (const key of source.keys()) {
+			if (key === 'set-cookie') {
+				if (target.has('set-cookie')) continue
+				for (const cookie of source.getSetCookie())
+					target.append('set-cookie', cookie)
+			} else if (!target.has(key))
+				target.set(key, source.get(key) ?? '')
+		}
+	} else {
+		for (const key in source)
+			if (key === 'set-cookie')
+				target.append(key, source[key] as any)
+			else if (!target.has(key))
+				target.set(key, source[key] as any)
+	}
+}
+
 export function mergeStatus(
 	responseStatus: number,
 	setStatus: Context['set']['status']
@@ -498,9 +526,29 @@ export const createResponseHandler = (handler: CreateHandlerParameter) => {
 	const handleStream = createStreamHandler(handler)
 
 	return (response: Response, set: Context['set'], request?: Request) => {
+		const mergedStatus = mergeStatus(response.status, set.status)
+		const needsStreamHandling =
+			!response.headers.has('content-length') &&
+			response.headers.get('transfer-encoding') === 'chunked'
+
+		// On Bun, when status is unchanged and the response doesn't need stream
+		// processing, mutate headers in place and return the original Response.
+		// Rewrapping reads `response.body` as a plain ReadableStream and severs
+		// any body-specific optimizations Bun.serve relies on — most importantly,
+		// automatic Range handling for `new Response(Bun.file())`, which is the
+		// response shape `@elysiajs/static` returns. Without this branch every
+		// static asset on Bun loses 206/Accept-Ranges support, breaking video
+		// playback in mobile Safari (Apple requires byte-range support for
+		// <video>). On Node/Cloudflare Workers response.headers is immutable,
+		// so we fall through to the rewrap path.
+		if (isBun && mergedStatus === response.status && !needsStreamHandling) {
+			mergeHeadersInPlace(response.headers, set.headers)
+			return response
+		}
+
 		const newResponse = new Response(response.body, {
 			headers: mergeHeaders(response.headers, set.headers),
-			status: mergeStatus(response.status, set.status)
+			status: mergedStatus
 		})
 
 		if (
