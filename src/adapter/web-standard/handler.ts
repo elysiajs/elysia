@@ -7,14 +7,13 @@ import {
 	handleSet
 } from '../utils'
 
+import { isBun } from '../../universal/utils'
 import { ElysiaFile, mime } from '../../universal/file'
 import { isNotEmpty } from '../../utils'
-import { Cookie } from '../../cookie'
 import { ElysiaStatus } from '../../error'
 
 import type { Context } from '../../context'
 import type { AnyLocalHook, MaybePromise } from '../../types'
-import { isBun } from '../../universal/utils'
 
 const type = 'content-type' as const
 
@@ -116,12 +115,6 @@ export function mapResponse(
 			case 'Function':
 				return mapResponse((response as Function)(), set, request)
 
-			case 'Cookie':
-				if (response instanceof Cookie)
-					return new Response(response.value, set as ResponseInit)
-
-				return new Response(response?.toString(), set as ResponseInit)
-
 			case 'FormData':
 				return new Response(response as FormData, set as ResponseInit)
 
@@ -139,91 +132,6 @@ export function mapResponse(
 		return handleStream(response as any, set, request) as any
 
 	return mapCompactResponse(response, request)
-}
-
-export function mapEarlyResponse(
-	response: unknown,
-	set: Context['set'],
-	request?: Request
-): Response | undefined {
-	if (response === undefined || response === null) return
-
-	const headers = set.headers
-	const hasSet = isNotEmpty(headers) || set.status !== 200 || set.cookie
-	if (hasSet) handleSet(set)
-
-	switch (response?.constructor?.name) {
-		case 'String':
-			if (isNotBun && !headers[type]) headers[type] = 'text/plain'
-
-			return new Response(
-				response as string,
-				hasSet ? (set as ResponseInit) : undefined
-			)
-
-		case 'Array':
-		case 'Object':
-			return Response.json(response, set as ResponseInit)
-
-		case 'Number':
-		case 'Boolean':
-			return new Response(
-				(response as number | boolean).toString(),
-				hasSet ? (set as ResponseInit) : undefined
-			)
-
-		case 'ElysiaFile':
-			return handleElysiaFile(response as ElysiaFile, set, request)
-
-		case 'File':
-		case 'Blob':
-			return handleFile(response as File | Blob, set, request)
-
-		case 'ElysiaStatus':
-			set.status = (response as ElysiaStatus<200>).code
-
-			return mapEarlyResponse(
-				(response as ElysiaStatus<200>).response,
-				set,
-				request
-			)
-
-		case undefined:
-			if (response) return Response.json(response, set as ResponseInit)
-
-			return
-
-		case 'Response':
-			return hasSet
-				? handleResponse(response as Response, set, request)
-				: (response as Response)
-
-		case 'Promise':
-			return (response as Promise<unknown>).then((x) => {
-				const r = mapEarlyResponse(x, set)
-				if (r !== undefined) return r
-			}) as any
-
-		case 'Error':
-			return errorToResponse(response as Error, set)
-
-		case 'Function':
-			return hasSet
-				? mapEarlyResponse((response as Function)(), set, request)
-				: mapCompactResponse((response as Function)(), request)
-
-		case 'FormData':
-			return new Response(response as FormData)
-
-		case 'Cookie':
-			if (response instanceof Cookie)
-				return new Response(response.value, set as ResponseInit)
-
-			return new Response(response?.toString(), set as ResponseInit)
-
-		default:
-			return mapEarlyResponseFallback(response, set, request)
-	}
 }
 
 const stringHeaders = isBun
@@ -390,12 +298,17 @@ function mapFallback(
 		// eg. Bun.sql`` result
 		if (Array.isArray(response)) return Response.json(response) as any
 
-		if ('charCodeAt' in (response as any)) {
-			const code = (response as any).charCodeAt(0)
+		// @ts-expect-error
+		if (response?.constructor?.name === 'Cookie' && response.jar)
+			// @ts-expect-error
+			return new Response(response.value, set as ResponseInit)
 
-			if (code === 123 || code === 91)
-				return Response.json(response, set as unknown as ResponseInit)
-		}
+		// if ('charCodeAt' in (response as any)) {
+		// 	const code = (response as any).charCodeAt(0)
+
+		// 	if (code === 123 || code === 91)
+		// 		return Response.json(response, set as unknown as ResponseInit)
+		// }
 
 		if (mustReturn)
 			return new Response(response as any, set as ResponseInit)
@@ -403,7 +316,6 @@ function mapFallback(
 }
 
 const mapResponseFallback = mapFallback(mapResponse)
-const mapEarlyResponseFallback = mapFallback(mapEarlyResponse, false)
 const mapCompactResponseFallback = mapFallback((response, set, request) =>
 	mapCompactResponse(response, request)
 )

@@ -1,29 +1,118 @@
-import type { Server } from './universal/server'
-import type { Cookie, ElysiaCookie } from './cookies'
-import type {
-	StatusMap,
-	InvertedStatusMap,
-	redirect as Redirect
-} from './utils'
+import { ElysiaStatus, status, type SelectiveStatus } from './error'
+import { checksum, redirect } from './utils'
 
-import { ElysiaCustomStatusResponse, status, type SelectiveStatus } from './error'
+import type { AnyElysia } from './base'
+import type { Server } from './universal/server'
+import type { StatusMap, StatusMapBack } from './constants'
+import type { Cookie } from './cookie'
+
 import type {
 	RouteSchema,
 	Prettify,
-	ResolvePath,
 	SingletonBase,
+	ResolvePath,
 	HTTPHeaders,
 	InputSchema
 } from './types'
 
-type InvertedStatusMapKey = keyof InvertedStatusMap
+let createBaseContextCount = 0
+let createContextCount = 0
+
+let baseCache: Map<number, new () => any>
+let contextCache: Map<number, new () => any>
+
+function getBaseKey(app: AnyElysia) {
+	const ext = app['~ext']
+	if (!ext) return 0
+
+	return checksum(
+		(ext.decorator ? checksum(JSON.stringify(ext.decorator)) : '') +
+			'-' +
+			(ext.store ? checksum(JSON.stringify(ext.store)) : '')
+	)
+}
+
+function getContextKey(app: AnyElysia) {
+	const ext = app['~ext']
+	if (!ext) return 0
+
+	return checksum(
+		(ext.decorator ? checksum(JSON.stringify(ext.decorator)) : '') +
+			'-' +
+			(ext.store ? checksum(JSON.stringify(ext.store)) : '') +
+			'-' +
+			(ext.headers ? checksum(JSON.stringify(ext.headers)) : '')
+	)
+}
+
+export function createBaseContext(app: AnyElysia) {
+	const key = baseCache ? getBaseKey(app) : undefined
+	if (key !== undefined && baseCache.has(key)) return baseCache.get(key)!
+
+	class Decorator {}
+	Object.assign(Decorator.prototype, {
+		...app['~ext']?.decorator,
+		store: app['~ext']?.store,
+		status,
+		redirect
+	})
+
+	if (createBaseContextCount > 2) {
+		baseCache ??= new Map()
+		baseCache.set(key ?? getBaseKey(app), Decorator)
+	} else createBaseContextCount++
+
+	return Decorator
+}
+
+export function clearContextCache() {
+	// @ts-expect-error
+	baseCache = contextCache = undefined
+	createBaseContextCount = createContextCount = 0
+}
+
+export function createContext(
+	app: AnyElysia
+): new (request: Request) => Context {
+	const key = contextCache ? getContextKey(app) : undefined
+	if (key !== undefined && contextCache.has(key))
+		return contextCache.get(key)!
+
+	const headers = app['~ext']?.headers
+		? Object.assign(Object.create(null), app['~ext'].headers)
+		: null
+
+	const context = class Context extends createBaseContext(app) {
+		params?: Record<string, string>
+		headers?: Record<string, string>
+		qi!: number
+		set: { headers: Record<string, string> }
+
+		constructor(public request: Request) {
+			super()
+
+			this.set = {
+				headers: Object.create(headers)
+			}
+		}
+	} as any
+
+	if (createContextCount > 2) {
+		contextCache ??= new Map()
+		contextCache.set(key ?? getContextKey(app), context)
+	} else createContextCount++
+
+	return context
+}
 
 type CheckExcessProps<T, U> = 0 extends 1 & T
 	? T // T is any
 	: U extends U
 		? Exclude<keyof T, keyof U> extends never
 			? T
-			: { [K in keyof U]: U[K] } & { [K in Exclude<keyof T, keyof U>]: never }
+			: { [K in keyof U]: U[K] } & {
+					[K in Exclude<keyof T, keyof U>]: never
+				}
 		: never
 
 export type ErrorContext<
@@ -58,18 +147,17 @@ export type ErrorContext<
 				}
 
 		server: Server | null
-		redirect: Redirect
+		redirect: redirect
 
 		set: {
 			headers: HTTPHeaders
 			status?: number | keyof StatusMap
-			redirect?: string
 			/**
 			 * ! Internal Property
 			 *
 			 * Use `Context.cookie` instead
 			 */
-			cookie?: Record<string, ElysiaCookie>
+			cookie?: Record<string, Cookie>
 		}
 
 		status: {} extends Route['response']
@@ -77,8 +165,8 @@ export type ErrorContext<
 			: <
 					const Code extends
 						| keyof Route['response']
-						| InvertedStatusMap[Extract<
-								InvertedStatusMapKey,
+						| StatusMapBack[Extract<
+								keyof StatusMapBack,
 								keyof Route['response']
 						  >],
 					T extends Code extends keyof Route['response']
@@ -98,7 +186,7 @@ export type ErrorContext<
 									Route['response'][StatusMap[Code]]
 								: never
 					>
-				) => ElysiaCustomStatusResponse<
+				) => ElysiaStatus<
 					// @ts-ignore trust me bro
 					Code,
 					T
@@ -178,7 +266,7 @@ export type Context<
 					>
 
 		server: Server | null
-		redirect: Redirect
+		redirect: redirect
 
 		set: {
 			headers: HTTPHeaders
@@ -198,7 +286,7 @@ export type Context<
 			 *
 			 * Use `Context.cookie` instead
 			 */
-			cookie?: Record<string, ElysiaCookie>
+			cookie?: Record<string, Cookie>
 		}
 
 		/**
@@ -228,7 +316,7 @@ export type Context<
 		Omit<Singleton['resolve'], keyof InputSchema>
 >
 
-// Use to mimic request before mapping route
+// Mimic request before mapping route
 export type PreContext<
 	in out Singleton extends SingletonBase = {
 		decorator: {}
@@ -241,7 +329,7 @@ export type PreContext<
 		store: Singleton['store']
 		request: Request
 
-		redirect: Redirect
+		redirect: redirect
 		server: Server | null
 
 		set: {

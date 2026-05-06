@@ -1466,10 +1466,9 @@ export class Elysia<
 			)
 
 			if (isDynamic) {
-				import('./q')
-				console.log("A")
-				// this['~router'] ??= new Memoirist(decodeComponent)
-				// this['~router'].add(method, path, handler, false)
+				this['~router'] ??= new Memoirist(decodeComponent)
+
+				this['~router']!.add(method, path, handler, false)
 			} else {
 				this['~map']![method] ??= nullObject()
 				this['~map']![method]![path] = handler

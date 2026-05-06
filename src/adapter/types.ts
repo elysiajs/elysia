@@ -79,14 +79,6 @@ export interface ElysiaAdapterOptions {
 			...params: unknown[]
 		): unknown
 		/**
-		 * Map response on truthy value
-		 */
-		early?(
-			response: unknown,
-			set: Context['set'],
-			...params: unknown[]
-		): unknown
-		/**
 		 * Map response without cookie, status or headers
 		 */
 		compact?(response: unknown, ...params: unknown[]): unknown

@@ -203,7 +203,7 @@
 		"cookie": "^1.1.1",
 		"deuri": "^2.0.1",
 		"exact-mirror": "^1.0.0",
-		"memoirist": "^1.0.1",
+		"memoirist": "^1.0.2",
 		"typebox": "~1.1.28"
 	},
 	"devDependencies": {

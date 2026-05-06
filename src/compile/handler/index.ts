@@ -3,8 +3,8 @@ import { sucrose, type Sucrose } from '../../sucrose'
 
 import type { ElysiaAdapter } from '../../adapter'
 
-import type { Validator } from '../../validator'
 import { RouteValidator } from '../../validator/route'
+import type { Validator } from '../../validator'
 
 import type { TypeBoxValidator } from '../../type/validator'
 import { isAsyncFunction, isAsyncLifecycle } from '../utils'
@@ -26,6 +26,7 @@ import { mapAfterHandle, mapBeforeHandle, mapTransform } from './utils'
 import { isBlob, mergeHook } from '../../utils'
 
 import type { Link } from '../types'
+import type { Context } from '../../context'
 import type {
 	BodyHandler,
 	ContentType,
@@ -35,7 +36,6 @@ import type {
 	AppHook,
 	MaybeArray
 } from '../../types'
-import { Context } from '../../context'
 
 function builtinParser(
 	adapter: ElysiaAdapter['parse'],
@@ -355,14 +355,11 @@ export function compileHandler(
 	if (params.size === 1) {
 		if (alias === 'rc')
 			return createInlineHandler(
-				adapter.response.compact! ?? adapter.response.map,
+				res.compact ?? (res.map as any),
 				handler as any
 			)
 		else if (alias === 'rm')
-			return createInlineHandler(
-				adapter.response.compact! ?? adapter.response.map,
-				handler as any
-			)
+			return createInlineHandler(res.map as any, handler as any)
 	}
 
 	return new Function('h', 'a', `const [${alias}]=a\nreturn ` + code)(

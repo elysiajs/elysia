@@ -8,7 +8,7 @@
         "cookie": "^1.1.1",
         "deuri": "^2.0.1",
         "exact-mirror": "^1.0.0",
-        "memoirist": "^1.0.1",
+        "memoirist": "^1.0.2",
         "typebox": "~1.1.28",
       },
       "devDependencies": {
@@ -18,7 +18,6 @@
         "@sinclair/typebox": "^0.34.48",
         "@types/bun": "^1.3.5",
         "@types/cookie": "1.0.0",
-        "@types/fast-decode-uri-component": "^1.0.0",
         "@typescript-eslint/eslint-plugin": "^8.30.1",
         "@typescript-eslint/parser": "^8.30.1",
         "@typescript/native-preview": "^7.0.0-dev.20260501.1",
@@ -206,8 +205,6 @@
     "@types/cookie": ["@types/cookie@1.0.0", "", { "dependencies": { "cookie": "*" } }, "sha512-mGFXbkDQJ6kAXByHS7QAggRXgols0mAdP4MuXgloGY1tXokvzaFFM4SMqWvf7AH0oafI7zlFJwoGWzmhDqTZ9w=="],
 
     "@types/estree": ["@types/estree@1.0.8", "", {}, "sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w=="],
-
-    "@types/fast-decode-uri-component": ["@types/fast-decode-uri-component@1.0.0", "", {}, "sha512-xhTFpMookjiVEDxI8RBUOxZL8BQiI2+YZZoqzW/G6s3r1h60gDzGnmKP83LNuTmCqk8ZmbY5cYkByKu4t+rKhA=="],
 
     "@types/jsesc": ["@types/jsesc@2.5.1", "", {}, "sha512-9VN+6yxLOPLOav+7PwjZbxiID2bVaeq0ED4qSQmdQTdjnXJSaCVKTR58t15oqH1H5t8Ng2ZX1SabJVoN9Q34bw=="],
 
@@ -425,7 +422,7 @@
 
     "lodash.merge": ["lodash.merge@4.6.2", "", {}, "sha512-0KpjqXRVvrYyCsX1swR/XTK0va6VQkQM6MNo7PqW77ByjAhoARA8EfrP1N4+KlKj8YS0ZUCtRT/YUuhyYDujIQ=="],
 
-    "memoirist": ["memoirist@1.0.1", "", {}, "sha512-lhzySFFUyF1KXkbgQyFWrpHPl6OwdaF5NPdPE1UBSJMBJaMfJr8nssZBZeh6IBl6VWsCj0t8GR8Pp92U4SHbFg=="],
+    "memoirist": ["memoirist@1.0.2", "", {}, "sha512-VuCgZN31V3dj2ukmeqyJYP7O9w11A7xo8TNtceBPGTlAht8WVk98oJSc5aKiQGj8MrTbepTbzpvXVbQkGfJbvA=="],
 
     "merge2": ["merge2@1.4.1", "", {}, "sha512-8q7VEgMJW4J8tcfVPy8g09NcQwZdbwFEqhe/WZkoIzjn/3TGDwtOCYtXGxA3O8tPzpczCCDgv+P2P5y00ZJOOg=="],
 

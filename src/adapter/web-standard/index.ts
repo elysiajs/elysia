@@ -22,7 +22,6 @@ export const WebStandardAdapter = createAdapter({
 	},
 	response: {
 		map: mapResponse,
-		early: mapEarlyResponse,
 		compact: mapCompactResponse
 	}
 })
