@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { describe, it, expect } from 'bun:test'
-import { Elysia } from '../../../src/2'
+import { Elysia } from '../../../src'
 import { req } from '../../utils'
 
 describe('Decorate', () => {

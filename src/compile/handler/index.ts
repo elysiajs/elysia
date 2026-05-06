@@ -23,7 +23,7 @@ import { parseQueryFromURL } from '../../parse-query'
 import { getDefaultAdapter } from '../../adapter/constants'
 
 import { mapAfterHandle, mapBeforeHandle, mapTransform } from './utils'
-import { isBlob, mergeHook } from '../../utils'
+import { eventProperties, isBlob, mergeHook, nullObject } from '../../utils'
 
 import type { Link } from '../types'
 import type { Context } from '../../context'
@@ -144,6 +144,13 @@ function parse(
 const isAsyncValidator = (vali: Validator | undefined) =>
 	!(vali as TypeBoxValidator)?.tb || (vali as TypeBoxValidator)?.isAsync
 
+function cloneHook<T extends Partial<InputHook> | Partial<AppHook>>(src: T): T {
+	const out = Object.assign(nullObject(), src) as Record<string, any>
+	for (const key of eventProperties)
+		if (Array.isArray(out[key])) out[key] = (out[key] as unknown[]).slice()
+	return out as T
+}
+
 function applyHook(
 	localHook: Partial<InputHook> | undefined,
 	appHook: Partial<InputHook> | undefined,
@@ -152,8 +159,9 @@ function applyHook(
 	if (!localHook) {
 		if (rootHook)
 			return mergeHook(
-				Object.assign(Object.create(null), appHook),
+				cloneHook(appHook ?? {}) as any,
 				rootHook as any,
+				true,
 				true
 			) as any
 
@@ -162,21 +170,19 @@ function applyHook(
 
 	if (!appHook) {
 		if (rootHook)
-			mergeHook(
-				Object.assign(Object.create(null), localHook),
+			return mergeHook(
+				cloneHook(localHook) as any,
 				rootHook as any,
+				true,
 				true
-			)
+			) as any
 
 		return localHook as any
 	}
 
-	const hook = mergeHook(
-		Object.assign(Object.create(null), localHook),
-		appHook as any
-	) as any
+	const hook = mergeHook(cloneHook(localHook) as any, appHook as any) as any
 
-	if (rootHook) mergeHook(hook, rootHook as any, true)
+	if (rootHook) mergeHook(hook, rootHook as any, true, true)
 
 	return hook
 }

@@ -38,6 +38,17 @@ export function fnv1a(str: string): number {
 }
 
 /**
+ * Maps each lifecycle/derive function to the hash of the named plugin it was
+ * first registered on. Used by `.use()` to dedup absorbed hooks: if a fn's
+ * origin is already in `parent.#apps`, the parent has already absorbed that
+ * named plugin via another path and should skip re-adding the fn.
+ *
+ * Anonymous plugins (no name) don't tag their fns — there's no hash to dedup
+ * by, so their fns always propagate.
+ */
+export const fnOrigin = new WeakMap<Function, number>()
+
+/**
  *
  * @param url URL to redirect to
  * @param HTTP status code to send,
@@ -131,6 +142,38 @@ export function mergeArray<
 	return [a, b] as any
 }
 
+/**
+ * Like {@link mergeArray} but drops entries from `a` that already appear in
+ * `b` by reference. Always allocates fresh arrays — never mutates inputs.
+ *
+ * Used at the compile-time merge of a route's snapshotted `appHook` with the
+ * root's current `rootHook`: the same fn can sit on both sides because
+ * `.use()` propagates global/plugin-scoped hooks into the parent, while the
+ * route's `appHook` was captured on the child and still holds the original.
+ * The fn must run once, in `b`'s position.
+ */
+export function dedupedMergeArray<
+	A extends MaybeArray<unknown> | undefined,
+	B extends MaybeArray<unknown> | undefined
+>(
+	a: A,
+	b: B,
+	reverse = false
+): (A extends unknown[] ? A : []) | (B extends unknown[] ? B : []) {
+	if (!a) return (Array.isArray(b) ? (b as unknown[]).slice() : b) as any
+	if (!b) return (Array.isArray(a) ? (a as unknown[]).slice() : a) as any
+
+	const aArr = (Array.isArray(a) ? a : [a]) as unknown[]
+	const bArr = (Array.isArray(b) ? b : [b]) as unknown[]
+
+	const seen = new Set(bArr)
+	const filtered: unknown[] = []
+	for (let i = 0; i < aArr.length; i++)
+		if (!seen.has(aArr[i])) filtered.push(aArr[i])
+
+	return (reverse ? bArr.concat(filtered) : filtered.concat(bArr)) as any
+}
+
 export const schemaProperties = new Set([
 	'body',
 	'headers',
@@ -141,6 +184,10 @@ export const schemaProperties = new Set([
 ])
 
 export const eventProperties = new Set([
+	'start',
+	'stop',
+	'trace',
+	'request',
 	'parse',
 	'transform',
 	'beforeHandle',
@@ -221,11 +268,14 @@ export function mergeGuard(
 export function mergeHook(
 	a: Partial<AppHook>,
 	b: Partial<AppHook> | undefined,
-	reverse = false
+	reverse = false,
+	dedup = false
 ): Partial<AppHook> {
 	if (!b) return a
 	// b is undefined but it's shorter this way
 	if (!a) return b
+
+	const merge = (dedup ? dedupedMergeArray : mergeArray) as typeof mergeArray
 
 	if (!a.body && b.body) a.body = b.body
 	if (!a.headers && b.headers) a.headers = b.headers
@@ -235,39 +285,39 @@ export function mergeHook(
 	if (a.response || b.response)
 		a.response = mergeResponse(a.response, b.response)
 
-	if (a.parse || b.parse) a.parse = mergeArray(a.parse, b.parse, reverse)
+	if (a.parse || b.parse) a.parse = merge(a.parse, b.parse, reverse)
 
 	if (a.transform || b.transform)
-		a.transform = mergeArray(a.transform, b.transform, reverse)
+		a.transform = merge(a.transform, b.transform, reverse)
 
 	if (a.derive || b.derive)
-		a.beforeHandle = mergeArray(
+		a.beforeHandle = merge(
 			a.beforeHandle,
-			mergeArray(a.derive, b.derive),
+			merge(a.derive, b.derive),
 			reverse
 		)
 
 	// Remove in 2.1
 	if (a.resolve || b.resolve)
-		a.beforeHandle = mergeArray(
+		a.beforeHandle = merge(
 			a.beforeHandle,
-			mergeArray(a.resolve, b.resolve, reverse),
+			merge(a.resolve, b.resolve, reverse),
 			reverse
 		)
 
 	if (a.beforeHandle || b.beforeHandle)
-		a.beforeHandle = mergeArray(a.beforeHandle, b.beforeHandle, reverse)
+		a.beforeHandle = merge(a.beforeHandle, b.beforeHandle, reverse)
 
 	if (a.afterHandle || b.afterHandle)
-		a.afterHandle = mergeArray(a.afterHandle, b.afterHandle, reverse)
+		a.afterHandle = merge(a.afterHandle, b.afterHandle, reverse)
 
 	if (a.mapResponse || b.mapResponse)
-		a.mapResponse = mergeArray(a.mapResponse, b.mapResponse, reverse)
+		a.mapResponse = merge(a.mapResponse, b.mapResponse, reverse)
 
 	if (a.afterResponse || b.afterResponse)
-		a.afterResponse = mergeArray(a.afterResponse, b.afterResponse, reverse)
+		a.afterResponse = merge(a.afterResponse, b.afterResponse, reverse)
 
-	if (a.error || b.error) a.error = mergeArray(a.error, b.error, reverse)
+	if (a.error || b.error) a.error = merge(a.error, b.error, reverse)
 	if (a.schema || b.schema)
 		a.schema = mergeArray(a.schema, b.schema, reverse) as any
 
@@ -362,3 +412,13 @@ export const isBlob = (value: unknown): value is Blob =>
 	value instanceof Blob || value instanceof ElysiaFile
 
 export const nullObject = () => Object.create(null)
+
+export function joinPath(base: string, path: string) {
+	const baseEndsWithSlash = base.charCodeAt(base.length - 1) === 47
+	const pathStartsWithSlash = path.charCodeAt(0) === 47
+
+	if (baseEndsWithSlash && pathStartsWithSlash) return base + path.slice(1)
+	if (!baseEndsWithSlash && !pathStartsWithSlash) return base + '/' + path
+
+	return base + path
+}

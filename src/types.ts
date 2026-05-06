@@ -23,7 +23,7 @@ export interface ElysiaConfig<
 	 *
 	 * @since 2.0.0
 	 */
-	as: Scope
+	as?: Scope
 
 	/**
 	 * @default BunAdapter
@@ -693,7 +693,7 @@ export interface PublicRoute {
 	method: HTTPMethod
 	path: string
 	handler: Handler
-	hook: InputHook
+	hooks: InputHook
 	compile(): CompiledHandler
 	websocket?: AnyWSLocalHook
 }

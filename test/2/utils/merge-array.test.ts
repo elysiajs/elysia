@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test'
-import { mergeArray } from '../../../src/2/utils'
+import { mergeArray } from '../../../src/utils'
 
 describe('mergeArray', () => {
 	// falsy inputs

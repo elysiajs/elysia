@@ -10,5 +10,5 @@ trace
 .wrangler
 .elysia
 heap.json
-./server
-./elysia
+server
+.claude

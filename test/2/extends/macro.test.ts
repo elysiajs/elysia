@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { Elysia } from '../../../src/2'
+import { Elysia } from '../../../src'
 
 describe('macro order', () => {
 	it('run in order', async () => {

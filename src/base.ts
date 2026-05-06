@@ -12,9 +12,11 @@ import { BunAdapter } from './adapter/bun'
 import {
 	createErrorEventHandler,
 	eventProperties,
+	fnOrigin,
 	fnv1a,
 	hookToGuard,
 	isEmpty,
+	joinPath,
 	mapMethodBack,
 	mergeDeep,
 	mergeHook,
@@ -92,6 +94,9 @@ export class Elysia<
 	#plugin?: WeakSet<any>
 	#global?: WeakSet<any>
 
+	#hash?: number
+	#apps?: Set<number>
+
 	'~ext'?: {
 		decorator?: Singleton['decorator']
 		store?: Singleton['store']
@@ -115,6 +120,14 @@ export class Elysia<
 
 	constructor(config?: ElysiaConfig<BasePath, Scope>) {
 		this['~config'] = config
+		// Compute hash eagerly when the plugin is named so .beforeHandle and
+		// friends can tag each fn's origin without recomputing.
+		if (config?.name)
+			this.#hash = fnv1a(
+				config.seed
+					? `${config.name}_${typeof config.seed === 'object' ? JSON.stringify(config.seed) : config.seed}`
+					: config.name
+			)
 	}
 
 	get routes(): PublicRoute[] {
@@ -128,7 +141,7 @@ export class Elysia<
 					method: mapMethodBack(method),
 					path,
 					handler,
-					hook: appHook
+					hooks: appHook
 						? hook
 							? mergeHook(hook as any, appHook as any)
 							: appHook
@@ -818,7 +831,7 @@ export class Elysia<
 	#on<Event extends keyof AppHook>(
 		type: Event,
 		fn: UnwrapArray<AppHook[Event]>,
-		scope?: EventScope
+		scope: EventScope = this['~config']?.as as EventScope
 	): this {
 		// @ts-expect-error Remove in 2.1
 		if (scope === 'scoped') scope = 'plugin'
@@ -836,8 +849,11 @@ export class Elysia<
 			ext.hooks.push(newHook)
 			this.#newHook = false
 		} else {
-			if (hook![type]) hook![type]!.push(fn as any)
-			else hook![type] = [fn as any]
+			if (hook![type]) {
+				// @ts-expect-error
+				if (Array.isArray(hook!)) hook![type]!.push(fn as any)
+				else hook![type]! = [hook![type]!, fn]
+			} else hook![type] = [fn as any]
 		}
 
 		if (scope === 'plugin') {
@@ -847,6 +863,14 @@ export class Elysia<
 			this.#global ??= new WeakSet()
 			this.#global.add(fn)
 		}
+
+		// Tag the fn with the hash of the named plugin it was first
+		// registered on. `.use()` uses this to dedup hooks: if a fn's
+		// origin is already absorbed (in parent.#apps), skip re-adding it.
+		// Anonymous plugins (no hash) leave fns un-tagged so they always
+		// propagate.
+		if (this.#hash !== undefined && !fnOrigin.has(fn as any))
+			fnOrigin.set(fn as any, this.#hash)
 
 		return this
 	}
@@ -862,9 +886,7 @@ export class Elysia<
 					fn,
 					// Remove in 2.1
 					((scopeOrFn as { as: LegacyEventScope })
-						?.as as EventScope) ??
-						scopeOrFn ??
-						this['~config']?.as
+						?.as as EventScope) ?? scopeOrFn
 				)
 			: this.#on(type, scopeOrFn as EventFn<'beforeHandle'>)
 	}
@@ -1244,10 +1266,38 @@ export class Elysia<
 			return app(this)
 		}
 
-		return this.#use(app)
+		this.#use(app)
+		return this
 	}
 
-	#use(app: AnyElysia): this {
+	#use(app: AnyElysia) {
+		// Snapshot of named-plugin hashes already absorbed by `this`. A fn
+		// whose origin (`fnOrigin.get(fn)`) is in this snapshot has already
+		// been pulled in via another path — skip it during the merge below.
+		// We capture the snapshot BEFORE we start mutating `this.#apps` so
+		// the child's own hash (which we add now) doesn't accidentally cause
+		// the child's own fns to be skipped.
+		const before: Set<number> | undefined = this.#apps
+			? new Set(this.#apps)
+			: undefined
+
+		const name = app['~config']?.name
+		if (name) {
+			const hash = app.#hash!
+			if (this.#apps?.has(hash)) return
+
+			this.#apps ??= new Set()
+			this.#apps.add(hash)
+		}
+
+		// Always propagate the child's transitive named plugins so the next
+		// .use() can dedup against the full set (regardless of whether the
+		// child itself is named).
+		if (app.#apps) {
+			this.#apps ??= new Set()
+			app.#apps.forEach(this.#apps.add, this.#apps)
+		}
+
 		if (app.#routes) {
 			this.#newHook = true
 
@@ -1291,8 +1341,22 @@ export class Elysia<
 					for (const key in hook) {
 						if (!eventProperties.has(key)) continue
 
-						const fns = hook[key as keyof AppHook] as Function[]
+						const raw = hook[key as keyof AppHook] as
+							| Function
+							| Function[]
+						const fns: Function[] = Array.isArray(raw)
+							? raw
+							: [raw as Function]
+
 						for (const fn of fns) {
+							// Origin-based dedup: if fn was first registered
+							// on a named plugin already absorbed by `this`,
+							// skip it. Anonymous-source fns have no origin
+							// and always pass.
+							const origin = fnOrigin.get(fn)
+							if (origin !== undefined && before?.has(origin))
+								continue
+
 							if (
 								derive &&
 								key === 'beforeHandle' &&
@@ -1316,8 +1380,6 @@ export class Elysia<
 				this.#pushHook(event)
 			}
 		}
-
-		return this
 	}
 
 	#add(
@@ -1327,6 +1389,9 @@ export class Elysia<
 		hook?: Partial<InputHook>
 	) {
 		this.#newHook = true
+
+		if (this['~config']?.prefix)
+			path = joinPath(this['~config']?.prefix, path)
 
 		const appHook = this['~ext']?.hooks?.at(-1)
 		const history = appHook

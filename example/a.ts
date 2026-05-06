@@ -1,7 +1,15 @@
 import { Elysia, t } from '../src'
 
-const app = new Elysia().get('/:id', ({ params }) => params.id).listen(3000)
+let count = 0
 
-// app.handle('/1')
-// 	.then((x) => x.text())
-// 	.then(console.log)
+const group = new Elysia()
+	.transform('global', () => {
+		count++
+	})
+	.get('/a', () => 'Hi')
+
+const app = new Elysia().use(group)
+
+await app.handle('/a')
+
+console.log(count)
