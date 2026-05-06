@@ -8,6 +8,7 @@ import { ListenCallback, Serve } from './universal'
 import { isBun } from './universal/constants'
 
 import { MethodMap } from './constants'
+import { BunAdapter } from './adapter/bun'
 import {
 	checksum,
 	createErrorEventHandler,
@@ -1520,7 +1521,7 @@ export class Elysia<
 	) {
 		if (!this['~config']?.adapter && isBun) {
 			this['~config'] ??= nullObject()
-			this['~config']!.adapter = require('./adapter/bun').BunAdapter
+			this['~config']!.adapter = BunAdapter
 		}
 
 		const listen = this['~config']?.adapter?.listen
