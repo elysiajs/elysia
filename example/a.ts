@@ -1,9 +1,11 @@
 import { Elysia, t } from '../src/2'
-import * as z from 'zod'
 
 const app = new Elysia()
-	.derive(({ status }) => {
-		return status(418)
+	.beforeHandle(() => {
+		console.log('B')
+	})
+	.afterHandle(() => {
+		console.log('Q')
 	})
 	.get('/', () => 'hi')
 

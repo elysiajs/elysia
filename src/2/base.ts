@@ -28,7 +28,7 @@ import type {
 	EventScope
 } from './types'
 
-import decodeURIComponent from 'fast-decode-uri-component'
+import { decodeComponent } from 'deuri'
 
 import { BunAdapter } from './adapter/bun'
 import { ListenCallback, Serve } from './universal'
@@ -41,7 +41,8 @@ import {
 	isEmpty,
 	mapMethodBack,
 	mergeDeep,
-	mergeHook
+	mergeHook,
+    nullObject
 } from './utils'
 import { MethodMap } from './constants'
 
@@ -434,9 +435,9 @@ export class Elysia<
 	}
 
 	#decorate(as: ContextAppendType, name: string, value: unknown): this {
-		const ext = (this['~ext'] ??= Object.create(null))
+		const ext = (this['~ext'] ??= nullObject())
 		const fresh = !ext.decorator
-		const decorator = (ext.decorator ??= Object.create(null)) as Record<
+		const decorator = (ext.decorator ??= nullObject()) as Record<
 			string,
 			unknown
 		>
@@ -764,9 +765,9 @@ export class Elysia<
 	}
 
 	#state(as: ContextAppendType, name: string, value: unknown): this {
-		const ext = (this['~ext'] ??= Object.create(null))
+		const ext = (this['~ext'] ??= nullObject())
 		const fresh = !ext.store
-		const store = (ext.store ??= Object.create(null)) as Record<
+		const store = (ext.store ??= nullObject()) as Record<
 			string,
 			unknown
 		>
@@ -809,7 +810,7 @@ export class Elysia<
 	}
 
 	headers(headers: Record<string, string>) {
-		const ext = (this['~ext'] ??= Object.create(null))
+		const ext = (this['~ext'] ??= nullObject())
 
 		if (ext.headers) Object.assign(ext!.headers, headers)
 		else ext.headers = headers
@@ -825,12 +826,12 @@ export class Elysia<
 		// @ts-expect-error Remove in 2.1
 		if (scope === 'scoped') scope = 'plugin'
 
-		const ext = (this['~ext'] ??= Object.create(null))
-		ext.hooks ??= [Object.create(null)]
+		const ext = (this['~ext'] ??= nullObject())
+		ext.hooks ??= [nullObject()]
 		const hook = ext.hooks.at(-1)
 
 		if (this.#newHook) {
-			const newHook = Object.create(null)
+			const newHook = nullObject()
 			newHook[type] = fn
 
 			mergeHook(newHook, hook as any, true)
@@ -1099,7 +1100,7 @@ export class Elysia<
 	}
 
 	guard(hook: Partial<InputHook & Macro>) {
-		const ext = (this['~ext'] ??= Object.create(null))
+		const ext = (this['~ext'] ??= nullObject())
 
 		this['~applyMacro'](hookToGuard(hook as any))
 
@@ -1120,7 +1121,7 @@ export class Elysia<
 	}
 
 	#pushHook(hook: Partial<AppHook>): this {
-		const ext = (this['~ext'] ??= Object.create(null))
+		const ext = (this['~ext'] ??= nullObject())
 
 		if (ext.hooks) {
 			const index = ext.hooks.length - 1
@@ -1139,8 +1140,8 @@ export class Elysia<
 		if (typeof macroOrName === 'string' && !macro)
 			throw new Error('Macro function is required')
 
-		const ext = (this['~ext'] ??= Object.create(null))
-		const m = (ext.macro ??= Object.create(null))
+		const ext = (this['~ext'] ??= nullObject())
+		const m = (ext.macro ??= nullObject())
 
 		if (typeof macroOrName === 'string') m[macroOrName] = macro!
 		else {
@@ -1264,29 +1265,29 @@ export class Elysia<
 		if (app['~ext']) {
 			const { decorator, store, headers, hooks } = app['~ext']
 			const ext: NonNullable<(typeof this)['~ext']> = (this['~ext'] ??=
-				Object.create(null))
+				nullObject())
 
 			if (decorator) {
 				if (ext.decorator) mergeDeep(ext.decorator, decorator)
 				else
 					ext.decorator = Object.assign(
-						Object.create(null),
+						nullObject(),
 						decorator
 					)
 			}
 
 			if (store) {
 				if (ext.store) mergeDeep(ext.store, store)
-				else ext.store = Object.assign(Object.create(null), store)
+				else ext.store = Object.assign(nullObject(), store)
 			}
 
 			if (headers) {
 				if (ext.headers) Object.assign(ext.headers, headers)
-				else ext.headers = Object.assign(Object.create(null), headers)
+				else ext.headers = Object.assign(nullObject(), headers)
 			}
 
 			if (app.#plugin || app.#global) {
-				const event = Object.create(null)
+				const event = nullObject()
 				const hook = hooks!.at(-1)!
 				const derive = app['~derive']
 
@@ -1354,12 +1355,12 @@ export class Elysia<
 		method = mapMethodBack(method)
 
 		if (this.#routes) {
-			this['~mapIdx']![method] ??= Object.create(null)
+			this['~mapIdx']![method] ??= nullObject()
 			this['~mapIdx']![method]![path] = this.#routes.length
 			this.#routes.push(route)
 		} else {
-			this['~mapIdx'] = Object.create(null)
-			this['~mapIdx']![method] = Object.create(null)
+			this['~mapIdx'] = nullObject()
+			this['~mapIdx']![method] = nullObject()
 			this['~mapIdx']![method]![path] = 0
 			this.#routes = [route]
 		}
@@ -1384,15 +1385,15 @@ export class Elysia<
 	#initMap() {
 		// monomorphic access is faster, so we ensure the shape of the map is consistent
 		this['~map'] ??= {
-			GET: Object.create(null),
-			POST: Object.create(null),
-			PUT: Object.create(null),
-			DELETE: Object.create(null),
-			PATCH: Object.create(null),
+			GET: nullObject(),
+			POST: nullObject(),
+			PUT: nullObject(),
+			DELETE: nullObject(),
+			PATCH: nullObject(),
 			// Cache check, not uncommon
-			HEAD: Object.create(null),
+			HEAD: nullObject(),
 			// CORS preflight, usuaul
-			OPTIONS: Object.create(null)
+			OPTIONS: nullObject()
 		}
 	}
 
@@ -1471,10 +1472,10 @@ export class Elysia<
 			)
 
 			if (isDynamic) {
-				this['~router'] ??= new Memoirist(decodeURIComponent)
+				this['~router'] ??= new Memoirist(decodeComponent)
 				this['~router'].add(method, path, handler, false)
 			} else {
-				this['~map']![method] ??= Object.create(null)
+				this['~map']![method] ??= nullObject()
 				this['~map']![method]![path] = handler
 			}
 		}
@@ -1500,7 +1501,7 @@ export class Elysia<
 		// this.#routes = undefined
 		// this.#compiled = undefined
 		this['~mapIdx'] = undefined
-		this['~loosePath'] = Object.create(null)
+		this['~loosePath'] = nullObject()
 	}
 
 	// for whatever reason, this use less memory than declaraing as method/arrow function
@@ -1526,7 +1527,7 @@ export class Elysia<
 		callback?: ListenCallback
 	) {
 		if (!this['~config']?.adapter && isBun) {
-			this['~config'] ??= Object.create(null)
+			this['~config'] ??= nullObject()
 			this['~config']!.adapter = BunAdapter
 		}
 

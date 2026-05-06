@@ -1,9 +1,9 @@
-import { type Context } from './context'
+import type { Context } from './context'
 
 import type { AppHook, MaybeArray, EventFn, Macro, InputSchema } from './types'
 
-import { type MethodMap, MethodMapBack } from './constants'
 import { ElysiaFile } from './universal/file'
+import { dangerousKeys, type MethodMap, MethodMapBack } from './constants'
 
 export const mapMethodBack = (method: MethodMap[keyof MethodMap] | string) =>
 	MethodMapBack[method as MethodMap[keyof MethodMap]] ?? method
@@ -76,7 +76,7 @@ export function mergeResponse(
 	return b ?? a
 }
 
-function mergeArray<
+export function mergeArray<
 	A extends MaybeArray<unknown> | undefined,
 	B extends MaybeArray<unknown> | undefined
 >(
@@ -93,12 +93,11 @@ function mergeArray<
 	if (reverse) {
 		if (aIsArray && bIsArray) {
 			if (b.length === 1) {
-				a.unshift((b as unknown[])[0])
+				a.unshift(b[0])
 				return a as any
-			} else if (a.length === 1) {
-				a.push((b as unknown[])[0])
-				return a as any
-			} else return b.concat(a) as any
+			}
+
+			return (b as unknown[]).concat(a) as any
 		}
 
 		if (aIsArray) {
@@ -112,13 +111,8 @@ function mergeArray<
 	}
 
 	if (aIsArray && bIsArray) {
-		if (b.length === 1) {
-			a.push((b as unknown[])[0])
-			return a as any
-		} else if (a.length === 1) {
-			a.unshift((b as unknown[])[0])
-			return a as any
-		} else return b.concat(a) as any
+		a.push(...b)
+		return a as any
 	}
 
 	if (aIsArray) {
@@ -302,8 +296,6 @@ export const isClass = (v: Object) =>
 	// If object prototype is not pure, then probably a class-like object
 	isNotEmpty(Object.getPrototypeOf(v))
 
-const dangerousKeys = new Set(['__proto__', 'constructor', 'prototype'])
-
 export function mergeDeep<
 	A extends Record<string, any>,
 	B extends Record<string, any>
@@ -362,3 +354,5 @@ export function mergeDeep<
 
 export const isBlob = (value: unknown): value is Blob =>
 	value instanceof Blob || value instanceof ElysiaFile
+
+export const nullObject = () => Object.create(null)

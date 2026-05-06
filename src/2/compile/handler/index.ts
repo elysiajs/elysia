@@ -22,7 +22,7 @@ import { isBun } from '../../universal/utils'
 import { parseQueryFromURL } from '../../parse-query'
 import { getDefaultAdapter } from '../../adapter/constants'
 
-import { mapBeforeHandle, mapTransform } from './utils'
+import { mapAfterHandle, mapBeforeHandle, mapTransform } from './utils'
 import { isBlob, mergeHook } from '../../utils'
 
 import type { Link } from '../types'
@@ -320,25 +320,32 @@ export function compileHandler(
 	// maybeStream
 
 	const res = adapter.response
-	const mapReturn = (() => {
-		if (hasSet) {
-			link(res.map, 'rm')
-			return 'rm(h(c),c.set)\n'
-		}
-
-		link(res.compact ?? res.map, 'rc')
-		return 'rc(h(c))\n'
-	})()
+	const map = hasSet
+		? (link(res.map, 'rm') ?? 'rm')
+		: (link(res.compact ?? res.map, 'rc') ?? 'rc')
+	const mapReturn = hasSet ? 'rm(h(c),c.set)\n' : 'rc(h(c))\n'
 
 	if (hook?.beforeHandle) {
 		link(hook.beforeHandle, 'bf')
-		link(res.early ?? res.map, 're')
 
 		const derive = root['~derive']
-		code += mapBeforeHandle(hook.beforeHandle, [derive, link])
+		code += mapBeforeHandle(hook.beforeHandle, [
+			derive,
+			map,
+			link,
+			res.map,
+			!!hook?.afterHandle
+		])
 	}
 
 	if (hook?.afterHandle) {
+		code += `const ret=${mapReturn}`
+
+		link(hook.afterHandle, 'af')
+
+		code += mapAfterHandle(hook.afterHandle)
+
+		code += `return ret\n`
 	} else {
 		code += `return ${mapReturn}`
 	}

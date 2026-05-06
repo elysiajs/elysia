@@ -1,4 +1,4 @@
-import decode from 'fast-decode-uri-component'
+import { decodeComponent } from 'deuri'
 
 // bit flags
 const KEY_HAS_PLUS = 1
@@ -76,7 +76,7 @@ export function parseQueryFromURL(
 
 		let finalKey = keySlice
 		if (flags & KEY_HAS_PLUS) finalKey = finalKey.replace(/\+/g, ' ')
-		if (flags & KEY_NEEDS_DECODE) finalKey = decode(finalKey) || finalKey
+		if (flags & KEY_NEEDS_DECODE) finalKey = decodeComponent(finalKey) || finalKey
 
 		let finalValue = ''
 		if (hasBothKeyValuePair) {
@@ -84,7 +84,7 @@ export function parseQueryFromURL(
 			if (flags & VALUE_HAS_PLUS)
 				valueSlice = valueSlice.replace(/\+/g, ' ')
 			if (flags & VALUE_NEEDS_DECODE)
-				valueSlice = decode(valueSlice) || valueSlice
+				valueSlice = decodeComponent(valueSlice) || valueSlice
 			finalValue = valueSlice
 		}
 
@@ -185,7 +185,8 @@ export function parseQueryStandardSchema(
 
 		let finalKey = keySlice
 		if (flags & KEY_HAS_PLUS) finalKey = finalKey.replace(/\+/g, ' ')
-		if (flags & KEY_NEEDS_DECODE) finalKey = decode(finalKey) || finalKey
+		if (flags & KEY_NEEDS_DECODE)
+			finalKey = decodeComponent(finalKey) || finalKey
 
 		let finalValue = ''
 		if (hasBothKeyValuePair) {
@@ -193,7 +194,7 @@ export function parseQueryStandardSchema(
 			if (flags & VALUE_HAS_PLUS)
 				valueSlice = valueSlice.replace(/\+/g, ' ')
 			if (flags & VALUE_NEEDS_DECODE)
-				valueSlice = decode(valueSlice) || valueSlice
+				valueSlice = decodeComponent(valueSlice) || valueSlice
 			finalValue = valueSlice
 		}
 
@@ -306,7 +307,8 @@ export function parseQuery(input: string) {
 
 		let finalKey = keySlice
 		if (flags & KEY_HAS_PLUS) finalKey = finalKey.replace(/\+/g, ' ')
-		if (flags & KEY_NEEDS_DECODE) finalKey = decode(finalKey) || finalKey
+		if (flags & KEY_NEEDS_DECODE)
+			finalKey = decodeComponent(finalKey) || finalKey
 
 		let finalValue = ''
 		if (hasBothKeyValuePair) {
@@ -314,7 +316,7 @@ export function parseQuery(input: string) {
 			if (flags & VALUE_HAS_PLUS)
 				valueSlice = valueSlice.replace(/\+/g, ' ')
 			if (flags & VALUE_NEEDS_DECODE)
-				valueSlice = decode(valueSlice) || valueSlice
+				valueSlice = decodeComponent(valueSlice) || valueSlice
 			finalValue = valueSlice
 		}
 

@@ -1,6 +1,7 @@
 import { isAsyncFunction } from '../utils'
 import { ElysiaStatus } from '../../error'
 
+import type { ElysiaAdapter } from '../../adapter'
 import type { AnyElysia } from '../../base'
 import type { AppEvent, AppHook, MaybeArray } from '../../types'
 import type { Link } from '../types'
@@ -11,23 +12,41 @@ export const mapTransform = map<'transform'>(
 
 export const mapBeforeHandle = map<
 	'beforeHandle',
-	[AnyElysia['~derive'], Link]
->((i, fn, [derive, link]) => {
+	[
+		AnyElysia['~derive'],
+		string,
+		Link,
+		ElysiaAdapter['response']['map'],
+		shouldReturn: boolean
+	]
+>((i, fn, [derive, map, link, mapResponse, shouldReturn]) => {
 	const body = `tmp=${Await(fn)}bf${at(i)}(c)\n`
 
 	if (derive?.has(fn)) {
 		link(ElysiaStatus, 'st')
+		link(mapResponse, 'rm')
 
 		return (
 			body +
 			'if(tmp instanceof st){\n' +
 			'c.set.status=tmp.status\n' +
-			'return re(tmp.res,c.set)\n' +
+			`return ${map}(tmp.res,c.set)\n` +
 			'}else if(tmp)Object.assign(c,tmp)\n'
 		)
 	}
 
-	return body + `if(tmp!==undefined)return re(tmp,c.set)\n`
+	if (shouldReturn) {
+		const set = map === 'rc' ? '' : ',c.set'
+		return body + `if(tmp!==undefined)return ${map}(tmp${set})\n`
+	}
+
+	return body
+})
+
+export const mapAfterHandle = map<'afterHandle'>((i, fn) => {
+	const body = `tmp=${Await(fn)}af${at(i)}(c)\n`
+
+	return body + `if(tmp!==undefined)return tmp\n`
 })
 
 function map<Event extends AppEvent, T extends unknown[] = []>(

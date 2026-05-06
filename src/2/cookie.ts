@@ -1,8 +1,9 @@
 import { parse, serialize } from 'cookie'
 
-import decode from 'fast-decode-uri-component'
+import { decodeComponent } from 'deuri'
 
 import { InvalidCookieSignature } from './error'
+import { dangerousKeys } from './constants'
 import { constantTimeEqual, isNotEmpty } from './utils'
 
 import type { Context } from './context'
@@ -120,6 +121,21 @@ export interface CookieOptions {
 	secrets?: string | null | (string | null)[]
 }
 
+const FORWARDED_KEYS = [
+	'expires',
+	'maxAge',
+	'domain',
+	'path',
+	'secure',
+	'httpOnly',
+	'sameSite',
+	'priority',
+	'partitioned',
+	'secrets'
+] as const
+
+type FORWARDED_KEYS = typeof FORWARDED_KEYS
+
 export type ElysiaCookie = Prettify<
 	CookieOptions & {
 		value?: unknown
@@ -127,6 +143,9 @@ export type ElysiaCookie = Prettify<
 >
 
 type Updater<T> = T | ((value: T) => T)
+
+export interface Cookie<T>
+	extends Pick<ElysiaCookie, FORWARDED_KEYS[number]> {}
 
 export class Cookie<T> implements ElysiaCookie {
 	private valueHash?: number
@@ -174,30 +193,21 @@ export class Cookie<T> implements ElysiaCookie {
 		// Note: Uses JSON.stringify for comparison, so key order matters
 		// { a: 1, b: 2 } and { b: 2, a: 1 } are treated as different values
 		if (
+			current &&
 			typeof current === 'object' &&
-			current !== null &&
-			typeof value === 'object' &&
-			value !== null
+			value &&
+			typeof value === 'object'
 		) {
 			try {
 				// Cache stringified value to avoid duplicate stringify calls
 				const valueStr = JSON.stringify(value)
 				const newHash = hashString(valueStr)
 
-				// If hash differs from cached hash, value definitely changed
-				if (
-					this.valueHash !== undefined &&
-					this.valueHash !== newHash
-				) {
+				if (this.valueHash !== undefined && this.valueHash !== newHash)
 					this.valueHash = newHash
-				}
-				// First set (valueHash undefined) OR hashes match: do deep comparison
 				else {
-					if (JSON.stringify(current) === valueStr) {
-						this.valueHash = newHash
-						return // Values are identical, skip update
-					}
 					this.valueHash = newHash
+					if (JSON.stringify(current) === valueStr) return // Values are identical, skip update
 				}
 			} catch {}
 		}
@@ -329,6 +339,18 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 }
 
+for (const key of FORWARDED_KEYS)
+	Object.defineProperty(Cookie.prototype, key, {
+		get(this: Cookie<unknown>) {
+			return this.cookie[key]
+		},
+		set(this: Cookie<unknown>, v) {
+			this.setCookie[key] = v
+		},
+		configurable: true
+		// enumerable defaults to false → matches native class accessors
+	})
+
 export const createCookieJar = (
 	set: Context['set'],
 	store: Record<string, ElysiaCookie>,
@@ -374,15 +396,9 @@ export const parseCookie = async (
 
 	const cookies = parse(cookieString)
 	for (const [name, v] of Object.entries(cookies)) {
-		if (
-			v === undefined ||
-			name === '__proto__' ||
-			name === 'constructor' ||
-			name === 'prototype'
-		)
-			continue
+		if (v === undefined || dangerousKeys.has(v)) continue
 
-		let value = decode(v)
+		let value = decodeComponent(v)
 
 		if (sign === true || sign?.includes(name)) {
 			if (!secrets)
@@ -465,6 +481,7 @@ export const serializeCookie = (cookies: Context['set']['cookie']) => {
 
 let encoder: TextEncoder
 let removeTrailingEqualsRegex: RegExp
+const algorithm = { name: 'HMAC', hash: 'SHA-256' }
 
 async function signCookie(val: string, secret: string | null) {
 	if (typeof val === 'object') val = JSON.stringify(val)
@@ -478,7 +495,7 @@ async function signCookie(val: string, secret: string | null) {
 	const secretKey = await crypto.subtle.importKey(
 		'raw',
 		encoder.encode(secret),
-		{ name: 'HMAC', hash: 'SHA-256' },
+		algorithm,
 		false,
 		['sign']
 	)

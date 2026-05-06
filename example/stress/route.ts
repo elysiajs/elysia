@@ -2,11 +2,13 @@ import { Elysia } from '../../src/2'
 import { profile } from './utils'
 
 const app = new Elysia()
+const plugin = new Elysia()
 
 const total = 100_000
 const stop = profile('Elysia 2α add route x100k + fetch once')
 
-for (let i = 0; i < total; i++) app.get(`/${i}`, () => 'ok')
+for (let i = 0; i < total; i++) plugin.get(`/${i}`, () => 'ok')
+app.use(plugin)
 
 // full build
 // app.handle('/0')
