@@ -1,7 +1,26 @@
 import Memoirist from 'memoirist'
+import { decodeComponent } from 'deuri'
 
 import { createFetchHandler } from './handler'
 import { compileHandler } from './compile'
+
+import { BunAdapter } from './adapter/bun'
+
+import { ListenCallback, Serve } from './universal'
+import { isBun } from './universal/utils'
+
+import { MethodMap } from './constants'
+import {
+	checksum,
+	createErrorEventHandler,
+	eventProperties,
+	hookToGuard,
+	isEmpty,
+	mapMethodBack,
+	mergeDeep,
+	mergeHook,
+	nullObject
+} from './utils'
 
 import type {
 	CompiledHandler,
@@ -27,24 +46,6 @@ import type {
 	Prettify,
 	EventScope
 } from './types'
-
-import { decodeComponent } from 'deuri'
-
-import { BunAdapter } from './adapter/bun'
-import { ListenCallback, Serve } from './universal'
-import { isBun } from './universal/utils'
-import {
-	checksum,
-	createErrorEventHandler,
-	eventProperties,
-	hookToGuard,
-	isEmpty,
-	mapMethodBack,
-	mergeDeep,
-	mergeHook,
-    nullObject
-} from './utils'
-import { MethodMap } from './constants'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
 
@@ -767,10 +768,7 @@ export class Elysia<
 	#state(as: ContextAppendType, name: string, value: unknown): this {
 		const ext = (this['~ext'] ??= nullObject())
 		const fresh = !ext.store
-		const store = (ext.store ??= nullObject()) as Record<
-			string,
-			unknown
-		>
+		const store = (ext.store ??= nullObject()) as Record<string, unknown>
 
 		switch (typeof value) {
 			case 'object':
@@ -1269,11 +1267,7 @@ export class Elysia<
 
 			if (decorator) {
 				if (ext.decorator) mergeDeep(ext.decorator, decorator)
-				else
-					ext.decorator = Object.assign(
-						nullObject(),
-						decorator
-					)
+				else ext.decorator = Object.assign(nullObject(), decorator)
 			}
 
 			if (store) {
@@ -1472,8 +1466,10 @@ export class Elysia<
 			)
 
 			if (isDynamic) {
-				this['~router'] ??= new Memoirist(decodeComponent)
-				this['~router'].add(method, path, handler, false)
+				import('./q')
+				console.log("A")
+				// this['~router'] ??= new Memoirist(decodeComponent)
+				// this['~router'].add(method, path, handler, false)
 			} else {
 				this['~map']![method] ??= nullObject()
 				this['~map']![method]![path] = handler
