@@ -10,9 +10,9 @@ import { isBun } from './universal/constants'
 import { MethodMap } from './constants'
 import { BunAdapter } from './adapter/bun'
 import {
-	checksum,
 	createErrorEventHandler,
 	eventProperties,
+	fnv1a,
 	hookToGuard,
 	isEmpty,
 	mapMethodBack,
@@ -1178,7 +1178,7 @@ export class Elysia<
 			if (!hook || (!isFunction && value === false)) continue
 
 			if (isFunction) {
-				const seed = checksum(key + JSON.stringify(hook.seed ?? value))
+				const seed = fnv1a(key + JSON.stringify(hook.seed ?? value))
 				if (seen.has(seed)) continue
 
 				seen.add(seed)

@@ -22,13 +22,19 @@ export function isNotEmpty(obj?: Object): boolean {
 	return false
 }
 
-// https://stackoverflow.com/a/52171480
-export function checksum(s: string): number {
-	let h = 9
+const FNV_OFFSET_BASIS = 2166136261
+const FNV_PRIME = 16777619
 
-	for (let i = 0; i < s.length; ) h = Math.imul(h ^ s.charCodeAt(i++), 9 ** 9)
+export function fnv1a(str: string): number {
+	let hash = FNV_OFFSET_BASIS
+	const len = str.length
 
-	return (h = h ^ (h >>> 9))
+	for (let i = 0; i < len; i++) {
+		hash ^= str.charCodeAt(i)
+		hash = Math.imul(hash, FNV_PRIME)
+	}
+
+	return hash >>> 0
 }
 
 /**

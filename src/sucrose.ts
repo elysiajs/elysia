@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable no-constant-condition */
-import { checksum } from './utils'
+import { fnv1a } from './utils'
 import { isBun, isCloudflareWorker } from './universal/constants'
 
 import type { Handler, AppHook } from './types'
@@ -699,7 +699,7 @@ export function sucrose(
 		if (!event) continue
 
 		const content = event.toString()
-		const key = checksum(content)
+		const key = fnv1a(content)
 		const cachedInference = caches[key]
 		if (cachedInference) {
 			inference = mergeInference(inference, cachedInference)

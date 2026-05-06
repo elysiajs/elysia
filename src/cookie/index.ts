@@ -1,3 +1,4 @@
+import { fnv1a } from '../utils'
 import type { BaseCookie } from './types'
 
 const FORWARDED_KEYS = [
@@ -17,25 +18,11 @@ type FORWARDED_KEYS = typeof FORWARDED_KEYS
 
 type Updater<T> = T | ((value: T) => T)
 
-export interface Cookie<T = any> extends Pick<BaseCookie, FORWARDED_KEYS[number]> {}
+export interface Cookie<T = any>
+	extends Pick<BaseCookie, FORWARDED_KEYS[number]> {}
 
 export class Cookie<T = any> implements BaseCookie {
-	private valueHash?: number
-
-	static hash(str: string) {
-		const FNV_OFFSET_BASIS = 2166136261
-		const FNV_PRIME = 16777619
-
-		let hash = FNV_OFFSET_BASIS
-		const len = str.length
-
-		for (let i = 0; i < len; i++) {
-			hash ^= str.charCodeAt(i)
-			hash = Math.imul(hash, FNV_PRIME)
-		}
-
-		return hash >>> 0
-	}
+	#hash?: number
 
 	constructor(
 		private name: string,
@@ -52,7 +39,7 @@ export class Cookie<T = any> implements BaseCookie {
 
 		this.jar[this.name] = jar
 		// Invalidate hash cache when jar is modified directly
-		this.valueHash = undefined
+		this.#hash = undefined
 	}
 
 	protected get setCookie() {
@@ -88,12 +75,12 @@ export class Cookie<T = any> implements BaseCookie {
 			try {
 				// Cache stringified value to avoid duplicate stringify calls
 				const valueStr = JSON.stringify(value)
-				const newHash = Cookie.hash(valueStr)
+				const hash = fnv1a(valueStr)
 
-				if (this.valueHash !== undefined && this.valueHash !== newHash)
-					this.valueHash = newHash
+				if (this.#hash !== undefined && this.#hash !== hash)
+					this.#hash = hash
 				else {
-					this.valueHash = newHash
+					this.#hash = hash
 					if (JSON.stringify(current) === valueStr) return // Values are identical, skip update
 				}
 			} catch {}

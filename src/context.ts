@@ -1,5 +1,5 @@
 import { ElysiaStatus, status, type SelectiveStatus } from './error'
-import { checksum, redirect } from './utils'
+import { fnv1a, redirect } from './utils'
 
 import type { AnyElysia } from './base'
 import type { Server } from './universal/server'
@@ -25,10 +25,10 @@ function getBaseKey(app: AnyElysia) {
 	const ext = app['~ext']
 	if (!ext) return 0
 
-	return checksum(
-		(ext.decorator ? checksum(JSON.stringify(ext.decorator)) : '') +
+	return fnv1a(
+		(ext.decorator ? JSON.stringify(ext.decorator) : '') +
 			'-' +
-			(ext.store ? checksum(JSON.stringify(ext.store)) : '')
+			(ext.store ? JSON.stringify(ext.store) : '')
 	)
 }
 
@@ -36,12 +36,12 @@ function getContextKey(app: AnyElysia) {
 	const ext = app['~ext']
 	if (!ext) return 0
 
-	return checksum(
-		(ext.decorator ? checksum(JSON.stringify(ext.decorator)) : '') +
+	return fnv1a(
+		(ext.decorator ? JSON.stringify(ext.decorator) : '') +
 			'-' +
-			(ext.store ? checksum(JSON.stringify(ext.store)) : '') +
+			(ext.store ? JSON.stringify(ext.store) : '') +
 			'-' +
-			(ext.headers ? checksum(JSON.stringify(ext.headers)) : '')
+			(ext.headers ? JSON.stringify(ext.headers) : '')
 	)
 }
 
