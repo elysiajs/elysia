@@ -7,7 +7,7 @@ import {
 	handleSet
 } from '../utils'
 
-import { isBun } from '../../universal/utils'
+import { isBun } from '../../universal/constants'
 import { ElysiaFile, mime } from '../../universal/file'
 import { isNotEmpty } from '../../utils'
 import { ElysiaStatus } from '../../error'

@@ -3,7 +3,7 @@ import { type createReadStream as CreateReadStream } from 'fs'
 import { type stat as Stat } from 'fs/promises'
 import type { BunFile } from 'bun'
 
-import { isBun } from './utils'
+import { isBun } from './constants'
 
 export const mime = {
 	// web

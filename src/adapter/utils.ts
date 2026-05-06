@@ -2,7 +2,7 @@ import { isNotEmpty } from '../utils'
 import { StatusMap } from '../constants'
 
 import { serializeCookie } from '../cookie/utils'
-import { isBun, hasHeaderShorthand } from '../universal/utils'
+import { isBun, hasHeaderShorthand } from '../universal/constants'
 import type { Context } from '../context'
 import type { MaybePromise } from '../types'
 

@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable no-constant-condition */
 import { checksum } from './utils'
-import { isBun, isCloudflareWorker } from './universal/utils'
+import { isBun, isCloudflareWorker } from './universal/constants'
 
 import type { Handler, AppHook } from './types'
 

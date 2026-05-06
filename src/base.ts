@@ -4,10 +4,8 @@ import { decodeComponent } from 'deuri'
 import { createFetchHandler } from './handler'
 import { compileHandler } from './compile'
 
-import { BunAdapter } from './adapter/bun'
-
 import { ListenCallback, Serve } from './universal'
-import { isBun } from './universal/utils'
+import { isBun } from './universal/constants'
 
 import { MethodMap } from './constants'
 import {
@@ -1467,7 +1465,6 @@ export class Elysia<
 
 			if (isDynamic) {
 				this['~router'] ??= new Memoirist(decodeComponent)
-
 				this['~router']!.add(method, path, handler, false)
 			} else {
 				this['~map']![method] ??= nullObject()
@@ -1523,7 +1520,7 @@ export class Elysia<
 	) {
 		if (!this['~config']?.adapter && isBun) {
 			this['~config'] ??= nullObject()
-			this['~config']!.adapter = BunAdapter
+			this['~config']!.adapter = require('./adapter/bun').BunAdapter
 		}
 
 		const listen = this['~config']?.adapter?.listen

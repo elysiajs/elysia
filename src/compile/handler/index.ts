@@ -17,7 +17,7 @@ import {
 	parseUrlencoded
 } from './constants'
 
-import { isBun } from '../../universal/utils'
+import { isBun } from '../../universal/constants'
 
 import { parseQueryFromURL } from '../../parse-query'
 import { getDefaultAdapter } from '../../adapter/constants'
