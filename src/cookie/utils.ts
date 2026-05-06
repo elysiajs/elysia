@@ -1,5 +1,5 @@
-import { parse, serialize } from 'cookie'
 import { decodeComponent } from 'deuri'
+import { parse, serialize } from './lib'
 
 import { Cookie } from '.'
 import { InvalidCookieSignature } from '../error'
@@ -41,14 +41,18 @@ export function createCookieJar(
 export async function parseCookie(
 	set: Context['set'],
 	cookieString?: string | null,
-	{
+	options?: CookieOptions & {
+		sign?: true | string | string[]
+	}
+) {
+	let {
 		secrets,
 		sign,
 		...initial
 	}: CookieOptions & {
 		sign?: true | string | string[]
-	} = nullObject()
-) {
+	} = options ?? nullObject()
+
 	if (!cookieString) return createCookieJar(set, nullObject(), initial)
 
 	const isStringKey = typeof secrets === 'string'
@@ -104,8 +108,7 @@ export async function parseCookie(
 				} catch {}
 		}
 
-		jar[name] = nullObject()
-		jar[name].value = value
+		jar[name] = { value }
 	}
 
 	return createCookieJar(set, jar, initial)
@@ -123,11 +126,7 @@ export function serializeCookie(cookies: Context['set']['cookie']) {
 		const value = property.value
 		if (value === undefined || value === null) continue
 
-		const v = serialize(
-			key,
-			typeof value === 'object' ? JSON.stringify(value) : value + '',
-			property
-		)
+		const v = serialize(key, value, property)
 
 		if (set) {
 			if (isArray) {
@@ -142,8 +141,7 @@ export function serializeCookie(cookies: Context['set']['cookie']) {
 	return set
 }
 
-let encoder: TextEncoder
-let removeTrailingEqualsRegex: RegExp
+const removeTrailingEquals = /=+$/g
 const algorithm = { name: 'HMAC', hash: 'SHA-256' }
 
 async function signCookie(val: string, secret: string | null) {
@@ -153,7 +151,7 @@ async function signCookie(val: string, secret: string | null) {
 	if (secret === null || secret === undefined)
 		throw new TypeError('Secret key must be provided')
 
-	encoder ??= new TextEncoder()
+	const encoder = new TextEncoder()
 
 	const secretKey = await crypto.subtle.importKey(
 		'raw',
@@ -174,7 +172,7 @@ async function signCookie(val: string, secret: string | null) {
 		'.' +
 		Buffer.from(hmacBuffer)
 			.toString('base64')
-			.replace((removeTrailingEqualsRegex ??= /=+$/g), '')
+			.replace(removeTrailingEquals, '')
 	)
 }
 

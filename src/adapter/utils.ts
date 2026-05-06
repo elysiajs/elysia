@@ -436,11 +436,11 @@ export function handleSet(set: Context['set']) {
 	if (typeof set.status === 'string')
 		set.status = StatusMap[set.status as keyof typeof StatusMap]
 
-	// if (set.cookie && isNotEmpty(set.cookie)) {
-	// 	const cookie = serializeCookie(set.cookie)
+	if (set.cookie && isNotEmpty(set.cookie)) {
+		const cookie = serializeCookie(set.cookie)
 
-	// 	if (cookie) set.headers[setCookie] = cookie
-	// }
+		if (cookie) set.headers[setCookie] = cookie
+	}
 
 	if (set.headers[setCookie] && Array.isArray(set.headers[setCookie])) {
 		set.headers = parseSetCookies(
