@@ -10,7 +10,7 @@ import { NotFound } from '../../error'
 
 import type { AnyElysia } from '../../base'
 import type { Context } from '../../context'
-import type { CompiledHandler, MaybePromise } from '../../types'
+import type { CompiledHandler, InternalRoute, MaybePromise } from '../../types'
 
 export function createBunContext(
 	app: AnyElysia
@@ -94,7 +94,7 @@ export function createRouteMap(app: AnyElysia) {
 		return handleError(new Context(request), new NotFound()) as Response
 	}
 
-	if (!app['~mapIdx'])
+	if (!app.history)
 		return [
 			{
 				'/_elysia': { GET: new Response('hi') }
@@ -102,29 +102,29 @@ export function createRouteMap(app: AnyElysia) {
 			fetch
 		]
 
-	const routes = nullObject()
-
 	const handleError = createErrorHandler(
 		flattenChain(app['~ext']?.hookChain)?.error,
 		WebStandardAdapter.response.map,
 		new Response('Not Found', { status: 404 })
 	)
 
-	for (const method in app['~mapIdx']) {
-		const paths = app['~mapIdx'][method]
+	const routes = nullObject()
+	const length = app.history.length
 
-		for (const path in paths) {
-			routes[path] ??= nullObject()
-			routes[path][
-				MethodMapBack[method as unknown as keyof MethodMapBack] ??
-					method
-			] = createFetchHandler(
-				app,
-				Context,
-				app.handler(paths[path], false, undefined),
-				handleError
-			)
-		}
+	for (let i = 0; i < length; i++) {
+		const route: InternalRoute = app.history[i]
+		const method = route[0]
+		const path = route[1]
+
+		routes[path] ??= nullObject()
+		routes[path][
+			MethodMapBack[method as unknown as keyof MethodMapBack] ?? method
+		] = createFetchHandler(
+			app,
+			Context,
+			app.handler(i, false, route),
+			handleError
+		)
 	}
 
 	return [routes, fetch]

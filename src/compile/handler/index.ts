@@ -29,7 +29,8 @@ import {
 	isBlob,
 	isDownwardScope,
 	isLocalScope,
-	mergeHook
+	mergeHook,
+	nullObject
 } from '../../utils'
 
 import type { Link } from '../types'
@@ -159,7 +160,7 @@ function applyHook(
 	if (!localHook) {
 		if (rootHook)
 			return mergeHook(
-				cloneHook(appHook ?? {}) as any,
+				cloneHook(appHook ?? nullObject()) as any,
 				rootHook as any,
 				true,
 				true
@@ -222,7 +223,6 @@ export function compileHandler(
 	// registration time; flatten with no filter (locals on the owning instance
 	// apply to its own routes). Result is cached via `#compiled`.
 	const flatAppHook = flattenChain(appHook)
-
 	const hook = applyHook(
 		localHook,
 		flatAppHook as any,

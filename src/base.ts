@@ -113,9 +113,9 @@ export class Elysia<
 		hookChain?: ChainNode
 	}
 
-	#routes?: InternalRoute[]
+	history?: InternalRoute[]
 
-	// Side table parallel to #routes
+	// Side table parallel to history
 	//
 	// Each entry points to a node in the inherited-downward-hook chain
 	// captured at the moment the route applied to `.use()`
@@ -132,12 +132,7 @@ export class Elysia<
 
 	'~router'?: Memoirist<CompiledHandler>
 	'~map'?: { [method: string]: { [path: string]: CompiledHandler } }
-	'~mapIdx'?: {
-		[method: string | number]: { [path: string]: number }
-	}
 	'~loosePath': Record<string, string>
-
-	#newHook = false
 
 	constructor(config?: ElysiaConfig<BasePath, Scope>) {
 		this['~config'] = config
@@ -151,12 +146,13 @@ export class Elysia<
 	}
 
 	get routes(): PublicRoute[] {
-		if (!this.#routes) return []
+		if (!this.history) return []
 
-		this.#compiled ??= Array(this.#routes.length)
+		this.#compiled ??= Array(this.history.length)
 
-		return this.#routes.map(([method, path, handler, , hook, appHook]) => {
-			const flatAppHook = flattenChain(appHook)
+		return this.history.map(([method, path, handler, , hook, appHook]) => {
+			const flatAppHook = flattenChain(appHook as any)
+
 			return {
 				method: mapMethodBack(method),
 				path,
@@ -858,11 +854,6 @@ export class Elysia<
 
 		const ext = (this['~ext'] ??= nullObject())
 
-		// Extend the linked-list hook chain. O(1) per registration; older
-		// nodes are immutable by construction so routes that captured the
-		// previous head as their `appHook` see only what was in scope at
-		// their registration time (top-down ordering - no `#newHook`
-		// bookkeeping needed).
 		const added: Partial<AppHook> = nullObject()
 		;(added as any)[type] = fn
 		ext.hookChain = { added, parent: ext.hookChain }
@@ -1333,7 +1324,7 @@ export class Elysia<
 			else this.#childrenHash ??= new Set(app.#childrenHash)
 		}
 
-		const absorbedStart = this.#routes?.length ?? 0
+		const absorbedStart = this.history?.length ?? 0
 
 		// Capture the chain head BEFORE this .use() extends it
 		//
@@ -1343,12 +1334,10 @@ export class Elysia<
 		// encodes. O(1) capture, no filter work.
 		const preChain = this['~ext']?.hookChain
 
-		if (app.#routes) {
-			this.#newHook = true
-
+		if (app.history) {
 			const snapshot = app['~routeSnapshot']
-			for (let i = 0; i < app.#routes.length; i++) {
-				const route = app.#routes[i]
+			for (let i = 0; i < app.history.length; i++) {
+				const route = app.history[i]
 				this.#mapIdx(route[0], route[1], route, snapshot?.[i] as any)
 			}
 		}
@@ -1434,9 +1423,9 @@ export class Elysia<
 		//   when no parent context to add.
 		// - `preChain` is parent's chain at the moment of this .use().
 		// - When both exist, link via a `combine` node - O(1), no flatten.
-		if (preChain && this.#routes) {
+		if (preChain && this.history) {
 			const snapshot = this['~routeSnapshot']!
-			for (let i = absorbedStart; i < this.#routes.length; i++) {
+			for (let i = absorbedStart; i < this.history.length; i++) {
 				const inherited = snapshot[i]
 				snapshot[i] = inherited
 					? { combine: inherited, over: preChain }
@@ -1451,8 +1440,6 @@ export class Elysia<
 		fn: Function,
 		hook?: Partial<InputHook>
 	) {
-		this.#newHook = true
-
 		if (this['~config']?.prefix)
 			path = joinPath(this['~config']?.prefix, path)
 
@@ -1476,16 +1463,11 @@ export class Elysia<
 	) {
 		method = mapMethodBack(method)
 
-		if (this.#routes) {
-			this['~mapIdx']![method] ??= nullObject()
-			this['~mapIdx']![method]![path] = this.#routes.length
-			this.#routes.push(route)
+		if (this.history) {
+			this.history.push(route)
 			;(this['~routeSnapshot'] ??= []).push(rootAppHook as any)
 		} else {
-			this['~mapIdx'] = nullObject()
-			this['~mapIdx']![method] = nullObject()
-			this['~mapIdx']![method]![path] = 0
-			this.#routes = [route]
+			this.history = [route]
 			this['~routeSnapshot'] = [rootAppHook as any]
 		}
 	}
@@ -1533,7 +1515,7 @@ export class Elysia<
 	compile() {
 		this.fetch
 
-		for (let i = 0; i < this.#routes!.length; i++) this.handler(i, true)
+		for (let i = 0; i < this.history!.length; i++) this.handler(i, true)
 
 		return this
 	}
@@ -1541,14 +1523,14 @@ export class Elysia<
 	handler(
 		index: number,
 		immediate: boolean | undefined = this['~config']?.precompile,
-		route: InternalRoute = this.#routes![index]
+		route: InternalRoute = this.history![index]
 	): CompiledHandler {
 		if (this.#compiled?.[index]) return this.#compiled![index]
 
-		const compiled = (this.#compiled ??= new Array(this.#routes!.length))
+		const compiled = (this.#compiled ??= new Array(this.history!.length))
 
 		if (immediate) {
-			const handler = compileHandler(this.#routes![index], this, index)
+			const handler = compileHandler(this.history![index], this, index)
 
 			compiled![index] = handler
 			if (route) {
@@ -1566,7 +1548,7 @@ export class Elysia<
 		return (context) => {
 			if (this.#compiled?.[index]) return this.#compiled![index](context)
 
-			const handler = compileHandler(this.#routes![index], this, index)
+			const handler = compileHandler(this.history![index], this, index)
 			this.#compiled![index] = handler
 
 			if (route) {
@@ -1579,10 +1561,10 @@ export class Elysia<
 	}
 
 	#buildRouter() {
-		if (!this.#routes) return
+		if (!this.history) return
 
-		for (let i = 0; i < this.#routes.length; i++) {
-			const route: InternalRoute = this.#routes[i]
+		for (let i = 0; i < this.history.length; i++) {
+			const route: InternalRoute = this.history[i]
 			const method = mapMethodBack(route[0])
 			const path = route[1]
 
@@ -1622,9 +1604,6 @@ export class Elysia<
 	 * Only use this if you know what you're doing.
 	 */
 	clear() {
-		// this.#routes = undefined
-		// this.#compiled = undefined
-		this['~mapIdx'] = undefined
 		this['~loosePath'] = nullObject()
 	}
 

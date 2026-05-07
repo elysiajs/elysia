@@ -1,7 +1,7 @@
 import { Elysia, t } from '../../src'
 import { profile } from './utils'
 
-const total = 100_000
+const total = 30_000
 const stacks = <any[]>Array(total)
 
 const stop = profile('Elysia 2α full compile x100k')
