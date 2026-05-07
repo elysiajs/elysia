@@ -18,11 +18,14 @@ import {
 } from 'typebox/value'
 import { TLocalizedValidationError } from 'typebox/error'
 
+
 import createMirror from 'exact-mirror'
 
 import { applyCoercions, deferCoercions, type CoerceOption } from './coerce'
 import { Validator, type ValidatorOptions } from '../validator'
+import { isAsyncFunction } from '../compile/utils'
 import { hasProperty } from './utils'
+import { isBlob } from '../utils'
 
 import type { MaybePromise } from '../types'
 

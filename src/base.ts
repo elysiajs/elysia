@@ -1483,6 +1483,22 @@ export class Elysia<
 		return this.#add(MethodMap.POST, path, fn, hook)
 	}
 
+	delete(path: string, fn: Function, hook?: InputHook) {
+		return this.#add(MethodMap.DELETE, path, fn, hook)
+	}
+
+	put(path: string, fn: Function, hook?: InputHook) {
+		return this.#add(MethodMap.PUT, path, fn, hook)
+	}
+
+	patch(path: string, fn: Function, hook?: InputHook) {
+		return this.#add(MethodMap.PATCH, path, fn, hook)
+	}
+
+	options(path: string, fn: Function, hook?: InputHook) {
+		return this.#add(MethodMap.OPTIONS, path, fn, hook)
+	}
+
 	head(path: string, fn: Function, hook?: InputHook) {
 		return this.#add(MethodMap.HEAD, path, fn, hook)
 	}
