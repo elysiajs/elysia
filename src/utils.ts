@@ -106,37 +106,34 @@ export const isLocalScope = (s: EventScope | undefined) =>
 	s === 'local' || s === undefined
 
 /**
- * Linked-list representation of the inherited downward hook chain for a
- * route. Each `.use()` that propagates extends the parent instance's chain
- * by one node; routes absorbed in that `.use()` snapshot the head pointer
- * - O(1) per stamp, O(N) memory per instance regardless of route count.
+ * Linked-list representation of the scope/global hook chain of a route
  *
- * Single class — V8/JSC sees one hidden class for every node. Two flavours
- * are encoded in the same shape:
- *   - "standard" node: `added` + `parent` set, `combine`/`over` undefined.
- *   - "combine" node: `combine` + `over` set, `added`/`parent` undefined.
+ * Each `.use()` that propagates extends the parent instance's chain
+ * by one node; routes absorbed in that `.use()` snapshot the head pointer
+ *
+ * - O(1) per stamp, O(N) memory per instance regardless of route count
+ *
+ * shapes:
+ * 1. "standard" node: `added` + `parent` set, `combine`/`over` undefined
+ * 2. "combine" node: `combine` + `over` set, `added`/`parent` undefined
  *
  * Combine nodes appear at multi-level absorption (parent.use(child) when
  * child's routes already had their own chain): they link two sibling chains
- * without flattening — `over` is walked first (older / outer context),
- * then `combine` (newer / inner context).
+ * without flattening - `over` is walked first (older / outer context),
+ * then `combine` (newer / inner context)
  *
- * Use with {@link flattenChain} to walk tail-first and reconstruct a flat
- * `Partial<AppHook>` at compile time.
+ * Use with {@link flattenChain} to walk tail-first and reconstruct
+ * flat `Partial<AppHook>` at compile time
  */
-// Two distinct shapes — V8/JSC will keep separate hidden classes per
-// variant, but each variant is monomorphic at its own creation sites
-// (one in `#on`/`#pushHook`, the other in `#use` stamping). Empirically
-// faster than a unified 4-field shape: smaller payload + fewer per-node
-// undefined slots dominates the polymorphic-IC cost at the walker.
 export type ChainNode =
 	| { added: Partial<AppHook>; parent: ChainNode | undefined }
 	| { combine: ChainNode; over: ChainNode | undefined }
 
 /**
- * Walk the chain tail-first into a fresh `Partial<AppHook>`. Iterative
- * (Task-based) walker with explicit stack — works uniformly for linear
- * chains and combine nodes without recursion.
+ * Walk the chain tail-first into a fresh `Partial<AppHook>`
+ *
+ * Walk instruction with explicit stack - works uniformly for linear
+ * chains and combine nodes without recursion
  */
 type Task =
 	// visit

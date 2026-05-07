@@ -113,16 +113,13 @@ export class Elysia<
 
 	history?: InternalRoute[]
 
-	// Side table parallel to history
-	//
-	// Each entry points to a node in the inherited-downward-hook chain
-	// captured at the moment the route applied to `.use()`
+	// Each entry points to a node in the plugin/global events chain
+	// when applied to `use`
 	//
 	// Chains are shared by reference across routes and
-	// across `.use()` calls - O(1) per stamp, O(N) memory total
 	//
-	// `flattenChain(this['~routeSnapshot'][i])` reconstructs the flat
-	// `Partial<AppHook>` at compile time
+	// use `flattenChain(this['~routeSnapshot'][i])` to reconstructs
+	// flat `Partial<AppHook>` at compile time
 	'~routeSnapshot'?: (ChainNode | undefined)[]
 
 	#compiled?: CompiledHandler[]

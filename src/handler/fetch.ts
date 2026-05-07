@@ -50,7 +50,7 @@ export function createFetchHandler(
 	const router = app['~router']!
 	const loosePath = (app['~loosePath'] ??= nullObject())
 
-	// Materialize the cumulative hook view once at fetch-handler creation —
+	// Materialize the cumulative hook view once at fetch-handler creation -
 	// hot path closes over `hook`, so this runs only on first `app.fetch`.
 	const hook = flattenChain(app['~ext']?.hookChain)
 	const hasError = !!hook?.error
