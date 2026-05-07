@@ -5,7 +5,7 @@ import { getAsyncIndexes } from './utils'
 
 import { createContext, type Context } from '../context'
 import { createErrorHandler } from './error'
-import { getLoosePath } from '../utils'
+import { flattenChain, getLoosePath, nullObject } from '../utils'
 
 import type { CompiledHandler, MaybePromise } from '../types'
 
@@ -46,11 +46,13 @@ export function createFetchHandler(
 	app: AnyElysia
 ): (request: Request) => MaybePromise<Response> {
 	const Context = createContext(app)
-	const map = app['~map']! ?? {}
+	const map = app['~map']! ?? nullObject()
 	const router = app['~router']!
-	const loosePath = (app['~loosePath'] ??= Object.create(null))
+	const loosePath = (app['~loosePath'] ??= nullObject())
 
-	const hook = app['~ext']?.hooks?.at(-1)
+	// Materialize the cumulative hook view once at fetch-handler creation —
+	// hot path closes over `hook`, so this runs only on first `app.fetch`.
+	const hook = flattenChain(app['~ext']?.hookChain)
 	const hasError = !!hook?.error
 
 	const handleError = createErrorHandler(

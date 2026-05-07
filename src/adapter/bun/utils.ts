@@ -3,6 +3,7 @@ import type { BunRequest } from 'bun'
 import { MethodMapBack } from '../../constants'
 import { createBaseContext } from '../../context'
 import { getAsyncIndexes, createErrorHandler } from '../../handler'
+import { flattenChain, nullObject } from '../../utils'
 
 import { WebStandardAdapter } from '../web-standard'
 import { NotFound } from '../../error'
@@ -15,10 +16,7 @@ export function createBunContext(
 	app: AnyElysia
 ): new (request: Request) => Context {
 	const headers = app['~ext']?.headers
-		? Object.assign(
-				Object.create(null),
-				structuredClone(app['~ext'].headers)
-			)
+		? Object.assign(nullObject(), structuredClone(app['~ext'].headers))
 		: null
 
 	return class Context extends createBaseContext(app) {
@@ -44,7 +42,7 @@ export function createFetchHandler(
 	handler: CompiledHandler,
 	handleError: (context: Context, error: Error) => unknown
 ) {
-	const hook = app['~ext']?.hooks?.at(-1)
+	const hook = flattenChain(app['~ext']?.hookChain)
 	if (hook?.request) {
 		const onRequests = hook?.request
 		const asyncIndexes = getAsyncIndexes(onRequests)
@@ -104,10 +102,10 @@ export function createRouteMap(app: AnyElysia) {
 			fetch
 		]
 
-	const routes = Object.create(null)
+	const routes = nullObject()
 
 	const handleError = createErrorHandler(
-		app['~ext']?.hooks?.at(-1)?.error,
+		flattenChain(app['~ext']?.hookChain)?.error,
 		WebStandardAdapter.response.map,
 		new Response('Not Found', { status: 404 })
 	)
@@ -116,7 +114,7 @@ export function createRouteMap(app: AnyElysia) {
 		const paths = app['~mapIdx'][method]
 
 		for (const path in paths) {
-			routes[path] ??= Object.create(null)
+			routes[path] ??= nullObject()
 			routes[path][
 				MethodMapBack[method as unknown as keyof MethodMapBack] ??
 					method

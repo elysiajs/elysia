@@ -25,8 +25,9 @@ import { getDefaultAdapter } from '../../adapter/constants'
 import { mapAfterHandle, mapBeforeHandle, mapTransform } from './utils'
 import {
 	cloneHook,
-	filterByScope,
+	flattenChain,
 	isBlob,
+	isDownwardScope,
 	isLocalScope,
 	mergeHook
 } from '../../utils'
@@ -191,18 +192,23 @@ const createInlineHandler = (
 	h: (context: Context) => unknown
 ) => ((c: Context) => map(h(c))) as CompiledHandler
 
-// Snapshot of app hooks (`~routeSnapshot`) merged with current locals.
+// Flattens the route's inheritance chain (filtered for downward) and merges
+// in the root's current locals. Compile is per-route cached, so the chain
+// walk runs once per route on first request.
 function composeRootHook(
 	root: AnyElysia,
 	index: number
 ): Partial<AppHook> | undefined {
-	const snapshot = root['~routeSnapshot']?.[index]
-	const locals = filterByScope(root['~ext']?.hooks?.at(-1), isLocalScope)
+	const inherited = flattenChain(
+		root['~routeSnapshot']?.[index],
+		isDownwardScope
+	)
+	const locals = flattenChain(root['~ext']?.hookChain, isLocalScope)
 
-	if (!snapshot) return locals
-	if (!locals) return snapshot
+	if (!inherited) return locals
+	if (!locals) return inherited
 
-	return mergeHook(cloneHook(snapshot), locals as any)
+	return mergeHook(inherited, locals as any)
 }
 
 export function compileHandler(
@@ -212,9 +218,14 @@ export function compileHandler(
 ): CompiledHandler {
 	const adapter = root['~config']?.adapter ?? getDefaultAdapter()
 
+	// `appHook` is a chain ref captured on the route's owning instance at
+	// registration time; flatten with no filter (locals on the owning instance
+	// apply to its own routes). Result is cached via `#compiled`.
+	const flatAppHook = flattenChain(appHook)
+
 	const hook = applyHook(
 		localHook,
-		appHook,
+		flatAppHook as any,
 		instance !== root ? composeRootHook(root, index) : undefined
 	)
 

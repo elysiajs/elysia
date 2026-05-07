@@ -13,12 +13,11 @@ import {
 	cloneHook,
 	createErrorEventHandler,
 	eventProperties,
-	filterByScope,
+	flattenChain,
 	fnOrigin,
 	fnScope,
 	fnv1a,
 	hookToGuard,
-	isDownwardScope,
 	isEmpty,
 	joinPath,
 	mapMethodBack,
@@ -26,7 +25,8 @@ import {
 	mergeHook,
 	nullObject,
 	pushArray,
-	pushField
+	pushField,
+	type ChainNode
 } from './utils'
 
 import type {
@@ -107,20 +107,25 @@ export class Elysia<
 		decorator?: Singleton['decorator']
 		store?: Singleton['store']
 		headers?: Record<string, string>
-		hooks?: Partial<AppHook>[]
 		macro?: Macro
+		// Linked list of hook deltas. Each `#on` and each `#pushHook` event
+		// prepends one node - O(1) extension, never mutates older nodes
+		hookChain?: ChainNode
 	}
 
 	#routes?: InternalRoute[]
 
 	// Side table parallel to #routes
 	//
-	// Each entry is the snapshot of the scoped/global hooks
-	// when route was absorbed via .use()
+	// Each entry points to a node in the inherited-downward-hook chain
+	// captured at the moment the route applied to `.use()`
 	//
-	// This allows us to know which hooks to apply for each route
-	// without having to check the entire parent chain at request time
-	'~routeSnapshot'?: (Partial<AppHook> | undefined)[]
+	// Chains are shared by reference across routes and
+	// across `.use()` calls - O(1) per stamp, O(N) memory total
+	//
+	// `flattenChain(this['~routeSnapshot'][i])` reconstructs the flat
+	// `Partial<AppHook>` at compile time
+	'~routeSnapshot'?: (ChainNode | undefined)[]
 
 	#compiled?: CompiledHandler[]
 	private '~derive'?: WeakSet<EventFn<'beforeHandle'>>
@@ -150,19 +155,19 @@ export class Elysia<
 
 		this.#compiled ??= Array(this.#routes.length)
 
-		return this.#routes.map(
-			([method, path, handler, , hook, appHook]) =>
-				({
-					method: mapMethodBack(method),
-					path,
-					handler,
-					hooks: appHook
-						? hook
-							? mergeHook(hook as any, appHook as any)
-							: appHook
-						: hook
-				}) as PublicRoute
-		)
+		return this.#routes.map(([method, path, handler, , hook, appHook]) => {
+			const flatAppHook = flattenChain(appHook)
+			return {
+				method: mapMethodBack(method),
+				path,
+				handler,
+				hooks: flatAppHook
+					? hook
+						? mergeHook(hook as any, flatAppHook as any)
+						: flatAppHook
+					: hook
+			} as PublicRoute
+		})
 	}
 
 	/**
@@ -852,18 +857,15 @@ export class Elysia<
 		if (scope === 'scoped') scope = 'plugin'
 
 		const ext = (this['~ext'] ??= nullObject())
-		ext.hooks ??= [nullObject()]
-		const hook = ext.hooks.at(-1)
 
-		if (this.#newHook) {
-			this.#newHook = false
-
-			const newHook = nullObject()
-			newHook[type] = fn
-
-			mergeHook(newHook, hook as any, true)
-			ext.hooks.push(newHook)
-		} else pushArray(hook!, type, fn as any)
+		// Extend the linked-list hook chain. O(1) per registration; older
+		// nodes are immutable by construction so routes that captured the
+		// previous head as their `appHook` see only what was in scope at
+		// their registration time (top-down ordering - no `#newHook`
+		// bookkeeping needed).
+		const added: Partial<AppHook> = nullObject()
+		;(added as any)[type] = fn
+		ext.hookChain = { added, parent: ext.hookChain }
 
 		if (scope === 'plugin') {
 			this.#plugin ??= new WeakSet()
@@ -1145,18 +1147,50 @@ export class Elysia<
 		return this
 	}
 
-	#pushHook(hook: Partial<AppHook>): this {
+	#pushHook(_hook: Partial<AppHook>): this {
+		// Promote `derive`/`resolve` into `beforeHandle` so chain nodes only
+		// hold `eventProperties` keys (which is what `flattenChain` walks).
+		// Mirrors `mergeHook`'s historical handling of those legacy keys.
+		let hook = _hook as any
+
+		if (hook.derive || hook.resolve) {
+			const promoted = nullObject() as any
+
+			for (const key of Object.keys(hook)) {
+				if (!eventProperties.has(key as any)) continue
+
+				promoted[key] = (hook as any)[key]
+			}
+
+			const extras: Function[] = []
+
+			if (hook.derive) {
+				if (Array.isArray(hook.derive)) extras.push(...hook.derive)
+				else extras.push(hook.derive)
+			}
+
+			// Remove in 2.1
+			if (hook.resolve) {
+				if (Array.isArray(hook.resolve)) extras.push(...hook.resolve)
+				else extras.push(hook.resolve)
+			}
+
+			if (extras.length) {
+				const existing = promoted.beforeHandle
+				if (existing) {
+					promoted.beforeHandle = Array.isArray(existing)
+						? [...extras, ...existing]
+						: [...extras, existing]
+				} else {
+					promoted.beforeHandle = extras
+				}
+			}
+
+			hook = promoted
+		}
+
 		const ext = (this['~ext'] ??= nullObject())
-
-		if (ext.hooks) {
-			const index = ext.hooks.length - 1
-			const current = ext.hooks[index]
-
-			if (this.#newHook) {
-				ext.hooks.push(mergeHook(hook, current, true))
-				this.#newHook = false
-			} else ext.hooks[index] = mergeHook(current, hook)
-		} else ext.hooks = [hook]
+		ext.hookChain = { added: hook, parent: ext.hookChain }
 
 		return this
 	}
@@ -1217,7 +1251,7 @@ export class Elysia<
 				seen.add(hook)
 			}
 
-			delete hook.seed
+			hook.seed = undefined
 
 			for (let [k, v] of Object.entries(hook)) {
 				if (k === 'introspect') {
@@ -1299,9 +1333,15 @@ export class Elysia<
 			else this.#childrenHash ??= new Set(app.#childrenHash)
 		}
 
-		const hook = this['~ext']?.hooks?.at(-1)
-		const preSnapshot = filterByScope(hook, isDownwardScope)
 		const absorbedStart = this.#routes?.length ?? 0
+
+		// Capture the chain head BEFORE this .use() extends it
+		//
+		// represents the downward set in scope on `this` at the moment
+		// `.use(app)` was called - exactly what the absorbed routes should
+		// pick up beyond what their own appHook / inherited chain already
+		// encodes. O(1) capture, no filter work.
+		const preChain = this['~ext']?.hookChain
 
 		if (app.#routes) {
 			this.#newHook = true
@@ -1309,12 +1349,12 @@ export class Elysia<
 			const snapshot = app['~routeSnapshot']
 			for (let i = 0; i < app.#routes.length; i++) {
 				const route = app.#routes[i]
-				this.#mapIdx(route[0], route[1], route, snapshot?.[i])
+				this.#mapIdx(route[0], route[1], route, snapshot?.[i] as any)
 			}
 		}
 
 		if (app['~ext']) {
-			const { decorator, store, headers, hooks } = app['~ext']
+			const { decorator, store, headers, hookChain } = app['~ext']
 			const ext: NonNullable<(typeof this)['~ext']> = (this['~ext'] ??=
 				nullObject())
 
@@ -1335,28 +1375,35 @@ export class Elysia<
 
 			if (app.#plugin || app.#global) {
 				const event = nullObject()
-				const hook = hooks!.at(-1)!
 				const derive = app['~derive']
 
 				if (app.#global) this.#global ??= new WeakSet()
 				if (derive) this['~derive'] ??= new WeakSet()
 
-				if (hook)
-					for (const key in hook) {
+				// Walk the absorbed app's chain TAIL-FIRST so propagated fns
+				// appear in registration order. Chain head is the newest // addition; we collect nodes head→tail then iterate reversed.
+				const nodes: ChainNode[] = []
+				let cur: ChainNode | undefined = hookChain
+				while (cur) {
+					if ('combine' in cur) {
+						cur = cur.over
+						continue
+					}
+					nodes.push(cur)
+					cur = cur.parent
+				}
+				for (let i = nodes.length - 1; i >= 0; i--) {
+					const added = (nodes[i] as { added: Partial<AppHook> })
+						.added
+					for (const key in added) {
 						if (!eventProperties.has(key)) continue
 
-						const raw = hook[key as keyof AppHook] as
-							| Function
-							| Function[]
+						const raw = (added as any)[key] as Function | Function[]
 						const fns: Function[] = Array.isArray(raw)
 							? raw
 							: [raw as Function]
 
 						for (const fn of fns) {
-							// If fn was first registered
-							// on a named plugin already absorbed by `this`,
-							// skip it. Anonymous-source fns have no origin
-							// and always pass.
 							const origin = fnOrigin.get(fn)
 							if (origin !== undefined && before?.has(origin))
 								continue
@@ -1371,26 +1418,29 @@ export class Elysia<
 							const isGlobal = app.#global?.has(fn)
 							if (isGlobal || app.#plugin?.has(fn)) {
 								pushField(event, key, fn)
-
 								if (isGlobal) this.#global!.add(fn)
 							}
 						}
 					}
+				}
 
 				this.#pushHook(event)
 			}
 		}
 
-		// Extend each newly-absorbed route's inheritance chain with
-		// this parent's pre-`.use()` downward (global/plugin) set
-		if (this.#routes && preSnapshot) {
+		// Stamp newly-absorbed routes with their inheritance chain.
+		// - `inherited` (mirrored from child's table) is the route's
+		//   pre-existing chain from prior absorptions - left untouched
+		//   when no parent context to add.
+		// - `preChain` is parent's chain at the moment of this .use().
+		// - When both exist, link via a `combine` node - O(1), no flatten.
+		if (preChain && this.#routes) {
 			const snapshot = this['~routeSnapshot']!
 			for (let i = absorbedStart; i < this.#routes.length; i++) {
 				const inherited = snapshot[i]
-
 				snapshot[i] = inherited
-					? mergeHook(cloneHook(preSnapshot), inherited)
-					: preSnapshot
+					? { combine: inherited, over: preChain }
+					: preChain
 			}
 		}
 	}
@@ -1406,7 +1456,7 @@ export class Elysia<
 		if (this['~config']?.prefix)
 			path = joinPath(this['~config']?.prefix, path)
 
-		const appHook = this['~ext']?.hooks?.at(-1)
+		const appHook = this['~ext']?.hookChain
 		const history = appHook
 			? [method, path, fn, this, hook, appHook]
 			: hook
@@ -1430,13 +1480,13 @@ export class Elysia<
 			this['~mapIdx']![method] ??= nullObject()
 			this['~mapIdx']![method]![path] = this.#routes.length
 			this.#routes.push(route)
-			;(this['~routeSnapshot'] ??= []).push(rootAppHook)
+			;(this['~routeSnapshot'] ??= []).push(rootAppHook as any)
 		} else {
 			this['~mapIdx'] = nullObject()
 			this['~mapIdx']![method] = nullObject()
 			this['~mapIdx']![method]![path] = 0
 			this.#routes = [route]
-			this['~routeSnapshot'] = [rootAppHook]
+			this['~routeSnapshot'] = [rootAppHook as any]
 		}
 	}
 

@@ -1,5 +1,5 @@
 import { ElysiaStatus, status, type SelectiveStatus } from './error'
-import { fnv1a, redirect } from './utils'
+import { fnv1a, nullObject, redirect } from './utils'
 
 import type { AnyElysia } from './base'
 import type { Server } from './universal/server'
@@ -79,7 +79,7 @@ export function createContext(
 		return contextCache.get(key)!
 
 	const headers = app['~ext']?.headers
-		? Object.assign(Object.create(null), app['~ext'].headers)
+		? Object.assign(nullObject(), app['~ext'].headers)
 		: null
 
 	const context = class Context extends createBaseContext(app) {

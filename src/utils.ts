@@ -51,7 +51,7 @@ export function fnv1a(str: string): number {
  * origin is already in `parent.#apps`, the parent has already absorbed that
  * named plugin via another path and should skip re-adding the fn.
  *
- * Anonymous plugins (no name) don't tag their fns — there's no hash to dedup
+ * Anonymous plugins (no name) don't tag their fns - there's no hash to dedup
  * by, so their fns always propagate.
  */
 export const fnOrigin = new WeakMap<Function, number>()
@@ -60,9 +60,9 @@ export const fnOrigin = new WeakMap<Function, number>()
  * Scope tag set on each registered hook fn at first registration. Used by
  * `filterByScope` (below) to distinguish, at .use() / compile time, between:
  *   - locals (don't propagate to absorbed sub-plugin routes)
- *   - plugin/global (propagate downward — the "scoped/global" set)
+ *   - plugin/global (propagate downward - the "scoped/global" set)
  *
- * Like `fnOrigin`, first registration wins — propagated fns added to other
+ * Like `fnOrigin`, first registration wins - propagated fns added to other
  * instances' `~ext.hooks` via `#pushHook` keep their original tag.
  */
 export const fnScope = new WeakMap<Function, EventScope>()
@@ -72,7 +72,7 @@ export const fnScope = new WeakMap<Function, EventScope>()
  * (applied to its `fnScope` tag, or `undefined` if never registered).
  *
  * Returns a fresh `Partial<AppHook>` (not a layer reference), or `undefined`
- * if nothing was kept. Arrays are sliced — caller can mutate the result.
+ * if nothing was kept. Arrays are sliced - caller can mutate the result.
  */
 export function filterByScope(
 	layer: Partial<AppHook> | undefined,
@@ -104,6 +104,85 @@ export const isDownwardScope = (s: EventScope | undefined) =>
 
 export const isLocalScope = (s: EventScope | undefined) =>
 	s === 'local' || s === undefined
+
+/**
+ * Linked-list representation of the inherited downward hook chain for a
+ * route. Each `.use()` that propagates extends the parent instance's chain
+ * by one node; routes absorbed in that `.use()` snapshot the head pointer
+ * - O(1) per stamp, O(N) memory per instance regardless of route count
+ *
+ * `combine` is used at multi-level absorption (parent.use(child) when
+ * child's routes already had their own chain): it links two sibling chains
+ * without flattening - `over` is walked first (older / outer context),
+ * then `combine` (newer / inner context)
+ *
+ * use with `flattenChain` to walks the structure tail-first to
+ * reconstruct a flat `Partial<AppHook>` at compile time
+ */
+export type ChainNode =
+	| { added: Partial<AppHook>; parent: ChainNode | undefined }
+	| { combine: ChainNode; over: ChainNode | undefined }
+
+// Iterative tail-first walker. Stack holds either a node to visit or a
+// `Partial<AppHook>` to append. Avoids recursion so deep chains (thousands
+// of `.use()` calls) don't blow the JS call stack.
+type Task =
+	| { kind: 'visit'; node: ChainNode }
+	| { kind: 'append'; added: Partial<AppHook> }
+
+export function flattenChain(
+	start: ChainNode | undefined,
+	keep?: (s: EventScope | undefined) => boolean
+): Partial<AppHook> | undefined {
+	if (!start) return undefined
+	const result = nullObject() as Partial<AppHook>
+
+	const stack: Task[] = [{ kind: 'visit', node: start }]
+
+	while (stack.length) {
+		const task = stack.pop()!
+		if (task.kind === 'append') {
+			appendInto(result, task.added, keep)
+			continue
+		}
+
+		const node = task.node
+		if ('combine' in node) {
+			// Tail-first: visit `over` (older), then `combine` (newer).
+			// Push reverse order - combine pushed first, popped last.
+			stack.push({ kind: 'visit', node: node.combine })
+			if (node.over) stack.push({ kind: 'visit', node: node.over })
+		} else {
+			// Tail-first: visit parent (older), then append this node's added.
+			stack.push({ kind: 'append', added: node.added })
+			if (node.parent) stack.push({ kind: 'visit', node: node.parent })
+		}
+	}
+
+	if (isNotEmpty(result)) return result
+}
+
+function appendInto(
+	target: Partial<AppHook>,
+	src: Partial<AppHook>,
+	keep?: (s: EventScope | undefined) => boolean
+): void {
+	for (const key of eventProperties) {
+		const v = (src as any)[key]
+		if (!v) continue
+		const raw = Array.isArray(v) ? v : [v]
+
+		const arr = keep ? raw.filter((fn) => keep(fnScope.get(fn))) : raw
+
+		if (!arr.length) continue
+		const existing = (target as any)[key]
+
+		// Always materialise arrays - `compileHandler` and friends index by
+		// `.length` and `[i]`, which would silently wrong-result on single fns.
+		if (existing) (existing as any[]).push(...arr)
+		else (target as any)[key] = arr.slice()
+	}
+}
 
 /**
  *
@@ -206,7 +285,7 @@ export function mergeArray<
 
 /**
  * Like {@link mergeArray} but drops entries from `a` that already appear in
- * `b` by reference. Always allocates fresh arrays — never mutates inputs.
+ * `b` by reference. Always allocates fresh arrays - never mutates inputs.
  *
  * Used at the compile-time merge of a route's snapshotted `appHook` with the
  * root's current `rootHook`: the same fn can sit on both sides because

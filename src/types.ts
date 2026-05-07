@@ -641,7 +641,9 @@ export type InternalRoute = readonly [
 	handler: Handler | Response,
 	instance: AnyElysia,
 	hook: InputHook | undefined,
-	appHook: InputHook | undefined
+	// Chain node ref captured at registration time on the owning instance.
+	// `flattenChain(appHook)` materialises the route's compile-time hooks.
+	appHook: import('./utils').ChainNode | undefined
 ]
 
 export type ErrorHandler<
