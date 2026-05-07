@@ -109,26 +109,40 @@ export const isLocalScope = (s: EventScope | undefined) =>
  * Linked-list representation of the inherited downward hook chain for a
  * route. Each `.use()` that propagates extends the parent instance's chain
  * by one node; routes absorbed in that `.use()` snapshot the head pointer
- * - O(1) per stamp, O(N) memory per instance regardless of route count
+ * - O(1) per stamp, O(N) memory per instance regardless of route count.
  *
- * `combine` is used at multi-level absorption (parent.use(child) when
- * child's routes already had their own chain): it links two sibling chains
- * without flattening - `over` is walked first (older / outer context),
- * then `combine` (newer / inner context)
+ * Single class — V8/JSC sees one hidden class for every node. Two flavours
+ * are encoded in the same shape:
+ *   - "standard" node: `added` + `parent` set, `combine`/`over` undefined.
+ *   - "combine" node: `combine` + `over` set, `added`/`parent` undefined.
  *
- * use with `flattenChain` to walks the structure tail-first to
- * reconstruct a flat `Partial<AppHook>` at compile time
+ * Combine nodes appear at multi-level absorption (parent.use(child) when
+ * child's routes already had their own chain): they link two sibling chains
+ * without flattening — `over` is walked first (older / outer context),
+ * then `combine` (newer / inner context).
+ *
+ * Use with {@link flattenChain} to walk tail-first and reconstruct a flat
+ * `Partial<AppHook>` at compile time.
  */
+// Two distinct shapes — V8/JSC will keep separate hidden classes per
+// variant, but each variant is monomorphic at its own creation sites
+// (one in `#on`/`#pushHook`, the other in `#use` stamping). Empirically
+// faster than a unified 4-field shape: smaller payload + fewer per-node
+// undefined slots dominates the polymorphic-IC cost at the walker.
 export type ChainNode =
 	| { added: Partial<AppHook>; parent: ChainNode | undefined }
 	| { combine: ChainNode; over: ChainNode | undefined }
 
-// Iterative tail-first walker. Stack holds either a node to visit or a
-// `Partial<AppHook>` to append. Avoids recursion so deep chains (thousands
-// of `.use()` calls) don't blow the JS call stack.
+/**
+ * Walk the chain tail-first into a fresh `Partial<AppHook>`. Iterative
+ * (Task-based) walker with explicit stack — works uniformly for linear
+ * chains and combine nodes without recursion.
+ */
 type Task =
-	| { kind: 'visit'; node: ChainNode }
-	| { kind: 'append'; added: Partial<AppHook> }
+	// visit
+	| { kind: 0; node: ChainNode }
+	// append
+	| { kind: 1; added: Partial<AppHook> }
 
 export function flattenChain(
 	start: ChainNode | undefined,
@@ -137,11 +151,11 @@ export function flattenChain(
 	if (!start) return undefined
 	const result = nullObject() as Partial<AppHook>
 
-	const stack: Task[] = [{ kind: 'visit', node: start }]
+	const stack: Task[] = [{ kind: 0, node: start }]
 
 	while (stack.length) {
 		const task = stack.pop()!
-		if (task.kind === 'append') {
+		if (task.kind === 1) {
 			appendInto(result, task.added, keep)
 			continue
 		}
@@ -149,13 +163,11 @@ export function flattenChain(
 		const node = task.node
 		if ('combine' in node) {
 			// Tail-first: visit `over` (older), then `combine` (newer).
-			// Push reverse order - combine pushed first, popped last.
-			stack.push({ kind: 'visit', node: node.combine })
-			if (node.over) stack.push({ kind: 'visit', node: node.over })
+			stack.push({ kind: 0, node: node.combine })
+			if (node.over) stack.push({ kind: 0, node: node.over })
 		} else {
-			// Tail-first: visit parent (older), then append this node's added.
-			stack.push({ kind: 'append', added: node.added })
-			if (node.parent) stack.push({ kind: 'visit', node: node.parent })
+			stack.push({ kind: 1, added: node.added })
+			if (node.parent) stack.push({ kind: 0, node: node.parent })
 		}
 	}
 

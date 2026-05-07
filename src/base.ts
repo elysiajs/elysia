@@ -10,7 +10,6 @@ import { isBun } from './universal/constants'
 import { isDynamicRegex, MethodMap } from './constants'
 import { BunAdapter } from './adapter/bun'
 import {
-	cloneHook,
 	createErrorEventHandler,
 	eventProperties,
 	flattenChain,
@@ -24,7 +23,6 @@ import {
 	mergeDeep,
 	mergeHook,
 	nullObject,
-	pushArray,
 	pushField,
 	type ChainNode
 } from './utils'
@@ -1370,7 +1368,11 @@ export class Elysia<
 				if (derive) this['~derive'] ??= new WeakSet()
 
 				// Walk the absorbed app's chain TAIL-FIRST so propagated fns
-				// appear in registration order. Chain head is the newest // addition; we collect nodes head→tail then iterate reversed.
+				// appear in registration order. Chain head is the newest
+				//
+				// addition; we collect nodes head→tail then iterate reversed
+				// `~ext.hookChain` never holds combine nodes, but we tolerate
+				// them by skipping past `over` if encountered.
 				const nodes: ChainNode[] = []
 				let cur: ChainNode | undefined = hookChain
 				while (cur) {
