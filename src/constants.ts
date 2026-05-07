@@ -92,3 +92,5 @@ export const StatusMapBack = mapBack(StatusMap)
 export type StatusMapBack = typeof StatusMapBack
 
 export const dangerousKeys = new Set(['__proto__', 'constructor', 'prototype'])
+
+export const isDynamicRegex = /\:|\*/

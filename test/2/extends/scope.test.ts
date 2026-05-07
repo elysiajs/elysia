@@ -44,4 +44,22 @@ describe('macro order', () => {
 		await app.handle('/a')
 		expect(order).toEqual(['root', 1, 2, 3, 4])
 	})
+
+	// Dual of "plugin scope propagates one level up": a plugin-scoped hook on
+	// the parent must also apply DOWNWARD to routes absorbed via .use(). Locks
+	// in the invariant before refactoring how downward propagation is computed.
+	it('plugin-scoped hook on parent applies to absorbed sibling routes', async () => {
+		let count = 0
+
+		const sub = new Elysia({ prefix: '/sub' }).get('/r', () => 'ok')
+		const parent = new Elysia()
+			.beforeHandle('plugin', () => {
+				count++
+			})
+			.use(sub)
+
+		count = 0
+		await parent.handle('/sub/r')
+		expect(count).toBe(1)
+	})
 })

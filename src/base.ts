@@ -7,20 +7,26 @@ import { compileHandler } from './compile'
 import { ListenCallback, Serve } from './universal'
 import { isBun } from './universal/constants'
 
-import { MethodMap } from './constants'
+import { isDynamicRegex, MethodMap } from './constants'
 import { BunAdapter } from './adapter/bun'
 import {
+	cloneHook,
 	createErrorEventHandler,
 	eventProperties,
+	filterByScope,
 	fnOrigin,
+	fnScope,
 	fnv1a,
 	hookToGuard,
+	isDownwardScope,
 	isEmpty,
 	joinPath,
 	mapMethodBack,
 	mergeDeep,
 	mergeHook,
-	nullObject
+	nullObject,
+	pushArray,
+	pushField
 } from './utils'
 
 import type {
@@ -95,7 +101,7 @@ export class Elysia<
 	#global?: WeakSet<any>
 
 	#hash?: number
-	#apps?: Set<number>
+	#childrenHash?: Set<number>
 
 	'~ext'?: {
 		decorator?: Singleton['decorator']
@@ -106,6 +112,16 @@ export class Elysia<
 	}
 
 	#routes?: InternalRoute[]
+
+	// Side table parallel to #routes
+	//
+	// Each entry is the snapshot of the scoped/global hooks
+	// when route was absorbed via .use()
+	//
+	// This allows us to know which hooks to apply for each route
+	// without having to check the entire parent chain at request time
+	'~routeSnapshot'?: (Partial<AppHook> | undefined)[]
+
 	#compiled?: CompiledHandler[]
 	private '~derive'?: WeakSet<EventFn<'beforeHandle'>>
 
@@ -120,8 +136,7 @@ export class Elysia<
 
 	constructor(config?: ElysiaConfig<BasePath, Scope>) {
 		this['~config'] = config
-		// Compute hash eagerly when the plugin is named so .beforeHandle and
-		// friends can tag each fn's origin without recomputing.
+
 		if (config?.name)
 			this.#hash = fnv1a(
 				config.seed
@@ -841,20 +856,14 @@ export class Elysia<
 		const hook = ext.hooks.at(-1)
 
 		if (this.#newHook) {
+			this.#newHook = false
+
 			const newHook = nullObject()
 			newHook[type] = fn
 
 			mergeHook(newHook, hook as any, true)
-
 			ext.hooks.push(newHook)
-			this.#newHook = false
-		} else {
-			if (hook![type]) {
-				// @ts-expect-error
-				if (Array.isArray(hook!)) hook![type]!.push(fn as any)
-				else hook![type]! = [hook![type]!, fn]
-			} else hook![type] = [fn as any]
-		}
+		} else pushArray(hook!, type, fn as any)
 
 		if (scope === 'plugin') {
 			this.#plugin ??= new WeakSet()
@@ -864,11 +873,8 @@ export class Elysia<
 			this.#global.add(fn)
 		}
 
-		// Tag the fn with the hash of the named plugin it was first
-		// registered on. `.use()` uses this to dedup hooks: if a fn's
-		// origin is already absorbed (in parent.#apps), skip re-adding it.
-		// Anonymous plugins (no hash) leave fns un-tagged so they always
-		// propagate.
+		if (!fnScope.has(fn as any)) fnScope.set(fn as any, scope ?? 'local')
+
 		if (this.#hash !== undefined && !fnOrigin.has(fn as any))
 			fnOrigin.set(fn as any, this.#hash)
 
@@ -1271,42 +1277,40 @@ export class Elysia<
 	}
 
 	#use(app: AnyElysia) {
-		// Snapshot of named-plugin hashes already absorbed by `this`. A fn
-		// whose origin (`fnOrigin.get(fn)`) is in this snapshot has already
-		// been pulled in via another path — skip it during the merge below.
-		// We capture the snapshot BEFORE we start mutating `this.#apps` so
-		// the child's own hash (which we add now) doesn't accidentally cause
-		// the child's own fns to be skipped.
-		const before: Set<number> | undefined = this.#apps
-			? new Set(this.#apps)
+		const before: Set<number> | undefined = this.#childrenHash
+			? new Set(this.#childrenHash)
 			: undefined
 
 		const name = app['~config']?.name
 		if (name) {
 			const hash = app.#hash!
-			if (this.#apps?.has(hash)) return
+			if (this.#childrenHash?.has(hash)) return
 
-			this.#apps ??= new Set()
-			this.#apps.add(hash)
+			this.#childrenHash ??= new Set()
+			this.#childrenHash.add(hash)
 		}
 
-		// Always propagate the child's transitive named plugins so the next
-		// .use() can dedup against the full set (regardless of whether the
-		// child itself is named).
-		if (app.#apps) {
-			this.#apps ??= new Set()
-			app.#apps.forEach(this.#apps.add, this.#apps)
+		if (app.#childrenHash) {
+			if (this.#childrenHash)
+				app.#childrenHash.forEach(
+					this.#childrenHash.add,
+					this.#childrenHash
+				)
+			else this.#childrenHash ??= new Set(app.#childrenHash)
 		}
+
+		const hook = this['~ext']?.hooks?.at(-1)
+		const preSnapshot = filterByScope(hook, isDownwardScope)
+		const absorbedStart = this.#routes?.length ?? 0
 
 		if (app.#routes) {
 			this.#newHook = true
 
-			for (const route of app.#routes)
-				this.#mapIdx(
-					route[0],
-					route[1],
-					route as unknown as InternalRoute
-				)
+			const snapshot = app['~routeSnapshot']
+			for (let i = 0; i < app.#routes.length; i++) {
+				const route = app.#routes[i]
+				this.#mapIdx(route[0], route[1], route, snapshot?.[i])
+			}
 		}
 
 		if (app['~ext']) {
@@ -1349,7 +1353,7 @@ export class Elysia<
 							: [raw as Function]
 
 						for (const fn of fns) {
-							// Origin-based dedup: if fn was first registered
+							// If fn was first registered
 							// on a named plugin already absorbed by `this`,
 							// skip it. Anonymous-source fns have no origin
 							// and always pass.
@@ -1366,11 +1370,7 @@ export class Elysia<
 
 							const isGlobal = app.#global?.has(fn)
 							if (isGlobal || app.#plugin?.has(fn)) {
-								if (event[key]) {
-									if (Array.isArray(event[key]))
-										event[key].push(fn)
-									else event[key] = [event[key], fn]
-								} else event[key] = fn
+								pushField(event, key, fn)
 
 								if (isGlobal) this.#global!.add(fn)
 							}
@@ -1378,6 +1378,19 @@ export class Elysia<
 					}
 
 				this.#pushHook(event)
+			}
+		}
+
+		// Extend each newly-absorbed route's inheritance chain with
+		// this parent's pre-`.use()` downward (global/plugin) set
+		if (this.#routes && preSnapshot) {
+			const snapshot = this['~routeSnapshot']!
+			for (let i = absorbedStart; i < this.#routes.length; i++) {
+				const inherited = snapshot[i]
+
+				snapshot[i] = inherited
+					? mergeHook(cloneHook(preSnapshot), inherited)
+					: preSnapshot
 			}
 		}
 	}
@@ -1408,7 +1421,8 @@ export class Elysia<
 	#mapIdx(
 		method: string | MethodMap[keyof MethodMap],
 		path: string,
-		route: InternalRoute
+		route: InternalRoute,
+		rootAppHook?: Partial<AppHook>
 	) {
 		method = mapMethodBack(method)
 
@@ -1416,11 +1430,13 @@ export class Elysia<
 			this['~mapIdx']![method] ??= nullObject()
 			this['~mapIdx']![method]![path] = this.#routes.length
 			this.#routes.push(route)
+			;(this['~routeSnapshot'] ??= []).push(rootAppHook)
 		} else {
 			this['~mapIdx'] = nullObject()
 			this['~mapIdx']![method] = nullObject()
 			this['~mapIdx']![method]![path] = 0
 			this.#routes = [route]
+			this['~routeSnapshot'] = [rootAppHook]
 		}
 	}
 
@@ -1482,7 +1498,7 @@ export class Elysia<
 		const compiled = (this.#compiled ??= new Array(this.#routes!.length))
 
 		if (immediate) {
-			const handler = compileHandler(this.#routes![index], this)
+			const handler = compileHandler(this.#routes![index], this, index)
 
 			compiled![index] = handler
 			if (route) {
@@ -1500,7 +1516,7 @@ export class Elysia<
 		return (context) => {
 			if (this.#compiled?.[index]) return this.#compiled![index](context)
 
-			const handler = compileHandler(this.#routes![index], this)
+			const handler = compileHandler(this.#routes![index], this, index)
 			this.#compiled![index] = handler
 
 			if (route) {
@@ -1520,7 +1536,7 @@ export class Elysia<
 			const method = mapMethodBack(route[0])
 			const path = route[1]
 
-			const isDynamic = /\:|\*/.test(path)
+			const isDynamic = isDynamicRegex.test(path)
 			if (!isDynamic) this.#initMap()
 
 			const handler = this.handler(

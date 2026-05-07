@@ -1,7 +1,7 @@
-import { Elysia } from '../../src/2'
+import { Elysia } from '../../src'
 import { profile } from './utils'
 
-const total = 100_000
+const total = 10_000
 const plugins = new Array(total)
 
 for (let i = 0; i < total; i++)

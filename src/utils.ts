@@ -1,6 +1,14 @@
 import type { Context } from './context'
 
-import type { AppHook, MaybeArray, EventFn, Macro, InputSchema } from './types'
+import type {
+	AppHook,
+	MaybeArray,
+	EventFn,
+	EventScope,
+	Macro,
+	InputSchema,
+	InputHook
+} from './types'
 
 import { ElysiaFile } from './universal/file'
 import { dangerousKeys, type MethodMap, MethodMapBack } from './constants'
@@ -49,6 +57,55 @@ export function fnv1a(str: string): number {
 export const fnOrigin = new WeakMap<Function, number>()
 
 /**
+ * Scope tag set on each registered hook fn at first registration. Used by
+ * `filterByScope` (below) to distinguish, at .use() / compile time, between:
+ *   - locals (don't propagate to absorbed sub-plugin routes)
+ *   - plugin/global (propagate downward — the "scoped/global" set)
+ *
+ * Like `fnOrigin`, first registration wins — propagated fns added to other
+ * instances' `~ext.hooks` via `#pushHook` keep their original tag.
+ */
+export const fnScope = new WeakMap<Function, EventScope>()
+
+/**
+ * Walk a hook layer and keep only entries whose fn passes the predicate
+ * (applied to its `fnScope` tag, or `undefined` if never registered).
+ *
+ * Returns a fresh `Partial<AppHook>` (not a layer reference), or `undefined`
+ * if nothing was kept. Arrays are sliced — caller can mutate the result.
+ */
+export function filterByScope(
+	layer: Partial<AppHook> | undefined,
+	keep: (s: EventScope | undefined) => boolean
+): Partial<AppHook> | undefined {
+	if (!layer) return undefined
+	let out: Partial<AppHook> | undefined
+
+	for (const key of Object.keys(layer)) {
+		if (!eventProperties.has(key)) continue
+
+		const v: MaybeArray<Function> = layer[
+			key as keyof typeof layer
+		] as MaybeArray<Function>
+
+		if (Array.isArray(v)) {
+			const kept = v.filter((fn) => keep(fnScope.get(fn)))
+
+			if (kept.length) ((out ??= nullObject()) as any)[key] = kept
+		} else if (keep(fnScope.get(v)))
+			((out ??= nullObject()) as any)[key] = v
+	}
+
+	return out
+}
+
+export const isDownwardScope = (s: EventScope | undefined) =>
+	s === 'plugin' || s === 'global'
+
+export const isLocalScope = (s: EventScope | undefined) =>
+	s === 'local' || s === undefined
+
+/**
  *
  * @param url URL to redirect to
  * @param HTTP status code to send,
@@ -93,6 +150,11 @@ export function mergeResponse(
 	return b ?? a
 }
 
+/**
+ * a is mutable, b is immutable
+ *
+ * If both are arrays, mutates a by pushing/appending b
+ */
 export function mergeArray<
 	A extends MaybeArray<unknown> | undefined,
 	B extends MaybeArray<unknown> | undefined
@@ -413,6 +475,17 @@ export const isBlob = (value: unknown): value is Blob =>
 
 export const nullObject = () => Object.create(null)
 
+export function cloneHook<T extends Partial<InputHook> | Partial<AppHook>>(
+	src: T
+): T {
+	const out = Object.assign(nullObject(), src) as Record<string, any>
+
+	for (const key of eventProperties)
+		if (Array.isArray(out[key])) out[key] = (out[key] as unknown[]).slice()
+
+	return out as T
+}
+
 export function joinPath(base: string, path: string) {
 	const baseEndsWithSlash = base.charCodeAt(base.length - 1) === 47
 	const pathStartsWithSlash = path.charCodeAt(0) === 47
@@ -422,3 +495,22 @@ export function joinPath(base: string, path: string) {
 
 	return base + path
 }
+
+export function pushField<K extends keyof any>(
+	target: Record<K, unknown>,
+	key: K,
+	item: unknown,
+	defaultArray = false
+) {
+	const v = target[key]
+	if (v) {
+		if (Array.isArray(v)) (target[key] as unknown[]).push(item)
+		else target[key] = [v, item]
+	} else target[key] = defaultArray ? [item] : item
+}
+
+export const pushArray = <K extends keyof any>(
+	target: Record<K, unknown>,
+	key: K,
+	item: unknown
+) => pushField(target, key, item, true)

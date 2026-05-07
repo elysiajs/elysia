@@ -271,4 +271,68 @@ describe('plugin dedup graph', () => {
 
 		expect(order).toEqual([1, 2])
 	})
+
+	// The per-parent absorption snapshot lives on each parent (currently
+	// `~routeSnapshot`), not on the route tuple. The same anonymous
+	// sub-plugin used in two parents with different hook contexts must
+	// see each parent's hooks independently — no bleed.
+	it('absorbed plugin sees per-parent hook context, not bled across parents', async () => {
+		const order: string[] = []
+
+		const sub = new Elysia({ prefix: '/sub' }).get('/r', () => 'ok')
+
+		const parentA = new Elysia()
+			.derive('global', () => {
+				order.push('A')
+				return {}
+			})
+			.use(sub)
+
+		const parentB = new Elysia()
+			.derive('global', () => {
+				order.push('B')
+				return {}
+			})
+			.use(sub)
+
+		order.length = 0
+		await parentA.handle('/sub/r')
+		expect(order).toEqual(['A'])
+
+		order.length = 0
+		await parentB.handle('/sub/r')
+		expect(order).toEqual(['B'])
+	})
+
+	// Side-table indexes must stay aligned with `#routes` even when
+	// direct routes are registered on root before AND after a `.use()`
+	// that propagates hooks. Misalignment would show up as the wrong
+	// route picking up the wrong hook.
+	it('mixed direct and absorbed routes — hook scoping stays aligned', async () => {
+		let count = 0
+
+		const plug = new Elysia({ prefix: '/p' })
+			.derive('global', () => {
+				count++
+				return {}
+			})
+			.get('/x', () => 'ok')
+
+		const app = new Elysia()
+			.get('/before', () => 'before')
+			.use(plug)
+			.get('/after', () => 'after')
+
+		count = 0
+		await app.handle('/before')
+		expect(count).toBe(0)
+
+		count = 0
+		await app.handle('/p/x')
+		expect(count).toBe(1)
+
+		count = 0
+		await app.handle('/after')
+		expect(count).toBe(1)
+	})
 })

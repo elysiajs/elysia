@@ -1,5 +1,5 @@
-import { applyCoercions } from '../../src/2/type/coerce'
-import { t } from '../../src/2/type'
+import { applyCoercions } from '../../src/type/coerce'
+import { t } from '../../src/type'
 // import { Type as t } from 'typebox'
 
 import { profile } from './utils'

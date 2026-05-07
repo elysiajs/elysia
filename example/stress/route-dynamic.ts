@@ -1,4 +1,4 @@
-import { Elysia } from '../../src/2'
+import { Elysia } from '../../src'
 import { profile } from './utils'
 
 const app = new Elysia()

@@ -23,7 +23,13 @@ import { parseQueryFromURL } from '../../parse-query'
 import { getDefaultAdapter } from '../../adapter/constants'
 
 import { mapAfterHandle, mapBeforeHandle, mapTransform } from './utils'
-import { eventProperties, isBlob, mergeHook, nullObject } from '../../utils'
+import {
+	cloneHook,
+	filterByScope,
+	isBlob,
+	isLocalScope,
+	mergeHook
+} from '../../utils'
 
 import type { Link } from '../types'
 import type { Context } from '../../context'
@@ -144,13 +150,6 @@ function parse(
 const isAsyncValidator = (vali: Validator | undefined) =>
 	!(vali as TypeBoxValidator)?.tb || (vali as TypeBoxValidator)?.isAsync
 
-function cloneHook<T extends Partial<InputHook> | Partial<AppHook>>(src: T): T {
-	const out = Object.assign(nullObject(), src) as Record<string, any>
-	for (const key of eventProperties)
-		if (Array.isArray(out[key])) out[key] = (out[key] as unknown[]).slice()
-	return out as T
-}
-
 function applyHook(
 	localHook: Partial<InputHook> | undefined,
 	appHook: Partial<InputHook> | undefined,
@@ -192,16 +191,31 @@ const createInlineHandler = (
 	h: (context: Context) => unknown
 ) => ((c: Context) => map(h(c))) as CompiledHandler
 
+// Snapshot of app hooks (`~routeSnapshot`) merged with current locals.
+function composeRootHook(
+	root: AnyElysia,
+	index: number
+): Partial<AppHook> | undefined {
+	const snapshot = root['~routeSnapshot']?.[index]
+	const locals = filterByScope(root['~ext']?.hooks?.at(-1), isLocalScope)
+
+	if (!snapshot) return locals
+	if (!locals) return snapshot
+
+	return mergeHook(cloneHook(snapshot), locals as any)
+}
+
 export function compileHandler(
-	[, path, handler, instance, localHook, appHook]: InternalRoute,
-	root: AnyElysia
+	[, , handler, instance, localHook, appHook]: InternalRoute,
+	root: AnyElysia,
+	index: number
 ): CompiledHandler {
 	const adapter = root['~config']?.adapter ?? getDefaultAdapter()
 
 	const hook = applyHook(
 		localHook,
 		appHook,
-		root === instance ? undefined : root['~ext']?.hooks?.at(-1)
+		instance !== root ? composeRootHook(root, index) : undefined
 	)
 
 	const inference = sucrose(handler as any, hook as Sucrose.LifeCycle)

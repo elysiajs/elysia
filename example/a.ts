@@ -1,15 +1,18 @@
 import { Elysia, t } from '../src'
 
-let count = 0
+let i = 0
 
-const group = new Elysia()
-	.transform('global', () => {
-		count++
+const plugin1 = new Elysia({ prefix: '/not-call' }).get('/', () => 'asdf')
+
+const plugin2 = new Elysia({ prefix: '/call' })
+	.derive('global', ({ request }) => {
+		i++ // <-- should not be called, when requesting /asdf
+		return { test: 'test' }
 	})
-	.get('/a', () => 'Hi')
+	.get('/', ({ test }) => test)
 
-const app = new Elysia().use(group)
+const app = new Elysia().use(plugin1).use(plugin2)
 
-await app.handle('/a')
+await Promise.all(['/not-call', '/call'].map((path) => app.handle(path)))
 
-console.log(count)
+console.log(i) // .toBe(1)

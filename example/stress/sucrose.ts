@@ -1,6 +1,6 @@
 // @ts-nocheck
 
-import { sucrose } from '../../src/2/sucrose'
+import { sucrose } from '../../src/sucrose'
 import { profile } from './utils'
 
 const total = 100_000

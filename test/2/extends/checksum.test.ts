@@ -342,6 +342,111 @@ describe('Checksum', () => {
 		expect(i).toBe(1)
 	})
 
+	// Same invariant as "read lifecylce top-down" but the two siblings
+	// are .use()'d directly on the compile root (no wrapping plugin).
+	// Catches regressions where the rootHook lookup is correct only when
+	// an extra plugin layer absorbs the propagated hooks first.
+	it('sibling top-down on root without wrapping plugin', async () => {
+		let i = 0
+
+		const plugin1 = new Elysia({ prefix: '/not-call' }).get(
+			'/',
+			() => 'asdf'
+		)
+		const plugin2 = new Elysia({ prefix: '/call' })
+			.derive('global', () => {
+				i++
+				return { test: 'test' }
+			})
+			.get('/', ({ test }) => test)
+
+		const app = new Elysia().use(plugin1).use(plugin2)
+
+		await Promise.all(
+			['/not-call', '/call'].map((path) => app.handle(req(path)))
+		)
+
+		expect(i).toBe(1)
+	})
+
+	// Verifies the absorption-time stamping accumulates across levels in
+	// the right order. grandparent's d1 must run before child's d2 must
+	// run before grandchild's d3 (deepest registers earliest in route's
+	// own appHook; outer levels prepend via reverse-merge).
+	it('multi-level global derive order across grandparent/child/grandchild', async () => {
+		const order: string[] = []
+
+		const grandchild = new Elysia()
+			.derive('global', () => {
+				order.push('gc')
+				return {}
+			})
+			.get('/r', () => 'ok')
+
+		const child = new Elysia()
+			.derive('global', () => {
+				order.push('c')
+				return {}
+			})
+			.use(grandchild)
+
+		const grandparent = new Elysia()
+			.derive('global', () => {
+				order.push('gp')
+				return {}
+			})
+			.use(child)
+
+		await grandparent.handle(req('/r'))
+
+		expect(order).toEqual(['gp', 'c', 'gc'])
+	})
+
+	// Stricter version of the above: multiple hooks per level. Catches
+	// regressions in the stamping merge — specifically, the b.concat(a) /
+	// a.push(...b) branches in mergeArray where ordering can flip if the
+	// merge args (or `reverse` flag) get swapped wrong.
+	it('multi-fn cumulative inheritance preserves intra-level and cross-level order', async () => {
+		const order: string[] = []
+
+		const grandchild = new Elysia()
+			.derive('global', () => {
+				order.push('gc1')
+				return {}
+			})
+			.derive('global', () => {
+				order.push('gc2')
+				return {}
+			})
+			.get('/r', () => 'ok')
+
+		const child = new Elysia()
+			.derive('global', () => {
+				order.push('c1')
+				return {}
+			})
+			.derive('global', () => {
+				order.push('c2')
+				return {}
+			})
+			.use(grandchild)
+
+		const grandparent = new Elysia()
+			.derive('global', () => {
+				order.push('gp1')
+				return {}
+			})
+			.derive('global', () => {
+				order.push('gp2')
+				return {}
+			})
+			.use(child)
+
+		await grandparent.handle(req('/r'))
+
+		expect(order).toEqual(['gp1', 'gp2', 'c1', 'c2', 'gc1', 'gc2'])
+	})
+
 	it('handle reference parent-child', async () => {
 		const parent = new Elysia({ name: 'parent' }).derive(
 			'global',
