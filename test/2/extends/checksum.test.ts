@@ -402,6 +402,40 @@ describe('Checksum', () => {
 		expect(order).toEqual(['gp', 'c', 'gc'])
 	})
 
+	// Path 3 of #use mirroring: parent has no hooks of its own, but the
+	// absorbed child has stamped `inheritedChain` slots from its own
+	// prior `.use()`. The mirror takes the share-by-ref branch
+	// (`inheritedChain === childChain` → push original tuple). Locks in
+	// that the inherited chain isn't dropped when parent's preChain is
+	// undefined — without this, a regression that always clones (or
+	// always discards) would silently corrupt the chain on plain
+	// pass-through wrappers.
+	it('absorb stamped child into parent without hooks (share-by-ref)', async () => {
+		const order: string[] = []
+
+		const sub = new Elysia()
+			.derive('global', () => {
+				order.push('sub')
+				return {}
+			})
+			.get('/r', () => 'ok')
+
+		const mid = new Elysia()
+			.derive('global', () => {
+				order.push('mid')
+				return {}
+			})
+			.use(sub)
+
+		// `app` has zero hooks of its own — preChain is undefined when
+		// it absorbs `mid`, hitting the share-by-ref branch for /r.
+		const app = new Elysia().use(mid)
+
+		await app.handle(req('/r'))
+
+		expect(order).toEqual(['mid', 'sub'])
+	})
+
 	// Stricter version of the above: multiple hooks per level. Catches
 	// regressions in the stamping merge — specifically, the b.concat(a) /
 	// a.push(...b) branches in mergeArray where ordering can flip if the
