@@ -116,7 +116,6 @@ export class Elysia<
 
 	history?: InternalRoute[]
 
-
 	#compiled?: CompiledHandler[]
 	private '~derive'?: WeakSet<EventFn<'beforeHandle'>>
 
@@ -1318,23 +1317,17 @@ export class Elysia<
 			else this.#childrenHash ??= new Set(app.#childrenHash)
 		}
 
-		// Capture parent's chain head BEFORE this `.use()` extends it.
-		// Routes absorbed here inherit exactly this — what was in scope on
-		// parent at the moment of `.use(app)`.
-		const preChain = this['~ext']?.hookChain
-
 		if (app.history) {
 			const history = (this.history ??= [])
 			for (let i = 0; i < app.history.length; i++) {
 				const route = app.history[i]
-				// Child's inherited chain from prior `.use()`s in `app`.
-				// Undefined = direct route on `app`: route owns its full
-				// context via `appHook`, no absorbing chain to merge.
-				const childChain = route[6]
 
-				// Combine child's inherited chain with parent's preChain.
-				// Either side can be undefined; both undefined → no clone.
-				// Both set → O(1) `combine` link, no flatten.
+				// Capture parent's chain head BEFORE merge app
+				// Routes absorbed here inherit exactly this — what was in scope on
+				// parent at the moment of `.use(app)`.
+				const preChain = this['~ext']?.hookChain
+
+				const childChain = route[6]
 				const inheritedChain: ChainNode | undefined =
 					childChain === undefined
 						? preChain
@@ -1459,16 +1452,14 @@ export class Elysia<
 			path = joinPath(this['~config']?.prefix, path)
 
 		const appHook = this['~ext']?.hookChain
-		const route = appHook
-			? [method, path, fn, this, hook, appHook]
-			: hook
-				? [method, path, fn, this, hook]
-				: [method, path, fn, this]
 
-		// Direct route: tuple's `inheritedChain` slot stays absent — the
-		// route owns its full context via `appHook`, no absorbing chain
-		// to merge in `composeRootHook`.
-		;(this.history ??= []).push(route as unknown as InternalRoute)
+		;(this.history ??= []).push(
+			(appHook
+				? [method, path, fn, this, hook, appHook]
+				: hook
+					? [method, path, fn, this, hook]
+					: [method, path, fn, this]) as unknown as InternalRoute
+		)
 
 		return this
 	}
