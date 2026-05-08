@@ -222,6 +222,7 @@ type BaseSchemaRecord = Record<string, BaseSchema>
 export interface BaseSchema {
 	'~kind': string
 	'~elyTyp'?: ELYSIA_TYPES[keyof ELYSIA_TYPES]
+	$id?: string
 	id?: string
 	type?: string
 	$schema?: string

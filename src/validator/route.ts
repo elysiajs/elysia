@@ -20,10 +20,8 @@ interface RouteSchema {
 	response?: Record<number, AnySchema>
 }
 
-interface RouteValidatorOptions extends Omit<
-	ValidatorOptions,
-	'coerces' | 'schemas'
-> {
+export interface RouteValidatorOptions
+	extends Omit<ValidatorOptions, 'coerces' | 'schemas'> {
 	schemas?: {
 		body: AnySchema
 		headers: AnySchema
@@ -55,56 +53,63 @@ export class RouteValidator<const in out T extends RouteSchema> {
 		if (!route) return
 
 		if (route.body) {
-			this.body = Validator.create(route.body, {
+			const body = Validator.reference(route.body, options?.models)
+
+			this.body = Validator.create(body, {
 				normalize: options?.normalize,
 				sanitize: options?.sanitize,
 				schemas: options?.schemas?.map((s) => s.body),
-				coerces: isTb(route.body)
-					? hasTypes(
-							[ELYSIA_TYPES.File, ELYSIA_TYPES.Files],
-							route.body
-						)
+				coerces: isTb(body)
+					? hasTypes([ELYSIA_TYPES.File, ELYSIA_TYPES.Files], body)
 						? coerceFormData()
 						: coerceRoot()
 					: undefined
 			}) as any
 		}
 
-		if (route.headers)
-			this.headers = Validator.create(route.headers, {
+		if (route.headers) {
+			const headers = Validator.reference(route.headers, options?.models)
+
+			this.headers = Validator.create(headers, {
 				normalize: options?.normalize,
 				sanitize: options?.sanitize,
 				schemas: options?.schemas?.map((s) => s.headers),
-				coerces: isTb(route.headers)
-					? coerceStringToStructure()
-					: undefined
+				coerces: isTb(headers) ? coerceStringToStructure() : undefined
 			}) as any
+		}
 
-		if (route.query)
-			this.query = Validator.create(route.query, {
+		if (route.query) {
+			const query = Validator.reference(route.query, options?.models)
+
+			this.query = Validator.create(query, {
 				normalize: options?.normalize,
 				sanitize: options?.sanitize,
 				schemas: options?.schemas?.map((s) => s.query),
-				coerces: isTb(route.query) ? coerceQuery() : undefined
+				coerces: isTb(query) ? coerceQuery() : undefined
 			}) as any
+		}
 
-		if (route.params)
-			this.params = Validator.create(route.params, {
+		if (route.params) {
+			const params = Validator.reference(route.params, options?.models)
+
+			this.params = Validator.create(params, {
 				normalize: options?.normalize,
 				sanitize: options?.sanitize,
 				schemas: options?.schemas?.map((s) => s.params),
 				coerces: isTb(route.params) ? coerceRoot() : undefined
 			}) as any
+		}
 
-		if (route.cookie)
-			this.cookie = Validator.create(route.cookie, {
+		if (route.cookie) {
+			const cookie = Validator.reference(route.cookie, options?.models)
+
+			this.cookie = Validator.create(cookie, {
 				normalize: options?.normalize,
 				sanitize: options?.sanitize,
 				schemas: options?.schemas?.map((s) => s.cookie),
-				coerces: isTb(route.cookie)
-					? coerceStringToStructure()
-					: undefined
+				coerces: isTb(cookie) ? coerceStringToStructure() : undefined
 			}) as any
+		}
 
 		if (route.response)
 			this.response = Validator.response(route.response, {

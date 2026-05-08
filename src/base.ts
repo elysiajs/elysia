@@ -51,6 +51,8 @@ import type {
 	Prettify,
 	EventScope
 } from './types'
+import { AnySchema } from './type'
+import { TRef, TSchema } from 'typebox'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
 
@@ -110,6 +112,8 @@ export class Elysia<
 		// prepends one node - O(1) extension, never mutates older nodes
 		hookChain?: ChainNode
 	}
+
+	'~models'?: Record<keyof any, AnySchema>
 
 	history?: InternalRoute[]
 
@@ -1011,11 +1015,11 @@ export class Elysia<
 		return this.#onBranch('afterHandle', scopeOrFn, fn)
 	}
 
+	// Remove in 2.1
 	onError(fn: EventFn<'error'>): this
 	onError(scope: { as: 'local' }, fn: EventFn<'error'>): this
 	onError(scope: { as: 'global' }, fn: EventFn<'error'>): this
 	onError(scope: { as: 'scoped' }, fn: EventFn<'error'>): this
-	// Remove in 2.1
 	onError(
 		options: { as: LegacyEventScope } | MaybeArray<Function>,
 		handler?: MaybeArray<Function>
@@ -1333,7 +1337,7 @@ export class Elysia<
 			const snapshot = app['~routeSnapshot']
 			for (let i = 0; i < app.history.length; i++) {
 				const route = app.history[i]
-				this.#mapIdx(route[0], route[1], route, snapshot?.[i] as any)
+				this.#save(route[0], route[1], route, snapshot?.[i] as any)
 			}
 		}
 
@@ -1449,12 +1453,12 @@ export class Elysia<
 				? [method, path, fn, this, hook]
 				: [method, path, fn, this]
 
-		this.#mapIdx(method, path, history as unknown as InternalRoute)
+		this.#save(method, path, history as unknown as InternalRoute)
 
 		return this
 	}
 
-	#mapIdx(
+	#save(
 		method: string | MethodMap[keyof MethodMap],
 		path: string,
 		route: InternalRoute,
@@ -1471,6 +1475,116 @@ export class Elysia<
 		}
 	}
 
+	model<const Name extends string, const Model extends AnySchema>(
+		name: Name,
+		model: Model
+	): Elysia<
+		BasePath,
+		Scope,
+		Singleton,
+		{
+			typebox: Definitions['typebox'] & {
+				[name in Name]: Model
+			}
+			error: Definitions['error']
+		},
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	model<const Recorder extends Record<string, AnySchema>>(
+		record: Recorder
+	): Elysia<
+		BasePath,
+		Scope,
+		Singleton,
+		{
+			typebox: Definitions['typebox'] & Recorder
+			error: Definitions['error']
+		},
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	model<const NewType extends Record<string, AnySchema>>(
+		mapper: (
+			decorators: Definitions['typebox'] extends infer Models
+				? {
+						[Name in keyof Models]: Models[Name] extends TSchema
+							? TRef<Name & string>
+							: Models[Name]
+					}
+				: {}
+		) => NewType
+	): Elysia<
+		BasePath,
+		Scope,
+		Singleton,
+		{
+			typebox: {
+				[Name in keyof NewType]: NewType[Name] extends TRef<
+					Name & string
+				>
+					? // @ts-ignore
+						Definitions['typebox'][Name]
+					: NewType[Name]
+			}
+			error: Definitions['error']
+		},
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	model(
+		name: string | Record<string, AnySchema> | Function,
+		model?: AnySchema
+	): AnyElysia {
+		switch (typeof name) {
+			case 'object':
+				const entries = Object.entries(name)
+				if (entries.length) {
+					const models = (this['~models'] ??= nullObject())
+
+					for (let [key, value] of entries) {
+						if (key in models) continue
+
+						if ('~standard' in value) models[key] = value
+						else {
+							if (Object.isFrozen(value))
+								value = Object.create(value)
+
+							// @ts-expect-error
+							value.$id ??= key
+							models[key] = value
+						}
+					}
+				}
+
+				return this
+
+			case 'function':
+				this['~models'] = name(this['~models'] ?? nullObject())
+
+				return this
+
+			case 'string':
+				if (model) {
+					this['~models'] ??= nullObject()
+					this['~models']![name] = model
+				}
+
+				return this
+		}
+
+		return this
+	}
+
 	get<Hook extends Partial<InputHook>>(
 		path: string,
 		fn: Function,
@@ -1479,27 +1593,27 @@ export class Elysia<
 		return this.#add(MethodMap.GET, path, fn, hook)
 	}
 
-	post(path: string, fn: Function, hook?: InputHook) {
+	post<Hook extends Partial<InputHook>>(path: string, fn: Function, hook?: Hook) {
 		return this.#add(MethodMap.POST, path, fn, hook)
 	}
 
-	delete(path: string, fn: Function, hook?: InputHook) {
+	delete<Hook extends Partial<InputHook>>(path: string, fn: Function, hook?: Hook) {
 		return this.#add(MethodMap.DELETE, path, fn, hook)
 	}
 
-	put(path: string, fn: Function, hook?: InputHook) {
+	put<Hook extends Partial<InputHook>>(path: string, fn: Function, hook?: Hook) {
 		return this.#add(MethodMap.PUT, path, fn, hook)
 	}
 
-	patch(path: string, fn: Function, hook?: InputHook) {
+	patch<Hook extends Partial<InputHook>>(path: string, fn: Function, hook?: Hook) {
 		return this.#add(MethodMap.PATCH, path, fn, hook)
 	}
 
-	options(path: string, fn: Function, hook?: InputHook) {
+	options<Hook extends Partial<InputHook>>(path: string, fn: Function, hook?: Hook) {
 		return this.#add(MethodMap.OPTIONS, path, fn, hook)
 	}
 
-	head(path: string, fn: Function, hook?: InputHook) {
+	head<Hook extends Partial<InputHook>>(path: string, fn: Function, hook?: Hook) {
 		return this.#add(MethodMap.HEAD, path, fn, hook)
 	}
 

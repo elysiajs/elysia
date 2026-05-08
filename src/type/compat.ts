@@ -1,7 +1,7 @@
 import { useTypebox } from './bridge'
 
 import { Compile } from 'typebox/compile'
-import { Decode, Errors } from 'typebox/value'
+import { Decode, Errors, HasCodec } from 'typebox/value'
 
 import { applyCoercions } from './coerce'
 import { TypeBoxValidator, TypeBoxValidatorCache } from './validator'
@@ -30,6 +30,7 @@ export function setupTypebox() {
 		coerceQuery,
 		coerceRoot,
 		coerceStringToStructure,
-		hasTypes
+		hasTypes,
+		HasCodec
 	})
 }

@@ -14,20 +14,20 @@ import {
 	Errors,
 	applyCoercions,
 	TypeBoxValidator,
-	TypeBoxValidatorCache
+	TypeBoxValidatorCache,
+	HasCodec
 } from '../type/bridge'
 
 export interface ValidatorOptions {
+	models?: Record<keyof any, AnySchema>
 	schemas?: AnySchema[]
 	coerces?: CoerceOption[]
 	normalize?: boolean | 'exactMirror' | 'typebox'
 	sanitize?: ElysiaConfig<any, any>['sanitize']
 }
 
-export interface ResponseValidatorOptions extends Omit<
-	ValidatorOptions,
-	'schemas'
-> {
+export interface ResponseValidatorOptions
+	extends Omit<ValidatorOptions, 'schemas'> {
 	schemas?: Record<number, AnySchema>[]
 }
 
@@ -40,6 +40,16 @@ export type ToSubTypeValidator<T> = T extends AnySchema
 export abstract class Validator {
 	abstract Check(value: unknown): boolean
 	abstract Errors(value: unknown): TLocalizedValidationError[]
+
+	static reference(
+		schema: string | TSchema | StandardSchemaV1Like,
+		models: Record<keyof any, AnySchema> | undefined
+	): AnySchema {
+		if (typeof schema !== 'string') return schema as unknown as AnySchema
+		if (models && schema in models) return models[schema]
+
+		throw new Error(`Schema reference "${schema}" not found in models`)
+	}
 
 	Decode(value: unknown): unknown {
 		return value
@@ -66,7 +76,9 @@ export abstract class Validator {
 		options?: ValidatorOptions
 	): StandardValidator
 
-	static create(schema: AnySchema, options?: ValidatorOptions) {
+	static create(name: AnySchema | string, options?: ValidatorOptions) {
+		let schema = Validator.reference(name, options?.models)
+
 		if (options?.schemas?.length) {
 			if (
 				'~kind' in schema &&
@@ -88,7 +100,7 @@ export abstract class Validator {
 			else tbCache = new TypeBoxValidatorCache()
 
 			// @ts-expect-error
-			const validator = new TypeBoxValidator(schema, options) as any
+			const validator = new TypeBoxValidator(schema, options, name) as any
 			tbCache!.set(schema, options?.coerces, validator)
 			return validator
 		}
@@ -184,7 +196,7 @@ export class MultiValidator extends Validator {
 				)
 
 			if (isTypeBox) {
-				// if (HasCodec(schema)) codexIndexes.add(i)
+				if (HasCodec(schema)) codexIndexes.add(i)
 
 				if (schema['~kind'] === 'Object') {
 					typeboxObjects ??= []

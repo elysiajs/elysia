@@ -1,3 +1,4 @@
+import { Type } from 'typebox'
 import { Compile, type Validator as BaseTypeBoxValidator } from 'typebox/schema'
 import type {
 	Static,
@@ -18,7 +19,6 @@ import {
 } from 'typebox/value'
 import { TLocalizedValidationError } from 'typebox/error'
 
-
 import createMirror from 'exact-mirror'
 
 import { applyCoercions, deferCoercions, type CoerceOption } from './coerce'
@@ -33,6 +33,16 @@ const Decoder = Pipeline([
 	(context, type, value) => DecodeUnsafe(context, type, value)
 ])
 
+const moduleCache = new WeakMap<
+	Record<string, TSchema>,
+	Record<string, TSchema>
+>()
+
+const isAsyncPredicate = (v: unknown) =>
+	Array.isArray(v)
+		? v.some((x) => isAsyncFunction(x.refine) || x.refine === isBlob)
+		: false
+
 export class TypeBoxValidator<
 	const in out T extends TSchema = TAny
 > extends Validator {
@@ -42,18 +52,23 @@ export class TypeBoxValidator<
 	isAsync: boolean
 	hasDefault: boolean
 
-	constructor(schema: T, options?: ValidatorOptions) {
+	constructor(schema: T, options?: ValidatorOptions, name?: string) {
 		super()
+
+		if (name && options?.models) {
+			const module = moduleCache.getOrInsertComputed(options.models, () =>
+				Type.Module(options.models as Record<string, TSchema>)
+			)
+
+			schema = module[name] as T
+		}
 
 		this.schema = applyCoercions(schema, options?.coerces) as T
 
-		this.tb = Compile(this.schema)
+		this.tb = Compile(this.schema as TSchema)
 		this.hasCodec = HasCodec(this.schema)
 		// @ts-expect-error private property
-		this.isAsync = this.tb.build.external.variables.some((array) =>
-			// @ts-expect-error private property
-			array.some((x) => isAsyncFunction(x.refine) || x.refine === isBlob)
-		)
+		this.isAsync = this.tb.build.external.variables.some(isAsyncPredicate)
 		this.hasDefault = hasProperty('default', this.schema as any)
 
 		try {

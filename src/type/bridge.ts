@@ -1,6 +1,10 @@
 import type { TAny, TSchema } from 'typebox/type'
 import type { Compile as CompileType } from 'typebox/compile'
-import type { Decode as DecodeType, Errors as ErrorsType } from 'typebox/value'
+import type {
+	Decode as DecodeType,
+	Errors as ErrorsType,
+	HasCodec as HasCodecType
+} from 'typebox/value'
 
 import type { applyCoercions as applyCoercionsType } from './coerce'
 import type {
@@ -45,6 +49,7 @@ export let coerceStringToStructure: typeof coerceStringToStructureType =
 	errorFn as any
 
 export let hasTypes: typeof hasTypesType = errorFn as any
+export let HasCodec: typeof HasCodecType = errorFn as any
 
 export function useTypebox(mod: {
 	Compile: typeof CompileType
@@ -58,8 +63,8 @@ export function useTypebox(mod: {
 	coerceRoot: typeof coerceRootType
 	coerceStringToStructure: typeof coerceStringToStructureType
 	hasTypes: typeof hasTypesType
+	HasCodec: typeof HasCodecType
 }) {
-	console.debug('debug: use TypeBox')
 	Compile = mod.Compile
 	Decode = mod.Decode
 	Errors = mod.Errors
@@ -71,4 +76,5 @@ export function useTypebox(mod: {
 	coerceRoot = mod.coerceRoot
 	coerceStringToStructure = mod.coerceStringToStructure
 	hasTypes = mod.hasTypes
+	HasCodec = mod.HasCodec
 }

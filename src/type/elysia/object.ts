@@ -24,7 +24,8 @@ export function ObjectType<T extends TProperties>(
 		const schema = {
 			type: 'object' as const,
 			properties,
-			required
+			required,
+			additionalProperties: false
 		}
 		Object.defineProperty(schema, '~kind', objectKind)
 		return schema as any
@@ -34,6 +35,7 @@ export function ObjectType<T extends TProperties>(
 	options.type = 'object'
 	options.properties = properties
 	options.required = required
+	options.additionalProperties ??= false
 
 	return options as any
 }

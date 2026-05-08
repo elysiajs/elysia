@@ -3,7 +3,7 @@ import { sucrose, type Sucrose } from '../../sucrose'
 
 import type { ElysiaAdapter } from '../../adapter'
 
-import { RouteValidator } from '../../validator/route'
+import { RouteValidator, RouteValidatorOptions } from '../../validator/route'
 import type { Validator } from '../../validator'
 
 import type { TypeBoxValidator } from '../../type/validator'
@@ -84,6 +84,9 @@ function builtinParser(
 	}
 }
 
+const hasFileTbPredicate = (v) =>
+	Array.isArray(v) ? v.some((x) => x.refine === isBlob) : false
+
 function parse(
 	adapter: ElysiaAdapter['parse'],
 	parsers: MaybeArray<ContentType | BodyHandler> | undefined,
@@ -92,10 +95,7 @@ function parse(
 	link: Link
 ) {
 	const hasFile = // @ts-expect-error
-		bodyVali?.tb?.build.external.variables.some((array) =>
-			// @ts-expect-error
-			array.some((x) => x.refine === isBlob)
-		)
+		bodyVali?.tb?.build.external.variables.some(hasFileTbPredicate)
 
 	if (
 		typeof parsers === 'string' ||
@@ -212,6 +212,8 @@ function composeRootHook(
 	return mergeHook(inherited, locals as any)
 }
 
+const validatorOptionsCache = new WeakMap<AnyElysia, RouteValidatorOptions>()
+
 export function compileHandler(
 	[, , handler, instance, localHook, appHook]: InternalRoute,
 	root: AnyElysia,
@@ -251,9 +253,17 @@ export function compileHandler(
 		}
 	}
 
-	const hasBody = inference.body && hook?.parse?.[0] !== 'none'
+	const hasBody =
+		!!hook?.body || (inference.body && hook?.parse?.[0] !== 'none')
 
-	const vali = new RouteValidator(hook)
+	const vali = new RouteValidator(
+		hook as any,
+		validatorOptionsCache.getOrInsertComputed(root, () => ({
+			models: root['~models'],
+			normalize: root['~config']?.normalize,
+			sanitize: root['~config']?.sanitize
+		}))
+	)
 
 	const bodyValiIsAsync = hasBody && isAsyncValidator(vali.body)
 	const headersValiIsAsync = vali.headers && isAsyncValidator(vali.headers)
