@@ -6,13 +6,14 @@ import { Decode, Errors, HasCodec } from 'typebox/value'
 import { applyCoercions } from './coerce'
 import { TypeBoxValidator, TypeBoxValidatorCache } from './validator'
 
-import { hasTypes } from './utils'
+import { Intersect } from './elysia/intersect'
 import {
 	coerceFormData,
 	coerceQuery,
 	coerceRoot,
 	coerceStringToStructure
 } from './coerce'
+import { hasTypes } from './utils'
 
 let setup = false
 export function setupTypebox() {
@@ -31,6 +32,7 @@ export function setupTypebox() {
 		coerceRoot,
 		coerceStringToStructure,
 		hasTypes,
-		HasCodec
+		HasCodec,
+		Intersect
 	})
 }

@@ -7,7 +7,6 @@ import { type AnySchema, type StandardSchemaV1Like } from '../type'
 import type { ElysiaConfig, MaybePromise } from '../types'
 import type { CoerceOption } from '../type/coerce'
 
-import { Intersect } from '../type/elysia/intersect'
 import {
 	Decode,
 	Compile,
@@ -15,7 +14,8 @@ import {
 	applyCoercions,
 	TypeBoxValidator,
 	TypeBoxValidatorCache,
-	HasCodec
+	HasCodec,
+	Intersect
 } from '../type/bridge'
 
 export interface ValidatorOptions {
@@ -79,15 +79,14 @@ export abstract class Validator {
 	static create(name: AnySchema | string, options?: ValidatorOptions) {
 		let schema = Validator.reference(name, options?.models)
 
+		let isIntersectable = false
+
 		if (options?.schemas?.length) {
 			if (
 				'~kind' in schema &&
 				options.schemas.every((v) => '~kind' in v || '~elyAcl' in v)
 			)
-				schema = Intersect([
-					schema as TSchema,
-					...options.schemas
-				]) as AnySchema
+				isIntersectable = true
 			else return new MultiValidator(schema, options) as any
 		}
 
@@ -101,10 +100,13 @@ export abstract class Validator {
 
 			// @ts-expect-error
 			const validator = new TypeBoxValidator(
-				schema,
+				isIntersectable
+					? Intersect([schema, ...options!.schemas!])
+					: schema,
 				options,
 				typeof name === 'string' ? name : undefined
 			) as any
+
 			tbCache!.set(schema, options?.coerces, validator)
 			return validator
 		}

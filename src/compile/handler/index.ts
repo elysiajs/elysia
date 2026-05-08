@@ -212,8 +212,6 @@ function composeRootHook(
 	return mergeHook(inherited, locals as any)
 }
 
-const validatorOptionsCache = new WeakMap<AnyElysia, RouteValidatorOptions>()
-
 export function compileHandler(
 	[, , handler, instance, localHook, appHook]: InternalRoute,
 	root: AnyElysia,
@@ -256,14 +254,11 @@ export function compileHandler(
 	const hasBody =
 		!!hook?.body || (inference.body && hook?.parse?.[0] !== 'none')
 
-	const vali = new RouteValidator(
-		hook as any,
-		validatorOptionsCache.getOrInsertComputed(root, () => ({
-			models: root['~ext']?.models,
-			normalize: root['~config']?.normalize,
-			sanitize: root['~config']?.sanitize
-		}))
-	)
+	const vali = new RouteValidator(hook as any, {
+		models: root['~ext']?.models,
+		normalize: root['~config']?.normalize,
+		sanitize: root['~config']?.sanitize
+	})
 
 	const bodyValiIsAsync = hasBody && isAsyncValidator(vali.body)
 	const headersValiIsAsync = vali.headers && isAsyncValidator(vali.headers)
