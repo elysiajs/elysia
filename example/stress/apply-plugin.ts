@@ -15,10 +15,12 @@ for (let i = 0; i < total; i++) app.use(plugins[i])
 // app.handle('/')
 stop()
 
+console.log(app)
+
 // await handler({
 // 	set: {
 // 		status: 200,
-// 		headers: {}
+// 		headers: {}$
 // 	},
 // 	request: new Request('http://localhost?a=b', {
 // 		method: 'GET',

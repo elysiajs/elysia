@@ -94,10 +94,11 @@ export function createRouteMap(app: AnyElysia) {
 		return handleError(new Context(request), new NotFound()) as Response
 	}
 
-	if (!app.history)
+	const length = app.history?.length ?? 0
+	if (length === 0)
 		return [
 			{
-				'/_elysia': { GET: new Response('hi') }
+				'/elysia': new Response('hi')
 			},
 			fetch
 		]
@@ -109,10 +110,9 @@ export function createRouteMap(app: AnyElysia) {
 	)
 
 	const routes = nullObject()
-	const length = app.history.length
 
-	for (let i = 0; i < length; i++) {
-		const route: InternalRoute = app.history[i]
+	for (let i = 0; i < length!; i++) {
+		const route: InternalRoute = app.history![i]
 		const method = route[0]
 		const path = route[1]
 

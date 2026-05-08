@@ -1708,21 +1708,17 @@ export class Elysia<
 			const method = mapMethodBack(route[0])
 			const path = route[1]
 
-			const isDynamic = isDynamicRegex.test(path)
-			if (!isDynamic) this.#initMap()
-
-			const handler = this.handler(
-				i,
-				this['~config']?.precompile,
-				isDynamic ? undefined : route
-			)
-
-			if (isDynamic) {
-				this['~router'] ??= new Memoirist(decodeComponent)
-				this['~router']!.add(method, path, handler, false)
+			if (isDynamicRegex.test(path)) {
+				;(this['~router'] ??= new Memoirist(decodeComponent)).add(
+					method,
+					path,
+					this.handler(i, this['~config']?.precompile),
+					false
+				)
 			} else {
-				this['~map']![method] ??= nullObject()
-				this['~map']![method]![path] = handler
+				this.#initMap()
+				const map = (this['~map']![method] ??= nullObject())
+				map[path] = this.handler(i, this['~config']?.precompile, route)
 			}
 		}
 	}

@@ -18,7 +18,7 @@ export const BunAdapter = createAdapter({
 	listen(app, options, callback) {
 		const [routes, fetch] = createRouteMap(app as AnyElysia)
 
-		const server = app.server = Bun.serve(
+		const server = (app.server = Bun.serve(
 			typeof options === 'object'
 				? Object.assign(options, {
 						routes,
@@ -31,7 +31,7 @@ export const BunAdapter = createAdapter({
 						fetch,
 						reusePort: true
 					}
-		)
+		))
 
 		flushMemory(app)
 		callback?.(server)

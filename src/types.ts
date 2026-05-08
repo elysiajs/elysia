@@ -13,6 +13,7 @@ import type { Sucrose } from './sucrose'
 import type { Serve } from './universal'
 import type { CookieOptions } from './cookie'
 import type { Context, ErrorContext, PreContext } from './context'
+import type { ChainNode } from './utils'
 
 export interface ElysiaConfig<
 	in out Prefix extends string | undefined,
@@ -643,12 +644,12 @@ export type InternalRoute = readonly [
 	hook: InputHook | undefined,
 	// Chain node ref captured at registration time on the owning instance.
 	// `flattenChain(appHook)` materialises the route's compile-time hooks.
-	appHook: import('./utils').ChainNode | undefined,
+	appHook: ChainNode | undefined,
 	// Inheritance chain captured on the absorbing instance at `.use()`
 	// time. Set during `#use` mirroring (via tuple clone) so the same
 	// route can carry different chains in different parents.
 	// Undefined / absent = direct route: no absorbing-chain context.
-	inheritedChain?: import('./utils').ChainNode
+	inheritedChain?: ChainNode
 ]
 
 export type ErrorHandler<
