@@ -112,30 +112,57 @@ export abstract class Validator {
 		)
 	}
 
-	static response = (
-		schema: Record<number, TSchema | StandardSchemaV1Like>,
+	static response(
+		schema:
+			| TSchema
+			| StandardSchemaV1Like
+			| Record<number, TSchema | StandardSchemaV1Like>,
 		options?: ResponseValidatorOptions
-	): Record<number, Validator> =>
-		Object.fromEntries(
-			Object.entries(schema).map(([k, v]) => [
+	): Record<number, Validator> {
+		if ('~kind' in schema || '~elyAcl' in schema || '~standard' in schema)
+			return {
+				200: Validator.create(
+					schema as TSchema | StandardSchemaV1Like,
+					{
+						...options,
+						schemas: options?.schemas?.map(
+							(s) => toStatusBased(s)[200]
+						)
+					}
+				)
+			}
+
+		const entries = Object.entries(schema)
+
+		return Object.fromEntries(
+			entries.map(([k, v]) => [
 				k,
 				v instanceof Validator
 					? v
 					: Validator.create(v, {
-							normalize: options?.normalize,
-							sanitize: options?.sanitize,
-							coerces: options?.coerces,
-							schemas: options?.schemas?.map(
-								(s) => s[k as unknown as keyof typeof s]
-							)
+							...options,
+							schemas: options?.schemas
+								?.map((s) => toStatusBased(s)[k as any])
+								?.filter(Boolean)
 						})
 			])
 		)
+	}
 
 	static clear() {
 		tbCache?.clear()
 	}
 }
+
+const toStatusBased = (
+	schema:
+		| TSchema
+		| StandardSchemaV1Like
+		| Record<number, TSchema | StandardSchemaV1Like>
+): Record<number, AnySchema> =>
+	'~kind' in schema || '~elyAcl' in schema || '~standard' in schema
+		? { 200: schema as unknown as AnySchema }
+		: (schema as Record<number, AnySchema>)
 
 export class StandardValidator extends Validator {
 	private validate: (

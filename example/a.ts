@@ -7,7 +7,10 @@ const app = new Elysia()
 		})
 	})
 	.post(`/1`, () => 'ok', {
-		body: 'a'
+		body: 'a',
+		response: t.Object({
+			a: t.String()
+		})
 	})
 
 app.handler(0, true)
