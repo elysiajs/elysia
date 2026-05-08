@@ -14,8 +14,7 @@ import {
 	applyCoercions,
 	TypeBoxValidator,
 	TypeBoxValidatorCache,
-	HasCodec,
-	Intersect
+	HasCodec
 } from '../type/bridge'
 
 export interface ValidatorOptions {
@@ -100,11 +99,10 @@ export abstract class Validator {
 
 			// @ts-expect-error
 			const validator = new TypeBoxValidator(
-				isIntersectable
-					? Intersect([schema, ...options!.schemas!])
-					: schema,
+				schema,
 				options,
-				typeof name === 'string' ? name : undefined
+				typeof name === 'string' ? name : undefined,
+				isIntersectable
 			) as any
 
 			tbCache!.set(schema, options?.coerces, validator)

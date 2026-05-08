@@ -97,6 +97,9 @@ export class Elysia<
 > {
 	'~config'?: ElysiaConfig<BasePath, Scope>
 
+	// Holds both event-handler fns and schema entries (objects pushed by
+	// `hookToGuard`). Both are gated by membership during `.use()` propagation;
+	// chain-key context disambiguates kind at the call site.
 	#plugin?: WeakSet<any>
 	#global?: WeakSet<any>
 
@@ -1107,9 +1110,32 @@ export class Elysia<
 		return this
 	}
 
-	guard(hook: Partial<InputHook & Macro>) {
-		const ext = this.#ext
+	guard(hook: Partial<InputHook & Macro>): this
+	guard(scope: 'local', hook: Partial<InputHook & Macro>): this
+	guard(scope: 'plugin', hook: Partial<InputHook & Macro>): this
+	guard(scope: 'global', hook: Partial<InputHook & Macro>): this
 
+	guard() {
+		if (arguments.length === 1)
+			return this.#guard(
+				'local',
+				arguments[0] as Partial<InputHook & Macro>
+			)
+
+		if (arguments.length === 2)
+			return this.#guard(
+				arguments[0] as EventScope,
+				arguments[1] as Partial<Macro>
+			)
+
+		return this
+	}
+
+	#guard(scope: EventScope, hook: Partial<InputHook & Macro>): this {
+		// @ts-expect-error Remove in 2.1
+		if (scope === 'scoped') scope = 'plugin'
+
+		const prevSchemaLen = (hook as any).schema?.length ?? 0
 		this['~applyMacro'](hookToGuard(hook as any))
 
 		if (hook.derive) {
@@ -1121,6 +1147,55 @@ export class Elysia<
 		if (hook.resolve) {
 			this['~derive'] ??= new WeakSet<EventFn<'beforeHandle'>>()
 			this['~derive'].add(hook.resolve as EventFn<'beforeHandle'>)
+		}
+
+		const targetSet =
+			scope === 'plugin'
+				? (this.#plugin ??= new WeakSet())
+				: scope === 'global'
+					? (this.#global ??= new WeakSet())
+					: undefined
+
+		const trackFn = (fn: unknown) => {
+			if (typeof fn !== 'function') return
+
+			targetSet?.add(fn)
+
+			if (!fnScope.has(fn as any))
+				fnScope.set(fn as any, scope ?? 'local')
+
+			if (this.#hash !== undefined && !fnOrigin.has(fn as any))
+				fnOrigin.set(fn as any, this.#hash)
+		}
+
+		for (const key in hook) {
+			if (!eventProperties.has(key)) continue
+
+			const raw = (hook as any)[key]
+			if (raw === null) continue
+
+			if (Array.isArray(raw)) for (const fn of raw) trackFn(fn)
+			else trackFn(raw)
+		}
+
+		if (hook.derive) {
+			if (Array.isArray(hook.derive))
+				for (const fn of hook.derive) trackFn(fn)
+			else trackFn(hook.derive)
+		}
+
+		// remove in 2.1
+		if (hook.resolve) {
+			if (Array.isArray(hook.resolve))
+				for (const fn of hook.resolve) trackFn(fn)
+			else trackFn(hook.resolve)
+		}
+
+		if (targetSet) {
+			const schemas = (hook as any).schema as any[] | undefined
+			if (schemas && schemas.length > prevSchemaLen)
+				for (let i = prevSchemaLen; i < schemas.length; i++)
+					targetSet.add(schemas[i])
 		}
 
 		this.#pushHook(hook as Partial<AppHook>)
@@ -1394,19 +1469,41 @@ export class Elysia<
 				// `~ext.hookChain` never holds combine nodes, but we tolerate
 				// them by skipping past `over` if encountered.
 				const nodes: ChainNode[] = []
-				let cur: ChainNode | undefined = hookChain
-				while (cur) {
-					if ('combine' in cur) {
-						cur = cur.over
+				let current: ChainNode | undefined = hookChain
+
+				while (current) {
+					if ('combine' in current) {
+						current = current.over
 						continue
 					}
-					nodes.push(cur)
-					cur = cur.parent
+
+					nodes.push(current)
+					current = current.parent
 				}
+
 				for (let i = nodes.length - 1; i >= 0; i--) {
 					const added = (nodes[i] as { added: Partial<AppHook> })
 						.added
+
 					for (const key in added) {
+						if (key === 'schema') {
+							const schemas = (added as any).schema as
+								| any[]
+								| undefined
+
+							if (!schemas) continue
+
+							for (const s of schemas) {
+								const isGlobal = app.#global?.has(s)
+								if (isGlobal || app.#plugin?.has(s)) {
+									;((event as any).schema ??= []).push(s)
+									if (isGlobal) this.#global!.add(s)
+								}
+							}
+
+							continue
+						}
+
 						if (!eventProperties.has(key)) continue
 
 						const raw = (added as any)[key] as Function | Function[]
@@ -1438,9 +1535,6 @@ export class Elysia<
 				this.#pushHook(event)
 			}
 		}
-
-		// Stamping is folded into the mirror loop above (timeline approach
-		// captures everything during the single pass).
 	}
 
 	#add(

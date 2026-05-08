@@ -52,8 +52,6 @@ export let coerceStringToStructure: typeof coerceStringToStructureType =
 export let hasTypes: typeof hasTypesType = errorFn as any
 export let HasCodec: typeof HasCodecType = errorFn as any
 
-export let Intersect: typeof IntersectType = errorFn as any
-
 export function useTypebox(mod: {
 	Compile: typeof CompileType
 	Decode: typeof DecodeType
@@ -66,8 +64,7 @@ export function useTypebox(mod: {
 	coerceRoot: typeof coerceRootType
 	coerceStringToStructure: typeof coerceStringToStructureType
 	hasTypes: typeof hasTypesType
-	HasCodec: typeof HasCodecType,
-	Intersect: typeof IntersectType
+	HasCodec: typeof HasCodecType
 }) {
 	Compile = mod.Compile
 	Decode = mod.Decode
@@ -81,5 +78,4 @@ export function useTypebox(mod: {
 	coerceStringToStructure = mod.coerceStringToStructure
 	hasTypes = mod.hasTypes
 	HasCodec = mod.HasCodec
-	Intersect = mod.Intersect
 }

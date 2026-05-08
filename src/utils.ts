@@ -176,11 +176,11 @@ function appendInto(
 	src: Partial<AppHook>,
 	keep?: (s: EventScope | undefined) => boolean
 ): void {
-	for (const key of eventProperties) {
+	for (const key of nativeProperties) {
 		const v = (src as any)[key]
 		if (!v) continue
-		const raw = Array.isArray(v) ? v : [v]
 
+		const raw = Array.isArray(v) ? v : [v]
 		const arr = keep ? raw.filter((fn) => keep(fnScope.get(fn))) : raw
 
 		if (!arr.length) continue
@@ -363,32 +363,32 @@ export function hookToGuard(
 
 		if (a.body) {
 			schema.body = a.body
-			delete a.body
+			a.body = undefined
 		}
 
 		if (a.headers) {
 			schema.headers = a.headers
-			delete a.headers
+			a.headers = undefined
 		}
 
 		if (a.params) {
 			schema.params = a.params
-			delete a.params
+			a.params = undefined
 		}
 
 		if (a.query) {
 			schema.query = a.query
-			delete a.query
+			a.query = undefined
 		}
 
 		if (a.cookie) {
 			schema.cookie = a.cookie
-			delete a.cookie
+			a.cookie = undefined
 		}
 
 		if (a.response) {
 			schema.response = a.response
-			delete a.response
+			a.response = undefined
 		}
 
 		a.schema.push(schema)

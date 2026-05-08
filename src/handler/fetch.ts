@@ -23,7 +23,7 @@ function findRoute(
 		path = url.substring(
 			s,
 			// @ts-expect-error
-			(context.qi = url.indexOf('?', s) === -1 ? url.length : context.qi)
+			(context.qi = url.indexOf('?', s)) === -1 ? url.length : context.qi
 		)
 
 	const paths = map[request.method]
@@ -115,8 +115,10 @@ export function createFetchHandler(
 			path = url.substring(
 				s,
 				// @ts-expect-error
-				(context.qi =
-					url.indexOf('?', s) === -1 ? url.length : context.qi)
+				(context.qi = url.indexOf('?', s)) === -1
+					? url.length
+					: // @ts-expect-error
+						context.qi
 			)
 
 		const handler: CompiledHandler =

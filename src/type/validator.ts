@@ -56,8 +56,18 @@ export class TypeBoxValidator<
 	isAsync: boolean
 	hasDefault: boolean
 
-	constructor(schema: T, options?: ValidatorOptions, name?: string) {
+	constructor(
+		schema: T,
+		options?: ValidatorOptions,
+		name?: string,
+		isIntersectable?: boolean
+	) {
 		super()
+
+		if (isIntersectable)
+			schema = Type.Evaluate(
+				Type.Intersect([schema, ...options!.schemas!])
+			)
 
 		if (name && options?.models) {
 			const module = moduleCache.getOrInsertComputed(options.models, () =>

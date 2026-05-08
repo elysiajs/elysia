@@ -1,26 +1,26 @@
 import { Elysia, t } from '../src'
 
-const routes = new Elysia().beforeHandle('global', () => {
-	console.log(1)
-}).get('/0', () => {})
+const a = new Elysia()
+	.beforeHandle('global', () => {
+		console.log(1)
+	})
+	// This should log but not implemented yet
+	.guard('global', {
+		beforeHandle() {
+			console.log(2)
+		},
+		query: t.Object({
+			b: t.String()
+		})
+	})
 
-const app = new Elysia()
-	// .beforeHandle(() => {
-	// 	console.log(2)
-	// })
-	// .use(routes)
-	.get('/1', () => 'ok')
-	.get('/2', () => 'ok')
-	// .beforeHandle(() => {
-	// 	console.log(2)
-	// })
-	// .use(routes)
-	.get('/3', () => 'ok')
-	.get('/4', () => 'ok')
+const app = new Elysia().use(a).get('/', () => 'ok', {
+	query: t.Object({
+		a: t.String()
+	})
+})
 
-console.log(app)
-
-app.handler(0, true)
-app.handle('/1')
-	.then((res) => res.text())
+// should be 422
+app.handle('/?a=a&b=b')
+	.then((res) => res.status)
 	.then(console.log)

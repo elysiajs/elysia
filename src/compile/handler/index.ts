@@ -260,7 +260,9 @@ export function compileHandler(
 		? new RouteValidator(hook as any, {
 				models: root['~ext']?.models,
 				normalize: root['~config']?.normalize,
-				sanitize: root['~config']?.sanitize
+				sanitize: root['~config']?.sanitize,
+				// @ts-expect-error
+				schemas: hook?.schema
 			})
 		: undefined
 
