@@ -116,14 +116,6 @@ export class Elysia<
 
 	history?: InternalRoute[]
 
-	// Each entry points to a node in the plugin/global events chain
-	// when applied to `use`
-	//
-	// Chains are shared by reference across routes and
-	//
-	// use `flattenChain(this['~routeSnapshot'][i])` to reconstructs
-	// flat `Partial<AppHook>` at compile time
-	'~routeSnapshot'?: (ChainNode | undefined)[]
 
 	#compiled?: CompiledHandler[]
 	private '~derive'?: WeakSet<EventFn<'beforeHandle'>>
@@ -1326,21 +1318,46 @@ export class Elysia<
 			else this.#childrenHash ??= new Set(app.#childrenHash)
 		}
 
-		const absorbedStart = this.history?.length ?? 0
-
-		// Capture the chain head BEFORE this .use() extends it
-		//
-		// represents the downward set in scope on `this` at the moment
-		// `.use(app)` was called - exactly what the absorbed routes should
-		// pick up beyond what their own appHook / inherited chain already
-		// encodes. O(1) capture, no filter work.
+		// Capture parent's chain head BEFORE this `.use()` extends it.
+		// Routes absorbed here inherit exactly this — what was in scope on
+		// parent at the moment of `.use(app)`.
 		const preChain = this['~ext']?.hookChain
 
 		if (app.history) {
-			const snapshot = app['~routeSnapshot']
+			const history = (this.history ??= [])
 			for (let i = 0; i < app.history.length; i++) {
 				const route = app.history[i]
-				this.#save(route[0], route[1], route, snapshot?.[i] as any)
+				// Child's inherited chain from prior `.use()`s in `app`.
+				// Undefined = direct route on `app`: route owns its full
+				// context via `appHook`, no absorbing chain to merge.
+				const childChain = route[6]
+
+				// Combine child's inherited chain with parent's preChain.
+				// Either side can be undefined; both undefined → no clone.
+				// Both set → O(1) `combine` link, no flatten.
+				const inheritedChain: ChainNode | undefined =
+					childChain === undefined
+						? preChain
+						: preChain === undefined
+							? childChain
+							: { combine: childChain, over: preChain }
+
+				// Share the original tuple when nothing changed (cheap
+				// passthrough for "direct child route, parent has no chain
+				// yet"). Otherwise clone with `inheritedChain` at slot 6.
+				history.push(
+					inheritedChain === childChain
+						? route
+						: ([
+								route[0],
+								route[1],
+								route[2],
+								route[3],
+								route[4],
+								route[5],
+								inheritedChain
+							] as unknown as InternalRoute)
+				)
 			}
 		}
 
@@ -1364,8 +1381,8 @@ export class Elysia<
 				else ext.headers = Object.assign(nullObject(), headers)
 			}
 
-			if(models) {
-				if(ext.models) Object.assign(ext.models, models)
+			if (models) {
+				if (ext.models) Object.assign(ext.models, models)
 				else ext.models = Object.assign(nullObject(), models)
 			}
 
@@ -1428,21 +1445,8 @@ export class Elysia<
 			}
 		}
 
-		// Stamp newly-absorbed routes with their inheritance chain.
-		// - `inherited` (mirrored from child's table) is the route's
-		//   pre-existing chain from prior absorptions - left untouched
-		//   when no parent context to add.
-		// - `preChain` is parent's chain at the moment of this .use().
-		// - When both exist, link via a `combine` node - O(1), no flatten.
-		if (preChain && this.history) {
-			const snapshot = this['~routeSnapshot']!
-			for (let i = absorbedStart; i < this.history.length; i++) {
-				const inherited = snapshot[i]
-				snapshot[i] = inherited
-					? { combine: inherited, over: preChain }
-					: preChain
-			}
-		}
+		// Stamping is folded into the mirror loop above (timeline approach
+		// captures everything during the single pass).
 	}
 
 	#add(
@@ -1455,32 +1459,18 @@ export class Elysia<
 			path = joinPath(this['~config']?.prefix, path)
 
 		const appHook = this['~ext']?.hookChain
-		const history = appHook
+		const route = appHook
 			? [method, path, fn, this, hook, appHook]
 			: hook
 				? [method, path, fn, this, hook]
 				: [method, path, fn, this]
 
-		this.#save(method, path, history as unknown as InternalRoute)
+		// Direct route: tuple's `inheritedChain` slot stays absent — the
+		// route owns its full context via `appHook`, no absorbing chain
+		// to merge in `composeRootHook`.
+		;(this.history ??= []).push(route as unknown as InternalRoute)
 
 		return this
-	}
-
-	#save(
-		method: string | MethodMap[keyof MethodMap],
-		path: string,
-		route: InternalRoute,
-		rootAppHook?: Partial<AppHook>
-	) {
-		method = mapMethodBack(method)
-
-		if (this.history) {
-			this.history.push(route)
-			;(this['~routeSnapshot'] ??= []).push(rootAppHook as any)
-		} else {
-			this.history = [route]
-			this['~routeSnapshot'] = [rootAppHook as any]
-		}
 	}
 
 	model<const Name extends string, const Model extends AnySchema>(
@@ -1688,7 +1678,7 @@ export class Elysia<
 		const compiled = (this.#compiled ??= new Array(this.history!.length))
 
 		if (immediate) {
-			const handler = compileHandler(this.history![index], this, index)
+			const handler = compileHandler(this.history![index], this)
 
 			compiled![index] = handler
 			if (route) {
@@ -1706,7 +1696,7 @@ export class Elysia<
 		return (context) => {
 			if (this.#compiled?.[index]) return this.#compiled![index](context)
 
-			const handler = compileHandler(this.history![index], this, index)
+			const handler = compileHandler(this.history![index], this)
 			this.#compiled![index] = handler
 
 			if (route) {

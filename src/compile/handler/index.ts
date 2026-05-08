@@ -30,7 +30,8 @@ import {
 	isDownwardScope,
 	isLocalScope,
 	mergeHook,
-	nullObject
+	nullObject,
+	type ChainNode
 } from '../../utils'
 
 import type { Link } from '../types'
@@ -198,12 +199,9 @@ const createInlineHandler = (
 // walk runs once per route on first request.
 function composeRootHook(
 	root: AnyElysia,
-	index: number
+	inheritedChain: ChainNode | undefined
 ): Partial<AppHook> | undefined {
-	const inherited = flattenChain(
-		root['~routeSnapshot']?.[index],
-		isDownwardScope
-	)
+	const inherited = flattenChain(inheritedChain, isDownwardScope)
 	const locals = flattenChain(root['~ext']?.hookChain, isLocalScope)
 
 	if (!inherited) return locals
@@ -213,9 +211,8 @@ function composeRootHook(
 }
 
 export function compileHandler(
-	[, , handler, instance, localHook, appHook]: InternalRoute,
-	root: AnyElysia,
-	index: number
+	[, , handler, instance, localHook, appHook, inheritedChain]: InternalRoute,
+	root: AnyElysia
 ): CompiledHandler {
 	const adapter = root['~config']?.adapter ?? getDefaultAdapter()
 
@@ -226,7 +223,9 @@ export function compileHandler(
 	const hook = applyHook(
 		localHook,
 		flatAppHook as any,
-		instance !== root ? composeRootHook(root, index) : undefined
+		instance !== root
+			? composeRootHook(root, inheritedChain as any)
+			: undefined
 	)
 
 	const inference = sucrose(handler as any, hook as Sucrose.LifeCycle)

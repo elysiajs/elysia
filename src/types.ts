@@ -643,7 +643,12 @@ export type InternalRoute = readonly [
 	hook: InputHook | undefined,
 	// Chain node ref captured at registration time on the owning instance.
 	// `flattenChain(appHook)` materialises the route's compile-time hooks.
-	appHook: import('./utils').ChainNode | undefined
+	appHook: import('./utils').ChainNode | undefined,
+	// Inheritance chain captured on the absorbing instance at `.use()`
+	// time. Set during `#use` mirroring (via tuple clone) so the same
+	// route can carry different chains in different parents.
+	// Undefined / absent = direct route: no absorbing-chain context.
+	inheritedChain?: import('./utils').ChainNode
 ]
 
 export type ErrorHandler<
