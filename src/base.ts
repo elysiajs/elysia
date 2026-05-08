@@ -103,6 +103,17 @@ export class Elysia<
 	#plugin?: WeakSet<any>
 	#global?: WeakSet<any>
 
+	// Async-plugin chain: `#ready` aggregates pending async `.use()` calls
+	// so `app.modules` can be awaited. Sync chained calls (.get/.use/etc.)
+	// run eagerly regardless — async plugin work happens in the background
+	// and routes from a resolved plugin land in `history` whenever its
+	// promise settles, in wall-clock order. `#pending` counts in-flight
+	// async uses; `#error` captures the first failure surfaced via
+	// `app.modules`, reset on a fresh chain start.
+	#ready?: Promise<void>
+	#pending = 0
+	#error?: unknown
+
 	#hash?: number
 	#childrenHash?: Set<number>
 
@@ -1353,20 +1364,27 @@ export class Elysia<
 		return input
 	}
 
-	use(app: AnyElysia): this {
+	use(app: any): this {
 		if (!app) return this
+
+		if (typeof app === 'function') {
+			const result = app(this)
+
+			if (result && typeof result.then === 'function')
+				return this.#useAsync(result)
+
+			return this
+		}
+
+		if (typeof app.then === 'function') return this.#useAsync(app)
 
 		if (Array.isArray(app)) {
 			for (const plugin of app) this.#use(plugin)
 			return this
 		}
 
-		if (typeof app === 'function') {
-			// @ts-expect-error
-			return app(this)
-		}
-
 		this.#use(app)
+
 		return this
 	}
 
@@ -1535,6 +1553,82 @@ export class Elysia<
 				this.#pushHook(event)
 			}
 		}
+	}
+
+
+	get modules(): Promise<void> {
+		const ready = this.#ready
+		if (!ready) {
+			if (this.#error !== undefined) return Promise.reject(this.#error)
+			return Promise.resolve()
+		}
+		return ready.then(() => {
+			if (this.#error !== undefined) throw this.#error
+		})
+	}
+
+	get pending(): boolean {
+		return this.#pending > 0
+	}
+
+	#useAsync(promise: Promise<any>): this {
+		if (!this.#ready) this.#error = undefined
+
+		this.#pending++
+
+		const base = this.#ready ?? Promise.resolve()
+
+		const resolved = base
+			.then(() => promise)
+			.then((value) => {
+				const plugin =
+					value &&
+					typeof value === 'object' &&
+					'default' in value &&
+					value.default
+						? value.default
+						: value
+
+				if (plugin) {
+					try {
+						this.#use(plugin)
+					} catch (err) {
+						this.#error ??= err
+						console.error(err)
+					}
+				}
+			})
+			.finally(() => {
+				this.#pending--
+			})
+
+		// `next` must reference the same promise we assign to `#ready` so the
+		// drain identity check matches when the chain settles
+		// using the pre-.finally promise as the sentinel never equals `#ready`.
+		let next: Promise<void>
+		next = resolved
+			.then(
+				() => {},
+				(err) => {
+					this.#error ??= err
+					console.error(err)
+				}
+			)
+			.finally(() => this.#tryDrain(next))
+
+		this.#ready = next
+
+		return this
+	}
+
+	#tryDrain(sentinel: Promise<void>) {
+		if (this.#pending > 0) return
+		if (this.#ready !== sentinel) return
+
+		this.#ready = undefined
+		this.#fetchFn = undefined
+
+		this.#buildRouter()
 	}
 
 	#add(
