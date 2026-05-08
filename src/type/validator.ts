@@ -40,7 +40,11 @@ const moduleCache = new WeakMap<
 
 const isAsyncPredicate = (v: unknown) =>
 	Array.isArray(v)
-		? v.some((x) => isAsyncFunction(x.refine) || x.refine === isBlob)
+		? v.some((x) =>
+				typeof x.refine === 'function'
+					? isAsyncFunction(x.refine) || x.refine === isBlob
+					: false
+			)
 		: false
 
 export class TypeBoxValidator<
@@ -67,8 +71,10 @@ export class TypeBoxValidator<
 
 		this.tb = Compile(this.schema as TSchema)
 		this.hasCodec = HasCodec(this.schema)
-		// @ts-expect-error private property
-		this.isAsync = this.tb.build.external.variables.some(isAsyncPredicate)
+		this.isAsync =
+			// @ts-expect-error private property
+			this.tb.buildResult.external.variables.some(isAsyncPredicate) ??
+			false
 		this.hasDefault = hasProperty('default', this.schema as any)
 
 		try {

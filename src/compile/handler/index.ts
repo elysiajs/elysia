@@ -95,7 +95,7 @@ function parse(
 	link: Link
 ) {
 	const hasFile = // @ts-expect-error
-		bodyVali?.tb?.build.external.variables.some(hasFileTbPredicate)
+		bodyVali?.tb?.buildResult.external.variables.some(hasFileTbPredicate)
 
 	if (
 		typeof parsers === 'string' ||
@@ -259,7 +259,7 @@ export function compileHandler(
 	const vali = new RouteValidator(
 		hook as any,
 		validatorOptionsCache.getOrInsertComputed(root, () => ({
-			models: root['~models'],
+			models: root['~ext']?.models,
 			normalize: root['~config']?.normalize,
 			sanitize: root['~config']?.sanitize
 		}))

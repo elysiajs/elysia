@@ -111,9 +111,8 @@ export class Elysia<
 		// Linked list of hook deltas. Each `#on` and each `#pushHook` event
 		// prepends one node - O(1) extension, never mutates older nodes
 		hookChain?: ChainNode
+		models?: Record<keyof any, AnySchema>
 	}
-
-	'~models'?: Record<keyof any, AnySchema>
 
 	history?: InternalRoute[]
 
@@ -463,7 +462,7 @@ export class Elysia<
 	}
 
 	#decorate(as: ContextAppendType, name: string, value: unknown): this {
-		const ext = (this['~ext'] ??= nullObject())
+		const ext = this.#ext
 		const fresh = !ext.decorator
 		const decorator = (ext.decorator ??= nullObject()) as Record<
 			string,
@@ -793,7 +792,7 @@ export class Elysia<
 	}
 
 	#state(as: ContextAppendType, name: string, value: unknown): this {
-		const ext = (this['~ext'] ??= nullObject())
+		const ext = this.#ext
 		const fresh = !ext.store
 		const store = (ext.store ??= nullObject()) as Record<string, unknown>
 
@@ -835,7 +834,7 @@ export class Elysia<
 	}
 
 	headers(headers: Record<string, string>) {
-		const ext = (this['~ext'] ??= nullObject())
+		const ext = this.#ext
 
 		if (ext.headers) Object.assign(ext!.headers, headers)
 		else ext.headers = headers
@@ -851,7 +850,7 @@ export class Elysia<
 		// @ts-expect-error Remove in 2.1
 		if (scope === 'scoped') scope = 'plugin'
 
-		const ext = (this['~ext'] ??= nullObject())
+		const ext = this.#ext
 
 		const added: Partial<AppHook> = nullObject()
 		;(added as any)[type] = fn
@@ -1117,7 +1116,7 @@ export class Elysia<
 	}
 
 	guard(hook: Partial<InputHook & Macro>) {
-		const ext = (this['~ext'] ??= nullObject())
+		const ext = this.#ext
 
 		this['~applyMacro'](hookToGuard(hook as any))
 
@@ -1135,6 +1134,10 @@ export class Elysia<
 		this.#pushHook(hook as Partial<AppHook>)
 
 		return this
+	}
+
+	get #ext(): NonNullable<this['~ext']> {
+		return (this['~ext'] ??= nullObject())
 	}
 
 	#pushHook(_hook: Partial<AppHook>): this {
@@ -1179,7 +1182,7 @@ export class Elysia<
 			hook = promoted
 		}
 
-		const ext = (this['~ext'] ??= nullObject())
+		const ext = this.#ext
 		ext.hookChain = { added: hook, parent: ext.hookChain }
 
 		return this
@@ -1189,7 +1192,7 @@ export class Elysia<
 		if (typeof macroOrName === 'string' && !macro)
 			throw new Error('Macro function is required')
 
-		const ext = (this['~ext'] ??= nullObject())
+		const ext = this.#ext
 		const m = (ext.macro ??= nullObject())
 
 		if (typeof macroOrName === 'string') m[macroOrName] = macro!
@@ -1342,7 +1345,7 @@ export class Elysia<
 		}
 
 		if (app['~ext']) {
-			const { decorator, store, headers, hookChain } = app['~ext']
+			const { decorator, store, headers, models, hookChain } = app['~ext']
 			const ext: NonNullable<(typeof this)['~ext']> = (this['~ext'] ??=
 				nullObject())
 
@@ -1359,6 +1362,11 @@ export class Elysia<
 			if (headers) {
 				if (ext.headers) Object.assign(ext.headers, headers)
 				else ext.headers = Object.assign(nullObject(), headers)
+			}
+
+			if(models) {
+				if(ext.models) Object.assign(ext.models, models)
+				else ext.models = Object.assign(nullObject(), models)
 			}
 
 			if (app.#plugin || app.#global) {
@@ -1545,12 +1553,12 @@ export class Elysia<
 		name: string | Record<string, AnySchema> | Function,
 		model?: AnySchema
 	): AnyElysia {
+		const models = (this.#ext.models ??= nullObject())
+
 		switch (typeof name) {
 			case 'object':
 				const entries = Object.entries(name)
 				if (entries.length) {
-					const models = (this['~models'] ??= nullObject())
-
 					for (let [key, value] of entries) {
 						if (key in models) continue
 
@@ -1569,15 +1577,12 @@ export class Elysia<
 				return this
 
 			case 'function':
-				this['~models'] = name(this['~models'] ?? nullObject())
+				this['~ext'] = name(models ?? nullObject())
 
 				return this
 
 			case 'string':
-				if (model) {
-					this['~models'] ??= nullObject()
-					this['~models']![name] = model
-				}
+				models[name] = model!
 
 				return this
 		}
@@ -1593,27 +1598,51 @@ export class Elysia<
 		return this.#add(MethodMap.GET, path, fn, hook)
 	}
 
-	post<Hook extends Partial<InputHook>>(path: string, fn: Function, hook?: Hook) {
+	post<Hook extends Partial<InputHook>>(
+		path: string,
+		fn: Function,
+		hook?: Hook
+	) {
 		return this.#add(MethodMap.POST, path, fn, hook)
 	}
 
-	delete<Hook extends Partial<InputHook>>(path: string, fn: Function, hook?: Hook) {
+	delete<Hook extends Partial<InputHook>>(
+		path: string,
+		fn: Function,
+		hook?: Hook
+	) {
 		return this.#add(MethodMap.DELETE, path, fn, hook)
 	}
 
-	put<Hook extends Partial<InputHook>>(path: string, fn: Function, hook?: Hook) {
+	put<Hook extends Partial<InputHook>>(
+		path: string,
+		fn: Function,
+		hook?: Hook
+	) {
 		return this.#add(MethodMap.PUT, path, fn, hook)
 	}
 
-	patch<Hook extends Partial<InputHook>>(path: string, fn: Function, hook?: Hook) {
+	patch<Hook extends Partial<InputHook>>(
+		path: string,
+		fn: Function,
+		hook?: Hook
+	) {
 		return this.#add(MethodMap.PATCH, path, fn, hook)
 	}
 
-	options<Hook extends Partial<InputHook>>(path: string, fn: Function, hook?: Hook) {
+	options<Hook extends Partial<InputHook>>(
+		path: string,
+		fn: Function,
+		hook?: Hook
+	) {
 		return this.#add(MethodMap.OPTIONS, path, fn, hook)
 	}
 
-	head<Hook extends Partial<InputHook>>(path: string, fn: Function, hook?: Hook) {
+	head<Hook extends Partial<InputHook>>(
+		path: string,
+		fn: Function,
+		hook?: Hook
+	) {
 		return this.#add(MethodMap.HEAD, path, fn, hook)
 	}
 

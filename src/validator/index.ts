@@ -100,7 +100,11 @@ export abstract class Validator {
 			else tbCache = new TypeBoxValidatorCache()
 
 			// @ts-expect-error
-			const validator = new TypeBoxValidator(schema, options, name) as any
+			const validator = new TypeBoxValidator(
+				schema,
+				options,
+				typeof name === 'string' ? name : undefined
+			) as any
 			tbCache!.set(schema, options?.coerces, validator)
 			return validator
 		}
@@ -119,6 +123,8 @@ export abstract class Validator {
 			| Record<number, TSchema | StandardSchemaV1Like>,
 		options?: ResponseValidatorOptions
 	): Record<number, Validator> {
+		schema = Validator.reference(schema, options?.models)
+
 		if ('~kind' in schema || '~elyAcl' in schema || '~standard' in schema)
 			return {
 				200: Validator.create(
