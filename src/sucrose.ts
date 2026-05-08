@@ -41,9 +41,11 @@ export namespace Sucrose {
  * separateFunction('async ({ hello }) => { return hello }') // => ['({ hello })', '{ return hello }']
  * ```
  */
-function separateFunction(
-	code: string
-): [string, string, { isArrowReturn: boolean }] {
+function separateFunction(code: string): [
+	string,
+	string
+	// isArrowReturn: boolean
+] {
 	// Remove async keyword without removing space (both minify and non-minify)
 	if (code.startsWith('async')) code = code.slice(5)
 	code = code.trimStart()
@@ -65,10 +67,8 @@ function separateFunction(
 
 			return [
 				code.slice(1, bracketEndIndex),
-				body,
-				{
-					isArrowReturn: body.charCodeAt(0) !== 123
-				}
+				body
+				// body.charCodeAt(0) !== 123
 			]
 		}
 	}
@@ -83,10 +83,8 @@ function separateFunction(
 
 			return [
 				code.slice(0, index),
-				body,
-				{
-					isArrowReturn: body.charCodeAt(0) !== 123
-				}
+				body
+				// body.charCodeAt(0) !== 123
 			]
 		}
 	}
@@ -98,10 +96,8 @@ function separateFunction(
 
 		return [
 			code.slice(index + 1, end),
-			code.slice(end + 2),
-			{
-				isArrowReturn: false
-			}
+			code.slice(end + 2)
+			// false
 		]
 	}
 
@@ -117,17 +113,19 @@ function separateFunction(
 
 		return [
 			parameter.slice(start, end),
-			'{' + body,
-			{
-				isArrowReturn: false
-			}
+			'{' + body
+			// false
 		]
 	}
 
 	// Unknown case
 	const x = code.split('\n', 2)
 
-	return [x[0], x[1], { isArrowReturn: false }]
+	return [
+		x[0],
+		x[1]
+		// false
+	]
 }
 
 /**
@@ -676,7 +674,7 @@ function pushParse(target: unknown[], array: unknown[]) {
 export function sucrose(
 	handler: Handler | undefined,
 	lifeCycle: Sucrose.LifeCycle | undefined,
-	inference: Sucrose.Inference = defaultSucrose(),
+	inference?: Sucrose.Inference,
 	settings?: Sucrose.Settings
 ): Sucrose.Inference {
 	const events = <Handler[]>[]
@@ -694,6 +692,8 @@ export function sucrose(
 			push(events, lifeCycle.afterResponse)
 	}
 
+	let needGc = true
+
 	for (let i = 0; i < events.length; i++) {
 		const event = events[i]
 		if (!event) continue
@@ -702,15 +702,22 @@ export function sucrose(
 		const key = fnv1a(content)
 		const cachedInference = caches[key]
 		if (cachedInference) {
-			inference = mergeInference(inference, cachedInference)
+			inference = inference
+				? mergeInference(inference, cachedInference)
+				: cachedInference
 			continue
 		}
+
+		inference ??= defaultSucrose()
 
 		// If no sucrose usage is found in 4:55 minutes
 		// it's likely that server is either idle or
 		// no new compilation is happening
 		// Clear the cache to free up memory
-		clearSucroseCache(settings?.gcTime)
+		if (needGc) {
+			needGc = false
+			clearSucroseCache(settings?.gcTime)
+		}
 
 		let fnInference: Sucrose.Inference | undefined = defaultSucrose()
 		const [parameter, body] = separateFunction(content)
@@ -725,8 +732,9 @@ export function sucrose(
 			let code = body
 
 			if (
-				code.charCodeAt(0) === 123 &&
-				code.charCodeAt(body.length - 1) === 125
+				code.charCodeAt(0) === 123
+				// start with { is implied to end with }
+				// && code.charCodeAt(body.length - 1) === 125
 			)
 				code = code.slice(1, -1).trim()
 
@@ -735,7 +743,7 @@ export function sucrose(
 
 			if (
 				!fnInference.query &&
-				code.includes('return ' + mainParameter + '.query')
+				code.includes(`return ${mainParameter}.query`)
 			)
 				fnInference.query = true
 		}

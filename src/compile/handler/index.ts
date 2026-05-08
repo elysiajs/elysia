@@ -20,7 +20,7 @@ import {
 import { isBun } from '../../universal/constants'
 
 import { parseQueryFromURL } from '../../parse-query'
-import { getDefaultAdapter } from '../../adapter/constants'
+import { defaultAdapter } from '../../adapter/constants'
 
 import { mapAfterHandle, mapBeforeHandle, mapTransform } from './utils'
 import {
@@ -85,8 +85,11 @@ function builtinParser(
 	}
 }
 
-const hasFileTbPredicate = (v) =>
-	Array.isArray(v) ? v.some((x) => x.refine === isBlob) : false
+const isRefineBlob = (v: unknown): v is { refine: unknown } =>
+	// @ts-expect-error
+	v!.refine === isBlob
+const hasFileTbPredicate = (v: unknown) =>
+	Array.isArray(v) ? v.some(isRefineBlob) : false
 
 function parse(
 	adapter: ElysiaAdapter['parse'],
@@ -214,7 +217,7 @@ export function compileHandler(
 	[, , handler, instance, localHook, appHook, inheritedChain]: InternalRoute,
 	root: AnyElysia
 ): CompiledHandler {
-	const adapter = root['~config']?.adapter ?? getDefaultAdapter()
+	const adapter = root['~config']?.adapter ?? defaultAdapter
 
 	// `appHook` is a chain ref captured on the route's owning instance at
 	// registration time; flatten with no filter (locals on the owning instance
@@ -253,55 +256,58 @@ export function compileHandler(
 	const hasBody =
 		!!hook?.body || (inference.body && hook?.parse?.[0] !== 'none')
 
-	const vali = new RouteValidator(hook as any, {
-		models: root['~ext']?.models,
-		normalize: root['~config']?.normalize,
-		sanitize: root['~config']?.sanitize
-	})
+	const vali = hook
+		? new RouteValidator(hook as any, {
+				models: root['~ext']?.models,
+				normalize: root['~config']?.normalize,
+				sanitize: root['~config']?.sanitize
+			})
+		: undefined
 
-	const bodyValiIsAsync = hasBody && isAsyncValidator(vali.body)
-	const headersValiIsAsync = vali.headers && isAsyncValidator(vali.headers)
-	const paramsValiIsAsync = vali.params && isAsyncValidator(vali.params)
-	const queryValiIsAsync = vali.query && isAsyncValidator(vali.query)
-	const cookieValidIsAsync = vali.cookie && isAsyncValidator(vali.cookie)
+	const bodyValiIsAsync = hasBody && isAsyncValidator(vali?.body)
+	const headersValiIsAsync = vali?.headers && isAsyncValidator(vali?.headers)
+	const paramsValiIsAsync = vali?.params && isAsyncValidator(vali?.params)
+	const queryValiIsAsync = vali?.query && isAsyncValidator(vali?.query)
+	const cookieValidIsAsync = vali?.cookie && isAsyncValidator(vali?.cookie)
 
 	const isAsync =
 		hasBody ||
 		isAsyncFunction(handler as Function) ||
-		!!hook?.parse?.length ||
-		!!isAsyncLifecycle(hook?.afterHandle) ||
-		!!isAsyncLifecycle(hook?.beforeHandle) ||
-		!!isAsyncLifecycle(hook?.transform) ||
-		!!isAsyncLifecycle(hook?.mapResponse) ||
-		bodyValiIsAsync ||
-		headersValiIsAsync ||
-		paramsValiIsAsync ||
-		queryValiIsAsync ||
-		cookieValidIsAsync ||
-		(vali.response &&
-			Object.values(
-				vali.response as Record<number, TypeBoxValidator>
-			).find((x) => ('tb' in x ? x.isAsync : true)))
+		(hook &&
+			(!!hook?.parse?.length ||
+				!!isAsyncLifecycle(hook?.afterHandle) ||
+				!!isAsyncLifecycle(hook?.beforeHandle) ||
+				!!isAsyncLifecycle(hook?.transform) ||
+				!!isAsyncLifecycle(hook?.mapResponse) ||
+				bodyValiIsAsync ||
+				headersValiIsAsync ||
+				paramsValiIsAsync ||
+				queryValiIsAsync ||
+				cookieValidIsAsync ||
+				(vali?.response &&
+					Object.values(
+						vali.response as Record<number, TypeBoxValidator>
+					).find((x) => ('tb' in x ? x.isAsync : true)))))
 
 	// va,rm,rc,re,pa,pf,pj,pt,pu
 	let code = `${isAsync ? 'async ' : ''}function route(c){\n`
 
 	if (
-		hook?.beforeHandle ||
-		hook?.afterHandle ||
-		hook?.mapResponse ||
-		hook?.afterResponse
-	) {
+		hook &&
+		(hook.beforeHandle ||
+			hook.afterHandle ||
+			hook.mapResponse ||
+			hook.afterResponse)
+	)
 		code += 'let tmp\n'
-	}
 
 	// ? defaultHeaders doesn't imply that user will use headers in handler
 	const hasHeaders =
 		inference.headers ||
-		// !!vali.headers ||
+		!!vali?.headers ||
 		(inference.body && typeof hook?.parse !== 'string')
 
-	if (inference.query || vali.query) {
+	if (inference.query || vali?.query) {
 		code += `c.query=pq(c.request.url,c.qi)\n`
 		link(parseQueryFromURL, 'pq')
 	}
@@ -315,30 +321,30 @@ export function compileHandler(
 		code += mapTransform(hook.transform)
 	}
 
-	if (vali.headers) {
+	if (vali?.headers) {
 		link(vali, 'va')
 		code += `c.headers=${headersValiIsAsync ? 'await ' : ''}va.headers.From(c.headers)\n`
 	}
 
-	if (vali.params) {
+	if (vali?.params) {
 		link(vali, 'va')
 		code += `c.params=${paramsValiIsAsync ? 'await ' : ''}va.params.From(c.params)\n`
 	}
 
-	if (vali.query) {
+	if (vali?.query) {
 		link(vali, 'va')
 		code += `c.query=${queryValiIsAsync ? 'await ' : ''}va.query.From(c.query)\n`
 	}
 
-	if (vali.cookie) {
+	if (vali?.cookie) {
 		link(vali, 'va')
 		code += `c.cookie=${cookieValidIsAsync ? 'await ' : ''}va.cookie.From(c.cookie)\n`
 	}
 
 	if (hasBody) {
-		code += parse(adapter.parse, hook?.parse, vali.body, hasHeaders, link)
+		code += parse(adapter.parse, hook?.parse, vali?.body, hasHeaders, link)
 
-		if (vali.body) {
+		if (vali?.body) {
 			link(vali, 'va')
 			code += `c.body=${bodyValiIsAsync ? 'await ' : ''}va.body.From(c.body)\n`
 		}

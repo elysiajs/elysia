@@ -4,7 +4,7 @@ import { decodeComponent } from 'deuri'
 import { createFetchHandler } from './handler'
 import { compileHandler } from './compile'
 
-import { ListenCallback, Serve } from './universal'
+import { ListenCallback, Serve, Server } from './universal'
 import { isBun } from './universal/constants'
 
 import { isDynamicRegex, MethodMap } from './constants'
@@ -115,6 +115,7 @@ export class Elysia<
 	}
 
 	history?: InternalRoute[]
+	server?: Server
 
 	#compiled?: CompiledHandler[]
 	private '~derive'?: WeakSet<EventFn<'beforeHandle'>>

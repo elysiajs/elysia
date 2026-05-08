@@ -1,4 +1,4 @@
-import { getDefaultAdapter } from '../adapter/constants'
+import { defaultAdapter } from '../adapter/constants'
 
 import type { AnyElysia } from '../base'
 import { getAsyncIndexes } from './utils'
@@ -57,7 +57,7 @@ export function createFetchHandler(
 
 	const handleError = createErrorHandler(
 		hook?.error,
-		(app['~config']?.adapter ?? getDefaultAdapter()).response.map
+		(app['~config']?.adapter ?? defaultAdapter).response.map
 	)
 
 	if (hook?.request) {
