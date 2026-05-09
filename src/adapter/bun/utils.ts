@@ -76,7 +76,15 @@ export function createFetchHandler(
 		}
 	}
 
-	return (request: Request) => {
+	return createPlainHandler(handler, handleError, Context)
+}
+
+function createPlainHandler(
+	handler: CompiledHandler,
+	handleError: (context: Context, error: Error) => unknown,
+	Context: new (request: Request) => Context
+) {
+	return function (request: Request) {
 		const context = new Context(request)
 
 		try {

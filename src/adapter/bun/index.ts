@@ -2,7 +2,6 @@ import { createAdapter } from '..'
 import { WebStandardAdapter } from '../web-standard'
 import { mapStaticHandler } from './handler'
 
-import { createRouteMap } from './utils'
 import { flushMemory } from '../../memory'
 
 import type { AnyElysia } from '../../base'
@@ -16,43 +15,24 @@ export const BunAdapter = createAdapter({
 		static: mapStaticHandler
 	},
 	listen(app, options, callback) {
-		const [routes, fetch] = createRouteMap(app as AnyElysia)
+		// No meaningful performance gain tbh 1-2% but use 2.5x more memory
+		// const [routes, fetch] = createRouteMap(app as AnyElysia)
 
 		const serveOptions =
 			typeof options === 'object'
 				? Object.assign(options, {
-						routes,
-						fetch,
+						fetch: app.fetch,
 						reusePort: true
 					} as any)
 				: {
 						port: +options,
-						routes,
-						fetch,
+						fetch: app.fetch,
 						reusePort: true
 					}
 
 		const server = (app.server = Bun.serve(serveOptions))
 
-		if ((app as AnyElysia).pending) {
-			;(app as AnyElysia).modules
-				.catch((err) => {
-					console.error(err)
-				})
-				.then(() => {
-					const [nextRoutes, nextFetch] = createRouteMap(
-						app as AnyElysia
-					)
-
-					app.server?.reload({
-						...serveOptions,
-						fetch: nextFetch,
-						routes: nextRoutes
-					} as any)
-
-					flushMemory(app)
-				})
-		} else flushMemory(app)
+		flushMemory(app)
 
 		callback?.(server)
 	}
