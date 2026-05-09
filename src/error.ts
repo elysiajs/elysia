@@ -15,6 +15,17 @@ export class ElysiaError<
 	}
 }
 
+/**
+ * Wrap a string into a TypeBox `error` callback that overrides the default
+ * validation message. Use as `t.Number({ error: validationDetail('x must be a number') })`.
+ */
+export const validationDetail =
+	<T>(message: T) =>
+	(error: any) => ({
+		...error,
+		message
+	})
+
 export class InternalServerError extends ElysiaError {
 	code = 'INTERNAL_SERVER_ERROR'
 	status = 500
@@ -43,6 +54,66 @@ export class ParseError extends ElysiaError {
 
 	constructor(cause?: Error) {
 		super('Bad Request', cause)
+	}
+}
+
+// NormalizeTypeBox `TLocalizedValidationError` and Standard Schema issue
+const normalizeValidationIssue = (e: any, value: unknown) => {
+	if (!e) return e
+
+	const path = Array.isArray(e.path)
+		? e.path.length
+			? e.path.join('.')
+			: 'root'
+		: typeof e.path === 'string'
+			? e.path.replace(/^\//, '').replace(/\//g, '.') || 'root'
+			: 'root'
+
+	return {
+		path,
+		message: e.message ?? '',
+		summary: e.summary ?? e.problem ?? e.message ?? '',
+		schemaPath: e.schemaPath,
+		params: e.params,
+		value
+	}
+}
+
+export class ValidationError extends ElysiaError {
+	code = 'VALIDATION'
+	status = 422
+
+	constructor(
+		public type: string | undefined,
+		public value: unknown,
+		public errors: any[]
+	) {
+		super(
+			JSON.stringify(
+				{
+					type: 'validation',
+					on: type ?? 'unknown',
+					errors
+				},
+				null,
+				2
+			)
+		)
+	}
+
+	get all() {
+		return (this.errors ?? [])
+			.filter((e) => e)
+			.map((e) => normalizeValidationIssue(e, this.value))
+	}
+
+	detail(message: unknown) {
+		return {
+			type: 'validation',
+			on: this.type,
+			message,
+			errors: this.all
+		}
 	}
 }
 
@@ -86,9 +157,7 @@ export class ElysiaStatus<
 
 export const status = <
 	const Code extends number | keyof StatusMap,
-	const T = Code extends keyof StatusMapBack
-		? StatusMapBack[Code]
-		: Code
+	const T = Code extends keyof StatusMapBack ? StatusMapBack[Code] : Code
 >(
 	code: Code,
 	response?: T

@@ -181,7 +181,11 @@ function appendInto(
 		if (!v) continue
 
 		const raw = Array.isArray(v) ? v : [v]
-		const arr = keep ? raw.filter((fn) => keep(fnScope.get(fn))) : raw
+
+		const arr =
+			keep && key !== 'schema'
+				? raw.filter((fn) => keep(fnScope.get(fn)))
+				: raw
 
 		if (!arr.length) continue
 		const existing = (target as any)[key]
@@ -575,6 +579,8 @@ export function cloneHook<T extends Partial<InputHook> | Partial<AppHook>>(
 }
 
 export function joinPath(base: string, path: string) {
+	if (!path) return base
+
 	const baseEndsWithSlash = base.charCodeAt(base.length - 1) === 47
 	const pathStartsWithSlash = path.charCodeAt(0) === 47
 

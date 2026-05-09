@@ -305,7 +305,12 @@ export const coerceQuery = () =>
 			{
 				root: false
 			}
-		]
+		],
+		// Query strings carry primitive values as strings; coerce
+		// `t.Number()` / `t.Boolean()` at root so e.g.
+		// `?limit=10&playing=true` validates against `t.Object({ limit:
+		// t.Number(), playing: t.Boolean() })`.
+		...coerceRoot()
 	])
 
 let _coerceFormData: CoerceOption[]

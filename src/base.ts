@@ -59,6 +59,7 @@ import type {
 	OptionalHandler,
 	ErrorHandler,
 	AfterHandler,
+	BodyHandler,
 	MergeSchema,
 	GuardLocalHook,
 	JoinPath,
@@ -145,6 +146,9 @@ export class Elysia<
 		// Linked list of hook deltas, add when `#on`/`#pushHook` event
 		hookChain?: ChainNode
 		models?: Record<keyof any, AnySchema>
+		// Named body parsers registered via `parser(name, fn)` and looked up
+		// by `onParse(name)` / route-level `parse: ['name', ...]`.
+		parser?: Record<string, BodyHandler<any, any>>
 	}
 
 	history?: InternalRoute[]
@@ -913,6 +917,65 @@ export class Elysia<
 			: this.#on(type, scopeOrFn as EventFn<'beforeHandle'>)
 	}
 
+	onRequest(fn: MaybeArray<EventFn<'request'>>): this
+	onRequest(
+		scope: { as: 'local' },
+		fn: MaybeArray<EventFn<'request'>>
+	): this
+	onRequest(
+		scope: { as: 'scoped' },
+		fn: MaybeArray<EventFn<'request'>>
+	): this
+	onRequest(
+		scope: { as: 'global' },
+		fn: MaybeArray<EventFn<'request'>>
+	): this
+	onRequest(
+		scopeOrFn:
+			| { as: LegacyEventScope }
+			| MaybeArray<EventFn<'request'>>,
+		fn?: MaybeArray<EventFn<'request'>>
+	): this {
+		return this.#onBranch('request', scopeOrFn as any, fn as any)
+	}
+
+	onParse(fn: MaybeArray<EventFn<'parse'>>): this
+	onParse(name: string): this
+	onParse(scope: { as: 'local' }, fn: MaybeArray<EventFn<'parse'>>): this
+	onParse(scope: { as: 'scoped' }, fn: MaybeArray<EventFn<'parse'>>): this
+	onParse(scope: { as: 'global' }, fn: MaybeArray<EventFn<'parse'>>): this
+	onParse(
+		scopeOrFnOrName:
+			| { as: LegacyEventScope }
+			| MaybeArray<EventFn<'parse'>>
+			| string,
+		fn?: MaybeArray<EventFn<'parse'>>
+	): this {
+		// Single-arg string: look up named parser, register it as a parse hook.
+		// If unknown, register the string itself — `compile/handler` treats
+		// known content-type strings as builtin parsers.
+		if (fn === undefined && typeof scopeOrFnOrName === 'string') {
+			const named = this['~ext']?.parser?.[scopeOrFnOrName]
+			return this.#onBranch(
+				'parse',
+				(named ?? scopeOrFnOrName) as any
+			)
+		}
+
+		return this.#onBranch('parse', scopeOrFnOrName as any, fn as any)
+	}
+
+	parser<const Name extends string>(
+		name: Name,
+		fn: BodyHandler<any, any>
+	): this {
+		const ext = this.#ext
+		const parsers = (ext.parser ??= nullObject())
+		parsers[name] = fn
+
+		return this
+	}
+
 	// Remove in 2.1
 	onTransform(fn: EventFn<'transform'>): this
 	onTransform(scope: { as: 'local' }, fn: EventFn<'transform'>): this
@@ -1361,7 +1424,81 @@ export class Elysia<
 		Volatile
 	>
 
-	group() {}
+	group() {
+		const prefix = arguments[0] as string
+		const schemaOrRun = arguments[1] as
+			| Partial<AnyLocalHook>
+			| ((group: AnyElysia) => AnyElysia)
+		const run = arguments[2] as
+			| ((group: AnyElysia) => AnyElysia)
+			| undefined
+
+		const isSchema = typeof schemaOrRun === 'object'
+		const callback = (isSchema ? run! : schemaOrRun) as (
+			group: AnyElysia
+		) => AnyElysia
+
+		// Compose prefix from parent's config.prefix + group prefix.
+		// Skip joinPath when either side is empty so we don't get a
+		// trailing slash (e.g. joinPath('/api', '') would yield '/api/').
+		const parentPrefix = this['~config']?.prefix ?? ''
+		const childPrefix = parentPrefix
+			? prefix
+				? joinPath(parentPrefix, prefix)
+				: parentPrefix
+			: prefix
+
+		// Drop name/seed so the child's hash doesn't collide with parent's
+		// in #childrenHash and short-circuit the merge in #use().
+		const child = new Elysia({
+			...this['~config'],
+			name: undefined,
+			seed: undefined,
+			prefix: childPrefix as any
+		} as any) as AnyElysia
+
+		// Seed child's ~ext from parent so callback introspection sees
+		// parent state. hookChain is intentionally NOT copied — #use()
+		// composes child's chain over parent's via { combine, over }.
+		const src = this['~ext']
+		if (src) {
+			const ext = (child['~ext'] ??= nullObject())
+			if (src.decorator)
+				ext.decorator = Object.assign(nullObject(), src.decorator)
+			if (src.store)
+				ext.store = Object.assign(nullObject(), src.store)
+			if (src.headers)
+				ext.headers = Object.assign(nullObject(), src.headers)
+			if (src.models)
+				ext.models = Object.assign(nullObject(), src.models)
+			if (src.macro)
+				ext.macro = Object.assign(nullObject(), src.macro)
+			if (src.parser)
+				ext.parser = Object.assign(nullObject(), src.parser)
+		}
+
+		// Apply schema as a local guard before running the callback so
+		// every route registered inside inherits it via the hookChain.
+		if (isSchema) child.guard(schemaOrRun as Partial<AnyLocalHook>)
+
+		callback(child)
+
+		// `onRequest` / `onParse` are request-level: they fire before route
+		// matching in `fetch.ts`, which only walks the root app's hookChain.
+		// Hoist child-registered request/parse hooks onto the parent so
+		// `app.group(prefix, app => app.onRequest(...))` continues to fire
+		// for every request, matching old src-old behavior.
+		const childFlat = flattenChain(child['~ext']?.hookChain)
+		const lifted: Partial<AppHook> = {}
+		if (childFlat?.request) (lifted as any).request = childFlat.request
+		if (childFlat?.parse) (lifted as any).parse = childFlat.parse
+		if ((lifted as any).request || (lifted as any).parse)
+			this.#pushHook(lifted)
+
+		this.#use(child)
+
+		return this
+	}
 
 	get #ext(): NonNullable<this['~ext']> {
 		return (this['~ext'] ??= nullObject())
@@ -1598,7 +1735,8 @@ export class Elysia<
 		}
 
 		if (app['~ext']) {
-			const { decorator, store, headers, models, hookChain } = app['~ext']
+			const { decorator, store, headers, models, parser, hookChain } =
+				app['~ext']
 			const ext: NonNullable<(typeof this)['~ext']> = (this['~ext'] ??=
 				nullObject())
 
@@ -1620,6 +1758,11 @@ export class Elysia<
 			if (models) {
 				if (ext.models) Object.assign(ext.models, models)
 				else ext.models = Object.assign(nullObject(), models)
+			}
+
+			if (parser) {
+				if (ext.parser) Object.assign(ext.parser, parser)
+				else ext.parser = Object.assign(nullObject(), parser)
 			}
 
 			if (app.#plugin || app.#global) {

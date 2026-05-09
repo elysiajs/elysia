@@ -43,10 +43,15 @@ export const mapBeforeHandle = map<
 	return body
 })
 
-export const mapAfterHandle = map<'afterHandle'>((i, fn) => {
+export const mapAfterHandle = map<
+	'afterHandle',
+	[map: string, link: Link, mapResponse: ElysiaAdapter['response']['map']]
+>((i, fn, [map, link, mapResponse]) => {
 	const body = `tmp=${Await(fn)}af${at(i)}(c)\n`
 
-	return body + `if(tmp!==undefined)return tmp\n`
+	const set = map === 'rc' ? '' : ',c.set'
+	link(mapResponse, 'rm')
+	return body + `if(tmp!==undefined)return ${map}(tmp${set})\n`
 })
 
 function map<Event extends AppEvent, T extends unknown[] = []>(

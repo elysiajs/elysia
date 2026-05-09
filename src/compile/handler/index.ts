@@ -18,6 +18,7 @@ import {
 } from './constants'
 
 import { isBun } from '../../universal/constants'
+import { ParseError } from '../../error'
 
 import { parseQueryFromURL } from '../../parse-query'
 import { defaultAdapter } from '../../adapter/constants'
@@ -98,6 +99,11 @@ function parse(
 	hasHeaders: boolean,
 	link: Link
 ) {
+	// Normalize: route-level `parse: fn` arrives as a single function, not
+	// an array (mergeHook only materializes arrays when merging two hooks).
+	if (parsers && typeof parsers === 'function')
+		parsers = [parsers] as ContentType[] | BodyHandler[]
+
 	const hasFile = // @ts-expect-error
 		bodyVali?.tb?.buildResult.external.variables.some(hasFileTbPredicate)
 
@@ -116,7 +122,7 @@ function parse(
 		return builtinParser(adapter, parsers as string, link)
 	}
 
-	let code = `const ct=${hasHeaders ? "c.headers['content-type']" : "c.request.headers.get('content-type')"}\n`
+	let code = `const ct=(${hasHeaders ? "c.headers['content-type']" : "c.request.headers.get('content-type')"})||''\nc.contentType=ct\n`
 
 	let hasFn = false
 	let hasType = false
@@ -128,14 +134,17 @@ function parse(
 				hasFn = true
 				link(0, '')
 
-				if (i) code += 'if(hasBody){'
+				if (i) code += 'if(!hasBody){'
 				code +=
-					`c.body=await ho.parse[${i}](c)\n` +
+					`c.body=await ho.parse[${i}](c,ct)\n` +
 					'hasBody=c.body!==undefined\n'
 				if (i) code += '}\n'
 			} else {
 				hasType = true
+
+				if (i) code += 'if(!hasBody){\n'
 				code += builtinParser(adapter, parser as string, link)
+				if (i) code += '}\n'
 				break
 			}
 		}
@@ -145,7 +154,9 @@ function parse(
 			link(adapter.formData, 'pf')
 			return code + parseFormData
 		} else {
-			code += `if(ct)c.body=await pd(c,ct)\n`
+			code += hasFn
+				? `if(!hasBody&&ct)c.body=await pd(c,ct)\n`
+				: `if(ct)c.body=await pd(c,ct)\n`
 			link(adapter.default, 'pd')
 		}
 	}
@@ -197,9 +208,11 @@ const createInlineHandler = (
 	h: (context: Context) => unknown
 ) => ((c: Context) => map(h(c))) as CompiledHandler
 
-// Flattens the route's inheritance chain (filtered for downward) and merges
-// in the root's current locals. Compile is per-route cached, so the chain
-// walk runs once per route on first request.
+const createInlineHandlerWithSet = (
+	map: (value: unknown, ...rest: unknown[]) => unknown,
+	h: (context: Context) => unknown
+) => ((c: Context) => map(h(c), c.set)) as CompiledHandler
+
 function composeRootHook(
 	root: AnyElysia,
 	inheritedChain: ChainNode | undefined
@@ -253,15 +266,20 @@ export function compileHandler(
 		}
 	}
 
+	if (hook && typeof hook.parse === 'function')
+		hook.parse = [hook.parse] as any
+
+	const parseLength = Array.isArray(hook?.parse) ? hook.parse.length : 0
+	const parseFirst = Array.isArray(hook?.parse) ? hook.parse[0] : hook?.parse
 	const hasBody =
-		!!hook?.body || (inference.body && hook?.parse?.[0] !== 'none')
+		!!hook?.body ||
+		((parseLength > 0 || inference.body) && parseFirst !== 'none')
 
 	const vali = hook
 		? new RouteValidator(hook as any, {
 				models: root['~ext']?.models,
 				normalize: root['~config']?.normalize,
 				sanitize: root['~config']?.sanitize,
-				// @ts-expect-error
 				schemas: hook?.schema
 			})
 		: undefined
@@ -325,30 +343,44 @@ export function compileHandler(
 
 	if (vali?.headers) {
 		link(vali, 'va')
-		code += `c.headers=${headersValiIsAsync ? 'await ' : ''}va.headers.From(c.headers)\n`
+		code += `c.headers=${headersValiIsAsync ? 'await ' : ''}va.headers.From(c.headers,'headers')\n`
 	}
 
 	if (vali?.params) {
 		link(vali, 'va')
-		code += `c.params=${paramsValiIsAsync ? 'await ' : ''}va.params.From(c.params)\n`
+		code += `c.params=${paramsValiIsAsync ? 'await ' : ''}va.params.From(c.params,'params')\n`
 	}
 
 	if (vali?.query) {
 		link(vali, 'va')
-		code += `c.query=${queryValiIsAsync ? 'await ' : ''}va.query.From(c.query)\n`
+		code += `c.query=${queryValiIsAsync ? 'await ' : ''}va.query.From(c.query,'query')\n`
 	}
 
 	if (vali?.cookie) {
 		link(vali, 'va')
-		code += `c.cookie=${cookieValidIsAsync ? 'await ' : ''}va.cookie.From(c.cookie)\n`
+		code += `c.cookie=${cookieValidIsAsync ? 'await ' : ''}va.cookie.From(c.cookie,'cookie')\n`
 	}
 
 	if (hasBody) {
-		code += parse(adapter.parse, hook?.parse, vali?.body, hasHeaders, link)
+		const namedParsers = root['~ext']?.parser
+		if (namedParsers && Array.isArray(hook?.parse))
+			hook.parse = (hook.parse as any[]).map((p) =>
+				typeof p === 'string' && p in namedParsers ? namedParsers[p] : p
+			) as any
+
+		const parseCode = parse(
+			adapter.parse,
+			hook?.parse,
+			vali?.body,
+			hasHeaders,
+			link
+		)
+		link(ParseError, 'pe')
+		code += 'try{\n' + parseCode + '}catch(e){throw new pe(e)}\n'
 
 		if (vali?.body) {
 			link(vali, 'va')
-			code += `c.body=${bodyValiIsAsync ? 'await ' : ''}va.body.From(c.body)\n`
+			code += `c.body=${bodyValiIsAsync ? 'await ' : ''}va.body.From(c.body,'body')\n`
 		}
 	}
 
@@ -366,6 +398,7 @@ export function compileHandler(
 	const map = hasSet
 		? (link(res.map, 'rm') ?? 'rm')
 		: (link(res.compact ?? res.map, 'rc') ?? 'rc')
+
 	const mapReturn = hasSet ? 'rm(h(c),c.set)\n' : 'rc(h(c))\n'
 
 	if (hook?.beforeHandle) {
@@ -377,7 +410,7 @@ export function compileHandler(
 			map,
 			link,
 			res.map,
-			!!hook?.afterHandle
+			true
 		])
 	}
 
@@ -386,7 +419,7 @@ export function compileHandler(
 
 		link(hook.afterHandle, 'af')
 
-		code += mapAfterHandle(hook.afterHandle)
+		code += mapAfterHandle(hook.afterHandle, [map, link, res.map])
 
 		code += `return ret\n`
 	} else {
@@ -402,7 +435,7 @@ export function compileHandler(
 				handler as any
 			)
 		else if (alias === 'rm')
-			return createInlineHandler(res.map as any, handler as any)
+			return createInlineHandlerWithSet(res.map as any, handler as any)
 	}
 
 	return new Function('h', 'a', `const [${alias}]=a\nreturn ` + code)(

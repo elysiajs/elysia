@@ -26,6 +26,7 @@ import { Validator, type ValidatorOptions } from '../validator'
 import { isAsyncFunction } from '../compile/utils'
 import { hasProperty } from './utils'
 import { isBlob } from '../utils'
+import { ValidationError } from '../error'
 
 import type { MaybePromise } from '../types'
 
@@ -122,28 +123,30 @@ export class TypeBoxValidator<
 		return this.hasCodec ? Encode(this.schema, value) : (value as any)
 	}
 
-	From(value: Static<T>): MaybePromise<Static<T>> {
+	From(value: Static<T>, type?: string): MaybePromise<Static<T>> {
 		return this.isAsync
-			? (this.FromAsync(value) as any)
-			: this.FromSync(value)
+			? (this.FromAsync(value, type) as any)
+			: this.FromSync(value, type)
 	}
 
-	async FromAsync(value: Static<T>): Promise<Static<T>> {
+	async FromAsync(value: Static<T>, type?: string): Promise<Static<T>> {
 		if (this.hasDefault) value = Default(this.schema, value) as any
 		// @ts-ignore
 		if (this.hasCodec) value = await Decoder(this.schema, value)
 		// @ts-ignore
-		if (!(await this.Check(value))) throw this.Errors(value)
+		if (!(await this.Check(value)))
+			throw new ValidationError(type, value, this.Errors(value))
 		// @ts-ignore
 		if (this.Clean) value = this.Clean(value)
 
 		return value
 	}
 
-	FromSync(value: Static<T>): Static<T> {
+	FromSync(value: Static<T>, type?: string): Static<T> {
 		if (this.hasDefault) value = Default(this.schema, value) as Static<T>
 		if (this.hasCodec) value = Decoder(this.schema, value) as Static<T>
-		if (!this.Check(value)) throw this.Errors(value)
+		if (!this.Check(value))
+			throw new ValidationError(type, value, this.Errors(value))
 		if (this.Clean) value = this.Clean(value) as Static<T>
 		return value
 	}
@@ -160,8 +163,13 @@ export class TypeBoxValidatorCache {
 		'defaultValue'
 	])
 
-	static ignoreMeta(k: string) {
+	static ignoreMeta(k: string, v: unknown) {
+		// `replacer` must return the value to keep it; returning undefined
+		// drops the property. Previously this only checked the key and fell
+		// off the end (returning undefined) for every property — collapsing
+		// every schema to the same cache key.
 		if (TypeBoxValidatorCache.ignoreKeys.has(k)) return undefined
+		return v
 	}
 
 	private cache = new Map<

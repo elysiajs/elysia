@@ -7,7 +7,9 @@ export {
 	NotFound,
 	ParseError,
 	InternalServerError,
-	InvalidCookieSignature
+	InvalidCookieSignature,
+	ValidationError,
+	validationDetail
 } from './error'
 export { t, System } from './type'
 

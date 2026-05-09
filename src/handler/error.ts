@@ -4,7 +4,24 @@ import type { Context } from '../context'
 import type { AppHook } from '../types'
 
 const _defaultError = new Response('Internal Server Error', { status: 500 })
-const defaultErrorHandler = _defaultError.clone.bind(_defaultError)
+
+function fallbackResponse(
+	context: Context,
+	error: any,
+	mapResponse: (response: unknown, set: Context['set']) => unknown,
+	defaultError: Response
+): unknown {
+	if (error?.status) {
+		const body =
+			error.response !== undefined
+				? error.response
+				: (error.message ?? '')
+
+		return mapResponse(body, context.set)
+	}
+
+	return defaultError.clone()
+}
 
 export function createErrorHandler(
 	onErrors: AppHook['error'] | undefined,
@@ -15,14 +32,19 @@ export function createErrorHandler(
 	) => unknown,
 	defaultError?: Response
 ) {
-	if (defaultError && !onErrors) return () => defaultError!.clone()
-	if (!onErrors) return (a, error) => {
-		console.log(error)
-
-		return defaultErrorHandler()
-	}
-
 	defaultError ??= _defaultError
+
+	if (!onErrors)
+		return (context: Context, error: Error) => {
+			// @ts-expect-error
+			context.error = error
+			// @ts-expect-error
+			context.code = (error as any).code ?? 'UNKNOWN'
+			if ((error as any)?.status)
+				context.set.status = (error as any).status
+
+			return fallbackResponse(context, error, mapResponse, defaultError!)
+		}
 
 	const asyncIndexes = getAsyncIndexes(onErrors)
 	if (asyncIndexes)
@@ -35,19 +57,19 @@ export function createErrorHandler(
 			if (error?.status) context.set.status = error.status
 
 			for (let i = 0; i < onErrors.length; i++) {
-				const error = asyncIndexes?.[i]
+				const result = asyncIndexes?.[i]
 					? await onErrors[i](context)
 					: onErrors[i](context)
 
-				if (error !== undefined) {
+				if (result !== undefined) {
 					// @ts-expect-error
-					if (error?.status) context.set.status = error.status
+					if (result?.status) context.set.status = result.status
 
-					return mapResponse(error, context.set)
+					return mapResponse(result, context.set)
 				}
 			}
 
-			return mapResponse(error, context.set)
+			return fallbackResponse(context, error, mapResponse, defaultError!)
 		}
 
 	return (context: Context, error: Error) => {
@@ -59,10 +81,10 @@ export function createErrorHandler(
 		if (error?.status) context.set.status = error.status
 
 		for (let i = 0; i < onErrors.length; i++) {
-			const error = onErrors[i](context)
-			if (error !== undefined) return mapResponse(error, context.set)
+			const result = onErrors[i](context)
+			if (result !== undefined) return mapResponse(result, context.set)
 		}
 
-		return defaultError.clone()
+		return fallbackResponse(context, error, mapResponse, defaultError!)
 	}
 }

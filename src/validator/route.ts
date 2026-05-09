@@ -52,12 +52,18 @@ export class RouteValidator<const in out T extends RouteSchema> {
 	constructor(route: T, options?: RouteValidatorOptions) {
 		if (!route) return
 
-		if (route.body) {
-			const body = Validator.reference(route.body, options?.models)
+		const bodyStandalone = options?.schemas
+			?.map((s) => s.body)
+			.filter(Boolean) as AnySchema[] | undefined
+		if (route.body || bodyStandalone?.length) {
+			const body = Validator.reference(
+				(route.body ?? bodyStandalone![0]) as AnySchema,
+				options?.models
+			)
 
-			this.body = Validator.create(body, {
+			this.body = Validator.create(route.body as any, {
 				...options,
-				schemas: options?.schemas?.map((s) => s.body),
+				schemas: bodyStandalone,
 				coerces: isTb(body)
 					? hasTypes([ELYSIA_TYPES.File, ELYSIA_TYPES.Files], body)
 						? coerceFormData()
@@ -66,50 +72,77 @@ export class RouteValidator<const in out T extends RouteSchema> {
 			}) as any
 		}
 
-		if (route.headers) {
-			const headers = Validator.reference(route.headers, options?.models)
+		const headersStandalone = options?.schemas
+			?.map((s) => s.headers)
+			.filter(Boolean) as AnySchema[] | undefined
+		if (route.headers || headersStandalone?.length) {
+			const headers = Validator.reference(
+				(route.headers ?? headersStandalone![0]) as AnySchema,
+				options?.models
+			)
 
-			this.headers = Validator.create(headers, {
+			this.headers = Validator.create(route.headers as any, {
 				...options,
-				schemas: options?.schemas?.map((s) => s.headers),
+				schemas: headersStandalone,
 				coerces: isTb(headers) ? coerceStringToStructure() : undefined
 			}) as any
 		}
 
-		if (route.query) {
-			const query = Validator.reference(route.query, options?.models)
+		const queryStandalone = options?.schemas
+			?.map((s) => s.query)
+			.filter(Boolean) as AnySchema[] | undefined
+		if (route.query || queryStandalone?.length) {
+			const query = Validator.reference(
+				(route.query ?? queryStandalone![0]) as AnySchema,
+				options?.models
+			)
 
-			this.query = Validator.create(query, {
+			this.query = Validator.create(route.query as any, {
 				...options,
-				schemas: options?.schemas?.map((s) => s.query),
+				schemas: queryStandalone,
 				coerces: isTb(query) ? coerceQuery() : undefined
 			}) as any
 		}
 
-		if (route.params) {
-			const params = Validator.reference(route.params, options?.models)
+		const paramsStandalone = options?.schemas
+			?.map((s) => s.params)
+			.filter(Boolean) as AnySchema[] | undefined
+		if (route.params || paramsStandalone?.length) {
+			const params = Validator.reference(
+				(route.params ?? paramsStandalone![0]) as AnySchema,
+				options?.models
+			)
 
-			this.params = Validator.create(params, {
+			this.params = Validator.create(route.params as any, {
 				...options,
-				schemas: options?.schemas?.map((s) => s.params),
+				schemas: paramsStandalone,
 				coerces: isTb(params) ? coerceRoot() : undefined
 			}) as any
 		}
 
-		if (route.cookie) {
-			const cookie = Validator.reference(route.cookie, options?.models)
+		const cookieStandalone = options?.schemas
+			?.map((s) => s.cookie)
+			.filter(Boolean) as AnySchema[] | undefined
+		if (route.cookie || cookieStandalone?.length) {
+			const cookie = Validator.reference(
+				(route.cookie ?? cookieStandalone![0]) as AnySchema,
+				options?.models
+			)
 
-			this.cookie = Validator.create(cookie, {
+			this.cookie = Validator.create(route.cookie as any, {
 				...options,
-				schemas: options?.schemas?.map((s) => s.cookie),
+				schemas: cookieStandalone,
 				coerces: isTb(cookie) ? coerceStringToStructure() : undefined
 			}) as any
 		}
 
-		if (route.response)
-			this.response = Validator.response(route.response, {
-				...options,
-				schemas: options?.schemas?.map((s) => s.response)
-			}) as any
+		const responseStandalone = options?.schemas
+			?.map((s) => s.response)
+			.filter(Boolean) as Record<number, AnySchema>[] | undefined
+
+		this.response = Validator.response(route.response, {
+			...options,
+			schemas: responseStandalone
+		}) as any
 	}
 }

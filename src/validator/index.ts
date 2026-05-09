@@ -1,6 +1,7 @@
 import type { TSchema } from 'typebox/type'
 import type { Validator as BaseTypeBoxValidator } from 'typebox/schema'
 import type { TLocalizedValidationError } from 'typebox/error'
+import { ValidationError } from '../error'
 
 import { type AnySchema, type StandardSchemaV1Like } from '../type'
 
@@ -14,7 +15,8 @@ import {
 	applyCoercions,
 	TypeBoxValidator,
 	TypeBoxValidatorCache,
-	HasCodec
+	HasCodec,
+	Intersect
 } from '../type/bridge'
 
 export interface ValidatorOptions {
@@ -58,10 +60,7 @@ export abstract class Validator {
 		return value
 	}
 
-	From?(
-		value: unknown,
-		error: (value: unknown) => MaybePromise<void>
-	): unknown
+	From?(value: unknown, type?: string): MaybePromise<unknown>
 
 	Clean: ((value: unknown) => unknown) | undefined
 
@@ -75,7 +74,21 @@ export abstract class Validator {
 		options?: ValidatorOptions
 	): StandardValidator
 
-	static create(name: AnySchema | string, options?: ValidatorOptions) {
+	static create(
+		schema: undefined | null,
+		options?: ValidatorOptions
+	): Validator | undefined
+
+	static create(
+		name: AnySchema | string | undefined | null,
+		options?: ValidatorOptions
+	) {
+		if (name == null) {
+			if (!options?.schemas?.length) return undefined
+			name = options.schemas[0]
+			options = { ...options, schemas: options.schemas.slice(1) }
+		}
+
 		let schema = Validator.reference(name, options?.models)
 
 		let isIntersectable = false
@@ -90,12 +103,12 @@ export abstract class Validator {
 		}
 
 		if ('~kind' in schema || '~elyAcl' in schema) {
-			if (tbCache) {
+			if (!isIntersectable && tbCache) {
 				const cached = tbCache.get(schema, options?.coerces)
 				if (cached) return cached
 			}
 			// @ts-expect-error
-			else tbCache = new TypeBoxValidatorCache()
+			else if (!tbCache) tbCache = new TypeBoxValidatorCache()
 
 			// @ts-expect-error
 			const validator = new TypeBoxValidator(
@@ -105,7 +118,8 @@ export abstract class Validator {
 				isIntersectable
 			) as any
 
-			tbCache!.set(schema, options?.coerces, validator)
+			if (!isIntersectable)
+				tbCache!.set(schema, options?.coerces, validator)
 			return validator
 		}
 
@@ -120,9 +134,17 @@ export abstract class Validator {
 		schema:
 			| TSchema
 			| StandardSchemaV1Like
-			| Record<number, TSchema | StandardSchemaV1Like>,
+			| Record<number, TSchema | StandardSchemaV1Like>
+			| undefined
+			| null,
 		options?: ResponseValidatorOptions
-	): Record<number, Validator> {
+	): Record<number, Validator> | undefined {
+		if (schema == null) {
+			if (!options?.schemas?.length) return undefined
+			schema = options.schemas[0]
+			options = { ...options, schemas: options.schemas.slice(1) }
+		}
+
 		schema = Validator.reference(schema, options?.models)
 
 		if ('~kind' in schema || '~elyAcl' in schema || '~standard' in schema)
@@ -195,10 +217,10 @@ export class StandardValidator extends Validator {
 		return this.validate(value).value
 	}
 
-	From(value: unknown): unknown {
+	From(value: unknown, type?: string): unknown {
 		const q = this.validate(value)
 		// @ts-expect-error
-		if (q.issues) throw this.Errors(value)
+		if (q.issues) throw new ValidationError(type, value, this.Errors(value))
 
 		// @ts-expect-error
 		return q.value
@@ -304,8 +326,9 @@ export class MultiValidator extends Validator {
 		return snapshot!
 	}
 
-	From(value: unknown, error: (value: unknown) => void): unknown {
-		if (!this.Check(value)) return void error(value)
+	From(value: unknown, type?: string): unknown {
+		if (!this.Check(value))
+			throw new ValidationError(type, value, this.Errors(value))
 
 		return this.Decode(value)!
 	}
