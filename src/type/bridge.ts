@@ -1,4 +1,4 @@
-import type { TAny, TSchema, Intersect as IntersectType } from 'typebox/type'
+import type { TAny, TSchema } from 'typebox/type'
 import type { Compile as CompileType } from 'typebox/compile'
 import type {
 	Decode as DecodeType,
