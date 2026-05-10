@@ -118,7 +118,12 @@ export type TraceHandler<
 	(
 		lifecycle: Prettify<
 			{
-				id: number
+				/**
+				 * Per-request id. Sourced from `crypto.randomUUIDv7()` when
+				 * the runtime supports it (Bun ≥ 1.1.40), otherwise
+				 * `crypto.randomUUID()`. Useful for log correlation.
+				 */
+				id: string
 				context: Context<Route, Singleton>
 				set: Context['set']
 				time: number
@@ -130,8 +135,6 @@ export type TraceHandler<
 		>
 	): unknown
 }
-
-export const ELYSIA_TRACE = Symbol('ElysiaTrace')
 
 const createProcess = () => {
 	const { promise, resolve } = Promise.withResolvers<TraceProcess>()
@@ -189,7 +192,16 @@ const createProcess = () => {
 					for (let i = 0; i < callbacks.length; i++)
 						callbacks[i](result)
 
+					let childResolved = false
 					return (error: Error | null = null) => {
+						// Idempotent: codegen for some shapes intentionally
+						// finalizes both the success path AND the error path
+						// (e.g. fetch.ts re-resolves on catch even when the
+						// route already finalized internally). Skip the
+						// redundant fire so user `onStop` runs once.
+						if (childResolved) return
+						childResolved = true
+
 						const end = performance.now()
 
 						// Catch return error
@@ -230,9 +242,14 @@ const createProcess = () => {
 			resolve(result)
 			for (let i = 0; i < callbacks.length; i++) callbacks[i](result)
 
+			let parentResolved = false
 			return {
 				resolveChild: resolvers,
 				resolve(error: Error | null = null) {
+					// Idempotent — see child resolver above.
+					if (parentResolved) return
+					parentResolved = true
+
 					const end = performance.now()
 
 					// If error is return, parent group will not catch an error
@@ -271,8 +288,10 @@ export const createTracer = (traceListener: TraceHandler) => {
 		const [onAfterResponse, resolveAfterResponse] = createProcess()
 
 		traceListener({
-			// @ts-ignore
-			id: context[ELYSIA_REQUEST_ID],
+			// `rid` is populated by `fetch.ts` when a tracer is registered.
+			// Empty string is the safe fallback for the rare direct
+			// invocation path (the type is `string`, not `string | undefined`).
+			id: context.rid ?? '',
 			context,
 			set: context.set,
 			// @ts-ignore

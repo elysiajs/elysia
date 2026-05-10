@@ -7,6 +7,7 @@ import { ArrayString } from './elysia/array-string'
 import { ObjectString } from './elysia/object-string'
 import { Numeric } from './elysia/numeric'
 import { BooleanString } from './elysia/boolean-string'
+import { IntegerString } from './elysia/integer-string'
 
 interface CoerceOptions {
 	/**
@@ -41,9 +42,11 @@ export function coerce(
 	fromTo: [from: string, to: CoerceTo][],
 	options?: CoerceOptions
 ): BaseSchema {
-	let transformMap = new Map<string, CoerceTo>(fromTo)
-	let rootOption = options?.root
-	let seen = new WeakSet()
+	const transformMap = new Map<string, CoerceTo>(fromTo)
+	const rootOption = options?.root
+
+	// prevent shared schema and circular reference issues with memoization
+	const memo = new WeakMap<BaseSchema, BaseSchema | null>()
 	let stopped = false
 
 	// Inline copy-on-write helper to avoid closure allocation
@@ -68,18 +71,20 @@ export function coerce(
 		if (
 			!node ||
 			stopped ||
-			seen.has(node) ||
 			typeof node !== 'object' ||
 			(node['~elyTyp'] &&
 				primitiveElysiaTypes.has(node['~elyTyp'] as any))
 		)
 			return node
 
+		const memoed = memo.get(node)
+		if (memoed !== undefined) return memoed ?? node
+
 		// Early exit if we're deeper than root properties
 		if (options?.rootPropertiesOnly && !isRoot && !isRootProperty)
 			return node
 
-		seen.add(node)
+		memo.set(node, null)
 
 		const kind = node['~kind'] as string | undefined
 
@@ -123,6 +128,7 @@ export function coerce(
 							})
 					}
 
+					memo.set(node, result! as BaseSchema)
 					return result! as BaseSchema
 				}
 			}
@@ -130,8 +136,32 @@ export function coerce(
 
 		if (stopped) return node
 
-		// Don't recurse children of root properties
-		if (options?.rootPropertiesOnly && isRootProperty) return node
+		if (options?.rootPropertiesOnly && isRootProperty) {
+			let out: any = node
+			for (const key of ['anyOf', 'oneOf', 'allOf'] as const) {
+				const arr = node[key]
+				if (!Array.isArray(arr)) continue
+				let newArr: BaseSchema[] | undefined
+				for (let i = 0, len = arr.length; i < len; i++) {
+					const item = arr[i]!
+					const r = walk(item, false, true)
+					if (stopped && !newArr) {
+						memo.set(node, node)
+						return node
+					}
+					if (r !== item) {
+						newArr ??= arr.slice()
+						newArr[i] = r
+					}
+				}
+				if (newArr) {
+					out = copyNode(node)
+					out[key] = newArr
+				}
+			}
+			memo.set(node, out)
+			return out
+		}
 
 		let out: any = node
 
@@ -255,19 +285,11 @@ export function coerce(
 			}
 		}
 
+		memo.set(node, out)
 		return out
 	}
 
 	return walk(schema as BaseSchema, true)
-
-	// transformMap.clear()
-	// // @ts-expect-error
-	// transformMap = undefined
-	// rootOption = undefined
-	// // @ts-expect-error
-	// seen = undefined
-	// // @ts-expect-error
-	// stopped = undefined
 }
 
 type CoerceParameters = Parameters<typeof coerce>
@@ -281,7 +303,8 @@ export const coerceRoot = () =>
 		[
 			[
 				['Number', Numeric],
-				['Boolean', BooleanString]
+				['Boolean', BooleanString],
+				['Integer', IntegerString]
 			],
 			{
 				rootPropertiesOnly: true
@@ -306,11 +329,21 @@ export const coerceQuery = () =>
 				root: false
 			}
 		],
-		// Query strings carry primitive values as strings; coerce
-		// `t.Number()` / `t.Boolean()` at root so e.g.
-		// `?limit=10&playing=true` validates against `t.Object({ limit:
-		// t.Number(), playing: t.Boolean() })`.
 		...coerceRoot()
+	])
+
+let _coerceBody: CoerceOption[]
+export const coerceBody = () =>
+	(_coerceBody ??= [
+		[
+			[
+				['Number', Numeric],
+				['Boolean', BooleanString]
+			],
+			{ root: true }
+		],
+		// Integer everywhere: no `root` filter, no `rootPropertiesOnly`.
+		[[['Integer', IntegerString]]]
 	])
 
 let _coerceFormData: CoerceOption[]
@@ -358,6 +391,126 @@ export function applyCoercions(
 	return schema
 }
 
+export function nonAdditionalProperties(
+	schema: BaseSchema | TSchema
+): BaseSchema {
+	const seen = new WeakSet()
+
+	function walk(node: BaseSchema): BaseSchema {
+		if (!node || typeof node !== 'object' || seen.has(node)) return node
+		seen.add(node)
+
+		let out = node as any
+		let cloned = false
+		const clone = () => {
+			if (cloned) return
+			out = Object.defineProperty(
+				{ ...node, '~kind': (node as any)['~kind'] },
+				'~kind',
+				{ enumerable: false }
+			)
+			cloned = true
+		}
+
+		if (node.properties) {
+			let newProps: Record<string, BaseSchema> | undefined
+			for (const k in node.properties) {
+				const v = node.properties[k] as BaseSchema
+				const r = walk(v)
+				if (r !== v) {
+					newProps ??= { ...node.properties }
+					newProps[k] = r
+				}
+			}
+			if (newProps) {
+				clone()
+				out.properties = newProps
+			}
+		}
+
+		if (node.items) {
+			if (Array.isArray(node.items)) {
+				let newItems: BaseSchema[] | undefined
+				for (let i = 0; i < node.items.length; i++) {
+					const r = walk(node.items[i] as BaseSchema)
+					if (r !== node.items[i]) {
+						newItems ??= [...(node.items as BaseSchema[])]
+						newItems[i] = r
+					}
+				}
+				if (newItems) {
+					clone()
+					out.items = newItems
+				}
+			} else {
+				const r = walk(node.items as BaseSchema)
+				if (r !== node.items) {
+					clone()
+					out.items = r
+				}
+			}
+		}
+
+		for (const key of ['anyOf', 'allOf', 'oneOf'] as const) {
+			const arr = (node as any)[key]
+			if (!Array.isArray(arr)) continue
+			let newArr: BaseSchema[] | undefined
+			for (let i = 0; i < arr.length; i++) {
+				const r = walk(arr[i])
+				if (r !== arr[i]) {
+					newArr ??= [...arr]
+					newArr[i] = r
+				}
+			}
+			if (newArr) {
+				clone()
+				out[key] = newArr
+			}
+		}
+
+		if (
+			node.additionalProperties &&
+			typeof node.additionalProperties === 'object'
+		) {
+			const r = walk(node.additionalProperties as BaseSchema)
+			if (r !== node.additionalProperties) {
+				clone()
+				out.additionalProperties = r
+			}
+		}
+
+		if (node.patternProperties) {
+			let newPP: Record<string, BaseSchema> | undefined
+			for (const k in node.patternProperties) {
+				const v = node.patternProperties[k] as BaseSchema
+				const r = walk(v)
+				if (r !== v) {
+					newPP ??= { ...node.patternProperties }
+					newPP[k] = r
+				}
+			}
+			if (newPP) {
+				clone()
+				out.patternProperties = newPP
+			}
+		}
+
+		// Apply the strict marker last so the recursion above doesn't
+		// trip over `additionalProperties: false` (boolean, not schema).
+		if (
+			(node.type === 'object' || (node as any)['~kind'] === 'Object') &&
+			!('additionalProperties' in node)
+		) {
+			clone()
+			out.additionalProperties = false
+		}
+
+		return out
+	}
+
+	return walk(schema as BaseSchema)
+}
+
 export function deferCoercions() {
 	// @ts-expect-error
 	_coerceRoot = undefined
@@ -367,4 +520,6 @@ export function deferCoercions() {
 	_coerceFormData = undefined
 	// @ts-expect-error
 	_coerceStringToStructure = undefined
+	// @ts-expect-error
+	_coerceBody = undefined
 }

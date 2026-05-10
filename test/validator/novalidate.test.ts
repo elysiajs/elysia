@@ -155,18 +155,19 @@ describe('ElysiaType.NoValidate', () => {
 	})
 
 	// `t.BooleanString` and `t.Numeric` use unidirectional `Type.Decode`
-	// codecs (Decode-only; Encode throws "Encode not implemented"). Under
-	// the strict "skip Check only" NoValidate semantic, response-side
-	// validation runs `EncodeUnsafe` and unidirectional codecs always fail.
-	// We assert the error path to lock the contract in.
-	it('NoValidate(t.BooleanString()) surfaces unidirectional codec error', async () => {
+	// codecs (Decode-only; Encode throws "Encode not implemented").
+	// `NoValidate` follows a "skip Check, never reject" contract — when
+	// the codec's Encode throws, the value passes through unchanged
+	// instead of surfacing as 422.
+	it('NoValidate(t.BooleanString()) passes through on Encode failure', async () => {
 		const app = new Elysia().get('/', () => true, {
 			response: t.NoValidate(t.BooleanString())
 		})
 
 		const res = await app.handle(req('/'))
 
-		expect(res.status).toBe(422)
+		expect(res.status).toBe(200)
+		expect(await res.text()).toBe('true')
 	})
 
 	it('should work with NoValidate in specific status codes', async () => {

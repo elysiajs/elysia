@@ -103,7 +103,9 @@ export abstract class Validator {
 		}
 
 		if ('~kind' in schema || '~elyAcl' in schema) {
-			if (!isIntersectable && tbCache) {
+			const skipCache = options?.normalize === false
+
+			if (!isIntersectable && !skipCache && tbCache) {
 				const cached = tbCache.get(schema, options?.coerces)
 				if (cached) return cached
 			}
@@ -118,7 +120,7 @@ export abstract class Validator {
 				isIntersectable
 			) as any
 
-			if (!isIntersectable)
+			if (!isIntersectable && !skipCache)
 				tbCache!.set(schema, options?.coerces, validator)
 			return validator
 		}
@@ -215,6 +217,10 @@ export class StandardValidator extends Validator {
 	Decode(value: unknown): unknown {
 		// @ts-expect-error
 		return this.validate(value).value
+	}
+
+	EncodeFrom(value: unknown) {
+		return this.From(value)
 	}
 
 	From(value: unknown, type?: string): unknown {
@@ -324,6 +330,10 @@ export class MultiValidator extends Validator {
 		}
 
 		return snapshot!
+	}
+
+	EncodeFrom(value: unknown) {
+		return this.From(value)
 	}
 
 	From(value: unknown, type?: string): unknown {

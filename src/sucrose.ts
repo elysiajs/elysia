@@ -768,5 +768,7 @@ export function sucrose(
 	}
 
 	events.length = 0
-	return inference
+
+	// Fall back to defaults when no analysable events were found
+	return inference ?? defaultSucrose()
 }

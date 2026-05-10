@@ -13,6 +13,7 @@ import type {
 
 import { ElysiaFile } from './universal/file'
 import { dangerousKeys, type MethodMap, MethodMapBack } from './constants'
+import { isBun } from './universal/constants'
 
 export const mapMethodBack = (method: MethodMap[keyof MethodMap] | string) =>
 	MethodMapBack[method as MethodMap[keyof MethodMap]] ?? method
@@ -173,7 +174,7 @@ function appendInto(
 		// more-global". Unknown keys (notably unresolved macro keys like
 		// `auth: 'admin'`) propagate as scalar last-wins so `~applyMacro`
 		// can resolve them at compile time on the merged hook.
-		if (eventProperties.has(key) || key === 'schema') {
+		if (eventProperties.has(key) || key === 'schema' || key === 'schemas') {
 			const arr = Array.isArray(v) ? v : [v]
 			const existing = (target as any)[key]
 			if (existing) (existing as any[]).push(...arr)
@@ -198,6 +199,71 @@ export type redirect = typeof redirect
 
 export const getLoosePath = (path: string) =>
 	path.charCodeAt(path.length - 1) === 47 ? path.slice(0, -1) : path + '/'
+
+import type { SSEPayload, Prettify } from './types'
+
+type FormatSSEPayload<T = unknown> = T extends string
+	? { readonly data: T }
+	: Prettify<SSEPayload<T>>
+
+/**
+ * Return a Server-Sent Events (SSE) payload. Wraps a plain `data`-only
+ * object, a full `{id, event, retry, data}` payload, or any
+ * stream/generator that produces them. Mirrors src-old/utils.ts:1161.
+ */
+export const sse = <
+	const T extends
+		| string
+		| SSEPayload
+		| Generator
+		| AsyncGenerator
+		| ReadableStream
+>(
+	_payload: T
+): T extends string
+	? { readonly data: T }
+	: T extends SSEPayload
+		? T
+		: T extends ReadableStream<infer A>
+			? ReadableStream<FormatSSEPayload<A>>
+			: T extends Generator<infer A, infer B, infer C>
+				? Generator<FormatSSEPayload<A>, B, C>
+				: T extends AsyncGenerator<infer A, infer B, infer C>
+					? AsyncGenerator<FormatSSEPayload<A>, B, C>
+					: T => {
+	if (_payload instanceof ReadableStream) {
+		// @ts-expect-error
+		_payload.sse = true
+		return _payload as any
+	}
+
+	const payload: SSEPayload =
+		typeof _payload === 'string'
+			? { data: _payload }
+			: (_payload as SSEPayload)
+
+	// @ts-ignore
+	payload.sse = true
+
+	// @ts-ignore
+	payload.toSSE = () => {
+		let s = ''
+		if (payload.id !== undefined && payload.id !== null)
+			s += `id: ${payload.id}\n`
+		if (payload.event) s += `event: ${payload.event}\n`
+		if (payload.retry !== undefined) s += `retry: ${payload.retry}\n`
+		if (payload.data === null) s += 'data: null\n'
+		else if (typeof payload.data === 'string')
+			s += `data: ${payload.data}\n`
+		else if (typeof payload.data === 'object')
+			s += `data: ${JSON.stringify(payload.data)}\n`
+
+		if (s) s += '\n'
+		return s
+	}
+
+	return payload as any
+}
 
 export const constantTimeEqual =
 	typeof crypto?.timingSafeEqual === 'function'
@@ -353,6 +419,8 @@ export function hookToGuard(
 		schema?: GuardSchemaType
 	}
 ): Partial<AppHook & Macro> {
+	if (a.schema !== 'standalone') return a
+
 	if (a.body || a.headers || a.params || a.query || a.cookie || a.response) {
 		a.schemas ??= []
 		const schema = Object.create(null)
@@ -498,8 +566,9 @@ export function mergeHook(
 	if (!a.params && b.params) a.params = b.params
 	if (!a.query && b.query) a.query = b.query
 	if (!a.cookie && b.cookie) a.cookie = b.cookie
-	if (a.response || b.response)
-		a.response = mergeResponse(a.response, b.response)
+	if (!a.response && b.response) a.response = b.response
+	else if (a.response && b.response)
+		a.response = mergeResponse(b.response, a.response)
 
 	if (a.parse || b.parse) a.parse = merge(a.parse, b.parse, reverse)
 
@@ -534,6 +603,9 @@ export function mergeHook(
 		a.afterResponse = merge(a.afterResponse, b.afterResponse, reverse)
 
 	if (a.error || b.error) a.error = merge(a.error, b.error, reverse)
+
+	if (a.trace || b.trace) a.trace = merge(a.trace, b.trace, reverse)
+
 	if (a.schemas || b.schemas)
 		a.schemas = mergeArray(a.schemas, b.schemas, reverse) as any
 
@@ -670,3 +742,8 @@ export const pushArray = <K extends keyof any>(
 	key: K,
 	item: unknown
 ) => pushField(target, key, item, true)
+
+export const createRequestId = isBun
+	? Bun.randomUUIDv7
+	: // @ts-ignore
+		(crypto.randomUUIDv7?.bind(crypto) ?? crypto.randomUUID?.bind(crypto))

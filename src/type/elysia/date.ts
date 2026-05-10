@@ -12,14 +12,11 @@ import {
 	type Refines as RefinesType
 } from './utils'
 
-let StringifiedDate: Type.TCodec<
-	Type.TUnion<[Type.TRefine<Type.TUnsafe<Date>>, Type.TString]>,
-	Date
->
-let emptyDate: Type.TCodec<
-	Type.TUnion<[Type.TRefine<Type.TUnsafe<Date>>, Type.TString]>,
-	Date
->
+const ISO8601 = /T\d\d(?::\d\d){1,2} \d\d:\d\d$/
+const removeTime = / (\d{2}:\d{2})$/
+
+let StringifiedDate: Type.TCodec<Type.TUnion<Type.TSchema[]>, Date>
+let emptyDate: Type.TCodec<Type.TUnion<Type.TSchema[]>, Date>
 let sharedDate: ReturnType<
 	typeof createSharedReference<
 		DateOptions,
@@ -27,6 +24,13 @@ let sharedDate: ReturnType<
 	>
 >
 export function DateType(property?: DateOptions) {
+	// Source schema: any of [actual Date | parseable string | epoch
+	// ms]. The string branch uses a Refine — not `format: 'date-time'`
+	// — so query-string-mangled offsets (`+`→space) survive Check and
+	// reach the Decode callback, which attempts a repair. Strings that
+	// can't be parsed at all (`'Hello'`) fail the Refine, surfacing as
+	// 422 in plain `t.Date()` validation while still passing through
+	// for `t.NoValidate(t.Date())` (which skips Check).
 	StringifiedDate ??= Type.Codec(
 		Union([
 			Type.Refine(
@@ -34,20 +38,47 @@ export function DateType(property?: DateOptions) {
 				(value) => value instanceof Date,
 				'must be Date'
 			),
-			StringType({
-				format: 'date'
-			})
+			Type.Refine(
+				StringType(),
+				(value) => {
+					if (!isNaN(new Date(value).getTime())) return true
+
+					if (ISO8601.test(value))
+						return !isNaN(
+							new Date(value.replace(removeTime, '+$1')).getTime()
+						)
+					return false
+				},
+				'must be Date'
+			),
+			Type.Number()
 		])
 	)
-		.Decode((value) => (value instanceof Date ? value : new Date(value)))
-		.Encode((value) =>
-			value instanceof Date ? value.toISOString() : value + ''
-		)
+		.Decode((value) => {
+			if (value instanceof Date) return value
+			let d = new Date(value as any)
+
+			if (
+				isNaN(d.getTime()) &&
+				typeof value === 'string' &&
+				/T\d{2}:\d{2}(:\d{2})? \d{2}:\d{2}$/.test(value)
+			)
+				d = new Date(value.replace(/ (\d{2}:\d{2})$/, '+$1'))
+
+			if (isNaN(d.getTime()))
+				throw new Error(`Expected Date, got: ${String(value)}`)
+
+			return d
+		})
+		.Encode((value) => {
+			if (value instanceof Date) return value.toISOString()
+			return value + ''
+		})
 
 	if (!property || isEmpty(property))
 		return (emptyDate ??= Object.freeze(
 			elyType(ELYSIA_TYPES.Date, StringifiedDate)
-		))
+		)) as any
 
 	sharedDate ??= createSharedReference(DateWithProperty)
 	return sharedDate(property)

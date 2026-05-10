@@ -5,8 +5,14 @@ import { getAsyncIndexes } from './utils'
 
 import { createContext, type Context } from '../context'
 import { createErrorHandler } from './error'
-import { flattenChain, getLoosePath, nullObject } from '../utils'
+import {
+	createRequestId,
+	flattenChain,
+	getLoosePath,
+	nullObject
+} from '../utils'
 import { NotFound } from '../error'
+import { createTracer } from '../trace'
 
 import type { CompiledHandler, MaybePromise } from '../types'
 
@@ -80,24 +86,149 @@ export function createFetchHandler(
 	const mapResponse = (app['~config']?.adapter ?? defaultAdapter).response.map
 	const handleError = createErrorHandler(hook?.error, mapResponse)
 
-	const afterResponses = hook?.afterResponse
-	const afterResponse = afterResponses?.length
-		? (context: Context, status?: number) => {
-				if ((context as any)._arf) return
-				;(context as any)._arf = true
+	const traceHandlers = hook?.trace as
+		| ((context: any) => unknown)[]
+		| undefined
+	const hasTrace = !!traceHandlers?.length
 
-				if (status !== undefined) context.set.status = status
-
-				queueMicrotask(async () => {
-					for (let i = 0; i < afterResponses.length; i++)
-						try {
-							await afterResponses[i](context as any)
-						} catch (e) {
-							console.error(e)
-						}
-				})
-			}
+	const tracerFactories = hasTrace
+		? traceHandlers!.map((fn) => createTracer(fn as any))
 		: undefined
+
+	const afterResponses = hook?.afterResponse
+	const afterResponse =
+		afterResponses?.length || hasTrace
+			? (context: Context, status?: number) => {
+					if ((context as any)._arf) return
+					;(context as any)._arf = true
+
+					if (status !== undefined) context.set.status = status
+
+					queueMicrotask(async () => {
+						if (afterResponses)
+							for (let i = 0; i < afterResponses.length; i++)
+								try {
+									await afterResponses[i](context as any)
+								} catch (e) {
+									console.error(e)
+								}
+
+						if (hasTrace) {
+							const cache = (context as any).trace as
+								| any[]
+								| undefined
+
+							if (cache)
+								for (let i = 0; i < cache.length; i++) {
+									const r = cache[i].afterResponse({
+										id: context.rid ?? '',
+										event: 'afterResponse',
+										name: 'afterResponse',
+										begin: performance.now(),
+										total: afterResponses?.length ?? 0
+									})
+									r.resolve()
+								}
+						}
+					})
+				}
+			: undefined
+
+	if (hasTrace) {
+		const onRequests = hook?.request ?? []
+		const asyncIndexes = onRequests.length
+			? getAsyncIndexes(onRequests)
+			: undefined
+
+		return async (request: Request): Promise<Response> => {
+			const context = new Context(request)
+			const url = request.url,
+				s = url.indexOf('/', 11)
+			context.path = url.substring(
+				s,
+				// @ts-expect-error
+				(context.qi = url.indexOf('?', s)) === -1
+					? url.length
+					: // @ts-expect-error
+						context.qi
+			)
+
+			context.rid = createRequestId()
+
+			const traceLength = tracerFactories!.length
+			const trace: any[] = new Array(traceLength)
+			for (let i = 0; i < traceLength; i++)
+				trace[i] = tracerFactories![i](context as any)
+
+			// @ts-expect-error private property
+			context.trace = trace
+
+			const requestReports = trace.map((c) =>
+				c.request({
+					id: context.rid,
+					event: 'request',
+					name: 'request',
+					begin: performance.now(),
+					total: onRequests.length
+				})
+			)
+
+			try {
+				for (let i = 0; i < onRequests.length; i++) {
+					const endReports = requestReports.map((r) =>
+						r.resolveChild?.shift?.()?.({
+							id: context.rid,
+							event: 'request',
+							name: (onRequests[i] as any).name || 'anonymous',
+							begin: performance.now()
+						})
+					)
+
+					const result = asyncIndexes?.[i]
+						? await onRequests[i](context as any)
+						: onRequests[i](context as any)
+
+					// `endReports[i]` is the closer FUNCTION returned by
+					// `resolveChild?.shift?.()?.({...})`, not a report object.
+					// Call it directly to finalize the child; only the parent
+					// report has a `.resolve()` method.
+					for (let i = 0; i < traceLength; i++) endReports[i]?.()
+
+					if (result !== undefined) {
+						requestReports.forEach((r) => r.resolve())
+						const response = mapResponse(
+							result,
+							context.set
+						) as Response
+
+						afterResponse?.(context)
+						return response
+					}
+				}
+
+				for (let i = 0; i < traceLength; i++)
+					requestReports[i].resolve()
+
+				return await findRoute(
+					context,
+					request,
+					map,
+					router,
+					hasError,
+					loosePath,
+					handleError,
+					afterResponse
+				)
+			} catch (error) {
+				for (let i = 0; i < traceLength; i++)
+					requestReports[i].resolve(error)
+
+				const r = handleError(context, error as Error) as Response
+				afterResponse?.(context)
+				return r
+			}
+		}
+	}
 
 	if (hook?.request) {
 		const onRequests = hook.request

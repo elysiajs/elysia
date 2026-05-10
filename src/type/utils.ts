@@ -29,6 +29,21 @@ export function hasType(
 			schema.$defs![schema.$ref as keyof typeof schema.$defs]
 		)
 
+	// Import-style `$ref` + `$defs` (no `~kind: 'Cyclic'` marker) —
+	// produced by `Type.Module(...)[name]` in typebox 1.x. Follow the
+	// reference so walks see the referenced model's body.
+	if (
+		schema.$ref &&
+		schema.$defs &&
+		schema.$defs[schema.$ref as keyof typeof schema.$defs]
+	)
+		return hasType(
+			type,
+			schema.$defs[
+				schema.$ref as keyof typeof schema.$defs
+			] as BaseSchema
+		)
+
 	for (const key of iterators)
 		if (
 			schema[key] &&
@@ -97,6 +112,19 @@ function _hasTypes(
 				schema.$defs![schema.$ref as keyof typeof schema.$defs]
 			)
 
+	// Import-style `$ref` + `$defs` (typebox 1.x `Type.Module`).
+	if (
+		schema.$ref &&
+		schema.$defs &&
+		schema.$defs[schema.$ref as keyof typeof schema.$defs]
+	)
+		return _hasTypes(
+			types,
+			schema.$defs[
+				schema.$ref as keyof typeof schema.$defs
+			] as BaseSchema
+		)
+
 	for (const key of iterators)
 		if (schema[key] && schema[key].some((s) => _hasTypes(types, s)))
 			return true
@@ -143,6 +171,16 @@ export function hasProperty(
 	if (
 		schema['~kind'] === 'Cyclic' &&
 		schema.$defs?.[schema.$ref as keyof typeof schema.$defs]
+	)
+		return hasProperty(
+			key,
+			schema.$defs[schema.$ref as keyof typeof schema.$defs] as any
+		)
+
+	if (
+		schema.$ref &&
+		schema.$defs &&
+		schema.$defs[schema.$ref as keyof typeof schema.$defs]
 	)
 		return hasProperty(
 			key,

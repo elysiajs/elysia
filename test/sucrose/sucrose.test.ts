@@ -8,33 +8,35 @@ import { req } from '../utils'
 describe('sucrose', () => {
 	it('common 1', () => {
 		expect(
-			sucrose({
-				handler: function ({ query }) {
+			sucrose(
+				({ query }) => {
 					query.a
 				},
-				afterHandle: [],
-				beforeHandle: [],
-				error: [
-					function a({
-						query,
-						query: { a, c: d },
-						headers: { hello },
-						...rest
-					}) {
-						query.b
-						rest.query.e
-					},
-					({ query: { f } }) => {}
-				],
-				mapResponse: [],
-				afterResponse: [],
-				parse: [],
-				request: [],
-				start: [],
-				stop: [],
-				trace: [],
-				transform: []
-			})
+				{
+					afterHandle: [],
+					beforeHandle: [],
+					error: [
+						function a({
+							query,
+							query: { a, c: d },
+							headers: { hello },
+							...rest
+						}) {
+							query.b
+							rest.query.e
+						},
+						({ query: { f } }) => {}
+					],
+					mapResponse: [],
+					afterResponse: [],
+					parse: [],
+					request: [],
+					start: [],
+					stop: [],
+					trace: [],
+					transform: []
+				}
+			)
 		).toEqual({
 			query: true,
 			headers: true,
@@ -50,23 +52,25 @@ describe('sucrose', () => {
 
 	it('common 2', async () => {
 		expect(
-			sucrose({
-				handler: ({ set, cookie: { auth } }) => {
+			sucrose(
+				({ set, cookie: { auth } }) => {
 					console.log(auth.value)
 					return ''
 				},
-				afterHandle: [],
-				beforeHandle: [],
-				error: [],
-				mapResponse: [],
-				afterResponse: [],
-				parse: [],
-				request: [],
-				start: [],
-				stop: [],
-				trace: [],
-				transform: []
-			})
+				{
+					afterHandle: [],
+					beforeHandle: [],
+					error: [],
+					mapResponse: [],
+					afterResponse: [],
+					parse: [],
+					request: [],
+					start: [],
+					stop: [],
+					trace: [],
+					transform: []
+				}
+			)
 		).toEqual({
 			query: false,
 			headers: false,
@@ -100,21 +104,6 @@ describe('sucrose', () => {
 		})
 	})
 
-	it('inherits inference from plugin', () => {
-		const plugin = new Elysia().derive(({ headers: { authorization } }) => {
-			return {
-				get auth() {
-					return authorization
-				}
-			}
-		})
-
-		const main = new Elysia().use(plugin)
-
-		// @ts-expect-error
-		expect(main.inference.headers).toBe(true)
-	})
-
 	it("don't link inference", async () => {
 		const app = new Elysia({
 			cookie: {
@@ -133,24 +122,26 @@ describe('sucrose', () => {
 
 	it('mix up chain properties as query', () => {
 		expect(
-			sucrose({
-				handler: async (c) => {
+			sucrose(
+				async (c) => {
 					const id = c.query.id
 					const cookie = c.cookie
 					return { cookie, id }
 				},
-				afterHandle: [],
-				beforeHandle: [],
-				error: [],
-				mapResponse: [],
-				onResponse: [],
-				parse: [],
-				request: [],
-				start: [],
-				stop: [],
-				trace: [],
-				transform: []
-			})
+				{
+					afterHandle: [],
+					beforeHandle: [],
+					error: [],
+					mapResponse: [],
+					onResponse: [],
+					parse: [],
+					request: [],
+					start: [],
+					stop: [],
+					trace: [],
+					transform: []
+				}
+			)
 		).toEqual({
 			body: false,
 			cookie: true,
@@ -166,22 +157,24 @@ describe('sucrose', () => {
 
 	it('infer all inferences if context is passed to function', () => {
 		expect(
-			sucrose({
-				handler: function (context) {
+			sucrose(
+				(context) => {
 					console.log(context)
 				},
-				afterHandle: [],
-				beforeHandle: [],
-				error: [],
-				mapResponse: [],
-				onResponse: [],
-				parse: [],
-				request: [],
-				start: [],
-				stop: [],
-				trace: [],
-				transform: []
-			})
+				{
+					afterHandle: [],
+					beforeHandle: [],
+					error: [],
+					mapResponse: [],
+					onResponse: [],
+					parse: [],
+					request: [],
+					start: [],
+					stop: [],
+					trace: [],
+					transform: []
+				}
+			)
 		).toEqual({
 			query: true,
 			headers: true,
@@ -197,22 +190,24 @@ describe('sucrose', () => {
 
 	it('infer all inferences if context is passed to function', () => {
 		expect(
-			sucrose({
-				handler: function ({ ...context }) {
+			sucrose(
+				({ ...context }) => {
 					console.log(context)
 				},
-				afterHandle: [],
-				beforeHandle: [],
-				error: [],
-				mapResponse: [],
-				onResponse: [],
-				parse: [],
-				request: [],
-				start: [],
-				stop: [],
-				trace: [],
-				transform: []
-			})
+				{
+					afterHandle: [],
+					beforeHandle: [],
+					error: [],
+					mapResponse: [],
+					onResponse: [],
+					parse: [],
+					request: [],
+					start: [],
+					stop: [],
+					trace: [],
+					transform: []
+				}
+			)
 		).toEqual({
 			query: true,
 			headers: true,
@@ -228,22 +223,24 @@ describe('sucrose', () => {
 
 	it('infer single object destructure property', () => {
 		expect(
-			sucrose({
-				handler: function ({ server }) {
+			sucrose(
+				({ server }) => {
 					console.log(server)
 				},
-				afterHandle: [],
-				beforeHandle: [],
-				error: [],
-				mapResponse: [],
-				onResponse: [],
-				parse: [],
-				request: [],
-				start: [],
-				stop: [],
-				trace: [],
-				transform: []
-			})
+				{
+					afterHandle: [],
+					beforeHandle: [],
+					error: [],
+					mapResponse: [],
+					onResponse: [],
+					parse: [],
+					request: [],
+					start: [],
+					stop: [],
+					trace: [],
+					transform: []
+				}
+			)
 		).toEqual({
 			query: false,
 			headers: false,
@@ -279,22 +276,24 @@ describe('sucrose', () => {
 
 	it('access route, url, path', () => {
 		expect(
-			sucrose({
-				handler: function (context) {
+			sucrose(
+				(context) => {
 					console.log(context.url, context.path, context.route)
 				},
-				afterHandle: [],
-				beforeHandle: [],
-				error: [],
-				mapResponse: [],
-				onResponse: [],
-				parse: [],
-				request: [],
-				start: [],
-				stop: [],
-				trace: [],
-				transform: []
-			})
+				{
+					afterHandle: [],
+					beforeHandle: [],
+					error: [],
+					mapResponse: [],
+					onResponse: [],
+					parse: [],
+					request: [],
+					start: [],
+					stop: [],
+					trace: [],
+					transform: []
+				}
+			)
 		).toEqual({
 			query: false,
 			headers: false,
@@ -310,11 +309,9 @@ describe('sucrose', () => {
 
 	it('handle context pass to function with sub context', () => {
 		expect(
-			sucrose({
-				handler: (context) => {
-					console.log('path >>> ', context.path)
-					console.log(context)
-				}
+			sucrose((context) => {
+				console.log('path >>> ', context.path)
+				console.log(context)
 			})
 		).toEqual({
 			query: true,

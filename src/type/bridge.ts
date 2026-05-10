@@ -17,7 +17,8 @@ import type {
 	coerceFormData as coerceFormDataType,
 	coerceQuery as coerceQueryType,
 	coerceRoot as coerceRootType,
-	coerceStringToStructure as coerceStringToStructureType
+	coerceStringToStructure as coerceStringToStructureType,
+	coerceBody as coerceBodyType
 } from './coerce'
 import { type hasTypes as hasTypesType } from './utils'
 
@@ -48,6 +49,7 @@ export let coerceQuery: typeof coerceQueryType = errorFn as any
 export let coerceRoot: typeof coerceRootType = errorFn as any
 export let coerceStringToStructure: typeof coerceStringToStructureType =
 	errorFn as any
+export let coerceBody: typeof coerceBodyType = errorFn as any
 
 export let hasTypes: typeof hasTypesType = errorFn as any
 export let HasCodec: typeof HasCodecType = errorFn as any
@@ -65,6 +67,7 @@ export function useTypebox(mod: {
 	coerceQuery: typeof coerceQueryType
 	coerceRoot: typeof coerceRootType
 	coerceStringToStructure: typeof coerceStringToStructureType
+	coerceBody: typeof coerceBodyType
 	hasTypes: typeof hasTypesType
 	HasCodec: typeof HasCodecType,
 	Intersect: typeof IntersectType
@@ -79,6 +82,7 @@ export function useTypebox(mod: {
 	coerceQuery = mod.coerceQuery
 	coerceRoot = mod.coerceRoot
 	coerceStringToStructure = mod.coerceStringToStructure
+	coerceBody = mod.coerceBody
 	hasTypes = mod.hasTypes
 	HasCodec = mod.HasCodec
 	Intersect = mod.Intersect

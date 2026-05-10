@@ -4,6 +4,7 @@ import { isBlob, isEmpty } from '../../utils'
 import { ELYSIA_TYPES } from '../constants'
 import type { FileOptions, FilesOptions, FileType, FileUnit } from '../types'
 import {
+	cloneSchema,
 	createSharedReference,
 	elyType,
 	Refines,
@@ -50,9 +51,15 @@ export function File(options?: FileOptions) {
 		'must be instance of Blob'
 	)
 
+	// Clone `BaseFile` (preserving non-enumerable `~kind` / `~refine`)
+	// before passing to `elyType` so the cached `BaseFile` stays mutable
+	// for later `Refines()` calls. Without the clone, the first
+	// `t.File()` call freezes BaseFile via `emptyFile`, and subsequent
+	// `t.File({type})` calls fail when typebox `Update()` tries to
+	// define properties on the now-frozen schema.
 	if (!options || isEmpty(options))
 		return (emptyFile ??= Object.freeze(
-			elyType(ELYSIA_TYPES.File, BaseFile)
+			elyType(ELYSIA_TYPES.File, cloneSchema(BaseFile))
 		))
 
 	sharedFile ??= createSharedReference(FileWithProperty)

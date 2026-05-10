@@ -21,13 +21,12 @@ export function ObjectString<T extends TProperties>(
 			Type.Refine(
 				StringType(),
 				(value) => {
-					if (
-						(value.charCodeAt(0) !== 123 &&
-							value.charCodeAt(value.length - 1) !== 125) ||
-						(value.charCodeAt(0) !== 91 &&
-							value.charCodeAt(value.length - 1) !== 93)
-					)
-						return false
+					const start = value.charCodeAt(0)
+					const end = value.charCodeAt(value.length - 1)
+					// we already have try parse check, so just quick check
+					const isObject = start === 123
+					const isArray = start === 91
+					if (!isObject && !isArray) return false
 
 					try {
 						JSON.parse(value)

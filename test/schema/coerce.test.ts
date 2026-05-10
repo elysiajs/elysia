@@ -1,6 +1,6 @@
 import Type from 'typebox'
-import { coerce } from '../../src/2/type/coerce'
-import { type BaseSchema } from '../../src/2/type'
+import { coerce } from '../../src/type/coerce'
+import { type BaseSchema } from '../../src/type'
 import { describe, expect, it } from 'bun:test'
 
 describe('coerce schema', () => {

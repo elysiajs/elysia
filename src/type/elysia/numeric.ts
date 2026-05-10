@@ -3,16 +3,32 @@ import type { TNumberOptions } from 'typebox'
 
 import { isEmpty } from '../../utils'
 import { ELYSIA_TYPES } from '../constants'
-import { Intersect } from './intersect'
 import { NumberType } from './number'
 import { StringType } from './string'
 import { Union } from './union'
 import { elyType, getMeta } from './utils'
 
 let StringifiedNumber: Type.TCodec<Type.TRefine<Type.TString>, number>
-let emptyNumeric: Readonly<
-	Type.TUnion<[Type.TNumber, Type.TCodec<Type.TRefine<Type.TString>, number>]>
+type NumericSchema = Type.TUnion<
+	[Type.TNumber, Type.TCodec<Type.TRefine<Type.TString>, number>]
 >
+let emptyNumeric: Readonly<NumericSchema>
+
+function passesConstraints(n: number, c: TNumberOptions): boolean {
+	if (typeof c.minimum === 'number' && n < c.minimum) return false
+	if (typeof c.maximum === 'number' && n > c.maximum) return false
+
+	if (typeof c.exclusiveMinimum === 'number' && n <= c.exclusiveMinimum)
+		return false
+
+	if (typeof c.exclusiveMaximum === 'number' && n >= c.exclusiveMaximum)
+		return false
+
+	if (typeof c.multipleOf === 'number' && n % c.multipleOf !== 0) return false
+
+	return true
+}
+
 export function Numeric(property?: TNumberOptions) {
 	StringifiedNumber ??= Type.Decode(
 		Type.Refine(StringType(), (value) => !isNaN(+value), 'must be number'),
@@ -24,14 +40,25 @@ export function Numeric(property?: TNumberOptions) {
 			elyType(
 				ELYSIA_TYPES.Numeric,
 				Union([NumberType(), StringifiedNumber])
-			)
+			) as NumericSchema
 		))
 
 	const [constraints, meta] = getMeta(property)
 	const number = NumberType(constraints)
+	const stringified = Type.Decode(
+		Type.Refine(
+			StringType(),
+			(value) => {
+				const n = +value
+				return !isNaN(n) && passesConstraints(n, constraints as any)
+			},
+			'must be number'
+		),
+		(value) => +value
+	)
 
 	return elyType(
 		ELYSIA_TYPES.Numeric,
-		Union([number, Intersect([StringifiedNumber, number])], meta)
+		Union([number, stringified] as any, meta) as NumericSchema
 	)
 }

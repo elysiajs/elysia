@@ -1,16 +1,17 @@
 import { describe, it, expect } from 'bun:test'
 
 import { t } from '../../src'
-import { hasType } from '../../src/schema'
+import { hasType } from '../../src/type/utils'
+import { ELYSIA_TYPES } from '../../src/type/constants'
 
-describe('Has Transform', () => {
+describe('Has Type', () => {
 	it('find primitive', () => {
 		const schema = t
 			.Codec(t.File())
 			.Decode((v) => v)
 			.Encode((v) => v)
 
-		expect(hasType('File', schema)).toBe(true)
+		expect(hasType(ELYSIA_TYPES.File, schema)).toBe(true)
 	})
 
 	it('find in root object', () => {
@@ -18,7 +19,7 @@ describe('Has Transform', () => {
 			liyue: t.File()
 		})
 
-		expect(hasType('File', schema)).toBe(true)
+		expect(hasType(ELYSIA_TYPES.File, schema)).toBe(true)
 	})
 
 	it('find in nested object', () => {
@@ -28,7 +29,7 @@ describe('Has Transform', () => {
 			})
 		})
 
-		expect(hasType('File', schema)).toBe(true)
+		expect(hasType(ELYSIA_TYPES.File, schema)).toBe(true)
 	})
 
 	it('find in Optional', () => {
@@ -38,7 +39,7 @@ describe('Has Transform', () => {
 			})
 		)
 
-		expect(hasType('File', schema)).toBe(true)
+		expect(hasType(ELYSIA_TYPES.File, schema)).toBe(true)
 	})
 
 	it('find on multiple transform', () => {
@@ -47,7 +48,7 @@ describe('Has Transform', () => {
 			name: t.File()
 		})
 
-		expect(hasType('File', schema)).toBe(true)
+		expect(hasType(ELYSIA_TYPES.File, schema)).toBe(true)
 	})
 
 	it('return false on not found', () => {
@@ -56,7 +57,7 @@ describe('Has Transform', () => {
 			age: t.Number()
 		})
 
-		expect(hasType('File', schema)).toBe(false)
+		expect(hasType(ELYSIA_TYPES.File, schema)).toBe(false)
 	})
 
 	it('found on Union', () => {
@@ -65,30 +66,30 @@ describe('Has Transform', () => {
 			liyue: t.Union([t.Number(), t.File()])
 		})
 
-		expect(hasType('File', schema)).toBe(true)
+		expect(hasType(ELYSIA_TYPES.File, schema)).toBe(true)
 	})
 
 	it('found on direct Union', () => {
 		const schema = t.Union([
 			t.Object({
-			    id: t.Number(),
-			    liyue: t.File()
+				id: t.Number(),
+				liyue: t.File()
 			}),
 			t.Object({
-			    id: t.Number(),
-			    liyue: t.Number(),
-			}),
+				id: t.Number(),
+				liyue: t.Number()
+			})
 		])
 
-		expect(hasType('File', schema)).toBe(true)
+		expect(hasType(ELYSIA_TYPES.File, schema)).toBe(true)
 	})
 
 	it('find in Import wrapping File', () => {
 		const schema = t.Module({
 			Avatar: t.File()
-		}).Import('Avatar')
+		}).Avatar
 
-		expect(hasType('File', schema)).toBe(true)
+		expect(hasType(ELYSIA_TYPES.File, schema)).toBe(true)
 	})
 
 	it('find in Import wrapping Object with File', () => {
@@ -97,9 +98,9 @@ describe('Has Transform', () => {
 				name: t.String(),
 				file: t.File()
 			})
-		}).Import('Upload')
+		}).Upload
 
-		expect(hasType('File', schema)).toBe(true)
+		expect(hasType(ELYSIA_TYPES.File, schema)).toBe(true)
 	})
 
 	it('return false for Import wrapping Object without File', () => {
@@ -108,48 +109,45 @@ describe('Has Transform', () => {
 				name: t.String(),
 				age: t.Number()
 			})
-		}).Import('User')
+		}).User
 
-		expect(hasType('File', schema)).toBe(false)
+		expect(hasType(ELYSIA_TYPES.File, schema)).toBe(false)
 	})
 
 	it('find in Import wrapping Union with File', () => {
 		const schema = t.Module({
-			Data: t.Union([
-				t.Object({ file: t.File() }),
-				t.Null()
-			])
-		}).Import('Data')
+			Data: t.Union([t.Object({ file: t.File() }), t.Null()])
+		}).Data
 
-		expect(hasType('File', schema)).toBe(true)
+		expect(hasType(ELYSIA_TYPES.File, schema)).toBe(true)
 	})
 
 	it('find in Import wrapping Array of Files', () => {
 		const schema = t.Module({
 			Uploads: t.Array(t.File())
-		}).Import('Uploads')
+		}).Uploads
 
-		expect(hasType('Files', schema)).toBe(true)
+		expect(hasType(ELYSIA_TYPES.Files, schema)).toBe(true)
 	})
 
 	it('find in Import wrapping Array of Files using t.Files', () => {
 		const schema = t.Module({
 			Uploads: t.Files()
-		}).Import('Uploads')
+		}).Uploads
 
-		expect(hasType('Files', schema)).toBe(true)
+		expect(hasType(ELYSIA_TYPES.Files, schema)).toBe(true)
 	})
 
 	it('find in Array of Files (direct)', () => {
 		const schema = t.Array(t.File())
 
-		expect(hasType('Files', schema)).toBe(true)
+		expect(hasType(ELYSIA_TYPES.Files, schema)).toBe(true)
 	})
 
 	it('find in Array of Files using t.Files (direct)', () => {
 		const schema = t.Files()
 
-		expect(hasType('Files', schema)).toBe(true)
+		expect(hasType(ELYSIA_TYPES.Files, schema)).toBe(true)
 	})
 
 	// Intersect schema tests
@@ -163,7 +161,7 @@ describe('Has Transform', () => {
 			})
 		])
 
-		expect(hasType('File', schema)).toBe(true)
+		expect(hasType(ELYSIA_TYPES.File, schema)).toBe(true)
 	})
 
 	it('do not find on Intersect without File', () => {
@@ -176,7 +174,7 @@ describe('Has Transform', () => {
 			})
 		])
 
-		expect(hasType('File', schema)).toBe(false)
+		expect(hasType(ELYSIA_TYPES.File, schema)).toBe(false)
 	})
 
 	it('find on nested Union in Intersect', () => {
@@ -187,19 +185,17 @@ describe('Has Transform', () => {
 			t.Union([t.Object({ file: t.File() }), t.Null()])
 		])
 
-		expect(hasType('File', schema)).toBe(true)
+		expect(hasType(ELYSIA_TYPES.File, schema)).toBe(true)
 	})
 
 	it('find File in Intersect referenced via Module.Import()', () => {
-		const schema = t
-			.Module({
-				Data: t.Intersect([
-					t.Object({ id: t.Number() }),
-					t.Object({ file: t.File() })
-				])
-			})
-			.Import('Data')
+		const schema = t.Module({
+			Data: t.Intersect([
+				t.Object({ id: t.Number() }),
+				t.Object({ file: t.File() })
+			])
+		}).Data
 
-		expect(hasType('File', schema)).toBe(true)
+		expect(hasType(ELYSIA_TYPES.File, schema)).toBe(true)
 	})
 })

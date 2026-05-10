@@ -1,3 +1,5 @@
+import { Default } from 'typebox/value'
+
 import { StatusMap, StatusMapBack } from './constants'
 
 export class ElysiaError<
@@ -21,10 +23,10 @@ export class ElysiaError<
  */
 export const validationDetail =
 	<T>(message: T) =>
-	(error: any) => ({
-		...error,
-		message
-	})
+	(error: any) => {
+		error.message = message
+		return error
+	}
 
 export class InternalServerError extends ElysiaError {
 	code = 'INTERNAL_SERVER_ERROR'
@@ -79,6 +81,12 @@ const normalizeValidationIssue = (e: any, value: unknown) => {
 	}
 }
 
+const propertyAccessor = (path: unknown): string => {
+	if (Array.isArray(path)) return path.length ? '/' + path.join('/') : 'root'
+	if (typeof path === 'string') return path || 'root'
+	return 'root'
+}
+
 // Walk a TypeBox/Standard schema using an `instancePath` like `/x` or
 // `/items/0` to find the violating sub-schema. Returns undefined if the
 // path can't be resolved. Used to read custom `error` overrides off the
@@ -125,11 +133,8 @@ export class ValidationError extends ElysiaError {
 	code = 'VALIDATION'
 	status = 422
 
-	// `customError` is the literal string or the result of calling the
-	// schema's `error` function. When set, it overrides the JSON dump that
-	// would otherwise be the message — letting users return short, custom
-	// messages from `t.X({ error: ... })`.
 	customError?: unknown
+	private schema?: unknown
 
 	constructor(
 		public type: string | undefined,
@@ -152,10 +157,6 @@ export class ValidationError extends ElysiaError {
 					: sub.error
 		}
 
-		// Pick the message: explicit custom error > violating error's
-		// `.message` > generic fallback. Plain strings are used as-is so
-		// `error.message` doesn't start with `{` for handlers that just
-		// want the user-visible string.
 		let message: string
 		if (customError !== undefined) {
 			message =
@@ -170,6 +171,7 @@ export class ValidationError extends ElysiaError {
 
 		super(message)
 		this.customError = customError
+		this.schema = schema
 	}
 
 	get all() {
@@ -185,6 +187,47 @@ export class ValidationError extends ElysiaError {
 			message,
 			errors: this.all
 		}
+	}
+
+	get payload() {
+		const first = (this.errors ?? []).find(Boolean) as any
+		const property = first
+			? propertyAccessor(first.instancePath ?? first.path)
+			: 'root'
+
+		const message = first?.message ?? this.message
+		const enrichedErrors = (this.errors ?? []).filter(Boolean).map((e) => ({
+			...e,
+			summary: e.summary ?? e.message ?? ''
+		}))
+
+		let expected: unknown
+		const schemaForExpected = first?.schema ?? this.schema
+		if (schemaForExpected)
+			try {
+				expected = Default({}, schemaForExpected as any, undefined)
+			} catch {}
+
+		return {
+			type: 'validation',
+			on: this.type,
+			property,
+			message,
+			summary: message,
+			expected,
+			found: this.value,
+			errors: enrichedErrors
+		}
+	}
+
+	toResponse(headers?: Record<string, any>) {
+		return new Response(JSON.stringify(this.payload), {
+			status: 422,
+			headers: {
+				...headers,
+				'content-type': 'application/json'
+			}
+		})
 	}
 }
 
@@ -222,8 +265,7 @@ export class ElysiaStatus<
 
 		this.code = (StatusMap[code as keyof StatusMap] as Status) ?? code
 
-		if (!emptyHttpStatus.has(code as number))
-			this.response = response as T
+		if (!emptyHttpStatus.has(code as number)) this.response = response as T
 	}
 
 	// Mirrors `ElysiaError.status` so error-handling code paths can read

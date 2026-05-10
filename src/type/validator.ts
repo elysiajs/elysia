@@ -9,7 +9,6 @@ import type {
 } from 'typebox/type'
 import {
 	Clean,
-	Convert,
 	Decode,
 	DecodeUnsafe,
 	Default,
@@ -22,7 +21,12 @@ import { TLocalizedValidationError } from 'typebox/error'
 
 import createMirror from 'exact-mirror'
 
-import { applyCoercions, deferCoercions, type CoerceOption } from './coerce'
+import {
+	applyCoercions,
+	CoerceOption,
+	deferCoercions,
+	nonAdditionalProperties
+} from './coerce'
 import { ELYSIA_TYPES } from './constants'
 import { Validator, type ValidatorOptions } from '../validator'
 import { isAsyncFunction } from '../compile/utils'
@@ -37,6 +41,45 @@ const moduleCache = new WeakMap<
 	Record<string, TSchema>
 >()
 
+function schemaContainsRef(node: any, seen = new WeakSet()): boolean {
+	if (!node || typeof node !== 'object' || seen.has(node)) return false
+	seen.add(node)
+
+	if (node.$ref) return true
+
+	const props = node.properties
+	if (props)
+		for (const k in props)
+			if (schemaContainsRef(props[k], seen)) return true
+
+	const items = node.items
+	if (Array.isArray(items)) {
+		for (const it of items) if (schemaContainsRef(it, seen)) return true
+	} else if (items && schemaContainsRef(items, seen)) return true
+
+	for (const key of ['anyOf', 'allOf', 'oneOf'] as const) {
+		const arr = node[key]
+		if (Array.isArray(arr))
+			for (const x of arr) if (schemaContainsRef(x, seen)) return true
+	}
+
+	if (
+		node.additionalProperties &&
+		typeof node.additionalProperties === 'object' &&
+		schemaContainsRef(node.additionalProperties, seen)
+	)
+		return true
+
+	if (node.not && schemaContainsRef(node.not, seen)) return true
+
+	const pp = node.patternProperties
+	if (pp) for (const k in pp) if (schemaContainsRef(pp[k], seen)) return true
+
+	return false
+}
+
+let inlineRefId = 0
+
 const isAsyncPredicate = (v: unknown) =>
 	Array.isArray(v)
 		? v.some((x) =>
@@ -46,17 +89,6 @@ const isAsyncPredicate = (v: unknown) =>
 			)
 		: false
 
-// Determines whether `Default(schema, {})` produces a snapshot that's safe to
-// cache and merge against arbitrary inputs. Unsafe nodes:
-//   - Union/Intersect: chosen default depends on the runtime value's branch.
-//   - Codec (`~codec`): encode/decode applied via callback per-call.
-//   - Refine (`~refine`): default filtered by predicate at runtime.
-//   - Ref/Cyclic: schema body resolved elsewhere.
-//   - Nested Object without its own `default`: TypeBox's `Default(schema,{})`
-//     does NOT materialize nested objects unless the input has the key,
-//     so the cached snapshot would be missing nested skeletons. Falling
-//     back to runtime `Default()` for these is correct (and `Default` does
-//     walk into nested objects when the input provides them).
 function isPrecomputeSafe(schema: any, depth = 0): boolean {
 	if (!schema || typeof schema !== 'object') return true
 
@@ -74,7 +106,7 @@ function isPrecomputeSafe(schema: any, depth = 0): boolean {
 	// the underlying schema; `~kind` shows the wrapped type, not the wrapper.
 	if (schema['~codec'] || schema['~refine']) return false
 
-	// Nested Object without its own default — see comment above.
+	// Nested Object without its own default - see comment above.
 	if (
 		depth > 0 &&
 		(kind === 'Object' || schema.type === 'object') &&
@@ -106,21 +138,13 @@ function isPrecomputeSafe(schema: any, depth = 0): boolean {
 	return true
 }
 
-// Deep-merge user-supplied input into a clone of the precomputed defaults.
-// Top-level keys come from `defaults`; user `value` keys override, recursing
-// into nested plain objects so partial nested input still pulls leaf
-// defaults from the snapshot. Tighter than the general `mergeDeep` in
-// utils.ts (no cycle/skipKeys/freeze handling) — we know the inputs.
-//
-// Cycle safety: TypeBox schemas can't produce cyclic precomputed defaults
-// (Cyclic/Ref schemas opt out via `isPrecomputeSafe`). Cyclic user input
-// is user error and would also break TypeBox's own `Default()`; we don't
-// guard against it.
+// recursive merge precompute default
 function applyPrecomputed(
 	defaults: Record<string, unknown>,
 	value: Record<string, unknown>
 ): Record<string, unknown> {
 	const out: Record<string, unknown> = { ...defaults }
+
 	for (const k in value) {
 		const v = value[k]
 		if (v === undefined) continue
@@ -139,6 +163,7 @@ function applyPrecomputed(
 			)
 		else out[k] = v
 	}
+
 	return out
 }
 
@@ -150,19 +175,9 @@ export class TypeBoxValidator<
 	schema: T
 	isAsync: boolean
 	hasDefault: boolean
-	// Two precomputed snapshots used when the schema is safe (no Union /
-	// Intersect / Codec / Refine at non-leaf). `precomputedDefault` is what
-	// `Default(schema, undefined)` would return — the value to use when the
-	// input is undefined/null (primitive schemas with a top-level default
-	// resolve here). `precomputedObjectDefault` is `Default(schema, {})` —
-	// the snapshot to deep-merge into object inputs so leaf defaults still
-	// fill in. When both are unset the validator falls back to runtime
-	// `Default()`. Skipping precompute is signalled by `precomputeSafe`.
 	precomputeSafe: boolean
 	precomputedDefault: unknown
 	precomputedObjectDefault: Record<string, unknown> | undefined
-	// `t.NoValidate(...)` opts the schema out of Check/Decode/Encode entirely
-	// — From/EncodeFrom return the value as-is.
 	noValidate: boolean
 
 	constructor(
@@ -176,7 +191,9 @@ export class TypeBoxValidator<
 		if (isIntersectable)
 			schema = Type.Evaluate(
 				Type.Intersect([schema, ...options!.schemas!])
-			)
+			) as any as T
+
+		const originalElyTyp = (schema as any)?.['~elyTyp']
 
 		if (name && options?.models) {
 			const module = moduleCache.getOrInsertComputed(options.models, () =>
@@ -184,9 +201,25 @@ export class TypeBoxValidator<
 			)
 
 			schema = module[name] as T
+		} else if (
+			options?.models &&
+			typeof name !== 'string' &&
+			schemaContainsRef(schema)
+		) {
+			const id = `inline@${++inlineRefId}`
+			const synthetic = Type.Module({
+				...(options.models as Record<string, TSchema>),
+				[id]: schema as TSchema
+			})
+			schema = synthetic[id as keyof typeof synthetic] as T
 		}
 
 		this.schema = applyCoercions(schema, options?.coerces) as T
+
+		if (options?.normalize === false)
+			this.schema = nonAdditionalProperties(
+				this.schema as any
+			) as unknown as T
 
 		this.tb = Compile(this.schema as TSchema)
 		this.hasCodec = HasCodec(this.schema)
@@ -198,13 +231,7 @@ export class TypeBoxValidator<
 		this.precomputeSafe =
 			this.hasDefault && isPrecomputeSafe(this.schema as any)
 		if (this.precomputeSafe) {
-			// `Default(schema, undefined)` returns the default for primitive
-			// schemas with a top-level default; for object schemas with only
-			// leaf defaults it returns undefined.
 			this.precomputedDefault = Default(this.schema, undefined)
-			// `Default(schema, {})` walks leaf defaults so we can merge them
-			// into a partial user object. Frozen so we never mutate the
-			// shared snapshot — each call clones via `applyPrecomputed`.
 			const obj = Default(this.schema, {}) as unknown
 			this.precomputedObjectDefault =
 				obj && typeof obj === 'object' && !Array.isArray(obj)
@@ -214,8 +241,10 @@ export class TypeBoxValidator<
 			this.precomputedDefault = undefined
 			this.precomputedObjectDefault = undefined
 		}
+
 		this.noValidate =
-			(this.schema as any)?.['~elyTyp'] === ELYSIA_TYPES.NoValidate
+			(this.schema as any)?.['~elyTyp'] === ELYSIA_TYPES.NoValidate ||
+			originalElyTyp === ELYSIA_TYPES.NoValidate
 
 		try {
 			this.Clean =
@@ -252,13 +281,6 @@ export class TypeBoxValidator<
 		return this.hasCodec ? Encode(this.schema, value) : (value as any)
 	}
 
-	// Encode + Check, surfaced as ValidationError on failure. Used by the
-	// response branch — mirrors src-old's `coerceTransformDecodeError`
-	// wrapper for the encode direction.
-	//
-	// `noValidate` skips Check only — Default/Convert/Codec.Encode still run.
-	// On the codec branch we route through `EncodeUnsafe` (callback only)
-	// and skip the Assert step that the bundled `Encode` performs.
 	EncodeFrom(value: Static<T>, type?: string): StaticEncode<T> {
 		if (!this.hasCodec) {
 			if (!this.noValidate && !this.Check(value))
@@ -268,14 +290,19 @@ export class TypeBoxValidator<
 					this.Errors(value),
 					this.schema
 				)
+
+			if (this.Clean) value = this.Clean(value) as Static<T>
 			return value as any
 		}
 		try {
-			return this.noValidate
+			const out = this.noValidate
 				? // @ts-ignore EncodeUnsafe returns unknown
 					(EncodeUnsafe({}, this.schema, value) as any)
 				: Encode(this.schema, value)
+			return this.Clean ? (this.Clean(out) as any) : out
 		} catch (e: any) {
+			if (this.noValidate)
+				return this.Clean ? (this.Clean(value) as any) : (value as any)
 			if (e instanceof ValidationError) throw e
 			if (e?.error) throw e.error
 			throw new ValidationError(
@@ -293,6 +320,29 @@ export class TypeBoxValidator<
 			: this.FromSync(value, type)
 	}
 
+	private optionalBypass(
+		value: Static<T>
+	): { bypass: true; value: Static<T> } | undefined {
+		const schema = this.schema as any
+		if (!schema?.['~optional']) return undefined
+
+		if (value === undefined || value === null)
+			return {
+				bypass: true,
+				value: (schema['~kind'] === 'Object' ? {} : value) as Static<T>
+			}
+
+		if (
+			schema['~kind'] === 'Object' &&
+			typeof value === 'object' &&
+			!Array.isArray(value) &&
+			Object.keys(value as object).length === 0
+		)
+			return { bypass: true, value: {} as Static<T> }
+
+		return undefined
+	}
+
 	async FromAsync(value: Static<T>, type?: string): Promise<Static<T>> {
 		if (this.hasDefault) {
 			if (this.precomputeSafe) {
@@ -308,20 +358,15 @@ export class TypeBoxValidator<
 						value as any
 					) as any
 				}
-				// primitive non-undefined input: leave as-is (Default would
-				// not overwrite an existing primitive)
 			} else {
 				value = Default(this.schema, value) as any
 			}
 		}
+
+		const bypass = this.optionalBypass(value)
+		if (bypass) return bypass.value
+
 		if (this.hasCodec) {
-			// Codec path: Convert (string→number/etc) → Check the wire-form
-			// → run the codec callback. Mirrors TypeBox 1.0's standard
-			// Decode order. Without this ordering, codec schemas like
-			// `Codec(String).Decode(s => Date)` would Check a Date against
-			// `t.String()` and fail with "must be string".
-			// @ts-ignore
-			value = Convert({}, this.schema, value)
 			if (!this.noValidate && !this.Check(value))
 				throw new ValidationError(
 					type,
@@ -333,10 +378,6 @@ export class TypeBoxValidator<
 				// @ts-ignore
 				value = await DecodeUnsafe({}, this.schema, value)
 			} catch (e: any) {
-				// Mirror src-old's `coerceTransformDecodeError`: propagate
-				// user-thrown errors (e.g. NotFoundError raised inside a
-				// Decode callback) verbatim; otherwise surface as our
-				// ValidationError so the route's error chain is uniform.
 				if (e instanceof ValidationError) throw e
 				if (e?.error) throw e.error
 				throw new ValidationError(
@@ -347,11 +388,6 @@ export class TypeBoxValidator<
 				)
 			}
 		} else {
-			// Non-codec path: pure Check, no coercion. Important for
-			// response validation — we do NOT want a returned `1` to be
-			// silently coerced into `'1'` against a `t.String()` response
-			// schema; the test should fail.
-			// @ts-ignore
 			if (!this.noValidate && !(await this.Check(value)))
 				throw new ValidationError(
 					type,
@@ -385,9 +421,12 @@ export class TypeBoxValidator<
 				value = Default(this.schema, value) as Static<T>
 			}
 		}
+
+		const bypass = this.optionalBypass(value)
+		if (bypass) return bypass.value
+
 		if (this.hasCodec) {
-			// @ts-ignore
-			value = Convert({}, this.schema, value) as Static<T>
+			// See FromAsync for the rationale on skipping `Convert`
 			if (!this.noValidate && !this.Check(value))
 				throw new ValidationError(
 					type,
@@ -423,10 +462,6 @@ export class TypeBoxValidator<
 
 export class TypeBoxValidatorCache {
 	private static EMPTY = {} as const
-	// `error` is intentionally NOT in the ignore set: two schemas that
-	// differ only in `error` produce different `customError` values when
-	// validation fails, so caching them under the same key would return
-	// the wrong custom message.
 	private static ignoreKeys = new Set([
 		'title',
 		'description',
@@ -435,12 +470,8 @@ export class TypeBoxValidatorCache {
 		'defaultValue'
 	])
 
-	// Stable per-process IDs for function values (e.g. `error` callbacks
-	// produced by `validationDetail`). `JSON.stringify` drops functions by
-	// default, which collapsed `t.Number({ error: fn })` and `t.Number()` to
-	// the same cache key — a later test that built `t.Number()` would get
-	// a validator carrying the prior test's schema, and `ValidationError`
-	// would walk that stale schema for `customError`.
+	// Stable per-process IDs for function values `error` callbacks
+	// produced by
 	private static fnIds = new WeakMap<Function, number>()
 	private static nextFnId = 0
 	private static fnKey(fn: Function) {
@@ -453,14 +484,59 @@ export class TypeBoxValidatorCache {
 	}
 
 	static ignoreMeta(k: string, v: unknown) {
-		// `replacer` must return the value to keep it; returning undefined
-		// drops the property. Previously this only checked the key and fell
-		// off the end (returning undefined) for every property — collapsing
-		// every schema to the same cache key.
 		if (TypeBoxValidatorCache.ignoreKeys.has(k)) return undefined
 		if (typeof v === 'function')
 			return TypeBoxValidatorCache.fnKey(v as Function)
 		return v
+	}
+
+	private static isOpaqueType(schema: any, seen = new WeakSet()): boolean {
+		if (!schema || typeof schema !== 'object') return false
+		if (seen.has(schema)) return false
+		seen.add(schema)
+
+		if (schema['~refine'] || schema['~optional']) return true
+		if ((schema as any)['~elyTyp'] === ELYSIA_TYPES.NoValidate) return true
+
+		const props = schema.properties
+		if (props)
+			for (const k in props)
+				if (TypeBoxValidatorCache.isOpaqueType(props[k], seen))
+					return true
+
+		const items = schema.items
+		if (Array.isArray(items)) {
+			for (const it of items)
+				if (TypeBoxValidatorCache.isOpaqueType(it, seen)) return true
+		} else if (items && TypeBoxValidatorCache.isOpaqueType(items, seen))
+			return true
+
+		for (const k of ['anyOf', 'allOf', 'oneOf'] as const) {
+			const arr = schema[k]
+			if (Array.isArray(arr))
+				for (const x of arr)
+					if (TypeBoxValidatorCache.isOpaqueType(x, seen)) return true
+		}
+
+		if (
+			schema.additionalProperties &&
+			typeof schema.additionalProperties === 'object' &&
+			TypeBoxValidatorCache.isOpaqueType(
+				schema.additionalProperties,
+				seen
+			)
+		)
+			return true
+
+		if (schema.not && TypeBoxValidatorCache.isOpaqueType(schema.not, seen))
+			return true
+
+		const pp = schema.patternProperties
+		if (pp)
+			for (const k in pp)
+				if (TypeBoxValidatorCache.isOpaqueType(pp[k], seen)) return true
+
+		return false
 	}
 
 	private cache = new Map<
@@ -490,13 +566,8 @@ export class TypeBoxValidatorCache {
 				return coercionsCache.get(coercions)!
 		}
 
-		// Codec callbacks aren't JSON-serializable, so two distinct schemas
-		// with identical JSON but different Decode/Encode callbacks would
-		// collide on the same cache key and return the wrong compiled
-		// validator. Skip the JSON cache for codec-bearing schemas; the
-		// reference cache above still de-dupes when the user passes the
-		// same schema object twice.
-		if (HasCodec(schema)) return undefined
+		if (HasCodec(schema) || TypeBoxValidatorCache.isOpaqueType(schema))
+			return undefined
 
 		const key = JSON.stringify(schema, TypeBoxValidatorCache.ignoreMeta)
 		if (this.cache.has(key)) {
@@ -514,10 +585,7 @@ export class TypeBoxValidatorCache {
 			| typeof TypeBoxValidatorCache.EMPTY = TypeBoxValidatorCache.EMPTY,
 		validator: BaseTypeBoxValidator
 	) {
-		// Codec-bearing schemas only go into the reference cache (keyed by
-		// identity). Storing them in the JSON cache would bind the wrong
-		// callbacks to a future schema with identical structure. See `get`.
-		if (HasCodec(schema)) {
+		if (HasCodec(schema) || TypeBoxValidatorCache.isOpaqueType(schema)) {
 			const cache = new WeakMap().set(coercions, validator)
 			this.referenceCache.set(schema, cache)
 			return

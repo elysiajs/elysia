@@ -202,7 +202,7 @@
 	"dependencies": {
 		"deuri": "^2.0.1",
 		"exact-mirror": "^1.0.0",
-		"memoirist": "^1.0.2"
+		"memoirist": "^1.0.3"
 	},
 	"devDependencies": {
 		"@elysiajs/openapi": "^1.4.1",

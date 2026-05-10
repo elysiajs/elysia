@@ -1,6 +1,6 @@
-export { Elysia } from './base'
+import { Elysia } from './base'
 
-export { redirect } from './utils'
+export { redirect, sse } from './utils'
 export {
 	status,
 	ElysiaError,
@@ -20,3 +20,6 @@ export type {
 	StandardSchemaV1Like,
 	StandardJSONSchemaV1Like
 } from './type'
+
+export { Elysia }
+export default Elysia

@@ -36,7 +36,15 @@ export function ArrayString<T extends TProperties>(
 		(value) => JSON.parse(value)
 	)
 
-	const [{ items, ...constraints }, meta] = getMeta(property)
+	// `property` is the items schema (e.g. `t.Numeric()`), `_options` is
+	// the source `t.Array(...)` node minus `type`. Constraints/meta
+	// (`minItems`, `maxItems`, `description`, etc.) live on `_options`,
+	// NOT on the items. Reading them off `property` produced a malformed
+	// schema where the items' fields (e.g. Numeric's `anyOf`) bled into
+	// the wrapper Array - `t.Array(t.Numeric())` came out as
+	// `{type:'array', items, anyOf, ~elyTyp:Numeric}` and validation
+	// against `['1','2']` failed at the top level.
+	const [constraints, meta] = getMeta((_options ?? {}) as any)
 	const array = ArrayType(property as any, constraints)
 
 	return elyType(

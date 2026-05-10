@@ -208,6 +208,16 @@ export type Prettify<in out T> = {
 	[K in keyof T]: T[K]
 } & {}
 
+export type SSEPayload<
+	Data extends unknown = unknown,
+	Event extends string | undefined = string | undefined
+> = {
+	id?: string | number | null
+	event?: Event
+	retry?: number
+	data?: Data
+}
+
 export type MaybeArray<T> = T | T[]
 export type MaybePromise<T> = T | Promise<T>
 export type IsAny<T> = 0 extends 1 & T ? true : false

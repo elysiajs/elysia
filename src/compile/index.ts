@@ -1,1 +1,1 @@
-export { compileHandler } from './handler'
+export { compileHandler, buildNativeStaticResponse } from './handler'

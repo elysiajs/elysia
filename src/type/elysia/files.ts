@@ -7,6 +7,7 @@ import { ArrayType } from './array'
 import { File } from './file'
 import { Union } from './union'
 import {
+	cloneSchema,
 	createSharedReference,
 	elyType,
 	Refines,
@@ -39,9 +40,15 @@ export function Files(options?: FilesOptions) {
 		Type.Decode(File(), (value) => [value])
 	])
 
+	// Clone `BaseFiles` (preserving non-enumerable `~kind` / `~refine`)
+	// before passing to `elyType` so the cached `BaseFile` stays mutable
+	// for later `Refines()` calls. Without the clone, the first
+	// `t.File()` call freezes BaseFile via `emptyFile`, and subsequent
+	// `t.File({type})` calls fail when typebox `Update()` tries to
+	// define properties on the now-frozen schema.
 	if (!options || isEmpty(options))
 		return (emptyFiles ??= Object.freeze(
-			elyType(ELYSIA_TYPES.Files, BaseFiles)
+			elyType(ELYSIA_TYPES.Files, cloneSchema(BaseFiles))
 		))
 
 	sharedFiles ??= createSharedReference(FilesWithProperty)
@@ -65,6 +72,5 @@ function FilesWithProperty(options: FilesOptions) {
 			`Expect less than ${options.maxItems} files`
 		])
 
-	// refines not matched, expected Decode first
 	return elyType(ELYSIA_TYPES.Files, Refines(BaseFiles, refines as any))
 }

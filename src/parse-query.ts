@@ -76,7 +76,8 @@ export function parseQueryFromURL(
 
 		let finalKey = keySlice
 		if (flags & KEY_HAS_PLUS) finalKey = finalKey.replace(/\+/g, ' ')
-		if (flags & KEY_NEEDS_DECODE) finalKey = decodeComponent(finalKey) || finalKey
+		if (flags & KEY_NEEDS_DECODE)
+			finalKey = decodeComponent(finalKey) || finalKey
 
 		let finalValue = ''
 		if (hasBothKeyValuePair) {
@@ -104,10 +105,34 @@ export function parseQueryFromURL(
 					result[finalKey].unshift(currentValue)
 				}
 			} else {
-				if (currentValue === undefined) result[finalKey] = finalValue
-				else if (Array.isArray(currentValue))
+				if (
+					object &&
+					object?.[finalKey] &&
+					finalValue.charCodeAt(0) === 123
+				) {
+					try {
+						finalValue = JSON.parse(finalValue) as any
+					} catch {}
+				} else if (
+					currentValue === undefined &&
+					!(object && object?.[finalKey]) &&
+					finalValue.indexOf(',') !== -1
+				)
+					finalValue = finalValue.split(',') as any
+
+				if (currentValue === undefined) {
+					result[finalKey] = Array.isArray(finalValue)
+						? finalValue
+						: [finalValue]
+				} else if (Array.isArray(currentValue))
 					currentValue.push(finalValue)
 				else result[finalKey] = [currentValue, finalValue]
+			}
+		} else if (object?.[finalKey] && finalValue.charCodeAt(0) === 123) {
+			try {
+				result[finalKey] = JSON.parse(finalValue)
+			} catch {
+				result[finalKey] = finalValue
 			}
 		} else {
 			result[finalKey] = finalValue

@@ -11,7 +11,8 @@ import {
 	coerceFormData,
 	coerceQuery,
 	coerceRoot,
-	coerceStringToStructure
+	coerceStringToStructure,
+	coerceBody
 } from './coerce'
 import { hasTypes } from './utils'
 
@@ -31,6 +32,7 @@ export function setupTypebox() {
 		coerceQuery,
 		coerceRoot,
 		coerceStringToStructure,
+		coerceBody,
 		hasTypes,
 		HasCodec,
 		Intersect

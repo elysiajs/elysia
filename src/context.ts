@@ -16,12 +16,6 @@ import type {
 	InputSchema
 } from './types'
 
-// Per-app caches keyed by app identity. The previous scheme keyed by a hash
-// of `JSON.stringify(ext)` so two apps with the same store/decorator shape
-// shared the same cached class — but `store` is MUTABLE, and the prototype
-// closed over the FIRST app's store reference, leaking state across apps
-// with matching shapes (reproduced by `resolve > can mutate store` failing
-// only when run alongside `map resolve > can mutate store`).
 let baseCache = new WeakMap<AnyElysia, new () => any>()
 let contextCache = new WeakMap<AnyElysia, new (request: Request) => any>()
 
@@ -64,6 +58,10 @@ export function createContext(
 		headers?: Record<string, string>
 		qi!: number
 		set: { headers: Record<string, string> }
+		// Trace fields — populated only when `.trace(...)` is registered.
+		rid?: string
+		route?: string
+		trace?: any[]
 
 		constructor(public request: Request) {
 			super()
@@ -176,11 +174,16 @@ export type ErrorContext<
 		/**
 		 * Path as registered to router
 		 *
-		 * Represent a path registered to a router, not a URL
+		 * Represent a path registered to a router, not a URL.
+		 * Set only for dynamic routes; for static routes, fall back to `path`.
 		 *
 		 * @example '/id/:id'
 		 */
-		route: string
+		route?: string
+		/**
+		 * Per-request id, populated when `.trace(...)` is registered.
+		 */
+		rid?: string
 		request: Request
 		store: Singleton['store']
 	} & Singleton['decorator'] &
@@ -273,11 +276,16 @@ export type Context<
 		/**
 		 * Path as registered to router
 		 *
-		 * Represent a path registered to a router, not a URL
+		 * Represent a path registered to a router, not a URL.
+		 * Set only for dynamic routes; for static routes, fall back to `path`.
 		 *
 		 * @example '/id/:id'
 		 */
-		route: string
+		route?: string
+		/**
+		 * Per-request id, populated when `.trace(...)` is registered.
+		 */
+		rid?: string
 		request: Request
 		store: Singleton['store']
 

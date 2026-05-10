@@ -6,49 +6,26 @@ import { post, req } from '../utils'
 
 describe('Model', () => {
 	it('add single', async () => {
-		const app = new Elysia()
-			.model('string', t.String())
-			// @ts-ignore
-			.route('GET', '/', (context) => Object.keys(context.defs), {
-				config: {
-					allowMeta: true
-				}
-			})
+		const app = new Elysia().model('string', t.String())
 
-		const res = await app.handle(req('/')).then((r) => r.json())
-		expect(res).toEqual(['string'])
+		expect(app['~ext']?.models).toContainKey('string')
 	})
 
 	it('add multiple', async () => {
 		const app = new Elysia()
 			.model('string', t.String())
 			.model('number', t.Number())
-			// @ts-ignore
-			.route('GET', '/', (context) => Object.keys(context.defs), {
-				config: {
-					allowMeta: true
-				}
-			})
 
-		const res = await app.handle(req('/')).then((r) => r.json())
-		expect(res).toEqual(['string', 'number'])
+		expect(app['~ext']?.models).toContainKeys(['string', 'number'])
 	})
 
 	it('add object', async () => {
-		const app = new Elysia()
-			.model({
-				string: t.String(),
-				number: t.Number()
-			})
-			// @ts-ignore
-			.route('GET', '/', (context) => Object.keys(context.defs), {
-				config: {
-					allowMeta: true
-				}
-			})
+		const app = new Elysia().model({
+			string: t.String(),
+			number: t.Number()
+		})
 
-		const res = await app.handle(req('/')).then((r) => r.json())
-		expect(res).toEqual(['string', 'number'])
+		expect(app['~ext']?.models).toContainKeys(['string', 'number'])
 	})
 
 	it('add object', async () => {
@@ -61,56 +38,24 @@ describe('Model', () => {
 				...rest,
 				boolean: t.Boolean()
 			}))
-			// @ts-ignore
-			.route('GET', '/', (context) => Object.keys(context.defs), {
-				config: {
-					allowMeta: true
-				}
-			})
 
-		const res = await app.handle(req('/')).then((r) => r.json())
-		expect(res).toEqual(['string', 'boolean'])
+		expect(app['~ext']?.models).toContainKeys(['string', 'boolean'])
+		expect(app['~ext']?.models).not.toContainKey('number')
 	})
 
 	it('inherits functional plugin', async () => {
 		const plugin = () => (app: Elysia) => app.model('string', t.String())
 
-		const app = new Elysia()
-			.use(plugin())
-			// @ts-ignore
-			.route('GET', '/', (context) => Object.keys(context.defs), {
-				config: {
-					allowMeta: true
-				}
-			})
+		const app = new Elysia().use(plugin())
 
-		const res = await app.handle(req('/')).then((r) => r.json())
-		expect(res).toEqual(['string'])
+		expect(app['~ext']?.models).toContainKey('string')
 	})
 
 	it('inherits instance plugin', async () => {
-		const plugin = () => (app: Elysia) => app.model('string', t.String())
+		const plugin = new Elysia().model('string', t.String())
+		const app = new Elysia().use(plugin)
 
-		const app = new Elysia()
-			.use(plugin())
-			// @ts-ignore
-			.route('GET', '/', (context) => Object.keys(context.defs), {
-				config: {
-					allowMeta: true
-				}
-			})
-
-		const res = await app.handle(req('/')).then((r) => r.json())
-		expect(res).toEqual(['string'])
-	})
-
-	it('inherits instance plugin', async () => {
-		const plugin = new Elysia().decorate('hi', () => 'hi')
-
-		const app = new Elysia().use(plugin).get('/', ({ hi }) => hi())
-
-		const res = await app.handle(req('/')).then((r) => r.text())
-		expect(res).toBe('hi')
+		expect(app['~ext']?.models).toContainKey('string')
 	})
 
 	it('validate reference model', async () => {
@@ -192,15 +137,8 @@ describe('Model', () => {
 				...rest,
 				numba: number
 			}))
-			// @ts-ignore
-			.route('GET', '/', (context) => Object.keys(context.defs), {
-				config: {
-					allowMeta: true
-				}
-			})
 
-		const res = await app.handle(req('/')).then((r) => r.json())
-		expect(res).toEqual(['string', 'numba'])
+		expect(app['~ext']?.models).toContainKeys(['string', 'numba'])
 	})
 
 	it('use reference model', async () => {

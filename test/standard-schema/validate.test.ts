@@ -89,7 +89,6 @@ describe('Standard Schema Validate', () => {
 	it('validate single response', async () => {
 		const app = new Elysia().get(
 			'/:name',
-			// @ts-expect-error
 			({ params: { name } }) => (name === 'lilith' ? undefined : true),
 			{
 				response: z.boolean()

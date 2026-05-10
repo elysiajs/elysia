@@ -25,6 +25,21 @@ function fallbackResponse(
 	mapResponse: (response: unknown, set: Context['set']) => unknown,
 	defaultError: Response
 ): unknown {
+	// `toResponse()` returns a complete `Response` (status, headers, body).
+	// Used by ValidationError to surface the structured `{type, on,
+	// property, message, summary, expected, found, errors}` JSON shape
+	// instead of `error.message` plain text. Other errors (NotFound,
+	// ParseError, etc.) keep using the `error.status` + `error.message`
+	// path below.
+	if (typeof error?.toResponse === 'function') {
+		try {
+			const r = error.toResponse()
+			if (r instanceof Response) return r
+		} catch {
+			/* fall through to status/message handling */
+		}
+	}
+
 	if (error?.status) {
 		const body =
 			error.response !== undefined

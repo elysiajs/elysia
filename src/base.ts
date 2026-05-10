@@ -2,7 +2,7 @@ import Memoirist from 'memoirist'
 import { decodeComponent } from 'deuri'
 
 import { createFetchHandler } from './handler'
-import { compileHandler } from './compile'
+import { compileHandler, buildNativeStaticResponse } from './compile'
 
 import { ListenCallback, Serve, Server } from './universal'
 import { isBun } from './universal/constants'
@@ -16,6 +16,7 @@ import {
 	flattenChain,
 	fnOrigin,
 	fnv1a,
+	getLoosePath,
 	hookToGuard,
 	isEmpty,
 	isNotEmpty,
@@ -28,11 +29,14 @@ import {
 	mergeResponse,
 	nullObject,
 	pushField,
+	schemaProperties,
 	type ChainNode
 } from './utils'
 
 import type { AnySchema } from './type'
 import type { TRef, TSchema } from 'typebox'
+
+import type { TraceHandler } from './trace'
 
 import type {
 	CompiledHandler,
@@ -184,6 +188,22 @@ export class Elysia<
 	'~router'?: Memoirist<CompiledHandler>
 	'~map'?: { [method: string]: { [path: string]: CompiledHandler } }
 	'~loosePath': Record<string, string>
+	// Routes that resolve to a precomputed `Response` (no blocking
+	// lifecycle hooks, non-function handler). Sync handlers store a
+	// `Response`; Promise inline handlers (e.g. `.get('/', fetch(...))`)
+	// store a `Promise<Response>` so the Bun adapter can `server.reload`
+	// once they settle.
+	//
+	// Populated by `#buildRouter`, which is triggered lazily by the
+	// `fetch` getter. Consumers (Bun adapter, tests) read this field
+	// directly — `void app.fetch` first if access happens pre-listen.
+	// Naming mirrors the `nativeStaticResponse` config flag that gates
+	// this behavior.
+	'~staticResponse'?: {
+		[path: string]: {
+			[method: string]: Response | Promise<Response>
+		}
+	}
 
 	constructor(config?: ElysiaConfig<BasePath, Scope>) {
 		this['~config'] = config
@@ -962,11 +982,9 @@ export class Elysia<
 			: this.#on(type, scopeOrFn as EventFn<'beforeHandle'>)
 	}
 
-	// Generic dispatcher: `app.on(eventName, fn)` or
-	// `app.on({ as: scope }, eventName, fn)`. `parse` looks up named
-	// parsers from `~ext.parser` first to mirror `onParse(name)`.
 	on<Event extends AppEvent>(event: Event, fn: EventFn<Event>): this
 	on<Event extends AppEvent>(
+		// Remove in 2.1
 		scope: { as: LegacyEventScope },
 		event: Event,
 		fn: EventFn<Event>
@@ -976,10 +994,7 @@ export class Elysia<
 			const [event, fn] = args
 			if (event === 'parse' && typeof fn === 'string') {
 				const named = this['~ext']?.parser?.[fn]
-				return this.#onBranch(
-					'parse',
-					(named ?? fn) as any
-				)
+				return this.#onBranch('parse', (named ?? fn) as any)
 			}
 			return this.#onBranch(event, fn)
 		}
@@ -993,22 +1008,11 @@ export class Elysia<
 	}
 
 	onRequest(fn: MaybeArray<EventFn<'request'>>): this
+	onRequest(scope: { as: 'local' }, fn: MaybeArray<EventFn<'request'>>): this
+	onRequest(scope: { as: 'scoped' }, fn: MaybeArray<EventFn<'request'>>): this
+	onRequest(scope: { as: 'global' }, fn: MaybeArray<EventFn<'request'>>): this
 	onRequest(
-		scope: { as: 'local' },
-		fn: MaybeArray<EventFn<'request'>>
-	): this
-	onRequest(
-		scope: { as: 'scoped' },
-		fn: MaybeArray<EventFn<'request'>>
-	): this
-	onRequest(
-		scope: { as: 'global' },
-		fn: MaybeArray<EventFn<'request'>>
-	): this
-	onRequest(
-		scopeOrFn:
-			| { as: LegacyEventScope }
-			| MaybeArray<EventFn<'request'>>,
+		scopeOrFn: { as: LegacyEventScope } | MaybeArray<EventFn<'request'>>,
 		fn?: MaybeArray<EventFn<'request'>>
 	): this {
 		return this.#onBranch('request', scopeOrFn as any, fn as any)
@@ -1031,10 +1035,7 @@ export class Elysia<
 		// known content-type strings as builtin parsers.
 		if (fn === undefined && typeof scopeOrFnOrName === 'string') {
 			const named = this['~ext']?.parser?.[scopeOrFnOrName]
-			return this.#onBranch(
-				'parse',
-				(named ?? scopeOrFnOrName) as any
-			)
+			return this.#onBranch('parse', (named ?? scopeOrFnOrName) as any)
 		}
 
 		return this.#onBranch('parse', scopeOrFnOrName as any, fn as any)
@@ -1335,30 +1336,80 @@ export class Elysia<
 		return this
 	}
 
+	trace(fn: TraceHandler<any, any>): this
+	trace(scope: { as: 'local' }, fn: TraceHandler<any, any>): this
+	trace(scope: { as: 'scoped' }, fn: TraceHandler<any, any>): this
+	trace(scope: { as: 'global' }, fn: TraceHandler<any, any>): this
+	trace(
+		scopeOrFn: { as: LegacyEventScope } | TraceHandler<any, any>,
+		fn?: TraceHandler<any, any>
+	): this {
+		return this.#onBranch('trace', scopeOrFn as any, fn as any)
+	}
+
+	as(target: 'scoped' | 'global'): this {
+		const newScope: EventScope = target === 'scoped' ? 'plugin' : 'global'
+
+		const visit = (node: ChainNode | undefined): void => {
+			while (node) {
+				if ('combine' in node) {
+					visit(node.combine)
+					node = node.over
+					continue
+				}
+
+				if (node.scope !== 'global') {
+					node.scope = newScope
+					node.propagated = false
+					for (const key in node.added) {
+						if (!eventProperties.has(key)) continue
+						const v = (node.added as any)[key]
+						const fns = Array.isArray(v) ? v : [v]
+						for (const fn of fns) {
+							if (typeof fn !== 'function') continue
+							if (newScope === 'plugin')
+								(this.#plugin ??= new WeakSet()).add(fn)
+							else (this.#global ??= new WeakSet()).add(fn)
+						}
+					}
+				}
+				node = node.parent
+			}
+		}
+		visit(this.#ext.hookChain)
+		return this
+	}
+
 	guard(hook: Partial<AnyLocalHook>): this
 	guard(scope: 'local', hook: Partial<AnyLocalHook>): this
 	guard(scope: 'plugin', hook: Partial<AnyLocalHook>): this
 	guard(scope: 'global', hook: Partial<AnyLocalHook>): this
-	// Sandbox form: applies the hook to a child instance built by `run`,
-	// then merges back. Equivalent to `group('', hook, run)`.
 	guard(
 		hook: Partial<AnyLocalHook>,
 		run: (group: AnyElysia) => AnyElysia
 	): this
 
 	guard() {
-		if (arguments.length === 1)
-			return this.#guard('local', arguments[0] as Partial<AnyWSLocalHook>)
+		if (arguments.length === 1) {
+			// Allow `.guard({ as: scope })` for backward compatibility
+			// Will be removed in 2.1
+			const arg = arguments[0] as Partial<AnyWSLocalHook> & {
+				as?: EventScope | 'scoped'
+			}
+
+			let scope: EventScope = 'local'
+			if (arg && typeof arg === 'object' && 'as' in arg && arg.as) {
+				scope = arg.as === 'scoped' ? 'plugin' : (arg.as as EventScope)
+				delete (arg as any).as
+			}
+			return this.#guard(scope, arg as Partial<AnyWSLocalHook>)
+		}
 
 		if (arguments.length === 2) {
 			// `guard(hook, callback)` is `group('', hook, callback)` —
 			// scope-bound hook with a sandboxed builder.
 			if (typeof arguments[1] === 'function')
-				return (this as any).group(
-					'',
-					arguments[0],
-					arguments[1]
-				)
+				return (this as any).group('', arguments[0], arguments[1])
 
 			return this.#guard(
 				arguments[0] as EventScope,
@@ -1373,12 +1424,14 @@ export class Elysia<
 		// @ts-expect-error Remove in 2.1
 		if (scope === 'scoped') scope = 'plugin'
 
-		// Lift `body/headers/params/query/cookie/response` into the
-		// `schema` array so they're treated as STANDALONE validators (each
-		// runs as its own pass) rather than scalars subject to last-wins
-		// override. Macro keys on the guard hook stay unresolved at
-		// registration; `compileHandler` runs `~applyMacro` on the
-		// flattened chain hook with `root` as the registry.
+		// `hookToGuard` only lifts schema fields into the standalone
+		// `schemas[]` array when the hook explicitly opts in via
+		// `schema: 'standalone'`. Default and `schema: 'override'` guards
+		// keep their fields scalar so `mergeHook`'s last-wins applies and
+		// the route's own `body`/`response`/etc. takes precedence. Macro
+		// keys on the guard hook stay unresolved at registration;
+		// `compileHandler` runs `~applyMacro` on the flattened chain
+		// hook with `root` as the registry.
 		hookToGuard(hook as any)
 		const prevSchemaLen = (hook as any).schemas?.length ?? 0
 
@@ -1616,28 +1669,20 @@ export class Elysia<
 			const ext = (child['~ext'] ??= nullObject())
 			if (src.decorator)
 				ext.decorator = Object.assign(nullObject(), src.decorator)
-			if (src.store)
-				ext.store = Object.assign(nullObject(), src.store)
+			if (src.store) ext.store = Object.assign(nullObject(), src.store)
 			if (src.headers)
 				ext.headers = Object.assign(nullObject(), src.headers)
-			if (src.models)
-				ext.models = Object.assign(nullObject(), src.models)
-			if (src.macro)
-				ext.macro = Object.assign(nullObject(), src.macro)
-			if (src.parser)
-				ext.parser = Object.assign(nullObject(), src.parser)
+			if (src.models) ext.models = Object.assign(nullObject(), src.models)
+			if (src.macro) ext.macro = Object.assign(nullObject(), src.macro)
+			if (src.parser) ext.parser = Object.assign(nullObject(), src.parser)
 		}
 
-		// Apply schema as a local guard before running the callback so
-		// every route registered inside inherits it via the hookChain.
-		// `.guard(hook, callback)` (the with-callback form) treats the
-		// guard's body/headers/etc. as STANDALONE validators on each route
-		// inside (per src-old's design at index.ts:4670-4682) — so they
-		// add to validation rather than overriding the route's own fields.
-		// `hookToGuard` lifts the user-set schema fields into `schema:[{...}]`.
 		if (isSchema)
 			child.guard(
-				hookToGuard({ ...schemaOrRun }) as Partial<AnyLocalHook>
+				hookToGuard({
+					...schemaOrRun,
+					schema: 'standalone'
+				} as any) as Partial<AnyLocalHook>
 			)
 
 		callback(child)
@@ -1754,10 +1799,6 @@ export class Elysia<
 				: (macro[key] as Partial<AppHook & Macro>)
 
 			if (!hook || (!isFunction && value === false)) {
-				// Function-form macros with side-effects-only (no return)
-				// still need their key deleted so they don't re-fire on
-				// subsequent `~applyMacro` calls (e.g. each `app.history`
-				// getter access).
 				delete (input as any)[key]
 				continue
 			}
@@ -1801,13 +1842,6 @@ export class Elysia<
 					continue
 				}
 
-				// Register resolve/derive fns so codegen treats their return
-				// as a context extension (`Object.assign(c, ret)`) rather
-				// than a response. `.resolve()` / `.derive()` do this via
-				// `~derive.add(fn)` at API time; macro contributions need the
-				// same — without it, the codegen sees the fn in `beforeHandle`
-				// (after `mergeHook`'s resolve→beforeHandle promotion) and
-				// short-circuits the route on its return.
 				if (k === 'resolve' || k === 'derive') {
 					this['~derive'] ??= new WeakSet()
 					if (Array.isArray(v)) {
@@ -1820,14 +1854,6 @@ export class Elysia<
 				}
 
 				if (k === 'schema') {
-					// Standalone validator entries: each contribution is an
-					// array of `{body?, headers?, params?, query?, cookie?,
-					// response?}`. Try to fold each into an existing entry
-					// (compatible if no field-name collision); fall back to
-					// append. This way sibling macros with disjoint fields
-					// produce a single entry, while conflicting macros
-					// (e.g. multiple `body` schemas) stay separate so each
-					// gets its own validation pass.
 					const incoming: any[] = Array.isArray(v) ? v : [v]
 					if (!input.schemas) (input as any).schemas = []
 					coalesceStandaloneSchemas(
@@ -1839,7 +1865,9 @@ export class Elysia<
 				}
 
 				if (k in input) {
-					if (Array.isArray(input[k])) {
+					if (schemaProperties.has(k)) {
+						// Route already has its own value — keep it.
+					} else if (Array.isArray(input[k])) {
 						if (Array.isArray(v)) {
 							for (const item of v)
 								if (!input[k].some((e: any) => e === item))
@@ -1849,10 +1877,6 @@ export class Elysia<
 						// Just in case same function is applied
 					} else if (input[k] !== v) input[k] = [v, input[k]]
 				} else {
-					// Chain-style event hooks (parse/transform/beforeHandle/...)
-					// must materialize as arrays so downstream `.length` and
-					// per-index handling work uniformly. Non-event fields
-					// (body/headers/etc., detail, schema) keep their shape.
 					input[k] =
 						eventProperties.has(k) && !Array.isArray(v) ? [v] : v
 				}
@@ -1861,13 +1885,6 @@ export class Elysia<
 			}
 		}
 
-		// Outermost call: lift any direct body/headers/params/query/cookie/
-		// response fields the macro chain set on `input` into the schema
-		// array, coalescing with existing entries where compatible. This
-		// keeps the standalone-schema count semantically meaningful: 1
-		// entry per conflicting validation pass, regardless of whether the
-		// contribution came via record-form (already in `schema`) or
-		// string-form `.macro(name, value)` (lands at top level).
 		if (iteration === 0) liftDirectFieldsToSchema(input)
 
 		return input
@@ -2072,8 +2089,7 @@ export class Elysia<
 							if (!schemas) continue
 							for (const s of schemas) {
 								;((target as any).schemas ??= []).push(s)
-								if (nodeScope === 'global')
-									this.#global!.add(s)
+								if (nodeScope === 'global') this.#global!.add(s)
 							}
 							continue
 						}
@@ -2088,10 +2104,7 @@ export class Elysia<
 
 							for (const fn of fns) {
 								const origin = fnOrigin.get(fn)
-								if (
-									origin !== undefined &&
-									before?.has(origin)
-								)
+								if (origin !== undefined && before?.has(origin))
 									continue
 
 								if (
@@ -2216,6 +2229,11 @@ export class Elysia<
 
 		this.#ready = undefined
 		this.#fetchFn = undefined
+		// Async plugins may have appended fresh routes to `#history` while
+		// we were waiting; invalidate the build flag so the next
+		// `#buildRouter()` re-walks history and registers them in
+		// `~map` / `~router` / `~staticResponse`.
+		this.#routerBuilt = false
 
 		this.#buildRouter()
 	}
@@ -2335,10 +2353,32 @@ export class Elysia<
 
 				return this
 
-			case 'function':
-				this['~ext'] = name(models ?? nullObject())
+			case 'function': {
+				// Functional remap: pass the current models to the user
+				// fn and use the returned record as the new models.
+				// Previously assigned to `this['~ext']` directly, which
+				// overwrote the entire ext object instead of just the
+				// `models` field — `.model(fn)` would then drop
+				// decorators / store / macros / etc. registered earlier.
+				const remapped = name(models ?? nullObject()) as Record<
+					string,
+					AnySchema
+				>
+				const next = nullObject() as Record<string, AnySchema>
+				for (const key in remapped) {
+					let value = remapped[key]
+					if ('~standard' in (value as any)) next[key] = value
+					else {
+						if (Object.isFrozen(value))
+							value = Object.create(value as object)
+						;(value as any).$id ??= key
+						next[key] = value
+					}
+				}
+				this.#ext.models = next
 
 				return this
+			}
 
 			case 'string':
 				models[name] = model!
@@ -3146,14 +3186,19 @@ export class Elysia<
 	handler(
 		index: number,
 		immediate: boolean | undefined = this['~config']?.precompile,
-		route: InternalRoute = this.#history![index]
+		route: InternalRoute = this.#history![index],
+		precomputedStatic?: Response
 	): CompiledHandler {
 		if (this.#compiled?.[index]) return this.#compiled![index]
 
 		const compiled = (this.#compiled ??= new Array(this.#history!.length))
 
 		if (immediate) {
-			const handler = compileHandler(this.#history![index], this)
+			const handler = compileHandler(
+				this.#history![index],
+				this,
+				precomputedStatic
+			)
 
 			compiled![index] = handler
 			if (route) {
@@ -3164,14 +3209,22 @@ export class Elysia<
 			return handler
 		}
 
-		return this.#jitHandler(index, route)
+		return this.#jitHandler(index, route, precomputedStatic)
 	}
 
-	#jitHandler(index: number, route?: InternalRoute): CompiledHandler {
+	#jitHandler(
+		index: number,
+		route?: InternalRoute,
+		precomputedStatic?: Response
+	): CompiledHandler {
 		return (context) => {
 			if (this.#compiled?.[index]) return this.#compiled![index](context)
 
-			const handler = compileHandler(this.#history![index], this)
+			const handler = compileHandler(
+				this.#history![index],
+				this,
+				precomputedStatic
+			)
 			this.#compiled![index] = handler
 
 			if (route) {
@@ -3183,27 +3236,54 @@ export class Elysia<
 		}
 	}
 
+	#routerBuilt = false
 	#buildRouter() {
-		if (!this.#history) return
+		if (!this.#history || this.#routerBuilt) return
+		this.#routerBuilt = true
 
 		const precompile = this['~config']?.precompile
+		const buildStatic = this['~config']?.nativeStaticResponse !== false
+		const strictPath = !!this['~config']?.strictPath
+
 		const length = this.#history.length
 		for (let i = 0; i < length; i++) {
 			const route: InternalRoute = this.#history![i]
 			const method = mapMethodBack(route[0])
 			const path = route[1]
 
+			let staticResponse: Response | Promise<Response> | undefined
+			if (buildStatic) {
+				staticResponse = buildNativeStaticResponse(route, this)
+				if (staticResponse) {
+					const target = (this['~staticResponse'] ??= nullObject())
+					;(target[path] ??= nullObject())[method] = staticResponse
+
+					if (!strictPath) {
+						const loose = getLoosePath(path)
+						const aliased =
+							staticResponse instanceof Response
+								? staticResponse.clone()
+								: staticResponse.then((r) => r.clone())
+
+						;(target[loose] ??= nullObject())[method] = aliased
+					}
+				}
+			}
+
+			const sharedStatic =
+				staticResponse instanceof Response ? staticResponse : undefined
+
 			if (isDynamicRegex.test(path)) {
 				;(this['~router'] ??= new Memoirist(decodeComponent)).add(
 					method,
 					path,
-					this.handler(i, precompile),
+					this.handler(i, precompile, undefined, sharedStatic),
 					false
 				)
 			} else {
 				this.#initMap()
 				const map = (this['~map']![method] ??= nullObject())
-				map[path] = this.handler(i, precompile, route)
+				map[path] = this.handler(i, precompile, route, sharedStatic)
 			}
 		}
 	}

@@ -5,23 +5,47 @@ import { fnv1a } from '../../utils'
 import type { BaseSchema } from '../types'
 import type { ELYSIA_TYPES } from '../constants'
 
+export function cloneSchema<T extends TSchema>(schema: T): T {
+	const target = { ...schema } as T
+	for (const key of Object.getOwnPropertyNames(schema)) {
+		const desc = Object.getOwnPropertyDescriptor(schema, key)
+		if (!desc || desc.enumerable) continue
+		Object.defineProperty(target, key, {
+			value: desc.value,
+			enumerable: false,
+			writable: true,
+			configurable: true
+		})
+	}
+	return target
+}
+
 export function elyType<T extends TSchema>(
 	name: ELYSIA_TYPES[keyof ELYSIA_TYPES],
 	schema: T
 ): T {
-	if (Object.isExtensible(schema)) {
+	const elyDesc = Object.getOwnPropertyDescriptor(schema, '~elyTyp')
+	if (
+		Object.isExtensible(schema) &&
+		(!elyDesc || elyDesc.writable !== false)
+	) {
 		// @ts-expect-error
 		schema['~elyTyp'] = name
 		return schema
 	}
 
-	const target = Object.create(
-		Object.getPrototypeOf(schema),
-		Object.getOwnPropertyDescriptors(schema)
-	) as T
+	const target = { ...schema, '~elyTyp': name } as T
+	for (const key of Object.getOwnPropertyNames(schema)) {
+		const desc = Object.getOwnPropertyDescriptor(schema, key)
+		if (!desc || desc.enumerable || key === '~elyTyp') continue
+		Object.defineProperty(target, key, {
+			value: desc.value,
+			enumerable: false,
+			writable: true,
+			configurable: true
+		})
+	}
 
-	// @ts-expect-error
-	target['~elyTyp'] = name
 	return target
 }
 
@@ -92,7 +116,7 @@ export function getMeta(
 		if (error !== undefined) meta['error'] = error
 		if (defaultValue !== undefined) meta['default'] = defaultValue
 
-		return [rest, meta]
+		return [rest, meta] as const
 	}
 
 	return [property] as const

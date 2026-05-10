@@ -1,6 +1,7 @@
 import { Validator, ValidatorOptions, type ToSubTypeValidator } from '.'
 
 import {
+	coerceBody,
 	coerceFormData,
 	coerceQuery,
 	coerceRoot,
@@ -59,7 +60,9 @@ export class RouteValidator<const in out T extends RouteSchema> {
 		// buckets, no per-validator scope override). Scope filtering is a
 		// `#use` propagation concern, not a per-validator one.
 		const pickStandalone = <K extends keyof RouteSchema>(key: K) =>
-			options?.schemas?.filter((s: any) => s[key])?.map((s: any) => s[key])
+			options?.schemas
+				?.filter((s: any) => s[key])
+				?.map((s: any) => s[key])
 
 		const bodyStandalone = pickStandalone('body') as AnySchema[] | undefined
 		if (route.body || bodyStandalone?.length) {
@@ -74,7 +77,7 @@ export class RouteValidator<const in out T extends RouteSchema> {
 				coerces: isTb(body)
 					? hasTypes([ELYSIA_TYPES.File, ELYSIA_TYPES.Files], body)
 						? coerceFormData()
-						: coerceRoot()
+						: coerceBody()
 					: undefined
 			}) as any
 		}
