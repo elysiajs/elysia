@@ -917,7 +917,7 @@ describe('Macro', () => {
 				lilith: true
 			})
 
-		expect(app.history![0][4]!.schema!.length).toBe(1)
+		expect(app.history![0][4]!.schemas!.length).toBe(1)
 
 		const valid = await app.handle(
 			post('/Sartre?focou=Focou', {
@@ -974,7 +974,7 @@ describe('Macro', () => {
 				lilith: true
 			})
 
-		expect(app.history![0][4]!.schema!.length).toBe(3)
+		expect(app.history![0][4]!.schemas!.length).toBe(3)
 
 		const response = await app.handle(
 			post('/', {
@@ -1041,7 +1041,7 @@ describe('Macro', () => {
 				lilith: true
 			})
 
-		expect(app.history![0][4]!.schema!.length).toBe(3)
+		expect(app.history![0][4]!.schemas!.length).toBe(3)
 
 		const response = await app.handle(
 			post('/', {
@@ -1157,7 +1157,7 @@ describe('Macro', () => {
 
 		const route = app.history![0]
 
-		expect(route[4]!.schema!.length).toBe(3)
+		expect(route[4]!.schemas!.length).toBe(3)
 	})
 
 	it('deduplicate function macro by default', () => {
@@ -1190,7 +1190,7 @@ describe('Macro', () => {
 		// 2. focou
 		// 3. sartre from focou
 		// 4. sartre with false flag
-		expect(route[4]!.schema!.length).toBe(4)
+		expect(route[4]!.schemas!.length).toBe(4)
 	})
 
 	it('deduplicate function macro when argument is similar', () => {
@@ -1222,7 +1222,7 @@ describe('Macro', () => {
 		// 1. lilith
 		// 2. focou
 		// 3. sartre from focou
-		expect(route[4]!.schema!.length).toBe(3)
+		expect(route[4]!.schemas!.length).toBe(3)
 	})
 
 	it('deduplicate programmatically', () => {
@@ -1253,7 +1253,7 @@ describe('Macro', () => {
 
 		const route = app.history![0]
 
-		expect(route[4]!.schema!.length).toBe(4)
+		expect(route[4]!.schemas!.length).toBe(4)
 		expect(route[4]!.detail).toEqual({
 			tags: ['philosopher', 'npc']
 		})
@@ -1278,7 +1278,7 @@ describe('Macro', () => {
 				lilith: true
 			})
 
-		expect(app.history![0][4]!.schema!.length).toBe(1)
+		expect(app.history![0][4]!.schemas!.length).toBe(1)
 
 		const valid = await app.handle(
 			post('/Sartre?focou=Focou', {
@@ -1335,7 +1335,7 @@ describe('Macro', () => {
 				lilith: true
 			})
 
-		expect(app.history![0][4]!.schema!.length).toBe(1)
+		expect(app.history![0][4]!.schemas!.length).toBe(1)
 
 		const valid = await app.handle(
 			post('/Sartre?focou=Focou', {
@@ -1392,7 +1392,7 @@ describe('Macro', () => {
 				lilith: true
 			})
 
-		expect(app.history![0][4]!.schema!.length).toBe(3)
+		expect(app.history![0][4]!.schemas!.length).toBe(3)
 
 		const response = await app.handle(
 			post('/', {

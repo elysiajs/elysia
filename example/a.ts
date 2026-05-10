@@ -1,10 +1,6 @@
 import { Elysia, t } from '../src'
 
-const app = new Elysia().post('/', () => 'a', {
-	body: t.Object({
-		a: t.String()
-	})
-})
+const app = new Elysia().all('/', () => 'a')
 
 app.handle('/', {
 	method: 'POST',

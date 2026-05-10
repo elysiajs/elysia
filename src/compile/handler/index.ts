@@ -25,7 +25,6 @@ import {
 import { compileCookieConfig } from '../../cookie/config'
 
 import { isBun } from '../../universal/constants'
-import { AFTER_RESPONSE_FIRED } from '../../constants'
 import { ElysiaStatus, ParseError } from '../../error'
 
 import { parseQueryFromURL } from '../../parse-query'
@@ -410,7 +409,7 @@ export function compileHandler(
 				models: root['~ext']?.models,
 				normalize: root['~config']?.normalize,
 				sanitize: root['~config']?.sanitize,
-				schemas: hook?.schema
+				schemas: hook?.schemas
 			})
 		: undefined
 
@@ -593,16 +592,10 @@ export function compileHandler(
 	const hasAfterHandle = !!hook?.afterHandle?.length
 	const hasMapResponse = !!hook?.mapResponse?.length
 
-	if (hasAfterResponse) {
-		link(hook!.afterResponse!, 'ar')
-		link(AFTER_RESPONSE_FIRED, 'arf')
-	}
-	// Dedup flag: fetch.ts checks `c[AFTER_RESPONSE_FIRED]` so its
-	// not-found / pre-route / caught-error fallbacks don't double-fire
-	// for matched routes that already scheduled here. The Symbol is
-	// linked above as `arf`.
+	if (hasAfterResponse) link(hook!.afterResponse!, 'ar')
+
 	const scheduleAfterResponse = hasAfterResponse
-		? `c[arf]=true\n` +
+		? `c._arf=true\n` +
 			`${setImmediateFn}(async()=>{` +
 			`if(_streamListener)for await(const v of _streamListener){}\n` +
 			mapAfterResponse(hook!.afterResponse!) +
@@ -632,7 +625,9 @@ export function compileHandler(
 			// Adapter is structurally compatible with WeakSet's `.has(fn)`
 			// usage in `mapBeforeHandle`.
 			const rootDerive = root['~derive']
-			const instanceDerive = (instance as AnyElysia | undefined)?.['~derive']
+			const instanceDerive = (instance as AnyElysia | undefined)?.[
+				'~derive'
+			]
 			const deriveSet: WeakSet<any> | undefined =
 				rootDerive && instanceDerive
 					? ({

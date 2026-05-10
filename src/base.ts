@@ -216,8 +216,8 @@ export class Elysia<
 			// those into a unified `hooks.response` keyed by status so
 			// the public surface matches what compileHandler actually
 			// validates against.
-			if (merged?.schema?.length) {
-				for (const entry of merged.schema as any[]) {
+			if (merged?.schemas?.length) {
+				for (const entry of merged.schemas as any[]) {
 					if (!entry?.response) continue
 					merged.response = mergeResponse(
 						merged.response,
@@ -1380,7 +1380,7 @@ export class Elysia<
 		// registration; `compileHandler` runs `~applyMacro` on the
 		// flattened chain hook with `root` as the registry.
 		hookToGuard(hook as any)
-		const prevSchemaLen = (hook as any).schema?.length ?? 0
+		const prevSchemaLen = (hook as any).schemas?.length ?? 0
 
 		if (hook.derive) {
 			this['~derive'] ??= new WeakSet<EventFn<'beforeHandle'>>()
@@ -1433,7 +1433,7 @@ export class Elysia<
 		}
 
 		if (targetSet) {
-			const schemas = (hook as any).schema as any[] | undefined
+			const schemas = (hook as any).schemas as any[] | undefined
 			if (schemas && schemas.length > prevSchemaLen)
 				for (let i = prevSchemaLen; i < schemas.length; i++)
 					targetSet.add(schemas[i])
@@ -1829,9 +1829,9 @@ export class Elysia<
 					// (e.g. multiple `body` schemas) stay separate so each
 					// gets its own validation pass.
 					const incoming: any[] = Array.isArray(v) ? v : [v]
-					if (!input.schema) (input as any).schema = []
+					if (!input.schemas) (input as any).schemas = []
 					coalesceStandaloneSchemas(
-						(input as any).schema as any[],
+						(input as any).schemas as any[],
 						incoming
 					)
 					delete input[key]
@@ -2066,12 +2066,12 @@ export class Elysia<
 
 					for (const key in added) {
 						if (key === 'schema') {
-							const schemas = (added as any).schema as
+							const schemas = (added as any).schemas as
 								| any[]
 								| undefined
 							if (!schemas) continue
 							for (const s of schemas) {
-								;((target as any).schema ??= []).push(s)
+								;((target as any).schemas ??= []).push(s)
 								if (nodeScope === 'global')
 									this.#global!.add(s)
 							}
@@ -3105,17 +3105,9 @@ export class Elysia<
 		return this.#add(MethodMap.HEAD, path, fn, hook) as any
 	}
 
-	// Register a handler for every HTTP method on the same path.
-	// Implemented as a fan-out over `#add` so dispatch through `~map` is
-	// the same monomorphic path as a single-method handler.
 	all(path: string, fn: unknown, hook?: Partial<AnyLocalHook>): this {
-		this.#add(MethodMap.GET, path, fn, hook)
-		this.#add(MethodMap.POST, path, fn, hook)
-		this.#add(MethodMap.PUT, path, fn, hook)
-		this.#add(MethodMap.DELETE, path, fn, hook)
-		this.#add(MethodMap.PATCH, path, fn, hook)
-		this.#add(MethodMap.OPTIONS, path, fn, hook)
-		this.#add(MethodMap.HEAD, path, fn, hook)
+		this.#add('*', path, fn, hook)
+
 		return this
 	}
 

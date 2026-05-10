@@ -7,7 +7,8 @@ import type {
 	EventScope,
 	Macro,
 	InputSchema,
-	AnyLocalHook
+	AnyLocalHook,
+	GuardSchemaType
 } from './types'
 
 import { ElysiaFile } from './universal/file'
@@ -348,17 +349,12 @@ const nativeProperties = new Set([
 ])
 
 export function hookToGuard(
-	a: Partial<AppHook & Macro>
+	a: Partial<AppHook & Macro> & {
+		schema?: GuardSchemaType
+	}
 ): Partial<AppHook & Macro> {
-	if (
-		a.body ||
-		a.headers ||
-		a.params ||
-		a.query ||
-		a.cookie ||
-		a.response
-	) {
-		a.schema ??= []
+	if (a.body || a.headers || a.params || a.query || a.cookie || a.response) {
+		a.schemas ??= []
 		const schema = Object.create(null)
 
 		if (a.body) {
@@ -391,7 +387,7 @@ export function hookToGuard(
 			a.response = undefined
 		}
 
-		a.schema.push(schema)
+		a.schemas.push(schema)
 	}
 
 	return a
@@ -463,8 +459,8 @@ export function liftDirectFieldsToSchema(
 		}
 	}
 	if (!lifted) return
-	;(input as any).schema ??= []
-	coalesceStandaloneSchemas((input as any).schema as any[], [lifted])
+	;(input as any).schemas ??= []
+	coalesceStandaloneSchemas((input as any).schemas as any[], [lifted])
 }
 
 export function mergeGuard(
@@ -538,8 +534,8 @@ export function mergeHook(
 		a.afterResponse = merge(a.afterResponse, b.afterResponse, reverse)
 
 	if (a.error || b.error) a.error = merge(a.error, b.error, reverse)
-	if (a.schema || b.schema)
-		a.schema = mergeArray(a.schema, b.schema, reverse) as any
+	if (a.schemas || b.schemas)
+		a.schemas = mergeArray(a.schemas, b.schemas, reverse) as any
 
 	return a
 }
