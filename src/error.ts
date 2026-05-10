@@ -1,4 +1,4 @@
-import { Default } from 'typebox/value'
+import { Default } from './type/bridge'
 
 import { StatusMap, StatusMapBack } from './constants'
 

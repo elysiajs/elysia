@@ -11,8 +11,8 @@ import type {
 	GuardSchemaType
 } from './types'
 
-import { ElysiaFile } from './universal/file'
 import { dangerousKeys, type MethodMap, MethodMapBack } from './constants'
+import { ElysiaFile } from './universal/file'
 import { isBun } from './universal/constants'
 
 export const mapMethodBack = (method: MethodMap[keyof MethodMap] | string) =>

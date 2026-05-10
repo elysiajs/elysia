@@ -3,7 +3,8 @@ import type { Compile as CompileType } from 'typebox/compile'
 import type {
 	Decode as DecodeType,
 	Errors as ErrorsType,
-	HasCodec as HasCodecType
+	HasCodec as HasCodecType,
+	Default as DefaultType
 } from 'typebox/value'
 
 import type { applyCoercions as applyCoercionsType } from './coerce'
@@ -55,6 +56,7 @@ export let hasTypes: typeof hasTypesType = errorFn as any
 export let HasCodec: typeof HasCodecType = errorFn as any
 
 export let Intersect: typeof IntersectType = errorFn as any
+export let Default: typeof DefaultType = errorFn as any
 
 export function useTypebox(mod: {
 	Compile: typeof CompileType
@@ -70,7 +72,8 @@ export function useTypebox(mod: {
 	coerceBody: typeof coerceBodyType
 	hasTypes: typeof hasTypesType
 	HasCodec: typeof HasCodecType,
-	Intersect: typeof IntersectType
+	Intersect: typeof IntersectType,
+	Default: typeof DefaultType
 }) {
 	Compile = mod.Compile
 	Decode = mod.Decode
@@ -86,4 +89,5 @@ export function useTypebox(mod: {
 	hasTypes = mod.hasTypes
 	HasCodec = mod.HasCodec
 	Intersect = mod.Intersect
+	Default = mod.Default
 }

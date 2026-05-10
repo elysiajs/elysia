@@ -13,7 +13,7 @@ import { isNotEmpty } from '../../utils'
 import { ElysiaStatus } from '../../error'
 
 import type { Context } from '../../context'
-import type { AnyLocalHook, MaybePromise } from '../../types'
+import type { MaybePromise } from '../../types'
 
 const type = 'content-type' as const
 

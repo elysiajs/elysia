@@ -1,11 +1,11 @@
 import { isAsyncFunction } from '../utils'
 import { ElysiaStatus } from '../../error'
+import { ELYSIA_TYPES } from '../../type/constants'
 
-import type { ElysiaAdapter } from '../../adapter'
-import type { AnyElysia } from '../../base'
-import type { AppEvent, AppHook, MaybeArray } from '../../types'
 import type { Link } from '../types'
-import { ELYSIA_TYPES, primitiveElysiaTypes } from '../../type/constants'
+import type { AnyElysia } from '../../base'
+import type { ElysiaAdapter } from '../../adapter'
+import type { AppEvent, AppHook, MaybeArray } from '../../types'
 
 export interface TraceReporter {
 	resolveChild(name: string): {

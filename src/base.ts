@@ -3296,11 +3296,19 @@ export class Elysia<
 		return (this.#fetchFn ??= createFetchHandler(this))
 	}
 
+	#handle?: (
+		url: string | Request,
+		options?: RequestInit
+	) => Promise<Response>
+
 	get handle(): (
 		url: string | Request,
 		options?: RequestInit
 	) => Promise<Response> {
-		return async (requestOrUrl: Request | string, options?: RequestInit) =>
+		return (this.#handle ??= async (
+			requestOrUrl: Request | string,
+			options?: RequestInit
+		) =>
 			this.fetch(
 				typeof requestOrUrl === 'string'
 					? new Request(
@@ -3310,7 +3318,7 @@ export class Elysia<
 							options
 						)
 					: (requestOrUrl as Request)
-			)
+			))
 	}
 
 	listen(

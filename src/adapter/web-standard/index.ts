@@ -13,17 +13,8 @@ export const WebStandardAdapter = createAdapter({
 		formData: (context) =>
 			// @ts-ignore
 			context.request.formData().then(formDataToObject),
-		json: async (context) => {
-			// `Request.json()` throws `SyntaxError: Unexpected end of
-			// JSON input` for empty payloads, which surfaces as a 400
-			// ParseError. Empty body with `content-type: application/json`
-			// is a common preflight shape — treat it as "no body"
-			// instead of erroring (test "skip body parsing if body is
-			// empty but headers is present").
-			const text = await context.request.text()
-			if (!text) return undefined
-			return JSON.parse(text) as any
-		},
+		// @ts-ignore
+		json: (context) => context.request.json(),
 		text: (context) => context.request.text(),
 		urlencoded: (context) => context.request.text().then(parseQuery)
 	},

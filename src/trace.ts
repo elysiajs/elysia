@@ -12,7 +12,7 @@ export type TraceEvent =
 	| 'afterResponse'
 	| 'error'
 
-export type TraceStream = {
+export interface TraceStream {
 	id: number
 	event: TraceEvent
 	type: 'begin' | 'end'
@@ -21,7 +21,7 @@ export type TraceStream = {
 	total?: number
 }
 
-type TraceEndDetail = {
+interface TraceEndDetail {
 	/**
 	 * Timestamp of a function after it's executed since the server start
 	 */
