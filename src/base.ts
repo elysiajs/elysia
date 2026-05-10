@@ -3296,7 +3296,6 @@ export class Elysia<
 		return (this.#fetchFn ??= createFetchHandler(this))
 	}
 
-	// for whatever reason, this use less memory than declaraing as method/arrow function
 	get handle(): (
 		url: string | Request,
 		options?: RequestInit
@@ -3305,9 +3304,9 @@ export class Elysia<
 			this.fetch(
 				typeof requestOrUrl === 'string'
 					? new Request(
-							requestOrUrl.includes('://')
-								? requestOrUrl
-								: `http://e.ly${requestOrUrl.startsWith('/') ? '' : '/'}${requestOrUrl}`,
+							requestOrUrl.startsWith('/')
+								? `http://e.ly${requestOrUrl}`
+								: requestOrUrl,
 							options
 						)
 					: (requestOrUrl as Request)
