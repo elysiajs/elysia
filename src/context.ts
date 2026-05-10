@@ -1,10 +1,11 @@
 import { ElysiaStatus, status, type SelectiveStatus } from './error'
-import { fnv1a, nullObject, redirect } from './utils'
+import { nullObject, redirect } from './utils'
 
 import type { AnyElysia } from './base'
 import type { Server } from './universal/server'
 import type { StatusMap, StatusMapBack } from './constants'
 import type { Cookie } from './cookie'
+import type { BaseCookie } from './cookie/types'
 
 import type {
 	RouteSchema,
@@ -15,39 +16,18 @@ import type {
 	InputSchema
 } from './types'
 
-let createBaseContextCount = 0
-let createContextCount = 0
-
-let baseCache: Map<number, new () => any>
-let contextCache: Map<number, new () => any>
-
-function getBaseKey(app: AnyElysia) {
-	const ext = app['~ext']
-	if (!ext) return 0
-
-	return fnv1a(
-		(ext.decorator ? JSON.stringify(ext.decorator) : '') +
-			'-' +
-			(ext.store ? JSON.stringify(ext.store) : '')
-	)
-}
-
-function getContextKey(app: AnyElysia) {
-	const ext = app['~ext']
-	if (!ext) return 0
-
-	return fnv1a(
-		(ext.decorator ? JSON.stringify(ext.decorator) : '') +
-			'-' +
-			(ext.store ? JSON.stringify(ext.store) : '') +
-			'-' +
-			(ext.headers ? JSON.stringify(ext.headers) : '')
-	)
-}
+// Per-app caches keyed by app identity. The previous scheme keyed by a hash
+// of `JSON.stringify(ext)` so two apps with the same store/decorator shape
+// shared the same cached class — but `store` is MUTABLE, and the prototype
+// closed over the FIRST app's store reference, leaking state across apps
+// with matching shapes (reproduced by `resolve > can mutate store` failing
+// only when run alongside `map resolve > can mutate store`).
+let baseCache = new WeakMap<AnyElysia, new () => any>()
+let contextCache = new WeakMap<AnyElysia, new (request: Request) => any>()
 
 export function createBaseContext(app: AnyElysia) {
-	const key = baseCache ? getBaseKey(app) : undefined
-	if (key !== undefined && baseCache.has(key)) return baseCache.get(key)!
+	const cached = baseCache.get(app)
+	if (cached) return cached
 
 	class Decorator {}
 	Object.assign(Decorator.prototype, {
@@ -57,26 +37,23 @@ export function createBaseContext(app: AnyElysia) {
 		redirect
 	})
 
-	if (createBaseContextCount > 2) {
-		baseCache ??= new Map()
-		baseCache.set(key ?? getBaseKey(app), Decorator)
-	} else createBaseContextCount++
-
+	baseCache.set(app, Decorator)
 	return Decorator
 }
 
 export function clearContextCache() {
-	// @ts-expect-error
-	baseCache = contextCache = undefined
-	createBaseContextCount = createContextCount = 0
+	// `WeakMap` has no `clear()`. Drop the references so cached classes
+	// become eligible for GC alongside their owning apps; subsequent
+	// `createBaseContext`/`createContext` calls rebuild on miss.
+	baseCache = new WeakMap()
+	contextCache = new WeakMap()
 }
 
 export function createContext(
 	app: AnyElysia
 ): new (request: Request) => Context {
-	const key = contextCache ? getContextKey(app) : undefined
-	if (key !== undefined && contextCache.has(key))
-		return contextCache.get(key)!
+	const cached = contextCache.get(app)
+	if (cached) return cached
 
 	const headers = app['~ext']?.headers
 		? Object.assign(nullObject(), app['~ext'].headers)
@@ -97,11 +74,7 @@ export function createContext(
 		}
 	} as any
 
-	if (createContextCount > 2) {
-		contextCache ??= new Map()
-		contextCache.set(key ?? getContextKey(app), context)
-	} else createContextCount++
-
+	contextCache.set(app, context)
 	return context
 }
 
@@ -157,7 +130,7 @@ export type ErrorContext<
 			 *
 			 * Use `Context.cookie` instead
 			 */
-			cookie?: Record<string, Cookie>
+			cookie?: Record<string, BaseCookie>
 		}
 
 		status: {} extends Route['response']
@@ -286,7 +259,7 @@ export type Context<
 			 *
 			 * Use `Context.cookie` instead
 			 */
-			cookie?: Record<string, Cookie>
+			cookie?: Record<string, BaseCookie>
 		}
 
 		/**

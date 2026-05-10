@@ -128,14 +128,6 @@ export interface ElysiaConfig<
 	analytic?: boolean
 
 	/**
-	 * If enabled, Elysia will call `Encode` before sending the response
-	 *
-	 * @default true
-	 * @since 1.3.0
-	 **/
-	encodeSchema?: boolean
-
-	/**
 	 * Enable experimental features
 	 */
 	experimental?: {}

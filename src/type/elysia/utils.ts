@@ -9,9 +9,20 @@ export function elyType<T extends TSchema>(
 	name: ELYSIA_TYPES[keyof ELYSIA_TYPES],
 	schema: T
 ): T {
+	if (Object.isExtensible(schema)) {
+		// @ts-expect-error
+		schema['~elyTyp'] = name
+		return schema
+	}
+
+	const target = Object.create(
+		Object.getPrototypeOf(schema),
+		Object.getOwnPropertyDescriptors(schema)
+	) as T
+
 	// @ts-expect-error
-	schema['~elyTyp'] = name
-	return schema
+	target['~elyTyp'] = name
+	return target
 }
 
 export function assignOrNew<

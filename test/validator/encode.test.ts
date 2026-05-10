@@ -5,9 +5,7 @@ import { req } from '../utils'
 
 describe('Encode response', () => {
 	it('handle default status', async () => {
-		const app = new Elysia({
-			encodeSchema: true
-		}).get(
+		const app = new Elysia().get(
 			'/',
 			() => ({
 				id: 'hello world'
@@ -15,7 +13,7 @@ describe('Encode response', () => {
 			{
 				response: t.Object({
 					id: t
-						.Transform(t.String())
+						.Codec(t.String())
 						.Decode((v) => v)
 						.Encode(() => 'encoded')
 				})
@@ -30,9 +28,7 @@ describe('Encode response', () => {
 	})
 
 	it('handle default named status', async () => {
-		const app = new Elysia({
-			encodeSchema: true
-		}).get(
+		const app = new Elysia().get(
 			'/:id',
 			({ status, params: { id } }) =>
 				status(id as any, {
@@ -45,13 +41,13 @@ describe('Encode response', () => {
 				response: {
 					200: t.Object({
 						id: t
-							.Transform(t.String())
+							.Codec(t.String())
 							.Decode((v) => v)
 							.Encode(() => 'encoded 200')
 					}),
 					418: t.Object({
 						id: t
-							.Transform(t.String())
+							.Codec(t.String())
 							.Decode((v) => v)
 							.Encode(() => 'encoded 418')
 					})
@@ -76,18 +72,14 @@ describe('Encode response', () => {
 	it('Encode before type check', async () => {
 		const dto = t.Object({
 			value: t
-				.Transform(t.String())
+				.Codec(t.String())
 				.Decode((value) => parseFloat(value))
 				.Encode((value) => value.toString())
 		})
 
 		let bodyType = ''
 
-		const elysia = new Elysia({
-			experimental: {
-				encodeSchema: true //open the flag!
-			}
-		}).post(
+		const elysia = new Elysia().post(
 			'/',
 			({ body }) => {
 				bodyType = typeof body.value

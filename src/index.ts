@@ -1,5 +1,6 @@
 export { Elysia } from './base'
 
+export { redirect } from './utils'
 export {
 	status,
 	ElysiaError,

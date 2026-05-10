@@ -77,7 +77,7 @@ import { expectTypeOf } from 'expect-type'
 	new Elysia().get('', async ({ query: { foo } }) => addTwo(foo), {
 		query: t.Object({
 			foo: t
-				.Transform(t.String())
+				.Codec(t.String())
 				.Decode((x) => 12)
 				.Encode((x) => x.toString())
 		})

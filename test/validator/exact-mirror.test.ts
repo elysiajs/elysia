@@ -4,7 +4,7 @@ import { describe, expect, it } from 'bun:test'
 import { post, req } from '../utils'
 
 describe('Exact Mirror', () => {
-	it('normalize when t.Transform is provided', async () => {
+	it('normalize when t.Codec is provided', async () => {
 		const app = new Elysia({
 			normalize: 'exactMirror'
 		}).get('/', () => ({ count: 2, name: 'foo', extra: 1 }), {

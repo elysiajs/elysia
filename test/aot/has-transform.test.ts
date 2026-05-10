@@ -6,7 +6,7 @@ import { hasTransform } from '../../src/schema'
 describe('Has Transform', () => {
 	it('find primitive', () => {
 		const schema = t
-			.Transform(t.String())
+			.Codec(t.String())
 			.Decode((v) => v)
 			.Encode((v) => v)
 
@@ -16,7 +16,7 @@ describe('Has Transform', () => {
 	it('find in root object', () => {
 		const schema = t.Object({
 			liyue: t
-				.Transform(t.String())
+				.Codec(t.String())
 				.Decode((v) => v)
 				.Encode((v) => v)
 		})
@@ -28,7 +28,7 @@ describe('Has Transform', () => {
 		const schema = t.Object({
 			liyue: t.Object({
 				id: t
-					.Transform(t.String())
+					.Codec(t.String())
 					.Decode((v) => v)
 					.Encode((v) => v)
 			})
@@ -41,7 +41,7 @@ describe('Has Transform', () => {
 		const schema = t.Optional(
 			t.Object({
 				prop1: t
-					.Transform(t.String())
+					.Codec(t.String())
 					.Decode((v) => v)
 					.Encode((v) => v)
 			})
@@ -53,11 +53,11 @@ describe('Has Transform', () => {
 	it('find on multiple transform', () => {
 		const schema = t.Object({
 			id: t
-				.Transform(t.String())
+				.Codec(t.String())
 				.Decode((v) => v)
 				.Encode((v) => v),
 			name: t
-				.Transform(t.String())
+				.Codec(t.String())
 				.Decode((v) => v)
 				.Encode((v) => v)
 		})
@@ -79,7 +79,7 @@ describe('Has Transform', () => {
 			id: t.Number(),
 			liyue: t.Union([
 				t
-					.Transform(t.String())
+					.Codec(t.String())
 					.Decode((v) => v)
 					.Encode((v) => v),
 				t.Number()

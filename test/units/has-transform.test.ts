@@ -108,7 +108,7 @@ describe('has transform', () => {
 					t.Object({ foo: t.String() }),
 					t.Object({
 						field: t
-							.Transform(t.String())
+							.Codec(t.String())
 							.Decode((decoded) => ({ decoded }))
 							.Encode((v) => v.decoded)
 					})
@@ -124,7 +124,7 @@ describe('has transform', () => {
 					t.Object({ foo: t.String() }),
 					t.Object({
 						field: t
-							.Transform(t.String())
+							.Codec(t.String())
 							.Decode((decoded) => ({ decoded }))
 							.Encode((v) => v.decoded)
 					})
@@ -137,7 +137,7 @@ describe('has transform', () => {
 		expect(
 			hasTransform(
 				t
-					.Transform(t.Object({ id: t.String() }))
+					.Codec(t.Object({ id: t.String() }))
 					.Decode((value) => value.id)
 					.Encode((value) => ({
 						id: value

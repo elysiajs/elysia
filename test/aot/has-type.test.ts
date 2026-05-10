@@ -6,7 +6,7 @@ import { hasType } from '../../src/schema'
 describe('Has Transform', () => {
 	it('find primitive', () => {
 		const schema = t
-			.Transform(t.File())
+			.Codec(t.File())
 			.Decode((v) => v)
 			.Encode((v) => v)
 

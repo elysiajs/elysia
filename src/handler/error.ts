@@ -1,9 +1,23 @@
 import { getAsyncIndexes } from './utils'
+import { parseQueryFromURL } from '../parse-query'
 
 import type { Context } from '../context'
 import type { AppHook } from '../types'
 
 const _defaultError = new Response('Internal Server Error', { status: 500 })
+
+// Error paths (404, pre-route throws, route exceptions caught at the
+// dispatcher) bypass the compiled-route codegen, so its inline query parse
+// never runs. `onError` handlers that destructure `({ query })` would see
+// undefined unless we parse here. Cost is one URL scan per error, only on
+// the cold error path.
+function ensureQuery(context: Context) {
+	if ((context as any).query === undefined && (context as any).qi !== undefined)
+		(context as any).query = parseQueryFromURL(
+			context.request.url,
+			(context as any).qi
+		)
+}
 
 function fallbackResponse(
 	context: Context,
@@ -43,6 +57,7 @@ export function createErrorHandler(
 			if ((error as any)?.status)
 				context.set.status = (error as any).status
 
+			ensureQuery(context)
 			return fallbackResponse(context, error, mapResponse, defaultError!)
 		}
 
@@ -55,6 +70,8 @@ export function createErrorHandler(
 			context.code = error.code ?? 'UNKNOWN'
 			// @ts-expect-error
 			if (error?.status) context.set.status = error.status
+
+			ensureQuery(context)
 
 			for (let i = 0; i < onErrors.length; i++) {
 				const result = asyncIndexes?.[i]
@@ -79,6 +96,8 @@ export function createErrorHandler(
 		context.code = error.code ?? 'UNKNOWN'
 		// @ts-expect-error
 		if (error?.status) context.set.status = error.status
+
+		ensureQuery(context)
 
 		for (let i = 0; i < onErrors.length; i++) {
 			const result = onErrors[i](context)

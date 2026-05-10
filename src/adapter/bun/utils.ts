@@ -102,7 +102,10 @@ export function createRouteMap(app: AnyElysia) {
 		return handleError(new Context(request), new NotFound()) as Response
 	}
 
-	const length = app.history?.length ?? 0
+	// Read once — the `history` getter walks every entry running
+	// `~applyMacro`, so repeat reads are O(N) per call.
+	const history = app.history
+	const length = history?.length ?? 0
 	if (length === 0)
 		return [
 			{
@@ -119,8 +122,8 @@ export function createRouteMap(app: AnyElysia) {
 
 	const routes = nullObject()
 
-	for (let i = 0; i < length!; i++) {
-		const route: InternalRoute = app.history![i]
+	for (let i = 0; i < length; i++) {
+		const route: InternalRoute = history![i]
 		const method = route[0]
 		const path = route[1]
 

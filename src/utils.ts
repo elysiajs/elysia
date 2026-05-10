@@ -7,7 +7,7 @@ import type {
 	EventScope,
 	Macro,
 	InputSchema,
-	InputHook
+	AnyLocalHook
 } from './types'
 
 import { ElysiaFile } from './universal/file'
@@ -56,49 +56,6 @@ export function fnv1a(str: string): number {
  */
 export const fnOrigin = new WeakMap<Function, number>()
 
-/**
- * Scope tag set on each registered hook fn at first registration. Used by
- * `filterByScope` (below) to distinguish, at .use() / compile time, between:
- *   - locals (don't propagate to absorbed sub-plugin routes)
- *   - plugin/global (propagate downward - the "scoped/global" set)
- *
- * Like `fnOrigin`, first registration wins - propagated fns added to other
- * instances' `~ext.hooks` via `#pushHook` keep their original tag.
- */
-export const fnScope = new WeakMap<Function, EventScope>()
-
-/**
- * Walk a hook layer and keep only entries whose fn passes the predicate
- * (applied to its `fnScope` tag, or `undefined` if never registered).
- *
- * Returns a fresh `Partial<AppHook>` (not a layer reference), or `undefined`
- * if nothing was kept. Arrays are sliced - caller can mutate the result.
- */
-export function filterByScope(
-	layer: Partial<AppHook> | undefined,
-	keep: (s: EventScope | undefined) => boolean
-): Partial<AppHook> | undefined {
-	if (!layer) return undefined
-	let out: Partial<AppHook> | undefined
-
-	for (const key of Object.keys(layer)) {
-		if (!eventProperties.has(key)) continue
-
-		const v: MaybeArray<Function> = layer[
-			key as keyof typeof layer
-		] as MaybeArray<Function>
-
-		if (Array.isArray(v)) {
-			const kept = v.filter((fn) => keep(fnScope.get(fn)))
-
-			if (kept.length) ((out ??= nullObject()) as any)[key] = kept
-		} else if (keep(fnScope.get(v)))
-			((out ??= nullObject()) as any)[key] = v
-	}
-
-	return out
-}
-
 export const isDownwardScope = (s: EventScope | undefined) =>
 	s === 'plugin' || s === 'global'
 
@@ -126,7 +83,19 @@ export const isLocalScope = (s: EventScope | undefined) =>
  * flat `Partial<AppHook>` at compile time
  */
 export type ChainNode =
-	| { added: Partial<AppHook>; parent: ChainNode | undefined }
+	| {
+			added: Partial<AppHook>
+			parent: ChainNode | undefined
+			// Scope this node was registered at (`#on` / `#guard`).
+			// All entries in the node share this scope by construction.
+			scope?: EventScope
+			// True if this node was created by `#use` propagation rather
+			// than direct registration. Used to enforce the "plugin scope
+			// propagates exactly one level" rule: `plugin` nodes with
+			// `propagated=true` are skipped in subsequent `#use` walks.
+			// Globals propagate regardless of this flag.
+			propagated?: boolean
+	  }
 	| { combine: ChainNode; over: ChainNode | undefined }
 
 /**
@@ -139,13 +108,20 @@ type Task =
 	// visit
 	| { kind: 0; node: ChainNode }
 	// append
-	| { kind: 1; added: Partial<AppHook> }
+	| { kind: 1; added: Partial<AppHook>; scope?: EventScope }
 
 export function flattenChain(
 	start: ChainNode | undefined,
-	keep?: (s: EventScope | undefined) => boolean
+	keep?: (s: EventScope | undefined) => boolean,
+	// Stop walking when this node is reached (exclusive). Used by
+	// `composeRootHook` to flatten only the chain entries added AFTER
+	// the snapshot in `inheritedChain` — without it, the same node would
+	// be visited via both inheritedChain (full walk) and locals (filtered
+	// walk on root.chain), double-counting hooks like a root-level
+	// `.beforeHandle()` registered before `.use(plugin)`.
+	stopAt?: ChainNode
 ): Partial<AppHook> | undefined {
-	if (!start) return undefined
+	if (!start || start === stopAt) return undefined
 	const result = nullObject() as Partial<AppHook>
 
 	const stack: Task[] = [{ kind: 0, node: start }]
@@ -153,18 +129,20 @@ export function flattenChain(
 	while (stack.length) {
 		const task = stack.pop()!
 		if (task.kind === 1) {
-			appendInto(result, task.added, keep)
+			appendInto(result, task.added, keep, task.scope)
 			continue
 		}
 
 		const node = task.node
+		if (stopAt && node === stopAt) continue
 		if ('combine' in node) {
 			// Tail-first: visit `over` (older), then `combine` (newer).
 			stack.push({ kind: 0, node: node.combine })
 			if (node.over) stack.push({ kind: 0, node: node.over })
 		} else {
-			stack.push({ kind: 1, added: node.added })
-			if (node.parent) stack.push({ kind: 0, node: node.parent })
+			stack.push({ kind: 1, added: node.added, scope: node.scope })
+			if (node.parent && node.parent !== stopAt)
+				stack.push({ kind: 0, node: node.parent })
 		}
 	}
 
@@ -174,26 +152,34 @@ export function flattenChain(
 function appendInto(
 	target: Partial<AppHook>,
 	src: Partial<AppHook>,
-	keep?: (s: EventScope | undefined) => boolean
+	keep?: (s: EventScope | undefined) => boolean,
+	nodeScope?: EventScope
 ): void {
-	for (const key of nativeProperties) {
+	// `keep` filters the whole node by its scope. After per-scope `#use`
+	// propagation, every entry in a node shares the node's scope by
+	// construction, so a single `keep(nodeScope)` decides the lot.
+	if (keep && !keep(nodeScope)) return
+
+	for (const key in src) {
 		const v = (src as any)[key]
-		if (!v) continue
+		if (v === undefined || v === null) continue
 
-		const raw = Array.isArray(v) ? v : [v]
-
-		const arr =
-			keep && key !== 'schema'
-				? raw.filter((fn) => keep(fnScope.get(fn)))
-				: raw
-
-		if (!arr.length) continue
-		const existing = (target as any)[key]
-
-		// Always materialise arrays - `compileHandler` and friends index by
-		// `.length` and `[i]`, which would silently wrong-result on single fns.
-		if (existing) (existing as any[]).push(...arr)
-		else (target as any)[key] = arr.slice()
+		// Chain-style and standalone-schema fields accumulate as arrays.
+		// Scalar fields (body/headers/params/query/cookie/response/detail)
+		// take the LAST write — matches src-old's `mergeSchemaValidator`
+		// (`b?.body ?? a?.body`). With tail-first chain traversal (oldest
+		// node first, newest last), this gives "more-local overrides
+		// more-global". Unknown keys (notably unresolved macro keys like
+		// `auth: 'admin'`) propagate as scalar last-wins so `~applyMacro`
+		// can resolve them at compile time on the merged hook.
+		if (eventProperties.has(key) || key === 'schema') {
+			const arr = Array.isArray(v) ? v : [v]
+			const existing = (target as any)[key]
+			if (existing) (existing as any[]).push(...arr)
+			else (target as any)[key] = arr.slice()
+		} else {
+			;(target as any)[key] = v
+		}
 	}
 }
 
@@ -224,7 +210,7 @@ export const constantTimeEqual =
 			}
 		: (a: string, b: string) => a === b
 
-const isRecordNumber = (
+export const isRecordNumber = (
 	x: Record<keyof object, unknown> | undefined
 ): x is Record<number, unknown> =>
 	typeof x === 'object' && Object.keys(x).every((x) => !isNaN(+x))
@@ -233,11 +219,14 @@ export function mergeResponse(
 	a: InputSchema['response'],
 	b: InputSchema['response']
 ) {
-	if (isRecordNumber(a) && isRecordNumber(b))
-		// Prevent side effect
-		return Object.assign({}, a, b)
-	else if (a && !isRecordNumber(a) && isRecordNumber(b))
-		return Object.assign({ 200: a }, b)
+	const aRecord = isRecordNumber(a)
+	const bRecord = isRecordNumber(b)
+
+	if (aRecord && bRecord) return Object.assign({}, a, b)
+	if (aRecord && b)
+		// `a` is `{ 400: ..., 500: ... }`, `b` is a single schema → 200.
+		return Object.assign({}, a, { 200: b })
+	if (a && bRecord) return Object.assign({ 200: a }, b)
 
 	return b ?? a
 }
@@ -361,7 +350,14 @@ const nativeProperties = new Set([
 export function hookToGuard(
 	a: Partial<AppHook & Macro>
 ): Partial<AppHook & Macro> {
-	if (a.body || a.headers || a.params || a.query || a.cookie) {
+	if (
+		a.body ||
+		a.headers ||
+		a.params ||
+		a.query ||
+		a.cookie ||
+		a.response
+	) {
 		a.schema ??= []
 		const schema = Object.create(null)
 
@@ -399,6 +395,76 @@ export function hookToGuard(
 	}
 
 	return a
+}
+
+const SCHEMA_FIELDS = [
+	'body',
+	'headers',
+	'params',
+	'query',
+	'cookie',
+	'response'
+] as const
+
+/**
+ * Try to fold each `incoming` standalone-schema entry into an existing
+ * `existing` entry. Two entries are mergeable iff their field-name sets
+ * are disjoint OR all overlapping fields hold identical references.
+ * Conflicting entries are appended rather than merged so each gets its
+ * own validation pass.
+ *
+ * Used by `~applyMacro` when multiple macros contribute schemas to the
+ * same route. Sibling record-form macros with disjoint fields collapse
+ * into one entry; conflicting (`body` × N) macros stay separate.
+ */
+export function coalesceStandaloneSchemas(
+	existing: any[],
+	incoming: any[]
+): void {
+	for (const entry of incoming) {
+		if (!entry || typeof entry !== 'object') continue
+		let merged = false
+		for (let i = 0; i < existing.length; i++) {
+			const e = existing[i]
+			let canMerge = true
+			for (const k in entry) {
+				if (k in e && e[k] !== entry[k]) {
+					canMerge = false
+					break
+				}
+			}
+			if (canMerge) {
+				Object.assign(e, entry)
+				merged = true
+				break
+			}
+		}
+		if (!merged) existing.push(entry)
+	}
+}
+
+/**
+ * After `~applyMacro` finishes, any `body`/`headers`/etc. left at the top
+ * level of `input` (from string-form macros that bypassed registration-
+ * time `hookToGuard`, or from a direct user-set field) gets folded into
+ * the `schema` array via `coalesceStandaloneSchemas`. Mirrors what
+ * `hookToGuard` does, but try-merges into existing entries instead of
+ * always pushing new ones.
+ */
+export function liftDirectFieldsToSchema(
+	input: Partial<AppHook & Macro>
+): void {
+	let lifted: Record<string, unknown> | undefined
+	for (const f of SCHEMA_FIELDS) {
+		const v = (input as any)[f]
+		if (v !== undefined && v !== null) {
+			;(lifted ??= Object.create(null) as any)![f] = v
+			;(input as any)[f] = undefined
+		}
+	}
+	if (!lifted) return
+	;(input as any).schema ??= []
+	coalesceStandaloneSchemas((input as any).schema as any[], [lifted])
 }
 
 export function mergeGuard(
@@ -567,7 +633,7 @@ export const isBlob = (value: unknown): value is Blob =>
 
 export const nullObject = () => Object.create(null)
 
-export function cloneHook<T extends Partial<InputHook> | Partial<AppHook>>(
+export function cloneHook<T extends Partial<AnyLocalHook> | Partial<AppHook>>(
 	src: T
 ): T {
 	const out = Object.assign(nullObject(), src) as Record<string, any>

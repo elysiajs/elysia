@@ -226,7 +226,7 @@ describe('Handle Error', () => {
 		const route = new Elysia().get('/', ({ query: { aid } }) => aid, {
 			query: t.Object({
 				aid: t
-					.Transform(t.String())
+					.Codec(t.String())
 					.Decode((value) => {
 						throw new NotFoundError('foo')
 					})

@@ -125,6 +125,9 @@ describe('ElysiaType.NoValidate', () => {
 	})
 
 	it('should work with actual Date when using t.NoValidate(t.Date())', async () => {
+		// Under strict "skip Check only", Date's bidirectional codec still
+		// runs Encode → ISO string (instead of the JS .toString() form the
+		// raw response handler would produce).
 		const testDate = new Date('2025-01-01T00:00:00Z')
 		const app = new Elysia().get('/', () => testDate, {
 			response: t.NoValidate(t.Date())
@@ -133,7 +136,7 @@ describe('ElysiaType.NoValidate', () => {
 		const res = await app.handle(req('/'))
 
 		expect(res.status).toBe(200)
-		expect(await res.text()).toBe(testDate.toString())
+		expect(await res.text()).toBe(testDate.toISOString())
 	})
 
 	it('should bypass validation with t.NoValidate(t.Numeric())', async () => {
@@ -151,19 +154,19 @@ describe('ElysiaType.NoValidate', () => {
 		expect(await res.text()).toBe('not-a-number')
 	})
 
-	it('should bypass validation with t.NoValidate(t.BooleanString())', async () => {
-		const app = new Elysia().get(
-			'/',
-			() => 'invalid-boolean' as unknown as boolean,
-			{
-				response: t.NoValidate(t.BooleanString())
-			}
-		)
+	// `t.BooleanString` and `t.Numeric` use unidirectional `Type.Decode`
+	// codecs (Decode-only; Encode throws "Encode not implemented"). Under
+	// the strict "skip Check only" NoValidate semantic, response-side
+	// validation runs `EncodeUnsafe` and unidirectional codecs always fail.
+	// We assert the error path to lock the contract in.
+	it('NoValidate(t.BooleanString()) surfaces unidirectional codec error', async () => {
+		const app = new Elysia().get('/', () => true, {
+			response: t.NoValidate(t.BooleanString())
+		})
 
 		const res = await app.handle(req('/'))
 
-		expect(res.status).toBe(200)
-		expect(await res.text()).toBe('invalid-boolean')
+		expect(res.status).toBe(422)
 	})
 
 	it('should work with NoValidate in specific status codes', async () => {
@@ -309,11 +312,13 @@ describe('ElysiaType.NoValidate', () => {
 		expect(await res.text()).toBe('test')
 	})
 
-	it('bypasses Encode when encodeSchema=true (Date)', async () => {
-		const app = new Elysia({ encodeSchema: true }).get(
+	it('passes string through NoValidate(t.Date()) — Date.Encode handles non-Date input', async () => {
+		// `t.Date()`'s Encode is `(v) => v instanceof Date ? toISOString : v + ''`,
+		// so a string return is encoded into itself. Under strict skip-Check-only
+		// semantic, Encode still runs but doesn't break for primitive strings.
+		const app = new Elysia().get(
 			'/',
-			// @ts-expect-error
-			() => 'Hello Elysia',
+			() => 'Hello Elysia' as any,
 			{ response: t.NoValidate(t.Date()) }
 		)
 		const res = await app.handle(req('/'))
@@ -321,11 +326,10 @@ describe('ElysiaType.NoValidate', () => {
 		expect(await res.text()).toBe('Hello Elysia')
 	})
 
-	it('bypasses Encode with NoValidate(t.Ref(Date)) when encodeSchema=true', async () => {
-		const app = new Elysia({ encodeSchema: true })
+	it('passes string through NoValidate(t.Ref(Date))', async () => {
+		const app = new Elysia()
 			.model({ createdAt: t.Date() })
-			// @ts-expect-error
-			.get('/', () => 'Hello', {
+			.get('/', () => 'Hello' as any, {
 				response: t.NoValidate(t.Ref('createdAt'))
 			})
 		const res = await app.handle(req('/'))

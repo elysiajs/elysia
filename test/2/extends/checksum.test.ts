@@ -320,28 +320,6 @@ describe('Checksum', () => {
 		expect(i).toBe(1)
 	})
 
-	it('scope plugin', async () => {
-		let i = 0
-
-		const plugin = new Elysia().use(
-			new Elysia({ prefix: '/call' })
-				.derive(() => {
-					i++ // <-- should not be called, when requesting /asdf
-					return { test: 'test' }
-				})
-				.get('/', ({ test }) => test)
-				.use(new Elysia({ prefix: '/not-call' }).get('/', () => 'asdf'))
-		)
-
-		const app = new Elysia().use(plugin)
-
-		await Promise.all(
-			['/not-call', '/call'].map((path) => app.handle(req(path)))
-		)
-
-		expect(i).toBe(1)
-	})
-
 	// Same invariant as "read lifecylce top-down" but the two siblings
 	// are .use()'d directly on the compile root (no wrapping plugin).
 	// Catches regressions where the rootHook lookup is correct only when

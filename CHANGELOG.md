@@ -4,12 +4,30 @@ Breaking Change:
 - [Internal] remove format: `numeric`, `integer`, `objectString`, `booleanString`
 - `getSchemaValidator` renamed to `Validator.create`
 - remove `context.contentType` from `Context` in `parse`
+- drop `config.encodeSchema` as always enabled. Can't support both in a type safe manner.
+- `derive` now run in `beforeHandle`
+- `error` for error registration is replace by `onError`
+- `t.Transform` renamed to `t.Codec` (TypeBox 1.0 alignment)
+- `t.NoValidate` semantics: now skips `Check` only — `Default`/`Convert`/`Decode`/`Encode` still run. Unidirectional codecs (`t.BooleanString`, `t.Numeric`) under `NoValidate` will surface as `ValidationError` if Encode is invoked
+- Cookie `sign` without matching `secrets` now throws at app construction time (was silent before — cookies shipped unsigned)
+
+Behavior Change:
+- soft deprecation for `resolve`, use `derive` instead
+- soft deprecation for `on<event>()` use `<event>()` method for lifecycle event instead
+- soft deprecation for `onError({ code })`, use `error(Error, () => {})` instead
+- `afterHandle` will skip the rest when short-circuit
+- `Error.summary` now use default TypeBox message instead
+- `Error.summary` now support for Standard Schema
+- Validator runs `Convert` and reorders to `Convert → Check → DecodeUnsafe` for codec schemas (matches TypeBox 1.0 standard `Decode` pipeline). Fixes `t.Numeric({ minimum, maximum })` and `t.Codec(...).Decode(...)` against wire-form input
 
 Feature:
 - Adapter v2
 - sub type validator
 - shared validator cached
 - shared schema reference
+- Cookie schema field
+- `t.Cookie(schema, opts)` field-form — wrap individual properties of `t.Object` for per-field cookie attributes/secrets, replacing the need for top-level `sign: ['name']` arrays
+- Validator pre-computes default snapshot at construction for safe schemas (no Union/Codec/Refine/nested-Object-without-default), eliminating per-request `Default()` walk for the common case
 
 # 1.4.28 - 17 Mar 2025
 Feature:

@@ -951,7 +951,7 @@ describe('Query Validator', () => {
 			{
 				query: t.Object({
 					id: t
-						.Transform(t.UnionEnum(['test', 'foo']))
+						.Codec(t.UnionEnum(['test', 'foo']))
 						.Decode((id) => ({ value: id }))
 						.Encode((id) => id.value)
 				})

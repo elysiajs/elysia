@@ -294,6 +294,46 @@ describe('Transform', () => {
 		expect(called).toEqual(['/inner'])
 	})
 
+	// New direct-scope API: `transform('global', fn)` parallels
+	// `onTransform({ as: 'global' }, fn)`.
+	it('global true (direct scope)', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.transform('global', ({ path }) => {
+				called.push(path)
+			})
+			.get('/inner', () => 'NOOP')
+
+		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
+
+		await Promise.all([
+			app.handle(req('/inner')),
+			app.handle(req('/outer'))
+		])
+
+		expect(called).toEqual(['/inner', '/outer'])
+	})
+
+	it('global false (direct scope)', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.transform('local', ({ path }) => {
+				called.push(path)
+			})
+			.get('/inner', () => 'NOOP')
+
+		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
+
+		await Promise.all([
+			app.handle(req('/inner')),
+			app.handle(req('/outer'))
+		])
+
+		expect(called).toEqual(['/inner'])
+	})
+
 	it('support array', async () => {
 		let total = 0
 

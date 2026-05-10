@@ -94,3 +94,9 @@ export type StatusMapBack = typeof StatusMapBack
 export const dangerousKeys = new Set(['__proto__', 'constructor', 'prototype'])
 
 export const isDynamicRegex = /\:|\*/
+
+// Module-scoped Symbol used to dedupe `afterResponse` firing between
+// compiled-route schedules and the app-level dispatcher fallback in
+// `src/handler/fetch.ts`. A Symbol prevents collision with user decorators
+// and keeps the marker off enumerable property surfaces.
+export const AFTER_RESPONSE_FIRED = Symbol('elysia.afterResponseFired')

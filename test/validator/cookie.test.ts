@@ -277,7 +277,7 @@ describe('Cookie Validation', () => {
 			{
 				cookie: t.Cookie({
 					timestamp: t
-						.Transform(t.String())
+						.Codec(t.String())
 						.Decode((value) => new Date(value))
 						.Encode((value) => value.toISOString())
 				})

@@ -79,26 +79,97 @@ const normalizeValidationIssue = (e: any, value: unknown) => {
 	}
 }
 
+// Walk a TypeBox/Standard schema using an `instancePath` like `/x` or
+// `/items/0` to find the violating sub-schema. Returns undefined if the
+// path can't be resolved. Used to read custom `error` overrides off the
+// sub-schema when a validator throws.
+//
+// Composition handling: `anyOf` / `oneOf` / `allOf` (TypeBox `Union`,
+// `Intersect`, refined union/intersect) wrap the same value in multiple
+// shape candidates and don't append to `instancePath`. We try each branch
+// in turn — the first that resolves the remaining path wins. `allOf` is
+// handled the same way: properties are spread across branches and any of
+// them may carry the violating sub-schema.
+const walkComposition = (schema: any, parts: string[]): any => {
+	if (parts.length === 0) return schema
+
+	const branches: any[] | undefined =
+		schema.anyOf ?? schema.oneOf ?? schema.allOf
+	if (Array.isArray(branches)) {
+		for (let i = 0; i < branches.length; i++) {
+			const result = walkComposition(branches[i], parts)
+			if (result !== undefined) return result
+		}
+		return undefined
+	}
+
+	const [head, ...rest] = parts
+	if (schema.properties?.[head])
+		return walkComposition(schema.properties[head], rest)
+	if (
+		schema.additionalProperties &&
+		typeof schema.additionalProperties === 'object'
+	)
+		return walkComposition(schema.additionalProperties, rest)
+	if (schema.items) return walkComposition(schema.items, rest)
+	return undefined
+}
+
+const walkSubSchema = (schema: any, instancePath: string | undefined) => {
+	if (!schema || !instancePath) return schema
+	const parts = instancePath.split('/').filter(Boolean)
+	return walkComposition(schema, parts)
+}
+
 export class ValidationError extends ElysiaError {
 	code = 'VALIDATION'
 	status = 422
 
+	// `customError` is the literal string or the result of calling the
+	// schema's `error` function. When set, it overrides the JSON dump that
+	// would otherwise be the message — letting users return short, custom
+	// messages from `t.X({ error: ... })`.
+	customError?: unknown
+
 	constructor(
 		public type: string | undefined,
 		public value: unknown,
-		public errors: any[]
+		public errors: any[],
+		schema?: unknown
 	) {
-		super(
-			JSON.stringify(
-				{
-					type: 'validation',
-					on: type ?? 'unknown',
-					errors
-				},
-				null,
-				2
-			)
-		)
+		const sub: any = walkSubSchema(schema, errors?.[0]?.instancePath)
+		let customError: unknown
+
+		if (sub?.error !== undefined) {
+			customError =
+				typeof sub.error === 'function'
+					? sub.error({
+							type: 'validation',
+							on: type,
+							value,
+							errors
+						})
+					: sub.error
+		}
+
+		// Pick the message: explicit custom error > violating error's
+		// `.message` > generic fallback. Plain strings are used as-is so
+		// `error.message` doesn't start with `{` for handlers that just
+		// want the user-visible string.
+		let message: string
+		if (customError !== undefined) {
+			message =
+				typeof customError === 'string'
+					? customError
+					: JSON.stringify(customError)
+		} else if (errors?.[0]?.message) {
+			message = errors[0].message
+		} else {
+			message = `Validation error on ${type ?? 'unknown'}`
+		}
+
+		super(message)
+		this.customError = customError
 	}
 
 	get all() {
@@ -140,7 +211,7 @@ export class ElysiaStatus<
 		: Code = Code extends keyof StatusMap ? StatusMap[Code] : Code
 > {
 	code: Status
-	res!: T
+	response!: T
 
 	constructor(code: Code, res: T) {
 		const response =
@@ -151,7 +222,14 @@ export class ElysiaStatus<
 
 		this.code = (StatusMap[code as keyof StatusMap] as Status) ?? code
 
-		if (!emptyHttpStatus.has(code as number)) this.res = response as T
+		if (!emptyHttpStatus.has(code as number))
+			this.response = response as T
+	}
+
+	// Mirrors `ElysiaError.status` so error-handling code paths can read
+	// `e.status` uniformly without an `instanceof ElysiaStatus` branch.
+	get status() {
+		return this.code as unknown as number
 	}
 }
 

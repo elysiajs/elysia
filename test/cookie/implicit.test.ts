@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
-import { createCookieJar } from '../../src/cookies'
-import type { Context } from '../../src'
+import { createCookieJar } from '../../src/cookie'
+import type { Context } from '../../src/context'
 
 const create = () => {
 	const set: Context['set'] = {

@@ -65,32 +65,6 @@ describe('On After Response', () => {
 
 		const afterResponse = new Elysia().onAfterResponse(
 			{ as: 'global' },
-			({ response }) => {
-				type = typeof response
-			}
-		)
-
-		const app = new Elysia()
-			.use(afterResponse)
-			.get('/id/:id', ({ params: { id } }) => id, {
-				params: t.Object({
-					id: t.Number()
-				})
-			})
-
-		await app.handle(req('/id/1'))
-
-		// wait for next tick
-		await Bun.sleep(1)
-
-		expect(type).toBe('number')
-	})
-
-	it('inherits from plugin using responseValue', async () => {
-		let type = ''
-
-		const afterResponse = new Elysia().onAfterResponse(
-			{ as: 'global' },
 			({ responseValue }) => {
 				type = typeof responseValue
 			}
@@ -149,6 +123,48 @@ describe('On After Response', () => {
 			app.handle(req('/outer'))
 		])
 		// wait for next tick
+		await Bun.sleep(1)
+
+		expect(called).toEqual(['/inner'])
+	})
+
+	// New direct-scope API: `afterResponse('global', fn)` parallels
+	// `onAfterResponse({ as: 'global' }, fn)`.
+	it('as global (direct scope)', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.afterResponse('global', ({ path }) => {
+				called.push(path)
+			})
+			.get('/inner', () => 'NOOP')
+
+		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
+
+		await Promise.all([
+			app.handle(req('/inner')),
+			app.handle(req('/outer'))
+		])
+		await Bun.sleep(1)
+
+		expect(called).toEqual(['/inner', '/outer'])
+	})
+
+	it('as local (direct scope)', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.afterResponse('local', ({ path }) => {
+				called.push(path)
+			})
+			.get('/inner', () => 'NOOP')
+
+		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
+
+		await Promise.all([
+			app.handle(req('/inner')),
+			app.handle(req('/outer'))
+		])
 		await Bun.sleep(1)
 
 		expect(called).toEqual(['/inner'])

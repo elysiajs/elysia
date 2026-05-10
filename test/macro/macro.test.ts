@@ -53,7 +53,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.router.history[0].hooks.parse?.length).toEqual(1)
+		expect(app.history![0][4]!.parse?.length).toEqual(1)
 	})
 
 	it('appends parse array', async () => {
@@ -69,7 +69,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.router.history[0].hooks.parse?.length).toEqual(2)
+		expect(app.history![0][4]!.parse?.length).toEqual(2)
 	})
 
 	it('appends transform', async () => {
@@ -85,7 +85,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.router.history[0].hooks.transform?.length).toEqual(1)
+		expect(app.history![0][4]!.transform?.length).toEqual(1)
 	})
 
 	it('appends transform array', async () => {
@@ -101,7 +101,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.router.history[0].hooks.transform?.length).toEqual(2)
+		expect(app.history![0][4]!.transform?.length).toEqual(2)
 	})
 
 	it('appends beforeHandle', async () => {
@@ -117,7 +117,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.router.history[0].hooks.beforeHandle?.length).toEqual(1)
+		expect(app.history![0][4]!.beforeHandle?.length).toEqual(1)
 	})
 
 	it('appends beforeHandle array', async () => {
@@ -133,7 +133,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.router.history[0].hooks.beforeHandle?.length).toEqual(2)
+		expect(app.history![0][4]!.beforeHandle?.length).toEqual(2)
 	})
 
 	it('appends afterHandle', async () => {
@@ -149,7 +149,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.router.history[0].hooks.afterHandle?.length).toEqual(1)
+		expect(app.history![0][4]!.afterHandle?.length).toEqual(1)
 	})
 
 	it('appends afterHandle array', async () => {
@@ -165,7 +165,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.router.history[0].hooks.afterHandle?.length).toEqual(2)
+		expect(app.history![0][4]!.afterHandle?.length).toEqual(2)
 	})
 
 	it('appends error', async () => {
@@ -181,7 +181,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.router.history[0].hooks.error?.length).toEqual(1)
+		expect(app.history![0][4]!.error?.length).toEqual(1)
 	})
 
 	it('appends error array', async () => {
@@ -197,7 +197,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.router.history[0].hooks.error?.length).toEqual(2)
+		expect(app.history![0][4]!.error?.length).toEqual(2)
 	})
 
 	it('appends afterResponse', async () => {
@@ -213,7 +213,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.router.history[0].hooks.afterResponse?.length).toEqual(1)
+		expect(app.history![0][4]!.afterResponse?.length).toEqual(1)
 	})
 
 	it('appends afterResponse array', async () => {
@@ -229,7 +229,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.router.history[0].hooks.afterResponse?.length).toEqual(2)
+		expect(app.history![0][4]!.afterResponse?.length).toEqual(2)
 	})
 
 	it('handle deduplication', async () => {
@@ -451,7 +451,7 @@ describe('Macro', () => {
 			hello: 'nagisa'
 		})
 
-		new Elysia()
+		const app = new Elysia()
 			.macro({
 				hello(a: string) {
 					called.push(a)
@@ -459,8 +459,13 @@ describe('Macro', () => {
 			})
 			.use(plugin)
 			.get('/', () => 'a', {
+				// @ts-ignore
 				hello: 'hifumi'
 			})
+
+		// Macros run during route compilation; reading `app.history`
+		// triggers compile for each route via the introspection getter.
+		void app.history
 
 		expect(called).toEqual(['nagisa', 'hifumi'])
 	})
@@ -585,8 +590,7 @@ describe('Macro', () => {
 					})
 				})
 			})
-			.guard({
-				as: 'scoped',
+			.guard('plugin', {
 				account: true
 			})
 			.get('/local', ({ account }) => account === 'A')
@@ -620,8 +624,7 @@ describe('Macro', () => {
 					})
 				})
 			})
-			.guard({
-				as: 'global',
+			.guard('global', {
 				account: true
 			})
 			.get('/local', ({ account }) => account === 'A')
@@ -655,8 +658,7 @@ describe('Macro', () => {
 					})
 				})
 			})
-			.guard({
-				as: 'local',
+			.guard('local', {
 				account: true
 			})
 			.get('/local', ({ account }) => account === 'A')
@@ -732,8 +734,7 @@ describe('Macro', () => {
 					}
 				})
 			})
-			.guard({
-				as: 'scoped',
+			.guard('plugin', {
 				account: true
 			})
 			.get('/local', ({ account }) => account === 'A')
@@ -916,7 +917,7 @@ describe('Macro', () => {
 				lilith: true
 			})
 
-		expect(app.routes[0].hooks.standaloneValidator.length).toBe(1)
+		expect(app.history![0][4]!.schema!.length).toBe(1)
 
 		const valid = await app.handle(
 			post('/Sartre?focou=Focou', {
@@ -973,7 +974,7 @@ describe('Macro', () => {
 				lilith: true
 			})
 
-		expect(app.routes[0].hooks.standaloneValidator.length).toBe(3)
+		expect(app.history![0][4]!.schema!.length).toBe(3)
 
 		const response = await app.handle(
 			post('/', {
@@ -1040,7 +1041,7 @@ describe('Macro', () => {
 				lilith: true
 			})
 
-		expect(app.routes[0].hooks.standaloneValidator.length).toBe(3)
+		expect(app.history![0][4]!.schema!.length).toBe(3)
 
 		const response = await app.handle(
 			post('/', {
@@ -1102,9 +1103,9 @@ describe('Macro', () => {
 				lilith: true
 			})
 
-		const route = app.routes[0]
+		const route = app.history![0]
 
-		expect(route.hooks.detail).toEqual({
+		expect(route[4]!.detail).toEqual({
 			summary: 'Lilith',
 			description: 'Lilith description'
 		})
@@ -1126,9 +1127,9 @@ describe('Macro', () => {
 				}
 			})
 
-		const route = app.routes[0]
+		const route = app.history![0]
 
-		expect(route.hooks.detail).toEqual({
+		expect(route[4]!.detail).toEqual({
 			summary: 'Lilith',
 			description: 'Lilith description'
 		})
@@ -1154,9 +1155,9 @@ describe('Macro', () => {
 				lilith: true
 			})
 
-		const route = app.routes[0]
+		const route = app.history![0]
 
-		expect(route.hooks.standaloneValidator.length).toBe(3)
+		expect(route[4]!.schema!.length).toBe(3)
 	})
 
 	it('deduplicate function macro by default', () => {
@@ -1182,14 +1183,14 @@ describe('Macro', () => {
 				sartre: false
 			})
 
-		const route = app.routes[0]
+		const route = app.history![0]
 
 		// This is 4 because
 		// 1. lilith
 		// 2. focou
 		// 3. sartre from focou
 		// 4. sartre with false flag
-		expect(route.hooks.standaloneValidator.length).toBe(4)
+		expect(route[4]!.schema!.length).toBe(4)
 	})
 
 	it('deduplicate function macro when argument is similar', () => {
@@ -1215,13 +1216,13 @@ describe('Macro', () => {
 				sartre: true
 			})
 
-		const route = app.routes[0]
+		const route = app.history![0]
 
 		// This is 4 because
 		// 1. lilith
 		// 2. focou
 		// 3. sartre from focou
-		expect(route.hooks.standaloneValidator.length).toBe(3)
+		expect(route[4]!.schema!.length).toBe(3)
 	})
 
 	it('deduplicate programmatically', () => {
@@ -1250,10 +1251,10 @@ describe('Macro', () => {
 				lilith: true
 			})
 
-		const route = app.routes[0]
+		const route = app.history![0]
 
-		expect(route.hooks.standaloneValidator.length).toBe(4)
-		expect(route.hooks.detail).toEqual({
+		expect(route[4]!.schema!.length).toBe(4)
+		expect(route[4]!.detail).toEqual({
 			tags: ['philosopher', 'npc']
 		})
 	})
@@ -1277,7 +1278,7 @@ describe('Macro', () => {
 				lilith: true
 			})
 
-		expect(app.routes[0].hooks.standaloneValidator.length).toBe(1)
+		expect(app.history![0][4]!.schema!.length).toBe(1)
 
 		const valid = await app.handle(
 			post('/Sartre?focou=Focou', {
@@ -1334,7 +1335,7 @@ describe('Macro', () => {
 				lilith: true
 			})
 
-		expect(app.routes[0].hooks.standaloneValidator.length).toBe(1)
+		expect(app.history![0][4]!.schema!.length).toBe(1)
 
 		const valid = await app.handle(
 			post('/Sartre?focou=Focou', {
@@ -1391,7 +1392,7 @@ describe('Macro', () => {
 				lilith: true
 			})
 
-		expect(app.routes[0].hooks.standaloneValidator.length).toBe(3)
+		expect(app.history![0][4]!.schema!.length).toBe(3)
 
 		const response = await app.handle(
 			post('/', {

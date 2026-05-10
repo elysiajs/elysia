@@ -1,13 +1,19 @@
 import { Elysia, t } from '../src'
 
-new Elysia().get(
-	'/:id',
-	({ body }) => {
-		return 'ok'
+const app = new Elysia().post('/', () => 'a', {
+	body: t.Object({
+		a: t.String()
+	})
+})
+
+app.handle('/', {
+	method: 'POST',
+	headers: {
+		'content-type': 'application/json'
 	},
-	{
-		body: t.Object({
-			id: t.Number()
-		})
-	}
-)
+	body: JSON.stringify({
+		a: 'a'
+	})
+})
+	.then((r) => r.text())
+	.then(console.log)
