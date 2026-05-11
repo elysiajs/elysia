@@ -6,7 +6,7 @@ import { getAsyncIndexes } from './utils'
 import { createContext, type Context } from '../context'
 import { createErrorHandler } from './error'
 import {
-	createRequestId,
+	requestId,
 	flattenChain,
 	getLoosePath,
 	nullObject
@@ -153,7 +153,7 @@ export function createFetchHandler(
 						context.qi
 			)
 
-			context.rid = createRequestId()
+			context.rid = requestId()
 
 			const traceLength = tracerFactories!.length
 			const trace: any[] = new Array(traceLength)

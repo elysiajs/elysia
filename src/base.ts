@@ -84,7 +84,7 @@ import type {
 	AnyLocalHook,
 	DefaultEphemeral,
 	DefaultSingleton,
-    DefaultMetadata
+	DefaultMetadata
 } from './types'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
@@ -165,17 +165,6 @@ export class Elysia<
 	'~router'?: Memoirist<CompiledHandler>
 	'~map'?: { [method: string]: { [path: string]: CompiledHandler } }
 	'~loosePath': Record<string, string>
-	// Routes that resolve to a precomputed `Response` (no blocking
-	// lifecycle hooks, non-function handler). Sync handlers store a
-	// `Response`; Promise inline handlers (e.g. `.get('/', fetch(...))`)
-	// store a `Promise<Response>` so the Bun adapter can `server.reload`
-	// once they settle.
-	//
-	// Populated by `#buildRouter`, which is triggered lazily by the
-	// `fetch` getter. Consumers (Bun adapter, tests) read this field
-	// directly — `void app.fetch` first if access happens pre-listen.
-	// Naming mirrors the `nativeStaticResponse` config flag that gates
-	// this behavior.
 	'~staticResponse'?: {
 		[path: string]: {
 			[method: string]: Response | Promise<Response>
@@ -208,11 +197,6 @@ export class Elysia<
 					: flatAppHook
 				: hook
 
-			// Standalone schema entries from guards/groups carry their
-			// own `response` (single schema or status-keyed map). Fold
-			// those into a unified `hooks.response` keyed by status so
-			// the public surface matches what compileHandler actually
-			// validates against.
 			if (merged?.schemas?.length) {
 				for (const entry of merged.schemas as any[]) {
 					if (!entry?.response) continue
@@ -223,8 +207,6 @@ export class Elysia<
 				}
 			}
 
-			// Normalize a bare single schema to `{ 200: schema }` so all
-			// inspection paths see a status-keyed map.
 			if (merged?.response && !isRecordNumber(merged.response))
 				merged.response = { 200: merged.response }
 
@@ -1007,9 +989,6 @@ export class Elysia<
 			| string,
 		fn?: MaybeArray<EventFn<'parse'>>
 	): this {
-		// Single-arg string: look up named parser, register it as a parse hook.
-		// If unknown, register the string itself — `compile/handler` treats
-		// known content-type strings as builtin parsers.
 		if (fn === undefined && typeof scopeOrFnOrName === 'string') {
 			const named = this['~ext']?.parser?.[scopeOrFnOrName]
 			return this.#onBranch('parse', (named ?? scopeOrFnOrName) as any)
@@ -1094,12 +1073,6 @@ export class Elysia<
 		return this.#onBranch('beforeHandle', scopeOrFn, fn)
 	}
 
-	// `resolve`, `mapDerive`, `mapResolve` share `derive`'s runtime: the
-	// callback's return is `Object.assign`'d into context inside the
-	// beforeHandle chain, and the function is tracked in `~derive` so the
-	// codegen treats it as a context extension (not a response). They
-	// differ only in user-facing semantics (`resolve` runs after schema
-	// validation; `map*` variants conventionally remap rather than add).
 	resolve(fn: EventFn<'beforeHandle'>): this
 	resolve(scope: { as: 'local' }, fn: EventFn<'beforeHandle'>): this
 	resolve(scope: { as: 'scoped' }, fn: EventFn<'beforeHandle'>): this
@@ -1401,15 +1374,7 @@ export class Elysia<
 		// @ts-expect-error Remove in 2.1
 		if (scope === 'scoped') scope = 'plugin'
 
-		// `hookToGuard` only lifts schema fields into the standalone
-		// `schemas[]` array when the hook explicitly opts in via
-		// `schema: 'standalone'`. Default and `schema: 'override'` guards
-		// keep their fields scalar so `mergeHook`'s last-wins applies and
-		// the route's own `body`/`response`/etc. takes precedence. Macro
-		// keys on the guard hook stay unresolved at registration;
-		// `compileHandler` runs `~applyMacro` on the flattened chain
-		// hook with `root` as the registry.
-		hookToGuard(hook as any)
+		// life standalone schemas
 		const prevSchemaLen = (hook as any).schemas?.length ?? 0
 
 		if (hook.derive) {
@@ -1576,9 +1541,7 @@ export class Elysia<
 				Definitions,
 				{
 					schema: Schema
-					standaloneSchema: Metadata['schemas'] &
-						Schema &
-						MacroContext
+					schemas: Metadata['schemas'] & Schema & MacroContext
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
 					parser: Metadata['parser']
@@ -1619,28 +1582,24 @@ export class Elysia<
 			group: AnyElysia
 		) => AnyElysia
 
-		// Compose prefix from parent's config.prefix + group prefix.
-		// Skip joinPath when either side is empty so we don't get a
-		// trailing slash (e.g. joinPath('/api', '') would yield '/api/').
-		const parentPrefix = this['~config']?.prefix ?? ''
+		const parentPrefix = this['~config']?.prefix
 		const childPrefix = parentPrefix
 			? prefix
 				? joinPath(parentPrefix, prefix)
 				: parentPrefix
 			: prefix
 
-		// Drop name/seed so the child's hash doesn't collide with parent's
-		// in #childrenHash and short-circuit the merge in #use().
-		const child = new Elysia({
-			...this['~config'],
-			name: undefined,
-			seed: undefined,
-			prefix: childPrefix as any
-		} as any) as AnyElysia
+		const child = new Elysia(
+			this['~config'] || childPrefix
+				? {
+						...this['~config'],
+						name: undefined,
+						seed: undefined,
+						prefix: childPrefix
+					}
+				: undefined
+		) as AnyElysia
 
-		// Seed child's ~ext from parent so callback introspection sees
-		// parent state. hookChain is intentionally NOT copied — #use()
-		// composes child's chain over parent's via { combine, over }.
 		const src = this['~ext']
 		if (src) {
 			const ext = (child['~ext'] ??= nullObject())
@@ -1664,15 +1623,12 @@ export class Elysia<
 
 		callback(child)
 
-		// `onRequest` / `onParse` are request-level: they fire before route
-		// matching in `fetch.ts`, which only walks the root app's hookChain.
-		// Hoist child-registered request/parse hooks onto the parent so
-		// `app.group(prefix, app => app.onRequest(...))` continues to fire
-		// for every request, matching old src-old behavior.
+		// get request/parse
 		const childFlat = flattenChain(child['~ext']?.hookChain)
 		const lifted: Partial<AppHook> = {}
 		if (childFlat?.request) (lifted as any).request = childFlat.request
 		if (childFlat?.parse) (lifted as any).parse = childFlat.parse
+
 		if ((lifted as any).request || (lifted as any).parse)
 			this.#pushHook(lifted)
 
@@ -1686,9 +1642,7 @@ export class Elysia<
 	}
 
 	#pushHook(_hook: Partial<AppHook>, scope?: EventScope): this {
-		// Promote derive/resolve into `beforeHandle` so chain nodes only
-		// hold eventProperties (what `flattenChain` walks)
-		// Mirrors mergeHook's history
+		// get resolve/derive to beforeHandle
 		let hook = _hook as any
 
 		if (hook.derive || hook.resolve) {
@@ -1933,9 +1887,6 @@ export class Elysia<
 							? childChain
 							: { combine: childChain, over: preChain }
 
-				// Share the original tuple when nothing changed (cheap
-				// passthrough for "direct child route, parent has no chain
-				// yet"). Otherwise clone with `inheritedChain` at slot 6.
 				history.push(
 					inheritedChain === childChain
 						? route
@@ -1990,23 +1941,12 @@ export class Elysia<
 				else ext.parser = Object.assign(nullObject(), parser)
 			}
 
-			// Propagate macros so the parent's `~applyMacro` (called from
-			// `compileHandler` with `root` = parent) sees the absorbed
-			// plugin's macro names. Without this, routes registered on the
-			// parent that reference a plugin's macro key never resolve.
 			if (macro) {
 				if (ext.macro) Object.assign(ext.macro, macro)
 				else ext.macro = Object.assign(nullObject(), macro)
 			}
 
 			if (app.#plugin || app.#global || hookChain) {
-				// Bucket entries by their NODE'S scope (set when the node was
-				// pushed via `#on` / `#guard` / `#pushHook`) so we can push
-				// per-scope chain nodes onto the parent. With per-node scope,
-				// downstream readers (`appendInto`'s filter, `composeRootHook`)
-				// only need `nodeScope` — no per-entry scope tag required.
-				// Local nodes are skipped (locals shouldn't escape the plugin —
-				// confirmed with user).
 				const events: {
 					plugin: Partial<AppHook>
 					global: Partial<AppHook>
@@ -2014,6 +1954,7 @@ export class Elysia<
 					plugin: nullObject(),
 					global: nullObject()
 				}
+
 				const derive = app['~derive']
 
 				if (app.#global) this.#global ??= new WeakSet()
@@ -2044,14 +1985,9 @@ export class Elysia<
 						propagated?: boolean
 					}
 					const nodeScope = node.scope
-					// Locals (or scope-less lifted nodes) don't propagate up.
 					if (nodeScope !== 'plugin' && nodeScope !== 'global')
 						continue
-					// `plugin` propagates exactly ONE level (per docs:
-					// "applies to parent, current, descendants" — current
-					// is where it was registered, parent is +1). After that
-					// step, the node is marked propagated and skipped here.
-					// `global` propagates everywhere, so no skip.
+
 					if (nodeScope === 'plugin' && node.propagated) continue
 
 					const target =
@@ -2063,11 +1999,14 @@ export class Elysia<
 							const schemas = (added as any).schemas as
 								| any[]
 								| undefined
+
 							if (!schemas) continue
+
 							for (const s of schemas) {
 								;((target as any).schemas ??= []).push(s)
 								if (nodeScope === 'global') this.#global!.add(s)
 							}
+
 							continue
 						}
 
@@ -2075,6 +2014,7 @@ export class Elysia<
 							const raw = (added as any)[key] as
 								| Function
 								| Function[]
+
 							const fns: Function[] = Array.isArray(raw)
 								? raw
 								: [raw as Function]
@@ -2098,39 +2038,25 @@ export class Elysia<
 							continue
 						}
 
-						// Top-level regular-validator fields (body / headers /
-						// params / query / cookie / response) and `detail`.
-						// Last-write-wins per scope bucket — `appendInto`
-						// during flatten reapplies the same rule.
 						;(target as any)[key] = (added as any)[key]
 					}
 				}
 
-				// Push per-scope nodes directly (bypass `#pushHook` so we can
-				// set `propagated: true` — used to enforce the
-				// "plugin scope propagates exactly one level" rule on the
-				// next `#use`). Order: `global` first, `plugin` LAST, so
-				// `plugin` ends up at the chain HEAD (newest) and is the
-				// LAST processed by tail-first flatten. With last-write-wins
-				// on scalar fields, this gives `plugin overrides global` —
-				// matching src-old's `mergeSchemaValidator(merge(global,
-				// scoped), local)` precedence (local > scoped > global).
-				if (isNotEmpty(events.global)) {
+				if (isNotEmpty(events.global))
 					ext.hookChain = {
 						added: events.global,
 						parent: ext.hookChain,
 						scope: 'global',
 						propagated: true
 					}
-				}
-				if (isNotEmpty(events.plugin)) {
+
+				if (isNotEmpty(events.plugin))
 					ext.hookChain = {
 						added: events.plugin,
 						parent: ext.hookChain,
 						scope: 'plugin',
 						propagated: true
 					}
-				}
 			}
 		}
 	}
@@ -2206,10 +2132,6 @@ export class Elysia<
 
 		this.#ready = undefined
 		this.#fetchFn = undefined
-		// Async plugins may have appended fresh routes to `#history` while
-		// we were waiting; invalidate the build flag so the next
-		// `#buildRouter()` re-walks history and registers them in
-		// `~map` / `~router` / `~staticResponse`.
 		this.#routerBuilt = false
 
 		this.#buildRouter()
@@ -2331,12 +2253,6 @@ export class Elysia<
 				return this
 
 			case 'function': {
-				// Functional remap: pass the current models to the user
-				// fn and use the returned record as the new models.
-				// Previously assigned to `this['~ext']` directly, which
-				// overwrote the entire ext object instead of just the
-				// `models` field — `.model(fn)` would then drop
-				// decorators / store / macros / etc. registered earlier.
 				const remapped = name(models ?? nullObject()) as Record<
 					string,
 					AnySchema

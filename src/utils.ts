@@ -1,5 +1,8 @@
-import type { Context } from './context'
+import { dangerousKeys, type MethodMap, MethodMapBack } from './constants'
+import { ElysiaFile } from './universal/file'
+import { isBun } from './universal/constants'
 
+import type { Context } from './context'
 import type {
 	AppHook,
 	MaybeArray,
@@ -10,10 +13,6 @@ import type {
 	AnyLocalHook,
 	GuardSchemaType
 } from './types'
-
-import { dangerousKeys, type MethodMap, MethodMapBack } from './constants'
-import { ElysiaFile } from './universal/file'
-import { isBun } from './universal/constants'
 
 export const mapMethodBack = (method: MethodMap[keyof MethodMap] | string) =>
 	MethodMapBack[method as MethodMap[keyof MethodMap]] ?? method
@@ -117,7 +116,7 @@ export function flattenChain(
 	keep?: (s: EventScope | undefined) => boolean,
 	// Stop walking when this node is reached (exclusive). Used by
 	// `composeRootHook` to flatten only the chain entries added AFTER
-	// the snapshot in `inheritedChain` — without it, the same node would
+	// the snapshot in `inheritedChain` - without it, the same node would
 	// be visited via both inheritedChain (full walk) and locals (filtered
 	// walk on root.chain), double-counting hooks like a root-level
 	// `.beforeHandle()` registered before `.use(plugin)`.
@@ -168,8 +167,7 @@ function appendInto(
 
 		// Chain-style and standalone-schema fields accumulate as arrays.
 		// Scalar fields (body/headers/params/query/cookie/response/detail)
-		// take the LAST write — matches src-old's `mergeSchemaValidator`
-		// (`b?.body ?? a?.body`). With tail-first chain traversal (oldest
+		// take the LAST write. With tail-first chain traversal (oldest
 		// node first, newest last), this gives "more-local overrides
 		// more-global". Unknown keys (notably unresolved macro keys like
 		// `auth: 'admin'`) propagate as scalar last-wins so `~applyMacro`
@@ -206,11 +204,6 @@ type FormatSSEPayload<T = unknown> = T extends string
 	? { readonly data: T }
 	: Prettify<SSEPayload<T>>
 
-/**
- * Return a Server-Sent Events (SSE) payload. Wraps a plain `data`-only
- * object, a full `{id, event, retry, data}` payload, or any
- * stream/generator that produces them. Mirrors src-old/utils.ts:1161.
- */
 export const sse = <
 	const T extends
 		| string
@@ -461,32 +454,13 @@ export function hookToGuard(
 	return a
 }
 
-const SCHEMA_FIELDS = [
-	'body',
-	'headers',
-	'params',
-	'query',
-	'cookie',
-	'response'
-] as const
-
-/**
- * Try to fold each `incoming` standalone-schema entry into an existing
- * `existing` entry. Two entries are mergeable iff their field-name sets
- * are disjoint OR all overlapping fields hold identical references.
- * Conflicting entries are appended rather than merged so each gets its
- * own validation pass.
- *
- * Used by `~applyMacro` when multiple macros contribute schemas to the
- * same route. Sibling record-form macros with disjoint fields collapse
- * into one entry; conflicting (`body` × N) macros stay separate.
- */
 export function coalesceStandaloneSchemas(
 	existing: any[],
 	incoming: any[]
 ): void {
 	for (const entry of incoming) {
 		if (!entry || typeof entry !== 'object') continue
+
 		let merged = false
 		for (let i = 0; i < existing.length; i++) {
 			const e = existing[i]
@@ -497,37 +471,36 @@ export function coalesceStandaloneSchemas(
 					break
 				}
 			}
+
 			if (canMerge) {
 				Object.assign(e, entry)
 				merged = true
 				break
 			}
 		}
+
 		if (!merged) existing.push(entry)
 	}
 }
 
-/**
- * After `~applyMacro` finishes, any `body`/`headers`/etc. left at the top
- * level of `input` (from string-form macros that bypassed registration-
- * time `hookToGuard`, or from a direct user-set field) gets folded into
- * the `schema` array via `coalesceStandaloneSchemas`. Mirrors what
- * `hookToGuard` does, but try-merges into existing entries instead of
- * always pushing new ones.
- */
+const schemaKeys = schemaProperties.keys()
+
 export function liftDirectFieldsToSchema(
 	input: Partial<AppHook & Macro>
 ): void {
 	let lifted: Record<string, unknown> | undefined
-	for (const f of SCHEMA_FIELDS) {
+
+	for (const f of schemaKeys) {
 		const v = (input as any)[f]
 		if (v !== undefined && v !== null) {
 			;(lifted ??= Object.create(null) as any)![f] = v
 			;(input as any)[f] = undefined
 		}
 	}
+
 	if (!lifted) return
 	;(input as any).schemas ??= []
+
 	coalesceStandaloneSchemas((input as any).schemas as any[], [lifted])
 }
 
@@ -568,7 +541,7 @@ export function mergeHook(
 	if (!a.cookie && b.cookie) a.cookie = b.cookie
 	if (!a.response && b.response) a.response = b.response
 	else if (a.response && b.response)
-		a.response = mergeResponse(b.response, a.response)
+		a.response = mergeResponse(b.response, a.response) as any
 
 	if (a.parse || b.parse) a.parse = merge(a.parse, b.parse, reverse)
 
@@ -743,7 +716,7 @@ export const pushArray = <K extends keyof any>(
 	item: unknown
 ) => pushField(target, key, item, true)
 
-export const createRequestId = isBun
+export const requestId = isBun
 	? Bun.randomUUIDv7
 	: // @ts-ignore
 		(crypto.randomUUIDv7?.bind(crypto) ?? crypto.randomUUID?.bind(crypto))

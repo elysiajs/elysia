@@ -54,11 +54,13 @@ const setImmediateFn =
 		: 'Promise.resolve().then'
 import {
 	cloneHook,
+	eventProperties,
 	flattenChain,
 	isBlob,
 	isLocalScope,
 	mergeHook,
 	nullObject,
+	requestId,
 	type ChainNode
 } from '../../utils'
 
@@ -116,6 +118,7 @@ function builtinParser(
 const isRefineBlob = (v: unknown): v is { refine: unknown } =>
 	// @ts-expect-error
 	v!.refine === isBlob
+
 const hasFileTbPredicate = (v: unknown) =>
 	Array.isArray(v) ? v.some(isRefineBlob) : false
 
@@ -242,13 +245,6 @@ function applyHook(
 		return localHook as any
 	}
 
-	// `reverse=true` does two things via mergeHook semantics:
-	//   1. chain-fn arrays: result is `[...appHook, ...localHook]` (app
-	//      runs first — outer/registration-time before inner/route-time).
-	//   2. scalar fields (body/headers/etc.): `a` (= localHook clone) wins
-	//      since `mergeHook` keeps `a`'s scalar when both have it. So
-	//      route-local `body` overrides app-level `body`. Mirrors src-old's
-	//      `mergeSchemaValidator(merge(global, scoped), local)` shape.
 	const hook = mergeHook(
 		cloneHook(localHook) as any,
 		appHook as any,
@@ -406,15 +402,11 @@ export function compileHandler(
 
 	if (hook) {
 		promoteDeriveResolve(hook)
+		const keys = Object.keys(hook)
 
-		for (const key of [
-			'beforeHandle',
-			'afterHandle',
-			'afterResponse',
-			'error',
-			'transform',
-			'mapResponse'
-		] as const) {
+		for (const key of keys) {
+			if (!eventProperties.has(key)) continue
+
 			const v = (hook as any)[key]
 			if (typeof v === 'function') (hook as any)[key] = [v]
 		}
@@ -463,12 +455,6 @@ export function compileHandler(
 
 	const parseLength = Array.isArray(hook?.parse) ? hook.parse.length : 0
 	const parseFirst = Array.isArray(hook?.parse) ? hook.parse[0] : hook?.parse
-	// Standalone body schemas live on `hook.schemas[]` (lifted by
-	// `hookToGuard` for `schema: 'standalone'` guards). Routes that
-	// only inherit a standalone body — without their own `hook.body`
-	// — still need parsing + validation. Without this gate they'd
-	// short-circuit `hasBody` and skip the parse step entirely (test
-	// "handle global scope" in standalone.test.ts).
 	const hasStandaloneBody = !!(hook as any)?.schemas?.some(
 		(s: any) => s?.body
 	)
@@ -514,6 +500,7 @@ export function compileHandler(
 				`id:c.rid,event:'${phase}',name:'${phase}',` +
 				`begin:performance.now(),total:${total}` +
 				`})\n`
+
 		return s
 	}
 
@@ -556,9 +543,6 @@ export function compileHandler(
 		}
 	}
 
-	// Compute once; reused below to decide both function-level `async` and
-	// whether to emit `await` on each response-validator call. Avoids two
-	// independent iterations getting out of sync.
 	const responseValiAsync = !!(
 		vali?.response &&
 		Object.values(vali.response as Record<number, TypeBoxValidator>).find(
@@ -570,13 +554,8 @@ export function compileHandler(
 		hasBody ||
 		isAsyncFunction(handler as Function) ||
 		hasErrorHook ||
-		// `tee` is awaited when the handler returns a stream + we have
-		// afterResponse hooks; force async so the await is valid.
 		hasAfterResponse ||
-		// Trace emits `await tee(...)` when a stream handler return needs
-		// a side branch for the deferred `onHandle.onStop`.
 		hasTrace ||
-		// parseCookieRaw is async (HMAC unsign); signCookieValues is async.
 		needsCookie ||
 		responseValiAsync ||
 		(hook &&
@@ -598,14 +577,12 @@ export function compileHandler(
 	if (hasAfterResponse || hasTrace) code += 'let _streamListener\n'
 
 	if (hasTrace) {
-		// lazy-init fallback only
-		// `fetch.ts` populates `c.trace` per request before dispatching, so the
-		// `c.trace ??= [...]` line below normally short-circuits and
-		// `tr[i](c)` is never invoked
+		// fetch handler should already handle trace but fallback just in case
 		const wrappedTracers = traceHandlers!.map((fn: any) => createTracer(fn))
 		link(wrappedTracers, 'tr')
+		link(requestId, 'rid')
 
-		code += `c.rid??=performance.now().toString()\n`
+		code += `c.rid??=rid()\n`
 		for (let i = 0; i < traceCount; i++)
 			code += `let report${i},reportChild${i},_handleReport${i};\n`
 
@@ -806,6 +783,7 @@ export function compileHandler(
 									rootDerive.has(fn) || instanceDerive.has(fn)
 							} as unknown as WeakSet<any>)
 						: (rootDerive ?? instanceDerive)
+
 				code += mapBeforeHandle(
 					hook!.beforeHandle!,
 					deriveSet,
@@ -813,6 +791,7 @@ export function compileHandler(
 					buildReport('beforeHandle')
 				)
 			}
+
 			code += endTrace()
 		}
 
