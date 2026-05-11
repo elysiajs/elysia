@@ -38,17 +38,50 @@ function findRoute(
 	hasError: boolean,
 	loosePath: NonNullable<AnyElysia['~loosePath']>,
 	handleError: (context: Context, error: Error) => unknown,
-	afterResponse: ((context: Context, status?: number) => void) | undefined
+	afterResponse: ((context: Context, status?: number) => void) | undefined,
+	hasWS?: boolean
 ): Response | Promise<Response> {
-	const paths = map[request.method]
 	const path = context.path
+	const onError = catchError(context, handleError, afterResponse)
+
+	// WS upgrade pre-check — gated by `~hasWS` and the Upgrade header so
+	// HTTP-only apps pay nothing, and HTTP-only traffic on a WS-enabled
+	// app pays a single header read.
+	//
+	// WS routes share `~map['WS']` and `~router` (under method `'WS'`)
+	// with HTTP routes, but a normal HTTP request can't reach them
+	// because method dispatch keys by `request.method` which is never
+	// the synthetic `'WS'`.
+	if (hasWS) {
+		const upgrade = request.headers.get('upgrade')
+		if (upgrade && upgrade.toLowerCase() === 'websocket') {
+			const wsHandler =
+				map['WS']?.[path] ??
+				map['WS']?.[(loosePath[path] ??= getLoosePath(path))]
+			if (wsHandler) {
+				const r = wsHandler(context)
+				return r instanceof Promise ? (r.catch(onError) as any) : r
+			}
+			const found = router?.find('WS', path)
+			if (found) {
+				context.params = found.params
+				const r = found.store(context)
+				return r instanceof Promise
+					? (r.catch(onError) as any)
+					: r
+			}
+			// No WS route matched — fall through to regular dispatch
+			// (will likely 404, which is correct for an upgrade attempt
+			// on a non-WS path).
+		}
+	}
+
+	const paths = map[request.method]
 	const handler: CompiledHandler =
 		paths?.[path] ??
 		paths?.[(loosePath[path] ??= getLoosePath(path))] ??
 		map['*']?.[path] ??
 		map['*']?.[loosePath[path]]
-
-	const onError = catchError(context, handleError, afterResponse)
 
 	if (handler) {
 		const r = handler(context)
@@ -56,7 +89,12 @@ function findRoute(
 		return r instanceof Promise ? r.catch(onError) : r
 	}
 
-	const found = router.find(request.method, path)
+	// Mirror the static-map's `map['*']` fallback: try the request's
+	// method first, then fall back to wildcard-method (`.all()`) entries.
+	// Without this, dynamic `.all('/x/:id')` routes never match — only
+	// static `.all('/x')` does.
+	const found =
+		router.find(request.method, path) ?? router.find('*', path)
 	if (found) {
 		context.params = found.params
 
@@ -77,6 +115,11 @@ export function createFetchHandler(
 	const map = app['~map']! ?? nullObject()
 	const router = app['~router']!
 	const loosePath = (app['~loosePath'] ??= nullObject())
+
+	// Single boolean read so HTTP-only apps incur no overhead. WS routes
+	// live in `~map['WS']` / `~router` (under method `'WS'`); the
+	// Upgrade-header pre-check below is what gates dispatch into them.
+	const hasWS = !!app['~hasWS']
 
 	// Materialize the cumulative hook view once at fetch-handler creation -
 	// hot path closes over `hook`, so this runs only on first `app.fetch`.
@@ -217,7 +260,8 @@ export function createFetchHandler(
 					hasError,
 					loosePath,
 					handleError,
-					afterResponse
+					afterResponse,
+					hasWS
 				)
 			} catch (error) {
 				for (let i = 0; i < traceLength; i++)
@@ -267,7 +311,8 @@ export function createFetchHandler(
 						hasError,
 						loosePath,
 						handleError,
-						afterResponse
+						afterResponse,
+						hasWS
 					)
 				} catch (error) {
 					const r = handleError(context, error as Error) as Response
@@ -305,7 +350,8 @@ export function createFetchHandler(
 					hasError,
 					loosePath,
 					handleError,
-					afterResponse
+					afterResponse,
+					hasWS
 				)
 			} catch (error) {
 				return handleError(context, error as Error) as Response
@@ -328,13 +374,46 @@ export function createFetchHandler(
 						context.qi
 			))
 
+		const onError = catchError(context, handleError, afterResponse)
+
+		// WS upgrade pre-check. `~hasWS` lets HTTP-only apps take no
+		// branch; apps with WS routes pay a single header read.
+		// WS routes share `~map`/`~router` under the synthetic method `'WS'`.
+		if (hasWS) {
+			const upgrade = request.headers.get('upgrade')
+			if (upgrade && upgrade.toLowerCase() === 'websocket') {
+				const wsHandler =
+					map['WS']?.[path] ??
+					map['WS']?.[(loosePath[path] ??= getLoosePath(path))]
+
+				try {
+					if (wsHandler) {
+						const r = wsHandler(context)
+						return r instanceof Promise
+							? (r.catch(onError) as any)
+							: (r as any)
+					}
+					const found = router?.find('WS', path)
+					if (found) {
+						context.params = found.params
+						const r = found.store(context)
+						return r instanceof Promise
+							? (r.catch(onError) as any)
+							: (r as any)
+					}
+				} catch (error) {
+					const r = handleError(context, error as Error) as Response
+					afterResponse?.(context)
+					return r
+				}
+			}
+		}
+
 		const handler: CompiledHandler =
 			map[request.method]?.[path] ??
 			map[request.method]?.[(loosePath[path] ??= getLoosePath(path))] ??
 			map['*']?.[path] ??
 			map['*']?.[loosePath[path]]
-
-		const onError = catchError(context, handleError, afterResponse)
 
 		try {
 			if (handler) {
@@ -342,7 +421,9 @@ export function createFetchHandler(
 				return r instanceof Promise ? r.catch(onError) : r
 			}
 
-			const result = router?.find(request.method, path)
+			const result =
+				router?.find(request.method, path) ??
+				router?.find('*', path)
 			if (result) {
 				context.params = result.params
 

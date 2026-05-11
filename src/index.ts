@@ -14,6 +14,13 @@ export {
 } from './error'
 export { t, System } from './type'
 
+export {
+	type Context,
+	type ErrorContext,
+	createContext,
+	createBaseContext
+} from './context'
+
 export type {
 	BaseSchema,
 	AnySchema,

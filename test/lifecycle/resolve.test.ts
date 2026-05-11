@@ -216,15 +216,10 @@ describe('resolve', () => {
 			})
 			.get('/', () => '')
 
-		const res = await new Elysia({ aot: true }).use(route).handle(req('/'))
+		const res = await new Elysia().use(route).handle(req('/'))
+
 		expect(await res.status).toEqual(418)
 		expect(await res.text()).toEqual("I'm a teapot")
-
-		const res2 = await new Elysia({ aot: false })
-			.use(route)
-			.handle(req('/'))
-		expect(await res2.status).toEqual(418)
-		expect(await res2.text()).toEqual("I'm a teapot")
 	})
 
 	/** These work but there's no support for type

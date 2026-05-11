@@ -36,9 +36,6 @@ export function createBaseContext(app: AnyElysia) {
 }
 
 export function clearContextCache() {
-	// `WeakMap` has no `clear()`. Drop the references so cached classes
-	// become eligible for GC alongside their owning apps; subsequent
-	// `createBaseContext`/`createContext` calls rebuild on miss.
 	baseCache = new WeakMap()
 	contextCache = new WeakMap()
 }

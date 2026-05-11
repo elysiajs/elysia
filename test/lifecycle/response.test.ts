@@ -259,18 +259,12 @@ describe('On After Response Error', () => {
 		expect(onResponseCalledCounter).toBe(1)
 	})
 
-	it.each([
-		{ aot: true, withOnError: true },
-		{ aot: true, withOnError: false },
-
-		{ aot: false, withOnError: true },
-		{ aot: false, withOnError: false }
-	])(
-		'should execute onAfterResponse once during NotFoundError aot=$aot,\twithOnError=$withOnError',
-		async ({ aot, withOnError }) => {
+	it.each([{ withOnError: true }, { withOnError: false }])(
+		'should execute onAfterResponse once during NotFoundError withOnError=$withOnError',
+		async ({ withOnError }) => {
 			let counter = 0
 
-			const app = new Elysia({ aot }).onAfterResponse(() => {
+			const app = new Elysia().onAfterResponse(() => {
 				counter++
 			})
 
@@ -285,39 +279,39 @@ describe('On After Response Error', () => {
 	)
 
 	it.each([
-		{ aot: true, onErrorReturnsValue: "error handled" },
-		{ aot: false, onErrorReturnsValue: "error handled" },
+		{ onErrorReturnsValue: 'error handled' },
+		{ onErrorReturnsValue: { message: 'error handled' } }
+	])(
+		'should execute onAfterResponse when onError returns a value aot=$aot,\tonErrorReturnsValue=$onErrorReturnsValue',
+		async ({ onErrorReturnsValue }) => {
+			let counter = 0
 
-		{ aot: true, onErrorReturnsValue: { message: "error handled" } },
-		{ aot: false, onErrorReturnsValue: { message: "error handled" } },
-	])('should execute onAfterResponse when onError returns a value aot=$aot,\tonErrorReturnsValue=$onErrorReturnsValue', async ({ aot, onErrorReturnsValue }) => {
-		let counter = 0
+			const app = new Elysia()
+				.onError(() => {
+					return onErrorReturnsValue
+				})
+				.onAfterResponse(() => {
+					counter++
+				})
+				.get('/error', () => {
+					throw new Error('test error')
+				})
 
-		const app = new Elysia({ aot })
-			.onError(() => {
-				return onErrorReturnsValue
-			})
-			.onAfterResponse(() => {
-				counter++
-			})
-			.get('/error', () => {
-				throw new Error('test error')
-			})
+			expect(counter).toBe(0)
 
-		expect(counter).toBe(0)
+			const req = new Request('http://localhost/error')
+			const res = await app.handle(req)
+			const text = await res.text()
 
-		const req = new Request('http://localhost/error')
-		const res = await app.handle(req)
-		const text = await res.text()
+			expect(text).toStrictEqual(
+				typeof onErrorReturnsValue === 'string'
+					? onErrorReturnsValue
+					: JSON.stringify(onErrorReturnsValue)
+			)
 
-		expect(text).toStrictEqual(
-			typeof onErrorReturnsValue === 'string'
-				? onErrorReturnsValue
-				: JSON.stringify(onErrorReturnsValue)
-		)
+			await Bun.sleep(1)
 
-		await Bun.sleep(1)
-
-		expect(counter).toBe(1)
-	})
+			expect(counter).toBe(1)
+		}
+	)
 })

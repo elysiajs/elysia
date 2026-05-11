@@ -3,6 +3,8 @@ import { decodeComponent } from 'deuri'
 
 import { createFetchHandler } from './handler'
 import { compileHandler, buildNativeStaticResponse } from './compile'
+import { buildWSRoute } from './ws/route'
+import type { AnyWSLocalHook as AnyWSLocalHookImport } from './ws/types'
 
 import { ListenCallback, Serve, Server } from './universal'
 import { isBun } from './universal/constants'
@@ -170,6 +172,16 @@ export class Elysia<
 			[method: string]: Response | Promise<Response>
 		}
 	}
+
+	// True when at least one `.ws()` route has been registered. Used by
+	// `fetch.ts` to gate the Upgrade-header pre-check (single nullish read
+	// for HTTP-only apps) and by the Bun adapter to decide whether to
+	// pass a `websocket: {...}` config into `Bun.serve`.
+	//
+	// WS dispatch tables share `~map['WS']` and `~router` (under method
+	// `'WS'`) with HTTP routes — no separate slots — keyed by the synthetic
+	// method `'WS'`.
+	'~hasWS'?: boolean
 
 	constructor(config?: ElysiaConfig<BasePath, Scope>) {
 		this['~config'] = config
@@ -3030,6 +3042,70 @@ export class Elysia<
 		return this
 	}
 
+	/**
+	 * ### ws
+	 * Register a WebSocket route. Mirrors `.get`/`.post` ergonomics:
+	 *
+	 * ```ts
+	 * // 2-arg form — backward compatible with the old single-options shape.
+	 * .ws('/chat', {
+	 *     body: t.Object({ text: t.String() }),
+	 *     message({ ws, body }) { ws.send(body.text) }
+	 * })
+	 *
+	 * // 3-arg form — message handler as a positional arg.
+	 * .ws('/chat', function* ({ ws, body }) { yield body }, {
+	 *     open({ ws }) { ws.send('hello') },
+	 *     close({ ws, code, reason }) { console.log('bye', code, reason) }
+	 * })
+	 * ```
+	 *
+	 * Generator handlers (`function*` / `async function*`) stream each
+	 * yielded value to the client as a separate message.
+	 */
+	ws(path: string, options: Partial<AnyWSLocalHookImport>): this
+	ws(
+		path: string,
+		handler: (...args: any[]) => any,
+		options?: Partial<AnyWSLocalHookImport>
+	): this
+	ws(
+		path: string,
+		handlerOrOptions: unknown,
+		maybeOptions?: Partial<AnyWSLocalHookImport>
+	): this {
+		// Web-standard adapter doesn't support WS. Fail loud at registration.
+		// Also catches the implicit default-adapter case in non-Bun runtimes.
+		const explicit = this['~config']?.adapter
+		const adapter: any = explicit ?? (isBun ? BunAdapter : null)
+		if (adapter && adapter.runtime && adapter.runtime !== 'bun')
+			throw new Error(
+				`[Elysia] WebSocket is not supported on the '${adapter.name ?? 'web-standard'}' adapter. Use the Bun adapter for WebSocket support.`
+			)
+		if (!isBun && !explicit)
+			throw new Error(
+				`[Elysia] WebSocket is not supported on the 'web-standard' adapter. Use the Bun adapter for WebSocket support.`
+			)
+
+		let opts: any
+		if (typeof handlerOrOptions === 'function') {
+			// 3-arg form: (path, handler, options)
+			opts = maybeOptions ?? {}
+			if (opts.message != null && opts.message !== handlerOrOptions)
+				throw new Error(
+					"[Elysia] .ws(): cannot specify 'message' as both positional handler and options.message"
+				)
+			opts = { ...opts, message: handlerOrOptions }
+		} else {
+			// 2-arg form: (path, options)
+			opts = (handlerOrOptions as any) ?? {}
+		}
+
+		this.#add('WS', path, undefined, opts)
+
+		return this
+	}
+
 	#initMap() {
 		// monomorphic access is faster, so we ensure the shape of the map is consistent
 		this['~map'] ??= {
@@ -3082,7 +3158,8 @@ export class Elysia<
 			compiled![index] = handler
 			if (route) {
 				this.#initMap()
-				this['~map']![mapMethodBack(route[0])]![route[1]] = handler
+				const m = mapMethodBack(route[0])
+				;(this['~map']![m] ??= nullObject())[route[1]] = handler
 			}
 
 			return handler
@@ -3108,7 +3185,8 @@ export class Elysia<
 
 			if (route) {
 				this.#initMap()
-				this['~map']![mapMethodBack(route[0])]![route[1]] = handler
+				const method = mapMethodBack(route[0])
+				;(this['~map']![method] ??= nullObject())[route[1]] = handler
 			}
 
 			return handler(context)
@@ -3128,7 +3206,45 @@ export class Elysia<
 		for (let i = 0; i < length; i++) {
 			const route: InternalRoute = this.#history![i]
 			const method = mapMethodBack(route[0])
-			const path = route[1]
+			const path = encodeURI(route[1])
+
+			if ((route[0] as any) === 'WS') {
+				const { fetch, bunOptions } = buildWSRoute(route, this)
+				const wsCompiled = fetch as unknown as CompiledHandler
+
+				this['~hasWS'] = true
+
+				// Share the same dispatch tables as HTTP routes, keyed by
+				// the synthetic method `'WS'`. The Upgrade-header pre-check
+				// in `fetch.ts` is what routes here — `~map.WS[path]` will
+				// never be hit by a regular HTTP request.
+				if (isDynamicRegex.test(path)) {
+					;(this['~router'] ??= new Memoirist(decodeComponent)).add(
+						'WS',
+						path,
+						wsCompiled,
+						false
+					)
+				} else {
+					this.#initMap()
+					;(this['~map']!['WS'] ??= nullObject())[path] = wsCompiled
+				}
+
+				// Per-route Bun server-level knobs (maxPayloadLength,
+				// idleTimeout, perMessageDeflate, …) fold into
+				// `~config.websocket` directly. Bun forces a single global
+				// `websocket: {...}`, so we keep one merged bag of defaults
+				// + overrides rather than maintaining a parallel slot.
+				if (bunOptions && Object.keys(bunOptions).length) {
+					this['~config'] ??= nullObject()
+					;(this['~config'] as any).websocket = Object.assign(
+						(this['~config'] as any).websocket ?? {},
+						bunOptions
+					)
+				}
+
+				continue
+			}
 
 			let staticResponse: Response | Promise<Response> | undefined
 			if (buildStatic) {
@@ -3215,5 +3331,20 @@ export class Elysia<
 		listen(this, options, callback)
 
 		return this
+	}
+
+	/**
+	 * Stop the underlying server (if any). Mirrors `Server.stop()`.
+	 *
+	 * @param closeActiveConnections Pass `true` to terminate in-flight
+	 *   requests and WebSocket connections immediately. Defaults to
+	 *   draining gracefully.
+	 */
+	stop(closeActiveConnections?: boolean): Promise<void> | void {
+		const server = this.server
+		if (!server) return
+		const r = (server as any).stop?.(closeActiveConnections)
+		this.server = undefined
+		return r
 	}
 }

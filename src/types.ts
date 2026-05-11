@@ -91,13 +91,6 @@ export interface ElysiaConfig<
 	precompile?: boolean
 
 	/**
-	 * Enable Ahead of Time compilation
-	 *
-	 * Trade significant performance with slightly faster startup time and reduced memory usage
-	 */
-	aot?: boolean
-
-	/**
 	 * Whether should Elysia tolerate suffix '/' or vice-versa
 	 *
 	 * @default false
@@ -105,14 +98,20 @@ export interface ElysiaConfig<
 	strictPath?: boolean
 
 	/**
-	 * Override websocket configuration
+	 * App-wide WebSocket configuration. Provides defaults for the Bun
+	 * server-level `websocket: {...}` options — `maxPayloadLength`,
+	 * `idleTimeout`, `perMessageDeflate`, etc. Per-route values set via
+	 * `.ws(path, { idleTimeout: 60, ... })` override these.
 	 *
-	 * @see https://bun.sh/docs/api/websockets
+	 * Lifecycle handlers (`open`/`close`/`message`/`drain`/`ping`/`pong`)
+	 * are per-route only and not accepted here.
+	 *
+	 * @see https://bun.com/docs/runtime/http/websockets
 	 */
-	// websocket?: Omit<
-	// 	WebSocketHandler<any>,
-	// 	'open' | 'close' | 'message' | 'drain'
-	// >
+	websocket?: Omit<
+		import('./ws/types').WebSocketHandler<any>,
+		'open' | 'close' | 'message' | 'drain' | 'ping' | 'pong'
+	>
 
 	cookie?: CookieOptions & {
 		/**
@@ -159,14 +158,6 @@ export interface ElysiaConfig<
 	 * @since 1.1.11
 	 */
 	nativeStaticResponse?: boolean
-
-	/**
-	 * Use runtime/framework provided router if possible
-	 *
-	 * @default true
-	 * @since 1.3.0
-	 */
-	systemRouter?: boolean
 
 	/**
 	 * Array of callback function to transform a string value defined in a schema

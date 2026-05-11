@@ -1,20 +1,10 @@
-import z from 'zod'
 import { Elysia, t } from '../src'
 
 new Elysia()
-	.model({
-		params: z.object({
-			name: z.literal(['lilith', 'focou'])
-		})
+	.derive(() => {
+		console.log('thing')
 	})
-	.get(
-		'/:name',
-		({ params: { name } }) => (name === 'lilith' ? undefined : true),
-		{
-			params: 'params'
-		}
-	)
-
-const a = z.object({
-	name: z.number()
-})
+	.ws('/', function* () {
+		yield 'hello'
+	})
+	.listen(3000)

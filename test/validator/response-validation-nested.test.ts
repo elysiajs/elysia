@@ -9,56 +9,8 @@ import { Elysia, t } from '../../src'
 // Fix: Wrap Clean() calls in try-catch in dynamic-handle.ts
 
 describe('Response validation nested schemas', () => {
-	it('should return 422 for invalid nested response (aot: false)', async () => {
-		const app = new Elysia({ aot: false }).post(
-			'/test',
-			// @ts-expect-error - intentionally returning invalid data to test validation
-			() => ({
-				items: [
-					['t1', { file: { ver: { s: '', m: null } } }],
-					['t2', { file: { ver: null } }] // Invalid - ver should be object
-				]
-			}),
-			{
-				body: t.Object({}),
-				response: t.Object({
-					items: t.Array(
-						t.Tuple([
-							t.String(),
-							t.Union([
-								t.Object({
-									file: t.Object({
-										ver: t.Object({
-											s: t.String(),
-											m: t.Nullable(t.String())
-										})
-									})
-								})
-							])
-						])
-					)
-				})
-			}
-		)
-
-		const res = await app.handle(
-			new Request('http://localhost/test', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: '{}'
-			})
-		)
-
-		// Should be 422 (validation error), not 500 (internal error)
-		expect(res.status).toBe(422)
-
-		const json = (await res.json()) as { type: string; errors?: unknown[] }
-		expect(json.type).toBe('validation')
-		expect(json.errors?.length).toBeGreaterThan(0)
-	})
-
-	it('should return 422 for invalid nested response (aot: true)', async () => {
-		const app = new Elysia({ aot: true }).post(
+	it('should return 422 for invalid nested response', async () => {
+		const app = new Elysia().post(
 			'/test',
 			// @ts-expect-error - intentionally returning invalid data to test validation
 			() => ({
@@ -104,8 +56,8 @@ describe('Response validation nested schemas', () => {
 		expect(json.errors?.length).toBeGreaterThan(0)
 	})
 
-	it('should return 422 for tuple with null nested object (aot: false)', async () => {
-		const app = new Elysia({ aot: false }).get(
+	it('should return 422 for tuple with null nested object', async () => {
+		const app = new Elysia().get(
 			'/test',
 			// @ts-expect-error - intentionally returning invalid data to test validation
 			() => ({

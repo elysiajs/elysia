@@ -612,7 +612,7 @@ export function compileHandler(
 	}
 
 	if (hasHeaders)
-		code += `c.headers=${isBun ? 'c.request.headers.toJSON()' : 'Object.fromEntries(c.request.headers.headers)'}\n`
+		code += `c.headers=${isBun ? 'c.request.headers.toJSON()' : 'Object.fromEntries(c.request.headers)'}\n`
 
 	if (hasBody) {
 		const namedParsers = root['~ext']?.parser

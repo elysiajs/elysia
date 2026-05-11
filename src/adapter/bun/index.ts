@@ -4,6 +4,8 @@ import { WebStandardAdapter } from '../web-standard'
 import { flushMemory } from '../../memory'
 import { flattenChain } from '../../utils'
 
+import { buildGlobalWSHandler } from '../../ws/route'
+
 import type { AnyElysia } from '../../base'
 
 function collectStaticRoutes(app: AnyElysia) {
@@ -62,23 +64,31 @@ export const BunAdapter = createAdapter({
 	name: 'bun',
 	runtime: 'bun',
 	listen(app, options, callback) {
+		// call fetch first to trigger router build
+		const fetch = app.fetch
+
 		const staticRoutes = collectStaticRoutes(app as AnyElysia)
 
-		const serveOptions =
-			typeof options === 'object'
-				? Object.assign(options, {
-						fetch: app.fetch,
-						routes: staticRoutes?.[0],
-						reusePort: true
-					} as any)
-				: {
-						port: +options,
-						fetch: app.fetch,
-						routes: staticRoutes?.[0],
-						reusePort: true
-					}
+		const websocket = app['~hasWS']
+			? {
+					...buildGlobalWSHandler(),
+					...((app['~config'] as any)?.websocket ?? {})
+				}
+			: undefined
 
-		const server = (app.server = Bun.serve(serveOptions))
+		const baseServe: any = {
+			fetch,
+			routes: staticRoutes?.[0],
+			reusePort: true
+		}
+
+		if (websocket) baseServe.websocket = websocket
+
+		const server = (app.server = Bun.serve(
+			typeof options === 'object'
+				? { ...options, ...baseServe }
+				: { port: +options, ...baseServe }
+		))
 
 		if (staticRoutes?.[1].length)
 			Promise.all(staticRoutes?.[1]).then(() => {

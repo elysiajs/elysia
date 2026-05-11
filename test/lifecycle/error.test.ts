@@ -11,7 +11,7 @@ import { describe, expect, it } from 'bun:test'
 import { post, req } from '../utils'
 import * as z from 'zod'
 
-describe('error', () => {
+describe('Error lifecycle', () => {
 	it('use custom 404', async () => {
 		const app = new Elysia()
 			.get('/', () => 'hello')

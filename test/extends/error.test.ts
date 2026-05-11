@@ -15,9 +15,9 @@ const getErrors = (app: Elysia<any, any, any, any, any>) =>
 	// @ts-ignore
 	Object.keys(app.definitions.error)
 
-describe('Error', () => {
+describe('Error extends', () => {
 	it('add single', async () => {
-		const app = new Elysia().error('CUSTOM_ERROR', CustomError)
+		const app = new Elysia().error(CustomError, () => {})
 
 		expect(getErrors(app)).toEqual(['CUSTOM_ERROR'])
 	})
