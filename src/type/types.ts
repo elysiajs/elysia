@@ -88,7 +88,8 @@ export interface FilesOptions extends FileOptions {
 }
 
 export interface CookieValidatorOptions<T extends Object = {}>
-	extends TObjectOptions, CookieOptions {
+	extends TObjectOptions,
+		CookieOptions {
 	/**
 	 * Secret key for signing cookie
 	 *
@@ -108,8 +109,9 @@ export type NonEmptyArray<T> = [T, ...T[]]
 export type TEnumValue = number | string | null
 
 export interface TUnionEnum<
-	T extends NonEmptyArray<TEnumValue> | Readonly<NonEmptyArray<TEnumValue>> =
-		[TEnumValue]
+	T extends
+		| NonEmptyArray<TEnumValue>
+		| Readonly<NonEmptyArray<TEnumValue>> = [TEnumValue]
 > {
 	'~kind': 'UnionEnum'
 	type?: 'number' | 'string' | 'null'
@@ -274,10 +276,12 @@ export interface StandardSchemaV1Like<
 	in out Output = Input
 > {
 	readonly '~standard': {
-		readonly types: {
-			readonly input: Input
-			readonly output: Output
-		}
+		readonly types?:
+			| {
+					readonly input: Input
+					readonly output: Output
+			  }
+			| undefined
 	}
 }
 
@@ -291,7 +295,9 @@ declare module 'typebox' {
 	}
 }
 
-export type AnySchema = BaseSchema | StandardSchemaV1Like
+export type TypeBoxSchema = { '~kind': string }
+
+export type AnySchema = TypeBoxSchema | StandardSchemaV1Like
 
 export type GetOwnPropertyDescriptor<T> = {
 	[P in keyof T]: TypedPropertyDescriptor<T[P]>

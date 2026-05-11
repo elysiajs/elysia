@@ -5,8 +5,9 @@ import { ElysiaFile } from './universal/file'
 import { TraceEvent, TraceListener } from './trace'
 import { MethodMap } from './constants'
 import { ElysiaError, type ElysiaStatus } from './error'
-import type { AnySchema, StandardSchemaV1Like } from './type'
+import type { TypeBoxSchema, AnySchema, StandardSchemaV1Like } from './type'
 
+import type { Static, TCyclic } from 'typebox'
 import type { AnyElysia, Elysia } from './base'
 import type { ElysiaAdapter } from './adapter'
 import type { Sucrose } from './sucrose'
@@ -14,8 +15,6 @@ import type { Serve } from './universal'
 import type { CookieOptions } from './cookie'
 import type { Context, ErrorContext, PreContext } from './context'
 import type { ChainNode } from './utils'
-import { Static, TCyclic, TSchema } from 'typebox'
-import { UnionTypeNode } from 'typescript'
 
 export interface ElysiaConfig<
 	in out Prefix extends string | undefined,
@@ -506,13 +505,37 @@ export interface EphemeralType {
 	derive: SingletonBase['derive']
 	resolve: SingletonBase['resolve']
 	schema: MetadataBase['schema']
-	standaloneSchema: MetadataBase['schema']
+	schemas: MetadataBase['schema']
 	response: PossibleResponse
 }
 
 export interface DefinitionBase {
 	typebox: Record<string, AnySchema>
 	error: Record<string, Error>
+}
+
+export interface DefaultEphemeral {
+	derive: {}
+	resolve: {}
+	schema: {}
+	schemas: {}
+	response: {}
+}
+
+export interface DefaultSingleton {
+	decorator: {}
+	store: {}
+	derive: {}
+	resolve: {}
+}
+
+export interface DefaultMetadata {
+	schema: {}
+	schemas: {}
+	macro: {}
+	macroFn: {}
+	parser: {}
+	response: {}
 }
 
 export type RouteBase = Record<string, unknown>
@@ -528,7 +551,7 @@ export interface PossibleResponse {
 
 export interface MetadataBase {
 	schema: RouteSchema
-	standaloneSchema: MetadataBase['schema']
+	schemas: MetadataBase['schema']
 	macro: BaseMacro
 	macroFn: Macro
 	parser: Record<string, BodyHandler<any, any>>
@@ -546,12 +569,7 @@ export interface RouteSchema {
 
 export type OptionalHandler<
 	in out Route extends RouteSchema = {},
-	in out Singleton extends SingletonBase = {
-		decorator: {}
-		store: {}
-		derive: {}
-		resolve: {}
-	},
+	in out Singleton extends SingletonBase = DefaultSingleton,
 	Path extends string | undefined = undefined
 > = (
 	context: Context<Route, Singleton, Path>
@@ -566,12 +584,7 @@ export type OptionalHandler<
 
 export type AfterHandler<
 	in out Route extends RouteSchema = {},
-	in out Singleton extends SingletonBase = {
-		decorator: {}
-		store: {}
-		derive: {}
-		resolve: {}
-	},
+	in out Singleton extends SingletonBase = DefaultSingleton,
 	Path extends string | undefined = undefined
 > = (
 	context: Context<Route, Singleton, Path> & {
@@ -590,12 +603,7 @@ export type AfterHandler<
 
 export type MapResponse<
 	in out Route extends RouteSchema = {},
-	in out Singleton extends SingletonBase = {
-		decorator: {}
-		store: {}
-		derive: {}
-		resolve: {}
-	},
+	in out Singleton extends SingletonBase = DefaultSingleton,
 	Path extends string | undefined = undefined
 > = (
 	context: Context<Route, Singleton, Path> & {
@@ -613,22 +621,12 @@ export type MapResponse<
 
 export type VoidHandler<
 	in out Route extends RouteSchema = {},
-	in out Singleton extends SingletonBase = {
-		decorator: {}
-		store: {}
-		derive: {}
-		resolve: {}
-	}
+	in out Singleton extends SingletonBase = DefaultSingleton
 > = (context: Context<Route, Singleton>) => MaybePromise<void>
 
 export type TransformHandler<
 	in out Route extends RouteSchema = {},
-	in out Singleton extends SingletonBase = {
-		decorator: {}
-		store: {}
-		derive: {}
-		resolve: {}
-	},
+	in out Singleton extends SingletonBase = DefaultSingleton,
 	Path extends string | undefined = undefined
 > = (
 	context: Context<
@@ -642,12 +640,7 @@ export type TransformHandler<
 
 export type BodyHandler<
 	in out Route extends RouteSchema = {},
-	in out Singleton extends SingletonBase = {
-		decorator: {}
-		store: {}
-		derive: {}
-		resolve: {}
-	},
+	in out Singleton extends SingletonBase = DefaultSingleton,
 	Path extends string | undefined = undefined
 > = (
 	context: Context<
@@ -678,12 +671,7 @@ export type BodyHandler<
 
 export type PreHandler<
 	in out Route extends RouteSchema = {},
-	in out Singleton extends SingletonBase = {
-		decorator: {}
-		store: {}
-		derive: {}
-		resolve: {}
-	}
+	in out Singleton extends SingletonBase = DefaultSingleton
 > = (
 	context: PreContext<Singleton>
 ) => MaybePromise<
@@ -692,12 +680,7 @@ export type PreHandler<
 
 export type AfterResponseHandler<
 	in out Route extends RouteSchema = {},
-	in out Singleton extends SingletonBase = {
-		decorator: {}
-		store: {}
-		derive: {}
-		resolve: {}
-	}
+	in out Singleton extends SingletonBase = DefaultSingleton
 > = (
 	context: Context<Route, Singleton> & {
 		responseValue: {} extends Route['response']
@@ -729,12 +712,7 @@ export type ResolveHandler<
 
 export type TraceHandler<
 	in out Route extends RouteSchema = {},
-	in out Singleton extends SingletonBase = {
-		decorator: {}
-		store: {}
-		derive: {}
-		resolve: {}
-	}
+	in out Singleton extends SingletonBase = DefaultSingleton
 > = {
 	(
 		lifecycle: Prettify<
@@ -789,12 +767,7 @@ type InlineHandlerResponse<Route extends RouteSchema['response']> = {
 
 export type InlineHandler<
 	Route extends RouteSchema = {},
-	Singleton extends SingletonBase = {
-		decorator: {}
-		store: {}
-		derive: {}
-		resolve: {}
-	},
+	Singleton extends SingletonBase = DefaultSingleton,
 	MacroContext extends {
 		response: PossibleResponse
 		return: PossibleResponse
@@ -844,12 +817,7 @@ export type InlineHandler<
 
 export type InlineHandlerNonMacro<
 	Route extends RouteSchema = {},
-	Singleton extends SingletonBase = {
-		decorator: {}
-		store: {}
-		derive: {}
-		resolve: {}
-	}
+	Singleton extends SingletonBase = DefaultSingleton
 > =
 	| MaybePromise<InlineResponse>
 	| ((context: Context<Route, Singleton>) =>
@@ -904,28 +872,9 @@ export type InternalRoute = readonly [
 export type ErrorHandler<
 	in out T extends Record<string, Error> = {},
 	in out Route extends RouteSchema = {},
-	in out Singleton extends SingletonBase = {
-		decorator: {}
-		store: {}
-		derive: {}
-		resolve: {}
-	},
-	// ? scoped
-	in out Ephemeral extends EphemeralType = {
-		derive: {}
-		resolve: {}
-		schema: {}
-		standaloneSchema: {}
-		response: {}
-	},
-	// ? local
-	in out Volatile extends EphemeralType = {
-		derive: {}
-		resolve: {}
-		schema: {}
-		standaloneSchema: {}
-		response: {}
-	}
+	in out Singleton extends SingletonBase = DefaultSingleton,
+	in out Ephemeral extends EphemeralType = DefaultEphemeral,
+	in out Volatile extends EphemeralType = DefaultEphemeral
 > = (
 	context: ErrorContext<
 		Route,
@@ -1057,12 +1006,7 @@ export type MaybeValueOrVoidFunction<T> = T | ((...a: any) => void | T)
 export interface MacroProperty<
 	in out Macro extends BaseMacro = {},
 	in out TypedRoute extends RouteSchema = {},
-	in out Singleton extends SingletonBase = {
-		decorator: {}
-		store: {}
-		derive: {}
-		resolve: {}
-	},
+	in out Singleton extends SingletonBase = DefaultSingleton,
 	in out Errors extends Record<string, Error> = {}
 > {
 	/**
@@ -1090,12 +1034,7 @@ export interface Macro<
 	in out Macro extends BaseMacro = {},
 	in out Input extends BaseMacro = {},
 	in out TypedRoute extends RouteSchema = {},
-	in out Singleton extends SingletonBase = {
-		decorator: {}
-		store: {}
-		derive: {}
-		resolve: {}
-	},
+	in out Singleton extends SingletonBase = DefaultSingleton,
 	in out Errors extends Record<string, Error> = {}
 > {
 	[K: keyof any]: MaybeValueOrVoidFunction<
@@ -1341,11 +1280,11 @@ export type ContextAppendType = 'append' | 'override'
 type OptionalField = { '~optional': true }
 
 type StaticCyclic<
-	T extends TSchema,
-	Definitions extends Record<string, TSchema>
+	T extends TypeBoxSchema,
+	Definitions extends Record<string, AnySchema>
 > = Static<
 	TCyclic<
-		Definitions & {
+		Extract<Definitions, TypeBoxSchema> & {
 			$elysia: T
 		},
 		'$elysia'
@@ -1357,7 +1296,7 @@ export type UnwrapSchema<
 	Definitions extends DefinitionBase['typebox'] = {}
 > = Schema extends undefined
 	? unknown
-	: Schema extends TSchema
+	: Schema extends TypeBoxSchema
 		? Schema extends OptionalField
 			? Partial<StaticCyclic<Schema, Definitions>>
 			: StaticCyclic<Schema, Definitions>
@@ -1365,8 +1304,8 @@ export type UnwrapSchema<
 			? NonNullable<Schema['~standard']['types']>['output']
 			: Schema extends string
 				? Schema extends keyof Definitions
-					? Definitions[Schema] extends TSchema
-						? StaticCyclic<Schema, Definitions>
+					? Definitions[Schema] extends TypeBoxSchema
+						? StaticCyclic<Definitions[Schema], Definitions>
 						: Definitions[Schema] extends StandardSchemaV1Like
 							? NonNullable<
 									Definitions[Schema]['~standard']['types']
@@ -1380,7 +1319,7 @@ export type UnwrapBodySchema<
 	Definitions extends DefinitionBase['typebox'] = {}
 > = undefined extends Schema
 	? unknown
-	: Schema extends TSchema
+	: Schema extends TypeBoxSchema
 		? Schema extends OptionalField
 			? Partial<StaticCyclic<Schema, Definitions>> | null
 			: StaticCyclic<Schema, Definitions>
@@ -1388,8 +1327,8 @@ export type UnwrapBodySchema<
 			? NonNullable<Schema['~standard']['types']>['output']
 			: Schema extends string
 				? Schema extends keyof Definitions
-					? Definitions[Schema] extends AnySchema
-						? StaticCyclic<Schema, Definitions>
+					? Definitions[Schema] extends TypeBoxSchema
+						? StaticCyclic<Definitions[Schema], Definitions>
 						: Definitions[Schema] extends StandardSchemaV1Like
 							? NonNullable<
 									Definitions[Schema]['~standard']['types']
@@ -1906,38 +1845,14 @@ export type MergeElysiaInstances<
 	Instances extends AnyElysia[] = [],
 	Prefix extends string = '',
 	Scope extends EventScope = 'local',
-	Singleton extends SingletonBase = {
-		decorator: {}
-		store: {}
-		derive: {}
-		resolve: {}
-	},
+	Singleton extends SingletonBase = DefaultSingleton,
 	Definitions extends DefinitionBase = {
 		typebox: {}
 		error: {}
 	},
-	Metadata extends MetadataBase = {
-		schema: {}
-		standaloneSchema: {}
-		macro: {}
-		macroFn: {}
-		parser: {}
-		response: {}
-	},
-	Ephemeral extends EphemeralType = {
-		derive: {}
-		resolve: {}
-		schema: {}
-		standaloneSchema: {}
-		response: {}
-	},
-	Volatile extends EphemeralType = {
-		derive: {}
-		resolve: {}
-		schema: {}
-		standaloneSchema: {}
-		response: {}
-	},
+	Metadata extends MetadataBase = DefaultMetadata,
+	Ephemeral extends EphemeralType = DefaultEphemeral,
+	Volatile extends EphemeralType = DefaultEphemeral,
 	Routes extends RouteBase = {}
 > = Instances extends [
 	infer Current extends AnyElysia,

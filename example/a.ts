@@ -1,22 +1,21 @@
 import z from 'zod'
 import { Elysia, t } from '../src'
+import { UnwrapSchema } from '../src/types'
 
 const app = new Elysia()
 	.model({
-		response: z.boolean()
+		params: z.object({
+			name: z.number()
+		})
 	})
 	.get(
 		'/:name',
-		({ params: { name } }) => (name === 'lilith' ? undefined : true),
+		({ params }) => (name === 'lilith' ? undefined : true),
 		{
-			response: 'response'
+			params: 'params'
 		}
 	)
 
-console.log(app.handler(0, true).toString())
-
-const exists = await app.handle('/fouco')
-const nonExists = await app.handle('/lilith')
-
-console.log(exists)
-console.log(nonExists)
+const a = z.object({
+	name: z.number()
+})

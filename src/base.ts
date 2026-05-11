@@ -81,7 +81,10 @@ import type {
 	InlineHandlerNonMacro,
 	InlineHandler,
 	ElysiaHandlerToResponseSchemaAmbiguous,
-	AnyLocalHook
+	AnyLocalHook,
+	DefaultEphemeral,
+	DefaultSingleton,
+    DefaultMetadata
 } from './types'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
@@ -89,41 +92,15 @@ export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
 export class Elysia<
 	const in out BasePath extends string = '',
 	const in out Scope extends EventScope = 'local',
-	const in out Singleton extends SingletonBase = {
-		decorator: {}
-		store: {}
-		derive: {}
-		resolve: {}
-	},
+	const in out Singleton extends SingletonBase = DefaultSingleton,
 	const in out Definitions extends DefinitionBase = {
 		typebox: {}
 		error: {}
 	},
-	const in out Metadata extends MetadataBase = {
-		schema: {}
-		standaloneSchema: {}
-		macro: {}
-		macroFn: {}
-		parser: {}
-		response: {}
-	},
+	const in out Metadata extends MetadataBase = DefaultMetadata,
 	const in out Routes extends RouteBase = {},
-	// ? scoped
-	const in out Ephemeral extends EphemeralType = {
-		derive: {}
-		resolve: {}
-		schema: {}
-		standaloneSchema: {}
-		response: {}
-	},
-	// ? local
-	const in out Volatile extends EphemeralType = {
-		derive: {}
-		resolve: {}
-		schema: {}
-		standaloneSchema: {}
-		response: {}
-	}
+	const in out Ephemeral extends EphemeralType = DefaultEphemeral,
+	const in out Volatile extends EphemeralType = DefaultEphemeral
 > {
 	'~config'?: ElysiaConfig<BasePath, Scope>
 
@@ -1510,8 +1487,8 @@ export class Elysia<
 						UnwrapRoute<{}, Definitions['typebox']>,
 						Metadata['schema']
 					>
-					standaloneSchema: UnwrapRoute<{}, Definitions['typebox']> &
-						Metadata['standaloneSchema']
+					schemas: UnwrapRoute<{}, Definitions['typebox']> &
+						Metadata['schemas']
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
 					parser: Metadata['parser']
@@ -1548,9 +1525,9 @@ export class Elysia<
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
 			>
 		> &
-			Metadata['standaloneSchema'] &
-			Ephemeral['standaloneSchema'] &
-			Volatile['standaloneSchema'],
+			Metadata['schemas'] &
+			Ephemeral['schemas'] &
+			Volatile['schemas'],
 		const MacroContext extends {} extends Metadata['macroFn']
 			? {}
 			: MacroToContext<
@@ -1599,7 +1576,7 @@ export class Elysia<
 				Definitions,
 				{
 					schema: Schema
-					standaloneSchema: Metadata['standaloneSchema'] &
+					standaloneSchema: Metadata['schemas'] &
 						Schema &
 						MacroContext
 					macro: Metadata['macro']
@@ -2421,9 +2398,7 @@ export class Elysia<
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
 				>
 			>,
-			Metadata['standaloneSchema'] &
-				Ephemeral['standaloneSchema'] &
-				Volatile['standaloneSchema']
+			Metadata['schemas'] & Ephemeral['schemas'] & Volatile['schemas']
 		>,
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
@@ -2472,9 +2447,9 @@ export class Elysia<
 						ComposeElysiaResponse<
 							Schema &
 								MacroContext &
-								Metadata['standaloneSchema'] &
-								Ephemeral['standaloneSchema'] &
-								Volatile['standaloneSchema'],
+								Metadata['schemas'] &
+								Ephemeral['schemas'] &
+								Volatile['schemas'],
 							Handle,
 							UnionResponseStatus<
 								Metadata['response'],
@@ -2529,9 +2504,7 @@ export class Elysia<
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
 				>
 			>,
-			Metadata['standaloneSchema'] &
-				Ephemeral['standaloneSchema'] &
-				Volatile['standaloneSchema']
+			Metadata['schemas'] & Ephemeral['schemas'] & Volatile['schemas']
 		>,
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
@@ -2580,9 +2553,9 @@ export class Elysia<
 						ComposeElysiaResponse<
 							Schema &
 								MacroContext &
-								Metadata['standaloneSchema'] &
-								Ephemeral['standaloneSchema'] &
-								Volatile['standaloneSchema'],
+								Metadata['schemas'] &
+								Ephemeral['schemas'] &
+								Volatile['schemas'],
 							Handle,
 							UnionResponseStatus<
 								Metadata['response'],
@@ -2637,9 +2610,7 @@ export class Elysia<
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
 				>
 			>,
-			Metadata['standaloneSchema'] &
-				Ephemeral['standaloneSchema'] &
-				Volatile['standaloneSchema']
+			Metadata['schemas'] & Ephemeral['schemas'] & Volatile['schemas']
 		>,
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
@@ -2688,9 +2659,9 @@ export class Elysia<
 						ComposeElysiaResponse<
 							Schema &
 								MacroContext &
-								Metadata['standaloneSchema'] &
-								Ephemeral['standaloneSchema'] &
-								Volatile['standaloneSchema'],
+								Metadata['schemas'] &
+								Ephemeral['schemas'] &
+								Volatile['schemas'],
 							Handle,
 							UnionResponseStatus<
 								Metadata['response'],
@@ -2745,9 +2716,7 @@ export class Elysia<
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
 				>
 			>,
-			Metadata['standaloneSchema'] &
-				Ephemeral['standaloneSchema'] &
-				Volatile['standaloneSchema']
+			Metadata['schemas'] & Ephemeral['schemas'] & Volatile['schemas']
 		>,
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
@@ -2796,9 +2765,9 @@ export class Elysia<
 						ComposeElysiaResponse<
 							Schema &
 								MacroContext &
-								Metadata['standaloneSchema'] &
-								Ephemeral['standaloneSchema'] &
-								Volatile['standaloneSchema'],
+								Metadata['schemas'] &
+								Ephemeral['schemas'] &
+								Volatile['schemas'],
 							Handle,
 							UnionResponseStatus<
 								Metadata['response'],
@@ -2853,9 +2822,7 @@ export class Elysia<
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
 				>
 			>,
-			Metadata['standaloneSchema'] &
-				Ephemeral['standaloneSchema'] &
-				Volatile['standaloneSchema']
+			Metadata['schemas'] & Ephemeral['schemas'] & Volatile['schemas']
 		>,
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
@@ -2904,9 +2871,9 @@ export class Elysia<
 						ComposeElysiaResponse<
 							Schema &
 								MacroContext &
-								Metadata['standaloneSchema'] &
-								Ephemeral['standaloneSchema'] &
-								Volatile['standaloneSchema'],
+								Metadata['schemas'] &
+								Ephemeral['schemas'] &
+								Volatile['schemas'],
 							Handle,
 							UnionResponseStatus<
 								Metadata['response'],
@@ -2961,9 +2928,7 @@ export class Elysia<
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
 				>
 			>,
-			Metadata['standaloneSchema'] &
-				Ephemeral['standaloneSchema'] &
-				Volatile['standaloneSchema']
+			Metadata['schemas'] & Ephemeral['schemas'] & Volatile['schemas']
 		>,
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
@@ -3012,9 +2977,9 @@ export class Elysia<
 						ComposeElysiaResponse<
 							Schema &
 								MacroContext &
-								Metadata['standaloneSchema'] &
-								Ephemeral['standaloneSchema'] &
-								Volatile['standaloneSchema'],
+								Metadata['schemas'] &
+								Ephemeral['schemas'] &
+								Volatile['schemas'],
 							Handle,
 							UnionResponseStatus<
 								Metadata['response'],
@@ -3069,9 +3034,7 @@ export class Elysia<
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
 				>
 			>,
-			Metadata['standaloneSchema'] &
-				Ephemeral['standaloneSchema'] &
-				Volatile['standaloneSchema']
+			Metadata['schemas'] & Ephemeral['schemas'] & Volatile['schemas']
 		>,
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
@@ -3120,9 +3083,9 @@ export class Elysia<
 						ComposeElysiaResponse<
 							Schema &
 								MacroContext &
-								Metadata['standaloneSchema'] &
-								Ephemeral['standaloneSchema'] &
-								Volatile['standaloneSchema'],
+								Metadata['schemas'] &
+								Ephemeral['schemas'] &
+								Volatile['schemas'],
 							Handle,
 							UnionResponseStatus<
 								Metadata['response'],

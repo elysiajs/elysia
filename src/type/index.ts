@@ -15,6 +15,7 @@ export { System } from 'typebox/system'
 export type {
 	BaseSchema,
 	AnySchema,
+	TypeBoxSchema,
 	StandardSchemaV1Like,
 	StandardJSONSchemaV1Like
 } from './types'
