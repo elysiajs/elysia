@@ -388,10 +388,10 @@ export function compileHandler(
 	const adapter = root['~config']?.adapter ?? defaultAdapter
 
 	if (localHook) root['~applyMacro'](localHook)
+	if (appHook) resolveChainMacros(root, appHook)
 
-	resolveChainMacros(root, appHook)
 	if (inheritedChain) resolveChainMacros(root, inheritedChain as ChainNode)
-	const flatAppHook = flattenChain(appHook)
+	const flatAppHook = appHook ? flattenChain(appHook) : undefined
 
 	const rootHook =
 		instance !== root
@@ -943,8 +943,7 @@ export function compileHandler(
 			return createInlineHandlerWithSet(res.map as any, handler as any)
 	}
 
-	if (alias === '')
-		return new Function('h', `return ${code}`)(handler)
+	if (alias === '') return new Function('h', `return ${code}`)(handler)
 
 	return new Function('h', alias, `return ${code}`)(handler, ...params)
 }

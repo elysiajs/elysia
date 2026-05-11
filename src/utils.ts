@@ -716,3 +716,5 @@ export const requestId = isBun
 	? Bun.randomUUIDv7
 	: // @ts-ignore
 		(crypto.randomUUIDv7?.bind(crypto) ?? crypto.randomUUID?.bind(crypto))
+
+export const isEncoded = /%[0-9A-Fa-f]{2}/

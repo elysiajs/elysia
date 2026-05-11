@@ -21,6 +21,7 @@ import {
 	getLoosePath,
 	hookToGuard,
 	isEmpty,
+	isEncoded,
 	isRecordNumber,
 	joinPath,
 	liftDirectFieldsToSchema,
@@ -169,7 +170,6 @@ export class Elysia<
 
 	'~router'?: Memoirist<CompiledHandler>
 	'~map'?: { [method: string]: { [path: string]: CompiledHandler } }
-	'~loosePath': Record<string, string>
 	'~staticResponse'?: {
 		[path: string]: {
 			[method: string]: Response | Promise<Response>
@@ -3175,11 +3175,7 @@ export class Elysia<
 			)
 
 			compiled![index] = handler
-			if (route) {
-				this.#initMap()
-				const m = mapMethodBack(route[0])
-				;(this['~map']![m] ??= nullObject())[route[1]] = handler
-			}
+			this.#saveHandler(route[0], route[1], handler)
 
 			return handler
 		}
@@ -3189,27 +3185,35 @@ export class Elysia<
 
 	#jitHandler(
 		index: number,
-		route?: InternalRoute,
+		route: InternalRoute,
 		precomputedStatic?: Response
 	): CompiledHandler {
 		return (context) => {
-			if (this.#compiled?.[index]) return this.#compiled![index](context)
+			if (this.#compiled![index]) return this.#compiled![index](context)
 
 			const handler = compileHandler(
 				this.#history![index],
 				this,
 				precomputedStatic
 			)
-			this.#compiled![index] = handler
 
-			if (route) {
-				this.#initMap()
-				const method = mapMethodBack(route[0])
-				;(this['~map']![method] ??= nullObject())[route[1]] = handler
-			}
+			this.#compiled![index] = handler
+			this.#saveHandler(route[0], route[1], handler)
 
 			return handler(context)
 		}
+	}
+
+	#saveHandler(
+		method: string | MethodMap[keyof MethodMap],
+		path: string,
+		handler: CompiledHandler
+	) {
+		this.#initMap()
+
+		const encoded = isEncoded.test(path) ? path : encodeURI(path)
+		const map = (this['~map']![mapMethodBack(method)] ??= nullObject())
+		map[path] = handler
 	}
 
 	#routerBuilt = false
@@ -3225,7 +3229,7 @@ export class Elysia<
 		for (let i = 0; i < length; i++) {
 			const route: InternalRoute = this.#history![i]
 			const method = mapMethodBack(route[0])
-			const path = encodeURI(route[1])
+			const path = route[1]
 
 			if ((route[0] as any) === 'WS') {
 				const { fetch, bunOptions } = buildWSRoute(route, this)
@@ -3266,26 +3270,20 @@ export class Elysia<
 			}
 
 			let staticResponse: Response | Promise<Response> | undefined
-			if (typeof route[2] !== 'function' && buildStatic) {
+			const maybeStatic = buildStatic && typeof route[2] !== 'function'
+			if (maybeStatic) {
 				staticResponse = buildNativeStaticResponse(route, this)
+
 				if (staticResponse) {
 					const target = (this['~staticResponse'] ??= nullObject())
 					;(target[path] ??= nullObject())[method] = staticResponse
-
-					if (!strictPath) {
-						const loose = getLoosePath(path)
-						const aliased =
-							staticResponse instanceof Response
-								? staticResponse.clone()
-								: staticResponse.then((r) => r.clone())
-
-						;(target[loose] ??= nullObject())[method] = aliased
-					}
 				}
 			}
 
 			const sharedStatic =
-				staticResponse instanceof Response ? staticResponse : undefined
+				maybeStatic && staticResponse instanceof Response
+					? staticResponse
+					: undefined
 
 			if (isDynamicRegex.test(path)) {
 				;(this['~router'] ??= new Memoirist(decodeComponent)).add(
