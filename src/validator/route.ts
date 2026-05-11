@@ -36,6 +36,22 @@ export interface RouteValidatorOptions
 // @ts-expect-error
 const isTb = (schema: unknown): schema is AnySchema => '~kind' in schema
 
+function pickStandalone<K extends keyof RouteSchema>(
+	schemas: NonNullable<RouteValidatorOptions['schemas']> | undefined,
+	key: K
+): AnySchema[] | undefined {
+	if (!schemas) return undefined
+
+	const result: AnySchema[] = []
+
+	for (let i = 0; i < schemas.length; i++) {
+		const v = (schemas[i] as any)[key]
+		if (v) result.push(v)
+	}
+
+	return result
+}
+
 export class RouteValidator<const in out T extends RouteSchema> {
 	body: ToSubTypeValidator<T['body']> | undefined
 	headers: ToSubTypeValidator<T['headers']> | undefined
@@ -53,18 +69,9 @@ export class RouteValidator<const in out T extends RouteSchema> {
 	constructor(route: T, options?: RouteValidatorOptions) {
 		if (!route) return
 
-		// Per-field standalone validator entries: filter `options.schemas`
-		// for entries that contribute to this field. Every visible entry
-		// runs as its own validation pass — matches src-old's behavior at
-		// `index.ts:499-519` (concat of all `local + scoped + global`
-		// buckets, no per-validator scope override). Scope filtering is a
-		// `#use` propagation concern, not a per-validator one.
-		const pickStandalone = <K extends keyof RouteSchema>(key: K) =>
-			options?.schemas
-				?.filter((s: any) => s[key])
-				?.map((s: any) => s[key])
+		const standaloneSchemas = options?.schemas
 
-		const bodyStandalone = pickStandalone('body') as AnySchema[] | undefined
+		const bodyStandalone = pickStandalone(standaloneSchemas, 'body') as AnySchema[] | undefined
 		if (route.body || bodyStandalone?.length) {
 			const body = Validator.reference(
 				(route.body ?? bodyStandalone![0]) as AnySchema,
@@ -82,7 +89,7 @@ export class RouteValidator<const in out T extends RouteSchema> {
 			}) as any
 		}
 
-		const headersStandalone = pickStandalone('headers') as
+		const headersStandalone = pickStandalone(standaloneSchemas, 'headers') as
 			| AnySchema[]
 			| undefined
 		if (route.headers || headersStandalone?.length) {
@@ -98,7 +105,7 @@ export class RouteValidator<const in out T extends RouteSchema> {
 			}) as any
 		}
 
-		const queryStandalone = pickStandalone('query') as
+		const queryStandalone = pickStandalone(standaloneSchemas, 'query') as
 			| AnySchema[]
 			| undefined
 		if (route.query || queryStandalone?.length) {
@@ -114,7 +121,7 @@ export class RouteValidator<const in out T extends RouteSchema> {
 			}) as any
 		}
 
-		const paramsStandalone = pickStandalone('params') as
+		const paramsStandalone = pickStandalone(standaloneSchemas, 'params') as
 			| AnySchema[]
 			| undefined
 		if (route.params || paramsStandalone?.length) {
@@ -130,7 +137,7 @@ export class RouteValidator<const in out T extends RouteSchema> {
 			}) as any
 		}
 
-		const cookieStandalone = pickStandalone('cookie') as
+		const cookieStandalone = pickStandalone(standaloneSchemas, 'cookie') as
 			| AnySchema[]
 			| undefined
 		if (route.cookie || cookieStandalone?.length) {
@@ -146,7 +153,7 @@ export class RouteValidator<const in out T extends RouteSchema> {
 			}) as any
 		}
 
-		const responseStandalone = pickStandalone('response') as
+		const responseStandalone = pickStandalone(standaloneSchemas, 'response') as
 			| Record<number, AnySchema>[]
 			| undefined
 

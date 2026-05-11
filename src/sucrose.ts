@@ -27,9 +27,17 @@ export namespace Sucrose {
 		 * no new compilation is happening
 		 * clear the cache to free up memory
 		 *
-		 * @default 4 * 60 * 1000 + 55 * 1000 (4 minutes 55 seconds)
+		 * @default 1 * 60 * 1000 (1 minute)
 		 */
 		gcTime?: number | null
+		/**
+		 * Maximum number of cached inferences before LRU eviction kicks in.
+		 * Bounds memory when many unique handler sources are compiled (e.g.
+		 * 100k routes with distinct closures) without waiting for `gcTime`.
+		 *
+		 * @default 1024
+		 */
+		cacheLimit?: number
 	}
 }
 
@@ -611,10 +619,12 @@ function isContextPassToFunction(
 }
 
 let pendingGC: Timer | undefined
-let caches = <Record<number, Sucrose.Inference>>{}
+const DEFAULT_CACHE_LIMIT = 1024
+
+const caches = new Map<number, Sucrose.Inference>()
 
 function clearCache() {
-	caches = {}
+	caches.clear()
 
 	pendingGC = undefined
 	if (isBun) Bun.gc(false)
@@ -671,13 +681,17 @@ function pushParse(target: unknown[], array: unknown[]) {
 		if (typeof array[i] === 'function') target.push(array[i])
 }
 
+// never recreate array to reduce memory allocation, just clear and reuse it
+const eventsBuffer = <Handler[]>[]
+
 export function sucrose(
 	handler: Handler | undefined,
 	lifeCycle: Sucrose.LifeCycle | undefined,
 	inference?: Sucrose.Inference,
 	settings?: Sucrose.Settings
 ): Sucrose.Inference {
-	const events = <Handler[]>[]
+	const events = eventsBuffer
+	events.length = 0
 
 	if (handler && typeof handler === 'function') events.push(handler)
 	if (lifeCycle) {
@@ -700,8 +714,11 @@ export function sucrose(
 
 		const content = event.toString()
 		const key = fnv1a(content)
-		const cachedInference = caches[key]
+		const cachedInference = caches.get(key)
 		if (cachedInference) {
+			// LRU bump: move this key to MRU position by re-inserting.
+			caches.delete(key)
+			caches.set(key, cachedInference)
 			inference = inference
 				? mergeInference(inference, cachedInference)
 				: cachedInference
@@ -710,10 +727,6 @@ export function sucrose(
 
 		inference ??= defaultSucrose()
 
-		// If no sucrose usage is found in 4:55 minutes
-		// it's likely that server is either idle or
-		// no new compilation is happening
-		// Clear the cache to free up memory
 		if (needGc) {
 			needGc = false
 			clearSucroseCache(settings?.gcTime)
@@ -748,7 +761,15 @@ export function sucrose(
 				fnInference.query = true
 		}
 
-		if (!caches[key]) caches[key] = fnInference
+		if (!caches.has(key)) {
+			const limit = settings?.cacheLimit ?? DEFAULT_CACHE_LIMIT
+			if (caches.size >= limit) {
+				// Drop the oldest (first inserted / least recently used).
+				const oldest = caches.keys().next().value
+				if (oldest !== undefined) caches.delete(oldest)
+			}
+			caches.set(key, fnInference)
+		}
 
 		inference = mergeInference(inference, fnInference)
 		fnInference = undefined

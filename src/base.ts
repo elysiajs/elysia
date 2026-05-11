@@ -21,7 +21,6 @@ import {
 	getLoosePath,
 	hookToGuard,
 	isEmpty,
-	isNotEmpty,
 	isRecordNumber,
 	joinPath,
 	liftDirectFieldsToSchema,
@@ -88,6 +87,10 @@ import type {
 	DefaultSingleton,
 	DefaultMetadata
 } from './types'
+
+// Tail-first walk buffer for `#use`'s hookChain absorption.
+// reused array so no new array allocation
+const useNodesBuffer: ChainNode[] = []
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
 
@@ -545,7 +548,8 @@ export class Elysia<
 						decorator[name] = mergeDeep(
 							decorator[name] as any,
 							value!,
-							{ override: as === 'override' }
+							undefined,
+							as === 'override'
 						)
 					else decorator[name] = value
 
@@ -554,9 +558,12 @@ export class Elysia<
 
 				if (fresh) Object.assign(decorator, value)
 				else
-					ext.decorator = mergeDeep(decorator, value as any, {
-						override: as === 'override'
-					})
+					ext.decorator = mergeDeep(
+						decorator,
+						value as any,
+						undefined,
+						as === 'override'
+					)
 
 				return this
 
@@ -869,9 +876,12 @@ export class Elysia<
 
 				if (name) {
 					if (!fresh && name in store)
-						store[name] = mergeDeep(store[name] as any, value!, {
-							override: as === 'override'
-						})
+						store[name] = mergeDeep(
+							store[name] as any,
+							value!,
+							undefined,
+							as === 'override'
+						)
 					else store[name] = value
 
 					return this
@@ -879,9 +889,12 @@ export class Elysia<
 
 				if (fresh) Object.assign(store, value)
 				else
-					ext.store = mergeDeep(store, value as any, {
-						override: as === 'override'
-					})
+					ext.store = mergeDeep(
+						store,
+						value as any,
+						undefined,
+						as === 'override'
+					)
 
 				return this
 
@@ -1731,8 +1744,9 @@ export class Elysia<
 
 		if (!macro) return input
 
-		for (let [key, value] of Object.entries(toApply)) {
+		for (const key in toApply) {
 			if (key in macro === false) continue
+			const value = (toApply as any)[key]
 
 			const isFunction: boolean = typeof macro[key] === 'function'
 			const hook: Partial<AppHook & Macro> = isFunction
@@ -1747,7 +1761,15 @@ export class Elysia<
 			}
 
 			if (isFunction) {
-				const seed = fnv1a(key + JSON.stringify(hook.seed ?? value))
+				const seedSource = hook.seed ?? value
+				const seedStr =
+					seedSource === null ||
+					seedSource === undefined ||
+					typeof seedSource !== 'object'
+						? String(seedSource)
+						: JSON.stringify(seedSource)
+
+				const seed = fnv1a(key + seedStr)
 				if (seen.has(seed)) continue
 
 				seen.add(seed)
@@ -1760,7 +1782,8 @@ export class Elysia<
 
 			hook.seed = undefined
 
-			for (let [k, v] of Object.entries(hook)) {
+			for (const k in hook) {
+				const v = (hook as any)[k]
 				if (k === 'introspect') {
 					v?.(input)
 
@@ -1770,9 +1793,13 @@ export class Elysia<
 
 				if (k === 'detail') {
 					if (!input.detail) input.detail = {}
-					input.detail = mergeDeep(input.detail, v, {
-						mergeArray: true
-					})
+					input.detail = mergeDeep(
+						input.detail,
+						v,
+						undefined,
+						undefined,
+						true
+					)
 
 					delete input[key]
 					continue
@@ -1858,9 +1885,7 @@ export class Elysia<
 	}
 
 	#use(app: AnyElysia) {
-		const before: Set<number> | undefined = this.#childrenHash
-			? new Set(this.#childrenHash)
-			: undefined
+		let addedByThisCall: Set<number> | undefined
 
 		const name = app['~config']?.name
 		if (name) {
@@ -1869,15 +1894,21 @@ export class Elysia<
 
 			this.#childrenHash ??= new Set()
 			this.#childrenHash.add(hash)
+			;(addedByThisCall ??= new Set()).add(hash)
 		}
 
 		if (app.#childrenHash) {
-			if (this.#childrenHash)
-				app.#childrenHash.forEach(
-					this.#childrenHash.add,
-					this.#childrenHash
-				)
-			else this.#childrenHash ??= new Set(app.#childrenHash)
+			if (this.#childrenHash) {
+				for (const h of app.#childrenHash) {
+					if (this.#childrenHash.has(h)) continue
+					this.#childrenHash.add(h)
+					;(addedByThisCall ??= new Set()).add(h)
+				}
+			} else {
+				this.#childrenHash = new Set(app.#childrenHash)
+				addedByThisCall ??= new Set()
+				for (const h of app.#childrenHash) addedByThisCall.add(h)
+			}
 		}
 
 		if (app.#history) {
@@ -1886,9 +1917,6 @@ export class Elysia<
 			for (let i = 0; i < length; i++) {
 				const route = app.#history[i]
 
-				// Capture parent's chain head BEFORE merge app
-				// Routes absorbed here inherit exactly this — what was in scope on
-				// parent at the moment of `.use(app)`.
 				const preChain = this['~ext']?.hookChain
 
 				const childChain = route[6]
@@ -1959,13 +1987,8 @@ export class Elysia<
 			}
 
 			if (app.#plugin || app.#global || hookChain) {
-				const events: {
-					plugin: Partial<AppHook>
-					global: Partial<AppHook>
-				} = {
-					plugin: nullObject(),
-					global: nullObject()
-				}
+				let pluginEvents: Partial<AppHook> | undefined
+				let globalEvents: Partial<AppHook> | undefined
 
 				const derive = app['~derive']
 
@@ -1977,7 +2000,8 @@ export class Elysia<
 				// addition; collect nodes head→tail then iterate reversed.
 				// `~ext.hookChain` never holds combine nodes, but we tolerate
 				// them by skipping past `over` if encountered.
-				const nodes: ChainNode[] = []
+				const nodes = useNodesBuffer
+				nodes.length = 0
 				let current: ChainNode | undefined = hookChain
 
 				while (current) {
@@ -2002,8 +2026,7 @@ export class Elysia<
 
 					if (nodeScope === 'plugin' && node.propagated) continue
 
-					const target =
-						nodeScope === 'global' ? events.global : events.plugin
+					const isGlobal = nodeScope === 'global'
 					const added = node.added
 
 					for (const key in added) {
@@ -2014,9 +2037,13 @@ export class Elysia<
 
 							if (!schemas) continue
 
+							const target = isGlobal
+								? (globalEvents ??= nullObject())
+								: (pluginEvents ??= nullObject())
+
 							for (const s of schemas) {
 								;((target as any).schemas ??= []).push(s)
-								if (nodeScope === 'global') this.#global!.add(s)
+								if (isGlobal) this.#global!.add(s)
 							}
 
 							continue
@@ -2032,10 +2059,6 @@ export class Elysia<
 								: [raw as Function]
 
 							for (const fn of fns) {
-								const origin = fnOrigin.get(fn)
-								if (origin !== undefined && before?.has(origin))
-									continue
-
 								if (
 									derive &&
 									key === 'beforeHandle' &&
@@ -2043,28 +2066,42 @@ export class Elysia<
 								)
 									this['~derive']!.add(fn as any)
 
+								const origin = fnOrigin.get(fn)
+								if (
+									origin !== undefined &&
+									this.#childrenHash?.has(origin) &&
+									!addedByThisCall?.has(origin)
+								)
+									continue
+
+								const target = isGlobal
+									? (globalEvents ??= nullObject())
+									: (pluginEvents ??= nullObject())
+
 								pushField(target, key, fn)
-								if (nodeScope === 'global')
-									this.#global!.add(fn)
+								if (isGlobal) this.#global!.add(fn)
 							}
 							continue
 						}
 
+						const target = isGlobal
+							? (globalEvents ??= nullObject())
+							: (pluginEvents ??= nullObject())
 						;(target as any)[key] = (added as any)[key]
 					}
 				}
 
-				if (isNotEmpty(events.global))
+				if (globalEvents)
 					ext.hookChain = {
-						added: events.global,
+						added: globalEvents,
 						parent: ext.hookChain,
 						scope: 'global',
 						propagated: true
 					}
 
-				if (isNotEmpty(events.plugin))
+				if (pluginEvents)
 					ext.hookChain = {
-						added: events.plugin,
+						added: pluginEvents,
 						parent: ext.hookChain,
 						scope: 'plugin',
 						propagated: true
@@ -2119,9 +2156,6 @@ export class Elysia<
 				this.#pending--
 			})
 
-		// `next` must reference the same promise we assign to `#ready` so the
-		// drain identity check matches when the chain settles
-		// using the pre-.finally promise as the sentinel never equals `#ready`.
 		let next: Promise<void>
 		next = resolved
 			.then(

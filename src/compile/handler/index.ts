@@ -402,9 +402,7 @@ export function compileHandler(
 
 	if (hook) {
 		promoteDeriveResolve(hook)
-		const keys = Object.keys(hook)
-
-		for (const key of keys) {
+		for (const key in hook) {
 			if (!eventProperties.has(key)) continue
 
 			const v = (hook as any)[key]
@@ -432,15 +430,13 @@ export function compileHandler(
 
 	const params = new Set<unknown>()
 	let alias = ''
-
-	let hookNotLinked = true
 	function link(v: unknown, key: string) {
 		if (v === 0) {
-			if (hookNotLinked) {
-				hookNotLinked = false
+			if (!params.has(hook)) {
 				params.add(hook)
 				alias += `${alias ? ',' : ''}ho`
 			}
+
 			return
 		}
 
@@ -947,8 +943,8 @@ export function compileHandler(
 			return createInlineHandlerWithSet(res.map as any, handler as any)
 	}
 
-	return new Function('h', 'a', `const [${alias}]=a\nreturn ` + code)(
-		handler,
-		params
-	)
+	if (alias === '')
+		return new Function('h', `return ${code}`)(handler)
+
+	return new Function('h', alias, `return ${code}`)(handler, ...params)
 }

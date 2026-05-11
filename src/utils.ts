@@ -111,21 +111,20 @@ type Task =
 	// append
 	| { kind: 1; added: Partial<AppHook>; scope?: EventScope }
 
+// reuse array buffer so it doesn't create new array
+const flattenChainStack: Task[] = []
+
 export function flattenChain(
 	start: ChainNode | undefined,
 	keep?: (s: EventScope | undefined) => boolean,
-	// Stop walking when this node is reached (exclusive). Used by
-	// `composeRootHook` to flatten only the chain entries added AFTER
-	// the snapshot in `inheritedChain` - without it, the same node would
-	// be visited via both inheritedChain (full walk) and locals (filtered
-	// walk on root.chain), double-counting hooks like a root-level
-	// `.beforeHandle()` registered before `.use(plugin)`.
 	stopAt?: ChainNode
 ): Partial<AppHook> | undefined {
 	if (!start || start === stopAt) return undefined
 	const result = nullObject() as Partial<AppHook>
 
-	const stack: Task[] = [{ kind: 0, node: start }]
+	const stack = flattenChainStack
+	stack.length = 0
+	stack.push({ kind: 0, node: start })
 
 	while (stack.length) {
 		const task = stack.pop()!
@@ -619,22 +618,13 @@ export function mergeDeep<
 >(
 	target: A,
 	source: B,
-	options?: {
-		skipKeys?: string[]
-		override?: boolean
-		mergeArray?: boolean
-		seen?: WeakSet<object>
-	}
+	skipKeys?: string[],
+	override: boolean = true,
+	mergeArray: boolean = false,
+	seen?: WeakSet<object>
 ): A & B {
-	const skipKeys = options?.skipKeys
-	const override = options?.override ?? true
-	const mergeArray = options?.mergeArray ?? false
-	const seen = options?.seen ?? new WeakSet<object>()
-
 	if (!isObject(target) || !isObject(source)) return target as A & B
-
-	if (seen.has(source)) return target as A & B
-	seen.add(source)
+	if (seen?.has(source)) return target as A & B
 
 	for (const [key, value] of Object.entries(source)) {
 		if (skipKeys?.includes(key) || dangerousKeys.has(key as any)) continue
@@ -656,15 +646,21 @@ export function mergeDeep<
 			continue
 		}
 
-		if (!Object.isFrozen(target[key]))
+		if (!Object.isFrozen(target[key])) {
+			seen ??= new WeakSet<object>()
+			seen.add(source)
 			target[key as keyof typeof target] = mergeDeep(
 				(target as any)[key] as any,
 				value,
-				{ skipKeys, override, mergeArray, seen }
+				skipKeys,
+				override,
+				mergeArray,
+				seen
 			)
+		}
 	}
 
-	seen.delete(source)
+	seen?.delete(source)
 
 	return target as A & B
 }

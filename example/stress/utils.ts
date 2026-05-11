@@ -1,9 +1,9 @@
-function gc() {
+export function gc() {
 	if (typeof Bun !== 'undefined') Bun.gc(true)
 	else if (typeof global.gc === 'function') global.gc()
 }
 
-function memoryUsage() {
+export function memoryUsage() {
 	if (typeof Bun !== 'undefined') {
 		const { memoryUsage } = require('bun:jsc')
 

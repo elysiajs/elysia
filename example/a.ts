@@ -1,10 +1,5 @@
 import { Elysia, t } from '../src'
 
 new Elysia()
-	.derive(() => {
-		console.log('thing')
-	})
-	.ws('/', function* () {
-		yield 'hello'
-	})
+	.get('/', () => 'Hello World')
 	.listen(3000)

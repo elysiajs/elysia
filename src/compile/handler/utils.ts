@@ -198,56 +198,76 @@ function isObjectish(v: any): boolean {
 	return false
 }
 
-function containsArray(v: any, seen = new WeakSet()): boolean {
+function containsArray(v: any, seen?: WeakSet<object>): boolean {
 	if (!v || typeof v !== 'object') return false
-	if (seen.has(v)) return false
-	seen.add(v)
+	if (seen?.has(v)) return false
+
 	if (v.type === 'array' || v['~kind'] === 'Array') return true
 	if (v['~elyTyp'] === ELYSIA_TYPES.ArrayString) return true
+
 	for (const key of ['anyOf', 'allOf', 'oneOf'] as const) {
 		const arr = v[key]
-		if (Array.isArray(arr))
+		if (Array.isArray(arr)) {
+			seen ??= new WeakSet<object>()
+			seen.add(v)
 			for (const x of arr) if (containsArray(x, seen)) return true
+		}
 	}
+
 	return false
+}
+
+interface QueryWalkState {
+	array: Record<string, 1> | undefined
+	object: Record<string, 1> | undefined
+}
+
+function getQueryParseArgsCollect(
+	node: any,
+	seen: WeakSet<object>,
+	state: QueryWalkState
+): void {
+	if (!node || typeof node !== 'object' || seen.has(node)) return
+	seen.add(node)
+
+	const props = node.properties
+	if (props)
+		for (const k in props) {
+			const v = props[k]
+			const kind = v?.['~elyTyp']
+			if (containsArray(v)) {
+				;(state.array ??= {})[k] = 1
+
+				const item = arrayItemSchema(v)
+				if (item && isObjectish(item))
+					(state.object ??= {})[k] = 1
+			}
+			if (kind === ELYSIA_TYPES.ObjectString)
+				(state.object ??= {})[k] = 1
+		}
+
+	for (const key of ['anyOf', 'allOf', 'oneOf'] as const) {
+		const arr = node[key]
+		if (Array.isArray(arr))
+			for (const x of arr) getQueryParseArgsCollect(x, seen, state)
+	}
 }
 
 // see if schema has object/array then tell `parseQueryFromURL`
 export function getQueryParseArgs(querySchema: any): string {
 	if (!querySchema) return ''
 
-	let arrayProps: Record<string, 1> | undefined
-	let objectProps: Record<string, 1> | undefined
-	const seen = new WeakSet()
-
-	function collect(node: any) {
-		if (!node || typeof node !== 'object' || seen.has(node)) return
-		seen.add(node)
-
-		const props = node.properties
-		if (props)
-			for (const k in props) {
-				const v = props[k]
-				const kind = v?.['~elyTyp']
-				if (containsArray(v)) {
-					;(arrayProps ??= {})[k] = 1
-
-					const item = arrayItemSchema(v)
-					if (item && isObjectish(item)) (objectProps ??= {})[k] = 1
-				}
-				if (kind === ELYSIA_TYPES.ObjectString)
-					(objectProps ??= {})[k] = 1
-			}
-
-		for (const key of ['anyOf', 'allOf', 'oneOf'] as const) {
-			const arr = node[key]
-			if (Array.isArray(arr)) for (const x of arr) collect(x)
-		}
+	const state: QueryWalkState = {
+		array: undefined,
+		object: undefined
 	}
 
-	collect(querySchema)
+	getQueryParseArgsCollect(querySchema, new WeakSet(), state)
 
+	const arrayProps = state.array
+	const objectProps = state.object
 	if (!arrayProps && !objectProps) return ''
+
 	const arrLit = arrayProps ? `,${JSON.stringify(arrayProps)}` : ''
 	const objLit = objectProps
 		? `,${arrayProps ? '' : 'undefined,'}${JSON.stringify(objectProps)}`

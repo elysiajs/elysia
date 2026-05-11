@@ -19,14 +19,33 @@ import type {
 let baseCache = new WeakMap<AnyElysia, new () => any>()
 let contextCache = new WeakMap<AnyElysia, new (request: Request) => any>()
 
+let sharedEmptyDecorator: any = null
+let sharedEmptyContext: any = null
+
+function buildEmptyDecorator() {
+	class Decorator {}
+	Object.assign(Decorator.prototype, { status, redirect })
+	return Decorator
+}
+
 export function createBaseContext(app: AnyElysia) {
 	const cached = baseCache.get(app)
 	if (cached) return cached
 
+	const ext = app['~ext']
+	const decorator = ext?.decorator
+	const store = ext?.store
+
+	if (!decorator && !store) {
+		sharedEmptyDecorator ??= buildEmptyDecorator()
+		baseCache.set(app, sharedEmptyDecorator)
+		return sharedEmptyDecorator
+	}
+
 	class Decorator {}
 	Object.assign(Decorator.prototype, {
-		...app['~ext']?.decorator,
-		store: app['~ext']?.store,
+		...decorator,
+		store,
 		status,
 		redirect
 	})
@@ -38,6 +57,25 @@ export function createBaseContext(app: AnyElysia) {
 export function clearContextCache() {
 	baseCache = new WeakMap()
 	contextCache = new WeakMap()
+	sharedEmptyDecorator = null
+	sharedEmptyContext = null
+}
+
+function buildEmptyContext(Base: any) {
+	return class Context extends Base {
+		params?: Record<string, string>
+		headers?: Record<string, string>
+		qi!: number
+		set: { headers: Record<string, string> }
+		rid?: string
+		route?: string
+		trace?: any[]
+
+		constructor(public request: Request) {
+			super()
+			this.set = { headers: Object.create(null) }
+		}
+	}
 }
 
 export function createContext(
@@ -46,16 +84,24 @@ export function createContext(
 	const cached = contextCache.get(app)
 	if (cached) return cached
 
-	const headers = app['~ext']?.headers
-		? Object.assign(nullObject(), app['~ext'].headers)
+	const ext = app['~ext']
+	const headers = ext?.headers
+		? Object.assign(nullObject(), ext.headers)
 		: null
+
+	if (headers === null && !ext?.decorator && !ext?.store) {
+		sharedEmptyDecorator ??= buildEmptyDecorator()
+		sharedEmptyContext ??= buildEmptyContext(sharedEmptyDecorator)
+		contextCache.set(app, sharedEmptyContext)
+
+		return sharedEmptyContext
+	}
 
 	const context = class Context extends createBaseContext(app) {
 		params?: Record<string, string>
 		headers?: Record<string, string>
 		qi!: number
 		set: { headers: Record<string, string> }
-		// Trace fields — populated only when `.trace(...)` is registered.
 		rid?: string
 		route?: string
 		trace?: any[]

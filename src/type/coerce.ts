@@ -391,124 +391,135 @@ export function applyCoercions(
 	return schema
 }
 
+const noEnumerable = { enumerable: false }
+function cloneNode(node: BaseSchema, out: any): any {
+	if (out !== node) return out
+
+	return Object.defineProperty(
+		{ ...node, '~kind': (node as any)['~kind'] },
+		'~kind',
+		noEnumerable
+	)
+}
+
+function nonAdditionalPropertiesWalk(
+	node: BaseSchema,
+	seen: WeakSet<object>
+): BaseSchema {
+	if (!node || typeof node !== 'object' || seen.has(node)) return node
+	seen.add(node)
+
+	let out: any = node
+
+	if (node.properties) {
+		let newProps: Record<string, BaseSchema> | undefined
+		for (const k in node.properties) {
+			const v = node.properties[k] as BaseSchema
+			const r = nonAdditionalPropertiesWalk(v, seen)
+			if (r !== v) {
+				newProps ??= { ...node.properties }
+				newProps[k] = r
+			}
+		}
+		if (newProps) {
+			out = cloneNode(node, out)
+			out.properties = newProps
+		}
+	}
+
+	if (node.items) {
+		if (Array.isArray(node.items)) {
+			let newItems: BaseSchema[] | undefined
+			for (let i = 0; i < node.items.length; i++) {
+				const r = nonAdditionalPropertiesWalk(
+					node.items[i] as BaseSchema,
+					seen
+				)
+				if (r !== node.items[i]) {
+					newItems ??= [...(node.items as BaseSchema[])]
+					newItems[i] = r
+				}
+			}
+			if (newItems) {
+				out = cloneNode(node, out)
+				out.items = newItems
+			}
+		} else {
+			const r = nonAdditionalPropertiesWalk(
+				node.items as BaseSchema,
+				seen
+			)
+			if (r !== node.items) {
+				out = cloneNode(node, out)
+				out.items = r
+			}
+		}
+	}
+
+	for (const key of ['anyOf', 'allOf', 'oneOf'] as const) {
+		const arr = (node as any)[key]
+		if (!Array.isArray(arr)) continue
+		let newArr: BaseSchema[] | undefined
+		for (let i = 0; i < arr.length; i++) {
+			const r = nonAdditionalPropertiesWalk(arr[i], seen)
+			if (r !== arr[i]) {
+				newArr ??= [...arr]
+				newArr[i] = r
+			}
+		}
+		if (newArr) {
+			out = cloneNode(node, out)
+			out[key] = newArr
+		}
+	}
+
+	if (
+		node.additionalProperties &&
+		typeof node.additionalProperties === 'object'
+	) {
+		const r = nonAdditionalPropertiesWalk(
+			node.additionalProperties as BaseSchema,
+			seen
+		)
+		if (r !== node.additionalProperties) {
+			out = cloneNode(node, out)
+			out.additionalProperties = r
+		}
+	}
+
+	if (node.patternProperties) {
+		let newPP: Record<string, BaseSchema> | undefined
+		for (const k in node.patternProperties) {
+			const v = node.patternProperties[k] as BaseSchema
+			const r = nonAdditionalPropertiesWalk(v, seen)
+			if (r !== v) {
+				newPP ??= { ...node.patternProperties }
+				newPP[k] = r
+			}
+		}
+		if (newPP) {
+			out = cloneNode(node, out)
+			out.patternProperties = newPP
+		}
+	}
+
+	// Apply the strict marker last so the recursion above doesn't
+	// trip over `additionalProperties: false` (boolean, not schema).
+	if (
+		(node.type === 'object' || (node as any)['~kind'] === 'Object') &&
+		!('additionalProperties' in node)
+	) {
+		out = cloneNode(node, out)
+		out.additionalProperties = false
+	}
+
+	return out
+}
+
 export function nonAdditionalProperties(
 	schema: BaseSchema | TSchema
 ): BaseSchema {
-	const seen = new WeakSet()
-
-	function walk(node: BaseSchema): BaseSchema {
-		if (!node || typeof node !== 'object' || seen.has(node)) return node
-		seen.add(node)
-
-		let out = node as any
-		let cloned = false
-		const clone = () => {
-			if (cloned) return
-			out = Object.defineProperty(
-				{ ...node, '~kind': (node as any)['~kind'] },
-				'~kind',
-				{ enumerable: false }
-			)
-			cloned = true
-		}
-
-		if (node.properties) {
-			let newProps: Record<string, BaseSchema> | undefined
-			for (const k in node.properties) {
-				const v = node.properties[k] as BaseSchema
-				const r = walk(v)
-				if (r !== v) {
-					newProps ??= { ...node.properties }
-					newProps[k] = r
-				}
-			}
-			if (newProps) {
-				clone()
-				out.properties = newProps
-			}
-		}
-
-		if (node.items) {
-			if (Array.isArray(node.items)) {
-				let newItems: BaseSchema[] | undefined
-				for (let i = 0; i < node.items.length; i++) {
-					const r = walk(node.items[i] as BaseSchema)
-					if (r !== node.items[i]) {
-						newItems ??= [...(node.items as BaseSchema[])]
-						newItems[i] = r
-					}
-				}
-				if (newItems) {
-					clone()
-					out.items = newItems
-				}
-			} else {
-				const r = walk(node.items as BaseSchema)
-				if (r !== node.items) {
-					clone()
-					out.items = r
-				}
-			}
-		}
-
-		for (const key of ['anyOf', 'allOf', 'oneOf'] as const) {
-			const arr = (node as any)[key]
-			if (!Array.isArray(arr)) continue
-			let newArr: BaseSchema[] | undefined
-			for (let i = 0; i < arr.length; i++) {
-				const r = walk(arr[i])
-				if (r !== arr[i]) {
-					newArr ??= [...arr]
-					newArr[i] = r
-				}
-			}
-			if (newArr) {
-				clone()
-				out[key] = newArr
-			}
-		}
-
-		if (
-			node.additionalProperties &&
-			typeof node.additionalProperties === 'object'
-		) {
-			const r = walk(node.additionalProperties as BaseSchema)
-			if (r !== node.additionalProperties) {
-				clone()
-				out.additionalProperties = r
-			}
-		}
-
-		if (node.patternProperties) {
-			let newPP: Record<string, BaseSchema> | undefined
-			for (const k in node.patternProperties) {
-				const v = node.patternProperties[k] as BaseSchema
-				const r = walk(v)
-				if (r !== v) {
-					newPP ??= { ...node.patternProperties }
-					newPP[k] = r
-				}
-			}
-			if (newPP) {
-				clone()
-				out.patternProperties = newPP
-			}
-		}
-
-		// Apply the strict marker last so the recursion above doesn't
-		// trip over `additionalProperties: false` (boolean, not schema).
-		if (
-			(node.type === 'object' || (node as any)['~kind'] === 'Object') &&
-			!('additionalProperties' in node)
-		) {
-			clone()
-			out.additionalProperties = false
-		}
-
-		return out
-	}
-
-	return walk(schema as BaseSchema)
+	return nonAdditionalPropertiesWalk(schema as BaseSchema, new WeakSet())
 }
 
 export function deferCoercions() {
