@@ -7,9 +7,9 @@ import { describe, it, expect } from 'bun:test'
 // node scope is set at registration and stays put — propagation creates
 // new per-scope nodes on each parent without touching the plugin's own).
 // The legacy `app.event.transform[0].scope` API is gone; the new
-// equivalent is the chain node's `scope` field on `~ext.hookChain`.
+// equivalent is the chain node's `scope` field on `~hookChain`.
 const tipScope = (app: any): string | undefined => {
-	let cur = app['~ext']?.hookChain
+	let cur = app['~hookChain']
 	while (cur && 'combine' in cur) cur = cur.over
 	return cur?.scope
 }

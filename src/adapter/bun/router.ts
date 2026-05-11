@@ -42,7 +42,7 @@ export function createFetchHandler(
 	handler: CompiledHandler,
 	handleError: (context: Context, error: Error) => unknown
 ) {
-	const hook = flattenChain(app['~ext']?.hookChain)
+	const hook = flattenChain(app['~hookChain'])
 	if (hook?.request) {
 		const onRequests = hook?.request
 		const asyncIndexes = getAsyncIndexes(onRequests)
@@ -115,7 +115,7 @@ export function createRouteMap(app: AnyElysia) {
 		]
 
 	const handleError = createErrorHandler(
-		flattenChain(app['~ext']?.hookChain)?.error,
+		flattenChain(app['~hookChain'])?.error,
 		WebStandardAdapter.response.map,
 		new Response('Not Found', { status: 404 })
 	)

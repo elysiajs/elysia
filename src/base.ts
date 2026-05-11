@@ -109,7 +109,7 @@ export class Elysia<
 > {
 	'~config'?: ElysiaConfig<BasePath, Scope>
 
-	'~Prefix' = '' as BasePath
+	'~Prefix': BasePath
 	'~Scope': Scope
 	'~Singleton': Singleton
 	'~Definitions': Definitions
@@ -133,13 +133,13 @@ export class Elysia<
 		store?: Singleton['store']
 		headers?: Record<string, string>
 		macro?: Macro
-		// Linked list of hook deltas, add when `#on`/`#pushHook` event
-		hookChain?: ChainNode
 		models?: Record<keyof any, AnySchema>
 		// Named body parsers registered via `parser(name, fn)` and looked up
 		// by `onParse(name)` / route-level `parse: ['name', ...]`.
 		parser?: Record<string, BodyHandler<any, any>>
 	}
+
+	'~hookChain'?: ChainNode
 
 	// Internal storage. External code reads via `history` (below) which
 	// lazily resolves macros; methods inside this class touch `#history`
@@ -188,6 +188,8 @@ export class Elysia<
 
 	constructor(config?: ElysiaConfig<BasePath, Scope>) {
 		this['~config'] = config
+
+		this['~Prefix'] = config?.prefix as BasePath
 
 		if (config?.name)
 			this.#hash = fnv1a(
@@ -930,11 +932,9 @@ export class Elysia<
 		// @ts-expect-error Remove in 2.1
 		if (scope === 'scoped') scope = 'plugin'
 
-		const ext = this.#ext
-
 		const added: Partial<AppHook> = nullObject()
 		;(added as any)[type] = fn
-		ext.hookChain = { added, parent: ext.hookChain, scope }
+		this['~hookChain'] = { added, parent: this['~hookChain'], scope }
 
 		if (scope === 'plugin') {
 			this.#plugin ??= new WeakSet()
@@ -1351,7 +1351,7 @@ export class Elysia<
 				node = node.parent
 			}
 		}
-		visit(this.#ext.hookChain)
+		visit(this['~hookChain'])
 		return this
 	}
 
@@ -1649,7 +1649,7 @@ export class Elysia<
 		callback(child)
 
 		// get request/parse
-		const childFlat = flattenChain(child['~ext']?.hookChain)
+		const childFlat = flattenChain(child['~hookChain'])
 		const lifted: Partial<AppHook> = {}
 		if (childFlat?.request) (lifted as any).request = childFlat.request
 		if (childFlat?.parse) (lifted as any).parse = childFlat.parse
@@ -1706,8 +1706,7 @@ export class Elysia<
 			hook = promoted
 		}
 
-		const ext = this.#ext
-		ext.hookChain = { added: hook, parent: ext.hookChain, scope }
+		this['~hookChain'] = { added: hook, parent: this['~hookChain'], scope }
 
 		return this
 	}
@@ -1917,7 +1916,7 @@ export class Elysia<
 			for (let i = 0; i < length; i++) {
 				const route = app.#history[i]
 
-				const preChain = this['~ext']?.hookChain
+				const preChain = this['~hookChain']
 
 				const childChain = route[6]
 				const inheritedChain: ChainNode | undefined =
@@ -1943,16 +1942,11 @@ export class Elysia<
 			}
 		}
 
+		const hookChain = app['~hookChain']
+
 		if (app['~ext']) {
-			const {
-				decorator,
-				store,
-				headers,
-				models,
-				parser,
-				macro,
-				hookChain
-			} = app['~ext']
+			const { decorator, store, headers, models, parser, macro } =
+				app['~ext']
 			const ext: NonNullable<(typeof this)['~ext']> = (this['~ext'] ??=
 				nullObject())
 
@@ -1985,128 +1979,120 @@ export class Elysia<
 				if (ext.macro) Object.assign(ext.macro, macro)
 				else ext.macro = Object.assign(nullObject(), macro)
 			}
+		}
 
-			if (app.#plugin || app.#global || hookChain) {
-				let pluginEvents: Partial<AppHook> | undefined
-				let globalEvents: Partial<AppHook> | undefined
+		if (app.#plugin || app.#global || hookChain) {
+			let pluginEvents: Partial<AppHook> | undefined
+			let globalEvents: Partial<AppHook> | undefined
 
-				const derive = app['~derive']
+			const derive = app['~derive']
 
-				if (app.#global) this.#global ??= new WeakSet()
-				if (derive) this['~derive'] ??= new WeakSet()
+			if (app.#global) this.#global ??= new WeakSet()
+			if (derive) this['~derive'] ??= new WeakSet()
 
-				// Walk the absorbed app's chain TAIL-FIRST so propagated fns
-				// appear in registration order. Chain head is the newest
-				// addition; collect nodes head→tail then iterate reversed.
-				// `~ext.hookChain` never holds combine nodes, but we tolerate
-				// them by skipping past `over` if encountered.
-				const nodes = useNodesBuffer
-				nodes.length = 0
-				let current: ChainNode | undefined = hookChain
+			const nodes = useNodesBuffer
+			nodes.length = 0
+			let current: ChainNode | undefined = hookChain
 
-				while (current) {
-					if ('combine' in current) {
-						current = current.over
-						continue
-					}
-
-					nodes.push(current)
-					current = current.parent
+			while (current) {
+				if ('combine' in current) {
+					current = current.over
+					continue
 				}
 
-				for (let i = nodes.length - 1; i >= 0; i--) {
-					const node = nodes[i] as {
-						added: Partial<AppHook>
-						scope?: EventScope
-						propagated?: boolean
-					}
-					const nodeScope = node.scope
-					if (nodeScope !== 'plugin' && nodeScope !== 'global')
+				nodes.push(current)
+				current = current.parent
+			}
+
+			for (let i = nodes.length - 1; i >= 0; i--) {
+				const node = nodes[i] as {
+					added: Partial<AppHook>
+					scope?: EventScope
+					propagated?: boolean
+				}
+				const nodeScope = node.scope
+				if (nodeScope !== 'plugin' && nodeScope !== 'global') continue
+
+				if (nodeScope === 'plugin' && node.propagated) continue
+
+				const isGlobal = nodeScope === 'global'
+				const added = node.added
+
+				for (const key in added) {
+					if (key === 'schema') {
+						const schemas = (added as any).schemas as
+							| any[]
+							| undefined
+
+						if (!schemas) continue
+
+						const target = isGlobal
+							? (globalEvents ??= nullObject())
+							: (pluginEvents ??= nullObject())
+
+						for (const s of schemas) {
+							;((target as any).schemas ??= []).push(s)
+							if (isGlobal) this.#global!.add(s)
+						}
+
 						continue
+					}
 
-					if (nodeScope === 'plugin' && node.propagated) continue
+					if (eventProperties.has(key)) {
+						const raw = (added as any)[key] as Function | Function[]
 
-					const isGlobal = nodeScope === 'global'
-					const added = node.added
+						const fns: Function[] = Array.isArray(raw)
+							? raw
+							: [raw as Function]
 
-					for (const key in added) {
-						if (key === 'schema') {
-							const schemas = (added as any).schemas as
-								| any[]
-								| undefined
+						for (const fn of fns) {
+							if (
+								derive &&
+								key === 'beforeHandle' &&
+								app['~derive']?.has(fn as any)
+							)
+								this['~derive']!.add(fn as any)
 
-							if (!schemas) continue
+							const origin = fnOrigin.get(fn)
+							if (
+								origin !== undefined &&
+								this.#childrenHash?.has(origin) &&
+								!addedByThisCall?.has(origin)
+							)
+								continue
 
 							const target = isGlobal
 								? (globalEvents ??= nullObject())
 								: (pluginEvents ??= nullObject())
 
-							for (const s of schemas) {
-								;((target as any).schemas ??= []).push(s)
-								if (isGlobal) this.#global!.add(s)
-							}
-
-							continue
+							pushField(target, key, fn)
+							if (isGlobal) this.#global!.add(fn)
 						}
-
-						if (eventProperties.has(key)) {
-							const raw = (added as any)[key] as
-								| Function
-								| Function[]
-
-							const fns: Function[] = Array.isArray(raw)
-								? raw
-								: [raw as Function]
-
-							for (const fn of fns) {
-								if (
-									derive &&
-									key === 'beforeHandle' &&
-									app['~derive']?.has(fn as any)
-								)
-									this['~derive']!.add(fn as any)
-
-								const origin = fnOrigin.get(fn)
-								if (
-									origin !== undefined &&
-									this.#childrenHash?.has(origin) &&
-									!addedByThisCall?.has(origin)
-								)
-									continue
-
-								const target = isGlobal
-									? (globalEvents ??= nullObject())
-									: (pluginEvents ??= nullObject())
-
-								pushField(target, key, fn)
-								if (isGlobal) this.#global!.add(fn)
-							}
-							continue
-						}
-
-						const target = isGlobal
-							? (globalEvents ??= nullObject())
-							: (pluginEvents ??= nullObject())
-						;(target as any)[key] = (added as any)[key]
+						continue
 					}
+
+					const target = isGlobal
+						? (globalEvents ??= nullObject())
+						: (pluginEvents ??= nullObject())
+					;(target as any)[key] = (added as any)[key]
+				}
+			}
+
+			if (globalEvents)
+				this['~hookChain'] = {
+					added: globalEvents,
+					parent: this['~hookChain'],
+					scope: 'global',
+					propagated: true
 				}
 
-				if (globalEvents)
-					ext.hookChain = {
-						added: globalEvents,
-						parent: ext.hookChain,
-						scope: 'global',
-						propagated: true
-					}
-
-				if (pluginEvents)
-					ext.hookChain = {
-						added: pluginEvents,
-						parent: ext.hookChain,
-						scope: 'plugin',
-						propagated: true
-					}
-			}
+			if (pluginEvents)
+				this['~hookChain'] = {
+					added: pluginEvents,
+					parent: this['~hookChain'],
+					scope: 'plugin',
+					propagated: true
+				}
 		}
 	}
 
@@ -2189,10 +2175,9 @@ export class Elysia<
 		fn: unknown,
 		hook?: Partial<AnyLocalHook>
 	) {
-		if (this['~config']?.prefix)
-			path = joinPath(this['~config']?.prefix, path)
+		if (this['~Prefix']) path = joinPath(this['~Prefix'], path)
 
-		const appHook = this['~ext']?.hookChain
+		const appHook = this['~hookChain']
 
 		;(this.#history ??= []).push(
 			(appHook
@@ -3281,7 +3266,7 @@ export class Elysia<
 			}
 
 			let staticResponse: Response | Promise<Response> | undefined
-			if (buildStatic) {
+			if (typeof route[2] !== 'function' && buildStatic) {
 				staticResponse = buildNativeStaticResponse(route, this)
 				if (staticResponse) {
 					const target = (this['~staticResponse'] ??= nullObject())

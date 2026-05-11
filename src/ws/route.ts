@@ -122,7 +122,7 @@ export function buildWSRoute(
 		| { [status: number]: WSValidatorLike }
 		| undefined
 
-	const flatAppHook = flattenChain(app['~ext']?.hookChain) ?? {}
+	const flatAppHook = flattenChain(app['~hookChain']) ?? {}
 
 	const parseHooks = toArray(hook.parse as any)
 	const transforms = concatHooks(

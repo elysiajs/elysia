@@ -9,7 +9,7 @@ import { buildGlobalWSHandler } from '../../ws/route'
 import type { AnyElysia } from '../../base'
 
 function collectStaticRoutes(app: AnyElysia) {
-	const hook = flattenChain(app['~ext']?.hookChain)
+	const hook = flattenChain(app['~hookChain'])
 	if (
 		hook &&
 		(hook?.request?.length ||

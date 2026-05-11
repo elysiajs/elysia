@@ -123,7 +123,7 @@ export function createFetchHandler(
 
 	// Materialize the cumulative hook view once at fetch-handler creation -
 	// hot path closes over `hook`, so this runs only on first `app.fetch`.
-	const hook = flattenChain(app['~ext']?.hookChain)
+	const hook = flattenChain(app['~hookChain'])
 	const hasError = !!hook?.error
 
 	const mapResponse = (app['~config']?.adapter ?? defaultAdapter).response.map

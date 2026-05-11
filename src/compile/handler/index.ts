@@ -310,7 +310,7 @@ function composeRootHook(
 ): Partial<AppHook> | undefined {
 	const inherited = flattenChain(inheritedChain)
 	const locals = flattenChain(
-		root['~ext']?.hookChain,
+		root['~hookChain'],
 		isLocalScope,
 		inheritedChain
 	)
