@@ -1,5 +1,4 @@
 import Memoirist from 'memoirist'
-import { decodeComponent } from 'deuri'
 
 import { createFetchHandler } from './handler'
 import { compileHandler, buildNativeStaticResponse } from './compile'
@@ -3242,7 +3241,7 @@ export class Elysia<
 				// in `fetch.ts` is what routes here — `~map.WS[path]` will
 				// never be hit by a regular HTTP request.
 				if (isDynamicRegex.test(path)) {
-					;(this['~router'] ??= new Memoirist(decodeComponent)).add(
+					;(this['~router'] ??= new Memoirist()).add(
 						'WS',
 						path,
 						wsCompiled,
@@ -3286,7 +3285,7 @@ export class Elysia<
 					: undefined
 
 			if (isDynamicRegex.test(path)) {
-				;(this['~router'] ??= new Memoirist(decodeComponent)).add(
+				;(this['~router'] ??= new Memoirist()).add(
 					method,
 					path,
 					this.handler(i, precompile, undefined, sharedStatic),

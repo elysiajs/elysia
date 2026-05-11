@@ -1,3 +1,5 @@
+import { decodeComponent } from 'deuri'
+
 import { defaultAdapter } from '../adapter/constants'
 
 import type { AnyElysia } from '../base'
@@ -10,7 +12,6 @@ import { NotFound } from '../error'
 import { createTracer } from '../trace'
 
 import type { CompiledHandler, MaybePromise } from '../types'
-import { describeCollapsibleDate } from '@ark/util'
 
 const notFound = new Response('Not Found', { status: 404 })
 
@@ -51,8 +52,14 @@ function findRoute(
 				const r = handler(context)
 				return r instanceof Promise ? (r.catch(onError) as any) : r
 			} else {
-				const handler = getDecodedPathHandler(path, 'WS', map)
-				path = decodedPath[path]
+				// 1 time cost for non-encoded paths
+				const [decoded, handler] = getDecodedPathHandler(
+					path,
+					'WS',
+					map,
+					loosePath
+				)
+				path = decoded
 				if (handler) return handler(context)
 			}
 
@@ -77,8 +84,13 @@ function findRoute(
 			return r instanceof Promise ? r.catch(onError) : r
 		} else {
 			// 1 time cost for non-encoded paths
-			const handler = getDecodedPathHandler(path, 'WS', map)
-			path = decodedPath[path]
+			const [decoded, handler] = getDecodedPathHandler(
+				path,
+				request.method,
+				map,
+				loosePath
+			)
+			path = decoded
 			if (handler) return handler(context)
 		}
 
@@ -103,41 +115,42 @@ function findRoute(
 	return notFound.clone() as Response
 }
 
-const loosePath = nullObject()
-const decodedPath = nullObject()
-
 function getDecodedPathHandler(
 	path: string,
 	method: string,
-	map: NonNullable<AnyElysia['~map']>
+	map: NonNullable<AnyElysia['~map']>,
+	loosePath: Record<string, string>
 ) {
-	const cached = decodedPath[path]
-	const decoded = cached ?? (decodedPath[path] = decodeURI(path))
-
-	if (cached) return
+	const decoded = decodeComponent(path) ?? path
+	if (decoded === path) return [decoded] as const
 
 	let handler: CompiledHandler | undefined
+	let _map = map[method]
 
-	if (decoded !== path) {
-		let _map = map[method]
+	if (_map)
+		handler =
+			_map[decoded] ??
+			_map[(loosePath[decoded] ??= getLoosePath(decoded))]
+
+	if (!handler) {
+		_map = map['*']
 
 		if (_map)
 			handler =
 				_map[decoded] ??
 				_map[(loosePath[decoded] ??= getLoosePath(decoded))]
-
-		if (!handler) {
-			_map = map['*']
-			handler = _map[decoded] ?? _map[loosePath[decoded]]
-		}
-
-		if (handler) {
-			_map[path] = handler
-			delete map[decoded]
-
-			return handler
-		}
 	}
+
+	if (handler) {
+		_map[path] = handler
+		delete map[decoded]
+
+		return [decoded, handler] as const
+	}
+
+	console.log('D')
+
+	return [decoded] as const
 }
 
 export function createFetchHandler(
@@ -146,8 +159,9 @@ export function createFetchHandler(
 	const Context = createContext(app)
 	const map = app['~map']! ?? nullObject()
 	const router = app['~router']!
-
 	const hasWS = !!app['~hasWS']
+
+	const loosePath = nullObject()
 
 	const hook = flattenChain(app['~hookChain'])
 	const hasError = !!hook?.error
@@ -421,8 +435,13 @@ export function createFetchHandler(
 							: (r as any)
 					} else {
 						// 1 time cost for non-encoded paths
-						const handler = getDecodedPathHandler(path, 'WS', map)
-						path = decodedPath[path]
+						const [decoded, handler] = getDecodedPathHandler(
+							path,
+							'WS',
+							map,
+							loosePath
+						)
+						path = decoded
 						if (handler) return handler(context)
 					}
 
@@ -454,8 +473,14 @@ export function createFetchHandler(
 				return r instanceof Promise ? r.catch(onError) : r
 			} else {
 				// 1 time cost for non-encoded paths
-				const handler = getDecodedPathHandler(path, request.method, map)
-				path = decodedPath[path]
+				const [decoded, handler] = getDecodedPathHandler(
+					path,
+					request.method,
+					map,
+					loosePath
+				)
+				path = decoded
+
 				if (handler) return handler(context)
 			}
 
