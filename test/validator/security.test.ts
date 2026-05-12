@@ -61,4 +61,50 @@ describe('Validator Security', () => {
 
 		expect(response).toBe('safe')
 	})
+
+	it('handle arbitrary code execution from body string default', async () => {
+		const app = new Elysia().post(
+			'/',
+			// @ts-ignore
+			(c) => c.q ?? 'safe',
+			{
+				body: t.String({
+					default: `';console.log(c.q='pwn');'`
+				})
+			}
+		)
+
+		const response = await app
+			.handle(new Request('http://localhost/', { method: 'POST' }))
+			.then((x) => x.text())
+
+		expect(response).toBe('safe')
+	})
+
+	it('handle arbitrary code execution from body object default value', async () => {
+		const app = new Elysia().post(
+			'/',
+			// @ts-ignore
+			(c) => c.q ?? 'safe',
+			{
+				body: t.Object({
+					field: t.String({
+						default: `';console.log(c.q='pwn');'`
+					})
+				})
+			}
+		)
+
+		const response = await app
+			.handle(
+				new Request('http://localhost/', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({})
+				})
+			)
+			.then((x) => x.text())
+
+		expect(response).toBe('safe')
+	})
 })

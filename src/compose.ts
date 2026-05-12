@@ -1407,14 +1407,13 @@ export const composeHandler = ({
 					if (!isNotEmpty(value)) value = undefined
 				}
 
-				const parsed =
-					typeof value === 'object'
-						? JSON.stringify(value)
-						: typeof value === 'string'
-							? `'${value}'`
-							: value
+				const parsed = stringifyDefault(value)
 
-				if (value !== undefined && value !== null) {
+				if (
+					value !== undefined &&
+					value !== null &&
+					parsed !== undefined
+				) {
 					if (Array.isArray(value))
 						fnLiteral += `if(!c.body)c.body=${parsed}\n`
 					else if (typeof value === 'object')
