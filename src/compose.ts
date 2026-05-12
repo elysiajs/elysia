@@ -1332,14 +1332,18 @@ export const composeHandler = ({
 					) as Object
 				)) {
 					const parsed =
-						typeof value === 'object'
-							? JSON.stringify(value)
-							: typeof value === 'string'
-								? `'${value}'`
-								: value
+						value instanceof Date
+							? `new Date(${value.getTime()})`
+							: typeof value === 'object'
+								? JSON.stringify(value)
+								: typeof value === 'string'
+									? JSON.stringify(value)
+									: value
 
-					if (parsed !== undefined)
-						fnLiteral += `if(c.query['${key}']===undefined)c.query['${key}']=${parsed}\n`
+					if (parsed !== undefined) {
+						const accessor = `c.query[${JSON.stringify(key)}]`
+						fnLiteral += `if(${accessor}===undefined)${accessor}=${parsed}\n`
+					}
 				}
 
 			fnLiteral += composeCleaner({
