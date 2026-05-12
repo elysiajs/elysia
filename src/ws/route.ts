@@ -1,0 +1,500 @@
+import { RouteValidator } from '../validator/route'
+import { flattenChain, nullObject } from '../utils'
+
+import { ElysiaWS, type WSConnectionData } from './context'
+import { createMessageParser } from './parser'
+import { ValidationError } from '../error'
+
+import { isBun } from '../universal/constants'
+
+import type { AnyElysia } from '../base'
+import type { Context } from '../context'
+import type {
+	AnyWSLocalHook,
+	WSValidatorLike,
+	ServerWebSocket,
+	WebSocketHandler
+} from './types'
+import type { InternalRoute } from '../types'
+
+type AnyFn = (...args: any[]) => any
+type Server = {
+	upgrade(request: Request, options?: { headers?: any; data?: any }): boolean
+}
+
+const toArray = <T>(v: T | T[] | undefined): T[] =>
+	v == null ? [] : Array.isArray(v) ? v : [v]
+
+const EMPTY_HOOKS: readonly AnyFn[] = Object.freeze([]) as any
+
+function concatHooks(
+	...sources: Array<AnyFn | AnyFn[] | undefined | null>
+): readonly AnyFn[] {
+	let result: AnyFn[] | undefined
+
+	for (let i = 0; i < sources.length; i++) {
+		const s = sources[i]
+		if (s == null) continue
+		const arr = Array.isArray(s) ? s : [s]
+		if (arr.length === 0) continue
+		result = result ? result.concat(arr) : arr
+	}
+
+	return result ?? EMPTY_HOOKS
+}
+
+async function applyMapResponse(
+	elysia: ElysiaWS<any>,
+	value: unknown,
+	mapResponses: readonly AnyFn[]
+): Promise<unknown> {
+	for (let i = 0; i < mapResponses.length; i++) {
+		;(elysia as any).responseValue = value
+		;(elysia as any).response = value
+
+		const r = mapResponses[i](elysia)
+		const result = r instanceof Promise ? await r : r
+		if (result !== undefined) value = result
+	}
+
+	return value
+}
+
+async function handleWSResponse(
+	elysia: ElysiaWS<any>,
+	value: unknown,
+	mapResponses: readonly AnyFn[]
+): Promise<void> {
+	if (value === undefined) return
+
+	if (
+		value !== null &&
+		typeof (value as any).next === 'function' &&
+		(typeof (value as any)[Symbol.iterator] === 'function' ||
+			typeof (value as any)[Symbol.asyncIterator] === 'function')
+	) {
+		const iter = value as Iterator<unknown> | AsyncIterator<unknown>
+		while (true) {
+			const step = iter.next()
+			const { value: yielded, done } =
+				step instanceof Promise ? await step : step
+
+			if (yielded !== undefined) {
+				const mapped = mapResponses.length
+					? await applyMapResponse(elysia, yielded, mapResponses)
+					: yielded
+				;(elysia as any).send(mapped)
+			}
+
+			if (done) return
+		}
+	}
+
+	const mapped = mapResponses.length
+		? await applyMapResponse(elysia, value, mapResponses)
+		: value
+	;(elysia as any).send(mapped)
+}
+
+function dispatchHandler(fn: AnyFn, elysia: ElysiaWS<any>, body?: unknown) {
+	if (fn.length >= 2) return fn(elysia, body)
+	return fn(elysia)
+}
+
+export function buildWSRoute(
+	route: InternalRoute,
+	app: AnyElysia
+): {
+	fetch: (
+		context: Context
+	) => Promise<Response | undefined> | Response | undefined
+	bunOptions: Partial<WebSocketHandler<any>>
+} {
+	const hook: AnyWSLocalHook = ((route[4] as AnyWSLocalHook | undefined) ??
+		{}) as AnyWSLocalHook
+
+	const validators = new RouteValidator(hook as any, {
+		models: app['~ext']?.models
+	})
+
+	// Status-keyed bag — `ElysiaWS.send` selects an entry per payload.
+	const responseValidator = validators.response as
+		| { [status: number]: WSValidatorLike }
+		| undefined
+
+	const flatAppHook = flattenChain(app['~hookChain']) ?? {}
+
+	const parseHooks = toArray(hook.parse as any)
+	const transforms = concatHooks(
+		flatAppHook.transform as any,
+		hook.transform as any
+	)
+
+	const allBeforeHandles = concatHooks(
+		flatAppHook.beforeHandle as any,
+		hook.beforeHandle as any
+	)
+
+	const deriveSet: WeakSet<any> | undefined = (app as any)['~derive']
+	const messageBeforeHandles: readonly AnyFn[] = deriveSet
+		? allBeforeHandles.filter((fn) => !deriveSet.has(fn))
+		: allBeforeHandles
+
+	const afterHandles = concatHooks(
+		flatAppHook.afterHandle as any,
+		hook.afterHandle as any
+	)
+
+	const mapResponses = concatHooks(
+		flatAppHook.mapResponse as any,
+		hook.mapResponse as any
+	)
+
+	const afterResponses = concatHooks(
+		flatAppHook.afterResponse as any,
+		hook.afterResponse as any
+	)
+
+	const errorHandlers = concatHooks(
+		hook.error as any,
+		flatAppHook.error as any
+	)
+
+	const parseMessage = createMessageParser(parseHooks as any)
+
+	async function handleUpgradeError(
+		context: Context,
+		error: any
+	): Promise<Response> {
+		;(context as any).error = error
+		;(context as any).code = error?.code ?? 'UNKNOWN'
+		if (error?.status) (context.set as any).status = error.status
+
+		for (let i = 0; i < errorHandlers.length; i++) {
+			let r: unknown = errorHandlers[i](context as any)
+			if (r instanceof Promise) r = await r
+
+			if (r === undefined) continue
+			if (r instanceof Response) return r
+
+			const status = (context.set as any)?.status ?? 200
+			return new Response(
+				typeof r === 'object' ? JSON.stringify(r) : String(r),
+				{ status }
+			)
+		}
+
+		if (typeof error?.toResponse === 'function')
+			try {
+				const r = error.toResponse()
+				if (r instanceof Response) return r
+			} catch {}
+
+		const status = error?.status ?? 500
+		const body =
+			error?.response !== undefined
+				? typeof error.response === 'object'
+					? JSON.stringify(error.response)
+					: String(error.response)
+				: error instanceof Error
+					? error.message
+					: String(error)
+
+		return new Response(body, { status })
+	}
+
+	async function handleError(elysia: ElysiaWS<any>, error: unknown) {
+		const errCtx: any = Object.assign({}, elysia as any)
+		errCtx.error = error
+		errCtx.code = (error as any)?.code ?? 'UNKNOWN'
+
+		for (let i = 0; i < errorHandlers.length; i++) {
+			let r: unknown = errorHandlers[i](errCtx)
+			if (r instanceof Promise) r = await r
+			if (r !== undefined) {
+				try {
+					await handleWSResponse(elysia, r, [])
+				} catch {}
+				return
+			}
+		}
+
+		const message = error instanceof Error ? error.message : String(error)
+		try {
+			elysia.raw.send(message)
+		} catch {}
+	}
+
+	async function dispatchMessage(
+		elysia: ElysiaWS<any>,
+		rawMessage: string | Buffer
+	) {
+		try {
+			const message = await parseMessage(elysia.raw as any, rawMessage)
+
+			if (validators.body) {
+				const v = validators.body as any
+				if (!v.Check(message)) {
+					const err = new ValidationError(
+						'body',
+						message,
+						v.Errors?.(message) ?? []
+					)
+					if (errorHandlers.length === 0) {
+						elysia.raw.send(err.message)
+						return
+					}
+					return handleError(elysia, err)
+				}
+			}
+
+			elysia.body = message as any
+
+			for (let i = 0; i < transforms.length; i++) {
+				const r = transforms[i](elysia as any)
+				if (r instanceof Promise) await r
+			}
+			for (let i = 0; i < messageBeforeHandles.length; i++) {
+				let r: unknown = messageBeforeHandles[i](elysia as any)
+				if (r instanceof Promise) r = await r
+				if (r !== undefined) {
+					await handleWSResponse(elysia, r, mapResponses)
+					return
+				}
+			}
+
+			if (hook.message) {
+				const result = dispatchHandler(
+					hook.message as any,
+					elysia,
+					message
+				)
+				const resolved =
+					result instanceof Promise ? await result : result
+				await handleWSResponse(elysia, resolved, mapResponses)
+			}
+
+			for (let i = 0; i < afterHandles.length; i++) {
+				const r = afterHandles[i](elysia as any)
+				if (r instanceof Promise) await r
+			}
+			for (let i = 0; i < afterResponses.length; i++) {
+				try {
+					const r = afterResponses[i](elysia as any)
+					if (r instanceof Promise) await r
+				} catch {}
+			}
+		} catch (error) {
+			await handleError(elysia, error)
+		}
+	}
+
+	function wrapLifecycle(fn: AnyFn | undefined, withBody: boolean) {
+		if (!fn) return
+
+		return async (elysia: ElysiaWS<any>, bodyArg?: unknown) => {
+			try {
+				if (withBody) elysia.body = bodyArg as any
+				const result = dispatchHandler(fn, elysia, bodyArg)
+				const resolved =
+					result instanceof Promise ? await result : result
+				await handleWSResponse(elysia, resolved, mapResponses)
+			} catch (error) {
+				await handleError(elysia, error)
+			}
+		}
+	}
+
+	const onOpen = wrapLifecycle(hook.open as any, false)
+	const onDrain = wrapLifecycle(hook.drain as any, false)
+	const onPing = wrapLifecycle(hook.ping as any, true)
+	const onPong = wrapLifecycle(hook.pong as any, true)
+	const onClose = hook.close
+		? async (elysia: ElysiaWS<any>, code: number, reason: string) => {
+				try {
+					;(elysia as any).code = code
+					;(elysia as any).reason = reason
+					const fn = hook.close as AnyFn
+					const result = fn(elysia, code, reason)
+					const resolved =
+						result instanceof Promise ? await result : result
+					await handleWSResponse(elysia, resolved, mapResponses)
+				} catch (error) {
+					await handleError(elysia, error)
+				}
+			}
+		: undefined
+
+	const fetchHandler = async (context: Context) => {
+		const request = context.request
+
+		try {
+			if (validators.params) {
+				const v = validators.params as any
+				if (!v.Check(context.params ?? {}))
+					return await handleUpgradeError(
+						context,
+						new ValidationError(
+							'params',
+							context.params,
+							v.Errors?.(context.params) ?? []
+						)
+					)
+			}
+			if (validators.query) {
+				const url = request.url
+				const qStart = url.indexOf('?')
+				const query =
+					qStart === -1
+						? {}
+						: Object.fromEntries(
+								new URLSearchParams(url.slice(qStart + 1))
+							)
+				;(context as any).query = query
+
+				const v = validators.query as any
+				if (!v.Check(query))
+					return await handleUpgradeError(
+						context,
+						new ValidationError(
+							'query',
+							query,
+							v.Errors?.(query) ?? []
+						)
+					)
+			}
+
+			if (validators.headers) {
+				const headers = ((context as any).headers = isBun
+					? request.headers.toJSON()
+					: Object.fromEntries(request.headers))
+
+				const vali = validators.headers as any
+				if (!vali.Check(headers))
+					return await handleUpgradeError(
+						context,
+						new ValidationError(
+							'headers',
+							headers,
+							vali.Errors?.(headers) ?? []
+						)
+					)
+			}
+
+			for (let i = 0; i < transforms.length; i++) {
+				const r = transforms[i](context as any)
+				if (r instanceof Promise) await r
+			}
+
+			for (let i = 0; i < allBeforeHandles.length; i++) {
+				const fn = allBeforeHandles[i]
+				let r: unknown = fn(context as any)
+				if (r instanceof Promise) r = await r
+				if (deriveSet?.has(fn)) {
+					if (r && typeof r === 'object')
+						Object.assign(context as any, r)
+				} else if (r !== undefined) {
+					if (r instanceof Response) return r
+					return new Response(
+						typeof r === 'object' ? JSON.stringify(r) : String(r),
+						{ status: (context.set as any)?.status ?? 200 }
+					)
+				}
+			}
+
+			let upgradeHeaders: Record<string, string> | undefined
+			if (hook.upgrade != null) {
+				const r =
+					typeof hook.upgrade === 'function'
+						? hook.upgrade(context as any)
+						: hook.upgrade
+				const resolved = r instanceof Promise ? await r : r
+				if (resolved && typeof resolved === 'object')
+					upgradeHeaders = resolved as Record<string, string>
+			}
+
+			const server = (app as any).server as Server | null
+			if (!server)
+				return new Response(
+					'WebSocket upgrade requires a running server. Call .listen() first.',
+					{ status: 500 }
+				)
+
+			const connectionData: WSConnectionData = {
+				id: '',
+				context: context as any,
+				validator: responseValidator,
+				open: onOpen as any,
+				message: hook.message
+					? (elysia, raw) => dispatchMessage(elysia, raw)
+					: undefined,
+				drain: onDrain as any,
+				close: onClose as any,
+				ping: onPing as any,
+				pong: onPong as any
+			}
+
+			const upgraded = server.upgrade(request, {
+				headers: upgradeHeaders,
+				data: connectionData
+			})
+
+			if (!upgraded)
+				return new Response('Expected a websocket connection', {
+					status: 400
+				})
+		} catch (error) {
+			return handleUpgradeError(context, error)
+		}
+	}
+
+	const bunOptions: Partial<WebSocketHandler<any>> = nullObject()
+	for (const k of [
+		'maxPayloadLength',
+		'backpressureLimit',
+		'closeOnBackpressureLimit',
+		'idleTimeout',
+		'publishToSelf',
+		'sendPings',
+		'perMessageDeflate'
+	] as const) {
+		if ((hook as any)[k] !== undefined)
+			(bunOptions as any)[k] = (hook as any)[k]
+	}
+
+	return { fetch: fetchHandler as any, bunOptions }
+}
+
+export function buildGlobalWSHandler(): WebSocketHandler<WSConnectionData> {
+	function getElysia(ws: ServerWebSocket<WSConnectionData>): ElysiaWS<any> {
+		let elysia = ws.data.elysia
+		if (!elysia) {
+			elysia = new ElysiaWS(ws as any, ws.data.context as any)
+			ws.data.elysia = elysia
+		}
+		return elysia
+	}
+
+	return {
+		message(ws, message) {
+			ws.data.message?.(getElysia(ws), message)
+		},
+		open(ws) {
+			ws.data.open?.(getElysia(ws))
+		},
+		drain(ws) {
+			ws.data.drain?.(getElysia(ws))
+		},
+		close(ws, code, reason) {
+			if (ws.data.closeHandlerInvoked) return
+			ws.data.closeHandlerInvoked = true
+			ws.data.close?.(getElysia(ws), code, reason)
+		},
+		ping(ws, data) {
+			ws.data.ping?.(getElysia(ws), data)
+		},
+		pong(ws, data) {
+			ws.data.pong?.(getElysia(ws), data)
+		}
+	}
+}

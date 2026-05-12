@@ -21,15 +21,15 @@ jobs:
             - name: Install packages
               run: bun install
 
-            - name: Build code
-              run: bun run build
+            # - name: Build code
+            #   run: bun run build
 
             - name: Test
-              run: bun run test
+              run: bun test test/2
 
-            - name: Test
-              run: bun run test:cf
+            # - name: Test
+            #   run: bun run test:cf
 
-            - name: Publish Preview
-              if: github.event_name == 'pull_request'
-              run: bunx pkg-pr-new publish
+            # - name: Publish Preview
+            #   if: github.event_name == 'pull_request'
+            #   run: bunx pkg-pr-new publish

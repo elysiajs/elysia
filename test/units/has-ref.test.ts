@@ -131,7 +131,7 @@ describe('has Ref', () => {
 		expect(
 			hasRef(
 				t
-					.Transform(t.Object({ id: t.Ref('b') }))
+					.Codec(t.Object({ id: t.Ref('b') }))
 					.Decode((value) => value.id)
 					.Encode((value) => ({
 						id: value

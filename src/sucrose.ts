@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable no-constant-condition */
-import { checksum } from './utils'
-import { isBun, isCloudflareWorker } from './universal/utils'
+import { fnv1a } from './utils'
+import { isBun, isCloudflareWorker } from './universal/constants'
 
-import type { Handler, HookContainer, LifeCycleStore } from './types'
+import type { Handler, AppHook } from './types'
 
 export namespace Sucrose {
 	export interface Inference {
@@ -18,9 +18,7 @@ export namespace Sucrose {
 		path: boolean
 	}
 
-	export interface LifeCycle extends Partial<LifeCycleStore> {
-		handler?: Handler
-	}
+	export type LifeCycle = Partial<Partial<AppHook>>
 
 	export interface Settings {
 		/**
@@ -29,9 +27,17 @@ export namespace Sucrose {
 		 * no new compilation is happening
 		 * clear the cache to free up memory
 		 *
-		 * @default 4 * 60 * 1000 + 55 * 1000 (4 minutes 55 seconds)
+		 * @default 1 * 60 * 1000 (1 minute)
 		 */
 		gcTime?: number | null
+		/**
+		 * Maximum number of cached inferences before LRU eviction kicks in.
+		 * Bounds memory when many unique handler sources are compiled (e.g.
+		 * 100k routes with distinct closures) without waiting for `gcTime`.
+		 *
+		 * @default 1024
+		 */
+		cacheLimit?: number
 	}
 }
 
@@ -43,9 +49,11 @@ export namespace Sucrose {
  * separateFunction('async ({ hello }) => { return hello }') // => ['({ hello })', '{ return hello }']
  * ```
  */
-export const separateFunction = (
-	code: string
-): [string, string, { isArrowReturn: boolean }] => {
+function separateFunction(code: string): [
+	string,
+	string
+	// isArrowReturn: boolean
+] {
 	// Remove async keyword without removing space (both minify and non-minify)
 	if (code.startsWith('async')) code = code.slice(5)
 	code = code.trimStart()
@@ -67,10 +75,8 @@ export const separateFunction = (
 
 			return [
 				code.slice(1, bracketEndIndex),
-				body,
-				{
-					isArrowReturn: body.charCodeAt(0) !== 123
-				}
+				body
+				// body.charCodeAt(0) !== 123
 			]
 		}
 	}
@@ -85,10 +91,8 @@ export const separateFunction = (
 
 			return [
 				code.slice(0, index),
-				body,
-				{
-					isArrowReturn: body.charCodeAt(0) !== 123
-				}
+				body
+				// body.charCodeAt(0) !== 123
 			]
 		}
 	}
@@ -100,10 +104,8 @@ export const separateFunction = (
 
 		return [
 			code.slice(index + 1, end),
-			code.slice(end + 2),
-			{
-				isArrowReturn: false
-			}
+			code.slice(end + 2)
+			// false
 		]
 	}
 
@@ -119,17 +121,19 @@ export const separateFunction = (
 
 		return [
 			parameter.slice(start, end),
-			'{' + body,
-			{
-				isArrowReturn: false
-			}
+			'{' + body
+			// false
 		]
 	}
 
 	// Unknown case
 	const x = code.split('\n', 2)
 
-	return [x[0], x[1], { isArrowReturn: false }]
+	return [
+		x[0],
+		x[1]
+		// false
+	]
 }
 
 /**
@@ -140,7 +144,7 @@ export const separateFunction = (
  * bracketPairRange('hello: { world: { a } }, elysia') // [6, 20]
  * ```
  */
-export const bracketPairRange = (parameter: string): [number, number] => {
+function bracketPairRange(parameter: string): [number, number] {
 	const start = parameter.indexOf('{')
 	if (start === -1) return [-1, 0]
 
@@ -172,9 +176,7 @@ export const bracketPairRange = (parameter: string): [number, number] => {
  * bracketPairRange('hello: { world: { a } }, elysia') // [6, 20]
  * ```
  */
-export const bracketPairRangeReverse = (
-	parameter: string
-): [number, number] => {
+function bracketPairRangeReverse(parameter: string): [number, number] {
 	const end = parameter.lastIndexOf('}')
 	if (end === -1) return [-1, 0]
 
@@ -197,7 +199,7 @@ export const bracketPairRangeReverse = (
 	return [start, end + 1]
 }
 
-export const removeColonAlias = (parameter: string) => {
+function removeColonAlias(parameter: string) {
 	while (true) {
 		const start = parameter.indexOf(':')
 		if (start === -1) break
@@ -223,7 +225,7 @@ export const removeColonAlias = (parameter: string) => {
  * }
  * ```
  */
-export const retrieveRootparameters = (parameter: string) => {
+function retrieveRootparameters(parameter: string) {
 	let hasParenthesis = false
 
 	// Remove () from parameter
@@ -274,10 +276,10 @@ export const retrieveRootparameters = (parameter: string) => {
  *
  * @param parameter stringified parameter
  */
-export const findParameterReference = (
+function findParameterReference(
 	parameter: string,
 	inference: Sucrose.Inference
-) => {
+) {
 	const { parameters, hasParenthesis } = retrieveRootparameters(parameter)
 
 	// Check if root is an object destructuring
@@ -296,11 +298,11 @@ export const findParameterReference = (
 	return Object.keys(parameters).join(', ')
 }
 
-const findEndIndex = (
+function findEndIndex(
 	type: string,
 	content: string,
 	index?: number | undefined
-) => {
+) {
 	const regex = new RegExp(
 		`${type.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\n\\t,; ]`
 	)
@@ -312,22 +314,22 @@ const findEndIndex = (
 	return match ? match.index : -1
 }
 
-const findEndQueryBracketIndex = (
-	type: string,
-	content: string,
-	index?: number | undefined
-) => {
-	const bracketEndIndex = content.indexOf(type + ']', index)
-	const singleQuoteIndex = content.indexOf(type + "'", index)
-	const doubleQuoteIndex = content.indexOf(type + '"', index)
+// const findEndQueryBracketIndex = (
+// 	type: string,
+// 	content: string,
+// 	index?: number | undefined
+// ) => {
+// 	const bracketEndIndex = content.indexOf(type + ']', index)
+// 	const singleQuoteIndex = content.indexOf(type + "'", index)
+// 	const doubleQuoteIndex = content.indexOf(type + '"', index)
 
-	// Pick the smallest index that is not -1 or 0
-	return (
-		[bracketEndIndex, singleQuoteIndex, doubleQuoteIndex]
-			.filter((i) => i > 0)
-			.sort((a, b) => a - b)[0] || -1
-	)
-}
+// 	// Pick the smallest index that is not -1 or 0
+// 	return (
+// 		[bracketEndIndex, singleQuoteIndex, doubleQuoteIndex]
+// 			.filter((i) => i > 0)
+// 			.sort((a, b) => a - b)[0] || -1
+// 	)
+// }
 
 /**
  * Find alias of variable from function body
@@ -337,7 +339,7 @@ const findEndQueryBracketIndex = (
  * findAlias('body', '{ const a = body, b = body }') // => ['a', 'b']
  * ```
  */
-export const findAlias = (type: string, body: string, depth = 0) => {
+function findAlias(type: string, body: string, depth = 0) {
 	if (depth > 5) return []
 
 	const aliases: string[] = []
@@ -418,7 +420,7 @@ export const findAlias = (type: string, body: string, depth = 0) => {
 // 		parent + "['" + prop + "']"
 // 	] as const
 
-export const extractMainParameter = (parameter: string) => {
+function extractMainParameter(parameter: string) {
 	if (!parameter) return
 
 	if (parameter.charCodeAt(0) !== 123) return parameter
@@ -444,11 +446,11 @@ export const extractMainParameter = (parameter: string) => {
 /**
  * Analyze if context is mentioned in body
  */
-export const inferBodyReference = (
+function inferBodyReference(
 	code: string,
 	aliases: string[],
 	inference: Sucrose.Inference
-) => {
+) {
 	const access = (type: string, alias: string) =>
 		new RegExp(
 			`${alias}\\.(${type})|${alias}\\["${type}"\\]|${alias}\\['${type}'\\]`
@@ -515,7 +517,7 @@ export const inferBodyReference = (
 	return aliases
 }
 
-export const removeDefaultParameter = (parameter: string) => {
+function removeDefaultParameter(parameter: string) {
 	while (true) {
 		const index = parameter.indexOf('=')
 		if (index === -1) break
@@ -543,11 +545,11 @@ export const removeDefaultParameter = (parameter: string) => {
 		.join(', ')
 }
 
-export const isContextPassToFunction = (
+function isContextPassToFunction(
 	context: string,
 	body: string,
 	inference: Sucrose.Inference
-) => {
+) {
 	// ! Function is passed to another function, assume as all is accessed
 	try {
 		const captureFunction = new RegExp(
@@ -617,26 +619,34 @@ export const isContextPassToFunction = (
 }
 
 let pendingGC: Timer | undefined
-let caches = <Record<number, Sucrose.Inference>>{}
+const DEFAULT_CACHE_LIMIT = 1024
 
-export const clearSucroseCache = (delay: Sucrose.Settings['gcTime']) => {
+const caches = new Map<number, Sucrose.Inference>()
+
+function clearCache() {
+	caches.clear()
+
+	pendingGC = undefined
+	if (isBun) Bun.gc(false)
+}
+
+export function clearSucroseCache(delay: Sucrose.Settings['gcTime']) {
 	// Can't setTimeout outside fetch in Cloudflare Worker
-	if (delay === null || isCloudflareWorker()) return
-	if (delay === undefined) delay = 4 * 60 * 1000 + 55 * 1000
+	if (delay === null || isCloudflareWorker) return
+	if (delay === undefined) delay = 1 * 60 * 1000
 
 	if (pendingGC) clearTimeout(pendingGC)
 
-	pendingGC = setTimeout(() => {
-		caches = {}
-
+	if (delay) {
+		pendingGC = setTimeout(clearCache, delay)
+		pendingGC.unref?.()
+	} else {
 		pendingGC = undefined
-		if (isBun) Bun.gc(false)
-	}, delay)
-
-	pendingGC.unref?.()
+		clearCache()
+	}
 }
 
-export const mergeInference = (a: Sucrose.Inference, b: Sucrose.Inference) => {
+export function mergeInference(a: Sucrose.Inference, b: Sucrose.Inference) {
 	return {
 		body: a.body || b.body,
 		cookie: a.cookie || b.cookie,
@@ -650,70 +660,79 @@ export const mergeInference = (a: Sucrose.Inference, b: Sucrose.Inference) => {
 	}
 }
 
-export const sucrose = (
-	lifeCycle: Sucrose.LifeCycle,
-	inference: Sucrose.Inference = {
-		query: false,
-		headers: false,
-		body: false,
-		cookie: false,
-		set: false,
-		server: false,
-		url: false,
-		route: false,
-		path: false
-	},
-	settings: Sucrose.Settings = {}
-): Sucrose.Inference => {
-	const events = <(Handler | HookContainer)[]>[]
+export const defaultSucrose = () => ({
+	query: false,
+	headers: false,
+	body: false,
+	cookie: false,
+	set: false,
+	server: false,
+	url: false,
+	route: false,
+	path: false
+})
 
-	if (lifeCycle.request?.length) events.push(...lifeCycle.request)
-	if (lifeCycle.beforeHandle?.length) events.push(...lifeCycle.beforeHandle)
-	if (lifeCycle.parse?.length) events.push(...lifeCycle.parse)
-	if (lifeCycle.error?.length) events.push(...lifeCycle.error)
-	if (lifeCycle.transform?.length) events.push(...lifeCycle.transform)
-	if (lifeCycle.afterHandle?.length) events.push(...lifeCycle.afterHandle)
-	if (lifeCycle.mapResponse?.length) events.push(...lifeCycle.mapResponse)
-	if (lifeCycle.afterResponse?.length) events.push(...lifeCycle.afterResponse)
+function push(target: unknown[], array: unknown[]) {
+	for (let i = 0; i < array.length; i++) target.push(array[i])
+}
 
-	if (lifeCycle.handler && typeof lifeCycle.handler === 'function')
-		events.push(lifeCycle.handler as Handler)
+function pushParse(target: unknown[], array: unknown[]) {
+	for (let i = 0; i < array.length; i++)
+		if (typeof array[i] === 'function') target.push(array[i])
+}
+
+// never recreate array to reduce memory allocation, just clear and reuse it
+const eventsBuffer = <Handler[]>[]
+
+export function sucrose(
+	handler: Handler | undefined,
+	lifeCycle: Sucrose.LifeCycle | undefined,
+	inference?: Sucrose.Inference,
+	settings?: Sucrose.Settings
+): Sucrose.Inference {
+	const events = eventsBuffer
+	events.length = 0
+
+	if (handler && typeof handler === 'function') events.push(handler)
+	if (lifeCycle) {
+		if (lifeCycle.request?.length) push(events, lifeCycle.request)
+		if (lifeCycle.beforeHandle?.length) push(events, lifeCycle.beforeHandle)
+		if (lifeCycle.parse?.length) pushParse(events, lifeCycle.parse)
+		if (lifeCycle.error?.length) push(events, lifeCycle.error)
+		if (lifeCycle.transform?.length) push(events, lifeCycle.transform)
+		if (lifeCycle.afterHandle?.length) push(events, lifeCycle.afterHandle)
+		if (lifeCycle.mapResponse?.length) push(events, lifeCycle.mapResponse)
+		if (lifeCycle.afterResponse?.length)
+			push(events, lifeCycle.afterResponse)
+	}
+
+	let needGc = true
 
 	for (let i = 0; i < events.length; i++) {
-		const e = events[i]
-		if (!e) continue
-
-		const event = typeof e === 'object' ? e.fn : e
-
-		// parse can be either a function or string
-		if (typeof event !== 'function') continue
+		const event = events[i]
+		if (!event) continue
 
 		const content = event.toString()
-		const key = checksum(content)
-		const cachedInference = caches[key]
+		const key = fnv1a(content)
+		const cachedInference = caches.get(key)
 		if (cachedInference) {
-			inference = mergeInference(inference, cachedInference)
+			// LRU bump: move this key to MRU position by re-inserting.
+			caches.delete(key)
+			caches.set(key, cachedInference)
+			inference = inference
+				? mergeInference(inference, cachedInference)
+				: cachedInference
 			continue
 		}
 
-		// If no sucrose usage is found in 4:55 minutes
-		// it's likely that server is either idle or
-		// no new compilation is happening
-		// Clear the cache to free up memory
-		clearSucroseCache(settings.gcTime)
+		inference ??= defaultSucrose()
 
-		const fnInference: Sucrose.Inference = {
-			query: false,
-			headers: false,
-			body: false,
-			cookie: false,
-			set: false,
-			server: false,
-			url: false,
-			route: false,
-			path: false
+		if (needGc) {
+			needGc = false
+			clearSucroseCache(settings?.gcTime)
 		}
 
+		let fnInference: Sucrose.Inference | undefined = defaultSucrose()
 		const [parameter, body] = separateFunction(content)
 
 		const rootParameters = findParameterReference(parameter, fnInference)
@@ -726,8 +745,9 @@ export const sucrose = (
 			let code = body
 
 			if (
-				code.charCodeAt(0) === 123 &&
-				code.charCodeAt(body.length - 1) === 125
+				code.charCodeAt(0) === 123
+				// start with { is implied to end with }
+				// && code.charCodeAt(body.length - 1) === 125
 			)
 				code = code.slice(1, -1).trim()
 
@@ -736,14 +756,23 @@ export const sucrose = (
 
 			if (
 				!fnInference.query &&
-				code.includes('return ' + mainParameter + '.query')
+				code.includes(`return ${mainParameter}.query`)
 			)
 				fnInference.query = true
 		}
 
-		if (!caches[key]) caches[key] = fnInference
+		if (!caches.has(key)) {
+			const limit = settings?.cacheLimit ?? DEFAULT_CACHE_LIMIT
+			if (caches.size >= limit) {
+				// Drop the oldest (first inserted / least recently used).
+				const oldest = caches.keys().next().value
+				if (oldest !== undefined) caches.delete(oldest)
+			}
+			caches.set(key, fnInference)
+		}
 
 		inference = mergeInference(inference, fnInference)
+		fnInference = undefined
 
 		if (
 			inference.query &&
@@ -759,5 +788,8 @@ export const sucrose = (
 			break
 	}
 
-	return inference
+	events.length = 0
+
+	// Fall back to defaults when no analysable events were found
+	return inference ?? defaultSucrose()
 }

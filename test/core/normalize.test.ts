@@ -510,7 +510,7 @@ describe('Normalize', () => {
 		])
 	})
 
-	it('normalize encodeSchema with Transform', async () => {
+	it('normalize Codec response', async () => {
 		const app = new Elysia().get(
 			'/',
 			() => ({
@@ -531,7 +531,7 @@ describe('Normalize', () => {
 						})
 					),
 					total: t
-						.Transform(t.Number())
+						.Codec(t.Number())
 						.Decode((x) => x)
 						.Encode((x) => x),
 					offset: t.Number({ minimum: 0 }),

@@ -282,7 +282,7 @@ describe('Trace Timing', async () => {
 				onParse(({ onStop, onEvent }) => {
 					let total = 0
 
-					onEvent(({ begin }) => {
+					onEvent(({ onStop }) => {
 						onStop(({ elapsed }) => {
 							total += elapsed
 						})
@@ -486,7 +486,7 @@ describe('Trace Timing', async () => {
 						})
 					})
 
-					onStop(({ elapsed }) => {
+					onStop(() => {
 						set.headers.time = total.toString()
 					})
 				})

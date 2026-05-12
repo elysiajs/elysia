@@ -3,6 +3,7 @@ export { file } from './file'
 export type {
 	ErrorLike,
 	GenericServeOptions,
+	ListenCallback,
 	Serve,
 	ServeOptions,
 	Server,

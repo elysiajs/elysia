@@ -1088,7 +1088,7 @@ describe('Body Validator', () => {
 				t.Object({ foo: t.String() }),
 				t.Object({
 					field: t
-						.Transform(t.String())
+						.Codec(t.String())
 						.Decode((decoded) => ({ decoded }))
 						.Encode((v) => v.decoded)
 				})

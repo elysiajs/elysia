@@ -951,7 +951,7 @@ describe('Query Validator', () => {
 			{
 				query: t.Object({
 					id: t
-						.Transform(t.UnionEnum(['test', 'foo']))
+						.Codec(t.UnionEnum(['test', 'foo']))
 						.Decode((id) => ({ value: id }))
 						.Encode((id) => id.value)
 				})
@@ -1129,7 +1129,7 @@ describe('Query Validator', () => {
 
 	// Union schema tests
 	it('handle query array in Union schema', async () => {
-		const app = new Elysia({ aot: false }).get('/', ({ query }) => query, {
+		const app = new Elysia().get('/', ({ query }) => query, {
 			query: t.Union([
 				t.Object({
 					ids: t.Array(t.String())
@@ -1148,7 +1148,7 @@ describe('Query Validator', () => {
 	})
 
 	it('handle numeric coercion in Union schema', async () => {
-		const app = new Elysia({ aot: false }).get('/', ({ query }) => query, {
+		const app = new Elysia().get('/', ({ query }) => query, {
 			query: t.Union([
 				t.Object({
 					page: t.Numeric()

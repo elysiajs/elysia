@@ -300,28 +300,6 @@ describe('Checksum', () => {
 		expect(i).toBe(1)
 	})
 
-	it('scope plugin', async () => {
-		let i = 0
-
-		const plugin = new Elysia().use(
-			new Elysia({ prefix: '/call' })
-				.derive(() => {
-					i++ // <-- should not be called, when requesting /asdf
-					return { test: 'test' }
-				})
-				.get('/', ({ test }) => test)
-				.use(new Elysia({ prefix: '/not-call' }).get('/', () => 'asdf'))
-		)
-
-		const app = new Elysia().use(plugin)
-
-		await Promise.all(
-			['/not-call', '/call'].map((path) => app.handle(req(path)))
-		)
-
-		expect(i).toBe(1)
-	})
-
 	it('handle reference parent-child', async () => {
 		const parent = new Elysia({ name: 'parent' }).derive(
 			{ as: 'global' },

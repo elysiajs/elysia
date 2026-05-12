@@ -27,8 +27,9 @@ describe('After Handle', () => {
 	it('inherits from plugin', async () => {
 		const transformType = new Elysia().onAfterHandle(
 			{ as: 'global' },
-			({ response }) => {
-				if (response === 'string') return 'number'
+			// @ts-ignore
+			({ responseValue }) => {
+				if (responseValue === 'string') return 'number'
 			}
 		)
 
@@ -42,8 +43,9 @@ describe('After Handle', () => {
 	})
 
 	it('not inherits plugin on local', async () => {
-		const transformType = new Elysia().onAfterHandle(({ response }) => {
-			if (response === 'string') return 'number'
+		// @ts-ignore
+		const transformType = new Elysia().onAfterHandle(({ responseValue }) => {
+			if (responseValue === 'string') return 'number'
 		})
 
 		const app = new Elysia()
@@ -82,21 +84,6 @@ describe('After Handle', () => {
 		await app.handle(req('/'))
 
 		expect(order).toEqual(['A', 'B'])
-	})
-
-	it('accept response', async () => {
-		const app = new Elysia().get('/', () => 'NOOP', {
-			afterHandle({ response }) {
-				return response
-			},
-			mapResponse() {
-
-			}
-		})
-
-		const res = await app.handle(req('/')).then((x) => x.text())
-
-		expect(res).toBe('NOOP')
 	})
 
 	it('accept responseValue', async () => {
@@ -145,6 +132,46 @@ describe('After Handle', () => {
 		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
 
 		const res = await Promise.all([
+			app.handle(req('/inner')),
+			app.handle(req('/outer'))
+		])
+
+		expect(called).toEqual(['/inner'])
+	})
+
+	// New direct-scope API: `afterHandle('global', fn)` parallels
+	// `onAfterHandle({ as: 'global' }, fn)`.
+	it('as global (direct scope)', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.afterHandle('global', ({ path }) => {
+				called.push(path)
+			})
+			.get('/inner', () => 'NOOP')
+
+		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
+
+		await Promise.all([
+			app.handle(req('/inner')),
+			app.handle(req('/outer'))
+		])
+
+		expect(called).toEqual(['/inner', '/outer'])
+	})
+
+	it('as local (direct scope)', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.afterHandle('local', ({ path }) => {
+				called.push(path)
+			})
+			.get('/inner', () => 'NOOP')
+
+		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
+
+		await Promise.all([
 			app.handle(req('/inner')),
 			app.handle(req('/outer'))
 		])

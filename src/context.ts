@@ -1,29 +1,132 @@
-import type { Server } from './universal/server'
-import type { Cookie, ElysiaCookie } from './cookies'
-import type {
-	StatusMap,
-	InvertedStatusMap,
-	redirect as Redirect
-} from './utils'
+import { ElysiaStatus, status, type SelectiveStatus } from './error'
+import { nullObject, redirect } from './utils'
 
-import { ElysiaCustomStatusResponse, status, type SelectiveStatus } from './error'
+import type { AnyElysia } from './base'
+import type { Server } from './universal/server'
+import type { StatusMap, StatusMapBack } from './constants'
+import type { Cookie } from './cookie'
+import type { BaseCookie } from './cookie/types'
+
 import type {
 	RouteSchema,
 	Prettify,
-	ResolvePath,
 	SingletonBase,
+	ResolvePath,
 	HTTPHeaders,
 	InputSchema
 } from './types'
 
-type InvertedStatusMapKey = keyof InvertedStatusMap
+let baseCache = new WeakMap<AnyElysia, new () => any>()
+let contextCache = new WeakMap<AnyElysia, new (request: Request) => any>()
+
+let sharedEmptyDecorator: any = null
+let sharedEmptyContext: any = null
+
+function buildEmptyDecorator() {
+	class Decorator {}
+	Object.assign(Decorator.prototype, { status, redirect })
+	return Decorator
+}
+
+export function createBaseContext(app: AnyElysia) {
+	const cached = baseCache.get(app)
+	if (cached) return cached
+
+	const ext = app['~ext']
+	const decorator = ext?.decorator
+	const store = ext?.store
+
+	if (!decorator && !store) {
+		sharedEmptyDecorator ??= buildEmptyDecorator()
+		baseCache.set(app, sharedEmptyDecorator)
+		return sharedEmptyDecorator
+	}
+
+	class Decorator {}
+	Object.assign(Decorator.prototype, {
+		...decorator,
+		store,
+		status,
+		redirect
+	})
+
+	baseCache.set(app, Decorator)
+	return Decorator
+}
+
+export function clearContextCache() {
+	baseCache = new WeakMap()
+	contextCache = new WeakMap()
+	sharedEmptyDecorator = null
+	sharedEmptyContext = null
+}
+
+function buildEmptyContext(Base: any) {
+	return class Context extends Base {
+		params?: Record<string, string>
+		headers?: Record<string, string>
+		qi!: number
+		set: { headers: Record<string, string> }
+		rid?: string
+		route?: string
+		trace?: any[]
+
+		constructor(public request: Request) {
+			super()
+			this.set = { headers: Object.create(null) }
+		}
+	}
+}
+
+export function createContext(
+	app: AnyElysia
+): new (request: Request) => Context {
+	const cached = contextCache.get(app)
+	if (cached) return cached
+
+	const ext = app['~ext']
+	const headers = ext?.headers
+		? Object.assign(nullObject(), ext.headers)
+		: null
+
+	if (headers === null && !ext?.decorator && !ext?.store) {
+		sharedEmptyDecorator ??= buildEmptyDecorator()
+		sharedEmptyContext ??= buildEmptyContext(sharedEmptyDecorator)
+		contextCache.set(app, sharedEmptyContext)
+
+		return sharedEmptyContext
+	}
+
+	const context = class Context extends createBaseContext(app) {
+		params?: Record<string, string>
+		headers?: Record<string, string>
+		qi!: number
+		set: { headers: Record<string, string> }
+		rid?: string
+		route?: string
+		trace?: any[]
+
+		constructor(public request: Request) {
+			super()
+
+			this.set = {
+				headers: Object.create(headers)
+			}
+		}
+	} as any
+
+	contextCache.set(app, context)
+	return context
+}
 
 type CheckExcessProps<T, U> = 0 extends 1 & T
 	? T // T is any
 	: U extends U
 		? Exclude<keyof T, keyof U> extends never
 			? T
-			: { [K in keyof U]: U[K] } & { [K in Exclude<keyof T, keyof U>]: never }
+			: { [K in keyof U]: U[K] } & {
+					[K in Exclude<keyof T, keyof U>]: never
+				}
 		: never
 
 export type ErrorContext<
@@ -58,18 +161,17 @@ export type ErrorContext<
 				}
 
 		server: Server | null
-		redirect: Redirect
+		redirect: redirect
 
 		set: {
 			headers: HTTPHeaders
 			status?: number | keyof StatusMap
-			redirect?: string
 			/**
 			 * ! Internal Property
 			 *
 			 * Use `Context.cookie` instead
 			 */
-			cookie?: Record<string, ElysiaCookie>
+			cookie?: Record<string, BaseCookie>
 		}
 
 		status: {} extends Route['response']
@@ -77,8 +179,8 @@ export type ErrorContext<
 			: <
 					const Code extends
 						| keyof Route['response']
-						| InvertedStatusMap[Extract<
-								InvertedStatusMapKey,
+						| StatusMapBack[Extract<
+								keyof StatusMapBack,
 								keyof Route['response']
 						  >],
 					T extends Code extends keyof Route['response']
@@ -98,7 +200,7 @@ export type ErrorContext<
 									Route['response'][StatusMap[Code]]
 								: never
 					>
-				) => ElysiaCustomStatusResponse<
+				) => ElysiaStatus<
 					// @ts-ignore trust me bro
 					Code,
 					T
@@ -115,11 +217,16 @@ export type ErrorContext<
 		/**
 		 * Path as registered to router
 		 *
-		 * Represent a path registered to a router, not a URL
+		 * Represent a path registered to a router, not a URL.
+		 * Set only for dynamic routes; for static routes, fall back to `path`.
 		 *
 		 * @example '/id/:id'
 		 */
-		route: string
+		route?: string
+		/**
+		 * Per-request id, populated when `.trace(...)` is registered.
+		 */
+		rid?: string
 		request: Request
 		store: Singleton['store']
 	} & Singleton['decorator'] &
@@ -178,7 +285,7 @@ export type Context<
 					>
 
 		server: Server | null
-		redirect: Redirect
+		redirect: redirect
 
 		set: {
 			headers: HTTPHeaders
@@ -198,7 +305,7 @@ export type Context<
 			 *
 			 * Use `Context.cookie` instead
 			 */
-			cookie?: Record<string, ElysiaCookie>
+			cookie?: Record<string, BaseCookie>
 		}
 
 		/**
@@ -212,11 +319,16 @@ export type Context<
 		/**
 		 * Path as registered to router
 		 *
-		 * Represent a path registered to a router, not a URL
+		 * Represent a path registered to a router, not a URL.
+		 * Set only for dynamic routes; for static routes, fall back to `path`.
 		 *
 		 * @example '/id/:id'
 		 */
-		route: string
+		route?: string
+		/**
+		 * Per-request id, populated when `.trace(...)` is registered.
+		 */
+		rid?: string
 		request: Request
 		store: Singleton['store']
 
@@ -228,7 +340,7 @@ export type Context<
 		Omit<Singleton['resolve'], keyof InputSchema>
 >
 
-// Use to mimic request before mapping route
+// Mimic request before mapping route
 export type PreContext<
 	in out Singleton extends SingletonBase = {
 		decorator: {}
@@ -241,7 +353,7 @@ export type PreContext<
 		store: Singleton['store']
 		request: Request
 
-		redirect: Redirect
+		redirect: redirect
 		server: Server | null
 
 		set: {

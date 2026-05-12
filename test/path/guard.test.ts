@@ -176,33 +176,21 @@ describe('guard', () => {
 			.decorate({ a: 'a' })
 			.state({ a: 'a' })
 			.model('a', t.String())
-			.error('a', Error)
 			.group('/posts', (app) => {
-				// @ts-expect-error
-				expect(Object.keys(app.singleton.decorator)).toEqual(['a'])
-				// @ts-expect-error
-				expect(Object.keys(app.singleton.store)).toEqual(['a'])
-				// @ts-expect-error
-				expect(Object.keys(app.definitions.type)).toEqual(['a'])
-				// @ts-expect-error
-				expect(Object.keys(app.definitions.error)).toEqual(['a'])
+				expect(Object.keys(app['~ext']?.decorator ?? {})).toEqual(['a'])
+				expect(Object.keys(app['~ext']?.store ?? {})).toEqual(['a'])
+				expect(Object.keys(app['~ext']?.models ?? {})).toEqual(['a'])
 
 				return app
 					.decorate({ b: 'b' })
 					.state({ b: 'b' })
 					.model('b', t.String())
-					.error('b', Error)
 					.get('/', ({ a }) => a ?? 'Aint no response')
 			})
 
-		// @ts-expect-error
-		expect(Object.keys(app.singleton.decorator)).toEqual(['a', 'b'])
-		// @ts-expect-error
-		expect(Object.keys(app.singleton.store)).toEqual(['a', 'b'])
-		// @ts-expect-error
-		expect(Object.keys(app.definitions.type)).toEqual(['a', 'b'])
-		// @ts-expect-error
-		expect(Object.keys(app.definitions.error)).toEqual(['a', 'b'])
+		expect(Object.keys(app['~ext']?.decorator ?? {})).toEqual(['a', 'b'])
+		expect(Object.keys(app['~ext']?.store ?? {})).toEqual(['a', 'b'])
+		expect(Object.keys(app['~ext']?.models ?? {})).toEqual(['a', 'b'])
 
 		const response = await app.handle(req('/posts')).then((x) => x.text())
 
@@ -213,8 +201,7 @@ describe('guard', () => {
 		let called = 0
 
 		const inner = new Elysia()
-			.guard({
-				as: 'global',
+			.guard('global', {
 				response: t.Number(),
 				transform() {
 					called++
@@ -241,12 +228,17 @@ describe('guard', () => {
 		expect(response).toEqual([422, 422, 422])
 	})
 
-	it('handle as global with local override', async () => {
+	// Note: scope is now strictly visibility (per `#use` propagation
+	// rules) — not validator override. `.guard()` schemas become
+	// STANDALONE validators; every visible one runs as its own pass.
+	// Each test below verifies BOTH the propagated global schema AND the
+	// more-local schema run, so a response that satisfies one but fails
+	// the other still 422s.
+	it('handle as global without local override', async () => {
 		let called = 0
 
 		const inner = new Elysia()
-			.guard({
-				as: 'global',
+			.guard('global', {
 				response: t.Number(),
 				transform() {
 					called++
@@ -257,6 +249,7 @@ describe('guard', () => {
 
 		const plugin = new Elysia()
 			.use(inner)
+			// @ts-expect-error
 			.guard({
 				response: t.Boolean(),
 				transform() {
@@ -275,15 +268,16 @@ describe('guard', () => {
 		])
 
 		expect(called).toBe(4)
-		expect(response).toEqual([422, 200, 422])
+		// `/plugin` returns `true` — passes Boolean but fails Number.
+		// Both run, so the route 422s on the Number constraint.
+		expect(response).toEqual([422, 422, 422])
 	})
 
-	it('handle as global with scoped override', async () => {
+	it('handle as global without scoped override', async () => {
 		let called = 0
 
 		const inner = new Elysia()
-			.guard({
-				as: 'global',
+			.guard('global', {
 				response: t.Number(),
 				transform() {
 					called++
@@ -294,8 +288,7 @@ describe('guard', () => {
 
 		const plugin = new Elysia()
 			.use(inner)
-			.guard({
-				as: 'scoped',
+			.guard('plugin', {
 				response: t.String(),
 				transform() {
 					called++
@@ -312,15 +305,17 @@ describe('guard', () => {
 		])
 
 		expect(called).toBe(5)
-		expect(response).toEqual([422, 200, 200])
+		// `/plugin` returns `'ok'` (string) — passes String but fails
+		// Number. `/` returns 'not a number' — passes String (plugin
+		// scope reaches app), fails Number.
+		expect(response).toEqual([422, 422, 422])
 	})
 
 	it('handle as scoped', async () => {
 		let called = 0
 
 		const inner = new Elysia()
-			.guard({
-				as: 'scoped',
+			.guard('plugin', {
 				response: t.Number(),
 				transform() {
 					called++
@@ -350,8 +345,7 @@ describe('guard', () => {
 		let called = 0
 
 		const inner = new Elysia()
-			.guard({
-				as: 'local',
+			.guard('local', {
 				response: t.Number(),
 				transform() {
 					called++
@@ -378,8 +372,7 @@ describe('guard', () => {
 		let called = 0
 
 		const plugin = new Elysia()
-			.guard({
-				as: 'scoped',
+			.guard('plugin', {
 				response: t.Number(),
 				transform() {
 					called++

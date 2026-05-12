@@ -1,4 +1,4 @@
-import { isBun } from './utils'
+import { isBun } from './constants'
 
 export const env = isBun
 	? Bun.env

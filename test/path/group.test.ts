@@ -175,7 +175,7 @@ describe('group', () => {
 
 		const app = new Elysia().use(plugin)
 
-		expect(app.router.history.map((x) => x.path)).toEqual([
+		expect(app.routes.map((x) => x.path)).toEqual([
 			'/v1/course',
 			'/v1/course/new',
 			'/v1/course/id/:courseId/chapter/hello'
@@ -203,7 +203,7 @@ describe('group', () => {
 			.use(b)
 			.get('/', () => 'a')
 
-		expect(app.router.history.map((x) => x.path)).toEqual([
+		expect(app.routes.map((x) => x.path)).toEqual([
 			'/course/id/:courseId/b',
 			'/test/id/:courseId/b',
 			'/'
@@ -215,33 +215,21 @@ describe('group', () => {
 			.decorate({ a: 'a' })
 			.state({ a: 'a' })
 			.model('a', t.String())
-			.error('a', Error)
 			.group('/posts', (app) => {
-				// @ts-expect-error
-				expect(Object.keys(app.singleton.decorator)).toEqual(['a'])
-				// @ts-expect-error
-				expect(Object.keys(app.singleton.store)).toEqual(['a'])
-				// @ts-expect-error
-				expect(Object.keys(app.definitions.type)).toEqual(['a'])
-				// @ts-expect-error
-				expect(Object.keys(app.definitions.error)).toEqual(['a'])
+				expect(Object.keys(app['~ext']?.decorator ?? {})).toEqual(['a'])
+				expect(Object.keys(app['~ext']?.store ?? {})).toEqual(['a'])
+				expect(Object.keys(app['~ext']?.models ?? {})).toEqual(['a'])
 
 				return app
 					.decorate({ b: 'b' })
 					.state({ b: 'b' })
 					.model('b', t.String())
-					.error('b', Error)
 					.get('/', ({ a }) => a ?? 'Aint no response')
 			})
 
-		// @ts-expect-error
-		expect(Object.keys(app.singleton.decorator)).toEqual(['a', 'b'])
-		// @ts-expect-error
-		expect(Object.keys(app.singleton.store)).toEqual(['a', 'b'])
-		// @ts-expect-error
-		expect(Object.keys(app.definitions.type)).toEqual(['a', 'b'])
-		// @ts-expect-error
-		expect(Object.keys(app.definitions.error)).toEqual(['a', 'b'])
+		expect(Object.keys(app['~ext']?.decorator ?? {})).toEqual(['a', 'b'])
+		expect(Object.keys(app['~ext']?.store ?? {})).toEqual(['a', 'b'])
+		expect(Object.keys(app['~ext']?.models ?? {})).toEqual(['a', 'b'])
 
 		const response = await app.handle(req('/posts')).then((x) => x.text())
 

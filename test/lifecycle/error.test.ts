@@ -11,7 +11,7 @@ import { describe, expect, it } from 'bun:test'
 import { post, req } from '../utils'
 import * as z from 'zod'
 
-describe('error', () => {
+describe('Error lifecycle', () => {
 	it('use custom 404', async () => {
 		const app = new Elysia()
 			.get('/', () => 'hello')
@@ -238,6 +238,58 @@ describe('error', () => {
 		})
 
 		const res = await Promise.all([
+			app.handle(req('/inner')),
+			app.handle(req('/outer'))
+		])
+
+		expect(called).toEqual(['/inner'])
+	})
+
+	// New direct-scope API: `error('global', fn)` parallels
+	// `onError({ as: 'global' }, fn)`.
+	it('as global (direct scope)', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.error('global', ({ path }) => {
+				called.push(path)
+
+				return {}
+			})
+			.get('/inner', () => {
+				throw new Error('A')
+			})
+
+		const app = new Elysia().use(plugin).get('/outer', () => {
+			throw new Error('A')
+		})
+
+		await Promise.all([
+			app.handle(req('/inner')),
+			app.handle(req('/outer'))
+		])
+
+		expect(called).toEqual(['/inner', '/outer'])
+	})
+
+	it('as local (direct scope)', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.error('local', ({ path }) => {
+				called.push(path)
+
+				return {}
+			})
+			.get('/inner', () => {
+				throw new Error('A')
+			})
+
+		const app = new Elysia().use(plugin).get('/outer', () => {
+			throw new Error('A')
+		})
+
+		await Promise.all([
 			app.handle(req('/inner')),
 			app.handle(req('/outer'))
 		])

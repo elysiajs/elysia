@@ -191,7 +191,7 @@ describe('Edge Case', () => {
 		expect(main.getGlobalRoutes().length).toBe(2)
 	})
 
-	describe('value returned from transform has priority over the default value from schema', () => {
+	it('value returned from transform has priority over the default value from schema', async () => {
 		const route = new Elysia().get(
 			'/:propParams?',
 			({ params: { propParams } }) => propParams,
@@ -207,25 +207,13 @@ describe('Edge Case', () => {
 			}
 		)
 
-		it('aot is on', async () => {
-			const app = new Elysia().use(route)
+		const app = new Elysia().use(route)
 
-			const response = await app
-				.handle(new Request('http://localhost'))
-				.then((x) => x.text())
+		const response = await app
+			.handle(new Request('http://localhost'))
+			.then((x) => x.text())
 
-			expect(response).toBe('params-transform')
-		})
-
-		it('aot is off', async () => {
-			const app = new Elysia({ aot: false }).use(route)
-
-			const response = await app
-				.handle(new Request('http://localhost'))
-				.then((x) => x.text())
-
-			expect(response).toBe('params-transform')
-		})
+		expect(response).toBe('params-transform')
 	})
 
 	it('handle duplicated static route may cause index conflict correctly', async () => {

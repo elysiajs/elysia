@@ -1,4 +1,4 @@
-import decode from 'fast-decode-uri-component'
+import { decodeComponent } from 'deuri'
 
 // bit flags
 const KEY_HAS_PLUS = 1
@@ -9,16 +9,17 @@ const VALUE_NEEDS_DECODE = 8
 // Parse query without array
 export function parseQueryFromURL(
 	input: string,
-	startIndex: number = 0,
+	startIndex = input.indexOf('?', 11),
 	array?: { [key: string]: 1 },
 	object?: { [key: string]: 1 }
 ): Record<string, string> {
 	const result = Object.create(null)
+	if (startIndex === -1) return result
 
 	let flags = 0
 
 	const inputLength = input.length
-	let startingIndex = startIndex - 1
+	let startingIndex = startIndex
 	let equalityIndex = startingIndex
 
 	for (let i = 0; i < inputLength; i++)
@@ -75,7 +76,8 @@ export function parseQueryFromURL(
 
 		let finalKey = keySlice
 		if (flags & KEY_HAS_PLUS) finalKey = finalKey.replace(/\+/g, ' ')
-		if (flags & KEY_NEEDS_DECODE) finalKey = decode(finalKey) || finalKey
+		if (flags & KEY_NEEDS_DECODE)
+			finalKey = decodeComponent(finalKey) || finalKey
 
 		let finalValue = ''
 		if (hasBothKeyValuePair) {
@@ -83,7 +85,7 @@ export function parseQueryFromURL(
 			if (flags & VALUE_HAS_PLUS)
 				valueSlice = valueSlice.replace(/\+/g, ' ')
 			if (flags & VALUE_NEEDS_DECODE)
-				valueSlice = decode(valueSlice) || valueSlice
+				valueSlice = decodeComponent(valueSlice) || valueSlice
 			finalValue = valueSlice
 		}
 
@@ -103,10 +105,34 @@ export function parseQueryFromURL(
 					result[finalKey].unshift(currentValue)
 				}
 			} else {
-				if (currentValue === undefined) result[finalKey] = finalValue
-				else if (Array.isArray(currentValue))
+				if (
+					object &&
+					object?.[finalKey] &&
+					finalValue.charCodeAt(0) === 123
+				) {
+					try {
+						finalValue = JSON.parse(finalValue) as any
+					} catch {}
+				} else if (
+					currentValue === undefined &&
+					!(object && object?.[finalKey]) &&
+					finalValue.indexOf(',') !== -1
+				)
+					finalValue = finalValue.split(',') as any
+
+				if (currentValue === undefined) {
+					result[finalKey] = Array.isArray(finalValue)
+						? finalValue
+						: [finalValue]
+				} else if (Array.isArray(currentValue))
 					currentValue.push(finalValue)
 				else result[finalKey] = [currentValue, finalValue]
+			}
+		} else if (object?.[finalKey] && finalValue.charCodeAt(0) === 123) {
+			try {
+				result[finalKey] = JSON.parse(finalValue)
+			} catch {
+				result[finalKey] = finalValue
 			}
 		} else {
 			result[finalKey] = finalValue
@@ -184,7 +210,8 @@ export function parseQueryStandardSchema(
 
 		let finalKey = keySlice
 		if (flags & KEY_HAS_PLUS) finalKey = finalKey.replace(/\+/g, ' ')
-		if (flags & KEY_NEEDS_DECODE) finalKey = decode(finalKey) || finalKey
+		if (flags & KEY_NEEDS_DECODE)
+			finalKey = decodeComponent(finalKey) || finalKey
 
 		let finalValue = ''
 		if (hasBothKeyValuePair) {
@@ -192,7 +219,7 @@ export function parseQueryStandardSchema(
 			if (flags & VALUE_HAS_PLUS)
 				valueSlice = valueSlice.replace(/\+/g, ' ')
 			if (flags & VALUE_NEEDS_DECODE)
-				valueSlice = decode(valueSlice) || valueSlice
+				valueSlice = decodeComponent(valueSlice) || valueSlice
 			finalValue = valueSlice
 		}
 
@@ -305,7 +332,8 @@ export function parseQuery(input: string) {
 
 		let finalKey = keySlice
 		if (flags & KEY_HAS_PLUS) finalKey = finalKey.replace(/\+/g, ' ')
-		if (flags & KEY_NEEDS_DECODE) finalKey = decode(finalKey) || finalKey
+		if (flags & KEY_NEEDS_DECODE)
+			finalKey = decodeComponent(finalKey) || finalKey
 
 		let finalValue = ''
 		if (hasBothKeyValuePair) {
@@ -313,7 +341,7 @@ export function parseQuery(input: string) {
 			if (flags & VALUE_HAS_PLUS)
 				valueSlice = valueSlice.replace(/\+/g, ' ')
 			if (flags & VALUE_NEEDS_DECODE)
-				valueSlice = decode(valueSlice) || valueSlice
+				valueSlice = decodeComponent(valueSlice) || valueSlice
 			finalValue = valueSlice
 		}
 
