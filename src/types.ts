@@ -1017,24 +1017,27 @@ type ExtractAllResponseFromMacro<A> =
 			}
 
 type ExtractAllErrorResponseFromMacro<A> =
-	IsNever<A> extends true
-		? {}
-		: {
-				return: MergeResponseStatus<A> &
-					(Exclude<A, AnyElysiaCustomStatusResponse> extends infer A
-						? IsAny<A> extends true
-							? {}
-							: IsNever<A> extends true
-								? {}
-								: NonNullable<void> extends A
+	Exclude<A, undefined | void> extends infer A
+		? IsAny<A> extends true
+			? {}
+			: IsNever<A> extends true
+				? {}
+				: {
+						return: MergeResponseStatus<A> &
+							(Exclude<
+								A,
+								AnyElysiaCustomStatusResponse
+							> extends infer A
+								? IsAny<A> extends true
 									? {}
-									: undefined extends A
+									: IsNever<A> extends true
 										? {}
 										: {
 												500: A
 											}
-						: {})
-			}
+								: {})
+					}
+		: {}
 
 type FlattenMacroResponse<T> = T extends object
 	? '_' extends keyof T
@@ -2212,14 +2215,16 @@ export type ValueToResponseSchema<Value> = ExtractErrorFromHandle<Value> &
 				: { 200: R200 }
 		: {})
 
-export type ValueToErrorResponseSchema<Value> = ExtractErrorFromHandle<Value> &
-	(Exclude<Value, AnyElysiaCustomStatusResponse> extends infer RError
+export type ValueToErrorResponseSchema<Value> = UnionResponseStatus<
+	ExtractErrorFromHandle<Value>,
+	Exclude<Value, AnyElysiaCustomStatusResponse> extends infer RError
 		? undefined extends RError
 			? {}
 			: IsNever<RError> extends true
 				? {}
 				: { 500: RError }
-		: {})
+		: {}
+>
 
 export type ValueOrFunctionToResponseSchema<T> = T extends (
 	...a: any
@@ -2249,7 +2254,7 @@ export type ElysiaHandlerToResponseSchemas<
 export type ElysiaErrorHandlerToResponseSchema<in out Handle extends Function> =
 	Prettify<
 		Handle extends (...a: any) => MaybePromise<infer R>
-			? ValueToErrorResponseSchema<Exclude<R, undefined>>
+			? ValueToErrorResponseSchema<Exclude<R, undefined | void>>
 			: {}
 	>
 
