@@ -1286,15 +1286,10 @@ export const composeHandler = ({
 						{}
 					) as Object
 				)) {
-					const parsed =
-						typeof value === 'object'
-							? JSON.stringify(value)
-							: typeof value === 'string'
-								? `'${value}'`
-								: value
+					const parsed = stringifyDefault(value)
 
 					if (parsed !== undefined)
-						fnLiteral += `c.params['${key}']??=${parsed}\n`
+						fnLiteral += `c.params[${JSON.stringify(key)}]??=${parsed}\n`
 				}
 
 			if (validator.params.provider === 'standard') {

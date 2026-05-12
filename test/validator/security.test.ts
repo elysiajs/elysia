@@ -41,4 +41,24 @@ describe('Validator Security', () => {
 
 		expect(response).toBe('safe')
 	})
+
+	it('handle arbitrary code execution from params default', async () => {
+		const app = new Elysia().get(
+			'/:id',
+			// @ts-ignore
+			(c) => c.q ?? 'safe',
+			{
+				params: t.Object({
+					id: t.String(),
+					filter: t.String({
+						default: `';console.log(c.q='pwn');'`
+					})
+				})
+			}
+		)
+
+		const response = await app.handle(req('/abc')).then((x) => x.text())
+
+		expect(response).toBe('safe')
+	})
 })
