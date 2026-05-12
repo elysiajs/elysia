@@ -1238,14 +1238,16 @@ export const composeHandler = ({
 					) as Object
 				)) {
 					const parsed =
-						typeof value === 'object'
-							? JSON.stringify(value)
-							: typeof value === 'string'
-								? `'${value}'`
-								: value
+						value instanceof Date
+							? `new Date(${value.getTime()})`
+							: typeof value === 'object'
+								? JSON.stringify(value)
+								: typeof value === 'string'
+									? JSON.stringify(value)
+									: value
 
 					if (parsed !== undefined)
-						fnLiteral += `c.headers['${key}']??=${parsed}\n`
+						fnLiteral += `c.headers[${JSON.stringify(key)}]??=${parsed}\n`
 				}
 
 			fnLiteral += composeCleaner({
