@@ -60,11 +60,6 @@ function collectStaticRoutes(app: AnyElysia) {
 	return [ready, pending] as const
 }
 
-type ServeOptionsWithPort = ServeOptions & {
-	port: number
-	fetch: (request: Request) => Response
-}
-
 export const BunAdapter = createAdapter({
 	...WebStandardAdapter,
 	name: 'bun',
@@ -74,25 +69,32 @@ export const BunAdapter = createAdapter({
 			typeof options === 'object' ? { ...options } : { port: +options }
 		) as any
 
-		app.server = Bun.serve({
-			...serve,
-			fetch: (request) => app.fetch(request)
-		})
+		const hasWs = app['~hasWS']
 
-		setImmediate(() => {
+		if (!hasWs) {
+			app.server = Bun.serve({
+				...serve,
+				fetch: (request) => app.fetch(request)
+			})
+
+			callback?.(app.server!)
+		}
+
+		// optimize router, static route, etc.
+		queueMicrotask(() => {
 			// build router before do anything else
 			serve.fetch = app.fetch
 
-			if (app['~hasWS']) {
-				const websocket = {
-					...buildGlobalWSHandler(),
-					...((app['~config'] as any)?.websocket ?? {})
-				}
+			if (hasWs) {
+				const defaultConfig = (app['~config'] as any)?.websocket
 
-				if (websocket) serve.websocket = websocket
+				serve.websocket = defaultConfig
+					? Object.assign(buildGlobalWSHandler(), defaultConfig)
+					: buildGlobalWSHandler()
 			}
 
-			app.server!.reload(serve)
+			if (app.server) app.server.reload(serve)
+			else app.server = Bun.serve(serve)
 
 			const staticRoutes = collectStaticRoutes(app as AnyElysia)
 
@@ -106,9 +108,9 @@ export const BunAdapter = createAdapter({
 					app.server!.reload(serve)
 				})
 
-			flushMemory(app)
+			flushMemory()
 
-			callback?.(app.server!)
+			if (hasWs) callback?.(app.server!)
 		})
 	}
 })

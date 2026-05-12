@@ -1,11 +1,10 @@
-import type { AnyElysia } from './base'
 import { clearSucroseCache } from './sucrose'
 import { clearContextCache } from './context'
 
 import { isBun } from './universal/constants'
 import { Validator } from './validator'
 
-export function flushMemory(app?: AnyElysia) {
+export function flushMemory() {
 	clearSucroseCache(0)
 	clearContextCache()
 	Validator.clear()
