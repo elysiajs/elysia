@@ -3222,7 +3222,9 @@ export class Elysia<
 
 		const precompile = this['~config']?.precompile
 		const buildStatic = this['~config']?.nativeStaticResponse !== false
-		const strictPath = !!this['~config']?.strictPath
+
+		this.#initMap()
+		const methods = this['~map']!
 
 		const length = this.#history.length
 		for (let i = 0; i < length; i++) {
@@ -3236,10 +3238,6 @@ export class Elysia<
 
 				this['~hasWS'] = true
 
-				// Share the same dispatch tables as HTTP routes, keyed by
-				// the synthetic method `'WS'`. The Upgrade-header pre-check
-				// in `fetch.ts` is what routes here — `~map.WS[path]` will
-				// never be hit by a regular HTTP request.
 				if (isDynamicRegex.test(path)) {
 					;(this['~router'] ??= new Memoirist()).add(
 						'WS',
@@ -3252,11 +3250,6 @@ export class Elysia<
 					;(this['~map']!['WS'] ??= nullObject())[path] = wsCompiled
 				}
 
-				// Per-route Bun server-level knobs (maxPayloadLength,
-				// idleTimeout, perMessageDeflate, …) fold into
-				// `~config.websocket` directly. Bun forces a single global
-				// `websocket: {...}`, so we keep one merged bag of defaults
-				// + overrides rather than maintaining a parallel slot.
 				if (bunOptions && Object.keys(bunOptions).length) {
 					this['~config'] ??= nullObject()
 					;(this['~config'] as any).websocket = Object.assign(
@@ -3292,8 +3285,7 @@ export class Elysia<
 					false
 				)
 			} else {
-				this.#initMap()
-				const map = (this['~map']![method] ??= nullObject())
+				const map = (methods[method] ??= nullObject())
 				map[path] = this.handler(i, precompile, route, sharedStatic)
 			}
 		}

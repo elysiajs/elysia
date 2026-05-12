@@ -148,8 +148,6 @@ function getDecodedPathHandler(
 		return [decoded, handler] as const
 	}
 
-	console.log('D')
-
 	return [decoded] as const
 }
 

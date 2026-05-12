@@ -7,6 +7,7 @@ import { flattenChain } from '../../utils'
 import { buildGlobalWSHandler } from '../../ws/route'
 
 import type { AnyElysia } from '../../base'
+import { ServeOptions } from '../../universal'
 
 function collectStaticRoutes(app: AnyElysia) {
 	const hook = flattenChain(app['~hookChain'])
@@ -59,47 +60,55 @@ function collectStaticRoutes(app: AnyElysia) {
 	return [ready, pending] as const
 }
 
+type ServeOptionsWithPort = ServeOptions & {
+	port: number
+	fetch: (request: Request) => Response
+}
+
 export const BunAdapter = createAdapter({
 	...WebStandardAdapter,
 	name: 'bun',
 	runtime: 'bun',
 	listen(app, options, callback) {
-		// call fetch first to trigger router build
-		const fetch = app.fetch
+		const serve = (
+			typeof options === 'object' ? { ...options } : { port: +options }
+		) as any
 
-		const staticRoutes = collectStaticRoutes(app as AnyElysia)
+		app.server = Bun.serve({
+			...serve,
+			fetch: (request) => app.fetch(request)
+		})
 
-		const websocket = app['~hasWS']
-			? {
+		setImmediate(() => {
+			// build router before do anything else
+			serve.fetch = app.fetch
+
+			if (app['~hasWS']) {
+				const websocket = {
 					...buildGlobalWSHandler(),
 					...((app['~config'] as any)?.websocket ?? {})
 				}
-			: undefined
 
-		const baseServe: any = {
-			fetch,
-			routes: staticRoutes?.[0],
-			reusePort: true
-		}
+				if (websocket) serve.websocket = websocket
+			}
 
-		if (websocket) baseServe.websocket = websocket
+			app.server!.reload(serve)
 
-		const server = (app.server = Bun.serve(
-			typeof options === 'object'
-				? { ...options, ...baseServe }
-				: { port: +options, ...baseServe }
-		))
+			const staticRoutes = collectStaticRoutes(app as AnyElysia)
 
-		if (staticRoutes?.[1].length)
-			Promise.all(staticRoutes?.[1]).then(() => {
-				server.reload({
-					routes: staticRoutes?.[0],
-					fetch: app.fetch
-				} as any)
-			})
+			if (staticRoutes?.[1].length)
+				Promise.all(staticRoutes?.[1]).then(() => {
+					app.server!.reload(serve)
+				})
 
-		flushMemory(app)
+			if (app.pending)
+				app.modules.then(() => {
+					app.server!.reload(serve)
+				})
 
-		callback?.(server)
+			flushMemory(app)
+
+			callback?.(app.server!)
+		})
 	}
 })
