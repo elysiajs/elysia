@@ -26,7 +26,8 @@ import {
 	isNotEmpty,
 	encodePath,
 	mergeCookie,
-	getResponseLength
+	getResponseLength,
+	stringifyDefault
 } from './utils'
 import { isBun } from './universal/utils'
 import { ParseError, status } from './error'
@@ -1237,15 +1238,10 @@ export const composeHandler = ({
 						{}
 					) as Object
 				)) {
-					const parsed =
-						typeof value === 'object'
-							? JSON.stringify(value)
-							: typeof value === 'string'
-								? `'${value}'`
-								: value
+					const parsed = stringifyDefault(value)
 
 					if (parsed !== undefined)
-						fnLiteral += `c.headers['${key}']??=${parsed}\n`
+						fnLiteral += `c.headers[${JSON.stringify(key)}]??=${parsed}\n`
 				}
 
 			fnLiteral += composeCleaner({
@@ -1290,15 +1286,10 @@ export const composeHandler = ({
 						{}
 					) as Object
 				)) {
-					const parsed =
-						typeof value === 'object'
-							? JSON.stringify(value)
-							: typeof value === 'string'
-								? `'${value}'`
-								: value
+					const parsed = stringifyDefault(value)
 
 					if (parsed !== undefined)
-						fnLiteral += `c.params['${key}']??=${parsed}\n`
+						fnLiteral += `c.params[${JSON.stringify(key)}]??=${parsed}\n`
 				}
 
 			if (validator.params.provider === 'standard') {
@@ -1331,15 +1322,12 @@ export const composeHandler = ({
 						{}
 					) as Object
 				)) {
-					const parsed =
-						typeof value === 'object'
-							? JSON.stringify(value)
-							: typeof value === 'string'
-								? `'${value}'`
-								: value
+					const parsed = stringifyDefault(value)
 
-					if (parsed !== undefined)
-						fnLiteral += `if(c.query['${key}']===undefined)c.query['${key}']=${parsed}\n`
+					if (parsed !== undefined) {
+						const accessor = `c.query[${JSON.stringify(key)}]`
+						fnLiteral += `if(${accessor}===undefined)${accessor}=${parsed}\n`
+					}
 				}
 
 			fnLiteral += composeCleaner({
@@ -1419,14 +1407,13 @@ export const composeHandler = ({
 					if (!isNotEmpty(value)) value = undefined
 				}
 
-				const parsed =
-					typeof value === 'object'
-						? JSON.stringify(value)
-						: typeof value === 'string'
-							? `'${value}'`
-							: value
+				const parsed = stringifyDefault(value)
 
-				if (value !== undefined && value !== null) {
+				if (
+					value !== undefined &&
+					value !== null &&
+					parsed !== undefined
+				) {
 					if (Array.isArray(value))
 						fnLiteral += `if(!c.body)c.body=${parsed}\n`
 					else if (typeof value === 'object')

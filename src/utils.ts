@@ -35,6 +35,24 @@ export const replaceUrlPath = (url: string, pathname: string) => {
 	return `${url.slice(0, pathStartIndex)}${pathname.charCodeAt(0) === 47 ? '' : '/'}${pathname}${url.slice(queryIndex)}`
 }
 
+// Render a schema default value as a JavaScript literal safe to embed in
+// AOT-generated handler source. Strings and objects are escaped via
+// JSON.stringify; Date instances round-trip through `new Date(...)` so
+// handlers still receive a real Date. Mirrors the cookie codegen pattern
+// hardened by GHSA-8vch-m3f4-q8jf.
+export const stringifyDefault = (value: unknown): string | undefined => {
+	if (value === undefined) return undefined
+	if (value === null) return 'null'
+	if (value instanceof Date) return `new Date(${value.getTime()})`
+	if (typeof value === 'string') return JSON.stringify(value)
+	if (typeof value === 'number' || typeof value === 'boolean')
+		return String(value)
+	if (typeof value === 'object') return JSON.stringify(value)
+	throw new TypeError(
+		`Unsupported schema default value type: ${typeof value}`
+	)
+}
+
 export const isClass = (v: Object) =>
 	(typeof v === 'function' && /^\s*class\s+/.test(v.toString())) ||
 	// Handle Object.create(null)
