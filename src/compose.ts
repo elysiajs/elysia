@@ -26,7 +26,8 @@ import {
 	isNotEmpty,
 	encodePath,
 	mergeCookie,
-	getResponseLength
+	getResponseLength,
+	stringifyDefault
 } from './utils'
 import { isBun } from './universal/utils'
 import { ParseError, status } from './error'
@@ -1237,14 +1238,7 @@ export const composeHandler = ({
 						{}
 					) as Object
 				)) {
-					const parsed =
-						value instanceof Date
-							? `new Date(${value.getTime()})`
-							: typeof value === 'object'
-								? JSON.stringify(value)
-								: typeof value === 'string'
-									? JSON.stringify(value)
-									: value
+					const parsed = stringifyDefault(value)
 
 					if (parsed !== undefined)
 						fnLiteral += `c.headers[${JSON.stringify(key)}]??=${parsed}\n`
@@ -1333,14 +1327,7 @@ export const composeHandler = ({
 						{}
 					) as Object
 				)) {
-					const parsed =
-						value instanceof Date
-							? `new Date(${value.getTime()})`
-							: typeof value === 'object'
-								? JSON.stringify(value)
-								: typeof value === 'string'
-									? JSON.stringify(value)
-									: value
+					const parsed = stringifyDefault(value)
 
 					if (parsed !== undefined) {
 						const accessor = `c.query[${JSON.stringify(key)}]`
