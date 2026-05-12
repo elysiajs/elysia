@@ -741,6 +741,35 @@ import { Prettify } from '../../../src/types'
 	}>()
 }
 
+// Macro should extract plain error array response on error status
+{
+	const app = new Elysia()
+		.macro({
+			a: {
+				error: [
+					() => ({ macroError: 'nope' as const }),
+					({ status }) =>
+						status(409, { explicit: 'conflict' as const })
+				]
+			}
+		})
+		.guard({
+			a: true
+		})
+
+	type Actual = Prettify<(typeof app)['~Volatile']['response']>
+	type Expected = {
+		409: {
+			explicit: 'conflict'
+		}
+		500: {
+			macroError: 'nope'
+		}
+	}
+	expectTypeOf<Actual>().toMatchTypeOf<Expected>()
+	expectTypeOf<Expected>().toMatchTypeOf<Actual>()
+}
+
 // Guard should cast to scoped
 {
 	const app = new Elysia()
