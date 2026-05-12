@@ -1,3 +1,7 @@
+# Unreleased
+Bug fix:
+- [#1864](https://github.com/elysiajs/elysia/issues/1864) prevent arbitrary code execution via schema default values for query/headers/params/body (mirrors the cookie hardening from GHSA-8vch-m3f4-q8jf)
+
 # 1.4.28 - 17 Mar 2025
 Feature:
 - [#1803](https://github.com/elysiajs/elysia/pull/1803) stream response with pull based backpressure
