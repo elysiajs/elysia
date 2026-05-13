@@ -24,6 +24,7 @@ const createContext = (
 	const defaultHeaders = app.setHeaders
 
 	const hasTrace = !!app.event.trace?.length
+	const hasAfterResponse = !!app.event.afterResponse?.length
 	if (hasTrace) fnLiteral += `const id=randomId()\n`
 
 	const isDynamic = /[:*]/.test(route.path)
@@ -64,7 +65,7 @@ const createContext = (
 		getPath +
 		allocateIf(
 			`url:request.url,`,
-			hasTrace || inference.url || needsQuery
+			hasTrace || inference.url || needsQuery || hasAfterResponse
 		) +
 		`redirect,` +
 		`status,` +
