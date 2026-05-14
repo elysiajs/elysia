@@ -1000,7 +1000,10 @@ type ExtractAllResponseFromMacro<A> =
 		: {
 				// Merge all status to single object first
 				return: MergeResponseStatus<A> &
-					(Exclude<A, AnyElysiaCustomStatusResponse> extends infer A
+					(Exclude<
+						A,
+						AnyElysiaCustomStatusResponse | Response
+					> extends infer A
 						? IsAny<A> extends true
 							? {}
 							: IsNever<A> extends true
