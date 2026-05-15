@@ -519,6 +519,24 @@ export default class Elysia<
 				this.standaloneValidator.global
 			)
 
+		// Normalize standalone validator header schemas to lowercase
+		// since HTTP headers are case-insensitive (RFC 2616)
+		for (const validator of standaloneValidators) {
+			const h = validator.headers as any
+			if (h?.properties) {
+				const props: Record<string, any> = {}
+				for (const [key, value] of Object.entries(h.properties))
+					props[key.toLowerCase()] = value
+				validator.headers = {
+					...h,
+					properties: props,
+					required: h.required?.map((k: string) =>
+						k.toLowerCase()
+					)
+				}
+			}
+		}
+
 		if (path !== '' && path.charCodeAt(0) !== 47) path = '/' + path
 		if (this.config.prefix && !skipPrefix) path = this.config.prefix + path
 
