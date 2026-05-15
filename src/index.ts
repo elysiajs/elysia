@@ -18,6 +18,7 @@ import type { WSLocalHook } from './ws/types'
 
 import { BunAdapter } from './adapter/bun/index'
 import { WebStandardAdapter } from './adapter/web-standard/index'
+import { createCaseInsensitiveHeaders } from './adapter/utils'
 import type { ElysiaAdapter } from './adapter/types'
 
 import { env } from './universal/env'
@@ -549,9 +550,27 @@ export default class Elysia<
 
 		const instanceValidator = this.validator.getCandidate()
 
+		// Normalize header schema property keys to lowercase
+		// since HTTP headers are case-insensitive (RFC 2616)
+		const rawHeaders =
+			localHook?.headers ?? (instanceValidator?.headers as any)
+		let normalizedHeaders = rawHeaders
+		if (rawHeaders?.properties) {
+			const props: Record<string, any> = {}
+			for (const [key, value] of Object.entries(rawHeaders.properties))
+				props[key.toLowerCase()] = value
+			normalizedHeaders = {
+				...rawHeaders,
+				properties: props,
+				required: rawHeaders.required?.map((k: string) =>
+					k.toLowerCase()
+				)
+			}
+		}
+
 		const cloned = {
 			body: localHook?.body ?? (instanceValidator?.body as any),
-			headers: localHook?.headers ?? (instanceValidator?.headers as any),
+			headers: normalizedHeaders,
 			params: localHook?.params ?? (instanceValidator?.params as any),
 			query: localHook?.query ?? (instanceValidator?.query as any),
 			cookie: localHook?.cookie ?? (instanceValidator?.cookie as any),
@@ -882,7 +901,9 @@ export default class Elysia<
 								: (undefined as any as Request),
 							server: null,
 							set: {
-								headers: Object.assign({}, this.setHeaders)
+								headers: createCaseInsensitiveHeaders(
+									Object.assign({}, this.setHeaders)
+								)
 							},
 							status,
 							store: this.store
@@ -1104,7 +1125,11 @@ export default class Elysia<
 
 		if (!this.setHeaders) this.setHeaders = {}
 
-		this.setHeaders = mergeDeep(this.setHeaders, header)
+		const normalized: Record<string, any> = {}
+		for (const key in header)
+			normalized[key.toLowerCase()] = (header as Record<string, any>)[key]
+
+		this.setHeaders = mergeDeep(this.setHeaders, normalized)
 
 		return this
 	}

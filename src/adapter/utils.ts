@@ -6,6 +6,49 @@ import { env } from '../universal'
 import { isBun } from '../universal/utils'
 import { MaybePromise } from '../types'
 
+const ciHeadersHandler: ProxyHandler<Record<string, any>> = {
+	get(obj, prop) {
+		if (typeof prop === 'string') return obj[prop.toLowerCase()]
+		return obj[prop as any]
+	},
+	set(obj, prop, value) {
+		if (typeof prop === 'string') obj[prop.toLowerCase()] = value
+		else obj[prop as any] = value
+		return true
+	},
+	has(obj, prop) {
+		if (typeof prop === 'string') return prop.toLowerCase() in obj
+		return prop in obj
+	},
+	deleteProperty(obj, prop) {
+		if (typeof prop === 'string') delete obj[prop.toLowerCase()]
+		else delete obj[prop as any]
+		return true
+	},
+	ownKeys(obj) {
+		return Reflect.ownKeys(obj)
+	},
+	getOwnPropertyDescriptor(obj, prop) {
+		if (typeof prop === 'string') {
+			const lower = prop.toLowerCase()
+			if (lower in obj)
+				return {
+					value: obj[lower],
+					writable: true,
+					enumerable: true,
+					configurable: true
+				}
+			return undefined
+		}
+		return Reflect.getOwnPropertyDescriptor(obj, prop)
+	}
+}
+
+export const createCaseInsensitiveHeaders = (
+	target: Record<string, any> = Object.create(null)
+): Context['set']['headers'] =>
+	new Proxy(target, ciHeadersHandler) as Context['set']['headers']
+
 export const handleFile = (
 	response: File | Blob,
 	set?: Context['set'],

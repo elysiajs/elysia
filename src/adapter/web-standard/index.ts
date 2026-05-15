@@ -21,7 +21,7 @@ export const WebStandardAdapter: ElysiaAdapter = {
 		preferWebstandardHeaders: true,
 		// @ts-ignore Bun specific
 		headers:
-			'c.headers={}\n' +
+			'c.headers=ciHeaders()\n' +
 			'for(const [k,v] of c.request.headers.entries())' +
 			'c.headers[k]=v\n',
 		parser: {
@@ -176,8 +176,8 @@ export const WebStandardAdapter: ElysiaAdapter = {
 				`set:{headers:`
 
 			fnLiteral += Object.keys(defaultHeaders ?? {}).length
-				? 'Object.assign({},app.setHeaders)'
-				: 'Object.create(null)'
+				? 'ciHeaders(Object.assign({},app.setHeaders))'
+				: 'ciHeaders()'
 
 			fnLiteral += `,status:200}`
 

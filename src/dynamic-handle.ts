@@ -14,6 +14,7 @@ import { getSchemaProperties, type ElysiaTypeCheck } from './schema'
 import type { TypeCheck } from './type-system'
 import type { Handler, LifeCycleStore, SchemaValidator } from './types'
 import { hasSetImmediate, redirect, StatusMap, signCookie } from './utils'
+import { createCaseInsensitiveHeaders } from './adapter/utils'
 
 // JIT Handler
 export type DynamicHandler = {
@@ -201,7 +202,9 @@ export const createDynamicHandler = (app: AnyElysia) => {
 		const set: Context['set'] = {
 			cookie: {},
 			status: 200,
-			headers: defaultHeader ? { ...defaultHeader } : {}
+			headers: createCaseInsensitiveHeaders(
+				defaultHeader ? { ...defaultHeader } : undefined
+			)
 		}
 
 		const context = Object.assign(
@@ -443,7 +446,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 			// @ts-expect-error
 			context.query = qi === -1 ? {} : parseQuery(url.substring(qi + 1))
 
-			context.headers = {}
+			context.headers = createCaseInsensitiveHeaders()
 			for (const [key, value] of request.headers.entries())
 				context.headers[key] = value
 
@@ -532,7 +535,9 @@ export const createDynamicHandler = (app: AnyElysia) => {
 
 			if (validator) {
 				if (headerValidator) {
-					const _header = structuredClone(context.headers)
+					const _header = createCaseInsensitiveHeaders({
+						...context.headers
+					})
 					for (const [key, value] of request.headers)
 						_header[key] = value
 
@@ -544,7 +549,9 @@ export const createDynamicHandler = (app: AnyElysia) => {
 						)
 				} else if (validator.headers?.Decode)
 					// @ts-ignore
-					context.headers = validator.headers.Decode(context.headers)
+					context.headers = createCaseInsensitiveHeaders(
+						validator.headers.Decode(context.headers)
+					)
 
 				if (paramsValidator?.Check(context.params) === false) {
 					throw new ValidationError(
