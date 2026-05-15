@@ -1082,6 +1082,54 @@ describe('Body Validator', () => {
 		}
 	})
 
+	it('validate csv file by declared text/csv type', async () => {
+		const app = new Elysia().post('/', () => 'ok', {
+			body: t.Object({
+				file: t.File({
+					type: ['text/csv']
+				})
+			})
+		})
+
+		const body = new FormData()
+		body.append(
+			'file',
+			new File(['name,email\nelysia,hi@example.com\n'], 'sample.csv', {
+				type: 'text/csv'
+			})
+		)
+
+		const response = await app.handle(
+			new Request('http://localhost/', {
+				method: 'POST',
+				body
+			})
+		)
+
+		expect(response.status).toBe(200)
+
+		const invalidBody = new FormData()
+		invalidBody.append(
+			'file',
+			new File(
+				[await Bun.file('test/images/millenium.jpg').arrayBuffer()],
+				'sample.csv',
+				{
+					type: 'text/csv'
+				}
+			)
+		)
+
+		const invalidResponse = await app.handle(
+			new Request('http://localhost/', {
+				method: 'POST',
+				body: invalidBody
+			})
+		)
+
+		expect(invalidResponse.status).toBe(422)
+	})
+
 	it('handle body using Transform with Intersect ', async () => {
 		const app = new Elysia().post('/test', ({ body }) => body, {
 			body: t.Intersect([
