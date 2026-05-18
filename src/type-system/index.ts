@@ -153,6 +153,21 @@ export const ElysiaType = {
 			.Encode((value) => value) as any as TNumber
 	},
 
+	BigIntNumeric: (property?: SchemaOptions) => {
+		return t
+			.Transform(
+				t.Number(property)
+			)
+			.Decode((value) => {
+				try {
+					return BigInt(value)
+				} catch {
+					return value
+				}
+			})
+			.Encode((value) => Number(value)) as any
+	},
+
 	NumericEnum<T extends AssertNumericEnum<T>>(
 		item: T,
 		property?: SchemaOptions
@@ -673,6 +688,7 @@ t.UnionEnum = ElysiaType.UnionEnum
 t.NoValidate = ElysiaType.NoValidate
 t.Form = ElysiaType.Form
 
+t.BigIntNumeric = ElysiaType.BigIntNumeric
 t.ArrayBuffer = ElysiaType.ArrayBuffer
 t.Uint8Array = ElysiaType.Uint8Array as any
 
