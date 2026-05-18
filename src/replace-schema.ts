@@ -238,6 +238,11 @@ export const coercePrimitiveRoot = () => {
 				to: (schema) => t.BooleanString(schema),
 				rootOnly: true,
 			},
+			{
+				from: t.BigInt(),
+				to: (schema) => t.BigIntNumeric(schema),
+				untilObjectFound: true,
+			},
 		] satisfies ReplaceSchemaTypeOptions[];
 
 	return _coercePrimitiveRoot;
