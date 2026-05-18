@@ -18,6 +18,16 @@ const env =
 			? process?.env
 			: undefined
 
+const safeStringify = (
+	value: unknown,
+	space?: string | number
+): string =>
+	JSON.stringify(
+		value,
+		(_, v) => (typeof v === 'bigint' ? v.toString() : v),
+		space
+	)
+
 export const ERROR_CODE = Symbol('ElysiaErrorCode')
 export type ERROR_CODE = typeof ERROR_CODE
 
@@ -351,13 +361,13 @@ export class ValidationError extends Error {
 			error = _errors?.[0]
 
 			if (isProduction && !allowUnsafeValidationDetails)
-				message = JSON.stringify({
+				message = safeStringify({
 					type: 'validation',
 					on: type,
 					found: value
 				})
 			else
-				message = JSON.stringify(
+				message = safeStringify(
 					{
 						type: 'validation',
 						on: type,
@@ -368,7 +378,6 @@ export class ValidationError extends Error {
 						found: value,
 						errors
 					},
-					null,
 					2
 				)
 
@@ -446,16 +455,16 @@ export class ValidationError extends Error {
 			if (customError !== undefined) {
 				message =
 					typeof customError === 'object'
-						? JSON.stringify(customError)
+						? safeStringify(customError)
 						: customError + ''
 			} else if (isProduction && !allowUnsafeValidationDetails) {
-				message = JSON.stringify({
+				message = safeStringify({
 					type: 'validation',
 					on: type,
 					found: value
 				})
 			} else {
-				message = JSON.stringify(
+				message = safeStringify(
 					{
 						type: 'validation',
 						on: type,
@@ -473,7 +482,6 @@ export class ValidationError extends Error {
 										mapValueError
 									)
 					},
-					null,
 					2
 				)
 			}
