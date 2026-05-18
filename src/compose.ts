@@ -1421,7 +1421,9 @@ export const composeHandler = ({
 
 				const parsed =
 					typeof value === 'object'
-						? JSON.stringify(value)
+						? JSON.stringify(value, (_, v) =>
+									typeof v === 'bigint' ? Number(v) : v
+							)
 						: typeof value === 'string'
 							? `'${value}'`
 							: value
@@ -1491,7 +1493,9 @@ export const composeHandler = ({
 
 			if (validator.body.hasTransform)
 				fnLiteral += coerceTransformDecodeError(
-					`if(isNotEmptyObject)c.body=validator.body.Decode(c.body)\n`,
+					validator.body.hasDefault
+					? `c.body=validator.body.Decode(c.body)\n`
+					: `if(isNotEmptyObject)c.body=validator.body.Decode(c.body)\n`,
 					'body',
 					allowUnsafeValidationDetails
 				)
