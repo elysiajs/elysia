@@ -462,6 +462,11 @@ export const getSchemaValidator = <T extends AnySchema | string | undefined>(
 					to: (options) => t.BooleanString(options),
 					untilObjectFound: true
 				},
+				{
+					from: t.BigInt(),
+					to: (options) => t.BigIntNumeric(options),
+					untilObjectFound: true
+				},
 				...(Array.isArray(additionalCoerce)
 					? additionalCoerce
 					: [additionalCoerce])
