@@ -5,6 +5,7 @@ import { createHoc, createOnRequestHandler, isAsync } from '../../compose'
 import { randomId, ELYSIA_REQUEST_ID, redirect, isNotEmpty } from '../../utils'
 import { status } from '../../error'
 import { ELYSIA_TRACE } from '../../trace'
+import { createCaseInsensitiveHeaders as ciHeaders } from '../utils'
 
 import type { AnyElysia } from '../..'
 import type { InternalRoute, InputSchema } from '../../types'
@@ -70,8 +71,8 @@ const createContext = (
 		`status,` +
 		`set:{headers:` +
 		(isNotEmpty(defaultHeaders)
-			? 'Object.assign({},app.setHeaders)'
-			: 'Object.create(null)') +
+			? 'ciHeaders(Object.assign({},app.setHeaders))'
+			: 'ciHeaders()') +
 		`,status:200}`
 
 	if (inference.server) fnLiteral += `,get server(){return app.getServer()}`
@@ -117,6 +118,7 @@ export const createBunRouteHandler = (app: AnyElysia, route: InternalRoute) => {
 		'redirect=data.redirect,' +
 		'route=data.route,' +
 		'mapEarlyResponse=data.mapEarlyResponse,' +
+		'ciHeaders=data.ciHeaders,' +
 		allocateIf('randomId=data.randomId,', hasTrace) +
 		allocateIf(`ELYSIA_REQUEST_ID=data.ELYSIA_REQUEST_ID,`, hasTrace) +
 		allocateIf(`ELYSIA_TRACE=data.ELYSIA_TRACE,`, hasTrace) +
@@ -164,6 +166,7 @@ export const createBunRouteHandler = (app: AnyElysia, route: InternalRoute) => {
 		ELYSIA_TRACE: hasTrace ? ELYSIA_TRACE : undefined,
 		ELYSIA_REQUEST_ID: hasTrace ? ELYSIA_REQUEST_ID : undefined,
 		trace: hasTrace ? app.event.trace?.map((x) => x?.fn ?? x) : undefined,
-		mapEarlyResponse: mapEarlyResponse
+		mapEarlyResponse: mapEarlyResponse,
+		ciHeaders
 	})
 }

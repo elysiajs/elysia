@@ -214,8 +214,8 @@ export const BunAdapter: ElysiaAdapter = {
 	composeHandler: {
 		...WebStandardAdapter.composeHandler,
 		headers: hasHeaderShorthand
-			? 'c.headers=c.request.headers.toJSON()\n'
-			: 'c.headers={}\n' +
+			? 'c.headers=ciHeaders(c.request.headers.toJSON())\n'
+			: 'c.headers=ciHeaders()\n' +
 				'for(const [k,v] of c.request.headers.entries())' +
 				'c.headers[k]=v\n'
 	},
