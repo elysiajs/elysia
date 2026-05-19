@@ -541,17 +541,22 @@ export const createDynamicHandler = (app: AnyElysia) => {
 					for (const [key, value] of request.headers)
 						_header[key] = value
 
-					if (validator.headers!.Check(_header) === false)
+					if (headerValidator.Check(_header) === false)
 						throw new ValidationError(
 							'header',
-							validator.headers!,
+							headerValidator,
 							_header
 						)
-				} else if (validator.headers?.Decode)
+
 					// @ts-ignore
-					context.headers = createCaseInsensitiveHeaders(
-						validator.headers.Decode(context.headers)
-					)
+					if (headerValidator.Decode)
+						// @ts-ignore
+						context.headers = createCaseInsensitiveHeaders(
+							headerValidator.Decode(_header)
+						)
+					// @ts-ignore
+					else context.headers = _header
+				}
 
 				if (paramsValidator?.Check(context.params) === false) {
 					throw new ValidationError(

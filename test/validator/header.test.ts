@@ -428,6 +428,29 @@ describe('Header Validator', () => {
 		expect(res.status).toBe(200)
 	})
 
+	it('access validated headers with any casing', async () => {
+		const app = new Elysia().get(
+			'/',
+			({ headers }) =>
+				`${headers['x-custom']},${headers['X-Custom']},${headers['X-CUSTOM']}`,
+			{
+				headers: t.Object({
+					'X-Custom': t.String()
+				})
+			}
+		)
+		const res = await app.handle(
+			req('/', {
+				headers: {
+					'x-custom': 'hello'
+				}
+			})
+		)
+
+		expect(await res.text()).toBe('hello,hello,hello')
+		expect(res.status).toBe(200)
+	})
+
 	it('validate User-Agent schema key against lowercase header', async () => {
 		const app = new Elysia().get(
 			'/',
