@@ -375,7 +375,7 @@ export const mapEarlyResponse = (
 				)
 
 			case undefined:
-				if (!response) return new Response(null)
+				if (!response) return new Response()
 
 				return new Response(JSON.stringify(response), {
 					headers: {
@@ -514,7 +514,7 @@ export const mapCompactResponse = (
 			)
 
 		case undefined:
-			if (!response) return new Response(null)
+			if (!response) return new Response()
 
 			return new Response(JSON.stringify(response), {
 				headers: {
