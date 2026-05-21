@@ -185,8 +185,9 @@ export class Elysia<
 
 	constructor(config?: ElysiaConfig<BasePath, Scope>) {
 		this['~config'] = config
-
 		this['~Prefix'] = config?.prefix as BasePath
+		if (this['~Prefix'] && !this['~Prefix'].startsWith('/'))
+			this['~Prefix'] = `/${this['~Prefix']}` as BasePath
 
 		if (config?.name)
 			this.#hash = fnv1a(
