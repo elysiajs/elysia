@@ -1938,12 +1938,25 @@ export class Elysia<
 							? childChain
 							: { combine: childChain, over: preChain }
 
+				const path = this['~Prefix']
+					? joinPath(this['~Prefix'], route[1])
+					: route[1]
+
 				history.push(
 					inheritedChain === childChain
-						? route
+						? this['~Prefix']
+							? [
+									route[0],
+									path,
+									route[2],
+									route[3],
+									route[4],
+									route[5]
+								]
+							: route
 						: ([
 								route[0],
-								route[1],
+								path,
 								route[2],
 								route[3],
 								route[4],

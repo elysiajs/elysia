@@ -1,14 +1,10 @@
 import { Elysia, t } from '../src'
-const t1 = performance.now()
 
-class CustomError extends Error {
-	constructor() {
-		super()
-	}
-}
+const plugin = new Elysia({ prefix: 'v1' }).get('thing', 'thing')
 
-const app = new Elysia().error(CustomError, () => {})
+const app = new Elysia({ prefix: 'api' }).use(plugin)
 
-const getErrors = (app: Elysia<any, any, any, any, any>) => app['~ext']?.error
+console.log(app.routes[0].path)
 
-console.log(getErrors(app))
+// This should not error
+app['~Routes']?.api.v1.thing
