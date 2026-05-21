@@ -3,8 +3,9 @@ import { Elysia, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { post, req } from '../utils'
+
 import z from 'zod'
-import { AnyElysia } from '../../src/base'
+import type { AnyElysia } from '../../src/base'
 
 class CustomError extends Error {
 	constructor() {
@@ -46,7 +47,7 @@ describe('Error extends', () => {
 	})
 
 	it('inherits functional plugin', async () => {
-		const plugin = (app: Elysia) => app.error(CustomError, () => { })
+		const plugin = (app: Elysia) => app.error(CustomError, () => {})
 
 		const app = new Elysia().use(plugin)
 
@@ -54,7 +55,7 @@ describe('Error extends', () => {
 	})
 
 	it('inherits instance plugin', async () => {
-		const plugin = new Elysia().error(CustomError, () => { })
+		const plugin = new Elysia().error(CustomError, () => {})
 
 		const app = new Elysia().use(plugin)
 

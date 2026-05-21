@@ -31,6 +31,7 @@ import {
 	mergeResponse,
 	nullObject,
 	pushField,
+	replaceUrlPath,
 	schemaProperties,
 	type ChainNode
 } from './utils'
@@ -86,8 +87,11 @@ import type {
 	AnyLocalHook,
 	DefaultEphemeral,
 	DefaultSingleton,
-	DefaultMetadata
+	DefaultMetadata,
+	DocumentDecoration,
+	Handler
 } from './types'
+import { Context } from './context'
 
 // Tail-first walk buffer for `#use`'s hookChain absorption.
 // reused array so no new array allocation
@@ -3131,6 +3135,87 @@ export class Elysia<
 			opts = handlerOrOptions
 
 		this.#add('WS', path, undefined, opts)
+
+		return this
+	}
+
+	mount(
+		handle: (request: Request) => MaybePromise<Response>,
+		detail?: { detail?: DocumentDecoration }
+	): this
+	mount(
+		path: string,
+		handle: (request: Request) => MaybePromise<Response>,
+		detail?: { detail?: DocumentDecoration }
+	): this
+
+	mount(
+		path: string | ((request: Request) => MaybePromise<Response>),
+		handleOrConfig?:
+			| ((request: Request) => MaybePromise<Response>)
+			| { detail?: DocumentDecoration },
+		config?: { detail?: DocumentDecoration }
+	) {
+		const options = {
+			...config,
+			parse: 'none',
+			detail: {
+				...config?.detail,
+				hide: true
+			}
+		}
+
+		if (typeof path === 'function' || path === '' || path === '/') {
+			const run =
+				typeof path === 'function'
+					? path
+					: typeof handleOrConfig === 'function'
+						? handleOrConfig
+						: null
+
+			if (!run) throw new Error('Invalid handler')
+
+			this.all(
+				'/*',
+				(c: Context) =>
+					run(
+						new Request(
+							replaceUrlPath(c.request.url, c.path),
+							c.request
+						)
+					),
+				options
+			)
+
+			return this
+		}
+
+		const handle =
+			typeof handleOrConfig === 'function' ? handleOrConfig : null
+
+		if (!handle) throw new Error('Invalid handler')
+
+		const fullPath =
+			typeof path === 'string' && this['~Prefix']
+				? this['~Prefix'] + path
+				: path
+
+		const length = fullPath.length - (path.endsWith('*') ? 1 : 0)
+		const handler: Handler = (c) =>
+			handle(
+				new Request(
+					replaceUrlPath(c.request.url, c.path.slice(length) || '/'),
+					c.request
+				)
+			)
+
+		this.all(path, handler as any, options)
+
+		this.all(
+			path + (path.endsWith('/') ? '*' : '/*'),
+			handler as any,
+			options
+		)
 
 		return this
 	}

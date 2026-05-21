@@ -718,3 +718,10 @@ export const requestId = isBun
 		(crypto.randomUUIDv7?.bind(crypto) ?? crypto.randomUUID?.bind(crypto))
 
 export const isEncoded = /%[0-9A-Fa-f]{2}/
+
+export function replaceUrlPath(url: string, path: string) {
+	const i = url.indexOf('/', 11)
+	const qs = url.indexOf('?', i)
+
+	return `${url.slice(0, i)}${path.charCodeAt(0) === 47 ? '' : '/'}${path}${qs === -1 ? '' : url.slice(qs)}`
+}

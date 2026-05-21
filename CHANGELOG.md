@@ -10,6 +10,7 @@ Breaking Change:
 - `t.Transform` renamed to `t.Codec` (TypeBox 1.0 alignment)
 - `t.NoValidate` semantics: now skips `Check` only — `Default`/`Convert`/`Decode`/`Encode` still run. Unidirectional codecs (`t.BooleanString`, `t.Numeric`) under `NoValidate` will surface as `ValidationError` if Encode is invoked
 - Cookie `sign` without matching `secrets` now throws at app construction time (was silent before — cookies shipped unsigned)
+- deprecated passing Elysia instance to `.mount`, use `.use` instead
 
 Behavior Change:
 - soft deprecation for `resolve`, use `derive` instead
