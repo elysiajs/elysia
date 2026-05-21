@@ -89,7 +89,11 @@ import type {
 	DefaultSingleton,
 	DefaultMetadata,
 	DocumentDecoration,
-	Handler
+	Handler,
+	MaybeValueOrVoidFunction,
+	MacroProperty,
+	MacroToProperty,
+	MaybeFunction
 } from './types'
 import { Context } from './context'
 
@@ -255,7 +259,6 @@ export class Elysia<
 		{
 			decorator: Prettify<Singleton['decorator'] & { [k in Name]: Value }>
 			store: Singleton['store']
-			derive: Singleton['derive']
 			resolve: Singleton['resolve']
 		},
 		Definitions,
@@ -273,7 +276,6 @@ export class Elysia<
 		{
 			decorator: Prettify<Singleton['decorator'] & NewDecorators>
 			store: Singleton['store']
-			derive: Singleton['derive']
 			resolve: Singleton['resolve']
 		},
 		Definitions,
@@ -291,7 +293,6 @@ export class Elysia<
 		{
 			decorator: NewDecorators
 			store: Singleton['store']
-			derive: Singleton['derive']
 			resolve: Singleton['resolve']
 		},
 		Definitions,
@@ -311,7 +312,6 @@ export class Elysia<
 		{
 			decorator: Prettify<Singleton['decorator'] & { [k in Name]: Value }>
 			store: Singleton['store']
-			derive: Singleton['derive']
 			resolve: Singleton['resolve']
 		},
 		Definitions,
@@ -333,7 +333,6 @@ export class Elysia<
 				Omit<Singleton['decorator'], Name> & { [k in Name]: Value }
 			>
 			store: Singleton['store']
-			derive: Singleton['derive']
 			resolve: Singleton['resolve']
 		},
 		Definitions,
@@ -354,7 +353,6 @@ export class Elysia<
 		{
 			decorator: Prettify<Singleton['decorator'] & { [k in Name]: Value }>
 			store: Singleton['store']
-			derive: Singleton['derive']
 			resolve: Singleton['resolve']
 		},
 		Definitions,
@@ -377,7 +375,6 @@ export class Elysia<
 				Omit<Singleton['decorator'], Name> & { [k in Name]: Value }
 			>
 			store: Singleton['store']
-			derive: Singleton['derive']
 			resolve: Singleton['resolve']
 		},
 		Definitions,
@@ -396,7 +393,6 @@ export class Elysia<
 		{
 			decorator: Prettify<Singleton['decorator'] & NewDecorators>
 			store: Singleton['store']
-			derive: Singleton['derive']
 			resolve: Singleton['resolve']
 		},
 		Definitions,
@@ -418,7 +414,6 @@ export class Elysia<
 					NewDecorators
 			>
 			store: Singleton['store']
-			derive: Singleton['derive']
 			resolve: Singleton['resolve']
 		},
 		Definitions,
@@ -438,7 +433,6 @@ export class Elysia<
 		{
 			decorator: Prettify<Singleton['decorator'] & NewDecorators>
 			store: Singleton['store']
-			derive: Singleton['derive']
 			resolve: Singleton['resolve']
 		},
 		Definitions,
@@ -461,7 +455,6 @@ export class Elysia<
 					NewDecorators
 			>
 			store: Singleton['store']
-			derive: Singleton['derive']
 			resolve: Singleton['resolve']
 		},
 		Definitions,
@@ -604,7 +597,6 @@ export class Elysia<
 		{
 			decorator: Singleton['decorator']
 			store: Prettify<Singleton['store'] & { [k in Name]: Value }>
-			derive: Singleton['derive']
 			resolve: Singleton['resolve']
 		},
 		Definitions,
@@ -622,7 +614,6 @@ export class Elysia<
 		{
 			decorator: Singleton['decorator']
 			store: Prettify<Singleton['store'] & NewStore>
-			derive: Singleton['derive']
 			resolve: Singleton['resolve']
 		},
 		Definitions,
@@ -640,7 +631,6 @@ export class Elysia<
 		{
 			decorator: Singleton['decorator']
 			store: NewStore
-			derive: Singleton['derive']
 			resolve: Singleton['resolve']
 		},
 		Definitions,
@@ -660,7 +650,6 @@ export class Elysia<
 		{
 			decorator: Singleton['decorator']
 			store: Prettify<Singleton['store'] & { [k in Name]: Value }>
-			derive: Singleton['derive']
 			resolve: Singleton['resolve']
 		},
 		Definitions,
@@ -682,7 +671,6 @@ export class Elysia<
 			store: Prettify<
 				Omit<Singleton['store'], Name> & { [k in Name]: Value }
 			>
-			derive: Singleton['derive']
 			resolve: Singleton['resolve']
 		},
 		Definitions,
@@ -703,7 +691,6 @@ export class Elysia<
 		{
 			decorator: Singleton['decorator']
 			store: Prettify<Singleton['store'] & { [k in Name]: Value }>
-			derive: Singleton['derive']
 			resolve: Singleton['resolve']
 		},
 		Definitions,
@@ -726,7 +713,6 @@ export class Elysia<
 			store: Prettify<
 				Omit<Singleton['store'], Name> & { [k in Name]: Value }
 			>
-			derive: Singleton['derive']
 			resolve: Singleton['resolve']
 		},
 		Definitions,
@@ -745,7 +731,6 @@ export class Elysia<
 		{
 			decorator: Singleton['decorator']
 			store: Prettify<Singleton['store'] & NewStore>
-			derive: Singleton['derive']
 			resolve: Singleton['resolve']
 		},
 		Definitions,
@@ -764,7 +749,6 @@ export class Elysia<
 		{
 			decorator: Singleton['decorator']
 			store: Prettify<Omit<Singleton['store'], keyof NewStore> & NewStore>
-			derive: Singleton['derive']
 			resolve: Singleton['resolve']
 		},
 		Definitions,
@@ -784,7 +768,6 @@ export class Elysia<
 		{
 			decorator: Singleton['decorator']
 			store: Prettify<Singleton['store'] & NewStore>
-			derive: Singleton['derive']
 			resolve: Singleton['resolve']
 		},
 		Definitions,
@@ -804,7 +787,6 @@ export class Elysia<
 		{
 			decorator: Singleton['decorator']
 			store: Prettify<Omit<Singleton['store'], keyof NewStore> & NewStore>
-			derive: Singleton['derive']
 			resolve: Singleton['resolve']
 		},
 		Definitions,
@@ -1550,7 +1532,6 @@ export class Elysia<
 			// @ts-ignore
 			Schema & MacroContext,
 			Singleton & {
-				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
 					// @ts-ignore
@@ -1568,7 +1549,6 @@ export class Elysia<
 				{
 					decorator: Singleton['decorator']
 					store: Singleton['store']
-					derive: Singleton['derive']
 					resolve: Singleton['resolve'] &
 						// @ts-ignore
 						MacroContext['resolve']
@@ -1721,7 +1701,205 @@ export class Elysia<
 		return this
 	}
 
-	macro(macroOrName: string | Macro, macro?: Macro): this {
+	macro<
+		const Name extends string,
+		const Input extends Metadata['macro'] &
+			InputSchema<keyof Definitions['typebox'] & string>,
+		const Schema extends MergeSchema<
+			UnwrapRoute<Input, Definitions['typebox'], BasePath>,
+			MergeSchema<
+				Volatile['schema'],
+				MergeSchema<Ephemeral['schema'], Metadata['schema']>
+			> &
+				Metadata['schemas'] &
+				Ephemeral['schemas'] &
+				Volatile['schemas']
+		>,
+		const MacroContext extends {} extends Metadata['macroFn']
+			? {}
+			: MacroToContext<
+					Metadata['macroFn'],
+					Omit<Input, NonResolvableMacroKey>,
+					Definitions['typebox']
+				>
+	>(
+		name: Name,
+		macro: Input extends any ? Input : Prettify<Input>
+	): Elysia<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		{
+			schema: Metadata['schema']
+			schemas: Metadata['schemas']
+			macro: Metadata['macro'] & {
+				[name in Name]?: boolean
+			}
+			macroFn: Metadata['macroFn'] & {
+				[name in Name]: Input
+			}
+			parser: Metadata['parser']
+			response: Metadata['response']
+		},
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	macro<
+		const Name extends string,
+		const Input extends Metadata['macro'] &
+			InputSchema<keyof Definitions['typebox'] & string>,
+		const Schema extends MergeSchema<
+			UnwrapRoute<Input, Definitions['typebox'], BasePath>,
+			MergeSchema<
+				Volatile['schema'],
+				MergeSchema<Ephemeral['schema'], Metadata['schema']>
+			> &
+				Metadata['schemas'] &
+				Ephemeral['schemas'] &
+				Volatile['schemas']
+		>,
+		const MacroContext extends {} extends Metadata['macroFn']
+			? {}
+			: MacroToContext<
+					Metadata['macroFn'],
+					Omit<Input, NonResolvableMacroKey>,
+					Definitions['typebox']
+				>,
+		const Property extends MaybeValueOrVoidFunction<
+			MacroProperty<
+				Metadata['macro'] &
+					InputSchema<keyof Definitions['typebox'] & string> & {
+						[name in Name]?: boolean
+					},
+				Schema & MacroContext,
+				Singleton & {
+					resolve: Partial<
+						Ephemeral['resolve'] & Volatile['resolve']
+					> &
+						// @ts-ignore
+						MacroContext['resolve']
+				},
+				Definitions['error']
+			>
+		>
+	>(
+		name: Name,
+		macro: (Input extends any ? Input : Prettify<Input>) & Property
+	): Elysia<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		{
+			schema: Metadata['schema']
+			schemas: Metadata['schemas']
+			macro: Metadata['macro'] & {
+				[name in Name]?: Property extends (a: infer Params) => any
+					? Params
+					: boolean
+			}
+			macroFn: Metadata['macroFn'] & {
+				[name in Name]: Property
+			}
+			parser: Metadata['parser']
+			response: Metadata['response']
+		},
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	macro<
+		const Input extends Metadata['macro'] &
+			InputSchema<keyof Definitions['typebox'] & string>,
+		const NewMacro extends Macro<
+			Metadata['macro'] &
+				InputSchema<keyof Definitions['typebox'] & string>,
+			Input,
+			IntersectIfObjectSchema<
+				MergeSchema<
+					UnwrapRoute<Input, Definitions['typebox'], BasePath>,
+					MergeSchema<
+						Volatile['schema'],
+						MergeSchema<Ephemeral['schema'], Metadata['schema']>
+					>
+				>,
+				Metadata['schemas'] & Ephemeral['schemas'] & Volatile['schemas']
+			>,
+			Singleton & {
+				resolve: Partial<Ephemeral['resolve'] & Volatile['resolve']>
+			},
+			Definitions['error']
+		>
+	>(
+		macro: NewMacro
+	): Elysia<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		{
+			schema: Metadata['schema']
+			schemas: Metadata['schemas']
+			macro: Metadata['macro'] & Partial<MacroToProperty<NewMacro>>
+			macroFn: Metadata['macroFn'] & NewMacro
+			parser: Metadata['parser']
+			response: Metadata['response']
+		},
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	macro<
+		const Input extends Metadata['macro'] &
+			InputSchema<keyof Definitions['typebox'] & string>,
+		const NewMacro extends MaybeFunction<
+			Macro<
+				Input,
+				// @ts-ignore trust me bro
+				IntersectIfObjectSchema<
+					MergeSchema<
+						UnwrapRoute<Input, Definitions['typebox'], BasePath>,
+						MergeSchema<
+							Volatile['schema'],
+							MergeSchema<Ephemeral['schema'], Metadata['schema']>
+						>
+					>,
+					Metadata['schemas'] &
+						Ephemeral['schemas'] &
+						Volatile['schemas']
+				>,
+				Singleton & {
+					resolve: Partial<Ephemeral['resolve'] & Volatile['resolve']>
+				},
+				Definitions['error']
+			>
+		>
+	>(
+		macro: NewMacro
+	): Elysia<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		{
+			schema: Metadata['schema']
+			schemas: Metadata['schemas']
+			macro: Metadata['macro'] & Partial<MacroToProperty<NewMacro>>
+			macroFn: Metadata['macroFn'] & NewMacro
+			parser: Metadata['parser']
+			response: Metadata['response']
+		},
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	macro(macroOrName: string | Macro, macro?: Macro) {
 		if (typeof macroOrName === 'string' && !macro)
 			throw new Error('Macro function is required')
 
@@ -2379,7 +2557,6 @@ export class Elysia<
 			Metadata['schemas'] & Ephemeral['schemas'] & Volatile['schemas']
 		>,
 		const Decorator extends Singleton & {
-			derive: Ephemeral['derive'] & Volatile['derive']
 			resolve: Ephemeral['resolve'] & Volatile['resolve']
 		},
 		const MacroContext extends {} extends Metadata['macroFn']
@@ -2485,7 +2662,6 @@ export class Elysia<
 			Metadata['schemas'] & Ephemeral['schemas'] & Volatile['schemas']
 		>,
 		const Decorator extends Singleton & {
-			derive: Ephemeral['derive'] & Volatile['derive']
 			resolve: Ephemeral['resolve'] & Volatile['resolve']
 		},
 		const MacroContext extends {} extends Metadata['macroFn']
@@ -2591,7 +2767,6 @@ export class Elysia<
 			Metadata['schemas'] & Ephemeral['schemas'] & Volatile['schemas']
 		>,
 		const Decorator extends Singleton & {
-			derive: Ephemeral['derive'] & Volatile['derive']
 			resolve: Ephemeral['resolve'] & Volatile['resolve']
 		},
 		const MacroContext extends {} extends Metadata['macroFn']
@@ -2697,7 +2872,6 @@ export class Elysia<
 			Metadata['schemas'] & Ephemeral['schemas'] & Volatile['schemas']
 		>,
 		const Decorator extends Singleton & {
-			derive: Ephemeral['derive'] & Volatile['derive']
 			resolve: Ephemeral['resolve'] & Volatile['resolve']
 		},
 		const MacroContext extends {} extends Metadata['macroFn']
@@ -2803,7 +2977,6 @@ export class Elysia<
 			Metadata['schemas'] & Ephemeral['schemas'] & Volatile['schemas']
 		>,
 		const Decorator extends Singleton & {
-			derive: Ephemeral['derive'] & Volatile['derive']
 			resolve: Ephemeral['resolve'] & Volatile['resolve']
 		},
 		const MacroContext extends {} extends Metadata['macroFn']
@@ -2909,7 +3082,6 @@ export class Elysia<
 			Metadata['schemas'] & Ephemeral['schemas'] & Volatile['schemas']
 		>,
 		const Decorator extends Singleton & {
-			derive: Ephemeral['derive'] & Volatile['derive']
 			resolve: Ephemeral['resolve'] & Volatile['resolve']
 		},
 		const MacroContext extends {} extends Metadata['macroFn']
@@ -3015,7 +3187,6 @@ export class Elysia<
 			Metadata['schemas'] & Ephemeral['schemas'] & Volatile['schemas']
 		>,
 		const Decorator extends Singleton & {
-			derive: Ephemeral['derive'] & Volatile['derive']
 			resolve: Ephemeral['resolve'] & Volatile['resolve']
 		},
 		const MacroContext extends {} extends Metadata['macroFn']

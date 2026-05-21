@@ -13,7 +13,8 @@ import type {
 	SingletonBase,
 	ResolvePath,
 	HTTPHeaders,
-	InputSchema
+	InputSchema,
+	DefaultSingleton
 } from './types'
 
 let baseCache = new WeakMap<AnyElysia, new () => any>()
@@ -131,12 +132,7 @@ type CheckExcessProps<T, U> = 0 extends 1 & T
 
 export type ErrorContext<
 	in out Route extends RouteSchema = {},
-	in out Singleton extends SingletonBase = {
-		decorator: {}
-		store: {}
-		derive: {}
-		resolve: {}
-	},
+	in out Singleton extends SingletonBase = DefaultSingleton,
 	Path extends string | undefined = undefined
 > = Prettify<
 	{
@@ -230,7 +226,6 @@ export type ErrorContext<
 		request: Request
 		store: Singleton['store']
 	} & Singleton['decorator'] &
-		Singleton['derive'] &
 		Singleton['resolve']
 >
 
@@ -238,12 +233,7 @@ type PrettifyIfObject<T> = T extends object ? Prettify<T> : T
 
 export type Context<
 	in out Route extends RouteSchema = {},
-	in out Singleton extends SingletonBase = {
-		decorator: {}
-		store: {}
-		derive: {}
-		resolve: {}
-	},
+	in out Singleton extends SingletonBase = DefaultSingleton,
 	Path extends string | undefined = undefined
 > = Prettify<
 	{
@@ -336,7 +326,6 @@ export type Context<
 			? typeof status
 			: SelectiveStatus<Route['response']>
 	} & Singleton['decorator'] &
-		Singleton['derive'] &
 		Omit<Singleton['resolve'], keyof InputSchema>
 >
 

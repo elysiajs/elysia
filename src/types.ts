@@ -488,12 +488,10 @@ export type EventFn<T extends AppEvent> = UnwrapArray<AppHook[T]>
 export interface SingletonBase {
 	decorator: Record<string, unknown>
 	store: Record<string, unknown>
-	derive: Record<string, unknown>
 	resolve: Record<string, unknown>
 }
 
 export interface EphemeralType {
-	derive: SingletonBase['derive']
 	resolve: SingletonBase['resolve']
 	schema: MetadataBase['schema']
 	schemas: MetadataBase['schema']
@@ -506,7 +504,6 @@ export interface DefinitionBase {
 }
 
 export interface DefaultEphemeral {
-	derive: {}
 	resolve: {}
 	schema: {}
 	schemas: {}
@@ -516,7 +513,6 @@ export interface DefaultEphemeral {
 export interface DefaultSingleton {
 	decorator: {}
 	store: {}
-	derive: {}
 	resolve: {}
 }
 
@@ -872,7 +868,6 @@ export type ErrorHandler<
 		{
 			store: Singleton['store']
 			decorator: Singleton['decorator']
-			derive: {}
 			resolve: {}
 		}
 	>
@@ -1273,14 +1268,18 @@ type OptionalField = { '~optional': true }
 type StaticCyclic<
 	T extends TypeBoxSchema,
 	Definitions extends Record<string, AnySchema>
-> = Static<
-	TCyclic<
-		Extract<Definitions, TypeBoxSchema> & {
-			$elysia: T
-		},
-		'$elysia'
-	>
->
+> = Definitions extends {}
+	? Static<T>
+	: Definitions extends infer Defs extends Record<string, TypeBoxSchema>
+		? Static<
+				TCyclic<
+					Defs & {
+						$elysia: T
+					},
+					'$elysia'
+				>
+			>
+		: Static<T>
 
 export type UnwrapSchema<
 	Schema extends AnySchema | string | undefined,
@@ -1381,9 +1380,21 @@ type LocalLifecycleProperty =
 	| 'error'
 	| 'tags'
 
+export type MaybeFunction<T> = T | ((...args: any[]) => T)
+
+export type MacroToProperty<in out T extends Macro<any, any, any, any>> =
+	Prettify<{
+		[K in keyof T]: T[K] extends Function
+			? T[K] extends (a: infer Params) => any
+				? Params
+				: boolean
+			: boolean
+	}>
+
 export type NonResolvableMacroKey =
 	| LocalLifecycleProperty
 	| keyof InputSchema
+	// remove in 2.1
 	| 'derive'
 	| 'resolve'
 
@@ -1604,6 +1615,7 @@ type InnerMacroToContext<
 						SelectedMacro[key]
 					> extends infer Value
 						? {
+								q: UnwrapMacroSchema<Value, Definitions>
 								resolve: ExtractResolveFromMacro<
 									Extract<
 										Exclude<
@@ -1657,7 +1669,7 @@ type InnerMacroToContext<
 				}[keyof SelectedMacro]
 			>
 
-type UnwrapMacroSchema<
+export type UnwrapMacroSchema<
 	T extends Partial<InputSchema<any>>,
 	Definitions extends DefinitionBase['typebox'] = {}
 > = UnwrapRoute<
@@ -1869,7 +1881,6 @@ export type MergeElysiaInstances<
 			{
 				decorator: Singleton['decorator']
 				store: Prettify<Singleton['store']>
-				derive: Singleton['derive']
 				resolve: Singleton['resolve']
 			},
 			Definitions,
