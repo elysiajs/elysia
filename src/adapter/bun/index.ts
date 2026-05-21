@@ -7,7 +7,6 @@ import { flattenChain } from '../../utils'
 import { buildGlobalWSHandler } from '../../ws/route'
 
 import type { AnyElysia } from '../../base'
-import { ServeOptions } from '../../universal'
 
 function collectStaticRoutes(app: AnyElysia) {
 	const hook = flattenChain(app['~hookChain'])
@@ -28,9 +27,6 @@ function collectStaticRoutes(app: AnyElysia) {
 	const pending: Array<Promise<void>> = []
 
 	for (const rawPath in source) {
-		// Bun matches the request URL's encoded form against the keys in
-		// `routes`. Paths registered with non-ASCII characters
-		// (e.g. `/สวัสดี`) need `encodeURI` here or they won't match incoming requests.
 		const path = encodeURI(rawPath)
 
 		const methods = source[rawPath]
@@ -66,23 +62,20 @@ export const BunAdapter = createAdapter({
 	runtime: 'bun',
 	listen(app, options, callback) {
 		const serve = (
-			typeof options === 'object' ? { ...options } : { port: +options }
+			typeof options === 'object' ? options : { port: +options }
 		) as any
 
 		const hasWs = app['~hasWS']
 
-		if (!hasWs) {
-			app.server = Bun.serve({
-				...serve,
-				fetch: (request) => app.fetch(request)
-			})
+		app.server = Bun.serve({
+			...serve,
+			fetch: (request) => app.fetch(request)
+		})
 
-			callback?.(app.server!)
-		}
+		if (!hasWs) callback?.(app.server!)
 
 		// optimize router, static route, etc.
 		queueMicrotask(() => {
-			// build router before do anything else
 			serve.fetch = app.fetch
 
 			if (hasWs) {

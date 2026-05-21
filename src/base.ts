@@ -21,6 +21,7 @@ import {
 	hookToGuard,
 	isEmpty,
 	isEncoded,
+	isNotEmpty,
 	isRecordNumber,
 	joinPath,
 	liftDirectFieldsToSchema,
@@ -175,14 +176,6 @@ export class Elysia<
 		}
 	}
 
-	// True when at least one `.ws()` route has been registered. Used by
-	// `fetch.ts` to gate the Upgrade-header pre-check (single nullish read
-	// for HTTP-only apps) and by the Bun adapter to decide whether to
-	// pass a `websocket: {...}` config into `Bun.serve`.
-	//
-	// WS dispatch tables share `~map['WS']` and `~router` (under method
-	// `'WS'`) with HTTP routes — no separate slots — keyed by the synthetic
-	// method `'WS'`.
 	'~hasWS'?: boolean
 
 	constructor(config?: ElysiaConfig<BasePath, Scope>) {
@@ -1910,6 +1903,8 @@ export class Elysia<
 		}
 
 		if (app.#history) {
+			if (app['~hasWS']) this['~hasWS'] = true
+
 			const history = (this.#history ??= [])
 			const length = app.#history.length
 			for (let i = 0; i < length; i++) {
@@ -3092,32 +3087,29 @@ export class Elysia<
 		handlerOrOptions: unknown,
 		maybeOptions?: Partial<AnyWSLocalHookImport>
 	): this {
-		// Web-standard adapter doesn't support WS. Fail loud at registration.
-		// Also catches the implicit default-adapter case in non-Bun runtimes.
-		const explicit = this['~config']?.adapter
-		const adapter: any = explicit ?? (isBun ? BunAdapter : null)
-		if (adapter && adapter.runtime && adapter.runtime !== 'bun')
+		this['~hasWS'] = true
+
+		const adapter = this['~config']?.adapter
+
+		// @ts-expect-error
+		if (!adapter?.websocket && !isBun)
 			throw new Error(
-				`[Elysia] WebSocket is not supported on the '${adapter.name ?? 'web-standard'}' adapter. Use the Bun adapter for WebSocket support.`
-			)
-		if (!isBun && !explicit)
-			throw new Error(
-				`[Elysia] WebSocket is not supported on the 'web-standard' adapter. Use the Bun adapter for WebSocket support.`
+				`[Elysia] WebSocket is not supported on '${adapter?.name ?? 'web-standard'}' adapter.`
 			)
 
 		let opts: any
 		if (typeof handlerOrOptions === 'function') {
 			// 3-arg form: (path, handler, options)
-			opts = maybeOptions ?? {}
+			opts = maybeOptions ?? nullObject()
 			if (opts.message != null && opts.message !== handlerOrOptions)
 				throw new Error(
 					"[Elysia] .ws(): cannot specify 'message' as both positional handler and options.message"
 				)
-			opts = { ...opts, message: handlerOrOptions }
-		} else {
+
+			opts.message = handlerOrOptions
+		} else
 			// 2-arg form: (path, options)
-			opts = (handlerOrOptions as any) ?? {}
-		}
+			opts = handlerOrOptions
 
 		this.#add('WS', path, undefined, opts)
 
@@ -3233,29 +3225,28 @@ export class Elysia<
 			const path = route[1]
 
 			if ((route[0] as any) === 'WS') {
-				const { fetch, bunOptions } = buildWSRoute(route, this)
-				const wsCompiled = fetch as unknown as CompiledHandler
-
-				this['~hasWS'] = true
+				const ws = buildWSRoute(route, this)
+				const handler = ws[0] as unknown as CompiledHandler
+				const options = ws[1]
 
 				if (isDynamicRegex.test(path)) {
 					;(this['~router'] ??= new Memoirist()).add(
 						'WS',
 						path,
-						wsCompiled,
+						handler,
 						false
 					)
 				} else {
 					this.#initMap()
-					;(this['~map']!['WS'] ??= nullObject())[path] = wsCompiled
+					;(this['~map']!['WS'] ??= nullObject())[path] = handler
 				}
 
-				if (bunOptions && Object.keys(bunOptions).length) {
+				if (options && isNotEmpty(options)) {
 					this['~config'] ??= nullObject()
-					;(this['~config'] as any).websocket = Object.assign(
-						(this['~config'] as any).websocket ?? {},
-						bunOptions
-					)
+					;(this['~config'] as any).websocket = this['~config']
+						?.websocket
+						? Object.assign(this['~config'].websocket, options)
+						: options
 				}
 
 				continue

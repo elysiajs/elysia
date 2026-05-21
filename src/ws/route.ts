@@ -104,12 +104,12 @@ function dispatchHandler(fn: AnyFn, elysia: ElysiaWS<any>, body?: unknown) {
 export function buildWSRoute(
 	route: InternalRoute,
 	app: AnyElysia
-): {
+): [
 	fetch: (
 		context: Context
-	) => Promise<Response | undefined> | Response | undefined
-	bunOptions: Partial<WebSocketHandler<any>>
-} {
+	) => Promise<Response | undefined> | Response | undefined,
+	options: Partial<WebSocketHandler<any>>
+] {
 	const hook: AnyWSLocalHook = ((route[4] as AnyWSLocalHook | undefined) ??
 		{}) as AnyWSLocalHook
 
@@ -448,7 +448,7 @@ export function buildWSRoute(
 		}
 	}
 
-	const bunOptions: Partial<WebSocketHandler<any>> = nullObject()
+	const options: Partial<WebSocketHandler<any>> = nullObject()
 	for (const k of [
 		'maxPayloadLength',
 		'backpressureLimit',
@@ -459,10 +459,10 @@ export function buildWSRoute(
 		'perMessageDeflate'
 	] as const) {
 		if ((hook as any)[k] !== undefined)
-			(bunOptions as any)[k] = (hook as any)[k]
+			(options as any)[k] = (hook as any)[k]
 	}
 
-	return { fetch: fetchHandler as any, bunOptions }
+	return [fetchHandler, options] as const
 }
 
 export function buildGlobalWSHandler(): WebSocketHandler<WSConnectionData> {
