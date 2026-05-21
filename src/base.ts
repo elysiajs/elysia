@@ -135,6 +135,7 @@ export class Elysia<
 		headers?: Record<string, string>
 		macro?: Macro
 		models?: Record<keyof any, AnySchema>
+		error?: Set<AnyErrorConstructor>
 		// Named body parsers registered via `parser(name, fn)` and looked up
 		// by `onParse(name)` / route-level `parse: ['name', ...]`.
 		parser?: Record<string, BodyHandler<any, any>>
@@ -1270,6 +1271,10 @@ export class Elysia<
 							: () => fnOrError
 					) as EventFn<'error'>
 
+					;(this.#ext.error ??= new Set()).add(
+						scopeOrFnOrError as unknown as AnyErrorConstructor
+					)
+
 					// scopeOrFnOrError: Error
 					// fnOrError: EventFn<'error'>
 					return this.#onBranch(
@@ -1291,6 +1296,10 @@ export class Elysia<
 				const run = (typeof fn === 'function'
 					? fn
 					: () => fn) as unknown as EventFn<'error'>
+
+				;(this.#ext.error ??= new Set()).add(
+					fnOrError as unknown as AnyErrorConstructor
+				)
 
 				return this.#onBranch(
 					'error',
@@ -1315,36 +1324,40 @@ export class Elysia<
 	}
 
 	as(target: 'scoped' | 'global'): this {
-		const newScope: EventScope = target === 'scoped' ? 'plugin' : 'global'
+		this.#as(this['~hookChain'], target === 'scoped' ? 'plugin' : 'global')
 
-		const visit = (node: ChainNode | undefined): void => {
-			while (node) {
-				if ('combine' in node) {
-					visit(node.combine)
-					node = node.over
-					continue
-				}
+		return this
+	}
 
-				if (node.scope !== 'global') {
-					node.scope = newScope
-					node.propagated = false
-					for (const key in node.added) {
-						if (!eventProperties.has(key)) continue
-						const v = (node.added as any)[key]
-						const fns = Array.isArray(v) ? v : [v]
-						for (const fn of fns) {
-							if (typeof fn !== 'function') continue
-							if (newScope === 'plugin')
-								(this.#plugin ??= new WeakSet()).add(fn)
-							else (this.#global ??= new WeakSet()).add(fn)
-						}
+	#as(node: ChainNode | undefined, scope: EventScope): void {
+		while (node) {
+			if ('combine' in node) {
+				this.#as(node.combine, scope)
+				node = node.over
+				continue
+			}
+
+			if (node.scope !== 'global') {
+				node.scope = scope
+				node.propagated = false
+
+				for (const key in node.added) {
+					if (!eventProperties.has(key)) continue
+
+					const v = (node.added as any)[key]
+					const fns = Array.isArray(v) ? v : [v]
+
+					for (const fn of fns) {
+						if (typeof fn !== 'function') continue
+						if (scope === 'plugin')
+							(this.#plugin ??= new WeakSet()).add(fn)
+						else (this.#global ??= new WeakSet()).add(fn)
 					}
 				}
-				node = node.parent
 			}
+
+			node = node.parent
 		}
-		visit(this['~hookChain'])
-		return this
 	}
 
 	guard(hook: Partial<AnyLocalHook>): this
@@ -1939,8 +1952,9 @@ export class Elysia<
 		const hookChain = app['~hookChain']
 
 		if (app['~ext']) {
-			const { decorator, store, headers, models, parser, macro } =
+			const { decorator, store, headers, models, parser, macro, error } =
 				app['~ext']
+
 			const ext: NonNullable<(typeof this)['~ext']> = (this['~ext'] ??=
 				nullObject())
 
@@ -1972,6 +1986,11 @@ export class Elysia<
 			if (macro) {
 				if (ext.macro) Object.assign(ext.macro, macro)
 				else ext.macro = Object.assign(nullObject(), macro)
+			}
+
+			if (error) {
+				if (ext.error) ext.error = new Set([...ext.error, ...error])
+				else ext.error = new Set(error)
 			}
 		}
 

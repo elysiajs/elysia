@@ -4,6 +4,7 @@ import { Elysia, t } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { post, req } from '../utils'
 import z from 'zod'
+import { AnyElysia } from '../../src/base'
 
 class CustomError extends Error {
 	constructor() {
@@ -11,62 +12,53 @@ class CustomError extends Error {
 	}
 }
 
-const getErrors = (app: Elysia<any, any, any, any, any>) =>
-	// @ts-ignore
-	Object.keys(app.definitions.error)
+class CustomError2 extends Error {
+	constructor() {
+		super()
+	}
+}
+
+const getErrors = (app: AnyElysia) =>
+	app['~ext']?.error ? [...app['~ext'].error] : undefined
 
 describe('Error extends', () => {
 	it('add single', async () => {
 		const app = new Elysia().error(CustomError, () => {})
 
-		expect(getErrors(app)).toEqual(['CUSTOM_ERROR'])
+		expect(getErrors(app)).toEqual([CustomError])
 	})
 
 	it('add multiple', async () => {
 		const app = new Elysia()
-			.error('CUSTOM_ERROR', CustomError)
-			.error('CUSTOM_ERROR_2', CustomError)
+			.error(CustomError, () => {})
+			.error(CustomError2, () => {})
 
-		expect(getErrors(app)).toEqual(['CUSTOM_ERROR', 'CUSTOM_ERROR_2'])
+		expect(getErrors(app)).toEqual([CustomError, CustomError2])
 	})
 
-	it('add object', async () => {
-		const app = new Elysia().error({
-			CUSTOM_ERROR: CustomError,
-			CUSTOM_ERROR_2: CustomError
-		})
+	it('add duplicate', async () => {
+		const app = new Elysia()
+			.error(CustomError, () => {})
+			.error(CustomError2, () => {})
+			.error(CustomError2, () => {})
 
-		expect(getErrors(app)).toEqual(['CUSTOM_ERROR', 'CUSTOM_ERROR_2'])
+		expect(getErrors(app)).toEqual([CustomError, CustomError2])
 	})
-
-	// it('remap error', async () => {
-	// 	const app = new Elysia()
-	// 		.error({
-	// 			CUSTOM_ERROR: CustomError,
-	// 			CUSTOM_ERROR_2: CustomError
-	// 		})
-	// 		.error(({ CUSTOM_ERROR, ...rest }) => ({
-	// 			...rest,
-	// 			CUSTOM_ERROR_3: CustomError
-	// 		}))
-
-	// 	expect(getErrors(app)).toEqual(['CUSTOM_ERROR', 'CUSTOM_ERROR_2'])
-	// })
 
 	it('inherits functional plugin', async () => {
-		const plugin = (app: Elysia) => app.error('CUSTOM_ERROR', CustomError)
+		const plugin = (app: Elysia) => app.error(CustomError, () => { })
 
 		const app = new Elysia().use(plugin)
 
-		expect(getErrors(app)).toEqual(['CUSTOM_ERROR'])
+		expect(getErrors(app)).toEqual([CustomError])
 	})
 
 	it('inherits instance plugin', async () => {
-		const plugin = new Elysia().error('CUSTOM_ERROR', CustomError)
+		const plugin = new Elysia().error(CustomError, () => { })
 
 		const app = new Elysia().use(plugin)
 
-		expect(getErrors(app)).toEqual(['CUSTOM_ERROR'])
+		expect(getErrors(app)).toEqual([CustomError])
 	})
 
 	it('preserve status code base on error if not set', async () => {

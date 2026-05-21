@@ -1,4 +1,14 @@
 import { Elysia, t } from '../src'
 const t1 = performance.now()
 
-const app = new Elysia().ws('/', () => 'ok').listen(3000)
+class CustomError extends Error {
+	constructor() {
+		super()
+	}
+}
+
+const app = new Elysia().error(CustomError, () => {})
+
+const getErrors = (app: Elysia<any, any, any, any, any>) => app['~ext']?.error
+
+console.log(getErrors(app))
