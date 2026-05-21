@@ -259,12 +259,12 @@ function applyHook(
 const createInlineHandler = (
 	map: (value: unknown, ...rest: unknown[]) => unknown,
 	h: (context: Context) => unknown
-) => ((c: Context) => map(h(c))) as CompiledHandler
+) => ((c: Context) => map(h(c), c.request)) as CompiledHandler
 
 const createInlineHandlerWithSet = (
 	map: (value: unknown, ...rest: unknown[]) => unknown,
 	h: (context: Context) => unknown
-) => ((c: Context) => map(h(c), c.set)) as CompiledHandler
+) => ((c: Context) => map(h(c), c.set, c.request)) as CompiledHandler
 
 function promoteDeriveResolve(hook: any) {
 	for (const key of ['derive', 'resolve'] as const) {
@@ -710,8 +710,8 @@ export function compileHandler(
 			: 'h'
 
 	const mapReturn = hasSet
-		? `rm(${handleInstruction},c.set)\n`
-		: `rc(${handleInstruction})\n`
+		? `rm(${handleInstruction},c.set,c.request)\n`
+		: `rc(${handleInstruction},c.request)\n`
 
 	const hasBeforeHandle = !!hook?.beforeHandle?.length
 	const hasAfterHandle = !!hook?.afterHandle?.length
@@ -887,7 +887,7 @@ export function compileHandler(
 
 		code += scheduleAfterResponse
 		code += signPrefix
-		code += `return ${hasSet ? `${map}(_r,c.set)` : `${map}(_r)`}\n`
+		code += `return ${hasSet ? `${map}(_r,c.set,c.request)` : `${map}(_r,c.request)`}\n`
 	} else {
 		code += `return ${mapReturn}`
 	}
@@ -917,12 +917,12 @@ export function compileHandler(
 				]) +
 				endTrace() +
 				scheduleAfterResponse +
-				`if(typeof e?.toResponse==='function'){const _er=e.toResponse();if(_er instanceof Response){${signPrefix}return ${map}(_er,c.set)}}\n` +
-				`if(e instanceof es){${signPrefix}return ${map}(e,c.set)}\n` +
-				`if(e?.status){${signPrefix}return ${map}(e?.response??e?.message??'',c.set)}\n` +
+				`if(typeof e?.toResponse==='function'){const _er=e.toResponse();if(_er instanceof Response){${signPrefix}return ${map}(_er,c.set,c.request)}}\n` +
+				`if(e instanceof es){${signPrefix}return ${map}(e,c.set,c.request)}\n` +
+				`if(e?.status){${signPrefix}return ${map}(e?.response??e?.message??'',c.set,c.request)}\n` +
 				`c.set.status=500\n` +
 				signPrefix +
-				`return ${map}('Internal Server Error',c.set)\n`
+				`return ${map}('Internal Server Error',c.set,c.request)\n`
 		} else {
 			code += endTrace() + scheduleAfterResponse
 			code += `throw e\n`

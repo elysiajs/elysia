@@ -1391,6 +1391,8 @@ export class Elysia<
 		// @ts-expect-error Remove in 2.1
 		if (scope === 'scoped') scope = 'plugin'
 
+		hookToGuard(hook as any)
+
 		// life standalone schemas
 		const prevSchemaLen = (hook as any).schemas?.length ?? 0
 
@@ -1931,9 +1933,8 @@ export class Elysia<
 
 		if (!macro) return input
 
-		for (const key in toApply) {
+		for (const [key, value] of Object.entries(toApply)) {
 			if (key in macro === false) continue
-			const value = (toApply as any)[key]
 
 			const isFunction: boolean = typeof macro[key] === 'function'
 			const hook: Partial<AppHook & Macro> = isFunction
@@ -1993,12 +1994,18 @@ export class Elysia<
 				}
 
 				if (k in macro) {
-					this['~applyMacro'](input, { [k]: v }, iteration, seen)
+					this['~applyMacro'](
+						input,
+						{ [k]: v },
+						iteration + 1,
+						seen
+					)
 
 					delete input[key]
 					continue
 				}
 
+				// remove derive in 2.1
 				if (k === 'resolve' || k === 'derive') {
 					this['~derive'] ??= new WeakSet()
 					if (Array.isArray(v)) {
@@ -2021,10 +2028,22 @@ export class Elysia<
 					continue
 				}
 
+				if (schemaProperties.has(k)) {
+					if (v === undefined || v === null) {
+						delete input[key]
+						continue
+					}
+					;(input as any).schemas ??= []
+					coalesceStandaloneSchemas(
+						(input as any).schemas as any[],
+						[{ [k]: v }]
+					)
+					delete input[key]
+					continue
+				}
+
 				if (k in input) {
-					if (schemaProperties.has(k)) {
-						// Route already has its own value — keep it.
-					} else if (Array.isArray(input[k])) {
+					if (Array.isArray(input[k])) {
 						if (Array.isArray(v)) {
 							for (const item of v)
 								if (!input[k].some((e: any) => e === item))

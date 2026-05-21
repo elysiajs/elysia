@@ -18,7 +18,7 @@ describe('Checksum', () => {
 			.use(group)
 			.get('/cookie', () => 'Hi')
 
-		const [a, b] = app.router.history
+		const [a, b] = app.history
 
 		expect(a.hooks.transform!.length).toBe(1)
 		expect(b.hooks.transform!.length).toBe(1)

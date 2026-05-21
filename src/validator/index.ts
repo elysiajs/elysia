@@ -1,5 +1,4 @@
 import type { TSchema } from 'typebox/type'
-import type { Validator as BaseTypeBoxValidator } from 'typebox/schema'
 import type { TLocalizedValidationError } from 'typebox/error'
 import { ValidationError } from '../error'
 
@@ -11,11 +10,9 @@ import type { CoerceOption } from '../type/coerce'
 import {
 	Decode,
 	Compile,
-	Errors,
 	applyCoercions,
 	TypeBoxValidator,
 	TypeBoxValidatorCache,
-	HasCodec,
 	Intersect
 } from '../type/bridge'
 
@@ -235,7 +232,6 @@ export class StandardValidator extends Validator {
 
 export class MultiValidator extends Validator {
 	private schemas: (TSchema | StandardSchemaV1Like)[]
-	private codexIndexes: Set<number>
 
 	constructor(
 		schema: TSchema | StandardSchemaV1Like,
@@ -245,7 +241,6 @@ export class MultiValidator extends Validator {
 
 		let typeboxObjects
 		const schemas = [schema].concat(options.schemas!)
-		const codexIndexes = new Set<number>()
 
 		for (let i = 0; i < schemas.length; i++) {
 			const schema = schemas[i]
@@ -257,8 +252,6 @@ export class MultiValidator extends Validator {
 				)
 
 			if (isTypeBox) {
-				if (HasCodec(schema)) codexIndexes.add(i)
-
 				if (schema['~kind'] === 'Object') {
 					typeboxObjects ??= []
 					typeboxObjects.push(schema as TSchema)
@@ -279,16 +272,21 @@ export class MultiValidator extends Validator {
 			)
 
 		this.schemas = schemas
-		this.codexIndexes = codexIndexes
 	}
 
 	Check(value: unknown): boolean {
-		return this.schemas.every((validator) =>
-			'~standard' in validator
-				? // @ts-expect-error
-					validator['~standard'].validate(value).value
-				: (validator as TypeBoxValidator).Decode(value) || true
-		)
+		return this.schemas.every((validator) => {
+			if ('~standard' in validator)
+				// @ts-expect-error
+				return !validator['~standard'].validate(value).issues
+
+			try {
+				;(validator as TypeBoxValidator).Decode(value)
+				return true
+			} catch {
+				return false
+			}
+		})
 	}
 
 	Errors(value: unknown): TLocalizedValidationError[] {
@@ -300,9 +298,7 @@ export class MultiValidator extends Validator {
 				const issues = schema['~standard'].validate(value).issues
 				if (issues) errors.push(...issues)
 			} else
-				errors.push(
-					...Errors((schema as BaseTypeBoxValidator).Schema(), value)
-				)
+				errors.push(...(schema as TypeBoxValidator).Errors(value))
 
 		return errors
 	}
@@ -317,9 +313,7 @@ export class MultiValidator extends Validator {
 				'~standard' in validator
 					? // @ts-expect-error
 						validator['~standard'].validate(value).value
-					: this.codexIndexes.has(i)
-						? Decode(validator as TypeBoxValidator, value)
-						: value
+					: Decode(validator as TypeBoxValidator, value)
 
 			if (snapshot! === undefined) snapshot = result
 			else if (typeof snapshot === 'object' && typeof result === 'object')

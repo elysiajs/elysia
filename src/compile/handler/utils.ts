@@ -157,7 +157,7 @@ export const mapError = map<
 		`if(_r!==undefined){\n` +
 		`if(_r?.status)c.set.status=_r.status\n` +
 		schedule +
-		`return ${map}(_r,c.set)\n` +
+		`return ${map}(_r,c.set,c.request)\n` +
 		`}\n`
 	)
 })
