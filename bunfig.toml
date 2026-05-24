@@ -1,0 +1,4 @@
+[install]
+minimumReleaseAge = 86400
+
+minimumReleaseAgeExcludes = ["@types/node", "typescript"]
