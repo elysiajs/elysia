@@ -2233,19 +2233,29 @@ type ErrorPlainResponse<T> = Exclude<
 	AnyElysiaCustomStatusResponse | Response
 >
 
-export type ErrorValueToResponseSchema<Value> = ExtractErrorFromHandle<Value> &
-	(Extract<Value, Response> extends infer R200
+type ErrorNativeResponseToResponseSchema<Value> =
+	Extract<Value, Response> extends infer R200
 		? IsNever<R200> extends true
 			? {}
 			: { 200: R200 }
-		: {}) &
-	(ErrorPlainResponse<Value> extends infer R500
+		: {}
+
+type ErrorPlainResponseToResponseSchema<Value> =
+	ErrorPlainResponse<Value> extends infer R500
 		? undefined extends R500
 			? {}
 			: IsNever<R500> extends true
 				? {}
 				: { 500: R500 }
-		: {})
+		: {}
+
+export type ErrorValueToResponseSchema<Value> = UnionResponseStatus<
+	ExtractErrorFromHandle<Value>,
+	UnionResponseStatus<
+		ErrorNativeResponseToResponseSchema<Value>,
+		ErrorPlainResponseToResponseSchema<Value>
+	>
+>
 
 export type ElysiaErrorHandlerToResponseSchema<in out Handle extends Function> =
 	Prettify<

@@ -1056,6 +1056,17 @@ import { Prettify } from '../../../src/types'
 	}>()
 }
 
+// onError explicit and plain default error statuses are unioned
+{
+	const app = new Elysia().onError(({ status }) =>
+		Math.random() > 0.5 ? status(500, 'explicit') : 'plain'
+	)
+
+	expectTypeOf<(typeof app)['~Volatile']['response']>().toEqualTypeOf<{
+		500: 'explicit' | 'plain'
+	}>()
+}
+
 // onError plain return uses the default error status
 {
 	const app = new Elysia()
