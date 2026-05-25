@@ -1016,6 +1016,19 @@ type ExtractAllResponseFromMacro<A> =
 						: {})
 			}
 
+type ExtractAllErrorResponseFromMacro<A> =
+	IsNever<A> extends true
+		? {}
+		: Exclude<A, undefined | void> extends infer A
+			? IsAny<A> extends true
+				? {}
+				: IsNever<A> extends true
+					? {}
+					: {
+							return: ErrorValueToResponseSchema<A>
+						}
+			: {}
+
 type FlattenMacroResponse<T> = T extends object
 	? '_' extends keyof T
 		? MergeFlattenMacroResponse<
@@ -1108,7 +1121,7 @@ type InnerMacroToContext<
 										Value['afterHandle']
 									>
 								> &
-								ExtractAllResponseFromMacro<
+								ExtractAllErrorResponseFromMacro<
 									// @ts-expect-error type is checked in key mapping
 									FunctionArrayReturnType<Value['error']>
 								> &

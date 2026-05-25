@@ -709,6 +709,30 @@ import { Prettify } from '../../../src/types'
 	}>()
 }
 
+// Macro error plain return uses the default error status
+{
+	const app = new Elysia()
+		.macro({
+			a: {
+				error() {
+					return {
+						failure: 'macro' as string
+					}
+				}
+			}
+		})
+		.get('/', () => 'ok' as const, {
+			a: true
+		})
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: 'ok'
+		500: {
+			failure: string
+		}
+	}>()
+}
+
 // Macro should extract possible status 4
 {
 	const app = new Elysia()
