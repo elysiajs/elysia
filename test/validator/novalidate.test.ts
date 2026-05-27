@@ -1,4 +1,5 @@
 import { Elysia, t } from '../../src'
+import * as z from 'zod'
 
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
@@ -331,5 +332,74 @@ describe('ElysiaType.NoValidate', () => {
 		const res = await app.handle(req('/'))
 		expect(res.status).toBe(200)
 		expect(await res.text()).toBe('Hello')
+	})
+
+	it('should bypass validation with t.NoValidate on Zod schema', async () => {
+		const schema = z.z.string()
+		t.NoValidate(schema as any)
+
+		const app = new Elysia().get(
+			'/',
+			() => 123 as unknown as string,
+			{ response: schema as any }
+		)
+
+		const res = await app.handle(req('/'))
+
+		expect(res.status).toBe(200)
+		expect(await res.text()).toBe('123')
+	})
+
+	it('should validate normally with Zod schema without NoValidate', async () => {
+		const app = new Elysia().get(
+			'/',
+			() => 123 as unknown as string,
+			{ response: z.z.string() as any }
+		)
+
+		const res = await app.handle(req('/'))
+
+		expect(res.status).toBe(422)
+	})
+
+	it('should bypass validation with t.NoValidate on Zod object schema', async () => {
+		const schema = z.z.object({ name: z.z.string(), age: z.z.number() })
+		t.NoValidate(schema as any)
+
+		const app = new Elysia().get(
+			'/',
+			() => ({ name: 123, age: 'not-a-number' }) as any,
+			{ response: schema as any }
+		)
+
+		const res = await app.handle(req('/'))
+
+		expect(res.status).toBe(200)
+		const body = await res.json()
+		expect(body).toEqual({ name: 123, age: 'not-a-number' })
+	})
+
+	it('should bypass validation with t.NoValidate on Zod schema in specific status code', async () => {
+		const schema = z.z.string()
+		t.NoValidate(schema as any)
+
+		const app = new Elysia().get(
+			'/',
+			({ set }) => {
+				set.status = 201
+				return 123 as unknown as string
+			},
+			{
+				response: {
+					200: t.String(),
+					201: schema as any
+				}
+			}
+		)
+
+		const res = await app.handle(req('/'))
+
+		expect(res.status).toBe(201)
+		expect(await res.text()).toBe('123')
 	})
 })
