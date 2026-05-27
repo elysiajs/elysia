@@ -39,6 +39,10 @@ export type DynamicHandler = {
 const ARRAY_INDEX_REGEX = /^(.+)\[(\d+)\]$/
 const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
 
+// Standard schema Check returns { value } | { issues }, TypeBox returns boolean
+const isCheckInvalid = (result: any): boolean =>
+	result === false || !!(result && result.issues)
+
 const isDangerousKey = (key: string): boolean => {
 	if (DANGEROUS_KEYS.has(key)) return true
 
@@ -687,11 +691,20 @@ export const createDynamicHandler = (app: AnyElysia) => {
 					validator?.createResponse?.()?.[status]
 
 				if (responseValidator?.schema?.noValidate !== true) {
-					if (responseValidator?.Check(response) === false) {
+					let checkResult = responseValidator?.Check(response)
+					if (checkResult instanceof Promise)
+						checkResult = await checkResult
+
+					if (isCheckInvalid(checkResult)) {
 						if (responseValidator?.Clean) {
 							try {
 								const temp = responseValidator.Clean(response)
-								if (responseValidator?.Check(temp) === false)
+								let tempCheck =
+									responseValidator?.Check(temp)
+								if (tempCheck instanceof Promise)
+									tempCheck = await tempCheck
+
+								if (isCheckInvalid(tempCheck))
 									throw new ValidationError(
 										'response',
 										responseValidator,
@@ -715,6 +728,11 @@ export const createDynamicHandler = (app: AnyElysia) => {
 								responseValidator,
 								response
 							)
+					} else if (
+						checkResult &&
+						checkResult.value !== undefined
+					) {
+						response = checkResult.value
 					}
 
 					if (responseValidator?.Encode)
@@ -761,14 +779,21 @@ export const createDynamicHandler = (app: AnyElysia) => {
 						validator?.createResponse?.()?.[status]
 
 					if (responseValidator?.schema?.noValidate !== true) {
-						if (responseValidator?.Check(response) === false) {
+						let checkResult = responseValidator?.Check(response)
+						if (checkResult instanceof Promise)
+							checkResult = await checkResult
+
+						if (isCheckInvalid(checkResult)) {
 							if (responseValidator?.Clean) {
 								try {
 									const temp =
 										responseValidator.Clean(response)
-									if (
-										responseValidator?.Check(temp) === false
-									)
+									let tempCheck =
+										responseValidator?.Check(temp)
+									if (tempCheck instanceof Promise)
+										tempCheck = await tempCheck
+
+									if (isCheckInvalid(tempCheck))
 										throw new ValidationError(
 											'response',
 											responseValidator,
@@ -792,6 +817,11 @@ export const createDynamicHandler = (app: AnyElysia) => {
 									responseValidator,
 									response
 								)
+						} else if (
+							checkResult &&
+							checkResult.value !== undefined
+						) {
+							response = checkResult.value
 						}
 
 						if (responseValidator?.Encode)

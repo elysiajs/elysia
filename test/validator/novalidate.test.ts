@@ -402,4 +402,32 @@ describe('ElysiaType.NoValidate', () => {
 		expect(res.status).toBe(201)
 		expect(await res.text()).toBe('123')
 	})
+
+	it('should reject invalid Zod response in dynamic mode (aot: false)', async () => {
+		const app = new Elysia({ aot: false }).get(
+			'/',
+			() => 123 as unknown as string,
+			{ response: z.z.string() as any }
+		)
+
+		const res = await app.handle(req('/'))
+
+		expect(res.status).toBe(422)
+	})
+
+	it('should bypass Zod validation with NoValidate in dynamic mode (aot: false)', async () => {
+		const schema = z.z.string()
+		t.NoValidate(schema as any)
+
+		const app = new Elysia({ aot: false }).get(
+			'/',
+			() => 123 as unknown as string,
+			{ response: schema as any }
+		)
+
+		const res = await app.handle(req('/'))
+
+		expect(res.status).toBe(200)
+		expect(await res.text()).toBe('123')
+	})
 })
