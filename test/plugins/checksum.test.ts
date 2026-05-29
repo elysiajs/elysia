@@ -2,6 +2,7 @@ import { Elysia, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
+import { flattenChain } from '../../src/utils'
 
 describe('Checksum', () => {
 	it('deduplicate plugin', async () => {
@@ -18,10 +19,11 @@ describe('Checksum', () => {
 			.use(group)
 			.get('/cookie', () => 'Hi')
 
-		const [a, b] = app.history
+		const hook0 = flattenChain(app.history![0][5])!
+		const hook1 = flattenChain(app.history![1][5])!
 
-		expect(a.hooks.transform!.length).toBe(1)
-		expect(b.hooks.transform!.length).toBe(1)
+		expect(hook0.transform!.length).toBe(1)
+		expect(hook1.transform!.length).toBe(1)
 	})
 
 	it('Set default checksum if not provided when name is set', async () => {
@@ -38,10 +40,11 @@ describe('Checksum', () => {
 			.use(group)
 			.get('/cookie', () => 'Hi')
 
-		const [a, b] = app.router.history
+		const hook0 = flattenChain(app.history![0][5])!
+		const hook1 = flattenChain(app.history![1][5])!
 
-		expect(a.hooks.transform!.length).toBe(1)
-		expect(b.hooks.transform!.length).toBe(1)
+		expect(hook0.transform!.length).toBe(1)
+		expect(hook1.transform!.length).toBe(1)
 	})
 
 	it('Accept plugin when on different different', async () => {
@@ -62,10 +65,11 @@ describe('Checksum', () => {
 			)
 			.get('/cookie', () => 'Hi')
 
-		const [a, b] = app.router.history
+		const hook0 = flattenChain(app.history![0][5])!
+		const hook1 = flattenChain(app.history![1][5])!
 
 		expect(
-			Math.abs(a.hooks.transform!.length - b.hooks.transform!.length)
+			Math.abs(hook0.transform!.length - hook1.transform!.length)
 		).toBe(1)
 	})
 
@@ -83,10 +87,11 @@ describe('Checksum', () => {
 			.use(group)
 			.get('/cookie', () => 'Hi')
 
-		const [a, b] = app.router.history
+		const hook0 = flattenChain(app.history![0][5])!
+		const hook1 = flattenChain(app.history![1][5])!
 
 		expect(
-			Math.abs(a.hooks.transform!.length - b.hooks.transform!.length)
+			Math.abs(hook0.transform!.length - hook1.transform!.length)
 		).toBe(0)
 	})
 
@@ -106,10 +111,11 @@ describe('Checksum', () => {
 			.use(group)
 			.get('/cookie', () => 'Hi')
 
-		const [a, b] = app.router.history
+		const hook0 = flattenChain(app.history![0][5])!
+		const hook1 = flattenChain(app.history![1][5])!
 
 		expect(
-			Math.abs(a.hooks.transform!.length - b.hooks.transform!.length)
+			Math.abs(hook0.transform!.length - hook1.transform!.length)
 		).toBe(1)
 	})
 

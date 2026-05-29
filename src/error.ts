@@ -1,6 +1,7 @@
 import { Default } from './type/bridge'
 
 import { StatusMap, StatusMapBack } from './constants'
+import { nullObject } from './utils'
 
 export class ElysiaError<
 	Status extends number = number,
@@ -59,28 +60,6 @@ export class ParseError extends ElysiaError {
 	}
 }
 
-// NormalizeTypeBox `TLocalizedValidationError` and Standard Schema issue
-const normalizeValidationIssue = (e: any, value: unknown) => {
-	if (!e) return e
-
-	const path = Array.isArray(e.path)
-		? e.path.length
-			? e.path.join('.')
-			: 'root'
-		: typeof e.path === 'string'
-			? e.path.replace(/^\//, '').replace(/\//g, '.') || 'root'
-			: 'root'
-
-	return {
-		path,
-		message: e.message ?? '',
-		summary: e.summary ?? e.problem ?? e.message ?? '',
-		schemaPath: e.schemaPath,
-		params: e.params,
-		value
-	}
-}
-
 const propertyAccessor = (path: unknown): string => {
 	if (Array.isArray(path)) return path.length ? '/' + path.join('/') : 'root'
 	if (typeof path === 'string') return path || 'root'
@@ -88,21 +67,15 @@ const propertyAccessor = (path: unknown): string => {
 }
 
 // Walk a TypeBox/Standard schema using an `instancePath` like `/x` or
-// `/items/0` to find the violating sub-schema. Returns undefined if the
-// path can't be resolved. Used to read custom `error` overrides off the
-// sub-schema when a validator throws.
+// `/items/0`. Returns undefined can't resolved.
 //
-// Composition handling: `anyOf` / `oneOf` / `allOf` (TypeBox `Union`,
-// `Intersect`, refined union/intersect) wrap the same value in multiple
-// shape candidates and don't append to `instancePath`. We try each branch
-// in turn — the first that resolves the remaining path wins. `allOf` is
-// handled the same way: properties are spread across branches and any of
-// them may carry the violating sub-schema.
+// in case of allOf/anyOf, first path win
 const walkComposition = (schema: any, parts: string[]): any => {
 	if (parts.length === 0) return schema
 
 	const branches: any[] | undefined =
 		schema.anyOf ?? schema.oneOf ?? schema.allOf
+
 	if (Array.isArray(branches)) {
 		for (let i = 0; i < branches.length; i++) {
 			const result = walkComposition(branches[i], parts)
@@ -114,12 +87,15 @@ const walkComposition = (schema: any, parts: string[]): any => {
 	const [head, ...rest] = parts
 	if (schema.properties?.[head])
 		return walkComposition(schema.properties[head], rest)
+
 	if (
 		schema.additionalProperties &&
 		typeof schema.additionalProperties === 'object'
 	)
 		return walkComposition(schema.additionalProperties, rest)
+
 	if (schema.items) return walkComposition(schema.items, rest)
+
 	return undefined
 }
 
@@ -134,7 +110,7 @@ export class ValidationError extends ElysiaError {
 	status = 422
 
 	customError?: unknown
-	private schema?: unknown
+	schema?: unknown
 
 	constructor(
 		public type: string | undefined,
@@ -157,27 +133,45 @@ export class ValidationError extends ElysiaError {
 					: sub.error
 		}
 
-		let message: string
-		if (customError !== undefined) {
-			message =
-				typeof customError === 'string'
+		super(
+			customError !== undefined
+				? typeof customError === 'string'
 					? customError
 					: JSON.stringify(customError)
-		} else if (errors?.[0]?.message) {
-			message = errors[0].message
-		} else {
-			message = `Validation error on ${type ?? 'unknown'}`
-		}
+				: errors?.[0]?.message
+					? errors[0].message
+					: `Validation error on ${type ?? 'unknown'}`
+		)
 
-		super(message)
 		this.customError = customError
 		this.schema = schema
 	}
 
 	get all() {
-		return (this.errors ?? [])
-			.filter((e) => e)
-			.map((e) => normalizeValidationIssue(e, this.value))
+		if (!this.errors) return []
+
+		return this.errors.filter(Boolean).map(this.#normalizeIssue)
+	}
+
+	#normalizeIssue(e: any) {
+		if (!e) return e
+
+		const path = Array.isArray(e.path)
+			? e.path.length
+				? e.path.join('.')
+				: 'root'
+			: typeof e.path === 'string'
+				? e.path.replace(/^\//, '').replace(/\//g, '.') || 'root'
+				: 'root'
+
+		return {
+			path,
+			message: e.message ?? '',
+			summary: e.summary ?? e.problem ?? e.message ?? '',
+			schemaPath: e.schemaPath,
+			params: e.params,
+			value: this.value
+		}
 	}
 
 	detail(message: unknown) {
@@ -203,9 +197,10 @@ export class ValidationError extends ElysiaError {
 
 		let expected: unknown
 		const schemaForExpected = first?.schema ?? this.schema
+
 		if (schemaForExpected)
 			try {
-				expected = Default({}, schemaForExpected as any, undefined)
+				expected = Default(nullObject(), schemaForExpected as any, undefined)
 			} catch {}
 
 		return {

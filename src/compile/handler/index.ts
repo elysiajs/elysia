@@ -6,23 +6,15 @@ import type { ElysiaAdapter } from '../../adapter'
 import { RouteValidator } from '../../validator/route'
 import type { Validator } from '../../validator'
 
-import type { TypeBoxValidator } from '../../type/validator'
 import { isAsyncFunction, isAsyncLifecycle } from '../utils'
+import type { TypeBoxValidator } from '../../type/validator'
 
-import {
-	parseArrayBuffer,
-	parseFormData,
-	parseJson,
-	parseText,
-	parseUrlencoded
-} from './constants'
-
+import { compileCookieConfig } from '../../cookie/config'
 import {
 	parseCookieRaw,
 	buildCookieJar,
 	signCookieValues
 } from '../../cookie/utils'
-import { compileCookieConfig } from '../../cookie/config'
 
 import { isBun } from '../../universal/constants'
 import { ElysiaStatus, ParseError } from '../../error'
@@ -85,27 +77,27 @@ function builtinParser(
 		case 'formdata':
 		case 'multipart/form-data':
 			link(adapter.formData, 'pf')
-			return parseFormData
+			return 'c.body=await pf(c)\n'
 
 		case 'json':
 		case 'application/json':
 			link(adapter.json, 'pj')
-			return parseJson
+			return 'c.body=await pj(c)\n'
 
 		case 'urlencoded':
 		case 'application/x-www-form-urlencoded':
 			link(adapter.urlencoded, 'pu')
-			return parseUrlencoded
+			return 'c.body=await pu(c)\n'
 
 		case 'arrayBuffer':
 		case 'application/octet-stream':
 			link(adapter.arrayBuffer, 'pa')
-			return parseArrayBuffer
+			return 'c.body=await pa(c)\n'
 
 		case 'text':
 		case 'text/plain':
 			link(adapter.text, 'pt')
-			return parseText
+			return 'c.body=await pt(c)\n'
 
 		case 'none':
 			return ''
@@ -479,7 +471,7 @@ export function compileHandler(
 	const cookieConfig = needsCookie
 		? compileCookieConfig(hook?.cookie as any, appCookieConfig as any)
 		: undefined
-	const hasCookieSign = !!cookieConfig?.hasAnySign
+	const hasCookieSign = !!cookieConfig?.hasSign
 
 	const hasErrorHook = !!hook?.error?.length
 	const hasAfterResponse = !!hook?.afterResponse?.length

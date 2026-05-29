@@ -64,8 +64,6 @@ export class Cookie<T = any> implements BaseCookie {
 		if (current === value) return
 
 		// For objects, use hash-based comparison for performance
-		// Note: Uses JSON.stringify for comparison, so key order matters
-		// { a: 1, b: 2 } and { b: 2, a: 1 } are treated as different values
 		if (
 			current &&
 			typeof current === 'object' &&
@@ -81,7 +79,7 @@ export class Cookie<T = any> implements BaseCookie {
 					this.#hash = hash
 				else {
 					this.#hash = hash
-					if (JSON.stringify(current) === valueStr) return // Values are identical, skip update
+					if (JSON.stringify(current) === valueStr) return
 				}
 			} catch {}
 		}

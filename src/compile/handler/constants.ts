@@ -1,5 +1,1 @@
-export const parseJson = 'c.body=await pj(c)\n'
-export const parseUrlencoded = 'c.body=await pu(c)\n'
-export const parseArrayBuffer = 'c.body=await pa(c)\n'
-export const parseFormData = 'c.body=await pf(c)\n'
-export const parseText = 'c.body=await pt(c)\n'
+export { }

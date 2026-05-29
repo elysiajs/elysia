@@ -54,7 +54,6 @@ export async function parseCookie(
 	return buildCookieJar(set, raw, config)
 }
 
-// Phase 1: parse + unsign + JSON-decode → raw Record<string, unknown>
 export async function parseCookieRaw(
 	cookieString: string | null | undefined,
 	config: CompiledCookieConfig
@@ -121,7 +120,6 @@ export async function parseCookieRaw(
 	return out
 }
 
-// Phase 3: wrap raw values into a BaseCookie store + Proxy
 export function buildCookieJar(
 	set: Context['set'],
 	raw: Record<string, unknown>,
@@ -131,7 +129,6 @@ export function buildCookieJar(
 
 	const store: Record<string, BaseCookie> = nullObject() as any
 
-	// Materialize incoming cookies into BaseCookie entries with merged defaults
 	for (const name in raw) {
 		const fieldDefaults = config.fields[name]?.defaults
 		store[name] = Object.assign(
@@ -142,13 +139,6 @@ export function buildCookieJar(
 		)
 	}
 
-	// Per-cookie initial used by Cookie class — only the schema-known fields
-	// can have per-field defaults. Cookies created on-the-fly by the handler
-	// (e.g. `cookie.newOne.value = 'x'`) get the global defaults via the
-	// Proxy `get` trap below. Sign metadata is NOT stamped on entries —
-	// `signCookieValues` looks up `config.fields[name]` / `config.globalSign`
-	// by cookie name at write time, so the BaseCookie object stays clean
-	// (safe to JSON-serialize for debugging).
 	return new Proxy(store, {
 		get(_, key: string) {
 			const fieldDefaults = config.fields[key]?.defaults
@@ -168,29 +158,18 @@ export function buildCookieJar(
 	}) as Record<string, Cookie<unknown>>
 }
 
-// Phase 4a: sign-pass — runs before serializeCookie when the route's
-// CompiledCookieConfig declares any sign-bearing scope. Looks up signing
-// config by cookie name (not via per-entry metadata) so BaseCookie objects
-// stay free of internal markers. Mutates `property.value` in place, which
-// is safe because:
-//   - this runs after the handler has finished writing,
-//   - serializeCookie reads `value` immediately after,
-//   - nothing else in the response path touches set.cookie between them.
-// The `_signedAt` flag prevents double-signing if the routine is re-entered
-// for the same request.
 const SIGNED_AT = Symbol('cookie.signedAt')
 export async function signCookieValues(
 	cookies: Context['set']['cookie'] | undefined,
 	config: CompiledCookieConfig
 ): Promise<void> {
-	if (!cookies || !config.hasAnySign) return
+	if (!cookies || !config.hasSign) return
+
+	const signed = new Set()
 
 	for (const key in cookies) {
-		const property = cookies[key] as
-			| (BaseCookie & { [SIGNED_AT]?: true })
-			| undefined
-		if (!property) continue
-		if (property[SIGNED_AT]) continue
+		const property = cookies[key] as BaseCookie | undefined
+		if (!property || signed.has(SIGNED_AT)) continue
 
 		const r = isCookieSigned(key, config)
 		if (!r.signed) continue
@@ -202,17 +181,16 @@ export async function signCookieValues(
 		else if (typeof value !== 'string') value = value + ''
 
 		const secret = Array.isArray(r.secrets)
-			? r.secrets.find((s) => s !== null) ?? null
+			? (r.secrets.find((s) => s !== null) ?? null)
 			: r.secrets
 
 		if (secret === null) continue
 
 		property.value = await signCookie(value as string, secret)
-		property[SIGNED_AT] = true
+		signed.add(key)
 	}
 }
 
-// Phase 4b: serialize already-signed cookies into Set-Cookie strings.
 export function serializeCookie(
 	cookies: Context['set']['cookie']
 ): string | string[] | undefined {

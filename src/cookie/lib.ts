@@ -67,6 +67,9 @@ export function parse(
 	return obj
 }
 
+const PRIORITY = '; Priority='
+const SAMESITE = '; SameSite='
+
 export function serialize(
 	name: string,
 	value: string = '',
@@ -97,17 +100,17 @@ export function serialize(
 
 	const priority = options.priority
 	if (priority) {
-		if (priority === 'low') str += '; Priority=Low'
-		else if (priority === 'medium') str += '; Priority=Medium'
-		else if (priority === 'high') str += '; Priority=High'
+		if (priority === 'low') str += `${PRIORITY}Low`
+		else if (priority === 'medium') str += `${PRIORITY}Medium`
+		else if (priority === 'high') str += `${PRIORITY}High`
 	}
 
 	const sameSite = options.sameSite
 	if (sameSite) {
 		if (sameSite === true || sameSite === 'strict')
-			str += '; SameSite=Strict'
-		else if (sameSite === 'lax') str += '; SameSite=Lax'
-		else if (sameSite === 'none') str += '; SameSite=None'
+			str += `${SAMESITE}Strict`
+		else if (sameSite === 'lax') str += `${SAMESITE}Lax`
+		else if (sameSite === 'none') str += `${SAMESITE}None`
 	}
 
 	return str
