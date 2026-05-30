@@ -1079,6 +1079,29 @@ import { Prettify } from '../../../src/types'
 	}>()
 }
 
+// onError explicit 500 response merges with plain default response
+{
+	const app = new Elysia()
+		.onError(({ status }) =>
+			Math.random() > 0.5
+				? status(500, { code: 'custom' as const })
+				: { failure: 'plain' as const }
+		)
+		.get('/throws', () => {
+			throw new Error('boom')
+		})
+
+	expectTypeOf<(typeof app)['~Volatile']['response']>().toEqualTypeOf<{
+		500: { readonly code: 'custom' } | { failure: 'plain' }
+	}>()
+
+	expectTypeOf<
+		(typeof app)['~Routes']['throws']['get']['response']
+	>().toEqualTypeOf<{
+		500: { readonly code: 'custom' } | { failure: 'plain' }
+	}>()
+}
+
 // resolve local
 {
 	const app = new Elysia()

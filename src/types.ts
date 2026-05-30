@@ -2197,13 +2197,17 @@ type Extract500<T> = Exclude<
 	AnyElysiaCustomStatusResponse | undefined | void
 >
 
-export type ValueToErrorResponseSchema<Value> =
-	ExtractErrorFromHandle<Value> &
-		(Extract500<Value> extends infer R500
-			? IsNever<R500> extends true
-				? {}
-				: { 500: R500 }
-			: {})
+type MergeDefaultErrorResponse<Base extends PossibleResponse, R500> =
+	IsNever<R500> extends true
+		? Base
+		: Omit<Base, 500> & {
+				500: (500 extends keyof Base ? Base[500] : never) | R500
+			}
+
+export type ValueToErrorResponseSchema<Value> = MergeDefaultErrorResponse<
+	ExtractErrorFromHandle<Value>,
+	Extract500<Value>
+>
 
 export type ValueOrFunctionToResponseSchema<T> = T extends (
 	...a: any

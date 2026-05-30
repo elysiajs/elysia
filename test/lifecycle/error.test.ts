@@ -141,6 +141,45 @@ describe('error', () => {
 	)
 
 	it.each([true, false])(
+		'uses error status for plain onError response with aot: %p',
+		async (aot) => {
+			const error = new Error('boom') as Error & { status: number }
+			error.status = 418
+
+			const app = new Elysia({ aot })
+				.onError(({ error }) => ({ error: error.message }))
+				.get('/', () => {
+					throw error
+				})
+
+			const response = await app.handle(req('/'))
+
+			expect(response.status).toBe(418)
+			expect(await response.json()).toEqual({ error: 'boom' })
+		}
+	)
+
+	it.each([true, false])(
+		'preserves set status for plain onError response with aot: %p',
+		async (aot) => {
+			const app = new Elysia({ aot })
+				.onError(({ error, set }) => {
+					set.status = 418
+
+					return { error: error.message }
+				})
+				.get('/', () => {
+					throw new Error('boom')
+				})
+
+			const response = await app.handle(req('/'))
+
+			expect(response.status).toBe(418)
+			expect(await response.json()).toEqual({ error: 'boom' })
+		}
+	)
+
+	it.each([true, false])(
 		'return correct number status on error function with aot: %p',
 		async (aot) => {
 			const app = new Elysia({ aot }).get('/', ({ status }) =>
