@@ -2192,6 +2192,19 @@ export type ValueToResponseSchema<Value> = ExtractErrorFromHandle<Value> &
 				: { 200: R200 }
 		: {})
 
+type Extract500<T> = Exclude<
+	T,
+	AnyElysiaCustomStatusResponse | undefined | void
+>
+
+export type ValueToErrorResponseSchema<Value> =
+	ExtractErrorFromHandle<Value> &
+		(Extract500<Value> extends infer R500
+			? IsNever<R500> extends true
+				? {}
+				: { 500: R500 }
+			: {})
+
 export type ValueOrFunctionToResponseSchema<T> = T extends (
 	...a: any
 ) => MaybePromise<infer R>
@@ -2226,6 +2239,42 @@ export type ElysiaHandlerToResponseSchemaAmbiguous<
 			? ElysiaHandlerToResponseSchema<Schemas>
 			: Schemas extends Function[]
 				? ElysiaHandlerToResponseSchemas<Schemas>
+				: {}
+
+export type ElysiaErrorHandlerToResponseSchema<
+	in out Handle extends Function
+> = Prettify<
+	Handle extends (...a: any) => MaybePromise<infer R>
+		? ValueToErrorResponseSchema<Exclude<R, undefined>>
+		: {}
+>
+
+export type ElysiaErrorHandlerToResponseSchemas<
+	Handle extends Function[],
+	Carry extends PossibleResponse = {}
+> = Handle extends [infer Current, ...infer Rest]
+	? ElysiaErrorHandlerToResponseSchemas<
+			// @ts-ignore Trust me bro
+			Rest,
+			// @ts-ignore trust me bro
+			UnionResponseStatus<
+				Current extends Function
+					? ElysiaErrorHandlerToResponseSchema<Current>
+					: {},
+				Carry
+			>
+		>
+	: Prettify<Carry>
+
+export type ElysiaErrorHandlerToResponseSchemaAmbiguous<
+	Schemas extends MaybeArray<Function>
+> =
+	MaybeArray<(...a: any) => any> extends Schemas
+		? {}
+		: Schemas extends Function
+			? ElysiaErrorHandlerToResponseSchema<Schemas>
+			: Schemas extends Function[]
+				? ElysiaErrorHandlerToResponseSchemas<Schemas>
 				: {}
 
 type ReconcileStatus<

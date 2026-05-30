@@ -125,6 +125,22 @@ describe('error', () => {
 	})
 
 	it.each([true, false])(
+		'defaults plain onError response to 500 with aot: %p',
+		async (aot) => {
+			const app = new Elysia({ aot })
+				.onError(({ error }) => ({ error: error.message }))
+				.get('/', () => {
+					throw new Error('boom')
+				})
+
+			const response = await app.handle(req('/'))
+
+			expect(response.status).toBe(500)
+			expect(await response.json()).toEqual({ error: 'boom' })
+		}
+	)
+
+	it.each([true, false])(
 		'return correct number status on error function with aot: %p',
 		async (aot) => {
 			const app = new Elysia({ aot }).get('/', ({ status }) =>
