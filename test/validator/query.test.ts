@@ -1034,6 +1034,62 @@ describe('Query Validator', () => {
 		}
 	})
 
+	it('preserves query transform validation errors for all and detail', async () => {
+		for (const aot of [true, false]) {
+			let all:
+				| {
+						path: string
+						value: unknown
+						message: string
+				  }[]
+				| undefined
+			let detail: unknown
+
+			const app = new Elysia({ aot })
+				.onError(({ error }) => {
+					if (error instanceof ValidationError) {
+						all = error.all.map(({ path, value, message }) => ({
+							path,
+							value,
+							message
+						}))
+						detail = error.detail(error.message)
+					}
+				})
+				.get('/', ({ query }) => query, {
+					query: t.Object({
+						limit: t.Number({
+							minimum: 1,
+							maximum: 100,
+							default: 10,
+							error: 'limit invalid'
+						})
+					})
+				})
+
+			await app.handle(req('/?limit=200'))
+
+			expect(all).toEqual([
+				{
+					path: '/limit',
+					value: 200,
+					message: 'Expected number to be less or equal to 100'
+				}
+			])
+			expect(detail).toMatchObject({
+				property: '/limit',
+				message: 'limit invalid',
+				errors: [
+					{
+						path: '/limit',
+						value: 200,
+						message: 'Expected number to be less or equal to 100'
+					}
+				]
+			})
+		}
+	})
+
 	it('handle reference query array', async () => {
 		const app = new Elysia()
 			.model({

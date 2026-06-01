@@ -297,6 +297,8 @@ export class ValidationError extends Error {
 	 * use this instead of message
 	 */
 	valueError?: ValueError
+	private _validationErrors?: ValueError[]
+	private _mappedValidationErrors?: ValueErrorWithSummary[]
 
 	/**
 	 * Alias of `valueError`
@@ -333,6 +335,10 @@ export class ValidationError extends Error {
 		let error
 		let expected
 		let customError
+		let validationErrorsCache: ValueError[] | undefined
+		let mappedValidationErrorsCache:
+			| ValueErrorWithSummary[]
+			| undefined
 
 		if (
 			// @ts-ignore
@@ -395,6 +401,8 @@ export class ValidationError extends Error {
 			const mappedValidationErrors = validationErrors
 				.map(mapValueError)
 				.filter((x): x is ValueErrorWithSummary => !!x)
+			validationErrorsCache = validationErrors
+			mappedValidationErrorsCache = mappedValidationErrors
 
 			const accessor = error?.path || 'root'
 
@@ -473,11 +481,20 @@ export class ValidationError extends Error {
 		this.valueError = error
 		this.expected = expected
 		this.customError = customError
+		this._validationErrors = validationErrorsCache
+		this._mappedValidationErrors = mappedValidationErrorsCache
 
 		Object.setPrototypeOf(this, ValidationError.prototype)
 	}
 
 	get all(): ValueErrorWithSummary[] {
+		if (this._mappedValidationErrors !== undefined)
+			return this._mappedValidationErrors
+		if (this._validationErrors !== undefined)
+			return this._validationErrors
+				.map(mapValueError)
+				.filter((x): x is ValueErrorWithSummary => !!x)
+
 		// Handle standard schema validators (Zod, Valibot, etc.)
 		if (
 			// @ts-ignore

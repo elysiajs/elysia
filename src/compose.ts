@@ -468,6 +468,7 @@ const coerceTransformDecodeError = (
 	`if(error.constructor.name === 'TransformDecodeError'){` +
 	`c.set.status=422\n` +
 	`throw mapTransformDecodeError(error,'${type}',validator.${type},${value},${allowUnsafeValidationDetails})}` +
+	`if(error.constructor.name!=='TransformDecodeCheckError')throw error` +
 	`}`
 
 const setImmediateFn = hasSetImmediate
