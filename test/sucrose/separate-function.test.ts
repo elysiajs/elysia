@@ -156,4 +156,29 @@ describe('Sucrose: separateFunction', () => {
 			}
 		])
 	})
+
+	it('separate method with quoted closing paren in default parameter', () => {
+		const method = 'beforeHandle(ctx = createGuard(")")){return ctx.query}'
+
+		expect(separateFunction(method)).toEqual([
+			'ctx = createGuard(")")',
+			'{return ctx.query}',
+			{
+				isArrowReturn: false
+			}
+		])
+	})
+
+	it('separate method with template and comment parens in parameters', () => {
+		const method =
+			'beforeHandle(ctx = createGuard(`value ${")"}`), next = /* ) */ fallback){return next(ctx)}'
+
+		expect(separateFunction(method)).toEqual([
+			'ctx = createGuard(`value ${")"}`), next = /* ) */ fallback',
+			'{return next(ctx)}',
+			{
+				isArrowReturn: false
+			}
+		])
+	})
 })

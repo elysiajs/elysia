@@ -35,6 +35,94 @@ export namespace Sucrose {
 	}
 }
 
+const skipString = (code: string, index: number, quote: number) => {
+	for (let i = index + 1; i < code.length; i++) {
+		const char = code.charCodeAt(i)
+
+		if (char === 92) {
+			i++
+			continue
+		}
+
+		if (char === quote) return i
+	}
+
+	return code.length - 1
+}
+
+const skipBlockComment = (code: string, index: number) => {
+	const end = code.indexOf('*/', index + 2)
+
+	return end === -1 ? code.length - 1 : end + 1
+}
+
+const skipLineComment = (code: string, index: number) => {
+	const end = code.indexOf('\n', index + 2)
+
+	return end === -1 ? code.length - 1 : end
+}
+
+const skipTemplate = (code: string, index: number): number => {
+	for (let i = index + 1; i < code.length; i++) {
+		const char = code.charCodeAt(i)
+
+		if (char === 92) {
+			i++
+			continue
+		}
+
+		if (char === 96) return i
+
+		if (char === 36 && code.charCodeAt(i + 1) === 123) {
+			i = skipBlock(code, i + 1, 123, 125)
+			continue
+		}
+	}
+
+	return code.length - 1
+}
+
+const skipBlock = (
+	code: string,
+	index: number,
+	open: number,
+	close: number
+): number => {
+	let deep = 1
+
+	for (let i = index + 1; i < code.length; i++) {
+		const char = code.charCodeAt(i)
+		const next = code.charCodeAt(i + 1)
+
+		if (char === 34 || char === 39) {
+			i = skipString(code, i, char)
+			continue
+		}
+
+		if (char === 96) {
+			i = skipTemplate(code, i)
+			continue
+		}
+
+		if (char === 47 && next === 47) {
+			i = skipLineComment(code, i)
+			continue
+		}
+
+		if (char === 47 && next === 42) {
+			i = skipBlockComment(code, i)
+			continue
+		}
+
+		if (char === open) deep++
+		else if (char === close) deep--
+
+		if (deep === 0) return i
+	}
+
+	return code.length - 1
+}
+
 /**
  * Separate stringified function body and parameter
  *
@@ -116,6 +204,27 @@ export const separateFunction = (
 
 		for (; end < code.length; end++) {
 			const char = code.charCodeAt(end)
+			const next = code.charCodeAt(end + 1)
+
+			if (char === 34 || char === 39) {
+				end = skipString(code, end, char)
+				continue
+			}
+
+			if (char === 96) {
+				end = skipTemplate(code, end)
+				continue
+			}
+
+			if (char === 47 && next === 47) {
+				end = skipLineComment(code, end)
+				continue
+			}
+
+			if (char === 47 && next === 42) {
+				end = skipBlockComment(code, end)
+				continue
+			}
 
 			if (char === 40) deep++
 			else if (char === 41) deep--
