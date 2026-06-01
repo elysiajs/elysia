@@ -1008,6 +1008,32 @@ describe('Query Validator', () => {
 		expect(err instanceof ValidationError).toBe(true)
 	})
 
+	it('reports query path on numeric transform validation errors', async () => {
+		for (const aot of [true, false]) {
+			const app = new Elysia({ aot }).get('/', ({ query }) => query, {
+				query: t.Object({
+					limit: t.Number({
+						minimum: 1,
+						maximum: 100,
+						default: 10
+					})
+				})
+			})
+
+			const response = await app.handle(req('/?limit=200'))
+			const body = await response.json()
+
+			expect(response.status).toBe(422)
+			expect(body.on).toBe('query')
+			expect(body.property).toBe('/limit')
+			expect(body.message).toBe(
+				'Expected number to be less or equal to 100'
+			)
+			expect(body.errors[0].path).toBe('/limit')
+			expect(body.errors[0].value).toBe(200)
+		}
+	})
+
 	it('handle reference query array', async () => {
 		const app = new Elysia()
 			.model({
