@@ -106,4 +106,17 @@ describe('Sucrose: separateFunction', () => {
 			}
 		])
 	})
+
+	it('separate minified method', () => {
+		const method =
+			'beforeHandle(ctx){await executeMiddleware(ctx, guardFn, logMessage)}'
+
+		expect(separateFunction(method)).toEqual([
+			'ctx',
+			'{await executeMiddleware(ctx, guardFn, logMessage)}',
+			{
+				isArrowReturn: false
+			}
+		])
+	})
 })

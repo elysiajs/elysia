@@ -328,4 +328,38 @@ describe('sucrose', () => {
 			route: true
 		})
 	})
+
+	it('handles minified method context pass without warning', () => {
+		const beforeHandle = () => {}
+		beforeHandle.toString = () =>
+			'beforeHandle(ctx){await executeMiddleware(ctx, guardFn, logMessage)}'
+
+		const log = console.log
+		const logs: unknown[] = []
+		console.log = (...args) => {
+			logs.push(args)
+		}
+
+		try {
+			expect(
+				sucrose({
+					beforeHandle: [beforeHandle]
+				})
+			).toEqual({
+				query: true,
+				headers: true,
+				body: true,
+				cookie: true,
+				set: true,
+				server: true,
+				path: true,
+				url: true,
+				route: true
+			})
+
+			expect(logs).toEqual([])
+		} finally {
+			console.log = log
+		}
+	})
 })
