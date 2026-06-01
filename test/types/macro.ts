@@ -231,6 +231,37 @@ import { expectTypeOf } from 'expect-type'
 		)
 }
 
+// Handle function macro resolve schema
+{
+	const plugin = new Elysia().macro({
+		withParam: (enabled: boolean) => ({
+			params: t.Object({
+				id: t.String()
+			}),
+			resolve({ params }) {
+				expectTypeOf(params).toEqualTypeOf<{
+					id: string
+				}>()
+
+				return {
+					paramId: params.id
+				}
+			}
+		})
+	})
+
+	new Elysia().use(plugin).get(
+		'/:id',
+		({ params, paramId }) => {
+			expectTypeOf(params).toEqualTypeOf<{ id: string }>()
+			expectTypeOf(paramId).toEqualTypeOf<string>()
+		},
+		{
+			withParam: true
+		}
+	)
+}
+
 // resolve with custom status
 {
 	const app = new Elysia()

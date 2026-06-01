@@ -155,6 +155,7 @@ import type {
 	UnionResponseStatus,
 	CreateEdenResponse,
 	MacroProperty,
+	ResolveHandler,
 	MaybeValueOrVoidFunction,
 	IntersectIfObject,
 	IntersectIfObjectSchema,
@@ -5400,6 +5401,132 @@ export default class Elysia<
 			}
 			macroFn: Metadata['macroFn'] & {
 				[name in Name]: Property
+			}
+			parser: Metadata['parser']
+			response: Metadata['response']
+		},
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	macro<
+		const Name extends string,
+		const Params extends InputSchema<
+			keyof Definitions['typebox'] & string
+		>['params'],
+		const Body extends InputSchema<
+			keyof Definitions['typebox'] & string
+		>['body'] = undefined,
+		const Headers extends InputSchema<
+			keyof Definitions['typebox'] & string
+		>['headers'] = undefined,
+		const Query extends InputSchema<
+			keyof Definitions['typebox'] & string
+		>['query'] = undefined,
+		const Cookie extends InputSchema<
+			keyof Definitions['typebox'] & string
+		>['cookie'] = undefined,
+		const Response extends InputSchema<
+			keyof Definitions['typebox'] & string
+		>['response'] = undefined,
+		const Derivative extends
+			| Record<string, unknown>
+			| ElysiaCustomStatusResponse<any, any, any>
+			| void =
+			| Record<string, unknown>
+			| ElysiaCustomStatusResponse<any, any, any>
+			| void,
+		const Args extends any[] = any[],
+		const Schema extends RouteSchema = IntersectIfObjectSchema<
+			MergeSchema<
+				UnwrapRoute<
+					{
+						body: Body
+						headers: Headers
+						query: Query
+						params: Params
+						cookie: Cookie
+						response: Response
+					},
+					Definitions['typebox'],
+					BasePath
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>
+			>,
+			Metadata['standaloneSchema'] &
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema']
+		>,
+		const SingletonContext extends SingletonBase = Singleton & {
+			derive: Partial<Ephemeral['derive'] & Volatile['derive']>
+			resolve: Partial<Ephemeral['resolve'] & Volatile['resolve']>
+		},
+		const Resolve extends ResolveHandler<
+			Schema,
+			SingletonContext,
+			Derivative
+		> = ResolveHandler<Schema, SingletonContext, Derivative>
+	>(
+		macro: [Name] extends [never]
+			? never
+			: {
+					[name in Name]: (...args: Args) => {
+						body?: Body
+						headers?: Headers
+						query?: Query
+						params: Params
+						cookie?: Cookie
+						response?: Response
+						resolve: Resolve &
+							ResolveHandler<Schema, SingletonContext, Derivative>
+					} & Omit<
+						MacroProperty<
+							Metadata['macro'] &
+								InputSchema<
+									keyof Definitions['typebox'] & string
+								>,
+							Schema,
+							SingletonContext,
+							Definitions['error']
+						>,
+						'resolve'
+					>
+				}
+	): Elysia<
+		BasePath,
+		Singleton,
+		Definitions,
+		{
+			schema: Metadata['schema']
+			standaloneSchema: Metadata['standaloneSchema']
+			macro: Metadata['macro'] & {
+				[name in Name]?: Args extends [infer Params, ...any[]]
+					? Params
+					: boolean
+			}
+			macroFn: Metadata['macroFn'] & {
+				[name in Name]: (...args: Args) => {
+					body?: Body
+					headers?: Headers
+					query?: Query
+					params: Params
+					cookie?: Cookie
+					response?: Response
+					resolve: Resolve
+				} & Omit<
+					MacroProperty<
+						Metadata['macro'] &
+							InputSchema<keyof Definitions['typebox'] & string>,
+						Schema,
+						SingletonContext,
+						Definitions['error']
+					>,
+					'resolve'
+				>
 			}
 			parser: Metadata['parser']
 			response: Metadata['response']
