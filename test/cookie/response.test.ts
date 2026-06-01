@@ -338,6 +338,37 @@ describe('Cookie Response', () => {
 		])
 	})
 
+	it('uses route cookie encode over constructor in dynamic mode', async () => {
+		const app = new Elysia({
+			aot: false,
+			cookie: {
+				encode: (value) => `app-${value.replaceAll(' ', '-')}`
+			}
+		}).get(
+			'/',
+			({ cookie: { name } }) => {
+				name.value = 'seminar Himari'
+			},
+			{
+				cookie: t.Cookie(
+					{
+						name: t.Optional(t.String())
+					},
+					{
+						encode: (value) =>
+							`route-${value.replaceAll(' ', '-')}`
+					}
+				)
+			}
+		)
+
+		const response = await app.handle(req('/'))
+
+		expect(response.headers.getAll('Set-Cookie')).toEqual([
+			'name=route-seminar-Himari; Path=/'
+		])
+	})
+
 	it('uses cookie encode set on a cookie instance', async () => {
 		const app = new Elysia().get('/', ({ cookie: { name } }) => {
 			name.encode = (value) => value.replaceAll(' ', '+')

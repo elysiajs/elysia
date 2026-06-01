@@ -476,7 +476,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 					routeCookieConfig?.partitioned,
 				sameSite: app.config.cookie?.sameSite ?? routeCookieConfig?.sameSite,
 				secure: app.config.cookie?.secure ?? routeCookieConfig?.secure,
-				encode: app.config.cookie?.encode ?? routeCookieConfig?.encode,
+				encode: routeCookieConfig?.encode ?? app.config.cookie?.encode,
 				secrets: app.config.cookie?.secrets ?? routeCookieConfig?.secrets,
 				sign: app.config.cookie?.sign ?? routeCookieConfig?.sign
 			} as CookieOptions & {
