@@ -111,15 +111,30 @@ export const separateFunction = (
 	const start = code.indexOf('(')
 
 	if (start !== -1) {
-		const sep = code.indexOf('\n', 2)
-		const parameter = code.slice(0, sep)
-		const end = parameter.lastIndexOf(')') + 1
+		let end = start + 1
+		let deep = 1
 
-		const body = code.slice(sep + 1)
+		for (; end < code.length; end++) {
+			const char = code.charCodeAt(end)
+
+			if (char === 40) deep++
+			else if (char === 41) deep--
+
+			if (deep === 0) break
+		}
+
+		if (deep !== 0) {
+			const x = code.split('\n', 2)
+
+			return [x[0], x[1], { isArrowReturn: false }]
+		}
+
+		let body = code.slice(end + 1).trimStart()
+		if (body.charCodeAt(0) !== 123) body = '{' + body
 
 		return [
-			parameter.slice(start, end),
-			'{' + body,
+			code.slice(start + 1, end),
+			body,
 			{
 				isArrowReturn: false
 			}
@@ -550,11 +565,12 @@ export const isContextPassToFunction = (
 ) => {
 	// ! Function is passed to another function, assume as all is accessed
 	try {
+		const escapedContext = context.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 		const captureFunction = new RegExp(
-			`\\w\\((?:.*?)?${context}(?:.*?)?\\)`,
+			`\\w\\((?:.*?)?${escapedContext}(?:.*?)?\\)`,
 			'gs'
 		)
-		const exactParameter = new RegExp(`${context}(,|\\))`, 'gs')
+		const exactParameter = new RegExp(`${escapedContext}(,|\\))`, 'gs')
 
 		const length = body.length
 		let fn
