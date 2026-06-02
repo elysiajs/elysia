@@ -31,7 +31,7 @@ import { ELYSIA_TYPES } from './constants'
 import { Validator, type ValidatorOptions } from '../validator'
 import { isAsyncFunction } from '../compile/utils'
 import { hasProperty } from './utils'
-import { isBlob } from '../utils'
+import { isBlob, nullObject } from '../utils'
 import { ValidationError } from '../error'
 
 import type { MaybePromise } from '../types'
@@ -487,66 +487,81 @@ export class TypeBoxValidatorCache {
 		if (TypeBoxValidatorCache.ignoreKeys.has(k)) return undefined
 		if (typeof v === 'function')
 			return TypeBoxValidatorCache.fnKey(v as Function)
+
+		if (v && typeof v === 'object' && (v as any)['~optional'] === true) {
+			const out = nullObject()
+			for (const k in v) out[k] = (v as any)[k]
+			out['~optional'] = true
+
+			return out
+		}
+
 		return v
 	}
 
-	private static isOpaqueType(schema: any, seen = new WeakSet()): boolean {
-		if (!schema || typeof schema !== 'object') return false
-		if (seen.has(schema)) return false
+	static #isOpaqueType(schema: any, seen = new WeakSet()): boolean {
+		if (!schema || typeof schema !== 'object' || seen.has(schema))
+			return false
+
 		seen.add(schema)
 
-		if (schema['~refine'] || schema['~optional']) return true
-		if ((schema as any)['~elyTyp'] === ELYSIA_TYPES.NoValidate) return true
+		if (
+			schema['~refine'] ||
+			(schema as any)['~elyTyp'] === ELYSIA_TYPES.NoValidate
+		)
+			return true
 
 		const props = schema.properties
 		if (props)
 			for (const k in props)
-				if (TypeBoxValidatorCache.isOpaqueType(props[k], seen))
+				if (TypeBoxValidatorCache.#isOpaqueType(props[k], seen))
 					return true
 
 		const items = schema.items
 		if (Array.isArray(items)) {
 			for (const it of items)
-				if (TypeBoxValidatorCache.isOpaqueType(it, seen)) return true
-		} else if (items && TypeBoxValidatorCache.isOpaqueType(items, seen))
+				if (TypeBoxValidatorCache.#isOpaqueType(it, seen)) return true
+		} else if (items && TypeBoxValidatorCache.#isOpaqueType(items, seen))
 			return true
 
 		for (const k of ['anyOf', 'allOf', 'oneOf'] as const) {
 			const arr = schema[k]
 			if (Array.isArray(arr))
 				for (const x of arr)
-					if (TypeBoxValidatorCache.isOpaqueType(x, seen)) return true
+					if (TypeBoxValidatorCache.#isOpaqueType(x, seen))
+						return true
 		}
 
 		if (
 			schema.additionalProperties &&
 			typeof schema.additionalProperties === 'object' &&
-			TypeBoxValidatorCache.isOpaqueType(
+			TypeBoxValidatorCache.#isOpaqueType(
 				schema.additionalProperties,
 				seen
 			)
 		)
 			return true
 
-		if (schema.not && TypeBoxValidatorCache.isOpaqueType(schema.not, seen))
+		if (schema.not && TypeBoxValidatorCache.#isOpaqueType(schema.not, seen))
 			return true
 
 		const pp = schema.patternProperties
 		if (pp)
 			for (const k in pp)
-				if (TypeBoxValidatorCache.isOpaqueType(pp[k], seen)) return true
+				if (TypeBoxValidatorCache.#isOpaqueType(pp[k], seen))
+					return true
 
 		return false
 	}
 
-	private cache = new Map<
+	#cache = new Map<
 		string,
 		WeakMap<
 			CoerceOption[] | typeof TypeBoxValidatorCache.EMPTY,
 			BaseTypeBoxValidator
 		>
 	>()
-	private referenceCache = new WeakMap<
+	#referenceCache = new WeakMap<
 		TSchema,
 		WeakMap<
 			CoerceOption[] | typeof TypeBoxValidatorCache.EMPTY,
@@ -560,18 +575,18 @@ export class TypeBoxValidatorCache {
 			| CoerceOption[]
 			| typeof TypeBoxValidatorCache.EMPTY = TypeBoxValidatorCache.EMPTY
 	) {
-		if (this.referenceCache.has(schema)) {
-			const coercionsCache = this.referenceCache.get(schema)!
+		if (this.#referenceCache.has(schema)) {
+			const coercionsCache = this.#referenceCache.get(schema)!
 			if (coercionsCache.has(coercions))
 				return coercionsCache.get(coercions)!
 		}
 
-		if (HasCodec(schema) || TypeBoxValidatorCache.isOpaqueType(schema))
+		if (HasCodec(schema) || TypeBoxValidatorCache.#isOpaqueType(schema))
 			return undefined
 
 		const key = JSON.stringify(schema, TypeBoxValidatorCache.ignoreMeta)
-		if (this.cache.has(key)) {
-			const coercionsCache = this.cache.get(key)!
+		if (this.#cache.has(key)) {
+			const coercionsCache = this.#cache.get(key)!
 
 			if (coercionsCache.has(coercions))
 				return coercionsCache.get(coercions)!
@@ -585,32 +600,32 @@ export class TypeBoxValidatorCache {
 			| typeof TypeBoxValidatorCache.EMPTY = TypeBoxValidatorCache.EMPTY,
 		validator: BaseTypeBoxValidator
 	) {
-		if (HasCodec(schema) || TypeBoxValidatorCache.isOpaqueType(schema)) {
+		if (HasCodec(schema) || TypeBoxValidatorCache.#isOpaqueType(schema)) {
 			const cache = new WeakMap().set(coercions, validator)
-			this.referenceCache.set(schema, cache)
+			this.#referenceCache.set(schema, cache)
 			return
 		}
 
 		const key = JSON.stringify(schema, TypeBoxValidatorCache.ignoreMeta)
-		if (this.cache.has(key)) {
-			const cache = this.cache.get(key)!.set(coercions, validator)
+		if (this.#cache.has(key)) {
+			const cache = this.#cache.get(key)!.set(coercions, validator)
 
-			if (this.referenceCache.has(schema))
-				this.referenceCache.get(schema)!.set(coercions, validator)
-			else this.referenceCache.set(schema, cache)
+			if (this.#referenceCache.has(schema))
+				this.#referenceCache.get(schema)!.set(coercions, validator)
+			else this.#referenceCache.set(schema, cache)
 
 			return
 		}
 
 		const cache = new WeakMap().set(coercions, validator)
 
-		this.cache.set(key, cache)
-		this.referenceCache.set(schema, cache)
+		this.#cache.set(key, cache)
+		this.#referenceCache.set(schema, cache)
 	}
 
 	clear() {
-		this.cache.clear()
-		this.referenceCache = new WeakMap()
+		this.#cache.clear()
+		this.#referenceCache = new WeakMap()
 		deferCoercions()
 	}
 }
