@@ -49,7 +49,7 @@ export namespace Sucrose {
  * separateFunction('async ({ hello }) => { return hello }') // => ['({ hello })', '{ return hello }']
  * ```
  */
-function separateFunction(code: string): [
+export function separateFunction(code: string): [
 	string,
 	string
 	// isArrowReturn: boolean
@@ -144,7 +144,7 @@ function separateFunction(code: string): [
  * bracketPairRange('hello: { world: { a } }, elysia') // [6, 20]
  * ```
  */
-function bracketPairRange(parameter: string): [number, number] {
+export function bracketPairRange(parameter: string): [number, number] {
 	const start = parameter.indexOf('{')
 	if (start === -1) return [-1, 0]
 
@@ -176,7 +176,7 @@ function bracketPairRange(parameter: string): [number, number] {
  * bracketPairRange('hello: { world: { a } }, elysia') // [6, 20]
  * ```
  */
-function bracketPairRangeReverse(parameter: string): [number, number] {
+export function bracketPairRangeReverse(parameter: string): [number, number] {
 	const end = parameter.lastIndexOf('}')
 	if (end === -1) return [-1, 0]
 
@@ -199,7 +199,7 @@ function bracketPairRangeReverse(parameter: string): [number, number] {
 	return [start, end + 1]
 }
 
-function removeColonAlias(parameter: string) {
+export function removeColonAlias(parameter: string) {
 	while (true) {
 		const start = parameter.indexOf(':')
 		if (start === -1) break
@@ -225,7 +225,7 @@ function removeColonAlias(parameter: string) {
  * }
  * ```
  */
-function retrieveRootparameters(parameter: string) {
+export function retrieveRootparameters(parameter: string) {
 	let hasParenthesis = false
 
 	// Remove () from parameter
@@ -339,7 +339,7 @@ function findEndIndex(
  * findAlias('body', '{ const a = body, b = body }') // => ['a', 'b']
  * ```
  */
-function findAlias(type: string, body: string, depth = 0) {
+export function findAlias(type: string, body: string, depth = 0) {
 	if (depth > 5) return []
 
 	const aliases: string[] = []
@@ -420,7 +420,7 @@ function findAlias(type: string, body: string, depth = 0) {
 // 		parent + "['" + prop + "']"
 // 	] as const
 
-function extractMainParameter(parameter: string) {
+export function extractMainParameter(parameter: string) {
 	if (!parameter) return
 
 	if (parameter.charCodeAt(0) !== 123) return parameter
@@ -446,7 +446,7 @@ function extractMainParameter(parameter: string) {
 /**
  * Analyze if context is mentioned in body
  */
-function inferBodyReference(
+export function inferBodyReference(
 	code: string,
 	aliases: string[],
 	inference: Sucrose.Inference
@@ -517,7 +517,7 @@ function inferBodyReference(
 	return aliases
 }
 
-function removeDefaultParameter(parameter: string) {
+export function removeDefaultParameter(parameter: string) {
 	while (true) {
 		const index = parameter.indexOf('=')
 		if (index === -1) break

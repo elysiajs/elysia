@@ -21,8 +21,10 @@ interface RouteSchema {
 	response?: Record<number, AnySchema>
 }
 
-export interface RouteValidatorOptions
-	extends Omit<ValidatorOptions, 'coerces' | 'schemas'> {
+export interface RouteValidatorOptions extends Omit<
+	ValidatorOptions,
+	'coerces' | 'schemas' | 'slot'
+> {
 	schemas?: {
 		body: AnySchema
 		headers: AnySchema
@@ -71,7 +73,9 @@ export class RouteValidator<const in out T extends RouteSchema> {
 
 		const standaloneSchemas = options?.schemas
 
-		const bodyStandalone = pickStandalone(standaloneSchemas, 'body') as AnySchema[] | undefined
+		const bodyStandalone = pickStandalone(standaloneSchemas, 'body') as
+			| AnySchema[]
+			| undefined
 		if (route.body || bodyStandalone?.length) {
 			const body = Validator.reference(
 				(route.body ?? bodyStandalone![0]) as AnySchema,
@@ -80,6 +84,7 @@ export class RouteValidator<const in out T extends RouteSchema> {
 
 			this.body = Validator.create(route.body as any, {
 				...options,
+				slot: 'body',
 				schemas: bodyStandalone,
 				coerces: isTb(body)
 					? hasTypes([ELYSIA_TYPES.File, ELYSIA_TYPES.Files], body)
@@ -89,9 +94,10 @@ export class RouteValidator<const in out T extends RouteSchema> {
 			}) as any
 		}
 
-		const headersStandalone = pickStandalone(standaloneSchemas, 'headers') as
-			| AnySchema[]
-			| undefined
+		const headersStandalone = pickStandalone(
+			standaloneSchemas,
+			'headers'
+		) as AnySchema[] | undefined
 		if (route.headers || headersStandalone?.length) {
 			const headers = Validator.reference(
 				(route.headers ?? headersStandalone![0]) as AnySchema,
@@ -100,6 +106,7 @@ export class RouteValidator<const in out T extends RouteSchema> {
 
 			this.headers = Validator.create(route.headers as any, {
 				...options,
+				slot: 'headers',
 				schemas: headersStandalone,
 				coerces: isTb(headers) ? coerceStringToStructure() : undefined
 			}) as any
@@ -116,6 +123,7 @@ export class RouteValidator<const in out T extends RouteSchema> {
 
 			this.query = Validator.create(route.query as any, {
 				...options,
+				slot: 'query',
 				schemas: queryStandalone,
 				coerces: isTb(query) ? coerceQuery() : undefined
 			}) as any
@@ -132,6 +140,7 @@ export class RouteValidator<const in out T extends RouteSchema> {
 
 			this.params = Validator.create(route.params as any, {
 				...options,
+				slot: 'params',
 				schemas: paramsStandalone,
 				coerces: isTb(params) ? coerceRoot() : undefined
 			}) as any
@@ -148,14 +157,16 @@ export class RouteValidator<const in out T extends RouteSchema> {
 
 			this.cookie = Validator.create(route.cookie as any, {
 				...options,
+				slot: 'cookie',
 				schemas: cookieStandalone,
 				coerces: isTb(cookie) ? coerceStringToStructure() : undefined
 			}) as any
 		}
 
-		const responseStandalone = pickStandalone(standaloneSchemas, 'response') as
-			| Record<number, AnySchema>[]
-			| undefined
+		const responseStandalone = pickStandalone(
+			standaloneSchemas,
+			'response'
+		) as Record<number, AnySchema>[] | undefined
 
 		this.response = Validator.response(route.response, {
 			...options,

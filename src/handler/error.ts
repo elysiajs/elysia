@@ -1,43 +1,37 @@
 import { getAsyncIndexes } from './utils'
 import { parseQueryFromURL } from '../parse-query'
+import { isCloudflareWorker } from '../universal/constants'
 
 import type { Context } from '../context'
 import type { AppHook } from '../types'
 
-const _defaultError = new Response('Internal Server Error', { status: 500 })
+let _defaultError: Response | undefined
+const getDefaultError = (): Response =>
+	isCloudflareWorker
+		? new Response('Internal Server Error', { status: 500 })
+		: (_defaultError ??= new Response('Internal Server Error', {
+				status: 500
+			})).clone()
 
-// Error paths (404, pre-route throws, route exceptions caught at the
-// dispatcher) bypass the compiled-route codegen, so its inline query parse
-// never runs. `onError` handlers that destructure `({ query })` would see
-// undefined unless we parse here. Cost is one URL scan per error, only on
-// the cold error path.
-function ensureQuery(context: Context) {
-	if ((context as any).query === undefined && (context as any).qi !== undefined)
-		(context as any).query = parseQueryFromURL(
-			context.request.url,
-			(context as any).qi
-		)
+// bypass the compiled-route codegen
+function parseQuery(context: Context) {
+	const c = context as any
+
+	if (c.query === undefined && c.qi !== undefined)
+		context.query = parseQueryFromURL(c.request.url, c.qi)
 }
 
 function fallbackResponse(
 	context: Context,
 	error: any,
 	mapResponse: (response: unknown, set: Context['set']) => unknown,
-	defaultError: Response
+	defaultError?: Response
 ): unknown {
-	// `toResponse()` returns a complete `Response` (status, headers, body).
-	// Used by ValidationError to surface the structured `{type, on,
-	// property, message, summary, expected, found, errors}` JSON shape
-	// instead of `error.message` plain text. Other errors (NotFound,
-	// ParseError, etc.) keep using the `error.status` + `error.message`
-	// path below.
 	if (typeof error?.toResponse === 'function') {
 		try {
 			const r = error.toResponse()
 			if (r instanceof Response) return r
-		} catch {
-			/* fall through to status/message handling */
-		}
+		} catch {}
 	}
 
 	if (error?.status) {
@@ -49,7 +43,7 @@ function fallbackResponse(
 		return mapResponse(body, context.set)
 	}
 
-	return defaultError.clone()
+	return defaultError ? defaultError.clone() : getDefaultError()
 }
 
 export function createErrorHandler(
@@ -61,8 +55,6 @@ export function createErrorHandler(
 	) => unknown,
 	defaultError?: Response
 ) {
-	defaultError ??= _defaultError
-
 	if (!onErrors)
 		return (context: Context, error: Error) => {
 			// @ts-expect-error
@@ -72,8 +64,8 @@ export function createErrorHandler(
 			if ((error as any)?.status)
 				context.set.status = (error as any).status
 
-			ensureQuery(context)
-			return fallbackResponse(context, error, mapResponse, defaultError!)
+			parseQuery(context)
+			return fallbackResponse(context, error, mapResponse, defaultError)
 		}
 
 	const asyncIndexes = getAsyncIndexes(onErrors)
@@ -86,7 +78,7 @@ export function createErrorHandler(
 			// @ts-expect-error
 			if (error?.status) context.set.status = error.status
 
-			ensureQuery(context)
+			parseQuery(context)
 
 			for (let i = 0; i < onErrors.length; i++) {
 				const result = asyncIndexes?.[i]
@@ -101,7 +93,7 @@ export function createErrorHandler(
 				}
 			}
 
-			return fallbackResponse(context, error, mapResponse, defaultError!)
+			return fallbackResponse(context, error, mapResponse, defaultError)
 		}
 
 	return (context: Context, error: Error) => {
@@ -112,13 +104,13 @@ export function createErrorHandler(
 		// @ts-expect-error
 		if (error?.status) context.set.status = error.status
 
-		ensureQuery(context)
+		parseQuery(context)
 
 		for (let i = 0; i < onErrors.length; i++) {
 			const result = onErrors[i](context)
 			if (result !== undefined) return mapResponse(result, context.set)
 		}
 
-		return fallbackResponse(context, error, mapResponse, defaultError!)
+		return fallbackResponse(context, error, mapResponse, defaultError)
 	}
 }

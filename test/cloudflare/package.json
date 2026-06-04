@@ -5,7 +5,8 @@
 	"scripts": {
 		"dev": "wrangler dev",
 		"start": "wrangler dev",
-		"test": "bun script/test.ts",
+		"gen": "node gen-node.mjs",
+		"test": "node gen-node.mjs && bun script/smoke.ts",
 		"cf-typegen": "wrangler types"
 	},
 	"devDependencies": {

@@ -13,6 +13,8 @@ export {
 	validationDetail
 } from './error'
 export { t, System } from './type'
+export { Compiled } from './compile/aot'
+export { file, ElysiaFile } from './universal/file'
 
 export {
 	type Context,

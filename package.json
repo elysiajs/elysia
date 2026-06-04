@@ -152,6 +152,21 @@
 			"import": "./dist/adapter/web-standard/handler.mjs",
 			"require": "./dist/adapter/web-standard/handler.js"
 		},
+		"./plugin/bun": {
+			"types": "./dist/plugin/bun.d.ts",
+			"import": "./dist/plugin/bun.mjs",
+			"require": "./dist/plugin/bun.js"
+		},
+		"./plugin/esbuild": {
+			"types": "./dist/plugin/esbuild.d.ts",
+			"import": "./dist/plugin/esbuild.mjs",
+			"require": "./dist/plugin/esbuild.js"
+		},
+		"./plugin/vite": {
+			"types": "./dist/plugin/vite.d.ts",
+			"import": "./dist/plugin/vite.mjs",
+			"require": "./dist/plugin/vite.js"
+		},
 		"./universal": {
 			"types": "./dist/universal/index.d.ts",
 			"import": "./dist/universal/index.mjs",
@@ -192,7 +207,7 @@
 		"test:imports": "bun run test/type-system/import.ts",
 		"test:types": "tsc --project tsconfig.test.json",
 		"test:node": "npm install --prefix test/node/cjs && npm install --prefix test/node/esm/ && node test/node/cjs/index.js && node test/node/esm/index.js",
-		"test:cf": "npm install --prefix test/cloudflare && cd test/cloudflare && bun run cf-typegen && bun run test",
+		"test:cf": "bun run build && npm install --prefix test/cloudflare && cd test/cloudflare && bun run cf-typegen && bun run test",
 		"dev": "bun run --watch example/a.ts",
 		"build": "rm -rf dist && bun build.ts",
 		"deadcode": "knip",
@@ -201,7 +216,7 @@
 	"sideEffects": false,
 	"dependencies": {
 		"deuri": "^2.0.1",
-		"exact-mirror": "^1.0.0",
+		"exact-mirror": "^1.0.2",
 		"memoirist": "^1.0.3"
 	},
 	"devDependencies": {

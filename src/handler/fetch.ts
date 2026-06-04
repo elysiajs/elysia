@@ -10,10 +10,15 @@ import { createErrorHandler } from './error'
 import { requestId, flattenChain, getLoosePath, nullObject } from '../utils'
 import { NotFound } from '../error'
 import { createTracer } from '../trace'
+import { isCloudflareWorker } from '../universal/constants'
 
 import type { CompiledHandler, MaybePromise } from '../types'
 
-const notFound = new Response('Not Found', { status: 404 })
+let _notFound: Response | undefined
+const getNotFound = (): Response =>
+	isCloudflareWorker
+		? new Response('Not Found', { status: 404 })
+		: (_notFound ??= new Response('Not Found', { status: 404 })).clone()
 
 const catchError =
 	(
@@ -33,7 +38,7 @@ function findRoute(
 	map: NonNullable<AnyElysia['~map']>,
 	router: NonNullable<AnyElysia['~router']>,
 	hasError: boolean,
-	loosePath: NonNullable<AnyElysia['~loosePath']>,
+	loosePath: Record<string, string>,
 	handleError: (context: Context, error: Error) => unknown,
 	afterResponse: ((context: Context, status?: number) => void) | undefined,
 	hasWS?: boolean
@@ -112,7 +117,7 @@ function findRoute(
 	if (hasError) throw new NotFound()
 
 	afterResponse?.(context, 404)
-	return notFound.clone() as Response
+	return getNotFound()
 }
 
 function getDecodedPathHandler(
@@ -503,6 +508,6 @@ export function createFetchHandler(
 		}
 
 		afterResponse?.(context, 404)
-		return notFound.clone() as Response
+		return getNotFound()
 	}
 }

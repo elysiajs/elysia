@@ -6,6 +6,11 @@ import { type AnySchema, type StandardSchemaV1Like } from '../type'
 
 import type { ElysiaConfig, MaybePromise } from '../types'
 import type { CoerceOption } from '../type/coerce'
+import {
+	Compiled,
+	isValidatorCapturing,
+	type ValidatorSlot
+} from '../compile/aot'
 
 import {
 	Decode,
@@ -22,6 +27,8 @@ export interface ValidatorOptions {
 	coerces?: CoerceOption[]
 	normalize?: boolean | 'exactMirror' | 'typebox'
 	sanitize?: ElysiaConfig<any, any>['sanitize']
+	aot?: { method: string; path: string }
+	slot?: ValidatorSlot
 }
 
 export interface ResponseValidatorOptions
@@ -101,8 +108,19 @@ export abstract class Validator {
 
 		if ('~kind' in schema || '~elyAcl' in schema) {
 			const skipCache = options?.normalize === false
+			const aot = options?.aot
+			const slot = options?.slot
 
-			if (!isIntersectable && !skipCache && tbCache) {
+			const bypassCache =
+				!!aot &&
+				!!slot &&
+				(isValidatorCapturing() ||
+					(options?.normalize !== 'typebox' &&
+						!!Compiled.validators?.[aot.method]?.[aot.path]?.[
+							slot
+						]))
+
+			if (!isIntersectable && !skipCache && !bypassCache && tbCache) {
 				const cached = tbCache.get(schema, options?.coerces)
 				if (cached) return cached
 			}
@@ -117,7 +135,7 @@ export abstract class Validator {
 				isIntersectable
 			) as any
 
-			if (!isIntersectable && !skipCache)
+			if (!isIntersectable && !skipCache && !bypassCache)
 				tbCache!.set(schema, options?.coerces, validator)
 			return validator
 		}
@@ -146,12 +164,16 @@ export abstract class Validator {
 
 		schema = Validator.reference(schema, options?.models)
 
+		const responseSlot = (status: number | string) =>
+			options?.aot ? (`response:${status}` as ValidatorSlot) : undefined
+
 		if ('~kind' in schema || '~elyAcl' in schema || '~standard' in schema)
 			return {
 				200: Validator.create(
 					schema as TSchema | StandardSchemaV1Like,
 					{
 						...options,
+						slot: responseSlot(200),
 						schemas: options?.schemas?.map(
 							(s) => toStatusBased(s)[200]
 						)
@@ -168,6 +190,7 @@ export abstract class Validator {
 					? v
 					: Validator.create(v, {
 							...options,
+							slot: responseSlot(k),
 							schemas: options?.schemas
 								?.map((s) => toStatusBased(s)[k as any])
 								?.filter(Boolean)
@@ -297,8 +320,7 @@ export class MultiValidator extends Validator {
 				// @ts-expect-error
 				const issues = schema['~standard'].validate(value).issues
 				if (issues) errors.push(...issues)
-			} else
-				errors.push(...(schema as TypeBoxValidator).Errors(value))
+			} else errors.push(...(schema as TypeBoxValidator).Errors(value))
 
 		return errors
 	}

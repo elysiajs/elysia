@@ -16,9 +16,9 @@ import {
 	signCookieValues
 } from '../../cookie/utils'
 
-import { isBun } from '../../universal/constants'
 import { ElysiaStatus, ParseError } from '../../error'
 import { isDynamicRegex } from '../../constants'
+import { hasHeaderShorthand } from '../../universal/constants'
 
 import { parseQueryFromURL } from '../../parse-query'
 import { defaultAdapter } from '../../adapter/constants'
@@ -35,21 +35,16 @@ import {
 } from './utils'
 import { tee } from '../../adapter/utils'
 import { createTracer, type TraceEvent } from '../../trace'
+import { Compiled, captureHandler, isValidatorCapturing } from '../aot'
+import { resolveHandlerParams } from './params'
 
-// `setImmediate` runs the callback after the current task completes, which
-// is the right semantic for "after the response has been flushed". Fall
-// back to `Promise.resolve().then` for runtimes without it (browsers,
-// workers). Mirrors src-old/compose.ts:472.
-const setImmediateFn =
-	typeof setImmediate === 'function'
-		? 'setImmediate'
-		: 'Promise.resolve().then'
 import {
 	cloneHook,
 	eventProperties,
 	flattenChain,
 	isBlob,
 	isLocalScope,
+	mapMethodBack,
 	mergeHook,
 	nullObject,
 	requestId,
@@ -68,6 +63,8 @@ import type {
 	MaybeArray
 } from '../../types'
 
+const parseFormData = 'c.body=await pf(c)\n'
+
 function builtinParser(
 	adapter: ElysiaAdapter['parse'],
 	parse: string,
@@ -77,7 +74,7 @@ function builtinParser(
 		case 'formdata':
 		case 'multipart/form-data':
 			link(adapter.formData, 'pf')
-			return 'c.body=await pf(c)\n'
+			return parseFormData
 
 		case 'json':
 		case 'application/json':
@@ -122,8 +119,6 @@ function parse(
 	link: Link,
 	report?: TraceReporter
 ) {
-	// Normalize: route-level `parse: fn` arrives as a single function, not
-	// an array (mergeHook only materializes arrays when merging two hooks).
 	if (parsers && typeof parsers === 'function')
 		parsers = [parsers] as ContentType[] | BodyHandler[]
 
@@ -190,8 +185,6 @@ function parse(
 			link(adapter.formData, 'pf')
 			return code + parseFormData
 		} else {
-			// Default content-type-driven parser. `name: 'default'` so trace
-			// `onEvent` reports a stable label when fallback parsing fires.
 			const child = report?.resolveChild('default')
 			const begin = child ? child.begin : ''
 			const end = child ? child.end() : ''
@@ -258,10 +251,9 @@ const createInlineHandlerWithSet = (
 	h: (context: Context) => unknown
 ) => ((c: Context) => map(h(c), c.set, c.request)) as CompiledHandler
 
-function promoteDeriveResolve(hook: any) {
-	for (const key of ['derive', 'resolve'] as const) {
-		const v = hook[key]
-		if (!v) continue
+function promoteDerive(hook: any) {
+	if ('resolve' in hook) {
+		const v = hook.resolve
 
 		const arr = Array.isArray(v) ? v : [v]
 		const existing = hook.beforeHandle
@@ -272,7 +264,7 @@ function promoteDeriveResolve(hook: any) {
 				: [...arr, existing]
 			: arr
 
-		hook[key] = undefined
+		hook.resolve = undefined
 	}
 }
 
@@ -289,7 +281,7 @@ function resolveChainMacros(
 
 		if (node.added) {
 			root['~applyMacro'](node.added)
-			promoteDeriveResolve(node.added)
+			promoteDerive(node.added)
 		}
 
 		node = node.parent
@@ -366,7 +358,7 @@ export function buildNativeStaticResponse(
 
 export function compileHandler(
 	[
-		,
+		_method,
 		path,
 		handler,
 		instance,
@@ -379,10 +371,13 @@ export function compileHandler(
 ): CompiledHandler {
 	const adapter = root['~config']?.adapter ?? defaultAdapter
 
-	if (localHook) root['~applyMacro'](localHook)
-	if (appHook) resolveChainMacros(root, appHook)
+	if (root['~ext']?.macro) {
+		if (localHook) root['~applyMacro'](localHook)
+		if (appHook) resolveChainMacros(root, appHook)
+		if (inheritedChain)
+			resolveChainMacros(root, inheritedChain as ChainNode)
+	}
 
-	if (inheritedChain) resolveChainMacros(root, inheritedChain as ChainNode)
 	const flatAppHook = appHook ? flattenChain(appHook) : undefined
 
 	const rootHook =
@@ -393,7 +388,7 @@ export function compileHandler(
 	const hook = applyHook(localHook, flatAppHook as any, rootHook)
 
 	if (hook) {
-		promoteDeriveResolve(hook)
+		promoteDerive(hook)
 		for (const key in hook) {
 			if (!eventProperties.has(key)) continue
 
@@ -402,7 +397,17 @@ export function compileHandler(
 		}
 	}
 
-	const inference = sucrose(handler as any, hook as Sucrose.LifeCycle)
+	const method = mapMethodBack(_method as any)
+
+	const vali = hook
+		? new RouteValidator(hook as any, {
+				models: root['~ext']?.models,
+				normalize: root['~config']?.normalize,
+				sanitize: root['~config']?.sanitize,
+				schemas: hook?.schemas,
+				aot: { method, path }
+			})
+		: undefined
 
 	const isHandleFunction = typeof handler === 'function'
 	if (precomputedStatic) handler = precomputedStatic
@@ -419,6 +424,33 @@ export function compileHandler(
 	}
 
 	const isStaticResponse = !isHandleFunction && handler instanceof Response
+
+	const reconstructed = Compiled.handlers?.[method]?.[path]
+	if (reconstructed) {
+		const names = new Set(reconstructed.a ? reconstructed.a.split(',') : [])
+		return reconstructed.f(
+			handler,
+			...resolveHandlerParams(reconstructed.a, {
+				parse: adapter.parse as any,
+				res: adapter.response as any,
+				hook: (hook ?? {}) as any,
+				vali,
+				cookieConfig: names.has('cc')
+					? compileCookieConfig(
+							hook?.cookie as any,
+							root['~config']?.cookie as any
+						)
+					: undefined,
+				tracers: names.has('tr')
+					? (hook?.trace as any[] | undefined)?.map((fn) =>
+							createTracer(fn)
+						)
+					: undefined
+			})
+		) as CompiledHandler
+	}
+
+	const inference = sucrose(handler as any, hook as Sucrose.LifeCycle)
 
 	const params = new Set<unknown>()
 	let alias = ''
@@ -450,15 +482,6 @@ export function compileHandler(
 		!!hook?.body ||
 		hasStandaloneBody ||
 		((parseLength > 0 || inference.body) && parseFirst !== 'none')
-
-	const vali = hook
-		? new RouteValidator(hook as any, {
-				models: root['~ext']?.models,
-				normalize: root['~config']?.normalize,
-				sanitize: root['~config']?.sanitize,
-				schemas: hook?.schemas
-			})
-		: undefined
 
 	const bodyValiIsAsync = hasBody && isAsyncValidator(vali?.body)
 	const headersValiIsAsync = vali?.headers && isAsyncValidator(vali?.headers)
@@ -600,7 +623,7 @@ export function compileHandler(
 	}
 
 	if (hasHeaders)
-		code += `c.headers=${isBun ? 'c.request.headers.toJSON()' : 'Object.fromEntries(c.request.headers)'}\n`
+		code += `c.headers=${hasHeaderShorthand ? 'c.request.headers.toJSON()' : 'Object.fromEntries(c.request.headers)'}\n`
 
 	if (hasBody) {
 		const namedParsers = root['~ext']?.parser
@@ -723,6 +746,12 @@ export function compileHandler(
 				return s
 			})()
 		: ''
+
+	const setImmediateFn = isValidatorCapturing()
+		? ";(typeof setImmediate==='function'?setImmediate:(f)=>Promise.resolve().then(f))"
+		: typeof setImmediate === 'function'
+			? 'setImmediate'
+			: 'Promise.resolve().then'
 
 	const scheduleAfterResponse =
 		hasAfterResponse || hasTrace
@@ -925,7 +954,15 @@ export function compileHandler(
 
 	code += '}'
 
-	if (params.size === 1 && !hasTrace && isHandleFunction) {
+	const needsContextSetup =
+		hasHeaders || (inference.route && isDynamicRegex.test(path as string))
+
+	if (
+		params.size === 1 &&
+		!hasTrace &&
+		isHandleFunction &&
+		!needsContextSetup
+	) {
 		if (alias === 'rc')
 			return createInlineHandler(
 				res.compact ?? (res.map as any),
@@ -934,6 +971,8 @@ export function compileHandler(
 		else if (alias === 'rm')
 			return createInlineHandlerWithSet(res.map as any, handler as any)
 	}
+
+	if (!precomputedStatic) captureHandler({ method, path, alias, code })
 
 	if (alias === '') return new Function('h', `return ${code}`)(handler)
 

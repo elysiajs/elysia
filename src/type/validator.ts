@@ -27,9 +27,26 @@ import {
 	deferCoercions,
 	nonAdditionalProperties
 } from './coerce'
+
 import { ELYSIA_TYPES } from './constants'
 import { Validator, type ValidatorOptions } from '../validator'
 import { isAsyncFunction } from '../compile/utils'
+
+import {
+	Compiled,
+	instantiateFrozenCheck,
+	instantiateFrozenMirror,
+	collectExternals,
+	externalsMatch,
+	reconstructCheckCode,
+	captureValidator,
+	captureMirror,
+	captureMirrorUnions,
+	isValidatorCapturing,
+	type CheckBuildResult,
+	type FrozenValidator
+} from '../compile/aot'
+
 import { hasProperty } from './utils'
 import { isBlob, nullObject } from '../utils'
 import { ValidationError } from '../error'
@@ -79,6 +96,9 @@ function schemaContainsRef(node: any, seen = new WeakSet()): boolean {
 }
 
 let inlineRefId = 0
+
+// Shared empty externals for frozen checks
+const EMPTY_EXTERNALS = Object.freeze([]) as unknown as unknown[]
 
 const isAsyncPredicate = (v: unknown) =>
 	Array.isArray(v)
@@ -170,14 +190,25 @@ function applyPrecomputed(
 export class TypeBoxValidator<
 	const in out T extends TSchema = TAny
 > extends Validator {
-	tb: BaseTypeBoxValidator
-	hasCodec: boolean
+	// undefined for frozen check
+	tb?: BaseTypeBoxValidator
+
+	// build time check
+	reconstructedCheck?: (value: unknown) => boolean
+	// restore build time lazily on first check call
+	#reconstructedValidator?: FrozenValidator
+
 	schema: T
-	isAsync: boolean
-	hasDefault: boolean
+
+	hasCodec!: boolean
+	isAsync!: boolean
+	hasDefault!: boolean
+
+	// default value
 	precomputeSafe: boolean
 	precomputedDefault: unknown
 	precomputedObjectDefault: Record<string, unknown> | undefined
+
 	noValidate: boolean
 
 	constructor(
@@ -195,23 +226,29 @@ export class TypeBoxValidator<
 
 		const originalElyTyp = (schema as any)?.['~elyTyp']
 
+		let schemaHasRef = false
 		if (name && options?.models) {
 			const module = moduleCache.getOrInsertComputed(options.models, () =>
 				Type.Module(options.models as Record<string, TSchema>)
 			)
 
 			schema = module[name] as T
-		} else if (
-			options?.models &&
-			typeof name !== 'string' &&
-			schemaContainsRef(schema)
-		) {
-			const id = `inline@${++inlineRefId}`
-			const synthetic = Type.Module({
-				...(options.models as Record<string, TSchema>),
-				[id]: schema as TSchema
-			})
-			schema = synthetic[id as keyof typeof synthetic] as T
+		} else if (options?.models && typeof name !== 'string') {
+			const a = options.aot
+			const frozen =
+				a &&
+				options.slot &&
+				Compiled.validators?.[a.method]?.[a.path]?.[options.slot]
+
+			schemaHasRef = frozen ? frozen.r === 1 : schemaContainsRef(schema)
+			if (schemaHasRef) {
+				const id = `inline@${++inlineRefId}`
+				const synthetic = Type.Module({
+					...(options.models as Record<string, TSchema>),
+					[id]: schema as TSchema
+				})
+				schema = synthetic[id as keyof typeof synthetic] as T
+			}
 		}
 
 		this.schema = applyCoercions(schema, options?.coerces) as T
@@ -221,18 +258,26 @@ export class TypeBoxValidator<
 				this.schema as any
 			) as unknown as T
 
-		this.tb = Compile(this.schema as TSchema)
-		this.hasCodec = HasCodec(this.schema)
-		this.isAsync =
-			// @ts-expect-error private property
-			this.tb.buildResult.external.variables.some(isAsyncPredicate) ??
-			false
-		this.hasDefault = hasProperty('default', this.schema as any)
+		if (!this.#reconstruct(options)) {
+			this.tb = Compile(this.schema as TSchema)
+			this.hasCodec = HasCodec(this.schema)
+			this.isAsync =
+				// @ts-expect-error private property
+				this.tb.buildResult.external.variables.some(isAsyncPredicate) ??
+				false
+
+			this.hasDefault = hasProperty('default', this.schema as any)
+
+			if (isValidatorCapturing())
+				this.#maybeCapture(options, schemaHasRef)
+		}
+
 		this.precomputeSafe =
 			this.hasDefault && isPrecomputeSafe(this.schema as any)
+
 		if (this.precomputeSafe) {
 			this.precomputedDefault = Default(this.schema, undefined)
-			const obj = Default(this.schema, {}) as unknown
+			const obj = Default(this.schema, nullObject()) as unknown
 			this.precomputedObjectDefault =
 				obj && typeof obj === 'object' && !Array.isArray(obj)
 					? (Object.freeze(obj) as Record<string, unknown>)
@@ -249,10 +294,7 @@ export class TypeBoxValidator<
 		try {
 			this.Clean =
 				!options?.normalize || options.normalize === 'exactMirror'
-					? (createMirror(schema, {
-							Compile,
-							sanitize: options?.sanitize
-						}) as any)
+					? this.#setupMirror(schema, options)
 					: options.normalize === 'typebox'
 						? (value) => Clean(this.tb!, value)
 						: undefined
@@ -265,8 +307,146 @@ export class TypeBoxValidator<
 		}
 	}
 
+	#setupMirror(
+		schema: TSchema,
+		options?: ValidatorOptions
+	): ((value: unknown) => unknown) | undefined {
+		const aot = options?.aot
+		const slot = options?.slot
+
+		if (aot && slot) {
+			const frozen = Compiled.validators?.[aot.method]?.[aot.path]?.[slot]
+			if (frozen?.m) {
+				const m = frozen.m
+				let clean: ((value: unknown) => unknown) | undefined
+
+				return (value: unknown) => {
+					if (clean === undefined)
+						try {
+							clean = instantiateFrozenMirror(m, schema)
+						} catch (error) {
+							console.warn(
+								'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
+							)
+							console.warn(schema)
+							console.warn(error)
+							clean = (v) => v
+						}
+
+					return clean(value)
+				}
+			}
+
+			if (isValidatorCapturing())
+				try {
+					const emitted = createMirror(schema, {
+						Compile,
+						sanitize: options?.sanitize,
+						emit: true
+					}) as { source?: string; externals?: any }
+
+					if (typeof emitted?.source === 'string') {
+						const ext = emitted.externals
+
+						if (!ext)
+							captureMirror({
+								method: aot.method,
+								path: aot.path,
+								slot,
+								mirror: {
+									source: emitted.source,
+									hasExternals: false
+								}
+							})
+						else if (ext.unions && !ext.hof) {
+							const u = captureMirrorUnions(schema, ext.unions)
+
+							if (u)
+								captureMirror({
+									method: aot.method,
+									path: aot.path,
+									slot,
+									mirror: {
+										source: emitted.source,
+										hasExternals: true,
+										u
+									}
+								})
+						}
+						// the rest is not freezable
+					}
+				} catch {}
+		}
+
+		return createMirror(schema, {
+			Compile,
+			sanitize: options?.sanitize
+		}) as (value: unknown) => unknown
+	}
+
 	Check(value: Static<T>): boolean {
-		return this.tb.Check(value)
+		if (this.#reconstructedValidator) {
+			const f = this.#reconstructedValidator
+			this.reconstructedCheck = instantiateFrozenCheck(
+				f,
+				f.e ? collectExternals(this.schema) : EMPTY_EXTERNALS
+			)
+			this.#reconstructedValidator = undefined
+		}
+
+		return this.reconstructedCheck
+			? this.reconstructedCheck(value)
+			: this.tb!.Check(value)
+	}
+
+	#reconstruct(options?: ValidatorOptions): boolean {
+		const aot = options?.aot
+		const slot = options?.slot
+		if (!aot || !slot || options?.normalize === 'typebox') return false
+
+		const reconstructed =
+			Compiled.validators?.[aot.method]?.[aot.path]?.[slot]
+		if (!reconstructed?.c) return false
+
+		this.#reconstructedValidator = reconstructed
+		this.isAsync = reconstructed.a === 1
+		this.hasDefault = reconstructed.d === 1
+		this.hasCodec = reconstructed.k === 1
+
+		return true
+	}
+
+	#maybeCapture(
+		options: ValidatorOptions | undefined,
+		hasRef: boolean
+	): void {
+		const aot = options?.aot
+		const slot = options?.slot
+		if (!aot || !slot || !isValidatorCapturing()) return
+
+		// @ts-expect-error private property
+		const build = this.tb!.buildResult as CheckBuildResult
+		if (!build?.functions?.length || !build.entry) return
+
+		const variables = build.external.variables
+		// externals not reconstructable, leave it to JIT
+		if (!externalsMatch(collectExternals(this.schema), variables)) return
+
+		captureValidator({
+			method: aot.method,
+			path: aot.path,
+			slot,
+			identifier: build.external.identifier,
+			code: reconstructCheckCode(build),
+			// captured so the runtime skips the per-schema walks (collectExternals
+			// when empty / isAsyncPredicate / hasProperty('default') / HasCodec /
+			// schemaContainsRef)
+			external: variables.length > 0,
+			async: variables.some(isAsyncPredicate),
+			hasDefault: this.hasDefault,
+			hasCodec: this.hasCodec,
+			hasRef
+		})
 	}
 
 	Errors(value: unknown): TLocalizedValidationError[] {
@@ -294,10 +474,11 @@ export class TypeBoxValidator<
 			if (this.Clean) value = this.Clean(value) as Static<T>
 			return value as any
 		}
+
 		try {
 			const out = this.noValidate
 				? // @ts-ignore EncodeUnsafe returns unknown
-					(EncodeUnsafe({}, this.schema, value) as any)
+					(EncodeUnsafe(nullObject(), this.schema, value) as any)
 				: Encode(this.schema, value)
 			return this.Clean ? (this.Clean(out) as any) : out
 		} catch (e: any) {
@@ -329,7 +510,9 @@ export class TypeBoxValidator<
 		if (value === undefined || value === null)
 			return {
 				bypass: true,
-				value: (schema['~kind'] === 'Object' ? {} : value) as Static<T>
+				value: (schema['~kind'] === 'Object'
+					? nullObject()
+					: value) as Static<T>
 			}
 
 		if (
@@ -338,7 +521,7 @@ export class TypeBoxValidator<
 			!Array.isArray(value) &&
 			Object.keys(value as object).length === 0
 		)
-			return { bypass: true, value: {} as Static<T> }
+			return { bypass: true, value: nullObject() as Static<T> }
 
 		return undefined
 	}
@@ -376,7 +559,7 @@ export class TypeBoxValidator<
 				)
 			try {
 				// @ts-ignore
-				value = await DecodeUnsafe({}, this.schema, value)
+				value = await DecodeUnsafe(nullObject(), this.schema, value)
 			} catch (e: any) {
 				if (e instanceof ValidationError) throw e
 				if (e?.error) throw e.error
@@ -435,7 +618,11 @@ export class TypeBoxValidator<
 					this.schema
 				)
 			try {
-				value = DecodeUnsafe({}, this.schema, value) as Static<T>
+				value = DecodeUnsafe(
+					nullObject() as {},
+					this.schema,
+					value
+				) as Static<T>
 			} catch (e: any) {
 				if (e instanceof ValidationError) throw e
 				if (e?.error) throw e.error
@@ -461,7 +648,7 @@ export class TypeBoxValidator<
 }
 
 export class TypeBoxValidatorCache {
-	private static EMPTY = {} as const
+	private static EMPTY = nullObject() as {}
 	private static ignoreKeys = new Set([
 		'title',
 		'description',

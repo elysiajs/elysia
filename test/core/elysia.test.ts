@@ -182,13 +182,12 @@ describe('Edge Case', () => {
 		expect(app.routeTree['GET_/4']).toEqual(4)
 	})
 
-	it('get getGlobalRoutes', () => {
+	it('get routes', () => {
 		const plugin = new Elysia().get('/', () => 'hello')
 
 		const main = new Elysia().use(plugin).get('/2', () => 'hi')
 
-		// @ts-expect-error private property
-		expect(main.getGlobalRoutes().length).toBe(2)
+		expect(main.routes.length).toBe(2)
 	})
 
 	it('value returned from transform has priority over the default value from schema', async () => {

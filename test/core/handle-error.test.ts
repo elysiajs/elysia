@@ -1,7 +1,7 @@
 import {
 	Elysia,
 	InternalServerError,
-	NotFoundError,
+	NotFound,
 	status,
 	t
 } from '../../src'
@@ -23,7 +23,7 @@ describe('Handle Error', () => {
 						headers: {}
 					}
 				},
-				new NotFoundError()
+				new NotFound()
 			)
 
 		expect(await res.text()).toBe('NOT_FOUND')
@@ -81,7 +81,7 @@ describe('Handle Error', () => {
 				set.headers['Access-Control-Allow-Origin'] = '*'
 			})
 			.get('/', () => {
-				throw new NotFoundError()
+				throw new NotFound()
 			})
 
 		const res = await app.handle(req('/'))
@@ -98,7 +98,7 @@ describe('Handle Error', () => {
 				return 'aw man'
 			})
 			.get('/', () => {
-				throw new NotFoundError()
+				throw new NotFound()
 			})
 
 		const res = await app.handle(req('/'))
@@ -234,7 +234,7 @@ describe('Handle Error', () => {
 				aid: t
 					.Codec(t.String())
 					.Decode((value) => {
-						throw new NotFoundError('foo')
+						throw new NotFound('foo')
 					})
 					.Encode((value) => `1`)
 			})
@@ -607,7 +607,7 @@ describe('Handle Error', () => {
 	it('send set-cookie header when NotFoundError is thrown', async () => {
 		const app = new Elysia().get('/', ({ cookie }) => {
 			cookie.session.value = 'test-session-id'
-			throw new NotFoundError()
+			throw new NotFound()
 		})
 
 		const res = await app.handle(req('/'))

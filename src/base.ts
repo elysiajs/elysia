@@ -5,7 +5,7 @@ import { compileHandler, buildNativeStaticResponse } from './compile'
 import { buildWSRoute } from './ws/route'
 import type { AnyWSLocalHook as AnyWSLocalHookImport } from './ws/types'
 
-import { ListenCallback, Serve, Server } from './universal'
+import { env, ListenCallback, Serve, Server } from './universal'
 import { isBun } from './universal/constants'
 
 import { isDynamicRegex, MethodMap } from './constants'
@@ -1007,7 +1007,10 @@ export class Elysia<
 		fn: BodyHandler<any, any>
 	): this {
 		const ext = this.#ext
-		const parsers = (ext.parser ??= nullObject())
+		const parsers = (ext.parser ??= nullObject() as Record<
+			string,
+			BodyHandler<any, any>
+		>)
 		parsers[name] = fn
 
 		return this
@@ -1906,7 +1909,7 @@ export class Elysia<
 			throw new Error('Macro function is required')
 
 		const ext = this.#ext
-		const m = (ext.macro ??= nullObject())
+		const m = (ext.macro ??= nullObject() as any)
 
 		if (typeof macroOrName === 'string') m[macroOrName] = macro!
 		else {
@@ -1994,12 +1997,7 @@ export class Elysia<
 				}
 
 				if (k in macro) {
-					this['~applyMacro'](
-						input,
-						{ [k]: v },
-						iteration + 1,
-						seen
-					)
+					this['~applyMacro'](input, { [k]: v }, iteration + 1, seen)
 
 					delete input[key]
 					continue
@@ -2034,10 +2032,9 @@ export class Elysia<
 						continue
 					}
 					;(input as any).schemas ??= []
-					coalesceStandaloneSchemas(
-						(input as any).schemas as any[],
-						[{ [k]: v }]
-					)
+					coalesceStandaloneSchemas((input as any).schemas as any[], [
+						{ [k]: v }
+					])
 					delete input[key]
 					continue
 				}
@@ -2359,7 +2356,10 @@ export class Elysia<
 
 				if (plugin) {
 					try {
-						this.#use(plugin)
+						// Route back through `use` (not `#use`) so a resolved
+						// function plugin `(app) => …`, array, or nested thenable is
+						// dispatched correctly — `#use` only accepts an Elysia instance.
+						this.use(plugin)
 					} catch (err) {
 						this.#error ??= err
 						console.error(err)
@@ -2488,7 +2488,10 @@ export class Elysia<
 		name: string | Record<string, AnySchema> | Function,
 		model?: AnySchema
 	): AnyElysia {
-		const models = (this.#ext.models ??= nullObject())
+		const models = (this.#ext.models ??= nullObject() as Record<
+			string,
+			AnySchema
+		>)
 
 		switch (typeof name) {
 			case 'object':
@@ -3427,15 +3430,15 @@ export class Elysia<
 	#initMap() {
 		// monomorphic access is faster, so we ensure the shape of the map is consistent
 		this['~map'] ??= {
-			GET: nullObject(),
-			POST: nullObject(),
-			PUT: nullObject(),
-			DELETE: nullObject(),
-			PATCH: nullObject(),
+			GET: nullObject() as any,
+			POST: nullObject() as any,
+			PUT: nullObject() as any,
+			DELETE: nullObject() as any,
+			PATCH: nullObject() as any,
 			// Cache check, not uncommon
-			HEAD: nullObject(),
+			HEAD: nullObject() as any,
 			// CORS preflight, usuaul
-			OPTIONS: nullObject()
+			OPTIONS: nullObject() as any
 		}
 	}
 
@@ -3510,8 +3513,8 @@ export class Elysia<
 	) {
 		this.#initMap()
 
-		const encoded = isEncoded.test(path) ? path : encodeURI(path)
-		const map = (this['~map']![mapMethodBack(method)] ??= nullObject())
+		const map = (this['~map']![mapMethodBack(method)] ??=
+			nullObject() as any)
 		map[path] = handler
 	}
 
@@ -3546,7 +3549,8 @@ export class Elysia<
 					)
 				} else {
 					this.#initMap()
-					;(this['~map']!['WS'] ??= nullObject())[path] = handler
+					;(this['~map']!['WS'] ??= nullObject() as any)[path] =
+						handler
 				}
 
 				if (options && isNotEmpty(options)) {
@@ -3566,8 +3570,10 @@ export class Elysia<
 				staticResponse = buildNativeStaticResponse(route, this)
 
 				if (staticResponse) {
-					const target = (this['~staticResponse'] ??= nullObject())
-					;(target[path] ??= nullObject())[method] = staticResponse
+					const target = (this['~staticResponse'] ??=
+						nullObject() as any)
+					;(target[path] ??= nullObject() as any)[method] =
+						staticResponse
 				}
 			}
 
@@ -3584,7 +3590,7 @@ export class Elysia<
 					false
 				)
 			} else {
-				const map = (methods[method] ??= nullObject())
+				const map = (methods[method] ??= nullObject() as any)
 				map[path] = this.handler(i, precompile, route, sharedStatic)
 			}
 		}
@@ -3635,7 +3641,7 @@ export class Elysia<
 		const listen = this['~config']?.adapter?.listen
 		if (!listen) throw new Error('No adapter provided for listen()')
 
-		listen(this, options, callback)
+		if (!env.ELYSIA_AOT_BUILD) listen(this, options, callback)
 
 		return this
 	}
@@ -3650,8 +3656,10 @@ export class Elysia<
 	stop(closeActiveConnections?: boolean): Promise<void> | void {
 		const server = this.server
 		if (!server) return
+
 		const r = (server as any).stop?.(closeActiveConnections)
 		this.server = undefined
+
 		return r
 	}
 }
