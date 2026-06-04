@@ -162,7 +162,7 @@ import type {
 	UnknownRouteSchema,
 	MaybeFunction,
 	InlineHandlerNonMacro,
-	Router,
+	Router
 } from './types'
 import {
 	coercePrimitiveRoot,
@@ -340,6 +340,11 @@ export default class Elysia<
 
 	protected getGlobalDefinitions() {
 		return this.definitions
+	}
+
+	private invalidateCompilation() {
+		delete (this as { fetch?: unknown }).fetch
+		this._handle = undefined
 	}
 
 	protected inference: Sucrose.Inference = {
@@ -865,6 +870,8 @@ export default class Elysia<
 				hooks
 			})
 
+			this.invalidateCompilation()
+
 			return
 		}
 
@@ -1031,6 +1038,8 @@ export default class Elysia<
 						: undefined
 				)
 			)
+
+		this.invalidateCompilation()
 
 		const handler = {
 			handler: shouldPrecompile
@@ -4703,7 +4712,12 @@ export default class Elysia<
 						} = hook
 
 						const hasStandaloneSchema =
-							body || headers || query || params || cookie || response
+							body ||
+							headers ||
+							query ||
+							params ||
+							cookie ||
+							response
 
 						const startIndex = processedUntil
 						processedUntil = instance.router.history.length
@@ -4731,11 +4745,13 @@ export default class Elysia<
 										: Array.isArray(localHook.error)
 											? [
 													...(localHook.error ?? []),
-													...(sandbox.event.error ?? [])
+													...(sandbox.event.error ??
+														[])
 												]
 											: [
 													localHook.error,
-													...(sandbox.event.error ?? [])
+													...(sandbox.event.error ??
+														[])
 												],
 									standaloneValidator: !hasStandaloneSchema
 										? localHook.standaloneValidator
