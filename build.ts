@@ -16,7 +16,7 @@ await build({
 	format: ['esm'],
 	minify: false,
 	unbundle: true,
-	dts: false,
+	dts: true,
 	outExtensions(c) {
 		return {
 			dts: '.d.ts',

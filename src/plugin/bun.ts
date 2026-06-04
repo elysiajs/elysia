@@ -12,6 +12,8 @@ import {
  *
  * Run Elysia JIT compilation in build time instead of runtime
  *
+ * Relative entry is resolved by the nearest `package.json`
+ *
  * ```ts
  * import { aot } from 'elysia/plugin/bun'
  *
