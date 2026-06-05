@@ -62,11 +62,10 @@ export const HANDLER_PARAMS: Record<string, Resolver> = {
 	cc: (c) => c.cookieConfig
 } as const
 
-export function resolveHandlerParams(alias: string, c: HandlerParamContext) {
-	if (!alias) return []
-
-	const names = alias.split(',')
+export function resolveHandlerParams(names: string[], c: HandlerParamContext) {
 	const length = names.length
+	if (!length) return []
+
 	const out: unknown[] = new Array(length)
 
 	for (let i = 0; i < length; i++) {

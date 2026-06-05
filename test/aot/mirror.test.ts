@@ -84,7 +84,7 @@ describe('AOT mirror freeze (exact-mirror Clean, codec family)', () => {
 		it(`differential: ${name} — frozen Clean ≡ JIT Clean`, () => {
 			const path = `/${name.replace(/\W/g, '')}`
 			const m = captureDirect(make(), path)
-			expect(m.GET?.[path]?.query?.m).toBeDefined() // mirror frozen
+			expect(m.GET?.[path]?.query?.cm).toBeDefined() // mirror frozen (merged with check)
 
 			// JIT reference (no manifest)
 			Compiled.clear()

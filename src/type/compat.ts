@@ -2,10 +2,6 @@ import { useTypebox } from './bridge'
 
 import { Compile } from 'typebox/compile'
 import { Decode, Errors, HasCodec, Default } from 'typebox/value'
-import { CheckContext } from 'typebox/schema'
-import { Guard } from 'typebox/guard'
-import { Format } from 'typebox/format'
-import { Hashing } from 'typebox/system'
 
 import { applyCoercions } from './coerce'
 import { TypeBoxValidator, TypeBoxValidatorCache } from './validator'
@@ -40,10 +36,6 @@ export function setupTypebox() {
 		hasTypes,
 		HasCodec,
 		Intersect,
-		Default,
-		CheckContext,
-		Guard,
-		Format,
-		Hashing
+		Default
 	})
 }

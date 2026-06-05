@@ -17,20 +17,50 @@
 			"import": "./dist/index.mjs",
 			"require": "./dist/index.js"
 		},
-		"./ws": {
-			"types": "./dist/ws/index.d.ts",
-			"import": "./dist/ws/index.mjs",
-			"require": "./dist/ws/index.js"
+		"./adapter": {
+			"types": "./dist/adapter/index.d.ts",
+			"import": "./dist/adapter/index.mjs",
+			"require": "./dist/adapter/index.js"
 		},
-		"./ws/types": {
-			"types": "./dist/ws/types.d.ts",
-			"import": "./dist/ws/types.mjs",
-			"require": "./dist/ws/types.js"
+		"./adapter/utils": {
+			"types": "./dist/adapter/utils.d.ts",
+			"import": "./dist/adapter/utils.mjs",
+			"require": "./dist/adapter/utils.js"
 		},
-		"./ws/bun": {
-			"types": "./dist/ws/bun.d.ts",
-			"import": "./dist/ws/bun.mjs",
-			"require": "./dist/ws/bun.js"
+		"./adapter/bun": {
+			"types": "./dist/adapter/bun/index.d.ts",
+			"import": "./dist/adapter/bun/index.mjs",
+			"require": "./dist/adapter/bun/index.js"
+		},
+		"./adapter/bun/handler": {
+			"types": "./dist/adapter/bun/handler.d.ts",
+			"import": "./dist/adapter/bun/handler.mjs",
+			"require": "./dist/adapter/bun/handler.js"
+		},
+		"./adapter/bun/compose": {
+			"types": "./dist/adapter/bun/compose.d.ts",
+			"import": "./dist/adapter/bun/compose.mjs",
+			"require": "./dist/adapter/bun/compose.js"
+		},
+		"./adapter/cloudflare-worker": {
+			"types": "./dist/adapter/cloudflare-worker/index.d.ts",
+			"import": "./dist/adapter/cloudflare-worker/index.mjs",
+			"require": "./dist/adapter/cloudflare-worker/index.js"
+		},
+		"./adapter/web-standard": {
+			"types": "./dist/adapter/web-standard/index.d.ts",
+			"import": "./dist/adapter/web-standard/index.mjs",
+			"require": "./dist/adapter/web-standard/index.js"
+		},
+		"./adapter/web-standard/handler": {
+			"types": "./dist/adapter/web-standard/handler.d.ts",
+			"import": "./dist/adapter/web-standard/handler.mjs",
+			"require": "./dist/adapter/web-standard/handler.js"
+		},
+		"./base": {
+			"types": "./dist/base.d.ts",
+			"import": "./dist/base.mjs",
+			"require": "./dist/base.js"
 		},
 		"./compose": {
 			"types": "./dist/compose.d.ts",
@@ -52,15 +82,35 @@
 			"import": "./dist/cookies.mjs",
 			"require": "./dist/cookies.js"
 		},
-		"./base": {
-			"types": "./dist/base.d.ts",
-			"import": "./dist/base.mjs",
-			"require": "./dist/base.js"
-		},
 		"./error": {
 			"types": "./dist/error.d.ts",
 			"import": "./dist/error.mjs",
 			"require": "./dist/error.js"
+		},
+		"./memory": {
+			"types": "./dist/memory.d.ts",
+			"import": "./dist/memory.mjs",
+			"require": "./dist/memory.js"
+		},
+		"./parse-query": {
+			"types": "./dist/parse-query.d.ts",
+			"import": "./dist/parse-query.mjs",
+			"require": "./dist/parse-query.js"
+		},
+		"./plugin/bun": {
+			"types": "./dist/plugin/bun.d.ts",
+			"import": "./dist/plugin/bun.mjs",
+			"require": "./dist/plugin/bun.js"
+		},
+		"./plugin/esbuild": {
+			"types": "./dist/plugin/esbuild.d.ts",
+			"import": "./dist/plugin/esbuild.mjs",
+			"require": "./dist/plugin/esbuild.js"
+		},
+		"./plugin/vite": {
+			"types": "./dist/plugin/vite.d.ts",
+			"import": "./dist/plugin/vite.mjs",
+			"require": "./dist/plugin/vite.js"
 		},
 		"./schema": {
 			"types": "./dist/schema.d.ts",
@@ -102,71 +152,6 @@
 			"import": "./dist/types.mjs",
 			"require": "./dist/types.js"
 		},
-		"./utils": {
-			"types": "./dist/utils.d.ts",
-			"import": "./dist/utils.mjs",
-			"require": "./dist/utils.js"
-		},
-		"./parse-query": {
-			"types": "./dist/parse-query.d.ts",
-			"import": "./dist/parse-query.mjs",
-			"require": "./dist/parse-query.js"
-		},
-		"./adapter": {
-			"types": "./dist/adapter/index.d.ts",
-			"import": "./dist/adapter/index.mjs",
-			"require": "./dist/adapter/index.js"
-		},
-		"./adapter/utils": {
-			"types": "./dist/adapter/utils.d.ts",
-			"import": "./dist/adapter/utils.mjs",
-			"require": "./dist/adapter/utils.js"
-		},
-		"./adapter/bun": {
-			"types": "./dist/adapter/bun/index.d.ts",
-			"import": "./dist/adapter/bun/index.mjs",
-			"require": "./dist/adapter/bun/index.js"
-		},
-		"./adapter/bun/handler": {
-			"types": "./dist/adapter/bun/handler.d.ts",
-			"import": "./dist/adapter/bun/handler.mjs",
-			"require": "./dist/adapter/bun/handler.js"
-		},
-		"./adapter/bun/compose": {
-			"types": "./dist/adapter/bun/compose.d.ts",
-			"import": "./dist/adapter/bun/compose.mjs",
-			"require": "./dist/adapter/bun/compose.js"
-		},
-		"./adapter/cloudflare-worker": {
-			"types": "./dist/adapter/cloudflare-worker/index.d.ts",
-			"import": "./dist/adapter/cloudflare-worker/index.mjs",
-			"require": "./dist/adapter/cloudflare-worker/index.js"
-		},
-		"./adapter/web-standard": {
-			"types": "./dist/adapter/web-standard/index.d.ts",
-			"import": "./dist/adapter/web-standard/index.mjs",
-			"require": "./dist/adapter/web-standard/index.js"
-		},
-		"./adapter/web-standard/handler": {
-			"types": "./dist/adapter/web-standard/handler.d.ts",
-			"import": "./dist/adapter/web-standard/handler.mjs",
-			"require": "./dist/adapter/web-standard/handler.js"
-		},
-		"./plugin/bun": {
-			"types": "./dist/plugin/bun.d.ts",
-			"import": "./dist/plugin/bun.mjs",
-			"require": "./dist/plugin/bun.js"
-		},
-		"./plugin/esbuild": {
-			"types": "./dist/plugin/esbuild.d.ts",
-			"import": "./dist/plugin/esbuild.mjs",
-			"require": "./dist/plugin/esbuild.js"
-		},
-		"./plugin/vite": {
-			"types": "./dist/plugin/vite.d.ts",
-			"import": "./dist/plugin/vite.mjs",
-			"require": "./dist/plugin/vite.js"
-		},
 		"./universal": {
 			"types": "./dist/universal/index.d.ts",
 			"import": "./dist/universal/index.mjs",
@@ -186,6 +171,26 @@
 			"types": "./dist/universal/file.d.ts",
 			"import": "./dist/universal/file.mjs",
 			"require": "./dist/universal/file.js"
+		},
+		"./utils": {
+			"types": "./dist/utils.d.ts",
+			"import": "./dist/utils.mjs",
+			"require": "./dist/utils.js"
+		},
+		"./ws": {
+			"types": "./dist/ws/index.d.ts",
+			"import": "./dist/ws/index.mjs",
+			"require": "./dist/ws/index.js"
+		},
+		"./ws/types": {
+			"types": "./dist/ws/types.d.ts",
+			"import": "./dist/ws/types.mjs",
+			"require": "./dist/ws/types.js"
+		},
+		"./ws/bun": {
+			"types": "./dist/ws/bun.d.ts",
+			"import": "./dist/ws/bun.mjs",
+			"require": "./dist/ws/bun.js"
 		}
 	},
 	"repository": {

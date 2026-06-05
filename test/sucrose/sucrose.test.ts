@@ -254,6 +254,38 @@ describe('sucrose', () => {
 		})
 	})
 
+	it('infer destructured properties that carry defaults', () => {
+		const lifeCycle = {
+			afterHandle: [],
+			beforeHandle: [],
+			error: [],
+			mapResponse: [],
+			onResponse: [],
+			parse: [],
+			request: [],
+			start: [],
+			stop: [],
+			trace: [],
+			transform: []
+		}
+
+		// primitive default (`body = 1`) must not be parsed as the key `body=1`,
+		// and a sibling after it must still be seen — regression for the dropped
+		// `removeDefaultParameter` call
+		expect(
+			sucrose(({ body = 1, query }) => {
+				console.log(body, query)
+			}, lifeCycle)
+		).toMatchObject({ body: true, query: true })
+
+		// object default (`headers = {}`) followed by a sibling
+		expect(
+			sucrose(({ headers = {}, cookie }) => {
+				console.log(headers, cookie)
+			}, lifeCycle)
+		).toMatchObject({ headers: true, cookie: true })
+	})
+
 	it('infer server', async () => {
 		const app = new Elysia({ precompile: true })
 			.onRequest(({ server }) => {})

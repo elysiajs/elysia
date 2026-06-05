@@ -42,7 +42,8 @@ describe('AOT check freeze (TypeBox check, empty externals)', () => {
 	it('captures an empty-external body check by route identity', () => {
 		const m = captureManifest(bodyApp)
 		expect(m.POST?.['/body']?.body).toBeDefined()
-		expect(typeof m.POST!['/body']!.body!.c).toBe('function')
+		// body freezes BOTH check + mirror → merged `cm` factory
+		expect(typeof m.POST!['/body']!.body!.cm).toBe('function')
 	})
 
 	it('also freezes a coerced query (externals reconstructed)', () => {
@@ -60,8 +61,8 @@ describe('AOT check freeze (TypeBox check, empty externals)', () => {
 		Validator.clear() // simulate a fresh runtime process
 
 		let frozenBound = false
-		const orig = m.POST!['/body']!.body!.c!
-		m.POST!['/body']!.body!.c = ((...d: any[]) => {
+		const orig = m.POST!['/body']!.body!.cm!
+		m.POST!['/body']!.body!.cm = ((...d: any[]) => {
 			frozenBound = true
 			return (orig as any)(...d)
 		}) as any
@@ -103,5 +104,66 @@ describe('AOT check freeze (TypeBox check, empty externals)', () => {
 		const ok = await app.handle(post('/body', { hello: 'x' }))
 		expect(ok.status).toBe(200)
 		expect(await ok.json()).toEqual({ hello: 'x' })
+	})
+})
+
+/**
+ * Reconstruction reads typebox / exact-mirror INTERNALS (External order, factory
+ * signature, d.unions). A library upgrade that changes them makes reconstruction
+ * fail — which is FAIL-SAFE (the build-time `externalsMatch` check refuses to
+ * freeze and the route falls back to JIT) but SILENT (the entry just goes absent).
+ * This pins that the family still FREEZES, so an upgrade that breaks it fails CI
+ * instead of silently shipping a slow / eval-using build.
+ */
+describe('AOT freeze coverage (guards silent JIT fallback on lib upgrade)', () => {
+	it('freezes the whole schema family — a missing entry means reconstruction broke', () => {
+		beginValidatorCapture()
+		;(
+			new Elysia()
+				.post('/obj', ({ body }: any) => body, {
+					body: t.Object({ s: t.String(), n: t.Number() })
+				})
+				.post('/arr', ({ body }: any) => body, {
+					body: t.Object({ xs: t.Array(t.String()) })
+				})
+				.get('/codec', ({ query }: any) => query, {
+					query: t.Object({ n: t.Numeric() })
+				})
+				.post('/format', ({ body }: any) => body, {
+					body: t.Object({ email: t.String({ format: 'email' }) })
+				})
+				.post('/nested', ({ body }: any) => body, {
+					body: t.Object({ meta: t.Object({ x: t.Number() }) })
+				})
+				.post('/optional', ({ body }: any) => body, {
+					body: t.Object({ o: t.Optional(t.String()) })
+				}) as any
+		).compile()
+		const captured = endValidatorCapture()
+
+		const at = (method: string, path: string, slot: string) =>
+			captured.find(
+				(c) => c.method === method && c.path === path && c.slot === slot
+			)
+
+		// every slot must produce a frozen CHECK — absent ⇒ silent JIT fallback
+		for (const [m, p, s] of [
+			['POST', '/obj', 'body'],
+			['POST', '/arr', 'body'],
+			['GET', '/codec', 'query'],
+			['POST', '/format', 'body'],
+			['POST', '/nested', 'body'],
+			['POST', '/optional', 'body']
+		] as const) {
+			const c = at(m, p, s)
+			expect(
+				c,
+				`${m} ${p} ${s} should freeze (absent = JIT fallback)`
+			).toBeDefined()
+			expect(c!.checkValue).toBeDefined()
+		}
+
+		// the codec query must also freeze its exact-mirror (d.unions reconstructed)
+		expect(at('GET', '/codec', 'query')!.mirror).toBeDefined()
 	})
 })

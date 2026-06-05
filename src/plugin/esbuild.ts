@@ -1,6 +1,5 @@
 import { readFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
-import type { Plugin } from 'esbuild'
 import {
 	generateCompiledModule,
 	resolveEntry,
@@ -26,12 +25,12 @@ import {
  * })
  * ```
  */
-export const elysiaAot = (
+export const aot = (
 	entry: string,
 	options?: ElysiaAotOptions
-): Plugin => ({
+) => ({
 	name: 'elysia-aot',
-	async setup(build) {
+	async setup(build: any	) {
 		const source = await generateCompiledModule(entry, options)
 		const entryPath = resolveEntry(entry)
 		const loader = resolveLoader(entryPath)
@@ -47,9 +46,12 @@ export const elysiaAot = (
 			resolveDir: dirname(entryPath)
 		}))
 
-		build.onLoad({ filter: entryFilter(entryPath) }, async (args) => ({
-			contents: `import 'elysia/compiled'\n${await readFile(args.path, 'utf8')}`,
-			loader
-		}))
+		build.onLoad(
+			{ filter: entryFilter(entryPath) },
+			async (args: { path: string }) => ({
+				contents: `import 'elysia/compiled'\n${await readFile(args.path, 'utf8')}`,
+				loader
+			})
+		)
 	}
 })

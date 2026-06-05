@@ -258,11 +258,12 @@ export function retrieveRootparameters(parameter: string) {
 	const parameterMap: Record<string, true> = Object.create(null)
 	for (const p of parameters) {
 		if (p.indexOf(',') === -1) {
-			parameterMap[p] = true
+			parameterMap[removeDefaultParameter(p)] = true
 			continue
 		}
 
-		for (const q of p.split(',')) parameterMap[q.trim()] = true
+		for (const q of p.split(','))
+			parameterMap[removeDefaultParameter(q.trim())] = true
 	}
 
 	return {

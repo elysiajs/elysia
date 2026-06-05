@@ -6,6 +6,7 @@ import {
 	endValidatorCapture,
 	endHandlerCapture
 } from '../../src/compile/aot'
+import { compileToSource } from '../../src/plugin/source'
 import { materialise, materialiseHandlers } from './_manifest'
 import { post, req } from '../utils'
 
@@ -100,12 +101,46 @@ describe('AOT handler freeze', () => {
 		// name has no ParamDescriptor, so it throws at compile (fail loud) rather
 		// than mis-binding. Normal operation never hits this.
 		const manifest = materialiseHandlers(handlers)
-		manifest.POST!['/x']!.a = 'bogus'
+		manifest.POST!['/x']!.a = ['bogus']
 		Validator.clear()
 		Compiled.handlers = manifest
 
 		delete process.env.ELYSIA_AOT_BUILD
 		expect(() => (build() as any).compile()).toThrow(/Fail to reconstruct build/)
+	})
+})
+
+/**
+ * Same-shape routes share ONE handler pipeline (the schemas live in the
+ * validators, referenced by param — not inlined in the handler code). The emit
+ * must dedup the factory `_h`, the alias array `_a`, AND the `{ a, f }` wrapper
+ * `_w`, leaving the route tree as bare `_w` refs (no per-route object/array).
+ */
+describe('AOT handler emit dedup', () => {
+	it('shares the factory, alias, and wrapper across same-shape routes', async () => {
+		const app = new Elysia()
+			.onBeforeHandle(() => {})
+			.post('/a', ({ body }: any) => body, {
+				body: t.Object({ a: t.String() })
+			})
+			.post('/b', ({ body }: any) => body, {
+				body: t.Object({ b: t.String() })
+			})
+			.post('/c', ({ body }: any) => body, {
+				body: t.Object({ c: t.String() })
+			})
+
+		const src = await compileToSource(app as any, { register: false })
+		delete process.env.ELYSIA_AOT_BUILD
+
+		// one of each, despite three routes
+		expect((src.match(/const _h\d+ =/g) ?? []).length).toBe(1)
+		expect((src.match(/const _a\d+ =/g) ?? []).length).toBe(1)
+		expect((src.match(/const _w\d+ =/g) ?? []).length).toBe(1)
+		// the wrapper holds a REFERENCE to the alias array, not an inline literal
+		expect(src).toMatch(/_w0 = \{ a: _a0, f: _h0 \}/)
+		// all three routes point at the same shared wrapper
+		expect((src.match(/: _w0\b/g) ?? []).length).toBe(3)
 	})
 })
 

@@ -57,19 +57,20 @@ describe('AOT branch-check table', () => {
 			(src.match(/const _b\d+ =/g) ?? []).length
 		).toBeGreaterThanOrEqual(1)
 
-		// runtime proof: both entries' first branch slot is the SAME object
+		// runtime proof: both entries' first branch slot is the SAME object.
+		// (Merged entries carry the mirror's `u` at entry level, not under `m`.)
 		const v = evalManifest(src)
 		const a = v.GET['/a'].query
 		const b = v.GET['/b'].query
-		expect(typeof a?.m?.u?.[0]?.[0]).toBe('function')
-		expect(a.m.u[0][0]).toBe(b.m.u[0][0]) // shared, not a per-entry copy
+		expect(typeof a?.u?.[0]?.[0]).toBe('function')
+		expect(a.u[0][0]).toBe(b.u[0][0]) // shared, not a per-entry copy
 	})
 
 	it('leaves no branch inline — every `u` member is a hoisted `_b` reference', async () => {
-		// Every check (entry `c` + hoisted `_b` branch) is a `function(CheckContext…)`
-		// factory; an INLINE branch would add one. So no-inline ⟺ that count equals
-		// entries + branches. (Scoped to check factories so the handler factory now
-		// emitted alongside doesn't skew it.)
+		// Every check (entry `cm` + hoisted `_b` branch) is a `function(External…)`
+		// factory (CheckContext/Guard/… are module-global now); an INLINE branch
+		// would add one. So no-inline ⟺ that count equals entries + branches.
+		// (Scoped to check factories so the handler factory doesn't skew it.)
 		const app = new Elysia().get('/q', ({ query }) => query, {
 			query: t.Object({ page: t.Numeric(), limit: t.Numeric() })
 		})
@@ -77,10 +78,33 @@ describe('AOT branch-check table', () => {
 
 		const entries = (src.match(/const _c\d+ =/g) ?? []).length
 		const branches = (src.match(/const _b\d+ =/g) ?? []).length
-		const checkFns = (src.match(/function\(CheckContext/g) ?? []).length
+		const checkFns = (src.match(/function\(External/g) ?? []).length
 		expect(entries).toBe(1)
 		expect(branches).toBeGreaterThanOrEqual(1)
 		// no branch survives inline in `u: [...]` — all are `_b` refs
 		expect(checkFns).toBe(entries + branches)
+	})
+
+	it('dedups the union table `u` across same-codec-shape entries', async () => {
+		// distinct field names → distinct `cm`, but the SAME 2-Numeric codec shape
+		// → identical `u` structure, which must collapse to one `_u` const
+		const app = new Elysia()
+			.get('/a', ({ query }) => query, {
+				query: t.Object({ x1: t.Numeric(), y1: t.Numeric() })
+			})
+			.get('/b', ({ query }) => query, {
+				query: t.Object({ x2: t.Numeric(), y2: t.Numeric() })
+			})
+			.get('/c', ({ query }) => query, {
+				query: t.Object({ x3: t.Numeric(), y3: t.Numeric() })
+			})
+		const src = await compileToSource(app, { register: false })
+
+		// 3 distinct entries (different field names)…
+		expect((src.match(/const _c\d+ =/g) ?? []).length).toBe(3)
+		// …sharing ONE union table `_u0`, referenced by all three
+		expect((src.match(/const _u\d+ =/g) ?? []).length).toBe(1)
+		expect((src.match(/u: _u0\b/g) ?? []).length).toBe(3)
+		expect(src).not.toMatch(/u: \[\[/) // nothing left inline
 	})
 })

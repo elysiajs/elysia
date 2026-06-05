@@ -116,9 +116,8 @@ export abstract class Validator {
 				!!slot &&
 				(isValidatorCapturing() ||
 					(options?.normalize !== 'typebox' &&
-						!!Compiled.validators?.[aot.method]?.[aot.path]?.[
-							slot
-						]))
+						// lazy-aware: checks existence without materializing the group
+						Compiled.hasValidator(aot.method, aot.path, slot)))
 
 			if (!isIntersectable && !skipCache && !bypassCache && tbCache) {
 				const cached = tbCache.get(schema, options?.coerces)

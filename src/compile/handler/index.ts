@@ -427,21 +427,20 @@ export function compileHandler(
 
 	const reconstructed = Compiled.handlers?.[method]?.[path]
 	if (reconstructed) {
-		const names = new Set(reconstructed.a ? reconstructed.a.split(',') : [])
 		return reconstructed.f(
 			handler,
 			...resolveHandlerParams(reconstructed.a, {
 				parse: adapter.parse as any,
 				res: adapter.response as any,
-				hook: (hook ?? {}) as any,
+				hook: (hook ?? nullObject()) as any,
 				vali,
-				cookieConfig: names.has('cc')
+				cookieConfig: reconstructed.a.includes('cc')
 					? compileCookieConfig(
 							hook?.cookie as any,
 							root['~config']?.cookie as any
 						)
 					: undefined,
-				tracers: names.has('tr')
+				tracers: reconstructed.a.includes('tr')
 					? (hook?.trace as any[] | undefined)?.map((fn) =>
 							createTracer(fn)
 						)
@@ -606,8 +605,13 @@ export function compileHandler(
 		code += `let _traceStream\n`
 	}
 
-	if ((hasTrace || inference.route) && isDynamicRegex.test(path as string))
+	// paramless handler
+	let inlineUnsafe = false
+
+	if ((hasTrace || inference.route) && isDynamicRegex.test(path as string)) {
 		code += `c.route=${JSON.stringify(path)}\n`
+		inlineUnsafe = true
+	}
 
 	if (hasErrorHook || hasTrace) code += 'try{\n'
 
@@ -622,8 +626,10 @@ export function compileHandler(
 		link(parseQueryFromURL, 'pq')
 	}
 
-	if (hasHeaders)
+	if (hasHeaders) {
 		code += `c.headers=${hasHeaderShorthand ? 'c.request.headers.toJSON()' : 'Object.fromEntries(c.request.headers)'}\n`
+		inlineUnsafe = true
+	}
 
 	if (hasBody) {
 		const namedParsers = root['~ext']?.parser
@@ -954,15 +960,7 @@ export function compileHandler(
 
 	code += '}'
 
-	const needsContextSetup =
-		hasHeaders || (inference.route && isDynamicRegex.test(path as string))
-
-	if (
-		params.size === 1 &&
-		!hasTrace &&
-		isHandleFunction &&
-		!needsContextSetup
-	) {
+	if (params.size === 1 && !hasTrace && isHandleFunction && !inlineUnsafe) {
 		if (alias === 'rc')
 			return createInlineHandler(
 				res.compact ?? (res.map as any),

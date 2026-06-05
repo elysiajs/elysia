@@ -56,23 +56,18 @@ describe('AOT handler ParamDescriptor', () => {
 			tracers: 'TR'
 		} as any
 
-		expect(resolveHandlerParams('pj,va,bf,rc,cc,tr', ctx)).toEqual([
-			'PJ',
-			'VA',
-			'BF',
-			'RC',
-			'CC',
-			'TR'
-		])
-		expect(resolveHandlerParams('', ctx)).toEqual([])
+		expect(
+			resolveHandlerParams(['pj', 'va', 'bf', 'rc', 'cc', 'tr'], ctx)
+		).toEqual(['PJ', 'VA', 'BF', 'RC', 'CC', 'TR'])
+		expect(resolveHandlerParams([], ctx)).toEqual([])
 		// `rc` falls back to res.map when compact is absent
-		expect(resolveHandlerParams('rc', { res: { map: 'M' } } as any)).toEqual([
-			'M'
-		])
+		expect(
+			resolveHandlerParams(['rc'], { res: { map: 'M' } } as any)
+		).toEqual(['M'])
 	})
 
 	it('throws loudly on an unknown link name (no silent mis-bind)', () => {
-		expect(() => resolveHandlerParams('bogus', {} as any)).toThrow(
+		expect(() => resolveHandlerParams(['bogus'], {} as any)).toThrow(
 			/Fail to reconstruct build/
 		)
 	})

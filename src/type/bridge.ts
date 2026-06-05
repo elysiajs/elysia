@@ -23,11 +23,6 @@ import type {
 } from './coerce'
 import type { hasTypes as hasTypesType } from './utils'
 
-import type { CheckContext as CheckContextType } from 'typebox/schema'
-import type { Guard as GuardType } from 'typebox/guard'
-import type { Format as FormatType } from 'typebox/format'
-import type { Hashing as HashingType } from 'typebox/system'
-
 const error = new Error("Typebox module isn't initialized yet")
 function errorFn() {
 	throw error
@@ -63,11 +58,6 @@ export let HasCodec: typeof HasCodecType = errorFn as any
 export let Intersect: typeof IntersectType = errorFn as any
 export let Default: typeof DefaultType = errorFn as any
 
-export let CheckContext: typeof CheckContextType = errorFn as any
-export let Guard: typeof GuardType = errorFn as any
-export let Format: typeof FormatType = errorFn as any
-export let Hashing: typeof HashingType = errorFn as any
-
 export function useTypebox(mod: {
 	Compile: typeof CompileType
 	Decode: typeof DecodeType
@@ -84,10 +74,6 @@ export function useTypebox(mod: {
 	HasCodec: typeof HasCodecType
 	Intersect: typeof IntersectType
 	Default: typeof DefaultType
-	CheckContext: typeof CheckContext
-	Guard: typeof Guard
-	Format: typeof Format
-	Hashing: typeof Hashing
 }) {
 	Compile = mod.Compile
 	Decode = mod.Decode
@@ -104,8 +90,4 @@ export function useTypebox(mod: {
 	HasCodec = mod.HasCodec
 	Intersect = mod.Intersect
 	Default = mod.Default
-	CheckContext = mod.CheckContext
-	Guard = mod.Guard
-	Format = mod.Format
-	Hashing = mod.Hashing
 }

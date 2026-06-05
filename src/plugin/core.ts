@@ -10,6 +10,16 @@ export interface ElysiaAotOptions {
 	 * @default 'elysia'
 	 */
 	registerFrom?: string
+
+	/**
+	 * Materialize route handlers as separate modules and load them lazily
+	 *
+	 * This can reduce peak memory usage and improve startup time,
+	 * but increase latency for the first request to each route
+	 *
+	 * @default decided by Elysia based on route batch scale
+	 */
+	lazy?: boolean | number
 }
 
 function findPackageRoot(from: string = process.cwd()): string {
@@ -57,6 +67,7 @@ export async function generateCompiledModule(
 
 	return compileToSource(app as Parameters<typeof compileToSource>[0], {
 		register: true,
-		registerFrom: options?.registerFrom
+		registerFrom: options?.registerFrom,
+		lazy: options?.lazy
 	})
 }

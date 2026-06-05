@@ -32,7 +32,7 @@ const VIRTUAL = '\0elysia/compiled'
  * })
  * ```
  */
-export const elysiaAot = (
+export const aot = (
 	entry: string,
 	options?: ElysiaAotOptions
 ): ElysiaAotVitePlugin => {
