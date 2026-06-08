@@ -1,6 +1,6 @@
 import Elysia, { t } from '../../src'
 import { describe, expect, it } from 'bun:test'
-import { Value } from '@sinclair/typebox/value'
+import { Value } from 'typebox/value'
 import { post } from '../utils'
 
 describe('TypeSystem - UnionEnum', () => {

@@ -39,6 +39,7 @@ function findRoute(
 	router: NonNullable<AnyElysia['~router']>,
 	hasError: boolean,
 	loosePath: Record<string, string>,
+	strictPath: boolean,
 	handleError: (context: Context, error: Error) => unknown,
 	afterResponse: ((context: Context, status?: number) => void) | undefined,
 	hasWS?: boolean
@@ -49,9 +50,10 @@ function findRoute(
 	if (hasWS) {
 		const upgrade = request.headers.get('upgrade')
 		if (upgrade && upgrade.toLowerCase() === 'websocket') {
-			const handler =
-				map['WS']?.[path] ??
-				map['WS']?.[(loosePath[path] ??= getLoosePath(path))]
+			const loose = strictPath
+				? path
+				: (loosePath[path] ??= getLoosePath(path))
+			const handler = map['WS']?.[path] ?? map['WS']?.[loose]
 
 			if (handler) {
 				const r = handler(context)
@@ -62,7 +64,8 @@ function findRoute(
 					path,
 					'WS',
 					map,
-					loosePath
+					loosePath,
+					strictPath
 				)
 				path = decoded
 				if (handler) return handler(context)
@@ -77,11 +80,15 @@ function findRoute(
 		}
 	} else {
 		const paths = map[request.method]
+		// Loose lookup stays lazy: `getLoosePath` only runs when the exact
+		// path misses, and never in strict mode.
 		const handler: CompiledHandler =
 			paths?.[path] ??
-			paths?.[(loosePath[path] ??= getLoosePath(path))] ??
+			paths?.[
+				strictPath ? path : (loosePath[path] ??= getLoosePath(path))
+			] ??
 			map['*']?.[path] ??
-			map['*']?.[loosePath[path]]
+			map['*']?.[strictPath ? path : loosePath[path]]
 
 		if (handler) {
 			const r = handler(context)
@@ -93,16 +100,13 @@ function findRoute(
 				path,
 				request.method,
 				map,
-				loosePath
+				loosePath,
+				strictPath
 			)
 			path = decoded
 			if (handler) return handler(context)
 		}
 
-		// Mirror the static-map's `map['*']` fallback: try the request's
-		// method first, then fall back to wildcard-method (`.all()`) entries.
-		// Without this, dynamic `.all('/x/:id')` routes never match — only
-		// static `.all('/x')` does.
 		const found =
 			router.find(request.method, path) ?? router.find('*', path)
 
@@ -124,26 +128,25 @@ function getDecodedPathHandler(
 	path: string,
 	method: string,
 	map: NonNullable<AnyElysia['~map']>,
-	loosePath: Record<string, string>
+	loosePath: Record<string, string>,
+	strictPath: boolean
 ) {
 	const decoded = decodeComponent(path) ?? path
 	if (decoded === path) return [decoded] as const
 
+	const loose = strictPath
+		? decoded
+		: (loosePath[decoded] ??= getLoosePath(decoded))
+
 	let handler: CompiledHandler | undefined
 	let _map = map[method]
 
-	if (_map)
-		handler =
-			_map[decoded] ??
-			_map[(loosePath[decoded] ??= getLoosePath(decoded))]
+	if (_map) handler = _map[decoded] ?? _map[loose]
 
 	if (!handler) {
 		_map = map['*']
 
-		if (_map)
-			handler =
-				_map[decoded] ??
-				_map[(loosePath[decoded] ??= getLoosePath(decoded))]
+		if (_map) handler = _map[decoded] ?? _map[loose]
 	}
 
 	if (handler) {
@@ -164,13 +167,55 @@ export function createFetchHandler(
 	const router = app['~router']!
 	const hasWS = !!app['~hasWS']
 
-	const loosePath = nullObject()
+	const strictPath = !!app['~config']?.strictPath
+	const loosePath = nullObject() as Record<string, string>
 
 	const hook = flattenChain(app['~hookChain'])
 	const hasError = !!hook?.error
 
-	const mapResponse = (app['~config']?.adapter ?? defaultAdapter).response.map
-	const handleError = createErrorHandler(hook?.error, mapResponse)
+	const baseMapResponse = (app['~config']?.adapter ?? defaultAdapter).response
+		.map as (response: unknown, set: Context['set']) => unknown
+
+	const mapResponseHooks = hook?.mapResponse as
+		| ((context: Context) => unknown)[]
+		| undefined
+	const mapResponse =
+		mapResponseHooks?.length
+			? (response: unknown, set: Context['set'], context?: Context) => {
+					if (!context) return baseMapResponse(response, set)
+
+					;(context as { responseValue?: unknown }).responseValue =
+						response
+
+					// First hook to return a non-undefined value wins (mirrors
+					// the success-path `mapResponse` semantics); the adapter
+					// then maps it, applying `set.status`/headers even to a
+					// returned `Response`.
+					const run = (i: number): unknown => {
+						for (; i < mapResponseHooks.length; i++) {
+							const result = mapResponseHooks[i](context)
+							if (result instanceof Promise)
+								return result.then((resolved) => {
+									if (resolved !== undefined)
+										return baseMapResponse(resolved, set)
+									return run(i + 1)
+								})
+							if (result !== undefined)
+								return baseMapResponse(result, set)
+						}
+						return baseMapResponse(response, set)
+					}
+
+					return run(0)
+				}
+			: baseMapResponse
+
+	const handleError = createErrorHandler(
+		hook?.error,
+		mapResponse as typeof baseMapResponse,
+		undefined,
+		app['~ext']?.error
+	)
 
 	const traceHandlers = hook?.trace as
 		| ((context: any) => unknown)[]
@@ -274,10 +319,6 @@ export function createFetchHandler(
 						? await onRequests[i](context as any)
 						: onRequests[i](context as any)
 
-					// `endReports[i]` is the closer FUNCTION returned by
-					// `resolveChild?.shift?.()?.({...})`, not a report object.
-					// Call it directly to finalize the child; only the parent
-					// report has a `.resolve()` method.
 					for (let i = 0; i < traceLength; i++) endReports[i]?.()
 
 					if (result !== undefined) {
@@ -302,6 +343,7 @@ export function createFetchHandler(
 					router,
 					hasError,
 					loosePath,
+					strictPath,
 					handleError,
 					afterResponse,
 					hasWS
@@ -353,6 +395,7 @@ export function createFetchHandler(
 						router,
 						hasError,
 						loosePath,
+						strictPath,
 						handleError,
 						afterResponse,
 						hasWS
@@ -392,6 +435,7 @@ export function createFetchHandler(
 					router,
 					hasError,
 					loosePath,
+					strictPath,
 					handleError,
 					afterResponse,
 					hasWS
@@ -420,15 +464,13 @@ export function createFetchHandler(
 
 		const onError = catchError(context, handleError, afterResponse)
 
-		// WS upgrade pre-check. `~hasWS` lets HTTP-only apps take no
-		// branch; apps with WS routes pay a single header read.
-		// WS routes share `~map`/`~router` under the synthetic method `'WS'`.
 		if (hasWS) {
 			const upgrade = request.headers.get('upgrade')
 			if (upgrade && upgrade.toLowerCase() === 'websocket') {
-				const handler =
-					map['WS']?.[path] ??
-					map['WS']?.[(loosePath[path] ??= getLoosePath(path))]
+				const loose = strictPath
+					? path
+					: (loosePath[path] ??= getLoosePath(path))
+				const handler = map['WS']?.[path] ?? map['WS']?.[loose]
 
 				try {
 					if (handler) {
@@ -442,7 +484,8 @@ export function createFetchHandler(
 							path,
 							'WS',
 							map,
-							loosePath
+							loosePath,
+							strictPath
 						)
 						path = decoded
 						if (handler) return handler(context)
@@ -466,9 +509,11 @@ export function createFetchHandler(
 
 		let handler: CompiledHandler =
 			map[request.method]?.[path] ??
-			map[request.method]?.[(loosePath[path] ??= getLoosePath(path))] ??
+			map[request.method]?.[
+				strictPath ? path : (loosePath[path] ??= getLoosePath(path))
+			] ??
 			map['*']?.[path] ??
-			map['*']?.[loosePath[path]]
+			map['*']?.[strictPath ? path : loosePath[path]]
 
 		try {
 			if (handler) {
@@ -480,7 +525,8 @@ export function createFetchHandler(
 					path,
 					request.method,
 					map,
-					loosePath
+					loosePath,
+					strictPath
 				)
 				path = decoded
 
@@ -489,6 +535,7 @@ export function createFetchHandler(
 
 			const result =
 				router?.find(request.method, path) ?? router?.find('*', path)
+
 			if (result) {
 				context.params = result.params
 

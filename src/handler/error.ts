@@ -3,7 +3,26 @@ import { parseQueryFromURL } from '../parse-query'
 import { isCloudflareWorker } from '../universal/constants'
 
 import type { Context } from '../context'
-import type { AppHook } from '../types'
+import type { AnyErrorConstructor, AppHook } from '../types'
+
+export type ErrorCodeRegistry = Map<AnyErrorConstructor, string>
+
+export function createCodeResolver(
+	registry: ErrorCodeRegistry | undefined
+): (error: any) => string {
+	if (!registry?.size) return (error: any) => error?.code ?? 'UNKNOWN'
+
+	const entries = [...registry]
+
+	return (error: any) => {
+		if (error?.code) return error.code
+
+		for (let i = 0; i < entries.length; i++)
+			if (error instanceof (entries[i][0] as any)) return entries[i][1]
+
+		return 'UNKNOWN'
+	}
+}
 
 let _defaultError: Response | undefined
 const getDefaultError = (): Response =>
@@ -24,26 +43,77 @@ function parseQuery(context: Context) {
 function fallbackResponse(
 	context: Context,
 	error: any,
-	mapResponse: (response: unknown, set: Context['set']) => unknown,
+	mapResponse: (
+		response: unknown,
+		set: Context['set'],
+		context?: Context
+	) => unknown,
 	defaultError?: Response
 ): unknown {
-	if (typeof error?.toResponse === 'function') {
+	if (typeof error?.toResponse === 'function')
 		try {
 			const r = error.toResponse()
-			if (r instanceof Response) return r
-		} catch {}
-	}
 
+			if (r instanceof Promise)
+				return r.then(
+					(resolved) =>
+						resolved instanceof Response
+							? mapResponse(resolved, context.set, context)
+							: fallbackErrorResponse(
+									context,
+									error,
+									mapResponse,
+									defaultError
+								),
+					() =>
+						fallbackErrorResponse(
+							context,
+							error,
+							mapResponse,
+							defaultError
+						)
+				)
+
+			if (r instanceof Response)
+				return mapResponse(r, context.set, context)
+		} catch {}
+
+	return fallbackErrorResponse(context, error, mapResponse, defaultError)
+}
+
+function fallbackErrorResponse(
+	context: Context,
+	error: any,
+	mapResponse: (
+		response: unknown,
+		set: Context['set'],
+		context?: Context
+	) => unknown,
+	defaultError?: Response
+): unknown {
 	if (error?.status) {
 		const body =
 			error.response !== undefined
 				? error.response
 				: (error.message ?? '')
 
-		return mapResponse(body, context.set)
+		return mapResponse(body, context.set, context)
+	}
+
+	if (error?.message != null) {
+		if (context.set.status === undefined || context.set.status === 200)
+			context.set.status = 500
+
+		return mapResponse(error.message, context.set, context)
 	}
 
 	return defaultError ? defaultError.clone() : getDefaultError()
+}
+
+function applyErrorStatus(context: Context, error: any): void {
+	if (error?.status) context.set.status = error.status
+	else if (context.set.status === undefined || context.set.status === 200)
+		context.set.status = 500
 }
 
 export function createErrorHandler(
@@ -53,16 +123,18 @@ export function createErrorHandler(
 		set: Context['set'],
 		...any: unknown[]
 	) => unknown,
-	defaultError?: Response
+	defaultError?: Response,
+	codeRegistry?: ErrorCodeRegistry
 ) {
+	const resolveCode = createCodeResolver(codeRegistry)
+
 	if (!onErrors)
 		return (context: Context, error: Error) => {
 			// @ts-expect-error
 			context.error = error
 			// @ts-expect-error
-			context.code = (error as any).code ?? 'UNKNOWN'
-			if ((error as any)?.status)
-				context.set.status = (error as any).status
+			context.code = resolveCode(error)
+			applyErrorStatus(context, error)
 
 			parseQuery(context)
 			return fallbackResponse(context, error, mapResponse, defaultError)
@@ -74,9 +146,8 @@ export function createErrorHandler(
 			// @ts-expect-error
 			context.error = error
 			// @ts-expect-error
-			context.code = error.code ?? 'UNKNOWN'
-			// @ts-expect-error
-			if (error?.status) context.set.status = error.status
+			context.code = resolveCode(error)
+			applyErrorStatus(context, error)
 
 			parseQuery(context)
 
@@ -89,7 +160,7 @@ export function createErrorHandler(
 					// @ts-expect-error
 					if (result?.status) context.set.status = result.status
 
-					return mapResponse(result, context.set)
+					return mapResponse(result, context.set, context)
 				}
 			}
 
@@ -100,15 +171,15 @@ export function createErrorHandler(
 		// @ts-expect-error
 		context.error = error
 		// @ts-expect-error
-		context.code = error.code ?? 'UNKNOWN'
-		// @ts-expect-error
-		if (error?.status) context.set.status = error.status
+		context.code = resolveCode(error)
+		applyErrorStatus(context, error)
 
 		parseQuery(context)
 
 		for (let i = 0; i < onErrors.length; i++) {
 			const result = onErrors[i](context)
-			if (result !== undefined) return mapResponse(result, context.set)
+			if (result !== undefined)
+				return mapResponse(result, context.set, context)
 		}
 
 		return fallbackResponse(context, error, mapResponse, defaultError)

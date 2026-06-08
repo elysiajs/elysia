@@ -2,7 +2,7 @@ import { createAdapter } from '..'
 import { WebStandardAdapter } from '../web-standard'
 
 import { flushMemory } from '../../memory'
-import { flattenChain } from '../../utils'
+import { flattenChain, nullObject } from '../../utils'
 
 import { buildGlobalWSHandler } from '../../ws/route'
 
@@ -23,7 +23,7 @@ function collectStaticRoutes(app: AnyElysia) {
 	const source = app['~staticResponse']
 	if (!source) return
 
-	const ready: Record<string, Record<string, Response>> = {}
+	const ready: Record<string, Record<string, Response>> = nullObject()
 	const pending: Array<Promise<void>> = []
 
 	for (const rawPath in source) {
@@ -32,12 +32,14 @@ function collectStaticRoutes(app: AnyElysia) {
 		const methods = source[rawPath]
 		for (const method in methods) {
 			const value = methods[method]
-			if (value instanceof Promise) {
+
+			if (value instanceof Promise)
 				pending.push(
 					value.then(
 						(resolved) => {
-							if (!(resolved instanceof Response)) return
-							;(ready[path] ??= {})[method] = resolved
+							if (resolved instanceof Response)
+								(ready[path] ??= nullObject())[method] =
+									resolved
 						},
 						(err) => {
 							console.error(
@@ -47,9 +49,7 @@ function collectStaticRoutes(app: AnyElysia) {
 						}
 					)
 				)
-			} else {
-				;(ready[path] ??= {})[method] = value
-			}
+			else (ready[path] ??= nullObject())[method] = value
 		}
 	}
 
@@ -90,17 +90,30 @@ export const BunAdapter = createAdapter({
 			if (app.server) app.server.reload(serve)
 			else app.server = Bun.serve(serve)
 
-			const staticRoutes = collectStaticRoutes(app as AnyElysia)
+			const collectRoutes = () => {
+				const staticRoutes = collectStaticRoutes(app as AnyElysia)
 
-			if (staticRoutes?.[1].length)
-				Promise.all(staticRoutes?.[1]).then(() => {
-					app.server!.reload(serve)
-				})
+				if (staticRoutes?.[1].length)
+					return Promise.all(staticRoutes?.[1]).then(() => {
+						serve.routes = staticRoutes?.[1]
+						app.server!.reload(serve)
+					})
+			}
 
-			if (app.pending)
-				app.modules.then(() => {
-					app.server!.reload(serve)
-				})
+			if (app.pending) {
+				const reloadAfterModules = () => {
+					const routes = collectRoutes()
+
+					if (routes)
+						routes.then(() => {
+							app.server!.reload(serve)
+						})
+					else app.server!.reload(serve)
+				}
+
+				// todo: yeah sorry I'm too tired for today to make is run sync with user's app.modules atm
+				app.modules.then(reloadAfterModules, reloadAfterModules)
+			} else collectRoutes()
 
 			flushMemory()
 

@@ -1,6 +1,6 @@
 import { type BaseSchema, type AnySchema } from '.'
 
-import { primitiveElysiaTypes, type ELYSIA_TYPES } from './constants'
+import { ELYSIA_TYPES, primitiveElysiaTypes } from './constants'
 
 const iterators = ['anyOf', 'oneOf', 'allOf'] as const
 
@@ -29,9 +29,6 @@ export function hasType(
 			schema.$defs![schema.$ref as keyof typeof schema.$defs]
 		)
 
-	// Import-style `$ref` + `$defs` (no `~kind: 'Cyclic'` marker) —
-	// produced by `Type.Module(...)[name]` in typebox 1.x. Follow the
-	// reference so walks see the referenced model's body.
 	if (
 		schema.$ref &&
 		schema.$defs &&
@@ -39,9 +36,7 @@ export function hasType(
 	)
 		return hasType(
 			type,
-			schema.$defs[
-				schema.$ref as keyof typeof schema.$defs
-			] as BaseSchema
+			schema.$defs[schema.$ref as keyof typeof schema.$defs] as BaseSchema
 		)
 
 	for (const key of iterators)
@@ -53,23 +48,29 @@ export function hasType(
 
 	if (schema.not && hasType(type, schema.not)) return true
 
-	if (schema.items)
-		return Array.isArray(schema.items)
-			? schema.items.some((s) => hasType(type, s))
-			: hasType(type, schema.items)
+	if (schema.items) {
+		if (Array.isArray(schema.items))
+			return schema.items.some((s) => hasType(type, s))
+
+		if (
+			type === ELYSIA_TYPES.Files &&
+			(schema.items as BaseSchema)['~elyTyp'] === ELYSIA_TYPES.File
+		)
+			return true
+
+		return hasType(type, schema.items)
+	}
 
 	if (schema.properties)
 		for (const v of Object.values(schema.properties))
 			if (hasType(type, v)) return true
 
-	// additionalProperties (when schema, not boolean)
 	if (
 		typeof schema.additionalProperties === 'object' &&
 		hasType(type, schema.additionalProperties)
 	)
 		return true
 
-	// Record (patternProperties)
 	if (schema.patternProperties)
 		for (const v of Object.values(schema.patternProperties))
 			if (hasType(type, v)) return true
@@ -120,9 +121,7 @@ function _hasTypes(
 	)
 		return _hasTypes(
 			types,
-			schema.$defs[
-				schema.$ref as keyof typeof schema.$defs
-			] as BaseSchema
+			schema.$defs[schema.$ref as keyof typeof schema.$defs] as BaseSchema
 		)
 
 	for (const key of iterators)
@@ -131,10 +130,18 @@ function _hasTypes(
 
 	if (schema.not && _hasTypes(types, schema.not)) return true
 
-	if (schema.items)
-		return Array.isArray(schema.items)
-			? schema.items.some((s) => _hasTypes(types, s))
-			: _hasTypes(types, schema.items)
+	if (schema.items) {
+		if (Array.isArray(schema.items))
+			return schema.items.some((s) => _hasTypes(types, s))
+
+		if (
+			types.has(ELYSIA_TYPES.Files) &&
+			(schema.items as BaseSchema)['~elyTyp'] === ELYSIA_TYPES.File
+		)
+			return true
+
+		return _hasTypes(types, schema.items)
+	}
 
 	if (schema.properties)
 		for (const v of Object.values(schema.properties))

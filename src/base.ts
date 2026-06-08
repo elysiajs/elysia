@@ -11,6 +11,7 @@ import { isBun } from './universal/constants'
 import { isDynamicRegex, MethodMap } from './constants'
 import { BunAdapter } from './adapter/bun'
 import {
+	cloneHook,
 	coalesceStandaloneSchemas,
 	createErrorEventHandler,
 	eventProperties,
@@ -102,6 +103,37 @@ import { Context } from './context'
 // reused array so no new array allocation
 const useNodesBuffer: ChainNode[] = []
 
+// Turn a GET response into its HEAD counterpart: same status/headers, no body,
+// with `content-length` reflecting the would-be body. A bodyless response (204,
+// redirect, …) passes through untouched.
+function toHeadResponse(response: Response): Response | Promise<Response> {
+	if (!(response instanceof Response) || response.body === null)
+		return response
+
+	return response.arrayBuffer().then((body) => {
+		const headers = new Headers(response.headers)
+		headers.set('content-length', String(body.byteLength))
+
+		return new Response(null, {
+			status: response.status,
+			statusText: response.statusText,
+			headers
+		})
+	})
+}
+
+// Wrap a GET handler so a HEAD request runs the full GET lifecycle but returns
+// no body. The GET handler produces a fresh response per call, so reading its
+// body here is safe.
+function wrapHeadHandler(handler: CompiledHandler): CompiledHandler {
+	return ((context) => {
+		const r = handler(context)
+		return r instanceof Promise
+			? r.then(toHeadResponse)
+			: toHeadResponse(r as Response)
+	}) as CompiledHandler
+}
+
 export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
 
 export class Elysia<
@@ -144,7 +176,7 @@ export class Elysia<
 		headers?: Record<string, string>
 		macro?: Macro
 		models?: Record<keyof any, AnySchema>
-		error?: Set<AnyErrorConstructor>
+		error?: Map<AnyErrorConstructor, string>
 		parser?: Record<string, BodyHandler<any, any>>
 		hoc?: WrapFn<any>[]
 	}
@@ -210,9 +242,12 @@ export class Elysia<
 		return this.#history.map(([method, path, handler, , hook, appHook]) => {
 			const flatAppHook = flattenChain(appHook as any)
 
+			// `mergeHook` mutates its first argument; clone the stored inline
+			// `hook` (route[4]) so repeated `routes` reads don't re-merge into
+			// it (which would duplicate hooks on every access).
 			const merged: any = flatAppHook
 				? hook
-					? mergeHook(hook as any, flatAppHook as any)
+					? mergeHook(cloneHook(hook) as any, flatAppHook as any)
 					: flatAppHook
 				: hook
 
@@ -1016,6 +1051,14 @@ export class Elysia<
 		return this
 	}
 
+	onStart() {
+		return this
+	}
+
+	onStop() {
+		return this
+	}
+
 	// Remove in 2.1
 	onTransform(fn: EventFn<'transform'>): this
 	onTransform(scope: { as: 'local' }, fn: EventFn<'transform'>): this
@@ -1245,6 +1288,19 @@ export class Elysia<
 	): this {
 		switch (arguments.length) {
 			case 1:
+				if (scopeOrFnOrError && typeof scopeOrFnOrError === 'object') {
+					for (const [code, ErrorClass] of Object.entries(
+						scopeOrFnOrError
+					))
+						if (typeof ErrorClass === 'function')
+							(this.#ext.error ??= new Map()).set(
+								ErrorClass as unknown as AnyErrorConstructor,
+								code
+							)
+
+					return this
+				}
+
 				return this.#onBranch(
 					'error',
 					scopeOrFnOrError as EventFn<'error'>
@@ -1261,8 +1317,9 @@ export class Elysia<
 							: () => fnOrError
 					) as EventFn<'error'>
 
-					;(this.#ext.error ??= new Set()).add(
-						scopeOrFnOrError as unknown as AnyErrorConstructor
+					;(this.#ext.error ??= new Map()).set(
+						scopeOrFnOrError as unknown as AnyErrorConstructor,
+						(scopeOrFnOrError as { name: string }).name
 					)
 
 					// scopeOrFnOrError: Error
@@ -1287,8 +1344,9 @@ export class Elysia<
 					? fn
 					: () => fn) as unknown as EventFn<'error'>
 
-				;(this.#ext.error ??= new Set()).add(
-					fnOrError as unknown as AnyErrorConstructor
+				;(this.#ext.error ??= new Map()).set(
+					fnOrError as unknown as AnyErrorConstructor,
+					(fnOrError as { name: string }).name
 				)
 
 				return this.#onBranch(
@@ -1372,7 +1430,8 @@ export class Elysia<
 				scope = arg.as === 'scoped' ? 'plugin' : (arg.as as EventScope)
 				delete (arg as any).as
 			}
-			return this.#guard(scope, arg as Partial<AnyWSLocalHook>)
+
+			return this.#guard(scope, arg as Partial<AnyWSLocalHook>, false)
 		}
 
 		if (arguments.length === 2) {
@@ -1383,20 +1442,28 @@ export class Elysia<
 
 			return this.#guard(
 				arguments[0] as EventScope,
-				arguments[1] as Partial<Macro>
+				arguments[1] as Partial<Macro>,
+				true
 			)
 		}
 
 		return this
 	}
 
-	#guard(scope: EventScope, hook: Partial<AnyLocalHook>): this {
+	#guard(
+		scope: EventScope,
+		hook: Partial<AnyLocalHook>,
+		standalone = false
+	): this {
 		// @ts-expect-error Remove in 2.1
 		if (scope === 'scoped') scope = 'plugin'
 
+		if (standalone && (hook as any).schema !== 'override')
+			(hook as any).schema = 'standalone'
+
 		hookToGuard(hook as any)
 
-		// life standalone schemas
+		// lift standalone schemas
 		const prevSchemaLen = (hook as any).schemas?.length ?? 0
 
 		if (hook.derive) {
@@ -1602,20 +1669,13 @@ export class Elysia<
 			group: AnyElysia
 		) => AnyElysia
 
-		const parentPrefix = this['~config']?.prefix
-		const childPrefix = parentPrefix
-			? prefix
-				? joinPath(parentPrefix, prefix)
-				: parentPrefix
-			: prefix
-
 		const child = new Elysia(
-			this['~config'] || childPrefix
+			this['~config'] || prefix
 				? {
 						...this['~config'],
 						name: undefined,
 						seed: undefined,
-						prefix: childPrefix
+						prefix
 					}
 				: undefined
 		) as AnyElysia
@@ -2082,6 +2142,9 @@ export class Elysia<
 			return this
 		}
 
+		if (app !== this && app.pending)
+			return this.#useAsync(app.modules.then(() => app))
+
 		this.#use(app)
 
 		return this
@@ -2164,8 +2227,16 @@ export class Elysia<
 		const hookChain = app['~hookChain']
 
 		if (app['~ext']) {
-			const { decorator, store, headers, models, parser, macro, error, hoc } =
-				app['~ext']
+			const {
+				decorator,
+				store,
+				headers,
+				models,
+				parser,
+				macro,
+				error,
+				hoc
+			} = app['~ext']
 
 			const ext: NonNullable<(typeof this)['~ext']> = (this['~ext'] ??=
 				nullObject())
@@ -2201,14 +2272,18 @@ export class Elysia<
 			}
 
 			if (error) {
-				if (ext.error) ext.error = new Set([...ext.error, ...error])
-				else ext.error = new Set(error)
+				if (ext.error)
+					for (const [code, handler] of error)
+						ext.error.set(code, handler)
+				else ext.error = new Map(error)
 			}
 
-			// hoc is the only append-array in ~ext (others are idempotent
-			// key/Set merges), so the plugin diamond would apply a wrap twice;
-			// reference-dedup via Set here, mirroring ext.error.
-			if (hoc) ext.hoc = [...new Set([...(ext.hoc ?? []), ...hoc])]
+			if (hoc) {
+				if (ext.hoc) {
+					for (const fn of hoc)
+						if (!ext.hoc.includes(fn)) ext.hoc.push(fn)
+				} else ext.hoc = hoc.slice()
+			}
 		}
 
 		if (app.#plugin || app.#global || hookChain) {
@@ -2328,10 +2403,12 @@ export class Elysia<
 
 	get modules(): Promise<void> {
 		const ready = this.#ready
+
 		if (!ready) {
 			if (this.#error !== undefined) return Promise.reject(this.#error)
 			return Promise.resolve()
 		}
+
 		return ready.then(() => {
 			if (this.#error !== undefined) throw this.#error
 		})
@@ -2359,17 +2436,13 @@ export class Elysia<
 						? value.default
 						: value
 
-				if (plugin) {
+				if (plugin)
 					try {
-						// Route back through `use` (not `#use`) so a resolved
-						// function plugin `(app) => …`, array, or nested thenable is
-						// dispatched correctly — `#use` only accepts an Elysia instance.
 						this.use(plugin)
 					} catch (err) {
 						this.#error ??= err
 						console.error(err)
 					}
-				}
 			})
 			.finally(() => {
 				this.#pending--
@@ -2409,6 +2482,7 @@ export class Elysia<
 		hook?: Partial<AnyLocalHook>
 	) {
 		if (this['~Prefix']) path = joinPath(this['~Prefix'], path)
+		else if (path && path.charCodeAt(0) !== 47) path = '/' + path
 
 		const appHook = this['~hookChain']
 
@@ -3535,6 +3609,12 @@ export class Elysia<
 		const methods = this['~map']!
 
 		const length = this.#history.length
+
+		let explicitHead: Set<string> | undefined
+		for (let i = 0; i < length; i++)
+			if (mapMethodBack(this.#history![i][0]) === 'HEAD')
+				(explicitHead ??= new Set()).add(this.#history![i][1])
+
 		for (let i = 0; i < length; i++) {
 			const route: InternalRoute = this.#history![i]
 			const method = mapMethodBack(route[0])
@@ -3577,8 +3657,19 @@ export class Elysia<
 				if (staticResponse) {
 					const target = (this['~staticResponse'] ??=
 						nullObject() as any)
+
 					;(target[path] ??= nullObject() as any)[method] =
 						staticResponse
+
+					if (!this['~config']?.strictPath) {
+						const loose = getLoosePath(path)
+						;(target[loose] ??= nullObject() as any)[method] =
+							staticResponse instanceof Response
+								? staticResponse.clone()
+								: (staticResponse as Promise<Response>).then(
+										(r) => r.clone()
+									)
+					}
 				}
 			}
 
@@ -3587,16 +3678,28 @@ export class Elysia<
 					? staticResponse
 					: undefined
 
+			const autoHead = method === 'GET' && !explicitHead?.has(path)
+
 			if (isDynamicRegex.test(path)) {
-				;(this['~router'] ??= new Memoirist()).add(
-					method,
-					path,
-					this.handler(i, precompile, undefined, sharedStatic),
-					false
+				const router = (this['~router'] ??= new Memoirist())
+				const handler = this.handler(
+					i,
+					precompile,
+					undefined,
+					sharedStatic
 				)
+				router.add(method, path, handler, false)
+
+				if (autoHead)
+					router.add('HEAD', path, wrapHeadHandler(handler), false)
 			} else {
 				const map = (methods[method] ??= nullObject() as any)
-				map[path] = this.handler(i, precompile, route, sharedStatic)
+				const handler = this.handler(i, precompile, route, sharedStatic)
+				map[path] = handler
+
+				if (autoHead)
+					(methods['HEAD'] ??= nullObject() as any)[path] =
+						wrapHeadHandler(handler)
 			}
 		}
 	}

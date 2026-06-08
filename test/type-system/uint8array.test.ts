@@ -1,7 +1,5 @@
 import Elysia, { t } from '../../src'
 import { describe, expect, it } from 'bun:test'
-import { Value } from '@sinclair/typebox/value'
-import { TypeBoxError } from '@sinclair/typebox'
 
 describe('TypeSystem - Uint8Array', () => {
 	// it('Create', () => {

@@ -1,52 +1,42 @@
 import { Type } from 'typebox'
 import type { TObjectOptions, TProperties } from 'typebox'
+import { Value } from 'typebox/value'
 
 import { ELYSIA_TYPES } from '../constants'
-import { Intersect } from './intersect'
 import { ObjectType } from './object'
 import { StringType } from './string'
 import { Union } from './union'
 import { elyType, getMeta } from './utils'
+import { nullObject } from '../../utils'
 
-let BaseObjectString: Type.TCodec<
-	Type.TRefine<Type.TString>,
-	Record<string | number | symbol, unknown>
->
 export function ObjectString<T extends TProperties>(
 	property: T,
 	_options?: TObjectOptions
 ) {
-	BaseObjectString ??= Object.freeze(
-		Type.Decode(
-			Type.Refine(
-				StringType(),
-				(value) => {
-					const start = value.charCodeAt(0)
-					const end = value.charCodeAt(value.length - 1)
-					// we already have try parse check, so just quick check
-					const isObject = start === 123
-					const isArray = start === 91
-					if (!isObject && !isArray) return false
-
-					try {
-						JSON.parse(value)
-
-						return true
-					} catch {
-						return false
-					}
-				},
-				'must be an object'
-			),
-			(value) => JSON.parse(value)
-		)
+	const [{ properties, ...constraints }, meta] = getMeta(
+		(_options ?? nullObject()) as any
 	)
-
-	const [{ properties, ...constraints }, meta] = getMeta(property)
 	const object = ObjectType(property, constraints)
+
+	const objectString = Type.Decode(
+		Type.Refine(
+			StringType(),
+			(value) => {
+				if (value.charCodeAt(0) !== 123) return false
+
+				try {
+					return Value.Check(object, JSON.parse(value))
+				} catch {
+					return false
+				}
+			},
+			'must be an object'
+		),
+		(value) => Value.Decode(object, JSON.parse(value))
+	)
 
 	return elyType(
 		ELYSIA_TYPES.ObjectString,
-		Union([object, Intersect([BaseObjectString, object])], meta)
+		Union([object, objectString], meta)
 	)
 }

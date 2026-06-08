@@ -150,7 +150,8 @@ export class ValidationError extends ElysiaError {
 	get all() {
 		if (!this.errors) return []
 
-		return this.errors.filter(Boolean).map(this.#normalizeIssue)
+		// need arrow function to preserve `this`
+		return this.errors.filter(Boolean).map((e) => this.#normalizeIssue(e))
 	}
 
 	#normalizeIssue(e: any) {
@@ -216,6 +217,26 @@ export class ValidationError extends ElysiaError {
 	}
 
 	toResponse(headers?: Record<string, any>) {
+		// validateDetail
+		if (this.customError !== undefined) {
+			const isString = typeof this.customError === 'string'
+
+			return new Response(
+				isString
+					? (this.customError as string)
+					: JSON.stringify(this.customError),
+				{
+					status: this.status ?? 422,
+					headers: {
+						...headers,
+						'content-type': isString
+							? 'text/plain'
+							: 'application/json'
+					}
+				}
+			)
+		}
+
 		return new Response(JSON.stringify(this.payload), {
 			status: 422,
 			headers: {

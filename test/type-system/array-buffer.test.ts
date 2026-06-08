@@ -1,12 +1,10 @@
 import Elysia, { t } from '../../src'
 import { describe, expect, it } from 'bun:test'
-import { Value } from '@sinclair/typebox/value'
-import { TypeBoxError } from '@sinclair/typebox'
+import { Value, EncodeError, DecodeError } from 'typebox/value'
 
 describe('TypeSystem - ArrayBuffer', () => {
 	it('Create', () => {
-		// @ts-expect-error
-		expect(Value.Create(t.ArrayBuffer())).toEqual([1, 2, 3])
+		expect(Value.Create(t.ArrayBuffer())).toBeUndefined()
 
 		expect(
 			Value.Create(
@@ -14,7 +12,6 @@ describe('TypeSystem - ArrayBuffer', () => {
 					default: '[]'
 				})
 			)
-			// @ts-expect-error
 		).toBe('[]')
 	})
 
@@ -28,12 +25,12 @@ describe('TypeSystem - ArrayBuffer', () => {
 	it('Encode', () => {
 		const schema = t.ArrayBuffer()
 
-		expect(() => Value.Encode(schema, [1, 2, 3])).toThrow(TypeBoxError)
-		expect(() => Value.Encode(schema, 'test')).toThrow(TypeBoxError)
-		expect(() => Value.Encode(schema, 123)).toThrow(TypeBoxError)
-		expect(() => Value.Encode(schema, true)).toThrow(TypeBoxError)
-		expect(() => Value.Encode(schema, null)).toThrow(TypeBoxError)
-		expect(() => Value.Encode(schema, undefined)).toThrow(TypeBoxError)
+		expect(() => Value.Encode(schema, [1, 2, 3])).toThrow(EncodeError)
+		expect(() => Value.Encode(schema, 'test')).toThrow(EncodeError)
+		expect(() => Value.Encode(schema, 123)).toThrow(EncodeError)
+		expect(() => Value.Encode(schema, true)).toThrow(EncodeError)
+		expect(() => Value.Encode(schema, null)).toThrow(EncodeError)
+		expect(() => Value.Encode(schema, undefined)).toThrow(EncodeError)
 	})
 
 	it('Decode', () => {
@@ -42,12 +39,12 @@ describe('TypeSystem - ArrayBuffer', () => {
 		expect(Value.Decode(schema, new ArrayBuffer())).toEqual(
 			new ArrayBuffer()
 		)
-		expect(() => Value.Decode(schema, [1, 2, 3])).toThrow(TypeBoxError)
-		expect(() => Value.Decode(schema, 'test')).toThrow(TypeBoxError)
-		expect(() => Value.Decode(schema, 123)).toThrow(TypeBoxError)
-		expect(() => Value.Decode(schema, true)).toThrow(TypeBoxError)
-		expect(() => Value.Decode(schema, null)).toThrow(TypeBoxError)
-		expect(() => Value.Decode(schema, undefined)).toThrow(TypeBoxError)
+		expect(() => Value.Decode(schema, [1, 2, 3])).toThrow(DecodeError)
+		expect(() => Value.Decode(schema, 'test')).toThrow(DecodeError)
+		expect(() => Value.Decode(schema, 123)).toThrow(DecodeError)
+		expect(() => Value.Decode(schema, true)).toThrow(DecodeError)
+		expect(() => Value.Decode(schema, null)).toThrow(DecodeError)
+		expect(() => Value.Decode(schema, undefined)).toThrow(DecodeError)
 	})
 
 	it('Integrate', async () => {

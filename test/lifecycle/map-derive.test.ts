@@ -102,7 +102,7 @@ describe('map derive', () => {
 		const stack: number[] = []
 
 		const app = new Elysia()
-			.onTransform(() => {
+			.beforeHandle(() => {
 				stack.push(1)
 			})
 			.mapDerive(() => {
@@ -111,7 +111,7 @@ describe('map derive', () => {
 				return { name: 'Ina' }
 			})
 			.get('/', ({ name }) => name, {
-				transform() {
+				beforeHandle() {
 					stack.push(3)
 				}
 			})

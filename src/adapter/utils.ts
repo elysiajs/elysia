@@ -1,4 +1,4 @@
-import { isNotEmpty } from '../utils'
+import { isNotEmpty, nullObject } from '../utils'
 import { StatusMap } from '../constants'
 
 import { serializeCookie } from '../cookie/utils'
@@ -27,7 +27,7 @@ export function handleFile(
 					status: 416,
 					headers: mergeHeaders(
 						new Headers({ 'content-range': `bytes */${size}` }),
-						set?.headers ?? {}
+						set?.headers ?? nullObject()
 					)
 				})
 
@@ -50,7 +50,7 @@ export function handleFile(
 					status: 416,
 					headers: mergeHeaders(
 						new Headers({ 'content-range': `bytes */${size}` }),
-						set?.headers ?? {}
+						set?.headers ?? nullObject()
 					)
 				})
 			}
@@ -77,7 +77,7 @@ export function handleFile(
 				).slice(start, end + 1, response.type),
 				{
 					status: 206,
-					headers: mergeHeaders(rangeHeaders, set?.headers ?? {})
+					headers: mergeHeaders(rangeHeaders, set?.headers ?? nullObject())
 				}
 			)
 		}
@@ -91,7 +91,7 @@ export function handleFile(
 			set.status === 416)
 
 	const defaultHeader = immutable
-		? {}
+		? nullObject()
 		: ({
 				'accept-ranges': 'bytes',
 				'content-range': size
@@ -170,7 +170,7 @@ export function responseToSetHeaders(response: Response, set?: Context['set']) {
 
 	if (!response)
 		return {
-			headers: {},
+			headers: nullObject(),
 			status: set?.status ?? 200
 		}
 
@@ -188,7 +188,7 @@ export function responseToSetHeaders(response: Response, set?: Context['set']) {
 	}
 
 	set = {
-		headers: {},
+		headers: nullObject(),
 		status: set?.status ?? 200
 	}
 
@@ -304,10 +304,6 @@ export const createStreamHandler =
 				}
 			}
 
-		// Get an explicit async iterator so pull() can advance one step at a time.
-		// Generators already implement the iterator protocol directly (.next()),
-		// while ReadableStream (which generator may be reassigned to above) needs
-		// [Symbol.asyncIterator]() to produce one.
 		const iterator: AsyncIterator<unknown> =
 			typeof (generator as any).next === 'function'
 				? (generator as AsyncIterator<unknown>)
@@ -436,6 +432,18 @@ export function handleSet(set: Context['set']) {
 	if (typeof set.status === 'string')
 		set.status = StatusMap[set.status as keyof typeof StatusMap]
 
+	// Handle `Elysia.headers` which is created in Context prototype
+	//
+	// If we assign to set.headers, it will mutate the prototype's headers
+	// which cause all responses share the same headers object
+	const proto = Object.getPrototypeOf(set.headers)
+	if (proto !== null && proto !== Object.prototype) {
+		const flat: Record<string, unknown> = Object.create(null)
+
+		for (const key in set.headers) flat[key] = set.headers[key]
+		set.headers = flat as Context['set']['headers']
+	}
+
 	if (set.cookie && isNotEmpty(set.cookie)) {
 		const cookie = serializeCookie(set.cookie)
 
@@ -453,15 +461,14 @@ export function handleSet(set: Context['set']) {
 // Merge header by allocating a new one
 // In Bun, response.headers can be mutable
 // while in Node and Cloudflare Worker is not
-// default to creating a new one instead
+//
+// Default to creating a new one instead
 export function mergeHeaders(
 	responseHeaders: Headers,
 	setHeaders: Context['set']['headers']
 ) {
-	// Direct clone preserves all headers including multiple set-cookie
 	const headers = new Headers(responseHeaders)
 
-	// Merge headers: Response headers take precedence, set.headers fill in non-conflicting ones
 	if (setHeaders instanceof Headers)
 		for (const key of setHeaders.keys()) {
 			if (key === setCookie) {

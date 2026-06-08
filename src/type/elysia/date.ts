@@ -6,8 +6,10 @@ import type { DateOptions } from '../types'
 import { StringType } from './string'
 import { Union } from './union'
 import {
+	cloneSchema,
 	createSharedReference,
 	elyType,
+	getMeta,
 	Refines,
 	type Refines as RefinesType
 } from './utils'
@@ -24,13 +26,6 @@ let sharedDate: ReturnType<
 	>
 >
 export function DateType(property?: DateOptions) {
-	// Source schema: any of [actual Date | parseable string | epoch
-	// ms]. The string branch uses a Refine — not `format: 'date-time'`
-	// — so query-string-mangled offsets (`+`→space) survive Check and
-	// reach the Decode callback, which attempts a repair. Strings that
-	// can't be parsed at all (`'Hello'`) fail the Refine, surfacing as
-	// 422 in plain `t.Date()` validation while still passing through
-	// for `t.NoValidate(t.Date())` (which skips Check).
 	StringifiedDate ??= Type.Codec(
 		Union([
 			Type.Refine(
@@ -111,5 +106,24 @@ function DateWithProperty(options: DateOptions) {
 			`date must be before or equal to ${new Date(options.exclusiveMaximumTimestamp!).toISOString()}`
 		])
 
-	return elyType(ELYSIA_TYPES.Date, Refines(StringifiedDate, refines as any))
+	let schema: any = Refines(StringifiedDate, refines as any)
+
+	// Carry meta (`default`, `description`, ...) onto the schema. Without
+	// this, `t.Date({ default })` drops the default - this function only
+	// reads timestamp bounds. Clone first so the shared `StringifiedDate`
+	// isn't mutated, and mirror `default` onto each union branch so the
+	// default survives whichever branch validates.
+	const [, meta] = getMeta(options as any)
+	if (meta) {
+		schema = cloneSchema(schema)
+		Object.assign(schema, meta)
+		if (Array.isArray(schema.anyOf))
+			schema.anyOf = schema.anyOf.map((member: any) => {
+				const cloned = cloneSchema(member)
+				if (meta.default !== undefined) cloned.default = meta.default
+				return cloned
+			})
+	}
+
+	return elyType(ELYSIA_TYPES.Date, schema)
 }

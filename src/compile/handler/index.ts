@@ -18,6 +18,7 @@ import {
 
 import { ElysiaStatus, ParseError } from '../../error'
 import { isDynamicRegex } from '../../constants'
+import { createCodeResolver } from '../../handler/error'
 import { hasHeaderShorthand } from '../../universal/constants'
 
 import { parseQueryFromURL } from '../../parse-query'
@@ -42,6 +43,7 @@ import {
 	cloneHook,
 	eventProperties,
 	flattenChain,
+	fnOrigin,
 	isBlob,
 	isLocalScope,
 	mapMethodBack,
@@ -241,6 +243,68 @@ function applyHook(
 	return hook
 }
 
+function collectHookOrigins(
+	hook: Partial<AnyLocalHook> | undefined,
+	into: Set<number>
+): void {
+	if (!hook) return
+
+	for (const key in hook) {
+		if (!eventProperties.has(key)) continue
+
+		const v = (hook as any)[key]
+		if (!v) continue
+
+		// Most hook slots hold a single function; iterate the array form
+		// directly and special-case the scalar to skip the `[v]` allocation.
+		if (Array.isArray(v))
+			for (const fn of v) {
+				const origin = fnOrigin.get(fn as Function)
+				if (origin !== undefined) into.add(origin)
+			}
+		else {
+			const origin = fnOrigin.get(v as Function)
+			if (origin !== undefined) into.add(origin)
+		}
+	}
+}
+
+function dropHooksByOrigin(
+	hook: Partial<AppHook>,
+	skip: Set<number>
+): Partial<AppHook> {
+	let out = hook
+
+	for (const key in hook) {
+		if (!eventProperties.has(key)) continue
+
+		const v = (hook as any)[key]
+		if (!v) continue
+
+		// Same scalar special-case as `collectHookOrigins`: skip the `[v]`
+		// allocation (and the `filter`) when the slot holds a single function.
+		if (Array.isArray(v)) {
+			const kept = v.filter((fn: Function) => {
+				const origin = fnOrigin.get(fn)
+				return origin === undefined || !skip.has(origin)
+			})
+
+			if (kept.length !== v.length) {
+				if (out === hook) out = { ...hook }
+				;(out as any)[key] = kept
+			}
+		} else {
+			const origin = fnOrigin.get(v as Function)
+			if (origin !== undefined && skip.has(origin)) {
+				if (out === hook) out = { ...hook }
+				;(out as any)[key] = []
+			}
+		}
+	}
+
+	return out
+}
+
 const createInlineHandler = (
 	map: (value: unknown, ...rest: unknown[]) => unknown,
 	h: (context: Context) => unknown
@@ -252,10 +316,24 @@ const createInlineHandlerWithSet = (
 ) => ((c: Context) => map(h(c), c.set, c.request)) as CompiledHandler
 
 function promoteDerive(hook: any) {
-	if ('derive' in hook) {
-		const v = hook.derive
+	const derive = hook.derive
+	const resolve = hook.resolve
+	if (derive === undefined && resolve === undefined) return
 
-		const arr = Array.isArray(v) ? v : [v]
+	// `resolve` is deprecated and almost always absent, so avoid the
+	// `[...derive, ...resolve]` spread in the common derive-only case.
+	let arr: unknown[]
+
+	if (resolve === undefined) arr = Array.isArray(derive) ? derive : [derive]
+	else if (derive === undefined)
+		arr = Array.isArray(resolve) ? resolve : [resolve]
+	else
+		arr = [
+			...(Array.isArray(derive) ? derive : [derive]),
+			...(Array.isArray(resolve) ? resolve : [resolve])
+		]
+
+	if (arr.length) {
 		const existing = hook.beforeHandle
 
 		hook.beforeHandle = existing
@@ -263,9 +341,10 @@ function promoteDerive(hook: any) {
 				? [...arr, ...existing]
 				: [...arr, existing]
 			: arr
-
-		hook.derive = undefined
 	}
+
+	if (hook.derive !== undefined) hook.derive = undefined
+	if (hook.resolve !== undefined) hook.resolve = undefined
 }
 
 function resolveChainMacros(
@@ -334,7 +413,9 @@ export function buildNativeStaticResponse(
 
 	const rootHeaders = root['~ext']?.headers
 	const buildSet = () => ({
-		headers: rootHeaders ? Object.assign({}, rootHeaders) : {},
+		headers: rootHeaders
+			? Object.assign(nullObject(), rootHeaders)
+			: nullObject(),
 		status: 200
 	})
 
@@ -380,12 +461,48 @@ export function compileHandler(
 
 	const flatAppHook = appHook ? flattenChain(appHook) : undefined
 
-	const rootHook =
+	let rootHook =
 		instance !== root
 			? composeRootHook(root, inheritedChain as any)
 			: undefined
 
-	const hook = applyHook(localHook, flatAppHook as any, rootHook)
+	if (rootHook && (flatAppHook || localHook)) {
+		const present = new Set<number>()
+
+		collectHookOrigins(localHook, present)
+		collectHookOrigins(flatAppHook as any, present)
+
+		if (present.size) rootHook = dropHooksByOrigin(rootHook, present)
+	}
+
+	let hook = applyHook(localHook, flatAppHook as any, rootHook)
+
+	if (instance !== root) {
+		const instanceLocal = flattenChain(
+			(instance as AnyElysia)['~hookChain'],
+			isLocalScope
+		)
+
+		const errors = instanceLocal?.error
+		if (errors) {
+			hook ??= nullObject() as any
+			const existing = (hook as any).error
+
+			if (existing) {
+				// Dedup against handlers already on the hook.
+				if (Array.isArray(errors)) {
+					for (const fn of errors)
+						if (!existing.includes(fn)) existing.push(fn)
+				} else if (!existing.includes(errors)) existing.push(errors)
+			}
+			// No existing handlers - skip the `includes` dedup entirely,
+			// and avoid the `[errors]` allocation for the scalar case.
+			else;
+			;(hook as any).error = Array.isArray(errors)
+				? errors.slice()
+				: [errors]
+		}
+	}
 
 	if (hook) {
 		promoteDerive(hook)
@@ -415,7 +532,9 @@ export function compileHandler(
 		const rootHeaders = root['~ext']?.headers
 
 		const set = {
-			headers: rootHeaders ? Object.assign({}, rootHeaders) : {},
+			headers: rootHeaders
+				? Object.assign(nullObject(), rootHeaders)
+				: nullObject(),
 			status: 200
 		}
 
@@ -424,6 +543,8 @@ export function compileHandler(
 	}
 
 	const isStaticResponse = !isHandleFunction && handler instanceof Response
+
+	const errorCode = createCodeResolver(root['~ext']?.error)
 
 	const reconstructed = Compiled.handlers?.[method]?.[path]
 	if (reconstructed) {
@@ -434,6 +555,7 @@ export function compileHandler(
 				res: adapter.response as any,
 				hook: (hook ?? nullObject()) as any,
 				vali,
+				errorCode,
 				cookieConfig: reconstructed.a.includes('cc')
 					? compileCookieConfig(
 							hook?.cookie as any,
@@ -931,16 +1053,31 @@ export function compileHandler(
 		if (hasErrorHook) {
 			link(hook!.error!, 'er')
 			link(ElysiaStatus, 'es')
+			link(errorCode, 'crc')
 			code +=
 				`c.error=e\n` +
-				`c.code=e?.code??'UNKNOWN'\n` +
+				// `crc` resolves the code from the instance's registered errors
+				`c.code=crc(e)\n` +
+				// Explicit error status wins; otherwise keep an already-set
+				// non-200 status (handler set it before throwing) and default
+				// statusless errors to 500.
 				`if(e?.status)c.set.status=e.status\n` +
+				`else if(c.set.status===undefined||c.set.status===200)c.set.status=500\n` +
 				`let _r\n` +
 				mapError(hook!.error!, [
 					map,
 					link,
 					res.map,
-					endTrace() + scheduleAfterResponse
+					// Run `mapResponse` hooks on the value an `onError` returns,
+					// mirroring the success path (a thrown-then-handled response
+					// is still a response). `mr`/`tmp` are linked/declared above
+					// since `hasMapResponse`.
+					(hasMapResponse
+						? `c.responseValue=_r\n` +
+							mapMapResponse(hook!.mapResponse!, undefined)
+						: '') +
+						endTrace() +
+						scheduleAfterResponse
 				]) +
 				endTrace() +
 				scheduleAfterResponse +

@@ -234,7 +234,7 @@ describe('Web Standard - Map Response', () => {
 		expect(await response.json()).toEqual(body)
 		expect(response.headers.toJSON()).toEqual({
 			...context.headers,
-			'content-type': 'application/json'
+			'content-type': 'application/json;charset=utf-8'
 		})
 		expect(response.status).toBe(200)
 	})
@@ -249,7 +249,10 @@ describe('Web Standard - Map Response', () => {
 			name: 'Error',
 			message: 'Hello'
 		})
-		expect(response.headers.toJSON()).toEqual(context.headers)
+		expect(response.headers.toJSON()).toEqual({
+			...context.headers,
+			'content-type': 'application/json;charset=utf-8'
+		})
 		expect(response.status).toBe(500)
 	})
 

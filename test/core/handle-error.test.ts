@@ -1,50 +1,28 @@
-import {
-	Elysia,
-	InternalServerError,
-	NotFound,
-	status,
-	t
-} from '../../src'
+import { Elysia, InternalServerError, NotFound, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
 
-const request = new Request('http://localhost:8080')
-
 describe('Handle Error', () => {
 	it('handle NOT_FOUND', async () => {
 		const res = await new Elysia()
-			.get('/', () => 'Hi')
-			// @ts-expect-error private
-			.handleError(
-				{
-					request,
-					set: {
-						headers: {}
-					}
-				},
-				new NotFound()
-			)
+			.get('/', () => {
+				throw new NotFound()
+			})
+			.handle(req('/'))
 
-		expect(await res.text()).toBe('NOT_FOUND')
+		expect(await res.text()).toBe('Not Found')
 		expect(res.status).toBe(404)
 	})
 
 	it('handle INTERNAL_SERVER_ERROR', async () => {
 		const res = await new Elysia()
-			.get('/', () => 'Hi')
-			// @ts-expect-error private
-			.handleError(
-				{
-					request,
-					set: {
-						headers: {}
-					}
-				},
-				new InternalServerError()
-			)
+			.get('/', () => {
+				throw new InternalServerError()
+			})
+			.handle(req('/'))
 
-		expect(await res.text()).toBe('INTERNAL_SERVER_ERROR')
+		expect(await res.text()).toBe('Internal Server Error')
 		expect(res.status).toBe(500)
 	})
 
@@ -249,22 +227,11 @@ describe('Handle Error', () => {
 	it('map status error to response', async () => {
 		const value = { message: 'meow!' }
 
-		const response: Response = await new Elysia()
-			.get('/', () => 'Hello', {
-				beforeHandle({ status }) {
-					throw status("I'm a teapot", { message: 'meow!' })
-				}
+		const response = await new Elysia()
+			.get('/', ({ status }) => {
+				throw status(422, value)
 			})
-			// @ts-expect-error private property
-			.handleError(
-				{
-					request: new Request('http://localhost/'),
-					set: {
-						headers: {}
-					}
-				},
-				status(422, value) as any
-			)
+			.handle(req('/'))
 
 		expect(await response.json()).toEqual(value)
 		expect(response.headers.get('content-type')).toStartWith(
@@ -276,7 +243,7 @@ describe('Handle Error', () => {
 	it('map status error with custom mapResponse', async () => {
 		const value = { message: 'meow!' }
 
-		const response: Response = await new Elysia()
+		const response = await new Elysia()
 			.mapResponse(({ responseValue }) => {
 				if (typeof responseValue === 'object')
 					return new Response('Don Quixote', {
@@ -285,21 +252,10 @@ describe('Handle Error', () => {
 						}
 					})
 			})
-			.get('/', () => 'Hello', {
-				beforeHandle({ status }) {
-					throw status("I'm a teapot", { message: 'meow!' })
-				}
+			.get('/', ({ status }) => {
+				throw status(422, value)
 			})
-			// @ts-expect-error private property
-			.handleError(
-				{
-					request: new Request('http://localhost/'),
-					set: {
-						headers: {}
-					}
-				},
-				status(422, value) as any
-			)
+			.handle(req('/'))
 
 		expect(await response.text()).toBe('Don Quixote')
 		expect(response.headers.get('content-type')).toStartWith('text/plain')
@@ -308,18 +264,11 @@ describe('Handle Error', () => {
 
 	it('handle generic error', async () => {
 		const res = await new Elysia()
-			.get('/', () => 'Hi')
-			// @ts-expect-error private
-			.handleError(
-				{
-					request,
-					set: {
-						headers: {}
-					}
-				},
+			.get('/', () => {
 				// https://youtube.com/shorts/PbIWVPKHfrQ
-				new Error('a')
-			)
+				throw new Error('a')
+			})
+			.handle(req('/'))
 
 		expect(await res.text()).toBe('a')
 		expect(res.status).toBe(500)

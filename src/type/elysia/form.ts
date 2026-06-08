@@ -40,7 +40,9 @@ export const Form = <T extends TProperties>(
 				(value) => '~ely-form' in value,
 				'must be instance of Elysia.form'
 			),
-			(value) => value['~ely-form']
+			// The form's fields live inline on the object (`~ely-form` is just
+			// a marker), so decoding is identity.
+			(value) => value
 		)
 	)
 

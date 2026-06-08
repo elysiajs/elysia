@@ -228,6 +228,7 @@ export class TypeBoxValidator<
 	#precomputedObjectDefault: Record<string, unknown> | undefined
 
 	#noValidate: boolean
+	#isForm = false
 
 	constructor(
 		schema: T,
@@ -318,6 +319,7 @@ export class TypeBoxValidator<
 		}
 
 		this.#noValidate = originalElyTyp === ELYSIA_TYPES.NoValidate
+		this.#isForm = originalElyTyp === ELYSIA_TYPES.Form
 
 		if (isFrozen && frozen!.cm) {
 			const both = instantiateFrozenBoth(frozen!, this.schema, schema)
@@ -492,6 +494,18 @@ export class TypeBoxValidator<
 	}
 
 	EncodeFrom(value: Static<T>, type?: string): StaticEncode<T> {
+		if (this.#isForm) {
+			if (!this.#noValidate && !this.Check(value))
+				throw new ValidationError(
+					type,
+					value,
+					this.Errors(value),
+					this.schema
+				)
+
+			return value as any
+		}
+
 		if (!this.hasCodec) {
 			if (!this.#noValidate && !this.Check(value))
 				throw new ValidationError(
@@ -514,8 +528,11 @@ export class TypeBoxValidator<
 		} catch (e: any) {
 			if (this.#noValidate)
 				return this.Clean ? (this.Clean(value) as any) : (value as any)
+
 			if (e instanceof ValidationError) throw e
 			if (e?.error) throw e.error
+			if (e?.status) throw e
+
 			throw new ValidationError(
 				type,
 				value,
@@ -559,21 +576,19 @@ export class TypeBoxValidator<
 	async FromAsync(value: Static<T>, type?: string): Promise<Static<T>> {
 		if (this.hasDefault) {
 			if (this.precomputeSafe) {
-				if (value === undefined || value === null) {
+				if (value === undefined || value === null)
 					value = this.#precomputedDefault as any
-				} else if (
+
+				else if (
 					this.#precomputedObjectDefault !== undefined &&
 					typeof value === 'object' &&
 					!Array.isArray(value)
-				) {
+				)
 					value = applyPrecomputed(
 						this.#precomputedObjectDefault,
 						value as any
 					) as any
-				}
-			} else {
-				value = Default(this.schema, value) as any
-			}
+			} else value = Default(this.schema, value) as any
 		}
 
 		const bypass = this.optionalBypass(value)
@@ -593,6 +608,8 @@ export class TypeBoxValidator<
 			} catch (e: any) {
 				if (e instanceof ValidationError) throw e
 				if (e?.error) throw e.error
+				if (e?.status) throw e
+
 				throw new ValidationError(
 					type,
 					value,
@@ -656,6 +673,8 @@ export class TypeBoxValidator<
 			} catch (e: any) {
 				if (e instanceof ValidationError) throw e
 				if (e?.error) throw e.error
+				if (e?.status) throw e
+
 				throw new ValidationError(
 					type,
 					value,
@@ -687,16 +706,16 @@ export class TypeBoxValidatorCache {
 		'defaultValue'
 	])
 
-	// Stable per-process IDs for function values `error` callbacks
-	// produced by
 	private static fnIds = new WeakMap<Function, number>()
 	private static nextFnId = 0
+
 	private static fnKey(fn: Function) {
 		let id = TypeBoxValidatorCache.fnIds.get(fn)
 		if (id === undefined) {
 			id = ++TypeBoxValidatorCache.nextFnId
 			TypeBoxValidatorCache.fnIds.set(fn, id)
 		}
+
 		return `<fn:${id}>`
 	}
 

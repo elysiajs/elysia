@@ -158,10 +158,16 @@ describe('Edge Case', () => {
 			.get('/1', () => '-')
 			.get('/4', () => '4')
 
-		// @ts-expect-error
-		expect(app.routeTree['GET_/0']).toEqual(0)
-		// @ts-expect-error
-		expect(app.routeTree['GET_/4']).toEqual(4)
+		// Routes keep their insertion order in `history`, even when a path
+		// repeats — the duplicate stays in place rather than shifting indices.
+		expect(app.history!.map((route) => route[1])).toEqual([
+			'/0',
+			'/1',
+			'/2',
+			'/3',
+			'/1',
+			'/4'
+		])
 	})
 
 	it('preserve correct index order of routes if duplicated from plugin', () => {
@@ -176,10 +182,15 @@ describe('Edge Case', () => {
 			.get('/2', () => '2')
 			.use(plugin)
 
-		// @ts-expect-error
-		expect(app.routeTree['GET_/0']).toEqual(0)
-		// @ts-expect-error
-		expect(app.routeTree['GET_/4']).toEqual(4)
+		// A plugin's routes are appended in order after the parent's own.
+		expect(app.history!.map((route) => route[1])).toEqual([
+			'/0',
+			'/1',
+			'/2',
+			'/3',
+			'/1',
+			'/4'
+		])
 	})
 
 	it('get routes', () => {
@@ -188,6 +199,20 @@ describe('Edge Case', () => {
 		const main = new Elysia().use(plugin).get('/2', () => 'hi')
 
 		expect(main.routes.length).toBe(2)
+	})
+
+	it('reading routes is idempotent (no hook duplication)', () => {
+		const plugin = new Elysia().onTransform(() => {})
+		const app = new Elysia().use(plugin).get('/', () => 'hi', {
+			transform() {}
+		})
+
+		const first = app.routes[0].hooks.transform!.length
+
+		// `routes` merges hooks lazily; reading it must not mutate the stored
+		// route, so repeated reads return the same shape.
+		expect(app.routes[0].hooks.transform!.length).toBe(first)
+		expect(app.routes[0].hooks.transform!.length).toBe(first)
 	})
 
 	it('value returned from transform has priority over the default value from schema', async () => {
@@ -255,12 +280,12 @@ describe('Edge Case', () => {
 				]
 			}),
 			{
-				response: t.Recursive((This) =>
-					t.Object({
+				response: t.Cyclic({
+					a: t.Object({
 						type: t.String(),
-						data: t.Union([t.Nullable(This), t.Array(This)])
+						data: t.Union([t.Nullable(t.Ref('a')), t.Array(t.Ref('a'))])
 					})
-				)
+				}, 'a')
 			}
 		)
 
@@ -405,6 +430,43 @@ describe('Edge Case', () => {
 		expect(response.headers.toJSON()).toEqual({
 			'content-length': '11'
 		})
+	})
+
+	it('prefer user-provided HEAD over auto-HEAD for GET', async () => {
+		const app = new Elysia()
+			.get('/', () => 'hello world')
+			.head('/', ({ set }) => {
+				set.headers['x-source'] = 'manual-head'
+			})
+
+		const response = await app.handle(
+			new Request('http://localhost', {
+				method: 'HEAD'
+			})
+		)
+
+		// The explicit HEAD handler runs (its custom header is present) instead
+		// of the GET-derived auto-HEAD (which would carry `content-length: 11`).
+		expect(response.status).toBe(200)
+		expect(response.headers.get('x-source')).toBe('manual-head')
+		expect(response.headers.get('content-length')).not.toBe('11')
+	})
+
+	it('prefer user-provided HEAD over auto-HEAD for dynamic GET', async () => {
+		const app = new Elysia()
+			.get('/:id', () => 'hello world')
+			.head('/:id', ({ set }) => {
+				set.headers['x-source'] = 'manual-head'
+			})
+
+		const response = await app.handle(
+			new Request('http://localhost/1', {
+				method: 'HEAD'
+			})
+		)
+
+		expect(response.status).toBe(200)
+		expect(response.headers.get('x-source')).toBe('manual-head')
 	})
 
 	it('handle arbitrary code execution from cookie', async () => {

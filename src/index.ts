@@ -1,6 +1,6 @@
 import { Elysia } from './base'
 
-export { redirect, sse } from './utils'
+export { redirect, sse, form } from './utils'
 export {
 	status,
 	ElysiaError,

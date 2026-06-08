@@ -145,10 +145,7 @@ describe('Bun router', () => {
 		const app = new Elysia()
 			.trace((a) => {
 				a.onHandle(() => {
-					// @ts-expect-error private property
-					url = a.context.url
-
-					// @ts-expect-error private property
+					url = a.context.request.url
 					hasRequestId = !!a.context.rid
 				})
 			})
@@ -193,8 +190,7 @@ describe('Bun router', () => {
 			})
 			.trace((a) => {
 				a.onHandle(() => {
-					// @ts-expect-error private property
-					url = a.context.url
+					url = a.context.request.url
 
 					// @ts-expect-error private property
 					hasRequestId = !!a.context.rid
@@ -223,8 +219,7 @@ describe('Bun router', () => {
 			})
 			.trace((a) => {
 				a.onHandle(() => {
-					// @ts-expect-error private property
-					url = a.context.url
+					url = a.context.request.url
 
 					// @ts-expect-error private property
 					hasRequestId = !!a.context.rid
@@ -247,6 +242,8 @@ describe('Bun router', () => {
 				.get('/static', 'OK')
 
 		const app = new Elysia({ name: 'main' }).use(asyncPlugin).listen(0)
+
+		await app.modules
 
 		const [router, _static] = await Promise.all([
 			fetch(`http://localhost:${app.server?.port}/router`).then((x) =>

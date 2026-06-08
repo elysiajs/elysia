@@ -3,7 +3,7 @@ import { req } from '../utils'
 
 import { Elysia, sse } from '../../src'
 import { streamResponse } from '../../src/adapter/utils'
-import { randomId } from '../../src/utils'
+import { requestId } from '../../src/utils'
 
 describe('Stream', () => {
 	it('handle stream', async () => {
@@ -293,7 +293,7 @@ describe('Stream', () => {
 		const app = new Elysia().get('/sse', async function* () {
 			for (let i = 0; i < 3; i++) {
 				yield sse({
-					id: randomId(),
+					id: requestId(),
 					data: `message ${i}`
 				})
 				await Bun.sleep(10)

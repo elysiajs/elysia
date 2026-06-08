@@ -11,7 +11,8 @@ import type {
 	Macro,
 	InputSchema,
 	AnyLocalHook,
-	GuardSchemaType
+	GuardSchemaType,
+	ElysiaFormData
 } from './types'
 
 export const mapMethodBack = (method: MethodMap[keyof MethodMap] | string) =>
@@ -155,30 +156,19 @@ function appendInto(
 	keep?: (s: EventScope | undefined) => boolean,
 	nodeScope?: EventScope
 ): void {
-	// `keep` filters the whole node by its scope. After per-scope `#use`
-	// propagation, every entry in a node shares the node's scope by
-	// construction, so a single `keep(nodeScope)` decides the lot.
 	if (keep && !keep(nodeScope)) return
 
 	for (const key in src) {
 		const v = (src as any)[key]
 		if (v === undefined || v === null) continue
 
-		// Chain-style and standalone-schema fields accumulate as arrays.
-		// Scalar fields (body/headers/params/query/cookie/response/detail)
-		// take the LAST write. With tail-first chain traversal (oldest
-		// node first, newest last), this gives "more-local overrides
-		// more-global". Unknown keys (notably unresolved macro keys like
-		// `auth: 'admin'`) propagate as scalar last-wins so `~applyMacro`
-		// can resolve them at compile time on the merged hook.
 		if (eventProperties.has(key) || key === 'schema' || key === 'schemas') {
 			const arr = Array.isArray(v) ? v : [v]
 			const existing = (target as any)[key]
+
 			if (existing) (existing as any[]).push(...arr)
 			else (target as any)[key] = arr.slice()
-		} else {
-			;(target as any)[key] = v
-		}
+		} else (target as any)[key] = v
 	}
 }
 
@@ -193,6 +183,61 @@ export const redirect = (
 ) => Response.redirect(url, status)
 
 export type redirect = typeof redirect
+
+function appendFormField(formData: FormData, key: string, value: unknown) {
+	if (value === undefined || value === null) return
+
+	if (value instanceof Blob) formData.append(key, value)
+	else if (value instanceof ElysiaFile)
+		formData.append(key, value.value as Blob)
+	else if (typeof value === 'object')
+		formData.append(key, JSON.stringify(value))
+	else formData.append(key, '' + value)
+}
+
+/**
+ * Build `FormData` from a `form()` object, skipping the internal `~ely-form`
+ * marker that flags the object as a form.
+ */
+export function formToFormData(value: Record<keyof any, unknown>): FormData {
+	const formData = new FormData()
+
+	for (const key in value) {
+		if (key === '~ely-form') continue
+
+		const field = value[key]
+
+		if (Array.isArray(field))
+			for (const item of field) appendFormField(formData, key, item)
+		else appendFormField(formData, key, field)
+	}
+
+	return formData
+}
+
+/**
+ * Return a `multipart/form-data` response.
+ *
+ * @example
+ * ```ts
+ * import { Elysia, form, file } from 'elysia'
+ *
+ * new Elysia().get('/', () =>
+ * 	form({
+ * 		name: 'Tea Party',
+ * 		images: [file('1.webp'), file('2.webp')]
+ * 	})
+ * )
+ * ```
+ */
+export const form = <const T extends Record<keyof any, unknown>>(
+	value: T
+): ElysiaFormData<T> =>
+	// A plain object (not a class instance) keeps V8's fast object shape - the
+	// fields are own enumerable props so the `t.Form` object validator sees
+	// them, and the enumerable `~ely-form` marker flags it as a form for the
+	// response mapper and the `t.Form` refine (`'~ely-form' in value`).
+	({ ...value, '~ely-form': 1 }) as unknown as ElysiaFormData<T>
 
 export const getLoosePath = (path: string) =>
 	path.charCodeAt(path.length - 1) === 47 ? path.slice(0, -1) : path + '/'
@@ -547,17 +592,21 @@ export function mergeHook(
 	if (a.transform || b.transform)
 		a.transform = merge(a.transform, b.transform, reverse)
 
+	// @ts-expect-error
 	if (a.derive || b.derive)
 		a.beforeHandle = merge(
 			a.beforeHandle,
+			// @ts-expect-error
 			merge(a.derive, b.derive),
 			reverse
 		)
 
 	// Remove in 2.1
+	// @ts-expect-error
 	if (a.resolve || b.resolve)
 		a.beforeHandle = merge(
 			a.beforeHandle,
+			// @ts-expect-error
 			merge(a.resolve, b.resolve, reverse),
 			reverse
 		)

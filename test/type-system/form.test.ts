@@ -2,12 +2,14 @@ import { Elysia, file, form, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 
-import { Value } from '@sinclair/typebox/value'
+import { Value } from 'typebox/value'
 import { req } from '../utils'
 
 describe('TypeSystem - Form', () => {
 	it('Create', () => {
-		expect(Value.Create(t.Form({}))).toEqual(form({}))
+		// `Value.Create` builds from the schema, so it has no `~ely-form`
+		// marker (that's added by `form()`, not the type) - an empty object.
+		expect(Value.Create(t.Form({}))).toEqual({} as any)
 
 		expect(
 			Value.Create(

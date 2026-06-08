@@ -9,18 +9,16 @@ import {
 
 import { isBun } from '../../universal/constants'
 import { ElysiaFile, mime } from '../../universal/file'
-import { isNotEmpty } from '../../utils'
+import { formToFormData, isNotEmpty, nullObject } from '../../utils'
 import { ElysiaStatus } from '../../error'
 
 import type { Context } from '../../context'
 import type { MaybePromise } from '../../types'
 
-const type = 'content-type' as const
-
 function handleElysiaFile(
 	file: ElysiaFile,
 	set: Context['set'] = {
-		headers: {}
+		headers: nullObject()
 	},
 	request?: Request
 ) {
@@ -29,7 +27,7 @@ function handleElysiaFile(
 		mime[path.slice(path.lastIndexOf('.') + 1) as any as keyof typeof mime]
 
 	const headers = set.headers
-	if (contentType) headers[type] = contentType
+	if (contentType) headers['content-type'] = contentType
 
 	if (
 		file.stats &&
@@ -65,12 +63,21 @@ export function mapResponse(
 
 		switch (response?.constructor?.name) {
 			case 'String':
-				if (isNotBun && !headers[type]) headers[type] = 'text/plain'
+				if (isNotBun && !headers['content-type'])
+					headers['content-type'] = 'text/plain'
 
 				return new Response(response as string, set as ResponseInit)
 
 			case 'Array':
+				return Response.json(response, set as ResponseInit)
+
 			case 'Object':
+				if ((response as Record<string, unknown>)['~ely-form'])
+					return new Response(
+						formToFormData(response as Record<string, unknown>),
+						set as ResponseInit
+					)
+
 				return Response.json(response, set as ResponseInit)
 
 			case 'Number':
@@ -150,8 +157,15 @@ export function mapCompactResponse(
 		case 'String':
 			return new Response(response as string, stringHeaders)
 
-		case 'Object':
 		case 'Array':
+			return Response.json(response)
+
+		case 'Object':
+			if ((response as Record<string, unknown>)['~ely-form'])
+				return new Response(
+					formToFormData(response as Record<string, unknown>)
+				)
+
 			return Response.json(response)
 
 		case 'Number':
@@ -168,7 +182,7 @@ export function mapCompactResponse(
 		case 'ElysiaStatus':
 			return mapResponse((response as ElysiaStatus<200>).response, {
 				status: (response as ElysiaStatus<200>).code,
-				headers: {}
+				headers: nullObject()
 			})
 
 		case undefined:
@@ -207,7 +221,7 @@ export function errorToResponse(
 ) {
 	if (error?.toResponse) {
 		const targetSet =
-			set ?? ({ headers: {}, redirect: '' } as Context['set'])
+			set ?? ({ headers: nullObject(), redirect: '' } as Context['set'])
 
 		const apply = (resolved: unknown) => {
 			if (resolved instanceof Response) targetSet.status = resolved.status
@@ -220,6 +234,8 @@ export function errorToResponse(
 		return typeof raw?.then === 'function' ? raw.then(apply) : apply(raw)
 	}
 
+	const headers = (set?.headers ?? nullObject()) as Record<string, string>
+
 	return Response.json(
 		{
 			name: error?.name,
@@ -229,7 +245,7 @@ export function errorToResponse(
 		{
 			status:
 				set?.status !== 200 ? ((set?.status as number) ?? 500) : 500,
-			headers: set?.headers as any
+			headers
 		}
 	)
 }

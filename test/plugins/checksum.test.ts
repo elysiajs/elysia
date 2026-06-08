@@ -111,12 +111,38 @@ describe('Checksum', () => {
 			.use(group)
 			.get('/cookie', () => 'Hi')
 
-		const hook0 = flattenChain(app.history![0][5])!
-		const hook1 = flattenChain(app.history![1][5])!
+		// `/a` (routes[0]) has the deduplicated global cookie transform plus its
+		// own inline transform → 2; `/cookie` (routes[1]) only the cookie
+		// transform → 1.
+		const routes = app.routes
+		const hook0 = routes[0].hooks
+		const hook1 = routes[1].hooks
 
 		expect(
 			Math.abs(hook0.transform!.length - hook1.transform!.length)
 		).toBe(1)
+	})
+
+	it('does not run a diamond-shared plugin hook twice', async () => {
+		let called = 0
+
+		const cookie = (options?: Record<string, unknown>) =>
+			new Elysia({
+				name: '@elysiajs/cookie',
+				seed: options
+			}).onTransform({ as: 'global' }, () => {
+				called++
+			})
+
+		// `cookie` is a shared dependency of both `group` and `app`. Its hook
+		// reaches `/a` via the route's own chain AND the inherited chain, but
+		// must run only once.
+		const group = new Elysia().use(cookie()).get('/a', () => 'Hi')
+		const app = new Elysia().use(cookie()).use(group)
+
+		await app.handle(req('/a'))
+
+		expect(called).toBe(1)
 	})
 
 	it('Merge global hook', async () => {
@@ -356,8 +382,11 @@ describe('Checksum', () => {
 
 		const server = new Elysia({ name: 'server' }).use(router1).use(router2)
 
+		// `derive` now registers on `beforeHandle` (not `transform`). The `/ip`
+		// route sees the global `derive` once (deduplicated despite `ip` being
+		// used by both routers) plus its local `onBeforeHandle` — two in total.
 		expect(
-			server.routes.find((x) => x.path === '/ip')?.hooks.transform
-		).toHaveLength(1)
+			server.routes.find((x) => x.path === '/ip')?.hooks.beforeHandle
+		).toHaveLength(2)
 	})
 })

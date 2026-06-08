@@ -12,7 +12,7 @@ import { elyType, getMeta } from './utils'
 let StringifiedBoolean: Type.TCodec<Type.TRefine<Type.TString>, boolean>
 let emptyBooleanString: Readonly<
 	Type.TUnion<
-		[Type.TCodec<Type.TRefine<Type.TString>, boolean>, Type.TBoolean]
+		[Type.TBoolean, Type.TCodec<Type.TRefine<Type.TString>, boolean>]
 	>
 >
 export function BooleanString(property?: TSchemaOptions) {
@@ -28,7 +28,7 @@ export function BooleanString(property?: TSchemaOptions) {
 	if (!property || isEmpty(property))
 		return (emptyBooleanString ??= elyType(
 			ELYSIA_TYPES.BooleanString,
-			Union([StringifiedBoolean, BooleanType()])
+			Union([BooleanType(), StringifiedBoolean])
 		))
 
 	const [, meta] = getMeta(property)

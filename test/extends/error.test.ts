@@ -19,8 +19,9 @@ class CustomError2 extends Error {
 	}
 }
 
+// `~ext.error` is a `Class → code-name` map; the registered classes are its keys.
 const getErrors = (app: AnyElysia) =>
-	app['~ext']?.error ? [...app['~ext'].error] : undefined
+	app['~ext']?.error ? [...app['~ext'].error.keys()] : undefined
 
 describe('Error extends', () => {
 	it('add single', async () => {

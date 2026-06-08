@@ -112,6 +112,8 @@ export function compileCookieConfig(
 		}
 	}
 
+	if (globalSign !== undefined) hasSign = true
+
 	if (hasSign) {
 		if (globalSign !== undefined && globalSecrets === undefined) {
 			const fieldsWithOwnSecrets = new Set<string>()

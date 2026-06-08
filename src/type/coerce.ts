@@ -42,16 +42,14 @@ export function coerce(
 	fromTo: [from: string, to: CoerceTo][],
 	options?: CoerceOptions
 ): BaseSchema {
-	const transformMap = new Map<string, CoerceTo>(fromTo)
+	const transformMap = new Map<string, CoerceTo>()
+	for (const [from, to] of fromTo)
+		if (!transformMap.has(from)) transformMap.set(from, to)
 	const rootOption = options?.root
 
-	// prevent shared schema and circular reference issues with memoization
 	const memo = new WeakMap<BaseSchema, BaseSchema | null>()
 	let stopped = false
 
-	// Inline copy-on-write helper to avoid closure allocation
-	// `~kind` is non-enumerable in TypeBox, so we reassign it after spread
-	// https://sinclairzx81.github.io/typebox/#/docs/system/1_settings
 	function copyNode(node: BaseSchema | TSchema) {
 		return Object.defineProperty(
 			// @ts-expect-error
@@ -155,7 +153,7 @@ export function coerce(
 					}
 				}
 				if (newArr) {
-					out = copyNode(node)
+					if (out === node) out = copyNode(node)
 					out[key] = newArr
 				}
 			}
@@ -174,7 +172,9 @@ export function coerce(
 			for (let i = 0, len = arr.length; i < len; i++) {
 				const item = arr[i]!
 				const r = walk(item, false)
+
 				if (stopped && !newArr) return node
+
 				if (r !== item) {
 					newArr ??= arr.slice()
 					newArr[i] = r
@@ -182,7 +182,7 @@ export function coerce(
 			}
 
 			if (newArr) {
-				out = copyNode(node)
+				if (out === node) out = copyNode(node)
 				out[key] = newArr
 			}
 		}
@@ -190,8 +190,8 @@ export function coerce(
 		// Not
 		if (node.not) {
 			const r = walk(node.not, false)
-			if (r !== node.not && out === node) {
-				out = copyNode(node)
+			if (r !== node.not) {
+				if (out === node) out = copyNode(node)
 				out.not = r
 			}
 		}
@@ -210,14 +210,14 @@ export function coerce(
 					}
 				}
 
-				if (newItems && out === node) {
-					out = copyNode(node)
+				if (newItems) {
+					if (out === node) out = copyNode(node)
 					out.items = newItems
 				}
 			} else {
 				const r = walk(items, false)
-				if (r !== items && out === node) {
-					out = copyNode(node)
+				if (r !== items) {
+					if (out === node) out = copyNode(node)
 					out.items = r
 				}
 			}
@@ -237,16 +237,16 @@ export function coerce(
 				}
 			}
 
-			if (newProps && out === node) {
-				out = copyNode(node)
+			if (newProps) {
+				if (out === node) out = copyNode(node)
 				out.properties = newProps
 			}
 		}
 
 		if (typeof node.additionalProperties === 'object') {
 			const r = walk(node.additionalProperties, false)
-			if (r !== node.additionalProperties && out === node) {
-				out = copyNode(node)
+			if (r !== node.additionalProperties) {
+				if (out === node) out = copyNode(node)
 				out.additionalProperties = r
 			}
 		}
@@ -265,8 +265,8 @@ export function coerce(
 				}
 			}
 
-			if (newPP && out === node) {
-				out = copyNode(node)
+			if (newPP) {
+				if (out === node) out = copyNode(node)
 				out.patternProperties = newPP
 			}
 		}
@@ -278,8 +278,8 @@ export function coerce(
 
 			if (def) {
 				const r = walk(def, false)
-				if (r !== def && out === node) {
-					out = copyNode(node)
+				if (r !== def) {
+					if (out === node) out = copyNode(node)
 					out.$defs = { ...node.$defs, [node.$ref!]: r }
 				}
 			}

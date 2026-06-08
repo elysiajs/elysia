@@ -96,13 +96,6 @@ function createPlainHandler(
 	}
 }
 
-// TODO(wrap): when this native per-route path is wired into the Bun adapter,
-// fold `applyHoc` over each emitted route handler AND the `fetch` fallback below
-// so `wrap` survives native routing — it currently only applies in `get fetch()`,
-// which native `routes` dispatch bypasses. At that point switch `WrapFn` to the
-// two-stage `() => (fetch) => …` form so the factory runs once and binders are
-// reused per route (dedup must key on the factory ref, not the binder). See
-// design/wrap.md.
 export function createRouteMap(app: AnyElysia) {
 	const Context = createBunContext(app)
 
@@ -110,10 +103,9 @@ export function createRouteMap(app: AnyElysia) {
 		return handleError(new Context(request), new NotFound()) as Response
 	}
 
-	// Read once — the `history` getter walks every entry running
-	// `~applyMacro`, so repeat reads are O(N) per call.
 	const history = app.history
 	const length = history?.length ?? 0
+
 	if (length === 0)
 		return [
 			{
@@ -125,7 +117,8 @@ export function createRouteMap(app: AnyElysia) {
 	const handleError = createErrorHandler(
 		flattenChain(app['~hookChain'])?.error,
 		WebStandardAdapter.response.map,
-		new Response('Not Found', { status: 404 })
+		new Response('Not Found', { status: 404 }),
+		app['~ext']?.error
 	)
 
 	const routes = nullObject()
