@@ -2192,6 +2192,26 @@ export type ValueToResponseSchema<Value> = ExtractErrorFromHandle<Value> &
 				: { 200: R200 }
 		: {})
 
+/**
+ * Like ValueToResponseSchema but for onError handlers.
+ * Maps plain (non-ElysiaCustomStatusResponse) returns to error status codes
+ * instead of 200, matching runtime behavior where error status is preserved.
+ */
+type ExtractPlainErrorReturn<T> = Exclude<
+	T extends AnyElysiaCustomStatusResponse
+		? Exclude<T, AnyElysiaCustomStatusResponse>
+		: T,
+	undefined
+>
+
+export type ErrorValueToResponseSchema<Value> =
+	ExtractErrorFromHandle<Value> &
+		(ExtractPlainErrorReturn<Value> extends infer ErrVal
+			? IsNever<ErrVal> extends true
+				? {}
+				: { 400: ErrVal; 404: ErrVal; 422: ErrVal; 500: ErrVal }
+			: {})
+
 export type ValueOrFunctionToResponseSchema<T> = T extends (
 	...a: any
 ) => MaybePromise<infer R>
@@ -2202,6 +2222,13 @@ export type ElysiaHandlerToResponseSchema<in out Handle extends Function> =
 	Prettify<
 		Handle extends (...a: any) => MaybePromise<infer R>
 			? ValueToResponseSchema<Exclude<R, undefined>>
+			: {}
+	>
+
+export type ErrorHandlerToResponseSchema<in out Handle extends Function> =
+	Prettify<
+		Handle extends (...a: any) => MaybePromise<infer R>
+			? ErrorValueToResponseSchema<Exclude<R, undefined>>
 			: {}
 	>
 
@@ -2217,6 +2244,18 @@ export type ElysiaHandlerToResponseSchemas<
 		>
 	: Prettify<Carry>
 
+export type ErrorHandlerToResponseSchemas<
+	Handle extends Function[],
+	Carry extends PossibleResponse = {}
+> = Handle extends [infer Current, ...infer Rest]
+	? ErrorHandlerToResponseSchemas<
+			// @ts-ignore Trust me bro
+			Rest,
+			// @ts-ignore trust me bro
+			UnionResponseStatus<ErrorHandlerToResponseSchema<Current>, Carry>
+		>
+	: Prettify<Carry>
+
 export type ElysiaHandlerToResponseSchemaAmbiguous<
 	Schemas extends MaybeArray<Function>
 > =
@@ -2226,6 +2265,17 @@ export type ElysiaHandlerToResponseSchemaAmbiguous<
 			? ElysiaHandlerToResponseSchema<Schemas>
 			: Schemas extends Function[]
 				? ElysiaHandlerToResponseSchemas<Schemas>
+				: {}
+
+export type ErrorHandlerToResponseSchemaAmbiguous<
+	Schemas extends MaybeArray<Function>
+> =
+	MaybeArray<(...a: any) => any> extends Schemas
+		? {}
+		: Schemas extends Function
+			? ErrorHandlerToResponseSchema<Schemas>
+			: Schemas extends Function[]
+				? ErrorHandlerToResponseSchemas<Schemas>
 				: {}
 
 type ReconcileStatus<
