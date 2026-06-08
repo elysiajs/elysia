@@ -51,9 +51,8 @@ describe('AOT response freezing', () => {
 			{ aot: { method: 'GET', path: '/u' }, slot: 'response:200' }
 		) as any
 		expect(v.tb).toBeUndefined() // frozen-bound, not compiled
-		expect(v.reconstructedCheck).toBeUndefined() // deferred until first Check
+		expect(v.reconstructedCheck).toBeDefined() // bound eagerly at construction
 		expect(v.Check({ id: 'a', name: 'b' })).toBe(true)
-		expect(v.reconstructedCheck).toBeDefined() // instantiated lazily (deferred parse)
 		expect(v.Check({ id: 1 })).toBe(false)
 	})
 

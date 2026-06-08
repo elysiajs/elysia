@@ -1,3 +1,4 @@
+// not used yet but might be in the future
 import type { BunRequest } from 'bun'
 
 import { MethodMapBack } from '../../constants'
@@ -95,6 +96,13 @@ function createPlainHandler(
 	}
 }
 
+// TODO(wrap): when this native per-route path is wired into the Bun adapter,
+// fold `applyHoc` over each emitted route handler AND the `fetch` fallback below
+// so `wrap` survives native routing — it currently only applies in `get fetch()`,
+// which native `routes` dispatch bypasses. At that point switch `WrapFn` to the
+// two-stage `() => (fetch) => …` form so the factory runs once and binders are
+// reused per route (dedup must key on the factory ref, not the binder). See
+// design/wrap.md.
 export function createRouteMap(app: AnyElysia) {
 	const Context = createBunContext(app)
 

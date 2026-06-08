@@ -76,6 +76,7 @@ export class RouteValidator<const in out T extends RouteSchema> {
 		const bodyStandalone = pickStandalone(standaloneSchemas, 'body') as
 			| AnySchema[]
 			| undefined
+
 		if (route.body || bodyStandalone?.length) {
 			const body = Validator.reference(
 				(route.body ?? bodyStandalone![0]) as AnySchema,

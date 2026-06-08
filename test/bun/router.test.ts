@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test'
-import { Elysia, ELYSIA_REQUEST_ID, t } from '../../src'
+import { Elysia, t } from '../../src'
 import { req } from '../utils'
 
 describe('Bun router', () => {
@@ -149,7 +149,7 @@ describe('Bun router', () => {
 					url = a.context.url
 
 					// @ts-expect-error private property
-					hasRequestId = !!a.context[ELYSIA_REQUEST_ID]
+					hasRequestId = !!a.context.rid
 				})
 			})
 			.get('/', () => 'ok')
@@ -197,7 +197,7 @@ describe('Bun router', () => {
 					url = a.context.url
 
 					// @ts-expect-error private property
-					hasRequestId = !!a.context[ELYSIA_REQUEST_ID]
+					hasRequestId = !!a.context.rid
 				})
 			})
 			.get('/', () => 'ok')
@@ -227,7 +227,7 @@ describe('Bun router', () => {
 					url = a.context.url
 
 					// @ts-expect-error private property
-					hasRequestId = !!a.context[ELYSIA_REQUEST_ID]
+					hasRequestId = !!a.context.rid
 				})
 			})
 			.get('/', () => 'ok')

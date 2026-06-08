@@ -511,3 +511,16 @@ export function createFetchHandler(
 		return getNotFound()
 	}
 }
+
+export function applyHoc(
+	app: AnyElysia,
+	fetch: (request: Request, ...rest: any[]) => MaybePromise<Response>
+): (request: Request, ...rest: any[]) => MaybePromise<Response> {
+	const hoc = app['~ext']?.hoc
+	if (!hoc?.length) return fetch
+
+	let handler = fetch
+	for (let i = hoc.length - 1; i >= 0; i--) handler = hoc[i](handler)
+
+	return handler
+}

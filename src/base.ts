@@ -1,6 +1,6 @@
 import Memoirist from 'memoirist'
 
-import { createFetchHandler } from './handler'
+import { applyHoc, createFetchHandler } from './handler'
 import { compileHandler, buildNativeStaticResponse } from './compile'
 import { buildWSRoute } from './ws/route'
 import type { AnyWSLocalHook as AnyWSLocalHookImport } from './ws/types'
@@ -93,7 +93,8 @@ import type {
 	MaybeValueOrVoidFunction,
 	MacroProperty,
 	MacroToProperty,
-	MaybeFunction
+	MaybeFunction,
+	WrapFn
 } from './types'
 import { Context } from './context'
 
@@ -144,9 +145,8 @@ export class Elysia<
 		macro?: Macro
 		models?: Record<keyof any, AnySchema>
 		error?: Set<AnyErrorConstructor>
-		// Named body parsers registered via `parser(name, fn)` and looked up
-		// by `onParse(name)` / route-level `parse: ['name', ...]`.
 		parser?: Record<string, BodyHandler<any, any>>
+		hoc?: WrapFn<any>[]
 	}
 
 	'~hookChain'?: ChainNode
@@ -2164,7 +2164,7 @@ export class Elysia<
 		const hookChain = app['~hookChain']
 
 		if (app['~ext']) {
-			const { decorator, store, headers, models, parser, macro, error } =
+			const { decorator, store, headers, models, parser, macro, error, hoc } =
 				app['~ext']
 
 			const ext: NonNullable<(typeof this)['~ext']> = (this['~ext'] ??=
@@ -2204,6 +2204,11 @@ export class Elysia<
 				if (ext.error) ext.error = new Set([...ext.error, ...error])
 				else ext.error = new Set(error)
 			}
+
+			// hoc is the only append-array in ~ext (others are idempotent
+			// key/Set merges), so the plugin diamond would apply a wrap twice;
+			// reference-dedup via Set here, mirroring ext.error.
+			if (hoc) ext.hoc = [...new Set([...(ext.hoc ?? []), ...hoc])]
 		}
 
 		if (app.#plugin || app.#global || hookChain) {
@@ -3601,7 +3606,7 @@ export class Elysia<
 		if (this.#fetchFn) return this.#fetchFn
 
 		this.#buildRouter()
-		return (this.#fetchFn ??= createFetchHandler(this))
+		return (this.#fetchFn ??= applyHoc(this, createFetchHandler(this)))
 	}
 
 	#handle?: (
@@ -3642,6 +3647,23 @@ export class Elysia<
 		if (!listen) throw new Error('No adapter provided for listen()')
 
 		if (!env.ELYSIA_AOT_BUILD) listen(this, options, callback)
+
+		return this
+	}
+
+	wrap<
+		T extends (...params: any) => MaybePromise<Response> = (
+			request: Request,
+			...rest: any[]
+		) => MaybePromise<Response>
+	>(callback: WrapFn<T>): this {
+		if (this.#fetchFn)
+			console.warn(
+				'[Elysia] .wrap() was called after the fetch handler was built, so it will not take effect. Register .wrap() before .listen() or before accessing .fetch/.handle.'
+			)
+
+		const ext = this.#ext
+		;(ext.hoc ??= []).push(callback)
 
 		return this
 	}

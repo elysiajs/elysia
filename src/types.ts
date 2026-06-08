@@ -1889,3 +1889,12 @@ export type MergeElysiaInstances<
 			Ephemeral,
 			Volatile
 		>
+
+export type WrapFn<
+	Callback extends (...params: any) => MaybePromise<Response> = (
+		request: Request,
+		...rest: any[]
+	) => MaybePromise<Response>
+> = (
+	fetch: (request: Request, ...rest: any[]) => MaybePromise<Response>
+) => Callback

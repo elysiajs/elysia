@@ -199,13 +199,6 @@ export const checkFactorySource = (identifier: string, code: string) =>
 export const handlerFactorySource = (alias: string, code: string) =>
 	`function(h${alias ? ',' + alias : ''}){return ${code}}`
 
-export function instantiateFrozenCheck(
-	frozen: FrozenValidator,
-	externals: unknown[]
-): (value: unknown) => boolean {
-	return frozen.c!(externals)
-}
-
 const isValueLikeExternal = (v: unknown) =>
 	v === null || (typeof v !== 'object' && typeof v !== 'function')
 

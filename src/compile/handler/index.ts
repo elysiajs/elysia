@@ -252,8 +252,8 @@ const createInlineHandlerWithSet = (
 ) => ((c: Context) => map(h(c), c.set, c.request)) as CompiledHandler
 
 function promoteDerive(hook: any) {
-	if ('resolve' in hook) {
-		const v = hook.resolve
+	if ('derive' in hook) {
+		const v = hook.derive
 
 		const arr = Array.isArray(v) ? v : [v]
 		const existing = hook.beforeHandle
@@ -264,7 +264,7 @@ function promoteDerive(hook: any) {
 				: [...arr, existing]
 			: arr
 
-		hook.resolve = undefined
+		hook.derive = undefined
 	}
 }
 
@@ -971,8 +971,6 @@ export function compileHandler(
 	}
 
 	if (!precomputedStatic) captureHandler({ method, path, alias, code })
-
-	if (alias === '') return new Function('h', `return ${code}`)(handler)
 
 	return new Function('h', alias, `return ${code}`)(handler, ...params)
 }

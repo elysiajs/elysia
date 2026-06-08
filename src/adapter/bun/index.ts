@@ -69,7 +69,8 @@ export const BunAdapter = createAdapter({
 
 		app.server = Bun.serve({
 			...serve,
-			fetch: (request) => app.fetch(request)
+			// lazy init fetch
+			fetch: (request, server) => app.fetch(request, server)
 		})
 
 		if (!hasWs) callback?.(app.server!)

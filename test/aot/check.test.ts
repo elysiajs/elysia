@@ -70,10 +70,9 @@ describe('AOT check freeze (TypeBox check, empty externals)', () => {
 
 		const app = bodyApp()
 		app.compile()
-		expect(frozenBound).toBe(false) // deferred — factory not invoked at compile
+		expect(frozenBound).toBe(true) // bound eagerly at construction (compile)
 
 		const ok = await app.handle(post('/body', { hello: 'world' }))
-		expect(frozenBound).toBe(true) // bound on first validation (parse deferred off compile)
 		expect(ok.status).toBe(200)
 		expect(await ok.json()).toEqual({ hello: 'world' })
 
@@ -92,9 +91,8 @@ describe('AOT check freeze (TypeBox check, empty externals)', () => {
 		}) as any
 
 		expect(v.tb).toBeUndefined() // Compile skipped
-		expect(v.reconstructedCheck).toBeUndefined() // deferred — not bound until first Check
+		expect(v.reconstructedCheck).toBeDefined() // bound eagerly at construction
 		expect(v.Check({ hello: 'x' })).toBe(true)
-		expect(v.reconstructedCheck).toBeDefined() // instantiated lazily (parse off the boot path)
 		expect(v.Check({ hello: 1 })).toBe(false)
 		expect(v.Check({})).toBe(false)
 	})

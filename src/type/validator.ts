@@ -21,7 +21,7 @@ import {
 	Errors,
 	HasCodec
 } from 'typebox/value'
-import { TLocalizedValidationError } from 'typebox/error'
+import type { TLocalizedValidationError } from 'typebox/error'
 
 import createMirror from 'exact-mirror'
 
@@ -38,7 +38,6 @@ import { isAsyncFunction } from '../compile/utils'
 
 import {
 	Compiled,
-	instantiateFrozenCheck,
 	instantiateFrozenMirror,
 	instantiateFrozenBoth,
 	collectExternals,
@@ -211,17 +210,11 @@ function sourceOnlyValidator(schema: TSchema): BaseTypeBoxValidator {
 export class TypeBoxValidator<
 	const in out T extends TSchema = TAny
 > extends Validator {
-	// undefined for frozen check
+	// undefined is reconstruct via aot
 	tb?: BaseTypeBoxValidator
 
-	// build time check
+	// build time check, bound eagerly from the frozen manifest at construction
 	reconstructedCheck?: (value: unknown) => boolean
-	// restore build time lazily on first check call
-	#reconstructedValidator?: FrozenValidator
-	// merged-mirror clean, instantiated alongside reconstructedCheck on first use
-	#frozenClean?: (value: unknown) => unknown
-	// raw (pre-coercion) schema — the merged mirror's union source is built from it
-	#rawSchema?: TSchema
 
 	schema: T
 
@@ -231,10 +224,10 @@ export class TypeBoxValidator<
 
 	// default value
 	precomputeSafe: boolean
-	precomputedDefault: unknown
-	precomputedObjectDefault: Record<string, unknown> | undefined
+	#precomputedDefault: unknown
+	#precomputedObjectDefault: Record<string, unknown> | undefined
 
-	noValidate: boolean
+	#noValidate: boolean
 
 	constructor(
 		schema: T,
@@ -313,32 +306,43 @@ export class TypeBoxValidator<
 			this.hasDefault && isPrecomputeSafe(this.schema as any)
 
 		if (this.precomputeSafe) {
-			this.precomputedDefault = Default(this.schema, undefined)
+			this.#precomputedDefault = Default(this.schema, undefined)
 			const obj = Default(this.schema, nullObject()) as unknown
-			this.precomputedObjectDefault =
+			this.#precomputedObjectDefault =
 				obj && typeof obj === 'object' && !Array.isArray(obj)
 					? (Object.freeze(obj) as Record<string, unknown>)
 					: undefined
 		} else {
-			this.precomputedDefault = undefined
-			this.precomputedObjectDefault = undefined
+			this.#precomputedDefault = undefined
+			this.#precomputedObjectDefault = undefined
 		}
 
-		this.noValidate = originalElyTyp === ELYSIA_TYPES.NoValidate
+		this.#noValidate = originalElyTyp === ELYSIA_TYPES.NoValidate
 
-		try {
-			this.Clean =
-				!options?.normalize || options.normalize === 'exactMirror'
-					? this.#setupMirror(schema, options, frozen)
-					: options.normalize === 'typebox'
-						? (value) => Clean(this.tb!, value)
-						: undefined
-		} catch (error) {
-			console.warn(
-				'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
-			)
-			console.warn(schema)
-			console.warn(error)
+		if (isFrozen && frozen!.cm) {
+			const both = instantiateFrozenBoth(frozen!, this.schema, schema)
+			this.reconstructedCheck = both.check
+			this.Clean = both.clean
+		} else {
+			if (isFrozen)
+				this.reconstructedCheck = frozen!.c!(
+					frozen!.e ? collectExternals(this.schema) : EMPTY_EXTERNALS
+				)
+
+			try {
+				this.Clean =
+					!options?.normalize || options.normalize === 'exactMirror'
+						? this.#setupMirror(schema, options, frozen)
+						: options.normalize === 'typebox'
+							? (value) => Clean(this.tb!, value)
+							: undefined
+			} catch (error) {
+				console.warn(
+					'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
+				)
+				console.warn(schema)
+				console.warn(error)
+			}
 		}
 	}
 
@@ -351,15 +355,6 @@ export class TypeBoxValidator<
 		const slot = options?.slot
 
 		if (aot && slot) {
-			if (frozen?.cm) {
-				this.#rawSchema = schema
-
-				return (value: unknown) => {
-					this.#ensureFrozen()
-					return this.#frozenClean ? this.#frozenClean(value) : value
-				}
-			}
-
 			if (frozen?.m) {
 				const m = frozen.m
 				let clean: ((value: unknown) => unknown) | undefined
@@ -428,26 +423,7 @@ export class TypeBoxValidator<
 		}) as (value: unknown) => unknown
 	}
 
-	#ensureFrozen() {
-		if (!this.#reconstructedValidator) return
-
-		const f = this.#reconstructedValidator
-		this.#reconstructedValidator = undefined
-
-		if (f.cm) {
-			const both = instantiateFrozenBoth(f, this.schema, this.#rawSchema)
-			this.reconstructedCheck = both.check
-			this.#frozenClean = both.clean
-		} else
-			this.reconstructedCheck = instantiateFrozenCheck(
-				f,
-				f.e ? collectExternals(this.schema) : EMPTY_EXTERNALS
-			)
-	}
-
 	Check(value: Static<T>): boolean {
-		this.#ensureFrozen()
-
 		return this.reconstructedCheck
 			? this.reconstructedCheck(value)
 			: this.tb!.Check(value)
@@ -461,7 +437,6 @@ export class TypeBoxValidator<
 			return false
 		if (!frozen?.c && !frozen?.cm) return false
 
-		this.#reconstructedValidator = frozen
 		this.isAsync = frozen.a === 1
 		this.hasDefault = frozen.d === 1
 		this.hasCodec = frozen.k === 1
@@ -518,7 +493,7 @@ export class TypeBoxValidator<
 
 	EncodeFrom(value: Static<T>, type?: string): StaticEncode<T> {
 		if (!this.hasCodec) {
-			if (!this.noValidate && !this.Check(value))
+			if (!this.#noValidate && !this.Check(value))
 				throw new ValidationError(
 					type,
 					value,
@@ -531,13 +506,13 @@ export class TypeBoxValidator<
 		}
 
 		try {
-			const out = this.noValidate
+			const out = this.#noValidate
 				? // @ts-ignore EncodeUnsafe returns unknown
 					(EncodeUnsafe(nullObject(), this.schema, value) as any)
 				: Encode(this.schema, value)
 			return this.Clean ? (this.Clean(out) as any) : out
 		} catch (e: any) {
-			if (this.noValidate)
+			if (this.#noValidate)
 				return this.Clean ? (this.Clean(value) as any) : (value as any)
 			if (e instanceof ValidationError) throw e
 			if (e?.error) throw e.error
@@ -585,14 +560,14 @@ export class TypeBoxValidator<
 		if (this.hasDefault) {
 			if (this.precomputeSafe) {
 				if (value === undefined || value === null) {
-					value = this.precomputedDefault as any
+					value = this.#precomputedDefault as any
 				} else if (
-					this.precomputedObjectDefault !== undefined &&
+					this.#precomputedObjectDefault !== undefined &&
 					typeof value === 'object' &&
 					!Array.isArray(value)
 				) {
 					value = applyPrecomputed(
-						this.precomputedObjectDefault,
+						this.#precomputedObjectDefault,
 						value as any
 					) as any
 				}
@@ -605,7 +580,7 @@ export class TypeBoxValidator<
 		if (bypass) return bypass.value
 
 		if (this.hasCodec) {
-			if (!this.noValidate && !this.Check(value))
+			if (!this.#noValidate && !this.Check(value))
 				throw new ValidationError(
 					type,
 					value,
@@ -626,7 +601,7 @@ export class TypeBoxValidator<
 				)
 			}
 		} else {
-			if (!this.noValidate && !(await this.Check(value)))
+			if (!this.#noValidate && !(await this.Check(value)))
 				throw new ValidationError(
 					type,
 					value,
@@ -644,14 +619,14 @@ export class TypeBoxValidator<
 		if (this.hasDefault) {
 			if (this.precomputeSafe) {
 				if (value === undefined || value === null) {
-					value = this.precomputedDefault as Static<T>
+					value = this.#precomputedDefault as Static<T>
 				} else if (
-					this.precomputedObjectDefault !== undefined &&
+					this.#precomputedObjectDefault !== undefined &&
 					typeof value === 'object' &&
 					!Array.isArray(value)
 				) {
 					value = applyPrecomputed(
-						this.precomputedObjectDefault,
+						this.#precomputedObjectDefault,
 						value as any
 					) as Static<T>
 				}
@@ -665,7 +640,7 @@ export class TypeBoxValidator<
 
 		if (this.hasCodec) {
 			// See FromAsync for the rationale on skipping `Convert`
-			if (!this.noValidate && !this.Check(value))
+			if (!this.#noValidate && !this.Check(value))
 				throw new ValidationError(
 					type,
 					value,
@@ -689,7 +664,7 @@ export class TypeBoxValidator<
 				)
 			}
 		} else {
-			if (!this.noValidate && !this.Check(value))
+			if (!this.#noValidate && !this.Check(value))
 				throw new ValidationError(
 					type,
 					value,
