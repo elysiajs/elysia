@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+    - name: 📗 Documentation Issue
+      url: https://github.com/elysiajs/documentation/issues/new/choose
+      about: Head over to our Documentation repository!
+    - name: 💬 Ask a Question
+      url: https://discord.gg/eaFJ2KDJck
+      about: Head over to our Discord!
