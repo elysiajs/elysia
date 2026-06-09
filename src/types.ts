@@ -2204,6 +2204,16 @@ type ExtractPlainErrorReturn<T> = Exclude<
 	undefined
 >
 
+/**
+ * Maps a plain (non-`ElysiaCustomStatusResponse`) return value from an `onError`
+ * handler to a set of HTTP error status codes in the inferred response schema.
+ *
+ * **Limitation**: plain returns are typed against the most common Elysia built-in
+ * error codes (400, 404, 422, 500). Other codes (401, 403, 405, 429, 502, 503,
+ * etc.) are not statically knowable from the return type alone and will not appear
+ * in the schema. Use an explicit `status(N, value)` return to capture any specific
+ * status code accurately.
+ */
 export type ErrorValueToResponseSchema<Value> =
 	ExtractErrorFromHandle<Value> &
 		(ExtractPlainErrorReturn<Value> extends infer ErrVal
@@ -2244,6 +2254,12 @@ export type ElysiaHandlerToResponseSchemas<
 		>
 	: Prettify<Carry>
 
+// Mirrors `ElysiaHandlerToResponseSchemas`, differing only in delegating to
+// `ErrorHandlerToResponseSchema` instead of `ElysiaHandlerToResponseSchema`.
+// A shared generic recursive type is not used because the `in out` variance
+// annotation on the `Handle` parameter causes TypeScript to reject the
+// conditional narrowing inside the recursive branch — the `// @ts-ignore`
+// suppressions below are intentional and match the established pattern.
 export type ErrorHandlerToResponseSchemas<
 	Handle extends Function[],
 	Carry extends PossibleResponse = {}
