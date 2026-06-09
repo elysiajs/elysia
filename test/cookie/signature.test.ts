@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 import { parseCookie, Cookie } from '../../src/cookies'
 import { signCookie } from '../../src/utils'
+import { InvalidCookieSignature } from '../../src/error'
 
 describe('Parse Cookie', () => {
 	it('handle empty cookie', async () => {
@@ -133,5 +134,20 @@ describe('Parse Cookie', () => {
 		})
 
 		expect(result.fischl.value).toEqual('fischl')
+	})
+
+	it('rejects invalid signature with null secret in rotation', async () => {
+		const set = {
+			headers: {},
+			cookie: {}
+		}
+
+		const cookieString = `wizard=1.invalid_sign`
+		await expect(
+			parseCookie(set, cookieString, {
+				secrets: ['valid-secret', null],
+				sign: ['wizard']
+			})
+		).rejects.toThrow(InvalidCookieSignature)
 	})
 })

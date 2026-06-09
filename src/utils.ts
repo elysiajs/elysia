@@ -711,6 +711,9 @@ export const unsignCookie = async (input: string, secret: string | null) => {
 	}
 
 	const tentativeValue = input.slice(0, dot)
+
+	if (secret === null) return false
+
 	const expectedInput = await signCookie(tentativeValue, secret)
 
 	return constantTimeEqual(expectedInput, input) ? tentativeValue : false
