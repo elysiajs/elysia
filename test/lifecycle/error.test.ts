@@ -2,6 +2,8 @@
 import {
 	Elysia,
 	InternalServerError,
+	InvalidCookieSignature,
+	NotFound,
 	ParseError,
 	ValidationError,
 	t,
@@ -15,8 +17,8 @@ describe('Error lifecycle', () => {
 	it('use custom 404', async () => {
 		const app = new Elysia()
 			.get('/', () => 'hello')
-			.onError(({ code, set }) => {
-				if (code === 'NOT_FOUND') {
+			.error(({ error, set }) => {
+				if (error instanceof NotFound) {
 					set.status = 404
 
 					return 'UwU'
@@ -34,8 +36,9 @@ describe('Error lifecycle', () => {
 
 	it('handle parse error', async () => {
 		const app = new Elysia()
-			.onError(({ code }) => {
-				if (code === 'PARSE') return 'Why you no proper type'
+			.error(({ error }) => {
+				if (error instanceof ParseError)
+					return 'Why you no proper type'
 			})
 			.post('/', () => {
 				throw new ParseError()
@@ -57,8 +60,8 @@ describe('Error lifecycle', () => {
 
 	it('custom validation error', async () => {
 		const app = new Elysia()
-			.onError(({ code, error, set }) => {
-				if (code === 'VALIDATION') {
+			.error(({ error, set }) => {
+				if (error instanceof ValidationError) {
 					set.status = 400
 
 					return error.all.map((i) =>
@@ -109,8 +112,8 @@ describe('Error lifecycle', () => {
 
 	it('custom 500', async () => {
 		const app = new Elysia()
-			.onError(({ code }) => {
-				if (code === 'INTERNAL_SERVER_ERROR') {
+			.error(({ error }) => {
+				if (error instanceof InternalServerError) {
 					return 'UwU'
 				}
 			})
@@ -347,8 +350,8 @@ describe('Error lifecycle', () => {
 		const app = new Elysia({
 			cookie: { secrets: 'secrets', sign: ['session'] }
 		})
-			.onError(({ code, error }) => {
-				if (code === 'INVALID_COOKIE_SIGNATURE')
+			.error(({ error }) => {
+				if (error instanceof InvalidCookieSignature)
 					return 'Where is the signature?'
 			})
 			.get('/', ({ cookie: { session } }) => '')
@@ -448,8 +451,9 @@ describe('Error lifecycle', () => {
 
 	it('handle custom error message globally', async () => {
 		const app = new Elysia()
-			.onError(({ error, code }) => {
-				if (code === 'VALIDATION') return error.detail(error.message)
+			.error(({ error }) => {
+				if (error instanceof ValidationError)
+					return error.detail(error.message)
 			})
 			.post('/', () => 'Hello World!', {
 				body: t.Object({
@@ -478,8 +482,9 @@ describe('Error lifecycle', () => {
 
 	it('ValidationError.detail only handle custom error', async () => {
 		const app = new Elysia()
-			.onError(({ error, code }) => {
-				if (code === 'VALIDATION') return error.detail(error.message)
+			.error(({ error }) => {
+				if (error instanceof ValidationError)
+					return error.detail(error.message)
 			})
 			.post('/', () => 'Hello World!', {
 				body: t.Object({
@@ -506,7 +511,7 @@ describe('Error lifecycle', () => {
 
 	it('ValidationError.all works with Zod validators', async () => {
 		const app = new Elysia()
-			.onError(({ error, code }) => {
+			.error(({ error }) => {
 				if (error instanceof ValidationError) {
 					const errors = error.all
 
@@ -535,8 +540,7 @@ describe('Error lifecycle', () => {
 
 	it('ValidationError.all provides error details with Zod validators', async () => {
 		const app = new Elysia()
-			.onError(({ error, code }) => {
-				expect(code).toBe('VALIDATION')
+			.error(({ error }) => {
 				if (error instanceof ValidationError) {
 					const errors = error.all
 

@@ -1110,7 +1110,7 @@ app.group(
 		type: {
 			b: string
 		}
-		error: {}
+		error: []
 	}>()
 }
 

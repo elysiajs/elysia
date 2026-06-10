@@ -215,9 +215,7 @@ export function createFetchHandler(
 
 	const handleError = createErrorHandler(
 		hook?.error,
-		mapResponse as typeof baseMapResponse,
-		undefined,
-		app['~ext']?.error
+		mapResponse as typeof baseMapResponse
 	)
 
 	const traceHandlers = hook?.trace as

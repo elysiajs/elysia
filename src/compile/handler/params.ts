@@ -6,6 +6,7 @@ import {
 	signCookieValues
 } from '../../cookie/utils'
 import { requestId } from '../../utils'
+import { forwardError } from '../../handler/utils'
 import { tee } from '../../adapter/utils'
 import { cloneResponse } from './utils'
 
@@ -21,7 +22,6 @@ export interface HandlerParamContext {
 	res: { map: unknown; compact?: unknown }
 	hook: Record<string, unknown>
 	vali: unknown
-	errorCode: unknown
 	cookieConfig: unknown
 	tracers: unknown
 }
@@ -51,8 +51,8 @@ export const HANDLER_PARAMS: Record<string, Resolver> = {
 	scv: () => signCookieValues,
 	// validator
 	va: (c) => c.vali,
-	// error code resolver
-	crc: (c) => c.errorCode,
+	// returned-error forwarder
+	fe: () => forwardError,
 	// route hook
 	// `link(0, '')`
 	ho: (c) => c.hook,

@@ -641,7 +641,7 @@ export function createErrorEventHandler(fn: EventFn<'error'>, error: Error) {
 			// @ts-expect-error
 			(error as unknown as Error)
 		)
-			return fn!(context)
+			return fn!(context as any)
 	}
 }
 

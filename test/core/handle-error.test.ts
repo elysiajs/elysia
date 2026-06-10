@@ -41,8 +41,8 @@ describe('Handle Error', () => {
 	it('use custom error', async () => {
 		const res = await new Elysia()
 			.get('/', () => 'Hi')
-			.onError(({ code }) => {
-				if (code === 'NOT_FOUND')
+			.error(({ error }) => {
+				if (error instanceof NotFound)
 					return new Response("I'm a teapot", {
 						status: 418
 					})
@@ -168,11 +168,9 @@ describe('Handle Error', () => {
 			}
 		}
 
-		const errors = new Elysia()
-			.error({ APIError })
-			.onError({ as: 'global' }, ({ code }) => {
-				return code
-			})
+		const errors = new Elysia().error('global', APIError, ({ error }) =>
+			error.name
+		)
 
 		const requestHandler = new Elysia()
 			.onTransform(() => {

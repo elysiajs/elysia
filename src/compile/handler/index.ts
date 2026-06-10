@@ -18,7 +18,7 @@ import {
 
 import { ElysiaStatus, ParseError } from '../../error'
 import { isDynamicRegex } from '../../constants'
-import { createCodeResolver } from '../../handler/error'
+import { forwardError } from '../../handler/utils'
 import { hasHeaderShorthand } from '../../universal/constants'
 
 import { parseQueryFromURL } from '../../parse-query'
@@ -291,12 +291,28 @@ function dropHooksByOrigin(
 const createInlineHandler = (
 	map: (value: unknown, ...rest: unknown[]) => unknown,
 	h: (context: Context) => unknown
-) => ((c: Context) => map(h(c), c.request)) as CompiledHandler
+) =>
+	((c: Context) => {
+		const r = h(c)
+		if (r instanceof Error) throw r
+		if (r instanceof Promise)
+			return r.then((v) => map(forwardError(v), c.request))
+
+		return map(r, c.request)
+	}) as CompiledHandler
 
 const createInlineHandlerWithSet = (
 	map: (value: unknown, ...rest: unknown[]) => unknown,
 	h: (context: Context) => unknown
-) => ((c: Context) => map(h(c), c.set, c.request)) as CompiledHandler
+) =>
+	((c: Context) => {
+		const r = h(c)
+		if (r instanceof Error) throw r
+		if (r instanceof Promise)
+			return r.then((v) => map(forwardError(v), c.set, c.request))
+
+		return map(r, c.set, c.request)
+	}) as CompiledHandler
 
 function promoteDerive(hook: any) {
 	const derive = hook.derive
@@ -372,6 +388,10 @@ export function buildNativeStaticResponse(
 	root: AnyElysia
 ): Response | Promise<Response> | undefined {
 	if (typeof handler === 'function') return
+
+	// An `Error` value forwards to the error pipeline per request,
+	// so it can never be a precomputed static response
+	if (handler instanceof Error) return
 
 	const adapter = root['~config']?.adapter ?? defaultAdapter
 
@@ -515,6 +535,15 @@ export function compileHandler(
 			})
 		: undefined
 
+	// A static `Error` value forwards to the error pipeline per request,
+	// exactly like a handler returning it
+	if (handler instanceof Error) {
+		const error = handler
+		handler = () => {
+			throw error
+		}
+	}
+
 	const isHandleFunction = typeof handler === 'function'
 	if (precomputedStatic) handler = precomputedStatic
 	else if (!isHandleFunction && !(handler instanceof Promise)) {
@@ -533,8 +562,6 @@ export function compileHandler(
 	const isStaticResponse = !isHandleFunction && handler instanceof Response
 	const isPromiseHandler = !isHandleFunction && handler instanceof Promise
 
-	const errorCode = createCodeResolver(root['~ext']?.error)
-
 	const reconstructed = Compiled.handlers?.[method]?.[path]
 	if (reconstructed) {
 		return reconstructed.f(
@@ -544,7 +571,6 @@ export function compileHandler(
 				res: adapter.response as any,
 				hook: (hook ?? nullObject()) as any,
 				vali,
-				errorCode,
 				cookieConfig: reconstructed.a.includes('cc')
 					? compileCookieConfig(
 							hook?.cookie as any,
@@ -984,6 +1010,13 @@ export function compileHandler(
 			code += `if(_r===undefined){\n${callHandler}${teeBlock}}\n`
 		else code += callHandler + teeBlock
 
+		// Forward a returned `Error` to the error pipeline, like a throw
+		code += `if(_r instanceof Error)throw _r\n`
+		if (!isAsync) {
+			link(forwardError, 'fe')
+			code += `else if(_r instanceof Promise)_r=_r.then(fe)\n`
+		}
+
 		if (hasAfterHandle || hasMapResponse || hasAfterResponse || hasTrace)
 			code += `c.responseValue=_r\n`
 
@@ -1033,6 +1066,14 @@ export function compileHandler(
 		code += scheduleAfterResponse
 		code += signPrefix
 		code += `return ${hasSet ? `${map}(_r,c.set,c.request)` : `${map}(_r,c.request)`}\n`
+	} else if (isHandleFunction) {
+		// Materialize the result to forward a returned `Error` like a throw
+		if (!isAsync) link(forwardError, 'fe')
+		code +=
+			`let _r=${isAsync ? 'await ' : ''}h(c)\n` +
+			`if(_r instanceof Error)throw _r\n` +
+			(isAsync ? '' : `if(_r instanceof Promise)_r=_r.then(fe)\n`) +
+			`return ${hasSet ? `${map}(_r,c.set,c.request)` : `${map}(_r,c.request)`}\n`
 	} else {
 		code += `return ${mapReturn}`
 	}
@@ -1049,11 +1090,8 @@ export function compileHandler(
 		if (hasErrorHook) {
 			link(hook!.error!, 'er')
 			link(ElysiaStatus, 'es')
-			link(errorCode, 'crc')
 			code +=
 				`c.error=e\n` +
-				// `crc` resolves the code from the instance's registered errors
-				`c.code=crc(e)\n` +
 				// Explicit error status wins; otherwise keep an already-set
 				// non-200 status (handler set it before throwing) and default
 				// statusless errors to 500.
@@ -1082,7 +1120,9 @@ export function compileHandler(
 				`if(e?.status){${signPrefix}return ${map}(e?.response??e?.message??'',c.set,c.request)}\n` +
 				`c.set.status=500\n` +
 				signPrefix +
-				`return ${map}('Internal Server Error',c.set,c.request)\n`
+				// Mirror `fallbackErrorResponse`: an unhandled error responds
+				// with its message
+				`return ${map}(e?.message!=null?e.message:'Internal Server Error',c.set,c.request)\n`
 		} else {
 			code += endTrace() + scheduleAfterResponse
 			code += `throw e\n`

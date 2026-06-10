@@ -1,4 +1,4 @@
-import { Elysia, t } from '../../src'
+import { Elysia, ParseError, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { post } from '../utils'
@@ -445,12 +445,11 @@ describe('Parser', () => {
 	})
 
 	it('should get parse error', async () => {
-		let code: string | undefined
+		let parseError = false
 
 		const app = new Elysia()
-			.onError((ctx) => {
-				// @ts-ignore
-				code = ctx.code
+			.error(({ error }) => {
+				parseError = error instanceof ParseError
 			})
 			.post('/', () => '', {
 				body: t.Object({
@@ -468,7 +467,7 @@ describe('Parser', () => {
 			})
 		)
 
-		expect(code).toBe('PARSE')
+		expect(parseError).toBe(true)
 		expect(response.status).toBe(400)
 	})
 })

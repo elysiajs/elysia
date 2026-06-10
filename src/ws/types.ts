@@ -228,7 +228,7 @@ export type WSLocalHook<
 	afterHandle?: MaybeArray<OptionalHandler<Schema, Singleton>>
 	mapResponse?: MaybeArray<MapResponse<Schema, Singleton>>
 	afterResponse?: MaybeArray<AfterResponseHandler<Schema, Singleton>>
-	error?: MaybeArray<ErrorHandler<{}, Schema, Singleton>>
+	error?: MaybeArray<ErrorHandler<[], Schema, Singleton>>
 	tags?: DocumentDecoration['tags']
 
 	// Bun server-level knobs (folded into the global `websocket: {...}` config).

@@ -1,4 +1,4 @@
-import { Elysia, t } from '../../src'
+import { Elysia, NotFound, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { post, req } from '../utils'
@@ -116,8 +116,8 @@ describe('Path', () => {
 	})
 
 	it('custom error', async () => {
-		const app = new Elysia().onError((error) => {
-			if (error.code === 'NOT_FOUND')
+		const app = new Elysia().error(({ error }) => {
+			if (error instanceof NotFound)
 				return new Response('Not Stonk :(', {
 					status: 404
 				})
@@ -247,11 +247,9 @@ describe('Path', () => {
 		const app = new Elysia().use(plugin)
 
 		const res = await app.handle(req('/error'))
-		const { message } = (await res.json()) as unknown as {
-			message: string
-		}
 
-		expect(message).toBe(error)
+		expect(res.status).toBe(500)
+		expect(await res.text()).toBe(error)
 	})
 
 	it('handle async', async () => {

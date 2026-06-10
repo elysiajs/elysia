@@ -1,23 +1,26 @@
 import { Elysia, sse, t } from '../src'
-import { streamResponse } from '../src/adapter/utils'
 
-const asyncPlugin = async () =>
-	new Elysia({ name: 'async' })
-		.get('/router', () => 'OK')
-		.get('/static', 'OK')
+class MyError extends Error {
+	constructor(public message: string) {
+		super(message)
+	}
+}
 
-const app = new Elysia({ name: 'main' }).use(asyncPlugin()).listen(0)
+// default scope is local: handlers only cover the plugin's own routes.
+// 'plugin' covers the immediate parent, 'global' any depth — types follow
+const plugin = new Elysia().error('plugin', MyError, ({ status, error }) => {
+	return status(418, error.message)
+})
 
-await app.modules
+const app = new Elysia()
+	.get('/', () => {
+		return new MyError('A')
+	})
+	.use(plugin)
 
-console.log(app.routes)
+type Response = (typeof app)['~Routes']['get']['response']
+//   ^? { 418: string }
 
-console.log(app.server?.port)
-
-const [router, _static] = await Promise.all([
-	fetch(`http://localhost:${app.server?.port}/router`).then((x) => x.text()),
-	fetch(`http://localhost:${app.server?.port}/static`).then((x) => x.text())
-])
-
-console.log(router)
-console.log(_static)
+app.handle('/')
+	.then((x) => x.text())
+	.then(console.log)

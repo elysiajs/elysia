@@ -70,6 +70,9 @@ import type {
 	NonResolvableMacroKey,
 	OptionalHandler,
 	ErrorHandler,
+	ErrorDefinitionEntry,
+	ResolveRouteErrors,
+	UnhandledReturnedErrorOf,
 	AfterHandler,
 	BodyHandler,
 	MergeSchema,
@@ -98,7 +101,7 @@ import type {
 	MaybeFunction,
 	WrapFn
 } from './types'
-import type { Context } from './context'
+import type { Context, ErrorContext } from './context'
 
 const useNodesBuffer: ChainNode[] = []
 
@@ -110,7 +113,7 @@ export class Elysia<
 	const in out Singleton extends SingletonBase = DefaultSingleton,
 	const in out Definitions extends DefinitionBase = {
 		typebox: {}
-		error: {}
+		error: []
 	},
 	const in out Metadata extends MetadataBase = DefaultMetadata,
 	const in out Routes extends RouteBase = {},
@@ -1232,28 +1235,250 @@ export class Elysia<
 		return this
 	}
 
-	error(fn: EventFn<'error'>): this
-	error(error: AnyErrorConstructor, fn: EventFn<'error'>): this
-	error(error: AnyErrorConstructor, fn: unknown): this
-	error(scope: 'local', fn: EventFn<'error'>): this
-	error(scope: 'plugin', fn: EventFn<'error'>): this
-	error(scope: 'global', fn: EventFn<'error'>): this
 	error(
-		scope: 'local',
-		error: AnyErrorConstructor,
-		fn: EventFn<'error'>
+		fn: ErrorHandler<
+			[
+				...Definitions['error'],
+				...Ephemeral['error'],
+				...Volatile['error']
+			],
+			{},
+			Singleton
+		>
 	): this
+	error<
+		const E extends AnyErrorConstructor &
+			(abstract new (...args: any) => Error),
+		const Fn extends (
+			context: ErrorContext<
+				{},
+				{
+					store: Singleton['store']
+					decorator: Singleton['decorator']
+					resolve: {}
+				}
+			> & {
+				error: InstanceType<E>
+			}
+		) => unknown
+	>(
+		error: E,
+		fn: Fn
+	): Elysia<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		ResolveRouteErrors<Routes, [ErrorDefinitionEntry<E, ReturnType<Fn>>]>,
+		Ephemeral,
+		{
+			resolve: Volatile['resolve']
+			schema: Volatile['schema']
+			schemas: Volatile['schemas']
+			response: Volatile['response']
+			error: [
+				...Volatile['error'],
+				ErrorDefinitionEntry<E, ReturnType<Fn>>
+			]
+		}
+	>
+	error<
+		const E extends AnyErrorConstructor &
+			(abstract new (...args: any) => Error),
+		const Value
+	>(
+		error: E,
+		value: Value
+	): Elysia<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		ResolveRouteErrors<Routes, [ErrorDefinitionEntry<E, Value>]>,
+		Ephemeral,
+		{
+			resolve: Volatile['resolve']
+			schema: Volatile['schema']
+			schemas: Volatile['schemas']
+			response: Volatile['response']
+			error: [...Volatile['error'], ErrorDefinitionEntry<E, Value>]
+		}
+	>
 	error(
-		scope: 'plugin',
-		error: AnyErrorConstructor,
-		fn: EventFn<'error'>
+		scope: EventScope,
+		fn: ErrorHandler<
+			[
+				...Definitions['error'],
+				...Ephemeral['error'],
+				...Volatile['error']
+			],
+			{},
+			Singleton
+		>
 	): this
-	error(scope: 'global', error: AnyErrorConstructor, fn: unknown): this
+	error<
+		const S extends EventScope,
+		const E extends AnyErrorConstructor &
+			(abstract new (...args: any) => Error),
+		const Fn extends (
+			context: ErrorContext<
+				{},
+				{
+					store: Singleton['store']
+					decorator: Singleton['decorator']
+					resolve: {}
+				}
+			> & {
+				error: InstanceType<E>
+			}
+		) => unknown
+	>(
+		scope: S,
+		error: E,
+		fn: Fn
+	): S extends 'global'
+		? Elysia<
+				BasePath,
+				Scope,
+				Singleton,
+				{
+					typebox: Definitions['typebox']
+					error: [
+						...Definitions['error'],
+						ErrorDefinitionEntry<E, ReturnType<Fn>>
+					]
+				},
+				Metadata,
+				ResolveRouteErrors<
+					Routes,
+					[ErrorDefinitionEntry<E, ReturnType<Fn>>]
+				>,
+				Ephemeral,
+				Volatile
+			>
+		: S extends 'plugin'
+			? Elysia<
+					BasePath,
+					Scope,
+					Singleton,
+					Definitions,
+					Metadata,
+					ResolveRouteErrors<
+						Routes,
+						[ErrorDefinitionEntry<E, ReturnType<Fn>>]
+					>,
+					{
+						resolve: Ephemeral['resolve']
+						schema: Ephemeral['schema']
+						schemas: Ephemeral['schemas']
+						response: Ephemeral['response']
+						error: [
+							...Ephemeral['error'],
+							ErrorDefinitionEntry<E, ReturnType<Fn>>
+						]
+					},
+					Volatile
+				>
+			: Elysia<
+					BasePath,
+					Scope,
+					Singleton,
+					Definitions,
+					Metadata,
+					ResolveRouteErrors<
+						Routes,
+						[ErrorDefinitionEntry<E, ReturnType<Fn>>]
+					>,
+					Ephemeral,
+					{
+						resolve: Volatile['resolve']
+						schema: Volatile['schema']
+						schemas: Volatile['schemas']
+						response: Volatile['response']
+						error: [
+							...Volatile['error'],
+							ErrorDefinitionEntry<E, ReturnType<Fn>>
+						]
+					}
+				>
+	error<
+		const S extends EventScope,
+		const E extends AnyErrorConstructor &
+			(abstract new (...args: any) => Error),
+		const Value
+	>(
+		scope: S,
+		error: E,
+		value: Value
+	): S extends 'global'
+		? Elysia<
+				BasePath,
+				Scope,
+				Singleton,
+				{
+					typebox: Definitions['typebox']
+					error: [
+						...Definitions['error'],
+						ErrorDefinitionEntry<E, Value>
+					]
+				},
+				Metadata,
+				ResolveRouteErrors<Routes, [ErrorDefinitionEntry<E, Value>]>,
+				Ephemeral,
+				Volatile
+			>
+		: S extends 'plugin'
+			? Elysia<
+					BasePath,
+					Scope,
+					Singleton,
+					Definitions,
+					Metadata,
+					ResolveRouteErrors<
+						Routes,
+						[ErrorDefinitionEntry<E, Value>]
+					>,
+					{
+						resolve: Ephemeral['resolve']
+						schema: Ephemeral['schema']
+						schemas: Ephemeral['schemas']
+						response: Ephemeral['response']
+						error: [
+							...Ephemeral['error'],
+							ErrorDefinitionEntry<E, Value>
+						]
+					},
+					Volatile
+				>
+			: Elysia<
+					BasePath,
+					Scope,
+					Singleton,
+					Definitions,
+					Metadata,
+					ResolveRouteErrors<
+						Routes,
+						[ErrorDefinitionEntry<E, Value>]
+					>,
+					Ephemeral,
+					{
+						resolve: Volatile['resolve']
+						schema: Volatile['schema']
+						schemas: Volatile['schemas']
+						response: Volatile['response']
+						error: [
+							...Volatile['error'],
+							ErrorDefinitionEntry<E, Value>
+						]
+					}
+				>
 	error(
 		scopeOrFnOrError: EventScope | EventFn<'error'> | AnyErrorConstructor,
 		fnOrError?: AnyErrorConstructor | EventFn<'error'> | unknown,
 		fn?: EventFn<'error'> | unknown
-	): this {
+	): AnyElysia {
 		switch (arguments.length) {
 			case 1:
 				if (scopeOrFnOrError && typeof scopeOrFnOrError === 'object') {
@@ -2114,13 +2339,57 @@ export class Elysia<
 			>
 			resolve: Singleton['resolve'] & NewElysia['~Singleton']['resolve']
 		},
-		Definitions & NewElysia['~Definitions'],
+		{
+			typebox: Definitions['typebox'] &
+				NewElysia['~Definitions']['typebox']
+			error: [
+				...Definitions['error'],
+				...NewElysia['~Definitions']['error']
+			]
+		},
 		Metadata & NewElysia['~Metadata'],
 		BasePath extends ``
-			? Routes & NewElysia['~Routes']
-			: Routes & CreateEden<BasePath, NewElysia['~Routes']>,
+			? ResolveRouteErrors<
+					Routes,
+					[
+						...NewElysia['~Definitions']['error'],
+						...NewElysia['~Ephemeral']['error']
+					]
+				> &
+					ResolveRouteErrors<
+						NewElysia['~Routes'],
+						[
+							...Definitions['error'],
+							...Ephemeral['error'],
+							...Volatile['error']
+						]
+					>
+			: ResolveRouteErrors<
+					Routes,
+					[
+						...NewElysia['~Definitions']['error'],
+						...NewElysia['~Ephemeral']['error']
+					]
+				> &
+					CreateEden<
+						BasePath,
+						ResolveRouteErrors<
+							NewElysia['~Routes'],
+							[
+								...Definitions['error'],
+								...Ephemeral['error'],
+								...Volatile['error']
+							]
+						>
+					>,
 		Ephemeral,
-		Volatile & NewElysia['~Ephemeral']
+		{
+			resolve: Volatile['resolve'] & NewElysia['~Ephemeral']['resolve']
+			schema: Volatile['schema'] & NewElysia['~Ephemeral']['schema']
+			schemas: Volatile['schemas'] & NewElysia['~Ephemeral']['schemas']
+			response: Volatile['response'] & NewElysia['~Ephemeral']['response']
+			error: [...Volatile['error'], ...NewElysia['~Ephemeral']['error']]
+		}
 	>
 
 	/**
@@ -2159,13 +2428,33 @@ export class Elysia<
 			>
 			resolve: Singleton['resolve'] & NewElysia['~Singleton']['resolve']
 		},
-		Definitions & NewElysia['~Definitions'],
+		{
+			typebox: Definitions['typebox'] &
+				NewElysia['~Definitions']['typebox']
+			error: [
+				...Definitions['error'],
+				...NewElysia['~Definitions']['error']
+			]
+		},
 		Metadata & NewElysia['~Metadata'],
 		BasePath extends ``
 			? Routes & NewElysia['~Routes']
 			: Routes & CreateEden<BasePath, NewElysia['~Routes']>,
-		Ephemeral & NewElysia['~Ephemeral'],
-		Volatile & NewElysia['~Volatile']
+		{
+			resolve: Ephemeral['resolve'] & NewElysia['~Ephemeral']['resolve']
+			schema: Ephemeral['schema'] & NewElysia['~Ephemeral']['schema']
+			schemas: Ephemeral['schemas'] & NewElysia['~Ephemeral']['schemas']
+			response: Ephemeral['response'] &
+				NewElysia['~Ephemeral']['response']
+			error: NewElysia['~Ephemeral']['error']
+		},
+		{
+			resolve: Volatile['resolve'] & NewElysia['~Volatile']['resolve']
+			schema: Volatile['schema'] & NewElysia['~Volatile']['schema']
+			schemas: Volatile['schemas'] & NewElysia['~Volatile']['schemas']
+			response: Volatile['response'] & NewElysia['~Volatile']['response']
+			error: NewElysia['~Volatile']['error']
+		}
 	>
 
 	/**
@@ -2185,11 +2474,49 @@ export class Elysia<
 			resolve: Singleton['resolve'] &
 				Partial<NewElysia['~Singleton']['resolve']>
 		},
-		Definitions & NewElysia['~Definitions'],
+		{
+			typebox: Definitions['typebox'] &
+				NewElysia['~Definitions']['typebox']
+			error: [
+				...Definitions['error'],
+				...NewElysia['~Definitions']['error']
+			]
+		},
 		Metadata & NewElysia['~Metadata'],
 		BasePath extends ``
-			? Routes & NewElysia['~Routes']
-			: Routes & CreateEden<BasePath, NewElysia['~Routes']>,
+			? ResolveRouteErrors<
+					Routes,
+					[
+						...NewElysia['~Definitions']['error'],
+						...NewElysia['~Ephemeral']['error']
+					]
+				> &
+					ResolveRouteErrors<
+						NewElysia['~Routes'],
+						[
+							...Definitions['error'],
+							...Ephemeral['error'],
+							...Volatile['error']
+						]
+					>
+			: ResolveRouteErrors<
+					Routes,
+					[
+						...NewElysia['~Definitions']['error'],
+						...NewElysia['~Ephemeral']['error']
+					]
+				> &
+					CreateEden<
+						BasePath,
+						ResolveRouteErrors<
+							NewElysia['~Routes'],
+							[
+								...Definitions['error'],
+								...Ephemeral['error'],
+								...Volatile['error']
+							]
+						>
+					>,
 		Ephemeral,
 		{
 			resolve: Volatile['resolve'] &
@@ -2197,6 +2524,7 @@ export class Elysia<
 			schema: Volatile['schema'] & NewElysia['~Ephemeral']['schema']
 			schemas: Volatile['schemas'] & NewElysia['~Ephemeral']['schemas']
 			response: Volatile['response'] & NewElysia['~Ephemeral']['response']
+			error: [...Volatile['error'], ...NewElysia['~Ephemeral']['error']]
 		}
 	>
 
@@ -2224,7 +2552,14 @@ export class Elysia<
 			resolve: Singleton['resolve'] &
 				Partial<NewElysia['~Singleton']['resolve']>
 		},
-		Definitions & NewElysia['~Definitions'],
+		{
+			typebox: Definitions['typebox'] &
+				NewElysia['~Definitions']['typebox']
+			error: [
+				...Definitions['error'],
+				...NewElysia['~Definitions']['error']
+			]
+		},
 		Metadata & NewElysia['~Metadata'],
 		BasePath extends ``
 			? Routes & NewElysia['~Routes']
@@ -2236,6 +2571,7 @@ export class Elysia<
 			schemas: Ephemeral['schemas'] & NewElysia['~Ephemeral']['schemas']
 			response: Ephemeral['response'] &
 				NewElysia['~Ephemeral']['response']
+			error: NewElysia['~Ephemeral']['error']
 		},
 		{
 			resolve: Volatile['resolve'] &
@@ -2243,6 +2579,7 @@ export class Elysia<
 			schema: Volatile['schema'] & NewElysia['~Volatile']['schema']
 			schemas: Volatile['schemas'] & NewElysia['~Volatile']['schemas']
 			response: Volatile['response'] & NewElysia['~Volatile']['response']
+			error: NewElysia['~Volatile']['error']
 		}
 	>
 
@@ -2858,7 +3195,20 @@ export class Elysia<
 										MacroContext['return'] & {}
 									>
 								>
-							>
+							>,
+							[
+								...Definitions['error'],
+								...Ephemeral['error'],
+								...Volatile['error']
+							]
+						>,
+						UnhandledReturnedErrorOf<
+							Handle,
+							[
+								...Definitions['error'],
+								...Ephemeral['error'],
+								...Volatile['error']
+							]
 						>
 					>
 				}
@@ -2963,7 +3313,20 @@ export class Elysia<
 										MacroContext['return'] & {}
 									>
 								>
-							>
+							>,
+							[
+								...Definitions['error'],
+								...Ephemeral['error'],
+								...Volatile['error']
+							]
+						>,
+						UnhandledReturnedErrorOf<
+							Handle,
+							[
+								...Definitions['error'],
+								...Ephemeral['error'],
+								...Volatile['error']
+							]
 						>
 					>
 				}
@@ -3068,7 +3431,20 @@ export class Elysia<
 										MacroContext['return'] & {}
 									>
 								>
-							>
+							>,
+							[
+								...Definitions['error'],
+								...Ephemeral['error'],
+								...Volatile['error']
+							]
+						>,
+						UnhandledReturnedErrorOf<
+							Handle,
+							[
+								...Definitions['error'],
+								...Ephemeral['error'],
+								...Volatile['error']
+							]
 						>
 					>
 				}
@@ -3173,7 +3549,20 @@ export class Elysia<
 										MacroContext['return'] & {}
 									>
 								>
-							>
+							>,
+							[
+								...Definitions['error'],
+								...Ephemeral['error'],
+								...Volatile['error']
+							]
+						>,
+						UnhandledReturnedErrorOf<
+							Handle,
+							[
+								...Definitions['error'],
+								...Ephemeral['error'],
+								...Volatile['error']
+							]
 						>
 					>
 				}
@@ -3278,7 +3667,20 @@ export class Elysia<
 										MacroContext['return'] & {}
 									>
 								>
-							>
+							>,
+							[
+								...Definitions['error'],
+								...Ephemeral['error'],
+								...Volatile['error']
+							]
+						>,
+						UnhandledReturnedErrorOf<
+							Handle,
+							[
+								...Definitions['error'],
+								...Ephemeral['error'],
+								...Volatile['error']
+							]
 						>
 					>
 				}
@@ -3383,7 +3785,20 @@ export class Elysia<
 										MacroContext['return'] & {}
 									>
 								>
-							>
+							>,
+							[
+								...Definitions['error'],
+								...Ephemeral['error'],
+								...Volatile['error']
+							]
+						>,
+						UnhandledReturnedErrorOf<
+							Handle,
+							[
+								...Definitions['error'],
+								...Ephemeral['error'],
+								...Volatile['error']
+							]
 						>
 					>
 				}
@@ -3488,7 +3903,20 @@ export class Elysia<
 										MacroContext['return'] & {}
 									>
 								>
-							>
+							>,
+							[
+								...Definitions['error'],
+								...Ephemeral['error'],
+								...Volatile['error']
+							]
+						>,
+						UnhandledReturnedErrorOf<
+							Handle,
+							[
+								...Definitions['error'],
+								...Ephemeral['error'],
+								...Volatile['error']
+							]
 						>
 					>
 				}
@@ -3662,15 +4090,6 @@ export class Elysia<
 		}
 	}
 
-	/**
-	 * @deprecated use `config.precompile` instead
-	 *
-	 * We be removed in 2.1
-	 *
-	 * ```typescript
-	 * new Elysia({ precompile: true })
-	 * ```
-	 */
 	compile() {
 		this.fetch
 

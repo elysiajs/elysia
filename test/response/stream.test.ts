@@ -584,12 +584,12 @@ describe('Stream', () => {
 	it('should call onError hook when throwing from async generator', async () => {
 		const { status: statusFn } = await import('../../src')
 		let onErrorCalled = false
-		let errorCode: string | number | undefined
+		let errorStatus: number | undefined
 
 		const app = new Elysia()
-			.onError(({ code }) => {
+			.error(({ error }) => {
 				onErrorCalled = true
-				errorCode = code
+				errorStatus = (error as any)?.status
 			})
 			.get('/', async function* ({ set }) {
 				set.headers['x-custom-header'] = 'test-value'
@@ -602,7 +602,7 @@ describe('Stream', () => {
 
 		expect(response.status).toBe(500)
 		expect(onErrorCalled).toBe(true)
-		expect(errorCode).toBe(500)
+		expect(errorStatus).toBe(500)
 		expect(response.headers.get('x-custom-header')).toBe('test-value')
 	})
 

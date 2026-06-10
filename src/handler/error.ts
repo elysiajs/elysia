@@ -3,26 +3,7 @@ import { parseQueryFromURL } from '../parse-query'
 import { isCloudflareWorker } from '../universal/constants'
 
 import type { Context } from '../context'
-import type { AnyErrorConstructor, AppHook } from '../types'
-
-export type ErrorCodeRegistry = Map<AnyErrorConstructor, string>
-
-export function createCodeResolver(
-	registry: ErrorCodeRegistry | undefined
-): (error: any) => string {
-	if (!registry?.size) return (error: any) => error?.code ?? 'UNKNOWN'
-
-	const entries = [...registry]
-
-	return (error: any) => {
-		if (error?.code) return error.code
-
-		for (let i = 0; i < entries.length; i++)
-			if (error instanceof (entries[i][0] as any)) return entries[i][1]
-
-		return 'UNKNOWN'
-	}
-}
+import type { AppHook } from '../types'
 
 let _defaultError: Response | undefined
 const getDefaultError = (): Response =>
@@ -123,17 +104,12 @@ export function createErrorHandler(
 		set: Context['set'],
 		...any: unknown[]
 	) => unknown,
-	defaultError?: Response,
-	codeRegistry?: ErrorCodeRegistry
+	defaultError?: Response
 ) {
-	const resolveCode = createCodeResolver(codeRegistry)
-
 	if (!onErrors)
 		return (context: Context, error: Error) => {
 			// @ts-expect-error
 			context.error = error
-			// @ts-expect-error
-			context.code = resolveCode(error)
 			applyErrorStatus(context, error)
 
 			parseQuery(context)
@@ -145,16 +121,14 @@ export function createErrorHandler(
 		return async (context: Context, error: Error) => {
 			// @ts-expect-error
 			context.error = error
-			// @ts-expect-error
-			context.code = resolveCode(error)
 			applyErrorStatus(context, error)
 
 			parseQuery(context)
 
 			for (let i = 0; i < onErrors.length; i++) {
 				const result = asyncIndexes?.[i]
-					? await onErrors[i](context)
-					: onErrors[i](context)
+					? await onErrors[i](context as any)
+					: onErrors[i](context as any)
 
 				if (result !== undefined) {
 					// @ts-expect-error
@@ -170,14 +144,12 @@ export function createErrorHandler(
 	return (context: Context, error: Error) => {
 		// @ts-expect-error
 		context.error = error
-		// @ts-expect-error
-		context.code = resolveCode(error)
 		applyErrorStatus(context, error)
 
 		parseQuery(context)
 
 		for (let i = 0; i < onErrors.length; i++) {
-			const result = onErrors[i](context)
+			const result = onErrors[i](context as any)
 			if (result !== undefined)
 				return mapResponse(result, context.set, context)
 		}

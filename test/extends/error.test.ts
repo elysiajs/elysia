@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { Elysia, t } from '../../src'
+import { Elysia, NotFound, ValidationError, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { post, req } from '../utils'
@@ -64,8 +64,8 @@ describe('Error extends', () => {
 	})
 
 	it('preserve status code base on error if not set', async () => {
-		const app = new Elysia().onError(({ code }) => {
-			if (code === 'NOT_FOUND') return 'UwU'
+		const app = new Elysia().error(({ error }) => {
+			if (error instanceof NotFound) return 'UwU'
 		})
 
 		const response = await app.handle(req('/not/found'))
@@ -105,11 +105,9 @@ describe('Error extends', () => {
 		])
 
 		const app = new Elysia()
-			.onError(({ code, error, status }) => {
-				switch (code) {
-					case 'VALIDATION':
-						return error.detail(error.message)
-				}
+			.error(({ error }) => {
+				if (error instanceof ValidationError)
+					return error.detail(error.message)
 			})
 			.post('/', ({ body, set }) => 'ok', {
 				body: sendOtpSchema

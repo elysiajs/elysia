@@ -375,7 +375,7 @@ export type LocalHook<
 	Input extends BaseMacro,
 	Schema extends RouteSchemaWithResolvedMacro,
 	Singleton extends SingletonBase,
-	Errors extends { [key in string]: Error },
+	Errors extends ErrorDefinition[],
 	Parser extends keyof any = ''
 > = {
 	detail?: DocumentDecoration
@@ -501,16 +501,24 @@ export interface SingletonBase {
 	resolve: Record<string, unknown>
 }
 
+export interface ErrorDefinition {
+	error: Error
+	response: PossibleResponse
+}
+
 export interface EphemeralType {
 	resolve: SingletonBase['resolve']
 	schema: MetadataBase['schema']
 	schemas: MetadataBase['schema']
 	response: PossibleResponse
+	// `.error(Class, handler)` entries, channeled by scope like schemas:
+	// local → Volatile, 'plugin' → Ephemeral, 'global' → Definitions
+	error: ErrorDefinition[]
 }
 
 export interface DefinitionBase {
 	typebox: Record<string, AnySchema>
-	error: Record<string, Error>
+	error: ErrorDefinition[]
 }
 
 export interface DefaultEphemeral {
@@ -518,6 +526,7 @@ export interface DefaultEphemeral {
 	schema: {}
 	schemas: {}
 	response: {}
+	error: []
 }
 
 export interface DefaultSingleton {
@@ -752,6 +761,8 @@ type InlineResponse =
 	| ElysiaFile
 	| Record<any, unknown>
 	| BunHTMLBundlelike
+	// forwarded to the error pipeline per request
+	| Error
 
 type InlineHandlerResponse<Route extends RouteSchema['response']> = {
 	[Status in keyof Route]: ElysiaStatus<
@@ -867,7 +878,7 @@ export type InternalRoute = readonly [
 ]
 
 export type ErrorHandler<
-	in out T extends Record<string, Error> = {},
+	T extends ErrorDefinition[] = [],
 	in out Route extends RouteSchema = {},
 	in out Singleton extends SingletonBase = DefaultSingleton,
 	in out Ephemeral extends EphemeralType = DefaultEphemeral,
@@ -880,7 +891,9 @@ export type ErrorHandler<
 			decorator: Singleton['decorator']
 			resolve: {}
 		}
-	>
+	> & {
+		error: T[number]['error'] | Error
+	}
 ) => unknown
 
 export type MergeSchema<
@@ -1003,7 +1016,7 @@ export interface MacroProperty<
 	in out Macro extends BaseMacro = {},
 	in out TypedRoute extends RouteSchema = {},
 	in out Singleton extends SingletonBase = DefaultSingleton,
-	in out Errors extends Record<string, Error> = {}
+	Errors extends ErrorDefinition[] = []
 > {
 	/**
 	 * Deduplication similar to Elysia.constructor.seed
@@ -1031,7 +1044,7 @@ export interface Macro<
 	in out Input extends BaseMacro = {},
 	in out TypedRoute extends RouteSchema = {},
 	in out Singleton extends SingletonBase = DefaultSingleton,
-	in out Errors extends Record<string, Error> = {}
+	Errors extends ErrorDefinition[] = []
 > {
 	[K: keyof any]: MaybeValueOrVoidFunction<
 		Input & MacroProperty<Macro, TypedRoute, Singleton, Errors>
@@ -1392,7 +1405,7 @@ type LocalLifecycleProperty =
 
 export type MaybeFunction<T> = T | ((...args: any[]) => T)
 
-export type MacroToProperty<in out T extends Macro<any, any, any, any>> =
+export type MacroToProperty<in out T extends Macro<any, any, any, any, any>> =
 	Prettify<{
 		[K in keyof T]: T[K] extends Function
 			? T[K] extends (a: infer Params) => any
@@ -1723,7 +1736,11 @@ export type CreateEdenResponse<
 	Schema extends RouteSchema,
 	MacroContext extends RouteSchema,
 	// This should be handled by ComposeElysiaResponse
-	Res extends PossibleResponse
+	Res extends PossibleResponse,
+	// Returned `Error` types with no matching `.error(Class, handler)` yet.
+	// Re-resolved by `ResolveRouteErrors` as handlers register; whatever
+	// remains is the default 500 (folded in at the Eden read side)
+	Err extends Error = never
 > = RouteSchema extends MacroContext
 	? {
 			body: Schema['body']
@@ -1733,6 +1750,7 @@ export type CreateEdenResponse<
 			query: Schema['query']
 			headers: Schema['headers']
 			response: Prettify<Res>
+			error: Err
 		}
 	: {
 			body: Prettify<Schema['body'] & MacroContext['body']>
@@ -1744,6 +1762,7 @@ export type CreateEdenResponse<
 			query: Prettify<Schema['query'] & MacroContext['query']>
 			headers: Prettify<Schema['headers'] & MacroContext['headers']>
 			response: Prettify<Res>
+			error: Err
 		}
 
 type Extract200<T> = T extends AnyElysiaStatus
@@ -1752,8 +1771,15 @@ type Extract200<T> = T extends AnyElysiaStatus
 			| Extract<T, ElysiaStatus<200, any, 200>>['response']
 	: T
 
-export type ValueToResponseSchema<Value> = ExtractErrorFromHandle<Value> &
-	(Extract200<Value> extends infer R200
+// `Error` instances are excluded first everywhere below: built-in errors
+// carry `code`/`status`/`response` so they structurally match
+// AnyElysiaStatus, but they belong to the error pipeline
+export type ValueToResponseSchema<
+	Value,
+	Errors extends ErrorDefinition[] = []
+> = ExtractErrorFromHandle<Exclude<Value, Error>> &
+	ExtractReturnedError<Value, Errors> &
+	(Extract200<Exclude<Value, Error>> extends infer R200
 		? undefined extends R200
 			? {}
 			: IsNever<R200> extends true
@@ -1761,11 +1787,12 @@ export type ValueToResponseSchema<Value> = ExtractErrorFromHandle<Value> &
 				: { 200: R200 }
 		: {})
 
-export type ValueOrFunctionToResponseSchema<T> = T extends (
-	...a: any
-) => MaybePromise<infer R>
-	? ValueToResponseSchema<R>
-	: ValueToResponseSchema<T>
+export type ValueOrFunctionToResponseSchema<
+	T,
+	Errors extends ErrorDefinition[] = []
+> = T extends (...a: any) => MaybePromise<infer R>
+	? ValueToResponseSchema<R, Errors>
+	: ValueToResponseSchema<T, Errors>
 
 export type ElysiaHandlerToResponseSchema<in out Handle extends Function> =
 	Prettify<
@@ -1822,12 +1849,13 @@ export type UnionResponseStatus<A, B> = {} extends A
 export type ComposeElysiaResponse<
 	Schema extends RouteSchema,
 	Handle,
-	Possibility extends PossibleResponse
+	Possibility extends PossibleResponse,
+	Errors extends ErrorDefinition[] = []
 > = ReconcileStatus<
 	// @ts-ignore
 	Schema['response'],
 	UnionResponseStatus<
-		ValueOrFunctionToResponseSchema<Handle>,
+		ValueOrFunctionToResponseSchema<Handle, Errors>,
 		Possibility &
 			(EmptyInputSchema extends Pick<Schema, InputSchemaKey>
 				? {}
@@ -1855,6 +1883,177 @@ export type ExtractErrorFromHandle<in out Handle> = {
 			never]: Prettify<ErrorResponse['response']>
 }
 
+/**
+ * Status used when an error handler returns a plain value (or falls through):
+ * the error's declared literal `status`, otherwise 500
+ */
+type ErrorFallbackStatus<E> = E extends { status: infer S extends number }
+	? number extends S
+		? 500
+		: S
+	: 500
+
+/**
+ * Body produced when no error handler returns a value:
+ * the error's declared `response`, otherwise its message (string)
+ */
+type ErrorFallbackBody<E> = E extends { response: infer R }
+	? unknown extends R
+		? string
+		: R
+	: string
+
+/**
+ * Map an error handler's return type to a response schema.
+ *
+ * `status()` returns map to their own code, plain returns map to the error's
+ * declared `status` (500 when absent). A handler that may return `undefined`
+ * falls through to the default error response.
+ */
+/**
+ * `Definitions['error']` / `EphemeralType['error']` entry registered by an
+ * `.error(Class, handler)` call
+ */
+export type ErrorDefinitionEntry<
+	E extends abstract new (...args: any) => Error,
+	R
+> = {
+	error: InstanceType<E>
+	response: ErrorHandlerResponseSchema<Awaited<R>, InstanceType<E>>
+}
+
+export type ErrorHandlerResponseSchema<R, E> = ExtractErrorFromHandle<
+	Exclude<R, Error>
+> &
+	(
+		| Exclude<R, Extract<Exclude<R, Error>, AnyElysiaStatus> | undefined>
+		| (undefined extends R
+				? ErrorFallbackBody<E>
+				: never) extends infer Plain
+		? IsNever<Plain> extends true
+			? {}
+			: { [S in ErrorFallbackStatus<E>]: Plain }
+		: {})
+
+/**
+ * Resolve the response schema of a returned error instance against
+ * registered `.error(Class, handler)` entries: first registered match wins,
+ * mirroring runtime hook order. Unmatched errors resolve to `never` — they
+ * are kept on the route's `error` field until a handler registers
+ */
+type MatchRegisteredError<
+	V,
+	Errors extends ErrorDefinition[]
+> = Errors extends [
+	infer Head extends ErrorDefinition,
+	...infer Rest extends ErrorDefinition[]
+]
+	? [V] extends [Head['error']]
+		? Head['response']
+		: MatchRegisteredError<V, Rest>
+	: never
+
+type HasErrorMatch<V, Errors extends ErrorDefinition[]> = Errors extends [
+	infer Head extends ErrorDefinition,
+	...infer Rest extends ErrorDefinition[]
+]
+	? [V] extends [Head['error']]
+		? true
+		: HasErrorMatch<V, Rest>
+	: false
+
+/**
+ * Returned `Error` types with no matching registered handler — stored on
+ * the route record and re-resolved as handlers register
+ */
+export type UnhandledReturnedError<
+	Value,
+	Errors extends ErrorDefinition[]
+> = 0 extends 1 & Value
+	? never
+	: Extract<Value, Error> extends infer Es
+		? Es extends Error
+			? HasErrorMatch<Es, Errors> extends true
+				? never
+				: Es
+			: never
+		: never
+
+export type UnhandledReturnedErrorOf<
+	T,
+	Errors extends ErrorDefinition[]
+> = T extends (...a: any) => MaybePromise<infer R>
+	? UnhandledReturnedError<R, Errors>
+	: UnhandledReturnedError<T, Errors>
+
+/**
+ * Re-resolve every route's unhandled returned errors against newly visible
+ * handler entries: matches move into `response`, the rest stay on `error`.
+ * Applied when `.error(Class, handler)` registers (covering routes defined
+ * earlier — registration order does not matter at runtime) and when
+ * `.use()` makes handlers and routes visible to each other
+ */
+export type ResolveRouteErrors<
+	Routes,
+	Errors extends ErrorDefinition[]
+> = Errors extends []
+	? Routes
+	: {
+			[K in keyof Routes]: Routes[K] extends {
+				params: any
+				query: any
+				headers: any
+				response: any
+				error: any
+			}
+				? [Routes[K]['error']] extends [never]
+					? Routes[K]
+					: Omit<Routes[K], 'response' | 'error'> & {
+							response: Prettify<
+								UnionResponseStatus<
+									Routes[K]['response'],
+									ExtractReturnedError<
+										Routes[K]['error'],
+										Errors
+									>
+								>
+							>
+							error: UnhandledReturnedError<
+								Routes[K]['error'],
+								Errors
+							>
+						}
+				: Routes[K] extends Record<keyof any, any>
+					? ResolveRouteErrors<Routes[K], Errors>
+					: Routes[K]
+		}
+
+type MergeStatusUnion<U> = {
+	[K in U extends unknown ? keyof U : never]: U extends unknown
+		? K extends keyof U
+			? U[K]
+			: never
+		: never
+}
+
+/**
+ * Map `Error` instances in a handler's return type to the response of their
+ * matching `.error(Class, handler)`. Returned errors are forwarded to the
+ * error pipeline at runtime, so they never appear in the 200 response
+ */
+export type ExtractReturnedError<
+	Value,
+	Errors extends ErrorDefinition[]
+> = 0 extends 1 & Value
+	? {}
+	: Extract<Value, Error> extends infer Es
+		? IsNever<Es> extends true
+			? {}
+			: MergeStatusUnion<
+					Es extends Error ? MatchRegisteredError<Es, Errors> : never
+				>
+		: {}
+
 export type MergeElysiaInstances<
 	Instances extends AnyElysia[] = [],
 	Prefix extends string = '',
@@ -1862,7 +2061,7 @@ export type MergeElysiaInstances<
 	Singleton extends SingletonBase = DefaultSingleton,
 	Definitions extends DefinitionBase = {
 		typebox: {}
-		error: {}
+		error: []
 	},
 	Metadata extends MetadataBase = DefaultMetadata,
 	Ephemeral extends EphemeralType = DefaultEphemeral,
@@ -1877,14 +2076,51 @@ export type MergeElysiaInstances<
 			Prefix,
 			Scope,
 			Singleton & Current['~Singleton'],
-			Definitions & Current['~Definitions'],
+			{
+				typebox: Definitions['typebox'] &
+					Current['~Definitions']['typebox']
+				error: [
+					...Definitions['error'],
+					...Current['~Definitions']['error']
+				]
+			},
 			Metadata & Current['~Metadata'],
 			Ephemeral,
-			Volatile & Current['~Ephemeral'],
-			Routes &
+			{
+				resolve: Volatile['resolve'] & Current['~Ephemeral']['resolve']
+				schema: Volatile['schema'] & Current['~Ephemeral']['schema']
+				schemas: Volatile['schemas'] & Current['~Ephemeral']['schemas']
+				response: Volatile['response'] &
+					Current['~Ephemeral']['response']
+				error: [...Volatile['error'], ...Current['~Ephemeral']['error']]
+			},
+			ResolveRouteErrors<
+				Routes,
+				[
+					...Current['~Definitions']['error'],
+					...Current['~Ephemeral']['error']
+				]
+			> &
 				(Prefix extends ``
-					? Current['~Routes']
-					: CreateEden<Prefix, Current['~Routes']>)
+					? ResolveRouteErrors<
+							Current['~Routes'],
+							[
+								...Definitions['error'],
+								...Ephemeral['error'],
+								...Volatile['error']
+							]
+						>
+					: CreateEden<
+							Prefix,
+							ResolveRouteErrors<
+								Current['~Routes'],
+								[
+									...Definitions['error'],
+									...Ephemeral['error'],
+									...Volatile['error']
+								]
+							>
+						>)
 		>
 	: Elysia<
 			Prefix,

@@ -29,7 +29,7 @@ type ResolvePlugin = Elysia<
 		store: { stated: string }
 		resolve: { derived: string }
 	},
-	{ typebox: {}; error: {} },
+	{ typebox: {}; error: [] },
 	DefaultMetadata,
 	{},
 	DefaultEphemeral,

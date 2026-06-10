@@ -31,7 +31,7 @@ export const validationDetail =
 
 export class InternalServerError extends ElysiaError {
 	code = 'INTERNAL_SERVER_ERROR'
-	status = 500
+	status = 500 as const
 
 	constructor(
 		public response = 'Internal Server Error',
@@ -43,7 +43,7 @@ export class InternalServerError extends ElysiaError {
 
 export class NotFound extends ElysiaError {
 	code = 'NOT_FOUND'
-	status = 404
+	status = 404 as const
 
 	constructor(public response = 'Not Found') {
 		super(response)
@@ -52,7 +52,7 @@ export class NotFound extends ElysiaError {
 
 export class ParseError extends ElysiaError {
 	code = 'PARSE'
-	status = 400
+	status = 400 as const
 	response = 'Bad Request'
 
 	constructor(cause?: Error) {
@@ -107,7 +107,7 @@ const walkSubSchema = (schema: any, instancePath: string | undefined) => {
 
 export class ValidationError extends ElysiaError {
 	code = 'VALIDATION'
-	status = 422
+	status = 422 as const
 
 	customError?: unknown
 	schema?: unknown
@@ -249,7 +249,7 @@ export class ValidationError extends ElysiaError {
 
 export class InvalidCookieSignature extends ElysiaError {
 	code = 'INVALID_COOKIE_SIGNATURE'
-	status = 400
+	status = 400 as const
 
 	constructor(
 		public key: string,

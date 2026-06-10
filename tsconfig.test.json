@@ -107,5 +107,5 @@
   // lifecycle/soundness, macro, schema-standalone, standard-schema,
   // type-system, utils) as porting continues. `src` is pulled in transitively
   // and is fully green.
-  "include": ["test/types/async-use.ts"]
+  "include": ["test/types/async-use.ts", "test/types/error.ts"]
 }
