@@ -94,24 +94,21 @@ export const BunAdapter = createAdapter({
 				const staticRoutes = collectStaticRoutes(app as AnyElysia)
 
 				if (staticRoutes?.[1].length)
-					return Promise.all(staticRoutes?.[1]).then(() => {
-						serve.routes = staticRoutes?.[1]
+					return Promise.all(staticRoutes[1]).then(() => {
+						serve.routes = staticRoutes[0]
 						app.server!.reload(serve)
 					})
 			}
 
 			if (app.pending) {
 				const reloadAfterModules = () => {
+					serve.fetch = app.fetch
+
 					const routes = collectRoutes()
 
-					if (routes)
-						routes.then(() => {
-							app.server!.reload(serve)
-						})
-					else app.server!.reload(serve)
+					if (!routes) app.server!.reload(serve)
 				}
 
-				// todo: yeah sorry I'm too tired for today to make is run sync with user's app.modules atm
 				app.modules.then(reloadAfterModules, reloadAfterModules)
 			} else collectRoutes()
 

@@ -28,9 +28,9 @@ let _defaultError: Response | undefined
 const getDefaultError = (): Response =>
 	isCloudflareWorker
 		? new Response('Internal Server Error', { status: 500 })
-		: (_defaultError ??= new Response('Internal Server Error', {
+		: ((_defaultError ??= new Response('Internal Server Error', {
 				status: 500
-			})).clone()
+			})).clone() as Response)
 
 // bypass the compiled-route codegen
 function parseQuery(context: Context) {

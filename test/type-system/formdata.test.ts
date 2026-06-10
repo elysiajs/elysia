@@ -713,6 +713,27 @@ describe('Zod (for standard schema) with File and nested Object', () => {
 		})
 	})
 
+	it('should reject when async file refine fails', async () => {
+		const app = new Elysia().post('/upload', ({ body }) => body, {
+			body: z.object({
+				file: z.file().refine((file) => fileType(file, 'image/png'))
+			})
+		})
+
+		const formData = new FormData()
+		// aris-yuzu.jpg is a jpeg — the png refine must reject it
+		formData.append('file', bunFile)
+
+		const response = await app.handle(
+			new Request('http://localhost/upload', {
+				method: 'POST',
+				body: formData
+			})
+		)
+
+		expect(response.status).toBe(422)
+	})
+
 	it('should handle array JSON strings in FormData', async () => {
 		const app = new Elysia().post('/upload', ({ body }) => body, {
 			body: z.object({

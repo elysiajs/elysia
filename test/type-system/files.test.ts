@@ -63,6 +63,47 @@ describe('Files', () => {
 		}
 	})
 
+	it('validate per-file maxSize', async () => {
+		const app = new Elysia().post('/', () => 'ok', {
+			body: t.Object({
+				file: t.Files({
+					maxSize: '100k'
+				})
+			})
+		})
+
+		// case 1 fail: millenium.jpg (~480k) exceeds maxSize
+		{
+			const body = new FormData()
+			body.append('file', Bun.file('test/images/millenium.jpg'))
+			body.append('file', Bun.file('test/images/kozeki-ui.webp'))
+
+			const response = await app.handle(
+				new Request('http://localhost/', {
+					method: 'POST',
+					body
+				})
+			)
+
+			expect(response.status).toBe(422)
+		}
+
+		// case 2 pass: kozeki-ui.webp (~30k) is within maxSize
+		{
+			const body = new FormData()
+			body.append('file', Bun.file('test/images/kozeki-ui.webp'))
+
+			const response = await app.handle(
+				new Request('http://localhost/', {
+					method: 'POST',
+					body
+				})
+			)
+
+			expect(response.status).toBe(200)
+		}
+	})
+
 	// Union schema tests - testing that getSchemaProperties handles Union correctly
 	it('handle file in Union schema', async () => {
 		const app = new Elysia().post('/', ({ body }) => 'ok', {

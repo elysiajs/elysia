@@ -12,6 +12,11 @@ export let t: typeof Type = new Proxy(Type, {
 })
 
 export { System } from 'typebox/system'
+export {
+	fileType,
+	setFileTypeDetector,
+	type FileTypeDetector
+} from './elysia/file'
 export type {
 	BaseSchema,
 	AnySchema,

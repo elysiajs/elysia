@@ -309,6 +309,102 @@ describe('Edge Case', () => {
 		})
 	})
 
+	it('sanitize cyclic schema nested in object', async () => {
+		const app = new Elysia({
+			sanitize: (v) => v && 'Elysia'
+		}).get(
+			'/',
+			// @ts-ignore
+			() => ({
+				wrap: {
+					type: 'ok',
+					data: { type: 'nested', data: null }
+				},
+				extra: 'untouched-number-free'
+			}),
+			{
+				response: t.Object({
+					wrap: t.Cyclic(
+						{
+							a: t.Object({
+								type: t.String(),
+								data: t.Nullable(t.Ref('a'))
+							})
+						},
+						'a'
+					),
+					extra: t.String()
+				})
+			}
+		)
+
+		const response = await app.handle(req('/')).then((x) => x.json())
+
+		expect(response).toEqual({
+			wrap: {
+				type: 'Elysia',
+				data: { type: 'Elysia', data: null }
+			},
+			extra: 'Elysia'
+		})
+	})
+
+	it('serve async static route repeatedly', async () => {
+		const app = new Elysia().get(
+			'/',
+			Promise.resolve(new Response('hi'))
+		)
+
+		const first = await app.handle(req('/'))
+		expect(first.status).toBe(200)
+		expect(await first.text()).toBe('hi')
+
+		// the resolved Response must be cloned per serve, not consumed
+		const second = await app.handle(req('/'))
+		expect(second.status).toBe(200)
+		expect(await second.text()).toBe('hi')
+	})
+
+	it('sanitize cyclic value at arbitrary depth', async () => {
+		let payload: any = { type: 'leaf', data: null }
+		for (let i = 0; i < 12; i++) payload = { type: 'node', data: payload }
+
+		const app = new Elysia({
+			sanitize: (v) => v && 'Elysia'
+		}).get(
+			'/',
+			// @ts-ignore
+			() => payload,
+			{
+				response: t.Cyclic(
+					{
+						a: t.Object({
+							type: t.String(),
+							data: t.Union([
+								t.Nullable(t.Ref('a')),
+								t.Array(t.Ref('a'))
+							])
+						})
+					},
+					'a'
+				)
+			}
+		)
+
+		const response = await app.handle(req('/')).then((x) => x.json())
+
+		let node: any = response
+		let depth = 0
+		while (node.data) {
+			expect(node.type).toBe('Elysia')
+			node = node.data
+			depth++
+		}
+
+		expect(depth).toBe(12)
+		expect(node.type).toBe('Elysia')
+	})
+
 	it('clone hooks before mapping it to usable function while compose', async () => {
 		const group = new Elysia()
 			.macro({

@@ -73,6 +73,7 @@ import type {
 	AfterHandler,
 	BodyHandler,
 	MergeSchema,
+	MergeElysiaInstances,
 	GuardLocalHook,
 	JoinPath,
 	UnwrapRoute,
@@ -97,42 +98,9 @@ import type {
 	MaybeFunction,
 	WrapFn
 } from './types'
-import { Context } from './context'
+import type { Context } from './context'
 
-// Tail-first walk buffer for `#use`'s hookChain absorption.
-// reused array so no new array allocation
 const useNodesBuffer: ChainNode[] = []
-
-// Turn a GET response into its HEAD counterpart: same status/headers, no body,
-// with `content-length` reflecting the would-be body. A bodyless response (204,
-// redirect, …) passes through untouched.
-function toHeadResponse(response: Response): Response | Promise<Response> {
-	if (!(response instanceof Response) || response.body === null)
-		return response
-
-	return response.arrayBuffer().then((body) => {
-		const headers = new Headers(response.headers)
-		headers.set('content-length', String(body.byteLength))
-
-		return new Response(null, {
-			status: response.status,
-			statusText: response.statusText,
-			headers
-		})
-	})
-}
-
-// Wrap a GET handler so a HEAD request runs the full GET lifecycle but returns
-// no body. The GET handler produces a fresh response per call, so reading its
-// body here is safe.
-function wrapHeadHandler(handler: CompiledHandler): CompiledHandler {
-	return ((context) => {
-		const r = handler(context)
-		return r instanceof Promise
-			? r.then(toHeadResponse)
-			: toHeadResponse(r as Response)
-	}) as CompiledHandler
-}
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
 
@@ -1703,16 +1671,22 @@ export class Elysia<
 
 		callback(child)
 
-		// get request/parse
-		const childFlat = flattenChain(child['~hookChain'])
-		const lifted: Partial<AppHook> = {}
-		if (childFlat?.request) (lifted as any).request = childFlat.request
-		if (childFlat?.parse) (lifted as any).parse = childFlat.parse
+		const finalize = () => {
+			const childFlat = flattenChain(child['~hookChain'])
+			const lifted: Partial<AppHook> = nullObject()
 
-		if ((lifted as any).request || (lifted as any).parse)
-			this.#pushHook(lifted)
+			if (childFlat?.request) (lifted as any).request = childFlat.request
+			if (childFlat?.parse) (lifted as any).parse = childFlat.parse
 
-		this.#use(child)
+			if ((lifted as any).request || (lifted as any).parse)
+				this.#pushHook(lifted)
+
+			return child
+		}
+
+		if (child.pending) return this.#useAsync(child.modules.then(finalize))
+
+		this.#use(finalize())
 
 		return this
 	}
@@ -2043,7 +2017,8 @@ export class Elysia<
 				}
 
 				if (k === 'detail') {
-					if (!input.detail) input.detail = {}
+					if (!input.detail) input.detail = nullObject()
+
 					input.detail = mergeDeep(
 						input.detail,
 						v,
@@ -2123,7 +2098,170 @@ export class Elysia<
 		return input
 	}
 
-	use(app: any): this {
+	/**
+	 * Merge a plugin instance
+	 */
+	use<const NewElysia extends AnyElysia>(
+		instance: NewElysia
+	): Elysia<
+		BasePath,
+		Scope,
+		{
+			decorator: Singleton['decorator'] &
+				NewElysia['~Singleton']['decorator']
+			store: Prettify<
+				Singleton['store'] & NewElysia['~Singleton']['store']
+			>
+			resolve: Singleton['resolve'] & NewElysia['~Singleton']['resolve']
+		},
+		Definitions & NewElysia['~Definitions'],
+		Metadata & NewElysia['~Metadata'],
+		BasePath extends ``
+			? Routes & NewElysia['~Routes']
+			: Routes & CreateEden<BasePath, NewElysia['~Routes']>,
+		Ephemeral,
+		Volatile & NewElysia['~Ephemeral']
+	>
+
+	/**
+	 * Merge multiple plugin instances
+	 */
+	use<const Instances extends AnyElysia[]>(
+		instances: Instances
+	): MergeElysiaInstances<
+		Instances,
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Ephemeral,
+		Volatile,
+		Routes
+	>
+
+	/**
+	 * Inline functional plugin
+	 */
+	use<
+		const NewElysia extends AnyElysia,
+		const Param extends AnyElysia = this
+	>(
+		plugin: (app: Param) => NewElysia
+	): Elysia<
+		BasePath,
+		Scope,
+		{
+			decorator: Singleton['decorator'] &
+				NewElysia['~Singleton']['decorator']
+			store: Prettify<
+				Singleton['store'] & NewElysia['~Singleton']['store']
+			>
+			resolve: Singleton['resolve'] & NewElysia['~Singleton']['resolve']
+		},
+		Definitions & NewElysia['~Definitions'],
+		Metadata & NewElysia['~Metadata'],
+		BasePath extends ``
+			? Routes & NewElysia['~Routes']
+			: Routes & CreateEden<BasePath, NewElysia['~Routes']>,
+		Ephemeral & NewElysia['~Ephemeral'],
+		Volatile & NewElysia['~Volatile']
+	>
+
+	/**
+	 * async plugin instance
+	 */
+	use<const NewElysia extends AnyElysia>(
+		instance: Promise<NewElysia | { default: NewElysia }>
+	): Elysia<
+		BasePath,
+		Scope,
+		{
+			decorator: Singleton['decorator'] &
+				NewElysia['~Singleton']['decorator']
+			store: Prettify<
+				Singleton['store'] & NewElysia['~Singleton']['store']
+			>
+			resolve: Singleton['resolve'] &
+				Partial<NewElysia['~Singleton']['resolve']>
+		},
+		Definitions & NewElysia['~Definitions'],
+		Metadata & NewElysia['~Metadata'],
+		BasePath extends ``
+			? Routes & NewElysia['~Routes']
+			: Routes & CreateEden<BasePath, NewElysia['~Routes']>,
+		Ephemeral,
+		{
+			resolve: Volatile['resolve'] &
+				Partial<NewElysia['~Ephemeral']['resolve']>
+			schema: Volatile['schema'] & NewElysia['~Ephemeral']['schema']
+			schemas: Volatile['schemas'] & NewElysia['~Ephemeral']['schemas']
+			response: Volatile['response'] & NewElysia['~Ephemeral']['response']
+		}
+	>
+
+	/**
+	 * Async functional plugin — same `| undefined` treatment for
+	 * `derive`/`resolve` as async instances
+	 */
+	use<
+		const NewElysia extends AnyElysia,
+		const Param extends AnyElysia = this
+	>(
+		plugin:
+			| ((app: Param) => Promise<NewElysia>)
+			| Promise<(app: Param) => MaybePromise<NewElysia>>
+			| Promise<{ default: (app: Param) => MaybePromise<NewElysia> }>
+	): Elysia<
+		BasePath,
+		Scope,
+		{
+			decorator: Singleton['decorator'] &
+				NewElysia['~Singleton']['decorator']
+			store: Prettify<
+				Singleton['store'] & NewElysia['~Singleton']['store']
+			>
+			resolve: Singleton['resolve'] &
+				Partial<NewElysia['~Singleton']['resolve']>
+		},
+		Definitions & NewElysia['~Definitions'],
+		Metadata & NewElysia['~Metadata'],
+		BasePath extends ``
+			? Routes & NewElysia['~Routes']
+			: Routes & CreateEden<BasePath, NewElysia['~Routes']>,
+		{
+			resolve: Ephemeral['resolve'] &
+				Partial<NewElysia['~Ephemeral']['resolve']>
+			schema: Ephemeral['schema'] & NewElysia['~Ephemeral']['schema']
+			schemas: Ephemeral['schemas'] & NewElysia['~Ephemeral']['schemas']
+			response: Ephemeral['response'] &
+				NewElysia['~Ephemeral']['response']
+		},
+		{
+			resolve: Volatile['resolve'] &
+				Partial<NewElysia['~Volatile']['resolve']>
+			schema: Volatile['schema'] & NewElysia['~Volatile']['schema']
+			schemas: Volatile['schemas'] & NewElysia['~Volatile']['schemas']
+			response: Volatile['response'] & NewElysia['~Volatile']['response']
+		}
+	>
+
+	/**
+	 * Fallback for values the typed overloads cannot model
+	 */
+	use(
+		app:
+			| MaybePromise<
+					| AnyElysia
+					| AnyElysia[]
+					| { default: unknown }
+					| ((app: any) => unknown)
+			  >
+			| null
+			| undefined
+	): this
+
+	use(app: any): any {
 		if (!app) return this
 
 		if (typeof app === 'function') {
@@ -2411,6 +2549,9 @@ export class Elysia<
 
 		return ready.then(() => {
 			if (this.#error !== undefined) throw this.#error
+
+			// module may register another async plugin (nested async) and extends the chain
+			if (this.#ready && this.#ready !== ready) return this.modules
 		})
 	}
 
@@ -3533,7 +3674,9 @@ export class Elysia<
 	compile() {
 		this.fetch
 
-		for (let i = 0; i < this.#history!.length; i++) this.handler(i, true)
+		// routes may not exist, eg. async plugins
+		if (this.#history)
+			for (let i = 0; i < this.#history.length; i++) this.handler(i, true)
 
 		return this
 	}
@@ -3597,6 +3740,32 @@ export class Elysia<
 		map[path] = handler
 	}
 
+	static #toHeadResponse(response: Response) {
+		if (!(response instanceof Response) || response.body === null)
+			return response
+
+		return response.arrayBuffer().then((body) => {
+			const headers = new Headers(response.headers)
+			headers.set('content-length', String(body.byteLength))
+
+			return new Response(null, {
+				status: response.status,
+				statusText: response.statusText,
+				headers
+			})
+		})
+	}
+
+	static #wrapHeadHandler(handler: CompiledHandler) {
+		return ((context) => {
+			const r = handler(context)
+
+			return r instanceof Promise
+				? r.then(Elysia.#toHeadResponse)
+				: Elysia.#toHeadResponse(r as Response)
+		}) as CompiledHandler
+	}
+
 	#routerBuilt = false
 	#buildRouter() {
 		if (!this.#history || this.#routerBuilt) return
@@ -3614,6 +3783,8 @@ export class Elysia<
 		for (let i = 0; i < length; i++)
 			if (mapMethodBack(this.#history![i][0]) === 'HEAD')
 				(explicitHead ??= new Set()).add(this.#history![i][1])
+
+		const wrapHeadHandler = Elysia.#wrapHeadHandler
 
 		for (let i = 0; i < length; i++) {
 			const route: InternalRoute = this.#history![i]

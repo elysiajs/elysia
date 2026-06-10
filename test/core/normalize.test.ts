@@ -406,6 +406,99 @@ describe('Normalize', () => {
 		expect(res.status).toBe(200)
 	})
 
+	it('normalize special-character property names', async () => {
+		const original = console.warn
+		console.warn = () => {}
+
+		try {
+			// a double-quote in a property name breaks exact-mirror codegen
+			// before 1.1.1 (SyntaxError) while typebox compiles it fine —
+			// normalization must never silently turn off: on exact-mirror
+			// < 1.1.1 this exercises the typebox Clean fallback in
+			// TypeBoxValidator's catch, on >= 1.1.1 the mirror itself
+			const app = new Elysia().post('/', ({ body }) => body, {
+				body: t.Object({
+					'a"b': t.String()
+				})
+			})
+
+			const res = await app.handle(
+				post('/', { 'a"b': 'value', extra: 'strip-me' })
+			)
+
+			expect(res.status).toBe(200)
+			expect(await res.json()).toEqual({ 'a"b': 'value' })
+		} finally {
+			console.warn = original
+		}
+	})
+
+	it("normalize body with normalize: 'typebox'", async () => {
+		const app = new Elysia({ normalize: 'typebox' }).post(
+			'/',
+			({ body }) => body,
+			{
+				body: t.Object({
+					name: t.String()
+				})
+			}
+		)
+
+		const res = await app.handle(
+			post('/', { name: 'sucrose', extra: 'strip-me' })
+		)
+
+		expect(res.status).toBe(200)
+		expect(await res.json()).toEqual({ name: 'sucrose' })
+	})
+
+	it('normalize headers when normalize is true', async () => {
+		const app = new Elysia({ normalize: true }).get(
+			'/',
+			({ headers }) => headers,
+			{
+				headers: t.Object({
+					name: t.String()
+				})
+			}
+		)
+
+		const res = await app.handle(
+			req('/', {
+				headers: {
+					name: 'sucrose',
+					job: 'alchemist'
+				}
+			})
+		)
+
+		expect(await res.json()).toEqual({ name: 'sucrose' })
+		expect(res.status).toBe(200)
+	})
+
+	it('loosely validate cookie by default if not normalized', async () => {
+		const app = new Elysia({ normalize: false }).get(
+			'/',
+			({ cookie: { name } }) => name.value!,
+			{
+				cookie: t.Cookie({
+					name: t.String()
+				})
+			}
+		)
+
+		const res = await app.handle(
+			req('/', {
+				headers: {
+					cookie: 'name=sucrose; extra=alchemist'
+				}
+			})
+		)
+
+		expect(await res.text()).toBe('sucrose')
+		expect(res.status).toBe(200)
+	})
+
 	it('strictly validate headers if not normalized and additionalProperties is false', async () => {
 		const app = new Elysia({ normalize: false }).get(
 			'/',

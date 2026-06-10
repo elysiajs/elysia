@@ -64,7 +64,7 @@ export function createSharedReference<
 >(createType: (property: P) => T) {
 	const shared = Object.create(null)
 
-	return (property: P) => {
+	return (property: P): T => {
 		const hash = propertyChecksum(property)
 		if (hash[0] in shared) {
 			const cached = shared[hash[0]]

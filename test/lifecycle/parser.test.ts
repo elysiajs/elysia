@@ -423,6 +423,27 @@ describe('Parser', () => {
 		])
 	})
 
+	it('honor explicit parser when schema contains File', async () => {
+		const app = new Elysia().post('/', ({ body }) => body, {
+			parse: 'json',
+			body: t.Object({
+				name: t.String(),
+				file: t.Optional(t.File())
+			})
+		})
+
+		const response = await app.handle(
+			new Request('http://localhost/', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ name: 'Aru' })
+			})
+		)
+
+		expect(response.status).toBe(200)
+		expect(await response.json()).toEqual({ name: 'Aru' })
+	})
+
 	it('should get parse error', async () => {
 		let code: string | undefined
 

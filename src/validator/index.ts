@@ -107,7 +107,7 @@ export abstract class Validator {
 		}
 
 		if ('~kind' in schema || '~elyAcl' in schema) {
-			const skipCache = options?.normalize === false
+			const skipCache = options?.normalize === false || !!options?.sanitize
 			const aot = options?.aot
 			const slot = options?.slot
 
@@ -244,6 +244,15 @@ export class StandardValidator extends Validator {
 
 	From(value: unknown, type?: string): unknown {
 		const q = this.validate(value)
+
+		if (q instanceof Promise)
+			return q.then((resolved) => {
+				if (resolved.issues)
+					throw new ValidationError(type, value, resolved.issues)
+
+				return resolved.value
+			})
+
 		// @ts-expect-error
 		if (q.issues) throw new ValidationError(type, value, this.Errors(value))
 

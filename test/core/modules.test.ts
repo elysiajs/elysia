@@ -22,193 +22,212 @@ describe('Modules', () => {
 		expect(res).toBe('async')
 	})
 
-	// it('async', async () => {
-	// 	const app = new Elysia().use(asyncPlugin)
+	it('async', async () => {
+		const app = new Elysia().use(asyncPlugin)
 
-	// 	await app.modules
+		await app.modules
 
-	// 	const res = await app.handle(req('/async')).then((r) => r.text())
+		const res = await app.handle(req('/async')).then((r) => r.text())
 
-	// 	expect(res).toBe('async')
-	// })
+		expect(res).toBe('async')
+	})
 
-	// it('inline import', async () => {
-	// 	const app = new Elysia().use(import('../modules'))
+	it('inline import', async () => {
+		const app = new Elysia().use(import('../modules'))
 
-	// 	await app.modules
+		await app.modules
 
-	// 	const res = await app.handle(req('/lazy')).then((r) => r.text())
+		const res = await app.handle(req('/lazy')).then((r) => r.text())
 
-	// 	expect(res).toBe('lazy')
-	// })
+		expect(res).toBe('lazy')
+	})
 
-	// it('import', async () => {
-	// 	const app = new Elysia().use(lazyPlugin)
+	it('import', async () => {
+		const app = new Elysia().use(lazyPlugin)
 
-	// 	await app.modules
+		await app.modules
 
-	// 	const res = await app.handle(req('/lazy')).then((r) => r.text())
+		const res = await app.handle(req('/lazy')).then((r) => r.text())
 
-	// 	expect(res).toBe('lazy')
-	// })
+		expect(res).toBe('lazy')
+	})
 
-	// it('import non default', async () => {
-	// 	const app = new Elysia().use(lazyNamed)
+	it('import non default', async () => {
+		const app = new Elysia().use(lazyNamed)
 
-	// 	await app.modules
+		await app.modules
 
-	// 	const res = await app.handle(req('/lazy')).then((r) => r.text())
+		const res = await app.handle(req('/lazy')).then((r) => r.text())
 
-	// 	expect(res).toBe('lazy')
-	// })
+		expect(res).toBe('lazy')
+	})
 
-	// it('inline import non default', async () => {
-	// 	const app = new Elysia().use(import('../modules'))
+	it('inline import non default', async () => {
+		const app = new Elysia().use(import('../modules'))
 
-	// 	await app.modules
+		await app.modules
 
-	// 	const res = await app.handle(req('/lazy')).then((r) => r.text())
+		const res = await app.handle(req('/lazy')).then((r) => r.text())
 
-	// 	expect(res).toBe('lazy')
-	// })
+		expect(res).toBe('lazy')
+	})
 
-	// it('register async and lazy path', async () => {
-	// 	const app = new Elysia()
-	// 		.use(import('../modules'))
-	// 		.use(asyncPlugin)
-	// 		.get('/', () => 'hi')
+	it('register async and lazy path', async () => {
+		const app = new Elysia()
+			.use(import('../modules'))
+			.use(asyncPlugin)
+			.get('/', () => 'hi')
 
-	// 	await app.modules
+		await app.modules
 
-	// 	const res = await app.handle(req('/async'))
+		const res = await app.handle(req('/async'))
 
-	// 	expect(res.status).toEqual(200)
-	// })
+		expect(res.status).toEqual(200)
+	})
 
-	// it('handle other routes while lazy load', async () => {
-	// 	const app = new Elysia().use(import('../timeout')).get('/', () => 'hi')
+	it('handle other routes while lazy load', async () => {
+		const app = new Elysia().use(import('../timeout')).get('/', () => 'hi')
 
-	// 	const res = await app.handle(req('/')).then((r) => r.text())
+		const res = await app.handle(req('/')).then((r) => r.text())
 
-	// 	expect(res).toBe('hi')
-	// })
+		expect(res).toBe('hi')
+	})
 
-	// it('handle deferred import', async () => {
-	// 	const app = new Elysia().use(import('../modules'))
+	it('handle deferred import', async () => {
+		const app = new Elysia().use(import('../modules'))
 
-	// 	await app.modules
+		await app.modules
 
-	// 	const res = await app.handle(req('/lazy')).then((x) => x.text())
+		const res = await app.handle(req('/lazy')).then((x) => x.text())
 
-	// 	expect(res).toBe('lazy')
-	// })
+		expect(res).toBe('lazy')
+	})
 
-	// it('re-compile on async plugin', async () => {
-	// 	const app = new Elysia().use(async (app) => {
-	// 		await new Promise((resolve) => setTimeout(resolve, 1))
+	it('re-compile on async plugin', async () => {
+		const app = new Elysia().use(async (app) => {
+			await new Promise((resolve) => setTimeout(resolve, 1))
 
-	// 		return app.get('/', () => 'hi')
-	// 	})
+			return app.get('/', () => 'hi')
+		})
 
-	// 	await app.modules
+		await app.modules
 
-	// 	const res = await app.handle(req('/')).then((x) => x.text())
+		const res = await app.handle(req('/')).then((x) => x.text())
 
-	// 	expect(res).toBe('hi')
-	// })
+		expect(res).toBe('hi')
+	})
 
-	// it('handle async plugin', async () => {
-	// 	const a =
-	// 		(config = {}) =>
-	// 		async (app: Elysia) => {
-	// 			await sleep(0)
-	// 			return app.derive(() => ({
-	// 				derived: 'async'
-	// 			}))
-	// 		}
+	it('apply async plugin contributions at resolution time', async () => {
+		const app = new Elysia()
+			.use(async (app) => {
+				await sleep(0)
 
-	// 	const app = new Elysia().use(a()).get('/', ({ derived }) => derived)
+				return app
+					.decorate('decorated', 'decorated-value')
+					.state('stated', 'stated-value')
+					.derive(() => ({ derived: 'derived-value' }))
+			})
+			.get('/', (c: any) => ({
+				decorated: c.decorated ?? null,
+				stated: c.store?.stated ?? null,
+				// routes declared before the plugin resolves never see
+				// chain-ordered contributions (derive/resolve) — async
+				// `use` types them `| undefined` accordingly
+				// (see test/types/async-use.ts)
+				derived: c.derived ?? null
+			}))
 
-	// 	await app.modules
+		await app.modules
 
-	// 	const resRoot = await app.handle(req('/')).then((r) => r.text())
-	// 	expect(resRoot).toBe('async')
-	// })
+		const res = await app.handle(req('/')).then((r) => r.json())
 
-	// it('do not duplicate functional async plugin lifecycle', async () => {
-	// 	const plugin = async (app: Elysia) => app.get('/', () => 'yay')
+		expect(res).toEqual({
+			decorated: 'decorated-value',
+			stated: 'stated-value',
+			derived: null
+		})
+	})
 
-	// 	let fired = 0
+	it('do not duplicate functional async plugin lifecycle', async () => {
+		const plugin = async (app: Elysia) => app.get('/', () => 'yay')
 
-	// 	const app = new Elysia()
-	// 		.use(plugin)
-	// 		.onRequest(() => {
-	// 			fired++
-	// 		})
-	// 		.compile()
+		let fired = 0
 
-	// 	await app.modules
-	// 	await app.handle(req('/'))
+		const app = new Elysia()
+			.use(plugin)
+			.onRequest(() => {
+				fired++
+			})
+			.compile()
 
-	// 	expect(fired).toBe(1)
-	// })
+		await app.modules
+		await app.handle(req('/'))
 
-	// it('do not duplicate instance async plugin lifecycle', async () => {
-	// 	const plugin = async () => new Elysia().get('/', () => 'yay')
+		expect(fired).toBe(1)
+	})
 
-	// 	let fired = 0
+	it('do not duplicate instance async plugin lifecycle', async () => {
+		const plugin = async () => new Elysia().get('/', () => 'yay')
 
-	// 	const app = new Elysia()
-	// 		.use(plugin())
-	// 		.onRequest(() => {
-	// 			fired++
-	// 		})
-	// 		.compile()
+		let fired = 0
 
-	// 	await app.modules
-	// 	await app.handle(req('/'))
+		const app = new Elysia()
+			.use(plugin())
+			.onRequest(() => {
+				fired++
+			})
+			.compile()
 
-	// 	expect(fired).toBe(1)
-	// })
+		await app.modules
+		await app.handle(req('/'))
 
-	// it('handle nested async plugin', async () => {
-	// 	const yay = async () => {
-	// 		await Bun.sleep(2)
+		expect(fired).toBe(1)
+	})
 
-	// 		return new Elysia({ name: 'yay' }).get('/yay', 'yay')
-	// 	}
+	it('handle nested async plugin', async () => {
+		const yay = async () => {
+			await Bun.sleep(2)
 
-	// 	const wrapper = new Elysia({ name: 'wrapper' }).use(yay())
+			return new Elysia({ name: 'yay' }).get('/yay', 'yay')
+		}
 
-	// 	const app = new Elysia().use(wrapper)
+		const wrapper = new Elysia({ name: 'wrapper' }).use(yay())
 
-	// 	await app.modules
+		const app = new Elysia().use(wrapper)
 
-	// 	const response = await app.handle(req('/yay'))
+		await app.modules
 
-	// 	expect(response.status).toBe(200)
-	// })
+		const response = await app.handle(req('/yay'))
 
-	// it('handle recursive nested async plugins', async () => {
-	// 	const delay = <T extends (...args: any) => any>(
-	// 		callback: T,
-	// 		ms = 617
-	// 	): Promise<ReturnType<T>> => Bun.sleep(ms).then(() => callback())
+		expect(response.status).toBe(200)
+	})
 
-	// 	const yay = () => delay(() => new Elysia().get('/nested', 'hi!'), 1)
-	// 	const yay2 = () => delay(() => new Elysia().use(yay), 5)
-	// 	const yay3 = () => delay(() => new Elysia().use(yay2), 10)
-	// 	const wrapper = new Elysia().use(async () => delay(() => yay3(), 6.17))
+	it('handle recursive nested async plugins', async () => {
+		const delay = <T extends (...args: any) => any>(
+			callback: T,
+			ms = 617
+		): Promise<ReturnType<T>> => Bun.sleep(ms).then(() => callback())
 
-	// 	const app = new Elysia().use(wrapper)
+		const yay = () => delay(() => new Elysia().get('/nested', 'hi!'), 1)
+		const yay2 = () => delay(() => new Elysia().use(yay), 5)
+		const yay3 = () => delay(() => new Elysia().use(yay2), 10)
+		const wrapper = new Elysia().use(async () => delay(() => yay3(), 6.17))
 
-	// 	await app.modules
+		const app = new Elysia().use(wrapper)
 
-	// 	const response = await app.handle(req('/nested'))
+		await app.modules
 
-	// 	expect(response.status).toBe(200)
-	// })
+		const response = await app.handle(req('/nested'))
 
+		expect(response.status).toBe(200)
+	})
+
+	// Requires eagerly merging a pending instance's synchronously-registered
+	// routes (and re-merging once its async modules drain) — `use(pending
+	// instance)` currently defers the whole merge until the chain drains, so
+	// `/plugin` is unreachable without `await app.modules`. Compatible with
+	// the eager-serve design in test/2/extends/async-use.test.ts but needs
+	// partial-merge machinery (issue #1067 semantics) first.
 	// it('recompile nested async plugin once registered', async () => {
 	// 	const asyncPlugin = Promise.resolve(new Elysia({ name: 'AsyncPlugin' }))
 
@@ -249,54 +268,54 @@ describe('Modules', () => {
 	// 	expect(text).toEqual('GET /plugin')
 	// })
 
-	// it('register dynamic import routes inside guard', async () => {
-	// 	const app = new Elysia().guard(
-	// 		{},
-	// 		(app) => app.use(import('../modules').then((m) => m.lazyInstance))
-	// 	)
+	it('register dynamic import routes inside guard', async () => {
+		const app = new Elysia().guard(
+			{},
+			(app) => app.use(import('../modules').then((m) => m.lazyInstance))
+		)
 
-	// 	await app.modules
+		await app.modules
 
-	// 	const res = await app.handle(req('/lazy-instance'))
+		const res = await app.handle(req('/lazy-instance'))
 
-	// 	expect(res.status).toBe(200)
-	// 	expect(await res.text()).toBe('lazy-instance')
-	// })
+		expect(res.status).toBe(200)
+		expect(await res.text()).toBe('lazy-instance')
+	})
 
-	// it('register multiple dynamic import routes inside guard', async () => {
-	// 	const lazyA = Promise.resolve(new Elysia().get('/a', () => 'a'))
-	// 	const lazyB = Promise.resolve(new Elysia().get('/b', () => 'b'))
+	it('register multiple dynamic import routes inside guard', async () => {
+		const lazyA = Promise.resolve(new Elysia().get('/a', () => 'a'))
+		const lazyB = Promise.resolve(new Elysia().get('/b', () => 'b'))
 
-	// 	let hookCalls = 0
+		let hookCalls = 0
 
-	// 	const app = new Elysia().guard(
-	// 		{ beforeHandle: () => { hookCalls++ } },
-	// 		(app) => app.use(lazyA).use(lazyB)
-	// 	)
+		const app = new Elysia().guard(
+			{ beforeHandle: () => { hookCalls++ } },
+			(app) => app.use(lazyA).use(lazyB)
+		)
 
-	// 	await app.modules
+		await app.modules
 
-	// 	expect((await app.handle(req('/a'))).status).toBe(200)
-	// 	expect((await app.handle(req('/b'))).status).toBe(200)
-	// 	expect(hookCalls).toBe(2)
-	// })
+		expect((await app.handle(req('/a'))).status).toBe(200)
+		expect((await app.handle(req('/b'))).status).toBe(200)
+		expect(hookCalls).toBe(2)
+	})
 
-	// it('register dynamic import routes inside guard with hook', async () => {
-	// 	let called = false
+	it('register dynamic import routes inside guard with hook', async () => {
+		let called = false
 
-	// 	const app = new Elysia().guard(
-	// 		{
-	// 			beforeHandle: () => {
-	// 				called = true
-	// 			}
-	// 		},
-	// 		(app) => app.use(import('../modules').then((m) => m.lazyInstance))
-	// 	)
+		const app = new Elysia().guard(
+			{
+				beforeHandle: () => {
+					called = true
+				}
+			},
+			(app) => app.use(import('../modules').then((m) => m.lazyInstance))
+		)
 
-	// 	await app.modules
+		await app.modules
 
-	// 	await app.handle(req('/lazy-instance'))
+		await app.handle(req('/lazy-instance'))
 
-	// 	expect(called).toBe(true)
-	// })
+		expect(called).toBe(true)
+	})
 })

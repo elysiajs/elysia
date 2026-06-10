@@ -18,7 +18,10 @@ let _notFound: Response | undefined
 const getNotFound = (): Response =>
 	isCloudflareWorker
 		? new Response('Not Found', { status: 404 })
-		: (_notFound ??= new Response('Not Found', { status: 404 })).clone()
+		: // undici-types' `clone()` return clashes with Bun's global Response
+			((_notFound ??= new Response('Not Found', {
+				status: 404
+			})).clone() as Response)
 
 const catchError =
 	(
@@ -170,6 +173,10 @@ export function createFetchHandler(
 	const strictPath = !!app['~config']?.strictPath
 	const loosePath = nullObject() as Record<string, string>
 
+	// standard internet hostname is at minimum 11 characters (http://a.bc)
+	const pathStart =
+		app['~config']?.handler?.standardHostname === false ? 7 : 11
+
 	const hook = flattenChain(app['~hookChain'])
 	const hasError = !!hook?.error
 
@@ -179,36 +186,32 @@ export function createFetchHandler(
 	const mapResponseHooks = hook?.mapResponse as
 		| ((context: Context) => unknown)[]
 		| undefined
-	const mapResponse =
-		mapResponseHooks?.length
-			? (response: unknown, set: Context['set'], context?: Context) => {
-					if (!context) return baseMapResponse(response, set)
+	const mapResponse = mapResponseHooks?.length
+		? (response: unknown, set: Context['set'], context?: Context) => {
+				if (!context) return baseMapResponse(response, set)
+				;(context as { responseValue?: unknown }).responseValue =
+					response
 
-					;(context as { responseValue?: unknown }).responseValue =
-						response
+				const run = (i: number): unknown => {
+					for (; i < mapResponseHooks.length; i++) {
+						const result = mapResponseHooks[i](context)
+						if (result instanceof Promise)
+							return result.then((resolved) => {
+								if (resolved !== undefined)
+									return baseMapResponse(resolved, set)
+								return run(i + 1)
+							})
 
-					// First hook to return a non-undefined value wins (mirrors
-					// the success-path `mapResponse` semantics); the adapter
-					// then maps it, applying `set.status`/headers even to a
-					// returned `Response`.
-					const run = (i: number): unknown => {
-						for (; i < mapResponseHooks.length; i++) {
-							const result = mapResponseHooks[i](context)
-							if (result instanceof Promise)
-								return result.then((resolved) => {
-									if (resolved !== undefined)
-										return baseMapResponse(resolved, set)
-									return run(i + 1)
-								})
-							if (result !== undefined)
-								return baseMapResponse(result, set)
-						}
-						return baseMapResponse(response, set)
+						if (result !== undefined)
+							return baseMapResponse(result, set)
 					}
 
-					return run(0)
+					return baseMapResponse(response, set)
 				}
-			: baseMapResponse
+
+				return run(0)
+			}
+		: baseMapResponse
 
 	const handleError = createErrorHandler(
 		hook?.error,
@@ -274,7 +277,7 @@ export function createFetchHandler(
 		return async (request: Request): Promise<Response> => {
 			const context = new Context(request)
 			const url = request.url,
-				s = url.indexOf('/', 11)
+				s = url.indexOf('/', pathStart)
 			context.path = url.substring(
 				s,
 				// @ts-expect-error
@@ -367,7 +370,7 @@ export function createFetchHandler(
 			return async (request: Request): Promise<Response> => {
 				const context = new Context(request)
 				const url = request.url,
-					s = url.indexOf('/', 11)
+					s = url.indexOf('/', pathStart)
 
 				context.path = url.substring(
 					s,
@@ -410,7 +413,7 @@ export function createFetchHandler(
 		return (request: Request): MaybePromise<Response> => {
 			const context = new Context(request)
 			const url = request.url,
-				s = url.indexOf('/', 11)
+				s = url.indexOf('/', pathStart)
 
 			context.path = url.substring(
 				s,
@@ -451,7 +454,7 @@ export function createFetchHandler(
 	return (request: Request): MaybePromise<Response> => {
 		const context = new Context(request)
 		const url = request.url,
-			s = url.indexOf('/', 11)
+			s = url.indexOf('/', pathStart)
 
 		let path = (context.path = url.substring(
 			s,

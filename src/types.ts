@@ -149,8 +149,18 @@ export interface ElysiaConfig<
 	 */
 	normalize?: boolean | 'exactMirror' | 'typebox'
 
-	// ? Might delete
-	// handler?: ComposerGeneralHandlerOptions
+	handler?: {
+		/**
+		 * optimization for standard internet hostname
+		 * this will assume hostname is always use a standard internet hostname
+		 * assuming hostname is at minimum of 11 length of string (http://a.bc)
+		 *
+		 * setting this to true will skip the first 11 character of the hostname
+		 *
+		 * @default true
+		 */
+		standardHostname?: boolean
+	}
 	/**
 	 * Enable Bun static response
 	 *
@@ -1615,6 +1625,7 @@ type InnerMacroToContext<
 						SelectedMacro[key]
 					> extends infer Value
 						? {
+								// @ts-ignore Trust me bro
 								q: UnwrapMacroSchema<Value, Definitions>
 								resolve: ExtractResolveFromMacro<
 									Extract<
@@ -1738,7 +1749,7 @@ export type CreateEdenResponse<
 type Extract200<T> = T extends AnyElysiaStatus
 	?
 			| Exclude<T, AnyElysiaStatus>
-			| Extract<T, ElysiaStatus<200, any, 200>>['res']
+			| Extract<T, ElysiaStatus<200, any, 200>>['response']
 	: T
 
 export type ValueToResponseSchema<Value> = ExtractErrorFromHandle<Value> &

@@ -159,7 +159,8 @@ export function responseToSetHeaders(response: Response, set?: Context['set']) {
 					if (key in set.headers) set.headers[key] = value
 		}
 
-		if (set.status === 200) set.status = response.status
+		if (set.status === undefined || set.status === 200)
+			set.status = response.status
 
 		// ? `content-encoding` prevent response streaming
 		if (set.headers['content-encoding'])

@@ -332,7 +332,7 @@ function mapFallback(
 }
 
 const mapResponseFallback = mapFallback(mapResponse)
-const mapCompactResponseFallback = mapFallback((response, set, request) =>
+const mapCompactResponseFallback = mapFallback((response, _, request) =>
 	mapCompactResponse(response, request)
 )
 

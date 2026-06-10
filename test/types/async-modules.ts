@@ -1,7 +1,7 @@
 import { expectTypeOf } from 'expect-type'
 import { Elysia } from '../../src'
 
-// ? async plugin should mark as partial
+// ? async plugin should mark derive/resolve as partial, decorate/state stay exact
 {
 	const serviceA = async () => {
 		await Bun.sleep(1)
@@ -20,12 +20,12 @@ import { Elysia } from '../../src'
 	new Elysia()
 		.use(serviceA)
 		.decorate((v) => {
-			expectTypeOf(v.decoratorA).toEqualTypeOf<string | undefined>()
+			expectTypeOf(v.decoratorA).toEqualTypeOf<string>()
 
 			return v
 		})
 		.state((v) => {
-			expectTypeOf(v.storeA).toEqualTypeOf<'storeA' | undefined>()
+			expectTypeOf(v.storeA).toEqualTypeOf<'storeA'>()
 
 			return v
 		})
@@ -41,7 +41,7 @@ import { Elysia } from '../../src'
 		})
 }
 
-// ? inline async should mark plugin as partial
+// ? inline async should mark scoped derive/resolve as partial, decorate/state stay exact
 {
 	const serviceA = new Elysia().use(async (app) => {
 		await Bun.sleep(1)
@@ -61,12 +61,12 @@ import { Elysia } from '../../src'
 	new Elysia()
 		.use(serviceA)
 		.decorate((v) => {
-			expectTypeOf(v.decoratorA).toEqualTypeOf<string | undefined>()
+			expectTypeOf(v.decoratorA).toEqualTypeOf<string>()
 
 			return v
 		})
 		.state((v) => {
-			expectTypeOf(v.storeA).toEqualTypeOf<'storeA' | undefined>()
+			expectTypeOf(v.storeA).toEqualTypeOf<'storeA'>()
 
 			return v
 		})
@@ -82,7 +82,7 @@ import { Elysia } from '../../src'
 		})
 }
 
-// ? async plugin should mark plugin as partial
+// ? async plugin should mark scoped derive/resolve as partial, decorate/state stay exact
 {
 	const serviceA = async () => {
 		await Bun.sleep(1)
@@ -102,12 +102,12 @@ import { Elysia } from '../../src'
 	new Elysia()
 		.use(serviceA)
 		.decorate((v) => {
-			expectTypeOf(v.decoratorA).toEqualTypeOf<string | undefined>()
+			expectTypeOf(v.decoratorA).toEqualTypeOf<string>()
 
 			return v
 		})
 		.state((v) => {
-			expectTypeOf(v.storeA).toEqualTypeOf<'storeA' | undefined>()
+			expectTypeOf(v.storeA).toEqualTypeOf<'storeA'>()
 
 			return v
 		})
@@ -123,7 +123,7 @@ import { Elysia } from '../../src'
 		})
 }
 
-// ? inline async should mark plugin as partial
+// ? inline async should mark scoped derive/resolve as partial, decorate/state stay exact
 {
 	const serviceA = new Elysia().use(async (app) => {
 		await Bun.sleep(1)
@@ -143,12 +143,12 @@ import { Elysia } from '../../src'
 	new Elysia()
 		.use(serviceA)
 		.decorate((v) => {
-			expectTypeOf(v.decoratorA).toEqualTypeOf<string | undefined>()
+			expectTypeOf(v.decoratorA).toEqualTypeOf<string>()
 
 			return v
 		})
 		.state((v) => {
-			expectTypeOf(v.storeA).toEqualTypeOf<'storeA' | undefined>()
+			expectTypeOf(v.storeA).toEqualTypeOf<'storeA'>()
 
 			return v
 		})
@@ -164,7 +164,7 @@ import { Elysia } from '../../src'
 		})
 }
 
-// ? async plugin should mark global as partial
+// ? async plugin should mark global derive/resolve as partial, decorate/state stay exact
 {
 	const serviceA = async () => {
 		await Bun.sleep(1)
@@ -184,12 +184,12 @@ import { Elysia } from '../../src'
 	new Elysia()
 		.use(serviceA)
 		.decorate((v) => {
-			expectTypeOf(v.decoratorA).toEqualTypeOf<string | undefined>()
+			expectTypeOf(v.decoratorA).toEqualTypeOf<string>()
 
 			return v
 		})
 		.state((v) => {
-			expectTypeOf(v.storeA).toEqualTypeOf<'storeA' | undefined>()
+			expectTypeOf(v.storeA).toEqualTypeOf<'storeA'>()
 
 			return v
 		})
@@ -205,7 +205,7 @@ import { Elysia } from '../../src'
 		})
 }
 
-// ? inline async should mark global as partial
+// ? inline async should mark global derive/resolve as partial, decorate/state stay exact
 {
 	const serviceA = new Elysia().use(async (app) => {
 		await Bun.sleep(1)
@@ -225,12 +225,12 @@ import { Elysia } from '../../src'
 	new Elysia()
 		.use(serviceA)
 		.decorate((v) => {
-			expectTypeOf(v.decoratorA).toEqualTypeOf<string | undefined>()
+			expectTypeOf(v.decoratorA).toEqualTypeOf<string>()
 
 			return v
 		})
 		.state((v) => {
-			expectTypeOf(v.storeA).toEqualTypeOf<'storeA' | undefined>()
+			expectTypeOf(v.storeA).toEqualTypeOf<'storeA'>()
 
 			return v
 		})

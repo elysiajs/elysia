@@ -52,6 +52,7 @@ import {
 } from '../compile/aot'
 
 import { hasProperty } from './utils'
+import { collectFileTypeChecks, takeFileTypeChecks } from './elysia/file'
 import { isBlob, nullObject } from '../utils'
 import { ValidationError } from '../error'
 
@@ -107,11 +108,35 @@ const EMPTY_EXTERNALS = Object.freeze([]) as unknown as unknown[]
 const isAsyncPredicate = (v: unknown) =>
 	Array.isArray(v)
 		? v.some((x) =>
-				typeof x.refine === 'function'
-					? isAsyncFunction(x.refine) || x.refine === isBlob
+				typeof x.check === 'function'
+					? isAsyncFunction(x.check) || x.check === isBlob
 					: false
 			)
 		: false
+
+async function enforceFileTypeChecks(
+	pending: Promise<true | string>[],
+	type: string | undefined,
+	value: unknown,
+	schema: unknown
+): Promise<void> {
+	const results = await Promise.all(pending)
+
+	for (let i = 0; i < results.length; i++)
+		if (results[i] !== true)
+			throw new ValidationError(
+				type,
+				value,
+				[
+					{
+						instancePath: '',
+						message: results[i],
+						summary: results[i]
+					}
+				],
+				schema
+			)
+}
 
 function isPrecomputeSafe(schema: any, depth = 0): boolean {
 	if (!schema || typeof schema !== 'object') return true
@@ -282,7 +307,11 @@ export class TypeBoxValidator<
 				: applyCoercions(schema, options?.coerces)
 		) as T
 
-		if (options?.normalize === false)
+		if (
+			options?.normalize === false &&
+			options.slot !== 'headers' &&
+			options.slot !== 'cookie'
+		)
 			this.schema = nonAdditionalProperties(
 				this.schema as any
 			) as unknown as T
@@ -333,17 +362,22 @@ export class TypeBoxValidator<
 
 			try {
 				this.Clean =
-					!options?.normalize || options.normalize === 'exactMirror'
-						? this.#setupMirror(schema, options, frozen)
-						: options.normalize === 'typebox'
-							? (value) => Clean(this.tb!, value)
-							: undefined
+					options?.normalize === false
+						? undefined
+						: options?.normalize === 'typebox'
+							? (value) => Clean(this.schema, value)
+							: this.#setupMirror(schema, options, frozen)
 			} catch (error) {
 				console.warn(
 					'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
 				)
 				console.warn(schema)
 				console.warn(error)
+
+				// degrade to typebox Clean (slower, no sanitize) instead of
+				// silently skipping normalization
+				if (options?.normalize !== false)
+					this.Clean = (value) => Clean(this.schema, value)
 			}
 		}
 	}
@@ -578,7 +612,6 @@ export class TypeBoxValidator<
 			if (this.precomputeSafe) {
 				if (value === undefined || value === null)
 					value = this.#precomputedDefault as any
-
 				else if (
 					this.#precomputedObjectDefault !== undefined &&
 					typeof value === 'object' &&
@@ -595,16 +628,30 @@ export class TypeBoxValidator<
 		if (bypass) return bypass.value
 
 		if (this.hasCodec) {
-			if (!this.#noValidate && !this.Check(value))
-				throw new ValidationError(
-					type,
-					value,
-					this.Errors(value),
-					this.schema
-				)
+			if (!this.#noValidate) {
+				collectFileTypeChecks()
+				const valid = this.Check(value)
+				const pendingFile = takeFileTypeChecks()
+
+				if (!valid)
+					throw new ValidationError(
+						type,
+						value,
+						this.Errors(value),
+						this.schema
+					)
+
+				if (pendingFile)
+					await enforceFileTypeChecks(
+						pendingFile,
+						type,
+						value,
+						this.schema
+					)
+			}
 			try {
 				// @ts-ignore
-				value = await DecodeUnsafe(nullObject(), this.schema, value)
+				value = DecodeUnsafe(nullObject(), this.schema, value)
 			} catch (e: any) {
 				if (e instanceof ValidationError) throw e
 				if (e?.error) throw e.error
@@ -617,12 +664,24 @@ export class TypeBoxValidator<
 					this.schema
 				)
 			}
-		} else {
-			if (!this.#noValidate && !(await this.Check(value)))
+		} else if (!this.#noValidate) {
+			collectFileTypeChecks()
+			const valid = this.Check(value)
+			const pendingFile = takeFileTypeChecks()
+
+			if (!valid)
 				throw new ValidationError(
 					type,
 					value,
 					this.Errors(value),
+					this.schema
+				)
+
+			if (pendingFile)
+				await enforceFileTypeChecks(
+					pendingFile,
+					type,
+					value,
 					this.schema
 				)
 		}
@@ -635,21 +694,18 @@ export class TypeBoxValidator<
 	FromSync(value: Static<T>, type?: string): Static<T> {
 		if (this.hasDefault) {
 			if (this.precomputeSafe) {
-				if (value === undefined || value === null) {
+				if (value === undefined || value === null)
 					value = this.#precomputedDefault as Static<T>
-				} else if (
+				else if (
 					this.#precomputedObjectDefault !== undefined &&
 					typeof value === 'object' &&
 					!Array.isArray(value)
-				) {
+				)
 					value = applyPrecomputed(
 						this.#precomputedObjectDefault,
 						value as any
 					) as Static<T>
-				}
-			} else {
-				value = Default(this.schema, value) as Static<T>
-			}
+			} else value = Default(this.schema, value) as Static<T>
 		}
 
 		const bypass = this.optionalBypass(value)

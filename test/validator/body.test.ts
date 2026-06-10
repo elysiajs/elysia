@@ -1,7 +1,11 @@
-import { Elysia, t, ValidationError } from '../../src'
+import { fileTypeFromBlob } from 'file-type'
+
+import { Elysia, t, ValidationError, setFileTypeDetector } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { post, upload } from '../utils'
+
+setFileTypeDetector(fileTypeFromBlob)
 
 describe('Body Validator', () => {
 	it('skip body parsing if body is empty but headers is present', async () => {
@@ -739,7 +743,7 @@ describe('Body Validator', () => {
 			})
 
 			const response = await app.handle(request).then((r) => r.text())
-			// expect(+response).toBe(size)
+			expect(+response).toBe(size)
 		}
 
 		{

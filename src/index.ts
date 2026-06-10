@@ -12,7 +12,13 @@ export {
 	ValidationError,
 	validationDetail
 } from './error'
-export { t, System } from './type'
+export {
+	t,
+	System,
+	fileType,
+	setFileTypeDetector,
+	type FileTypeDetector
+} from './type'
 export { Compiled } from './compile/aot'
 export { file, ElysiaFile } from './universal/file'
 

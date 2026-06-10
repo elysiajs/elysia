@@ -25,6 +25,7 @@ import { parseQueryFromURL } from '../../parse-query'
 import { defaultAdapter } from '../../adapter/constants'
 
 import {
+    cloneResponse,
 	getQueryParseArgs,
 	mapAfterHandle,
 	mapAfterResponse,
@@ -44,7 +45,6 @@ import {
 	eventProperties,
 	flattenChain,
 	fnOrigin,
-	isBlob,
 	isLocalScope,
 	mapMethodBack,
 	mergeHook,
@@ -106,13 +106,6 @@ function builtinParser(
 	}
 }
 
-const isRefineBlob = (v: unknown): v is { refine: unknown } =>
-	// @ts-expect-error
-	v!.refine === isBlob
-
-const hasFileTbPredicate = (v: unknown) =>
-	Array.isArray(v) ? v.some(isRefineBlob) : false
-
 function parse(
 	adapter: ElysiaAdapter['parse'],
 	parsers: MaybeArray<ContentType | BodyHandler> | undefined,
@@ -123,9 +116,6 @@ function parse(
 ) {
 	if (parsers && typeof parsers === 'function')
 		parsers = [parsers] as ContentType[] | BodyHandler[]
-
-	const hasFile = // @ts-expect-error
-		bodyVali?.tb?.buildResult.external.variables.some(hasFileTbPredicate)
 
 	if (
 		typeof parsers === 'string' ||
@@ -138,11 +128,6 @@ function parse(
 		const child = report?.resolveChild(builtinName)
 		const begin = child ? child.begin : ''
 		const end = child ? child.end() : ''
-
-		if (hasFile) {
-			link(adapter.formData, 'pf')
-			return begin + parseFormData + end
-		}
 
 		return begin + builtinParser(adapter, parsers as string, link) + end
 	}
@@ -183,18 +168,16 @@ function parse(
 		}
 
 	if (!hasType) {
-		if (hasFile) {
-			link(adapter.formData, 'pf')
-			return code + parseFormData
-		} else {
-			const child = report?.resolveChild('default')
-			const begin = child ? child.begin : ''
-			const end = child ? child.end() : ''
-			code += hasFn
-				? `if(!hasBody&&ct){${begin}c.body=await pd(c,ct)\n${end}}\n`
-				: `if(ct){${begin}c.body=await pd(c,ct)\n${end}}\n`
-			link(adapter.default, 'pd')
-		}
+		const child = report?.resolveChild('default')
+		const begin = child ? child.begin : ''
+		const end = child ? child.end() : ''
+		const guard = bodyVali ? 'ct' : 'ct&&c.request.body'
+
+		code += hasFn
+			? `if(!hasBody&&${guard}){${begin}c.body=await pd(c,ct)\n${end}}\n`
+			: `if(${guard}){${begin}c.body=await pd(c,ct)\n${end}}\n`
+
+		link(adapter.default, 'pd')
 	}
 
 	return hasFn ? 'let hasBody=false\n' + code : code
@@ -415,14 +398,18 @@ export function buildNativeStaticResponse(
 	const buildSet = () => ({
 		headers: rootHeaders
 			? Object.assign(nullObject(), rootHeaders)
-			: nullObject(),
-		status: 200
+			: nullObject()
 	})
 
 	if (handler instanceof Promise) {
 		// Resolve and re-map. We rebuild `set` per resolution so a stale
 		// mutation doesn't leak across retries / reloads.
 		return handler.then((resolved) => {
+			// With nothing to apply, mapping would re-wrap the Response
+			// via `new Response(resolved.body)` and lock its body,
+			// breaking the per-request mapping of the same resolved value
+			if (resolved instanceof Response && !rootHeaders) return resolved
+
 			const mapped = (adapter.response.map as Function)(
 				resolved,
 				buildSet()
@@ -430,6 +417,8 @@ export function buildNativeStaticResponse(
 			return mapped instanceof Response ? mapped : undefined
 		}) as Promise<Response>
 	}
+
+	if (handler instanceof Response && !rootHeaders) return handler
 
 	const mapped = (adapter.response.map as Function)(handler, buildSet())
 	if (mapped instanceof Response) return mapped
@@ -534,8 +523,7 @@ export function compileHandler(
 		const set = {
 			headers: rootHeaders
 				? Object.assign(nullObject(), rootHeaders)
-				: nullObject(),
-			status: 200
+				: nullObject()
 		}
 
 		const mapped = (adapter.response.map as Function)(handler, set)
@@ -543,6 +531,7 @@ export function compileHandler(
 	}
 
 	const isStaticResponse = !isHandleFunction && handler instanceof Response
+	const isPromiseHandler = !isHandleFunction && handler instanceof Promise
 
 	const errorCode = createCodeResolver(root['~ext']?.error)
 
@@ -846,11 +835,16 @@ export function compileHandler(
 		? (link(res.map, 'rm') ?? 'rm')
 		: (link(res.compact ?? res.map, 'rc') ?? 'rc')
 
+	if (isPromiseHandler) link(cloneResponse, 'cr')
+
 	const handleInstruction = isHandleFunction
 		? 'h(c)'
 		: isStaticResponse
 			? 'h.clone()'
-			: 'h'
+			: isPromiseHandler
+				? // a static Promise<Response> resolves once — clone per serve
+					'h.then(cr)'
+				: 'h'
 
 	const mapReturn = hasSet
 		? `rm(${handleInstruction},c.set,c.request)\n`
@@ -946,7 +940,9 @@ export function compileHandler(
 			? `_r=${isAsync ? 'await ' : ''}h(c)\n`
 			: isStaticResponse
 				? `_r=h.clone()\n`
-				: `_r=h\n`
+				: isPromiseHandler
+					? `_r=h.then(cr)\n`
+					: `_r=h\n`
 
 		const teeConsumers = (hasAfterResponse ? 1 : 0) + (hasTrace ? 1 : 0)
 		const teeCount = teeConsumers + 1

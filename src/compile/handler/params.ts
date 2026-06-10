@@ -7,6 +7,7 @@ import {
 } from '../../cookie/utils'
 import { requestId } from '../../utils'
 import { tee } from '../../adapter/utils'
+import { cloneResponse } from './utils'
 
 /**
  * mirror compileHandler params and save in build time
@@ -44,6 +45,7 @@ export const HANDLER_PARAMS: Record<string, Resolver> = {
 	pe: () => ParseError,
 	es: () => ElysiaStatus,
 	tee: () => tee,
+	cr: () => cloneResponse,
 	pcr: () => parseCookieRaw,
 	bcj: () => buildCookieJar,
 	scv: () => signCookieValues,

@@ -221,7 +221,7 @@
 	"sideEffects": false,
 	"dependencies": {
 		"deuri": "^2.0.1",
-		"exact-mirror": "^1.0.2",
+		"exact-mirror": "^1.1.1",
 		"memoirist": "^1.0.3"
 	},
 	"devDependencies": {

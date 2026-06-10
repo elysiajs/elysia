@@ -21,6 +21,9 @@ const childName = (fn: unknown): string =>
 
 const noTrace = { begin: '', end: () => '' } as const
 
+export const cloneResponse = (r: unknown) =>
+	r instanceof Response ? r.clone() : r
+
 const trace = (report: TraceReporter | undefined, fn: Function) =>
 	report?.resolveChild(childName(fn)) ?? noTrace
 
