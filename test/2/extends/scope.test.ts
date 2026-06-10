@@ -62,4 +62,31 @@ describe('macro order', () => {
 		await parent.handle('/sub/r')
 		expect(count).toBe(1)
 	})
+
+	// Regression (audit C1): a plugin's inherited hook chain (route tuple
+	// index 6) must survive being absorbed under a prefix. The prefix branch
+	// of #use rebuilt the route tuple WITHOUT the chain, so any inherited
+	// guard/auth/beforeHandle silently stopped running once the composed app
+	// was mounted under `new Elysia({ prefix })` — an auth-bypass. The
+	// no-prefix and prefixed mounts must behave identically.
+	it('inherited hook chain survives mounting under a prefix', async () => {
+		const inner = new Elysia().get('/c', () => 'handler')
+		const guarded = new Elysia()
+			.onBeforeHandle(() => 'INTERCEPTED')
+			.use(inner)
+
+		const noPrefix = await new Elysia()
+			.use(guarded)
+			.handle('/c')
+			.then((r) => r.text())
+
+		const prefixed = await new Elysia({ prefix: '/v1' })
+			.use(guarded)
+			.handle('/v1/c')
+			.then((r) => r.text())
+
+		expect(noPrefix).toBe('INTERCEPTED')
+		// before the fix this returned 'handler' (guard bypassed)
+		expect(prefixed).toBe('INTERCEPTED')
+	})
 })

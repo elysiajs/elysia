@@ -567,4 +567,87 @@ describe('Path', () => {
 	// 		expect(await res.text()).toBe(path)
 	// 	}
 	// })
+
+	// Regression (audit H11/H12): the request hot path used to memoize a
+	// `loosePath` entry for EVERY distinct missed path (incl. 404s) and a
+	// `~map` entry for EVERY distinct percent-encoding of a real route, with
+	// no eviction — an unbounded, attacker-controlled memory-exhaustion DoS
+	// (200k distinct 404s grew RSS ~117MB). The per-app route map must stay
+	// flat regardless of how many distinct paths are requested.
+	it('does not grow the route map on distinct request paths', async () => {
+		const app = new Elysia().get('/foo', () => 'hi')
+		await app.handle(req('/foo'))
+
+		const map = (app as any)['~map'].GET as Record<string, unknown>
+		const before = Object.keys(map).length
+
+		for (let i = 0; i < 1000; i++) await app.handle(req(`/missing/${i}`))
+		// over-encoded / garbage variants must not be cached either
+		for (let i = 0; i < 200; i++) await app.handle(req(`/%66oo${i}`))
+
+		expect(Object.keys(map).length).toBe(before)
+
+		// exact route still resolves
+		expect(await app.handle(req('/foo')).then((r) => r.text())).toBe('hi')
+	})
+
+	// The decode path was moved to build time (encodeURI stored alongside
+	// ~map). A non-ASCII route must match both its literal form and its
+	// canonical percent-encoded form (the usual on-the-wire shape), without a
+	// per-request decode or any map growth.
+	it('matches a non-ASCII route by its encoded and literal form', async () => {
+		const app = new Elysia().get('/menu/café', () => 'coffee')
+		await app.handle(req('/menu/café'))
+
+		const map = (app as any)['~map'].GET as Record<string, unknown>
+		const keys = Object.keys(map).length
+
+		expect(
+			await app.handle(req('/menu/café')).then((r) => r.text())
+		).toBe('coffee')
+		expect(
+			await app
+				.handle(req('/menu/caf%C3%A9'))
+				.then((r) => r.text())
+		).toBe('coffee')
+		// trailing slash on the encoded form (loose) still matches
+		expect(
+			await app
+				.handle(req('/menu/caf%C3%A9/'))
+				.then((r) => r.text())
+		).toBe('coffee')
+
+		// the encoded key is precomputed at build time, not added per request
+		expect(Object.keys(map).length).toBe(keys)
+	})
+
+	// Regression (audit H10): dynamic (parameterized) routes were registered
+	// only at the exact path, so `/users/1/` 404'd on `/users/:id` even though
+	// static routes tolerate trailing slashes by default. Register the loose
+	// variant unless strictPath.
+	it('dynamic route matches a trailing slash when not strict', async () => {
+		const app = new Elysia().get(
+			'/users/:id',
+			({ params: { id } }) => `user:${id}`
+		)
+
+		expect(await app.handle(req('/users/1')).then((r) => r.text())).toBe(
+			'user:1'
+		)
+		// before the fix this 404'd
+		expect(await app.handle(req('/users/1/')).then((r) => r.text())).toBe(
+			'user:1'
+		)
+	})
+
+	it('strictPath still rejects a trailing slash on dynamic routes', async () => {
+		const app = new Elysia({ strictPath: true }).get(
+			'/users/:id',
+			({ params: { id } }) => `user:${id}`
+		)
+
+		expect(
+			await app.handle(req('/users/1/')).then((r) => r.status)
+		).toBe(404)
+	})
 })

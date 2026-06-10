@@ -192,7 +192,20 @@ function applyPrecomputed(
 	defaults: Record<string, unknown>,
 	value: Record<string, unknown>
 ): Record<string, unknown> {
-	const out: Record<string, unknown> = { ...defaults }
+	const out: Record<string, unknown> = {}
+
+	// Seed with the defaults. A nested mutable default (array/object) that the
+	// request does NOT override must be deep-cloned — otherwise every request
+	// shares the same default array/object instance and a handler mutation
+	// leaks across requests. (`Object.freeze` on the precomputed default is
+	// shallow, so it does not protect nested values.)
+	for (const k in defaults) {
+		const d = defaults[k]
+		out[k] =
+			value[k] === undefined && d !== null && typeof d === 'object'
+				? structuredClone(d)
+				: d
+	}
 
 	for (const k in value) {
 		const v = value[k]
@@ -582,6 +595,14 @@ export class TypeBoxValidator<
 			: this.FromSync(value, type)
 	}
 
+	#cloneSharedDefault(): unknown {
+		const value = this.#precomputedDefault
+		if (this.Clean !== undefined || value === null || typeof value !== 'object')
+			return value
+
+		return structuredClone(value)
+	}
+
 	private optionalBypass(
 		value: Static<T>
 	): { bypass: true; value: Static<T> } | undefined {
@@ -611,7 +632,7 @@ export class TypeBoxValidator<
 		if (this.hasDefault) {
 			if (this.precomputeSafe) {
 				if (value === undefined || value === null)
-					value = this.#precomputedDefault as any
+					value = this.#cloneSharedDefault() as any
 				else if (
 					this.#precomputedObjectDefault !== undefined &&
 					typeof value === 'object' &&
@@ -695,7 +716,7 @@ export class TypeBoxValidator<
 		if (this.hasDefault) {
 			if (this.precomputeSafe) {
 				if (value === undefined || value === null)
-					value = this.#precomputedDefault as Static<T>
+					value = this.#cloneSharedDefault() as Static<T>
 				else if (
 					this.#precomputedObjectDefault !== undefined &&
 					typeof value === 'object' &&

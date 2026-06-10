@@ -227,4 +227,52 @@ describe('Error handler', () => {
 		expect(plain.status).toBe(500)
 		expect(await plain.text()).toBe('plain')
 	})
+
+	// Regression (audit H1): an instance-level `.onError` on a plugin must NOT
+	// clobber route-level error handlers. A dangling `else;` in the error-merge
+	// codegen left the array reassignment outside the branch, so adding any
+	// plugin `.onError` overwrote the merged handlers with only the
+	// instance-local ones — the route's error mapper was dropped and the raw
+	// Error.message (internal detail) leaked with a 500.
+	it('instance-level onError does not clobber route-level error handler', async () => {
+		const plugin = new Elysia()
+			.onError(() => {})
+			.get('/boom', () => {
+				throw new Error('SECRET_INTERNAL_DETAIL')
+			}, {
+				error: () => new Response('mapped', { status: 418 })
+			})
+
+		const app = new Elysia().use(plugin)
+		const res = await app.handle(req('/boom'))
+
+		// before the fix: 500 with body 'SECRET_INTERNAL_DETAIL'
+		expect(res.status).toBe(418)
+		expect(await res.text()).toBe('mapped')
+	})
+
+	// Regression (audit H5): when there are no mapResponse hooks, `mapResponse`
+	// IS the bare adapter whose 3rd arg is the Request. createErrorHandler
+	// passed the Context instead, so an onError returning a File/Blob hit
+	// `context.headers.get('range')` — a TypeError that escaped the fetch
+	// handler. The Context's `.request` must be unwrapped for the adapter.
+	it('onError returning a Blob responds without crashing (and honours Range)', async () => {
+		const app = new Elysia()
+			.onError(() => new Blob(['error-asset'], { type: 'text/plain' }))
+			.get('/boom', () => {
+				throw new Error('x')
+			})
+
+		const res = await app.handle(req('/boom'))
+		expect(res.status).toBe(500)
+		expect(await res.text()).toBe('error-asset')
+
+		// the real Request is now forwarded → range requests work
+		const ranged = await app.handle(
+			new Request('http://localhost/boom', {
+				headers: { range: 'bytes=0-3' }
+			})
+		)
+		expect(ranged.status).toBe(206)
+	})
 })

@@ -995,11 +995,9 @@ describe('Query Validator', () => {
 			query: t.Object({
 				year: t.Numeric({ minimum: 1900, maximum: 2160 })
 			}),
-			error({ code, error }) {
-				switch (code) {
-					case 'VALIDATION':
-						err = error
-				}
+			error({ error }) {
+				// `code` was removed this version; dispatch via instanceof.
+				if (error instanceof ValidationError) err = error
 			}
 		})
 

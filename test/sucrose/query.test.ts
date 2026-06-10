@@ -27,6 +27,17 @@ describe('Query', () => {
 		expect(await response.text()).toEqual('sucrose')
 	})
 
+	// Regression (audit P8): sucrose's access regex only matched `ctx.query`
+	// (and bracket forms), not optional chaining `ctx?.query`. A handler using
+	// optional chaining therefore didn't infer query usage, so it was never
+	// parsed and read back undefined at runtime.
+	it('access via optional chaining (ctx?.query)', async () => {
+		const app = new Elysia().get('/', (ctx) => ctx?.query?.name ?? 'MISS')
+		const response = await app.handle(req())
+
+		expect(await response.text()).toEqual('sucrose')
+	})
+
 	it('access single param using destructuring', async () => {
 		const app = new Elysia().get('/', ({ query: { name } }) => name)
 		const response = await app.handle(req())

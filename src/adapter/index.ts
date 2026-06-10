@@ -20,7 +20,16 @@ export function createAdapter(adapter: ElysiaAdapterOptions) {
 							return json(context)
 
 						case 120:
-							return urlencoded(context)
+							// 'x' at index 12 matches both
+							// `application/x-www-form-urlencoded` and
+							// `application/xml` / `application/xhtml+xml`. Only
+							// the urlencoded form has '-' at index 13; the others
+							// must NOT be parsed as urlencoded (which mangled the
+							// body). Disambiguate, else fall through to default.
+							if (contentType.charCodeAt(13) === 45)
+								return urlencoded(context)
+
+							break
 
 						case 111:
 							return arrayBuffer(context)

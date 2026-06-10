@@ -150,8 +150,12 @@ export function createErrorHandler(
 
 		for (let i = 0; i < onErrors.length; i++) {
 			const result = onErrors[i](context as any)
-			if (result !== undefined)
+			if (result !== undefined) {
+				if ((result as any)?.status)
+					context.set.status = (result as any).status
+
 				return mapResponse(result, context.set, context)
+			}
 		}
 
 		return fallbackResponse(context, error, mapResponse, defaultError)

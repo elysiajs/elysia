@@ -25,7 +25,7 @@ import { parseQueryFromURL } from '../../parse-query'
 import { defaultAdapter } from '../../adapter/constants'
 
 import {
-    cloneResponse,
+	cloneResponse,
 	getQueryParseArgs,
 	mapAfterHandle,
 	mapAfterResponse,
@@ -506,10 +506,10 @@ export function compileHandler(
 			}
 			// No existing handlers - skip the `includes` dedup entirely,
 			// and avoid the `[errors]` allocation for the scalar case.
-			else;
-			;(hook as any).error = Array.isArray(errors)
-				? errors.slice()
-				: [errors]
+			else
+				(hook as any).error = Array.isArray(errors)
+					? errors.slice()
+					: [errors]
 		}
 	}
 
@@ -1097,7 +1097,7 @@ export function compileHandler(
 				// statusless errors to 500.
 				`if(e?.status)c.set.status=e.status\n` +
 				`else if(c.set.status===undefined||c.set.status===200)c.set.status=500\n` +
-				`let _r\n` +
+				`let _r${hasMapResponse ? ',tmp' : ''}\n` +
 				mapError(hook!.error!, [
 					map,
 					link,

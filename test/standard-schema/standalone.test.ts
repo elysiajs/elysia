@@ -1,4 +1,4 @@
-import { Elysia, t } from '../../src'
+import { Elysia, t, ValidationError } from '../../src'
 import { describe, it, expect } from 'bun:test'
 import { z } from 'zod'
 import * as v from 'valibot'
@@ -213,8 +213,9 @@ describe('Standard Schema Standalone', () => {
 
 	it('validate multiple schema together', async () => {
 		const app = new Elysia()
-			.onError(({ error, code }) => {
-				if (code !== 'VALIDATION') console.log(error)
+			.onError(({ error }) => {
+				// `code` was removed this version; detect via instanceof.
+				if (!(error instanceof ValidationError)) console.log(error)
 			})
 			.guard({
 				schema: 'standalone',

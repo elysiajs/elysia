@@ -30,6 +30,32 @@ Feature:
 - `t.Cookie(schema, opts)` field-form — wrap individual properties of `t.Object` for per-field cookie attributes/secrets, replacing the need for top-level `sign: ['name']` arrays
 - Validator pre-computes default snapshot at construction for safe schemas (no Union/Codec/Refine/nested-Object-without-default), eliminating per-request `Default()` walk for the common case
 
+Bug fix:
+- prefixed `.use()` dropped the absorbed plugin's inherited hook chain — guards/`beforeHandle`/auth applied through composition silently stopped running once mounted under `new Elysia({ prefix })`
+- an instance-level `.onError` on a plugin clobbered route-level and inherited error handlers, leaking the raw `Error.message` with a 500 instead of the mapped response
+- cookie values were percent-decoded twice (`parse()` already decodes), corrupting any value that decodes to something still containing `%xx` (e.g. `100%2520off` → `100 off` instead of `100%20off`)
+- `.compile()` overwrote WebSocket upgrade handlers with a generic HTTP handler, breaking upgrades after eager/AOT compilation
+- `normalize: false` returned the precomputed default object by reference, so one request's handler mutation of a defaulted body/query leaked into subsequent requests
+- a standalone `response` schema without a `200` entry threw `'~kind' in undefined`, 500-ing every request on the route
+- dynamic (parameterized) routes did not match a trailing slash under the default `strictPath: false` (static routes already did)
+- the per-app `loosePath`/decoded-path caches grew without bound on attacker-controlled request paths — an unauthenticated memory-exhaustion DoS
+- `parseQueryFromURL` scanned the whole URL from index 0, corrupting the query when the matched path contained `&`/`%`/`+`/`=` (reachable via path params)
+- an `onError` returning a `File`/`Blob` threw a `TypeError` (the Context was passed where the adapter expected a `Request`); Range requests are now honoured on the error path
+- response headers were dropped on non-Bun runtimes when re-streaming a returned `Response`
+- a `wrap()` HOC was skipped for native static routes on Bun (it now serves through `fetch` so the HOC always runs)
+- signed-cookie HMAC comparison fell back to a non-constant-time `===` off Bun (timing side channel)
+- cookie secret rotation with a `null` ("allow unsigned") entry threw `Secret key must be provided` for any value containing a dot
+- `application/xml` was parsed as `x-www-form-urlencoded` (both share `'x'` at index 12 of the content type)
+- handlers using optional chaining on the context (`ctx?.query`) did not infer the field, so it was never parsed and read back `undefined`
+- an unguarded `JSON.parse` in query array parsing turned malformed input into a request-controlled 500
+- Bun native static routes were never installed when every static response was synchronous (the optimization was dead in its common case)
+- error-path `mapResponse` codegen assigned an undeclared `tmp`, leaking the mapped response onto `globalThis` (and crashing under AOT strict-mode modules)
+
+Internal:
+- route matching: percent-encoded paths are now matched via build-time `encodeURI` keys stored alongside `~map`/the router, instead of decoding the path per request — dynamic param values are still decoded at match time
+- `error.code` removed — dispatch on the error class with `instanceof` (or register via `error(Error, () => {})`)
+- dual CJS + ESM build (the previous ESM-only output left `require('elysia')` resolving to non-existent `.js` files); `exports` map reconciled against the real `dist/`, and `files: ["dist"]` keeps `src-old`/`design`/dev artifacts out of the published tarball
+
 # 1.4.28 - 17 Mar 2025
 Feature:
 - [#1803](https://github.com/elysiajs/elysia/pull/1803) stream response with pull based backpressure

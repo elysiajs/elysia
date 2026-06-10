@@ -9,6 +9,8 @@ import { buildGlobalWSHandler } from '../../ws/route'
 import type { AnyElysia } from '../../base'
 
 function collectStaticRoutes(app: AnyElysia) {
+	if (app['~ext']?.hoc?.length) return
+
 	const hook = flattenChain(app['~hookChain'])
 	if (
 		hook &&
@@ -92,12 +94,25 @@ export const BunAdapter = createAdapter({
 
 			const collectRoutes = () => {
 				const staticRoutes = collectStaticRoutes(app as AnyElysia)
+				if (!staticRoutes) return
 
-				if (staticRoutes?.[1].length)
+				if (staticRoutes[1].length)
 					return Promise.all(staticRoutes[1]).then(() => {
 						serve.routes = staticRoutes[0]
 						app.server!.reload(serve)
 					})
+
+				// All static responses were synchronous (the common case):
+				// `pending` is empty, so previously `serve.routes` was never
+				// assigned and Bun.serve's native static-route dispatch was
+				// dead — every static route fell through to the JS fetch
+				// handler. Install them synchronously here. Returning a truthy
+				// sentinel tells the caller a reload already happened.
+				if (Object.keys(staticRoutes[0]).length) {
+					serve.routes = staticRoutes[0]
+					app.server!.reload(serve)
+					return true
+				}
 			}
 
 			if (app.pending) {

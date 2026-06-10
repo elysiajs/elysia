@@ -13,7 +13,7 @@ await build({
 	entry: ['src/**/*.ts'],
 	cjsDefault: false,
 	target: 'node22',
-	format: ['esm'],
+	format: ['esm', 'cjs'],
 	minify: false,
 	unbundle: true,
 	dts: true,

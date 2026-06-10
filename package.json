@@ -10,6 +10,9 @@
 	"main": "./dist/index.js",
 	"module": "./dist/index.mjs",
 	"types": "./dist/index.d.ts",
+	"files": [
+		"dist"
+	],
 	"exports": {
 		"./package.json": "./package.json",
 		".": {
@@ -32,21 +35,6 @@
 			"import": "./dist/adapter/bun/index.mjs",
 			"require": "./dist/adapter/bun/index.js"
 		},
-		"./adapter/bun/handler": {
-			"types": "./dist/adapter/bun/handler.d.ts",
-			"import": "./dist/adapter/bun/handler.mjs",
-			"require": "./dist/adapter/bun/handler.js"
-		},
-		"./adapter/bun/compose": {
-			"types": "./dist/adapter/bun/compose.d.ts",
-			"import": "./dist/adapter/bun/compose.mjs",
-			"require": "./dist/adapter/bun/compose.js"
-		},
-		"./adapter/cloudflare-worker": {
-			"types": "./dist/adapter/cloudflare-worker/index.d.ts",
-			"import": "./dist/adapter/cloudflare-worker/index.mjs",
-			"require": "./dist/adapter/cloudflare-worker/index.js"
-		},
 		"./adapter/web-standard": {
 			"types": "./dist/adapter/web-standard/index.d.ts",
 			"import": "./dist/adapter/web-standard/index.mjs",
@@ -62,11 +50,6 @@
 			"import": "./dist/base.mjs",
 			"require": "./dist/base.js"
 		},
-		"./compose": {
-			"types": "./dist/compose.d.ts",
-			"import": "./dist/compose.mjs",
-			"require": "./dist/compose.js"
-		},
 		"./constants": {
 			"types": "./dist/constants.d.ts",
 			"import": "./dist/constants.mjs",
@@ -78,9 +61,9 @@
 			"require": "./dist/context.js"
 		},
 		"./cookies": {
-			"types": "./dist/cookies.d.ts",
-			"import": "./dist/cookies.mjs",
-			"require": "./dist/cookies.js"
+			"types": "./dist/cookie/index.d.ts",
+			"import": "./dist/cookie/index.mjs",
+			"require": "./dist/cookie/index.js"
 		},
 		"./error": {
 			"types": "./dist/error.d.ts",
@@ -112,11 +95,6 @@
 			"import": "./dist/plugin/vite.mjs",
 			"require": "./dist/plugin/vite.js"
 		},
-		"./schema": {
-			"types": "./dist/schema.d.ts",
-			"import": "./dist/schema.mjs",
-			"require": "./dist/schema.js"
-		},
 		"./sucrose": {
 			"types": "./dist/sucrose.d.ts",
 			"import": "./dist/sucrose.mjs",
@@ -128,24 +106,19 @@
 			"require": "./dist/trace.js"
 		},
 		"./type-system": {
-			"types": "./dist/type-system/index.d.ts",
-			"import": "./dist/type-system/index.mjs",
-			"require": "./dist/type-system/index.js"
-		},
-		"./type-system/format": {
-			"types": "./dist/type-system/format.d.ts",
-			"import": "./dist/type-system/format.mjs",
-			"require": "./dist/type-system/format.js"
+			"types": "./dist/type/index.d.ts",
+			"import": "./dist/type/index.mjs",
+			"require": "./dist/type/index.js"
 		},
 		"./type-system/utils": {
-			"types": "./dist/type-system/utils.d.ts",
-			"import": "./dist/type-system/utils.mjs",
-			"require": "./dist/type-system/utils.js"
+			"types": "./dist/type/utils.d.ts",
+			"import": "./dist/type/utils.mjs",
+			"require": "./dist/type/utils.js"
 		},
 		"./type-system/types": {
-			"types": "./dist/type-system/types.d.ts",
-			"import": "./dist/type-system/types.mjs",
-			"require": "./dist/type-system/types.js"
+			"types": "./dist/type/types.d.ts",
+			"import": "./dist/type/types.mjs",
+			"require": "./dist/type/types.js"
 		},
 		"./types": {
 			"types": "./dist/types.d.ts",
@@ -186,11 +159,6 @@
 			"types": "./dist/ws/types.d.ts",
 			"import": "./dist/ws/types.mjs",
 			"require": "./dist/ws/types.js"
-		},
-		"./ws/bun": {
-			"types": "./dist/ws/bun.d.ts",
-			"import": "./dist/ws/bun.mjs",
-			"require": "./dist/ws/bun.js"
 		}
 	},
 	"repository": {

@@ -312,7 +312,15 @@ export const constantTimeEqual =
 				if (ab.length !== bb.length) return false
 				return crypto.timingSafeEqual(ab, bb)
 			}
-		: (a: string, b: string) => a === b
+		: (a: string, b: string) => {
+				if (a.length !== b.length) return false
+
+				let mismatch = 0
+				for (let i = 0; i < a.length; i++)
+					mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i)
+
+				return mismatch === 0
+			}
 
 export const isRecordNumber = (
 	x: Record<keyof object, unknown> | undefined

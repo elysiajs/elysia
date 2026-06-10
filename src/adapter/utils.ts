@@ -77,7 +77,10 @@ export function handleFile(
 				).slice(start, end + 1, response.type),
 				{
 					status: 206,
-					headers: mergeHeaders(rangeHeaders, set?.headers ?? nullObject())
+					headers: mergeHeaders(
+						rangeHeaders,
+						set?.headers ?? nullObject()
+					)
 				}
 			)
 		}
@@ -155,8 +158,13 @@ export function responseToSetHeaders(response: Response, set?: Context['set']) {
 			if (hasHeaderShorthand)
 				Object.assign(set.headers, response.headers.toJSON())
 			else
+				// Copy unconditionally to match the Bun `Object.assign` path
+				// above. The old `key in set.headers` guard only updated keys
+				// that were ALREADY present — on the non-Bun runtimes that take
+				// this branch, a re-streamed Response's headers (content-type,
+				// etc.) were silently dropped.
 				for (const [key, value] of response.headers.entries())
-					if (key in set.headers) set.headers[key] = value
+					set.headers[key] = value
 		}
 
 		if (set.status === undefined || set.status === 200)
@@ -195,10 +203,9 @@ export function responseToSetHeaders(response: Response, set?: Context['set']) {
 
 	for (const [key, value] of response.headers.entries()) {
 		// ? `content-encoding` prevent response streaming
-
 		if (key === 'content-encoding') continue
 
-		if (key in set.headers) set.headers[key] = value
+		set.headers[key] = value
 	}
 
 	return set

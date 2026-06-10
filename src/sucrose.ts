@@ -454,7 +454,7 @@ export function inferBodyReference(
 ) {
 	const access = (type: string, alias: string) =>
 		new RegExp(
-			`${alias}\\.(${type})|${alias}\\["${type}"\\]|${alias}\\['${type}'\\]`
+			`${alias}\\??\\.(${type})|${alias}(?:\\?\\.)?\\["${type}"\\]|${alias}(?:\\?\\.)?\\['${type}'\\]`
 		).test(code)
 
 	for (const alias of aliases) {

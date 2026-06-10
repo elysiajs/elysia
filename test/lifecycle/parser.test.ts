@@ -97,6 +97,31 @@ describe('Parser', () => {
 		expect(await res.json()).toEqual(body)
 	})
 
+	// Regression (audit P7): the default parser dispatched on charCodeAt(12),
+	// where `application/xml` shares 'x' with `application/x-www-form-urlencoded`
+	// and was silently parsed as urlencoded — mangling the XML body into a
+	// bogus object. application/xml must NOT be urlencoded-parsed (it has no
+	// built-in parser → body stays unparsed for a custom onParse).
+	it('does not parse application/xml as urlencoded', async () => {
+		const app = new Elysia().post('/', ({ body }) => ({
+			type: typeof body,
+			isObject: !!body && typeof body === 'object'
+		}))
+
+		const res = await app
+			.handle(
+				new Request('http://localhost/', {
+					method: 'POST',
+					body: '<root><a>1</a></root>',
+					headers: { 'content-type': 'application/xml' }
+				})
+			)
+			.then((r) => r.json())
+
+		// before the fix `body` was a urlencoded-parsed object with garbage keys
+		expect(res.isObject).toBe(false)
+	})
+
 	it('parse with extra content-type attribute', async () => {
 		const app = new Elysia().post('/', ({ body }) => body)
 

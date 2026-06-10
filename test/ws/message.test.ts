@@ -621,4 +621,34 @@ describe('WebSocket message', () => {
         await wsClosed(ws)
         app.stop()
     })
+
+	// Regression (audit H4): `.compile()` iterated ALL route history including
+	// WebSocket tuples and overwrote map['WS'][path] (the upgrade handler) with
+	// a generic compiled HTTP handler — so WS upgrades broke after compile()
+	// (and via the AOT build path which calls compile()). Echo must still work
+	// when the app is eagerly compiled before listen.
+	it('keeps WebSocket upgrade working after .compile()', async () => {
+		const app = new Elysia()
+			.ws('/ws', {
+				message(ws, message) {
+					ws.send(message)
+				}
+			})
+			.compile()
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+
+		await wsOpen(ws)
+
+		const message = wsMessage(ws)
+		ws.send('after-compile')
+
+		const { type, data } = await message
+		expect(type).toBe('message')
+		expect(data).toBe('after-compile')
+
+		await wsClosed(ws)
+		app.stop()
+	})
 })

@@ -173,9 +173,9 @@ export abstract class Validator {
 					{
 						...options,
 						slot: responseSlot(200),
-						schemas: options?.schemas?.map(
-							(s) => toStatusBased(s)[200]
-						)
+						schemas: options?.schemas
+							?.map((s) => toStatusBased(s)[200])
+							?.filter(Boolean)
 					}
 				)
 			}

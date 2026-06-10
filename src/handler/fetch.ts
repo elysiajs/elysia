@@ -23,6 +23,20 @@ const getNotFound = (): Response =>
 				status: 404
 			})).clone() as Response)
 
+// Dynamic-route params arrive percent-encoded (memoirist returns the raw URL
+// segments). Decode each value at match time — route MATCHING is handled by the
+// build-time encodeURI keys in `~map`/the router, but a param VALUE can't be
+// precomputed, so it's decoded here. Only strings containing '%' pay the cost.
+const decodeParams = (params: Record<string, string>): Record<string, string> => {
+	for (const key in params) {
+		const value = params[key]
+		if (value.indexOf('%') !== -1)
+			params[key] = decodeComponent(value) ?? value
+	}
+
+	return params
+}
+
 const catchError =
 	(
 		context: Context,
@@ -41,80 +55,52 @@ function findRoute(
 	map: NonNullable<AnyElysia['~map']>,
 	router: NonNullable<AnyElysia['~router']>,
 	hasError: boolean,
-	loosePath: Record<string, string>,
 	strictPath: boolean,
 	handleError: (context: Context, error: Error) => unknown,
 	afterResponse: ((context: Context, status?: number) => void) | undefined,
 	hasWS?: boolean
 ): Response | Promise<Response> {
-	let path = context.path
+	const path = context.path
 	const onError = catchError(context, handleError, afterResponse)
 
 	if (hasWS) {
 		const upgrade = request.headers.get('upgrade')
 		if (upgrade && upgrade.toLowerCase() === 'websocket') {
-			const loose = strictPath
-				? path
-				: (loosePath[path] ??= getLoosePath(path))
+			const loose = strictPath ? path : getLoosePath(path)
 			const handler = map['WS']?.[path] ?? map['WS']?.[loose]
 
 			if (handler) {
 				const r = handler(context)
 				return r instanceof Promise ? (r.catch(onError) as any) : r
-			} else {
-				// 1 time cost for non-encoded paths
-				const [decoded, handler] = getDecodedPathHandler(
-					path,
-					'WS',
-					map,
-					loosePath,
-					strictPath
-				)
-				path = decoded
-				if (handler) return handler(context)
 			}
 
 			const found = router?.find('WS', path)
 			if (found) {
-				context.params = found.params
+				context.params = decodeParams(found.params)
 				const r = found.store(context)
 				return r instanceof Promise ? (r.catch(onError) as any) : r
 			}
 		}
 	} else {
 		const paths = map[request.method]
-		// Loose lookup stays lazy: `getLoosePath` only runs when the exact
-		// path misses, and never in strict mode.
+		const loose = strictPath ? path : getLoosePath(path)
 		const handler: CompiledHandler =
 			paths?.[path] ??
-			paths?.[
-				strictPath ? path : (loosePath[path] ??= getLoosePath(path))
-			] ??
+			paths?.[loose] ??
 			map['*']?.[path] ??
-			map['*']?.[strictPath ? path : loosePath[path]]
+			map['*']?.[loose]
 
 		if (handler) {
 			const r = handler(context)
 
 			return r instanceof Promise ? r.catch(onError) : r
-		} else {
-			// 1 time cost for non-encoded paths
-			const [decoded, handler] = getDecodedPathHandler(
-				path,
-				request.method,
-				map,
-				loosePath,
-				strictPath
-			)
-			path = decoded
-			if (handler) return handler(context)
 		}
 
 		const found =
 			router.find(request.method, path) ?? router.find('*', path)
 
 		if (found) {
-			context.params = found.params
+			context.params = decodeParams(found.params)
 
 			const r = found.store(context)
 			return r instanceof Promise ? r.catch(onError) : r
@@ -127,41 +113,6 @@ function findRoute(
 	return getNotFound()
 }
 
-function getDecodedPathHandler(
-	path: string,
-	method: string,
-	map: NonNullable<AnyElysia['~map']>,
-	loosePath: Record<string, string>,
-	strictPath: boolean
-) {
-	const decoded = decodeComponent(path) ?? path
-	if (decoded === path) return [decoded] as const
-
-	const loose = strictPath
-		? decoded
-		: (loosePath[decoded] ??= getLoosePath(decoded))
-
-	let handler: CompiledHandler | undefined
-	let _map = map[method]
-
-	if (_map) handler = _map[decoded] ?? _map[loose]
-
-	if (!handler) {
-		_map = map['*']
-
-		if (_map) handler = _map[decoded] ?? _map[loose]
-	}
-
-	if (handler) {
-		_map[path] = handler
-		delete map[decoded]
-
-		return [decoded, handler] as const
-	}
-
-	return [decoded] as const
-}
-
 export function createFetchHandler(
 	app: AnyElysia
 ): (request: Request) => MaybePromise<Response> {
@@ -171,7 +122,6 @@ export function createFetchHandler(
 	const hasWS = !!app['~hasWS']
 
 	const strictPath = !!app['~config']?.strictPath
-	const loosePath = nullObject() as Record<string, string>
 
 	// standard internet hostname is at minimum 11 characters (http://a.bc)
 	const pathStart =
@@ -181,7 +131,11 @@ export function createFetchHandler(
 	const hasError = !!hook?.error
 
 	const baseMapResponse = (app['~config']?.adapter ?? defaultAdapter).response
-		.map as (response: unknown, set: Context['set']) => unknown
+		.map as (
+		response: unknown,
+		set: Context['set'],
+		request?: Request
+	) => unknown
 
 	const mapResponseHooks = hook?.mapResponse as
 		| ((context: Context) => unknown)[]
@@ -192,31 +146,39 @@ export function createFetchHandler(
 				;(context as { responseValue?: unknown }).responseValue =
 					response
 
+				const request = context.request
+
 				const run = (i: number): unknown => {
 					for (; i < mapResponseHooks.length; i++) {
 						const result = mapResponseHooks[i](context)
 						if (result instanceof Promise)
 							return result.then((resolved) => {
 								if (resolved !== undefined)
-									return baseMapResponse(resolved, set)
+									return baseMapResponse(
+										resolved,
+										set,
+										request
+									)
 								return run(i + 1)
 							})
 
 						if (result !== undefined)
-							return baseMapResponse(result, set)
+							return baseMapResponse(result, set, request)
 					}
 
-					return baseMapResponse(response, set)
+					return baseMapResponse(response, set, request)
 				}
 
 				return run(0)
 			}
-		: baseMapResponse
+		: (response: unknown, set: Context['set'], context?: Context) =>
+				baseMapResponse(
+					response,
+					set,
+					(context as { request?: Request } | undefined)?.request
+				)
 
-	const handleError = createErrorHandler(
-		hook?.error,
-		mapResponse as typeof baseMapResponse
-	)
+	const handleError = createErrorHandler(hook?.error, mapResponse as any)
 
 	const traceHandlers = hook?.trace as
 		| ((context: any) => unknown)[]
@@ -343,7 +305,6 @@ export function createFetchHandler(
 					map,
 					router,
 					hasError,
-					loosePath,
 					strictPath,
 					handleError,
 					afterResponse,
@@ -395,7 +356,6 @@ export function createFetchHandler(
 						map,
 						router,
 						hasError,
-						loosePath,
 						strictPath,
 						handleError,
 						afterResponse,
@@ -435,7 +395,6 @@ export function createFetchHandler(
 					map,
 					router,
 					hasError,
-					loosePath,
 					strictPath,
 					handleError,
 					afterResponse,
@@ -454,7 +413,7 @@ export function createFetchHandler(
 		const url = request.url,
 			s = url.indexOf('/', pathStart)
 
-		let path = (context.path = url.substring(
+		const path = (context.path = url.substring(
 			s,
 			// @ts-expect-error
 			(context.qi = url.indexOf('?', s)) === -1
@@ -468,9 +427,7 @@ export function createFetchHandler(
 		if (hasWS) {
 			const upgrade = request.headers.get('upgrade')
 			if (upgrade && upgrade.toLowerCase() === 'websocket') {
-				const loose = strictPath
-					? path
-					: (loosePath[path] ??= getLoosePath(path))
+				const loose = strictPath ? path : getLoosePath(path)
 				const handler = map['WS']?.[path] ?? map['WS']?.[loose]
 
 				try {
@@ -479,22 +436,11 @@ export function createFetchHandler(
 						return r instanceof Promise
 							? (r.catch(onError) as any)
 							: (r as any)
-					} else {
-						// 1 time cost for non-encoded paths
-						const [decoded, handler] = getDecodedPathHandler(
-							path,
-							'WS',
-							map,
-							loosePath,
-							strictPath
-						)
-						path = decoded
-						if (handler) return handler(context)
 					}
 
 					const found = router?.find('WS', path)
 					if (found) {
-						context.params = found.params
+						context.params = decodeParams(found.params)
 						const r = found.store(context)
 						return r instanceof Promise
 							? (r.catch(onError) as any)
@@ -508,37 +454,24 @@ export function createFetchHandler(
 			}
 		}
 
-		let handler: CompiledHandler =
+		const loose = strictPath ? path : getLoosePath(path)
+		const handler: CompiledHandler =
 			map[request.method]?.[path] ??
-			map[request.method]?.[
-				strictPath ? path : (loosePath[path] ??= getLoosePath(path))
-			] ??
+			map[request.method]?.[loose] ??
 			map['*']?.[path] ??
-			map['*']?.[strictPath ? path : loosePath[path]]
+			map['*']?.[loose]
 
 		try {
 			if (handler) {
 				const r = handler(context)
 				return r instanceof Promise ? r.catch(onError) : r
-			} else {
-				// 1 time cost for non-encoded paths
-				const [decoded, handler] = getDecodedPathHandler(
-					path,
-					request.method,
-					map,
-					loosePath,
-					strictPath
-				)
-				path = decoded
-
-				if (handler) return handler(context)
 			}
 
 			const result =
 				router?.find(request.method, path) ?? router?.find('*', path)
 
 			if (result) {
-				context.params = result.params
+				context.params = decodeParams(result.params)
 
 				const r = result.store(context)
 				return r instanceof Promise ? r.catch(onError) : r

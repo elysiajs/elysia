@@ -22,7 +22,11 @@ export function parseQueryFromURL(
 	let startingIndex = startIndex
 	let equalityIndex = startingIndex
 
-	for (let i = 0; i < inputLength; i++)
+	// Scan only the query string (after '?'). Starting at 0 fed the whole
+	// scheme/host/path through the switch: a literal '&' in the matched path
+	// (a legal pchar, reachable via `/:param`) reset state into the path and
+	// corrupted the parsed query; '%'/'+'/'=' in the path also set stale flags.
+	for (let i = startIndex + 1; i < inputLength; i++)
 		switch (input.charCodeAt(i)) {
 			// '&'
 			case 38:
@@ -94,7 +98,15 @@ export function parseQueryFromURL(
 		if (array && array?.[finalKey]) {
 			if (finalValue.charCodeAt(0) === 91) {
 				if (object && object?.[finalKey])
-					finalValue = JSON.parse(finalValue) as any
+					// Guarded like the other JSON.parse sites below: malformed
+					// request input (e.g. `?key=[bad`) must not throw an
+					// uncaught error → request-controlled 500. Fall back to the
+					// bracket-split behaviour used for non-object arrays.
+					try {
+						finalValue = JSON.parse(finalValue) as any
+					} catch {
+						finalValue = finalValue.slice(1, -1).split(',') as any
+					}
 				else finalValue = finalValue.slice(1, -1).split(',') as any
 
 				if (currentValue === undefined) result[finalKey] = finalValue

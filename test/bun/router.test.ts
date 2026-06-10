@@ -340,4 +340,31 @@ describe('Bun router', () => {
 			)
 		).resolves.toBe('/items/types/:id')
 	})
+
+	// Regression (audit H16): when every static response is synchronous the
+	// `pending` array is empty, and `collectRoutes` only installed
+	// `serve.routes` when there were pending promises — so Bun.serve's native
+	// static-route dispatch was never wired up. The optimization being dead
+	// isn't observable behaviourally (routes still serve via the JS fetch
+	// fallback), so this guards that all-sync static + dynamic routes keep
+	// serving after the fix installs the native table.
+	it('serves synchronous static routes alongside dynamic ones', async () => {
+		const app = new Elysia()
+			.get('/static', 'static-value')
+			.get('/dyn/:id', ({ params: { id } }) => `dyn:${id}`)
+			.listen(0)
+
+		// let the queueMicrotask boot (native-route install) settle
+		await new Promise((r) => setTimeout(r, 50))
+
+		const base = `http://localhost:${app.server!.port}`
+		expect(await fetch(`${base}/static`).then((x) => x.text())).toBe(
+			'static-value'
+		)
+		expect(await fetch(`${base}/dyn/1`).then((x) => x.text())).toBe(
+			'dyn:1'
+		)
+
+		app.stop()
+	})
 })

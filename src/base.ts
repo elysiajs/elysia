@@ -1264,25 +1264,71 @@ export class Elysia<
 	>(
 		error: E,
 		fn: Fn
-	): Elysia<
-		BasePath,
-		Scope,
-		Singleton,
-		Definitions,
-		Metadata,
-		ResolveRouteErrors<Routes, [ErrorDefinitionEntry<E, ReturnType<Fn>>]>,
-		Ephemeral,
-		{
-			resolve: Volatile['resolve']
-			schema: Volatile['schema']
-			schemas: Volatile['schemas']
-			response: Volatile['response']
-			error: [
-				...Volatile['error'],
-				ErrorDefinitionEntry<E, ReturnType<Fn>>
-			]
-		}
-	>
+	): Scope extends 'local'
+		? Elysia<
+				BasePath,
+				Scope,
+				Singleton,
+				Definitions,
+				Metadata,
+				ResolveRouteErrors<
+					Routes,
+					[ErrorDefinitionEntry<E, ReturnType<Fn>>]
+				>,
+				Ephemeral,
+				{
+					resolve: Volatile['resolve']
+					schema: Volatile['schema']
+					schemas: Volatile['schemas']
+					response: Volatile['response']
+					error: [
+						...Volatile['error'],
+						ErrorDefinitionEntry<E, ReturnType<Fn>>
+					]
+				}
+			>
+		: Scope extends 'plugin'
+			? Elysia<
+					BasePath,
+					Scope,
+					Singleton,
+					Definitions,
+					Metadata,
+					ResolveRouteErrors<
+						Routes,
+						[ErrorDefinitionEntry<E, ReturnType<Fn>>]
+					>,
+					{
+						resolve: Ephemeral['resolve']
+						schema: Ephemeral['schema']
+						schemas: Ephemeral['schemas']
+						response: Ephemeral['response']
+						error: [
+							...Ephemeral['error'],
+							ErrorDefinitionEntry<E, ReturnType<Fn>>
+						]
+					},
+					Volatile
+				>
+			: Elysia<
+					BasePath,
+					Scope,
+					Singleton,
+					{
+						typebox: Definitions['typebox']
+						error: [
+							...Definitions['error'],
+							ErrorDefinitionEntry<E, ReturnType<Fn>>
+						]
+					},
+					Metadata,
+					ResolveRouteErrors<
+						Routes,
+						[ErrorDefinitionEntry<E, ReturnType<Fn>>]
+					>,
+					Ephemeral,
+					Volatile
+				>
 	error<
 		const E extends AnyErrorConstructor &
 			(abstract new (...args: any) => Error),
@@ -1318,6 +1364,7 @@ export class Elysia<
 			Singleton
 		>
 	): this
+
 	error<
 		const S extends EventScope,
 		const E extends AnyErrorConstructor &
@@ -2677,14 +2724,18 @@ export class Elysia<
 				history.push(
 					inheritedChain === childChain
 						? this['~Prefix']
-							? [
+							? ([
 									route[0],
 									path,
 									route[2],
 									route[3],
 									route[4],
-									route[5]
-								]
+									route[5],
+									// Preserve the inherited hook chain (index 6).
+									// Dropping it here silently disabled inherited
+									// guards/auth when an app is mounted under a prefix.
+									childChain
+								] as unknown as InternalRoute)
 							: route
 						: ([
 								route[0],
@@ -4095,7 +4146,15 @@ export class Elysia<
 
 		// routes may not exist, eg. async plugins
 		if (this.#history)
-			for (let i = 0; i < this.#history.length; i++) this.handler(i, true)
+			for (let i = 0; i < this.#history.length; i++) {
+				// Skip WebSocket routes: #buildRouter installs their upgrade
+				// handler into map['WS'], and compileHandler would overwrite it
+				// with a generic compiled HTTP handler — breaking upgrades after
+				// .compile() (and the AOT build path, which calls compile()).
+				if (this.#history[i][0] === 'WS') continue
+
+				this.handler(i, true)
+			}
 
 		return this
 	}
@@ -4278,18 +4337,56 @@ export class Elysia<
 					undefined,
 					sharedStatic
 				)
-				router.add(method, path, handler, false)
+				const headHandler = autoHead
+					? wrapHeadHandler(handler)
+					: undefined
+				const strict = !!this['~config']?.strictPath
 
-				if (autoHead)
-					router.add('HEAD', path, wrapHeadHandler(handler), false)
+				// Register a route pattern plus, unless strictPath, its
+				// trailing-slash (loose) variant — so `/users/1/` matches
+				// `/users/:id` just like static routes tolerate trailing
+				// slashes. (Pre-fix the router was only queried with the exact
+				// path, so dynamic routes 404'd on a trailing slash.)
+				const addPattern = (p: string) => {
+					router.add(method, p, handler, false)
+					if (headHandler) router.add('HEAD', p, headHandler, false)
+
+					if (!strict) {
+						const loose = getLoosePath(p)
+						if (loose !== p) {
+							router.add(method, loose, handler, false)
+							if (headHandler)
+								router.add('HEAD', loose, headHandler, false)
+						}
+					}
+				}
+
+				addPattern(path)
+
+				// Encoded form so a percent-encoded request path matches a
+				// non-ASCII pattern without a per-request decode (mirrors the
+				// static map above). `:` is URI-safe, so params survive.
+				const encoded = encodeURI(path)
+				if (encoded !== path) addPattern(encoded)
 			} else {
 				const map = (methods[method] ??= nullObject() as any)
 				const handler = this.handler(i, precompile, route, sharedStatic)
 				map[path] = handler
 
-				if (autoHead)
-					(methods['HEAD'] ??= nullObject() as any)[path] =
-						wrapHeadHandler(handler)
+				// Store the percent-encoded form too. A request path arrives
+				// percent-encoded on the wire (the usual form for non-ASCII
+				// routes), so this lets it match by a direct map lookup instead
+				// of decoding per request. ASCII paths encode to themselves, so
+				// this is a no-op for them.
+				const encoded = encodeURI(path)
+				if (encoded !== path) map[encoded] = handler
+
+				if (autoHead) {
+					const head = (methods['HEAD'] ??= nullObject() as any)
+					const headHandler = wrapHeadHandler(handler)
+					head[path] = headHandler
+					if (encoded !== path) head[encoded] = headHandler
+				}
 			}
 		}
 	}

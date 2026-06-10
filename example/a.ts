@@ -1,4 +1,4 @@
-import { Elysia, sse, t } from '../src'
+import { Elysia } from '../src'
 
 class MyError extends Error {
 	constructor(public message: string) {
@@ -6,20 +6,17 @@ class MyError extends Error {
 	}
 }
 
-// default scope is local: handlers only cover the plugin's own routes.
-// 'plugin' covers the immediate parent, 'global' any depth — types follow
-const plugin = new Elysia().error('plugin', MyError, ({ status, error }) => {
-	return status(418, error.message)
-})
+const errorBoundary = new Elysia({ name: 'boundary', as: 'global' })
+	.error(
+		MyError,
+		({ status, error }) => status(418, "QQ")
+	)
 
 const app = new Elysia()
-	.get('/', () => {
-		return new MyError('A')
-	})
-	.use(plugin)
+	.get('/', () => new MyError('A'))
+	.use(errorBoundary)
 
 type Response = (typeof app)['~Routes']['get']['response']
-//   ^? { 418: string }
 
 app.handle('/')
 	.then((x) => x.text())

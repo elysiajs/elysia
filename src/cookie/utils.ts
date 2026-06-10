@@ -61,7 +61,11 @@ export async function parseCookieRaw(
 	const out: Record<string, unknown> = nullObject() as any
 	if (!cookieString) return out
 
-	const cookies = parse(cookieString)
+	// Identity decode: `parse` would otherwise run decodeURIComponent on any
+	// value containing '%', and we decode again with deuri's decodeComponent
+	// below — decoding twice silently corrupts values like `100%2520off`
+	// (correctly encoded `100%20off`). Decode exactly once, here.
+	const cookies = parse(cookieString, (raw) => raw)
 
 	for (const name in cookies) {
 		if (dangerousKeys.has(name)) continue
@@ -268,6 +272,14 @@ export async function unsignCookie(input: string, secret: string | null) {
 	}
 
 	const tentativeValue = input.slice(0, dot)
+
+	// A `null` secret is the "allow unsigned" slot in a rotation list. A value
+	// that looks signed (has a dot) cannot be verified by it, so it simply
+	// doesn't match — previously this fell through to signCookie(value, null),
+	// which threw 'Secret key must be provided' and 500'd the request for any
+	// value containing a dot.
+	if (secret === null) return false
+
 	const expectedInput = await signCookie(tentativeValue, secret)
 
 	return constantTimeEqual(expectedInput, input) ? tentativeValue : false

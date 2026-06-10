@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test'
 import { Type } from 'typebox'
 import { Default } from 'typebox/value'
 
-import { Elysia, t } from '../../src'
+import { Elysia, t, ValidationError } from '../../src'
 import { TypeBoxValidator } from '../../src/type/validator'
 import { setupTypebox } from '../../src/type/compat'
 import { req } from '../utils'
@@ -119,11 +119,15 @@ describe('TypeBoxValidator default precompute', () => {
 
 describe('EncodeFrom error path', () => {
 	it('codec Encode that throws surfaces as ValidationError', async () => {
-		let caught: { code?: string; status?: number } | null = null
+		let caught: { isValidation?: boolean; status?: number } | null = null
 
 		const app = new Elysia()
-			.onError(({ code, error, set }) => {
-				caught = { code, status: set.status as number }
+			.onError(({ error, set }) => {
+				// `code` was removed this version; detect via instanceof.
+				caught = {
+					isValidation: error instanceof ValidationError,
+					status: set.status as number
+				}
 				return 'caught'
 			})
 			.get('/', () => 'value', {
@@ -139,7 +143,7 @@ describe('EncodeFrom error path', () => {
 
 		const res = await app.handle(req('/'))
 		expect(res.status).toBe(422)
-		expect(caught?.code).toBe('VALIDATION')
+		expect(caught?.isValidation).toBe(true)
 	})
 })
 
@@ -171,5 +175,36 @@ describe('t.Cookie field-form ignores `sign` option', () => {
 		// Plain value, no `.<sig>` suffix.
 		expect(setCookie).toContain('token=plain')
 		expect(setCookie.split(';')[0]).toBe('token=plain')
+	})
+
+	// Regression (audit H7): the precomputed default is shared across requests.
+	// With `normalize:false` there is no Clean() to clone the validated value,
+	// so a nested mutable default (e.g. `t.Array(..., { default: [] })`) was
+	// handed to every request BY REFERENCE — one request's handler mutation
+	// leaked into the next. Each request must get its own default instance.
+	it('does not share a defaulted array across requests (normalize:false)', async () => {
+		const post = (body: string) =>
+			req('/', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body
+			})
+
+		const app = new Elysia({ normalize: false }).post(
+			'/',
+			({ body }) => {
+				;(body as { items: string[] }).items.push('x')
+				return (body as { items: string[] }).items.length
+			},
+			{ body: t.Object({ items: t.Array(t.String(), { default: [] }) }) }
+		)
+
+		// empty object → `items` comes entirely from the (shared) default
+		const first = await app.handle(post('{}')).then((r) => r.text())
+		const second = await app.handle(post('{}')).then((r) => r.text())
+
+		// before the fix the second request saw the first push (length 2)
+		expect(first).toBe('1')
+		expect(second).toBe('1')
 	})
 })
