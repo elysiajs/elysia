@@ -3,7 +3,7 @@ import type { OpenAPIV3 } from 'openapi-types'
 
 import { ElysiaFile } from './universal/file'
 import { TraceEvent, TraceListener } from './trace'
-import { MethodMap } from './constants'
+import { MethodMap, type StatusMapBack } from './constants'
 import { ElysiaError, type ElysiaStatus } from './error'
 import type { TypeBoxSchema, AnySchema, StandardSchemaV1Like } from './type'
 
@@ -710,9 +710,16 @@ export type GracefulHandler<in Instance extends AnyElysia> = (
 export type ResolveHandler<
 	in out Route extends RouteSchema,
 	in out Singleton extends SingletonBase,
-	Derivative extends Record<string, unknown> | ElysiaError | void =
+	// `status(...)` (ElysiaStatus) is a valid resolve return — it short-circuits
+	// to the response union rather than contributing a resolved property.
+	Derivative extends
 		| Record<string, unknown>
 		| ElysiaError
+		| AnyElysiaStatus
+		| void =
+		| Record<string, unknown>
+		| ElysiaError
+		| AnyElysiaStatus
 		| void
 > = (context: Context<Route, Singleton>) => MaybePromise<Derivative>
 
@@ -1291,7 +1298,10 @@ type OptionalField = { '~optional': true }
 type StaticCyclic<
 	T extends TypeBoxSchema,
 	Definitions extends Record<string, AnySchema>
-> = Definitions extends {}
+	// `{} extends Definitions` (Definitions is empty), NOT `Definitions extends
+	// {}` (always true → refs never resolved): with no models there are no refs
+	// to resolve, so `Static<T>` directly; otherwise resolve `$ref`s via TCyclic.
+> = {} extends Definitions
 	? Static<T>
 	: Definitions extends infer Defs extends Record<string, TypeBoxSchema>
 		? Static<
@@ -1445,7 +1455,51 @@ export interface IntersectIfObjectSchema<
 	query: IntersectIfObject<A['query'], B['query']>
 	params: IntersectIfObject<A['params'], B['params']>
 	cookie: IntersectIfObject<A['cookie'], B['cookie']>
-	response: IntersectIfObject<A['response'], B['response']>
+	// `response` uses OVERRIDE semantics, not the additive intersection used for
+	// input fields: a local/route response (A) wins over a standalone guard
+	// response (B). The standalone response only constrains the handler when no
+	// local one exists; when neither exists, A (`unknown | void`) leaves the
+	// handler unconstrained.
+	response: {} extends A['response']
+		? {} extends B['response']
+			? A['response']
+			: B['response']
+		: A['response']
+}
+
+// Merge the standalone (`schemas`) channels across scopes for a route's input
+// constraint. Input fields are additive (intersected across global / scoped /
+// local), but `response` uses OVERRIDE by scope precedence (local > scoped >
+// global): a nearer scope's standalone response replaces an inherited one
+// rather than intersecting to `never` (e.g. a plugin-local `guard` response
+// overriding a response inherited from a globally-promoted guard).
+export interface MergeScopedSchemas<
+	Global extends RouteSchema,
+	Scoped extends RouteSchema,
+	Local extends RouteSchema
+> {
+	body: Global['body'] & Scoped['body'] & Local['body']
+	headers: Global['headers'] & Scoped['headers'] & Local['headers']
+	query: Global['query'] & Scoped['query'] & Local['query']
+	params: Global['params'] & Scoped['params'] & Local['params']
+	cookie: Global['cookie'] & Scoped['cookie'] & Local['cookie']
+	// Override is PER STATUS CODE, not whole-object: a nearer scope's entry for
+	// a given status replaces the inherited one, but statuses only declared by
+	// an outer scope survive (e.g. local `{ 401 }` over global `{ 401, 402 }`
+	// keeps 402). When no scope declares a response, `keyof` is `never` → `{}`,
+	// which `IntersectIfObjectSchema` treats as "no standalone response".
+	response: {
+		[K in
+			| keyof Global['response']
+			| keyof Scoped['response']
+			| keyof Local['response']]: K extends keyof Local['response']
+			? Local['response'][K]
+			: K extends keyof Scoped['response']
+				? Scoped['response'][K]
+				: K extends keyof Global['response']
+					? Global['response'][K]
+					: never
+	}
 }
 
 type ReturnTypeIfPossible<T, Enabled = true> = false extends Enabled
@@ -1510,6 +1564,19 @@ type _FunctionArrayReturnTypeNonNullable<T, Carry = undefined> = T extends [
 
 type AnyElysiaStatus = ElysiaStatus<any, any, any>
 
+/**
+ * The resolved properties a `derive`/`resolve` handler contributes to the
+ * context — its return value with any `status(...)` (ElysiaStatus) responses
+ * removed (those flow to the response union instead), and `void`/`never`
+ * collapsed to `{}`.
+ */
+export type ExcludeElysiaResponse<T> =
+	Exclude<Awaited<T>, AnyElysiaStatus> extends infer A
+		? IsNever<A & {}> extends true
+			? {}
+			: A & {}
+		: {}
+
 type ExtractResolveFromMacro<A> =
 	IsNever<A> extends true
 		? {}
@@ -1539,10 +1606,10 @@ type MergeResponseStatus<A> = {
 			? { [A in Status]: 1 }
 			: never
 		// @ts-ignore A is checked in key computation
-	>]: Extract<A, { code: status }>['res'] extends infer Value
+	>]: Extract<A, { code: status }>['response'] extends infer Value
 		? IsAny<Value> extends true
-			? // @ts-ignore status is always in Status Map
-				InvertedStatusMap[status]
+			? // @ts-ignore status is always in StatusMapBack
+				StatusMapBack[status]
 			: Value
 		: never
 }

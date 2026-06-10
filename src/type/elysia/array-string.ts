@@ -1,5 +1,5 @@
 import { Type } from 'typebox'
-import type { TObjectOptions, TProperties } from 'typebox'
+import type { TObjectOptions, TSchema } from 'typebox'
 import { Value } from 'typebox/value'
 
 import { ELYSIA_TYPES } from '../constants'
@@ -9,12 +9,12 @@ import { Union } from './union'
 import { elyType, getMeta } from './utils'
 import { nullObject } from '../../utils'
 
-export function ArrayString<T extends TProperties>(
+export function ArrayString<T extends TSchema>(
 	property: T,
 	_options?: TObjectOptions
 ) {
 	const [constraints, meta] = getMeta((_options ?? nullObject()) as any)
-	const array = ArrayType(property as any, constraints)
+	const array = ArrayType(property, constraints)
 
 	const arrayString = Type.Decode(
 		Type.Refine(

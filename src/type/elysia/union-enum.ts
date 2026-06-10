@@ -41,5 +41,10 @@ export function UnionEnum<
 
 	if (!mixed) schema.type = kind
 
-	return elyType(ELYSIA_TYPES.UnionEnum, Type.Unsafe<TUnionEnum<T>>(schema))
+	// Static (output) type is the union of the enum values (`T[number]`), not
+	// the `TUnionEnum<T>` schema interface — `Type.Unsafe<TUnionEnum<T>>` would
+	// surface the schema shape in handler/Eden context instead of the value.
+	// The runtime `schema` (carrying `~kind`/`enum`/`type` for validation) and
+	// the `elyType` tag are unchanged.
+	return elyType(ELYSIA_TYPES.UnionEnum, Type.Unsafe<T[number]>(schema))
 }

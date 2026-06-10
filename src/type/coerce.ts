@@ -314,8 +314,9 @@ export const coerceRoot = () =>
 
 const toObjectString = (x: TProperties) =>
 	ObjectString((x.properties as TProperties) ?? {}, x)
+
 const toArrayString = (x: TProperties) =>
-	ArrayString((x.items as TProperties) ?? {}, x)
+	ArrayString((x.items ?? {}) as any, x)
 
 let _coerceQuery: CoerceOption[]
 export const coerceQuery = () =>

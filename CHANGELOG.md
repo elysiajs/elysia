@@ -50,6 +50,19 @@ Bug fix:
 - an unguarded `JSON.parse` in query array parsing turned malformed input into a request-controlled 500
 - Bun native static routes were never installed when every static response was synchronous (the optimization was dead in its common case)
 - error-path `mapResponse` codegen assigned an undeclared `tmp`, leaking the mapped response onto `globalThis` (and crashing under AOT strict-mode modules)
+- `Cookie` was no longer exported from the package entry, so `import { Cookie } from 'elysia'` (used to type the `cookie` context) failed to resolve
+
+Type:
+- restored `.derive()` / `.resolve()` context inference — resolved properties now flow into subsequent handler/Eden context types, with `local` / `scoped` / `global` scope propagation (was untyped, returning `this`)
+- restored `.guard()` / `.as()` schema inference — `.guard({ body })` now accumulates standalone schemas (body/headers/query/params/cookie/response) into subsequent handler/Eden context; `.guard({ as: 'scoped' | 'global', … })` accumulates into the Ephemeral / Singleton+Metadata channel (so a guarded macro `resolve` propagates one level / everywhere); `.guard(hook, app => …)` types the sandboxed builder and merges its routes back; `.as('scoped' | 'global')` promotes the locally-accumulated schema / resolve / response / error one scope outward (all were untyped, returning `this`)
+- a standalone guard `response` schema now type-constrains route handlers, but a route's own local `response` overrides it (override semantics, not intersection) — `response` resolution in `IntersectIfObjectSchema` and the new `MergeScopedSchemas` prefers the nearer scope **per status code** (local > scoped > global), so e.g. a plugin-local `{ 401 }` override keeps an inherited global `{ 402 }` instead of intersecting to `never`
+- restored lifecycle-hook response inference — `.onBeforeHandle` / `.onAfterHandle` / `.onError` now accept `MaybeArray` handlers and fold each handler's `status(...)` returns into the response union, channeled by scope (local→Volatile, `{ as: 'scoped' }`→Ephemeral, `{ as: 'global' }`→Metadata), matching `.guard`'s lifecycle handlers (were untyped single-handler, returning `this`)
+- macro lifecycle `status(...)` returns now surface in the route response type — `MergeResponseStatus` read a non-existent `['res']` field on `ElysiaStatus` (the field is `['response']`), so e.g. a macro `beforeHandle` returning `status(410)` resolved to `unknown` instead of `'Gone'`
+- `resolve` / macro `resolve` handlers may now `return status(...)` — `ResolveHandler` previously allowed only `Record | ElysiaError | void`, rejecting `ElysiaStatus`; the status return short-circuits to the response union
+- `t.UnionEnum([...])` now infers as the union of its values (`'a' | 'b'`) in handler/Eden context — it was `Type.Unsafe<TUnionEnum<T>>`, surfacing the schema interface instead of the value union
+- `t.ArrayString(t.String())` now accepts an element schema and infers `string[]` — the parameter was wrongly constrained to `TProperties` and the element type was erased with an `as any`
+- restored `Elysia.Ref(name)` for referencing a registered `.model(...)` as a schema (the method was missing)
+- model `$ref` types now resolve in handler/Eden context — `StaticCyclic` had an inverted `Definitions extends {}` check (always true) that skipped ref resolution, leaving `Model.Ref('x')` typed as `unknown`
 
 Internal:
 - route matching: percent-encoded paths are now matched via build-time `encodeURI` keys stored alongside `~map`/the router, instead of decoding the path per request — dynamic param values are still decoded at match time

@@ -21,6 +21,7 @@ export {
 } from './type'
 export { Compiled } from './compile/aot'
 export { file, ElysiaFile } from './universal/file'
+export { Cookie } from './cookie'
 
 export {
 	type Context,
