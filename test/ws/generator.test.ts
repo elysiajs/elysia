@@ -206,9 +206,9 @@ describe('WebSocket generator handlers', () => {
 					yield `${body}-1`
 					yield `${body}-2`
 				},
-				mapResponse({ response }: any) {
-					seen.push(response)
-					return response
+				mapResponse({ responseValue }: any) {
+					seen.push(responseValue)
+					return responseValue
 				}
 			})
 			.listen(0)

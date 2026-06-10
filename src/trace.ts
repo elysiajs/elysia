@@ -112,7 +112,6 @@ export type TraceHandler<
 		decorator: {}
 		store: {}
 		derive: {}
-		resolve: {}
 	}
 > = {
 	(

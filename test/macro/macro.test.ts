@@ -503,7 +503,7 @@ describe('Macro', () => {
 		const app = new Elysia()
 			.macro({
 				user: (enabled: boolean) => ({
-					resolve: ({ query: { name = 'anon' } }) => ({
+					derive: ({ query: { name = 'anon' } }) => ({
 						user: {
 							name
 						}
@@ -527,7 +527,7 @@ describe('Macro', () => {
 		const app = new Elysia()
 			.macro({
 				user: (enabled: boolean) => ({
-					resolve: async ({ query: { name = 'anon' } }) => ({
+					derive: async ({ query: { name = 'anon' } }) => ({
 						user: {
 							name
 						}
@@ -551,7 +551,7 @@ describe('Macro', () => {
 		const plugin = new Elysia()
 			.macro({
 				account: (a: boolean) => ({
-					resolve: () => ({
+					derive: () => ({
 						account: 'A'
 					})
 				})
@@ -585,7 +585,7 @@ describe('Macro', () => {
 		const plugin = new Elysia()
 			.macro({
 				account: (a: boolean) => ({
-					resolve: () => ({
+					derive: () => ({
 						account: 'A'
 					})
 				})
@@ -619,7 +619,7 @@ describe('Macro', () => {
 		const plugin = new Elysia()
 			.macro({
 				account: (a: boolean) => ({
-					resolve: () => ({
+					derive: () => ({
 						account: 'A'
 					})
 				})
@@ -653,7 +653,7 @@ describe('Macro', () => {
 		const plugin = new Elysia()
 			.macro({
 				account: (a: boolean) => ({
-					resolve: () => ({
+					derive: () => ({
 						account: 'A'
 					})
 				})
@@ -687,7 +687,7 @@ describe('Macro', () => {
 		const plugin = new Elysia()
 			.macro({
 				account: (a: boolean) => ({
-					resolve: () => {
+					derive: () => {
 						if (Math.random() > 2) return status(401)
 
 						return {
@@ -725,7 +725,7 @@ describe('Macro', () => {
 		const plugin = new Elysia()
 			.macro({
 				account: (a: boolean) => ({
-					resolve: async () => {
+					derive: async () => {
 						if (Math.random() > 2) return status(401)
 
 						return {
@@ -764,7 +764,7 @@ describe('Macro', () => {
 		const app = new Elysia()
 			.macro({
 				user: (enabled: true) => ({
-					resolve() {
+					derive() {
 						if (!enabled) return
 
 						return {
@@ -796,7 +796,7 @@ describe('Macro', () => {
 		const app = new Elysia()
 			.macro({
 				user: {
-					resolve: ({ query: { name = 'anon' } }) => ({
+					derive: ({ query: { name = 'anon' } }) => ({
 						user: {
 							name
 						}
@@ -828,13 +828,13 @@ describe('Macro', () => {
 		const app = new Elysia()
 			.macro({
 				a: {
-					resolve: () => ({ a: 'a' as const })
+					derive: () => ({ a: 'a' as const })
 				},
 				b: {
-					resolve: () => ({ b: 'b' as const })
+					derive: () => ({ b: 'b' as const })
 				},
 				c: (n: number) => ({
-					resolve: () => ({ c: n })
+					derive: () => ({ c: n })
 				})
 			})
 			.get('/a', ({ a }) => ({ a }), {

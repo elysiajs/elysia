@@ -16,7 +16,7 @@ describe('derive', () => {
 	})
 
 	it('inherits plugin', async () => {
-		const plugin = new Elysia().derive({ as: 'global' }, () => ({
+		const plugin = new Elysia().derive('global', () => ({
 			hi: () => 'hi'
 		}))
 
@@ -99,7 +99,7 @@ describe('derive', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.derive({ as: 'global' }, ({ path }) => {
+			.derive('global', ({ path }) => {
 				called.push(path)
 
 				return {}
@@ -120,7 +120,7 @@ describe('derive', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.derive({ as: 'local' }, ({ path }) => {
+			.derive('local', ({ path }) => {
 				called.push(path)
 
 				return {}
@@ -141,7 +141,7 @@ describe('derive', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.derive({ as: 'scoped' }, ({ path }) => {
+			.derive('plugin', ({ path }) => {
 				called.push(path)
 
 				return {}
@@ -165,7 +165,7 @@ describe('derive', () => {
 		let total = 0
 
 		const app = new Elysia()
-			.onAfterHandle([
+			.afterHandle([
 				() => {
 					total++
 				},
@@ -288,7 +288,7 @@ describe('derive', () => {
 
 	// it('work scoped guard', async () => {
 	// 	const plugin = new Elysia().guard({
-	// 		as: 'scoped',
+	// 		as: 'plugin',
 	// 		derive: () => ({ hi: () => 'hi' })
 	// 	})
 
@@ -329,7 +329,7 @@ describe('derive', () => {
 		let isOnErrorCalled = false
 
 		const app = new Elysia()
-			.onError(() => {
+			.error(() => {
 				isOnErrorCalled = true
 			})
 			.derive(({ status }) => status(418))

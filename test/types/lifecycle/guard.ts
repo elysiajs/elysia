@@ -54,11 +54,11 @@ import { expectTypeOf } from 'expect-type'
 	})
 }
 
-// ? guard().as('scoped') promotes the schema one level via .use
+// ? guard().as('plugin') promotes the schema one level via .use
 {
 	const plugin = new Elysia()
 		.guard({ body: t.Object({ name: t.String() }) })
-		.as('scoped')
+		.as('plugin')
 
 	new Elysia().use(plugin).post('/', ({ body }) => {
 		expectTypeOf<typeof body>().toEqualTypeOf<{ name: string }>()

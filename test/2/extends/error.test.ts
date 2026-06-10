@@ -236,7 +236,7 @@ describe('Error handler', () => {
 	// Error.message (internal detail) leaked with a 500.
 	it('instance-level onError does not clobber route-level error handler', async () => {
 		const plugin = new Elysia()
-			.onError(() => {})
+			.error(() => {})
 			.get('/boom', () => {
 				throw new Error('SECRET_INTERNAL_DETAIL')
 			}, {
@@ -258,7 +258,7 @@ describe('Error handler', () => {
 	// handler. The Context's `.request` must be unwrapped for the adapter.
 	it('onError returning a Blob responds without crashing (and honours Range)', async () => {
 		const app = new Elysia()
-			.onError(() => new Blob(['error-asset'], { type: 'text/plain' }))
+			.error(() => new Blob(['error-asset'], { type: 'text/plain' }))
 			.get('/boom', () => {
 				throw new Error('x')
 			})

@@ -6,7 +6,7 @@ import { post } from '../utils'
 describe('Parser', () => {
 	it('handle onParse', async () => {
 		const app = new Elysia()
-			.onParse((context, contentType) => {
+			.parse(({ contentType }) => {
 				switch (contentType) {
 					case 'application/Elysia':
 						return 'A'
@@ -30,10 +30,10 @@ describe('Parser', () => {
 
 	it('register using on', async () => {
 		const app = new Elysia()
-			.on('parse', (context, contentType) => {
+			.on('parse', ({ contentType, request }) => {
 				switch (contentType) {
 					case 'application/Elysia':
-						return context.request.text()
+						return request.text()
 				}
 			})
 			.post('/', ({ body }) => body)
@@ -54,7 +54,7 @@ describe('Parser', () => {
 
 	it('overwrite default parser', async () => {
 		const app = new Elysia()
-			.onParse((context, contentType) => {
+			.parse(({ contentType }) => {
 				switch (contentType) {
 					case 'text/plain':
 						return 'Overwrited'
@@ -169,10 +169,10 @@ describe('Parser', () => {
 		let order = <string[]>[]
 
 		const app = new Elysia()
-			.onParse({ as: 'global' }, ({ path }) => {
+			.parse('global', ({ path }) => {
 				order.push('A')
 			})
-			.onParse({ as: 'global' }, ({ path }) => {
+			.parse('global', ({ path }) => {
 				order.push('B')
 			})
 			.post('/', ({ body }) => 'NOOP')
@@ -183,7 +183,7 @@ describe('Parser', () => {
 	})
 
 	it('inherits plugin', async () => {
-		const plugin = new Elysia().onParse({ as: 'global' }, () => 'Kozeki Ui')
+		const plugin = new Elysia().parse('global', () => 'Kozeki Ui')
 
 		const app = new Elysia().use(plugin).post('/', ({ body }) => body)
 
@@ -192,7 +192,7 @@ describe('Parser', () => {
 	})
 
 	it('not inherits plugin on local', async () => {
-		const plugin = new Elysia().onParse(() => 'Kozeki Ui')
+		const plugin = new Elysia().parse(() => 'Kozeki Ui')
 
 		const app = new Elysia().use(plugin).post('/', ({ body }) => body)
 
@@ -207,7 +207,7 @@ describe('Parser', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.onParse({ as: 'global' }, ({ path }) => {
+			.parse('global', ({ path }) => {
 				called.push(path)
 			})
 			.post('/inner', () => 'NOOP')
@@ -226,7 +226,7 @@ describe('Parser', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.onParse({ as: 'local' }, ({ path }) => {
+			.parse('local', ({ path }) => {
 				called.push(path)
 			})
 			.post('/inner', () => 'NOOP')
@@ -245,7 +245,7 @@ describe('Parser', () => {
 		let total = 0
 
 		const app = new Elysia()
-			.onParse([
+			.parse([
 				() => {
 					total++
 				},

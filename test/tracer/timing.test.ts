@@ -36,7 +36,7 @@ describe('Trace Timing', async () => {
 					})
 				})
 			})
-			.onRequest(async () => {
+			.request(async () => {
 				await delay()
 			})
 			.get('/', () => 'a')
@@ -55,7 +55,7 @@ describe('Trace Timing', async () => {
 					})
 				})
 			})
-			.onParse(async () => {
+			.parse(async () => {
 				await delay()
 			})
 			.post('/', ({ body }) => 'a')
@@ -74,7 +74,7 @@ describe('Trace Timing', async () => {
 					})
 				})
 			})
-			.onTransform(async () => {
+			.transform(async () => {
 				await delay()
 			})
 			.get('/', () => 'a')
@@ -93,7 +93,7 @@ describe('Trace Timing', async () => {
 					})
 				})
 			})
-			.onBeforeHandle(async () => {
+			.beforeHandle(async () => {
 				await delay()
 			})
 			.get('/', () => 'a')
@@ -112,7 +112,7 @@ describe('Trace Timing', async () => {
 					})
 				})
 			})
-			.onAfterHandle(async () => {
+			.afterHandle(async () => {
 				await delay()
 			})
 			.get('/', () => 'a')
@@ -150,7 +150,7 @@ describe('Trace Timing', async () => {
 					})
 				})
 			})
-			.onAfterResponse(async () => {
+			.afterResponse(async () => {
 				await delay()
 			})
 			.get('/', () => 'a')
@@ -293,7 +293,7 @@ describe('Trace Timing', async () => {
 					})
 				})
 			})
-			.onParse(async function luna() {
+			.parse(async function luna() {
 				await delay(6)
 			})
 			.post('/', ({ body }) => body, {
@@ -326,7 +326,7 @@ describe('Trace Timing', async () => {
 					})
 				})
 			})
-			.onTransform(async function luna() {
+			.transform(async function luna() {
 				await delay(6)
 			})
 			.get('/', () => 'a', {
@@ -359,7 +359,7 @@ describe('Trace Timing', async () => {
 					})
 				})
 			})
-			.onBeforeHandle(async function luna() {
+			.beforeHandle(async function luna() {
 				await delay(6)
 			})
 			.get('/', () => 'a', {
@@ -392,7 +392,7 @@ describe('Trace Timing', async () => {
 					})
 				})
 			})
-			.onBeforeHandle(async function luna() {
+			.beforeHandle(async function luna() {
 				await delay(6.25)
 			})
 			.get('/', () => 'a', {
@@ -425,7 +425,7 @@ describe('Trace Timing', async () => {
 					})
 				})
 			})
-			.onAfterHandle(async function luna() {
+			.afterHandle(async function luna() {
 				await delay(6)
 			})
 			.get('/', () => 'a', {
@@ -491,7 +491,7 @@ describe('Trace Timing', async () => {
 					})
 				})
 			})
-			.onAfterResponse(async function luna() {
+			.afterResponse(async function luna() {
 				await delay(6)
 			})
 			.get('/', () => 'a', {

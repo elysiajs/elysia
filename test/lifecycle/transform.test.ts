@@ -6,7 +6,7 @@ import { req } from '../utils'
 describe('Transform', () => {
 	it('globally Transform', async () => {
 		const app = new Elysia()
-			.onTransform<{
+			.transform<{
 				params: {
 					id: number
 				} | null
@@ -43,7 +43,7 @@ describe('Transform', () => {
 		const app = new Elysia()
 			.group('/scoped/id/:id', (app) =>
 				app
-					.onTransform(({ params }) => {
+					.transform(({ params }) => {
 						// @ts-ignore
 						if (params.id) params.id = +params.id
 					})
@@ -59,14 +59,14 @@ describe('Transform', () => {
 	})
 
 	it('transform from plugin', async () => {
-		const transformId = new Elysia().onTransform<
+		const transformId = new Elysia().transform<
 			{
 				params: {
 					id: number
 				} | null
 			},
 			'global'
-		>({ as: 'global' }, (request) => {
+		>('global', (request) => {
 			// @ts-ignore
 			if (request.params?.id) request.params.id = +request.params.id
 		})
@@ -96,10 +96,10 @@ describe('Transform', () => {
 		let order = <string[]>[]
 
 		const app = new Elysia()
-			.onTransform(() => {
+			.transform(() => {
 				order.push('A')
 			})
-			.onTransform(() => {
+			.transform(() => {
 				order.push('B')
 			})
 			.get('/', () => '')
@@ -111,7 +111,7 @@ describe('Transform', () => {
 
 	it('globally and locally pre handle', async () => {
 		const app = new Elysia()
-			.onTransform<{
+			.transform<{
 				params: {
 					id: number
 				} | null
@@ -138,14 +138,14 @@ describe('Transform', () => {
 
 	it('accept multiple transform', async () => {
 		const app = new Elysia()
-			.onTransform<{
+			.transform<{
 				params: {
 					id: number
 				} | null
 			}>((request) => {
 				if (request.params?.id) request.params.id = +request.params.id
 			})
-			.onTransform<{
+			.transform<{
 				params: {
 					id: number
 				} | null
@@ -190,7 +190,7 @@ describe('Transform', () => {
 
 	it('map returned value', async () => {
 		const app = new Elysia()
-			.onTransform<{
+			.transform<{
 				params: {
 					id: number
 				} | null
@@ -218,14 +218,14 @@ describe('Transform', () => {
 	})
 
 	it('inherits from plugin', async () => {
-		const transformId = new Elysia().onTransform<
+		const transformId = new Elysia().transform<
 			{
 				params: {
 					name: string
 				} | null
 			},
 			'global'
-		>({ as: 'global' }, ({ params }) => {
+		>('global', ({ params }) => {
 			if (params?.name === 'Fubuki') params.name = 'Cat'
 		})
 
@@ -239,7 +239,7 @@ describe('Transform', () => {
 	})
 
 	it('not inherits plugin on local', async () => {
-		const transformId = new Elysia().onTransform<{
+		const transformId = new Elysia().transform<{
 			params: {
 				name: string
 			} | null
@@ -260,7 +260,7 @@ describe('Transform', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.onTransform({ as: 'global' }, ({ path }) => {
+			.transform('global', ({ path }) => {
 				called.push(path)
 			})
 			.get('/inner', () => 'NOOP')
@@ -279,7 +279,7 @@ describe('Transform', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.onTransform({ as: 'local' }, ({ path }) => {
+			.transform('local', ({ path }) => {
 				called.push(path)
 			})
 			.get('/inner', () => 'NOOP')
@@ -295,7 +295,7 @@ describe('Transform', () => {
 	})
 
 	// New direct-scope API: `transform('global', fn)` parallels
-	// `onTransform({ as: 'global' }, fn)`.
+	// `onTransform('global', fn)`.
 	it('global true (direct scope)', async () => {
 		const called = <string[]>[]
 
@@ -338,7 +338,7 @@ describe('Transform', () => {
 		let total = 0
 
 		const app = new Elysia()
-			.onTransform([
+			.transform([
 				() => {
 					total++
 				},

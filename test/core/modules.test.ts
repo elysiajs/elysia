@@ -155,7 +155,7 @@ describe('Modules', () => {
 
 		const app = new Elysia()
 			.use(plugin)
-			.onRequest(() => {
+			.request(() => {
 				fired++
 			})
 			.compile()
@@ -173,7 +173,7 @@ describe('Modules', () => {
 
 		const app = new Elysia()
 			.use(plugin())
-			.onRequest(() => {
+			.request(() => {
 				fired++
 			})
 			.compile()

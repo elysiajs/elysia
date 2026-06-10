@@ -174,7 +174,7 @@ describe('plugin dedup graph', () => {
 		let count = 0
 
 		const auth = new Elysia({ name: 'auth' }).derive(
-			{ as: 'global' },
+			'global',
 			() => {
 				count++
 				return { user: 'alice' }

@@ -5,7 +5,7 @@ const prettyJson = new Elysia()
 		if (response instanceof Object)
 			return new Response(JSON.stringify(response, null, 4))
 	})
-	.as('scoped')
+	.as('plugin')
 
 new Elysia()
 	.use(prettyJson)

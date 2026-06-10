@@ -89,7 +89,7 @@ describe('Error lifecycle', () => {
 	})
 
 	it('inherits plugin', async () => {
-		const plugin = new Elysia().onError({ as: 'global' }, () => 'hi')
+		const plugin = new Elysia().error('global', () => 'hi')
 
 		const app = new Elysia().use(plugin).get('/', () => {
 			throw new Error('')
@@ -100,7 +100,7 @@ describe('Error lifecycle', () => {
 	})
 
 	it('not inherits plugin on local', async () => {
-		const plugin = new Elysia().onError(() => 'hi')
+		const plugin = new Elysia().error(() => 'hi')
 
 		const app = new Elysia().use(plugin).get('/', () => {
 			throw new Error('')
@@ -183,10 +183,10 @@ describe('Error lifecycle', () => {
 		let order = <string[]>[]
 
 		const app = new Elysia()
-			.onError(() => {
+			.error(() => {
 				order.push('A')
 			})
-			.onError(() => {
+			.error(() => {
 				order.push('B')
 			})
 			.get('/', () => {
@@ -202,7 +202,7 @@ describe('Error lifecycle', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.onError({ as: 'global' }, ({ path }) => {
+			.error('global', ({ path }) => {
 				called.push(path)
 
 				return {}
@@ -227,7 +227,7 @@ describe('Error lifecycle', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.onError({ as: 'local' }, ({ path }) => {
+			.error('local', ({ path }) => {
 				called.push(path)
 
 				return {}
@@ -249,7 +249,7 @@ describe('Error lifecycle', () => {
 	})
 
 	// New direct-scope API: `error('global', fn)` parallels
-	// `onError({ as: 'global' }, fn)`.
+	// `onError('global', fn)`.
 	it('as global (direct scope)', async () => {
 		const called = <string[]>[]
 
@@ -304,7 +304,7 @@ describe('Error lifecycle', () => {
 		let total = 0
 
 		const app = new Elysia()
-			.onAfterHandle([
+			.afterHandle([
 				() => {
 					total++
 				},
@@ -329,10 +329,10 @@ describe('Error lifecycle', () => {
 		}
 
 		const app = new Elysia()
-			.onError(({ error }) => {
+			.error(({ error }) => {
 				if (error instanceof SomeCustomError) return error.asJSON()
 			})
-			.onRequest(() => {
+			.request(() => {
 				throw new SomeCustomError()
 			})
 			.get('/', () => '')
@@ -372,7 +372,7 @@ describe('Error lifecycle', () => {
 		let i = 0
 
 		const plugin = new Elysia()
-			.onError(() => {
+			.error(() => {
 				i++
 			})
 			.get('/', ({ status }) => {
@@ -388,7 +388,7 @@ describe('Error lifecycle', () => {
 	})
 
 	it('404 should parse query if infer', async () => {
-		const app = new Elysia().onError(({ query }) => query)
+		const app = new Elysia().error(({ query }) => query)
 
 		const response = await app.handle(
 			new Request('http://localhost?hello=world')

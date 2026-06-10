@@ -19,13 +19,13 @@ describe('Bun router', () => {
 					trace = true
 				})
 			})
-			.onRequest(() => {
+			.request(() => {
 				onRequest = true
 			})
 			.decorate('decorated', 'decorated')
 			.state('state', 'state')
 			.derive(() => ({ derived: 'derived' }))
-			.resolve(() => ({ resolved: 'resolved' }))
+			.derive(() => ({ resolved: 'resolved' }))
 			.get('/', ({ store, decorated, derived, resolved }) => ({
 				store,
 				decorated,
@@ -260,7 +260,7 @@ describe('Bun router', () => {
 
 	it('handle async request', async () => {
 		const app = new Elysia()
-			.onRequest(async () => {})
+			.request(async () => {})
 			.mount('/auth', () => new Response('OK'))
 			.listen(0)
 
@@ -297,7 +297,7 @@ describe('Bun router', () => {
 
 	it('mapEarlyResponse onRequest', async () => {
 		const app = new Elysia()
-			.onRequest(() => 'OK!! XD')
+			.request(() => 'OK!! XD')
 			.get('/', () => '')
 			.listen(0)
 

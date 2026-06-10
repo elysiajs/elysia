@@ -221,7 +221,7 @@ export function errorToResponse(
 ) {
 	if (error?.toResponse) {
 		const targetSet =
-			set ?? ({ headers: nullObject(), redirect: '' } as Context['set'])
+			set ?? ({ headers: nullObject() } as Context['set'])
 
 		const apply = (resolved: unknown) => {
 			if (resolved instanceof Response) targetSet.status = resolved.status

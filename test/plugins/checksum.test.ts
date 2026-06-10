@@ -10,7 +10,7 @@ describe('Checksum', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).onTransform({ as: 'global' }, () => {})
+			}).transform('global', () => {})
 
 		const group = new Elysia().use(cookie({})).get('/a', () => 'Hi')
 
@@ -31,7 +31,7 @@ describe('Checksum', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).onTransform({ as: 'global' }, () => {})
+			}).transform('global', () => {})
 
 		const group = new Elysia().use(cookie()).get('/a', () => 'Hi')
 
@@ -52,7 +52,7 @@ describe('Checksum', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).onTransform({ as: 'global' }, () => {})
+			}).transform('global', () => {})
 
 		const group = new Elysia().use(cookie({})).get('/a', () => 'Hi')
 
@@ -78,7 +78,7 @@ describe('Checksum', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).onTransform({ as: 'global' }, () => {})
+			}).transform('global', () => {})
 
 		const group = new Elysia().use(cookie()).get('/a', () => 'Hi')
 
@@ -100,7 +100,7 @@ describe('Checksum', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).onTransform({ as: 'global' }, () => {})
+			}).transform('global', () => {})
 
 		const group = new Elysia().use(cookie()).get('/a', () => 'Hi', {
 			transform() {}
@@ -130,7 +130,7 @@ describe('Checksum', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).onTransform({ as: 'global' }, () => {
+			}).transform('global', () => {
 				called++
 			})
 
@@ -152,11 +152,11 @@ describe('Checksum', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).onTransform({ as: 'global' }, () => {})
+			}).transform('global', () => {})
 
 		const group = new Elysia()
 			.use(cookie())
-			.onTransform({ as: 'global' }, () => {
+			.transform('global', () => {
 				count++
 			})
 			.get('/a', () => 'Hi')
@@ -194,7 +194,7 @@ describe('Checksum', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).derive({ as: 'global' }, () => {
+			}).derive('global', () => {
 				return {
 					cookie: 'mock'
 				}
@@ -230,18 +230,18 @@ describe('Checksum', () => {
 		let b = 0
 
 		const plugin = new Elysia()
-			.onBeforeHandle({ as: 'global' }, () => {
+			.beforeHandle('global', () => {
 				x++
 			})
 			.group('/v1', (app) =>
 				app
-					.onBeforeHandle(() => {
+					.beforeHandle(() => {
 						a++
 					})
 					.get('', () => 'A')
 					.group('/v1', (app) =>
 						app
-							.onBeforeHandle(() => {
+							.beforeHandle(() => {
 								b++
 							})
 							.get('/', () => 'B')
@@ -267,7 +267,7 @@ describe('Checksum', () => {
 		const plugin = new Elysia()
 			.use(
 				new Elysia()
-					.derive({ as: 'global' }, () => {
+					.derive('global', () => {
 						a++
 
 						return {}
@@ -276,7 +276,7 @@ describe('Checksum', () => {
 			)
 			.use(
 				new Elysia()
-					.derive({ as: 'global' }, () => {
+					.derive('global', () => {
 						b++
 
 						return { test: 'test' }
@@ -284,7 +284,7 @@ describe('Checksum', () => {
 					.get('/2', ({ test }) => test)
 					.use(
 						new Elysia()
-							.derive({ as: 'global' }, () => {
+							.derive('global', () => {
 								c++
 
 								return { test: 'test' }
@@ -316,7 +316,7 @@ describe('Checksum', () => {
 			.use(new Elysia({ prefix: '/not-call' }).get('/', () => 'asdf'))
 			.use(
 				new Elysia({ prefix: '/call' })
-					.derive({ as: 'global' }, () => {
+					.derive('global', () => {
 						i++ // <-- should not be called, when requesting /asdf
 						return { test: 'test' }
 					})
@@ -334,7 +334,7 @@ describe('Checksum', () => {
 
 	it('handle reference parent-child', async () => {
 		const parent = new Elysia({ name: 'parent' }).derive(
-			{ as: 'global' },
+			'global',
 			() => ({
 				bye: () => 'bye'
 			})
@@ -342,7 +342,7 @@ describe('Checksum', () => {
 
 		const child = new Elysia({ name: 'child' })
 			.use(parent)
-			.derive({ as: 'global' }, ({ bye }) => ({
+			.derive('global', ({ bye }) => ({
 				hi: () => `hi + ${bye()}`
 			}))
 
@@ -358,12 +358,12 @@ describe('Checksum', () => {
 
 	it('deduplicate local handler from global event', () => {
 		const ip = new Elysia({ name: 'ip', seed: 'ip' })
-			.derive({ as: 'global' }, ({ server, request }) => {
+			.derive('global', ({ server, request }) => {
 				return {
 					ip: server?.requestIP(request)
 				}
 			})
-			.onBeforeHandle(() => {
+			.beforeHandle(() => {
 				console.log('11')
 			})
 			.get('/ip', ({ ip }) => ip)

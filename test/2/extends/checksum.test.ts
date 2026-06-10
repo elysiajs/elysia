@@ -220,18 +220,18 @@ describe('Checksum', () => {
 	// 	let b = 0
 
 	// 	const plugin = new Elysia()
-	// 		.onBeforeHandle('global', () => {
+	// 		.beforeHandle('global', () => {
 	// 			x++
 	// 		})
 	// 		.group('/v1', (app) =>
 	// 			app
-	// 				.onBeforeHandle(() => {
+	// 				.beforeHandle(() => {
 	// 					a++
 	// 				})
 	// 				.get('', () => 'A')
 	// 				.group('/v1', (app) =>
 	// 					app
-	// 						.onBeforeHandle(() => {
+	// 						.beforeHandle(() => {
 	// 							b++
 	// 						})
 	// 						.get('/', () => 'B')
@@ -490,7 +490,7 @@ describe('Checksum', () => {
 					ip: server?.requestIP(request)
 				}
 			})
-			.onBeforeHandle(() => {
+			.beforeHandle(() => {
 				console.log('11')
 			})
 			.get('/ip', ({ ip }) => ip)

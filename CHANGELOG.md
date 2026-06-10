@@ -6,16 +6,20 @@ Breaking Change:
 - remove `context.contentType` from `Context` in `parse`
 - drop `config.encodeSchema` as always enabled. Can't support both in a type safe manner.
 - `derive` now run in `beforeHandle`
-- `error` for error registration is replace by `onError`
+- removed `on<event>()` lifecycle methods — use the bare `<event>()` method instead (`onRequest`→`request`, `onParse`→`parse`, `onTransform`→`transform`, `onBeforeHandle`→`beforeHandle`, `onAfterHandle`→`afterHandle`, `onAfterResponse`→`afterResponse`, `onError`→`error`)
+- removed `.onError()` — use `error()`: `error(Error, fn)` registers a per-class handler, `error(fn)` registers the general error handler
+- removed `resolve` / `.resolve()` — use `derive` / `.derive()`
+- removed the `{ as: 'scope' }` object form for lifecycle scope — pass a bare-string scope (e.g. `.beforeHandle('plugin', fn)`, `.trace('global', fn)`)
+- renamed the `'scoped'` scope to `'plugin'` — `.as('plugin')`, `.derive('plugin', fn)`, `.guard({ as: 'plugin' })`
+- removed deprecated `set.redirect` — use the `redirect()` context helper (`({ redirect }) => redirect('/')`)
+- removed the deprecated `response` context field on `mapResponse`/`afterResponse` handlers — use `responseValue`
+- removed the deprecated `contentType` second parameter of the `parse`/`parser` handler — use `context.contentType`
 - `t.Transform` renamed to `t.Codec` (TypeBox 1.0 alignment)
 - `t.NoValidate` semantics: now skips `Check` only — `Default`/`Convert`/`Decode`/`Encode` still run. Unidirectional codecs (`t.BooleanString`, `t.Numeric`) under `NoValidate` will surface as `ValidationError` if Encode is invoked
 - Cookie `sign` without matching `secrets` now throws at app construction time (was silent before — cookies shipped unsigned)
 - deprecated passing Elysia instance to `.mount`, use `.use` instead
 
 Behavior Change:
-- soft deprecation for `resolve`, use `derive` instead
-- soft deprecation for `on<event>()` use `<event>()` method for lifecycle event instead
-- soft deprecation for `onError({ code })`, use `error(Error, () => {})` instead
 - `afterHandle` will skip the rest when short-circuit
 - `Error.summary` now use default TypeBox message instead
 - `Error.summary` now support for Standard Schema

@@ -9,7 +9,7 @@ describe('group', () => {
 			.group('/counter', (app) =>
 				app
 					.state('counter', 0)
-					.onRequest(({ store }) => {
+					.request(({ store }) => {
 						store.counter++
 					})
 					.get('', ({ store: { counter } }) => counter)

@@ -373,8 +373,8 @@ describe('Path', () => {
 
 	it('add path if onRequest is used', async () => {
 		const app = new Elysia()
-			.onRequest(() => {})
-			.onAfterHandle(({ path }) => {
+			.request(() => {})
+			.afterHandle(({ path }) => {
 				return path
 			})
 			.get('/', () => 'Hi')

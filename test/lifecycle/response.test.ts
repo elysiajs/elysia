@@ -8,10 +8,10 @@ describe('On After Response', () => {
 		let isAfterResponseCalled = false
 
 		const app = new Elysia()
-			.onAfterResponse(() => {
+			.afterResponse(() => {
 				isAfterResponseCalled = true
 			})
-			.onError(() => {
+			.error(() => {
 				return new Response('a', {
 					status: 401,
 					headers: {
@@ -30,7 +30,7 @@ describe('On After Response', () => {
 	it('call after response on not found without error handler', async () => {
 		let isAfterResponseCalled = false
 
-		const app = new Elysia().onAfterResponse(() => {
+		const app = new Elysia().afterResponse(() => {
 			isAfterResponseCalled = true
 		})
 
@@ -45,10 +45,10 @@ describe('On After Response', () => {
 		let order = <string[]>[]
 
 		const app = new Elysia()
-			.onAfterResponse(() => {
+			.afterResponse(() => {
 				order.push('A')
 			})
-			.onAfterResponse(() => {
+			.afterResponse(() => {
 				order.push('B')
 			})
 			.get('/', () => '')
@@ -63,8 +63,8 @@ describe('On After Response', () => {
 	it('inherits from plugin', async () => {
 		let type = ''
 
-		const afterResponse = new Elysia().onAfterResponse(
-			{ as: 'global' },
+		const afterResponse = new Elysia().afterResponse(
+			'global',
 			({ responseValue }) => {
 				type = typeof responseValue
 			}
@@ -90,7 +90,7 @@ describe('On After Response', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.onAfterResponse({ as: 'global' }, ({ path }) => {
+			.afterResponse('global', ({ path }) => {
 				called.push(path)
 			})
 			.get('/inner', () => 'NOOP')
@@ -111,7 +111,7 @@ describe('On After Response', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.onAfterResponse({ as: 'local' }, ({ path }) => {
+			.afterResponse('local', ({ path }) => {
 				called.push(path)
 			})
 			.get('/inner', () => 'NOOP')
@@ -129,7 +129,7 @@ describe('On After Response', () => {
 	})
 
 	// New direct-scope API: `afterResponse('global', fn)` parallels
-	// `onAfterResponse({ as: 'global' }, fn)`.
+	// `onAfterResponse('global', fn)`.
 	it('as global (direct scope)', async () => {
 		const called = <string[]>[]
 
@@ -174,7 +174,7 @@ describe('On After Response', () => {
 		let total = 0
 
 		const app = new Elysia()
-			.onAfterHandle([
+			.afterHandle([
 				() => {
 					total++
 				},
@@ -211,7 +211,7 @@ describe('On After Response Error', () => {
 	})
 
 	const app = new Elysia()
-		.onAfterResponse(() => {
+		.afterResponse(() => {
 			isOnResponseCalled = true
 			onResponseCalledCounter++
 		})
@@ -264,11 +264,11 @@ describe('On After Response Error', () => {
 		async ({ withOnError }) => {
 			let counter = 0
 
-			const app = new Elysia().onAfterResponse(() => {
+			const app = new Elysia().afterResponse(() => {
 				counter++
 			})
 
-			if (withOnError) app.onError(() => {})
+			if (withOnError) app.error(() => {})
 
 			const req = new Request('http://localhost/notFound')
 			await app.handle(req)
@@ -287,10 +287,10 @@ describe('On After Response Error', () => {
 			let counter = 0
 
 			const app = new Elysia()
-				.onError(() => {
+				.error(() => {
 					return onErrorReturnsValue
 				})
-				.onAfterResponse(() => {
+				.afterResponse(() => {
 					counter++
 				})
 				.get('/error', () => {

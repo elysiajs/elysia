@@ -387,7 +387,7 @@ import { expectTypeOf } from 'expect-type'
 // ? merge standalone standard schema from plugin
 {
 	const plugin = new Elysia().guard({
-		as: 'scoped',
+		as: 'plugin',
 		schema: 'standalone',
 		body: z.object({
 			name: z.literal('fouco').or(z.literal('lilith'))

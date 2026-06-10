@@ -202,7 +202,7 @@ describe('Edge Case', () => {
 	})
 
 	it('reading routes is idempotent (no hook duplication)', () => {
-		const plugin = new Elysia().onTransform(() => {})
+		const plugin = new Elysia().transform(() => {})
 		const app = new Elysia().use(plugin).get('/', () => 'hi', {
 			transform() {}
 		})
@@ -409,7 +409,7 @@ describe('Edge Case', () => {
 		const group = new Elysia()
 			.macro({
 				user: (enabled: true) => ({
-					resolve() {
+					derive() {
 						if (!enabled) return
 
 						return {

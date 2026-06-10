@@ -18,7 +18,7 @@ describe('Trace Detail', async () => {
 					})
 				})
 			})
-			.onParse(function luna() {})
+			.parse(function luna() {})
 			.post('/', ({ body }) => body, {
 				parse: [function kindred() {}]
 			})
@@ -43,7 +43,7 @@ describe('Trace Detail', async () => {
 					})
 				})
 			})
-			.onTransform(function luna() {})
+			.transform(function luna() {})
 			.get('/', () => 'a', {
 				transform: [function kindred() {}]
 			})
@@ -68,7 +68,7 @@ describe('Trace Detail', async () => {
 					})
 				})
 			})
-			.onBeforeHandle(function luna() {})
+			.beforeHandle(function luna() {})
 			.get('/', () => 'a', {
 				beforeHandle: [function kindred() {}]
 			})
@@ -93,7 +93,7 @@ describe('Trace Detail', async () => {
 					})
 				})
 			})
-			.onAfterHandle(function luna() {})
+			.afterHandle(function luna() {})
 			.get('/', () => 'a', {
 				afterHandle: [function kindred() {}]
 			})
@@ -143,7 +143,7 @@ describe('Trace Detail', async () => {
 					})
 				})
 			})
-			.onAfterResponse(function luna() {})
+			.afterResponse(function luna() {})
 			.get('/', () => 'a', {
 				afterResponse: [function kindred() {}]
 			})

@@ -72,7 +72,7 @@ describe('macro order', () => {
 	it('inherited hook chain survives mounting under a prefix', async () => {
 		const inner = new Elysia().get('/c', () => 'handler')
 		const guarded = new Elysia()
-			.onBeforeHandle(() => 'INTERCEPTED')
+			.beforeHandle(() => 'INTERCEPTED')
 			.use(inner)
 
 		const noPrefix = await new Elysia()

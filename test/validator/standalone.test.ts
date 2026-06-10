@@ -521,7 +521,7 @@ describe('standalone validator', () => {
 		const local = new Elysia()
 			.guard({
 				schema: 'standalone',
-				as: 'scoped',
+				as: 'plugin',
 				body: t.Object({ id: t.Number() })
 			})
 			.post(
@@ -759,7 +759,7 @@ describe('standalone validator', () => {
 		const local = new Elysia()
 			.guard({
 				schema: 'standalone',
-				as: 'scoped',
+				as: 'plugin',
 				body: t.Object({ family: t.String() }),
 				headers: t.Object({ family: t.String() }),
 				query: t.Object({ family: t.String() }),

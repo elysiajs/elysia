@@ -8,8 +8,8 @@ class MyError extends Error {
 // ? as('scoped') promotes a local resolve to propagate one level via .use
 {
 	const plugin = new Elysia()
-		.resolve(() => ({ token: 'abc' as const }))
-		.as('scoped')
+		.derive(() => ({ token: 'abc' as const }))
+		.as('plugin')
 
 	new Elysia().use(plugin).get('/', ({ token }) => {
 		expectTypeOf<typeof token>().toEqualTypeOf<'abc'>()
@@ -19,7 +19,7 @@ class MyError extends Error {
 // ? as('global') promotes a local resolve to propagate everywhere
 {
 	const plugin = new Elysia()
-		.resolve(() => ({ token: 'abc' as const }))
+		.derive(() => ({ token: 'abc' as const }))
 		.as('global')
 
 	const app = new Elysia().use(plugin)
@@ -32,8 +32,8 @@ class MyError extends Error {
 // ? as('scoped') is one hop only — a scoped resolve does not leak two levels
 {
 	const plugin = new Elysia()
-		.resolve(() => ({ token: 'abc' as const }))
-		.as('scoped')
+		.derive(() => ({ token: 'abc' as const }))
+		.as('plugin')
 
 	const mid = new Elysia().use(plugin)
 

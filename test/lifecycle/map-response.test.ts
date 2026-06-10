@@ -53,7 +53,7 @@ describe('Map Response', () => {
 
 	it('inherits plugin', async () => {
 		const plugin = new Elysia().mapResponse(
-			{ as: 'global' },
+			'global',
 			() => new Response('Fubuki')
 		)
 
@@ -164,7 +164,7 @@ describe('Map Response', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.mapResponse({ as: 'global' }, ({ path }) => {
+			.mapResponse('global', ({ path }) => {
 				called.push(path)
 			})
 			.get('/inner', () => 'NOOP')
@@ -183,7 +183,7 @@ describe('Map Response', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.mapResponse({ as: 'local' }, ({ path }) => {
+			.mapResponse('local', ({ path }) => {
 				called.push(path)
 			})
 			.get('/inner', () => 'NOOP')
@@ -223,7 +223,7 @@ describe('Map Response', () => {
 		}
 
 		const app = new Elysia()
-			.onError(() => new CustomClass('aru'))
+			.error(() => new CustomClass('aru'))
 			.mapResponse(({ responseValue }) => {
 				if (responseValue instanceof CustomClass)
 					return new Response(responseValue.name)
@@ -240,7 +240,7 @@ describe('Map Response', () => {
 	// https://github.com/elysiajs/elysia/issues/965
 	it('mapResponse with after handle using responseValue', async () => {
 		const app = new Elysia()
-			.onAfterHandle(() => {})
+			.afterHandle(() => {})
 			.mapResponse((context) => {
 				return new Response(context.responseValue + '')
 			})
@@ -253,7 +253,7 @@ describe('Map Response', () => {
 
 	it('mapResponse with onError', async () => {
 		const app = new Elysia()
-			.onError(() => {})
+			.error(() => {})
 			.mapResponse(() => {})
 			.get('/', () => 'ok')
 

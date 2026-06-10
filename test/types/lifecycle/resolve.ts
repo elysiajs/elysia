@@ -4,7 +4,7 @@ import { expectTypeOf } from 'expect-type'
 // ? local resolve flows into later handler context
 {
 	new Elysia()
-		.resolve(() => ({ token: 'abc' as const }))
+		.derive(() => ({ token: 'abc' as const }))
 		.get('/', ({ token }) => {
 			expectTypeOf<typeof token>().toEqualTypeOf<'abc'>()
 		})
@@ -14,7 +14,7 @@ import { expectTypeOf } from 'expect-type'
 {
 	new Elysia()
 		.derive(() => ({ a: 1 as const }))
-		.resolve(({ a }) => {
+		.derive(({ a }) => {
 			expectTypeOf<typeof a>().toEqualTypeOf<1>()
 			return { b: 2 as const }
 		})
@@ -26,7 +26,7 @@ import { expectTypeOf } from 'expect-type'
 
 // ? local resolve does NOT leak via .use
 {
-	const plugin = new Elysia().resolve(() => ({ token: 'abc' as const }))
+	const plugin = new Elysia().derive(() => ({ token: 'abc' as const }))
 
 	new Elysia().use(plugin).get('/', (context) => {
 		expectTypeOf<typeof context>().not.toHaveProperty('token')
@@ -35,7 +35,7 @@ import { expectTypeOf } from 'expect-type'
 
 // ? scoped resolve propagates one level
 {
-	const plugin = new Elysia().resolve({ as: 'scoped' }, () => ({
+	const plugin = new Elysia().derive('plugin', () => ({
 		token: 'abc' as const
 	}))
 
@@ -46,7 +46,7 @@ import { expectTypeOf } from 'expect-type'
 
 // ? global resolve propagates everywhere
 {
-	const plugin = new Elysia().resolve({ as: 'global' }, () => ({
+	const plugin = new Elysia().derive('global', () => ({
 		token: 'abc' as const
 	}))
 

@@ -6,7 +6,7 @@ import { expectTypeOf } from 'expect-type'
 	const plugin = new Elysia()
 		.macro({
 			account: (a: boolean) => ({
-				resolve: () => ({
+				derive: () => ({
 					account: 'A'
 				})
 			})
@@ -32,13 +32,13 @@ import { expectTypeOf } from 'expect-type'
 	const plugin = new Elysia()
 		.macro({
 			account: (a: boolean) => ({
-				resolve: () => ({
+				derive: () => ({
 					account: 'A'
 				})
 			})
 		})
 		.guard({
-			as: 'scoped',
+			as: 'plugin',
 			account: true
 		})
 		.get('/', ({ account }) => {
@@ -60,7 +60,7 @@ import { expectTypeOf } from 'expect-type'
 	const plugin = new Elysia()
 		.macro({
 			account: (a: boolean) => ({
-				resolve: () => ({
+				derive: () => ({
 					account: 'A'
 				})
 			})
@@ -89,7 +89,7 @@ import { expectTypeOf } from 'expect-type'
 	const plugin = new Elysia()
 		.macro({
 			account: (a: boolean) => ({
-				resolve: () => ({
+				derive: () => ({
 					account: 'A'
 				})
 			})
@@ -116,7 +116,7 @@ import { expectTypeOf } from 'expect-type'
 	const plugin = new Elysia()
 		.macro({
 			account: (a: boolean) => ({
-				resolve: ({ status }) => {
+				derive: ({ status }) => {
 					if (Math.random() > 0.5) return status(401)
 
 					return {
@@ -146,7 +146,7 @@ import { expectTypeOf } from 'expect-type'
 	const plugin = new Elysia()
 		.macro({
 			account: (a: boolean) => ({
-				resolve: async ({ status }) => {
+				derive: async ({ status }) => {
 					if (Math.random() > 0.5) return status(401)
 
 					return {
@@ -156,7 +156,7 @@ import { expectTypeOf } from 'expect-type'
 			})
 		})
 		.guard({
-			as: 'scoped',
+			as: 'plugin',
 			account: true
 		})
 		.get('/', ({ account }) => {
@@ -176,14 +176,14 @@ import { expectTypeOf } from 'expect-type'
 // Handle ephemeral and volatile property
 {
 	const app = new Elysia()
-		.resolve(() => {
+		.derive(() => {
 			return {
 				hello: 'world'
 			}
 		})
 		.macro({
 			user: (enabled: boolean) => ({
-				resolve: ({ hello, query: { name = 'anon' } }) => {
+				derive: ({ hello, query: { name = 'anon' } }) => {
 					expectTypeOf(hello).toEqualTypeOf<'world' | undefined>()
 
 					return {
@@ -204,7 +204,7 @@ import { expectTypeOf } from 'expect-type'
 	const app = new Elysia()
 		.macro({
 			user: {
-				resolve: ({ query: { name = 'anon' } }) => ({
+				derive: ({ query: { name = 'anon' } }) => ({
 					user: {
 						name
 					}
@@ -236,7 +236,7 @@ import { expectTypeOf } from 'expect-type'
 	const app = new Elysia()
 		.macro({
 			auth: {
-				resolve: [
+				derive: [
 					({ status }) => {
 						if (Math.random() > 0.5) return status(401)
 
@@ -254,7 +254,7 @@ import { expectTypeOf } from 'expect-type'
 const app = new Elysia()
 	.macro({
 		user: (enabled: true) => ({
-			resolve() {
+			derive() {
 				if (!enabled) return
 
 				return {
@@ -300,7 +300,7 @@ const app = new Elysia()
 {
 	new Elysia()
 		.macro('a', (a: 'a') => ({
-			resolve: () => ({ a: 'a' as const })
+			derive: () => ({ a: 'a' as const })
 		}))
 		.get(
 			'/',

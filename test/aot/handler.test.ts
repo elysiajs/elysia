@@ -36,7 +36,7 @@ afterEach(() => {
 // Hook + validation + response → params.size > 1 → goes through `new Function`
 // (not the `createInlineHandler` fast path), so there's a handler to freeze.
 const build = () =>
-	new Elysia().onBeforeHandle(() => {}).post(
+	new Elysia().beforeHandle(() => {}).post(
 		'/x',
 		({ body }: any) => ({ ok: true, n: body.n }),
 		{
@@ -119,7 +119,7 @@ describe('AOT handler freeze', () => {
 describe('AOT handler emit dedup', () => {
 	it('shares the factory, alias, and wrapper across same-shape routes', async () => {
 		const app = new Elysia()
-			.onBeforeHandle(() => {})
+			.beforeHandle(() => {})
 			.post('/a', ({ body }: any) => body, {
 				body: t.Object({ a: t.String() })
 			})

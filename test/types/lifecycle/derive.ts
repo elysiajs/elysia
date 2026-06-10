@@ -32,7 +32,7 @@ import { expectTypeOf } from 'expect-type'
 
 // ? scoped derive propagates exactly one level via .use
 {
-	const plugin = new Elysia().derive({ as: 'scoped' }, () => ({
+	const plugin = new Elysia().derive('plugin', () => ({
 		name: 'hare' as const
 	}))
 
@@ -47,7 +47,7 @@ import { expectTypeOf } from 'expect-type'
 
 // ? global derive propagates to every consumer
 {
-	const plugin = new Elysia().derive({ as: 'global' }, () => ({
+	const plugin = new Elysia().derive('global', () => ({
 		name: 'hare' as const
 	}))
 

@@ -609,16 +609,6 @@ export function mergeHook(
 			reverse
 		)
 
-	// Remove in 2.1
-	// @ts-expect-error
-	if (a.resolve || b.resolve)
-		a.beforeHandle = merge(
-			a.beforeHandle,
-			// @ts-expect-error
-			merge(a.resolve, b.resolve, reverse),
-			reverse
-		)
-
 	if (a.beforeHandle || b.beforeHandle)
 		a.beforeHandle = merge(a.beforeHandle, b.beforeHandle, reverse)
 

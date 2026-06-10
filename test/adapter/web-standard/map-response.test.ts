@@ -307,7 +307,6 @@ describe('Web Standard - Map Response', () => {
 			headers: {
 				Name: 'Sorasaki Hina'
 			},
-			redirect: 'https://cunny.school',
 			cookie: {}
 		})
 
@@ -447,7 +446,7 @@ describe('Web Standard - Map Response', () => {
 
 	it('respect set.headers on string response', async () => {
 		const app = new Elysia()
-			.onAfterHandle(({ set }) => {
+			.afterHandle(({ set }) => {
 				set.headers['content-type'] = 'text/html; charset=utf8'
 
 				return '<h1>Hina</h1>'

@@ -295,7 +295,7 @@ describe('Standard Schema Reference', () => {
 				'response.418': z.literal('fouco')
 			})
 			.guard({
-				as: 'scoped',
+				as: 'plugin',
 				body: 'body',
 				query: 'query',
 				response: {

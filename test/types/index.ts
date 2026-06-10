@@ -482,7 +482,7 @@ const b = app
 
 // ? It resolve void
 {
-	app.resolve(async ({ headers }) => {
+	app.derive(async ({ headers }) => {
 		if (Math.random() > 0.5)
 			return {
 				stuff: 'a'
@@ -518,13 +518,13 @@ app.derive(({ headers }) => {
 		expectTypeOf<typeof b>().toBeString()
 	})
 	// ? Resolve should not include in onRequest
-	.onRequest((context) => {
+	.request((context) => {
 		expectTypeOf<
 			'b' extends keyof typeof context ? true : false
 		>().toEqualTypeOf<false>()
 	})
 	// ? Resolve should not include in onTransform
-	.onTransform((context) => {
+	.transform((context) => {
 		expectTypeOf<
 			'b' extends keyof typeof context ? true : false
 		>().toEqualTypeOf<true>()
@@ -1031,7 +1031,7 @@ app.group(
 {
 	const cookie = new Elysia({
 		prefix: '/'
-	}).derive({ as: 'global' }, () => {
+	}).derive('global', () => {
 		return {
 			customCookie: 'A'
 		}
@@ -1137,7 +1137,7 @@ app.group(
 }
 
 const a = app
-	.resolve(({ headers }) => {
+	.derive(({ headers }) => {
 		return {
 			authorization: headers.authorization as string
 		}
@@ -1147,7 +1147,7 @@ const a = app
 	// 	expectTypeOf<typeof authorization>().toBeString()
 	// })
 	.decorate('a', 'b')
-	.resolve(({ a }) => {
+	.derive(({ a }) => {
 		// ? derive from current context
 		expectTypeOf<typeof a>().toBeString()
 
@@ -1162,13 +1162,13 @@ const a = app
 		expectTypeOf<typeof b>().toBeString()
 	})
 	// ? Resolve should not include in onTransform
-	.onTransform((context) => {
+	.transform((context) => {
 		expectTypeOf<
 			'b' extends keyof typeof context ? true : false
 		>().toEqualTypeOf<false>()
 	})
 	// ? Resolve should not include in onBeforeHandle
-	.onBeforeHandle((context) => {
+	.beforeHandle((context) => {
 		expectTypeOf<
 			'b' extends keyof typeof context ? true : false
 		>().toEqualTypeOf<true>()
@@ -1363,7 +1363,7 @@ app.get('/', ({ set }) => {
 // ? Ephemeral and Current type
 {
 	const child = new Elysia()
-		.derive({ as: 'scoped' }, () => {
+		.derive('plugin', () => {
 			return {
 				hello: 'world'
 			}
@@ -1508,7 +1508,7 @@ type a = keyof {}
 		const plugin = new Elysia()
 			.use(inner)
 			.guard({
-				as: 'scoped',
+				as: 'plugin',
 				response: t.String()
 			})
 			.get('/plugin', () => 'ok')
@@ -1569,7 +1569,7 @@ type a = keyof {}
 		const plugin = new Elysia()
 			.use(inner)
 			.guard({
-				as: 'scoped',
+				as: 'plugin',
 				response: t.String()
 			})
 			.get('/plugin', () => 'ok')
@@ -1585,7 +1585,7 @@ type a = keyof {}
 			})
 			// @ts-expect-error
 			.get('/inner', () => 'a')
-			.as('scoped')
+			.as('plugin')
 
 		const plugin = new Elysia()
 			.use(inner)
@@ -1603,13 +1603,13 @@ type a = keyof {}
 			})
 			// @ts-expect-error
 			.get('/inner', () => 'a')
-			.as('scoped')
+			.as('plugin')
 
 		const plugin = new Elysia()
 			.use(inner)
 			// @ts-expect-error
 			.get('/plugin', () => true)
-			.as('scoped')
+			.as('plugin')
 
 		// @ts-expect-error
 		const app = new Elysia().use(plugin).get('/', () => 'not a number')
@@ -1721,7 +1721,7 @@ type a = keyof {}
 	const plugin = new Elysia()
 		.use(inner)
 		.guard({
-			as: 'scoped',
+			as: 'plugin',
 			response: t.String()
 		})
 		.get('/plugin', () => 'ok')
@@ -1782,7 +1782,7 @@ type a = keyof {}
 	const plugin = new Elysia()
 		.use(inner)
 		.guard({
-			as: 'scoped',
+			as: 'plugin',
 			response: t.String()
 		})
 		.get('/plugin', () => 'ok')
@@ -1794,7 +1794,7 @@ type a = keyof {}
 {
 	const inner = new Elysia()
 		.guard({
-			as: 'scoped',
+			as: 'plugin',
 			response: t.Number()
 		})
 		// @ts-expect-error
@@ -1942,7 +1942,7 @@ type a = keyof {}
 				id: number
 			}>()
 		})
-		.resolve(({ query }) => {
+		.derive(({ query }) => {
 			expectTypeOf<typeof query>().toEqualTypeOf<{
 				id: number
 			}>()
@@ -1961,7 +1961,7 @@ type a = keyof {}
 			myPluginMethod: pluginMethod,
 			...rest
 		}))
-		.as('scoped')
+		.as('plugin')
 
 	expectTypeOf<(typeof plugin)['~Ephemeral']['derive']>().toHaveProperty(
 		'pluginMethod'
@@ -1986,7 +1986,7 @@ type a = keyof {}
 					stuff: t.Number()
 				})
 			},
-			afterResponse({ response }) {
+			afterResponse({ responseValue }) {
 				// expectTypeOf<typeof response>().toEqualTypeOf<
 				// 	| {
 				// 			duration: number
@@ -2004,7 +2004,7 @@ type a = keyof {}
 // ? params in local lifecycle should follow path prefix
 {
 	new Elysia()
-		.onParse(({ params }) => {
+		.parse(({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<
 				Record<string, string>
 			>()
@@ -2016,20 +2016,20 @@ type a = keyof {}
 
 			return {}
 		})
-		.resolve(({ params }) => {
+		.derive(({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<never>()
 
 			return {}
 		})
-		.onTransform(({ params }) => {
+		.transform(({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{}>()
 		})
-		.onBeforeHandle(({ params }) => {
+		.beforeHandle(({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<
 				Record<string, string>
 			>()
 		})
-		.onAfterHandle(({ params }) => {
+		.afterHandle(({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<
 				Record<string, string>
 			>()
@@ -2039,7 +2039,7 @@ type a = keyof {}
 				Record<string, string>
 			>()
 		})
-		.onAfterResponse(({ params }) => {
+		.afterResponse(({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<
 				Record<string, string>
 			>()
@@ -2049,7 +2049,7 @@ type a = keyof {}
 // ? params in local lifecycle should follow path prefix
 {
 	new Elysia({ prefix: '/:id' })
-		.onParse(({ params }) => {
+		.parse(({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{ id: string }>()
 		})
 		.derive(({ params }) => {
@@ -2057,24 +2057,24 @@ type a = keyof {}
 
 			return {}
 		})
-		.resolve(({ params }) => {
+		.derive(({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{ id: string }>()
 
 			return {}
 		})
-		.onTransform(({ params }) => {
+		.transform(({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{ id: string }>()
 		})
-		.onBeforeHandle(({ params }) => {
+		.beforeHandle(({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{ id: string }>()
 		})
-		.onAfterHandle(({ params }) => {
+		.afterHandle(({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{ id: string }>()
 		})
 		.mapResponse(({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{ id: string }>()
 		})
-		.onAfterResponse(({ params }) => {
+		.afterResponse(({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{ id: string }>()
 		})
 }
@@ -2082,46 +2082,46 @@ type a = keyof {}
 // ? params in local lifecycle should respect global scope
 {
 	new Elysia({ prefix: '/:id' })
-		.onParse({ as: 'global' }, ({ params }) => {
+		.parse('global', ({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{
 				[name: string]: string | undefined
 			}>()
 		})
-		.derive({ as: 'global' }, ({ params }) => {
-			expectTypeOf<typeof params>().toEqualTypeOf<{
-				[name: string]: string | undefined
-			}>()
-
-			return {}
-		})
-		.resolve({ as: 'global' }, ({ params }) => {
+		.derive('global', ({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{
 				[name: string]: string | undefined
 			}>()
 
 			return {}
 		})
-		.onTransform({ as: 'global' }, ({ params }) => {
+		.derive('global', ({ params }) => {
+			expectTypeOf<typeof params>().toEqualTypeOf<{
+				[name: string]: string | undefined
+			}>()
+
+			return {}
+		})
+		.transform('global', ({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{
 				[name: string]: string | undefined
 			}>()
 		})
-		.onBeforeHandle({ as: 'global' }, ({ params }) => {
+		.beforeHandle('global', ({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{
 				[name: string]: string | undefined
 			}>()
 		})
-		.onAfterHandle({ as: 'global' }, ({ params }) => {
+		.afterHandle('global', ({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{
 				[name: string]: string | undefined
 			}>()
 		})
-		.mapResponse({ as: 'global' }, ({ params }) => {
+		.mapResponse('global', ({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{
 				[name: string]: string | undefined
 			}>()
 		})
-		.onAfterResponse({ as: 'global' }, ({ params }) => {
+		.afterResponse('global', ({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{
 				[name: string]: string | undefined
 			}>()
@@ -2131,46 +2131,46 @@ type a = keyof {}
 // ? params in local lifecycle should respect scoped scope
 {
 	new Elysia({ prefix: '/:id' })
-		.onParse({ as: 'scoped' }, ({ params }) => {
+		.parse('plugin', ({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{
 				[name: string]: string | undefined
 			}>()
 		})
-		.derive({ as: 'scoped' }, ({ params }) => {
-			expectTypeOf<typeof params>().toEqualTypeOf<{
-				[name: string]: string | undefined
-			}>()
-
-			return {}
-		})
-		.resolve({ as: 'scoped' }, ({ params }) => {
+		.derive('plugin', ({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{
 				[name: string]: string | undefined
 			}>()
 
 			return {}
 		})
-		.onTransform({ as: 'scoped' }, ({ params }) => {
+		.derive('plugin', ({ params }) => {
+			expectTypeOf<typeof params>().toEqualTypeOf<{
+				[name: string]: string | undefined
+			}>()
+
+			return {}
+		})
+		.transform('plugin', ({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{
 				[name: string]: string | undefined
 			}>()
 		})
-		.onBeforeHandle({ as: 'scoped' }, ({ params }) => {
+		.beforeHandle('plugin', ({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{
 				[name: string]: string | undefined
 			}>()
 		})
-		.onAfterHandle({ as: 'scoped' }, ({ params }) => {
+		.afterHandle('plugin', ({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{
 				[name: string]: string | undefined
 			}>()
 		})
-		.mapResponse({ as: 'scoped' }, ({ params }) => {
+		.mapResponse('plugin', ({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{
 				[name: string]: string | undefined
 			}>()
 		})
-		.onAfterResponse({ as: 'scoped' }, ({ params }) => {
+		.afterResponse('plugin', ({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{
 				[name: string]: string | undefined
 			}>()
@@ -2185,7 +2185,7 @@ type a = keyof {}
 				startTime: performance.now()
 			}
 		})
-		.onAfterResponse((ctx) => {
+		.afterResponse((ctx) => {
 			expectTypeOf<typeof ctx>().not.toBeNever()
 			expectTypeOf<(typeof ctx)['startTime']>().toBeNumber()
 		})
@@ -2206,7 +2206,7 @@ type a = keyof {}
 	const app = new Elysia()
 		.macro({
 			user: (enabled: boolean) => ({
-				resolve: async ({ query: { name = 'anon' } }) => ({
+				derive: async ({ query: { name = 'anon' } }) => ({
 					user: {
 						name,
 						async: false
@@ -2214,7 +2214,7 @@ type a = keyof {}
 				})
 			}),
 			asyncUser: (enabled: boolean) => ({
-				resolve: async ({ query: { name = 'anon' } }) => ({
+				derive: async ({ query: { name = 'anon' } }) => ({
 					user: {
 						name,
 						async: true
@@ -2434,7 +2434,7 @@ type a = keyof {}
 	const app = new Elysia()
 		.macro({
 			a: {
-				resolve: () => ({
+				derive: () => ({
 					a: 'a'
 				})
 			}
@@ -2493,15 +2493,15 @@ type a = keyof {}
 
 // onError should have status
 {
-	new Elysia().onError(({ status }) => {
+	new Elysia().error(({ status }) => {
 		status(200)
 	})
 }
 
 // onAfterHandle should have response
 {
-	new Elysia().onAfterHandle(
-		{ as: 'scoped' },
+	new Elysia().afterHandle(
+		'plugin',
 		({ responseValue }) => responseValue
 	)
 }
@@ -2514,13 +2514,13 @@ type a = keyof {}
 				body: t.Object({
 					a: t.String()
 				}),
-				resolve: () => ({ a: 'a' as const })
+				derive: () => ({ a: 'a' as const })
 			},
 			b: {
 				body: t.Object({
 					b: t.String()
 				}),
-				resolve: () => ({ b: 'b' as const })
+				derive: () => ({ b: 'b' as const })
 			}
 		})
 		.get(
@@ -2698,7 +2698,7 @@ type a = keyof {}
 
 			return { auth: { id: 1 } }
 		})
-		.onBeforeHandle(({ auth }) => {
+		.beforeHandle(({ auth }) => {
 			expectTypeOf<typeof auth>().toEqualTypeOf<{
 				readonly id: 1
 			} | null>()
@@ -2708,7 +2708,7 @@ type a = keyof {}
 // resolve should add property union correctly
 {
 	const app = new Elysia()
-		.resolve(({ request, status }) => {
+		.derive(({ request, status }) => {
 			const apiKey = request.headers.get('x-api-key')
 			if (!apiKey) return { auth: null }
 
@@ -2716,7 +2716,7 @@ type a = keyof {}
 
 			return { auth: { id: 1 } }
 		})
-		.onBeforeHandle(({ auth }) => {
+		.beforeHandle(({ auth }) => {
 			expectTypeOf<typeof auth>().toEqualTypeOf<{
 				readonly id: 1
 			} | null>()
@@ -2734,7 +2734,7 @@ type a = keyof {}
 				id: t.String()
 			})
 		})
-		.onTransform(({ params, body }) => {
+		.transform(({ params, body }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{}>()
 
 			expectTypeOf<typeof body>().toBeUnknown()
@@ -2744,12 +2744,12 @@ type a = keyof {}
 // transform should cast params to unknown when scope is over local
 {
 	new Elysia({ prefix: '/:id' })
-		.onTransform(({ params }) => {
+		.transform(({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{
 				id: string
 			}>()
 		})
-		.onTransform({ as: 'scoped' }, ({ params }) => {
+		.transform('plugin', ({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{
 				[name: string]: string | undefined
 			}>()

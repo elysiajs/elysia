@@ -50,7 +50,6 @@ async function applyMapResponse(
 ): Promise<unknown> {
 	for (let i = 0; i < mapResponses.length; i++) {
 		;(elysia as any).responseValue = value
-		;(elysia as any).response = value
 
 		const r = mapResponses[i](elysia)
 		const result = r instanceof Promise ? await r : r

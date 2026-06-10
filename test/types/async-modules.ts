@@ -12,7 +12,7 @@ import { Elysia } from '../../src'
 			.derive(() => ({
 				deriveA: 'deriveA'
 			}))
-			.resolve(() => ({
+			.derive(() => ({
 				resolveA: 'resolveA'
 			}))
 	}
@@ -34,7 +34,7 @@ import { Elysia } from '../../src'
 
 			return v
 		})
-		.resolve((v) => {
+		.derive((v) => {
 			expectTypeOf(v.resolveA).toEqualTypeOf<'resolveA' | undefined>()
 
 			return v
@@ -52,10 +52,10 @@ import { Elysia } from '../../src'
 			.derive(() => ({
 				deriveA: 'deriveA'
 			}))
-			.resolve(() => ({
+			.derive(() => ({
 				resolveA: 'resolveA'
 			}))
-			.as('scoped')
+			.as('plugin')
 	})
 
 	new Elysia()
@@ -75,7 +75,7 @@ import { Elysia } from '../../src'
 
 			return v
 		})
-		.resolve((v) => {
+		.derive((v) => {
 			expectTypeOf(v.resolveA).toEqualTypeOf<'resolveA' | undefined>()
 
 			return v
@@ -93,10 +93,10 @@ import { Elysia } from '../../src'
 			.derive(() => ({
 				deriveA: 'deriveA'
 			}))
-			.resolve(() => ({
+			.derive(() => ({
 				resolveA: 'resolveA'
 			}))
-			.as('scoped')
+			.as('plugin')
 	}
 
 	new Elysia()
@@ -116,7 +116,7 @@ import { Elysia } from '../../src'
 
 			return v
 		})
-		.resolve((v) => {
+		.derive((v) => {
 			expectTypeOf(v.resolveA).toEqualTypeOf<'resolveA' | undefined>()
 
 			return v
@@ -134,10 +134,10 @@ import { Elysia } from '../../src'
 			.derive(() => ({
 				deriveA: 'deriveA'
 			}))
-			.resolve(() => ({
+			.derive(() => ({
 				resolveA: 'resolveA'
 			}))
-			.as('scoped')
+			.as('plugin')
 	})
 
 	new Elysia()
@@ -157,7 +157,7 @@ import { Elysia } from '../../src'
 
 			return v
 		})
-		.resolve((v) => {
+		.derive((v) => {
 			expectTypeOf(v.resolveA).toEqualTypeOf<'resolveA' | undefined>()
 
 			return v
@@ -175,7 +175,7 @@ import { Elysia } from '../../src'
 			.derive(() => ({
 				deriveA: 'deriveA'
 			}))
-			.resolve(() => ({
+			.derive(() => ({
 				resolveA: 'resolveA'
 			}))
 			.as('global')
@@ -198,7 +198,7 @@ import { Elysia } from '../../src'
 
 			return v
 		})
-		.resolve((v) => {
+		.derive((v) => {
 			expectTypeOf(v.resolveA).toEqualTypeOf<'resolveA' | undefined>()
 
 			return v
@@ -216,7 +216,7 @@ import { Elysia } from '../../src'
 			.derive(() => ({
 				deriveA: 'deriveA'
 			}))
-			.resolve(() => ({
+			.derive(() => ({
 				resolveA: 'resolveA'
 			}))
 			.as('global')
@@ -239,7 +239,7 @@ import { Elysia } from '../../src'
 
 			return v
 		})
-		.resolve((v) => {
+		.derive((v) => {
 			expectTypeOf(v.resolveA).toEqualTypeOf<'resolveA' | undefined>()
 
 			return v

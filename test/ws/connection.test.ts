@@ -146,7 +146,7 @@ describe('WebSocket connection', () => {
 			.derive(() => ({
 				sessionId: '123'
 			}))
-			.resolve(() => ({
+			.derive(() => ({
 				getUser() {
 					return {
 						id: '123',

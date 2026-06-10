@@ -55,7 +55,7 @@ describe('Handle Error', () => {
 
 	it('inject headers to error', async () => {
 		const app = new Elysia()
-			.onRequest(({ set }) => {
+			.request(({ set }) => {
 				set.headers['Access-Control-Allow-Origin'] = '*'
 			})
 			.get('/', () => {
@@ -70,7 +70,7 @@ describe('Handle Error', () => {
 
 	it('transform any to error', async () => {
 		const app = new Elysia()
-			.onError(async ({ set }) => {
+			.error(async ({ set }) => {
 				set.status = 418
 
 				return 'aw man'
@@ -91,7 +91,7 @@ describe('Handle Error', () => {
 				.get('/inner', () => {
 					throw new Error('A')
 				})
-				.onError(() => {
+				.error(() => {
 					return 'handled'
 				})
 		)
@@ -112,7 +112,7 @@ describe('Handle Error', () => {
 
 					throw new Error('A')
 				})
-				.onError(() => {
+				.error(() => {
 					return 'handled'
 				})
 		)
@@ -173,7 +173,7 @@ describe('Handle Error', () => {
 		)
 
 		const requestHandler = new Elysia()
-			.onTransform(() => {
+			.transform(() => {
 				throw new APIError(403, 'Not authorized')
 			})
 			.get('/', () => 'a')
@@ -534,7 +534,7 @@ describe('Handle Error', () => {
 
 	it('send set-cookie header when error is thrown with onError hook', async () => {
 		const app = new Elysia()
-			.onError(({ error }) => {
+			.error(({ error }) => {
 				return error.message
 			})
 			.get('/', ({ cookie }) => {

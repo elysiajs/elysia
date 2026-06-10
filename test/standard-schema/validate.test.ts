@@ -240,7 +240,7 @@ describe('Standard Schema Validate', () => {
 
 	it('merge plugin', async () => {
 		const plugin = new Elysia().guard({
-			as: 'scoped',
+			as: 'plugin',
 			body: z.object({
 				id: z.number()
 			}),

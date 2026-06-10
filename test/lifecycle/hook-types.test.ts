@@ -17,7 +17,7 @@ const tipScope = (app: any): string | undefined => {
 describe('Hook Types', () => {
 	it('should clone function to prevent hookType link', async () => {
 		const plugin = new Elysia({ name: 'plugin' }).derive(
-			{ as: 'scoped' },
+			'plugin',
 			() => {
 				return { id: 1 }
 			}

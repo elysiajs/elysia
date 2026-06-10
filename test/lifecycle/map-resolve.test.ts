@@ -6,10 +6,10 @@ import { req } from '../utils'
 describe('map resolve', () => {
 	it('work', async () => {
 		const app = new Elysia()
-			.resolve(() => ({
+			.derive(() => ({
 				hi: () => 'hi'
 			}))
-			.mapResolve((resolvers) => ({
+			.mapDerive((resolvers) => ({
 				...resolvers,
 				hi2: () => 'hi'
 			}))
@@ -25,7 +25,7 @@ describe('map resolve', () => {
 
 	it('inherits plugin', async () => {
 		const plugin = new Elysia()
-			.resolve({ as: 'global' }, () => ({
+			.derive('global', () => ({
 				hi: () => 'hi'
 			}))
 			// .mapResolve((resolvers) => ({
@@ -45,10 +45,10 @@ describe('map resolve', () => {
 
 	it('not inherits plugin', async () => {
 		const plugin = new Elysia()
-			.resolve(() => ({
+			.derive(() => ({
 				hi: () => 'hi'
 			}))
-			.mapResolve((resolvers) => ({
+			.mapDerive((resolvers) => ({
 				...resolvers,
 				hi2: () => 'hi'
 			}))
@@ -70,11 +70,11 @@ describe('map resolve', () => {
 		let order = <string[]>[]
 
 		const app = new Elysia()
-			.mapResolve(() => {
+			.mapDerive(() => {
 				order.push('A')
 				return {}
 			})
-			.mapResolve(() => {
+			.mapDerive(() => {
 				order.push('B')
 				return {}
 			})
@@ -88,7 +88,7 @@ describe('map resolve', () => {
 	it('can mutate store', async () => {
 		const app = new Elysia()
 			.state('counter', 1)
-			.mapResolve(({ store }) => ({
+			.mapDerive(({ store }) => ({
 				increase: () => store.counter++
 			}))
 			.get('/', ({ store, increase }) => {
@@ -103,7 +103,7 @@ describe('map resolve', () => {
 
 	it('resolve with static analysis', async () => {
 		const app = new Elysia()
-			.mapResolve(({ headers: { name } }) => ({
+			.mapDerive(({ headers: { name } }) => ({
 				name
 			}))
 			.get('/', ({ name }) => name)
@@ -125,10 +125,10 @@ describe('map resolve', () => {
 		const stack: number[] = []
 
 		const app = new Elysia()
-			.onBeforeHandle(() => {
+			.beforeHandle(() => {
 				stack.push(1)
 			})
-			.mapResolve(() => {
+			.mapDerive(() => {
 				stack.push(2)
 
 				return { name: 'Ina' }
@@ -154,7 +154,7 @@ describe('map resolve', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.mapResolve({ as: 'global' }, ({ path }) => {
+			.mapDerive('global', ({ path }) => {
 				called.push(path)
 
 				return {}
@@ -175,7 +175,7 @@ describe('map resolve', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.mapResolve({ as: 'local' }, ({ path }) => {
+			.mapDerive('local', ({ path }) => {
 				called.push(path)
 
 				return {}

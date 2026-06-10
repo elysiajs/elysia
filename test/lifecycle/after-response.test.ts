@@ -8,7 +8,7 @@ describe('After Handle', () => {
 		let status: number
 
 		const app = new Elysia()
-			.onAfterResponse(({ set }) => {
+			.afterResponse(({ set }) => {
 				status = set.status as number
 			})
 			.get('/error', (c) => c.status(401, { error: 'Unauthorized' }))
@@ -23,7 +23,7 @@ describe('After Handle', () => {
 	it('set response status for default 404', async () => {
 		let status: number
 
-		const app = new Elysia().onAfterResponse(({ set }) => {
+		const app = new Elysia().afterResponse(({ set }) => {
 			status = set.status as number
 		})
 

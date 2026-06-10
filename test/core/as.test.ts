@@ -10,7 +10,7 @@ describe('as', () => {
 					hi: 'hi'
 				}
 			})
-			.as('scoped')
+			.as('plugin')
 
 		const plugin = new Elysia()
 			.use(subPlugin1)
@@ -54,7 +54,7 @@ describe('as', () => {
 
 	it('global on scoped event', async () => {
 		const subPlugin1 = new Elysia()
-			.derive({ as: 'scoped' }, () => {
+			.derive('plugin', () => {
 				return {
 					hi: 'hi'
 				}
@@ -82,7 +82,7 @@ describe('as', () => {
 			.guard({
 				response: t.Number(),
 			})
-			.onBeforeHandle(() => {
+			.beforeHandle(() => {
 				called++
 			})
 			// @ts-expect-error
@@ -114,7 +114,7 @@ describe('as', () => {
 			.guard({
 				response: t.Number()
 			})
-			.onBeforeHandle(() => {
+			.beforeHandle(() => {
 				called++
 			})
 			// @ts-expect-error
@@ -126,7 +126,7 @@ describe('as', () => {
 			.guard({
 				response: t.Boolean()
 			})
-			.onBeforeHandle(() => {
+			.beforeHandle(() => {
 				called++
 			})
 			.get('/plugin', () => true)
@@ -151,7 +151,7 @@ describe('as', () => {
 			.guard({
 				response: t.Number()
 			})
-			.onBeforeHandle(() => {
+			.beforeHandle(() => {
 				called++
 			})
 			// @ts-expect-error
@@ -161,10 +161,10 @@ describe('as', () => {
 		const plugin = new Elysia()
 			.use(inner)
 			.guard({
-				as: 'scoped',
+				as: 'plugin',
 				response: t.String()
 			})
-            .onBeforeHandle({ as: 'scoped' }, () => {
+            .beforeHandle('plugin', () => {
 				called++
 			})
 			.get('/plugin', () => 'ok')
@@ -188,12 +188,12 @@ describe('as', () => {
 			.guard({
 				response: t.Number()
 			})
-			.onBeforeHandle(() => {
+			.beforeHandle(() => {
 				called++
 			})
 			// @ts-expect-error
 			.get('/inner', () => 'a')
-			.as('scoped')
+			.as('plugin')
 
 		const plugin = new Elysia()
 			.use(inner)
@@ -219,18 +219,18 @@ describe('as', () => {
 			.guard({
 				response: t.Number()
 			})
-			.onBeforeHandle(() => {
+			.beforeHandle(() => {
 				called++
 			})
 			// @ts-expect-error
 			.get('/inner', () => 'a')
-			.as('scoped')
+			.as('plugin')
 
 		const plugin = new Elysia()
 			.use(inner)
 			// @ts-expect-error
 			.get('/plugin', () => true)
-			.as('scoped')
+			.as('plugin')
 
 		// @ts-expect-error
 		const app = new Elysia().use(plugin).get('/', () => 'not a number')

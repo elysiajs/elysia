@@ -5,7 +5,7 @@ import { req } from '../utils'
 
 describe('After Handle', () => {
 	it('work global', async () => {
-		const app = new Elysia().onAfterHandle(() => 'A').get('/', () => 'NOOP')
+		const app = new Elysia().afterHandle(() => 'A').get('/', () => 'NOOP')
 
 		const res = await app.handle(req('/')).then((x) => x.text())
 
@@ -25,8 +25,8 @@ describe('After Handle', () => {
 	})
 
 	it('inherits from plugin', async () => {
-		const transformType = new Elysia().onAfterHandle(
-			{ as: 'global' },
+		const transformType = new Elysia().afterHandle(
+			'global',
 			// @ts-ignore
 			({ responseValue }) => {
 				if (responseValue === 'string') return 'number'
@@ -44,7 +44,7 @@ describe('After Handle', () => {
 
 	it('not inherits plugin on local', async () => {
 		// @ts-ignore
-		const transformType = new Elysia().onAfterHandle(({ responseValue }) => {
+		const transformType = new Elysia().afterHandle(({ responseValue }) => {
 			if (responseValue === 'string') return 'number'
 		})
 
@@ -73,10 +73,10 @@ describe('After Handle', () => {
 		let order = <string[]>[]
 
 		const app = new Elysia()
-			.onAfterHandle(() => {
+			.afterHandle(() => {
 				order.push('A')
 			})
-			.onAfterHandle(() => {
+			.afterHandle(() => {
 				order.push('B')
 			})
 			.get('/', () => '')
@@ -105,7 +105,7 @@ describe('After Handle', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.onAfterHandle({ as: 'global' }, ({ path }) => {
+			.afterHandle('global', ({ path }) => {
 				called.push(path)
 			})
 			.get('/inner', () => 'NOOP')
@@ -124,7 +124,7 @@ describe('After Handle', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.onAfterHandle({ as: 'local' }, ({ path }) => {
+			.afterHandle('local', ({ path }) => {
 				called.push(path)
 			})
 			.get('/inner', () => 'NOOP')
@@ -140,7 +140,7 @@ describe('After Handle', () => {
 	})
 
 	// New direct-scope API: `afterHandle('global', fn)` parallels
-	// `onAfterHandle({ as: 'global' }, fn)`.
+	// `onAfterHandle('global', fn)`.
 	it('as global (direct scope)', async () => {
 		const called = <string[]>[]
 
@@ -183,7 +183,7 @@ describe('After Handle', () => {
 		let total = 0
 
 		const app = new Elysia()
-			.onAfterHandle([
+			.afterHandle([
 				() => {
 					total++
 				},

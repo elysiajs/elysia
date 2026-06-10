@@ -17,7 +17,7 @@ describe('macro resolve', () => {
 	// macro objects are cast — the point here is the runtime promotion path.
 	it('a macro returning `resolve` exposes the value to the handler', async () => {
 		const app = new Elysia()
-			.macro({ withUser: { resolve: () => ({ user: 'alice' }) } } as any)
+			.macro({ withUser: { derive: () => ({ user: 'alice' }) } } as any)
 			.get('/', ({ user }: any) => ({ user }), { withUser: true } as any)
 
 		const res = await app.handle(req('/'))
@@ -38,7 +38,7 @@ describe('macro resolve', () => {
 		const app = new Elysia()
 			.macro({
 				gate: {
-					resolve: ({ query }: any) => ({
+					derive: ({ query }: any) => ({
 						value: query.deny ? 'denied' : 'ok'
 					})
 				}

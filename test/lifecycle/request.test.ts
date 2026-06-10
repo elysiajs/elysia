@@ -6,7 +6,7 @@ import { req, delay } from '../utils'
 describe('On Request', () => {
 	it('inject headers to response', async () => {
 		const app = new Elysia()
-			.onRequest(({ set }) => {
+			.request(({ set }) => {
 				set.headers['Access-Control-Allow-Origin'] = '*'
 			})
 			.get('/', () => 'hi')
@@ -18,7 +18,7 @@ describe('On Request', () => {
 
 	it('handle async', async () => {
 		const app = new Elysia()
-			.onRequest(async ({ set }) => {
+			.request(async ({ set }) => {
 				await delay(5)
 				set.headers.name = 'llama'
 			})
@@ -31,7 +31,7 @@ describe('On Request', () => {
 
 	it('early return', async () => {
 		const app = new Elysia()
-			.onRequest(({ set }) => {
+			.request(({ set }) => {
 				set.status = 401
 				return 'Unauthorized'
 			})
@@ -49,7 +49,7 @@ describe('On Request', () => {
 		let total = 0
 
 		const app = new Elysia()
-			.onRequest([
+			.request([
 				() => {
 					total++
 				},
@@ -68,10 +68,10 @@ describe('On Request', () => {
 		let order = <string[]>[]
 
 		const app = new Elysia()
-			.onRequest(() => {
+			.request(() => {
 				order.push('A')
 			})
-			.onRequest(() => {
+			.request(() => {
 				order.push('B')
 			})
 			.get('/', () => '')
@@ -86,7 +86,7 @@ describe('On Request', () => {
 
 		const app = new Elysia()
 			// @ts-ignore
-			.onRequest(({ qi }) => {
+			.request(({ qi }) => {
 				queryIndex = qi
 			})
 			.get('/', () => 'ok')

@@ -6,7 +6,7 @@ import { delay, req } from '../utils'
 describe('Before Handle', () => {
 	it('globally skip main handler', async () => {
 		const app = new Elysia()
-			.onBeforeHandle<{
+			.beforeHandle<{
 				params: {
 					name?: string
 				}
@@ -40,7 +40,7 @@ describe('Before Handle', () => {
 		const app = new Elysia()
 			.group('/type', (app) =>
 				app
-					.onBeforeHandle<{
+					.beforeHandle<{
 						params: {
 							name?: string
 						}
@@ -59,8 +59,8 @@ describe('Before Handle', () => {
 	})
 
 	it('inherits from plugin', async () => {
-		const transformId = new Elysia().onBeforeHandle(
-			{ as: 'global' },
+		const transformId = new Elysia().beforeHandle(
+			'global',
 			({ params: { name } }) => {
 				if (name === 'Fubuki') return 'Cat'
 			}
@@ -76,7 +76,7 @@ describe('Before Handle', () => {
 	})
 
 	it('not inherits plugin on local', async () => {
-		const beforeHandle = new Elysia().onBeforeHandle(
+		const beforeHandle = new Elysia().beforeHandle(
 			({ params: { name } }) => {
 				if (name === 'Fubuki') return 'Cat'
 			}
@@ -95,10 +95,10 @@ describe('Before Handle', () => {
 		let order = <string[]>[]
 
 		const app = new Elysia()
-			.onBeforeHandle(() => {
+			.beforeHandle(() => {
 				order.push('A')
 			})
-			.onBeforeHandle(() => {
+			.beforeHandle(() => {
 				order.push('B')
 			})
 			.get('/', () => '')
@@ -110,7 +110,7 @@ describe('Before Handle', () => {
 
 	it('globally and locally before handle', async () => {
 		const app = new Elysia()
-			.onBeforeHandle<{
+			.beforeHandle<{
 				params: {
 					name?: string
 				}
@@ -132,14 +132,14 @@ describe('Before Handle', () => {
 
 	it('accept multiple before handler', async () => {
 		const app = new Elysia()
-			.onBeforeHandle<{
+			.beforeHandle<{
 				params: {
 					name?: string
 				}
 			}>(({ params: { name } }) => {
 				if (name === 'fubuki') return 'cat'
 			})
-			.onBeforeHandle<{
+			.beforeHandle<{
 				params: {
 					name?: string
 				}
@@ -193,14 +193,14 @@ describe('Before Handle', () => {
 
 	it('execute afterHandle', async () => {
 		const app = new Elysia()
-			.onBeforeHandle<{
+			.beforeHandle<{
 				params: {
 					name?: string
 				}
 			}>(({ params: { name } }) => {
 				if (name === 'Fubuki') return 'Cat'
 			})
-			.onAfterHandle((context) => {
+			.afterHandle((context) => {
 				// @ts-ignore
 				if (context.responseValue === 'Cat') return 'Not cat'
 			})
@@ -215,7 +215,7 @@ describe('Before Handle', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.onBeforeHandle({ as: 'global' }, ({ path }) => {
+			.beforeHandle('global', ({ path }) => {
 				called.push(path)
 			})
 			.get('/inner', () => 'NOOP')
@@ -234,7 +234,7 @@ describe('Before Handle', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.onBeforeHandle({ as: 'local' }, ({ path }) => {
+			.beforeHandle('local', ({ path }) => {
 				called.push(path)
 			})
 			.get('/inner', () => 'NOOP')
@@ -250,7 +250,7 @@ describe('Before Handle', () => {
 	})
 
 	// New direct-scope API: `beforeHandle('global', fn)` parallels
-	// `onBeforeHandle({ as: 'global' }, fn)`.
+	// `onBeforeHandle('global', fn)`.
 	it('as global (direct scope)', async () => {
 		const called = <string[]>[]
 
@@ -293,7 +293,7 @@ describe('Before Handle', () => {
 		let total = 0
 
 		const app = new Elysia()
-			.onAfterHandle([
+			.afterHandle([
 				() => {
 					total++
 				},

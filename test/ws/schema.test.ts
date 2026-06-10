@@ -134,12 +134,12 @@ describe('WebSocket non-body schemas', () => {
 		app.stop()
 	})
 
-	it('upgrade-time validation errors route through .onError()', async () => {
+	it('upgrade-time validation errors route through `.error()`', async () => {
 		let seenCode: string | undefined
 		let seenOn: string | undefined
 
 		const app = new Elysia()
-			.onError(({ error, code }: any) => {
+			.error(({ error, code }: any) => {
 				seenCode = code
 				seenOn = (error as any)?.type
 				return new Response('caught:' + (error as any)?.type, {

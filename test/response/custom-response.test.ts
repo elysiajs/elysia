@@ -39,7 +39,7 @@ describe('Custom Response Type', () => {
 
     it('Response headers take precedence, set.headers merge non-conflicting', async () => {
         const app = new Elysia()
-            .onRequest(({ set }) => {
+            .request(({ set }) => {
                 set.headers['Content-Type'] = 'application/json'
                 set.headers['X-Framework'] = 'Elysia'
             })

@@ -226,7 +226,7 @@ export type ErrorContext<
 		request: Request
 		store: Singleton['store']
 	} & Singleton['decorator'] &
-		Singleton['resolve']
+		Singleton['derive']
 >
 
 type PrettifyIfObject<T> = T extends object ? Prettify<T> : T
@@ -237,27 +237,27 @@ export type Context<
 	Path extends string | undefined = undefined
 > = Prettify<
 	{
-		body: PrettifyIfObject<Route['body'] & Singleton['resolve']['body']>
+		body: PrettifyIfObject<Route['body'] & Singleton['derive']['body']>
 		query: undefined extends Route['query']
-			? {} extends NonNullable<Singleton['resolve']['query']>
+			? {} extends NonNullable<Singleton['derive']['query']>
 				? Record<string, string>
-				: Singleton['resolve']['query']
-			: PrettifyIfObject<Route['query'] & Singleton['resolve']['query']>
+				: Singleton['derive']['query']
+			: PrettifyIfObject<Route['query'] & Singleton['derive']['query']>
 		params: undefined extends Route['params']
 			? undefined extends Path
-				? {} extends NonNullable<Singleton['resolve']['params']>
+				? {} extends NonNullable<Singleton['derive']['params']>
 					? Record<string, string>
-					: Singleton['resolve']['params']
+					: Singleton['derive']['params']
 				: Path extends `${string}/${':' | '*'}${string}`
 					? ResolvePath<Path>
 					: never
-			: PrettifyIfObject<Route['params'] & Singleton['resolve']['params']>
+			: PrettifyIfObject<Route['params'] & Singleton['derive']['params']>
 		headers: undefined extends Route['headers']
-			? {} extends NonNullable<Singleton['resolve']['headers']>
+			? {} extends NonNullable<Singleton['derive']['headers']>
 				? Record<string, string | undefined>
-				: Singleton['resolve']['headers']
+				: Singleton['derive']['headers']
 			: PrettifyIfObject<
-					Route['headers'] & Singleton['resolve']['headers']
+					Route['headers'] & Singleton['derive']['headers']
 				>
 		cookie: undefined extends Route['cookie']
 			? Record<string, Cookie<unknown>>
@@ -268,8 +268,8 @@ export type Context<
 								Route['cookie'][key]
 							>
 						} & {
-							[key in keyof Singleton['resolve']['cookie']]-?: Cookie<
-								Singleton['resolve']['cookie'][key]
+							[key in keyof Singleton['derive']['cookie']]-?: Cookie<
+								Singleton['derive']['cookie'][key]
 							>
 						}
 					>
@@ -280,16 +280,6 @@ export type Context<
 		set: {
 			headers: HTTPHeaders
 			status?: number | keyof StatusMap
-			/**
-			 * @deprecated Use inline redirect instead
-			 *
-			 * @example Migration example
-			 * ```ts
-			 * new Elysia()
-			 *     .get(({ redirect }) => redirect('/'))
-			 * ```
-			 */
-			redirect?: string
 			/**
 			 * ! Internal Property
 			 *
@@ -326,7 +316,7 @@ export type Context<
 			? typeof status
 			: SelectiveStatus<Route['response']>
 	} & Singleton['decorator'] &
-		Omit<Singleton['resolve'], keyof InputSchema>
+		Omit<Singleton['derive'], keyof InputSchema>
 >
 
 // Mimic request before mapping route
@@ -335,7 +325,6 @@ export type PreContext<
 		decorator: {}
 		store: {}
 		derive: {}
-		resolve: {}
 	}
 > = Prettify<
 	{
@@ -348,7 +337,6 @@ export type PreContext<
 		set: {
 			headers: HTTPHeaders
 			status?: number
-			redirect?: string
 		}
 
 		status: typeof status

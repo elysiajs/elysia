@@ -609,15 +609,15 @@ describe('Stream', () => {
 	it('handle sse with plugin global hooks and trace', async () => {
 		const PluginA = () =>
 			new Elysia({ name: 'PluginA' })
-				.onBeforeHandle(() => {})
-				.onAfterHandle(() => {})
-				.onParse(() => {})
-				.onTransform(() => {})
-				.onError(() => {})
-				.onAfterResponse(() => {})
+				.beforeHandle(() => {})
+				.afterHandle(() => {})
+				.parse(() => {})
+				.transform(() => {})
+				.error(() => {})
+				.afterResponse(() => {})
 				.onStart(() => {})
 				.onStop(() => {})
-				.onRequest(() => {})
+				.request(() => {})
 				.trace(() => {})
 				.as('global')
 

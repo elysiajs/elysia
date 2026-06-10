@@ -25,7 +25,7 @@ describe('map derive', () => {
 
 	it('inherits plugin', async () => {
 		const plugin = new Elysia()
-			.derive({ as: 'global' }, () => ({
+			.derive('global', () => ({
 				hi: () => 'hi'
 			}))
 			.mapDerive((derivatives) => ({
@@ -150,7 +150,7 @@ describe('map derive', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.mapDerive({ as: 'local' }, ({ path }) => {
+			.mapDerive('local', ({ path }) => {
 				called.push(path)
 
 				return {}
@@ -171,7 +171,7 @@ describe('map derive', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.mapDerive({ as: 'global' }, ({ path }) => {
+			.mapDerive('global', ({ path }) => {
 				called.push(path)
 
 				return {}

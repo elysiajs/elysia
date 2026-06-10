@@ -6,7 +6,7 @@ import { req } from '../utils'
 describe('resolve', () => {
 	it('work', async () => {
 		const app = new Elysia()
-			.resolve(() => ({
+			.derive(() => ({
 				hi: () => 'hi'
 			}))
 			.get('/', ({ hi }) => hi())
@@ -16,7 +16,7 @@ describe('resolve', () => {
 	})
 
 	it('inherits plugin', async () => {
-		const plugin = new Elysia().resolve({ as: 'global' }, () => ({
+		const plugin = new Elysia().derive('global', () => ({
 			hi: () => 'hi'
 		}))
 
@@ -27,7 +27,7 @@ describe('resolve', () => {
 	})
 
 	it('not inherits plugin on local', async () => {
-		const plugin = new Elysia().resolve(() => ({
+		const plugin = new Elysia().derive(() => ({
 			hi: () => 'hi'
 		}))
 
@@ -43,7 +43,7 @@ describe('resolve', () => {
 	it('can mutate store', async () => {
 		const app = new Elysia()
 			.state('counter', 1)
-			.resolve(({ store }) => ({
+			.derive(({ store }) => ({
 				increase: () => store.counter++
 			}))
 			.get('/', ({ store, increase }) => {
@@ -58,7 +58,7 @@ describe('resolve', () => {
 
 	it('derive with static analysis', async () => {
 		const app = new Elysia()
-			.resolve(({ headers: { name } }) => ({
+			.derive(({ headers: { name } }) => ({
 				name
 			}))
 			.get('/', ({ name }) => name)
@@ -80,10 +80,10 @@ describe('resolve', () => {
 		const stack: number[] = []
 
 		const app = new Elysia()
-			.onBeforeHandle(() => {
+			.beforeHandle(() => {
 				stack.push(1)
 			})
-			.resolve(() => {
+			.derive(() => {
 				stack.push(2)
 
 				return { name: 'Ina' }
@@ -109,11 +109,11 @@ describe('resolve', () => {
 		let order = <string[]>[]
 
 		const app = new Elysia()
-			.resolve(() => {
+			.derive(() => {
 				order.push('A')
 				return {}
 			})
-			.resolve(() => {
+			.derive(() => {
 				order.push('B')
 				return {}
 			})
@@ -128,7 +128,7 @@ describe('resolve', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.resolve({ as: 'global' }, ({ path }) => {
+			.derive('global', ({ path }) => {
 				called.push(path)
 
 				return {}
@@ -149,7 +149,7 @@ describe('resolve', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.resolve({ as: 'scoped' }, ({ path }) => {
+			.derive('plugin', ({ path }) => {
 				called.push(path)
 
 				return {}
@@ -173,7 +173,7 @@ describe('resolve', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.resolve({ as: 'local' }, ({ path }) => {
+			.derive('local', ({ path }) => {
 				called.push(path)
 
 				return {}
@@ -194,7 +194,7 @@ describe('resolve', () => {
 		let total = 0
 
 		const app = new Elysia()
-			.onAfterHandle([
+			.afterHandle([
 				() => {
 					total++
 				},
@@ -211,7 +211,7 @@ describe('resolve', () => {
 
 	it('handle error', async () => {
 		const route = new Elysia()
-			.resolve(({ status }) => {
+			.derive(({ status }) => {
 				return status(418)
 			})
 			.get('/', () => '')
@@ -225,7 +225,7 @@ describe('resolve', () => {
 	/** These work but there's no support for type
 	it('work inline', async () => {
 		const app = new Elysia().get('/', ({ hi }) => hi(), {
-			resolve: () => ({
+			derive: () => ({
 				hi: () => 'hi'
 			})
 		})
@@ -239,7 +239,7 @@ describe('resolve', () => {
 			'/',
 			({ first, last }) => [last, first].join(' '),
 			{
-				resolve: [
+				derive: [
 					() => ({
 						first: 'himari'
 					}),
@@ -256,7 +256,7 @@ describe('resolve', () => {
 		const app = new Elysia()
 			.guard(
 				{
-					resolve: () => ({ hi: () => 'hi' })
+					derive: () => ({ hi: () => 'hi' })
 				},
 				(app) => app.get('/', ({ hi }) => hi())
 			)
@@ -274,7 +274,7 @@ describe('resolve', () => {
 		const app = new Elysia()
 			.guard(
 				{
-					resolve: [
+					derive: [
 						() => ({ first: 'himari' }),
 						() => ({ last: 'akeboshi' })
 					]
@@ -295,7 +295,7 @@ describe('resolve', () => {
 	it('work local guard', async () => {
 		const app = new Elysia()
 			.guard({
-				resolve: () => ({ hi: () => 'hi' })
+				derive: () => ({ hi: () => 'hi' })
 			})
 			.get('/', ({ hi }) => hi())
 
@@ -306,7 +306,7 @@ describe('resolve', () => {
 	it('work local array guard', async () => {
 		const app = new Elysia()
 			.guard({
-				resolve: [
+				derive: [
 					() => ({
 						first: 'himari'
 					}),
@@ -321,8 +321,8 @@ describe('resolve', () => {
 
 	it('work scoped guard', async () => {
 		const plugin = new Elysia().guard({
-			as: 'scoped',
-			resolve: () => ({ hi: () => 'hi' })
+			as: 'plugin',
+			derive: () => ({ hi: () => 'hi' })
 		})
 
 		const app = new Elysia().use(plugin).get('/', ({ hi }) => hi())
@@ -342,7 +342,7 @@ describe('resolve', () => {
 	it('work global guard', async () => {
 		const plugin = new Elysia().guard({
 			as: 'global',
-			resolve: () => ({ hi: () => 'hi' })
+			derive: () => ({ hi: () => 'hi' })
 		})
 
 		const app = new Elysia().use(plugin).get('/', ({ hi }) => hi())
@@ -363,10 +363,10 @@ describe('resolve', () => {
 		let isOnErrorCalled = false
 
 		const app = new Elysia()
-			.onError(() => {
+			.error(() => {
 				isOnErrorCalled = true
 			})
-			.resolve(({ status }) => status(418))
+			.derive(({ status }) => status(418))
 			.get('/', () => '')
 
 		await app.handle(req('/'))

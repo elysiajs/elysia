@@ -10,7 +10,7 @@ const loggerPlugin = new Elysia()
 	.use((app) => app.state('abc', 'abc'))
 
 const app = new Elysia()
-	.onRequest(({ set }) => {
+	.request(({ set }) => {
 		set.headers = {
 			'Access-Control-Allow-Origin': '*'
 		}
@@ -75,7 +75,7 @@ const app = new Elysia()
 	.get('/trailing-slash', () => 'A')
 	.group('/group', (app) =>
 		app
-			.onBeforeHandle<{
+			.beforeHandle<{
 				query: {
 					name: string
 				}
@@ -109,7 +109,7 @@ const app = new Elysia()
 		return 'A'
 	})
 	.all('/all', () => 'hi')
-	.onError(({ code, error, set }) => {
+	.error(({ code, error, set }) => {
 		if (code === 'NOT_FOUND') {
 			set.status = 404
 

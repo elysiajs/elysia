@@ -30,7 +30,7 @@ describe('guard', () => {
 			.guard({}, (app) =>
 				app
 					.state('counter', 0)
-					.onRequest(({ store }) => {
+					.request(({ store }) => {
 						store.counter++
 					})
 					.get('/counter', ({ store: { counter } }) => counter)
@@ -378,7 +378,7 @@ describe('guard', () => {
 					called++
 				}
 			})
-			.onTransform(() => {
+			.transform(() => {
 				called++
 			})
 			// @ts-expect-error

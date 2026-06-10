@@ -213,7 +213,7 @@ describe('Standard Schema Standalone', () => {
 
 	it('validate multiple schema together', async () => {
 		const app = new Elysia()
-			.onError(({ error }) => {
+			.error(({ error }) => {
 				// `code` was removed this version; detect via instanceof.
 				if (!(error instanceof ValidationError)) console.log(error)
 			})
@@ -309,7 +309,7 @@ describe('Standard Schema Standalone', () => {
 
 	it('merge plugin', async () => {
 		const plugin = new Elysia().guard({
-			as: 'scoped',
+			as: 'plugin',
 			schema: 'standalone',
 			response: {
 				404: z.object({

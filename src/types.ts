@@ -247,7 +247,6 @@ export type Replace<Original, Target, With> =
 				? With
 				: Original
 
-export type LegacyEventScope = 'global' | 'local' | 'scoped'
 export type EventScope = 'global' | 'local' | 'plugin'
 export type GuardSchemaType = 'override' | 'standalone'
 
@@ -392,7 +391,7 @@ export type LocalHook<
 	 * - 'arraybuffer': parse body as readable stream
 	 */
 	parse?: MaybeArray<
-		| BodyHandler<Schema, Singleton & { resolve: Schema['resolve'] }>
+		| BodyHandler<Schema, Singleton & { derive: Schema['resolve'] }>
 		| ContentType
 		| Parser
 	>
@@ -400,37 +399,37 @@ export type LocalHook<
 	 * Transform context's value
 	 */
 	transform?: MaybeArray<
-		TransformHandler<Schema, Singleton & { resolve: Schema['resolve'] }>
+		TransformHandler<Schema, Singleton & { derive: Schema['resolve'] }>
 	>
 	/**
 	 * Execute before main handler
 	 */
 	beforeHandle?: MaybeArray<
-		OptionalHandler<Schema, Singleton & { resolve: Schema['resolve'] }>
+		OptionalHandler<Schema, Singleton & { derive: Schema['resolve'] }>
 	>
 	/**
 	 * Execute after main handler
 	 */
 	afterHandle?: MaybeArray<
-		AfterHandler<Schema, Singleton & { resolve: Schema['resolve'] }>
+		AfterHandler<Schema, Singleton & { derive: Schema['resolve'] }>
 	>
 	/**
 	 * Execute after main handler
 	 */
 	mapResponse?: MaybeArray<
-		MapResponse<Schema, Singleton & { resolve: Schema['resolve'] }>
+		MapResponse<Schema, Singleton & { derive: Schema['resolve'] }>
 	>
 	/**
 	 * Execute after response is sent
 	 */
 	afterResponse?: MaybeArray<
-		AfterResponseHandler<Schema, Singleton & { resolve: Schema['resolve'] }>
+		AfterResponseHandler<Schema, Singleton & { derive: Schema['resolve'] }>
 	>
 	/**
 	 * Catch error
 	 */
 	error?: MaybeArray<
-		ErrorHandler<Errors, Schema, Singleton & { resolve: Schema['resolve'] }>
+		ErrorHandler<Errors, Schema, Singleton & { derive: Schema['resolve'] }>
 	>
 	tags?: DocumentDecoration['tags']
 } & (Input extends any ? Input : Prettify<Input>)
@@ -498,7 +497,7 @@ export type EventFn<T extends AppEvent> = UnwrapArray<AppHook[T]>
 export interface SingletonBase {
 	decorator: Record<string, unknown>
 	store: Record<string, unknown>
-	resolve: Record<string, unknown>
+	derive: Record<string, unknown>
 }
 
 export interface ErrorDefinition {
@@ -507,7 +506,7 @@ export interface ErrorDefinition {
 }
 
 export interface EphemeralType {
-	resolve: SingletonBase['resolve']
+	derive: SingletonBase['derive']
 	schema: MetadataBase['schema']
 	schemas: MetadataBase['schema']
 	response: PossibleResponse
@@ -522,7 +521,7 @@ export interface DefinitionBase {
 }
 
 export interface DefaultEphemeral {
-	resolve: {}
+	derive: {}
 	schema: {}
 	schemas: {}
 	response: {}
@@ -532,7 +531,7 @@ export interface DefaultEphemeral {
 export interface DefaultSingleton {
 	decorator: {}
 	store: {}
-	resolve: {}
+	derive: {}
 }
 
 export interface DefaultMetadata {
@@ -616,12 +615,6 @@ export type MapResponse<
 		responseValue: {} extends Route['response']
 			? unknown
 			: Route['response'][keyof Route['response']]
-		/**
-		 * @deprecated use `context.responseValue` instead
-		 */
-		response: {} extends Route['response']
-			? unknown
-			: Route['response'][keyof Route['response']]
 	}
 ) => MaybePromise<Response | void>
 
@@ -637,8 +630,8 @@ export type TransformHandler<
 > = (
 	context: Context<
 		Route,
-		Omit<Singleton, 'resolve'> & {
-			resolve: {}
+		Omit<Singleton, 'derive'> & {
+			derive: {}
 		},
 		Path
 	>
@@ -657,22 +650,7 @@ export type BodyHandler<
 			}
 		},
 		Path
-	>,
-	/**
-	 * @deprecated
-	 *
-	 * use `context.contentType` instead
-	 *
-	 * @example
-	 * ```ts
-	 * new Elysia()
-	 * 	   .onParse(({ contentType, request }) => {
-	 * 		     if (contentType === 'application/json')
-	 * 			     return request.json()
-	 *     })
-	 * ```
-	 */
-	contentType: string
+	>
 ) => MaybePromise<any>
 
 export type PreHandler<
@@ -692,14 +670,6 @@ export type AfterResponseHandler<
 		responseValue: {} extends Route['response']
 			? unknown
 			: Route['response'][keyof Route['response']]
-		/**
-		 * @deprecated use `context.responseValue` instead
-		 */
-		response: {} extends Route['response']
-			? unknown
-			:
-					| Route['response'][keyof Route['response']]
-					| InlineHandlerResponse<Route['response']>
 	}
 ) => MaybePromise<unknown>
 
@@ -797,7 +767,7 @@ export type InlineHandler<
 	| ((
 			context: Context<
 				Route & MacroContext,
-				Singleton & { resolve: MacroContext['resolve'] }
+				Singleton & { derive: MacroContext['resolve'] }
 			>
 	  ) =>
 			| MaybePromise<Response>
@@ -896,7 +866,7 @@ export type ErrorHandler<
 		{
 			store: Singleton['store']
 			decorator: Singleton['decorator']
-			resolve: {}
+			derive: {}
 		}
 	> & {
 		error: T[number]['error'] | Error
@@ -1036,7 +1006,7 @@ export interface MacroProperty<
 	error?: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
 	mapResponse?: MaybeArray<MapResponse<TypedRoute, Singleton>>
 	afterResponse?: MaybeArray<AfterResponseHandler<TypedRoute, Singleton>>
-	resolve?: MaybeArray<ResolveHandler<TypedRoute, Singleton>>
+	derive?: MaybeArray<ResolveHandler<TypedRoute, Singleton>>
 	detail?: DocumentDecoration
 	/**
 	 * Introspect hook option for documentation generation or analysis
@@ -1427,9 +1397,7 @@ export type MacroToProperty<in out T extends Macro<any, any, any, any, any>> =
 export type NonResolvableMacroKey =
 	| LocalLifecycleProperty
 	| keyof InputSchema
-	// remove in 2.1
 	| 'derive'
-	| 'resolve'
 
 interface RouteSchemaWithResolvedMacro extends RouteSchema {
 	response: PossibleResponse
@@ -1712,7 +1680,7 @@ type InnerMacroToContext<
 										Exclude<
 											FunctionArrayReturnType<
 												// @ts-ignore Trust me bro
-												Value['resolve']
+												Value['derive']
 											>,
 											AnyElysiaStatus
 										>,
@@ -1743,7 +1711,7 @@ type InnerMacroToContext<
 								ExtractOnlyResponseFromMacro<
 									FunctionArrayReturnTypeNonNullable<
 										// @ts-expect-error type is checked in key mapping
-										Value['resolve']
+										Value['derive']
 									>
 								> &
 								InnerMacroToContext<
@@ -2154,7 +2122,7 @@ export type MergeElysiaInstances<
 			Metadata & Current['~Metadata'],
 			Ephemeral,
 			{
-				resolve: Volatile['resolve'] & Current['~Ephemeral']['resolve']
+				derive: Volatile['derive'] & Current['~Ephemeral']['derive']
 				schema: Volatile['schema'] & Current['~Ephemeral']['schema']
 				schemas: Volatile['schemas'] & Current['~Ephemeral']['schemas']
 				response: Volatile['response'] &
@@ -2195,7 +2163,7 @@ export type MergeElysiaInstances<
 			{
 				decorator: Singleton['decorator']
 				store: Prettify<Singleton['store']>
-				resolve: Singleton['resolve']
+				derive: Singleton['derive']
 			},
 			Definitions,
 			Metadata,
