@@ -75,6 +75,9 @@ import type {
 	UnhandledReturnedErrorOf,
 	AfterHandler,
 	BodyHandler,
+	TransformHandler,
+	MapResponse,
+	AfterResponseHandler,
 	MergeSchema,
 	MergeElysiaInstances,
 	GuardLocalHook,
@@ -105,7 +108,7 @@ import type {
 	ExtractErrorFromHandle
 } from './types'
 import type { ElysiaStatus } from './error'
-import type { Context, ErrorContext } from './context'
+import type { Context, LifecycleContext, ErrorContext } from './context'
 
 const useNodesBuffer: ChainNode[] = []
 
@@ -781,18 +784,83 @@ export class Elysia<
 		return this.#onBranch('request', scopeOrFn as any, fn as any)
 	}
 
-	parse(fn: MaybeArray<EventFn<'parse'>>): this
-	parse(name: string): this
-	parse(scope: 'local', fn: MaybeArray<EventFn<'parse'>>): this
-	parse(scope: 'plugin', fn: MaybeArray<EventFn<'parse'>>): this
-	parse(scope: 'global', fn: MaybeArray<EventFn<'parse'>>): this
 	parse(
-		scopeOrFnOrName:
-			| EventScope
-			| MaybeArray<EventFn<'parse'>>
-			| string,
-		fn?: MaybeArray<EventFn<'parse'>>
-	): this {
+		fn: MaybeArray<
+			BodyHandler<
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+					BasePath
+				> &
+					Metadata['schemas'] &
+					Ephemeral['schemas'] &
+					Volatile['schemas'],
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+				}
+			>
+		>
+	): this
+	parse(name: string): this
+	parse(
+		scope: 'local',
+		fn: MaybeArray<
+			BodyHandler<
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+					BasePath
+				> &
+					Metadata['schemas'] &
+					Ephemeral['schemas'] &
+					Volatile['schemas'],
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+				}
+			>
+		>
+	): this
+	parse(
+		scope: 'plugin',
+		fn: MaybeArray<
+			BodyHandler<
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+					BasePath
+				> &
+					Metadata['schemas'] &
+					Ephemeral['schemas'] &
+					Volatile['schemas'],
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+				},
+				undefined,
+				'plugin'
+			>
+		>
+	): this
+	parse(
+		scope: 'global',
+		fn: MaybeArray<
+			BodyHandler<
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+					BasePath
+				> &
+					Metadata['schemas'] &
+					Ephemeral['schemas'] &
+					Volatile['schemas'],
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+				},
+				undefined,
+				'global'
+			>
+		>
+	): this
+	parse(scopeOrFnOrName: any, fn?: any): this {
 		if (fn === undefined && typeof scopeOrFnOrName === 'string') {
 			const named = this['~ext']?.parser?.[scopeOrFnOrName]
 			return this.#onBranch('parse', (named ?? scopeOrFnOrName) as any)
@@ -823,14 +891,74 @@ export class Elysia<
 		return this
 	}
 
-	transform(fn: EventFn<'transform'>): this
-	transform(scope: 'local', fn: EventFn<'transform'>): this
-	transform(scope: 'plugin', fn: EventFn<'transform'>): this
-	transform(scope: 'global', fn: EventFn<'transform'>): this
 	transform(
-		scopeOrFn: EventScope | EventFn<'transform'>,
-		fn?: EventFn<'transform'>
-	): this {
+		fn: TransformHandler<
+			MergeSchema<
+				Volatile['schema'],
+				MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+				BasePath
+			> &
+				Metadata['schemas'] &
+				Ephemeral['schemas'] &
+				Volatile['schemas'],
+			Singleton & {
+				derive: Ephemeral['derive'] & Volatile['derive']
+			}
+		>
+	): this
+	transform(
+		scope: 'local',
+		fn: TransformHandler<
+			MergeSchema<
+				Volatile['schema'],
+				MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+				BasePath
+			> &
+				Metadata['schemas'] &
+				Ephemeral['schemas'] &
+				Volatile['schemas'],
+			Singleton & {
+				derive: Ephemeral['derive'] & Volatile['derive']
+			}
+		>
+	): this
+	transform(
+		scope: 'plugin',
+		fn: TransformHandler<
+			MergeSchema<
+				Volatile['schema'],
+				MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+				BasePath
+			> &
+				Metadata['schemas'] &
+				Ephemeral['schemas'] &
+				Volatile['schemas'],
+			Singleton & {
+				derive: Ephemeral['derive'] & Volatile['derive']
+			},
+			undefined,
+			'plugin'
+		>
+	): this
+	transform(
+		scope: 'global',
+		fn: TransformHandler<
+			MergeSchema<
+				Volatile['schema'],
+				MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+				BasePath
+			> &
+				Metadata['schemas'] &
+				Ephemeral['schemas'] &
+				Volatile['schemas'],
+			Singleton & {
+				derive: Ephemeral['derive'] & Volatile['derive']
+			},
+			undefined,
+			'global'
+		>
+	): this
+	transform(scopeOrFn: any, fn?: any): this {
 		return this.#onBranch('transform', scopeOrFn, fn)
 	}
 
@@ -924,7 +1052,9 @@ export class Elysia<
 					Volatile['schemas'],
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
-				}
+				},
+				undefined,
+				'plugin'
 			>
 		>
 	>(
@@ -963,7 +1093,9 @@ export class Elysia<
 					Volatile['schemas'],
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
-				}
+				},
+				undefined,
+				'global'
 			>
 		>
 	>(
@@ -1082,7 +1214,7 @@ export class Elysia<
 	>(
 		scope: 'plugin',
 		transform: (
-			context: Context<
+			context: LifecycleContext<
 				MergeSchema<
 					Volatile['schema'],
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
@@ -1090,7 +1222,9 @@ export class Elysia<
 				>,
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
-				}
+				},
+				undefined,
+				'plugin'
 			>
 		) => MaybePromise<Derivative>
 	): Elysia<
@@ -1122,7 +1256,7 @@ export class Elysia<
 	>(
 		scope: 'global',
 		transform: (
-			context: Context<
+			context: LifecycleContext<
 				MergeSchema<
 					Volatile['schema'],
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
@@ -1130,7 +1264,9 @@ export class Elysia<
 				>,
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
-				}
+				},
+				undefined,
+				'global'
 			>
 		) => MaybePromise<Derivative>
 	): Elysia<
@@ -1255,7 +1391,7 @@ export class Elysia<
 	>(
 		scope: 'plugin',
 		transform: (
-			context: Context<
+			context: LifecycleContext<
 				MergeSchema<
 					Volatile['schema'],
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
@@ -1263,7 +1399,9 @@ export class Elysia<
 				>,
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
-				}
+				},
+				undefined,
+				'plugin'
 			>
 		) => MaybePromise<Derivative>
 	): Elysia<
@@ -1293,7 +1431,7 @@ export class Elysia<
 	>(
 		scope: 'global',
 		transform: (
-			context: Context<
+			context: LifecycleContext<
 				MergeSchema<
 					Volatile['schema'],
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
@@ -1301,7 +1439,9 @@ export class Elysia<
 				>,
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
-				}
+				},
+				undefined,
+				'global'
 			>
 		) => MaybePromise<Derivative>
 	): Elysia<
@@ -1418,7 +1558,7 @@ export class Elysia<
 	>(
 		scope: 'plugin',
 		transform: (
-			context: Context<
+			context: LifecycleContext<
 				MergeSchema<
 					Volatile['schema'],
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
@@ -1426,7 +1566,9 @@ export class Elysia<
 				>,
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
-				}
+				},
+				undefined,
+				'plugin'
 			>
 		) => MaybePromise<Derivative>
 	): Elysia<
@@ -1456,7 +1598,7 @@ export class Elysia<
 	>(
 		scope: 'global',
 		transform: (
-			context: Context<
+			context: LifecycleContext<
 				MergeSchema<
 					Volatile['schema'],
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
@@ -1464,7 +1606,9 @@ export class Elysia<
 				>,
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
-				}
+				},
+				undefined,
+				'global'
 			>
 		) => MaybePromise<Derivative>
 	): Elysia<
@@ -1591,7 +1735,9 @@ export class Elysia<
 					Volatile['schemas'],
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
-				}
+				},
+				undefined,
+				'plugin'
 			>
 		>
 	>(
@@ -1630,7 +1776,9 @@ export class Elysia<
 					Volatile['schemas'],
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
-				}
+				},
+				undefined,
+				'global'
 			>
 		>
 	>(
@@ -1661,25 +1809,145 @@ export class Elysia<
 		return this.#onBranch('afterHandle', scopeOrFn, fn)
 	}
 
-	mapResponse(fn: EventFn<'mapResponse'>): this
-	mapResponse(scope: 'local', fn: EventFn<'mapResponse'>): this
-	mapResponse(scope: 'plugin', fn: EventFn<'mapResponse'>): this
-	mapResponse(scope: 'global', fn: EventFn<'mapResponse'>): this
 	mapResponse(
-		scopeOrFn: EventScope | EventFn<'mapResponse'>,
-		fn?: EventFn<'mapResponse'>
-	): this {
+		fn: MapResponse<
+			MergeSchema<
+				Volatile['schema'],
+				MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+				BasePath
+			> &
+				Metadata['schemas'] &
+				Ephemeral['schemas'] &
+				Volatile['schemas'],
+			Singleton & {
+				derive: Ephemeral['derive'] & Volatile['derive']
+			}
+		>
+	): this
+	mapResponse(
+		scope: 'local',
+		fn: MapResponse<
+			MergeSchema<
+				Volatile['schema'],
+				MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+				BasePath
+			> &
+				Metadata['schemas'] &
+				Ephemeral['schemas'] &
+				Volatile['schemas'],
+			Singleton & {
+				derive: Ephemeral['derive'] & Volatile['derive']
+			}
+		>
+	): this
+	mapResponse(
+		scope: 'plugin',
+		fn: MapResponse<
+			MergeSchema<
+				Volatile['schema'],
+				MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+				BasePath
+			> &
+				Metadata['schemas'] &
+				Ephemeral['schemas'] &
+				Volatile['schemas'],
+			Singleton & {
+				derive: Ephemeral['derive'] & Volatile['derive']
+			},
+			undefined,
+			'plugin'
+		>
+	): this
+	mapResponse(
+		scope: 'global',
+		fn: MapResponse<
+			MergeSchema<
+				Volatile['schema'],
+				MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+				BasePath
+			> &
+				Metadata['schemas'] &
+				Ephemeral['schemas'] &
+				Volatile['schemas'],
+			Singleton & {
+				derive: Ephemeral['derive'] & Volatile['derive']
+			},
+			undefined,
+			'global'
+		>
+	): this
+	mapResponse(scopeOrFn: any, fn?: any): this {
 		return this.#onBranch('mapResponse', scopeOrFn, fn)
 	}
 
-	afterResponse(fn: EventFn<'afterResponse'>): this
-	afterResponse(scope: 'local', fn: EventFn<'afterResponse'>): this
-	afterResponse(scope: 'plugin', fn: EventFn<'afterResponse'>): this
-	afterResponse(scope: 'global', fn: EventFn<'afterResponse'>): this
 	afterResponse(
-		scopeOrFn: EventScope | EventFn<'afterResponse'>,
-		fn?: EventFn<'afterResponse'>
-	): this {
+		fn: AfterResponseHandler<
+			MergeSchema<
+				Volatile['schema'],
+				MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+				BasePath
+			> &
+				Metadata['schemas'] &
+				Ephemeral['schemas'] &
+				Volatile['schemas'],
+			Singleton & {
+				derive: Ephemeral['derive'] & Volatile['derive']
+			}
+		>
+	): this
+	afterResponse(
+		scope: 'local',
+		fn: AfterResponseHandler<
+			MergeSchema<
+				Volatile['schema'],
+				MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+				BasePath
+			> &
+				Metadata['schemas'] &
+				Ephemeral['schemas'] &
+				Volatile['schemas'],
+			Singleton & {
+				derive: Ephemeral['derive'] & Volatile['derive']
+			}
+		>
+	): this
+	afterResponse(
+		scope: 'plugin',
+		fn: AfterResponseHandler<
+			MergeSchema<
+				Volatile['schema'],
+				MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+				BasePath
+			> &
+				Metadata['schemas'] &
+				Ephemeral['schemas'] &
+				Volatile['schemas'],
+			Singleton & {
+				derive: Ephemeral['derive'] & Volatile['derive']
+			},
+			undefined,
+			'plugin'
+		>
+	): this
+	afterResponse(
+		scope: 'global',
+		fn: AfterResponseHandler<
+			MergeSchema<
+				Volatile['schema'],
+				MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+				BasePath
+			> &
+				Metadata['schemas'] &
+				Ephemeral['schemas'] &
+				Volatile['schemas'],
+			Singleton & {
+				derive: Ephemeral['derive'] & Volatile['derive']
+			},
+			undefined,
+			'global'
+		>
+	): this
+	afterResponse(scopeOrFn: any, fn?: any): this {
 		return this.#onBranch('afterResponse', scopeOrFn, fn)
 	}
 

@@ -101,6 +101,7 @@ import { expectTypeOf } from 'expect-type'
 					expectTypeOf<typeof body>().toEqualTypeOf<{
 						id: number
 						name: 'saltyaom'
+						separated: true
 					}>()
 
 					return {
@@ -354,6 +355,7 @@ import { expectTypeOf } from 'expect-type'
 					expectTypeOf<typeof body>().toEqualTypeOf<{
 						id: number
 						name: 'saltyaom'
+						separated: true
 					}>()
 
 					return {
@@ -654,6 +656,7 @@ import { expectTypeOf } from 'expect-type'
 					expectTypeOf<typeof body>().toEqualTypeOf<{
 						id: number
 						name: 'saltyaom'
+						separated: true
 					}>()
 
 					return {

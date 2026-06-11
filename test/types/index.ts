@@ -2016,12 +2016,12 @@ type a = keyof {}
 			return {}
 		})
 		.derive(({ params }) => {
-			expectTypeOf<typeof params>().toEqualTypeOf<never>()
+			expectTypeOf<typeof params>().toEqualTypeOf<Record<string, string>>()
 
 			return {}
 		})
 		.transform(({ params }) => {
-			expectTypeOf<typeof params>().toEqualTypeOf<{}>()
+			expectTypeOf<typeof params>().toEqualTypeOf<Record<string, string>>()
 		})
 		.beforeHandle(({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<

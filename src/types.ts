@@ -13,7 +13,12 @@ import type { ElysiaAdapter } from './adapter'
 import type { Sucrose } from './sucrose'
 import type { Serve } from './universal'
 import type { CookieOptions } from './cookie'
-import type { Context, ErrorContext, PreContext } from './context'
+import type {
+	Context,
+	LifecycleContext,
+	ErrorContext,
+	PreContext
+} from './context'
 import type { ChainNode } from './utils'
 
 export interface ElysiaConfig<
@@ -357,7 +362,7 @@ export interface InputSchema<Name extends string = string> {
 	query?: Name | AnySchema
 	params?: Name | AnySchema
 	cookie?: Name | AnySchema
-	response?: Name | AnySchema | Record<number, string | AnySchema>
+	response?: Name | AnySchema | Record<number, Name | AnySchema>
 }
 export type InputSchemaKey = keyof InputSchema
 
@@ -575,9 +580,10 @@ export interface RouteSchema {
 export type OptionalHandler<
 	in out Route extends RouteSchema = {},
 	in out Singleton extends SingletonBase = DefaultSingleton,
-	Path extends string | undefined = undefined
+	Path extends string | undefined = undefined,
+	ParamsScope extends 'local' | 'plugin' | 'global' = 'local'
 > = (
-	context: Context<Route, Singleton, Path>
+	context: LifecycleContext<Route, Singleton, Path, ParamsScope>
 ) => MaybePromise<
 	{} extends Route['response']
 		? unknown
@@ -590,9 +596,10 @@ export type OptionalHandler<
 export type AfterHandler<
 	in out Route extends RouteSchema = {},
 	in out Singleton extends SingletonBase = DefaultSingleton,
-	Path extends string | undefined = undefined
+	Path extends string | undefined = undefined,
+	ParamsScope extends 'local' | 'plugin' | 'global' = 'local'
 > = (
-	context: Context<Route, Singleton, Path> & {
+	context: LifecycleContext<Route, Singleton, Path, ParamsScope> & {
 		responseValue: {} extends Route['response']
 			? unknown
 			: Route['response'][keyof Route['response']]
@@ -609,9 +616,10 @@ export type AfterHandler<
 export type MapResponse<
 	in out Route extends RouteSchema = {},
 	in out Singleton extends SingletonBase = DefaultSingleton,
-	Path extends string | undefined = undefined
+	Path extends string | undefined = undefined,
+	ParamsScope extends 'local' | 'plugin' | 'global' = 'local'
 > = (
-	context: Context<Route, Singleton, Path> & {
+	context: LifecycleContext<Route, Singleton, Path, ParamsScope> & {
 		responseValue: {} extends Route['response']
 			? unknown
 			: Route['response'][keyof Route['response']]
@@ -626,30 +634,34 @@ export type VoidHandler<
 export type TransformHandler<
 	in out Route extends RouteSchema = {},
 	in out Singleton extends SingletonBase = DefaultSingleton,
-	Path extends string | undefined = undefined
+	Path extends string | undefined = undefined,
+	ParamsScope extends 'local' | 'plugin' | 'global' = 'local'
 > = (
-	context: Context<
+	context: LifecycleContext<
 		Route,
 		Omit<Singleton, 'derive'> & {
 			derive: {}
 		},
-		Path
+		Path,
+		ParamsScope
 	>
 ) => MaybePromise<void>
 
 export type BodyHandler<
 	in out Route extends RouteSchema = {},
 	in out Singleton extends SingletonBase = DefaultSingleton,
-	Path extends string | undefined = undefined
+	Path extends string | undefined = undefined,
+	ParamsScope extends 'local' | 'plugin' | 'global' = 'local'
 > = (
-	context: Context<
+	context: LifecycleContext<
 		Route,
 		Singleton & {
 			decorator: {
 				contentType: string
 			}
 		},
-		Path
+		Path,
+		ParamsScope
 	>
 ) => MaybePromise<any>
 
@@ -664,9 +676,11 @@ export type PreHandler<
 
 export type AfterResponseHandler<
 	in out Route extends RouteSchema = {},
-	in out Singleton extends SingletonBase = DefaultSingleton
+	in out Singleton extends SingletonBase = DefaultSingleton,
+	Path extends string | undefined = undefined,
+	ParamsScope extends 'local' | 'plugin' | 'global' = 'local'
 > = (
-	context: Context<Route, Singleton> & {
+	context: LifecycleContext<Route, Singleton, Path, ParamsScope> & {
 		responseValue: {} extends Route['response']
 			? unknown
 			: Route['response'][keyof Route['response']]
@@ -1423,16 +1437,36 @@ export interface IntersectIfObjectSchema<
 	query: IntersectIfObject<A['query'], B['query']>
 	params: IntersectIfObject<A['params'], B['params']>
 	cookie: IntersectIfObject<A['cookie'], B['cookie']>
-	// `response` uses OVERRIDE semantics, not the additive intersection used for
-	// input fields: a local/route response (A) wins over a standalone guard
-	// response (B). The standalone response only constrains the handler when no
-	// local one exists; when neither exists, A (`unknown | void`) leaves the
+	// `response` merges the override side (A: route-local + override-channel
+	// schemas) with the standalone side (B: `schema: 'standalone'` guards) PER
+	// STATUS CODE. Standalone schemas INTERSECT, so a status code declared by both
+	// sides merges its object fields (route `{ 404: { q } }` + standalone
+	// `{ 404: { name } }` → `{ 404: { q, name } }`); codes declared by only one
+	// side survive (route `{ 200 }` + standalone `{ 418 }` → `{ 200, 418 }`).
+	// `IntersectIfObject` keeps this safe for non-object (literal) responses: a
+	// same-code literal clash picks A (route) rather than intersecting to `never`.
+	// When neither side declares a response, A (`unknown | void`) leaves the
 	// handler unconstrained.
 	response: {} extends A['response']
 		? {} extends B['response']
 			? A['response']
 			: B['response']
-		: A['response']
+		: {} extends B['response']
+			? A['response']
+			: {
+					[K in
+						| keyof A['response']
+						| keyof B['response']]: K extends keyof A['response']
+						? K extends keyof B['response']
+							? IntersectIfObject<
+									A['response'][K],
+									B['response'][K]
+								>
+							: A['response'][K]
+						: K extends keyof B['response']
+							? B['response'][K]
+							: never
+				}
 }
 
 // Merge the standalone (`schemas`) channels across scopes for a route's input

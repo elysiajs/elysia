@@ -319,6 +319,17 @@ export type Context<
 		Omit<Singleton['derive'], keyof InputSchema>
 >
 
+export type LifecycleContext<
+	Route extends RouteSchema = {},
+	Singleton extends SingletonBase = DefaultSingleton,
+	Path extends string | undefined = undefined,
+	ParamsScope extends 'local' | 'plugin' | 'global' = 'local'
+> = [ParamsScope] extends ['local']
+	? Context<Route, Singleton, Path>
+	: Omit<Context<Route, Singleton, Path>, 'params'> & {
+			params: { [name: string]: string | undefined }
+		}
+
 // Mimic request before mapping route
 export type PreContext<
 	in out Singleton extends SingletonBase = {

@@ -19,13 +19,15 @@ import { expectTypeOf } from 'expect-type'
 		})
 }
 
-// ? a guard `response` schema is enforced at runtime only — it must NOT
-// ? over-constrain a route's own local response (regression guard: standalone
-// ? response stays overridable, otherwise the handler would be forced to also
-// ? satisfy the guard response and this block would fail to compile).
+// ? a bare `.guard({ ... })` defaults to standalone, so its `response` schema
+// ? INTERSECTS a route's own local response per status code: the handler must
+// ? satisfy BOTH `{ id }` (route) and `{ name: 'cantarella' }` (guard).
+// ? Returning only `{ id }` must fail — regression guard against the standalone
+// ? response being dropped/overridden.
 {
 	new Elysia()
 		.guard({ response: t.Object({ name: t.Literal('cantarella') }) })
+		// @ts-expect-error handler must also satisfy the standalone guard response
 		.post('/', () => ({ id: 1 }), {
 			response: t.Object({ id: t.Number() })
 		})
