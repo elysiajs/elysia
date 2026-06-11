@@ -1140,7 +1140,10 @@ export class Elysia<
 					Volatile['schema'],
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
 					BasePath
-				>,
+				> &
+					Metadata['schemas'] &
+					Ephemeral['schemas'] &
+					Volatile['schemas'],
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
 				}
@@ -1179,7 +1182,10 @@ export class Elysia<
 					Volatile['schema'],
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
 					BasePath
-				>,
+				> &
+					Metadata['schemas'] &
+					Ephemeral['schemas'] &
+					Volatile['schemas'],
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
 				}
@@ -1219,7 +1225,10 @@ export class Elysia<
 					Volatile['schema'],
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
 					BasePath
-				>,
+				> &
+					Metadata['schemas'] &
+					Ephemeral['schemas'] &
+					Volatile['schemas'],
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
 				},
@@ -1261,7 +1270,10 @@ export class Elysia<
 					Volatile['schema'],
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
 					BasePath
-				>,
+				> &
+					Metadata['schemas'] &
+					Ephemeral['schemas'] &
+					Volatile['schemas'],
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
 				},
@@ -1320,7 +1332,10 @@ export class Elysia<
 					Volatile['schema'],
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
 					BasePath
-				>,
+				> &
+					Metadata['schemas'] &
+					Ephemeral['schemas'] &
+					Volatile['schemas'],
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
 				}
@@ -1358,7 +1373,10 @@ export class Elysia<
 					Volatile['schema'],
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
 					BasePath
-				>,
+				> &
+					Metadata['schemas'] &
+					Ephemeral['schemas'] &
+					Volatile['schemas'],
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
 				}
@@ -1396,7 +1414,10 @@ export class Elysia<
 					Volatile['schema'],
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
 					BasePath
-				>,
+				> &
+					Metadata['schemas'] &
+					Ephemeral['schemas'] &
+					Volatile['schemas'],
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
 				},
@@ -1436,7 +1457,10 @@ export class Elysia<
 					Volatile['schema'],
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
 					BasePath
-				>,
+				> &
+					Metadata['schemas'] &
+					Ephemeral['schemas'] &
+					Volatile['schemas'],
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
 				},
@@ -1487,7 +1511,10 @@ export class Elysia<
 					Volatile['schema'],
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
 					BasePath
-				>,
+				> &
+					Metadata['schemas'] &
+					Ephemeral['schemas'] &
+					Volatile['schemas'],
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
 				}
@@ -1525,7 +1552,10 @@ export class Elysia<
 					Volatile['schema'],
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
 					BasePath
-				>,
+				> &
+					Metadata['schemas'] &
+					Ephemeral['schemas'] &
+					Volatile['schemas'],
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
 				}
@@ -1563,7 +1593,10 @@ export class Elysia<
 					Volatile['schema'],
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
 					BasePath
-				>,
+				> &
+					Metadata['schemas'] &
+					Ephemeral['schemas'] &
+					Volatile['schemas'],
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
 				},
@@ -1603,7 +1636,10 @@ export class Elysia<
 					Volatile['schema'],
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
 					BasePath
-				>,
+				> &
+					Metadata['schemas'] &
+					Ephemeral['schemas'] &
+					Volatile['schemas'],
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
 				},

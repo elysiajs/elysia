@@ -7,7 +7,7 @@ import { MethodMap, type StatusMapBack } from './constants'
 import { ElysiaError, type ElysiaStatus } from './error'
 import type { TypeBoxSchema, AnySchema, StandardSchemaV1Like } from './type'
 
-import type { Static, TCyclic } from 'typebox'
+import type { StaticDecode, TCyclic } from 'typebox'
 import type { AnyElysia, Elysia } from './base'
 import type { ElysiaAdapter } from './adapter'
 import type { Sucrose } from './sucrose'
@@ -1284,11 +1284,13 @@ type StaticCyclic<
 	Definitions extends Record<string, AnySchema>
 	// `{} extends Definitions` (Definitions is empty), NOT `Definitions extends
 	// {}` (always true → refs never resolved): with no models there are no refs
-	// to resolve, so `Static<T>` directly; otherwise resolve `$ref`s via TCyclic.
+	// to resolve, so `StaticDecode<T>` directly; otherwise resolve `$ref`s via
+	// TCyclic. `StaticDecode` (not `Static`) so handler context sees a codec's
+	// decoded output type, e.g. `t.ArrayString(...)` → `string[]`.
 > = {} extends Definitions
-	? Static<T>
+	? StaticDecode<T>
 	: Definitions extends infer Defs extends Record<string, TypeBoxSchema>
-		? Static<
+		? StaticDecode<
 				TCyclic<
 					Defs & {
 						$elysia: T
@@ -1296,7 +1298,7 @@ type StaticCyclic<
 					'$elysia'
 				>
 			>
-		: Static<T>
+		: StaticDecode<T>
 
 export type UnwrapSchema<
 	Schema extends AnySchema | string | undefined,
@@ -1420,13 +1422,19 @@ interface RouteSchemaWithResolvedMacro extends RouteSchema {
 }
 
 export type IntersectIfObject<A, B> =
-	A extends Record<any, any>
-		? B extends Record<any, any>
-			? A & B
-			: A
-		: B extends Record<any, any>
-			? B
-			: A
+	// When the override side (A) is absent (`unknown`, e.g. no route/override
+	// schema for this field), defer to the standalone side (B) — including a
+	// primitive standalone schema like `t.String()`, which the object-only
+	// branches below would otherwise drop.
+	unknown extends A
+		? B
+		: A extends Record<any, any>
+			? B extends Record<any, any>
+				? A & B
+				: A
+			: B extends Record<any, any>
+				? B
+				: A
 
 export interface IntersectIfObjectSchema<
 	A extends RouteSchema,
@@ -1576,7 +1584,14 @@ export type ExcludeElysiaResponse<T> =
 	Exclude<Awaited<T>, AnyElysiaStatus> extends infer A
 		? IsNever<A & {}> extends true
 			? {}
-			: A & {}
+			: // A void-possible derive/resolve (e.g. one that conditionally
+				// `return {...}` and otherwise falls through) includes `undefined`
+				// in its return — its derived fields may be absent at runtime, so
+				// make them optional (`Partial`) rather than stripping `undefined`
+				// outright. An always-returning derive keeps its fields required.
+				undefined extends A
+				? Partial<A & {}>
+				: A & {}
 		: {}
 
 type ExtractResolveFromMacro<A> =
