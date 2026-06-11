@@ -224,41 +224,6 @@ describe('Decorate', () => {
 		expect(app['~ext']?.decorator?.['name ina']).toBe('Ina')
 	})
 
-	// ─── Backward compatibility: legacy { as: ... } form ─────────────────
-
-	it('legacy { as: override } object', async () => {
-		const app = new Elysia()
-			.decorate({
-				name: 'Ina',
-				job: 'artist'
-			})
-			.decorate({ as: 'override' }, { name: 'Fubuki' })
-
-		expect(app['~ext']?.decorator).toEqual({
-			name: 'Fubuki',
-			job: 'artist'
-		})
-	})
-
-	it('legacy { as: override } primitive by name', async () => {
-		const app = new Elysia()
-			.decorate('name', 'Ina')
-			.decorate({ as: 'override' }, 'name', 'Tako')
-
-		expect(app['~ext']?.decorator?.name).toBe('Tako')
-	})
-
-	it('legacy { as: append } primitive by name', async () => {
-		const app = new Elysia()
-			.decorate('name', 'Ina')
-			.decorate({ as: 'append' }, 'name', 'Tako')
-
-		// 'append' must NOT overwrite an existing key
-		expect(app['~ext']?.decorator?.name).toBe('Ina')
-	})
-
-	// ─── Modern string-mode form ─────────────────────────────────────────
-
 	it('explicit append primitive does not overwrite', async () => {
 		const app = new Elysia()
 			.decorate('name', 'Ina')

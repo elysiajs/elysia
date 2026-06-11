@@ -37,5 +37,7 @@ export type {
 	StandardJSONSchemaV1Like
 } from './type'
 
+export type { SSEPayload } from './types'
+
 export { Elysia }
 export default Elysia

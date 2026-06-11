@@ -218,41 +218,6 @@ describe('State', () => {
 		})
 	})
 
-	// ─── Backward compatibility: legacy { as: ... } form ─────────────────
-
-	it('legacy { as: override } primitive by name', async () => {
-		const app = new Elysia()
-			.state('name', 'Ina')
-			.state({ as: 'override' }, 'name', 'Tako')
-
-		expect(app['~ext']?.store?.name).toBe('Tako')
-	})
-
-	it('legacy { as: override } object', async () => {
-		const app = new Elysia()
-			.state({
-				name: 'Ina',
-				job: 'artist'
-			})
-			.state({ as: 'override' }, { name: 'Fubuki' })
-
-		expect(app['~ext']?.store).toEqual({
-			name: 'Fubuki',
-			job: 'artist'
-		})
-	})
-
-	it('legacy { as: append } primitive by name', async () => {
-		const app = new Elysia()
-			.state('name', 'Ina')
-			.state({ as: 'append' }, 'name', 'Tako')
-
-		// 'append' must NOT overwrite an existing key
-		expect(app['~ext']?.store?.name).toBe('Ina')
-	})
-
-	// ─── Modern string-mode form ─────────────────────────────────────────
-
 	it('explicit append primitive does not overwrite', async () => {
 		const app = new Elysia()
 			.state('name', 'Ina')

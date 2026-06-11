@@ -352,48 +352,6 @@ export class Elysia<
 		Volatile
 	>
 
-	/** @deprecated use `decorate('append', name, value)` instead */
-	decorate<const Name extends string, Value>(
-		type: { as: 'append' },
-		name: Name,
-		value: Value
-	): Elysia<
-		BasePath,
-		Scope,
-		{
-			decorator: Prettify<Singleton['decorator'] & { [k in Name]: Value }>
-			store: Singleton['store']
-			derive: Singleton['derive']
-		},
-		Definitions,
-		Metadata,
-		Routes,
-		Ephemeral,
-		Volatile
-	>
-
-	/** @deprecated use `decorate('override', name, value)` instead */
-	decorate<const Name extends string, Value>(
-		type: { as: 'override' },
-		name: Name,
-		value: Value
-	): Elysia<
-		BasePath,
-		Scope,
-		{
-			decorator: Prettify<
-				Omit<Singleton['decorator'], Name> & { [k in Name]: Value }
-			>
-			store: Singleton['store']
-			derive: Singleton['derive']
-		},
-		Definitions,
-		Metadata,
-		Routes,
-		Ephemeral,
-		Volatile
-	>
-
 	decorate<NewDecorators extends Record<string, unknown>>(
 		type: 'append',
 		decorators: NewDecorators
@@ -433,51 +391,9 @@ export class Elysia<
 		Volatile
 	>
 
-	/** @deprecated use `decorate('append', decorators)` instead */
-	decorate<NewDecorators extends Record<string, unknown>>(
-		type: { as: 'append' },
-		decorators: NewDecorators
-	): Elysia<
-		BasePath,
-		Scope,
-		{
-			decorator: Prettify<Singleton['decorator'] & NewDecorators>
-			store: Singleton['store']
-			derive: Singleton['derive']
-		},
-		Definitions,
-		Metadata,
-		Routes,
-		Ephemeral,
-		Volatile
-	>
-
-	/** @deprecated use `decorate('override', decorators)` instead */
-	decorate<NewDecorators extends Record<string, unknown>>(
-		type: { as: 'override' },
-		decorators: NewDecorators
-	): Elysia<
-		BasePath,
-		Scope,
-		{
-			decorator: Prettify<
-				Omit<Singleton['decorator'], keyof NewDecorators> &
-					NewDecorators
-			>
-			store: Singleton['store']
-			derive: Singleton['derive']
-		},
-		Definitions,
-		Metadata,
-		Routes,
-		Ephemeral,
-		Volatile
-	>
-
 	decorate(
 		typeOrNameOrDecorators:
 			| ContextAppendType
-			| { as: ContextAppendType }
 			| string
 			| Record<string, unknown>
 			| Function,
@@ -499,18 +415,6 @@ export class Elysia<
 						nameOrDecorators
 					)
 
-				if (
-					typeof typeOrNameOrDecorators === 'object' &&
-					typeOrNameOrDecorators !== null &&
-					'as' in typeOrNameOrDecorators
-				)
-					return this.#decorate(
-						(typeOrNameOrDecorators as { as: ContextAppendType })
-							.as,
-						'',
-						nameOrDecorators
-					)
-
 				return this.#decorate(
 					'append',
 					typeOrNameOrDecorators as string,
@@ -519,13 +423,7 @@ export class Elysia<
 
 			case 3:
 				return this.#decorate(
-					typeof typeOrNameOrDecorators === 'string'
-						? (typeOrNameOrDecorators as ContextAppendType)
-						: (
-								typeOrNameOrDecorators as {
-									as: ContextAppendType
-								}
-							).as,
+					typeOrNameOrDecorators as ContextAppendType,
 					nameOrDecorators as string,
 					value
 				)
@@ -690,48 +588,6 @@ export class Elysia<
 		Volatile
 	>
 
-	/** @deprecated use `state('append', name, value)` instead */
-	state<const Name extends string | number | symbol, Value>(
-		type: { as: 'append' },
-		name: Name,
-		value: Value
-	): Elysia<
-		BasePath,
-		Scope,
-		{
-			decorator: Singleton['decorator']
-			store: Prettify<Singleton['store'] & { [k in Name]: Value }>
-			derive: Singleton['derive']
-		},
-		Definitions,
-		Metadata,
-		Routes,
-		Ephemeral,
-		Volatile
-	>
-
-	/** @deprecated use `state('override', name, value)` instead */
-	state<const Name extends string | number | symbol, Value>(
-		type: { as: 'override' },
-		name: Name,
-		value: Value
-	): Elysia<
-		BasePath,
-		Scope,
-		{
-			decorator: Singleton['decorator']
-			store: Prettify<
-				Omit<Singleton['store'], Name> & { [k in Name]: Value }
-			>
-			derive: Singleton['derive']
-		},
-		Definitions,
-		Metadata,
-		Routes,
-		Ephemeral,
-		Volatile
-	>
-
 	state<NewStore extends Record<string, unknown>>(
 		type: 'append',
 		store: NewStore
@@ -768,48 +624,9 @@ export class Elysia<
 		Volatile
 	>
 
-	/** @deprecated use `state('append', store)` instead */
-	state<NewStore extends Record<string, unknown>>(
-		type: { as: 'append' },
-		store: NewStore
-	): Elysia<
-		BasePath,
-		Scope,
-		{
-			decorator: Singleton['decorator']
-			store: Prettify<Singleton['store'] & NewStore>
-			derive: Singleton['derive']
-		},
-		Definitions,
-		Metadata,
-		Routes,
-		Ephemeral,
-		Volatile
-	>
-
-	/** @deprecated use `state('override', store)` instead */
-	state<NewStore extends Record<string, unknown>>(
-		type: { as: 'override' },
-		store: NewStore
-	): Elysia<
-		BasePath,
-		Scope,
-		{
-			decorator: Singleton['decorator']
-			store: Prettify<Omit<Singleton['store'], keyof NewStore> & NewStore>
-			derive: Singleton['derive']
-		},
-		Definitions,
-		Metadata,
-		Routes,
-		Ephemeral,
-		Volatile
-	>
-
 	state(
 		typeOrNameOrStore:
 			| ContextAppendType
-			| { as: ContextAppendType }
 			| string
 			| Record<string, unknown>
 			| Function,
@@ -827,17 +644,6 @@ export class Elysia<
 				)
 					return this.#state(typeOrNameOrStore, '', nameOrStore)
 
-				if (
-					typeof typeOrNameOrStore === 'object' &&
-					typeOrNameOrStore !== null &&
-					'as' in typeOrNameOrStore
-				)
-					return this.#state(
-						(typeOrNameOrStore as { as: ContextAppendType }).as,
-						'',
-						nameOrStore
-					)
-
 				return this.#state(
 					'append',
 					typeOrNameOrStore as string,
@@ -846,9 +652,7 @@ export class Elysia<
 
 			case 3:
 				return this.#state(
-					typeof typeOrNameOrStore === 'string'
-						? (typeOrNameOrStore as ContextAppendType)
-						: (typeOrNameOrStore as { as: ContextAppendType }).as,
+					typeOrNameOrStore as ContextAppendType,
 					nameOrStore as string,
 					value
 				)
@@ -1358,25 +1162,309 @@ export class Elysia<
 		)
 	}
 
-	mapDerive(fn: EventFn<'beforeHandle'>): this
-	mapDerive(scope: 'local', fn: EventFn<'beforeHandle'>): this
-	mapDerive(scope: 'plugin', fn: EventFn<'beforeHandle'>): this
-	mapDerive(scope: 'global', fn: EventFn<'beforeHandle'>): this
+	mapDerive<
+		const Derivative extends
+			| Record<string, unknown>
+			| ElysiaStatus<any, any, any>
+			| void
+	>(
+		transform: (
+			context: Context<
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+					BasePath
+				>,
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+				}
+			>
+		) => MaybePromise<Derivative>
+	): Elysia<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		{
+			derive: Volatile['derive'] & ExcludeElysiaResponse<Derivative>
+			schema: Volatile['schema']
+			schemas: Volatile['schemas']
+			response: UnionResponseStatus<
+				Volatile['response'],
+				ExtractErrorFromHandle<Derivative>
+			>
+			error: Volatile['error']
+		}
+	>
+	mapDerive<
+		const Derivative extends
+			| Record<string, unknown>
+			| ElysiaStatus<any, any, any>
+			| void
+	>(
+		scope: 'local',
+		transform: (
+			context: Context<
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+					BasePath
+				>,
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+				}
+			>
+		) => MaybePromise<Derivative>
+	): Elysia<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		{
+			derive: Volatile['derive'] & ExcludeElysiaResponse<Derivative>
+			schema: Volatile['schema']
+			schemas: Volatile['schemas']
+			response: UnionResponseStatus<
+				Volatile['response'],
+				ExtractErrorFromHandle<Derivative>
+			>
+			error: Volatile['error']
+		}
+	>
+	mapDerive<
+		const Derivative extends
+			| Record<string, unknown>
+			| ElysiaStatus<any, any, any>
+			| void
+	>(
+		scope: 'plugin',
+		transform: (
+			context: Context<
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+					BasePath
+				>,
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+				}
+			>
+		) => MaybePromise<Derivative>
+	): Elysia<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		{
+			derive: Ephemeral['derive'] & ExcludeElysiaResponse<Derivative>
+			schema: Ephemeral['schema']
+			schemas: Ephemeral['schemas']
+			response: UnionResponseStatus<
+				Ephemeral['response'],
+				ExtractErrorFromHandle<Derivative>
+			>
+			error: Ephemeral['error']
+		},
+		Volatile
+	>
+	mapDerive<
+		const Derivative extends
+			| Record<string, unknown>
+			| ElysiaStatus<any, any, any>
+			| void
+	>(
+		scope: 'global',
+		transform: (
+			context: Context<
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+					BasePath
+				>,
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+				}
+			>
+		) => MaybePromise<Derivative>
+	): Elysia<
+		BasePath,
+		Scope,
+		{
+			decorator: Singleton['decorator']
+			store: Singleton['store']
+			derive: Singleton['derive'] & ExcludeElysiaResponse<Derivative>
+		},
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>
 	mapDerive(
-		scopeOrFn: EventScope | EventFn<'beforeHandle'>,
-		fn?: EventFn<'beforeHandle'>
-	): this {
+		scopeOrFn: EventScope | Function,
+		fn?: Function
+	): any {
 		return (this.derive as any)(scopeOrFn, fn)
 	}
 
-	mapResolve(fn: EventFn<'beforeHandle'>): this
-	mapResolve(scope: 'local', fn: EventFn<'beforeHandle'>): this
-	mapResolve(scope: 'plugin', fn: EventFn<'beforeHandle'>): this
-	mapResolve(scope: 'global', fn: EventFn<'beforeHandle'>): this
+	mapResolve<
+		const Derivative extends
+			| Record<string, unknown>
+			| ElysiaStatus<any, any, any>
+			| void
+	>(
+		transform: (
+			context: Context<
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+					BasePath
+				>,
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+				}
+			>
+		) => MaybePromise<Derivative>
+	): Elysia<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		{
+			derive: Volatile['derive'] & ExcludeElysiaResponse<Derivative>
+			schema: Volatile['schema']
+			schemas: Volatile['schemas']
+			response: UnionResponseStatus<
+				Volatile['response'],
+				ExtractErrorFromHandle<Derivative>
+			>
+			error: Volatile['error']
+		}
+	>
+	mapResolve<
+		const Derivative extends
+			| Record<string, unknown>
+			| ElysiaStatus<any, any, any>
+			| void
+	>(
+		scope: 'local',
+		transform: (
+			context: Context<
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+					BasePath
+				>,
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+				}
+			>
+		) => MaybePromise<Derivative>
+	): Elysia<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		{
+			derive: Volatile['derive'] & ExcludeElysiaResponse<Derivative>
+			schema: Volatile['schema']
+			schemas: Volatile['schemas']
+			response: UnionResponseStatus<
+				Volatile['response'],
+				ExtractErrorFromHandle<Derivative>
+			>
+			error: Volatile['error']
+		}
+	>
+	mapResolve<
+		const Derivative extends
+			| Record<string, unknown>
+			| ElysiaStatus<any, any, any>
+			| void
+	>(
+		scope: 'plugin',
+		transform: (
+			context: Context<
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+					BasePath
+				>,
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+				}
+			>
+		) => MaybePromise<Derivative>
+	): Elysia<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		{
+			derive: Ephemeral['derive'] & ExcludeElysiaResponse<Derivative>
+			schema: Ephemeral['schema']
+			schemas: Ephemeral['schemas']
+			response: UnionResponseStatus<
+				Ephemeral['response'],
+				ExtractErrorFromHandle<Derivative>
+			>
+			error: Ephemeral['error']
+		},
+		Volatile
+	>
+	mapResolve<
+		const Derivative extends
+			| Record<string, unknown>
+			| ElysiaStatus<any, any, any>
+			| void
+	>(
+		scope: 'global',
+		transform: (
+			context: Context<
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+					BasePath
+				>,
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+				}
+			>
+		) => MaybePromise<Derivative>
+	): Elysia<
+		BasePath,
+		Scope,
+		{
+			decorator: Singleton['decorator']
+			store: Singleton['store']
+			derive: Singleton['derive'] & ExcludeElysiaResponse<Derivative>
+		},
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>
 	mapResolve(
-		scopeOrFn: EventScope | EventFn<'beforeHandle'>,
-		fn?: EventFn<'beforeHandle'>
-	): this {
+		scopeOrFn: EventScope | Function,
+		fn?: Function
+	): any {
 		return (this.derive as any)(scopeOrFn, fn)
 	}
 
@@ -1565,17 +1653,39 @@ export class Elysia<
 		return this.#onBranch('afterResponse', scopeOrFn, fn)
 	}
 
-	error(
-		fn: ErrorHandler<
-			[
-				...Definitions['error'],
-				...Ephemeral['error'],
-				...Volatile['error']
-			],
-			{},
-			Singleton
+	error<
+		const Handler extends MaybeArray<
+			ErrorHandler<
+				[
+					...Definitions['error'],
+					...Ephemeral['error'],
+					...Volatile['error']
+				],
+				{},
+				Singleton
+			>
 		>
-	): this
+	>(
+		fn: Handler
+	): Elysia<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		{
+			derive: Volatile['derive']
+			schema: Volatile['schema']
+			schemas: Volatile['schemas']
+			response: UnionResponseStatus<
+				Volatile['response'],
+				ElysiaHandlerToResponseSchemaAmbiguous<Handler>
+			>
+			error: Volatile['error']
+		}
+	>
 	error<
 		const E extends AnyErrorConstructor &
 			(abstract new (...args: any) => Error),
@@ -1682,18 +1792,109 @@ export class Elysia<
 			error: [...Volatile['error'], ErrorDefinitionEntry<E, Value>]
 		}
 	>
-	error(
-		scope: EventScope,
-		fn: ErrorHandler<
-			[
-				...Definitions['error'],
-				...Ephemeral['error'],
-				...Volatile['error']
-			],
-			{},
-			Singleton
+	error<
+		const Handler extends MaybeArray<
+			ErrorHandler<
+				[
+					...Definitions['error'],
+					...Ephemeral['error'],
+					...Volatile['error']
+				],
+				{},
+				Singleton
+			>
 		>
-	): this
+	>(
+		scope: 'local',
+		fn: Handler
+	): Elysia<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		{
+			derive: Volatile['derive']
+			schema: Volatile['schema']
+			schemas: Volatile['schemas']
+			response: UnionResponseStatus<
+				Volatile['response'],
+				ElysiaHandlerToResponseSchemaAmbiguous<Handler>
+			>
+			error: Volatile['error']
+		}
+	>
+	error<
+		const Handler extends MaybeArray<
+			ErrorHandler<
+				[
+					...Definitions['error'],
+					...Ephemeral['error'],
+					...Volatile['error']
+				],
+				{},
+				Singleton
+			>
+		>
+	>(
+		scope: 'plugin',
+		fn: Handler
+	): Elysia<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		{
+			derive: Ephemeral['derive']
+			schema: Ephemeral['schema']
+			schemas: Ephemeral['schemas']
+			response: UnionResponseStatus<
+				Ephemeral['response'],
+				ElysiaHandlerToResponseSchemaAmbiguous<Handler>
+			>
+			error: Ephemeral['error']
+		},
+		Volatile
+	>
+	error<
+		const Handler extends MaybeArray<
+			ErrorHandler<
+				[
+					...Definitions['error'],
+					...Ephemeral['error'],
+					...Volatile['error']
+				],
+				{},
+				Singleton
+			>
+		>
+	>(
+		scope: 'global',
+		fn: Handler
+	): Elysia<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		{
+			schema: Metadata['schema']
+			schemas: Metadata['schemas']
+			macro: Metadata['macro']
+			macroFn: Metadata['macroFn']
+			parser: Metadata['parser']
+			response: UnionResponseStatus<
+				Metadata['response'],
+				ElysiaHandlerToResponseSchemaAmbiguous<Handler>
+			>
+		},
+		Routes,
+		Ephemeral,
+		Volatile
+	>
 
 	error<
 		const S extends EventScope,

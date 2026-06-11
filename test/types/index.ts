@@ -361,15 +361,12 @@ app.decorate('a', 'b')
 				world: 'Tako'
 			}
 		})
-		.decorate(
-			{ as: 'override' },
-			{
-				hello: {
-					world: 'Ina',
-					cookie: 'wah!'
-				}
+		.decorate('override', {
+			hello: {
+				world: 'Ina',
+				cookie: 'wah!'
 			}
-		)
+		})
 
 	expectTypeOf<typeof app.decorator.hello>().toEqualTypeOf<{
 		world: string
@@ -414,15 +411,12 @@ app.decorate('a', 'b')
 				world: 'Tako'
 			}
 		})
-		.state(
-			{ as: 'override' },
-			{
-				hello: {
-					world: 'Ina',
-					cookie: 'wah!'
-				}
+		.state('override', {
+			hello: {
+				world: 'Ina',
+				cookie: 'wah!'
 			}
-		)
+		})
 
 	expectTypeOf<typeof app.store.hello>().toEqualTypeOf<{
 		world: string
