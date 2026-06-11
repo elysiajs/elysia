@@ -225,11 +225,13 @@ export function buildWSRoute(
 	}
 
 	async function dispatchMessage(
-		elysia: ElysiaWS<any>,
+		connection: ElysiaWS<any>,
 		rawMessage: string | Buffer
 	) {
+		const ws: ElysiaWS<any> = Object.create(connection)
+
 		try {
-			const message = await parseMessage(elysia.raw as any, rawMessage)
+			const message = await parseMessage(ws.raw as any, rawMessage)
 
 			if (validators.body) {
 				const v = validators.body as any
@@ -240,51 +242,47 @@ export function buildWSRoute(
 						v.Errors?.(message) ?? []
 					)
 					if (errorHandlers.length === 0) {
-						elysia.raw.send(err.message)
+						ws.raw.send(err.message)
 						return
 					}
-					return handleError(elysia, err)
+					return handleError(ws, err)
 				}
 			}
 
-			elysia.body = message as any
+			ws.body = message as any
 
 			for (let i = 0; i < transforms.length; i++) {
-				const r = transforms[i](elysia as any)
+				const r = transforms[i](ws as any)
 				if (r instanceof Promise) await r
 			}
 			for (let i = 0; i < messageBeforeHandles.length; i++) {
-				let r: unknown = messageBeforeHandles[i](elysia as any)
+				let r: unknown = messageBeforeHandles[i](ws as any)
 				if (r instanceof Promise) r = await r
 				if (r !== undefined) {
-					await handleWSResponse(elysia, r, mapResponses)
+					await handleWSResponse(ws, r, mapResponses)
 					return
 				}
 			}
 
 			if (hook.message) {
-				const result = dispatchHandler(
-					hook.message as any,
-					elysia,
-					message
-				)
+				const result = dispatchHandler(hook.message as any, ws, message)
 				const resolved =
 					result instanceof Promise ? await result : result
-				await handleWSResponse(elysia, resolved, mapResponses)
+				await handleWSResponse(ws, resolved, mapResponses)
 			}
 
 			for (let i = 0; i < afterHandles.length; i++) {
-				const r = afterHandles[i](elysia as any)
+				const r = afterHandles[i](ws as any)
 				if (r instanceof Promise) await r
 			}
 			for (let i = 0; i < afterResponses.length; i++) {
 				try {
-					const r = afterResponses[i](elysia as any)
+					const r = afterResponses[i](ws as any)
 					if (r instanceof Promise) await r
 				} catch {}
 			}
 		} catch (error) {
-			await handleError(elysia, error)
+			await handleError(ws, error)
 		}
 	}
 

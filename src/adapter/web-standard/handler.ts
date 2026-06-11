@@ -58,6 +58,7 @@ export function mapResponse(
 	request?: Request
 ): Response {
 	const headers = set.headers
+
 	if (isNotEmpty(headers) || set.status !== 200 || set.cookie) {
 		handleSet(set)
 
@@ -128,7 +129,7 @@ export function mapResponse(
 			default:
 				return mapResponseFallback(response, set, request) as Response
 		}
-	}
+	} else if (response instanceof Response) return response
 
 	// Stream response defers a 'set' API, assume that it may include 'set'
 	if (
@@ -220,8 +221,7 @@ export function errorToResponse(
 	set?: Context['set']
 ) {
 	if (error?.toResponse) {
-		const targetSet =
-			set ?? ({ headers: nullObject() } as Context['set'])
+		const targetSet = set ?? ({ headers: nullObject() } as Context['set'])
 
 		const apply = (resolved: unknown) => {
 			if (resolved instanceof Response) targetSet.status = resolved.status

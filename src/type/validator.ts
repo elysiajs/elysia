@@ -343,6 +343,7 @@ export class TypeBoxValidator<
 			this.hasDefault = hasProperty('default', this.schema as any)
 
 			if (capturing) this.#maybeCapture(options, schemaHasRef)
+			else this.#dropCompiledSource()
 		}
 
 		this.precomputeSafe =
@@ -506,7 +507,6 @@ export class TypeBoxValidator<
 		if (!build?.functions?.length || !build.entry) return
 
 		const variables = build.external.variables
-		// externals not reconstructable, leave it to JIT
 		if (!externalsMatch(collectExternals(this.schema), variables)) return
 
 		const r = reconstructCheck(build)
@@ -517,15 +517,19 @@ export class TypeBoxValidator<
 			identifier: build.external.identifier,
 			checkDefs: r.defs,
 			checkValue: r.value,
-			// captured so the runtime skips the per-schema walks (collectExternals
-			// when empty / isAsyncPredicate / hasProperty('default') / HasCodec /
-			// schemaContainsRef)
 			external: variables.length > 0,
 			async: variables.some(isAsyncPredicate),
 			hasDefault: this.hasDefault,
 			hasCodec: this.hasCodec,
 			hasRef
 		})
+	}
+
+	#dropCompiledSource(): void {
+		const tb = this.tb as any
+		if (!tb) return
+		if (tb.evaluateResult) tb.evaluateResult.code = undefined
+		if (tb.buildResult) tb.buildResult.functions = undefined
 	}
 
 	Errors(value: unknown): TLocalizedValidationError[] {

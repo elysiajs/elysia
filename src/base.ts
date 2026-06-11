@@ -1313,18 +1313,11 @@ export class Elysia<
 		Volatile
 	>
 
-	derive(
-		scopeOrFn: EventScope | Function,
-		fn?: Function
-	): any {
+	derive(scopeOrFn: EventScope | Function, fn?: Function): any {
 		this['~derive'] ??= new WeakSet()
 		this['~derive'].add((fn ?? scopeOrFn) as EventFn<'beforeHandle'>)
 
-		return this.#onBranch(
-			'beforeHandle',
-			scopeOrFn as any,
-			fn as any
-		)
+		return this.#onBranch('beforeHandle', scopeOrFn as any, fn as any)
 	}
 
 	mapDerive<
@@ -1499,10 +1492,7 @@ export class Elysia<
 		Ephemeral,
 		Volatile
 	>
-	mapDerive(
-		scopeOrFn: EventScope | Function,
-		fn?: Function
-	): any {
+	mapDerive(scopeOrFn: EventScope | Function, fn?: Function): any {
 		return (this.derive as any)(scopeOrFn, fn)
 	}
 
@@ -1678,10 +1668,7 @@ export class Elysia<
 		Ephemeral,
 		Volatile
 	>
-	mapResolve(
-		scopeOrFn: EventScope | Function,
-		fn?: Function
-	): any {
+	mapResolve(scopeOrFn: EventScope | Function, fn?: Function): any {
 		return (this.derive as any)(scopeOrFn, fn)
 	}
 
@@ -3271,9 +3258,7 @@ export class Elysia<
 					},
 				Schema & MacroContext,
 				Singleton & {
-					derive: Partial<
-						Ephemeral['derive'] & Volatile['derive']
-					> &
+					derive: Partial<Ephemeral['derive'] & Volatile['derive']> &
 						// @ts-ignore
 						MacroContext['resolve']
 				},
@@ -3322,7 +3307,11 @@ export class Elysia<
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
 					>
 				>,
-				MergeScopedSchemas<Metadata['schemas'], Ephemeral['schemas'], Volatile['schemas']>
+				MergeScopedSchemas<
+					Metadata['schemas'],
+					Ephemeral['schemas'],
+					Volatile['schemas']
+				>
 			>,
 			Singleton & {
 				derive: Partial<Ephemeral['derive'] & Volatile['derive']>
@@ -4373,7 +4362,11 @@ export class Elysia<
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
 				>
 			>,
-			MergeScopedSchemas<Metadata['schemas'], Ephemeral['schemas'], Volatile['schemas']>
+			MergeScopedSchemas<
+				Metadata['schemas'],
+				Ephemeral['schemas'],
+				Volatile['schemas']
+			>
 		>,
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
@@ -4491,7 +4484,11 @@ export class Elysia<
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
 				>
 			>,
-			MergeScopedSchemas<Metadata['schemas'], Ephemeral['schemas'], Volatile['schemas']>
+			MergeScopedSchemas<
+				Metadata['schemas'],
+				Ephemeral['schemas'],
+				Volatile['schemas']
+			>
 		>,
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
@@ -4609,7 +4606,11 @@ export class Elysia<
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
 				>
 			>,
-			MergeScopedSchemas<Metadata['schemas'], Ephemeral['schemas'], Volatile['schemas']>
+			MergeScopedSchemas<
+				Metadata['schemas'],
+				Ephemeral['schemas'],
+				Volatile['schemas']
+			>
 		>,
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
@@ -4727,7 +4728,11 @@ export class Elysia<
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
 				>
 			>,
-			MergeScopedSchemas<Metadata['schemas'], Ephemeral['schemas'], Volatile['schemas']>
+			MergeScopedSchemas<
+				Metadata['schemas'],
+				Ephemeral['schemas'],
+				Volatile['schemas']
+			>
 		>,
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
@@ -4845,7 +4850,11 @@ export class Elysia<
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
 				>
 			>,
-			MergeScopedSchemas<Metadata['schemas'], Ephemeral['schemas'], Volatile['schemas']>
+			MergeScopedSchemas<
+				Metadata['schemas'],
+				Ephemeral['schemas'],
+				Volatile['schemas']
+			>
 		>,
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
@@ -4963,7 +4972,11 @@ export class Elysia<
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
 				>
 			>,
-			MergeScopedSchemas<Metadata['schemas'], Ephemeral['schemas'], Volatile['schemas']>
+			MergeScopedSchemas<
+				Metadata['schemas'],
+				Ephemeral['schemas'],
+				Volatile['schemas']
+			>
 		>,
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
@@ -5081,7 +5094,11 @@ export class Elysia<
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
 				>
 			>,
-			MergeScopedSchemas<Metadata['schemas'], Ephemeral['schemas'], Volatile['schemas']>
+			MergeScopedSchemas<
+				Metadata['schemas'],
+				Ephemeral['schemas'],
+				Volatile['schemas']
+			>
 		>,
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
@@ -5511,13 +5528,8 @@ export class Elysia<
 	compile() {
 		this.fetch
 
-		// routes may not exist, eg. async plugins
 		if (this.#history)
 			for (let i = 0; i < this.#history.length; i++) {
-				// Skip WebSocket routes: #buildRouter installs their upgrade
-				// handler into map['WS'], and compileHandler would overwrite it
-				// with a generic compiled HTTP handler — breaking upgrades after
-				// .compile() (and the AOT build path, which calls compile()).
 				if (this.#history[i][0] === 'WS') continue
 
 				this.handler(i, true)
@@ -5656,10 +5668,23 @@ export class Elysia<
 
 				if (options && isNotEmpty(options)) {
 					this['~config'] ??= nullObject()
-					;(this['~config'] as any).websocket = this['~config']
-						?.websocket
-						? Object.assign(this['~config'].websocket, options)
-						: options
+					const existing = (this['~config'] as any).websocket
+					if (existing) {
+						// Bun exposes a SINGLE global WebSocket config per
+						// server, so per-route knobs (maxPayloadLength, idle
+						// timeout, …) can't be enforced individually — the last
+						// registered route wins. Warn on a genuine conflict so a
+						// silently-ignored per-route limit is visible.
+						for (const key in options)
+							if (
+								key in existing &&
+								(existing as any)[key] !== (options as any)[key]
+							)
+								console.warn(
+									`[Elysia] Conflicting per-route WebSocket option '${key}' — Bun uses one global WebSocket config per server, so per-route values are not enforced (the last-registered route wins).`
+								)
+						Object.assign(existing, options)
+					} else (this['~config'] as any).websocket = options
 				}
 
 				continue

@@ -316,21 +316,9 @@ const createInlineHandlerWithSet = (
 
 function promoteDerive(hook: any) {
 	const derive = hook.derive
-	const resolve = hook.resolve
-	if (derive === undefined && resolve === undefined) return
+	if (derive === undefined) return
 
-	// `resolve` is deprecated and almost always absent, so avoid the
-	// `[...derive, ...resolve]` spread in the common derive-only case.
-	let arr: unknown[]
-
-	if (resolve === undefined) arr = Array.isArray(derive) ? derive : [derive]
-	else if (derive === undefined)
-		arr = Array.isArray(resolve) ? resolve : [resolve]
-	else
-		arr = [
-			...(Array.isArray(derive) ? derive : [derive]),
-			...(Array.isArray(resolve) ? resolve : [resolve])
-		]
+	const arr = Array.isArray(derive) ? derive : [derive]
 
 	if (arr.length) {
 		const existing = hook.beforeHandle
@@ -342,8 +330,7 @@ function promoteDerive(hook: any) {
 			: arr
 	}
 
-	if (hook.derive !== undefined) hook.derive = undefined
-	if (hook.resolve !== undefined) hook.resolve = undefined
+	hook.derive = undefined
 }
 
 function resolveChainMacros(
