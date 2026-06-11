@@ -7,7 +7,15 @@ import { MethodMap, type StatusMapBack } from './constants'
 import { ElysiaError, type ElysiaStatus } from './error'
 import type { TypeBoxSchema, AnySchema, StandardSchemaV1Like } from './type'
 
-import type { StaticDecode, TCyclic } from 'typebox'
+import type {
+	Static,
+	StaticDecode,
+	StaticEncode,
+	TCyclic,
+	TIntersect,
+	TObject,
+	TSchema
+} from 'typebox'
 import type { AnyElysia, Elysia } from './base'
 import type { ElysiaAdapter } from './adapter'
 import type { Sucrose } from './sucrose'
@@ -1341,6 +1349,24 @@ export type UnwrapBodySchema<
 					: unknown
 				: unknown
 
+type FormInnerProperties<Schema> = Extract<
+	Schema extends TIntersect<infer Members> ? Members[number] : never,
+	TObject
+>['properties']
+
+type UnwrapResponseSchema<
+	Schema extends AnySchema | string | undefined,
+	Definitions extends DefinitionBase['typebox'] = {}
+> = Schema extends TypeBoxSchema
+	? StaticEncode<Schema> extends { '~ely-form': any }
+		? ElysiaFormData<{
+				[K in keyof FormInnerProperties<Schema>]: Static<
+					FormInnerProperties<Schema>[K] & TSchema
+				>
+			}>
+		: UnwrapSchema<Schema, Definitions>
+	: UnwrapSchema<Schema, Definitions>
+
 export interface UnwrapRoute<
 	in out Schema extends InputSchema<any>,
 	in out Definitions extends DefinitionBase['typebox'] = {},
@@ -1357,7 +1383,7 @@ export interface UnwrapRoute<
 	cookie: UnwrapSchema<Schema['cookie'], Definitions>
 	response: Schema['response'] extends AnySchema | string
 		? {
-				200: UnwrapSchema<
+				200: UnwrapResponseSchema<
 					Schema['response'],
 					Definitions
 				> extends infer A
@@ -1370,7 +1396,7 @@ export interface UnwrapRoute<
 					[status in number]: AnySchema | string
 			  }
 			? {
-					[k in keyof Schema['response']]: UnwrapSchema<
+					[k in keyof Schema['response']]: UnwrapResponseSchema<
 						Schema['response'][k],
 						Definitions
 					> extends infer A

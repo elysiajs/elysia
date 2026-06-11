@@ -102,18 +102,7 @@
     "skipLibCheck": true,                                 /* Skip type checking all .d.ts files. */
   },
   "exclude": ["node_modules", "test/cloudflare/**/*"],
-  // mid-rewrite ratchet: only files expected to be green are gated; widen back
-  // to "test/types/**/*" (pending: async-modules, documentation, index,
-  // lifecycle/soundness, macro, schema-standalone, standard-schema,
-  // type-system, utils) as porting continues. `src` is pulled in transitively
-  // and is fully green.
-  "include": [
-    "test/types/async-use.ts",
-    "test/types/error.ts",
-    "test/types/lifecycle/derive.ts",
-    "test/types/lifecycle/resolve.ts",
-    "test/types/lifecycle/as.ts",
-    "test/types/lifecycle/guard.ts",
-    "test/types/documentation.ts"
-  ]
+  // The M3 type-builder port is complete: the entire `test/types` suite is green,
+  // so the mid-rewrite ratchet is fully widened. `src` is pulled in transitively.
+  "include": ["test/types/**/*"]
 }
