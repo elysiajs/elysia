@@ -750,7 +750,7 @@ type InlineResponse =
 	// forwarded to the error pipeline per request
 	| Error
 
-type InlineHandlerResponse<Route extends RouteSchema['response']> = {
+export type InlineHandlerResponse<Route extends RouteSchema['response']> = {
 	[Status in keyof Route]: ElysiaStatus<
 		// @ts-ignore Status is always a number
 		Status,
@@ -1842,6 +1842,37 @@ export type CreateEdenResponse<
 			headers: Prettify<Schema['headers'] & MacroContext['headers']>
 			response: Prettify<Res>
 			error: Err
+		}
+
+// WebSocket route shape (keyed under `subscribe` in the Eden tree). Identical
+// to `CreateEdenResponse` but WITHOUT the `error` field — a ws route has no
+// HTTP error channel, and its `~Routes['…']['subscribe']` shape is exactly
+// `{ body, params, query, headers, response }`.
+export type CreateWSEdenResponse<
+	Path extends string,
+	Schema extends RouteSchema,
+	MacroContext extends RouteSchema,
+	Res extends PossibleResponse
+> = RouteSchema extends MacroContext
+	? {
+			body: Schema['body']
+			params: IsNever<keyof Schema['params']> extends true
+				? ResolvePath<Path>
+				: Schema['params']
+			query: Schema['query']
+			headers: Schema['headers']
+			response: Prettify<Res>
+		}
+	: {
+			body: Prettify<Schema['body'] & MacroContext['body']>
+			params: IsNever<
+				keyof (Schema['params'] & MacroContext['params'])
+			> extends true
+				? ResolvePath<Path>
+				: Prettify<Schema['params'] & MacroContext['params']>
+			query: Prettify<Schema['query'] & MacroContext['query']>
+			headers: Prettify<Schema['headers'] & MacroContext['headers']>
+			response: Prettify<Res>
 		}
 
 type Extract200<T> = T extends AnyElysiaStatus

@@ -319,3 +319,69 @@ const app = new Elysia()
 		})
 		.listen(3000)
 }
+
+// Function-form macro: the call-site value is the option object, not a boolean.
+// Guards the parameterised-macro overload from regressing to the old
+// boolean-accepting form (a `true` / wrong-shape must error).
+{
+	new Elysia()
+		.macro('level', (_opt: { min: number }) => ({
+			beforeHandle() {}
+		}))
+		.get('/ok', 'ok', { level: { min: 1 } })
+		.get('/bad-bool', 'ok', {
+			// @ts-expect-error boolean is not assignable to { min: number }
+			level: true
+		})
+		.get('/bad-shape', 'ok', {
+			// @ts-expect-error wrong option shape
+			level: { min: 'high' }
+		})
+}
+
+// A macro lifecycle handler's return is checked against the macro's OWN
+// `response` schema. The error surfaces on the whole macro-object argument,
+// so the @ts-expect-error must sit on the object expression.
+{
+	new Elysia().macro(
+		'a',
+		// @ts-expect-error { wrong: number } violates the macro response schema
+		{
+			response: t.Object({ ok: t.Boolean() }),
+			beforeHandle() {
+				return { wrong: 1 }
+			}
+		}
+	)
+
+	new Elysia().macro('ok', {
+		response: t.Object({ ok: t.Boolean() }),
+		beforeHandle() {
+			return { ok: true }
+		}
+	})
+}
+
+// Inherited derive flows two hops: macro `auth` derives `userId`, macro `admin`
+// applies `{ auth: true }` and sees it, and a route applying `{ admin: true }`
+// also sees it. Guards the recursive macro-inheritance derive path.
+{
+	new Elysia()
+		.macro('auth', {
+			derive: () => ({ userId: 1 })
+		})
+		.macro('admin', {
+			auth: true,
+			beforeHandle(ctx) {
+				expectTypeOf(ctx.userId).toEqualTypeOf<number>()
+			}
+		})
+		.get(
+			'/',
+			(ctx) => {
+				expectTypeOf(ctx.userId).toEqualTypeOf<number>()
+				return ctx.userId
+			},
+			{ admin: true }
+		)
+}

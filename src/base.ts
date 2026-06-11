@@ -3,7 +3,10 @@ import Memoirist from 'memoirist'
 import { applyHoc, createFetchHandler } from './handler'
 import { compileHandler, buildNativeStaticResponse } from './compile'
 import { buildWSRoute } from './ws/route'
-import type { AnyWSLocalHook as AnyWSLocalHookImport } from './ws/types'
+import type {
+	AnyWSLocalHook as AnyWSLocalHookImport,
+	WSLocalHook
+} from './ws/types'
 
 import { env, ListenCallback, Serve, Server } from './universal'
 import { isBun } from './universal/constants'
@@ -87,6 +90,7 @@ import type {
 	AnyWSLocalHook,
 	CreateEden,
 	CreateEdenResponse,
+	CreateWSEdenResponse,
 	ComposeElysiaResponse,
 	UnionResponseStatus,
 	IntersectIfObjectSchema,
@@ -3256,52 +3260,6 @@ export class Elysia<
 					Metadata['macroFn'],
 					Omit<Input, NonResolvableMacroKey>,
 					Definitions['typebox']
-				>
-	>(
-		name: Name,
-		macro: Input extends any ? Input : Prettify<Input>
-	): Elysia<
-		BasePath,
-		Scope,
-		Singleton,
-		Definitions,
-		{
-			schema: Metadata['schema']
-			schemas: Metadata['schemas']
-			macro: Metadata['macro'] & {
-				[name in Name]?: boolean
-			}
-			macroFn: Metadata['macroFn'] & {
-				[name in Name]: Input
-			}
-			parser: Metadata['parser']
-			response: Metadata['response']
-		},
-		Routes,
-		Ephemeral,
-		Volatile
-	>
-
-	macro<
-		const Name extends string,
-		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<Input, Definitions['typebox'], BasePath>,
-			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>
-			> &
-				Metadata['schemas'] &
-				Ephemeral['schemas'] &
-				Volatile['schemas']
-		>,
-		const MacroContext extends {} extends Metadata['macroFn']
-			? {}
-			: MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
-					Definitions['typebox']
 				>,
 		const Property extends MaybeValueOrVoidFunction<
 			MacroProperty<
@@ -5234,7 +5192,92 @@ export class Elysia<
 	 * Generator handlers (`function*` / `async function*`) stream each
 	 * yielded value to the client as a separate message.
 	 */
-	ws(path: string, options: Partial<AnyWSLocalHookImport>): this
+	ws<
+		const Path extends string,
+		const Input extends Metadata['macro'] &
+			InputSchema<keyof Definitions['typebox'] & string>,
+		const Schema extends IntersectIfObjectSchema<
+			MergeSchema<
+				UnwrapRoute<
+					Input,
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>
+			>,
+			MergeScopedSchemas<
+				Metadata['schemas'],
+				Ephemeral['schemas'],
+				Volatile['schemas']
+			>
+		>,
+		const MacroContext extends {} extends Metadata['macroFn']
+			? {}
+			: MacroToContext<
+					Metadata['macroFn'],
+					Omit<Input, NonResolvableMacroKey>,
+					Definitions['typebox']
+				>
+	>(
+		path: Path,
+		options: WSLocalHook<
+			Input,
+			// @ts-ignore
+			Schema & MacroContext,
+			Singleton & {
+				derive: Ephemeral['derive'] &
+					Volatile['derive'] &
+					// @ts-ignore
+					MacroContext['resolve']
+			}
+		>
+	): Elysia<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes &
+			CreateEden<
+				JoinPath<BasePath, Path>,
+				{
+					subscribe: CreateWSEdenResponse<
+						Path,
+						Schema,
+						MacroContext,
+						ComposeElysiaResponse<
+							Schema &
+								MacroContext &
+								Metadata['schemas'] &
+								Ephemeral['schemas'] &
+								Volatile['schemas'],
+							void,
+							UnionResponseStatus<
+								Metadata['response'],
+								UnionResponseStatus<
+									Ephemeral['response'],
+									UnionResponseStatus<
+										Volatile['response'],
+										// @ts-ignore
+										MacroContext['return'] & {}
+									>
+								>
+							>,
+							[
+								...Definitions['error'],
+								...Ephemeral['error'],
+								...Volatile['error']
+							]
+						>
+					>
+				}
+			>,
+		Ephemeral,
+		Volatile
+	>
 	ws(
 		path: string,
 		handler: (...args: any[]) => any,
@@ -5244,7 +5287,7 @@ export class Elysia<
 		path: string,
 		handlerOrOptions: unknown,
 		maybeOptions?: Partial<AnyWSLocalHookImport>
-	): this {
+	): any {
 		this['~hasWS'] = true
 
 		const adapter = this['~config']?.adapter

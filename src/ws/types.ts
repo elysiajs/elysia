@@ -5,6 +5,7 @@ import type {
 	BaseMacro,
 	DocumentDecoration,
 	ErrorHandler,
+	InlineHandlerResponse,
 	MaybeArray,
 	MaybePromise,
 	OptionalHandler,
@@ -151,12 +152,21 @@ export interface ElysiaWSLike<
 	body: Route['body']
 }
 
-// Yields and returns are both sent as outbound messages.
-export type WSHandlerResult<Response> =
-	| Response
-	| void
-	| Generator<Response, Response | void>
-	| AsyncGenerator<Response, Response | void>
+// Yields and returns are both sent as outbound messages. `Response` is the
+// status-keyed response MAP: with a declared `response`, returning
+// `status(code, value)` (ElysiaStatus) is also allowed and validated against
+// the matching schema, mirroring HTTP handlers.
+export type WSHandlerResult<Response> = {} extends Response
+	? unknown
+	:
+			| FlattenResponse<Response>
+			| InlineHandlerResponse<Response>
+			| void
+			| Generator<FlattenResponse<Response>, FlattenResponse<Response> | void>
+			| AsyncGenerator<
+					FlattenResponse<Response>,
+					FlattenResponse<Response> | void
+			  >
 
 // Returning non-undefined overrides the default-parsed message.
 export type WSParseHandler<Route extends RouteSchema, Context = {}> = (
@@ -176,37 +186,23 @@ interface TypedWebSocketHandler<
 	in out Ctx,
 	in out Route extends RouteSchema = {}
 > {
-	open?: LifecycleFn<
-		Ctx,
-		never,
-		FlattenResponse<Route['response']>
-	>
+	open?: LifecycleFn<Ctx, never, Route['response']>
+	// `message` is the only ws handler with an inbound payload, so its ctx
+	// `body` is the decoded `body` schema (every other handler keeps `never`).
 	message?: LifecycleFn<
-		Ctx,
+		Omit<Ctx, 'body'> & { body: Route['body'] },
 		Route['body'],
-		FlattenResponse<Route['response']>
+		Route['response']
 	>
-	drain?: LifecycleFn<
-		Ctx,
-		never,
-		FlattenResponse<Route['response']>
-	>
+	drain?: LifecycleFn<Ctx, never, Route['response']>
 	close?: (
 		this: void,
 		ws: Ctx,
 		code?: number,
 		reason?: string
-	) => MaybePromise<WSHandlerResult<FlattenResponse<Route['response']>>>
-	ping?: LifecycleFn<
-		Ctx,
-		Buffer | string,
-		FlattenResponse<Route['response']>
-	>
-	pong?: LifecycleFn<
-		Ctx,
-		Buffer | string,
-		FlattenResponse<Route['response']>
-	>
+	) => MaybePromise<WSHandlerResult<Route['response']>>
+	ping?: LifecycleFn<Ctx, Buffer | string, Route['response']>
+	pong?: LifecycleFn<Ctx, Buffer | string, Route['response']>
 }
 
 // Options passed to `.ws(path, options)` or the 3rd arg of the 3-arg form.
@@ -240,10 +236,13 @@ export type WSLocalHook<
 	sendPings?: boolean
 	perMessageDeflate?: WebSocketHandler['perMessageDeflate']
 } & TypedWebSocketHandler<
-		Omit<Context<Schema, Singleton>, 'body'> & {
-			body: never
-			ws: ElysiaWSLike<Context<Schema, Singleton>, Schema>
-		},
+		// The handler arg is the `ElysiaWS` instance: route context props
+		// (params/query/headers/derive) are spread TOP-LEVEL alongside the ws
+		// methods (send/publish/subscribe/…), matching the runtime instance.
+		Omit<Context<Schema, Singleton>, 'body'> &
+			Omit<ElysiaWSLike<Context<Schema, Singleton>, Schema>, 'body'> & {
+				body: never
+			},
 		Schema
 	>
 
@@ -254,12 +253,12 @@ export type WSMessageHandler<
 	Schema extends RouteSchema,
 	Singleton extends SingletonBase
 > = LifecycleFn<
-	Omit<Context<Schema, Singleton>, 'body'> & {
-		body: Schema['body']
-		ws: ElysiaWSLike<Context<Schema, Singleton>, Schema>
-	},
+	Omit<Context<Schema, Singleton>, 'body'> &
+		Omit<ElysiaWSLike<Context<Schema, Singleton>, Schema>, 'body'> & {
+			body: Schema['body']
+		},
 	Schema['body'],
-	FlattenResponse<Schema['response']>
+	Schema['response']
 >
 
 // Mirrors `Validator` from `src/validator/index.ts` — kept structural to
