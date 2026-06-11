@@ -59,6 +59,19 @@ export function mapResponse(
 ): Response {
 	const headers = set.headers
 
+	// H13: a returned `Response` with an untouched `set` passes through by
+	// reference — no rewrap allocation, no re-locking a single-use stream body.
+	// `status === undefined` is the lazy-untouched marker; a touched non-200
+	// status (or headers/cookie) still falls through and rewraps. Kept separate
+	// from the `!== 200` gate below so ElysiaStatus writeback still hits it.
+	if (
+		response instanceof Response &&
+		set.status === undefined &&
+		!set.cookie &&
+		!isNotEmpty(headers)
+	)
+		return response
+
 	if (isNotEmpty(headers) || set.status !== 200 || set.cookie) {
 		handleSet(set)
 

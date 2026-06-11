@@ -5601,14 +5601,24 @@ export class Elysia<
 		if (!(response instanceof Response) || response.body === null)
 			return response
 
-		return response.arrayBuffer().then((body) => {
-			const headers = new Headers(response.headers)
-			headers.set('content-length', String(body.byteLength))
+		const headers = response.headers
+
+		if (headers.get('transfer-encoding') || headers.get('content-length')) {
+			response.body.cancel?.().catch(() => {})
 
 			return new Response(null, {
 				status: response.status,
-				statusText: response.statusText,
 				headers
+			})
+		}
+
+		return response.arrayBuffer().then((body) => {
+			const merged = new Headers(headers)
+			merged.set('content-length', String(body.byteLength))
+
+			return new Response(null, {
+				status: response.status,
+				headers: merged
 			})
 		})
 	}

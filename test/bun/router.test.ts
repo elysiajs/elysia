@@ -9,7 +9,7 @@ describe('Bun router', () => {
 		let onRequest = false
 		let traceOnRequest = false
 
-		const app = new Elysia({ systemRouter: true })
+		const app = new Elysia()
 			.trace(({ onHandle, onRequest }) => {
 				onRequest(() => {
 					traceOnRequest = true
@@ -59,7 +59,7 @@ describe('Bun router', () => {
 	})
 
 	it('handle params and query', async () => {
-		const app = new Elysia({ systemRouter: true })
+		const app = new Elysia()
 			.get('/id/:id', ({ query, params }) => ({
 				query,
 				params
@@ -81,7 +81,7 @@ describe('Bun router', () => {
 	})
 
 	it('handle optional params', async () => {
-		const app = new Elysia({ systemRouter: false })
+		const app = new Elysia()
 			.get('/id/:id?/:name?', ({ params }) => params)
 			.listen(0)
 

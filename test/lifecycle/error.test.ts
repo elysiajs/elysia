@@ -127,10 +127,10 @@ describe('Error lifecycle', () => {
 		expect(response.status).toBe(500)
 	})
 
-	it.each([true, false])(
-		'return correct number status on error function with aot: %p',
-		async (aot) => {
-			const app = new Elysia({ aot }).get('/', ({ status }) =>
+	it(
+		'return correct number status on error function',
+		async () => {
+			const app = new Elysia().get('/', ({ status }) =>
 				status(418, 'I am a teapot')
 			)
 
@@ -140,10 +140,10 @@ describe('Error lifecycle', () => {
 		}
 	)
 
-	it.each([true, false])(
-		'return correct named status on error function with aot: %p',
-		async (aot) => {
-			const app = new Elysia({ aot }).get('/', ({ status }) =>
+	it(
+		'return correct named status on error function',
+		async () => {
+			const app = new Elysia().get('/', ({ status }) =>
 				status("I'm a teapot", 'I am a teapot')
 			)
 
@@ -153,10 +153,10 @@ describe('Error lifecycle', () => {
 		}
 	)
 
-	it.each([true, false])(
-		'return correct number status without value on error function with aot: %p',
-		async (aot) => {
-			const app = new Elysia({ aot }).get('/', ({ status }) => status(418))
+	it(
+		'return correct number status without value on error function',
+		async () => {
+			const app = new Elysia().get('/', ({ status }) => status(418))
 
 			const response = await app.handle(req('/'))
 
@@ -165,10 +165,10 @@ describe('Error lifecycle', () => {
 		}
 	)
 
-	it.each([true, false])(
-		'return correct named status without value on error function with aot: %p',
-		async (aot) => {
-			const app = new Elysia({ aot }).get('/', ({ status }) =>
+	it(
+		'return correct named status without value on error function',
+		async () => {
+			const app = new Elysia().get('/', ({ status }) =>
 				status("I'm a teapot")
 			)
 

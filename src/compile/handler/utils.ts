@@ -151,15 +151,17 @@ export const mapError = map<
 		map: string,
 		link: Link,
 		mapResponse: ElysiaAdapter['response']['map'],
-		schedule: string
+		schedule: string,
+		sign: string
 	]
->((i, fn, [map, link, mapResponse, schedule]) => {
+>((i, fn, [map, link, mapResponse, schedule, sign]) => {
 	link(mapResponse, 'rm')
 	return (
 		`_r=${Await(fn)}er${at(i)}(c)\n` +
 		`if(_r!==undefined){\n` +
 		`if(_r?.status)c.set.status=_r.status\n` +
 		schedule +
+		sign +
 		`return ${map}(_r,c.set,c.request)\n` +
 		`}\n`
 	)

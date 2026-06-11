@@ -565,6 +565,31 @@ describe('Edge Case', () => {
 		expect(response.headers.get('x-source')).toBe('manual-head')
 	})
 
+	it('auto-HEAD on an infinite-stream GET returns instead of hanging', async () => {
+		const app = new Elysia().get('/stream', async function* () {
+			// Never terminates — the old `arrayBuffer()` content-length path
+			// would buffer this forever and hang the HEAD request.
+			while (true) {
+				yield 'tick'
+				await new Promise((resolve) => setTimeout(resolve, 1))
+			}
+		})
+
+		const result = await Promise.race([
+			app.handle(
+				new Request('http://localhost/stream', { method: 'HEAD' })
+			),
+			new Promise<'TIMEOUT'>((resolve) =>
+				setTimeout(() => resolve('TIMEOUT'), 250)
+			)
+		])
+
+		expect(result).not.toBe('TIMEOUT')
+		expect((result as Response).status).toBe(200)
+		// HEAD must not carry a body
+		expect((result as Response).body).toBeNull()
+	})
+
 	it('handle arbitrary code execution from cookie', async () => {
 		const app = new Elysia({
 			cookie: {

@@ -402,4 +402,32 @@ describe('Cookie Response', () => {
 
 		expect(res.getSetCookie()).toEqual([])
 	})
+
+	it('signs a cookie set before a thrown-then-handled error', async () => {
+		const app = new Elysia()
+			// A handler returning from `error()` is still a response — the
+			// cookie it set before throwing must go out SIGNED, not raw.
+			.error(() => 'handled')
+			.get(
+				'/boom',
+				({ cookie: { name } }) => {
+					name.value = 'seminar: Himari'
+
+					throw new Error('boom')
+				},
+				{
+					cookie: t.Cookie(
+						{ name: t.Optional(t.String()) },
+						{ secrets, sign: ['name'] }
+					)
+				}
+			)
+
+		const response = await app.handle(req('/boom'))
+
+		expect(await response.text()).toBe('handled')
+		expect(getCookies(response)).toEqual([
+			`name=${await signCookie('seminar: Himari', secrets)}; Path=/`
+		])
+	})
 })

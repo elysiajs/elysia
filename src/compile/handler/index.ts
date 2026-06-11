@@ -630,7 +630,7 @@ export function compileHandler(
 		let s = ''
 		for (let i = 0; i < traceCount; i++)
 			s +=
-				`report${i}=tracer${i}.${phase}({` +
+				`rp${i}=tr${i}.${phase}({` +
 				`id:c.rid,event:'${phase}',name:'${phase}',` +
 				`begin:performance.now(),total:${total}` +
 				`})\n`
@@ -642,7 +642,7 @@ export function compileHandler(
 		if (!hasTrace) return ''
 		let s = ''
 		for (let i = 0; i < traceCount; i++)
-			s += `report${i}.resolve(${errBinding ?? ''})\n`
+			s += `rp${i}.resolve(${errBinding ?? ''})\n`
 		return s
 	}
 	const buildReport = (phase: TraceEvent): TraceReporter | undefined => {
@@ -652,7 +652,7 @@ export function compileHandler(
 				let begin = ''
 				for (let i = 0; i < traceCount; i++)
 					begin +=
-						`reportChild${i}=report${i}.resolveChild?.shift?.()?.({` +
+						`rpc${i}=rp${i}.resolveChild?.shift?.()?.({` +
 						`id:c.rid,event:'${phase}',name:${JSON.stringify(name)},` +
 						`begin:performance.now()` +
 						`})\n`
@@ -664,11 +664,11 @@ export function compileHandler(
 							if (errBinding)
 								close +=
 									`if(${errBinding} instanceof Error){` +
-									`reportChild${i}?.(${errBinding})` +
+									`rpc${i}?.(${errBinding})` +
 									`}else{` +
-									`reportChild${i}?.()` +
+									`rpc${i}?.()` +
 									`}\n`
-							else close += `reportChild${i}?.()\n`
+							else close += `rpc${i}?.()\n`
 						}
 						return close
 					}
@@ -708,7 +708,7 @@ export function compileHandler(
 	// va,rm,rc,re,pa,pf,pj,pt,pu,er,ar
 	let code = `${isAsync ? 'async ' : ''}function route(c){\n`
 
-	if (hasAfterResponse || hasTrace) code += 'let _streamListener\n'
+	if (hasAfterResponse || hasTrace) code += 'let _stl\n'
 
 	if (hasTrace) {
 		// fetch handler should already handle trace but fallback just in case
@@ -718,15 +718,15 @@ export function compileHandler(
 
 		code += `c.rid??=rid()\n`
 		for (let i = 0; i < traceCount; i++)
-			code += `let report${i},reportChild${i},_handleReport${i};\n`
+			code += `let rp${i},rpc${i},_hr${i};\n`
 
 		code += `c.trace??=[`
 		for (let i = 0; i < traceCount; i++)
 			code += (i ? ',' : '') + `tr[${i}](c)`
 		code += `]\n`
 		for (let i = 0; i < traceCount; i++)
-			code += `const tracer${i}=c.trace[${i}]\n`
-		code += `let _traceStream\n`
+			code += `const tr${i}=c.trace[${i}]\n`
+		code += `let _trs\n`
 	}
 
 	// paramless handler
@@ -870,14 +870,14 @@ export function compileHandler(
 	if (hasAfterResponse) link(hook!.afterResponse!, 'ar')
 
 	const drainTraceStream = hasTrace
-		? `let _streamErr\nif(_traceStream){try{for await(const v of _traceStream){}}catch(_te){_streamErr=_te}}\n`
+		? `let _ser\nif(_trs){try{for await(const v of _trs){}}catch(_te){_ser=_te}}\n`
 		: ''
 
 	const resolveHandlePostDrain = hasTrace
 		? (() => {
 				let s = ''
 				for (let i = 0; i < traceCount; i++)
-					s += `_handleReport${i}?.resolve(_streamErr)\n`
+					s += `_hr${i}?.resolve(_ser)\n`
 				return s
 			})()
 		: ''
@@ -892,7 +892,7 @@ export function compileHandler(
 		hasAfterResponse || hasTrace
 			? `c._arf=true\n` +
 				`${setImmediateFn}(async()=>{` +
-				`if(_streamListener)for await(const v of _streamListener){}\n` +
+				`if(_stl)for await(const v of _stl){}\n` +
 				drainTraceStream +
 				resolveHandlePostDrain +
 				beginTrace('afterResponse', hook?.afterResponse?.length ?? 0) +
@@ -964,9 +964,9 @@ export function compileHandler(
 				? `if(_r&&(_r[Symbol.iterator]||_r[Symbol.asyncIterator])&&typeof _r.next==='function'){\n` +
 					`const _s=await tee(_r,${teeCount})\n` +
 					`_r=_s[0]\n` +
-					(hasAfterResponse ? `_streamListener=_s[1]\n` : '') +
+					(hasAfterResponse ? `_stl=_s[1]\n` : '') +
 					(hasTrace
-						? `_traceStream=_s[${1 + (hasAfterResponse ? 1 : 0)}]\n`
+						? `_trs=_s[${1 + (hasAfterResponse ? 1 : 0)}]\n`
 						: '') +
 					`}\n`
 				: ''
@@ -987,9 +987,9 @@ export function compileHandler(
 
 			code += handleChild.end('_r')
 
-			code += `if(_traceStream){\n`
+			code += `if(_trs){\n`
 			for (let i = 0; i < traceCount; i++)
-				code += `_handleReport${i}=report${i};\n`
+				code += `_hr${i}=rp${i};\n`
 			code += `}else{\n`
 			code += endTrace()
 			code += `}\n`
@@ -1070,7 +1070,7 @@ export function compileHandler(
 
 		if (hasTrace) {
 			for (let i = 0; i < traceCount; i++)
-				code += `report${i}?.resolve(e);reportChild${i}?.(e)\n`
+				code += `rp${i}?.resolve(e);rpc${i}?.(e)\n`
 			code += beginTrace('error', hook?.error?.length ?? 0)
 		}
 
@@ -1098,7 +1098,8 @@ export function compileHandler(
 							mapMapResponse(hook!.mapResponse!, undefined)
 						: '') +
 						endTrace() +
-						scheduleAfterResponse
+						scheduleAfterResponse,
+					signPrefix
 				]) +
 				endTrace() +
 				scheduleAfterResponse +
