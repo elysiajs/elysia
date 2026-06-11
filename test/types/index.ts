@@ -1002,6 +1002,7 @@ app.group(
 						response: {
 							200: string
 						}
+						error: never
 					}
 				}
 			}
@@ -1159,11 +1160,11 @@ const a = app
 		// ? derive from context
 		expectTypeOf<typeof b>().toBeString()
 	})
-	// ? Resolve should not include in onTransform
+	// ? a prior `.derive` runs in the transform stage, so it IS visible here
 	.transform((context) => {
 		expectTypeOf<
 			'b' extends keyof typeof context ? true : false
-		>().toEqualTypeOf<false>()
+		>().toEqualTypeOf<true>()
 	})
 	// ? Resolve should not include in onBeforeHandle
 	.beforeHandle((context) => {
@@ -2734,7 +2735,7 @@ type a = keyof {}
 			})
 		})
 		.transform(({ params, body }) => {
-			expectTypeOf<typeof params>().toEqualTypeOf<{}>()
+			expectTypeOf<typeof params>().toEqualTypeOf<Record<string, string>>()
 
 			expectTypeOf<typeof body>().toBeUnknown()
 		})

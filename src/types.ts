@@ -637,14 +637,9 @@ export type TransformHandler<
 	Path extends string | undefined = undefined,
 	ParamsScope extends 'local' | 'plugin' | 'global' = 'local'
 > = (
-	context: LifecycleContext<
-		Route,
-		Omit<Singleton, 'derive'> & {
-			derive: {}
-		},
-		Path,
-		ParamsScope
-	>
+	// `derive` runs at transform-time on this branch, so its values ARE visible
+	// in the transform context (do not empty the derive channel).
+	context: LifecycleContext<Route, Singleton, Path, ParamsScope>
 ) => MaybePromise<void>
 
 export type BodyHandler<

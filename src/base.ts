@@ -78,6 +78,7 @@ import type {
 	TransformHandler,
 	MapResponse,
 	AfterResponseHandler,
+	PreHandler,
 	MergeSchema,
 	MergeElysiaInstances,
 	GuardLocalHook,
@@ -773,14 +774,14 @@ export class Elysia<
 		return this
 	}
 
-	request(fn: MaybeArray<EventFn<'request'>>): this
-	request(scope: 'local', fn: MaybeArray<EventFn<'request'>>): this
-	request(scope: 'plugin', fn: MaybeArray<EventFn<'request'>>): this
-	request(scope: 'global', fn: MaybeArray<EventFn<'request'>>): this
-	request(
-		scopeOrFn: EventScope | MaybeArray<EventFn<'request'>>,
-		fn?: MaybeArray<EventFn<'request'>>
-	): this {
+	// `request` runs before routing/validation/derive — its context is the
+	// derive-free `PreContext` (no resolved/derived properties), so a `.derive`
+	// value must NOT appear here.
+	request(fn: MaybeArray<PreHandler<{}, Singleton>>): this
+	request(scope: 'local', fn: MaybeArray<PreHandler<{}, Singleton>>): this
+	request(scope: 'plugin', fn: MaybeArray<PreHandler<{}, Singleton>>): this
+	request(scope: 'global', fn: MaybeArray<PreHandler<{}, Singleton>>): this
+	request(scopeOrFn: any, fn?: any): this {
 		return this.#onBranch('request', scopeOrFn as any, fn as any)
 	}
 
@@ -893,14 +894,14 @@ export class Elysia<
 
 	transform(
 		fn: TransformHandler<
+			// transform runs BEFORE validation, so it must NOT inherit the
+			// standalone (`schemas`) guard input schemas — body/params/etc. stay
+			// pre-validation here.
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>,
 				BasePath
-			> &
-				Metadata['schemas'] &
-				Ephemeral['schemas'] &
-				Volatile['schemas'],
+			>,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
 			}
@@ -909,14 +910,14 @@ export class Elysia<
 	transform(
 		scope: 'local',
 		fn: TransformHandler<
+			// transform runs BEFORE validation, so it must NOT inherit the
+			// standalone (`schemas`) guard input schemas — body/params/etc. stay
+			// pre-validation here.
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>,
 				BasePath
-			> &
-				Metadata['schemas'] &
-				Ephemeral['schemas'] &
-				Volatile['schemas'],
+			>,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
 			}
@@ -925,14 +926,14 @@ export class Elysia<
 	transform(
 		scope: 'plugin',
 		fn: TransformHandler<
+			// transform runs BEFORE validation, so it must NOT inherit the
+			// standalone (`schemas`) guard input schemas — body/params/etc. stay
+			// pre-validation here.
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>,
 				BasePath
-			> &
-				Metadata['schemas'] &
-				Ephemeral['schemas'] &
-				Volatile['schemas'],
+			>,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
 			},
@@ -943,14 +944,14 @@ export class Elysia<
 	transform(
 		scope: 'global',
 		fn: TransformHandler<
+			// transform runs BEFORE validation, so it must NOT inherit the
+			// standalone (`schemas`) guard input schemas — body/params/etc. stay
+			// pre-validation here.
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>,
 				BasePath
-			> &
-				Metadata['schemas'] &
-				Ephemeral['schemas'] &
-				Volatile['schemas'],
+			>,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
 			},
