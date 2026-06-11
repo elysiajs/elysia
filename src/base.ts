@@ -1142,7 +1142,17 @@ export class Elysia<
 			derive: Singleton['derive'] & ExcludeElysiaResponse<Derivative>
 		},
 		Definitions,
-		Metadata,
+		{
+			schema: Metadata['schema']
+			schemas: Metadata['schemas']
+			macro: Metadata['macro']
+			macroFn: Metadata['macroFn']
+			parser: Metadata['parser']
+			response: UnionResponseStatus<
+				Metadata['response'],
+				ExtractErrorFromHandle<Derivative>
+			>
+		},
 		Routes,
 		Ephemeral,
 		Volatile
@@ -1303,7 +1313,17 @@ export class Elysia<
 			derive: Singleton['derive'] & ExcludeElysiaResponse<Derivative>
 		},
 		Definitions,
-		Metadata,
+		{
+			schema: Metadata['schema']
+			schemas: Metadata['schemas']
+			macro: Metadata['macro']
+			macroFn: Metadata['macroFn']
+			parser: Metadata['parser']
+			response: UnionResponseStatus<
+				Metadata['response'],
+				ExtractErrorFromHandle<Derivative>
+			>
+		},
 		Routes,
 		Ephemeral,
 		Volatile
@@ -1456,7 +1476,17 @@ export class Elysia<
 			derive: Singleton['derive'] & ExcludeElysiaResponse<Derivative>
 		},
 		Definitions,
-		Metadata,
+		{
+			schema: Metadata['schema']
+			schemas: Metadata['schemas']
+			macro: Metadata['macro']
+			macroFn: Metadata['macroFn']
+			parser: Metadata['parser']
+			response: UnionResponseStatus<
+				Metadata['response'],
+				ExtractErrorFromHandle<Derivative>
+			>
+		},
 		Routes,
 		Ephemeral,
 		Volatile

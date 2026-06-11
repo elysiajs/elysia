@@ -525,7 +525,6 @@ import { Prettify } from '../../../src/types'
 			return 'Hello World' as const
 		})
 
-	app['~Volatile']['standaloneSchema']['response']['401']
 	type Route = (typeof app)['~Routes']['get']['response']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
@@ -1766,6 +1765,7 @@ import { Prettify } from '../../../src/types'
 		})
 
 	expectTypeOf<(typeof app)['~Routes']['post']>().toEqualTypeOf<{
+		error: never
 		body: {
 			name: 'lilith'
 		}
@@ -1834,6 +1834,7 @@ import { Prettify } from '../../../src/types'
 		)
 
 	expectTypeOf<(typeof app)['~Routes']['post']>().toEqualTypeOf<{
+		error: never
 		body: {
 			name: 'Lilith'
 			friends: ['Sartre', 'Fouco']

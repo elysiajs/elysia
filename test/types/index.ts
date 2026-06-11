@@ -339,7 +339,7 @@ app.decorate('a', 'b')
 			}
 		})
 
-	expectTypeOf<(typeof app)['decorator']['a']>().toEqualTypeOf<
+	expectTypeOf<(typeof app)['~Singleton']['decorator']['a']>().toEqualTypeOf<
 		{
 			hello: {
 				world: string
@@ -368,7 +368,7 @@ app.decorate('a', 'b')
 			}
 		})
 
-	expectTypeOf<typeof app.decorator.hello>().toEqualTypeOf<{
+	expectTypeOf<(typeof app)['~Singleton']['decorator']['hello']>().toEqualTypeOf<{
 		world: string
 		cookie: string
 	}>()
@@ -389,7 +389,7 @@ app.decorate('a', 'b')
 			}
 		})
 
-	expectTypeOf<(typeof app)['store']['a']>().toEqualTypeOf<
+	expectTypeOf<(typeof app)['~Singleton']['store']['a']>().toEqualTypeOf<
 		{
 			hello: {
 				world: string
@@ -418,7 +418,7 @@ app.decorate('a', 'b')
 			}
 		})
 
-	expectTypeOf<typeof app.store.hello>().toEqualTypeOf<{
+	expectTypeOf<(typeof app)['~Singleton']['store']['hello']>().toEqualTypeOf<{
 		world: string
 		cookie: string
 	}>()
@@ -646,6 +646,7 @@ app.use(plugin).group(
 	type Route = App['v1']['a']['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
+		error: never
 		headers: {
 			authorization: string
 		}
@@ -686,6 +687,7 @@ app.use(plugin).group(
 	type Route = App['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
+		error: never
 		body: unknown
 		params: {}
 		query: unknown
@@ -756,6 +758,7 @@ app.use(plugin).group(
 	type Route = App['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
+		error: never
 		body: unknown
 		params: {}
 		query: unknown
@@ -964,6 +967,7 @@ app.group(
 	type Route = App['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
+		error: never
 		body: unknown
 		params: {}
 		query: unknown
@@ -1100,7 +1104,7 @@ app.group(
 		}
 		store: {}
 	}>()
-	expectTypeOf<keyof (typeof main)['definitions']>().not.toEqualTypeOf<{
+	expectTypeOf<keyof (typeof main)['~Definitions']>().not.toEqualTypeOf<{
 		type: {
 			b: string
 		}
@@ -1220,6 +1224,7 @@ const a = app
 	expectTypeOf<
 		(typeof app)['~Routes']['api']['test']['could-be-error']['right']['get']
 	>().toEqualTypeOf<{
+		error: never
 		body: unknown
 		params: {}
 		query: unknown
