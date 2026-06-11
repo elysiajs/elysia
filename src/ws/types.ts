@@ -152,30 +152,38 @@ export interface ElysiaWSLike<
 	body: Route['body']
 }
 
-// Yields and returns are both sent as outbound messages. `Response` is the
-// status-keyed response MAP: with a declared `response`, returning
-// `status(code, value)` (ElysiaStatus) is also allowed and validated against
-// the matching schema, mirroring HTTP handlers.
 export type WSHandlerResult<Response> = {} extends Response
 	? unknown
 	:
 			| FlattenResponse<Response>
 			| InlineHandlerResponse<Response>
 			| void
-			| Generator<FlattenResponse<Response>, FlattenResponse<Response> | void>
+			| Generator<
+					FlattenResponse<Response>,
+					FlattenResponse<Response> | void
+			  >
 			| AsyncGenerator<
 					FlattenResponse<Response>,
 					FlattenResponse<Response> | void
 			  >
 
-// Returning non-undefined overrides the default-parsed message.
+export type WSHandlerResponse<Handler> = Handler extends (
+	...args: any[]
+) => infer R
+	? Awaited<R> extends
+			| Generator<infer Yield, any, any>
+			| AsyncGenerator<infer Yield, any, any>
+		? Yield
+		: Exclude<Awaited<R>, void | undefined>
+	: never
+
 export type WSParseHandler<Route extends RouteSchema, Context = {}> = (
-	ws: Prettify<ElysiaWSLike<Context, Omit<Route, 'body'> & { body: unknown }>>,
+	ws: Prettify<
+		ElysiaWSLike<Context, Omit<Route, 'body'> & { body: unknown }>
+	>,
 	message: unknown
 ) => MaybePromise<Route['body'] | void | undefined>
 
-// Accepts both `(ctx)` (new destructured) and `(ws, body)` (legacy positional).
-// Calling convention is picked at runtime by `fn.length`.
 type LifecycleFn<Ctx, Body, Response> = (
 	this: void,
 	ws: Ctx,
@@ -187,8 +195,6 @@ interface TypedWebSocketHandler<
 	in out Route extends RouteSchema = {}
 > {
 	open?: LifecycleFn<Ctx, never, Route['response']>
-	// `message` is the only ws handler with an inbound payload, so its ctx
-	// `body` is the decoded `body` schema (every other handler keeps `never`).
 	message?: LifecycleFn<
 		Omit<Ctx, 'body'> & { body: Route['body'] },
 		Route['body'],
@@ -205,9 +211,6 @@ interface TypedWebSocketHandler<
 	pong?: LifecycleFn<Ctx, Buffer | string, Route['response']>
 }
 
-// Options passed to `.ws(path, options)` or the 3rd arg of the 3-arg form.
-// `.ws(path, handler, opts)` is normalized to `{...opts, message: handler}`
-// before reaching `buildWSRoute`.
 export type WSLocalHook<
 	Input extends BaseMacro,
 	Schema extends RouteSchema,
@@ -248,7 +251,6 @@ export type WSLocalHook<
 
 export type AnyWSLocalHook = WSLocalHook<any, any, any>
 
-// 2nd positional arg of the 3-arg `.ws()` form — same shape as `WSLocalHook['message']`.
 export type WSMessageHandler<
 	Schema extends RouteSchema,
 	Singleton extends SingletonBase
@@ -268,8 +270,6 @@ export interface WSValidatorLike {
 	Errors(data: unknown): any[]
 }
 
-// Status-keyed schemas. `send` picks `validators[status]` for ElysiaStatus
-// payloads, falling back to `validators[200]` (or the first entry) for plain values.
 export type WSResponseValidator =
 	| { [status: number]: WSValidatorLike }
 	| undefined

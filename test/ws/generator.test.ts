@@ -40,6 +40,28 @@ describe('WebSocket generator handlers', () => {
 		app.stop()
 	})
 
+	it('3-arg form: positional generator handler streams yields', async () => {
+		const app = new Elysia()
+			.ws('/ws', function* (ws) {
+				void ws
+				yield 'x:1'
+				yield 'x:2'
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+		await wsOpen(ws)
+
+		const messages = collectMessages(ws, 2)
+		ws.send('hi')
+		const got = await messages
+
+		expect(got).toEqual(['x:1', 'x:2'])
+
+		await wsClosed(ws)
+		app.stop()
+	})
+
 	it('message: async generator yields are each sent as messages', async () => {
 		const app = new Elysia()
 			.ws('/ws', {

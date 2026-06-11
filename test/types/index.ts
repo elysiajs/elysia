@@ -3161,3 +3161,64 @@ type a = keyof {}
 	>().toEqualTypeOf<true>()
 	expectTypeOf<Route['subscribe']['body']>().toEqualTypeOf<{ text: string }>()
 }
+
+// 3-arg ws form: a generator handler's `yield` type flows into
+// subscribe.response (typed streamed messages for Eden), with no explicit
+// `response` schema.
+{
+	const app = new Elysia().ws('/ws-gen', function* () {
+		yield { tick: 1 }
+	})
+	type Sub = (typeof app)['~Routes']['ws-gen']['subscribe']
+	expectTypeOf<Sub['response'][200]>().toEqualTypeOf<{ tick: number }>()
+}
+
+// async generator handler
+{
+	const app = new Elysia().ws('/ws-agen', async function* () {
+		yield 'hello'
+	})
+	type Sub = (typeof app)['~Routes']['ws-agen']['subscribe']
+	expectTypeOf<Sub['response'][200]>().toEqualTypeOf<string>()
+}
+
+// 3-arg form with a body schema in options: the handler ctx is typed
+// (ws.body) AND the yield flows into subscribe.response.
+{
+	const app = new Elysia().ws(
+		'/ws-echo',
+		function* (ws) {
+			expectTypeOf<typeof ws.body>().toEqualTypeOf<{ text: string }>()
+			yield ws.body
+		},
+		{ body: t.Object({ text: t.String() }) }
+	)
+	type Sub = (typeof app)['~Routes']['ws-echo']['subscribe']
+	expectTypeOf<Sub['response'][200]>().toEqualTypeOf<{ text: string }>()
+	expectTypeOf<Sub['body']>().toEqualTypeOf<{ text: string }>()
+}
+
+// 3-arg ws form with a PLAIN (non-generator) handler: its return type flows
+// into subscribe.response (a void-returning handler contributes nothing).
+{
+	const app = new Elysia().ws('/ws-ret', () => ({ ok: true }))
+	type Sub = (typeof app)['~Routes']['ws-ret']['subscribe']
+	expectTypeOf<Sub['response'][200]>().toEqualTypeOf<{ ok: boolean }>()
+}
+
+// 3-arg form WITH options + a plain (non-generator) handler: the handler
+// return flows into subscribe.response just like the 2-arg-function form,
+// and the ctx (ws.body) is typed from the options schema.
+{
+	const app = new Elysia().ws(
+		'/ws-3arg-ret',
+		(ws) => {
+			expectTypeOf<typeof ws.body>().toEqualTypeOf<{ id: number }>()
+			return { done: true }
+		},
+		{ body: t.Object({ id: t.Number() }) }
+	)
+	type Sub = (typeof app)['~Routes']['ws-3arg-ret']['subscribe']
+	expectTypeOf<Sub['response'][200]>().toEqualTypeOf<{ done: boolean }>()
+	expectTypeOf<Sub['body']>().toEqualTypeOf<{ id: number }>()
+}

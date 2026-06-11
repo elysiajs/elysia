@@ -589,6 +589,36 @@ export class TypeBoxValidator<
 		}
 	}
 
+	// An incoming multipart body has no `~ely-form` marker — that marker is added
+	// by `form()` for the response direction. Mark it non-enumerably so a
+	// `t.Form` request body satisfies the schema's `~ely-form` refine without
+	// leaking the marker into `ctx.body` (responses already carry it).
+	#markForm(value: unknown): void {
+		if (
+			this.#isForm &&
+			value !== null &&
+			typeof value === 'object' &&
+			!('~ely-form' in value)
+		)
+			Object.defineProperty(value, '~ely-form', {
+				value: 1,
+				configurable: true
+			})
+	}
+
+	// Remove the transient request marker so it never surfaces in `ctx.body`
+	// (the decode pipeline can re-materialise it as an enumerable property).
+	#unmarkForm(value: unknown): void {
+		if (
+			this.#isForm &&
+			value !== null &&
+			typeof value === 'object' &&
+			'~ely-form' in value &&
+			Object.getOwnPropertyDescriptor(value, '~ely-form')?.configurable
+		)
+			delete (value as any)['~ely-form']
+	}
+
 	From(value: Static<T>, type?: string): MaybePromise<Static<T>> {
 		return this.isAsync
 			? (this.FromAsync(value, type) as any)
@@ -647,6 +677,8 @@ export class TypeBoxValidator<
 
 		const bypass = this.optionalBypass(value)
 		if (bypass) return bypass.value
+
+		this.#markForm(value)
 
 		if (this.hasCodec) {
 			if (!this.#noValidate) {
@@ -709,6 +741,7 @@ export class TypeBoxValidator<
 		// @ts-ignore
 		if (this.Clean) value = this.Clean(value)
 
+		this.#unmarkForm(value)
 		return value
 	}
 
@@ -731,6 +764,8 @@ export class TypeBoxValidator<
 
 		const bypass = this.optionalBypass(value)
 		if (bypass) return bypass.value
+
+		this.#markForm(value)
 
 		if (this.hasCodec) {
 			// See FromAsync for the rationale on skipping `Convert`
@@ -769,6 +804,7 @@ export class TypeBoxValidator<
 				)
 		}
 		if (this.Clean) value = this.Clean(value) as Static<T>
+		this.#unmarkForm(value)
 		return value
 	}
 }

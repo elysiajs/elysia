@@ -1,31 +1,25 @@
 import { Type } from 'typebox'
-import type { TObjectOptions, TProperties } from 'typebox'
+import type {
+	StaticDecode,
+	TObjectOptions,
+	TProperties,
+	TSchema
+} from 'typebox'
 
 import { ELYSIA_TYPES } from '../constants'
 import { Intersect } from './intersect'
-import type { IsTuple, ElysiaFormData } from '../../types'
-import { ElysiaFile } from '../../universal/file'
+import type { ElysiaFormData } from '../../types'
 import { ObjectType } from './object'
 import { elyType } from './utils'
 
 type BaseFormType<T extends Record<keyof any, unknown>> = Type.TCodec<
 	Type.TRefine<Type.TUnsafe<ElysiaFormData<T>>>,
-	(
-		T extends Record<string, unknown>
-			? { [K in keyof T]: T[K] extends Blob | ElysiaFile ? File : T[K] }
-			: T extends Blob | ElysiaFile
-				? File
-				: T
-	) extends infer A
-		? {
-				[key in keyof A]: IsTuple<A[key]> extends true
-					? // @ts-expect-error
-						A[key][number] extends Blob | ElysiaFile
-						? File[]
-						: A[key]
-					: A[key]
-			}
-		: T
+	// `T` is a record of SCHEMA NODES, so decode each field to its static type
+	// (`t.File()` → File, `t.Files()` → File[]) instead of passing the raw node
+	// through — the old `T[K] extends Blob | ElysiaFile` test never matched a
+	// schema node and leaked `Readonly<TRefine<TUnsafe<File>>>` into `ctx.body`.
+	// (Mirrors the sibling `ObjectType(property)` member of the Intersect.)
+	{ [K in keyof T]: T[K] extends TSchema ? StaticDecode<T[K]> : T[K] }
 >
 
 let BaseForm: BaseFormType<any>

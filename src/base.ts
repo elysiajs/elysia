@@ -5,7 +5,9 @@ import { compileHandler, buildNativeStaticResponse } from './compile'
 import { buildWSRoute } from './ws/route'
 import type {
 	AnyWSLocalHook as AnyWSLocalHookImport,
-	WSLocalHook
+	WSLocalHook,
+	WSMessageHandler,
+	WSHandlerResponse
 } from './ws/types'
 
 import { env, ListenCallback, Serve, Server } from './universal'
@@ -5278,11 +5280,104 @@ export class Elysia<
 		Ephemeral,
 		Volatile
 	>
-	ws(
-		path: string,
-		handler: (...args: any[]) => any,
-		options?: Partial<AnyWSLocalHookImport>
-	): this
+
+	ws<
+		const Path extends string,
+		const Input extends Metadata['macro'] &
+			InputSchema<keyof Definitions['typebox'] & string>,
+		const Schema extends IntersectIfObjectSchema<
+			MergeSchema<
+				UnwrapRoute<
+					Input,
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>
+			>,
+			MergeScopedSchemas<
+				Metadata['schemas'],
+				Ephemeral['schemas'],
+				Volatile['schemas']
+			>
+		>,
+		const MacroContext extends {} extends Metadata['macroFn']
+			? {}
+			: MacroToContext<
+					Metadata['macroFn'],
+					Omit<Input, NonResolvableMacroKey>,
+					Definitions['typebox']
+				>,
+		const Handler extends WSMessageHandler<
+			// @ts-ignore
+			Schema & MacroContext,
+			Singleton & {
+				derive: Ephemeral['derive'] &
+					Volatile['derive'] &
+					// @ts-ignore
+					MacroContext['resolve']
+			}
+		>
+	>(
+		path: Path,
+		handler: Handler,
+		options?: WSLocalHook<
+			Input,
+			// @ts-ignore
+			Schema & MacroContext,
+			Singleton & {
+				derive: Ephemeral['derive'] &
+					Volatile['derive'] &
+					// @ts-ignore
+					MacroContext['resolve']
+			}
+		>
+	): Elysia<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes &
+			CreateEden<
+				JoinPath<BasePath, Path>,
+				{
+					subscribe: CreateWSEdenResponse<
+						Path,
+						Schema,
+						MacroContext,
+						ComposeElysiaResponse<
+							Schema &
+								MacroContext &
+								Metadata['schemas'] &
+								Ephemeral['schemas'] &
+								Volatile['schemas'],
+							WSHandlerResponse<Handler>,
+							UnionResponseStatus<
+								Metadata['response'],
+								UnionResponseStatus<
+									Ephemeral['response'],
+									UnionResponseStatus<
+										Volatile['response'],
+										// @ts-ignore
+										MacroContext['return'] & {}
+									>
+								>
+							>,
+							[
+								...Definitions['error'],
+								...Ephemeral['error'],
+								...Volatile['error']
+							]
+						>
+					>
+				}
+			>,
+		Ephemeral,
+		Volatile
+	>
 	ws(
 		path: string,
 		handlerOrOptions: unknown,
