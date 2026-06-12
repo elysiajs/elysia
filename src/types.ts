@@ -703,11 +703,7 @@ export type ResolveHandler<
 		| Record<string, unknown>
 		| ElysiaError
 		| AnyElysiaStatus
-		| void =
-		| Record<string, unknown>
-		| ElysiaError
-		| AnyElysiaStatus
-		| void
+		| void = Record<string, unknown> | ElysiaError | AnyElysiaStatus | void
 > = (context: Context<Route, Singleton>) => MaybePromise<Derivative>
 
 export type TraceHandler<
@@ -1415,14 +1411,13 @@ type LocalLifecycleProperty =
 	| 'error'
 	| 'tags'
 
-export type MacroToProperty<in out T extends Macro<any, any, any, any, any>> =
-	Prettify<{
-		[K in keyof T]: T[K] extends Function
-			? T[K] extends (a: infer Params) => any
-				? Params
-				: boolean
+export type MacroToProperty<in out T> = Prettify<{
+	[K in keyof T]: T[K] extends Function
+		? T[K] extends (a: infer Params) => any
+			? Params
 			: boolean
-	}>
+		: boolean
+}>
 
 export type NonResolvableMacroKey =
 	| LocalLifecycleProperty
@@ -1805,6 +1800,98 @@ export type UnwrapMacroSchema<
 	},
 	Definitions
 >
+
+export type MacroPropertyKey = keyof MacroProperty
+
+type AsMacroSchemaField<T> = [T] extends [never]
+	? undefined
+	: [unknown] extends [T]
+		? undefined
+		: T extends AnySchema | string
+			? T
+			: undefined
+
+type MacroDefSchema<K, MBody, MHeaders, MQuery, MParams, MCookie> = {
+	body: AsMacroSchemaField<K extends keyof MBody ? MBody[K] : undefined>
+	headers: AsMacroSchemaField<
+		K extends keyof MHeaders ? MHeaders[K] : undefined
+	>
+	query: AsMacroSchemaField<K extends keyof MQuery ? MQuery[K] : undefined>
+	params: AsMacroSchemaField<K extends keyof MParams ? MParams[K] : undefined>
+	cookie: AsMacroSchemaField<K extends keyof MCookie ? MCookie[K] : undefined>
+	response: undefined
+}
+
+/**
+ * Parameter type of the object-form `.macro({ name: definition })`
+ *
+ * TypeScript cannot infer one generic from a record while ALSO using it to
+ * contextually type that record's own handlers (the inference cycle that
+ * historically forced the named `.macro(name, def)` overload).
+ *
+ * Handler member only consumes them so `derive`/ `beforeHandle`
+ * see their sibling schema fully typed while their return types
+ * still flow into `N` (the verbatim definitions, stored in
+ * `Metadata['macroFn']` for the consuming route)
+ */
+export type ObjectMacroDefs<
+	Body,
+	Headers,
+	Query,
+	Params,
+	Cookie,
+	N,
+	AmbientSchema extends RouteSchema,
+	ScopedSchemas extends RouteSchema,
+	Singleton extends SingletonBase,
+	Definitions extends DefinitionBase,
+	MacroNames extends BaseMacro
+> = {
+	[K in keyof Body]: MaybeValueOrVoidFunction<{ body?: Body[K] }>
+} & {
+	[K in keyof Headers]: MaybeValueOrVoidFunction<{ headers?: Headers[K] }>
+} & {
+	[K in keyof Query]: MaybeValueOrVoidFunction<{ query?: Query[K] }>
+} & {
+	[K in keyof Params]: MaybeValueOrVoidFunction<{ params?: Params[K] }>
+} & {
+	[K in keyof Cookie]: MaybeValueOrVoidFunction<{ cookie?: Cookie[K] }>
+} & {
+	[K in keyof N]: MaybeValueOrVoidFunction<
+		MacroProperty<
+			MacroNames & InputSchema<keyof Definitions['typebox'] & string>,
+			IntersectIfObjectSchema<
+				MergeSchema<
+					UnwrapMacroSchema<
+						MacroDefSchema<K, Body, Headers, Query, Params, Cookie>,
+						Definitions['typebox']
+					>,
+					AmbientSchema
+				>,
+				ScopedSchemas
+			>,
+			Singleton,
+			Definitions['error']
+		>
+	>
+} & {
+	[K in keyof N]: N[K] extends (...a: any[]) => any
+		? unknown
+		: string extends keyof N[K]
+			? unknown
+			: {
+					[P in Exclude<
+						keyof N[K],
+						| MacroPropertyKey
+						| InputSchemaKey
+						| keyof MacroNames
+						| keyof N
+					>]: `Unknown macro property '${P & string}'`
+				}
+} & (N extends (...a: any) => any
+		? 'A functional macro must be named — use `.macro({ name: fn })` instead of `.macro(fn)`'
+		: unknown) &
+	N
 
 // ? Unwrap Handler Stuff
 export type CreateEden<

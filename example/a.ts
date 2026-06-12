@@ -1,14 +1,17 @@
-import { Elysia } from '../src'
+import { Elysia, t } from '../src'
 
 const app = new Elysia()
-	.wrap((fn) => {
-		return (request) => {
-			console.log("Q")
-
-			return fn(request)
-		}
+	.macro({
+		role: (role: 'admin' | 'user') => ({
+			body: t.Object({
+				ok: t.String()
+			}),
+			derive: () => ({ ok: 'a' } as const)
+		})
 	})
-	.get('/', () => 'ok')
+	.get('/', ({ ok }) => ok, {
+		role: 'admin'
+	})
 
 type Response = (typeof app)['~Routes']['get']['response']
 

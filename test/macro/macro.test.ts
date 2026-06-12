@@ -869,7 +869,6 @@ describe('Macro', () => {
 					// @ts-expect-error Property `a` does not exist
 					a,
 					b,
-					// @ts-expect-error Property `c` does not exist
 					c
 				}) => ({ a, b, c }),
 				{
@@ -1261,8 +1260,10 @@ describe('Macro', () => {
 
 	it('handle macro name', async () => {
 		const app = new Elysia()
-			.macro('sartre', {
-				params: t.Object({ sartre: t.Literal('Sartre') })
+			.macro({
+				sartre: {
+					params: t.Object({ sartre: t.Literal('Sartre') })
+				}
 			})
 			.macro({
 				focou: {
@@ -1318,9 +1319,11 @@ describe('Macro', () => {
 
 	it('handle macro name with function', async () => {
 		const app = new Elysia()
-			.macro('sartre', (_: boolean) => ({
-				params: t.Object({ sartre: t.Literal('Sartre') })
-			}))
+			.macro({
+				sartre: (_: boolean) => ({
+					params: t.Object({ sartre: t.Literal('Sartre') })
+				})
+			})
 			.macro({
 				focou: {
 					query: t.Object({ focou: t.Literal('Focou') })
@@ -1375,8 +1378,10 @@ describe('Macro', () => {
 
 	it('handle macro name extends', async () => {
 		const app = new Elysia()
-			.macro('sartre', {
-				body: t.Object({ sartre: t.Literal('Sartre') })
+			.macro({
+				sartre: {
+					body: t.Object({ sartre: t.Literal('Sartre') })
+				}
 			})
 			.macro({
 				focou: {
@@ -1449,10 +1454,16 @@ describe('Macro', () => {
 		).toThrow()
 	})
 
-	it('accepts a named functional macro `.macro(name, fn)` (A6)', () => {
+	it('accepts a functional macro under its name in the object form', () => {
 		const def = () => ({ beforeHandle() {} })
-		const app = new Elysia().macro('a', def as any)
+		const app = new Elysia().macro({ a: def as any })
 
 		expect(app['~ext']?.macro?.a).toBe(def)
+	})
+
+	it('rejects the removed `.macro(name, definition)` form with a migration error', () => {
+		expect(() =>
+			(new Elysia().macro as any)('a', { beforeHandle() {} })
+		).toThrow('`.macro(name, definition)` was removed')
 	})
 })

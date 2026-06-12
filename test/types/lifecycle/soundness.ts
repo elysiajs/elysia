@@ -1864,12 +1864,14 @@ import { Prettify } from '../../../src/types'
 // resolve for lifecycle event
 {
 	new Elysia()
-		.macro('auth', {
-			headers: t.Object({ authorization: t.String() }),
-			derive: ({ status }) =>
-				Math.random() > 0.5
-					? { role: 'user' }
-					: status(401, 'not authorized')
+		.macro({
+			auth: {
+				headers: t.Object({ authorization: t.String() }),
+				derive: ({ status }) =>
+					Math.random() > 0.5
+						? { role: 'user' }
+						: status(401, 'not authorized')
+			}
 		})
 		.post('/', ({ role }) => role, {
 			auth: true,
@@ -2090,23 +2092,33 @@ import { Prettify } from '../../../src/types'
 	}>()
 }
 
-// Inherit macro context
+// Inherit macro context: the inherited derive reaches the CONSUMING route
+// (cross-macro context is not visible to the inheriting macro's OWN
+// handlers in the object form)
 {
 	new Elysia()
-		.macro('guestOrUser', {
-			derive: () => {
-				return {
-					user: 'Lilith' as const
+		.macro({
+			guestOrUser: {
+				derive: () => {
+					return {
+						user: 'Lilith' as const
+					}
 				}
 			}
 		})
-		.macro('user', {
-			guestOrUser: true,
-			body: t.String(),
-			derive: ({ user }) => {
-				expectTypeOf(user).toEqualTypeOf<'Lilith'>()
+		.macro({
+			user: {
+				guestOrUser: true,
+				body: t.String()
 			}
 		})
+		.post(
+			'/',
+			({ user }) => {
+				expectTypeOf(user).toEqualTypeOf<'Lilith'>()
+			},
+			{ user: true }
+		)
 }
 
 // Handle 200 status for inline status
@@ -2222,10 +2234,12 @@ import { Prettify } from '../../../src/types'
 // intersect multiple resolve macro response
 {
 	const app = new Elysia()
-		.macro('multiple', {
-			derive({ status }) {
-				if (Math.random() > 0.5) return status(401)
-				return status(403)
+		.macro({
+			multiple: {
+				derive({ status }) {
+					if (Math.random() > 0.5) return status(401)
+					return status(403)
+				}
 			}
 		})
 		.get('/multiple', () => 'Ok', { multiple: true })
@@ -2242,11 +2256,13 @@ import { Prettify } from '../../../src/types'
 // intersect multiple resolve macro response
 {
 	const app = new Elysia()
-		.macro('multiple', {
-			derive({ status }) {
-				if (Math.random() > 0.5) return status(401)
+		.macro({
+			multiple: {
+				derive({ status }) {
+					if (Math.random() > 0.5) return status(401)
 
-				return status(403)
+					return status(403)
+				}
 			}
 		})
 		.get('/multiple', () => 'Ok', { multiple: true })

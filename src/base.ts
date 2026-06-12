@@ -106,9 +106,8 @@ import type {
 	DefaultMetadata,
 	DocumentDecoration,
 	Handler,
-	MaybeValueOrVoidFunction,
-	MacroProperty,
 	MacroToProperty,
+	ObjectMacroDefs,
 	WrapFn,
 	ExcludeElysiaResponse,
 	ExtractErrorFromHandle
@@ -2879,11 +2878,229 @@ export class Elysia<
 		Volatile
 	>
 
-	// Legacy string-scope forms (kept permissive; precise accumulation is via
-	// the object-hook overloads above plus `.as()`).
-	guard(scope: 'local', hook: Partial<AnyLocalHook>): this
-	guard(scope: 'plugin', hook: Partial<AnyLocalHook>): this
-	guard(scope: 'global', hook: Partial<AnyLocalHook>): this
+	guard<
+		const Input extends Metadata['macro'] &
+			InputSchema<keyof Definitions['typebox'] & string>,
+		const Schema extends MergeSchema<
+			UnwrapRoute<Input, Definitions['typebox'], BasePath>,
+			MergeSchema<
+				Volatile['schema'],
+				MergeSchema<Ephemeral['schema'], Metadata['schema']>
+			>
+		> &
+			Metadata['schemas'] &
+			Ephemeral['schemas'] &
+			Volatile['schemas'],
+		const MacroContext extends {} extends Metadata['macroFn']
+			? {}
+			: MacroToContext<
+					Metadata['macroFn'],
+					Omit<Input, NonResolvableMacroKey>,
+					Definitions['typebox']
+				>,
+		const BeforeHandle extends MaybeArray<
+			OptionalHandler<Schema, Singleton>
+		>,
+		const AfterHandle extends MaybeArray<AfterHandler<Schema, Singleton>>,
+		const ErrorHandle extends MaybeArray<
+			ErrorHandler<Definitions['error'], Schema, Singleton>
+		>
+	>(
+		scope: 'local',
+		hook: GuardLocalHook<
+			Input,
+			// @ts-ignore
+			Schema & MacroContext,
+			Singleton & {
+				derive: Ephemeral['derive'] &
+					Volatile['derive'] &
+					// @ts-ignore
+					MacroContext['response']
+			},
+			keyof Metadata['parser'],
+			BeforeHandle,
+			AfterHandle,
+			ErrorHandle
+		>
+	): Elysia<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		{
+			derive: Volatile['derive'] &
+				// @ts-ignore
+				MacroContext['resolve']
+			schema: Volatile['schema']
+			schemas: Volatile['schemas'] &
+				UnwrapRoute<Input, Definitions['typebox']> &
+				// @ts-ignore
+				MacroContext
+			response: UnionResponseStatus<
+				Volatile['response'],
+				ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
+					ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
+					ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
+					// @ts-ignore
+					MacroContext['return']
+			>
+			error: Volatile['error']
+		}
+	>
+
+	guard<
+		const Input extends Metadata['macro'] &
+			InputSchema<keyof Definitions['typebox'] & string>,
+		const Schema extends MergeSchema<
+			UnwrapRoute<Input, Definitions['typebox'], BasePath>,
+			MergeSchema<
+				Volatile['schema'],
+				MergeSchema<Ephemeral['schema'], Metadata['schema']>
+			>
+		> &
+			Metadata['schemas'] &
+			Ephemeral['schemas'] &
+			Volatile['schemas'],
+		const MacroContext extends {} extends Metadata['macroFn']
+			? {}
+			: MacroToContext<
+					Metadata['macroFn'],
+					Omit<Input, NonResolvableMacroKey>,
+					Definitions['typebox']
+				>,
+		const BeforeHandle extends MaybeArray<
+			OptionalHandler<Schema, Singleton>
+		>,
+		const AfterHandle extends MaybeArray<AfterHandler<Schema, Singleton>>,
+		const ErrorHandle extends MaybeArray<
+			ErrorHandler<Definitions['error'], Schema, Singleton>
+		>
+	>(
+		scope: 'plugin',
+		hook: GuardLocalHook<
+			Input,
+			// @ts-ignore
+			Schema & MacroContext,
+			Singleton & {
+				derive: Ephemeral['derive'] &
+					Volatile['derive'] &
+					// @ts-ignore
+					MacroContext['response']
+			},
+			keyof Metadata['parser'],
+			BeforeHandle,
+			AfterHandle,
+			ErrorHandle
+		>
+	): Elysia<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		{
+			derive: Ephemeral['derive'] &
+				// @ts-ignore
+				MacroContext['resolve']
+			schema: Ephemeral['schema']
+			schemas: Ephemeral['schemas'] &
+				UnwrapRoute<Input, Definitions['typebox']> &
+				// @ts-ignore
+				MacroContext
+			response: UnionResponseStatus<
+				Ephemeral['response'],
+				ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
+					ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
+					ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
+					// @ts-ignore
+					MacroContext['return']
+			>
+			error: Ephemeral['error']
+		},
+		Volatile
+	>
+
+	guard<
+		const Input extends Metadata['macro'] &
+			InputSchema<keyof Definitions['typebox'] & string>,
+		const Schema extends MergeSchema<
+			UnwrapRoute<Input, Definitions['typebox'], BasePath>,
+			MergeSchema<
+				Volatile['schema'],
+				MergeSchema<Ephemeral['schema'], Metadata['schema']>
+			>
+		> &
+			Metadata['schemas'] &
+			Ephemeral['schemas'] &
+			Volatile['schemas'],
+		const MacroContext extends {} extends Metadata['macroFn']
+			? {}
+			: MacroToContext<
+					Metadata['macroFn'],
+					Omit<Input, NonResolvableMacroKey>,
+					Definitions['typebox']
+				>,
+		const BeforeHandle extends MaybeArray<
+			OptionalHandler<Schema, Singleton>
+		>,
+		const AfterHandle extends MaybeArray<AfterHandler<Schema, Singleton>>,
+		const ErrorHandle extends MaybeArray<
+			ErrorHandler<Definitions['error'], Schema, Singleton>
+		>
+	>(
+		scope: 'global',
+		hook: GuardLocalHook<
+			Input,
+			// @ts-ignore
+			Schema & MacroContext,
+			Singleton & {
+				derive: Ephemeral['derive'] &
+					Volatile['derive'] &
+					// @ts-ignore
+					MacroContext['response']
+			},
+			keyof Metadata['parser'],
+			BeforeHandle,
+			AfterHandle,
+			ErrorHandle
+		>
+	): Elysia<
+		BasePath,
+		Scope,
+		{
+			decorator: Singleton['decorator']
+			store: Singleton['store']
+			derive: Singleton['derive'] &
+				// @ts-ignore
+				MacroContext['resolve']
+		},
+		Definitions,
+		{
+			schema: Metadata['schema']
+			schemas: Metadata['schemas'] &
+				UnwrapRoute<Input, Definitions['typebox']> &
+				// @ts-ignore
+				MacroContext
+			macro: Metadata['macro']
+			macroFn: Metadata['macroFn']
+			parser: Metadata['parser']
+			response: UnionResponseStatus<
+				Metadata['response'],
+				ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
+					ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
+					ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
+					// @ts-ignore
+					MacroContext['return']
+			>
+		},
+		Routes,
+		Ephemeral,
+		Volatile
+	>
 
 	guard(): any {
 		if (arguments.length === 1) {
@@ -3199,96 +3416,35 @@ export class Elysia<
 	}
 
 	macro<
-		const Name extends string,
-		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<Input, Definitions['typebox'], BasePath>,
+		const Body,
+		const Headers,
+		const Query,
+		const Params,
+		const Cookie,
+		const NewMacro
+	>(
+		macro: ObjectMacroDefs<
+			Body,
+			Headers,
+			Query,
+			Params,
+			Cookie,
+			NewMacro,
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
-			> &
-				Metadata['schemas'] &
-				Ephemeral['schemas'] &
+			>,
+			MergeScopedSchemas<
+				Metadata['schemas'],
+				Ephemeral['schemas'],
 				Volatile['schemas']
-		>,
-		const MacroContext extends {} extends Metadata['macroFn']
-			? {}
-			: MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
-					Definitions['typebox']
-				>,
-		const Property extends MaybeValueOrVoidFunction<
-			MacroProperty<
-				Metadata['macro'] &
-					InputSchema<keyof Definitions['typebox'] & string> & {
-						[name in Name]?: boolean
-					},
-				Schema & MacroContext,
-				Singleton & {
-					derive: Partial<Ephemeral['derive'] & Volatile['derive']> &
-						// @ts-ignore
-						MacroContext['resolve']
-				},
-				Definitions['error']
-			>
-		>
-	>(
-		name: Name,
-		macro: (Input extends any ? Input : Prettify<Input>) & Property
-	): Elysia<
-		BasePath,
-		Scope,
-		Singleton,
-		Definitions,
-		{
-			schema: Metadata['schema']
-			schemas: Metadata['schemas']
-			macro: Metadata['macro'] & {
-				[name in Name]?: Property extends (a: infer Params) => any
-					? Params
-					: boolean
-			}
-			macroFn: Metadata['macroFn'] & {
-				[name in Name]: Property
-			}
-			parser: Metadata['parser']
-			response: Metadata['response']
-		},
-		Routes,
-		Ephemeral,
-		Volatile
-	>
-
-	macro<
-		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
-		const NewMacro extends Macro<
-			Metadata['macro'] &
-				InputSchema<keyof Definitions['typebox'] & string>,
-			Input,
-			IntersectIfObjectSchema<
-				MergeSchema<
-					UnwrapRoute<Input, Definitions['typebox'], BasePath>,
-					MergeSchema<
-						Volatile['schema'],
-						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>
-				>,
-				MergeScopedSchemas<
-					Metadata['schemas'],
-					Ephemeral['schemas'],
-					Volatile['schemas']
-				>
 			>,
 			Singleton & {
 				derive: Partial<Ephemeral['derive'] & Volatile['derive']>
 			},
-			Definitions['error']
+			Definitions,
+			Metadata['macro']
 		>
-	>(
-		macro: NewMacro
 	): Elysia<
 		BasePath,
 		Scope,
@@ -3307,73 +3463,30 @@ export class Elysia<
 		Volatile
 	>
 
-	macro<
-		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
-		const NewMacro extends Macro<
-			Input,
-			// @ts-ignore trust me bro
-			IntersectIfObjectSchema<
-				MergeSchema<
-					UnwrapRoute<Input, Definitions['typebox'], BasePath>,
-					MergeSchema<
-						Volatile['schema'],
-						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>
-				>,
-				Metadata['schemas'] &
-					Ephemeral['schemas'] &
-					Volatile['schemas']
-			>,
-			Singleton & {
-				derive: Partial<Ephemeral['derive'] & Volatile['derive']>
-			},
-			Definitions['error']
-		>
-	>(
-		macro: NewMacro
-	): Elysia<
-		BasePath,
-		Scope,
-		Singleton,
-		Definitions,
-		{
-			schema: Metadata['schema']
-			schemas: Metadata['schemas']
-			macro: Metadata['macro'] & Partial<MacroToProperty<NewMacro>>
-			macroFn: Metadata['macroFn'] & NewMacro
-			parser: Metadata['parser']
-			response: Metadata['response']
-		},
-		Routes,
-		Ephemeral,
-		Volatile
-	>
-
-	macro(macroOrName: string | Macro, macro?: Macro) {
-		// A functional macro must be named: `.macro(name, fn)`. A bare
-		// `.macro(fn)` has no name to register under and used to silently no-op.
-		if (typeof macroOrName === 'function')
+	macro(macro: Macro) {
+		// A functional macro must live under its name in the object form. A
+		// bare `.macro(fn)` has no name to register under and used to
+		// silently no-op.
+		if (typeof macro === 'function')
 			throw new Error(
-				'A functional macro must be named — use `.macro(name, fn)` instead of `.macro(fn)`'
+				'A functional macro must be named — use `.macro({ name: fn })` instead of `.macro(fn)`'
 			)
 
-		if (typeof macroOrName === 'string' && !macro)
-			throw new Error('Macro function is required')
+		// `.macro(name, def)` was removed: the object form now covers
+		// everything the named form existed for
+		if (typeof macro === 'string')
+			throw new Error(
+				`\`.macro(name, definition)\` was removed — use \`.macro({ ${macro}: definition })\` instead`
+			)
 
 		const ext = this.#ext
 		const m = (ext.macro ??= nullObject() as any)
 
-		if (typeof macroOrName === 'string') m[macroOrName] = macro!
-		else {
-			for (const key in macroOrName)
-				if (typeof macroOrName[key] === 'object')
-					macroOrName[key] = hookToGuard(
-						macroOrName[key] as any
-					) as any
+		for (const key in macro)
+			if (typeof macro[key] === 'object')
+				macro[key] = hookToGuard(macro[key] as any) as any
 
-			Object.assign(m, macroOrName)
-		}
+		Object.assign(m, macro)
 
 		return this as any
 	}

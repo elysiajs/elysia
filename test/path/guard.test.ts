@@ -249,7 +249,9 @@ describe('guard', () => {
 
 		const plugin = new Elysia()
 			.use(inner)
-			// @ts-expect-error
+			// Declaring a second standalone response alongside the inherited
+			// global one is fine at the type level (nearer scope overrides per
+			// status for typing) — at runtime BOTH validators still run
 			.guard({
 				response: t.Boolean(),
 				transform() {
