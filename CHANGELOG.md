@@ -3,6 +3,7 @@ Breaking Change:
 - [Internal] remove ArrayQuery
 - [Internal] remove format: `numeric`, `integer`, `objectString`, `booleanString`
 - `getSchemaValidator` renamed to `Validator.create`
+- `NotFoundError` renamed to `NotFound` — import `NotFound` (a thrown 404 is `instanceof NotFound`)
 - remove `context.contentType` from `Context` in `parse`
 - drop `config.encodeSchema` as always enabled. Can't support both in a type safe manner.
 - `derive` now run in `beforeHandle` (after validation) — it does **not** run when validation fails (a 422 short-circuits before `beforeHandle`). If you need logic that runs before validation, use `transform` instead.

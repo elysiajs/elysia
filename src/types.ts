@@ -1285,11 +1285,6 @@ type OptionalField = { '~optional': true }
 type StaticCyclic<
 	T extends TypeBoxSchema,
 	Definitions extends Record<string, AnySchema>
-	// `{} extends Definitions` (Definitions is empty), NOT `Definitions extends
-	// {}` (always true → refs never resolved): with no models there are no refs
-	// to resolve, so `StaticDecode<T>` directly; otherwise resolve `$ref`s via
-	// TCyclic. `StaticDecode` (not `Static`) so handler context sees a codec's
-	// decoded output type, e.g. `t.ArrayString(...)` → `string[]`.
 > = {} extends Definitions
 	? StaticDecode<T>
 	: Definitions extends infer Defs extends Record<string, TypeBoxSchema>
@@ -1419,8 +1414,6 @@ type LocalLifecycleProperty =
 	| 'afterResponse'
 	| 'error'
 	| 'tags'
-
-export type MaybeFunction<T> = T | ((...args: any[]) => T)
 
 export type MacroToProperty<in out T extends Macro<any, any, any, any, any>> =
 	Prettify<{

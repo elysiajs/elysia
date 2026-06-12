@@ -144,8 +144,8 @@ export class Elysia<
 	'~Volatile': Volatile
 	'~Routes': Routes
 
-	#plugin?: WeakSet<any>
-	#global?: WeakSet<any>
+	#hasPlugin = false
+	#hasGlobal = false
 
 	#ready?: Promise<void>
 	#pending = 0
@@ -167,15 +167,9 @@ export class Elysia<
 
 	'~hookChain'?: ChainNode
 
-	// Internal storage. External code reads via `history` (below) which
-	// lazily resolves macros; methods inside this class touch `#history`
-	// directly to skip that work.
 	#history?: InternalRoute[]
 	server?: Server
 
-	// `~applyMacro` is idempotent (deletes each macro key after expansion),
-	// so re-walking on every public read is cheap and handles late macro
-	// registration (`.get(p, fn, {mac: true})` then `.macro('mac', ...)`).
 	#resolveMacros() {
 		if (!this.#history) return
 		for (let i = 0; i < this.#history.length; i++) {
@@ -187,6 +181,7 @@ export class Elysia<
 	get history(): InternalRoute[] | undefined {
 		if (!this.#history) return undefined
 		this.#resolveMacros()
+
 		return this.#history
 	}
 
@@ -736,13 +731,8 @@ export class Elysia<
 		;(added as any)[type] = fn
 		this['~hookChain'] = { added, parent: this['~hookChain'], scope }
 
-		if (scope === 'plugin') {
-			this.#plugin ??= new WeakSet()
-			this.#plugin.add(fn)
-		} else if (scope === 'global') {
-			this.#global ??= new WeakSet()
-			this.#global.add(fn)
-		}
+		if (scope === 'plugin') this.#hasPlugin = true
+		else if (scope === 'global') this.#hasGlobal = true
 
 		if (this.#hash !== undefined && !fnOrigin.has(fn as any))
 			fnOrigin.set(fn as any, this.#hash)
@@ -2560,9 +2550,8 @@ export class Elysia<
 
 					for (const fn of fns) {
 						if (typeof fn !== 'function') continue
-						if (scope === 'plugin')
-							(this.#plugin ??= new WeakSet()).add(fn)
-						else (this.#global ??= new WeakSet()).add(fn)
+						if (scope === 'plugin') this.#hasPlugin = true
+						else this.#hasGlobal = true
 					}
 				}
 			}
@@ -2938,25 +2927,13 @@ export class Elysia<
 
 		hookToGuard(hook as any)
 
-		// lift standalone schemas
-		const prevSchemaLen = (hook as any).schemas?.length ?? 0
-
 		if (hook.derive) {
 			this['~derive'] ??= new WeakSet<EventFn<'beforeHandle'>>()
 			this['~derive'].add(hook.derive as EventFn<'beforeHandle'>)
 		}
 
-		const targetSet =
-			scope === 'plugin'
-				? (this.#plugin ??= new WeakSet())
-				: scope === 'global'
-					? (this.#global ??= new WeakSet())
-					: undefined
-
 		const trackFn = (fn: unknown) => {
 			if (typeof fn !== 'function') return
-
-			targetSet?.add(fn)
 
 			if (this.#hash !== undefined && !fnOrigin.has(fn as any))
 				fnOrigin.set(fn as any, this.#hash)
@@ -2976,13 +2953,6 @@ export class Elysia<
 			if (Array.isArray(hook.derive))
 				for (const fn of hook.derive) trackFn(fn)
 			else trackFn(hook.derive)
-		}
-
-		if (targetSet) {
-			const schemas = (hook as any).schemas as any[] | undefined
-			if (schemas && schemas.length > prevSchemaLen)
-				for (let i = prevSchemaLen; i < schemas.length; i++)
-					targetSet.add(schemas[i])
 		}
 
 		this.#pushHook(hook as Partial<AppHook>, scope)
@@ -3988,13 +3958,13 @@ export class Elysia<
 			}
 		}
 
-		if (app.#plugin || app.#global || hookChain) {
+		if (app.#hasPlugin || app.#hasGlobal || hookChain) {
 			let pluginEvents: Partial<AppHook> | undefined
 			let globalEvents: Partial<AppHook> | undefined
 
 			const derive = app['~derive']
 
-			if (app.#global) this.#global ??= new WeakSet()
+			if (app.#hasGlobal) this.#hasGlobal = true
 			if (derive) this['~derive'] ??= new WeakSet()
 
 			const nodes = useNodesBuffer
@@ -4039,7 +4009,7 @@ export class Elysia<
 
 						for (const s of schemas) {
 							;((target as any).schemas ??= []).push(s)
-							if (isGlobal) this.#global!.add(s)
+							if (isGlobal) this.#hasGlobal = true
 						}
 
 						continue
@@ -4073,7 +4043,7 @@ export class Elysia<
 								: (pluginEvents ??= nullObject())
 
 							pushField(target, key, fn)
-							if (isGlobal) this.#global!.add(fn)
+							if (isGlobal) this.#hasGlobal = true
 						}
 						continue
 					}

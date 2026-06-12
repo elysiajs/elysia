@@ -3,14 +3,7 @@ import { describe, it, expect } from 'bun:test'
 // A1 (API parity): symbols that must remain importable from the package entry.
 // Value re-exports are asserted at runtime; type re-exports are asserted by this
 // file type-checking (build/dts generation fails if a type export is dropped).
-import {
-	Cookie,
-	serializeCookie,
-	StatusMap,
-	env,
-	NotFound,
-	NotFoundError
-} from '../../src'
+import { Cookie, serializeCookie, StatusMap, env } from '../../src'
 
 import type {
 	SSEPayload,
@@ -27,10 +20,6 @@ describe('package export surface (A1)', () => {
 		expect(typeof serializeCookie).toBe('function')
 		expect(typeof env).toBe('object')
 		expect(StatusMap.OK).toBe(200)
-	})
-
-	it('keeps `NotFoundError` as an alias of `NotFound`', () => {
-		expect(NotFoundError).toBe(NotFound)
 	})
 
 	it('keeps the trace + SSE types importable', () => {

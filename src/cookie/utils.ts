@@ -1,7 +1,7 @@
 import { decodeComponent } from 'deuri'
 import { parse, serialize } from './lib'
 
-import { Cookie } from '.'
+import { Cookie } from './cookie'
 import { InvalidCookieSignature } from '../error'
 import { dangerousKeys } from '../constants'
 import { constantTimeEqual, isNotEmpty, nullObject } from '../utils'

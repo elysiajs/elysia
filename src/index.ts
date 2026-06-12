@@ -24,8 +24,6 @@ export { file, ElysiaFile } from './universal/file'
 export { Cookie, serializeCookie } from './cookie'
 export { StatusMap } from './constants'
 export { env } from './universal'
-// v1 parity: `NotFoundError` was renamed to `NotFound`; keep the old name as an alias.
-export { NotFound as NotFoundError } from './error'
 
 export {
 	type Context,
