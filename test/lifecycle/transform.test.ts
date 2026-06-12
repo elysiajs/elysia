@@ -6,12 +6,9 @@ import { req } from '../utils'
 describe('Transform', () => {
 	it('globally Transform', async () => {
 		const app = new Elysia()
-			.transform<{
-				params: {
-					id: number
-				} | null
-			}>((request) => {
-				if (request.params?.id) request.params.id = +request.params.id
+			.transform(({ params }) => {
+				const p = params as { id?: string | number } | null
+				if (p?.id) p.id = +p.id
 			})
 			.get('/id/:id', ({ params: { id } }) => typeof id)
 
@@ -59,16 +56,9 @@ describe('Transform', () => {
 	})
 
 	it('transform from plugin', async () => {
-		const transformId = new Elysia().transform<
-			{
-				params: {
-					id: number
-				} | null
-			},
-			'global'
-		>('global', (request) => {
-			// @ts-ignore
-			if (request.params?.id) request.params.id = +request.params.id
+		const transformId = new Elysia().transform('global', ({ params }) => {
+			const p = params as { id?: string | number } | null
+			if (p?.id) p.id = +p.id
 		})
 
 		const app = new Elysia()
@@ -111,12 +101,9 @@ describe('Transform', () => {
 
 	it('globally and locally pre handle', async () => {
 		const app = new Elysia()
-			.transform<{
-				params: {
-					id: number
-				} | null
-			}>((request) => {
-				if (request.params?.id) request.params.id = +request.params.id
+			.transform(({ params }) => {
+				const p = params as { id?: string | number } | null
+				if (p?.id) p.id = +p.id
 			})
 			.get('/id/:id', ({ params: { id } }) => id, {
 				params: t.Object({
@@ -138,23 +125,13 @@ describe('Transform', () => {
 
 	it('accept multiple transform', async () => {
 		const app = new Elysia()
-			.transform<{
-				params: {
-					id: number
-				} | null
-			}>((request) => {
-				if (request.params?.id) request.params.id = +request.params.id
+			.transform(({ params }) => {
+				const p = params as { id?: string | number } | null
+				if (p?.id) p.id = +p.id
 			})
-			.transform<{
-				params: {
-					id: number
-				} | null
-			}>((request) => {
-				if (
-					request.params?.id &&
-					typeof request.params?.id === 'number'
-				)
-					request.params.id = request.params.id + 1
+			.transform(({ params }) => {
+				const p = params as { id?: string | number } | null
+				if (p?.id && typeof p.id === 'number') p.id = p.id + 1
 			})
 			.get('/id/:id', ({ params: { id } }) => id)
 
@@ -190,12 +167,9 @@ describe('Transform', () => {
 
 	it('map returned value', async () => {
 		const app = new Elysia()
-			.transform<{
-				params: {
-					id: number
-				} | null
-			}>((request) => {
-				if (request.params?.id) request.params.id = +request.params.id
+			.transform(({ params }) => {
+				const p = params as { id?: string | number } | null
+				if (p?.id) p.id = +p.id
 			})
 			.get('/id/:id', ({ params: { id } }) => typeof id)
 
@@ -262,15 +236,9 @@ describe('Transform', () => {
 	})
 
 	it('inherits from plugin', async () => {
-		const transformId = new Elysia().transform<
-			{
-				params: {
-					name: string
-				} | null
-			},
-			'global'
-		>('global', ({ params }) => {
-			if (params?.name === 'Fubuki') params.name = 'Cat'
+		const transformId = new Elysia().transform('global', ({ params }) => {
+			const p = params as { name?: string } | null
+			if (p?.name === 'Fubuki') p.name = 'Cat'
 		})
 
 		const app = new Elysia()
@@ -283,12 +251,9 @@ describe('Transform', () => {
 	})
 
 	it('not inherits plugin on local', async () => {
-		const transformId = new Elysia().transform<{
-			params: {
-				name: string
-			} | null
-		}>(({ params }) => {
-			if (params?.name === 'Fubuki') params.name = 'Cat'
+		const transformId = new Elysia().transform(({ params }) => {
+			const p = params as { name?: string } | null
+			if (p?.name === 'Fubuki') p.name = 'Cat'
 		})
 
 		const app = new Elysia()

@@ -187,7 +187,11 @@ export type WSParseHandler<Route extends RouteSchema, Context = {}> = (
 type LifecycleFn<Ctx, Body, Response> = (
 	this: void,
 	ws: Ctx,
-	body?: Body
+	// required: `message` always receives the parsed body — an optional
+	// param would force `| undefined` onto every consumer. Events without a
+	// body (open/drain) pass `never`, so declaring the param there is its
+	// own error
+	body: Body
 ) => MaybePromise<WSHandlerResult<Response>>
 
 interface TypedWebSocketHandler<

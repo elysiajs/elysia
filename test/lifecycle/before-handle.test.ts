@@ -6,11 +6,8 @@ import { delay, req } from '../utils'
 describe('Before Handle', () => {
 	it('globally skip main handler', async () => {
 		const app = new Elysia()
-			.beforeHandle<{
-				params: {
-					name?: string
-				}
-			}>(({ params: { name } }) => {
+			.beforeHandle(({ params }) => {
+				const { name } = params as { name?: string }
 				if (name === 'Fubuki') return 'Cat'
 			})
 			.get('/name/:name', ({ params: { name } }) => name)
@@ -40,11 +37,8 @@ describe('Before Handle', () => {
 		const app = new Elysia()
 			.group('/type', (app) =>
 				app
-					.beforeHandle<{
-						params: {
-							name?: string
-						}
-					}>(({ params: { name } }) => {
+					.beforeHandle(({ params }) => {
+						const { name } = params as { name?: string }
 						if (name === 'fubuki') return 'cat'
 					})
 					.get('/name/:name', ({ params: { name } }) => name)
@@ -110,11 +104,8 @@ describe('Before Handle', () => {
 
 	it('globally and locally before handle', async () => {
 		const app = new Elysia()
-			.beforeHandle<{
-				params: {
-					name?: string
-				}
-			}>(({ params: { name } }) => {
+			.beforeHandle(({ params }) => {
+				const { name } = params as { name?: string }
 				if (name === 'fubuki') return 'cat'
 			})
 			.get('/name/:name', ({ params: { name } }) => name, {
@@ -132,18 +123,12 @@ describe('Before Handle', () => {
 
 	it('accept multiple before handler', async () => {
 		const app = new Elysia()
-			.beforeHandle<{
-				params: {
-					name?: string
-				}
-			}>(({ params: { name } }) => {
+			.beforeHandle(({ params }) => {
+				const { name } = params as { name?: string }
 				if (name === 'fubuki') return 'cat'
 			})
-			.beforeHandle<{
-				params: {
-					name?: string
-				}
-			}>(({ params: { name } }) => {
+			.beforeHandle(({ params }) => {
+				const { name } = params as { name?: string }
 				if (name === 'korone') return 'dog'
 			})
 			.get('/name/:name', ({ params: { name } }) => name)
@@ -193,11 +178,8 @@ describe('Before Handle', () => {
 
 	it('execute afterHandle', async () => {
 		const app = new Elysia()
-			.beforeHandle<{
-				params: {
-					name?: string
-				}
-			}>(({ params: { name } }) => {
+			.beforeHandle(({ params }) => {
+				const { name } = params as { name?: string }
 				if (name === 'Fubuki') return 'Cat'
 			})
 			.afterHandle((context) => {

@@ -749,6 +749,7 @@ type InlineResponse =
 	| Response
 	| AnyElysiaStatus
 	| ElysiaFile
+	| Blob
 	| Record<any, unknown>
 	| BunHTMLBundlelike
 	// forwarded to the error pipeline per request

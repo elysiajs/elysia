@@ -866,8 +866,39 @@ export class Elysia<
 
 	parser<const Name extends string>(
 		name: Name,
-		fn: BodyHandler<any, any>
-	): this {
+		fn: BodyHandler<
+			MergeSchema<
+				Volatile['schema'],
+				MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+				BasePath
+			> &
+				Metadata['schemas'] &
+				Ephemeral['schemas'] &
+				Volatile['schemas'],
+			Singleton & {
+				derive: Ephemeral['derive'] & Volatile['derive']
+			}
+		>
+	): Elysia<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		{
+			schema: Metadata['schema']
+			schemas: Metadata['schemas']
+			macro: Metadata['macro']
+			macroFn: Metadata['macroFn']
+			// register the name so route-level `parse: '<name>'` typechecks
+			parser: Metadata['parser'] & {
+				[name in Name]: BodyHandler<any, any>
+			}
+			response: Metadata['response']
+		},
+		Routes,
+		Ephemeral,
+		Volatile
+	> {
 		const ext = this.#ext
 		const parsers = (ext.parser ??= nullObject() as Record<
 			string,
@@ -875,82 +906,78 @@ export class Elysia<
 		>)
 		parsers[name] = fn
 
+		return this as any
+	}
+
+	onStart(_listener?: unknown) {
 		return this
 	}
 
-	onStart() {
-		return this
-	}
-
-	onStop() {
+	onStop(_listener?: unknown) {
 		return this
 	}
 
 	transform(
-		fn: TransformHandler<
-			// transform runs BEFORE validation, so it must NOT inherit the
-			// standalone (`schemas`) guard input schemas — body/params/etc. stay
-			// pre-validation here.
-			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>,
-				BasePath
-			>,
-			Singleton & {
-				derive: Ephemeral['derive'] & Volatile['derive']
-			}
+		fn: MaybeArray<
+			TransformHandler<
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+					BasePath
+				>,
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+				}
+			>
 		>
 	): this
 	transform(
 		scope: 'local',
-		fn: TransformHandler<
-			// transform runs BEFORE validation, so it must NOT inherit the
-			// standalone (`schemas`) guard input schemas — body/params/etc. stay
-			// pre-validation here.
-			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>,
-				BasePath
-			>,
-			Singleton & {
-				derive: Ephemeral['derive'] & Volatile['derive']
-			}
+		fn: MaybeArray<
+			TransformHandler<
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+					BasePath
+				>,
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+				}
+			>
 		>
 	): this
 	transform(
 		scope: 'plugin',
-		fn: TransformHandler<
-			// transform runs BEFORE validation, so it must NOT inherit the
-			// standalone (`schemas`) guard input schemas — body/params/etc. stay
-			// pre-validation here.
-			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>,
-				BasePath
-			>,
-			Singleton & {
-				derive: Ephemeral['derive'] & Volatile['derive']
-			},
-			undefined,
-			'plugin'
+		fn: MaybeArray<
+			TransformHandler<
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+					BasePath
+				>,
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+				},
+				undefined,
+				'plugin'
+			>
 		>
 	): this
 	transform(
 		scope: 'global',
-		fn: TransformHandler<
-			// transform runs BEFORE validation, so it must NOT inherit the
-			// standalone (`schemas`) guard input schemas — body/params/etc. stay
-			// pre-validation here.
-			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>,
-				BasePath
-			>,
-			Singleton & {
-				derive: Ephemeral['derive'] & Volatile['derive']
-			},
-			undefined,
-			'global'
+		fn: MaybeArray<
+			TransformHandler<
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+					BasePath
+				>,
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+				},
+				undefined,
+				'global'
+			>
 		>
 	): this
 	transform(scopeOrFn: any, fn?: any): this {
@@ -1828,70 +1855,78 @@ export class Elysia<
 	}
 
 	mapResponse(
-		fn: MapResponse<
-			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>,
-				BasePath
-			> &
-				Metadata['schemas'] &
-				Ephemeral['schemas'] &
-				Volatile['schemas'],
-			Singleton & {
-				derive: Ephemeral['derive'] & Volatile['derive']
-			}
+		fn: MaybeArray<
+			MapResponse<
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+					BasePath
+				> &
+					Metadata['schemas'] &
+					Ephemeral['schemas'] &
+					Volatile['schemas'],
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+				}
+			>
 		>
 	): this
 	mapResponse(
 		scope: 'local',
-		fn: MapResponse<
-			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>,
-				BasePath
-			> &
-				Metadata['schemas'] &
-				Ephemeral['schemas'] &
-				Volatile['schemas'],
-			Singleton & {
-				derive: Ephemeral['derive'] & Volatile['derive']
-			}
+		fn: MaybeArray<
+			MapResponse<
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+					BasePath
+				> &
+					Metadata['schemas'] &
+					Ephemeral['schemas'] &
+					Volatile['schemas'],
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+				}
+			>
 		>
 	): this
 	mapResponse(
 		scope: 'plugin',
-		fn: MapResponse<
-			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>,
-				BasePath
-			> &
-				Metadata['schemas'] &
-				Ephemeral['schemas'] &
-				Volatile['schemas'],
-			Singleton & {
-				derive: Ephemeral['derive'] & Volatile['derive']
-			},
-			undefined,
-			'plugin'
+		fn: MaybeArray<
+			MapResponse<
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+					BasePath
+				> &
+					Metadata['schemas'] &
+					Ephemeral['schemas'] &
+					Volatile['schemas'],
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+				},
+				undefined,
+				'plugin'
+			>
 		>
 	): this
 	mapResponse(
 		scope: 'global',
-		fn: MapResponse<
-			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>,
-				BasePath
-			> &
-				Metadata['schemas'] &
-				Ephemeral['schemas'] &
-				Volatile['schemas'],
-			Singleton & {
-				derive: Ephemeral['derive'] & Volatile['derive']
-			},
-			undefined,
-			'global'
+		fn: MaybeArray<
+			MapResponse<
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+					BasePath
+				> &
+					Metadata['schemas'] &
+					Ephemeral['schemas'] &
+					Volatile['schemas'],
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+				},
+				undefined,
+				'global'
+			>
 		>
 	): this
 	mapResponse(scopeOrFn: any, fn?: any): this {
@@ -5282,7 +5317,60 @@ export class Elysia<
 		return this.#add(MethodMap.HEAD, path, fn, hook) as any
 	}
 
-	all(path: string, fn: unknown, hook?: Partial<AnyLocalHook>): this {
+	// Typed like the verb methods (handler ctx gets schema/macro/derive) but
+	// without Eden route registration — Eden has no `all` concept
+	all<
+		const Path extends string,
+		const Input extends Metadata['macro'] &
+			InputSchema<keyof Definitions['typebox'] & string>,
+		const Schema extends IntersectIfObjectSchema<
+			MergeSchema<
+				UnwrapRoute<
+					Input,
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>
+			>,
+			MergeScopedSchemas<
+				Metadata['schemas'],
+				Ephemeral['schemas'],
+				Volatile['schemas']
+			>
+		>,
+		const Decorator extends Singleton & {
+			derive: Ephemeral['derive'] & Volatile['derive']
+		},
+		const MacroContext extends {} extends Metadata['macroFn']
+			? {}
+			: MacroToContext<
+					Metadata['macroFn'],
+					Omit<Input, NonResolvableMacroKey>,
+					Definitions['typebox']
+				>,
+		const Handle extends {} extends MacroContext
+			? InlineHandlerNonMacro<NoInfer<Schema>, NoInfer<Decorator>>
+			: InlineHandler<
+					NoInfer<Schema>,
+					NoInfer<Decorator>,
+					// @ts-ignore
+					MacroContext
+				>
+	>(
+		path: Path,
+		fn: Handle,
+		hook?: LocalHook<
+			Input,
+			// @ts-ignore
+			Schema & MacroContext,
+			Decorator,
+			Definitions['error'],
+			keyof Metadata['parser']
+		>
+	): this {
 		this.#add('*', path, fn, hook)
 
 		return this
@@ -5565,14 +5653,14 @@ export class Elysia<
 
 			this.all(
 				'/*',
-				(c: Context) =>
+				((c: Context) =>
 					run(
 						new Request(
 							replaceUrlPath(c.request.url, c.path),
 							c.request
 						)
-					),
-				options
+					)) as any,
+				options as any
 			)
 
 			return this

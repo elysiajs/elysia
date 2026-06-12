@@ -15,22 +15,22 @@ describe('TypeSystem - Date', () => {
 
 	it('No default date provided', () => {
 		const schema = t.Date()
-		expect(schema.default).toBeUndefined()
+		expect((schema as { default?: unknown }).default).toBeUndefined()
 
 		const unionSchema = schema as unknown as TUnion
 		for (const type of unionSchema.anyOf) {
-			expect(type.default).toBeUndefined()
+			expect((type as { default?: unknown }).default).toBeUndefined()
 		}
 	})
 
 	it('Default date provided', () => {
 		const given = new Date('2025-01-01T00:00:00.000Z')
 		const schema = t.Date({ default: given })
-		expect(schema.default).toEqual(given)
+		expect((schema as { default?: unknown }).default).toEqual(given)
 
 		const unionSchema = schema as unknown as TUnion
 		for (const type of unionSchema.anyOf) {
-			expect(new Date(type.default)).toEqual(given)
+			expect(new Date((type as { default: string }).default)).toEqual(given)
 		}
 	})
 

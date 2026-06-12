@@ -192,7 +192,6 @@ describe('Bun router', () => {
 				a.onHandle(() => {
 					url = a.context.request.url
 
-					// @ts-expect-error private property
 					hasRequestId = !!a.context.rid
 				})
 			})
@@ -221,7 +220,6 @@ describe('Bun router', () => {
 				a.onHandle(() => {
 					url = a.context.request.url
 
-					// @ts-expect-error private property
 					hasRequestId = !!a.context.rid
 				})
 			})

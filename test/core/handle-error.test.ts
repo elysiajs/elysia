@@ -515,6 +515,8 @@ describe('Handle Error', () => {
 	it('send set-cookie header when response validation error occurs', async () => {
 		const app = new Elysia().get(
 			'/',
+			// @ts-expect-error deliberately returns an invalid response to
+			// assert set-cookie survives the response-validation error
 			({ cookie }) => {
 				cookie.session.value = 'test-session-id'
 				return 'invalid response'

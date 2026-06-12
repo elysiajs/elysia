@@ -181,6 +181,7 @@ describe('Standard Schema Standalone', () => {
 						? status(404, {
 								name,
 								id: 1,
+								// @ts-expect-error excess property — stripped by response normalization
 								extra: false
 							})
 						: status(418, {
@@ -244,11 +245,13 @@ describe('Standard Schema Standalone', () => {
 						? status(404, {
 								name,
 								id,
+								// @ts-expect-error excess property — stripped by response normalization
 								extra: true
 							})
 						: status(418, {
 								name,
 								id,
+								// @ts-expect-error excess property — stripped by response normalization
 								extra: true
 							}),
 				{
@@ -328,6 +331,7 @@ describe('Standard Schema Standalone', () => {
 					? status(404, {
 							name,
 							id: 1,
+							// @ts-expect-error excess property — stripped by response normalization
 							extra: false
 						})
 					: status(418, {
@@ -387,11 +391,13 @@ describe('Standard Schema Standalone', () => {
 						? status(404, {
 								name,
 								id,
+								// @ts-expect-error excess property — stripped by response normalization
 								extra: true
 							})
 						: status(418, {
 								name,
 								id,
+								// @ts-expect-error excess property — stripped by response normalization
 								extra: true
 							}),
 				{

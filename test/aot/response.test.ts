@@ -40,7 +40,11 @@ describe('AOT response freezing', () => {
 		// one frozen entry per status — not a single bare `response`
 		expect(m.GET?.['/u']?.['response:200']).toBeDefined()
 		expect(m.GET?.['/u']?.['response:404']).toBeDefined()
-		expect(m.GET?.['/u']?.['response']).toBeUndefined()
+		expect(
+			(m.GET?.['/u'] as Record<string, unknown> | undefined)?.[
+				'response'
+			]
+		).toBeUndefined()
 
 		Validator.clear()
 		Compiled.validators = m

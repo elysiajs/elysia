@@ -997,7 +997,7 @@ describe('Query Validator', () => {
 		const app = new Elysia()
 			.model({
 				ids: t.Object({
-					ids: t.Array(t.Union([t.String(), t.ArrayString()]))
+					ids: t.Array(t.Union([t.String(), t.ArrayString(t.String())]))
 				})
 			})
 			.get('/', ({ query }) => query, {
@@ -1125,9 +1125,9 @@ describe('Query Validator', () => {
 			])
 		})
 
-		const response = await app
+		const response = (await app
 			.handle(req('/?ids=1&ids=2'))
-			.then((x) => x.json())
+			.then((x) => x.json())) as { ids: string[] }
 
 		expect(response.ids).toEqual(['1', '2'])
 	})
@@ -1146,7 +1146,7 @@ describe('Query Validator', () => {
 
 		const response = await app
 			.handle(req('/?page=5'))
-			.then((x) => x.json())
+			.then((x) => x.json() as Promise<{ page: number }>)
 
 		expect(response.page).toBe(5)
 	})

@@ -1,4 +1,4 @@
-import { Elysia, t } from '../src'
+import { Elysia, NotFound, t } from '../src'
 
 const t1 = performance.now()
 
@@ -75,11 +75,7 @@ const app = new Elysia()
 	.get('/trailing-slash', () => 'A')
 	.group('/group', (app) =>
 		app
-			.beforeHandle<{
-				query: {
-					name: string
-				}
-			}>(({ query }) => {
+			.beforeHandle(({ query }) => {
 				if (query?.name === 'aom') return 'Hi saltyaom'
 			})
 			.get('/', () => 'From Group')
@@ -109,8 +105,8 @@ const app = new Elysia()
 		return 'A'
 	})
 	.all('/all', () => 'hi')
-	.error(({ code, error, set }) => {
-		if (code === 'NOT_FOUND') {
+	.error(({ error, set }) => {
+		if (error instanceof NotFound) {
 			set.status = 404
 
 			return 'Not Found :('

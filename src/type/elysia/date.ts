@@ -17,15 +17,28 @@ import {
 const ISO8601 = /T\d\d(?::\d\d){1,2} \d\d:\d\d$/
 const removeTime = / (\d{2}:\d{2})$/
 
-let StringifiedDate: Type.TCodec<Type.TUnion<Type.TSchema[]>, Date>
-let emptyDate: Type.TCodec<Type.TUnion<Type.TSchema[]>, Date>
+let StringifiedDate: Type.TCodec<
+	Type.TUnion<[Type.TUnsafe<Date>, Type.TString, Type.TNumber]>,
+	Date
+>
+let emptyDate: Type.TCodec<
+	Type.TUnion<[Type.TUnsafe<Date>, Type.TString, Type.TNumber]>,
+	Date
+>
 let sharedDate: ReturnType<
 	typeof createSharedReference<
 		DateOptions,
 		ReturnType<typeof DateWithProperty>
 	>
 >
-export function DateType(property?: DateOptions) {
+export function DateType(
+	property?: DateOptions
+): Type.TCodec<
+	Type.TUnion<[Type.TUnsafe<Date>, Type.TString, Type.TNumber]>,
+	Date
+> {
+	// the runtime union members carry Refine wrappers — static-equivalent
+	// to the declared precise type
 	StringifiedDate ??= Type.Codec(
 		Union([
 			Type.Refine(

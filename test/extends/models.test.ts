@@ -94,7 +94,7 @@ describe('Model', () => {
 				headers: {
 					'content-type': 'application/json'
 				},
-				body: 1
+				body: JSON.stringify(1)
 			})
 		)
 

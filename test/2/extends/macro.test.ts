@@ -19,7 +19,9 @@ describe('macro order', () => {
 
 						return { a: 'ok' }
 					},
-					beforeHandle: function b({ a }) {
+					// own-derive results are runtime-only in the own handler ctx —
+					// annotate (same single-pass inference boundary as cross-macro)
+					beforeHandle: function b({ a }: { a?: string }) {
 						order.push('b')
 
 						derived = a

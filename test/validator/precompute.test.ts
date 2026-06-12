@@ -130,7 +130,7 @@ describe('EncodeFrom error path', () => {
 				}
 				return 'caught'
 			})
-			.get('/', () => 'value', {
+			.get('/', () => ({ id: 'value' }), {
 				response: t.Object({
 					id: t
 						.Codec(t.String())
@@ -143,7 +143,9 @@ describe('EncodeFrom error path', () => {
 
 		const res = await app.handle(req('/'))
 		expect(res.status).toBe(422)
-		expect(caught?.isValidation).toBe(true)
+		expect(
+			(caught as { isValidation?: boolean } | null)?.isValidation
+		).toBe(true)
 	})
 })
 

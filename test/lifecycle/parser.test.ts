@@ -108,7 +108,7 @@ describe('Parser', () => {
 			isObject: !!body && typeof body === 'object'
 		}))
 
-		const res = await app
+		const res = (await app
 			.handle(
 				new Request('http://localhost/', {
 					method: 'POST',
@@ -116,7 +116,7 @@ describe('Parser', () => {
 					headers: { 'content-type': 'application/xml' }
 				})
 			)
-			.then((r) => r.json())
+			.then((r) => r.json())) as { type: string; isObject: boolean }
 
 		// before the fix `body` was a urlencoded-parsed object with garbage keys
 		expect(res.isObject).toBe(false)

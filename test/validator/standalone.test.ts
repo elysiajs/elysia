@@ -183,9 +183,17 @@ describe('standalone validator', () => {
 				schema: 'standalone',
 				body: t.Object({ id: t.Number() })
 			})
-			.post('/name/:name', ({ body }) => body, {
-				response: t.Object({ id: t.Number() })
-			})
+			.post(
+				'/name/:name',
+				// @ts-expect-error SS1: the type-level merge INTERSECTS the
+				// override-channel guard response with the route-local one,
+				// but the runtime OVERRIDES (this handler is runtime-correct,
+				// asserted below). Remove this directive when SS1 lands
+				({ body }) => body,
+				{
+					response: t.Object({ id: t.Number() })
+				}
+			)
 
 		const correct = await app.handle(
 			post('/name/cantarella', {

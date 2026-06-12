@@ -643,7 +643,7 @@ describe('Body Validator', () => {
 
 		const person = t.Object({
 			name: t.String(),
-			job: t.Ref(job)
+			job: t.Ref('job')
 		})
 
 		const app = new Elysia()

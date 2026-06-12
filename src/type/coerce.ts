@@ -1,4 +1,4 @@
-import type { TProperties, TSchema } from 'typebox'
+import type { TProperties, TSchema, TSchemaOptions } from 'typebox'
 
 import type { BaseSchema } from '.'
 import { primitiveElysiaTypes } from './constants'
@@ -32,7 +32,9 @@ interface CoerceOptions {
 	rootPropertiesOnly?: boolean
 }
 
-type CoerceTo = (schema: TProperties) => TSchema | BaseSchema | null
+// The replacement factory receives the ORIGINAL schema node, which doubles
+// as the options bag (constraints like `minimum` carry over to the new type)
+type CoerceTo = (schema: BaseSchema & TSchemaOptions) => TSchema | BaseSchema | null
 
 /**
  * Replace schema types with custom transformation
@@ -312,10 +314,10 @@ export const coerceRoot = () =>
 		]
 	])
 
-const toObjectString = (x: TProperties) =>
+const toObjectString = (x: BaseSchema & TSchemaOptions) =>
 	ObjectString((x.properties as TProperties) ?? {}, x)
 
-const toArrayString = (x: TProperties) =>
+const toArrayString = (x: BaseSchema & TSchemaOptions) =>
 	ArrayString((x.items ?? {}) as any, x)
 
 let _coerceQuery: CoerceOption[]

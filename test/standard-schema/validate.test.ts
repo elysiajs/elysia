@@ -89,6 +89,7 @@ describe('Standard Schema Validate', () => {
 	it('validate single response', async () => {
 		const app = new Elysia().get(
 			'/:name',
+			// @ts-expect-error deliberately returns an invalid response to assert 422
 			({ params: { name } }) => (name === 'lilith' ? undefined : true),
 			{
 				response: z.boolean()

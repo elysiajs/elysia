@@ -39,7 +39,7 @@ describe('handle path with spaces', () => {
 			[
 				new Request(`http://localhost/y a y`),
 				new Request(`http://localhost/y a y/1`)
-			].map(app.handle)
+			].map((request) => app.handle(request))
 		)
 
 		expect(response[0].status).toBe(200)

@@ -210,7 +210,9 @@ describe('coerce schema', () => {
 			// The nested array should not be descended into
 			expect(result['~kind']).toBe('Object')
 			expect(result.properties?.items?.['~kind']).toBe('Array')
-			expect(result.properties?.items?.items?.['~kind']).toBe('String')
+			expect(
+				(result.properties?.items?.items as BaseSchema)?.['~kind']
+			).toBe('String')
 		})
 
 		it('should still process root Object properties at first level', () => {
@@ -236,7 +238,7 @@ describe('coerce schema', () => {
 
 			// Root array IS processed
 			expect(result['~kind']).toBe('Array')
-			expect(result.items?.['~kind']).toBe('Number')
+			expect((result.items as BaseSchema)?.['~kind']).toBe('Number')
 		})
 	})
 
@@ -399,7 +401,7 @@ describe('coerce schema', () => {
 			const result = coerce(schema, [['String', () => Type.Number()]])
 
 			expect(result['~kind']).toBe('Array')
-			expect(result.items?.['~kind']).toBe('Number')
+			expect((result.items as BaseSchema)?.['~kind']).toBe('Number')
 		})
 
 		it('should traverse tuple items (array of schemas)', () => {
@@ -959,7 +961,7 @@ describe('coerce schema', () => {
 			// Should not throw
 			const result = coerce(schema, [['String', () => Type.Number()]])
 			expect(result.properties?.valid?.['~kind']).toBe('Number')
-			expect(result.properties?.invalid).toBe(null)
+			expect(result.properties?.invalid).toBeNull()
 		})
 
 		it('should handle undefined values in properties gracefully', () => {

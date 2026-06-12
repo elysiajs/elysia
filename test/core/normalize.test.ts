@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'bun:test'
+import type { Static } from 'typebox'
 import { Elysia, t } from '../../src'
 import { post, req } from '../utils'
 
@@ -591,7 +592,7 @@ describe('Normalize', () => {
 
 		const response = (await app
 			.handle(new Request('http://localhost:3000/'))
-			.then((x) => x.json())) as typeof type.static
+			.then((x) => x.json())) as Static<typeof type>
 
 		expect(response).toEqual([
 			{

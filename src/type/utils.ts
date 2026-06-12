@@ -1,3 +1,4 @@
+import type { TSchema } from 'typebox'
 import { type BaseSchema, type AnySchema } from '.'
 
 import { ELYSIA_TYPES, primitiveElysiaTypes } from './constants'
@@ -6,8 +7,13 @@ const iterators = ['anyOf', 'oneOf', 'allOf'] as const
 
 export function hasType(
 	type: string | ELYSIA_TYPES[keyof ELYSIA_TYPES],
-	schema: BaseSchema
+	// `TSchema` accepted because some typebox node types (TCodec, TUnsafe,
+	// TRefine) don't declare `~kind` statically — the walker reads it
+	// structurally at runtime
+	rawSchema: BaseSchema | TSchema
 ): boolean {
+	const schema = rawSchema as BaseSchema
+
 	if (!schema) return false
 
 	if (schema[typeof type === 'string' ? '~kind' : '~elyTyp'] === type)
@@ -94,7 +100,7 @@ function _hasTypes(
 	if (!schema) return false
 
 	if (
-		types.has(schema['~kind']) ||
+		(schema['~kind'] !== undefined && types.has(schema['~kind'])) ||
 		('~elyTyp' in schema && types.has(schema['~elyTyp']!))
 	)
 		return true

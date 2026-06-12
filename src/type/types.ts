@@ -222,7 +222,9 @@ export type ElysiaTypeCustomErrorCallback = (
 type BaseSchemaRecord = Record<string, BaseSchema>
 
 export interface BaseSchema {
-	'~kind': string
+	// Some typebox node types (TCodec/TUnsafe/TRefine)
+	// don't declare `~kind` statically"
+	'~kind'?: string
 	'~elyTyp'?: ELYSIA_TYPES[keyof ELYSIA_TYPES]
 	$id?: string
 	id?: string
@@ -258,7 +260,7 @@ export interface BaseSchema {
 	oneOf?: BaseSchema[]
 	not?: BaseSchema
 	$ref?: string
-	$defs?: BaseSchema
+	$defs?: BaseSchemaRecord
 }
 
 export interface StandardJSONSchemaV1Like {
@@ -295,7 +297,11 @@ declare module 'typebox' {
 	}
 }
 
-export type TypeBoxSchema = { '~kind': string }
+export type TypeBoxSchema =
+	| { '~kind': string }
+	| { '~unsafe': unknown }
+	| { '~refine': unknown }
+	| { '~codec': unknown }
 
 export type AnySchema = TypeBoxSchema | StandardSchemaV1Like
 

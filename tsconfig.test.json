@@ -102,7 +102,9 @@
     "skipLibCheck": true,                                 /* Skip type checking all .d.ts files. */
   },
   "exclude": ["node_modules", "test/cloudflare/**/*"],
-  // The M3 type-builder port is complete: the entire `test/types` suite is green,
-  // so the mid-rewrite ratchet is fully widened. `src` is pulled in transitively.
-  "include": ["test/types/**/*"]
+  // C2d complete: the ratchet covers the ENTIRE test suite (runtime tests
+  // included), not just `test/types`. `src` is pulled in transitively.
+  // `test/cloudflare` stays out — it is its own wrangler project importing
+  // generated `.mjs` artifacts and typechecks via `cf-typegen`.
+  "include": ["test/**/*"]
 }
