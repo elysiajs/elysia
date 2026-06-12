@@ -84,7 +84,9 @@ import { expectTypeOf } from 'expect-type'
 			)
 	}
 
-	// Handle standalone after override guard
+	// Handle standalone after override guard — the override guard's body is
+	// replaced by the route-local one (closer wins); the standalone body still
+	// intersects
 	{
 		new Elysia()
 			.guard({
@@ -101,7 +103,6 @@ import { expectTypeOf } from 'expect-type'
 					expectTypeOf<typeof body>().toEqualTypeOf<{
 						id: number
 						name: 'saltyaom'
-						separated: true
 					}>()
 
 					return {
@@ -197,7 +198,9 @@ import { expectTypeOf } from 'expect-type'
 			)
 	}
 
-	// Handle standalone after override guard
+	// Handle standalone after override guard — the override guard's body is
+	// replaced by the route-local one (closer wins); the standalone body still
+	// intersects
 	{
 		const local = new Elysia()
 			.guard({
@@ -336,7 +339,9 @@ import { expectTypeOf } from 'expect-type'
 			)
 	}
 
-	// Handle standalone after override guard
+	// Handle standalone after override guard — the override guard's body is
+	// replaced by the route-local one (closer wins); the standalone body still
+	// intersects
 	{
 		new Elysia()
 			.guard({
@@ -355,7 +360,6 @@ import { expectTypeOf } from 'expect-type'
 					expectTypeOf<typeof body>().toEqualTypeOf<{
 						id: number
 						name: 'saltyaom'
-						separated: true
 					}>()
 
 					return {
@@ -454,7 +458,9 @@ import { expectTypeOf } from 'expect-type'
 			)
 	}
 
-	// Handle standalone after override guard
+	// Handle standalone after override guard — the override guard's body is
+	// replaced by the route-local one (closer wins); the standalone body still
+	// intersects
 	{
 		const local = new Elysia()
 			.guard({
@@ -637,7 +643,9 @@ import { expectTypeOf } from 'expect-type'
 			)
 	}
 
-	// Handle standalone after override guard
+	// Handle standalone after override guard — the override guard's body is
+	// replaced by the route-local one (closer wins); the standalone body still
+	// intersects
 	{
 		new Elysia()
 			.guard({
@@ -656,7 +664,6 @@ import { expectTypeOf } from 'expect-type'
 					expectTypeOf<typeof body>().toEqualTypeOf<{
 						id: number
 						name: 'saltyaom'
-						separated: true
 					}>()
 
 					return {
@@ -756,7 +763,9 @@ import { expectTypeOf } from 'expect-type'
 			)
 	}
 
-	// Handle standalone after override guard
+	// Handle standalone after override guard — the override guard's body is
+	// replaced by the route-local one (closer wins); the standalone body still
+	// intersects
 	{
 		const local = new Elysia()
 			.guard({
