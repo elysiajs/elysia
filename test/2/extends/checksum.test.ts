@@ -161,24 +161,6 @@ describe('Checksum', () => {
 		expect(count).toBe(2)
 	})
 
-	// it('Deduplicate guard hook', async () => {
-	// 	const guard = new Elysia({ prefix: '/guard' }).guard(
-	// 		{
-	// 			params: t.Object({ id: t.Number() }),
-	// 			transform({ params }) {
-	// 				const id = +params.id
-	// 				if (!Number.isNaN(id)) params.id = id
-	// 			}
-	// 		},
-	// 		(app) => app.get('/id/:id', ({ params: { id } }) => id)
-	// 	)
-
-	// 	const app = new Elysia().use(guard)
-	// 	const res = await app.handle(req('/guard/id/123'))
-
-	// 	expect(res.status).toBe(200)
-	// })
-
 	it('deduplicate in new instance', async () => {
 		const cookie = (options?: Record<string, unknown>) =>
 			new Elysia({
@@ -213,41 +195,6 @@ describe('Checksum', () => {
 		const root = await app.handle(req('/root')).then((x) => x.text())
 		expect(root).toBe('mock')
 	})
-
-	// it('Filter global event', async () => {
-	// 	let x = 0
-	// 	let a = 0
-	// 	let b = 0
-
-	// 	const plugin = new Elysia()
-	// 		.beforeHandle('global', () => {
-	// 			x++
-	// 		})
-	// 		.group('/v1', (app) =>
-	// 			app
-	// 				.beforeHandle(() => {
-	// 					a++
-	// 				})
-	// 				.get('', () => 'A')
-	// 				.group('/v1', (app) =>
-	// 					app
-	// 						.beforeHandle(() => {
-	// 							b++
-	// 						})
-	// 						.get('/', () => 'B')
-	// 				)
-	// 		)
-
-	// 	const app = new Elysia().use(plugin).get('/', () => 'A')
-
-	// 	await Promise.all(
-	// 		['/v1', '/v1/v1', '/'].map((path) => app.handle(req(path)))
-	// 	)
-
-	// 	expect(x).toBe(3)
-	// 	expect(a).toBe(2)
-	// 	expect(b).toBe(1)
-	// })
 
 	it('invalidate non-root lifecycle', async () => {
 		let a = 0

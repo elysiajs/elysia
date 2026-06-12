@@ -79,67 +79,6 @@ describe('infer body reference', () => {
 		})
 	})
 
-	// This is not use in Bun
-	// it('infer single quote query', () => {
-	// 	const code = `{
-	// 		const b = query['quack'];
-	// 		return "a";
-	// 	}`
-
-	// 	const aliases = ['query']
-	// 	const inference = {
-	// 		body: false,
-	// 		cookie: false,
-	// 		headers: false,
-	// 		queries: <string[]>[],
-	// 		query: true,
-	// 		set: true,
-	// 		unknownQueries: false
-	// 	}
-
-	// 	inferBodyReference(code, aliases, inference)
-
-	// 	expect(inference).toEqual({
-	// 		body: false,
-	// 		cookie: false,
-	// 		headers: false,
-	// 		queries: ['quack'],
-	// 		query: true,
-	// 		set: true,
-	// 		unknownQueries: false
-	// 	})
-	// })
-
-	// it('infer double quote query', () => {
-	// 	const code = `{
-	// 		const b = query["quack"];
-	// 		return "a";
-	// 	}`
-
-	// 	const aliases = ['query']
-	// 	const inference = {
-	// 		body: false,
-	// 		cookie: false,
-	// 		headers: false,
-	// 		queries: <string[]>[],
-	// 		query: true,
-	// 		set: true,
-	// 		unknownQueries: false
-	// 	}
-
-	// 	inferBodyReference(code, aliases, inference)
-
-	// 	expect(inference).toEqual({
-	// 		body: false,
-	// 		cookie: false,
-	// 		headers: false,
-	// 		queries: ['quack'],
-	// 		query: true,
-	// 		set: true,
-	// 		unknownQueries: false
-	// 	})
-	// })
-
 	it('skip dynamic quote query', () => {
 		const code = `{
 			const b = query[quack];

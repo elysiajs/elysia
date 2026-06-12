@@ -11,16 +11,6 @@ describe('retrieve root parameter', () => {
 		})
 	})
 
-	// Doesn't make sense as JavaScript will panic
-	// it('return the same string when there are no brackets in the string', () => {
-	// 	const parameter = 'hello world'
-	// 	const result = retrieveRootparameters(parameter)
-	// 	expect(result).toEqual({
-	// 		parameters: ['hello world'],
-	// 		hasParenthesis: false
-	// 	})
-	// })
-
 	it('remove brackets and their contents when they are at the root level', () => {
 		const parameter = '({ hello: { world: { a } }, elysia })'
 		const result = retrieveRootparameters(parameter)
@@ -47,16 +37,6 @@ describe('retrieve root parameter', () => {
 			hasParenthesis: false
 		})
 	})
-
-	// Doesn't make sense as JavaScript will panic
-	// it('return even if bracket is unbalanced', () => {
-	// 	const parameter = '({ hello: { world: { a } })'
-	// 	const result = retrieveRootparameters(parameter)
-	// 	expect(result).toEqual({
-	// 		parameters: ['hello'],
-	// 		hasParenthesis: true
-	// 	})
-	// })
 
 	it('return the root parameters when given a string with spaces between brackets', () => {
 		const parameter = '({ hello: { world: { a } }, elysia })'

@@ -59,40 +59,6 @@ describe('Edge Case', () => {
 		expect(res).toBe('ALL')
 	})
 
-	// ? since different runtime expected to have different implementation of new Response
-	// ? we can't handle all the case
-	// it('handle object of class', async () => {
-	// 	class SomeResponse {
-	// 		constructor(public message: string) {}
-	// 	}
-
-	// 	const app = new Elysia().get(
-	// 		'/',
-	// 		() => new SomeResponse('Hello, world!')
-	// 	)
-
-	// 	const res = await app.handle(req('/')).then((x) => x.json())
-	// 	expect(res).toStrictEqual({
-	// 		message: 'Hello, world!'
-	// 	})
-	// })
-
-	// it('handle object of class (async)', async () => {
-	// 	class SomeResponse {
-	// 		constructor(public message: string) {}
-	// 	}
-
-	// 	const app = new Elysia().get('/', async () => {
-	// 		await Bun.sleep(1)
-	// 		return new SomeResponse('Hello, world!')
-	// 	})
-
-	// 	const res = await app.handle(req('/')).then((x) => x.json())
-	// 	expect(res).toStrictEqual({
-	// 		message: 'Hello, world!'
-	// 	})
-	// })
-
 	it('handle strict path and loose path', async () => {
 		const loose = new Elysia().group('/a', (app) =>
 			app.get('/', () => 'Hi')

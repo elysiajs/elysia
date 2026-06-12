@@ -163,31 +163,6 @@ describe('Model', () => {
 		expect(correct.status).toBe(200)
 	})
 
-	// it('use coerce with reference model', async () => {
-	// 	const app = new Elysia()
-	// 		.model({
-	// 			number: t.Number(),
-	// 			optionalNumber: t.Optional(t.Ref('number'))
-	// 		})
-	// 		.post('/', ({ body }) => body, {
-	// 			body: 'optionalNumber'
-	// 		})
-
-	// 	const error = await app.handle(post('/'))
-	// 	expect(error.status).toBe(422)
-
-	// 	const correct = await app.handle(
-	// 		new Request('http://localhost/', {
-	// 			method: 'POST',
-	// 			headers: {
-	// 				'content-type': 'text/plain; charset=utf-8'
-	// 			},
-	// 			body: '0'
-	// 		})
-	// 	)
-	// 	expect(correct.status).toBe(200)
-	// })
-
 	it('create default value with nested reference model', async () => {
 		const app = new Elysia()
 			.model({

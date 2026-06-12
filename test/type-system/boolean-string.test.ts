@@ -45,11 +45,6 @@ describe('TypeSystem - BooleanString', () => {
 		// `Value.Decode` runs Convert before its Check gate and is lenient.
 	})
 
-	// it('Convert', () => {
-	// 	expect(Value.Convert(t.BooleanString(), 'true')).toBe(true)
-	// 	expect(Value.Convert(t.BooleanString(), 'false')).toBe(false)
-	// })
-
 	it('Integrate', async () => {
 		const app = new Elysia().get('/', ({ query }) => query, {
 			query: t.Object({

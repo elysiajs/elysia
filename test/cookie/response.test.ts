@@ -294,34 +294,6 @@ describe('Cookie Response', () => {
 		expect(await response.json()).toEqual(expected)
 	})
 
-	// this is removed there's no way to accurately determine object on Standard Schema
-	// it("don't parse cookie type unless specified", async () => {
-	// 	let value: unknown
-
-	// 	const app = new Elysia().get(
-	// 		'/council',
-	// 		({ cookie: { council } }) => (value = council.value)
-	// 	)
-
-	// 	const expected = {
-	// 		name: 'Rin',
-	// 		affilation: 'Administration'
-	// 	}
-
-	// 	const response = await app.handle(
-	// 		req('/council', {
-	// 			headers: {
-	// 				cookie:
-	// 					'council=' +
-	// 					encodeURIComponent(JSON.stringify(expected))
-	// 			}
-	// 		})
-	// 	)
-
-	// 	expect(response.status).toBe(200)
-	// 	expect(value).toEqual(JSON.stringify(expected))
-	// })
-
 	it('handle optional at root', async () => {
 		const app = new Elysia().get('/', ({ cookie: { id } }) => id.value, {
 			cookie: t.Optional(

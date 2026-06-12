@@ -222,52 +222,6 @@ describe('Modules', () => {
 		expect(response.status).toBe(200)
 	})
 
-	// Requires eagerly merging a pending instance's synchronously-registered
-	// routes (and re-merging once its async modules drain) — `use(pending
-	// instance)` currently defers the whole merge until the chain drains, so
-	// `/plugin` is unreachable without `await app.modules`. Compatible with
-	// the eager-serve design in test/2/extends/async-use.test.ts but needs
-	// partial-merge machinery (issue #1067 semantics) first.
-	// it('recompile nested async plugin once registered', async () => {
-	// 	const asyncPlugin = Promise.resolve(new Elysia({ name: 'AsyncPlugin' }))
-
-	// 	const plugin = new Elysia({ name: 'Plugin' })
-	// 		.use(asyncPlugin)
-	// 		.get('/plugin', () => 'GET /plugin')
-
-	// 	const app = new Elysia({ name: 'App' })
-	// 		.use(plugin)
-	// 		.get('/foo', () => 'GET /foo')
-
-	// 	const response = await app
-	// 		.handle(new Request('http://localhost/plugin'))
-	// 		.then((x) => x.text())
-
-	// 	// https://github.com/elysiajs/elysia/issues/1067
-	// 	// If the plugin doesn't recompile, route index
-	// 	// would be pointed to /foo instead of /plugin
-	// 	expect(response).toEqual('GET /plugin')
-	// })
-
-	// it('recompile not nested async plugin once registered', async () => {
-	// 	const asyncPlugin = Promise.resolve(new Elysia({ name: 'AsyncPlugin' }))
-
-	// 	const plugin = new Elysia({ name: 'Plugin' })
-	// 		.use(asyncPlugin)
-	// 		.get('/plugin', () => 'GET /plugin')
-
-	// 	const app = new Elysia({ name: 'App' })
-	// 		.use(plugin)
-	// 		.get('/foo', () => 'GET /foo')
-
-	// 	const response = await app.handle(
-	// 		new Request('http://localhost/plugin')
-	// 	)
-
-	// 	const text = await response.text()
-	// 	expect(text).toEqual('GET /plugin')
-	// })
-
 	it('register dynamic import routes inside guard', async () => {
 		const app = new Elysia().guard(
 			{},

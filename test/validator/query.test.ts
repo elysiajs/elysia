@@ -522,19 +522,6 @@ describe('Query Validator', () => {
 		})
 	})
 
-	// People don't expect this
-	// @see: https://x.com/saltyAom/status/1813236251321069918
-	// it('parse query array without schema', async () => {
-	// 	let value: string[] | undefined
-
-	// 	const response = await new Elysia()
-	// 		.get('/', ({ query: { keys } }) => value = keys)
-	// 		.handle(new Request(`http://localhost/?id=1&id=2`))
-	// 		.then((res) => res.json())
-
-	// 	expect(value).toEqual(['1', '2'])
-	// })
-
 	it("don't parse query object without schema", async () => {
 		const app = new Elysia().get('/', ({ query: { role } }) => role)
 
