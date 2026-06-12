@@ -250,3 +250,68 @@ class OtherError extends Error {
 		403: 'plugin'
 	}>()
 }
+
+// T8 regression pins: the route-shape `error` field must survive every
+// composition path (it was dropped by the pre-rewrite guard/group/use
+// merge). The field carries unhandled returned errors for deferred
+// re-resolution — losing it silently breaks `.error(Class, handler)`
+// registered above the composition.
+{
+	const direct = new Elysia().get('/x', () =>
+		Math.random() > 0.5 ? new MyError('x') : ('ok' as const)
+	)
+
+	expectTypeOf<
+		(typeof direct)['~Routes']['x']['get']['error']
+	>().toEqualTypeOf<MyError>()
+
+	const used = new Elysia().use(direct)
+
+	expectTypeOf<
+		(typeof used)['~Routes']['x']['get']['error']
+	>().toEqualTypeOf<MyError>()
+
+	const grouped = new Elysia().group('/g', (app) =>
+		app.get('/x', () =>
+			Math.random() > 0.5 ? new MyError('x') : ('ok' as const)
+		)
+	)
+
+	expectTypeOf<
+		(typeof grouped)['~Routes']['g']['x']['get']['error']
+	>().toEqualTypeOf<MyError>()
+
+	const groupedWithHook = new Elysia().group('/h', {}, (app) =>
+		app.get('/x', () =>
+			Math.random() > 0.5 ? new MyError('x') : ('ok' as const)
+		)
+	)
+
+	expectTypeOf<
+		(typeof groupedWithHook)['~Routes']['h']['x']['get']['error']
+	>().toEqualTypeOf<MyError>()
+
+	const guarded = new Elysia().guard({}, (app) =>
+		app.get('/x', () =>
+			Math.random() > 0.5 ? new MyError('x') : ('ok' as const)
+		)
+	)
+
+	expectTypeOf<
+		(typeof guarded)['~Routes']['x']['get']['error']
+	>().toEqualTypeOf<MyError>()
+
+	// a parent handler re-resolves the composed route's error: the field
+	// empties and the handler's status folds into the response map
+	const resolved = new Elysia()
+		.use(used)
+		.error(MyError, () => 'handled' as const)
+
+	expectTypeOf<
+		(typeof resolved)['~Routes']['x']['get']['error']
+	>().toEqualTypeOf<never>()
+
+	expectTypeOf<
+		(typeof resolved)['~Routes']['x']['get']['response'][500]
+	>().toEqualTypeOf<'handled'>()
+}

@@ -1930,6 +1930,7 @@ import { Prettify } from '../../../src/types'
 {
 	const app = new Elysia().guard(
 		{
+			schema: 'standalone',
 			query: t.Object({
 				name: t.Literal('lilith')
 			}),
@@ -1940,6 +1941,7 @@ import { Prettify } from '../../../src/types'
 		(app) =>
 			app.guard(
 				{
+					schema: 'standalone',
 					query: t.Object({
 						limit: t.Number()
 					}),
@@ -1973,6 +1975,7 @@ import { Prettify } from '../../../src/types'
 {
 	const app = new Elysia().guard(
 		{
+			schema: 'standalone',
 			query: t.Object({
 				name: t.Literal('lilith')
 			}),
@@ -1983,6 +1986,7 @@ import { Prettify } from '../../../src/types'
 		(app) =>
 			app.guard(
 				{
+					schema: 'standalone',
 					query: t.Object({
 						limit: t.Number()
 					}),
@@ -2034,6 +2038,7 @@ import { Prettify } from '../../../src/types'
 {
 	const app = new Elysia().guard(
 		{
+			schema: 'standalone',
 			query: t.Object({
 				name: t.Literal('lilith')
 			}),
@@ -2044,6 +2049,7 @@ import { Prettify } from '../../../src/types'
 		(app) =>
 			app.guard(
 				{
+					schema: 'standalone',
 					query: t.Object({
 						limit: t.Number()
 					}),

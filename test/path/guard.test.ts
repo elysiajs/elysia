@@ -414,9 +414,33 @@ describe('guard', () => {
 		])
 	})
 
-	it('cast callback function schema to standaloneValidator', async () => {
+	it('route-local schema overrides the wrapper schema', async () => {
 		const app = new Elysia().guard(
 			{ params: t.Object({ id: t.Number() }) },
+			(app) =>
+				app.get('/guard/:id/:name', ({ params }) => params, {
+					params: t.Object({ name: t.String() })
+				})
+		)
+
+		// the route's own `params` replaces the wrapper's (override is the
+		// default) — `id` is no longer part of the schema and normalization
+		// strips it from the validated params object
+		const valid = app.handle(req('/guard/1/saltyaom')).then((x) => x.json())
+		const invalid = app
+			.handle(req('/guard/a/saltyaom'))
+			.then((x) => x.status)
+
+		expect(await valid).toEqual({ name: 'saltyaom' })
+		expect(await invalid).toBe(200)
+	})
+
+	it("wrapper schema with schema: 'standalone' stays additive", async () => {
+		const app = new Elysia().guard(
+			{
+				schema: 'standalone',
+				params: t.Object({ id: t.Number() })
+			},
 			(app) =>
 				app.get('/guard/:id/:name', ({ params }) => params, {
 					params: t.Object({ name: t.String() })
@@ -432,7 +456,7 @@ describe('guard', () => {
 		expect(await invalid).toBe(422)
 	})
 
-	it('handle multiple nested guard with schema', async () => {
+	it('nested guard: route-local schema overrides the wrappers', async () => {
 		const app = new Elysia().guard(
 			{
 				query: t.Object({
@@ -442,6 +466,48 @@ describe('guard', () => {
 			(app) =>
 				app.guard(
 					{
+						query: t.Object({
+							limit: t.Number()
+						})
+					},
+					(app) =>
+						app.get('/', ({ query }) => query, {
+							query: t.Object({
+								playing: t.Boolean()
+							})
+						})
+				)
+		)
+
+		// only the route's own `query` validates (override is the default);
+		// the wrappers' `name`/`limit` constraints are replaced
+		const value = await app
+			.handle(req('/?name=lilith&playing=true&limit=10'))
+			.then((x) => x.json())
+
+		expect(value).toEqual({
+			playing: true
+		})
+
+		const error = await app
+			.handle(req('/?name=lilith&playing=true'))
+			.then((x) => x.status)
+
+		expect(error).toBe(200)
+	})
+
+	it('nested standalone guard schemas stay additive', async () => {
+		const app = new Elysia().guard(
+			{
+				schema: 'standalone',
+				query: t.Object({
+					name: t.Literal('lilith')
+				})
+			},
+			(app) =>
+				app.guard(
+					{
+						schema: 'standalone',
 						query: t.Object({
 							limit: t.Number()
 						})
