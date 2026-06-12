@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
-import { compileToSource } from './source'
+import { compileToSource, type AotTarget } from './source'
 
 export interface ElysiaAotOptions {
 	/**
@@ -20,6 +20,15 @@ export interface ElysiaAotOptions {
 	 * @default decided by Elysia based on route batch scale
 	 */
 	lazy?: boolean | number
+
+	/**
+	 * Deploy target for build-time-baked codegen consts (the response-header
+	 * path). Set `target: 'workerd'` to build under Bun yet ship a manifest
+	 * valid on Cloudflare Workers / Node.
+	 *
+	 * @default the build runtime
+	 */
+	target?: AotTarget
 }
 
 function findPackageRoot(from: string = process.cwd()): string {
@@ -68,6 +77,7 @@ export async function generateCompiledModule(
 	return compileToSource(app as Parameters<typeof compileToSource>[0], {
 		register: true,
 		registerFrom: options?.registerFrom,
-		lazy: options?.lazy
+		lazy: options?.lazy,
+		target: options?.target
 	})
 }

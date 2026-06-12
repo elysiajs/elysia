@@ -13,7 +13,7 @@ import { writeFileSync } from 'node:fs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const entry = resolve(here, 'src/app.mjs')
-const source = await generateCompiledModule({ entry, registerFrom: 'elysia' })
+const source = await generateCompiledModule(entry, { registerFrom: 'elysia' })
 writeFileSync(resolve(here, 'src/manifest.generated.js'), source)
 console.log(
 	`wrote manifest under Node (isBun=${typeof Bun !== 'undefined'}) — ${source.length} bytes`

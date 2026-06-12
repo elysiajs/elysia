@@ -4,10 +4,17 @@
 // without the frozen manifest. If it validates and echoes, eval was eliminated.
 export {} // module scope (top-level await)
 
+// `bun script/smoke.ts [port] [...extra wrangler args]`
+//  - default       → bundles `wrangler.jsonc` main (src/index.ts: manifest + app)
+//  - standalone    → `8801 --no-bundle -c wrangler.standalone.jsonc` runs the
+//                    pre-built esbuild bundle (dist-cf/worker.mjs) with no Wrangler
+//                    bundling, proving the esbuild AOT plugin's output runs on workerd
+const PORT = process.argv[2] ?? '8787'
+const EXTRA = process.argv.slice(3)
+
 const log: string[] = []
 const proc = Bun.spawn({
-	// entry = `wrangler.jsonc` `main` (src/index.ts: manifest + app)
-	cmd: ['bunx', 'wrangler', 'dev', '--port', '8787', '--local'],
+	cmd: ['bunx', 'wrangler', 'dev', '--port', PORT, '--local', ...EXTRA],
 	stdout: 'pipe',
 	stderr: 'pipe'
 })
@@ -18,7 +25,7 @@ const drain = async (s: ReadableStream) => {
 drain(proc.stdout)
 drain(proc.stderr)
 
-const base = 'http://localhost:8787'
+const base = `http://localhost:${PORT}`
 const deadline = Date.now() + 40_000
 let lastErr = ''
 

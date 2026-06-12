@@ -2,3 +2,4 @@ node_modules/
 package-lock.json
 .wrangler
 src/manifest.generated.js
+dist-cf/

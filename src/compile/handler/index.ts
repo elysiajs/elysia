@@ -67,6 +67,19 @@ import type {
 
 const parseFormData = 'c.body=await pf(c)\n'
 
+// During AOT capture the codegen STRING is frozen, so any runtime-detected const
+// it interpolates is baked at BUILD time. The header-materialization path is the
+// only build-target-dependent one (`setImmediate` is emitted as a runtime check,
+// portable anywhere). An AOT build whose deploy target differs from the build
+// runtime — e.g. build under Bun, deploy to workerd — sets this to force the
+// right branch; `undefined` means "use the build runtime's `hasHeaderShorthand`".
+let captureHeaderShorthand: boolean | undefined
+export const setCaptureHeaderShorthand = (
+	value: boolean | undefined
+): void => {
+	captureHeaderShorthand = value
+}
+
 function builtinParser(
 	adapter: ElysiaAdapter['parse'],
 	parse: string,
@@ -755,7 +768,8 @@ export function compileHandler(
 	}
 
 	if (hasHeaders) {
-		code += `c.headers=${hasHeaderShorthand ? 'c.request.headers.toJSON()' : 'Object.fromEntries(c.request.headers)'}\n`
+		const headerShorthand = captureHeaderShorthand ?? hasHeaderShorthand
+		code += `c.headers=${headerShorthand ? 'c.request.headers.toJSON()' : 'Object.fromEntries(c.request.headers)'}\n`
 		inlineUnsafe = true
 	}
 

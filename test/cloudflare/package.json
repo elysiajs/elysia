@@ -7,9 +7,12 @@
 		"start": "wrangler dev",
 		"gen": "node gen-node.mjs",
 		"test": "node gen-node.mjs && bun script/smoke.ts",
+		"build:standalone": "bun build-standalone.mjs",
+		"test:standalone": "bun build-standalone.mjs && bun script/smoke.ts 8801 --no-bundle -c wrangler.standalone.jsonc",
 		"cf-typegen": "wrangler types"
 	},
 	"devDependencies": {
+		"esbuild": "0.25.4",
 		"typescript": "^5.8.2",
 		"wrangler": "^4.40.2"
 	},

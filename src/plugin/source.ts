@@ -14,10 +14,29 @@ import {
 } from '../compile/aot'
 import { env } from '../universal'
 import { nullObject } from '../utils'
+import { setCaptureHeaderShorthand } from '../compile/handler'
+
+/**
+ * Deploy runtime the AOT artifact will run on. Only matters for codegen consts
+ * baked at build time — currently just the response-header materialization path
+ * (`Headers.toJSON()` exists on Bun, not Node/workerd).
+ */
+export type AotTarget = 'bun' | 'node' | 'workerd'
 
 export interface CompileToSourceOptions {
 	/** Emit a self-registering module (`Compiled.registerValidators(...)`). */
 	register?: boolean
+
+	/**
+	 * Deploy target for build-time-baked codegen consts. Lets you build on one
+	 * runtime and deploy to another — e.g. build under Bun with
+	 * `target: 'workerd'` so the manifest bakes `Object.fromEntries(...)` instead
+	 * of the Bun-only `Headers.toJSON()`. Removes the need to generate the
+	 * manifest under Node for a workerd deploy.
+	 *
+	 * @default the build runtime
+	 */
+	target?: AotTarget
 
 	/**
 	 * Materialize route handlers as separate modules and load them lazily
@@ -62,9 +81,19 @@ export async function compileToSource(
 
 	const modules = (app as { modules?: Promise<unknown> }).modules
 	if (modules) await modules
-	;(app as { compile(): unknown }).compile()
 
-	return emitModule(endValidatorCapture(), endHandlerCapture(), options)
+	// `Headers.toJSON()` exists on Bun but not Node/workerd. Force the baked
+	// header path to the deploy target so an AOT build under one runtime ships
+	// codegen valid on another; an undefined target keeps the build default.
+	if (options?.target !== undefined)
+		setCaptureHeaderShorthand(options.target === 'bun')
+
+	try {
+		;(app as { compile(): unknown }).compile()
+		return emitModule(endValidatorCapture(), endHandlerCapture(), options)
+	} finally {
+		setCaptureHeaderShorthand(undefined)
+	}
 }
 
 function emitModule(
