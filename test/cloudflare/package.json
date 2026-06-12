@@ -5,10 +5,11 @@
 	"scripts": {
 		"dev": "wrangler dev",
 		"start": "wrangler dev",
-		"gen": "node gen-node.mjs",
-		"test": "node gen-node.mjs && bun script/smoke.ts",
-		"build:standalone": "bun build-standalone.mjs",
-		"test:standalone": "bun build-standalone.mjs && bun script/smoke.ts 8801 --no-bundle -c wrangler.standalone.jsonc",
+		"setup": "rm -rf node_modules/elysia && ln -sf ../../.. node_modules/elysia",
+		"gen": "npm run setup && node gen-node.mjs",
+		"test": "npm run gen && bun script/smoke.ts",
+		"build:standalone": "npm run setup && bun build-standalone.mjs",
+		"test:standalone": "npm run build:standalone && bun script/smoke.ts 8801 --no-bundle -c wrangler.standalone.jsonc",
 		"cf-typegen": "wrangler types"
 	},
 	"devDependencies": {
