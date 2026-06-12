@@ -5,7 +5,7 @@ Breaking Change:
 - `getSchemaValidator` renamed to `Validator.create`
 - remove `context.contentType` from `Context` in `parse`
 - drop `config.encodeSchema` as always enabled. Can't support both in a type safe manner.
-- `derive` now run in `beforeHandle`
+- `derive` now run in `beforeHandle` (after validation) — it does **not** run when validation fails (a 422 short-circuits before `beforeHandle`). If you need logic that runs before validation, use `transform` instead.
 - removed `on<event>()` lifecycle methods — use the bare `<event>()` method instead (`onRequest`→`request`, `onParse`→`parse`, `onTransform`→`transform`, `onBeforeHandle`→`beforeHandle`, `onAfterHandle`→`afterHandle`, `onAfterResponse`→`afterResponse`, `onError`→`error`)
 - removed `.onError()` — use `error()`: `error(Error, fn)` registers a per-class handler, `error(fn)` registers the general error handler
 - removed `resolve` / `.resolve()` — use `derive` / `.derive()`
@@ -16,9 +16,12 @@ Breaking Change:
 - removed the deprecated `contentType` second parameter of the `parse`/`parser` handler — use `context.contentType`
 - removed the `{ as: 'append' | 'override' }` object form of `.decorate()` / `.state()` — use the bare-string form `.decorate('append' | 'override', …)` / `.state('append' | 'override', …)`
 - `t.Transform` renamed to `t.Codec` (TypeBox 1.0 alignment)
+- removed `t.Recursive`, `t.Not`, `t.RegExp` (TypeBox 1.0 alignment) — use `t.Ref`/self-reference for recursion and `t.String({ pattern })` for regex constraints
 - `t.NoValidate` semantics: now skips `Check` only — `Default`/`Convert`/`Decode`/`Encode` still run. Unidirectional codecs (`t.BooleanString`, `t.Numeric`) under `NoValidate` will surface as `ValidationError` if Encode is invoked
 - Cookie `sign` without matching `secrets` now throws at app construction time (was silent before — cookies shipped unsigned)
 - deprecated passing Elysia instance to `.mount`, use `.use` instead
+- removed v1 instance methods `.route()`, `.connect()`, `.env()`, `.affix()`/`.prefix()`/`.suffix()` and the `.store`/`.decorator`/`.config` instance getters — use the explicit method handlers (`.get`/`.post`/…), plugin naming via `new Elysia({ name, prefix })`, and the in-handler `context.store`/`context.decorator`
+- functional macro must be named: `.macro(name, fn)` (or the object form `.macro({ name: fn })`). A bare `.macro(fn)` now throws instead of silently doing nothing
 
 Behavior Change:
 - `afterHandle` will skip the rest when short-circuit

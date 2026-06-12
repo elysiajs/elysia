@@ -109,7 +109,6 @@ import type {
 	MaybeValueOrVoidFunction,
 	MacroProperty,
 	MacroToProperty,
-	MaybeFunction,
 	WrapFn,
 	ExcludeElysiaResponse,
 	ExtractErrorFromHandle
@@ -3341,27 +3340,25 @@ export class Elysia<
 	macro<
 		const Input extends Metadata['macro'] &
 			InputSchema<keyof Definitions['typebox'] & string>,
-		const NewMacro extends MaybeFunction<
-			Macro<
-				Input,
-				// @ts-ignore trust me bro
-				IntersectIfObjectSchema<
+		const NewMacro extends Macro<
+			Input,
+			// @ts-ignore trust me bro
+			IntersectIfObjectSchema<
+				MergeSchema<
+					UnwrapRoute<Input, Definitions['typebox'], BasePath>,
 					MergeSchema<
-						UnwrapRoute<Input, Definitions['typebox'], BasePath>,
-						MergeSchema<
-							Volatile['schema'],
-							MergeSchema<Ephemeral['schema'], Metadata['schema']>
-						>
-					>,
-					Metadata['schemas'] &
-						Ephemeral['schemas'] &
-						Volatile['schemas']
+						Volatile['schema'],
+						MergeSchema<Ephemeral['schema'], Metadata['schema']>
+					>
 				>,
-				Singleton & {
-					derive: Partial<Ephemeral['derive'] & Volatile['derive']>
-				},
-				Definitions['error']
-			>
+				Metadata['schemas'] &
+					Ephemeral['schemas'] &
+					Volatile['schemas']
+			>,
+			Singleton & {
+				derive: Partial<Ephemeral['derive'] & Volatile['derive']>
+			},
+			Definitions['error']
 		>
 	>(
 		macro: NewMacro
@@ -3384,6 +3381,13 @@ export class Elysia<
 	>
 
 	macro(macroOrName: string | Macro, macro?: Macro) {
+		// A functional macro must be named: `.macro(name, fn)`. A bare
+		// `.macro(fn)` has no name to register under and used to silently no-op.
+		if (typeof macroOrName === 'function')
+			throw new Error(
+				'A functional macro must be named — use `.macro(name, fn)` instead of `.macro(fn)`'
+			)
+
 		if (typeof macroOrName === 'string' && !macro)
 			throw new Error('Macro function is required')
 
@@ -4322,6 +4326,17 @@ export class Elysia<
 		}
 
 		return this
+	}
+
+	/**
+	 * Registered reusable models (via `.model()`), keyed by name.
+	 *
+	 * Primarily a type accessor — `typeof app.models` extracts the registered
+	 * model types for sharing schema types across files (v1 parity). Returns the
+	 * live model map at runtime.
+	 */
+	get models(): Definitions['typebox'] {
+		return (this['~ext']?.models ?? {}) as Definitions['typebox']
 	}
 
 	// Reference a registered model by name as a schema; resolved against

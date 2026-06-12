@@ -333,4 +333,12 @@ describe('Model', () => {
 
 		expect(value).toEqual({ message: 'ok', content: [{ id: 3 }] })
 	})
+
+	it('exposes registered models via the .models getter (A6)', () => {
+		const app = new Elysia()
+			.model('string', t.String())
+			.model('number', t.Number())
+
+		expect(Object.keys(app.models)).toEqual(['string', 'number'])
+	})
 })

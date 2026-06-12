@@ -217,6 +217,50 @@ describe('Transform', () => {
 		expect(invalid).toBe(422)
 	})
 
+	// Transform must run BEFORE body validation (consistent with
+	// query/params/headers), so a transform may reshape an incoming body into
+	// the validated shape — and its output is the thing that gets validated.
+	const post = (body: unknown) =>
+		new Request('http://localhost/', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify(body)
+		})
+
+	it('transform reshapes the body before it is validated', async () => {
+		const app = new Elysia().post('/', ({ body }) => body, {
+			body: t.Object({ name: t.String() }),
+			transform({ body }) {
+				const b = body as Record<string, unknown>
+				if (b && 'rename' in b) {
+					b.name = b.rename
+					delete b.rename
+				}
+			}
+		})
+
+		// arrives WITHOUT `name` (invalid) — transform adds it → passes
+		const res = await app.handle(post({ rename: 'Himari' }))
+
+		expect(res.status).toBe(200)
+		expect(await res.json()).toEqual({ name: 'Himari' })
+	})
+
+	it("transform's body output is validated (invalid after transform → 422)", async () => {
+		const app = new Elysia().post('/', ({ body }) => body, {
+			body: t.Object({ name: t.String() }),
+			transform({ body }) {
+				// drop the required field — validation (which runs AFTER) catches it
+				delete (body as Record<string, unknown>).name
+			}
+		})
+
+		// arrives valid, but transform makes it invalid → 422
+		const res = await app.handle(post({ name: 'Himari' }))
+
+		expect(res.status).toBe(422)
+	})
+
 	it('inherits from plugin', async () => {
 		const transformId = new Elysia().transform<
 			{

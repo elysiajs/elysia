@@ -66,10 +66,6 @@ const propertyAccessor = (path: unknown): string => {
 	return 'root'
 }
 
-// Walk a TypeBox/Standard schema using an `instancePath` like `/x` or
-// `/items/0`. Returns undefined can't resolved.
-//
-// in case of allOf/anyOf, first path win
 const walkComposition = (schema: any, parts: string[]): any => {
 	if (parts.length === 0) return schema
 
@@ -81,6 +77,7 @@ const walkComposition = (schema: any, parts: string[]): any => {
 			const result = walkComposition(branches[i], parts)
 			if (result !== undefined) return result
 		}
+
 		return undefined
 	}
 
@@ -99,8 +96,13 @@ const walkComposition = (schema: any, parts: string[]): any => {
 	return undefined
 }
 
+// Walk a TypeBox/Standard schema using an `instancePath` like `/x` or
+// `/items/0`. Returns undefined if can't resolved.
+//
+// in case of allOf/anyOf, first path win
 const walkSubSchema = (schema: any, instancePath: string | undefined) => {
 	if (!schema || !instancePath) return schema
+
 	const parts = instancePath.split('/').filter(Boolean)
 	return walkComposition(schema, parts)
 }

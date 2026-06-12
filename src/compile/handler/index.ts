@@ -314,6 +314,10 @@ const createInlineHandlerWithSet = (
 		return map(r, c.set, c.request)
 	}) as CompiledHandler
 
+// `derive` is promoted into the front of `beforeHandle`, so it runs AFTER
+// validation (body/query/params/headers/cookie). Consequence: on a 422 the
+// validators throw before `beforeHandle`, so derive never runs. Logic that must
+// run before validation belongs in `transform`. (2.0 breaking change.)
 function promoteDerive(hook: any) {
 	const derive = hook.derive
 	if (derive === undefined) return
@@ -776,11 +780,6 @@ export function compileHandler(
 		link(ParseError, 'pe')
 		code += 'try{\n' + parseCode + '}catch(e){throw new pe(e)}\n'
 
-		if (vali?.body) {
-			link(vali, 'va')
-			code += `c.body=${bodyValiIsAsync ? 'await ' : ''}va.body.From(c.body,'body')\n`
-		}
-
 		if (hasTrace) code += endTrace()
 	} else if (hasTrace) {
 		code += beginTrace('parse', 0) + endTrace()
@@ -794,6 +793,11 @@ export function compileHandler(
 			code += mapTransform(hook!.transform!, [buildReport('transform')])
 		}
 		code += endTrace()
+	}
+
+	if (vali?.body) {
+		link(vali, 'va')
+		code += `c.body=${bodyValiIsAsync ? 'await ' : ''}va.body.From(c.body,'body')\n`
 	}
 
 	if (vali?.headers) {

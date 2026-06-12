@@ -1439,4 +1439,20 @@ describe('Macro', () => {
 
 		expect(invalid3.status).toBe(422)
 	})
+
+	it('rejects a bare functional macro — must be named (A6)', () => {
+		// `.macro(fn)` has no name to register under; it used to silently no-op
+		// and now throws. (A function is structurally assignable to the open
+		// `Macro` record, so this is enforced at runtime, not the type level.)
+		expect(() =>
+			(new Elysia().macro as any)(() => ({ beforeHandle() {} }))
+		).toThrow()
+	})
+
+	it('accepts a named functional macro `.macro(name, fn)` (A6)', () => {
+		const def = () => ({ beforeHandle() {} })
+		const app = new Elysia().macro('a', def as any)
+
+		expect(app['~ext']?.macro?.a).toBe(def)
+	})
 })
