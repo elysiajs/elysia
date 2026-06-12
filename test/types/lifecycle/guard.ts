@@ -94,3 +94,49 @@ import { expectTypeOf } from 'expect-type'
 }
 
 export {}
+
+// ? params are WHOLE-FIELD on the override channel — the nearest DECLARED
+// ? schema's static IS the params shape (the runtime validator strips keys
+// ? outside it, even path-derived ones; verified against the runtime)
+{
+	// route-local params replace the wrapper's entirely
+	new Elysia().guard(
+		{ params: t.Object({ id: t.Number() }) },
+		(app) =>
+			app.get('/guard/:id/:name', ({ params }) => {
+				expectTypeOf(params).toEqualTypeOf<{ name: string }>()
+			}, {
+				params: t.Object({ name: t.String() })
+			})
+	)
+
+	// a silent route inherits the wrapper's params validator — its static
+	// is the shape, path keys it doesn't cover are stripped
+	new Elysia().guard(
+		{ params: t.Object({ id: t.Number() }) },
+		(app) =>
+			app.get('/guard/:id/:name', ({ params }) => {
+				expectTypeOf(params).toEqualTypeOf<{ id: number }>()
+			})
+	)
+
+	// nested wrappers: the nearer declared schema wins whole-field
+	new Elysia().guard(
+		{ params: t.Object({ id: t.Number() }) },
+		(app) =>
+			app.guard(
+				{ params: t.Object({ name: t.Literal('x') }) },
+				(app) =>
+					app.get('/guard/:id/:name', ({ params }) => {
+						expectTypeOf(params).toEqualTypeOf<{ name: 'x' }>()
+					})
+			)
+	)
+
+	// nothing declared anywhere → raw path strings
+	new Elysia().guard({}, (app) =>
+		app.get('/guard/:id/:name', ({ params }) => {
+			expectTypeOf(params).toEqualTypeOf<{ id: string; name: string }>()
+		})
+	)
+}

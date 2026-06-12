@@ -3352,7 +3352,19 @@ export class Elysia<
 				},
 				Definitions,
 				{
-					schema: Schema
+					// path-free: the inner BasePath already carries the
+					// prefix, so route sites regenerate full path params —
+					// baking `ResolvePath` here would shadow them
+					schema: MergeSchema<
+						UnwrapRoute<Input, Definitions['typebox']>,
+						MergeSchema<
+							Volatile['schema'],
+							MergeSchema<
+								Ephemeral['schema'],
+								Metadata['schema']
+							>
+						>
+					>
 					schemas: Metadata['schemas'] & MacroContext
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
@@ -4101,7 +4113,19 @@ export class Elysia<
 				},
 				Definitions,
 				{
-					schema: Schema
+					// path-free: the inner BasePath already carries the
+					// prefix, so route sites regenerate full path params —
+					// baking `ResolvePath` here would shadow them
+					schema: MergeSchema<
+						UnwrapRoute<Input, Definitions['typebox']>,
+						MergeSchema<
+							Volatile['schema'],
+							MergeSchema<
+								Ephemeral['schema'],
+								Metadata['schema']
+							>
+						>
+					>
 					schemas: Metadata['schemas'] & MacroContext
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
@@ -5278,7 +5302,10 @@ export class Elysia<
 				MergeSchema<
 					Volatile['schema'],
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
-				>
+				>,
+				'',
+				// route declares no params → path-derived, ambient may win
+				undefined extends Input['params'] ? true : false
 			>,
 			MergeScopedSchemas<
 				Metadata['schemas'],
@@ -5400,7 +5427,10 @@ export class Elysia<
 				MergeSchema<
 					Volatile['schema'],
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
-				>
+				>,
+				'',
+				// route declares no params → path-derived, ambient may win
+				undefined extends Input['params'] ? true : false
 			>,
 			MergeScopedSchemas<
 				Metadata['schemas'],
@@ -5522,7 +5552,10 @@ export class Elysia<
 				MergeSchema<
 					Volatile['schema'],
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
-				>
+				>,
+				'',
+				// route declares no params → path-derived, ambient may win
+				undefined extends Input['params'] ? true : false
 			>,
 			MergeScopedSchemas<
 				Metadata['schemas'],
@@ -5644,7 +5677,10 @@ export class Elysia<
 				MergeSchema<
 					Volatile['schema'],
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
-				>
+				>,
+				'',
+				// route declares no params → path-derived, ambient may win
+				undefined extends Input['params'] ? true : false
 			>,
 			MergeScopedSchemas<
 				Metadata['schemas'],
@@ -5766,7 +5802,10 @@ export class Elysia<
 				MergeSchema<
 					Volatile['schema'],
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
-				>
+				>,
+				'',
+				// route declares no params → path-derived, ambient may win
+				undefined extends Input['params'] ? true : false
 			>,
 			MergeScopedSchemas<
 				Metadata['schemas'],
@@ -5888,7 +5927,10 @@ export class Elysia<
 				MergeSchema<
 					Volatile['schema'],
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
-				>
+				>,
+				'',
+				// route declares no params → path-derived, ambient may win
+				undefined extends Input['params'] ? true : false
 			>,
 			MergeScopedSchemas<
 				Metadata['schemas'],
@@ -6010,7 +6052,10 @@ export class Elysia<
 				MergeSchema<
 					Volatile['schema'],
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
-				>
+				>,
+				'',
+				// route declares no params → path-derived, ambient may win
+				undefined extends Input['params'] ? true : false
 			>,
 			MergeScopedSchemas<
 				Metadata['schemas'],
@@ -6118,7 +6163,10 @@ export class Elysia<
 				MergeSchema<
 					Volatile['schema'],
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
-				>
+				>,
+				'',
+				// route declares no params → path-derived, ambient may win
+				undefined extends Input['params'] ? true : false
 			>,
 			MergeScopedSchemas<
 				Metadata['schemas'],
@@ -6196,7 +6244,10 @@ export class Elysia<
 				MergeSchema<
 					Volatile['schema'],
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
-				>
+				>,
+				'',
+				// route declares no params → path-derived, ambient may win
+				undefined extends Input['params'] ? true : false
 			>,
 			MergeScopedSchemas<
 				Metadata['schemas'],
@@ -6283,7 +6334,10 @@ export class Elysia<
 				MergeSchema<
 					Volatile['schema'],
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
-				>
+				>,
+				'',
+				// route declares no params → path-derived, ambient may win
+				undefined extends Input['params'] ? true : false
 			>,
 			MergeScopedSchemas<
 				Metadata['schemas'],

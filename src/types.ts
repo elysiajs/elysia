@@ -890,7 +890,8 @@ export type ErrorHandler<
 export type MergeSchema<
 	A extends RouteSchema,
 	B extends RouteSchema,
-	Path extends string = ''
+	Path extends string = '',
+	AParamsPathDerived extends boolean = false
 > = {} extends A
 	? Path extends PathParameterLike
 		? Omit<B, 'params'> & { params: ResolvePath<Path> }
@@ -905,16 +906,15 @@ export type MergeSchema<
 					? B['headers']
 					: A['headers']
 				query: undefined extends A['query'] ? B['query'] : A['query']
-				params: IsNever<keyof A['params']> extends true
+				params: AParamsPathDerived extends true
 					? IsNever<keyof B['params']> extends true
-						? ResolvePath<Path>
-						: B['params']
-					: IsNever<keyof B['params']> extends true
 						? A['params']
-						: Prettify<
-								B['params'] &
-									Omit<A['params'], keyof B['params']>
-							>
+						: B['params']
+					: IsNever<keyof A['params']> extends true
+						? IsNever<keyof B['params']> extends true
+							? ResolvePath<Path>
+							: B['params']
+						: A['params']
 				cookie: undefined extends A['cookie']
 					? B['cookie']
 					: A['cookie']
