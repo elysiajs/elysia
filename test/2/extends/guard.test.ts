@@ -56,7 +56,7 @@ describe('guard(scope, hook) bulk registration', () => {
 		expect(count).toBe(0)
 	})
 
-	it('propagates schema to consumer route when scope is global', async () => {
+	it('route-local schema overrides a propagated global guard schema', async () => {
 		const a = new Elysia().guard('global', {
 			query: t.Object({ b: t.String() })
 		})
@@ -65,9 +65,27 @@ describe('guard(scope, hook) bulk registration', () => {
 			query: t.Object({ a: t.String() })
 		})
 
-		// Route now requires both `a` (own schema) and `b` (propagated guard).
-		// flattenChain composes route schema after guard schema, so missing
-		// `b` must fail validation just like missing `a` does.
+		// Guards default to the OVERRIDE channel: the route's own `query`
+		// replaces the propagated guard query, so only `a` is required.
+		const ok = await app.handle('/?a=foo')
+		expect(ok.status).toBe(200)
+
+		const missingA = await app.handle('/?b=bar')
+		expect(missingA.status).not.toBe(200)
+	})
+
+	it('standalone global guard schema stays additive on consumer routes', async () => {
+		const a = new Elysia().guard('global', {
+			schema: 'standalone',
+			query: t.Object({ b: t.String() })
+		})
+
+		const app = new Elysia().use(a).get('/', () => 'ok', {
+			query: t.Object({ a: t.String() })
+		})
+
+		// `schema: 'standalone'` opts into additive validation: the route
+		// requires both `a` (own schema) and `b` (propagated guard).
 		const ok = await app.handle('/?a=foo&b=bar')
 		expect(ok.status).toBe(200)
 

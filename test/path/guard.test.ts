@@ -228,13 +228,12 @@ describe('guard', () => {
 		expect(response).toEqual([422, 422, 422])
 	})
 
-	// Note: scope is now strictly visibility (per `#use` propagation
-	// rules) — not validator override. `.guard()` schemas become
-	// STANDALONE validators; every visible one runs as its own pass.
-	// Each test below verifies BOTH the propagated global schema AND the
-	// more-local schema run, so a response that satisfies one but fails
-	// the other still 422s.
-	it('handle as global without local override', async () => {
+	// Note: EVERY guard form defaults to the OVERRIDE channel — the closer
+	// to the route, the more power. A nearer guard's schema replaces an
+	// inherited one per field / response status. Additive validation
+	// (every visible validator runs) requires an explicit
+	// `schema: 'standalone'` opt-in.
+	it('nearer guard overrides inherited response', async () => {
 		let called = 0
 
 		const inner = new Elysia()
@@ -249,9 +248,8 @@ describe('guard', () => {
 
 		const plugin = new Elysia()
 			.use(inner)
-			// Declaring a second standalone response alongside the inherited
-			// global one is fine at the type level (nearer scope overrides per
-			// status for typing) — at runtime BOTH validators still run
+			// the nearer guard's Boolean response REPLACES the inherited
+			// global Number for routes on this instance
 			.guard({
 				response: t.Boolean(),
 				transform() {
@@ -270,12 +268,12 @@ describe('guard', () => {
 		])
 
 		expect(called).toBe(4)
-		// `/plugin` returns `true` — passes Boolean but fails Number.
-		// Both run, so the route 422s on the Number constraint.
-		expect(response).toEqual([422, 422, 422])
+		// `/plugin` returns `true` — the nearer Boolean replaced Number, so
+		// it passes. `/inner` and `/` only see the global Number.
+		expect(response).toEqual([422, 200, 422])
 	})
 
-	it('handle as global without scoped override', async () => {
+	it('nearer plugin-scope guard overrides inherited response', async () => {
 		let called = 0
 
 		const inner = new Elysia()
@@ -307,10 +305,10 @@ describe('guard', () => {
 		])
 
 		expect(called).toBe(5)
-		// `/plugin` returns `'ok'` (string) — passes String but fails
-		// Number. `/` returns 'not a number' — passes String (plugin
-		// scope reaches app), fails Number.
-		expect(response).toEqual([422, 422, 422])
+		// The plugin-scope String is NEARER than the inherited global
+		// Number, so it replaces it on `/plugin` AND on `/` (plugin scope
+		// reaches the consumer one level up). `/inner` only sees Number.
+		expect(response).toEqual([422, 200, 200])
 	})
 
 	it('handle as scoped', async () => {
