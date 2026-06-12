@@ -541,32 +541,131 @@ export const createResponseHandler = (handler: CreateHandlerParameter) => {
 	}
 }
 
+/**
+ * Split async source into `branches` independent iterators
+ *
+ * A producer drains the source ahead of consumers
+ *
+ * To prevent long/infinite stream, the unconsumed window is capped:
+ * Consumed-by-every-branch entries are trimmed off the front
+ * Producer backpressures whenever the window hits `cap`
+ * Streams shorter than `cap` buffer eagerly;
+ * Only streams exceeding it gate on the slowest consumer
+ *
+ * Branch 0 is the value consumer (response/client)
+ * When it is `return()`-ed (client abort / early exit) the source is stopped
+ * so the observer branches can still reach completion instead of spinning
+ * an infinite source, and so an abandoned branch never pins the window into a deadlock
+ */
 export async function tee<T>(
 	source: AsyncIterable<T>,
-	branches = 2
+	branches = 2,
+	// backpressure
+	cap = 64
 ): Promise<AsyncIterableIterator<T>[]> {
+	const iterator: AsyncIterator<T> | Iterator<T> =
+		(source as AsyncIterable<T>)[Symbol.asyncIterator]?.() ??
+		(source as unknown as Iterable<T>)[Symbol.iterator]()
+
 	const buffer: T[] = []
+	let base = 0
 	let done = false
+	let stopped = false
 	let waiting: { resolve: () => void }[] = []
+	let drainResume: (() => void) | null = null
 
-	;(async () => {
-		for await (const value of source) {
-			buffer.push(value)
-			waiting.forEach((w) => w.resolve())
-			waiting = []
-		}
-		done = true
-		waiting.forEach((w) => w.resolve())
-	})()
+	const cursors: number[] = new Array(branches).fill(0)
+	let active = branches
 
-	async function* makeIterator(): AsyncIterableIterator<T> {
-		let i = 0
-		while (true) {
-			if (i < buffer.length) yield buffer[i++]
-			else if (done) return
-			else await new Promise<void>((resolve) => waiting.push({ resolve }))
+	const wake = () => {
+		if (!waiting.length) return
+		const woken = waiting
+		waiting = []
+		for (const w of woken) w.resolve()
+	}
+
+	const resumeProducer = () => {
+		if (drainResume) {
+			const resume = drainResume
+			drainResume = null
+			resume()
 		}
 	}
 
-	return Array.from({ length: branches }, makeIterator)
+	// Drop entries every active branch has read
+	// let the producer resume if freed room under the cap
+	const trim = () => {
+		if (active > 0) {
+			let min = Infinity
+			for (const c of cursors) if (c < min) min = c
+			if (min !== Infinity && min > base) {
+				buffer.splice(0, min - base)
+				base = min
+			}
+		}
+		if (buffer.length < cap) resumeProducer()
+	}
+
+	;(async () => {
+		try {
+			while (!stopped) {
+				const result = await iterator.next()
+				if (result.done) break
+
+				buffer.push(result.value)
+				wake()
+
+				if (buffer.length >= cap && active > 0 && !stopped)
+					await new Promise<void>((resolve) => {
+						drainResume = resolve
+					})
+			}
+		} catch {
+		} finally {
+			done = true
+			wake()
+		}
+	})()
+
+	async function* makeBranch(me: number): AsyncIterableIterator<T> {
+		try {
+			while (true) {
+				const i = cursors[me]
+
+				if (i < base + buffer.length) {
+					const value = buffer[i - base]
+					cursors[me] = i + 1
+					trim()
+					yield value
+				} else if (done) return
+				else
+					await new Promise<void>((resolve) =>
+						waiting.push({ resolve })
+					)
+			}
+		} finally {
+			if (cursors[me] !== Infinity) {
+				cursors[me] = Infinity
+				active--
+			}
+
+			// Branch 0 is the value consumer
+			// If aborts/returns early, stop the producer
+			if (me === 0 && !stopped) {
+				stopped = true
+				resumeProducer()
+
+				try {
+					await iterator.return?.()
+				} catch {}
+
+				done = true
+			}
+
+			trim()
+			wake()
+		}
+	}
+
+	return Array.from({ length: branches }, (_, b) => makeBranch(b))
 }

@@ -1,20 +1,14 @@
 import { Elysia } from '../src'
 
-class MyError extends Error {
-	constructor(public message: string) {
-		super(message)
-	}
-}
-
-const errorBoundary = new Elysia({ name: 'boundary', as: 'global' })
-	.error(
-		MyError,
-		({ status, error }) => status(418, "QQ")
-	)
-
 const app = new Elysia()
-	.get('/', () => new MyError('A'))
-	.use(errorBoundary)
+	.wrap((fn) => {
+		return (request) => {
+			console.log("Q")
+
+			return fn(request)
+		}
+	})
+	.get('/', () => 'ok')
 
 type Response = (typeof app)['~Routes']['get']['response']
 
