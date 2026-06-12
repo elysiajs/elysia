@@ -47,6 +47,8 @@ Feature:
 - Validator pre-computes default snapshot at construction for safe schemas (no Union/Codec/Refine/nested-Object-without-default), eliminating per-request `Default()` walk for the common case
 
 Bug fix:
+- typebox is tree-shakable again: `Elysia` itself no longer holds a static value-edge into the `t`/typebox graph (`.Ref()` now goes through the typebox-free bridge), so bundling an app that never uses `t` drops typebox entirely (esbuild probe: 737KB → 204KB, 0 typebox bytes; schema users unchanged). `import { Elysia } from 'elysia/base'` is now typebox-free at runtime too (~8ms cold import vs ~60ms for the main barrel)
+- a raw `typebox` schema (importing `Type` from `typebox` directly, never touching Elysia's `t`) threw `Typebox module isn't initialized yet` on every request — bridge stubs now self-initialize via the `t` module's setup trigger
 - prefixed `.use()` dropped the absorbed plugin's inherited hook chain — guards/`beforeHandle`/auth applied through composition silently stopped running once mounted under `new Elysia({ prefix })`
 - an instance-level `.onError` on a plugin clobbered route-level and inherited error handlers, leaking the raw `Error.message` with a 500 instead of the mapped response
 - cookie values were percent-decoded twice (`parse()` already decodes), corrupting any value that decodes to something still containing `%xx` (e.g. `100%2520off` → `100 off` instead of `100%20off`)

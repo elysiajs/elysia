@@ -1,4 +1,4 @@
-import type { TAny, TSchema } from 'typebox/type'
+import type { TAny, TSchema, Ref as RefType } from 'typebox/type'
 import type { Compile as CompileType } from 'typebox/compile'
 import type {
 	Decode as DecodeType,
@@ -6,6 +6,8 @@ import type {
 	HasCodec as HasCodecType,
 	Default as DefaultType
 } from 'typebox/value'
+
+import type * as TypeRegistryType from './exports'
 
 import type { applyCoercions as applyCoercionsType } from './coerce'
 import type {
@@ -23,42 +25,7 @@ import type {
 } from './coerce'
 import type { hasTypes as hasTypesType } from './utils'
 
-const error = new Error("Typebox module isn't initialized yet")
-function errorFn() {
-	throw error
-}
-class Noop {
-	constructor() {
-		throw error
-	}
-}
-
-export let Compile: typeof CompileType = errorFn as any
-export let Decode: typeof DecodeType = errorFn as any
-export let Errors: typeof ErrorsType = errorFn as any
-
-export let applyCoercions: typeof applyCoercionsType = errorFn as any
-
-export let TypeBoxValidator: TypeBoxValidatorType = Noop as any
-export type TypeBoxValidator<T extends TSchema = TAny> = TypeBoxValidatorType<T>
-
-export let TypeBoxValidatorCache: TypeBoxValidatorCacheType = Noop as any
-export type TypeBoxValidatorCache = TypeBoxValidatorCacheType
-
-export let coerceFormData: typeof coerceFormDataType = errorFn as any
-export let coerceQuery: typeof coerceQueryType = errorFn as any
-export let coerceRoot: typeof coerceRootType = errorFn as any
-export let coerceStringToStructure: typeof coerceStringToStructureType =
-	errorFn as any
-export let coerceBody: typeof coerceBodyType = errorFn as any
-
-export let hasTypes: typeof hasTypesType = errorFn as any
-export let HasCodec: typeof HasCodecType = errorFn as any
-
-export let Intersect: typeof IntersectType = errorFn as any
-export let Default: typeof DefaultType = errorFn as any
-
-export function useTypebox(mod: {
+interface TypeboxModule {
 	Compile: typeof CompileType
 	Decode: typeof DecodeType
 	Errors: typeof ErrorsType
@@ -74,7 +41,82 @@ export function useTypebox(mod: {
 	HasCodec: typeof HasCodecType
 	Intersect: typeof IntersectType
 	Default: typeof DefaultType
-}) {
+	Ref: typeof RefType
+	TypeRegistry: typeof TypeRegistryType
+}
+
+const error = new Error(
+	"Typebox module isn't initialized yet. Import `t` from 'elysia' so the TypeBox bridge can register before TypeBox schemas are used."
+)
+
+let live: TypeboxModule | undefined
+
+let setupTrigger: (() => void) | undefined
+export function setSetupTrigger(fn: () => void) {
+	setupTrigger = fn
+}
+
+function ensure(): TypeboxModule {
+	if (!live) setupTrigger?.()
+	if (!live) throw error
+
+	return live
+}
+
+function stub(name: keyof TypeboxModule) {
+	return function (...args: unknown[]) {
+		return (ensure()[name] as Function)(...args)
+	} as any
+}
+
+function stubClass(name: keyof TypeboxModule) {
+	return class {
+		constructor(...args: unknown[]) {
+			return new (ensure()[name] as unknown as new (
+				...args: unknown[]
+			) => object)(...args)
+		}
+	} as any
+}
+
+export let Compile: typeof CompileType = stub('Compile')
+export let Decode: typeof DecodeType = stub('Decode')
+export let Errors: typeof ErrorsType = stub('Errors')
+
+export let applyCoercions: typeof applyCoercionsType = stub('applyCoercions')
+
+export let TypeBoxValidator: TypeBoxValidatorType =
+	stubClass('TypeBoxValidator')
+export type TypeBoxValidator<T extends TSchema = TAny> = TypeBoxValidatorType<T>
+
+export let TypeBoxValidatorCache: TypeBoxValidatorCacheType = stubClass(
+	'TypeBoxValidatorCache'
+)
+export type TypeBoxValidatorCache = TypeBoxValidatorCacheType
+
+export let coerceFormData: typeof coerceFormDataType = stub('coerceFormData')
+export let coerceQuery: typeof coerceQueryType = stub('coerceQuery')
+export let coerceRoot: typeof coerceRootType = stub('coerceRoot')
+export let coerceStringToStructure: typeof coerceStringToStructureType = stub(
+	'coerceStringToStructure'
+)
+export let coerceBody: typeof coerceBodyType = stub('coerceBody')
+
+export let hasTypes: typeof hasTypesType = stub('hasTypes')
+export let HasCodec: typeof HasCodecType = stub('HasCodec')
+
+export let Intersect: typeof IntersectType = stub('Intersect')
+export let Default: typeof DefaultType = stub('Default')
+
+export let Ref: typeof RefType = stub('Ref')
+
+export function ensureTypeRegistry(): typeof TypeRegistryType {
+	return ensure().TypeRegistry
+}
+
+export function useTypebox(mod: TypeboxModule) {
+	live = mod
+
 	Compile = mod.Compile
 	Decode = mod.Decode
 	Errors = mod.Errors
@@ -90,4 +132,5 @@ export function useTypebox(mod: {
 	HasCodec = mod.HasCodec
 	Intersect = mod.Intersect
 	Default = mod.Default
+	Ref = mod.Ref
 }

@@ -1,7 +1,10 @@
 import { useTypebox } from './bridge'
 
 import { Compile } from 'typebox/compile'
+import { Ref } from 'typebox/type'
 import { Decode, Errors, HasCodec, Default } from 'typebox/value'
+
+import * as TypeRegistry from './exports'
 
 import { applyCoercions } from './coerce'
 import { TypeBoxValidator, TypeBoxValidatorCache } from './validator'
@@ -36,6 +39,8 @@ export function setupTypebox() {
 		hasTypes,
 		HasCodec,
 		Intersect,
-		Default
+		Default,
+		Ref,
+		TypeRegistry
 	})
 }

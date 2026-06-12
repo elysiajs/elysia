@@ -151,13 +151,15 @@ function setNested(
 
 export function formDataToObject(form: FormData): Record<string, unknown> {
 	const body: Record<string, unknown> = nullObject()
+	let seen: Set<string> | undefined
 
 	for (const key of form.keys()) {
-		if (key in body) continue
+		if (key in body || seen?.has(key)) continue
 
 		const value = resolveValue(form.getAll(key))
 
 		if (HAS_NESTING.test(key)) {
+			;(seen ??= new Set()).add(key)
 			setNested(body, key, value)
 			continue
 		}

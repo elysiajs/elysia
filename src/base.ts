@@ -43,7 +43,11 @@ import {
 } from './utils'
 
 import type { AnySchema } from './type'
-import { t } from './type'
+// `Ref` comes from the typebox-free bridge (self-initializing stub), NOT
+// `./type` — a value import of `t` here would make the whole typebox graph
+// statically reachable from the Elysia class, defeating tree-shaking for
+// apps that never use schemas
+import { Ref as tRef } from './type/bridge'
 import type { TRef, TSchema } from 'typebox'
 
 import type { TraceHandler } from './trace'
@@ -5313,7 +5317,7 @@ export class Elysia<
 	// Reference a registered model by name as a schema; resolved against
 	// `Definitions['typebox']` at the type level and `#ext.models` at runtime.
 	Ref<const Key extends keyof Definitions['typebox'] & string>(key: Key) {
-		return t.Ref(key)
+		return tRef(key)
 	}
 
 	/**
