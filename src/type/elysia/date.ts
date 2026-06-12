@@ -44,7 +44,7 @@ export function DateType(
 			Type.Refine(
 				Type.Unsafe<Date>({ '~kind': 'Date' }),
 				(value) => value instanceof Date,
-				'must be Date'
+				() => 'must be Date'
 			),
 			Type.Refine(
 				StringType(),

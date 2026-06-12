@@ -3101,8 +3101,14 @@ export class Elysia<
 				},
 				Definitions,
 				{
-					schema: Schema
-					schemas: Metadata['schemas'] & Schema & MacroContext
+					schema: Metadata['schema']
+					// path-free hook schema only — ambient channels are read
+					// independently at route sites, and the inner BasePath
+					// regenerates path params
+					schemas: Metadata['schemas'] &
+						UnwrapRoute<Input, Definitions['typebox']> &
+						// @ts-ignore
+						MacroContext
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
 					parser: Metadata['parser']
@@ -4021,8 +4027,14 @@ export class Elysia<
 				},
 				Definitions,
 				{
-					schema: Schema
-					schemas: Metadata['schemas'] & Schema & MacroContext
+					schema: Metadata['schema']
+					// path-free hook schema only — ambient channels are read
+					// independently at route sites, and the inner BasePath
+					// regenerates path params
+					schemas: Metadata['schemas'] &
+						UnwrapRoute<Input, Definitions['typebox']> &
+						// @ts-ignore
+						MacroContext
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
 					parser: Metadata['parser']
@@ -4259,6 +4271,38 @@ export class Elysia<
 		return this
 	}
 
+	/**
+	 * ### macro
+	 * Declare a custom route property: applying it on a route or guard folds
+	 * the definition's schema, lifecycle hooks, and `derive` result into that
+	 * route — both at runtime and in the route's types.
+	 *
+	 * ```ts
+	 * new Elysia()
+	 *     .macro({
+	 *         auth: {
+	 *             headers: t.Object({ authorization: t.String() }),
+	 *             derive: ({ headers }) => ({ user: headers.authorization })
+	 *         },
+	 *         role: (role: 'admin' | 'user') => ({
+	 *             beforeHandle() { ... }
+	 *         })
+	 *     })
+	 *     .get('/', ({ user }) => user, { auth: true, role: 'admin' })
+	 * ```
+	 *
+	 * Requires TypeScript >= 5.7 (older versions silently degrade the
+	 * definition's own handler context to defaults).
+	 *
+	 * Known type-level boundaries (runtime is unaffected; annotate the
+	 * handler's parameter when needed):
+	 * - a FUNCTION-form definition's own handlers do not see the sibling
+	 *   schema (`(arg) => ({ body, derive })` — `derive`'s ctx types `body`
+	 *   as the default, not the sibling schema's static)
+	 * - context contributed by OTHER applied macros (`{ auth: true }` inside
+	 *   a definition) and a definition's own `derive` result reach the
+	 *   CONSUMING route's ctx, but not the definition's own handlers
+	 */
 	macro<
 		const Body,
 		const Headers,

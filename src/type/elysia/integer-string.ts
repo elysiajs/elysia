@@ -20,7 +20,7 @@ export function IntegerString(property?: TNumberOptions) {
 		Type.Refine(
 			StringType(),
 			(value) => !isNaN(+value) && Number.isInteger(+value),
-			'must be integer'
+			() => 'must be integer'
 		),
 		(value) => +value
 	)
@@ -28,7 +28,7 @@ export function IntegerString(property?: TNumberOptions) {
 	StrictInteger ??= Type.Refine(
 		NumberType(),
 		(value) => Number.isInteger(value),
-		'must be integer'
+		() => 'must be integer'
 	)
 
 	if (!property || isEmpty(property))
@@ -68,7 +68,7 @@ export function IntegerString(property?: TNumberOptions) {
 					return false
 				return true
 			},
-			'must be integer'
+			() => 'must be integer'
 		),
 		(value) => +value
 	)

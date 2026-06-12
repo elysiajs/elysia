@@ -38,7 +38,7 @@ export function NumericEnum<T extends AssertNumericEnum<T>>(
 				const n = +value
 				return !isNaN(n) && allowed.has(n)
 			},
-			'must be a member of the enum'
+			() => 'must be a member of the enum'
 		),
 		(value) => +value
 	)

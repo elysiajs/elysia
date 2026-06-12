@@ -31,7 +31,7 @@ function passesConstraints(n: number, c: TNumberOptions): boolean {
 
 export function Numeric(property?: TNumberOptions) {
 	StringifiedNumber ??= Type.Decode(
-		Type.Refine(StringType(), (value) => !isNaN(+value), 'must be number'),
+		Type.Refine(StringType(), (value) => !isNaN(+value), () => 'must be number'),
 		(value) => +value
 	)
 
@@ -52,7 +52,7 @@ export function Numeric(property?: TNumberOptions) {
 				const n = +value
 				return !isNaN(n) && passesConstraints(n, constraints as any)
 			},
-			'must be number'
+			() => 'must be number'
 		),
 		(value) => +value
 	)

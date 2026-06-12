@@ -124,7 +124,22 @@ export async function fileType(
 // The flag gate prevents stray enqueues (and leaks) from other Check sites that never
 // drain, eg. response validation or typebox's internal Errors / Decode walks.
 let collecting = false
-let pendingFileTypeChecks: Promise<true | string>[] | undefined
+let pendingFileTypeChecks: PendingFileTypeCheck[] | undefined
+
+export interface PendingFileTypeCheck {
+	check: Promise<true | string>
+	/** kept so a failed detection can be located in the validated value
+	 *  (identity walk on failure only) for a path-aware error */
+	file: File
+}
+
+/**
+ * Marks a refine closure that enqueues async work — `isAsyncPredicate`
+ * routes validators carrying it through `FromAsync`. Narrower than the old
+ * `check === isBlob` heuristic: a plain `t.File()` (no `type`) never
+ * enqueues and stays on the sync path
+ */
+export const ASYNC_REFINE = '~elyAsyncRefine'
 
 export function collectFileTypeChecks() {
 	collecting = true
@@ -176,7 +191,7 @@ export function File(options?: FileOptions) {
 	BaseFile ??= Type.Refine(
 		Type.Unsafe<File>({ '~kind': 'File' }),
 		isBlob,
-		'must be instance of Blob'
+		() => 'must be instance of Blob'
 	)
 
 	// Clone `BaseFile` (preserving non-enumerable `~kind` / `~refine`)
@@ -224,42 +239,43 @@ function FileWithProperty(options: FilesOptions) {
 				? `Expect file type to be ${types[0]}`
 				: `Expect file type to be one of ${types.join(', ')}`
 
-		refines.push([
-			(value) => {
-				let match = false
-				for (let i = 0; i < types.length; i++)
-					if (checkFileExtension(value.type, types[i])) {
-						match = true
-						break
-					}
-
-				if (!match) return false
-
-				if (!collecting) return true
-
-				if (!fileTypeDetectors) {
-					warnNoFileTypeDetector()
-					return true
+		const checkType = (value: File) => {
+			let match = false
+			for (let i = 0; i < types.length; i++)
+				if (checkFileExtension(value.type, types[i])) {
+					match = true
+					break
 				}
 
-				;(pendingFileTypeChecks ??= []).push(
-					detectFileType(value).then(
-						(mime) => {
-							if (mime)
-								for (let i = 0; i < types.length; i++)
-									if (checkFileExtension(mime, types[i]))
-										return true as const
+			if (!match) return false
 
-							return message
-						},
-						() => message
-					)
-				)
+			if (!collecting) return true
 
+			if (!fileTypeDetectors) {
+				warnNoFileTypeDetector()
 				return true
-			},
-			message
-		])
+			}
+
+			;(pendingFileTypeChecks ??= []).push({
+				file: value,
+				check: detectFileType(value).then(
+					(mime) => {
+						if (mime)
+							for (let i = 0; i < types.length; i++)
+								if (checkFileExtension(mime, types[i]))
+									return true as const
+
+						return message
+					},
+					() => message
+				)
+			})
+
+			return true
+		}
+		;(checkType as any)[ASYNC_REFINE] = true
+
+		refines.push([checkType, message])
 	}
 
 	return elyType(ELYSIA_TYPES.File, Refines(BaseFile, refines))

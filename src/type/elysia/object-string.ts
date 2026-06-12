@@ -30,7 +30,7 @@ export function ObjectString<T extends TProperties>(
 					return false
 				}
 			},
-			'must be an object'
+			() => 'must be an object'
 		),
 		(value) => Value.Decode(object, JSON.parse(value))
 	)

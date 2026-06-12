@@ -15,7 +15,7 @@ export function ArrayBufferType(property?: ArrayBufferOptions) {
 	BaseArrayBuffer ??= Type.Refine(
 		Type.Unsafe<ArrayBuffer>({ '~kind': 'ArrayBuffer' }),
 		(value) => value instanceof ArrayBuffer,
-		'must be ArrayBuffer'
+		() => 'must be ArrayBuffer'
 	)
 
 	if (!property || isEmpty(property))

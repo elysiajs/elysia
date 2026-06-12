@@ -32,7 +32,7 @@ export const Form = <T extends TProperties>(
 			Type.Refine(
 				Type.Unsafe<any>({ '~kind': 'FormData' }),
 				(value) => '~ely-form' in value,
-				'must be instance of Elysia.form'
+				() => 'must be instance of Elysia.form'
 			),
 			// The form's fields live inline on the object (`~ely-form` is just
 			// a marker), so decoding is identity.

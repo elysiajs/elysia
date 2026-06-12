@@ -20,7 +20,7 @@ export function BooleanString(property?: TSchemaOptions) {
 		Type.Refine(
 			StringType(),
 			(value) => value === 'true' || value === 'false',
-			'must be boolean'
+			() => 'must be boolean'
 		),
 		(value) => (value === 'true' ? true : false)
 	)

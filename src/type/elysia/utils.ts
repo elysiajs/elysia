@@ -153,7 +153,7 @@ export function Refines<T extends TSchema>(
 	refines: Refines<Static<T>>
 ) {
 	for (const [refine, message] of refines)
-		schema = Type.Refine(schema, refine, message)
+		schema = Type.Refine(schema, refine, () => message)
 
 	return schema
 }

@@ -28,7 +28,7 @@ export function ArrayString<T extends TSchema>(
 					return false
 				}
 			},
-			'must be an array'
+			() => 'must be an array'
 		),
 		(value) => Value.Decode(array, JSON.parse(value))
 	)

@@ -52,7 +52,12 @@ import {
 } from '../compile/aot'
 
 import { hasProperty } from './utils'
-import { collectFileTypeChecks, takeFileTypeChecks } from './elysia/file'
+import {
+	ASYNC_REFINE,
+	collectFileTypeChecks,
+	takeFileTypeChecks,
+	type PendingFileTypeCheck
+} from './elysia/file'
 import { isBlob, nullObject } from '../utils'
 import { ValidationError } from '../error'
 
@@ -109,18 +114,18 @@ const isAsyncPredicate = (v: unknown) =>
 	Array.isArray(v)
 		? v.some((x) =>
 				typeof x.check === 'function'
-					? isAsyncFunction(x.check) || x.check === isBlob
+					? isAsyncFunction(x.check) || x.check[ASYNC_REFINE] === true
 					: false
 			)
 		: false
 
 async function enforceFileTypeChecks(
-	pending: Promise<true | string>[],
+	pending: PendingFileTypeCheck[],
 	type: string | undefined,
 	value: unknown,
 	schema: unknown
 ): Promise<void> {
-	const results = await Promise.all(pending)
+	const results = await Promise.all(pending.map((x) => x.check))
 
 	for (let i = 0; i < results.length; i++)
 		if (results[i] !== true)
@@ -129,13 +134,43 @@ async function enforceFileTypeChecks(
 				value,
 				[
 					{
-						instancePath: '',
+						instancePath:
+							findInstancePath(value, pending[i].file) ?? '',
 						message: results[i],
 						summary: results[i]
 					}
 				],
 				schema
 			)
+}
+
+function findInstancePath(
+	value: unknown,
+	target: unknown,
+	path = ''
+): string | undefined {
+	if (value === target) return path
+	if (!value || typeof value !== 'object') return undefined
+
+	if (Array.isArray(value)) {
+		for (let i = 0; i < value.length; i++) {
+			const found = findInstancePath(value[i], target, `${path}/${i}`)
+			if (found !== undefined) return found
+		}
+
+		return undefined
+	}
+
+	for (const key in value) {
+		const found = findInstancePath(
+			(value as Record<string, unknown>)[key],
+			target,
+			`${path}/${key}`
+		)
+		if (found !== undefined) return found
+	}
+
+	return undefined
 }
 
 function isPrecomputeSafe(schema: any, depth = 0): boolean {

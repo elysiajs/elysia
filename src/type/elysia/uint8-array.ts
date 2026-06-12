@@ -19,7 +19,7 @@ export function Uint8ArrayType(property?: ArrayBufferOptions) {
 			Type.Unsafe<Uint8Array>({ '~kind': 'Uint8Array' }),
 			(value: unknown) =>
 				value instanceof Uint8Array || value instanceof ArrayBuffer,
-			'must be Uint8Array'
+			() => 'must be Uint8Array'
 		)
 	)
 		.Decode((value: unknown) =>

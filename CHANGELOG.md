@@ -36,12 +36,14 @@ Behavior Change:
 - Validator runs `Convert` and reorders to `Convert → Check → DecodeUnsafe` for codec schemas (matches TypeBox 1.0 standard `Decode` pipeline). Fixes `t.Numeric({ minimum, maximum })` and `t.Codec(...).Decode(...)` against wire-form input
 
 Feature:
+- `t.File({ type })` / `t.Files({ type })` content-detection failures now report the offending property path (`property: '/avatar'`, `/files/0`) instead of an empty path — the validated value is identity-walked only when a detection fails
 - Adapter v2
 - sub type validator
 - shared validator cached
 - shared schema reference
 - Cookie schema field
 - `t.Cookie(schema, opts)` field-form — wrap individual properties of `t.Object` for per-field cookie attributes/secrets, replacing the need for top-level `sign: ['name']` arrays
+- plain `t.File()` / `t.Files()` (no `type` option) no longer force the async validation path — only schemas that can actually enqueue content detection go through `FromAsync`
 - Validator pre-computes default snapshot at construction for safe schemas (no Union/Codec/Refine/nested-Object-without-default), eliminating per-request `Default()` walk for the common case
 
 Bug fix:
