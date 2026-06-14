@@ -125,6 +125,34 @@ describe('error', () => {
 	})
 
 	it.each([true, false])(
+		'uses registered error key over instance code with aot: %p',
+		async (aot) => {
+			class InvalidUrlError extends Error {
+				code = 'invalid_url' as const
+
+				constructor() {
+					super('internal message')
+				}
+			}
+
+			const app = new Elysia({ aot })
+				.error({ INVALID_URL: InvalidUrlError })
+				.onError(({ code }) => {
+					if (code === 'INVALID_URL')
+						return new Response('handled', { status: 422 })
+				})
+				.get('/', () => {
+					throw new InvalidUrlError()
+				})
+
+			const response = await app.handle(req('/'))
+
+			expect(response.status).toBe(422)
+			expect(await response.text()).toBe('handled')
+		}
+	)
+
+	it.each([true, false])(
 		'return correct number status on error function with aot: %p',
 		async (aot) => {
 			const app = new Elysia({ aot }).get('/', ({ status }) =>
