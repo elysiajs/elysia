@@ -1,3 +1,4 @@
+import { Kind } from '@sinclair/typebox'
 import { TransformDecodeError } from '@sinclair/typebox/value'
 import type { Context } from './context'
 import { parseCookie } from './cookies'
@@ -10,8 +11,13 @@ import {
 } from './error'
 import type { AnyElysia, CookieOptions } from './index'
 import { parseQuery } from './parse-query'
-import { getSchemaProperties, type ElysiaTypeCheck } from './schema'
+import {
+	getSchemaProperties,
+	unwrapImportSchema,
+	type ElysiaTypeCheck
+} from './schema'
 import type { TypeCheck } from './type-system'
+import { fileType } from './type-system/utils'
 import type { Handler, LifeCycleStore, SchemaValidator } from './types'
 import { hasSetImmediate, redirect, StatusMap, signCookie } from './utils'
 
@@ -615,6 +621,33 @@ export const createDynamicHandler = (app: AnyElysia) => {
 
 						// Zod returns { value: ... } wrapper
 						context.body = decoded?.value ?? decoded
+				}
+
+				// Validate file contents by magic bytes, mirroring the AOT path
+				// (`compose.ts`) which injects `fileType(...)` for File/Files
+				// fields that declare an extension. Without this, dynamic mode
+				// (`aot: false`) only checks the client-supplied MIME type and
+				// accepts a file whose bytes do not match the declared type.
+				if (validator.body) {
+					const bodyProperties = getSchemaProperties(
+						unwrapImportSchema(validator.body.schema)
+					)
+
+					if (bodyProperties)
+						for (const key in bodyProperties) {
+							const property = bodyProperties[key]
+
+							if (
+								property.extension &&
+								(property[Kind] === 'File' ||
+									property[Kind] === 'Files')
+							)
+								await fileType(
+									(context.body as any)?.[key],
+									property.extension,
+									`body.${key}`
+								)
+						}
 				}
 			}
 
