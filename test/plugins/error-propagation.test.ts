@@ -6,7 +6,7 @@ describe('Error correctly passed to outer elysia instance', () => {
 	it('Global error handler is run', async () => {
 		let globalHandlerRun = false
 
-		const mainApp = new Elysia().onError(() => {
+		const mainApp = new Elysia().error(() => {
 			globalHandlerRun = true
 			return 'Fail'
 		})
@@ -31,7 +31,7 @@ describe('Error correctly passed to outer elysia instance', () => {
 		const plugin = new Elysia({
 			prefix: '/a'
 		})
-			.onError({ as: 'global' }, () => {
+			.error('global', () => {
 				localHandlerRun = true
 				return 'FailPlugin'
 			})
@@ -40,7 +40,7 @@ describe('Error correctly passed to outer elysia instance', () => {
 			})
 
 		const mainApp = new Elysia()
-			.onError(() => {
+			.error(() => {
 				globalHandlerRun = true
 
 				return 'Fail'

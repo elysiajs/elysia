@@ -102,6 +102,8 @@
     // "skipDefaultLibCheck": true,                      /* Skip type checking .d.ts files that are included with TypeScript. */
     "skipLibCheck": true,                                 /* Skip type checking all .d.ts files. */
   },
-  "exclude": ["node_modules"]
+  // `design/` is gitignored working notes (contains deliberately-failing
+  // type spikes); `src-old/` is a frozen pre-rewrite copy. Neither is code.
+  "exclude": ["node_modules", "design", "src-old", "test/cloudflare"]
   // "include": ["src/**/*"]
 }

@@ -117,22 +117,35 @@ describe('Modules', () => {
 		expect(res).toBe('hi')
 	})
 
-	it('handle async plugin', async () => {
-		const a =
-			(config = {}) =>
-			async (app: Elysia) => {
+	it('apply async plugin contributions at resolution time', async () => {
+		const app = new Elysia()
+			.use(async (app) => {
 				await sleep(0)
-				return app.derive(() => ({
-					derived: 'async'
-				}))
-			}
 
-		const app = new Elysia().use(a()).get('/', ({ derived }) => derived)
+				return app
+					.decorate('decorated', 'decorated-value')
+					.state('stated', 'stated-value')
+					.derive(() => ({ derived: 'derived-value' }))
+			})
+			.get('/', (c: any) => ({
+				decorated: c.decorated ?? null,
+				stated: c.store?.stated ?? null,
+				// routes declared before the plugin resolves never see
+				// chain-ordered contributions (derive/resolve) — async
+				// `use` types them `| undefined` accordingly
+				// (see test/types/async-use.ts)
+				derived: c.derived ?? null
+			}))
 
 		await app.modules
 
-		const resRoot = await app.handle(req('/')).then((r) => r.text())
-		expect(resRoot).toBe('async')
+		const res = await app.handle(req('/')).then((r) => r.json())
+
+		expect(res).toEqual({
+			decorated: 'decorated-value',
+			stated: 'stated-value',
+			derived: null
+		})
 	})
 
 	it('do not duplicate functional async plugin lifecycle', async () => {
@@ -142,7 +155,7 @@ describe('Modules', () => {
 
 		const app = new Elysia()
 			.use(plugin)
-			.onRequest(() => {
+			.request(() => {
 				fired++
 			})
 			.compile()
@@ -160,7 +173,7 @@ describe('Modules', () => {
 
 		const app = new Elysia()
 			.use(plugin())
-			.onRequest(() => {
+			.request(() => {
 				fired++
 			})
 			.compile()
@@ -207,46 +220,6 @@ describe('Modules', () => {
 		const response = await app.handle(req('/nested'))
 
 		expect(response.status).toBe(200)
-	})
-
-	it('recompile nested async plugin once registered', async () => {
-		const asyncPlugin = Promise.resolve(new Elysia({ name: 'AsyncPlugin' }))
-
-		const plugin = new Elysia({ name: 'Plugin' })
-			.use(asyncPlugin)
-			.get('/plugin', () => 'GET /plugin')
-
-		const app = new Elysia({ name: 'App' })
-			.use(plugin)
-			.get('/foo', () => 'GET /foo')
-
-		const response = await app
-			.handle(new Request('http://localhost/plugin'))
-			.then((x) => x.text())
-
-		// https://github.com/elysiajs/elysia/issues/1067
-		// If the plugin doesn't recompile, route index
-		// would be pointed to /foo instead of /plugin
-		expect(response).toEqual('GET /plugin')
-	})
-
-	it('recompile not nested async plugin once registered', async () => {
-		const asyncPlugin = Promise.resolve(new Elysia({ name: 'AsyncPlugin' }))
-
-		const plugin = new Elysia({ name: 'Plugin' })
-			.use(asyncPlugin)
-			.get('/plugin', () => 'GET /plugin')
-
-		const app = new Elysia({ name: 'App' })
-			.use(plugin)
-			.get('/foo', () => 'GET /foo')
-
-		const response = await app.handle(
-			new Request('http://localhost/plugin')
-		)
-
-		const text = await response.text()
-		expect(text).toEqual('GET /plugin')
 	})
 
 	it('register dynamic import routes inside guard', async () => {

@@ -1,16 +1,18 @@
-import { serializeCookie } from '../cookies'
-import { hasHeaderShorthand, isNotEmpty, StatusMap } from '../utils'
+import { isNotEmpty, nullObject } from '../utils'
+import { StatusMap } from '../constants'
 
+import { serializeCookie } from '../cookie/utils'
+import { isBun, hasHeaderShorthand } from '../universal/constants'
 import type { Context } from '../context'
-import { env } from '../universal'
-import { isBun } from '../universal/utils'
-import { MaybePromise } from '../types'
+import type { MaybePromise } from '../types'
 
-export const handleFile = (
+const setCookie = 'set-cookie' as const
+
+export function handleFile(
 	response: File | Blob,
 	set?: Context['set'],
 	request?: Request
-): Response => {
+): Response {
 	if (!isBun && response instanceof Promise)
 		return response.then((res) => handleFile(res, set, request)) as any
 
@@ -25,7 +27,7 @@ export const handleFile = (
 					status: 416,
 					headers: mergeHeaders(
 						new Headers({ 'content-range': `bytes */${size}` }),
-						set?.headers ?? {}
+						set?.headers ?? nullObject()
 					)
 				})
 
@@ -48,7 +50,7 @@ export const handleFile = (
 					status: 416,
 					headers: mergeHeaders(
 						new Headers({ 'content-range': `bytes */${size}` }),
-						set?.headers ?? {}
+						set?.headers ?? nullObject()
 					)
 				})
 			}
@@ -75,7 +77,10 @@ export const handleFile = (
 				).slice(start, end + 1, response.type),
 				{
 					status: 206,
-					headers: mergeHeaders(rangeHeaders, set?.headers ?? {})
+					headers: mergeHeaders(
+						rangeHeaders,
+						set?.headers ?? nullObject()
+					)
 				}
 			)
 		}
@@ -89,7 +94,7 @@ export const handleFile = (
 			set.status === 416)
 
 	const defaultHeader = immutable
-		? {}
+		? nullObject()
 		: ({
 				'accept-ranges': 'bytes',
 				'content-range': size
@@ -128,7 +133,7 @@ export const handleFile = (
 	})
 }
 
-export const parseSetCookies = (headers: Headers, setCookie: string[]) => {
+export function parseSetCookies(headers: Headers, setCookie: string[]) {
 	if (!headers) return headers
 
 	headers.delete('set-cookie')
@@ -147,61 +152,44 @@ export const parseSetCookies = (headers: Headers, setCookie: string[]) => {
 	return headers
 }
 
-export const responseToSetHeaders = (
-	response: Response,
-	set?: Context['set']
-) => {
+export function responseToSetHeaders(response: Response, set?: Context['set']) {
 	if (set?.headers) {
 		if (response) {
 			if (hasHeaderShorthand)
 				Object.assign(set.headers, response.headers.toJSON())
 			else
 				for (const [key, value] of response.headers.entries())
-					if (key in set.headers) set.headers[key] = value
+					set.headers[key] = value
 		}
 
-		if (set.status === 200) set.status = response.status
-
-		// ? `content-encoding` prevent response streaming
-		if (set.headers['content-encoding'])
-			delete set.headers['content-encoding']
-
-		return set
-	}
-
-	if (!response)
+		if (set.status === undefined || set.status === 200)
+			set.status = response.status
+	} else if (!response) {
 		return {
-			headers: {},
+			headers: nullObject(),
 			status: set?.status ?? 200
 		}
-
-	if (hasHeaderShorthand) {
+	} else if (hasHeaderShorthand) {
 		set = {
 			headers: response.headers.toJSON(),
 			status: set?.status ?? 200
 		}
+	} else {
+		set = {
+			headers: nullObject(),
+			status: set?.status ?? 200
+		}
 
-		// ? `content-encoding` prevent response streaming
-		if (set.headers['content-encoding'])
-			delete set.headers['content-encoding']
-
-		return set
+		for (const [key, value] of response.headers.entries())
+			set.headers[key] = value
 	}
 
-	set = {
-		headers: {},
-		status: set?.status ?? 200
-	}
+	// ? `content-encoding` prevents response streaming — strip it once,
+	// whichever branch built `set.headers`.
+	if (set!.headers['content-encoding'])
+		delete set!.headers['content-encoding']
 
-	for (const [key, value] of response.headers.entries()) {
-		// ? `content-encoding` prevent response streaming
-
-		if (key === 'content-encoding') continue
-
-		if (key in set.headers) set.headers[key] = value
-	}
-
-	return set
+	return set!
 }
 
 interface CreateHandlerParameter {
@@ -285,16 +273,17 @@ export const createStreamHandler =
 		const contentType = isSSE
 			? 'text/event-stream'
 			: init?.value && typeof init?.value === 'object'
-				? 'application/json'
+				? ArrayBuffer.isView(init.value)
+					? 'application/octet-stream'
+					: 'application/json'
 				: 'text/plain'
 
-		if (set?.headers) {
-			if (!set.headers['transfer-encoding'])
-				set.headers['transfer-encoding'] = 'chunked'
-			if (!set.headers['content-type'])
-				set.headers['content-type'] = contentType
-			if (!set.headers['cache-control'])
-				set.headers['cache-control'] = 'no-cache'
+		const headers = set?.headers
+		if (headers) {
+			if (!headers['transfer-encoding'])
+				headers['transfer-encoding'] = 'chunked'
+			if (!headers['content-type']) headers['content-type'] = contentType
+			if (!headers['cache-control']) headers['cache-control'] = 'no-cache'
 		} else
 			set = {
 				status: 200,
@@ -306,10 +295,6 @@ export const createStreamHandler =
 				}
 			}
 
-		// Get an explicit async iterator so pull() can advance one step at a time.
-		// Generators already implement the iterator protocol directly (.next()),
-		// while ReadableStream (which generator may be reassigned to above) needs
-		// [Symbol.asyncIterator]() to produce one.
 		const iterator: AsyncIterator<unknown> =
 			typeof (generator as any).next === 'function'
 				? (generator as AsyncIterator<unknown>)
@@ -414,72 +399,70 @@ export const createStreamHandler =
 	}
 
 export async function* streamResponse(response: Response) {
+	// ReadableStream is async-iterable on every target runtime (verified:
+	// Bun, Node 22, Deno 2, workerd 2025). NOTE: `yield*` cancels the body on
+	// early termination, where the old getReader()+releaseLock() only released.
 	const body = response.body
-
-	if (!body) return
-
-	const reader = body.getReader()
-	const decoder = new TextDecoder()
-
-	try {
-		while (true) {
-			const { done, value } = await reader.read()
-			if (done) break
-
-			if (typeof value === 'string') yield value
-			else yield decoder.decode(value)
-		}
-	} finally {
-		reader.releaseLock()
-	}
+	if (body) yield* body as any
 }
 
-export const handleSet = (set: Context['set']) => {
-	if (typeof set.status === 'string') set.status = StatusMap[set.status]
+export function handleSet(set: Context['set']) {
+	if (typeof set.status === 'string')
+		set.status = StatusMap[set.status as keyof typeof StatusMap]
+
+	// ? Handle `Elysia.headers` which is created in Context prototype
+	//
+	// If we assign to set.headers, it will mutate the prototype's headers
+	// which cause all responses share the same headers object
+	const proto = Object.getPrototypeOf(set.headers)
+	if (proto !== null && proto !== Object.prototype) {
+		const flat: Record<string, unknown> = Object.create(null)
+
+		for (const key in set.headers) flat[key] = set.headers[key]
+		set.headers = flat as Context['set']['headers']
+	}
 
 	if (set.cookie && isNotEmpty(set.cookie)) {
 		const cookie = serializeCookie(set.cookie)
 
-		if (cookie) set.headers['set-cookie'] = cookie
+		if (cookie) set.headers[setCookie] = cookie
 	}
 
-	if (set.headers['set-cookie'] && Array.isArray(set.headers['set-cookie'])) {
+	if (set.headers[setCookie] && Array.isArray(set.headers[setCookie])) {
 		set.headers = parseSetCookies(
 			new Headers(set.headers as any) as Headers,
-			set.headers['set-cookie']
+			set.headers[setCookie]
 		) as any
 	}
 }
 
-// Merge header by allocating a new one
-// In Bun, response.headers can be mutable
-// while in Node and Cloudflare Worker is not
-// default to creating a new one instead
+function applySetHeaders(
+	target: Headers,
+	setHeaders: Context['set']['headers'],
+	present: Headers
+) {
+	if (setHeaders instanceof Headers)
+		for (const key of setHeaders.keys()) {
+			if (key === setCookie) {
+				if (target.has(setCookie)) continue
+
+				for (const cookie of setHeaders.getSetCookie())
+					target.append(setCookie, cookie)
+			} else if (!present.has(key))
+				target.set(key, setHeaders.get(key) ?? '')
+		}
+	else
+		for (const key in setHeaders)
+			if (key === setCookie) target.append(key, setHeaders[key] as any)
+			else if (!present.has(key)) target.set(key, setHeaders[key] as any)
+}
+
 export function mergeHeaders(
 	responseHeaders: Headers,
 	setHeaders: Context['set']['headers']
 ) {
-	// Direct clone preserves all headers including multiple set-cookie
 	const headers = new Headers(responseHeaders)
-
-	// Merge headers: Response headers take precedence, set.headers fill in non-conflicting ones
-	if (setHeaders instanceof Headers)
-		for (const key of setHeaders.keys()) {
-			if (key === 'set-cookie') {
-				if (headers.has('set-cookie')) continue
-
-				for (const cookie of setHeaders.getSetCookie())
-					headers.append('set-cookie', cookie)
-			} else if (!responseHeaders.has(key))
-				headers.set(key, setHeaders?.get(key) ?? '')
-		}
-	else
-		for (const key in setHeaders)
-			if (key === 'set-cookie')
-				headers.append(key, setHeaders[key] as any)
-			else if (!responseHeaders.has(key))
-				headers.set(key, setHeaders[key] as any)
-
+	applySetHeaders(headers, setHeaders, responseHeaders)
 	return headers
 }
 
@@ -487,7 +470,8 @@ export function mergeStatus(
 	responseStatus: number,
 	setStatus: Context['set']['status']
 ) {
-	if (typeof setStatus === 'string') setStatus = StatusMap[setStatus]
+	if (typeof setStatus === 'string')
+		setStatus = StatusMap[setStatus as keyof typeof StatusMap]
 
 	if (responseStatus === 200) return setStatus
 
@@ -497,11 +481,58 @@ export function mergeStatus(
 export const createResponseHandler = (handler: CreateHandlerParameter) => {
 	const handleStream = createStreamHandler(handler)
 
-	return (response: Response, set: Context['set'], request?: Request) => {
-		const newResponse = new Response(response.body, {
-			headers: mergeHeaders(response.headers, set.headers),
-			status: mergeStatus(response.status, set.status)
-		})
+	return (response: Response, set?: Context['set'], request?: Request) => {
+		if (set) {
+			const status = mergeStatus(response.status, set.status)
+			const statusUnchanged =
+				status === undefined || status === response.status
+
+			if (statusUnchanged && !set.cookie && !isNotEmpty(set.headers))
+				return response
+
+			// Headers is mutable in Bun, cheaper than create a new one
+			if (
+				isBun &&
+				statusUnchanged &&
+				!set.cookie &&
+				(set.headers instanceof Headers
+					? !set.headers.has(setCookie)
+					: set.headers[setCookie] === undefined)
+			) {
+				const responseHeaders = response.headers
+
+				// In-place (target === present): no new Headers allocation on
+				// the hot Bun no-status-change path. setCookie is guarded out
+				// above, so that branch never fires here.
+				applySetHeaders(responseHeaders, set.headers, responseHeaders)
+
+				if (
+					!responseHeaders.has('content-length') &&
+					responseHeaders.get('transfer-encoding') === 'chunked'
+				)
+					return handleStream(
+						streamResponse(response),
+						responseToSetHeaders(response, set),
+						request,
+						true
+					) as any
+
+				return response
+			}
+		}
+
+		const newResponse = new Response(
+			response.body,
+			set
+				? {
+						headers: mergeHeaders(response.headers, set.headers),
+						status: mergeStatus(response.status, set.status) as any
+					}
+				: {
+						headers: response.headers,
+						status: response.status
+					}
+		)
 
 		if (
 			!(newResponse as Response).headers.has('content-length') &&
@@ -512,43 +543,136 @@ export const createResponseHandler = (handler: CreateHandlerParameter) => {
 				streamResponse(newResponse as Response),
 				responseToSetHeaders(newResponse as Response, set),
 				request,
-				true // don't auto-format SSE for pre-formatted Response
+				true
 			) as any
 
 		return newResponse
 	}
 }
 
+/**
+ * Split async source into `branches` independent iterators
+ *
+ * A producer drains the source ahead of consumers
+ *
+ * To prevent long/infinite stream, the unconsumed window is capped:
+ * Consumed-by-every-branch entries are trimmed off the front
+ * Producer backpressures whenever the window hits `cap`
+ * Streams shorter than `cap` buffer eagerly;
+ * Only streams exceeding it gate on the slowest consumer
+ *
+ * Branch 0 is the value consumer (response/client)
+ * When it is `return()`-ed (client abort / early exit) the source is stopped
+ * so the observer branches can still reach completion instead of spinning
+ * an infinite source, and so an abandoned branch never pins the window into a deadlock
+ */
 export async function tee<T>(
 	source: AsyncIterable<T>,
-	branches = 2
+	branches = 2,
+	// backpressure
+	cap = 64
 ): Promise<AsyncIterableIterator<T>[]> {
+	const iterator: AsyncIterator<T> | Iterator<T> =
+		(source as AsyncIterable<T>)[Symbol.asyncIterator]?.() ??
+		(source as unknown as Iterable<T>)[Symbol.iterator]()
+
 	const buffer: T[] = []
+	let base = 0
 	let done = false
+	let stopped = false
 	let waiting: { resolve: () => void }[] = []
+	let drainResume: (() => void) | null = null
 
-	;(async () => {
-		for await (const value of source) {
-			buffer.push(value)
-			waiting.forEach((w) => w.resolve())
-			waiting = []
-		}
-		done = true
-		waiting.forEach((w) => w.resolve())
-	})()
+	const cursors: number[] = new Array(branches).fill(0)
+	let active = branches
 
-	async function* makeIterator(): AsyncIterableIterator<T> {
-		let i = 0
-		while (true) {
-			if (i < buffer.length) {
-				yield buffer[i++]
-			} else if (done) {
-				return
-			} else {
-				await new Promise<void>((resolve) => waiting.push({ resolve }))
-			}
+	const wake = () => {
+		if (!waiting.length) return
+		const woken = waiting
+		waiting = []
+		for (const w of woken) w.resolve()
+	}
+
+	const resumeProducer = () => {
+		if (drainResume) {
+			const resume = drainResume
+			drainResume = null
+			resume()
 		}
 	}
 
-	return Array.from({ length: branches }, makeIterator)
+	const trim = () => {
+		if (active > 0) {
+			let min = Infinity
+			for (const c of cursors) if (c < min) min = c
+			if (min !== Infinity && min > base) {
+				buffer.splice(0, min - base)
+				base = min
+			}
+		}
+
+		if (buffer.length < cap) resumeProducer()
+	}
+
+	;(async () => {
+		try {
+			while (!stopped) {
+				const result = await iterator.next()
+				if (result.done) break
+
+				buffer.push(result.value)
+				wake()
+
+				if (buffer.length >= cap && active > 0 && !stopped)
+					await new Promise<void>((resolve) => {
+						drainResume = resolve
+					})
+			}
+		} finally {
+			done = true
+			wake()
+		}
+	})()
+
+	async function* makeBranch(me: number): AsyncIterableIterator<T> {
+		try {
+			while (true) {
+				const i = cursors[me]
+
+				if (i < base + buffer.length) {
+					const value = buffer[i - base]
+					cursors[me] = i + 1
+					trim()
+					yield value
+				} else if (done) return
+				else
+					await new Promise<void>((resolve) =>
+						waiting.push({ resolve })
+					)
+			}
+		} finally {
+			if (cursors[me] !== Infinity) {
+				cursors[me] = Infinity
+				active--
+			}
+
+			// Branch 0 is the value consumer
+			// If aborts/returns early, stop the producer
+			if (me === 0 && !stopped) {
+				stopped = true
+				resumeProducer()
+
+				try {
+					await iterator.return?.()
+				} catch {}
+
+				done = true
+			}
+
+			trim()
+			wake()
+		}
+	}
+
+	return Array.from({ length: branches }, (_, b) => makeBranch(b))
 }

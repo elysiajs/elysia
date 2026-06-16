@@ -1,39 +1,122 @@
-import type { Server } from './universal/server'
-import type { Cookie, ElysiaCookie } from './cookies'
-import type {
-	StatusMap,
-	InvertedStatusMap,
-	redirect as Redirect
-} from './utils'
+import { status, type SelectiveStatus } from './error'
+import { nullObject, redirect } from './utils'
 
-import { ElysiaCustomStatusResponse, status, type SelectiveStatus } from './error'
+import type { AnyElysia } from './base'
+import type { Server } from './universal/server'
+import type { StatusMap } from './constants'
+import type { Cookie } from './cookie'
+import type { BaseCookie } from './cookie/types'
+
 import type {
 	RouteSchema,
 	Prettify,
-	ResolvePath,
 	SingletonBase,
+	ResolvePath,
 	HTTPHeaders,
-	InputSchema
+	InputSchema,
+	DefaultSingleton
 } from './types'
 
-type InvertedStatusMapKey = keyof InvertedStatusMap
+let baseCache = new WeakMap<AnyElysia, new () => any>()
+let contextCache = new WeakMap<AnyElysia, new (request: Request) => any>()
 
-type CheckExcessProps<T, U> = 0 extends 1 & T
-	? T // T is any
-	: U extends U
-		? Exclude<keyof T, keyof U> extends never
-			? T
-			: { [K in keyof U]: U[K] } & { [K in Exclude<keyof T, keyof U>]: never }
-		: never
+let sharedEmptyDecorator: any = null
+let sharedEmptyContext: any = null
+
+function buildEmptyDecorator() {
+	class Decorator {}
+	Object.assign(Decorator.prototype, { status, redirect })
+	return Decorator
+}
+
+export function createBaseContext(app: AnyElysia) {
+	const cached = baseCache.get(app)
+	if (cached) return cached
+
+	const ext = app['~ext']
+	const decorator = ext?.decorator
+	const store = ext?.store
+
+	if (!decorator && !store) {
+		sharedEmptyDecorator ??= buildEmptyDecorator()
+		baseCache.set(app, sharedEmptyDecorator)
+		return sharedEmptyDecorator
+	}
+
+	class Decorator {}
+	Object.assign(Decorator.prototype, {
+		...decorator,
+		store,
+		status,
+		redirect
+	})
+
+	baseCache.set(app, Decorator)
+	return Decorator
+}
+
+export function clearContextCache() {
+	baseCache = new WeakMap()
+	contextCache = new WeakMap()
+	sharedEmptyDecorator = null
+	sharedEmptyContext = null
+}
+
+// Cached once per app (contextCache), NOT per-request — `headers` (null for the
+// shared-empty path) is the only field that varies between the two call sites.
+function buildEmptyContext(Base: any, headers: object | null = null) {
+	return class Context extends Base {
+		params?: Record<string, string>
+		headers?: Record<string, string>
+		qi!: number
+		set: {
+			headers: Record<string, string>
+			status?: number | string
+			cookie?: Record<string, unknown>
+		}
+		rid?: string
+		route?: string
+		trace?: any[]
+
+		constructor(public request: Request) {
+			super()
+			this.set = {
+				headers: Object.create(headers),
+				status: undefined,
+				cookie: undefined
+			}
+		}
+	}
+}
+
+export function createContext(
+	app: AnyElysia
+): new (request: Request) => Context {
+	const cached = contextCache.get(app)
+	if (cached) return cached
+
+	const ext = app['~ext']
+	const headers = ext?.headers
+		? Object.assign(nullObject(), ext.headers)
+		: null
+
+	if (headers === null && !ext?.decorator && !ext?.store) {
+		sharedEmptyDecorator ??= buildEmptyDecorator()
+		sharedEmptyContext ??= buildEmptyContext(sharedEmptyDecorator)
+		contextCache.set(app, sharedEmptyContext)
+
+		return sharedEmptyContext
+	}
+
+	const context = buildEmptyContext(createBaseContext(app), headers) as any
+
+	contextCache.set(app, context)
+	return context
+}
 
 export type ErrorContext<
 	in out Route extends RouteSchema = {},
-	in out Singleton extends SingletonBase = {
-		decorator: {}
-		store: {}
-		derive: {}
-		resolve: {}
-	},
+	in out Singleton extends SingletonBase = DefaultSingleton,
 	Path extends string | undefined = undefined
 > = Prettify<
 	{
@@ -58,51 +141,22 @@ export type ErrorContext<
 				}
 
 		server: Server | null
-		redirect: Redirect
+		redirect: redirect
 
 		set: {
 			headers: HTTPHeaders
 			status?: number | keyof StatusMap
-			redirect?: string
 			/**
 			 * ! Internal Property
 			 *
 			 * Use `Context.cookie` instead
 			 */
-			cookie?: Record<string, ElysiaCookie>
+			cookie?: Record<string, BaseCookie>
 		}
 
 		status: {} extends Route['response']
 			? typeof status
-			: <
-					const Code extends
-						| keyof Route['response']
-						| InvertedStatusMap[Extract<
-								InvertedStatusMapKey,
-								keyof Route['response']
-						  >],
-					T extends Code extends keyof Route['response']
-						? Route['response'][Code]
-						: Code extends keyof StatusMap
-							? // @ts-ignore StatusMap[Code] always valid because Code generic check
-								Route['response'][StatusMap[Code]]
-							: never
-				>(
-					code: Code,
-					response: CheckExcessProps<
-						T,
-						Code extends keyof Route['response']
-							? Route['response'][Code]
-							: Code extends keyof StatusMap
-								? // @ts-ignore StatusMap[Code] always valid because Code generic check
-									Route['response'][StatusMap[Code]]
-								: never
-					>
-				) => ElysiaCustomStatusResponse<
-					// @ts-ignore trust me bro
-					Code,
-					T
-				>
+			: SelectiveStatus<Route['response']>
 
 		/**
 		 * Path extracted from incoming URL
@@ -115,52 +169,51 @@ export type ErrorContext<
 		/**
 		 * Path as registered to router
 		 *
-		 * Represent a path registered to a router, not a URL
+		 * Represent a path registered to a router, not a URL.
+		 * Set only for dynamic routes; for static routes, fall back to `path`.
 		 *
 		 * @example '/id/:id'
 		 */
-		route: string
+		route?: string
+		/**
+		 * Per-request id, populated when `.trace(...)` is registered.
+		 */
+		rid?: string
 		request: Request
 		store: Singleton['store']
 	} & Singleton['decorator'] &
-		Singleton['derive'] &
-		Singleton['resolve']
+		Singleton['derive']
 >
 
 type PrettifyIfObject<T> = T extends object ? Prettify<T> : T
 
 export type Context<
 	in out Route extends RouteSchema = {},
-	in out Singleton extends SingletonBase = {
-		decorator: {}
-		store: {}
-		derive: {}
-		resolve: {}
-	},
+	in out Singleton extends SingletonBase = DefaultSingleton,
 	Path extends string | undefined = undefined
 > = Prettify<
 	{
-		body: PrettifyIfObject<Route['body'] & Singleton['resolve']['body']>
+		body: PrettifyIfObject<Route['body'] & Singleton['derive']['body']>
 		query: undefined extends Route['query']
-			? {} extends NonNullable<Singleton['resolve']['query']>
+			? {} extends NonNullable<Singleton['derive']['query']>
 				? Record<string, string>
-				: Singleton['resolve']['query']
-			: PrettifyIfObject<Route['query'] & Singleton['resolve']['query']>
+				: Singleton['derive']['query']
+			: PrettifyIfObject<Route['query'] & Singleton['derive']['query']>
 		params: undefined extends Route['params']
 			? undefined extends Path
-				? {} extends NonNullable<Singleton['resolve']['params']>
+				? {} extends NonNullable<Singleton['derive']['params']>
 					? Record<string, string>
-					: Singleton['resolve']['params']
+					: Singleton['derive']['params']
 				: Path extends `${string}/${':' | '*'}${string}`
 					? ResolvePath<Path>
 					: never
-			: PrettifyIfObject<Route['params'] & Singleton['resolve']['params']>
+			: PrettifyIfObject<Route['params'] & Singleton['derive']['params']>
 		headers: undefined extends Route['headers']
-			? {} extends NonNullable<Singleton['resolve']['headers']>
+			? {} extends NonNullable<Singleton['derive']['headers']>
 				? Record<string, string | undefined>
-				: Singleton['resolve']['headers']
+				: Singleton['derive']['headers']
 			: PrettifyIfObject<
-					Route['headers'] & Singleton['resolve']['headers']
+					Route['headers'] & Singleton['derive']['headers']
 				>
 		cookie: undefined extends Route['cookie']
 			? Record<string, Cookie<unknown>>
@@ -171,34 +224,24 @@ export type Context<
 								Route['cookie'][key]
 							>
 						} & {
-							[key in keyof Singleton['resolve']['cookie']]-?: Cookie<
-								Singleton['resolve']['cookie'][key]
+							[key in keyof Singleton['derive']['cookie']]-?: Cookie<
+								Singleton['derive']['cookie'][key]
 							>
 						}
 					>
 
 		server: Server | null
-		redirect: Redirect
+		redirect: redirect
 
 		set: {
 			headers: HTTPHeaders
 			status?: number | keyof StatusMap
 			/**
-			 * @deprecated Use inline redirect instead
-			 *
-			 * @example Migration example
-			 * ```ts
-			 * new Elysia()
-			 *     .get(({ redirect }) => redirect('/'))
-			 * ```
-			 */
-			redirect?: string
-			/**
 			 * ! Internal Property
 			 *
 			 * Use `Context.cookie` instead
 			 */
-			cookie?: Record<string, ElysiaCookie>
+			cookie?: Record<string, BaseCookie>
 		}
 
 		/**
@@ -212,11 +255,16 @@ export type Context<
 		/**
 		 * Path as registered to router
 		 *
-		 * Represent a path registered to a router, not a URL
+		 * Represent a path registered to a router, not a URL.
+		 * Set only for dynamic routes; for static routes, fall back to `path`.
 		 *
 		 * @example '/id/:id'
 		 */
-		route: string
+		route?: string
+		/**
+		 * Per-request id, populated when `.trace(...)` is registered.
+		 */
+		rid?: string
 		request: Request
 		store: Singleton['store']
 
@@ -224,30 +272,38 @@ export type Context<
 			? typeof status
 			: SelectiveStatus<Route['response']>
 	} & Singleton['decorator'] &
-		Singleton['derive'] &
-		Omit<Singleton['resolve'], keyof InputSchema>
+		Omit<Singleton['derive'], keyof InputSchema>
 >
 
-// Use to mimic request before mapping route
+export type LifecycleContext<
+	Route extends RouteSchema = {},
+	Singleton extends SingletonBase = DefaultSingleton,
+	Path extends string | undefined = undefined,
+	ParamsScope extends 'local' | 'plugin' | 'global' = 'local'
+> = [ParamsScope] extends ['local']
+	? Context<Route, Singleton, Path>
+	: Omit<Context<Route, Singleton, Path>, 'params'> & {
+			params: { [name: string]: string | undefined }
+		}
+
+// Mimic request before mapping route
 export type PreContext<
 	in out Singleton extends SingletonBase = {
 		decorator: {}
 		store: {}
 		derive: {}
-		resolve: {}
 	}
 > = Prettify<
 	{
 		store: Singleton['store']
 		request: Request
 
-		redirect: Redirect
+		redirect: redirect
 		server: Server | null
 
 		set: {
 			headers: HTTPHeaders
 			status?: number
-			redirect?: string
 		}
 
 		status: typeof status

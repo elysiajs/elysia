@@ -3,7 +3,7 @@ import { Elysia, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { post, req } from '../utils'
-import { hasType } from '../../src/schema'
+import { hasType } from '../schema/has-type'
 
 const payload = { hello: 'world' }
 
@@ -168,7 +168,7 @@ describe('Static code analysis', () => {
 
 	it('parse custom parser with schema', async () => {
 		const app = new Elysia()
-			.onParse((request, contentType) => {
+			.parse(({ contentType }) => {
 				if (contentType === 'application/elysia') return 'hi'
 			})
 			.post('/', ({ body }) => body, {

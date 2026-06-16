@@ -53,7 +53,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.router.history[0].hooks.parse?.length).toEqual(1)
+		expect(app.history![0][4]!.parse?.length).toEqual(1)
 	})
 
 	it('appends parse array', async () => {
@@ -69,7 +69,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.router.history[0].hooks.parse?.length).toEqual(2)
+		expect(app.history![0][4]!.parse?.length).toEqual(2)
 	})
 
 	it('appends transform', async () => {
@@ -85,7 +85,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.router.history[0].hooks.transform?.length).toEqual(1)
+		expect(app.history![0][4]!.transform?.length).toEqual(1)
 	})
 
 	it('appends transform array', async () => {
@@ -101,7 +101,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.router.history[0].hooks.transform?.length).toEqual(2)
+		expect(app.history![0][4]!.transform?.length).toEqual(2)
 	})
 
 	it('appends beforeHandle', async () => {
@@ -117,7 +117,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.router.history[0].hooks.beforeHandle?.length).toEqual(1)
+		expect(app.history![0][4]!.beforeHandle?.length).toEqual(1)
 	})
 
 	it('appends beforeHandle array', async () => {
@@ -133,7 +133,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.router.history[0].hooks.beforeHandle?.length).toEqual(2)
+		expect(app.history![0][4]!.beforeHandle?.length).toEqual(2)
 	})
 
 	it('appends afterHandle', async () => {
@@ -149,7 +149,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.router.history[0].hooks.afterHandle?.length).toEqual(1)
+		expect(app.history![0][4]!.afterHandle?.length).toEqual(1)
 	})
 
 	it('appends afterHandle array', async () => {
@@ -165,7 +165,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.router.history[0].hooks.afterHandle?.length).toEqual(2)
+		expect(app.history![0][4]!.afterHandle?.length).toEqual(2)
 	})
 
 	it('appends error', async () => {
@@ -181,7 +181,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.router.history[0].hooks.error?.length).toEqual(1)
+		expect(app.history![0][4]!.error?.length).toEqual(1)
 	})
 
 	it('appends error array', async () => {
@@ -197,7 +197,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.router.history[0].hooks.error?.length).toEqual(2)
+		expect(app.history![0][4]!.error?.length).toEqual(2)
 	})
 
 	it('appends afterResponse', async () => {
@@ -213,7 +213,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.router.history[0].hooks.afterResponse?.length).toEqual(1)
+		expect(app.history![0][4]!.afterResponse?.length).toEqual(1)
 	})
 
 	it('appends afterResponse array', async () => {
@@ -229,7 +229,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.router.history[0].hooks.afterResponse?.length).toEqual(2)
+		expect(app.history![0][4]!.afterResponse?.length).toEqual(2)
 	})
 
 	it('handle deduplication', async () => {
@@ -451,7 +451,7 @@ describe('Macro', () => {
 			hello: 'nagisa'
 		})
 
-		new Elysia()
+		const app = new Elysia()
 			.macro({
 				hello(a: string) {
 					called.push(a)
@@ -459,8 +459,13 @@ describe('Macro', () => {
 			})
 			.use(plugin)
 			.get('/', () => 'a', {
+				// @ts-ignore
 				hello: 'hifumi'
 			})
+
+		// Macros run during route compilation; reading `app.history`
+		// triggers compile for each route via the introspection getter.
+		void app.history
 
 		expect(called).toEqual(['nagisa', 'hifumi'])
 	})
@@ -498,7 +503,7 @@ describe('Macro', () => {
 		const app = new Elysia()
 			.macro({
 				user: (enabled: boolean) => ({
-					resolve: ({ query: { name = 'anon' } }) => ({
+					derive: ({ query: { name = 'anon' } }) => ({
 						user: {
 							name
 						}
@@ -522,7 +527,7 @@ describe('Macro', () => {
 		const app = new Elysia()
 			.macro({
 				user: (enabled: boolean) => ({
-					resolve: async ({ query: { name = 'anon' } }) => ({
+					derive: async ({ query: { name = 'anon' } }) => ({
 						user: {
 							name
 						}
@@ -546,7 +551,7 @@ describe('Macro', () => {
 		const plugin = new Elysia()
 			.macro({
 				account: (a: boolean) => ({
-					resolve: () => ({
+					derive: () => ({
 						account: 'A'
 					})
 				})
@@ -580,13 +585,12 @@ describe('Macro', () => {
 		const plugin = new Elysia()
 			.macro({
 				account: (a: boolean) => ({
-					resolve: () => ({
+					derive: () => ({
 						account: 'A'
 					})
 				})
 			})
-			.guard({
-				as: 'scoped',
+			.guard('plugin', {
 				account: true
 			})
 			.get('/local', ({ account }) => account === 'A')
@@ -615,13 +619,12 @@ describe('Macro', () => {
 		const plugin = new Elysia()
 			.macro({
 				account: (a: boolean) => ({
-					resolve: () => ({
+					derive: () => ({
 						account: 'A'
 					})
 				})
 			})
-			.guard({
-				as: 'global',
+			.guard('global', {
 				account: true
 			})
 			.get('/local', ({ account }) => account === 'A')
@@ -650,13 +653,12 @@ describe('Macro', () => {
 		const plugin = new Elysia()
 			.macro({
 				account: (a: boolean) => ({
-					resolve: () => ({
+					derive: () => ({
 						account: 'A'
 					})
 				})
 			})
-			.guard({
-				as: 'local',
+			.guard('local', {
 				account: true
 			})
 			.get('/local', ({ account }) => account === 'A')
@@ -685,7 +687,7 @@ describe('Macro', () => {
 		const plugin = new Elysia()
 			.macro({
 				account: (a: boolean) => ({
-					resolve: () => {
+					derive: () => {
 						if (Math.random() > 2) return status(401)
 
 						return {
@@ -723,7 +725,7 @@ describe('Macro', () => {
 		const plugin = new Elysia()
 			.macro({
 				account: (a: boolean) => ({
-					resolve: async () => {
+					derive: async () => {
 						if (Math.random() > 2) return status(401)
 
 						return {
@@ -732,8 +734,7 @@ describe('Macro', () => {
 					}
 				})
 			})
-			.guard({
-				as: 'scoped',
+			.guard('plugin', {
 				account: true
 			})
 			.get('/local', ({ account }) => account === 'A')
@@ -763,7 +764,7 @@ describe('Macro', () => {
 		const app = new Elysia()
 			.macro({
 				user: (enabled: true) => ({
-					resolve() {
+					derive() {
 						if (!enabled) return
 
 						return {
@@ -795,7 +796,7 @@ describe('Macro', () => {
 		const app = new Elysia()
 			.macro({
 				user: {
-					resolve: ({ query: { name = 'anon' } }) => ({
+					derive: ({ query: { name = 'anon' } }) => ({
 						user: {
 							name
 						}
@@ -827,13 +828,13 @@ describe('Macro', () => {
 		const app = new Elysia()
 			.macro({
 				a: {
-					resolve: () => ({ a: 'a' as const })
+					derive: () => ({ a: 'a' as const })
 				},
 				b: {
-					resolve: () => ({ b: 'b' as const })
+					derive: () => ({ b: 'b' as const })
 				},
 				c: (n: number) => ({
-					resolve: () => ({ c: n })
+					derive: () => ({ c: n })
 				})
 			})
 			.get('/a', ({ a }) => ({ a }), {
@@ -868,7 +869,6 @@ describe('Macro', () => {
 					// @ts-expect-error Property `a` does not exist
 					a,
 					b,
-					// @ts-expect-error Property `c` does not exist
 					c
 				}) => ({ a, b, c }),
 				{
@@ -916,7 +916,7 @@ describe('Macro', () => {
 				lilith: true
 			})
 
-		expect(app.routes[0].hooks.standaloneValidator.length).toBe(1)
+		expect(app.history![0][4]!.schemas!.length).toBe(1)
 
 		const valid = await app.handle(
 			post('/Sartre?focou=Focou', {
@@ -973,7 +973,7 @@ describe('Macro', () => {
 				lilith: true
 			})
 
-		expect(app.routes[0].hooks.standaloneValidator.length).toBe(3)
+		expect(app.history![0][4]!.schemas!.length).toBe(3)
 
 		const response = await app.handle(
 			post('/', {
@@ -1040,7 +1040,7 @@ describe('Macro', () => {
 				lilith: true
 			})
 
-		expect(app.routes[0].hooks.standaloneValidator.length).toBe(3)
+		expect(app.history![0][4]!.schemas!.length).toBe(3)
 
 		const response = await app.handle(
 			post('/', {
@@ -1088,6 +1088,70 @@ describe('Macro', () => {
 		expect(invalid3.status).toBe(422)
 	})
 
+	// registering a macro must not change route-local schema semantics:
+	// route-local fields stay in the override channel (SS1 "override
+	// everywhere") instead of being lifted into the additive schemas
+	// channel — previously the first applyMacro call in a process lifted
+	// them (one-shot iterator bug), making validation process-order
+	// dependent: identical routes returned 422 (route 1) vs 200 (route 2)
+	it('keep route-local schema override under guard regardless of route order', async () => {
+		const app = new Elysia()
+			.macro({
+				lilith: {
+					query: t.Object({ user: t.Literal('Lilith') })
+				}
+			})
+			.guard({
+				body: t.Object({ name: t.String() })
+			})
+			.post('/first', ({ body }) => body, {
+				body: t.Object({ id: t.Number() })
+			})
+			.post('/second', ({ body }) => body, {
+				body: t.Object({ id: t.Number() })
+			})
+			.post('/macro', ({ body }) => body, {
+				lilith: true,
+				body: t.Object({ id: t.Number() })
+			})
+
+		// route-local body stays in the override channel, never lifted
+		expect(app.history![0][4]!.body).not.toBeUndefined()
+		expect(app.history![0][4]!.schemas).toBeUndefined()
+		expect(app.history![1][4]!.body).not.toBeUndefined()
+		expect(app.history![1][4]!.schemas).toBeUndefined()
+
+		// { id } fails the guard's body but passes the route-local one:
+		// 200 proves the route-local schema overrides the guard's,
+		// identically on both routes
+		const second = await app.handle(post('/second', { id: 1 }))
+		const first = await app.handle(post('/first', { id: 1 }))
+
+		expect(second.status).toBe(200)
+		expect(first.status).toBe(200)
+		expect(await second.json()).toEqual({ id: 1 })
+		expect(await first.json()).toEqual({ id: 1 })
+
+		// the route-local schema is still enforced, not dropped
+		const invalidFirst = await app.handle(post('/first', { name: 'a' }))
+		const invalidSecond = await app.handle(post('/second', { name: 'a' }))
+
+		expect(invalidFirst.status).toBe(422)
+		expect(invalidSecond.status).toBe(422)
+
+		// a macro-produced direct schema field is additive and
+		// still validates on the consuming route
+		const validMacro = await app.handle(
+			post('/macro?user=Lilith', { id: 1 })
+		)
+		expect(validMacro.status).toBe(200)
+
+		const invalidMacro = await app.handle(
+			post('/macro?user=Eve', { id: 1 })
+		)
+		expect(invalidMacro.status).toBe(422)
+	})
+
 	it('create detail if not exists', () => {
 		const app = new Elysia()
 			.macro({
@@ -1102,9 +1166,9 @@ describe('Macro', () => {
 				lilith: true
 			})
 
-		const route = app.routes[0]
+		const route = app.history![0]
 
-		expect(route.hooks.detail).toEqual({
+		expect(route[4]!.detail).toEqual({
 			summary: 'Lilith',
 			description: 'Lilith description'
 		})
@@ -1126,9 +1190,9 @@ describe('Macro', () => {
 				}
 			})
 
-		const route = app.routes[0]
+		const route = app.history![0]
 
-		expect(route.hooks.detail).toEqual({
+		expect(route[4]!.detail).toEqual({
 			summary: 'Lilith',
 			description: 'Lilith description'
 		})
@@ -1154,9 +1218,9 @@ describe('Macro', () => {
 				lilith: true
 			})
 
-		const route = app.routes[0]
+		const route = app.history![0]
 
-		expect(route.hooks.standaloneValidator.length).toBe(3)
+		expect(route[4]!.schemas!.length).toBe(3)
 	})
 
 	it('deduplicate function macro by default', () => {
@@ -1182,14 +1246,14 @@ describe('Macro', () => {
 				sartre: false
 			})
 
-		const route = app.routes[0]
+		const route = app.history![0]
 
 		// This is 4 because
 		// 1. lilith
 		// 2. focou
 		// 3. sartre from focou
 		// 4. sartre with false flag
-		expect(route.hooks.standaloneValidator.length).toBe(4)
+		expect(route[4]!.schemas!.length).toBe(4)
 	})
 
 	it('deduplicate function macro when argument is similar', () => {
@@ -1215,13 +1279,13 @@ describe('Macro', () => {
 				sartre: true
 			})
 
-		const route = app.routes[0]
+		const route = app.history![0]
 
 		// This is 4 because
 		// 1. lilith
 		// 2. focou
 		// 3. sartre from focou
-		expect(route.hooks.standaloneValidator.length).toBe(3)
+		expect(route[4]!.schemas!.length).toBe(3)
 	})
 
 	it('deduplicate programmatically', () => {
@@ -1250,18 +1314,20 @@ describe('Macro', () => {
 				lilith: true
 			})
 
-		const route = app.routes[0]
+		const route = app.history![0]
 
-		expect(route.hooks.standaloneValidator.length).toBe(4)
-		expect(route.hooks.detail).toEqual({
+		expect(route[4]!.schemas!.length).toBe(4)
+		expect(route[4]!.detail).toEqual({
 			tags: ['philosopher', 'npc']
 		})
 	})
 
 	it('handle macro name', async () => {
 		const app = new Elysia()
-			.macro('sartre', {
-				params: t.Object({ sartre: t.Literal('Sartre') })
+			.macro({
+				sartre: {
+					params: t.Object({ sartre: t.Literal('Sartre') })
+				}
 			})
 			.macro({
 				focou: {
@@ -1277,7 +1343,7 @@ describe('Macro', () => {
 				lilith: true
 			})
 
-		expect(app.routes[0].hooks.standaloneValidator.length).toBe(1)
+		expect(app.history![0][4]!.schemas!.length).toBe(1)
 
 		const valid = await app.handle(
 			post('/Sartre?focou=Focou', {
@@ -1317,9 +1383,11 @@ describe('Macro', () => {
 
 	it('handle macro name with function', async () => {
 		const app = new Elysia()
-			.macro('sartre', (_: boolean) => ({
-				params: t.Object({ sartre: t.Literal('Sartre') })
-			}))
+			.macro({
+				sartre: (_: boolean) => ({
+					params: t.Object({ sartre: t.Literal('Sartre') })
+				})
+			})
 			.macro({
 				focou: {
 					query: t.Object({ focou: t.Literal('Focou') })
@@ -1334,7 +1402,7 @@ describe('Macro', () => {
 				lilith: true
 			})
 
-		expect(app.routes[0].hooks.standaloneValidator.length).toBe(1)
+		expect(app.history![0][4]!.schemas!.length).toBe(1)
 
 		const valid = await app.handle(
 			post('/Sartre?focou=Focou', {
@@ -1374,8 +1442,10 @@ describe('Macro', () => {
 
 	it('handle macro name extends', async () => {
 		const app = new Elysia()
-			.macro('sartre', {
-				body: t.Object({ sartre: t.Literal('Sartre') })
+			.macro({
+				sartre: {
+					body: t.Object({ sartre: t.Literal('Sartre') })
+				}
 			})
 			.macro({
 				focou: {
@@ -1391,7 +1461,7 @@ describe('Macro', () => {
 				lilith: true
 			})
 
-		expect(app.routes[0].hooks.standaloneValidator.length).toBe(3)
+		expect(app.history![0][4]!.schemas!.length).toBe(3)
 
 		const response = await app.handle(
 			post('/', {
@@ -1437,5 +1507,21 @@ describe('Macro', () => {
 		)
 
 		expect(invalid3.status).toBe(422)
+	})
+
+	it('rejects a bare functional macro — must be named (A6)', () => {
+		// `.macro(fn)` has no name to register under; TS can't catch it (a
+		// function is structurally assignable to the open `Macro` record), so
+		// without this guard it silently no-ops.
+		expect(() =>
+			(new Elysia().macro as any)(() => ({ beforeHandle() {} }))
+		).toThrow()
+	})
+
+	it('accepts a functional macro under its name in the object form', () => {
+		const def = () => ({ beforeHandle() {} })
+		const app = new Elysia().macro({ a: def as any })
+
+		expect(app['~ext']?.macro?.a).toBe(def)
 	})
 })

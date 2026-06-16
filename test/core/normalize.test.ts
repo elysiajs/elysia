@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'bun:test'
+import type { Static } from 'typebox'
 import { Elysia, t } from '../../src'
 import { post, req } from '../utils'
 
@@ -406,6 +407,99 @@ describe('Normalize', () => {
 		expect(res.status).toBe(200)
 	})
 
+	it('normalize special-character property names', async () => {
+		const original = console.warn
+		console.warn = () => {}
+
+		try {
+			// a double-quote in a property name breaks exact-mirror codegen
+			// before 1.1.1 (SyntaxError) while typebox compiles it fine —
+			// normalization must never silently turn off: on exact-mirror
+			// < 1.1.1 this exercises the typebox Clean fallback in
+			// TypeBoxValidator's catch, on >= 1.1.1 the mirror itself
+			const app = new Elysia().post('/', ({ body }) => body, {
+				body: t.Object({
+					'a"b': t.String()
+				})
+			})
+
+			const res = await app.handle(
+				post('/', { 'a"b': 'value', extra: 'strip-me' })
+			)
+
+			expect(res.status).toBe(200)
+			expect(await res.json()).toEqual({ 'a"b': 'value' })
+		} finally {
+			console.warn = original
+		}
+	})
+
+	it("normalize body with normalize: 'typebox'", async () => {
+		const app = new Elysia({ normalize: 'typebox' }).post(
+			'/',
+			({ body }) => body,
+			{
+				body: t.Object({
+					name: t.String()
+				})
+			}
+		)
+
+		const res = await app.handle(
+			post('/', { name: 'sucrose', extra: 'strip-me' })
+		)
+
+		expect(res.status).toBe(200)
+		expect(await res.json()).toEqual({ name: 'sucrose' })
+	})
+
+	it('normalize headers when normalize is true', async () => {
+		const app = new Elysia({ normalize: true }).get(
+			'/',
+			({ headers }) => headers,
+			{
+				headers: t.Object({
+					name: t.String()
+				})
+			}
+		)
+
+		const res = await app.handle(
+			req('/', {
+				headers: {
+					name: 'sucrose',
+					job: 'alchemist'
+				}
+			})
+		)
+
+		expect(await res.json()).toEqual({ name: 'sucrose' })
+		expect(res.status).toBe(200)
+	})
+
+	it('loosely validate cookie by default if not normalized', async () => {
+		const app = new Elysia({ normalize: false }).get(
+			'/',
+			({ cookie: { name } }) => name.value!,
+			{
+				cookie: t.Cookie({
+					name: t.String()
+				})
+			}
+		)
+
+		const res = await app.handle(
+			req('/', {
+				headers: {
+					cookie: 'name=sucrose; extra=alchemist'
+				}
+			})
+		)
+
+		expect(await res.text()).toBe('sucrose')
+		expect(res.status).toBe(200)
+	})
+
 	it('strictly validate headers if not normalized and additionalProperties is false', async () => {
 		const app = new Elysia({ normalize: false }).get(
 			'/',
@@ -498,7 +592,7 @@ describe('Normalize', () => {
 
 		const response = (await app
 			.handle(new Request('http://localhost:3000/'))
-			.then((x) => x.json())) as typeof type.static
+			.then((x) => x.json())) as Static<typeof type>
 
 		expect(response).toEqual([
 			{
@@ -510,7 +604,7 @@ describe('Normalize', () => {
 		])
 	})
 
-	it('normalize encodeSchema with Transform', async () => {
+	it('normalize Codec response', async () => {
 		const app = new Elysia().get(
 			'/',
 			() => ({
@@ -531,7 +625,7 @@ describe('Normalize', () => {
 						})
 					),
 					total: t
-						.Transform(t.Number())
+						.Codec(t.Number())
 						.Decode((x) => x)
 						.Encode((x) => x),
 					offset: t.Number({ minimum: 0 }),
@@ -557,416 +651,4 @@ describe('Normalize', () => {
 		})
 	})
 
-	// it('normalize response with getter fields on class', async () => {
-	// 	const app = new Elysia({
-	// 		normalize: true
-	// 	}).get(
-	// 		'/',
-	// 		() => {
-	// 			class MyTest {
-	// 				constructor(hello: string) {
-	// 					this.one = hello
-	// 					this.two = hello
-	// 				}
-	// 				public one: string
-	// 				public two: string
-
-	// 				get oneGet() {
-	// 					return this.one
-	// 				}
-
-	// 				get twoGet() {
-	// 					return this.two
-	// 				}
-	// 			}
-
-	// 			const res = new MyTest('world')
-	// 			return res
-	// 		},
-	// 		{
-	// 			response: t.Object(
-	// 				{
-	// 					one: t.String(),
-	// 					oneGet: t.String()
-	// 				},
-	// 				{ additionalProperties: false }
-	// 			)
-	// 		}
-	// 	)
-
-	// 	const response = await app.handle(req('/')).then((x) => x.json())
-
-	// 	expect(response).toEqual({
-	// 		one: 'world',
-	// 		oneGet: 'world'
-	// 	})
-	// })
-
-	// it('normalize response with getter fields on simple object', async () => {
-	// 	const app = new Elysia({
-	// 		normalize: true
-	// 	}).get(
-	// 		'/',
-	// 		() => {
-	// 			return {
-	// 				one: 'world',
-	// 				get oneGet() {
-	// 					return 'world'
-	// 				},
-	// 				two: 'world',
-	// 				get twoGet() {
-	// 					return 'world'
-	// 				}
-	// 			}
-	// 		},
-	// 		{
-	// 			response: t.Object(
-	// 				{
-	// 					one: t.String(),
-	// 					oneGet: t.String()
-	// 				},
-	// 				{ additionalProperties: false }
-	// 			)
-	// 		}
-	// 	)
-
-	// 	const response = await app.handle(req('/')).then((x) => x.json())
-
-	// 	expect(response).toEqual({
-	// 		one: 'world',
-	// 		oneGet: 'world'
-	// 	})
-	// })
-
-	// it('normalize response with getter fields on class array', async () => {
-	// 	const app = new Elysia({
-	// 		normalize: true
-	// 	}).get(
-	// 		'/',
-	// 		() => {
-	// 			class MyTest {
-	// 				constructor(hello: string) {
-	// 					this.one = hello
-	// 					this.two = hello
-	// 				}
-	// 				public one: string
-	// 				public two: string
-
-	// 				get oneGet() {
-	// 					return this.one
-	// 				}
-
-	// 				get twoGet() {
-	// 					return this.two
-	// 				}
-	// 			}
-
-	// 			const res = new MyTest('world')
-	// 			return [res]
-	// 		},
-	// 		{
-	// 			response: t.Array(
-	// 				t.Object(
-	// 					{
-	// 						one: t.String(),
-	// 						oneGet: t.String()
-	// 					},
-	// 					{ additionalProperties: false }
-	// 				)
-	// 			)
-	// 		}
-	// 	)
-
-	// 	const response = await app.handle(req('/')).then((x) => x.json())
-
-	// 	expect(response).toEqual([
-	// 		{
-	// 			one: 'world',
-	// 			oneGet: 'world'
-	// 		}
-	// 	])
-	// })
-
-	// it('normalize response with getter fields on simple object array', async () => {
-	// 	const app = new Elysia({
-	// 		normalize: true
-	// 	}).get(
-	// 		'/',
-	// 		() => {
-	// 			return [
-	// 				{
-	// 					one: 'world',
-	// 					get oneGet() {
-	// 						return 'world'
-	// 					},
-	// 					two: 'world',
-	// 					get twoGet() {
-	// 						return 'world'
-	// 					}
-	// 				}
-	// 			]
-	// 		},
-	// 		{
-	// 			response: t.Array(
-	// 				t.Object(
-	// 					{
-	// 						one: t.String(),
-	// 						oneGet: t.String()
-	// 					},
-	// 					{ additionalProperties: false }
-	// 				)
-	// 			)
-	// 		}
-	// 	)
-
-	// 	const response = await app.handle(req('/')).then((x) => x.json())
-
-	// 	expect(response).toEqual([
-	// 		{
-	// 			one: 'world',
-	// 			oneGet: 'world'
-	// 		}
-	// 	])
-	// })
-
-	// it('normalize response with getter fields on class array with nested arrays', async () => {
-	// 	const app = new Elysia({
-	// 		normalize: true
-	// 	}).get(
-	// 		'/',
-	// 		() => {
-	// 			class MyTest {
-	// 				constructor(hello: string) {
-	// 					this.one = hello
-	// 					this.two = hello
-	// 				}
-	// 				public one: string
-	// 				public two: string
-
-	// 				get oneGet() {
-	// 					return this.one
-	// 				}
-
-	// 				get twoGet() {
-	// 					return this.two
-	// 				}
-	// 			}
-
-	// 			class MyTest2 {
-	// 				constructor(hello: string) {
-	// 					this.one = hello
-	// 					this.two = hello
-	// 					this.three = [new MyTest(hello)]
-	// 					this.four = [new MyTest(hello)]
-	// 				}
-
-	// 				public one: string
-	// 				public two: string
-	// 				public three: MyTest[]
-	// 				public four: MyTest[]
-
-	// 				get oneGet() {
-	// 					return this.one
-	// 				}
-
-	// 				get twoGet() {
-	// 					return this.two
-	// 				}
-
-	// 				get threeGet() {
-	// 					return this.three
-	// 				}
-
-	// 				get fourGet() {
-	// 					return this.four
-	// 				}
-	// 			}
-
-	// 			const res = new MyTest2('world')
-
-	// 			return [res]
-	// 		},
-	// 		{
-	// 			response: t.Array(
-	// 				t.Object(
-	// 					{
-	// 						one: t.String(),
-	// 						oneGet: t.String(),
-	// 						three: t.Array(
-	// 							t.Object(
-	// 								{
-	// 									one: t.String(),
-	// 									oneGet: t.String()
-	// 								},
-	// 								{ additionalProperties: false }
-	// 							)
-	// 						),
-	// 						threeGet: t.Array(
-	// 							t.Object(
-	// 								{
-	// 									one: t.String(),
-	// 									oneGet: t.String()
-	// 								},
-	// 								{ additionalProperties: false }
-	// 							)
-	// 						)
-	// 					},
-	// 					{ additionalProperties: false }
-	// 				)
-	// 			)
-	// 		}
-	// 	)
-
-	// 	const response = await app.handle(req('/')).then((x) => x.json())
-
-	// 	expect(response).toEqual([
-	// 		{
-	// 			one: 'world',
-	// 			oneGet: 'world',
-	// 			three: [
-	// 				{
-	// 					one: 'world',
-	// 					oneGet: 'world'
-	// 				}
-	// 			],
-	// 			threeGet: [
-	// 				{
-	// 					one: 'world',
-	// 					oneGet: 'world'
-	// 				}
-	// 			]
-	// 		}
-	// 	])
-	// })
-
-	// it('normalize response with getter fields on simple object array with nested arrays', async () => {
-	// 	const app = new Elysia({
-	// 		normalize: true
-	// 	}).get(
-	// 		'/',
-	// 		() => {
-	// 			const o = [
-	// 				{
-	// 					one: 'world',
-	// 					get oneGet() {
-	// 						return 'world'
-	// 					},
-	// 					two: 'world',
-	// 					get twoGet() {
-	// 						return 'world'
-	// 					}
-	// 				}
-	// 			]
-	// 			return [
-	// 				{
-	// 					one: 'world',
-	// 					get oneGet() {
-	// 						return 'world'
-	// 					},
-	// 					two: 'world',
-	// 					get twoGet() {
-	// 						return 'world'
-	// 					},
-	// 					three: o,
-	// 					get threeGet() {
-	// 						return o
-	// 					},
-	// 					four: o,
-	// 					get fourGet() {
-	// 						return o
-	// 					}
-	// 				}
-	// 			]
-	// 		},
-	// 		{
-	// 			response: t.Array(
-	// 				t.Object(
-	// 					{
-	// 						one: t.String(),
-	// 						oneGet: t.String(),
-	// 						three: t.Array(
-	// 							t.Object(
-	// 								{
-	// 									one: t.String(),
-	// 									oneGet: t.String()
-	// 								},
-	// 								{ additionalProperties: false }
-	// 							)
-	// 						),
-	// 						threeGet: t.Array(
-	// 							t.Object(
-	// 								{
-	// 									one: t.String(),
-	// 									oneGet: t.String()
-	// 								},
-	// 								{ additionalProperties: false }
-	// 							)
-	// 						)
-	// 					},
-	// 					{ additionalProperties: false }
-	// 				)
-	// 			)
-	// 		}
-	// 	)
-
-	// 	const response = await app.handle(req('/')).then((x) => x.json())
-
-	// 	expect(response).toEqual([
-	// 		{
-	// 			one: 'world',
-	// 			oneGet: 'world',
-	// 			three: [
-	// 				{
-	// 					one: 'world',
-	// 					oneGet: 'world'
-	// 				}
-	// 			],
-	// 			threeGet: [
-	// 				{
-	// 					one: 'world',
-	// 					oneGet: 'world'
-	// 				}
-	// 			]
-	// 		}
-	// 	])
-	// })
-
-	// it('normalize getter field', async () => {
-	// 	class Example {
-	// 		field1: string
-	// 		field3?: string
-
-	// 		constructor(
-	// 			private field2: string,
-	// 			field1: string,
-	// 			field3?: string
-	// 		) {
-	// 			this.field1 = field1
-	// 			this.field3 = field3
-	// 		}
-
-	// 		get getterField() {
-	// 			return this.field2
-	// 		}
-	// 	}
-
-	// 	const app = new Elysia().get(
-	// 		'/',
-	// 		() => new Example('field2', 'field1'),
-	// 		{
-	// 			response: t.Object({
-	// 				field1: t.String(),
-	// 				field3: t.Optional(t.String()),
-	// 				getterField: t.String()
-	// 			})
-	// 		}
-	// 	)
-
-	// 	const response = await app.handle(req('/')).then((x) => x.json())
-
-	// 	expect(response).toEqual({
-	// 		field1: 'field1',
-	// 		getterField: 'field2'
-	// 	})
-	// })
 })

@@ -171,8 +171,8 @@ describe('Mount', () => {
 		expect(response.path).toBe('/problems')
 	})
 
-	it('handle body in aot: false', async () => {
-		const app = new Elysia({ aot: false }).mount('/api', async (request) =>
+	it('handle body', async () => {
+		const app = new Elysia().mount('/api', async (request) =>
 			Response.json(await request.json())
 		)
 
@@ -209,7 +209,7 @@ describe('Mount', () => {
 
 		const app = new Elysia()
 			.use((app) =>
-				app.onBeforeHandle(({ set }) => {
+				app.beforeHandle(({ set }) => {
 					set.headers['access-control-allow-origin'] = '*'
 				})
 			)

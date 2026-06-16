@@ -1,4 +1,4 @@
-import { Elysia, t } from '../../src'
+import { Elysia, ParseError, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { post } from '../utils'
@@ -6,7 +6,7 @@ import { post } from '../utils'
 describe('Parser', () => {
 	it('handle onParse', async () => {
 		const app = new Elysia()
-			.onParse((context, contentType) => {
+			.parse(({ contentType }) => {
 				switch (contentType) {
 					case 'application/Elysia':
 						return 'A'
@@ -30,10 +30,10 @@ describe('Parser', () => {
 
 	it('register using on', async () => {
 		const app = new Elysia()
-			.on('parse', (context, contentType) => {
+			.on('parse', ({ contentType, request }) => {
 				switch (contentType) {
 					case 'application/Elysia':
-						return context.request.text()
+						return request.text()
 				}
 			})
 			.post('/', ({ body }) => body)
@@ -54,7 +54,7 @@ describe('Parser', () => {
 
 	it('overwrite default parser', async () => {
 		const app = new Elysia()
-			.onParse((context, contentType) => {
+			.parse(({ contentType }) => {
 				switch (contentType) {
 					case 'text/plain':
 						return 'Overwrited'
@@ -95,6 +95,31 @@ describe('Parser', () => {
 		)
 
 		expect(await res.json()).toEqual(body)
+	})
+
+	// Regression (audit P7): the default parser dispatched on charCodeAt(12),
+	// where `application/xml` shares 'x' with `application/x-www-form-urlencoded`
+	// and was silently parsed as urlencoded — mangling the XML body into a
+	// bogus object. application/xml must NOT be urlencoded-parsed (it has no
+	// built-in parser → body stays unparsed for a custom onParse).
+	it('does not parse application/xml as urlencoded', async () => {
+		const app = new Elysia().post('/', ({ body }) => ({
+			type: typeof body,
+			isObject: !!body && typeof body === 'object'
+		}))
+
+		const res = (await app
+			.handle(
+				new Request('http://localhost/', {
+					method: 'POST',
+					body: '<root><a>1</a></root>',
+					headers: { 'content-type': 'application/xml' }
+				})
+			)
+			.then((r) => r.json())) as { type: string; isObject: boolean }
+
+		// before the fix `body` was a urlencoded-parsed object with garbage keys
+		expect(res.isObject).toBe(false)
 	})
 
 	it('parse with extra content-type attribute', async () => {
@@ -144,10 +169,10 @@ describe('Parser', () => {
 		let order = <string[]>[]
 
 		const app = new Elysia()
-			.onParse({ as: 'global' }, ({ path }) => {
+			.parse('global', ({ path }) => {
 				order.push('A')
 			})
-			.onParse({ as: 'global' }, ({ path }) => {
+			.parse('global', ({ path }) => {
 				order.push('B')
 			})
 			.post('/', ({ body }) => 'NOOP')
@@ -158,7 +183,7 @@ describe('Parser', () => {
 	})
 
 	it('inherits plugin', async () => {
-		const plugin = new Elysia().onParse({ as: 'global' }, () => 'Kozeki Ui')
+		const plugin = new Elysia().parse('global', () => 'Kozeki Ui')
 
 		const app = new Elysia().use(plugin).post('/', ({ body }) => body)
 
@@ -167,7 +192,7 @@ describe('Parser', () => {
 	})
 
 	it('not inherits plugin on local', async () => {
-		const plugin = new Elysia().onParse(() => 'Kozeki Ui')
+		const plugin = new Elysia().parse(() => 'Kozeki Ui')
 
 		const app = new Elysia().use(plugin).post('/', ({ body }) => body)
 
@@ -182,7 +207,7 @@ describe('Parser', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.onParse({ as: 'global' }, ({ path }) => {
+			.parse('global', ({ path }) => {
 				called.push(path)
 			})
 			.post('/inner', () => 'NOOP')
@@ -201,7 +226,7 @@ describe('Parser', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.onParse({ as: 'local' }, ({ path }) => {
+			.parse('local', ({ path }) => {
 				called.push(path)
 			})
 			.post('/inner', () => 'NOOP')
@@ -220,7 +245,7 @@ describe('Parser', () => {
 		let total = 0
 
 		const app = new Elysia()
-			.onParse([
+			.parse([
 				() => {
 					total++
 				},
@@ -423,13 +448,33 @@ describe('Parser', () => {
 		])
 	})
 
+	it('honor explicit parser when schema contains File', async () => {
+		const app = new Elysia().post('/', ({ body }) => body, {
+			parse: 'json',
+			body: t.Object({
+				name: t.String(),
+				file: t.Optional(t.File())
+			})
+		})
+
+		const response = await app.handle(
+			new Request('http://localhost/', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ name: 'Aru' })
+			})
+		)
+
+		expect(response.status).toBe(200)
+		expect(await response.json()).toEqual({ name: 'Aru' })
+	})
+
 	it('should get parse error', async () => {
-		let code: string | undefined
+		let parseError = false
 
 		const app = new Elysia()
-			.onError((ctx) => {
-				// @ts-ignore
-				code = ctx.code
+			.error(({ error }) => {
+				parseError = error instanceof ParseError
 			})
 			.post('/', () => '', {
 				body: t.Object({
@@ -447,7 +492,7 @@ describe('Parser', () => {
 			})
 		)
 
-		expect(code).toBe('PARSE')
+		expect(parseError).toBe(true)
 		expect(response.status).toBe(400)
 	})
 })

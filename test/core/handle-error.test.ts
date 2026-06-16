@@ -1,44 +1,28 @@
-import { Elysia, InternalServerError, NotFoundError, status, t } from '../../src'
+import { Elysia, InternalServerError, NotFound, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
 
-const request = new Request('http://localhost:8080')
-
 describe('Handle Error', () => {
 	it('handle NOT_FOUND', async () => {
 		const res = await new Elysia()
-			.get('/', () => 'Hi')
-			// @ts-expect-error private
-			.handleError(
-				{
-					request,
-					set: {
-						headers: {}
-					}
-				},
-				new NotFoundError()
-			)
+			.get('/', () => {
+				throw new NotFound()
+			})
+			.handle(req('/'))
 
-		expect(await res.text()).toBe('NOT_FOUND')
+		expect(await res.text()).toBe('Not Found')
 		expect(res.status).toBe(404)
 	})
 
 	it('handle INTERNAL_SERVER_ERROR', async () => {
 		const res = await new Elysia()
-			.get('/', () => 'Hi')
-			// @ts-expect-error private
-			.handleError(
-				{
-					request,
-					set: {
-						headers: {}
-					}
-				},
-				new InternalServerError()
-			)
+			.get('/', () => {
+				throw new InternalServerError()
+			})
+			.handle(req('/'))
 
-		expect(await res.text()).toBe('INTERNAL_SERVER_ERROR')
+		expect(await res.text()).toBe('Internal Server Error')
 		expect(res.status).toBe(500)
 	})
 
@@ -57,8 +41,8 @@ describe('Handle Error', () => {
 	it('use custom error', async () => {
 		const res = await new Elysia()
 			.get('/', () => 'Hi')
-			.onError(({ code }) => {
-				if (code === 'NOT_FOUND')
+			.error(({ error }) => {
+				if (error instanceof NotFound)
 					return new Response("I'm a teapot", {
 						status: 418
 					})
@@ -71,11 +55,11 @@ describe('Handle Error', () => {
 
 	it('inject headers to error', async () => {
 		const app = new Elysia()
-			.onRequest(({ set }) => {
+			.request(({ set }) => {
 				set.headers['Access-Control-Allow-Origin'] = '*'
 			})
 			.get('/', () => {
-				throw new NotFoundError()
+				throw new NotFound()
 			})
 
 		const res = await app.handle(req('/'))
@@ -86,13 +70,13 @@ describe('Handle Error', () => {
 
 	it('transform any to error', async () => {
 		const app = new Elysia()
-			.onError(async ({ set }) => {
+			.error(async ({ set }) => {
 				set.status = 418
 
 				return 'aw man'
 			})
 			.get('/', () => {
-				throw new NotFoundError()
+				throw new NotFound()
 			})
 
 		const res = await app.handle(req('/'))
@@ -107,7 +91,7 @@ describe('Handle Error', () => {
 				.get('/inner', () => {
 					throw new Error('A')
 				})
-				.onError(() => {
+				.error(() => {
 					return 'handled'
 				})
 		)
@@ -128,7 +112,7 @@ describe('Handle Error', () => {
 
 					throw new Error('A')
 				})
-				.onError(() => {
+				.error(() => {
 					return 'handled'
 				})
 		)
@@ -184,14 +168,12 @@ describe('Handle Error', () => {
 			}
 		}
 
-		const errors = new Elysia()
-			.error({ APIError })
-			.onError({ as: 'global' }, ({ code }) => {
-				return code
-			})
+		const errors = new Elysia().error('global', APIError, ({ error }) =>
+			error.name
+		)
 
 		const requestHandler = new Elysia()
-			.onTransform(() => {
+			.transform(() => {
 				throw new APIError(403, 'Not authorized')
 			})
 			.get('/', () => 'a')
@@ -226,24 +208,16 @@ describe('Handle Error', () => {
 		const route = new Elysia().get('/', ({ query: { aid } }) => aid, {
 			query: t.Object({
 				aid: t
-					.Transform(t.String())
+					.Codec(t.String())
 					.Decode((value) => {
-						throw new NotFoundError('foo')
+						throw new NotFound('foo')
 					})
 					.Encode((value) => `1`)
 			})
 		})
 
-		let response = await new Elysia({ aot: false })
-			.use(route)
-			.handle(req('/?aid=a'))
+		const response = await new Elysia().use(route).handle(req('/?aid=a'))
 
-		expect(response.status).toEqual(404)
-		expect(await response.text()).toEqual('foo')
-
-		response = await new Elysia({ aot: true })
-			.use(route)
-			.handle(req('/?aid=a'))
 		expect(response.status).toEqual(404)
 		expect(await response.text()).toEqual('foo')
 	})
@@ -251,22 +225,11 @@ describe('Handle Error', () => {
 	it('map status error to response', async () => {
 		const value = { message: 'meow!' }
 
-		const response: Response = await new Elysia()
-			.get('/', () => 'Hello', {
-				beforeHandle({ status }) {
-					throw status("I'm a teapot", { message: 'meow!' })
-				}
+		const response = await new Elysia()
+			.get('/', ({ status }) => {
+				throw status(422, value)
 			})
-			// @ts-expect-error private property
-			.handleError(
-				{
-					request: new Request('http://localhost/'),
-					set: {
-						headers: {}
-					}
-				},
-				status(422, value) as any
-			)
+			.handle(req('/'))
 
 		expect(await response.json()).toEqual(value)
 		expect(response.headers.get('content-type')).toStartWith(
@@ -278,7 +241,7 @@ describe('Handle Error', () => {
 	it('map status error with custom mapResponse', async () => {
 		const value = { message: 'meow!' }
 
-		const response: Response = await new Elysia()
+		const response = await new Elysia()
 			.mapResponse(({ responseValue }) => {
 				if (typeof responseValue === 'object')
 					return new Response('Don Quixote', {
@@ -287,21 +250,10 @@ describe('Handle Error', () => {
 						}
 					})
 			})
-			.get('/', () => 'Hello', {
-				beforeHandle({ status }) {
-					throw status("I'm a teapot", { message: 'meow!' })
-				}
+			.get('/', ({ status }) => {
+				throw status(422, value)
 			})
-			// @ts-expect-error private property
-			.handleError(
-				{
-					request: new Request('http://localhost/'),
-					set: {
-						headers: {}
-					}
-				},
-				status(422, value) as any
-			)
+			.handle(req('/'))
 
 		expect(await response.text()).toBe('Don Quixote')
 		expect(response.headers.get('content-type')).toStartWith('text/plain')
@@ -310,18 +262,11 @@ describe('Handle Error', () => {
 
 	it('handle generic error', async () => {
 		const res = await new Elysia()
-			.get('/', () => 'Hi')
-			// @ts-expect-error private
-			.handleError(
-				{
-					request,
-					set: {
-						headers: {}
-					}
-				},
+			.get('/', () => {
 				// https://youtube.com/shorts/PbIWVPKHfrQ
-				new Error('a')
-			)
+				throw new Error('a')
+			})
+			.handle(req('/'))
 
 		expect(await res.text()).toBe('a')
 		expect(res.status).toBe(500)
@@ -370,6 +315,31 @@ describe('Handle Error', () => {
 
 		expect(await res.json()).toEqual({ error: 'hello' })
 		expect(res.status).toBe(418)
+	})
+
+	// F29: the finished Response from toResponse() must pass through by
+	// reference — set.status already matches, so rewrapping would only
+	// clone headers and downgrade the in-memory body to a stream
+	it('pass through toResponse() Response by reference when set matches', async () => {
+		const original = Response.json({ error: 'hello' }, { status: 418 })
+
+		class ErrorA extends Error {
+			status = 418
+
+			toResponse() {
+				return original
+			}
+		}
+
+		const app = new Elysia().get('/', () => {
+			throw new ErrorA()
+		})
+
+		const res = await app.handle(req('/'))
+
+		expect(res).toBe(original)
+		expect(res.status).toBe(418)
+		expect(await res.json()).toEqual({ error: 'hello' })
 	})
 
 	it('handle non-Error with toResponse() when returned', async () => {
@@ -437,7 +407,7 @@ describe('Handle Error', () => {
 		class AsyncError extends Error {
 			async toResponse() {
 				// Simulate async operation
-				await new Promise(resolve => setTimeout(resolve, 10))
+				await new Promise((resolve) => setTimeout(resolve, 10))
 				return Response.json({ error: 'async error' }, { status: 418 })
 			}
 		}
@@ -456,7 +426,7 @@ describe('Handle Error', () => {
 		class AsyncError extends Error {
 			async toResponse() {
 				// Simulate async operation
-				await new Promise(resolve => setTimeout(resolve, 10))
+				await new Promise((resolve) => setTimeout(resolve, 10))
 				return Response.json({ error: 'async error' }, { status: 418 })
 			}
 		}
@@ -474,7 +444,7 @@ describe('Handle Error', () => {
 	it('handle async toResponse() with custom headers', async () => {
 		class AsyncErrorWithHeaders extends Error {
 			async toResponse() {
-				await new Promise(resolve => setTimeout(resolve, 10))
+				await new Promise((resolve) => setTimeout(resolve, 10))
 				return Response.json(
 					{ error: 'async with headers' },
 					{
@@ -501,8 +471,11 @@ describe('Handle Error', () => {
 	it('handle non-Error with async toResponse()', async () => {
 		class AsyncNonError {
 			async toResponse() {
-				await new Promise(resolve => setTimeout(resolve, 10))
-				return Response.json({ error: 'non-error async' }, { status: 418 })
+				await new Promise((resolve) => setTimeout(resolve, 10))
+				return Response.json(
+					{ error: 'non-error async' },
+					{ status: 418 }
+				)
 			}
 		}
 
@@ -559,26 +532,36 @@ describe('Handle Error', () => {
 		const res = await app.handle(req('/'))
 
 		expect(res.status).toBe(500)
-		expect(res.headers.get('set-cookie')).toContain('session=test-session-id')
+		expect(res.headers.get('set-cookie')).toContain(
+			'session=test-session-id'
+		)
 	})
 
 	it('send set-cookie header when response validation error occurs', async () => {
-		const app = new Elysia().get('/', ({ cookie }) => {
-			cookie.session.value = 'test-session-id'
-			return 'invalid response'
-		}, {
-			response: t.Number()
-		})
+		const app = new Elysia().get(
+			'/',
+			// @ts-expect-error deliberately returns an invalid response to
+			// assert set-cookie survives the response-validation error
+			({ cookie }) => {
+				cookie.session.value = 'test-session-id'
+				return 'invalid response'
+			},
+			{
+				response: t.Number()
+			}
+		)
 
 		const res = await app.handle(req('/'))
 
 		expect(res.status).toBe(422)
-		expect(res.headers.get('set-cookie')).toContain('session=test-session-id')
+		expect(res.headers.get('set-cookie')).toContain(
+			'session=test-session-id'
+		)
 	})
 
 	it('send set-cookie header when error is thrown with onError hook', async () => {
 		const app = new Elysia()
-			.onError(({ error }) => {
+			.error(({ error }) => {
 				return error.message
 			})
 			.get('/', ({ cookie }) => {
@@ -590,19 +573,23 @@ describe('Handle Error', () => {
 
 		expect(res.status).toBe(500)
 		expect(await res.text()).toBe('custom error')
-		expect(res.headers.get('set-cookie')).toContain('session=test-session-id')
+		expect(res.headers.get('set-cookie')).toContain(
+			'session=test-session-id'
+		)
 	})
 
 	it('send set-cookie header when NotFoundError is thrown', async () => {
 		const app = new Elysia().get('/', ({ cookie }) => {
 			cookie.session.value = 'test-session-id'
-			throw new NotFoundError()
+			throw new NotFound()
 		})
 
 		const res = await app.handle(req('/'))
 
 		expect(res.status).toBe(404)
-		expect(res.headers.get('set-cookie')).toContain('session=test-session-id')
+		expect(res.headers.get('set-cookie')).toContain(
+			'session=test-session-id'
+		)
 	})
 
 	it('send set-cookie header when InternalServerError is thrown', async () => {
@@ -614,11 +601,13 @@ describe('Handle Error', () => {
 		const res = await app.handle(req('/'))
 
 		expect(res.status).toBe(500)
-		expect(res.headers.get('set-cookie')).toContain('session=test-session-id')
+		expect(res.headers.get('set-cookie')).toContain(
+			'session=test-session-id'
+		)
 	})
 
-	it('send set-cookie header in AOT mode when error is thrown', async () => {
-		const app = new Elysia({ aot: true }).get('/', ({ cookie }) => {
+	it('send set-cookie header when error is thrown', async () => {
+		const app = new Elysia().get('/', ({ cookie }) => {
 			cookie.session.value = 'test-session-id'
 			throw new Error('test error')
 		})
@@ -626,7 +615,9 @@ describe('Handle Error', () => {
 		const res = await app.handle(req('/'))
 
 		expect(res.status).toBe(500)
-		expect(res.headers.get('set-cookie')).toContain('session=test-session-id')
+		expect(res.headers.get('set-cookie')).toContain(
+			'session=test-session-id'
+		)
 	})
 
 	it('preserve multiple cookies when error is thrown', async () => {
@@ -653,7 +644,9 @@ describe('Handle Error', () => {
 
 		const res = await app.handle(req('/'))
 
-		expect(res.headers.get('set-cookie')).toContain('session=test-session-id')
+		expect(res.headers.get('set-cookie')).toContain(
+			'session=test-session-id'
+		)
 		expect(res.headers.get('x-custom')).toBe('value')
 	})
 })

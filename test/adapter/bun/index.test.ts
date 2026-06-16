@@ -53,12 +53,12 @@ describe('Bun adapter', () => {
 		let onRequestCalled = false
 
 		const app = new Elysia()
-			.onError(({ error }) => {
+			.error(({ error }) => {
 				caughtError = error as Error
 
 				return 'handled'
 			})
-			.onRequest(({ set }) => {
+			.request(({ set }) => {
 				set.headers['x-header'] = 'test'
 				set.status = 400
 

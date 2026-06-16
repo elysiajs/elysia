@@ -3,7 +3,7 @@ import { req } from '../utils'
 
 import { Elysia, sse } from '../../src'
 import { streamResponse } from '../../src/adapter/utils'
-import { randomId } from '../../src/utils'
+import { requestId } from '../../src/utils'
 
 describe('Stream', () => {
 	it('handle stream', async () => {
@@ -94,6 +94,72 @@ describe('Stream', () => {
 
 		expect(expected).toHaveLength(0)
 		expect(response).toBe('ab')
+	})
+
+	// `streamResponse` re-streams a Response body (chunked, unknown length). It
+	// now uses `yield* body` instead of a manual getReader()/releaseLock() loop;
+	// these pin the mid-stream abort semantics of that change.
+	it('streamResponse cancels the source body on a mid-stream abort', async () => {
+		let cancelled = false
+		const body = new ReadableStream<Uint8Array>({
+			start(controller) {
+				controller.enqueue(new Uint8Array([1]))
+				controller.enqueue(new Uint8Array([2]))
+				// left open on purpose — only an abort should end it
+			},
+			cancel() {
+				cancelled = true
+			}
+		})
+
+		const gen = streamResponse(new Response(body))
+
+		const first = await gen.next()
+		expect(first.done).toBe(false)
+		expect([...(first.value as Uint8Array)]).toEqual([1])
+
+		// consumer bails out before the stream ends (client disconnect)
+		await gen.return(undefined as any)
+
+		// `yield* body` forwards .return() to the body's async iterator, which
+		// cancels the upstream — the old getReader()+releaseLock() did not.
+		expect(cancelled).toBe(true)
+	})
+
+	it('streamResponse settles a mid-stream abort without hanging', async () => {
+		const body = new ReadableStream<Uint8Array>({
+			start(controller) {
+				controller.enqueue(new Uint8Array([1]))
+				controller.enqueue(new Uint8Array([2]))
+				controller.enqueue(new Uint8Array([3]))
+			}
+		})
+
+		const gen = streamResponse(new Response(body))
+		await gen.next()
+
+		const outcome = await Promise.race([
+			gen.return(undefined as any).then(() => 'returned'),
+			new Promise((resolve) => setTimeout(() => resolve('hung'), 500))
+		])
+
+		expect(outcome).toBe('returned')
+	})
+
+	it('streamResponse yields every chunk on normal completion', async () => {
+		const body = new ReadableStream<Uint8Array>({
+			start(controller) {
+				controller.enqueue(new Uint8Array([1]))
+				controller.enqueue(new Uint8Array([2]))
+				controller.close()
+			}
+		})
+
+		const out: number[] = []
+		for await (const chunk of streamResponse(new Response(body)))
+			out.push(...(chunk as Uint8Array))
+
+		expect(out).toEqual([1, 2])
 	})
 
 	it('include multiple set-cookie headers in streamed response', async () => {
@@ -293,7 +359,7 @@ describe('Stream', () => {
 		const app = new Elysia().get('/sse', async function* () {
 			for (let i = 0; i < 3; i++) {
 				yield sse({
-					id: randomId(),
+					id: requestId(),
 					data: `message ${i}`
 				})
 				await Bun.sleep(10)
@@ -584,12 +650,12 @@ describe('Stream', () => {
 	it('should call onError hook when throwing from async generator', async () => {
 		const { status: statusFn } = await import('../../src')
 		let onErrorCalled = false
-		let errorCode: string | number | undefined
+		let errorStatus: number | undefined
 
 		const app = new Elysia()
-			.onError(({ code }) => {
+			.error(({ error }) => {
 				onErrorCalled = true
-				errorCode = code
+				errorStatus = (error as any)?.status
 			})
 			.get('/', async function* ({ set }) {
 				set.headers['x-custom-header'] = 'test-value'
@@ -602,22 +668,22 @@ describe('Stream', () => {
 
 		expect(response.status).toBe(500)
 		expect(onErrorCalled).toBe(true)
-		expect(errorCode).toBe(500)
+		expect(errorStatus).toBe(500)
 		expect(response.headers.get('x-custom-header')).toBe('test-value')
 	})
 
 	it('handle sse with plugin global hooks and trace', async () => {
 		const PluginA = () =>
 			new Elysia({ name: 'PluginA' })
-				.onBeforeHandle(() => {})
-				.onAfterHandle(() => {})
-				.onParse(() => {})
-				.onTransform(() => {})
-				.onError(() => {})
-				.onAfterResponse(() => {})
+				.beforeHandle(() => {})
+				.afterHandle(() => {})
+				.parse(() => {})
+				.transform(() => {})
+				.error(() => {})
+				.afterResponse(() => {})
 				.onStart(() => {})
 				.onStop(() => {})
-				.onRequest(() => {})
+				.request(() => {})
 				.trace(() => {})
 				.as('global')
 
@@ -757,6 +823,37 @@ describe('Stream', () => {
 		const result = new Uint8Array(await response.arrayBuffer())
 
 		expect(result).toEqual(expected)
+	})
+
+	// F20: re-streamed Response bodies must pass through byte-identical —
+	// UTF-8 decoding each chunk corrupted non-UTF-8 bytes (U+FFFD) and
+	// multi-byte characters split across chunk boundaries
+	it('preserve exact bytes when re-streaming a touched-set chunked Response', async () => {
+		const app = new Elysia().get('/', ({ set }) => {
+			set.headers['x-touch'] = '1'
+
+			return new Response(
+				new ReadableStream({
+					start(controller) {
+						// € (e2 82 ac) split across chunks + non-UTF-8 tail
+						controller.enqueue(new Uint8Array([0xe2, 0x82]))
+						controller.enqueue(new Uint8Array([0xac, 0xff, 0x00]))
+						controller.close()
+					}
+				}),
+				{ headers: { 'transfer-encoding': 'chunked' } }
+			)
+		})
+
+		const response = await app.handle(req('/'))
+		const result = new Uint8Array(await response.arrayBuffer())
+
+		expect(response.headers.get('x-touch')).toBe('1')
+		// binary first chunk pins the deliberate headerless default
+		expect(response.headers.get('content-type')).toBe(
+			'application/octet-stream'
+		)
+		expect(result).toEqual(new Uint8Array([0xe2, 0x82, 0xac, 0xff, 0x00]))
 	})
 
 	it('stream generator Uint8Array chunks as binary', async () => {

@@ -1,229 +1,93 @@
-import { describe, expect, it } from 'bun:test'
+import { describe, it, expect, afterEach } from 'bun:test'
 import { Elysia, t } from '../../src'
-import { req } from '../utils'
-import { signCookie } from '../../src/utils'
+import { Validator } from '../../src/validator'
+import { TypeBoxValidator } from '../../src/type/validator'
+import {
+	Compiled,
+	beginValidatorCapture,
+	endValidatorCapture
+} from '../../src/compile/aot'
+import { materialise } from './_manifest'
 
-const secrets = 'We long for the seven wailings. We bear the koan of Jericho.'
+/**
+ * AOT response freezing — response validators are keyed PER STATUS
+ * (`response:<status>`) and frozen like every request slot. Before this, the
+ * `response` slot was never set (route.ts can't add it — it doesn't know the
+ * statuses), so response validators fell through to `Compile` + `createMirror`
+ * on every boot. That's invisible in request-only synthetic apps but dominates
+ * boot in real, response-heavy APIs (≈3.9× boot on a response-heavy app).
+ */
 
-const getCookies = (response: Response) =>
-	response.headers.getAll('Set-Cookie').map((x) => {
-		return decodeURIComponent(x)
-	})
+afterEach(() => {
+	Compiled.clear()
+	Validator.clear()
+})
 
-const app = new Elysia()
-	.get(
-		'/council',
-		({ cookie: { council } }) =>
-			(council.value = [
-				{
-					name: 'Rin',
-					affilation: 'Administration'
-				}
-			])
-	)
-	.get('/create', ({ cookie: { name } }) => (name.value = 'Himari'))
-	.get('/multiple', ({ cookie: { name, president } }) => {
-		name.value = 'Himari'
-		president.value = 'Rio'
-
-		return 'ok'
-	})
-	.get(
-		'/update',
-		({ cookie: { name } }) => {
-			name.value = 'seminar: Himari'
-
-			return name.value
-		},
-		{
-			cookie: t.Cookie(
-				{
-					name: t.Optional(t.String())
-				},
-				{
-					secrets,
-					sign: ['name']
-				}
-			)
+const RESP = () =>
+	new Elysia().get('/u', () => ({ id: 'x', name: 'y' }), {
+		response: {
+			200: t.Object({ id: t.String(), name: t.String() }),
+			404: t.Object({ error: t.String() })
 		}
-	)
-	.get('/remove', ({ cookie }) => {
-		for (const self of Object.values(cookie)) self.remove()
-
-		return 'Deleted'
 	})
 
-describe('Dynamic Cookie Response', () => {
-	it('set cookie', async () => {
-		const response = await app.handle(req('/create'))
+describe('AOT response freezing', () => {
+	it('captures + freezes a validator for EACH declared status', () => {
+		beginValidatorCapture()
+		RESP().compile()
+		const m = materialise(endValidatorCapture())
 
-		expect(getCookies(response)).toEqual(['name=Himari; Path=/'])
+		// one frozen entry per status — not a single bare `response`
+		expect(m.GET?.['/u']?.['response:200']).toBeDefined()
+		expect(m.GET?.['/u']?.['response:404']).toBeDefined()
+		expect(
+			(m.GET?.['/u'] as Record<string, unknown> | undefined)?.[
+				'response'
+			]
+		).toBeUndefined()
+
+		Validator.clear()
+		Compiled.validators = m
+
+		// a response:200 validator binds the frozen check (Compile skipped) + validates
+		const v = Validator.create(
+			t.Object({ id: t.String(), name: t.String() }),
+			{ aot: { method: 'GET', path: '/u' }, slot: 'response:200' }
+		) as any
+		expect(v.tb).toBeUndefined() // frozen-bound, not compiled
+		expect(v.reconstructedCheck).toBeDefined() // bound eagerly at construction
+		expect(v.Check({ id: 'a', name: 'b' })).toBe(true)
+		expect(v.Check({ id: 1 })).toBe(false)
 	})
 
-	it('set multiple cookie', async () => {
-		const response = await app.handle(req('/multiple'))
+	it('differential: frozen response Clean ≡ JIT Clean (extra stripped)', () => {
+		const schema = () => t.Object({ id: t.String(), n: t.Number() })
 
-		expect(getCookies(response)).toEqual([
-			'name=Himari; Path=/',
-			'president=Rio; Path=/'
-		])
-	})
-
-	it('set JSON cookie', async () => {
-		const response = await app.handle(req('/council'))
-
-		expect(getCookies(response)).toEqual([
-			'council=[{"name":"Rin","affilation":"Administration"}]; Path=/'
-		])
-	})
-
-	it('write cookie on difference value', async () => {
-		const response = await app.handle(
-			req('/council', {
-				headers: {
-					cookie:
-						'council=' +
-						encodeURIComponent(
-							JSON.stringify([
-								{
-									name: 'Aoi',
-									affilation: 'Financial'
-								}
-							])
-						) +
-						'; Path=/'
-				}
+		beginValidatorCapture()
+		new Elysia()
+			.get('/u', () => ({ id: 'a', n: 1 }), {
+				response: { 200: schema() }
 			})
+			.compile()
+		const m = materialise(endValidatorCapture())
+
+		// JIT reference (no manifest)
+		Validator.clear()
+		Compiled.clear()
+		const jit = new TypeBoxValidator(schema()) as any
+
+		// frozen
+		Validator.clear()
+		Compiled.validators = m
+		const frozen = Validator.create(schema(), {
+			aot: { method: 'GET', path: '/u' },
+			slot: 'response:200'
+		}) as any
+
+		expect(frozen.tb).toBeUndefined()
+		const input = { id: 'a', n: 1, extra: 'strip' }
+		expect(frozen.Clean?.(structuredClone(input))).toEqual(
+			jit.Clean?.(structuredClone(input))
 		)
-
-		expect(getCookies(response)).toEqual([
-			'council=[{"name":"Rin","affilation":"Administration"}]; Path=/'
-		])
-	})
-
-	it('remove cookie', async () => {
-		const response = await app.handle(
-			req('/remove', {
-				headers: {
-					cookie:
-						'council=' +
-						encodeURIComponent(
-							JSON.stringify([
-								{
-									name: 'Rin',
-									affilation: 'Administration'
-								}
-							])
-						)
-				}
-			})
-		)
-
-		expect(getCookies(response)[0]).toInclude(
-			`council=; Max-Age=0; Path=/; Expires=${new Date(0).toUTCString()}`
-		)
-	})
-
-	it('sign cookie', async () => {
-		const response = await app.handle(req('/update'))
-
-		expect(getCookies(response)).toEqual([
-			`name=${await signCookie('seminar: Himari', secrets)}; Path=/`
-		])
-	})
-
-	it('sign/unsign cookie', async () => {
-		const response = await app.handle(
-			req('/update', {
-				headers: {
-					cookie: `name=${await signCookie(
-						'seminar: Himari',
-						secrets
-					)}`
-				}
-			})
-		)
-
-		expect(response.status).toBe(200)
-	})
-
-	it('inherits cookie settings', async () => {
-		const app = new Elysia({
-			cookie: {
-				secrets,
-				sign: ['name']
-			}
-		}).get(
-			'/update',
-			({ cookie: { name } }) => {
-				if (!name.value) name.value = 'seminar: Himari'
-
-				return name.value
-			},
-			{
-				cookie: t.Cookie({
-					name: t.Optional(t.String())
-				})
-			}
-		)
-
-		const response = await app.handle(
-			req('/update', {
-				headers: {
-					cookie: `name=${await signCookie(
-						'seminar: Himari',
-						secrets
-					)}`
-				}
-			})
-		)
-
-		expect(response.status).toBe(200)
-	})
-
-	it('sign all cookie', async () => {
-		const app = new Elysia({
-			cookie: {
-				secrets,
-				sign: true
-			}
-		}).get(
-			'/update',
-			({ cookie: { name } }) => {
-				if (!name.value) name.value = 'seminar: Himari'
-
-				return name.value
-			},
-			{
-				cookie: t.Cookie({
-					name: t.Optional(t.String())
-				})
-			}
-		)
-
-		const response = await app.handle(
-			req('/update', {
-				headers: {
-					cookie: `name=${await signCookie('seminar: Himari', secrets)}`
-				}
-			})
-		)
-
-		expect(response.status).toBe(200)
-	})
-
-	it("don't share context between race condition", async () => {
-		const resolver = Promise.withResolvers()
-
-		const app = new Elysia({ aot: false })
-			.onRequest(() => new Promise((resolve) => setTimeout(resolve, 1)))
-			.get('/test', ({ request }) => {
-				resolver.resolve(request.url)
-			})
-
-		app.handle(new Request('http://localhost:1025/test'))
-		app.handle(new Request('http://localhost:1025/bad'))
-
-		expect(await resolver.promise).toBe('http://localhost:1025/test')
 	})
 })

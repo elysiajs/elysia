@@ -1,170 +1,77 @@
-// /* eslint-disable @typescript-eslint/no-unused-vars */
-// import { expect } from 'bun:test'
-// import { t, Elysia, RouteSchema, Cookie, error } from '../../../src'
-// import { expectTypeOf } from 'expect-type'
+import { Elysia } from '../../../src'
+import { expectTypeOf } from 'expect-type'
 
-// // Inline Derive
-// {
-// 	new Elysia().get(
-// 		'/',
-// 		({ name }) => {
-// 			expectTypeOf<typeof name>().toEqualTypeOf<'hare'>()
-// 		},
-// 		{
-// 			derive: () => {
-// 				return { name: 'hare' as const }
-// 			}
-// 		}
-// 	)
-// }
+// ? local derive flows into later handler context
+{
+	new Elysia()
+		.derive(() => ({ name: 'hare' as const }))
+		.get('/', ({ name }) => {
+			expectTypeOf<typeof name>().toEqualTypeOf<'hare'>()
+		})
+}
 
-// // Inline Derive Array
-// {
-// 	new Elysia().get(
-// 		'/',
-// 		({ first, last }) => {
-// 			expectTypeOf<typeof first>().toEqualTypeOf<'hare'>()
-// 			expectTypeOf<typeof last>().toEqualTypeOf<'omagari'>()
-// 		},
-// 		{
-// 			derive: [
-// 				() => {
-// 					return { first: 'hare' as const }
-// 				},
-// 				() => {
-// 					return { last: 'omagari' as const }
-// 				}
-// 			]
-// 		}
-// 	)
-// }
+// ? chained derive accumulates
+{
+	new Elysia()
+		.derive(() => ({ first: 'hare' as const }))
+		.derive(() => ({ last: 'omagari' as const }))
+		.get('/', ({ first, last }) => {
+			expectTypeOf<typeof first>().toEqualTypeOf<'hare'>()
+			expectTypeOf<typeof last>().toEqualTypeOf<'omagari'>()
+		})
+}
 
-// // Inline Derive Array
-// {
-// 	new Elysia().get(
-// 		'/',
-// 		({ first, last }) => {
-// 			expectTypeOf<typeof first>().toEqualTypeOf<'hare'>()
-// 			expectTypeOf<typeof last>().toEqualTypeOf<'omagari'>()
-// 		},
-// 		{
-// 			derive: [
-// 				() => {
-// 					return { first: 'hare' as const }
-// 				},
-// 				() => {
-// 					return { last: 'omagari' as const }
-// 				}
-// 			]
-// 		}
-// 	)
-// }
+// ? local derive does NOT leak to a consumer via .use
+{
+	const plugin = new Elysia().derive(() => ({ name: 'hare' as const }))
 
-// // ? Group Derive
-// {
-// 	new Elysia()
-// 		.guard(
-// 			{
-// 				derive: () => ({ hi: 'hare' as const })
-// 			},
-// 			(app) =>
-// 				app.get('/', ({ hi }) => {
-// 					expectTypeOf<typeof hi>().toEqualTypeOf<'hare'>()
-// 				})
-// 		)
-// 		.get('/nope', (context) => {
-// 			expectTypeOf<typeof context>().not.toHaveProperty('hi')
-// 		})
-// }
+	new Elysia().use(plugin).get('/', (context) => {
+		expectTypeOf<typeof context>().not.toHaveProperty('name')
+	})
+}
 
-// // ? Group Derive
-// {
-// 	new Elysia()
-// 		.guard(
-// 			{
-// 				derive: [
-// 					() => ({ first: 'hare' as const }),
-// 					() => ({ last: 'omagari' as const })
-// 				]
-// 			},
-// 			(app) =>
-// 				app.get('/', ({ first, last }) => {
-// 					expectTypeOf<typeof first>().toEqualTypeOf<'hare'>()
-// 					expectTypeOf<typeof last>().toEqualTypeOf<'omagari'>()
-// 				})
-// 		)
-// 		.get('/nope', (context) => {
-// 			expectTypeOf<typeof context>().not.toHaveProperty('first')
-// 			expectTypeOf<typeof context>().not.toHaveProperty('last')
-// 		})
-// }
+// ? scoped derive propagates exactly one level via .use
+{
+	const plugin = new Elysia().derive('plugin', () => ({
+		name: 'hare' as const
+	}))
 
-// // ? Guard Derive
-// {
-// 	const plugin = new Elysia()
-// 		.guard({
-// 			derive: () => ({ name: 'hare' as const })
-// 		})
-// 		.get('/', ({ name }) => {
-// 			expectTypeOf<typeof name>().toEqualTypeOf<'hare'>()
-// 		})
+	const app = new Elysia().use(plugin).get('/', ({ name }) => {
+		expectTypeOf<typeof name>().toEqualTypeOf<'hare'>()
+	})
 
-// 	new Elysia().use(plugin).get('/', (context) => {
-// 		expectTypeOf<typeof context>().not.toHaveProperty('name')
-// 	})
-// }
+	new Elysia().use(app).get('/', (context) => {
+		expectTypeOf<typeof context>().not.toHaveProperty('name')
+	})
+}
 
-// // ? Guard Derive Array
-// {
-// 	new Elysia()
-// 		.guard({
-// 			derive: [
-// 				() => ({ first: 'hare' as const }),
-// 				() => ({ last: 'omagari' as const })
-// 			]
-// 		})
-// 		.get('/', ({ first, last }) => {
-// 			expectTypeOf<typeof first>().toEqualTypeOf<'hare'>()
-// 			expectTypeOf<typeof last>().toEqualTypeOf<'omagari'>()
-// 		})
-// }
+// ? global derive propagates to every consumer
+{
+	const plugin = new Elysia().derive('global', () => ({
+		name: 'hare' as const
+	}))
 
-// // ? Scoped Derive
-// {
-// 	const plugin = new Elysia()
-// 		.guard({
-// 			as: 'scoped',
-// 			derive: () => ({ name: 'hare' as const })
-// 		})
-// 		.get('/', ({ name }) => {
-// 			expectTypeOf<typeof name>().toEqualTypeOf<'hare'>()
-// 		})
+	const app = new Elysia().use(plugin).get('/', ({ name }) => {
+		expectTypeOf<typeof name>().toEqualTypeOf<'hare'>()
+	})
 
-// 	const app = new Elysia().use(plugin).get('/', ({ name }) => {
-// 		expectTypeOf<typeof name>().toEqualTypeOf<'hare'>()
-// 	})
+	new Elysia().use(app).get('/', ({ name }) => {
+		expectTypeOf<typeof name>().toEqualTypeOf<'hare'>()
+	})
+}
 
-// 	const root = new Elysia().use(app).get('/', (context) => {
-// 		expectTypeOf<typeof context>().not.toHaveProperty('name')
-// 	})
-// }
+// ? derive can read previously-derived properties
+{
+	new Elysia()
+		.derive(() => ({ a: 1 as const }))
+		.derive(({ a }) => {
+			expectTypeOf<typeof a>().toEqualTypeOf<1>()
+			return { b: 2 as const }
+		})
+		.get('/', ({ a, b }) => {
+			expectTypeOf<typeof a>().toEqualTypeOf<1>()
+			expectTypeOf<typeof b>().toEqualTypeOf<2>()
+		})
+}
 
-// // ? Global Derive
-// {
-// 	const plugin = new Elysia()
-// 		.guard({
-// 			as: 'global',
-// 			derive: () => ({ name: 'hare' as const })
-// 		})
-// 		.get('/', ({ name }) => {
-// 			expectTypeOf<typeof name>().toEqualTypeOf<'hare'>()
-// 		})
-
-// 	const app = new Elysia().use(plugin).get('/', ({ name }) => {
-// 		expectTypeOf<typeof name>().toEqualTypeOf<'hare'>()
-// 	})
-
-// 	new Elysia().use(app).get('/', ({ name }) => {
-// 		expectTypeOf<typeof name>().toEqualTypeOf<'hare'>()
-// 	})
-// }
+export {}

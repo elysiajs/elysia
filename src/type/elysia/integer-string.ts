@@ -1,0 +1,80 @@
+import { Type } from 'typebox'
+import type { TNumberOptions } from 'typebox'
+
+import { isEmpty } from '../../utils'
+import { ELYSIA_TYPES } from '../constants'
+import { Integer } from './integer'
+import { NumberType } from './number'
+import { StringType } from './string'
+import { Union } from './union'
+import { elyType, getMeta } from './utils'
+
+let StringifiedInteger: Type.TCodec<Type.TRefine<Type.TString>, number>
+let StrictInteger: Type.TRefine<Type.TNumber>
+type IntegerStringSchema = Type.TUnion<
+	[Type.TInteger, Type.TCodec<Type.TRefine<Type.TString>, number>]
+>
+let emptyIntegerString: Readonly<IntegerStringSchema>
+export function IntegerString(property?: TNumberOptions) {
+	StringifiedInteger ??= Type.Decode(
+		Type.Refine(
+			StringType(),
+			(value) => !isNaN(+value) && Number.isInteger(+value),
+			() => 'must be integer'
+		),
+		(value) => +value
+	)
+
+	StrictInteger ??= Type.Refine(
+		NumberType(),
+		(value) => Number.isInteger(value),
+		() => 'must be integer'
+	)
+
+	if (!property || isEmpty(property))
+		return (emptyIntegerString ??= elyType(
+			ELYSIA_TYPES.Integer,
+			Union([StrictInteger, StringifiedInteger]) as any
+		) as IntegerStringSchema)
+
+	const [constraints, meta] = getMeta(property)
+	const integer = Integer(constraints)
+
+	const c = constraints as TNumberOptions
+	const stringified = Type.Decode(
+		Type.Refine(
+			StringType(),
+			(value) => {
+				const n = +value
+				if (isNaN(n) || !Number.isInteger(n)) return false
+				if (typeof c.minimum === 'number' && n < c.minimum)
+					return false
+				if (typeof c.maximum === 'number' && n > c.maximum)
+					return false
+				if (
+					typeof c.exclusiveMinimum === 'number' &&
+					n <= c.exclusiveMinimum
+				)
+					return false
+				if (
+					typeof c.exclusiveMaximum === 'number' &&
+					n >= c.exclusiveMaximum
+				)
+					return false
+				if (
+					typeof c.multipleOf === 'number' &&
+					n % c.multipleOf !== 0
+				)
+					return false
+				return true
+			},
+			() => 'must be integer'
+		),
+		(value) => +value
+	)
+
+	return elyType(
+		ELYSIA_TYPES.Integer,
+		Union([integer, stringified] as any, meta) as IntegerStringSchema
+	)
+}

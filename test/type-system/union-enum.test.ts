@@ -1,6 +1,6 @@
 import Elysia, { t } from '../../src'
 import { describe, expect, it } from 'bun:test'
-import { Value } from '@sinclair/typebox/value'
+import { Value } from 'typebox/value'
 import { post } from '../utils'
 
 describe('TypeSystem - UnionEnum', () => {
@@ -31,7 +31,7 @@ describe('TypeSystem - UnionEnum', () => {
 			type: 'string',
 			enum: ['some', 'data']
 		})
-		expect(t.UnionEnum(['some', 1]).type).toBeUndefined()
+		expect((t.UnionEnum(['some', 1]) as { type?: string }).type).toBeUndefined()
 		expect(t.UnionEnum([2, 1])).toMatchObject({
 			type: 'number',
 			enum: [2, 1]

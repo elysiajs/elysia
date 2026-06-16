@@ -136,7 +136,7 @@ describe('mergeDeep', () => {
 
 		const Plugin = new Elysia({ name: 'Plugin', seed: 'seed' })
 			.decorate('dep', complex)
-			.as('scoped')
+			.as('plugin')
 
 		const ModuleA = new Elysia({ name: 'ModuleA' })
 			.use(Plugin)

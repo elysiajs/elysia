@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test'
+import type { Static } from 'typebox'
 import { z } from 'zod'
 import { Elysia, fileType, t, type ValidationError } from '../../src'
 
@@ -19,7 +20,7 @@ const postProductModel = t.Object({
 	metadata: t.Object(metadataObject),
 	image: t.File({ type: 'image' })
 })
-type postProductModel = typeof postProductModel.static
+type postProductModel = Static<typeof postProductModel>
 
 const patchProductModel = t.Object({
 	name: t.Optional(t.String()),
@@ -27,7 +28,7 @@ const patchProductModel = t.Object({
 	metadata: t.Optional(t.Object(metadataObject)),
 	image: t.Optional(t.File({ type: 'image' }))
 })
-type patchProductModel = typeof patchProductModel.static
+type patchProductModel = Static<typeof patchProductModel>
 
 const postProductModelComplex = t.Object({
 	name: t.String(),
@@ -35,7 +36,7 @@ const postProductModelComplex = t.Object({
 	metadata: t.ObjectString(metadataObject),
 	image: t.File({ type: 'image' })
 })
-type postProductModelComplex = typeof postProductModelComplex.static
+type postProductModelComplex = Static<typeof postProductModelComplex>
 
 const patchProductModelComplex = t.Object({
 	name: t.Optional(t.String()),
@@ -43,7 +44,7 @@ const patchProductModelComplex = t.Object({
 	metadata: t.Optional(t.ObjectString(metadataObject)),
 	image: t.Optional(t.File({ type: 'image' }))
 })
-type patchProductModelComplex = typeof patchProductModelComplex.static
+type patchProductModelComplex = Static<typeof patchProductModelComplex>
 
 const app = new Elysia()
 	.post('/product', async ({ body, status }) => status('Created', body), {
@@ -711,6 +712,27 @@ describe('Zod (for standard schema) with File and nested Object', () => {
 			name: 'John',
 			metadata: { age: 25 }
 		})
+	})
+
+	it('should reject when async file refine fails', async () => {
+		const app = new Elysia().post('/upload', ({ body }) => body, {
+			body: z.object({
+				file: z.file().refine((file) => fileType(file, 'image/png'))
+			})
+		})
+
+		const formData = new FormData()
+		// aris-yuzu.jpg is a jpeg — the png refine must reject it
+		formData.append('file', bunFile)
+
+		const response = await app.handle(
+			new Request('http://localhost/upload', {
+				method: 'POST',
+				body: formData
+			})
+		)
+
+		expect(response.status).toBe(422)
 	})
 
 	it('should handle array JSON strings in FormData', async () => {

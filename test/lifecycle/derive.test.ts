@@ -16,7 +16,7 @@ describe('derive', () => {
 	})
 
 	it('inherits plugin', async () => {
-		const plugin = new Elysia().derive({ as: 'global' }, () => ({
+		const plugin = new Elysia().derive('global', () => ({
 			hi: () => 'hi'
 		}))
 
@@ -99,7 +99,7 @@ describe('derive', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.derive({ as: 'global' }, ({ path }) => {
+			.derive('global', ({ path }) => {
 				called.push(path)
 
 				return {}
@@ -120,7 +120,7 @@ describe('derive', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.derive({ as: 'local' }, ({ path }) => {
+			.derive('local', ({ path }) => {
 				called.push(path)
 
 				return {}
@@ -141,7 +141,7 @@ describe('derive', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.derive({ as: 'scoped' }, ({ path }) => {
+			.derive('plugin', ({ path }) => {
 				called.push(path)
 
 				return {}
@@ -165,7 +165,7 @@ describe('derive', () => {
 		let total = 0
 
 		const app = new Elysia()
-			.onAfterHandle([
+			.afterHandle([
 				() => {
 					total++
 				},
@@ -190,146 +190,11 @@ describe('derive', () => {
 		expect(res).toEqual("I'm a teapot")
 	})
 
-	// it('work inline', async () => {
-	// 	const app = new Elysia().get('/', ({ hi }) => hi(), {
-	// 		derive: () => ({
-	// 			hi: () => 'hi'
-	// 		})
-	// 	})
-
-	// 	const res = await app.handle(req('/')).then((t) => t.text())
-	// 	expect(res).toBe('hi')
-	// })
-
-	// it('work inline array', async () => {
-	// 	const app = new Elysia().get(
-	// 		'/',
-	// 		({ first, last }) => [last, first].join(' '),
-	// 		{
-	// 			derive: [
-	// 				() => ({
-	// 					first: 'himari'
-	// 				}),
-	// 				() => ({ last: 'akeboshi' })
-	// 			]
-	// 		}
-	// 	)
-
-	// 	const res = await app.handle(req('/')).then((t) => t.text())
-	// 	expect(res).toBe('akeboshi himari')
-	// })
-
-	// it('work group guard', async () => {
-	// 	const app = new Elysia()
-	// 		.guard(
-	// 			{
-	// 				derive: () => ({ hi: () => 'hi' })
-	// 			},
-	// 			(app) => app.get('/', ({ hi }) => hi())
-	// 		)
-	// 		// @ts-expect-error
-	// 		.get('/nope', ({ hi }) => hi?.() ?? 'nope')
-
-	// 	const res = await app.handle(req('/')).then((t) => t.text())
-	// 	expect(res).toBe('hi')
-
-	// 	const nope = await app.handle(req('/nope')).then((t) => t.text())
-	// 	expect(nope).toBe('nope')
-	// })
-
-	// it('work group array guard', async () => {
-	// 	const app = new Elysia()
-	// 		.guard(
-	// 			{
-	// 				derive: [
-	// 					() => ({ first: 'himari' }),
-	// 					() => ({ last: 'akeboshi' })
-	// 				]
-	// 			},
-	// 			(app) =>
-	// 				app.get('/', ({ first, last }) => [last, first].join(' '))
-	// 		)
-	// 		// @ts-expect-error
-	// 		.get('/nope', ({ first, last }) => [last, first].join(''))
-
-	// 	const res = await app.handle(req('/')).then((t) => t.text())
-	// 	expect(res).toBe('akeboshi himari')
-
-	// 	const nope = await app.handle(req('/nope')).then((t) => t.text())
-	// 	expect(nope).toBe('')
-	// })
-
-	// it('work local guard', async () => {
-	// 	const app = new Elysia()
-	// 		.guard({
-	// 			derive: () => ({ hi: () => 'hi' })
-	// 		})
-	// 		.get('/', ({ hi }) => hi())
-
-	// 	const res = await app.handle(req('/')).then((t) => t.text())
-	// 	expect(res).toBe('hi')
-	// })
-
-	// it('work local array guard', async () => {
-	// 	const app = new Elysia()
-	// 		.guard({
-	// 			derive: [
-	// 				() => ({
-	// 					first: 'himari'
-	// 				}),
-	// 				() => ({ last: 'akeboshi' })
-	// 			]
-	// 		})
-	// 		.get('/', ({ first, last }) => [last, first].join(' '))
-
-	// 	const res = await app.handle(req('/')).then((t) => t.text())
-	// 	expect(res).toBe('akeboshi himari')
-	// })
-
-	// it('work scoped guard', async () => {
-	// 	const plugin = new Elysia().guard({
-	// 		as: 'scoped',
-	// 		derive: () => ({ hi: () => 'hi' })
-	// 	})
-
-	// 	const app = new Elysia().use(plugin).get('/', ({ hi }) => hi())
-
-	// 	const root = new Elysia()
-	// 		.use(app)
-	// 		// @ts-expect-error
-	// 		.get('/root', ({ hi }) => hi?.() ?? 'nope')
-
-	// 	const res = await app.handle(req('/')).then((t) => t.text())
-	// 	expect(res).toBe('hi')
-
-	// 	const res2 = await root.handle(req('/root')).then((t) => t.text())
-	// 	expect(res2).toBe('nope')
-	// })
-
-	// it('work global guard', async () => {
-	// 	const plugin = new Elysia().guard({
-	// 		as: 'global',
-	// 		derive: () => ({ hi: () => 'hi' })
-	// 	})
-
-	// 	const app = new Elysia().use(plugin).get('/', ({ hi }) => hi())
-
-	// 	const root = new Elysia()
-	// 		.use(app)
-	// 		.get('/root', ({ hi }) => hi?.() ?? 'nope')
-
-	// 	const res = await app.handle(req('/')).then((t) => t.text())
-	// 	expect(res).toBe('hi')
-
-	// 	const res2 = await root.handle(req('/root')).then((t) => t.text())
-	// 	expect(res2).toBe('hi')
-	// })
-
 	it('handle return derive without throw', async () => {
 		let isOnErrorCalled = false
 
 		const app = new Elysia()
-			.onError(() => {
+			.error(() => {
 				isOnErrorCalled = true
 			})
 			.derive(({ status }) => status(418))

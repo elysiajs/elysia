@@ -2,9 +2,9 @@ import { describe, it } from 'bun:test'
 import { Elysia } from '../../src'
 import { newWebsocket, wsOpen, wsClosed } from './utils'
 
-describe('WebSocket with AoT disabled', () => {
+describe('WebSocket connection', () => {
 	it('should connect and close', async () => {
-		const app = new Elysia({ aot: false })
+		const app = new Elysia()
 			.ws('/ws', {
 				message() {}
 			})

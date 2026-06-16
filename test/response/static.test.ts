@@ -14,7 +14,7 @@ describe('Static Content', () => {
 
 	it('handle onRequest', async () => {
 		const app = new Elysia()
-			.onRequest(() => 'request')
+			.request(() => 'request')
 			.get('/', 'Static Content')
 
 		const response = await app.handle(req('/')).then((x) => x.text())
@@ -75,8 +75,8 @@ describe('Static Content', () => {
 
 	it('handle errror after routing', async () => {
 		const app = new Elysia()
-			.onError(() => 'handled')
-			.onRequest(() => {
+			.error(() => 'handled')
+			.request(() => {
 				throw new Error('error')
 			})
 			.get('/', 'Static Content')

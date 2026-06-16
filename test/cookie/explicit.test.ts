@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
-import { Cookie, createCookieJar } from '../../src/cookies'
-import type { Context } from '../../src'
+import { createCookieJar } from '../../src/cookie'
+import type { Context } from '../../src/context'
 
 const create = () => {
 	const set: Context['set'] = {
@@ -117,5 +117,47 @@ describe('Explicit Cookie', () => {
 		expect(set.cookie?.name.expires?.getTime()).toBeLessThanOrEqual(
 			Date.now()
 		)
+	})
+
+	// Regression (perf audit F2): the jar memoizes Cookie instances per key —
+	// repeated accesses must return the SAME instance instead of allocating
+	// a fresh Cookie (plus re-merged defaults) per property touch
+	it('memoizes Cookie instances per key', () => {
+		const { cookie } = create()
+
+		expect(cookie.name).toBe(cookie.name)
+		expect(cookie.name).not.toBe(cookie.other)
+	})
+
+	// Regression (perf audit F2): read-only access through the memoized jar
+	// must still not create a Set-Cookie entry
+	it('read-only access does not create a set-cookie entry', () => {
+		const { cookie, set } = create()
+
+		cookie.name.value
+
+		expect(set.cookie).toEqual({})
+	})
+
+	// Lazy write-buffer: `set.cookie` is allocated by `Cookie` only on a real
+	// write, so a route that only reads (or writes an unchanged value) never
+	// allocates it. Uses a `set` with no pre-set `cookie` key, mirroring the
+	// real per-request `set` (where `cookie` starts `undefined`).
+	it('does not allocate set.cookie until a value actually changes', () => {
+		const set: Context['set'] = { headers: {} }
+		const cookie = createCookieJar(set, { existing: { value: 'hi' } })
+
+		// read-only
+		expect(cookie.existing.value).toBe('hi')
+		expect(set.cookie).toBeUndefined()
+
+		// writing the SAME value back is a no-op (unchanged detection)
+		cookie.existing.value = 'hi'
+		expect(set.cookie).toBeUndefined()
+
+		// a real change allocates the buffer
+		cookie.existing.value = 'changed'
+		expect(set.cookie).toBeDefined()
+		expect(set.cookie!.existing.value).toBe('changed')
 	})
 })

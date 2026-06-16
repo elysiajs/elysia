@@ -3,7 +3,7 @@ import { describe, it, expect } from 'bun:test'
 import { z } from 'zod'
 import { post, req } from '../utils'
 
-describe('Standard Schema Validate', () => {
+describe('Standard Schema Reference', () => {
 	it('validate body', async () => {
 		const app = new Elysia()
 			.model({
@@ -109,7 +109,7 @@ describe('Standard Schema Validate', () => {
 			})
 			.get(
 				'/:name',
-				// @ts-expect-error
+				// @ts-expect-error deliberately returns an invalid response to assert 422
 				({ params: { name } }) =>
 					name === 'lilith' ? undefined : true,
 				{
@@ -296,7 +296,7 @@ describe('Standard Schema Validate', () => {
 				'response.418': z.literal('fouco')
 			})
 			.guard({
-				as: 'scoped',
+				as: 'plugin',
 				body: 'body',
 				query: 'query',
 				response: {

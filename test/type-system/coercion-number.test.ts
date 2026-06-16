@@ -1,4 +1,4 @@
-import { Elysia, t } from '../../src'
+import { Elysia, t, ValidationError } from '../../src'
 import { describe, it, expect } from 'bun:test'
 
 describe('Coercion - Numeric -> Number', () => {
@@ -19,7 +19,9 @@ describe('Coercion - Numeric -> Number', () => {
 
 	it('handle property', async () => {
 		const numberApp = new Elysia()
-			.onError(({ code }) => code)
+			.error(({ error }) =>
+				error instanceof ValidationError ? 'VALIDATION' : 'OTHER'
+			)
 			.get('/:entityType', ({ params: { entityType } }) => entityType, {
 				params: t.Object({
 					entityType: t.Number({
@@ -31,7 +33,9 @@ describe('Coercion - Numeric -> Number', () => {
 			})
 
 		const numericApp = new Elysia()
-			.onError(({ code }) => code)
+			.error(({ error }) =>
+				error instanceof ValidationError ? 'VALIDATION' : 'OTHER'
+			)
 			.get('/:entityType', ({ params: { entityType } }) => entityType, {
 				params: t.Object({
 					entityType: t.Numeric({

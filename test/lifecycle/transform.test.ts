@@ -6,12 +6,9 @@ import { req } from '../utils'
 describe('Transform', () => {
 	it('globally Transform', async () => {
 		const app = new Elysia()
-			.onTransform<{
-				params: {
-					id: number
-				} | null
-			}>((request) => {
-				if (request.params?.id) request.params.id = +request.params.id
+			.transform(({ params }) => {
+				const p = params as { id?: string | number } | null
+				if (p?.id) p.id = +p.id
 			})
 			.get('/id/:id', ({ params: { id } }) => typeof id)
 
@@ -43,7 +40,7 @@ describe('Transform', () => {
 		const app = new Elysia()
 			.group('/scoped/id/:id', (app) =>
 				app
-					.onTransform(({ params }) => {
+					.transform(({ params }) => {
 						// @ts-ignore
 						if (params.id) params.id = +params.id
 					})
@@ -59,16 +56,9 @@ describe('Transform', () => {
 	})
 
 	it('transform from plugin', async () => {
-		const transformId = new Elysia().onTransform<
-			{
-				params: {
-					id: number
-				} | null
-			},
-			'global'
-		>({ as: 'global' }, (request) => {
-			// @ts-ignore
-			if (request.params?.id) request.params.id = +request.params.id
+		const transformId = new Elysia().transform('global', ({ params }) => {
+			const p = params as { id?: string | number } | null
+			if (p?.id) p.id = +p.id
 		})
 
 		const app = new Elysia()
@@ -96,10 +86,10 @@ describe('Transform', () => {
 		let order = <string[]>[]
 
 		const app = new Elysia()
-			.onTransform(() => {
+			.transform(() => {
 				order.push('A')
 			})
-			.onTransform(() => {
+			.transform(() => {
 				order.push('B')
 			})
 			.get('/', () => '')
@@ -111,12 +101,9 @@ describe('Transform', () => {
 
 	it('globally and locally pre handle', async () => {
 		const app = new Elysia()
-			.onTransform<{
-				params: {
-					id: number
-				} | null
-			}>((request) => {
-				if (request.params?.id) request.params.id = +request.params.id
+			.transform(({ params }) => {
+				const p = params as { id?: string | number } | null
+				if (p?.id) p.id = +p.id
 			})
 			.get('/id/:id', ({ params: { id } }) => id, {
 				params: t.Object({
@@ -138,23 +125,13 @@ describe('Transform', () => {
 
 	it('accept multiple transform', async () => {
 		const app = new Elysia()
-			.onTransform<{
-				params: {
-					id: number
-				} | null
-			}>((request) => {
-				if (request.params?.id) request.params.id = +request.params.id
+			.transform(({ params }) => {
+				const p = params as { id?: string | number } | null
+				if (p?.id) p.id = +p.id
 			})
-			.onTransform<{
-				params: {
-					id: number
-				} | null
-			}>((request) => {
-				if (
-					request.params?.id &&
-					typeof request.params?.id === 'number'
-				)
-					request.params.id = request.params.id + 1
+			.transform(({ params }) => {
+				const p = params as { id?: string | number } | null
+				if (p?.id && typeof p.id === 'number') p.id = p.id + 1
 			})
 			.get('/id/:id', ({ params: { id } }) => id)
 
@@ -190,12 +167,9 @@ describe('Transform', () => {
 
 	it('map returned value', async () => {
 		const app = new Elysia()
-			.onTransform<{
-				params: {
-					id: number
-				} | null
-			}>((request) => {
-				if (request.params?.id) request.params.id = +request.params.id
+			.transform(({ params }) => {
+				const p = params as { id?: string | number } | null
+				if (p?.id) p.id = +p.id
 			})
 			.get('/id/:id', ({ params: { id } }) => typeof id)
 
@@ -217,16 +191,54 @@ describe('Transform', () => {
 		expect(invalid).toBe(422)
 	})
 
+	// Transform must run BEFORE body validation (consistent with
+	// query/params/headers), so a transform may reshape an incoming body into
+	// the validated shape — and its output is the thing that gets validated.
+	const post = (body: unknown) =>
+		new Request('http://localhost/', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify(body)
+		})
+
+	it('transform reshapes the body before it is validated', async () => {
+		const app = new Elysia().post('/', ({ body }) => body, {
+			body: t.Object({ name: t.String() }),
+			transform({ body }) {
+				const b = body as Record<string, unknown>
+				if (b && 'rename' in b) {
+					b.name = b.rename
+					delete b.rename
+				}
+			}
+		})
+
+		// arrives WITHOUT `name` (invalid) — transform adds it → passes
+		const res = await app.handle(post({ rename: 'Himari' }))
+
+		expect(res.status).toBe(200)
+		expect(await res.json()).toEqual({ name: 'Himari' })
+	})
+
+	it("transform's body output is validated (invalid after transform → 422)", async () => {
+		const app = new Elysia().post('/', ({ body }) => body, {
+			body: t.Object({ name: t.String() }),
+			transform({ body }) {
+				// drop the required field — validation (which runs AFTER) catches it
+				delete (body as Record<string, unknown>).name
+			}
+		})
+
+		// arrives valid, but transform makes it invalid → 422
+		const res = await app.handle(post({ name: 'Himari' }))
+
+		expect(res.status).toBe(422)
+	})
+
 	it('inherits from plugin', async () => {
-		const transformId = new Elysia().onTransform<
-			{
-				params: {
-					name: string
-				} | null
-			},
-			'global'
-		>({ as: 'global' }, ({ params }) => {
-			if (params?.name === 'Fubuki') params.name = 'Cat'
+		const transformId = new Elysia().transform('global', ({ params }) => {
+			const p = params as { name?: string } | null
+			if (p?.name === 'Fubuki') p.name = 'Cat'
 		})
 
 		const app = new Elysia()
@@ -239,12 +251,9 @@ describe('Transform', () => {
 	})
 
 	it('not inherits plugin on local', async () => {
-		const transformId = new Elysia().onTransform<{
-			params: {
-				name: string
-			} | null
-		}>(({ params }) => {
-			if (params?.name === 'Fubuki') params.name = 'Cat'
+		const transformId = new Elysia().transform(({ params }) => {
+			const p = params as { name?: string } | null
+			if (p?.name === 'Fubuki') p.name = 'Cat'
 		})
 
 		const app = new Elysia()
@@ -260,7 +269,7 @@ describe('Transform', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.onTransform({ as: 'global' }, ({ path }) => {
+			.transform('global', ({ path }) => {
 				called.push(path)
 			})
 			.get('/inner', () => 'NOOP')
@@ -279,7 +288,7 @@ describe('Transform', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.onTransform({ as: 'local' }, ({ path }) => {
+			.transform('local', ({ path }) => {
 				called.push(path)
 			})
 			.get('/inner', () => 'NOOP')
@@ -294,11 +303,51 @@ describe('Transform', () => {
 		expect(called).toEqual(['/inner'])
 	})
 
+	// New direct-scope API: `transform('global', fn)` parallels
+	// `onTransform('global', fn)`.
+	it('global true (direct scope)', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.transform('global', ({ path }) => {
+				called.push(path)
+			})
+			.get('/inner', () => 'NOOP')
+
+		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
+
+		await Promise.all([
+			app.handle(req('/inner')),
+			app.handle(req('/outer'))
+		])
+
+		expect(called).toEqual(['/inner', '/outer'])
+	})
+
+	it('global false (direct scope)', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.transform('local', ({ path }) => {
+				called.push(path)
+			})
+			.get('/inner', () => 'NOOP')
+
+		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
+
+		await Promise.all([
+			app.handle(req('/inner')),
+			app.handle(req('/outer'))
+		])
+
+		expect(called).toEqual(['/inner'])
+	})
+
 	it('support array', async () => {
 		let total = 0
 
 		const app = new Elysia()
-			.onTransform([
+			.transform([
 				() => {
 					total++
 				},

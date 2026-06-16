@@ -1,4 +1,4 @@
-import { Serve as BunServe, type Server as BunServer } from 'bun'
+import type { Serve as BunServe, Server as BunServer } from 'bun'
 import type { Equal, MaybePromise } from '../types'
 
 export interface ErrorLike extends Error {

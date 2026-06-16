@@ -9,7 +9,7 @@ describe('group', () => {
 			.group('/counter', (app) =>
 				app
 					.state('counter', 0)
-					.onRequest(({ store }) => {
+					.request(({ store }) => {
 						store.counter++
 					})
 					.get('', ({ store: { counter } }) => counter)
@@ -175,7 +175,7 @@ describe('group', () => {
 
 		const app = new Elysia().use(plugin)
 
-		expect(app.router.history.map((x) => x.path)).toEqual([
+		expect(app.routes.map((x) => x.path)).toEqual([
 			'/v1/course',
 			'/v1/course/new',
 			'/v1/course/id/:courseId/chapter/hello'
@@ -203,7 +203,7 @@ describe('group', () => {
 			.use(b)
 			.get('/', () => 'a')
 
-		expect(app.router.history.map((x) => x.path)).toEqual([
+		expect(app.routes.map((x) => x.path)).toEqual([
 			'/course/id/:courseId/b',
 			'/test/id/:courseId/b',
 			'/'
@@ -215,43 +215,56 @@ describe('group', () => {
 			.decorate({ a: 'a' })
 			.state({ a: 'a' })
 			.model('a', t.String())
-			.error('a', Error)
 			.group('/posts', (app) => {
-				// @ts-expect-error
-				expect(Object.keys(app.singleton.decorator)).toEqual(['a'])
-				// @ts-expect-error
-				expect(Object.keys(app.singleton.store)).toEqual(['a'])
-				// @ts-expect-error
-				expect(Object.keys(app.definitions.type)).toEqual(['a'])
-				// @ts-expect-error
-				expect(Object.keys(app.definitions.error)).toEqual(['a'])
+				expect(Object.keys(app['~ext']?.decorator ?? {})).toEqual(['a'])
+				expect(Object.keys(app['~ext']?.store ?? {})).toEqual(['a'])
+				expect(Object.keys(app['~ext']?.models ?? {})).toEqual(['a'])
 
 				return app
 					.decorate({ b: 'b' })
 					.state({ b: 'b' })
 					.model('b', t.String())
-					.error('b', Error)
 					.get('/', ({ a }) => a ?? 'Aint no response')
 			})
 
-		// @ts-expect-error
-		expect(Object.keys(app.singleton.decorator)).toEqual(['a', 'b'])
-		// @ts-expect-error
-		expect(Object.keys(app.singleton.store)).toEqual(['a', 'b'])
-		// @ts-expect-error
-		expect(Object.keys(app.definitions.type)).toEqual(['a', 'b'])
-		// @ts-expect-error
-		expect(Object.keys(app.definitions.error)).toEqual(['a', 'b'])
+		expect(Object.keys(app['~ext']?.decorator ?? {})).toEqual(['a', 'b'])
+		expect(Object.keys(app['~ext']?.store ?? {})).toEqual(['a', 'b'])
+		expect(Object.keys(app['~ext']?.models ?? {})).toEqual(['a', 'b'])
 
 		const response = await app.handle(req('/posts')).then((x) => x.text())
 
 		expect(response).toEqual('a')
 	})
 
-	it('cast callback function schema to standaloneValidator', async () => {
+	it('route-local schema overrides the group schema', async () => {
 		const app = new Elysia().group(
 			'/group/:id',
 			{ params: t.Object({ id: t.Number() }) },
+			(app) =>
+				app.get('/:name', ({ params }) => params, {
+					params: t.Object({ name: t.String() })
+				})
+		)
+
+		// the route's own `params` replaces the group's (override is the
+		// default) — `id` is no longer part of the schema and normalization
+		// strips it from the validated params object
+		const valid = app.handle(req('/group/1/saltyaom')).then((x) => x.json())
+		const invalid = app
+			.handle(req('/group/a/saltyaom'))
+			.then((x) => x.status)
+
+		expect(await valid).toEqual({ name: 'saltyaom' })
+		expect(await invalid).toBe(200)
+	})
+
+	it("group schema with schema: 'standalone' stays additive", async () => {
+		const app = new Elysia().group(
+			'/group/:id',
+			{
+				schema: 'standalone',
+				params: t.Object({ id: t.Number() })
+			},
 			(app) =>
 				app.get('/:name', ({ params }) => params, {
 					params: t.Object({ name: t.String() })
@@ -289,7 +302,7 @@ describe('group', () => {
 		})
 	})
 
-	it('handle multiple nested guard with schema', async () => {
+	it('nested group: route-local schema overrides the wrappers', async () => {
 		const app = new Elysia().group(
 			'',
 			{
@@ -301,6 +314,49 @@ describe('group', () => {
 				app.group(
 					'',
 					{
+						query: t.Object({
+							limit: t.Number()
+						})
+					},
+					(app) =>
+						app.get('/', ({ query }) => query, {
+							query: t.Object({
+								playing: t.Boolean()
+							})
+						})
+				)
+		)
+
+		// only the route's own `query` validates (override is the default)
+		const value = await app
+			.handle(req('/?name=lilith&playing=true&limit=10'))
+			.then((x) => x.json())
+
+		expect(value).toEqual({
+			playing: true
+		})
+
+		const error = await app
+			.handle(req('/?name=lilith&playing=true'))
+			.then((x) => x.status)
+
+		expect(error).toBe(200)
+	})
+
+	it('nested standalone group schemas stay additive', async () => {
+		const app = new Elysia().group(
+			'',
+			{
+				schema: 'standalone',
+				query: t.Object({
+					name: t.Literal('lilith')
+				})
+			},
+			(app) =>
+				app.group(
+					'',
+					{
+						schema: 'standalone',
 						query: t.Object({
 							limit: t.Number()
 						})

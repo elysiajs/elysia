@@ -8,7 +8,7 @@ describe('trace', () => {
 			throw new Error('Trace stuck')
 		}, 1000)
 
-		const a = new Elysia().trace({ as: 'global' }, async ({ set }) => {
+		const a = new Elysia().trace('global', async ({ set }) => {
 			set.headers['X-Powered-By'] = 'elysia'
 			clearTimeout(timeout)
 		})
@@ -26,7 +26,7 @@ describe('trace', () => {
 			throw new Error('Trace stuck')
 		}, 1000)
 
-		const a = new Elysia().trace({ as: 'global' }, async ({ set }) => {
+		const a = new Elysia().trace('global', async ({ set }) => {
 			set.headers['X-Powered-By'] = 'elysia'
 			clearTimeout(timeout)
 		})
@@ -56,7 +56,7 @@ describe('trace', () => {
 			}
 
 		const plugin = new Elysia().trace(
-			{ as: 'scoped' },
+			'plugin',
 			({
 				onRequest,
 				onParse,
@@ -122,11 +122,11 @@ describe('trace', () => {
 			}
 
 		const plugin = new Elysia()
-			.onRequest(() => {})
-			.onTransform(() => {})
-			.onError(() => {})
+			.request(() => {})
+			.transform(() => {})
+			.error(() => {})
 			.trace(
-				{ as: 'scoped' },
+				'plugin',
 				({
 					onRequest,
 					onParse,
@@ -203,7 +203,7 @@ describe('trace', () => {
 	it('handle scoped scope', async () => {
 		let called = false
 
-		const plugin = new Elysia().trace({ as: 'scoped' }, () => {
+		const plugin = new Elysia().trace('plugin', () => {
 			called = true
 		})
 
@@ -223,7 +223,7 @@ describe('trace', () => {
 	it('handle global scope', async () => {
 		let called = false
 
-		const plugin = new Elysia().trace({ as: 'global' }, () => {
+		const plugin = new Elysia().trace('global', () => {
 			called = true
 		})
 
@@ -243,11 +243,11 @@ describe('trace', () => {
 	it('handle as cast', async () => {
 		let called = false
 
-		const plugin = new Elysia().trace({ as: 'scoped' }, () => {
+		const plugin = new Elysia().trace('plugin', () => {
 			called = true
 		})
 
-		const parent = new Elysia().use(plugin).as('scoped')
+		const parent = new Elysia().use(plugin).as('plugin')
 		const main = new Elysia().use(parent).get('/', () => 'h')
 
 		await main.handle(req('/'))
@@ -261,7 +261,7 @@ describe('trace', () => {
 	})
 
 	it('deduplicate plugin when name is provided', () => {
-		const a = new Elysia({ name: 'a' }).trace({ as: 'global' }, () => {})
+		const a = new Elysia({ name: 'a' }).trace('global', () => {})
 		const b = new Elysia().use(a)
 
 		const app = new Elysia()
@@ -474,6 +474,67 @@ describe('trace', () => {
 		await app.handle(req('/id/1'))
 
 		expect(route).toBe('/id/:id')
+	})
+
+	it('resolve late (await-then-subscribe) event access', async () => {
+		const done = Promise.withResolvers<void>()
+
+		let name: string | undefined
+		let endsAfterBegin = false
+		let resolvedError: Error | null | undefined
+
+		const app = new Elysia()
+			.trace(async (t) => {
+				// subscribe to NOTHING synchronously: touch an event only
+				// after the request finished — the promise must resolve from
+				// recorded data instead of hanging silently (events without
+				// a pre-begin subscriber skip the Promise machinery)
+				await new Promise((resolve) => setTimeout(resolve, 20))
+
+				const handle = await t.onHandle()
+				name = handle.name
+				endsAfterBegin = (await handle.end) >= handle.begin
+				resolvedError = await handle.error
+
+				done.resolve()
+			})
+			.get('/', () => 'hi')
+
+		const response = await app.handle(req('/'))
+		expect(await response.text()).toBe('hi')
+
+		await done.promise
+
+		expect(name).toBe('handle')
+		expect(endsAfterBegin).toBe(true)
+		expect(resolvedError).toBeNull()
+	})
+
+	it('report late-accessed error of a throwing lifecycle', async () => {
+		const done = Promise.withResolvers<void>()
+
+		let resolvedError: Error | null | undefined
+
+		const app = new Elysia()
+			.trace(async (t) => {
+				await new Promise((resolve) => setTimeout(resolve, 20))
+
+				// the error returned by a child lifecycle must still reach a
+				// late subscriber through the recorded group error
+				resolvedError = await (await t.onBeforeHandle()).error
+
+				done.resolve()
+			})
+			.get('/', () => 'ok', {
+				beforeHandle() {
+					return new Error('A')
+				}
+			})
+
+		await app.handle(req('/'))
+		await done.promise
+
+		expect(resolvedError).toBeInstanceOf(Error)
 	})
 
 	it('defers stream for onHandle, and onAfterResponse', async () => {

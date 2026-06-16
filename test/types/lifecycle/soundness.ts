@@ -4,7 +4,7 @@ import { Prettify } from '../../../src/types'
 
 // Handle resolve property correctly
 {
-	const app = new Elysia().resolve(({ status }) => {
+	const app = new Elysia().derive(({ status }) => {
 		if (Math.random() > 0.05) return status(401)
 
 		return {
@@ -12,7 +12,7 @@ import { Prettify } from '../../../src/types'
 		}
 	})
 
-	type Resolve = (typeof app)['~Volatile']['resolve']
+	type Resolve = (typeof app)['~Volatile']['derive']
 	expectTypeOf<Resolve>().toEqualTypeOf<{
 		name: 'mokou'
 	}>
@@ -20,24 +20,24 @@ import { Prettify } from '../../../src/types'
 
 // Handle resolve property without any data
 {
-	const app = new Elysia().resolve(({ status }) => {
+	const app = new Elysia().derive(({ status }) => {
 		if (Math.random() > 0.05) return status(401)
 	})
 
-	type Resolve = (typeof app)['~Volatile']['resolve']
+	type Resolve = (typeof app)['~Volatile']['derive']
 	expectTypeOf<Resolve>().toEqualTypeOf<{}>
 }
 
 // Type soundness of lifecycle event in local
 {
 	const app = new Elysia()
-		.onError(({ status }) => {
+		.error(({ status }) => {
 			if (Math.random() > 0.05) return status(400)
 		})
-		.resolve(({ status }) => {
+		.derive(({ status }) => {
 			if (Math.random() > 0.05) return status(401)
 		})
-		.onBeforeHandle([
+		.beforeHandle([
 			({ status }) => {
 				if (Math.random() > 0.05) return status(402)
 			},
@@ -97,13 +97,13 @@ import { Prettify } from '../../../src/types'
 // Type soundness of lifecycle event in scoped
 {
 	const app = new Elysia()
-		.onError(({ status }) => {
+		.error(({ status }) => {
 			if (Math.random() > 0.05) return status(400)
 		})
-		.resolve(({ status }) => {
+		.derive(({ status }) => {
 			if (Math.random() > 0.05) return status(401)
 		})
-		.onBeforeHandle([
+		.beforeHandle([
 			({ status }) => {
 				if (Math.random() > 0.05) return status(402)
 			},
@@ -127,7 +127,7 @@ import { Prettify } from '../../../src/types'
 				if (Math.random() > 0.05) return status(408)
 			}
 		})
-		.as('scoped')
+		.as('plugin')
 		.get('/', ({ body, status }) =>
 			Math.random() > 0.05 ? status(409) : ('Hello World' as const)
 		)
@@ -164,13 +164,13 @@ import { Prettify } from '../../../src/types'
 // Type soundness of lifecycle event in global
 {
 	const app = new Elysia()
-		.onError(({ status }) => {
+		.error(({ status }) => {
 			if (Math.random() > 0.05) return status(400)
 		})
-		.resolve(({ status }) => {
+		.derive(({ status }) => {
 			if (Math.random() > 0.05) return status(401)
 		})
-		.onBeforeHandle([
+		.beforeHandle([
 			({ status }) => {
 				if (Math.random() > 0.05) return status(402)
 			},
@@ -239,20 +239,20 @@ import { Prettify } from '../../../src/types'
 				beforeHandle({ status }) {
 					if (Math.random() < 0.05) return status(410)
 				},
-				resolve: () => ({ a: 'a' as const })
+				derive: () => ({ a: 'a' as const })
 			}
 		})
-		.onError(({ status }) => {
+		.error(({ status }) => {
 			if (Math.random() < 0.05) return status(400)
 		})
-		.resolve(({ status }) => {
+		.derive(({ status }) => {
 			if (Math.random() < 0.05) return status(401)
 
 			return {
 				b: 'b' as const
 			}
 		})
-		.onBeforeHandle([
+		.beforeHandle([
 			({ status }) => {
 				if (Math.random() < 0.05) return status(402)
 			},
@@ -312,7 +312,6 @@ import { Prettify } from '../../../src/types'
 		422: {
 			type: 'validation'
 			on: string
-			summary?: string
 			message?: string
 			found?: unknown
 			property?: string
@@ -369,7 +368,6 @@ import { Prettify } from '../../../src/types'
 		422: {
 			type: 'validation'
 			on: string
-			summary?: string
 			message?: string
 			found?: unknown
 			property?: string
@@ -453,7 +451,6 @@ import { Prettify } from '../../../src/types'
 		422: {
 			type: 'validation'
 			on: string
-			summary?: string
 			message?: string
 			found?: unknown
 			property?: string
@@ -525,7 +522,6 @@ import { Prettify } from '../../../src/types'
 			return 'Hello World' as const
 		})
 
-	app['~Volatile']['standaloneSchema']['response']['401']
 	type Route = (typeof app)['~Routes']['get']['response']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
@@ -535,7 +531,6 @@ import { Prettify } from '../../../src/types'
 		422: {
 			type: 'validation'
 			on: string
-			summary?: string
 			message?: string
 			found?: unknown
 			property?: string
@@ -619,7 +614,7 @@ import { Prettify } from '../../../src/types'
 	const app = new Elysia()
 		.macro({
 			a: {
-				resolve() {
+				derive() {
 					return { a: 'a' }
 				},
 				beforeHandle({ status }) {
@@ -760,7 +755,7 @@ import { Prettify } from '../../../src/types'
 			}
 		})
 		.guard({
-			as: 'scoped',
+			as: 'plugin',
 			a: true,
 			b: true
 		})
@@ -812,7 +807,7 @@ import { Prettify } from '../../../src/types'
 	const app = new Elysia()
 		.macro({
 			auth: {
-				resolve({ status }) {
+				derive({ status }) {
 					if (Math.random() > 0.5) return status(401)
 
 					return { user: 'saltyaom' } as const
@@ -854,7 +849,7 @@ import { Prettify } from '../../../src/types'
 // Reconcile response
 {
 	const app = new Elysia()
-		.onBeforeHandle(({ status }) =>
+		.beforeHandle(({ status }) =>
 			Math.random() > 0.5 ? status(404, 'lilith') : 'lilith'
 		)
 		.get('/', ({ status }) =>
@@ -870,10 +865,10 @@ import { Prettify } from '../../../src/types'
 // onBeforeHandle
 {
 	const app = new Elysia()
-		.onBeforeHandle(({ status }) =>
+		.beforeHandle(({ status }) =>
 			Math.random() > 0.5 ? status(404, 'lilith') : 'lilith'
 		)
-		.onBeforeHandle([
+		.beforeHandle([
 			({ status }) =>
 				Math.random() > 0.5 ? status(401, 'fouco') : 'fouco',
 			({ status }) =>
@@ -891,10 +886,10 @@ import { Prettify } from '../../../src/types'
 // onBeforeHandle scoped
 {
 	const app = new Elysia()
-		.onBeforeHandle({ as: 'scoped' }, ({ status }) =>
+		.beforeHandle('plugin', ({ status }) =>
 			Math.random() > 0.5 ? status(404, 'lilith') : 'lilith'
 		)
-		.onBeforeHandle({ as: 'scoped' }, [
+		.beforeHandle('plugin', [
 			({ status }) =>
 				Math.random() > 0.5 ? status(401, 'fouco') : 'fouco',
 			({ status }) =>
@@ -912,10 +907,10 @@ import { Prettify } from '../../../src/types'
 // onBeforeHandle global
 {
 	const app = new Elysia()
-		.onBeforeHandle({ as: 'global' }, ({ status }) =>
+		.beforeHandle('global', ({ status }) =>
 			Math.random() > 0.5 ? status(404, 'lilith') : 'lilith'
 		)
-		.onBeforeHandle({ as: 'global' }, [
+		.beforeHandle('global', [
 			({ status }) =>
 				Math.random() > 0.5 ? status(401, 'fouco') : 'fouco',
 			({ status }) =>
@@ -933,10 +928,10 @@ import { Prettify } from '../../../src/types'
 // onAfterHandle local
 {
 	const app = new Elysia()
-		.onAfterHandle(({ status }) =>
+		.afterHandle(({ status }) =>
 			Math.random() > 0.5 ? status(404, 'lilith') : 'lilith'
 		)
-		.onAfterHandle([
+		.afterHandle([
 			({ status }) =>
 				Math.random() > 0.5 ? status(401, 'fouco') : 'fouco',
 			({ status }) =>
@@ -954,10 +949,10 @@ import { Prettify } from '../../../src/types'
 // onAfterHandle scoped
 {
 	const app = new Elysia()
-		.onAfterHandle({ as: 'scoped' }, ({ status }) =>
+		.afterHandle('plugin', ({ status }) =>
 			Math.random() > 0.5 ? status(404, 'lilith') : 'lilith'
 		)
-		.onAfterHandle({ as: 'scoped' }, [
+		.afterHandle('plugin', [
 			({ status }) =>
 				Math.random() > 0.5 ? status(401, 'fouco') : 'fouco',
 			({ status }) =>
@@ -975,10 +970,10 @@ import { Prettify } from '../../../src/types'
 // onAfterHandle global
 {
 	const app = new Elysia()
-		.onAfterHandle({ as: 'global' }, ({ status }) =>
+		.afterHandle('global', ({ status }) =>
 			Math.random() > 0.5 ? status(404, 'lilith') : 'lilith'
 		)
-		.onAfterHandle({ as: 'global' }, [
+		.afterHandle('global', [
 			({ status }) =>
 				Math.random() > 0.5 ? status(401, 'fouco') : 'fouco',
 			({ status }) =>
@@ -996,10 +991,10 @@ import { Prettify } from '../../../src/types'
 // onError local
 {
 	const app = new Elysia()
-		.onError(({ status }) =>
+		.error(({ status }) =>
 			Math.random() > 0.5 ? status(404, 'lilith') : 'lilith'
 		)
-		.onError([
+		.error([
 			({ status }) =>
 				Math.random() > 0.5 ? status(401, 'fouco') : 'fouco',
 			({ status }) =>
@@ -1017,10 +1012,10 @@ import { Prettify } from '../../../src/types'
 // onError scoped
 {
 	const app = new Elysia()
-		.onError({ as: 'scoped' }, ({ status }) =>
+		.error('plugin', ({ status }) =>
 			Math.random() > 0.5 ? status(404, 'lilith') : 'lilith'
 		)
-		.onError({ as: 'scoped' }, [
+		.error('plugin', [
 			({ status }) =>
 				Math.random() > 0.5 ? status(401, 'fouco') : 'fouco',
 			({ status }) =>
@@ -1038,10 +1033,10 @@ import { Prettify } from '../../../src/types'
 // onError global
 {
 	const app = new Elysia()
-		.onError({ as: 'global' }, ({ status }) =>
+		.error('global', ({ status }) =>
 			Math.random() > 0.5 ? status(404, 'lilith') : 'lilith'
 		)
-		.onError({ as: 'global' }, [
+		.error('global', [
 			({ status }) =>
 				Math.random() > 0.5 ? status(401, 'fouco') : 'fouco',
 			({ status }) =>
@@ -1059,12 +1054,12 @@ import { Prettify } from '../../../src/types'
 // resolve local
 {
 	const app = new Elysia()
-		.resolve(({ status }) =>
+		.derive(({ status }) =>
 			Math.random() > 0.5
 				? status(401, 'sartre')
 				: { friends: ['lilith'] }
 		)
-		.resolve(({ status }) =>
+		.derive(({ status }) =>
 			Math.random() > 0.5 ? status(401, 'fouco') : { friends: ['lilith'] }
 		)
 		.get('/', ({ friends, status }) => {
@@ -1073,7 +1068,7 @@ import { Prettify } from '../../../src/types'
 			return 'NOexistenceN'
 		})
 
-	expectTypeOf<(typeof app)['~Volatile']['resolve']>().toEqualTypeOf<{
+	expectTypeOf<(typeof app)['~Volatile']['derive']>().toEqualTypeOf<{
 		readonly friends: readonly ['lilith']
 	}>()
 
@@ -1090,12 +1085,12 @@ import { Prettify } from '../../../src/types'
 // resolve scoped
 {
 	const app = new Elysia()
-		.resolve({ as: 'scoped' }, ({ status }) =>
+		.derive('plugin', ({ status }) =>
 			Math.random() > 0.5
 				? status(401, 'sartre')
 				: { friends: ['lilith'] }
 		)
-		.resolve({ as: 'scoped' }, ({ status }) =>
+		.derive('plugin', ({ status }) =>
 			Math.random() > 0.5 ? status(401, 'fouco') : { friends: ['lilith'] }
 		)
 		.get('/', ({ friends, status }) => {
@@ -1104,7 +1099,7 @@ import { Prettify } from '../../../src/types'
 			return 'NOexistenceN'
 		})
 
-	expectTypeOf<(typeof app)['~Ephemeral']['resolve']>().toEqualTypeOf<{
+	expectTypeOf<(typeof app)['~Ephemeral']['derive']>().toEqualTypeOf<{
 		readonly friends: readonly ['lilith']
 	}>()
 
@@ -1121,12 +1116,12 @@ import { Prettify } from '../../../src/types'
 // resolve global
 {
 	const app = new Elysia()
-		.resolve({ as: 'global' }, ({ status }) =>
+		.derive('global', ({ status }) =>
 			Math.random() > 0.5
 				? status(401, 'sartre')
 				: { friends: ['lilith'] }
 		)
-		.resolve({ as: 'global' }, ({ status }) =>
+		.derive('global', ({ status }) =>
 			Math.random() > 0.5 ? status(401, 'fouco') : { friends: ['lilith'] }
 		)
 		.get('/', ({ friends, status }) => {
@@ -1135,100 +1130,7 @@ import { Prettify } from '../../../src/types'
 			return 'NOexistenceN'
 		})
 
-	expectTypeOf<(typeof app)['~Singleton']['resolve']>().toEqualTypeOf<{
-		readonly friends: readonly ['lilith']
-	}>()
-
-	expectTypeOf<(typeof app)['~Metadata']['response']>().toEqualTypeOf<{
-		401: 'sartre' | 'fouco'
-	}>()
-
-	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
-		200: 'NOexistenceN'
-		401: 'sartre' | 'fouco' | 'lilith'
-	}>()
-}
-
-// mapResolve local
-{
-	const app = new Elysia()
-		.mapResolve(({ status }) =>
-			Math.random() > 0.5
-				? status(401, 'sartre')
-				: { friends: ['lilith'] }
-		)
-		.mapResolve(({ status }) =>
-			Math.random() > 0.5 ? status(401, 'fouco') : { friends: ['lilith'] }
-		)
-		.get('/', ({ friends, status }) => {
-			if (Math.random() > 0.5) return status(401, friends[0])
-
-			return 'NOexistenceN'
-		})
-
-	expectTypeOf<(typeof app)['~Volatile']['resolve']>().toEqualTypeOf<{
-		readonly friends: readonly ['lilith']
-	}>()
-
-	expectTypeOf<(typeof app)['~Volatile']['response']>().toEqualTypeOf<{
-		401: 'sartre' | 'fouco'
-	}>()
-
-	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
-		200: 'NOexistenceN'
-		401: 'sartre' | 'fouco' | 'lilith'
-	}>()
-}
-
-// mapResolve scoped
-{
-	const app = new Elysia()
-		.mapResolve({ as: 'scoped' }, ({ status }) =>
-			Math.random() > 0.5
-				? status(401, 'sartre')
-				: { friends: ['lilith'] }
-		)
-		.mapResolve({ as: 'scoped' }, ({ status }) =>
-			Math.random() > 0.5 ? status(401, 'fouco') : { friends: ['lilith'] }
-		)
-		.get('/', ({ friends, status }) => {
-			if (Math.random() > 0.5) return status(401, friends[0])
-
-			return 'NOexistenceN'
-		})
-
-	expectTypeOf<(typeof app)['~Ephemeral']['resolve']>().toEqualTypeOf<{
-		readonly friends: readonly ['lilith']
-	}>()
-
-	expectTypeOf<(typeof app)['~Ephemeral']['response']>().toEqualTypeOf<{
-		401: 'sartre' | 'fouco'
-	}>()
-
-	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
-		200: 'NOexistenceN'
-		401: 'sartre' | 'fouco' | 'lilith'
-	}>()
-}
-
-// mapResolve global
-{
-	const app = new Elysia()
-		.mapResolve({ as: 'global' }, ({ status }) =>
-			Math.random() > 0.5
-				? status(401, 'sartre')
-				: { friends: ['lilith'] }
-		)
-		.mapResolve({ as: 'global' }, ({ status }) =>
-			Math.random() > 0.5 ? status(401, 'fouco') : { friends: ['lilith'] }
-		)
-		.get('/', ({ friends, status }) => {
-			if (Math.random() > 0.5) return status(401, friends[0])
-
-			return 'NOexistenceN'
-		})
-
-	expectTypeOf<(typeof app)['~Singleton']['resolve']>().toEqualTypeOf<{
+	expectTypeOf<(typeof app)['~Singleton']['derive']>().toEqualTypeOf<{
 		readonly friends: readonly ['lilith']
 	}>()
 
@@ -1276,12 +1178,12 @@ import { Prettify } from '../../../src/types'
 // derive scoped
 {
 	const app = new Elysia()
-		.derive({ as: 'scoped' }, ({ status }) =>
+		.derive('plugin', ({ status }) =>
 			Math.random() > 0.5
 				? status(401, 'sartre')
 				: { friends: ['lilith'] }
 		)
-		.derive({ as: 'scoped' }, ({ status }) =>
+		.derive('plugin', ({ status }) =>
 			Math.random() > 0.5 ? status(401, 'fouco') : { friends: ['lilith'] }
 		)
 		.get('/', ({ friends, status }) => {
@@ -1307,12 +1209,12 @@ import { Prettify } from '../../../src/types'
 // derive global
 {
 	const app = new Elysia()
-		.derive({ as: 'global' }, ({ status }) =>
+		.derive('global', ({ status }) =>
 			Math.random() > 0.5
 				? status(401, 'sartre')
 				: { friends: ['lilith'] }
 		)
-		.derive({ as: 'global' }, ({ status }) =>
+		.derive('global', ({ status }) =>
 			Math.random() > 0.5 ? status(401, 'fouco') : { friends: ['lilith'] }
 		)
 		.get('/', ({ friends, status }) => {
@@ -1369,12 +1271,12 @@ import { Prettify } from '../../../src/types'
 // mapDerive scoped
 {
 	const app = new Elysia()
-		.mapDerive({ as: 'scoped' }, ({ status }) =>
+		.mapDerive('plugin', ({ status }) =>
 			Math.random() > 0.5
 				? status(401, 'sartre')
 				: { friends: ['lilith'] }
 		)
-		.mapDerive({ as: 'scoped' }, ({ status }) =>
+		.mapDerive('plugin', ({ status }) =>
 			Math.random() > 0.5 ? status(401, 'fouco') : { friends: ['lilith'] }
 		)
 		.get('/', ({ friends, status }) => {
@@ -1400,12 +1302,12 @@ import { Prettify } from '../../../src/types'
 // mapDerive global
 {
 	const app = new Elysia()
-		.mapDerive({ as: 'global' }, ({ status }) =>
+		.mapDerive('global', ({ status }) =>
 			Math.random() > 0.5
 				? status(401, 'sartre')
 				: { friends: ['lilith'] }
 		)
-		.mapDerive({ as: 'global' }, ({ status }) =>
+		.mapDerive('global', ({ status }) =>
 			Math.random() > 0.5 ? status(401, 'fouco') : { friends: ['lilith'] }
 		)
 		.get('/', ({ friends, status }) => {
@@ -1518,7 +1420,7 @@ import { Prettify } from '../../../src/types'
 			}
 		})
 		.guard({
-			as: 'scoped',
+			as: 'plugin',
 			q: true,
 			beforeHandle: [
 				({ status }) => {
@@ -1711,7 +1613,7 @@ import { Prettify } from '../../../src/types'
 // merge possible path
 {
 	const app = new Elysia()
-		.onBeforeHandle(({ status }) => {
+		.beforeHandle(({ status }) => {
 			if (Math.random() > 0.05) return 'fouco' as const
 			if (Math.random() > 0.05) return 'sartre' as const
 			if (Math.random() > 0.05) return status(404, 'lilith')
@@ -1766,6 +1668,7 @@ import { Prettify } from '../../../src/types'
 		})
 
 	expectTypeOf<(typeof app)['~Routes']['post']>().toEqualTypeOf<{
+		error: never
 		body: {
 			name: 'lilith'
 		}
@@ -1786,7 +1689,6 @@ import { Prettify } from '../../../src/types'
 			422: {
 				type: 'validation'
 				on: string
-				summary?: string
 				message?: string
 				found?: unknown
 				property?: string
@@ -1834,6 +1736,7 @@ import { Prettify } from '../../../src/types'
 		)
 
 	expectTypeOf<(typeof app)['~Routes']['post']>().toEqualTypeOf<{
+		error: never
 		body: {
 			name: 'Lilith'
 			friends: ['Sartre', 'Fouco']
@@ -1850,7 +1753,6 @@ import { Prettify } from '../../../src/types'
 			422: {
 				type: 'validation'
 				on: string
-				summary?: string
 				message?: string
 				found?: unknown
 				property?: string
@@ -1863,12 +1765,14 @@ import { Prettify } from '../../../src/types'
 // resolve for lifecycle event
 {
 	new Elysia()
-		.macro('auth', {
-			headers: t.Object({ authorization: t.String() }),
-			resolve: ({ status }) =>
-				Math.random() > 0.5
-					? { role: 'user' }
-					: status(401, 'not authorized')
+		.macro({
+			auth: {
+				headers: t.Object({ authorization: t.String() }),
+				derive: ({ status }) =>
+					Math.random() > 0.5
+						? { role: 'user' }
+						: status(401, 'not authorized')
+			}
 		})
 		.post('/', ({ role }) => role, {
 			auth: true,
@@ -1881,7 +1785,7 @@ import { Prettify } from '../../../src/types'
 	new Elysia()
 		.macro({
 			role: (role: 'user' | 'admin') => ({
-				resolve({ status, headers: { authorization } }) {
+				derive({ status, headers: { authorization } }) {
 					const user = {
 						role: Math.random() > 0.5 ? 'user' : 'admin'
 					} as {
@@ -1927,6 +1831,7 @@ import { Prettify } from '../../../src/types'
 {
 	const app = new Elysia().guard(
 		{
+			schema: 'standalone',
 			query: t.Object({
 				name: t.Literal('lilith')
 			}),
@@ -1937,6 +1842,7 @@ import { Prettify } from '../../../src/types'
 		(app) =>
 			app.guard(
 				{
+					schema: 'standalone',
 					query: t.Object({
 						limit: t.Number()
 					}),
@@ -1970,6 +1876,7 @@ import { Prettify } from '../../../src/types'
 {
 	const app = new Elysia().guard(
 		{
+			schema: 'standalone',
 			query: t.Object({
 				name: t.Literal('lilith')
 			}),
@@ -1980,6 +1887,7 @@ import { Prettify } from '../../../src/types'
 		(app) =>
 			app.guard(
 				{
+					schema: 'standalone',
 					query: t.Object({
 						limit: t.Number()
 					}),
@@ -2019,7 +1927,6 @@ import { Prettify } from '../../../src/types'
 		422: {
 			type: 'validation'
 			on: string
-			summary?: string
 			message?: string
 			found?: unknown
 			property?: string
@@ -2031,6 +1938,7 @@ import { Prettify } from '../../../src/types'
 {
 	const app = new Elysia().guard(
 		{
+			schema: 'standalone',
 			query: t.Object({
 				name: t.Literal('lilith')
 			}),
@@ -2041,6 +1949,7 @@ import { Prettify } from '../../../src/types'
 		(app) =>
 			app.guard(
 				{
+					schema: 'standalone',
 					query: t.Object({
 						limit: t.Number()
 					}),
@@ -2080,7 +1989,6 @@ import { Prettify } from '../../../src/types'
 		422: {
 			type: 'validation'
 			on: string
-			summary?: string
 			message?: string
 			found?: unknown
 			property?: string
@@ -2089,23 +1997,33 @@ import { Prettify } from '../../../src/types'
 	}>()
 }
 
-// Inherit macro context
+// Inherit macro context: the inherited derive reaches the CONSUMING route
+// (cross-macro context is not visible to the inheriting macro's OWN
+// handlers in the object form)
 {
 	new Elysia()
-		.macro('guestOrUser', {
-			resolve: () => {
-				return {
-					user: 'Lilith' as const
+		.macro({
+			guestOrUser: {
+				derive: () => {
+					return {
+						user: 'Lilith' as const
+					}
 				}
 			}
 		})
-		.macro('user', {
-			guestOrUser: true,
-			body: t.String(),
-			resolve: ({ user }) => {
-				expectTypeOf(user).toEqualTypeOf<'Lilith'>()
+		.macro({
+			user: {
+				guestOrUser: true,
+				body: t.String()
 			}
 		})
+		.post(
+			'/',
+			({ user }) => {
+				expectTypeOf(user).toEqualTypeOf<'Lilith'>()
+			},
+			{ user: true }
+		)
 }
 
 // Handle 200 status for inline status
@@ -2173,7 +2091,7 @@ import { Prettify } from '../../../src/types'
 {
 	new Elysia({ name: 'my-middleware-1' })
 		.guard({
-			as: 'scoped',
+			as: 'plugin',
 			headers: t.Object({
 				role: t.UnionEnum(['admin', 'user'])
 			}),
@@ -2183,7 +2101,7 @@ import { Prettify } from '../../../src/types'
 		})
 		.macro({
 			auth: {
-				resolve: ({ headers, body }) => {
+				derive: ({ headers, body }) => {
 					expectTypeOf(headers).toEqualTypeOf<{
 						role: 'admin' | 'user'
 					}>()
@@ -2201,7 +2119,7 @@ import { Prettify } from '../../../src/types'
 	const app = new Elysia()
 		.macro({
 			multiple: {
-				resolve({ status }) {
+				derive({ status }) {
 					if (Math.random() > 0.5) return status(401)
 					return status(403)
 				}
@@ -2221,10 +2139,12 @@ import { Prettify } from '../../../src/types'
 // intersect multiple resolve macro response
 {
 	const app = new Elysia()
-		.macro('multiple', {
-			resolve({ status }) {
-				if (Math.random() > 0.5) return status(401)
-				return status(403)
+		.macro({
+			multiple: {
+				derive({ status }) {
+					if (Math.random() > 0.5) return status(401)
+					return status(403)
+				}
 			}
 		})
 		.get('/multiple', () => 'Ok', { multiple: true })
@@ -2241,11 +2161,13 @@ import { Prettify } from '../../../src/types'
 // intersect multiple resolve macro response
 {
 	const app = new Elysia()
-		.macro('multiple', {
-			resolve({ status }) {
-				if (Math.random() > 0.5) return status(401)
+		.macro({
+			multiple: {
+				derive({ status }) {
+					if (Math.random() > 0.5) return status(401)
 
-				return status(403)
+					return status(403)
+				}
 			}
 		})
 		.get('/multiple', () => 'Ok', { multiple: true })
@@ -2330,7 +2252,7 @@ import { Prettify } from '../../../src/types'
 	const app = new Elysia()
 		.macro({
 			a: {
-				resolve({ status }) {
+				derive({ status }) {
 					if (Math.random()) return status(400, 'a')
 					if (Math.random()) return status(401, 'b')
 					if (Math.random()) return status(401, 'c')
@@ -2339,7 +2261,7 @@ import { Prettify } from '../../../src/types'
 				}
 			},
 			b: {
-				resolve({ status }) {
+				derive({ status }) {
 					if (Math.random()) return status(400, 'x')
 					if (Math.random()) return status(401, 'y')
 					if (Math.random()) return status(401, 'z')

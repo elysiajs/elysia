@@ -27,16 +27,16 @@ export const app = new Elysia()
 			beforeHandle({ status }) {
 				if (Math.random() < 0.05) return status(410)
 			},
-			resolve: () => ({ a: 'a' })
+			derive: () => ({ a: 'a' })
 		}
 	})
-	.onError(({ status }) => {
+	.error(({ status }) => {
 		if (Math.random() < 0.05) return status(400)
 	})
-	.resolve(({ status }) => {
+	.derive(({ status }) => {
 		if (Math.random() < 0.05) return status(401)
 	})
-	.onBeforeHandle([
+	.beforeHandle([
 		({ status }) => {
 			if (Math.random() < 0.05) return status(402)
 		},

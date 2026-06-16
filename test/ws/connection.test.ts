@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test'
 import { Elysia, t } from '../../src'
-import { newWebsocket, wsOpen, wsClose, wsClosed } from './utils'
+import { newWebsocket, wsOpen, wsClose, wsClosed, wsMessage } from './utils'
 import { req } from '../utils'
 
 describe('WebSocket connection', () => {
@@ -146,7 +146,7 @@ describe('WebSocket connection', () => {
 			.derive(() => ({
 				sessionId: '123'
 			}))
-			.resolve(() => ({
+			.derive(() => ({
 				getUser() {
 					return {
 						id: '123',
@@ -156,8 +156,8 @@ describe('WebSocket connection', () => {
 			}))
 			.ws('/ws', {
 				open(ws) {
-					sessionId = ws.data.sessionId
-					user = ws.data.getUser()
+					sessionId = (ws as any).sessionId
+					user = (ws as any).getUser()
 				}
 			})
 			.listen(0)
@@ -172,6 +172,104 @@ describe('WebSocket connection', () => {
 			id: '123',
 			name: 'Jane Doe'
 		})
+	})
+
+	it('derive runs once per connection, not per message', async () => {
+		let deriveCalls = 0
+
+		const app = new Elysia()
+			.derive(() => {
+				deriveCalls++
+				return { token: `t${deriveCalls}` }
+			})
+			.ws('/ws', {
+				message(ws: any) {
+					ws.send(ws.token)
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+		await wsOpen(ws)
+
+		// Three messages on the same connection.
+		const tokens: string[] = []
+		ws.onmessage = (e) => tokens.push(String(e.data))
+
+		ws.send('a')
+		ws.send('b')
+		ws.send('c')
+
+		await Bun.sleep(50)
+
+		// All three should return the SAME token — derive fired once on
+		// upgrade and the value persists for the lifetime of the connection.
+		expect(deriveCalls).toBe(1)
+		expect(tokens).toEqual(['t1', 't1', 't1'])
+
+		await wsClosed(ws)
+		app.stop()
+	})
+
+	it('transform fires at BOTH upgrade and per-message', async () => {
+		let calls = 0
+
+		const app = new Elysia()
+			.ws('/ws', {
+				transform() {
+					calls++
+				},
+				message(ws: any) {
+					ws.send('ok')
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+		await wsOpen(ws)
+		// At this point transform should have fired ONCE (upgrade).
+		expect(calls).toBe(1)
+
+		const got1 = wsMessage(ws)
+		ws.send('a')
+		await got1
+		expect(calls).toBe(2)
+
+		const got2 = wsMessage(ws)
+		ws.send('b')
+		await got2
+		expect(calls).toBe(3)
+
+		await wsClosed(ws)
+		app.stop()
+	})
+
+	it('beforeHandle short-circuits the upgrade with HTTP response', async () => {
+		const app = new Elysia()
+			.ws('/ws', {
+				beforeHandle() {
+					return new Response('forbidden', { status: 403 })
+				},
+				message() {}
+			})
+			.listen(0)
+
+		const upgradeResponse = await fetch(
+			`http://${app.server!.hostname}:${app.server!.port}/ws`,
+			{
+				headers: {
+					upgrade: 'websocket',
+					connection: 'Upgrade',
+					'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==',
+					'sec-websocket-version': '13'
+				}
+			}
+		)
+
+		expect(upgradeResponse.status).toBe(403)
+		expect(await upgradeResponse.text()).toBe('forbidden')
+
+		app.stop()
 	})
 
 	it('call ping/pong', async () => {

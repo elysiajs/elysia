@@ -1,7 +1,11 @@
-import { Elysia, t, ValidationError } from '../../src'
+import { fileTypeFromBlob } from 'file-type'
+
+import { Elysia, t, ValidationError, setFileTypeDetector } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { post, upload } from '../utils'
+
+setFileTypeDetector(fileTypeFromBlob)
 
 describe('Body Validator', () => {
 	it('skip body parsing if body is empty but headers is present', async () => {
@@ -639,7 +643,7 @@ describe('Body Validator', () => {
 
 		const person = t.Object({
 			name: t.String(),
-			job: t.Ref(job)
+			job: t.Ref('job')
 		})
 
 		const app = new Elysia()
@@ -739,7 +743,7 @@ describe('Body Validator', () => {
 			})
 
 			const response = await app.handle(request).then((r) => r.text())
-			// expect(+response).toBe(size)
+			expect(+response).toBe(size)
 		}
 
 		{
@@ -1088,7 +1092,7 @@ describe('Body Validator', () => {
 				t.Object({ foo: t.String() }),
 				t.Object({
 					field: t
-						.Transform(t.String())
+						.Codec(t.String())
 						.Decode((decoded) => ({ decoded }))
 						.Encode((v) => v.decoded)
 				})
@@ -1139,11 +1143,9 @@ describe('Body Validator', () => {
 				body: t.Object({
 					year: t.Numeric({ minimum: 1900, maximum: 2160 })
 				}),
-				error({ code, error }) {
-					switch (code) {
-						case 'VALIDATION':
-							err = error
-					}
+				error({ error }) {
+					// `code` was removed this version; dispatch via instanceof.
+					if (error instanceof ValidationError) err = error
 				}
 			})
 			.listen(0)

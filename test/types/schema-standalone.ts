@@ -84,7 +84,9 @@ import { expectTypeOf } from 'expect-type'
 			)
 	}
 
-	// Handle standalone after override guard
+	// Handle standalone after override guard — the override guard's body is
+	// replaced by the route-local one (closer wins); the standalone body still
+	// intersects
 	{
 		new Elysia()
 			.guard({
@@ -196,7 +198,9 @@ import { expectTypeOf } from 'expect-type'
 			)
 	}
 
-	// Handle standalone after override guard
+	// Handle standalone after override guard — the override guard's body is
+	// replaced by the route-local one (closer wins); the standalone body still
+	// intersects
 	{
 		const local = new Elysia()
 			.guard({
@@ -254,7 +258,7 @@ import { expectTypeOf } from 'expect-type'
 	{
 		new Elysia()
 			.guard({
-				as: 'scoped',
+				as: 'plugin',
 				schema: 'standalone',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
@@ -275,7 +279,7 @@ import { expectTypeOf } from 'expect-type'
 	{
 		new Elysia()
 			.guard({
-				as: 'scoped',
+				as: 'plugin',
 				schema: 'standalone',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
@@ -304,13 +308,13 @@ import { expectTypeOf } from 'expect-type'
 	{
 		new Elysia()
 			.guard({
-				as: 'scoped',
+				as: 'plugin',
 				schema: 'standalone',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
 			})
 			.guard({
-				as: 'scoped',
+				as: 'plugin',
 				schema: 'standalone',
 				body: t.Object({ separated: t.Literal(true) })
 			})
@@ -335,17 +339,19 @@ import { expectTypeOf } from 'expect-type'
 			)
 	}
 
-	// Handle standalone after override guard
+	// Handle standalone after override guard — the override guard's body is
+	// replaced by the route-local one (closer wins); the standalone body still
+	// intersects
 	{
 		new Elysia()
 			.guard({
-				as: 'scoped',
+				as: 'plugin',
 				schema: 'standalone',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
 			})
 			.guard({
-				as: 'scoped',
+				as: 'plugin',
 				body: t.Object({ separated: t.Literal(true) })
 			})
 			.post(
@@ -372,7 +378,7 @@ import { expectTypeOf } from 'expect-type'
 	{
 		new Elysia()
 			.guard({
-				as: 'scoped',
+				as: 'plugin',
 				schema: 'standalone',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
@@ -393,7 +399,7 @@ import { expectTypeOf } from 'expect-type'
 	{
 		new Elysia()
 			.guard({
-				as: 'scoped',
+				as: 'plugin',
 				schema: 'standalone',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
@@ -422,7 +428,7 @@ import { expectTypeOf } from 'expect-type'
 	{
 		new Elysia()
 			.guard({
-				as: 'scoped',
+				as: 'plugin',
 				schema: 'standalone',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
@@ -452,17 +458,19 @@ import { expectTypeOf } from 'expect-type'
 			)
 	}
 
-	// Handle standalone after override guard
+	// Handle standalone after override guard — the override guard's body is
+	// replaced by the route-local one (closer wins); the standalone body still
+	// intersects
 	{
 		const local = new Elysia()
 			.guard({
-				as: 'scoped',
+				as: 'plugin',
 				schema: 'standalone',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
 			})
 			.guard({
-				as: 'scoped',
+				as: 'plugin',
 				schema: 'standalone',
 				body: t.Object({ separated: t.Literal(true) })
 			})
@@ -525,7 +533,7 @@ import { expectTypeOf } from 'expect-type'
 			}
 		)
 
-		const propagated = new Elysia().use(parent.as('scoped')).post(
+		const propagated = new Elysia().use(parent.as('plugin')).post(
 			'/',
 			({ body }) => {
 				expectTypeOf<typeof body>().toEqualTypeOf<{
@@ -635,7 +643,9 @@ import { expectTypeOf } from 'expect-type'
 			)
 	}
 
-	// Handle standalone after override guard
+	// Handle standalone after override guard — the override guard's body is
+	// replaced by the route-local one (closer wins); the standalone body still
+	// intersects
 	{
 		new Elysia()
 			.guard({
@@ -728,7 +738,7 @@ import { expectTypeOf } from 'expect-type'
 				response: t.Object({ success: t.Boolean() })
 			})
 			.guard({
-				as: 'scoped',
+				as: 'plugin',
 				schema: 'standalone',
 				body: t.Object({ separated: t.Literal(true) })
 			})
@@ -753,7 +763,9 @@ import { expectTypeOf } from 'expect-type'
 			)
 	}
 
-	// Handle standalone after override guard
+	// Handle standalone after override guard — the override guard's body is
+	// replaced by the route-local one (closer wins); the standalone body still
+	// intersects
 	{
 		const local = new Elysia()
 			.guard({
@@ -970,7 +982,7 @@ import { expectTypeOf } from 'expect-type'
 		const local = new Elysia()
 			.guard({
 				schema: 'standalone',
-				as: 'scoped',
+				as: 'plugin',
 				body: t.Object({ family: t.String() }),
 				headers: t.Object({ family: t.String() }),
 				query: t.Object({ family: t.String() }),

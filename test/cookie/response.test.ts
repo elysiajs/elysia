@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { req } from '../utils'
-import { signCookie } from '../../src/utils'
+import { signCookie } from '../../src/cookie'
 
 const secrets = 'We long for the seven wailings. We bear the koan of Jericho.'
 
@@ -294,34 +294,6 @@ describe('Cookie Response', () => {
 		expect(await response.json()).toEqual(expected)
 	})
 
-	// this is removed there's no way to accurately determine object on Standard Schema
-	// it("don't parse cookie type unless specified", async () => {
-	// 	let value: unknown
-
-	// 	const app = new Elysia().get(
-	// 		'/council',
-	// 		({ cookie: { council } }) => (value = council.value)
-	// 	)
-
-	// 	const expected = {
-	// 		name: 'Rin',
-	// 		affilation: 'Administration'
-	// 	}
-
-	// 	const response = await app.handle(
-	// 		req('/council', {
-	// 			headers: {
-	// 				cookie:
-	// 					'council=' +
-	// 					encodeURIComponent(JSON.stringify(expected))
-	// 			}
-	// 		})
-	// 	)
-
-	// 	expect(response.status).toBe(200)
-	// 	expect(value).toEqual(JSON.stringify(expected))
-	// })
-
 	it('handle optional at root', async () => {
 		const app = new Elysia().get('/', ({ cookie: { id } }) => id.value, {
 			cookie: t.Optional(
@@ -401,5 +373,80 @@ describe('Cookie Response', () => {
 			.then((x) => x.headers)
 
 		expect(res.getSetCookie()).toEqual([])
+	})
+
+	// Regression (perf audit F2): buildCookieJar memoizes Cookie instances
+	// per request jar — repeated accesses return the same instance so
+	// change-detection state survives across accesses
+	it('memoizes Cookie instances per request jar', async () => {
+		const app = new Elysia().get('/identity', ({ cookie }) => ({
+			same: cookie.session === cookie.session,
+			distinct: cookie.session !== cookie.other
+		}))
+
+		const response = await app.handle(
+			req('/identity', {
+				headers: {
+					cookie: 'session=a'
+				}
+			})
+		)
+
+		expect(await response.json()).toEqual({
+			same: true,
+			distinct: true
+		})
+	})
+
+	// Regression (perf audit F2): request-cookie store entries (defaults
+	// already merged at parse) are now passed to Cookie by reference instead
+	// of re-merged per access — an attribute-only write must keep emitting
+	// the exact same Set-Cookie bytes
+	it('set cookie attribute only on a request cookie', async () => {
+		const app = new Elysia().get('/attr', ({ cookie: { session } }) => {
+			session.domain = 'elysiajs.com'
+
+			return 'ok'
+		})
+
+		const response = await app.handle(
+			req('/attr', {
+				headers: {
+					cookie: 'session=a'
+				}
+			})
+		)
+
+		expect(getCookies(response)).toEqual([
+			'session=a; Domain=elysiajs.com; Path=/'
+		])
+	})
+
+	it('signs a cookie set before a thrown-then-handled error', async () => {
+		const app = new Elysia()
+			// A handler returning from `error()` is still a response — the
+			// cookie it set before throwing must go out SIGNED, not raw.
+			.error(() => 'handled')
+			.get(
+				'/boom',
+				({ cookie: { name } }) => {
+					name.value = 'seminar: Himari'
+
+					throw new Error('boom')
+				},
+				{
+					cookie: t.Cookie(
+						{ name: t.Optional(t.String()) },
+						{ secrets, sign: ['name'] }
+					)
+				}
+			)
+
+		const response = await app.handle(req('/boom'))
+
+		expect(await response.text()).toBe('handled')
+		expect(getCookies(response)).toEqual([
+			`name=${await signCookie('seminar: Himari', secrets)}; Path=/`
+		])
 	})
 })

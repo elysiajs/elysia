@@ -1,7 +1,5 @@
 import Elysia, { t } from '../../src'
 import { describe, expect, it } from 'bun:test'
-import { Value } from '@sinclair/typebox/value'
-import { TBoolean, TString, TypeBoxError } from '@sinclair/typebox'
 import { req } from '../utils'
 
 describe('TypeSystem - ObjectString', () => {

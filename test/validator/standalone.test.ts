@@ -183,9 +183,13 @@ describe('standalone validator', () => {
 				schema: 'standalone',
 				body: t.Object({ id: t.Number() })
 			})
-			.post('/name/:name', ({ body }) => body, {
-				response: t.Object({ id: t.Number() })
-			})
+			.post(
+				'/name/:name',
+				({ body }) => body,
+				{
+					response: t.Object({ id: t.Number() })
+				}
+			)
 
 		const correct = await app.handle(
 			post('/name/cantarella', {
@@ -521,7 +525,7 @@ describe('standalone validator', () => {
 		const local = new Elysia()
 			.guard({
 				schema: 'standalone',
-				as: 'scoped',
+				as: 'plugin',
 				body: t.Object({ id: t.Number() })
 			})
 			.post(
@@ -759,7 +763,7 @@ describe('standalone validator', () => {
 		const local = new Elysia()
 			.guard({
 				schema: 'standalone',
-				as: 'scoped',
+				as: 'plugin',
 				body: t.Object({ family: t.String() }),
 				headers: t.Object({ family: t.String() }),
 				query: t.Object({ family: t.String() }),
@@ -971,5 +975,24 @@ describe('standalone validator', () => {
 		)
 
 		expect(incorrect3.status).toBe(422)
+	})
+
+	// Regression (audit H9): a standalone response schema with no 200 entry
+	// mapped to `undefined` in the single-schema branch (the record branch
+	// already had `.filter(Boolean)`), and Validator.create then threw
+	// `'~kind' in undefined` — turning every request on the route into a 500.
+	it('standalone response schema without a 200 entry does not 500', async () => {
+		const app = new Elysia()
+			.guard({
+				schema: 'standalone',
+				response: { 404: t.String() }
+			})
+			.get('/ok', () => 'fine')
+
+		const res = await app.handle(new Request('http://localhost/ok'))
+
+		// before the fix: 500 with an opaque '~kind' in undefined TypeError
+		expect(res.status).toBe(200)
+		expect(await res.text()).toBe('fine')
 	})
 })

@@ -1,13 +1,12 @@
 import Elysia, { t } from '../../src'
 import { describe, expect, it } from 'bun:test'
-import { Value } from '@sinclair/typebox/value'
-import { TBoolean, TString, TypeBoxError } from '@sinclair/typebox'
+import { Value } from 'typebox/value'
 import { req } from '../utils'
 
 describe('TypeSystem - ArrayString', () => {
 	it('Create', () => {
-		// @ts-expect-error
-		expect(Value.Create(t.ArrayString())).toBe(undefined)
+		// @ts-expect-error t.ArrayString requires an items schema
+		expect(Value.Create(t.ArrayString())).toEqual([])
 
 		expect(
 			Value.Create(
@@ -15,7 +14,6 @@ describe('TypeSystem - ArrayString', () => {
 					default: '[]'
 				})
 			)
-			// @ts-expect-error
 		).toBe('[]')
 	})
 
@@ -26,15 +24,11 @@ describe('TypeSystem - ArrayString', () => {
 	})
 
 	it('Encode', () => {
+		// ArrayString is a decode-only codec (string -> array); the encode
+		// direction is intentionally not implemented.
 		const schema = t.ArrayString(t.Number())
 
-		expect(Value.Encode<typeof schema, string>(schema, [1])).toBe(
-			JSON.stringify([1])
-		)
-
-		expect(Value.Encode<typeof schema, string>(schema, [1])).toBe(
-			JSON.stringify([1])
-		)
+		expect(() => Value.Encode(schema, [1])).toThrow()
 	})
 
 	it('Decode', () => {
@@ -42,7 +36,10 @@ describe('TypeSystem - ArrayString', () => {
 
 		expect(Value.Decode<typeof schema>(schema, '[1]')).toEqual([1])
 
-		expect(() => Value.Decode<typeof schema>(schema, '1')).toThrow()
+		// `Value.Decode` runs Convert before its Check gate so it coerces
+		// loosely; the framework validates with Check (`FromSync` Checks
+		// before decoding), which rejects a non-array string.
+		expect(Value.Check(schema, '1')).toBe(false)
 	})
 
 	it('Integrate', async () => {

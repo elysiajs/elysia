@@ -8,10 +8,10 @@ describe('On After Response', () => {
 		let isAfterResponseCalled = false
 
 		const app = new Elysia()
-			.onAfterResponse(() => {
+			.afterResponse(() => {
 				isAfterResponseCalled = true
 			})
-			.onError(() => {
+			.error(() => {
 				return new Response('a', {
 					status: 401,
 					headers: {
@@ -30,7 +30,7 @@ describe('On After Response', () => {
 	it('call after response on not found without error handler', async () => {
 		let isAfterResponseCalled = false
 
-		const app = new Elysia().onAfterResponse(() => {
+		const app = new Elysia().afterResponse(() => {
 			isAfterResponseCalled = true
 		})
 
@@ -45,10 +45,10 @@ describe('On After Response', () => {
 		let order = <string[]>[]
 
 		const app = new Elysia()
-			.onAfterResponse(() => {
+			.afterResponse(() => {
 				order.push('A')
 			})
-			.onAfterResponse(() => {
+			.afterResponse(() => {
 				order.push('B')
 			})
 			.get('/', () => '')
@@ -63,34 +63,8 @@ describe('On After Response', () => {
 	it('inherits from plugin', async () => {
 		let type = ''
 
-		const afterResponse = new Elysia().onAfterResponse(
-			{ as: 'global' },
-			({ response }) => {
-				type = typeof response
-			}
-		)
-
-		const app = new Elysia()
-			.use(afterResponse)
-			.get('/id/:id', ({ params: { id } }) => id, {
-				params: t.Object({
-					id: t.Number()
-				})
-			})
-
-		await app.handle(req('/id/1'))
-
-		// wait for next tick
-		await Bun.sleep(1)
-
-		expect(type).toBe('number')
-	})
-
-	it('inherits from plugin using responseValue', async () => {
-		let type = ''
-
-		const afterResponse = new Elysia().onAfterResponse(
-			{ as: 'global' },
+		const afterResponse = new Elysia().afterResponse(
+			'global',
 			({ responseValue }) => {
 				type = typeof responseValue
 			}
@@ -116,7 +90,7 @@ describe('On After Response', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.onAfterResponse({ as: 'global' }, ({ path }) => {
+			.afterResponse('global', ({ path }) => {
 				called.push(path)
 			})
 			.get('/inner', () => 'NOOP')
@@ -137,7 +111,7 @@ describe('On After Response', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.onAfterResponse({ as: 'local' }, ({ path }) => {
+			.afterResponse('local', ({ path }) => {
 				called.push(path)
 			})
 			.get('/inner', () => 'NOOP')
@@ -154,11 +128,53 @@ describe('On After Response', () => {
 		expect(called).toEqual(['/inner'])
 	})
 
+	// New direct-scope API: `afterResponse('global', fn)` parallels
+	// `onAfterResponse('global', fn)`.
+	it('as global (direct scope)', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.afterResponse('global', ({ path }) => {
+				called.push(path)
+			})
+			.get('/inner', () => 'NOOP')
+
+		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
+
+		await Promise.all([
+			app.handle(req('/inner')),
+			app.handle(req('/outer'))
+		])
+		await Bun.sleep(1)
+
+		expect(called).toEqual(['/inner', '/outer'])
+	})
+
+	it('as local (direct scope)', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.afterResponse('local', ({ path }) => {
+				called.push(path)
+			})
+			.get('/inner', () => 'NOOP')
+
+		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
+
+		await Promise.all([
+			app.handle(req('/inner')),
+			app.handle(req('/outer'))
+		])
+		await Bun.sleep(1)
+
+		expect(called).toEqual(['/inner'])
+	})
+
 	it('support array', async () => {
 		let total = 0
 
 		const app = new Elysia()
-			.onAfterHandle([
+			.afterHandle([
 				() => {
 					total++
 				},
@@ -195,7 +211,7 @@ describe('On After Response Error', () => {
 	})
 
 	const app = new Elysia()
-		.onAfterResponse(() => {
+		.afterResponse(() => {
 			isOnResponseCalled = true
 			onResponseCalledCounter++
 		})
@@ -243,22 +259,16 @@ describe('On After Response Error', () => {
 		expect(onResponseCalledCounter).toBe(1)
 	})
 
-	it.each([
-		{ aot: true, withOnError: true },
-		{ aot: true, withOnError: false },
-
-		{ aot: false, withOnError: true },
-		{ aot: false, withOnError: false }
-	])(
-		'should execute onAfterResponse once during NotFoundError aot=$aot,\twithOnError=$withOnError',
-		async ({ aot, withOnError }) => {
+	it.each([{ withOnError: true }, { withOnError: false }])(
+		'should execute onAfterResponse once during NotFoundError withOnError=$withOnError',
+		async ({ withOnError }) => {
 			let counter = 0
 
-			const app = new Elysia({ aot }).onAfterResponse(() => {
+			const app = new Elysia().afterResponse(() => {
 				counter++
 			})
 
-			if (withOnError) app.onError(() => {})
+			if (withOnError) app.error(() => {})
 
 			const req = new Request('http://localhost/notFound')
 			await app.handle(req)
@@ -269,39 +279,39 @@ describe('On After Response Error', () => {
 	)
 
 	it.each([
-		{ aot: true, onErrorReturnsValue: "error handled" },
-		{ aot: false, onErrorReturnsValue: "error handled" },
+		{ onErrorReturnsValue: 'error handled' },
+		{ onErrorReturnsValue: { message: 'error handled' } }
+	])(
+		'should execute onAfterResponse when onError returns a value aot=$aot,\tonErrorReturnsValue=$onErrorReturnsValue',
+		async ({ onErrorReturnsValue }) => {
+			let counter = 0
 
-		{ aot: true, onErrorReturnsValue: { message: "error handled" } },
-		{ aot: false, onErrorReturnsValue: { message: "error handled" } },
-	])('should execute onAfterResponse when onError returns a value aot=$aot,\tonErrorReturnsValue=$onErrorReturnsValue', async ({ aot, onErrorReturnsValue }) => {
-		let counter = 0
+			const app = new Elysia()
+				.error(() => {
+					return onErrorReturnsValue
+				})
+				.afterResponse(() => {
+					counter++
+				})
+				.get('/error', () => {
+					throw new Error('test error')
+				})
 
-		const app = new Elysia({ aot })
-			.onError(() => {
-				return onErrorReturnsValue
-			})
-			.onAfterResponse(() => {
-				counter++
-			})
-			.get('/error', () => {
-				throw new Error('test error')
-			})
+			expect(counter).toBe(0)
 
-		expect(counter).toBe(0)
+			const req = new Request('http://localhost/error')
+			const res = await app.handle(req)
+			const text = await res.text()
 
-		const req = new Request('http://localhost/error')
-		const res = await app.handle(req)
-		const text = await res.text()
+			expect(text).toStrictEqual(
+				typeof onErrorReturnsValue === 'string'
+					? onErrorReturnsValue
+					: JSON.stringify(onErrorReturnsValue)
+			)
 
-		expect(text).toStrictEqual(
-			typeof onErrorReturnsValue === 'string'
-				? onErrorReturnsValue
-				: JSON.stringify(onErrorReturnsValue)
-		)
+			await Bun.sleep(1)
 
-		await Bun.sleep(1)
-
-		expect(counter).toBe(1)
-	})
+			expect(counter).toBe(1)
+		}
+	)
 })

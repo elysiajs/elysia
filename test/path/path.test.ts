@@ -1,4 +1,4 @@
-import { Elysia, t } from '../../src'
+import { Elysia, NotFound, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { post, req } from '../utils'
@@ -116,8 +116,8 @@ describe('Path', () => {
 	})
 
 	it('custom error', async () => {
-		const app = new Elysia().onError((error) => {
-			if (error.code === 'NOT_FOUND')
+		const app = new Elysia().error(({ error }) => {
+			if (error instanceof NotFound)
 				return new Response('Not Stonk :(', {
 					status: 404
 				})
@@ -247,11 +247,9 @@ describe('Path', () => {
 		const app = new Elysia().use(plugin)
 
 		const res = await app.handle(req('/error'))
-		const { message } = (await res.json()) as unknown as {
-			message: string
-		}
 
-		expect(message).toBe(error)
+		expect(res.status).toBe(500)
+		expect(await res.text()).toBe(error)
 	})
 
 	it('handle async', async () => {
@@ -375,8 +373,8 @@ describe('Path', () => {
 
 	it('add path if onRequest is used', async () => {
 		const app = new Elysia()
-			.onRequest(() => {})
-			.onAfterHandle(({ path }) => {
+			.request(() => {})
+			.afterHandle(({ path }) => {
 				return path
 			})
 			.get('/', () => 'Hi')
@@ -386,187 +384,104 @@ describe('Path', () => {
 		expect(res).toBe('/')
 	})
 
-	// it('handle array route - GET', async () => {
-	// 	const paths = ['/', '/test', '/other/nested']
-	// 	const app = new Elysia().get(paths, ({ path }) => {
-	// 		return path
-	// 	})
+	it('does not grow the route map on distinct request paths', async () => {
+		const app = new Elysia().get('/foo', () => 'hi')
+		await app.handle(req('/foo'))
 
-	// 	for (const path of paths) {
-	// 		const res = await app.handle(req(path))
-	// 		expect(await res.text()).toBe(path)
-	// 	}
-	// })
+		const map = (app as any)['~map'].GET as Record<string, unknown>
+		const before = Object.keys(map).length
 
-	// it('handle array route - POST', async () => {
-	// 	const paths = ['/', '/test', '/other/nested']
-	// 	const app = new Elysia().post(paths, ({ path }) => {
-	// 		return path
-	// 	})
+		for (let i = 0; i < 1000; i++) await app.handle(req(`/missing/${i}`))
+		// over-encoded / garbage variants must not be cached either
+		for (let i = 0; i < 200; i++) await app.handle(req(`/%66oo${i}`))
 
-	// 	for (const path of paths) {
-	// 		const res = await app.handle(
-	// 			new Request('http://localhost' + path, {
-	// 				method: 'POST'
-	// 			})
-	// 		)
-	// 		expect(await res.text()).toBe(path)
-	// 	}
-	// })
+		expect(Object.keys(map).length).toBe(before)
 
-	// it('handle array route - PUT', async () => {
-	// 	const paths = ['/', '/test', '/other/nested']
-	// 	const app = new Elysia().put(paths, ({ path }) => {
-	// 		return path
-	// 	})
+		// exact route still resolves
+		expect(await app.handle(req('/foo')).then((r) => r.text())).toBe('hi')
+	})
 
-	// 	for (const path of paths) {
-	// 		const res = await app.handle(
-	// 			new Request('http://localhost' + path, {
-	// 				method: 'PUT'
-	// 			})
-	// 		)
-	// 		expect(await res.text()).toBe(path)
-	// 	}
-	// })
+	// The decode path was moved to build time (encodeURI stored alongside
+	// ~map). A non-ASCII route must match both its literal form and its
+	// canonical percent-encoded form (the usual on-the-wire shape), without a
+	// per-request decode or any map growth.
+	it('matches a non-ASCII route by its encoded and literal form', async () => {
+		const app = new Elysia().get('/menu/café', () => 'coffee')
+		await app.handle(req('/menu/café'))
 
-	// it('handle array route - DELETE', async () => {
-	// 	const paths = ['/', '/test', '/other/nested']
-	// 	const app = new Elysia().delete(paths, ({ path }) => {
-	// 		return path
-	// 	})
+		const map = (app as any)['~map'].GET as Record<string, unknown>
+		const keys = Object.keys(map).length
 
-	// 	for (const path of paths) {
-	// 		const res = await app.handle(
-	// 			new Request('http://localhost' + path, {
-	// 				method: 'DELETE'
-	// 			})
-	// 		)
-	// 		expect(await res.text()).toBe(path)
-	// 	}
-	// })
+		expect(
+			await app.handle(req('/menu/café')).then((r) => r.text())
+		).toBe('coffee')
+		expect(
+			await app
+				.handle(req('/menu/caf%C3%A9'))
+				.then((r) => r.text())
+		).toBe('coffee')
+		// trailing slash on the encoded form (loose) still matches
+		expect(
+			await app
+				.handle(req('/menu/caf%C3%A9/'))
+				.then((r) => r.text())
+		).toBe('coffee')
 
-	// it('handle array route - PATCH', async () => {
-	// 	const paths = ['/', '/test', '/other/nested']
-	// 	const app = new Elysia().patch(paths, ({ path }) => {
-	// 		return path
-	// 	})
+		// the encoded key is precomputed at build time, not added per request
+		expect(Object.keys(map).length).toBe(keys)
+	})
 
-	// 	for (const path of paths) {
-	// 		const res = await app.handle(
-	// 			new Request('http://localhost' + path, {
-	// 				method: 'PATCH'
-	// 			})
-	// 		)
-	// 		expect(await res.text()).toBe(path)
-	// 	}
-	// })
+	// A static route's trailing-slash (loose) variant is pre-registered in
+	// `~map` at build time, so the fetch hot path resolves a trailing-slash
+	// request by a direct lookup — there is no per-request getLoosePath.
+	it('static route matches a trailing slash via a pre-registered loose key', async () => {
+		const app = new Elysia().get('/x', () => 'x')
+		app.compile()
 
-	// it('handle array route - HEAD', async () => {
-	// 	const paths = ['/', '/test', '/other/nested']
-	// 	const app = new Elysia().head(paths, ({ path }) => {
-	// 		return path
-	// 	})
+		const map = (app as any)['~map'].GET as Record<string, unknown>
+		expect('/x' in map).toBe(true)
+		expect('/x/' in map).toBe(true)
 
-	// 	for (const path of paths) {
-	// 		const res = await app.handle(
-	// 			new Request('http://localhost' + path, {
-	// 				method: 'HEAD'
-	// 			})
-	// 		)
-	// 		expect(await res.text()).toBe(path)
-	// 	}
-	// })
+		expect(await app.handle(req('/x')).then((r) => r.text())).toBe('x')
+		expect(await app.handle(req('/x/')).then((r) => r.text())).toBe('x')
+	})
 
-	// it('handle array route - OPTIONS', async () => {
-	// 	const paths = ['/', '/test', '/other/nested']
-	// 	const app = new Elysia().options(paths, ({ path }) => {
-	// 		return path
-	// 	})
+	it('strictPath does not pre-register a static loose variant', async () => {
+		const app = new Elysia({ strictPath: true }).get('/x', () => 'x')
+		app.compile()
 
-	// 	for (const path of paths) {
-	// 		const res = await app.handle(
-	// 			new Request('http://localhost' + path, {
-	// 				method: 'OPTIONS'
-	// 			})
-	// 		)
-	// 		expect(await res.text()).toBe(path)
-	// 	}
-	// })
+		const map = (app as any)['~map'].GET as Record<string, unknown>
+		expect('/x/' in map).toBe(false)
+		expect(await app.handle(req('/x/')).then((r) => r.status)).toBe(404)
+	})
 
-	// it('handle array route - CONNECT', async () => {
-	// 	const paths = ['/', '/test', '/other/nested']
-	// 	const app = new Elysia().connect(paths, ({ path }) => {
-	// 		return path
-	// 	})
+	// Regression (audit H10): dynamic (parameterized) routes were registered
+	// only at the exact path, so `/users/1/` 404'd on `/users/:id` even though
+	// static routes tolerate trailing slashes by default. Register the loose
+	// variant unless strictPath.
+	it('dynamic route matches a trailing slash when not strict', async () => {
+		const app = new Elysia().get(
+			'/users/:id',
+			({ params: { id } }) => `user:${id}`
+		)
 
-	// 	for (const path of paths) {
-	// 		const res = await app.handle(
-	// 			new Request('http://localhost' + path, {
-	// 				method: 'CONNECT'
-	// 			})
-	// 		)
-	// 		expect(await res.text()).toBe(path)
-	// 	}
-	// })
+		expect(await app.handle(req('/users/1')).then((r) => r.text())).toBe(
+			'user:1'
+		)
+		// before the fix this 404'd
+		expect(await app.handle(req('/users/1/')).then((r) => r.text())).toBe(
+			'user:1'
+		)
+	})
 
-	// it('handle array route - all', async () => {
-	// 	const paths = ['/', '/test', '/other/nested'] as const
-	// 	const app = new Elysia().all(paths, ({ path }) => {
-	// 		return path
-	// 	})
+	it('strictPath still rejects a trailing slash on dynamic routes', async () => {
+		const app = new Elysia({ strictPath: true }).get(
+			'/users/:id',
+			({ params: { id } }) => `user:${id}`
+		)
 
-	// 	for (const path of paths) {
-	// 		const getRes = await app.handle(req(path))
-	// 		const postRes = await app.handle(
-	// 			new Request('http://localhost' + path, {
-	// 				method: 'POST'
-	// 			})
-	// 		)
-	// 		const putRes = await app.handle(
-	// 			new Request('http://localhost' + path, {
-	// 				method: 'PUT'
-	// 			})
-	// 		)
-	// 		const deleteRes = await app.handle(
-	// 			new Request('http://localhost' + path, {
-	// 				method: 'DELETE'
-	// 			})
-	// 		)
-	// 		const patchRes = await app.handle(
-	// 			new Request('http://localhost' + path, {
-	// 				method: 'PATCH'
-	// 			})
-	// 		)
-	// 		const headRes = await app.handle(
-	// 			new Request('http://localhost' + path, {
-	// 				method: 'HEAD'
-	// 			})
-	// 		)
-
-	// 		expect(await getRes.text()).toBe(path)
-	// 		expect(await postRes.text()).toBe(path)
-	// 		expect(await putRes.text()).toBe(path)
-	// 		expect(await deleteRes.text()).toBe(path)
-	// 		expect(await patchRes.text()).toBe(path)
-	// 		expect(await headRes.text()).toBe(path)
-	// 	}
-	// })
-
-	// it('handle array route - custom method', async () => {
-	// 	const paths = ['/', '/test', '/other/nested'] as const
-	// 	// @ts-ignore
-	// 	const app = new Elysia().route('NOTIFY', paths, ({ path }) => {
-	// 		return path
-	// 	})
-
-	// 	for (const path of paths) {
-	// 		const res = await app.handle(
-	// 			new Request('http://localhost' + path, {
-	// 				method: 'NOTIFY'
-	// 			})
-	// 		)
-	// 		expect(await res.text()).toBe(path)
-	// 	}
-	// })
+		expect(
+			await app.handle(req('/users/1/')).then((r) => r.status)
+		).toBe(404)
+	})
 })

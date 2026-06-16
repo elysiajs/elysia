@@ -53,7 +53,7 @@ describe('Map Response', () => {
 
 	it('inherits plugin', async () => {
 		const plugin = new Elysia().mapResponse(
-			{ as: 'global' },
+			'global',
 			() => new Response('Fubuki')
 		)
 
@@ -92,19 +92,6 @@ describe('Map Response', () => {
 
 	it('inherit response', async () => {
 		const app = new Elysia().get('/', () => 'Hu', {
-			mapResponse({ response }) {
-				if (typeof response === 'string')
-					return new Response(response + 'tao')
-			}
-		})
-
-		const res = await app.handle(req('/')).then((x) => x.text())
-
-		expect(res).toBe('Hutao')
-	})
-
-	it('inherit response using responseValue', async () => {
-		const app = new Elysia().get('/', () => 'Hu', {
 			mapResponse({ responseValue }) {
 				if (typeof responseValue === 'string')
 					return new Response(responseValue + 'tao')
@@ -117,26 +104,6 @@ describe('Map Response', () => {
 	})
 
 	it('inherit set', async () => {
-		const app = new Elysia().get('/', () => 'Hu', {
-			mapResponse({ response, set }) {
-				set.headers['X-Powered-By'] = 'Elysia'
-
-				if (typeof response === 'string')
-					return new Response(response + 'tao', {
-						headers: {
-							'X-Series': 'Genshin'
-						}
-					})
-			}
-		})
-
-		const res = await app.handle(req('/')).then((x) => x.headers)
-
-		expect(res.get('X-Powered-By')).toBe('Elysia')
-		expect(res.get('X-Series')).toBe('Genshin')
-	})
-
-	it('inherit set using responseValue', async () => {
 		const app = new Elysia().get('/', () => 'Hu', {
 			mapResponse({ responseValue, set }) {
 				set.headers['X-Powered-By'] = 'Elysia'
@@ -197,7 +164,7 @@ describe('Map Response', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.mapResponse({ as: 'global' }, ({ path }) => {
+			.mapResponse('global', ({ path }) => {
 				called.push(path)
 			})
 			.get('/inner', () => 'NOOP')
@@ -216,7 +183,7 @@ describe('Map Response', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.mapResponse({ as: 'local' }, ({ path }) => {
+			.mapResponse('local', ({ path }) => {
 				called.push(path)
 			})
 			.get('/inner', () => 'NOOP')
@@ -256,29 +223,7 @@ describe('Map Response', () => {
 		}
 
 		const app = new Elysia()
-			.trace(() => {})
-			.onError(() => new CustomClass('aru'))
-			.mapResponse(({ response }) => {
-				if (response instanceof CustomClass)
-					return new Response(response.name)
-			})
-			.get('/', () => {
-				throw new Error('Hello')
-			})
-
-		const response = await app.handle(req('/')).then((x) => x.text())
-
-		expect(response).toBe('aru')
-	})
-
-	it('mapResponse in error using responseValue', async () => {
-		class CustomClass {
-			constructor(public name: string) {}
-		}
-
-		const app = new Elysia()
-			.trace(() => {})
-			.onError(() => new CustomClass('aru'))
+			.error(() => new CustomClass('aru'))
 			.mapResponse(({ responseValue }) => {
 				if (responseValue instanceof CustomClass)
 					return new Response(responseValue.name)
@@ -293,22 +238,9 @@ describe('Map Response', () => {
 	})
 
 	// https://github.com/elysiajs/elysia/issues/965
-	it('mapResponse with after handle', async () => {
-		const app = new Elysia()
-			.onAfterHandle(() => {})
-			.mapResponse((context) => {
-				return new Response(context.response + '')
-			})
-			.get('/', async () => 'aru')
-
-		const response = await app.handle(req('/')).then((x) => x.text())
-
-		expect(response).toBe('aru')
-	})
-
 	it('mapResponse with after handle using responseValue', async () => {
 		const app = new Elysia()
-			.onAfterHandle(() => {})
+			.afterHandle(() => {})
 			.mapResponse((context) => {
 				return new Response(context.responseValue + '')
 			})
@@ -321,7 +253,7 @@ describe('Map Response', () => {
 
 	it('mapResponse with onError', async () => {
 		const app = new Elysia()
-			.onError(() => {})
+			.error(() => {})
 			.mapResponse(() => {})
 			.get('/', () => 'ok')
 

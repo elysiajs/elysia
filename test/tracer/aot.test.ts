@@ -3,13 +3,6 @@ import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
 
 describe('Trace AoT', async () => {
-	// it('inject request report', async () => {
-	// 	const app = new Elysia().trace(async () => {}).get('/', () => '')
-
-	// 	expect(app.compile().fetch.toString()).toInclude(
-	// 		`reporter.emit('event',{id,event:'request'`
-	// 	)
-	// })
 
 	it('try-catch edge case', async () => {
 		class Controller {
@@ -36,15 +29,6 @@ describe('Trace AoT', async () => {
 
 		expect(await response.text()).toEqual('yay')
 	})
-
-	// ! Fix me: uncomment when 1.0.0 is released
-	// it('inject response report', async () => {
-	// 	const app = new Elysia().trace(async () => {}).get('/', () => '')
-
-	// 	expect(app.router.history[0].composed?.toString()).toInclude(
-	// 		`reporter.emit('event',{id,event:'response'`
-	// 	)
-	// })
 
 	it('handle scope', async () => {
 		let called = 0

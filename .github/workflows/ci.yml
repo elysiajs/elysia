@@ -27,6 +27,9 @@ jobs:
             - name: Test
               run: bun run test
 
+            - name: Type-check
+              run: bun run test:types
+
             - name: Test
               run: bun run test:cf
 

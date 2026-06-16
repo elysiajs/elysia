@@ -522,19 +522,6 @@ describe('Query Validator', () => {
 		})
 	})
 
-	// People don't expect this
-	// @see: https://x.com/saltyAom/status/1813236251321069918
-	// it('parse query array without schema', async () => {
-	// 	let value: string[] | undefined
-
-	// 	const response = await new Elysia()
-	// 		.get('/', ({ query: { keys } }) => value = keys)
-	// 		.handle(new Request(`http://localhost/?id=1&id=2`))
-	// 		.then((res) => res.json())
-
-	// 	expect(value).toEqual(['1', '2'])
-	// })
-
 	it("don't parse query object without schema", async () => {
 		const app = new Elysia().get('/', ({ query: { role } }) => role)
 
@@ -951,7 +938,7 @@ describe('Query Validator', () => {
 			{
 				query: t.Object({
 					id: t
-						.Transform(t.UnionEnum(['test', 'foo']))
+						.Codec(t.UnionEnum(['test', 'foo']))
 						.Decode((id) => ({ value: id }))
 						.Encode((id) => id.value)
 				})
@@ -995,11 +982,9 @@ describe('Query Validator', () => {
 			query: t.Object({
 				year: t.Numeric({ minimum: 1900, maximum: 2160 })
 			}),
-			error({ code, error }) {
-				switch (code) {
-					case 'VALIDATION':
-						err = error
-				}
+			error({ error }) {
+				// `code` was removed this version; dispatch via instanceof.
+				if (error instanceof ValidationError) err = error
 			}
 		})
 
@@ -1012,7 +997,7 @@ describe('Query Validator', () => {
 		const app = new Elysia()
 			.model({
 				ids: t.Object({
-					ids: t.Array(t.Union([t.String(), t.ArrayString()]))
+					ids: t.Array(t.Union([t.String(), t.ArrayString(t.String())]))
 				})
 			})
 			.get('/', ({ query }) => query, {
@@ -1129,7 +1114,7 @@ describe('Query Validator', () => {
 
 	// Union schema tests
 	it('handle query array in Union schema', async () => {
-		const app = new Elysia({ aot: false }).get('/', ({ query }) => query, {
+		const app = new Elysia().get('/', ({ query }) => query, {
 			query: t.Union([
 				t.Object({
 					ids: t.Array(t.String())
@@ -1140,15 +1125,15 @@ describe('Query Validator', () => {
 			])
 		})
 
-		const response = await app
+		const response = (await app
 			.handle(req('/?ids=1&ids=2'))
-			.then((x) => x.json())
+			.then((x) => x.json())) as { ids: string[] }
 
 		expect(response.ids).toEqual(['1', '2'])
 	})
 
 	it('handle numeric coercion in Union schema', async () => {
-		const app = new Elysia({ aot: false }).get('/', ({ query }) => query, {
+		const app = new Elysia().get('/', ({ query }) => query, {
 			query: t.Union([
 				t.Object({
 					page: t.Numeric()
@@ -1161,7 +1146,7 @@ describe('Query Validator', () => {
 
 		const response = await app
 			.handle(req('/?page=5'))
-			.then((x) => x.json())
+			.then((x) => x.json() as Promise<{ page: number }>)
 
 		expect(response.page).toBe(5)
 	})

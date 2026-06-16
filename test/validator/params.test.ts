@@ -110,38 +110,39 @@ describe('Params Validator', () => {
 		})
 
 		const res = await app.handle(req('/id/617.1234'))
+		// New TypeBox (1.x) reports JSONSchema-style errors with
+		// `keyword` / `params` / `instancePath`. The shape below
+		// matches what `ValidationError.toResponseBody()` produces.
+		// `anyOf` branch order: [Number (Integer source), Refined
+		// String (codec source for IntegerString)].
 		expect(await res.json()).toMatchObject({
 			type: 'validation',
 			on: 'params',
-			summary: "Property 'id' should be one of: 'integer', 'integer'",
 			property: '/id',
-			message: 'Expected union value',
-			expected: {
-				id: 0
-			},
+			message: 'must be number',
 			found: {
 				id: '617.1234'
 			},
 			errors: [
 				{
-					type: 62,
-					schema: {
-						anyOf: [
-							{
-								format: 'integer',
-								default: 0,
-								type: 'string'
-							},
-							{
-								type: 'integer'
-							}
-						]
-					},
-					path: '/id',
-					value: '617.1234',
-					message: 'Expected union value',
-					summary:
-						"Property 'id' should be one of: 'integer', 'integer'"
+					keyword: 'type',
+					schemaPath: '#/properties/id/anyOf/0',
+					instancePath: '/id',
+					params: { type: 'number' },
+					message: 'must be number'
+				},
+				{
+					keyword: '~refine',
+					schemaPath: '#/properties/id/anyOf/1',
+					instancePath: '/id',
+					params: { index: 0, message: 'must be integer' },
+					message: 'must be integer'
+				},
+				{
+					keyword: 'anyOf',
+					schemaPath: '#/properties/id',
+					instancePath: '/id',
+					message: 'must match a schema in anyOf'
 				}
 			]
 		})
@@ -272,11 +273,9 @@ describe('Params Validator', () => {
 				params: t.Object({
 					year: t.Numeric({ minimum: 1900, maximum: 2160 })
 				}),
-				error({ code, error }) {
-					switch (code) {
-						case 'VALIDATION':
-							err = error
-					}
+				error({ error }) {
+					// `code` was removed this version; dispatch via instanceof.
+					if (error instanceof ValidationError) err = error
 				}
 			})
 			.listen(0)

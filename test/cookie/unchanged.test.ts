@@ -72,25 +72,6 @@ describe('Cookie - Unchanged Values', () => {
 		).toBeGreaterThan(0)
 	})
 
-	// Fine by using FNV-1a hash
-	// it('should send set-cookie header when setting same value', async () => {
-	// 	const app = new Elysia().get('/same', ({ cookie: { session } }) => {
-	// 		// Setting the same value that came from request
-	// 		session.value = 'existing'
-	// 		return 'ok'
-	// 	})
-
-	// 	const response = await app.handle(
-	// 		new Request('http://localhost/same', {
-	// 			headers: {
-	// 				cookie: 'session=existing'
-	// 			}
-	// 		})
-	// 	)
-
-	// 	expect(response.headers.getAll('set-cookie').length).toBeGreaterThan(0)
-	// })
-
 	it('should send set-cookie header when value actually changes', async () => {
 		const app = new Elysia().get('/change', ({ cookie: { session } }) => {
 			session.value = 'new-value'
@@ -188,27 +169,71 @@ describe('Cookie - Unchanged Values', () => {
 	})
 
 	it('should invalidate hash cache when using update() method', async () => {
-		const app = new Elysia().post('/cache-invalidation', ({ cookie: { data } }) => {
-			// Set initial value
-			data.value = { id: 1, name: 'first' }
+		const app = new Elysia().post(
+			'/cache-invalidation',
+			({ cookie: { data } }) => {
+				// Set initial value
+				data.value = { id: 1, name: 'first' }
 
-			// Modify via update() - should invalidate cache
-			data.update({ value: { id: 2, name: 'second' } })
+				// Modify via update() - should invalidate cache
+				data.update({ value: { id: 2, name: 'second' } })
 
-			// Set to the updated value again - should detect as unchanged
-			data.value = { id: 2, name: 'second' }
+				// Set to the updated value again - should detect as unchanged
+				data.value = { id: 2, name: 'second' }
 
-			return 'ok'
-		})
+				return 'ok'
+			}
+		)
 
 		const res = await app.handle(
-			new Request('http://localhost/cache-invalidation', { method: 'POST' })
+			new Request('http://localhost/cache-invalidation', {
+				method: 'POST'
+			})
 		)
 
 		// Should only have one Set-Cookie header (for final value)
 		const setCookieHeaders = res.headers.getAll('set-cookie')
 		expect(setCookieHeaders.length).toBe(1)
 		expect(setCookieHeaders[0]).toContain('id')
+	})
+
+	// Regression (perf audit F2 + F22): object change detection compares
+	// serialized values directly (the fnv1a #hash cache is gone) and Cookie
+	// instances are memoized per jar — an equal-but-not-identical object
+	// written through SEPARATE jar accesses must still suppress the
+	// duplicate write
+	it('should optimize multiple assignments via separate jar accesses', async () => {
+		const app = new Elysia().post('/multi-access', ({ cookie }) => {
+			cookie.data.value = { id: 123, name: 'test' }
+			cookie.data.value = { id: 123, name: 'test' }
+
+			return 'ok'
+		})
+
+		const res = await app.handle(
+			new Request('http://localhost/multi-access', { method: 'POST' })
+		)
+
+		expect(res.headers.getAll('set-cookie').length).toBe(1)
+	})
+
+	// Regression (perf audit F22): dropping the hash shortcut must not break
+	// ACTUAL changes — a second write with a different object must win
+	it('should send the latest value when object value changes across writes', async () => {
+		const app = new Elysia().post('/rewrite', ({ cookie: { data } }) => {
+			data.value = { id: 1 }
+			data.value = { id: 2 }
+
+			return 'ok'
+		})
+
+		const res = await app.handle(
+			new Request('http://localhost/rewrite', { method: 'POST' })
+		)
+
+		const headers = res.headers.getAll('set-cookie')
+		expect(headers.length).toBe(1)
+		expect(decodeURIComponent(headers[0])).toContain('{"id":2}')
 	})
 
 	it('should invalidate hash cache when using set() method', async () => {

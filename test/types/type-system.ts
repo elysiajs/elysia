@@ -48,6 +48,26 @@ import { expectTypeOf } from 'expect-type'
 		)
 }
 
+// ? Form as a REQUEST body decodes to the plain field object (not the
+// ElysiaFormData wrapper used for responses) — the decode/encode split.
+{
+	new Elysia().post(
+		'/',
+		({ body }) => {
+			expectTypeOf<typeof body.name>().toEqualTypeOf<string>()
+			expectTypeOf<typeof body.file>().toEqualTypeOf<File>()
+			expectTypeOf<typeof body.files>().toEqualTypeOf<File[]>()
+		},
+		{
+			body: t.Form({
+				name: t.String(),
+				file: t.File(),
+				files: t.Files()
+			})
+		}
+	)
+}
+
 // Files
 {
 	new Elysia().get(
@@ -77,7 +97,7 @@ import { expectTypeOf } from 'expect-type'
 	new Elysia().get('', async ({ query: { foo } }) => addTwo(foo), {
 		query: t.Object({
 			foo: t
-				.Transform(t.String())
+				.Codec(t.String())
 				.Decode((x) => 12)
 				.Encode((x) => x.toString())
 		})

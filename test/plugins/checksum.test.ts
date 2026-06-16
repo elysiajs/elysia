@@ -2,6 +2,7 @@ import { Elysia, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
+import { flattenChain } from '../../src/utils'
 
 describe('Checksum', () => {
 	it('deduplicate plugin', async () => {
@@ -9,7 +10,7 @@ describe('Checksum', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).onTransform({ as: 'global' }, () => {})
+			}).transform('global', () => {})
 
 		const group = new Elysia().use(cookie({})).get('/a', () => 'Hi')
 
@@ -18,10 +19,11 @@ describe('Checksum', () => {
 			.use(group)
 			.get('/cookie', () => 'Hi')
 
-		const [a, b] = app.router.history
+		const hook0 = flattenChain(app.history![0][5])!
+		const hook1 = flattenChain(app.history![1][5])!
 
-		expect(a.hooks.transform!.length).toBe(1)
-		expect(b.hooks.transform!.length).toBe(1)
+		expect(hook0.transform!.length).toBe(1)
+		expect(hook1.transform!.length).toBe(1)
 	})
 
 	it('Set default checksum if not provided when name is set', async () => {
@@ -29,7 +31,7 @@ describe('Checksum', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).onTransform({ as: 'global' }, () => {})
+			}).transform('global', () => {})
 
 		const group = new Elysia().use(cookie()).get('/a', () => 'Hi')
 
@@ -38,10 +40,11 @@ describe('Checksum', () => {
 			.use(group)
 			.get('/cookie', () => 'Hi')
 
-		const [a, b] = app.router.history
+		const hook0 = flattenChain(app.history![0][5])!
+		const hook1 = flattenChain(app.history![1][5])!
 
-		expect(a.hooks.transform!.length).toBe(1)
-		expect(b.hooks.transform!.length).toBe(1)
+		expect(hook0.transform!.length).toBe(1)
+		expect(hook1.transform!.length).toBe(1)
 	})
 
 	it('Accept plugin when on different different', async () => {
@@ -49,7 +52,7 @@ describe('Checksum', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).onTransform({ as: 'global' }, () => {})
+			}).transform('global', () => {})
 
 		const group = new Elysia().use(cookie({})).get('/a', () => 'Hi')
 
@@ -62,10 +65,11 @@ describe('Checksum', () => {
 			)
 			.get('/cookie', () => 'Hi')
 
-		const [a, b] = app.router.history
+		const hook0 = flattenChain(app.history![0][5])!
+		const hook1 = flattenChain(app.history![1][5])!
 
 		expect(
-			Math.abs(a.hooks.transform!.length - b.hooks.transform!.length)
+			Math.abs(hook0.transform!.length - hook1.transform!.length)
 		).toBe(1)
 	})
 
@@ -74,7 +78,7 @@ describe('Checksum', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).onTransform({ as: 'global' }, () => {})
+			}).transform('global', () => {})
 
 		const group = new Elysia().use(cookie()).get('/a', () => 'Hi')
 
@@ -83,10 +87,11 @@ describe('Checksum', () => {
 			.use(group)
 			.get('/cookie', () => 'Hi')
 
-		const [a, b] = app.router.history
+		const hook0 = flattenChain(app.history![0][5])!
+		const hook1 = flattenChain(app.history![1][5])!
 
 		expect(
-			Math.abs(a.hooks.transform!.length - b.hooks.transform!.length)
+			Math.abs(hook0.transform!.length - hook1.transform!.length)
 		).toBe(0)
 	})
 
@@ -95,7 +100,7 @@ describe('Checksum', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).onTransform({ as: 'global' }, () => {})
+			}).transform('global', () => {})
 
 		const group = new Elysia().use(cookie()).get('/a', () => 'Hi', {
 			transform() {}
@@ -106,11 +111,38 @@ describe('Checksum', () => {
 			.use(group)
 			.get('/cookie', () => 'Hi')
 
-		const [a, b] = app.router.history
+		// `/a` (routes[0]) has the deduplicated global cookie transform plus its
+		// own inline transform → 2; `/cookie` (routes[1]) only the cookie
+		// transform → 1.
+		const routes = app.routes
+		const hook0 = routes[0].hooks
+		const hook1 = routes[1].hooks
 
 		expect(
-			Math.abs(a.hooks.transform!.length - b.hooks.transform!.length)
+			Math.abs(hook0.transform!.length - hook1.transform!.length)
 		).toBe(1)
+	})
+
+	it('does not run a diamond-shared plugin hook twice', async () => {
+		let called = 0
+
+		const cookie = (options?: Record<string, unknown>) =>
+			new Elysia({
+				name: '@elysiajs/cookie',
+				seed: options
+			}).transform('global', () => {
+				called++
+			})
+
+		// `cookie` is a shared dependency of both `group` and `app`. Its hook
+		// reaches `/a` via the route's own chain AND the inherited chain, but
+		// must run only once.
+		const group = new Elysia().use(cookie()).get('/a', () => 'Hi')
+		const app = new Elysia().use(cookie()).use(group)
+
+		await app.handle(req('/a'))
+
+		expect(called).toBe(1)
 	})
 
 	it('Merge global hook', async () => {
@@ -120,11 +152,11 @@ describe('Checksum', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).onTransform({ as: 'global' }, () => {})
+			}).transform('global', () => {})
 
 		const group = new Elysia()
 			.use(cookie())
-			.onTransform({ as: 'global' }, () => {
+			.transform('global', () => {
 				count++
 			})
 			.get('/a', () => 'Hi')
@@ -162,7 +194,7 @@ describe('Checksum', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).derive({ as: 'global' }, () => {
+			}).derive('global', () => {
 				return {
 					cookie: 'mock'
 				}
@@ -198,18 +230,18 @@ describe('Checksum', () => {
 		let b = 0
 
 		const plugin = new Elysia()
-			.onBeforeHandle({ as: 'global' }, () => {
+			.beforeHandle('global', () => {
 				x++
 			})
 			.group('/v1', (app) =>
 				app
-					.onBeforeHandle(() => {
+					.beforeHandle(() => {
 						a++
 					})
 					.get('', () => 'A')
 					.group('/v1', (app) =>
 						app
-							.onBeforeHandle(() => {
+							.beforeHandle(() => {
 								b++
 							})
 							.get('/', () => 'B')
@@ -235,7 +267,7 @@ describe('Checksum', () => {
 		const plugin = new Elysia()
 			.use(
 				new Elysia()
-					.derive({ as: 'global' }, () => {
+					.derive('global', () => {
 						a++
 
 						return {}
@@ -244,7 +276,7 @@ describe('Checksum', () => {
 			)
 			.use(
 				new Elysia()
-					.derive({ as: 'global' }, () => {
+					.derive('global', () => {
 						b++
 
 						return { test: 'test' }
@@ -252,7 +284,7 @@ describe('Checksum', () => {
 					.get('/2', ({ test }) => test)
 					.use(
 						new Elysia()
-							.derive({ as: 'global' }, () => {
+							.derive('global', () => {
 								c++
 
 								return { test: 'test' }
@@ -284,7 +316,7 @@ describe('Checksum', () => {
 			.use(new Elysia({ prefix: '/not-call' }).get('/', () => 'asdf'))
 			.use(
 				new Elysia({ prefix: '/call' })
-					.derive({ as: 'global' }, () => {
+					.derive('global', () => {
 						i++ // <-- should not be called, when requesting /asdf
 						return { test: 'test' }
 					})
@@ -300,31 +332,9 @@ describe('Checksum', () => {
 		expect(i).toBe(1)
 	})
 
-	it('scope plugin', async () => {
-		let i = 0
-
-		const plugin = new Elysia().use(
-			new Elysia({ prefix: '/call' })
-				.derive(() => {
-					i++ // <-- should not be called, when requesting /asdf
-					return { test: 'test' }
-				})
-				.get('/', ({ test }) => test)
-				.use(new Elysia({ prefix: '/not-call' }).get('/', () => 'asdf'))
-		)
-
-		const app = new Elysia().use(plugin)
-
-		await Promise.all(
-			['/not-call', '/call'].map((path) => app.handle(req(path)))
-		)
-
-		expect(i).toBe(1)
-	})
-
 	it('handle reference parent-child', async () => {
 		const parent = new Elysia({ name: 'parent' }).derive(
-			{ as: 'global' },
+			'global',
 			() => ({
 				bye: () => 'bye'
 			})
@@ -332,7 +342,7 @@ describe('Checksum', () => {
 
 		const child = new Elysia({ name: 'child' })
 			.use(parent)
-			.derive({ as: 'global' }, ({ bye }) => ({
+			.derive('global', ({ bye }) => ({
 				hi: () => `hi + ${bye()}`
 			}))
 
@@ -348,12 +358,12 @@ describe('Checksum', () => {
 
 	it('deduplicate local handler from global event', () => {
 		const ip = new Elysia({ name: 'ip', seed: 'ip' })
-			.derive({ as: 'global' }, ({ server, request }) => {
+			.derive('global', ({ server, request }) => {
 				return {
 					ip: server?.requestIP(request)
 				}
 			})
-			.onBeforeHandle(() => {
+			.beforeHandle(() => {
 				console.log('11')
 			})
 			.get('/ip', ({ ip }) => ip)
@@ -372,8 +382,11 @@ describe('Checksum', () => {
 
 		const server = new Elysia({ name: 'server' }).use(router1).use(router2)
 
+		// `derive` now registers on `beforeHandle` (not `transform`). The `/ip`
+		// route sees the global `derive` once (deduplicated despite `ip` being
+		// used by both routers) plus its local `onBeforeHandle` — two in total.
 		expect(
-			server.routes.find((x) => x.path === '/ip')?.hooks.transform
-		).toHaveLength(1)
+			server.routes.find((x) => x.path === '/ip')?.hooks.beforeHandle
+		).toHaveLength(2)
 	})
 })

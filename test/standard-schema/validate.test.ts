@@ -89,7 +89,7 @@ describe('Standard Schema Validate', () => {
 	it('validate single response', async () => {
 		const app = new Elysia().get(
 			'/:name',
-			// @ts-expect-error
+			// @ts-expect-error deliberately returns an invalid response to assert 422
 			({ params: { name } }) => (name === 'lilith' ? undefined : true),
 			{
 				response: z.boolean()
@@ -241,7 +241,7 @@ describe('Standard Schema Validate', () => {
 
 	it('merge plugin', async () => {
 		const plugin = new Elysia().guard({
-			as: 'scoped',
+			as: 'plugin',
 			body: z.object({
 				id: z.number()
 			}),

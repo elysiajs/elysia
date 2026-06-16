@@ -28,7 +28,7 @@
     /* Modules */
     "module": "ES2022",                                /* Specify what module code is generated. */
     // "rootDir": "./src",                                  /* Specify the root folder within your source files. */
-    "moduleResolution": "node",                       /* Specify how TypeScript looks up a file from a given module specifier. */
+    "moduleResolution": "bundler",                       /* Specify how TypeScript looks up a file from a given module specifier. */
     // "baseUrl": "./src",                                  /* Specify the base directory to resolve non-relative module names. */
     // "paths": {},                                      /* Specify a set of entries that re-map imports to additional lookup locations. */
     // "rootDirs": [],                                   /* Allow multiple folders to be treated as one when resolving modules. */
@@ -102,5 +102,9 @@
     "skipLibCheck": true,                                 /* Skip type checking all .d.ts files. */
   },
   "exclude": ["node_modules", "test/cloudflare/**/*"],
-  "include": ["test/types/**/*"]
+  // C2d complete: the ratchet covers the ENTIRE test suite (runtime tests
+  // included), not just `test/types`. `src` is pulled in transitively.
+  // `test/cloudflare` stays out — it is its own wrangler project importing
+  // generated `.mjs` artifacts and typechecks via `cf-typegen`.
+  "include": ["test/**/*"]
 }
