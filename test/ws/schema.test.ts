@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test'
-import { Elysia, t } from '../../src'
+import { Elysia, t, ValidationError } from '../../src'
 import { newWebsocket, wsOpen, wsClosed, wsMessage } from './utils'
 
 describe('WebSocket non-body schemas', () => {
@@ -135,12 +135,12 @@ describe('WebSocket non-body schemas', () => {
 	})
 
 	it('upgrade-time validation errors route through `.error()`', async () => {
-		let seenCode: string | undefined
+		let seenIsValidation = false
 		let seenOn: string | undefined
 
 		const app = new Elysia()
-			.error(({ error, code }: any) => {
-				seenCode = code
+			.error(({ error }: any) => {
+				seenIsValidation = error instanceof ValidationError
 				seenOn = (error as any)?.type
 				return new Response('caught:' + (error as any)?.type, {
 					status: 418
@@ -168,7 +168,7 @@ describe('WebSocket non-body schemas', () => {
 
 		expect(response.status).toBe(418)
 		expect(await response.text()).toBe('caught:query')
-		expect(seenCode).toBe('VALIDATION')
+		expect(seenIsValidation).toBe(true)
 		expect(seenOn).toBe('query')
 
 		app.stop()

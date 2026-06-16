@@ -123,7 +123,8 @@ export function createRouteMap(app: AnyElysia) {
 	const handleError = createErrorHandler(
 		flattenChain(app['~hookChain'])?.error,
 		WebStandardAdapter.response.map,
-		new Response('Not Found', { status: 404 })
+		new Response('Not Found', { status: 404 }),
+		app['~config']?.allowUnsafeValidationDetails
 	)
 
 	const routes = nullObject()

@@ -16,7 +16,7 @@ import {
 	signCookieValues
 } from '../../cookie/utils'
 
-import { ElysiaStatus, ParseError } from '../../error'
+import { ElysiaStatus, ParseError, ValidationError } from '../../error'
 import { isDynamicRegex } from '../../constants'
 import { forwardError } from '../../handler/utils'
 import { hasHeaderShorthand } from '../../universal/constants'
@@ -1175,8 +1175,17 @@ export function compileHandler(
 		if (hasErrorHook) {
 			link(hook!.error!, 'er')
 			link(ElysiaStatus, 'es')
+
+			const allowUnsafeDetail =
+				!!root['~config']?.allowUnsafeValidationDetails
+
+			if (allowUnsafeDetail) link(ValidationError, 'verr')
+
 			body +=
 				`c.error=e\n` +
+				(allowUnsafeDetail
+					? `if(e instanceof verr)e.allowUnsafeValidationDetails=true\n`
+					: ``) +
 				`if(e?.status)c.set.status=e.status\n` +
 				`else if(c.set.status===undefined||c.set.status===200)c.set.status=500\n` +
 				`let _r${hasMapResponse ? ',tmp' : ''}\n` +

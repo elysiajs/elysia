@@ -755,7 +755,6 @@ type InlineResponse =
 	| AnyElysiaStatus
 	| ElysiaFile
 	| Blob
-	| Record<any, unknown>
 	| BunHTMLBundlelike
 	// forwarded to the error pipeline per request
 	| Error
@@ -873,6 +872,7 @@ export type InternalRoute = readonly [
 	inheritedChain?: ChainNode
 ]
 
+// TODO: work in progress, do not touch
 export type ErrorHandler<
 	T extends ErrorDefinition[] = [],
 	in out Route extends RouteSchema = {},
@@ -2013,7 +2013,6 @@ export type ComposeElysiaResponse<
 						422: {
 							type: 'validation'
 							on: string
-							summary?: string
 							message?: string
 							found?: unknown
 							property?: string

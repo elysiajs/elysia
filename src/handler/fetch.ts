@@ -158,7 +158,12 @@ export function createFetchHandler(
 					(context as { request?: Request } | undefined)?.request
 				)
 
-	const handleError = createErrorHandler(hook?.error, mapResponse as any)
+	const handleError = createErrorHandler(
+		hook?.error,
+		mapResponse as any,
+		undefined,
+		app['~config']?.allowUnsafeValidationDetails
+	)
 
 	const traceHandlers = hook?.trace as
 		| ((context: any) => unknown)[]

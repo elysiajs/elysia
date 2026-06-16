@@ -189,11 +189,6 @@ export type ElysiaTypeCustomErrorCallback = (
 		 */
 		value: unknown
 		/**
-		 * Human readable summary of the error
-		 * (omitted on production)
-		 */
-		summary?: string
-		/**
 		 * Property that caused the error
 		 * (omitted on production)
 		 */

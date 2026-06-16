@@ -672,7 +672,7 @@ describe('Standard Schema single-pass validation', () => {
 		} catch (error) {
 			const all = (error as ValidationError).all
 			expect(all.length).toBe(1)
-			expect(all[0].summary).toInclude('constant')
+			expect(all[0].message).toInclude('constant')
 		}
 	})
 

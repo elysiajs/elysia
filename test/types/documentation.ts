@@ -14,7 +14,7 @@ import { Elysia, t, ValidationError } from '../../src'
 
 				// Find a specific error name (path is OpenAPI Schema compliance)
 				const name = error.all.find(
-					(x) => x.summary && 'path' in x && x.path === '/name'
+					(x) => x.message && 'path' in x && x.path === '/name'
 				)
 
 				// If there is a validation error, then log it

@@ -312,7 +312,6 @@ import { Prettify } from '../../../src/types'
 		422: {
 			type: 'validation'
 			on: string
-			summary?: string
 			message?: string
 			found?: unknown
 			property?: string
@@ -369,7 +368,6 @@ import { Prettify } from '../../../src/types'
 		422: {
 			type: 'validation'
 			on: string
-			summary?: string
 			message?: string
 			found?: unknown
 			property?: string
@@ -453,7 +451,6 @@ import { Prettify } from '../../../src/types'
 		422: {
 			type: 'validation'
 			on: string
-			summary?: string
 			message?: string
 			found?: unknown
 			property?: string
@@ -534,7 +531,6 @@ import { Prettify } from '../../../src/types'
 		422: {
 			type: 'validation'
 			on: string
-			summary?: string
 			message?: string
 			found?: unknown
 			property?: string
@@ -1693,7 +1689,6 @@ import { Prettify } from '../../../src/types'
 			422: {
 				type: 'validation'
 				on: string
-				summary?: string
 				message?: string
 				found?: unknown
 				property?: string
@@ -1758,7 +1753,6 @@ import { Prettify } from '../../../src/types'
 			422: {
 				type: 'validation'
 				on: string
-				summary?: string
 				message?: string
 				found?: unknown
 				property?: string
@@ -1933,7 +1927,6 @@ import { Prettify } from '../../../src/types'
 		422: {
 			type: 'validation'
 			on: string
-			summary?: string
 			message?: string
 			found?: unknown
 			property?: string
@@ -1996,7 +1989,6 @@ import { Prettify } from '../../../src/types'
 		422: {
 			type: 'validation'
 			on: string
-			summary?: string
 			message?: string
 			found?: unknown
 			property?: string

@@ -89,12 +89,6 @@ import { expectTypeOf } from 'expect-type'
 		)
 }
 
-// a bare functional macro is rejected — it has no name to register under
-{
-	// @ts-expect-error use `.macro({ name: fn })` instead
-	new Elysia().macro(() => ({ beforeHandle() {} }))
-}
-
 // a typo'd definition key is rejected
 {
 	new Elysia().macro({

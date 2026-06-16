@@ -660,7 +660,6 @@ app.use(plugin).group(
 			422: {
 				type: 'validation'
 				on: string
-				summary?: string
 				message?: string
 				found?: unknown
 				property?: string
@@ -740,7 +739,6 @@ app.use(plugin).group(
 			422: {
 				type: 'validation'
 				on: string
-				summary?: string
 				message?: string
 				found?: unknown
 				property?: string
@@ -1302,7 +1300,6 @@ const a = app
 		422: {
 			type: 'validation'
 			on: string
-			summary?: string
 			message?: string
 			found?: unknown
 			property?: string
@@ -1320,7 +1317,6 @@ const a = app
 		422: {
 			type: 'validation'
 			on: string
-			summary?: string
 			message?: string
 			found?: unknown
 			property?: string

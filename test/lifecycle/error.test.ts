@@ -67,7 +67,7 @@ describe('Error lifecycle', () => {
 					set.status = 400
 
 					return error.all.map((i) =>
-						i.summary
+						i.message
 							? {
 									filed: i.path.slice(1) || 'root',
 									reason: i.message
@@ -587,7 +587,6 @@ describe('Error lifecycle', () => {
 						errors: errors.map((e: any) => ({
 							path: e.path,
 							message: e.message,
-							summary: e.summary
 						}))
 					}
 				}
@@ -617,7 +616,6 @@ describe('Error lifecycle', () => {
 		for (const error of data.errors) {
 			expect(error).toHaveProperty('path')
 			expect(error).toHaveProperty('message')
-			expect(error).toHaveProperty('summary')
 		}
 
 		expect(res.status).toBe(422)
@@ -681,7 +679,6 @@ describe('Lazy validation error enumeration', () => {
 			{
 				instancePath: '/x',
 				message: 'must be number',
-				summary: 'must be number'
 			}
 		]
 		let calls = 0

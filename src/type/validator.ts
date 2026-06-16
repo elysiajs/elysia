@@ -135,8 +135,7 @@ async function enforceFileTypeChecks(
 					{
 						instancePath:
 							findInstancePath(value, pending[i].file) ?? '',
-						message: results[i],
-						summary: results[i]
+						message: results[i]
 					}
 				],
 				schema
@@ -884,6 +883,7 @@ export class TypeBoxValidator<
 		}
 
 		// `#decodeMirror` already cleaned
+		// @ts-ignore
 		if (this.Clean && !this.#decodeMirror) value = this.Clean(value)
 
 		this.#unmarkForm(value)

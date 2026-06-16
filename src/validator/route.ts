@@ -52,7 +52,7 @@ function pickStandalone<K extends keyof RouteSchema>(
 	return result
 }
 
-const coerceFile = (schema) =>
+const coerceFile = (schema: AnySchema) =>
 	hasTypes([ELYSIA_TYPES.File, ELYSIA_TYPES.Files], schema)
 		? coerceFormData()
 		: coerceBody()

@@ -169,7 +169,11 @@ export function buildWSRoute(
 		error: any
 	): Promise<Response> {
 		;(context as any).error = error
-		;(context as any).code = error?.code ?? 'UNKNOWN'
+		if (
+			app['~config']?.allowUnsafeValidationDetails &&
+			error instanceof ValidationError
+		)
+			error.allowUnsafeValidationDetails = true
 		if (error?.status) (context.set as any).status = error.status
 
 		for (let i = 0; i < errorHandlers.length; i++) {
@@ -208,7 +212,11 @@ export function buildWSRoute(
 	async function handleError(ws: ElysiaWS<any>, error: unknown) {
 		const errCtx: any = Object.create(ws as any)
 		errCtx.error = error
-		errCtx.code = (error as any)?.code ?? 'UNKNOWN'
+		if (
+			app['~config']?.allowUnsafeValidationDetails &&
+			error instanceof ValidationError
+		)
+			error.allowUnsafeValidationDetails = true
 
 		for (let i = 0; i < errorHandlers.length; i++) {
 			let r: unknown = errorHandlers[i](errCtx)

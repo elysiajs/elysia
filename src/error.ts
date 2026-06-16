@@ -2,12 +2,20 @@ import { Default } from './type/bridge'
 
 import { StatusMap, StatusMapBack } from './constants'
 import { nullObject } from './utils'
+import { env } from './universal/env'
+
+/**
+ * Whether the runtime is in production, evaluated once at module load.
+ *
+ * Gates schema-revealing validation detail in `ValidationError` (omitted in
+ * production unless `allowUnsafeValidationDetails` is set).
+ */
+export const isProduction = (env.NODE_ENV ?? env.ENV) === 'production'
 
 export class ElysiaError<
 	Status extends number = number,
 	Response extends string = string
 > extends Error {
-	code?: string
 	status?: Status
 	response?: Response
 
@@ -30,7 +38,6 @@ export const validationDetail =
 	}
 
 export class InternalServerError extends ElysiaError {
-	code = 'INTERNAL_SERVER_ERROR'
 	status = 500 as const
 
 	constructor(
@@ -42,7 +49,6 @@ export class InternalServerError extends ElysiaError {
 }
 
 export class NotFound extends ElysiaError {
-	code = 'NOT_FOUND'
 	status = 404 as const
 
 	constructor(public response = 'Not Found') {
@@ -51,7 +57,6 @@ export class NotFound extends ElysiaError {
 }
 
 export class ParseError extends ElysiaError {
-	code = 'PARSE'
 	status = 400 as const
 	response = 'Bad Request'
 
@@ -185,12 +190,13 @@ const scopeFound = (value: unknown, first: any): unknown => {
 }
 
 export class ValidationError extends ElysiaError {
-	code = 'VALIDATION'
 	status = 422 as const
 
 	customError?: unknown
 	schema?: unknown
 	declare errors: any[]
+
+	allowUnsafeValidationDetails = false
 
 	constructor(
 		public type: string | undefined,
@@ -198,49 +204,19 @@ export class ValidationError extends ElysiaError {
 		errors: any[] | (() => any[]),
 		schema?: unknown
 	) {
-		const lazy = typeof errors === 'function' ? errors : undefined
+		// Always resolve lazily. The real request flow already passes a thunk;
+		// unifying the eager (array) path onto the lazy machinery means the
+		// production gate (`allowUnsafeValidationDetails`, set on the instance by
+		// the error pipeline AFTER construction) is in effect by the time
+		// `errors`/`customError`/`message` are first read.
+		const thunk: () => any[] =
+			typeof errors === 'function'
+				? (errors as () => any[])
+				: () => errors as any[]
 
-		let customError: unknown
-
-		if (!lazy) {
-			const sub: any = walkSubSchema(
-				schema,
-				(errors as any[])?.[0]?.instancePath
-			)
-
-			if (sub?.error !== undefined) {
-				customError =
-					typeof sub.error === 'function'
-						? sub.error({
-								type: 'validation',
-								on: type,
-								value,
-								errors
-							})
-						: sub.error
-			}
-		}
-
-		super(
-			lazy
-				? `Validation error on ${type ?? 'unknown'}`
-				: customError !== undefined
-					? typeof customError === 'string'
-						? customError
-						: JSON.stringify(customError)
-					: (errors as any[])?.[0]?.message
-						? (errors as any[])[0].message
-						: `Validation error on ${type ?? 'unknown'}`
-		)
+		super(`Validation error on ${type ?? 'unknown'}`)
 
 		this.schema = schema
-
-		if (!lazy) {
-			this.errors = errors as any[]
-			this.customError = customError
-
-			return
-		}
 
 		let resolved: any[] | undefined
 		let custom: unknown
@@ -249,19 +225,28 @@ export class ValidationError extends ElysiaError {
 		const resolve = () => {
 			if (resolved !== undefined) return
 
-			resolved = lazy() ?? []
+			resolved = thunk() ?? []
 
 			const sub: any = walkSubSchema(schema, resolved[0]?.instancePath)
 
 			if (sub?.error !== undefined)
 				custom =
 					typeof sub.error === 'function'
-						? sub.error({
-								type: 'validation',
-								on: type,
-								value,
-								errors: resolved
-							})
+						? sub.error(
+								isProduction &&
+									!this.allowUnsafeValidationDetails
+									? {
+											type: 'validation',
+											on: type,
+											found: scopeFound(value, resolved[0])
+										}
+									: {
+											type: 'validation',
+											on: type,
+											value,
+											errors: resolved
+										}
+							)
 						: sub.error
 
 			message =
@@ -340,7 +325,6 @@ export class ValidationError extends ElysiaError {
 		return {
 			path,
 			message: e.message ?? '',
-			summary: e.summary ?? e.problem ?? e.message ?? '',
 			schemaPath: e.schemaPath,
 			params: e.params,
 			value: this.value
@@ -348,6 +332,14 @@ export class ValidationError extends ElysiaError {
 	}
 
 	detail(message: unknown) {
+		if (isProduction && !this.allowUnsafeValidationDetails)
+			return {
+				type: 'validation',
+				on: this.type,
+				found: scopeFound(this.value, (this.errors ?? []).find(Boolean)),
+				message
+			}
+
 		return {
 			type: 'validation',
 			on: this.type,
@@ -358,15 +350,20 @@ export class ValidationError extends ElysiaError {
 
 	get payload() {
 		const first = (this.errors ?? []).find(Boolean) as any
+
+		if (isProduction && !this.allowUnsafeValidationDetails)
+			return {
+				type: 'validation',
+				on: this.type,
+				found: scopeFound(this.value, first)
+			}
+
 		const property = first
 			? propertyAccessor(first.instancePath ?? first.path)
 			: 'root'
 
 		const message = first?.message ?? this.message
-		const enrichedErrors = (this.errors ?? []).filter(Boolean).map((e) => ({
-			...e,
-			summary: e.summary ?? e.message ?? ''
-		}))
+		const errors = (this.errors ?? []).filter(Boolean)
 
 		let expected: unknown
 		const schemaForExpected = first?.schema ?? this.schema
@@ -381,10 +378,9 @@ export class ValidationError extends ElysiaError {
 			on: this.type,
 			property,
 			message,
-			summary: message,
 			expected,
 			found: scopeFound(this.value, first),
-			errors: enrichedErrors
+			errors
 		}
 	}
 
@@ -420,7 +416,6 @@ export class ValidationError extends ElysiaError {
 }
 
 export class InvalidCookieSignature extends ElysiaError {
-	code = 'INVALID_COOKIE_SIGNATURE'
 	status = 400 as const
 
 	constructor(

@@ -1,5 +1,6 @@
 import { getAsyncIndexes, cachedResponse } from './utils'
 import { parseQueryFromURL } from '../parse-query'
+import { ValidationError } from '../error'
 
 import type { Context } from '../context'
 import type { AppHook } from '../types'
@@ -97,12 +98,15 @@ export function createErrorHandler(
 		set: Context['set'],
 		...any: unknown[]
 	) => unknown,
-	defaultError?: Response
+	defaultError?: Response,
+	allowUnsafe = false
 ) {
 	if (!onErrors)
 		return (context: Context, error: Error) => {
 			// @ts-expect-error
 			context.error = error
+			if (allowUnsafe && error instanceof ValidationError)
+				error.allowUnsafeValidationDetails = true
 			applyErrorStatus(context, error)
 
 			parseQuery(context)
@@ -114,6 +118,8 @@ export function createErrorHandler(
 		return async (context: Context, error: Error) => {
 			// @ts-expect-error
 			context.error = error
+			if (allowUnsafe && error instanceof ValidationError)
+				error.allowUnsafeValidationDetails = true
 			applyErrorStatus(context, error)
 
 			parseQuery(context)
@@ -142,6 +148,8 @@ export function createErrorHandler(
 	return (context: Context, error: Error) => {
 		// @ts-expect-error
 		context.error = error
+		if (allowUnsafe && error instanceof ValidationError)
+			error.allowUnsafeValidationDetails = true
 		applyErrorStatus(context, error)
 
 		parseQuery(context)

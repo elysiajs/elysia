@@ -4111,12 +4111,9 @@ export class Elysia<
 
 	macro(macro: Macro) {
 		// `.macro(fn)` has no name to register under, and TS can't reject it
-		// (a function is structurally assignable to the open `Macro` record),
-		// so it would silently no-op — guard it loudly. The `.macro(name, def)`
-		// form is already a compile-time error, so it needs no runtime guard.
 		if (typeof macro === 'function')
 			throw new Error(
-				'A functional macro must be named — use `.macro({ name: fn })` instead of `.macro(fn)`'
+				'Use `.macro({ name: fn })` instead of `.macro(fn)`'
 			)
 
 		const ext = this.#ext

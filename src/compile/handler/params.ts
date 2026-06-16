@@ -1,4 +1,4 @@
-import { ElysiaStatus, ParseError } from '../../error'
+import { ElysiaStatus, ParseError, ValidationError } from '../../error'
 import { parseQueryFromURL } from '../../parse-query'
 import {
 	parseCookieRaw,
@@ -45,6 +45,8 @@ export const HANDLER_PARAMS: Record<string, Resolver> = {
 	pq: () => parseQueryFromURL,
 	pe: () => ParseError,
 	es: () => ElysiaStatus,
+	// allowUnsafeValidationDetails opt-in: `e instanceof verr` in the error catch
+	verr: () => ValidationError,
 	tee: () => tee,
 	cr: () => cloneResponse,
 	// `pcr` kept for replay of older frozen builds; `pcrs` is the F1 sync core.
