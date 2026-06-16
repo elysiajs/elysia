@@ -1,3 +1,7 @@
+# 1.4.29 - 17 Jun 2026
+Bug fix:
+- normalize a `multipart/form-data` with `.get` instead of `.getAll` for faster performance
+
 # 1.4.28 - 17 Mar 2025
 Feature:
 - [#1803](https://github.com/elysiajs/elysia/pull/1803) stream response with pull based backpressure

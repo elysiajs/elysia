@@ -287,10 +287,15 @@ export const createDynamicHandler = (app: AnyElysia) => {
 							body = {}
 
 							const form = await request.formData()
-							for (const key of form.keys()) {
+							const grouped = new Map<string, any[]>()
+							form.forEach((v, k) => {
+								const list = grouped.get(k)
+								if (list) list.push(v)
+								else grouped.set(k, [v])
+							})
+							for (const [key, value] of grouped) {
 								if (body[key]) continue
 
-								const value = form.getAll(key)
 								const finalValue = normalizeFormValue(value)
 
 								if (key.includes('.') || key.includes('['))
@@ -347,10 +352,15 @@ export const createDynamicHandler = (app: AnyElysia) => {
 											body = {}
 
 											const form = await request.formData()
-											for (const key of form.keys()) {
+											const grouped = new Map<string, any[]>()
+											form.forEach((v, k) => {
+												const list = grouped.get(k)
+												if (list) list.push(v)
+												else grouped.set(k, [v])
+											})
+											for (const [key, value] of grouped) {
 												if (body[key]) continue
 
-												const value = form.getAll(key)
 												const finalValue = normalizeFormValue(value)
 
 												if (key.includes('.') || key.includes('['))
@@ -417,10 +427,15 @@ export const createDynamicHandler = (app: AnyElysia) => {
 									body = {}
 
 									const form = await request.formData()
-									for (const key of form.keys()) {
+									const grouped = new Map<string, any[]>()
+									form.forEach((v, k) => {
+										const list = grouped.get(k)
+										if (list) list.push(v)
+										else grouped.set(k, [v])
+									})
+									for (const [key, value] of grouped) {
 										if (body[key]) continue
 
-										const value = form.getAll(key)
 										const finalValue = normalizeFormValue(value)
 
 										if (key.includes('.') || key.includes('['))
