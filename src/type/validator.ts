@@ -56,7 +56,7 @@ import {
 	takeFileTypeChecks,
 	type PendingFileTypeCheck
 } from './elysia/file'
-import { isBlob, nullObject } from '../utils'
+import { nullObject } from '../utils'
 import { isCloudflareWorker } from '../universal/constants'
 import { ValidationError } from '../error'
 

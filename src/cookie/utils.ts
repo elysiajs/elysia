@@ -78,7 +78,7 @@ function resolveSignSecrets(
 
 export function parseCookieRawSync(
 	cookieString: string | null | undefined,
-	config: CompiledCookieConfig
+	_config: CompiledCookieConfig
 ): Record<string, unknown> {
 	const out: Record<string, unknown> = nullObject() as any
 	if (!cookieString) return out
@@ -259,6 +259,7 @@ export function serializeCookie(
 	return set
 }
 
+// eslint-disable-next-line sonarjs/slow-regex -- anchored, single-char class over base64 padding (≤2 chars); linear
 const removeTrailingEquals = /=+$/g
 const algorithm = { name: 'HMAC', hash: 'SHA-256' } as const
 const encoder = new TextEncoder()

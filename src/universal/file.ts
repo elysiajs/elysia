@@ -1,4 +1,3 @@
-/* eslint-disable sonarjs/no-duplicate-string */
 import { type createReadStream as CreateReadStream } from 'fs'
 import { type stat as Stat } from 'fs/promises'
 import type { BunFile } from 'bun'

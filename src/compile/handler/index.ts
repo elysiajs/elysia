@@ -444,7 +444,6 @@ export function buildNativeStaticResponse(
 	const mapped = (adapter.response.map as Function)(handler, buildSet())
 	if (mapped instanceof Response) return mapped
 	if (mapped instanceof Promise) return mapped as Promise<Response>
-	return
 }
 
 export function compileHandler(
@@ -905,9 +904,13 @@ export function compileHandler(
 		hasTrace
 
 	const res = adapter.response
+	// link() registers params for its side effect and returns nothing; the
+	// `?? 'rm'`/`?? 'rc'` supplies the alias the generated code references
+	/* eslint-disable sonarjs/no-use-of-empty-return-value */
 	const map = hasSet
 		? (link(res.map, 'rm') ?? 'rm')
 		: (link(res.compact ?? res.map, 'rc') ?? 'rc')
+	/* eslint-enable sonarjs/no-use-of-empty-return-value */
 
 	if (isPromiseHandler) link(cloneResponse, 'cr')
 
@@ -1246,5 +1249,6 @@ export function compileHandler(
 
 	if (!precomputedStatic) Capture.handler({ method, path, alias, code })
 
+	// eslint-disable-next-line sonarjs/code-eval -- AOT codegen is the architecture
 	return new Function('h', alias, `return ${code}`)(handler, ...params)
 }

@@ -203,6 +203,7 @@ const createProcess = () => {
 						const detail = {
 							end,
 							error,
+							// eslint-disable-next-line sonarjs/no-nested-functions -- single inline getter
 							get elapsed() {
 								return end - process.begin
 							}

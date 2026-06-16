@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable no-constant-condition */
 import { fnv1a } from './utils'
 import { isBun, isCloudflareWorker } from './universal/constants'
 
@@ -198,7 +196,6 @@ export function retrieveRootparameters(parameter: string) {
 
 	// Object destructuring
 	while (true) {
-		// eslint-disable-next-line prefer-const
 		let [start, end] = bracketPairRange(parameter)
 		if (start === -1) break
 
@@ -544,7 +541,7 @@ function isContextPassToFunction(
 		}
 
 		return false
-	} catch (error) {
+	} catch {
 		console.log(
 			'[Sucrose] warning: unexpected isContextPassToFunction error, you may continue development as usual but please report the following to maintainers:'
 		)

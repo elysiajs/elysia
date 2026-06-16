@@ -97,7 +97,7 @@ export abstract class Validator {
 			options = { ...options, schemas: options.schemas.slice(1) }
 		}
 
-		let schema = Validator.reference(name, options?.models)
+		const schema = Validator.reference(name, options?.models)
 
 		let isIntersectable = false
 

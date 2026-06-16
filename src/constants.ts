@@ -1,5 +1,3 @@
-import { env } from "./universal"
-
 const mapBack = <const T extends Record<string, number>>(
 	map: T
 ): {
@@ -95,7 +93,7 @@ export type StatusMapBack = typeof StatusMapBack
 
 export const dangerousKeys = new Set(['__proto__', 'constructor', 'prototype'])
 
-export const isDynamicRegex = /\:|\*/
+export const isDynamicRegex = /[:*]/
 
 // Matches any char that `encodeURI` would escape — i.e. the exact complement
 // of its unescaped set (A-Za-z0-9 - _ . ! ~ * ' ( ) ; , / ? : @ & = + $ #).

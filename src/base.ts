@@ -4887,8 +4887,7 @@ export class Elysia<
 				this.#pending--
 			})
 
-		let next: Promise<void>
-		next = resolved
+		const next: Promise<void> = resolved
 			.then(
 				() => {},
 				(err) => {
@@ -6462,7 +6461,7 @@ export class Elysia<
 		this['~config'] ??= nullObject()
 		this['~config']!.precompile = true
 
-		this.fetch
+		void this.fetch
 
 		return this
 	}

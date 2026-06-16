@@ -1,5 +1,3 @@
-/* eslint-disable sonarjs/no-nested-switch */
-/* eslint-disable sonarjs/no-duplicate-string */
 import {
 	createResponseHandler,
 	createStreamHandler,

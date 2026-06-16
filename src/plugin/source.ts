@@ -1,4 +1,3 @@
-import { group } from 'node:console'
 import type { AnyElysia } from '../base'
 import {
 	endValidatorCapture,

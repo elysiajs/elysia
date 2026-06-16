@@ -132,6 +132,7 @@ export function createFetchHandler(
 					for (; i < mapResponseHooks.length; i++) {
 						const result = mapResponseHooks[i](context)
 						if (result instanceof Promise)
+							// eslint-disable-next-line sonarjs/function-inside-loop -- promise continuation for the hook at index i
 							return result.then((resolved) => {
 								if (resolved !== undefined)
 									return baseMapResponse(

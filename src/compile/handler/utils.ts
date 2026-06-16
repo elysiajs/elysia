@@ -293,7 +293,7 @@ function scanObjectLiteralKeys(src: string, open: number): string[] | null {
 	let expectKey = true
 
 	while (i < src.length) {
-		let ch = src[i]
+		const ch = src[i]
 
 		if (isSpace(ch)) {
 			i++

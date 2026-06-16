@@ -229,7 +229,7 @@ export type Prettify<in out T> = {
 } & {}
 
 export type SSEPayload<
-	Data extends unknown = unknown,
+	Data = unknown,
 	Event extends string | undefined = string | undefined
 > = {
 	id?: string | number | null
@@ -1075,7 +1075,6 @@ type SetContentType =
 	| 'video/x-msvideo'
 	| 'video/quicktime'
 	| 'video/x-ms-wmv'
-	| 'video/x-msvideo'
 	| 'video/x-flv'
 	| 'video/av1'
 	| 'video/mp4'
