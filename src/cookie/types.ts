@@ -1,4 +1,4 @@
-export type BaseCookie = CookieOptions & {
+export interface BaseCookie extends CookieOptions {
 	value?: unknown
 }
 

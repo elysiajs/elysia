@@ -232,4 +232,51 @@ describe('Form Data DoS hardening', () => {
 			a: ['x', 'y']
 		})
 	})
+
+	// A pathologically deep key name (e.g. `'.'.repeat(2e6)`) would otherwise
+	// allocate one object per segment — hundreds of MB of heap from a few KB of
+	// input. Nesting depth is capped, so a too-deep key stops descending instead
+	// of amplifying. Legit shallow nesting (tested above) is unaffected.
+	it('caps nesting depth on a pathologically deep key', () => {
+		const form = new FormData()
+		form.append('a' + '.b'.repeat(2000), 'x') // ~2001 levels
+
+		const out = formDataToObject(form)
+
+		let depth = 0
+		let cur: any = out
+		while (cur && typeof cur === 'object') {
+			const k = Object.keys(cur)[0]
+			if (k === undefined) break
+			cur = cur[k]
+			depth++
+		}
+
+		expect(depth).toBeLessThanOrEqual(70) // MAX_NESTING (64) + slack
+	})
+
+	// The per-key depth cap stops one huge key, but many medium-deep keys could
+	// still aggregate into a huge heap. A global node budget bounds the TOTAL
+	// objects allocated per body, so a small body can't amplify regardless of
+	// how the keys are distributed.
+	it('bounds total nested objects across many keys (global budget)', () => {
+		const form = new FormData()
+		// ~2000 distinct 63-deep keys would attempt ~126k nodes; the budget caps
+		// the total around 100k.
+		for (let i = 0; i < 2000; i++) form.append('r' + i + '.b'.repeat(62), 'x')
+
+		const start = performance.now()
+		const out = formDataToObject(form)
+		const elapsed = performance.now() - start
+
+		const countNodes = (o: any): number => {
+			if (!o || typeof o !== 'object') return 0
+			let n = 1
+			for (const k in o) n += countNodes(o[k])
+			return n
+		}
+
+		expect(countNodes(out)).toBeLessThanOrEqual(110_000) // ~100k cap + slack
+		expect(elapsed).toBeLessThan(2_000)
+	})
 })

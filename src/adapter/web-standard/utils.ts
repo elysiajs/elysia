@@ -15,6 +15,14 @@ const BRACE_C = 125 // '}'
 
 const HAS_FILE = typeof File !== 'undefined'
 const HAS_NESTING = /[.[]/
+// ponytail: max nesting depth for a single form key. Each '.'/'[' segment
+// allocates an object (~185 bytes), so an unbounded key like `'.'.repeat(2e6)`
+// would amplify a few KB into hundreds of MB. Real forms never nest this deep.
+const MAX_NESTING = 64
+// ponytail: absolute cap on nested objects allocated per body. The per-key
+// depth cap stops one huge key; this stops many medium-deep keys from
+// amplifying a small body into a huge heap. ~100k nodes ≈ 18MB ceiling.
+const MAX_NESTED_NODES = 100_000
 
 function tryParseJson(
 	val: string
@@ -82,13 +90,16 @@ function resolveValue(entries: FormDataEntryValue[]): unknown {
 function setNested(
 	body: Record<string, unknown>,
 	path: string,
-	value: unknown
+	value: unknown,
+	budget: { left: number }
 ): void {
 	let current: any = body
 	let i = 0
+	let depth = 0
 	const len = path.length
 
 	while (i < len) {
+		if (++depth > MAX_NESTING) return
 		let key: string | number
 		let nextIsArrayIdx = false
 
@@ -132,6 +143,7 @@ function setNested(
 
 		const existing = current[key]
 		if (existing === undefined) {
+			if (--budget.left < 0) return
 			current = current[key] = nextIsArrayIdx ? [] : nullObject()
 			continue
 		}
@@ -149,6 +161,7 @@ function setNested(
 				continue
 			}
 		}
+		if (--budget.left < 0) return
 		current = current[key] = nextIsArrayIdx ? [] : nullObject()
 	}
 }
@@ -165,8 +178,10 @@ export function formDataToObject(form: FormData): Record<string, unknown> {
 
 	if (!grouped) return body
 
+	const budget = { left: MAX_NESTED_NODES }
 	for (const [key, entries] of grouped) {
-		if (HAS_NESTING.test(key)) setNested(body, key, resolveValue(entries))
+		if (HAS_NESTING.test(key))
+			setNested(body, key, resolveValue(entries), budget)
 		else if (!(key in body)) body[key] = resolveValue(entries)
 	}
 
