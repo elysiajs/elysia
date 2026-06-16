@@ -1011,7 +1011,7 @@ export default class Elysia<
 							standaloneValidators
 						}
 					: undefined,
-				localHook.webSocket
+				localHook.websocket
 					? { websocket: localHook.websocket as any }
 					: undefined
 			)
@@ -1026,7 +1026,7 @@ export default class Elysia<
 						handler: handle,
 						hooks
 					},
-					localHook.webSocket
+					localHook.websocket
 						? { websocket: localHook.websocket as any }
 						: undefined
 				)
@@ -5266,8 +5266,14 @@ export default class Elysia<
 
 		for (const { method, path, handler, hooks } of Object.values(
 			plugin.router.history
-		))
-			this.add(method, path, handler, hooks)
+		)) {
+			// WS routes carry the original options in hooks.websocket.
+			// Re-register through this app's adapter so the upgrade store
+			// used by listen() matches the one the route handler writes to.
+			if (method === 'WS' && hooks?.websocket && this['~adapter']?.ws)
+				this['~adapter'].ws(this, path, hooks.websocket)
+			else this.add(method, path, handler, hooks)
+		}
 
 		if (name) {
 			if (!(name in this.dependencies)) this.dependencies[name] = []
