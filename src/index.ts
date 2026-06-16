@@ -5098,14 +5098,18 @@ export default class Elysia<
 									path,
 									handler,
 									hooks
-								} of Object.values(plugin.router.history))
-									this.add(
-										method,
-										path,
-										handler,
-										hooks,
-										undefined
-									)
+								} of Object.values(plugin.router.history)) {
+									if (method === 'WS' && hooks?.websocket && this['~adapter']?.ws)
+										this['~adapter'].ws(this, path, hooks.websocket as any)
+									else
+										this.add(
+											method,
+											path,
+											handler,
+											hooks,
+											undefined
+										)
+								}
 
 								if (plugin === this) return
 
