@@ -187,19 +187,19 @@ export function reconstructCheck(build: CheckBuildResult): {
 	return { defs, value: `(value) => { ${statements} }` }
 }
 
-export const checkCode = (defs: string, value: string) =>
+const checkCode = (defs: string, value: string) =>
 	`${defs}; return ${value}`
 
-export function reconstructCheckCode(build: CheckBuildResult) {
+function reconstructCheckCode(build: CheckBuildResult) {
 	const { defs, value } = reconstructCheck(build)
 	return checkCode(defs, value)
 }
 
 // emit into bundle for frozen check
-export const checkFactorySource = (identifier: string, code: string) =>
+const checkFactorySource = (identifier: string, code: string) =>
 	`function(${identifier}){${code}}`
 
-export const handlerFactorySource = (alias: string, code: string) =>
+const handlerFactorySource = (alias: string, code: string) =>
 	`function(h${alias ? ',' + alias : ''}){return ${code}}`
 
 const isValueLikeExternal = (v: unknown) =>
@@ -284,7 +284,7 @@ export function externalsMatch(a: unknown[], b: unknown[]) {
 	return true
 }
 
-export const mirrorFactorySource = (source: string, hasExternals: boolean) =>
+const mirrorFactorySource = (source: string, hasExternals: boolean) =>
 	hasExternals
 		? // union: a factory `(d) => (v) => cleaned`. `d` injects the branch checks
 			`function(d){${source}}`
@@ -292,7 +292,7 @@ export const mirrorFactorySource = (source: string, hasExternals: boolean) =>
 			`function(v){${source}}`
 
 // Merged check + mirror factory source (cm)
-export const bothFactorySource = (
+const bothFactorySource = (
 	identifier: string,
 	checkDefs: string,
 	checkValue: string,
@@ -304,6 +304,17 @@ export const bothFactorySource = (
 			? `(function(d){${mirrorSource}})(d)`
 			: `function(v){${mirrorSource}}`
 	}}}`
+
+// Build-only: these source emitters are imported solely by `plugin/source.ts`
+// (the vite/esbuild/bun build plugins), never at runtime — so the whole `Source`
+// object tree-shakes out of a normal client bundle regardless of grouping.
+export const Source = {
+	checkFactory: checkFactorySource,
+	checkCode: checkCode,
+	handlerFactory: handlerFactorySource,
+	mirrorFactory: mirrorFactorySource,
+	bothFactory: bothFactorySource
+} as const
 
 function collectMirrorUnions(schema: any, out: unknown[][] = []) {
 	if (!schema || typeof schema !== 'object') return out
@@ -410,7 +421,7 @@ export function instantiateFrozenBoth(
  * return undefined if not reconstructable
  * `truthUnions` is `mir.externals.unions` (compiled branches).
  */
-export function captureMirrorUnions(schema: unknown, truthUnions: any[][]) {
+function captureMirrorUnions(schema: unknown, truthUnions: any[][]) {
 	const branchSchemas = collectMirrorUnions(schema)
 	if (branchSchemas.length !== truthUnions.length) return
 
@@ -452,7 +463,7 @@ export function captureMirrorUnions(schema: unknown, truthUnions: any[][]) {
 	return u
 }
 
-export function captureMirrorCodecs(
+function captureMirrorCodecs(
 	schema: unknown,
 	truthCodecs: Function[]
 ): boolean {
@@ -535,7 +546,7 @@ export interface CapturedHandler {
 
 let handlerCapture: Map<string, CapturedHandler> | undefined
 
-export function captureHandler(v: CapturedHandler) {
+function captureHandler(v: CapturedHandler) {
 	if (!isValidatorCapturing()) return
 
 	handlerCapture ??= new Map()
@@ -549,7 +560,7 @@ export function endHandlerCapture(): CapturedHandler[] {
 	return captured
 }
 
-export function captureValidator(v: {
+function captureValidator(v: {
 	method: string
 	path: string
 	slot: ValidatorSlot
@@ -576,7 +587,7 @@ export function captureValidator(v: {
 	}
 }
 
-export function captureMirror(v: {
+function captureMirror(v: {
 	method: string
 	path: string
 	slot: ValidatorSlot
@@ -586,7 +597,7 @@ export function captureMirror(v: {
 	if (e) e.mirror = v.mirror
 }
 
-export function captureDecodeMirror(v: {
+function captureDecodeMirror(v: {
 	method: string
 	path: string
 	slot: ValidatorSlot
@@ -596,5 +607,21 @@ export function captureDecodeMirror(v: {
 	if (e) e.decodeMirror = v.mirror
 }
 
-export const isValidatorCapturing = () =>
+const isValidatorCapturing = () =>
 	capture !== undefined || env.ELYSIA_AOT_BUILD === '1'
+
+// Runtime capture writers — all called in the compile codegen path (no-op at
+// runtime when not capturing), so they're already in every runtime bundle. The
+// `Capture` object wrapper itself does cost a little (~its property names, which
+// minifiers can't mangle across the module boundary), so it's kept flat. Test-only
+// `beginValidatorCapture` and build-only `end*Capture` stay individual — they're
+// NOT in a runtime bundle.
+export const Capture = {
+	validator: captureValidator,
+	handler: captureHandler,
+	mirror: captureMirror,
+	mirrorDecode: captureDecodeMirror,
+	mirrorUnions: captureMirrorUnions,
+	mirrorCodecs: captureMirrorCodecs,
+	isCapturing: isValidatorCapturing
+} as const

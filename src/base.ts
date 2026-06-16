@@ -13,7 +13,7 @@ import type {
 import { env, ListenCallback, Serve, Server } from './universal'
 import { isBun } from './universal/constants'
 
-import { isDynamicRegex, MethodMap } from './constants'
+import { isDynamicRegex, needEncodeRegex, MethodMap } from './constants'
 import { BunAdapter } from './adapter/bun'
 import {
 	cloneHook,
@@ -26,7 +26,6 @@ import {
 	getLoosePath,
 	hookToGuard,
 	isEmpty,
-	isEncoded,
 	isNotEmpty,
 	isRecordNumber,
 	joinPath,
@@ -220,22 +219,14 @@ export class Elysia<
 	get routes(): PublicRoute[] {
 		if (!this.#history) return []
 
-		// Cached snapshot (shared array, like `.history`): re-running
-		// `#resolveMacros` + flatten + clone + merge per access is quadratic
-		// when indexed in a loop. Skipping `#resolveMacros` on a hit is safe
-		// because macro registration invalidates this cache (see `.macro()`).
 		if (this.#cachedRoutes) return this.#cachedRoutes
 
 		this.#resolveMacros()
-		this.#compiled ??= Array(this.#history.length)
 
 		const routes = this.#history.map(
 			([method, path, handler, , hook, appHook]) => {
 				const flatAppHook = flattenChain(appHook as any)
 
-				// `mergeHook` mutates its first argument; clone the stored inline
-				// `hook` (route[4]) so repeated `routes` reads don't re-merge into
-				// it (which would duplicate hooks on every access).
 				const merged: any = flatAppHook
 					? hook
 						? mergeHook(cloneHook(hook) as any, flatAppHook as any)
@@ -1483,185 +1474,6 @@ export class Elysia<
 		return (this.derive as any)(scopeOrFn, fn)
 	}
 
-	mapResolve<
-		const Derivative extends
-			| Record<string, unknown>
-			| ElysiaStatus<any, any, any>
-			| void
-	>(
-		transform: (
-			context: Context<
-				MergeSchema<
-					Volatile['schema'],
-					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
-					BasePath
-				> &
-					Metadata['schemas'] &
-					Ephemeral['schemas'] &
-					Volatile['schemas'],
-				Singleton & {
-					derive: Ephemeral['derive'] & Volatile['derive']
-				}
-			>
-		) => MaybePromise<Derivative>
-	): Elysia<
-		BasePath,
-		Scope,
-		Singleton,
-		Definitions,
-		Metadata,
-		Routes,
-		Ephemeral,
-		{
-			derive: Volatile['derive'] & ExcludeElysiaResponse<Derivative>
-			schema: Volatile['schema']
-			schemas: Volatile['schemas']
-			response: UnionResponseStatus<
-				Volatile['response'],
-				ExtractErrorFromHandle<Derivative>
-			>
-			error: Volatile['error']
-		}
-	>
-	mapResolve<
-		const Derivative extends
-			| Record<string, unknown>
-			| ElysiaStatus<any, any, any>
-			| void
-	>(
-		scope: 'local',
-		transform: (
-			context: Context<
-				MergeSchema<
-					Volatile['schema'],
-					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
-					BasePath
-				> &
-					Metadata['schemas'] &
-					Ephemeral['schemas'] &
-					Volatile['schemas'],
-				Singleton & {
-					derive: Ephemeral['derive'] & Volatile['derive']
-				}
-			>
-		) => MaybePromise<Derivative>
-	): Elysia<
-		BasePath,
-		Scope,
-		Singleton,
-		Definitions,
-		Metadata,
-		Routes,
-		Ephemeral,
-		{
-			derive: Volatile['derive'] & ExcludeElysiaResponse<Derivative>
-			schema: Volatile['schema']
-			schemas: Volatile['schemas']
-			response: UnionResponseStatus<
-				Volatile['response'],
-				ExtractErrorFromHandle<Derivative>
-			>
-			error: Volatile['error']
-		}
-	>
-	mapResolve<
-		const Derivative extends
-			| Record<string, unknown>
-			| ElysiaStatus<any, any, any>
-			| void
-	>(
-		scope: 'plugin',
-		transform: (
-			context: LifecycleContext<
-				MergeSchema<
-					Volatile['schema'],
-					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
-					BasePath
-				> &
-					Metadata['schemas'] &
-					Ephemeral['schemas'] &
-					Volatile['schemas'],
-				Singleton & {
-					derive: Ephemeral['derive'] & Volatile['derive']
-				},
-				undefined,
-				'plugin'
-			>
-		) => MaybePromise<Derivative>
-	): Elysia<
-		BasePath,
-		Scope,
-		Singleton,
-		Definitions,
-		Metadata,
-		Routes,
-		{
-			derive: Ephemeral['derive'] & ExcludeElysiaResponse<Derivative>
-			schema: Ephemeral['schema']
-			schemas: Ephemeral['schemas']
-			response: UnionResponseStatus<
-				Ephemeral['response'],
-				ExtractErrorFromHandle<Derivative>
-			>
-			error: Ephemeral['error']
-		},
-		Volatile
-	>
-	mapResolve<
-		const Derivative extends
-			| Record<string, unknown>
-			| ElysiaStatus<any, any, any>
-			| void
-	>(
-		scope: 'global',
-		transform: (
-			context: LifecycleContext<
-				MergeSchema<
-					Volatile['schema'],
-					MergeSchema<Ephemeral['schema'], Metadata['schema']>,
-					BasePath
-				> &
-					Metadata['schemas'] &
-					Ephemeral['schemas'] &
-					Volatile['schemas'],
-				Singleton & {
-					derive: Ephemeral['derive'] & Volatile['derive']
-				},
-				undefined,
-				'global'
-			>
-		) => MaybePromise<Derivative>
-	): Elysia<
-		BasePath,
-		Scope,
-		{
-			decorator: Singleton['decorator']
-			store: Singleton['store']
-			derive: Singleton['derive'] & ExcludeElysiaResponse<Derivative>
-		},
-		Definitions,
-		{
-			schema: Metadata['schema']
-			schemas: Metadata['schemas']
-			macro: Metadata['macro']
-			macroFn: Metadata['macroFn']
-			parser: Metadata['parser']
-			response: UnionResponseStatus<
-				Metadata['response'],
-				ExtractErrorFromHandle<Derivative>
-			>
-		},
-		Routes,
-		Ephemeral,
-		Volatile
-	>
-	mapResolve(scopeOrFn: EventScope | Function, fn?: Function): any {
-		return (this.derive as any)(scopeOrFn, fn)
-	}
-
-	// `afterHandle` may replace the response by returning `status(...)`, so its
-	// status returns accumulate into the response union (by scope), like
-	// `beforeHandle`.
 	afterHandle<
 		const Handler extends MaybeArray<
 			AfterHandler<
@@ -4298,6 +4110,15 @@ export class Elysia<
 	>
 
 	macro(macro: Macro) {
+		// `.macro(fn)` has no name to register under, and TS can't reject it
+		// (a function is structurally assignable to the open `Macro` record),
+		// so it would silently no-op — guard it loudly. The `.macro(name, def)`
+		// form is already a compile-time error, so it needs no runtime guard.
+		if (typeof macro === 'function')
+			throw new Error(
+				'A functional macro must be named — use `.macro({ name: fn })` instead of `.macro(fn)`'
+			)
+
 		const ext = this.#ext
 		const m = (ext.macro ??= nullObject() as any)
 
@@ -5242,6 +5063,7 @@ export class Elysia<
 				return this
 		}
 
+		// just in case
 		return this
 	}
 
@@ -6192,19 +6014,16 @@ export class Elysia<
 	}
 
 	/**
-	 * ### get
-	 * Register handler for path with method [GET]
+	 * ### method
+	 * Register a handler for `path` with an arbitrary HTTP `method`
 	 *
 	 * ---
 	 * @example
 	 * ```typescript
-	 * import { Elysia, t } from 'elysia'
+	 * import { Elysia } from 'elysia'
 	 *
 	 * new Elysia()
-	 *     .get('/', () => 'hi')
-	 *     .get('/with-hook', () => 'hi', {
-	 *         response: t.String()
-	 *     })
+	 *     .method('REPORT', '/', () => 'hi')
 	 * ```
 	 */
 	method<
@@ -6648,13 +6467,6 @@ export class Elysia<
 
 		this.fetch
 
-		if (this.#history)
-			for (let i = 0; i < this.#history.length; i++) {
-				if (this.#history[i][0] === 'WS') continue
-
-				this.handler(i, true)
-			}
-
 		return this
 	}
 
@@ -6779,6 +6591,8 @@ export class Elysia<
 
 		const wrapHeadHandler = Elysia.#wrapHeadHandler
 
+		const strict = !!this['~config']?.strictPath
+
 		for (let i = 0; i < length; i++) {
 			const route: InternalRoute = this.#history![i]
 			const method = mapMethodBack(route[0])
@@ -6811,8 +6625,23 @@ export class Elysia<
 					this['~config'] ??= nullObject()
 					const existing = (this['~config'] as any).websocket
 
-					if (existing) Object.assign(existing, options)
-					else (this['~config'] as any).websocket = options
+					if (existing && isBun) {
+						for (const key in options)
+							if (
+								key in existing &&
+								(existing as any)[key] !== (options as any)[key]
+							) {
+								console.warn(
+									`[Elysia] Conflicting per-route WebSocket option '${key}'`
+								)
+								console.warn(
+									`Bun uses one global WebSocket config per server, so per-route values are not enforced (the last-registered route wins).`
+								)
+								console.warn(new Error().stack)
+							}
+
+						Object.assign(existing, options)
+					} else (this['~config'] as any).websocket = options
 				}
 
 				continue
@@ -6833,11 +6662,7 @@ export class Elysia<
 					if (!this['~config']?.strictPath) {
 						const loose = getLoosePath(path)
 						;(target[loose] ??= nullObject() as any)[method] =
-							staticResponse instanceof Response
-								? staticResponse.clone()
-								: (staticResponse as Promise<Response>).then(
-										(r) => r.clone()
-									)
+							staticResponse
 					}
 				}
 			}
@@ -6849,6 +6674,33 @@ export class Elysia<
 
 			const autoHead =
 				enableAutoHead && method === 'GET' && !explicitHead?.has(path)
+
+			const registerPattern = (
+				registerMain: (p: string, h: CompiledHandler) => void,
+				registerHead: (p: string, h: CompiledHandler) => void,
+				handler: CompiledHandler,
+				headHandler: CompiledHandler | undefined
+			) => {
+				const add = (p: string) => {
+					registerMain(p, handler)
+					if (headHandler) registerHead(p, headHandler)
+
+					if (!strict) {
+						const loose = getLoosePath(p)
+						if (loose !== p) {
+							registerMain(loose, handler)
+							if (headHandler) registerHead(loose, headHandler)
+						}
+					}
+				}
+
+				add(path)
+
+				if (needEncodeRegex.test(path)) {
+					const encoded = encodeURI(path)
+					if (encoded !== path) add(encoded)
+				}
+			}
 
 			if (isDynamicRegex.test(path)) {
 				const router = (this['~router'] ??= new Memoirist())
@@ -6863,26 +6715,12 @@ export class Elysia<
 					? wrapHeadHandler(handler)
 					: undefined
 
-				const strict = !!this['~config']?.strictPath
-
-				const addPattern = (p: string) => {
-					router.add(method, p, handler, false)
-					if (headHandler) router.add('HEAD', p, headHandler, false)
-
-					if (!strict) {
-						const loose = getLoosePath(p)
-						if (loose !== p) {
-							router.add(method, loose, handler, false)
-							if (headHandler)
-								router.add('HEAD', loose, headHandler, false)
-						}
-					}
-				}
-
-				addPattern(path)
-
-				const encoded = encodeURI(path)
-				if (encoded !== path) addPattern(encoded)
+				registerPattern(
+					(p, h) => router.add(method, p, h, false),
+					(p, h) => router.add('HEAD', p, h, false),
+					handler,
+					headHandler
+				)
 			} else {
 				const map = (methods[method] ??= nullObject() as any)
 				const handler = this.handler(i, precompile, route, sharedStatic)
@@ -6895,25 +6733,16 @@ export class Elysia<
 					? (methods['HEAD'] ??= nullObject() as any)
 					: undefined
 
-				const strict = !!this['~config']?.strictPath
-
-				const addStatic = (p: string) => {
-					map[p] = handler
-					if (head) head[p] = headHandler!
-
-					if (!strict) {
-						const loose = getLoosePath(p)
-						if (loose !== p) {
-							map[loose] = handler
-							if (head) head[loose] = headHandler!
-						}
-					}
-				}
-
-				addStatic(path)
-
-				const encoded = encodeURI(path)
-				if (encoded !== path) addStatic(encoded)
+				registerPattern(
+					(p, h) => {
+						map[p] = h
+					},
+					(p, h) => {
+						head![p] = h
+					},
+					handler,
+					headHandler
+				)
 			}
 		}
 	}

@@ -309,13 +309,6 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 	}
 }
 
-export function isGeneratorFunction(fn: unknown): boolean {
-	if (typeof fn !== 'function') return false
-
-	const name = (fn as Function).constructor?.name
-	return name === 'GeneratorFunction' || name === 'AsyncGeneratorFunction'
-}
-
 export function isGeneratorObject(value: unknown): boolean {
 	if (value == null || typeof value !== 'object') return false
 

@@ -96,6 +96,72 @@ describe('Stream', () => {
 		expect(response).toBe('ab')
 	})
 
+	// `streamResponse` re-streams a Response body (chunked, unknown length). It
+	// now uses `yield* body` instead of a manual getReader()/releaseLock() loop;
+	// these pin the mid-stream abort semantics of that change.
+	it('streamResponse cancels the source body on a mid-stream abort', async () => {
+		let cancelled = false
+		const body = new ReadableStream<Uint8Array>({
+			start(controller) {
+				controller.enqueue(new Uint8Array([1]))
+				controller.enqueue(new Uint8Array([2]))
+				// left open on purpose — only an abort should end it
+			},
+			cancel() {
+				cancelled = true
+			}
+		})
+
+		const gen = streamResponse(new Response(body))
+
+		const first = await gen.next()
+		expect(first.done).toBe(false)
+		expect([...(first.value as Uint8Array)]).toEqual([1])
+
+		// consumer bails out before the stream ends (client disconnect)
+		await gen.return(undefined as any)
+
+		// `yield* body` forwards .return() to the body's async iterator, which
+		// cancels the upstream — the old getReader()+releaseLock() did not.
+		expect(cancelled).toBe(true)
+	})
+
+	it('streamResponse settles a mid-stream abort without hanging', async () => {
+		const body = new ReadableStream<Uint8Array>({
+			start(controller) {
+				controller.enqueue(new Uint8Array([1]))
+				controller.enqueue(new Uint8Array([2]))
+				controller.enqueue(new Uint8Array([3]))
+			}
+		})
+
+		const gen = streamResponse(new Response(body))
+		await gen.next()
+
+		const outcome = await Promise.race([
+			gen.return(undefined as any).then(() => 'returned'),
+			new Promise((resolve) => setTimeout(() => resolve('hung'), 500))
+		])
+
+		expect(outcome).toBe('returned')
+	})
+
+	it('streamResponse yields every chunk on normal completion', async () => {
+		const body = new ReadableStream<Uint8Array>({
+			start(controller) {
+				controller.enqueue(new Uint8Array([1]))
+				controller.enqueue(new Uint8Array([2]))
+				controller.close()
+			}
+		})
+
+		const out: number[] = []
+		for await (const chunk of streamResponse(new Response(body)))
+			out.push(...(chunk as Uint8Array))
+
+		expect(out).toEqual([1, 2])
+	})
+
 	it('include multiple set-cookie headers in streamed response', async () => {
 		const app = new Elysia().get('/', async function* (context) {
 			context.cookie['cookie1'].set({

@@ -3,25 +3,17 @@ import { decodeComponent } from 'deuri'
 import { defaultAdapter } from '../adapter/constants'
 
 import type { AnyElysia } from '../base'
-import { getAsyncIndexes } from './utils'
+import { getAsyncIndexes, cachedResponse } from './utils'
 
 import { createContext, type Context } from '../context'
 import { createErrorHandler } from './error'
 import { requestId, flattenChain, nullObject } from '../utils'
 import { NotFound } from '../error'
 import { createTracer } from '../trace'
-import { isCloudflareWorker } from '../universal/constants'
 
 import type { CompiledHandler, MaybePromise } from '../types'
 
-let _notFound: Response | undefined
-const getNotFound = (): Response =>
-	isCloudflareWorker
-		? new Response('Not Found', { status: 404 })
-		: // undici-types' `clone()` return clashes with Bun's global Response
-			((_notFound ??= new Response('Not Found', {
-				status: 404
-			})).clone() as Response)
+const getNotFound = cachedResponse('Not Found', 404)
 
 const decodeParams = (
 	params: Record<string, string>
@@ -58,7 +50,6 @@ function findRoute(
 	hasWS?: boolean
 ): Response | Promise<Response> {
 	const path = context.path
-	const onError = catchError(context, handleError, afterResponse)
 
 	if (hasWS) {
 		const upgrade = request.headers.get('upgrade')
@@ -67,14 +58,14 @@ function findRoute(
 
 			if (handler) {
 				const r = handler(context)
-				return r instanceof Promise ? (r.catch(onError) as any) : r
+				return r instanceof Promise ? (r.catch(catchError(context, handleError, afterResponse)) as any) : r
 			}
 
 			const found = router?.find('WS', path)
 			if (found) {
 				context.params = decodeParams(found.params)
 				const r = found.store(context)
-				return r instanceof Promise ? (r.catch(onError) as any) : r
+				return r instanceof Promise ? (r.catch(catchError(context, handleError, afterResponse)) as any) : r
 			}
 		}
 	} else {
@@ -84,7 +75,7 @@ function findRoute(
 		if (handler) {
 			const r = handler(context)
 
-			return r instanceof Promise ? r.catch(onError) : r
+			return r instanceof Promise ? r.catch(catchError(context, handleError, afterResponse)) : r
 		}
 
 		const found =
@@ -94,7 +85,7 @@ function findRoute(
 			context.params = decodeParams(found.params)
 
 			const r = found.store(context)
-			return r instanceof Promise ? r.catch(onError) : r
+			return r instanceof Promise ? r.catch(catchError(context, handleError, afterResponse)) : r
 		}
 	}
 
@@ -408,8 +399,6 @@ export function createFetchHandler(
 					context.qi
 		))
 
-		const onError = catchError(context, handleError, afterResponse)
-
 		if (hasWS) {
 			const upgrade = request.headers.get('upgrade')
 			if (upgrade && upgrade.toLowerCase() === 'websocket') {
@@ -420,7 +409,7 @@ export function createFetchHandler(
 					if (handler) {
 						const r = handler(context)
 						return r instanceof Promise
-							? (r.catch(onError) as any)
+							? (r.catch(catchError(context, handleError, afterResponse)) as any)
 							: (r as any)
 					}
 
@@ -429,7 +418,7 @@ export function createFetchHandler(
 						context.params = decodeParams(found.params)
 						const r = found.store(context)
 						return r instanceof Promise
-							? (r.catch(onError) as any)
+							? (r.catch(catchError(context, handleError, afterResponse)) as any)
 							: (r as any)
 					}
 				} catch (error) {
@@ -446,7 +435,7 @@ export function createFetchHandler(
 		try {
 			if (handler) {
 				const r = handler(context)
-				return r instanceof Promise ? r.catch(onError) : r
+				return r instanceof Promise ? r.catch(catchError(context, handleError, afterResponse)) : r
 			}
 
 			const result =
@@ -456,7 +445,7 @@ export function createFetchHandler(
 				context.params = decodeParams(result.params)
 
 				const r = result.store(context)
-				return r instanceof Promise ? r.catch(onError) : r
+				return r instanceof Promise ? r.catch(catchError(context, handleError, afterResponse)) : r
 			}
 		} catch (error) {
 			const r = handleError(context, error as Error) as Response

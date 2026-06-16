@@ -14,23 +14,3 @@ for (let i = 0; i < total; i++) app.use(plugins[i])
 
 // app.handle('/')
 stop()
-
-// await handler({
-// 	set: {
-// 		status: 200,
-// 		headers: {}$
-// 	},
-// 	request: new Request('http://localhost?a=b', {
-// 		method: 'GET',
-// 		headers: {
-// 			'content-type': 'application/json'
-// 		},
-// 		body: JSON.stringify([
-// 			{
-// 				name: 'q'
-// 			}
-// 		])
-// 	})
-// })
-// 	.then((res) => res.text())
-// 	.then(console.log)

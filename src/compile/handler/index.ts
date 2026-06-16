@@ -37,7 +37,7 @@ import {
 } from './utils'
 import { tee } from '../../adapter/utils'
 import { createTracer, type TraceEvent } from '../../trace'
-import { Compiled, captureHandler, isValidatorCapturing } from '../aot'
+import { Compiled, Capture } from '../aot'
 import { resolveHandlerParams } from './params'
 
 import {
@@ -790,8 +790,12 @@ export function compileHandler(
 		inlineUnsafe = true
 	}
 
-	const scheduleDeclSlot = '/*__SCHEDULE_DECL__*/\n'
-	code += scheduleDeclSlot
+	// Freeze the preamble as `head`; the body builds into a fresh `code` buffer
+	// so the hoisted `_sc()` schedule decl (known only after the hook pipeline
+	// is walked) can be concatenated between them at the end — instead of an
+	// inline `/*__SCHEDULE_DECL__*/` placeholder + `code.replace` string scan.
+	const head = code
+	code = ''
 
 	if (hasErrorHook || hasTrace) code += 'try{\n'
 
@@ -934,7 +938,7 @@ export function compileHandler(
 			})()
 		: ''
 
-	const setImmediateFn = isValidatorCapturing()
+	const setImmediateFn = Capture.isCapturing()
 		? ";(typeof setImmediate==='function'?setImmediate:(f)=>Promise.resolve().then(f))"
 		: typeof setImmediate === 'function'
 			? 'setImmediate'
@@ -968,7 +972,6 @@ export function compileHandler(
 		: ''
 
 	const schedule = dedupSchedule ? `_sc()\n` : scheduleAfterResponse
-	code = code.replace(scheduleDeclSlot, scheduleDecl)
 
 	const signPrefix = hasCookieSign
 		? `_sg=scv(c.set.cookie,cc)\nif(_sg)await _sg\n`
@@ -1212,6 +1215,10 @@ export function compileHandler(
 
 	code += '}'
 
+	// head | hoisted `_sc` decl | body — concatenated once (replaces the old
+	// `/*__SCHEDULE_DECL__*/` placeholder + `code.replace`).
+	code = head + scheduleDecl + code
+
 	if (factoryHelpers)
 		code = `(function(){\n${factoryHelpers}return ${code}})()`
 
@@ -1228,7 +1235,7 @@ export function compileHandler(
 			return createInlineHandlerWithSet(res.map as any, handler as any)
 	}
 
-	if (!precomputedStatic) captureHandler({ method, path, alias, code })
+	if (!precomputedStatic) Capture.handler({ method, path, alias, code })
 
 	return new Function('h', alias, `return ${code}`)(handler, ...params)
 }

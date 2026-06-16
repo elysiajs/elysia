@@ -1,9 +1,9 @@
-import { ElysiaStatus, status, type SelectiveStatus } from './error'
+import { status, type SelectiveStatus } from './error'
 import { nullObject, redirect } from './utils'
 
 import type { AnyElysia } from './base'
 import type { Server } from './universal/server'
-import type { StatusMap, StatusMapBack } from './constants'
+import type { StatusMap } from './constants'
 import type { Cookie } from './cookie'
 import type { BaseCookie } from './cookie/types'
 
@@ -62,7 +62,9 @@ export function clearContextCache() {
 	sharedEmptyContext = null
 }
 
-function buildEmptyContext(Base: any) {
+// Cached once per app (contextCache), NOT per-request — `headers` (null for the
+// shared-empty path) is the only field that varies between the two call sites.
+function buildEmptyContext(Base: any, headers: object | null = null) {
 	return class Context extends Base {
 		params?: Record<string, string>
 		headers?: Record<string, string>
@@ -79,7 +81,7 @@ function buildEmptyContext(Base: any) {
 		constructor(public request: Request) {
 			super()
 			this.set = {
-				headers: Object.create(null),
+				headers: Object.create(headers),
 				status: undefined,
 				cookie: undefined
 			}
@@ -106,43 +108,11 @@ export function createContext(
 		return sharedEmptyContext
 	}
 
-	const context = class Context extends createBaseContext(app) {
-		params?: Record<string, string>
-		headers?: Record<string, string>
-		qi!: number
-		set: {
-			headers: Record<string, string>
-			status?: number | string
-			cookie?: Record<string, unknown>
-		}
-		rid?: string
-		route?: string
-		trace?: any[]
-
-		constructor(public request: Request) {
-			super()
-
-			this.set = {
-				headers: Object.create(headers),
-				status: undefined,
-				cookie: undefined
-			}
-		}
-	} as any
+	const context = buildEmptyContext(createBaseContext(app), headers) as any
 
 	contextCache.set(app, context)
 	return context
 }
-
-type CheckExcessProps<T, U> = 0 extends 1 & T
-	? T // T is any
-	: U extends U
-		? Exclude<keyof T, keyof U> extends never
-			? T
-			: { [K in keyof U]: U[K] } & {
-					[K in Exclude<keyof T, keyof U>]: never
-				}
-		: never
 
 export type ErrorContext<
 	in out Route extends RouteSchema = {},
@@ -186,35 +156,7 @@ export type ErrorContext<
 
 		status: {} extends Route['response']
 			? typeof status
-			: <
-					const Code extends
-						| keyof Route['response']
-						| StatusMapBack[Extract<
-								keyof StatusMapBack,
-								keyof Route['response']
-						  >],
-					T extends Code extends keyof Route['response']
-						? Route['response'][Code]
-						: Code extends keyof StatusMap
-							? // @ts-ignore StatusMap[Code] always valid because Code generic check
-								Route['response'][StatusMap[Code]]
-							: never
-				>(
-					code: Code,
-					response: CheckExcessProps<
-						T,
-						Code extends keyof Route['response']
-							? Route['response'][Code]
-							: Code extends keyof StatusMap
-								? // @ts-ignore StatusMap[Code] always valid because Code generic check
-									Route['response'][StatusMap[Code]]
-								: never
-					>
-				) => ElysiaStatus<
-					// @ts-ignore trust me bro
-					Code,
-					T
-				>
+			: SelectiveStatus<Route['response']>
 
 		/**
 		 * Path extracted from incoming URL

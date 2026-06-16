@@ -1,6 +1,16 @@
+let warnedNoGc = false
 export function gc() {
 	if (typeof Bun !== 'undefined') Bun.gc(true)
 	else if (typeof global.gc === 'function') global.gc()
+	else if (!warnedNoGc) {
+		warnedNoGc = true
+		// On Node without `--expose-gc`, global.gc is undefined → this silently
+		// no-ops and memory numbers include uncollected garbage (unfair vs Bun,
+		// which always GCs). Surface it instead of lying.
+		console.warn(
+			'[stress] global.gc unavailable — run Node with `--expose-gc` for accurate memory numbers.'
+		)
+	}
 }
 
 export function memoryUsage() {

@@ -86,27 +86,30 @@ describe('Native Static Response', () => {
 			new Elysia().use(plugin).get('/', 'Static Content')
 		)
 
+		// Loose entries share the canonical Response object (no clone), so
+		// clone before reading — consuming the body here would empty the
+		// object Bun serves by reference.
 		expect(app['~staticResponse']['/'].GET).toBeInstanceOf(Response)
-		expect(await app['~staticResponse']['/'].GET.text()).toEqual(
+		expect(await app['~staticResponse']['/'].GET.clone().text()).toEqual(
 			'Static Content'
 		)
 
 		expect(app['~staticResponse'][''].GET).toBeInstanceOf(Response)
-		expect(await app['~staticResponse'][''].GET.text()).toEqual(
+		expect(await app['~staticResponse'][''].GET.clone().text()).toEqual(
 			'Static Content'
 		)
 
 		expect(app['~staticResponse']['/plugin'].GET).toBeInstanceOf(Response)
-		expect(await app['~staticResponse']['/plugin'].GET.text()).toEqual(
-			'Plugin'
-		)
+		expect(
+			await app['~staticResponse']['/plugin'].GET.clone().text()
+		).toEqual('Plugin')
 
 		expect(app['~staticResponse']['/plugin/'].GET).toBeInstanceOf(
 			Response
 		)
-		expect(await app['~staticResponse']['/plugin/'].GET.text()).toEqual(
-			'Plugin'
-		)
+		expect(
+			await app['~staticResponse']['/plugin/'].GET.clone().text()
+		).toEqual('Plugin')
 
 		const strict = build(
 			new Elysia({ strictPath: true })

@@ -68,12 +68,7 @@ async function handleWSResponse(
 ): Promise<void> {
 	if (value === undefined) return
 
-	if (
-		value !== null &&
-		typeof (value as any).next === 'function' &&
-		(typeof (value as any)[Symbol.iterator] === 'function' ||
-			typeof (value as any)[Symbol.asyncIterator] === 'function')
-	) {
+	if (isGeneratorObject(value)) {
 		const iter = value as Iterator<unknown> | AsyncIterator<unknown>
 		while (true) {
 			const step = iter.next()
@@ -96,12 +91,6 @@ async function handleWSResponse(
 		: value
 
 	;(ws as any).send(mapped)
-}
-
-function dispatchHandler(fn: AnyFn, ws: ElysiaWS<any>, body?: unknown) {
-	if (fn.length >= 2) return fn(ws, body)
-
-	return fn(ws)
 }
 
 export function buildWSRoute(
@@ -404,7 +393,7 @@ export function buildWSRoute(
 		return async (ws: ElysiaWS<any>, bodyArg?: unknown) => {
 			try {
 				if (withBody) ws.body = bodyArg as any
-				const result = dispatchHandler(fn, ws, bodyArg)
+				const result = withBody ? fn(ws, bodyArg) : fn(ws)
 				const resolved =
 					result instanceof Promise ? await result : result
 				await handleWSResponse(ws, resolved, mapResponses)

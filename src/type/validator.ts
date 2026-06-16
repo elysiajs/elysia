@@ -44,12 +44,7 @@ import {
 	collectExternals,
 	externalsMatch,
 	reconstructCheck,
-	captureValidator,
-	captureMirror,
-	captureDecodeMirror,
-	captureMirrorUnions,
-	captureMirrorCodecs,
-	isValidatorCapturing,
+	Capture,
 	type CheckBuildResult,
 	type FrozenValidator
 } from '../compile/aot'
@@ -367,7 +362,7 @@ export class TypeBoxValidator<
 			) as unknown as T
 
 		if (!isFrozen) {
-			const capturing = isValidatorCapturing()
+			const capturing = Capture.isCapturing()
 			this.tb = capturing
 				? sourceOnlyValidator(this.schema as TSchema)
 				: Compile(this.schema as TSchema)
@@ -478,7 +473,7 @@ export class TypeBoxValidator<
 				}
 			}
 
-			if (isValidatorCapturing())
+			if (Capture.isCapturing())
 				try {
 					const emitted = createMirror(schema, {
 						Compile,
@@ -490,7 +485,7 @@ export class TypeBoxValidator<
 						const ext = emitted.externals
 
 						if (!ext)
-							captureMirror({
+							Capture.mirror({
 								method: aot.method,
 								path: aot.path,
 								slot,
@@ -500,10 +495,10 @@ export class TypeBoxValidator<
 								}
 							})
 						else if (ext.unions && !ext.hof) {
-							const u = captureMirrorUnions(schema, ext.unions)
+							const u = Capture.mirrorUnions(schema, ext.unions)
 
 							if (u)
-								captureMirror({
+								Capture.mirror({
 									method: aot.method,
 									path: aot.path,
 									slot,
@@ -560,7 +555,7 @@ export class TypeBoxValidator<
 		if (
 			aot &&
 			slot &&
-			isValidatorCapturing() &&
+			Capture.isCapturing() &&
 			!slot.startsWith('response')
 		)
 			try {
@@ -577,7 +572,7 @@ export class TypeBoxValidator<
 					if (
 						ext?.codecs &&
 						!ext.hof &&
-						captureMirrorCodecs(schema, ext.codecs)
+						Capture.mirrorCodecs(schema, ext.codecs)
 					) {
 						let u:
 							| { identifier: string; code: string }[][]
@@ -585,12 +580,12 @@ export class TypeBoxValidator<
 						let freezable = true
 
 						if (ext.unions && ext.unions.length) {
-							u = captureMirrorUnions(schema, ext.unions)
+							u = Capture.mirrorUnions(schema, ext.unions)
 							if (!u) freezable = false
 						}
 
 						if (freezable)
-							captureDecodeMirror({
+							Capture.mirrorDecode({
 								method: aot.method,
 								path: aot.path,
 								slot,
@@ -642,7 +637,7 @@ export class TypeBoxValidator<
 	): void {
 		const aot = options?.aot
 		const slot = options?.slot
-		if (!aot || !slot || !isValidatorCapturing()) return
+		if (!aot || !slot || !Capture.isCapturing()) return
 
 		// @ts-expect-error private property
 		const build = this.tb!.buildResult as CheckBuildResult
@@ -652,7 +647,7 @@ export class TypeBoxValidator<
 		if (!externalsMatch(collectExternals(this.schema), variables)) return
 
 		const r = reconstructCheck(build)
-		captureValidator({
+		Capture.validator({
 			method: aot.method,
 			path: aot.path,
 			slot,

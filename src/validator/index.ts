@@ -9,7 +9,7 @@ import type { ElysiaConfig, MaybePromise } from '../types'
 import type { CoerceOption } from '../type/coerce'
 import {
 	Compiled,
-	isValidatorCapturing,
+	Capture,
 	type ValidatorSlot
 } from '../compile/aot'
 
@@ -118,7 +118,7 @@ export abstract class Validator {
 			const bypassCache =
 				!!aot &&
 				!!slot &&
-				(isValidatorCapturing() ||
+				(Capture.isCapturing() ||
 					(options?.normalize !== 'typebox' &&
 						// lazy-aware: checks existence without materializing the group
 						Compiled.hasValidator(aot.method, aot.path, slot)))
@@ -170,7 +170,7 @@ export abstract class Validator {
 		const responseSlot = (status: number | string) =>
 			options?.aot ? (`response:${status}` as ValidatorSlot) : undefined
 
-		if ('~kind' in schema || '~elyAcl' in schema || '~standard' in schema)
+		if (isSingleSchema(schema))
 			return {
 				200: Validator.create(
 					schema as TSchema | StandardSchemaV1Like,
@@ -207,13 +207,17 @@ export abstract class Validator {
 	}
 }
 
+// a single TypeBox / Standard / Acl schema vs a `Record<status, schema>` map
+const isSingleSchema = (schema: any): boolean =>
+	'~kind' in schema || '~elyAcl' in schema || '~standard' in schema
+
 const toStatusBased = (
 	schema:
 		| TSchema
 		| StandardSchemaV1Like
 		| Record<number, TSchema | StandardSchemaV1Like>
 ): Record<number, AnySchema> =>
-	'~kind' in schema || '~elyAcl' in schema || '~standard' in schema
+	isSingleSchema(schema)
 		? { 200: schema as unknown as AnySchema }
 		: (schema as Record<number, AnySchema>)
 

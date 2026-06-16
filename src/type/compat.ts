@@ -2,7 +2,7 @@ import { useTypebox } from './bridge'
 
 import { Compile } from 'typebox/compile'
 import { Ref } from 'typebox/type'
-import { Decode, Errors, HasCodec, Default } from 'typebox/value'
+import { Decode, HasCodec, Default } from 'typebox/value'
 
 import * as TypeRegistry from './exports'
 
@@ -27,7 +27,6 @@ export function setupTypebox() {
 	useTypebox({
 		Compile,
 		Decode,
-		Errors,
 		applyCoercions,
 		TypeBoxValidator: TypeBoxValidator as any,
 		TypeBoxValidatorCache: TypeBoxValidatorCache as any,

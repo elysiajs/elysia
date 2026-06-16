@@ -43,14 +43,14 @@ stop()
 const handle = app.handle
 const body = JSON.stringify({ name: 'a', age: 1 })
 
+// Reuse no-body Requests so the op measures framework dispatch, not `new Request`.
+const getRoot = new Request('http://e.ly/')
+const getRes = new Request('http://e.ly/res/3/7')
+
 summary(() => {
 	group('composite throughput', () => {
-		bench('GET / (derive+guard+global)', () =>
-			handle(new Request('http://e.ly/'))
-		)
-		bench('GET /res/3/:id (dynamic+params)', () =>
-			handle(new Request('http://e.ly/res/3/7'))
-		)
+		bench('GET / (derive+guard+global)', () => handle(getRoot))
+		bench('GET /res/3/:id (dynamic+params)', () => handle(getRes))
 		bench('POST /users (body+response)', () =>
 			handle(
 				new Request('http://e.ly/users', {

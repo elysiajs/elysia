@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'bun:test'
 
 import { t } from '../../src'
-import { hasType } from '../../src/type/utils'
+import { hasType } from './has-type'
 import { ELYSIA_TYPES } from '../../src/type/constants'
 
 describe('Has Type', () => {

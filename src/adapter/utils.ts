@@ -164,46 +164,32 @@ export function responseToSetHeaders(response: Response, set?: Context['set']) {
 
 		if (set.status === undefined || set.status === 200)
 			set.status = response.status
-
-		// ? `content-encoding` prevent response streaming
-		if (set.headers['content-encoding'])
-			delete set.headers['content-encoding']
-
-		return set
-	}
-
-	if (!response)
+	} else if (!response) {
 		return {
 			headers: nullObject(),
 			status: set?.status ?? 200
 		}
-
-	if (hasHeaderShorthand) {
+	} else if (hasHeaderShorthand) {
 		set = {
 			headers: response.headers.toJSON(),
 			status: set?.status ?? 200
 		}
+	} else {
+		set = {
+			headers: nullObject(),
+			status: set?.status ?? 200
+		}
 
-		// ? `content-encoding` prevent response streaming
-		if (set.headers['content-encoding'])
-			delete set.headers['content-encoding']
-
-		return set
+		for (const [key, value] of response.headers.entries())
+			set.headers[key] = value
 	}
 
-	set = {
-		headers: nullObject(),
-		status: set?.status ?? 200
-	}
+	// ? `content-encoding` prevents response streaming — strip it once,
+	// whichever branch built `set.headers`.
+	if (set!.headers['content-encoding'])
+		delete set!.headers['content-encoding']
 
-	for (const [key, value] of response.headers.entries()) {
-		// ? `content-encoding` prevent response streaming
-		if (key === 'content-encoding') continue
-
-		set.headers[key] = value
-	}
-
-	return set
+	return set!
 }
 
 interface CreateHandlerParameter {
@@ -413,22 +399,11 @@ export const createStreamHandler =
 	}
 
 export async function* streamResponse(response: Response) {
+	// ReadableStream is async-iterable on every target runtime (verified:
+	// Bun, Node 22, Deno 2, workerd 2025). NOTE: `yield*` cancels the body on
+	// early termination, where the old getReader()+releaseLock() only released.
 	const body = response.body
-
-	if (!body) return
-
-	const reader = body.getReader()
-
-	try {
-		while (true) {
-			const { done, value } = await reader.read()
-			if (done) break
-
-			yield value
-		}
-	} finally {
-		reader.releaseLock()
-	}
+	if (body) yield* body as any
 }
 
 export function handleSet(set: Context['set']) {
@@ -461,28 +436,33 @@ export function handleSet(set: Context['set']) {
 	}
 }
 
+function applySetHeaders(
+	target: Headers,
+	setHeaders: Context['set']['headers'],
+	present: Headers
+) {
+	if (setHeaders instanceof Headers)
+		for (const key of setHeaders.keys()) {
+			if (key === setCookie) {
+				if (target.has(setCookie)) continue
+
+				for (const cookie of setHeaders.getSetCookie())
+					target.append(setCookie, cookie)
+			} else if (!present.has(key))
+				target.set(key, setHeaders.get(key) ?? '')
+		}
+	else
+		for (const key in setHeaders)
+			if (key === setCookie) target.append(key, setHeaders[key] as any)
+			else if (!present.has(key)) target.set(key, setHeaders[key] as any)
+}
+
 export function mergeHeaders(
 	responseHeaders: Headers,
 	setHeaders: Context['set']['headers']
 ) {
 	const headers = new Headers(responseHeaders)
-
-	if (setHeaders instanceof Headers)
-		for (const key of setHeaders.keys()) {
-			if (key === setCookie) {
-				if (headers.has(setCookie)) continue
-
-				for (const cookie of setHeaders.getSetCookie())
-					headers.append(setCookie, cookie)
-			} else if (!responseHeaders.has(key))
-				headers.set(key, setHeaders?.get(key) ?? '')
-		}
-	else
-		for (const key in setHeaders)
-			if (key === setCookie) headers.append(key, setHeaders[key] as any)
-			else if (!responseHeaders.has(key))
-				headers.set(key, setHeaders[key] as any)
-
+	applySetHeaders(headers, setHeaders, responseHeaders)
 	return headers
 }
 
@@ -521,14 +501,10 @@ export const createResponseHandler = (handler: CreateHandlerParameter) => {
 			) {
 				const responseHeaders = response.headers
 
-				if (set.headers instanceof Headers) {
-					for (const key of set.headers.keys())
-						if (!responseHeaders.has(key))
-							responseHeaders.set(key, set.headers.get(key) ?? '')
-				} else
-					for (const key in set.headers)
-						if (!responseHeaders.has(key))
-							responseHeaders.set(key, set.headers[key] as any)
+				// In-place (target === present): no new Headers allocation on
+				// the hot Bun no-status-change path. setCookie is guarded out
+				// above, so that branch never fires here.
+				applySetHeaders(responseHeaders, set.headers, responseHeaders)
 
 				if (
 					!responseHeaders.has('content-length') &&
@@ -625,8 +601,6 @@ export async function tee<T>(
 		}
 	}
 
-	// Drop entries every active branch has read
-	// let the producer resume if freed room under the cap
 	const trim = () => {
 		if (active > 0) {
 			let min = Infinity
@@ -636,6 +610,7 @@ export async function tee<T>(
 				base = min
 			}
 		}
+
 		if (buffer.length < cap) resumeProducer()
 	}
 
@@ -653,7 +628,6 @@ export async function tee<T>(
 						drainResume = resolve
 					})
 			}
-		} catch {
 		} finally {
 			done = true
 			wake()

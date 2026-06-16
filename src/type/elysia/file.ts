@@ -13,7 +13,7 @@ import {
 
 import {
 	ASYNC_REFINE,
-	checkFileExtension,
+	matchesAnyFileType,
 	maybeQueueFileTypeCheck,
 	parseFileUnit
 } from './file-type'
@@ -86,14 +86,7 @@ function FileWithProperty(options: FilesOptions) {
 				: `Expect file type to be one of ${types.join(', ')}`
 
 		const checkType = (value: File) => {
-			let match = false
-			for (let i = 0; i < types.length; i++)
-				if (checkFileExtension(value.type, types[i])) {
-					match = true
-					break
-				}
-
-			if (!match) return false
+			if (!matchesAnyFileType(value.type, types)) return false
 
 			maybeQueueFileTypeCheck(value, types, message)
 

@@ -1,6 +1,5 @@
 export {
 	ElysiaWS,
-	isGeneratorFunction,
 	isGeneratorObject,
 	type WSConnectionData
 } from './context'

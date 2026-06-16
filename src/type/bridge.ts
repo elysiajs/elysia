@@ -2,7 +2,6 @@ import type { TAny, TSchema, Ref as RefType } from 'typebox/type'
 import type { Compile as CompileType } from 'typebox/compile'
 import type {
 	Decode as DecodeType,
-	Errors as ErrorsType,
 	HasCodec as HasCodecType,
 	Default as DefaultType
 } from 'typebox/value'
@@ -28,7 +27,6 @@ import type { hasTypes as hasTypesType } from './utils'
 interface TypeboxModule {
 	Compile: typeof CompileType
 	Decode: typeof DecodeType
-	Errors: typeof ErrorsType
 	applyCoercions: typeof applyCoercionsType
 	TypeBoxValidator: TypeBoxValidatorType
 	TypeBoxValidatorCache: TypeBoxValidatorCacheType
@@ -81,7 +79,6 @@ function stubClass(name: keyof TypeboxModule) {
 
 export let Compile: typeof CompileType = stub('Compile')
 export let Decode: typeof DecodeType = stub('Decode')
-export let Errors: typeof ErrorsType = stub('Errors')
 
 export let applyCoercions: typeof applyCoercionsType = stub('applyCoercions')
 
@@ -119,7 +116,6 @@ export function useTypebox(mod: TypeboxModule) {
 
 	Compile = mod.Compile
 	Decode = mod.Decode
-	Errors = mod.Errors
 	applyCoercions = mod.applyCoercions
 	TypeBoxValidator = mod.TypeBoxValidator
 	TypeBoxValidatorCache = mod.TypeBoxValidatorCache

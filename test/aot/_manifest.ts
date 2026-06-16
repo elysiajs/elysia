@@ -1,9 +1,5 @@
 import {
-	checkFactorySource,
-	checkCode,
-	mirrorFactorySource,
-	bothFactorySource,
-	handlerFactorySource,
+	Source,
 	type CapturedValidator,
 	type ValidatorManifest,
 	type CapturedHandler,
@@ -35,7 +31,7 @@ export const materialiseHandlers = (
 	for (const h of captured) {
 		;(m[h.method] ??= {})[h.path] = {
 			a: h.alias ? h.alias.split(',') : [],
-			f: fn(handlerFactorySource(h.alias, h.code)) as any
+			f: fn(Source.handlerFactory(h.alias, h.code)) as any
 		}
 	}
 	return m
@@ -62,13 +58,13 @@ export const materialise = (
 		}
 		const branchTable = (u: NonNullable<typeof c.mirror>['u'] & {}) =>
 			u.map((branch) =>
-				branch.map((b) => fn(checkFactorySource(b.identifier, b.code)))
+				branch.map((b) => fn(Source.checkFactory(b.identifier, b.code)))
 			)
 
 		if (c.checkValue && c.mirror) {
 			// merged: one factory → { check, clean }; `u` rides at entry level
 			entry.cm = fn(
-				bothFactorySource(
+				Source.bothFactory(
 					c.identifier!,
 					c.checkDefs!,
 					c.checkValue,
@@ -80,15 +76,15 @@ export const materialise = (
 			if (c.mirror.u) entry.u = branchTable(c.mirror.u)
 		} else if (c.checkValue) {
 			entry.c = fn(
-				checkFactorySource(
+				Source.checkFactory(
 					c.identifier!,
-					checkCode(c.checkDefs!, c.checkValue)
+					Source.checkCode(c.checkDefs!, c.checkValue)
 				)
 			)
 			setFlags()
 		} else if (c.mirror) {
 			const mir: any = {
-				s: fn(mirrorFactorySource(c.mirror.source, c.mirror.hasExternals))
+				s: fn(Source.mirrorFactory(c.mirror.source, c.mirror.hasExternals))
 			}
 			if (c.mirror.u) mir.u = branchTable(c.mirror.u)
 			entry.m = mir
@@ -97,7 +93,7 @@ export const materialise = (
 		// request-side decode mirror (always factory: codecs ride in `d`)
 		if (c.decodeMirror) {
 			const dm: any = {
-				s: fn(mirrorFactorySource(c.decodeMirror.source, true))
+				s: fn(Source.mirrorFactory(c.decodeMirror.source, true))
 			}
 			if (c.decodeMirror.u) dm.u = branchTable(c.decodeMirror.u)
 			entry.dm = dm

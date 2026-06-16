@@ -133,12 +133,10 @@ export interface DateOptions extends TSchemaOptions {
 	default?: string | Date | number
 }
 
-export interface Uint8ArrayOptions extends TSchemaOptions {
+export interface ArrayBufferOptions extends TSchemaOptions {
 	maxByteLength?: number
 	minByteLength?: number
 }
-
-export interface ArrayBufferOptions extends Uint8ArrayOptions {}
 
 /**
  * !important
@@ -304,9 +302,3 @@ export type TypeBoxSchema =
 	| { '~codec': unknown }
 
 export type AnySchema = TypeBoxSchema | StandardSchemaV1Like
-
-export type GetOwnPropertyDescriptor<T> = {
-	[P in keyof T]: TypedPropertyDescriptor<T[P]>
-} & {
-	[x: string]: PropertyDescriptor
-}

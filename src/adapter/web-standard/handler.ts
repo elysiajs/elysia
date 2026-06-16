@@ -326,21 +326,10 @@ function mapFallback(
 				request
 			)
 
-		// custom class with an array-like value
-		// eg. Bun.sql`` result
-		if (Array.isArray(response)) return Response.json(response) as any
-
 		// @ts-expect-error
 		if (response?.constructor?.name === 'Cookie' && response.jar)
 			// @ts-expect-error
 			return new Response(response.value, set as ResponseInit)
-
-		// if ('charCodeAt' in (response as any)) {
-		// 	const code = (response as any).charCodeAt(0)
-
-		// 	if (code === 123 || code === 91)
-		// 		return Response.json(response, set as unknown as ResponseInit)
-		// }
 
 		if (mustReturn)
 			return new Response(response as any, set as ResponseInit)

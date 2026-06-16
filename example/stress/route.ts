@@ -8,29 +8,8 @@ const stop = profile('Elysia 2α add route x100k')
 
 for (let i = 0; i < total; i++) app.get(`/${i}`, () => 'ok')
 
-app.fetch
-
 // full build
 // app.listen(3000)
 
+app.fetch
 stop()
-
-// await handler({
-// 	set: {
-// 		status: 200,
-// 		headers: {}
-// 	},
-// 	request: new Request('http://localhost?a=b', {
-// 		method: 'GET',
-// 		headers: {
-// 			'content-type': 'application/json'
-// 		},
-// 		body: JSON.stringify([
-// 			{
-// 				name: 'q'
-// 			}
-// 		])
-// 	})
-// })
-// 	.then((res) => res.text())
-// 	.then(console.log)

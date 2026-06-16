@@ -1,4 +1,15 @@
 import { isAsyncFunction } from '../compile/utils'
+import { isCloudflareWorker } from '../universal/constants'
+
+// cached + cloned Response factory (Cloudflare can't reuse a Response across requests)
+export function cachedResponse(body: string, status: number): () => Response {
+	let cached: Response | undefined
+
+	return (): Response =>
+		isCloudflareWorker
+			? new Response(body, { status })
+			: ((cached ??= new Response(body, { status })).clone() as Response)
+}
 
 export function forwardError<T>(value: T): T {
 	if (value instanceof Error) throw value

@@ -19,26 +19,6 @@ export namespace Sucrose {
 	}
 
 	export type LifeCycle = Partial<Partial<AppHook>>
-
-	export interface Settings {
-		/**
-		 * If no sucrose usage is found in time
-		 * it's likely that server is either idle or
-		 * no new compilation is happening
-		 * clear the cache to free up memory
-		 *
-		 * @default 1 * 60 * 1000 (1 minute)
-		 */
-		gcTime?: number | null
-		/**
-		 * Maximum number of cached inferences before LRU eviction kicks in.
-		 * Bounds memory when many unique handler sources are compiled (e.g.
-		 * 100k routes with distinct closures) without waiting for `gcTime`.
-		 *
-		 * @default 1024
-		 */
-		cacheLimit?: number
-	}
 }
 
 /**
@@ -49,11 +29,7 @@ export namespace Sucrose {
  * separateFunction('async ({ hello }) => { return hello }') // => ['({ hello })', '{ return hello }']
  * ```
  */
-export function separateFunction(code: string): [
-	string,
-	string
-	// isArrowReturn: boolean
-] {
+export function separateFunction(code: string): [string, string] {
 	// Remove async keyword without removing space (both minify and non-minify)
 	if (code.startsWith('async')) code = code.slice(5)
 	code = code.trimStart()
@@ -73,11 +49,7 @@ export function separateFunction(code: string): [
 			let body = code.slice(index + 2)
 			if (body.charCodeAt(0) === 32) body = body.trimStart()
 
-			return [
-				code.slice(1, bracketEndIndex),
-				body
-				// body.charCodeAt(0) !== 123
-			]
+			return [code.slice(1, bracketEndIndex), body]
 		}
 	}
 
@@ -89,11 +61,7 @@ export function separateFunction(code: string): [
 			let body = code.slice(index + 2)
 			if (body.charCodeAt(0) === 32) body = body.trimStart()
 
-			return [
-				code.slice(0, index),
-				body
-				// body.charCodeAt(0) !== 123
-			]
+			return [code.slice(0, index), body]
 		}
 	}
 
@@ -102,11 +70,7 @@ export function separateFunction(code: string): [
 		index = code.indexOf('(')
 		const end = code.indexOf(')')
 
-		return [
-			code.slice(index + 1, end),
-			code.slice(end + 2)
-			// false
-		]
+		return [code.slice(index + 1, end), code.slice(end + 2)]
 	}
 
 	// Probably Declare as method
@@ -119,21 +83,13 @@ export function separateFunction(code: string): [
 
 		const body = code.slice(sep + 1)
 
-		return [
-			parameter.slice(start, end),
-			'{' + body
-			// false
-		]
+		return [parameter.slice(start, end), '{' + body]
 	}
 
 	// Unknown case
 	const x = code.split('\n', 2)
 
-	return [
-		x[0],
-		x[1]
-		// false
-	]
+	return [x[0], x[1]]
 }
 
 /**
@@ -237,7 +193,7 @@ export function retrieveRootparameters(parameter: string) {
 		parameter = parameter.slice(1, -1)
 	}
 
-	parameter = parameter.replace(/( |\t|\n)/g, '').trim()
+	parameter = parameter.replace(/[ \t\n]/g, '')
 	let parameters = <string[]>[]
 
 	// Object destructuring
@@ -314,23 +270,6 @@ function findEndIndex(
 
 	return match ? match.index : -1
 }
-
-// const findEndQueryBracketIndex = (
-// 	type: string,
-// 	content: string,
-// 	index?: number | undefined
-// ) => {
-// 	const bracketEndIndex = content.indexOf(type + ']', index)
-// 	const singleQuoteIndex = content.indexOf(type + "'", index)
-// 	const doubleQuoteIndex = content.indexOf(type + '"', index)
-
-// 	// Pick the smallest index that is not -1 or 0
-// 	return (
-// 		[bracketEndIndex, singleQuoteIndex, doubleQuoteIndex]
-// 			.filter((i) => i > 0)
-// 			.sort((a, b) => a - b)[0] || -1
-// 	)
-// }
 
 /**
  * Find alias of variable from function body
@@ -415,14 +354,6 @@ export function findAlias(
 
 	return aliases
 }
-
-// ? This is normalized to dot notation in Bun
-// const accessor = <T extends string, P extends string>(parent: T, prop: P) =>
-// 	[
-// 		parent + '.' + prop,
-// 		parent + '["' + prop + '"]',
-// 		parent + "['" + prop + "']"
-// 	] as const
 
 export function extractMainParameter(parameter: string) {
 	if (!parameter) return
@@ -529,10 +460,14 @@ export function removeDefaultParameter(parameter: string) {
 		const commaIndex = parameter.indexOf(',', index)
 		const bracketIndex = parameter.indexOf('}', index)
 
+		// smallest positive of the two (neither can be 0 — both are searched
+		// from the `=` position), or -1 when both are absent
 		const end =
-			[commaIndex, bracketIndex]
-				.filter((i) => i > 0)
-				.sort((a, b) => a - b)[0] || -1
+			commaIndex === -1
+				? bracketIndex
+				: bracketIndex === -1
+					? commaIndex
+					: Math.min(commaIndex, bracketIndex)
 
 		if (end === -1) {
 			parameter = parameter.slice(0, index)
@@ -637,7 +572,7 @@ function clearCache() {
 	if (isBun) Bun.gc(false)
 }
 
-export function clearSucroseCache(delay: Sucrose.Settings['gcTime']) {
+export function clearSucroseCache(delay?: number | null) {
 	// Can't setTimeout outside fetch in Cloudflare Worker
 	if (delay === null || isCloudflareWorker) return
 	if (delay === undefined) delay = 1 * 60 * 1000
@@ -693,10 +628,10 @@ const eventsBuffer = <Handler[]>[]
 
 export function sucrose(
 	handler: Handler | undefined,
-	lifeCycle: Sucrose.LifeCycle | undefined,
-	inference?: Sucrose.Inference,
-	settings?: Sucrose.Settings
+	lifeCycle: Sucrose.LifeCycle | undefined
 ): Sucrose.Inference {
+	let inference: Sucrose.Inference | undefined
+
 	const events = eventsBuffer
 	events.length = 0
 
@@ -746,7 +681,7 @@ export function sucrose(
 
 		if (needGc) {
 			needGc = false
-			clearSucroseCache(settings?.gcTime)
+			clearSucroseCache()
 		}
 
 		let fnInference: Sucrose.Inference | undefined = defaultSucrose()
@@ -779,7 +714,7 @@ export function sucrose(
 		}
 
 		if (!caches.has(key)) {
-			const limit = settings?.cacheLimit ?? DEFAULT_CACHE_LIMIT
+			const limit = DEFAULT_CACHE_LIMIT
 			if (caches.size >= limit) {
 				// Drop the oldest (first inserted / least recently used).
 				const oldest = caches.keys().next().value

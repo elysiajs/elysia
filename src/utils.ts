@@ -490,13 +490,6 @@ export const eventProperties = new Set([
 	'error'
 ])
 
-const nativeProperties = new Set([
-	...schemaProperties,
-	...eventProperties,
-	'schema',
-	'detail'
-])
-
 export function hookToGuard(
 	a: Partial<AppHook & Macro> & {
 		schema?: GuardSchemaType
@@ -573,24 +566,6 @@ export function coalesceStandaloneSchemas(
 	}
 }
 
-export function mergeGuard(
-	a: Partial<AppHook & Macro>,
-	b: Partial<AppHook & Macro> | undefined
-): Partial<AppHook & Macro> {
-	if (!b) return a
-	// b is undefined but it's shorter this way
-	if (!a) return b
-
-	a = mergeHook(a, b, true) as any
-
-	// let macro: Record<string, unknown> | undefined
-	for (const key in b)
-		if (!nativeProperties.has(key as any) && key in b)
-			a[key] = b[key as keyof typeof b]
-
-	return a
-}
-
 export function mergeHook(
 	a: Partial<AppHook>,
 	b: Partial<AppHook> | undefined,
@@ -664,7 +639,7 @@ const isObject = (item: any): item is Object =>
 	item && typeof item === 'object' && !Array.isArray(item)
 
 const isClassRegex = /^\s*class\s+/
-export const isClass = (v: Object) =>
+const isClass = (v: Object) =>
 	(typeof v === 'function' && isClassRegex.test(v.toString())) ||
 	// Handle Object.create(null)
 	(v.toString &&
@@ -768,18 +743,10 @@ export function pushField<K extends keyof any>(
 	} else target[key] = defaultArray ? [item] : item
 }
 
-export const pushArray = <K extends keyof any>(
-	target: Record<K, unknown>,
-	key: K,
-	item: unknown
-) => pushField(target, key, item, true)
-
 export const requestId = isBun
 	? Bun.randomUUIDv7
 	: // @ts-ignore
 		(crypto.randomUUIDv7?.bind(crypto) ?? crypto.randomUUID?.bind(crypto))
-
-export const isEncoded = /%[0-9A-Fa-f]{2}/
 
 export function replaceUrlPath(url: string, path: string) {
 	const i = url.indexOf('/', 11)

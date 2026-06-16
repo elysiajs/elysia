@@ -21,10 +21,8 @@ interface RouteSchema {
 	response?: Record<number, AnySchema>
 }
 
-export interface RouteValidatorOptions extends Omit<
-	ValidatorOptions,
-	'coerces' | 'schemas' | 'slot'
-> {
+export interface RouteValidatorOptions
+	extends Omit<ValidatorOptions, 'coerces' | 'schemas' | 'slot'> {
 	schemas?: {
 		body: AnySchema
 		headers: AnySchema
@@ -54,6 +52,11 @@ function pickStandalone<K extends keyof RouteSchema>(
 	return result
 }
 
+const coerceFile = (schema) =>
+	hasTypes([ELYSIA_TYPES.File, ELYSIA_TYPES.Files], schema)
+		? coerceFormData()
+		: coerceBody()
+
 export class RouteValidator<const in out T extends RouteSchema> {
 	body: ToSubTypeValidator<T['body']> | undefined
 	headers: ToSubTypeValidator<T['headers']> | undefined
@@ -73,95 +76,34 @@ export class RouteValidator<const in out T extends RouteSchema> {
 
 		const standaloneSchemas = options?.schemas
 
-		const bodyStandalone = pickStandalone(standaloneSchemas, 'body') as
-			| AnySchema[]
-			| undefined
+		const slots: [
+			'body' | 'headers' | 'query' | 'params' | 'cookie',
+			(schema: any) => any
+		][] = [
+			['body', coerceFile],
+			['headers', coerceStringToStructure],
+			['query', coerceQuery],
+			['params', coerceRoot],
+			['cookie', coerceStringToStructure]
+		]
 
-		if (route.body || bodyStandalone?.length) {
-			const body = Validator.reference(
-				(route.body ?? bodyStandalone![0]) as AnySchema,
+		for (const [slot, coerce] of slots) {
+			const standalone = pickStandalone(standaloneSchemas, slot) as
+				| AnySchema[]
+				| undefined
+			if (!route[slot] && !standalone?.length) continue
+
+			const reference = Validator.reference(
+				(route[slot] ?? standalone![0]) as AnySchema,
 				options?.models
 			)
 
-			this.body = Validator.create(route.body as any, {
+			;(this as any)[slot] = Validator.create(route[slot] as any, {
 				...options,
-				slot: 'body',
-				schemas: bodyStandalone,
-				coerces: isTb(body)
-					? hasTypes([ELYSIA_TYPES.File, ELYSIA_TYPES.Files], body)
-						? coerceFormData()
-						: coerceBody()
-					: undefined
-			}) as any
-		}
-
-		const headersStandalone = pickStandalone(
-			standaloneSchemas,
-			'headers'
-		) as AnySchema[] | undefined
-		if (route.headers || headersStandalone?.length) {
-			const headers = Validator.reference(
-				(route.headers ?? headersStandalone![0]) as AnySchema,
-				options?.models
-			)
-
-			this.headers = Validator.create(route.headers as any, {
-				...options,
-				slot: 'headers',
-				schemas: headersStandalone,
-				coerces: isTb(headers) ? coerceStringToStructure() : undefined
-			}) as any
-		}
-
-		const queryStandalone = pickStandalone(standaloneSchemas, 'query') as
-			| AnySchema[]
-			| undefined
-		if (route.query || queryStandalone?.length) {
-			const query = Validator.reference(
-				(route.query ?? queryStandalone![0]) as AnySchema,
-				options?.models
-			)
-
-			this.query = Validator.create(route.query as any, {
-				...options,
-				slot: 'query',
-				schemas: queryStandalone,
-				coerces: isTb(query) ? coerceQuery() : undefined
-			}) as any
-		}
-
-		const paramsStandalone = pickStandalone(standaloneSchemas, 'params') as
-			| AnySchema[]
-			| undefined
-		if (route.params || paramsStandalone?.length) {
-			const params = Validator.reference(
-				(route.params ?? paramsStandalone![0]) as AnySchema,
-				options?.models
-			)
-
-			this.params = Validator.create(route.params as any, {
-				...options,
-				slot: 'params',
-				schemas: paramsStandalone,
-				coerces: isTb(params) ? coerceRoot() : undefined
-			}) as any
-		}
-
-		const cookieStandalone = pickStandalone(standaloneSchemas, 'cookie') as
-			| AnySchema[]
-			| undefined
-		if (route.cookie || cookieStandalone?.length) {
-			const cookie = Validator.reference(
-				(route.cookie ?? cookieStandalone![0]) as AnySchema,
-				options?.models
-			)
-
-			this.cookie = Validator.create(route.cookie as any, {
-				...options,
-				slot: 'cookie',
-				schemas: cookieStandalone,
-				coerces: isTb(cookie) ? coerceStringToStructure() : undefined
-			}) as any
+				slot,
+				schemas: standalone,
+				coerces: isTb(reference) ? coerce(reference) : undefined
+			})
 		}
 
 		const responseStandalone = pickStandalone(

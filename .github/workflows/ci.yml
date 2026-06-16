@@ -24,18 +24,15 @@ jobs:
             - name: Build code
               run: bun run build
 
-            # Full functional suite (not just test/2) — a PR that breaks any of
-            # the ~1630 tests must fail CI. The release gate ran far more than
-            # CI did, so regressions slipped through.
             - name: Test
-              run: bun test test
+              run: bun run test
 
             - name: Type-check
               run: bun run test:types
 
-            # - name: Test
-            #   run: bun run test:cf
+            - name: Test
+              run: bun run test:cf
 
-            # - name: Publish Preview
-            #   if: github.event_name == 'pull_request'
-            #   run: bunx pkg-pr-new publish
+            - name: Publish Preview
+              if: github.event_name == 'pull_request'
+              run: bunx pkg-pr-new publish

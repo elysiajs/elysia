@@ -1510,9 +1510,9 @@ describe('Macro', () => {
 	})
 
 	it('rejects a bare functional macro — must be named (A6)', () => {
-		// `.macro(fn)` has no name to register under; it used to silently no-op
-		// and now throws. (A function is structurally assignable to the open
-		// `Macro` record, so this is enforced at runtime, not the type level.)
+		// `.macro(fn)` has no name to register under; TS can't catch it (a
+		// function is structurally assignable to the open `Macro` record), so
+		// without this guard it silently no-ops.
 		expect(() =>
 			(new Elysia().macro as any)(() => ({ beforeHandle() {} }))
 		).toThrow()
@@ -1523,11 +1523,5 @@ describe('Macro', () => {
 		const app = new Elysia().macro({ a: def as any })
 
 		expect(app['~ext']?.macro?.a).toBe(def)
-	})
-
-	it('rejects the removed `.macro(name, definition)` form with a migration error', () => {
-		expect(() =>
-			(new Elysia().macro as any)('a', { beforeHandle() {} })
-		).toThrow('`.macro(name, definition)` was removed')
 	})
 })

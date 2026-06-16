@@ -52,17 +52,6 @@ export function coerce(
 	const memo = new WeakMap<BaseSchema, BaseSchema | null>()
 	let stopped = false
 
-	function copyNode(node: BaseSchema | TSchema) {
-		return Object.defineProperty(
-			// @ts-expect-error
-			{ ...node, '~kind': node['~kind'] },
-			'~kind',
-			{
-				enumerable: false
-			}
-		)
-	}
-
 	function walk(
 		node: BaseSchema,
 		isRoot: boolean,
@@ -155,7 +144,7 @@ export function coerce(
 					}
 				}
 				if (newArr) {
-					if (out === node) out = copyNode(node)
+					out = cloneNode(node, out)
 					out[key] = newArr
 				}
 			}
@@ -184,7 +173,7 @@ export function coerce(
 			}
 
 			if (newArr) {
-				if (out === node) out = copyNode(node)
+				out = cloneNode(node, out)
 				out[key] = newArr
 			}
 		}
@@ -193,7 +182,7 @@ export function coerce(
 		if (node.not) {
 			const r = walk(node.not, false)
 			if (r !== node.not) {
-				if (out === node) out = copyNode(node)
+				out = cloneNode(node, out)
 				out.not = r
 			}
 		}
@@ -213,13 +202,13 @@ export function coerce(
 				}
 
 				if (newItems) {
-					if (out === node) out = copyNode(node)
+					out = cloneNode(node, out)
 					out.items = newItems
 				}
 			} else {
 				const r = walk(items, false)
 				if (r !== items) {
-					if (out === node) out = copyNode(node)
+					out = cloneNode(node, out)
 					out.items = r
 				}
 			}
@@ -240,7 +229,7 @@ export function coerce(
 			}
 
 			if (newProps) {
-				if (out === node) out = copyNode(node)
+				out = cloneNode(node, out)
 				out.properties = newProps
 			}
 		}
@@ -248,7 +237,7 @@ export function coerce(
 		if (typeof node.additionalProperties === 'object') {
 			const r = walk(node.additionalProperties, false)
 			if (r !== node.additionalProperties) {
-				if (out === node) out = copyNode(node)
+				out = cloneNode(node, out)
 				out.additionalProperties = r
 			}
 		}
@@ -268,7 +257,7 @@ export function coerce(
 			}
 
 			if (newPP) {
-				if (out === node) out = copyNode(node)
+				out = cloneNode(node, out)
 				out.patternProperties = newPP
 			}
 		}
@@ -281,7 +270,7 @@ export function coerce(
 			if (def) {
 				const r = walk(def, false)
 				if (r !== def) {
-					if (out === node) out = copyNode(node)
+					out = cloneNode(node, out)
 					out.$defs = { ...node.$defs, [node.$ref!]: r }
 				}
 			}

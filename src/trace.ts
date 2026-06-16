@@ -15,7 +15,6 @@ export type TraceEvent =
 export interface TraceStream {
 	id: number
 	event: TraceEvent
-	type: 'begin' | 'end'
 	begin: number
 	name?: string
 	total?: number

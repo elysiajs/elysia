@@ -36,11 +36,14 @@ let sharedFiles: ReturnType<
 >
 export type TFiles = Type.TUnsafe<File[]>
 
+const filesUnion = (options?: FileOptions): typeof BaseFiles =>
+	Union([
+		ArrayType(File(options)),
+		Type.Decode(File(options), (value) => [value])
+	]) as typeof BaseFiles
+
 export function Files(options?: FilesOptions): TFiles {
-	BaseFiles ??= Union([
-		ArrayType(File()),
-		Type.Decode(File(), (value) => [value])
-	])
+	BaseFiles ??= filesUnion()
 
 	if (!options || isEmpty(options))
 		return (emptyFiles ??= Object.freeze(
@@ -59,10 +62,7 @@ function FilesWithProperty(options: FilesOptions) {
 
 	const base: typeof BaseFiles = isEmpty(fileOptions)
 		? BaseFiles
-		: (Union([
-				ArrayType(File(fileOptions)),
-				Type.Decode(File(fileOptions), (value) => [value])
-			]) as typeof BaseFiles)
+		: filesUnion(fileOptions)
 
 	const refines: RefinesType<File[]> = []
 

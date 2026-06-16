@@ -14,7 +14,7 @@ export interface TraceReporter {
 	}
 }
 
-const childName = (fn: unknown): string =>
+const childName = (fn: unknown) =>
 	(fn as any)?.name && typeof (fn as any).name === 'string'
 		? (fn as any).name
 		: 'anonymous'
@@ -38,7 +38,7 @@ export const mapTransform = map<'transform', [report?: TraceReporter]>(
 
 const deriveKeyCache = new WeakMap<Function, string[] | null>()
 
-export function extractDeriveKeys(fn: Function): string[] | null {
+export function extractDeriveKeys(fn: Function) {
 	const cached = deriveKeyCache.get(fn)
 	if (cached !== undefined) return cached
 
@@ -47,7 +47,7 @@ export function extractDeriveKeys(fn: Function): string[] | null {
 	return result
 }
 
-function scanDeriveKeys(fn: Function): string[] | null {
+function scanDeriveKeys(fn: Function) {
 	let src: string
 	try {
 		src = Function.prototype.toString.call(fn)
@@ -64,7 +64,7 @@ function scanDeriveKeys(fn: Function): string[] | null {
 	return scanObjectLiteralKeys(src, objStart)
 }
 
-function findReturnedObjectStart(src: string): number {
+function findReturnedObjectStart(src: string) {
 	const arrow = topLevelArrowIndex(src)
 	if (arrow !== -1) {
 		let i = arrow + 2
@@ -72,8 +72,10 @@ function findReturnedObjectStart(src: string): number {
 
 		if (src[i] === '(') {
 			let j = i + 1
+
 			while (j < src.length && isSpace(src[j])) j++
 			if (src[j] === '{') return j
+
 			// `=> (` not followed by an object literal → not a plain object
 			// implicit return, bail.
 			return -1
@@ -165,17 +167,20 @@ function countReturns(src: string): number {
 			i = skipString(src, i)
 			continue
 		}
+
 		if (ch === '/' && src[i + 1] === '/') {
 			i = src.indexOf('\n', i)
 			if (i === -1) break
 			continue
 		}
+
 		if (ch === '/' && src[i + 1] === '*') {
 			i = src.indexOf('*/', i)
 			if (i === -1) break
 			i += 2
 			continue
 		}
+
 		if (
 			ch === 'r' &&
 			src.startsWith('return', i) &&
@@ -186,6 +191,7 @@ function countReturns(src: string): number {
 			i += 6
 			continue
 		}
+
 		i++
 	}
 	return count
@@ -198,18 +204,21 @@ function returnKeywordIndex(src: string): number {
 			i = skipString(src, i)
 			continue
 		}
+
 		if (ch === '/' && src[i + 1] === '/') {
 			const nl = src.indexOf('\n', i)
 			if (nl === -1) break
 			i = nl
 			continue
 		}
+
 		if (ch === '/' && src[i + 1] === '*') {
 			const end = src.indexOf('*/', i)
 			if (end === -1) break
 			i = end + 2
 			continue
 		}
+
 		if (
 			ch === 'r' &&
 			src.startsWith('return', i) &&
@@ -217,6 +226,7 @@ function returnKeywordIndex(src: string): number {
 			!isIdentChar(src[i + 6] ?? ' ')
 		)
 			return i
+
 		i++
 	}
 	return -1
@@ -450,55 +460,45 @@ export function mapBeforeHandle(
 	return code
 }
 
+// afterHandle + mapResponse share this chain: run each hook until one returns
+// a value, nesting `if(tmp===undefined)` guards. Only the emit prefix differs.
+function mapChainHook(
+	hooks: Function[],
+	prefix: string,
+	report?: TraceReporter
+) {
+	let code = ''
+	let depth = 0
+
+	for (let i = 0; i < hooks.length; i++) {
+		const fn = hooks[i]
+		if (i > 0) {
+			code += `if(tmp===undefined){\n`
+			depth++
+		}
+
+		const t = trace(report, fn)
+		code += t.begin
+		code += `tmp=${Await(fn)}${prefix}${at(i)}(c)\n`
+		code += t.end('tmp')
+	}
+
+	code += '}'.repeat(depth)
+	code += `if(tmp!==undefined)_r=c.responseValue=tmp\n`
+	return code
+}
+
 export function mapAfterHandle(
 	_hooks: AppHook['afterHandle'] | AppHook['afterHandle'][0],
 	report?: TraceReporter
 ) {
-	const hooks = toArray(_hooks)
-	let code = ''
-	let depth = 0
-
-	for (let i = 0; i < hooks.length; i++) {
-		const fn = hooks[i]
-		if (i > 0) {
-			code += `if(tmp===undefined){\n`
-			depth++
-		}
-
-		const t = trace(report, fn)
-		code += t.begin
-		code += `tmp=${Await(fn)}af${at(i)}(c)\n`
-		code += t.end('tmp')
-	}
-
-	code += '}'.repeat(depth)
-	code += `if(tmp!==undefined)_r=c.responseValue=tmp\n`
-	return code
+	return mapChainHook(toArray(_hooks), 'af', report)
 }
 
-export function mapMapResponse(
+export const mapMapResponse = (
 	_hooks: AppHook['mapResponse'] | AppHook['mapResponse'][0],
 	report?: TraceReporter
-) {
-	const hooks = toArray(_hooks)
-	let code = ''
-	let depth = 0
-
-	for (let i = 0; i < hooks.length; i++) {
-		const fn = hooks[i]
-		if (i > 0) {
-			code += `if(tmp===undefined){\n`
-			depth++
-		}
-		const t = trace(report, fn)
-		code += t.begin
-		code += `tmp=${Await(fn)}mr${at(i)}(c)\n`
-		code += t.end('tmp')
-	}
-	code += '}'.repeat(depth)
-	code += `if(tmp!==undefined)_r=c.responseValue=tmp\n`
-	return code
-}
+) => mapChainHook(toArray(_hooks), 'mr', report)
 
 // `try / catch` per hook so a thrown hook doesn't drop the rest
 export const mapAfterResponse = map<'afterResponse', [report?: TraceReporter]>(
@@ -531,6 +531,7 @@ export const mapError = map<
 		`_r=${Await(fn)}er${at(i)}(c)\n` +
 		`if(_r!==undefined){\n` +
 		`if(_r?.status)c.set.status=_r.status\n` +
+		`else if(c.set.status===undefined||c.set.status===200)c.set.status=500\n` +
 		schedule +
 		sign +
 		`return ${map}(_r,c.set,c.request)\n` +
@@ -538,8 +539,14 @@ export const mapError = map<
 	)
 })
 
+// NOTE: must stay a `function` declaration so `mapTransform`,
+// `mapAfterResponse`, and `mapError` above can use it.
 function map<Event extends AppEvent, T extends unknown[] = []>(
-	map: (index: number | undefined, fn: AppHook[Event][0], rest: T) => string
+	map: (
+		index: number | undefined,
+		fn: AppHook[Event][0],
+		rest: T
+	) => string
 ) {
 	return function (event: MaybeArray<AppHook[Event][0]>, rest?: T) {
 		if (Array.isArray(event)) {
@@ -564,17 +571,19 @@ function arrayItemSchema(v: any): any {
 			const it = arrayItemSchema(x)
 			if (it) return it
 		}
+
 	return undefined
 }
 
-function isObjectish(v: any): boolean {
+function isObjectish(v: any) {
 	if (!v) return false
 	if (v.type === 'object' || v['~kind'] === 'Object') return true
 	if (Array.isArray(v.anyOf)) return v.anyOf.some(isObjectish)
+
 	return false
 }
 
-function containsArray(v: any, seen?: WeakSet<object>): boolean {
+function containsArray(v: any, seen?: WeakSet<object>) {
 	if (!v || typeof v !== 'object') return false
 	if (seen?.has(v)) return false
 
@@ -607,6 +616,7 @@ function getQueryParseArgsCollect(
 	seen.add(node)
 
 	const props = node.properties
+
 	if (props)
 		for (const k in props) {
 			const v = props[k]

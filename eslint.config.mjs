@@ -19,10 +19,13 @@ const compat = new FlatCompat({
 export default defineConfig([
 	globalIgnores(['example/*', 'test/**/*']),
 	{
+		// sonarjs ships a flat config (`sonarjs.configs.recommended`); the old
+		// eslintrc string `plugin:sonarjs/recommended` via FlatCompat throws on
+		// ESLint 9 ("Unexpected top-level property 'name'"). Spread its rules
+		// instead and keep the plugin registered below.
 		extends: compat.extends(
 			'eslint:recommended',
-			'plugin:@typescript-eslint/recommended',
-			'plugin:sonarjs/recommended'
+			'plugin:@typescript-eslint/recommended'
 		),
 
 		plugins: {
@@ -41,7 +44,12 @@ export default defineConfig([
 		},
 
 		rules: {
+			...sonarjs.configs.recommended.rules,
 			'@typescript-eslint/ban-types': 'off',
+			// successors of ban-types (TS-eslint v8) — `{}` and `Function` are
+			// deliberate, pervasive patterns in the type machinery + codegen
+			'@typescript-eslint/no-empty-object-type': 'off',
+			'@typescript-eslint/no-unsafe-function-type': 'off',
 			'@typescript-eslint/no-explicit-any': 'off',
 			'no-mixed-spaces-and-tabs': 'off',
 			'@typescript-eslint/no-non-null-assertion': 'off',
@@ -51,7 +59,10 @@ export default defineConfig([
 			'no-case-declarations': 'off',
 			'no-extra-semi': 'off',
 			'sonarjs/cognitive-complexity': 'off',
-			'sonarjs/no-all-duplicated-branches': 'off'
+			'sonarjs/no-all-duplicated-branches': 'off',
+			// intentional perf/terseness (consistent with cognitive-complexity off)
+			'sonarjs/no-nested-assignment': 'off',
+			'sonarjs/no-nested-conditional': 'off'
 		}
 	}
 ])

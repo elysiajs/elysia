@@ -129,6 +129,42 @@ describe('Error lifecycle', () => {
 		expect(response.status).toBe(500)
 	})
 
+	it('coerces a stray set.status = 200 in an error handler to 500', async () => {
+		// `undefined` is the default status now, not 200; a 200 reaching the
+		// error path is a leftover from the aborted success path (a handler or
+		// beforeHandle that optimistically set 200 then threw), so it must not
+		// escape as the error response status
+		const app = new Elysia()
+			.error(({ set }) => {
+				set.status = 200
+
+				return 'recovered?'
+			})
+			.get('/', () => {
+				throw new Error('boom')
+			})
+
+		const response = await app.handle(req('/'))
+
+		expect(await response.text()).toBe('recovered?')
+		expect(response.status).toBe(500)
+	})
+
+	it('respects an explicit status() recovery from an error handler', async () => {
+		// an explicit status(200) is a deliberate choice (carried by the
+		// ElysiaStatus code), not a leftover — it must still win
+		const app = new Elysia()
+			.error(({ status }) => status(200, 'recovered'))
+			.get('/', () => {
+				throw new Error('boom')
+			})
+
+		const response = await app.handle(req('/'))
+
+		expect(await response.text()).toBe('recovered')
+		expect(response.status).toBe(200)
+	})
+
 	it(
 		'return correct number status on error function',
 		async () => {

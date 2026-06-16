@@ -1,18 +1,7 @@
-import { applyCoercions } from '../../src/type/coerce'
 import { t } from '../../src/type'
 // import { Type as t } from 'typebox'
 
 import { profile } from './utils'
-
-const coerce = (schema: any) =>
-	applyCoercions(schema, [
-		[
-			[
-				['Number', t.Numeric],
-				['Boolean', t.BooleanString]
-			]
-		]
-	])
 
 const total = 100_000
 const stacks = <any[]>Array(total)
@@ -20,61 +9,54 @@ const stacks = <any[]>Array(total)
 const stop = profile('Elysia 2 schema with 45 types x100,000')
 
 for (let i = 0; i <= total; i++)
-	stacks[i] =
-		// coerce(
-		t.Array(
-			t.Object({
-				id: t.Number(),
+	stacks[i] = t.Array(
+		t.Object({
+			id: t.Number(),
+			name: t.String(),
+			bio: t.String(),
+			user: t.Object({
 				name: t.String(),
-				bio: t.String(),
-				user: t.Object({
+				password: t.String(),
+				email: t.Optional(t.String({ format: 'email' })),
+				age: t.Optional(t.Number()),
+				avatar: t.Optional(t.String({ format: 'uri' })),
+				cover: t.Optional(t.String({ format: 'uri' }))
+			}),
+			playing: t.Optional(t.String()),
+			wishlist: t.Optional(t.Array(t.Number())),
+			games: t.Array(
+				t.Object({
+					id: t.Number(),
 					name: t.String(),
-					password: t.String(),
-					email: t.Optional(t.String({ format: 'email' })),
-					age: t.Optional(t.Number()),
-					avatar: t.Optional(t.String({ format: 'uri' })),
-					cover: t.Optional(t.String({ format: 'uri' }))
+					hoursPlay: t.Number(),
+					tags: t.Array(
+						t.Object({
+							name: t.String(),
+							count: t.Number()
+						})
+					)
+				})
+			),
+			metadata: t.Intersect([
+				t.Object({
+					alias: t.String()
 				}),
-				playing: t.Optional(t.String()),
-				wishlist: t.Optional(t.Array(t.Number())),
-				games: t.Array(
-					t.Object({
-						id: t.Number(),
-						name: t.String(),
-						hoursPlay: t.Number(),
-						tags: t.Array(
-							t.Object({
-								name: t.String(),
-								count: t.Number()
-							})
-						)
-					})
-				),
-				metadata: t.Intersect([
-					t.Object({
-						alias: t.String()
-					}),
-					t.Object({
-						country: t.Optional(t.String()),
-						region: t.Optional(t.String())
-					})
-				]),
-				social: t.Optional(
-					t.Object({
-						facebook: t.Optional(t.String()),
-						twitter: t.Optional(t.String()),
-						youtube: t.Optional(t.String())
-					})
-				)
-			})
-		)
-// )
+				t.Object({
+					country: t.Optional(t.String()),
+					region: t.Optional(t.String())
+				})
+			]),
+			social: t.Optional(
+				t.Object({
+					facebook: t.Optional(t.String()),
+					twitter: t.Optional(t.String()),
+					youtube: t.Optional(t.String())
+				})
+			)
+		})
+	)
 
 stop()
-
-// console.dir(stacks[0], {
-// 	depth: null
-// })
 
 // import { Compile } from 'typebox/schema'
 

@@ -46,4 +46,47 @@ describe('responseToSetHeaders', () => {
 		expect(set?.headers['content-encoding']).toBeUndefined()
 		expect(set?.headers['x-keep']).toBe('1')
 	})
+
+	it('drops content-encoding when merging into an existing set too', () => {
+		const response = new Response('x', {
+			headers: { 'content-encoding': 'br', 'x-keep': '1' }
+		})
+
+		const set = responseToSetHeaders(response, {
+			headers: { 'x-pre': 'p' },
+			status: undefined
+		} as any)
+
+		expect(set?.headers['content-encoding']).toBeUndefined()
+		expect(set?.headers['x-pre']).toBe('p')
+		expect(set?.headers['x-keep']).toBe('1')
+	})
+
+	it('adopts the response status when an existing set.status is default (undefined/200)', () => {
+		const response = new Response('x', { status: 201 })
+
+		expect(
+			responseToSetHeaders(response, {
+				headers: {},
+				status: undefined
+			} as any)?.status
+		).toBe(201)
+		expect(
+			responseToSetHeaders(response, {
+				headers: {},
+				status: 200
+			} as any)?.status
+		).toBe(201)
+	})
+
+	it('keeps a non-default existing set.status over the response status', () => {
+		const response = new Response('x', { status: 201 })
+
+		const set = responseToSetHeaders(response, {
+			headers: {},
+			status: 418
+		} as any)
+
+		expect(set?.status).toBe(418)
+	})
 })

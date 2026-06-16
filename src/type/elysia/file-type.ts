@@ -44,14 +44,7 @@ export async function fileType(
 
 	const types = typeof type === 'string' ? [type] : type
 
-	let match = false
-	for (let i = 0; i < types.length; i++)
-		if (checkFileExtension(file.type, types[i])) {
-			match = true
-			break
-		}
-
-	if (!match) return false
+	if (!matchesAnyFileType(file.type, types)) return false
 
 	if (!fileTypeDetectors) {
 		warnNoFileTypeDetector()
@@ -59,9 +52,7 @@ export async function fileType(
 	}
 
 	const mime = await detectFileType(file)
-	if (mime)
-		for (let i = 0; i < types.length; i++)
-			if (checkFileExtension(mime, types[i])) return true
+	if (mime && matchesAnyFileType(mime, types)) return true
 
 	return false
 }
@@ -106,17 +97,21 @@ export function maybeQueueFileTypeCheck(
 	;(pendingFileTypeChecks ??= []).push({
 		file: value,
 		check: detectFileType(value).then(
-			(mime) => {
-				if (mime)
-					for (let i = 0; i < types.length; i++)
-						if (checkFileExtension(mime, types[i]))
-							return true as const
-
-				return message
-			},
+			(mime) =>
+				mime && matchesAnyFileType(mime, types)
+					? (true as const)
+					: message,
 			() => message
 		)
 	})
+}
+
+// does `mime` match any of the accepted file types?
+export function matchesAnyFileType(mime: string, types: FileType[]): boolean {
+	for (let i = 0; i < types.length; i++)
+		if (checkFileExtension(mime, types[i])) return true
+
+	return false
 }
 
 export function checkFileExtension(type: string, extension: string) {

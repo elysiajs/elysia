@@ -1,4 +1,4 @@
-import { Elysia, t } from '../../src'
+import { Elysia } from '../../src'
 import { profile } from './utils'
 
 const total = 40_000

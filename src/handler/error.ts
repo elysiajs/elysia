@@ -1,17 +1,10 @@
-import { getAsyncIndexes } from './utils'
+import { getAsyncIndexes, cachedResponse } from './utils'
 import { parseQueryFromURL } from '../parse-query'
-import { isCloudflareWorker } from '../universal/constants'
 
 import type { Context } from '../context'
 import type { AppHook } from '../types'
 
-let _defaultError: Response | undefined
-const getDefaultError = (): Response =>
-	isCloudflareWorker
-		? new Response('Internal Server Error', { status: 500 })
-		: ((_defaultError ??= new Response('Internal Server Error', {
-				status: 500
-			})).clone() as Response)
+const getDefaultError = cachedResponse('Internal Server Error', 500)
 
 // bypass the compiled-route codegen
 function parseQuery(context: Context) {
@@ -133,6 +126,11 @@ export function createErrorHandler(
 				if (result !== undefined) {
 					// @ts-expect-error
 					if (result?.status) context.set.status = result.status
+					else if (
+						context.set.status === undefined ||
+						context.set.status === 200
+					)
+						context.set.status = 500
 
 					return mapResponse(result, context.set, context)
 				}
@@ -153,6 +151,11 @@ export function createErrorHandler(
 			if (result !== undefined) {
 				if ((result as any)?.status)
 					context.set.status = (result as any).status
+				else if (
+					context.set.status === undefined ||
+					context.set.status === 200
+				)
+					context.set.status = 500
 
 				return mapResponse(result, context.set, context)
 			}

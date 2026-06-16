@@ -32,11 +32,6 @@ const nestedSchema = Type.Object({
 // ---- Schema 3: defaults but input always has all values ----
 const fullInputSchema = flatSchema
 
-function structuredCloneOrSpread<T>(v: T): T {
-	// Bun and modern Node have global structuredClone.
-	return structuredClone(v) as T
-}
-
 // Naive merge: shallow spread for top-level, recurse on object values that
 // also exist in the precomputed default. Good enough for the benchmark; a
 // real impl would be more careful about arrays / nullables / etc.

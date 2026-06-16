@@ -3,12 +3,8 @@ import type { AnyElysia } from '../base'
 import {
 	endValidatorCapture,
 	endHandlerCapture,
-	checkFactorySource,
-	checkCode,
-	mirrorFactorySource,
-	bothFactorySource,
-	handlerFactorySource,
-	isValidatorCapturing,
+	Source,
+	Capture,
 	type CapturedValidator,
 	type CapturedHandler
 } from '../compile/aot'
@@ -69,7 +65,7 @@ export async function compileToSource(
 ): Promise<string> {
 	env.ELYSIA_AOT_BUILD = '1'
 
-	if (!isValidatorCapturing())
+	if (!Capture.isCapturing())
 		throw new Error(
 			'[elysia-aot]: ELYSIA_AOT_BUILD=1 must be set to enable AOT capture mode'
 		)
@@ -108,7 +104,7 @@ function emitModule(
 					'[' +
 					branch
 						.map((b) => {
-							const src = checkFactorySource(b.identifier, b.code)
+							const src = Source.checkFactory(b.identifier, b.code)
 
 							let ref = branchRef.get(src)
 							if (ref === undefined) {
@@ -155,25 +151,25 @@ function emitModule(
 		if (c.checkValue && c.mirror) {
 			const m = c.mirror
 			parts.push(
-				`cm: ${bothFactorySource(c.identifier!, c.checkDefs!, c.checkValue, m.source, m.hasExternals)}`,
+				`cm: ${Source.bothFactory(c.identifier!, c.checkDefs!, c.checkValue, m.source, m.hasExternals)}`,
 				...flags
 			)
 			if (m.u) parts.push(`u: ${unionTable(m.u)}`)
 		} else if (c.checkValue) {
 			parts.push(
-				`c: ${checkFactorySource(c.identifier!, checkCode(c.checkDefs!, c.checkValue))}`,
+				`c: ${Source.checkFactory(c.identifier!, Source.checkCode(c.checkDefs!, c.checkValue))}`,
 				...flags
 			)
 		} else if (c.mirror) {
 			const m = c.mirror
-			let ms = `s: ${mirrorFactorySource(m.source, m.hasExternals)}`
+			let ms = `s: ${Source.mirrorFactory(m.source, m.hasExternals)}`
 			if (m.u) ms += `, u: ${unionTable(m.u)}`
 			parts.push(`m: { ${ms} }`)
 		}
 
 		if (c.decodeMirror) {
 			const dm = c.decodeMirror
-			let dms = `s: ${mirrorFactorySource(dm.source, true)}`
+			let dms = `s: ${Source.mirrorFactory(dm.source, true)}`
 			if (dm.u) dms += `, u: ${unionTable(dm.u)}`
 			parts.push(`dm: { ${dms} }`)
 		}
@@ -364,7 +360,7 @@ function emitModule(
 	const handlerTree = nullObject() as Record<string, Record<string, string>>
 
 	for (const h of handlers) {
-		const src = handlerFactorySource(h.alias, h.code)
+		const src = Source.handlerFactory(h.alias, h.code)
 
 		let wref = handlerRef.get(src)
 		if (wref === undefined) {

@@ -18,7 +18,6 @@ import type {
 } from 'typebox'
 import type { AnyElysia, Elysia } from './base'
 import type { ElysiaAdapter } from './adapter'
-import type { Sucrose } from './sucrose'
 import type { Serve } from './universal'
 import type { CookieOptions } from './cookie'
 import type {
@@ -206,11 +205,6 @@ export interface ElysiaConfig<
 	 * @since 1.3.0
 	 */
 	sanitize?: ExactMirrorInstruction['sanitize']
-
-	/**
-	 * Sucrose (Static Code Analysis) configuration
-	 */
-	sucrose?: Sucrose.Settings
 
 	/**
 	 * Allow unsafe validation details in errors thrown by Elysia's schema validator (422 status code)
@@ -938,55 +932,6 @@ export type MergeSchema<
 						: A['response'] &
 								Omit<B['response'], keyof A['response']>
 			}
-
-export interface MergeStandaloneSchema<
-	in out A extends RouteSchema,
-	in out B extends RouteSchema,
-	Path extends string = ''
-> {
-	body: undefined extends A['body']
-		? undefined extends B['body']
-			? undefined
-			: B['body']
-		: undefined extends B['body']
-			? A['body']
-			: Prettify<A['body'] & B['body']>
-	headers: undefined extends A['headers']
-		? undefined extends B['headers']
-			? undefined
-			: B['headers']
-		: undefined extends B['headers']
-			? A['headers']
-			: Prettify<A['headers'] & B['headers']>
-	query: undefined extends A['query']
-		? undefined extends B['query']
-			? undefined
-			: B['query']
-		: undefined extends B['query']
-			? A['query']
-			: Prettify<A['query'] & B['query']>
-	params: IsNever<keyof A['params']> extends true
-		? IsNever<keyof B['params']> extends true
-			? ResolvePath<Path>
-			: B['params']
-		: IsNever<keyof B['params']> extends true
-			? A['params']
-			: Prettify<A['params'] & B['params']>
-	cookie: undefined extends A['cookie']
-		? undefined extends B['cookie']
-			? undefined
-			: B['cookie']
-		: undefined extends B['cookie']
-			? A['cookie']
-			: Prettify<A['cookie'] & B['cookie']>
-	response: {} extends A['response']
-		? {} extends B['response']
-			? {}
-			: B['response']
-		: {} extends B['response']
-			? A['response']
-			: Prettify<A['response'] & B['response']>
-}
 
 export type AnyWSLocalHook = any
 
@@ -2108,13 +2053,6 @@ type ErrorFallbackBody<E> = E extends { response: infer R }
 		: R
 	: string
 
-/**
- * Map an error handler's return type to a response schema.
- *
- * `status()` returns map to their own code, plain returns map to the error's
- * declared `status` (500 when absent). A handler that may return `undefined`
- * falls through to the default error response.
- */
 /**
  * `Definitions['error']` / `EphemeralType['error']` entry registered by an
  * `.error(Class, handler)` call
