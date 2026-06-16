@@ -8,6 +8,8 @@ const stop = profile('Elysia 2α add route x100k')
 
 for (let i = 0; i < total; i++) app.get(`/${i}`, () => 'ok')
 
+app.fetch
+
 // full build
 // app.listen(3000)
 
