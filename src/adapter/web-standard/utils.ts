@@ -97,12 +97,12 @@ function setNested(
 
 			if (ch2 === QUOTE_1 || ch2 === QUOTE_2) {
 				const start = ++i
-				while (path.charCodeAt(i) !== ch2) i++
+				while (i < len && path.charCodeAt(i) !== ch2) i++
 				key = path.slice(start, i)
 				i += 2 // skip quote + ]
 			} else {
 				const start = i
-				while (path.charCodeAt(i) !== BRACKET_C) i++
+				while (i < len && path.charCodeAt(i) !== BRACKET_C) i++
 				key = +path.slice(start, i)
 				i++ // skip ]
 			}
@@ -155,20 +155,19 @@ function setNested(
 
 export function formDataToObject(form: FormData): Record<string, unknown> {
 	const body: Record<string, unknown> = nullObject()
-	let seen: Set<string> | undefined
 
-	for (const key of form.keys()) {
-		if (key in body || seen?.has(key)) continue
+	let grouped: Map<string, FormDataEntryValue[]> | undefined
+	form.forEach((value, key) => {
+		const list = (grouped ??= new Map()).get(key)
+		if (list) list.push(value)
+		else grouped!.set(key, [value])
+	})
 
-		const value = resolveValue(form.getAll(key))
+	if (!grouped) return body
 
-		if (HAS_NESTING.test(key)) {
-			;(seen ??= new Set()).add(key)
-			setNested(body, key, value)
-			continue
-		}
-
-		body[key] = value
+	for (const [key, entries] of grouped) {
+		if (HAS_NESTING.test(key)) setNested(body, key, resolveValue(entries))
+		else if (!(key in body)) body[key] = resolveValue(entries)
 	}
 
 	return body
