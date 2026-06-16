@@ -759,6 +759,37 @@ describe('Stream', () => {
 		expect(result).toEqual(expected)
 	})
 
+	// F20: re-streamed Response bodies must pass through byte-identical —
+	// UTF-8 decoding each chunk corrupted non-UTF-8 bytes (U+FFFD) and
+	// multi-byte characters split across chunk boundaries
+	it('preserve exact bytes when re-streaming a touched-set chunked Response', async () => {
+		const app = new Elysia().get('/', ({ set }) => {
+			set.headers['x-touch'] = '1'
+
+			return new Response(
+				new ReadableStream({
+					start(controller) {
+						// € (e2 82 ac) split across chunks + non-UTF-8 tail
+						controller.enqueue(new Uint8Array([0xe2, 0x82]))
+						controller.enqueue(new Uint8Array([0xac, 0xff, 0x00]))
+						controller.close()
+					}
+				}),
+				{ headers: { 'transfer-encoding': 'chunked' } }
+			)
+		})
+
+		const response = await app.handle(req('/'))
+		const result = new Uint8Array(await response.arrayBuffer())
+
+		expect(response.headers.get('x-touch')).toBe('1')
+		// binary first chunk pins the deliberate headerless default
+		expect(response.headers.get('content-type')).toBe(
+			'application/octet-stream'
+		)
+		expect(result).toEqual(new Uint8Array([0xe2, 0x82, 0xac, 0xff, 0x00]))
+	})
+
 	it('stream generator Uint8Array chunks as binary', async () => {
 		const app = new Elysia().get('/', async function* () {
 			yield new Uint8Array([1, 2])

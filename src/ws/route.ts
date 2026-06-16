@@ -1,7 +1,9 @@
 import { RouteValidator } from '../validator/route'
 import { flattenChain, nullObject } from '../utils'
+import { parseQueryFromURL } from '../parse-query'
+import { getQueryParseChannels } from '../compile/handler/utils'
 
-import { ElysiaWS, type WSConnectionData } from './context'
+import { ElysiaWS, isGeneratorObject, type WSConnectionData } from './context'
 import { createMessageParser } from './parser'
 import { ValidationError } from '../error'
 
@@ -44,14 +46,14 @@ function concatHooks(
 }
 
 async function applyMapResponse(
-	elysia: ElysiaWS<any>,
+	ws: ElysiaWS<any>,
 	value: unknown,
 	mapResponses: readonly AnyFn[]
 ): Promise<unknown> {
 	for (let i = 0; i < mapResponses.length; i++) {
-		;(elysia as any).responseValue = value
+		;(ws as any).responseValue = value
 
-		const r = mapResponses[i](elysia)
+		const r = mapResponses[i](ws)
 		const result = r instanceof Promise ? await r : r
 		if (result !== undefined) value = result
 	}
@@ -60,7 +62,7 @@ async function applyMapResponse(
 }
 
 async function handleWSResponse(
-	elysia: ElysiaWS<any>,
+	ws: ElysiaWS<any>,
 	value: unknown,
 	mapResponses: readonly AnyFn[]
 ): Promise<void> {
@@ -80,9 +82,9 @@ async function handleWSResponse(
 
 			if (yielded !== undefined) {
 				const mapped = mapResponses.length
-					? await applyMapResponse(elysia, yielded, mapResponses)
+					? await applyMapResponse(ws, yielded, mapResponses)
 					: yielded
-				;(elysia as any).send(mapped)
+				;(ws as any).send(mapped)
 			}
 
 			if (done) return
@@ -90,14 +92,16 @@ async function handleWSResponse(
 	}
 
 	const mapped = mapResponses.length
-		? await applyMapResponse(elysia, value, mapResponses)
+		? await applyMapResponse(ws, value, mapResponses)
 		: value
-	;(elysia as any).send(mapped)
+
+	;(ws as any).send(mapped)
 }
 
-function dispatchHandler(fn: AnyFn, elysia: ElysiaWS<any>, body?: unknown) {
-	if (fn.length >= 2) return fn(elysia, body)
-	return fn(elysia)
+function dispatchHandler(fn: AnyFn, ws: ElysiaWS<any>, body?: unknown) {
+	if (fn.length >= 2) return fn(ws, body)
+
+	return fn(ws)
 }
 
 export function buildWSRoute(
@@ -116,10 +120,20 @@ export function buildWSRoute(
 		models: app['~ext']?.models
 	})
 
-	// Status-keyed bag — `ElysiaWS.send` selects an entry per payload.
 	const responseValidator = validators.response as
 		| { [status: number]: WSValidatorLike }
 		| undefined
+
+	const defaultResponseValidator = responseValidator
+		? (responseValidator[200] ??
+			responseValidator[Object.keys(responseValidator)[0] as any])
+		: undefined
+
+	const queryChannels = getQueryParseChannels(
+		(validators.query as any)?.schema
+	)
+	const queryArray = queryChannels?.array
+	const queryObject = queryChannels?.object
 
 	const flatAppHook = flattenChain(app['~hookChain']) ?? {}
 
@@ -202,8 +216,8 @@ export function buildWSRoute(
 		return new Response(body, { status })
 	}
 
-	async function handleError(elysia: ElysiaWS<any>, error: unknown) {
-		const errCtx: any = Object.assign({}, elysia as any)
+	async function handleError(ws: ElysiaWS<any>, error: unknown) {
+		const errCtx: any = Object.create(ws as any)
 		errCtx.error = error
 		errCtx.code = (error as any)?.code ?? 'UNKNOWN'
 
@@ -212,7 +226,7 @@ export function buildWSRoute(
 			if (r instanceof Promise) r = await r
 			if (r !== undefined) {
 				try {
-					await handleWSResponse(elysia, r, [])
+					await handleWSResponse(ws, r, [])
 				} catch {}
 				return
 			}
@@ -220,9 +234,13 @@ export function buildWSRoute(
 
 		const message = error instanceof Error ? error.message : String(error)
 		try {
-			elysia.raw.send(message)
+			ws.raw.send(message)
 		} catch {}
 	}
+
+	// Per-route constant. `hook.message` never changes after build.
+	const messageTakesBody =
+		!!hook.message && (hook.message as AnyFn).length >= 2
 
 	async function dispatchMessage(
 		connection: ElysiaWS<any>,
@@ -231,7 +249,8 @@ export function buildWSRoute(
 		const ws: ElysiaWS<any> = Object.create(connection)
 
 		try {
-			const message = await parseMessage(ws.raw as any, rawMessage)
+			const p = parseMessage(ws.raw as any, rawMessage)
+			const message = p instanceof Promise ? await p : p
 
 			if (validators.body) {
 				const v = validators.body as any
@@ -265,10 +284,15 @@ export function buildWSRoute(
 			}
 
 			if (hook.message) {
-				const result = dispatchHandler(hook.message as any, ws, message)
+				const result = messageTakesBody
+					? (hook.message as AnyFn)(ws, message)
+					: (hook.message as AnyFn)(ws)
+
 				const resolved =
 					result instanceof Promise ? await result : result
-				await handleWSResponse(ws, resolved, mapResponses)
+
+				if (resolved !== undefined)
+					await handleWSResponse(ws, resolved, mapResponses)
 			}
 
 			for (let i = 0; i < afterHandles.length; i++) {
@@ -286,18 +310,106 @@ export function buildWSRoute(
 		}
 	}
 
+	const syncDispatchEligible =
+		transforms.length === 0 &&
+		messageBeforeHandles.length === 0 &&
+		afterHandles.length === 0 &&
+		afterResponses.length === 0 &&
+		mapResponses.length === 0
+
+	function finishMessageResult(
+		ws: ElysiaWS<any>,
+		value: unknown
+	): void | Promise<void> {
+		if (value === undefined) return
+
+		if (isGeneratorObject(value))
+			return handleWSResponse(ws, value, mapResponses).catch((error) =>
+				handleError(ws, error)
+			)
+
+		try {
+			;(ws as any).send(value)
+		} catch (error) {
+			return handleError(ws, error)
+		}
+	}
+
+	function dispatchParsedSync(
+		ws: ElysiaWS<any>,
+		message: unknown
+	): void | Promise<void> {
+		try {
+			if (validators.body) {
+				const v = validators.body as any
+				if (!v.Check(message)) {
+					const err = new ValidationError(
+						'body',
+						message,
+						v.Errors?.(message) ?? []
+					)
+					if (errorHandlers.length === 0) {
+						ws.raw.send(err.message)
+						return
+					}
+					return handleError(ws, err)
+				}
+			}
+
+			ws.body = message as any
+
+			const result = messageTakesBody
+				? (hook.message as AnyFn)(ws, message)
+				: (hook.message as AnyFn)(ws)
+
+			if (result instanceof Promise)
+				return result.then(
+					(resolved) => finishMessageResult(ws, resolved),
+					(error) => handleError(ws, error)
+				)
+
+			return finishMessageResult(ws, result)
+		} catch (error) {
+			return handleError(ws, error)
+		}
+	}
+
+	function dispatchMessageSync(
+		connection: ElysiaWS<any>,
+		rawMessage: string | Buffer
+	): void | Promise<void> {
+		const ws: ElysiaWS<any> = Object.create(connection)
+
+		try {
+			const p = parseMessage(ws.raw as any, rawMessage)
+			if (p instanceof Promise)
+				return p.then(
+					(message) => dispatchParsedSync(ws, message),
+					(error) => handleError(ws, error)
+				)
+
+			return dispatchParsedSync(ws, p)
+		} catch (error) {
+			return handleError(ws, error)
+		}
+	}
+
+	const dispatch = syncDispatchEligible
+		? dispatchMessageSync
+		: dispatchMessage
+
 	function wrapLifecycle(fn: AnyFn | undefined, withBody: boolean) {
 		if (!fn) return
 
-		return async (elysia: ElysiaWS<any>, bodyArg?: unknown) => {
+		return async (ws: ElysiaWS<any>, bodyArg?: unknown) => {
 			try {
-				if (withBody) elysia.body = bodyArg as any
-				const result = dispatchHandler(fn, elysia, bodyArg)
+				if (withBody) ws.body = bodyArg as any
+				const result = dispatchHandler(fn, ws, bodyArg)
 				const resolved =
 					result instanceof Promise ? await result : result
-				await handleWSResponse(elysia, resolved, mapResponses)
+				await handleWSResponse(ws, resolved, mapResponses)
 			} catch (error) {
-				await handleError(elysia, error)
+				await handleError(ws, error)
 			}
 		}
 	}
@@ -307,17 +419,19 @@ export function buildWSRoute(
 	const onPing = wrapLifecycle(hook.ping as any, true)
 	const onPong = wrapLifecycle(hook.pong as any, true)
 	const onClose = hook.close
-		? async (elysia: ElysiaWS<any>, code: number, reason: string) => {
+		? async (ws: ElysiaWS<any>, code: number, reason: string) => {
 				try {
-					;(elysia as any).code = code
-					;(elysia as any).reason = reason
+					;(ws as any).code = code
+					;(ws as any).reason = reason
+
 					const fn = hook.close as AnyFn
-					const result = fn(elysia, code, reason)
+					const result = fn(ws, code, reason)
 					const resolved =
 						result instanceof Promise ? await result : result
-					await handleWSResponse(elysia, resolved, mapResponses)
+
+					await handleWSResponse(ws, resolved, mapResponses)
 				} catch (error) {
-					await handleError(elysia, error)
+					await handleError(ws, error)
 				}
 			}
 		: undefined
@@ -340,13 +454,12 @@ export function buildWSRoute(
 			}
 			if (validators.query) {
 				const url = request.url
-				const qStart = url.indexOf('?')
-				const query =
-					qStart === -1
-						? {}
-						: Object.fromEntries(
-								new URLSearchParams(url.slice(qStart + 1))
-							)
+				const query = parseQueryFromURL(
+					url,
+					(context as any).qi ?? url.indexOf('?'),
+					queryArray,
+					queryObject
+				)
 				;(context as any).query = query
 
 				const v = validators.query as any
@@ -421,10 +534,9 @@ export function buildWSRoute(
 				id: '',
 				context: context as any,
 				validator: responseValidator,
+				defaultValidator: defaultResponseValidator,
 				open: onOpen as any,
-				message: hook.message
-					? (elysia, raw) => dispatchMessage(elysia, raw)
-					: undefined,
+				message: hook.message ? dispatch : undefined,
 				drain: onDrain as any,
 				close: onClose as any,
 				ping: onPing as any,
@@ -468,6 +580,7 @@ export function buildGlobalWSHandler(): WebSocketHandler<WSConnectionData> {
 		if (!elysia) {
 			elysia = new ElysiaWS(ws as any, ws.data.context as any)
 			ws.data.elysia = elysia
+			ws.data.context = undefined
 		}
 		return elysia
 	}

@@ -8,7 +8,9 @@ try {
 	// touch `t` to trigger the lazy setupTypebox() proxy, then assert the
 	// type-system surface is actually wired (not an empty/broken module).
 	if (typeof t?.String !== 'function')
-		throw new Error('t.String is not callable — type-system not initialised')
+		throw new Error(
+			't.String is not callable — type-system not initialised'
+		)
 	if (!System)
 		throw new Error('System export missing from type-system barrel')
 

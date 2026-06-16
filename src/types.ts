@@ -111,8 +111,21 @@ export interface ElysiaConfig<
 	strictPath?: boolean
 
 	/**
+	 * Automatically register a HEAD handler for every GET route, deriving the
+	 * response headers (e.g. `content-length`) from the GET handler while
+	 * dropping the body.
+	 *
+	 * An explicit `.head(path, ...)` always takes precedence over the
+	 * auto-generated one.
+	 *
+	 * @default false
+	 * @since 2.0.0
+	 */
+	autoHead?: boolean
+
+	/**
 	 * App-wide WebSocket configuration. Provides defaults for the Bun
-	 * server-level `websocket: {...}` options — `maxPayloadLength`,
+	 * server-level `websocket: {...}` options `maxPayloadLength`,
 	 * `idleTimeout`, `perMessageDeflate`, etc. Per-route values set via
 	 * `.ws(path, { idleTimeout: 60, ... })` override these.
 	 *
@@ -697,8 +710,6 @@ export type GracefulHandler<in Instance extends AnyElysia> = (
 export type ResolveHandler<
 	in out Route extends RouteSchema,
 	in out Singleton extends SingletonBase,
-	// `status(...)` (ElysiaStatus) is a valid resolve return — it short-circuits
-	// to the response union rather than contributing a resolved property.
 	Derivative extends
 		| Record<string, unknown>
 		| ElysiaError
@@ -1431,20 +1442,15 @@ interface RouteSchemaWithResolvedMacro extends RouteSchema {
 	resolve: Record<string, unknown>
 }
 
-export type IntersectIfObject<A, B> =
-	// When the override side (A) is absent (`unknown`, e.g. no route/override
-	// schema for this field), defer to the standalone side (B) — including a
-	// primitive standalone schema like `t.String()`, which the object-only
-	// branches below would otherwise drop.
-	unknown extends A
-		? B
-		: A extends Record<any, any>
-			? B extends Record<any, any>
-				? A & B
-				: A
-			: B extends Record<any, any>
-				? B
-				: A
+export type IntersectIfObject<A, B> = unknown extends A
+	? B
+	: A extends Record<any, any>
+		? B extends Record<any, any>
+			? A & B
+			: A
+		: B extends Record<any, any>
+			? B
+			: A
 
 export interface IntersectIfObjectSchema<
 	A extends RouteSchema,
@@ -1584,22 +1590,11 @@ type _FunctionArrayReturnTypeNonNullable<T, Carry = undefined> = T extends [
 
 type AnyElysiaStatus = ElysiaStatus<any, any, any>
 
-/**
- * The resolved properties a `derive`/`resolve` handler contributes to the
- * context — its return value with any `status(...)` (ElysiaStatus) responses
- * removed (those flow to the response union instead), and `void`/`never`
- * collapsed to `{}`.
- */
 export type ExcludeElysiaResponse<T> =
 	Exclude<Awaited<T>, AnyElysiaStatus> extends infer A
 		? IsNever<A & {}> extends true
 			? {}
-			: // A void-possible derive/resolve (e.g. one that conditionally
-				// `return {...}` and otherwise falls through) includes `undefined`
-				// in its return — its derived fields may be absent at runtime, so
-				// make them optional (`Partial`) rather than stripping `undefined`
-				// outright. An always-returning derive keeps its fields required.
-				undefined extends A
+			: undefined extends A
 				? Partial<A & {}>
 				: A & {}
 		: {}
@@ -1889,10 +1884,7 @@ export type ObjectMacroDefs<
 						| keyof N
 					>]: `Unknown macro property '${P & string}'`
 				}
-} & (N extends (...a: any) => any
-		? 'A functional macro must be named — use `.macro({ name: fn })` instead of `.macro(fn)`'
-		: unknown) &
-	N
+} & N
 
 // ? Unwrap Handler Stuff
 export type CreateEden<
@@ -1951,10 +1943,6 @@ export type CreateEdenResponse<
 			error: Err
 		}
 
-// WebSocket route shape (keyed under `subscribe` in the Eden tree). Identical
-// to `CreateEdenResponse` but WITHOUT the `error` field — a ws route has no
-// HTTP error channel, and its `~Routes['…']['subscribe']` shape is exactly
-// `{ body, params, query, headers, response }`.
 export type CreateWSEdenResponse<
 	Path extends string,
 	Schema extends RouteSchema,
@@ -2152,12 +2140,6 @@ export type ErrorHandlerResponseSchema<R, E> = ExtractErrorFromHandle<
 			: { [S in ErrorFallbackStatus<E>]: Plain }
 		: {})
 
-/**
- * Resolve the response schema of a returned error instance against
- * registered `.error(Class, handler)` entries: first registered match wins,
- * mirroring runtime hook order. Unmatched errors resolve to `never` — they
- * are kept on the route's `error` field until a handler registers
- */
 type MatchRegisteredError<
 	V,
 	Errors extends ErrorDefinition[]
@@ -2179,10 +2161,6 @@ type HasErrorMatch<V, Errors extends ErrorDefinition[]> = Errors extends [
 		: HasErrorMatch<V, Rest>
 	: false
 
-/**
- * Returned `Error` types with no matching registered handler — stored on
- * the route record and re-resolved as handlers register
- */
 export type UnhandledReturnedError<
 	Value,
 	Errors extends ErrorDefinition[]
@@ -2203,13 +2181,6 @@ export type UnhandledReturnedErrorOf<
 	? UnhandledReturnedError<R, Errors>
 	: UnhandledReturnedError<T, Errors>
 
-/**
- * Re-resolve every route's unhandled returned errors against newly visible
- * handler entries: matches move into `response`, the rest stay on `error`.
- * Applied when `.error(Class, handler)` registers (covering routes defined
- * earlier — registration order does not matter at runtime) and when
- * `.use()` makes handlers and routes visible to each other
- */
 export type ResolveRouteErrors<
 	Routes,
 	Errors extends ErrorDefinition[]

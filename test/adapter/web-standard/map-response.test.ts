@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test'
 
-import { Elysia, form, redirect } from '../../../src'
+import { Elysia, file, form, redirect, status } from '../../../src'
 
 import { mapResponse } from '../../../src/adapter/web-standard/handler'
 import { Passthrough } from './utils'
@@ -458,5 +458,104 @@ describe('Web Standard - Map Response', () => {
 		expect(response.headers.get('content-type')).toBe(
 			'text/html; charset=utf8'
 		)
+	})
+})
+
+// F27: an untouched set (lazy `status === undefined`, no cookie, no headers)
+// must take the compact path instead of the touched-set slow path, while
+// ElysiaStatus and Promise stay excluded so `set.status` writeback (the
+// settled lazy-status design) is preserved for afterResponse/trace observers.
+describe('Web Standard - Map Response (untouched set fast path)', () => {
+	const untouched = () => ({ headers: {} }) as any
+
+	it('map string on an untouched set', async () => {
+		const response = mapResponse('Shiroko', untouched())
+
+		expect(response).toBeInstanceOf(Response)
+		expect(await response.text()).toBe('Shiroko')
+		expect(response.status).toBe(200)
+	})
+
+	it('map object on an untouched set', async () => {
+		const response = mapResponse({ name: 'Shiroko' }, untouched())
+
+		expect(response).toBeInstanceOf(Response)
+		expect(await response.json()).toEqual({ name: 'Shiroko' })
+		expect(response.status).toBe(200)
+	})
+
+	it('write back set.status for ElysiaStatus on an untouched set', async () => {
+		const set = untouched()
+		const response = mapResponse(status(418, 'teapot'), set)
+
+		expect(response.status).toBe(418)
+		expect(await response.text()).toBe('teapot')
+		expect(set.status).toBe(418)
+	})
+
+	it('write back set.status for Promise<ElysiaStatus> on an untouched set', async () => {
+		const set = untouched()
+		const response = await mapResponse(
+			Promise.resolve(status(418, 'teapot')),
+			set
+		)
+
+		expect(response.status).toBe(418)
+		expect(await response.text()).toBe('teapot')
+		expect(set.status).toBe(418)
+	})
+
+	it('leave set.headers unmutated for ElysiaFile on an untouched set', async () => {
+		const set = untouched()
+		const response = await mapResponse(file('test/kyuukurarin.mp4'), set)
+
+		expect(response.headers.get('content-type')).toBe('video/mp4')
+		expect(response.headers.get('content-range')).toStartWith('bytes 0-')
+		// compact path: the route-level set must not be written to
+		expect(Object.keys(set.headers)).toHaveLength(0)
+	})
+
+	it('stream generator with set on an untouched set', async () => {
+		const set = untouched()
+		const response = await mapResponse(
+			(function* () {
+				yield 'a'
+				yield 'b'
+			})(),
+			set
+		)
+
+		expect(response.headers.get('transfer-encoding')).toBe('chunked')
+		expect(await response.text()).toBe('ab')
+		// stream handling still flows through the set for trace/afterResponse
+		expect(set.headers['transfer-encoding']).toBe('chunked')
+	})
+
+	it('keep the slow path for prototype-chained default headers', async () => {
+		const set = {
+			headers: Object.create({ 'x-default': '1' })
+		} as any
+		const response = mapResponse('Shiroko', set)
+
+		expect(response.headers.get('x-default')).toBe('1')
+		expect(await response.text()).toBe('Shiroko')
+	})
+
+	it('write back set.status from a sync handler returning Promise<status()>', async () => {
+		let observed: unknown
+
+		const app = new Elysia()
+			.afterResponse(({ set }) => {
+				observed = set.status
+			})
+			.get('/', () => Promise.resolve(status(418, 'teapot')))
+
+		const response = await app.handle(req('/'))
+
+		expect(response.status).toBe(418)
+		expect(await response.text()).toBe('teapot')
+
+		await Bun.sleep(10)
+		expect(observed).toBe(418)
 	})
 })

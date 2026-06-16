@@ -167,6 +167,99 @@ describe('Edge Case', () => {
 		expect(main.routes.length).toBe(2)
 	})
 
+	it('share one combine node across routes absorbed under the same chain', async () => {
+		const called: string[] = []
+
+		const inner = new Elysia()
+			.transform(() => {
+				called.push('inner')
+			})
+			.get('/a', () => 'a')
+			.get('/b', () => 'b')
+
+		const mid = new Elysia()
+			.transform(() => {
+				called.push('mid')
+			})
+			.use(inner)
+
+		const app = new Elysia()
+			.transform(() => {
+				called.push('app')
+			})
+			.use(mid)
+
+		// ≥2 hook-bearing `.use` levels make both `route[6]` (the child's
+		// inherited chain) and the absorbing chain non-empty, producing a
+		// {combine, over} node per absorbed route. Identical (childChain,
+		// preChain) pairs must share ONE node — otherwise every ancestor's
+		// history retains O(routes × depth) duplicate combine nodes forever.
+		const a = app.history!.find((route) => route[1] === '/a')!
+		const b = app.history!.find((route) => route[1] === '/b')!
+
+		expect(a[6]).toBeDefined()
+		expect(a[6]).toBe(b[6]!)
+
+		// sharing the node must not change hook execution
+		const resA = await app.handle(req('/a'))
+		expect(await resA.text()).toBe('a')
+		const forA = called.splice(0)
+
+		const resB = await app.handle(req('/b'))
+		expect(await resB.text()).toBe('b')
+		const forB = called.splice(0)
+
+		expect(forB).toEqual(forA)
+		expect(forA.length).toBeGreaterThan(0)
+	})
+
+	it('memoize routes getter until mutation', () => {
+		const app = new Elysia().get('/a', () => 'a')
+
+		// repeated reads return the same array identity (cached snapshot,
+		// matching `.history` reference semantics) — re-materializing per
+		// access makes `app.routes[i]` in a loop quadratic
+		const first = app.routes
+		expect(app.routes).toBe(first)
+
+		// adding a route invalidates the snapshot
+		app.get('/b', () => 'b')
+
+		const second = app.routes
+		expect(second).not.toBe(first)
+		expect(second.length).toBe(2)
+		expect(app.routes).toBe(second)
+
+		// absorbing a plugin (routes + macro + hook) invalidates it too,
+		// and macro resolution still applies to the new snapshot
+		const plugin = new Elysia()
+			.macro({
+				tagged: {
+					transform: () => {}
+				}
+			})
+			.get('/c', () => 'c', { tagged: true })
+
+		app.use(plugin)
+
+		const third = app.routes
+		expect(third).not.toBe(second)
+		expect(third.length).toBe(3)
+		expect(
+			third.find((route) => route.path === '/c')!.hooks.transform!.length
+		).toBe(1)
+
+		// compilation mutates stored hooks in place (hookToGuard /
+		// promoteDerive on route[4]) — reads after compile must re-merge
+		// instead of serving a stale pre-compile snapshot
+		app.compile()
+		const fourth = app.routes
+		expect(fourth).not.toBe(third)
+		expect(
+			fourth.find((route) => route.path === '/c')!.hooks.transform!.length
+		).toBe(1)
+	})
+
 	it('reading routes is idempotent (no hook duplication)', () => {
 		const plugin = new Elysia().transform(() => {})
 		const app = new Elysia().use(plugin).get('/', () => 'hi', {
@@ -465,7 +558,7 @@ describe('Edge Case', () => {
 	})
 
 	it('automatically handle HEAD request for GET static path', async () => {
-		const app = new Elysia().get('/', () => 'hello world')
+		const app = new Elysia({ autoHead: true }).get('/', () => 'hello world')
 
 		const response = await app.handle(
 			new Request('http://localhost', {
@@ -480,7 +573,10 @@ describe('Edge Case', () => {
 	})
 
 	it('automatically handle HEAD request for GET dynamic path', async () => {
-		const app = new Elysia().get('/:id', () => 'hello world')
+		const app = new Elysia({ autoHead: true }).get(
+			'/:id',
+			() => 'hello world'
+		)
 
 		const response = await app.handle(
 			new Request('http://localhost/1', {
@@ -495,7 +591,7 @@ describe('Edge Case', () => {
 	})
 
 	it('prefer user-provided HEAD over auto-HEAD for GET', async () => {
-		const app = new Elysia()
+		const app = new Elysia({ autoHead: true })
 			.get('/', () => 'hello world')
 			.head('/', ({ set }) => {
 				set.headers['x-source'] = 'manual-head'
@@ -515,7 +611,7 @@ describe('Edge Case', () => {
 	})
 
 	it('prefer user-provided HEAD over auto-HEAD for dynamic GET', async () => {
-		const app = new Elysia()
+		const app = new Elysia({ autoHead: true })
 			.get('/:id', () => 'hello world')
 			.head('/:id', ({ set }) => {
 				set.headers['x-source'] = 'manual-head'
@@ -532,14 +628,17 @@ describe('Edge Case', () => {
 	})
 
 	it('auto-HEAD on an infinite-stream GET returns instead of hanging', async () => {
-		const app = new Elysia().get('/stream', async function* () {
-			// Never terminates — the old `arrayBuffer()` content-length path
-			// would buffer this forever and hang the HEAD request.
-			while (true) {
-				yield 'tick'
-				await new Promise((resolve) => setTimeout(resolve, 1))
+		const app = new Elysia({ autoHead: true }).get(
+			'/stream',
+			async function* () {
+				// Never terminates — the old `arrayBuffer()` content-length path
+				// would buffer this forever and hang the HEAD request.
+				while (true) {
+					yield 'tick'
+					await new Promise((resolve) => setTimeout(resolve, 1))
+				}
 			}
-		})
+		)
 
 		const result = await Promise.race([
 			app.handle(
@@ -554,6 +653,21 @@ describe('Edge Case', () => {
 		expect((result as Response).status).toBe(200)
 		// HEAD must not carry a body
 		expect((result as Response).body).toBeNull()
+	})
+
+	it('does not auto-register HEAD for GET unless autoHead is enabled', async () => {
+		// auto-HEAD is opt-in: without `autoHead`, a HEAD request to a
+		// GET-only route has no handler and falls through to 404 rather than
+		// silently deriving one from the GET handler.
+		const app = new Elysia().get('/', () => 'hello world')
+
+		const response = await app.handle(
+			new Request('http://localhost', {
+				method: 'HEAD'
+			})
+		)
+
+		expect(response.status).toBe(404)
 	})
 
 	it('handle arbitrary code execution from cookie', async () => {

@@ -340,9 +340,11 @@ function findEndIndex(
  * findAlias('body', '{ const a = body, b = body }') // => ['a', 'b']
  * ```
  */
-export function findAlias(type: string, body: string, depth = 0) {
-	if (depth > 5) return []
-
+export function findAlias(
+	type: string,
+	body: string,
+	seen: Set<string> = new Set()
+) {
 	const aliases: string[] = []
 
 	let content = body
@@ -403,11 +405,12 @@ export function findAlias(type: string, body: string, depth = 0) {
 		content = content.slice(index + 3 + type.length)
 	}
 
-	for (const alias of aliases) {
-		if (alias.charCodeAt(0) === 123) continue
+	for (let i = 0; i < aliases.length; i++) {
+		const alias = aliases[i]
+		if (alias.charCodeAt(0) === 123 || seen.has(alias)) continue
 
-		const deepAlias = findAlias(alias, body)
-		if (deepAlias.length > 0) aliases.push(...deepAlias)
+		seen.add(alias)
+		aliases.push(...findAlias(alias, body, seen))
 	}
 
 	return aliases
@@ -624,8 +627,11 @@ const DEFAULT_CACHE_LIMIT = 1024
 
 const caches = new Map<number, Sucrose.Inference>()
 
+let functionCaches = new WeakMap<Function, Sucrose.Inference>()
+
 function clearCache() {
 	caches.clear()
+	functionCaches = new WeakMap()
 
 	pendingGC = undefined
 	if (isBun) Bun.gc(false)
@@ -713,6 +719,14 @@ export function sucrose(
 		const event = events[i]
 		if (!event) continue
 
+		const memoized = functionCaches.get(event as Function)
+		if (memoized) {
+			inference = inference
+				? mergeInference(inference, memoized)
+				: memoized
+			continue
+		}
+
 		const content = event.toString()
 		const key = fnv1a(content)
 		const cachedInference = caches.get(key)
@@ -720,6 +734,8 @@ export function sucrose(
 			// LRU bump: move this key to MRU position by re-inserting.
 			caches.delete(key)
 			caches.set(key, cachedInference)
+			if (typeof event === 'function')
+				functionCaches.set(event, cachedInference)
 			inference = inference
 				? mergeInference(inference, cachedInference)
 				: cachedInference
@@ -771,6 +787,8 @@ export function sucrose(
 			}
 			caches.set(key, fnInference)
 		}
+		if (typeof event === 'function')
+			functionCaches.set(event, fnInference)
 
 		inference = mergeInference(inference, fnInference)
 		fnInference = undefined

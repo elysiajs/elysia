@@ -60,13 +60,10 @@ describe('AOT lazy validator groups', () => {
 
 		// spy each thunk to prove WHEN it's called (i.e. when structures build)
 		const calls = [0, 0]
-		const spied = groups.map(
-			(g: () => unknown, i: number) =>
-				() => {
-					calls[i]++
-					return g()
-				}
-		)
+		const spied = groups.map((g: () => unknown, i: number) => () => {
+			calls[i]++
+			return g()
+		})
 
 		Validator.clear()
 		Compiled.registerLazyValidators(spied, groupOf)
@@ -93,13 +90,10 @@ describe('AOT lazy validator groups', () => {
 		const { groups, groupOf, handlers } = evalLazy(src)
 
 		const calls = [0, 0]
-		const spied = groups.map(
-			(g: () => unknown, i: number) =>
-				() => {
-					calls[i]++
-					return g()
-				}
-		)
+		const spied = groups.map((g: () => unknown, i: number) => () => {
+			calls[i]++
+			return g()
+		})
 		Validator.clear()
 		Compiled.registerLazyValidators(spied, groupOf)
 		Compiled.handlers = handlers
@@ -118,7 +112,10 @@ describe('AOT lazy validator groups', () => {
 			.post('/b', ({ body }: any) => body, { body })
 			.post('/c', ({ body }: any) => body, { body })
 
-		const src = await compileToSource(app as any, { register: false, lazy: 1 })
+		const src = await compileToSource(app as any, {
+			register: false,
+			lazy: 1
+		})
 		delete process.env.ELYSIA_AOT_BUILD
 
 		// ONE entry despite 3 routes in 3 groups (cross-group dedup preserved)…
@@ -146,7 +143,10 @@ describe('AOT lazy validator groups', () => {
 				body: t.Object({ b: t.String() })
 			})
 
-		const src = await compileToSource(app as any, { register: false, lazy: 1 })
+		const src = await compileToSource(app as any, {
+			register: false,
+			lazy: 1
+		})
 		delete process.env.ELYSIA_AOT_BUILD
 
 		// every `_c` lives INSIDE a thunk — none before `_groups`
@@ -158,10 +158,9 @@ describe('AOT lazy validator groups', () => {
 	})
 
 	it('is eval-free by construction (CF-safe: no new Function / eval / dynamic import)', async () => {
-		const app = new Elysia()
-			.post('/x', ({ body }: any) => body, {
-				body: t.Object({ n: t.Numeric() }) // codec exercises mirror branches too
-			})
+		const app = new Elysia().post('/x', ({ body }: any) => body, {
+			body: t.Object({ n: t.Numeric() }) // codec exercises mirror branches too
+		})
 		const src = await compileToSource(app as any, {
 			register: true,
 			lazy: true
@@ -175,7 +174,10 @@ describe('AOT lazy validator groups', () => {
 	})
 
 	it('serves end-to-end through the lazy manifest (≡ eager behaviour)', async () => {
-		const src = await compileToSource(build(), { register: false, lazy: 64 })
+		const src = await compileToSource(build(), {
+			register: false,
+			lazy: 64
+		})
 		delete process.env.ELYSIA_AOT_BUILD
 		const { groups, groupOf, handlers } = evalLazy(src)
 
@@ -235,6 +237,8 @@ describe('AOT lazy group size (auto-scale)', () => {
 			lazy: 25
 		})
 		delete process.env.ELYSIA_AOT_BUILD
-		expect((fixed.match(/\(\) => \{/g) ?? []).length).toBe(Math.ceil(100 / 25))
+		expect((fixed.match(/\(\) => \{/g) ?? []).length).toBe(
+			Math.ceil(100 / 25)
+		)
 	})
 })

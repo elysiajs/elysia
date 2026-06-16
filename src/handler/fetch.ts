@@ -7,7 +7,7 @@ import { getAsyncIndexes } from './utils'
 
 import { createContext, type Context } from '../context'
 import { createErrorHandler } from './error'
-import { requestId, flattenChain, getLoosePath, nullObject } from '../utils'
+import { requestId, flattenChain, nullObject } from '../utils'
 import { NotFound } from '../error'
 import { createTracer } from '../trace'
 import { isCloudflareWorker } from '../universal/constants'
@@ -23,11 +23,9 @@ const getNotFound = (): Response =>
 				status: 404
 			})).clone() as Response)
 
-// Dynamic-route params arrive percent-encoded (memoirist returns the raw URL
-// segments). Decode each value at match time — route MATCHING is handled by the
-// build-time encodeURI keys in `~map`/the router, but a param VALUE can't be
-// precomputed, so it's decoded here. Only strings containing '%' pay the cost.
-const decodeParams = (params: Record<string, string>): Record<string, string> => {
+const decodeParams = (
+	params: Record<string, string>
+): Record<string, string> => {
 	for (const key in params) {
 		const value = params[key]
 		if (value.indexOf('%') !== -1)
@@ -55,7 +53,6 @@ function findRoute(
 	map: NonNullable<AnyElysia['~map']>,
 	router: NonNullable<AnyElysia['~router']>,
 	hasError: boolean,
-	strictPath: boolean,
 	handleError: (context: Context, error: Error) => unknown,
 	afterResponse: ((context: Context, status?: number) => void) | undefined,
 	hasWS?: boolean
@@ -66,8 +63,7 @@ function findRoute(
 	if (hasWS) {
 		const upgrade = request.headers.get('upgrade')
 		if (upgrade && upgrade.toLowerCase() === 'websocket') {
-			const loose = strictPath ? path : getLoosePath(path)
-			const handler = map['WS']?.[path] ?? map['WS']?.[loose]
+			const handler = map['WS']?.[path]
 
 			if (handler) {
 				const r = handler(context)
@@ -82,13 +78,8 @@ function findRoute(
 			}
 		}
 	} else {
-		const paths = map[request.method]
-		const loose = strictPath ? path : getLoosePath(path)
 		const handler: CompiledHandler =
-			paths?.[path] ??
-			paths?.[loose] ??
-			map['*']?.[path] ??
-			map['*']?.[loose]
+			map[request.method]?.[path] ?? map['*']?.[path]
 
 		if (handler) {
 			const r = handler(context)
@@ -120,8 +111,6 @@ export function createFetchHandler(
 	const map = app['~map']! ?? nullObject()
 	const router = app['~router']!
 	const hasWS = !!app['~hasWS']
-
-	const strictPath = !!app['~config']?.strictPath
 
 	// standard internet hostname is at minimum 11 characters (http://a.bc)
 	const pathStart =
@@ -305,7 +294,6 @@ export function createFetchHandler(
 					map,
 					router,
 					hasError,
-					strictPath,
 					handleError,
 					afterResponse,
 					hasWS
@@ -356,7 +344,6 @@ export function createFetchHandler(
 						map,
 						router,
 						hasError,
-						strictPath,
 						handleError,
 						afterResponse,
 						hasWS
@@ -395,7 +382,6 @@ export function createFetchHandler(
 					map,
 					router,
 					hasError,
-					strictPath,
 					handleError,
 					afterResponse,
 					hasWS
@@ -427,8 +413,8 @@ export function createFetchHandler(
 		if (hasWS) {
 			const upgrade = request.headers.get('upgrade')
 			if (upgrade && upgrade.toLowerCase() === 'websocket') {
-				const loose = strictPath ? path : getLoosePath(path)
-				const handler = map['WS']?.[path] ?? map['WS']?.[loose]
+				// Loose variants are pre-registered in `~map` (build time).
+				const handler = map['WS']?.[path]
 
 				try {
 					if (handler) {
@@ -454,12 +440,8 @@ export function createFetchHandler(
 			}
 		}
 
-		const loose = strictPath ? path : getLoosePath(path)
 		const handler: CompiledHandler =
-			map[request.method]?.[path] ??
-			map[request.method]?.[loose] ??
-			map['*']?.[path] ??
-			map['*']?.[loose]
+			map[request.method]?.[path] ?? map['*']?.[path]
 
 		try {
 			if (handler) {

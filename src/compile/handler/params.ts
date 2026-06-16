@@ -2,6 +2,7 @@ import { ElysiaStatus, ParseError } from '../../error'
 import { parseQueryFromURL } from '../../parse-query'
 import {
 	parseCookieRaw,
+	parseCookieRawSync,
 	buildCookieJar,
 	signCookieValues
 } from '../../cookie/utils'
@@ -46,7 +47,9 @@ export const HANDLER_PARAMS: Record<string, Resolver> = {
 	es: () => ElysiaStatus,
 	tee: () => tee,
 	cr: () => cloneResponse,
+	// `pcr` kept for replay of older frozen builds; `pcrs` is the F1 sync core.
 	pcr: () => parseCookieRaw,
+	pcrs: () => parseCookieRawSync,
 	bcj: () => buildCookieJar,
 	scv: () => signCookieValues,
 	// validator

@@ -14,11 +14,6 @@ import { elyType } from './utils'
 
 type BaseFormType<T extends Record<keyof any, unknown>> = Type.TCodec<
 	Type.TRefine<Type.TUnsafe<ElysiaFormData<T>>>,
-	// `T` is a record of SCHEMA NODES, so decode each field to its static type
-	// (`t.File()` → File, `t.Files()` → File[]) instead of passing the raw node
-	// through — the old `T[K] extends Blob | ElysiaFile` test never matched a
-	// schema node and leaked `Readonly<TRefine<TUnsafe<File>>>` into `ctx.body`.
-	// (Mirrors the sibling `ObjectType(property)` member of the Intersect.)
 	{ [K in keyof T]: T[K] extends TSchema ? StaticDecode<T[K]> : T[K] }
 >
 
@@ -34,8 +29,6 @@ export const Form = <T extends TProperties>(
 				(value) => '~ely-form' in value,
 				() => 'must be instance of Elysia.form'
 			),
-			// The form's fields live inline on the object (`~ely-form` is just
-			// a marker), so decoding is identity.
 			(value) => value
 		)
 	)

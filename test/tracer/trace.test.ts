@@ -476,6 +476,67 @@ describe('trace', () => {
 		expect(route).toBe('/id/:id')
 	})
 
+	it('resolve late (await-then-subscribe) event access', async () => {
+		const done = Promise.withResolvers<void>()
+
+		let name: string | undefined
+		let endsAfterBegin = false
+		let resolvedError: Error | null | undefined
+
+		const app = new Elysia()
+			.trace(async (t) => {
+				// subscribe to NOTHING synchronously: touch an event only
+				// after the request finished — the promise must resolve from
+				// recorded data instead of hanging silently (events without
+				// a pre-begin subscriber skip the Promise machinery)
+				await new Promise((resolve) => setTimeout(resolve, 20))
+
+				const handle = await t.onHandle()
+				name = handle.name
+				endsAfterBegin = (await handle.end) >= handle.begin
+				resolvedError = await handle.error
+
+				done.resolve()
+			})
+			.get('/', () => 'hi')
+
+		const response = await app.handle(req('/'))
+		expect(await response.text()).toBe('hi')
+
+		await done.promise
+
+		expect(name).toBe('handle')
+		expect(endsAfterBegin).toBe(true)
+		expect(resolvedError).toBeNull()
+	})
+
+	it('report late-accessed error of a throwing lifecycle', async () => {
+		const done = Promise.withResolvers<void>()
+
+		let resolvedError: Error | null | undefined
+
+		const app = new Elysia()
+			.trace(async (t) => {
+				await new Promise((resolve) => setTimeout(resolve, 20))
+
+				// the error returned by a child lifecycle must still reach a
+				// late subscriber through the recorded group error
+				resolvedError = await (await t.onBeforeHandle()).error
+
+				done.resolve()
+			})
+			.get('/', () => 'ok', {
+				beforeHandle() {
+					return new Error('A')
+				}
+			})
+
+		await app.handle(req('/'))
+		await done.promise
+
+		expect(resolvedError).toBeInstanceOf(Error)
+	})
+
 	it('defers stream for onHandle, and onAfterResponse', async () => {
 		const order = <string[]>[]
 

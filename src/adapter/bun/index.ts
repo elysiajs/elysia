@@ -8,14 +8,14 @@ import { buildGlobalWSHandler } from '../../ws/route'
 
 import type { AnyElysia } from '../../base'
 
-function collectStaticRoutes(app: AnyElysia) {
+export function collectStaticRoutes(app: AnyElysia) {
 	if (app['~ext']?.hoc?.length) return
 
 	const hook = flattenChain(app['~hookChain'])
 	if (
 		hook &&
 		(hook?.request?.length ||
-			hook?.error?.length ||
+			hook?.mapResponse?.length ||
 			hook?.afterResponse?.length ||
 			hook?.trace?.length)
 	)
@@ -69,19 +69,17 @@ export const BunAdapter = createAdapter({
 
 		const hasWs = app['~hasWS']
 
-		app.server = Bun.serve({
-			...serve,
-			// lazy init fetch
-			fetch: (request, server) => app.fetch(request, server)
-		})
+		serve.fetch = (request: Request, server: unknown) =>
+			app.fetch(request, server)
+
+		app.server = Bun.serve(serve)
 
 		if (!hasWs) callback?.(app.server!)
 
-		// optimize router, static route, etc.
 		queueMicrotask(() => {
-			serve.fetch = app.fetch
+			if (!app.pending) serve.fetch = app.fetch
 
-			if (hasWs) {
+			const buildWebSocket = () => {
 				const defaultConfig = (app['~config'] as any)?.websocket
 
 				serve.websocket = defaultConfig
@@ -89,8 +87,7 @@ export const BunAdapter = createAdapter({
 					: buildGlobalWSHandler()
 			}
 
-			if (app.server) app.server.reload(serve)
-			else app.server = Bun.serve(serve)
+			if (hasWs) buildWebSocket()
 
 			const collectRoutes = () => {
 				const staticRoutes = collectStaticRoutes(app as AnyElysia)
@@ -102,30 +99,30 @@ export const BunAdapter = createAdapter({
 						app.server!.reload(serve)
 					})
 
-				// All static responses were synchronous (the common case):
-				// `pending` is empty, so previously `serve.routes` was never
-				// assigned and Bun.serve's native static-route dispatch was
-				// dead — every static route fell through to the JS fetch
-				// handler. Install them synchronously here. Returning a truthy
-				// sentinel tells the caller a reload already happened.
-				if (Object.keys(staticRoutes[0]).length) {
+				if (Object.keys(staticRoutes[0]).length)
 					serve.routes = staticRoutes[0]
-					app.server!.reload(serve)
-					return true
-				}
 			}
 
 			if (app.pending) {
+				if (app.server) app.server.reload(serve)
+				else app.server = Bun.serve(serve)
+
 				const reloadAfterModules = () => {
 					serve.fetch = app.fetch
 
-					const routes = collectRoutes()
+					if (hasWs || app['~hasWS']) buildWebSocket()
 
-					if (!routes) app.server!.reload(serve)
+					collectRoutes()
+					app.server!.reload(serve)
 				}
 
 				app.modules.then(reloadAfterModules, reloadAfterModules)
-			} else collectRoutes()
+			} else {
+				collectRoutes()
+
+				if (app.server) app.server.reload(serve)
+				else app.server = Bun.serve(serve)
+			}
 
 			flushMemory()
 

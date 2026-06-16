@@ -67,14 +67,22 @@ function buildEmptyContext(Base: any) {
 		params?: Record<string, string>
 		headers?: Record<string, string>
 		qi!: number
-		set: { headers: Record<string, string> }
+		set: {
+			headers: Record<string, string>
+			status?: number | string
+			cookie?: Record<string, unknown>
+		}
 		rid?: string
 		route?: string
 		trace?: any[]
 
 		constructor(public request: Request) {
 			super()
-			this.set = { headers: Object.create(null) }
+			this.set = {
+				headers: Object.create(null),
+				status: undefined,
+				cookie: undefined
+			}
 		}
 	}
 }
@@ -102,7 +110,11 @@ export function createContext(
 		params?: Record<string, string>
 		headers?: Record<string, string>
 		qi!: number
-		set: { headers: Record<string, string> }
+		set: {
+			headers: Record<string, string>
+			status?: number | string
+			cookie?: Record<string, unknown>
+		}
 		rid?: string
 		route?: string
 		trace?: any[]
@@ -111,7 +123,9 @@ export function createContext(
 			super()
 
 			this.set = {
-				headers: Object.create(headers)
+				headers: Object.create(headers),
+				status: undefined,
+				cookie: undefined
 			}
 		}
 	} as any

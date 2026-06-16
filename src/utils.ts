@@ -15,6 +15,8 @@ import type {
 	ElysiaFormData
 } from './types'
 
+export const nullObject = () => Object.create(null)
+
 export const mapMethodBack = (method: MethodMap[keyof MethodMap] | string) =>
 	MethodMapBack[method as MethodMap[keyof MethodMap]] ?? method
 
@@ -148,6 +150,42 @@ export function flattenChain(
 	}
 
 	if (isNotEmpty(result)) return result
+}
+
+const flattenChainMemos = new WeakMap<
+	object,
+	WeakMap<ChainNode, Partial<AppHook>>
+>()
+const emptyFlatten = Object.freeze(nullObject()) as Partial<AppHook>
+
+function cloneFlatHook(src: Partial<AppHook>): Partial<AppHook> {
+	const out = Object.assign(nullObject(), src) as Record<string, unknown>
+	for (const key in out)
+		if (Array.isArray(out[key])) out[key] = (out[key] as unknown[]).slice()
+	return out as Partial<AppHook>
+}
+
+export function flattenChainMemo(
+	root: object,
+	start: ChainNode | undefined
+): Partial<AppHook> | undefined {
+	if (!start) return undefined
+
+	let perRoot = flattenChainMemos.get(root)
+	if (!perRoot) {
+		perRoot = new WeakMap()
+		flattenChainMemos.set(root, perRoot)
+	}
+
+	let cached = perRoot.get(start)
+	if (cached === undefined) {
+		cached = flattenChain(start) ?? emptyFlatten
+		perRoot.set(start, cached)
+	}
+
+	if (cached === emptyFlatten) return undefined
+
+	return cloneFlatHook(cached)
 }
 
 function appendInto(
@@ -535,27 +573,6 @@ export function coalesceStandaloneSchemas(
 	}
 }
 
-const schemaKeys = schemaProperties.keys()
-
-export function liftDirectFieldsToSchema(
-	input: Partial<AppHook & Macro>
-): void {
-	let lifted: Record<string, unknown> | undefined
-
-	for (const f of schemaKeys) {
-		const v = (input as any)[f]
-		if (v !== undefined && v !== null) {
-			;(lifted ??= Object.create(null) as any)![f] = v
-			;(input as any)[f] = undefined
-		}
-	}
-
-	if (!lifted) return
-	;(input as any).schemas ??= []
-
-	coalesceStandaloneSchemas((input as any).schemas as any[], [lifted])
-}
-
 export function mergeGuard(
 	a: Partial<AppHook & Macro>,
 	b: Partial<AppHook & Macro> | undefined
@@ -714,8 +731,6 @@ export function mergeDeep<
 
 export const isBlob = (value: unknown): value is Blob =>
 	value instanceof Blob || value instanceof ElysiaFile
-
-export const nullObject = () => Object.create(null)
 
 export function cloneHook<T extends Partial<AnyLocalHook> | Partial<AppHook>>(
 	src: T

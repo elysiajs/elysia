@@ -124,4 +124,93 @@ describe('Parse Cookie', () => {
 		const single = await parseCookie(set, 'greeting=hello%20world')
 		expect(single.greeting.value).toBe('hello world')
 	})
+
+	// Regression (perf audit F5): signCookie caches imported HMAC CryptoKeys
+	// per secret at module level — the cache must not change the signature
+	// bytes, so pin them against an independent HMAC implementation
+	it('produces byte-identical signatures with the cached CryptoKey', async () => {
+		const { createHmac } = await import('node:crypto')
+		const secret = 'Fischl von Luftschloss Narfidort'
+
+		const expected =
+			'fischl.' +
+			createHmac('sha256', secret)
+				.update('fischl')
+				.digest('base64')
+				.replace(/=+$/, '')
+
+		// sign twice — the second call hits the cache and must match
+		expect(await signCookie('fischl', secret)).toBe(expected)
+		expect(await signCookie('fischl', secret)).toBe(expected)
+	})
+
+	// Regression (perf audit F5): the CryptoKey cache is keyed PER secret —
+	// every secret in a rotation list must verify, not just the first one
+	// cached
+	it('verifies both rotation secrets after key caching', async () => {
+		const oldSecret = 'old rotation secret'
+		const newSecret = 'new rotation secret'
+
+		// cache both keys via signing
+		const signedOld = await signCookie('fischl', oldSecret)
+		const signedNew = await signCookie('eula', newSecret)
+
+		const set = { headers: {}, cookie: {} }
+		const result = await parseCookie(
+			set,
+			`fischl=${signedOld}; eula=${signedNew}`,
+			{
+				secrets: [newSecret, oldSecret],
+				sign: ['fischl', 'eula']
+			}
+		)
+
+		expect(result.fischl.value).toEqual('fischl')
+		expect(result.eula.value).toEqual('eula')
+
+		// the wrong (but cached) key must still reject
+		expect(await unsignCookie(signedOld, newSecret)).toBe(false)
+	})
+
+	// Regression (perf audit F5): the null/undefined-secret TypeError must
+	// fire BEFORE the key-cache lookup — rotation lists legitimately contain
+	// null slots
+	it('signCookie still throws on a null secret', async () => {
+		expect(signCookie('fischl', null)).rejects.toThrow(
+			'Secret key must be provided'
+		)
+	})
+
+	// Regression (perf audit F5): a FAILED importKey must self-evict from the
+	// cache (the `.catch` on the cached promise). Without it, a transient
+	// failure sticks a rejected promise in keyCache and every later sign with
+	// that secret re-throws permanently. Verify a retry after a one-shot
+	// failure succeeds.
+	it('recovers after a transient importKey failure (rejected key self-evicts)', async () => {
+		const subtle = crypto.subtle as {
+			importKey: (...args: any[]) => Promise<CryptoKey>
+		}
+		const realImportKey = subtle.importKey.bind(crypto.subtle)
+		const secret = 'transient-failure-secret-unique'
+		let failNext = true
+
+		subtle.importKey = (...args: any[]) => {
+			if (failNext) {
+				failNext = false
+				return Promise.reject(new Error('boom'))
+			}
+			return realImportKey(...args)
+		}
+
+		try {
+			await expect(signCookie('v', secret)).rejects.toThrow('boom')
+
+			// the rejected key must have evicted; the retry imports cleanly
+			const signed = await signCookie('v', secret)
+			expect(signed.startsWith('v.')).toBe(true)
+			expect(await unsignCookie(signed, secret)).toBe('v')
+		} finally {
+			subtle.importKey = realImportKey
+		}
+	})
 })

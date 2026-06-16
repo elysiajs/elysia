@@ -49,6 +49,28 @@ describe('Response Headers', () => {
 		expect(res.headers.get('x-powered-by')).toBe('Elysia')
 	})
 
+	// F28: on Bun a returned Response with a touched set keeps its identity —
+	// headers are merged in place instead of rewrapping via response.body,
+	// preserving the static in-memory body and its content-length
+	it('add headers to Response in place without rewrapping', async () => {
+		let original: Response | undefined
+
+		const app = new Elysia().get('/', ({ set }) => {
+			set.headers['x-powered-by'] = 'Elysia'
+
+			return (original = new Response('Hi', {
+				headers: { 'content-length': '2' }
+			}))
+		})
+
+		const res = await app.handle(req('/'))
+
+		expect(res).toBe(original!)
+		expect(res.headers.get('x-powered-by')).toBe('Elysia')
+		expect(res.headers.get('content-length')).toBe('2')
+		expect(await res.text()).toBe('Hi')
+	})
+
 	it('add status to Response', async () => {
 		const app = new Elysia().get('/', ({ set }) => {
 			set.status = 401

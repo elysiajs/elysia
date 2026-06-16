@@ -375,6 +375,53 @@ describe('Cookie Response', () => {
 		expect(res.getSetCookie()).toEqual([])
 	})
 
+	// Regression (perf audit F2): buildCookieJar memoizes Cookie instances
+	// per request jar — repeated accesses return the same instance so
+	// change-detection state survives across accesses
+	it('memoizes Cookie instances per request jar', async () => {
+		const app = new Elysia().get('/identity', ({ cookie }) => ({
+			same: cookie.session === cookie.session,
+			distinct: cookie.session !== cookie.other
+		}))
+
+		const response = await app.handle(
+			req('/identity', {
+				headers: {
+					cookie: 'session=a'
+				}
+			})
+		)
+
+		expect(await response.json()).toEqual({
+			same: true,
+			distinct: true
+		})
+	})
+
+	// Regression (perf audit F2): request-cookie store entries (defaults
+	// already merged at parse) are now passed to Cookie by reference instead
+	// of re-merged per access — an attribute-only write must keep emitting
+	// the exact same Set-Cookie bytes
+	it('set cookie attribute only on a request cookie', async () => {
+		const app = new Elysia().get('/attr', ({ cookie: { session } }) => {
+			session.domain = 'elysiajs.com'
+
+			return 'ok'
+		})
+
+		const response = await app.handle(
+			req('/attr', {
+				headers: {
+					cookie: 'session=a'
+				}
+			})
+		)
+
+		expect(getCookies(response)).toEqual([
+			'session=a; Domain=elysiajs.com; Path=/'
+		])
+	})
+
 	it('signs a cookie set before a thrown-then-handled error', async () => {
 		const app = new Elysia()
 			// A handler returning from `error()` is still a response — the

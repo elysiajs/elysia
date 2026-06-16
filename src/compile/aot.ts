@@ -41,6 +41,9 @@ export interface FrozenValidator {
 	c?: FrozenCheckFactory
 	// exact-mirror clean
 	m?: FrozenMirror
+	// exact-mirror request-side decode (codec `~decode`); instantiated with
+	// `{ unions, codecs }`: codecs rebuilt from the live schema's `~codec.decode`
+	dm?: FrozenMirror
 	/** Merged check + clean (present iff a slot froze BOTH; supersedes `c`/`m`). */
 	cm?: FrozenBothFactory
 	/** Union branch checks for the merged mirror (entry-level `m.u`). */
@@ -83,7 +86,7 @@ export interface HandlerManifest {
 let validators: ValidatorManifest | undefined
 let handlers: HandlerManifest | undefined
 
-// lazy validator groups (sync thunks) — built on first hit, not at boot
+// lazy validator groups (sync thunks)
 let lazyGroups: Array<() => ValidatorManifest> | undefined
 let lazyGroupOf: Record<string, Record<string, number>> | undefined
 const builtGroups = new Set<number>()
@@ -283,7 +286,7 @@ export function externalsMatch(a: unknown[], b: unknown[]) {
 
 export const mirrorFactorySource = (source: string, hasExternals: boolean) =>
 	hasExternals
-		? // union: a factory `(d) => (v) => cleaned` — `d` injects the branch checks
+		? // union: a factory `(d) => (v) => cleaned`. `d` injects the branch checks
 			`function(d){${source}}`
 		: // plain: the cleaner `(v) => cleaned` directly (no unused-`d` factory)
 			`function(v){${source}}`
@@ -321,6 +324,32 @@ function collectMirrorUnions(schema: any, out: unknown[][] = []) {
 	return out
 }
 
+const CODEC = '~codec'
+
+function collectMirrorCodecs(schema: any, out: Function[] = []): Function[] {
+	if (!schema || typeof schema !== 'object') return out
+
+	const codec = schema[CODEC]
+	if (
+		codec &&
+		typeof codec.decode === 'function' &&
+		out.indexOf(codec.decode) === -1
+	)
+		out.push(codec.decode)
+
+	if (schema.type === 'object' && schema.properties)
+		for (const key in schema.properties)
+			collectMirrorCodecs(schema.properties[key], out)
+	else if (schema.type === 'array' && schema.items) {
+		if (Array.isArray(schema.items))
+			for (const it of schema.items) collectMirrorCodecs(it, out)
+		else collectMirrorCodecs(schema.items, out)
+	} else if (Array.isArray(schema.anyOf))
+		for (const b of schema.anyOf) collectMirrorCodecs(b, out)
+
+	return out
+}
+
 // Rebuild exact-mirror's `d.unions` from live schema
 function buildUnions(u: FrozenCheckFactory[][], schema: unknown) {
 	const branchSchemas = collectMirrorUnions(schema)
@@ -342,6 +371,21 @@ export function instantiateFrozenMirror(
 	return (frozen.s as FrozenMirrorFactory)({
 		unions: buildUnions(frozen.u, schema)
 	})
+}
+
+export function instantiateFrozenDecodeMirror(
+	frozen: FrozenMirror,
+	schema: unknown
+): (value: unknown) => unknown {
+	// The decode source always references `d.codecs` (rebuilt from the live
+	// schema's `~codec.decode` leaves) and `d.unions` when the schema has unions.
+	const d: { codecs: Function[]; unions?: unknown } = {
+		codecs: collectMirrorCodecs(schema)
+	}
+
+	if (frozen.u) d.unions = buildUnions(frozen.u, schema)
+
+	return (frozen.s as FrozenMirrorFactory)(d)
 }
 
 const EMPTY_EXTERNALS: unknown[] = []
@@ -408,6 +452,19 @@ export function captureMirrorUnions(schema: unknown, truthUnions: any[][]) {
 	return u
 }
 
+export function captureMirrorCodecs(
+	schema: unknown,
+	truthCodecs: Function[]
+): boolean {
+	const codecs = collectMirrorCodecs(schema)
+	if (codecs.length !== truthCodecs.length) return false
+
+	for (let i = 0; i < codecs.length; i++)
+		if (codecs[i] !== truthCodecs[i]) return false
+
+	return true
+}
+
 export interface CapturedMirror {
 	source: string
 	hasExternals: boolean
@@ -430,6 +487,8 @@ export interface CapturedValidator {
 	hasCodec?: boolean
 	hasRef?: boolean
 	mirror?: CapturedMirror
+	// request-side decode mirror (codec `~decode`), frozen to `dm`
+	decodeMirror?: CapturedMirror
 }
 
 let capture: Map<string, CapturedValidator> | undefined
@@ -525,6 +584,16 @@ export function captureMirror(v: {
 }) {
 	const e = captureEntry(v)
 	if (e) e.mirror = v.mirror
+}
+
+export function captureDecodeMirror(v: {
+	method: string
+	path: string
+	slot: ValidatorSlot
+	mirror: CapturedMirror
+}) {
+	const e = captureEntry(v)
+	if (e) e.decodeMirror = v.mirror
 }
 
 export const isValidatorCapturing = () =>

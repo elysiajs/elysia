@@ -1088,6 +1088,70 @@ describe('Macro', () => {
 		expect(invalid3.status).toBe(422)
 	})
 
+	// registering a macro must not change route-local schema semantics:
+	// route-local fields stay in the override channel (SS1 "override
+	// everywhere") instead of being lifted into the additive schemas
+	// channel — previously the first applyMacro call in a process lifted
+	// them (one-shot iterator bug), making validation process-order
+	// dependent: identical routes returned 422 (route 1) vs 200 (route 2)
+	it('keep route-local schema override under guard regardless of route order', async () => {
+		const app = new Elysia()
+			.macro({
+				lilith: {
+					query: t.Object({ user: t.Literal('Lilith') })
+				}
+			})
+			.guard({
+				body: t.Object({ name: t.String() })
+			})
+			.post('/first', ({ body }) => body, {
+				body: t.Object({ id: t.Number() })
+			})
+			.post('/second', ({ body }) => body, {
+				body: t.Object({ id: t.Number() })
+			})
+			.post('/macro', ({ body }) => body, {
+				lilith: true,
+				body: t.Object({ id: t.Number() })
+			})
+
+		// route-local body stays in the override channel, never lifted
+		expect(app.history![0][4]!.body).not.toBeUndefined()
+		expect(app.history![0][4]!.schemas).toBeUndefined()
+		expect(app.history![1][4]!.body).not.toBeUndefined()
+		expect(app.history![1][4]!.schemas).toBeUndefined()
+
+		// { id } fails the guard's body but passes the route-local one:
+		// 200 proves the route-local schema overrides the guard's,
+		// identically on both routes
+		const second = await app.handle(post('/second', { id: 1 }))
+		const first = await app.handle(post('/first', { id: 1 }))
+
+		expect(second.status).toBe(200)
+		expect(first.status).toBe(200)
+		expect(await second.json()).toEqual({ id: 1 })
+		expect(await first.json()).toEqual({ id: 1 })
+
+		// the route-local schema is still enforced, not dropped
+		const invalidFirst = await app.handle(post('/first', { name: 'a' }))
+		const invalidSecond = await app.handle(post('/second', { name: 'a' }))
+
+		expect(invalidFirst.status).toBe(422)
+		expect(invalidSecond.status).toBe(422)
+
+		// a macro-produced direct schema field is additive and
+		// still validates on the consuming route
+		const validMacro = await app.handle(
+			post('/macro?user=Lilith', { id: 1 })
+		)
+		expect(validMacro.status).toBe(200)
+
+		const invalidMacro = await app.handle(
+			post('/macro?user=Eve', { id: 1 })
+		)
+		expect(invalidMacro.status).toBe(422)
+	})
+
 	it('create detail if not exists', () => {
 		const app = new Elysia()
 			.macro({

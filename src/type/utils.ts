@@ -7,9 +7,6 @@ const iterators = ['anyOf', 'oneOf', 'allOf'] as const
 
 export function hasType(
 	type: string | ELYSIA_TYPES[keyof ELYSIA_TYPES],
-	// `TSchema` accepted because some typebox node types (TCodec, TUnsafe,
-	// TRefine) don't declare `~kind` statically — the walker reads it
-	// structurally at runtime
 	rawSchema: BaseSchema | TSchema
 ): boolean {
 	const schema = rawSchema as BaseSchema

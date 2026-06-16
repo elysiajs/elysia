@@ -16,32 +16,26 @@ export function createCookieJar(
 	store: Record<string, BaseCookie>,
 	initial?: Partial<BaseCookie>
 ): Record<string, Cookie<unknown>> {
-	set.cookie ??= nullObject() as any
+	const cache: Record<string, Cookie<unknown>> = nullObject()
 
 	return new Proxy(store, {
 		get(_, key: string) {
-			if (key in store)
-				return new Cookie(
-					key,
-					set.cookie as Record<string, BaseCookie>,
-					Object.assign(
-						nullObject(),
-						initial ?? nullObject(),
-						store[key]
-					)
-				)
-
-			return new Cookie(
+			return (cache[key] ??= new Cookie(
 				key,
-				set.cookie as Record<string, BaseCookie>,
-				Object.assign(nullObject(), initial)
-			)
+				set,
+				key in store
+					? Object.assign(
+							nullObject(),
+							initial ?? nullObject(),
+							store[key]
+						)
+					: Object.assign(nullObject(), initial)
+			))
 		}
 	}) as Record<string, Cookie<unknown>>
 }
 
-// Public API used by tests — accepts loose options and wraps them into the
-// compiled config used by parseCookieRaw/buildCookieJar.
+// export for test
 export async function parseCookie(
 	set: Context['set'],
 	cookieString?: string | null,
@@ -54,18 +48,65 @@ export async function parseCookie(
 	return buildCookieJar(set, raw, config)
 }
 
+function maybeJsonDecode(value: unknown) {
+	if (typeof value === 'string') {
+		const starts = value.charCodeAt(0)
+
+		// { or [
+		if (starts === 123 || starts === 91)
+			try {
+				return JSON.parse(value)
+			} catch {}
+	}
+
+	return value
+}
+
+function resolveSignSecrets(
+	name: string,
+	config: CompiledCookieConfig
+): CompiledCookieConfig['globalSecrets'] | undefined {
+	const field = config.fields[name]
+	if (field?.sign) return field.secrets ?? config.globalSecrets
+	if (
+		config.globalSign === true ||
+		(Array.isArray(config.globalSign) && config.globalSign.includes(name))
+	)
+		return config.globalSecrets
+	return undefined
+}
+
+export function parseCookieRawSync(
+	cookieString: string | null | undefined,
+	config: CompiledCookieConfig
+): Record<string, unknown> {
+	const out: Record<string, unknown> = nullObject() as any
+	if (!cookieString) return out
+
+	const cookies = parse(cookieString, null)
+
+	for (const name in cookies) {
+		if (dangerousKeys.has(name)) continue
+
+		const v = cookies[name]
+		if (v === undefined) continue
+
+		out[name] = maybeJsonDecode(decodeComponent(v) as unknown as string)
+	}
+
+	return out
+}
+
 export async function parseCookieRaw(
 	cookieString: string | null | undefined,
 	config: CompiledCookieConfig
 ): Promise<Record<string, unknown>> {
+	if (!config.hasSign) return parseCookieRawSync(cookieString, config)
+
 	const out: Record<string, unknown> = nullObject() as any
 	if (!cookieString) return out
 
-	// Identity decode: `parse` would otherwise run decodeURIComponent on any
-	// value containing '%', and we decode again with deuri's decodeComponent
-	// below — decoding twice silently corrupts values like `100%2520off`
-	// (correctly encoded `100%20off`). Decode exactly once, here.
-	const cookies = parse(cookieString, (raw) => raw)
+	const cookies = parse(cookieString, null)
 
 	for (const name in cookies) {
 		if (dangerousKeys.has(name)) continue
@@ -75,17 +116,7 @@ export async function parseCookieRaw(
 
 		let value: unknown = decodeComponent(v) as unknown as string
 
-		const signCheck = (() => {
-			const field = config.fields[name]
-			if (field?.sign) return field.secrets ?? config.globalSecrets
-			if (
-				config.globalSign === true ||
-				(Array.isArray(config.globalSign) &&
-					config.globalSign.includes(name))
-			)
-				return config.globalSecrets
-			return undefined
-		})()
+		const signCheck = resolveSignSecrets(name, config)
 
 		if (signCheck !== undefined) {
 			if (typeof value !== 'string')
@@ -109,16 +140,7 @@ export async function parseCookieRaw(
 			}
 		}
 
-		// JSON-decode if value looks like an object/array
-		if (typeof value === 'string' && value) {
-			const starts = value.charCodeAt(0)
-			if (starts === 123 /* { */ || starts === 91 /* [ */)
-				try {
-					value = JSON.parse(value)
-				} catch {}
-		}
-
-		out[name] = value
+		out[name] = maybeJsonDecode(value)
 	}
 
 	return out
@@ -129,8 +151,6 @@ export function buildCookieJar(
 	raw: Record<string, unknown>,
 	config: CompiledCookieConfig
 ): Record<string, Cookie<unknown>> {
-	set.cookie ??= nullObject() as any
-
 	const store: Record<string, BaseCookie> = nullObject() as any
 
 	for (const name in raw) {
@@ -143,37 +163,40 @@ export function buildCookieJar(
 		)
 	}
 
+	const cache: Record<string, Cookie<unknown>> = nullObject()
+
 	return new Proxy(store, {
 		get(_, key: string) {
-			const fieldDefaults = config.fields[key]?.defaults
-			const initial = Object.assign(
-				nullObject(),
-				config.defaults,
-				fieldDefaults,
-				store[key]
-			)
-
-			return new Cookie(
+			return (cache[key] ??= new Cookie(
 				key,
-				set.cookie as Record<string, BaseCookie>,
-				initial
-			)
+				set,
+				key in store
+					? store[key]
+					: Object.assign(
+							nullObject(),
+							config.defaults,
+							config.fields[key]?.defaults
+						)
+			))
 		}
 	}) as Record<string, Cookie<unknown>>
 }
 
-const SIGNED_AT = Symbol('cookie.signedAt')
-export async function signCookieValues(
+export function signCookieValues(
 	cookies: Context['set']['cookie'] | undefined,
 	config: CompiledCookieConfig
-): Promise<void> {
+): Promise<void> | undefined {
 	if (!cookies || !config.hasSign) return
 
-	const signed = new Set()
+	// Collect the (property, value, secret) tuples to sign in a single sync
+	// pass; allocate nothing until at least one cookie actually needs signing.
+	let pending:
+		| [property: BaseCookie, value: string, secret: string][]
+		| undefined
 
 	for (const key in cookies) {
 		const property = cookies[key] as BaseCookie | undefined
-		if (!property || signed.has(SIGNED_AT)) continue
+		if (!property) continue
 
 		const r = isCookieSigned(key, config)
 		if (!r.signed) continue
@@ -189,9 +212,20 @@ export async function signCookieValues(
 			: r.secrets
 
 		if (secret === null) continue
+		;(pending ??= []).push([property, value as string, secret])
+	}
 
-		property.value = await signCookie(value as string, secret)
-		signed.add(key)
+	if (!pending) return
+
+	return signPending(pending)
+}
+
+async function signPending(
+	pending: [property: BaseCookie, value: string, secret: string][]
+): Promise<void> {
+	for (let i = 0; i < pending.length; i++) {
+		const [property, value, secret] = pending[i]!
+		property.value = await signCookie(value, secret)
 	}
 }
 
@@ -226,7 +260,34 @@ export function serializeCookie(
 }
 
 const removeTrailingEquals = /=+$/g
-const algorithm = { name: 'HMAC', hash: 'SHA-256' }
+const algorithm = { name: 'HMAC', hash: 'SHA-256' } as const
+const encoder = new TextEncoder()
+
+// reuse cookie key
+const keyCache = new Map<string, Promise<CryptoKey>>()
+
+function importSecretKey(secret: string): Promise<CryptoKey> {
+	let key = keyCache.get(secret)
+	if (key) return key
+
+	if (keyCache.size >= 256) keyCache.clear()
+
+	key = crypto.subtle.importKey(
+		'raw',
+		encoder.encode(secret),
+		algorithm,
+		false,
+		['sign']
+	)
+
+	key.catch(() => {
+		if (keyCache.get(secret) === key) keyCache.delete(secret)
+	})
+
+	keyCache.set(secret, key)
+
+	return key
+}
 
 export async function signCookie(val: string, secret: string | null) {
 	if (typeof val === 'object') val = JSON.stringify(val)
@@ -235,19 +296,9 @@ export async function signCookie(val: string, secret: string | null) {
 	if (secret === null || secret === undefined)
 		throw new TypeError('Secret key must be provided')
 
-	const encoder = new TextEncoder()
-
-	const secretKey = await crypto.subtle.importKey(
-		'raw',
-		encoder.encode(secret),
-		algorithm,
-		false,
-		['sign']
-	)
-
 	const hmacBuffer = await crypto.subtle.sign(
 		'HMAC',
-		secretKey,
+		await importSecretKey(secret),
 		encoder.encode(val)
 	)
 
@@ -273,11 +324,6 @@ export async function unsignCookie(input: string, secret: string | null) {
 
 	const tentativeValue = input.slice(0, dot)
 
-	// A `null` secret is the "allow unsigned" slot in a rotation list. A value
-	// that looks signed (has a dot) cannot be verified by it, so it simply
-	// doesn't match — previously this fell through to signCookie(value, null),
-	// which threw 'Secret key must be provided' and 500'd the request for any
-	// value containing a dot.
 	if (secret === null) return false
 
 	const expectedInput = await signCookie(tentativeValue, secret)

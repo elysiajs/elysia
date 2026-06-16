@@ -317,6 +317,31 @@ describe('Handle Error', () => {
 		expect(res.status).toBe(418)
 	})
 
+	// F29: the finished Response from toResponse() must pass through by
+	// reference — set.status already matches, so rewrapping would only
+	// clone headers and downgrade the in-memory body to a stream
+	it('pass through toResponse() Response by reference when set matches', async () => {
+		const original = Response.json({ error: 'hello' }, { status: 418 })
+
+		class ErrorA extends Error {
+			status = 418
+
+			toResponse() {
+				return original
+			}
+		}
+
+		const app = new Elysia().get('/', () => {
+			throw new ErrorA()
+		})
+
+		const res = await app.handle(req('/'))
+
+		expect(res).toBe(original)
+		expect(res.status).toBe(418)
+		expect(await res.json()).toEqual({ error: 'hello' })
+	})
+
 	it('handle non-Error with toResponse() when returned', async () => {
 		class ErrorB {
 			toResponse() {

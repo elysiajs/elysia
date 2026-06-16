@@ -34,10 +34,6 @@ let sharedFiles: ReturnType<
 		ReturnType<typeof FilesWithProperty>
 	>
 >
-// The runtime schema is a Union([Array(File), Codec(File -> File[])]) but the
-// static type is declared as the decoded result: after validation the value
-// is always `File[]` — `Static` of the union would leak the codec's encoded
-// side as `File | File[]`
 export type TFiles = Type.TUnsafe<File[]>
 
 export function Files(options?: FilesOptions): TFiles {

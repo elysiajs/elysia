@@ -102,9 +102,12 @@ describe('AOT branch-check table', () => {
 
 		// 3 distinct entries (different field names)…
 		expect((src.match(/const _c\d+ =/g) ?? []).length).toBe(3)
-		// …sharing ONE union table `_u0`, referenced by all three
+		// …sharing ONE union table `_u0`
 		expect((src.match(/const _u\d+ =/g) ?? []).length).toBe(1)
-		expect((src.match(/u: _u0\b/g) ?? []).length).toBe(3)
+		// referenced TWICE per entry — once by the clean mirror (entry-level `u`)
+		// and once by the request-side decode mirror (`dm`) — so 3 entries × 2 = 6,
+		// all pointing at the same shared `_u0` (the dedup this test pins)
+		expect((src.match(/u: _u0\b/g) ?? []).length).toBe(6)
 		expect(src).not.toMatch(/u: \[\[/) // nothing left inline
 	})
 })

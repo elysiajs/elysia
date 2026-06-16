@@ -2,7 +2,11 @@
 import { describe, expect, it } from 'bun:test'
 import { Elysia } from '../../src'
 
-import { separateFunction, sucrose } from '../../src/sucrose'
+import {
+	separateFunction,
+	sucrose,
+	clearSucroseCache
+} from '../../src/sucrose'
 import { req } from '../utils'
 
 describe('sucrose', () => {
@@ -356,5 +360,38 @@ describe('sucrose', () => {
 			url: true,
 			route: true
 		})
+	})
+
+	// Hooks are shared by reference across all routes (ChainNode design), so
+	// the same function objects come back on every route compile — sucrose
+	// must memoize by function identity instead of paying
+	// toString + hash + LRU churn per shared hook (O(routes × hooks) compile
+	// cost otherwise)
+	it('memoize analysis by function identity', () => {
+		const fn = ({ query }) => query.identityMemoProbe
+
+		let stringified = 0
+		const original = Function.prototype.toString.bind(fn)
+		fn.toString = () => {
+			stringified++
+			return original()
+		}
+
+		const first = sucrose(fn, undefined)
+		expect(first.query).toBe(true)
+		expect(stringified).toBe(1)
+
+		// identity hit: no re-stringify, identical inference
+		const second = sucrose(fn, undefined)
+		expect(second).toEqual(first)
+		expect(stringified).toBe(1)
+
+		// clearing the sucrose cache must also drop the identity memo so
+		// gcTime actually releases the retained inference objects
+		clearSucroseCache(0)
+
+		const third = sucrose(fn, undefined)
+		expect(third).toEqual(first)
+		expect(stringified).toBe(2)
 	})
 })

@@ -107,46 +107,216 @@ const walkSubSchema = (schema: any, instancePath: string | undefined) => {
 	return walkComposition(schema, parts)
 }
 
+const FOUND_ECHO_LIMIT = 4096
+const FOUND_ECHO_OMITTED = `[value exceeds ${FOUND_ECHO_LIMIT} byte echo limit]`
+
+const jsonLengthWithin = (value: unknown, budget: number): number => {
+	if (budget < 0) return -1
+
+	switch (typeof value) {
+		case 'object':
+			break
+
+		case 'string':
+			return budget - value.length - 2
+
+		case 'number':
+			return budget - String(value).length
+
+		case 'boolean':
+			return budget - (value ? 4 : 5)
+
+		default:
+			return budget - 4
+	}
+
+	if (value === null) return budget - 4
+
+	if (Array.isArray(value)) {
+		budget -= 2
+		for (let i = 0; i < value.length; i++) {
+			budget = jsonLengthWithin(value[i], budget - 1)
+			if (budget < 0) return -1
+		}
+
+		return budget
+	}
+
+	budget -= 2
+	for (const key in value) {
+		budget = jsonLengthWithin(
+			(value as Record<string, unknown>)[key],
+			budget - key.length - 4
+		)
+		if (budget < 0) return -1
+	}
+
+	return budget
+}
+
+const subValueAt = (value: unknown, path: unknown): unknown => {
+	let parts: any[] | undefined
+
+	if (typeof path === 'string') parts = path.split('/').filter(Boolean)
+	else if (Array.isArray(path)) parts = path
+
+	if (!parts?.length) return undefined
+
+	let current: any = value
+	for (let i = 0; i < parts.length; i++) {
+		if (current === null || typeof current !== 'object') return undefined
+
+		const part = parts[i]
+		current =
+			current[typeof part === 'object' && part !== null ? part.key : part]
+	}
+
+	return current
+}
+
+const scopeFound = (value: unknown, first: any): unknown => {
+	if (jsonLengthWithin(value, FOUND_ECHO_LIMIT) >= 0) return value
+
+	const sub = subValueAt(value, first?.instancePath ?? first?.path)
+	if (sub !== undefined && jsonLengthWithin(sub, FOUND_ECHO_LIMIT) >= 0)
+		return sub
+
+	return FOUND_ECHO_OMITTED
+}
+
 export class ValidationError extends ElysiaError {
 	code = 'VALIDATION'
 	status = 422 as const
 
 	customError?: unknown
 	schema?: unknown
+	declare errors: any[]
 
 	constructor(
 		public type: string | undefined,
 		public value: unknown,
-		public errors: any[],
+		errors: any[] | (() => any[]),
 		schema?: unknown
 	) {
-		const sub: any = walkSubSchema(schema, errors?.[0]?.instancePath)
+		const lazy = typeof errors === 'function' ? errors : undefined
+
 		let customError: unknown
 
-		if (sub?.error !== undefined) {
-			customError =
-				typeof sub.error === 'function'
-					? sub.error({
-							type: 'validation',
-							on: type,
-							value,
-							errors
-						})
-					: sub.error
+		if (!lazy) {
+			const sub: any = walkSubSchema(
+				schema,
+				(errors as any[])?.[0]?.instancePath
+			)
+
+			if (sub?.error !== undefined) {
+				customError =
+					typeof sub.error === 'function'
+						? sub.error({
+								type: 'validation',
+								on: type,
+								value,
+								errors
+							})
+						: sub.error
+			}
 		}
 
 		super(
-			customError !== undefined
-				? typeof customError === 'string'
-					? customError
-					: JSON.stringify(customError)
-				: errors?.[0]?.message
-					? errors[0].message
-					: `Validation error on ${type ?? 'unknown'}`
+			lazy
+				? `Validation error on ${type ?? 'unknown'}`
+				: customError !== undefined
+					? typeof customError === 'string'
+						? customError
+						: JSON.stringify(customError)
+					: (errors as any[])?.[0]?.message
+						? (errors as any[])[0].message
+						: `Validation error on ${type ?? 'unknown'}`
 		)
 
-		this.customError = customError
 		this.schema = schema
+
+		if (!lazy) {
+			this.errors = errors as any[]
+			this.customError = customError
+
+			return
+		}
+
+		let resolved: any[] | undefined
+		let custom: unknown
+		let message: string | undefined
+
+		const resolve = () => {
+			if (resolved !== undefined) return
+
+			resolved = lazy() ?? []
+
+			const sub: any = walkSubSchema(schema, resolved[0]?.instancePath)
+
+			if (sub?.error !== undefined)
+				custom =
+					typeof sub.error === 'function'
+						? sub.error({
+								type: 'validation',
+								on: type,
+								value,
+								errors: resolved
+							})
+						: sub.error
+
+			message =
+				custom !== undefined
+					? typeof custom === 'string'
+						? custom
+						: JSON.stringify(custom)
+					: resolved[0]?.message
+						? resolved[0].message
+						: `Validation error on ${type ?? 'unknown'}`
+		}
+
+		const define = (
+			key: 'errors' | 'customError' | 'message',
+			get: () => unknown,
+			enumerable: boolean
+		) =>
+			Object.defineProperty(this, key, {
+				get,
+				set(v) {
+					Object.defineProperty(this, key, {
+						value: v,
+						writable: true,
+						enumerable,
+						configurable: true
+					})
+				},
+				enumerable,
+				configurable: true
+			})
+
+		define(
+			'errors',
+			() => {
+				resolve()
+				return resolved
+			},
+			true
+		)
+		define(
+			'customError',
+			() => {
+				resolve()
+				return custom
+			},
+			true
+		)
+		define(
+			'message',
+			() => {
+				resolve()
+				return message
+			},
+			false
+		)
 	}
 
 	get all() {
@@ -213,7 +383,7 @@ export class ValidationError extends ElysiaError {
 			message,
 			summary: message,
 			expected,
-			found: this.value,
+			found: scopeFound(this.value, first),
 			errors: enrichedErrors
 		}
 	}
@@ -286,8 +456,6 @@ export class ElysiaStatus<
 		if (!emptyHttpStatus.has(code as number)) this.response = response as T
 	}
 
-	// Mirrors `ElysiaError.status` so error-handling code paths can read
-	// `e.status` uniformly without an `instanceof ElysiaStatus` branch.
 	get status() {
 		return this.code as unknown as number
 	}

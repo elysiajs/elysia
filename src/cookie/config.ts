@@ -80,7 +80,6 @@ export function compileCookieConfig(
 
 	if (!defaults.path) defaults.path = '/'
 
-	// Resolve global sign/secrets — route overrides app
 	const globalSign = normalizeSign(routeConfig?.sign ?? appConfig?.sign)
 	const globalSecrets =
 		routeConfig?.secrets !== undefined

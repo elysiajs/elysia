@@ -213,4 +213,55 @@ describe('WebSocket non-body schemas', () => {
 
 		app.stop()
 	})
+
+	// F33: the upgrade path parses query via `parseQueryFromURL` (the same
+	// scanner HTTP routes use) instead of URLSearchParams +
+	// Object.fromEntries. Duplicate keys must build an array when the
+	// schema declares one — they previously collapsed last-wins and failed
+	// a t.Array validation that PASSES on an equivalent HTTP route.
+	it('query: t.Array schema receives duplicate keys as an array (HTTP parity)', async () => {
+		const app = new Elysia()
+			.ws('/ws', {
+				query: t.Object({ id: t.Array(t.String()) }),
+				message({ ws, query }: any) {
+					ws.send(JSON.stringify(query))
+				}
+			})
+			.listen(0)
+
+		const ws = new WebSocket(
+			`ws://${app.server!.hostname}:${app.server!.port}/ws?id=a&id=b`
+		)
+		await wsOpen(ws)
+
+		const got = wsMessage(ws)
+		ws.send('ping')
+		expect(JSON.parse((await got).data as string)).toEqual({
+			id: ['a', 'b']
+		})
+
+		await wsClosed(ws)
+		app.stop()
+	})
+
+	it('query: no query string parses to an empty record (F33)', async () => {
+		const app = new Elysia()
+			.ws('/ws', {
+				query: t.Object({ name: t.Optional(t.String()) }),
+				message({ ws, query }: any) {
+					ws.send(JSON.stringify(query))
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+		await wsOpen(ws)
+
+		const got = wsMessage(ws)
+		ws.send('ping')
+		expect(JSON.parse((await got).data as string)).toEqual({})
+
+		await wsClosed(ws)
+		app.stop()
+	})
 })

@@ -39,13 +39,16 @@ import { isAsyncFunction } from '../compile/utils'
 import {
 	Compiled,
 	instantiateFrozenMirror,
+	instantiateFrozenDecodeMirror,
 	instantiateFrozenBoth,
 	collectExternals,
 	externalsMatch,
 	reconstructCheck,
 	captureValidator,
 	captureMirror,
+	captureDecodeMirror,
 	captureMirrorUnions,
+	captureMirrorCodecs,
 	isValidatorCapturing,
 	type CheckBuildResult,
 	type FrozenValidator
@@ -59,6 +62,7 @@ import {
 	type PendingFileTypeCheck
 } from './elysia/file'
 import { isBlob, nullObject } from '../utils'
+import { isCloudflareWorker } from '../universal/constants'
 import { ValidationError } from '../error'
 
 import type { MaybePromise } from '../types'
@@ -227,13 +231,9 @@ function applyPrecomputed(
 	defaults: Record<string, unknown>,
 	value: Record<string, unknown>
 ): Record<string, unknown> {
-	const out: Record<string, unknown> = {}
+	const out: Record<string, unknown> = nullObject()
 
-	// Seed with the defaults. A nested mutable default (array/object) that the
-	// request does NOT override must be deep-cloned — otherwise every request
-	// shares the same default array/object instance and a handler mutation
-	// leaks across requests. (`Object.freeze` on the precomputed default is
-	// shallow, so it does not protect nested values.)
+	// clone in case of a shared reference default value
 	for (const k in defaults) {
 		const d = defaults[k]
 		out[k] =
@@ -294,6 +294,8 @@ export class TypeBoxValidator<
 	hasCodec!: boolean
 	isAsync!: boolean
 	hasDefault!: boolean
+
+	#decodeMirror?: (value: unknown) => unknown
 
 	// default value
 	precomputeSafe: boolean
@@ -429,6 +431,21 @@ export class TypeBoxValidator<
 					this.Clean = (value) => Clean(this.schema, value)
 			}
 		}
+
+		if (
+			this.hasCodec &&
+			!this.#isForm &&
+			!this.#noValidate &&
+			// only response is start with r
+			!options?.slot?.startsWith('r') &&
+			options?.normalize !== false &&
+			options?.normalize !== 'typebox'
+		)
+			this.#decodeMirror = this.#setupDecodeMirror(
+				this.schema as TSchema,
+				options,
+				frozen
+			)
 	}
 
 	#setupMirror(
@@ -508,6 +525,96 @@ export class TypeBoxValidator<
 		}) as (value: unknown) => unknown
 	}
 
+	#setupDecodeMirror(
+		schema: TSchema,
+		options?: ValidatorOptions,
+		frozen?: FrozenValidator
+	): ((value: unknown) => unknown) | undefined {
+		const aot = options?.aot
+		const slot = options?.slot
+
+		if (aot && slot && frozen?.dm) {
+			const dm = frozen.dm
+			let decode: ((value: unknown) => unknown) | undefined
+
+			return (value: unknown) => {
+				if (decode === undefined)
+					try {
+						decode = instantiateFrozenDecodeMirror(dm, schema)
+					} catch {
+						decode = (v) => {
+							// @ts-ignore
+							const decoded = DecodeUnsafe(
+								nullObject(),
+								schema,
+								v
+							)
+							return this.Clean ? this.Clean(decoded) : decoded
+						}
+					}
+
+				return decode(value)
+			}
+		}
+
+		if (
+			aot &&
+			slot &&
+			isValidatorCapturing() &&
+			!slot.startsWith('response')
+		)
+			try {
+				const emitted = createMirror(schema, {
+					Compile,
+					sanitize: options?.sanitize,
+					decode: true,
+					emit: true
+				}) as { source?: string; externals?: any }
+
+				if (typeof emitted?.source === 'string') {
+					const ext = emitted.externals
+
+					if (
+						ext?.codecs &&
+						!ext.hof &&
+						captureMirrorCodecs(schema, ext.codecs)
+					) {
+						let u:
+							| { identifier: string; code: string }[][]
+							| undefined
+						let freezable = true
+
+						if (ext.unions && ext.unions.length) {
+							u = captureMirrorUnions(schema, ext.unions)
+							if (!u) freezable = false
+						}
+
+						if (freezable)
+							captureDecodeMirror({
+								method: aot.method,
+								path: aot.path,
+								slot,
+								mirror: {
+									source: emitted.source,
+									hasExternals: true,
+									u
+								}
+							})
+					}
+				}
+			} catch {}
+
+		try {
+			return createMirror(schema, {
+				Compile,
+				sanitize: options?.sanitize,
+				decode: true
+			}) as (value: unknown) => unknown
+		} catch {
+			return undefined
+		}
+	}
+
 	Check(value: Static<T>): boolean {
 		return this.reconstructedCheck
 			? this.reconstructedCheck(value)
@@ -585,7 +692,7 @@ export class TypeBoxValidator<
 				throw new ValidationError(
 					type,
 					value,
-					this.Errors(value),
+					() => this.Errors(value),
 					this.schema
 				)
 
@@ -597,7 +704,7 @@ export class TypeBoxValidator<
 				throw new ValidationError(
 					type,
 					value,
-					this.Errors(value),
+					() => this.Errors(value),
 					this.schema
 				)
 
@@ -622,16 +729,12 @@ export class TypeBoxValidator<
 			throw new ValidationError(
 				type,
 				value,
-				this.Errors(value),
+				() => this.Errors(value),
 				this.schema
 			)
 		}
 	}
 
-	// An incoming multipart body has no `~ely-form` marker — that marker is added
-	// by `form()` for the response direction. Mark it non-enumerably so a
-	// `t.Form` request body satisfies the schema's `~ely-form` refine without
-	// leaking the marker into `ctx.body` (responses already carry it).
 	#markForm(value: unknown): void {
 		if (
 			this.#isForm &&
@@ -666,7 +769,11 @@ export class TypeBoxValidator<
 
 	#cloneSharedDefault(): unknown {
 		const value = this.#precomputedDefault
-		if (this.Clean !== undefined || value === null || typeof value !== 'object')
+		if (
+			this.Clean !== undefined ||
+			value === null ||
+			typeof value !== 'object'
+		)
 			return value
 
 		return structuredClone(value)
@@ -729,7 +836,7 @@ export class TypeBoxValidator<
 					throw new ValidationError(
 						type,
 						value,
-						this.Errors(value),
+						() => this.Errors(value),
 						this.schema
 					)
 
@@ -741,21 +848,24 @@ export class TypeBoxValidator<
 						this.schema
 					)
 			}
-			try {
-				// @ts-ignore
-				value = DecodeUnsafe(nullObject(), this.schema, value)
-			} catch (e: any) {
-				if (e instanceof ValidationError) throw e
-				if (e?.error) throw e.error
-				if (e?.status) throw e
+			if (this.#decodeMirror)
+				value = this.#decodeMirror(value) as Static<T>
+			else
+				try {
+					// @ts-ignore
+					value = DecodeUnsafe(nullObject(), this.schema, value)
+				} catch (e: any) {
+					if (e instanceof ValidationError) throw e
+					if (e?.error) throw e.error
+					if (e?.status) throw e
 
-				throw new ValidationError(
-					type,
-					value,
-					this.Errors(value),
-					this.schema
-				)
-			}
+					throw new ValidationError(
+						type,
+						value,
+						() => this.Errors(value),
+						this.schema
+					)
+				}
 		} else if (!this.#noValidate) {
 			collectFileTypeChecks()
 			const valid = this.Check(value)
@@ -765,7 +875,7 @@ export class TypeBoxValidator<
 				throw new ValidationError(
 					type,
 					value,
-					this.Errors(value),
+					() => this.Errors(value),
 					this.schema
 				)
 
@@ -777,8 +887,9 @@ export class TypeBoxValidator<
 					this.schema
 				)
 		}
-		// @ts-ignore
-		if (this.Clean) value = this.Clean(value)
+
+		// `#decodeMirror` already cleaned
+		if (this.Clean && !this.#decodeMirror) value = this.Clean(value)
 
 		this.#unmarkForm(value)
 		return value
@@ -812,41 +923,50 @@ export class TypeBoxValidator<
 				throw new ValidationError(
 					type,
 					value,
-					this.Errors(value),
+					() => this.Errors(value),
 					this.schema
 				)
-			try {
-				value = DecodeUnsafe(
-					nullObject() as {},
-					this.schema,
-					value
-				) as Static<T>
-			} catch (e: any) {
-				if (e instanceof ValidationError) throw e
-				if (e?.error) throw e.error
-				if (e?.status) throw e
+			if (this.#decodeMirror)
+				value = this.#decodeMirror(value) as Static<T>
+			else
+				try {
+					value = DecodeUnsafe(
+						nullObject() as {},
+						this.schema,
+						value
+					) as Static<T>
+				} catch (e: any) {
+					if (e instanceof ValidationError) throw e
+					if (e?.error) throw e.error
+					if (e?.status) throw e
 
-				throw new ValidationError(
-					type,
-					value,
-					this.Errors(value),
-					this.schema
-				)
-			}
+					throw new ValidationError(
+						type,
+						value,
+						() => this.Errors(value),
+						this.schema
+					)
+				}
 		} else {
 			if (!this.#noValidate && !this.Check(value))
 				throw new ValidationError(
 					type,
 					value,
-					this.Errors(value),
+					() => this.Errors(value),
 					this.schema
 				)
 		}
-		if (this.Clean) value = this.Clean(value) as Static<T>
+
+		if (this.Clean && !this.#decodeMirror)
+			value = this.Clean(value) as Static<T>
+
 		this.#unmarkForm(value)
 		return value
 	}
 }
+
+const DEFAULT_CACHE_LIMIT = 1024
+const DEFAULT_GC_TIME = 1 * 60 * 1000
 
 export class TypeBoxValidatorCache {
 	private static EMPTY = nullObject() as {}
@@ -957,6 +1077,43 @@ export class TypeBoxValidatorCache {
 		>
 	>()
 
+	#gc: Timer | undefined
+	#gcTime: number
+
+	#lastSchema: TSchema | undefined
+	#lastMeta: { special: boolean; key: string } | undefined
+
+	#meta(schema: TSchema): { special: boolean; key: string } {
+		if (this.#lastSchema === schema && this.#lastMeta) return this.#lastMeta
+
+		const special =
+			HasCodec(schema) || TypeBoxValidatorCache.#isOpaqueType(schema)
+		const meta = {
+			special,
+			key: special
+				? ''
+				: JSON.stringify(schema, TypeBoxValidatorCache.ignoreMeta)
+		}
+
+		this.#lastSchema = schema
+		this.#lastMeta = meta
+
+		return meta
+	}
+
+	constructor(gcTime: number = DEFAULT_GC_TIME) {
+		this.#gcTime = gcTime
+	}
+
+	#scheduleClear() {
+		if (isCloudflareWorker) return
+
+		if (this.#gc) clearTimeout(this.#gc)
+
+		this.#gc = setTimeout(() => this.clear(), this.#gcTime)
+		this.#gc.unref?.()
+	}
+
 	get(
 		schema: TSchema,
 		coercions:
@@ -969,12 +1126,14 @@ export class TypeBoxValidatorCache {
 				return coercionsCache.get(coercions)!
 		}
 
-		if (HasCodec(schema) || TypeBoxValidatorCache.#isOpaqueType(schema))
-			return undefined
+		const { special, key } = this.#meta(schema)
+		if (special) return undefined
 
-		const key = JSON.stringify(schema, TypeBoxValidatorCache.ignoreMeta)
 		if (this.#cache.has(key)) {
 			const coercionsCache = this.#cache.get(key)!
+
+			this.#cache.delete(key)
+			this.#cache.set(key, coercionsCache)
 
 			if (coercionsCache.has(coercions))
 				return coercionsCache.get(coercions)!
@@ -988,13 +1147,15 @@ export class TypeBoxValidatorCache {
 			| typeof TypeBoxValidatorCache.EMPTY = TypeBoxValidatorCache.EMPTY,
 		validator: BaseTypeBoxValidator
 	) {
-		if (HasCodec(schema) || TypeBoxValidatorCache.#isOpaqueType(schema)) {
+		this.#scheduleClear()
+
+		const { special, key } = this.#meta(schema)
+		if (special) {
 			const cache = new WeakMap().set(coercions, validator)
 			this.#referenceCache.set(schema, cache)
 			return
 		}
 
-		const key = JSON.stringify(schema, TypeBoxValidatorCache.ignoreMeta)
 		if (this.#cache.has(key)) {
 			const cache = this.#cache.get(key)!.set(coercions, validator)
 
@@ -1005,6 +1166,12 @@ export class TypeBoxValidatorCache {
 			return
 		}
 
+		if (this.#cache.size >= DEFAULT_CACHE_LIMIT) {
+			// Drop the oldest (first inserted / least recently used).
+			const oldest = this.#cache.keys().next().value
+			if (oldest !== undefined) this.#cache.delete(oldest)
+		}
+
 		const cache = new WeakMap().set(coercions, validator)
 
 		this.#cache.set(key, cache)
@@ -1012,6 +1179,11 @@ export class TypeBoxValidatorCache {
 	}
 
 	clear() {
+		if (this.#gc) {
+			clearTimeout(this.#gc)
+			this.#gc = undefined
+		}
+
 		this.#cache.clear()
 		this.#referenceCache = new WeakMap()
 		deferCoercions()

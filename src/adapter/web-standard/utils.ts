@@ -11,6 +11,7 @@ const QUOTE_2 = 34 // '"'
 const ZERO = 48
 const NINE = 57
 const BRACE_O = 123 // '{'
+const BRACE_C = 125 // '}'
 
 const HAS_FILE = typeof File !== 'undefined'
 const HAS_NESTING = /[.[]/
@@ -19,7 +20,10 @@ function tryParseJson(
 	val: string
 ): Record<string, unknown> | unknown[] | undefined {
 	const code = val.charCodeAt(0)
-	if (code !== BRACE_O && code !== BRACKET_O) return
+	const closer =
+		code === BRACE_O ? BRACE_C : code === BRACKET_O ? BRACKET_C : 0
+
+	if (closer === 0 || val.charCodeAt(val.length - 1) !== closer) return
 
 	try {
 		const p = JSON.parse(val)

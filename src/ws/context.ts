@@ -4,7 +4,8 @@ import type {
 	BufferSource,
 	WebSocketReadyState,
 	FlattenResponse,
-	WSResponseValidator
+	WSResponseValidator,
+	WSValidatorLike
 } from './types'
 
 import { ValidationError, ElysiaStatus } from '../error'
@@ -20,6 +21,7 @@ function pickValidator(
 				}
 		  }
 		| undefined,
+	defaultValidator: WSValidatorLike | undefined,
 	data: unknown
 ) {
 	if (!validators) return undefined
@@ -27,7 +29,7 @@ function pickValidator(
 		const v = validators[data.status]
 		if (v) return v
 	}
-	return validators[200] ?? validators[Object.keys(validators)[0] as any]
+	return defaultValidator
 }
 
 export interface WSConnectionData {
@@ -48,26 +50,28 @@ export interface WSConnectionData {
 
 	closeHandlerInvoked?: boolean
 	elysia?: ElysiaWS<any>
-	context: Record<string, unknown>
+	context?: Record<string, unknown>
 
 	validator?: WSResponseValidator
+	defaultValidator?: WSValidatorLike
+}
+
+function memoize<T>(view: ElysiaWS<any>, key: string, value: T): T {
+	const self = view.raw.data.elysia ?? view
+
+	Object.defineProperty(self, key, {
+		value,
+		enumerable: true,
+		writable: true,
+		configurable: true
+	})
+
+	return value
 }
 
 export class ElysiaWS<Route extends RouteSchema = {}> {
 	raw: ServerWebSocket<WSConnectionData>
 	body: Route['body'] = undefined as any
-
-	sendText!: ServerWebSocket['sendText']
-	sendBinary!: ServerWebSocket['sendBinary']
-	terminate!: ServerWebSocket['terminate']
-	publishText!: ServerWebSocket['publishText']
-	publishBinary!: ServerWebSocket['publishBinary']
-	subscribe!: ServerWebSocket['subscribe']
-	unsubscribe!: ServerWebSocket['unsubscribe']
-	isSubscribed!: ServerWebSocket['isSubscribed']
-	cork!: ServerWebSocket['cork']
-	remoteAddress!: string
-	binaryType?: 'nodebuffer' | 'arraybuffer' | 'uint8array'
 
 	constructor(
 		raw: ServerWebSocket<WSConnectionData>,
@@ -80,28 +84,99 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 				if (key === 'ws' || key === 'body') continue
 				;(this as any)[key] = context[key]
 			}
-
-		this.sendText = raw.sendText.bind(raw)
-		this.sendBinary = raw.sendBinary.bind(raw)
-		this.terminate = raw.terminate.bind(raw)
-		this.publishText = raw.publishText.bind(raw)
-		this.publishBinary = raw.publishBinary.bind(raw)
-		this.subscribe = raw.subscribe.bind(raw)
-		this.unsubscribe = raw.unsubscribe.bind(raw)
-		this.isSubscribed = raw.isSubscribed.bind(raw)
-		this.cork = raw.cork.bind(raw) as any
-		this.remoteAddress = raw.remoteAddress
-		this.binaryType = raw.binaryType
-
-		this.send = this.send.bind(this)
-		this.ping = this.ping.bind(this)
-		this.pong = this.pong.bind(this)
-		this.publish = this.publish.bind(this)
-		this.close = this.close.bind(this)
 	}
 
 	get ws(): this {
 		return this
+	}
+
+	get sendText(): ServerWebSocket['sendText'] {
+		const raw = this.raw
+		return memoize(this, 'sendText', raw.sendText.bind(raw))
+	}
+
+	get sendBinary(): ServerWebSocket['sendBinary'] {
+		const raw = this.raw
+		return memoize(this, 'sendBinary', raw.sendBinary.bind(raw))
+	}
+
+	get terminate(): ServerWebSocket['terminate'] {
+		const raw = this.raw
+		return memoize(this, 'terminate', raw.terminate.bind(raw))
+	}
+
+	get publishText(): ServerWebSocket['publishText'] {
+		const raw = this.raw
+		return memoize(this, 'publishText', raw.publishText.bind(raw))
+	}
+
+	get publishBinary(): ServerWebSocket['publishBinary'] {
+		const raw = this.raw
+		return memoize(this, 'publishBinary', raw.publishBinary.bind(raw))
+	}
+
+	get subscribe(): ServerWebSocket['subscribe'] {
+		const raw = this.raw
+		return memoize(this, 'subscribe', raw.subscribe.bind(raw))
+	}
+
+	get unsubscribe(): ServerWebSocket['unsubscribe'] {
+		const raw = this.raw
+		return memoize(this, 'unsubscribe', raw.unsubscribe.bind(raw))
+	}
+
+	get isSubscribed(): ServerWebSocket['isSubscribed'] {
+		const raw = this.raw
+		return memoize(this, 'isSubscribed', raw.isSubscribed.bind(raw))
+	}
+
+	get cork(): ServerWebSocket['cork'] {
+		const raw = this.raw
+		return memoize(this, 'cork', raw.cork.bind(raw) as any)
+	}
+
+	get remoteAddress(): string {
+		return memoize(this, 'remoteAddress', this.raw.remoteAddress)
+	}
+
+	get binaryType(): 'nodebuffer' | 'arraybuffer' | 'uint8array' | undefined {
+		return memoize(this, 'binaryType', this.raw.binaryType)
+	}
+
+	get send(): (
+		data: FlattenResponse<Route['response']> | BufferSource,
+		compress?: boolean
+	) => ServerWebSocketSendStatus {
+		const self = (this.raw.data.elysia as ElysiaWS<Route>) ?? this
+		return memoize(this, 'send', self.#send.bind(self))
+	}
+
+	get ping(): (
+		data?: FlattenResponse<Route['response']> | BufferSource
+	) => ServerWebSocketSendStatus {
+		const self = (this.raw.data.elysia as ElysiaWS<Route>) ?? this
+		return memoize(this, 'ping', self.#ping.bind(self))
+	}
+
+	get pong(): (
+		data?: FlattenResponse<Route['response']> | BufferSource
+	) => ServerWebSocketSendStatus {
+		const self = (this.raw.data.elysia as ElysiaWS<Route>) ?? this
+		return memoize(this, 'pong', self.#pong.bind(self))
+	}
+
+	get publish(): (
+		topic: string,
+		data: FlattenResponse<Route['response']> | BufferSource,
+		compress?: boolean
+	) => ServerWebSocketSendStatus {
+		const self = (this.raw.data.elysia as ElysiaWS<Route>) ?? this
+		return memoize(this, 'publish', self.#publish.bind(self))
+	}
+
+	get close(): (code?: number, reason?: string) => void {
+		const self = (this.raw.data.elysia as ElysiaWS<Route>) ?? this
+		return memoize(this, 'close', self.#close.bind(self))
 	}
 
 	get id(): string {
@@ -139,14 +214,19 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 	}
 
 	#validatedOrError(data: unknown): string | undefined {
-		const v = pickValidator(this.raw.data?.validator as any, data)
+		const connectionData = this.raw.data
+		const v = pickValidator(
+			connectionData?.validator as any,
+			connectionData?.defaultValidator,
+			data
+		)
 		if (!v) return undefined
 		const value = data instanceof ElysiaStatus ? data.response : data
 		if (v.Check(value)) return undefined
 		return new ValidationError('message', value, v.Errors(value)).message
 	}
 
-	send(
+	#send(
 		data: FlattenResponse<Route['response']> | BufferSource,
 		compress?: boolean
 	): ServerWebSocketSendStatus {
@@ -162,7 +242,7 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		return this.raw.send(prepared.wire, compress)
 	}
 
-	ping(
+	#ping(
 		data?: FlattenResponse<Route['response']> | BufferSource
 	): ServerWebSocketSendStatus {
 		if (data === undefined) return this.raw.ping()
@@ -176,7 +256,7 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		return this.raw.ping(prepared.wire)
 	}
 
-	pong(
+	#pong(
 		data?: FlattenResponse<Route['response']> | BufferSource
 	): ServerWebSocketSendStatus {
 		if (data === undefined) return this.raw.pong()
@@ -190,7 +270,7 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		return this.raw.pong(prepared.wire)
 	}
 
-	publish(
+	#publish(
 		topic: string,
 		data: FlattenResponse<Route['response']> | BufferSource,
 		compress?: boolean
@@ -211,7 +291,7 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		return this.raw.publish(topic, prepared.wire, compress)
 	}
 
-	close(code?: number, reason?: string): void {
+	#close(code?: number, reason?: string): void {
 		const data = this.raw.data
 		if (!data.closeHandlerInvoked && data.close) {
 			data.closeHandlerInvoked = true
@@ -223,8 +303,7 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 						.catch(() => this.raw.close(code, reason))
 
 				return
-			} catch {
-			}
+			} catch {}
 		}
 		this.raw.close(code, reason)
 	}

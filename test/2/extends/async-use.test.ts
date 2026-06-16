@@ -13,8 +13,8 @@ describe('async use', () => {
 	})
 
 	it('accepts async () => Elysia', async () => {
-		const app = new Elysia().use(
-			async () => new Elysia().get('/p', () => 'plugin')
+		const app = new Elysia().use(async () =>
+			new Elysia().get('/p', () => 'plugin')
 		)
 
 		await app.modules

@@ -1,7 +1,8 @@
 import type { TSchema } from 'typebox/type'
 import type { TLocalizedValidationError } from 'typebox/error'
-import { ValidationError } from '../error'
+import type { Validator as CompiledTypeBoxValidator } from 'typebox/compile'
 
+import { ValidationError } from '../error'
 import { type AnySchema, type StandardSchemaV1Like } from '../type'
 
 import type { ElysiaConfig, MaybePromise } from '../types'
@@ -18,7 +19,8 @@ import {
 	applyCoercions,
 	TypeBoxValidator,
 	TypeBoxValidatorCache,
-	Intersect
+	Intersect,
+	HasCodec
 } from '../type/bridge'
 
 export interface ValidatorOptions {
@@ -43,6 +45,8 @@ export type ToSubTypeValidator<T> = T extends AnySchema
 	: never
 
 export abstract class Validator {
+	isAsync: boolean = true
+
 	abstract Check(value: unknown): boolean
 	abstract Errors(value: unknown): TLocalizedValidationError[]
 
@@ -254,7 +258,7 @@ export class StandardValidator extends Validator {
 			})
 
 		// @ts-expect-error
-		if (q.issues) throw new ValidationError(type, value, this.Errors(value))
+		if (q.issues) throw new ValidationError(type, value, q.issues)
 
 		// @ts-expect-error
 		return q.value
@@ -262,7 +266,10 @@ export class StandardValidator extends Validator {
 }
 
 export class MultiValidator extends Validator {
+	override isAsync = false
+
 	private schemas: (TSchema | StandardSchemaV1Like)[]
+	private codecs: boolean[]
 
 	constructor(
 		schema: TSchema | StandardSchemaV1Like,
@@ -303,21 +310,45 @@ export class MultiValidator extends Validator {
 			)
 
 		this.schemas = schemas
+
+		const codecs: boolean[] = []
+		for (let i = 0; i < schemas.length; i++)
+			codecs.push(
+				'~standard' in schemas[i]
+					? false
+					: HasCodec(
+							(
+								schemas[i] as unknown as CompiledTypeBoxValidator
+							).Type()
+						)
+			)
+
+		this.codecs = codecs
 	}
 
 	Check(value: unknown): boolean {
-		return this.schemas.every((validator) => {
-			if ('~standard' in validator)
+		for (let i = 0; i < this.schemas.length; i++) {
+			const validator = this.schemas[i]
+
+			if ('~standard' in validator) {
 				// @ts-expect-error
-				return !validator['~standard'].validate(value).issues
+				if (validator['~standard'].validate(value).issues) return false
+				continue
+			}
+
+			if (!this.codecs[i]) {
+				if (!(validator as TypeBoxValidator).Check(value)) return false
+				continue
+			}
 
 			try {
 				;(validator as TypeBoxValidator).Decode(value)
-				return true
 			} catch {
 				return false
 			}
-		})
+		}
+
+		return true
 	}
 
 	Errors(value: unknown): TLocalizedValidationError[] {
@@ -361,10 +392,51 @@ export class MultiValidator extends Validator {
 	}
 
 	From(value: unknown, type?: string): unknown {
-		if (!this.Check(value))
-			throw new ValidationError(type, value, this.Errors(value))
+		let snapshot: Record<string, unknown> | unknown[]
 
-		return this.Decode(value)!
+		for (let i = 0; i < this.schemas.length; i++) {
+			const validator = this.schemas[i]
+
+			let result
+			if ('~standard' in validator) {
+				// @ts-expect-error
+				const q = validator['~standard'].validate(value)
+
+				if (!(q instanceof Promise) && q.issues)
+					throw new ValidationError(type, value, q.issues)
+
+				result = q.value
+			} else {
+				if (this.codecs[i]) {
+					// decode-as-gate, see Check
+					try {
+						;(validator as TypeBoxValidator).Decode(value)
+					} catch {
+						throw new ValidationError(
+							type,
+							value,
+							(validator as TypeBoxValidator).Errors(value)
+						)
+					}
+				} else if (!(validator as TypeBoxValidator).Check(value))
+					throw new ValidationError(
+						type,
+						value,
+						(validator as TypeBoxValidator).Errors(value)
+					)
+
+				result = Decode(validator as TypeBoxValidator, value)
+			}
+
+			if (snapshot! === undefined) snapshot = result
+			else if (typeof snapshot === 'object' && typeof result === 'object')
+				snapshot = Object.assign(snapshot, result)
+			else if (Array.isArray(snapshot) && Array.isArray(result))
+				snapshot.push(...result)
+			else throw new Error('Unable to merged value with different type')
+		}
+
+		return snapshot!
 	}
 }
 

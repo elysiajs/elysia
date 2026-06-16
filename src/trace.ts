@@ -193,11 +193,6 @@ const createProcess = () => {
 
 					let childResolved = false
 					return (error: Error | null = null) => {
-						// Idempotent: codegen for some shapes intentionally
-						// finalizes both the success path AND the error path
-						// (e.g. fetch.ts re-resolves on catch even when the
-						// route already finalized internally). Skip the
-						// redundant fire so user `onStop` runs once.
 						if (childResolved) return
 						childResolved = true
 
@@ -245,14 +240,11 @@ const createProcess = () => {
 			return {
 				resolveChild: resolvers,
 				resolve(error: Error | null = null) {
-					// Idempotent — see child resolver above.
 					if (parentResolved) return
 					parentResolved = true
 
 					const end = performance.now()
 
-					// If error is return, parent group will not catch an error
-					// but the child group will catch the error
 					if (!error && groupError) error = groupError
 
 					const detail = {
@@ -274,58 +266,260 @@ const createProcess = () => {
 	] as const
 }
 
+type LiveProcess = ReturnType<typeof createProcess>
+
+class TraceRecorder {
+	begun?: TraceStream
+	remaining = 0
+	groupError: Error | null = null
+	ended = false
+	endTime = 0
+	endError: Error | null = null
+	callbacksEnd?: Function[]
+	endPromise?: Promise<number>
+	endResolve?: (end: number) => void
+	errorPromise?: Promise<Error | null>
+	errorResolve?: (error: Error | null) => void
+	lateResult?: TraceProcess<'begin'>
+	listenFn?: (callback?: Function) => Promise<TraceProcess<'begin'>>
+	childBegin?: (process: TraceStream) => (error?: Error | null) => void
+
+	/** late subscription (`lifecycle.on<Event>` after the phase began) */
+	listen() {
+		if (this.listenFn) return this.listenFn
+
+		return (this.listenFn = (_callback?: Function) =>
+			Promise.resolve(this.#result()))
+	}
+
+	#result(): TraceProcess<'begin'> {
+		if (this.lateResult) return this.lateResult
+
+		const slot = this
+
+		return (this.lateResult = {
+			...this.begun!,
+			end: this.#end(),
+			error: this.#error(),
+			onEvent(_callback?: Function) {},
+			onStop(callback?: Function) {
+				if (callback && !slot.ended)
+					(slot.callbacksEnd ??= []).push(callback)
+
+				return slot.#end()
+			}
+		} as any)
+	}
+
+	#end() {
+		if (this.endPromise) return this.endPromise
+		if (this.ended) return (this.endPromise = Promise.resolve(this.endTime))
+
+		const { promise, resolve } = Promise.withResolvers<number>()
+		this.endPromise = promise
+		this.endResolve = resolve
+
+		return promise
+	}
+
+	#error() {
+		if (this.errorPromise) return this.errorPromise
+		if (this.ended)
+			return (this.errorPromise = Promise.resolve(this.endError))
+
+		const { promise, resolve } = Promise.withResolvers<Error | null>()
+		this.errorPromise = promise
+		this.errorResolve = resolve
+
+		return promise
+	}
+
+	begin(process: TraceStream) {
+		this.begun = process
+		this.remaining = process.total ?? 0
+
+		return this
+	}
+
+	get resolveChild() {
+		return this
+	}
+
+	shift() {
+		if (this.remaining <= 0) return undefined
+		this.remaining--
+
+		if (!this.childBegin)
+			this.childBegin =
+				() =>
+				(error: Error | null = null) => {
+					if (error) this.groupError = error
+				}
+
+		return this.childBegin
+	}
+
+	resolve(error: Error | null = null) {
+		if (this.ended) return
+		this.ended = true
+
+		const end = performance.now()
+
+		if (!error && this.groupError) error = this.groupError
+
+		this.endTime = end
+		this.endError = error
+
+		const callbacks = this.callbacksEnd
+		if (callbacks) {
+			const begun = this.begun!
+			const detail = {
+				end,
+				error,
+				get elapsed() {
+					return end - begun.begin
+				}
+			}
+
+			for (let i = 0; i < callbacks.length; i++) callbacks[i](detail)
+		}
+
+		this.endResolve?.(end)
+		this.errorResolve?.(error)
+	}
+}
+
+class TracerHandle {
+	slots = new Array<LiveProcess | TraceRecorder | undefined>(9)
+
+	listen(index: number): NonNullable<TraceRecorder['listenFn']> {
+		const slot = this.slots[index]
+
+		if (slot === undefined) {
+			const live = createProcess()
+			this.slots[index] = live
+
+			return live[0] as NonNullable<TraceRecorder['listenFn']>
+		}
+
+		if (slot instanceof TraceRecorder) return slot.listen()
+
+		return slot[0] as NonNullable<TraceRecorder['listenFn']>
+	}
+
+	begin(index: number, process: TraceStream) {
+		const slot = this.slots[index]
+
+		if (slot !== undefined) {
+			if (slot instanceof TraceRecorder) return slot.begin(process)
+
+			return slot[1](process)
+		}
+
+		const recorder = new TraceRecorder()
+		this.slots[index] = recorder
+
+		return recorder.begin(process)
+	}
+
+	request(process: TraceStream) {
+		return this.begin(0, process)
+	}
+
+	parse(process: TraceStream) {
+		return this.begin(1, process)
+	}
+
+	transform(process: TraceStream) {
+		return this.begin(2, process)
+	}
+
+	beforeHandle(process: TraceStream) {
+		return this.begin(3, process)
+	}
+
+	handle(process: TraceStream) {
+		return this.begin(4, process)
+	}
+
+	afterHandle(process: TraceStream) {
+		return this.begin(5, process)
+	}
+
+	mapResponse(process: TraceStream) {
+		return this.begin(6, process)
+	}
+
+	afterResponse(process: TraceStream) {
+		return this.begin(7, process)
+	}
+
+	error(process: TraceStream) {
+		return this.begin(8, process)
+	}
+}
+
+class TracerLifecycle {
+	id: string
+	context: Context
+	set: Context['set']
+	time: number
+	store: Context['store']
+
+	#handle: TracerHandle
+
+	constructor(handle: TracerHandle, context: Context) {
+		this.#handle = handle
+		this.id = context.rid ?? ''
+		this.context = context
+		this.set = context.set
+		this.time = Date.now()
+		this.store = context.store
+	}
+
+	get onRequest() {
+		return this.#handle.listen(0)
+	}
+
+	get onParse() {
+		return this.#handle.listen(1)
+	}
+
+	get onTransform() {
+		return this.#handle.listen(2)
+	}
+
+	get onBeforeHandle() {
+		return this.#handle.listen(3)
+	}
+
+	get onHandle() {
+		return this.#handle.listen(4)
+	}
+
+	get onAfterHandle() {
+		return this.#handle.listen(5)
+	}
+
+	get onMapResponse() {
+		return this.#handle.listen(6)
+	}
+
+	get onAfterResponse() {
+		return this.#handle.listen(7)
+	}
+
+	get onError() {
+		return this.#handle.listen(8)
+	}
+}
+
 export const createTracer = (traceListener: TraceHandler) => {
 	return (context: Context) => {
-		const [onRequest, resolveRequest] = createProcess()
-		const [onParse, resolveParse] = createProcess()
-		const [onTransform, resolveTransform] = createProcess()
-		const [onBeforeHandle, resolveBeforeHandle] = createProcess()
-		const [onHandle, resolveHandle] = createProcess()
-		const [onAfterHandle, resolveAfterHandle] = createProcess()
-		const [onError, resolveError] = createProcess()
-		const [onMapResponse, resolveMapResponse] = createProcess()
-		const [onAfterResponse, resolveAfterResponse] = createProcess()
+		const handle = new TracerHandle()
 
-		traceListener({
-			// `rid` is populated by `fetch.ts` when a tracer is registered.
-			// Empty string is the safe fallback for the rare direct
-			// invocation path (the type is `string`, not `string | undefined`).
-			id: context.rid ?? '',
-			context,
-			set: context.set,
-			// @ts-ignore
-			onRequest,
-			// @ts-ignore
-			onParse,
-			// @ts-ignore
-			onTransform,
-			// @ts-ignore
-			onBeforeHandle,
-			// @ts-ignore
-			onHandle,
-			// @ts-ignore
-			onAfterHandle,
-			// @ts-ignore
-			onMapResponse,
-			// @ts-ignore
-			onAfterResponse,
-			// @ts-ignore
-			onError,
-			time: Date.now(),
-			store: context.store
-		})
+		traceListener(new TracerLifecycle(handle, context) as any)
 
-		// ? This is pass to compiler
-		return {
-			request: resolveRequest,
-			parse: resolveParse,
-			transform: resolveTransform,
-			beforeHandle: resolveBeforeHandle,
-			handle: resolveHandle,
-			afterHandle: resolveAfterHandle,
-			error: resolveError,
-			mapResponse: resolveMapResponse,
-			afterResponse: resolveAfterResponse
-		}
+		return handle
 	}
 }

@@ -3,7 +3,7 @@ import type { CookieOptions } from './types'
 
 export function parse(
 	str: string,
-	decode?: (str: string) => string | undefined
+	decode?: null | ((str: string) => string | undefined)
 ): Record<string, string | undefined> {
 	const obj = nullObject()
 	const len = str.length
@@ -52,6 +52,7 @@ export function parse(
 
 			const raw = str.slice(vs, ve)
 			if (decode) obj[key] = decode(raw)
+			else if (decode === null) obj[key] = raw
 			else if (raw.indexOf('%') === -1) obj[key] = raw
 			else
 				try {

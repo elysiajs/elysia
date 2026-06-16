@@ -1,4 +1,3 @@
-import { fnv1a } from '../utils'
 import type { BaseCookie } from './types'
 
 const FORWARDED_KEYS = [
@@ -22,30 +21,32 @@ export interface Cookie<T = any>
 	extends Pick<BaseCookie, FORWARDED_KEYS[number]> {}
 
 export class Cookie<T = any> implements BaseCookie {
-	#hash?: number
-
 	constructor(
 		private name: string,
-		private jar: Record<string, BaseCookie>,
+		private setRef: { cookie?: Record<string, BaseCookie> },
 		private initial: Partial<BaseCookie> = Object.create(null)
 	) {}
 
+	private get jar(): Record<string, BaseCookie> {
+		return (this.setRef.cookie ??= Object.create(null))
+	}
+
 	get cookie() {
-		return this.jar[this.name] ?? this.initial
+		return this.setRef.cookie?.[this.name] ?? this.initial
 	}
 
 	set cookie(jar: BaseCookie) {
-		if (!(this.name in this.jar)) this.jar[this.name] = this.initial
+		const j = this.jar
+		if (!(this.name in j)) j[this.name] = this.initial
 
-		this.jar[this.name] = jar
-		// Invalidate hash cache when jar is modified directly
-		this.#hash = undefined
+		j[this.name] = jar
 	}
 
 	protected get setCookie() {
-		if (!(this.name in this.jar)) this.jar[this.name] = this.initial
+		const j = this.jar
+		if (!(this.name in j)) j[this.name] = this.initial
 
-		return this.jar[this.name]
+		return j[this.name]
 	}
 
 	protected set setCookie(jar: BaseCookie) {
@@ -57,13 +58,10 @@ export class Cookie<T = any> implements BaseCookie {
 	}
 
 	set value(value: T) {
-		// Check if value actually changed before creating entry in jar
 		const current = this.cookie.value
 
-		// Simple equality check
 		if (current === value) return
 
-		// For objects, use hash-based comparison for performance
 		if (
 			current &&
 			typeof current === 'object' &&
@@ -71,22 +69,14 @@ export class Cookie<T = any> implements BaseCookie {
 			typeof value === 'object'
 		) {
 			try {
-				// Cache stringified value to avoid duplicate stringify calls
-				const valueStr = JSON.stringify(value)
-				const hash = fnv1a(valueStr)
-
-				if (this.#hash !== undefined && this.#hash !== hash)
-					this.#hash = hash
-				else {
-					this.#hash = hash
-					if (JSON.stringify(current) === valueStr) return
-				}
+				if (JSON.stringify(current) === JSON.stringify(value)) return
 			} catch {}
 		}
 
-		// Only create entry in jar if value actually changed
-		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
-		this.jar[this.name].value = value
+		const j = this.jar
+		if (!(this.name in j)) j[this.name] = { ...this.initial }
+
+		j[this.name].value = value
 	}
 
 	update(config: Updater<Partial<BaseCookie>>) {

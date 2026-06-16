@@ -17,9 +17,6 @@ import type {
 	MapResponse
 } from '../types'
 
-// Bun WebSocket types — local copy so Elysia type-checks without @types/bun
-// and so we can parameterize `data` with our per-connection ctx.
-
 type TypedArray =
 	| Uint8Array
 	| Uint8ClampedArray
@@ -187,10 +184,6 @@ export type WSParseHandler<Route extends RouteSchema, Context = {}> = (
 type LifecycleFn<Ctx, Body, Response> = (
 	this: void,
 	ws: Ctx,
-	// required: `message` always receives the parsed body — an optional
-	// param would force `| undefined` onto every consumer. Events without a
-	// body (open/drain) pass `never`, so declaring the param there is its
-	// own error
 	body: Body
 ) => MaybePromise<WSHandlerResult<Response>>
 
@@ -267,8 +260,7 @@ export type WSMessageHandler<
 	Schema['response']
 >
 
-// Mirrors `Validator` from `src/validator/index.ts` — kept structural to
-// avoid a circular import.
+// Mirrors `Validator` from `src/validator/index.ts` to avoid circular import
 export interface WSValidatorLike {
 	Check(data: unknown): boolean
 	Errors(data: unknown): any[]

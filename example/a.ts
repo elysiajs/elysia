@@ -1,20 +1,12 @@
-import { Elysia, t } from '../src'
+import { Type } from 'typebox'
+import { Value } from 'typebox/value'
 
-const app = new Elysia()
-	.macro({
-		role: (role: 'admin' | 'user') => ({
-			body: t.Object({
-				ok: t.String()
-			}),
-			derive: () => ({ ok: 'a' } as const)
-		})
-	})
-	.get('/', ({ ok }) => ok, {
-		role: 'admin'
-	})
+const make = () => Type.Object({ id: Type.Union([Type.Number(), Type.Literal(1)]) })
+const A = make()
+const B = make()
 
-type Response = (typeof app)['~Routes']['get']['response']
+console.log(JSON.stringify(A) === JSON.stringify(B)) // true
 
-app.handle('/')
-	.then((x) => x.text())
-	.then(console.log)
+Value.Decode(B, { id: 1 })
+
+console.log(JSON.stringify(A) === JSON.stringify(B)) // false (because of reorder)

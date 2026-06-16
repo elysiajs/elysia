@@ -37,8 +37,6 @@ export function DateType(
 	Type.TUnion<[Type.TUnsafe<Date>, Type.TString, Type.TNumber]>,
 	Date
 > {
-	// the runtime union members carry Refine wrappers — static-equivalent
-	// to the declared precise type
 	StringifiedDate ??= Type.Codec(
 		Union([
 			Type.Refine(
@@ -57,7 +55,7 @@ export function DateType(
 						)
 					return false
 				},
-				'must be Date'
+				() => 'must be Date'
 			),
 			Type.Number()
 		])

@@ -431,6 +431,30 @@ describe('Path', () => {
 		expect(Object.keys(map).length).toBe(keys)
 	})
 
+	// A static route's trailing-slash (loose) variant is pre-registered in
+	// `~map` at build time, so the fetch hot path resolves a trailing-slash
+	// request by a direct lookup — there is no per-request getLoosePath.
+	it('static route matches a trailing slash via a pre-registered loose key', async () => {
+		const app = new Elysia().get('/x', () => 'x')
+		app.compile()
+
+		const map = (app as any)['~map'].GET as Record<string, unknown>
+		expect('/x' in map).toBe(true)
+		expect('/x/' in map).toBe(true)
+
+		expect(await app.handle(req('/x')).then((r) => r.text())).toBe('x')
+		expect(await app.handle(req('/x/')).then((r) => r.text())).toBe('x')
+	})
+
+	it('strictPath does not pre-register a static loose variant', async () => {
+		const app = new Elysia({ strictPath: true }).get('/x', () => 'x')
+		app.compile()
+
+		const map = (app as any)['~map'].GET as Record<string, unknown>
+		expect('/x/' in map).toBe(false)
+		expect(await app.handle(req('/x/')).then((r) => r.status)).toBe(404)
+	})
+
 	// Regression (audit H10): dynamic (parameterized) routes were registered
 	// only at the exact path, so `/users/1/` 404'd on `/users/:id` even though
 	// static routes tolerate trailing slashes by default. Register the loose

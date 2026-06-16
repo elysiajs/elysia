@@ -158,11 +158,6 @@ export function responseToSetHeaders(response: Response, set?: Context['set']) {
 			if (hasHeaderShorthand)
 				Object.assign(set.headers, response.headers.toJSON())
 			else
-				// Copy unconditionally to match the Bun `Object.assign` path
-				// above. The old `key in set.headers` guard only updated keys
-				// that were ALREADY present — on the non-Bun runtimes that take
-				// this branch, a re-streamed Response's headers (content-type,
-				// etc.) were silently dropped.
 				for (const [key, value] of response.headers.entries())
 					set.headers[key] = value
 		}
@@ -292,7 +287,9 @@ export const createStreamHandler =
 		const contentType = isSSE
 			? 'text/event-stream'
 			: init?.value && typeof init?.value === 'object'
-				? 'application/json'
+				? ArrayBuffer.isView(init.value)
+					? 'application/octet-stream'
+					: 'application/json'
 				: 'text/plain'
 
 		const headers = set?.headers
@@ -421,15 +418,13 @@ export async function* streamResponse(response: Response) {
 	if (!body) return
 
 	const reader = body.getReader()
-	const decoder = new TextDecoder()
 
 	try {
 		while (true) {
 			const { done, value } = await reader.read()
 			if (done) break
 
-			if (typeof value === 'string') yield value
-			else yield decoder.decode(value)
+			yield value
 		}
 	} finally {
 		reader.releaseLock()
@@ -440,7 +435,7 @@ export function handleSet(set: Context['set']) {
 	if (typeof set.status === 'string')
 		set.status = StatusMap[set.status as keyof typeof StatusMap]
 
-	// Handle `Elysia.headers` which is created in Context prototype
+	// ? Handle `Elysia.headers` which is created in Context prototype
 	//
 	// If we assign to set.headers, it will mutate the prototype's headers
 	// which cause all responses share the same headers object
@@ -466,11 +461,6 @@ export function handleSet(set: Context['set']) {
 	}
 }
 
-// Merge header by allocating a new one
-// In Bun, response.headers can be mutable
-// while in Node and Cloudflare Worker is not
-//
-// Default to creating a new one instead
 export function mergeHeaders(
 	responseHeaders: Headers,
 	setHeaders: Context['set']['headers']
@@ -512,6 +502,49 @@ export const createResponseHandler = (handler: CreateHandlerParameter) => {
 	const handleStream = createStreamHandler(handler)
 
 	return (response: Response, set?: Context['set'], request?: Request) => {
+		if (set) {
+			const status = mergeStatus(response.status, set.status)
+			const statusUnchanged =
+				status === undefined || status === response.status
+
+			if (statusUnchanged && !set.cookie && !isNotEmpty(set.headers))
+				return response
+
+			// Headers is mutable in Bun, cheaper than create a new one
+			if (
+				isBun &&
+				statusUnchanged &&
+				!set.cookie &&
+				(set.headers instanceof Headers
+					? !set.headers.has(setCookie)
+					: set.headers[setCookie] === undefined)
+			) {
+				const responseHeaders = response.headers
+
+				if (set.headers instanceof Headers) {
+					for (const key of set.headers.keys())
+						if (!responseHeaders.has(key))
+							responseHeaders.set(key, set.headers.get(key) ?? '')
+				} else
+					for (const key in set.headers)
+						if (!responseHeaders.has(key))
+							responseHeaders.set(key, set.headers[key] as any)
+
+				if (
+					!responseHeaders.has('content-length') &&
+					responseHeaders.get('transfer-encoding') === 'chunked'
+				)
+					return handleStream(
+						streamResponse(response),
+						responseToSetHeaders(response, set),
+						request,
+						true
+					) as any
+
+				return response
+			}
+		}
+
 		const newResponse = new Response(
 			response.body,
 			set
@@ -534,7 +567,7 @@ export const createResponseHandler = (handler: CreateHandlerParameter) => {
 				streamResponse(newResponse as Response),
 				responseToSetHeaders(newResponse as Response, set),
 				request,
-				true // don't auto-format SSE for pre-formatted Response
+				true
 			) as any
 
 		return newResponse

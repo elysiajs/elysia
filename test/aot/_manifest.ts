@@ -94,6 +94,15 @@ export const materialise = (
 			entry.m = mir
 		}
 
+		// request-side decode mirror (always factory: codecs ride in `d`)
+		if (c.decodeMirror) {
+			const dm: any = {
+				s: fn(mirrorFactorySource(c.decodeMirror.source, true))
+			}
+			if (c.decodeMirror.u) dm.u = branchTable(c.decodeMirror.u)
+			entry.dm = dm
+		}
+
 		const bySlot = ((m[c.method] ??= {})[c.path] ??= {})
 		bySlot[c.slot] = entry
 	}

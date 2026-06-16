@@ -30,7 +30,6 @@ import {
 	isNotEmpty,
 	isRecordNumber,
 	joinPath,
-	liftDirectFieldsToSchema,
 	mapMethodBack,
 	mergeDeep,
 	mergeHook,
@@ -42,13 +41,9 @@ import {
 	type ChainNode
 } from './utils'
 
-import type { AnySchema } from './type'
-// `Ref` comes from the typebox-free bridge (self-initializing stub), NOT
-// `./type` — a value import of `t` here would make the whole typebox graph
-// statically reachable from the Elysia class, defeating tree-shaking for
-// apps that never use schemas
-import { Ref as tRef } from './type/bridge'
 import type { TRef, TSchema } from 'typebox'
+import type { AnySchema } from './type'
+import { Ref as tRef } from './type/bridge'
 
 import type { TraceHandler } from './trace'
 
@@ -115,7 +110,8 @@ import type {
 	ObjectMacroDefs,
 	WrapFn,
 	ExcludeElysiaResponse,
-	ExtractErrorFromHandle
+	ExtractErrorFromHandle,
+	HTTPMethod
 } from './types'
 import type { ElysiaStatus } from './error'
 import type { Context, LifecycleContext, ErrorContext } from './context'
@@ -190,6 +186,11 @@ export class Elysia<
 	}
 
 	#compiled?: CompiledHandler[]
+
+	// Memoized `routes` getter output
+	//
+	// Invalidated on `#add`, `#use`, `#on`, `#pushHook`, `.macro()`, `.as()`, `compileHandler`
+	#cachedRoutes?: PublicRoute[]
 	private '~derive'?: WeakSet<EventFn<'beforeHandle'>>
 
 	'~router'?: Memoirist<CompiledHandler>
@@ -219,41 +220,53 @@ export class Elysia<
 	get routes(): PublicRoute[] {
 		if (!this.#history) return []
 
+		// Cached snapshot (shared array, like `.history`): re-running
+		// `#resolveMacros` + flatten + clone + merge per access is quadratic
+		// when indexed in a loop. Skipping `#resolveMacros` on a hit is safe
+		// because macro registration invalidates this cache (see `.macro()`).
+		if (this.#cachedRoutes) return this.#cachedRoutes
+
 		this.#resolveMacros()
 		this.#compiled ??= Array(this.#history.length)
 
-		return this.#history.map(([method, path, handler, , hook, appHook]) => {
-			const flatAppHook = flattenChain(appHook as any)
+		const routes = this.#history.map(
+			([method, path, handler, , hook, appHook]) => {
+				const flatAppHook = flattenChain(appHook as any)
 
-			// `mergeHook` mutates its first argument; clone the stored inline
-			// `hook` (route[4]) so repeated `routes` reads don't re-merge into
-			// it (which would duplicate hooks on every access).
-			const merged: any = flatAppHook
-				? hook
-					? mergeHook(cloneHook(hook) as any, flatAppHook as any)
-					: flatAppHook
-				: hook
+				// `mergeHook` mutates its first argument; clone the stored inline
+				// `hook` (route[4]) so repeated `routes` reads don't re-merge into
+				// it (which would duplicate hooks on every access).
+				const merged: any = flatAppHook
+					? hook
+						? mergeHook(cloneHook(hook) as any, flatAppHook as any)
+						: flatAppHook
+					: hook
 
-			if (merged?.schemas?.length) {
-				for (const entry of merged.schemas as any[]) {
-					if (!entry?.response) continue
-					merged.response = mergeResponse(
-						merged.response,
-						entry.response
-					)
+				if (merged?.schemas?.length) {
+					for (const entry of merged.schemas as any[]) {
+						if (!entry?.response) continue
+						merged.response = mergeResponse(
+							merged.response,
+							entry.response
+						)
+					}
 				}
+
+				if (merged?.response && !isRecordNumber(merged.response))
+					merged.response = { 200: merged.response }
+
+				return {
+					method: mapMethodBack(method),
+					path,
+					handler,
+					hooks: merged
+				} as PublicRoute
 			}
+		)
 
-			if (merged?.response && !isRecordNumber(merged.response))
-				merged.response = { 200: merged.response }
+		this.#cachedRoutes = routes
 
-			return {
-				method: mapMethodBack(method),
-				path,
-				handler,
-				hooks: merged
-			} as PublicRoute
-		})
+		return routes
 	}
 
 	/**
@@ -734,6 +747,7 @@ export class Elysia<
 		const added: Partial<AppHook> = nullObject()
 		;(added as any)[type] = fn
 		this['~hookChain'] = { added, parent: this['~hookChain'], scope }
+		this.#cachedRoutes = undefined
 
 		if (scope === 'plugin') this.#hasPlugin = true
 		else if (scope === 'global') this.#hasGlobal = true
@@ -773,9 +787,6 @@ export class Elysia<
 		return this
 	}
 
-	// `request` runs before routing/validation/derive — its context is the
-	// derive-free `PreContext` (no resolved/derived properties), so a `.derive`
-	// value must NOT appear here.
 	request(fn: MaybeArray<PreHandler<{}, Singleton>>): this
 	request(scope: 'local', fn: MaybeArray<PreHandler<{}, Singleton>>): this
 	request(scope: 'plugin', fn: MaybeArray<PreHandler<{}, Singleton>>): this
@@ -787,10 +798,6 @@ export class Elysia<
 	parse(
 		fn: MaybeArray<
 			BodyHandler<
-				// parse PRODUCES the body — it must NOT inherit any guard
-				// schema (override or standalone channel): body/query/params
-				// are raw, pre-validation values here. Path params from the
-				// instance prefix are kept (structurally known, plain strings)
 				MergeSchema<{}, {}, BasePath>,
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
@@ -803,10 +810,6 @@ export class Elysia<
 		scope: 'local',
 		fn: MaybeArray<
 			BodyHandler<
-				// parse PRODUCES the body — it must NOT inherit any guard
-				// schema (override or standalone channel): body/query/params
-				// are raw, pre-validation values here. Path params from the
-				// instance prefix are kept (structurally known, plain strings)
 				MergeSchema<{}, {}, BasePath>,
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
@@ -818,10 +821,6 @@ export class Elysia<
 		scope: 'plugin',
 		fn: MaybeArray<
 			BodyHandler<
-				// parse PRODUCES the body — it must NOT inherit any guard
-				// schema (override or standalone channel): body/query/params
-				// are raw, pre-validation values here. Path params from the
-				// instance prefix are kept (structurally known, plain strings)
 				MergeSchema<{}, {}, BasePath>,
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
@@ -835,10 +834,6 @@ export class Elysia<
 		scope: 'global',
 		fn: MaybeArray<
 			BodyHandler<
-				// parse PRODUCES the body — it must NOT inherit any guard
-				// schema (override or standalone channel): body/query/params
-				// are raw, pre-validation values here. Path params from the
-				// instance prefix are kept (structurally known, plain strings)
 				MergeSchema<{}, {}, BasePath>,
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
@@ -2537,6 +2532,7 @@ export class Elysia<
 
 	as(target: 'plugin' | 'global'): any {
 		this.#as(this['~hookChain'], target === 'global' ? 'global' : 'plugin')
+		this.#cachedRoutes = undefined
 
 		return this
 	}
@@ -2571,9 +2567,6 @@ export class Elysia<
 		}
 	}
 
-	// `.guard({ as: 'plugin', schema: 'standalone', … })` — STANDALONE schemas
-	// accumulate into the Ephemeral `schemas` channel (additive: every visible
-	// standalone validator runs); the hook propagates one level on `.use()`.
 	guard<
 		const Input extends Metadata['macro'] &
 			InputSchema<keyof Definitions['typebox'] & string>,
@@ -2646,9 +2639,6 @@ export class Elysia<
 		Volatile
 	>
 
-	// `.guard({ as: 'plugin', … })` — OVERRIDE schemas (no `schema:
-	// 'standalone'`) go to the Ephemeral `schema` channel: nearer schemas win
-	// per field / response status, and a route-local schema replaces them.
 	guard<
 		const Input extends Metadata['macro'] &
 			InputSchema<keyof Definitions['typebox'] & string>,
@@ -2704,9 +2694,6 @@ export class Elysia<
 			derive: Ephemeral['derive'] &
 				// @ts-ignore
 				MacroContext['resolve']
-			// only write the channel when the hook declares schema fields —
-			// UnwrapRoute<{}> is a record of `unknown`s, not "absent", and
-			// would pollute every subsequent route (phantom 422 etc.)
 			schema: {} extends Pick<Input, Extract<keyof Input, InputSchemaKey>>
 				? Ephemeral['schema']
 				: MergeSchema<
@@ -2729,9 +2716,6 @@ export class Elysia<
 		Volatile
 	>
 
-	// `.guard({ as: 'global', schema: 'standalone', … })` — STANDALONE schemas
-	// promote into Metadata `schemas` (additive at any depth) alongside
-	// Singleton (resolve) and Metadata response.
 	guard<
 		const Input extends Metadata['macro'] &
 			InputSchema<keyof Definitions['typebox'] & string>,
@@ -2865,9 +2849,6 @@ export class Elysia<
 		},
 		Definitions,
 		{
-			// only write the channel when the hook declares schema fields —
-			// UnwrapRoute<{}> is a record of `unknown`s, not "absent", and
-			// would pollute every subsequent route (phantom 422 etc.)
 			schema: {} extends Pick<Input, Extract<keyof Input, InputSchemaKey>>
 				? Metadata['schema']
 				: MergeSchema<
@@ -3106,9 +3087,6 @@ export class Elysia<
 				Definitions,
 				{
 					schema: Metadata['schema']
-					// path-free hook schema only — ambient channels are read
-					// independently at route sites, and the inner BasePath
-					// regenerates path params
 					schemas: Metadata['schemas'] &
 						UnwrapRoute<Input, Definitions['typebox']> &
 						// @ts-ignore
@@ -3214,11 +3192,6 @@ export class Elysia<
 		}
 	>
 
-	// `.guard({ … })` — OVERRIDE schemas (the default) go to the Volatile
-	// `schema` channel: the closer to the route, the more power — a nearer
-	// guard or the route-local schema replaces them per field / response
-	// status. Macro context, resolve, and handler responses fold into
-	// Volatile either way.
 	guard<
 		const Input extends Metadata['macro'] &
 			InputSchema<keyof Definitions['typebox'] & string>,
@@ -3275,9 +3248,6 @@ export class Elysia<
 			derive: Volatile['derive'] &
 				// @ts-ignore
 				MacroContext['resolve']
-			// only write the channel when the hook declares schema fields —
-			// UnwrapRoute<{}> is a record of `unknown`s, not "absent", and
-			// would pollute every subsequent route (phantom 422 etc.)
 			schema: {} extends Pick<Input, Extract<keyof Input, InputSchemaKey>>
 				? Volatile['schema']
 				: MergeSchema<
@@ -3362,17 +3332,11 @@ export class Elysia<
 				},
 				Definitions,
 				{
-					// path-free: the inner BasePath already carries the
-					// prefix, so route sites regenerate full path params —
-					// baking `ResolvePath` here would shadow them
 					schema: MergeSchema<
 						UnwrapRoute<Input, Definitions['typebox']>,
 						MergeSchema<
 							Volatile['schema'],
-							MergeSchema<
-								Ephemeral['schema'],
-								Metadata['schema']
-							>
+							MergeSchema<Ephemeral['schema'], Metadata['schema']>
 						>
 					>
 					schemas: Metadata['schemas'] & MacroContext
@@ -3882,8 +3846,7 @@ export class Elysia<
 		}
 
 		if (arguments.length === 2) {
-			// `guard(hook, callback)` is `group('', hook, callback)` —
-			// scope-bound hook with a sandboxed builder.
+			// `guard(hook, callback)` is `group('', hook, callback)`
 			if (typeof arguments[1] === 'function')
 				return (this as any).group('', arguments[0], arguments[1])
 
@@ -4032,9 +3995,6 @@ export class Elysia<
 				Definitions,
 				{
 					schema: Metadata['schema']
-					// path-free hook schema only — ambient channels are read
-					// independently at route sites, and the inner BasePath
-					// regenerates path params
 					schemas: Metadata['schemas'] &
 						UnwrapRoute<Input, Definitions['typebox']> &
 						// @ts-ignore
@@ -4129,17 +4089,11 @@ export class Elysia<
 				},
 				Definitions,
 				{
-					// path-free: the inner BasePath already carries the
-					// prefix, so route sites regenerate full path params —
-					// baking `ResolvePath` here would shadow them
 					schema: MergeSchema<
 						UnwrapRoute<Input, Definitions['typebox']>,
 						MergeSchema<
 							Volatile['schema'],
-							MergeSchema<
-								Ephemeral['schema'],
-								Metadata['schema']
-							>
+							MergeSchema<Ephemeral['schema'], Metadata['schema']>
 						>
 					>
 					schemas: Metadata['schemas'] & MacroContext
@@ -4207,8 +4161,7 @@ export class Elysia<
 			if (src.parser) ext.parser = Object.assign(nullObject(), src.parser)
 		}
 
-		if (isSchema)
-			child.guard({ ...schemaOrRun } as Partial<AnyLocalHook>)
+		if (isSchema) child.guard({ ...schemaOrRun } as Partial<AnyLocalHook>)
 
 		callback(child)
 
@@ -4271,6 +4224,7 @@ export class Elysia<
 		}
 
 		this['~hookChain'] = { added: hook, parent: this['~hookChain'], scope }
+		this.#cachedRoutes = undefined
 
 		return this
 	}
@@ -4279,7 +4233,7 @@ export class Elysia<
 	 * ### macro
 	 * Declare a custom route property: applying it on a route or guard folds
 	 * the definition's schema, lifecycle hooks, and `derive` result into that
-	 * route — both at runtime and in the route's types.
+	 * route
 	 *
 	 * ```ts
 	 * new Elysia()
@@ -4294,18 +4248,6 @@ export class Elysia<
 	 *     })
 	 *     .get('/', ({ user }) => user, { auth: true, role: 'admin' })
 	 * ```
-	 *
-	 * Requires TypeScript >= 5.7 (older versions silently degrade the
-	 * definition's own handler context to defaults).
-	 *
-	 * Known type-level boundaries (runtime is unaffected; annotate the
-	 * handler's parameter when needed):
-	 * - a FUNCTION-form definition's own handlers do not see the sibling
-	 *   schema (`(arg) => ({ body, derive })` — `derive`'s ctx types `body`
-	 *   as the default, not the sibling schema's static)
-	 * - context contributed by OTHER applied macros (`{ auth: true }` inside
-	 *   a definition) and a definition's own `derive` result reach the
-	 *   CONSUMING route's ctx, but not the definition's own handlers
 	 */
 	macro<
 		const Body,
@@ -4356,21 +4298,6 @@ export class Elysia<
 	>
 
 	macro(macro: Macro) {
-		// A functional macro must live under its name in the object form. A
-		// bare `.macro(fn)` has no name to register under and used to
-		// silently no-op.
-		if (typeof macro === 'function')
-			throw new Error(
-				'A functional macro must be named — use `.macro({ name: fn })` instead of `.macro(fn)`'
-			)
-
-		// `.macro(name, def)` was removed: the object form now covers
-		// everything the named form existed for
-		if (typeof macro === 'string')
-			throw new Error(
-				`\`.macro(name, definition)\` was removed — use \`.macro({ ${macro}: definition })\` instead`
-			)
-
 		const ext = this.#ext
 		const m = (ext.macro ??= nullObject() as any)
 
@@ -4379,6 +4306,8 @@ export class Elysia<
 				macro[key] = hookToGuard(macro[key] as any) as any
 
 		Object.assign(m, macro)
+
+		this.#cachedRoutes = undefined
 
 		return this as any
 	}
@@ -4515,8 +4444,6 @@ export class Elysia<
 				delete input[key]
 			}
 		}
-
-		if (iteration === 0) liftDirectFieldsToSchema(input)
 
 		return input
 	}
@@ -4727,8 +4654,7 @@ export class Elysia<
 	>
 
 	/**
-	 * Async functional plugin — same `| undefined` treatment for
-	 * `derive`/`resolve` as async instances
+	 * Async functional plugin
 	 */
 	use<
 		const NewElysia extends AnyElysia,
@@ -4836,6 +4762,8 @@ export class Elysia<
 			;(addedByThisCall ??= new Set()).add(hash)
 		}
 
+		this.#cachedRoutes = undefined
+
 		if (app.#childrenHash) {
 			if (this.#childrenHash) {
 				for (const h of app.#childrenHash) {
@@ -4855,18 +4783,31 @@ export class Elysia<
 
 			const history = (this.#history ??= [])
 			const length = app.#history.length
+
+			const preChain = this['~hookChain']
+
+			// 1-slot memo for the {combine, over} pair: routes registered
+			// under the same chain snapshot share `route[6]` by reference, so
+			// consecutive routes repeat the same (childChain, preChain) pair.
+			let lastChildChain: ChainNode | undefined
+			let lastCombined: ChainNode | undefined
+
 			for (let i = 0; i < length; i++) {
 				const route = app.#history[i]
 
-				const preChain = this['~hookChain']
-
 				const childChain = route[6]
-				const inheritedChain: ChainNode | undefined =
-					childChain === undefined
-						? preChain
-						: preChain === undefined
-							? childChain
-							: { combine: childChain, over: preChain }
+				let inheritedChain: ChainNode | undefined
+				if (childChain === undefined) inheritedChain = preChain
+				else if (preChain === undefined) inheritedChain = childChain
+				else if (childChain === lastChildChain)
+					inheritedChain = lastCombined
+				else {
+					lastChildChain = childChain
+					inheritedChain = lastCombined = {
+						combine: childChain,
+						over: preChain
+					}
+				}
 
 				const path = this['~Prefix']
 					? joinPath(this['~Prefix'], route[1])
@@ -5173,6 +5114,7 @@ export class Elysia<
 					? [method, path, fn, this, hook]
 					: [method, path, fn, this]) as unknown as InternalRoute
 		)
+		this.#cachedRoutes = undefined
 
 		return this
 	}
@@ -5305,17 +5247,11 @@ export class Elysia<
 
 	/**
 	 * Registered reusable models (via `.model()`), keyed by name.
-	 *
-	 * Primarily a type accessor — `typeof app.models` extracts the registered
-	 * model types for sharing schema types across files (v1 parity). Returns the
-	 * live model map at runtime.
 	 */
 	get models(): Definitions['typebox'] {
 		return (this['~ext']?.models ?? {}) as Definitions['typebox']
 	}
 
-	// Reference a registered model by name as a schema; resolved against
-	// `Definitions['typebox']` at the type level and `#ext.models` at runtime.
 	Ref<const Key extends keyof Definitions['typebox'] & string>(key: Key) {
 		return tRef(key)
 	}
@@ -6195,8 +6131,6 @@ export class Elysia<
 		return this.#add(MethodMap.HEAD, path, fn, hook) as any
 	}
 
-	// Typed like the verb methods (handler ctx gets schema/macro/derive) but
-	// without Eden route registration — Eden has no `all` concept
 	all<
 		const Path extends string,
 		const Input extends Metadata['macro'] &
@@ -6258,25 +6192,135 @@ export class Elysia<
 	}
 
 	/**
+	 * ### get
+	 * Register handler for path with method [GET]
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * import { Elysia, t } from 'elysia'
+	 *
+	 * new Elysia()
+	 *     .get('/', () => 'hi')
+	 *     .get('/with-hook', () => 'hi', {
+	 *         response: t.String()
+	 *     })
+	 * ```
+	 */
+	method<
+		const Method extends HTTPMethod,
+		const Path extends string,
+		const Input extends Metadata['macro'] &
+			InputSchema<keyof Definitions['typebox'] & string>,
+		const Schema extends IntersectIfObjectSchema<
+			MergeSchema<
+				UnwrapRoute<
+					Input,
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>,
+				'',
+				// route declares no params → path-derived, ambient may win
+				undefined extends Input['params'] ? true : false
+			>,
+			MergeScopedSchemas<
+				Metadata['schemas'],
+				Ephemeral['schemas'],
+				Volatile['schemas']
+			>
+		>,
+		const Decorator extends Singleton & {
+			derive: Ephemeral['derive'] & Volatile['derive']
+		},
+		const MacroContext extends {} extends Metadata['macroFn']
+			? {}
+			: MacroToContext<
+					Metadata['macroFn'],
+					Omit<Input, NonResolvableMacroKey>,
+					Definitions['typebox']
+				>,
+		const Handle extends {} extends MacroContext
+			? InlineHandlerNonMacro<NoInfer<Schema>, NoInfer<Decorator>>
+			: InlineHandler<
+					NoInfer<Schema>,
+					NoInfer<Decorator>,
+					// @ts-ignore
+					MacroContext
+				>
+	>(
+		method: Method,
+		path: Path,
+		fn: Handle,
+		hook?: LocalHook<
+			Input,
+			// @ts-ignore
+			Schema & MacroContext,
+			Decorator,
+			Definitions['error'],
+			keyof Metadata['parser']
+		>
+	): Elysia<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes &
+			CreateEden<
+				JoinPath<BasePath, Path>,
+				{
+					[method in Method]: CreateEdenResponse<
+						Path,
+						Schema,
+						MacroContext,
+						ComposeElysiaResponse<
+							Schema &
+								MacroContext &
+								Metadata['schemas'] &
+								Ephemeral['schemas'] &
+								Volatile['schemas'],
+							Handle,
+							UnionResponseStatus<
+								Metadata['response'],
+								UnionResponseStatus<
+									Ephemeral['response'],
+									UnionResponseStatus<
+										Volatile['response'],
+										// @ts-ignore
+										MacroContext['return'] & {}
+									>
+								>
+							>,
+							[
+								...Definitions['error'],
+								...Ephemeral['error'],
+								...Volatile['error']
+							]
+						>,
+						UnhandledReturnedErrorOf<
+							Handle,
+							[
+								...Definitions['error'],
+								...Ephemeral['error'],
+								...Volatile['error']
+							]
+						>
+					>
+				}
+			>,
+		Ephemeral,
+		Volatile
+	> {
+		return this.#add(method, path, fn, hook) as any
+	}
+
+	/**
 	 * ### ws
 	 * Register a WebSocket route. Mirrors `.get`/`.post` ergonomics:
-	 *
-	 * ```ts
-	 * // 2-arg form — backward compatible with the old single-options shape.
-	 * .ws('/chat', {
-	 *     body: t.Object({ text: t.String() }),
-	 *     message({ ws, body }) { ws.send(body.text) }
-	 * })
-	 *
-	 * // 3-arg form — message handler as a positional arg.
-	 * .ws('/chat', function* ({ ws, body }) { yield body }, {
-	 *     open({ ws }) { ws.send('hello') },
-	 *     close({ ws, code, reason }) { console.log('bye', code, reason) }
-	 * })
-	 * ```
-	 *
-	 * Generator handlers (`function*` / `async function*`) stream each
-	 * yielded value to the client as a separate message.
 	 */
 	ws<
 		const Path extends string,
@@ -6599,6 +6643,9 @@ export class Elysia<
 	}
 
 	compile() {
+		this['~config'] ??= nullObject()
+		this['~config']!.precompile = true
+
 		this.fetch
 
 		if (this.#history)
@@ -6622,6 +6669,8 @@ export class Elysia<
 		const compiled = (this.#compiled ??= new Array(this.#history!.length))
 
 		if (immediate) {
+			this.#cachedRoutes = undefined
+
 			const handler = compileHandler(
 				this.#history![index],
 				this,
@@ -6644,6 +6693,8 @@ export class Elysia<
 	): CompiledHandler {
 		return (context) => {
 			if (this.#compiled![index]) return this.#compiled![index](context)
+
+			this.#cachedRoutes = undefined
 
 			const handler = compileHandler(
 				this.#history![index],
@@ -6713,6 +6764,7 @@ export class Elysia<
 
 		const precompile = this['~config']?.precompile
 		const buildStatic = this['~config']?.nativeStaticResponse !== false
+		const enableAutoHead = this['~config']?.autoHead === true
 
 		this.#initMap()
 		const methods = this['~map']!
@@ -6720,9 +6772,10 @@ export class Elysia<
 		const length = this.#history.length
 
 		let explicitHead: Set<string> | undefined
-		for (let i = 0; i < length; i++)
-			if (mapMethodBack(this.#history![i][0]) === 'HEAD')
-				(explicitHead ??= new Set()).add(this.#history![i][1])
+		if (enableAutoHead)
+			for (let i = 0; i < length; i++)
+				if (mapMethodBack(this.#history![i][0]) === 'HEAD')
+					(explicitHead ??= new Set()).add(this.#history![i][1])
 
 		const wrapHeadHandler = Elysia.#wrapHeadHandler
 
@@ -6745,29 +6798,21 @@ export class Elysia<
 					)
 				} else {
 					this.#initMap()
-					;(this['~map']!['WS'] ??= nullObject() as any)[path] =
-						handler
+					const wsMap = (this['~map']!['WS'] ??= nullObject() as any)
+					wsMap[path] = handler
+
+					if (!this['~config']?.strictPath) {
+						const loose = getLoosePath(path)
+						if (loose !== path) wsMap[loose] = handler
+					}
 				}
 
 				if (options && isNotEmpty(options)) {
 					this['~config'] ??= nullObject()
 					const existing = (this['~config'] as any).websocket
-					if (existing) {
-						// Bun exposes a SINGLE global WebSocket config per
-						// server, so per-route knobs (maxPayloadLength, idle
-						// timeout, …) can't be enforced individually — the last
-						// registered route wins. Warn on a genuine conflict so a
-						// silently-ignored per-route limit is visible.
-						for (const key in options)
-							if (
-								key in existing &&
-								(existing as any)[key] !== (options as any)[key]
-							)
-								console.warn(
-									`[Elysia] Conflicting per-route WebSocket option '${key}' — Bun uses one global WebSocket config per server, so per-route values are not enforced (the last-registered route wins).`
-								)
-						Object.assign(existing, options)
-					} else (this['~config'] as any).websocket = options
+
+					if (existing) Object.assign(existing, options)
+					else (this['~config'] as any).websocket = options
 				}
 
 				continue
@@ -6802,7 +6847,8 @@ export class Elysia<
 					? staticResponse
 					: undefined
 
-			const autoHead = method === 'GET' && !explicitHead?.has(path)
+			const autoHead =
+				enableAutoHead && method === 'GET' && !explicitHead?.has(path)
 
 			if (isDynamicRegex.test(path)) {
 				const router = (this['~router'] ??= new Memoirist())
@@ -6812,16 +6858,13 @@ export class Elysia<
 					undefined,
 					sharedStatic
 				)
+
 				const headHandler = autoHead
 					? wrapHeadHandler(handler)
 					: undefined
+
 				const strict = !!this['~config']?.strictPath
 
-				// Register a route pattern plus, unless strictPath, its
-				// trailing-slash (loose) variant — so `/users/1/` matches
-				// `/users/:id` just like static routes tolerate trailing
-				// slashes. (Pre-fix the router was only queried with the exact
-				// path, so dynamic routes 404'd on a trailing slash.)
 				const addPattern = (p: string) => {
 					router.add(method, p, handler, false)
 					if (headHandler) router.add('HEAD', p, headHandler, false)
@@ -6838,30 +6881,39 @@ export class Elysia<
 
 				addPattern(path)
 
-				// Encoded form so a percent-encoded request path matches a
-				// non-ASCII pattern without a per-request decode (mirrors the
-				// static map above). `:` is URI-safe, so params survive.
 				const encoded = encodeURI(path)
 				if (encoded !== path) addPattern(encoded)
 			} else {
 				const map = (methods[method] ??= nullObject() as any)
 				const handler = this.handler(i, precompile, route, sharedStatic)
-				map[path] = handler
 
-				// Store the percent-encoded form too. A request path arrives
-				// percent-encoded on the wire (the usual form for non-ASCII
-				// routes), so this lets it match by a direct map lookup instead
-				// of decoding per request. ASCII paths encode to themselves, so
-				// this is a no-op for them.
-				const encoded = encodeURI(path)
-				if (encoded !== path) map[encoded] = handler
+				const headHandler = autoHead
+					? wrapHeadHandler(handler)
+					: undefined
 
-				if (autoHead) {
-					const head = (methods['HEAD'] ??= nullObject() as any)
-					const headHandler = wrapHeadHandler(handler)
-					head[path] = headHandler
-					if (encoded !== path) head[encoded] = headHandler
+				const head = autoHead
+					? (methods['HEAD'] ??= nullObject() as any)
+					: undefined
+
+				const strict = !!this['~config']?.strictPath
+
+				const addStatic = (p: string) => {
+					map[p] = handler
+					if (head) head[p] = headHandler!
+
+					if (!strict) {
+						const loose = getLoosePath(p)
+						if (loose !== p) {
+							map[loose] = handler
+							if (head) head[loose] = headHandler!
+						}
+					}
 				}
+
+				addStatic(path)
+
+				const encoded = encodeURI(path)
+				if (encoded !== path) addStatic(encoded)
 			}
 		}
 	}

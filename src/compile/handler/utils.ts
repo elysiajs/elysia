@@ -36,6 +36,367 @@ export const mapTransform = map<'transform', [report?: TraceReporter]>(
 	}
 )
 
+const deriveKeyCache = new WeakMap<Function, string[] | null>()
+
+export function extractDeriveKeys(fn: Function): string[] | null {
+	const cached = deriveKeyCache.get(fn)
+	if (cached !== undefined) return cached
+
+	const result = scanDeriveKeys(fn)
+	deriveKeyCache.set(fn, result)
+	return result
+}
+
+function scanDeriveKeys(fn: Function): string[] | null {
+	let src: string
+	try {
+		src = Function.prototype.toString.call(fn)
+	} catch {
+		return null
+	}
+
+	if (src.includes('[native code]')) return null
+	if (src.includes('...')) return null
+
+	const objStart = findReturnedObjectStart(src)
+	if (objStart === -1) return null
+
+	return scanObjectLiteralKeys(src, objStart)
+}
+
+function findReturnedObjectStart(src: string): number {
+	const arrow = topLevelArrowIndex(src)
+	if (arrow !== -1) {
+		let i = arrow + 2
+		while (i < src.length && isSpace(src[i])) i++
+
+		if (src[i] === '(') {
+			let j = i + 1
+			while (j < src.length && isSpace(src[j])) j++
+			if (src[j] === '{') return j
+			// `=> (` not followed by an object literal → not a plain object
+			// implicit return, bail.
+			return -1
+		}
+
+		if (src[i] !== '{') return -1
+		// `=> {` is a block body: fall through to the single-return logic below.
+	}
+
+	const returns = countReturns(src)
+	if (returns !== 1) return -1
+
+	const idx = returnKeywordIndex(src)
+	if (idx === -1) return -1
+	let i = idx + 6
+	while (i < src.length && isSpace(src[i])) i++
+	while (i < src.length && src[i] === '(') {
+		i++
+		while (i < src.length && isSpace(src[i])) i++
+	}
+	return src[i] === '{' ? i : -1
+}
+
+function topLevelArrowIndex(src: string): number {
+	let depth = 0
+	for (let i = 0; i < src.length; ) {
+		const ch = src[i]
+		if (ch === '"' || ch === "'" || ch === '`') {
+			i = skipString(src, i)
+			continue
+		}
+
+		if (ch === '/' && src[i + 1] === '/') {
+			const nl = src.indexOf('\n', i)
+			if (nl === -1) return -1
+			i = nl + 1
+			continue
+		}
+
+		if (ch === '/' && src[i + 1] === '*') {
+			const end = src.indexOf('*/', i)
+			if (end === -1) return -1
+			i = end + 2
+			continue
+		}
+
+		if (
+			depth === 0 &&
+			ch === 'f' &&
+			src.startsWith('function', i) &&
+			!isIdentChar(src[i - 1] ?? ' ') &&
+			!isIdentChar(src[i + 8] ?? ' ')
+		)
+			return -1
+
+		if (ch === '(' || ch === '[' || ch === '{') {
+			depth++
+			i++
+			continue
+		}
+
+		if (ch === ')' || ch === ']' || ch === '}') {
+			depth--
+			i++
+			continue
+		}
+
+		if (depth === 0 && ch === '=' && src[i + 1] === '>') return i
+		i++
+	}
+	return -1
+}
+
+const isSpace = (ch: string) =>
+	ch === ' ' || ch === '\n' || ch === '\t' || ch === '\r'
+
+const isIdentChar = (ch: string) =>
+	(ch >= 'a' && ch <= 'z') ||
+	(ch >= 'A' && ch <= 'Z') ||
+	(ch >= '0' && ch <= '9') ||
+	ch === '_' ||
+	ch === '$'
+
+function countReturns(src: string): number {
+	let count = 0
+	for (let i = 0; i < src.length; ) {
+		const ch = src[i]
+		if (ch === '"' || ch === "'" || ch === '`') {
+			i = skipString(src, i)
+			continue
+		}
+		if (ch === '/' && src[i + 1] === '/') {
+			i = src.indexOf('\n', i)
+			if (i === -1) break
+			continue
+		}
+		if (ch === '/' && src[i + 1] === '*') {
+			i = src.indexOf('*/', i)
+			if (i === -1) break
+			i += 2
+			continue
+		}
+		if (
+			ch === 'r' &&
+			src.startsWith('return', i) &&
+			!isIdentChar(src[i - 1] ?? ' ') &&
+			!isIdentChar(src[i + 6] ?? ' ')
+		) {
+			count++
+			i += 6
+			continue
+		}
+		i++
+	}
+	return count
+}
+
+function returnKeywordIndex(src: string): number {
+	for (let i = 0; i < src.length; ) {
+		const ch = src[i]
+		if (ch === '"' || ch === "'" || ch === '`') {
+			i = skipString(src, i)
+			continue
+		}
+		if (ch === '/' && src[i + 1] === '/') {
+			const nl = src.indexOf('\n', i)
+			if (nl === -1) break
+			i = nl
+			continue
+		}
+		if (ch === '/' && src[i + 1] === '*') {
+			const end = src.indexOf('*/', i)
+			if (end === -1) break
+			i = end + 2
+			continue
+		}
+		if (
+			ch === 'r' &&
+			src.startsWith('return', i) &&
+			!isIdentChar(src[i - 1] ?? ' ') &&
+			!isIdentChar(src[i + 6] ?? ' ')
+		)
+			return i
+		i++
+	}
+	return -1
+}
+
+// Returns the index just past the closing quote
+function skipString(src: string, start: number): number {
+	const quote = src[start]
+	let i = start + 1
+
+	if (quote === '`') {
+		while (i < src.length) {
+			const ch = src[i]
+			if (ch === '\\') {
+				i += 2
+				continue
+			}
+
+			if (ch === '`') return i + 1
+			if (ch === '$' && src[i + 1] === '{') {
+				// skip balanced `${ ... }`
+				let depth = 1
+				i += 2
+
+				while (i < src.length && depth > 0) {
+					const c = src[i]
+					if (c === '"' || c === "'" || c === '`') {
+						i = skipString(src, i)
+						continue
+					}
+
+					if (c === '{') depth++
+					else if (c === '}') depth--
+
+					i++
+				}
+
+				continue
+			}
+
+			i++
+		}
+
+		return i
+	}
+
+	while (i < src.length) {
+		const ch = src[i]
+		if (ch === '\\') {
+			i += 2
+			continue
+		}
+
+		if (ch === quote) return i + 1
+		i++
+	}
+
+	return i
+}
+
+function scanObjectLiteralKeys(src: string, open: number): string[] | null {
+	const keys: string[] = []
+	let i = open + 1
+	let expectKey = true
+
+	while (i < src.length) {
+		let ch = src[i]
+
+		if (isSpace(ch)) {
+			i++
+			continue
+		}
+
+		if (ch === '/' && src[i + 1] === '/') {
+			const nl = src.indexOf('\n', i)
+			if (nl === -1) return null
+			i = nl + 1
+			continue
+		}
+
+		if (ch === '/' && src[i + 1] === '*') {
+			const end = src.indexOf('*/', i)
+			if (end === -1) return null
+			i = end + 2
+			continue
+		}
+
+		if (ch === '}') return keys
+
+		if (expectKey) {
+			// computed key, spread, getter/setter/method → bail
+			if (ch === '[') return null
+
+			let key: string
+			if (ch === '"' || ch === "'") {
+				const end = skipString(src, i)
+				key = src.slice(i + 1, end - 1)
+
+				if (key.includes('\\')) return null
+				i = end
+			} else if (isIdentChar(ch) && !(ch >= '0' && ch <= '9')) {
+				const start = i
+				while (i < src.length && isIdentChar(src[i])) i++
+				key = src.slice(start, i)
+			} else {
+				return null
+			}
+
+			let j = i
+			while (j < src.length && isSpace(src[j])) j++
+			if (src[j] !== ':') return null // shorthand / method / getter → bail
+
+			keys.push(key)
+			i = j + 1
+			i = skipValue(src, i)
+
+			if (i === -1) return null
+			expectKey = false
+
+			continue
+		}
+
+		if (ch === ',') {
+			expectKey = true
+			i++
+			continue
+		}
+
+		return null
+	}
+
+	return null
+}
+
+function skipValue(src: string, i: number): number {
+	let depth = 0
+	while (i < src.length) {
+		const ch = src[i]
+		if (ch === '"' || ch === "'" || ch === '`') {
+			i = skipString(src, i)
+			continue
+		}
+
+		if (ch === '/' && src[i + 1] === '/') {
+			const nl = src.indexOf('\n', i)
+			if (nl === -1) return -1
+			i = nl + 1
+			continue
+		}
+
+		if (ch === '/' && src[i + 1] === '*') {
+			const end = src.indexOf('*/', i)
+			if (end === -1) return -1
+			i = end + 2
+			continue
+		}
+
+		if (ch === '{' || ch === '(' || ch === '[') {
+			depth++
+			i++
+			continue
+		}
+
+		if (ch === '}' || ch === ')' || ch === ']') {
+			if (depth === 0) {
+				if (ch === '}') return i
+				return -1
+			}
+
+			depth--
+			i++
+			continue
+		}
+
+		if (ch === ',' && depth === 0) return i
+		i++
+	}
+	return -1
+}
+
 // `beforeHandle` / `afterHandle` / `mapResponse` all share a
 // short-circuit shape: each successive hook runs ONLY if the previous
 // one didn't set the gating var (`_r === undefined` or
@@ -66,9 +427,19 @@ export function mapBeforeHandle(
 		code += `tmp=${Await(fn)}bf${at(i)}(c)\n`
 		if (derive?.has(fn)) {
 			needsEs = true
+			const keys = extractDeriveKeys(fn)
+			const merge =
+				keys && keys.length
+					? keys
+							.map(
+								(k) =>
+									`c[${JSON.stringify(k)}]=tmp[${JSON.stringify(k)}]`
+							)
+							.join(';')
+					: 'Object.assign(c,tmp)'
 			code +=
 				'if(tmp instanceof es)_r=tmp\n' +
-				'else if(tmp){Object.assign(c,tmp);tmp=undefined}\n'
+				`else if(tmp){${merge};tmp=undefined}\n`
 		} else code += 'if(tmp!==undefined)_r=tmp\n'
 		code += t.end('tmp')
 	}
@@ -244,11 +615,9 @@ function getQueryParseArgsCollect(
 				;(state.array ??= {})[k] = 1
 
 				const item = arrayItemSchema(v)
-				if (item && isObjectish(item))
-					(state.object ??= {})[k] = 1
+				if (item && isObjectish(item)) (state.object ??= {})[k] = 1
 			}
-			if (kind === ELYSIA_TYPES.ObjectString)
-				(state.object ??= {})[k] = 1
+			if (kind === ELYSIA_TYPES.ObjectString) (state.object ??= {})[k] = 1
 		}
 
 	for (const key of ['anyOf', 'allOf', 'oneOf'] as const) {
@@ -258,9 +627,11 @@ function getQueryParseArgsCollect(
 	}
 }
 
-// see if schema has object/array then tell `parseQueryFromURL`
-export function getQueryParseArgs(querySchema: any): string {
-	if (!querySchema) return ''
+// gather metadata for `parseQueryFromURL`
+export function getQueryParseChannels(
+	querySchema: any
+): QueryWalkState | undefined {
+	if (!querySchema) return undefined
 
 	const state: QueryWalkState = {
 		array: undefined,
@@ -269,9 +640,17 @@ export function getQueryParseArgs(querySchema: any): string {
 
 	getQueryParseArgsCollect(querySchema, new WeakSet(), state)
 
-	const arrayProps = state.array
-	const objectProps = state.object
-	if (!arrayProps && !objectProps) return ''
+	if (!state.array && !state.object) return undefined
+
+	return state
+}
+
+export function getQueryParseArgs(querySchema: any): string {
+	const channels = getQueryParseChannels(querySchema)
+	if (!channels) return ''
+
+	const arrayProps = channels.array
+	const objectProps = channels.object
 
 	const arrLit = arrayProps ? `,${JSON.stringify(arrayProps)}` : ''
 	const objLit = objectProps

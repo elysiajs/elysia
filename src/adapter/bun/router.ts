@@ -24,14 +24,20 @@ export function createBunContext(
 		params: Record<string, string>
 		qi!: number
 		headers?: Record<string, string>
-		set: { headers: Record<string, string> }
+		set: {
+			headers: Record<string, string>
+			status?: number | string
+			cookie?: Record<string, unknown>
+		}
 
 		constructor(public request: BunRequest) {
 			super()
 
 			this.params = request.params
 			this.set = {
-				headers: Object.create(headers)
+				headers: Object.create(headers),
+				status: undefined,
+				cookie: undefined
 			}
 		}
 	} as any

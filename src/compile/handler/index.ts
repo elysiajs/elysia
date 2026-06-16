@@ -7,11 +7,11 @@ import { RouteValidator } from '../../validator/route'
 import type { Validator } from '../../validator'
 
 import { isAsyncFunction, isAsyncLifecycle } from '../utils'
-import type { TypeBoxValidator } from '../../type/validator'
 
 import { compileCookieConfig } from '../../cookie/config'
 import {
 	parseCookieRaw,
+	parseCookieRawSync,
 	buildCookieJar,
 	signCookieValues
 } from '../../cookie/utils'
@@ -44,6 +44,7 @@ import {
 	cloneHook,
 	eventProperties,
 	flattenChain,
+	flattenChainMemo,
 	fnOrigin,
 	isLocalScope,
 	mapMethodBack,
@@ -67,16 +68,8 @@ import type {
 
 const parseFormData = 'c.body=await pf(c)\n'
 
-// During AOT capture the codegen STRING is frozen, so any runtime-detected const
-// it interpolates is baked at BUILD time. The header-materialization path is the
-// only build-target-dependent one (`setImmediate` is emitted as a runtime check,
-// portable anywhere). An AOT build whose deploy target differs from the build
-// runtime — e.g. build under Bun, deploy to workerd — sets this to force the
-// right branch; `undefined` means "use the build runtime's `hasHeaderShorthand`".
 let captureHeaderShorthand: boolean | undefined
-export const setCaptureHeaderShorthand = (
-	value: boolean | undefined
-): void => {
+export const setCaptureHeaderShorthand = (value: boolean | undefined): void => {
 	captureHeaderShorthand = value
 }
 
@@ -162,9 +155,13 @@ function parse(
 				)
 				if (i) code += 'if(!hasBody){'
 				if (child) code += child.begin
-				code +=
-					`c.body=await ho.parse[${i}](c,ct)\n` +
-					'hasBody=c.body!==undefined\n'
+
+				code += isAsyncFunction(parser as Function)
+					? `c.body=await ho.parse[${i}](c,ct)\n`
+					: `_bp=ho.parse[${i}](c,ct)\n` +
+						`if(_bp instanceof Promise)_bp=await _bp\n` +
+						`c.body=_bp\n`
+				code += 'hasBody=c.body!==undefined\n'
 				if (child) code += child.end()
 				if (i) code += '}\n'
 			} else {
@@ -193,11 +190,11 @@ function parse(
 		link(adapter.default, 'pd')
 	}
 
-	return hasFn ? 'let hasBody=false\n' + code : code
+	return hasFn ? 'let hasBody=false,_bp\n' + code : code
 }
 
 const isAsyncValidator = (vali: Validator | undefined) =>
-	!(vali as TypeBoxValidator)?.tb || (vali as TypeBoxValidator)?.isAsync
+	(vali as Validator | undefined)?.isAsync ?? true
 
 function applyHook(
 	localHook: Partial<AnyLocalHook> | undefined,
@@ -251,8 +248,6 @@ function collectHookOrigins(
 		const v = (hook as any)[key]
 		if (!v) continue
 
-		// Most hook slots hold a single function; iterate the array form
-		// directly and special-case the scalar to skip the `[v]` allocation.
 		if (Array.isArray(v))
 			for (const fn of v) {
 				const origin = fnOrigin.get(fn as Function)
@@ -277,8 +272,6 @@ function dropHooksByOrigin(
 		const v = (hook as any)[key]
 		if (!v) continue
 
-		// Same scalar special-case as `collectHookOrigins`: skip the `[v]`
-		// allocation (and the `filter`) when the slot holds a single function.
 		if (Array.isArray(v)) {
 			const kept = v.filter((fn: Function) => {
 				const origin = fnOrigin.get(fn)
@@ -327,10 +320,6 @@ const createInlineHandlerWithSet = (
 		return map(r, c.set, c.request)
 	}) as CompiledHandler
 
-// `derive` is promoted into the front of `beforeHandle`, so it runs AFTER
-// validation (body/query/params/headers/cookie). Consequence: on a 422 the
-// validators throw before `beforeHandle`, so derive never runs. Logic that must
-// run before validation belongs in `transform`. (2.0 breaking change.)
 function promoteDerive(hook: any) {
 	const derive = hook.derive
 	if (derive === undefined) return
@@ -374,7 +363,7 @@ function composeRootHook(
 	root: AnyElysia,
 	inheritedChain: ChainNode | undefined
 ): Partial<AppHook> | undefined {
-	const inherited = flattenChain(inheritedChain)
+	const inherited = flattenChainMemo(root, inheritedChain)
 	const locals = flattenChain(
 		root['~hookChain'],
 		isLocalScope,
@@ -393,8 +382,6 @@ export function buildNativeStaticResponse(
 ): Response | Promise<Response> | undefined {
 	if (typeof handler === 'function') return
 
-	// An `Error` value forwards to the error pipeline per request,
-	// so it can never be a precomputed static response
 	if (handler instanceof Error) return
 
 	const adapter = root['~config']?.adapter ?? defaultAdapter
@@ -403,18 +390,33 @@ export function buildNativeStaticResponse(
 	resolveChainMacros(root, appHook)
 	if (inheritedChain) resolveChainMacros(root, inheritedChain as ChainNode)
 
-	const flatAppHook = flattenChain(appHook)
+	const flatAppHook = flattenChainMemo(root, appHook as ChainNode)
 	const rootHook =
 		instance !== root
 			? composeRootHook(root, inheritedChain as any)
 			: undefined
 	const hook = applyHook(localHook, flatAppHook as any, rootHook)
 
+	const has = (v: unknown) => (Array.isArray(v) ? v.length > 0 : !!v)
+
 	if (
-		hook?.parse?.length ||
-		hook?.transform?.length ||
-		hook?.beforeHandle?.length ||
-		hook?.afterHandle?.length
+		has(hook?.parse) ||
+		has(hook?.transform) ||
+		has(hook?.beforeHandle) ||
+		has(hook?.afterHandle) ||
+		has(hook?.mapResponse) ||
+		has(hook?.afterResponse) ||
+		has(hook?.trace)
+	)
+		return
+
+	if (
+		hook?.body ||
+		hook?.query ||
+		hook?.params ||
+		hook?.headers ||
+		hook?.cookie ||
+		(hook?.schemas as unknown[] | undefined)?.length
 	)
 		return
 
@@ -426,12 +428,7 @@ export function buildNativeStaticResponse(
 	})
 
 	if (handler instanceof Promise) {
-		// Resolve and re-map. We rebuild `set` per resolution so a stale
-		// mutation doesn't leak across retries / reloads.
 		return handler.then((resolved) => {
-			// With nothing to apply, mapping would re-wrap the Response
-			// via `new Response(resolved.body)` and lock its body,
-			// breaking the per-request mapping of the same resolved value
 			if (resolved instanceof Response && !rootHeaders) return resolved
 
 			const mapped = (adapter.response.map as Function)(
@@ -472,7 +469,9 @@ export function compileHandler(
 			resolveChainMacros(root, inheritedChain as ChainNode)
 	}
 
-	const flatAppHook = appHook ? flattenChain(appHook) : undefined
+	const flatAppHook = appHook
+		? flattenChainMemo(root, appHook as ChainNode)
+		: undefined
 
 	let rootHook =
 		instance !== root
@@ -507,10 +506,7 @@ export function compileHandler(
 					for (const fn of errors)
 						if (!existing.includes(fn)) existing.push(fn)
 				} else if (!existing.includes(errors)) existing.push(errors)
-			}
-			// No existing handlers - skip the `includes` dedup entirely,
-			// and avoid the `[errors]` allocation for the scalar case.
-			else
+			} else
 				(hook as any).error = Array.isArray(errors)
 					? errors.slice()
 					: [errors]
@@ -539,8 +535,6 @@ export function compileHandler(
 			})
 		: undefined
 
-	// A static `Error` value forwards to the error pipeline per request,
-	// exactly like a handler returning it
 	if (handler instanceof Error) {
 		const error = handler
 		handler = () => {
@@ -618,10 +612,14 @@ export function compileHandler(
 	const hasStandaloneBody = !!(hook as any)?.schemas?.some(
 		(s: any) => s?.body
 	)
+
+	const bodylessMethod = method === 'GET' || method === 'HEAD'
 	const hasBody =
 		!!hook?.body ||
 		hasStandaloneBody ||
-		((parseLength > 0 || inference.body) && parseFirst !== 'none')
+		(!bodylessMethod &&
+			(parseLength > 0 || inference.body) &&
+			parseFirst !== 'none')
 
 	const bodyValiIsAsync = hasBody && isAsyncValidator(vali?.body)
 	const headersValiIsAsync = vali?.headers && isAsyncValidator(vali?.headers)
@@ -638,6 +636,10 @@ export function compileHandler(
 
 	const hasErrorHook = !!hook?.error?.length
 	const hasAfterResponse = !!hook?.afterResponse?.length
+	const hasBeforeHandle = !!hook?.beforeHandle?.length
+	const hasAfterHandle = !!hook?.afterHandle?.length
+	const hasMapResponse = !!hook?.mapResponse?.length
+	const hasResponseValidator = !!vali?.response
 	const traceHandlers = (hook?.trace as any[] | undefined) ?? undefined
 	const hasTrace = !!traceHandlers?.length
 	const traceCount = hasTrace ? traceHandlers!.length : 0
@@ -696,22 +698,36 @@ export function compileHandler(
 
 	const responseValiAsync = !!(
 		vali?.response &&
-		Object.values(vali.response as Record<number, TypeBoxValidator>).find(
-			(x) => ('tb' in x ? x.isAsync : true)
+		Object.values(vali.response as Record<number, Validator>).find(
+			isAsyncValidator
 		)
 	)
 
+	const handlerIsAsync =
+		isHandleFunction && isAsyncFunction(handler as Function)
+
+	const errorHookForcesAsync =
+		hasErrorHook &&
+		(hasAfterHandle || hasMapResponse || hasResponseValidator)
+
+	const afterResponseForcesAsync =
+		hasAfterResponse &&
+		(isAsyncLifecycle(hook?.afterResponse) ||
+			hasAfterHandle ||
+			hasMapResponse ||
+			hasResponseValidator ||
+			hasErrorHook)
+
 	const isAsync =
 		hasBody ||
-		isAsyncFunction(handler as Function) ||
-		hasErrorHook ||
-		hasAfterResponse ||
+		handlerIsAsync ||
+		errorHookForcesAsync ||
+		afterResponseForcesAsync ||
 		hasTrace ||
-		needsCookie ||
+		hasCookieSign ||
 		responseValiAsync ||
 		(hook &&
-			(!!hook?.parse?.length ||
-				!!isAsyncLifecycle(hook?.afterHandle) ||
+			(!!isAsyncLifecycle(hook?.afterHandle) ||
 				!!isAsyncLifecycle(hook?.beforeHandle) ||
 				!!isAsyncLifecycle(hook?.transform) ||
 				!!isAsyncLifecycle(hook?.mapResponse) ||
@@ -722,10 +738,30 @@ export function compileHandler(
 				queryValiIsAsync ||
 				cookieValidIsAsync))
 
+	const callHandlerSyncOnAsync =
+		isAsync && isHandleFunction && !handlerIsAsync
+
+	const syncErrorHook = hasErrorHook && !isAsync && !hasTrace
+	const syncAfterResponse =
+		hasAfterResponse && !isAsync && !hasTrace && !hasErrorHook
+
+	const callHandler = isHandleFunction
+		? callHandlerSyncOnAsync
+			? `_r=h(c)\nif(_r instanceof Promise)_r=await _r\n`
+			: `_r=${isAsync ? 'await ' : ''}h(c)\n`
+		: isStaticResponse
+			? `_r=h.clone()\n`
+			: isPromiseHandler
+				? `_r=h.then(cr)\n`
+				: `_r=h\n`
+
 	// va,rm,rc,re,pa,pf,pj,pt,pu,er,ar
 	let code = `${isAsync ? 'async ' : ''}function route(c){\n`
 
-	if (hasAfterResponse || hasTrace) code += 'let _stl\n'
+	if ((hasAfterResponse || hasTrace) && !syncAfterResponse)
+		code += 'let _stl\n'
+
+	if (hasCookieSign) code += 'let _sg\n'
 
 	if (hasTrace) {
 		// fetch handler should already handle trace but fallback just in case
@@ -754,12 +790,12 @@ export function compileHandler(
 		inlineUnsafe = true
 	}
 
+	const scheduleDeclSlot = '/*__SCHEDULE_DECL__*/\n'
+	code += scheduleDeclSlot
+
 	if (hasErrorHook || hasTrace) code += 'try{\n'
 
-	const hasHeaders =
-		inference.headers ||
-		!!vali?.headers ||
-		(inference.body && typeof hook?.parse !== 'string')
+	const hasHeaders = inference.headers || !!vali?.headers
 
 	if (inference.query || vali?.query) {
 		const parseArgs = getQueryParseArgs((vali?.query as any)?.schema)
@@ -830,11 +866,16 @@ export function compileHandler(
 	}
 
 	if (cookieConfig) {
-		link(parseCookieRaw, 'pcr')
 		link(buildCookieJar, 'bcj')
 		link(cookieConfig, 'cc')
 
-		code += `let _ck=await pcr(c.request.headers.get('cookie'),cc)\n`
+		if (!hasCookieSign && !cookieValidIsAsync) {
+			link(parseCookieRawSync, 'pcrs')
+			code += `let _ck=pcrs(c.request.headers.get('cookie'),cc)\n`
+		} else {
+			link(parseCookieRaw, 'pcr')
+			code += `let _ck=await pcr(c.request.headers.get('cookie'),cc)\n`
+		}
 
 		if (vali?.cookie) {
 			link(vali, 'va')
@@ -849,11 +890,9 @@ export function compileHandler(
 		code += `c.cookie=bcj(c.set,_ck,cc)\n`
 	}
 
-	const hasResponseValidator = !!vali?.response
 	const hasSet =
 		inference.cookie ||
 		inference.set ||
-		hasHeaders ||
 		!!root['~ext']?.['headers'] ||
 		needsCookie ||
 		hasAfterResponse ||
@@ -873,17 +912,12 @@ export function compileHandler(
 		: isStaticResponse
 			? 'h.clone()'
 			: isPromiseHandler
-				? // a static Promise<Response> resolves once — clone per serve
-					'h.then(cr)'
+				? 'h.then(cr)'
 				: 'h'
 
 	const mapReturn = hasSet
 		? `rm(${handleInstruction},c.set,c.request)\n`
 		: `rc(${handleInstruction},c.request)\n`
-
-	const hasBeforeHandle = !!hook?.beforeHandle?.length
-	const hasAfterHandle = !!hook?.afterHandle?.length
-	const hasMapResponse = !!hook?.mapResponse?.length
 
 	if (hasAfterResponse) link(hook!.afterResponse!, 'ar')
 
@@ -923,8 +957,26 @@ export function compileHandler(
 				`})\n`
 			: ''
 
-	const signPrefix = hasCookieSign ? `await scv(c.set.cookie,cc)\n` : ''
+	const dedupSchedule =
+		!!scheduleAfterResponse &&
+		(hasErrorHook || hasTrace) &&
+		!syncAfterResponse &&
+		!syncErrorHook
+
+	const scheduleDecl = dedupSchedule
+		? `function _sc(){\n${scheduleAfterResponse}}\n`
+		: ''
+
+	const schedule = dedupSchedule ? `_sc()\n` : scheduleAfterResponse
+	code = code.replace(scheduleDeclSlot, scheduleDecl)
+
+	const signPrefix = hasCookieSign
+		? `_sg=scv(c.set.cookie,cc)\nif(_sg)await _sg\n`
+		: ''
+
 	if (hasCookieSign) link(signCookieValues, 'scv')
+
+	let factoryHelpers = ''
 
 	if (
 		hasBeforeHandle ||
@@ -967,18 +1019,10 @@ export function compileHandler(
 
 		if (hasAfterResponse || hasTrace) link(tee, 'tee')
 
-		const callHandler = isHandleFunction
-			? `_r=${isAsync ? 'await ' : ''}h(c)\n`
-			: isStaticResponse
-				? `_r=h.clone()\n`
-				: isPromiseHandler
-					? `_r=h.then(cr)\n`
-					: `_r=h\n`
-
 		const teeConsumers = (hasAfterResponse ? 1 : 0) + (hasTrace ? 1 : 0)
 		const teeCount = teeConsumers + 1
 		const teeBlock =
-			teeConsumers > 0
+			teeConsumers > 0 && !syncAfterResponse
 				? `if(_r&&(_r[Symbol.iterator]||_r[Symbol.asyncIterator])&&typeof _r.next==='function'){\n` +
 					`const _s=await tee(_r,${teeCount})\n` +
 					`_r=_s[0]\n` +
@@ -1006,8 +1050,7 @@ export function compileHandler(
 			code += handleChild.end('_r')
 
 			code += `if(_trs){\n`
-			for (let i = 0; i < traceCount; i++)
-				code += `_hr${i}=rp${i};\n`
+			for (let i = 0; i < traceCount; i++) code += `_hr${i}=rp${i};\n`
 			code += `}else{\n`
 			code += endTrace()
 			code += `}\n`
@@ -1015,91 +1058,122 @@ export function compileHandler(
 			code += `if(_r===undefined){\n${callHandler}${teeBlock}}\n`
 		else code += callHandler + teeBlock
 
-		// Forward a returned `Error` to the error pipeline, like a throw
-		code += `if(_r instanceof Error)throw _r\n`
-		if (!isAsync) {
+		if (syncAfterResponse) {
 			link(forwardError, 'fe')
-			code += `else if(_r instanceof Promise)_r=_r.then(fe)\n`
-		}
 
-		if (hasAfterHandle || hasMapResponse || hasAfterResponse || hasTrace)
-			code += `c.responseValue=_r\n`
-
-		if (hasAfterHandle || hasTrace) {
-			const afLen = hook?.afterHandle?.length ?? 0
-			code += beginTrace('afterHandle', afLen)
-			if (hasAfterHandle) {
-				link(hook!.afterHandle!, 'af')
-				code += mapAfterHandle(
-					hook!.afterHandle!,
-					buildReport('afterHandle')
-				)
-			}
-			code += endTrace()
-		}
-
-		if (hasMapResponse || hasTrace) {
-			const mrLen = hook?.mapResponse?.length ?? 0
-			code += beginTrace('mapResponse', mrLen)
-			if (hasMapResponse) {
-				link(hook!.mapResponse!, 'mr')
-				code += mapMapResponse(
-					hook!.mapResponse!,
-					buildReport('mapResponse')
-				)
-			}
-			code += endTrace()
-		}
-
-		if (hasResponseValidator) {
-			link(vali!, 'va')
-			link(ElysiaStatus, 'es')
-
-			const awaitStr = responseValiAsync ? 'await ' : ''
+			factoryHelpers +=
+				`function _fin(c,_r){\n` +
+				`if(_r instanceof Error)throw _r\n` +
+				`if(_r&&(_r[Symbol.iterator]||_r[Symbol.asyncIterator])&&typeof _r.next==='function'){\n` +
+				`return tee(_r,${teeCount}).then((_s)=>_fin2(c,_s[0],_s[1]))\n` +
+				`}\n` +
+				`return _fin2(c,_r,undefined)\n` +
+				`}\n` +
+				`function _fin2(c,_r,_stl){\n` +
+				`c.responseValue=_r\n` +
+				scheduleAfterResponse +
+				`return ${hasSet ? `${map}(_r,c.set,c.request)` : `${map}(_r,c.request)`}\n` +
+				`}\n`
 
 			code +=
-				`if(_r instanceof es){\n` +
-				`const _vr=va.response[_r.code]\n` +
-				`if(_vr)_r.response=${awaitStr}_vr.EncodeFrom(_r.response,'response')\n` +
-				`}else if(!(_r instanceof Response)` +
-				`&&typeof _r?.next!=='function'){\n` +
-				`const _vr=va.response[c.set.status??200]\n` +
-				`if(_vr)_r=${awaitStr}_vr.EncodeFrom(_r,'response')\n` +
-				`}\n`
-		}
+				`if(_r instanceof Promise)return _r.then(fe).then((_v)=>_fin(c,_v))\n` +
+				`return _fin(c,_r)\n`
+		} else {
+			// Forward a returned `Error` to the error pipeline, like a throw
+			code += `if(_r instanceof Error)throw _r\n`
+			if (!isAsync) {
+				link(forwardError, 'fe')
+				code += `else if(_r instanceof Promise)_r=_r.then(fe)\n`
+			}
 
-		code += scheduleAfterResponse
-		code += signPrefix
-		code += `return ${hasSet ? `${map}(_r,c.set,c.request)` : `${map}(_r,c.request)`}\n`
+			if (
+				hasAfterHandle ||
+				hasMapResponse ||
+				hasAfterResponse ||
+				hasTrace
+			)
+				code += `c.responseValue=_r\n`
+
+			if (hasAfterHandle || hasTrace) {
+				const afLen = hook?.afterHandle?.length ?? 0
+				code += beginTrace('afterHandle', afLen)
+				if (hasAfterHandle) {
+					link(hook!.afterHandle!, 'af')
+					code += mapAfterHandle(
+						hook!.afterHandle!,
+						buildReport('afterHandle')
+					)
+				}
+				code += endTrace()
+			}
+
+			if (hasMapResponse || hasTrace) {
+				const mrLen = hook?.mapResponse?.length ?? 0
+				code += beginTrace('mapResponse', mrLen)
+				if (hasMapResponse) {
+					link(hook!.mapResponse!, 'mr')
+					code += mapMapResponse(
+						hook!.mapResponse!,
+						buildReport('mapResponse')
+					)
+				}
+				code += endTrace()
+			}
+
+			if (hasResponseValidator) {
+				link(vali!, 'va')
+				link(ElysiaStatus, 'es')
+
+				const awaitStr = responseValiAsync ? 'await ' : ''
+
+				code +=
+					`if(_r instanceof es){\n` +
+					`const _vr=va.response[_r.code]\n` +
+					`if(_vr)_r.response=${awaitStr}_vr.EncodeFrom(_r.response,'response')\n` +
+					`}else if(!(_r instanceof Response)` +
+					`&&typeof _r?.next!=='function'){\n` +
+					`const _vr=va.response[c.set.status??200]\n` +
+					`if(_vr)_r=${awaitStr}_vr.EncodeFrom(_r,'response')\n` +
+					`}\n`
+			}
+
+			code += schedule
+			code += signPrefix
+			code += `return ${hasSet ? `${map}(_r,c.set,c.request)` : `${map}(_r,c.request)`}\n`
+		}
 	} else if (isHandleFunction) {
-		// Materialize the result to forward a returned `Error` like a throw
 		if (!isAsync) link(forwardError, 'fe')
+		const mapArgs = hasSet ? 'c.set,c.request' : 'c.request'
 		code +=
-			`let _r=${isAsync ? 'await ' : ''}h(c)\n` +
+			(callHandlerSyncOnAsync
+				? `let _r=h(c)\nif(_r instanceof Promise)_r=await _r\n`
+				: `let _r=${isAsync ? 'await ' : ''}h(c)\n`) +
 			`if(_r instanceof Error)throw _r\n` +
-			(isAsync ? '' : `if(_r instanceof Promise)_r=_r.then(fe)\n`) +
-			`return ${hasSet ? `${map}(_r,c.set,c.request)` : `${map}(_r,c.request)`}\n`
+			(isAsync
+				? `return ${map}(_r,${mapArgs})\n`
+				: syncErrorHook
+					? `if(_r instanceof Promise)return ${map}(_r.then(fe),${mapArgs}).catch((_e)=>_ce(_e,c))\n` +
+						`return ${map}(_r,${mapArgs})\n`
+					: `if(_r instanceof Promise)_r=_r.then(fe)\n` +
+						`return ${map}(_r,${mapArgs})\n`)
 	} else {
 		code += `return ${mapReturn}`
 	}
 
 	if (hasErrorHook || hasTrace) {
-		code += `}catch(e){\n`
+		let body = ''
 
 		if (hasTrace) {
 			for (let i = 0; i < traceCount; i++)
-				code += `rp${i}?.resolve(e);rpc${i}?.(e)\n`
-			code += beginTrace('error', hook?.error?.length ?? 0)
+				body += `rp${i}?.resolve(e);rpc${i}?.(e)\n`
+			body += beginTrace('error', hook?.error?.length ?? 0)
 		}
 
 		if (hasErrorHook) {
 			link(hook!.error!, 'er')
 			link(ElysiaStatus, 'es')
-			code +=
+			body +=
 				`c.error=e\n` +
-				// Explicit error status wins; otherwise keep an already-set
-				// non-200 status (handler set it before throwing) and default
-				// statusless errors to 500.
 				`if(e?.status)c.set.status=e.status\n` +
 				`else if(c.set.status===undefined||c.set.status===200)c.set.status=500\n` +
 				`let _r${hasMapResponse ? ',tmp' : ''}\n` +
@@ -1107,20 +1181,16 @@ export function compileHandler(
 					map,
 					link,
 					res.map,
-					// Run `mapResponse` hooks on the value an `onError` returns,
-					// mirroring the success path (a thrown-then-handled response
-					// is still a response). `mr`/`tmp` are linked/declared above
-					// since `hasMapResponse`.
 					(hasMapResponse
 						? `c.responseValue=_r\n` +
 							mapMapResponse(hook!.mapResponse!, undefined)
 						: '') +
 						endTrace() +
-						scheduleAfterResponse,
+						schedule,
 					signPrefix
 				]) +
 				endTrace() +
-				scheduleAfterResponse +
+				schedule +
 				`if(typeof e?.toResponse==='function'){const _er=e.toResponse();if(_er instanceof Response){${signPrefix}return ${map}(_er,c.set,c.request)}}\n` +
 				`if(e instanceof es){${signPrefix}return ${map}(e,c.set,c.request)}\n` +
 				`if(e?.status){${signPrefix}return ${map}(e?.response??e?.message??'',c.set,c.request)}\n` +
@@ -1130,22 +1200,31 @@ export function compileHandler(
 				// with its message
 				`return ${map}(e?.message!=null?e.message:'Internal Server Error',c.set,c.request)\n`
 		} else {
-			code += endTrace() + scheduleAfterResponse
-			code += `throw e\n`
+			body += endTrace() + schedule
+			body += `throw e\n`
 		}
 
-		code += `}\n`
+		if (syncErrorHook) {
+			factoryHelpers += `function _ce(e,c){\n${body}}\n`
+			code += `}catch(e){return _ce(e,c)}\n`
+		} else code += `}catch(e){\n${body}}\n`
 	}
 
 	code += '}'
 
-	if (params.size === 1 && !hasTrace && isHandleFunction && !inlineUnsafe) {
-		if (alias === 'rc')
+	if (factoryHelpers)
+		code = `(function(){\n${factoryHelpers}return ${code}})()`
+
+	if (!hasTrace && isHandleFunction && !inlineUnsafe) {
+		if (alias === 'rc' || (!isAsync && !syncErrorHook && alias === 'rc,fe'))
 			return createInlineHandler(
 				res.compact ?? (res.map as any),
 				handler as any
 			)
-		else if (alias === 'rm')
+		else if (
+			alias === 'rm' ||
+			(!isAsync && !syncErrorHook && alias === 'rm,fe')
+		)
 			return createInlineHandlerWithSet(res.map as any, handler as any)
 	}
 
