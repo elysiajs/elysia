@@ -2,6 +2,7 @@
 
 Breaking Change:
 
+- route handler argument order is now **hook-first**: the verb methods (`get`/`post`/`put`/`patch`/`delete`/`options`/`head`/`all`/`method`) take the hook/schema object **before** the handler — `.get('/', { query }, handler)` instead of `.get('/', handler, { query })`. The hookless form is unchanged (`.get('/', handler)`). `.ws()` matches: its 3-arg form is now `.ws('/ws', options, handler)` (the 2-arg `.ws('/ws', handler)` / `.ws('/ws', options)` forms are unchanged). Declaring the schema first lets the handler's context (`body`/`query`/`params`/…) infer from it, and surfaces an invalid option or handler return at the exact property/handler rather than at the whole call. Migration: move the options/hook object from the last argument to the second.
 - [Internal] remove ArrayQuery
 - [Internal] remove format: `numeric`, `integer`, `objectString`, `booleanString`
 - `getSchemaValidator` renamed to `Validator.create`
