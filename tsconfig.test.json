@@ -102,9 +102,18 @@
     "skipLibCheck": true,                                 /* Skip type checking all .d.ts files. */
   },
   "exclude": ["node_modules", "test/cloudflare/**/*"],
-  // C2d complete: the ratchet covers the ENTIRE test suite (runtime tests
-  // included), not just `test/types`. `src` is pulled in transitively.
+  // The type gate checks ALL of `src` (regression coverage for the library
+  // itself) + `test/types` (the inference/declaration ratchet) + the import
+  // smoke test. The 161 runtime `*.test.ts` are deliberately NOT type-checked
+  // here: they carry zero type assertions (all live in `test/types`), they are
+  // already EXECUTED by `bun test` (`test:functionality`), and type-checking
+  // them was ~31% of this command's cost (4.18M -> 2.87M instantiations,
+  // ~8.6s -> ~5.3s) for only implicit "does the runtime test still use the API
+  // in a well-typed way" coverage. `src/**/*` (not transitive-only) guarantees
+  // every src file is checked even if no test imports it.
+  // Trade-off accepted 2026-06-17 (was `test/**/*` under the C2d ratchet). To
+  // restore the full-suite type-check, set include back to `["test/**/*"]`.
   // `test/cloudflare` stays out — it is its own wrangler project importing
   // generated `.mjs` artifacts and typechecks via `cf-typegen`.
-  "include": ["test/**/*"]
+  "include": ["src/**/*", "test/types/**/*", "test/type-system/import.ts"]
 }

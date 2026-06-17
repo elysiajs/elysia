@@ -862,23 +862,17 @@ export type InternalRoute = readonly [
 	handler: unknown,
 	instance: AnyElysia,
 	hook: AnyLocalHook | undefined,
-	// Chain node ref captured at registration time on the owning instance.
-	// `flattenChain(appHook)` materialises the route's compile-time hooks.
+	// Chain node ref captured at route registraion time
+	// `flattenChain(appHook)` materialises the route's compile-time hooks
 	appHook: ChainNode | undefined,
-	// Inheritance chain captured on the absorbing instance at `.use()`
-	// time. Set during `#use` mirroring (via tuple clone) so the same
-	// route can carry different chains in different parents.
-	// Undefined / absent = direct route: no absorbing-chain context.
+	// Inheritance chain captured on `.use()`
 	inheritedChain?: ChainNode
 ]
 
-// TODO: work in progress, do not touch
 export type ErrorHandler<
 	T extends ErrorDefinition[] = [],
 	in out Route extends RouteSchema = {},
-	in out Singleton extends SingletonBase = DefaultSingleton,
-	in out Ephemeral extends EphemeralType = DefaultEphemeral,
-	in out Volatile extends EphemeralType = DefaultEphemeral
+	in out Singleton extends SingletonBase = DefaultSingleton
 > = (
 	context: ErrorContext<
 		Route,

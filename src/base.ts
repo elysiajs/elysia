@@ -1965,10 +1965,12 @@ export class Elysia<
 		const Fn extends (
 			context: ErrorContext<
 				{},
-				{
-					store: Singleton['store']
-					decorator: Singleton['decorator']
-					derive: {}
+				Singleton & {
+					derive: Scope extends 'local'
+						? Partial<Ephemeral['derive'] & Volatile['derive']>
+						: Scope extends 'plugin'
+							? Ephemeral['derive'] & Partial<Volatile['derive']>
+							: Ephemeral['derive'] & Volatile['derive']
 				}
 			> & {
 				error: InstanceType<E>
@@ -2074,7 +2076,9 @@ export class Elysia<
 					...Volatile['error']
 				],
 				{},
-				Singleton
+				Singleton & {
+					derive: Partial<Ephemeral['derive'] & Volatile['derive']>
+				}
 			>
 		>
 	>(
@@ -2108,7 +2112,9 @@ export class Elysia<
 					...Volatile['error']
 				],
 				{},
-				Singleton
+				Singleton & {
+					derive: Ephemeral['derive'] & Partial<Volatile['derive']>
+				}
 			>
 		>
 	>(
@@ -2142,7 +2148,9 @@ export class Elysia<
 					...Volatile['error']
 				],
 				{},
-				Singleton
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+				}
 			>
 		>
 	>(
@@ -3065,161 +3073,6 @@ export class Elysia<
 		Routes & NewElysia['~Routes'],
 		Ephemeral,
 		Volatile
-	>
-
-	guard<
-		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<Input, Definitions['typebox'], BasePath>,
-			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>
-			>
-		> &
-			Metadata['schemas'] &
-			Ephemeral['schemas'] &
-			Volatile['schemas'],
-		const MacroContext extends {} extends Metadata['macroFn']
-			? {}
-			: MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
-					Definitions['typebox']
-				>,
-		const BeforeHandle extends MaybeArray<
-			OptionalHandler<Schema, Singleton>
-		>,
-		const AfterHandle extends MaybeArray<AfterHandler<Schema, Singleton>>,
-		const ErrorHandle extends MaybeArray<
-			ErrorHandler<Definitions['error'], Schema, Singleton>
-		>
-	>(
-		hook: GuardLocalHook<
-			Input,
-			// @ts-ignore
-			Schema & MacroContext,
-			Singleton & {
-				derive: Ephemeral['derive'] &
-					Volatile['derive'] &
-					// @ts-ignore
-					MacroContext['response']
-			},
-			keyof Metadata['parser'],
-			BeforeHandle,
-			AfterHandle,
-			ErrorHandle
-		> & { schema: 'standalone' }
-	): Elysia<
-		BasePath,
-		Scope,
-		Singleton,
-		Definitions,
-		Metadata,
-		Routes,
-		Ephemeral,
-		{
-			derive: Volatile['derive'] &
-				// @ts-ignore
-				MacroContext['resolve']
-			schema: Volatile['schema']
-			// Standalone input + response accumulate here; a route's own local
-			// response overrides this standalone response via the OVERRIDE
-			// semantics in `IntersectIfObjectSchema`.
-			schemas: Volatile['schemas'] &
-				UnwrapRoute<Input, Definitions['typebox']> &
-				// @ts-ignore
-				MacroContext
-			response: UnionResponseStatus<
-				Volatile['response'],
-				ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
-					ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
-					ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
-					// @ts-ignore
-					MacroContext['return']
-			>
-			error: Volatile['error']
-		}
-	>
-
-	guard<
-		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<Input, Definitions['typebox'], BasePath>,
-			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>
-			>
-		> &
-			Metadata['schemas'] &
-			Ephemeral['schemas'] &
-			Volatile['schemas'],
-		const MacroContext extends {} extends Metadata['macroFn']
-			? {}
-			: MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
-					Definitions['typebox']
-				>,
-		const BeforeHandle extends MaybeArray<
-			OptionalHandler<Schema, Singleton>
-		>,
-		const AfterHandle extends MaybeArray<AfterHandler<Schema, Singleton>>,
-		const ErrorHandle extends MaybeArray<
-			ErrorHandler<Definitions['error'], Schema, Singleton>
-		>
-	>(
-		hook: GuardLocalHook<
-			Input,
-			// @ts-ignore
-			Schema & MacroContext,
-			Singleton & {
-				derive: Ephemeral['derive'] &
-					Volatile['derive'] &
-					// @ts-ignore
-					MacroContext['response']
-			},
-			keyof Metadata['parser'],
-			BeforeHandle,
-			AfterHandle,
-			ErrorHandle,
-			'override'
-		>
-	): Elysia<
-		BasePath,
-		Scope,
-		Singleton,
-		Definitions,
-		Metadata,
-		Routes,
-		Ephemeral,
-		{
-			derive: Volatile['derive'] &
-				// @ts-ignore
-				MacroContext['resolve']
-			schema: {} extends Pick<Input, Extract<keyof Input, InputSchemaKey>>
-				? Volatile['schema']
-				: MergeSchema<
-						UnwrapRoute<Input, Definitions['typebox']>,
-						Volatile['schema']
-					>
-			// Standalone input + response accumulate here; a route's own local
-			// response overrides this standalone response via the OVERRIDE
-			// semantics in `IntersectIfObjectSchema`.
-			schemas: Volatile['schemas'] &
-				// @ts-ignore
-				MacroContext
-			response: UnionResponseStatus<
-				Volatile['response'],
-				ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
-					ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
-					ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
-					// @ts-ignore
-					MacroContext['return']
-			>
-			error: Volatile['error']
-		}
 	>
 
 	// `guard(hook, run)` is `group('', hook, run)`: a scope-bound hook plus a
