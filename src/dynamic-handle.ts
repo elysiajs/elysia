@@ -3,6 +3,7 @@ import type { Context } from './context'
 import { parseCookie } from './cookies'
 import {
 	ElysiaCustomStatusResponse,
+	ERROR_CODE,
 	type ElysiaErrors,
 	NotFoundError,
 	status,
@@ -895,7 +896,14 @@ export const createDynamicErrorHandler = (app: AnyElysia) => {
 		},
 		error: ElysiaErrors
 	) => {
-		const errorContext = Object.assign(context, { error, code: error.code })
+		const registeredCode = (error as Error & { [ERROR_CODE]?: string })[
+			ERROR_CODE
+		]
+
+		const errorContext = Object.assign(context, {
+			error,
+			code: registeredCode ?? error.code
+		})
 		errorContext.set = context.set
 
 		if (
