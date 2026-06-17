@@ -1034,6 +1034,23 @@ type MergeFlattenMacroResponse<A, B> = {
 			? B[K]
 			: never
 }
+
+type UnionKeys<T> = T extends unknown ? keyof T : never
+
+type UnionValue<T, K extends PropertyKey> = T extends unknown
+	? K extends keyof T
+		? T[K]
+		: never
+	: never
+
+type MergeObjectUnion<T> = [T] extends [object]
+	? Prettify<
+			{
+				[K in UnionKeys<T>]: UnionValue<T, K>
+			}
+		>
+	: T
+
 type UnionMacroContext<A> = UnionToIntersect<{
 	[K in Exclude<keyof A, 'return'>]: A[K]
 }> & {
@@ -1054,7 +1071,12 @@ export type MacroToContext<
 		R
 	> extends infer A
 		? {
-				[K in Exclude<keyof A, 'return'>]: UnionToIntersect<A[K]>
+				[K in Exclude<
+					keyof A,
+					'return'
+				>]: K extends 'resolve'
+					? MergeObjectUnion<A[K]>
+					: UnionToIntersect<A[K]>
 			} & Prettify<{
 				// @ts-ignore
 				return: FlattenMacroResponse<A['return']>
