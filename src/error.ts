@@ -124,6 +124,13 @@ export class InternalServerError extends Error {
 	constructor(message?: string) {
 		super(message ?? 'INTERNAL_SERVER_ERROR')
 	}
+
+	toResponse(headers?: Record<string, any>) {
+		return Response.json(
+			{ name: this.name, message: this.message },
+			{ status: 500, headers }
+		)
+	}
 }
 
 export class NotFoundError extends Error {
@@ -132,6 +139,13 @@ export class NotFoundError extends Error {
 
 	constructor(message?: string) {
 		super(message ?? 'NOT_FOUND')
+	}
+
+	toResponse(headers?: Record<string, any>) {
+		return Response.json(
+			{ name: this.name, message: this.message },
+			{ status: 404, headers }
+		)
 	}
 }
 
@@ -143,6 +157,13 @@ export class ParseError extends Error {
 		super('Bad Request', {
 			cause
 		})
+	}
+
+	toResponse(headers?: Record<string, any>) {
+		return Response.json(
+			{ name: this.name, message: this.message, cause: this.cause },
+			{ status: 400, headers }
+		)
 	}
 }
 
@@ -550,13 +571,16 @@ export class ValidationError extends Error {
 	}
 
 	toResponse(headers?: Record<string, any>) {
-		return new Response(this.message, {
-			status: 400,
-			headers: {
-				...headers,
-				'content-type': 'application/json'
+		return Response.json(
+			JSON.parse(this.message),
+			{
+				status: 400,
+				headers: {
+					...headers,
+					'content-type': 'application/json'
+				}
 			}
-		})
+		)
 	}
 
 	/**
