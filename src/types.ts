@@ -1230,11 +1230,7 @@ type OptionalField = { '~optional': true }
 type StaticCyclic<
 	T extends TypeBoxSchema,
 	Definitions extends Record<string, AnySchema>
-> = {} extends Definitions
-	? StaticDecode<T>
-	: Definitions extends infer Defs extends Record<string, TypeBoxSchema>
-		? StaticDecode<T, Defs>
-		: StaticDecode<T>
+> = {} extends Definitions ? StaticDecode<T> : StaticDecode<T, Definitions>
 
 export type UnwrapSchema<
 	Schema extends AnySchema | string | undefined,
