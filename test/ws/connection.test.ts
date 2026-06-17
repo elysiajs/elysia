@@ -34,8 +34,10 @@ describe('WebSocket connection', () => {
 		ws.send('close me!')
 
 		const { wasClean, code } = await wsClose(ws)
-		expect(wasClean).toBe(false)
-		expect(code).toBe(1000) // going away -> https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.1
+		// A server-initiated ws.close() completes the closing handshake, so the
+		// close is clean per the WebSocket spec (matches Node and browsers).
+		expect(wasClean).toBe(true)
+		expect(code).toBe(1000) // normal closure -> https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.1
 
 		app.stop()
 	})
