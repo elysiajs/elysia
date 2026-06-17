@@ -125,6 +125,53 @@ import { expectTypeOf } from 'expect-type'
 	)
 }
 
+// `StaticCyclic` threads registered models as the resolution context. These pins
+// lock that a `t.Ref('model')` still resolves once models are registered — the
+// soundness boundary for passing `Defs` directly (vs the old `TCyclic` wrapper).
+
+// a model that references ANOTHER model (cross-model ref), via string ref
+{
+	const Model = new Elysia().model({
+		inner: t.Object({ v: t.String() }),
+		outer: t.Object({ a: t.Number(), child: t.Ref('inner') })
+	})
+
+	Model.post('/', { body: 'outer' }, ({ body }) => {
+		expectTypeOf<typeof body>().toEqualTypeOf<{ a: number; child: { v: string } }>()
+	})
+}
+
+// recursive / self-referencing model resolves (structurally) without blowing up
+{
+	const Model = new Elysia().model({
+		category: t.Object({
+			name: t.String(),
+			parent: t.Optional(t.Ref('category'))
+		})
+	})
+
+	Model.post('/', { body: 'category' }, ({ body }) => {
+		expectTypeOf<typeof body extends { name: string } ? true : false>().toEqualTypeOf<true>()
+		expectTypeOf<
+			undefined extends (typeof body)['parent'] ? true : false
+		>().toEqualTypeOf<true>()
+	})
+}
+
+// `t.Module` — a self-contained cyclic namespace used as a route schema
+{
+	const Module = t.Module({
+		User: t.Object({ name: t.String(), friend: t.Optional(t.Ref('User')) })
+	})
+
+	new Elysia().model({ z: t.Number() }).post('/', { body: Module.User }, ({ body }) => {
+		expectTypeOf<typeof body extends { name: string } ? true : false>().toEqualTypeOf<true>()
+		expectTypeOf<
+			undefined extends (typeof body)['friend'] ? true : false
+		>().toEqualTypeOf<true>()
+	})
+}
+
 // Transform Tuple<ElysiaFile> to Files[]
 {
 	new Elysia().get(

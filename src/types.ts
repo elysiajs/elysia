@@ -11,7 +11,6 @@ import type {
 	Static,
 	StaticDecode,
 	StaticEncode,
-	TCyclic,
 	TIntersect,
 	TObject,
 	TSchema
@@ -1234,14 +1233,7 @@ type StaticCyclic<
 > = {} extends Definitions
 	? StaticDecode<T>
 	: Definitions extends infer Defs extends Record<string, TypeBoxSchema>
-		? StaticDecode<
-				TCyclic<
-					Defs & {
-						$elysia: T
-					},
-					'$elysia'
-				>
-			>
+		? StaticDecode<T, Defs>
 		: StaticDecode<T>
 
 export type UnwrapSchema<
