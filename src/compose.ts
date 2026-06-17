@@ -2082,6 +2082,8 @@ export const composeHandler = ({
 					total: hooks.mapResponse?.length
 				})
 
+				fnLiteral += `if(er!==undefined){`
+
 				for (let i = 0; i < hooks.mapResponse.length; i++) {
 					const mapResponse = hooks.mapResponse[i]
 
@@ -2097,6 +2099,7 @@ export const composeHandler = ({
 
 					endUnit()
 				}
+				fnLiteral += `}`
 				mapResponseReporter.resolve()
 			}
 

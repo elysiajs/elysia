@@ -125,6 +125,73 @@ describe('error', () => {
 	})
 
 	it.each([true, false])(
+		'continue error handler chain when an earlier handler returns undefined with mapResponse and aot: %p',
+		async (aot) => {
+			const events: string[] = []
+
+			const logger = new Elysia().onError({ as: 'global' }, ({ error }) => {
+				events.push(
+					`logger:${error instanceof Error ? error.message : String(error)}`
+				)
+			})
+
+			const responseWrapper = new Elysia()
+				.onError({ as: 'global' }, ({ error, set }) => {
+					events.push('response-wrapper:onError')
+					set.status = 200
+
+					return Response.json({
+						code: 403,
+						msg:
+							error instanceof Error
+								? error.message
+								: 'Forbidden',
+						data: null
+					})
+				})
+				.mapResponse({ as: 'global' }, ({ response, set }) => {
+					events.push(
+						`response-wrapper:mapResponse:${response instanceof Response}`
+					)
+
+					if (response instanceof Response) return response
+
+					set.status = 200
+
+					return Response.json({
+						code: 200,
+						msg: 'success',
+						data: response ?? null
+					})
+				})
+
+			const guard = new Elysia().onBeforeHandle({ as: 'scoped' }, () => {
+				throw new Error('denied by nested guard')
+			})
+
+			const api = new Elysia({ prefix: '/api' }).group('', (app) =>
+				app.use(guard).post('/guarded', () => ({ ok: true }))
+			)
+
+			const app = new Elysia({ aot })
+				.use(logger)
+				.use(responseWrapper)
+				.use(api)
+
+			const response = await app.handle(post('/api/guarded', {}))
+
+			expect(response.status).toBe(200)
+			expect(await response.json()).toEqual({
+				code: 403,
+				msg: 'denied by nested guard',
+				data: null
+			})
+			expect(events).toContain('logger:denied by nested guard')
+			expect(events).toContain('response-wrapper:onError')
+		}
+	)
+
+	it.each([true, false])(
 		'return correct number status on error function with aot: %p',
 		async (aot) => {
 			const app = new Elysia({ aot }).get('/', ({ status }) =>
