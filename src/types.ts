@@ -2192,6 +2192,36 @@ export type ValueToResponseSchema<Value> = ExtractErrorFromHandle<Value> &
 				: { 200: R200 }
 		: {})
 
+/**
+ * Like ValueToResponseSchema but for onError handlers.
+ * Maps plain (non-ElysiaCustomStatusResponse) returns to error status codes
+ * instead of 200, matching runtime behavior where error status is preserved.
+ */
+type ExtractPlainErrorReturn<T> = Exclude<
+	T extends AnyElysiaCustomStatusResponse
+		? Exclude<T, AnyElysiaCustomStatusResponse>
+		: T,
+	undefined
+>
+
+/**
+ * Maps a plain (non-`ElysiaCustomStatusResponse`) return value from an `onError`
+ * handler to a set of HTTP error status codes in the inferred response schema.
+ *
+ * **Limitation**: plain returns are typed against the most common Elysia built-in
+ * error codes (400, 404, 422, 500). Other codes (401, 403, 405, 429, 502, 503,
+ * etc.) are not statically knowable from the return type alone and will not appear
+ * in the schema. Use an explicit `status(N, value)` return to capture any specific
+ * status code accurately.
+ */
+export type ErrorValueToResponseSchema<Value> =
+	ExtractErrorFromHandle<Value> &
+		(ExtractPlainErrorReturn<Value> extends infer ErrVal
+			? IsNever<ErrVal> extends true
+				? {}
+				: { 400: ErrVal; 404: ErrVal; 422: ErrVal; 500: ErrVal }
+			: {})
+
 export type ValueOrFunctionToResponseSchema<T> = T extends (
 	...a: any
 ) => MaybePromise<infer R>
@@ -2202,6 +2232,13 @@ export type ElysiaHandlerToResponseSchema<in out Handle extends Function> =
 	Prettify<
 		Handle extends (...a: any) => MaybePromise<infer R>
 			? ValueToResponseSchema<Exclude<R, undefined>>
+			: {}
+	>
+
+export type ErrorHandlerToResponseSchema<in out Handle extends Function> =
+	Prettify<
+		Handle extends (...a: any) => MaybePromise<infer R>
+			? ErrorValueToResponseSchema<Exclude<R, undefined>>
 			: {}
 	>
 
@@ -2217,6 +2254,24 @@ export type ElysiaHandlerToResponseSchemas<
 		>
 	: Prettify<Carry>
 
+// Mirrors `ElysiaHandlerToResponseSchemas`, differing only in delegating to
+// `ErrorHandlerToResponseSchema` instead of `ElysiaHandlerToResponseSchema`.
+// A shared generic recursive type is not used because the `in out` variance
+// annotation on the `Handle` parameter causes TypeScript to reject the
+// conditional narrowing inside the recursive branch — the `// @ts-ignore`
+// suppressions below are intentional and match the established pattern.
+export type ErrorHandlerToResponseSchemas<
+	Handle extends Function[],
+	Carry extends PossibleResponse = {}
+> = Handle extends [infer Current, ...infer Rest]
+	? ErrorHandlerToResponseSchemas<
+			// @ts-ignore Trust me bro
+			Rest,
+			// @ts-ignore trust me bro
+			UnionResponseStatus<ErrorHandlerToResponseSchema<Current>, Carry>
+		>
+	: Prettify<Carry>
+
 export type ElysiaHandlerToResponseSchemaAmbiguous<
 	Schemas extends MaybeArray<Function>
 > =
@@ -2226,6 +2281,17 @@ export type ElysiaHandlerToResponseSchemaAmbiguous<
 			? ElysiaHandlerToResponseSchema<Schemas>
 			: Schemas extends Function[]
 				? ElysiaHandlerToResponseSchemas<Schemas>
+				: {}
+
+export type ErrorHandlerToResponseSchemaAmbiguous<
+	Schemas extends MaybeArray<Function>
+> =
+	MaybeArray<(...a: any) => any> extends Schemas
+		? {}
+		: Schemas extends Function
+			? ErrorHandlerToResponseSchema<Schemas>
+			: Schemas extends Function[]
+				? ErrorHandlerToResponseSchemas<Schemas>
 				: {}
 
 type ReconcileStatus<
