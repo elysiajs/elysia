@@ -483,6 +483,36 @@ export function mergeHeaders(
 	return headers
 }
 
+// Mutate `target` Headers in place with non-conflicting entries from `source`.
+// Used on Bun against a *clone* of the handler's Response so we can preserve
+// the body's identity (e.g. Bun.file) while still merging set.headers without
+// polluting the original Response. Rewrapping the response via
+// `new Response(response.body, ...)` reads the body as a generic ReadableStream
+// and severs the Bun.file association, which is what Bun.serve relies on for
+// automatic Range-request handling of `new Response(Bun.file())` — the response
+// shape `@elysiajs/static` returns.
+function mergeHeadersInPlace(
+	target: Headers,
+	source: Context['set']['headers']
+) {
+	if (source instanceof Headers) {
+		for (const key of source.keys()) {
+			if (key === 'set-cookie') {
+				if (target.has('set-cookie')) continue
+				for (const cookie of source.getSetCookie())
+					target.append('set-cookie', cookie)
+			} else if (!target.has(key))
+				target.set(key, source.get(key) ?? '')
+		}
+	} else {
+		for (const key in source)
+			if (key === 'set-cookie')
+				target.append(key, source[key] as any)
+			else if (!target.has(key))
+				target.set(key, source[key] as any)
+	}
+}
+
 export function mergeStatus(
 	responseStatus: number,
 	setStatus: Context['set']['status']
@@ -498,9 +528,41 @@ export const createResponseHandler = (handler: CreateHandlerParameter) => {
 	const handleStream = createStreamHandler(handler)
 
 	return (response: Response, set: Context['set'], request?: Request) => {
+		const mergedStatus = mergeStatus(response.status, set.status)
+
+		// On Bun, when status is unchanged, clone the handler's Response and
+		// merge set.headers into the clone. Cloning preserves body identity
+		// (Bun.file stays Bun.file), which is what Bun.serve relies on for
+		// automatic Range-request handling of `new Response(Bun.file())` —
+		// the shape `@elysiajs/static` returns. Rewrapping via
+		// `new Response(response.body, ...)` would read the body as a plain
+		// ReadableStream and sever that association, breaking 206 / Accept-Ranges
+		// for every static asset on Bun (visible mainly as iOS Safari refusing
+		// to play <video>; Apple requires byte-range support).
+		//
+		// Mutating the handler's Response directly would pollute it across
+		// requests when the handler returns a cached/shared Response, so we
+		// always clone first. Header-merge / streaming-decision both happen
+		// against the clone's already-merged headers, so set.headers values
+		// (e.g. an explicit transfer-encoding) participate in the decision.
+		// On Node / Cloudflare Workers response.headers is immutable, so we
+		// fall through to the rewrap path.
+		if (isBun && mergedStatus === response.status) {
+			const cloned = response.clone()
+			mergeHeadersInPlace(cloned.headers, set.headers)
+
+			const needsStreamHandling =
+				!cloned.headers.has('content-length') &&
+				cloned.headers.get('transfer-encoding') === 'chunked'
+
+			if (!needsStreamHandling) return cloned
+			// Streaming required — fall through to the rewrap path. The clone
+			// is discarded; the rewrap path reads response.body directly.
+		}
+
 		const newResponse = new Response(response.body, {
 			headers: mergeHeaders(response.headers, set.headers),
-			status: mergeStatus(response.status, set.status)
+			status: mergedStatus
 		})
 
 		if (
