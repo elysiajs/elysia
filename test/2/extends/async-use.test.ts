@@ -83,7 +83,7 @@ describe('async use', () => {
 			.handle('/sync')
 			.then((r) => [r.status, r.text()] as const)
 		expect(syncBefore[0]).toBe(200)
-		expect(await syncBefore[1]).toBe('sync')
+		await expect(syncBefore[1]).resolves.toBe('sync')
 
 		const asyncBefore = await app.handle('/async').then((r) => r.status)
 		expect(asyncBefore).toBe(404)

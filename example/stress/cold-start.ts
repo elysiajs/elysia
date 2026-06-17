@@ -5,12 +5,20 @@ const makeApp = () =>
 	new Elysia()
 		.get('/', () => 'ok')
 		.get('/user/:id', ({ params: { id } }) => id)
-		.post('/json', ({ body }) => body, {
-			body: t.Object({ name: t.String(), age: t.Number() })
-		})
-		.get('/search', ({ query }) => query, {
-			query: t.Object({ page: t.Number() })
-		})
+		.post(
+			'/json',
+			{
+				body: t.Object({ name: t.String(), age: t.Number() })
+			},
+			({ body }) => body
+		)
+		.get(
+			'/search',
+			{
+				query: t.Object({ page: t.Number() })
+			},
+			({ query }) => query
+		)
 
 const N = 5_000
 const times = new Array<number>(N)

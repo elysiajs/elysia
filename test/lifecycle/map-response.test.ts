@@ -15,11 +15,15 @@ describe('Map Response', () => {
 	})
 
 	it('work local', async () => {
-		const app = new Elysia().get('/', () => 'Hutao', {
-			mapResponse() {
-				return new Response('A')
-			}
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				mapResponse() {
+					return new Response('A')
+				}
+			},
+			() => 'Hutao'
+		)
 
 		const res = await app.handle(req('/')).then((x) => x.text())
 
@@ -29,11 +33,6 @@ describe('Map Response', () => {
 	it('set header', async () => {
 		const app = new Elysia().get(
 			'/',
-			({ set }) => {
-				set.headers['X-Powered-By'] = 'Elysia'
-
-				return 'a'
-			},
 			{
 				mapResponse() {
 					return new Response('A', {
@@ -42,6 +41,11 @@ describe('Map Response', () => {
 						}
 					})
 				}
+			},
+			({ set }) => {
+				set.headers['X-Powered-By'] = 'Elysia'
+
+				return 'a'
 			}
 		)
 
@@ -73,17 +77,21 @@ describe('Map Response', () => {
 	})
 
 	it('map response only once', async () => {
-		const app = new Elysia().get('/', () => 'Hutao', {
-			mapResponse: [
-				() => {},
-				() => {
-					return new Response('A')
-				},
-				() => {
-					return new Response('B')
-				}
-			]
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				mapResponse: [
+					() => {},
+					() => {
+						return new Response('A')
+					},
+					() => {
+						return new Response('B')
+					}
+				]
+			},
+			() => 'Hutao'
+		)
 
 		const res = await app.handle(req('/')).then((x) => x.text())
 
@@ -91,12 +99,16 @@ describe('Map Response', () => {
 	})
 
 	it('inherit response', async () => {
-		const app = new Elysia().get('/', () => 'Hu', {
-			mapResponse({ responseValue }) {
-				if (typeof responseValue === 'string')
-					return new Response(responseValue + 'tao')
-			}
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				mapResponse({ responseValue }) {
+					if (typeof responseValue === 'string')
+						return new Response(responseValue + 'tao')
+				}
+			},
+			() => 'Hu'
+		)
 
 		const res = await app.handle(req('/')).then((x) => x.text())
 
@@ -104,18 +116,22 @@ describe('Map Response', () => {
 	})
 
 	it('inherit set', async () => {
-		const app = new Elysia().get('/', () => 'Hu', {
-			mapResponse({ responseValue, set }) {
-				set.headers['X-Powered-By'] = 'Elysia'
+		const app = new Elysia().get(
+			'/',
+			{
+				mapResponse({ responseValue, set }) {
+					set.headers['X-Powered-By'] = 'Elysia'
 
-				if (typeof responseValue === 'string')
-					return new Response(responseValue + 'tao', {
-						headers: {
-							'X-Series': 'Genshin'
-						}
-					})
-			}
-		})
+					if (typeof responseValue === 'string')
+						return new Response(responseValue + 'tao', {
+							headers: {
+								'X-Series': 'Genshin'
+							}
+						})
+				}
+			},
+			() => 'Hu'
+		)
 
 		const res = await app.handle(req('/')).then((x) => x.headers)
 

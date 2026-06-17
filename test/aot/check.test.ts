@@ -27,9 +27,13 @@ const captureManifest = (build: () => any): ValidatorManifest => {
 }
 
 const bodyApp = () =>
-	new Elysia().post('/body', ({ body }) => body, {
-		body: t.Object({ hello: t.String() })
-	})
+	new Elysia().post(
+		'/body',
+		{
+			body: t.Object({ hello: t.String() })
+		},
+		({ body }) => body
+	)
 
 // Each test starts from a clean registry + validator cache (a real runtime boots
 // with an empty cache; capture in the same process would otherwise pollute it).
@@ -48,9 +52,13 @@ describe('AOT check freeze (TypeBox check, empty externals)', () => {
 
 	it('also freezes a coerced query (externals reconstructed)', () => {
 		const m = captureManifest(() =>
-			new Elysia().get('/q', ({ query }) => query, {
-				query: t.Object({ id: t.Numeric() })
-			})
+			new Elysia().get(
+				'/q',
+				{
+					query: t.Object({ id: t.Numeric() })
+				},
+				({ query }) => query
+			)
 		)
 		// externals reconstructable + verified → frozen (was excluded in phase 1)
 		expect(m.GET?.['/q']?.query).toBeDefined()
@@ -74,7 +82,7 @@ describe('AOT check freeze (TypeBox check, empty externals)', () => {
 
 		const ok = await app.handle(post('/body', { hello: 'world' }))
 		expect(ok.status).toBe(200)
-		expect(await ok.json()).toEqual({ hello: 'world' })
+		await expect(ok.json()).resolves.toEqual({ hello: 'world' })
 
 		const bad = await app.handle(post('/body', { hello: 123 }))
 		expect(bad.status).toBe(422) // frozen check rejects wrong type
@@ -101,7 +109,7 @@ describe('AOT check freeze (TypeBox check, empty externals)', () => {
 		const app = bodyApp()
 		const ok = await app.handle(post('/body', { hello: 'x' }))
 		expect(ok.status).toBe(200)
-		expect(await ok.json()).toEqual({ hello: 'x' })
+		await expect(ok.json()).resolves.toEqual({ hello: 'x' })
 	})
 })
 
@@ -118,24 +126,48 @@ describe('AOT freeze coverage (guards silent JIT fallback on lib upgrade)', () =
 		beginValidatorCapture()
 		;(
 			new Elysia()
-				.post('/obj', ({ body }: any) => body, {
-					body: t.Object({ s: t.String(), n: t.Number() })
-				})
-				.post('/arr', ({ body }: any) => body, {
-					body: t.Object({ xs: t.Array(t.String()) })
-				})
-				.get('/codec', ({ query }: any) => query, {
-					query: t.Object({ n: t.Numeric() })
-				})
-				.post('/format', ({ body }: any) => body, {
-					body: t.Object({ email: t.String({ format: 'email' }) })
-				})
-				.post('/nested', ({ body }: any) => body, {
-					body: t.Object({ meta: t.Object({ x: t.Number() }) })
-				})
-				.post('/optional', ({ body }: any) => body, {
-					body: t.Object({ o: t.Optional(t.String()) })
-				}) as any
+				.post(
+					'/obj',
+					{
+						body: t.Object({ s: t.String(), n: t.Number() })
+					},
+					({ body }: any) => body
+				)
+				.post(
+					'/arr',
+					{
+						body: t.Object({ xs: t.Array(t.String()) })
+					},
+					({ body }: any) => body
+				)
+				.get(
+					'/codec',
+					{
+						query: t.Object({ n: t.Numeric() })
+					},
+					({ query }: any) => query
+				)
+				.post(
+					'/format',
+					{
+						body: t.Object({ email: t.String({ format: 'email' }) })
+					},
+					({ body }: any) => body
+				)
+				.post(
+					'/nested',
+					{
+						body: t.Object({ meta: t.Object({ x: t.Number() }) })
+					},
+					({ body }: any) => body
+				)
+				.post(
+					'/optional',
+					{
+						body: t.Object({ o: t.Optional(t.String()) })
+					},
+					({ body }: any) => body
+				) as any
 		).compile()
 		const captured = endValidatorCapture()
 

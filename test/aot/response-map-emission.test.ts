@@ -56,20 +56,24 @@ describe('F19: body route no longer materializes all headers for content-type', 
 	it('POST echo body still parses correctly', async () => {
 		const app = new Elysia().post('/echo', ({ body }) => body)
 		const res = await app.handle(post('/echo', { name: 'saltyaom' }))
-		expect(await res.json()).toEqual({ name: 'saltyaom' })
+		await expect(res.json()).resolves.toEqual({ name: 'saltyaom' })
 	})
 
 	it('POST with body schema reads content-type directly and validates', async () => {
-		const app = new Elysia().post('/echo', ({ body }) => body, {
-			body: t.Object({ name: t.String() })
-		})
+		const app = new Elysia().post(
+			'/echo',
+			{
+				body: t.Object({ name: t.String() })
+			},
+			({ body }) => body
+		)
 
 		const { source } = compileRoute(app)
 		expect(source).toContain("c.request.headers.get('content-type')")
 		expect(source).not.toContain('c.headers=')
 
 		const ok = await app.handle(post('/echo', { name: 'x' }))
-		expect(await ok.json()).toEqual({ name: 'x' })
+		await expect(ok.json()).resolves.toEqual({ name: 'x' })
 
 		const bad = await app.handle(post('/echo', { name: 1 }))
 		expect(bad.status).toBe(422)
@@ -92,17 +96,21 @@ describe('F19: body route no longer materializes all headers for content-type', 
 		const res = await app.handle(
 			req('/h', { method: 'POST', headers: { 'x-foo': 'bar' } })
 		)
-		expect(await res.text()).toBe('bar')
+		await expect(res.text()).resolves.toBe('bar')
 	})
 
 	// A custom parser reading ctx.headers must still materialize (sucrose sets
 	// inference.headers from the parser fn source)
 	it('parser reading ctx.headers still materializes headers', () => {
-		const app = new Elysia().post('/p', ({ body }) => body, {
-			parse(c) {
-				return (c.headers as any)['x-custom'] ? 'hi' : undefined
-			}
-		})
+		const app = new Elysia().post(
+			'/p',
+			{
+				parse(c) {
+					return (c.headers as any)['x-custom'] ? 'hi' : undefined
+				}
+			},
+			({ body }) => body
+		)
 
 		const { source } = compileRoute(app)
 		expect(source).toContain('c.headers=')
@@ -111,9 +119,13 @@ describe('F19: body route no longer materializes all headers for content-type', 
 
 	// A headers SCHEMA must still materialize (vali.headers)
 	it('headers schema still materializes headers', () => {
-		const app = new Elysia().post('/hs', ({ body }) => body, {
-			headers: t.Object({ 'x-foo': t.String() })
-		})
+		const app = new Elysia().post(
+			'/hs',
+			{
+				headers: t.Object({ 'x-foo': t.String() })
+			},
+			({ body }) => body
+		)
 
 		const { source } = compileRoute(app)
 		expect(source).toContain('c.headers=')
@@ -123,7 +135,10 @@ describe('F19: body route no longer materializes all headers for content-type', 
 
 describe('F9: hasHeaders is not a hasSet term', () => {
 	it('GET reading c.headers uses the compact rc path', async () => {
-		const app = new Elysia().get('/h', ({ headers }) => headers['x-foo'] ?? '')
+		const app = new Elysia().get(
+			'/h',
+			({ headers }) => headers['x-foo'] ?? ''
+		)
 
 		const { source } = compileRoute(app)
 		// reads headers → materialized
@@ -132,10 +147,8 @@ describe('F9: hasHeaders is not a hasSet term', () => {
 		expect(source).toContain('rc(_r,c.request)')
 		expect(source).not.toContain('c.set')
 
-		const res = await app.handle(
-			req('/h', { headers: { 'x-foo': 'baz' } })
-		)
-		expect(await res.text()).toBe('baz')
+		const res = await app.handle(req('/h', { headers: { 'x-foo': 'baz' } }))
+		await expect(res.text()).resolves.toBe('baz')
 	})
 
 	it('a route that writes c.set stays set-aware', async () => {
@@ -201,7 +214,9 @@ describe('F9: hasHeaders is not a hasSet term', () => {
 		)
 
 		expect(compileRoute(writes).source).toContain('c.set')
-		expect(await writes.handle(req('/w')).then((r) => r.status)).toBe(418)
+		await expect(
+			writes.handle(req('/w')).then((r) => r.status)
+		).resolves.toBe(418)
 		expect(compileRoute(reads).source).toContain('rc(_r,c.request)')
 	})
 })

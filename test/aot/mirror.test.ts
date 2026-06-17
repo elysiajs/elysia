@@ -108,9 +108,13 @@ describe('AOT mirror freeze (exact-mirror Clean, codec family)', () => {
 
 	it('end-to-end: frozen codec mirror normalizes + coerces on a real route', async () => {
 		const build = () =>
-			new Elysia().get('/q', ({ query }) => query, {
-				query: t.Object({ page: t.Numeric(), limit: t.Numeric() })
-			})
+			new Elysia().get(
+				'/q',
+				{
+					query: t.Object({ page: t.Numeric(), limit: t.Numeric() })
+				},
+				({ query }) => query
+			)
 		beginValidatorCapture()
 		build().compile()
 		const m = materialise(endValidatorCapture())
@@ -121,7 +125,7 @@ describe('AOT mirror freeze (exact-mirror Clean, codec family)', () => {
 		app.compile()
 		const ok = await app.handle(req('/q?page=3&limit=10&extra=strip'))
 		expect(ok.status).toBe(200)
-		expect(await ok.json()).toEqual({ page: 3, limit: 10 }) // coerced + extra stripped
+		await expect(ok.json()).resolves.toEqual({ page: 3, limit: 10 }) // coerced + extra stripped
 		const bad = await app.handle(req('/q?page=abc&limit=10'))
 		expect(bad.status).toBe(422)
 	})

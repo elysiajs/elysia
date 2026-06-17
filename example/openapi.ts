@@ -62,14 +62,14 @@ export const app = new Elysia()
 	})
 	.post(
 		'/',
-		({ status }) =>
-			Math.random() < 0.05 ? status(409, 'Conflict') : 'Type Soundness',
 		{
 			auth: true,
 			response: {
 				411: t.Literal('Length Required')
 			}
-		}
+		},
+		({ status }) =>
+			Math.random() < 0.05 ? status(409, 'Conflict') : 'Type Soundness'
 	)
 	.listen(3000)
 

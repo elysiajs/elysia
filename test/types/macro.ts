@@ -295,9 +295,13 @@ import { expectTypeOf } from 'expect-type'
 				}
 			})
 		})
-		.get('/', ({ user }) => user, {
-			user: true
-		})
+		.get(
+			'/',
+			{
+				user: true
+			},
+			({ user }) => user
+		)
 }
 
 // Handle shorthand function macro
@@ -314,20 +318,20 @@ import { expectTypeOf } from 'expect-type'
 		})
 		.get(
 			'/',
-			({ user }) => {
-				expectTypeOf(user).toEqualTypeOf<{ name: string }>()
-			},
 			{
 				user: true
+			},
+			({ user }) => {
+				expectTypeOf(user).toEqualTypeOf<{ name: string }>()
 			}
 		)
 		.get(
 			'/no',
-			(context) => {
-				expectTypeOf(context).not.toHaveProperty('user')
-			},
 			{
 				user: false
+			},
+			(context) => {
+				expectTypeOf(context).not.toHaveProperty('user')
 			}
 		)
 }
@@ -346,9 +350,13 @@ import { expectTypeOf } from 'expect-type'
 				]
 			}
 		})
-		.get('/', ({ user }) => user, {
-			auth: true
-		})
+		.get(
+			'/',
+			{
+				auth: true
+			},
+			({ user }) => user
+		)
 }
 
 // retrieve resolve conditionally
@@ -366,13 +374,13 @@ const app = new Elysia()
 	})
 	.get(
 		'/',
+		{
+			user: true
+		},
 		({ user, status }) => {
 			if (!user) return status(401)
 
 			return { hello: 'hanabi' }
-		},
-		{
-			user: true
 		}
 	)
 
@@ -399,13 +407,9 @@ const app = new Elysia()
 				}
 			}
 		})
-		.post(
-			'/',
-			({ body }) => {
-				expectTypeOf(body).toEqualTypeOf<{ b: 'B'; a: 'A' }>()
-			},
-			{ b: true }
-		)
+		.post('/', { b: true }, ({ body }) => {
+			expectTypeOf(body).toEqualTypeOf<{ b: 'B'; a: 'A' }>()
+		})
 }
 
 // handle function
@@ -418,19 +422,23 @@ const app = new Elysia()
 		})
 		.get(
 			'/',
+			{
+				a: 'a'
+			},
 			({ a }) => {
 				expectTypeOf(a).toEqualTypeOf<'a'>()
 
 				return a
-			},
-			{
-				a: 'a'
 			}
 		)
-		.get('/', 'ok', {
-			// @ts-expect-error
-			a: 'b'
-		})
+		.get(
+			'/',
+			{
+				// @ts-expect-error
+				a: 'b'
+			},
+			'ok'
+		)
 		.listen(3000)
 }
 
@@ -444,15 +452,23 @@ const app = new Elysia()
 				beforeHandle() {}
 			})
 		})
-		.get('/ok', 'ok', { level: { min: 1 } })
-		.get('/bad-bool', 'ok', {
-			// @ts-expect-error boolean is not assignable to { min: number }
-			level: true
-		})
-		.get('/bad-shape', 'ok', {
-			// @ts-expect-error wrong option shape
-			level: { min: 'high' }
-		})
+		.get('/ok', { level: { min: 1 } }, 'ok')
+		.get(
+			'/bad-bool',
+			{
+				// @ts-expect-error boolean is not assignable to { min: number }
+				level: true
+			},
+			'ok'
+		)
+		.get(
+			'/bad-shape',
+			{
+				// @ts-expect-error wrong option shape
+				level: { min: 'high' }
+			},
+			'ok'
+		)
 }
 
 // A macro's declared `response` types the CONSUMING route's contract; the
@@ -487,12 +503,8 @@ const app = new Elysia()
 				auth: true
 			}
 		})
-		.get(
-			'/',
-			(ctx) => {
-				expectTypeOf(ctx.userId).toEqualTypeOf<number>()
-				return ctx.userId
-			},
-			{ admin: true }
-		)
+		.get('/', { admin: true }, (ctx) => {
+			expectTypeOf(ctx.userId).toEqualTypeOf<number>()
+			return ctx.userId
+		})
 }

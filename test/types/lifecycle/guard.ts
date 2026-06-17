@@ -26,9 +26,13 @@ import { expectTypeOf } from 'expect-type'
 {
 	new Elysia()
 		.guard({ response: t.Object({ name: t.Literal('cantarella') }) })
-		.post('/', () => ({ id: 1 }), {
-			response: t.Object({ id: t.Number() })
-		})
+		.post(
+			'/',
+			{
+				response: t.Object({ id: t.Number() })
+			},
+			() => ({ id: 1 })
+		)
 }
 
 // ? without a route-local response, the override guard's response IS the
@@ -53,21 +57,23 @@ import { expectTypeOf } from 'expect-type'
 			schema: 'standalone',
 			response: t.Object({ name: t.Literal('cantarella') })
 		})
-		// @ts-expect-error handler must also satisfy the standalone guard response
-		.post('/', () => ({ id: 1 }), {
-			response: t.Object({ id: t.Number() })
-		})
+		.post(
+			'/',
+			{
+				response: t.Object({ id: t.Number() })
+			},
+			// @ts-expect-error handler must also satisfy the standalone guard response
+			() => ({ id: 1 })
+		)
 }
 
 // ? guard(hook, run) sandboxed builder sees the schema; routes merge back
 {
-	new Elysia().guard(
-		{ body: t.Object({ name: t.String() }) },
-		(app) =>
-			app.post('/', ({ body }) => {
-				expectTypeOf<typeof body>().toEqualTypeOf<{ name: string }>()
-				return body
-			})
+	new Elysia().guard({ body: t.Object({ name: t.String() }) }, (app) =>
+		app.post('/', ({ body }) => {
+			expectTypeOf<typeof body>().toEqualTypeOf<{ name: string }>()
+			return body
+		})
 	)
 }
 
@@ -100,37 +106,33 @@ export {}
 // ? outside it, even path-derived ones; verified against the runtime)
 {
 	// route-local params replace the wrapper's entirely
-	new Elysia().guard(
-		{ params: t.Object({ id: t.Number() }) },
-		(app) =>
-			app.get('/guard/:id/:name', ({ params }) => {
-				expectTypeOf(params).toEqualTypeOf<{ name: string }>()
-			}, {
+	new Elysia().guard({ params: t.Object({ id: t.Number() }) }, (app) =>
+		app.get(
+			'/guard/:id/:name',
+			{
 				params: t.Object({ name: t.String() })
-			})
+			},
+			({ params }) => {
+				expectTypeOf(params).toEqualTypeOf<{ name: string }>()
+			}
+		)
 	)
 
 	// a silent route inherits the wrapper's params validator — its static
 	// is the shape, path keys it doesn't cover are stripped
-	new Elysia().guard(
-		{ params: t.Object({ id: t.Number() }) },
-		(app) =>
-			app.get('/guard/:id/:name', ({ params }) => {
-				expectTypeOf(params).toEqualTypeOf<{ id: number }>()
-			})
+	new Elysia().guard({ params: t.Object({ id: t.Number() }) }, (app) =>
+		app.get('/guard/:id/:name', ({ params }) => {
+			expectTypeOf(params).toEqualTypeOf<{ id: number }>()
+		})
 	)
 
 	// nested wrappers: the nearer declared schema wins whole-field
-	new Elysia().guard(
-		{ params: t.Object({ id: t.Number() }) },
-		(app) =>
-			app.guard(
-				{ params: t.Object({ name: t.Literal('x') }) },
-				(app) =>
-					app.get('/guard/:id/:name', ({ params }) => {
-						expectTypeOf(params).toEqualTypeOf<{ name: 'x' }>()
-					})
-			)
+	new Elysia().guard({ params: t.Object({ id: t.Number() }) }, (app) =>
+		app.guard({ params: t.Object({ name: t.Literal('x') }) }, (app) =>
+			app.get('/guard/:id/:name', ({ params }) => {
+				expectTypeOf(params).toEqualTypeOf<{ name: 'x' }>()
+			})
+		)
 	)
 
 	// nothing declared anywhere → raw path strings

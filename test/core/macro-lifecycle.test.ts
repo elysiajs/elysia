@@ -179,7 +179,7 @@ describe('macro beforeHandle lifecycle order', () => {
 			})
 		)
 		expect(validResponse.status).toBe(200)
-		expect(await validResponse.text()).toBe('test')
+		await expect(validResponse.text()).resolves.toBe('test')
 
 		// Invalid request - should fail validation (macro schema should be preserved)
 		const invalidResponse = await app.handle(

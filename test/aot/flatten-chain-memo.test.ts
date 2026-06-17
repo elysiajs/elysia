@@ -25,9 +25,9 @@ describe('F16: shared chain head, many routes', () => {
 			.get('/b', () => 'b')
 			.get('/c', () => 'c')
 
-		expect(await (await app.handle(req('/a'))).text()).toBe('a')
-		expect(await (await app.handle(req('/b'))).text()).toBe('b')
-		expect(await (await app.handle(req('/c'))).text()).toBe('c')
+		await expect((await app.handle(req('/a'))).text()).resolves.toBe('a')
+		await expect((await app.handle(req('/b'))).text()).resolves.toBe('b')
+		await expect((await app.handle(req('/c'))).text()).resolves.toBe('c')
 		// beforeHandle ran once per request, for every route
 		expect(order).toEqual(['before', 'before', 'before'])
 	})
@@ -38,8 +38,8 @@ describe('F16: shared chain head, many routes', () => {
 			.get('/a', (c: any) => c.shared)
 			.get('/b', (c: any) => c.shared)
 
-		expect(await (await app.handle(req('/a'))).text()).toBe('x')
-		expect(await (await app.handle(req('/b'))).text()).toBe('x')
+		await expect((await app.handle(req('/a'))).text()).resolves.toBe('x')
+		await expect((await app.handle(req('/b'))).text()).resolves.toBe('x')
 	})
 })
 
@@ -71,19 +71,23 @@ describe('F16: cross-root macro staleness', () => {
 					}
 				}
 			})
-			.get('/b', () => 'b', { audit: true } as any)
+			.get('/b', { audit: true } as any, () => 'b')
 
 		// compile the macro-less app FIRST
 		;(macroLess as any).compile()
 		;(withMacro as any).compile()
 
 		// macro-less app still serves
-		expect(await (await macroLess.handle(req('/a'))).text()).toBe('a')
-		expect(await (await macroLess.handle(req('/plug'))).text()).toBe('plug')
+		await expect((await macroLess.handle(req('/a'))).text()).resolves.toBe(
+			'a'
+		)
+		await expect(
+			(await macroLess.handle(req('/plug'))).text()
+		).resolves.toBe('plug')
 
 		// macro app's macro hook still fires
 		const res = await withMacro.handle(req('/b'))
-		expect(await res.text()).toBe('b')
+		await expect(res.text()).resolves.toBe('b')
 		expect(macroRan).toBe(1)
 	})
 
@@ -107,18 +111,20 @@ describe('F16: cross-root macro staleness', () => {
 					}
 				}
 			})
-			.get('/b', () => 'b', { audit: true } as any)
+			.get('/b', { audit: true } as any, () => 'b')
 
 		const macroLess = new Elysia().use(plugin).get('/a', () => 'a')
 
 		;(withMacro as any).compile()
 		;(macroLess as any).compile()
 
-		expect(await (await macroLess.handle(req('/a'))).text()).toBe('a')
+		await expect((await macroLess.handle(req('/a'))).text()).resolves.toBe(
+			'a'
+		)
 
 		// the macro hook fired exactly once (on the macro app), not twice
 		const res = await withMacro.handle(req('/b'))
-		expect(await res.text()).toBe('b')
+		await expect(res.text()).resolves.toBe('b')
 		expect(macroRan).toBe(1)
 	})
 })
@@ -149,8 +155,8 @@ describe('F16: memo returns mutation-safe clones', () => {
 
 		// Each consumer's own afterHandle stays its own — the shared-plugin flatten
 		// cache must not leak A's normalized hooks into B (or vice versa).
-		expect(await (await a.handle(req('/x'))).text()).toBe('x-A')
-		expect(await (await b.handle(req('/y'))).text()).toBe('y-B')
+		await expect((await a.handle(req('/x'))).text()).resolves.toBe('x-A')
+		await expect((await b.handle(req('/y'))).text()).resolves.toBe('y-B')
 		// the shared plugin route still serves in both consumers
 		expect((await a.handle(req('/p'))).status).toBe(200)
 		expect((await b.handle(req('/p'))).status).toBe(200)

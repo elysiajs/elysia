@@ -102,9 +102,13 @@ describe('Checksum', () => {
 				seed: options
 			}).transform('global', () => {})
 
-		const group = new Elysia().use(cookie()).get('/a', () => 'Hi', {
-			transform() {}
-		})
+		const group = new Elysia().use(cookie()).get(
+			'/a',
+			{
+				transform() {}
+			},
+			() => 'Hi'
+		)
 
 		const app = new Elysia()
 			.use(cookie())
@@ -333,12 +337,9 @@ describe('Checksum', () => {
 	})
 
 	it('handle reference parent-child', async () => {
-		const parent = new Elysia({ name: 'parent' }).derive(
-			'global',
-			() => ({
-				bye: () => 'bye'
-			})
-		)
+		const parent = new Elysia({ name: 'parent' }).derive('global', () => ({
+			bye: () => 'bye'
+		}))
 
 		const child = new Elysia({ name: 'child' })
 			.use(parent)

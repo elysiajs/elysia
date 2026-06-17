@@ -91,11 +91,14 @@ describe('Parse Cookie', () => {
 		const secret = 'Fischl von Luftschloss Narfidort'
 		const signed = await signCookie('hello', secret)
 
-		expect(await unsignCookie(signed, secret)).toBe('hello')
-		expect(await unsignCookie('hello.bogus-signature', secret)).toBe(false)
+		await expect(unsignCookie(signed, secret)).resolves.toBe('hello')
+		await expect(
+			unsignCookie('hello.bogus-signature', secret)
+		).resolves.toBe(false)
 		// flipping one byte of a valid signature must be rejected
-		const flipped = signed.slice(0, -1) + (signed.at(-1) === 'A' ? 'B' : 'A')
-		expect(await unsignCookie(flipped, secret)).toBe(false)
+		const flipped =
+			signed.slice(0, -1) + (signed.at(-1) === 'A' ? 'B' : 'A')
+		await expect(unsignCookie(flipped, secret)).resolves.toBe(false)
 	})
 
 	// Regression (audit P4): a `null` secret is the "allow unsigned" slot in a
@@ -104,8 +107,8 @@ describe('Parse Cookie', () => {
 	// provided' → a request-controlled 500 for any dotted value. It must just
 	// not match (return false), while unsigned values are still accepted.
 	it('null secret does not throw on a dotted value', async () => {
-		expect(await unsignCookie('value.with.dots', null)).toBe(false)
-		expect(await unsignCookie('plain', null)).toBe('plain')
+		await expect(unsignCookie('value.with.dots', null)).resolves.toBe(false)
+		await expect(unsignCookie('plain', null)).resolves.toBe('plain')
 	})
 
 	// Regression (audit H3): incoming cookie values must be percent-decoded
@@ -140,8 +143,8 @@ describe('Parse Cookie', () => {
 				.replace(/=+$/, '')
 
 		// sign twice — the second call hits the cache and must match
-		expect(await signCookie('fischl', secret)).toBe(expected)
-		expect(await signCookie('fischl', secret)).toBe(expected)
+		await expect(signCookie('fischl', secret)).resolves.toBe(expected)
+		await expect(signCookie('fischl', secret)).resolves.toBe(expected)
 	})
 
 	// Regression (perf audit F5): the CryptoKey cache is keyed PER secret —
@@ -169,7 +172,7 @@ describe('Parse Cookie', () => {
 		expect(result.eula.value).toEqual('eula')
 
 		// the wrong (but cached) key must still reject
-		expect(await unsignCookie(signedOld, newSecret)).toBe(false)
+		await expect(unsignCookie(signedOld, newSecret)).resolves.toBe(false)
 	})
 
 	// Regression (perf audit F5): the null/undefined-secret TypeError must
@@ -208,7 +211,7 @@ describe('Parse Cookie', () => {
 			// the rejected key must have evicted; the retry imports cleanly
 			const signed = await signCookie('v', secret)
 			expect(signed.startsWith('v.')).toBe(true)
-			expect(await unsignCookie(signed, secret)).toBe('v')
+			await expect(unsignCookie(signed, secret)).resolves.toBe('v')
 		} finally {
 			subtle.importKey = realImportKey
 		}

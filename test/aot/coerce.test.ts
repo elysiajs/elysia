@@ -47,9 +47,13 @@ const captureDirect = (
 describe('AOT coerce freeze (coerced/codec checks, externals reconstructed)', () => {
 	it('end-to-end: a frozen coerced query coerces and validates', async () => {
 		const build = () =>
-			new Elysia().get('/q', ({ query }) => query, {
-				query: t.Object({ page: t.Numeric(), limit: t.Numeric() })
-			})
+			new Elysia().get(
+				'/q',
+				{
+					query: t.Object({ page: t.Numeric(), limit: t.Numeric() })
+				},
+				({ query }) => query
+			)
 
 		// capture through the real route (query coercion applied)
 		beginValidatorCapture()
@@ -64,7 +68,7 @@ describe('AOT coerce freeze (coerced/codec checks, externals reconstructed)', ()
 
 		const ok = await app.handle(req('/q?page=3&limit=10'))
 		expect(ok.status).toBe(200)
-		expect(await ok.json()).toEqual({ page: 3, limit: 10 }) // coerced to numbers
+		await expect(ok.json()).resolves.toEqual({ page: 3, limit: 10 }) // coerced to numbers
 
 		const bad = await app.handle(req('/q?page=abc&limit=10'))
 		expect(bad.status).toBe(422)
@@ -210,7 +214,9 @@ describe('AOT coerce freeze (coerced/codec checks, externals reconstructed)', ()
 
 		// an unrelated value op that calls UnionPrioritySort on the SAME shared
 		// t.Date() singleton — would permanently reorder it without the bridge
-		Value.Decode(t.Object({ other: t.Date() }) as any, { other: '2024-01-01' })
+		Value.Decode(t.Object({ other: t.Date() }) as any, {
+			other: '2024-01-01'
+		})
 
 		const frozen = Validator.create(make() as any, {
 			aot: { method: 'GET', path: '/reorder' },
@@ -237,9 +243,13 @@ describe('AOT coerce freeze (coerced/codec checks, externals reconstructed)', ()
 		let src: string
 		process.env.ELYSIA_AOT_BUILD = '1'
 		try {
-			const app = new Elysia().get('/q', ({ query }) => query, {
-				query: make()
-			})
+			const app = new Elysia().get(
+				'/q',
+				{
+					query: make()
+				},
+				({ query }) => query
+			)
 			src = await compileToSource(app, { register: false })
 		} finally {
 			delete process.env.ELYSIA_AOT_BUILD

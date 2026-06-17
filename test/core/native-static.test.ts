@@ -15,7 +15,7 @@ describe('Native Static Response', () => {
 		const app = build(new Elysia().get('/', 'Static Content'))
 
 		expect(app['~staticResponse']['/'].GET).toBeInstanceOf(Response)
-		expect(await app['~staticResponse']['/'].GET.text()).toEqual(
+		await expect(app['~staticResponse']['/'].GET.text()).resolves.toEqual(
 			'Static Content'
 		)
 	})
@@ -23,19 +23,17 @@ describe('Native Static Response', () => {
 	it('handle plugin', async () => {
 		const plugin = new Elysia().get('/plugin', 'Plugin')
 
-		const app = build(
-			new Elysia().use(plugin).get('/', 'Static Content')
-		)
+		const app = build(new Elysia().use(plugin).get('/', 'Static Content'))
 
 		expect(app['~staticResponse']['/'].GET).toBeInstanceOf(Response)
-		expect(await app['~staticResponse']['/'].GET.text()).toEqual(
+		await expect(app['~staticResponse']['/'].GET.text()).resolves.toEqual(
 			'Static Content'
 		)
 
 		expect(app['~staticResponse']['/plugin'].GET).toBeInstanceOf(Response)
-		expect(await app['~staticResponse']['/plugin'].GET.text()).toEqual(
-			'Plugin'
-		)
+		await expect(
+			app['~staticResponse']['/plugin'].GET.text()
+		).resolves.toEqual('Plugin')
 	})
 
 	it('handle default header', async () => {
@@ -52,7 +50,7 @@ describe('Native Static Response', () => {
 		expect(app['~staticResponse']['/'].GET.headers.get('server')).toBe(
 			'Elysia'
 		)
-		expect(await app['~staticResponse']['/'].GET.text()).toEqual(
+		await expect(app['~staticResponse']['/'].GET.text()).resolves.toEqual(
 			'Static Content'
 		)
 
@@ -60,9 +58,9 @@ describe('Native Static Response', () => {
 		expect(
 			app['~staticResponse']['/plugin'].GET.headers.get('server')
 		).toBe('Elysia')
-		expect(await app['~staticResponse']['/plugin'].GET.text()).toEqual(
-			'Plugin'
-		)
+		await expect(
+			app['~staticResponse']['/plugin'].GET.text()
+		).resolves.toEqual('Plugin')
 	})
 
 	it('turn off by config', async () => {
@@ -82,34 +80,30 @@ describe('Native Static Response', () => {
 	it('handle loose path', async () => {
 		const plugin = new Elysia().get('/plugin', 'Plugin')
 
-		const app = build(
-			new Elysia().use(plugin).get('/', 'Static Content')
-		)
+		const app = build(new Elysia().use(plugin).get('/', 'Static Content'))
 
 		// Loose entries share the canonical Response object (no clone), so
 		// clone before reading — consuming the body here would empty the
 		// object Bun serves by reference.
 		expect(app['~staticResponse']['/'].GET).toBeInstanceOf(Response)
-		expect(await app['~staticResponse']['/'].GET.clone().text()).toEqual(
-			'Static Content'
-		)
+		await expect(
+			app['~staticResponse']['/'].GET.clone().text()
+		).resolves.toEqual('Static Content')
 
 		expect(app['~staticResponse'][''].GET).toBeInstanceOf(Response)
-		expect(await app['~staticResponse'][''].GET.clone().text()).toEqual(
-			'Static Content'
-		)
+		await expect(
+			app['~staticResponse'][''].GET.clone().text()
+		).resolves.toEqual('Static Content')
 
 		expect(app['~staticResponse']['/plugin'].GET).toBeInstanceOf(Response)
-		expect(
-			await app['~staticResponse']['/plugin'].GET.clone().text()
-		).toEqual('Plugin')
+		await expect(
+			app['~staticResponse']['/plugin'].GET.clone().text()
+		).resolves.toEqual('Plugin')
 
-		expect(app['~staticResponse']['/plugin/'].GET).toBeInstanceOf(
-			Response
-		)
-		expect(
-			await app['~staticResponse']['/plugin/'].GET.clone().text()
-		).toEqual('Plugin')
+		expect(app['~staticResponse']['/plugin/'].GET).toBeInstanceOf(Response)
+		await expect(
+			app['~staticResponse']['/plugin/'].GET.clone().text()
+		).resolves.toEqual('Plugin')
 
 		const strict = build(
 			new Elysia({ strictPath: true })
@@ -118,17 +112,17 @@ describe('Native Static Response', () => {
 		)
 
 		expect(strict['~staticResponse']['/'].GET).toBeInstanceOf(Response)
-		expect(await strict['~staticResponse']['/'].GET.text()).toEqual(
-			'Static Content'
-		)
+		await expect(
+			strict['~staticResponse']['/'].GET.text()
+		).resolves.toEqual('Static Content')
 		expect(strict['~staticResponse']).not.toHaveProperty('')
 
 		expect(strict['~staticResponse']['/plugin'].GET).toBeInstanceOf(
 			Response
 		)
-		expect(await strict['~staticResponse']['/plugin'].GET.text()).toEqual(
-			'Plugin'
-		)
+		await expect(
+			strict['~staticResponse']['/plugin'].GET.text()
+		).resolves.toEqual('Plugin')
 		expect(strict['~staticResponse']).not.toHaveProperty('/plugin/')
 	})
 
@@ -148,25 +142,33 @@ describe('Native Static Response', () => {
 			expect(app['~staticResponse'] ?? {}).not.toHaveProperty('/')
 
 			// the JS path is the source of truth for the mapped body
-			expect(
-				await app.handle(new Request('http://localhost/')).then((x) =>
-					x.text()
-				)
-			).toBe('MAPPED')
+			await expect(
+				app
+					.handle(new Request('http://localhost/'))
+					.then((x) => x.text())
+			).resolves.toBe('MAPPED')
 		})
 
 		it('bail for route-local mapResponse (scalar and array)', async () => {
 			const scalar = build(
-				new Elysia().get('/', 'ok', {
-					mapResponse: () => new Response('MAPPED')
-				})
+				new Elysia().get(
+					'/',
+					{
+						mapResponse: () => new Response('MAPPED')
+					},
+					'ok'
+				)
 			)
 			expect(scalar['~staticResponse'] ?? {}).not.toHaveProperty('/')
 
 			const array = build(
-				new Elysia().get('/', 'ok', {
-					mapResponse: [() => new Response('MAPPED')]
-				})
+				new Elysia().get(
+					'/',
+					{
+						mapResponse: [() => new Response('MAPPED')]
+					},
+					'ok'
+				)
 			)
 			expect(array['~staticResponse'] ?? {}).not.toHaveProperty('/')
 		})
@@ -201,11 +203,15 @@ describe('Native Static Response', () => {
 			// (it can throw or carry side effects the native path skips)
 			let called = 0
 			const app = build(
-				new Elysia().get('/', 'ok', {
-					beforeHandle: () => {
-						called++
-					}
-				})
+				new Elysia().get(
+					'/',
+					{
+						beforeHandle: () => {
+							called++
+						}
+					},
+					'ok'
+				)
 			)
 
 			expect(app['~staticResponse'] ?? {}).not.toHaveProperty('/')
@@ -219,18 +225,26 @@ describe('Native Static Response', () => {
 			// app-level chain check — native dispatch would silently skip
 			// them (no JS handler runs on a native hit)
 			const afterResponse = build(
-				new Elysia().get('/', 'ok', {
-					afterResponse: () => {}
-				})
+				new Elysia().get(
+					'/',
+					{
+						afterResponse: () => {}
+					},
+					'ok'
+				)
 			)
 			expect(afterResponse['~staticResponse'] ?? {}).not.toHaveProperty(
 				'/'
 			)
 
 			const trace = build(
-				new Elysia().get('/', 'ok', {
-					trace: () => {}
-				})
+				new Elysia().get(
+					'/',
+					{
+						trace: () => {}
+					},
+					'ok'
+				)
 			)
 			expect(trace['~staticResponse'] ?? {}).not.toHaveProperty('/')
 		})
@@ -239,9 +253,13 @@ describe('Native Static Response', () => {
 			// the compiled handler 422s per request — a precomputed 200
 			// would silently skip validation under native dispatch
 			const app = build(
-				new Elysia().get('/', 'ok', {
-					query: t.Object({ id: t.String() })
-				})
+				new Elysia().get(
+					'/',
+					{
+						query: t.Object({ id: t.String() })
+					},
+					'ok'
+				)
 			)
 
 			expect(app['~staticResponse'] ?? {}).not.toHaveProperty('/')
@@ -250,8 +268,7 @@ describe('Native Static Response', () => {
 				(await app.handle(new Request('http://localhost/'))).status
 			).toBe(422)
 			expect(
-				(await app.handle(new Request('http://localhost/?id=1')))
-					.status
+				(await app.handle(new Request('http://localhost/?id=1'))).status
 			).toBe(200)
 		})
 	})

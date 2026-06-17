@@ -49,7 +49,7 @@ describe('async-cliff: sync routes emit plain Function', () => {
 		const app = new Elysia().get('/', () => 'hi')
 
 		expect(isAsync(app)).toBe(false)
-		expect(await (await app.handle(req('/'))).text()).toBe('hi')
+		await expect((await app.handle(req('/'))).text()).resolves.toBe('hi')
 	})
 
 	it('async handler stays AsyncFunction', async () => {
@@ -57,12 +57,18 @@ describe('async-cliff: sync routes emit plain Function', () => {
 		// `new Function('route')` tail instead of the single-param inline
 		// fast-path (`createInlineHandler`, always a plain arrow) — so the route
 		// function's own async-ness is observable.
-		const app = new Elysia().get('/', async () => 'hi', {
-			query: t.Object({ q: t.Optional(t.String()) })
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({ q: t.Optional(t.String()) })
+			},
+			async () => 'hi'
+		)
 
 		expect(isAsync(app)).toBe(true)
-		expect(await (await app.handle(req('/?q=1'))).text()).toBe('hi')
+		await expect((await app.handle(req('/?q=1'))).text()).resolves.toBe(
+			'hi'
+		)
 	})
 
 	// F23 — error hook
@@ -70,7 +76,7 @@ describe('async-cliff: sync routes emit plain Function', () => {
 		const app = new Elysia().error(() => {}).get('/', () => 'hi')
 
 		expect(isAsync(app)).toBe(false)
-		expect(await (await app.handle(req('/'))).text()).toBe('hi')
+		await expect((await app.handle(req('/'))).text()).resolves.toBe('hi')
 	})
 
 	it('sync GET + async error hook stays AsyncFunction', () => {
@@ -81,12 +87,10 @@ describe('async-cliff: sync routes emit plain Function', () => {
 
 	// F24 — afterResponse
 	it('sync GET + sync afterResponse is a plain Function', async () => {
-		const app = new Elysia()
-			.afterResponse(() => {})
-			.get('/', () => 'hi')
+		const app = new Elysia().afterResponse(() => {}).get('/', () => 'hi')
 
 		expect(isAsync(app)).toBe(false)
-		expect(await (await app.handle(req('/'))).text()).toBe('hi')
+		await expect((await app.handle(req('/'))).text()).resolves.toBe('hi')
 	})
 
 	it('sync GET + async afterResponse stays AsyncFunction', () => {
@@ -115,7 +119,7 @@ describe('async-cliff: sync routes emit plain Function', () => {
 
 		const ok = await app.handle(req('/'))
 		expect(ok.status).toBe(200)
-		expect(await ok.text()).toBe('hi')
+		await expect(ok.text()).resolves.toBe('hi')
 
 		await new Promise((r) => setTimeout(r, 10))
 		expect(fired).toBe(true)
@@ -131,7 +135,7 @@ describe('async-cliff: sync routes emit plain Function', () => {
 
 		const r = await app.handle(req('/'))
 		expect(r.status).toBe(500)
-		expect(await r.text()).toBe('mapped-err')
+		await expect(r.text()).resolves.toBe('mapped-err')
 	})
 
 	// F1 — unsigned cookie
@@ -142,11 +146,11 @@ describe('async-cliff: sync routes emit plain Function', () => {
 		})
 
 		expect(isAsync(app)).toBe(false)
-		expect(
-			await (
+		await expect(
+			(
 				await app.handle(req('/', { headers: { cookie: 'id=abc' } }))
 			).text()
-		).toBe('hi')
+		).resolves.toBe('hi')
 	})
 
 	// signed cookie — stays async
@@ -166,7 +170,7 @@ describe('async-cliff: sync routes emit plain Function', () => {
 		const app = new Elysia().parse(() => {}).get('/', () => 'hi')
 
 		expect(isAsync(app)).toBe(false)
-		expect(await (await app.handle(req('/'))).text()).toBe('hi')
+		await expect((await app.handle(req('/'))).text()).resolves.toBe('hi')
 	})
 
 	// F26 — bodyless GET/HEAD skips the parse block entirely (method-gated), so
@@ -176,7 +180,7 @@ describe('async-cliff: sync routes emit plain Function', () => {
 		const app = new Elysia().parse(async () => {}).get('/', () => 'hi')
 
 		expect(isAsync(app)).toBe(false)
-		expect(await (await app.handle(req('/'))).text()).toBe('hi')
+		await expect((await app.handle(req('/'))).text()).resolves.toBe('hi')
 	})
 
 	// F26 — an async parse hook on a POST (real body) still forces async and
@@ -193,26 +197,36 @@ describe('async-cliff: sync routes emit plain Function', () => {
 		expect(isAsync(app)).toBe(true)
 		const res = await app.handle(post('/', { a: 1 }))
 		expect(ran).toBe(true)
-		expect(await res.json()).toEqual({ ok: 1 })
+		await expect(res.json()).resolves.toEqual({ ok: 1 })
 	})
 
 	// F26 — explicit body schema on a GET still forces parsing (validation runs)
 	it('GET with explicit body schema stays AsyncFunction (parse forced)', () => {
-		const app = new Elysia().get('/', ({ body }) => body, {
-			body: t.Object({ n: t.Number() })
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				body: t.Object({ n: t.Number() })
+			},
+			({ body }) => body
+		)
 
 		expect(isAsync(app)).toBe(true)
 	})
 
 	// POST body — async (real body read)
 	it('POST with t.Object body stays AsyncFunction (body read is async)', async () => {
-		const app = new Elysia().post('/', ({ body }) => body, {
-			body: t.Object({ n: t.Number() })
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({ n: t.Number() })
+			},
+			({ body }) => body
+		)
 
 		expect(isAsync(app)).toBe(true)
-		expect(await (await app.handle(post('/', { n: 5 }))).json()).toEqual({
+		await expect(
+			(await app.handle(post('/', { n: 5 }))).json()
+		).resolves.toEqual({
 			n: 5
 		})
 	})
@@ -226,10 +240,14 @@ describe('async-cliff: sync routes emit plain Function', () => {
 				validate: (v: any) => ({ value: v })
 			}
 		}
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: t.Object({ q: t.Optional(t.String()) }),
-			schemas: [fakeStd as any]
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({ q: t.Optional(t.String()) }),
+				schemas: [fakeStd as any]
+			},
+			({ query }) => query
+		)
 
 		expect(isAsync(app)).toBe(false)
 		const res = await app.handle(req('/?q=hi'))
@@ -246,18 +264,26 @@ describe('async-cliff: sync routes emit plain Function', () => {
 				validate: (v: any) => ({ value: v })
 			}
 		}
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: fakeStd as any
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				query: fakeStd as any
+			},
+			({ query }) => query
+		)
 
 		expect(isAsync(app)).toBe(true)
 	})
 
 	// F46 — POST+body sync handler emits the conditional-await, not `await h(c)`
 	it('POST+body sync handler emits conditional await (no `await h(c)`)', () => {
-		const app = new Elysia().post('/', ({ body }) => body, {
-			body: t.Object({ n: t.Number() })
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({ n: t.Number() })
+			},
+			({ body }) => body
+		)
 
 		const { source } = compileRoute(app)
 		expect(source).toContain('if(_r instanceof Promise)_r=await _r')
@@ -283,7 +309,7 @@ describe('async-cliff: rejecting promise from sync handler hits route error hook
 
 		const res = await app.handle(req('/'))
 		expect(res.status).toBe(418)
-		expect(await res.text()).toBe('handled')
+		await expect(res.text()).resolves.toBe('handled')
 		expect((seen as Error)?.message).toBe('boom')
 	})
 
@@ -293,7 +319,7 @@ describe('async-cliff: rejecting promise from sync handler hits route error hook
 			.get('/', () => Promise.resolve('ok') as any)
 
 		const res = await app.handle(req('/'))
-		expect(await res.text()).toBe('ok')
+		await expect(res.text()).resolves.toBe('ok')
 	})
 
 	// F23 — a SYNC throw on a sync error-hook route is caught by the sync
@@ -311,7 +337,7 @@ describe('async-cliff: rejecting promise from sync handler hits route error hook
 		expect(isAsync(app)).toBe(false)
 		const res = await app.handle(req('/'))
 		expect(res.status).toBe(400)
-		expect(await res.text()).toBe('nope')
+		await expect(res.text()).resolves.toBe('nope')
 	})
 
 	// F23 — error hook + response validator must STAY async (the thrown-then-
@@ -319,9 +345,13 @@ describe('async-cliff: rejecting promise from sync handler hits route error hook
 	it('error hook + response schema stays AsyncFunction', () => {
 		const app = new Elysia()
 			.error(() => {})
-			.get('/', () => 'hi', {
-				response: t.String()
-			})
+			.get(
+				'/',
+				{
+					response: t.String()
+				},
+				() => 'hi'
+			)
 
 		expect(isAsync(app)).toBe(true)
 	})
@@ -341,7 +371,7 @@ describe('async-cliff: sync afterResponse behaviour', () => {
 
 		expect(isAsync(app)).toBe(false)
 		const res = await app.handle(req('/'))
-		expect(await res.text()).toBe('hi')
+		await expect(res.text()).resolves.toBe('hi')
 		// afterResponse is scheduled on a microtask/setImmediate
 		await new Promise((r) => setTimeout(r, 10))
 		expect(calls).toBe(1)
@@ -362,7 +392,7 @@ describe('async-cliff: sync afterResponse behaviour', () => {
 		expect(isAsync(app)).toBe(false)
 
 		const res = await app.handle(req('/'))
-		expect(await res.text()).toBe('ab')
+		await expect(res.text()).resolves.toBe('ab')
 		await new Promise((r) => setTimeout(r, 20))
 		expect(calls).toBe(1)
 	})
@@ -373,13 +403,17 @@ describe('async-cliff: sync afterResponse behaviour', () => {
 			.afterResponse(() => {
 				calls++
 			})
-			.get('/', () => 'handler', {
-				beforeHandle: () => 'short'
-			})
+			.get(
+				'/',
+				{
+					beforeHandle: () => 'short'
+				},
+				() => 'handler'
+			)
 
 		expect(isAsync(app)).toBe(false)
 		const res = await app.handle(req('/'))
-		expect(await res.text()).toBe('short')
+		await expect(res.text()).resolves.toBe('short')
 		await new Promise((r) => setTimeout(r, 10))
 		expect(calls).toBe(1)
 	})
@@ -404,7 +438,7 @@ describe('async-cliff: sync afterResponse behaviour', () => {
 
 		expect(isAsync(app)).toBe(false)
 		const res = await app.handle(req('/'))
-		expect(await res.text()).toBe('xy')
+		await expect(res.text()).resolves.toBe('xy')
 		await new Promise((r) => setTimeout(r, 20))
 		expect(calls).toBe(1)
 	})
@@ -426,7 +460,6 @@ describe('async-cliff: frozen-handler reconstruction', () => {
 		process.env.ELYSIA_AOT_BUILD = '1'
 		endHandlerCapture()
 		endValidatorCapture()
-
 		;(build() as any).compile()
 		const handlers = endHandlerCapture()
 		const validators = endValidatorCapture()
@@ -458,10 +491,12 @@ describe('async-cliff: frozen-handler reconstruction', () => {
 				}) as any
 
 		await freeze(build, async (frozen) => {
-			expect(await (await frozen.handle(req('/'))).text()).toBe('ok')
+			await expect((await frozen.handle(req('/'))).text()).resolves.toBe(
+				'ok'
+			)
 			const err = await frozen.handle(req('/?boom=1'))
 			expect(err.status).toBe(400)
-			expect(await err.text()).toBe('boom')
+			await expect(err.text()).resolves.toBe('boom')
 		})
 	})
 
@@ -476,7 +511,9 @@ describe('async-cliff: frozen-handler reconstruction', () => {
 
 		await freeze(build, async (frozen) => {
 			counter.n = 0
-			expect(await (await frozen.handle(req('/?q=hi'))).text()).toBe('hi')
+			await expect(
+				(await frozen.handle(req('/?q=hi'))).text()
+			).resolves.toBe('hi')
 			await new Promise((r) => setTimeout(r, 10))
 			expect(counter.n).toBe(1)
 		})
@@ -493,7 +530,7 @@ describe('async-cliff: frozen-handler reconstruction', () => {
 			const res = await frozen.handle(
 				req('/', { headers: { cookie: 'id=abc' } })
 			)
-			expect(await res.text()).toBe('abc')
+			await expect(res.text()).resolves.toBe('abc')
 		})
 	})
 })

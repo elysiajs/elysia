@@ -4,15 +4,27 @@ import { run, bench, group, summary } from 'mitata'
 const app = new Elysia()
 	.get('/', () => 'ok')
 	.get('/user/:id', ({ params: { id } }) => id)
-	.post('/json', ({ body }) => body, {
-		body: t.Object({ name: t.String(), age: t.Number() })
-	})
-	.get('/search', ({ query }) => query, {
-		query: t.Object({ page: t.Number(), limit: t.Number() })
-	})
-	.get('/me', ({ cookie: { session } }) => session.value, {
-		cookie: t.Object({ session: t.Optional(t.String()) })
-	})
+	.post(
+		'/json',
+		{
+			body: t.Object({ name: t.String(), age: t.Number() })
+		},
+		({ body }) => body
+	)
+	.get(
+		'/search',
+		{
+			query: t.Object({ page: t.Number(), limit: t.Number() })
+		},
+		({ query }) => query
+	)
+	.get(
+		'/me',
+		{
+			cookie: t.Object({ session: t.Optional(t.String()) })
+		},
+		({ cookie: { session } }) => session.value
+	)
 
 const handle = app.handle
 

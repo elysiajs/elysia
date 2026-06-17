@@ -26,7 +26,7 @@ describe('handle path with spaces', () => {
 		)
 
 		expect(response.status).toBe(200)
-		expect(await response.text()).toBe('1')
+		await expect(response.text()).resolves.toBe('1')
 	})
 
 	it('optional dynamic path', async () => {
@@ -62,13 +62,13 @@ describe('handle path with spaces', () => {
 		)
 
 		expect(required.status).toBe(200)
-		expect(await required.text()).toEqual('yay')
+		await expect(required.text()).resolves.toEqual('yay')
 
 		const optional = await app.handle(
 			new Request('http://localhost/api/yay/ok')
 		)
 
 		expect(optional.status).toBe(200)
-		expect(await optional.text()).toEqual('yay')
+		await expect(optional.text()).resolves.toEqual('yay')
 	})
 })

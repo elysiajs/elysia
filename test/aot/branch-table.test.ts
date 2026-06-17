@@ -41,12 +41,20 @@ describe('AOT branch-check table', () => {
 		// Two DISTINCT query entries (distinct keys → no entry-level dedup) that
 		// EMBED the same `Numeric` codec → identical branch-check, different entry.
 		const app = new Elysia()
-			.get('/a', ({ query }) => query, {
-				query: t.Object({ aKey: t.String(), amount: t.Numeric() })
-			})
-			.get('/b', ({ query }) => query, {
-				query: t.Object({ bKey: t.String(), amount: t.Numeric() })
-			})
+			.get(
+				'/a',
+				{
+					query: t.Object({ aKey: t.String(), amount: t.Numeric() })
+				},
+				({ query }) => query
+			)
+			.get(
+				'/b',
+				{
+					query: t.Object({ bKey: t.String(), amount: t.Numeric() })
+				},
+				({ query }) => query
+			)
 
 		const src = await compileToSource(app, { register: false })
 
@@ -71,9 +79,13 @@ describe('AOT branch-check table', () => {
 		// factory (CheckContext/Guard/… are module-global now); an INLINE branch
 		// would add one. So no-inline ⟺ that count equals entries + branches.
 		// (Scoped to check factories so the handler factory doesn't skew it.)
-		const app = new Elysia().get('/q', ({ query }) => query, {
-			query: t.Object({ page: t.Numeric(), limit: t.Numeric() })
-		})
+		const app = new Elysia().get(
+			'/q',
+			{
+				query: t.Object({ page: t.Numeric(), limit: t.Numeric() })
+			},
+			({ query }) => query
+		)
 		const src = await compileToSource(app, { register: false })
 
 		const entries = (src.match(/const _c\d+ =/g) ?? []).length
@@ -89,15 +101,27 @@ describe('AOT branch-check table', () => {
 		// distinct field names → distinct `cm`, but the SAME 2-Numeric codec shape
 		// → identical `u` structure, which must collapse to one `_u` const
 		const app = new Elysia()
-			.get('/a', ({ query }) => query, {
-				query: t.Object({ x1: t.Numeric(), y1: t.Numeric() })
-			})
-			.get('/b', ({ query }) => query, {
-				query: t.Object({ x2: t.Numeric(), y2: t.Numeric() })
-			})
-			.get('/c', ({ query }) => query, {
-				query: t.Object({ x3: t.Numeric(), y3: t.Numeric() })
-			})
+			.get(
+				'/a',
+				{
+					query: t.Object({ x1: t.Numeric(), y1: t.Numeric() })
+				},
+				({ query }) => query
+			)
+			.get(
+				'/b',
+				{
+					query: t.Object({ x2: t.Numeric(), y2: t.Numeric() })
+				},
+				({ query }) => query
+			)
+			.get(
+				'/c',
+				{
+					query: t.Object({ x3: t.Numeric(), y3: t.Numeric() })
+				},
+				({ query }) => query
+			)
 		const src = await compileToSource(app, { register: false })
 
 		// 3 distinct entries (different field names)…

@@ -11,9 +11,13 @@ describe('Standard Schema Reference', () => {
 					id: z.number()
 				})
 			})
-			.post('/', ({ body }) => body, {
-				body: 'body'
-			})
+			.post(
+				'/',
+				{
+					body: 'body'
+				},
+				({ body }) => body
+			)
 
 		const value = await app
 			.handle(
@@ -41,9 +45,13 @@ describe('Standard Schema Reference', () => {
 					id: z.coerce.number()
 				})
 			})
-			.get('/', ({ query }) => query, {
-				query: 'query'
-			})
+			.get(
+				'/',
+				{
+					query: 'query'
+				},
+				({ query }) => query
+			)
 
 		const value = await app.handle(req('/?id=1')).then((x) => x.json())
 
@@ -61,9 +69,13 @@ describe('Standard Schema Reference', () => {
 					id: z.coerce.number()
 				})
 			})
-			.get('/user/:id', ({ params }) => params, {
-				params: 'params'
-			})
+			.get(
+				'/user/:id',
+				{
+					params: 'params'
+				},
+				({ params }) => params
+			)
 
 		const value = await app.handle(req('/user/1')).then((x) => x.json())
 
@@ -81,9 +93,13 @@ describe('Standard Schema Reference', () => {
 					id: z.coerce.number()
 				})
 			})
-			.get('/', ({ headers }) => headers, {
-				headers: 'headers'
-			})
+			.get(
+				'/',
+				{
+					headers: 'headers'
+				},
+				({ headers }) => headers
+			)
 
 		const value = await app
 			.handle(
@@ -109,12 +125,11 @@ describe('Standard Schema Reference', () => {
 			})
 			.get(
 				'/:name',
-				// @ts-expect-error deliberately returns an invalid response to assert 422
-				({ params: { name } }) =>
-					name === 'lilith' ? undefined : true,
 				{
 					response: 'response'
-				}
+				},
+				// @ts-expect-error deliberately returns an invalid response to assert 422
+				({ params: { name } }) => (name === 'lilith' ? undefined : true)
 			)
 
 		const exists = await app.handle(req('/fouco'))
@@ -132,16 +147,16 @@ describe('Standard Schema Reference', () => {
 			})
 			.get(
 				'/:name',
-				({ params: { name }, status }) =>
-					name === 'lilith'
-						? status(404, 'lilith')
-						: status(418, name as any),
 				{
 					response: {
 						404: 'response.404',
 						418: 'response.418'
 					}
-				}
+				},
+				({ params: { name }, status }) =>
+					name === 'lilith'
+						? status(404, 'lilith')
+						: status(418, name as any)
 			)
 
 		const exists = await app.handle(req('/fouco'))
@@ -171,10 +186,6 @@ describe('Standard Schema Reference', () => {
 			})
 			.post(
 				'/:name',
-				({ params: { name }, status }) =>
-					name === 'lilith'
-						? status(404, 'lilith')
-						: status(418, name as any),
 				{
 					body: 'body',
 					query: 'query',
@@ -183,7 +194,11 @@ describe('Standard Schema Reference', () => {
 						404: 'response.404',
 						418: 'response.418'
 					}
-				}
+				},
+				({ params: { name }, status }) =>
+					name === 'lilith'
+						? status(404, 'lilith')
+						: status(418, name as any)
 			)
 
 		const responses = await Promise.all(
@@ -239,16 +254,16 @@ describe('Standard Schema Reference', () => {
 			})
 			.post(
 				'/:name',
-				({ params: { name }, status }) =>
-					name === 'lilith'
-						? status(404, 'lilith')
-						: status(418, name as any),
 				{
 					params: 'params',
 					response: {
 						418: 'response.418'
 					}
-				}
+				},
+				({ params: { name }, status }) =>
+					name === 'lilith'
+						? status(404, 'lilith')
+						: status(418, name as any)
 			)
 
 		const responses = await Promise.all(
@@ -304,23 +319,21 @@ describe('Standard Schema Reference', () => {
 				}
 			})
 
-		const app = new Elysia()
-			.use(plugin)
-			.post(
-				'/:name',
-				({ params: { name }, status }) =>
-					name === 'lilith'
-						? status(404, 'lilith')
-						: status(418, name as any),
-				{
-					params: z.object({
-						name: z.literal('fouco').or(z.literal('lilith'))
-					}),
-					response: {
-						418: 'response.418'
-					}
+		const app = new Elysia().use(plugin).post(
+			'/:name',
+			{
+				params: z.object({
+					name: z.literal('fouco').or(z.literal('lilith'))
+				}),
+				response: {
+					418: 'response.418'
 				}
-			)
+			},
+			({ params: { name }, status }) =>
+				name === 'lilith'
+					? status(404, 'lilith')
+					: status(418, name as any)
+		)
 
 		const responses = await Promise.all(
 			[

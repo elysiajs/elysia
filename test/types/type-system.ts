@@ -6,11 +6,11 @@ import { expectTypeOf } from 'expect-type'
 {
 	new Elysia().post(
 		'/',
-		({ body }) => {
-			expectTypeOf<typeof body>().toEqualTypeOf([] as string[])
-		},
 		{
 			body: t.ArrayString(t.String())
+		},
+		({ body }) => {
+			expectTypeOf<typeof body>().toEqualTypeOf([] as string[])
 		}
 	)
 }
@@ -20,31 +20,31 @@ import { expectTypeOf } from 'expect-type'
 	new Elysia()
 		.get(
 			'/',
+			{
+				response: t.Form({
+					name: t.String(),
+					file: t.File()
+				})
+			},
 			() =>
 				form({
 					name: 'Misono Mika',
 					file: file('example/kyuukurarin.mp4')
-				}),
+				})
+		)
+		.get(
+			'/',
 			{
 				response: t.Form({
 					name: t.String(),
 					file: t.File()
 				})
-			}
-		)
-		.get(
-			'/',
+			},
 			// @ts-expect-error
 			() =>
 				form({
 					file: 'a'
-				}),
-			{
-				response: t.Form({
-					name: t.String(),
-					file: t.File()
 				})
-			}
 		)
 }
 
@@ -53,17 +53,17 @@ import { expectTypeOf } from 'expect-type'
 {
 	new Elysia().post(
 		'/',
-		({ body }) => {
-			expectTypeOf<typeof body.name>().toEqualTypeOf<string>()
-			expectTypeOf<typeof body.file>().toEqualTypeOf<File>()
-			expectTypeOf<typeof body.files>().toEqualTypeOf<File[]>()
-		},
 		{
 			body: t.Form({
 				name: t.String(),
 				file: t.File(),
 				files: t.Files()
 			})
+		},
+		({ body }) => {
+			expectTypeOf<typeof body.name>().toEqualTypeOf<string>()
+			expectTypeOf<typeof body.file>().toEqualTypeOf<File>()
+			expectTypeOf<typeof body.files>().toEqualTypeOf<File[]>()
 		}
 	)
 }
@@ -72,11 +72,6 @@ import { expectTypeOf } from 'expect-type'
 {
 	new Elysia().get(
 		'/',
-		({ body }) => {
-			expectTypeOf<typeof body>().toEqualTypeOf<{
-				images: File[]
-			}>()
-		},
 		{
 			body: t.Object({
 				images: t.Files({
@@ -84,6 +79,11 @@ import { expectTypeOf } from 'expect-type'
 					type: 'image'
 				})
 			})
+		},
+		({ body }) => {
+			expectTypeOf<typeof body>().toEqualTypeOf<{
+				images: File[]
+			}>()
 		}
 	)
 }
@@ -94,14 +94,18 @@ import { expectTypeOf } from 'expect-type'
 		return num + 2
 	}
 
-	new Elysia().get('', async ({ query: { foo } }) => addTwo(foo), {
-		query: t.Object({
-			foo: t
-				.Codec(t.String())
-				.Decode((x) => 12)
-				.Encode((x) => x.toString())
-		})
-	})
+	new Elysia().get(
+		'',
+		{
+			query: t.Object({
+				foo: t
+					.Codec(t.String())
+					.Decode((x) => 12)
+					.Encode((x) => x.toString())
+			})
+		},
+		async ({ query: { foo } }) => addTwo(foo)
+	)
 }
 
 // handle Elysia.Ref
@@ -112,11 +116,11 @@ import { expectTypeOf } from 'expect-type'
 
 	new Elysia().use(Model).get(
 		'',
-		async ({ body }) => {
-			expectTypeOf<typeof body>().toEqualTypeOf<number>()
-		},
 		{
 			body: Model.Ref('hello')
+		},
+		async ({ body }) => {
+			expectTypeOf<typeof body>().toEqualTypeOf<number>()
 		}
 	)
 }
@@ -125,16 +129,16 @@ import { expectTypeOf } from 'expect-type'
 {
 	new Elysia().get(
 		'/test',
-		() => {
-			return form({
-				files: [file('test.png'), file('test.png')],
-				text: 'hello'
-			})
-		},
 		{
 			response: t.Form({
 				files: t.Files(),
 				text: t.String()
+			})
+		},
+		() => {
+			return form({
+				files: [file('test.png'), file('test.png')],
+				text: 'hello'
 			})
 		}
 	)

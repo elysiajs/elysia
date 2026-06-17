@@ -19,9 +19,13 @@ describe('Trace Detail', async () => {
 				})
 			})
 			.parse(function luna() {})
-			.post('/', ({ body }) => body, {
-				parse: [function kindred() {}]
-			})
+			.post(
+				'/',
+				{
+					parse: [function kindred() {}]
+				},
+				({ body }) => body
+			)
 
 		const { headers } = await app.handle(post('/', {}))
 
@@ -44,9 +48,13 @@ describe('Trace Detail', async () => {
 				})
 			})
 			.transform(function luna() {})
-			.get('/', () => 'a', {
-				transform: [function kindred() {}]
-			})
+			.get(
+				'/',
+				{
+					transform: [function kindred() {}]
+				},
+				() => 'a'
+			)
 
 		const { headers } = await app.handle(req('/'))
 
@@ -69,9 +77,13 @@ describe('Trace Detail', async () => {
 				})
 			})
 			.beforeHandle(function luna() {})
-			.get('/', () => 'a', {
-				beforeHandle: [function kindred() {}]
-			})
+			.get(
+				'/',
+				{
+					beforeHandle: [function kindred() {}]
+				},
+				() => 'a'
+			)
 
 		const { headers } = await app.handle(req('/'))
 
@@ -94,9 +106,13 @@ describe('Trace Detail', async () => {
 				})
 			})
 			.afterHandle(function luna() {})
-			.get('/', () => 'a', {
-				afterHandle: [function kindred() {}]
-			})
+			.get(
+				'/',
+				{
+					afterHandle: [function kindred() {}]
+				},
+				() => 'a'
+			)
 
 		const { headers } = await app.handle(req('/'))
 
@@ -119,9 +135,13 @@ describe('Trace Detail', async () => {
 				})
 			})
 			.mapResponse(function luna() {})
-			.get('/', () => 'a', {
-				mapResponse: [function kindred() {}]
-			})
+			.get(
+				'/',
+				{
+					mapResponse: [function kindred() {}]
+				},
+				() => 'a'
+			)
 
 		const { headers } = await app.handle(req('/'))
 
@@ -144,9 +164,13 @@ describe('Trace Detail', async () => {
 				})
 			})
 			.afterResponse(function luna() {})
-			.get('/', () => 'a', {
-				afterResponse: [function kindred() {}]
-			})
+			.get(
+				'/',
+				{
+					afterResponse: [function kindred() {}]
+				},
+				() => 'a'
+			)
 
 		app.handle(req('/'))
 	})

@@ -110,11 +110,15 @@ describe('map derive', () => {
 
 				return { name: 'Ina' }
 			})
-			.get('/', ({ name }) => name, {
-				beforeHandle() {
-					stack.push(3)
-				}
-			})
+			.get(
+				'/',
+				{
+					beforeHandle() {
+						stack.push(3)
+					}
+				},
+				({ name }) => name
+			)
 
 		await app.handle(
 			new Request('http://localhost/', {

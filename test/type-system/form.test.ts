@@ -62,27 +62,27 @@ describe('TypeSystem - Form', () => {
 		const app = new Elysia()
 			.get(
 				'/form/:name',
-				({ params: { name } }) =>
-					form({
-						name: name as any
-					}),
 				{
 					response: t.Form({
 						name: t.Literal('saltyaom')
 					})
-				}
+				},
+				({ params: { name } }) =>
+					form({
+						name: name as any
+					})
 			)
 			.get(
 				'/file',
-				() =>
-					form({
-						teapot: file('example/teapot.webp')
-					}),
 				{
 					response: t.Form({
 						teapot: t.File()
 					})
-				}
+				},
+				() =>
+					form({
+						teapot: file('example/teapot.webp')
+					})
 			)
 
 		const res1 = await app.handle(req('/form/saltyaom'))
@@ -98,18 +98,18 @@ describe('TypeSystem - Form', () => {
 	it('accepts a multipart request body and exposes the parsed fields', async () => {
 		const app = new Elysia().post(
 			'/',
-			({ body }) => ({
-				name: body.name,
-				isFile: body.file instanceof File,
-				// the internal `~ely-form` marker must NOT leak into ctx.body
-				keys: Object.keys(body)
-			}),
 			{
 				body: t.Form({
 					name: t.String(),
 					file: t.File()
 				})
-			}
+			},
+			({ body }) => ({
+				name: body.name,
+				isFile: body.file instanceof File,
+				// the internal `~ely-form` marker must NOT leak into ctx.body
+				keys: Object.keys(body)
+			})
 		)
 
 		const fd = new FormData()
@@ -118,7 +118,7 @@ describe('TypeSystem - Form', () => {
 
 		const res = await app.handle(req('/', { method: 'POST', body: fd }))
 		expect(res.status).toBe(200)
-		expect(await res.json()).toEqual({
+		await expect(res.json()).resolves.toEqual({
 			name: 'saltyaom',
 			isFile: true,
 			keys: ['name', 'file']
@@ -126,12 +126,16 @@ describe('TypeSystem - Form', () => {
 	})
 
 	it('rejects a multipart request body missing a field', async () => {
-		const app = new Elysia().post('/', ({ body }) => body, {
-			body: t.Form({
-				name: t.String(),
-				file: t.File()
-			})
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Form({
+					name: t.String(),
+					file: t.File()
+				})
+			},
+			({ body }) => body
+		)
 
 		const fd = new FormData()
 		fd.append('name', 'saltyaom') // missing `file`

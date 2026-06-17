@@ -7,12 +7,15 @@ describe('NODE_ENV=production', () => {
 	})
 
 	it('omit error summary', async () => {
-		const app = new Elysia()
-			.post('/', () => 'yay', {
+		const app = new Elysia().post(
+			'/',
+			{
 				body: t.Object({
 					name: t.String()
 				})
-			})
+			},
+			() => 'yay'
+		)
 
 		const response = await app.handle(
 			new Request('http://localhost/', {

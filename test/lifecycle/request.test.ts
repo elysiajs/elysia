@@ -41,7 +41,7 @@ describe('On Request', () => {
 			})
 
 		const res = await app.handle(req('/'))
-		expect(await res.text()).toBe('Unauthorized')
+		await expect(res.text()).resolves.toBe('Unauthorized')
 		expect(res.status).toBe(401)
 	})
 

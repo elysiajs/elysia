@@ -14,23 +14,23 @@ describe('Before Handle', () => {
 
 		const res = await app.handle(req('/name/Fubuki'))
 
-		expect(await res.text()).toBe('Cat')
+		await expect(res.text()).resolves.toBe('Cat')
 	})
 
 	it('locally skip main handler', async () => {
 		const app = new Elysia().get(
 			'/name/:name',
-			({ params: { name } }) => name,
 			{
 				beforeHandle: ({ params: { name } }) => {
 					if (name === 'Fubuki') return 'Cat'
 				}
-			}
+			},
+			({ params: { name } }) => name
 		)
 
 		const res = await app.handle(req('/name/Fubuki'))
 
-		expect(await res.text()).toBe('Cat')
+		await expect(res.text()).resolves.toBe('Cat')
 	})
 
 	it('group before handler', async () => {
@@ -48,8 +48,8 @@ describe('Before Handle', () => {
 		const base = await app.handle(req('/name/fubuki'))
 		const scoped = await app.handle(req('/type/name/fubuki'))
 
-		expect(await base.text()).toBe('fubuki')
-		expect(await scoped.text()).toBe('cat')
+		await expect(base.text()).resolves.toBe('fubuki')
+		await expect(scoped.text()).resolves.toBe('cat')
 	})
 
 	it('inherits from plugin', async () => {
@@ -66,7 +66,7 @@ describe('Before Handle', () => {
 
 		const res = await app.handle(req('/name/Fubuki'))
 
-		expect(await res.text()).toBe('Cat')
+		await expect(res.text()).resolves.toBe('Cat')
 	})
 
 	it('not inherits plugin on local', async () => {
@@ -82,7 +82,7 @@ describe('Before Handle', () => {
 
 		const res = await app.handle(req('/name/Fubuki'))
 
-		expect(await res.text()).toBe('Fubuki')
+		await expect(res.text()).resolves.toBe('Fubuki')
 	})
 
 	it('before handle in order', async () => {
@@ -108,17 +108,21 @@ describe('Before Handle', () => {
 				const { name } = params as { name?: string }
 				if (name === 'fubuki') return 'cat'
 			})
-			.get('/name/:name', ({ params: { name } }) => name, {
-				beforeHandle: ({ params: { name } }) => {
-					if (name === 'korone') return 'dog'
-				}
-			})
+			.get(
+				'/name/:name',
+				{
+					beforeHandle: ({ params: { name } }) => {
+						if (name === 'korone') return 'dog'
+					}
+				},
+				({ params: { name } }) => name
+			)
 
 		const fubuki = await app.handle(req('/name/fubuki'))
 		const korone = await app.handle(req('/name/korone'))
 
-		expect(await fubuki.text()).toBe('cat')
-		expect(await korone.text()).toBe('dog')
+		await expect(fubuki.text()).resolves.toBe('cat')
+		await expect(korone.text()).resolves.toBe('dog')
 	})
 
 	it('accept multiple before handler', async () => {
@@ -136,26 +140,26 @@ describe('Before Handle', () => {
 		const fubuki = await app.handle(req('/name/fubuki'))
 		const korone = await app.handle(req('/name/korone'))
 
-		expect(await fubuki.text()).toBe('cat')
-		expect(await korone.text()).toBe('dog')
+		await expect(fubuki.text()).resolves.toBe('cat')
+		await expect(korone.text()).resolves.toBe('dog')
 	})
 
 	it('handle async', async () => {
 		const app = new Elysia().get(
 			'/name/:name',
-			({ params: { name } }) => name,
 			{
 				beforeHandle: async ({ params: { name } }) => {
 					await delay(5)
 
 					if (name === 'Watame') return 'Warukunai yo ne'
 				}
-			}
+			},
+			({ params: { name } }) => name
 		)
 
 		const res = await app.handle(req('/name/Watame'))
 
-		expect(await res.text()).toBe('Warukunai yo ne')
+		await expect(res.text()).resolves.toBe('Warukunai yo ne')
 	})
 
 	it("handle on('beforeHandle')", async () => {
@@ -173,7 +177,7 @@ describe('Before Handle', () => {
 
 		const res = await app.handle(req('/name/Watame'))
 
-		expect(await res.text()).toBe('Warukunai yo ne')
+		await expect(res.text()).resolves.toBe('Warukunai yo ne')
 	})
 
 	it('execute afterHandle', async () => {
@@ -190,7 +194,7 @@ describe('Before Handle', () => {
 
 		const res = await app.handle(req('/name/Fubuki'))
 
-		expect(await res.text()).toBe('Not cat')
+		await expect(res.text()).resolves.toBe('Not cat')
 	})
 
 	it('as global', async () => {
@@ -296,9 +300,6 @@ describe('Before Handle', () => {
 
 		const app = new Elysia().get(
 			'/handler',
-			({ status }) => {
-				return status(401, 'unauthorized handler')
-			},
 			{
 				afterHandle: ({ responseValue }) => {
 					hasAfterHandleResponse = !!responseValue
@@ -308,6 +309,9 @@ describe('Before Handle', () => {
 				afterResponse: ({ responseValue }) => {
 					hasAfterResponseResponse = !!responseValue
 				}
+			},
+			({ status }) => {
+				return status(401, 'unauthorized handler')
 			}
 		)
 

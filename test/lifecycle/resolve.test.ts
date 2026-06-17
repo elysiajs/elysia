@@ -88,11 +88,15 @@ describe('resolve', () => {
 
 				return { name: 'Ina' }
 			})
-			.get('/', ({ name }) => name, {
-				beforeHandle() {
-					stack.push(3)
-				}
-			})
+			.get(
+				'/',
+				{
+					beforeHandle() {
+						stack.push(3)
+					}
+				},
+				({ name }) => name
+			)
 
 		await app.handle(
 			new Request('http://localhost/', {
@@ -218,8 +222,8 @@ describe('resolve', () => {
 
 		const res = await new Elysia().use(route).handle(req('/'))
 
-		expect(await res.status).toEqual(418)
-		expect(await res.text()).toEqual("I'm a teapot")
+		expect(res.status).toEqual(418)
+		await expect(res.text()).resolves.toEqual("I'm a teapot")
 	})
 
 	/** These work but there's no support for type

@@ -16,13 +16,6 @@ const getCookies = (response: Response) =>
 const app = new Elysia()
 	.get(
 		'/council',
-		({ cookie: { council } }) =>
-			(council.value = [
-				{
-					name: 'Rin',
-					affilation: 'Administration'
-				}
-			]),
 		{
 			cookie: t.Cookie({
 				council: t.Optional(
@@ -34,7 +27,14 @@ const app = new Elysia()
 					)
 				)
 			})
-		}
+		},
+		({ cookie: { council } }) =>
+			(council.value = [
+				{
+					name: 'Rin',
+					affilation: 'Administration'
+				}
+			])
 	)
 	.get('/create', ({ cookie: { name } }) => (name.value = 'Himari'))
 	.get('/multiple', ({ cookie: { name, president } }) => {
@@ -45,11 +45,6 @@ const app = new Elysia()
 	})
 	.get(
 		'/update',
-		({ cookie: { name } }) => {
-			name.value = 'seminar: Himari'
-
-			return name.value
-		},
 		{
 			cookie: t.Cookie(
 				{
@@ -60,6 +55,11 @@ const app = new Elysia()
 					sign: ['name']
 				}
 			)
+		},
+		({ cookie: { name } }) => {
+			name.value = 'seminar: Himari'
+
+			return name.value
 		}
 	)
 	.get('/remove', ({ cookie }) => {
@@ -180,15 +180,15 @@ describe('Cookie Response', () => {
 			}
 		}).get(
 			'/update',
-			({ cookie: { name } }) => {
-				if (!name.value) name.value = 'seminar: Himari'
-
-				return name.value
-			},
 			{
 				cookie: t.Cookie({
 					name: t.Optional(t.String())
 				})
+			},
+			({ cookie: { name } }) => {
+				if (!name.value) name.value = 'seminar: Himari'
+
+				return name.value
 			}
 		)
 
@@ -214,15 +214,15 @@ describe('Cookie Response', () => {
 			}
 		}).get(
 			'/update',
-			({ cookie: { name } }) => {
-				if (!name.value) name.value = 'seminar: Himari'
-
-				return name.value
-			},
 			{
 				cookie: t.Cookie({
 					name: t.Optional(t.String())
 				})
+			},
+			({ cookie: { name } }) => {
+				if (!name.value) name.value = 'seminar: Himari'
+
+				return name.value
 			}
 		)
 
@@ -266,7 +266,6 @@ describe('Cookie Response', () => {
 	it('parse object cookie', async () => {
 		const app = new Elysia().get(
 			'/council',
-			({ cookie: { council } }) => council.value,
 			{
 				cookie: t.Cookie({
 					council: t.Object({
@@ -274,7 +273,8 @@ describe('Cookie Response', () => {
 						affilation: t.String()
 					})
 				})
-			}
+			},
+			({ cookie: { council } }) => council.value
 		)
 
 		const expected = {
@@ -291,17 +291,21 @@ describe('Cookie Response', () => {
 		)
 
 		expect(response.status).toBe(200)
-		expect(await response.json()).toEqual(expected)
+		await expect(response.json()).resolves.toEqual(expected)
 	})
 
 	it('handle optional at root', async () => {
-		const app = new Elysia().get('/', ({ cookie: { id } }) => id.value, {
-			cookie: t.Optional(
-				t.Object({
-					id: t.Numeric()
-				})
-			)
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				cookie: t.Optional(
+					t.Object({
+						id: t.Numeric()
+					})
+				)
+			},
+			({ cookie: { id } }) => id.value
+		)
 
 		const res = await Promise.all([
 			app.handle(req('/')).then((x) => x.text()),
@@ -392,7 +396,7 @@ describe('Cookie Response', () => {
 			})
 		)
 
-		expect(await response.json()).toEqual({
+		await expect(response.json()).resolves.toEqual({
 			same: true,
 			distinct: true
 		})
@@ -429,22 +433,22 @@ describe('Cookie Response', () => {
 			.error(() => 'handled')
 			.get(
 				'/boom',
-				({ cookie: { name } }) => {
-					name.value = 'seminar: Himari'
-
-					throw new Error('boom')
-				},
 				{
 					cookie: t.Cookie(
 						{ name: t.Optional(t.String()) },
 						{ secrets, sign: ['name'] }
 					)
+				},
+				({ cookie: { name } }) => {
+					name.value = 'seminar: Himari'
+
+					throw new Error('boom')
 				}
 			)
 
 		const response = await app.handle(req('/boom'))
 
-		expect(await response.text()).toBe('handled')
+		await expect(response.text()).resolves.toBe('handled')
 		expect(getCookies(response)).toEqual([
 			`name=${await signCookie('seminar: Himari', secrets)}; Path=/`
 		])

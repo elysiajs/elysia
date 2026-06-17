@@ -241,9 +241,13 @@ describe('group', () => {
 			'/group/:id',
 			{ params: t.Object({ id: t.Number() }) },
 			(app) =>
-				app.get('/:name', ({ params }) => params, {
-					params: t.Object({ name: t.String() })
-				})
+				app.get(
+					'/:name',
+					{
+						params: t.Object({ name: t.String() })
+					},
+					({ params }) => params
+				)
 		)
 
 		// the route's own `params` replaces the group's (override is the
@@ -254,8 +258,8 @@ describe('group', () => {
 			.handle(req('/group/a/saltyaom'))
 			.then((x) => x.status)
 
-		expect(await valid).toEqual({ name: 'saltyaom' })
-		expect(await invalid).toBe(200)
+		await expect(valid).resolves.toEqual({ name: 'saltyaom' })
+		await expect(invalid).resolves.toBe(200)
 	})
 
 	it("group schema with schema: 'standalone' stays additive", async () => {
@@ -266,9 +270,13 @@ describe('group', () => {
 				params: t.Object({ id: t.Number() })
 			},
 			(app) =>
-				app.get('/:name', ({ params }) => params, {
-					params: t.Object({ name: t.String() })
-				})
+				app.get(
+					'/:name',
+					{
+						params: t.Object({ name: t.String() })
+					},
+					({ params }) => params
+				)
 		)
 
 		const valid = app.handle(req('/group/1/saltyaom')).then((x) => x.json())
@@ -276,19 +284,23 @@ describe('group', () => {
 			.handle(req('/group/a/saltyaom'))
 			.then((x) => x.status)
 
-		expect(await valid).toEqual({ id: 1, name: 'saltyaom' })
-		expect(await invalid).toBe(422)
+		await expect(valid).resolves.toEqual({ id: 1, name: 'saltyaom' })
+		await expect(invalid).resolves.toBe(422)
 	})
 
 	it('handle multiple nested guard group', async () => {
 		const app = new Elysia().group('', {}, (app) =>
 			app.group('', {}, (app) =>
-				app.get('/', ({ query }) => query, {
-					query: t.Object({
-						playing: t.Boolean(),
-						limit: t.Number()
-					})
-				})
+				app.get(
+					'/',
+					{
+						query: t.Object({
+							playing: t.Boolean(),
+							limit: t.Number()
+						})
+					},
+					({ query }) => query
+				)
 			)
 		)
 
@@ -319,11 +331,15 @@ describe('group', () => {
 						})
 					},
 					(app) =>
-						app.get('/', ({ query }) => query, {
-							query: t.Object({
-								playing: t.Boolean()
-							})
-						})
+						app.get(
+							'/',
+							{
+								query: t.Object({
+									playing: t.Boolean()
+								})
+							},
+							({ query }) => query
+						)
 				)
 		)
 
@@ -362,11 +378,15 @@ describe('group', () => {
 						})
 					},
 					(app) =>
-						app.get('/', ({ query }) => query, {
-							query: t.Object({
-								playing: t.Boolean()
-							})
-						})
+						app.get(
+							'/',
+							{
+								query: t.Object({
+									playing: t.Boolean()
+								})
+							},
+							({ query }) => query
+						)
 				)
 		)
 

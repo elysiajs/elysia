@@ -10,19 +10,23 @@ import { flushMemory } from '../src/memory'
 export const app = new Elysia()
 
 for (let i = 0; i < 1_000; i++) {
-	app.post(`/${i}`, () => 'ok', {
-		query: t.Object({
-			[`name${i}`]: t.String()
-		}),
-		body: t.Object({
-			[`id${i}`]: t.String({ format: 'uuid' }),
-			title: t.String(),
-			count: t.Number(),
-			active: t.Boolean(),
-			tags: t.Array(t.String()),
-			note: t.Optional(t.String())
-		})
-	})
+	app.post(
+		`/${i}`,
+		{
+			query: t.Object({
+				[`name${i}`]: t.String()
+			}),
+			body: t.Object({
+				[`id${i}`]: t.String({ format: 'uuid' }),
+				title: t.String(),
+				count: t.Number(),
+				active: t.Boolean(),
+				tags: t.Array(t.String()),
+				note: t.Optional(t.String())
+			})
+		},
+		() => 'ok'
+	)
 }
 
 app.listen(3001)

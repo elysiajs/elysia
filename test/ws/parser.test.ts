@@ -67,7 +67,7 @@ describe('createMessageParser', () => {
 
 		const result = parse(fakeWS, 'x')
 		expect(result instanceof Promise).toBe(true)
-		expect(await result).toBe('x-sync-async-tail')
+		await expect(result).resolves.toBe('x-sync-async-tail')
 	})
 
 	it('F6: sync parser throw propagates synchronously to the caller', () => {

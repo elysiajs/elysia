@@ -30,7 +30,9 @@ describe('TypeSystem - Date', () => {
 
 		const unionSchema = schema as unknown as TUnion
 		for (const type of unionSchema.anyOf) {
-			expect(new Date((type as { default: string }).default)).toEqual(given)
+			expect(new Date((type as { default: string }).default)).toEqual(
+				given
+			)
 		}
 	})
 
@@ -75,11 +77,15 @@ describe('TypeSystem - Date', () => {
 	})
 
 	it('Integrate', async () => {
-		const app = new Elysia().post('/', ({ body: { date } }) => date, {
-			body: t.Object({
-				date: t.Date()
-			})
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({
+					date: t.Date()
+				})
+			},
+			({ body: { date } }) => date
+		)
 
 		const res1 = await app.handle(
 			post('/', {

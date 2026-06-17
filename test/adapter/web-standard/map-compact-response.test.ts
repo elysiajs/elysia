@@ -21,7 +21,7 @@ describe('Web Standard - Map Compact Response', () => {
 		const response = mapCompactResponse('Shiroko')
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toBe('Shiroko')
+		await expect(response.text()).resolves.toBe('Shiroko')
 		expect(response.status).toBe(200)
 	})
 
@@ -29,7 +29,7 @@ describe('Web Standard - Map Compact Response', () => {
 		const response = mapCompactResponse(1)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toBe('1')
+		await expect(response.text()).resolves.toBe('1')
 		expect(response.status).toBe(200)
 	})
 
@@ -37,7 +37,7 @@ describe('Web Standard - Map Compact Response', () => {
 		const response = mapCompactResponse(true)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toBe('true')
+		await expect(response.text()).resolves.toBe('true')
 		expect(response.status).toBe(200)
 	})
 
@@ -49,7 +49,7 @@ describe('Web Standard - Map Compact Response', () => {
 		const response = mapCompactResponse(body)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json()).toEqual(body)
+		await expect(response.json()).resolves.toEqual(body)
 		expect(response.status).toBe(200)
 	})
 
@@ -57,7 +57,7 @@ describe('Web Standard - Map Compact Response', () => {
 		const response = mapCompactResponse(() => 1)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toBe('1')
+		await expect(response.text()).resolves.toBe('1')
 		expect(response.status).toBe(200)
 	})
 
@@ -65,7 +65,7 @@ describe('Web Standard - Map Compact Response', () => {
 		const response = mapCompactResponse(undefined)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toEqual('')
+		await expect(response.text()).resolves.toEqual('')
 		expect(response.status).toBe(200)
 	})
 
@@ -73,7 +73,7 @@ describe('Web Standard - Map Compact Response', () => {
 		const response = mapCompactResponse(null)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toEqual('')
+		await expect(response.text()).resolves.toEqual('')
 		expect(response.status).toBe(200)
 	})
 
@@ -83,7 +83,9 @@ describe('Web Standard - Map Compact Response', () => {
 		const response = mapCompactResponse(file)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.arrayBuffer()).toEqual(await file.arrayBuffer())
+		await expect(response.arrayBuffer()).resolves.toEqual(
+			await file.arrayBuffer()
+		)
 		expect(response.status).toBe(200)
 	})
 
@@ -93,7 +95,7 @@ describe('Web Standard - Map Compact Response', () => {
 		const response = mapCompactResponse(file)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toEqual('Hello')
+		await expect(response.text()).resolves.toEqual('Hello')
 		expect(response.status).toBe(200)
 	})
 
@@ -107,7 +109,7 @@ describe('Web Standard - Map Compact Response', () => {
 		)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json()).toEqual(body)
+		await expect(response.json()).resolves.toEqual(body)
 		expect(response.status).toBe(200)
 	})
 
@@ -115,7 +117,7 @@ describe('Web Standard - Map Compact Response', () => {
 		const response = mapCompactResponse(new Error('Hello'))
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json()).toEqual({
+		await expect(response.json()).resolves.toEqual({
 			name: 'Error',
 			message: 'Hello'
 		})
@@ -126,7 +128,7 @@ describe('Web Standard - Map Compact Response', () => {
 		const response = mapCompactResponse(new Response('Shiroko'))
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toEqual('Shiroko')
+		await expect(response.text()).resolves.toEqual('Shiroko')
 		expect(response.status).toBe(200)
 	})
 
@@ -134,7 +136,7 @@ describe('Web Standard - Map Compact Response', () => {
 		const response = mapCompactResponse(new CustomResponse('Shiroko'))
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toEqual('Shiroko')
+		await expect(response.text()).resolves.toEqual('Shiroko')
 		expect(response.status).toBe(200)
 	})
 
@@ -142,7 +144,7 @@ describe('Web Standard - Map Compact Response', () => {
 		const response = mapCompactResponse(new Student('Himari'))
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json()).toEqual({
+		await expect(response.json()).resolves.toEqual({
 			name: 'Himari'
 		})
 		expect(response.status).toBe(200)
@@ -161,7 +163,7 @@ describe('Web Standard - Map Compact Response', () => {
 		const headers = response.headers.toJSON()
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toEqual('Shiroko')
+		await expect(response.text()).resolves.toEqual('Shiroko')
 		// @ts-ignore
 		expect(response.headers.toJSON()).toEqual({
 			...headers,
@@ -173,7 +175,7 @@ describe('Web Standard - Map Compact Response', () => {
 		const response = mapCompactResponse(new Passthrough())
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toEqual('hi')
+		await expect(response.text()).resolves.toEqual('hi')
 		expect(response.status).toBe(200)
 	})
 
@@ -201,7 +203,7 @@ describe('Web Standard - Map Compact Response', () => {
 			'multipart/form-data'
 		)
 		expect(response.status).toBe(200)
-		expect(await response.formData()).toBeInstanceOf(FormData)
+		await expect(response.formData()).resolves.toBeInstanceOf(FormData)
 	})
 
 	it('map custom thenable', async () => {
@@ -217,7 +219,7 @@ describe('Web Standard - Map Compact Response', () => {
 		const customThenable = new CustomThenable()
 		const responsePromise = mapCompactResponse(customThenable)
 		expect(responsePromise).toBeInstanceOf(Promise)
-		
+
 		const response = await responsePromise
 
 		expect(response).toBeInstanceOf(Response)

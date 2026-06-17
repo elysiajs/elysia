@@ -5,12 +5,9 @@ import { newWebsocket, wsOpen, wsClosed, wsMessage } from './utils'
 describe('WebSocket .ws() signature', () => {
 	it('3-arg form: positional message handler echoes back', async () => {
 		const app = new Elysia()
-			.ws(
-				'/ws',
-				({ ws, body }: any) => {
-					ws.send(`echo:${body}`)
-				}
-			)
+			.ws('/ws', ({ ws, body }: any) => {
+				ws.send(`echo:${body}`)
+			})
 			.listen(0)
 
 		const ws = newWebsocket(app.server!)
@@ -32,7 +29,6 @@ describe('WebSocket .ws() signature', () => {
 		const app = new Elysia()
 			.ws(
 				'/ws',
-				({ body }: any) => `msg:${body}`,
 				{
 					open: () => {
 						order.push('open')
@@ -40,7 +36,8 @@ describe('WebSocket .ws() signature', () => {
 					close: () => {
 						order.push('close')
 					}
-				}
+				},
+				({ body }: any) => `msg:${body}`
 			)
 			.listen(0)
 
@@ -61,13 +58,10 @@ describe('WebSocket .ws() signature', () => {
 
 	it('3-arg form: generator function as positional handler', async () => {
 		const app = new Elysia()
-			.ws(
-				'/ws',
-				function* ({ body }: any) {
-					yield `${body}-1`
-					yield `${body}-2`
-				}
-			)
+			.ws('/ws', function* ({ body }: any) {
+				yield `${body}-1`
+				yield `${body}-2`
+			})
 			.listen(0)
 
 		const ws = newWebsocket(app.server!)
@@ -82,7 +76,7 @@ describe('WebSocket .ws() signature', () => {
 		})
 
 		ws.send('x')
-		expect(await pending).toEqual(['x-1', 'x-2'])
+		await expect(pending).resolves.toEqual(['x-1', 'x-2'])
 
 		await wsClosed(ws)
 		app.stop()
@@ -92,10 +86,10 @@ describe('WebSocket .ws() signature', () => {
 		const app = new Elysia()
 			.ws(
 				'/ws',
-				({ ws, body }: any) => ws.send(body.text),
 				{
 					body: t.Object({ text: t.String() })
-				}
+				},
+				({ ws, body }: any) => ws.send(body.text)
 			)
 			.listen(0)
 
@@ -114,8 +108,10 @@ describe('WebSocket .ws() signature', () => {
 		expect(() => {
 			new Elysia().ws(
 				'/ws',
-				() => 'positional',
-				{ message: () => 'options' } as any
+				{
+					message: () => 'options'
+				} as any,
+				() => 'positional'
 			)
 		}).toThrow(/cannot specify 'message'/)
 	})

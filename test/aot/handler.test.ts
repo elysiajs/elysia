@@ -36,14 +36,16 @@ afterEach(() => {
 // Hook + validation + response → params.size > 1 → goes through `new Function`
 // (not the `createInlineHandler` fast path), so there's a handler to freeze.
 const build = () =>
-	new Elysia().beforeHandle(() => {}).post(
-		'/x',
-		({ body }: any) => ({ ok: true, n: body.n }),
-		{
-			body: t.Object({ n: t.Number() }),
-			response: { 200: t.Object({ ok: t.Boolean(), n: t.Number() }) }
-		}
-	)
+	new Elysia()
+		.beforeHandle(() => {})
+		.post(
+			'/x',
+			{
+				body: t.Object({ n: t.Number() }),
+				response: { 200: t.Object({ ok: t.Boolean(), n: t.Number() }) }
+			},
+			({ body }: any) => ({ ok: true, n: body.n })
+		)
 
 describe('AOT handler freeze', () => {
 	it('binds the frozen factory (no new Function) and behaves identically to JIT', async () => {
@@ -79,7 +81,7 @@ describe('AOT handler freeze', () => {
 
 		const frozen = await frozenApp.handle(post('/x', { n: 5 }))
 		expect(frozen.status).toBe(200)
-		expect(await frozen.json()).toEqual({ ok: true, n: 5 })
+		await expect(frozen.json()).resolves.toEqual({ ok: true, n: 5 })
 
 		// ── JIT reference (no manifest) — same behaviour ────────────────────
 		Compiled.clear()
@@ -88,7 +90,7 @@ describe('AOT handler freeze', () => {
 		;(jitApp as any).compile()
 		const jit = await jitApp.handle(post('/x', { n: 5 }))
 		expect(jit.status).toBe(200)
-		expect(await jit.json()).toEqual({ ok: true, n: 5 })
+		await expect(jit.json()).resolves.toEqual({ ok: true, n: 5 })
 	})
 
 	it('trusts the manifest alias and fails loud on a corrupt one', () => {
@@ -106,7 +108,9 @@ describe('AOT handler freeze', () => {
 		Compiled.handlers = manifest
 
 		delete process.env.ELYSIA_AOT_BUILD
-		expect(() => (build() as any).compile()).toThrow(/Fail to reconstruct build/)
+		expect(() => (build() as any).compile()).toThrow(
+			/Fail to reconstruct build/
+		)
 	})
 })
 
@@ -120,15 +124,27 @@ describe('AOT handler emit dedup', () => {
 	it('shares the factory, alias, and wrapper across same-shape routes', async () => {
 		const app = new Elysia()
 			.beforeHandle(() => {})
-			.post('/a', ({ body }: any) => body, {
-				body: t.Object({ a: t.String() })
-			})
-			.post('/b', ({ body }: any) => body, {
-				body: t.Object({ b: t.String() })
-			})
-			.post('/c', ({ body }: any) => body, {
-				body: t.Object({ c: t.String() })
-			})
+			.post(
+				'/a',
+				{
+					body: t.Object({ a: t.String() })
+				},
+				({ body }: any) => body
+			)
+			.post(
+				'/b',
+				{
+					body: t.Object({ b: t.String() })
+				},
+				({ body }: any) => body
+			)
+			.post(
+				'/c',
+				{
+					body: t.Object({ c: t.String() })
+				},
+				({ body }: any) => body
+			)
 
 		const src = await compileToSource(app as any, { register: false })
 		delete process.env.ELYSIA_AOT_BUILD
@@ -154,8 +170,8 @@ describe('AOT handler emit dedup', () => {
 describe('AOT static & promise handler freeze', () => {
 	const build = () =>
 		new Elysia()
-			.get('/s', 'hello', { beforeHandle() {} }) // static value + blocking hook
-			.get('/p', Promise.resolve('hi') as any, { beforeHandle() {} }) // promise + hook
+			.get('/s', { beforeHandle() {} }, 'hello') // static value + blocking hook
+			.get('/p', { beforeHandle() {} }, Promise.resolve('hi') as any) // promise + hook
 
 	it('captures static-value and Promise handlers, not just functions', () => {
 		;(build() as any).compile()
@@ -195,9 +211,9 @@ describe('AOT static & promise handler freeze', () => {
 		const s = await frozenApp.handle(req('/s'))
 		const p = await frozenApp.handle(req('/p'))
 		expect(s.status).toBe(200)
-		expect(await s.text()).toBe('hello')
+		await expect(s.text()).resolves.toBe('hello')
 		expect(p.status).toBe(200)
-		expect(await p.text()).toBe('hi')
+		await expect(p.text()).resolves.toBe('hi')
 
 		// ── JIT reference (no manifest) — same behaviour ────────────────────
 		Compiled.clear()
@@ -207,8 +223,8 @@ describe('AOT static & promise handler freeze', () => {
 		const js = await jitApp.handle(req('/s'))
 		const jp = await jitApp.handle(req('/p'))
 		expect(js.status).toBe(200)
-		expect(await js.text()).toBe('hello')
+		await expect(js.text()).resolves.toBe('hello')
 		expect(jp.status).toBe(200)
-		expect(await jp.text()).toBe('hi')
+		await expect(jp.text()).resolves.toBe('hi')
 	})
 })

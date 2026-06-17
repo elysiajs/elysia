@@ -8,9 +8,12 @@ describe('TypeSystem - ObjectString', () => {
 		expect(Value.Create(t.ObjectString({}))).toEqual({})
 		expect(
 			Value.Create(
-				t.ObjectString({}, {
-					default: '{}'
-				})
+				t.ObjectString(
+					{},
+					{
+						default: '{}'
+					}
+				)
 			)
 		).toBe('{}')
 	})
@@ -67,14 +70,18 @@ describe('TypeSystem - ObjectString', () => {
 	})
 
 	it('Integrate', async () => {
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: t.Object({
-				pagination: t.ObjectString({
-					pageIndex: t.Number(),
-					pageLimit: t.Number()
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					pagination: t.ObjectString({
+						pageIndex: t.Number(),
+						pageLimit: t.Number()
+					})
 				})
-			})
-		})
+			},
+			({ query }) => query
+		)
 
 		const res1 = await app.handle(
 			req('/?pagination={"pageIndex":1,"pageLimit":1}')
@@ -88,36 +95,47 @@ describe('TypeSystem - ObjectString', () => {
 	it('Optional', async () => {
 		const schema = t.Object({
 			name: t.String(),
-			metadata: t.Optional(t.ObjectString({
-				pageIndex: t.Number(),
-				pageLimit: t.Number()
-			}))
+			metadata: t.Optional(
+				t.ObjectString({
+					pageIndex: t.Number(),
+					pageLimit: t.Number()
+				})
+			)
 		})
 
 		expect(Value.Check(schema, { name: 'test' })).toBe(true)
 		expect(Value.Create(schema).metadata).toBeUndefined()
 
-		expect(Value.Check(schema, {
-			name: 'test',
-			metadata: { pageIndex: 1, pageLimit: 10 }
-		})).toBe(true)
+		expect(
+			Value.Check(schema, {
+				name: 'test',
+				metadata: { pageIndex: 1, pageLimit: 10 }
+			})
+		).toBe(true)
 		expect(Value.Check(schema, { name: 'test', metadata: {} })).toBe(false)
 	})
 
 	it('Default value', async () => {
-		const schema = t.ObjectString({
-			pageIndex: t.Number(),
-			pageLimit: t.Number()
-		}, {
-			default: { pageIndex: 0, pageLimit: 10 }
-		})
+		const schema = t.ObjectString(
+			{
+				pageIndex: t.Number(),
+				pageLimit: t.Number()
+			},
+			{
+				default: { pageIndex: 0, pageLimit: 10 }
+			}
+		)
 
 		expect(Value.Create(schema)).toEqual({ pageIndex: 0, pageLimit: 10 })
 
 		expect(Value.Check(schema, { pageIndex: 1, pageLimit: 20 })).toBe(true)
 		expect(Value.Check(schema, { pageIndex: 0, pageLimit: 10 })).toBe(true)
-		expect(Value.Check(schema, JSON.stringify({ pageIndex: 1, pageLimit: 20 }))).toBe(true)
-		expect(Value.Check(schema, JSON.stringify({ pageIndex: 0, pageLimit: 10 }))).toBe(true)
+		expect(
+			Value.Check(schema, JSON.stringify({ pageIndex: 1, pageLimit: 20 }))
+		).toBe(true)
+		expect(
+			Value.Check(schema, JSON.stringify({ pageIndex: 0, pageLimit: 10 }))
+		).toBe(true)
 
 		expect(Value.Check(schema, {})).toBe(false)
 		expect(Value.Check(schema, { pageIndex: 1 })).toBe(false)

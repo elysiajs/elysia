@@ -99,7 +99,10 @@ describe('AOT plugin', () => {
 		expect(plugin.load('\0not-ours')).toBeUndefined()
 
 		// transform injects the autoload import into the ENTRY only
-		const injected = plugin.transform('export const app = 1', resolveEntry(VITE_APP))
+		const injected = plugin.transform(
+			'export const app = 1',
+			resolveEntry(VITE_APP)
+		)
 		expect(injected).toBe("import 'elysia/compiled'\nexport const app = 1")
 		// any other module is untouched
 		expect(plugin.transform('x', '/some/other/file.ts')).toBeUndefined()
@@ -131,7 +134,7 @@ describe('AOT plugin', () => {
 
 			const ok = await mod.app.handle(post('/body', { hello: 'world' }))
 			expect(ok.status).toBe(200)
-			expect(await ok.json()).toEqual({ hello: 'world' })
+			await expect(ok.json()).resolves.toEqual({ hello: 'world' })
 
 			// frozen check rejects (the group materialized synchronously on first hit)
 			const bad = await mod.app.handle(post('/body', { hello: 123 }))

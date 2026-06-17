@@ -43,11 +43,15 @@ describe('TypeSystem - ArrayString', () => {
 	})
 
 	it('Integrate', async () => {
-		const app = new Elysia().post('/', ({ body }) => body, {
-			body: t.Object({
-				id: t.ArrayString(t.Number())
-			})
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({
+					id: t.ArrayString(t.Number())
+				})
+			},
+			({ body }) => body
+		)
 
 		const res1 = await app.handle(
 			new Request('http://localhost', {

@@ -5,12 +5,12 @@ describe('Coercion - Numeric -> Number', () => {
 	it('work', async () => {
 		const app = new Elysia().get(
 			'/:entityType',
-			({ params: { entityType } }) => entityType,
 			{
 				params: t.Object({
 					entityType: t.Number()
 				})
-			}
+			},
+			({ params: { entityType } }) => entityType
 		)
 
 		const response = await app.handle(new Request('http://localhost/999'))
@@ -22,29 +22,37 @@ describe('Coercion - Numeric -> Number', () => {
 			.error(({ error }) =>
 				error instanceof ValidationError ? 'VALIDATION' : 'OTHER'
 			)
-			.get('/:entityType', ({ params: { entityType } }) => entityType, {
-				params: t.Object({
-					entityType: t.Number({
-						minimum: 0,
-						maximum: 3,
-						multipleOf: 1
+			.get(
+				'/:entityType',
+				{
+					params: t.Object({
+						entityType: t.Number({
+							minimum: 0,
+							maximum: 3,
+							multipleOf: 1
+						})
 					})
-				})
-			})
+				},
+				({ params: { entityType } }) => entityType
+			)
 
 		const numericApp = new Elysia()
 			.error(({ error }) =>
 				error instanceof ValidationError ? 'VALIDATION' : 'OTHER'
 			)
-			.get('/:entityType', ({ params: { entityType } }) => entityType, {
-				params: t.Object({
-					entityType: t.Numeric({
-						minimum: 0,
-						maximum: 3,
-						multipleOf: 1
+			.get(
+				'/:entityType',
+				{
+					params: t.Object({
+						entityType: t.Numeric({
+							minimum: 0,
+							maximum: 3,
+							multipleOf: 1
+						})
 					})
-				})
-			})
+				},
+				({ params: { entityType } }) => entityType
+			)
 
 		async function expectValidResponse(response: Response) {
 			expect(response.status).toBe(422)

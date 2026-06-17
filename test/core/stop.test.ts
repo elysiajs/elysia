@@ -38,7 +38,7 @@ describe('Stop', () => {
 		try {
 			const response = await fetch(`http://localhost:${port}/health`)
 			expect(response.status).toBe(200)
-			expect(await response.text()).toBe('hi')
+			await expect(response.text()).resolves.toBe('hi')
 		} catch (error) {
 			throw new Error('Server unexpectedly shut down')
 		}

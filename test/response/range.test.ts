@@ -12,7 +12,7 @@ describe('Range header', () => {
 	it('returns full file without Range header', async () => {
 		const res = await app.handle(req('/file'))
 		expect(res.status).toBe(200)
-		expect(await res.text()).toBe(content)
+		await expect(res.text()).resolves.toBe(content)
 	})
 
 	it('handles bytes=start- (open-ended range)', async () => {
@@ -22,7 +22,7 @@ describe('Range header', () => {
 		expect(res.status).toBe(206)
 		expect(res.headers.get('content-range')).toBe('bytes 3-4/5')
 		expect(res.headers.get('content-length')).toBe('2')
-		expect(await res.text()).toBe('45')
+		await expect(res.text()).resolves.toBe('45')
 	})
 
 	it('handles bytes=start-end (bounded range)', async () => {
@@ -32,7 +32,7 @@ describe('Range header', () => {
 		expect(res.status).toBe(206)
 		expect(res.headers.get('content-range')).toBe('bytes 1-3/5')
 		expect(res.headers.get('content-length')).toBe('3')
-		expect(await res.text()).toBe('234')
+		await expect(res.text()).resolves.toBe('234')
 	})
 
 	it('handles bytes=-suffix (last N bytes)', async () => {
@@ -42,7 +42,7 @@ describe('Range header', () => {
 		expect(res.status).toBe(206)
 		expect(res.headers.get('content-range')).toBe('bytes 3-4/5')
 		expect(res.headers.get('content-length')).toBe('2')
-		expect(await res.text()).toBe('45')
+		await expect(res.text()).resolves.toBe('45')
 	})
 
 	it('clamps end beyond file size to last byte', async () => {
@@ -51,7 +51,7 @@ describe('Range header', () => {
 		)
 		expect(res.status).toBe(206)
 		expect(res.headers.get('content-range')).toBe('bytes 2-4/5')
-		expect(await res.text()).toBe('345')
+		await expect(res.text()).resolves.toBe('345')
 	})
 
 	it('returns 416 when start is out of range', async () => {
@@ -77,6 +77,6 @@ describe('Range header', () => {
 		)
 		expect(res.status).toBe(206)
 		expect(res.headers.get('content-range')).toBe('bytes 0-1/5')
-		expect(await res.text()).toBe('12')
+		await expect(res.text()).resolves.toBe('12')
 	})
 })

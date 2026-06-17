@@ -25,7 +25,7 @@ describe('Parser', () => {
 			})
 		)
 
-		expect(await res.text()).toBe('A')
+		await expect(res.text()).resolves.toBe('A')
 	})
 
 	it('register using on', async () => {
@@ -49,7 +49,7 @@ describe('Parser', () => {
 			})
 		)
 
-		expect(await res.text()).toBe(':D')
+		await expect(res.text()).resolves.toBe(':D')
 	})
 
 	it('overwrite default parser', async () => {
@@ -73,7 +73,7 @@ describe('Parser', () => {
 			})
 		)
 
-		expect(await res.text()).toBe('Overwrited')
+		await expect(res.text()).resolves.toBe('Overwrited')
 	})
 
 	it('parse x-www-form-urlencoded', async () => {
@@ -94,7 +94,7 @@ describe('Parser', () => {
 			})
 		)
 
-		expect(await res.json()).toEqual(body)
+		await expect(res.json()).resolves.toEqual(body)
 	})
 
 	// Regression (audit P7): the default parser dispatched on charCodeAt(12),
@@ -140,15 +140,19 @@ describe('Parser', () => {
 			})
 		)
 
-		expect(await res.json()).toEqual(body)
+		await expect(res.json()).resolves.toEqual(body)
 	})
 
 	it('inline parse', async () => {
-		const app = new Elysia().post('/', ({ body }) => body, {
-			parse({ request }) {
-				return request.text().then(() => 'hi')
-			}
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				parse({ request }) {
+					return request.text().then(() => 'hi')
+				}
+			},
+			({ body }) => body
+		)
 
 		const res = await app
 			.handle(
@@ -261,17 +265,21 @@ describe('Parser', () => {
 	})
 
 	it('handle type with validator with custom parse', async () => {
-		const app = new Elysia().post('/json', ({ body: { name } }) => name, {
-			body: t.Object({
-				name: t.String()
-			}),
-			parse: [
-				({ contentType }) => {
-					if (contentType === 'custom') return { name: 'Mutsuki' }
-				},
-				'json'
-			]
-		})
+		const app = new Elysia().post(
+			'/json',
+			{
+				body: t.Object({
+					name: t.String()
+				}),
+				parse: [
+					({ contentType }) => {
+						if (contentType === 'custom') return { name: 'Mutsuki' }
+					},
+					'json'
+				]
+			},
+			({ body: { name } }) => name
+		)
 
 		const [correct, incorrect, custom] = await Promise.all([
 			app.handle(post('/json', { name: 'Aru' })).then((x) => x.text()),
@@ -297,9 +305,13 @@ describe('Parser', () => {
 	})
 
 	it('handle name parser', async () => {
-		const app = new Elysia().post('/json', ({ body }) => body, {
-			parse: ['json']
-		})
+		const app = new Elysia().post(
+			'/json',
+			{
+				parse: ['json']
+			},
+			({ body }) => body
+		)
 
 		const response = await app
 			.handle(
@@ -319,9 +331,13 @@ describe('Parser', () => {
 				if (contentType.startsWith('application/x-elysia'))
 					return { name: 'Eden' }
 			})
-			.post('/json', ({ body }) => body, {
-				parse: ['custom', 'json']
-			})
+			.post(
+				'/json',
+				{
+					parse: ['custom', 'json']
+				},
+				({ body }) => body
+			)
 
 		const response = await Promise.all([
 			app
@@ -354,9 +370,13 @@ describe('Parser', () => {
 				if (contentType.startsWith('application/x-elysia'))
 					return { name: 'Eden' }
 			})
-			.post('/json', ({ body }) => body, {
-				parse: ['custom']
-			})
+			.post(
+				'/json',
+				{
+					parse: ['custom']
+				},
+				({ body }) => body
+			)
 
 		const response = await Promise.all([
 			app
@@ -401,9 +421,13 @@ describe('Parser', () => {
 				if (contentType === 'application/x-elysia-2')
 					return { name: 'Pardofelis' }
 			})
-			.post('/json', ({ body }) => body, {
-				parse: ['custom', 'custom2']
-			})
+			.post(
+				'/json',
+				{
+					parse: ['custom', 'custom2']
+				},
+				({ body }) => body
+			)
 
 		const response = await Promise.all([
 			app
@@ -449,13 +473,17 @@ describe('Parser', () => {
 	})
 
 	it('honor explicit parser when schema contains File', async () => {
-		const app = new Elysia().post('/', ({ body }) => body, {
-			parse: 'json',
-			body: t.Object({
-				name: t.String(),
-				file: t.Optional(t.File())
-			})
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				parse: 'json',
+				body: t.Object({
+					name: t.String(),
+					file: t.Optional(t.File())
+				})
+			},
+			({ body }) => body
+		)
 
 		const response = await app.handle(
 			new Request('http://localhost/', {
@@ -466,7 +494,7 @@ describe('Parser', () => {
 		)
 
 		expect(response.status).toBe(200)
-		expect(await response.json()).toEqual({ name: 'Aru' })
+		await expect(response.json()).resolves.toEqual({ name: 'Aru' })
 	})
 
 	it('should get parse error', async () => {
@@ -476,11 +504,15 @@ describe('Parser', () => {
 			.error(({ error }) => {
 				parseError = error instanceof ParseError
 			})
-			.post('/', () => '', {
-				body: t.Object({
-					test: t.String()
-				})
-			})
+			.post(
+				'/',
+				{
+					body: t.Object({
+						test: t.String()
+					})
+				},
+				() => ''
+			)
 
 		await app.modules
 

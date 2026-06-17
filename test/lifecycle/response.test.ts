@@ -70,13 +70,15 @@ describe('On After Response', () => {
 			}
 		)
 
-		const app = new Elysia()
-			.use(afterResponse)
-			.get('/id/:id', ({ params: { id } }) => id, {
+		const app = new Elysia().use(afterResponse).get(
+			'/id/:id',
+			{
 				params: t.Object({
 					id: t.Number()
 				})
-			})
+			},
+			({ params: { id } }) => id
+		)
 
 		await app.handle(req('/id/1'))
 
@@ -215,11 +217,15 @@ describe('On After Response Error', () => {
 			isOnResponseCalled = true
 			onResponseCalledCounter++
 		})
-		.post('/', () => 'yay', {
-			body: t.Object({
-				test: t.String()
-			})
-		})
+		.post(
+			'/',
+			{
+				body: t.Object({
+					test: t.String()
+				})
+			},
+			() => 'yay'
+		)
 		.get('/customError', () => {
 			throw new CustomError('whelp')
 		})

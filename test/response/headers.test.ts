@@ -68,7 +68,7 @@ describe('Response Headers', () => {
 		expect(res).toBe(original!)
 		expect(res.headers.get('x-powered-by')).toBe('Elysia')
 		expect(res.headers.get('content-length')).toBe('2')
-		expect(await res.text()).toBe('Hi')
+		await expect(res.text()).resolves.toBe('Hi')
 	})
 
 	it('add status to Response', async () => {
@@ -80,7 +80,7 @@ describe('Response Headers', () => {
 
 		const res = await app.handle(req('/'))
 
-		expect(await res.text()).toBe('Hi')
+		await expect(res.text()).resolves.toBe('Hi')
 		expect(res.status).toBe(401)
 	})
 

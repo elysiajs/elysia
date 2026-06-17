@@ -37,9 +37,15 @@ const count = (haystack: string, needle: string) =>
 
 describe('F10: schedule block is emitted once on trace+error routes', () => {
 	it('trace + 3 error hooks: one `function _sc(){` decl, multiple `_sc()` calls', () => {
-		const app = new Elysia().trace(() => {}).get('/', () => 'hi', {
-			error: [() => {}, () => {}, () => {}]
-		})
+		const app = new Elysia()
+			.trace(() => {})
+			.get(
+				'/',
+				{
+					error: [() => {}, () => {}, () => {}]
+				},
+				() => 'hi'
+			)
 
 		const { source } = compileRoute(app)
 
@@ -59,10 +65,14 @@ describe('F10: schedule block is emitted once on trace+error routes', () => {
 	it('afterResponse + 2 error hooks: schedule block deduped (no trace)', () => {
 		// async route (the handler is async so the route stays an AsyncFunction
 		// and afterResponse does not take the syncAfterResponse `_fin2` path)
-		const app = new Elysia().get('/', async () => 'hi', {
-			afterResponse() {},
-			error: [() => {}, () => {}]
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				afterResponse() {},
+				error: [() => {}, () => {}]
+			},
+			async () => 'hi'
+		)
 
 		const { source } = compileRoute(app)
 		expect(count(source, 'setImmediate(async()=>{')).toBe(1)
@@ -73,15 +83,19 @@ describe('F10: schedule block is emitted once on trace+error routes', () => {
 describe('F10: behaviour preserved', () => {
 	it('afterResponse fires once on the success path with an error hook present', async () => {
 		let calls = 0
-		const app = new Elysia().get('/', async () => 'ok', {
-			afterResponse() {
-				calls++
+		const app = new Elysia().get(
+			'/',
+			{
+				afterResponse() {
+					calls++
+				},
+				error() {}
 			},
-			error() {}
-		})
+			async () => 'ok'
+		)
 
 		const res = await app.handle(req('/'))
-		expect(await res.text()).toBe('ok')
+		await expect(res.text()).resolves.toBe('ok')
 		await new Promise((r) => setTimeout(r, 10))
 		expect(calls).toBe(1)
 	})
@@ -95,9 +109,6 @@ describe('F10: behaviour preserved', () => {
 		let calls = 0
 		const app = new Elysia().get(
 			'/',
-			async () => {
-				throw new Error('boom')
-			},
 			{
 				afterResponse() {
 					calls++
@@ -106,6 +117,9 @@ describe('F10: behaviour preserved', () => {
 					set.status = 418
 					return 'handled'
 				}
+			},
+			async () => {
+				throw new Error('boom')
 			}
 		)
 
@@ -114,7 +128,7 @@ describe('F10: behaviour preserved', () => {
 
 		const res = await app.handle(req('/'))
 		expect(res.status).toBe(418)
-		expect(await res.text()).toBe('handled')
+		await expect(res.text()).resolves.toBe('handled')
 		await new Promise((r) => setTimeout(r, 10))
 		expect(calls).toBe(1)
 	})
@@ -123,9 +137,6 @@ describe('F10: behaviour preserved', () => {
 		let calls = 0
 		const app = new Elysia().get(
 			'/',
-			async () => {
-				throw new Error('unhandled')
-			},
 			{
 				afterResponse() {
 					calls++
@@ -133,6 +144,9 @@ describe('F10: behaviour preserved', () => {
 				// error hook returns undefined → falls through to the message
 				// fallback path
 				error() {}
+			},
+			async () => {
+				throw new Error('unhandled')
 			}
 		)
 
@@ -146,9 +160,13 @@ describe('F10: behaviour preserved', () => {
 	// error hook, NO trace) must KEEP its inline schedule — it lives in a factory
 	// helper that cannot see a route-local `_sc`.
 	it('syncAfterResponse path keeps inline schedule (no _sc helper)', () => {
-		const app = new Elysia().get('/', () => 'hi', {
-			afterResponse() {}
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				afterResponse() {}
+			},
+			() => 'hi'
+		)
 
 		const { source } = compileRoute(app)
 		// route function source does not declare `_sc` (the schedule lives in the

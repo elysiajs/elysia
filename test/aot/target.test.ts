@@ -15,11 +15,13 @@ import { compileToSource } from '../../src/plugin/source'
 // had to be generated under Node. These tests run under Bun, so forcing
 // `fromEntries` via target proves the override beats the build runtime.
 const build = () =>
-	new Elysia().beforeHandle(() => {}).get(
-		'/',
-		({ headers }) => headers['x-id'] ?? 'ok',
-		{ headers: t.Object({ 'x-id': t.Optional(t.String()) }) }
-	)
+	new Elysia()
+		.beforeHandle(() => {})
+		.get(
+			'/',
+			{ headers: t.Object({ 'x-id': t.Optional(t.String()) }) },
+			({ headers }) => headers['x-id'] ?? 'ok'
+		)
 
 const TOJSON = 'c.request.headers.toJSON()'
 const FROM_ENTRIES = 'Object.fromEntries(c.request.headers)'

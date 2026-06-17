@@ -7,82 +7,98 @@ import { post, req, upload } from '../utils'
 
 describe('Response Validator', () => {
 	it('validate primitive', async () => {
-		const app = new Elysia().get('/', () => 'sucrose', {
-			response: t.String()
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				response: t.String()
+			},
+			() => 'sucrose'
+		)
 		const res = await app.handle(req('/'))
 
-		expect(await res.text()).toBe('sucrose')
+		await expect(res.text()).resolves.toBe('sucrose')
 		expect(res.status).toBe(200)
 	})
 
 	it('validate number', async () => {
-		const app = new Elysia().get('/', () => 1, {
-			response: t.Number()
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				response: t.Number()
+			},
+			() => 1
+		)
 		const res = await app.handle(req('/'))
 
-		expect(await res.text()).toBe('1')
+		await expect(res.text()).resolves.toBe('1')
 		expect(res.status).toBe(200)
 	})
 
 	it('validate boolean', async () => {
-		const app = new Elysia().get('/', () => true, {
-			response: t.Boolean()
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				response: t.Boolean()
+			},
+			() => true
+		)
 		const res = await app.handle(req('/'))
 
-		expect(await res.text()).toBe('true')
+		await expect(res.text()).resolves.toBe('true')
 		expect(res.status).toBe(200)
 	})
 
 	it('validate literal', async () => {
-		const app = new Elysia().get('/', () => 'A' as const, {
-			response: t.Literal('A')
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				response: t.Literal('A')
+			},
+			() => 'A' as const
+		)
 		const res = await app.handle(req('/'))
 
-		expect(await res.text()).toBe('A')
+		await expect(res.text()).resolves.toBe('A')
 		expect(res.status).toBe(200)
 	})
 
 	it('validate single', async () => {
 		const app = new Elysia().get(
 			'/',
-			() => ({
-				name: 'sucrose'
-			}),
 			{
 				response: t.Object({
 					name: t.String()
 				})
-			}
+			},
+			() => ({
+				name: 'sucrose'
+			})
 		)
 		const res = await app.handle(req('/'))
 
-		expect(await res.json()).toEqual({ name: 'sucrose' })
+		await expect(res.json()).resolves.toEqual({ name: 'sucrose' })
 		expect(res.status).toBe(200)
 	})
 
 	it('validate multiple', async () => {
 		const app = new Elysia().get(
 			'/',
-			() => ({
-				name: 'sucrose',
-				job: 'alchemist',
-				trait: 'dog'
-			}),
 			{
 				response: t.Object({
 					name: t.String(),
 					job: t.String(),
 					trait: t.String()
 				})
-			}
+			},
+			() => ({
+				name: 'sucrose',
+				job: 'alchemist',
+				trait: 'dog'
+			})
 		)
 		const res = await app.handle(req('/'))
 
-		expect(await res.json()).toEqual({
+		await expect(res.json()).resolves.toEqual({
 			name: 'sucrose',
 			job: 'alchemist',
 			trait: 'dog'
@@ -93,18 +109,18 @@ describe('Response Validator', () => {
 	it('parse without reference', async () => {
 		const app = new Elysia().get(
 			'/',
-			() => ({
-				name: 'sucrose',
-				job: 'alchemist',
-				trait: 'dog'
-			}),
 			{
 				response: t.Object({
 					name: t.String(),
 					job: t.String(),
 					trait: t.String()
 				})
-			}
+			},
+			() => ({
+				name: 'sucrose',
+				job: 'alchemist',
+				trait: 'dog'
+			})
 		)
 		const res = await app.handle(req('/'))
 
@@ -114,21 +130,21 @@ describe('Response Validator', () => {
 	it('validate optional', async () => {
 		const app = new Elysia().get(
 			'/',
-			() => ({
-				name: 'sucrose',
-				job: 'alchemist'
-			}),
 			{
 				response: t.Object({
 					name: t.String(),
 					job: t.String(),
 					trait: t.Optional(t.String())
 				})
-			}
+			},
+			() => ({
+				name: 'sucrose',
+				job: 'alchemist'
+			})
 		)
 		const res = await app.handle(req('/'))
 
-		expect(await res.json()).toEqual({
+		await expect(res.json()).resolves.toEqual({
 			name: 'sucrose',
 			job: 'alchemist'
 		})
@@ -136,34 +152,38 @@ describe('Response Validator', () => {
 	})
 
 	it('allow undefined', async () => {
-		const app = new Elysia().get('/', () => {}, {
-			body: t.Union([
-				t.Undefined(),
-				t.Object({
-					name: t.String(),
-					job: t.String(),
-					trait: t.Optional(t.String())
-				})
-			])
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				body: t.Union([
+					t.Undefined(),
+					t.Object({
+						name: t.String(),
+						job: t.String(),
+						trait: t.Optional(t.String())
+					})
+				])
+			},
+			() => {}
+		)
 		const res = await app.handle(req('/'))
 
 		expect(res.status).toBe(200)
-		expect(await res.text()).toBe('')
+		await expect(res.text()).resolves.toBe('')
 	})
 
 	it('normalize by default', async () => {
 		const app = new Elysia().get(
 			'/',
-			() => ({
-				name: 'sucrose',
-				job: 'alchemist'
-			}),
 			{
 				response: t.Object({
 					name: t.String()
 				})
-			}
+			},
+			() => ({
+				name: 'sucrose',
+				job: 'alchemist'
+			})
 		)
 
 		const res = await app.handle(req('/')).then((x) => x.json())
@@ -176,17 +196,17 @@ describe('Response Validator', () => {
 	it('strictly validate if not normalize', async () => {
 		const app = new Elysia({ normalize: false }).get(
 			'/',
-			() => ({
-				name: 'sucrose',
-				job: 'alchemist'
-			}),
 			{
 				response: {
 					200: t.Object({
 						name: t.String()
 					})
 				}
-			}
+			},
+			() => ({
+				name: 'sucrose',
+				job: 'alchemist'
+			})
 		)
 
 		const res = await app.handle(req('/'))
@@ -195,63 +215,62 @@ describe('Response Validator', () => {
 	})
 
 	it('handle File', async () => {
-		const app = new Elysia().post('/', ({ body: { file } }) => file.size, {
-			body: t.Object({
-				file: t.File()
-			})
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({
+					file: t.File()
+				})
+			},
+			({ body: { file } }) => file.size
+		)
 
-		expect(
-			await app
+		await expect(
+			app
 				.handle(
 					upload('/', {
 						file: 'aris-yuzu.jpg'
 					}).request
 				)
 				.then((x) => x.text())
-		).toBe(Bun.file('./test/images/aris-yuzu.jpg').size + '')
+		).resolves.toBe(Bun.file('./test/images/aris-yuzu.jpg').size + '')
 	})
 
 	it('convert File to Files automatically', async () => {
 		const app = new Elysia().post(
 			'/',
-			({ body: { files } }) => Array.isArray(files),
 			{
 				body: t.Object({
 					files: t.Files()
 				})
-			}
+			},
+			({ body: { files } }) => Array.isArray(files)
 		)
 
-		expect(
-			await app
+		await expect(
+			app
 				.handle(
 					upload('/', {
 						files: 'aris-yuzu.jpg'
 					}).request
 				)
 				.then((x) => x.text())
-		).toEqual('true')
+		).resolves.toEqual('true')
 
-		expect(
-			await app
+		await expect(
+			app
 				.handle(
 					upload('/', {
 						files: ['aris-yuzu.jpg', 'midori.png']
 					}).request
 				)
 				.then((x) => x.text())
-		).toEqual('true')
+		).resolves.toEqual('true')
 	})
 
 	it('validate response per status', async () => {
 		const app = new Elysia().post(
 			'/',
-			({ set, body: { status, response } }) => {
-				set.status = status
-
-				return response
-			},
 			{
 				body: t.Object({
 					status: t.Number(),
@@ -261,6 +280,11 @@ describe('Response Validator', () => {
 					200: t.String(),
 					201: t.Number()
 				}
+			},
+			({ set, body: { status, response } }) => {
+				set.status = status
+
+				return response
 			}
 		)
 
@@ -299,121 +323,145 @@ describe('Response Validator', () => {
 	it('validate response per status with error()', async () => {
 		const app = new Elysia().get(
 			'/',
-			({ status }) => status(418, 'I am a teapot'),
 			{
 				response: {
 					200: t.String(),
 					418: t.String()
 				}
-			}
+			},
+			({ status }) => status(418, 'I am a teapot')
 		)
 	})
 
 	it('use inline error from handler', async () => {
 		const app = new Elysia().get(
 			'/',
-			({ status }) => status(418, 'I am a teapot'),
 			{
 				response: {
 					200: t.String(),
 					418: t.String()
 				}
-			}
+			},
+			({ status }) => status(418, 'I am a teapot')
 		)
 	})
 
 	it('return null with schema', async () => {
-		const app = new Elysia().get('/', () => null, {
-			response: t.Union([
-				t.Null(),
-				t.Object({
-					name: t.String()
-				})
-			])
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				response: t.Union([
+					t.Null(),
+					t.Object({
+						name: t.String()
+					})
+				])
+			},
+			() => null
+		)
 	})
 
 	it('return undefined with schema', async () => {
-		const app = new Elysia().get('/', () => undefined, {
-			response: t.Union([
-				t.Undefined(),
-				t.Object({
-					name: t.String()
-				})
-			])
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				response: t.Union([
+					t.Undefined(),
+					t.Object({
+						name: t.String()
+					})
+				])
+			},
+			() => undefined
+		)
 	})
 
 	it('return void with schema', async () => {
-		const app = new Elysia().get('/', () => undefined, {
-			response: t.Union([
-				t.Void(),
-				t.Object({
-					name: t.String()
-				})
-			])
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				response: t.Union([
+					t.Void(),
+					t.Object({
+						name: t.String()
+					})
+				])
+			},
+			() => undefined
+		)
 	})
 
 	it('return null with status based schema', async () => {
-		const app = new Elysia().get('/', () => undefined, {
-			response: {
-				200: t.Union([
-					t.Void(),
-					t.Object({
-						name: t.String()
-					})
-				]),
-				418: t.String()
-			}
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				response: {
+					200: t.Union([
+						t.Void(),
+						t.Object({
+							name: t.String()
+						})
+					]),
+					418: t.String()
+				}
+			},
+			() => undefined
+		)
 	})
 
 	it('return static undefined with status based schema', async () => {
-		const app = new Elysia().get('/', undefined as any, {
-			response: {
-				200: t.Union([
-					t.Void(),
-					t.Object({
-						name: t.String()
-					})
-				]),
-				418: t.String()
-			}
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				response: {
+					200: t.Union([
+						t.Void(),
+						t.Object({
+							name: t.String()
+						})
+					]),
+					418: t.String()
+				}
+			},
+			undefined as any
+		)
 	})
 
 	it('return error response with validator', async () => {
 		const app = new Elysia()
-			.get('/ok', () => 'ok', {
-				response: {
-					200: t.String(),
-					418: t.Literal('Kirifuji Nagisa'),
-					420: t.Literal('Snoop Dogg')
-				}
-			})
 			.get(
-				'/error',
-				({ status }) => status("I'm a teapot", 'Kirifuji Nagisa'),
+				'/ok',
 				{
 					response: {
 						200: t.String(),
 						418: t.Literal('Kirifuji Nagisa'),
 						420: t.Literal('Snoop Dogg')
 					}
-				}
+				},
+				() => 'ok'
+			)
+			.get(
+				'/error',
+				{
+					response: {
+						200: t.String(),
+						418: t.Literal('Kirifuji Nagisa'),
+						420: t.Literal('Snoop Dogg')
+					}
+				},
+				({ status }) => status("I'm a teapot", 'Kirifuji Nagisa')
 			)
 			.get(
 				'/validate-error',
-				// @ts-ignore
-				({ status }) => status("I'm a teapot", 'Nagisa'),
 				{
 					response: {
 						200: t.String(),
 						418: t.Literal('Kirifuji Nagisa'),
 						420: t.Literal('Snoop Dogg')
 					}
-				}
+				},
+				// @ts-ignore
+				({ status }) => status("I'm a teapot", 'Nagisa')
 			)
 
 		const response = await Promise.all([
@@ -440,13 +488,13 @@ describe('Response Validator', () => {
 
 		const app = new Elysia().model({ job, person }).get(
 			'/',
+			{
+				response: person
+			},
 			() => ({
 				name: 'sucrose',
 				job: { name: 'alchemist' }
-			}),
-			{
-				response: person
-			}
+			})
 		)
 
 		const res = await app.handle(req('/'))
@@ -456,16 +504,16 @@ describe('Response Validator', () => {
 	it('validate SSE response with generator', async () => {
 		const app = new Elysia().get(
 			'/',
-			function* () {
-				yield sse({ data: { name: 'Alice' } })
-				yield sse({ data: { name: 'Bob' } })
-			},
 			{
 				response: t.Object({
 					data: t.Object({
 						name: t.String()
 					})
 				})
+			},
+			function* () {
+				yield sse({ data: { name: 'Alice' } })
+				yield sse({ data: { name: 'Bob' } })
 			}
 		)
 
@@ -486,17 +534,17 @@ describe('Response Validator', () => {
 	it('validate async SSE response with generator', async () => {
 		const app = new Elysia().get(
 			'/',
-			async function* () {
-				yield sse({ data: { name: 'Charlie' } })
-				await Bun.sleep(1)
-				yield sse({ data: { name: 'Diana' } })
-			},
 			{
 				response: t.Object({
 					data: t.Object({
 						name: t.String()
 					})
 				})
+			},
+			async function* () {
+				yield sse({ data: { name: 'Charlie' } })
+				await Bun.sleep(1)
+				yield sse({ data: { name: 'Diana' } })
 			}
 		)
 
@@ -508,14 +556,14 @@ describe('Response Validator', () => {
 	it('validate streaming response with generator', async () => {
 		const app = new Elysia().get(
 			'/',
-			function* () {
-				yield { message: 'first' }
-				yield { message: 'second' }
-			},
 			{
 				response: t.Object({
 					message: t.String()
 				})
+			},
+			function* () {
+				yield { message: 'first' }
+				yield { message: 'second' }
 			}
 		)
 
@@ -540,13 +588,9 @@ describe('Response Validator', () => {
 			})
 		})
 
-		const app = new Elysia().get(
-			'/',
-			function* () {
-				yield sse({ data: { name: 'Name' } })
-			},
-			{ response: Schema }
-		)
+		const app = new Elysia().get('/', { response: Schema }, function* () {
+			yield sse({ data: { name: 'Name' } })
+		})
 
 		const res = await app.handle(req('/'))
 
@@ -565,17 +609,21 @@ describe('Response Validator', () => {
 
 	it('handle distinct union', () => {
 		const app = new Elysia()
-			.get('/health', () => ({ status: 'healthy' }) as const, {
-				response: {
-					200: t.Union([
-						t.Object({
-							status: t.Literal('a'),
-							a: t.Object({ b: t.Integer() })
-						}),
-						t.Object({ status: t.Literal('healthy') })
-					])
-				}
-			})
+			.get(
+				'/health',
+				{
+					response: {
+						200: t.Union([
+							t.Object({
+								status: t.Literal('a'),
+								a: t.Object({ b: t.Integer() })
+							}),
+							t.Object({ status: t.Literal('healthy') })
+						])
+					}
+				},
+				() => ({ status: 'healthy' }) as const
+			)
 			.listen(3000)
 
 		const status = app.handle(req('/health')).then((x) => x.status)

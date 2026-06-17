@@ -83,7 +83,11 @@ describe('F45: extractDeriveKeys exact key set or bail', () => {
 			['a', 'b'],
 			'nested object value'
 		],
-		[(c: any) => ({ a: 'has,:}brace', b: 2 }), ['a', 'b'], 'punctuation in string value'],
+		[
+			(c: any) => ({ a: 'has,:}brace', b: 2 }),
+			['a', 'b'],
+			'punctuation in string value'
+		],
 		[(c: any) => ({ a: 1, b: 2 }), ['a', 'b'], 'trailing comma normalized'],
 		[(c: any) => ({}), [], 'empty object']
 	]
@@ -223,7 +227,7 @@ describe('F45: end-to-end derived keys reach the handler', () => {
 			.get('/', (c: any) => `${c.user}:${c.role}`)
 
 		const res = await app.handle(req('/'))
-		expect(await res.text()).toBe('bob:admin')
+		await expect(res.text()).resolves.toBe('bob:admin')
 	})
 
 	it('string-key derive (hyphen): key reaches the handler', async () => {
@@ -232,7 +236,7 @@ describe('F45: end-to-end derived keys reach the handler', () => {
 			.get('/', (c: any) => c['x-user'])
 
 		const res = await app.handle(req('/'))
-		expect(await res.text()).toBe('bob')
+		await expect(res.text()).resolves.toBe('bob')
 	})
 
 	it('spread derive (bail path): keys still reach the handler', async () => {
@@ -241,7 +245,7 @@ describe('F45: end-to-end derived keys reach the handler', () => {
 			.get('/', (c: any) => `${c.user}:${c.role}`)
 
 		const res = await app.handle(req('/'))
-		expect(await res.text()).toBe('bob:admin')
+		await expect(res.text()).resolves.toBe('bob:admin')
 	})
 
 	it('multiple derives merge in order', async () => {
@@ -251,7 +255,7 @@ describe('F45: end-to-end derived keys reach the handler', () => {
 			.get('/', (c: any) => `${c.a},${c.b}`)
 
 		const res = await app.handle(req('/'))
-		expect(await res.text()).toBe('1,2')
+		await expect(res.text()).resolves.toBe('1,2')
 	})
 
 	it('ElysiaStatus short-circuit from a derive still works', async () => {
@@ -263,6 +267,6 @@ describe('F45: end-to-end derived keys reach the handler', () => {
 
 		const res = await app.handle(req('/'))
 		expect(res.status).toBe(418)
-		expect(await res.text()).toBe('teapot')
+		await expect(res.text()).resolves.toBe('teapot')
 	})
 })

@@ -14,9 +14,7 @@ describe('file-type queue refinements', () => {
 	it('plain t.File() stays on the sync validation path', () => {
 		// no `type` option → nothing can enqueue async detection, so the
 		// validator must not be forced through FromAsync
-		const plain = new TypeBoxValidator(
-			t.Object({ file: t.File() }) as any
-		)
+		const plain = new TypeBoxValidator(t.Object({ file: t.File() }) as any)
 		expect(plain.isAsync).toBe(false)
 
 		const typed = new TypeBoxValidator(
@@ -29,12 +27,16 @@ describe('file-type queue refinements', () => {
 		// detector reports a mime that never matches `type: 'image'`
 		setFileTypeDetector(() => 'application/x-not-an-image')
 
-		const app = new Elysia().post('/', () => 'ok', {
-			body: t.Object({
-				name: t.String(),
-				avatar: t.File({ type: 'image' })
-			})
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({
+					name: t.String(),
+					avatar: t.File({ type: 'image' })
+				})
+			},
+			() => 'ok'
+		)
 
 		const response = await app.handle(
 			upload('/', { name: 'salt', avatar: 'fake.jpg' }).request
@@ -48,11 +50,15 @@ describe('file-type queue refinements', () => {
 	it('failed detection inside t.Files() reports the array index path', async () => {
 		setFileTypeDetector(() => 'application/x-not-an-image')
 
-		const app = new Elysia().post('/', () => 'ok', {
-			body: t.Object({
-				files: t.Files({ type: 'image' })
-			})
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({
+					files: t.Files({ type: 'image' })
+				})
+			},
+			() => 'ok'
+		)
 
 		const response = await app.handle(
 			upload('/', { files: ['aris-yuzu.jpg', 'fake.jpg'] }).request

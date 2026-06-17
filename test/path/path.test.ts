@@ -8,28 +8,28 @@ describe('Path', () => {
 		const app = new Elysia().get('/', () => 'Hi')
 		const res = await app.handle(req('/'))
 
-		expect(await res.text()).toBe('Hi')
+		await expect(res.text()).resolves.toBe('Hi')
 	})
 
 	it('handle multiple level', async () => {
 		const app = new Elysia().get('/this/is/my/deep/nested/root', () => 'Ok')
 		const res = await app.handle(req('/this/is/my/deep/nested/root'))
 
-		expect(await res.text()).toBe('Ok')
+		await expect(res.text()).resolves.toBe('Ok')
 	})
 
 	it('return boolean', async () => {
 		const app = new Elysia().get('/', () => true)
 		const res = await app.handle(req('/'))
 
-		expect(await res.text()).toBe('true')
+		await expect(res.text()).resolves.toBe('true')
 	})
 
 	it('return number', async () => {
 		const app = new Elysia().get('/', () => 617)
 		const res = await app.handle(req('/'))
 
-		expect(await res.text()).toBe('617')
+		await expect(res.text()).resolves.toBe('617')
 	})
 
 	it('return json', async () => {
@@ -59,7 +59,7 @@ describe('Path', () => {
 		)
 		const res = await app.handle(req('/'))
 
-		expect(await res.text()).toBe('Shuba Shuba')
+		await expect(res.text()).resolves.toBe('Shuba Shuba')
 		expect(res.status).toBe(418)
 		expect(res.headers.get('duck')).toBe('shuba duck')
 	})
@@ -68,7 +68,7 @@ describe('Path', () => {
 		const app = new Elysia().get('/id/:id', ({ params: { id } }) => id)
 		const res = await app.handle(req('/id/123'))
 
-		expect(await res.text()).toBe('123')
+		await expect(res.text()).resolves.toBe('123')
 	})
 
 	it('parse multiple params', async () => {
@@ -78,7 +78,7 @@ describe('Path', () => {
 		)
 		const res = await app.handle(req('/id/fubuki/Elysia'))
 
-		expect(await res.text()).toBe('fubuki/Elysia')
+		await expect(res.text()).resolves.toBe('fubuki/Elysia')
 	})
 
 	it('parse optional params', async () => {
@@ -112,7 +112,7 @@ describe('Path', () => {
 
 		const res = await app.handle(req('/wildcard/okayu'))
 
-		expect(await res.text()).toBe('Wildcard')
+		await expect(res.text()).resolves.toBe('Wildcard')
 	})
 
 	it('custom error', async () => {
@@ -125,7 +125,7 @@ describe('Path', () => {
 
 		const res = await app.handle(req('/wildcard/okayu'))
 
-		expect(await res.text()).toBe('Not Stonk :(')
+		await expect(res.text()).resolves.toBe('Not Stonk :(')
 		expect(res.status).toBe(404)
 	})
 
@@ -133,36 +133,40 @@ describe('Path', () => {
 		const app = new Elysia().get('/', ({ query: { id } }) => id)
 		const res = await app.handle(req('/?id=123'))
 
-		expect(await res.text()).toBe('123')
+		await expect(res.text()).resolves.toBe('123')
 	})
 
 	it('parse multiple querystrings', async () => {
 		const app = new Elysia().get(
 			'/',
-			({ query: { first, last } }) => `${last} ${first}`,
 			{
 				query: t.Object({
 					first: t.String(),
 					last: t.String()
 				})
-			}
+			},
+			({ query: { first, last } }) => `${last} ${first}`
 		)
 		const res = await app.handle(req('/?first=Fubuki&last=Shirakami'))
 
-		expect(await res.text()).toBe('Shirakami Fubuki')
+		await expect(res.text()).resolves.toBe('Shirakami Fubuki')
 	})
 
 	it('parse a querystring with a space', async () => {
 		const app = new Elysia().get('/', ({ query: { id } }) => id)
 		const res = await app.handle(req('/?id=test+123%2B'))
 
-		expect(await res.text()).toBe('test 123+')
+		await expect(res.text()).resolves.toBe('test 123+')
 	})
 
 	it('handle body', async () => {
-		const app = new Elysia().post('/', ({ body }) => body, {
-			body: t.String()
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.String()
+			},
+			({ body }) => body
+		)
 
 		const body = 'Botan'
 
@@ -177,7 +181,7 @@ describe('Path', () => {
 			})
 		)
 
-		expect(await res.text()).toBe('Botan')
+		await expect(res.text()).resolves.toBe('Botan')
 	})
 
 	it('parse JSON body', async () => {
@@ -185,11 +189,15 @@ describe('Path', () => {
 			name: 'Okayu'
 		})
 
-		const app = new Elysia().post('/', ({ body }) => body, {
-			body: t.Object({
-				name: t.String()
-			})
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({
+					name: t.String()
+				})
+			},
+			({ body }) => body
+		)
 		const res = await app.handle(
 			new Request('http://localhost/', {
 				method: 'POST',
@@ -217,7 +225,7 @@ describe('Path', () => {
 			})
 		)
 
-		expect(await res.text()).toBe('Elysia')
+		await expect(res.text()).resolves.toBe('Elysia')
 	})
 
 	it('handle group', async () => {
@@ -227,7 +235,7 @@ describe('Path', () => {
 
 		const res = await app.handle(req('/gamer/korone')).then((r) => r.text())
 
-		expect(await res).toBe('Yubi Yubi!')
+		expect(res).toBe('Yubi Yubi!')
 	})
 
 	it('handle plugin', async () => {
@@ -236,7 +244,7 @@ describe('Path', () => {
 
 		const res = await app.handle(req('/korone'))
 
-		expect(await res.text()).toBe('Yubi Yubi!')
+		await expect(res.text()).resolves.toBe('Yubi Yubi!')
 	})
 
 	it('handle error', async () => {
@@ -249,7 +257,7 @@ describe('Path', () => {
 		const res = await app.handle(req('/error'))
 
 		expect(res.status).toBe(500)
-		expect(await res.text()).toBe(error)
+		await expect(res.text()).resolves.toBe(error)
 	})
 
 	it('handle async', async () => {
@@ -264,14 +272,14 @@ describe('Path', () => {
 		})
 
 		const res = await app.handle(req('/async'))
-		expect(await res.text()).toBe('Hi')
+		await expect(res.text()).resolves.toBe('Hi')
 	})
 
 	it('handle absolute path', async () => {
 		const app = new Elysia().get('/', () => 'Hi')
 		const res = await app.handle(req('/'))
 
-		expect(await res.text()).toBe('Hi')
+		await expect(res.text()).resolves.toBe('Hi')
 	})
 
 	it('handle route which start with same letter', async () => {
@@ -308,16 +316,18 @@ describe('Path', () => {
 		expect(res.headers.get('Server')).toBe('Elysia')
 	})
 
-	it('return web api\'s File', async () => {
-		const app = new Elysia().get('/', () => new File(['Hello'], 'hello.txt', { type: 'text/plain' }))
+	it("return web api's File", async () => {
+		const app = new Elysia().get(
+			'/',
+			() => new File(['Hello'], 'hello.txt', { type: 'text/plain' })
+		)
 		const res = await app.handle(req('/'))
 
 		expect(res.headers.get('content-type')).toBe('text/plain;charset=utf-8')
-		expect(await res.text()).toBe('Hello')
+		await expect(res.text()).resolves.toBe('Hello')
 		expect(res.status).toBe(200)
 		expect(res.headers.get('accept-ranges')).toBe('bytes')
 		expect(res.headers.get('content-range')).toBe('bytes 0-4/5')
-
 	})
 
 	it('handle *', async () => {
@@ -398,7 +408,9 @@ describe('Path', () => {
 		expect(Object.keys(map).length).toBe(before)
 
 		// exact route still resolves
-		expect(await app.handle(req('/foo')).then((r) => r.text())).toBe('hi')
+		await expect(
+			app.handle(req('/foo')).then((r) => r.text())
+		).resolves.toBe('hi')
 	})
 
 	// The decode path was moved to build time (encodeURI stored alongside
@@ -412,20 +424,16 @@ describe('Path', () => {
 		const map = (app as any)['~map'].GET as Record<string, unknown>
 		const keys = Object.keys(map).length
 
-		expect(
-			await app.handle(req('/menu/café')).then((r) => r.text())
-		).toBe('coffee')
-		expect(
-			await app
-				.handle(req('/menu/caf%C3%A9'))
-				.then((r) => r.text())
-		).toBe('coffee')
+		await expect(
+			app.handle(req('/menu/café')).then((r) => r.text())
+		).resolves.toBe('coffee')
+		await expect(
+			app.handle(req('/menu/caf%C3%A9')).then((r) => r.text())
+		).resolves.toBe('coffee')
 		// trailing slash on the encoded form (loose) still matches
-		expect(
-			await app
-				.handle(req('/menu/caf%C3%A9/'))
-				.then((r) => r.text())
-		).toBe('coffee')
+		await expect(
+			app.handle(req('/menu/caf%C3%A9/')).then((r) => r.text())
+		).resolves.toBe('coffee')
 
 		// the encoded key is precomputed at build time, not added per request
 		expect(Object.keys(map).length).toBe(keys)
@@ -442,8 +450,12 @@ describe('Path', () => {
 		expect('/x' in map).toBe(true)
 		expect('/x/' in map).toBe(true)
 
-		expect(await app.handle(req('/x')).then((r) => r.text())).toBe('x')
-		expect(await app.handle(req('/x/')).then((r) => r.text())).toBe('x')
+		await expect(app.handle(req('/x')).then((r) => r.text())).resolves.toBe(
+			'x'
+		)
+		await expect(
+			app.handle(req('/x/')).then((r) => r.text())
+		).resolves.toBe('x')
 	})
 
 	it('strictPath does not pre-register a static loose variant', async () => {
@@ -452,7 +464,9 @@ describe('Path', () => {
 
 		const map = (app as any)['~map'].GET as Record<string, unknown>
 		expect('/x/' in map).toBe(false)
-		expect(await app.handle(req('/x/')).then((r) => r.status)).toBe(404)
+		await expect(
+			app.handle(req('/x/')).then((r) => r.status)
+		).resolves.toBe(404)
 	})
 
 	// Regression (audit H10): dynamic (parameterized) routes were registered
@@ -465,13 +479,13 @@ describe('Path', () => {
 			({ params: { id } }) => `user:${id}`
 		)
 
-		expect(await app.handle(req('/users/1')).then((r) => r.text())).toBe(
-			'user:1'
-		)
+		await expect(
+			app.handle(req('/users/1')).then((r) => r.text())
+		).resolves.toBe('user:1')
 		// before the fix this 404'd
-		expect(await app.handle(req('/users/1/')).then((r) => r.text())).toBe(
-			'user:1'
-		)
+		await expect(
+			app.handle(req('/users/1/')).then((r) => r.text())
+		).resolves.toBe('user:1')
 	})
 
 	it('strictPath still rejects a trailing slash on dynamic routes', async () => {
@@ -480,8 +494,8 @@ describe('Path', () => {
 			({ params: { id } }) => `user:${id}`
 		)
 
-		expect(
-			await app.handle(req('/users/1/')).then((r) => r.status)
-		).toBe(404)
+		await expect(
+			app.handle(req('/users/1/')).then((r) => r.status)
+		).resolves.toBe(404)
 	})
 })

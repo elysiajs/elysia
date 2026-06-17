@@ -167,7 +167,7 @@ describe('WebSocket non-body schemas', () => {
 		)
 
 		expect(response.status).toBe(418)
-		expect(await response.text()).toBe('caught:query')
+		await expect(response.text()).resolves.toBe('caught:query')
 		expect(seenIsValidation).toBe(true)
 		expect(seenOn).toBe('query')
 

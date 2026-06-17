@@ -32,7 +32,7 @@ describe('HOC', () => {
 
 		const response = await app.handle(req('/'))
 
-		expect(await response.text()).toBe('intercepted')
+		await expect(response.text()).resolves.toBe('intercepted')
 		expect(handlerRan).toBe(false)
 	})
 
@@ -46,7 +46,7 @@ describe('HOC', () => {
 
 		const response = await app.handle(req('/'))
 
-		expect(await response.text()).toBe('ok!')
+		await expect(response.text()).resolves.toBe('ok!')
 	})
 
 	it('applies the first-registered wrap as the outermost layer', async () => {
@@ -94,10 +94,12 @@ describe('HOC', () => {
 	it("applies a plugin's wrap to the host", async () => {
 		let wrapped = false
 
-		const plugin = new Elysia({ name: 'plugin' }).wrap((fn) => (request) => {
-			wrapped = true
-			return fn(request)
-		})
+		const plugin = new Elysia({ name: 'plugin' }).wrap(
+			(fn) => (request) => {
+				wrapped = true
+				return fn(request)
+			}
+		)
 
 		const app = new Elysia().use(plugin).get('/', () => 'ok')
 

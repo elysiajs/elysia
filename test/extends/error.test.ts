@@ -70,15 +70,19 @@ describe('Error extends', () => {
 
 		const response = await app.handle(req('/not/found'))
 
-		expect(await response.text()).toBe('UwU')
+		await expect(response.text()).resolves.toBe('UwU')
 		expect(response.status).toBe(404)
 	})
 
 	it('validation error should be application/json', async () => {
-		// @ts-expect-error
-		const app = new Elysia().get('/', () => '1', {
-			response: t.Null()
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				response: t.Null()
+			},
+			// @ts-expect-error
+			() => '1'
+		)
 
 		const response = await app.handle(req('/'))
 
@@ -109,9 +113,13 @@ describe('Error extends', () => {
 				if (error instanceof ValidationError)
 					return error.detail(error.message)
 			})
-			.post('/', ({ body, set }) => 'ok', {
-				body: sendOtpSchema
-			})
+			.post(
+				'/',
+				{
+					body: sendOtpSchema
+				},
+				({ body, set }) => 'ok'
+			)
 
 		const response = await app.handle(post('/', {}))
 

@@ -2,12 +2,15 @@ import Elysia, { t } from '../../src'
 import { describe, expect, it } from 'bun:test'
 
 describe('TypeSystem - Uint8Array', () => {
-
 	it('Integrate', async () => {
-		const app = new Elysia().post('/', ({ body }) => body, {
-			body: t.Uint8Array(),
-			response: t.Uint8Array()
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Uint8Array(),
+				response: t.Uint8Array()
+			},
+			({ body }) => body
+		)
 
 		const response = await app.handle(
 			new Request('http://localhost', {
@@ -17,6 +20,6 @@ describe('TypeSystem - Uint8Array', () => {
 			})
 		)
 
-		expect(await response.text()).toBe('可愛くてごめん')
+		await expect(response.text()).resolves.toBe('可愛くてごめん')
 	})
 })

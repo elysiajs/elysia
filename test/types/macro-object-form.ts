@@ -27,16 +27,12 @@ import { expectTypeOf } from 'expect-type'
 				derive: ({ body }) => ({ who: body.x })
 			}
 		})
-		.post(
-			'/',
-			({ body, who }) => {
-				expectTypeOf(body).toEqualTypeOf<{ x: string }>()
-				expectTypeOf(who).toEqualTypeOf<string>()
+		.post('/', { thing: true }, ({ body, who }) => {
+			expectTypeOf(body).toEqualTypeOf<{ x: string }>()
+			expectTypeOf(who).toEqualTypeOf<string>()
 
-				return 'ok'
-			},
-			{ thing: true }
-		)
+			return 'ok'
+		})
 }
 
 // function form: argument type + own handler ctx + derive flow
@@ -53,13 +49,9 @@ import { expectTypeOf } from 'expect-type'
 				}
 			})
 		})
-		.get(
-			'/',
-			({ role }) => {
-				expectTypeOf(role).toEqualTypeOf<'admin' | 'user'>()
-			},
-			{ role: 'admin' }
-		)
+		.get('/', { role: 'admin' }, ({ role }) => {
+			expectTypeOf(role).toEqualTypeOf<'admin' | 'user'>()
+		})
 }
 
 // function form with schema: the route receives schema + derive result.
@@ -79,14 +71,10 @@ import { expectTypeOf } from 'expect-type'
 				}
 			})
 		})
-		.get(
-			'/',
-			({ query, capped }) => {
-				expectTypeOf(query).toEqualTypeOf<{ page: number }>()
-				expectTypeOf(capped).toEqualTypeOf<number>()
-			},
-			{ limit: 10 }
-		)
+		.get('/', { limit: 10 }, ({ query, capped }) => {
+			expectTypeOf(query).toEqualTypeOf<{ page: number }>()
+			expectTypeOf(capped).toEqualTypeOf<number>()
+		})
 }
 
 // a typo'd definition key is rejected
@@ -102,14 +90,12 @@ import { expectTypeOf } from 'expect-type'
 
 // a typo'd macro (inherited) name is rejected
 {
-	new Elysia()
-		.macro({ auth: { derive: () => ({ user: 'a' }) } })
-		.macro({
-			admin: {
-				// @ts-expect-error `auth2` is not a registered macro
-				auth2: true
-			}
-		})
+	new Elysia().macro({ auth: { derive: () => ({ user: 'a' }) } }).macro({
+		admin: {
+			// @ts-expect-error `auth2` is not a registered macro
+			auth2: true
+		}
+	})
 }
 
 // referencing a previously-registered macro or a sibling still works
@@ -124,15 +110,11 @@ import { expectTypeOf } from 'expect-type'
 				derive: () => ({ level: 1 })
 			}
 		})
-		.get(
-			'/',
-			({ user, a, level }) => {
-				expectTypeOf(user).toEqualTypeOf<string>()
-				expectTypeOf(a).toEqualTypeOf<'a'>()
-				expectTypeOf(level).toEqualTypeOf<number>()
-			},
-			{ admin: true }
-		)
+		.get('/', { admin: true }, ({ user, a, level }) => {
+			expectTypeOf(user).toEqualTypeOf<string>()
+			expectTypeOf(a).toEqualTypeOf<'a'>()
+			expectTypeOf(level).toEqualTypeOf<number>()
+		})
 }
 
 // the macro's own declared response does NOT constrain its own hooks —
@@ -147,7 +129,7 @@ import { expectTypeOf } from 'expect-type'
 				}
 			}
 		})
-		.get('/', () => 'ok' as const, { auth: true })
+		.get('/', { auth: true }, () => 'ok' as const)
 
 	type Response = (typeof app)['~Routes']['get']['response']
 

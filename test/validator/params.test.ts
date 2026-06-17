@@ -8,36 +8,40 @@ describe('Params Validator', () => {
 		const app = new Elysia().get('/id/:id', ({ params: { id } }) => id)
 		const res = await app.handle(req('/id/617'))
 
-		expect(await res.text()).toBe('617')
+		await expect(res.text()).resolves.toBe('617')
 		expect(res.status).toBe(200)
 	})
 
 	it('validate single', async () => {
-		const app = new Elysia().get('/id/:id', ({ params: { id } }) => id, {
-			params: t.Object({
-				id: t.String()
-			})
-		})
+		const app = new Elysia().get(
+			'/id/:id',
+			{
+				params: t.Object({
+					id: t.String()
+				})
+			},
+			({ params: { id } }) => id
+		)
 		const res = await app.handle(req('/id/617'))
 
-		expect(await res.text()).toBe('617')
+		await expect(res.text()).resolves.toBe('617')
 		expect(res.status).toBe(200)
 	})
 
 	it('validate multiple', async () => {
 		const app = new Elysia().get(
 			'/id/:id/name/:name',
-			({ params }) => params,
 			{
 				params: t.Object({
 					id: t.String(),
 					name: t.String()
 				})
-			}
+			},
+			({ params }) => params
 		)
 		const res = await app.handle(req('/id/617/name/Ga1ahad'))
 
-		expect(await res.json()).toEqual({
+		await expect(res.json()).resolves.toEqual({
 			id: '617',
 			name: 'Ga1ahad'
 		})
@@ -45,25 +49,33 @@ describe('Params Validator', () => {
 	})
 
 	it('parse without reference', async () => {
-		const app = new Elysia().get('/id/:id', () => '', {
-			params: t.Object({
-				id: t.String()
-			})
-		})
+		const app = new Elysia().get(
+			'/id/:id',
+			{
+				params: t.Object({
+					id: t.String()
+				})
+			},
+			() => ''
+		)
 		const res = await app.handle(req('/id/617'))
 
 		expect(res.status).toBe(200)
 	})
 
 	it('parse single numeric', async () => {
-		const app = new Elysia().get('/id/:id', ({ params }) => params, {
-			params: t.Object({
-				id: t.Numeric()
-			})
-		})
+		const app = new Elysia().get(
+			'/id/:id',
+			{
+				params: t.Object({
+					id: t.Numeric()
+				})
+			},
+			({ params }) => params
+		)
 		const res = await app.handle(req('/id/617'))
 
-		expect(await res.json()).toEqual({
+		await expect(res.json()).resolves.toEqual({
 			id: 617
 		})
 		expect(res.status).toBe(200)
@@ -72,17 +84,17 @@ describe('Params Validator', () => {
 	it('parse multiple numeric', async () => {
 		const app = new Elysia().get(
 			'/id/:id/chapter/:chapterId',
-			({ params }) => params,
 			{
 				params: t.Object({
 					id: t.Numeric(),
 					chapterId: t.Numeric()
 				})
-			}
+			},
+			({ params }) => params
 		)
 		const res = await app.handle(req('/id/617/chapter/12'))
 
-		expect(await res.json()).toEqual({
+		await expect(res.json()).resolves.toEqual({
 			id: 617,
 			chapterId: 12
 		})
@@ -90,24 +102,32 @@ describe('Params Validator', () => {
 	})
 
 	it('parse single integer', async () => {
-		const app = new Elysia().get('/id/:id', ({ params }) => params, {
-			params: t.Object({
-				id: t.Integer()
-			})
-		})
+		const app = new Elysia().get(
+			'/id/:id',
+			{
+				params: t.Object({
+					id: t.Integer()
+				})
+			},
+			({ params }) => params
+		)
 		const res = await app.handle(req('/id/617'))
-		expect(await res.json()).toEqual({
+		await expect(res.json()).resolves.toEqual({
 			id: 617
 		})
 		expect(res.status).toBe(200)
 	})
 
 	it('parse malformed integer', async () => {
-		const app = new Elysia().get('/id/:id', ({ params }) => params, {
-			params: t.Object({
-				id: t.Integer()
-			})
-		})
+		const app = new Elysia().get(
+			'/id/:id',
+			{
+				params: t.Object({
+					id: t.Integer()
+				})
+			},
+			({ params }) => params
+		)
 
 		const res = await app.handle(req('/id/617.1234'))
 		// New TypeBox (1.x) reports JSONSchema-style errors with
@@ -115,7 +135,7 @@ describe('Params Validator', () => {
 		// matches what `ValidationError.toResponseBody()` produces.
 		// `anyOf` branch order: [Number (Integer source), Refined
 		// String (codec source for IntegerString)].
-		expect(await res.json()).toMatchObject({
+		await expect(res.json()).resolves.toMatchObject({
 			type: 'validation',
 			on: 'params',
 			property: '/id',
@@ -152,16 +172,16 @@ describe('Params Validator', () => {
 	it('parse multiple integer', async () => {
 		const app = new Elysia().get(
 			'/id/:id/chapter/:chapterId',
-			({ params }) => params,
 			{
 				params: t.Object({
 					id: t.Integer(),
 					chapterId: t.Integer()
 				})
-			}
+			},
+			({ params }) => params
 		)
 		const res = await app.handle(req('/id/617/chapter/12'))
-		expect(await res.json()).toEqual({
+		await expect(res.json()).resolves.toEqual({
 			id: 617,
 			chapterId: 12
 		})
@@ -169,12 +189,16 @@ describe('Params Validator', () => {
 	})
 
 	it('create default string params', async () => {
-		const app = new Elysia().get('/:name', ({ params }) => params, {
-			params: t.Object({
-				name: t.String(),
-				faction: t.String({ default: 'tea_party' })
-			})
-		})
+		const app = new Elysia().get(
+			'/:name',
+			{
+				params: t.Object({
+					name: t.String(),
+					faction: t.String({ default: 'tea_party' })
+				})
+			},
+			({ params }) => params
+		)
 
 		const value = await app.handle(req('/nagisa')).then((x) => x.json())
 
@@ -185,12 +209,16 @@ describe('Params Validator', () => {
 	})
 
 	it('create default number params', async () => {
-		const app = new Elysia().get('/:name', ({ params }) => params, {
-			params: t.Object({
-				name: t.String(),
-				rank: t.Number({ default: 1 })
-			})
-		})
+		const app = new Elysia().get(
+			'/:name',
+			{
+				params: t.Object({
+					name: t.String(),
+					rank: t.Number({ default: 1 })
+				})
+			},
+			({ params }) => params
+		)
 
 		const value = await app.handle(req('/nagisa')).then((x) => x.json())
 
@@ -203,12 +231,12 @@ describe('Params Validator', () => {
 	it('coerce number object to numeric', async () => {
 		const app = new Elysia().get(
 			'/id/:id',
-			({ params: { id } }) => typeof id,
 			{
 				params: t.Object({
 					id: t.Number()
 				})
-			}
+			},
+			({ params: { id } }) => typeof id
 		)
 
 		const value = await app.handle(req('/id/1')).then((x) => x.text())
@@ -219,12 +247,12 @@ describe('Params Validator', () => {
 	it('coerce string object to boolean', async () => {
 		const app = new Elysia().get(
 			'/is-admin/:value',
-			({ params: { value } }) => typeof value,
 			{
 				params: t.Object({
 					value: t.Boolean()
 				})
-			}
+			},
+			({ params: { value } }) => typeof value
 		)
 
 		const value = await app
@@ -238,7 +266,6 @@ describe('Params Validator', () => {
 		it('parse multiple optional params', async () => {
 			const app = new Elysia().get(
 				'/name/:last?/:first?',
-				({ params: { first, last } }) => `${last}/${first}`,
 				{
 					params: t.Object({
 						first: t.String({
@@ -248,7 +275,8 @@ describe('Params Validator', () => {
 							default: 'shirakami'
 						})
 					})
-				}
+				},
+				({ params: { first, last } }) => `${last}/${first}`
 			)
 
 			const res = await Promise.all([
@@ -269,15 +297,19 @@ describe('Params Validator', () => {
 		let err: Error | undefined
 
 		const app = new Elysia()
-			.get('/id/:id', ({ body }) => body, {
-				params: t.Object({
-					year: t.Numeric({ minimum: 1900, maximum: 2160 })
-				}),
-				error({ error }) {
-					// `code` was removed this version; dispatch via instanceof.
-					if (error instanceof ValidationError) err = error
-				}
-			})
+			.get(
+				'/id/:id',
+				{
+					params: t.Object({
+						year: t.Numeric({ minimum: 1900, maximum: 2160 })
+					}),
+					error({ error }) {
+						// `code` was removed this version; dispatch via instanceof.
+						if (error instanceof ValidationError) err = error
+					}
+				},
+				({ body }) => body
+			)
 			.listen(0)
 
 		await app.handle(req('/id/3000'))

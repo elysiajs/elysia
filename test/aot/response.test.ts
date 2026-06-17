@@ -24,12 +24,16 @@ afterEach(() => {
 })
 
 const RESP = () =>
-	new Elysia().get('/u', () => ({ id: 'x', name: 'y' }), {
-		response: {
-			200: t.Object({ id: t.String(), name: t.String() }),
-			404: t.Object({ error: t.String() })
-		}
-	})
+	new Elysia().get(
+		'/u',
+		{
+			response: {
+				200: t.Object({ id: t.String(), name: t.String() }),
+				404: t.Object({ error: t.String() })
+			}
+		},
+		() => ({ id: 'x', name: 'y' })
+	)
 
 describe('AOT response freezing', () => {
 	it('captures + freezes a validator for EACH declared status', () => {
@@ -41,9 +45,7 @@ describe('AOT response freezing', () => {
 		expect(m.GET?.['/u']?.['response:200']).toBeDefined()
 		expect(m.GET?.['/u']?.['response:404']).toBeDefined()
 		expect(
-			(m.GET?.['/u'] as Record<string, unknown> | undefined)?.[
-				'response'
-			]
+			(m.GET?.['/u'] as Record<string, unknown> | undefined)?.['response']
 		).toBeUndefined()
 
 		Validator.clear()
@@ -65,9 +67,13 @@ describe('AOT response freezing', () => {
 
 		beginValidatorCapture()
 		new Elysia()
-			.get('/u', () => ({ id: 'a', n: 1 }), {
-				response: { 200: schema() }
-			})
+			.get(
+				'/u',
+				{
+					response: { 200: schema() }
+				},
+				() => ({ id: 'a', n: 1 })
+			)
 			.compile()
 		const m = materialise(endValidatorCapture())
 

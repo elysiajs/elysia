@@ -13,9 +13,13 @@ describe('Macro', () => {
 					answer = config
 				}
 			})
-			.get('/', () => 'Hello World', {
-				hi: 'Hello World'
-			})
+			.get(
+				'/',
+				{
+					hi: 'Hello World'
+				},
+				() => 'Hello World'
+			)
 
 		await app.handle(req('/'))
 
@@ -31,9 +35,13 @@ describe('Macro', () => {
 					}
 				}
 			})
-			.get('/', () => 'Hello World', {
-				hi: () => 'Hello World'
-			})
+			.get(
+				'/',
+				{
+					hi: () => 'Hello World'
+				},
+				() => 'Hello World'
+			)
 
 		const response = await app.handle(req('/')).then((x) => x.text())
 
@@ -49,9 +57,13 @@ describe('Macro', () => {
 					}
 				}
 			})
-			.get('/', () => 'Hello World', {
-				hi: () => {}
-			})
+			.get(
+				'/',
+				{
+					hi: () => {}
+				},
+				() => 'Hello World'
+			)
 
 		expect(app.history![0][4]!.parse?.length).toEqual(1)
 	})
@@ -65,9 +77,13 @@ describe('Macro', () => {
 					}
 				}
 			})
-			.get('/', () => 'Hello World', {
-				hi: () => {}
-			})
+			.get(
+				'/',
+				{
+					hi: () => {}
+				},
+				() => 'Hello World'
+			)
 
 		expect(app.history![0][4]!.parse?.length).toEqual(2)
 	})
@@ -81,9 +97,13 @@ describe('Macro', () => {
 					}
 				}
 			})
-			.get('/', () => 'Hello World', {
-				hi: () => {}
-			})
+			.get(
+				'/',
+				{
+					hi: () => {}
+				},
+				() => 'Hello World'
+			)
 
 		expect(app.history![0][4]!.transform?.length).toEqual(1)
 	})
@@ -97,9 +117,13 @@ describe('Macro', () => {
 					}
 				}
 			})
-			.get('/', () => 'Hello World', {
-				hi: () => {}
-			})
+			.get(
+				'/',
+				{
+					hi: () => {}
+				},
+				() => 'Hello World'
+			)
 
 		expect(app.history![0][4]!.transform?.length).toEqual(2)
 	})
@@ -113,9 +137,13 @@ describe('Macro', () => {
 					}
 				}
 			})
-			.get('/', () => 'Hello World', {
-				hi: () => {}
-			})
+			.get(
+				'/',
+				{
+					hi: () => {}
+				},
+				() => 'Hello World'
+			)
 
 		expect(app.history![0][4]!.beforeHandle?.length).toEqual(1)
 	})
@@ -129,9 +157,13 @@ describe('Macro', () => {
 					}
 				}
 			})
-			.get('/', () => 'Hello World', {
-				hi: () => {}
-			})
+			.get(
+				'/',
+				{
+					hi: () => {}
+				},
+				() => 'Hello World'
+			)
 
 		expect(app.history![0][4]!.beforeHandle?.length).toEqual(2)
 	})
@@ -145,9 +177,13 @@ describe('Macro', () => {
 					}
 				}
 			})
-			.get('/', () => 'Hello World', {
-				hi: () => {}
-			})
+			.get(
+				'/',
+				{
+					hi: () => {}
+				},
+				() => 'Hello World'
+			)
 
 		expect(app.history![0][4]!.afterHandle?.length).toEqual(1)
 	})
@@ -161,9 +197,13 @@ describe('Macro', () => {
 					}
 				}
 			})
-			.get('/', () => 'Hello World', {
-				hi: () => {}
-			})
+			.get(
+				'/',
+				{
+					hi: () => {}
+				},
+				() => 'Hello World'
+			)
 
 		expect(app.history![0][4]!.afterHandle?.length).toEqual(2)
 	})
@@ -177,9 +217,13 @@ describe('Macro', () => {
 					}
 				}
 			})
-			.get('/', () => 'Hello World', {
-				hi: () => {}
-			})
+			.get(
+				'/',
+				{
+					hi: () => {}
+				},
+				() => 'Hello World'
+			)
 
 		expect(app.history![0][4]!.error?.length).toEqual(1)
 	})
@@ -193,9 +237,13 @@ describe('Macro', () => {
 					}
 				}
 			})
-			.get('/', () => 'Hello World', {
-				hi: () => {}
-			})
+			.get(
+				'/',
+				{
+					hi: () => {}
+				},
+				() => 'Hello World'
+			)
 
 		expect(app.history![0][4]!.error?.length).toEqual(2)
 	})
@@ -209,9 +257,13 @@ describe('Macro', () => {
 					}
 				}
 			})
-			.get('/', () => 'Hello World', {
-				hi: () => {}
-			})
+			.get(
+				'/',
+				{
+					hi: () => {}
+				},
+				() => 'Hello World'
+			)
 
 		expect(app.history![0][4]!.afterResponse?.length).toEqual(1)
 	})
@@ -225,9 +277,13 @@ describe('Macro', () => {
 					}
 				}
 			})
-			.get('/', () => 'Hello World', {
-				hi: () => {}
-			})
+			.get(
+				'/',
+				{
+					hi: () => {}
+				},
+				() => 'Hello World'
+			)
 
 		expect(app.history![0][4]!.afterResponse?.length).toEqual(2)
 	})
@@ -250,9 +306,13 @@ describe('Macro', () => {
 		const app = new Elysia()
 			.use(a)
 			.use(b)
-			.get('/', () => 'Hello World', {
-				a: true
-			})
+			.get(
+				'/',
+				{
+					a: true
+				},
+				() => 'Hello World'
+			)
 
 		await app.handle(req('/'))
 
@@ -284,7 +344,7 @@ describe('Macro', () => {
 					.get('/test2', () => 'test2')
 					.get('/test3', () => 'hello test3')
 			)
-			.get('/hello', () => 'hello', { auth: 'teacher' })
+			.get('/hello', { auth: 'teacher' }, () => 'hello')
 
 		await Promise.all(
 			['/test1', '/test2', '/test3'].map((x) => app.handle(req(x)))
@@ -306,9 +366,13 @@ describe('Macro', () => {
 			.use(plugin)
 			.use(plugin)
 			.use(plugin)
-			.get('/', () => 'Hello World', {
-				hi: 'Hello World'
-			})
+			.get(
+				'/',
+				{
+					hi: 'Hello World'
+				},
+				() => 'Hello World'
+			)
 
 		await app.handle(req('/'))
 
@@ -363,13 +427,21 @@ describe('Macro', () => {
 					}
 				}
 			})
-			.get('/', () => 'hi', {
-				count: true
-			})
+			.get(
+				'/',
+				{
+					count: true
+				},
+				() => 'hi'
+			)
 
-		const app = new Elysia().use(plugin).get('/foo', () => 'foo', {
-			count: true
-		})
+		const app = new Elysia().use(plugin).get(
+			'/foo',
+			{
+				count: true
+			},
+			() => 'foo'
+		)
 
 		await app.handle(req('/'))
 	})
@@ -387,9 +459,13 @@ describe('Macro', () => {
 		})
 
 		const app = new Elysia().use(authGuard).group('/posts', (app) =>
-			app.get('/', () => 'a', {
-				isAuth: true
-			})
+			app.get(
+				'/',
+				{
+					isAuth: true
+				},
+				() => 'a'
+			)
 		)
 
 		const status = await app.handle(req('/posts')).then((x) => x.status)
@@ -410,9 +486,13 @@ describe('Macro', () => {
 		})
 
 		const app = new Elysia().use(authGuard).guard({}, (app) =>
-			app.get('/posts', () => 'a', {
-				isAuth: true
-			})
+			app.get(
+				'/posts',
+				{
+					isAuth: true
+				},
+				() => 'a'
+			)
 		)
 
 		const status = await app.handle(req('/posts')).then((x) => x.status)
@@ -433,9 +513,13 @@ describe('Macro', () => {
 		})
 
 		const app = new Elysia().use(authGuard).use((app) =>
-			app.get('/posts', () => 'a', {
-				isAuth: true
-			})
+			app.get(
+				'/posts',
+				{
+					isAuth: true
+				},
+				() => 'a'
+			)
 		)
 
 		const status = await app.handle(req('/posts')).then((x) => x.status)
@@ -446,10 +530,14 @@ describe('Macro', () => {
 	it("don't inherits macro to plugin without type reference", () => {
 		const called = <string[]>[]
 
-		const plugin = new Elysia().get('/hello', () => 'hello', {
-			// @ts-ignore
-			hello: 'nagisa'
-		})
+		const plugin = new Elysia().get(
+			'/hello',
+			{
+				// @ts-ignore
+				hello: 'nagisa'
+			},
+			() => 'hello'
+		)
 
 		const app = new Elysia()
 			.macro({
@@ -458,10 +546,14 @@ describe('Macro', () => {
 				}
 			})
 			.use(plugin)
-			.get('/', () => 'a', {
-				// @ts-ignore
-				hello: 'hifumi'
-			})
+			.get(
+				'/',
+				{
+					// @ts-ignore
+					hello: 'hifumi'
+				},
+				() => 'a'
+			)
 
 		// Macros run during route compilation; reading `app.history`
 		// triggers compile for each route via the introspection getter.
@@ -487,9 +579,13 @@ describe('Macro', () => {
 		})
 
 		const b = new Elysia({ name: 'b' }).use(a)
-		const c = new Elysia().use(b).get('/', () => 'ok', {
-			isSignIn: true
-		})
+		const c = new Elysia().use(b).get(
+			'/',
+			{
+				isSignIn: true
+			},
+			() => 'ok'
+		)
 
 		const app = new Elysia().use(c)
 
@@ -510,9 +606,13 @@ describe('Macro', () => {
 					})
 				})
 			})
-			.get('/', ({ user }) => user, {
-				user: true
-			})
+			.get(
+				'/',
+				{
+					user: true
+				},
+				({ user }) => user
+			)
 
 		const [a, b] = await Promise.all([
 			app.handle(req('/')).then((x) => x.json()),
@@ -534,9 +634,13 @@ describe('Macro', () => {
 					})
 				})
 			})
-			.get('/', ({ user }) => user, {
-				user: true
-			})
+			.get(
+				'/',
+				{
+					user: true
+				},
+				({ user }) => user
+			)
 
 		const [a, b] = await Promise.all([
 			app.handle(req('/')).then((x) => x.json()),
@@ -569,8 +673,8 @@ describe('Macro', () => {
 			.use(parent)
 			.get('/global', (context) => !('account' in context))
 
-		expect(
-			await Promise.all(
+		await expect(
+			Promise.all(
 				['/local', '/plugin', '/global'].map((path) =>
 					app
 						.handle(req(path))
@@ -578,7 +682,7 @@ describe('Macro', () => {
 						.then((x) => x === 'true')
 				)
 			)
-		).toEqual([true, true, true])
+		).resolves.toEqual([true, true, true])
 	})
 
 	it('guard handle resolve macro with scoped', async () => {
@@ -603,8 +707,8 @@ describe('Macro', () => {
 			.use(parent)
 			.get('/global', (context) => !('account' in context))
 
-		expect(
-			await Promise.all(
+		await expect(
+			Promise.all(
 				['/local', '/plugin', '/global'].map((path) =>
 					app
 						.handle(req(path))
@@ -612,7 +716,7 @@ describe('Macro', () => {
 						.then((x) => x === 'true')
 				)
 			)
-		).toEqual([true, true, true])
+		).resolves.toEqual([true, true, true])
 	})
 
 	it('guard handle resolve macro with global', async () => {
@@ -637,8 +741,8 @@ describe('Macro', () => {
 			.use(parent)
 			.get('/global', ({ account }) => account === 'A')
 
-		expect(
-			await Promise.all(
+		await expect(
+			Promise.all(
 				['/local', '/plugin', '/global'].map((path) =>
 					app
 						.handle(req(path))
@@ -646,7 +750,7 @@ describe('Macro', () => {
 						.then((x) => x === 'true')
 				)
 			)
-		).toEqual([true, true, true])
+		).resolves.toEqual([true, true, true])
 	})
 
 	it('guard handle resolve macro with local', async () => {
@@ -671,8 +775,8 @@ describe('Macro', () => {
 			.use(parent)
 			.get('/global', (context) => !('account' in context))
 
-		expect(
-			await Promise.all(
+		await expect(
+			Promise.all(
 				['/local', '/plugin', '/global'].map((path) =>
 					app
 						.handle(req(path))
@@ -680,7 +784,7 @@ describe('Macro', () => {
 						.then((x) => x === 'true')
 				)
 			)
-		).toEqual([true, true, true])
+		).resolves.toEqual([true, true, true])
 	})
 
 	it('guard handle resolve macro with error', async () => {
@@ -709,8 +813,8 @@ describe('Macro', () => {
 			.use(parent)
 			.get('/global', (context) => !('account' in context))
 
-		expect(
-			await Promise.all(
+		await expect(
+			Promise.all(
 				['/local', '/plugin', '/global'].map((path) =>
 					app
 						.handle(req(path))
@@ -718,7 +822,7 @@ describe('Macro', () => {
 						.then((x) => x === 'true')
 				)
 			)
-		).toEqual([true, true, true])
+		).resolves.toEqual([true, true, true])
 	})
 
 	it('guard handle resolve macro with async', async () => {
@@ -747,8 +851,8 @@ describe('Macro', () => {
 			.use(parent)
 			.get('/global', (context) => !('account' in context))
 
-		expect(
-			await Promise.all(
+		await expect(
+			Promise.all(
 				['/local', '/plugin', '/global'].map((path) =>
 					app
 						.handle(req(path))
@@ -756,7 +860,7 @@ describe('Macro', () => {
 						.then((x) => x === 'true')
 				)
 			)
-		).toEqual([true, true, true])
+		).resolves.toEqual([true, true, true])
 	})
 
 	// It may look duplicate to the test case above, but it occurs for some reason
@@ -775,13 +879,13 @@ describe('Macro', () => {
 			})
 			.get(
 				'/',
+				{
+					user: true
+				},
 				({ user, status }) => {
 					if (!user) return status(401)
 
 					return { hello: 'hanabi' }
-				},
-				{
-					user: true
 				}
 			)
 
@@ -803,13 +907,21 @@ describe('Macro', () => {
 					})
 				}
 			})
-			.get('/', ({ user }) => user, {
-				user: true
-			})
-			// @ts-expect-error
-			.get('/no-macro', (context) => context?.user ?? { name: 'none' }, {
-				user: false
-			})
+			.get(
+				'/',
+				{
+					user: true
+				},
+				({ user }) => user
+			)
+			.get(
+				'/no-macro',
+				{
+					user: false
+				},
+				// @ts-expect-error
+				(context) => context?.user ?? { name: 'none' }
+			)
 
 		const [a, b, c, d] = await Promise.all([
 			app.handle(req('/')).then((x) => x.json()),
@@ -837,40 +949,46 @@ describe('Macro', () => {
 					derive: () => ({ c: n })
 				})
 			})
-			.get('/a', ({ a }) => ({ a }), {
-				a: true,
-				response: t.Object({ a: t.Literal('a') })
-			})
-			.get('/b', ({ b }) => ({ b }), {
-				b: true,
-				response: t.Object({ b: t.Literal('b') })
-			})
-			.get('/c', ({ a, b }) => ({ a, b }), {
-				a: true,
-				b: true,
-				response: t.Object({ a: t.Literal('a'), b: t.Literal('b') })
-			})
+			.get(
+				'/a',
+				{
+					a: true,
+					response: t.Object({ a: t.Literal('a') })
+				},
+				({ a }) => ({ a })
+			)
+			.get(
+				'/b',
+				{
+					b: true,
+					response: t.Object({ b: t.Literal('b') })
+				},
+				({ b }) => ({ b })
+			)
+			.get(
+				'/c',
+				{
+					a: true,
+					b: true,
+					response: t.Object({ a: t.Literal('a'), b: t.Literal('b') })
+				},
+				({ a, b }) => ({ a, b })
+			)
 			.get(
 				'/d',
-				({
-					a,
-					// @ts-expect-error Property `b` does not exist
-					b
-				}) => ({ a, b }),
 				{
 					a: true,
 					b: false,
 					response: t.Object({ a: t.Literal('a'), b: t.Undefined() })
-				}
+				},
+				({
+					a,
+					// @ts-expect-error Property `b` does not exist
+					b
+				}) => ({ a, b })
 			)
 			.get(
 				'/e',
-				({
-					// @ts-expect-error Property `a` does not exist
-					a,
-					b,
-					c
-				}) => ({ a, b, c }),
 				{
 					b: true,
 					c: 10,
@@ -879,7 +997,13 @@ describe('Macro', () => {
 						b: t.Literal('b'),
 						c: t.Number()
 					})
-				}
+				},
+				({
+					// @ts-expect-error Property `a` does not exist
+					a,
+					b,
+					c
+				}) => ({ a, b, c })
 			)
 
 		const [a, b, c, d, e] = await Promise.all([
@@ -910,11 +1034,15 @@ describe('Macro', () => {
 					body: t.Object({ lilith: t.Literal('Lilith') })
 				}
 			})
-			.post('/:sartre', ({ body }) => body, {
-				sartre: true,
-				focou: true,
-				lilith: true
-			})
+			.post(
+				'/:sartre',
+				{
+					sartre: true,
+					focou: true,
+					lilith: true
+				},
+				({ body }) => body
+			)
 
 		expect(app.history![0][4]!.schemas!.length).toBe(1)
 
@@ -925,7 +1053,7 @@ describe('Macro', () => {
 		)
 
 		expect(valid.status).toBe(200)
-		expect(await valid.json()).toEqual({
+		await expect(valid.json()).resolves.toEqual({
 			lilith: 'Lilith'
 		})
 
@@ -967,11 +1095,15 @@ describe('Macro', () => {
 					body: t.Object({ lilith: t.Literal('Lilith') })
 				}
 			})
-			.post('/', ({ body }) => body, {
-				sartre: true,
-				focou: true,
-				lilith: true
-			})
+			.post(
+				'/',
+				{
+					sartre: true,
+					focou: true,
+					lilith: true
+				},
+				({ body }) => body
+			)
 
 		expect(app.history![0][4]!.schemas!.length).toBe(3)
 
@@ -984,7 +1116,7 @@ describe('Macro', () => {
 		)
 
 		expect(response.status).toBe(200)
-		expect(await response.json()).toEqual({
+		await expect(response.json()).resolves.toEqual({
 			sartre: 'Sartre',
 			focou: 'Focou',
 			lilith: 'Lilith'
@@ -1036,9 +1168,13 @@ describe('Macro', () => {
 					body: t.Object({ lilith: t.Literal('Lilith') })
 				}
 			})
-			.post('/', ({ body }) => body, {
-				lilith: true
-			})
+			.post(
+				'/',
+				{
+					lilith: true
+				},
+				({ body }) => body
+			)
 
 		expect(app.history![0][4]!.schemas!.length).toBe(3)
 
@@ -1051,7 +1187,7 @@ describe('Macro', () => {
 		)
 
 		expect(response.status).toBe(200)
-		expect(await response.json()).toEqual({
+		await expect(response.json()).resolves.toEqual({
 			sartre: 'Sartre',
 			focou: 'Focou',
 			lilith: 'Lilith'
@@ -1104,16 +1240,28 @@ describe('Macro', () => {
 			.guard({
 				body: t.Object({ name: t.String() })
 			})
-			.post('/first', ({ body }) => body, {
-				body: t.Object({ id: t.Number() })
-			})
-			.post('/second', ({ body }) => body, {
-				body: t.Object({ id: t.Number() })
-			})
-			.post('/macro', ({ body }) => body, {
-				lilith: true,
-				body: t.Object({ id: t.Number() })
-			})
+			.post(
+				'/first',
+				{
+					body: t.Object({ id: t.Number() })
+				},
+				({ body }) => body
+			)
+			.post(
+				'/second',
+				{
+					body: t.Object({ id: t.Number() })
+				},
+				({ body }) => body
+			)
+			.post(
+				'/macro',
+				{
+					lilith: true,
+					body: t.Object({ id: t.Number() })
+				},
+				({ body }) => body
+			)
 
 		// route-local body stays in the override channel, never lifted
 		expect(app.history![0][4]!.body).not.toBeUndefined()
@@ -1129,8 +1277,8 @@ describe('Macro', () => {
 
 		expect(second.status).toBe(200)
 		expect(first.status).toBe(200)
-		expect(await second.json()).toEqual({ id: 1 })
-		expect(await first.json()).toEqual({ id: 1 })
+		await expect(second.json()).resolves.toEqual({ id: 1 })
+		await expect(first.json()).resolves.toEqual({ id: 1 })
 
 		// the route-local schema is still enforced, not dropped
 		const invalidFirst = await app.handle(post('/first', { name: 'a' }))
@@ -1162,9 +1310,13 @@ describe('Macro', () => {
 					}
 				}
 			})
-			.post('/', ({ body }) => body, {
-				lilith: true
-			})
+			.post(
+				'/',
+				{
+					lilith: true
+				},
+				({ body }) => body
+			)
 
 		const route = app.history![0]
 
@@ -1183,12 +1335,16 @@ describe('Macro', () => {
 					}
 				}
 			})
-			.post('/', ({ body }) => body, {
-				lilith: true,
-				detail: {
-					description: 'Lilith description'
-				}
-			})
+			.post(
+				'/',
+				{
+					lilith: true,
+					detail: {
+						description: 'Lilith description'
+					}
+				},
+				({ body }) => body
+			)
 
 		const route = app.history![0]
 
@@ -1214,9 +1370,13 @@ describe('Macro', () => {
 					body: t.Object({ lilith: t.Literal('Lilith') })
 				}
 			})
-			.post('/', ({ body }) => body, {
-				lilith: true
-			})
+			.post(
+				'/',
+				{
+					lilith: true
+				},
+				({ body }) => body
+			)
 
 		const route = app.history![0]
 
@@ -1241,10 +1401,14 @@ describe('Macro', () => {
 					body: t.Object({ lilith: t.Literal('Lilith') })
 				}
 			})
-			.post('/', ({ body }) => body, {
-				lilith: true,
-				sartre: false
-			})
+			.post(
+				'/',
+				{
+					lilith: true,
+					sartre: false
+				},
+				({ body }) => body
+			)
 
 		const route = app.history![0]
 
@@ -1274,10 +1438,14 @@ describe('Macro', () => {
 					body: t.Object({ lilith: t.Literal('Lilith') })
 				}
 			})
-			.post('/', ({ body }) => body, {
-				lilith: true,
-				sartre: true
-			})
+			.post(
+				'/',
+				{
+					lilith: true,
+					sartre: true
+				},
+				({ body }) => body
+			)
 
 		const route = app.history![0]
 
@@ -1310,9 +1478,13 @@ describe('Macro', () => {
 					body: t.Object({ lilith: t.Literal('Lilith') })
 				}
 			})
-			.post('/', ({ body }) => body, {
-				lilith: true
-			})
+			.post(
+				'/',
+				{
+					lilith: true
+				},
+				({ body }) => body
+			)
 
 		const route = app.history![0]
 
@@ -1337,11 +1509,15 @@ describe('Macro', () => {
 					body: t.Object({ lilith: t.Literal('Lilith') })
 				}
 			})
-			.post('/:sartre', ({ body }) => body, {
-				sartre: true,
-				focou: true,
-				lilith: true
-			})
+			.post(
+				'/:sartre',
+				{
+					sartre: true,
+					focou: true,
+					lilith: true
+				},
+				({ body }) => body
+			)
 
 		expect(app.history![0][4]!.schemas!.length).toBe(1)
 
@@ -1352,7 +1528,7 @@ describe('Macro', () => {
 		)
 
 		expect(valid.status).toBe(200)
-		expect(await valid.json()).toEqual({
+		await expect(valid.json()).resolves.toEqual({
 			lilith: 'Lilith'
 		})
 
@@ -1396,11 +1572,15 @@ describe('Macro', () => {
 					body: t.Object({ lilith: t.Literal('Lilith') })
 				}
 			})
-			.post('/:sartre', ({ body }) => body, {
-				sartre: true,
-				focou: true,
-				lilith: true
-			})
+			.post(
+				'/:sartre',
+				{
+					sartre: true,
+					focou: true,
+					lilith: true
+				},
+				({ body }) => body
+			)
 
 		expect(app.history![0][4]!.schemas!.length).toBe(1)
 
@@ -1411,7 +1591,7 @@ describe('Macro', () => {
 		)
 
 		expect(valid.status).toBe(200)
-		expect(await valid.json()).toEqual({
+		await expect(valid.json()).resolves.toEqual({
 			lilith: 'Lilith'
 		})
 
@@ -1457,9 +1637,13 @@ describe('Macro', () => {
 					body: t.Object({ lilith: t.Literal('Lilith') })
 				}
 			})
-			.post('/', ({ body }) => body, {
-				lilith: true
-			})
+			.post(
+				'/',
+				{
+					lilith: true
+				},
+				({ body }) => body
+			)
 
 		expect(app.history![0][4]!.schemas!.length).toBe(3)
 
@@ -1472,7 +1656,7 @@ describe('Macro', () => {
 		)
 
 		expect(response.status).toBe(200)
-		expect(await response.json()).toEqual({
+		await expect(response.json()).resolves.toEqual({
 			sartre: 'Sartre',
 			focou: 'Focou',
 			lilith: 'Lilith'

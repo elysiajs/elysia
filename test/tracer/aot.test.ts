@@ -3,7 +3,6 @@ import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
 
 describe('Trace AoT', async () => {
-
 	it('try-catch edge case', async () => {
 		class Controller {
 			static async handle(ctx: Context) {
@@ -27,7 +26,7 @@ describe('Trace AoT', async () => {
 			})
 		)
 
-		expect(await response.text()).toEqual('yay')
+		await expect(response.text()).resolves.toEqual('yay')
 	})
 
 	it('handle scope', async () => {

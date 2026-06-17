@@ -11,7 +11,7 @@ describe('Edge Case', () => {
 			.get('/', ({ store: { a } }) => a)
 		const res = await app.handle(req('/'))
 
-		expect(await res.text()).toBe('a')
+		await expect(res.text()).resolves.toBe('a')
 	})
 
 	// https://github.com/oven-sh/bun/issues/1523
@@ -64,15 +64,23 @@ describe('Edge Case', () => {
 			app.get('/', () => 'Hi')
 		)
 
-		expect(await loose.handle(req('/a')).then((x) => x.status)).toBe(200)
-		expect(await loose.handle(req('/a/')).then((x) => x.status)).toBe(200)
+		await expect(
+			loose.handle(req('/a')).then((x) => x.status)
+		).resolves.toBe(200)
+		await expect(
+			loose.handle(req('/a/')).then((x) => x.status)
+		).resolves.toBe(200)
 
 		const strict = new Elysia({
 			strictPath: true
 		}).group('/a', (app) => app.get('/', () => 'Hi'))
 
-		expect(await strict.handle(req('/a')).then((x) => x.status)).toBe(404)
-		expect(await strict.handle(req('/a/')).then((x) => x.status)).toBe(200)
+		await expect(
+			strict.handle(req('/a')).then((x) => x.status)
+		).resolves.toBe(404)
+		await expect(
+			strict.handle(req('/a/')).then((x) => x.status)
+		).resolves.toBe(200)
 	})
 
 	it('return cookie with file', async () => {
@@ -202,11 +210,11 @@ describe('Edge Case', () => {
 
 		// sharing the node must not change hook execution
 		const resA = await app.handle(req('/a'))
-		expect(await resA.text()).toBe('a')
+		await expect(resA.text()).resolves.toBe('a')
 		const forA = called.splice(0)
 
 		const resB = await app.handle(req('/b'))
-		expect(await resB.text()).toBe('b')
+		await expect(resB.text()).resolves.toBe('b')
 		const forB = called.splice(0)
 
 		expect(forB).toEqual(forA)
@@ -238,7 +246,7 @@ describe('Edge Case', () => {
 					transform: () => {}
 				}
 			})
-			.get('/c', () => 'c', { tagged: true })
+			.get('/c', { tagged: true }, () => 'c')
 
 		app.use(plugin)
 
@@ -262,9 +270,13 @@ describe('Edge Case', () => {
 
 	it('reading routes is idempotent (no hook duplication)', () => {
 		const plugin = new Elysia().transform(() => {})
-		const app = new Elysia().use(plugin).get('/', () => 'hi', {
-			transform() {}
-		})
+		const app = new Elysia().use(plugin).get(
+			'/',
+			{
+				transform() {}
+			},
+			() => 'hi'
+		)
 
 		const first = app.routes[0].hooks.transform!.length
 
@@ -277,7 +289,6 @@ describe('Edge Case', () => {
 	it('value returned from transform has priority over the default value from schema', async () => {
 		const route = new Elysia().get(
 			'/:propParams?',
-			({ params: { propParams } }) => propParams,
 			{
 				params: t.Object({
 					propParams: t.String({
@@ -287,7 +298,8 @@ describe('Edge Case', () => {
 				transform({ params }) {
 					params.propParams = 'params-transform'
 				}
-			}
+			},
+			({ params: { propParams } }) => propParams
 		)
 
 		const app = new Elysia().use(route)
@@ -322,6 +334,20 @@ describe('Edge Case', () => {
 		}).get(
 			'/',
 			// @ts-ignore
+			{
+				response: t.Cyclic(
+					{
+						a: t.Object({
+							type: t.String(),
+							data: t.Union([
+								t.Nullable(t.Ref('a')),
+								t.Array(t.Ref('a'))
+							])
+						})
+					},
+					'a'
+				)
+			},
 			() => ({
 				type: 'ok',
 				data: [
@@ -337,15 +363,7 @@ describe('Edge Case', () => {
 						}
 					}
 				]
-			}),
-			{
-				response: t.Cyclic({
-					a: t.Object({
-						type: t.String(),
-						data: t.Union([t.Nullable(t.Ref('a')), t.Array(t.Ref('a'))])
-					})
-				}, 'a')
-			}
+			})
 		)
 
 		const response = await app.handle(req('/')).then((x) => x.json())
@@ -374,13 +392,6 @@ describe('Edge Case', () => {
 		}).get(
 			'/',
 			// @ts-ignore
-			() => ({
-				wrap: {
-					type: 'ok',
-					data: { type: 'nested', data: null }
-				},
-				extra: 'untouched-number-free'
-			}),
 			{
 				response: t.Object({
 					wrap: t.Cyclic(
@@ -394,7 +405,14 @@ describe('Edge Case', () => {
 					),
 					extra: t.String()
 				})
-			}
+			},
+			() => ({
+				wrap: {
+					type: 'ok',
+					data: { type: 'nested', data: null }
+				},
+				extra: 'untouched-number-free'
+			})
 		)
 
 		const response = await app.handle(req('/')).then((x) => x.json())
@@ -409,19 +427,16 @@ describe('Edge Case', () => {
 	})
 
 	it('serve async static route repeatedly', async () => {
-		const app = new Elysia().get(
-			'/',
-			Promise.resolve(new Response('hi'))
-		)
+		const app = new Elysia().get('/', Promise.resolve(new Response('hi')))
 
 		const first = await app.handle(req('/'))
 		expect(first.status).toBe(200)
-		expect(await first.text()).toBe('hi')
+		await expect(first.text()).resolves.toBe('hi')
 
 		// the resolved Response must be cloned per serve, not consumed
 		const second = await app.handle(req('/'))
 		expect(second.status).toBe(200)
-		expect(await second.text()).toBe('hi')
+		await expect(second.text()).resolves.toBe('hi')
 	})
 
 	it('sanitize cyclic value at arbitrary depth', async () => {
@@ -433,7 +448,6 @@ describe('Edge Case', () => {
 		}).get(
 			'/',
 			// @ts-ignore
-			() => payload,
 			{
 				response: t.Cyclic(
 					{
@@ -447,7 +461,8 @@ describe('Edge Case', () => {
 					},
 					'a'
 				)
-			}
+			},
+			() => payload
 		)
 
 		const response = await app.handle(req('/')).then((x) => x.json())
@@ -479,13 +494,13 @@ describe('Edge Case', () => {
 			})
 			.get(
 				'/',
+				{
+					user: true
+				},
 				({ user, status }) => {
 					if (!user) return status(401)
 
 					return { hello: 'hanabi' }
-				},
-				{
-					user: true
 				}
 			)
 
@@ -501,11 +516,15 @@ describe('Edge Case', () => {
 	})
 
 	it('decode URI of path parameter', async () => {
-		const api = new Elysia().get('/:id', ({ params }) => params, {
-			params: t.Object({
-				id: t.String()
-			})
-		})
+		const api = new Elysia().get(
+			'/:id',
+			{
+				params: t.Object({
+					id: t.String()
+				})
+			},
+			({ params }) => params
+		)
 
 		const value = await api
 			.handle(new Request('http://localhost:3000/hello world'))
@@ -519,16 +538,16 @@ describe('Edge Case', () => {
 	it('clean non-root additionalProperties', async () => {
 		const app = new Elysia().get(
 			'/',
-			() => ({
-				keys: [{ a: 1, b: 2 }],
-				extra: true
-			}),
 			{
 				response: t.Object(
 					{ keys: t.Array(t.Object({ a: t.Number() })) },
 					{ additionalProperties: true }
 				)
-			}
+			},
+			() => ({
+				keys: [{ a: 1, b: 2 }],
+				extra: true
+			})
 		)
 
 		const value = await app.handle(req('/')).then((x) => x.json())
@@ -548,8 +567,8 @@ describe('Edge Case', () => {
 			},
 			(app) =>
 				app
-					.get('/foo', () => 'bar', { response: { 200: t.String() } })
-					.get('/bar', () => 12, { response: { 200: t.Integer() } })
+					.get('/foo', { response: { 200: t.String() } }, () => 'bar')
+					.get('/bar', { response: { 200: t.Integer() } }, () => 12)
 		)
 
 		const response = await app.handle(req('/foo'))
@@ -678,14 +697,14 @@ describe('Edge Case', () => {
 			}
 		}).get(
 			'/',
-			(c) =>
-				// @ts-ignore
-				c.q ?? 'safe',
 			{
 				cookie: t.Cookie({
 					foo: t.Optional(t.Any())
 				})
-			}
+			},
+			(c) =>
+				// @ts-ignore
+				c.q ?? 'safe'
 		)
 
 		const response = await app
@@ -705,19 +724,19 @@ describe('Edge Case', () => {
 			})
 			.post(
 				'/',
-				({ body }) => ({
-					body,
-					win:
-						// @ts-ignore
-						{}.foo
-				}),
 				{
 					body: z.object({
 						data: z.object({
 							messageId: z.string('pollute-me')
 						})
 					})
-				}
+				},
+				({ body }) => ({
+					body,
+					win:
+						// @ts-ignore
+						{}.foo
+				})
 			)
 
 		app.handle(

@@ -223,9 +223,8 @@ describe('Modules', () => {
 	})
 
 	it('register dynamic import routes inside guard', async () => {
-		const app = new Elysia().guard(
-			{},
-			(app) => app.use(import('../modules').then((m) => m.lazyInstance))
+		const app = new Elysia().guard({}, (app) =>
+			app.use(import('../modules').then((m) => m.lazyInstance))
 		)
 
 		await app.modules
@@ -233,7 +232,7 @@ describe('Modules', () => {
 		const res = await app.handle(req('/lazy-instance'))
 
 		expect(res.status).toBe(200)
-		expect(await res.text()).toBe('lazy-instance')
+		await expect(res.text()).resolves.toBe('lazy-instance')
 	})
 
 	it('register multiple dynamic import routes inside guard', async () => {
@@ -243,7 +242,11 @@ describe('Modules', () => {
 		let hookCalls = 0
 
 		const app = new Elysia().guard(
-			{ beforeHandle: () => { hookCalls++ } },
+			{
+				beforeHandle: () => {
+					hookCalls++
+				}
+			},
 			(app) => app.use(lazyA).use(lazyB)
 		)
 

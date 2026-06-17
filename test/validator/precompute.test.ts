@@ -130,16 +130,20 @@ describe('EncodeFrom error path', () => {
 				}
 				return 'caught'
 			})
-			.get('/', () => ({ id: 'value' }), {
-				response: t.Object({
-					id: t
-						.Codec(t.String())
-						.Decode((v) => v)
-						.Encode(() => {
-							throw new Error('boom')
-						})
-				})
-			})
+			.get(
+				'/',
+				{
+					response: t.Object({
+						id: t
+							.Codec(t.String())
+							.Decode((v) => v)
+							.Encode(() => {
+								throw new Error('boom')
+							})
+					})
+				},
+				() => ({ id: 'value' })
+			)
 
 		const res = await app.handle(req('/'))
 		expect(res.status).toBe(422)
@@ -156,10 +160,6 @@ describe('t.Cookie field-form ignores `sign` option', () => {
 		// contract documented in the t.Cookie implementation.
 		const app = new Elysia().get(
 			'/',
-			({ cookie: { token } }) => {
-				token.value = 'plain'
-				return 'ok'
-			},
 			{
 				cookie: t.Object({
 					// `sign` here is intentionally ignored by field-form.
@@ -167,6 +167,10 @@ describe('t.Cookie field-form ignores `sign` option', () => {
 						sign: 'token'
 					} as any)
 				})
+			},
+			({ cookie: { token } }) => {
+				token.value = 'plain'
+				return 'ok'
 			}
 		)
 
@@ -194,11 +198,11 @@ describe('t.Cookie field-form ignores `sign` option', () => {
 
 		const app = new Elysia({ normalize: false }).post(
 			'/',
+			{ body: t.Object({ items: t.Array(t.String(), { default: [] }) }) },
 			({ body }) => {
 				;(body as { items: string[] }).items.push('x')
 				return (body as { items: string[] }).items.length
-			},
-			{ body: t.Object({ items: t.Array(t.String(), { default: [] }) }) }
+			}
 		)
 
 		// empty object → `items` comes entirely from the (shared) default

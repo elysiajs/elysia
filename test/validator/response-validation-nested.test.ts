@@ -12,13 +12,6 @@ describe('Response validation nested schemas', () => {
 	it('should return 422 for invalid nested response', async () => {
 		const app = new Elysia().post(
 			'/test',
-			// @ts-expect-error - intentionally returning invalid data to test validation
-			() => ({
-				items: [
-					['t1', { file: { ver: { s: '', m: null } } }],
-					['t2', { file: { ver: null } }] // Invalid
-				]
-			}),
 			{
 				body: t.Object({}),
 				response: t.Object({
@@ -38,7 +31,14 @@ describe('Response validation nested schemas', () => {
 						])
 					)
 				})
-			}
+			},
+			// @ts-expect-error - intentionally returning invalid data to test validation
+			() => ({
+				items: [
+					['t1', { file: { ver: { s: '', m: null } } }],
+					['t2', { file: { ver: null } }] // Invalid
+				]
+			})
 		)
 
 		const res = await app.handle(
@@ -59,10 +59,6 @@ describe('Response validation nested schemas', () => {
 	it('should return 422 for tuple with null nested object', async () => {
 		const app = new Elysia().get(
 			'/test',
-			// @ts-expect-error - intentionally returning invalid data to test validation
-			() => ({
-				data: ['id', { nested: null }] // nested should be object with 'value'
-			}),
 			{
 				response: t.Object({
 					data: t.Tuple([
@@ -74,7 +70,11 @@ describe('Response validation nested schemas', () => {
 						})
 					])
 				})
-			}
+			},
+			// @ts-expect-error - intentionally returning invalid data to test validation
+			() => ({
+				data: ['id', { nested: null }] // nested should be object with 'value'
+			})
 		)
 
 		const res = await app.handle(new Request('http://localhost/test'))

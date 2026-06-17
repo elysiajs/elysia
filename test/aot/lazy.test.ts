@@ -26,12 +26,20 @@ const evalLazy = (src: string): any =>
 
 const build = () =>
 	new Elysia()
-		.post('/body', ({ body }) => body, {
-			body: t.Object({ hello: t.String() })
-		})
-		.get('/q', ({ query }) => query, {
-			query: t.Object({ id: t.Numeric() })
-		})
+		.post(
+			'/body',
+			{
+				body: t.Object({ hello: t.String() })
+			},
+			({ body }) => body
+		)
+		.get(
+			'/q',
+			{
+				query: t.Object({ id: t.Numeric() })
+			},
+			({ query }) => query
+		)
 
 afterEach(() => {
 	delete process.env.ELYSIA_AOT_BUILD
@@ -108,9 +116,9 @@ describe('AOT lazy validator groups', () => {
 		// same body on 3 routes, 1 route/group → 3 groups all referencing it
 		const body = t.Object({ hello: t.String() })
 		const app = new Elysia()
-			.post('/a', ({ body }: any) => body, { body })
-			.post('/b', ({ body }: any) => body, { body })
-			.post('/c', ({ body }: any) => body, { body })
+			.post('/a', { body }, ({ body }: any) => body)
+			.post('/b', { body }, ({ body }: any) => body)
+			.post('/c', { body }, ({ body }: any) => body)
 
 		const src = await compileToSource(app as any, {
 			register: false,
@@ -131,17 +139,25 @@ describe('AOT lazy validator groups', () => {
 		Compiled.handlers = handlers
 		const ok = await app.handle(post('/b', { hello: 'world' }))
 		expect(ok.status).toBe(200)
-		expect(await ok.json()).toEqual({ hello: 'world' })
+		await expect(ok.json()).resolves.toEqual({ hello: 'world' })
 	})
 
 	it('keeps distinct-per-route schemas fully lazy (nothing hoisted)', async () => {
 		const app = new Elysia()
-			.post('/a', ({ body }: any) => body, {
-				body: t.Object({ a: t.String() })
-			})
-			.post('/b', ({ body }: any) => body, {
-				body: t.Object({ b: t.String() })
-			})
+			.post(
+				'/a',
+				{
+					body: t.Object({ a: t.String() })
+				},
+				({ body }: any) => body
+			)
+			.post(
+				'/b',
+				{
+					body: t.Object({ b: t.String() })
+				},
+				({ body }: any) => body
+			)
 
 		const src = await compileToSource(app as any, {
 			register: false,
@@ -158,9 +174,13 @@ describe('AOT lazy validator groups', () => {
 	})
 
 	it('is eval-free by construction (CF-safe: no new Function / eval / dynamic import)', async () => {
-		const app = new Elysia().post('/x', ({ body }: any) => body, {
-			body: t.Object({ n: t.Numeric() }) // codec exercises mirror branches too
-		})
+		const app = new Elysia().post(
+			'/x',
+			{
+				body: t.Object({ n: t.Numeric() }) // codec exercises mirror branches too
+			},
+			({ body }: any) => body
+		)
 		const src = await compileToSource(app as any, {
 			register: true,
 			lazy: true
@@ -188,13 +208,13 @@ describe('AOT lazy validator groups', () => {
 		const app = build()
 		const ok = await app.handle(post('/body', { hello: 'world' }))
 		expect(ok.status).toBe(200)
-		expect(await ok.json()).toEqual({ hello: 'world' })
+		await expect(ok.json()).resolves.toEqual({ hello: 'world' })
 
 		const bad = await app.handle(post('/body', { hello: 123 }))
 		expect(bad.status).toBe(422) // frozen check rejects, materialised on hit
 
 		const q = await app.handle(req('/q?id=5'))
-		expect(await q.json()).toEqual({ id: 5 }) // codec coerced through frozen mirror
+		await expect(q.json()).resolves.toEqual({ id: 5 }) // codec coerced through frozen mirror
 	})
 })
 
@@ -215,9 +235,13 @@ describe('AOT lazy group size (auto-scale)', () => {
 		const make = (n: number) => {
 			const app = new Elysia()
 			for (let i = 0; i < n; i++)
-				app.post(`/r${i}`, ({ body }: any) => body, {
-					body: t.Object({ [`k${i}`]: t.String() }) // distinct → all stay lazy
-				})
+				app.post(
+					`/r${i}`,
+					{
+						body: t.Object({ [`k${i}`]: t.String() }) // distinct → all stay lazy
+					},
+					({ body }: any) => body
+				)
 			return app
 		}
 

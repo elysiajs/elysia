@@ -31,7 +31,9 @@ describe('TypeSystem - UnionEnum', () => {
 			type: 'string',
 			enum: ['some', 'data']
 		})
-		expect((t.UnionEnum(['some', 1]) as { type?: string }).type).toBeUndefined()
+		expect(
+			(t.UnionEnum(['some', 1]) as { type?: string }).type
+		).toBeUndefined()
 		expect(t.UnionEnum([2, 1])).toMatchObject({
 			type: 'number',
 			enum: [2, 1]
@@ -39,11 +41,15 @@ describe('TypeSystem - UnionEnum', () => {
 	})
 
 	it('Integrate', async () => {
-		const app = new Elysia().post('/', ({ body }) => body, {
-			body: t.Object({
-				value: t.UnionEnum(['some', 1])
-			})
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({
+					value: t.UnionEnum(['some', 1])
+				})
+			},
+			({ body }) => body
+		)
 		const res1 = await app.handle(post('/', { value: 1 }))
 		expect(res1.status).toBe(200)
 

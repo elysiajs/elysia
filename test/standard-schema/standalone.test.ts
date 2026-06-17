@@ -36,11 +36,15 @@ describe('Standard Schema Standalone', () => {
 					id: z.number()
 				})
 			})
-			.post('/', ({ body }) => body, {
-				body: t.Object({
-					name: t.Literal('lilith')
-				})
-			})
+			.post(
+				'/',
+				{
+					body: t.Object({
+						name: t.Literal('lilith')
+					})
+				},
+				({ body }) => body
+			)
 
 		const value = await app
 			.handle(
@@ -73,11 +77,15 @@ describe('Standard Schema Standalone', () => {
 					id: z.coerce.number()
 				})
 			})
-			.get('/', ({ query }) => query, {
-				query: t.Object({
-					name: t.Literal('lilith')
-				})
-			})
+			.get(
+				'/',
+				{
+					query: t.Object({
+						name: t.Literal('lilith')
+					})
+				},
+				({ query }) => query
+			)
 
 		const value = await app
 			.handle(req('/?id=1&name=lilith&extra=true'))
@@ -98,11 +106,15 @@ describe('Standard Schema Standalone', () => {
 					id: z.coerce.number()
 				})
 			})
-			.get('/:name/:id', ({ params }) => params, {
-				params: t.Object({
-					name: t.Literal('lilith')
-				})
-			})
+			.get(
+				'/:name/:id',
+				{
+					params: t.Object({
+						name: t.Literal('lilith')
+					})
+				},
+				({ params }) => params
+			)
 
 		const value = await app.handle(req('/lilith/1')).then((x) => x.json())
 
@@ -120,11 +132,15 @@ describe('Standard Schema Standalone', () => {
 					id: z.coerce.number()
 				})
 			})
-			.get('/', ({ headers }) => headers, {
-				headers: t.Object({
-					name: t.Literal('lilith')
-				})
-			})
+			.get(
+				'/',
+				{
+					headers: t.Object({
+						name: t.Literal('lilith')
+					})
+				},
+				({ headers }) => headers
+			)
 
 		const value = await app
 			.handle(
@@ -162,17 +178,17 @@ describe('Standard Schema Standalone', () => {
 			})
 			.get(
 				'/:name',
+				{
+					response: t.Object({
+						name: t.Literal('lilith')
+					})
+				},
 				// @ts-expect-error
 				({ params: { name } }) => ({
 					name,
 					id: name !== 'lilith' ? undefined : 1,
 					extra: false
-				}),
-				{
-					response: t.Object({
-						name: t.Literal('lilith')
-					})
-				}
+				})
 			)
 
 		const valid = await app.handle(req('/lilith')).then((x) => x.json())
@@ -198,6 +214,16 @@ describe('Standard Schema Standalone', () => {
 			})
 			.get(
 				'/:name',
+				{
+					response: {
+						404: t.Object({
+							name: t.Literal('lilith')
+						}),
+						418: t.Object({
+							name: t.Literal('fouco')
+						})
+					}
+				},
 				({ params: { name }, status }) =>
 					name === 'lilith'
 						? status(404, {
@@ -211,17 +237,7 @@ describe('Standard Schema Standalone', () => {
 								name,
 								id: 2,
 								extra: false
-							}),
-				{
-					response: {
-						404: t.Object({
-							name: t.Literal('lilith')
-						}),
-						418: t.Object({
-							name: t.Literal('fouco')
-						})
-					}
-				}
+							})
 			)
 
 		const lilith = await app.handle(req('/lilith')).then((x) => x.json())
@@ -262,20 +278,6 @@ describe('Standard Schema Standalone', () => {
 			})
 			.post(
 				'/:name/:id',
-				({ params: { name, id }, status }) =>
-					name === 'lilith'
-						? status(404, {
-								name,
-								id,
-								// @ts-expect-error excess property — stripped by response normalization
-								extra: true
-							})
-						: status(418, {
-								name,
-								id,
-								// @ts-expect-error excess property — stripped by response normalization
-								extra: true
-							}),
 				{
 					body: t.Object({
 						id: t.Number()
@@ -290,7 +292,21 @@ describe('Standard Schema Standalone', () => {
 						404: z.object({ name: z.literal('lilith') }),
 						418: z.object({ name: z.literal('fouco') })
 					}
-				}
+				},
+				({ params: { name, id }, status }) =>
+					name === 'lilith'
+						? status(404, {
+								name,
+								id,
+								// @ts-expect-error excess property — stripped by response normalization
+								extra: true
+							})
+						: status(418, {
+								name,
+								id,
+								// @ts-expect-error excess property — stripped by response normalization
+								extra: true
+							})
 			)
 
 		const responses = await Promise.all(
@@ -348,6 +364,16 @@ describe('Standard Schema Standalone', () => {
 
 		const app = new Elysia().use(plugin).get(
 			'/:name',
+			{
+				response: {
+					404: t.Object({
+						name: t.Literal('lilith')
+					}),
+					418: t.Object({
+						name: t.Literal('fouco')
+					})
+				}
+			},
 			({ params: { name }, status }) =>
 				name === 'lilith'
 					? status(404, {
@@ -361,17 +387,7 @@ describe('Standard Schema Standalone', () => {
 							name,
 							id: 2,
 							extra: false
-						}),
-			{
-				response: {
-					404: t.Object({
-						name: t.Literal('lilith')
-					}),
-					418: t.Object({
-						name: t.Literal('fouco')
-					})
-				}
-			}
+						})
 		)
 
 		const lilith = await app.handle(req('/lilith')).then((x) => x.json())
@@ -408,20 +424,6 @@ describe('Standard Schema Standalone', () => {
 			})
 			.post(
 				'/:name/:id',
-				({ params: { name, id }, status }) =>
-					name === 'lilith'
-						? status(404, {
-								name,
-								id,
-								// @ts-expect-error excess property — stripped by response normalization
-								extra: true
-							})
-						: status(418, {
-								name,
-								id,
-								// @ts-expect-error excess property — stripped by response normalization
-								extra: true
-							}),
 				{
 					body: v.object({
 						id: v.number()
@@ -440,7 +442,21 @@ describe('Standard Schema Standalone', () => {
 						404: v.object({ name: v.literal('lilith') }),
 						418: v.object({ name: v.literal('fouco') })
 					}
-				}
+				},
+				({ params: { name, id }, status }) =>
+					name === 'lilith'
+						? status(404, {
+								name,
+								id,
+								// @ts-expect-error excess property — stripped by response normalization
+								extra: true
+							})
+						: status(418, {
+								name,
+								id,
+								// @ts-expect-error excess property — stripped by response normalization
+								extra: true
+							})
 			)
 
 		const responses = await Promise.all(
@@ -523,18 +539,6 @@ describe('Standard Schema Standalone', () => {
 			})
 			.post(
 				'/:name/:id',
-				({ params: { name, id }, status }) =>
-					name === 'lilith'
-						? status(404, {
-								name,
-								id,
-								world: 'fantasy'
-							})
-						: status(418, {
-								name,
-								id,
-								world: 'fantasy'
-							}),
 				{
 					body: v.object({
 						id: v.number()
@@ -553,7 +557,19 @@ describe('Standard Schema Standalone', () => {
 						404: v.object({ name: v.literal('lilith') }),
 						418: v.object({ name: v.literal('fouco') })
 					}
-				}
+				},
+				({ params: { name, id }, status }) =>
+					name === 'lilith'
+						? status(404, {
+								name,
+								id,
+								world: 'fantasy'
+							})
+						: status(418, {
+								name,
+								id,
+								world: 'fantasy'
+							})
 			)
 
 		const responses = await Promise.all(
@@ -643,13 +659,13 @@ describe('Standard Schema single-pass validation', () => {
 		expect(id.count()).toBe(1)
 
 		// failure: still a single validate call, no Check-then-Errors re-run
-		expect(() => validator.From!({ id: 'a', name: 'lilith' }, 'body')).toThrow(
-			ValidationError
-		)
+		expect(() =>
+			validator.From!({ id: 'a', name: 'lilith' }, 'body')
+		).toThrow(ValidationError)
 		expect(id.count()).toBe(2)
 	})
 
-	it('MultiValidator.From throws with the failing schema\'s own errors', () => {
+	it("MultiValidator.From throws with the failing schema's own errors", () => {
 		const id = counted(z.object({ id: z.number() }))
 		const validator = Validator.create(id.schema, {
 			schemas: [t.Object({ name: t.Literal('lilith') })]
@@ -727,11 +743,15 @@ describe('Standard Schema single-pass validation', () => {
 				schema: 'standalone',
 				body: id.schema
 			})
-			.post('/', ({ body }) => body, {
-				body: t.Object({
-					name: t.Literal('lilith')
-				})
-			})
+			.post(
+				'/',
+				{
+					body: t.Object({
+						name: t.Literal('lilith')
+					})
+				},
+				({ body }) => body
+			)
 
 		const value = await app
 			.handle(post('/', { id: 1, name: 'lilith', extra: false }))
@@ -754,11 +774,15 @@ describe('Standard Schema single-pass validation', () => {
 					id: z.coerce.number()
 				})
 			})
-			.get('/', ({ query }) => query, {
-				query: t.Object({
-					page: t.Number({ default: 1 })
-				})
-			})
+			.get(
+				'/',
+				{
+					query: t.Object({
+						page: t.Number({ default: 1 })
+					})
+				},
+				({ query }) => query
+			)
 
 		const value = await app.handle(req('/?id=1')).then((x) => x.json())
 

@@ -288,11 +288,15 @@ describe('trace', () => {
 					})
 				})
 			})
-			.get('/', () => 'ok', {
-				beforeHandle() {
-					throw new Error('A')
-				}
-			})
+			.get(
+				'/',
+				{
+					beforeHandle() {
+						throw new Error('A')
+					}
+				},
+				() => 'ok'
+			)
 
 		await app.handle(req('/'))
 
@@ -313,11 +317,15 @@ describe('trace', () => {
 					})
 				})
 			})
-			.get('/', () => 'ok', {
-				beforeHandle() {
-					return new Error('A')
-				}
-			})
+			.get(
+				'/',
+				{
+					beforeHandle() {
+						return new Error('A')
+					}
+				},
+				() => 'ok'
+			)
 
 		await app.handle(req('/'))
 
@@ -336,11 +344,15 @@ describe('trace', () => {
 					})
 				})
 			})
-			.get('/', () => 'ok', {
-				beforeHandle() {
-					return new Error('A')
-				}
-			})
+			.get(
+				'/',
+				{
+					beforeHandle() {
+						return new Error('A')
+					}
+				},
+				() => 'ok'
+			)
 
 		await app.handle(req('/'))
 
@@ -358,11 +370,15 @@ describe('trace', () => {
 					expect(error).toBeInstanceOf(Error)
 				})
 			})
-			.get('/', () => 'ok', {
-				beforeHandle() {
-					return new Error('A')
-				}
-			})
+			.get(
+				'/',
+				{
+					beforeHandle() {
+						return new Error('A')
+					}
+				},
+				() => 'ok'
+			)
 
 		await app.handle(req('/'))
 
@@ -381,11 +397,15 @@ describe('trace', () => {
 					})
 				})
 			})
-			.get('/', () => 'ok', {
-				beforeHandle() {
-					return new Error('A')
-				}
-			})
+			.get(
+				'/',
+				{
+					beforeHandle() {
+						return new Error('A')
+					}
+				},
+				() => 'ok'
+			)
 
 		await app.handle(req('/'))
 
@@ -501,7 +521,7 @@ describe('trace', () => {
 			.get('/', () => 'hi')
 
 		const response = await app.handle(req('/'))
-		expect(await response.text()).toBe('hi')
+		await expect(response.text()).resolves.toBe('hi')
 
 		await done.promise
 
@@ -525,11 +545,15 @@ describe('trace', () => {
 
 				done.resolve()
 			})
-			.get('/', () => 'ok', {
-				beforeHandle() {
-					return new Error('A')
-				}
-			})
+			.get(
+				'/',
+				{
+					beforeHandle() {
+						return new Error('A')
+					}
+				},
+				() => 'ok'
+			)
 
 		await app.handle(req('/'))
 		await done.promise

@@ -59,9 +59,9 @@ describe('inline handler fast path (no new Function eval)', () => {
 		const rc = await codegen.handle(req('/'))
 
 		expect(ri.status).toBe(500)
-		expect(await ri.text()).toBe('boom')
+		await expect(ri.text()).resolves.toBe('boom')
 		expect(rc.status).toBe(ri.status)
-		expect(await rc.text()).toBe('boom')
+		await expect(rc.text()).resolves.toBe('boom')
 	})
 
 	it('forwards a rejecting Promise returned by a sync handler', async () => {
@@ -70,14 +70,14 @@ describe('inline handler fast path (no new Function eval)', () => {
 		)
 		const res = await app.handle(req('/'))
 		expect(res.status).toBe(500)
-		expect(await res.text()).toBe('rejected')
+		await expect(res.text()).resolves.toBe('rejected')
 	})
 
 	it('resolves a Promise returned by a sync handler to its value', async () => {
 		const app = new Elysia().get('/', () => Promise.resolve('async-ok'))
 		const res = await app.handle(req('/'))
 		expect(res.status).toBe(200)
-		expect(await res.text()).toBe('async-ok')
+		await expect(res.text()).resolves.toBe('async-ok')
 	})
 
 	it('a returned Error reaches an error hook (set.status writeback intact)', async () => {
@@ -90,6 +90,6 @@ describe('inline handler fast path (no new Function eval)', () => {
 
 		const res = await app.handle(req('/'))
 		expect(res.status).toBe(418)
-		expect(await res.text()).toBe('caught:boom')
+		await expect(res.text()).resolves.toBe('caught:boom')
 	})
 })

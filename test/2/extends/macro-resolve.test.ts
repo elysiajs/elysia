@@ -18,20 +18,20 @@ describe('macro resolve', () => {
 	it('a macro returning `resolve` exposes the value to the handler', async () => {
 		const app = new Elysia()
 			.macro({ withUser: { derive: () => ({ user: 'alice' }) } } as any)
-			.get('/', ({ user }: any) => ({ user }), { withUser: true } as any)
+			.get('/', { withUser: true } as any, ({ user }: any) => ({ user }))
 
 		const res = await app.handle(req('/'))
 		expect(res.status).toBe(200)
-		expect(await res.json()).toEqual({ user: 'alice' })
+		await expect(res.json()).resolves.toEqual({ user: 'alice' })
 	})
 
 	it('a macro returning `derive` exposes the value to the handler', async () => {
 		const app = new Elysia()
 			.macro({ withRole: { derive: () => ({ role: 'admin' }) } } as any)
-			.get('/', ({ role }: any) => ({ role }), { withRole: true } as any)
+			.get('/', { withRole: true } as any, ({ role }: any) => ({ role }))
 
 		const res = await app.handle(req('/'))
-		expect(await res.json()).toEqual({ role: 'admin' })
+		await expect(res.json()).resolves.toEqual({ role: 'admin' })
 	})
 
 	it('macro `resolve` sees the request (promoted into beforeHandle)', async () => {
@@ -43,9 +43,11 @@ describe('macro resolve', () => {
 					})
 				}
 			} as any)
-			.get('/', ({ value }: any) => value, { gate: true } as any)
+			.get('/', { gate: true } as any, ({ value }: any) => value)
 
-		expect(await (await app.handle(req('/'))).text()).toBe('ok')
-		expect(await (await app.handle(req('/?deny=1'))).text()).toBe('denied')
+		await expect((await app.handle(req('/'))).text()).resolves.toBe('ok')
+		await expect((await app.handle(req('/?deny=1'))).text()).resolves.toBe(
+			'denied'
+		)
 	})
 })

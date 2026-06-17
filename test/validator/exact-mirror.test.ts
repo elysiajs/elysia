@@ -7,22 +7,21 @@ describe('Exact Mirror', () => {
 	it('normalize when t.Codec is provided', async () => {
 		const app = new Elysia({
 			normalize: 'exactMirror'
-		}).get('/', () => ({ count: 2, name: 'foo', extra: 1 }), {
-			response: t.Object(
-				{ name: t.String(), count: t.Optional(t.Integer()) },
-				{ additionalProperties: false }
-			)
-		})
+		}).get(
+			'/',
+			{
+				response: t.Object(
+					{ name: t.String(), count: t.Optional(t.Integer()) },
+					{ additionalProperties: false }
+				)
+			},
+			() => ({ count: 2, name: 'foo', extra: 1 })
+		)
 	})
 
 	it('leave incorrect union field as-is', async () => {
 		const app = new Elysia().post(
 			'/test',
-			({ body }) => {
-				console.log({ body })
-
-				return 'Hello Elysia'
-			},
 			{
 				body: t.Object({
 					foo: t.Optional(
@@ -34,6 +33,11 @@ describe('Exact Mirror', () => {
 						)
 					)
 				})
+			},
+			({ body }) => {
+				console.log({ body })
+
+				return 'Hello Elysia'
 			}
 		)
 
@@ -49,16 +53,6 @@ describe('Exact Mirror', () => {
 	it('normalize array response', async () => {
 		const app = new Elysia().get(
 			'/',
-			() => {
-				return {
-					messages: [
-						{
-							message: 'Hello, world!',
-							shouldBeRemoved: true
-						}
-					]
-				}
-			},
 			{
 				response: {
 					200: t.Object({
@@ -68,6 +62,16 @@ describe('Exact Mirror', () => {
 							})
 						)
 					})
+				}
+			},
+			() => {
+				return {
+					messages: [
+						{
+							message: 'Hello, world!',
+							shouldBeRemoved: true
+						}
+					]
 				}
 			}
 		)
@@ -94,8 +98,8 @@ describe('Exact Mirror', () => {
 		const app = new Elysia().get(
 			'/',
 			// @ts-ignore
-			() => [{ bar: 'asd', baz: true, qux: 'b', foo: 1 }],
-			{ response: t.Array(OmittedUnionSchema) }
+			{ response: t.Array(OmittedUnionSchema) },
+			() => [{ bar: 'asd', baz: true, qux: 'b', foo: 1 }]
 		)
 
 		const response = await app.handle(req('/')).then((x) => x.json())
@@ -110,14 +114,18 @@ describe('Exact Mirror', () => {
 		const UnionSchema = t.Union([SchemaA, SchemaB])
 		const OmittedUnionSchema = t.Omit(UnionSchema, ['baz'])
 
-		const app = new Elysia().get('/', () => ({ baz: true, foo: 1 }), {
-			response: OmittedUnionSchema
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				response: OmittedUnionSchema
+			},
+			() => ({ baz: true, foo: 1 })
+		)
 
 		const response = await app.handle(req('/'))
 
 		expect(response.status).toBe(200)
-		expect(await response.json()).toEqual({ foo: 1 })
+		await expect(response.json()).resolves.toEqual({ foo: 1 })
 	})
 
 	it('normalize t.Omit(t.Union) with multiple status codes', async () => {
@@ -127,15 +135,19 @@ describe('Exact Mirror', () => {
 		const UnionSchema = t.Union([SchemaA, SchemaB])
 		const OmittedUnionSchema = t.Omit(UnionSchema, ['baz'])
 
-		const app = new Elysia().get('/', () => ({ baz: true, foo: 1 }), {
-			response: {
-				200: OmittedUnionSchema
-			}
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				response: {
+					200: OmittedUnionSchema
+				}
+			},
+			() => ({ baz: true, foo: 1 })
+		)
 
 		const response = await app.handle(req('/'))
 
 		expect(response.status).toBe(200)
-		expect(await response.json()).toEqual({ foo: 1 })
+		await expect(response.json()).resolves.toEqual({ foo: 1 })
 	})
 })

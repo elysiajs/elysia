@@ -278,6 +278,12 @@ import { Prettify } from '../../../src/types'
 		})
 		.post(
 			'/',
+			{
+				auth: true,
+				response: {
+					411: t.Literal('Length Required')
+				}
+			},
 			({ status, a, b }) => {
 				if (Math.random() < 0.05) return status(409, 'Conflict')
 
@@ -285,12 +291,6 @@ import { Prettify } from '../../../src/types'
 				expectTypeOf<typeof b>().toEqualTypeOf<'b'>()
 
 				return 'Type Soundness'
-			},
-			{
-				auth: true,
-				response: {
-					411: t.Literal('Length Required')
-				}
 			}
 		)
 
@@ -330,9 +330,13 @@ import { Prettify } from '../../../src/types'
 				}
 			}
 		})
-		.get('/', () => 'Hello World' as const, {
-			auth: true
-		})
+		.get(
+			'/',
+			{
+				auth: true
+			},
+			() => 'Hello World' as const
+		)
 
 	type Route = (typeof app)['~Routes']['get']['response']
 
@@ -355,9 +359,13 @@ import { Prettify } from '../../../src/types'
 				}
 			}
 		})
-		.get('/', () => 'Hello World' as const, {
-			auth: true
-		})
+		.get(
+			'/',
+			{
+				auth: true
+			},
+			() => 'Hello World' as const
+		)
 
 	type Route = (typeof app)['~Routes']['get']['response']
 
@@ -406,6 +414,9 @@ import { Prettify } from '../../../src/types'
 		})
 		.get(
 			'/',
+			{
+				auth: true
+			},
 			({ headers, body, cookie, params, query, status }) => {
 				expectTypeOf<typeof headers>().toEqualTypeOf<{
 					name: 'lilith'
@@ -436,9 +447,6 @@ import { Prettify } from '../../../src/types'
 					return status(401, 'Unauthorize')
 
 				return 'Hello World' as const
-			},
-			{
-				auth: true
 			}
 		)
 
@@ -814,9 +822,13 @@ import { Prettify } from '../../../src/types'
 				}
 			}
 		})
-		.get('/', ({ user }) => user, {
-			auth: true
-		})
+		.get(
+			'/',
+			{
+				auth: true
+			},
+			({ user }) => user
+		)
 
 	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
 		200: 'saltyaom'
@@ -836,9 +848,13 @@ import { Prettify } from '../../../src/types'
 				}
 			}
 		})
-		.get('/', () => 'fouco' as const, {
-			auth: true
-		})
+		.get(
+			'/',
+			{
+				auth: true
+			},
+			() => 'fouco' as const
+		)
 
 	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
 		200: 'lilith' | 'fouco'
@@ -1658,14 +1674,18 @@ import { Prettify } from '../../../src/types'
 				}
 			}
 		})
-		.post('/', ({ body }) => 'b' as const, {
-			a: true,
-			beforeHandle({ body }) {
-				expectTypeOf(body).toEqualTypeOf<{
-					name: 'lilith'
-				}>()
-			}
-		})
+		.post(
+			'/',
+			{
+				a: true,
+				beforeHandle({ body }) {
+					expectTypeOf(body).toEqualTypeOf<{
+						name: 'lilith'
+					}>()
+				}
+			},
+			({ body }) => 'b' as const
+		)
 
 	expectTypeOf<(typeof app)['~Routes']['post']>().toEqualTypeOf<{
 		error: never
@@ -1710,14 +1730,6 @@ import { Prettify } from '../../../src/types'
 		})
 		.post(
 			'/',
-			({ body }) => {
-				expectTypeOf(body).toEqualTypeOf<{
-					name: 'Lilith'
-					friends: ['Sartre', 'Fouco']
-				}>()
-
-				return body
-			},
 			{
 				body: t.Object({
 					name: t.Literal('Lilith')
@@ -1732,6 +1744,14 @@ import { Prettify } from '../../../src/types'
 						friends: ['Sartre', 'Fouco']
 					}>()
 				}
+			},
+			({ body }) => {
+				expectTypeOf(body).toEqualTypeOf<{
+					name: 'Lilith'
+					friends: ['Sartre', 'Fouco']
+				}>()
+
+				return body
 			}
 		)
 
@@ -1774,10 +1794,14 @@ import { Prettify } from '../../../src/types'
 						: status(401, 'not authorized')
 			}
 		})
-		.post('/', ({ role }) => role, {
-			auth: true,
-			beforeHandle: ({ role }) => {}
-		})
+		.post(
+			'/',
+			{
+				auth: true,
+				beforeHandle: ({ role }) => {}
+			},
+			({ role }) => role
+		)
 }
 
 // handle macro with arguments
@@ -1802,11 +1826,11 @@ import { Prettify } from '../../../src/types'
 		})
 		.get(
 			'/token',
-			({ user }) => {
-				expectTypeOf(user).toEqualTypeOf<{ role: 'admin' | 'user' }>()
-			},
 			{
 				role: 'admin'
+			},
+			({ user }) => {
+				expectTypeOf(user).toEqualTypeOf<{ role: 'admin' | 'user' }>()
 			}
 		)
 }
@@ -1820,11 +1844,15 @@ import { Prettify } from '../../../src/types'
 				id: t.Number()
 			})
 		})
-		.get('/user/:id', ({ body }) => body, {
-			body: t.Object({
-				name: t.Literal('lilith')
-			})
-		})
+		.get(
+			'/user/:id',
+			{
+				body: t.Object({
+					name: t.Literal('lilith')
+				})
+			},
+			({ body }) => body
+		)
 }
 
 // Merge multiple guard schema
@@ -1853,6 +1881,11 @@ import { Prettify } from '../../../src/types'
 				(app) =>
 					app.get(
 						'/',
+						{
+							query: t.Object({
+								playing: t.Boolean()
+							})
+						},
 						({ query }) => {
 							expectTypeOf(query).toEqualTypeOf<{
 								playing: boolean
@@ -1861,11 +1894,6 @@ import { Prettify } from '../../../src/types'
 							}>()
 
 							return query
-						},
-						{
-							query: t.Object({
-								playing: t.Boolean()
-							})
 						}
 					)
 			)
@@ -1898,6 +1926,11 @@ import { Prettify } from '../../../src/types'
 				(app) =>
 					app.get(
 						'/',
+						{
+							query: t.Object({
+								playing: t.Boolean()
+							})
+						},
 						({ query }) => {
 							expectTypeOf(query).toEqualTypeOf<{
 								playing: boolean
@@ -1906,11 +1939,6 @@ import { Prettify } from '../../../src/types'
 							}>()
 
 							return query
-						},
-						{
-							query: t.Object({
-								playing: t.Boolean()
-							})
 						}
 					)
 			)
@@ -1960,6 +1988,11 @@ import { Prettify } from '../../../src/types'
 				(app) =>
 					app.get(
 						'/',
+						{
+							query: t.Object({
+								playing: t.Boolean()
+							})
+						},
 						({ query }) => {
 							expectTypeOf(query).toEqualTypeOf<{
 								playing: boolean
@@ -1968,11 +2001,6 @@ import { Prettify } from '../../../src/types'
 							}>()
 
 							return query
-						},
-						{
-							query: t.Object({
-								playing: t.Boolean()
-							})
 						}
 					)
 			)
@@ -2017,19 +2045,29 @@ import { Prettify } from '../../../src/types'
 				body: t.String()
 			}
 		})
-		.post(
-			'/',
-			({ user }) => {
-				expectTypeOf(user).toEqualTypeOf<'Lilith'>()
-			},
-			{ user: true }
-		)
+		.post('/', { user: true }, ({ user }) => {
+			expectTypeOf(user).toEqualTypeOf<'Lilith'>()
+		})
 }
 
 // Handle 200 status for inline status
 {
 	new Elysia().get(
 		'/test',
+		{
+			response: {
+				200: t.Union([
+					t.Object({
+						key2: t.String(),
+						id: t.Literal(2)
+					}),
+					t.Object({
+						key: t.Number(),
+						id: t.Literal(1)
+					})
+				])
+			}
+		},
 		({ status }) => {
 			if (Math.random() > 0.1)
 				return status(200, {
@@ -2045,20 +2083,6 @@ import { Prettify } from '../../../src/types'
 				})
 
 			return status(200, { key2: 's', id: 2 })
-		},
-		{
-			response: {
-				200: t.Union([
-					t.Object({
-						key2: t.String(),
-						id: t.Literal(2)
-					}),
-					t.Object({
-						key: t.Number(),
-						id: t.Literal(1)
-					})
-				])
-			}
 		}
 	)
 }
@@ -2067,9 +2091,6 @@ import { Prettify } from '../../../src/types'
 {
 	new Elysia().get(
 		'/test',
-		({ status }) => {
-			return status(200, { key2: 's', id: 2 })
-		},
 		{
 			response: {
 				200: t.Union([
@@ -2083,6 +2104,9 @@ import { Prettify } from '../../../src/types'
 					})
 				])
 			}
+		},
+		({ status }) => {
+			return status(200, { key2: 's', id: 2 })
 		}
 	)
 }
@@ -2125,7 +2149,7 @@ import { Prettify } from '../../../src/types'
 				}
 			}
 		})
-		.get('/multiple', () => 'Ok', { multiple: true })
+		.get('/multiple', { multiple: true }, () => 'Ok')
 
 	expectTypeOf<
 		(typeof app)['~Routes']['multiple']['get']['response']
@@ -2147,7 +2171,7 @@ import { Prettify } from '../../../src/types'
 				}
 			}
 		})
-		.get('/multiple', () => 'Ok', { multiple: true })
+		.get('/multiple', { multiple: true }, () => 'Ok')
 
 	expectTypeOf<
 		(typeof app)['~Routes']['multiple']['get']['response']
@@ -2170,7 +2194,7 @@ import { Prettify } from '../../../src/types'
 				}
 			}
 		})
-		.get('/multiple', () => 'Ok', { multiple: true })
+		.get('/multiple', { multiple: true }, () => 'Ok')
 
 	expectTypeOf<
 		(typeof app)['~Routes']['multiple']['get']['response']
@@ -2202,9 +2226,13 @@ import { Prettify } from '../../../src/types'
 				}
 			}
 		})
-		.get('/', () => 'ok', {
-			a: true
-		})
+		.get(
+			'/',
+			{
+				a: true
+			},
+			() => 'ok'
+		)
 
 	type Route = (typeof app)['~Routes']['get']['response']
 
@@ -2234,9 +2262,13 @@ import { Prettify } from '../../../src/types'
 				a: true
 			}
 		})
-		.get('/', () => 'handler' as const, {
-			b: true
-		})
+		.get(
+			'/',
+			{
+				b: true
+			},
+			() => 'handler' as const
+		)
 
 	type Routes = (typeof app)['~Routes']['get']['response']
 
@@ -2271,9 +2303,13 @@ import { Prettify } from '../../../src/types'
 				a: true
 			}
 		})
-		.get('/', () => 'handler' as const, {
-			b: true
-		})
+		.get(
+			'/',
+			{
+				b: true
+			},
+			() => 'handler' as const
+		)
 
 	type Routes = (typeof app)['~Routes']['get']['response']
 
@@ -2303,9 +2339,13 @@ import { Prettify } from '../../../src/types'
 				}
 			}
 		})
-		.get('/', () => 'ok', {
-			a: true
-		})
+		.get(
+			'/',
+			{
+				a: true
+			},
+			() => 'ok'
+		)
 
 	type Route = (typeof app)['~Routes']['get']['response']
 

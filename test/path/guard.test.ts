@@ -12,16 +12,20 @@ describe('guard', () => {
 				}
 			},
 			(app) =>
-				app.get('/', ({ store: { counter } }) => counter, {
-					transform: ({ store }) => {
-						store.counter++
-					}
-				})
+				app.get(
+					'/',
+					{
+						transform: ({ store }) => {
+							store.counter++
+						}
+					},
+					({ store: { counter } }) => counter
+				)
 		)
 
 		const valid = await app.handle(req('/'))
 
-		expect(await valid.text()).toBe('2')
+		await expect(valid.text()).resolves.toBe('2')
 	})
 
 	it('delegate onRequest', async () => {
@@ -403,9 +407,13 @@ describe('guard', () => {
 					500: t.String()
 				}
 			})
-			.get('/', () => '', {
-				response: t.String()
-			})
+			.get(
+				'/',
+				{
+					response: t.String()
+				},
+				() => ''
+			)
 
 		expect(Object.keys(app.routes[0].hooks.response)).toEqual([
 			'200',
@@ -418,9 +426,13 @@ describe('guard', () => {
 		const app = new Elysia().guard(
 			{ params: t.Object({ id: t.Number() }) },
 			(app) =>
-				app.get('/guard/:id/:name', ({ params }) => params, {
-					params: t.Object({ name: t.String() })
-				})
+				app.get(
+					'/guard/:id/:name',
+					{
+						params: t.Object({ name: t.String() })
+					},
+					({ params }) => params
+				)
 		)
 
 		// the route's own `params` replaces the wrapper's (override is the
@@ -431,8 +443,8 @@ describe('guard', () => {
 			.handle(req('/guard/a/saltyaom'))
 			.then((x) => x.status)
 
-		expect(await valid).toEqual({ name: 'saltyaom' })
-		expect(await invalid).toBe(200)
+		await expect(valid).resolves.toEqual({ name: 'saltyaom' })
+		await expect(invalid).resolves.toBe(200)
 	})
 
 	it("wrapper schema with schema: 'standalone' stays additive", async () => {
@@ -442,9 +454,13 @@ describe('guard', () => {
 				params: t.Object({ id: t.Number() })
 			},
 			(app) =>
-				app.get('/guard/:id/:name', ({ params }) => params, {
-					params: t.Object({ name: t.String() })
-				})
+				app.get(
+					'/guard/:id/:name',
+					{
+						params: t.Object({ name: t.String() })
+					},
+					({ params }) => params
+				)
 		)
 
 		const valid = app.handle(req('/guard/1/saltyaom')).then((x) => x.json())
@@ -452,8 +468,8 @@ describe('guard', () => {
 			.handle(req('/guard/a/saltyaom'))
 			.then((x) => x.status)
 
-		expect(await valid).toEqual({ id: 1, name: 'saltyaom' })
-		expect(await invalid).toBe(422)
+		await expect(valid).resolves.toEqual({ id: 1, name: 'saltyaom' })
+		await expect(invalid).resolves.toBe(422)
 	})
 
 	it('nested guard: route-local schema overrides the wrappers', async () => {
@@ -471,11 +487,15 @@ describe('guard', () => {
 						})
 					},
 					(app) =>
-						app.get('/', ({ query }) => query, {
-							query: t.Object({
-								playing: t.Boolean()
-							})
-						})
+						app.get(
+							'/',
+							{
+								query: t.Object({
+									playing: t.Boolean()
+								})
+							},
+							({ query }) => query
+						)
 				)
 		)
 
@@ -513,11 +533,15 @@ describe('guard', () => {
 						})
 					},
 					(app) =>
-						app.get('/', ({ query }) => query, {
-							query: t.Object({
-								playing: t.Boolean()
-							})
-						})
+						app.get(
+							'/',
+							{
+								query: t.Object({
+									playing: t.Boolean()
+								})
+							},
+							({ query }) => query
+						)
 				)
 		)
 

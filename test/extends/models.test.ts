@@ -63,16 +63,24 @@ describe('Model', () => {
 			.model({
 				number: t.Number()
 			})
-			.post('/', ({ body: { data } }) => data, {
-				response: 'number',
-				body: t.Object({
-					data: t.Number()
-				})
-			})
-			.post('/arr', ({ body }) => body, {
-				response: 'number',
-				body: 'number'
-			})
+			.post(
+				'/',
+				{
+					response: 'number',
+					body: t.Object({
+						data: t.Number()
+					})
+				},
+				({ body: { data } }) => data
+			)
+			.post(
+				'/arr',
+				{
+					response: 'number',
+					body: 'number'
+				},
+				({ body }) => body
+			)
 
 		const correct = await app.handle(
 			new Request('http://localhost/', {
@@ -148,9 +156,13 @@ describe('Model', () => {
 					data: t.String()
 				})
 			})
-			.post('/', ({ body }) => body, {
-				body: 'string'
-			})
+			.post(
+				'/',
+				{
+					body: 'string'
+				},
+				({ body }) => body
+			)
 
 		const error = await app.handle(post('/'))
 		expect(error.status).toBe(422)
@@ -169,9 +181,13 @@ describe('Model', () => {
 				number: t.Numeric({ default: 0 }),
 				optionalNumber: t.Optional(t.Ref('number'))
 			})
-			.post('/', ({ body }) => body, {
-				body: t.Optional(t.Ref('number'))
-			})
+			.post(
+				'/',
+				{
+					body: t.Optional(t.Ref('number'))
+				},
+				({ body }) => body
+			)
 
 		const result = await app.handle(post('/')).then((x) => x.text())
 
@@ -184,7 +200,7 @@ describe('Model', () => {
 				number: t.Number({ default: 0 }),
 				optionalNumber: t.Optional(t.Ref('number'))
 			})
-			.post('/', ({ body }) => body, { body: 'optionalNumber' })
+			.post('/', { body: 'optionalNumber' }, ({ body }) => body)
 
 		const result = await app.handle(post('/')).then((x) => x.text())
 
@@ -197,7 +213,7 @@ describe('Model', () => {
 				session: t.Cookie({ token: t.Numeric() }),
 				optionalSession: t.Optional(t.Ref('session'))
 			})
-			.get('/', () => 'Hello Elysia', { cookie: 'optionalSession' })
+			.get('/', { cookie: 'optionalSession' }, () => 'Hello Elysia')
 
 		const error = await app.handle(
 			new Request('http://localhost/', {
@@ -223,9 +239,9 @@ describe('Model', () => {
 			.model({
 				res: t.String()
 			})
-			.get('/correct', () => 'Hello Elysia', { response: 'res' })
+			.get('/correct', { response: 'res' }, () => 'Hello Elysia')
 			// @ts-expect-error
-			.get('/error', () => 1, { response: 'res' })
+			.get('/error', { response: 'res' }, () => 1)
 
 		const error = await app.handle(req('/error'))
 		expect(error.status).toBe(422)
@@ -239,25 +255,37 @@ describe('Model', () => {
 			.model({
 				res: t.String()
 			})
-			.get('/correct', () => 'Hello Elysia', {
-				response: {
-					200: 'res',
-					400: 'res'
-				}
-			})
-			.get('/400', ({ status }) => status(400, 'ok'), {
-				response: {
-					200: 'res',
-					400: 'res'
-				}
-			})
-			// @ts-expect-error
-			.get('/error', ({ status }) => status(400, 1), {
-				response: {
-					200: 'res',
-					400: 'res'
-				}
-			})
+			.get(
+				'/correct',
+				{
+					response: {
+						200: 'res',
+						400: 'res'
+					}
+				},
+				() => 'Hello Elysia'
+			)
+			.get(
+				'/400',
+				{
+					response: {
+						200: 'res',
+						400: 'res'
+					}
+				},
+				({ status }) => status(400, 'ok')
+			)
+			.get(
+				'/error',
+				{
+					response: {
+						200: 'res',
+						400: 'res'
+					}
+				},
+				// @ts-expect-error
+				({ status }) => status(400, 1)
+			)
 
 		const error = await app.handle(req('/error'))
 		expect(error.status).toBe(422)
@@ -292,14 +320,14 @@ describe('Model', () => {
 			})
 			.get(
 				'/:id',
-				({ params: { id } }) => ({
-					message: 'ok',
-					content: [{ id }]
-				}),
 				{
 					params: 'idParam',
 					response: 'response200'
-				}
+				},
+				({ params: { id } }) => ({
+					message: 'ok',
+					content: [{ id }]
+				})
 			)
 
 		const value = await app

@@ -9,16 +9,16 @@ describe('Cookie Per-field Configuration', () => {
 
 		const app = new Elysia().get(
 			'/',
-			({ cookie: { token } }) => {
-				token.value = 'session-id'
-				return token.value
-			},
 			{
 				cookie: t.Object({
 					token: t.Cookie(t.Optional(t.String()), {
 						secrets: secret
 					})
 				})
+			},
+			({ cookie: { token } }) => {
+				token.value = 'session-id'
+				return token.value
 			}
 		)
 
@@ -26,7 +26,9 @@ describe('Cookie Per-field Configuration', () => {
 		const setCookie = response.headers.get('set-cookie')!
 
 		expect(response.status).toBe(200)
-		expect(setCookie).toInclude(`token=${await signCookie('session-id', secret)}`)
+		expect(setCookie).toInclude(
+			`token=${await signCookie('session-id', secret)}`
+		)
 	})
 
 	it('round-trips a signed per-field cookie', async () => {
@@ -34,14 +36,14 @@ describe('Cookie Per-field Configuration', () => {
 
 		const app = new Elysia().get(
 			'/',
-			({ cookie: { token } }) => token.value,
 			{
 				cookie: t.Object({
 					token: t.Cookie(t.Optional(t.String()), {
 						secrets: secret
 					})
 				})
-			}
+			},
+			({ cookie: { token } }) => token.value
 		)
 
 		const signed = await signCookie('session-id', secret)
@@ -50,7 +52,7 @@ describe('Cookie Per-field Configuration', () => {
 		)
 
 		expect(response.status).toBe(200)
-		expect(await response.text()).toBe('session-id')
+		await expect(response.text()).resolves.toBe('session-id')
 	})
 
 	it('rejects a tampered signature on a per-field signed cookie', async () => {
@@ -65,35 +67,37 @@ describe('Cookie Per-field Configuration', () => {
 			})
 			.get(
 				'/',
-				({ cookie: { token } }) => token.value,
 				{
 					cookie: t.Object({
 						token: t.Cookie(t.String(), { secrets: secret })
 					})
-				}
+				},
+				({ cookie: { token } }) => token.value
 			)
 
 		const response = await app.handle(
-			req('/', { headers: { cookie: 'token=session-id.bogus-signature' } })
+			req('/', {
+				headers: { cookie: 'token=session-id.bogus-signature' }
+			})
 		)
 
 		expect(response.status).toBe(401)
-		expect(await response.text()).toBe('bad-sig')
+		await expect(response.text()).resolves.toBe('bad-sig')
 	})
 
 	it('applies per-field attribute overrides only to the targeted field', async () => {
 		const app = new Elysia().get(
 			'/',
-			({ cookie: { a, b } }) => {
-				a.value = 'x'
-				b.value = 'y'
-				return 'ok'
-			},
 			{
 				cookie: t.Object({
 					a: t.Cookie(t.Optional(t.String()), { maxAge: 60 }),
 					b: t.Optional(t.String())
 				})
+			},
+			({ cookie: { a, b } }) => {
+				a.value = 'x'
+				b.value = 'y'
+				return 'ok'
 			}
 		)
 
@@ -108,10 +112,6 @@ describe('Cookie Per-field Configuration', () => {
 	it('per-field maxAge wins over object-level default', async () => {
 		const app = new Elysia().get(
 			'/',
-			({ cookie: { name } }) => {
-				name.value = 'hello'
-				return 'ok'
-			},
 			{
 				cookie: t.Cookie(
 					{
@@ -119,6 +119,10 @@ describe('Cookie Per-field Configuration', () => {
 					},
 					{ maxAge: 30 }
 				)
+			},
+			({ cookie: { name } }) => {
+				name.value = 'hello'
+				return 'ok'
 			}
 		)
 
@@ -136,16 +140,16 @@ describe('Cookie Per-field Configuration', () => {
 
 		const app = new Elysia({ cookie: { secrets: appSecret } }).get(
 			'/',
-			({ cookie: { token } }) => {
-				token.value = 'data'
-				return token.value
-			},
 			{
 				cookie: t.Object({
 					token: t.Cookie(t.Optional(t.String()), {
 						secrets: fieldSecret
 					})
 				})
+			},
+			({ cookie: { token } }) => {
+				token.value = 'data'
+				return token.value
 			}
 		)
 

@@ -7,16 +7,16 @@ describe('Normalize', () => {
 	it('normalize response', async () => {
 		const app = new Elysia().get(
 			'/',
+			{
+				response: t.Object({
+					hello: t.String()
+				})
+			},
 			() => {
 				return {
 					hello: 'world',
 					a: 'b'
 				}
-			},
-			{
-				response: t.Object({
-					hello: t.String()
-				})
 			}
 		)
 
@@ -30,18 +30,18 @@ describe('Normalize', () => {
 	it('normalize optional response', async () => {
 		const app = new Elysia().get(
 			'/',
-			() => {
-				return {
-					hello: 'world',
-					a: 'b'
-				}
-			},
 			{
 				response: t.Optional(
 					t.Object({
 						hello: t.String()
 					})
 				)
+			},
+			() => {
+				return {
+					hello: 'world',
+					a: 'b'
+				}
 			}
 		)
 
@@ -55,16 +55,16 @@ describe('Normalize', () => {
 	it('strictly validate response if not normalize', async () => {
 		const app = new Elysia({ normalize: false }).get(
 			'/',
+			{
+				response: t.Object({
+					hello: t.String()
+				})
+			},
 			() => {
 				return {
 					hello: 'world',
 					a: 'b'
 				}
-			},
-			{
-				response: t.Object({
-					hello: t.String()
-				})
 			}
 		)
 
@@ -76,8 +76,6 @@ describe('Normalize', () => {
 	it('normalize multiple response', async () => {
 		const app = new Elysia().get(
 			'/',
-			// @ts-ignore
-			({ status }) => status(418, { name: 'Nagisa', hifumi: 'daisuki' }),
 			{
 				response: {
 					200: t.Object({
@@ -87,7 +85,9 @@ describe('Normalize', () => {
 						name: t.Literal('Nagisa')
 					})
 				}
-			}
+			},
+			// @ts-ignore
+			({ status }) => status(418, { name: 'Nagisa', hifumi: 'daisuki' })
 		)
 
 		const response = await app.handle(req('/')).then((x) => x.json())
@@ -102,8 +102,6 @@ describe('Normalize', () => {
 			normalize: false
 		}).get(
 			'/',
-			// @ts-ignore
-			({ status }) => status(418, { name: 'Nagisa', hifumi: 'daisuki' }),
 			{
 				response: {
 					200: t.Object({
@@ -113,7 +111,9 @@ describe('Normalize', () => {
 						name: t.Literal('Nagisa')
 					})
 				}
-			}
+			},
+			// @ts-ignore
+			({ status }) => status(418, { name: 'Nagisa', hifumi: 'daisuki' })
 		)
 
 		const response = await app.handle(req('/'))
@@ -124,12 +124,6 @@ describe('Normalize', () => {
 	it('normalize multiple response using 200', async () => {
 		const app = new Elysia().get(
 			'/',
-			() => {
-				return {
-					hello: 'Nagisa',
-					hifumi: 'daisuki'
-				}
-			},
 			{
 				response: {
 					200: t.Object({
@@ -138,6 +132,12 @@ describe('Normalize', () => {
 					418: t.Object({
 						name: t.Literal('Nagisa')
 					})
+				}
+			},
+			() => {
+				return {
+					hello: 'Nagisa',
+					hifumi: 'daisuki'
 				}
 			}
 		)
@@ -152,12 +152,6 @@ describe('Normalize', () => {
 	it('strictly validate multiple response using 200 if not normalize', async () => {
 		const app = new Elysia({ normalize: false }).get(
 			'/',
-			() => {
-				return {
-					hello: 'Nagisa',
-					hifumi: 'daisuki'
-				}
-			},
 			{
 				response: {
 					200: t.Object({
@@ -166,6 +160,12 @@ describe('Normalize', () => {
 					418: t.Object({
 						name: t.Literal('Nagisa')
 					})
+				}
+			},
+			() => {
+				return {
+					hello: 'Nagisa',
+					hifumi: 'daisuki'
 				}
 			}
 		)
@@ -178,12 +178,6 @@ describe('Normalize', () => {
 	it('do not normalize response when allowing additional properties', async () => {
 		const app = new Elysia().get(
 			'/',
-			() => {
-				return {
-					hello: 'world',
-					a: 'b'
-				}
-			},
 			{
 				response: t.Object(
 					{
@@ -191,6 +185,12 @@ describe('Normalize', () => {
 					},
 					{ additionalProperties: true }
 				)
+			},
+			() => {
+				return {
+					hello: 'world',
+					a: 'b'
+				}
 			}
 		)
 
@@ -203,11 +203,15 @@ describe('Normalize', () => {
 	})
 
 	it('normalize body', async () => {
-		const app = new Elysia().post('/', ({ body }) => body, {
-			body: t.Object({
-				name: t.String()
-			})
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({
+					name: t.String()
+				})
+			},
+			({ body }) => body
+		)
 
 		const response = await app
 			.handle(
@@ -224,13 +228,17 @@ describe('Normalize', () => {
 	})
 
 	it('normalize optional body', async () => {
-		const app = new Elysia().post('/', ({ body }) => body, {
-			body: t.Optional(
-				t.Object({
-					name: t.String()
-				})
-			)
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Optional(
+					t.Object({
+						name: t.String()
+					})
+				)
+			},
+			({ body }) => body
+		)
 
 		const response = await app
 			.handle(
@@ -249,12 +257,12 @@ describe('Normalize', () => {
 	it('strictly validate body if not normalize', async () => {
 		const app = new Elysia({ normalize: false }).post(
 			'/',
-			({ body }) => body,
 			{
 				body: t.Object({
 					name: t.String()
 				})
-			}
+			},
+			({ body }) => body
 		)
 
 		const response = await app.handle(
@@ -270,7 +278,6 @@ describe('Normalize', () => {
 	it('loosely validate body if not normalize and has additionalProperties', async () => {
 		const app = new Elysia({ normalize: false }).post(
 			'/',
-			({ body }) => body,
 			{
 				body: t.Object(
 					{
@@ -280,7 +287,8 @@ describe('Normalize', () => {
 						additionalProperties: true
 					}
 				)
-			}
+			},
+			({ body }) => body
 		)
 
 		const response = await app.handle(
@@ -291,18 +299,22 @@ describe('Normalize', () => {
 		)
 
 		expect(response.status).toBe(200)
-		expect(await response.json()).toEqual({
+		await expect(response.json()).resolves.toEqual({
 			name: 'nagisa',
 			hifumi: 'daisuki'
 		})
 	})
 
 	it('normalize query', async () => {
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: t.Object({
-				name: t.String()
-			})
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					name: t.String()
+				})
+			},
+			({ query }) => query
+		)
 
 		const response = await app
 			.handle(req('/?name=nagisa&hifumi=daisuki'))
@@ -314,14 +326,18 @@ describe('Normalize', () => {
 	})
 
 	it("don't normalize query on additionalProperties", async () => {
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: t.Object(
-				{
-					name: t.String()
-				},
-				{ additionalProperties: true }
-			)
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object(
+					{
+						name: t.String()
+					},
+					{ additionalProperties: true }
+				)
+			},
+			({ query }) => query
+		)
 
 		const response = await app
 			.handle(req('/?name=nagisa&hifumi=daisuki'))
@@ -336,7 +352,6 @@ describe('Normalize', () => {
 	it('normalize based on property when normalized is disabled', async () => {
 		const app = new Elysia({ normalize: false }).get(
 			'/',
-			({ query }) => query,
 			{
 				query: t.Object(
 					{
@@ -346,7 +361,8 @@ describe('Normalize', () => {
 						additionalProperties: true
 					}
 				)
-			}
+			},
+			({ query }) => query
 		)
 
 		const response = await app
@@ -360,11 +376,15 @@ describe('Normalize', () => {
 	})
 
 	it('normalize headers', async () => {
-		const app = new Elysia().get('/', ({ headers }) => headers, {
-			headers: t.Object({
-				name: t.String()
-			})
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				headers: t.Object({
+					name: t.String()
+				})
+			},
+			({ headers }) => headers
+		)
 
 		const response = await app
 			.handle(
@@ -385,12 +405,12 @@ describe('Normalize', () => {
 	it('loosely validate headers by default if not normalized', async () => {
 		const app = new Elysia({ normalize: false }).get(
 			'/',
-			({ headers }) => headers,
 			{
 				headers: t.Object({
 					name: t.String()
 				})
-			}
+			},
+			({ headers }) => headers
 		)
 
 		const headers = {
@@ -403,7 +423,7 @@ describe('Normalize', () => {
 			})
 		)
 
-		expect(await res.json()).toEqual(headers)
+		await expect(res.json()).resolves.toEqual(headers)
 		expect(res.status).toBe(200)
 	})
 
@@ -417,18 +437,22 @@ describe('Normalize', () => {
 			// normalization must never silently turn off: on exact-mirror
 			// < 1.1.1 this exercises the typebox Clean fallback in
 			// TypeBoxValidator's catch, on >= 1.1.1 the mirror itself
-			const app = new Elysia().post('/', ({ body }) => body, {
-				body: t.Object({
-					'a"b': t.String()
-				})
-			})
+			const app = new Elysia().post(
+				'/',
+				{
+					body: t.Object({
+						'a"b': t.String()
+					})
+				},
+				({ body }) => body
+			)
 
 			const res = await app.handle(
 				post('/', { 'a"b': 'value', extra: 'strip-me' })
 			)
 
 			expect(res.status).toBe(200)
-			expect(await res.json()).toEqual({ 'a"b': 'value' })
+			await expect(res.json()).resolves.toEqual({ 'a"b': 'value' })
 		} finally {
 			console.warn = original
 		}
@@ -437,12 +461,12 @@ describe('Normalize', () => {
 	it("normalize body with normalize: 'typebox'", async () => {
 		const app = new Elysia({ normalize: 'typebox' }).post(
 			'/',
-			({ body }) => body,
 			{
 				body: t.Object({
 					name: t.String()
 				})
-			}
+			},
+			({ body }) => body
 		)
 
 		const res = await app.handle(
@@ -450,18 +474,18 @@ describe('Normalize', () => {
 		)
 
 		expect(res.status).toBe(200)
-		expect(await res.json()).toEqual({ name: 'sucrose' })
+		await expect(res.json()).resolves.toEqual({ name: 'sucrose' })
 	})
 
 	it('normalize headers when normalize is true', async () => {
 		const app = new Elysia({ normalize: true }).get(
 			'/',
-			({ headers }) => headers,
 			{
 				headers: t.Object({
 					name: t.String()
 				})
-			}
+			},
+			({ headers }) => headers
 		)
 
 		const res = await app.handle(
@@ -473,19 +497,19 @@ describe('Normalize', () => {
 			})
 		)
 
-		expect(await res.json()).toEqual({ name: 'sucrose' })
+		await expect(res.json()).resolves.toEqual({ name: 'sucrose' })
 		expect(res.status).toBe(200)
 	})
 
 	it('loosely validate cookie by default if not normalized', async () => {
 		const app = new Elysia({ normalize: false }).get(
 			'/',
-			({ cookie: { name } }) => name.value!,
 			{
 				cookie: t.Cookie({
 					name: t.String()
 				})
-			}
+			},
+			({ cookie: { name } }) => name.value!
 		)
 
 		const res = await app.handle(
@@ -496,14 +520,13 @@ describe('Normalize', () => {
 			})
 		)
 
-		expect(await res.text()).toBe('sucrose')
+		await expect(res.text()).resolves.toBe('sucrose')
 		expect(res.status).toBe(200)
 	})
 
 	it('strictly validate headers if not normalized and additionalProperties is false', async () => {
 		const app = new Elysia({ normalize: false }).get(
 			'/',
-			({ headers }) => headers,
 			{
 				headers: t.Object(
 					{
@@ -513,7 +536,8 @@ describe('Normalize', () => {
 						additionalProperties: false
 					}
 				)
-			}
+			},
+			({ headers }) => headers
 		)
 
 		const response = await app.handle(
@@ -544,9 +568,13 @@ describe('Normalize', () => {
 
 		const app = new Elysia({
 			normalize: true
-		}).get('/test', () => service, {
-			response: responseSchema
-		})
+		}).get(
+			'/test',
+			{
+				response: responseSchema
+			},
+			() => service
+		)
 
 		expect(service).toHaveProperty('token')
 		const origService = structuredClone(service)
@@ -573,6 +601,11 @@ describe('Normalize', () => {
 
 		const app = new Elysia().get(
 			'/',
+			{
+				response: {
+					200: type
+				}
+			},
 			() => {
 				return [
 					{
@@ -582,11 +615,6 @@ describe('Normalize', () => {
 						needNormalize: 'yes'
 					}
 				]
-			},
-			{
-				response: {
-					200: type
-				}
 			}
 		)
 
@@ -607,14 +635,6 @@ describe('Normalize', () => {
 	it('normalize Codec response', async () => {
 		const app = new Elysia().get(
 			'/',
-			() => ({
-				hasMore: true,
-				total: 1,
-				offset: 0,
-				totalPages: 1,
-				currentPage: 1,
-				items: [{ username: 'Bob', secret: 'shhh' }]
-			}),
 			{
 				// I don't know why but it must be this exact shape
 				response: t.Object({
@@ -632,7 +652,15 @@ describe('Normalize', () => {
 					totalPages: t.Number(),
 					currentPage: t.Number({ minimum: 1 })
 				})
-			}
+			},
+			() => ({
+				hasMore: true,
+				total: 1,
+				offset: 0,
+				totalPages: 1,
+				currentPage: 1,
+				items: [{ username: 'Bob', secret: 'shhh' }]
+			})
 		)
 
 		const data = await app.handle(req('/')).then((x) => x.json())
@@ -650,5 +678,4 @@ describe('Normalize', () => {
 			currentPage: 1
 		})
 	})
-
 })

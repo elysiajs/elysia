@@ -10,21 +10,21 @@ describe('Query', () => {
 		const app = new Elysia().get('/', (ctx) => ctx.query)
 		const response = await app.handle(req())
 
-		expect(await response.json()).toEqual({ name: 'sucrose' })
+		await expect(response.json()).resolves.toEqual({ name: 'sucrose' })
 	})
 
 	it('access all using destructuring', async () => {
 		const app = new Elysia().get('/', ({ query }) => query)
 		const response = await app.handle(req())
 
-		expect(await response.json()).toEqual({ name: 'sucrose' })
+		await expect(response.json()).resolves.toEqual({ name: 'sucrose' })
 	})
 
 	it('access single param using property name', async () => {
 		const app = new Elysia().get('/', (ctx) => ctx.query.name)
 		const response = await app.handle(req())
 
-		expect(await response.text()).toEqual('sucrose')
+		await expect(response.text()).resolves.toEqual('sucrose')
 	})
 
 	// Regression (audit P8): sucrose's access regex only matched `ctx.query`
@@ -35,14 +35,14 @@ describe('Query', () => {
 		const app = new Elysia().get('/', (ctx) => ctx?.query?.name ?? 'MISS')
 		const response = await app.handle(req())
 
-		expect(await response.text()).toEqual('sucrose')
+		await expect(response.text()).resolves.toEqual('sucrose')
 	})
 
 	it('access single param using destructuring', async () => {
 		const app = new Elysia().get('/', ({ query: { name } }) => name)
 		const response = await app.handle(req())
 
-		expect(await response.text()).toEqual('sucrose')
+		await expect(response.text()).resolves.toEqual('sucrose')
 	})
 
 	it('access all using destructuring assignment', async () => {
@@ -52,7 +52,7 @@ describe('Query', () => {
 		})
 		const response = await app.handle(req())
 
-		expect(await response.json()).toEqual({ name: 'sucrose' })
+		await expect(response.json()).resolves.toEqual({ name: 'sucrose' })
 	})
 
 	it('access all using destructuring assignment within derive', async () => {
@@ -68,7 +68,7 @@ describe('Query', () => {
 			.get('/', (ctx) => ctx.yay())
 		const response = await app.handle(req())
 
-		expect(await response.json()).toEqual({ name: 'sucrose' })
+		await expect(response.json()).resolves.toEqual({ name: 'sucrose' })
 	})
 
 	it('access all using property name within derive', async () => {
@@ -84,7 +84,7 @@ describe('Query', () => {
 
 		const response = await app.handle(req())
 
-		expect(await response.json()).toEqual({ name: 'sucrose' })
+		await expect(response.json()).resolves.toEqual({ name: 'sucrose' })
 	})
 
 	it('destructured encoded & (%26) query string', async () => {

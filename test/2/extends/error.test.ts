@@ -36,12 +36,12 @@ describe('Error handler', () => {
 				throw new OtherError('B')
 			})
 
-		expect(await app.handle(req('/custom')).then((x) => x.text())).toBe(
-			'custom'
-		)
-		expect(await app.handle(req('/other')).then((x) => x.text())).toBe(
-			'other'
-		)
+		await expect(
+			app.handle(req('/custom')).then((x) => x.text())
+		).resolves.toBe('custom')
+		await expect(
+			app.handle(req('/other')).then((x) => x.text())
+		).resolves.toBe('other')
 	})
 
 	it('map status() returned from handler', async () => {
@@ -54,7 +54,7 @@ describe('Error handler', () => {
 		const response = await app.handle(req('/'))
 
 		expect(response.status).toBe(418)
-		expect(await response.text()).toBe('A')
+		await expect(response.text()).resolves.toBe('A')
 	})
 
 	it('forward returned error like a throw', async () => {
@@ -65,7 +65,7 @@ describe('Error handler', () => {
 		const response = await app.handle(req('/'))
 
 		expect(response.status).toBe(418)
-		expect(await response.text()).toBe('A')
+		await expect(response.text()).resolves.toBe('A')
 	})
 
 	it('forward returned error before afterHandle, like a throw', async () => {
@@ -73,11 +73,15 @@ describe('Error handler', () => {
 
 		const app = new Elysia()
 			.error(CustomError, ({ error }) => status(418, error.message))
-			.get('/', () => new CustomError('A'), {
-				afterHandle: () => {
-					ranAfterHandle = true
-				}
-			})
+			.get(
+				'/',
+				{
+					afterHandle: () => {
+						ranAfterHandle = true
+					}
+				},
+				() => new CustomError('A')
+			)
 
 		const response = await app.handle(req('/'))
 
@@ -93,7 +97,7 @@ describe('Error handler', () => {
 		const response = await app.handle(req('/'))
 
 		expect(response.status).toBe(418)
-		expect(await response.text()).toBe('A')
+		await expect(response.text()).resolves.toBe('A')
 	})
 
 	it('forward a static error value', async () => {
@@ -104,7 +108,7 @@ describe('Error handler', () => {
 		const response = await app.handle(req('/'))
 
 		expect(response.status).toBe(418)
-		expect(await response.text()).toBe('A')
+		await expect(response.text()).resolves.toBe('A')
 	})
 
 	it('return 500 with message for unregistered returned error', async () => {
@@ -113,7 +117,7 @@ describe('Error handler', () => {
 		const response = await app.handle(req('/'))
 
 		expect(response.status).toBe(500)
-		expect(await response.text()).toBe('oops')
+		await expect(response.text()).resolves.toBe('oops')
 	})
 
 	it('forward error resolved from a promise on a sync route', async () => {
@@ -124,7 +128,7 @@ describe('Error handler', () => {
 		const response = await app.handle(req('/'))
 
 		expect(response.status).toBe(500)
-		expect(await response.text()).toBe('oops')
+		await expect(response.text()).resolves.toBe('oops')
 	})
 
 	it('run handlers in registration order for subclasses', async () => {
@@ -142,12 +146,12 @@ describe('Error handler', () => {
 				throw new ChildError('A')
 			})
 
-		expect(await parentFirst.handle(req('/')).then((x) => x.text())).toBe(
-			'parent'
-		)
-		expect(await childFirst.handle(req('/')).then((x) => x.text())).toBe(
-			'child'
-		)
+		await expect(
+			parentFirst.handle(req('/')).then((x) => x.text())
+		).resolves.toBe('parent')
+		await expect(
+			childFirst.handle(req('/')).then((x) => x.text())
+		).resolves.toBe('child')
 	})
 
 	it('fall through to the next handler when returning undefined', async () => {
@@ -158,7 +162,9 @@ describe('Error handler', () => {
 				throw new ChildError('A')
 			})
 
-		expect(await app.handle(req('/')).then((x) => x.text())).toBe('parent')
+		await expect(app.handle(req('/')).then((x) => x.text())).resolves.toBe(
+			'parent'
+		)
 	})
 
 	it("use the error's declared status for plain returns", async () => {
@@ -171,7 +177,7 @@ describe('Error handler', () => {
 		const response = await app.handle(req('/'))
 
 		expect(response.status).toBe(404)
-		expect(await response.text()).toBe('Not Found')
+		await expect(response.text()).resolves.toBe('Not Found')
 	})
 
 	it('apply plugin handlers per scope', async () => {
@@ -194,16 +200,18 @@ describe('Error handler', () => {
 			.use(new Elysia().use(global))
 			.get('/', route)
 
-		expect(await fromLocal.handle(req('/')).then((x) => x.text())).toBe('A')
-		expect(await fromPlugin.handle(req('/')).then((x) => x.text())).toBe(
-			'handled'
-		)
-		expect(
-			await fromPluginDeep.handle(req('/')).then((x) => x.text())
-		).toBe('A')
-		expect(
-			await fromGlobalDeep.handle(req('/')).then((x) => x.text())
-		).toBe('handled')
+		await expect(
+			fromLocal.handle(req('/')).then((x) => x.text())
+		).resolves.toBe('A')
+		await expect(
+			fromPlugin.handle(req('/')).then((x) => x.text())
+		).resolves.toBe('handled')
+		await expect(
+			fromPluginDeep.handle(req('/')).then((x) => x.text())
+		).resolves.toBe('A')
+		await expect(
+			fromGlobalDeep.handle(req('/')).then((x) => x.text())
+		).resolves.toBe('handled')
 	})
 
 	it('narrow catch-all with instanceof', async () => {
@@ -218,14 +226,14 @@ describe('Error handler', () => {
 				throw new Error('plain')
 			})
 
-		expect(await app.handle(req('/custom')).then((x) => x.text())).toBe(
-			'custom'
-		)
+		await expect(
+			app.handle(req('/custom')).then((x) => x.text())
+		).resolves.toBe('custom')
 
 		const plain = await app.handle(req('/plain'))
 
 		expect(plain.status).toBe(500)
-		expect(await plain.text()).toBe('plain')
+		await expect(plain.text()).resolves.toBe('plain')
 	})
 
 	// Regression (audit H1): an instance-level `.onError` on a plugin must NOT
@@ -237,18 +245,22 @@ describe('Error handler', () => {
 	it('instance-level onError does not clobber route-level error handler', async () => {
 		const plugin = new Elysia()
 			.error(() => {})
-			.get('/boom', () => {
-				throw new Error('SECRET_INTERNAL_DETAIL')
-			}, {
-				error: () => new Response('mapped', { status: 418 })
-			})
+			.get(
+				'/boom',
+				{
+					error: () => new Response('mapped', { status: 418 })
+				},
+				() => {
+					throw new Error('SECRET_INTERNAL_DETAIL')
+				}
+			)
 
 		const app = new Elysia().use(plugin)
 		const res = await app.handle(req('/boom'))
 
 		// before the fix: 500 with body 'SECRET_INTERNAL_DETAIL'
 		expect(res.status).toBe(418)
-		expect(await res.text()).toBe('mapped')
+		await expect(res.text()).resolves.toBe('mapped')
 	})
 
 	// Regression (audit H5): when there are no mapResponse hooks, `mapResponse`
@@ -265,7 +277,7 @@ describe('Error handler', () => {
 
 		const res = await app.handle(req('/boom'))
 		expect(res.status).toBe(500)
-		expect(await res.text()).toBe('error-asset')
+		await expect(res.text()).resolves.toBe('error-asset')
 
 		// the real Request is now forwarded → range requests work
 		const ranged = await app.handle(

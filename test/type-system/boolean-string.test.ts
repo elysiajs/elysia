@@ -46,11 +46,15 @@ describe('TypeSystem - BooleanString', () => {
 	})
 
 	it('Integrate', async () => {
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: t.Object({
-				value: t.BooleanString()
-			})
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					value: t.BooleanString()
+				})
+			},
+			({ query }) => query
+		)
 
 		const res1 = await app.handle(req('/?value=true'))
 		expect(res1.status).toBe(200)

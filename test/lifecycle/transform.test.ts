@@ -14,13 +14,12 @@ describe('Transform', () => {
 
 		const res = await app.handle(req('/id/1'))
 
-		expect(await res.text()).toBe('number')
+		await expect(res.text()).resolves.toBe('number')
 	})
 
 	it('locally transform', async () => {
 		const app = new Elysia().get(
 			'/id/:id',
-			({ params: { id } }) => typeof id,
 			{
 				transform: (request) => {
 					if (request.params?.id)
@@ -29,11 +28,12 @@ describe('Transform', () => {
 				params: t.Object({
 					id: t.Number()
 				})
-			}
+			},
+			({ params: { id } }) => typeof id
 		)
 		const res = await app.handle(req('/id/1'))
 
-		expect(await res.text()).toBe('number')
+		await expect(res.text()).resolves.toBe('number')
 	})
 
 	it('group transform', async () => {
@@ -51,8 +51,8 @@ describe('Transform', () => {
 		const base = await app.handle(req('/id/1'))
 		const scoped = await app.handle(req('/scoped/id/1'))
 
-		expect(await base.text()).toBe('string')
-		expect(await scoped.text()).toBe('number')
+		await expect(base.text()).resolves.toBe('string')
+		await expect(scoped.text()).resolves.toBe('number')
 	})
 
 	it('transform from plugin', async () => {
@@ -67,7 +67,7 @@ describe('Transform', () => {
 
 		const res = await app.handle(req('/id/1'))
 
-		expect(await res.text()).toBe('number')
+		await expect(res.text()).resolves.toBe('number')
 	})
 
 	it('transform from on', async () => {
@@ -79,7 +79,7 @@ describe('Transform', () => {
 
 		const res = await app.handle(req('/id/1'))
 
-		expect(await res.text()).toBe('number')
+		await expect(res.text()).resolves.toBe('number')
 	})
 
 	it('transform in order', async () => {
@@ -105,22 +105,26 @@ describe('Transform', () => {
 				const p = params as { id?: string | number } | null
 				if (p?.id) p.id = +p.id
 			})
-			.get('/id/:id', ({ params: { id } }) => id, {
-				params: t.Object({
-					id: t.Number()
-				}),
-				transform: (request) => {
-					if (
-						request.params?.id &&
-						typeof request.params?.id === 'number'
-					)
-						request.params.id = request.params.id + 1
-				}
-			})
+			.get(
+				'/id/:id',
+				{
+					params: t.Object({
+						id: t.Number()
+					}),
+					transform: (request) => {
+						if (
+							request.params?.id &&
+							typeof request.params?.id === 'number'
+						)
+							request.params.id = request.params.id + 1
+					}
+				},
+				({ params: { id } }) => id
+			)
 
 		const res = await app.handle(req('/id/1'))
 
-		expect(await res.text()).toBe('2')
+		await expect(res.text()).resolves.toBe('2')
 	})
 
 	it('accept multiple transform', async () => {
@@ -137,13 +141,12 @@ describe('Transform', () => {
 
 		const res = await app.handle(req('/id/1'))
 
-		expect(await res.text()).toBe('2')
+		await expect(res.text()).resolves.toBe('2')
 	})
 
 	it('transform async', async () => {
 		const app = new Elysia().get(
 			'/id/:id',
-			({ params: { id } }) => typeof id,
 			{
 				params: t.Object({
 					id: t.Number()
@@ -157,12 +160,13 @@ describe('Transform', () => {
 
 					if (params?.id) params.id = +params.id
 				}
-			}
+			},
+			({ params: { id } }) => typeof id
 		)
 
 		const res = await app.handle(req('/id/1'))
 
-		expect(await res.text()).toBe('number')
+		await expect(res.text()).resolves.toBe('number')
 	})
 
 	it('map returned value', async () => {
@@ -174,15 +178,19 @@ describe('Transform', () => {
 			.get('/id/:id', ({ params: { id } }) => typeof id)
 
 		const res = await app.handle(req('/id/1'))
-		expect(await res.text()).toBe('number')
+		await expect(res.text()).resolves.toBe('number')
 	})
 
 	it('validate property', async () => {
-		const app = new Elysia().get('/id/:id', ({ params: { id } }) => id, {
-			params: t.Object({
-				id: t.Numeric({ minimum: 0 })
-			})
-		})
+		const app = new Elysia().get(
+			'/id/:id',
+			{
+				params: t.Object({
+					id: t.Numeric({ minimum: 0 })
+				})
+			},
+			({ params: { id } }) => id
+		)
 
 		const correct = await app.handle(req('/id/1')).then((x) => x.status)
 		expect(correct).toBe(200)
@@ -202,32 +210,40 @@ describe('Transform', () => {
 		})
 
 	it('transform reshapes the body before it is validated', async () => {
-		const app = new Elysia().post('/', ({ body }) => body, {
-			body: t.Object({ name: t.String() }),
-			transform({ body }) {
-				const b = body as Record<string, unknown>
-				if (b && 'rename' in b) {
-					b.name = b.rename
-					delete b.rename
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({ name: t.String() }),
+				transform({ body }) {
+					const b = body as Record<string, unknown>
+					if (b && 'rename' in b) {
+						b.name = b.rename
+						delete b.rename
+					}
 				}
-			}
-		})
+			},
+			({ body }) => body
+		)
 
 		// arrives WITHOUT `name` (invalid) — transform adds it → passes
 		const res = await app.handle(post({ rename: 'Himari' }))
 
 		expect(res.status).toBe(200)
-		expect(await res.json()).toEqual({ name: 'Himari' })
+		await expect(res.json()).resolves.toEqual({ name: 'Himari' })
 	})
 
 	it("transform's body output is validated (invalid after transform → 422)", async () => {
-		const app = new Elysia().post('/', ({ body }) => body, {
-			body: t.Object({ name: t.String() }),
-			transform({ body }) {
-				// drop the required field — validation (which runs AFTER) catches it
-				delete (body as Record<string, unknown>).name
-			}
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({ name: t.String() }),
+				transform({ body }) {
+					// drop the required field — validation (which runs AFTER) catches it
+					delete (body as Record<string, unknown>).name
+				}
+			},
+			({ body }) => body
+		)
 
 		// arrives valid, but transform makes it invalid → 422
 		const res = await app.handle(post({ name: 'Himari' }))
@@ -247,7 +263,7 @@ describe('Transform', () => {
 
 		const res = await app.handle(req('/name/Fubuki'))
 
-		expect(await res.text()).toBe('Cat')
+		await expect(res.text()).resolves.toBe('Cat')
 	})
 
 	it('not inherits plugin on local', async () => {
@@ -262,7 +278,7 @@ describe('Transform', () => {
 
 		const res = await app.handle(req('/name/Fubuki'))
 
-		expect(await res.text()).toBe('Fubuki')
+		await expect(res.text()).resolves.toBe('Fubuki')
 	})
 
 	it('global true', async () => {

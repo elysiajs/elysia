@@ -61,9 +61,13 @@ describe('guard(scope, hook) bulk registration', () => {
 			query: t.Object({ b: t.String() })
 		})
 
-		const app = new Elysia().use(a).get('/', () => 'ok', {
-			query: t.Object({ a: t.String() })
-		})
+		const app = new Elysia().use(a).get(
+			'/',
+			{
+				query: t.Object({ a: t.String() })
+			},
+			() => 'ok'
+		)
 
 		// Guards default to the OVERRIDE channel: the route's own `query`
 		// replaces the propagated guard query, so only `a` is required.
@@ -80,9 +84,13 @@ describe('guard(scope, hook) bulk registration', () => {
 			query: t.Object({ b: t.String() })
 		})
 
-		const app = new Elysia().use(a).get('/', () => 'ok', {
-			query: t.Object({ a: t.String() })
-		})
+		const app = new Elysia().use(a).get(
+			'/',
+			{
+				query: t.Object({ a: t.String() })
+			},
+			() => 'ok'
+		)
 
 		// `schema: 'standalone'` opts into additive validation: the route
 		// requires both `a` (own schema) and `b` (propagated guard).

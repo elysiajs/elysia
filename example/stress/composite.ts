@@ -20,18 +20,30 @@ const build = () => {
 	for (let i = 0; i < 20; i++) app.get(`/static-${i}`, () => 'ok')
 
 	for (let i = 0; i < 20; i++)
-		app.get(`/res/${i}/:id`, ({ params: { id } }) => id, {
-			params: t.Object({ id: t.Number() })
-		})
+		app.get(
+			`/res/${i}/:id`,
+			{
+				params: t.Object({ id: t.Number() })
+			},
+			({ params: { id } }) => id
+		)
 
-	app.post('/users', ({ body }) => body, {
-		body: t.Object({ name: t.String(), age: t.Number() }),
-		response: t.Object({ name: t.String(), age: t.Number() })
-	})
+	app.post(
+		'/users',
+		{
+			body: t.Object({ name: t.String(), age: t.Number() }),
+			response: t.Object({ name: t.String(), age: t.Number() })
+		},
+		({ body }) => body
+	)
 
-	app.get('/search', ({ query }) => query, {
-		query: t.Object({ q: t.String(), page: t.Optional(t.Number()) })
-	})
+	app.get(
+		'/search',
+		{
+			query: t.Object({ q: t.String(), page: t.Optional(t.Number()) })
+		},
+		({ query }) => query
+	)
 
 	return app
 }

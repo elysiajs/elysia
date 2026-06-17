@@ -255,8 +255,8 @@ describe('Stream', () => {
 			app.handle(req('/json'))
 		])
 
-		expect(await response[0].text()).toBe('hello')
-		expect(await response[1].json()).toEqual({
+		await expect(response[0].text()).resolves.toBe('hello')
+		await expect(response[1].json()).resolves.toEqual({
 			hello: 'world'
 		})
 	})
@@ -275,8 +275,8 @@ describe('Stream', () => {
 			app.handle(req('/json'))
 		])
 
-		expect(await response[0].text()).toBe('hello')
-		expect(await response[1].json()).toEqual({
+		await expect(response[0].text()).resolves.toBe('hello')
+		await expect(response[1].json()).resolves.toEqual({
 			hello: 'world'
 		})
 	})

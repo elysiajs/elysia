@@ -28,50 +28,70 @@ const app = new Elysia()
 		return build
 	})
 	.get('/wildcard/*', () => 'Hi Wildcard')
-	.get('/query', () => 'Elysia', {
-		beforeHandle: ({ query }) => {
-			console.log('Name:', query?.name)
+	.get(
+		'/query',
+		{
+			beforeHandle: ({ query }) => {
+				console.log('Name:', query?.name)
 
-			if (query?.name === 'aom') return 'Hi saltyaom'
+				if (query?.name === 'aom') return 'Hi saltyaom'
+			},
+			query: t.Object({
+				name: t.String()
+			})
 		},
-		query: t.Object({
-			name: t.String()
-		})
-	})
-	.post('/json', async ({ body }) => body, {
-		body: t.Object({
-			name: t.String(),
-			additional: t.String()
-		})
-	})
-	.post('/transform-body', async ({ body }) => body, {
-		beforeHandle: (ctx) => {
-			ctx.body = {
-				...ctx.body,
-				additional: 'Elysia'
-			}
+		() => 'Elysia'
+	)
+	.post(
+		'/json',
+		{
+			body: t.Object({
+				name: t.String(),
+				additional: t.String()
+			})
 		},
-		body: t.Object({
-			name: t.String(),
-			additional: t.String()
-		})
-	})
-	.get('/id/:id', ({ params: { id } }) => id, {
-		transform({ params }) {
-			params.id = +params.id
+		async ({ body }) => body
+	)
+	.post(
+		'/transform-body',
+		{
+			beforeHandle: (ctx) => {
+				ctx.body = {
+					...ctx.body,
+					additional: 'Elysia'
+				}
+			},
+			body: t.Object({
+				name: t.String(),
+				additional: t.String()
+			})
 		},
-		params: t.Object({
-			id: t.Number()
-		})
-	})
-	.post('/new/:id', async ({ body, params }) => body, {
-		params: t.Object({
-			id: t.Number()
-		}),
-		body: t.Object({
-			username: t.String()
-		})
-	})
+		async ({ body }) => body
+	)
+	.get(
+		'/id/:id',
+		{
+			transform({ params }) {
+				params.id = +params.id
+			},
+			params: t.Object({
+				id: t.Number()
+			})
+		},
+		({ params: { id } }) => id
+	)
+	.post(
+		'/new/:id',
+		{
+			params: t.Object({
+				id: t.Number()
+			}),
+			body: t.Object({
+				username: t.String()
+			})
+		},
+		async ({ body, params }) => body
+	)
 	.get('/trailing-slash', () => 'A')
 	.group('/group', (app) =>
 		app

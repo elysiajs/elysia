@@ -48,10 +48,14 @@ describe('TypeSystem - ArrayBuffer', () => {
 	})
 
 	it('Integrate', async () => {
-		const app = new Elysia().post('/', ({ body }) => body, {
-			body: t.ArrayBuffer(),
-			response: t.ArrayBuffer()
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.ArrayBuffer(),
+				response: t.ArrayBuffer()
+			},
+			({ body }) => body
+		)
 
 		const response = await app.handle(
 			new Request('http://localhost', {
@@ -61,6 +65,6 @@ describe('TypeSystem - ArrayBuffer', () => {
 			})
 		)
 
-		expect(await response.text()).toBe('可愛くてごめん')
+		await expect(response.text()).resolves.toBe('可愛くてごめん')
 	})
 })

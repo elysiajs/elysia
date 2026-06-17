@@ -47,35 +47,39 @@ const patchProductModelComplex = t.Object({
 type patchProductModelComplex = Static<typeof patchProductModelComplex>
 
 const app = new Elysia()
-	.post('/product', async ({ body, status }) => status('Created', body), {
-		body: postProductModel
-	})
+	.post(
+		'/product',
+		{
+			body: postProductModel
+		},
+		async ({ body, status }) => status('Created', body)
+	)
 	.patch(
 		'/product/:id',
+		{
+			body: patchProductModel
+		},
 		({ body, params }) => ({
 			id: params.id,
 			...body
-		}),
-		{
-			body: patchProductModel
-		}
+		})
 	)
 	.post(
 		'/product-complex',
-		async ({ body, status }) => status('Created', body),
 		{
 			body: postProductModelComplex
-		}
+		},
+		async ({ body, status }) => status('Created', body)
 	)
 	.patch(
 		'/product-complex/:id',
+		{
+			body: patchProductModelComplex
+		},
 		({ body, params }) => ({
 			id: params.id,
 			...body
-		}),
-		{
-			body: patchProductModelComplex
-		}
+		})
 	)
 
 describe('Nested FormData with mandatory bunFile (post operation)', async () => {
@@ -654,9 +658,13 @@ describe('Model reference with File and nested Object', () => {
 					})
 				})
 			)
-			.post('/user', ({ body }) => body, {
-				body: 'userWithAvatar'
-			})
+			.post(
+				'/user',
+				{
+					body: 'userWithAvatar'
+				},
+				({ body }) => body
+			)
 
 		const formData = new FormData()
 		formData.append('name', 'John')
@@ -684,15 +692,21 @@ describe('Zod (for standard schema) with File and nested Object', () => {
 	const bunFile = Bun.file(bunFilePath6) as File
 
 	it('should handle Zod schema with File and nested object (without manual coercion)', async () => {
-		const app = new Elysia().post('/upload', ({ body }) => body, {
-			body: z.object({
-				name: z.string(),
-				file: z.file().refine((file) => fileType(file, 'image/jpeg')),
-				metadata: z.object({
-					age: z.coerce.number()
+		const app = new Elysia().post(
+			'/upload',
+			{
+				body: z.object({
+					name: z.string(),
+					file: z
+						.file()
+						.refine((file) => fileType(file, 'image/jpeg')),
+					metadata: z.object({
+						age: z.coerce.number()
+					})
 				})
-			})
-		})
+			},
+			({ body }) => body
+		)
 
 		const formData = new FormData()
 		formData.append('name', 'John')
@@ -715,11 +729,15 @@ describe('Zod (for standard schema) with File and nested Object', () => {
 	})
 
 	it('should reject when async file refine fails', async () => {
-		const app = new Elysia().post('/upload', ({ body }) => body, {
-			body: z.object({
-				file: z.file().refine((file) => fileType(file, 'image/png'))
-			})
-		})
+		const app = new Elysia().post(
+			'/upload',
+			{
+				body: z.object({
+					file: z.file().refine((file) => fileType(file, 'image/png'))
+				})
+			},
+			({ body }) => body
+		)
 
 		const formData = new FormData()
 		// aris-yuzu.jpg is a jpeg — the png refine must reject it
@@ -736,12 +754,18 @@ describe('Zod (for standard schema) with File and nested Object', () => {
 	})
 
 	it('should handle array JSON strings in FormData', async () => {
-		const app = new Elysia().post('/upload', ({ body }) => body, {
-			body: z.object({
-				file: z.file().refine((file) => fileType(file, 'image/jpeg')),
-				tags: z.array(z.string())
-			})
-		})
+		const app = new Elysia().post(
+			'/upload',
+			{
+				body: z.object({
+					file: z
+						.file()
+						.refine((file) => fileType(file, 'image/jpeg')),
+					tags: z.array(z.string())
+				})
+			},
+			({ body }) => body
+		)
 
 		const formData = new FormData()
 		formData.append('file', bunFile)
@@ -764,12 +788,18 @@ describe('Zod (for standard schema) with File and nested Object', () => {
 	})
 
 	it('should keep invalid JSON as string', async () => {
-		const app = new Elysia().post('/upload', ({ body }) => body, {
-			body: z.object({
-				file: z.file().refine((file) => fileType(file, 'image/jpeg')),
-				description: z.string()
-			})
-		})
+		const app = new Elysia().post(
+			'/upload',
+			{
+				body: z.object({
+					file: z
+						.file()
+						.refine((file) => fileType(file, 'image/jpeg')),
+					description: z.string()
+				})
+			},
+			({ body }) => body
+		)
 
 		const formData = new FormData()
 		formData.append('file', bunFile)
@@ -790,12 +820,18 @@ describe('Zod (for standard schema) with File and nested Object', () => {
 	})
 
 	it('should keep plain strings that are not JSON', async () => {
-		const app = new Elysia().post('/upload', ({ body }) => body, {
-			body: z.object({
-				file: z.file().refine((file) => fileType(file, 'image/jpeg')),
-				comment: z.string()
-			})
-		})
+		const app = new Elysia().post(
+			'/upload',
+			{
+				body: z.object({
+					file: z
+						.file()
+						.refine((file) => fileType(file, 'image/jpeg')),
+					comment: z.string()
+				})
+			},
+			({ body }) => body
+		)
 
 		const formData = new FormData()
 		formData.append('file', bunFile)
@@ -816,20 +852,26 @@ describe('Zod (for standard schema) with File and nested Object', () => {
 	})
 
 	it('should handle nested objects in JSON', async () => {
-		const app = new Elysia().post('/upload', ({ body }) => body, {
-			body: z.object({
-				file: z.file().refine((file) => fileType(file, 'image/jpeg')),
-				profile: z.object({
-					user: z.object({
-						name: z.string(),
-						age: z.coerce.number()
-					}),
-					settings: z.object({
-						notifications: z.coerce.boolean()
+		const app = new Elysia().post(
+			'/upload',
+			{
+				body: z.object({
+					file: z
+						.file()
+						.refine((file) => fileType(file, 'image/jpeg')),
+					profile: z.object({
+						user: z.object({
+							name: z.string(),
+							age: z.coerce.number()
+						}),
+						settings: z.object({
+							notifications: z.coerce.boolean()
+						})
 					})
 				})
-			})
-		})
+			},
+			({ body }) => body
+		)
 
 		const formData = new FormData()
 		formData.append('file', bunFile)
@@ -862,20 +904,26 @@ describe('Zod (for standard schema) with File and nested Object', () => {
 	})
 
 	it('should handle Zod schema with optional fields', async () => {
-		const app = new Elysia().post('/upload', ({ body }) => body, {
-			body: z.object({
-				file: z.file().refine((file) => fileType(file, 'image/jpeg')),
-				name: z.string(),
-				description: z.string().optional(),
-				metadata: z
-					.object({
-						category: z.string(),
-						tags: z.array(z.string()).optional(),
-						featured: z.boolean().optional()
-					})
-					.optional()
-			})
-		})
+		const app = new Elysia().post(
+			'/upload',
+			{
+				body: z.object({
+					file: z
+						.file()
+						.refine((file) => fileType(file, 'image/jpeg')),
+					name: z.string(),
+					description: z.string().optional(),
+					metadata: z
+						.object({
+							category: z.string(),
+							tags: z.array(z.string()).optional(),
+							featured: z.boolean().optional()
+						})
+						.optional()
+				})
+			},
+			({ body }) => body
+		)
 
 		const formData = new FormData()
 		formData.append('file', bunFile)
@@ -899,20 +947,26 @@ describe('Zod (for standard schema) with File and nested Object', () => {
 	})
 
 	it('should handle Zod schema with optional fields provided', async () => {
-		const app = new Elysia().post('/upload', ({ body }) => body, {
-			body: z.object({
-				file: z.file().refine((file) => fileType(file, 'image/jpeg')),
-				name: z.string(),
-				description: z.string().optional(),
-				metadata: z
-					.object({
-						category: z.string(),
-						tags: z.array(z.string()).optional(),
-						featured: z.coerce.boolean().optional()
-					})
-					.optional()
-			})
-		})
+		const app = new Elysia().post(
+			'/upload',
+			{
+				body: z.object({
+					file: z
+						.file()
+						.refine((file) => fileType(file, 'image/jpeg')),
+					name: z.string(),
+					description: z.string().optional(),
+					metadata: z
+						.object({
+							category: z.string(),
+							tags: z.array(z.string()).optional(),
+							featured: z.coerce.boolean().optional()
+						})
+						.optional()
+				})
+			},
+			({ body }) => body
+		)
 
 		const formData = new FormData()
 		formData.append('file', bunFile)

@@ -11,7 +11,7 @@ describe('Handle Error', () => {
 			})
 			.handle(req('/'))
 
-		expect(await res.text()).toBe('Not Found')
+		await expect(res.text()).resolves.toBe('Not Found')
 		expect(res.status).toBe(404)
 	})
 
@@ -22,17 +22,21 @@ describe('Handle Error', () => {
 			})
 			.handle(req('/'))
 
-		expect(await res.text()).toBe('Internal Server Error')
+		await expect(res.text()).resolves.toBe('Internal Server Error')
 		expect(res.status).toBe(500)
 	})
 
 	it('handle VALIDATION', async () => {
 		const res = await new Elysia()
-			.get('/', () => 'Hi', {
-				query: t.Object({
-					name: t.String()
-				})
-			})
+			.get(
+				'/',
+				{
+					query: t.Object({
+						name: t.String()
+					})
+				},
+				() => 'Hi'
+			)
 			.handle(req('/'))
 
 		expect(res.status).toBe(422)
@@ -49,7 +53,7 @@ describe('Handle Error', () => {
 			})
 			.handle(req('/not-found'))
 
-		expect(await res.text()).toBe("I'm a teapot")
+		await expect(res.text()).resolves.toBe("I'm a teapot")
 		expect(res.status).toBe(418)
 	})
 
@@ -81,7 +85,7 @@ describe('Handle Error', () => {
 
 		const res = await app.handle(req('/'))
 
-		expect(await res.text()).toBe('aw man')
+		await expect(res.text()).resolves.toBe('aw man')
 		expect(res.status).toBe(418)
 	})
 
@@ -100,7 +104,7 @@ describe('Handle Error', () => {
 
 		const response = await app.handle(req('/group/inner'))
 
-		expect(await response.text()).toEqual('handled')
+		await expect(response.text()).resolves.toEqual('handled')
 		expect(response.status).toEqual(500)
 	})
 
@@ -121,7 +125,7 @@ describe('Handle Error', () => {
 
 		const response = await app.handle(req('/group/inner'))
 
-		expect(await response.text()).toEqual('handled')
+		await expect(response.text()).resolves.toEqual('handled')
 		expect(response.status).toEqual(418)
 	})
 
@@ -132,7 +136,7 @@ describe('Handle Error', () => {
 
 		const response = await app.handle(req('/'))
 
-		expect(await response.text()).toEqual('Not Found :(')
+		await expect(response.text()).resolves.toEqual('Not Found :(')
 		expect(response.status).toEqual(404)
 	})
 
@@ -143,7 +147,7 @@ describe('Handle Error', () => {
 
 		const response = await app.handle(req('/'))
 
-		expect(await response.text()).toEqual('Not Found :(')
+		await expect(response.text()).resolves.toEqual('Not Found :(')
 		expect(response.status).toEqual(404)
 	})
 
@@ -168,8 +172,10 @@ describe('Handle Error', () => {
 			}
 		}
 
-		const errors = new Elysia().error('global', APIError, ({ error }) =>
-			error.name
+		const errors = new Elysia().error(
+			'global',
+			APIError,
+			({ error }) => error.name
 		)
 
 		const requestHandler = new Elysia()
@@ -180,9 +186,9 @@ describe('Handle Error', () => {
 
 		const app = new Elysia().use(errors).use(requestHandler)
 
-		expect(await app.handle(req('/')).then((req) => req.text())).toBe(
-			'APIError'
-		)
+		await expect(
+			app.handle(req('/')).then((req) => req.text())
+		).resolves.toBe('APIError')
 	})
 
 	it('parse headers', async () => {
@@ -205,21 +211,25 @@ describe('Handle Error', () => {
 	})
 
 	it('handle error in Transform', async () => {
-		const route = new Elysia().get('/', ({ query: { aid } }) => aid, {
-			query: t.Object({
-				aid: t
-					.Codec(t.String())
-					.Decode((value) => {
-						throw new NotFound('foo')
-					})
-					.Encode((value) => `1`)
-			})
-		})
+		const route = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					aid: t
+						.Codec(t.String())
+						.Decode((value) => {
+							throw new NotFound('foo')
+						})
+						.Encode((value) => `1`)
+				})
+			},
+			({ query: { aid } }) => aid
+		)
 
 		const response = await new Elysia().use(route).handle(req('/?aid=a'))
 
 		expect(response.status).toEqual(404)
-		expect(await response.text()).toEqual('foo')
+		await expect(response.text()).resolves.toEqual('foo')
 	})
 
 	it('map status error to response', async () => {
@@ -231,7 +241,7 @@ describe('Handle Error', () => {
 			})
 			.handle(req('/'))
 
-		expect(await response.json()).toEqual(value)
+		await expect(response.json()).resolves.toEqual(value)
 		expect(response.headers.get('content-type')).toStartWith(
 			'application/json'
 		)
@@ -255,7 +265,7 @@ describe('Handle Error', () => {
 			})
 			.handle(req('/'))
 
-		expect(await response.text()).toBe('Don Quixote')
+		await expect(response.text()).resolves.toBe('Don Quixote')
 		expect(response.headers.get('content-type')).toStartWith('text/plain')
 		expect(response.status).toEqual(422)
 	})
@@ -268,7 +278,7 @@ describe('Handle Error', () => {
 			})
 			.handle(req('/'))
 
-		expect(await res.text()).toBe('a')
+		await expect(res.text()).resolves.toBe('a')
 		expect(res.status).toBe(500)
 	})
 
@@ -279,7 +289,7 @@ describe('Handle Error', () => {
 
 		const res = await app.handle(req('/'))
 
-		expect(await res.text()).toBe('a')
+		await expect(res.text()).resolves.toBe('a')
 		expect(res.status).toBe(500)
 	})
 
@@ -296,7 +306,7 @@ describe('Handle Error', () => {
 
 		const res = await app.handle(req('/A'))
 
-		expect(await res.json()).toEqual({ error: 'hello' })
+		await expect(res.json()).resolves.toEqual({ error: 'hello' })
 		expect(res.status).toBe(418)
 	})
 
@@ -313,7 +323,7 @@ describe('Handle Error', () => {
 
 		const res = await app.handle(req('/A'))
 
-		expect(await res.json()).toEqual({ error: 'hello' })
+		await expect(res.json()).resolves.toEqual({ error: 'hello' })
 		expect(res.status).toBe(418)
 	})
 
@@ -339,7 +349,7 @@ describe('Handle Error', () => {
 
 		expect(res).toBe(original)
 		expect(res.status).toBe(418)
-		expect(await res.json()).toEqual({ error: 'hello' })
+		await expect(res.json()).resolves.toEqual({ error: 'hello' })
 	})
 
 	it('handle non-Error with toResponse() when returned', async () => {
@@ -355,7 +365,7 @@ describe('Handle Error', () => {
 
 		const res = await app.handle(req('/B'))
 
-		expect(await res.json()).toEqual({ error: 'hello' })
+		await expect(res.json()).resolves.toEqual({ error: 'hello' })
 		expect(res.status).toBe(418)
 	})
 
@@ -372,7 +382,7 @@ describe('Handle Error', () => {
 
 		const res = await app.handle(req('/B'))
 
-		expect(await res.json()).toEqual({ error: 'hello' })
+		await expect(res.json()).resolves.toEqual({ error: 'hello' })
 		expect(res.status).toBe(418)
 	})
 
@@ -398,7 +408,7 @@ describe('Handle Error', () => {
 
 		const res = await app.handle(req('/'))
 
-		expect(await res.json()).toEqual({ error: 'custom error' })
+		await expect(res.json()).resolves.toEqual({ error: 'custom error' })
 		expect(res.status).toBe(418)
 		expect(res.headers.get('X-Custom-Header')).toBe('custom-value')
 	})
@@ -418,7 +428,7 @@ describe('Handle Error', () => {
 
 		const res = await app.handle(req('/'))
 
-		expect(await res.json()).toEqual({ error: 'async error' })
+		await expect(res.json()).resolves.toEqual({ error: 'async error' })
 		expect(res.status).toBe(418)
 	})
 
@@ -437,7 +447,7 @@ describe('Handle Error', () => {
 
 		const res = await app.handle(req('/'))
 
-		expect(await res.json()).toEqual({ error: 'async error' })
+		await expect(res.json()).resolves.toEqual({ error: 'async error' })
 		expect(res.status).toBe(418)
 	})
 
@@ -463,7 +473,9 @@ describe('Handle Error', () => {
 
 		const res = await app.handle(req('/'))
 
-		expect(await res.json()).toEqual({ error: 'async with headers' })
+		await expect(res.json()).resolves.toEqual({
+			error: 'async with headers'
+		})
 		expect(res.status).toBe(419)
 		expect(res.headers.get('X-Async-Header')).toBe('async-value')
 	})
@@ -485,7 +497,7 @@ describe('Handle Error', () => {
 
 		const res = await app.handle(req('/'))
 
-		expect(await res.json()).toEqual({ error: 'non-error async' })
+		await expect(res.json()).resolves.toEqual({ error: 'non-error async' })
 		expect(res.status).toBe(418)
 	})
 
@@ -503,7 +515,7 @@ describe('Handle Error', () => {
 		const res = await app.handle(req('/'))
 
 		expect(res.status).toBe(500)
-		expect(await res.text()).toBe('original error')
+		await expect(res.text()).resolves.toBe('original error')
 	})
 
 	it('handle async toResponse() that throws an error', async () => {
@@ -520,7 +532,7 @@ describe('Handle Error', () => {
 		const res = await app.handle(req('/'))
 
 		expect(res.status).toBe(500)
-		expect(await res.text()).toBe('original error')
+		await expect(res.text()).resolves.toBe('original error')
 	})
 
 	it('send set-cookie header when error is thrown', async () => {
@@ -540,14 +552,14 @@ describe('Handle Error', () => {
 	it('send set-cookie header when response validation error occurs', async () => {
 		const app = new Elysia().get(
 			'/',
-			// @ts-expect-error deliberately returns an invalid response to
 			// assert set-cookie survives the response-validation error
+			{
+				response: t.Number()
+			},
+			// @ts-expect-error deliberately returns an invalid response to
 			({ cookie }) => {
 				cookie.session.value = 'test-session-id'
 				return 'invalid response'
-			},
-			{
-				response: t.Number()
 			}
 		)
 
@@ -572,7 +584,7 @@ describe('Handle Error', () => {
 		const res = await app.handle(req('/'))
 
 		expect(res.status).toBe(500)
-		expect(await res.text()).toBe('custom error')
+		await expect(res.text()).resolves.toBe('custom error')
 		expect(res.headers.get('set-cookie')).toContain(
 			'session=test-session-id'
 		)

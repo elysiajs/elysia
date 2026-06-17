@@ -23,11 +23,15 @@ describe('Static Content', () => {
 	})
 
 	it('inline life-cycle', async () => {
-		const app = new Elysia().get('/', 'Static Content', {
-			beforeHandle() {
-				return 'beforeHandle'
-			}
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				beforeHandle() {
+					return 'beforeHandle'
+				}
+			},
+			'Static Content'
+		)
 
 		const response = await app.handle(req('/')).then((x) => x.text())
 
@@ -35,11 +39,15 @@ describe('Static Content', () => {
 	})
 
 	it('mutate context', async () => {
-		const app = new Elysia().get('/', 'Static Content', {
-			beforeHandle({ set }) {
-				set.headers['X-Powered-By'] = 'Elysia'
-			}
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				beforeHandle({ set }) {
+					set.headers['X-Powered-By'] = 'Elysia'
+				}
+			},
+			'Static Content'
+		)
 
 		const headers = await app.handle(req('/')).then((x) => x.headers)
 
@@ -59,14 +67,18 @@ describe('Static Content', () => {
 	})
 
 	it('handle errror after routing', async () => {
-		const app = new Elysia().get('/', 'Static Content', {
-			beforeHandle() {
-				throw new Error('error')
+		const app = new Elysia().get(
+			'/',
+			{
+				beforeHandle() {
+					throw new Error('error')
+				},
+				error() {
+					return 'handled'
+				}
 			},
-			error() {
-				return 'handled'
-			}
-		})
+			'Static Content'
+		)
 
 		const response = await app.handle(req('/')).then((x) => x.text())
 
@@ -87,11 +99,15 @@ describe('Static Content', () => {
 	})
 
 	it('clone content', async () => {
-		const app = new Elysia().get('/', 'Static Content', {
-			beforeHandle({ set }) {
-				set.headers['X-Powered-By'] = 'Elysia'
-			}
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				beforeHandle({ set }) {
+					set.headers['X-Powered-By'] = 'Elysia'
+				}
+			},
+			'Static Content'
+		)
 
 		await app.handle(req('/'))
 		await app.handle(req('/'))

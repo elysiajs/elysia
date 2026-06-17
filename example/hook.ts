@@ -7,15 +7,19 @@ new Elysia()
 	.transform(({ store }) => {
 		store.counter++
 	})
-	.get('/', ({ store: { counter } }) => counter, {
-		// Increase counter only when this handler is called
-		transform: [
-			({ store }) => {
-				store.counter++
-			},
-			({ store }) => {
-				store.counter++
-			}
-		]
-	})
+	.get(
+		'/',
+		{
+			// Increase counter only when this handler is called
+			transform: [
+				({ store }) => {
+					store.counter++
+				},
+				({ store }) => {
+					store.counter++
+				}
+			]
+		},
+		({ store: { counter } }) => counter
+	)
 	.listen(3000)

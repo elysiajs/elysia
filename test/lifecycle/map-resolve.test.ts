@@ -24,10 +24,9 @@ describe('map resolve', () => {
 	})
 
 	it('inherits plugin', async () => {
-		const plugin = new Elysia()
-			.derive('global', () => ({
-				hi: () => 'hi'
-			}))
+		const plugin = new Elysia().derive('global', () => ({
+			hi: () => 'hi'
+		}))
 
 		const app = new Elysia().use(plugin).get('/', ({ hi }) => hi())
 
@@ -50,7 +49,7 @@ describe('map resolve', () => {
 		const app = new Elysia()
 			.use(plugin)
 			// @ts-expect-error
-			.get('/', ({ hi2 }) => typeof hi2 === "undefined")
+			.get('/', ({ hi2 }) => typeof hi2 === 'undefined')
 
 		const res = await app.handle(req('/')).then((t) => t.text())
 		const res2 = await app.handle(req('/h2')).then((t) => t.text())
@@ -126,11 +125,15 @@ describe('map resolve', () => {
 
 				return { name: 'Ina' }
 			})
-			.get('/', ({ name }) => name, {
-				beforeHandle() {
-					stack.push(3)
-				}
-			})
+			.get(
+				'/',
+				{
+					beforeHandle() {
+						stack.push(3)
+					}
+				},
+				({ name }) => name
+			)
 
 		await app.handle(
 			new Request('http://localhost/', {

@@ -29,7 +29,7 @@ describe('Web Standard - Map Response', () => {
 		const response = mapResponse('Shiroko', createContext())
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toBe('Shiroko')
+		await expect(response.text()).resolves.toBe('Shiroko')
 		expect(response.status).toBe(200)
 	})
 
@@ -37,7 +37,7 @@ describe('Web Standard - Map Response', () => {
 		const response = mapResponse(1, createContext())
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toBe('1')
+		await expect(response.text()).resolves.toBe('1')
 		expect(response.status).toBe(200)
 	})
 
@@ -45,7 +45,7 @@ describe('Web Standard - Map Response', () => {
 		const response = mapResponse(true, createContext())
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toBe('true')
+		await expect(response.text()).resolves.toBe('true')
 		expect(response.status).toBe(200)
 	})
 
@@ -57,7 +57,7 @@ describe('Web Standard - Map Response', () => {
 		const response = mapResponse(body, createContext())
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json()).toEqual(body)
+		await expect(response.json()).resolves.toEqual(body)
 		expect(response.status).toBe(200)
 	})
 
@@ -65,7 +65,7 @@ describe('Web Standard - Map Response', () => {
 		const response = mapResponse(() => 1, createContext())
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toBe('1')
+		await expect(response.text()).resolves.toBe('1')
 		expect(response.status).toBe(200)
 	})
 
@@ -73,7 +73,7 @@ describe('Web Standard - Map Response', () => {
 		const response = mapResponse(undefined, createContext())
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toEqual('')
+		await expect(response.text()).resolves.toEqual('')
 		expect(response.status).toBe(200)
 	})
 
@@ -81,7 +81,7 @@ describe('Web Standard - Map Response', () => {
 		const response = mapResponse(null, createContext())
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toEqual('')
+		await expect(response.text()).resolves.toEqual('')
 		expect(response.status).toBe(200)
 	})
 
@@ -91,7 +91,9 @@ describe('Web Standard - Map Response', () => {
 		const response = mapResponse(file, createContext())
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.arrayBuffer()).toEqual(await file.arrayBuffer())
+		await expect(response.arrayBuffer()).resolves.toEqual(
+			await file.arrayBuffer()
+		)
 		expect(response.status).toBe(200)
 	})
 
@@ -101,7 +103,7 @@ describe('Web Standard - Map Response', () => {
 		const response = mapResponse(file, createContext())
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toEqual('Hello')
+		await expect(response.text()).resolves.toEqual('Hello')
 		expect(response.status).toBe(200)
 	})
 
@@ -116,7 +118,7 @@ describe('Web Standard - Map Response', () => {
 		)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json()).toEqual(body)
+		await expect(response.json()).resolves.toEqual(body)
 		expect(response.status).toBe(200)
 	})
 
@@ -124,7 +126,7 @@ describe('Web Standard - Map Response', () => {
 		const response = mapResponse(new Error('Hello'), createContext())
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json()).toEqual({
+		await expect(response.json()).resolves.toEqual({
 			name: 'Error',
 			message: 'Hello'
 		})
@@ -135,7 +137,7 @@ describe('Web Standard - Map Response', () => {
 		const response = mapResponse(new Response('Shiroko'), createContext())
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toEqual('Shiroko')
+		await expect(response.text()).resolves.toEqual('Shiroko')
 		expect(response.status).toBe(200)
 	})
 
@@ -146,7 +148,7 @@ describe('Web Standard - Map Response', () => {
 		)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toEqual('Shiroko')
+		await expect(response.text()).resolves.toEqual('Shiroko')
 		expect(response.status).toBe(200)
 	})
 
@@ -159,7 +161,7 @@ describe('Web Standard - Map Response', () => {
 		})
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toEqual('Shiroko')
+		await expect(response.text()).resolves.toEqual('Shiroko')
 		expect(response.status).toBe(200)
 		expect(response.headers.get('content-type')).toBe(
 			'text/html; charset=utf8'
@@ -170,7 +172,7 @@ describe('Web Standard - Map Response', () => {
 		const response = mapResponse(new Student('Himari'), createContext())
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json()).toEqual({
+		await expect(response.json()).resolves.toEqual({
 			name: 'Himari'
 		})
 		expect(response.status).toBe(200)
@@ -181,7 +183,7 @@ describe('Web Standard - Map Response', () => {
 		const response = mapResponse('Shiroko', context)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toBe('Shiroko')
+		await expect(response.text()).resolves.toBe('Shiroko')
 		expect(response.headers.toJSON()).toEqual(context.headers)
 		expect(response.status).toBe(200)
 	})
@@ -191,7 +193,7 @@ describe('Web Standard - Map Response', () => {
 		const response = mapResponse(undefined, context)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toEqual('')
+		await expect(response.text()).resolves.toEqual('')
 		expect(response.headers.toJSON()).toEqual(context.headers)
 		expect(response.status).toBe(200)
 	})
@@ -201,7 +203,7 @@ describe('Web Standard - Map Response', () => {
 		const response = mapResponse(null, context)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toEqual('')
+		await expect(response.text()).resolves.toEqual('')
 		expect(response.headers.toJSON()).toEqual(context.headers)
 		expect(response.status).toBe(200)
 	})
@@ -211,7 +213,7 @@ describe('Web Standard - Map Response', () => {
 		const response = await mapResponse(() => 1, context)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toEqual('1')
+		await expect(response.text()).resolves.toEqual('1')
 		expect(response.headers.toJSON()).toEqual({
 			...context.headers
 		})
@@ -231,7 +233,7 @@ describe('Web Standard - Map Response', () => {
 		)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json()).toEqual(body)
+		await expect(response.json()).resolves.toEqual(body)
 		expect(response.headers.toJSON()).toEqual({
 			...context.headers,
 			'content-type': 'application/json;charset=utf-8'
@@ -245,7 +247,7 @@ describe('Web Standard - Map Response', () => {
 		const response = mapResponse(new Error('Hello'), context)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json()).toEqual({
+		await expect(response.json()).resolves.toEqual({
 			name: 'Error',
 			message: 'Hello'
 		})
@@ -263,7 +265,7 @@ describe('Web Standard - Map Response', () => {
 		const headers = response.headers.toJSON()
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toEqual('Shiroko')
+		await expect(response.text()).resolves.toEqual('Shiroko')
 		expect(response.headers.toJSON()).toEqual(headers)
 	})
 
@@ -281,7 +283,7 @@ describe('Web Standard - Map Response', () => {
 		const headers = response.headers.toJSON()
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toEqual('Shiroko')
+		await expect(response.text()).resolves.toEqual('Shiroko')
 		// @ts-ignore
 		expect(response.headers.toJSON()).toEqual({
 			...headers,
@@ -297,7 +299,7 @@ describe('Web Standard - Map Response', () => {
 		})
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toBe('Shiroko')
+		await expect(response.text()).resolves.toBe('Shiroko')
 		expect(response.status).toBe(418)
 	})
 
@@ -332,7 +334,7 @@ describe('Web Standard - Map Response', () => {
 			}
 		})
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toEqual('Hina')
+		await expect(response.text()).resolves.toEqual('Hina')
 		expect(response.headers.get('name')).toEqual('Sorasaki Hina')
 		expect(response.headers.getAll('set-cookie')).toEqual(['name=hina'])
 	})
@@ -353,7 +355,7 @@ describe('Web Standard - Map Response', () => {
 			}
 		})
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toEqual('Hina')
+		await expect(response.text()).resolves.toEqual('Hina')
 		expect(response.headers.get('name')).toEqual('Sorasaki Hina')
 		expect(response.headers.getAll('set-cookie')).toEqual([
 			'name=hina',
@@ -365,7 +367,7 @@ describe('Web Standard - Map Response', () => {
 		const response = mapResponse(new Passthrough(), createContext())
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toEqual('hi')
+		await expect(response.text()).resolves.toEqual('hi')
 		expect(response.status).toBe(200)
 	})
 
@@ -404,7 +406,7 @@ describe('Web Standard - Map Response', () => {
 			createContext()
 		)
 
-		expect(await response.formData()).toBeInstanceOf(FormData)
+		await expect(response.formData()).resolves.toBeInstanceOf(FormData)
 		// ? Auto appended by Bun
 		// expect(response.headers.get('content-type')).toStartWith(
 		// 	'multipart/form-data'
@@ -417,11 +419,15 @@ describe('Web Standard - Map Response', () => {
 			.mapResponse(() => {
 				return new Response('b')
 			})
-			.get('/', () => 'a', {
-				beforeHandle() {
-					return 'a'
-				}
-			})
+			.get(
+				'/',
+				{
+					beforeHandle() {
+						return 'a'
+					}
+				},
+				() => 'a'
+			)
 
 		const response = await app.handle(req('/')).then((x) => x.text())
 
@@ -433,11 +439,15 @@ describe('Web Standard - Map Response', () => {
 			.mapResponse(() => {
 				return new Response('b')
 			})
-			.get('/', () => 'a', {
-				beforeHandle() {
-					return 'a'
-				}
-			})
+			.get(
+				'/',
+				{
+					beforeHandle() {
+						return 'a'
+					}
+				},
+				() => 'a'
+			)
 
 		const response = await app.handle(req('/')).then((x) => x.text())
 
@@ -472,7 +482,7 @@ describe('Web Standard - Map Response (untouched set fast path)', () => {
 		const response = mapResponse('Shiroko', untouched())
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toBe('Shiroko')
+		await expect(response.text()).resolves.toBe('Shiroko')
 		expect(response.status).toBe(200)
 	})
 
@@ -480,7 +490,7 @@ describe('Web Standard - Map Response (untouched set fast path)', () => {
 		const response = mapResponse({ name: 'Shiroko' }, untouched())
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json()).toEqual({ name: 'Shiroko' })
+		await expect(response.json()).resolves.toEqual({ name: 'Shiroko' })
 		expect(response.status).toBe(200)
 	})
 
@@ -489,7 +499,7 @@ describe('Web Standard - Map Response (untouched set fast path)', () => {
 		const response = mapResponse(status(418, 'teapot'), set)
 
 		expect(response.status).toBe(418)
-		expect(await response.text()).toBe('teapot')
+		await expect(response.text()).resolves.toBe('teapot')
 		expect(set.status).toBe(418)
 	})
 
@@ -501,7 +511,7 @@ describe('Web Standard - Map Response (untouched set fast path)', () => {
 		)
 
 		expect(response.status).toBe(418)
-		expect(await response.text()).toBe('teapot')
+		await expect(response.text()).resolves.toBe('teapot')
 		expect(set.status).toBe(418)
 	})
 
@@ -526,7 +536,7 @@ describe('Web Standard - Map Response (untouched set fast path)', () => {
 		)
 
 		expect(response.headers.get('transfer-encoding')).toBe('chunked')
-		expect(await response.text()).toBe('ab')
+		await expect(response.text()).resolves.toBe('ab')
 		// stream handling still flows through the set for trace/afterResponse
 		expect(set.headers['transfer-encoding']).toBe('chunked')
 	})
@@ -538,7 +548,7 @@ describe('Web Standard - Map Response (untouched set fast path)', () => {
 		const response = mapResponse('Shiroko', set)
 
 		expect(response.headers.get('x-default')).toBe('1')
-		expect(await response.text()).toBe('Shiroko')
+		await expect(response.text()).resolves.toBe('Shiroko')
 	})
 
 	it('write back set.status from a sync handler returning Promise<status()>', async () => {
@@ -553,7 +563,7 @@ describe('Web Standard - Map Response (untouched set fast path)', () => {
 		const response = await app.handle(req('/'))
 
 		expect(response.status).toBe(418)
-		expect(await response.text()).toBe('teapot')
+		await expect(response.text()).resolves.toBe('teapot')
 
 		await Bun.sleep(10)
 		expect(observed).toBe(418)

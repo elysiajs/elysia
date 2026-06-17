@@ -16,23 +16,37 @@ const scenarios: Record<string, () => Promise<Response>> = {
 	// default → should be minimal in production
 	default: () =>
 		new Elysia()
-			.post('/', ({ body }) => body, { body: t.Object({ x: t.Number() }) })
+			.post(
+				'/',
+				{ body: t.Object({ x: t.Number() }) },
+				({ body }) => body
+			)
 			.handle(post(bad)),
 
 	// allowUnsafe → full detail even in production
 	allowUnsafe: () =>
 		new Elysia({ allowUnsafeValidationDetails: true })
-			.post('/', ({ body }) => body, { body: t.Object({ x: t.Number() }) })
+			.post(
+				'/',
+				{ body: t.Object({ x: t.Number() }) },
+				({ body }) => body
+			)
 			.handle(post(bad)),
 
 	// custom message via validationDetail → message shown, no schema leak
 	validationDetailMessage: () =>
 		new Elysia()
-			.post('/', () => 'ok', {
-				body: t.Object({
-					x: t.Number({ error: validationDetail('x must be a number') })
-				})
-			})
+			.post(
+				'/',
+				{
+					body: t.Object({
+						x: t.Number({
+							error: validationDetail('x must be a number')
+						})
+					})
+				},
+				() => 'ok'
+			)
 			.handle(post(bad)),
 
 	// error.detail() in an error hook → minimal in production
@@ -42,9 +56,15 @@ const scenarios: Record<string, () => Promise<Response>> = {
 				if (error instanceof ValidationError)
 					return error.detail(error.message)
 			})
-			.post('/', () => 'ok', {
-				body: t.Object({ x: t.Number({ error: 'x must be a number' }) })
-			})
+			.post(
+				'/',
+				{
+					body: t.Object({
+						x: t.Number({ error: 'x must be a number' })
+					})
+				},
+				() => 'ok'
+			)
 			.handle(post(bad)),
 
 	// error.detail() with allowUnsafe → full even in production
@@ -54,7 +74,7 @@ const scenarios: Record<string, () => Promise<Response>> = {
 				if (error instanceof ValidationError)
 					return error.detail(error.message)
 			})
-			.post('/', () => 'ok', { body: t.Object({ x: t.Number() }) })
+			.post('/', { body: t.Object({ x: t.Number() }) }, () => 'ok')
 			.handle(post(bad))
 }
 

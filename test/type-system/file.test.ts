@@ -24,11 +24,15 @@ describe('File type detector', () => {
 			}
 		])
 
-		const app = new Elysia().post('/', () => 'ok', {
-			body: t.Object({
-				file: t.File({ type: 'image/jpeg' })
-			})
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({
+					file: t.File({ type: 'image/jpeg' })
+				})
+			},
+			() => 'ok'
+		)
 
 		const { request } = upload('/', { file: 'millenium.jpg' })
 		const status = await app.handle(request).then((x) => x.status)
@@ -40,11 +44,15 @@ describe('File type detector', () => {
 	it('accept detector returning a mime string', async () => {
 		setFileTypeDetector(() => 'image/jpeg')
 
-		const app = new Elysia().post('/', () => 'ok', {
-			body: t.Object({
-				file: t.File({ type: 'image/jpeg' })
-			})
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({
+					file: t.File({ type: 'image/jpeg' })
+				})
+			},
+			() => 'ok'
+		)
 
 		const { request } = upload('/', { file: 'millenium.jpg' })
 		const status = await app.handle(request).then((x) => x.status)
@@ -55,11 +63,15 @@ describe('File type detector', () => {
 	it('reject when detected content does not match the reported mime', async () => {
 		setFileTypeDetector(() => 'text/plain')
 
-		const app = new Elysia().post('/', () => 'ok', {
-			body: t.Object({
-				file: t.File({ type: 'image/jpeg' })
-			})
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({
+					file: t.File({ type: 'image/jpeg' })
+				})
+			},
+			() => 'ok'
+		)
 
 		// reported mime is image/jpeg (from extension), content says otherwise
 		const { request } = upload('/', { file: 'millenium.jpg' })
@@ -71,11 +83,15 @@ describe('File type detector', () => {
 	it('reject when no detector can identify the file content', async () => {
 		setFileTypeDetector(() => undefined)
 
-		const app = new Elysia().post('/', () => 'ok', {
-			body: t.Object({
-				file: t.File({ type: 'image/jpeg' })
-			})
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({
+					file: t.File({ type: 'image/jpeg' })
+				})
+			},
+			() => 'ok'
+		)
 
 		const { request } = upload('/', { file: 'millenium.jpg' })
 		const status = await app.handle(request).then((x) => x.status)
@@ -86,11 +102,15 @@ describe('File type detector', () => {
 	it('apply detector registered after the route is compiled', async () => {
 		setFileTypeDetector(fileTypeFromBlob)
 
-		const app = new Elysia().post('/', () => 'ok', {
-			body: t.Object({
-				file: t.File({ type: 'image/jpeg' })
-			})
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({
+					file: t.File({ type: 'image/jpeg' })
+				})
+			},
+			() => 'ok'
+		)
 
 		// warm up the compiled route with the current detector
 		{
@@ -118,29 +138,33 @@ describe('fileType', () => {
 	it('validate file content against expected type', async () => {
 		setFileTypeDetector(fileTypeFromBlob)
 
-		expect(await fileType(jpg, 'image/jpeg')).toBe(true)
-		expect(await fileType(jpg, 'image')).toBe(true)
-		expect(await fileType(jpg, 'image/*')).toBe(true)
-		expect(await fileType(jpg, 'image/png')).toBe(false)
-		expect(await fileType(jpg, ['image/png', 'image/jpeg'])).toBe(true)
-		expect(await fileType(webp, ['image/png', 'image/jpeg'])).toBe(false)
+		await expect(fileType(jpg, 'image/jpeg')).resolves.toBe(true)
+		await expect(fileType(jpg, 'image')).resolves.toBe(true)
+		await expect(fileType(jpg, 'image/*')).resolves.toBe(true)
+		await expect(fileType(jpg, 'image/png')).resolves.toBe(false)
+		await expect(fileType(jpg, ['image/png', 'image/jpeg'])).resolves.toBe(
+			true
+		)
+		await expect(fileType(webp, ['image/png', 'image/jpeg'])).resolves.toBe(
+			false
+		)
 	})
 
 	it('reject spoofed file content', async () => {
 		setFileTypeDetector(fileTypeFromBlob)
 
 		// fake.jpg reports image/jpeg from its extension but contains text
-		expect(await fileType(fake, 'image/jpeg')).toBe(false)
+		await expect(fileType(fake, 'image/jpeg')).resolves.toBe(false)
 	})
 
 	it('handle array of files', async () => {
 		setFileTypeDetector(fileTypeFromBlob)
 
-		expect(await fileType([jpg, webp], 'image')).toBe(true)
-		expect(await fileType([jpg, fake], 'image')).toBe(false)
+		await expect(fileType([jpg, webp], 'image')).resolves.toBe(true)
+		await expect(fileType([jpg, fake], 'image')).resolves.toBe(false)
 	})
 
 	it('return false for missing file', async () => {
-		expect(await fileType(undefined, 'image')).toBe(false)
+		await expect(fileType(undefined, 'image')).resolves.toBe(false)
 	})
 })

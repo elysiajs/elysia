@@ -33,6 +33,10 @@ import { expectTypeOf } from 'expect-type'
 			})
 			.post(
 				'/',
+				{
+					body: t.Object({ name: t.String() }),
+					response: t.Object({ name: t.String() })
+				},
 				({ body }) => {
 					expectTypeOf<typeof body>().toEqualTypeOf<{
 						id: number
@@ -43,10 +47,6 @@ import { expectTypeOf } from 'expect-type'
 						success: true,
 						...body
 					}
-				},
-				{
-					body: t.Object({ name: t.String() }),
-					response: t.Object({ name: t.String() })
 				}
 			)
 	}
@@ -65,6 +65,10 @@ import { expectTypeOf } from 'expect-type'
 			})
 			.post(
 				'/',
+				{
+					body: t.Object({ name: t.String() }),
+					response: t.Object({ name: t.String() })
+				},
 				({ body }) => {
 					expectTypeOf<typeof body>().toEqualTypeOf<{
 						id: number
@@ -76,10 +80,6 @@ import { expectTypeOf } from 'expect-type'
 						success: true,
 						...body
 					}
-				},
-				{
-					body: t.Object({ name: t.String() }),
-					response: t.Object({ name: t.String() })
 				}
 			)
 	}
@@ -99,6 +99,10 @@ import { expectTypeOf } from 'expect-type'
 			})
 			.post(
 				'/',
+				{
+					body: t.Object({ name: t.Literal('saltyaom') }),
+					response: t.Object({ id: t.Number() })
+				},
 				({ body }) => {
 					expectTypeOf<typeof body>().toEqualTypeOf<{
 						id: number
@@ -109,10 +113,6 @@ import { expectTypeOf } from 'expect-type'
 						success: true,
 						...body
 					}
-				},
-				{
-					body: t.Object({ name: t.Literal('saltyaom') }),
-					response: t.Object({ id: t.Number() })
 				}
 			)
 	}
@@ -147,6 +147,10 @@ import { expectTypeOf } from 'expect-type'
 			})
 			.post(
 				'/',
+				{
+					body: t.Object({ name: t.String() }),
+					response: t.Object({ name: t.String() })
+				},
 				({ body }) => {
 					expectTypeOf<typeof body>().toEqualTypeOf<{
 						id: number
@@ -157,10 +161,6 @@ import { expectTypeOf } from 'expect-type'
 						success: true,
 						...body
 					}
-				},
-				{
-					body: t.Object({ name: t.String() }),
-					response: t.Object({ name: t.String() })
 				}
 			)
 	}
@@ -179,6 +179,10 @@ import { expectTypeOf } from 'expect-type'
 			})
 			.post(
 				'/',
+				{
+					body: t.Object({ name: t.String() }),
+					response: t.Object({ name: t.String() })
+				},
 				({ body }) => {
 					expectTypeOf<typeof body>().toEqualTypeOf<{
 						id: number
@@ -190,10 +194,6 @@ import { expectTypeOf } from 'expect-type'
 						success: true,
 						...body
 					}
-				},
-				{
-					body: t.Object({ name: t.String() }),
-					response: t.Object({ name: t.String() })
 				}
 			)
 	}
@@ -214,6 +214,10 @@ import { expectTypeOf } from 'expect-type'
 			})
 			.post(
 				'/',
+				{
+					body: t.Object({ name: t.Literal('saltyaom') }),
+					response: t.Object({ id: t.Number() })
+				},
 				({ body }) => {
 					expectTypeOf<typeof body>().toEqualTypeOf<{
 						name: 'saltyaom'
@@ -225,15 +229,15 @@ import { expectTypeOf } from 'expect-type'
 						success: true,
 						...body
 					}
-				},
-				{
-					body: t.Object({ name: t.Literal('saltyaom') }),
-					response: t.Object({ id: t.Number() })
 				}
 			)
 
 		const main = new Elysia().use(local).post(
 			'/',
+			{
+				body: t.Object({ name: t.Literal('saltyaom') }),
+				response: t.Object({ id: t.Number() })
+			},
 			({ body }) => {
 				expectTypeOf<typeof body>().toEqualTypeOf<{
 					name: 'saltyaom'
@@ -243,10 +247,6 @@ import { expectTypeOf } from 'expect-type'
 					id: 1,
 					name: body.name
 				}
-			},
-			{
-				body: t.Object({ name: t.Literal('saltyaom') }),
-				response: t.Object({ id: t.Number() })
 			}
 		)
 	}
@@ -286,6 +286,10 @@ import { expectTypeOf } from 'expect-type'
 			})
 			.post(
 				'/',
+				{
+					body: t.Object({ name: t.String() }),
+					response: t.Object({ name: t.String() })
+				},
 				({ body }) => {
 					expectTypeOf<typeof body>().toEqualTypeOf<{
 						id: number
@@ -296,10 +300,6 @@ import { expectTypeOf } from 'expect-type'
 						success: true,
 						...body
 					}
-				},
-				{
-					body: t.Object({ name: t.String() }),
-					response: t.Object({ name: t.String() })
 				}
 			)
 	}
@@ -320,6 +320,10 @@ import { expectTypeOf } from 'expect-type'
 			})
 			.post(
 				'/',
+				{
+					body: t.Object({ name: t.String() }),
+					response: t.Object({ name: t.String() })
+				},
 				({ body }) => {
 					expectTypeOf<typeof body>().toEqualTypeOf<{
 						id: number
@@ -331,10 +335,6 @@ import { expectTypeOf } from 'expect-type'
 						success: true,
 						...body
 					}
-				},
-				{
-					body: t.Object({ name: t.String() }),
-					response: t.Object({ name: t.String() })
 				}
 			)
 	}
@@ -356,6 +356,10 @@ import { expectTypeOf } from 'expect-type'
 			})
 			.post(
 				'/',
+				{
+					body: t.Object({ name: t.Literal('saltyaom') }),
+					response: t.Object({ id: t.Number() })
+				},
 				({ body }) => {
 					expectTypeOf<typeof body>().toEqualTypeOf<{
 						id: number
@@ -366,10 +370,6 @@ import { expectTypeOf } from 'expect-type'
 						success: true,
 						...body
 					}
-				},
-				{
-					body: t.Object({ name: t.Literal('saltyaom') }),
-					response: t.Object({ id: t.Number() })
 				}
 			)
 	}
@@ -406,6 +406,10 @@ import { expectTypeOf } from 'expect-type'
 			})
 			.post(
 				'/',
+				{
+					body: t.Object({ name: t.String() }),
+					response: t.Object({ name: t.String() })
+				},
 				({ body }) => {
 					expectTypeOf<typeof body>().toEqualTypeOf<{
 						id: number
@@ -416,10 +420,6 @@ import { expectTypeOf } from 'expect-type'
 						success: true,
 						...body
 					}
-				},
-				{
-					body: t.Object({ name: t.String() }),
-					response: t.Object({ name: t.String() })
 				}
 			)
 	}
@@ -439,6 +439,10 @@ import { expectTypeOf } from 'expect-type'
 			})
 			.post(
 				'/',
+				{
+					body: t.Object({ name: t.String() }),
+					response: t.Object({ name: t.String() })
+				},
 				({ body }) => {
 					expectTypeOf<typeof body>().toEqualTypeOf<{
 						id: number
@@ -450,10 +454,6 @@ import { expectTypeOf } from 'expect-type'
 						success: true,
 						...body
 					}
-				},
-				{
-					body: t.Object({ name: t.String() }),
-					response: t.Object({ name: t.String() })
 				}
 			)
 	}
@@ -476,6 +476,10 @@ import { expectTypeOf } from 'expect-type'
 			})
 			.post(
 				'/',
+				{
+					body: t.Object({ name: t.Literal('saltyaom') }),
+					response: t.Object({ id: t.Number() })
+				},
 				({ body }) => {
 					expectTypeOf<typeof body>().toEqualTypeOf<{
 						id: number
@@ -487,15 +491,15 @@ import { expectTypeOf } from 'expect-type'
 						success: true,
 						...body
 					}
-				},
-				{
-					body: t.Object({ name: t.Literal('saltyaom') }),
-					response: t.Object({ id: t.Number() })
 				}
 			)
 
 		const parent = new Elysia().use(local).post(
 			'/',
+			{
+				body: t.Object({ name: t.Literal('saltyaom') }),
+				response: t.Object({ id: t.Number() })
+			},
 			({ body }) => {
 				expectTypeOf<typeof body>().toEqualTypeOf<{
 					id: number
@@ -508,15 +512,15 @@ import { expectTypeOf } from 'expect-type'
 					id: 1,
 					name: body.name
 				}
-			},
-			{
-				body: t.Object({ name: t.Literal('saltyaom') }),
-				response: t.Object({ id: t.Number() })
 			}
 		)
 
 		const main = new Elysia().use(parent).post(
 			'/',
+			{
+				body: t.Object({ name: t.Literal('saltyaom') }),
+				response: t.Object({ id: t.Number() })
+			},
 			({ body }) => {
 				expectTypeOf<typeof body>().toEqualTypeOf<{
 					name: 'saltyaom'
@@ -526,15 +530,15 @@ import { expectTypeOf } from 'expect-type'
 					id: 1,
 					name: body.name
 				}
-			},
-			{
-				body: t.Object({ name: t.Literal('saltyaom') }),
-				response: t.Object({ id: t.Number() })
 			}
 		)
 
 		const propagated = new Elysia().use(parent.as('plugin')).post(
 			'/',
+			{
+				body: t.Object({ name: t.Literal('saltyaom') }),
+				response: t.Object({ id: t.Number() })
+			},
 			({ body }) => {
 				expectTypeOf<typeof body>().toEqualTypeOf<{
 					name: 'saltyaom'
@@ -547,10 +551,6 @@ import { expectTypeOf } from 'expect-type'
 					id: 1,
 					name: body.name
 				}
-			},
-			{
-				body: t.Object({ name: t.Literal('saltyaom') }),
-				response: t.Object({ id: t.Number() })
 			}
 		)
 	}
@@ -590,6 +590,10 @@ import { expectTypeOf } from 'expect-type'
 			})
 			.post(
 				'/',
+				{
+					body: t.Object({ name: t.String() }),
+					response: t.Object({ name: t.String() })
+				},
 				({ body }) => {
 					expectTypeOf<typeof body>().toEqualTypeOf<{
 						id: number
@@ -600,10 +604,6 @@ import { expectTypeOf } from 'expect-type'
 						success: true,
 						...body
 					}
-				},
-				{
-					body: t.Object({ name: t.String() }),
-					response: t.Object({ name: t.String() })
 				}
 			)
 	}
@@ -624,6 +624,10 @@ import { expectTypeOf } from 'expect-type'
 			})
 			.post(
 				'/',
+				{
+					body: t.Object({ name: t.String() }),
+					response: t.Object({ name: t.String() })
+				},
 				({ body }) => {
 					expectTypeOf<typeof body>().toEqualTypeOf<{
 						id: number
@@ -635,10 +639,6 @@ import { expectTypeOf } from 'expect-type'
 						success: true,
 						...body
 					}
-				},
-				{
-					body: t.Object({ name: t.String() }),
-					response: t.Object({ name: t.String() })
 				}
 			)
 	}
@@ -660,6 +660,10 @@ import { expectTypeOf } from 'expect-type'
 			})
 			.post(
 				'/',
+				{
+					body: t.Object({ name: t.Literal('saltyaom') }),
+					response: t.Object({ id: t.Number() })
+				},
 				({ body }) => {
 					expectTypeOf<typeof body>().toEqualTypeOf<{
 						id: number
@@ -670,10 +674,6 @@ import { expectTypeOf } from 'expect-type'
 						success: true,
 						...body
 					}
-				},
-				{
-					body: t.Object({ name: t.Literal('saltyaom') }),
-					response: t.Object({ id: t.Number() })
 				}
 			)
 	}
@@ -710,6 +710,10 @@ import { expectTypeOf } from 'expect-type'
 			})
 			.post(
 				'/',
+				{
+					body: t.Object({ name: t.String() }),
+					response: t.Object({ name: t.String() })
+				},
 				({ body }) => {
 					expectTypeOf<typeof body>().toEqualTypeOf<{
 						id: number
@@ -720,10 +724,6 @@ import { expectTypeOf } from 'expect-type'
 						success: true,
 						...body
 					}
-				},
-				{
-					body: t.Object({ name: t.String() }),
-					response: t.Object({ name: t.String() })
 				}
 			)
 	}
@@ -744,6 +744,10 @@ import { expectTypeOf } from 'expect-type'
 			})
 			.post(
 				'/',
+				{
+					body: t.Object({ name: t.String() }),
+					response: t.Object({ name: t.String() })
+				},
 				({ body }) => {
 					expectTypeOf<typeof body>().toEqualTypeOf<{
 						id: number
@@ -755,10 +759,6 @@ import { expectTypeOf } from 'expect-type'
 						success: true,
 						...body
 					}
-				},
-				{
-					body: t.Object({ name: t.String() }),
-					response: t.Object({ name: t.String() })
 				}
 			)
 	}
@@ -781,6 +781,10 @@ import { expectTypeOf } from 'expect-type'
 			})
 			.post(
 				'/',
+				{
+					body: t.Object({ name: t.Literal('saltyaom') }),
+					response: t.Object({ id: t.Number() })
+				},
 				({ body }) => {
 					expectTypeOf<typeof body>().toEqualTypeOf<{
 						id: number
@@ -792,15 +796,15 @@ import { expectTypeOf } from 'expect-type'
 						success: true,
 						...body
 					}
-				},
-				{
-					body: t.Object({ name: t.Literal('saltyaom') }),
-					response: t.Object({ id: t.Number() })
 				}
 			)
 
 		const parent = new Elysia().use(local).post(
 			'/',
+			{
+				body: t.Object({ name: t.Literal('saltyaom') }),
+				response: t.Object({ id: t.Number() })
+			},
 			({ body }) => {
 				expectTypeOf<typeof body>().toEqualTypeOf<{
 					id: number
@@ -813,15 +817,15 @@ import { expectTypeOf } from 'expect-type'
 					id: 1,
 					name: body.name
 				}
-			},
-			{
-				body: t.Object({ name: t.Literal('saltyaom') }),
-				response: t.Object({ id: t.Number() })
 			}
 		)
 
 		const main = new Elysia().use(parent).post(
 			'/',
+			{
+				body: t.Object({ name: t.Literal('saltyaom') }),
+				response: t.Object({ id: t.Number() })
+			},
 			({ body }) => {
 				expectTypeOf<typeof body>().toEqualTypeOf<{
 					name: 'saltyaom'
@@ -834,10 +838,6 @@ import { expectTypeOf } from 'expect-type'
 					id: 1,
 					name: body.name
 				}
-			},
-			{
-				body: t.Object({ name: t.Literal('saltyaom') }),
-				response: t.Object({ id: t.Number() })
 			}
 		)
 	}
@@ -859,6 +859,14 @@ import { expectTypeOf } from 'expect-type'
 			})
 			.post(
 				'/:family',
+				{
+					body: t.Object({ name: t.String() }),
+					headers: t.Object({ name: t.String() }),
+					query: t.Object({ name: t.String() }),
+					params: t.Object({ name: t.String() }),
+					response: t.Object({ name: t.String() }),
+					cookie: t.Object({ name: t.String() })
+				},
 				({ body, query, params, headers, cookie }) => {
 					expectTypeOf<typeof body>().toEqualTypeOf<{
 						family: string
@@ -888,19 +896,19 @@ import { expectTypeOf } from 'expect-type'
 					>()
 
 					return body
-				},
-				{
-					body: t.Object({ name: t.String() }),
-					headers: t.Object({ name: t.String() }),
-					query: t.Object({ name: t.String() }),
-					params: t.Object({ name: t.String() }),
-					response: t.Object({ name: t.String() }),
-					cookie: t.Object({ name: t.String() })
 				}
 			)
 
 		const parent = new Elysia().use(local).post(
 			'/family/:family/:name',
+			{
+				body: t.Object({ name: t.String() }),
+				headers: t.Object({ name: t.String() }),
+				query: t.Object({ name: t.String() }),
+				params: t.Object({ name: t.String() }),
+				response: t.Object({ name: t.String() }),
+				cookie: t.Object({ name: t.String() })
+			},
 			({ body, query, params, headers, cookie }) => {
 				expectTypeOf<typeof body>().toEqualTypeOf<{
 					name: string
@@ -925,19 +933,19 @@ import { expectTypeOf } from 'expect-type'
 				>()
 
 				return body
-			},
-			{
-				body: t.Object({ name: t.String() }),
-				headers: t.Object({ name: t.String() }),
-				query: t.Object({ name: t.String() }),
-				params: t.Object({ name: t.String() }),
-				response: t.Object({ name: t.String() }),
-				cookie: t.Object({ name: t.String() })
 			}
 		)
 
 		const app = new Elysia().use(parent).post(
 			'/:family/:name',
+			{
+				body: t.Object({ name: t.String() }),
+				headers: t.Object({ name: t.String() }),
+				query: t.Object({ name: t.String() }),
+				params: t.Object({ name: t.String() }),
+				response: t.Object({ name: t.String() }),
+				cookie: t.Object({ name: t.String() })
+			},
 			({ body, query, params, headers, cookie }) => {
 				expectTypeOf<typeof body>().toEqualTypeOf<{
 					name: string
@@ -962,14 +970,6 @@ import { expectTypeOf } from 'expect-type'
 				>()
 
 				return body
-			},
-			{
-				body: t.Object({ name: t.String() }),
-				headers: t.Object({ name: t.String() }),
-				query: t.Object({ name: t.String() }),
-				params: t.Object({ name: t.String() }),
-				response: t.Object({ name: t.String() }),
-				cookie: t.Object({ name: t.String() })
 			}
 		)
 	}
@@ -992,6 +992,14 @@ import { expectTypeOf } from 'expect-type'
 			})
 			.post(
 				'/:family',
+				{
+					body: t.Object({ name: t.String() }),
+					headers: t.Object({ name: t.String() }),
+					query: t.Object({ name: t.String() }),
+					params: t.Object({ name: t.String() }),
+					response: t.Object({ name: t.String() }),
+					cookie: t.Object({ name: t.String() })
+				},
 				({ body, query, params, headers, cookie }) => {
 					expectTypeOf<typeof body>().toEqualTypeOf<{
 						family: string
@@ -1021,19 +1029,19 @@ import { expectTypeOf } from 'expect-type'
 					>()
 
 					return body
-				},
-				{
-					body: t.Object({ name: t.String() }),
-					headers: t.Object({ name: t.String() }),
-					query: t.Object({ name: t.String() }),
-					params: t.Object({ name: t.String() }),
-					response: t.Object({ name: t.String() }),
-					cookie: t.Object({ name: t.String() })
 				}
 			)
 
 		const parent = new Elysia().use(local).post(
 			'/family/:family/:name',
+			{
+				body: t.Object({ name: t.String() }),
+				headers: t.Object({ name: t.String() }),
+				query: t.Object({ name: t.String() }),
+				params: t.Object({ name: t.String() }),
+				response: t.Object({ name: t.String() }),
+				cookie: t.Object({ name: t.String() })
+			},
 			({ body, query, params, headers, cookie }) => {
 				expectTypeOf<typeof body>().toEqualTypeOf<{
 					family: string
@@ -1063,7 +1071,11 @@ import { expectTypeOf } from 'expect-type'
 				>()
 
 				return body
-			},
+			}
+		)
+
+		const app = new Elysia().use(parent).post(
+			'/:family/:name',
 			{
 				body: t.Object({ name: t.String() }),
 				headers: t.Object({ name: t.String() }),
@@ -1071,11 +1083,7 @@ import { expectTypeOf } from 'expect-type'
 				params: t.Object({ name: t.String() }),
 				response: t.Object({ name: t.String() }),
 				cookie: t.Object({ name: t.String() })
-			}
-		)
-
-		const app = new Elysia().use(parent).post(
-			'/:family/:name',
+			},
 			({ body, query, params, headers, cookie }) => {
 				expectTypeOf<typeof body>().toEqualTypeOf<{
 					name: string
@@ -1100,14 +1108,6 @@ import { expectTypeOf } from 'expect-type'
 				>()
 
 				return body
-			},
-			{
-				body: t.Object({ name: t.String() }),
-				headers: t.Object({ name: t.String() }),
-				query: t.Object({ name: t.String() }),
-				params: t.Object({ name: t.String() }),
-				response: t.Object({ name: t.String() }),
-				cookie: t.Object({ name: t.String() })
 			}
 		)
 	}
@@ -1130,6 +1130,14 @@ import { expectTypeOf } from 'expect-type'
 			})
 			.post(
 				'/:family',
+				{
+					body: t.Object({ name: t.String() }),
+					headers: t.Object({ name: t.String() }),
+					query: t.Object({ name: t.String() }),
+					params: t.Object({ name: t.String() }),
+					response: t.Object({ name: t.String() }),
+					cookie: t.Object({ name: t.String() })
+				},
 				({ body, query, params, headers, cookie }) => {
 					expectTypeOf<typeof body>().toEqualTypeOf<{
 						family: string
@@ -1159,19 +1167,19 @@ import { expectTypeOf } from 'expect-type'
 					>()
 
 					return body
-				},
-				{
-					body: t.Object({ name: t.String() }),
-					headers: t.Object({ name: t.String() }),
-					query: t.Object({ name: t.String() }),
-					params: t.Object({ name: t.String() }),
-					response: t.Object({ name: t.String() }),
-					cookie: t.Object({ name: t.String() })
 				}
 			)
 
 		const parent = new Elysia().use(local).post(
 			'/family/:family/:name',
+			{
+				body: t.Object({ name: t.String() }),
+				headers: t.Object({ name: t.String() }),
+				query: t.Object({ name: t.String() }),
+				params: t.Object({ name: t.String() }),
+				response: t.Object({ name: t.String() }),
+				cookie: t.Object({ name: t.String() })
+			},
 			({ body, query, params, headers, cookie }) => {
 				expectTypeOf<typeof body>().toEqualTypeOf<{
 					family: string
@@ -1201,19 +1209,19 @@ import { expectTypeOf } from 'expect-type'
 				>()
 
 				return body
-			},
-			{
-				body: t.Object({ name: t.String() }),
-				headers: t.Object({ name: t.String() }),
-				query: t.Object({ name: t.String() }),
-				params: t.Object({ name: t.String() }),
-				response: t.Object({ name: t.String() }),
-				cookie: t.Object({ name: t.String() })
 			}
 		)
 
 		const app = new Elysia().use(parent).post(
 			'/:family/:name',
+			{
+				body: t.Object({ name: t.String() }),
+				headers: t.Object({ name: t.String() }),
+				query: t.Object({ name: t.String() }),
+				params: t.Object({ name: t.String() }),
+				response: t.Object({ name: t.String() }),
+				cookie: t.Object({ name: t.String() })
+			},
 			({ body, query, params, headers, cookie }) => {
 				expectTypeOf<typeof body>().toEqualTypeOf<{
 					family: string
@@ -1243,14 +1251,6 @@ import { expectTypeOf } from 'expect-type'
 				>()
 
 				return body
-			},
-			{
-				body: t.Object({ name: t.String() }),
-				headers: t.Object({ name: t.String() }),
-				query: t.Object({ name: t.String() }),
-				params: t.Object({ name: t.String() }),
-				response: t.Object({ name: t.String() }),
-				cookie: t.Object({ name: t.String() })
 			}
 		)
 	}

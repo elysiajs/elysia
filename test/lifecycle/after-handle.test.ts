@@ -13,11 +13,15 @@ describe('After Handle', () => {
 	})
 
 	it('work local', async () => {
-		const app = new Elysia().get('/', () => 'NOOP', {
-			afterHandle() {
-				return 'A'
-			}
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				afterHandle() {
+					return 'A'
+				}
+			},
+			() => 'NOOP'
+		)
 
 		const res = await app.handle(req('/')).then((x) => x.text())
 
@@ -39,7 +43,7 @@ describe('After Handle', () => {
 
 		const res = await app.handle(req('/id/1'))
 
-		expect(await res.text()).toBe('number')
+		await expect(res.text()).resolves.toBe('number')
 	})
 
 	it('not inherits plugin on local', async () => {
@@ -54,7 +58,7 @@ describe('After Handle', () => {
 
 		const res = await app.handle(req('/id/1'))
 
-		expect(await res.text()).toBe('string')
+		await expect(res.text()).resolves.toBe('string')
 	})
 
 	it('register using on', async () => {
@@ -66,7 +70,7 @@ describe('After Handle', () => {
 
 		const res = await app.handle(req('/id/1'))
 
-		expect(await res.text()).toBe('number')
+		await expect(res.text()).resolves.toBe('number')
 	})
 
 	it('after handle in order', async () => {
@@ -87,14 +91,16 @@ describe('After Handle', () => {
 	})
 
 	it('accept responseValue', async () => {
-		const app = new Elysia().get('/', () => 'NOOP', {
-			afterHandle({ responseValue }) {
-				return responseValue
+		const app = new Elysia().get(
+			'/',
+			{
+				afterHandle({ responseValue }) {
+					return responseValue
+				},
+				mapResponse() {}
 			},
-			mapResponse() {
-
-			}
-		})
+			() => 'NOOP'
+		)
 
 		const res = await app.handle(req('/')).then((x) => x.text())
 

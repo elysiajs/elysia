@@ -357,12 +357,12 @@ describe('Bun router', () => {
 		await new Promise((r) => setTimeout(r, 50))
 
 		const base = `http://localhost:${app.server!.port}`
-		expect(await fetch(`${base}/static`).then((x) => x.text())).toBe(
-			'static-value'
-		)
-		expect(await fetch(`${base}/dyn/1`).then((x) => x.text())).toBe(
-			'dyn:1'
-		)
+		await expect(
+			fetch(`${base}/static`).then((x) => x.text())
+		).resolves.toBe('static-value')
+		await expect(
+			fetch(`${base}/dyn/1`).then((x) => x.text())
+		).resolves.toBe('dyn:1')
 
 		app.stop()
 	})
@@ -393,7 +393,7 @@ describe('Bun router', () => {
 		// native hit: no user code runs, the hook must not fire
 		const hit = await fetch(`${base}/health`)
 		expect(hit.status).toBe(200)
-		expect(await hit.text()).toBe('ok')
+		await expect(hit.text()).resolves.toBe('ok')
 		expect(fired).toBe(0)
 
 		// miss falls through to the JS fetch handler where NotFound fires
@@ -411,7 +411,7 @@ describe('Bun router', () => {
 	it('still validates schema-carrying static-value routes with an error hook', async () => {
 		const app = new Elysia()
 			.error(() => {})
-			.get('/q', 'ok', { query: t.Object({ id: t.String() }) })
+			.get('/q', { query: t.Object({ id: t.String() }) }, 'ok')
 			.listen(0)
 
 		await new Promise((r) => setTimeout(r, 50))
@@ -421,7 +421,7 @@ describe('Bun router', () => {
 
 		const valid = await fetch(`${base}/q?id=1`)
 		expect(valid.status).toBe(200)
-		expect(await valid.text()).toBe('ok')
+		await expect(valid.text()).resolves.toBe('ok')
 
 		app.stop()
 	})
@@ -456,9 +456,7 @@ describe('Bun router', () => {
 		const gate = new Promise<void>((r) => {
 			release = r
 		})
-		const plugin = gate.then(() =>
-			new Elysia().get('/late', 'late')
-		)
+		const plugin = gate.then(() => new Elysia().get('/late', 'late'))
 
 		const app = new Elysia().use(plugin).get('/', 'Static').listen(0)
 
@@ -474,7 +472,7 @@ describe('Bun router', () => {
 		// pre-drain request is served on demand via the lazy arrow
 		const pre = await fetch(`${base}/`)
 		expect(pre.status).toBe(200)
-		expect(await pre.text()).toBe('Static')
+		await expect(pre.text()).resolves.toBe('Static')
 
 		release()
 		await app.modules
@@ -483,9 +481,11 @@ describe('Bun router', () => {
 		// post-drain rebuild picked up the async plugin's route
 		const late = await fetch(`${base}/late`)
 		expect(late.status).toBe(200)
-		expect(await late.text()).toBe('late')
+		await expect(late.text()).resolves.toBe('late')
 
-		expect(await fetch(`${base}/`).then((x) => x.text())).toBe('Static')
+		await expect(fetch(`${base}/`).then((x) => x.text())).resolves.toBe(
+			'Static'
+		)
 
 		app.stop()
 	})

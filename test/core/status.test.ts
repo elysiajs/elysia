@@ -10,7 +10,7 @@ describe('Status', () => {
 		const response = await app.handle(req('/'))
 
 		expect(response.status).toBe(201)
-		expect(await response.text()).toBe('Created')
+		await expect(response.text()).resolves.toBe('Created')
 	})
 
 	// Bun support 101 or >= 200 status
@@ -20,7 +20,7 @@ describe('Status', () => {
 		const response = await app.handle(req('/'))
 
 		expect(response.status).toBe(101)
-		expect(await response.text()).toBe('')
+		await expect(response.text()).resolves.toBe('')
 	})
 
 	it('ignore explicit response body of 101', async () => {
@@ -29,7 +29,7 @@ describe('Status', () => {
 		const response = await app.handle(req('/'))
 
 		expect(response.status).toBe(101)
-		expect(await response.text()).toBe('')
+		await expect(response.text()).resolves.toBe('')
 	})
 
 	it('ignore response body of 204', async () => {
@@ -38,7 +38,7 @@ describe('Status', () => {
 		const response = await app.handle(req('/'))
 
 		expect(response.status).toBe(204)
-		expect(await response.text()).toBe('')
+		await expect(response.text()).resolves.toBe('')
 	})
 
 	it('ignore explicit response body of 204', async () => {
@@ -47,7 +47,7 @@ describe('Status', () => {
 		const response = await app.handle(req('/'))
 
 		expect(response.status).toBe(204)
-		expect(await response.text()).toBe('')
+		await expect(response.text()).resolves.toBe('')
 	})
 
 	it('ignore response body of 205', async () => {
@@ -56,7 +56,7 @@ describe('Status', () => {
 		const response = await app.handle(req('/'))
 
 		expect(response.status).toBe(205)
-		expect(await response.text()).toBe('')
+		await expect(response.text()).resolves.toBe('')
 	})
 
 	it('ignore explicit response body of 205', async () => {
@@ -65,7 +65,7 @@ describe('Status', () => {
 		const response = await app.handle(req('/'))
 
 		expect(response.status).toBe(205)
-		expect(await response.text()).toBe('')
+		await expect(response.text()).resolves.toBe('')
 	})
 
 	it('ignore response body of 304', async () => {
@@ -74,7 +74,7 @@ describe('Status', () => {
 		const response = await app.handle(req('/'))
 
 		expect(response.status).toBe(304)
-		expect(await response.text()).toBe('')
+		await expect(response.text()).resolves.toBe('')
 	})
 
 	it('ignore explicit response body of 304', async () => {
@@ -83,7 +83,7 @@ describe('Status', () => {
 		const response = await app.handle(req('/'))
 
 		expect(response.status).toBe(304)
-		expect(await response.text()).toBe('')
+		await expect(response.text()).resolves.toBe('')
 	})
 
 	it('ignore response body of 307', async () => {
@@ -92,7 +92,7 @@ describe('Status', () => {
 		const response = await app.handle(req('/'))
 
 		expect(response.status).toBe(307)
-		expect(await response.text()).toBe('')
+		await expect(response.text()).resolves.toBe('')
 	})
 
 	it('ignore explicit response body of 307', async () => {
@@ -101,7 +101,7 @@ describe('Status', () => {
 		const response = await app.handle(req('/'))
 
 		expect(response.status).toBe(307)
-		expect(await response.text()).toBe('')
+		await expect(response.text()).resolves.toBe('')
 	})
 
 	it('ignore response body of 308', async () => {
@@ -110,7 +110,7 @@ describe('Status', () => {
 		const response = await app.handle(req('/'))
 
 		expect(response.status).toBe(308)
-		expect(await response.text()).toBe('')
+		await expect(response.text()).resolves.toBe('')
 	})
 
 	it('ignore explicit response body of 308', async () => {
@@ -119,6 +119,6 @@ describe('Status', () => {
 		const response = await app.handle(req('/'))
 
 		expect(response.status).toBe(308)
-		expect(await response.text()).toBe('')
+		await expect(response.text()).resolves.toBe('')
 	})
 })

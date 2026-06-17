@@ -7,13 +7,17 @@ describe('Sanitize', () => {
 	it('handle single sanitize', async () => {
 		const app = new Elysia({
 			sanitize: (v) => (v === 'a' ? 'ok' : v)
-		}).post('/', ({ body }) => body, {
-			body: t.Object({
-				a: t.String(),
-				b: t.String(),
-				c: t.String()
-			})
-		})
+		}).post(
+			'/',
+			{
+				body: t.Object({
+					a: t.String(),
+					b: t.String(),
+					c: t.String()
+				})
+			},
+			({ body }) => body
+		)
 
 		const response = await app
 			.handle(
@@ -34,13 +38,17 @@ describe('Sanitize', () => {
 				(v) => (v === 'a' ? 'ok' : v),
 				(v) => (v === 'b' ? 'ok' : v)
 			]
-		}).post('/', ({ body }) => body, {
-			body: t.Object({
-				a: t.String(),
-				b: t.String(),
-				c: t.String()
-			})
-		})
+		}).post(
+			'/',
+			{
+				body: t.Object({
+					a: t.String(),
+					b: t.String(),
+					c: t.String()
+				})
+			},
+			({ body }) => body
+		)
 
 		const response = await app
 			.handle(
@@ -56,13 +64,17 @@ describe('Sanitize', () => {
 	})
 
 	it('handle sanitize in plugin from main', async () => {
-		const plugin = new Elysia().post('/', ({ body }) => body, {
-			body: t.Object({
-				a: t.String(),
-				b: t.String(),
-				c: t.String()
-			})
-		})
+		const plugin = new Elysia().post(
+			'/',
+			{
+				body: t.Object({
+					a: t.String(),
+					b: t.String(),
+					c: t.String()
+				})
+			},
+			({ body }) => body
+		)
 
 		const app = new Elysia({
 			sanitize: (v) => (v === 'a' ? 'ok' : v)
@@ -84,9 +96,13 @@ describe('Sanitize', () => {
 	it('handle top-level string', async () => {
 		const app = new Elysia({
 			sanitize: (v) => (v === 'a' ? 'ok' : v)
-		}).post('/', ({ body }) => body, {
-			body: t.String()
-		})
+		}).post(
+			'/',
+			{
+				body: t.String()
+			},
+			({ body }) => body
+		)
 
 		const response = await app
 			.handle(

@@ -21,7 +21,11 @@ new Elysia()
 			}))
 	)
 	.get('/mapped', ({ renamedProperty }) => renamedProperty)
-	.post('/pepper', ({ body }) => body, {
-		body: 'pepper',
-		// response: t.String()
-	})
+	.post(
+		'/pepper',
+		{
+			body: 'pepper'
+			// response: t.String()
+		},
+		({ body }) => body
+	)

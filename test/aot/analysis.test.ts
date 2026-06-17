@@ -101,9 +101,13 @@ describe('Static code analysis', () => {
 			message: 'Rikuhachima Aru'
 		}
 
-		const app = new Elysia().post('/json', (c) => c.body, {
-			parse: 'json'
-		})
+		const app = new Elysia().post(
+			'/json',
+			{
+				parse: 'json'
+			},
+			(c) => c.body
+		)
 
 		const res = await app.handle(post('/json', body)).then((x) => x.json())
 
@@ -171,9 +175,13 @@ describe('Static code analysis', () => {
 			.parse(({ contentType }) => {
 				if (contentType === 'application/elysia') return 'hi'
 			})
-			.post('/', ({ body }) => body, {
-				body: t.String()
-			})
+			.post(
+				'/',
+				{
+					body: t.String()
+				},
+				({ body }) => body
+			)
 
 		await new Promise((resolve) => setTimeout(resolve, 25))
 
@@ -197,14 +205,14 @@ describe('Static code analysis', () => {
 			.get('/', () => 'Hello Elysia1')
 			.get(
 				'/products',
-				({ query }) =>
-					`pageIndex=${query.pageIndex}; pageSize=${query.pageSize}`,
 				{
 					query: t.Object({
 						pageIndex: t.Numeric(),
 						pageSize: t.Numeric()
 					})
-				}
+				},
+				({ query }) =>
+					`pageIndex=${query.pageIndex}; pageSize=${query.pageSize}`
 			)
 
 		const response = await app
@@ -231,16 +239,20 @@ describe('Static code analysis', () => {
 	})
 
 	it('handle accurate trie properties', async () => {
-		const app = new Elysia().get('/what', ({ query }) => query, {
-			query: t.Object({
-				stee: t.Optional(t.Literal('on')),
-				mtee: t.Optional(t.Literal('on')),
-				ltee: t.Optional(t.Literal('on')),
-				xltee: t.Optional(t.Literal('on')),
-				xxltee: t.Optional(t.Literal('on')),
-				xxxltee: t.Optional(t.Literal('on'))
-			})
-		})
+		const app = new Elysia().get(
+			'/what',
+			{
+				query: t.Object({
+					stee: t.Optional(t.Literal('on')),
+					mtee: t.Optional(t.Literal('on')),
+					ltee: t.Optional(t.Literal('on')),
+					xltee: t.Optional(t.Literal('on')),
+					xxltee: t.Optional(t.Literal('on')),
+					xxxltee: t.Optional(t.Literal('on'))
+				})
+			},
+			({ query }) => query
+		)
 
 		const response = await app
 			.handle(req('/what?xxltee=on'))

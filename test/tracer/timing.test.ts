@@ -167,11 +167,15 @@ describe('Trace Timing', async () => {
 					})
 				})
 			})
-			.post('/', ({ body }) => 'a', {
-				async parse() {
-					await delay()
-				}
-			})
+			.post(
+				'/',
+				{
+					async parse() {
+						await delay()
+					}
+				},
+				({ body }) => 'a'
+			)
 
 		const { headers } = await app.handle(post('/', {}))
 
@@ -187,11 +191,15 @@ describe('Trace Timing', async () => {
 					})
 				})
 			})
-			.get('/', () => 'a', {
-				async transform() {
-					await delay()
-				}
-			})
+			.get(
+				'/',
+				{
+					async transform() {
+						await delay()
+					}
+				},
+				() => 'a'
+			)
 
 		const { headers } = await app.handle(req('/'))
 
@@ -207,11 +215,15 @@ describe('Trace Timing', async () => {
 					})
 				})
 			})
-			.get('/', () => 'a', {
-				async beforeHandle() {
-					await delay()
-				}
-			})
+			.get(
+				'/',
+				{
+					async beforeHandle() {
+						await delay()
+					}
+				},
+				() => 'a'
+			)
 
 		const { headers } = await app.handle(req('/'))
 
@@ -227,11 +239,15 @@ describe('Trace Timing', async () => {
 					})
 				})
 			})
-			.get('/', () => 'a', {
-				async afterHandle() {
-					await delay()
-				}
-			})
+			.get(
+				'/',
+				{
+					async afterHandle() {
+						await delay()
+					}
+				},
+				() => 'a'
+			)
 
 		const { headers } = await app.handle(req('/'))
 
@@ -247,11 +263,15 @@ describe('Trace Timing', async () => {
 					})
 				})
 			})
-			.get('/', () => 'a', {
-				async mapResponse() {
-					await delay()
-				}
-			})
+			.get(
+				'/',
+				{
+					async mapResponse() {
+						await delay()
+					}
+				},
+				() => 'a'
+			)
 
 		const { headers } = await app.handle(req('/'))
 
@@ -267,11 +287,15 @@ describe('Trace Timing', async () => {
 					})
 				})
 			})
-			.get('/', () => 'a', {
-				async afterResponse() {
-					await delay()
-				}
-			})
+			.get(
+				'/',
+				{
+					async afterResponse() {
+						await delay()
+					}
+				},
+				() => 'a'
+			)
 
 		app.handle(req('/'))
 	})
@@ -296,13 +320,17 @@ describe('Trace Timing', async () => {
 			.parse(async function luna() {
 				await delay(6)
 			})
-			.post('/', ({ body }) => body, {
-				parse: [
-					async function kindred() {
-						await delay(6)
-					}
-				]
-			})
+			.post(
+				'/',
+				{
+					parse: [
+						async function kindred() {
+							await delay(6)
+						}
+					]
+				},
+				({ body }) => body
+			)
 
 		const { headers } = await app.handle(post('/', {}))
 
@@ -329,13 +357,17 @@ describe('Trace Timing', async () => {
 			.transform(async function luna() {
 				await delay(6)
 			})
-			.get('/', () => 'a', {
-				transform: [
-					async function kindred() {
-						await delay(6)
-					}
-				]
-			})
+			.get(
+				'/',
+				{
+					transform: [
+						async function kindred() {
+							await delay(6)
+						}
+					]
+				},
+				() => 'a'
+			)
 
 		const { headers } = await app.handle(req('/'))
 
@@ -362,13 +394,17 @@ describe('Trace Timing', async () => {
 			.beforeHandle(async function luna() {
 				await delay(6)
 			})
-			.get('/', () => 'a', {
-				beforeHandle: [
-					async function kindred() {
-						await delay(6)
-					}
-				]
-			})
+			.get(
+				'/',
+				{
+					beforeHandle: [
+						async function kindred() {
+							await delay(6)
+						}
+					]
+				},
+				() => 'a'
+			)
 
 		const { headers } = await app.handle(req('/'))
 
@@ -395,13 +431,17 @@ describe('Trace Timing', async () => {
 			.beforeHandle(async function luna() {
 				await delay(6.25)
 			})
-			.get('/', () => 'a', {
-				beforeHandle: [
-					async function kindred() {
-						await delay(6.25)
-					}
-				]
-			})
+			.get(
+				'/',
+				{
+					beforeHandle: [
+						async function kindred() {
+							await delay(6.25)
+						}
+					]
+				},
+				() => 'a'
+			)
 
 		const { headers } = await app.handle(req('/'))
 
@@ -428,13 +468,17 @@ describe('Trace Timing', async () => {
 			.afterHandle(async function luna() {
 				await delay(6)
 			})
-			.get('/', () => 'a', {
-				afterHandle: [
-					async function kindred() {
-						await delay(6)
-					}
-				]
-			})
+			.get(
+				'/',
+				{
+					afterHandle: [
+						async function kindred() {
+							await delay(6)
+						}
+					]
+				},
+				() => 'a'
+			)
 
 		const { headers } = await app.handle(req('/'))
 
@@ -461,13 +505,17 @@ describe('Trace Timing', async () => {
 			.mapResponse(async function luna() {
 				await delay(6)
 			})
-			.get('/', () => 'a', {
-				mapResponse: [
-					async function kindred() {
-						await delay(6)
-					}
-				]
-			})
+			.get(
+				'/',
+				{
+					mapResponse: [
+						async function kindred() {
+							await delay(6)
+						}
+					]
+				},
+				() => 'a'
+			)
 
 		const { headers } = await app.handle(req('/'))
 
@@ -494,13 +542,17 @@ describe('Trace Timing', async () => {
 			.afterResponse(async function luna() {
 				await delay(6)
 			})
-			.get('/', () => 'a', {
-				afterResponse: [
-					async function kindred() {
-						await delay(6)
-					}
-				]
-			})
+			.get(
+				'/',
+				{
+					afterResponse: [
+						async function kindred() {
+							await delay(6)
+						}
+					]
+				},
+				() => 'a'
+			)
 
 		app.handle(req('/'))
 	})

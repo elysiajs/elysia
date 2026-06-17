@@ -52,17 +52,17 @@ describe('Form Data', () => {
 	it('validate formdata', async () => {
 		const app = new Elysia().get(
 			'/',
-			() =>
-				form({
-					a: 'hello',
-					b: file('test/kyuukurarin.mp4')
-				}),
 			{
 				response: t.Form({
 					a: t.String(),
 					b: t.File()
 				})
-			}
+			},
+			() =>
+				form({
+					a: 'hello',
+					b: file('test/kyuukurarin.mp4')
+				})
 		)
 
 		const response = await app.handle(req('/'))
@@ -116,14 +116,14 @@ describe('Form Data JSON coercion (F44)', () => {
 		// raw string rather than throwing-and-falling-back.
 		form.append('payload', '{aaaa')
 
-		expect(await post(form)).toEqual({ payload: '{aaaa' })
+		await expect(post(form)).resolves.toEqual({ payload: '{aaaa' })
 	})
 
 	it('a [-opened field with no closing bracket stays a string', async () => {
 		const form = new FormData()
 		form.append('payload', '[1,2,3')
 
-		expect(await post(form)).toEqual({ payload: '[1,2,3' })
+		await expect(post(form)).resolves.toEqual({ payload: '[1,2,3' })
 	})
 
 	it('valid JSON.stringify object/array fields still parse to objects', async () => {
@@ -131,7 +131,7 @@ describe('Form Data JSON coercion (F44)', () => {
 		form.append('meta', JSON.stringify({ id: '123', altText: 'an image' }))
 		form.append('list', JSON.stringify([1, 2, 3]))
 
-		expect(await post(form)).toEqual({
+		await expect(post(form)).resolves.toEqual({
 			meta: { id: '123', altText: 'an image' },
 			list: [1, 2, 3]
 		})
@@ -145,7 +145,7 @@ describe('Form Data JSON coercion (F44)', () => {
 		const form = new FormData()
 		form.append('meta', JSON.stringify(big))
 
-		expect(await post(form)).toEqual({ meta: big })
+		await expect(post(form)).resolves.toEqual({ meta: big })
 	})
 
 	it('trailing-whitespace-padded JSON now stays a string (decided behaviour)', async () => {
@@ -156,7 +156,7 @@ describe('Form Data JSON coercion (F44)', () => {
 		const form = new FormData()
 		form.append('payload', '{"a":1} ')
 
-		expect(await post(form)).toEqual({ payload: '{"a":1} ' })
+		await expect(post(form)).resolves.toEqual({ payload: '{"a":1} ' })
 	})
 })
 
@@ -263,7 +263,8 @@ describe('Form Data DoS hardening', () => {
 		const form = new FormData()
 		// ~2000 distinct 63-deep keys would attempt ~126k nodes; the budget caps
 		// the total around 100k.
-		for (let i = 0; i < 2000; i++) form.append('r' + i + '.b'.repeat(62), 'x')
+		for (let i = 0; i < 2000; i++)
+			form.append('r' + i + '.b'.repeat(62), 'x')
 
 		const start = performance.now()
 		const out = formDataToObject(form)

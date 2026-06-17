@@ -267,7 +267,7 @@ describe('WebSocket connection', () => {
 		)
 
 		expect(upgradeResponse.status).toBe(403)
-		expect(await upgradeResponse.text()).toBe('forbidden')
+		await expect(upgradeResponse.text()).resolves.toBe('forbidden')
 
 		app.stop()
 	})
@@ -284,23 +284,26 @@ describe('WebSocket connection', () => {
 				pong() {
 					ponged = true
 				},
-				async message(ws) {
-				}
+				async message(ws) {}
 			})
 			.listen(0)
 
 		const ws = new WebSocket(`ws://localhost:${app.server?.port}`)
 
 		await new Promise<void>((resolve) => {
-			ws.addEventListener('open', () => {
-				ws.ping()
-				ws.send('df')
-				ws.pong()
+			ws.addEventListener(
+				'open',
+				() => {
+					ws.ping()
+					ws.send('df')
+					ws.pong()
 
-				resolve()
-			}, {
-				once: true
-			})
+					resolve()
+				},
+				{
+					once: true
+				}
+			)
 		})
 
 		await Bun.sleep(3)

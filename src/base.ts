@@ -91,6 +91,7 @@ import type {
 	AnyWSLocalHook,
 	CreateEden,
 	CreateEdenResponse,
+	RouteSchema,
 	CreateWSEdenResponse,
 	ComposeElysiaResponse,
 	UnionResponseStatus,
@@ -118,6 +119,143 @@ import type { Context, LifecycleContext, ErrorContext } from './context'
 const useNodesBuffer: ChainNode[] = []
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
+
+/**
+ * Shared return type for the HTTP verb methods' overloads — folds a single
+ * route into the instance's Eden tree. Factored out so each verb's two
+ * overloads (with-hook / no-hook) don't each re-spell the ~50-line type.
+ * `Method` is a literal (`'get'`) for the verbs, or the generic method for
+ * `.method()`. `MacroContext` is `{}` on the no-hook overload.
+ */
+type AddRoute<
+	BasePath extends string,
+	Scope extends EventScope,
+	Singleton extends SingletonBase,
+	Definitions extends DefinitionBase,
+	Metadata extends MetadataBase,
+	Routes extends RouteBase,
+	Ephemeral extends EphemeralType,
+	Volatile extends EphemeralType,
+	Method extends string,
+	Path extends string,
+	Schema extends RouteSchema,
+	MacroContext extends RouteSchema,
+	Handle
+> = Elysia<
+	BasePath,
+	Scope,
+	Singleton,
+	Definitions,
+	Metadata,
+	Routes &
+		CreateEden<
+			JoinPath<BasePath, Path>,
+			{
+				[method in Method]: CreateEdenResponse<
+					Path,
+					Schema,
+					MacroContext,
+					ComposeElysiaResponse<
+						Schema &
+							MacroContext &
+							Metadata['schemas'] &
+							Ephemeral['schemas'] &
+							Volatile['schemas'],
+						Handle,
+						UnionResponseStatus<
+							Metadata['response'],
+							UnionResponseStatus<
+								Ephemeral['response'],
+								UnionResponseStatus<
+									Volatile['response'],
+									// @ts-ignore
+									MacroContext['return'] & {}
+								>
+							>
+						>,
+						[
+							...Definitions['error'],
+							...Ephemeral['error'],
+							...Volatile['error']
+						]
+					>,
+					UnhandledReturnedErrorOf<
+						Handle,
+						[
+							...Definitions['error'],
+							...Ephemeral['error'],
+							...Volatile['error']
+						]
+					>
+				>
+			}
+		>,
+	Ephemeral,
+	Volatile
+>
+
+/**
+ * `AddRoute`'s WebSocket sibling — folds a `.ws()` route into the Eden tree
+ * under the `subscribe` key. `Response` is `void` for the options-only form,
+ * or `WSHandlerResponse<Handler>` when a positional message handler is given.
+ */
+type AddWSRoute<
+	BasePath extends string,
+	Scope extends EventScope,
+	Singleton extends SingletonBase,
+	Definitions extends DefinitionBase,
+	Metadata extends MetadataBase,
+	Routes extends RouteBase,
+	Ephemeral extends EphemeralType,
+	Volatile extends EphemeralType,
+	Path extends string,
+	Schema extends RouteSchema,
+	MacroContext extends RouteSchema,
+	Response
+> = Elysia<
+	BasePath,
+	Scope,
+	Singleton,
+	Definitions,
+	Metadata,
+	Routes &
+		CreateEden<
+			JoinPath<BasePath, Path>,
+			{
+				subscribe: CreateWSEdenResponse<
+					Path,
+					Schema,
+					MacroContext,
+					ComposeElysiaResponse<
+						Schema &
+							MacroContext &
+							Metadata['schemas'] &
+							Ephemeral['schemas'] &
+							Volatile['schemas'],
+						Response,
+						UnionResponseStatus<
+							Metadata['response'],
+							UnionResponseStatus<
+								Ephemeral['response'],
+								UnionResponseStatus<
+									Volatile['response'],
+									// @ts-ignore
+									MacroContext['return'] & {}
+								>
+							>
+						>,
+						[
+							...Definitions['error'],
+							...Ephemeral['error'],
+							...Volatile['error']
+						]
+					>
+				>
+			}
+		>,
+	Ephemeral,
+	Volatile
+>
 
 export class Elysia<
 	const in out BasePath extends string = '',
@@ -5085,9 +5223,7 @@ export class Elysia<
 	 *
 	 * new Elysia()
 	 *     .get('/', () => 'hi')
-	 *     .get('/with-hook', () => 'hi', {
-	 *         response: t.String()
-	 *     })
+	 *     .get('/hook', { query: t.String() }, () => 'hi')
 	 * ```
 	 */
 	get<
@@ -5135,68 +5271,87 @@ export class Elysia<
 				>
 	>(
 		path: Path,
-		fn: Handle,
-		hook?: LocalHook<
+		hook: LocalHook<
 			Input,
 			// @ts-ignore
 			Schema & MacroContext,
 			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
-		>
-	): Elysia<
+		>,
+		fn: Handle
+	): AddRoute<
 		BasePath,
 		Scope,
 		Singleton,
 		Definitions,
 		Metadata,
-		Routes &
-			CreateEden<
-				JoinPath<BasePath, Path>,
-				{
-					get: CreateEdenResponse<
-						Path,
-						Schema,
-						MacroContext,
-						ComposeElysiaResponse<
-							Schema &
-								MacroContext &
-								Metadata['schemas'] &
-								Ephemeral['schemas'] &
-								Volatile['schemas'],
-							Handle,
-							UnionResponseStatus<
-								Metadata['response'],
-								UnionResponseStatus<
-									Ephemeral['response'],
-									UnionResponseStatus<
-										Volatile['response'],
-										// @ts-ignore
-										MacroContext['return'] & {}
-									>
-								>
-							>,
-							[
-								...Definitions['error'],
-								...Ephemeral['error'],
-								...Volatile['error']
-							]
-						>,
-						UnhandledReturnedErrorOf<
-							Handle,
-							[
-								...Definitions['error'],
-								...Ephemeral['error'],
-								...Volatile['error']
-							]
-						>
-					>
-				}
-			>,
+		Routes,
 		Ephemeral,
-		Volatile
-	> {
-		return this.#add(MethodMap.GET, path, fn, hook) as any
+		Volatile,
+		'get',
+		Path,
+		Schema,
+		MacroContext,
+		Handle
+	>
+	get<
+		const Path extends string,
+		const Schema extends IntersectIfObjectSchema<
+			MergeSchema<
+				UnwrapRoute<
+					{},
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>,
+				'',
+				true
+			>,
+			MergeScopedSchemas<
+				Metadata['schemas'],
+				Ephemeral['schemas'],
+				Volatile['schemas']
+			>
+		>,
+		const Decorator extends Singleton & {
+			derive: Ephemeral['derive'] & Volatile['derive']
+		},
+		const Handle extends InlineHandlerNonMacro<
+			NoInfer<Schema>,
+			NoInfer<Decorator>
+		> &
+			Metadata['macro']
+	>(
+		path: Path,
+		fn: Handle
+	): AddRoute<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile,
+		'get',
+		Path,
+		Schema,
+		{},
+		Handle
+	>
+	get(path: string, hookOrFn: unknown, fn?: unknown): any {
+		return fn === undefined
+			? this.#add(MethodMap.GET, path, hookOrFn)
+			: this.#add(
+					MethodMap.GET,
+					path,
+					fn,
+					hookOrFn as Partial<AnyLocalHook>
+				)
 	}
 
 	/**
@@ -5210,11 +5365,10 @@ export class Elysia<
 	 *
 	 * new Elysia()
 	 *     .post('/', () => 'hi')
-	 *     .post('/with-hook', () => 'hi', {
-	 *         response: t.String()
-	 *     })
+	 *     .post('/hook', { query: t.String() }, () => 'hi')
 	 * ```
 	 */
+	// Overload A — with hook (3-arg)
 	post<
 		const Path extends string,
 		const Input extends Metadata['macro'] &
@@ -5260,68 +5414,87 @@ export class Elysia<
 				>
 	>(
 		path: Path,
-		fn: Handle,
-		hook?: LocalHook<
+		hook: LocalHook<
 			Input,
 			// @ts-ignore
 			Schema & MacroContext,
 			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
-		>
-	): Elysia<
+		>,
+		fn: Handle
+	): AddRoute<
 		BasePath,
 		Scope,
 		Singleton,
 		Definitions,
 		Metadata,
-		Routes &
-			CreateEden<
-				JoinPath<BasePath, Path>,
-				{
-					post: CreateEdenResponse<
-						Path,
-						Schema,
-						MacroContext,
-						ComposeElysiaResponse<
-							Schema &
-								MacroContext &
-								Metadata['schemas'] &
-								Ephemeral['schemas'] &
-								Volatile['schemas'],
-							Handle,
-							UnionResponseStatus<
-								Metadata['response'],
-								UnionResponseStatus<
-									Ephemeral['response'],
-									UnionResponseStatus<
-										Volatile['response'],
-										// @ts-ignore
-										MacroContext['return'] & {}
-									>
-								>
-							>,
-							[
-								...Definitions['error'],
-								...Ephemeral['error'],
-								...Volatile['error']
-							]
-						>,
-						UnhandledReturnedErrorOf<
-							Handle,
-							[
-								...Definitions['error'],
-								...Ephemeral['error'],
-								...Volatile['error']
-							]
-						>
-					>
-				}
-			>,
+		Routes,
 		Ephemeral,
-		Volatile
-	> {
-		return this.#add(MethodMap.POST, path, fn, hook) as any
+		Volatile,
+		'post',
+		Path,
+		Schema,
+		MacroContext,
+		Handle
+	>
+	post<
+		const Path extends string,
+		const Schema extends IntersectIfObjectSchema<
+			MergeSchema<
+				UnwrapRoute<
+					{},
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>,
+				'',
+				true
+			>,
+			MergeScopedSchemas<
+				Metadata['schemas'],
+				Ephemeral['schemas'],
+				Volatile['schemas']
+			>
+		>,
+		const Decorator extends Singleton & {
+			derive: Ephemeral['derive'] & Volatile['derive']
+		},
+		const Handle extends InlineHandlerNonMacro<
+			NoInfer<Schema>,
+			NoInfer<Decorator>
+		> &
+			Metadata['macro']
+	>(
+		path: Path,
+		fn: Handle
+	): AddRoute<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile,
+		'post',
+		Path,
+		Schema,
+		{},
+		Handle
+	>
+	post(path: string, hookOrFn: unknown, fn?: unknown): any {
+		return fn === undefined
+			? this.#add(MethodMap.POST, path, hookOrFn)
+			: this.#add(
+					MethodMap.POST,
+					path,
+					fn,
+					hookOrFn as Partial<AnyLocalHook>
+				)
 	}
 
 	/**
@@ -5335,11 +5508,10 @@ export class Elysia<
 	 *
 	 * new Elysia()
 	 *     .put('/', () => 'hi')
-	 *     .put('/with-hook', () => 'hi', {
-	 *         response: t.String()
-	 *     })
+	 *     .put('/hook', { query: t.String() }, () => 'hi')
 	 * ```
 	 */
+	// Overload A — with hook (3-arg)
 	put<
 		const Path extends string,
 		const Input extends Metadata['macro'] &
@@ -5385,68 +5557,87 @@ export class Elysia<
 				>
 	>(
 		path: Path,
-		fn: Handle,
-		hook?: LocalHook<
+		hook: LocalHook<
 			Input,
 			// @ts-ignore
 			Schema & MacroContext,
 			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
-		>
-	): Elysia<
+		>,
+		fn: Handle
+	): AddRoute<
 		BasePath,
 		Scope,
 		Singleton,
 		Definitions,
 		Metadata,
-		Routes &
-			CreateEden<
-				JoinPath<BasePath, Path>,
-				{
-					put: CreateEdenResponse<
-						Path,
-						Schema,
-						MacroContext,
-						ComposeElysiaResponse<
-							Schema &
-								MacroContext &
-								Metadata['schemas'] &
-								Ephemeral['schemas'] &
-								Volatile['schemas'],
-							Handle,
-							UnionResponseStatus<
-								Metadata['response'],
-								UnionResponseStatus<
-									Ephemeral['response'],
-									UnionResponseStatus<
-										Volatile['response'],
-										// @ts-ignore
-										MacroContext['return'] & {}
-									>
-								>
-							>,
-							[
-								...Definitions['error'],
-								...Ephemeral['error'],
-								...Volatile['error']
-							]
-						>,
-						UnhandledReturnedErrorOf<
-							Handle,
-							[
-								...Definitions['error'],
-								...Ephemeral['error'],
-								...Volatile['error']
-							]
-						>
-					>
-				}
-			>,
+		Routes,
 		Ephemeral,
-		Volatile
-	> {
-		return this.#add(MethodMap.PUT, path, fn, hook) as any
+		Volatile,
+		'put',
+		Path,
+		Schema,
+		MacroContext,
+		Handle
+	>
+	put<
+		const Path extends string,
+		const Schema extends IntersectIfObjectSchema<
+			MergeSchema<
+				UnwrapRoute<
+					{},
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>,
+				'',
+				true
+			>,
+			MergeScopedSchemas<
+				Metadata['schemas'],
+				Ephemeral['schemas'],
+				Volatile['schemas']
+			>
+		>,
+		const Decorator extends Singleton & {
+			derive: Ephemeral['derive'] & Volatile['derive']
+		},
+		const Handle extends InlineHandlerNonMacro<
+			NoInfer<Schema>,
+			NoInfer<Decorator>
+		> &
+			Metadata['macro']
+	>(
+		path: Path,
+		fn: Handle
+	): AddRoute<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile,
+		'put',
+		Path,
+		Schema,
+		{},
+		Handle
+	>
+	put(path: string, hookOrFn: unknown, fn?: unknown): any {
+		return fn === undefined
+			? this.#add(MethodMap.PUT, path, hookOrFn)
+			: this.#add(
+					MethodMap.PUT,
+					path,
+					fn,
+					hookOrFn as Partial<AnyLocalHook>
+				)
 	}
 
 	/**
@@ -5460,9 +5651,7 @@ export class Elysia<
 	 *
 	 * new Elysia()
 	 *     .patch('/', () => 'hi')
-	 *     .patch('/with-hook', () => 'hi', {
-	 *         response: t.String()
-	 *     })
+	 *     .patch('/hook', { query: t.String() }, () => 'hi')
 	 * ```
 	 */
 	patch<
@@ -5510,68 +5699,87 @@ export class Elysia<
 				>
 	>(
 		path: Path,
-		fn: Handle,
-		hook?: LocalHook<
+		hook: LocalHook<
 			Input,
 			// @ts-ignore
 			Schema & MacroContext,
 			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
-		>
-	): Elysia<
+		>,
+		fn: Handle
+	): AddRoute<
 		BasePath,
 		Scope,
 		Singleton,
 		Definitions,
 		Metadata,
-		Routes &
-			CreateEden<
-				JoinPath<BasePath, Path>,
-				{
-					patch: CreateEdenResponse<
-						Path,
-						Schema,
-						MacroContext,
-						ComposeElysiaResponse<
-							Schema &
-								MacroContext &
-								Metadata['schemas'] &
-								Ephemeral['schemas'] &
-								Volatile['schemas'],
-							Handle,
-							UnionResponseStatus<
-								Metadata['response'],
-								UnionResponseStatus<
-									Ephemeral['response'],
-									UnionResponseStatus<
-										Volatile['response'],
-										// @ts-ignore
-										MacroContext['return'] & {}
-									>
-								>
-							>,
-							[
-								...Definitions['error'],
-								...Ephemeral['error'],
-								...Volatile['error']
-							]
-						>,
-						UnhandledReturnedErrorOf<
-							Handle,
-							[
-								...Definitions['error'],
-								...Ephemeral['error'],
-								...Volatile['error']
-							]
-						>
-					>
-				}
-			>,
+		Routes,
 		Ephemeral,
-		Volatile
-	> {
-		return this.#add(MethodMap.PATCH, path, fn, hook) as any
+		Volatile,
+		'patch',
+		Path,
+		Schema,
+		MacroContext,
+		Handle
+	>
+	patch<
+		const Path extends string,
+		const Schema extends IntersectIfObjectSchema<
+			MergeSchema<
+				UnwrapRoute<
+					{},
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>,
+				'',
+				true
+			>,
+			MergeScopedSchemas<
+				Metadata['schemas'],
+				Ephemeral['schemas'],
+				Volatile['schemas']
+			>
+		>,
+		const Decorator extends Singleton & {
+			derive: Ephemeral['derive'] & Volatile['derive']
+		},
+		const Handle extends InlineHandlerNonMacro<
+			NoInfer<Schema>,
+			NoInfer<Decorator>
+		> &
+			Metadata['macro']
+	>(
+		path: Path,
+		fn: Handle
+	): AddRoute<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile,
+		'patch',
+		Path,
+		Schema,
+		{},
+		Handle
+	>
+	patch(path: string, hookOrFn: unknown, fn?: unknown): any {
+		return fn === undefined
+			? this.#add(MethodMap.PATCH, path, hookOrFn)
+			: this.#add(
+					MethodMap.PATCH,
+					path,
+					fn,
+					hookOrFn as Partial<AnyLocalHook>
+				)
 	}
 
 	/**
@@ -5585,9 +5793,7 @@ export class Elysia<
 	 *
 	 * new Elysia()
 	 *     .delete('/', () => 'hi')
-	 *     .delete('/with-hook', () => 'hi', {
-	 *         response: t.String()
-	 *     })
+	 *     .delete('/hook', { query: t.String() }, () => 'hi')
 	 * ```
 	 */
 	delete<
@@ -5635,68 +5841,87 @@ export class Elysia<
 				>
 	>(
 		path: Path,
-		fn: Handle,
-		hook?: LocalHook<
+		hook: LocalHook<
 			Input,
 			// @ts-ignore
 			Schema & MacroContext,
 			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
-		>
-	): Elysia<
+		>,
+		fn: Handle
+	): AddRoute<
 		BasePath,
 		Scope,
 		Singleton,
 		Definitions,
 		Metadata,
-		Routes &
-			CreateEden<
-				JoinPath<BasePath, Path>,
-				{
-					delete: CreateEdenResponse<
-						Path,
-						Schema,
-						MacroContext,
-						ComposeElysiaResponse<
-							Schema &
-								MacroContext &
-								Metadata['schemas'] &
-								Ephemeral['schemas'] &
-								Volatile['schemas'],
-							Handle,
-							UnionResponseStatus<
-								Metadata['response'],
-								UnionResponseStatus<
-									Ephemeral['response'],
-									UnionResponseStatus<
-										Volatile['response'],
-										// @ts-ignore
-										MacroContext['return'] & {}
-									>
-								>
-							>,
-							[
-								...Definitions['error'],
-								...Ephemeral['error'],
-								...Volatile['error']
-							]
-						>,
-						UnhandledReturnedErrorOf<
-							Handle,
-							[
-								...Definitions['error'],
-								...Ephemeral['error'],
-								...Volatile['error']
-							]
-						>
-					>
-				}
-			>,
+		Routes,
 		Ephemeral,
-		Volatile
-	> {
-		return this.#add(MethodMap.DELETE, path, fn, hook) as any
+		Volatile,
+		'delete',
+		Path,
+		Schema,
+		MacroContext,
+		Handle
+	>
+	delete<
+		const Path extends string,
+		const Schema extends IntersectIfObjectSchema<
+			MergeSchema<
+				UnwrapRoute<
+					{},
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>,
+				'',
+				true
+			>,
+			MergeScopedSchemas<
+				Metadata['schemas'],
+				Ephemeral['schemas'],
+				Volatile['schemas']
+			>
+		>,
+		const Decorator extends Singleton & {
+			derive: Ephemeral['derive'] & Volatile['derive']
+		},
+		const Handle extends InlineHandlerNonMacro<
+			NoInfer<Schema>,
+			NoInfer<Decorator>
+		> &
+			Metadata['macro']
+	>(
+		path: Path,
+		fn: Handle
+	): AddRoute<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile,
+		'delete',
+		Path,
+		Schema,
+		{},
+		Handle
+	>
+	delete(path: string, hookOrFn: unknown, fn?: unknown): any {
+		return fn === undefined
+			? this.#add(MethodMap.DELETE, path, hookOrFn)
+			: this.#add(
+					MethodMap.DELETE,
+					path,
+					fn,
+					hookOrFn as Partial<AnyLocalHook>
+				)
 	}
 
 	/**
@@ -5710,11 +5935,10 @@ export class Elysia<
 	 *
 	 * new Elysia()
 	 *     .options('/', () => 'hi')
-	 *     .options('/with-hook', () => 'hi', {
-	 *         response: t.String()
-	 *     })
+	 *     .options('/hook', { query: t.String() }, () => 'hi')
 	 * ```
 	 */
+	// Overload A — with hook (3-arg)
 	options<
 		const Path extends string,
 		const Input extends Metadata['macro'] &
@@ -5760,68 +5984,87 @@ export class Elysia<
 				>
 	>(
 		path: Path,
-		fn: Handle,
-		hook?: LocalHook<
+		hook: LocalHook<
 			Input,
 			// @ts-ignore
 			Schema & MacroContext,
 			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
-		>
-	): Elysia<
+		>,
+		fn: Handle
+	): AddRoute<
 		BasePath,
 		Scope,
 		Singleton,
 		Definitions,
 		Metadata,
-		Routes &
-			CreateEden<
-				JoinPath<BasePath, Path>,
-				{
-					options: CreateEdenResponse<
-						Path,
-						Schema,
-						MacroContext,
-						ComposeElysiaResponse<
-							Schema &
-								MacroContext &
-								Metadata['schemas'] &
-								Ephemeral['schemas'] &
-								Volatile['schemas'],
-							Handle,
-							UnionResponseStatus<
-								Metadata['response'],
-								UnionResponseStatus<
-									Ephemeral['response'],
-									UnionResponseStatus<
-										Volatile['response'],
-										// @ts-ignore
-										MacroContext['return'] & {}
-									>
-								>
-							>,
-							[
-								...Definitions['error'],
-								...Ephemeral['error'],
-								...Volatile['error']
-							]
-						>,
-						UnhandledReturnedErrorOf<
-							Handle,
-							[
-								...Definitions['error'],
-								...Ephemeral['error'],
-								...Volatile['error']
-							]
-						>
-					>
-				}
-			>,
+		Routes,
 		Ephemeral,
-		Volatile
-	> {
-		return this.#add(MethodMap.OPTIONS, path, fn, hook) as any
+		Volatile,
+		'options',
+		Path,
+		Schema,
+		MacroContext,
+		Handle
+	>
+	options<
+		const Path extends string,
+		const Schema extends IntersectIfObjectSchema<
+			MergeSchema<
+				UnwrapRoute<
+					{},
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>,
+				'',
+				true
+			>,
+			MergeScopedSchemas<
+				Metadata['schemas'],
+				Ephemeral['schemas'],
+				Volatile['schemas']
+			>
+		>,
+		const Decorator extends Singleton & {
+			derive: Ephemeral['derive'] & Volatile['derive']
+		},
+		const Handle extends InlineHandlerNonMacro<
+			NoInfer<Schema>,
+			NoInfer<Decorator>
+		> &
+			Metadata['macro']
+	>(
+		path: Path,
+		fn: Handle
+	): AddRoute<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile,
+		'options',
+		Path,
+		Schema,
+		{},
+		Handle
+	>
+	options(path: string, hookOrFn: unknown, fn?: unknown): any {
+		return fn === undefined
+			? this.#add(MethodMap.OPTIONS, path, hookOrFn)
+			: this.#add(
+					MethodMap.OPTIONS,
+					path,
+					fn,
+					hookOrFn as Partial<AnyLocalHook>
+				)
 	}
 
 	/**
@@ -5835,9 +6078,7 @@ export class Elysia<
 	 *
 	 * new Elysia()
 	 *     .head('/', () => 'hi')
-	 *     .head('/with-hook', () => 'hi', {
-	 *         response: t.String()
-	 *     })
+	 *     .head('/hook', { query: t.String() }, () => 'hi')
 	 * ```
 	 */
 	head<
@@ -5885,68 +6126,87 @@ export class Elysia<
 				>
 	>(
 		path: Path,
-		fn: Handle,
-		hook?: LocalHook<
+		hook: LocalHook<
 			Input,
 			// @ts-ignore
 			Schema & MacroContext,
 			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
-		>
-	): Elysia<
+		>,
+		fn: Handle
+	): AddRoute<
 		BasePath,
 		Scope,
 		Singleton,
 		Definitions,
 		Metadata,
-		Routes &
-			CreateEden<
-				JoinPath<BasePath, Path>,
-				{
-					head: CreateEdenResponse<
-						Path,
-						Schema,
-						MacroContext,
-						ComposeElysiaResponse<
-							Schema &
-								MacroContext &
-								Metadata['schemas'] &
-								Ephemeral['schemas'] &
-								Volatile['schemas'],
-							Handle,
-							UnionResponseStatus<
-								Metadata['response'],
-								UnionResponseStatus<
-									Ephemeral['response'],
-									UnionResponseStatus<
-										Volatile['response'],
-										// @ts-ignore
-										MacroContext['return'] & {}
-									>
-								>
-							>,
-							[
-								...Definitions['error'],
-								...Ephemeral['error'],
-								...Volatile['error']
-							]
-						>,
-						UnhandledReturnedErrorOf<
-							Handle,
-							[
-								...Definitions['error'],
-								...Ephemeral['error'],
-								...Volatile['error']
-							]
-						>
-					>
-				}
-			>,
+		Routes,
 		Ephemeral,
-		Volatile
-	> {
-		return this.#add(MethodMap.HEAD, path, fn, hook) as any
+		Volatile,
+		'head',
+		Path,
+		Schema,
+		MacroContext,
+		Handle
+	>
+	head<
+		const Path extends string,
+		const Schema extends IntersectIfObjectSchema<
+			MergeSchema<
+				UnwrapRoute<
+					{},
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>,
+				'',
+				true
+			>,
+			MergeScopedSchemas<
+				Metadata['schemas'],
+				Ephemeral['schemas'],
+				Volatile['schemas']
+			>
+		>,
+		const Decorator extends Singleton & {
+			derive: Ephemeral['derive'] & Volatile['derive']
+		},
+		const Handle extends InlineHandlerNonMacro<
+			NoInfer<Schema>,
+			NoInfer<Decorator>
+		> &
+			Metadata['macro']
+	>(
+		path: Path,
+		fn: Handle
+	): AddRoute<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile,
+		'head',
+		Path,
+		Schema,
+		{},
+		Handle
+	>
+	head(path: string, hookOrFn: unknown, fn?: unknown): any {
+		return fn === undefined
+			? this.#add(MethodMap.HEAD, path, hookOrFn)
+			: this.#add(
+					MethodMap.HEAD,
+					path,
+					fn,
+					hookOrFn as Partial<AnyLocalHook>
+				)
 	}
 
 	all<
@@ -5994,17 +6254,50 @@ export class Elysia<
 				>
 	>(
 		path: Path,
-		fn: Handle,
-		hook?: LocalHook<
+		hook: LocalHook<
 			Input,
 			// @ts-ignore
 			Schema & MacroContext,
 			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
-		>
-	): this {
-		this.#add('*', path, fn, hook)
+		>,
+		fn: Handle
+	): this
+	all<
+		const Path extends string,
+		const Schema extends IntersectIfObjectSchema<
+			MergeSchema<
+				UnwrapRoute<
+					{},
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>,
+				'',
+				true
+			>,
+			MergeScopedSchemas<
+				Metadata['schemas'],
+				Ephemeral['schemas'],
+				Volatile['schemas']
+			>
+		>,
+		const Decorator extends Singleton & {
+			derive: Ephemeral['derive'] & Volatile['derive']
+		},
+		const Handle extends InlineHandlerNonMacro<
+			NoInfer<Schema>,
+			NoInfer<Decorator>
+		> &
+			Metadata['macro']
+	>(path: Path, fn: Handle): this
+	all(path: string, hookOrFn: unknown, fn?: unknown): this {
+		if (fn === undefined) this.#add('*', path, hookOrFn)
+		else this.#add('*', path, fn, hookOrFn as Partial<AnyLocalHook>)
 
 		return this
 	}
@@ -6069,74 +6362,91 @@ export class Elysia<
 	>(
 		method: Method,
 		path: Path,
-		fn: Handle,
-		hook?: LocalHook<
+		hook: LocalHook<
 			Input,
 			// @ts-ignore
 			Schema & MacroContext,
 			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
-		>
-	): Elysia<
+		>,
+		fn: Handle
+	): AddRoute<
 		BasePath,
 		Scope,
 		Singleton,
 		Definitions,
 		Metadata,
-		Routes &
-			CreateEden<
-				JoinPath<BasePath, Path>,
-				{
-					[method in Method]: CreateEdenResponse<
-						Path,
-						Schema,
-						MacroContext,
-						ComposeElysiaResponse<
-							Schema &
-								MacroContext &
-								Metadata['schemas'] &
-								Ephemeral['schemas'] &
-								Volatile['schemas'],
-							Handle,
-							UnionResponseStatus<
-								Metadata['response'],
-								UnionResponseStatus<
-									Ephemeral['response'],
-									UnionResponseStatus<
-										Volatile['response'],
-										// @ts-ignore
-										MacroContext['return'] & {}
-									>
-								>
-							>,
-							[
-								...Definitions['error'],
-								...Ephemeral['error'],
-								...Volatile['error']
-							]
-						>,
-						UnhandledReturnedErrorOf<
-							Handle,
-							[
-								...Definitions['error'],
-								...Ephemeral['error'],
-								...Volatile['error']
-							]
-						>
-					>
-				}
-			>,
+		Routes,
 		Ephemeral,
-		Volatile
-	> {
-		return this.#add(method, path, fn, hook) as any
+		Volatile,
+		Method,
+		Path,
+		Schema,
+		MacroContext,
+		Handle
+	>
+	method<
+		const Method extends HTTPMethod,
+		const Path extends string,
+		const Schema extends IntersectIfObjectSchema<
+			MergeSchema<
+				UnwrapRoute<
+					{},
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>,
+				'',
+				true
+			>,
+			MergeScopedSchemas<
+				Metadata['schemas'],
+				Ephemeral['schemas'],
+				Volatile['schemas']
+			>
+		>,
+		const Decorator extends Singleton & {
+			derive: Ephemeral['derive'] & Volatile['derive']
+		},
+		const Handle extends InlineHandlerNonMacro<
+			NoInfer<Schema>,
+			NoInfer<Decorator>
+		> &
+			Metadata['macro']
+	>(
+		method: Method,
+		path: Path,
+		fn: Handle
+	): AddRoute<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile,
+		Method,
+		Path,
+		Schema,
+		{},
+		Handle
+	>
+	method(method: string, path: string, hookOrFn: unknown, fn?: unknown): any {
+		return fn === undefined
+			? this.#add(method, path, hookOrFn)
+			: this.#add(method, path, fn, hookOrFn as Partial<AnyLocalHook>)
 	}
 
 	/**
 	 * ### ws
 	 * Register a WebSocket route. Mirrors `.get`/`.post` ergonomics:
 	 */
+	// Overload A — options only (the message handler lives in `options.message`)
 	ws<
 		const Path extends string,
 		const Input extends Metadata['macro'] &
@@ -6182,51 +6492,20 @@ export class Elysia<
 					MacroContext['resolve']
 			}
 		>
-	): Elysia<
+	): AddWSRoute<
 		BasePath,
 		Scope,
 		Singleton,
 		Definitions,
 		Metadata,
-		Routes &
-			CreateEden<
-				JoinPath<BasePath, Path>,
-				{
-					subscribe: CreateWSEdenResponse<
-						Path,
-						Schema,
-						MacroContext,
-						ComposeElysiaResponse<
-							Schema &
-								MacroContext &
-								Metadata['schemas'] &
-								Ephemeral['schemas'] &
-								Volatile['schemas'],
-							void,
-							UnionResponseStatus<
-								Metadata['response'],
-								UnionResponseStatus<
-									Ephemeral['response'],
-									UnionResponseStatus<
-										Volatile['response'],
-										// @ts-ignore
-										MacroContext['return'] & {}
-									>
-								>
-							>,
-							[
-								...Definitions['error'],
-								...Ephemeral['error'],
-								...Volatile['error']
-							]
-						>
-					>
-				}
-			>,
+		Routes,
 		Ephemeral,
-		Volatile
+		Volatile,
+		Path,
+		Schema,
+		MacroContext,
+		void
 	>
-
 	ws<
 		const Path extends string,
 		const Input extends Metadata['macro'] &
@@ -6271,9 +6550,54 @@ export class Elysia<
 		>
 	>(
 		path: Path,
-		handler: Handler,
-		options?: WSLocalHook<
-			Input,
+		handler: Handler
+	): AddWSRoute<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile,
+		Path,
+		Schema,
+		MacroContext,
+		WSHandlerResponse<Handler>
+	>
+	ws<
+		const Path extends string,
+		const Input extends Metadata['macro'] &
+			InputSchema<keyof Definitions['typebox'] & string>,
+		const Schema extends IntersectIfObjectSchema<
+			MergeSchema<
+				UnwrapRoute<
+					Input,
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>,
+				'',
+				// route declares no params → path-derived, ambient may win
+				undefined extends Input['params'] ? true : false
+			>,
+			MergeScopedSchemas<
+				Metadata['schemas'],
+				Ephemeral['schemas'],
+				Volatile['schemas']
+			>
+		>,
+		const MacroContext extends {} extends Metadata['macroFn']
+			? {}
+			: MacroToContext<
+					Metadata['macroFn'],
+					Omit<Input, NonResolvableMacroKey>,
+					Definitions['typebox']
+				>,
+		const Handler extends WSMessageHandler<
 			// @ts-ignore
 			Schema & MacroContext,
 			Singleton & {
@@ -6283,55 +6607,35 @@ export class Elysia<
 					MacroContext['resolve']
 			}
 		>
-	): Elysia<
+	>(
+		path: Path,
+		options: WSLocalHook<
+			Input,
+			// @ts-ignore
+			Schema & MacroContext,
+			Singleton & {
+				derive: Ephemeral['derive'] &
+					Volatile['derive'] &
+					// @ts-ignore
+					MacroContext['resolve']
+			}
+		>,
+		handler: Handler
+	): AddWSRoute<
 		BasePath,
 		Scope,
 		Singleton,
 		Definitions,
 		Metadata,
-		Routes &
-			CreateEden<
-				JoinPath<BasePath, Path>,
-				{
-					subscribe: CreateWSEdenResponse<
-						Path,
-						Schema,
-						MacroContext,
-						ComposeElysiaResponse<
-							Schema &
-								MacroContext &
-								Metadata['schemas'] &
-								Ephemeral['schemas'] &
-								Volatile['schemas'],
-							WSHandlerResponse<Handler>,
-							UnionResponseStatus<
-								Metadata['response'],
-								UnionResponseStatus<
-									Ephemeral['response'],
-									UnionResponseStatus<
-										Volatile['response'],
-										// @ts-ignore
-										MacroContext['return'] & {}
-									>
-								>
-							>,
-							[
-								...Definitions['error'],
-								...Ephemeral['error'],
-								...Volatile['error']
-							]
-						>
-					>
-				}
-			>,
+		Routes,
 		Ephemeral,
-		Volatile
+		Volatile,
+		Path,
+		Schema,
+		MacroContext,
+		WSHandlerResponse<Handler>
 	>
-	ws(
-		path: string,
-		handlerOrOptions: unknown,
-		maybeOptions?: Partial<AnyWSLocalHookImport>
-	): any {
+	ws(path: string, optionsOrHandler: unknown, handler?: unknown): any {
 		this['~hasWS'] = true
 
 		const adapter = this['~config']?.adapter
@@ -6343,18 +6647,22 @@ export class Elysia<
 			)
 
 		let opts: any
-		if (typeof handlerOrOptions === 'function') {
-			// 3-arg form: (path, handler, options)
-			opts = maybeOptions ?? nullObject()
-			if (opts.message != null && opts.message !== handlerOrOptions)
+		if (handler !== undefined) {
+			// 3-arg form: (path, options, handler)
+			opts = optionsOrHandler ?? nullObject()
+			if (opts.message != null && opts.message !== handler)
 				throw new Error(
 					"[Elysia] .ws(): cannot specify 'message' as both positional handler and options.message"
 				)
 
-			opts.message = handlerOrOptions
+			opts.message = handler
+		} else if (typeof optionsOrHandler === 'function') {
+			// 2-arg form: (path, handler)
+			opts = nullObject()
+			opts.message = optionsOrHandler
 		} else
 			// 2-arg form: (path, options)
-			opts = handlerOrOptions
+			opts = optionsOrHandler
 
 		this.#add('WS', path, undefined, opts)
 
@@ -6399,14 +6707,14 @@ export class Elysia<
 
 			this.all(
 				'/*',
+				options as any,
 				((c: Context) =>
 					run(
 						new Request(
 							replaceUrlPath(c.request.url, c.path),
 							c.request
 						)
-					)) as any,
-				options as any
+					)) as any
 			)
 
 			return this
@@ -6431,12 +6739,12 @@ export class Elysia<
 				)
 			)
 
-		this.all(path, handler as any, options)
+		this.all(path, options as any, handler as any)
 
 		this.all(
 			path + (path.endsWith('/') ? '*' : '/*'),
-			handler as any,
-			options
+			options as any,
+			handler as any
 		)
 
 		return this

@@ -8,11 +8,11 @@ describe('Mount', () => {
 
 		const app = new Elysia().mount('/mount', plugin.handle)
 
-		expect(
-			await app
+		await expect(
+			app
 				.handle(new Request('http://elysiajs.com/mount/'))
 				.then((x) => x.text())
-		).toBe('http://elysiajs.com/')
+		).resolves.toBe('http://elysiajs.com/')
 	})
 
 	it('preserve request URL with query', async () => {
@@ -20,11 +20,11 @@ describe('Mount', () => {
 
 		const app = new Elysia().mount('/mount', plugin.handle)
 
-		expect(
-			await app
+		await expect(
+			app
 				.handle(new Request('http://elysiajs.com/mount/?a=1'))
 				.then((x) => x.text())
-		).toBe('http://elysiajs.com/?a=1')
+		).resolves.toBe('http://elysiajs.com/?a=1')
 	})
 
 	it('preserve body', async () => {

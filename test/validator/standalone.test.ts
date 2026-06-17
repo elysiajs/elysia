@@ -21,7 +21,7 @@ describe('standalone validator', () => {
 		)
 
 		expect(correct.status).toBe(200)
-		expect(await correct.json()).toEqual({ name: 'cantarella' })
+		await expect(correct.json()).resolves.toEqual({ name: 'cantarella' })
 
 		const incorrect = await app.handle(
 			post('/name/jinhsi', {
@@ -41,13 +41,13 @@ describe('standalone validator', () => {
 			})
 			.post(
 				'/name/:name',
+				{
+					response: t.Object({ id: t.Number() })
+				},
 				({ body, params: { name } }) => ({
 					...body,
 					name: name as 'cantarella'
-				}),
-				{
-					response: t.Object({ id: t.Number() })
-				}
+				})
 			)
 
 		const correct = await app.handle(
@@ -57,7 +57,10 @@ describe('standalone validator', () => {
 		)
 
 		expect(correct.status).toBe(200)
-		expect(await correct.json()).toEqual({ id: 1, name: 'cantarella' })
+		await expect(correct.json()).resolves.toEqual({
+			id: 1,
+			name: 'cantarella'
+		})
 
 		const incorrect = await app.handle(
 			post('/name/jinhsi', {
@@ -86,7 +89,7 @@ describe('standalone validator', () => {
 		)
 
 		expect(correct.status).toBe(200)
-		expect(await correct.json()).toEqual({ name: 'cantarella' })
+		await expect(correct.json()).resolves.toEqual({ name: 'cantarella' })
 
 		const incorrect = await app.handle(
 			post('/name/jinhsi', {
@@ -109,13 +112,13 @@ describe('standalone validator', () => {
 			})
 			.post(
 				'/name/:name',
+				{
+					response: t.Object({ id: t.Number() })
+				},
 				({ body, params: { name } }) => ({
 					...body,
 					name: name as 'cantarella'
-				}),
-				{
-					response: t.Object({ id: t.Number() })
-				}
+				})
 			)
 
 		const correct = await app.handle(
@@ -125,7 +128,10 @@ describe('standalone validator', () => {
 		)
 
 		expect(correct.status).toBe(200)
-		expect(await correct.json()).toEqual({ id: 1, name: 'cantarella' })
+		await expect(correct.json()).resolves.toEqual({
+			id: 1,
+			name: 'cantarella'
+		})
 
 		const incorrect = await app.handle(
 			post('/name/jinhsi', {
@@ -161,7 +167,7 @@ describe('standalone validator', () => {
 		)
 
 		expect(correct.status).toBe(200)
-		expect(await correct.json()).toEqual({ name: 'cantarella' })
+		await expect(correct.json()).resolves.toEqual({ name: 'cantarella' })
 
 		const incorrect = await app.handle(
 			post('/name/jinhsi', {
@@ -185,10 +191,10 @@ describe('standalone validator', () => {
 			})
 			.post(
 				'/name/:name',
-				({ body }) => body,
 				{
 					response: t.Object({ id: t.Number() })
-				}
+				},
+				({ body }) => body
 			)
 
 		const correct = await app.handle(
@@ -198,7 +204,7 @@ describe('standalone validator', () => {
 		)
 
 		expect(correct.status).toBe(200)
-		expect(await correct.json()).toEqual({ id: 1 })
+		await expect(correct.json()).resolves.toEqual({ id: 1 })
 
 		const incorrect = await app.handle(
 			post('/name/jinhsi', {
@@ -228,10 +234,6 @@ describe('standalone validator', () => {
 			})
 			.post(
 				'/name/:name',
-				({ body }) => ({
-					...body,
-					name: 'cantarella'
-				}),
 				{
 					response: t.Object(
 						{ id: t.Number() },
@@ -239,7 +241,11 @@ describe('standalone validator', () => {
 							additionalProperties: false
 						}
 					)
-				}
+				},
+				({ body }) => ({
+					...body,
+					name: 'cantarella'
+				})
 			)
 
 		const correct = await app.handle(
@@ -250,7 +256,10 @@ describe('standalone validator', () => {
 		)
 
 		expect(correct.status).toBe(200)
-		expect(await correct.json()).toEqual({ id: 1, name: 'cantarella' })
+		await expect(correct.json()).resolves.toEqual({
+			id: 1,
+			name: 'cantarella'
+		})
 
 		const incorrect = await app.handle(
 			post('/name/jinhsi', {
@@ -282,14 +291,14 @@ describe('standalone validator', () => {
 			})
 			.post(
 				'/name/:name',
-				({ body, params: { name } }) => ({
-					...body,
-					name: name as 'cantarella'
-				}),
 				{
 					body: t.Object({ name: t.Literal('cantarella') }),
 					response: t.Object({ id: t.Number() })
-				}
+				},
+				({ body, params: { name } }) => ({
+					...body,
+					name: name as 'cantarella'
+				})
 			)
 
 		const correct = await app.handle(
@@ -300,7 +309,10 @@ describe('standalone validator', () => {
 		)
 
 		expect(correct.status).toBe(200)
-		expect(await correct.json()).toEqual({ id: 1, name: 'cantarella' })
+		await expect(correct.json()).resolves.toEqual({
+			id: 1,
+			name: 'cantarella'
+		})
 
 		const incorrect = await app.handle(
 			post('/name/jinhsi', {
@@ -320,23 +332,23 @@ describe('standalone validator', () => {
 			})
 			.post(
 				'/local',
+				{
+					response: t.Object({ success: t.Boolean(), id: t.Number() })
+				},
 				({ body }) => ({
 					success: true,
 					...body
-				}),
-				{
-					response: t.Object({ success: t.Boolean(), id: t.Number() })
-				}
+				})
 			)
 
 		const app = new Elysia().use(local).post(
 			'/main',
-			() => ({
-				success: true
-			}),
 			{
 				response: t.Object({ success: t.Boolean() })
-			}
+			},
+			() => ({
+				success: true
+			})
 		)
 
 		const correct1 = await app.handle(
@@ -347,7 +359,7 @@ describe('standalone validator', () => {
 		)
 
 		expect(correct1.status).toBe(200)
-		expect(await correct1.json()).toEqual({ success: true })
+		await expect(correct1.json()).resolves.toEqual({ success: true })
 
 		const correct2 = await app.handle(
 			post('/local', {
@@ -356,12 +368,12 @@ describe('standalone validator', () => {
 		)
 
 		expect(correct2.status).toBe(200)
-		expect(await correct2.json()).toEqual({ success: true, id: 1 })
+		await expect(correct2.json()).resolves.toEqual({ success: true, id: 1 })
 
 		const correct3 = await app.handle(post('/main'))
 
 		expect(correct3.status).toBe(200)
-		expect(await correct3.json()).toEqual({ success: true })
+		await expect(correct3.json()).resolves.toEqual({ success: true })
 
 		const incorrect1 = await app.handle(
 			post('/local', {
@@ -380,23 +392,23 @@ describe('standalone validator', () => {
 			})
 			.post(
 				'/local',
+				{
+					response: t.Object({ success: t.Boolean(), id: t.Number() })
+				},
 				({ body }) => ({
 					success: true,
 					...body
-				}),
-				{
-					response: t.Object({ success: t.Boolean(), id: t.Number() })
-				}
+				})
 			)
 
 		const app = new Elysia().use(local).post(
 			'/main',
-			() => ({
-				success: true
-			}),
 			{
 				response: t.Object({ success: t.Boolean() })
-			}
+			},
+			() => ({
+				success: true
+			})
 		)
 
 		const correct1 = await app.handle(
@@ -407,7 +419,7 @@ describe('standalone validator', () => {
 		)
 
 		expect(correct1.status).toBe(200)
-		expect(await correct1.json()).toEqual({ success: true })
+		await expect(correct1.json()).resolves.toEqual({ success: true })
 
 		const correct2 = await app.handle(
 			post('/local', {
@@ -416,12 +428,12 @@ describe('standalone validator', () => {
 		)
 
 		expect(correct2.status).toBe(200)
-		expect(await correct2.json()).toEqual({ success: true, id: 1 })
+		await expect(correct2.json()).resolves.toEqual({ success: true, id: 1 })
 
 		const correct3 = await app.handle(post('/main'))
 
 		expect(correct3.status).toBe(200)
-		expect(await correct3.json()).toEqual({ success: true })
+		await expect(correct3.json()).resolves.toEqual({ success: true })
 
 		const correct4 = await app.handle(
 			post('/main', {
@@ -431,7 +443,7 @@ describe('standalone validator', () => {
 		)
 
 		expect(correct4.status).toBe(200)
-		expect(await correct4.json()).toEqual({ success: true })
+		await expect(correct4.json()).resolves.toEqual({ success: true })
 
 		const incorrect1 = await app.handle(
 			post('/local', {
@@ -450,13 +462,13 @@ describe('standalone validator', () => {
 			})
 			.post(
 				'/local',
+				{
+					response: t.Object({ success: t.Boolean(), id: t.Number() })
+				},
 				({ body }) => ({
 					success: true,
 					...body
-				}),
-				{
-					response: t.Object({ success: t.Boolean(), id: t.Number() })
-				}
+				})
 			)
 
 		const app = new Elysia()
@@ -467,12 +479,12 @@ describe('standalone validator', () => {
 			})
 			.post(
 				'/main',
-				() => ({
-					success: true
-				}),
 				{
 					response: t.Object({ success: t.Boolean() })
-				}
+				},
+				() => ({
+					success: true
+				})
 			)
 
 		const correct1 = await app.handle(
@@ -483,7 +495,7 @@ describe('standalone validator', () => {
 		)
 
 		expect(correct1.status).toBe(200)
-		expect(await correct1.json()).toEqual({ success: true })
+		await expect(correct1.json()).resolves.toEqual({ success: true })
 
 		const correct2 = await app.handle(
 			post('/local', {
@@ -492,7 +504,7 @@ describe('standalone validator', () => {
 		)
 
 		expect(correct2.status).toBe(200)
-		expect(await correct2.json()).toEqual({ success: true, id: 1 })
+		await expect(correct2.json()).resolves.toEqual({ success: true, id: 1 })
 
 		const correct3 = await app.handle(
 			post('/main', {
@@ -502,7 +514,7 @@ describe('standalone validator', () => {
 		)
 
 		expect(correct3.status).toBe(200)
-		expect(await correct3.json()).toEqual({ success: true })
+		await expect(correct3.json()).resolves.toEqual({ success: true })
 
 		const incorrect1 = await app.handle(
 			post('/local', {
@@ -530,33 +542,33 @@ describe('standalone validator', () => {
 			})
 			.post(
 				'/local',
+				{
+					response: t.Object({ success: t.Boolean(), id: t.Number() })
+				},
 				({ body }) => ({
 					success: true,
 					...body
-				}),
-				{
-					response: t.Object({ success: t.Boolean(), id: t.Number() })
-				}
+				})
 			)
 
 		const parent = new Elysia().use(local).post(
 			'/parent',
-			() => ({
-				success: true
-			}),
 			{
 				response: t.Object({ success: t.Boolean() })
-			}
+			},
+			() => ({
+				success: true
+			})
 		)
 
 		const app = new Elysia().use(parent).post(
 			'/main',
-			() => ({
-				success: true
-			}),
 			{
 				response: t.Object({ success: t.Boolean() })
-			}
+			},
+			() => ({
+				success: true
+			})
 		)
 
 		const correct1 = await app.handle(
@@ -567,7 +579,7 @@ describe('standalone validator', () => {
 		)
 
 		expect(correct1.status).toBe(200)
-		expect(await correct1.json()).toEqual({ success: true })
+		await expect(correct1.json()).resolves.toEqual({ success: true })
 
 		const correct2 = await app.handle(
 			post('/local', {
@@ -576,7 +588,7 @@ describe('standalone validator', () => {
 		)
 
 		expect(correct2.status).toBe(200)
-		expect(await correct2.json()).toEqual({ success: true, id: 1 })
+		await expect(correct2.json()).resolves.toEqual({ success: true, id: 1 })
 
 		const correct3 = await app.handle(
 			post('/parent', {
@@ -586,12 +598,12 @@ describe('standalone validator', () => {
 		)
 
 		expect(correct3.status).toBe(200)
-		expect(await correct3.json()).toEqual({ success: true })
+		await expect(correct3.json()).resolves.toEqual({ success: true })
 
 		const correct4 = await app.handle(post('/main'))
 
 		expect(correct4.status).toBe(200)
-		expect(await correct4.json()).toEqual({ success: true })
+		await expect(correct4.json()).resolves.toEqual({ success: true })
 
 		const incorrect1 = await app.handle(
 			post('/local', {
@@ -619,33 +631,33 @@ describe('standalone validator', () => {
 			})
 			.post(
 				'/local',
+				{
+					response: t.Object({ success: t.Boolean(), id: t.Number() })
+				},
 				({ body }) => ({
 					success: true,
 					...body
-				}),
-				{
-					response: t.Object({ success: t.Boolean(), id: t.Number() })
-				}
+				})
 			)
 
 		const parent = new Elysia().use(local).post(
 			'/parent',
-			() => ({
-				success: true
-			}),
 			{
 				response: t.Object({ success: t.Boolean() })
-			}
+			},
+			() => ({
+				success: true
+			})
 		)
 
 		const app = new Elysia().use(parent).post(
 			'/main',
-			() => ({
-				success: true
-			}),
 			{
 				response: t.Object({ success: t.Boolean() })
-			}
+			},
+			() => ({
+				success: true
+			})
 		)
 
 		const correct1 = await app.handle(
@@ -656,7 +668,7 @@ describe('standalone validator', () => {
 		)
 
 		expect(correct1.status).toBe(200)
-		expect(await correct1.json()).toEqual({ success: true })
+		await expect(correct1.json()).resolves.toEqual({ success: true })
 
 		const correct2 = await app.handle(
 			post('/local', {
@@ -665,7 +677,7 @@ describe('standalone validator', () => {
 		)
 
 		expect(correct2.status).toBe(200)
-		expect(await correct2.json()).toEqual({ success: true, id: 1 })
+		await expect(correct2.json()).resolves.toEqual({ success: true, id: 1 })
 
 		const correct3 = await app.handle(
 			post('/parent', {
@@ -675,7 +687,7 @@ describe('standalone validator', () => {
 		)
 
 		expect(correct3.status).toBe(200)
-		expect(await correct3.json()).toEqual({ success: true })
+		await expect(correct3.json()).resolves.toEqual({ success: true })
 
 		const incorrect1 = await app.handle(
 			post('/local', {
@@ -711,10 +723,6 @@ describe('standalone validator', () => {
 			})
 			.post(
 				'/:family/:name',
-				({ body }) => ({
-					...body,
-					name: 'cantarella'
-				}),
 				{
 					body: t.Object({ name: t.String() }),
 					headers: t.Object({ name: t.String() }),
@@ -722,7 +730,11 @@ describe('standalone validator', () => {
 					params: t.Object({ name: t.String() }),
 					response: t.Object({ name: t.String() }),
 					cookie: t.Object({ name: t.String() })
-				}
+				},
+				({ body }) => ({
+					...body,
+					name: 'cantarella'
+				})
 			)
 
 		const correct = await app.handle(
@@ -745,7 +757,7 @@ describe('standalone validator', () => {
 		)
 
 		expect(correct.status).toBe(200)
-		expect(await correct.json()).toEqual({
+		await expect(correct.json()).resolves.toEqual({
 			family: 'fisalia',
 			name: 'cantarella'
 		})
@@ -775,16 +787,18 @@ describe('standalone validator', () => {
 			})
 			.post('/:family', ({ body }) => body)
 
-		const app = new Elysia()
-			.use(local)
-			.post('/:family/:name', ({ body }) => body, {
+		const app = new Elysia().use(local).post(
+			'/:family/:name',
+			{
 				body: t.Object({ name: t.String() }),
 				headers: t.Object({ name: t.String() }),
 				query: t.Object({ name: t.String() }),
 				params: t.Object({ name: t.String() }),
 				response: t.Object({ name: t.String() }),
 				cookie: t.Object({ name: t.String() })
-			})
+			},
+			({ body }) => body
+		)
 
 		const correct1 = await app.handle(
 			new Request(
@@ -806,7 +820,7 @@ describe('standalone validator', () => {
 		)
 
 		expect(correct1.status).toBe(200)
-		expect(await correct1.json()).toEqual({
+		await expect(correct1.json()).resolves.toEqual({
 			family: 'fisalia',
 			name: 'cantarella'
 		})
@@ -826,7 +840,7 @@ describe('standalone validator', () => {
 		)
 
 		expect(correct2.status).toBe(200)
-		expect(await correct2.json()).toEqual({
+		await expect(correct2.json()).resolves.toEqual({
 			family: 'fisalia'
 		})
 
@@ -861,27 +875,31 @@ describe('standalone validator', () => {
 			})
 			.post('/:family', ({ body }) => body)
 
-		const parent = new Elysia()
-			.use(local)
-			.post('/family/:family/:name', ({ body }) => body, {
+		const parent = new Elysia().use(local).post(
+			'/family/:family/:name',
+			{
 				body: t.Object({ name: t.String() }),
 				headers: t.Object({ name: t.String() }),
 				query: t.Object({ name: t.String() }),
 				params: t.Object({ name: t.String() }),
 				response: t.Object({ name: t.String() }),
 				cookie: t.Object({ name: t.String() })
-			})
+			},
+			({ body }) => body
+		)
 
-		const app = new Elysia()
-			.use(parent)
-			.post('/:family/:name', ({ body }) => body, {
+		const app = new Elysia().use(parent).post(
+			'/:family/:name',
+			{
 				body: t.Object({ name: t.String() }),
 				headers: t.Object({ name: t.String() }),
 				query: t.Object({ name: t.String() }),
 				params: t.Object({ name: t.String() }),
 				response: t.Object({ name: t.String() }),
 				cookie: t.Object({ name: t.String() })
-			})
+			},
+			({ body }) => body
+		)
 
 		const correct1 = await app.handle(
 			new Request(
@@ -903,7 +921,7 @@ describe('standalone validator', () => {
 		)
 
 		expect(correct1.status).toBe(200)
-		expect(await correct1.json()).toEqual({
+		await expect(correct1.json()).resolves.toEqual({
 			family: 'fisalia',
 			name: 'cantarella'
 		})
@@ -923,7 +941,7 @@ describe('standalone validator', () => {
 		)
 
 		expect(correct2.status).toBe(200)
-		expect(await correct2.json()).toEqual({
+		await expect(correct2.json()).resolves.toEqual({
 			family: 'fisalia'
 		})
 
@@ -947,7 +965,7 @@ describe('standalone validator', () => {
 		)
 
 		expect(correct3.status).toBe(200)
-		expect(await correct3.json()).toEqual({
+		await expect(correct3.json()).resolves.toEqual({
 			family: 'fisalia',
 			name: 'cantarella'
 		})
@@ -993,6 +1011,6 @@ describe('standalone validator', () => {
 
 		// before the fix: 500 with an opaque '~kind' in undefined TypeError
 		expect(res.status).toBe(200)
-		expect(await res.text()).toBe('fine')
+		await expect(res.text()).resolves.toBe('fine')
 	})
 })

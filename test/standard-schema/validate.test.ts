@@ -5,11 +5,15 @@ import { post, req } from '../utils'
 
 describe('Standard Schema Validate', () => {
 	it('validate body', async () => {
-		const app = new Elysia().post('/', ({ body }) => body, {
-			body: z.object({
-				id: z.number()
-			})
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: z.object({
+					id: z.number()
+				})
+			},
+			({ body }) => body
+		)
 
 		const value = await app
 			.handle(
@@ -31,11 +35,15 @@ describe('Standard Schema Validate', () => {
 	})
 
 	it('validate query', async () => {
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: z.object({
-				id: z.coerce.number()
-			})
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				query: z.object({
+					id: z.coerce.number()
+				})
+			},
+			({ query }) => query
+		)
 
 		const value = await app.handle(req('/?id=1')).then((x) => x.json())
 
@@ -47,11 +55,15 @@ describe('Standard Schema Validate', () => {
 	})
 
 	it('validate params', async () => {
-		const app = new Elysia().get('/user/:id', ({ params }) => params, {
-			params: z.object({
-				id: z.coerce.number()
-			})
-		})
+		const app = new Elysia().get(
+			'/user/:id',
+			{
+				params: z.object({
+					id: z.coerce.number()
+				})
+			},
+			({ params }) => params
+		)
 
 		const value = await app.handle(req('/user/1')).then((x) => x.json())
 
@@ -63,11 +75,15 @@ describe('Standard Schema Validate', () => {
 	})
 
 	it('validate headers', async () => {
-		const app = new Elysia().get('/', ({ headers }) => headers, {
-			headers: z.object({
-				id: z.coerce.number()
-			})
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				headers: z.object({
+					id: z.coerce.number()
+				})
+			},
+			({ headers }) => headers
+		)
 
 		const value = await app
 			.handle(
@@ -89,11 +105,11 @@ describe('Standard Schema Validate', () => {
 	it('validate single response', async () => {
 		const app = new Elysia().get(
 			'/:name',
-			// @ts-expect-error deliberately returns an invalid response to assert 422
-			({ params: { name } }) => (name === 'lilith' ? undefined : true),
 			{
 				response: z.boolean()
-			}
+			},
+			// @ts-expect-error deliberately returns an invalid response to assert 422
+			({ params: { name } }) => (name === 'lilith' ? undefined : true)
 		)
 
 		const exists = await app.handle(req('/fouco'))
@@ -106,16 +122,16 @@ describe('Standard Schema Validate', () => {
 	it('validate multiple response', async () => {
 		const app = new Elysia().get(
 			'/:name',
-			({ params: { name }, status }) =>
-				name === 'lilith'
-					? status(404, 'lilith')
-					: status(418, name as any),
 			{
 				response: {
 					404: z.literal('lilith'),
 					418: z.literal('fouco')
 				}
-			}
+			},
+			({ params: { name }, status }) =>
+				name === 'lilith'
+					? status(404, 'lilith')
+					: status(418, name as any)
 		)
 
 		const exists = await app.handle(req('/fouco'))
@@ -131,10 +147,6 @@ describe('Standard Schema Validate', () => {
 	it('validate multiple schema together', async () => {
 		const app = new Elysia().post(
 			'/:name',
-			({ params: { name }, status }) =>
-				name === 'lilith'
-					? status(404, 'lilith')
-					: status(418, name as any),
 			{
 				body: z.object({
 					id: z.number()
@@ -149,7 +161,11 @@ describe('Standard Schema Validate', () => {
 					404: z.literal('lilith'),
 					418: z.literal('fouco')
 				}
-			}
+			},
+			({ params: { name }, status }) =>
+				name === 'lilith'
+					? status(404, 'lilith')
+					: status(418, name as any)
 		)
 
 		const responses = await Promise.all(
@@ -196,10 +212,6 @@ describe('Standard Schema Validate', () => {
 			})
 			.post(
 				'/:name',
-				({ params: { name }, status }) =>
-					name === 'lilith'
-						? status(404, 'lilith')
-						: status(418, name as any),
 				{
 					params: z.object({
 						name: z.literal('fouco').or(z.literal('lilith'))
@@ -207,7 +219,11 @@ describe('Standard Schema Validate', () => {
 					response: {
 						418: z.literal('fouco')
 					}
-				}
+				},
+				({ params: { name }, status }) =>
+					name === 'lilith'
+						? status(404, 'lilith')
+						: status(418, name as any)
 			)
 
 		const responses = await Promise.all(
@@ -253,23 +269,21 @@ describe('Standard Schema Validate', () => {
 			}
 		})
 
-		const app = new Elysia()
-			.use(plugin)
-			.post(
-				'/:name',
-				({ params: { name }, status }) =>
-					name === 'lilith'
-						? status(404, 'lilith')
-						: status(418, name as any),
-				{
-					params: z.object({
-						name: z.literal('fouco').or(z.literal('lilith'))
-					}),
-					response: {
-						418: z.literal('fouco')
-					}
+		const app = new Elysia().use(plugin).post(
+			'/:name',
+			{
+				params: z.object({
+					name: z.literal('fouco').or(z.literal('lilith'))
+				}),
+				response: {
+					418: z.literal('fouco')
 				}
-			)
+			},
+			({ params: { name }, status }) =>
+				name === 'lilith'
+					? status(404, 'lilith')
+					: status(418, name as any)
+		)
 
 		const responses = await Promise.all(
 			[
@@ -303,10 +317,10 @@ describe('Standard Schema Validate', () => {
 	it('handle cookie', async () => {
 		const app = new Elysia().get(
 			'test',
-			({ cookie: { test } }) => typeof test.value,
 			{
 				cookie: z.object({ test: z.coerce.number() })
-			}
+			},
+			({ cookie: { test } }) => typeof test.value
 		)
 
 		const value = await app
