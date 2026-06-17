@@ -102,21 +102,5 @@
     "skipLibCheck": true,                                 /* Skip type checking all .d.ts files. */
   },
   "exclude": ["node_modules", "test/cloudflare/**/*"],
-  // The type gate checks ALL of `src` (regression coverage for the library
-  // itself) + `test/types` (the inference/declaration ratchet) + the import
-  // smoke test. The 161 runtime `*.test.ts` are deliberately NOT type-checked
-  // here. CAVEAT: ~20 of them DO carry @ts-expect-error type assertions (~62
-  // lines — e.g. test/core/as.test.ts), so narrowing the gate drops those
-  // tripwires. The load-bearing inference ones (notably `.as()` response-scope
-  // promotion) have been ported into `test/types/*` (see lifecycle/as.ts); the
-  // rest are implicit "does the runtime test still use the API in a well-typed
-  // way" coverage. The runtime tests are still EXECUTED by `bun test`
-  // (`test:functionality`), and type-checking them cost ~31% of this command
-  // (4.18M -> 2.87M instantiations, ~8.6s -> ~5.3s). `src/**/*` (not
-  // transitive-only) guarantees every src file is checked even if no test imports it.
-  // Trade-off accepted 2026-06-17 (was `test/**/*` under the C2d ratchet). To
-  // restore the full-suite type-check, set include back to `["test/**/*"]`.
-  // `test/cloudflare` stays out — it is its own wrangler project importing
-  // generated `.mjs` artifacts and typechecks via `cf-typegen`.
   "include": ["src/**/*", "test/types/**/*", "test/type-system/import.ts"]
 }
