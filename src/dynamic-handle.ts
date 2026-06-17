@@ -921,11 +921,19 @@ export const createDynamicErrorHandler = (app: AnyElysia) => {
 				const hook = app.event.error[i]
 				let response = hook.fn(errorContext as any)
 				if (response instanceof Promise) response = await response
-				if (response !== undefined && response !== null)
+				if (response !== undefined && response !== null) {
+					if (
+						!(response instanceof Response) &&
+						!(response instanceof ElysiaCustomStatusResponse) &&
+						(context.set.status === 200 || !context.set.status)
+					)
+						context.set.status = error.status ?? 500
+
 					return (context.response = mapResponse(
 						response,
 						context.set
 					))
+				}
 			}
 
 		if (context.response) {
