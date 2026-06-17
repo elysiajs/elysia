@@ -2669,17 +2669,6 @@ export const composeErrorHandler = (app: AnyElysia) => {
 	const saveResponse =
 		hasTrace || !!hooks.afterResponse?.length ? 'context.response = ' : ''
 
-	fnLiteral +=
-		`if(typeof error?.toResponse==='function'&&!(error instanceof ValidationError)&&!(error instanceof TransformDecodeError)){` +
-		`try{` +
-		`let raw=error.toResponse()\n` +
-		`if(typeof raw?.then==='function')raw=await raw\n` +
-		`if(raw instanceof Response)set.status=raw.status\n` +
-		`context.response=context.responseValue=raw\n` +
-		`}catch(toResponseError){\n` +
-		`}\n` +
-		`}\n`
-
 	if (app.event.error)
 		for (let i = 0; i < app.event.error.length; i++) {
 			const handler = app.event.error[i]
@@ -2732,6 +2721,18 @@ export const composeErrorHandler = (app: AnyElysia) => {
 
 			fnLiteral += '}'
 		}
+
+	// toResponse fallback: run after onError hooks so custom error handlers take priority
+	fnLiteral +=
+		`if(!context.response&&typeof error?.toResponse==='function'&&!(error instanceof ValidationError)&&!(error instanceof TransformDecodeError)){` +
+		`try{` +
+		`let raw=error.toResponse()\n` +
+		`if(typeof raw?.then==='function')raw=await raw\n` +
+		`if(raw instanceof Response)set.status=raw.status\n` +
+		`context.response=context.responseValue=raw\n` +
+		`}catch(toResponseError){\n` +
+		`}\n` +
+		`}\n`
 
 	fnLiteral +=
 		`if(error instanceof ValidationError||error instanceof TransformDecodeError){\n` +
