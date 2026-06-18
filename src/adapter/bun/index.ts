@@ -63,9 +63,10 @@ export const BunAdapter = createAdapter({
 	name: 'bun',
 	runtime: 'bun',
 	listen(app, options, callback) {
-		const serve = (
+		const _config = (app['~config'] as any)?.serve
+		const _options =
 			typeof options === 'object' ? options : { port: +options }
-		) as any
+		const serve = _config ? { ..._config, ..._options } : _config
 
 		const hasWs = app['~hasWS']
 

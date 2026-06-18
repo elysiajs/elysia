@@ -593,13 +593,7 @@ export function mergeHook(
 		a.transform = merge(a.transform, b.transform, reverse)
 
 	// @ts-expect-error
-	if (a.derive || b.derive)
-		a.beforeHandle = merge(
-			a.beforeHandle,
-			// @ts-expect-error
-			merge(a.derive, b.derive),
-			reverse
-		)
+	if (a.derive || b.derive) a.derive = merge(a.derive, b.derive, reverse)
 
 	if (a.beforeHandle || b.beforeHandle)
 		a.beforeHandle = merge(a.beforeHandle, b.beforeHandle, reverse)
@@ -713,7 +707,9 @@ export function cloneHook<T extends Partial<AnyLocalHook> | Partial<AppHook>>(
 	const out = Object.assign(nullObject(), src) as Record<string, any>
 
 	for (const key of eventProperties)
-		if (Array.isArray(out[key])) out[key] = (out[key] as unknown[]).slice()
+		if (key in out)
+			if (Array.isArray(out[key]))
+				out[key] = (out[key] as unknown[]).slice()
 
 	return out as T
 }

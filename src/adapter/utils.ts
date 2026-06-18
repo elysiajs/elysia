@@ -414,8 +414,16 @@ export function handleSet(set: Context['set']) {
 	//
 	// If we assign to set.headers, it will mutate the prototype's headers
 	// which cause all responses share the same headers object
+	// A `Headers` instance also has a non-Object prototype, but `for..in` over
+	// it yields nothing/methods and would wipe the real headers (incl.
+	// Set-Cookie). Only flatten the plain object that inherits Context's
+	// shared default headers.
 	const proto = Object.getPrototypeOf(set.headers)
-	if (proto !== null && proto !== Object.prototype) {
+	if (
+		proto !== null &&
+		proto !== Object.prototype &&
+		!(set.headers instanceof Headers)
+	) {
 		const flat: Record<string, unknown> = Object.create(null)
 
 		for (const key in set.headers) flat[key] = set.headers[key]

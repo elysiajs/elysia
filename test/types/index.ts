@@ -1543,8 +1543,7 @@ type a = keyof {}
 
 		const plugin = new Elysia()
 			.use(inner)
-			.guard({
-				as: 'plugin',
+			.guard('plugin', {
 				response: t.String()
 			})
 			.get('/plugin', () => 'ok')
@@ -1604,8 +1603,7 @@ type a = keyof {}
 
 		const plugin = new Elysia()
 			.use(inner)
-			.guard({
-				as: 'plugin',
+			.guard('plugin', {
 				response: t.String()
 			})
 			.get('/plugin', () => 'ok')
@@ -1707,8 +1705,7 @@ type a = keyof {}
 // handle as global
 {
 	const inner = new Elysia()
-		.guard({
-			as: 'global',
+		.guard('global', {
 			response: t.Number()
 		})
 		// @ts-expect-error
@@ -1726,8 +1723,7 @@ type a = keyof {}
 // ? handle as global with local override
 {
 	const inner = new Elysia()
-		.guard({
-			as: 'global',
+		.guard('global', {
 			response: t.Number()
 		})
 		// @ts-expect-error
@@ -1747,8 +1743,7 @@ type a = keyof {}
 // handle as global with scoped override
 {
 	const inner = new Elysia()
-		.guard({
-			as: 'global',
+		.guard('global', {
 			response: t.Number()
 		})
 		// @ts-expect-error
@@ -1756,8 +1751,7 @@ type a = keyof {}
 
 	const plugin = new Elysia()
 		.use(inner)
-		.guard({
-			as: 'plugin',
+		.guard('plugin', {
 			response: t.String()
 		})
 		.get('/plugin', () => 'ok')
@@ -1768,8 +1762,7 @@ type a = keyof {}
 // handle as global
 {
 	const inner = new Elysia()
-		.guard({
-			as: 'global',
+		.guard('global', {
 			response: t.Number()
 		})
 		// @ts-expect-error
@@ -1787,8 +1780,7 @@ type a = keyof {}
 // handle as global with local override
 {
 	const inner = new Elysia()
-		.guard({
-			as: 'global',
+		.guard('global', {
 			response: t.Number()
 		})
 		// @ts-expect-error
@@ -1808,8 +1800,7 @@ type a = keyof {}
 // ? handle as global with scoped override
 {
 	const inner = new Elysia()
-		.guard({
-			as: 'global',
+		.guard('global', {
 			response: t.Number()
 		})
 		// @ts-expect-error
@@ -1817,8 +1808,7 @@ type a = keyof {}
 
 	const plugin = new Elysia()
 		.use(inner)
-		.guard({
-			as: 'plugin',
+		.guard('plugin', {
 			response: t.String()
 		})
 		.get('/plugin', () => 'ok')
@@ -1829,8 +1819,7 @@ type a = keyof {}
 // handle as scoped
 {
 	const inner = new Elysia()
-		.guard({
-			as: 'plugin',
+		.guard('plugin', {
 			response: t.Number()
 		})
 		// @ts-expect-error
@@ -1847,8 +1836,7 @@ type a = keyof {}
 // handle as local
 {
 	const inner = new Elysia()
-		.guard({
-			as: 'local',
+		.guard('local', {
 			response: t.Number()
 		})
 		// @ts-expect-error
@@ -1920,8 +1908,7 @@ type a = keyof {}
 	// ? Reconcile status
 	{
 		const inner = new Elysia()
-			.guard({
-				as: 'global',
+			.guard('global', {
 				response: {
 					401: t.Number(),
 					402: t.Number()
@@ -1947,8 +1934,7 @@ type a = keyof {}
 	// ? Reconcile inline handle
 	{
 		const inner = new Elysia()
-			.guard({
-				as: 'global',
+			.guard('global', {
 				response: {
 					401: t.Number(),
 					402: t.Number()

@@ -4751,7 +4751,7 @@ export class Elysia<
 				const added = node.added
 
 				for (const key in added) {
-					if (key === 'schema') {
+					if (key === 'schemas') {
 						const schemas = (added as any).schemas as
 							| any[]
 							| undefined
@@ -4769,6 +4769,8 @@ export class Elysia<
 
 						continue
 					}
+
+					if (key === 'schema') continue
 
 					if (eventProperties.has(key)) {
 						const raw = (added as any)[key] as Function | Function[]

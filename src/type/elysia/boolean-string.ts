@@ -3,7 +3,6 @@ import type { TSchemaOptions } from 'typebox'
 
 import { isEmpty } from '../../utils'
 import { ELYSIA_TYPES } from '../constants'
-import { Intersect } from './intersect'
 import { BooleanType } from './boolean'
 import { StringType } from './string'
 import { Union } from './union'
@@ -36,6 +35,6 @@ export function BooleanString(property?: TSchemaOptions) {
 
 	return elyType(
 		ELYSIA_TYPES.BooleanString,
-		Union([boolean, Intersect([StringifiedBoolean, boolean])], meta)
+		Union([boolean, StringifiedBoolean], meta)
 	)
 }

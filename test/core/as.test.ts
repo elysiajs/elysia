@@ -80,7 +80,7 @@ describe('as', () => {
 
 		const inner = new Elysia()
 			.guard({
-				response: t.Number(),
+				response: t.Number()
 			})
 			.beforeHandle(() => {
 				called++
@@ -160,11 +160,10 @@ describe('as', () => {
 
 		const plugin = new Elysia()
 			.use(inner)
-			.guard({
-				as: 'plugin',
+			.guard('plugin', {
 				response: t.String()
 			})
-            .beforeHandle('plugin', () => {
+			.beforeHandle('plugin', () => {
 				called++
 			})
 			.get('/plugin', () => 'ok')

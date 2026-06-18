@@ -762,8 +762,7 @@ import { Prettify } from '../../../src/types'
 				}
 			}
 		})
-		.guard({
-			as: 'plugin',
+		.guard('plugin', {
 			a: true,
 			b: true
 		})
@@ -795,8 +794,7 @@ import { Prettify } from '../../../src/types'
 				}
 			}
 		})
-		.guard({
-			as: 'global',
+		.guard('global', {
 			a: true,
 			b: true
 		})
@@ -1435,8 +1433,7 @@ import { Prettify } from '../../../src/types'
 				}
 			}
 		})
-		.guard({
-			as: 'plugin',
+		.guard('plugin', {
 			q: true,
 			beforeHandle: [
 				({ status }) => {
@@ -1506,8 +1503,7 @@ import { Prettify } from '../../../src/types'
 				}
 			}
 		})
-		.guard({
-			as: 'global',
+		.guard('global', {
 			q: true,
 			beforeHandle: [
 				({ status }) => {
@@ -2114,8 +2110,7 @@ import { Prettify } from '../../../src/types'
 // Macro should inherit schema type
 {
 	new Elysia({ name: 'my-middleware-1' })
-		.guard({
-			as: 'plugin',
+		.guard('plugin', {
 			headers: t.Object({
 				role: t.UnionEnum(['admin', 'user'])
 			}),

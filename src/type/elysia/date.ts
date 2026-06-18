@@ -17,6 +17,18 @@ import {
 const ISO8601 = /T\d\d(?::\d\d){1,2} \d\d:\d\d$/
 const removeTime = / (\d{2}:\d{2})$/
 
+const toTimestamp = (value: Date | string | number) => {
+	if (value instanceof Date) return value.getTime()
+	let t = new Date(value).getTime()
+	if (
+		isNaN(t) &&
+		typeof value === 'string' &&
+		/T\d{2}:\d{2}(:\d{2})? \d{2}:\d{2}$/.test(value)
+	)
+		t = new Date(value.replace(/ (\d{2}:\d{2})$/, '+$1')).getTime()
+	return t
+}
+
 let StringifiedDate: Type.TCodec<
 	Type.TUnion<[Type.TUnsafe<Date>, Type.TString, Type.TNumber]>,
 	Date
@@ -93,37 +105,32 @@ export function DateType(
 function DateWithProperty(options: DateOptions) {
 	const refines: RefinesType<Date> = []
 
-	if (options.minimumTimestamp)
+	if (typeof options.minimumTimestamp === 'number')
 		refines.push([
-			(value) => value.getTime() > options.minimumTimestamp!,
-			`date must be after ${new Date(options.minimumTimestamp!).toISOString()}`
+			(value) => toTimestamp(value) > options.minimumTimestamp!,
+			`date must be after ${new Date(options.minimumTimestamp).toISOString()}`
 		])
 
-	if (options.maximumTimestamp)
+	if (typeof options.maximumTimestamp === 'number')
 		refines.push([
-			(value) => value.getTime() < options.maximumTimestamp!,
-			`date must be before ${new Date(options.maximumTimestamp!).toISOString()}`
+			(value) => toTimestamp(value) < options.maximumTimestamp!,
+			`date must be before ${new Date(options.maximumTimestamp).toISOString()}`
 		])
 
-	if (options.exclusiveMinimumTimestamp)
+	if (typeof options.exclusiveMinimumTimestamp === 'number')
 		refines.push([
-			(value) => value.getTime() >= options.exclusiveMinimumTimestamp!,
-			`date must be after or equal to ${new Date(options.exclusiveMinimumTimestamp!).toISOString()}`
+			(value) => toTimestamp(value) >= options.exclusiveMinimumTimestamp!,
+			`date must be after or equal to ${new Date(options.exclusiveMinimumTimestamp).toISOString()}`
 		])
 
-	if (options.exclusiveMaximumTimestamp)
+	if (typeof options.exclusiveMaximumTimestamp === 'number')
 		refines.push([
-			(value) => value.getTime() <= options.exclusiveMaximumTimestamp!,
-			`date must be before or equal to ${new Date(options.exclusiveMaximumTimestamp!).toISOString()}`
+			(value) => toTimestamp(value) <= options.exclusiveMaximumTimestamp!,
+			`date must be before or equal to ${new Date(options.exclusiveMaximumTimestamp).toISOString()}`
 		])
 
 	let schema: any = Refines(StringifiedDate, refines as any)
 
-	// Carry meta (`default`, `description`, ...) onto the schema. Without
-	// this, `t.Date({ default })` drops the default - this function only
-	// reads timestamp bounds. Clone first so the shared `StringifiedDate`
-	// isn't mutated, and mirror `default` onto each union branch so the
-	// default survives whichever branch validates.
 	const [, meta] = getMeta(options as any)
 	if (meta) {
 		schema = cloneSchema(schema)

@@ -35,6 +35,9 @@ export function NumericEnum<T extends AssertNumericEnum<T>>(
 		Type.Refine(
 			Union([StringType({ format: 'numeric' }), NumberType()], property),
 			(value) => {
+				if (typeof value === 'string' && value.trim() === '')
+					return false
+
 				const n = +value
 				return !isNaN(n) && allowed.has(n)
 			},

@@ -6,7 +6,7 @@ import type { ElysiaAdapter } from '../../adapter'
 import { RouteValidator } from '../../validator/route'
 import type { Validator } from '../../validator'
 
-import { isAsyncFunction, isAsyncLifecycle } from '../utils'
+import { isAsyncFunction, isAsyncLifecycle, mayReturnPromise } from '../utils'
 
 import { compileCookieConfig } from '../../cookie/config'
 import {
@@ -201,35 +201,16 @@ function applyHook(
 	appHook: Partial<AnyLocalHook> | undefined,
 	rootHook: Partial<AppHook> | undefined
 ): AnyLocalHook | undefined {
-	if (!localHook) {
-		if (rootHook)
-			return mergeHook(
-				cloneHook(appHook ?? nullObject()) as any,
-				rootHook as any,
-				true,
-				true
-			) as any
+	let hook: any
 
-		return appHook as any
+	if (localHook && appHook)
+		hook = mergeHook(cloneHook(localHook) as any, appHook as any, true)
+	else {
+		const base = localHook ?? appHook
+		if (!rootHook) return base as any
+
+		hook = cloneHook((base ?? nullObject()) as any)
 	}
-
-	if (!appHook) {
-		if (rootHook)
-			return mergeHook(
-				cloneHook(localHook) as any,
-				rootHook as any,
-				true,
-				true
-			) as any
-
-		return localHook as any
-	}
-
-	const hook = mergeHook(
-		cloneHook(localHook) as any,
-		appHook as any,
-		true
-	) as any
 
 	if (rootHook) mergeHook(hook, rootHook as any, true, true)
 
@@ -446,6 +427,10 @@ export function buildNativeStaticResponse(
 	if (mapped instanceof Promise) return mapped as Promise<Response>
 }
 
+function toArray(name: string, hook: any) {
+	if (typeof hook[name] === 'function') hook[name] = [hook[name]]
+}
+
 export function compileHandler(
 	[
 		_method,
@@ -500,7 +485,6 @@ export function compileHandler(
 			const existing = (hook as any).error
 
 			if (existing) {
-				// Dedup against handlers already on the hook.
 				if (Array.isArray(errors)) {
 					for (const fn of errors)
 						if (!existing.includes(fn)) existing.push(fn)
@@ -514,12 +498,14 @@ export function compileHandler(
 
 	if (hook) {
 		promoteDerive(hook)
-		for (const key in hook) {
-			if (!eventProperties.has(key)) continue
 
-			const v = (hook as any)[key]
-			if (typeof v === 'function') (hook as any)[key] = [v]
-		}
+		toArray('parse', hook)
+		toArray('transform', hook)
+		toArray('beforeHandle', hook)
+		toArray('afterHandle', hook)
+		toArray('mapResponse', hook)
+		toArray('afterResponse', hook)
+		toArray('error', hook)
 	}
 
 	const method = mapMethodBack(_method as any)
@@ -709,6 +695,12 @@ export function compileHandler(
 		hasErrorHook &&
 		(hasAfterHandle || hasMapResponse || hasResponseValidator)
 
+	const responseValiForcesAsync =
+		hasResponseValidator &&
+		isHandleFunction &&
+		!handlerIsAsync &&
+		mayReturnPromise(handler as Function)
+
 	const afterResponseForcesAsync =
 		hasAfterResponse &&
 		(isAsyncLifecycle(hook?.afterResponse) ||
@@ -721,6 +713,7 @@ export function compileHandler(
 		hasBody ||
 		handlerIsAsync ||
 		errorHookForcesAsync ||
+		responseValiForcesAsync ||
 		afterResponseForcesAsync ||
 		hasTrace ||
 		hasCookieSign ||
@@ -789,10 +782,6 @@ export function compileHandler(
 		inlineUnsafe = true
 	}
 
-	// Freeze the preamble as `head`; the body builds into a fresh `code` buffer
-	// so the hoisted `_sc()` schedule decl (known only after the hook pipeline
-	// is walked) can be concatenated between them at the end — instead of an
-	// inline `/*__SCHEDULE_DECL__*/` placeholder + `code.replace` string scan.
 	const head = code
 	code = ''
 
@@ -834,9 +823,7 @@ export function compileHandler(
 		code += 'try{\n' + parseCode + '}catch(e){throw new pe(e)}\n'
 
 		if (hasTrace) code += endTrace()
-	} else if (hasTrace) {
-		code += beginTrace('parse', 0) + endTrace()
-	}
+	} else if (hasTrace) code += beginTrace('parse', 0) + endTrace()
 
 	if (hook?.transform?.length || hasTrace) {
 		const transformLen = hook?.transform?.length ?? 0
@@ -904,13 +891,11 @@ export function compileHandler(
 		hasTrace
 
 	const res = adapter.response
-	// link() registers params for its side effect and returns nothing; the
-	// `?? 'rm'`/`?? 'rc'` supplies the alias the generated code references
+
 	/* eslint-disable sonarjs/no-use-of-empty-return-value */
 	const map = hasSet
 		? (link(res.map, 'rm') ?? 'rm')
 		: (link(res.compact ?? res.map, 'rc') ?? 'rc')
-	/* eslint-enable sonarjs/no-use-of-empty-return-value */
 
 	if (isPromiseHandler) link(cloneResponse, 'cr')
 
@@ -1137,6 +1122,7 @@ export function compileHandler(
 					`const _vr=va.response[_r.code]\n` +
 					`if(_vr)_r.response=${awaitStr}_vr.EncodeFrom(_r.response,'response')\n` +
 					`}else if(!(_r instanceof Response)` +
+					`&&!(_r instanceof ReadableStream)` +
 					`&&typeof _r?.next!=='function'){\n` +
 					`const _vr=va.response[c.set.status??200]\n` +
 					`if(_vr)_r=${awaitStr}_vr.EncodeFrom(_r,'response')\n` +
@@ -1145,7 +1131,13 @@ export function compileHandler(
 
 			code += schedule
 			code += signPrefix
-			code += `return ${hasSet ? `${map}(_r,c.set,c.request)` : `${map}(_r,c.request)`}\n`
+			const finalMap = hasSet
+				? `${map}(_r,c.set,c.request)`
+				: `${map}(_r,c.request)`
+
+			if (syncErrorHook)
+				code += `if(_r instanceof Promise)return ${finalMap}.catch((_e)=>_ce(_e,c))\n`
+			code += `return ${finalMap}\n`
 		}
 	} else if (isHandleFunction) {
 		if (!isAsync) link(forwardError, 'fe')

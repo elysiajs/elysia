@@ -624,7 +624,7 @@ describe('Response Validator', () => {
 				},
 				() => ({ status: 'healthy' }) as const
 			)
-			.listen(3000)
+			.listen(0)
 
 		const status = app.handle(req('/health')).then((x) => x.status)
 

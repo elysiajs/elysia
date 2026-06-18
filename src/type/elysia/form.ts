@@ -26,7 +26,10 @@ export const Form = <T extends TProperties>(
 		Type.Decode(
 			Type.Refine(
 				Type.Unsafe<any>({ '~kind': 'FormData' }),
-				(value) => '~ely-form' in value,
+				(value) =>
+					typeof value === 'object' &&
+					value !== null &&
+					'~ely-form' in value,
 				() => 'must be instance of Elysia.form'
 			),
 			(value) => value

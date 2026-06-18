@@ -37,8 +37,7 @@ import { expectTypeOf } from 'expect-type'
 				})
 			})
 		})
-		.guard({
-			as: 'plugin',
+		.guard('plugin', {
 			account: true
 		})
 		.get('/', ({ account }) => {
@@ -65,8 +64,7 @@ import { expectTypeOf } from 'expect-type'
 				})
 			})
 		})
-		.guard({
-			as: 'global',
+		.guard('global', {
 			account: true
 		})
 		.get('/', ({ account }) => {
@@ -94,8 +92,7 @@ import { expectTypeOf } from 'expect-type'
 				})
 			})
 		})
-		.guard({
-			as: 'local',
+		.guard('local', {
 			account: true
 		})
 		.get('/', ({ account }) => {
@@ -256,8 +253,7 @@ import { expectTypeOf } from 'expect-type'
 				}
 			})
 		})
-		.guard({
-			as: 'plugin',
+		.guard('plugin', {
 			account: true
 		})
 		.get('/', ({ account }) => {

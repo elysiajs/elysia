@@ -257,8 +257,7 @@ import { expectTypeOf } from 'expect-type'
 	// Handle standalone
 	{
 		new Elysia()
-			.guard({
-				as: 'plugin',
+			.guard('plugin', {
 				schema: 'standalone',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
@@ -278,8 +277,7 @@ import { expectTypeOf } from 'expect-type'
 	// Handle with local schema standalone
 	{
 		new Elysia()
-			.guard({
-				as: 'plugin',
+			.guard('plugin', {
 				schema: 'standalone',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
@@ -307,14 +305,12 @@ import { expectTypeOf } from 'expect-type'
 	// Handle with multiple standalone with local schema
 	{
 		new Elysia()
-			.guard({
-				as: 'plugin',
+			.guard('plugin', {
 				schema: 'standalone',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
 			})
-			.guard({
-				as: 'plugin',
+			.guard('plugin', {
 				schema: 'standalone',
 				body: t.Object({ separated: t.Literal(true) })
 			})
@@ -344,14 +340,12 @@ import { expectTypeOf } from 'expect-type'
 	// intersects
 	{
 		new Elysia()
-			.guard({
-				as: 'plugin',
+			.guard('plugin', {
 				schema: 'standalone',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
 			})
-			.guard({
-				as: 'plugin',
+			.guard('plugin', {
 				body: t.Object({ separated: t.Literal(true) })
 			})
 			.post(
@@ -377,8 +371,7 @@ import { expectTypeOf } from 'expect-type'
 	// Handle standalone
 	{
 		new Elysia()
-			.guard({
-				as: 'plugin',
+			.guard('plugin', {
 				schema: 'standalone',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
@@ -398,8 +391,7 @@ import { expectTypeOf } from 'expect-type'
 	// Handle with local schema standalone
 	{
 		new Elysia()
-			.guard({
-				as: 'plugin',
+			.guard('plugin', {
 				schema: 'standalone',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
@@ -427,8 +419,7 @@ import { expectTypeOf } from 'expect-type'
 	// Handle with multiple standalone with local schema
 	{
 		new Elysia()
-			.guard({
-				as: 'plugin',
+			.guard('plugin', {
 				schema: 'standalone',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
@@ -463,14 +454,12 @@ import { expectTypeOf } from 'expect-type'
 	// intersects
 	{
 		const local = new Elysia()
-			.guard({
-				as: 'plugin',
+			.guard('plugin', {
 				schema: 'standalone',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
 			})
-			.guard({
-				as: 'plugin',
+			.guard('plugin', {
 				schema: 'standalone',
 				body: t.Object({ separated: t.Literal(true) })
 			})
@@ -561,8 +550,7 @@ import { expectTypeOf } from 'expect-type'
 	// Handle standalone
 	{
 		new Elysia()
-			.guard({
-				as: 'global',
+			.guard('global', {
 				schema: 'standalone',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
@@ -582,8 +570,7 @@ import { expectTypeOf } from 'expect-type'
 	// Handle with local schema standalone
 	{
 		new Elysia()
-			.guard({
-				as: 'global',
+			.guard('global', {
 				schema: 'standalone',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
@@ -611,14 +598,12 @@ import { expectTypeOf } from 'expect-type'
 	// Handle with multiple standalone with local schema
 	{
 		new Elysia()
-			.guard({
-				as: 'global',
+			.guard('global', {
 				schema: 'standalone',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
 			})
-			.guard({
-				as: 'global',
+			.guard('global', {
 				schema: 'standalone',
 				body: t.Object({ separated: t.Literal(true) })
 			})
@@ -648,14 +633,12 @@ import { expectTypeOf } from 'expect-type'
 	// intersects
 	{
 		new Elysia()
-			.guard({
-				as: 'global',
+			.guard('global', {
 				schema: 'standalone',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
 			})
-			.guard({
-				as: 'global',
+			.guard('global', {
 				body: t.Object({ separated: t.Literal(true) })
 			})
 			.post(
@@ -681,8 +664,7 @@ import { expectTypeOf } from 'expect-type'
 	// Handle standalone
 	{
 		new Elysia()
-			.guard({
-				as: 'global',
+			.guard('global', {
 				schema: 'standalone',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
@@ -702,8 +684,7 @@ import { expectTypeOf } from 'expect-type'
 	// Handle with local schema standalone
 	{
 		new Elysia()
-			.guard({
-				as: 'global',
+			.guard('global', {
 				schema: 'standalone',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
@@ -731,14 +712,12 @@ import { expectTypeOf } from 'expect-type'
 	// Handle with multiple standalone with local schema
 	{
 		new Elysia()
-			.guard({
-				as: 'global',
+			.guard('global', {
 				schema: 'standalone',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
 			})
-			.guard({
-				as: 'plugin',
+			.guard('plugin', {
 				schema: 'standalone',
 				body: t.Object({ separated: t.Literal(true) })
 			})
@@ -768,14 +747,12 @@ import { expectTypeOf } from 'expect-type'
 	// intersects
 	{
 		const local = new Elysia()
-			.guard({
-				as: 'global',
+			.guard('global', {
 				schema: 'standalone',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
 			})
-			.guard({
-				as: 'global',
+			.guard('global', {
 				schema: 'standalone',
 				body: t.Object({ separated: t.Literal(true) })
 			})
@@ -980,9 +957,8 @@ import { expectTypeOf } from 'expect-type'
 	// ? handle local
 	{
 		const local = new Elysia()
-			.guard({
+			.guard('plugin', {
 				schema: 'standalone',
-				as: 'plugin',
 				body: t.Object({ family: t.String() }),
 				headers: t.Object({ family: t.String() }),
 				query: t.Object({ family: t.String() }),
@@ -1118,9 +1094,8 @@ import { expectTypeOf } from 'expect-type'
 	// ? handle local
 	{
 		const local = new Elysia()
-			.guard({
+			.guard('global', {
 				schema: 'standalone',
-				as: 'global',
 				body: t.Object({ family: t.String() }),
 				headers: t.Object({ family: t.String() }),
 				query: t.Object({ family: t.String() }),

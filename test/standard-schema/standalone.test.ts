@@ -349,8 +349,7 @@ describe('Standard Schema Standalone', () => {
 	})
 
 	it('merge plugin', async () => {
-		const plugin = new Elysia().guard({
-			as: 'plugin',
+		const plugin = new Elysia().guard('plugin', {
 			schema: 'standalone',
 			response: {
 				404: z.object({

@@ -19,7 +19,10 @@ export function IntegerString(property?: TNumberOptions) {
 	StringifiedInteger ??= Type.Decode(
 		Type.Refine(
 			StringType(),
-			(value) => !isNaN(+value) && Number.isInteger(+value),
+			(value) =>
+				value.trim() !== '' &&
+				!isNaN(+value) &&
+				Number.isInteger(+value),
 			() => 'must be integer'
 		),
 		(value) => +value
@@ -45,6 +48,7 @@ export function IntegerString(property?: TNumberOptions) {
 		Type.Refine(
 			StringType(),
 			(value) => {
+				if (value.trim() === '') return false
 				const n = +value
 				if (isNaN(n) || !Number.isInteger(n)) return false
 				if (typeof c.minimum === 'number' && n < c.minimum)

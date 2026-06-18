@@ -57,6 +57,17 @@ const coerceFile = (schema: AnySchema) =>
 		? coerceFormData()
 		: coerceBody()
 
+const SLOTS: [
+	'body' | 'headers' | 'query' | 'params' | 'cookie',
+	(schema: any) => any
+][] = [
+	['body', coerceFile],
+	['headers', coerceStringToStructure],
+	['query', coerceQuery],
+	['params', coerceRoot],
+	['cookie', coerceStringToStructure]
+]
+
 export class RouteValidator<const in out T extends RouteSchema> {
 	body: ToSubTypeValidator<T['body']> | undefined
 	headers: ToSubTypeValidator<T['headers']> | undefined
@@ -76,18 +87,7 @@ export class RouteValidator<const in out T extends RouteSchema> {
 
 		const standaloneSchemas = options?.schemas
 
-		const slots: [
-			'body' | 'headers' | 'query' | 'params' | 'cookie',
-			(schema: any) => any
-		][] = [
-			['body', coerceFile],
-			['headers', coerceStringToStructure],
-			['query', coerceQuery],
-			['params', coerceRoot],
-			['cookie', coerceStringToStructure]
-		]
-
-		for (const [slot, coerce] of slots) {
+		for (const [slot, coerce] of SLOTS) {
 			const standalone = pickStandalone(standaloneSchemas, slot) as
 				| AnySchema[]
 				| undefined

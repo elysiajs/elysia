@@ -36,7 +36,16 @@ export function defaultWSParse(message: string | Buffer | Uint8Array): unknown {
 		}
 	}
 
-	if (isNumericString(message)) return +message
+	if (isNumericString(message)) {
+		// Don't coerce values that would lose precision (Snowflakes, long IDs):
+		// <16 chars is always safe; a 16-char value only if it round-trips.
+		if (message.length < 16) return +message
+
+		const n = +message
+		if (message.length === 16 && String(n) === message) return n
+
+		return message
+	}
 	if (message === 'true') return true
 	if (message === 'false') return false
 	if (message === 'null') return null

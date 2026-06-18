@@ -535,9 +535,8 @@ describe('standalone validator', () => {
 
 	it('handle scoped scope', async () => {
 		const local = new Elysia()
-			.guard({
+			.guard('plugin', {
 				schema: 'standalone',
-				as: 'plugin',
 				body: t.Object({ id: t.Number() })
 			})
 			.post(
@@ -624,9 +623,8 @@ describe('standalone validator', () => {
 
 	it('handle global scope', async () => {
 		const local = new Elysia()
-			.guard({
+			.guard('global', {
 				schema: 'standalone',
-				as: 'global',
 				body: t.Object({ id: t.Number() })
 			})
 			.post(
@@ -773,9 +771,8 @@ describe('standalone validator', () => {
 
 	it('handle every schema type on scoped scope', async () => {
 		const local = new Elysia()
-			.guard({
+			.guard('plugin', {
 				schema: 'standalone',
-				as: 'plugin',
 				body: t.Object({ family: t.String() }),
 				headers: t.Object({ family: t.String() }),
 				query: t.Object({ family: t.String() }),
@@ -863,9 +860,8 @@ describe('standalone validator', () => {
 
 	it('handle every schema type on global scope', async () => {
 		const local = new Elysia()
-			.guard({
+			.guard('global', {
 				schema: 'standalone',
-				as: 'global',
 				body: t.Object({ family: t.String() }),
 				headers: t.Object({ family: t.String() }),
 				query: t.Object({ family: t.String() }),

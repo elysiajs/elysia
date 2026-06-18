@@ -324,8 +324,7 @@ describe('resolve', () => {
 	})
 
 	it('work scoped guard', async () => {
-		const plugin = new Elysia().guard({
-			as: 'plugin',
+		const plugin = new Elysia().guard('plugin', {
 			derive: () => ({ hi: () => 'hi' })
 		})
 
@@ -344,8 +343,7 @@ describe('resolve', () => {
 	})
 
 	it('work global guard', async () => {
-		const plugin = new Elysia().guard({
-			as: 'global',
+		const plugin = new Elysia().guard('global', {
 			derive: () => ({ hi: () => 'hi' })
 		})
 

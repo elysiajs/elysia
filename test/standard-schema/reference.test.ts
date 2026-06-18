@@ -310,8 +310,7 @@ describe('Standard Schema Reference', () => {
 				'response.404': z.literal('lilith'),
 				'response.418': z.literal('fouco')
 			})
-			.guard({
-				as: 'plugin',
+			.guard('plugin', {
 				body: 'body',
 				query: 'query',
 				response: {
