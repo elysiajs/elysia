@@ -6,6 +6,10 @@ import { streamResponse } from '../../src/adapter/utils'
 import { randomId } from '../../src/utils'
 
 describe('Stream', () => {
+	const decoder = new TextDecoder()
+	const decode = (v: unknown) =>
+		v instanceof Uint8Array ? decoder.decode(v) : String(v)
+
 	it('handle stream', async () => {
 		const expected = ['a', 'b', 'c']
 
@@ -33,9 +37,9 @@ describe('Stream', () => {
 				reader.read().then(function pump({ done, value }): unknown {
 					if (done) return resolve(acc)
 
-					expect(value.toString()).toBe(expected.shift()!)
+					expect(decode(value)).toBe(expected.shift()!)
 
-					acc += value.toString()
+					acc += decode(value)
 					return reader.read().then(pump)
 				})
 
@@ -83,9 +87,9 @@ describe('Stream', () => {
 				reader.read().then(function pump({ done, value }): unknown {
 					if (done) return resolve(acc)
 
-					expect(value.toString()).toBe(expected.shift()!)
+					expect(decode(value)).toBe(expected.shift()!)
 
-					acc += value.toString()
+					acc += decode(value)
 					return reader.read().then(pump)
 				})
 
@@ -242,7 +246,7 @@ describe('Stream', () => {
 				reader.read().then(function pump({ done, value }): unknown {
 					if (done) return resolve()
 
-					expect(value.toString()).toBe(JSON.stringify(expected[i++]))
+					expect(decode(value)).toBe(JSON.stringify(expected[i++]))
 
 					return reader.read().then(pump)
 				})
@@ -280,7 +284,7 @@ describe('Stream', () => {
 				reader.read().then(function pump({ done, value }): unknown {
 					if (done) return resolve()
 
-					expect(value.toString()).toBe(expected[i++])
+					expect(decode(value)).toBe(expected[i++])
 
 					return reader.read().then(pump)
 				})
@@ -314,7 +318,7 @@ describe('Stream', () => {
 				reader.read().then(function pump({ done, value }): unknown {
 					if (done) return resolve(acc)
 
-					acc += value.toString()
+					acc += decode(value)
 					return reader.read().then(pump)
 				})
 
@@ -361,7 +365,7 @@ describe('Stream', () => {
 				reader.read().then(function pump({ done, value }): unknown {
 					if (done) return resolve(acc)
 
-					acc += value.toString()
+					acc += decode(value)
 					return reader.read().then(pump)
 				})
 
@@ -408,7 +412,7 @@ describe('Stream', () => {
 				reader.read().then(function pump({ done, value }): unknown {
 					if (done) return resolve(acc)
 
-					acc += value.toString()
+					acc += decode(value)
 					return reader.read().then(pump)
 				})
 
@@ -443,7 +447,7 @@ describe('Stream', () => {
 				reader.read().then(function pump({ done, value }): unknown {
 					if (done) return resolve(acc)
 
-					acc += value.toString()
+					acc += decode(value)
 					return reader.read().then(pump)
 				})
 
