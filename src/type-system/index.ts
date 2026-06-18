@@ -1,14 +1,18 @@
-import { Type, Kind } from '@sinclair/typebox'
-import type {
+import {
 	ArrayOptions,
 	DateOptions,
 	IntegerOptions,
+	JavaScriptTypeBuilder,
+	Kind,
+	NumberOptions,
 	ObjectOptions,
 	SchemaOptions,
+	StringOptions,
 	TAnySchema,
 	TArray,
 	TBoolean,
 	TDate,
+	TEnum,
 	TEnumValue,
 	TInteger,
 	TNumber,
@@ -16,13 +20,14 @@ import type {
 	TProperties,
 	TSchema,
 	TString,
-	NumberOptions,
-	JavaScriptTypeBuilder,
-	StringOptions,
 	TUnsafe,
-	Uint8ArrayOptions,
-	TEnum
+	Type,
+	Uint8ArrayOptions
 } from '@sinclair/typebox'
+import {
+	DefaultErrorFunction,
+	SetErrorFunction
+} from '@sinclair/typebox/errors'
 
 import {
 	compile,
@@ -32,22 +37,25 @@ import {
 	validateFile
 } from './utils'
 import {
+	AssertNumericEnum,
 	CookieValidatorOptions,
-	TFile,
-	TFiles,
+	ElysiaTransformDecodeBuilder,
 	FileOptions,
 	FilesOptions,
 	NonEmptyArray,
-	TForm,
-	TUnionEnum,
-	ElysiaTransformDecodeBuilder,
 	TArrayBuffer,
-	AssertNumericEnum
+	TFile,
+	TFiles,
+	TForm,
+	TMaybeNull,
+	TUnionEnum,
+	WrappedKind
 } from './types'
 
 import { ELYSIA_FORM_DATA, form } from '../utils'
 import { ValidationError } from '../error'
 import { parseDateTimeEmptySpace } from './format'
+import { Value } from '@sinclair/typebox/value'
 
 const t = Object.assign({}, Type) as unknown as Omit<
 	JavaScriptTypeBuilder,
@@ -72,6 +80,31 @@ createType<TArrayBuffer>(
 	'ArrayBuffer',
 	(schema, value) => value instanceof ArrayBuffer
 )
+
+createType<TMaybeNull>(
+	'MaybeNull',
+	({ [Kind]: kind, [WrappedKind]: wrappedKind, ...schema }, value) => {
+		return (
+			value === null ||
+			Value.Check(
+				{
+					[Kind]: wrappedKind,
+					...schema
+				},
+				value
+			)
+		)
+	}
+)
+
+SetErrorFunction((error) => {
+	switch (error.schema[Kind]) {
+		case 'MaybeNull':
+			return `Expected '${error.schema.type ?? (error.schema as TMaybeNull)[WrappedKind]}' or 'null'`
+		default:
+			return DefaultErrorFunction(error)
+	}
+})
 
 const internalFiles = createType<FilesOptions, File[]>(
 	'Files',
@@ -498,11 +531,24 @@ export const ElysiaType = {
 			})
 			.Encode((value) => value) as unknown as TUnsafe<File[]>,
 
+	/**
+	 * @deprecated Use MaybeNull instead which is OpenAPI 3.0 compliant. Will be removed in the next major release
+	 */
 	Nullable: <T extends TSchema>(schema: T, options?: SchemaOptions) =>
 		t.Union([schema, t.Null()], {
 			...options,
 			nullable: true
 		}),
+
+	MaybeNull: <T extends TSchema>({ [Kind]: kind, ...schema }: T) => {
+		return {
+			[Kind]: 'MaybeNull',
+			[WrappedKind]: kind,
+			default: undefined,
+			...schema,
+			nullable: true
+		} as unknown as TMaybeNull
+	},
 
 	/**
 	 * Allow Optional, Nullable and Undefined
@@ -666,6 +712,7 @@ t.Files = (arg) => {
 }
 
 t.Nullable = ElysiaType.Nullable
+t.MaybeNull = ElysiaType.MaybeNull
 t.MaybeEmpty = ElysiaType.MaybeEmpty
 t.Cookie = ElysiaType.Cookie
 t.Date = ElysiaType.Date
