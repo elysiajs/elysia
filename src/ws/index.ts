@@ -209,12 +209,13 @@ export class ElysiaWS<Context = unknown, Route extends RouteSchema = {}>
 }
 
 export const createWSMessageParser = (
-	parse: MaybeArray<WSParseHandler<any>>
+	parse: MaybeArray<WSParseHandler<any>>,
+	hasSchema = false
 ) => {
 	const parsers = typeof parse === 'function' ? [parse] : parse
 
 	return async function parseMessage(ws: ServerWebSocket<any>, message: any) {
-		if (typeof message === 'string') {
+		if (hasSchema && typeof message === 'string') {
 			const start = message?.charCodeAt(0)
 
 			if (start === 34 || start === 47 || start === 91 || start === 123)
