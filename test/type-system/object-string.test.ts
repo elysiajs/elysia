@@ -28,19 +28,24 @@ describe('TypeSystem - ObjectString', () => {
 	})
 
 	it('Encode', () => {
-		// ObjectString is a decode-only codec (string -> object); the encode
-		// direction is intentionally not implemented.
+		// ObjectString is a decode-only codec (string -> object). As of TypeBox
+		// 1.2.16 the union is matched narrow->broad, so encoding an object
+		// resolves through the plain Object member and passes through unchanged
+		// instead of throwing.
 		const schema = t.ObjectString({
 			pageIndex: t.Number(),
 			pageLimit: t.Number()
 		})
 
-		expect(() =>
+		expect(
 			Value.Encode(schema, {
 				pageIndex: 1,
 				pageLimit: 1
 			})
-		).toThrow()
+		).toEqual({
+			pageIndex: 1,
+			pageLimit: 1
+		})
 	})
 
 	it('Decode', () => {

@@ -24,11 +24,13 @@ describe('TypeSystem - ArrayString', () => {
 	})
 
 	it('Encode', () => {
-		// ArrayString is a decode-only codec (string -> array); the encode
-		// direction is intentionally not implemented.
+		// ArrayString is a decode-only codec (string -> array). As of TypeBox
+		// 1.2.16 the union is matched narrow->broad, so encoding an array
+		// resolves through the plain Array member and passes through unchanged
+		// instead of throwing.
 		const schema = t.ArrayString(t.Number())
 
-		expect(() => Value.Encode(schema, [1])).toThrow()
+		expect(Value.Encode(schema, [1])).toEqual([1])
 	})
 
 	it('Decode', () => {

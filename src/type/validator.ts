@@ -40,6 +40,7 @@ import {
 	Compiled,
 	instantiateFrozenMirror,
 	instantiateFrozenDecodeMirror,
+	instantiateFrozenEncodeMirror,
 	instantiateFrozenBoth,
 	collectExternals,
 	externalsMatch,
@@ -290,6 +291,7 @@ export class TypeBoxValidator<
 	hasDefault!: boolean
 
 	#decodeMirror?: (value: unknown) => unknown
+	#encodeMirror?: (value: unknown) => unknown
 
 	// default value
 	precomputeSafe: boolean
@@ -419,8 +421,6 @@ export class TypeBoxValidator<
 				console.warn(schema)
 				console.warn(error)
 
-				// degrade to typebox Clean (slower, no sanitize) instead of
-				// silently skipping normalization
 				if (options?.normalize !== false)
 					this.Clean = (value) => Clean(this.schema, value)
 			}
@@ -436,6 +436,20 @@ export class TypeBoxValidator<
 			options?.normalize !== 'typebox'
 		)
 			this.#decodeMirror = this.#setupDecodeMirror(
+				this.schema as TSchema,
+				options,
+				frozen
+			)
+
+		if (
+			this.hasCodec &&
+			!this.#isForm &&
+			!this.#noValidate &&
+			options?.slot?.startsWith('r') &&
+			options?.normalize !== false &&
+			options?.normalize !== 'typebox'
+		)
+			this.#encodeMirror = this.#setupEncodeMirror(
 				this.schema as TSchema,
 				options,
 				frozen
@@ -609,6 +623,86 @@ export class TypeBoxValidator<
 		}
 	}
 
+	#setupEncodeMirror(
+		schema: TSchema,
+		options?: ValidatorOptions,
+		frozen?: FrozenValidator
+	): ((value: unknown) => unknown) | undefined {
+		const aot = options?.aot
+		const slot = options?.slot
+
+		if (aot && slot && frozen?.em) {
+			const em = frozen.em
+			let encode: ((value: unknown) => unknown) | undefined
+
+			return (value: unknown) => {
+				if (encode === undefined)
+					try {
+						encode = instantiateFrozenEncodeMirror(em, schema)
+					} catch {
+						encode = (v) => {
+							const out = Encode(schema, v as any)
+							return this.Clean ? this.Clean(out) : out
+						}
+					}
+
+				return encode(value)
+			}
+		}
+
+		if (aot && slot && Capture.isCapturing() && slot.startsWith('r'))
+			try {
+				const emitted = createMirror(schema, {
+					Compile,
+					sanitize: options?.sanitize,
+					encode: true,
+					emit: true
+				}) as { source?: string; externals?: any }
+
+				if (typeof emitted?.source === 'string') {
+					const ext = emitted.externals
+
+					if (
+						ext?.codecs &&
+						!ext.hof &&
+						Capture.mirrorCodecs(schema, ext.codecs, 'encode')
+					) {
+						let u:
+							| { identifier: string; code: string }[][]
+							| undefined
+						let freezable = true
+
+						if (ext.unions && ext.unions.length) {
+							u = Capture.mirrorUnions(schema, ext.unions)
+							if (!u) freezable = false
+						}
+
+						if (freezable)
+							Capture.mirrorEncode({
+								method: aot.method,
+								path: aot.path,
+								slot,
+								mirror: {
+									source: emitted.source,
+									hasExternals: true,
+									u
+								}
+							})
+					}
+				}
+			} catch {}
+
+		try {
+			return createMirror(schema, {
+				Compile,
+				sanitize: options?.sanitize,
+				encode: true
+			}) as (value: unknown) => unknown
+		} catch {
+			return undefined
+		}
+	}
+
 	Check(value: Static<T>): boolean {
 		return this.reconstructedCheck
 			? this.reconstructedCheck(value)
@@ -707,6 +801,20 @@ export class TypeBoxValidator<
 		}
 
 		try {
+			if (this.#encodeMirror) {
+				const out = this.#encodeMirror(value)
+
+				if (!this.#noValidate && !this.Check(out as any))
+					throw new ValidationError(
+						type,
+						out,
+						() => this.Errors(out),
+						this.schema
+					)
+
+				return out as any
+			}
+
 			const out = this.#noValidate
 				? // @ts-ignore EncodeUnsafe returns unknown
 					(EncodeUnsafe(nullObject(), this.schema, value) as any)
@@ -742,8 +850,6 @@ export class TypeBoxValidator<
 			})
 	}
 
-	// Remove the transient request marker so it never surfaces in `ctx.body`
-	// (the decode pipeline can re-materialise it as an enumerable property).
 	#unmarkForm(value: unknown): void {
 		if (
 			this.#isForm &&

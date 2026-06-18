@@ -1,11 +1,4 @@
-import { Elysia, t } from '../src'
+import { Elysia, file, status, t } from '../src'
 
-new Elysia()
-	.macro({
-		a: {
-			derive: () => ({
-				user: '1'
-			})
-		}
-	})
-	.get('/', { a: true }, () => {})
+const inner = new Elysia()
+	.get('/plugin', new Response('ok'))

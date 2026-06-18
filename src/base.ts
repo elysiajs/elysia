@@ -4,7 +4,6 @@ import { applyHoc, createFetchHandler } from './handler'
 import { compileHandler, buildNativeStaticResponse } from './compile'
 import { buildWSRoute } from './ws/route'
 import type {
-	AnyWSLocalHook as AnyWSLocalHookImport,
 	WSLocalHook,
 	WSMessageHandler,
 	WSHandlerResponse
@@ -111,7 +110,11 @@ import type {
 	WrapFn,
 	ExcludeElysiaResponse,
 	ExtractErrorFromHandle,
-	HTTPMethod
+	HTTPMethod,
+	AddRoute,
+	AddWSRoute,
+	InlineResponse,
+	InlineSchemaResponse
 } from './types'
 import type { ElysiaStatus } from './error'
 import type { Context, LifecycleContext, ErrorContext } from './context'
@@ -119,143 +122,6 @@ import type { Context, LifecycleContext, ErrorContext } from './context'
 const useNodesBuffer: ChainNode[] = []
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
-
-/**
- * Shared return type for the HTTP verb methods' overloads — folds a single
- * route into the instance's Eden tree. Factored out so each verb's two
- * overloads (with-hook / no-hook) don't each re-spell the ~50-line type.
- * `Method` is a literal (`'get'`) for the verbs, or the generic method for
- * `.method()`. `MacroContext` is `{}` on the no-hook overload.
- */
-type AddRoute<
-	BasePath extends string,
-	Scope extends EventScope,
-	Singleton extends SingletonBase,
-	Definitions extends DefinitionBase,
-	Metadata extends MetadataBase,
-	Routes extends RouteBase,
-	Ephemeral extends EphemeralType,
-	Volatile extends EphemeralType,
-	Method extends string,
-	Path extends string,
-	Schema extends RouteSchema,
-	MacroContext extends RouteSchema,
-	Handle
-> = Elysia<
-	BasePath,
-	Scope,
-	Singleton,
-	Definitions,
-	Metadata,
-	Routes &
-		CreateEden<
-			JoinPath<BasePath, Path>,
-			{
-				[method in Method]: CreateEdenResponse<
-					Path,
-					Schema,
-					MacroContext,
-					ComposeElysiaResponse<
-						Schema &
-							MacroContext &
-							Metadata['schemas'] &
-							Ephemeral['schemas'] &
-							Volatile['schemas'],
-						Handle,
-						UnionResponseStatus<
-							Metadata['response'],
-							UnionResponseStatus<
-								Ephemeral['response'],
-								UnionResponseStatus<
-									Volatile['response'],
-									// @ts-ignore
-									MacroContext['return'] & {}
-								>
-							>
-						>,
-						[
-							...Definitions['error'],
-							...Ephemeral['error'],
-							...Volatile['error']
-						]
-					>,
-					UnhandledReturnedErrorOf<
-						Handle,
-						[
-							...Definitions['error'],
-							...Ephemeral['error'],
-							...Volatile['error']
-						]
-					>
-				>
-			}
-		>,
-	Ephemeral,
-	Volatile
->
-
-/**
- * `AddRoute`'s WebSocket sibling — folds a `.ws()` route into the Eden tree
- * under the `subscribe` key. `Response` is `void` for the options-only form,
- * or `WSHandlerResponse<Handler>` when a positional message handler is given.
- */
-type AddWSRoute<
-	BasePath extends string,
-	Scope extends EventScope,
-	Singleton extends SingletonBase,
-	Definitions extends DefinitionBase,
-	Metadata extends MetadataBase,
-	Routes extends RouteBase,
-	Ephemeral extends EphemeralType,
-	Volatile extends EphemeralType,
-	Path extends string,
-	Schema extends RouteSchema,
-	MacroContext extends RouteSchema,
-	Response
-> = Elysia<
-	BasePath,
-	Scope,
-	Singleton,
-	Definitions,
-	Metadata,
-	Routes &
-		CreateEden<
-			JoinPath<BasePath, Path>,
-			{
-				subscribe: CreateWSEdenResponse<
-					Path,
-					Schema,
-					MacroContext,
-					ComposeElysiaResponse<
-						Schema &
-							MacroContext &
-							Metadata['schemas'] &
-							Ephemeral['schemas'] &
-							Volatile['schemas'],
-						Response,
-						UnionResponseStatus<
-							Metadata['response'],
-							UnionResponseStatus<
-								Ephemeral['response'],
-								UnionResponseStatus<
-									Volatile['response'],
-									// @ts-ignore
-									MacroContext['return'] & {}
-								>
-							>
-						>,
-						[
-							...Definitions['error'],
-							...Ephemeral['error'],
-							...Volatile['error']
-						]
-					>
-				>
-			}
-		>,
-	Ephemeral,
-	Volatile
->
 
 export class Elysia<
 	const in out BasePath extends string = '',
@@ -5097,7 +4963,6 @@ export class Elysia<
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
 				>,
 				'',
-				// route declares no params → path-derived, ambient may win
 				undefined extends Input['params'] ? true : false
 			>,
 			MergeScopedSchemas<
@@ -5178,11 +5043,10 @@ export class Elysia<
 		const Handle extends InlineHandlerNonMacro<
 			NoInfer<Schema>,
 			NoInfer<Decorator>
-		> &
-			Metadata['macro']
+		>
 	>(
 		path: Path,
-		fn: Handle
+		fn: Handle & Metadata['macro']
 	): AddRoute<
 		BasePath,
 		Scope,
@@ -5223,7 +5087,6 @@ export class Elysia<
 	 *     .post('/hook', { query: t.String() }, () => 'hi')
 	 * ```
 	 */
-	// Overload A — with hook (3-arg)
 	post<
 		const Path extends string,
 		const Input extends Metadata['macro'] &
@@ -5240,7 +5103,6 @@ export class Elysia<
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
 				>,
 				'',
-				// route declares no params → path-derived, ambient may win
 				undefined extends Input['params'] ? true : false
 			>,
 			MergeScopedSchemas<
@@ -5321,11 +5183,10 @@ export class Elysia<
 		const Handle extends InlineHandlerNonMacro<
 			NoInfer<Schema>,
 			NoInfer<Decorator>
-		> &
-			Metadata['macro']
+		>
 	>(
 		path: Path,
-		fn: Handle
+		fn: Handle & Metadata['macro']
 	): AddRoute<
 		BasePath,
 		Scope,
@@ -5366,7 +5227,6 @@ export class Elysia<
 	 *     .put('/hook', { query: t.String() }, () => 'hi')
 	 * ```
 	 */
-	// Overload A — with hook (3-arg)
 	put<
 		const Path extends string,
 		const Input extends Metadata['macro'] &
@@ -5383,7 +5243,6 @@ export class Elysia<
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
 				>,
 				'',
-				// route declares no params → path-derived, ambient may win
 				undefined extends Input['params'] ? true : false
 			>,
 			MergeScopedSchemas<
@@ -5464,11 +5323,10 @@ export class Elysia<
 		const Handle extends InlineHandlerNonMacro<
 			NoInfer<Schema>,
 			NoInfer<Decorator>
-		> &
-			Metadata['macro']
+		>
 	>(
 		path: Path,
-		fn: Handle
+		fn: Handle & Metadata['macro']
 	): AddRoute<
 		BasePath,
 		Scope,
@@ -5525,7 +5383,6 @@ export class Elysia<
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
 				>,
 				'',
-				// route declares no params → path-derived, ambient may win
 				undefined extends Input['params'] ? true : false
 			>,
 			MergeScopedSchemas<
@@ -5606,11 +5463,10 @@ export class Elysia<
 		const Handle extends InlineHandlerNonMacro<
 			NoInfer<Schema>,
 			NoInfer<Decorator>
-		> &
-			Metadata['macro']
+		>
 	>(
 		path: Path,
-		fn: Handle
+		fn: Handle & Metadata['macro']
 	): AddRoute<
 		BasePath,
 		Scope,
@@ -5667,7 +5523,6 @@ export class Elysia<
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
 				>,
 				'',
-				// route declares no params → path-derived, ambient may win
 				undefined extends Input['params'] ? true : false
 			>,
 			MergeScopedSchemas<
@@ -5748,11 +5603,10 @@ export class Elysia<
 		const Handle extends InlineHandlerNonMacro<
 			NoInfer<Schema>,
 			NoInfer<Decorator>
-		> &
-			Metadata['macro']
+		>
 	>(
 		path: Path,
-		fn: Handle
+		fn: Handle & Metadata['macro']
 	): AddRoute<
 		BasePath,
 		Scope,
@@ -5793,7 +5647,6 @@ export class Elysia<
 	 *     .options('/hook', { query: t.String() }, () => 'hi')
 	 * ```
 	 */
-	// Overload A — with hook (3-arg)
 	options<
 		const Path extends string,
 		const Input extends Metadata['macro'] &
@@ -5810,7 +5663,6 @@ export class Elysia<
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
 				>,
 				'',
-				// route declares no params → path-derived, ambient may win
 				undefined extends Input['params'] ? true : false
 			>,
 			MergeScopedSchemas<
@@ -5891,11 +5743,10 @@ export class Elysia<
 		const Handle extends InlineHandlerNonMacro<
 			NoInfer<Schema>,
 			NoInfer<Decorator>
-		> &
-			Metadata['macro']
+		>
 	>(
 		path: Path,
-		fn: Handle
+		fn: Handle & Metadata['macro']
 	): AddRoute<
 		BasePath,
 		Scope,
@@ -5952,7 +5803,6 @@ export class Elysia<
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
 				>,
 				'',
-				// route declares no params → path-derived, ambient may win
 				undefined extends Input['params'] ? true : false
 			>,
 			MergeScopedSchemas<
@@ -6033,11 +5883,10 @@ export class Elysia<
 		const Handle extends InlineHandlerNonMacro<
 			NoInfer<Schema>,
 			NoInfer<Decorator>
-		> &
-			Metadata['macro']
+		>
 	>(
 		path: Path,
-		fn: Handle
+		fn: Handle & Metadata['macro']
 	): AddRoute<
 		BasePath,
 		Scope,
@@ -6080,7 +5929,6 @@ export class Elysia<
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
 				>,
 				'',
-				// route declares no params → path-derived, ambient may win
 				undefined extends Input['params'] ? true : false
 			>,
 			MergeScopedSchemas<
@@ -6147,9 +5995,8 @@ export class Elysia<
 		const Handle extends InlineHandlerNonMacro<
 			NoInfer<Schema>,
 			NoInfer<Decorator>
-		> &
-			Metadata['macro']
-	>(path: Path, fn: Handle): this
+		>
+	>(path: Path, fn: Handle & Metadata['macro']): this
 	all(path: string, hookOrFn: unknown, fn?: unknown): this {
 		if (fn === undefined) this.#add('*', path, hookOrFn)
 		else this.#add('*', path, fn, hookOrFn as Partial<AnyLocalHook>)
@@ -6187,7 +6034,6 @@ export class Elysia<
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
 				>,
 				'',
-				// route declares no params → path-derived, ambient may win
 				undefined extends Input['params'] ? true : false
 			>,
 			MergeScopedSchemas<
@@ -6270,12 +6116,11 @@ export class Elysia<
 		const Handle extends InlineHandlerNonMacro<
 			NoInfer<Schema>,
 			NoInfer<Decorator>
-		> &
-			Metadata['macro']
+		>
 	>(
 		method: Method,
 		path: Path,
-		fn: Handle
+		fn: Handle & Metadata['macro']
 	): AddRoute<
 		BasePath,
 		Scope,
@@ -6301,7 +6146,6 @@ export class Elysia<
 	 * ### ws
 	 * Register a WebSocket route. Mirrors `.get`/`.post` ergonomics:
 	 */
-	// Overload A — options only (the message handler lives in `options.message`)
 	ws<
 		const Path extends string,
 		const Input extends Metadata['macro'] &
@@ -6318,7 +6162,6 @@ export class Elysia<
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
 				>,
 				'',
-				// route declares no params → path-derived, ambient may win
 				undefined extends Input['params'] ? true : false
 			>,
 			MergeScopedSchemas<
@@ -6377,7 +6220,6 @@ export class Elysia<
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
 				>,
 				'',
-				// route declares no params → path-derived, ambient may win
 				undefined extends Input['params'] ? true : false
 			>,
 			MergeScopedSchemas<

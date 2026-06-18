@@ -25,11 +25,14 @@ describe('TypeSystem - BooleanString', () => {
 	})
 
 	it('Encode', () => {
-		// BooleanString is a decode-only codec (string -> boolean); the encode
-		// direction is intentionally not implemented.
+		// BooleanString is a decode-only codec (string -> boolean). As of
+		// TypeBox 1.2.16 the union is matched narrow->broad, so encoding a
+		// boolean resolves through the plain Boolean member and passes through
+		// unchanged instead of throwing.
 		const schema = t.BooleanString()
 
-		expect(() => Value.Encode(schema, true)).toThrow()
+		expect(Value.Encode(schema, true)).toBe(true)
+		expect(Value.Encode(schema, false)).toBe(false)
 	})
 
 	it('Decode', () => {

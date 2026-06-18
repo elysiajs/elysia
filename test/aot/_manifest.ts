@@ -99,6 +99,15 @@ export const materialise = (
 			entry.dm = dm
 		}
 
+		// response-side encode mirror (symmetric to dm)
+		if (c.encodeMirror) {
+			const em: any = {
+				s: fn(Source.mirrorFactory(c.encodeMirror.source, true))
+			}
+			if (c.encodeMirror.u) em.u = branchTable(c.encodeMirror.u)
+			entry.em = em
+		}
+
 		const bySlot = ((m[c.method] ??= {})[c.path] ??= {})
 		bySlot[c.slot] = entry
 	}

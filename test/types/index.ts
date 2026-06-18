@@ -1685,7 +1685,7 @@ type a = keyof {}
 					402: t.Number()
 				}
 			})
-			.get('/inner', '')
+			.get('/inner', status(401, 1))
 			.as('global')
 
 		const plugin = new Elysia()
@@ -1697,7 +1697,7 @@ type a = keyof {}
 			})
 			.get('/plugin', status(401, true))
 
-		const app = new Elysia().use(plugin).get('/', 'ok')
+		const app = new Elysia().use(plugin).get('/', status(401, 1))
 	}
 }
 
@@ -1940,7 +1940,7 @@ type a = keyof {}
 					402: t.Number()
 				}
 			})
-			.get('/inner', '')
+			.get('/inner', status(401, 1))
 
 		const plugin = new Elysia()
 			.use(inner)
@@ -1951,7 +1951,7 @@ type a = keyof {}
 			})
 			.get('/plugin', status(401, true))
 
-		const app = new Elysia().use(plugin).get('/', 'ok')
+		const app = new Elysia().use(plugin).get('/', status(401, 1))
 	}
 }
 

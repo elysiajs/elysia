@@ -3,6 +3,7 @@ import { useTypebox } from './bridge'
 import { Compile } from 'typebox/compile'
 import { Ref } from 'typebox/type'
 import { Decode, HasCodec, Default } from 'typebox/value'
+import { Settings } from 'typebox/system'
 
 import * as TypeRegistry from './exports'
 
@@ -24,6 +25,9 @@ export function setupTypebox() {
 	if (setup) return
 
 	setup = true
+
+	Settings.Set({ unionPrioritySort: false })
+
 	useTypebox({
 		Compile,
 		Decode,

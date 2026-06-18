@@ -380,6 +380,15 @@ export interface InputSchema<Name extends string = string> {
 }
 export type InputSchemaKey = keyof InputSchema
 
+export interface InlineSchemaResponse<Name extends string = string> {
+	body?: unknown
+	headers?: unknown
+	query?: Name | AnySchema
+	params?: Name | AnySchema
+	cookie?: Name | AnySchema
+	response?: Name | AnySchema | Record<number, Name | AnySchema>
+}
+
 export interface EmptyInputSchema {
 	body: unknown
 	headers: unknown
@@ -745,7 +754,7 @@ export interface BunHTMLBundlelike {
 	}[]
 }
 
-type InlineResponse =
+export type InlineResponse =
 	| string
 	| number
 	| boolean
@@ -780,7 +789,11 @@ export type InlineHandler<
 		resolve: {}
 	}
 > =
-	| MaybePromise<InlineResponse>
+	| MaybePromise<
+			{} extends Route['response']
+				? InlineResponse
+				: Route['response'][keyof Route['response']]
+	  >
 	| ((
 			context: Context<
 				Route & MacroContext,
@@ -821,7 +834,12 @@ export type InlineHandlerNonMacro<
 	Route extends RouteSchema = {},
 	Singleton extends SingletonBase = DefaultSingleton
 > =
-	| MaybePromise<InlineResponse>
+	| MaybePromise<
+			| InlineHandlerResponse<Route['response']>
+			| ({} extends Route['response']
+					? InlineResponse
+					: Route['response'][keyof Route['response']])
+	  >
 	| ((context: Context<Route, Singleton>) =>
 			| MaybePromise<Response>
 			| MaybePromise<
@@ -2251,3 +2269,128 @@ export type WrapFn<
 > = (
 	fetch: (request: Request, ...rest: any[]) => MaybePromise<Response>
 ) => Callback
+
+export type AddRoute<
+	BasePath extends string,
+	Scope extends EventScope,
+	Singleton extends SingletonBase,
+	Definitions extends DefinitionBase,
+	Metadata extends MetadataBase,
+	Routes extends RouteBase,
+	Ephemeral extends EphemeralType,
+	Volatile extends EphemeralType,
+	Method extends string,
+	Path extends string,
+	Schema extends RouteSchema,
+	MacroContext extends RouteSchema,
+	Handle
+> = Elysia<
+	BasePath,
+	Scope,
+	Singleton,
+	Definitions,
+	Metadata,
+	Routes &
+		CreateEden<
+			JoinPath<BasePath, Path>,
+			{
+				[method in Method]: CreateEdenResponse<
+					Path,
+					Schema,
+					MacroContext,
+					ComposeElysiaResponse<
+						Schema &
+							MacroContext &
+							Metadata['schemas'] &
+							Ephemeral['schemas'] &
+							Volatile['schemas'],
+						Handle,
+						UnionResponseStatus<
+							Metadata['response'],
+							UnionResponseStatus<
+								Ephemeral['response'],
+								UnionResponseStatus<
+									Volatile['response'],
+									// @ts-ignore
+									MacroContext['return'] & {}
+								>
+							>
+						>,
+						[
+							...Definitions['error'],
+							...Ephemeral['error'],
+							...Volatile['error']
+						]
+					>,
+					UnhandledReturnedErrorOf<
+						Handle,
+						[
+							...Definitions['error'],
+							...Ephemeral['error'],
+							...Volatile['error']
+						]
+					>
+				>
+			}
+		>,
+	Ephemeral,
+	Volatile
+>
+
+export type AddWSRoute<
+	BasePath extends string,
+	Scope extends EventScope,
+	Singleton extends SingletonBase,
+	Definitions extends DefinitionBase,
+	Metadata extends MetadataBase,
+	Routes extends RouteBase,
+	Ephemeral extends EphemeralType,
+	Volatile extends EphemeralType,
+	Path extends string,
+	Schema extends RouteSchema,
+	MacroContext extends RouteSchema,
+	Response
+> = Elysia<
+	BasePath,
+	Scope,
+	Singleton,
+	Definitions,
+	Metadata,
+	Routes &
+		CreateEden<
+			JoinPath<BasePath, Path>,
+			{
+				subscribe: CreateWSEdenResponse<
+					Path,
+					Schema,
+					MacroContext,
+					ComposeElysiaResponse<
+						Schema &
+							MacroContext &
+							Metadata['schemas'] &
+							Ephemeral['schemas'] &
+							Volatile['schemas'],
+						Response,
+						UnionResponseStatus<
+							Metadata['response'],
+							UnionResponseStatus<
+								Ephemeral['response'],
+								UnionResponseStatus<
+									Volatile['response'],
+									// @ts-ignore
+									MacroContext['return'] & {}
+								>
+							>
+						>,
+						[
+							...Definitions['error'],
+							...Ephemeral['error'],
+							...Volatile['error']
+						]
+					>
+				>
+			}
+		>,
+	Ephemeral,
+	Volatile
+>

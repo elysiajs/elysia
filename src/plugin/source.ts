@@ -72,9 +72,6 @@ export async function compileToSource(
 	const modules = (app as { modules?: Promise<unknown> }).modules
 	if (modules) await modules
 
-	// `Headers.toJSON()` exists on Bun but not Node/workerd. Force the baked
-	// header path to the deploy target so an AOT build under one runtime ships
-	// codegen valid on another; an undefined target keeps the build default.
 	if (options?.target !== undefined)
 		setCaptureHeaderShorthand(options.target === 'bun')
 
@@ -134,9 +131,7 @@ function emitModule(
 		return ref
 	}
 
-	// Build the entry-object parts (`cm`/`c`/`m` + flags + `u`) for one captured
-	// validator. Shared by the eager and lazy (grouped-thunk) emit paths.
-	const entryParts = (c: CapturedValidator): string[] => {
+	const entryParts = (c: CapturedValidator) => {
 		const parts: string[] = []
 		const flags: string[] = []
 		if (c.checkValue) {
@@ -173,6 +168,13 @@ function emitModule(
 			parts.push(`dm: { ${dms} }`)
 		}
 
+		if (c.encodeMirror) {
+			const em = c.encodeMirror
+			let ems = `s: ${Source.mirrorFactory(em.source, true)}`
+			if (em.u) ems += `, u: ${unionTable(em.u)}`
+			parts.push(`em: { ${ems} }`)
+		}
+
 		return parts
 	}
 
@@ -207,6 +209,7 @@ function emitModule(
 	}
 
 	let validatorDecls = ''
+	// eslint-disable-next-line no-useless-assignment
 	let validatorExport = ''
 
 	// bucket captured entries by route (all slots of a route share a group)

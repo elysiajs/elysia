@@ -41,9 +41,11 @@ export interface FrozenValidator {
 	c?: FrozenCheckFactory
 	// exact-mirror clean
 	m?: FrozenMirror
-	// exact-mirror request-side decode (codec `~decode`); instantiated with
+	// decode mirror
 	// `{ unions, codecs }`: codecs rebuilt from the live schema's `~codec.decode`
 	dm?: FrozenMirror
+	// encode mirror
+	em?: FrozenMirror
 	/** Merged check + clean (present iff a slot froze BOTH; supersedes `c`/`m`). */
 	cm?: FrozenBothFactory
 	/** Union branch checks for the merged mirror (entry-level `m.u`). */
@@ -187,8 +189,7 @@ export function reconstructCheck(build: CheckBuildResult): {
 	return { defs, value: `(value) => { ${statements} }` }
 }
 
-const checkCode = (defs: string, value: string) =>
-	`${defs}; return ${value}`
+const checkCode = (defs: string, value: string) => `${defs}; return ${value}`
 
 function reconstructCheckCode(build: CheckBuildResult) {
 	const { defs, value } = reconstructCheck(build)
@@ -335,28 +336,30 @@ function collectMirrorUnions(schema: any, out: unknown[][] = []) {
 	return out
 }
 
-const CODEC = '~codec'
-
-function collectMirrorCodecs(schema: any, out: Function[] = []): Function[] {
+function collectMirrorCodecs(
+	schema: any,
+	out: Function[] = [],
+	dir: 'decode' | 'encode' = 'decode'
+): Function[] {
 	if (!schema || typeof schema !== 'object') return out
 
-	const codec = schema[CODEC]
+	const codec = schema['~codec']
 	if (
 		codec &&
-		typeof codec.decode === 'function' &&
-		out.indexOf(codec.decode) === -1
+		typeof codec[dir] === 'function' &&
+		out.indexOf(codec[dir]) === -1
 	)
-		out.push(codec.decode)
+		out.push(codec[dir])
 
 	if (schema.type === 'object' && schema.properties)
 		for (const key in schema.properties)
-			collectMirrorCodecs(schema.properties[key], out)
+			collectMirrorCodecs(schema.properties[key], out, dir)
 	else if (schema.type === 'array' && schema.items) {
 		if (Array.isArray(schema.items))
-			for (const it of schema.items) collectMirrorCodecs(it, out)
-		else collectMirrorCodecs(schema.items, out)
+			for (const it of schema.items) collectMirrorCodecs(it, out, dir)
+		else collectMirrorCodecs(schema.items, out, dir)
 	} else if (Array.isArray(schema.anyOf))
-		for (const b of schema.anyOf) collectMirrorCodecs(b, out)
+		for (const b of schema.anyOf) collectMirrorCodecs(b, out, dir)
 
 	return out
 }
@@ -392,6 +395,21 @@ export function instantiateFrozenDecodeMirror(
 	// schema's `~codec.decode` leaves) and `d.unions` when the schema has unions.
 	const d: { codecs: Function[]; unions?: unknown } = {
 		codecs: collectMirrorCodecs(schema)
+	}
+
+	if (frozen.u) d.unions = buildUnions(frozen.u, schema)
+
+	return (frozen.s as FrozenMirrorFactory)(d)
+}
+
+export function instantiateFrozenEncodeMirror(
+	frozen: FrozenMirror,
+	schema: unknown
+): (value: unknown) => unknown {
+	// Symmetric to the decode mirror, but `d.codecs` are the live schema's
+	// `~codec.encode` leaves (response side) instead of `~codec.decode`.
+	const d: { codecs: Function[]; unions?: unknown } = {
+		codecs: collectMirrorCodecs(schema, [], 'encode')
 	}
 
 	if (frozen.u) d.unions = buildUnions(frozen.u, schema)
@@ -465,9 +483,10 @@ function captureMirrorUnions(schema: unknown, truthUnions: any[][]) {
 
 function captureMirrorCodecs(
 	schema: unknown,
-	truthCodecs: Function[]
-): boolean {
-	const codecs = collectMirrorCodecs(schema)
+	truthCodecs: Function[],
+	dir: 'decode' | 'encode' = 'decode'
+) {
+	const codecs = collectMirrorCodecs(schema, [], dir)
 	if (codecs.length !== truthCodecs.length) return false
 
 	for (let i = 0; i < codecs.length; i++)
@@ -500,6 +519,8 @@ export interface CapturedValidator {
 	mirror?: CapturedMirror
 	// request-side decode mirror (codec `~decode`), frozen to `dm`
 	decodeMirror?: CapturedMirror
+	// response-side encode mirror (codec `~encode`), frozen to `em`
+	encodeMirror?: CapturedMirror
 }
 
 let capture: Map<string, CapturedValidator> | undefined
@@ -607,20 +628,25 @@ function captureDecodeMirror(v: {
 	if (e) e.decodeMirror = v.mirror
 }
 
+function captureEncodeMirror(v: {
+	method: string
+	path: string
+	slot: ValidatorSlot
+	mirror: CapturedMirror
+}) {
+	const e = captureEntry(v)
+	if (e) e.encodeMirror = v.mirror
+}
+
 const isValidatorCapturing = () =>
 	capture !== undefined || env.ELYSIA_AOT_BUILD === '1'
 
-// Runtime capture writers — all called in the compile codegen path (no-op at
-// runtime when not capturing), so they're already in every runtime bundle. The
-// `Capture` object wrapper itself does cost a little (~its property names, which
-// minifiers can't mangle across the module boundary), so it's kept flat. Test-only
-// `beginValidatorCapture` and build-only `end*Capture` stay individual — they're
-// NOT in a runtime bundle.
 export const Capture = {
 	validator: captureValidator,
 	handler: captureHandler,
 	mirror: captureMirror,
 	mirrorDecode: captureDecodeMirror,
+	mirrorEncode: captureEncodeMirror,
 	mirrorUnions: captureMirrorUnions,
 	mirrorCodecs: captureMirrorCodecs,
 	isCapturing: isValidatorCapturing
