@@ -6680,13 +6680,23 @@ export class Elysia<
 				registerMain: (p: string, h: CompiledHandler) => void,
 				registerHead: (p: string, h: CompiledHandler) => void,
 				handler: CompiledHandler,
-				headHandler: CompiledHandler | undefined
+				headHandler: CompiledHandler | undefined,
+				registerLoose: boolean
 			) => {
 				const add = (p: string) => {
 					registerMain(p, handler)
 					if (headHandler) registerHead(p, headHandler)
 
-					if (!strict) {
+					// Pre-register the trailing-slash twin for STATIC routes only
+					// (a cheap O(1) `~map` key). This keeps the map-before-router
+					// lookup intact, so a static-literal route still wins over a
+					// param route (e.g. `/items/types` beats `/items/:id`).
+					// DYNAMIC (Memoirist) loose twins are NOT pre-registered — a
+					// loose radix branch costs ~315 B/route + a full trie insert;
+					// the fetch path instead retries the slash-toggled path against
+					// the router on miss (src/handler/fetch.ts), at no per-request
+					// cost on exact matches.
+					if (registerLoose) {
 						const loose = getLoosePath(p)
 						if (loose !== p) {
 							registerMain(loose, handler)
@@ -6720,7 +6730,9 @@ export class Elysia<
 					(p, h) => router.add(method, p, h, false),
 					(p, h) => router.add('HEAD', p, h, false),
 					handler,
-					headHandler
+					headHandler,
+					// dynamic loose twins use a find-time retry, not the trie
+					false
 				)
 			} else {
 				const map = (methods[method] ??= nullObject() as any)
@@ -6742,7 +6754,9 @@ export class Elysia<
 						head![p] = h
 					},
 					handler,
-					headHandler
+					headHandler,
+					// static loose twins are cheap map keys — pre-register them
+					!strict
 				)
 			}
 		}

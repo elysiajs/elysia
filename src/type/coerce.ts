@@ -148,6 +148,31 @@ export function coerce(
 					out[key] = newArr
 				}
 			}
+
+			if (node.items) {
+				const items = node.items
+				if (Array.isArray(items)) {
+					let newItems: BaseSchema[] | undefined
+					for (let i = 0, len = items.length; i < len; i++) {
+						const r = walk(items[i]!, false, true)
+						if (r !== items[i]) {
+							newItems ??= items.slice()
+							newItems[i] = r
+						}
+					}
+					if (newItems) {
+						out = cloneNode(node, out)
+						out.items = newItems
+					}
+				} else {
+					const r = walk(items, false, true)
+					if (r !== items) {
+						out = cloneNode(node, out)
+						out.items = r
+					}
+				}
+			}
+
 			memo.set(node, out)
 			return out
 		}

@@ -440,8 +440,11 @@ describe('Path', () => {
 	})
 
 	// A static route's trailing-slash (loose) variant is pre-registered in
-	// `~map` at build time, so the fetch hot path resolves a trailing-slash
-	// request by a direct lookup — there is no per-request getLoosePath.
+	// `~map` at build time (a cheap O(1) key), so the fetch hot path resolves a
+	// trailing-slash request by a direct lookup — there is no per-request
+	// getLoosePath, and static-literal routes keep winning over param routes via
+	// the map-before-router lookup. (Dynamic loose twins are NOT pre-registered;
+	// see the dynamic trailing-slash test below — they use a find-time retry.)
 	it('static route matches a trailing slash via a pre-registered loose key', async () => {
 		const app = new Elysia().get('/x', () => 'x')
 		app.compile()

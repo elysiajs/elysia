@@ -961,6 +961,36 @@ describe('Query Validator', () => {
 		})
 	})
 
+	// A plain `t.Array(t.Number())` (not `t.Numeric`) auto-coerces its element
+	// scalars from a query string, symmetric with a root `t.Number()`. Before,
+	// element coercion stopped at the array boundary so string elements 422'd
+	// and only the explicit `t.Array(t.Numeric())` form worked.
+	it('coerces plain t.Array(t.Number()) element scalars from a query string', async () => {
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					ids: t.Array(t.Number()),
+					flags: t.Array(t.Boolean())
+				})
+			},
+			({ query }) => query
+		)
+
+		const response = await app
+			.handle(req('/?ids=1,2,3&flags=true,false'))
+			.then((x) => x.json())
+
+		expect(response).toEqual({ ids: [1, 2, 3], flags: [true, false] })
+
+		// an invalid element is still rejected by Check
+		const invalid = await app
+			.handle(req('/?ids=1,x,3&flags=true'))
+			.then((x) => x.status)
+
+		expect(invalid).toBe(422)
+	})
+
 	// https://github.com/elysiajs/elysia/issues/1015
 	it('handle ref transform', async () => {
 		const app = new Elysia()

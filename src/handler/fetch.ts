@@ -7,7 +7,7 @@ import { getAsyncIndexes, cachedResponse } from './utils'
 
 import { createContext, type Context } from '../context'
 import { createErrorHandler } from './error'
-import { requestId, flattenChain, nullObject } from '../utils'
+import { requestId, flattenChain, nullObject, getLoosePath } from '../utils'
 import { NotFound } from '../error'
 import { createTracer } from '../trace'
 
@@ -47,6 +47,7 @@ function findRoute(
 	hasError: boolean,
 	handleError: (context: Context, error: Error) => unknown,
 	afterResponse: ((context: Context, status?: number) => void) | undefined,
+	strictPath: boolean,
 	hasWS?: boolean
 ): Response | Promise<Response> {
 	const path = context.path
@@ -78,8 +79,16 @@ function findRoute(
 			return r instanceof Promise ? r.catch(catchError(context, handleError, afterResponse)) : r
 		}
 
-		const found =
+		let found =
 			router.find(request.method, path) ?? router.find('*', path)
+
+		if (!found && !strictPath) {
+			const loose = getLoosePath(path)
+			if (loose !== path)
+				found =
+					router.find(request.method, loose) ??
+					router.find('*', loose)
+		}
 
 		if (found) {
 			context.params = decodeParams(found.params)
@@ -102,6 +111,7 @@ export function createFetchHandler(
 	const map = app['~map']! ?? nullObject()
 	const router = app['~router']!
 	const hasWS = !!app['~hasWS']
+	const strictPath = !!app['~config']?.strictPath
 
 	// standard internet hostname is at minimum 11 characters (http://a.bc)
 	const pathStart =
@@ -293,6 +303,7 @@ export function createFetchHandler(
 					hasError,
 					handleError,
 					afterResponse,
+					strictPath,
 					hasWS
 				)
 			} catch (error) {
@@ -343,6 +354,7 @@ export function createFetchHandler(
 						hasError,
 						handleError,
 						afterResponse,
+						strictPath,
 						hasWS
 					)
 				} catch (error) {
@@ -381,6 +393,7 @@ export function createFetchHandler(
 					hasError,
 					handleError,
 					afterResponse,
+					strictPath,
 					hasWS
 				)
 			} catch (error) {
@@ -444,8 +457,20 @@ export function createFetchHandler(
 				return r instanceof Promise ? r.catch(catchError(context, handleError, afterResponse)) : r
 			}
 
-			const result =
+			let result =
 				router?.find(request.method, path) ?? router?.find('*', path)
+
+			// Dynamic loose (trailing-slash) fallback — cold, only after an
+			// exact-dynamic miss. Static loose keys live in `~map` (checked
+			// above); dynamic loose twins aren't pre-registered, so retry the
+			// slash-toggled path against the router. Skip under strictPath.
+			if (!result && !strictPath) {
+				const loose = getLoosePath(path)
+				if (loose !== path)
+					result =
+						router?.find(request.method, loose) ??
+						router?.find('*', loose)
+			}
 
 			if (result) {
 				context.params = decodeParams(result.params)

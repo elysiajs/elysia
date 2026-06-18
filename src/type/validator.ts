@@ -300,6 +300,7 @@ export class TypeBoxValidator<
 
 	#noValidate: boolean
 	#isForm = false
+	#hasOptional = false
 
 	constructor(
 		schema: T,
@@ -396,6 +397,7 @@ export class TypeBoxValidator<
 
 		this.#noValidate = originalElyTyp === ELYSIA_TYPES.NoValidate
 		this.#isForm = originalElyTyp === ELYSIA_TYPES.Form
+		this.#hasOptional = !!(this.schema as any)?.['~optional']
 
 		if (isFrozen && frozen!.cm) {
 			const both = instantiateFrozenBoth(frozen!, this.schema, schema)
@@ -921,10 +923,12 @@ export class TypeBoxValidator<
 			} else value = Default(this.schema, value) as any
 		}
 
-		const bypass = this.optionalBypass(value)
-		if (bypass) return bypass.value
+		if (this.#hasOptional) {
+			const bypass = this.optionalBypass(value)
+			if (bypass) return bypass.value
+		}
 
-		this.#markForm(value)
+		if (this.#isForm) this.#markForm(value)
 
 		if (this.hasCodec) {
 			if (!this.#noValidate) {
@@ -992,7 +996,7 @@ export class TypeBoxValidator<
 		// @ts-ignore
 		if (this.Clean && !this.#decodeMirror) value = this.Clean(value)
 
-		this.#unmarkForm(value)
+		if (this.#isForm) this.#unmarkForm(value)
 		return value
 	}
 
@@ -1013,10 +1017,12 @@ export class TypeBoxValidator<
 			} else value = Default(this.schema, value) as Static<T>
 		}
 
-		const bypass = this.optionalBypass(value)
-		if (bypass) return bypass.value
+		if (this.#hasOptional) {
+			const bypass = this.optionalBypass(value)
+			if (bypass) return bypass.value
+		}
 
-		this.#markForm(value)
+		if (this.#isForm) this.#markForm(value)
 
 		if (this.hasCodec) {
 			// See FromAsync for the rationale on skipping `Convert`
@@ -1061,7 +1067,7 @@ export class TypeBoxValidator<
 		if (this.Clean && !this.#decodeMirror)
 			value = this.Clean(value) as Static<T>
 
-		this.#unmarkForm(value)
+		if (this.#isForm) this.#unmarkForm(value)
 		return value
 	}
 }

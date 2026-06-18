@@ -6,6 +6,12 @@ let objectKind: {
 	value: 'Object'
 	enumerable: false
 }
+// Shared prototype carrying a non-enumerable `~kind: 'Object'`. Placing it on
+// the prototype (instead of an own property via Object.defineProperty) lets the
+// fast path build the schema with a plain object literal, avoiding the costly
+// per-call defineProperty deopt while keeping `~kind` non-enumerable and
+// reachable through `'~kind' in schema` (the access TypeBox and Elysia use).
+let objectProto: { '~kind': 'Object' }
 export function ObjectType<T extends TProperties>(
 	properties: T,
 	options?: TObjectOptions
@@ -30,19 +36,22 @@ export function ObjectType<T extends TProperties>(
 		}
 	}
 
+	if (!options || isEmpty(options)) {
+		objectProto ??= Object.defineProperty({}, '~kind', {
+			value: 'Object',
+			enumerable: false
+		}) as { '~kind': 'Object' }
+
+		const schema = Object.create(objectProto) as TObject<T>
+		;(schema as any).type = 'object'
+		;(schema as any).properties = properties
+		;(schema as any).required = required
+		return schema
+	}
+
 	objectKind ??= {
 		value: 'Object',
 		enumerable: false
-	}
-
-	if (!options || isEmpty(options)) {
-		const schema = {
-			type: 'object' as const,
-			properties,
-			required
-		}
-		Object.defineProperty(schema, '~kind', objectKind)
-		return schema as any
 	}
 
 	Object.defineProperty(options, '~kind', objectKind)

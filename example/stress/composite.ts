@@ -58,20 +58,19 @@ const body = JSON.stringify({ name: 'a', age: 1 })
 // Reuse no-body Requests so the op measures framework dispatch, not `new Request`.
 const getRoot = new Request('http://e.ly/')
 const getRes = new Request('http://e.ly/res/3/7')
+// POST body is single-use → clone a prebuilt Request per op (~5× cheaper than
+// `new Request`, original stays unconsumed). See throughput.ts for the rationale.
+const postUsers = new Request('http://e.ly/users', {
+	method: 'POST',
+	headers: { 'content-type': 'application/json' },
+	body
+})
 
 summary(() => {
 	group('composite throughput', () => {
 		bench('GET / (derive+guard+global)', () => handle(getRoot))
 		bench('GET /res/3/:id (dynamic+params)', () => handle(getRes))
-		bench('POST /users (body+response)', () =>
-			handle(
-				new Request('http://e.ly/users', {
-					method: 'POST',
-					headers: { 'content-type': 'application/json' },
-					body
-				})
-			)
-		)
+		bench('POST /users (body+response)', () => handle(postUsers.clone()))
 	})
 })
 
