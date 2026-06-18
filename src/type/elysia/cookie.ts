@@ -77,23 +77,16 @@ export function Cookie(
 	)
 
 	if (isSchema(first)) {
-		// Field form: attach config. Some schemas (cached `t.Numeric()`,
-		// `t.String()` empties) are frozen, so layer via prototype to avoid
-		// "object is not extensible".
 		if (!config) return first
 
-		const target = Object.isExtensible(first)
-			? (first as any)
-			: Object.defineProperty(
-					Object.create(first as object),
-					'~kind',
-					{ value: (first as any)['~kind'], enumerable: false }
-				)
+		const target = Object.create(
+			Object.getPrototypeOf(first),
+			Object.getOwnPropertyDescriptors(first)
+		)
 		target.config = config
 		return target
 	}
 
-	// Object form: wrap properties as t.Object, attach top-level config
 	const schema = ObjectType(first as TProperties, rest as any)
 	if (config) (schema as any).config = config
 

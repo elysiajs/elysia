@@ -8,9 +8,9 @@ let optionalPropertyWithValue: {
 	enumerable: false
 	configurable: true
 }
-// let OptionalShared: WeakMap<TSchema, TSchema>
+let OptionalShared: WeakMap<TSchema, TSchema>
 export function Optional<T extends TSchema>(schema: T): TOptional<T> {
-	// if (OptionalShared?.has(schema)) return OptionalShared.get(schema) as any
+	if (OptionalShared?.has(schema)) return OptionalShared.get(schema) as any
 
 	if (Object.isFrozen(schema)) {
 		const result = Object.defineProperty(
@@ -23,8 +23,8 @@ export function Optional<T extends TSchema>(schema: T): TOptional<T> {
 			})
 		)
 
-		// OptionalShared ??= new WeakMap()
-		// OptionalShared.set(schema, result)
+		OptionalShared ??= new WeakMap()
+		OptionalShared.set(schema, result)
 
 		return result
 	}
