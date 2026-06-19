@@ -114,6 +114,25 @@ export interface ElysiaAdapter {
 				declare?: string
 			}
 		>
+		/**
+		 * Generate specialized inline response code for a known schema type kind.
+		 *
+		 * When the response schema type is known at compile time (e.g. Object, String),
+		 * this generates optimized inline code that bypasses the generic mapResponse
+		 * dispatch chain, eliminating 10+ type checks on the hot path.
+		 *
+		 * @param kind - The TypeBox schema Kind ('Object', 'Array', 'String', 'Number', 'Boolean')
+		 * @param r - Variable name holding the response value
+		 * @param hasSet - Whether set (headers/status/cookie) is active
+		 * @param saveResponse - Code prefix for saving response to context
+		 * @returns Generated fnLiteral string, or undefined to fall back to generic
+		 */
+		specializedResponse?: (
+			kind: string,
+			r: string,
+			hasSet: boolean,
+			saveResponse: string
+		) => string | undefined
 	}
 	composeGeneralHandler: {
 		parameters?: string

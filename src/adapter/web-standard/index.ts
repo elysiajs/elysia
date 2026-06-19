@@ -19,6 +19,26 @@ export const WebStandardAdapter: ElysiaAdapter = {
 	composeHandler: {
 		mapResponseContext: 'c.request',
 		preferWebstandardHeaders: true,
+		specializedResponse(kind, r, hasSet, saveResponse) {
+			switch (kind) {
+				case 'Object':
+				case 'Array':
+					return hasSet
+						? `(c.set.headers['content-type']||(c.set.headers['content-type']='application/json'),new Response(JSON.stringify(${saveResponse}${r}),c.set))`
+						: `new Response(JSON.stringify(${saveResponse}${r}),{headers:{'content-type':'application/json'}})`
+				case 'String':
+					return hasSet
+						? `(c.set.headers['content-type']||(c.set.headers['content-type']='text/plain'),new Response(${saveResponse}${r},c.set))`
+						: `new Response(${saveResponse}${r})`
+				case 'Number':
+				case 'Boolean':
+					return hasSet
+						? `new Response(${saveResponse}''+${r},c.set)`
+						: `new Response(${saveResponse}''+${r})`
+				default:
+					return undefined
+			}
+		},
 		// @ts-ignore Bun specific
 		headers:
 			'c.headers={}\n' +

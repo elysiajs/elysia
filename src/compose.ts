@@ -69,6 +69,50 @@ import { coercePrimitiveRoot } from './replace-schema'
 const allocateIf = (value: string, condition: unknown) =>
 	condition ? value : ''
 
+/**
+ * Detect the TypeBox schema Kind for single-status-code response schemas.
+ *
+ * Used for specialized response code generation during AOT compilation.
+ * When the response type is known at compile time, we can generate inline
+ * code that bypasses the generic mapResponse dispatch chain (10+ type checks),
+ * leveraging:
+ * - Monomorphic inline caches (V8/JSC optimize single-type call sites)
+ * - Reduced branch misprediction (fewer conditional branches on hot path)
+ * - Partial evaluation (specialize code for known input types)
+ *
+ * Returns null for unsupported schemas (Union, Intersect, multiple status codes,
+ * Standard Schema providers), falling back to the generic path.
+ */
+const getResponseSchemaKind = (
+	validator: SchemaValidator
+): string | null => {
+	if (!validator.response) return null
+
+	const keys = Object.keys(validator.response)
+	if (keys.length !== 1) return null
+
+	const check = validator.response[keys[0]]
+	if (check.provider === 'standard') return null
+
+	const schema = check.schema
+	if (!schema?.[Kind]) return null
+
+	switch (schema[Kind]) {
+		case 'Object':
+			return 'Object'
+		case 'String':
+			return 'String'
+		case 'Number':
+			return 'Number'
+		case 'Boolean':
+			return 'Boolean'
+		case 'Array':
+			return 'Array'
+		default:
+			return null
+	}
+}
+
 const defaultParsers = [
 	'json',
 	'text',
@@ -880,6 +924,13 @@ export const composeHandler = ({
 		return (_afterResponse = afterResponse)
 	}
 
+	const responseKind = getResponseSchemaKind(validator)
+	const canSpecialize =
+		responseKind !== null &&
+		!maybeStream &&
+		!hooks.mapResponse?.length &&
+		adapter.specializedResponse
+
 	const mapResponse = (r = 'r') => {
 		const after = afterResponse()
 		// When maybeStream is true, mapResponse may return a Promise (from handleStream)
@@ -887,6 +938,48 @@ export const composeHandler = ({
 		// can properly catch the rejection and route it to error handling.
 		// Only add await if the function is async (maybeAsync), otherwise it would be a syntax error.
 		const awaitStream = maybeStream && maybeAsync ? 'await ' : ''
+
+		if (canSpecialize) {
+			const fast = adapter.specializedResponse!(
+				responseKind!,
+				r,
+				hasSet,
+				saveResponse
+			)
+
+			if (fast) {
+				const fallback = `${awaitStream}${hasSet ? 'mapResponse' : 'mapCompactResponse'}(${saveResponse}${r}${hasSet ? ',c.set' : ''}${mapResponseContext})`
+
+				let guard: string
+				switch (responseKind) {
+					case 'Object':
+						guard = `${r}!==null&&${r}!==undefined&&${r}.constructor===Object`
+						break
+					case 'Array':
+						guard = `Array.isArray(${r})`
+						break
+					case 'String':
+						guard = `typeof ${r}==='string'`
+						break
+					case 'Number':
+						guard = `typeof ${r}==='number'`
+						break
+					case 'Boolean':
+						guard = `typeof ${r}==='boolean'`
+						break
+					default:
+						guard = ''
+				}
+
+				if (guard) {
+					const response = `(${guard}?${fast}:${fallback})`
+
+					if (!after) return `return ${response}\n`
+					return `const _res=${response}\n` + after + `return _res`
+				}
+			}
+		}
+
 		const response = `${awaitStream}${hasSet ? 'mapResponse' : 'mapCompactResponse'}(${saveResponse}${r}${hasSet ? ',c.set' : ''}${mapResponseContext})\n`
 
 		if (!after) return `return ${response}`
