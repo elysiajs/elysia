@@ -1,4 +1,5 @@
-import { Type } from 'typebox'
+import { Decode, Refine } from 'typebox/type'
+import type { Type } from 'typebox'
 import type { TNumberOptions } from 'typebox'
 
 import { isEmpty } from '../../utils'
@@ -30,8 +31,8 @@ function passesConstraints(n: number, c: TNumberOptions): boolean {
 }
 
 export function Numeric(property?: TNumberOptions) {
-	StringifiedNumber ??= Type.Decode(
-		Type.Refine(
+	StringifiedNumber ??= Decode(
+		Refine(
 			StringType(),
 			// reject empty/blank strings: `+'' === 0` would silently pass
 			(value) => value.trim() !== '' && !isNaN(+value),
@@ -50,8 +51,8 @@ export function Numeric(property?: TNumberOptions) {
 
 	const [constraints, meta] = getMeta(property)
 	const number = NumberType(constraints)
-	const stringified = Type.Decode(
-		Type.Refine(
+	const stringified = Decode(
+		Refine(
 			StringType(),
 			(value) => {
 				if (value.trim() === '') return false

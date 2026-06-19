@@ -1,4 +1,5 @@
-import { Type } from 'typebox'
+import { Refine, Unsafe } from 'typebox/type'
+import type { Type } from 'typebox'
 
 import { isBlob, isEmpty } from '../../utils'
 import { ELYSIA_TYPES } from '../constants'
@@ -40,8 +41,8 @@ let sharedFile: ReturnType<
 	>
 >
 export function File(options?: FileOptions) {
-	BaseFile ??= Type.Refine(
-		Type.Unsafe<File>({ '~kind': 'File' }),
+	BaseFile ??= Refine(
+		Unsafe<File>({ '~kind': 'File' }),
 		isBlob,
 		() => 'must be instance of Blob'
 	)

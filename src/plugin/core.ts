@@ -29,6 +29,16 @@ export interface ElysiaAotOptions {
 	 * @default the build runtime
 	 */
 	target?: AotTarget
+
+	/**
+	 * Rewrite `import { t } from 'elysia'` → `import * as t from 'elysia/type'`
+	 * at build time so unused TypeBox constructors tree-shake. `elysia/type` is
+	 * 1:1 with `t`, so call sites are untouched and the rewrite is semantically
+	 * identical. Set `false` to leave `t` imports as-is.
+	 *
+	 * @default true
+	 */
+	treeShake?: boolean
 }
 
 function findPackageRoot(from: string = process.cwd()): string {

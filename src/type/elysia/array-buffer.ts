@@ -1,4 +1,5 @@
-import { Type } from 'typebox'
+import { Refine, Unsafe } from 'typebox/type'
+import type { Type } from 'typebox'
 
 import { isEmpty } from '../../utils'
 import { ELYSIA_TYPES } from '../constants'
@@ -12,8 +13,8 @@ import {
 let BaseArrayBuffer: Type.TRefine<Type.TUnsafe<ArrayBuffer>>
 let emptyArrayBuffer: Type.TRefine<Type.TUnsafe<ArrayBuffer>>
 export function ArrayBufferType(property?: ArrayBufferOptions) {
-	BaseArrayBuffer ??= Type.Refine(
-		Type.Unsafe<ArrayBuffer>({ '~kind': 'ArrayBuffer' }),
+	BaseArrayBuffer ??= Refine(
+		Unsafe<ArrayBuffer>({ '~kind': 'ArrayBuffer' }),
 		(value) => value instanceof ArrayBuffer,
 		() => 'must be ArrayBuffer'
 	)

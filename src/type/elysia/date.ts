@@ -1,4 +1,5 @@
-import { Type } from 'typebox'
+import { Codec, Number, Refine, Unsafe } from 'typebox/type'
+import type { Type } from 'typebox'
 
 import { isEmpty } from '../../utils'
 import { ELYSIA_TYPES } from '../constants'
@@ -49,14 +50,14 @@ export function DateType(
 	Type.TUnion<[Type.TUnsafe<Date>, Type.TString, Type.TNumber]>,
 	Date
 > {
-	StringifiedDate ??= Type.Codec(
+	StringifiedDate ??= Codec(
 		Union([
-			Type.Refine(
-				Type.Unsafe<Date>({ '~kind': 'Date' }),
+			Refine(
+				Unsafe<Date>({ '~kind': 'Date' }),
 				(value) => value instanceof Date,
 				() => 'must be Date'
 			),
-			Type.Refine(
+			Refine(
 				StringType(),
 				(value) => {
 					if (!isNaN(new Date(value).getTime())) return true
@@ -69,7 +70,7 @@ export function DateType(
 				},
 				() => 'must be Date'
 			),
-			Type.Number()
+			Number()
 		])
 	)
 		.Decode((value) => {

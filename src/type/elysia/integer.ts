@@ -1,10 +1,10 @@
-import { Type } from 'typebox'
+import { Integer as IntegerType } from 'typebox/type'
 import type { TInteger, TNumberOptions } from 'typebox'
 
 import { isEmpty } from '../../utils'
 import { noEnumerable } from '../constants'
 
-const emptyInteger = Object.freeze(Type.Integer())
+const emptyInteger = Object.freeze(IntegerType())
 export function Integer(options?: TNumberOptions): TInteger {
 	if (!options || isEmpty(options)) return emptyInteger as any
 

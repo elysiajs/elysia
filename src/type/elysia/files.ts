@@ -1,4 +1,5 @@
-import { Type } from 'typebox'
+import { Decode } from 'typebox/type'
+import type { Type } from 'typebox'
 
 import { isEmpty } from '../../utils'
 import { ELYSIA_TYPES } from '../constants'
@@ -39,7 +40,7 @@ export type TFiles = Type.TUnsafe<File[]>
 const filesUnion = (options?: FileOptions): typeof BaseFiles =>
 	Union([
 		ArrayType(File(options)),
-		Type.Decode(File(options), (value) => [value])
+		Decode(File(options), (value) => [value])
 	]) as typeof BaseFiles
 
 export function Files(options?: FilesOptions): TFiles {

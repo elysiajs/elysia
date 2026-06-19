@@ -1,4 +1,4 @@
-import { Type } from 'typebox'
+import { Null } from 'typebox/type'
 import type { TSchema, TSchemaOptions } from 'typebox'
 
 import { ELYSIA_TYPES } from '../constants'
@@ -11,5 +11,5 @@ export const Nullable = <T extends TSchema>(
 ) =>
 	elyType(
 		ELYSIA_TYPES.Nullable,
-		Union([schema, Type.Null()], assignOrNew(options, { nullable: true }))
+		Union([schema, Null()], assignOrNew(options, { nullable: true }))
 	)

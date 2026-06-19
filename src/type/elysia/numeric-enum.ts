@@ -1,4 +1,4 @@
-import { Type } from 'typebox'
+import { Decode, Refine } from 'typebox/type'
 import type { TSchemaOptions } from 'typebox'
 
 import { ELYSIA_TYPES } from '../constants'
@@ -31,8 +31,8 @@ export function NumericEnum<T extends AssertNumericEnum<T>>(
 			.map((v) => v as number)
 	)
 
-	const decoder = Type.Decode(
-		Type.Refine(
+	const decoder = Decode(
+		Refine(
 			Union([StringType({ format: 'numeric' }), NumberType()], property),
 			(value) => {
 				if (typeof value === 'string' && value.trim() === '')

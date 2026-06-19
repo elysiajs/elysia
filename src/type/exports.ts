@@ -1,3 +1,7 @@
+import { setupTypebox } from './compat'
+
+setupTypebox()
+
 export * from 'typebox/type'
 
 export { Accelerate } from './elysia/accelerate'

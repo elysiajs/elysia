@@ -1,4 +1,5 @@
-import { Type } from 'typebox'
+import { Codec, Refine, Unsafe } from 'typebox/type'
+import type { Type } from 'typebox'
 
 import { isEmpty } from '../../utils'
 import { ELYSIA_TYPES } from '../constants'
@@ -14,9 +15,9 @@ let emptyUint8Array: Readonly<
 	Type.TCodec<Type.TRefine<Type.TUnsafe<Uint8Array>>, Uint8Array>
 >
 export function Uint8ArrayType(property?: ArrayBufferOptions) {
-	BaseUint8Array ??= Type.Codec(
-		Type.Refine(
-			Type.Unsafe<Uint8Array>({ '~kind': 'Uint8Array' }),
+	BaseUint8Array ??= Codec(
+		Refine(
+			Unsafe<Uint8Array>({ '~kind': 'Uint8Array' }),
 			(value: unknown) =>
 				value instanceof Uint8Array || value instanceof ArrayBuffer,
 			() => 'must be Uint8Array'

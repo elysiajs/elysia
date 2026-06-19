@@ -1,10 +1,10 @@
-import { Type } from 'typebox'
+import { Boolean } from 'typebox/type'
 import type { TBoolean, TSchemaOptions } from 'typebox'
 
 import { isEmpty } from '../../utils'
 import { noEnumerable } from '../constants'
 
-const emptyBoolean = Object.freeze(Type.Boolean())
+const emptyBoolean = Object.freeze(Boolean())
 export function BooleanType(options?: TSchemaOptions): TBoolean {
 	if (!options || isEmpty(options)) return emptyBoolean
 

@@ -1,4 +1,5 @@
-import { Type } from 'typebox'
+import { Decode, Refine } from 'typebox/type'
+import type { Type } from 'typebox'
 import type { TNumberOptions } from 'typebox'
 
 import { isEmpty } from '../../utils'
@@ -16,8 +17,8 @@ type IntegerStringSchema = Type.TUnion<
 >
 let emptyIntegerString: Readonly<IntegerStringSchema>
 export function IntegerString(property?: TNumberOptions) {
-	StringifiedInteger ??= Type.Decode(
-		Type.Refine(
+	StringifiedInteger ??= Decode(
+		Refine(
 			StringType(),
 			(value) =>
 				value.trim() !== '' &&
@@ -28,7 +29,7 @@ export function IntegerString(property?: TNumberOptions) {
 		(value) => +value
 	)
 
-	StrictInteger ??= Type.Refine(
+	StrictInteger ??= Refine(
 		NumberType(),
 		(value) => Number.isInteger(value),
 		() => 'must be integer'
@@ -44,8 +45,8 @@ export function IntegerString(property?: TNumberOptions) {
 	const integer = Integer(constraints)
 
 	const c = constraints as TNumberOptions
-	const stringified = Type.Decode(
-		Type.Refine(
+	const stringified = Decode(
+		Refine(
 			StringType(),
 			(value) => {
 				if (value.trim() === '') return false

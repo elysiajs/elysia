@@ -1,9 +1,9 @@
-import { Type } from 'typebox'
+import { String } from 'typebox/type'
 import type { TString, TStringOptions } from 'typebox'
 
 import { noEnumerable } from '../constants'
 
-const emptyString = Object.freeze(Type.String())
+const emptyString = Object.freeze(String())
 const stringFormatCache: Record<string, TString> = Object.create(null)
 export function StringType(options?: TStringOptions): TString {
 	if (!options) return emptyString

@@ -6,8 +6,6 @@ import type {
 	Default as DefaultType
 } from 'typebox/value'
 
-import type * as TypeRegistryType from './exports'
-
 import type { applyCoercions as applyCoercionsType } from './coerce'
 import type {
 	TypeBoxValidator as TypeBoxValidatorType,
@@ -40,7 +38,6 @@ interface TypeboxModule {
 	Intersect: typeof IntersectType
 	Default: typeof DefaultType
 	Ref: typeof RefType
-	TypeRegistry: typeof TypeRegistryType
 }
 
 const error = new Error(
@@ -49,13 +46,7 @@ const error = new Error(
 
 let live: TypeboxModule | undefined
 
-let setupTrigger: (() => void) | undefined
-export function setSetupTrigger(fn: () => void) {
-	setupTrigger = fn
-}
-
 function ensure(): TypeboxModule {
-	if (!live) setupTrigger?.()
 	if (!live) throw error
 
 	return live
@@ -106,10 +97,6 @@ export let Intersect: typeof IntersectType = stub('Intersect')
 export let Default: typeof DefaultType = stub('Default')
 
 export let Ref: typeof RefType = stub('Ref')
-
-export function ensureTypeRegistry(): typeof TypeRegistryType {
-	return ensure().TypeRegistry
-}
 
 export function useTypebox(mod: TypeboxModule) {
 	live = mod

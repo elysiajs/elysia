@@ -14,7 +14,7 @@ export {
 } from './error'
 export {
 	t,
-	System,
+	TypeSystem,
 	fileType,
 	setFileTypeDetector,
 	type FileTypeDetector

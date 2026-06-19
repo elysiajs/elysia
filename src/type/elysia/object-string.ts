@@ -1,6 +1,6 @@
-import { Type } from 'typebox'
+import { Decode, Refine } from 'typebox/type'
 import type { TObjectOptions, TProperties } from 'typebox'
-import { Value } from 'typebox/value'
+import { Check, Decode as decodeValue } from 'typebox/value'
 
 import { ELYSIA_TYPES } from '../constants'
 import { ObjectType } from './object'
@@ -18,21 +18,21 @@ export function ObjectString<T extends TProperties>(
 	)
 	const object = ObjectType(property, constraints)
 
-	const objectString = Type.Decode(
-		Type.Refine(
+	const objectString = Decode(
+		Refine(
 			StringType(),
 			(value) => {
 				if (value.charCodeAt(0) !== 123) return false
 
 				try {
-					return Value.Check(object, JSON.parse(value))
+					return Check(object, JSON.parse(value))
 				} catch {
 					return false
 				}
 			},
 			() => 'must be an object'
 		),
-		(value) => Value.Decode(object, JSON.parse(value))
+		(value) => decodeValue(object, JSON.parse(value))
 	)
 
 	return elyType(

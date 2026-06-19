@@ -1,4 +1,4 @@
-import { Type } from 'typebox'
+import { Unsafe } from 'typebox/type'
 import type { TSchemaOptions } from 'typebox'
 
 import { ELYSIA_TYPES } from '../constants'
@@ -41,5 +41,5 @@ export function UnionEnum<
 
 	if (!mixed) schema.type = kind
 
-	return elyType(ELYSIA_TYPES.UnionEnum, Type.Unsafe<T[number]>(schema))
+	return elyType(ELYSIA_TYPES.UnionEnum, Unsafe<T[number]>(schema))
 }

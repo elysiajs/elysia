@@ -7,6 +7,9 @@ import {
 	entryFilter,
 	type ElysiaAotOptions
 } from './core'
+import { rewriteTypeImport } from './treeshake'
+
+const SOURCE = /\.(c|m)?(t|j)sx?$/
 
 /**
  * Elysia AOT build plugin
@@ -33,7 +36,7 @@ export const aot = (
 	async setup(build: any	) {
 		const source = await generateCompiledModule(entry, options)
 		const entryPath = resolveEntry(entry)
-		const loader = resolveLoader(entryPath)
+		const treeShake = options?.treeShake ?? true
 
 		build.onResolve({ filter: /^elysia\/compiled$/ }, () => ({
 			path: 'manifest',
@@ -46,12 +49,30 @@ export const aot = (
 			resolveDir: dirname(entryPath)
 		}))
 
-		build.onLoad(
-			{ filter: entryFilter(entryPath) },
-			async (args: { path: string }) => ({
-				contents: `import 'elysia/compiled'\n${await readFile(args.path, 'utf8')}`,
-				loader
-			})
-		)
+		if (treeShake)
+			// Broad load: rewrite `t` imports in every source file, claiming only
+			// files we change (or the entry) so other plugins keep working.
+			build.onLoad(
+				{ filter: SOURCE },
+				async (args: { path: string }) => {
+					if (args.path.includes('/node_modules/')) return
+					const original = await readFile(args.path, 'utf8')
+					let contents = rewriteTypeImport(original, {
+						from: options?.registerFrom
+					})
+					if (args.path === entryPath)
+						contents = `import 'elysia/compiled'\n${contents}`
+					if (contents === original) return
+					return { contents, loader: resolveLoader(args.path) }
+				}
+			)
+		else
+			build.onLoad(
+				{ filter: entryFilter(entryPath) },
+				async (args: { path: string }) => ({
+					contents: `import 'elysia/compiled'\n${await readFile(args.path, 'utf8')}`,
+					loader: resolveLoader(args.path)
+				})
+			)
 	}
 })

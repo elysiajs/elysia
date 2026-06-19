@@ -105,6 +105,11 @@
 			"import": "./dist/trace.mjs",
 			"require": "./dist/trace.js"
 		},
+		"./type": {
+			"types": "./dist/type/exports.d.ts",
+			"import": "./dist/type/exports.mjs",
+			"require": "./dist/type/exports.js"
+		},
 		"./type-system": {
 			"types": "./dist/type/index.d.ts",
 			"import": "./dist/type/index.mjs",
@@ -186,7 +191,10 @@
 		"deadcode": "knip",
 		"release": "bun run build && bun run test && bun publish"
 	},
-	"sideEffects": false,
+	"sideEffects": [
+		"./dist/type/exports.mjs",
+		"./dist/type/exports.js"
+	],
 	"dependencies": {
 		"deuri": "^2.0.1",
 		"exact-mirror": "1.2.2",

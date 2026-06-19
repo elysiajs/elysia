@@ -1,4 +1,4 @@
-import { Type } from 'typebox'
+import { Evaluate, Intersect, Module } from 'typebox/type'
 import {
 	Compile,
 	Build,
@@ -311,8 +311,8 @@ export class TypeBoxValidator<
 		super()
 
 		if (isIntersectable)
-			schema = Type.Evaluate(
-				Type.Intersect([schema, ...options!.schemas!])
+			schema = Evaluate(
+				Intersect([schema, ...options!.schemas!])
 			) as any as T
 
 		const originalElyTyp = (schema as any)?.['~elyTyp']
@@ -329,7 +329,7 @@ export class TypeBoxValidator<
 		let schemaHasRef = false
 		if (name && options?.models) {
 			const module = moduleCache.getOrInsertComputed(options.models, () =>
-				Type.Module(options.models as Record<string, TSchema>)
+				Module(options.models as Record<string, TSchema>)
 			)
 
 			schema = module[name] as T
@@ -337,7 +337,7 @@ export class TypeBoxValidator<
 			schemaHasRef = frozen ? frozen.r === 1 : schemaContainsRef(schema)
 			if (schemaHasRef) {
 				const id = `inline@${++inlineRefId}`
-				const synthetic = Type.Module({
+				const synthetic = Module({
 					...(options.models as Record<string, TSchema>),
 					[id]: schema as TSchema
 				})

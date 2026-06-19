@@ -1,4 +1,4 @@
-import { Type } from 'typebox'
+import { Null, Undefined } from 'typebox/type'
 import type { TSchema, TSchemaOptions } from 'typebox'
 
 import { ELYSIA_TYPES } from '../constants'
@@ -14,7 +14,7 @@ export function MaybeEmpty<T extends TSchema>(
 	return elyType(
 		ELYSIA_TYPES.MaybeEmpty,
 		Union(
-			[schema, Type.Null(), Type.Undefined()],
+			[schema, Null(), Undefined()],
 			assignOrNew(options, { nullable: true })
 		)
 	)

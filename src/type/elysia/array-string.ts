@@ -1,6 +1,6 @@
-import { Type } from 'typebox'
+import { Decode, Refine } from 'typebox/type'
 import type { TObjectOptions, TSchema } from 'typebox'
-import { Value } from 'typebox/value'
+import { Check, Decode as decodeValue } from 'typebox/value'
 
 import { ELYSIA_TYPES } from '../constants'
 import { ArrayType } from './array'
@@ -16,21 +16,21 @@ export function ArrayString<T extends TSchema>(
 	const [constraints, meta] = getMeta((_options ?? nullObject()) as any)
 	const array = ArrayType(property, constraints)
 
-	const arrayString = Type.Decode(
-		Type.Refine(
+	const arrayString = Decode(
+		Refine(
 			StringType(),
 			(value) => {
 				if (value.charCodeAt(0) !== 91) return false
 
 				try {
-					return Value.Check(array, JSON.parse(value))
+					return Check(array, JSON.parse(value))
 				} catch {
 					return false
 				}
 			},
 			() => 'must be an array'
 		),
-		(value) => Value.Decode(array, JSON.parse(value))
+		(value) => decodeValue(array, JSON.parse(value))
 	)
 
 	return elyType(ELYSIA_TYPES.ArrayString, Union([array, arrayString], meta))

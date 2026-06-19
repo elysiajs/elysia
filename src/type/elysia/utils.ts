@@ -1,4 +1,4 @@
-import { Type } from 'typebox'
+import { Refine } from 'typebox/type'
 import type { Static, TSchema } from 'typebox'
 
 import { fnv1a } from '../../utils'
@@ -153,7 +153,7 @@ export function Refines<T extends TSchema>(
 	refines: Refines<Static<T>>
 ) {
 	for (const [refine, message] of refines)
-		schema = Type.Refine(schema, refine, () => message)
+		schema = Refine(schema, refine, () => message)
 
 	return schema
 }

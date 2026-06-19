@@ -3,6 +3,9 @@ import {
 	resolveEntry,
 	type ElysiaAotOptions
 } from './core'
+import { rewriteTypeImport } from './treeshake'
+
+const SOURCE = /\.(c|m)?(t|j)sx?$/
 
 export interface ElysiaAotVitePlugin {
 	name: string
@@ -37,6 +40,7 @@ export const aot = (
 	options?: ElysiaAotOptions
 ): ElysiaAotVitePlugin => {
 	const entryPath = resolveEntry(entry)
+	const treeShake = options?.treeShake ?? true
 	let source = ''
 
 	return {
@@ -53,7 +57,11 @@ export const aot = (
 			if (id === VIRTUAL) return source
 		},
 		transform(code, id) {
-			if (id === entryPath) return `import 'elysia/compiled'\n${code}`
+			let out = code
+			if (treeShake && SOURCE.test(id) && !id.includes('node_modules'))
+				out = rewriteTypeImport(out, { from: options?.registerFrom })
+			if (id === entryPath) out = `import 'elysia/compiled'\n${out}`
+			return out === code ? undefined : out
 		}
 	}
 }

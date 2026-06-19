@@ -1,9 +1,10 @@
-import { Type } from 'typebox'
+import { Decode, Refine, Unsafe } from 'typebox/type'
 import type {
 	StaticDecode,
 	TObjectOptions,
 	TProperties,
-	TSchema
+	TSchema,
+	Type
 } from 'typebox'
 
 import { ELYSIA_TYPES } from '../constants'
@@ -23,9 +24,9 @@ export const Form = <T extends TProperties>(
 	options?: TObjectOptions
 ) => {
 	BaseForm ??= Object.freeze(
-		Type.Decode(
-			Type.Refine(
-				Type.Unsafe<any>({ '~kind': 'FormData' }),
+		Decode(
+			Refine(
+				Unsafe<any>({ '~kind': 'FormData' }),
 				(value) =>
 					typeof value === 'object' &&
 					value !== null &&

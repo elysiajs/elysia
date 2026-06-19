@@ -1,4 +1,5 @@
-import { Type } from 'typebox'
+import { Decode, Refine } from 'typebox/type'
+import type { Type } from 'typebox'
 import type { TSchemaOptions } from 'typebox'
 
 import { isEmpty } from '../../utils'
@@ -15,8 +16,8 @@ let emptyBooleanString: Readonly<
 	>
 >
 export function BooleanString(property?: TSchemaOptions) {
-	StringifiedBoolean ??= Type.Decode(
-		Type.Refine(
+	StringifiedBoolean ??= Decode(
+		Refine(
 			StringType(),
 			(value) => value === 'true' || value === 'false',
 			() => 'must be boolean'
