@@ -174,6 +174,102 @@ describe('WebSocket connection', () => {
 		})
 	})
 
+	it('should maintain ws object identity across open/message/close', async () => {
+		let openWs: unknown
+		let messageWs: unknown
+		let closeWs: unknown
+
+		const app = new Elysia()
+			.ws('/ws', {
+				open(ws) {
+					openWs = ws
+				},
+				message(ws) {
+					messageWs = ws
+					ws.close()
+				},
+				close(ws) {
+					closeWs = ws
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+
+		await wsOpen(ws)
+		ws.send('hello')
+		await wsClose(ws)
+
+		expect(openWs).toBeDefined()
+		expect(messageWs).toBeDefined()
+		expect(closeWs).toBeDefined()
+		expect(openWs).toBe(messageWs)
+		expect(openWs).toBe(closeWs)
+
+		app.stop()
+	})
+
+	it('should allow tracking sockets in a Set across open/close', async () => {
+		const connections = new Set<unknown>()
+
+		const app = new Elysia()
+			.ws('/ws', {
+				open(ws) {
+					connections.add(ws)
+				},
+				message(ws) {
+					ws.close()
+				},
+				close(ws) {
+					connections.delete(ws)
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+
+		await wsOpen(ws)
+		expect(connections.size).toBe(1)
+
+		ws.send('hello')
+		await wsClose(ws)
+
+		expect(connections.size).toBe(0)
+
+		app.stop()
+	})
+
+	it('should allow per-socket state via Map across handlers', async () => {
+		const state = new Map<unknown, string>()
+		let messageValue: string | undefined
+
+		const app = new Elysia()
+			.ws('/ws', {
+				open(ws) {
+					state.set(ws, 'my-state')
+				},
+				message(ws) {
+					messageValue = state.get(ws)
+					ws.close()
+				},
+				close(ws) {
+					state.delete(ws)
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+
+		await wsOpen(ws)
+		ws.send('hello')
+		await wsClose(ws)
+
+		expect(messageValue).toBe('my-state')
+		expect(state.size).toBe(0)
+
+		app.stop()
+	})
+
 	it('call ping/pong', async () => {
 		let pinged = false
 		let ponged = false
