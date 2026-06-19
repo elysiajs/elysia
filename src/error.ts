@@ -361,7 +361,7 @@ export class ValidationError extends Error {
 					{
 						type: 'validation',
 						on: type,
-						property: error.path?.[0] || 'root',
+						property: error?.path?.[0] || 'root',
 						message: error?.message,
 						summary: error?.problem,
 						expected,
