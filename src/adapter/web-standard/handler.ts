@@ -176,8 +176,8 @@ export const mapResponse = (
 					const code = (response as any).charCodeAt(0)
 
 					if (code === 123 || code === 91) {
-						if (!set.headers['Content-Type'])
-							set.headers['Content-Type'] = 'application/json'
+						if (!set.headers['content-type'])
+							set.headers['content-type'] = 'application/json'
 
 						return new Response(
 							JSON.stringify(response),
@@ -329,8 +329,8 @@ export const mapEarlyResponse = (
 					const code = (response as any).charCodeAt(0)
 
 					if (code === 123 || code === 91) {
-						if (!set.headers['Content-Type'])
-							set.headers['Content-Type'] = 'application/json'
+						if (!set.headers['content-type'])
+							set.headers['content-type'] = 'application/json'
 
 						return new Response(
 							JSON.stringify(response),
@@ -461,8 +461,8 @@ export const mapEarlyResponse = (
 					const code = (response as any).charCodeAt(0)
 
 					if (code === 123 || code === 91) {
-						if (!set.headers['Content-Type'])
-							set.headers['Content-Type'] = 'application/json'
+						if (!set.headers['content-type'])
+							set.headers['content-type'] = 'application/json'
 
 						return new Response(
 							JSON.stringify(response),

@@ -405,4 +405,71 @@ describe('Header Validator', () => {
 
 		expect(err instanceof ValidationError).toBe(true)
 	})
+
+	it('validate mixed-case schema keys against lowercase headers', async () => {
+		const app = new Elysia().get(
+			'/',
+			({ headers }) => headers['x-custom'],
+			{
+				headers: t.Object({
+					'X-Custom': t.String()
+				})
+			}
+		)
+		const res = await app.handle(
+			req('/', {
+				headers: {
+					'x-custom': 'hello'
+				}
+			})
+		)
+
+		expect(await res.text()).toBe('hello')
+		expect(res.status).toBe(200)
+	})
+
+	it('access validated headers with any casing', async () => {
+		const app = new Elysia().get(
+			'/',
+			({ headers }) =>
+				`${headers['x-custom']},${headers['X-Custom']},${headers['X-CUSTOM']}`,
+			{
+				headers: t.Object({
+					'X-Custom': t.String()
+				})
+			}
+		)
+		const res = await app.handle(
+			req('/', {
+				headers: {
+					'x-custom': 'hello'
+				}
+			})
+		)
+
+		expect(await res.text()).toBe('hello,hello,hello')
+		expect(res.status).toBe(200)
+	})
+
+	it('validate User-Agent schema key against lowercase header', async () => {
+		const app = new Elysia().get(
+			'/',
+			({ headers }) => headers['user-agent'] ?? 'none',
+			{
+				headers: t.Object({
+					'User-Agent': t.String()
+				})
+			}
+		)
+		const res = await app.handle(
+			req('/', {
+				headers: {
+					'user-agent': 'TestAgent/1.0'
+				}
+			})
+		)
+
+		expect(await res.text()).toBe('TestAgent/1.0')
+		expect(res.status).toBe(200)
+	})
 })

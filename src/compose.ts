@@ -63,7 +63,7 @@ import type {
 	MaybePromise,
 	SchemaValidator
 } from './types'
-import { tee } from './adapter/utils'
+import { tee, createCaseInsensitiveHeaders } from './adapter/utils'
 import { coercePrimitiveRoot } from './replace-schema'
 
 const allocateIf = (value: string, condition: unknown) =>
@@ -499,7 +499,9 @@ export const composeHandler = ({
 	if (!isHandleFn) {
 		handler = adapterHandler.mapResponse(handler, {
 			// @ts-expect-error private property
-			headers: app.setHeaders ?? {}
+			headers: createCaseInsensitiveHeaders(
+				app.setHeaders ? { ...app.setHeaders } : undefined
+			)
 		})
 
 		const isResponse =
@@ -1279,6 +1281,10 @@ export const composeHandler = ({
 				)
 
 			if (validator.headers.isOptional) fnLiteral += '}'
+
+			// Re-wrap headers in case-insensitive proxy after validation
+			// since Clean/Decode may strip the proxy
+			fnLiteral += `c.headers=ciHeaders(c.headers)\n`
 		}
 
 		if (validator.params) {
@@ -2157,6 +2163,7 @@ export const composeHandler = ({
 		allocateIf('parser,', hooks.parse?.length) +
 		allocateIf(`getServer,`, inference.server) +
 		allocateIf(`fileUnions,`, fileUnions.length) +
+		`ciHeaders,` +
 		adapterVariables +
 		allocateIf('TypeBoxError', hasValidation) +
 		`}=hooks\n` +
@@ -2215,6 +2222,7 @@ export const composeHandler = ({
 			fileUnions: fileUnions.length ? fileUnions : undefined,
 			TypeBoxError: hasValidation ? TypeBoxError : undefined,
 			parser: app['~parser'],
+			ciHeaders: createCaseInsensitiveHeaders,
 			...adapter.inject
 		})
 	} catch (error) {
@@ -2501,6 +2509,7 @@ export const composeGeneralHandler = (
 		allocateIf(`parseQueryFromURL,`, app.inference.query) +
 		allocateIf(`ELYSIA_TRACE,`, hasTrace) +
 		allocateIf(`ELYSIA_REQUEST_ID,`, hasTrace) +
+		`ciHeaders,` +
 		adapterVariables +
 		`}=data\n` +
 		`const store=app.singleton.store\n` +
@@ -2568,6 +2577,7 @@ export const composeGeneralHandler = (
 		parseQueryFromURL: app.inference.query ? parseQueryFromURL : undefined,
 		ELYSIA_TRACE: hasTrace ? ELYSIA_TRACE : undefined,
 		ELYSIA_REQUEST_ID: hasTrace ? ELYSIA_REQUEST_ID : undefined,
+		ciHeaders: createCaseInsensitiveHeaders,
 		...adapter.inject
 	})
 
