@@ -33,4 +33,20 @@ describe('After Handle', () => {
 		await Bun.sleep(1)
 		expect(status!).toBe(404)
 	})
+
+	it('preserve request.url', async () => {
+		let url: string
+
+		const app = new Elysia()
+			.onAfterResponse(({ request }) => {
+				url = request.url
+			})
+			.get('/hello/page', () => 'hi')
+
+		const res = await app.handle(req('/hello/page?foo=bar'))
+		expect(res.status).toBe(200)
+
+		await Bun.sleep(1)
+		expect(url!).toBe('http://localhost/hello/page?foo=bar')
+	})
 })
