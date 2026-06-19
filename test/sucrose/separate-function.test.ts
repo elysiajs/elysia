@@ -106,4 +106,79 @@ describe('Sucrose: separateFunction', () => {
 			}
 		])
 	})
+
+	it('separate minified method', () => {
+		const method =
+			'beforeHandle(ctx){await executeMiddleware(ctx, guardFn, logMessage)}'
+
+		expect(separateFunction(method)).toEqual([
+			'ctx',
+			'{await executeMiddleware(ctx, guardFn, logMessage)}',
+			{
+				isArrowReturn: false
+			}
+		])
+	})
+
+	it('separate async minified method', () => {
+		const method =
+			'async beforeHandle(ctx){await executeMiddleware(ctx, guardFn)}'
+
+		expect(separateFunction(method)).toEqual([
+			'ctx',
+			'{await executeMiddleware(ctx, guardFn)}',
+			{
+				isArrowReturn: false
+			}
+		])
+	})
+
+	it('separate formatted method', () => {
+		const method = 'beforeHandle(ctx) {\n  return ctx.query\n}'
+
+		expect(separateFunction(method)).toEqual([
+			'ctx',
+			'{\n  return ctx.query\n}',
+			{
+				isArrowReturn: false
+			}
+		])
+	})
+
+	it('separate method with multiple parameters', () => {
+		const method = 'beforeHandle(ctx, next){return next(ctx)}'
+
+		expect(separateFunction(method)).toEqual([
+			'ctx, next',
+			'{return next(ctx)}',
+			{
+				isArrowReturn: false
+			}
+		])
+	})
+
+	it('separate method with quoted closing paren in default parameter', () => {
+		const method = 'beforeHandle(ctx = createGuard(")")){return ctx.query}'
+
+		expect(separateFunction(method)).toEqual([
+			'ctx = createGuard(")")',
+			'{return ctx.query}',
+			{
+				isArrowReturn: false
+			}
+		])
+	})
+
+	it('separate method with template and comment parens in parameters', () => {
+		const method =
+			'beforeHandle(ctx = createGuard(`value ${")"}`), next = /* ) */ fallback){return next(ctx)}'
+
+		expect(separateFunction(method)).toEqual([
+			'ctx = createGuard(`value ${")"}`), next = /* ) */ fallback',
+			'{return next(ctx)}',
+			{
+				isArrowReturn: false
+			}
+		])
+	})
 })
