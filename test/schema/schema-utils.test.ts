@@ -171,3 +171,35 @@ describe('hasProperty', () => {
 		expect(hasProperty('default', schema)).toBe(true)
 	})
 })
+
+describe('hasElysiaMeta', () => {
+	const { hasElysiaMeta } = require('../../src/schema')
+
+	it('finds elysiaMeta in Object properties even if placed after another property', () => {
+		const schema = t.Object({
+			a: t.String(),
+			b: t.ObjectString({ c: t.String() })
+		})
+
+		expect(hasElysiaMeta('ObjectString', schema)).toBe(true)
+	})
+
+	it('finds elysiaMeta in deeply nested objects', () => {
+		const schema = t.Object({
+			outer: t.Object({
+				inner: t.ObjectString({ c: t.String() })
+			})
+		})
+
+		expect(hasElysiaMeta('ObjectString', schema)).toBe(true)
+	})
+
+	it('returns false if elysiaMeta is not present', () => {
+		const schema = t.Object({
+			a: t.String(),
+			b: t.Object({ c: t.String() })
+		})
+
+		expect(hasElysiaMeta('ObjectString', schema)).toBe(false)
+	})
+})
