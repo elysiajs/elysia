@@ -121,4 +121,13 @@ describe('Status', () => {
 		expect(response.status).toBe(308)
 		expect(await response.text()).toBe('')
 	})
+
+	it('return empty body when body is explicitly set to null', async () => {
+		const app = new Elysia().get('/', ({ status }) => status(201, null))
+
+		const response = await app.handle(req('/'))
+
+		expect(response.status).toBe(201)
+		expect(await response.arrayBuffer()).toHaveLength(0);
+	})
 })
