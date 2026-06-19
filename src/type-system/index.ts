@@ -521,6 +521,7 @@ export const ElysiaType = {
 			priority,
 			sameSite,
 			secure,
+			encode,
 			secrets,
 			sign,
 			...options
@@ -537,6 +538,7 @@ export const ElysiaType = {
 			priority,
 			sameSite,
 			secure,
+			encode,
 			secrets,
 			sign
 		}

@@ -462,47 +462,38 @@ export const createDynamicHandler = (app: AnyElysia) => {
 			for (const [key, value] of request.headers.entries())
 				context.headers[key] = value
 
+			const routeCookieConfig = (
+				(hooks as {
+					cookie?: {
+						config?: CookieOptions & {
+							sign?: true | string | string[]
+						}
+					}
+				}).cookie?.config ??
+				(validator?.cookie?.config as
+					| (CookieOptions & {
+							sign?: true | string | string[]
+					  })
+					| undefined)
+			)
+
 			const cookieMeta = {
-				domain:
-					app.config.cookie?.domain ??
-					// @ts-expect-error
-					validator?.cookie?.config.domain,
-				expires:
-					app.config.cookie?.expires ??
-					// @ts-expect-error
-					validator?.cookie?.config.expires,
+				domain: app.config.cookie?.domain ?? routeCookieConfig?.domain,
+				expires: app.config.cookie?.expires ?? routeCookieConfig?.expires,
 				httpOnly:
-					app.config.cookie?.httpOnly ??
-					// @ts-expect-error
-					validator?.cookie?.config.httpOnly,
-				maxAge:
-					app.config.cookie?.maxAge ??
-					// @ts-expect-error
-					validator?.cookie?.config.maxAge,
-				// @ts-expect-error
-				path: app.config.cookie?.path ?? validator?.cookie?.config.path,
+					app.config.cookie?.httpOnly ?? routeCookieConfig?.httpOnly,
+				maxAge: app.config.cookie?.maxAge ?? routeCookieConfig?.maxAge,
+				path: app.config.cookie?.path ?? routeCookieConfig?.path,
 				priority:
-					app.config.cookie?.priority ??
-					// @ts-expect-error
-					validator?.cookie?.config.priority,
+					app.config.cookie?.priority ?? routeCookieConfig?.priority,
 				partitioned:
 					app.config.cookie?.partitioned ??
-					// @ts-expect-error
-					validator?.cookie?.config.partitioned,
-				sameSite:
-					app.config.cookie?.sameSite ??
-					// @ts-expect-error
-					validator?.cookie?.config.sameSite,
-				secure:
-					app.config.cookie?.secure ??
-					// @ts-expect-error
-					validator?.cookie?.config.secure,
-				secrets:
-					app.config.cookie?.secrets ??
-					// @ts-expect-error
-					validator?.cookie?.config.secrets,
-				// @ts-expect-error
-				sign: app.config.cookie?.sign ?? validator?.cookie?.config.sign
+					routeCookieConfig?.partitioned,
+				sameSite: app.config.cookie?.sameSite ?? routeCookieConfig?.sameSite,
+				secure: app.config.cookie?.secure ?? routeCookieConfig?.secure,
+				encode: routeCookieConfig?.encode ?? app.config.cookie?.encode,
+				secrets: app.config.cookie?.secrets ?? routeCookieConfig?.secrets,
+				sign: app.config.cookie?.sign ?? routeCookieConfig?.sign
 			} as CookieOptions & {
 				sign?: true | string | string[]
 			}
