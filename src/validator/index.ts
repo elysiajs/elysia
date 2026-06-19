@@ -228,6 +228,12 @@ export class StandardValidator extends Validator {
 
 	constructor(schema: StandardSchemaV1Like) {
 		super()
+
+		if (Capture.isCapturing())
+			Capture.unfreezable(
+				'Standard Schema validator — not TypeBox, cannot be AOT-frozen'
+			)
+
 		// @ts-expect-error
 		this.validate = schema['~standard'].validate
 	}
@@ -280,6 +286,11 @@ export class MultiValidator extends Validator {
 		options: ValidatorOptions
 	) {
 		super()
+
+		if (Capture.isCapturing())
+			Capture.unfreezable(
+				'standalone-guard / multi-schema validator — composed via Compile, cannot be AOT-frozen'
+			)
 
 		let typeboxObjects
 		const schemas = [schema].concat(options.schemas!)

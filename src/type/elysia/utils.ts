@@ -67,16 +67,9 @@ export function createSharedReference<
 	return (property: P): T => {
 		const hash = propertyChecksum(property)
 		if (hash[0] in shared) {
-			const cached = shared[hash[0]]
+			if (hash[1]) return createType(property)
 
-			if (hash[1])
-				return Object.defineProperty(
-					Object.assign(hash[1], cached as Record<string, unknown>),
-					'~kind',
-					{ value: cached['~kind'], enumerable: false }
-				) as T
-
-			return cached
+			return shared[hash[0]]
 		}
 
 		return (shared[hash[0]] = Object.freeze(createType(property)))

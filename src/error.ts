@@ -202,7 +202,13 @@ export class ValidationError extends ElysiaError {
 		public type: string | undefined,
 		public value: unknown,
 		errors: any[] | (() => any[]),
-		schema?: unknown
+		schema?: unknown,
+		// Production-only escape hatch: locate the first failing custom-error
+		// field WITHOUT TypeBox `Errors` (baked/compiled per-field checks). Only
+		// consulted in the production-gated path; dev/`allowUnsafe` use `errors`.
+		findCustomError?: (
+			value: unknown
+		) => { instancePath: string; error: unknown } | undefined
 	) {
 		// Always resolve lazily. The real request flow already passes a thunk;
 		// unifying the eager (array) path onto the lazy machinery means the
@@ -224,6 +230,34 @@ export class ValidationError extends ElysiaError {
 
 		const resolve = () => {
 			if (resolved !== undefined) return
+
+			if (
+				isProduction &&
+				!this.allowUnsafeValidationDetails &&
+				findCustomError
+			) {
+				const hit = findCustomError(value)
+				resolved = hit ? [{ instancePath: hit.instancePath }] : []
+
+				if (hit && hit.error !== undefined)
+					custom =
+						typeof hit.error === 'function'
+							? hit.error({
+									type: 'validation',
+									on: type,
+									found: scopeFound(value, resolved[0])
+								})
+							: hit.error
+
+				message =
+					custom !== undefined
+						? typeof custom === 'string'
+							? custom
+							: JSON.stringify(custom)
+						: `Validation error on ${type ?? 'unknown'}`
+
+				return
+			}
 
 			resolved = thunk() ?? []
 
@@ -368,7 +402,9 @@ export class ValidationError extends ElysiaError {
 		let expected: unknown
 		const schemaForExpected = first?.schema ?? this.schema
 
-		if (schemaForExpected)
+		// sealed builds drop TypeBox `Default`; the `expected` shape hint is then
+		// unavailable (the baked custom-error locator covers production detail)
+		if (schemaForExpected && !globalThis.__ELYSIA_SEALED__)
 			try {
 				expected = Default(nullObject(), schemaForExpected as any, undefined)
 			} catch {}

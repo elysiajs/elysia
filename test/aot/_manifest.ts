@@ -108,6 +108,58 @@ export const materialise = (
 			entry.em = em
 		}
 
+		// preallocated defaults — round-trip through JSON to match the real
+		// emit (the build serializes `pd`/`pod` via JSON.stringify).
+		if (c.precomputeSafe) {
+			entry.ps = 1
+			if (c.precomputedDefault !== undefined)
+				entry.pd = JSON.parse(JSON.stringify(c.precomputedDefault))
+			if (c.precomputedObjectDefault !== undefined)
+				entry.pod = JSON.parse(JSON.stringify(c.precomputedObjectDefault))
+		}
+
+		// per-field custom-error checks
+		if (c.customErrors?.length)
+			entry.ce = c.customErrors.map((e) => ({
+				p: e.path,
+				c: fn(
+					Source.checkFactory(
+						e.identifier,
+						Source.checkCode(e.checkDefs, e.checkValue)
+					)
+				),
+				...(e.external ? { e: 1 } : {})
+			}))
+
+		// inner codecs (t.ObjectString / t.ArrayString)
+		if (c.innerCodecs?.length)
+			entry.ic = c.innerCodecs.map((e) => {
+				const d: any = {
+					s: fn(
+						Source.mirrorFactory(
+							e.decode.source,
+							e.decode.hasExternals
+						)
+					)
+				}
+				if (e.decode.u) d.u = branchTable(e.decode.u)
+				if (e.decode.hasExternals) d.x = 1
+				return {
+					o: e.open,
+					c: fn(
+						Source.checkFactory(
+							e.identifier,
+							Source.checkCode(e.checkDefs, e.checkValue)
+						)
+					),
+					...(e.external ? { e: 1 } : {}),
+					d,
+					...(e.pod !== undefined
+						? { pod: JSON.parse(JSON.stringify(e.pod)) }
+						: {})
+				}
+			})
+
 		const bySlot = ((m[c.method] ??= {})[c.path] ??= {})
 		bySlot[c.slot] = entry
 	}

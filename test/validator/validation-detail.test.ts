@@ -78,6 +78,16 @@ describe('validation detail — production gating', () => {
 
 		// error.detail() → full when allowUnsafe even in production
 		expect(r.detailAllowUnsafe.body.errors).toBeArray()
+
+		// nested custom error resolves via findCustomError path navigation
+		expect(r.nestedCustomError.status).toBe(422)
+		expect(r.nestedCustomError.body.message).toBe('age must be a number')
+
+		// the custom-error path used findCustomError, NOT TypeBox Errors:
+		// the throwing thunk was never consulted (status 422, message present)
+		expect(r.findCustomErrorBypass.status).toBe(422)
+		expect(r.findCustomErrorBypass.body.message).toBe('from findCustomError')
+		expect(r.findCustomErrorBypass.body.found).toEqual({ x: 'bad' })
 	})
 
 	it('non-production keeps full detail (gate off)', async () => {

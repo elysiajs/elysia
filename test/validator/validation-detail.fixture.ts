@@ -75,8 +75,46 @@ const scenarios: Record<string, () => Promise<Response>> = {
 					return error.detail(error.message)
 			})
 			.post('/', { body: t.Object({ x: t.Number() }) }, () => 'ok')
-			.handle(post(bad))
+			.handle(post(bad)),
+
+	// nested custom error → exercises findCustomError path navigation (/user/age)
+	nestedCustomError: () =>
+		new Elysia()
+			.post(
+				'/',
+				{
+					body: t.Object({
+						user: t.Object({
+							age: t.Number({
+								error: validationDetail('age must be a number')
+							})
+						})
+					})
+				},
+				() => 'ok'
+			)
+			.handle(post({ user: { age: 'x' } }))
 }
+
+// Proves the production custom-error path uses `findCustomError` and NOT TypeBox
+// `Errors`: the thunk throws, so if resolve() consulted it the access below would
+// throw. In production it must resolve the message from findCustomError instead.
+// (Production only — in dev resolve() WOULD call the thunk, by design.)
+if ((process.env.NODE_ENV ?? process.env.ENV) === 'production')
+	scenarios.findCustomErrorBypass = async () => {
+		const err = new ValidationError(
+			'body',
+			{ x: 'bad' },
+			() => {
+				throw new Error('TypeBox Errors must not be called in production')
+			},
+			{ properties: { x: {} } },
+			() => ({ instancePath: '/x', error: 'from findCustomError' })
+		)
+		return new Response(JSON.stringify(err.detail(err.message)), {
+			status: 422
+		})
+	}
 
 const out: Record<string, { status: number; body: string }> = {}
 for (const key in scenarios) {

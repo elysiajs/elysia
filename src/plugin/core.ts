@@ -39,7 +39,23 @@ export interface ElysiaAotOptions {
 	 * @default true
 	 */
 	treeShake?: boolean
+
+	/**
+	 * Seal the build: `define` `globalThis.__ELYSIA_SEALED__ = true`, dropping the
+	 * JIT / `Default` / `Errors` / exact-mirror fallback branches (and their
+	 * imports) from the bundle.
+	 *
+	 * ⚠️ ONLY safe when EVERY validator the app constructs is frozen in the
+	 * manifest (closed-world, 100% capture coverage). A sealed manifest MISS has
+	 * no fallback and fails loud. Off by default.
+	 *
+	 * @default false
+	 */
+	seal?: boolean
 }
+
+/** The bundler `define` a sealed AOT build injects. */
+export const SEAL_DEFINE = { 'globalThis.__ELYSIA_SEALED__': 'true' } as const
 
 function findPackageRoot(from: string = process.cwd()): string {
 	let dir = from
@@ -88,6 +104,7 @@ export async function generateCompiledModule(
 		register: true,
 		registerFrom: options?.registerFrom,
 		lazy: options?.lazy,
-		target: options?.target
+		target: options?.target,
+		seal: options?.seal
 	})
 }

@@ -27,8 +27,14 @@ export function setupTypebox() {
 	Settings.Set({ unionPrioritySort: false })
 
 	useTypebox({
-		Compile,
-		Decode,
+		// sealed: the only consumers of bridge Compile/Decode/HasCodec are
+		// MultiValidator / standalone-guard, which are refused at build time
+		// (Capture.unfreezable). Gating these injections drops the typebox/compile
+		// import edge (which transitively pulls the entire typebox/value namespace)
+		// and the direct typebox/value Decode/HasCodec edges — letting both
+		// modules tree-shake out of a sealed bundle.
+		Compile: globalThis.__ELYSIA_SEALED__ ? (undefined as any) : Compile,
+		Decode: globalThis.__ELYSIA_SEALED__ ? (undefined as any) : Decode,
 		applyCoercions,
 		TypeBoxValidator: TypeBoxValidator as any,
 		TypeBoxValidatorCache: TypeBoxValidatorCache as any,
@@ -38,9 +44,12 @@ export function setupTypebox() {
 		coerceStringToStructure,
 		coerceBody,
 		hasTypes,
-		HasCodec,
+		HasCodec: globalThis.__ELYSIA_SEALED__ ? (undefined as any) : HasCodec,
 		Intersect,
-		Default,
+		// sealed: the only bridge-`Default` consumer (error.ts `expected` hint)
+		// is gated off, so this injection — and the typebox/value `Default`
+		// import behind it — DCEs out
+		Default: globalThis.__ELYSIA_SEALED__ ? (undefined as any) : Default,
 		Ref
 	})
 }

@@ -5,6 +5,7 @@ import {
 	resolveEntry,
 	resolveLoader,
 	entryFilter,
+	SEAL_DEFINE,
 	type ElysiaAotOptions
 } from './core'
 import { rewriteTypeImport } from './treeshake'
@@ -37,6 +38,34 @@ export const aot = (
 		const source = await generateCompiledModule(entry, options)
 		const entryPath = resolveEntry(entry)
 		const treeShake = options?.treeShake ?? true
+
+		if (options?.seal) {
+			build.initialOptions.define = {
+				...build.initialOptions.define,
+				...SEAL_DEFINE
+			}
+
+			// Under seal, every typebox/value + typebox/compile USE folds away
+			// (SEAL_DEFINE in form-B/ternary branches), but esbuild only
+			// tree-shakes the import EDGE if it knows the module is side-effect
+			// free — and typebox ships no `sideEffects:false`. Mark the entry
+			// barrels so the now-dead imports drop, taking the ~49 KB raw /
+			// 12 KB gzip value+compile graph with them.
+			build.onResolve(
+				{ filter: /^typebox\/(value|compile)(\/|$)/ },
+				async (args: any) => {
+					if (args.pluginData?.elysiaSeal) return null // re-entry guard
+					const resolved = await build.resolve(args.path, {
+						kind: args.kind,
+						resolveDir: args.resolveDir,
+						importer: args.importer,
+						pluginData: { elysiaSeal: true }
+					})
+					if (resolved.errors.length) return resolved
+					return { path: resolved.path, sideEffects: false }
+				}
+			)
+		}
 
 		build.onResolve({ filter: /^elysia\/compiled$/ }, () => ({
 			path: 'manifest',

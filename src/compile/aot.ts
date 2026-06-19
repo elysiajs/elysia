@@ -60,6 +60,32 @@ export interface FrozenValidator {
 	k?: 1
 	// hasRef
 	r?: 1
+	// precompute-safe defaults baked at build: when `ps`, the runtime reads
+	// `pd`/`pod` instead of calling TypeBox `Default()` at construction.
+	ps?: 1
+	// precomputed default for absent input (`Default(schema, undefined)`)
+	pd?: unknown
+	// precomputed object-default template (`Default(schema, {})`)
+	pod?: Record<string, unknown>
+	// custom-error fields: per-field frozen check (`c`) at instancePath `p`,
+	// `e:1` when the check needs externals. Locates the failing custom-error
+	// field in production without TypeBox `Errors`.
+	ce?: Array<{ p: string; c: FrozenCheckFactory; e?: 1 }>
+	// inner codecs for t.ObjectString / t.ArrayString: per ely-string-codec node
+	// (in deterministic walk order), the inner schema's frozen check (`c`) + decode
+	// mirror (`d`) + optional baked object-default template (`pod`). At
+	// reconstruction these overwrite the codec's `~codec.decode` / `~refine[0].check`
+	// with typebox-free closures so the codec stops delegating to typebox/value.
+	// `o` is the open char (123 `{` / 91 `[`). Bottom-up so nested codecs resolve.
+	ic?: Array<{
+		o: number
+		c: FrozenCheckFactory
+		e?: 1
+		// `x:1` → decode `s` is a (d)=>(v) factory (inner has codecs/unions);
+		// otherwise `s` is a plain (v)=>cleaned cleaner called directly
+		d: FrozenMirror & { x?: 1 }
+		pod?: Record<string, unknown>
+	}>
 }
 
 export interface ValidatorManifest {
@@ -330,7 +356,16 @@ function collectMirrorUnions(schema: any, out: unknown[][] = []) {
 	} else if (Array.isArray(schema.anyOf)) {
 		out.push(schema.anyOf)
 
-		for (const b of schema.anyOf) collectMirrorUnions(b, out)
+		// exact-mirror mirrors EACH union branch twice (the `if Check` return path
+		// + the clean-then-check fallback, index.mjs:166/172), so a nested union
+		// inside a branch is enumerated twice in `instruction.unions`. Descend each
+		// branch twice here to keep this enumeration index-aligned with the frozen
+		// `u` source (otherwise an ObjectString/ArrayString whose inner has a codec
+		// — a union-in-a-union — fails captureMirrorUnions and can't freeze).
+		for (const b of schema.anyOf) {
+			collectMirrorUnions(b, out)
+			collectMirrorUnions(b, out)
+		}
 	}
 
 	return out
@@ -521,6 +556,28 @@ export interface CapturedValidator {
 	decodeMirror?: CapturedMirror
 	// response-side encode mirror (codec `~encode`), frozen to `em`
 	encodeMirror?: CapturedMirror
+	// preallocated defaults (build-verified), frozen to `ps`/`pd`/`pod`
+	precomputeSafe?: boolean
+	precomputedDefault?: unknown
+	precomputedObjectDefault?: Record<string, unknown>
+	// per-field custom-error checks, frozen to `ce`
+	customErrors?: Array<{
+		path: string
+		identifier: string
+		checkDefs: string
+		checkValue: string
+		external: boolean
+	}>
+	// inner codecs (t.ObjectString / t.ArrayString) frozen to `ic`
+	innerCodecs?: Array<{
+		open: number
+		identifier: string
+		checkDefs: string
+		checkValue: string
+		external: boolean
+		decode: CapturedMirror
+		pod?: Record<string, unknown>
+	}>
 }
 
 let capture: Map<string, CapturedValidator> | undefined
@@ -548,6 +605,8 @@ function captureEntry({
 // @internal test isolation
 export function beginValidatorCapture() {
 	capture = new Map()
+	coverageNeeds = []
+	coverageUnfreezable = []
 }
 
 // @internal test isolation
@@ -556,6 +615,104 @@ export function endValidatorCapture() {
 	capture = undefined
 
 	return captured
+}
+
+// ----------------------------------------------------------------------------
+// Seal coverage. A sealed build drops the JIT / Default / Errors / codec /
+// exact-mirror fallbacks, so EVERY validator the runtime constructs must be
+// FULLY frozen — a manifest MISS has no fallback. Each AOT validator records the
+// channels it needs at runtime ("need profile"); validators that CAN'T be frozen
+// at all (no aot/slot: WebSocket / dynamic, `MultiValidator`, `normalize:'typebox'`
+// which uses TypeBox `Clean`) record an `unfreezable` marker. `assertSealCoverage`
+// cross-references and reports every gap; the build refuses to seal on any gap.
+// ----------------------------------------------------------------------------
+
+export interface CoverageNeed {
+	method: string
+	path: string
+	slot: ValidatorSlot
+	// frozen check (`c`/`cm`) — without it the runtime JITs via Compile/HasCodec
+	check: boolean
+	// exact-mirror Clean (frozen `m`/`cm`)
+	mirror: boolean
+	// request-side decode mirror (frozen `dm`)
+	decode: boolean
+	// response-side encode mirror (frozen `em`)
+	encode: boolean
+	// baked default (`ps`) — without it the runtime calls `Default`
+	hasDefault: boolean
+	// inner codecs (`ic`) — count of ely-string-codec nodes that must ALL freeze;
+	// 0 when the schema has no t.ObjectString / t.ArrayString
+	innerCodecs?: number
+}
+
+// validators that cannot be AOT-frozen at all → a sealed build would JIT them
+let coverageNeeds: CoverageNeed[] | undefined
+let coverageUnfreezable: { reason: string }[] | undefined
+
+function captureNeed(v: CoverageNeed) {
+	if (!isValidatorCapturing()) return
+	;(coverageNeeds ??= []).push(v)
+}
+
+function captureUnfreezable(reason: string) {
+	if (!isValidatorCapturing()) return
+	;(coverageUnfreezable ??= []).push({ reason })
+}
+
+export interface SealCoverageGap {
+	method?: string
+	path?: string
+	slot?: string
+	channel:
+		| 'check'
+		| 'mirror'
+		| 'decode'
+		| 'encode'
+		| 'default'
+		| 'innerCodec'
+		| 'unfreezable'
+	reason?: string
+}
+
+const needKey = (v: { method: string; path: string; slot: string }) =>
+	`${v.method}\0${v.path}\0${v.slot}`
+
+/**
+ * Every validator must have frozen every channel it needs (a sealed runtime has
+ * no fallback). Returns one gap per missing (validator, channel) plus one per
+ * validator that can't be AOT-frozen at all. Any non-empty result → refuse seal.
+ */
+export function assertSealCoverage(
+	captured: CapturedValidator[]
+): SealCoverageGap[] {
+	const needs = coverageNeeds ?? []
+	const byKey = new Map<string, CapturedValidator>()
+	for (const c of captured) byKey.set(needKey(c), c)
+
+	const gaps: SealCoverageGap[] = []
+
+	for (const n of needs) {
+		const c = byKey.get(needKey(n))
+		const loc = { method: n.method, path: n.path, slot: n.slot }
+
+		// `c`/`cm` → isFrozen; otherwise the runtime takes the JIT path
+		if (n.check && !c?.checkValue) gaps.push({ ...loc, channel: 'check' })
+		if (n.mirror && !c?.mirror) gaps.push({ ...loc, channel: 'mirror' })
+		if (n.decode && !c?.decodeMirror) gaps.push({ ...loc, channel: 'decode' })
+		if (n.encode && !c?.encodeMirror) gaps.push({ ...loc, channel: 'encode' })
+		if (n.hasDefault && !c?.precomputeSafe)
+			gaps.push({ ...loc, channel: 'default' })
+		// every ely-string-codec node must have a frozen inner codec; if even one
+		// couldn't freeze, capture emits a SHORT (or absent) `ic` → refuse
+		if (n.innerCodecs && (c?.innerCodecs?.length ?? 0) < n.innerCodecs)
+			gaps.push({ ...loc, channel: 'innerCodec' })
+	}
+
+	for (const u of coverageUnfreezable ?? [])
+		gaps.push({ channel: 'unfreezable', reason: u.reason })
+
+	return gaps
 }
 
 export interface CapturedHandler {
@@ -638,6 +795,41 @@ function captureEncodeMirror(v: {
 	if (e) e.encodeMirror = v.mirror
 }
 
+function capturePrecompute(v: {
+	method: string
+	path: string
+	slot: ValidatorSlot
+	precomputedDefault: unknown
+	precomputedObjectDefault: Record<string, unknown> | undefined
+}) {
+	const e = captureEntry(v)
+	if (e) {
+		e.precomputeSafe = true
+		e.precomputedDefault = v.precomputedDefault
+		e.precomputedObjectDefault = v.precomputedObjectDefault
+	}
+}
+
+function captureCustomErrors(v: {
+	method: string
+	path: string
+	slot: ValidatorSlot
+	entries: NonNullable<CapturedValidator['customErrors']>
+}) {
+	const e = captureEntry(v)
+	if (e) e.customErrors = v.entries
+}
+
+function captureInnerCodecs(v: {
+	method: string
+	path: string
+	slot: ValidatorSlot
+	entries: NonNullable<CapturedValidator['innerCodecs']>
+}) {
+	const e = captureEntry(v)
+	if (e) e.innerCodecs = v.entries
+}
+
 const isValidatorCapturing = () =>
 	capture !== undefined || env.ELYSIA_AOT_BUILD === '1'
 
@@ -649,5 +841,10 @@ export const Capture = {
 	mirrorEncode: captureEncodeMirror,
 	mirrorUnions: captureMirrorUnions,
 	mirrorCodecs: captureMirrorCodecs,
+	precompute: capturePrecompute,
+	customErrors: captureCustomErrors,
+	innerCodecs: captureInnerCodecs,
+	need: captureNeed,
+	unfreezable: captureUnfreezable,
 	isCapturing: isValidatorCapturing
 } as const

@@ -1,11 +1,14 @@
 import type { AnyElysia } from '../base'
 import {
+	beginValidatorCapture,
 	endValidatorCapture,
 	endHandlerCapture,
+	assertSealCoverage,
 	Source,
 	Capture,
 	type CapturedValidator,
-	type CapturedHandler
+	type CapturedHandler,
+	type SealCoverageGap
 } from '../compile/aot'
 import { env } from '../universal'
 import { nullObject } from '../utils'
@@ -45,6 +48,37 @@ export interface CompileToSourceOptions {
 	 * @default 'elysia'
 	 */
 	registerFrom?: string
+
+	/**
+	 * Seal the build — assert TOTAL freeze coverage and fail if any validator
+	 * would hit a dropped fallback at runtime. The bundler `define` is injected
+	 * separately by the plugin; this only enforces the safety precondition.
+	 *
+	 * @default false
+	 */
+	seal?: boolean
+}
+
+const formatSealGaps = (gaps: SealCoverageGap[]): string => {
+	const seen = new Set<string>()
+	const lines: string[] = []
+	for (const g of gaps) {
+		const line =
+			g.channel === 'unfreezable'
+				? `  cannot be AOT-frozen: ${g.reason}`
+				: `  ${g.method} ${g.path} (${g.slot}): ${g.channel} not frozen`
+		if (seen.has(line)) continue
+		seen.add(line)
+		lines.push(line)
+	}
+
+	return (
+		`[elysia-aot] Cannot seal: ${lines.length} issue(s) — a validator would ` +
+		`have no fallback at runtime (a sealed manifest MISS fails loud):\n` +
+		`${lines.join('\n')}\n` +
+		`Make these schemas freezable (or remove WebSocket / standalone-guard / ` +
+		`normalize:'typebox'), or build without \`seal\`.`
+	)
 }
 
 export const autoGroupSize = (routes: number): number =>
@@ -69,6 +103,10 @@ export async function compileToSource(
 			'[elysia-aot]: ELYSIA_AOT_BUILD=1 must be set to enable AOT capture mode'
 		)
 
+	// Fresh capture session — also clears `coverageNeeds` from a prior build so
+	// the seal gate can't carry stale needs across compileToSource calls.
+	beginValidatorCapture()
+
 	const modules = (app as { modules?: Promise<unknown> }).modules
 	if (modules) await modules
 
@@ -77,7 +115,30 @@ export async function compileToSource(
 
 	try {
 		;(app as { compile(): unknown }).compile()
-		return emitModule(endValidatorCapture(), endHandlerCapture(), options)
+		const captured = endValidatorCapture()
+
+		if (options?.seal) {
+			// Coverage gaps first — an unfreezable validator (WS / Standard Schema)
+			// captures zero TypeBox entries yet is a real gap, so it must be
+			// reported before the empty-capture check below shadows it.
+			const gaps = assertSealCoverage(captured)
+			if (gaps.length) throw new Error(formatSealGaps(gaps))
+
+			// An EMPTY capture with NO gaps is the no-op signature: the app's
+			// router/handlers were already built before capture (it served a
+			// request, was `.compile()`d, or `precompile:true`), so `app.compile()`
+			// reconstructed nothing. Sealing it would drop the fallbacks with
+			// NOTHING frozen — every validator breaks at runtime. Refuse loudly.
+			if (!captured.length)
+				throw new Error(
+					'[elysia-aot] Cannot seal: no validators were captured. The app was ' +
+						'likely built before compileToSource (it served a request / was ' +
+						'compiled / uses `precompile`), or has no validated routes. Seal ' +
+						'from a FRESH app — use the AOT plugin / generateCompiledModule.'
+				)
+		}
+
+		return emitModule(captured, endHandlerCapture(), options)
 	} finally {
 		setCaptureHeaderShorthand(undefined)
 	}
@@ -173,6 +234,54 @@ function emitModule(
 			let ems = `s: ${Source.mirrorFactory(em.source, true)}`
 			if (em.u) ems += `, u: ${unionTable(em.u)}`
 			parts.push(`em: { ${ems} }`)
+		}
+
+		// preallocated defaults (JSON ⊂ JS literal; emittability vetted at capture)
+		if (c.precomputeSafe) {
+			parts.push('ps: 1')
+			if (c.precomputedDefault !== undefined)
+				parts.push(`pd: ${JSON.stringify(c.precomputedDefault)}`)
+			if (c.precomputedObjectDefault !== undefined)
+				parts.push(`pod: ${JSON.stringify(c.precomputedObjectDefault)}`)
+		}
+
+		// per-field custom-error checks
+		if (c.customErrors?.length) {
+			const ce = c.customErrors
+				.map(
+					(e) =>
+						`{ p: ${JSON.stringify(e.path)}, c: ${Source.checkFactory(
+							e.identifier,
+							Source.checkCode(e.checkDefs, e.checkValue)
+						)}${e.external ? ', e: 1' : ''} }`
+				)
+				.join(', ')
+			parts.push(`ce: [${ce}]`)
+		}
+
+		// inner codecs (t.ObjectString / t.ArrayString): per node, open char +
+		// inner check factory + inner decode mirror + optional default template
+		if (c.innerCodecs?.length) {
+			const ic = c.innerCodecs
+				.map((e) => {
+					let s = `o: ${e.open}, c: ${Source.checkFactory(
+						e.identifier,
+						Source.checkCode(e.checkDefs, e.checkValue)
+					)}`
+					if (e.external) s += ', e: 1'
+					let ds = `s: ${Source.mirrorFactory(
+						e.decode.source,
+						e.decode.hasExternals
+					)}`
+					if (e.decode.u) ds += `, u: ${unionTable(e.decode.u)}`
+					if (e.decode.hasExternals) ds += ', x: 1'
+					s += `, d: { ${ds} }`
+					if (e.pod !== undefined)
+						s += `, pod: ${JSON.stringify(e.pod)}`
+					return `{ ${s} }`
+				})
+				.join(', ')
+			parts.push(`ic: [${ic}]`)
 		}
 
 		return parts
