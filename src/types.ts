@@ -1789,6 +1789,90 @@ export type NonResolvableMacroKey =
 	| keyof InputSchema
 	| 'resolve'
 
+/**
+ * Build a discriminated union of macro entry shapes.
+ * Each union member correlates specific flag values (e.g., `sessions: true`)
+ * with the corresponding callback context. TypeScript's union narrowing
+ * picks the correct member based on actual flag values in the object literal.
+ *
+ * Generates: no-flags entry | single-flag entries | all-flags entry
+ */
+export type DiscriminatedMacroEntry<
+	MacroFn extends Macro,
+	TypedRoute extends RouteSchema = {},
+	Singleton extends SingletonBase = {
+		decorator: {}
+		store: {}
+		derive: {}
+		resolve: {}
+	},
+	Errors extends Record<string, Error> = {},
+	Definitions extends DefinitionBase['typebox'] = {}
+> = {} extends MacroFn
+	? MacroProperty<{}, TypedRoute, Singleton, Errors> &
+			Record<string, any> & { call?: never; bind?: never }
+	:
+			| MacroEntryForSelected<MacroFn, never, TypedRoute, Singleton, Errors, Definitions>
+			| SingleKeyMacroEntries<MacroFn, TypedRoute, Singleton, Errors, Definitions>
+			| MacroEntryForSelected<
+					MacroFn,
+					keyof MacroFn & string,
+					TypedRoute,
+					Singleton,
+					Errors,
+					Definitions
+				>
+
+type MacroEntryForSelected<
+	MacroFn extends Macro,
+	Selected extends keyof MacroFn,
+	TypedRoute extends RouteSchema = {},
+	Singleton extends SingletonBase = {
+		decorator: {}
+		store: {}
+		derive: {}
+		resolve: {}
+	},
+	Errors extends Record<string, Error> = {},
+	Definitions extends DefinitionBase['typebox'] = {}
+> = {
+	[K in Selected]: true
+} & {
+	[K in Exclude<keyof MacroFn, Selected>]?: false
+} & { call?: never; bind?: never } & MacroProperty<
+	{},
+	TypedRoute &
+		MacroToContext<
+			MacroFn,
+			{ [K in Selected]: true },
+			Definitions
+		>,
+	Singleton & {
+		resolve: (MacroToContext<
+			MacroFn,
+			{ [K in Selected]: true },
+			Definitions
+		> & { resolve: {} })['resolve']
+	},
+	Errors
+>
+
+type SingleKeyMacroEntries<
+	MacroFn extends Macro,
+	TypedRoute extends RouteSchema = {},
+	Singleton extends SingletonBase = {
+		decorator: {}
+		store: {}
+		derive: {}
+		resolve: {}
+	},
+	Errors extends Record<string, Error> = {},
+	Definitions extends DefinitionBase['typebox'] = {},
+	K extends keyof MacroFn = keyof MacroFn
+> = K extends any
+	? MacroEntryForSelected<MacroFn, K & string, TypedRoute, Singleton, Errors, Definitions>
+	: never
+
 interface RouteSchemaWithResolvedMacro extends RouteSchema {
 	response: PossibleResponse
 	return: PossibleResponse
