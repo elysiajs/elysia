@@ -5071,7 +5071,7 @@ export default class Elysia<
 
 	private _use(
 		plugin: AnyElysia | ((app: AnyElysia) => MaybePromise<AnyElysia>)
-	) {
+	): AnyElysia {
 		if (typeof plugin === 'function') {
 			const instance = plugin(this as unknown as any) as unknown as any
 
@@ -5135,6 +5135,15 @@ export default class Elysia<
 				)
 				return this as unknown as any
 			}
+
+			// Merge a new instance returned by a factory plugin (`() => new Elysia()`). See #1407
+			if (
+				instance !== this &&
+				(instance instanceof Elysia ||
+					instance?.constructor?.name === 'Elysia' ||
+					instance?.constructor?.name === '_Elysia')
+			)
+				return this._use(instance)
 
 			return instance
 		}
