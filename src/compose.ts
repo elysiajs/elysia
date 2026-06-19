@@ -35,7 +35,8 @@ import {
 	NotFoundError,
 	ValidationError,
 	ERROR_CODE,
-	ElysiaCustomStatusResponse
+	ElysiaCustomStatusResponse,
+	mapTransformDecodeError
 } from './error'
 import { ELYSIA_TRACE, type TraceHandler } from './trace'
 
@@ -466,7 +467,8 @@ const coerceTransformDecodeError = (
 	`try{${fnLiteral}}catch(error){` +
 	`if(error.constructor.name === 'TransformDecodeError'){` +
 	`c.set.status=422\n` +
-	`throw error.error ?? new ValidationError('${type}',validator.${type},${value},${allowUnsafeValidationDetails})}` +
+	`throw mapTransformDecodeError(error,'${type}',validator.${type},${value},${allowUnsafeValidationDetails})}` +
+	`if(error.constructor.name!=='TransformDecodeCheckError')throw error` +
 	`}`
 
 const setImmediateFn = hasSetImmediate
@@ -2141,6 +2143,7 @@ export const composeHandler = ({
 		`},` +
 		`error:{` +
 		allocateIf(`ValidationError,`, hasValidation) +
+		allocateIf(`mapTransformDecodeError,`, hasValidation) +
 		allocateIf(`ParseError`, hasBody) +
 		`},` +
 		`fileType,` +
@@ -2195,6 +2198,9 @@ export const composeHandler = ({
 			},
 			error: {
 				ValidationError: hasValidation ? ValidationError : undefined,
+				mapTransformDecodeError: hasValidation
+					? mapTransformDecodeError
+					: undefined,
 				ParseError: hasBody ? ParseError : undefined
 			},
 			fileType,

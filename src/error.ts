@@ -297,6 +297,8 @@ export class ValidationError extends Error {
 	 * use this instead of message
 	 */
 	valueError?: ValueError
+	private _validationErrors?: ValueError[]
+	private _mappedValidationErrors?: ValueErrorWithSummary[]
 
 	/**
 	 * Alias of `valueError`
@@ -333,6 +335,10 @@ export class ValidationError extends Error {
 		let error
 		let expected
 		let customError
+		let validationErrorsCache: ValueError[] | undefined
+		let mappedValidationErrorsCache:
+			| ValueErrorWithSummary[]
+			| undefined
 
 		if (
 			// @ts-ignore
@@ -381,11 +387,22 @@ export class ValidationError extends Error {
 			)
 				value = value.response
 
-			error =
-				errors?.First() ??
-				('Errors' in validator
-					? validator.Errors(value).First()
-					: Value.Errors(validator, value).First())
+			const validationErrors = errors
+				? [...errors].filter((x): x is ValueError => !!x)
+				: 'Errors' in validator
+					? [...validator.Errors(value)].filter(
+							(x): x is ValueError => !!x
+						)
+					: [...Value.Errors(validator, value)].filter(
+							(x): x is ValueError => !!x
+						)
+
+			error = validationErrors[0]
+			const mappedValidationErrors = validationErrors
+				.map(mapValueError)
+				.filter((x): x is ValueErrorWithSummary => !!x)
+			validationErrorsCache = validationErrors
+			mappedValidationErrorsCache = mappedValidationErrors
 
 			const accessor = error?.path || 'root'
 
@@ -420,27 +437,15 @@ export class ValidationError extends Error {
 											value,
 											property: accessor,
 											message: error?.message,
-											summary:
-												mapValueError(error)?.summary,
-											found: value,
-											expected,
-											errors:
-												'Errors' in validator
-													? [
-															...validator.Errors(
-																value
-															)
-														].map(mapValueError)
-													: [
-															...Value.Errors(
-																validator,
-																value
-															)
-														].map(mapValueError)
-										},
-								validator
-							)
-						: error.schema.error
+												summary:
+													mapValueError(error)?.summary,
+												found: value,
+												expected,
+												errors: mappedValidationErrors
+											} as any,
+									validator as any
+								)
+							: error.schema.error
 					: undefined
 
 			if (customError !== undefined) {
@@ -464,14 +469,7 @@ export class ValidationError extends Error {
 						summary: mapValueError(error)?.summary,
 						expected,
 						found: value,
-						errors:
-							'Errors' in validator
-								? [...validator.Errors(value)].map(
-										mapValueError
-									)
-								: [...Value.Errors(validator, value)].map(
-										mapValueError
-									)
+						errors: mappedValidationErrors
 					},
 					null,
 					2
@@ -483,11 +481,20 @@ export class ValidationError extends Error {
 		this.valueError = error
 		this.expected = expected
 		this.customError = customError
+		this._validationErrors = validationErrorsCache
+		this._mappedValidationErrors = mappedValidationErrorsCache
 
 		Object.setPrototypeOf(this, ValidationError.prototype)
 	}
 
 	get all(): ValueErrorWithSummary[] {
+		if (this._mappedValidationErrors !== undefined)
+			return this._mappedValidationErrors
+		if (this._validationErrors !== undefined)
+			return this._validationErrors
+				.map(mapValueError)
+				.filter((x): x is ValueErrorWithSummary => !!x)
+
 		// Handle standard schema validators (Zod, Valibot, etc.)
 		if (
 			// @ts-ignore
@@ -607,4 +614,53 @@ export class ValidationError extends Error {
 					errors
 				}
 	}
+}
+
+const createValueErrorIterator = (errors: ValueError[]): ValueErrorIterator => {
+	const iterator = errors[Symbol.iterator]()
+
+	return {
+		iterator,
+		First: () => errors[0],
+		[Symbol.iterator]: function* () {
+			yield* errors
+		}
+	} as unknown as ValueErrorIterator
+}
+
+export const mapTransformDecodeError = (
+	error: { error?: unknown; path?: string },
+	type: string,
+	validator: ValidationError['validator'],
+	value: unknown,
+	allowUnsafeValidationDetails = false
+) => {
+	if (
+		error.error instanceof ValidationError &&
+		error.error.type === 'property' &&
+		error.error.valueError
+	) {
+		const valueError = {
+			...error.error.valueError,
+			path: error.path ?? error.error.valueError.path
+		}
+
+		return new ValidationError(
+			type,
+			validator,
+			value,
+			allowUnsafeValidationDetails,
+			createValueErrorIterator([valueError])
+		)
+	}
+
+	return (
+		error.error ??
+		new ValidationError(
+			type,
+			validator,
+			value,
+			allowUnsafeValidationDetails
+		)
+	)
 }
