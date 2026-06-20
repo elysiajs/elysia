@@ -13,7 +13,13 @@ import { parseQuery } from './parse-query'
 import { getSchemaProperties, type ElysiaTypeCheck } from './schema'
 import type { TypeCheck } from './type-system'
 import type { Handler, LifeCycleStore, SchemaValidator } from './types'
-import { hasSetImmediate, redirect, StatusMap, signCookie } from './utils'
+import {
+	hasSetImmediate,
+	redirect,
+	selectRoute,
+	StatusMap,
+	signCookie
+} from './utils'
 
 // JIT Handler
 export type DynamicHandler = {
@@ -22,6 +28,7 @@ export type DynamicHandler = {
 	hooks: Partial<LifeCycleStore>
 	validator?: SchemaValidator
 	route: string
+	score: string
 }
 
 /**
@@ -242,10 +249,14 @@ export const createDynamicHandler = (app: AnyElysia) => {
 
 			const methodKey = isWS ? 'WS' : request.method
 
-			const handler =
-				app.router.dynamic.find(request.method, path) ??
-				app.router.dynamic.find(methodKey, path) ??
-				app.router.dynamic.find('ALL', path)
+			const handler = isWS
+				? app.router.dynamic.find(request.method, path) ??
+					app.router.dynamic.find(methodKey, path) ??
+					app.router.dynamic.find('ALL', path)
+				: selectRoute(
+					app.router.dynamic.find(request.method, path),
+					app.router.dynamic.find('ALL', path)
+				)
 
 			if (!handler) {
 				// @ts-expect-error

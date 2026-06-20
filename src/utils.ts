@@ -1114,6 +1114,42 @@ export const getLoosePath = (path: string) => {
 	return path + '/'
 }
 
+// Mirrors Memoirist specificity: static segments > params > wildcard,
+// and an exact ending outranks a trailing wildcard at the same position.
+export const getRouteScore = (path: string) => {
+	let score = ''
+	let start = path.charCodeAt(0) === 47 ? 1 : 0
+
+	for (let i = start; i <= path.length; i++) {
+		if (i !== path.length && path.charCodeAt(i) !== 47) continue
+		if (i === start) {
+			start = i + 1
+			continue
+		}
+
+		const type = path.charCodeAt(start)
+		if (type === 42) score += '1'
+		else if (type === 58) score += '2'
+		else score += '3'
+
+		start = i + 1
+	}
+
+	return score + '4'
+}
+
+export const selectRoute = <T extends { store: { score?: string } }>(
+	preferred: T | null | undefined,
+	fallback: T | null | undefined
+) => {
+	if (!preferred) return fallback ?? null
+	if (!fallback) return preferred
+
+	return (fallback.store.score ?? '') > (preferred.store.score ?? '')
+		? fallback
+		: preferred
+}
+
 export const isNotEmpty = (obj?: Object) => {
 	if (!obj) return false
 

@@ -115,6 +115,32 @@ describe('Path', () => {
 		expect(await res.text()).toBe('Wildcard')
 	})
 
+	it('prioritizes more specific all wildcard over generic method wildcard', async () => {
+		for (const aot of [true, false]) {
+			const app = new Elysia({ aot })
+				.all('/api/auth/*', () => 'auth')
+				.get('/*', () => 'spa')
+
+			const reversed = new Elysia({ aot })
+				.get('/*', () => 'spa')
+				.all('/api/auth/*', () => 'auth')
+
+			expect(
+				await app
+					.handle(req('/api/auth/callback/google'))
+					.then((res) => res.text())
+			).toBe('auth')
+			expect(
+				await reversed
+					.handle(req('/api/auth/callback/google'))
+					.then((res) => res.text())
+			).toBe('auth')
+			expect(await app.handle(req('/dashboard')).then((res) => res.text())).toBe(
+				'spa'
+			)
+		}
+	})
+
 	it('custom error', async () => {
 		const app = new Elysia().onError((error) => {
 			if (error.code === 'NOT_FOUND')
