@@ -2360,10 +2360,16 @@ export const composeGeneralHandler = (
 	const router = app.router
 
 	let findDynamicRoute = router.http.root.WS
-		? `const route=router.find(r.method==='GET'&&r.headers.get('upgrade')==='websocket'?'WS':r.method,p)`
-		: `const route=router.find(r.method,p)`
+		? `let route=router.find(r.method==='GET'&&r.headers.get('upgrade')==='websocket'?'WS':r.method,p)`
+		: `let route=router.find(r.method,p)`
 
-	findDynamicRoute += router.http.root.ALL ? `??router.find('ALL',p)\n` : '\n'
+	const allowAllRouteByScore = router.http.root.WS
+		? `!(r.method==='GET'&&r.headers.get('upgrade')==='websocket')&&`
+		: ''
+
+	findDynamicRoute += router.http.root.ALL
+		? `;{const _route=router.find('ALL',p);if(_route&&(!route||(${allowAllRouteByScore}_route.store.score>route.store.score)))route=_route}\n`
+		: '\n'
 
 	if (isWebstandard)
 		findDynamicRoute +=

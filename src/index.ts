@@ -39,7 +39,8 @@ import {
 	supportPerMethodInlineHandler,
 	redirect,
 	emptySchema,
-	insertStandaloneValidator
+	insertStandaloneValidator,
+	getRouteScore
 } from './utils'
 
 import {
@@ -520,6 +521,7 @@ export default class Elysia<
 
 		if (path !== '' && path.charCodeAt(0) !== 47) path = '/' + path
 		if (this.config.prefix && !skipPrefix) path = this.config.prefix + path
+		const routeScore = getRouteScore(path)
 
 		if (localHook?.type)
 			switch (localHook.type) {
@@ -821,7 +823,8 @@ export default class Elysia<
 				hooks,
 				content: localHook?.type as string,
 				handle,
-				route: path
+				route: path,
+				score: routeScore
 			})
 
 			const encoded = encodePath(path, { dynamic: true })
@@ -831,7 +834,8 @@ export default class Elysia<
 					hooks,
 					content: localHook?.type as string,
 					handle,
-					route: path
+					route: path,
+					score: routeScore
 				})
 			}
 
@@ -842,7 +846,8 @@ export default class Elysia<
 					hooks,
 					content: localHook?.type as string,
 					handle,
-					route: path
+					route: path,
+					score: routeScore
 				})
 
 				const encoded = encodePath(loosePath)
@@ -852,7 +857,8 @@ export default class Elysia<
 						hooks,
 						content: localHook?.type as string,
 						handle,
-						route: path
+						route: path,
+						score: routeScore
 					})
 			}
 
@@ -1033,6 +1039,7 @@ export default class Elysia<
 			)
 
 		const handler = {
+			score: routeScore,
 			handler: shouldPrecompile
 				? (route[index].composed as ComposedHandler)
 				: undefined,

@@ -2693,11 +2693,13 @@ export interface Router {
 		| Memoirist<{
 				compile: Function
 				handler?: ComposedHandler
+				score: string
 		  }>
 		| undefined
 	get http(): Memoirist<{
 		compile: Function
 		handler?: ComposedHandler
+		score: string
 	}>
 	'~dynamic': Memoirist<DynamicHandler> | undefined
 	get dynamic(): Memoirist<DynamicHandler>
