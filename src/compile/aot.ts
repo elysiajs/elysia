@@ -583,8 +583,6 @@ function captureEntry({
 // @internal test isolation
 export function beginValidatorCapture() {
 	capture = new Map()
-	coverageNeeds = []
-	coverageUnfreezable = []
 }
 
 // @internal test isolation
@@ -593,92 +591,6 @@ export function endValidatorCapture() {
 	capture = undefined
 
 	return captured
-}
-
-export interface CoverageNeed {
-	method: string
-	path: string
-	slot: ValidatorSlot
-	check: boolean
-	mirror: boolean
-	decode: boolean
-	encode: boolean
-	hasDefault: boolean
-	innerCodecs?: number
-}
-
-interface UnfreezableLoc {
-	method?: string
-	path?: string
-	slot?: string
-}
-
-let coverageNeeds: CoverageNeed[] | undefined
-let coverageUnfreezable: ({ reason: string } & UnfreezableLoc)[] | undefined
-
-function captureNeed(v: CoverageNeed) {
-	if (!isValidatorCapturing()) return
-	;(coverageNeeds ??= []).push(v)
-}
-
-function captureUnfreezable(reason: string, loc?: UnfreezableLoc) {
-	if (!isValidatorCapturing()) return
-	;(coverageUnfreezable ??= []).push({ reason, ...loc })
-}
-
-export interface SealCoverageGap {
-	method?: string
-	path?: string
-	slot?: string
-	channel:
-		| 'check'
-		| 'mirror'
-		| 'decode'
-		| 'encode'
-		| 'default'
-		| 'innerCodec'
-		| 'unfreezable'
-	reason?: string
-}
-
-const needKey = (v: { method: string; path: string; slot: string }) =>
-	`${v.method}\0${v.path}\0${v.slot}`
-
-export function assertSealCoverage(
-	captured: CapturedValidator[]
-): SealCoverageGap[] {
-	const needs = coverageNeeds ?? []
-	const byKey = new Map<string, CapturedValidator>()
-	for (const c of captured) byKey.set(needKey(c), c)
-
-	const gaps: SealCoverageGap[] = []
-
-	for (const n of needs) {
-		const c = byKey.get(needKey(n))
-		const loc = { method: n.method, path: n.path, slot: n.slot }
-
-		if (n.check && !c?.checkValue) gaps.push({ ...loc, channel: 'check' })
-		if (n.mirror && !c?.mirror) gaps.push({ ...loc, channel: 'mirror' })
-		if (n.decode && !c?.decodeMirror)
-			gaps.push({ ...loc, channel: 'decode' })
-		if (n.encode && !c?.encodeMirror)
-			gaps.push({ ...loc, channel: 'encode' })
-		if (n.hasDefault && !c?.precomputeSafe)
-			gaps.push({ ...loc, channel: 'default' })
-		if (n.innerCodecs && (c?.innerCodecs?.length ?? 0) < n.innerCodecs)
-			gaps.push({ ...loc, channel: 'innerCodec' })
-	}
-
-	for (const u of coverageUnfreezable ?? [])
-		gaps.push({
-			channel: 'unfreezable',
-			reason: u.reason,
-			method: u.method,
-			path: u.path,
-			slot: u.slot
-		})
-
-	return gaps
 }
 
 export interface CapturedHandler {
@@ -722,7 +634,5 @@ export const Capture = {
 	handler: captureHandler,
 	mirrorUnions: captureMirrorUnions,
 	mirrorCodecs: captureMirrorCodecs,
-	need: captureNeed,
-	unfreezable: captureUnfreezable,
 	isCapturing: isValidatorCapturing
 } as const

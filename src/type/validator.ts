@@ -490,31 +490,6 @@ function collectCustomErrorNodes(
 	return out
 }
 
-// A custom error nested under an array element or union/intersect member has no
-// static path (the runtime value index/branch is dynamic), so the path-based
-// findCustomError locator can't reach it — and collectCustomErrorNodes only
-// descends `properties`, so such a node is neither captured NOR flagged as a
-// coverage gap. Left alone it would seal but silently drop the message. Detect
-// it so the route refuses to freeze (degrades, keeping TypeBox) instead.
-function hasUnlocatableCustomError(schema: any, underVariadic = false): boolean {
-	if (!schema || typeof schema !== 'object') return false
-	if (underVariadic && schema.error !== undefined) return true
-	if (schema.properties)
-		for (const k in schema.properties)
-			if (hasUnlocatableCustomError(schema.properties[k], underVariadic))
-				return true
-	if (schema.items) {
-		const items = Array.isArray(schema.items) ? schema.items : [schema.items]
-		for (const it of items)
-			if (hasUnlocatableCustomError(it, true)) return true
-	}
-	for (const key of ['anyOf', 'allOf', 'oneOf'])
-		if (Array.isArray(schema[key]))
-			for (const member of schema[key])
-				if (hasUnlocatableCustomError(member, true)) return true
-	return false
-}
-
 function subValueAt(value: any, path: string): unknown {
 	if (!path) return value
 	let cur = value
@@ -571,33 +546,6 @@ function collectStringCodecNodes(
 	return out
 }
 
-function hasDefaultOutsideStringCodec(schema: any): boolean {
-	if (!schema || typeof schema !== 'object') return false
-
-	const ely = schema['~elyTyp']
-	if (ely === ELYSIA_TYPES.ObjectString || ely === ELYSIA_TYPES.ArrayString)
-		return false
-
-	if ('default' in schema) return true
-
-	if (schema.properties)
-		for (const k in schema.properties)
-			if (hasDefaultOutsideStringCodec(schema.properties[k])) return true
-
-	const items = schema.items
-	if (Array.isArray(items)) {
-		for (const it of items)
-			if (hasDefaultOutsideStringCodec(it)) return true
-	} else if (items && hasDefaultOutsideStringCodec(items)) return true
-
-	for (const key of ['anyOf', 'allOf', 'oneOf'] as const)
-		if (Array.isArray(schema[key]))
-			for (const b of schema[key])
-				if (hasDefaultOutsideStringCodec(b)) return true
-
-	return false
-}
-
 // reconstruct seal: overwrite each ObjectString/ArrayString codec's
 // `~refine[0].check` + `~codec.decode` with frozen, typebox-free closures.
 // Iterate in REVERSE so nested codecs reconstruct bottom-up.
@@ -633,8 +581,6 @@ function reconstructInnerCodecs(
 	}
 }
 
-// Shared CAPTURE ritual (build-time, NOT a seal gate): Build → externalsMatch →
-// reconstructCheck → the frozen-check source parts. undefined if not freezable.
 function buildFrozenCheck(
 	build: CheckBuildResult | undefined,
 	node: any
@@ -648,8 +594,10 @@ function buildFrozenCheck(
 	| undefined {
 	if (!build?.functions?.length || !build.entry) return
 	const vars = build.external.variables
+
 	if (!externalsMatch(collectExternals(node), vars)) return
 	const cr = reconstructCheck(build)
+
 	return {
 		identifier: build.external.identifier,
 		checkDefs: cr.defs,
@@ -667,11 +615,14 @@ function captureInnerCodec(
 ): NonNullable<CapturedValidator['innerCodecs']>[number] | undefined {
 	let cf: ReturnType<typeof buildFrozenCheck>
 	try {
-		cf = buildFrozenCheck(Build(inner) as unknown as CheckBuildResult, inner)
+		cf = buildFrozenCheck(
+			Build(inner) as unknown as CheckBuildResult,
+			inner
+		)
+		if (!cf) return
 	} catch {
 		return
 	}
-	if (!cf) return
 
 	let decode: CapturedMirror
 	try {
@@ -802,11 +753,6 @@ export class TypeBoxValidator<
 
 		const isFrozen = this.#reconstruct(options, frozen)
 
-		if (globalThis.ELY_SEALED && !frozen && options?.aot && options.slot)
-			throw new Error(
-				`[elysia] sealed build is missing a frozen validator for ${options.aot.method} ${options.aot.path} (${options.slot}) — a route outside the AOT manifest (mounted Elysia sub-app, deferred plugin, or registerFrom mismatch).`
-			)
-
 		this.schema = (
 			isFrozen && !this.hasCodec
 				? schema
@@ -820,7 +766,7 @@ export class TypeBoxValidator<
 		)
 			this.schema = nonAdditionalProperties(this.schema as any) as T
 
-		if (!isFrozen && !globalThis.ELY_SEALED) {
+		if (!isFrozen) {
 			const capturing = Capture.isCapturing()
 			this.tb = capturing
 				? sourceOnlyValidator(this.schema as TSchema)
@@ -844,7 +790,7 @@ export class TypeBoxValidator<
 				frozen.pod !== undefined
 					? (Object.freeze(frozen.pod) as Record<string, unknown>)
 					: undefined
-		} else if (!globalThis.ELY_SEALED) {
+		} else {
 			this.precomputeSafe =
 				this.hasDefault && isPrecomputeSafe(this.schema as any)
 
@@ -881,12 +827,8 @@ export class TypeBoxValidator<
 				this.Clean =
 					options?.normalize === false
 						? undefined
-						: // `normalize:'typebox'` is refused on a sealed build (it
-							// uses TypeBox `Clean`), so this arm DCEs out when sealed
-							options?.normalize === 'typebox'
-							? globalThis.ELY_SEALED
-								? undefined
-								: (value) => Clean(this.schema, value)
+						: options?.normalize === 'typebox'
+							? (value) => Clean(this.schema, value)
 							: this.#setupMirror(schema, options, frozen)
 			} catch (error) {
 				console.warn(
@@ -895,7 +837,7 @@ export class TypeBoxValidator<
 				console.warn(schema)
 				console.warn(error)
 
-				if (options?.normalize !== false && !globalThis.ELY_SEALED)
+				if (options?.normalize !== false)
 					this.Clean = (value) => Clean(this.schema, value)
 			}
 		}
@@ -932,38 +874,6 @@ export class TypeBoxValidator<
 
 		if (!this.#noValidate)
 			this.#findCustomError = this.#buildFindCustomError(frozen)
-
-		if (Capture.isCapturing())
-			if (options?.aot && options.slot)
-				if (options.normalize === 'typebox')
-					Capture.unfreezable(
-						"normalize:'typebox' uses TypeBox Clean",
-						{
-							method: options.aot.method,
-							path: options.aot.path,
-							slot: options.slot
-						}
-					)
-				else
-					Capture.need({
-						method: options.aot.method,
-						path: options.aot.path,
-						slot: options.slot,
-						check: true,
-						mirror: this.Clean !== undefined,
-						decode: this.#decodeMirror !== undefined,
-						encode: this.#encodeMirror !== undefined,
-						hasDefault:
-							this.hasDefault &&
-							hasDefaultOutsideStringCodec(this.schema as any),
-						innerCodecs: collectStringCodecNodes(this.schema as any)
-							.length
-					})
-			else
-				Capture.unfreezable(
-					'a validator was built outside the AOT route path ' +
-						'(WebSocket / dynamic / standalone-guard)'
-				)
 	}
 
 	#buildFindCustomError(
@@ -996,7 +906,7 @@ export class TypeBoxValidator<
 						fe.e ? collectExternals(node) : EMPTY_EXTERNALS
 					)
 				} catch {}
-			else if (!globalThis.ELY_SEALED)
+			else
 				try {
 					const c = Compile(node)
 					check = (v) => c.Check(v)
@@ -1055,9 +965,7 @@ export class TypeBoxValidator<
 			}
 		}
 
-		// On a sealed build every mirror is in the manifest, so the exact-mirror
-		// JIT/capture fallback DCEs out.
-		if (!globalThis.ELY_SEALED && aot && slot) {
+		if (aot && slot) {
 			if (Capture.isCapturing())
 				try {
 					const emitted = createMirror(schema, {
@@ -1084,7 +992,11 @@ export class TypeBoxValidator<
 
 							if (u)
 								Capture.set(
-									{ method: aot.method, path: aot.path, slot },
+									{
+										method: aot.method,
+										path: aot.path,
+										slot
+									},
 									{
 										mirror: {
 											source: emitted.source,
@@ -1098,12 +1010,10 @@ export class TypeBoxValidator<
 				} catch {}
 		}
 
-		return globalThis.ELY_SEALED
-			? undefined
-			: (createMirror(schema, {
-					Compile,
-					sanitize: options?.sanitize
-				}) as (value: unknown) => unknown)
+		return createMirror(schema, {
+			Compile,
+			sanitize: options?.sanitize
+		}) as (value: unknown) => unknown
 	}
 
 	// decode (request) / encode (response) codec mirror. Frozen → instantiate
@@ -1126,41 +1036,32 @@ export class TypeBoxValidator<
 				if (run === undefined)
 					try {
 						run = instantiateFrozenDecodeMirror(m, schema, dir)
-					} catch (e) {
-						// form-B gate: the typebox fallback (DecodeUnsafe/Encode) MUST
-						// sit inside `if (!ELY_SEALED)` so it DCEs under seal — form A
-						// (`if (sealed) throw; …use…`) RETAINS the typebox import.
-						if (!globalThis.ELY_SEALED)
-							run =
-								dir === 'decode'
-									? (v) => {
-											// @ts-ignore
-											const decoded = DecodeUnsafe(
-												nullObject(),
-												schema,
-												v
-											)
-											return this.Clean
-												? this.Clean(decoded)
-												: decoded
-										}
-									: (v) => {
-											const out = Encode(schema, v as any)
-											return this.Clean
-												? this.Clean(out)
-												: out
-										}
-						else throw e
+					} catch {
+						run =
+							dir === 'decode'
+								? (v) => {
+										// @ts-ignore
+										const decoded = DecodeUnsafe(
+											nullObject(),
+											schema,
+											v
+										)
+										return this.Clean
+											? this.Clean(decoded)
+											: decoded
+									}
+								: (v) => {
+										const out = Encode(schema, v as any)
+										return this.Clean
+											? this.Clean(out)
+											: out
+									}
 					}
 
 				return run(value)
 			}
 		}
 
-		// `Compile` MUST stay INLINE inside the `!ELY_SEALED` gates below — hoisting
-		// it into a shared const makes it unconditionally reachable and defeats the
-		// sealed typebox/compile DCE (caught by seal-bundle.test.ts). Only the
-		// (typebox-free) direction flag is hoisted.
 		const dirOpt = dir === 'decode' ? { decode: true } : { encode: true }
 
 		// decode freezes non-response slots, encode freezes response slots
@@ -1169,13 +1070,7 @@ export class TypeBoxValidator<
 				? !slot?.startsWith('response')
 				: !!slot?.startsWith('response')
 
-		if (
-			!globalThis.ELY_SEALED &&
-			aot &&
-			slot &&
-			Capture.isCapturing() &&
-			captureSlot
-		)
+		if (aot && slot && Capture.isCapturing() && captureSlot)
 			try {
 				const emitted = createMirror(schema, {
 					Compile,
@@ -1219,23 +1114,17 @@ export class TypeBoxValidator<
 				}
 			} catch {}
 
-		if (!globalThis.ELY_SEALED)
-			try {
-				return createMirror(schema, {
-					Compile,
-					sanitize: options?.sanitize,
-					...dirOpt
-				}) as (value: unknown) => unknown
-			} catch {}
+		try {
+			return createMirror(schema, {
+				Compile,
+				sanitize: options?.sanitize,
+				...dirOpt
+			}) as (value: unknown) => unknown
+		} catch {}
 	}
 
 	Check(value: Static<T>): boolean {
 		if (this.reconstructedCheck) return this.reconstructedCheck(value)
-
-		if (globalThis.ELY_SEALED)
-			throw new Error(
-				'[elysia] sealed build: a validator has no frozen check, a route outside the AOT manifest (mounted Elysia sub-app, deferred plugin, or registerFrom mismatch)'
-			)
 
 		return this.tb!.Check(value)
 	}
@@ -1264,7 +1153,7 @@ export class TypeBoxValidator<
 		const slot = options?.slot
 		if (!aot || !slot || !Capture.isCapturing()) return
 
-		if (this.hasDefault && !globalThis.ELY_SEALED) {
+		if (this.hasDefault) {
 			const pre = verifyPreallocatableDefault(this.schema as TSchema)
 			if (pre)
 				Capture.set(
@@ -1276,13 +1165,6 @@ export class TypeBoxValidator<
 					}
 				)
 		}
-
-		if (hasUnlocatableCustomError(this.schema as any))
-			Capture.unfreezable(
-				'custom error on an array element or union member — ' +
-					'cannot be path-located under seal',
-				{ method: aot.method, path: aot.path, slot }
-			)
 
 		const ceNodes = collectCustomErrorNodes(this.schema as any, '', [])
 		if (ceNodes.length) {
@@ -1302,28 +1184,21 @@ export class TypeBoxValidator<
 				)
 		}
 
-		if (!globalThis.ELY_SEALED) {
-			const stringCodecs = collectStringCodecNodes(this.schema as any)
-			if (stringCodecs.length) {
-				const entries: NonNullable<CapturedValidator['innerCodecs']> =
-					[]
+		const stringCodecs = collectStringCodecNodes(this.schema as any)
+		if (stringCodecs.length) {
+			const entries: NonNullable<CapturedValidator['innerCodecs']> = []
 
-				for (const { inner, open } of stringCodecs) {
-					const entry = captureInnerCodec(
-						inner,
-						open,
-						options?.sanitize
-					)
-					if (!entry) break
-					entries.push(entry)
-				}
-
-				if (entries.length === stringCodecs.length)
-					Capture.set(
-						{ method: aot.method, path: aot.path, slot },
-						{ innerCodecs: entries }
-					)
+			for (const { inner, open } of stringCodecs) {
+				const entry = captureInnerCodec(inner, open, options?.sanitize)
+				if (!entry) break
+				entries.push(entry)
 			}
+
+			if (entries.length === stringCodecs.length)
+				Capture.set(
+					{ method: aot.method, path: aot.path, slot },
+					{ innerCodecs: entries }
+				)
 		}
 
 		// @ts-expect-error private property
@@ -1351,19 +1226,15 @@ export class TypeBoxValidator<
 	}
 
 	Errors(value: unknown): TLocalizedValidationError[] {
-		return globalThis.ELY_SEALED ? [] : Errors(this.schema, value)
+		return Errors(this.schema, value)
 	}
 
 	Decode(value: Static<T>): StaticDecode<T> {
-		return globalThis.ELY_SEALED
-			? (value as any)
-			: Decode(this.schema, value)
+		return Decode(this.schema, value)
 	}
 
 	Encode(value: Static<T>): StaticEncode<T> {
-		return this.hasCodec && !globalThis.ELY_SEALED
-			? Encode(this.schema, value)
-			: (value as any)
+		return this.hasCodec ? Encode(this.schema, value) : (value as any)
 	}
 
 	EncodeFrom(value: Static<T>, type?: string): StaticEncode<T> {
@@ -1397,16 +1268,12 @@ export class TypeBoxValidator<
 				return out as any
 			}
 
-			if (!globalThis.ELY_SEALED) {
-				const out = this.#noValidate
-					? // @ts-ignore EncodeUnsafe returns unknown
-						(EncodeUnsafe(nullObject(), this.schema, value) as any)
-					: Encode(this.schema, value)
+			const out = this.#noValidate
+				? // @ts-ignore EncodeUnsafe returns unknown
+					(EncodeUnsafe(nullObject(), this.schema, value) as any)
+				: Encode(this.schema, value)
 
-				return this.Clean ? (this.Clean(out) as any) : out
-			}
-
-			return value as any
+			return this.Clean ? (this.Clean(out) as any) : out
 		} catch (e: any) {
 			if (this.#noValidate)
 				return this.Clean ? (this.Clean(value) as any) : (value as any)
@@ -1501,8 +1368,7 @@ export class TypeBoxValidator<
 						this.#precomputedObjectDefault,
 						value as any
 					) as any
-			} else if (!globalThis.ELY_SEALED)
-				value = Default(this.schema, value) as any
+			} else value = Default(this.schema, value) as any
 		}
 
 		if (this.#hasOptional) {
@@ -1529,7 +1395,7 @@ export class TypeBoxValidator<
 
 			if (this.#decodeMirror)
 				value = this.#decodeMirror(value) as Static<T>
-			else if (!globalThis.ELY_SEALED)
+			else
 				try {
 					value = DecodeUnsafe(
 						nullObject() as {},
@@ -1583,8 +1449,7 @@ export class TypeBoxValidator<
 						this.#precomputedObjectDefault,
 						value as any
 					) as Static<T>
-			} else if (!globalThis.ELY_SEALED)
-				value = Default(this.schema, value) as Static<T>
+			} else value = Default(this.schema, value) as Static<T>
 		}
 
 		if (this.#hasOptional) {
@@ -1601,7 +1466,7 @@ export class TypeBoxValidator<
 
 			if (this.#decodeMirror)
 				value = this.#decodeMirror(value) as Static<T>
-			else if (!globalThis.ELY_SEALED)
+			else
 				try {
 					value = DecodeUnsafe(
 						nullObject() as {},
@@ -1750,8 +1615,7 @@ export class TypeBoxValidatorCache {
 		if (this.#lastSchema === schema && this.#lastMeta) return this.#lastMeta
 
 		const special =
-			(globalThis.ELY_SEALED ? false : HasCodec(schema)) ||
-			TypeBoxValidatorCache.#isOpaqueType(schema)
+			HasCodec(schema) || TypeBoxValidatorCache.#isOpaqueType(schema)
 
 		const meta = {
 			special,

@@ -7,11 +7,7 @@ import { type AnySchema, type StandardSchemaV1Like } from '../type'
 
 import type { ElysiaConfig, MaybePromise } from '../types'
 import type { CoerceOption } from '../type/coerce'
-import {
-	Compiled,
-	Capture,
-	type ValidatorSlot
-} from '../compile/aot'
+import { Compiled, Capture, type ValidatorSlot } from '../compile/aot'
 
 import {
 	Decode,
@@ -33,8 +29,10 @@ export interface ValidatorOptions {
 	slot?: ValidatorSlot
 }
 
-export interface ResponseValidatorOptions
-	extends Omit<ValidatorOptions, 'schemas'> {
+export interface ResponseValidatorOptions extends Omit<
+	ValidatorOptions,
+	'schemas'
+> {
 	schemas?: Record<number, AnySchema>[]
 }
 
@@ -109,23 +107,13 @@ export abstract class Validator {
 			)
 				isIntersectable = true
 			else {
-				// standalone-guard / multi-schema can't be AOT-frozen → refuse to
-				// seal (else it seals clean then crashes calling stubbed Compile)
-				if (Capture.isCapturing())
-					Capture.unfreezable(
-						'standalone-guard / multi-schema validator — composed via Compile, cannot be AOT-frozen',
-						{
-							method: options?.aot?.method,
-							path: options?.aot?.path,
-							slot: options?.slot
-						}
-					)
 				return new MultiValidator(schema, options) as any
 			}
 		}
 
 		if ('~kind' in schema || '~elyAcl' in schema) {
-			const skipCache = options?.normalize === false || !!options?.sanitize
+			const skipCache =
+				options?.normalize === false || !!options?.sanitize
 			const aot = options?.aot
 			const slot = options?.slot
 
@@ -158,16 +146,6 @@ export abstract class Validator {
 		}
 
 		if ('~standard' in schema) {
-			// Standard Schema (Zod/Valibot/…) isn't TypeBox → can't be AOT-frozen
-			if (Capture.isCapturing())
-				Capture.unfreezable(
-					'Standard Schema validator — not TypeBox, cannot be AOT-frozen',
-					{
-						method: options?.aot?.method,
-						path: options?.aot?.path,
-						slot: options?.slot
-					}
-				)
 			return new StandardValidator(schema) as any
 		}
 
@@ -350,7 +328,9 @@ export class MultiValidator extends Validator {
 					? false
 					: HasCodec(
 							(
-								schemas[i] as unknown as CompiledTypeBoxValidator
+								schemas[
+									i
+								] as unknown as CompiledTypeBoxValidator
 							).Type()
 						)
 			)

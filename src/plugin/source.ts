@@ -3,12 +3,10 @@ import {
 	beginValidatorCapture,
 	endValidatorCapture,
 	endHandlerCapture,
-	assertSealCoverage,
 	Source,
 	Capture,
 	type CapturedValidator,
-	type CapturedHandler,
-	type SealCoverageGap
+	type CapturedHandler
 } from '../compile/aot'
 import { env } from '../universal'
 import { nullObject } from '../utils'
@@ -48,99 +46,7 @@ export interface CompileToSourceOptions {
 	 * @default 'elysia'
 	 */
 	registerFrom?: string
-
-	/**
-	 * Seal the build: `define` `globalThis.ELY_SEALED = true`, dropping the
-	 * JIT / `Default` / `Errors` / exact-mirror fallback branches (and their
-	 * imports) from the bundle.
-	 *
-	 * BEST-EFFORT: TypeBox is dropped only when coverage is 100% clean. On a gap
-	 * (a route that can't be frozen) it keeps TypeBox + warns — the build still
-	 * succeeds, just unsealed.
-	 *
-	 * - `true`: best-effort + print the report
-	 * - `'silent'`: best-effort, suppress the success report (still warns on a gap)
-	 * - `'strict'`: hard-fail the build if anything can't be frozen (for CI)
-	 * - `'audit'`: dry-run — report only, never seals
-	 *
-	 * @default false
-	 */
-	seal?: SealMode
-
-	/**
-	 * Called once with whether the bundler should actually seal (inject the
-	 * define + stub TypeBox) — true only when a sealing mode reached 100%
-	 * coverage. The plugin gates the define/stub on this (best-effort).
-	 * @internal
-	 */
-	onSeal?: (sealable: boolean) => void
 }
-
-export type SealMode = boolean | 'audit' | 'silent' | 'strict'
-
-// modes that DROP TypeBox when coverage is clean ('audit' is dry-run only)
-export const isSealing = (seal: SealMode | undefined): boolean =>
-	seal === true || seal === 'silent' || seal === 'strict'
-
-const sealGapLine = (g: SealCoverageGap): string =>
-	g.channel === 'unfreezable'
-		? g.method
-			? `  ${g.method} ${g.path} (${g.slot}): cannot be AOT-frozen ${g.reason}`
-			: `  cannot be AOT-frozen: ${g.reason}`
-		: `  ${g.method} ${g.path} (${g.slot}): ${g.channel} not frozen`
-
-const dedupe = (gaps: SealCoverageGap[]): string[] => {
-	const seen = new Set<string>()
-	const lines: string[] = []
-	for (const g of gaps) {
-		const line = sealGapLine(g)
-		if (seen.has(line)) continue
-		seen.add(line)
-		lines.push(line)
-	}
-	return lines
-}
-
-const FIXIT =
-	`Make these schemas freezable (or remove WebSocket / standalone-guard / ` +
-	`normalize:'typebox')`
-
-const formatSealGaps = (gaps: SealCoverageGap[]): string => {
-	const lines = dedupe(gaps)
-
-	return (
-		`[elysia-aot] Cannot seal: ${lines.length} issue: a validator would ` +
-		`have no fallback at runtime:\n` +
-		`${lines.join('\n')}\n${FIXIT}, or build without \`seal\`.`
-	)
-}
-
-const NO_OP_SEAL =
-	'[elysia-aot] Cannot seal: no validators were captured. The app was likely ' +
-	'built before compileToSource (it served a request or was compiled) or has ' +
-	'no validated routes.'
-
-// best-effort gap: TypeBox kept, build unsealed (warned loud — even in 'silent')
-const formatSealDegrade = (gaps: SealCoverageGap[]): string => {
-	const lines = dedupe(gaps)
-	return (
-		`[elysia-aot] ⚠ SEAL INCOMPLETE — TypeBox kept (${lines.length} route(s) ` +
-		`could not be frozen; bundle NOT minimized):\n${lines.join('\n')}\n` +
-		`${FIXIT}, or use \`seal: 'strict'\` to fail the build instead.`
-	)
-}
-
-// 100% coverage: sealed (TypeBox dropped) or, for 'audit', a dry-run summary
-const formatSealOk = (frozen: number, sealed: boolean): string =>
-	sealed
-		? `[elysia-aot] ✓ sealed — ${frozen} validator(s) frozen, TypeBox dropped.`
-		: `[elysia-aot] seal audit — all ${frozen} validator(s) frozen ✓ ` +
-			`(dry-run; build is UNSEALED — use \`seal: true\` to apply).`
-
-// seal not requested, but every validator froze — surface the one-line opt-in
-const formatSealHint = (frozen: number): string =>
-	`[elysia-aot] all ${frozen} validator(s) are freezable — add \`seal: true\` ` +
-	`to drop the TypeBox runtime from this build (~12 KB gzip).`
 
 export const autoGroupSize = (routes: number): number =>
 	routes < 64
@@ -176,37 +82,6 @@ export async function compileToSource(
 		;(app as { compile(): unknown }).compile()
 		const captured = endValidatorCapture()
 
-		let sealable = false
-		if (options?.seal) {
-			const seal = options.seal
-			const gaps = assertSealCoverage(captured)
-			const empty = !captured.length
-
-			if (gaps.length || empty) {
-				// A gap = a validator with no frozen entry. 'strict' fails the
-				// build; best-effort (true/'silent'/'audit') keeps the TypeBox
-				// fallback + warns — the build works, just unsealed.
-				if (seal === 'strict')
-					throw new Error(gaps.length ? formatSealGaps(gaps) : NO_OP_SEAL)
-				console.warn(gaps.length ? formatSealDegrade(gaps) : NO_OP_SEAL)
-			} else {
-				// 100% coverage → seal, unless 'audit' (dry-run only)
-				sealable = isSealing(seal)
-				if (seal !== 'silent')
-					console.warn(formatSealOk(captured.length, sealable))
-			}
-		} else if (
-			options?.seal === undefined &&
-			options?.register &&
-			captured.length &&
-			!assertSealCoverage(captured).length
-		)
-			// Seal wasn't asked for but every validator froze — nudge the
-			// one-line opt-in. Real builds only (register); an explicit
-			// `seal: false` is honored (no nag).
-			console.info(formatSealHint(captured.length))
-
-		options?.onSeal?.(sealable)
 		return emitModule(captured, endHandlerCapture(), options)
 	} finally {
 		setCaptureHeaderShorthand(undefined)

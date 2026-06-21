@@ -4,10 +4,6 @@ import {
 	resolveEntry,
 	resolveLoader,
 	entryFilter,
-	SEAL_DEFINE,
-	SEAL_STUB_FILTER,
-	sealStubSource,
-	isElysiaImporter,
 	type ElysiaAotOptions
 } from './core'
 import { rewriteTypeImport } from './treeshake'
@@ -34,33 +30,9 @@ const SOURCE = /\.(c|m)?(t|j)sx?$/
 export const aot = (entry: string, options?: ElysiaAotOptions): BunPlugin => ({
 	name: 'elysia-aot',
 	async setup(build) {
-		// best-effort: `seal` is true only when coverage reached 100% (else the
-		// build keeps TypeBox + warns — see compileToSource)
-		const { source, seal } = await generateCompiledModule(entry, options)
+		const source = await generateCompiledModule(entry, options)
 		const entryPath = resolveEntry(entry)
 		const treeShake = options?.treeShake ?? true
-
-		if (seal) {
-			build.config.define = {
-				...(build.config.define ?? {}),
-				...SEAL_DEFINE
-			}
-
-			// replace typebox/compile, typebox/value with void 0 to avoid typebox deps in runtime
-			build.onResolve({ filter: SEAL_STUB_FILTER }, (args) =>
-				isElysiaImporter(args.importer)
-					? { path: args.path, namespace: 'elysia-seal-stub' }
-					: undefined
-			)
-
-			build.onLoad(
-				{ namespace: 'elysia-seal-stub', filter: /.*/ },
-				(args) => ({
-					contents: sealStubSource(args.path),
-					loader: 'js'
-				})
-			)
-		}
 
 		build.onResolve({ filter: /^elysia\/compiled$/ }, () => ({
 			path: 'manifest',

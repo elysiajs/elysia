@@ -227,10 +227,8 @@ export class ValidationError extends ElysiaError {
 		const resolve = () => {
 			if (resolved !== undefined) return
 
-			const production = isProduction || globalThis.ELY_SEALED
-			const allowUnsafe =
-				this.allowUnsafeValidationDetails &&
-				!globalThis.ELY_SEALED
+			const production = isProduction
+			const allowUnsafe = this.allowUnsafeValidationDetails
 
 			if (production && !allowUnsafe && findCustomError) {
 				const hit = findCustomError(value)
@@ -365,12 +363,7 @@ export class ValidationError extends ElysiaError {
 	}
 
 	get #productionDetail() {
-		const sealed = !!globalThis.ELY_SEALED
-
-		return (
-			(isProduction || sealed) &&
-			!(this.allowUnsafeValidationDetails && !sealed)
-		)
+		return isProduction && !this.allowUnsafeValidationDetails
 	}
 
 	detail(message: unknown) {
@@ -413,7 +406,7 @@ export class ValidationError extends ElysiaError {
 		let expected: unknown
 		const schemaForExpected = first?.schema ?? this.schema
 
-		if (schemaForExpected && !globalThis.ELY_SEALED)
+		if (schemaForExpected)
 			try {
 				expected = Default(
 					nullObject(),

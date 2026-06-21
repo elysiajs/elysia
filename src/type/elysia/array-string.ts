@@ -22,23 +22,15 @@ export function ArrayString<T extends TSchema>(
 			(value) => {
 				if (value.charCodeAt(0) !== 91) return false
 
-				if (!globalThis.ELY_SEALED)
-					try {
-						return Check(array, JSON.parse(value))
-					} catch {
-						return false
-					}
-
-				throw 0
+				try {
+					return Check(array, JSON.parse(value))
+				} catch {
+					return false
+				}
 			},
 			() => 'must be an array'
 		),
-		(value) => {
-			if (!globalThis.ELY_SEALED)
-				return decodeValue(array, JSON.parse(value))
-
-			throw 0
-		}
+		(value) => decodeValue(array, JSON.parse(value))
 	)
 
 	return elyType(ELYSIA_TYPES.ArrayString, Union([array, arrayString], meta))

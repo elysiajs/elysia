@@ -5,7 +5,6 @@ import {
 	resolveEntry,
 	resolveLoader,
 	entryFilter,
-	SEAL_DEFINE,
 	type ElysiaAotOptions
 } from './core'
 import { rewriteTypeImport } from './treeshake'
@@ -32,36 +31,9 @@ const SOURCE = /\.(c|m)?(t|j)sx?$/
 export const aot = (entry: string, options?: ElysiaAotOptions) => ({
 	name: 'elysia-aot',
 	async setup(build: any) {
-		// best-effort: `seal` is true only when coverage reached 100%
-		const { source, seal } = await generateCompiledModule(entry, options)
+		const source = await generateCompiledModule(entry, options)
 		const entryPath = resolveEntry(entry)
 		const treeShake = options?.treeShake ?? true
-
-		if (seal) {
-			build.initialOptions.define = {
-				...build.initialOptions.define,
-				...SEAL_DEFINE
-			}
-
-			// replace typebox/compile, typebox/value with void 0 to avoid typebox deps in runtime
-			build.onResolve(
-				{ filter: /^typebox\/(value|compile)(\/|$)/ },
-				async (args: any) => {
-					if (args.pluginData?.elysiaSeal) return null // re-entry guard
-
-					const resolved = await build.resolve(args.path, {
-						kind: args.kind,
-						resolveDir: args.resolveDir,
-						importer: args.importer,
-						pluginData: { elysiaSeal: true }
-					})
-
-					if (resolved.errors.length) return resolved
-
-					return { path: resolved.path, sideEffects: false }
-				}
-			)
-		}
 
 		build.onResolve({ filter: /^elysia\/compiled$/ }, () => ({
 			path: 'manifest',

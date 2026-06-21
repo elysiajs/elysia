@@ -24,23 +24,15 @@ export function ObjectString<T extends TProperties>(
 			(value) => {
 				if (value.charCodeAt(0) !== 123) return false
 
-				if (!globalThis.ELY_SEALED)
-					try {
-						return Check(object, JSON.parse(value))
-					} catch {
-						return false
-					}
-
-				throw 0
+				try {
+					return Check(object, JSON.parse(value))
+				} catch {
+					return false
+				}
 			},
 			() => 'must be an object'
 		),
-		(value) => {
-			if (!globalThis.ELY_SEALED)
-				return decodeValue(object, JSON.parse(value))
-
-			throw 0
-		}
+		(value) => decodeValue(object, JSON.parse(value))
 	)
 
 	return elyType(
