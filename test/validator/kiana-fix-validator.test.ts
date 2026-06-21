@@ -145,6 +145,66 @@ describe('kiana validator fixes', () => {
 		expect(v.FromSync({ tags: ['a', 'b'] })).toEqual({ tags: ['a', 'b'] })
 	})
 
+	// idx33 (union branch) — a custom error inside a discriminated-union branch
+	// surfaces when the value matches that branch's discriminator but fails its
+	// constraint, and the whole union therefore rejects.
+	it('idx33 — surfaces a custom error inside a union branch', () => {
+		process.env.NODE_ENV = 'production'
+
+		const v = new TypeBoxValidator(
+			t.Object({
+				pet: t.Union([
+					t.Object({
+						type: t.Literal('cat'),
+						meow: t.Boolean({ error: 'meow must be a boolean' })
+					}),
+					t.Object({
+						type: t.Literal('dog'),
+						bark: t.Boolean()
+					})
+				])
+			})
+		)
+
+		let message: string | undefined
+		try {
+			// matches the cat branch's discriminator but meow is wrong type →
+			// union rejects → the cat branch's custom error must surface.
+			v.FromSync({ pet: { type: 'cat', meow: 'yes' } })
+		} catch (error: any) {
+			message = error.message
+		}
+
+		expect(message).toBe('meow must be a boolean')
+	})
+
+	// idx33 (union branch) — the branch gate prevents a false positive: a value
+	// valid under a SIBLING branch must NOT trigger the other branch's error.
+	it('idx33 — a value valid under a sibling union branch does not false-trigger', () => {
+		process.env.NODE_ENV = 'production'
+
+		const v = new TypeBoxValidator(
+			t.Object({
+				pet: t.Union([
+					t.Object({
+						type: t.Literal('cat'),
+						meow: t.Boolean({ error: 'meow must be a boolean' })
+					}),
+					t.Object({
+						type: t.Literal('dog'),
+						bark: t.Boolean()
+					})
+				])
+			})
+		)
+
+		// a perfectly valid dog: the union accepts it, so the cat branch's
+		// `meow` custom error must NOT fire.
+		expect(v.FromSync({ pet: { type: 'dog', bark: true } })).toEqual({
+			pet: { type: 'dog', bark: true }
+		})
+	})
+
 	// idx49 — isProduction must be read from env at call time, not frozen at
 	// module load. A NODE_ENV set AFTER import (serverless cold path / bootstrap)
 	// must still gate the schema-revealing validation detail.

@@ -1,7 +1,11 @@
 import Memoirist from 'memoirist'
 
 import { applyHoc, createFetchHandler } from './handler'
-import { compileHandler, buildNativeStaticResponse } from './compile'
+import {
+	compileHandler,
+	composeRouteHook,
+	buildNativeStaticResponse
+} from './compile'
 import { buildWSRoute } from './ws/route'
 import type {
 	WSLocalHook,
@@ -15,7 +19,6 @@ import { isBun } from './universal/constants'
 import { isDynamicRegex, needEncodeRegex, MethodMap } from './constants'
 import { BunAdapter } from './adapter/bun'
 import {
-	cloneHook,
 	coalesceStandaloneSchemas,
 	createErrorEventHandler,
 	eventProperties,
@@ -30,7 +33,6 @@ import {
 	joinPath,
 	mapMethodBack,
 	mergeDeep,
-	mergeHook,
 	mergeResponse,
 	nullObject,
 	pushField,
@@ -260,14 +262,19 @@ export class Elysia<
 		this.#resolveMacros()
 
 		const routes = this.#history.map(
-			([method, path, handler, , hook, appHook]) => {
-				const flatAppHook = flattenChain(appHook as any)
-
-				const merged: any = flatAppHook
-					? hook
-						? mergeHook(cloneHook(hook) as any, flatAppHook as any)
-						: flatAppHook
-					: hook
+			([method, path, handler, instance, hook, appHook, inheritedChain]) => {
+				// Compose exactly as the runtime does (local + appHook +
+				// inherited `.use()` chain, origin-deduped) so introspection
+				// surfaces guard/group schemas inherited via `.use()` instead
+				// of dropping them. `composeRouteHook` returns a fresh clone,
+				// so the in-place response merge below cannot mutate history.
+				const merged: any = composeRouteHook(
+					instance as any,
+					hook as any,
+					appHook as any,
+					inheritedChain as any,
+					this as any
+				)
 
 				if (merged?.schemas?.length) {
 					for (const entry of merged.schemas as any[]) {

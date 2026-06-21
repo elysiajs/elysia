@@ -220,7 +220,7 @@ function applyHook(
 		const base = localHook ?? appHook
 		if (!rootHook) return base ? cloneHook(base as any) : (base as any)
 
-		hook = base ? cloneHook(base as any) : (base as any)
+		hook = base ? cloneHook(base as any) : nullObject()
 	}
 
 	if (rootHook) mergeHook(hook, rootHook as any, true, true)
@@ -442,28 +442,13 @@ function toArray(name: string, hook: any) {
 	if (typeof hook[name] === 'function') hook[name] = [hook[name]]
 }
 
-export function compileHandler(
-	[
-		_method,
-		path,
-		handler,
-		instance,
-		localHook,
-		appHook,
-		inheritedChain
-	]: InternalRoute,
-	root: AnyElysia,
-	precomputedStatic?: Response
-): CompiledHandler {
-	const adapter = root['~config']?.adapter ?? defaultAdapter
-
-	if (root['~ext']?.macro) {
-		if (localHook) root['~applyMacro'](localHook)
-		if (appHook) resolveChainMacros(root, appHook)
-		if (inheritedChain)
-			resolveChainMacros(root, inheritedChain as ChainNode)
-	}
-
+export function composeRouteHook(
+	instance: AnyElysia,
+	localHook: Partial<AnyLocalHook> | undefined,
+	appHook: ChainNode | undefined,
+	inheritedChain: ChainNode | undefined,
+	root: AnyElysia
+): AnyLocalHook | undefined {
 	const flatAppHook = appHook
 		? flattenChainMemo(root, appHook as ChainNode)
 		: undefined
@@ -509,6 +494,39 @@ export function compileHandler(
 					: [errors]
 		}
 	}
+
+	return hook
+}
+
+export function compileHandler(
+	[
+		_method,
+		path,
+		handler,
+		instance,
+		localHook,
+		appHook,
+		inheritedChain
+	]: InternalRoute,
+	root: AnyElysia,
+	precomputedStatic?: Response
+): CompiledHandler {
+	const adapter = root['~config']?.adapter ?? defaultAdapter
+
+	if (root['~ext']?.macro) {
+		if (localHook) root['~applyMacro'](localHook)
+		if (appHook) resolveChainMacros(root, appHook)
+		if (inheritedChain)
+			resolveChainMacros(root, inheritedChain as ChainNode)
+	}
+
+	const hook = composeRouteHook(
+		instance,
+		localHook,
+		appHook as any,
+		inheritedChain as any,
+		root
+	)
 
 	if (hook) {
 		promoteDerive(hook)

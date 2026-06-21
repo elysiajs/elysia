@@ -508,24 +508,45 @@ function verifyPreallocatableDefault(schema: TSchema) {
 	return { pd, pod }
 }
 
+interface CustomErrorNode {
+	path: string
+	node: any
+	each?: boolean
+	// Nearest enclosing union (anyOf/oneOf)
+	union?: { node: any; path: string }
+}
+
 function collectCustomErrorNodes(
 	schema: any,
 	path: string,
-	out: { path: string; node: any; each?: boolean }[]
+	out: CustomErrorNode[],
+	union?: { node: any; path: string }
 ) {
 	if (!schema || typeof schema !== 'object') return out
-	if (schema.error !== undefined) out.push({ path, node: schema })
+	if (schema.error !== undefined) out.push({ path, node: schema, union })
 	if (schema.properties)
 		for (const k in schema.properties)
-			collectCustomErrorNodes(schema.properties[k], path + '/' + k, out)
+			collectCustomErrorNodes(
+				schema.properties[k],
+				path + '/' + k,
+				out,
+				union
+			)
 
 	const items = schema.items
 	if (Array.isArray(items)) {
 		// Tuple: every element has a fixed index, so it is value-addressable
 		for (let i = 0; i < items.length; i++)
-			collectCustomErrorNodes(items[i], path + '/' + i, out)
+			collectCustomErrorNodes(items[i], path + '/' + i, out, union)
 	} else if (items && items.error !== undefined)
-		out.push({ path, node: items, each: true })
+		out.push({ path, node: items, each: true, union })
+
+	const branches = schema.anyOf ?? schema.oneOf
+	if (Array.isArray(branches)) {
+		const gate = { node: schema, path }
+		for (const branch of branches)
+			collectCustomErrorNodes(branch, path, out, gate)
+	}
 
 	return out
 }
@@ -933,13 +954,15 @@ export class TypeBoxValidator<
 		const checks: {
 			path: string
 			check: (v: unknown) => boolean
+			gate?: (root: unknown) => boolean
 			error: unknown
 		}[] = []
 
-		for (const { path, node, each } of nodes) {
+		for (const { path, node, each, union } of nodes) {
 			let check: ((v: unknown) => boolean) | undefined
 
-			const fe = frozenByPath?.get(path)
+			// Union-branch nodes must not reuse a frozen `ce` entry
+			const fe = union ? undefined : frozenByPath?.get(path)
 			if (fe)
 				try {
 					check = fe.c(
@@ -952,16 +975,30 @@ export class TypeBoxValidator<
 					check = (v) => c.Check(v)
 				} catch {}
 
-			// `each` nodes describe an array's element schema; the value at
-			// `path` is the array itself, so the custom error fires when any
-			// element fails. Non-arrays are left to the array-level check.
 			if (check && each) {
 				const elementCheck = check
 				check = (v) =>
 					!Array.isArray(v) || v.every((x) => elementCheck(x))
 			}
 
-			if (check) checks.push({ path, check, error: node.error })
+			if (!check) continue
+
+			let gate: ((root: unknown) => boolean) | undefined
+			if (union) {
+				let unionCheck: ((v: unknown) => boolean) | undefined
+				try {
+					const uc = Compile(union.node)
+					unionCheck = (v) => uc.Check(v)
+				} catch {}
+
+				if (!unionCheck) continue
+
+				// copy string
+				const unionPath = union.path
+				gate = (root) => unionCheck!(subValueAt(root, unionPath))
+			}
+
+			checks.push({ path, check, gate, error: node.error })
 		}
 
 		if (!checks.length) return
@@ -969,9 +1006,11 @@ export class TypeBoxValidator<
 		checks.sort((a, b) => b.path.length - a.path.length)
 
 		return (value) => {
-			for (const c of checks)
+			for (const c of checks) {
+				if (c.gate && c.gate(value)) continue
 				if (!c.check(subValueAt(value, c.path)))
 					return { instancePath: c.path, error: c.error }
+			}
 		}
 	}
 
@@ -1218,7 +1257,9 @@ export class TypeBoxValidator<
 		const ceNodes = collectCustomErrorNodes(this.schema as any, '', [])
 		if (ceNodes.length) {
 			const entries: NonNullable<CapturedValidator['customErrors']> = []
-			for (const { path, node } of ceNodes)
+			for (const { path, node, union } of ceNodes) {
+				if (union) continue
+
 				try {
 					const cf = buildFrozenCheck(
 						Build(node) as unknown as CheckBuildResult,
@@ -1226,6 +1267,7 @@ export class TypeBoxValidator<
 					)
 					if (cf) entries.push({ path, ...cf })
 				} catch {}
+			}
 			if (entries.length)
 				Capture.set(
 					{ method: aot.method, path: aot.path, slot },

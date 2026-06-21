@@ -1,4 +1,8 @@
-export { compileHandler, buildNativeStaticResponse } from './handler'
+export {
+	compileHandler,
+	composeRouteHook,
+	buildNativeStaticResponse
+} from './handler'
 export {
 	Compiled,
 	type ValidatorManifest,

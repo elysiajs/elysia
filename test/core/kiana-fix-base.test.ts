@@ -116,19 +116,25 @@ describe('base fixes (kiana)', () => {
 	// appear in `.routes` introspection (consumed by OpenAPI/Swagger). The
 	// getter previously ignored the inheritedChain tuple slot, so docs disagreed
 	// with the runtime (which DOES enforce the inherited guard).
-	// idx8 (routes-getter introspection of inherited schemas) was reverted:
-	// the approximate fold double-counted hooks and broke dedup/checksum
-	// tests. The runtime enforcement below is the load-bearing behavior and
-	// must hold regardless; surfacing inherited schemas on `.routes` is
-	// deferred until it can mirror composeRootHook precedence exactly.
-	it('enforces inherited guard schemas at runtime (introspection deferred)', async () => {
+	// idx8 — `.routes` introspection must surface schemas inherited via
+	// `.use()` under a parent guard/group (OpenAPI/Swagger), matching what the
+	// runtime enforces. `composeRouteHook` is shared by the runtime and the
+	// getter so the two cannot diverge (a prior approximate fold double-counted
+	// hooks and was reverted; the origin-dedup in the shared path prevents it).
+	it('surfaces inherited guard schemas at runtime and on .routes', async () => {
 		const inner = new Elysia().get('/x', () => 'ok')
 		const app = new Elysia()
 			.guard({ query: t.Object({ q: t.String() }) })
 			.use(inner)
 
+		// runtime enforces the inherited guard
 		expect((await app.handle(req('/x'))).status).toBe(422)
 		expect((await app.handle(req('/x?q=hi'))).status).toBe(200)
+
+		// introspection reflects it too (was dropped before idx8)
+		const route = app.routes.find((r) => r.path === '/x')
+		expect(route).toBeDefined()
+		expect((route!.hooks as any)?.query).toBeDefined()
 	})
 
 	// idx9 — headers() must not alias the caller's object. A subsequent
