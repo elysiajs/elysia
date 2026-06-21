@@ -24,7 +24,7 @@ export function ObjectString<T extends TProperties>(
 			(value) => {
 				if (value.charCodeAt(0) !== 123) return false
 
-				if (!globalThis.__ELYSIA_SEALED__)
+				if (!globalThis.ELY_SEALED)
 					try {
 						return Check(object, JSON.parse(value))
 					} catch {
@@ -36,7 +36,7 @@ export function ObjectString<T extends TProperties>(
 			() => 'must be an object'
 		),
 		(value) => {
-			if (!globalThis.__ELYSIA_SEALED__)
+			if (!globalThis.ELY_SEALED)
 				return decodeValue(object, JSON.parse(value))
 
 			throw 0

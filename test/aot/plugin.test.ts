@@ -12,7 +12,7 @@ const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/index.ts')
 describe('AOT plugin', () => {
 	it('generateCompiledModule emits a self-registering manifest', async () => {
 		const { generateCompiledModule } = await import('../../src/plugin/core')
-		const src = await generateCompiledModule(APP, {
+		const { source: src } = await generateCompiledModule(APP, {
 			registerFrom: REGISTER_FROM
 		})
 

@@ -92,7 +92,8 @@ export abstract class Validator {
 		options?: ValidatorOptions
 	) {
 		if (name == null) {
-			if (!options?.schemas?.length) return undefined
+			if (!options?.schemas?.length) return
+
 			name = options.schemas[0]
 			options = { ...options, schemas: options.schemas.slice(1) }
 		}
@@ -107,7 +108,20 @@ export abstract class Validator {
 				options.schemas.every((v) => '~kind' in v || '~elyAcl' in v)
 			)
 				isIntersectable = true
-			else return new MultiValidator(schema, options) as any
+			else {
+				// standalone-guard / multi-schema can't be AOT-frozen → refuse to
+				// seal (else it seals clean then crashes calling stubbed Compile)
+				if (Capture.isCapturing())
+					Capture.unfreezable(
+						'standalone-guard / multi-schema validator — composed via Compile, cannot be AOT-frozen',
+						{
+							method: options?.aot?.method,
+							path: options?.aot?.path,
+							slot: options?.slot
+						}
+					)
+				return new MultiValidator(schema, options) as any
+			}
 		}
 
 		if ('~kind' in schema || '~elyAcl' in schema) {
@@ -143,7 +157,19 @@ export abstract class Validator {
 			return validator
 		}
 
-		if ('~standard' in schema) return new StandardValidator(schema) as any
+		if ('~standard' in schema) {
+			// Standard Schema (Zod/Valibot/…) isn't TypeBox → can't be AOT-frozen
+			if (Capture.isCapturing())
+				Capture.unfreezable(
+					'Standard Schema validator — not TypeBox, cannot be AOT-frozen',
+					{
+						method: options?.aot?.method,
+						path: options?.aot?.path,
+						slot: options?.slot
+					}
+				)
+			return new StandardValidator(schema) as any
+		}
 
 		throw new Error(
 			'Elysia Validator support only TypeBox and Standard Schema'
@@ -160,7 +186,8 @@ export abstract class Validator {
 		options?: ResponseValidatorOptions
 	): Record<number, Validator> | undefined {
 		if (schema == null) {
-			if (!options?.schemas?.length) return undefined
+			if (!options?.schemas?.length) return
+
 			schema = options.schemas[0]
 			options = { ...options, schemas: options.schemas.slice(1) }
 		}
@@ -229,11 +256,6 @@ export class StandardValidator extends Validator {
 	constructor(schema: StandardSchemaV1Like) {
 		super()
 
-		if (Capture.isCapturing())
-			Capture.unfreezable(
-				'Standard Schema validator — not TypeBox, cannot be AOT-frozen'
-			)
-
 		// @ts-expect-error
 		this.validate = schema['~standard'].validate
 	}
@@ -286,11 +308,6 @@ export class MultiValidator extends Validator {
 		options: ValidatorOptions
 	) {
 		super()
-
-		if (Capture.isCapturing())
-			Capture.unfreezable(
-				'standalone-guard / multi-schema validator — composed via Compile, cannot be AOT-frozen'
-			)
 
 		let typeboxObjects
 		const schemas = [schema].concat(options.schemas!)

@@ -82,8 +82,6 @@ const walkComposition = (schema: any, parts: string[]): any => {
 			const result = walkComposition(branches[i], parts)
 			if (result !== undefined) return result
 		}
-
-		return undefined
 	}
 
 	const [head, ...rest] = parts
@@ -97,8 +95,6 @@ const walkComposition = (schema: any, parts: string[]): any => {
 		return walkComposition(schema.additionalProperties, rest)
 
 	if (schema.items) return walkComposition(schema.items, rest)
-
-	return undefined
 }
 
 // Walk a TypeBox/Standard schema using an `instancePath` like `/x` or
@@ -165,11 +161,11 @@ const subValueAt = (value: unknown, path: unknown): unknown => {
 	if (typeof path === 'string') parts = path.split('/').filter(Boolean)
 	else if (Array.isArray(path)) parts = path
 
-	if (!parts?.length) return undefined
+	if (!parts?.length) return
 
 	let current: any = value
 	for (let i = 0; i < parts.length; i++) {
-		if (current === null || typeof current !== 'object') return undefined
+		if (current === null || typeof current !== 'object') return
 
 		const part = parts[i]
 		current =
@@ -231,11 +227,12 @@ export class ValidationError extends ElysiaError {
 		const resolve = () => {
 			if (resolved !== undefined) return
 
-			if (
-				isProduction &&
-				!this.allowUnsafeValidationDetails &&
-				findCustomError
-			) {
+			const production = isProduction || globalThis.ELY_SEALED
+			const allowUnsafe =
+				this.allowUnsafeValidationDetails &&
+				!globalThis.ELY_SEALED
+
+			if (production && !allowUnsafe && findCustomError) {
 				const hit = findCustomError(value)
 				resolved = hit ? [{ instancePath: hit.instancePath }] : []
 
@@ -267,12 +264,14 @@ export class ValidationError extends ElysiaError {
 				custom =
 					typeof sub.error === 'function'
 						? sub.error(
-								isProduction &&
-									!this.allowUnsafeValidationDetails
+								production && !allowUnsafe
 									? {
 											type: 'validation',
 											on: type,
-											found: scopeFound(value, resolved[0])
+											found: scopeFound(
+												value,
+												resolved[0]
+											)
 										}
 									: {
 											type: 'validation',
@@ -365,12 +364,24 @@ export class ValidationError extends ElysiaError {
 		}
 	}
 
+	get #productionDetail() {
+		const sealed = !!globalThis.ELY_SEALED
+
+		return (
+			(isProduction || sealed) &&
+			!(this.allowUnsafeValidationDetails && !sealed)
+		)
+	}
+
 	detail(message: unknown) {
-		if (isProduction && !this.allowUnsafeValidationDetails)
+		if (this.#productionDetail)
 			return {
 				type: 'validation',
 				on: this.type,
-				found: scopeFound(this.value, (this.errors ?? []).find(Boolean)),
+				found: scopeFound(
+					this.value,
+					(this.errors ?? []).find(Boolean)
+				),
 				message
 			}
 
@@ -385,7 +396,7 @@ export class ValidationError extends ElysiaError {
 	get payload() {
 		const first = (this.errors ?? []).find(Boolean) as any
 
-		if (isProduction && !this.allowUnsafeValidationDetails)
+		if (this.#productionDetail)
 			return {
 				type: 'validation',
 				on: this.type,
@@ -402,11 +413,13 @@ export class ValidationError extends ElysiaError {
 		let expected: unknown
 		const schemaForExpected = first?.schema ?? this.schema
 
-		// sealed builds drop TypeBox `Default`; the `expected` shape hint is then
-		// unavailable (the baked custom-error locator covers production detail)
-		if (schemaForExpected && !globalThis.__ELYSIA_SEALED__)
+		if (schemaForExpected && !globalThis.ELY_SEALED)
 			try {
-				expected = Default(nullObject(), schemaForExpected as any, undefined)
+				expected = Default(
+					nullObject(),
+					schemaForExpected as any,
+					undefined
+				)
 			} catch {}
 
 		return {

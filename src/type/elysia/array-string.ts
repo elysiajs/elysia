@@ -22,7 +22,7 @@ export function ArrayString<T extends TSchema>(
 			(value) => {
 				if (value.charCodeAt(0) !== 91) return false
 
-				if (!globalThis.__ELYSIA_SEALED__)
+				if (!globalThis.ELY_SEALED)
 					try {
 						return Check(array, JSON.parse(value))
 					} catch {
@@ -34,7 +34,7 @@ export function ArrayString<T extends TSchema>(
 			() => 'must be an array'
 		),
 		(value) => {
-			if (!globalThis.__ELYSIA_SEALED__)
+			if (!globalThis.ELY_SEALED)
 				return decodeValue(array, JSON.parse(value))
 
 			throw 0

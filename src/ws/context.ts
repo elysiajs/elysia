@@ -24,7 +24,7 @@ function pickValidator(
 	defaultValidator: WSValidatorLike | undefined,
 	data: unknown
 ) {
-	if (!validators) return undefined
+	if (!validators) return
 	if (data instanceof ElysiaStatus) {
 		const v = validators[data.status]
 		if (v) return v
@@ -220,9 +220,11 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 			connectionData?.defaultValidator,
 			data
 		)
-		if (!v) return undefined
+
+		if (!v) return
 		const value = data instanceof ElysiaStatus ? data.response : data
-		if (v.Check(value)) return undefined
+
+		if (v.Check(value)) return
 		return new ValidationError('message', value, v.Errors(value)).message
 	}
 

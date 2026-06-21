@@ -346,7 +346,7 @@ class TraceRecorder {
 	}
 
 	shift() {
-		if (this.remaining <= 0) return undefined
+		if (this.remaining <= 0) return
 		this.remaining--
 
 		if (!this.childBegin)

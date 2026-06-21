@@ -8,7 +8,7 @@ import { compileToSource } from '../../src/plugin/source'
  * Tier 2 — ObjectString / ArrayString reconstruct typebox-free under seal. A
  * sealed app must produce byte-identical responses to a plain (JIT) app across
  * inner codecs (Numeric/Date), inner defaults, nesting and arrays. We compile to
- * the real manifest source, eval it, run with `globalThis.__ELYSIA_SEALED__` set,
+ * the real manifest source, eval it, run with `globalThis.ELY_SEALED` set,
  * and compare to the same app run plainly.
  */
 
@@ -17,7 +17,7 @@ const G = globalThis as any
 afterEach(() => {
 	Compiled.clear()
 	Validator.clear()
-	G.__ELYSIA_SEALED__ = undefined
+	G.ELY_SEALED = undefined
 	delete process.env.ELYSIA_AOT_BUILD
 })
 
@@ -59,10 +59,10 @@ const sealVsPlain = async (
 	Compiled.clear()
 	Validator.clear()
 	Compiled.validators = evalManifest(src)
-	G.__ELYSIA_SEALED__ = true
+	G.ELY_SEALED = true
 	const sealed = await run()
 
-	G.__ELYSIA_SEALED__ = undefined
+	G.ELY_SEALED = undefined
 	Compiled.clear()
 	Validator.clear()
 	const plain = await run()
@@ -108,40 +108,6 @@ describe('seal inner codec — sealed ≡ plain round-trip', () => {
 			reqs: [['/x' + q({ d: '2021-05-05' })]]
 		},
 		{
-			name: 'inner default applied on omitted key',
-			make: (): any =>
-				new Elysia().get(
-					'/x',
-					{
-						query: t.Object({
-							f: t.Object({
-								role: t.String({ default: 'user' }),
-								name: t.String()
-							})
-						})
-					},
-					({ query }) => query
-				),
-			reqs: [['/x' + q({ name: 'sa' })], ['/x' + q({ name: 'sa', role: 'admin' })]]
-		},
-		{
-			name: 'Numeric inner + default together',
-			make: (): any =>
-				new Elysia().get(
-					'/x',
-					{
-						query: t.Object({
-							f: t.Object({
-								age: t.Numeric(),
-								role: t.String({ default: 'user' })
-							})
-						})
-					},
-					({ query }) => query
-				),
-			reqs: [['/x' + q({ age: '7' })]]
-		},
-		{
 			name: 'deep nested ObjectString',
 			make: (): any =>
 				new Elysia().get(
@@ -185,50 +151,6 @@ describe('seal inner codec — sealed ≡ plain round-trip', () => {
 				),
 			reqs: [['/x' + q({ age: 'notnum' })]]
 		},
-		{
-			// STRING-branch inner default (body field sent as a JSON string): the
-			// bare refine Check applies NO default, so an omitted defaulted key must
-			// be REJECTED identically to plain (regression: a sealed app once
-			// fabricated a 200 here where plain returns 422).
-			name: 'string-branch inner-default rejects identically',
-			make: (): any =>
-				new Elysia().post(
-					'/b',
-					{
-						body: t.Object({
-							cfg: t.ObjectString({
-								a: t.String(),
-								d: t.String({ default: 'D' })
-							})
-						})
-					},
-					({ body }) => body
-				),
-			reqs: [
-				['/b', json({ cfg: '{"a":"A"}' })],
-				['/b', json({ cfg: '{"a":"A","d":"X"}' })]
-			]
-		},
-		{
-			name: 'headers string-branch inner-default rejects identically',
-			make: (): any =>
-				new Elysia().get(
-					'/h',
-					{
-						headers: t.Object({
-							meta: t.Object({
-								role: t.String({ default: 'user' }),
-								name: t.String()
-							})
-						})
-					},
-					({ headers }) => headers
-				),
-			reqs: [
-				['/h', { headers: { meta: '{"name":"x"}' } }],
-				['/h', { headers: { meta: '{"name":"x","role":"admin"}' } }]
-			]
-		}
 	]
 
 	for (const { name, make, reqs } of cases)
@@ -236,4 +158,34 @@ describe('seal inner codec — sealed ≡ plain round-trip', () => {
 			const { sealed, plain } = await sealVsPlain(make, reqs)
 			expect(sealed).toEqual(plain)
 		})
+})
+
+describe('seal inner codec — inner defaults refuse to seal', () => {
+	// ObjectString/ArrayString inner defaults aren't reconstructed under seal
+	// (dropped 2026-06-21): the slot refuses to freeze, so seal:'strict' fails
+	// and best-effort degrades (keeps TypeBox, which fills the default at runtime).
+	const innerDefaultApp = () =>
+		new Elysia().get(
+			'/x',
+			{
+				query: t.Object({
+					f: t.Object({
+						role: t.String({ default: 'user' }),
+						name: t.String()
+					})
+				})
+			},
+			({ query }) => query
+		)
+
+	it("seal:'strict' refuses a route with an inner default", async () => {
+		process.env.ELYSIA_AOT_BUILD = '1'
+		await expect(
+			compileToSource(innerDefaultApp() as any, {
+				register: false,
+				seal: 'strict'
+			})
+		).rejects.toThrow(/Cannot seal/)
+		delete process.env.ELYSIA_AOT_BUILD
+	})
 })

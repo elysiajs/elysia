@@ -1,6 +1,14 @@
 import { existsSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
-import { compileToSource, type AotTarget } from './source'
+import { fileURLToPath } from 'node:url'
+import {
+	compileToSource,
+	isSealing,
+	type AotTarget,
+	type SealMode
+} from './source'
+
+export { isSealing, type SealMode }
 
 export interface ElysiaAotOptions {
 	/**
@@ -31,33 +39,58 @@ export interface ElysiaAotOptions {
 	target?: AotTarget
 
 	/**
-	 * Rewrite `import { t } from 'elysia'` → `import * as t from 'elysia/type'`
-	 * at build time so unused TypeBox constructors tree-shake. `elysia/type` is
-	 * 1:1 with `t`, so call sites are untouched and the rewrite is semantically
-	 * identical. Set `false` to leave `t` imports as-is.
+	 * Replace `import { t } from 'elysia'` with `import * as t from 'elysia/type'`
+	 * at build time so unused TypeBox constructors tree-shake
 	 *
 	 * @default true
 	 */
 	treeShake?: boolean
 
 	/**
-	 * Seal the build: `define` `globalThis.__ELYSIA_SEALED__ = true`, dropping the
+	 * Seal the build: `define` `globalThis.ELY_SEALED = true`, dropping the
 	 * JIT / `Default` / `Errors` / exact-mirror fallback branches (and their
 	 * imports) from the bundle.
 	 *
-	 * ⚠️ ONLY safe when EVERY validator the app constructs is frozen in the
-	 * manifest (closed-world, 100% capture coverage). A sealed manifest MISS has
-	 * no fallback and fails loud. Off by default.
+	 * - `true`: seal + print the coverage report
+	 * - `'silent'`: seal but suppress the report (gaps still fail loud)
+	 * - `'audit'`: dry run: print which validators/routes can't be frozen
 	 *
 	 * @default false
 	 */
-	seal?: boolean
+	seal?: SealMode
 }
 
-/** The bundler `define` a sealed AOT build injects. */
-export const SEAL_DEFINE = { 'globalThis.__ELYSIA_SEALED__': 'true' } as const
+export const SEAL_DEFINE = { 'globalThis.ELY_SEALED': 'true' } as const
 
-function findPackageRoot(from: string = process.cwd()): string {
+const SEAL_STUB_EXPORTS = {
+	value: [
+		'Check',
+		'Decode',
+		'Clean',
+		'DecodeUnsafe',
+		'Default',
+		'Encode',
+		'EncodeUnsafe',
+		'Errors',
+		'HasCodec'
+	],
+	compile: ['Compile']
+} as const
+
+export const SEAL_STUB_FILTER = /^typebox\/(value|compile)$/
+
+export function sealStubSource(specifier: string) {
+	const names = specifier.endsWith('compile')
+		? SEAL_STUB_EXPORTS.compile
+		: SEAL_STUB_EXPORTS.value
+
+	return (
+		names.map((name) => `export const ${name} = void 0`).join('\n') +
+		'\nexport default {}\n'
+	)
+}
+
+function findPackageRoot(from: string = process.cwd()) {
 	let dir = from
 
 	while (!existsSync(join(dir, 'package.json'))) {
@@ -72,7 +105,16 @@ function findPackageRoot(from: string = process.cwd()): string {
 export const resolveEntry = (entry: string): string =>
 	resolve(findPackageRoot(), entry)
 
-export function resolveLoader(entryPath: string): 'js' | 'jsx' | 'tsx' | 'ts' {
+// Windows part to unix
+const toPosix = (path: string) => path.replace(/\\/g, '/')
+
+const ELYSIA_PACKAGE_DIR =
+	toPosix(findPackageRoot(dirname(fileURLToPath(import.meta.url)))) + '/'
+
+export const isElysiaImporter = (importer: string | undefined | null) =>
+	!!importer && toPosix(importer).startsWith(ELYSIA_PACKAGE_DIR)
+
+export function resolveLoader(entryPath: string) {
 	const ext = entryPath.slice(entryPath.lastIndexOf('.'))
 
 	return ext === '.js' || ext === '.mjs' || ext === '.cjs'
@@ -90,7 +132,7 @@ export const entryFilter = (entryPath: string): RegExp =>
 export async function generateCompiledModule(
 	file: string,
 	options?: ElysiaAotOptions
-): Promise<string> {
+): Promise<{ source: string; seal: boolean }> {
 	process.env.ELYSIA_AOT_BUILD = '1'
 
 	const entry = resolveEntry(file)
@@ -100,11 +142,19 @@ export async function generateCompiledModule(
 	if (!app || typeof (app as { compile?: unknown }).compile !== 'function')
 		throw new Error(`[elysia-aot] "${entry}" must export an Elysia app`)
 
-	return compileToSource(app as Parameters<typeof compileToSource>[0], {
-		register: true,
-		registerFrom: options?.registerFrom,
-		lazy: options?.lazy,
-		target: options?.target,
-		seal: options?.seal
-	})
+	// best-effort: `seal` is true only when a sealing mode reached 100% coverage
+	let seal = false
+	const source = await compileToSource(
+		app as Parameters<typeof compileToSource>[0],
+		{
+			register: true,
+			registerFrom: options?.registerFrom,
+			lazy: options?.lazy,
+			target: options?.target,
+			seal: options?.seal,
+			onSeal: (s) => (seal = s)
+		}
+	)
+
+	return { source, seal }
 }

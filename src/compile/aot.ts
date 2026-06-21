@@ -60,23 +60,15 @@ export interface FrozenValidator {
 	k?: 1
 	// hasRef
 	r?: 1
-	// precompute-safe defaults baked at build: when `ps`, the runtime reads
-	// `pd`/`pod` instead of calling TypeBox `Default()` at construction.
+	// precompute-safe
 	ps?: 1
 	// precomputed default for absent input (`Default(schema, undefined)`)
 	pd?: unknown
 	// precomputed object-default template (`Default(schema, {})`)
 	pod?: Record<string, unknown>
-	// custom-error fields: per-field frozen check (`c`) at instancePath `p`,
-	// `e:1` when the check needs externals. Locates the failing custom-error
-	// field in production without TypeBox `Errors`.
+	// custom error
 	ce?: Array<{ p: string; c: FrozenCheckFactory; e?: 1 }>
-	// inner codecs for t.ObjectString / t.ArrayString: per ely-string-codec node
-	// (in deterministic walk order), the inner schema's frozen check (`c`) + decode
-	// mirror (`d`) + optional baked object-default template (`pod`). At
-	// reconstruction these overwrite the codec's `~codec.decode` / `~refine[0].check`
-	// with typebox-free closures so the codec stops delegating to typebox/value.
-	// `o` is the open char (123 `{` / 91 `[`). Bottom-up so nested codecs resolve.
+	// inner codec
 	ic?: Array<{
 		o: number
 		c: FrozenCheckFactory
@@ -84,7 +76,6 @@ export interface FrozenValidator {
 		// `x:1` → decode `s` is a (d)=>(v) factory (inner has codecs/unions);
 		// otherwise `s` is a plain (v)=>cleaned cleaner called directly
 		d: FrozenMirror & { x?: 1 }
-		pod?: Record<string, unknown>
 	}>
 }
 
@@ -302,7 +293,8 @@ export function externalsMatch(a: unknown[], b: unknown[]) {
 					ok = false
 					break
 				}
-			if (ok) continue // all elements matched → this external is fine
+
+			if (ok) continue
 		}
 
 		return false
@@ -318,7 +310,7 @@ const mirrorFactorySource = (source: string, hasExternals: boolean) =>
 		: // plain: the cleaner `(v) => cleaned` directly (no unused-`d` factory)
 			`function(v){${source}}`
 
-// Merged check + mirror factory source (cm)
+// Merged check + mirror factory (cm)
 const bothFactorySource = (
 	identifier: string,
 	checkDefs: string,
@@ -332,9 +324,7 @@ const bothFactorySource = (
 			: `function(v){${mirrorSource}}`
 	}}}`
 
-// Build-only: these source emitters are imported solely by `plugin/source.ts`
-// (the vite/esbuild/bun build plugins), never at runtime — so the whole `Source`
-// object tree-shakes out of a normal client bundle regardless of grouping.
+// ? Build-only: these source emitters are imported solely by `plugin/source.ts`
 export const Source = {
 	checkFactory: checkFactorySource,
 	checkCode: checkCode,
@@ -356,12 +346,9 @@ function collectMirrorUnions(schema: any, out: unknown[][] = []) {
 	} else if (Array.isArray(schema.anyOf)) {
 		out.push(schema.anyOf)
 
-		// exact-mirror mirrors EACH union branch twice (the `if Check` return path
-		// + the clean-then-check fallback, index.mjs:166/172), so a nested union
-		// inside a branch is enumerated twice in `instruction.unions`. Descend each
-		// branch twice here to keep this enumeration index-aligned with the frozen
-		// `u` source (otherwise an ObjectString/ArrayString whose inner has a codec
-		// — a union-in-a-union — fails captureMirrorUnions and can't freeze).
+		// exact-mirror mirrors EACH union branch twice
+		// (the `if Check` return path + the clean-then-check fallback, index.mjs:166/172)
+		// so a nested union inside a branch is enumerated twice in `instruction.unions`
 		for (const b of schema.anyOf) {
 			collectMirrorUnions(b, out)
 			collectMirrorUnions(b, out)
@@ -422,14 +409,15 @@ export function instantiateFrozenMirror(
 	})
 }
 
+// Codec mirror: `d.codecs` are the live schema's `~codec.decode` (request) or
+// `~codec.encode` (response) leaves; `d.unions` when the schema has unions.
 export function instantiateFrozenDecodeMirror(
 	frozen: FrozenMirror,
-	schema: unknown
+	schema: unknown,
+	dir: 'decode' | 'encode' = 'decode'
 ): (value: unknown) => unknown {
-	// The decode source always references `d.codecs` (rebuilt from the live
-	// schema's `~codec.decode` leaves) and `d.unions` when the schema has unions.
 	const d: { codecs: Function[]; unions?: unknown } = {
-		codecs: collectMirrorCodecs(schema)
+		codecs: collectMirrorCodecs(schema, [], dir)
 	}
 
 	if (frozen.u) d.unions = buildUnions(frozen.u, schema)
@@ -437,22 +425,13 @@ export function instantiateFrozenDecodeMirror(
 	return (frozen.s as FrozenMirrorFactory)(d)
 }
 
-export function instantiateFrozenEncodeMirror(
+export const instantiateFrozenEncodeMirror = (
 	frozen: FrozenMirror,
 	schema: unknown
-): (value: unknown) => unknown {
-	// Symmetric to the decode mirror, but `d.codecs` are the live schema's
-	// `~codec.encode` leaves (response side) instead of `~codec.decode`.
-	const d: { codecs: Function[]; unions?: unknown } = {
-		codecs: collectMirrorCodecs(schema, [], 'encode')
-	}
+): ((value: unknown) => unknown) =>
+	instantiateFrozenDecodeMirror(frozen, schema, 'encode')
 
-	if (frozen.u) d.unions = buildUnions(frozen.u, schema)
-
-	return (frozen.s as FrozenMirrorFactory)(d)
-}
-
-const EMPTY_EXTERNALS: unknown[] = []
+export const EMPTY_EXTERNALS = Object.freeze([]) as unknown as unknown[]
 
 export function instantiateFrozenBoth(
 	frozen: FrozenValidator,
@@ -576,7 +555,6 @@ export interface CapturedValidator {
 		checkValue: string
 		external: boolean
 		decode: CapturedMirror
-		pod?: Record<string, unknown>
 	}>
 }
 
@@ -617,47 +595,35 @@ export function endValidatorCapture() {
 	return captured
 }
 
-// ----------------------------------------------------------------------------
-// Seal coverage. A sealed build drops the JIT / Default / Errors / codec /
-// exact-mirror fallbacks, so EVERY validator the runtime constructs must be
-// FULLY frozen — a manifest MISS has no fallback. Each AOT validator records the
-// channels it needs at runtime ("need profile"); validators that CAN'T be frozen
-// at all (no aot/slot: WebSocket / dynamic, `MultiValidator`, `normalize:'typebox'`
-// which uses TypeBox `Clean`) record an `unfreezable` marker. `assertSealCoverage`
-// cross-references and reports every gap; the build refuses to seal on any gap.
-// ----------------------------------------------------------------------------
-
 export interface CoverageNeed {
 	method: string
 	path: string
 	slot: ValidatorSlot
-	// frozen check (`c`/`cm`) — without it the runtime JITs via Compile/HasCodec
 	check: boolean
-	// exact-mirror Clean (frozen `m`/`cm`)
 	mirror: boolean
-	// request-side decode mirror (frozen `dm`)
 	decode: boolean
-	// response-side encode mirror (frozen `em`)
 	encode: boolean
-	// baked default (`ps`) — without it the runtime calls `Default`
 	hasDefault: boolean
-	// inner codecs (`ic`) — count of ely-string-codec nodes that must ALL freeze;
-	// 0 when the schema has no t.ObjectString / t.ArrayString
 	innerCodecs?: number
 }
 
-// validators that cannot be AOT-frozen at all → a sealed build would JIT them
+interface UnfreezableLoc {
+	method?: string
+	path?: string
+	slot?: string
+}
+
 let coverageNeeds: CoverageNeed[] | undefined
-let coverageUnfreezable: { reason: string }[] | undefined
+let coverageUnfreezable: ({ reason: string } & UnfreezableLoc)[] | undefined
 
 function captureNeed(v: CoverageNeed) {
 	if (!isValidatorCapturing()) return
 	;(coverageNeeds ??= []).push(v)
 }
 
-function captureUnfreezable(reason: string) {
+function captureUnfreezable(reason: string, loc?: UnfreezableLoc) {
 	if (!isValidatorCapturing()) return
-	;(coverageUnfreezable ??= []).push({ reason })
+	;(coverageUnfreezable ??= []).push({ reason, ...loc })
 }
 
 export interface SealCoverageGap {
@@ -678,11 +644,6 @@ export interface SealCoverageGap {
 const needKey = (v: { method: string; path: string; slot: string }) =>
 	`${v.method}\0${v.path}\0${v.slot}`
 
-/**
- * Every validator must have frozen every channel it needs (a sealed runtime has
- * no fallback). Returns one gap per missing (validator, channel) plus one per
- * validator that can't be AOT-frozen at all. Any non-empty result → refuse seal.
- */
 export function assertSealCoverage(
 	captured: CapturedValidator[]
 ): SealCoverageGap[] {
@@ -696,21 +657,26 @@ export function assertSealCoverage(
 		const c = byKey.get(needKey(n))
 		const loc = { method: n.method, path: n.path, slot: n.slot }
 
-		// `c`/`cm` → isFrozen; otherwise the runtime takes the JIT path
 		if (n.check && !c?.checkValue) gaps.push({ ...loc, channel: 'check' })
 		if (n.mirror && !c?.mirror) gaps.push({ ...loc, channel: 'mirror' })
-		if (n.decode && !c?.decodeMirror) gaps.push({ ...loc, channel: 'decode' })
-		if (n.encode && !c?.encodeMirror) gaps.push({ ...loc, channel: 'encode' })
+		if (n.decode && !c?.decodeMirror)
+			gaps.push({ ...loc, channel: 'decode' })
+		if (n.encode && !c?.encodeMirror)
+			gaps.push({ ...loc, channel: 'encode' })
 		if (n.hasDefault && !c?.precomputeSafe)
 			gaps.push({ ...loc, channel: 'default' })
-		// every ely-string-codec node must have a frozen inner codec; if even one
-		// couldn't freeze, capture emits a SHORT (or absent) `ic` → refuse
 		if (n.innerCodecs && (c?.innerCodecs?.length ?? 0) < n.innerCodecs)
 			gaps.push({ ...loc, channel: 'innerCodec' })
 	}
 
 	for (const u of coverageUnfreezable ?? [])
-		gaps.push({ channel: 'unfreezable', reason: u.reason })
+		gaps.push({
+			channel: 'unfreezable',
+			reason: u.reason,
+			method: u.method,
+			path: u.path,
+			slot: u.slot
+		})
 
 	return gaps
 }
@@ -738,112 +704,24 @@ export function endHandlerCapture(): CapturedHandler[] {
 	return captured
 }
 
-function captureValidator(v: {
-	method: string
-	path: string
-	slot: ValidatorSlot
-	identifier: string
-	checkDefs: string
-	checkValue: string
-	external: boolean
-	async: boolean
-	hasDefault: boolean
-	hasCodec: boolean
-	hasRef: boolean
-}) {
-	const e = captureEntry(v)
-
-	if (e) {
-		e.identifier = v.identifier
-		e.checkDefs = v.checkDefs
-		e.checkValue = v.checkValue
-		e.external = v.external
-		e.async = v.async
-		e.hasDefault = v.hasDefault
-		e.hasCodec = v.hasCodec
-		e.hasRef = v.hasRef
-	}
-}
-
-function captureMirror(v: {
-	method: string
-	path: string
-	slot: ValidatorSlot
-	mirror: CapturedMirror
-}) {
-	const e = captureEntry(v)
-	if (e) e.mirror = v.mirror
-}
-
-function captureDecodeMirror(v: {
-	method: string
-	path: string
-	slot: ValidatorSlot
-	mirror: CapturedMirror
-}) {
-	const e = captureEntry(v)
-	if (e) e.decodeMirror = v.mirror
-}
-
-function captureEncodeMirror(v: {
-	method: string
-	path: string
-	slot: ValidatorSlot
-	mirror: CapturedMirror
-}) {
-	const e = captureEntry(v)
-	if (e) e.encodeMirror = v.mirror
-}
-
-function capturePrecompute(v: {
-	method: string
-	path: string
-	slot: ValidatorSlot
-	precomputedDefault: unknown
-	precomputedObjectDefault: Record<string, unknown> | undefined
-}) {
-	const e = captureEntry(v)
-	if (e) {
-		e.precomputeSafe = true
-		e.precomputedDefault = v.precomputedDefault
-		e.precomputedObjectDefault = v.precomputedObjectDefault
-	}
-}
-
-function captureCustomErrors(v: {
-	method: string
-	path: string
-	slot: ValidatorSlot
-	entries: NonNullable<CapturedValidator['customErrors']>
-}) {
-	const e = captureEntry(v)
-	if (e) e.customErrors = v.entries
-}
-
-function captureInnerCodecs(v: {
-	method: string
-	path: string
-	slot: ValidatorSlot
-	entries: NonNullable<CapturedValidator['innerCodecs']>
-}) {
-	const e = captureEntry(v)
-	if (e) e.innerCodecs = v.entries
+// Set capture fields on the (method,path,slot) entry. Replaces the per-channel
+// setters — call sites pass the CapturedValidator field name(s) directly.
+function captureSet(
+	loc: { method: string; path: string; slot: ValidatorSlot },
+	partial: Partial<CapturedValidator>
+) {
+	const e = captureEntry(loc)
+	if (e) Object.assign(e, partial)
 }
 
 const isValidatorCapturing = () =>
 	capture !== undefined || env.ELYSIA_AOT_BUILD === '1'
 
 export const Capture = {
-	validator: captureValidator,
+	set: captureSet,
 	handler: captureHandler,
-	mirror: captureMirror,
-	mirrorDecode: captureDecodeMirror,
-	mirrorEncode: captureEncodeMirror,
 	mirrorUnions: captureMirrorUnions,
 	mirrorCodecs: captureMirrorCodecs,
-	precompute: capturePrecompute,
-	customErrors: captureCustomErrors,
-	innerCodecs: captureInnerCodecs,
 	need: captureNeed,
 	unfreezable: captureUnfreezable,
 	isCapturing: isValidatorCapturing

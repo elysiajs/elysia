@@ -60,7 +60,7 @@ describe('seal bundle — typebox/value drop', () => {
 		const unsealed = await build(common)
 		const sealed = await build({
 			...common,
-			define: { 'globalThis.__ELYSIA_SEALED__': 'true' },
+			define: { 'globalThis.ELY_SEALED': 'true' },
 			plugins: [sealSideEffects]
 		})
 

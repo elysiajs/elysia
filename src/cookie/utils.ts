@@ -73,7 +73,6 @@ function resolveSignSecrets(
 		(Array.isArray(config.globalSign) && config.globalSign.includes(name))
 	)
 		return config.globalSecrets
-	return undefined
 }
 
 export function parseCookieRawSync(
@@ -232,7 +231,7 @@ async function signPending(
 export function serializeCookie(
 	cookies: Context['set']['cookie']
 ): string | string[] | undefined {
-	if (!cookies || !isNotEmpty(cookies)) return undefined
+	if (!cookies || !isNotEmpty(cookies)) return
 
 	let set: string | string[] | undefined
 	let isArray = false

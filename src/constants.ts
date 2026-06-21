@@ -92,10 +92,5 @@ export const StatusMapBack = mapBack(StatusMap)
 export type StatusMapBack = typeof StatusMapBack
 
 export const dangerousKeys = new Set(['__proto__', 'constructor', 'prototype'])
-
 export const isDynamicRegex = /[:*]/
-
-// Matches any char that `encodeURI` would escape — i.e. the exact complement
-// of its unescaped set (A-Za-z0-9 - _ . ! ~ * ' ( ) ; , / ? : @ & = + $ #).
-// Lets us skip the `encodeURI` call (and its allocation) for plain-ASCII paths.
 export const needEncodeRegex = /[^A-Za-z0-9\-_.!~*'();,/?:@&=+$#]/

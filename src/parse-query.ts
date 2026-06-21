@@ -6,12 +6,6 @@ const KEY_NEEDS_DECODE = 2
 const VALUE_HAS_PLUS = 4
 const VALUE_NEEDS_DECODE = 8
 
-// NOTE: the charCode scanner + key/value prologue are intentionally duplicated
-// between `parseQueryFromURL` and `parseQuery`. A shared scanner taking an
-// `onPair` callback was measured ~10-12% SLOWER on the per-request hot path —
-// the callback goes megamorphic (two call sites) and blocks inlining. Keep
-// each parser's `processKeyValuePair` as its own monomorphic local closure.
-
 // Parse query without array
 export function parseQueryFromURL(
 	input: string,
@@ -28,10 +22,6 @@ export function parseQueryFromURL(
 	let startingIndex = startIndex
 	let equalityIndex = startingIndex
 
-	// Scan only the query string (after '?'). Starting at 0 fed the whole
-	// scheme/host/path through the switch: a literal '&' in the matched path
-	// (a legal pchar, reachable via `/:param`) reset state into the path and
-	// corrupted the parsed query; '%'/'+'/'=' in the path also set stale flags.
 	for (let i = startIndex + 1; i < inputLength; i++)
 		switch (input.charCodeAt(i)) {
 			// '&'

@@ -153,10 +153,7 @@ export const materialise = (
 						)
 					),
 					...(e.external ? { e: 1 } : {}),
-					d,
-					...(e.pod !== undefined
-						? { pod: JSON.parse(JSON.stringify(e.pod)) }
-						: {})
+					d
 				}
 			})
 

@@ -182,7 +182,8 @@ export class Elysia<
 	}
 
 	get history(): InternalRoute[] | undefined {
-		if (!this.#history) return undefined
+		if (!this.#history) return
+
 		this.#resolveMacros()
 
 		return this.#history

@@ -460,10 +460,6 @@ export function createFetchHandler(
 			let result =
 				router?.find(request.method, path) ?? router?.find('*', path)
 
-			// Dynamic loose (trailing-slash) fallback — cold, only after an
-			// exact-dynamic miss. Static loose keys live in `~map` (checked
-			// above); dynamic loose twins aren't pre-registered, so retry the
-			// slash-toggled path against the router. Skip under strictPath.
 			if (!result && !strictPath) {
 				const loose = getLoosePath(path)
 				if (loose !== path)

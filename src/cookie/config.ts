@@ -50,10 +50,8 @@ function getAttributes(source: Partial<BaseCookie> | undefined) {
 	return out
 }
 
-function normalizeSign(
-	sign: true | string | string[] | undefined
-): true | string[] | undefined {
-	if (sign === undefined) return undefined
+function normalizeSign(sign: true | string | string[] | undefined) {
+	if (sign === undefined) return
 	if (sign === true) return true
 	if (Array.isArray(sign)) return sign.length ? sign : undefined
 

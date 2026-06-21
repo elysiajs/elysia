@@ -564,15 +564,13 @@ const at = (index: number | undefined) =>
 	index === undefined ? '' : `[${index}]`
 
 function arrayItemSchema(v: any): any {
-	if (!v) return undefined
+	if (!v) return
 	if (v.type === 'array' || v['~kind'] === 'Array') return v.items
 	if (Array.isArray(v.anyOf))
 		for (const x of v.anyOf) {
 			const it = arrayItemSchema(x)
 			if (it) return it
 		}
-
-	return undefined
 }
 
 function isObjectish(v: any) {
@@ -641,7 +639,7 @@ function getQueryParseArgsCollect(
 export function getQueryParseChannels(
 	querySchema: any
 ): QueryWalkState | undefined {
-	if (!querySchema) return undefined
+	if (!querySchema) return
 
 	const state: QueryWalkState = {
 		array: undefined,

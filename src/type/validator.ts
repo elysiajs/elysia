@@ -40,11 +40,11 @@ import {
 	Compiled,
 	instantiateFrozenMirror,
 	instantiateFrozenDecodeMirror,
-	instantiateFrozenEncodeMirror,
 	instantiateFrozenBoth,
 	collectExternals,
 	externalsMatch,
 	reconstructCheck,
+	EMPTY_EXTERNALS,
 	Capture,
 	type CheckBuildResult,
 	type CapturedMirror,
@@ -77,7 +77,9 @@ function schemaContainsRef(node: any, seen = new WeakSet()): boolean {
 	if (node.$ref) return true
 
 	const props = node.properties
-	if (props) for (const k in props) if (schemaContainsRef(props[k], seen)) return true
+	if (props)
+		for (const k in props)
+			if (schemaContainsRef(props[k], seen)) return true
 
 	const items = node.items
 	if (Array.isArray(items)) {
@@ -106,9 +108,6 @@ function schemaContainsRef(node: any, seen = new WeakSet()): boolean {
 }
 
 let inlineRefId = 0
-
-// Shared empty externals for frozen checks
-const EMPTY_EXTERNALS = Object.freeze([]) as unknown as unknown[]
 
 const isAsyncPredicate = (v: unknown) =>
 	Array.isArray(v)
@@ -149,7 +148,7 @@ function findInstancePath(
 	path = ''
 ): string | undefined {
 	if (value === target) return path
-	if (!value || typeof value !== 'object') return undefined
+	if (!value || typeof value !== 'object') return
 
 	if (Array.isArray(value)) {
 		for (let i = 0; i < value.length; i++) {
@@ -157,7 +156,7 @@ function findInstancePath(
 			if (found !== undefined) return found
 		}
 
-		return undefined
+		return
 	}
 
 	for (const key in value) {
@@ -168,8 +167,6 @@ function findInstancePath(
 		)
 		if (found !== undefined) return found
 	}
-
-	return undefined
 }
 
 function isPrecomputeSafe(schema: any, depth = 0): boolean {
@@ -284,8 +281,8 @@ function childSchemaSome(n: any, f: (x: any) => boolean): boolean {
 		return true
 
 	if (n.patternProperties)
-		for (const k in n.patternProperties) if (f(n.patternProperties[k]))
-			return true
+		for (const k in n.patternProperties)
+			if (f(n.patternProperties[k])) return true
 
 	for (const key of ['not', 'if', 'then', 'else'] as const)
 		if (n[key] && f(n[key])) return true
@@ -415,6 +412,7 @@ function canonical(v: unknown): string {
 	if (Object.is(v, -0)) return '-0'
 	if (v === null || typeof v !== 'object') return JSON.stringify(v) ?? '\0u'
 	if (Array.isArray(v)) return '[' + v.map(canonical).join(',') + ']'
+
 	return (
 		'{' +
 		Object.keys(v)
@@ -430,23 +428,18 @@ function canonical(v: unknown): string {
 	)
 }
 
-// ----------------------------------------------------------------------------
-// Build-time default preallocation (capture only): `Default(schema, value)` is a
-// pure function of the build-time-known schema, so the frozen runtime reads the
-// baked `pd`/`pod` instead of running TypeBox `Default()` at construction. The
-// decision is sound by two layers: a structural gate + a differential guard that
-// replays `Default(schema, probe)` against `applyPrecomputed(pod, probe)`.
-// ----------------------------------------------------------------------------
-function verifyPreallocatableDefault(
-	schema: TSchema
-): { pd: unknown; pod: Record<string, unknown> | undefined } | undefined {
+// ? build-time, check if a default is preallocatable (emittable, JSON-serializable)
+function verifyPreallocatableDefault(schema: TSchema) {
+	// preallocated default
 	let pd: unknown
+	// preallocatable object default raw
 	let podRaw: unknown
+
 	try {
 		pd = Default(schema, undefined)
 		podRaw = Default(schema, nullObject())
 	} catch {
-		return undefined
+		return
 	}
 
 	const pod =
@@ -458,22 +451,25 @@ function verifyPreallocatableDefault(
 		!isEmittable(pd, new Set(), true) ||
 		(pod !== undefined && !isEmittable(pod, new Set(), true))
 	)
-		return undefined
+		return
 
 	if (!isPrecomputeSafe(schema as any)) {
 		const s = schema as any
-		if (s.type !== 'object' && s['~kind'] !== 'Object') return undefined
-		if (!structuralPreallocatable(schema as any)) return undefined
+
+		if (s.type !== 'object' && s['~kind'] !== 'Object') return
+		if (!structuralPreallocatable(schema as any)) return
 
 		for (const probe of defaultProbes(pod)) {
 			let expected: unknown
+
 			try {
 				expected = Default(schema, structuredClone(probe))
 			} catch {
-				return undefined
+				return
 			}
+
 			const actual = applyPrecomputed(pod!, structuredClone(probe))
-			if (canonical(expected) !== canonical(actual)) return undefined
+			if (canonical(expected) !== canonical(actual)) return
 		}
 	}
 
@@ -484,44 +480,67 @@ function collectCustomErrorNodes(
 	schema: any,
 	path: string,
 	out: { path: string; node: any }[]
-): { path: string; node: any }[] {
+) {
 	if (!schema || typeof schema !== 'object') return out
 	if (schema.error !== undefined) out.push({ path, node: schema })
 	if (schema.properties)
 		for (const k in schema.properties)
 			collectCustomErrorNodes(schema.properties[k], path + '/' + k, out)
+
 	return out
+}
+
+// A custom error nested under an array element or union/intersect member has no
+// static path (the runtime value index/branch is dynamic), so the path-based
+// findCustomError locator can't reach it — and collectCustomErrorNodes only
+// descends `properties`, so such a node is neither captured NOR flagged as a
+// coverage gap. Left alone it would seal but silently drop the message. Detect
+// it so the route refuses to freeze (degrades, keeping TypeBox) instead.
+function hasUnlocatableCustomError(schema: any, underVariadic = false): boolean {
+	if (!schema || typeof schema !== 'object') return false
+	if (underVariadic && schema.error !== undefined) return true
+	if (schema.properties)
+		for (const k in schema.properties)
+			if (hasUnlocatableCustomError(schema.properties[k], underVariadic))
+				return true
+	if (schema.items) {
+		const items = Array.isArray(schema.items) ? schema.items : [schema.items]
+		for (const it of items)
+			if (hasUnlocatableCustomError(it, true)) return true
+	}
+	for (const key of ['anyOf', 'allOf', 'oneOf'])
+		if (Array.isArray(schema[key]))
+			for (const member of schema[key])
+				if (hasUnlocatableCustomError(member, true)) return true
+	return false
 }
 
 function subValueAt(value: any, path: string): unknown {
 	if (!path) return value
 	let cur = value
+
 	for (const part of path.split('/')) {
 		if (!part) continue
-		if (cur === null || typeof cur !== 'object') return undefined
+		if (cur === null || typeof cur !== 'object') return
 		cur = cur[part]
 	}
+
 	return cur
 }
 
-// Walk for ely-ObjectString / ArrayString union nodes in deterministic PRE-ORDER
-// (parent before nested). Both capture and reconstruction use this single walker
-// so the `ic[]` array aligns 1:1 with the nodes; reconstruction iterates it in
-// REVERSE for bottom-up overwrite. For each: inner = `anyOf[0]`, codec =
-// `anyOf[1]`, open = `{` (123) / `[` (91), and the value-`path`/`inArray` used to
-// apply the inner default on the OBJECT branch.
+// capture ObjectString/ArrayString inner codecs. The traversal order is the
+// capture↔reconstruct contract: `ic[i]` aligns 1:1 with `nodes[i]` (reconstruct
+// iterates in REVERSE for bottom-up overwrite), so keep self → properties →
+// items → anyOf.
 interface StringCodecNode {
 	inner: any
 	codec: any
 	open: number
-	path: string[]
-	inArray: boolean
 }
+
 function collectStringCodecNodes(
 	schema: any,
-	out: StringCodecNode[] = [],
-	path: string[] = [],
-	inArray = false
+	out: StringCodecNode[] = []
 ): StringCodecNode[] {
 	if (!schema || typeof schema !== 'object') return out
 
@@ -533,38 +552,25 @@ function collectStringCodecNodes(
 			out.push({
 				inner,
 				codec,
-				open: ely === ELYSIA_TYPES.ObjectString ? 123 : 91,
-				path,
-				inArray
+				open: ely === ELYSIA_TYPES.ObjectString ? 123 : 91
 			})
 	}
 
 	if (schema.properties)
 		for (const k in schema.properties)
-			collectStringCodecNodes(
-				schema.properties[k],
-				out,
-				[...path, k],
-				inArray
-			)
+			collectStringCodecNodes(schema.properties[k], out)
 
 	const items = schema.items
 	if (Array.isArray(items)) {
-		for (const it of items) collectStringCodecNodes(it, out, path, true)
-	} else if (items) collectStringCodecNodes(items, out, path, true)
+		for (const it of items) collectStringCodecNodes(it, out)
+	} else if (items) collectStringCodecNodes(items, out)
 
-	// union branches sit at the SAME value position → same path
 	if (Array.isArray(schema.anyOf))
-		for (const b of schema.anyOf)
-			collectStringCodecNodes(b, out, path, inArray)
+		for (const b of schema.anyOf) collectStringCodecNodes(b, out)
 
 	return out
 }
 
-// A default INSIDE an ObjectString/ArrayString inner is baked into that codec's
-// `ic.pod` (not the parent's `ps`/`pod`), so it must NOT count toward the parent's
-// default coverage need — otherwise a `{ filter: { role: t.String({default}) } }`
-// query is wrongly refused for "default not frozen".
 function hasDefaultOutsideStringCodec(schema: any): boolean {
 	if (!schema || typeof schema !== 'object') return false
 
@@ -592,22 +598,14 @@ function hasDefaultOutsideStringCodec(schema: any): boolean {
 	return false
 }
 
-// Sealed-runtime reconstruction (typebox-free): overwrite each ObjectString /
-// ArrayString codec's `~codec.decode` + `~refine[0].check` with closures backed
-// by the frozen inner check + decode mirror, so the codec stops delegating to
-// typebox/value. Bottom-up (reverse of the pre-order `ic`) so nested codecs are
-// rebuilt typebox-free before a containing inner mirror/check reads them. Runs
-// BEFORE the parent check / decode mirror are instantiated. Returns the per-path
-// inner-default templates for the From default step (object branch).
+// reconstruct seal: overwrite each ObjectString/ArrayString codec's
+// `~refine[0].check` + `~codec.decode` with frozen, typebox-free closures.
+// Iterate in REVERSE so nested codecs reconstruct bottom-up.
 function reconstructInnerCodecs(
 	ic: NonNullable<FrozenValidator['ic']>,
 	schema: any
-): Array<{ path: string[]; pod: Record<string, unknown> }> {
+): void {
 	const nodes = collectStringCodecNodes(schema)
-	const innerDefaults: Array<{
-		path: string[]
-		pod: Record<string, unknown>
-	}> = []
 
 	for (let i = nodes.length - 1; i >= 0; i--) {
 		const entry = ic[i]
@@ -616,76 +614,64 @@ function reconstructInnerCodecs(
 
 		const innerSchema = node.inner
 		const innerCheck = entry.c(entry.e ? collectExternals(innerSchema) : [])
-		// `x:1` → factory form (codecs/unions rebuilt from the live schema);
-		// otherwise `s` is the plain (v)=>cleaned cleaner
 		const innerMirror = entry.d.x
 			? instantiateFrozenDecodeMirror(entry.d, innerSchema)
 			: (entry.d.s as (value: unknown) => unknown)
-		const pod = entry.pod
-
-		const fill = pod
-			? (parsed: unknown) =>
-					applyPrecomputed(pod, parsed as Record<string, unknown>)
-			: (parsed: unknown) => parsed
 
 		const open = entry.o
-		// The live string-branch refine is a BARE `Check(inner, JSON.parse(v))`
-		// (object-string.ts) that applies NO defaults — a missing defaulted key is
-		// rejected, the default is materialised only by the decode transform (which
-		// runs after a passing check). So the reconstructed refine must NOT fill
-		// defaults (else the sealed app would accept input the plain app rejects).
-		// Object-branch defaults are handled by `#applyInnerDefaults`.
 		node.codec['~refine'][0].check = (v: string) => {
 			if (v.charCodeAt(0) !== open) return false
+
 			try {
 				return innerCheck(JSON.parse(v))
 			} catch {
 				return false
 			}
 		}
-		// decode is reached only after a passing check (all required keys present),
-		// so `fill` here is a no-op clone — kept for symmetry/robustness
-		node.codec['~codec'].decode = (v: string) =>
-			innerMirror(fill(JSON.parse(v)))
 
-		// OBJECT-branch default: a JSON query value is pre-parsed to an object, so
-		// it never hits the string codec above — record (path, pod) so the From
-		// default step fills it (capture refuses array-nested inner defaults, so
-		// `path` here is object-property-only).
-		if (pod) innerDefaults.push({ path: node.path, pod })
+		node.codec['~codec'].decode = (v: string) => innerMirror(JSON.parse(v))
 	}
-
-	return innerDefaults
 }
 
-// Build-time: freeze one ObjectString/ArrayString inner schema into a check
-// (reconstructCheck source) + decode mirror (exact-mirror) + optional baked
-// default template. Returns undefined when the inner can't be frozen (hof
-// sanitize, non-reproducible externals/unions, non-preallocatable / array-nested
-// default) → the seal coverage gate then refuses the build.
+// Shared CAPTURE ritual (build-time, NOT a seal gate): Build → externalsMatch →
+// reconstructCheck → the frozen-check source parts. undefined if not freezable.
+function buildFrozenCheck(
+	build: CheckBuildResult | undefined,
+	node: any
+):
+	| {
+			identifier: string
+			checkDefs: string
+			checkValue: string
+			external: boolean
+	  }
+	| undefined {
+	if (!build?.functions?.length || !build.entry) return
+	const vars = build.external.variables
+	if (!externalsMatch(collectExternals(node), vars)) return
+	const cr = reconstructCheck(build)
+	return {
+		identifier: build.external.identifier,
+		checkDefs: cr.defs,
+		checkValue: cr.value,
+		external: vars.length > 0
+	}
+}
+
+// Build time: freeze one ObjectString/ArrayString inner schema into a check
+// (reconstructCheck source) + decode mirror (exact-mirror)
 function captureInnerCodec(
 	inner: any,
 	open: number,
-	inArray: boolean,
 	sanitize: ValidatorOptions['sanitize']
 ): NonNullable<CapturedValidator['innerCodecs']>[number] | undefined {
-	let identifier: string
-	let checkDefs: string
-	let checkValue: string
-	let external: boolean
+	let cf: ReturnType<typeof buildFrozenCheck>
 	try {
-		const b = Build(inner) as unknown as CheckBuildResult
-		if (!b?.functions?.length || !b.entry) return undefined
-		const vars = b.external.variables
-		if (!externalsMatch(collectExternals(inner), vars)) return undefined
-		const cr = reconstructCheck(b)
-		identifier = b.external.identifier
-		checkDefs = cr.defs
-		checkValue = cr.value
-		external = vars.length > 0
+		cf = buildFrozenCheck(Build(inner) as unknown as CheckBuildResult, inner)
 	} catch {
-		return undefined
+		return
 	}
+	if (!cf) return
 
 	let decode: CapturedMirror
 	try {
@@ -695,35 +681,33 @@ function captureInnerCodec(
 			decode: true,
 			emit: true
 		}) as { source?: string; externals?: any }
-		if (typeof emitted?.source !== 'string') return undefined
+
+		if (typeof emitted?.source !== 'string') return
 		const ext = emitted.externals
-		if (ext?.hof) return undefined
-		if (ext?.codecs && !Capture.mirrorCodecs(inner, ext.codecs))
-			return undefined
+
+		if (ext?.hof) return
+		if (ext?.codecs && !Capture.mirrorCodecs(inner, ext.codecs)) return
+
 		let u: { identifier: string; code: string }[][] | undefined
 		if (ext?.unions && ext.unions.length) {
 			u = Capture.mirrorUnions(inner, ext.unions)
-			if (!u) return undefined
+			if (!u) return
 		}
-		// exact-mirror emits a (d)=>(v)=> FACTORY when it has codecs/unions, else
-		// a plain (v)=> cleaner — track which so reconstruction calls it correctly
-		const hasExternals = !!(ext?.codecs || u)
-		decode = { source: emitted.source, hasExternals, u }
+
+		decode = {
+			source: emitted.source,
+			hasExternals: !!(ext?.codecs || u),
+			u
+		}
 	} catch {
-		return undefined
+		return
 	}
 
-	let pod: Record<string, unknown> | undefined
-	if (hasProperty('default', inner)) {
-		// exact-mirror drops inner defaults — bake an object-default template. A
-		// non-object-shaped / non-preallocatable / array-nested inner default → refuse.
-		if (inArray) return undefined
-		const pre = verifyPreallocatableDefault(inner)
-		if (!pre || pre.pod === undefined) return undefined
-		pod = pre.pod
-	}
+	// inner defaults aren't reconstructed under seal → refuse this slot so the
+	// route degrades to TypeBox (which fills the default at runtime)
+	if (hasProperty('default', inner)) return
 
-	return { open, identifier, checkDefs, checkValue, external, decode, pod }
+	return { open, ...cf, decode }
 }
 
 function sourceOnlyValidator(schema: TSchema): BaseTypeBoxValidator {
@@ -767,11 +751,6 @@ export class TypeBoxValidator<
 	precomputeSafe = false
 	#precomputedDefault: unknown
 	#precomputedObjectDefault: Record<string, unknown> | undefined
-	// sealed-only: ObjectString/ArrayString inner defaults, applied at their
-	// value-path in the From default step (the OBJECT branch)
-	#innerDefaults:
-		| Array<{ path: string[]; pod: Record<string, unknown> }>
-		| undefined
 
 	#noValidate!: boolean
 	#isForm = false
@@ -809,9 +788,7 @@ export class TypeBoxValidator<
 				) as any
 			)[name]
 		else if (options?.models && typeof name !== 'string') {
-			schemaHasRef = frozen
-				? frozen.r === 1
-				: schemaContainsRef(schema)
+			schemaHasRef = frozen ? frozen.r === 1 : schemaContainsRef(schema)
 			if (schemaHasRef) {
 				const id = `inline@${++inlineRefId}`
 				schema = (
@@ -824,6 +801,11 @@ export class TypeBoxValidator<
 		}
 
 		const isFrozen = this.#reconstruct(options, frozen)
+
+		if (globalThis.ELY_SEALED && !frozen && options?.aot && options.slot)
+			throw new Error(
+				`[elysia] sealed build is missing a frozen validator for ${options.aot.method} ${options.aot.path} (${options.slot}) — a route outside the AOT manifest (mounted Elysia sub-app, deferred plugin, or registerFrom mismatch).`
+			)
 
 		this.schema = (
 			isFrozen && !this.hasCodec
@@ -838,11 +820,7 @@ export class TypeBoxValidator<
 		)
 			this.schema = nonAdditionalProperties(this.schema as any) as T
 
-		// On a sealed build every validator is frozen (the coverage assertion
-		// guarantees it), so this whole JIT/capture block — Compile, HasCodec,
-		// sourceOnlyValidator and #maybeCapture — DCEs out, dropping typebox/compile
-		// + the capture-only refs.
-		if (!isFrozen && !globalThis.__ELYSIA_SEALED__) {
+		if (!isFrozen && !globalThis.ELY_SEALED) {
 			const capturing = Capture.isCapturing()
 			this.tb = capturing
 				? sourceOnlyValidator(this.schema as TSchema)
@@ -866,7 +844,7 @@ export class TypeBoxValidator<
 				frozen.pod !== undefined
 					? (Object.freeze(frozen.pod) as Record<string, unknown>)
 					: undefined
-		} else if (!globalThis.__ELYSIA_SEALED__) {
+		} else if (!globalThis.ELY_SEALED) {
 			this.precomputeSafe =
 				this.hasDefault && isPrecomputeSafe(this.schema as any)
 
@@ -887,19 +865,12 @@ export class TypeBoxValidator<
 		this.#isForm = originalElyTyp === ELYSIA_TYPES.Form
 		this.#hasOptional = !!(this.schema as any)?.['~optional']
 
-		// Tier 2: rewrite ObjectString/ArrayString codec closures to be
-		// typebox-free, BEFORE the parent check / decode mirror are instantiated
-		// below (they re-read these live nodes). Only present on a sealed frozen build.
-		if (frozen?.ic) {
-			const innerDefaults = reconstructInnerCodecs(frozen.ic, this.schema)
-			if (innerDefaults.length) this.#innerDefaults = innerDefaults
-		}
+		if (frozen?.ic) reconstructInnerCodecs(frozen.ic, this.schema)
 
 		if (isFrozen && frozen!.cm) {
 			const both = instantiateFrozenBoth(frozen!, this.schema, schema)
 			this.reconstructedCheck = both.check
-			this.Clean =
-				options?.normalize === false ? undefined : both.clean
+			this.Clean = options?.normalize === false ? undefined : both.clean
 		} else {
 			if (isFrozen)
 				this.reconstructedCheck = frozen!.c!(
@@ -913,7 +884,7 @@ export class TypeBoxValidator<
 						: // `normalize:'typebox'` is refused on a sealed build (it
 							// uses TypeBox `Clean`), so this arm DCEs out when sealed
 							options?.normalize === 'typebox'
-							? globalThis.__ELYSIA_SEALED__
+							? globalThis.ELY_SEALED
 								? undefined
 								: (value) => Clean(this.schema, value)
 							: this.#setupMirror(schema, options, frozen)
@@ -924,10 +895,7 @@ export class TypeBoxValidator<
 				console.warn(schema)
 				console.warn(error)
 
-				if (
-					options?.normalize !== false &&
-					!globalThis.__ELYSIA_SEALED__
-				)
+				if (options?.normalize !== false && !globalThis.ELY_SEALED)
 					this.Clean = (value) => Clean(this.schema, value)
 			}
 		}
@@ -940,10 +908,11 @@ export class TypeBoxValidator<
 			options?.normalize !== false &&
 			options?.normalize !== 'typebox'
 		)
-			this.#decodeMirror = this.#setupDecodeMirror(
+			this.#decodeMirror = this.#setupCodecMirror(
 				this.schema as TSchema,
 				options,
-				frozen
+				frozen,
+				'decode'
 			)
 
 		if (
@@ -954,21 +923,26 @@ export class TypeBoxValidator<
 			options?.normalize !== false &&
 			options?.normalize !== 'typebox'
 		)
-			this.#encodeMirror = this.#setupEncodeMirror(
+			this.#encodeMirror = this.#setupCodecMirror(
 				this.schema as TSchema,
 				options,
-				frozen
+				frozen,
+				'encode'
 			)
 
-		if (!this.#noValidate) this.#findCustomError = this.#buildFindCustomError(frozen)
+		if (!this.#noValidate)
+			this.#findCustomError = this.#buildFindCustomError(frozen)
 
-		// Record this validator's runtime need profile for the seal coverage
-		// assertion (capture-only).
 		if (Capture.isCapturing())
 			if (options?.aot && options.slot)
 				if (options.normalize === 'typebox')
 					Capture.unfreezable(
-						`${options.aot.method} ${options.aot.path} (${options.slot}): normalize:'typebox' uses TypeBox Clean`
+						"normalize:'typebox' uses TypeBox Clean",
+						{
+							method: options.aot.method,
+							path: options.aot.path,
+							slot: options.slot
+						}
 					)
 				else
 					Capture.need({
@@ -979,13 +953,9 @@ export class TypeBoxValidator<
 						mirror: this.Clean !== undefined,
 						decode: this.#decodeMirror !== undefined,
 						encode: this.#encodeMirror !== undefined,
-						// defaults inside ObjectString/ArrayString inners are baked
-						// into `ic.pod`, not the parent's `ps` — exclude them
 						hasDefault:
 							this.hasDefault &&
 							hasDefaultOutsideStringCodec(this.schema as any),
-						// each ObjectString/ArrayString inner must freeze (Tier 2);
-						// a short/absent `ic` → refuse (assertSealCoverage)
 						innerCodecs: collectStringCodecNodes(this.schema as any)
 							.length
 					})
@@ -999,10 +969,12 @@ export class TypeBoxValidator<
 	#buildFindCustomError(
 		frozen?: FrozenValidator
 	):
-		| ((value: unknown) => { instancePath: string; error: unknown } | undefined)
+		| ((
+				value: unknown
+		  ) => { instancePath: string; error: unknown } | undefined)
 		| undefined {
 		const nodes = collectCustomErrorNodes(this.schema as any, '', [])
-		if (!nodes.length) return undefined
+		if (!nodes.length) return
 
 		const frozenByPath = frozen?.ce
 			? new Map(frozen.ce.map((e) => [e.p, e]))
@@ -1020,11 +992,11 @@ export class TypeBoxValidator<
 			const fe = frozenByPath?.get(path)
 			if (fe)
 				try {
-					check = fe.c(fe.e ? collectExternals(node) : EMPTY_EXTERNALS)
+					check = fe.c(
+						fe.e ? collectExternals(node) : EMPTY_EXTERNALS
+					)
 				} catch {}
-			// sealed: every custom-error node is frozen (`ce` channel), so this
-			// TypeBox `Compile` fallback DCEs out
-			else if (!globalThis.__ELYSIA_SEALED__)
+			else if (!globalThis.ELY_SEALED)
 				try {
 					const c = Compile(node)
 					check = (v) => c.Check(v)
@@ -1033,16 +1005,14 @@ export class TypeBoxValidator<
 			if (check) checks.push({ path, check, error: node.error })
 		}
 
-		if (!checks.length) return undefined
+		if (!checks.length) return
 
-		// deepest (most specific) field first; root ('') last
 		checks.sort((a, b) => b.path.length - a.path.length)
 
 		return (value) => {
 			for (const c of checks)
 				if (!c.check(subValueAt(value, c.path)))
 					return { instancePath: c.path, error: c.error }
-			return undefined
 		}
 	}
 
@@ -1087,7 +1057,7 @@ export class TypeBoxValidator<
 
 		// On a sealed build every mirror is in the manifest, so the exact-mirror
 		// JIT/capture fallback DCEs out.
-		if (!globalThis.__ELYSIA_SEALED__ && aot && slot) {
+		if (!globalThis.ELY_SEALED && aot && slot) {
 			if (Capture.isCapturing())
 				try {
 					const emitted = createMirror(schema, {
@@ -1100,35 +1070,35 @@ export class TypeBoxValidator<
 						const ext = emitted.externals
 
 						if (!ext)
-							Capture.mirror({
-								method: aot.method,
-								path: aot.path,
-								slot,
-								mirror: {
-									source: emitted.source,
-									hasExternals: false
+							Capture.set(
+								{ method: aot.method, path: aot.path, slot },
+								{
+									mirror: {
+										source: emitted.source,
+										hasExternals: false
+									}
 								}
-							})
+							)
 						else if (ext.unions && !ext.hof) {
 							const u = Capture.mirrorUnions(schema, ext.unions)
 
 							if (u)
-								Capture.mirror({
-									method: aot.method,
-									path: aot.path,
-									slot,
-									mirror: {
-										source: emitted.source,
-										hasExternals: true,
-										u
+								Capture.set(
+									{ method: aot.method, path: aot.path, slot },
+									{
+										mirror: {
+											source: emitted.source,
+											hasExternals: true,
+											u
+										}
 									}
-								})
+								)
 						}
 					}
 				} catch {}
 		}
 
-		return globalThis.__ELYSIA_SEALED__
+		return globalThis.ELY_SEALED
 			? undefined
 			: (createMirror(schema, {
 					Compile,
@@ -1136,57 +1106,81 @@ export class TypeBoxValidator<
 				}) as (value: unknown) => unknown)
 	}
 
-	#setupDecodeMirror(
+	// decode (request) / encode (response) codec mirror. Frozen → instantiate
+	// lazily (with a JIT fallback when unsealed); else capture the emit + JIT.
+	#setupCodecMirror(
 		schema: TSchema,
-		options?: ValidatorOptions,
-		frozen?: FrozenValidator
+		options: ValidatorOptions | undefined,
+		frozen: FrozenValidator | undefined,
+		dir: 'decode' | 'encode'
 	): ((value: unknown) => unknown) | undefined {
 		const aot = options?.aot
 		const slot = options?.slot
+		const frozenMirror = dir === 'decode' ? frozen?.dm : frozen?.em
 
-		if (aot && slot && frozen?.dm) {
-			const dm = frozen.dm
-			let decode: ((value: unknown) => unknown) | undefined
+		if (aot && slot && frozenMirror) {
+			const m = frozenMirror
+			let run: ((value: unknown) => unknown) | undefined
 
 			return (value: unknown) => {
-				if (decode === undefined)
+				if (run === undefined)
 					try {
-						decode = instantiateFrozenDecodeMirror(dm, schema)
+						run = instantiateFrozenDecodeMirror(m, schema, dir)
 					} catch (e) {
-						// sealed: the frozen decode mirror is guaranteed (coverage).
-						// Form B so the typebox/value DecodeUnsafe import tree-shakes.
-						if (!globalThis.__ELYSIA_SEALED__)
-							decode = (v) => {
-								// @ts-ignore
-								const decoded = DecodeUnsafe(
-									nullObject(),
-									schema,
-									v
-								)
-								return this.Clean
-									? this.Clean(decoded)
-									: decoded
-							}
+						// form-B gate: the typebox fallback (DecodeUnsafe/Encode) MUST
+						// sit inside `if (!ELY_SEALED)` so it DCEs under seal — form A
+						// (`if (sealed) throw; …use…`) RETAINS the typebox import.
+						if (!globalThis.ELY_SEALED)
+							run =
+								dir === 'decode'
+									? (v) => {
+											// @ts-ignore
+											const decoded = DecodeUnsafe(
+												nullObject(),
+												schema,
+												v
+											)
+											return this.Clean
+												? this.Clean(decoded)
+												: decoded
+										}
+									: (v) => {
+											const out = Encode(schema, v as any)
+											return this.Clean
+												? this.Clean(out)
+												: out
+										}
 						else throw e
 					}
 
-				return decode(value)
+				return run(value)
 			}
 		}
 
-		// sealed: the decode JIT/capture fallback DCEs out (see #setupMirror).
+		// `Compile` MUST stay INLINE inside the `!ELY_SEALED` gates below — hoisting
+		// it into a shared const makes it unconditionally reachable and defeats the
+		// sealed typebox/compile DCE (caught by seal-bundle.test.ts). Only the
+		// (typebox-free) direction flag is hoisted.
+		const dirOpt = dir === 'decode' ? { decode: true } : { encode: true }
+
+		// decode freezes non-response slots, encode freezes response slots
+		const captureSlot =
+			dir === 'decode'
+				? !slot?.startsWith('response')
+				: !!slot?.startsWith('response')
+
 		if (
-			!globalThis.__ELYSIA_SEALED__ &&
+			!globalThis.ELY_SEALED &&
 			aot &&
 			slot &&
 			Capture.isCapturing() &&
-			!slot.startsWith('response')
+			captureSlot
 		)
 			try {
 				const emitted = createMirror(schema, {
 					Compile,
 					sanitize: options?.sanitize,
-					decode: true,
+					...dirOpt,
 					emit: true
 				}) as { source?: string; externals?: any }
 
@@ -1196,7 +1190,7 @@ export class TypeBoxValidator<
 					if (
 						ext?.codecs &&
 						!ext.hof &&
-						Capture.mirrorCodecs(schema, ext.codecs)
+						Capture.mirrorCodecs(schema, ext.codecs, dir)
 					) {
 						let u:
 							| { identifier: string; code: string }[][]
@@ -1208,129 +1202,42 @@ export class TypeBoxValidator<
 							if (!u) freezable = false
 						}
 
-						if (freezable)
-							Capture.mirrorDecode({
-								method: aot.method,
-								path: aot.path,
-								slot,
-								mirror: {
-									source: emitted.source,
-									hasExternals: true,
-									u
-								}
-							})
-					}
-				}
-			} catch {}
-
-		if (!globalThis.__ELYSIA_SEALED__)
-			try {
-				return createMirror(schema, {
-					Compile,
-					sanitize: options?.sanitize,
-					decode: true
-				}) as (value: unknown) => unknown
-			} catch {}
-
-		return undefined
-	}
-
-	#setupEncodeMirror(
-		schema: TSchema,
-		options?: ValidatorOptions,
-		frozen?: FrozenValidator
-	): ((value: unknown) => unknown) | undefined {
-		const aot = options?.aot
-		const slot = options?.slot
-
-		if (aot && slot && frozen?.em) {
-			const em = frozen.em
-			let encode: ((value: unknown) => unknown) | undefined
-
-			return (value: unknown) => {
-				if (encode === undefined)
-					try {
-						encode = instantiateFrozenEncodeMirror(em, schema)
-					} catch (e) {
-						// sealed: the frozen encode mirror is guaranteed (coverage).
-						// Form B so the typebox/value `Encode` import tree-shakes.
-						if (!globalThis.__ELYSIA_SEALED__)
-							encode = (v) => {
-								const out = Encode(schema, v as any)
-								return this.Clean ? this.Clean(out) : out
+						if (freezable) {
+							const mirror = {
+								source: emitted.source,
+								hasExternals: true,
+								u
 							}
-						else throw e
-					}
-
-				return encode(value)
-			}
-		}
-
-		// sealed: the encode JIT/capture fallback DCEs out (see #setupMirror).
-		if (
-			!globalThis.__ELYSIA_SEALED__ &&
-			aot &&
-			slot &&
-			Capture.isCapturing() &&
-			slot.startsWith('r')
-		)
-			try {
-				const emitted = createMirror(schema, {
-					Compile,
-					sanitize: options?.sanitize,
-					encode: true,
-					emit: true
-				}) as { source?: string; externals?: any }
-
-				if (typeof emitted?.source === 'string') {
-					const ext = emitted.externals
-
-					if (
-						ext?.codecs &&
-						!ext.hof &&
-						Capture.mirrorCodecs(schema, ext.codecs, 'encode')
-					) {
-						let u:
-							| { identifier: string; code: string }[][]
-							| undefined
-						let freezable = true
-
-						if (ext.unions && ext.unions.length) {
-							u = Capture.mirrorUnions(schema, ext.unions)
-							if (!u) freezable = false
+							Capture.set(
+								{ method: aot.method, path: aot.path, slot },
+								dir === 'decode'
+									? { decodeMirror: mirror }
+									: { encodeMirror: mirror }
+							)
 						}
-
-						if (freezable)
-							Capture.mirrorEncode({
-								method: aot.method,
-								path: aot.path,
-								slot,
-								mirror: {
-									source: emitted.source,
-									hasExternals: true,
-									u
-								}
-							})
 					}
 				}
 			} catch {}
 
-		if (!globalThis.__ELYSIA_SEALED__)
+		if (!globalThis.ELY_SEALED)
 			try {
 				return createMirror(schema, {
 					Compile,
 					sanitize: options?.sanitize,
-					encode: true
+					...dirOpt
 				}) as (value: unknown) => unknown
 			} catch {}
-
-		return undefined
 	}
 
 	Check(value: Static<T>): boolean {
-		return this.reconstructedCheck
-			? this.reconstructedCheck(value)
-			: this.tb!.Check(value)
+		if (this.reconstructedCheck) return this.reconstructedCheck(value)
+
+		if (globalThis.ELY_SEALED)
+			throw new Error(
+				'[elysia] sealed build: a validator has no frozen check, a route outside the AOT manifest (mounted Elysia sub-app, deferred plugin, or registerFrom mismatch)'
+			)
+
+		return this.tb!.Check(value)
 	}
 
 	#reconstruct(
@@ -1339,6 +1246,7 @@ export class TypeBoxValidator<
 	): boolean {
 		if (!options?.aot || !options.slot || options.normalize === 'typebox')
 			return false
+
 		if (!frozen?.c && !frozen?.cm) return false
 
 		this.isAsync = frozen.a === 1
@@ -1356,101 +1264,83 @@ export class TypeBoxValidator<
 		const slot = options?.slot
 		if (!aot || !slot || !Capture.isCapturing()) return
 
-		// form-B gate: under seal the build-only default verifier (and its TypeBox
-		// `Default` probes) tree-shakes out — capture never runs at sealed runtime.
-		if (this.hasDefault && !globalThis.__ELYSIA_SEALED__) {
+		if (this.hasDefault && !globalThis.ELY_SEALED) {
 			const pre = verifyPreallocatableDefault(this.schema as TSchema)
 			if (pre)
-				Capture.precompute({
-					method: aot.method,
-					path: aot.path,
-					slot,
-					precomputedDefault: pre.pd,
-					precomputedObjectDefault: pre.pod
-				})
+				Capture.set(
+					{ method: aot.method, path: aot.path, slot },
+					{
+						precomputeSafe: true,
+						precomputedDefault: pre.pd,
+						precomputedObjectDefault: pre.pod
+					}
+				)
 		}
 
-		// Freeze a per-field check for each custom-error field.
+		if (hasUnlocatableCustomError(this.schema as any))
+			Capture.unfreezable(
+				'custom error on an array element or union member — ' +
+					'cannot be path-located under seal',
+				{ method: aot.method, path: aot.path, slot }
+			)
+
 		const ceNodes = collectCustomErrorNodes(this.schema as any, '', [])
 		if (ceNodes.length) {
-			const entries: NonNullable<
-				Parameters<typeof Capture.customErrors>[0]['entries']
-			> = []
+			const entries: NonNullable<CapturedValidator['customErrors']> = []
 			for (const { path, node } of ceNodes)
 				try {
-					const b = Build(node) as unknown as CheckBuildResult
-					if (!b?.functions?.length || !b.entry) continue
-					const vars = b.external.variables
-					if (!externalsMatch(collectExternals(node), vars)) continue
-					const cr = reconstructCheck(b)
-					entries.push({
-						path,
-						identifier: b.external.identifier,
-						checkDefs: cr.defs,
-						checkValue: cr.value,
-						external: vars.length > 0
-					})
+					const cf = buildFrozenCheck(
+						Build(node) as unknown as CheckBuildResult,
+						node
+					)
+					if (cf) entries.push({ path, ...cf })
 				} catch {}
 			if (entries.length)
-				Capture.customErrors({
-					method: aot.method,
-					path: aot.path,
-					slot,
-					entries
-				})
+				Capture.set(
+					{ method: aot.method, path: aot.path, slot },
+					{ customErrors: entries }
+				)
 		}
 
-		// Freeze each ObjectString/ArrayString inner codec so the sealed runtime
-		// can reconstruct it typebox-free. If any inner can't freeze, emit a SHORT
-		// `ic` (break) — the `innerCodecs` coverage need then refuses the seal.
-		// form-B `!sealed` gate: build-only, pulls typebox/value + createMirror.
-		if (!globalThis.__ELYSIA_SEALED__) {
+		if (!globalThis.ELY_SEALED) {
 			const stringCodecs = collectStringCodecNodes(this.schema as any)
 			if (stringCodecs.length) {
-				const entries: NonNullable<
-					CapturedValidator['innerCodecs']
-				> = []
-				for (const { inner, open, inArray } of stringCodecs) {
+				const entries: NonNullable<CapturedValidator['innerCodecs']> =
+					[]
+
+				for (const { inner, open } of stringCodecs) {
 					const entry = captureInnerCodec(
 						inner,
 						open,
-						inArray,
 						options?.sanitize
 					)
 					if (!entry) break
 					entries.push(entry)
 				}
+
 				if (entries.length === stringCodecs.length)
-					Capture.innerCodecs({
-						method: aot.method,
-						path: aot.path,
-						slot,
-						entries
-					})
+					Capture.set(
+						{ method: aot.method, path: aot.path, slot },
+						{ innerCodecs: entries }
+					)
 			}
 		}
 
 		// @ts-expect-error private property
 		const build = this.tb!.buildResult as CheckBuildResult
-		if (!build?.functions?.length || !build.entry) return
+		const cf = buildFrozenCheck(build, this.schema)
+		if (!cf) return
 
-		const variables = build.external.variables
-		if (!externalsMatch(collectExternals(this.schema), variables)) return
-
-		const r = reconstructCheck(build)
-		Capture.validator({
-			method: aot.method,
-			path: aot.path,
-			slot,
-			identifier: build.external.identifier,
-			checkDefs: r.defs,
-			checkValue: r.value,
-			external: variables.length > 0,
-			async: variables.some(isAsyncPredicate),
-			hasDefault: this.hasDefault,
-			hasCodec: this.hasCodec,
-			hasRef
-		})
+		Capture.set(
+			{ method: aot.method, path: aot.path, slot },
+			{
+				...cf,
+				async: build.external.variables.some(isAsyncPredicate),
+				hasDefault: this.hasDefault,
+				hasCodec: this.hasCodec,
+				hasRef
+			}
+		)
 	}
 
 	#dropCompiledSource(): void {
@@ -1461,20 +1351,17 @@ export class TypeBoxValidator<
 	}
 
 	Errors(value: unknown): TLocalizedValidationError[] {
-		// sealed: TypeBox `Errors` is dropped — production errors come from the
-		// baked custom-error locator (error.ts), so the list degrades to empty
-		return globalThis.__ELYSIA_SEALED__ ? [] : Errors(this.schema, value)
+		return globalThis.ELY_SEALED ? [] : Errors(this.schema, value)
 	}
 
 	Decode(value: Static<T>): StaticDecode<T> {
-		// frozen validators decode via the baked decode mirror, never this method
-		return globalThis.__ELYSIA_SEALED__
+		return globalThis.ELY_SEALED
 			? (value as any)
 			: Decode(this.schema, value)
 	}
 
 	Encode(value: Static<T>): StaticEncode<T> {
-		return this.hasCodec && !globalThis.__ELYSIA_SEALED__
+		return this.hasCodec && !globalThis.ELY_SEALED
 			? Encode(this.schema, value)
 			: (value as any)
 	}
@@ -1510,13 +1397,12 @@ export class TypeBoxValidator<
 				return out as any
 			}
 
-			// sealed: codec-response validators always carry a frozen encode
-			// mirror (above), so this TypeBox Encode fallback DCEs out
-			if (!globalThis.__ELYSIA_SEALED__) {
+			if (!globalThis.ELY_SEALED) {
 				const out = this.#noValidate
 					? // @ts-ignore EncodeUnsafe returns unknown
 						(EncodeUnsafe(nullObject(), this.schema, value) as any)
 					: Encode(this.schema, value)
+
 				return this.Clean ? (this.Clean(out) as any) : out
 			}
 
@@ -1538,7 +1424,7 @@ export class TypeBoxValidator<
 		}
 	}
 
-	#markForm(value: unknown): void {
+	#markForm(value: unknown) {
 		if (
 			this.#isForm &&
 			value !== null &&
@@ -1551,7 +1437,7 @@ export class TypeBoxValidator<
 			})
 	}
 
-	#unmarkForm(value: unknown): void {
+	#unmarkForm(value: unknown) {
 		if (
 			this.#isForm &&
 			value !== null &&
@@ -1568,48 +1454,13 @@ export class TypeBoxValidator<
 			: this.FromSync(value, type)
 	}
 
-	// Apply baked ObjectString/ArrayString inner defaults at their value-paths.
-	// Only the OBJECT-branch case (the field is a present object) — runs in the
-	// default step BEFORE Check (matching TypeBox Default→Check order).
-	#applyInnerDefaults(value: any): any {
-		if (this.#innerDefaults === undefined) return value
-
-		for (const { path, pod } of this.#innerDefaults) {
-			if (path.length === 0) {
-				if (
-					value &&
-					typeof value === 'object' &&
-					!Array.isArray(value)
-				)
-					value = applyPrecomputed(pod, value)
-				continue
-			}
-
-			let cur = value
-			for (let i = 0; i < path.length - 1; i++) {
-				if (cur === null || typeof cur !== 'object') {
-					cur = undefined
-					break
-				}
-				cur = cur[path[i]]
-			}
-			if (cur === null || typeof cur !== 'object') continue
-
-			const key = path[path.length - 1]!
-			const target = cur[key]
-			if (target && typeof target === 'object' && !Array.isArray(target))
-				cur[key] = applyPrecomputed(pod, target)
-		}
-
-		return value
-	}
-
-	#cloneSharedDefault(): unknown {
+	// Apply baked ObjectString/ArrayString inner defaults at their value-paths
+	#cloneSharedDefault() {
 		const value = this.#precomputedDefault
 		if (value === null || typeof value !== 'object') return value
 
 		// Always deep-clone: the shared template (baked `pd` or the runtime
-		// snapshot) must yield an independent instance per request.
+		// snapshot) must yield an independent instance per request
 		return structuredClone(value)
 	}
 
@@ -1617,7 +1468,7 @@ export class TypeBoxValidator<
 		value: Static<T>
 	): { bypass: true; value: Static<T> } | undefined {
 		const schema = this.schema as any
-		if (!schema?.['~optional']) return undefined
+		if (!schema?.['~optional']) return
 
 		if (value === undefined || value === null)
 			return {
@@ -1634,8 +1485,6 @@ export class TypeBoxValidator<
 			Object.keys(value as object).length === 0
 		)
 			return { bypass: true, value: nullObject() as Static<T> }
-
-		return undefined
 	}
 
 	async FromAsync(value: Static<T>, type?: string): Promise<Static<T>> {
@@ -1652,11 +1501,9 @@ export class TypeBoxValidator<
 						this.#precomputedObjectDefault,
 						value as any
 					) as any
-			} else if (!globalThis.__ELYSIA_SEALED__)
+			} else if (!globalThis.ELY_SEALED)
 				value = Default(this.schema, value) as any
 		}
-
-		if (this.#innerDefaults) value = this.#applyInnerDefaults(value)
 
 		if (this.#hasOptional) {
 			const bypass = this.optionalBypass(value)
@@ -1682,7 +1529,7 @@ export class TypeBoxValidator<
 
 			if (this.#decodeMirror)
 				value = this.#decodeMirror(value) as Static<T>
-			else if (!globalThis.__ELYSIA_SEALED__)
+			else if (!globalThis.ELY_SEALED)
 				try {
 					value = DecodeUnsafe(
 						nullObject() as {},
@@ -1736,11 +1583,9 @@ export class TypeBoxValidator<
 						this.#precomputedObjectDefault,
 						value as any
 					) as Static<T>
-			} else if (!globalThis.__ELYSIA_SEALED__)
+			} else if (!globalThis.ELY_SEALED)
 				value = Default(this.schema, value) as Static<T>
 		}
-
-		if (this.#innerDefaults) value = this.#applyInnerDefaults(value)
 
 		if (this.#hasOptional) {
 			const bypass = this.optionalBypass(value)
@@ -1753,9 +1598,10 @@ export class TypeBoxValidator<
 			// See FromAsync for the rationale on skipping `Convert`
 			if (!this.#noValidate && !this.Check(value))
 				throw this.#verr(value, type)
+
 			if (this.#decodeMirror)
 				value = this.#decodeMirror(value) as Static<T>
-			else if (!globalThis.__ELYSIA_SEALED__)
+			else if (!globalThis.ELY_SEALED)
 				try {
 					value = DecodeUnsafe(
 						nullObject() as {},
@@ -1812,15 +1658,19 @@ export class TypeBoxValidatorCache {
 	}
 
 	static ignoreMeta(k: string, v: unknown): any {
-		if (TypeBoxValidatorCache.ignoreKeys.has(k)) return undefined
+		if (TypeBoxValidatorCache.ignoreKeys.has(k)) return
+
 		if (typeof v === 'function') return TypeBoxValidatorCache.fnKey(v)
+
 		if (v && typeof v === 'object' && (v as any)['~optional'] === true) {
 			const out = nullObject() as Record<string, unknown>
 			for (const key in v as Record<string, unknown>)
 				out[key] = (v as Record<string, unknown>)[key]
+
 			out['~optional'] = true
 			return out
 		}
+
 		return v
 	}
 
@@ -1829,10 +1679,7 @@ export class TypeBoxValidatorCache {
 			return false
 		seen.add(schema)
 
-		if (
-			schema['~refine'] ||
-			schema['~elyTyp'] === ELYSIA_TYPES.NoValidate
-		)
+		if (schema['~refine'] || schema['~elyTyp'] === ELYSIA_TYPES.NoValidate)
 			return true
 
 		const props = schema.properties
@@ -1852,13 +1699,17 @@ export class TypeBoxValidatorCache {
 			const arr = schema[k]
 			if (Array.isArray(arr))
 				for (const x of arr)
-					if (TypeBoxValidatorCache.#isOpaqueType(x, seen)) return true
+					if (TypeBoxValidatorCache.#isOpaqueType(x, seen))
+						return true
 		}
 
 		if (
 			schema.additionalProperties &&
 			typeof schema.additionalProperties === 'object' &&
-			TypeBoxValidatorCache.#isOpaqueType(schema.additionalProperties, seen)
+			TypeBoxValidatorCache.#isOpaqueType(
+				schema.additionalProperties,
+				seen
+			)
 		)
 			return true
 
@@ -1868,7 +1719,8 @@ export class TypeBoxValidatorCache {
 		const pp = schema.patternProperties
 		if (pp)
 			for (const k in pp)
-				if (TypeBoxValidatorCache.#isOpaqueType(pp[k], seen)) return true
+				if (TypeBoxValidatorCache.#isOpaqueType(pp[k], seen))
+					return true
 
 		return false
 	}
@@ -1897,11 +1749,10 @@ export class TypeBoxValidatorCache {
 	#meta(schema: TSchema): { special: boolean; key: string } {
 		if (this.#lastSchema === schema && this.#lastMeta) return this.#lastMeta
 
-		// sealed: this cache is bypassed for frozen validators (never reaches
-		// `#meta`), so the typebox/value `HasCodec` reference DCEs out
 		const special =
-			(globalThis.__ELYSIA_SEALED__ ? false : HasCodec(schema)) ||
+			(globalThis.ELY_SEALED ? false : HasCodec(schema)) ||
 			TypeBoxValidatorCache.#isOpaqueType(schema)
+
 		const meta = {
 			special,
 			key: special
@@ -1915,14 +1766,19 @@ export class TypeBoxValidatorCache {
 		return meta
 	}
 
-	constructor(gcTime = DEFAULT_GC_TIME) {
+	constructor(gcTime: number) {
 		this.#gcTime = gcTime
 	}
 
-	#scheduleClear(): void {
+	#scheduleClear() {
 		if (isCloudflareWorker) return
+
 		if (this.#gc) clearTimeout(this.#gc)
-		this.#gc = setTimeout(() => this.clear(), this.#gcTime)
+
+		this.#gc = setTimeout(
+			() => this.clear(),
+			this.#gcTime ?? DEFAULT_GC_TIME
+		)
 		;(this.#gc as any).unref?.()
 	}
 
@@ -1931,7 +1787,7 @@ export class TypeBoxValidatorCache {
 		coercions:
 			| CoerceOption[]
 			| typeof TypeBoxValidatorCache.EMPTY = TypeBoxValidatorCache.EMPTY
-	): BaseTypeBoxValidator | undefined {
+	) {
 		if (this.#referenceCache.has(schema)) {
 			const coercionsCache = this.#referenceCache.get(schema)!
 			if (coercionsCache.has(coercions))
@@ -1939,17 +1795,16 @@ export class TypeBoxValidatorCache {
 		}
 
 		const { special, key } = this.#meta(schema)
-		if (special) return undefined
+		if (special) return
 
 		if (this.#cache.has(key)) {
 			const coercionsCache = this.#cache.get(key)!
 			this.#cache.delete(key)
 			this.#cache.set(key, coercionsCache)
+
 			if (coercionsCache.has(coercions))
 				return coercionsCache.get(coercions)
 		}
-
-		return undefined
 	}
 
 	set(
@@ -1958,7 +1813,7 @@ export class TypeBoxValidatorCache {
 			| CoerceOption[]
 			| typeof TypeBoxValidatorCache.EMPTY = TypeBoxValidatorCache.EMPTY,
 		validator?: BaseTypeBoxValidator
-	): void {
+	) {
 		this.#scheduleClear()
 		const { special, key } = this.#meta(schema)
 
@@ -1992,11 +1847,12 @@ export class TypeBoxValidatorCache {
 		this.#referenceCache.set(schema, cache)
 	}
 
-	clear(): void {
+	clear() {
 		if (this.#gc) {
 			clearTimeout(this.#gc)
 			this.#gc = undefined
 		}
+
 		this.#cache.clear()
 		this.#referenceCache = new WeakMap()
 		deferCoercions()

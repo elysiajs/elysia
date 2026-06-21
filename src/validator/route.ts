@@ -40,7 +40,7 @@ function pickStandalone<K extends keyof RouteSchema>(
 	schemas: NonNullable<RouteValidatorOptions['schemas']> | undefined,
 	key: K
 ): AnySchema[] | undefined {
-	if (!schemas) return undefined
+	if (!schemas) return
 
 	const result: AnySchema[] = []
 

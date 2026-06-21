@@ -184,8 +184,7 @@ export function responseToSetHeaders(response: Response, set?: Context['set']) {
 			set.headers[key] = value
 	}
 
-	// ? `content-encoding` prevents response streaming — strip it once,
-	// whichever branch built `set.headers`.
+	// ? `content-encoding` prevents response streaming
 	if (set!.headers['content-encoding'])
 		delete set!.headers['content-encoding']
 

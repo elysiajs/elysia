@@ -62,8 +62,6 @@ export function clearContextCache() {
 	sharedEmptyContext = null
 }
 
-// Cached once per app (contextCache), NOT per-request — `headers` (null for the
-// shared-empty path) is the only field that varies between the two call sites.
 function buildEmptyContext(Base: any, headers: object | null = null) {
 	return class Context extends Base {
 		params?: Record<string, string>

@@ -649,8 +649,10 @@ export function compileHandler(
 			s += `rp${i}.resolve(${errBinding ?? ''})\n`
 		return s
 	}
+
 	const buildReport = (phase: TraceEvent): TraceReporter | undefined => {
-		if (!hasTrace) return undefined
+		if (!hasTrace) return
+
 		return {
 			resolveChild(name: string) {
 				let begin = ''
@@ -1219,8 +1221,6 @@ export function compileHandler(
 
 	code += '}'
 
-	// head | hoisted `_sc` decl | body — concatenated once (replaces the old
-	// `/*__SCHEDULE_DECL__*/` placeholder + `code.replace`).
 	code = head + scheduleDecl + code
 
 	if (factoryHelpers)

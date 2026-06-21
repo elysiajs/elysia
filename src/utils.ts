@@ -122,7 +122,7 @@ export function flattenChain(
 	keep?: (s: EventScope | undefined) => boolean,
 	stopAt?: ChainNode
 ): Partial<AppHook> | undefined {
-	if (!start || start === stopAt) return undefined
+	if (!start || start === stopAt) return
 	const result = nullObject() as Partial<AppHook>
 
 	const stack = flattenChainStack
@@ -169,7 +169,7 @@ export function flattenChainMemo(
 	root: object,
 	start: ChainNode | undefined
 ): Partial<AppHook> | undefined {
-	if (!start) return undefined
+	if (!start) return
 
 	let perRoot = flattenChainMemos.get(root)
 	if (!perRoot) {
@@ -183,7 +183,7 @@ export function flattenChainMemo(
 		perRoot.set(start, cached)
 	}
 
-	if (cached === emptyFlatten) return undefined
+	if (cached === emptyFlatten) return
 
 	return cloneFlatHook(cached)
 }
