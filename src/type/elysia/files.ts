@@ -67,7 +67,7 @@ function FilesWithProperty(options: FilesOptions) {
 
 	const refines: RefinesType<File[]> = []
 
-	if (options.minItems && options.minItems > 1)
+	if (options.minItems)
 		refines.push([
 			(value) =>
 				Array.isArray(value) && value.length >= options.minItems!,

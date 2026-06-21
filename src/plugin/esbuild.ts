@@ -1,3 +1,4 @@
+import { realpathSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import {
@@ -9,7 +10,16 @@ import {
 } from './core'
 import { rewriteTypeImport } from './treeshake'
 
+// eslint-disable-next-line sonarjs/single-character-alternation
 const SOURCE = /\.(c|m)?(t|j)sx?$/
+
+const realPath = (path: string): string => {
+	try {
+		return realpathSync(path)
+	} catch {
+		return path
+	}
+}
 
 /**
  * Elysia AOT build plugin
@@ -33,7 +43,11 @@ export const aot = (entry: string, options?: ElysiaAotOptions) => ({
 	async setup(build: any) {
 		const source = await generateCompiledModule(entry, options)
 		const entryPath = resolveEntry(entry)
+		const entryReal = realPath(entryPath)
 		const treeShake = options?.treeShake ?? true
+
+		const isEntry = (path: string): boolean =>
+			path === entryPath || realPath(path) === entryReal
 
 		build.onResolve({ filter: /^elysia\/compiled$/ }, () => ({
 			path: 'manifest',
@@ -50,14 +64,20 @@ export const aot = (entry: string, options?: ElysiaAotOptions) => ({
 			// Broad load: rewrite `t` imports in every source file, claiming only
 			// files we change (or the entry) so other plugins keep working.
 			build.onLoad({ filter: SOURCE }, async (args: { path: string }) => {
-				if (args.path.includes('/node_modules/')) return
+				const isEntryFile = isEntry(args.path)
+				const inModules = args.path.includes('/node_modules/')
+				if (inModules && !isEntryFile) return
+
 				const original = await readFile(args.path, 'utf8')
-				let contents = rewriteTypeImport(original, {
-					from: options?.registerFrom
-				})
-				if (args.path === entryPath)
+				let contents = inModules
+					? original
+					: rewriteTypeImport(original)
+
+				if (isEntryFile)
 					contents = `import 'elysia/compiled'\n${contents}`
+
 				if (contents === original) return
+
 				return { contents, loader: resolveLoader(args.path) }
 			})
 		else

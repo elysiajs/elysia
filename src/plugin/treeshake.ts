@@ -1,21 +1,3 @@
-// Build-time transform that makes `import { t } from 'elysia'` tree-shakeable.
-//
-// `t` is a runtime value, so `t.Object()` can't shake. But `elysia/type` is the
-// SAME 318-key surface as `t` (1:1), and `import * as t from 'elysia/type'` +
-// static `t.Object` DOES shake (esbuild rewrites static namespace access into
-// named imports). So we rewrite the IMPORT line only — every `t.Object()` call
-// site is untouched:
-//
-//   import { Elysia, t } from 'elysia'
-//        ↓
-//   import { Elysia } from 'elysia'
-//   import * as t from 'elysia/type'
-//
-// Because `elysia/type` is 1:1 with `t`, the rewrite is semantically identical —
-// it cannot break: `t.X`, `t[key]`, and `t` passed as a value all still resolve
-// (the namespace has every key); only static `t.X` additionally tree-shakes.
-// ponytail: 1:1 means no usage validation is needed — just split the import.
-
 export interface RewriteOptions {
 	/** Specifier the app imports `t` from. @default 'elysia' */
 	from?: string
@@ -34,9 +16,10 @@ export function rewriteTypeImport(
 
 	if (!code.includes(from)) return code
 
-	// `import <clause> from 'elysia'` at line start; skip `import type ...`
+	// `import <clause> from 'elysia'` at line start; skip `import type ...`.
+	// The trailing `(\\s*(?:with|assert)\\s*\\{[^}]*\\})?` consumes an optional
 	const importRe = new RegExp(
-		`(^|\\n)([ \\t]*)import\\s+(?!type\\b)([\\s\\S]*?)\\s+from\\s*(['"])${escape(from)}\\4`,
+		`(^|\\n)([ \\t]*)import\\s+(?!type\\b)([\\s\\S]*?)\\s+from\\s*(['"])${escape(from)}\\4(\\s*(?:with|assert)\\s*\\{[^}]*\\})?`,
 		'g'
 	)
 
@@ -44,7 +27,7 @@ export function rewriteTypeImport(
 	let m: RegExpExecArray | null
 
 	while ((m = importRe.exec(code))) {
-		const [full, lead, indent, clause] = m
+		const [full, lead, indent, clause, , attributes] = m
 
 		const braceStart = clause.indexOf('{')
 		if (braceStart === -1) continue // no named imports → nothing to split
@@ -77,9 +60,12 @@ export function rewriteTypeImport(
 						? `{ ${kept.join(', ')} }`
 						: ''
 
+		// Re-attach an import-attributes clause (`with`/`assert {...}`) to each
+		// split import so it is preserved, not orphaned onto the wrong line
+		const attr = attributes ?? ''
 		const lines: string[] = []
-		if (keptClause) lines.push(`import ${keptClause} from '${from}'`)
-		lines.push(`import * as ${alias} from '${typeFrom}'`)
+		if (keptClause) lines.push(`import ${keptClause} from '${from}'${attr}`)
+		lines.push(`import * as ${alias} from '${typeFrom}'${attr}`)
 
 		edits.push({
 			start: m.index,
@@ -96,7 +82,6 @@ export function rewriteTypeImport(
 	return out
 }
 
-// ponytail: runnable self-check — `bun run src/plugin/treeshake.ts`
 if (import.meta.main) {
 	const assert = (got: string, want: string, label: string) => {
 		if (got.trim() !== want.trim()) {
@@ -133,9 +118,10 @@ if (import.meta.main) {
 		`import type { t } from 'elysia'\nx`,
 		'import type → untouched'
 	)
-	// 1:1 means even dynamic/aliased usage is safe — still rewritten, still correct
 	assert(
-		rewriteTypeImport(`import { t } from 'elysia'\nconst x = t\nx.Object()`),
+		rewriteTypeImport(
+			`import { t } from 'elysia'\nconst x = t\nx.Object()`
+		),
 		`import * as t from 'elysia/type'\nconst x = t\nx.Object()`,
 		'aliased value still rewritten (1:1 safe)'
 	)

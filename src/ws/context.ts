@@ -26,8 +26,10 @@ function pickValidator(
 ) {
 	if (!validators) return
 	if (data instanceof ElysiaStatus) {
-		const v = validators[data.status]
-		if (v) return v
+		// A status response must be validated against its own status schema,
+		// not the default (200) one. If no validator is registered for this
+		// status, skip validation rather than reusing the 200 validator.
+		return validators[data.status]
 	}
 	return defaultValidator
 }

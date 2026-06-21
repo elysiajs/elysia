@@ -57,7 +57,8 @@ export const aot = (
 		transform(code, id) {
 			let out = code
 			if (treeShake && SOURCE.test(id) && !id.includes('node_modules'))
-				out = rewriteTypeImport(out, { from: options?.registerFrom })
+				out = rewriteTypeImport(out)
+
 			if (id === entryPath) out = `import 'elysia/compiled'\n${out}`
 			return out === code ? undefined : out
 		}

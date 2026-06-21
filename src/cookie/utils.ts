@@ -136,7 +136,8 @@ export async function parseCookieRaw(
 				}
 				if (decoded === false) throw new InvalidCookieSignature(name)
 				value = decoded
-			}
+			} else
+				throw new InvalidCookieSignature(name)
 		}
 
 		out[name] = maybeJsonDecode(value)
@@ -154,12 +155,14 @@ export function buildCookieJar(
 
 	for (const name in raw) {
 		const fieldDefaults = config.fields[name]?.defaults
-		store[name] = Object.assign(
-			nullObject(),
-			config.defaults,
-			fieldDefaults,
-			{ value: raw[name] }
-		)
+		const entry = Object.assign(nullObject(), config.defaults, fieldDefaults, {
+			value: raw[name]
+		})
+
+		if (entry.expires instanceof Date)
+			entry.expires = new Date(entry.expires.getTime())
+
+		store[name] = entry
 	}
 
 	const cache: Record<string, Cookie<unknown>> = nullObject()
@@ -210,7 +213,10 @@ export function signCookieValues(
 			? (r.secrets.find((s) => s !== null) ?? null)
 			: r.secrets
 
-		if (secret === null) continue
+		if (secret === null)
+			throw new TypeError(
+				`Cookie field "${key}" is signed but no \`secrets\` is provided.`
+			)
 		;(pending ??= []).push([property, value as string, secret])
 	}
 

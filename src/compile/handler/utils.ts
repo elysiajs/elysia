@@ -530,7 +530,7 @@ export const mapError = map<
 	return (
 		`_r=${Await(fn)}er${at(i)}(c)\n` +
 		`if(_r!==undefined){\n` +
-		`if(_r?.status)c.set.status=_r.status\n` +
+		`if(_r instanceof Response)c.set.status=_r.status\n` +
 		`else if(c.set.status===undefined||c.set.status===200)c.set.status=500\n` +
 		schedule +
 		sign +

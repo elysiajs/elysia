@@ -182,17 +182,12 @@ function isPrecomputeSafe(schema: any, depth = 0): boolean {
 	)
 		return false
 
-	// Codec and Refine wrappers attach as `~codec` / `~refine` markers on the
-	// underlying schema; `~kind` shows the wrapped type, not the wrapper.
 	if (schema['~codec'] || schema['~refine']) return false
 
-	// Nested Object without its own default - not preallocatable.
-	if (
-		depth > 0 &&
-		(kind === 'Object' || schema.type === 'object') &&
-		schema.default === undefined
-	)
-		return false
+	// Nested Object without its own default = not preallocatable.
+	if (depth > 0 && (kind === 'Object' || schema.type === 'object'))
+		if (schema.default === undefined || nestedOwnDefaultDiverges(schema))
+			return false
 
 	if (schema.properties)
 		for (const v of Object.values(schema.properties))
@@ -216,6 +211,43 @@ function isPrecomputeSafe(schema: any, depth = 0): boolean {
 			if (!isPrecomputeSafe(v, depth + 1)) return false
 
 	return true
+}
+
+// A nested Object WITH its own `default` is precompute-safe only when that
+// own default agrees, field by field, with the defaults its children would
+// fill in
+function nestedOwnDefaultDiverges(objectSchema: any) {
+	const own = objectSchema.default
+	if (own === null || typeof own !== 'object' || Array.isArray(own))
+		return false
+
+	const props = objectSchema.properties
+	if (!props) return false
+
+	for (const key in props) {
+		const child = props[key]
+		if (!child || typeof child !== 'object') continue
+
+		if ('default' in child) {
+			if (
+				!(key in own) ||
+				canonical((own as any)[key]) !== canonical(child.default)
+			)
+				return true
+		} else if (child['~kind'] === 'Object' || child.type === 'object') {
+			if (key in own) {
+				if (
+					nestedOwnDefaultDiverges({
+						...child,
+						default: (own as any)[key]
+					})
+				)
+					return true
+			} else if (hasDefaultBelow(child)) return true
+		}
+	}
+
+	return false
 }
 
 // recursive merge precompute default
@@ -479,13 +511,21 @@ function verifyPreallocatableDefault(schema: TSchema) {
 function collectCustomErrorNodes(
 	schema: any,
 	path: string,
-	out: { path: string; node: any }[]
+	out: { path: string; node: any; each?: boolean }[]
 ) {
 	if (!schema || typeof schema !== 'object') return out
 	if (schema.error !== undefined) out.push({ path, node: schema })
 	if (schema.properties)
 		for (const k in schema.properties)
 			collectCustomErrorNodes(schema.properties[k], path + '/' + k, out)
+
+	const items = schema.items
+	if (Array.isArray(items)) {
+		// Tuple: every element has a fixed index, so it is value-addressable
+		for (let i = 0; i < items.length; i++)
+			collectCustomErrorNodes(items[i], path + '/' + i, out)
+	} else if (items && items.error !== undefined)
+		out.push({ path, node: items, each: true })
 
 	return out
 }
@@ -896,7 +936,7 @@ export class TypeBoxValidator<
 			error: unknown
 		}[] = []
 
-		for (const { path, node } of nodes) {
+		for (const { path, node, each } of nodes) {
 			let check: ((v: unknown) => boolean) | undefined
 
 			const fe = frozenByPath?.get(path)
@@ -911,6 +951,15 @@ export class TypeBoxValidator<
 					const c = Compile(node)
 					check = (v) => c.Check(v)
 				} catch {}
+
+			// `each` nodes describe an array's element schema; the value at
+			// `path` is the array itself, so the custom error fires when any
+			// element fails. Non-arrays are left to the array-level check.
+			if (check && each) {
+				const elementCheck = check
+				check = (v) =>
+					!Array.isArray(v) || v.every((x) => elementCheck(x))
+			}
 
 			if (check) checks.push({ path, check, error: node.error })
 		}
@@ -1597,11 +1646,15 @@ export class TypeBoxValidatorCache {
 			BaseTypeBoxValidator
 		>
 	>()
+
 	#referenceCache = new WeakMap<
 		TSchema,
-		WeakMap<
-			CoerceOption[] | typeof TypeBoxValidatorCache.EMPTY,
-			BaseTypeBoxValidator
+		Map<
+			string,
+			WeakMap<
+				CoerceOption[] | typeof TypeBoxValidatorCache.EMPTY,
+				BaseTypeBoxValidator
+			>
 		>
 	>()
 
@@ -1650,17 +1703,16 @@ export class TypeBoxValidatorCache {
 		schema: TSchema,
 		coercions:
 			| CoerceOption[]
-			| typeof TypeBoxValidatorCache.EMPTY = TypeBoxValidatorCache.EMPTY
+			| typeof TypeBoxValidatorCache.EMPTY = TypeBoxValidatorCache.EMPTY,
+		normalize = ''
 	) {
-		if (this.#referenceCache.has(schema)) {
-			const coercionsCache = this.#referenceCache.get(schema)!
-			if (coercionsCache.has(coercions))
-				return coercionsCache.get(coercions)
-		}
+		const refBucket = this.#referenceCache.get(schema)?.get(normalize)
+		if (refBucket?.has(coercions)) return refBucket.get(coercions)
 
-		const { special, key } = this.#meta(schema)
-		if (special) return
+		const meta = this.#meta(schema)
+		if (meta.special) return
 
+		const key = meta.key + '\0' + normalize
 		if (this.#cache.has(key)) {
 			const coercionsCache = this.#cache.get(key)!
 			this.#cache.delete(key)
@@ -1671,30 +1723,42 @@ export class TypeBoxValidatorCache {
 		}
 	}
 
+	#refBucket(schema: TSchema) {
+		let byNormalize = this.#referenceCache.get(schema)
+		if (!byNormalize) {
+			byNormalize = new Map()
+			this.#referenceCache.set(schema, byNormalize)
+		}
+		return byNormalize
+	}
+
 	set(
 		schema: TSchema,
 		coercions:
 			| CoerceOption[]
 			| typeof TypeBoxValidatorCache.EMPTY = TypeBoxValidatorCache.EMPTY,
-		validator?: BaseTypeBoxValidator
+		validator?: BaseTypeBoxValidator,
+		normalize = ''
 	) {
 		this.#scheduleClear()
-		const { special, key } = this.#meta(schema)
+		const meta = this.#meta(schema)
 
-		if (special) {
+		if (meta.special) {
 			const cache = new WeakMap().set(coercions, validator) as WeakMap<
 				CoerceOption[] | typeof TypeBoxValidatorCache.EMPTY,
 				BaseTypeBoxValidator
 			>
-			this.#referenceCache.set(schema, cache)
+			this.#refBucket(schema).set(normalize, cache)
 			return
 		}
 
+		const key = meta.key + '\0' + normalize
 		if (this.#cache.has(key)) {
 			const cache = this.#cache.get(key)!.set(coercions, validator!)
-			if (this.#referenceCache.has(schema))
-				this.#referenceCache.get(schema)!.set(coercions, validator!)
-			else this.#referenceCache.set(schema, cache)
+			const byNormalize = this.#refBucket(schema)
+			if (byNormalize.has(normalize))
+				byNormalize.get(normalize)!.set(coercions, validator!)
+			else byNormalize.set(normalize, cache)
 			return
 		}
 
@@ -1708,7 +1772,7 @@ export class TypeBoxValidatorCache {
 			BaseTypeBoxValidator
 		>
 		this.#cache.set(key, cache)
-		this.#referenceCache.set(schema, cache)
+		this.#refBucket(schema).set(normalize, cache)
 	}
 
 	clear() {

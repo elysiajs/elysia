@@ -111,7 +111,7 @@ export function handleFile(
 
 	if (set.headers instanceof Headers) {
 		for (const key of Object.keys(defaultHeader))
-			if (key in set.headers) set.headers.append(key, defaultHeader[key])
+			if (!set.headers.has(key)) set.headers.append(key, defaultHeader[key])
 
 		if (immutable) {
 			set.headers.delete('content-length')
@@ -185,7 +185,10 @@ export function responseToSetHeaders(response: Response, set?: Context['set']) {
 	}
 
 	// ? `content-encoding` prevents response streaming
-	if (set!.headers['content-encoding'])
+	if (set!.headers instanceof Headers) {
+		if (set!.headers.has('content-encoding'))
+			set!.headers.delete('content-encoding')
+	} else if (set!.headers['content-encoding'])
 		delete set!.headers['content-encoding']
 
 	return set!

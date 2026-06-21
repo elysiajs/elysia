@@ -200,7 +200,7 @@ function appendInto(
 		const v = (src as any)[key]
 		if (v === undefined || v === null) continue
 
-		if (eventProperties.has(key) || key === 'schema' || key === 'schemas') {
+		if (eventProperties.has(key) || key === 'schemas') {
 			const arr = Array.isArray(v) ? v : [v]
 			const existing = (target as any)[key]
 
@@ -674,7 +674,9 @@ export function mergeDeep<
 
 		if (!isObject(value) || !(key in target) || isClass(value)) {
 			if ((override || !(key in target)) && !Object.isFrozen(target))
-				target[key as keyof typeof target] = value
+				try {
+					target[key as keyof typeof target] = value
+				} catch {}
 
 			continue
 		}
@@ -682,14 +684,16 @@ export function mergeDeep<
 		if (!Object.isFrozen(target[key])) {
 			seen ??= new WeakSet<object>()
 			seen.add(source)
-			target[key as keyof typeof target] = mergeDeep(
-				(target as any)[key] as any,
-				value,
-				skipKeys,
-				override,
-				mergeArray,
-				seen
-			)
+			try {
+				target[key as keyof typeof target] = mergeDeep(
+					(target as any)[key] as any,
+					value,
+					skipKeys,
+					override,
+					mergeArray,
+					seen
+				)
+			} catch {}
 		}
 	}
 
@@ -706,10 +710,8 @@ export function cloneHook<T extends Partial<AnyLocalHook> | Partial<AppHook>>(
 ): T {
 	const out = Object.assign(nullObject(), src) as Record<string, any>
 
-	for (const key of eventProperties)
-		if (key in out)
-			if (Array.isArray(out[key]))
-				out[key] = (out[key] as unknown[]).slice()
+	for (const key in out)
+		if (Array.isArray(out[key])) out[key] = (out[key] as unknown[]).slice()
 
 	return out as T
 }

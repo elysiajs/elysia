@@ -7,13 +7,36 @@ import { getAsyncIndexes, cachedResponse } from './utils'
 
 import { createContext, type Context } from '../context'
 import { createErrorHandler } from './error'
-import { requestId, flattenChain, nullObject, getLoosePath } from '../utils'
+import {
+	requestId,
+	flattenChain,
+	nullObject,
+	getLoosePath,
+	isNotEmpty
+} from '../utils'
+import { handleSet } from '../adapter/utils'
 import { NotFound } from '../error'
 import { createTracer } from '../trace'
 
 import type { CompiledHandler, MaybePromise } from '../types'
 
 const getNotFound = cachedResponse('Not Found', 404)
+
+// Default 404 that still emits `Elysia.headers` defaults / hook-set headers + cookies.
+function notFound(context: Context): Response {
+	const set = context.set
+
+	if (set.cookie || isNotEmpty(set.headers)) {
+		handleSet(set)
+
+		return new Response('Not Found', {
+			status: 404,
+			headers: set.headers as any
+		})
+	}
+
+	return getNotFound()
+}
 
 const decodeParams = (
 	params: Record<string, string>
@@ -80,14 +103,14 @@ function findRoute(
 		}
 
 		let found =
-			router.find(request.method, path) ?? router.find('*', path)
+			router?.find(request.method, path) ?? router?.find('*', path)
 
 		if (!found && !strictPath) {
 			const loose = getLoosePath(path)
 			if (loose !== path)
 				found =
-					router.find(request.method, loose) ??
-					router.find('*', loose)
+					router?.find(request.method, loose) ??
+					router?.find('*', loose)
 		}
 
 		if (found) {
@@ -101,7 +124,7 @@ function findRoute(
 	if (hasError) throw new NotFound()
 
 	afterResponse?.(context, 404)
-	return getNotFound()
+	return notFound(context)
 }
 
 export function createFetchHandler(
@@ -342,8 +365,15 @@ export function createFetchHandler(
 							? await onRequests[i](context)
 							: onRequests[i](context)
 
-						if (result !== undefined)
-							return mapResponse(result, context.set) as Response
+						if (result !== undefined) {
+							const response = mapResponse(
+								result,
+								context.set
+							) as Response
+
+							afterResponse?.(context)
+							return response
+						}
 					}
 
 					return findRoute(
@@ -381,8 +411,15 @@ export function createFetchHandler(
 			try {
 				for (let i = 0; i < onRequests.length; i++) {
 					const result = onRequests[i](context)
-					if (result !== undefined)
-						return mapResponse(result, context.set) as Response
+					if (result !== undefined) {
+						const response = mapResponse(
+							result,
+							context.set
+						) as Response
+
+						afterResponse?.(context)
+						return response
+					}
 				}
 
 				return findRoute(
@@ -482,12 +519,12 @@ export function createFetchHandler(
 
 		if (hasError) {
 			const r = handleError(context, new NotFound()) as Response
-			afterResponse?.(context, 404)
+			afterResponse?.(context)
 			return r
 		}
 
 		afterResponse?.(context, 404)
-		return getNotFound()
+		return notFound(context)
 	}
 }
 

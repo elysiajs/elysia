@@ -58,6 +58,15 @@ function normalizeSign(sign: true | string | string[] | undefined) {
 	return [sign]
 }
 
+const hasUsableSecret = (
+	secrets: string | null | (string | null)[] | undefined
+) =>
+	secrets == null
+		? false
+		: Array.isArray(secrets)
+			? secrets.some((s) => s != null)
+			: true
+
 export function compileCookieConfig(
 	routeSchema: AnySchema | undefined,
 	appConfig: AppCookieConfig | undefined
@@ -71,8 +80,8 @@ export function compileCookieConfig(
 	const defaults: Partial<BaseCookie> =
 		appAttributes && routeAttributes
 			? {
-					...getAttributes(appConfig),
-					...getAttributes(routeConfig)
+					...appAttributes,
+					...routeAttributes
 				}
 			: (appAttributes ?? routeAttributes ?? nullObject())
 
@@ -112,10 +121,10 @@ export function compileCookieConfig(
 	if (globalSign !== undefined) hasSign = true
 
 	if (hasSign) {
-		if (globalSign !== undefined && globalSecrets === undefined) {
+		if (globalSign !== undefined && !hasUsableSecret(globalSecrets)) {
 			const fieldsWithOwnSecrets = new Set<string>()
 			for (const name in fields)
-				if (fields[name].secrets !== undefined)
+				if (hasUsableSecret(fields[name].secrets))
 					fieldsWithOwnSecrets.add(name)
 
 			const fieldKeys = Object.keys(fields)
@@ -135,8 +144,8 @@ export function compileCookieConfig(
 		for (const name in fields)
 			if (
 				fields[name].sign &&
-				fields[name].secrets === undefined &&
-				globalSecrets === undefined
+				!hasUsableSecret(fields[name].secrets) &&
+				!hasUsableSecret(globalSecrets)
 			)
 				throw new Error(
 					`Cookie field "${name}" is signed but no \`secrets\` is provided.`

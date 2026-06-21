@@ -121,6 +121,37 @@ import type { Context, LifecycleContext, ErrorContext } from './context'
 
 const useNodesBuffer: ChainNode[] = []
 
+// Decorators are shared singletons, but a plugin's *nested plain object*
+// decorator must not be aliased into the parent by reference (a per-request
+// mutation through one would otherwise leak into the other instance). Recurse
+// only into plain objects ({} / Object.create(null)); class instances, arrays,
+// functions, Blobs and primitives are kept by reference (intended singletons).
+const isPlainObject = (v: unknown): v is Record<string, unknown> => {
+	if (!v || typeof v !== 'object' || Array.isArray(v)) return false
+	const proto = Object.getPrototypeOf(v)
+	return proto === Object.prototype || proto === null
+}
+
+function clonePlainDecorators<T extends Record<string, unknown>>(
+	source: T,
+	seen: WeakMap<object, any> = new WeakMap()
+): T {
+	const existing = seen.get(source)
+	if (existing) return existing
+
+	const out: Record<string, unknown> = nullObject()
+	seen.set(source, out)
+
+	for (const key in source) {
+		const value = source[key]
+		out[key] = isPlainObject(value)
+			? clonePlainDecorators(value, seen)
+			: value
+	}
+
+	return out as T
+}
+
 export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
 
 export class Elysia<
@@ -730,7 +761,7 @@ export class Elysia<
 		const ext = this.#ext
 
 		if (ext.headers) Object.assign(ext!.headers, headers)
-		else ext.headers = headers
+		else ext.headers = Object.assign(nullObject(), headers)
 
 		return this
 	}
@@ -3534,7 +3565,10 @@ export class Elysia<
 
 		if (hook.derive) {
 			this['~derive'] ??= new WeakSet<EventFn<'beforeHandle'>>()
-			this['~derive'].add(hook.derive as EventFn<'beforeHandle'>)
+			if (Array.isArray(hook.derive))
+				for (const fn of hook.derive)
+					this['~derive'].add(fn as EventFn<'beforeHandle'>)
+			else this['~derive'].add(hook.derive as EventFn<'beforeHandle'>)
 		}
 
 		const trackFn = (fn: unknown) => {
@@ -3867,7 +3901,15 @@ export class Elysia<
 			const promoted = nullObject() as any
 
 			for (const key of Object.keys(hook)) {
-				if (!eventProperties.has(key as any)) continue
+				if (key === 'derive' || key === 'resolve') continue
+
+				if (
+					!eventProperties.has(key as any) &&
+					!schemaProperties.has(key as any) &&
+					key !== 'schema' &&
+					key !== 'schemas'
+				)
+					continue
 
 				promoted[key] = (hook as any)[key]
 			}
@@ -4536,8 +4578,9 @@ export class Elysia<
 				nullObject())
 
 			if (decorator) {
-				if (ext.decorator) mergeDeep(ext.decorator, decorator)
-				else ext.decorator = Object.assign(nullObject(), decorator)
+				const cloned = clonePlainDecorators(decorator)
+				if (ext.decorator) mergeDeep(ext.decorator, cloned)
+				else ext.decorator = Object.assign(nullObject(), cloned)
 			}
 
 			if (store) {
@@ -6347,7 +6390,9 @@ export class Elysia<
 		let opts: any
 		if (handler !== undefined) {
 			// 3-arg form: (path, options, handler)
-			opts = optionsOrHandler ?? nullObject()
+			// clone so the caller's options object isn't mutated (and reused
+			// across .ws() calls without a spurious 'message' conflict)
+			opts = Object.assign(nullObject(), optionsOrHandler)
 			if (opts.message != null && opts.message !== handler)
 				throw new Error(
 					"[Elysia] .ws(): cannot specify 'message' as both positional handler and options.message"
@@ -6595,6 +6640,29 @@ export class Elysia<
 
 		const strict = !!this['~config']?.strictPath
 
+		// Explicit (non-loose) paths per method, so a route's trailing-slash
+		// loose twin never clobbers another route explicitly registered on it
+		let explicitPaths: Map<string, Set<string>> | undefined
+		if (!strict) {
+			explicitPaths = new Map()
+			for (let i = 0; i < length; i++) {
+				const route = this.#history![i]
+				const m =
+					(route[0] as any) === 'WS'
+						? 'WS'
+						: mapMethodBack(route[0])
+				const p = route[1]
+
+				let set = explicitPaths.get(m)
+				if (!set) explicitPaths.set(m, (set = new Set()))
+				set.add(p)
+				if (needEncodeRegex.test(p)) {
+					const encoded = encodeURI(p)
+					if (encoded !== p) set.add(encoded)
+				}
+			}
+		}
+
 		for (let i = 0; i < length; i++) {
 			const route: InternalRoute = this.#history![i]
 			const method = mapMethodBack(route[0])
@@ -6619,7 +6687,11 @@ export class Elysia<
 
 					if (!this['~config']?.strictPath) {
 						const loose = getLoosePath(path)
-						if (loose !== path) wsMap[loose] = handler
+						if (
+							loose !== path &&
+							!explicitPaths?.get('WS')?.has(loose)
+						)
+							wsMap[loose] = handler
 					}
 				}
 
@@ -6663,8 +6735,9 @@ export class Elysia<
 
 					if (!this['~config']?.strictPath) {
 						const loose = getLoosePath(path)
-						;(target[loose] ??= nullObject() as any)[method] =
-							staticResponse
+						if (!explicitPaths?.get(method)?.has(loose))
+							(target[loose] ??= nullObject() as any)[method] =
+								staticResponse
 					}
 				}
 			}
@@ -6684,13 +6757,15 @@ export class Elysia<
 				headHandler: CompiledHandler | undefined,
 				registerLoose: boolean
 			) => {
+				const explicitMain = explicitPaths?.get(method)
+
 				const add = (p: string) => {
 					registerMain(p, handler)
 					if (headHandler) registerHead(p, headHandler)
 
 					if (registerLoose) {
 						const loose = getLoosePath(p)
-						if (loose !== p) {
+						if (loose !== p && !explicitMain?.has(loose)) {
 							registerMain(loose, handler)
 							if (headHandler) registerHead(loose, headHandler)
 						}

@@ -108,26 +108,32 @@ function DateWithProperty(options: DateOptions) {
 
 	if (typeof options.minimumTimestamp === 'number')
 		refines.push([
-			(value) => toTimestamp(value) > options.minimumTimestamp!,
-			`date must be after ${new Date(options.minimumTimestamp).toISOString()}`
+			(value) => toTimestamp(value) >= options.minimumTimestamp!,
+			`date must be after or equal to ${new Date(options.minimumTimestamp).toISOString()}`
 		])
 
 	if (typeof options.maximumTimestamp === 'number')
 		refines.push([
-			(value) => toTimestamp(value) < options.maximumTimestamp!,
-			`date must be before ${new Date(options.maximumTimestamp).toISOString()}`
+			(value) => toTimestamp(value) <= options.maximumTimestamp!,
+			`date must be before or equal to ${new Date(options.maximumTimestamp).toISOString()}`
 		])
 
 	if (typeof options.exclusiveMinimumTimestamp === 'number')
 		refines.push([
-			(value) => toTimestamp(value) >= options.exclusiveMinimumTimestamp!,
-			`date must be after or equal to ${new Date(options.exclusiveMinimumTimestamp).toISOString()}`
+			(value) => toTimestamp(value) > options.exclusiveMinimumTimestamp!,
+			`date must be after ${new Date(options.exclusiveMinimumTimestamp).toISOString()}`
 		])
 
 	if (typeof options.exclusiveMaximumTimestamp === 'number')
 		refines.push([
-			(value) => toTimestamp(value) <= options.exclusiveMaximumTimestamp!,
-			`date must be before or equal to ${new Date(options.exclusiveMaximumTimestamp).toISOString()}`
+			(value) => toTimestamp(value) < options.exclusiveMaximumTimestamp!,
+			`date must be before ${new Date(options.exclusiveMaximumTimestamp).toISOString()}`
+		])
+
+	if (typeof options.multipleOfTimestamp === 'number')
+		refines.push([
+			(value) => toTimestamp(value) % options.multipleOfTimestamp! === 0,
+			`date timestamp must be a multiple of ${options.multipleOfTimestamp}`
 		])
 
 	let schema: any = Refines(StringifiedDate, refines as any)

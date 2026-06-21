@@ -1,6 +1,6 @@
 import { getAsyncIndexes, cachedResponse } from './utils'
 import { parseQueryFromURL } from '../parse-query'
-import { ValidationError } from '../error'
+import { ValidationError, ElysiaStatus } from '../error'
 
 import type { Context } from '../context'
 import type { AppHook } from '../types'
@@ -130,8 +130,11 @@ export function createErrorHandler(
 					: onErrors[i](context as any)
 
 				if (result !== undefined) {
-					// @ts-expect-error
-					if (result?.status) context.set.status = result.status
+					if (
+						result instanceof ElysiaStatus ||
+						result instanceof Response
+					)
+						context.set.status = result.status
 					else if (
 						context.set.status === undefined ||
 						context.set.status === 200
@@ -157,7 +160,10 @@ export function createErrorHandler(
 		for (let i = 0; i < onErrors.length; i++) {
 			const result = onErrors[i](context as any)
 			if (result !== undefined) {
-				if ((result as any)?.status)
+				if (
+					result instanceof ElysiaStatus ||
+					result instanceof Response
+				)
 					context.set.status = (result as any).status
 				else if (
 					context.set.status === undefined ||

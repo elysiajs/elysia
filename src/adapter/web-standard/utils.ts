@@ -15,13 +15,7 @@ const BRACE_C = 125 // '}'
 
 const HAS_FILE = typeof File !== 'undefined'
 const HAS_NESTING = /[.[]/
-// ponytail: max nesting depth for a single form key. Each '.'/'[' segment
-// allocates an object (~185 bytes), so an unbounded key like `'.'.repeat(2e6)`
-// would amplify a few KB into hundreds of MB. Real forms never nest this deep.
 const MAX_NESTING = 64
-// ponytail: absolute cap on nested objects allocated per body. The per-key
-// depth cap stops one huge key; this stops many medium-deep keys from
-// amplifying a small body into a huge heap. ~100k nodes ≈ 18MB ceiling.
 const MAX_NESTED_NODES = 100_000
 
 function tryParseJson(

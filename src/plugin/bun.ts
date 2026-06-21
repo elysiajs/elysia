@@ -1,3 +1,4 @@
+import { realpathSync } from 'node:fs'
 import type { BunPlugin } from 'bun'
 import {
 	generateCompiledModule,
@@ -8,7 +9,16 @@ import {
 } from './core'
 import { rewriteTypeImport } from './treeshake'
 
+// eslint-disable-next-line sonarjs/single-character-alternation
 const SOURCE = /\.(c|m)?(t|j)sx?$/
+
+const realPath = (path: string) => {
+	try {
+		return realpathSync(path)
+	} catch {
+		return path
+	}
+}
 
 /**
  * Elysia AOT build plugin
@@ -32,7 +42,11 @@ export const aot = (entry: string, options?: ElysiaAotOptions): BunPlugin => ({
 	async setup(build) {
 		const source = await generateCompiledModule(entry, options)
 		const entryPath = resolveEntry(entry)
+		const entryReal = realPath(entryPath)
 		const treeShake = options?.treeShake ?? true
+
+		const isEntry = (path: string): boolean =>
+			path === entryPath || realPath(path) === entryReal
 
 		build.onResolve({ filter: /^elysia\/compiled$/ }, () => ({
 			path: 'manifest',
@@ -46,14 +60,16 @@ export const aot = (entry: string, options?: ElysiaAotOptions): BunPlugin => ({
 
 		if (treeShake)
 			build.onLoad({ filter: SOURCE }, async (args) => {
-				if (args.path.includes('/node_modules/')) return
+				const isEntryFile = isEntry(args.path)
+				const inModules = args.path.includes('/node_modules/')
+				if (inModules && !isEntryFile) return
 
 				const original = await Bun.file(args.path).text()
-				let contents = rewriteTypeImport(original, {
-					from: options?.registerFrom
-				})
+				let contents = inModules
+					? original
+					: rewriteTypeImport(original)
 
-				if (args.path === entryPath)
+				if (isEntryFile)
 					contents = `import 'elysia/compiled'\n${contents}`
 
 				if (contents === original) return

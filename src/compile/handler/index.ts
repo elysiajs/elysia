@@ -68,6 +68,13 @@ import type {
 
 const parseFormData = 'c.body=await pf(c)\n'
 
+const matchReturnIdentifier =
+	// eslint-disable-next-line sonarjs/regex-complexity
+	/(?:=>|\breturn)\s+(?!(?:true|false|null|undefined|void|new|typeof|async|await|function|class)\b)[A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*\s*(?![\w$([])/
+
+const mayReturnIdentifier = (fn: Function): boolean =>
+	matchReturnIdentifier.test(fn.toString())
+
 let captureHeaderShorthand: boolean | undefined
 export const setCaptureHeaderShorthand = (value: boolean | undefined): void => {
 	captureHeaderShorthand = value
@@ -138,7 +145,11 @@ function parse(
 		return begin + builtinParser(adapter, parsers as string, link) + end
 	}
 
-	let code = `const ct=(${hasHeaders ? "c.headers['content-type']" : "c.request.headers.get('content-type')"})||''\nc.contentType=ct\n`
+	let code =
+		`let ct=((${hasHeaders ? "c.headers['content-type']" : "c.request.headers.get('content-type')"})||'')\n` +
+		'let cti=ct.indexOf(";")\n' +
+		'if(cti!==-1)ct=ct.slice(0,cti)\n' +
+		'c.contentType=ct\n'
 
 	let hasFn = false
 	let hasType = false
@@ -207,9 +218,9 @@ function applyHook(
 		hook = mergeHook(cloneHook(localHook) as any, appHook as any, true)
 	else {
 		const base = localHook ?? appHook
-		if (!rootHook) return base as any
+		if (!rootHook) return base ? cloneHook(base as any) : (base as any)
 
-		hook = cloneHook((base ?? nullObject()) as any)
+		hook = base ? cloneHook(base as any) : (base as any)
 	}
 
 	if (rootHook) mergeHook(hook, rootHook as any, true, true)
@@ -482,9 +493,12 @@ export function compileHandler(
 		const errors = instanceLocal?.error
 		if (errors) {
 			hook ??= nullObject() as any
-			const existing = (hook as any).error
+			let existing = (hook as any).error
 
 			if (existing) {
+				if (!Array.isArray(existing))
+					existing = (hook as any).error = [existing]
+
 				if (Array.isArray(errors)) {
 					for (const fn of errors)
 						if (!existing.includes(fn)) existing.push(fn)
@@ -544,6 +558,16 @@ export function compileHandler(
 
 	const isStaticResponse = !isHandleFunction && handler instanceof Response
 	const isPromiseHandler = !isHandleFunction && handler instanceof Promise
+
+	const namedParsers = root['~ext']?.parser
+	if (namedParsers && hook?.parse) {
+		const resolve = (p: any) =>
+			typeof p === 'string' && p in namedParsers ? namedParsers[p] : p
+
+		hook.parse = Array.isArray(hook.parse)
+			? (hook.parse as any[]).map(resolve)
+			: (resolve(hook.parse) as any)
+	}
 
 	const reconstructed = Compiled.handlers?.[method]?.[path]
 	if (reconstructed) {
@@ -701,7 +725,8 @@ export function compileHandler(
 		hasResponseValidator &&
 		isHandleFunction &&
 		!handlerIsAsync &&
-		mayReturnPromise(handler as Function)
+		(mayReturnPromise(handler as Function) ||
+			mayReturnIdentifier(handler as Function))
 
 	const afterResponseForcesAsync =
 		hasAfterResponse &&
@@ -798,18 +823,16 @@ export function compileHandler(
 	}
 
 	if (hasHeaders) {
-		const headerShorthand = captureHeaderShorthand ?? hasHeaderShorthand
-		code += `c.headers=${headerShorthand ? 'c.request.headers.toJSON()' : 'Object.fromEntries(c.request.headers)'}\n`
+		if (captureHeaderShorthand === undefined && Capture.isCapturing())
+			code += `c.headers=c.request.headers.toJSON?.()??Object.fromEntries(c.request.headers)\n`
+		else {
+			const headerShorthand = captureHeaderShorthand ?? hasHeaderShorthand
+			code += `c.headers=${headerShorthand ? 'c.request.headers.toJSON()' : 'Object.fromEntries(c.request.headers)'}\n`
+		}
 		inlineUnsafe = true
 	}
 
 	if (hasBody) {
-		const namedParsers = root['~ext']?.parser
-		if (namedParsers && Array.isArray(hook?.parse))
-			hook.parse = (hook.parse as any[]).map((p) =>
-				typeof p === 'string' && p in namedParsers ? namedParsers[p] : p
-			) as any
-
 		const parseLen = Array.isArray(hook?.parse) ? hook!.parse!.length : 0
 		if (hasTrace) code += beginTrace('parse', parseLen)
 

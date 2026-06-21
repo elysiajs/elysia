@@ -105,6 +105,13 @@ function createPlainHandler(
 export function createRouteMap(app: AnyElysia) {
 	const Context = createBunContext(app)
 
+	const handleError = createErrorHandler(
+		flattenChain(app['~hookChain'])?.error,
+		WebStandardAdapter.response.map,
+		new Response('Not Found', { status: 404 }),
+		app['~config']?.allowUnsafeValidationDetails
+	)
+
 	function fetch(request: Request) {
 		return handleError(new Context(request), new NotFound()) as Response
 	}
@@ -119,13 +126,6 @@ export function createRouteMap(app: AnyElysia) {
 			},
 			fetch
 		]
-
-	const handleError = createErrorHandler(
-		flattenChain(app['~hookChain'])?.error,
-		WebStandardAdapter.response.map,
-		new Response('Not Found', { status: 404 }),
-		app['~config']?.allowUnsafeValidationDetails
-	)
 
 	const routes = nullObject()
 

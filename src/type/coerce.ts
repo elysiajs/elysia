@@ -412,11 +412,20 @@ const noEnumerable = { enumerable: false }
 function cloneNode(node: BaseSchema, out: any): any {
 	if (out !== node) return out
 
-	return Object.defineProperty(
-		{ ...node, '~kind': (node as any)['~kind'] },
-		'~kind',
-		noEnumerable
-	)
+	const target: any = { ...node, '~kind': (node as any)['~kind'] }
+	for (const key of Object.getOwnPropertyNames(node)) {
+		const desc = Object.getOwnPropertyDescriptor(node, key)
+		if (!desc || desc.enumerable || key === '~kind') continue
+
+		Object.defineProperty(target, key, {
+			value: desc.value,
+			enumerable: false,
+			writable: true,
+			configurable: true
+		})
+	}
+
+	return Object.defineProperty(target, '~kind', noEnumerable)
 }
 
 function nonAdditionalPropertiesWalk(

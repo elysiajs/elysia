@@ -9,6 +9,10 @@ import { StringType } from './string'
 import { Union } from './union'
 import { elyType, getMeta } from './utils'
 
+// A finite decimal numeric string: optional sign + digits/decimal point
+// Rejects hex (`0x10`), binary/octal, scientific (`1e3`) and `Infinity`/`NaN`
+const decimalNumber = /^[+-]?(\d+\.?\d*|\.\d+)$/
+
 let StringifiedNumber: Type.TCodec<Type.TRefine<Type.TString>, number>
 type NumericSchema = Type.TUnion<
 	[Type.TNumber, Type.TCodec<Type.TRefine<Type.TString>, number>]
@@ -34,8 +38,9 @@ export function Numeric(property?: TNumberOptions) {
 	StringifiedNumber ??= Decode(
 		Refine(
 			StringType(),
-			// reject empty/blank strings: `+'' === 0` would silently pass
-			(value) => value.trim() !== '' && !isNaN(+value),
+			// only a finite decimal string (also rejects empty/blank, since
+			// `+'' === 0` would otherwise silently pass)
+			(value) => decimalNumber.test(value),
 			() => 'must be number'
 		),
 		(value) => +value
@@ -55,9 +60,8 @@ export function Numeric(property?: TNumberOptions) {
 		Refine(
 			StringType(),
 			(value) => {
-				if (value.trim() === '') return false
-				const n = +value
-				return !isNaN(n) && passesConstraints(n, constraints as any)
+				if (!decimalNumber.test(value)) return false
+				return passesConstraints(+value, constraints as any)
 			},
 			() => 'must be number'
 		),

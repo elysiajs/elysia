@@ -75,14 +75,14 @@ async function handleWSResponse(
 			const { value: yielded, done } =
 				step instanceof Promise ? await step : step
 
+			if (done) return
+
 			if (yielded !== undefined) {
 				const mapped = mapResponses.length
 					? await applyMapResponse(ws, yielded, mapResponses)
 					: yielded
 				;(ws as any).send(mapped)
 			}
-
-			if (done) return
 		}
 	}
 
@@ -223,7 +223,7 @@ export function buildWSRoute(
 			if (r instanceof Promise) r = await r
 			if (r !== undefined) {
 				try {
-					await handleWSResponse(ws, r, [])
+					await handleWSResponse(ws, r, mapResponses)
 				} catch {}
 				return
 			}
@@ -398,7 +398,12 @@ export function buildWSRoute(
 	function wrapLifecycle(fn: AnyFn | undefined, withBody: boolean) {
 		if (!fn) return
 
-		return async (ws: ElysiaWS<any>, bodyArg?: unknown) => {
+		return async (connection: ElysiaWS<any>, bodyArg?: unknown) => {
+			// Per-invocation view over the shared per-connection instance,
+			// mirroring dispatchMessage. Without it, concurrent ping/pong
+			// handlers would clobber each other's `body` (and lifecycle
+			// state) on the shared connection across an await.
+			const ws: ElysiaWS<any> = Object.create(connection)
 			try {
 				if (withBody) ws.body = bodyArg as any
 				const result = withBody ? fn(ws, bodyArg) : fn(ws)
@@ -416,7 +421,12 @@ export function buildWSRoute(
 	const onPing = wrapLifecycle(hook.ping as any, true)
 	const onPong = wrapLifecycle(hook.pong as any, true)
 	const onClose = hook.close
-		? async (ws: ElysiaWS<any>, code: number, reason: string) => {
+		? async (
+				connection: ElysiaWS<any>,
+				code: number,
+				reason: string
+			) => {
+				const ws: ElysiaWS<any> = Object.create(connection)
 				try {
 					;(ws as any).code = code
 					;(ws as any).reason = reason

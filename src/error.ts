@@ -4,13 +4,7 @@ import { StatusMap, StatusMapBack } from './constants'
 import { nullObject } from './utils'
 import { env } from './universal/env'
 
-/**
- * Whether the runtime is in production, evaluated once at module load.
- *
- * Gates schema-revealing validation detail in `ValidationError` (omitted in
- * production unless `allowUnsafeValidationDetails` is set).
- */
-export const isProduction = (env.NODE_ENV ?? env.ENV) === 'production'
+export const isProduction = () => (env.NODE_ENV ?? env.ENV) === 'production'
 
 export class ElysiaError<
 	Status extends number = number,
@@ -227,7 +221,7 @@ export class ValidationError extends ElysiaError {
 		const resolve = () => {
 			if (resolved !== undefined) return
 
-			const production = isProduction
+			const production = isProduction()
 			const allowUnsafe = this.allowUnsafeValidationDetails
 
 			if (production && !allowUnsafe && findCustomError) {
@@ -363,7 +357,7 @@ export class ValidationError extends ElysiaError {
 	}
 
 	get #productionDetail() {
-		return isProduction && !this.allowUnsafeValidationDetails
+		return isProduction() && !this.allowUnsafeValidationDetails
 	}
 
 	detail(message: unknown) {

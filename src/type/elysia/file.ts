@@ -63,7 +63,7 @@ function FileWithProperty(options: FilesOptions) {
 		const minSize = parseFileUnit(options.minSize!)
 
 		refines.push([
-			(value) => value.size > minSize,
+			(value) => value.size >= minSize,
 			`Expect file size to be more than ${options.minSize}`
 		])
 	}
@@ -72,7 +72,7 @@ function FileWithProperty(options: FilesOptions) {
 		const maxSize = parseFileUnit(options.maxSize!)
 
 		refines.push([
-			(value) => value.size < maxSize,
+			(value) => value.size <= maxSize,
 			`Expect file size to be less than ${options.maxSize}`
 		])
 	}

@@ -36,10 +36,7 @@ export class Cookie<T = any> implements BaseCookie {
 	}
 
 	set cookie(jar: BaseCookie) {
-		const j = this.jar
-		if (!(this.name in j)) j[this.name] = this.initial
-
-		j[this.name] = jar
+		this.jar[this.name] = jar
 	}
 
 	protected get setCookie() {

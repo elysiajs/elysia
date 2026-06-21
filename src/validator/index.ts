@@ -29,10 +29,8 @@ export interface ValidatorOptions {
 	slot?: ValidatorSlot
 }
 
-export interface ResponseValidatorOptions extends Omit<
-	ValidatorOptions,
-	'schemas'
-> {
+export interface ResponseValidatorOptions
+	extends Omit<ValidatorOptions, 'schemas'> {
 	schemas?: Record<number, AnySchema>[]
 }
 
@@ -117,6 +115,9 @@ export abstract class Validator {
 			const aot = options?.aot
 			const slot = options?.slot
 
+			const normalizeKey =
+				options?.normalize === 'typebox' ? 'typebox' : ''
+
 			const bypassCache =
 				!!aot &&
 				!!slot &&
@@ -126,7 +127,11 @@ export abstract class Validator {
 						Compiled.hasValidator(aot.method, aot.path, slot)))
 
 			if (!isIntersectable && !skipCache && !bypassCache && tbCache) {
-				const cached = tbCache.get(schema, options?.coerces)
+				const cached = tbCache.get(
+					schema,
+					options?.coerces,
+					normalizeKey
+				)
 				if (cached) return cached
 			}
 			// @ts-expect-error
@@ -141,7 +146,7 @@ export abstract class Validator {
 			) as any
 
 			if (!isIntersectable && !skipCache && !bypassCache)
-				tbCache!.set(schema, options?.coerces, validator)
+				tbCache!.set(schema, options?.coerces, validator, normalizeKey)
 			return validator
 		}
 
@@ -389,10 +394,10 @@ export class MultiValidator extends Validator {
 					: Decode(validator as TypeBoxValidator, value)
 
 			if (snapshot! === undefined) snapshot = result
-			else if (typeof snapshot === 'object' && typeof result === 'object')
-				snapshot = Object.assign(snapshot, result)
 			else if (Array.isArray(snapshot) && Array.isArray(result))
 				snapshot.push(...result)
+			else if (typeof snapshot === 'object' && typeof result === 'object')
+				snapshot = Object.assign(snapshot, result)
 			else throw new Error('Unable to merged value with different type')
 		}
 
@@ -441,10 +446,10 @@ export class MultiValidator extends Validator {
 			}
 
 			if (snapshot! === undefined) snapshot = result
-			else if (typeof snapshot === 'object' && typeof result === 'object')
-				snapshot = Object.assign(snapshot, result)
 			else if (Array.isArray(snapshot) && Array.isArray(result))
 				snapshot.push(...result)
+			else if (typeof snapshot === 'object' && typeof result === 'object')
+				snapshot = Object.assign(snapshot, result)
 			else throw new Error('Unable to merged value with different type')
 		}
 
