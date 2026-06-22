@@ -191,7 +191,7 @@ export function signCookieValues(
 	if (!cookies || !config.hasSign) return
 
 	// Collect the (property, value, secret) tuples to sign in a single sync
-	// pass; allocate nothing until at least one cookie actually needs signing.
+	// pass; allocate nothing until at least one cookie actually needs signing
 	let pending:
 		| [property: BaseCookie, value: string, secret: string][]
 		| undefined
@@ -209,9 +209,7 @@ export function signCookieValues(
 		if (typeof value === 'object') value = JSON.stringify(value)
 		else if (typeof value !== 'string') value = value + ''
 
-		const secret = Array.isArray(r.secrets)
-			? (r.secrets.find((s) => s !== null) ?? null)
-			: r.secrets
+		const secret = Array.isArray(r.secrets) ? (r.secrets[0] ?? null) : r.secrets
 
 		if (secret === null)
 			throw new TypeError(

@@ -8,7 +8,7 @@ import {
 import { isBun } from '../../universal/constants'
 import { ElysiaFile, mime } from '../../universal/file'
 import { formToFormData, isNotEmpty, nullObject } from '../../utils'
-import { ElysiaStatus } from '../../error'
+import { ElysiaStatus, isProduction } from '../../error'
 
 import type { Context } from '../../context'
 import type { MaybePromise } from '../../types'
@@ -22,7 +22,11 @@ function handleElysiaFile(
 ) {
 	const path = file.path
 	const contentType =
-		mime[path.slice(path.lastIndexOf('.') + 1) as any as keyof typeof mime]
+		mime[
+			path
+				.slice(path.lastIndexOf('.') + 1)
+				.toLowerCase() as any as keyof typeof mime
+		]
 
 	const headers = set.headers
 	if (contentType) headers['content-type'] = contentType
@@ -251,11 +255,16 @@ export function errorToResponse(
 	const headers = (set?.headers ?? nullObject()) as Record<string, string>
 
 	return Response.json(
-		{
-			name: error?.name,
-			message: error?.message,
-			cause: error?.cause
-		},
+		isProduction()
+			? {
+					name: error?.name,
+					message: 'Internal Server Error'
+				}
+			: {
+					name: error?.name,
+					message: error?.message,
+					cause: error?.cause
+				},
 		{
 			status:
 				set?.status !== 200 ? ((set?.status as number) ?? 500) : 500,

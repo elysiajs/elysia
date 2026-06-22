@@ -59,7 +59,7 @@ export const getFileExtension = (path: string) => {
 	const index = path.lastIndexOf('.')
 	if (index === -1) return ''
 
-	return path.slice(index + 1)
+	return path.slice(index + 1).toLowerCase()
 }
 
 export const file = (path: string) => new ElysiaFile(path)

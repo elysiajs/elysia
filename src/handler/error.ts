@@ -1,6 +1,6 @@
 import { getAsyncIndexes, cachedResponse } from './utils'
 import { parseQueryFromURL } from '../parse-query'
-import { ValidationError, ElysiaStatus } from '../error'
+import { ValidationError, ElysiaStatus, isProduction } from '../error'
 
 import type { Context } from '../context'
 import type { AppHook } from '../types'
@@ -70,7 +70,10 @@ function fallbackErrorResponse(
 		const body =
 			error.response !== undefined
 				? error.response
-				: (error.message ?? '')
+				: // safe guard unintentional error
+					isProduction() && error.status >= 500
+					? 'Internal Server Error'
+					: (error.message ?? '')
 
 		return mapResponse(body, context.set, context)
 	}
@@ -79,7 +82,11 @@ function fallbackErrorResponse(
 		if (context.set.status === undefined || context.set.status === 200)
 			context.set.status = 500
 
-		return mapResponse(error.message, context.set, context)
+		return mapResponse(
+			isProduction() ? 'Internal Server Error' : error.message,
+			context.set,
+			context
+		)
 	}
 
 	return defaultError ? defaultError.clone() : getDefaultError()
