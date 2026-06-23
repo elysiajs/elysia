@@ -176,6 +176,28 @@ describe('error', () => {
 		}
 	)
 
+	it('runs error and mapResponse hooks for thrown status in dynamic mode', async () => {
+		let onErrorCalled = false
+
+		const app = new Elysia({ aot: false })
+			.onError(({ code }) => {
+				onErrorCalled = code === 418
+			})
+			.mapResponse(({ response }) => {
+				if ((response as { message?: string })?.message === 'meow')
+					return 'mapped'
+			})
+			.get('/', ({ status }) => {
+				throw status(418, { message: 'meow' })
+			})
+
+		const response = await app.handle(req('/'))
+
+		expect(await response.text()).toBe('mapped')
+		expect(response.status).toBe(418)
+		expect(onErrorCalled).toBe(true)
+	})
+
 	it('handle error in order', async () => {
 		let order = <string[]>[]
 

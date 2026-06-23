@@ -5,6 +5,7 @@ import {
 	ElysiaCustomStatusResponse,
 	type ElysiaErrors,
 	NotFoundError,
+	ParseError,
 	status,
 	ValidationError
 } from './error'
@@ -264,25 +265,31 @@ export const createDynamicHandler = (app: AnyElysia) => {
 				return await hooks.config.mount(request)
 
 			let body: string | Record<string, any> | undefined
+			try {
 			if (request.method !== 'GET' && request.method !== 'HEAD') {
 				if (content) {
 					switch (content) {
+						case 'json':
 						case 'application/json':
 							body = (await request.json()) as any
 							break
 
+						case 'text':
 						case 'text/plain':
 							body = await request.text()
 							break
 
+						case 'urlencoded':
 						case 'application/x-www-form-urlencoded':
 							body = parseQuery(await request.text())
 							break
 
+						case 'arrayBuffer':
 						case 'application/octet-stream':
 							body = await request.arrayBuffer()
 							break
 
+						case 'formdata':
 						case 'multipart/form-data': {
 							body = {}
 
@@ -315,95 +322,97 @@ export const createDynamicHandler = (app: AnyElysia) => {
 						const index = contentType.indexOf(';')
 						if (index !== -1)
 							contentType = contentType.slice(0, index)
+					}
 
-						// @ts-expect-error
-						context.contentType = contentType
+					// @ts-expect-error
+					context.contentType = contentType ?? ''
 
-						if (hooks.parse)
-							for (let i = 0; i < hooks.parse.length; i++) {
-								const hook = hooks.parse[i].fn
+					if (hooks.parse)
+						parse: for (let i = 0; i < hooks.parse.length; i++) {
+							const hook = hooks.parse[i].fn
 
-								if (typeof hook === 'string')
-									switch (hook) {
-										case 'json':
-										case 'application/json':
-											body = (await request.json()) as any
-											break
+							if (typeof hook === 'string')
+								switch (hook) {
+									case 'json':
+									case 'application/json':
+										body = (await request.json()) as any
+										break parse
 
-										case 'text':
-										case 'text/plain':
-											body = await request.text()
-											break
+									case 'text':
+									case 'text/plain':
+										body = await request.text()
+										break parse
 
-										case 'urlencoded':
-										case 'application/x-www-form-urlencoded':
-											body = parseQuery(
-												await request.text()
-											)
-											break
+									case 'urlencoded':
+									case 'application/x-www-form-urlencoded':
+										body = parseQuery(
+											await request.text()
+										)
+										break parse
 
-										case 'arrayBuffer':
-										case 'application/octet-stream':
-											body = await request.arrayBuffer()
-											break
+									case 'arrayBuffer':
+									case 'application/octet-stream':
+										body = await request.arrayBuffer()
+										break parse
 
-										case 'formdata':
-										case 'multipart/form-data': {
-											body = {}
+									case 'formdata':
+									case 'multipart/form-data': {
+										body = {}
 
-											const form = await request.formData()
-											const grouped = new Map<string, any[]>()
-											form.forEach((v, k) => {
-												const list = grouped.get(k)
-												if (list) list.push(v)
-												else grouped.set(k, [v])
-											})
-											for (const [key, value] of grouped) {
-												if (body[key]) continue
+										const form = await request.formData()
+										const grouped = new Map<string, any[]>()
+										form.forEach((v, k) => {
+											const list = grouped.get(k)
+											if (list) list.push(v)
+											else grouped.set(k, [v])
+										})
+										for (const [key, value] of grouped) {
+											if (body[key]) continue
 
-												const finalValue = normalizeFormValue(value)
+											const finalValue = normalizeFormValue(value)
 
-												if (key.includes('.') || key.includes('['))
-													setNestedValue(body, key, finalValue)
-												else body[key] = finalValue
-											}
-
-											break
+											if (key.includes('.') || key.includes('['))
+												setNestedValue(body, key, finalValue)
+											else body[key] = finalValue
 										}
 
-										default: {
-											const parser = app['~parser'][hook]
-											if (parser) {
-												let temp = parser(
-													context as any,
-													contentType
-												)
-												if (temp instanceof Promise)
-													temp = await temp
-
-												if (temp) {
-													body = temp
-													break
-												}
-											}
-											break
-										}
+										break parse
 									}
-								else {
-									let temp = hook(context as any, contentType)
-									if (temp instanceof Promise)
-										temp = await temp
 
-									if (temp) {
-										body = temp
+									default: {
+										const parser = app['~parser'][hook]
+										if (parser) {
+											let temp = parser(
+												context as any,
+												contentType
+											)
+											if (temp instanceof Promise)
+												temp = await temp
+
+											if (temp) {
+												body = temp
+												break parse
+											}
+										}
 										break
 									}
 								}
+							else {
+								let temp = hook(context as any, contentType)
+								if (temp instanceof Promise)
+									temp = await temp
+
+								if (temp) {
+									body = temp
+									break parse
+								}
 							}
+						}
 
-						// @ts-expect-error
-						delete context.contentType
+					// @ts-expect-error
+					delete context.contentType
 
+					if (contentType) {
 						// body might be empty string thus can't use !body
 						if (body === undefined) {
 							switch (contentType) {
@@ -449,6 +458,9 @@ export const createDynamicHandler = (app: AnyElysia) => {
 						}
 					}
 				}
+			}
+			} catch (error) {
+				throw new ParseError(error instanceof Error ? error : undefined)
 			}
 
 			context.route = route
@@ -895,6 +907,13 @@ export const createDynamicErrorHandler = (app: AnyElysia) => {
 		},
 		error: ElysiaErrors
 	) => {
+		if (error instanceof ElysiaCustomStatusResponse) {
+			const statusResponse = error as any
+			context.set.status = error.code
+			statusResponse.status = error.code
+			statusResponse.message = error.response
+		}
+
 		const errorContext = Object.assign(context, { error, code: error.code })
 		errorContext.set = context.set
 
@@ -927,6 +946,12 @@ export const createDynamicErrorHandler = (app: AnyElysia) => {
 						context.set
 					))
 			}
+
+		if (
+			context.response === undefined &&
+			error instanceof ElysiaCustomStatusResponse
+		)
+			context.response = error.response
 
 		if (context.response) {
 			if (app.event.mapResponse)
