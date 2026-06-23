@@ -7,6 +7,10 @@ import { StringType } from './string'
 import { Union } from './union'
 import { elyType } from './utils'
 
+// A finite decimal numeric string: optional sign + digits/decimal point
+// Rejects hex (`0x10`), binary/octal, scientific (`1e3`) and `Infinity`/`NaN`
+const decimalNumber = /^[+-]?(\d+\.?\d*|\.\d+)$/
+
 export type AssertNumericEnum<T extends Record<string, string | number>> = {
 	[K in keyof T]: K extends number
 		? string
@@ -35,7 +39,7 @@ export function NumericEnum<T extends AssertNumericEnum<T>>(
 		Refine(
 			Union([StringType({ format: 'numeric' }), NumberType()], property),
 			(value) => {
-				if (typeof value === 'string' && value.trim() === '')
+				if (typeof value === 'string' && !decimalNumber.test(value))
 					return false
 
 				const n = +value
