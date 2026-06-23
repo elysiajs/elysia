@@ -6736,37 +6736,33 @@ export class Elysia<
 			const autoHead =
 				enableAutoHead && method === 'GET' && !explicitHead?.has(path)
 
-			const registerPattern = (
-				registerMain: (p: string, h: CompiledHandler) => void,
-				registerHead: (p: string, h: CompiledHandler) => void,
-				handler: CompiledHandler,
-				headHandler: CompiledHandler | undefined,
-				registerLoose: boolean
-			) => {
-				const explicitMain = explicitPaths?.get(method)
+			const isDynamic = isDynamicRegex.test(path)
+			// dynamic loose twins use a find-time retry, not the trie
+			const registerLoose = !isDynamic && !strict
+			const explicitMain = registerLoose
+				? explicitPaths?.get(method)
+				: undefined
 
-				const add = (p: string) => {
-					registerMain(p, handler)
-					if (headHandler) registerHead(p, headHandler)
+			// expand concrete paths (encoded variant + loose twins), preserving
+			// registration order: path, loose(path), encoded, loose(encoded)
+			const variants = [path]
+			if (needEncodeRegex.test(path)) {
+				const encoded = encodeURI(path)
+				if (encoded !== path) variants.push(encoded)
+			}
 
-					if (registerLoose) {
-						const loose = getLoosePath(p)
-						if (loose !== p && !explicitMain?.has(loose)) {
-							registerMain(loose, handler)
-							if (headHandler) registerHead(loose, headHandler)
-						}
-					}
-				}
-
-				add(path)
-
-				if (needEncodeRegex.test(path)) {
-					const encoded = encodeURI(path)
-					if (encoded !== path) add(encoded)
+			const paths: string[] = []
+			for (let v = 0; v < variants.length; v++) {
+				const p = variants[v]
+				paths.push(p)
+				if (registerLoose) {
+					const loose = getLoosePath(p)
+					if (loose !== p && !explicitMain?.has(loose))
+						paths.push(loose)
 				}
 			}
 
-			if (isDynamicRegex.test(path)) {
+			if (isDynamic) {
 				const router = (this['~router'] ??= new Memoirist())
 				const handler = this.handler(
 					i,
@@ -6779,14 +6775,11 @@ export class Elysia<
 					? wrapHeadHandler(handler)
 					: undefined
 
-				registerPattern(
-					(p, h) => router.add(method, p, h, false),
-					(p, h) => router.add('HEAD', p, h, false),
-					handler,
-					headHandler,
-					// dynamic loose twins use a find-time retry, not the trie
-					false
-				)
+				for (let p = 0; p < paths.length; p++) {
+					router.add(method, paths[p], handler, false)
+					if (headHandler)
+						router.add('HEAD', paths[p], headHandler, false)
+				}
 			} else {
 				const map = (methods[method] ??= nullObject() as any)
 				const handler = this.handler(i, precompile, route, sharedStatic)
@@ -6799,17 +6792,10 @@ export class Elysia<
 					? (methods['HEAD'] ??= nullObject() as any)
 					: undefined
 
-				registerPattern(
-					(p, h) => {
-						map[p] = h
-					},
-					(p, h) => {
-						head![p] = h
-					},
-					handler,
-					headHandler,
-					!strict
-				)
+				for (let p = 0; p < paths.length; p++) {
+					map[paths[p]] = handler
+					if (headHandler) head![paths[p]] = headHandler
+				}
 			}
 		}
 	}
