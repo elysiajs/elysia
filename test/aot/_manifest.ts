@@ -157,6 +157,9 @@ export const materialise = (
 				}
 			})
 
+		// coercion plan — pure JSON, round-trip to match the real emit
+		if (c.coercePlan) entry.cp = JSON.parse(JSON.stringify(c.coercePlan))
+
 		const bySlot = ((m[c.method] ??= {})[c.path] ??= {})
 		bySlot[c.slot] = entry
 	}

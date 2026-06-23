@@ -96,6 +96,18 @@ export abstract class Validator {
 
 		const schema = Validator.reference(name, options?.models)
 
+		if (isCompiledSchema(schema)) {
+			const message =
+				'[Elysia] A pre-compiled TypeBox schema (TypeCompiler.Compile / t.Compile) was passed as a route schema. Pass the schema itself (e.g. `t.Object({...})`) — Elysia compiles it internally.'
+
+			if (Capture.isCapturing())
+				throw new Error(
+					`${message} The AOT build plugin cannot serialize a pre-compiled schema.`
+				)
+
+			console.warn(message)
+		}
+
 		let isIntersectable = false
 
 		if (options?.schemas?.length) {
@@ -104,9 +116,7 @@ export abstract class Validator {
 				options.schemas.every((v) => '~kind' in v || '~elyAcl' in v)
 			)
 				isIntersectable = true
-			else {
-				return new MultiValidator(schema, options) as any
-			}
+			else return new MultiValidator(schema, options) as any
 		}
 
 		if ('~kind' in schema || '~elyAcl' in schema) {
@@ -216,6 +226,11 @@ export abstract class Validator {
 		tbCache?.clear()
 	}
 }
+
+const isCompiledSchema = (schema: any) =>
+	schema != null &&
+	typeof schema.Check === 'function' &&
+	'buildResult' in schema
 
 // a single TypeBox / Standard / Acl schema vs a `Record<status, schema>` map
 const isSingleSchema = (schema: any): boolean =>

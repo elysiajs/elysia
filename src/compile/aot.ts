@@ -1,5 +1,6 @@
 import { env } from '../universal'
 import { nullObject } from '../utils'
+import type { CoercePlan } from '../type/coerce'
 
 export type ValidatorSlot =
 	| 'body'
@@ -77,6 +78,9 @@ export interface FrozenValidator {
 		// otherwise `s` is a plain (v)=>cleaned cleaner called directly
 		d: FrozenMirror & { x?: 1 }
 	}>
+	// coercion plan: rebuild the coerced schema by splicing deduped frozen
+	// primitive leaves into the live original (skips the `applyCoercions` walk)
+	cp?: CoercePlan
 }
 
 export interface ValidatorManifest {
@@ -556,6 +560,8 @@ export interface CapturedValidator {
 		external: boolean
 		decode: CapturedMirror
 	}>
+	// coercion plan (primitive coercions)
+	coercePlan?: CoercePlan
 }
 
 let capture: Map<string, CapturedValidator> | undefined

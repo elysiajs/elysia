@@ -27,6 +27,8 @@ import createMirror from 'exact-mirror'
 
 import {
 	applyCoercions,
+	buildCoercedFromPlan,
+	captureCoercePlan,
 	CoerceOption,
 	deferCoercions,
 	nonAdditionalProperties
@@ -642,6 +644,15 @@ function reconstructInnerCodecs(
 	}
 }
 
+function externalsShape(schema: unknown) {
+	let out = ''
+	for (const e of collectExternals(schema))
+		out +=
+			e instanceof RegExp ? 'r' : typeof e === 'function' ? 'f' : 'v'
+
+	return out
+}
+
 function buildFrozenCheck(
 	build: CheckBuildResult | undefined,
 	node: any
@@ -815,9 +826,13 @@ export class TypeBoxValidator<
 		const isFrozen = this.#reconstruct(options, frozen)
 
 		this.schema = (
-			isFrozen && !this.hasCodec
-				? schema
-				: applyCoercions(schema as any, options?.coerces)
+			isFrozen && frozen!.cp
+				? // bake: splice deduped frozen leaves into the live original
+					// schema instead of re-walking (see coerce.ts captureCoercePlan)
+					buildCoercedFromPlan(schema as any, frozen!.cp)
+				: isFrozen && !this.hasCodec
+					? schema
+					: applyCoercions(schema as any, options?.coerces)
 		) as T
 
 		if (
@@ -840,7 +855,7 @@ export class TypeBoxValidator<
 
 			this.hasDefault = hasProperty('default', this.schema as any)
 
-			if (capturing) this.#maybeCapture(options, schemaHasRef)
+			if (capturing) this.#maybeCapture(options, schemaHasRef, schema)
 			else this.#dropCompiledSource()
 		}
 
@@ -1235,11 +1250,31 @@ export class TypeBoxValidator<
 
 	#maybeCapture(
 		options: ValidatorOptions | undefined,
-		hasRef: boolean
+		hasRef: boolean,
+		originalSchema: TSchema
 	): void {
 		const aot = options?.aot
 		const slot = options?.slot
 		if (!aot || !slot || !Capture.isCapturing()) return
+
+		if (
+			this.hasCodec &&
+			!hasRef &&
+			options.coerces &&
+			options.normalize !== false &&
+			options.normalize !== 'typebox'
+		) {
+			const plan = captureCoercePlan(originalSchema, this.schema)
+			if (
+				plan &&
+				externalsShape(buildCoercedFromPlan(originalSchema, plan)) ===
+					externalsShape(this.schema)
+			)
+				Capture.set(
+					{ method: aot.method, path: aot.path, slot },
+					{ coercePlan: plan }
+				)
+		}
 
 		if (this.hasDefault) {
 			const pre = verifyPreallocatableDefault(this.schema as TSchema)

@@ -26,9 +26,11 @@ export function BooleanString(property?: TSchemaOptions) {
 	)
 
 	if (!property || isEmpty(property))
-		return (emptyBooleanString ??= elyType(
-			ELYSIA_TYPES.BooleanString,
-			Union([BooleanType(), StringifiedBoolean])
+		return (emptyBooleanString ??= Object.freeze(
+			elyType(
+				ELYSIA_TYPES.BooleanString,
+				Union([BooleanType(), StringifiedBoolean])
+			)
 		))
 
 	const [, meta] = getMeta(property)

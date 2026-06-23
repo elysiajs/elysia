@@ -36,9 +36,11 @@ export function IntegerString(property?: TNumberOptions) {
 	)
 
 	if (!property || isEmpty(property))
-		return (emptyIntegerString ??= elyType(
-			ELYSIA_TYPES.Integer,
-			Union([StrictInteger, StringifiedInteger]) as any
+		return (emptyIntegerString ??= Object.freeze(
+			elyType(
+				ELYSIA_TYPES.Integer,
+				Union([StrictInteger, StringifiedInteger]) as any
+			)
 		) as IntegerStringSchema)
 
 	const [constraints, meta] = getMeta(property)
@@ -52,10 +54,8 @@ export function IntegerString(property?: TNumberOptions) {
 				if (value.trim() === '') return false
 				const n = +value
 				if (isNaN(n) || !Number.isInteger(n)) return false
-				if (typeof c.minimum === 'number' && n < c.minimum)
-					return false
-				if (typeof c.maximum === 'number' && n > c.maximum)
-					return false
+				if (typeof c.minimum === 'number' && n < c.minimum) return false
+				if (typeof c.maximum === 'number' && n > c.maximum) return false
 				if (
 					typeof c.exclusiveMinimum === 'number' &&
 					n <= c.exclusiveMinimum
@@ -66,10 +66,7 @@ export function IntegerString(property?: TNumberOptions) {
 					n >= c.exclusiveMaximum
 				)
 					return false
-				if (
-					typeof c.multipleOf === 'number' &&
-					n % c.multipleOf !== 0
-				)
+				if (typeof c.multipleOf === 'number' && n % c.multipleOf !== 0)
 					return false
 				return true
 			},

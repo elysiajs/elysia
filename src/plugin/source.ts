@@ -229,6 +229,8 @@ function emitModule(
 			parts.push(`ic: [${ic}]`)
 		}
 
+		if (c.coercePlan) parts.push(`cp: ${JSON.stringify(c.coercePlan)}`)
+
 		return parts
 	}
 

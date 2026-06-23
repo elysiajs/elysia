@@ -1280,7 +1280,9 @@ export function compileHandler(
 			return createInlineHandlerWithSet(res.map as any, handler as any)
 	}
 
-	if (!precomputedStatic) Capture.handler({ method, path, alias, code })
+	// capture static-response handlers too (no `!precomputedStatic` guard): `h`
+	// is re-injected at reconstruct, replacing the boot-time sucrose + new Function
+	Capture.handler({ method, path, alias, code })
 
 	// eslint-disable-next-line sonarjs/code-eval -- AOT codegen is the architecture
 	return new Function('h', alias, `return ${code}`)(handler, ...params)
