@@ -19,6 +19,7 @@ import { isBun } from './universal/constants'
 import { isDynamicRegex, needEncodeRegex, MethodMap } from './constants'
 import { BunAdapter } from './adapter/bun'
 import {
+    clonePlainDecorators,
 	coalesceStandaloneSchemas,
 	createErrorEventHandler,
 	eventProperties,
@@ -115,44 +116,11 @@ import type {
 	HTTPMethod,
 	AddRoute,
 	AddWSRoute,
-	InlineResponse,
-	InlineSchemaResponse
 } from './types'
 import type { ElysiaStatus } from './error'
 import type { Context, LifecycleContext, ErrorContext } from './context'
 
 const useNodesBuffer: ChainNode[] = []
-
-// Decorators are shared singletons, but a plugin's *nested plain object*
-// decorator must not be aliased into the parent by reference (a per-request
-// mutation through one would otherwise leak into the other instance). Recurse
-// only into plain objects ({} / Object.create(null)); class instances, arrays,
-// functions, Blobs and primitives are kept by reference (intended singletons).
-const isPlainObject = (v: unknown): v is Record<string, unknown> => {
-	if (!v || typeof v !== 'object' || Array.isArray(v)) return false
-	const proto = Object.getPrototypeOf(v)
-	return proto === Object.prototype || proto === null
-}
-
-function clonePlainDecorators<T extends Record<string, unknown>>(
-	source: T,
-	seen: WeakMap<object, any> = new WeakMap()
-): T {
-	const existing = seen.get(source)
-	if (existing) return existing
-
-	const out: Record<string, unknown> = nullObject()
-	seen.set(source, out)
-
-	for (const key in source) {
-		const value = source[key]
-		out[key] = isPlainObject(value)
-			? clonePlainDecorators(value, seen)
-			: value
-	}
-
-	return out as T
-}
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
 
@@ -6580,6 +6548,13 @@ export class Elysia<
 		path: string,
 		handler: CompiledHandler
 	) {
+		// Dynamic routes live in the router, not the map - the request path is
+		// concrete (`/5/7`) while `path` is the pattern (`/5/:id`), so a map entry
+		// here is never hit by a real URL. Worse, a literal `/5/:id` request would
+		// match it and run the handler with no params. Skip it: the router already
+		// holds the (jit) handler for these.
+		if (isDynamicRegex.test(path)) return
+
 		this.#initMap()
 
 		const map = (this['~map']![mapMethodBack(method)] ??=

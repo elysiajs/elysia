@@ -244,8 +244,12 @@ function isPrecomputeSafe(schema: any, depth = 0): boolean {
 			return false
 
 	if (schema.properties)
-		for (const v of Object.values(schema.properties))
-			if (!isPrecomputeSafe(v, depth + 1)) return false
+		for (const key in schema.properties)
+			if (
+				Object.hasOwn(schema.properties, key) &&
+				!isPrecomputeSafe(schema.properties[key], depth + 1)
+			)
+				return false
 
 	if (schema.items) {
 		if (Array.isArray(schema.items)) {
@@ -261,8 +265,12 @@ function isPrecomputeSafe(schema: any, depth = 0): boolean {
 		return false
 
 	if (schema.patternProperties)
-		for (const v of Object.values(schema.patternProperties))
-			if (!isPrecomputeSafe(v, depth + 1)) return false
+		for (const key in schema.patternProperties)
+			if (
+				Object.hasOwn(schema.patternProperties, key) &&
+				!isPrecomputeSafe(schema.patternProperties[key], depth + 1)
+			)
+				return false
 
 	return true
 }

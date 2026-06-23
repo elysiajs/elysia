@@ -415,13 +415,19 @@ export function mergeArray<
 			return a as any
 		}
 
-		if (bIsArray) return [...b, a] as any
+		if (bIsArray) {
+			const out = new Array(b.length + 1)
+			for (let i = 0; i < b.length; i++) out[i] = b[i]
+			out[b.length] = a
+
+			return out as any
+		}
 
 		return [b, a] as any
 	}
 
 	if (aIsArray && bIsArray) {
-		a.push(...b)
+		for (let i = 0; i < b.length; i++) a.push(b[i])
 		return a as any
 	}
 
@@ -430,7 +436,13 @@ export function mergeArray<
 		return a as any
 	}
 
-	if (bIsArray) return [a, ...b] as any
+	if (bIsArray) {
+		const out = new Array(b.length + 1)
+		out[0] = a
+		for (let i = 0; i < b.length; i++) out[i + 1] = b[i]
+
+		return out as any
+	}
 
 	return [a, b] as any
 }
@@ -659,15 +671,21 @@ export function mergeDeep<
 	if (!isObject(target) || !isObject(source)) return target as A & B
 	if (seen?.has(source)) return target as A & B
 
-	for (const [key, value] of Object.entries(source)) {
+	for (const key in source) {
+		if (!Object.hasOwn(source, key)) continue
+
+		const value = source[key]
 		if (skipKeys?.includes(key) || dangerousKeys.has(key as any)) continue
 
 		if (mergeArray && Array.isArray(value)) {
-			target[key as keyof typeof target] = Array.isArray(
-				(target as any)[key]
-			)
-				? [...(target as any)[key], ...value]
-				: (target[key as keyof typeof target] = value as any)
+			const existing = (target as any)[key]
+
+			// Allocate a fresh array on merge - `existing` may be aliased to a
+			// shared source (e.g. an object-macro's `detail.tags`), so pushing
+			// into it in place would leak across every reuse of that source.
+			target[key as keyof typeof target] = (
+				Array.isArray(existing) ? existing.concat(value) : value
+			) as any
 
 			continue
 		}
@@ -675,7 +693,7 @@ export function mergeDeep<
 		if (!isObject(value) || !(key in target) || isClass(value)) {
 			if ((override || !(key in target)) && !Object.isFrozen(target))
 				try {
-					target[key as keyof typeof target] = value
+					target[key as keyof typeof target] = value as any
 				} catch {}
 
 			continue
@@ -751,4 +769,31 @@ export function replaceUrlPath(url: string, path: string) {
 	const qs = url.indexOf('?', i)
 
 	return `${url.slice(0, i)}${path.charCodeAt(0) === 47 ? '' : '/'}${path}${qs === -1 ? '' : url.slice(qs)}`
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+	if (!v || typeof v !== 'object' || Array.isArray(v)) return false
+
+	const proto = Object.getPrototypeOf(v)
+	return proto === Object.prototype || proto === null
+}
+
+export function clonePlainDecorators<T extends Record<string, unknown>>(
+	source: T,
+	seen: WeakMap<object, any> = new WeakMap()
+): T {
+	const existing = seen.get(source)
+	if (existing) return existing
+
+	const out: Record<string, unknown> = nullObject()
+	seen.set(source, out)
+
+	for (const key in source) {
+		const value = source[key]
+		out[key] = isPlainObject(value)
+			? clonePlainDecorators(value, seen)
+			: value
+	}
+
+	return out as T
 }

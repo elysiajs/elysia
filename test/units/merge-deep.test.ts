@@ -16,6 +16,32 @@ describe('mergeDeep', () => {
 		expect(result).toEqual({ key1: 'value1', key2: 'value2' })
 	})
 
+	it('merges arrays target-first without leaking into a shared source', () => {
+		// The same source can be merged into many targets (e.g. an object-macro's
+		// shared `detail.tags`). Merging must not mutate that source in place, or
+		// one route's merge would corrupt every other route using it.
+		const source = { lifecycle: ['plugin', 'route'] }
+
+		const a = mergeDeep(
+			{ lifecycle: ['a'] },
+			source,
+			undefined,
+			true,
+			true
+		)
+		const b = mergeDeep(
+			{ lifecycle: ['b'] },
+			source,
+			undefined,
+			true,
+			true
+		)
+
+		expect(a.lifecycle).toEqual(['a', 'plugin', 'route'])
+		expect(b.lifecycle).toEqual(['b', 'plugin', 'route'])
+		expect(source.lifecycle).toEqual(['plugin', 'route'])
+	})
+
 	it('merge overlapping key', () => {
 		const result = mergeDeep(
 			{

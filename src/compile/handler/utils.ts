@@ -24,6 +24,12 @@ const noTrace = { begin: '', end: () => '' } as const
 export const cloneResponse = (r: unknown) =>
 	r instanceof Response ? r.clone() : r
 
+export function hasRequestBody(request: Request) {
+	const length = request.headers.get('content-length')
+	if (length !== null) return length !== '0'
+	return request.body != null
+}
+
 const trace = (report: TraceReporter | undefined, fn: Function) =>
 	report?.resolveChild(childName(fn)) ?? noTrace
 
@@ -542,11 +548,7 @@ export const mapError = map<
 // NOTE: must stay a `function` declaration so `mapTransform`,
 // `mapAfterResponse`, and `mapError` above can use it.
 function map<Event extends AppEvent, T extends unknown[] = []>(
-	map: (
-		index: number | undefined,
-		fn: AppHook[Event][0],
-		rest: T
-	) => string
+	map: (index: number | undefined, fn: AppHook[Event][0], rest: T) => string
 ) {
 	return function (event: MaybeArray<AppHook[Event][0]>, rest?: T) {
 		if (Array.isArray(event)) {

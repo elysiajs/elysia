@@ -103,7 +103,8 @@ export function parseQueryFromURL(
 
 				if (currentValue === undefined) result[finalKey] = finalValue
 				else if (Array.isArray(currentValue))
-					currentValue.push(...finalValue)
+					for (let i = 0; i < finalValue.length; i++)
+						currentValue.push(finalValue[i])
 				else {
 					result[finalKey] = finalValue
 					result[finalKey].unshift(currentValue)

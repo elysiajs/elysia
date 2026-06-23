@@ -235,6 +235,37 @@ export function buildWSRoute(
 		} catch {}
 	}
 
+	const bodyValidator = validators.body as any
+
+	function validateMessageBody(message: unknown) {
+		if (!bodyValidator) return message
+
+		if (bodyValidator.hasCodec) return bodyValidator.From(message, 'body')
+
+		if (!bodyValidator.Check(message))
+			throw new ValidationError(
+				'body',
+				message,
+				bodyValidator.Errors?.(message) ?? []
+			)
+
+		return message
+	}
+
+	function onMessageValidationError(
+		ws: ElysiaWS<any>,
+		error: unknown
+	): void | Promise<void> {
+		if (errorHandlers.length === 0) {
+			try {
+				ws.raw.send(error instanceof Error ? error.message : error + '')
+			} catch {}
+			return
+		}
+
+		return handleError(ws, error)
+	}
+
 	// Per-route constant. `hook.message` never changes after build.
 	const messageTakesBody =
 		!!hook.message && (hook.message as AnyFn).length >= 2
@@ -247,21 +278,15 @@ export function buildWSRoute(
 
 		try {
 			const p = parseMessage(ws.raw as any, rawMessage)
-			const message = p instanceof Promise ? await p : p
+			let message = p instanceof Promise ? await p : p
 
-			if (validators.body) {
-				const v = validators.body as any
-				if (!v.Check(message)) {
-					const err = new ValidationError(
-						'body',
-						message,
-						v.Errors?.(message) ?? []
-					)
-					if (errorHandlers.length === 0) {
-						ws.raw.send(err.message)
-						return
-					}
-					return handleError(ws, err)
+			if (bodyValidator) {
+				try {
+					const decoded = validateMessageBody(message)
+					message =
+						decoded instanceof Promise ? await decoded : decoded
+				} catch (err) {
+					return onMessageValidationError(ws, err)
 				}
 			}
 
@@ -336,23 +361,32 @@ export function buildWSRoute(
 		ws: ElysiaWS<any>,
 		message: unknown
 	): void | Promise<void> {
-		try {
-			if (validators.body) {
-				const v = validators.body as any
-				if (!v.Check(message)) {
-					const err = new ValidationError(
-						'body',
-						message,
-						v.Errors?.(message) ?? []
-					)
-					if (errorHandlers.length === 0) {
-						ws.raw.send(err.message)
-						return
-					}
-					return handleError(ws, err)
-				}
+		if (bodyValidator) {
+			let decoded: unknown
+
+			try {
+				decoded = validateMessageBody(message)
+			} catch (error) {
+				return onMessageValidationError(ws, error)
 			}
 
+			if (decoded instanceof Promise)
+				return decoded.then(
+					(m) => runMessageSync(ws, m),
+					(error) => onMessageValidationError(ws, error)
+				)
+
+			message = decoded
+		}
+
+		return runMessageSync(ws, message)
+	}
+
+	function runMessageSync(
+		ws: ElysiaWS<any>,
+		message: unknown
+	): void | Promise<void> {
+		try {
 			ws.body = message as any
 
 			const result = messageTakesBody
@@ -421,11 +455,7 @@ export function buildWSRoute(
 	const onPing = wrapLifecycle(hook.ping as any, true)
 	const onPong = wrapLifecycle(hook.pong as any, true)
 	const onClose = hook.close
-		? async (
-				connection: ElysiaWS<any>,
-				code: number,
-				reason: string
-			) => {
+		? async (connection: ElysiaWS<any>, code: number, reason: string) => {
 				const ws: ElysiaWS<any> = Object.create(connection)
 				try {
 					;(ws as any).code = code

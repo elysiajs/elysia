@@ -27,6 +27,7 @@ import { defaultAdapter } from '../../adapter/constants'
 import {
 	cloneResponse,
 	getQueryParseArgs,
+	hasRequestBody,
 	mapAfterHandle,
 	mapAfterResponse,
 	mapBeforeHandle,
@@ -192,12 +193,13 @@ function parse(
 		const child = report?.resolveChild('default')
 		const begin = child ? child.begin : ''
 		const end = child ? child.end() : ''
-		const guard = bodyVali ? 'ct' : 'ct&&c.request.body'
+		const guard = bodyVali ? 'ct' : 'ct&&hb(c.request)'
 
 		code += hasFn
 			? `if(!hasBody&&${guard}){${begin}c.body=await pd(c,ct)\n${end}}\n`
 			: `if(${guard}){${begin}c.body=await pd(c,ct)\n${end}}\n`
 
+		if (!bodyVali) link(hasRequestBody, 'hb')
 		link(adapter.default, 'pd')
 	}
 
@@ -725,12 +727,13 @@ export function compileHandler(
 		}
 	}
 
-	const responseValiAsync = !!(
-		vali?.response &&
-		Object.values(vali.response as Record<number, Validator>).find(
-			isAsyncValidator
-		)
-	)
+	let responseValiAsync = false
+	if (vali?.response)
+		for (const code in vali.response)
+			if (isAsyncValidator(vali.response[code])) {
+				responseValiAsync = true
+				break
+			}
 
 	const handlerIsAsync =
 		isHandleFunction && isAsyncFunction(handler as Function)

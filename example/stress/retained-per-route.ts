@@ -24,7 +24,7 @@ const variants: Record<string, () => any> = {
 const labels: Record<string, string> = {
 	static: 'Static routes (/N)',
 	'dynamic-default':
-		'Dynamic (/N/:id) — default (loose + auto-HEAD, up to 4 inserts/route)',
+		'Dynamic (/N/:id) — default (1 trie insert; premium vs static = memoirist node)',
 	'dynamic-strict': 'Dynamic (/N/:id) — strictPath (no loose variant)'
 }
 

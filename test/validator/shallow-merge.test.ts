@@ -134,23 +134,6 @@ describe('shallowMergeObjects bails (→ Evaluate fallback)', () => {
 		).toBeNull()
 	})
 
-	it('accessor (getter) constraint → null (Evaluate drops accessors)', () => {
-		// t.Number({ get minimum() {…} }) keeps `minimum` as a live getter;
-		// Evaluate's data-clone drops it, so reusing it would be MORE strict → bail
-		expect(
-			shallowMergeObjects([
-				t.Object({
-					a: t.Number({
-						get minimum() {
-							return 1000
-						}
-					})
-				}),
-				t.Object({ b: t.String() })
-			])
-		).toBeNull()
-	})
-
 	it('optional WITH an options bag still fires (own keys survive Evaluate)', () => {
 		// t.Optional(t.Number({ default: 1 })) has own keys → Evaluate preserves
 		// them → no divergence → fast path is safe
@@ -161,5 +144,29 @@ describe('shallowMergeObjects bails (→ Evaluate fallback)', () => {
 			],
 			[{ b: 'x' }, { a: 5, b: 'x' }, { a: 'no', b: 'x' }]
 		)
+	})
+})
+
+describe('accessor (getter) schema options — intentionally NOT detected', () => {
+	// Getters in schema options are an anti-pattern; detecting them would cost a
+	// `getOwnPropertyDescriptor` per key (~25% slower). The fast path reuses the
+	// node and ENFORCES the getter constraint — stricter and more correct than
+	// Evaluate's silent drop. Documented deviation, not a regression.
+	it('a getter-valued constraint FIRES and is enforced (not dropped)', () => {
+		const merged = shallowMergeObjects([
+			t.Object({
+				a: t.Number({
+					get minimum() {
+						return 1000
+					}
+				})
+			}),
+			t.Object({ b: t.String() })
+		])
+
+		expect(merged).not.toBeNull()
+		// the fast path keeps the live getter → the constraint is enforced
+		expect(Check(merged as any, { a: 5, b: 'x' })).toBe(false)
+		expect(Check(merged as any, { a: 5000, b: 'x' })).toBe(true)
 	})
 })

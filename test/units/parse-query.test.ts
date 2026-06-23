@@ -58,4 +58,18 @@ describe('parseQueryFromURL', () => {
 			parseQueryFromURL(ok, ok.indexOf('?'), cfg, cfg).key as unknown
 		).toEqual([1, 2])
 	})
+
+	it('preserves repeated bracketed array query order', () => {
+		// The repeated-array path appends into an existing array. This guards the
+		// no-spread push loop so an allocation cleanup cannot reorder values.
+		const cfg = { key: 1 as const }
+
+		expect(
+			parseQueryFromURL(
+				'http://x.ab/p?key=[1,2]&key=[3,4]',
+				'http://x.ab/p'.length,
+				cfg
+			).key as unknown
+		).toEqual(['1', '2', '3', '4'])
+	})
 })
