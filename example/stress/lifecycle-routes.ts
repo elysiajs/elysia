@@ -9,7 +9,9 @@ for (let i = 0; i < total; i++)
 		.beforeHandle('plugin', () => {})
 		.get(`/r${i}`, () => 'ok')
 
-const stop = profile('Elysia 2α full build 30k plugins w/ 1 route + global event then fetch\n')
+const stop = profile(
+	'Elysia 2α full build 30k plugins w/ 1 route + global event then fetch\n'
+)
 const app = new Elysia()
 
 for (let i = 0; i < total; i++) app.use(plugins[i])

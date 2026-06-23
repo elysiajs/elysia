@@ -1,14 +1,3 @@
-/**
- * Perf-cliff guard: a normal codec response route must encode via the compiled
- * encode mirror (`#encodeMirror`), NOT TypeBox's interpreted `Encode`. The
- * fallback is ~18× slower and allocation-heavy (measured 697 ns mirror vs 13 µs
- * fallback for `{ when: Date, n: Number }`), and a regression that drops the
- * mirror would be invisible — output stays correct, only speed/allocation
- * regress. This test fails if a default-config codec response ever calls the
- * interpreted `Encode`.
- *
- * See the performance/memory investigation (CYCLE 5 — response encode path).
- */
 import { afterEach, describe, expect, it, spyOn } from 'bun:test'
 import * as TBValue from 'typebox/value'
 
@@ -31,9 +20,6 @@ const value = () => ({ when: new Date('2020-01-01T00:00:00.000Z'), n: 1 })
 const encoded = { when: '2020-01-01T00:00:00.000Z', n: 1 }
 
 describe('encode-mirror fallback guard (CYCLE 5)', () => {
-	// Guards the guard: without a slot the mirror is never built, so EncodeFrom
-	// MUST hit the interpreted TypeBox Encode. If this stops firing, the spy is
-	// broken and the assertions below would be meaningless.
 	it('a slot-less validator DOES hit the interpreted Encode (sanity)', () => {
 		const v = new (TypeBoxValidator as any)(codecSchema())
 		encodeSpy.mockClear()

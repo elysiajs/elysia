@@ -19,7 +19,7 @@ import { isBun } from './universal/constants'
 import { isDynamicRegex, needEncodeRegex, MethodMap } from './constants'
 import { BunAdapter } from './adapter/bun'
 import {
-    clonePlainDecorators,
+	clonePlainDecorators,
 	coalesceStandaloneSchemas,
 	createErrorEventHandler,
 	eventProperties,
@@ -115,7 +115,7 @@ import type {
 	ExtractErrorFromHandle,
 	HTTPMethod,
 	AddRoute,
-	AddWSRoute,
+	AddWSRoute
 } from './types'
 import type { ElysiaStatus } from './error'
 import type { Context, LifecycleContext, ErrorContext } from './context'
@@ -230,7 +230,15 @@ export class Elysia<
 		this.#resolveMacros()
 
 		const routes = this.#history.map(
-			([method, path, handler, instance, hook, appHook, inheritedChain]) => {
+			([
+				method,
+				path,
+				handler,
+				instance,
+				hook,
+				appHook,
+				inheritedChain
+			]) => {
 				// Compose exactly as the runtime does (local + appHook +
 				// inherited `.use()` chain, origin-deduped) so introspection
 				// surfaces guard/group schemas inherited via `.use()` instead
@@ -6622,17 +6630,13 @@ export class Elysia<
 
 		const strict = !!this['~config']?.strictPath
 
-		// Explicit (non-loose) paths per method, so a route's trailing-slash
-		// loose twin never clobbers another route explicitly registered on it
 		let explicitPaths: Map<string, Set<string>> | undefined
-		if (!strict) {
+		if (!strict && this['~config']?.distinctPath) {
 			explicitPaths = new Map()
 			for (let i = 0; i < length; i++) {
 				const route = this.#history![i]
 				const m =
-					(route[0] as any) === 'WS'
-						? 'WS'
-						: mapMethodBack(route[0])
+					(route[0] as any) === 'WS' ? 'WS' : mapMethodBack(route[0])
 				const p = route[1]
 
 				let set = explicitPaths.get(m)
