@@ -109,6 +109,58 @@ function schemaContainsRef(node: any, seen = new WeakSet()): boolean {
 	return false
 }
 
+// Fast path for the standalone-guard merge: when every member is a plain inline
+// object (own keys ⊆ type/properties/required, no `~elyTyp`)
+function divergesFromEvaluate(node: any, seen: WeakSet<object>) {
+	if (!node || typeof node !== 'object' || seen.has(node)) return false
+	seen.add(node)
+
+	for (const k in node) {
+		if (!Object.hasOwn(node, k)) return true
+		const v = (node as any)[k]
+		if (typeof v === 'object' && v && divergesFromEvaluate(v, seen))
+			return true
+	}
+
+	return false
+}
+
+const SIMPLE_OBJECT_KEYS = new Set(['type', 'properties', 'required'])
+export function shallowMergeObjects(members: any[]): TSchema | null {
+	const properties: Record<string, unknown> = {}
+	let required: string[] | undefined
+
+	for (const m of members) {
+		if (
+			!m ||
+			m['~kind'] !== 'Object' ||
+			m['~elyTyp'] !== undefined ||
+			!m.properties ||
+			divergesFromEvaluate(m, new WeakSet())
+		)
+			return null
+
+		for (const k of Object.keys(m))
+			if (!SIMPLE_OBJECT_KEYS.has(k)) return null
+
+		for (const k in m.properties) {
+			if (k in properties) return null // Evaluate intersects overlaps
+			properties[k] = m.properties[k]
+		}
+
+		if (Array.isArray(m.required) && m.required.length)
+			(required ??= []).push(...m.required)
+	}
+
+	const out: any = { type: 'object', properties }
+	if (required) out.required = required
+
+	return Object.defineProperty(out, '~kind', {
+		value: 'Object',
+		enumerable: false
+	}) as TSchema
+}
+
 let inlineRefId = 0
 
 const isAsyncPredicate = (v: unknown) =>
@@ -647,8 +699,7 @@ function reconstructInnerCodecs(
 function externalsShape(schema: unknown) {
 	let out = ''
 	for (const e of collectExternals(schema))
-		out +=
-			e instanceof RegExp ? 'r' : typeof e === 'function' ? 'f' : 'v'
+		out += e instanceof RegExp ? 'r' : typeof e === 'function' ? 'f' : 'v'
 
 	return out
 }
@@ -787,10 +838,12 @@ export class TypeBoxValidator<
 	) {
 		super()
 
-		if (isIntersectable)
-			schema = Evaluate(
-				Intersect([schema, ...options!.schemas!] as any)
-			) as unknown as T
+		if (isIntersectable) {
+			const members = [schema, ...options!.schemas!]
+			// fast path because Evaluate(Intersect(...)) is deep clone
+			schema = (shallowMergeObjects(members) ??
+				Evaluate(Intersect(members as any))) as unknown as T
+		}
 
 		const originalElyTyp = (schema as any)?.['~elyTyp']
 
