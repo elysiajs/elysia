@@ -6737,14 +6737,11 @@ export class Elysia<
 				enableAutoHead && method === 'GET' && !explicitHead?.has(path)
 
 			const isDynamic = isDynamicRegex.test(path)
-			// dynamic loose twins use a find-time retry, not the trie
 			const registerLoose = !isDynamic && !strict
 			const explicitMain = registerLoose
 				? explicitPaths?.get(method)
 				: undefined
 
-			// expand concrete paths (encoded variant + loose twins), preserving
-			// registration order: path, loose(path), encoded, loose(encoded)
 			const variants = [path]
 			if (needEncodeRegex.test(path)) {
 				const encoded = encodeURI(path)
