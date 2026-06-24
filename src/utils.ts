@@ -169,13 +169,6 @@ const flattenChainMemos = new WeakMap<
 >()
 const emptyFlatten = Object.freeze(nullObject()) as Partial<AppHook>
 
-function cloneFlatHook(src: Partial<AppHook>): Partial<AppHook> {
-	const out = Object.assign(nullObject(), src) as Record<string, unknown>
-	for (const key in out)
-		if (Array.isArray(out[key])) out[key] = (out[key] as unknown[]).slice()
-	return out as Partial<AppHook>
-}
-
 export function flattenChainMemo(
 	root: object,
 	start: ChainNode | undefined
@@ -196,7 +189,10 @@ export function flattenChainMemo(
 
 	if (cached === emptyFlatten) return
 
-	return cloneFlatHook(cached)
+	// `cloneHook` is identical to the former local `cloneFlatHook`: a shallow
+	// copy with per-key array `.slice()` so the caller can mutate the result
+	// without touching the memoised (shared) flatten.
+	return cloneHook(cached)
 }
 
 function appendInto(
@@ -741,10 +737,12 @@ export const isBlob = (value: unknown): value is Blob =>
 export function cloneHook<T extends Partial<AnyLocalHook> | Partial<AppHook>>(
 	src: T
 ): T {
-	const out = Object.assign(nullObject(), src) as Record<string, any>
+	const out = nullObject() as Record<string, any>
 
-	for (const key in out)
-		if (Array.isArray(out[key])) out[key] = (out[key] as unknown[]).slice()
+	for (const key in src) {
+		const value = (src as Record<string, any>)[key]
+		out[key] = Array.isArray(value) ? value.slice() : value
+	}
 
 	return out as T
 }

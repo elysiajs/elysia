@@ -439,19 +439,17 @@ describe('Path', () => {
 		expect(Object.keys(map).length).toBe(keys)
 	})
 
-	// A static route's trailing-slash (loose) variant is pre-registered in
-	// `~map` at build time (a cheap O(1) key), so the fetch hot path resolves a
-	// trailing-slash request by a direct lookup — there is no per-request
-	// getLoosePath, and static-literal routes keep winning over param routes via
-	// the map-before-router lookup. (Dynamic loose twins are NOT pre-registered;
-	// see the dynamic trailing-slash test below — they use a find-time retry.)
-	it('static route matches a trailing slash via a pre-registered loose key', async () => {
+	// A static route registered without a trailing slash should not retain a
+	// second loose `~map` key. The fetch path still checks the canonical key on
+	// a trailing-slash miss before falling through to the dynamic router, so
+	// static-literal routes keep winning over param routes.
+	it('static route matches a trailing slash without retaining a loose key', async () => {
 		const app = new Elysia().get('/x', () => 'x')
 		app.compile()
 
 		const map = (app as any)['~map'].GET as Record<string, unknown>
 		expect('/x' in map).toBe(true)
-		expect('/x/' in map).toBe(true)
+		expect('/x/' in map).toBe(false)
 
 		await expect(app.handle(req('/x')).then((r) => r.text())).resolves.toBe(
 			'x'
@@ -470,6 +468,39 @@ describe('Path', () => {
 		await expect(
 			app.handle(req('/x/')).then((r) => r.status)
 		).resolves.toBe(404)
+	})
+
+	it('static loose miss still wins before a dynamic route', async () => {
+		const app = new Elysia()
+			.get('/users/1', () => 'static')
+			.get('/users/:id', ({ params: { id } }) => `dynamic:${id}`)
+
+		await expect(
+			app.handle(req('/users/1/')).then((r) => r.text())
+		).resolves.toBe('static')
+	})
+
+	it('method loose match wins before all-method exact match', async () => {
+		const app = new Elysia()
+			.get('/x', () => 'get loose')
+			.all('/x/', () => 'all exact')
+
+		await expect(app.handle(req('/x/')).then((r) => r.text())).resolves.toBe(
+			'get loose'
+		)
+	})
+
+	it('static route registered with trailing slash still matches without it', async () => {
+		const app = new Elysia().get('/x/', () => 'x')
+		app.compile()
+
+		const map = (app as any)['~map'].GET as Record<string, unknown>
+		expect('/x/' in map).toBe(true)
+		expect('/x' in map).toBe(true)
+
+		await expect(app.handle(req('/x')).then((r) => r.text())).resolves.toBe(
+			'x'
+		)
 	})
 
 	// Regression (audit H10): dynamic (parameterized) routes were registered

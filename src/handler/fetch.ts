@@ -93,8 +93,26 @@ function findRoute(
 			}
 		}
 	} else {
-		const handler: CompiledHandler =
-			map[request.method]?.[path] ?? map['*']?.[path]
+		const methodMap = map[request.method]
+		let handler: CompiledHandler | undefined = methodMap?.[path]
+
+		if (!handler) {
+			if (
+				!strictPath &&
+				path.length > 1 &&
+				path.charCodeAt(path.length - 1) === 47
+			) {
+				const loose = path.slice(0, -1)
+				handler = methodMap?.[loose]
+				if (!handler) {
+					const anyMap = map['*']
+					handler = anyMap?.[path] ?? anyMap?.[loose]
+				}
+			} else {
+				const anyMap = map['*']
+				handler = anyMap?.[path]
+			}
+		}
 
 		if (handler) {
 			const r = handler(context)
@@ -489,10 +507,28 @@ export function createFetchHandler(
 			}
 		}
 
-		const handler: CompiledHandler =
-			map[request.method]?.[path] ?? map['*']?.[path]
+		const methodMap = map[request.method]
+		let handler: CompiledHandler | undefined = methodMap?.[path]
 
 		try {
+			if (!handler) {
+				if (
+					!strictPath &&
+					path.length > 1 &&
+					path.charCodeAt(path.length - 1) === 47
+				) {
+					const loose = path.slice(0, -1)
+					handler = methodMap?.[loose]
+					if (!handler) {
+						const anyMap = map['*']
+						handler = anyMap?.[path] ?? anyMap?.[loose]
+					}
+				} else {
+					const anyMap = map['*']
+					handler = anyMap?.[path]
+				}
+			}
+
 			if (handler) {
 				const r = handler(context)
 				return r instanceof Promise ? r.catch(catchError(context, handleError, afterResponse)) : r

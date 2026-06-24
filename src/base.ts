@@ -199,7 +199,9 @@ export class Elysia<
 	private '~derive'?: WeakSet<EventFn<'beforeHandle'>>
 
 	'~router'?: Memoirist<CompiledHandler>
-	'~map'?: { [method: string]: { [path: string]: CompiledHandler } }
+	'~map'?: {
+		[method: string]: { [path: string]: CompiledHandler } | undefined
+	}
 	'~staticResponse'?: {
 		[path: string]: {
 			[method: string]: Response | Promise<Response>
@@ -6479,15 +6481,15 @@ export class Elysia<
 	#initMap() {
 		// monomorphic access is faster, so we ensure the shape of the map is consistent
 		this['~map'] ??= {
-			GET: nullObject() as any,
-			POST: nullObject() as any,
-			PUT: nullObject() as any,
-			DELETE: nullObject() as any,
-			PATCH: nullObject() as any,
+			GET: undefined as any,
+			POST: undefined as any,
+			PUT: undefined as any,
+			DELETE: undefined as any,
+			PATCH: undefined as any,
 			// Cache check, not uncommon
-			HEAD: nullObject() as any,
-			// CORS preflight, usuaul
-			OPTIONS: nullObject() as any
+			HEAD: undefined as any,
+			// CORS preflight, usual
+			OPTIONS: undefined as any
 		}
 	}
 
@@ -6732,10 +6734,28 @@ export class Elysia<
 				enableAutoHead && method === 'GET' && !explicitHead?.has(path)
 
 			const isDynamic = isDynamicRegex.test(path)
-			const registerLoose = !isDynamic && !strict
+			const registerLoose =
+				!isDynamic &&
+				!strict &&
+				(path.length === 0 ||
+					path.charCodeAt(path.length - 1) === 47)
 			const explicitMain = registerLoose
 				? explicitPaths?.get(method)
 				: undefined
+
+			if (!isDynamic && !needEncodeRegex.test(path) && !registerLoose) {
+				const map = (methods[method] ??= nullObject() as any)
+				const handler = this.handler(i, precompile, route, sharedStatic)
+
+				map[path] = handler
+
+				if (autoHead) {
+					const head = (methods['HEAD'] ??= nullObject() as any)
+					head[path] = wrapHeadHandler(handler)
+				}
+
+				continue
+			}
 
 			const variants = [path]
 			if (needEncodeRegex.test(path)) {
