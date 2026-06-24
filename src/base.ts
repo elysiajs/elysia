@@ -6556,11 +6556,6 @@ export class Elysia<
 		path: string,
 		handler: CompiledHandler
 	) {
-		// Dynamic routes live in the router, not the map - the request path is
-		// concrete (`/5/7`) while `path` is the pattern (`/5/:id`), so a map entry
-		// here is never hit by a real URL. Worse, a literal `/5/:id` request would
-		// match it and run the handler with no params. Skip it: the router already
-		// holds the (jit) handler for these.
 		if (isDynamicRegex.test(path)) return
 
 		this.#initMap()

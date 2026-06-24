@@ -102,21 +102,15 @@ export type ChainNode =
 	  }
 	| { combine: ChainNode; over: ChainNode | undefined }
 
+const flattenNodeStack: ChainNode[] = []
+const flattenPhaseStack: number[] = []
+
 /**
  * Walk the chain tail-first into a fresh `Partial<AppHook>`
  *
- * Walk instruction with explicit stack - works uniformly for linear
- * chains and combine nodes without recursion
+ * Explicit-stack walk (no recursion) so it works uniformly for linear
+ * chains and combine nodes without risking stack overflow on deep chains
  */
-type Task =
-	// visit
-	| { kind: 0; node: ChainNode }
-	// append
-	| { kind: 1; added: Partial<AppHook>; scope?: EventScope }
-
-// reuse array buffer so it doesn't create new array
-const flattenChainStack: Task[] = []
-
 export function flattenChain(
 	start: ChainNode | undefined,
 	keep?: (s: EventScope | undefined) => boolean,
@@ -125,27 +119,44 @@ export function flattenChain(
 	if (!start || start === stopAt) return
 	const result = nullObject() as Partial<AppHook>
 
-	const stack = flattenChainStack
-	stack.length = 0
-	stack.push({ kind: 0, node: start })
+	const nodes = flattenNodeStack
+	const phases = flattenPhaseStack
+	nodes.length = 0
+	phases.length = 0
+	nodes.push(start)
+	phases.push(0)
 
-	while (stack.length) {
-		const task = stack.pop()!
-		if (task.kind === 1) {
-			appendInto(result, task.added, keep, task.scope)
+	while (nodes.length) {
+		const node = nodes.pop()!
+		const phase = phases.pop()!
+
+		if (phase === 1) {
+			appendInto(
+				result,
+				(node as { added: Partial<AppHook> }).added,
+				keep,
+				(node as { scope?: EventScope }).scope
+			)
 			continue
 		}
 
-		const node = task.node
 		if (stopAt && node === stopAt) continue
 		if ('combine' in node) {
 			// Tail-first: visit `over` (older), then `combine` (newer).
-			stack.push({ kind: 0, node: node.combine })
-			if (node.over) stack.push({ kind: 0, node: node.over })
+			nodes.push(node.combine)
+			phases.push(0)
+			if (node.over) {
+				nodes.push(node.over)
+				phases.push(0)
+			}
 		} else {
-			stack.push({ kind: 1, added: node.added, scope: node.scope })
-			if (node.parent && node.parent !== stopAt)
-				stack.push({ kind: 0, node: node.parent })
+			// Append self after its parent has been visited/appended.
+			nodes.push(node)
+			phases.push(1)
+			if (node.parent && node.parent !== stopAt) {
+				nodes.push(node.parent)
+				phases.push(0)
+			}
 		}
 	}
 
@@ -201,11 +212,15 @@ function appendInto(
 		if (v === undefined || v === null) continue
 
 		if (eventProperties.has(key) || key === 'schemas') {
-			const arr = Array.isArray(v) ? v : [v]
 			const existing = (target as any)[key]
 
-			if (existing) (existing as any[]).push(...arr)
-			else (target as any)[key] = arr.slice()
+			if (Array.isArray(v)) {
+				if (existing) {
+					const arr = existing as any[]
+					for (let i = 0; i < v.length; i++) arr.push(v[i])
+				} else (target as any)[key] = v.slice()
+			} else if (existing) (existing as any[]).push(v)
+			else (target as any)[key] = [v]
 		} else (target as any)[key] = v
 	}
 }

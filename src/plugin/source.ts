@@ -63,28 +63,31 @@ export async function compileToSource(
 	app: AnyElysia,
 	options?: CompileToSourceOptions
 ): Promise<string> {
+	const previousAotBuild = env.ELYSIA_AOT_BUILD
 	env.ELYSIA_AOT_BUILD = '1'
 
-	if (!Capture.isCapturing())
-		throw new Error(
-			'[elysia-aot]: ELYSIA_AOT_BUILD=1 must be set to enable AOT capture mode'
-		)
-
-	beginValidatorCapture()
-
-	const modules = (app as { modules?: Promise<unknown> }).modules
-	if (modules) await modules
-
-	if (options?.target !== undefined)
-		setCaptureHeaderShorthand(options.target === 'bun')
-
 	try {
+		if (!Capture.isCapturing())
+			throw new Error(
+				'[elysia-aot]: ELYSIA_AOT_BUILD=1 must be set to enable AOT capture mode'
+			)
+
+		beginValidatorCapture()
+
+		const modules = (app as { modules?: Promise<unknown> }).modules
+		if (modules) await modules
+
+		if (options?.target !== undefined)
+			setCaptureHeaderShorthand(options.target === 'bun')
+
 		;(app as { compile(): unknown }).compile()
 		const captured = endValidatorCapture()
 
 		return emitModule(captured, endHandlerCapture(), options)
 	} finally {
 		setCaptureHeaderShorthand(undefined)
+		if (previousAotBuild === undefined) delete env.ELYSIA_AOT_BUILD
+		else env.ELYSIA_AOT_BUILD = previousAotBuild
 	}
 }
 

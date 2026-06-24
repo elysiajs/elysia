@@ -112,6 +112,28 @@ describe('AOT lazy validator groups', () => {
 		expect(Compiled.hasValidator('POST', '/nope', 'body')).toBe(false)
 	})
 
+	it('eager validator assignment clears stale lazy group metadata', async () => {
+		const src = await compileToSource(build(), { register: false, lazy: 1 })
+		delete process.env.ELYSIA_AOT_BUILD
+		const { groups, groupOf } = evalLazy(src)
+
+		const calls = [0, 0]
+		const spied = groups.map((g: () => unknown, i: number) => () => {
+			calls[i]++
+			return g()
+		})
+
+		Compiled.registerLazyValidators(spied, groupOf)
+		expect(Compiled.hasValidator('POST', '/body', 'body')).toBe(true)
+		expect(calls).toEqual([0, 0])
+
+		Compiled.validators = {}
+
+		expect(Compiled.hasValidator('POST', '/body', 'body')).toBe(false)
+		expect(Compiled.getValidator('POST', '/body', 'body')).toBeUndefined()
+		expect(calls).toEqual([0, 0])
+	})
+
 	it('hoists a schema shared across groups to top-level (keeps shared-schema apps small)', async () => {
 		// same body on 3 routes, 1 route/group → 3 groups all referencing it
 		const body = t.Object({ hello: t.String() })

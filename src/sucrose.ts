@@ -32,7 +32,7 @@ export function separateFunction(code: string): [string, string] {
 	if (code.startsWith('async')) code = code.slice(5)
 	code = code.trimStart()
 
-	let index = -1
+	let index: number
 
 	// JSC: Starts with '(', is an arrow function
 	if (code.charCodeAt(0) === 40) {
@@ -257,15 +257,23 @@ function findEndIndex(
 	content: string,
 	index?: number | undefined
 ) {
-	const regex = new RegExp(
-		`${type.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\n\\t,; ]`
-	)
+	let search = index ?? 0
 
-	if (index !== undefined) regex.lastIndex = index
+	while (true) {
+		const found = content.indexOf(type, search)
+		if (found === -1) return -1
 
-	const match = regex.exec(content)
+		switch (content.charCodeAt(found + type.length)) {
+			case 10: // \n
+			case 9: // \t
+			case 44: // ,
+			case 59: // ;
+			case 32: // space
+				return found
+		}
 
-	return match ? match.index : -1
+		search = found + 1
+	}
 }
 
 /**
@@ -384,9 +392,12 @@ export function inferBodyReference(
 	inference: Sucrose.Inference
 ) {
 	const access = (type: string, alias: string) =>
-		new RegExp(
-			`${alias}\\??\\.(${type})|${alias}(?:\\?\\.)?\\["${type}"\\]|${alias}(?:\\?\\.)?\\['${type}'\\]`
-		).test(code)
+		code.includes(`${alias}.${type}`) ||
+		code.includes(`${alias}?.${type}`) ||
+		code.includes(`${alias}["${type}"]`) ||
+		code.includes(`${alias}?.["${type}"]`) ||
+		code.includes(`${alias}['${type}']`) ||
+		code.includes(`${alias}?.['${type}']`)
 
 	for (const alias of aliases) {
 		if (!alias) continue
@@ -585,6 +596,13 @@ export function clearSucroseCache(delay?: number | null) {
 	}
 }
 
+function scheduleSucroseCacheClear() {
+	if (pendingGC || isCloudflareWorker) return
+
+	pendingGC = setTimeout(clearCache, 1 * 60 * 1000)
+	pendingGC.unref?.()
+}
+
 export function mergeInference(a: Sucrose.Inference, b: Sucrose.Inference) {
 	return {
 		body: a.body || b.body,
@@ -678,10 +696,10 @@ export function sucrose(
 
 		if (needGc) {
 			needGc = false
-			clearSucroseCache()
+			scheduleSucroseCacheClear()
 		}
 
-		let fnInference: Sucrose.Inference | undefined = defaultSucrose()
+		const fnInference: Sucrose.Inference = defaultSucrose()
 		const [parameter, body] = separateFunction(content)
 
 		const rootParameters = findParameterReference(parameter, fnInference)
@@ -723,9 +741,9 @@ export function sucrose(
 			functionCaches.set(event, fnInference)
 
 		inference = mergeInference(inference, fnInference)
-		fnInference = undefined
 
 		if (
+			inference &&
 			inference.query &&
 			inference.headers &&
 			inference.body &&

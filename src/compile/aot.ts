@@ -78,8 +78,6 @@ export interface FrozenValidator {
 		// otherwise `s` is a plain (v)=>cleaned cleaner called directly
 		d: FrozenMirror & { x?: 1 }
 	}>
-	// coercion plan: rebuild the coerced schema by splicing deduped frozen
-	// primitive leaves into the live original (skips the `applyCoercions` walk)
 	cp?: CoercePlan
 }
 
@@ -129,6 +127,9 @@ export abstract class Compiled {
 
 	static set validators(manifest: ValidatorManifest) {
 		validators = manifest
+		lazyGroups = undefined
+		lazyGroupOf = undefined
+		builtGroups.clear()
 	}
 
 	static registerLazyValidators(

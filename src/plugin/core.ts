@@ -73,19 +73,28 @@ export async function generateCompiledModule(
 	file: string,
 	options?: ElysiaAotOptions
 ): Promise<string> {
+	const previousAotBuild = process.env.ELYSIA_AOT_BUILD
 	process.env.ELYSIA_AOT_BUILD = '1'
 
-	const entry = resolveEntry(file)
-	const mod = (await import(entry)) as { app?: unknown; default?: unknown }
-	const app = mod.app ?? mod.default
+	try {
+		const entry = resolveEntry(file)
+		const mod = (await import(entry)) as { app?: unknown; default?: unknown }
+		const app = mod.app ?? mod.default
 
-	if (!app || typeof (app as { compile?: unknown }).compile !== 'function')
-		throw new Error(`[elysia-aot] "${entry}" must export an Elysia app`)
+		if (!app || typeof (app as { compile?: unknown }).compile !== 'function')
+			throw new Error(`[elysia-aot] "${entry}" must export an Elysia app`)
 
-	return compileToSource(app as Parameters<typeof compileToSource>[0], {
-		register: true,
-		registerFrom: options?.registerFrom,
-		lazy: options?.lazy,
-		target: options?.target
-	})
+		return await compileToSource(
+			app as Parameters<typeof compileToSource>[0],
+			{
+				register: true,
+				registerFrom: options?.registerFrom,
+				lazy: options?.lazy,
+				target: options?.target
+			}
+		)
+	} finally {
+		if (previousAotBuild === undefined) delete process.env.ELYSIA_AOT_BUILD
+		else process.env.ELYSIA_AOT_BUILD = previousAotBuild
+	}
 }

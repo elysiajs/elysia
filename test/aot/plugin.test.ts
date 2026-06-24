@@ -12,9 +12,19 @@ const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/index.ts')
 describe('AOT plugin', () => {
 	it('generateCompiledModule emits a self-registering manifest', async () => {
 		const { generateCompiledModule } = await import('../../src/plugin/core')
-		const src = await generateCompiledModule(APP, {
-			registerFrom: REGISTER_FROM
-		})
+		const previous = process.env.ELYSIA_AOT_BUILD
+		process.env.ELYSIA_AOT_BUILD = 'keep'
+
+		let src: string
+		try {
+			src = await generateCompiledModule(APP, {
+				registerFrom: REGISTER_FROM
+			})
+			expect(process.env.ELYSIA_AOT_BUILD).toBe('keep')
+		} finally {
+			if (previous === undefined) delete process.env.ELYSIA_AOT_BUILD
+			else process.env.ELYSIA_AOT_BUILD = previous
+		}
 
 		// small app → emit stays eager (auto-lazy only kicks in for large apps)
 		expect(src).toContain('export const validators')
@@ -27,6 +37,29 @@ describe('AOT plugin', () => {
 		expect((src.match(/const _c\d+ =/g) ?? []).length).toBe(2)
 		// phase 2: coerced query freezes too (externals reconstructed)
 		expect(src).toContain('"/q"')
+	})
+
+	it('compileToSource restores ELYSIA_AOT_BUILD after direct use', async () => {
+		const { Elysia } = await import('../../src')
+		const { compileToSource } = await import('../../src/plugin/source')
+		const previous = process.env.ELYSIA_AOT_BUILD
+
+		try {
+			delete process.env.ELYSIA_AOT_BUILD
+			await compileToSource(new Elysia().get('/x', () => 'x'), {
+				register: false
+			})
+			expect(process.env.ELYSIA_AOT_BUILD).toBeUndefined()
+
+			process.env.ELYSIA_AOT_BUILD = 'keep'
+			await compileToSource(new Elysia().get('/y', () => 'y'), {
+				register: false
+			})
+			expect(process.env.ELYSIA_AOT_BUILD).toBe('keep')
+		} finally {
+			if (previous === undefined) delete process.env.ELYSIA_AOT_BUILD
+			else process.env.ELYSIA_AOT_BUILD = previous
+		}
 	})
 
 	it('Bun.build inlines the manifest + injects the autoload import', async () => {

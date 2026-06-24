@@ -29,14 +29,12 @@ import {
 	applyCoercions,
 	buildCoercedFromPlan,
 	captureCoercePlan,
-	CoerceOption,
-	deferCoercions,
 	nonAdditionalProperties
-} from './coerce'
+} from '../coerce'
 
-import { ELYSIA_TYPES } from './constants'
-import { Validator, type ValidatorOptions } from '../validator'
-import { isAsyncFunction } from '../compile/utils'
+import { ELYSIA_TYPES } from '../constants'
+import { Validator, type ValidatorOptions } from '../../validator'
+import { isAsyncFunction } from '../../compile/utils'
 
 import {
 	Compiled,
@@ -44,28 +42,35 @@ import {
 	instantiateFrozenDecodeMirror,
 	instantiateFrozenBoth,
 	collectExternals,
-	externalsMatch,
-	reconstructCheck,
 	EMPTY_EXTERNALS,
 	Capture,
 	type CheckBuildResult,
-	type CapturedMirror,
-	type CapturedValidator,
 	type FrozenValidator
-} from '../compile/aot'
+} from '../../compile/aot'
 
-import { hasProperty } from './utils'
+import { hasProperty } from '../utils'
 import {
 	ASYNC_REFINE,
 	collectFileTypeChecks,
 	takeFileTypeChecks,
 	type PendingFileTypeCheck
-} from './elysia/file'
-import { nullObject } from '../utils'
-import { isCloudflareWorker } from '../universal/constants'
-import { ValidationError } from '../error'
+} from '../elysia/file'
+import { nullObject } from '../../utils'
+import { ValidationError } from '../../error'
+import {
+	applyPrecomputed,
+	isPrecomputeSafe,
+	verifyPreallocatableDefault
+} from './default-precompute'
+import { buildFrozenCheck } from './frozen-check'
+import { buildFindCustomError, captureCustomErrors } from './custom-error'
+import {
+	captureStringCodecEntries,
+	reconstructInnerCodecs
+} from './string-codec-aot'
+export { TypeBoxValidatorCache } from './validator-cache'
 
-import type { MaybePromise } from '../types'
+import type { MaybePromise } from '../../types'
 
 const moduleCache = new WeakMap<
 	Record<string, TSchema>,
@@ -223,573 +228,12 @@ function findInstancePath(
 	}
 }
 
-function isPrecomputeSafe(schema: any, depth = 0): boolean {
-	if (!schema || typeof schema !== 'object') return true
-
-	const kind = schema['~kind']
-	if (
-		kind === 'Union' ||
-		kind === 'Intersect' ||
-		kind === 'Ref' ||
-		kind === 'This' ||
-		kind === 'Cyclic'
-	)
-		return false
-
-	if (schema['~codec'] || schema['~refine']) return false
-
-	// Nested Object without its own default = not preallocatable.
-	if (depth > 0 && (kind === 'Object' || schema.type === 'object'))
-		if (schema.default === undefined || nestedOwnDefaultDiverges(schema))
-			return false
-
-	if (schema.properties)
-		for (const key in schema.properties)
-			if (
-				Object.hasOwn(schema.properties, key) &&
-				!isPrecomputeSafe(schema.properties[key], depth + 1)
-			)
-				return false
-
-	if (schema.items) {
-		if (Array.isArray(schema.items)) {
-			for (const v of schema.items)
-				if (!isPrecomputeSafe(v, depth + 1)) return false
-		} else if (!isPrecomputeSafe(schema.items, depth + 1)) return false
-	}
-
-	if (
-		typeof schema.additionalProperties === 'object' &&
-		!isPrecomputeSafe(schema.additionalProperties, depth + 1)
-	)
-		return false
-
-	if (schema.patternProperties)
-		for (const key in schema.patternProperties)
-			if (
-				Object.hasOwn(schema.patternProperties, key) &&
-				!isPrecomputeSafe(schema.patternProperties[key], depth + 1)
-			)
-				return false
-
-	return true
-}
-
-// A nested Object WITH its own `default` is precompute-safe only when that
-// own default agrees, field by field, with the defaults its children would
-// fill in
-function nestedOwnDefaultDiverges(objectSchema: any) {
-	const own = objectSchema.default
-	if (own === null || typeof own !== 'object' || Array.isArray(own))
-		return false
-
-	const props = objectSchema.properties
-	if (!props) return false
-
-	for (const key in props) {
-		const child = props[key]
-		if (!child || typeof child !== 'object') continue
-
-		if ('default' in child) {
-			if (
-				!(key in own) ||
-				canonical((own as any)[key]) !== canonical(child.default)
-			)
-				return true
-		} else if (child['~kind'] === 'Object' || child.type === 'object') {
-			if (key in own) {
-				if (
-					nestedOwnDefaultDiverges({
-						...child,
-						default: (own as any)[key]
-					})
-				)
-					return true
-			} else if (hasDefaultBelow(child)) return true
-		}
-	}
-
-	return false
-}
-
-// recursive merge precompute default
-function applyPrecomputed(
-	defaults: Record<string, unknown>,
-	value: Record<string, unknown>
-): Record<string, unknown> {
-	const out: Record<string, unknown> = nullObject()
-
-	// clone in case of a shared reference default value
-	for (const k in defaults) {
-		const d = defaults[k]
-		out[k] =
-			value[k] === undefined && d !== null && typeof d === 'object'
-				? structuredClone(d)
-				: d
-	}
-
-	for (const k in value) {
-		const v = value[k]
-		if (v === undefined) continue
-		const d = out[k]
-		if (
-			v &&
-			typeof v === 'object' &&
-			!Array.isArray(v) &&
-			d &&
-			typeof d === 'object' &&
-			!Array.isArray(d)
-		)
-			out[k] = applyPrecomputed(
-				d as Record<string, unknown>,
-				v as Record<string, unknown>
-			)
-		else out[k] = v
-	}
-
-	return out
-}
-
-const subtreeHasDefault = (n: any): boolean =>
-	!!n &&
-	typeof n === 'object' &&
-	('default' in n || childSchemaSome(n, subtreeHasDefault))
-
-function childSchemaSome(n: any, f: (x: any) => boolean): boolean {
-	if (!n || typeof n !== 'object') return false
-
-	if (n.properties)
-		for (const k in n.properties) if (f(n.properties[k])) return true
-
-	const items = n.items
-	if (Array.isArray(items)) {
-		for (const it of items) if (f(it)) return true
-	} else if (items && f(items)) return true
-
-	for (const key of ['anyOf', 'allOf', 'oneOf'] as const) {
-		const arr = n[key]
-		if (Array.isArray(arr)) for (const s of arr) if (f(s)) return true
-	}
-
-	if (typeof n.additionalProperties === 'object' && f(n.additionalProperties))
-		return true
-
-	if (n.patternProperties)
-		for (const k in n.patternProperties)
-			if (f(n.patternProperties[k])) return true
-
-	for (const key of ['not', 'if', 'then', 'else'] as const)
-		if (n[key] && f(n[key])) return true
-
-	return false
-}
-
-const hasDefaultBelow = (node: any) => childSchemaSome(node, subtreeHasDefault)
-
-function hasDivergentDefaultBelow(node: any): boolean {
-	const ownKey = 'default' in node ? canonical(node.default) : undefined
-	let bad = false
-	const visit = (n: any): boolean => {
-		if (!n || typeof n !== 'object') return false
-		if (
-			'default' in n &&
-			(ownKey === undefined || canonical(n.default) !== ownKey)
-		) {
-			bad = true
-			return true
-		}
-		return childSchemaSome(n, visit)
-	}
-	childSchemaSome(node, visit)
-	return bad
-}
-
-function structuralPreallocatable(schema: any, depth = 0): boolean {
-	if (!schema || typeof schema !== 'object') return true
-
-	if (
-		!(
-			(schema['~kind'] === 'Object' || schema.type === 'object') &&
-			!schema['~codec'] &&
-			!schema['~refine'] &&
-			!Array.isArray(schema.anyOf) &&
-			!Array.isArray(schema.allOf) &&
-			!Array.isArray(schema.oneOf) &&
-			schema.$ref === undefined &&
-			schema.if === undefined &&
-			schema.not === undefined
-		)
-	)
-		return !hasDivergentDefaultBelow(schema)
-
-	if (depth > 0 && schema.default === undefined && hasDefaultBelow(schema))
-		return false
-
-	if (
-		typeof schema.additionalProperties === 'object' &&
-		subtreeHasDefault(schema.additionalProperties)
-	)
-		return false
-
-	if (schema.patternProperties)
-		for (const k in schema.patternProperties)
-			if (subtreeHasDefault(schema.patternProperties[k])) return false
-
-	if (schema.properties)
-		for (const k in schema.properties)
-			if (!structuralPreallocatable(schema.properties[k], depth + 1))
-				return false
-
-	return true
-}
-
-function isEmittable(v: unknown, seen: Set<unknown>, top = false): boolean {
-	if (v === undefined) return top
-	if (v === null) return true
-	const t = typeof v
-	if (t === 'number') return Number.isFinite(v as number) && !Object.is(v, -0)
-	if (t === 'string' || t === 'boolean') return true
-	if (t !== 'object') return false
-	if (seen.has(v)) return false
-	seen.add(v)
-
-	let ok = true
-	if (Array.isArray(v)) {
-		for (const x of v)
-			if (!isEmittable(x, seen)) {
-				ok = false
-				break
-			}
-	} else {
-		const proto = Object.getPrototypeOf(v)
-		if (proto !== Object.prototype && proto !== null) ok = false
-		else
-			for (const k in v) {
-				if (k === '__proto__') {
-					ok = false
-					break
-				}
-				if (!Object.prototype.hasOwnProperty.call(v, k)) continue
-				if (!isEmittable((v as Record<string, unknown>)[k], seen)) {
-					ok = false
-					break
-				}
-			}
-	}
-
-	seen.delete(v)
-	return ok
-}
-
-const PROBE_SENTINEL = '__elysia_default_probe__'
-
-function* defaultProbes(
-	pod: Record<string, unknown> | undefined
-): Generator<Record<string, unknown>> {
-	if (!pod) return
-	yield {}
-	for (const k in pod) {
-		yield { [k]: PROBE_SENTINEL }
-		const d = pod[k]
-		if (d && typeof d === 'object' && !Array.isArray(d)) {
-			yield { [k]: {} }
-			for (const k2 in d as Record<string, unknown>) {
-				yield { [k]: { [k2]: PROBE_SENTINEL } }
-				break
-			}
-		}
-	}
-}
-
-function canonical(v: unknown): string {
-	if (v === undefined) return '\0u'
-	if (Object.is(v, -0)) return '-0'
-	if (v === null || typeof v !== 'object') return JSON.stringify(v) ?? '\0u'
-	if (Array.isArray(v)) return '[' + v.map(canonical).join(',') + ']'
-
-	return (
-		'{' +
-		Object.keys(v)
-			.sort()
-			.map(
-				(k) =>
-					JSON.stringify(k) +
-					':' +
-					canonical((v as Record<string, unknown>)[k])
-			)
-			.join(',') +
-		'}'
-	)
-}
-
-// ? build-time, check if a default is preallocatable (emittable, JSON-serializable)
-function verifyPreallocatableDefault(schema: TSchema) {
-	// preallocated default
-	let pd: unknown
-	// preallocatable object default raw
-	let podRaw: unknown
-
-	try {
-		pd = Default(schema, undefined)
-		podRaw = Default(schema, nullObject())
-	} catch {
-		return
-	}
-
-	const pod =
-		podRaw && typeof podRaw === 'object' && !Array.isArray(podRaw)
-			? (podRaw as Record<string, unknown>)
-			: undefined
-
-	if (
-		!isEmittable(pd, new Set(), true) ||
-		(pod !== undefined && !isEmittable(pod, new Set(), true))
-	)
-		return
-
-	if (!isPrecomputeSafe(schema as any)) {
-		const s = schema as any
-
-		if (s.type !== 'object' && s['~kind'] !== 'Object') return
-		if (!structuralPreallocatable(schema as any)) return
-
-		for (const probe of defaultProbes(pod)) {
-			let expected: unknown
-
-			try {
-				expected = Default(schema, structuredClone(probe))
-			} catch {
-				return
-			}
-
-			const actual = applyPrecomputed(pod!, structuredClone(probe))
-			if (canonical(expected) !== canonical(actual)) return
-		}
-	}
-
-	return { pd, pod }
-}
-
-interface CustomErrorNode {
-	path: string
-	node: any
-	each?: boolean
-	// Nearest enclosing union (anyOf/oneOf)
-	union?: { node: any; path: string }
-}
-
-function collectCustomErrorNodes(
-	schema: any,
-	path: string,
-	out: CustomErrorNode[],
-	union?: { node: any; path: string }
-) {
-	if (!schema || typeof schema !== 'object') return out
-	if (schema.error !== undefined) out.push({ path, node: schema, union })
-	if (schema.properties)
-		for (const k in schema.properties)
-			collectCustomErrorNodes(
-				schema.properties[k],
-				path + '/' + k,
-				out,
-				union
-			)
-
-	const items = schema.items
-	if (Array.isArray(items)) {
-		// Tuple: every element has a fixed index, so it is value-addressable
-		for (let i = 0; i < items.length; i++)
-			collectCustomErrorNodes(items[i], path + '/' + i, out, union)
-	} else if (items && items.error !== undefined)
-		out.push({ path, node: items, each: true, union })
-
-	const branches = schema.anyOf ?? schema.oneOf
-	if (Array.isArray(branches)) {
-		const gate = { node: schema, path }
-		for (const branch of branches)
-			collectCustomErrorNodes(branch, path, out, gate)
-	}
-
-	return out
-}
-
-function subValueAt(value: any, path: string): unknown {
-	if (!path) return value
-	let cur = value
-
-	for (const part of path.split('/')) {
-		if (!part) continue
-		if (cur === null || typeof cur !== 'object') return
-		cur = cur[part]
-	}
-
-	return cur
-}
-
-// capture ObjectString/ArrayString inner codecs. The traversal order is the
-// capture↔reconstruct contract: `ic[i]` aligns 1:1 with `nodes[i]` (reconstruct
-// iterates in REVERSE for bottom-up overwrite), so keep self → properties →
-// items → anyOf.
-interface StringCodecNode {
-	inner: any
-	codec: any
-	open: number
-}
-
-function collectStringCodecNodes(
-	schema: any,
-	out: StringCodecNode[] = []
-): StringCodecNode[] {
-	if (!schema || typeof schema !== 'object') return out
-
-	const ely = schema['~elyTyp']
-	if (ely === ELYSIA_TYPES.ObjectString || ely === ELYSIA_TYPES.ArrayString) {
-		const inner = schema.anyOf?.[0]
-		const codec = schema.anyOf?.[1]
-		if (inner && codec?.['~codec'] && codec['~refine'])
-			out.push({
-				inner,
-				codec,
-				open: ely === ELYSIA_TYPES.ObjectString ? 123 : 91
-			})
-	}
-
-	if (schema.properties)
-		for (const k in schema.properties)
-			collectStringCodecNodes(schema.properties[k], out)
-
-	const items = schema.items
-	if (Array.isArray(items)) {
-		for (const it of items) collectStringCodecNodes(it, out)
-	} else if (items) collectStringCodecNodes(items, out)
-
-	if (Array.isArray(schema.anyOf))
-		for (const b of schema.anyOf) collectStringCodecNodes(b, out)
-
-	return out
-}
-
-// reconstruct seal: overwrite each ObjectString/ArrayString codec's
-// `~refine[0].check` + `~codec.decode` with frozen, typebox-free closures.
-// Iterate in REVERSE so nested codecs reconstruct bottom-up.
-function reconstructInnerCodecs(
-	ic: NonNullable<FrozenValidator['ic']>,
-	schema: any
-): void {
-	const nodes = collectStringCodecNodes(schema)
-
-	for (let i = nodes.length - 1; i >= 0; i--) {
-		const entry = ic[i]
-		const node = nodes[i]
-		if (!entry || !node) continue
-
-		const innerSchema = node.inner
-		const innerCheck = entry.c(entry.e ? collectExternals(innerSchema) : [])
-		const innerMirror = entry.d.x
-			? instantiateFrozenDecodeMirror(entry.d, innerSchema)
-			: (entry.d.s as (value: unknown) => unknown)
-
-		const open = entry.o
-		node.codec['~refine'][0].check = (v: string) => {
-			if (v.charCodeAt(0) !== open) return false
-
-			try {
-				return innerCheck(JSON.parse(v))
-			} catch {
-				return false
-			}
-		}
-
-		node.codec['~codec'].decode = (v: string) => innerMirror(JSON.parse(v))
-	}
-}
-
 function externalsShape(schema: unknown) {
 	let out = ''
 	for (const e of collectExternals(schema))
 		out += e instanceof RegExp ? 'r' : typeof e === 'function' ? 'f' : 'v'
 
 	return out
-}
-
-function buildFrozenCheck(
-	build: CheckBuildResult | undefined,
-	node: any
-):
-	| {
-			identifier: string
-			checkDefs: string
-			checkValue: string
-			external: boolean
-	  }
-	| undefined {
-	if (!build?.functions?.length || !build.entry) return
-	const vars = build.external.variables
-
-	if (!externalsMatch(collectExternals(node), vars)) return
-	const cr = reconstructCheck(build)
-
-	return {
-		identifier: build.external.identifier,
-		checkDefs: cr.defs,
-		checkValue: cr.value,
-		external: vars.length > 0
-	}
-}
-
-// Build time: freeze one ObjectString/ArrayString inner schema into a check
-// (reconstructCheck source) + decode mirror (exact-mirror)
-function captureInnerCodec(
-	inner: any,
-	open: number,
-	sanitize: ValidatorOptions['sanitize']
-): NonNullable<CapturedValidator['innerCodecs']>[number] | undefined {
-	let cf: ReturnType<typeof buildFrozenCheck>
-	try {
-		cf = buildFrozenCheck(
-			Build(inner) as unknown as CheckBuildResult,
-			inner
-		)
-		if (!cf) return
-	} catch {
-		return
-	}
-
-	let decode: CapturedMirror
-	try {
-		const emitted = createMirror(inner, {
-			Compile,
-			sanitize,
-			decode: true,
-			emit: true
-		}) as { source?: string; externals?: any }
-
-		if (typeof emitted?.source !== 'string') return
-		const ext = emitted.externals
-
-		if (ext?.hof) return
-		if (ext?.codecs && !Capture.mirrorCodecs(inner, ext.codecs)) return
-
-		let u: { identifier: string; code: string }[][] | undefined
-		if (ext?.unions && ext.unions.length) {
-			u = Capture.mirrorUnions(inner, ext.unions)
-			if (!u) return
-		}
-
-		decode = {
-			source: emitted.source,
-			hasExternals: !!(ext?.codecs || u),
-			u
-		}
-	} catch {
-		return
-	}
-
-	// inner defaults aren't reconstructed under seal → refuse this slot so the
-	// route degrades to TypeBox (which fills the default at runtime)
-	if (hasProperty('default', inner)) return
-
-	return { open, ...cf, decode }
 }
 
 function sourceOnlyValidator(schema: TSchema): BaseTypeBoxValidator {
@@ -1010,87 +454,10 @@ export class TypeBoxValidator<
 			)
 
 		if (!this.#noValidate)
-			this.#findCustomError = this.#buildFindCustomError(frozen)
+			this.#findCustomError = buildFindCustomError(this.schema, frozen)
 	}
 
-	#buildFindCustomError(
-		frozen?: FrozenValidator
-	):
-		| ((
-				value: unknown
-		  ) => { instancePath: string; error: unknown } | undefined)
-		| undefined {
-		const nodes = collectCustomErrorNodes(this.schema as any, '', [])
-		if (!nodes.length) return
-
-		const frozenByPath = frozen?.ce
-			? new Map(frozen.ce.map((e) => [e.p, e]))
-			: undefined
-
-		const checks: {
-			path: string
-			check: (v: unknown) => boolean
-			gate?: (root: unknown) => boolean
-			error: unknown
-		}[] = []
-
-		for (const { path, node, each, union } of nodes) {
-			let check: ((v: unknown) => boolean) | undefined
-
-			// Union-branch nodes must not reuse a frozen `ce` entry
-			const fe = union ? undefined : frozenByPath?.get(path)
-			if (fe)
-				try {
-					check = fe.c(
-						fe.e ? collectExternals(node) : EMPTY_EXTERNALS
-					)
-				} catch {}
-			else
-				try {
-					const c = Compile(node)
-					check = (v) => c.Check(v)
-				} catch {}
-
-			if (check && each) {
-				const elementCheck = check
-				check = (v) =>
-					!Array.isArray(v) || v.every((x) => elementCheck(x))
-			}
-
-			if (!check) continue
-
-			let gate: ((root: unknown) => boolean) | undefined
-			if (union) {
-				let unionCheck: ((v: unknown) => boolean) | undefined
-				try {
-					const uc = Compile(union.node)
-					unionCheck = (v) => uc.Check(v)
-				} catch {}
-
-				if (!unionCheck) continue
-
-				// copy string
-				const unionPath = union.path
-				gate = (root) => unionCheck!(subValueAt(root, unionPath))
-			}
-
-			checks.push({ path, check, gate, error: node.error })
-		}
-
-		if (!checks.length) return
-
-		checks.sort((a, b) => b.path.length - a.path.length)
-
-		return (value) => {
-			for (const c of checks) {
-				if (c.gate && c.gate(value)) continue
-				if (!c.check(subValueAt(value, c.path)))
-					return { instancePath: c.path, error: c.error }
-			}
-		}
-	}
-
-	#verr(value: unknown, type?: string): ValidationError {
+	#error(value: unknown, type?: string): ValidationError {
 		return new ValidationError(
 			type,
 			value,
@@ -1350,43 +717,22 @@ export class TypeBoxValidator<
 				)
 		}
 
-		const ceNodes = collectCustomErrorNodes(this.schema as any, '', [])
-		if (ceNodes.length) {
-			const entries: NonNullable<CapturedValidator['customErrors']> = []
-			for (const { path, node, union } of ceNodes) {
-				if (union) continue
+		const customErrors = captureCustomErrors(this.schema)
+		if (customErrors)
+			Capture.set(
+				{ method: aot.method, path: aot.path, slot },
+				{ customErrors }
+			)
 
-				try {
-					const cf = buildFrozenCheck(
-						Build(node) as unknown as CheckBuildResult,
-						node
-					)
-					if (cf) entries.push({ path, ...cf })
-				} catch {}
-			}
-			if (entries.length)
-				Capture.set(
-					{ method: aot.method, path: aot.path, slot },
-					{ customErrors: entries }
-				)
-		}
-
-		const stringCodecs = collectStringCodecNodes(this.schema as any)
-		if (stringCodecs.length) {
-			const entries: NonNullable<CapturedValidator['innerCodecs']> = []
-
-			for (const { inner, open } of stringCodecs) {
-				const entry = captureInnerCodec(inner, open, options?.sanitize)
-				if (!entry) break
-				entries.push(entry)
-			}
-
-			if (entries.length === stringCodecs.length)
-				Capture.set(
-					{ method: aot.method, path: aot.path, slot },
-					{ innerCodecs: entries }
-				)
-		}
+		const innerCodecs = captureStringCodecEntries(
+			this.schema as TSchema,
+			options?.sanitize
+		)
+		if (innerCodecs)
+			Capture.set(
+				{ method: aot.method, path: aot.path, slot },
+				{ innerCodecs }
+			)
 
 		// @ts-expect-error private property
 		const build = this.tb!.buildResult as CheckBuildResult
@@ -1427,14 +773,14 @@ export class TypeBoxValidator<
 	EncodeFrom(value: Static<T>, type?: string): StaticEncode<T> {
 		if (this.#isForm) {
 			if (!this.#noValidate && !this.Check(value))
-				throw this.#verr(value, type)
+				throw this.#error(value, type)
 
 			return value as any
 		}
 
 		if (!this.hasCodec) {
 			if (!this.#noValidate && !this.Check(value))
-				throw this.#verr(value, type)
+				throw this.#error(value, type)
 
 			if (this.Clean) value = this.Clean(value) as Static<T>
 			return value as any
@@ -1570,7 +916,8 @@ export class TypeBoxValidator<
 				collectFileTypeChecks()
 				const valid = this.Check(value)
 				const pendingFile = takeFileTypeChecks()
-				if (!valid) throw this.#verr(value, type)
+
+				if (!valid) throw this.#error(value, type)
 				if (pendingFile)
 					await enforceFileTypeChecks(
 						pendingFile,
@@ -1605,7 +952,8 @@ export class TypeBoxValidator<
 			collectFileTypeChecks()
 			const valid = this.Check(value)
 			const pendingFile = takeFileTypeChecks()
-			if (!valid) throw this.#verr(value, type)
+
+			if (!valid) throw this.#error(value, type)
 			if (pendingFile)
 				await enforceFileTypeChecks(
 					pendingFile,
@@ -1649,7 +997,7 @@ export class TypeBoxValidator<
 		if (this.hasCodec) {
 			// See FromAsync for the rationale on skipping `Convert`
 			if (!this.#noValidate && !this.Check(value))
-				throw this.#verr(value, type)
+				throw this.#error(value, type)
 
 			if (this.#decodeMirror)
 				value = this.#decodeMirror(value) as Static<T>
@@ -1674,7 +1022,7 @@ export class TypeBoxValidator<
 				}
 		} else {
 			if (!this.#noValidate && !this.Check(value))
-				throw this.#verr(value, type)
+				throw this.#error(value, type)
 		}
 
 		if (this.Clean && !this.#decodeMirror)
@@ -1682,245 +1030,5 @@ export class TypeBoxValidator<
 
 		if (this.#isForm) this.#unmarkForm(value)
 		return value
-	}
-}
-
-const DEFAULT_CACHE_LIMIT = 1024
-const DEFAULT_GC_TIME = 1 * 60 * 1000
-
-export class TypeBoxValidatorCache {
-	private static EMPTY = nullObject() as {}
-	private static ignoreKeys = new Set([
-		'title',
-		'description',
-		'tags',
-		'examples',
-		'defaultValue'
-	])
-	private static fnIds = new WeakMap<Function, number>()
-	private static nextFnId = 0
-
-	private static fnKey(fn: Function): string {
-		let id = TypeBoxValidatorCache.fnIds.get(fn)
-		if (id === undefined) {
-			id = ++TypeBoxValidatorCache.nextFnId
-			TypeBoxValidatorCache.fnIds.set(fn, id)
-		}
-		return `<fn:${id}>`
-	}
-
-	static ignoreMeta(k: string, v: unknown): any {
-		if (TypeBoxValidatorCache.ignoreKeys.has(k)) return
-
-		if (typeof v === 'function') return TypeBoxValidatorCache.fnKey(v)
-
-		if (v && typeof v === 'object' && (v as any)['~optional'] === true) {
-			const out = nullObject() as Record<string, unknown>
-			for (const key in v as Record<string, unknown>)
-				out[key] = (v as Record<string, unknown>)[key]
-
-			out['~optional'] = true
-			return out
-		}
-
-		return v
-	}
-
-	static #isOpaqueType(schema: any, seen = new WeakSet()): boolean {
-		if (!schema || typeof schema !== 'object' || seen.has(schema))
-			return false
-		seen.add(schema)
-
-		if (schema['~refine'] || schema['~elyTyp'] === ELYSIA_TYPES.NoValidate)
-			return true
-
-		const props = schema.properties
-		if (props)
-			for (const k in props)
-				if (TypeBoxValidatorCache.#isOpaqueType(props[k], seen))
-					return true
-
-		const items = schema.items
-		if (Array.isArray(items)) {
-			for (const it of items)
-				if (TypeBoxValidatorCache.#isOpaqueType(it, seen)) return true
-		} else if (items && TypeBoxValidatorCache.#isOpaqueType(items, seen))
-			return true
-
-		for (const k of ['anyOf', 'allOf', 'oneOf'] as const) {
-			const arr = schema[k]
-			if (Array.isArray(arr))
-				for (const x of arr)
-					if (TypeBoxValidatorCache.#isOpaqueType(x, seen))
-						return true
-		}
-
-		if (
-			schema.additionalProperties &&
-			typeof schema.additionalProperties === 'object' &&
-			TypeBoxValidatorCache.#isOpaqueType(
-				schema.additionalProperties,
-				seen
-			)
-		)
-			return true
-
-		if (schema.not && TypeBoxValidatorCache.#isOpaqueType(schema.not, seen))
-			return true
-
-		const pp = schema.patternProperties
-		if (pp)
-			for (const k in pp)
-				if (TypeBoxValidatorCache.#isOpaqueType(pp[k], seen))
-					return true
-
-		return false
-	}
-
-	#cache = new Map<
-		string,
-		WeakMap<
-			CoerceOption[] | typeof TypeBoxValidatorCache.EMPTY,
-			BaseTypeBoxValidator
-		>
-	>()
-
-	#referenceCache = new WeakMap<
-		TSchema,
-		Map<
-			string,
-			WeakMap<
-				CoerceOption[] | typeof TypeBoxValidatorCache.EMPTY,
-				BaseTypeBoxValidator
-			>
-		>
-	>()
-
-	#gc: ReturnType<typeof setTimeout> | undefined
-	#gcTime: number
-
-	#lastSchema: TSchema | undefined
-	#lastMeta: { special: boolean; key: string } | undefined
-
-	#meta(schema: TSchema): { special: boolean; key: string } {
-		if (this.#lastSchema === schema && this.#lastMeta) return this.#lastMeta
-
-		const special =
-			HasCodec(schema) || TypeBoxValidatorCache.#isOpaqueType(schema)
-
-		const meta = {
-			special,
-			key: special
-				? ''
-				: JSON.stringify(schema, TypeBoxValidatorCache.ignoreMeta)
-		}
-
-		this.#lastSchema = schema
-		this.#lastMeta = meta
-
-		return meta
-	}
-
-	constructor(gcTime: number) {
-		this.#gcTime = gcTime
-	}
-
-	#scheduleClear() {
-		if (isCloudflareWorker) return
-
-		if (this.#gc) clearTimeout(this.#gc)
-
-		this.#gc = setTimeout(
-			() => this.clear(),
-			this.#gcTime ?? DEFAULT_GC_TIME
-		)
-		;(this.#gc as any).unref?.()
-	}
-
-	get(
-		schema: TSchema,
-		coercions:
-			| CoerceOption[]
-			| typeof TypeBoxValidatorCache.EMPTY = TypeBoxValidatorCache.EMPTY,
-		normalize = ''
-	) {
-		const refBucket = this.#referenceCache.get(schema)?.get(normalize)
-		if (refBucket?.has(coercions)) return refBucket.get(coercions)
-
-		const meta = this.#meta(schema)
-		if (meta.special) return
-
-		const key = meta.key + '\0' + normalize
-		if (this.#cache.has(key)) {
-			const coercionsCache = this.#cache.get(key)!
-			this.#cache.delete(key)
-			this.#cache.set(key, coercionsCache)
-
-			if (coercionsCache.has(coercions))
-				return coercionsCache.get(coercions)
-		}
-	}
-
-	#refBucket(schema: TSchema) {
-		let byNormalize = this.#referenceCache.get(schema)
-		if (!byNormalize) {
-			byNormalize = new Map()
-			this.#referenceCache.set(schema, byNormalize)
-		}
-		return byNormalize
-	}
-
-	set(
-		schema: TSchema,
-		coercions:
-			| CoerceOption[]
-			| typeof TypeBoxValidatorCache.EMPTY = TypeBoxValidatorCache.EMPTY,
-		validator?: BaseTypeBoxValidator,
-		normalize = ''
-	) {
-		this.#scheduleClear()
-		const meta = this.#meta(schema)
-
-		if (meta.special) {
-			const cache = new WeakMap().set(coercions, validator) as WeakMap<
-				CoerceOption[] | typeof TypeBoxValidatorCache.EMPTY,
-				BaseTypeBoxValidator
-			>
-			this.#refBucket(schema).set(normalize, cache)
-			return
-		}
-
-		const key = meta.key + '\0' + normalize
-		if (this.#cache.has(key)) {
-			const cache = this.#cache.get(key)!.set(coercions, validator!)
-			const byNormalize = this.#refBucket(schema)
-			if (byNormalize.has(normalize))
-				byNormalize.get(normalize)!.set(coercions, validator!)
-			else byNormalize.set(normalize, cache)
-			return
-		}
-
-		if (this.#cache.size >= DEFAULT_CACHE_LIMIT) {
-			const oldest = this.#cache.keys().next().value
-			if (oldest !== undefined) this.#cache.delete(oldest)
-		}
-
-		const cache = new WeakMap().set(coercions, validator) as WeakMap<
-			CoerceOption[] | typeof TypeBoxValidatorCache.EMPTY,
-			BaseTypeBoxValidator
-		>
-		this.#cache.set(key, cache)
-		this.#refBucket(schema).set(normalize, cache)
-	}
-
-	clear() {
-		if (this.#gc) {
-			clearTimeout(this.#gc)
-			this.#gc = undefined
-		}
-
-		this.#cache.clear()
-		this.#referenceCache = new WeakMap()
-		deferCoercions()
 	}
 }

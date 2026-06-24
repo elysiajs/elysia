@@ -212,7 +212,10 @@ const isAsyncValidator = (vali: Validator | undefined) =>
 function applyHook(
 	localHook: Partial<AnyLocalHook> | undefined,
 	appHook: Partial<AnyLocalHook> | undefined,
-	rootHook: Partial<AppHook> | undefined
+	rootHook: Partial<AppHook> | undefined,
+	// `appHook` from `flattenChainMemo` is already a clone, safe to mutate
+	// When no `localHook`, skip the redundant second clone
+	appHookFresh = false
 ): AnyLocalHook | undefined {
 	let hook: any
 
@@ -220,9 +223,16 @@ function applyHook(
 		hook = mergeHook(cloneHook(localHook) as any, appHook as any, true)
 	else {
 		const base = localHook ?? appHook
-		if (!rootHook) return base ? cloneHook(base as any) : (base as any)
+		const ownsBase = appHookFresh && !localHook && base !== undefined
 
-		hook = base ? cloneHook(base as any) : nullObject()
+		if (!rootHook)
+			return ownsBase
+				? (base as any)
+				: base
+					? cloneHook(base as any)
+					: (base as any)
+
+		hook = ownsBase ? base : base ? cloneHook(base as any) : nullObject()
 	}
 
 	if (rootHook) mergeHook(hook, rootHook as any, true, true)
@@ -267,12 +277,21 @@ function dropHooksByOrigin(
 		if (!v) continue
 
 		if (Array.isArray(v)) {
-			const kept = v.filter((fn: Function) => {
-				const origin = fnOrigin.get(fn)
-				return origin === undefined || !skip.has(origin)
-			})
+			let kept: Function[] | undefined
 
-			if (kept.length !== v.length) {
+			for (let i = 0; i < v.length; i++) {
+				const fn = v[i] as Function
+				const origin = fnOrigin.get(fn)
+				const keep = origin === undefined || !skip.has(origin)
+
+				if (kept) {
+					if (keep) kept.push(fn)
+				} else if (!keep) {
+					kept = v.slice(0, i) as Function[]
+				}
+			}
+
+			if (kept) {
 				if (out === hook) out = { ...hook }
 				;(out as any)[key] = kept
 			}
@@ -286,6 +305,25 @@ function dropHooksByOrigin(
 	}
 
 	return out
+}
+
+function reconstructNeedsHookState(names: string[]): boolean {
+	for (let i = 0; i < names.length; i++)
+		switch (names[i]) {
+			case 'ho':
+			case 'tf':
+			case 'bf':
+			case 'af':
+			case 'mr':
+			case 'er':
+			case 'ar':
+			case 'va':
+			case 'cc':
+			case 'tr':
+				return true
+		}
+
+	return false
 }
 
 const createInlineHandler = (
@@ -389,7 +427,7 @@ export function buildNativeStaticResponse(
 		instance !== root
 			? composeRootHook(root, inheritedChain as any)
 			: undefined
-	const hook = applyHook(localHook, flatAppHook as any, rootHook)
+	const hook = applyHook(localHook, flatAppHook as any, rootHook, true)
 
 	const has = (v: unknown) => (Array.isArray(v) ? v.length > 0 : !!v)
 
@@ -469,7 +507,7 @@ export function composeRouteHook(
 		if (present.size) rootHook = dropHooksByOrigin(rootHook, present)
 	}
 
-	let hook = applyHook(localHook, flatAppHook as any, rootHook)
+	let hook = applyHook(localHook, flatAppHook as any, rootHook, true)
 
 	if (instance !== root) {
 		const instanceLocal = flattenChain(
@@ -514,6 +552,30 @@ export function compileHandler(
 	precomputedStatic?: Response
 ): CompiledHandler {
 	const adapter = root['~config']?.adapter ?? defaultAdapter
+	const method = mapMethodBack(_method as any)
+	const reconstructed = Compiled.handlers?.[method]?.[path]
+
+	// When frozen factory does not consume any hook-derived params
+	// Keep non-function/static/Error/precomputed/macro cases on the normal path
+	// to preserve existing compile-time side-effect/order semantics
+	if (
+		reconstructed &&
+		!precomputedStatic &&
+		typeof handler === 'function' &&
+		!root['~ext']?.macro &&
+		!reconstructNeedsHookState(reconstructed.a)
+	)
+		return reconstructed.f(
+			handler,
+			...resolveHandlerParams(reconstructed.a, {
+				parse: adapter.parse as any,
+				res: adapter.response as any,
+				hook: nullObject() as any,
+				vali: undefined,
+				cookieConfig: undefined,
+				tracers: undefined
+			})
+		) as CompiledHandler
 
 	if (root['~ext']?.macro) {
 		if (localHook) root['~applyMacro'](localHook)
@@ -542,17 +604,16 @@ export function compileHandler(
 		toArray('error', hook)
 	}
 
-	const method = mapMethodBack(_method as any)
-
-	const vali = hook
-		? new RouteValidator(hook as any, {
-				models: root['~ext']?.models,
-				normalize: root['~config']?.normalize,
-				sanitize: root['~config']?.sanitize,
-				schemas: hook?.schemas,
-				aot: { method, path }
-			})
-		: undefined
+	const buildValidator = () =>
+		hook
+			? new RouteValidator(hook as any, {
+					models: root['~ext']?.models,
+					normalize: root['~config']?.normalize,
+					sanitize: root['~config']?.sanitize,
+					schemas: hook?.schemas,
+					aot: { method, path }
+				})
+			: undefined
 
 	if (handler instanceof Error) {
 		const error = handler
@@ -589,15 +650,16 @@ export function compileHandler(
 			: (resolve(hook.parse) as any)
 	}
 
-	const reconstructed = Compiled.handlers?.[method]?.[path]
-	if (reconstructed) {
+	if (reconstructed)
 		return reconstructed.f(
 			handler,
 			...resolveHandlerParams(reconstructed.a, {
 				parse: adapter.parse as any,
 				res: adapter.response as any,
 				hook: (hook ?? nullObject()) as any,
-				vali,
+				vali: reconstructed.a.includes('va')
+					? buildValidator()
+					: undefined,
 				cookieConfig: reconstructed.a.includes('cc')
 					? compileCookieConfig(
 							hook?.cookie as any,
@@ -611,7 +673,8 @@ export function compileHandler(
 					: undefined
 			})
 		) as CompiledHandler
-	}
+
+	const vali = buildValidator()
 
 	const inference = sucrose(handler as any, hook as Sucrose.LifeCycle)
 
