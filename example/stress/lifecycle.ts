@@ -5,7 +5,7 @@ const total = 100_000
 const plugins = new Array(total)
 
 for (let i = 0; i < total; i++)
-	plugins[i] = new Elysia().beforeHandle('plugin', () => {
+	plugins[i] = new Elysia({ as: 'plugin' }).beforeHandle(() => {
 		// console.log(i)
 	})
 

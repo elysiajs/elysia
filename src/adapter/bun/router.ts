@@ -17,7 +17,7 @@ export function createBunContext(
 	app: AnyElysia
 ): new (request: Request) => Context {
 	const headers = app['~ext']?.headers
-		? Object.assign(nullObject(), structuredClone(app['~ext'].headers))
+		? Object.assign(nullObject(), app['~ext'].headers)
 		: null
 
 	return class Context extends createBaseContext(app) {

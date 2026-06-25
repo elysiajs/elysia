@@ -3,17 +3,7 @@ import { Elysia, t } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { req, post } from '../utils'
 
-// Regression tests for the kiana base fixes (src/base.ts).
-// Each test fails on the pre-fix code and passes after the fix.
-
 describe('base fixes (kiana)', () => {
-	// idx0 — a guard/group hook that carries `derive` must keep its schema keys.
-	// #pushHook previously rebuilt the promoted hook by copying ONLY
-	// eventProperties keys, which excludes body/query/params/headers/cookie/
-	// response/schema/schemas, so the presence of `derive` silently wiped all
-	// validation. WHY it matters: validation is a security/correctness boundary;
-	// dropping it on a derive-bearing guard turns a 422 into a 200 that runs the
-	// handler with unvalidated input.
 	it('keeps query validation on a guard that also declares derive', async () => {
 		const app = new Elysia()
 			.guard({
@@ -88,7 +78,7 @@ describe('base fixes (kiana)', () => {
 	// other's real map entry. WHY: silent wrong-handler dispatch on a declared
 	// route is a correctness violation that no error surfaces.
 	it('does not let a /foo/ loose twin clobber an explicit /foo route', async () => {
-		const app = new Elysia()
+		const app = new Elysia({ distinctPath: true })
 			.get('/foo', () => 'real-foo')
 			.get('/foo/', () => 'foo-slash')
 
@@ -97,7 +87,7 @@ describe('base fixes (kiana)', () => {
 	})
 
 	it('clobber-guard holds regardless of registration order', async () => {
-		const app = new Elysia()
+		const app = new Elysia({ distinctPath: true })
 			.get('/foo/', () => 'foo-slash')
 			.get('/foo', () => 'real-foo')
 

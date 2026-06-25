@@ -17,10 +17,12 @@ import {
  * here until a descriptor is added; a removed one fails as stale.
  */
 
-const SRC = readFileSync(
-	resolve(import.meta.dir, '../../src/compile/handler/index.ts'),
-	'utf8'
-)
+const SRC = [
+	'../../src/compile/handler/index.ts',
+	'../../src/compile/handler/jit.ts'
+]
+	.map((file) => readFileSync(resolve(import.meta.dir, file), 'utf8'))
+	.join('\n')
 
 const linkedNames = () => {
 	const names = new Set<string>()

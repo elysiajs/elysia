@@ -9,7 +9,7 @@ import {
 import { requestId } from '../../utils'
 import { forwardError } from '../../handler/utils'
 import { tee } from '../../adapter/utils'
-import { cloneResponse } from './utils'
+import { cloneResponse, hasRequestBody } from './utils'
 
 /**
  * mirror compileHandler params and save in build time
@@ -37,6 +37,7 @@ export const HANDLER_PARAMS: Record<string, Resolver> = {
 	pa: (c) => c.parse.arrayBuffer,
 	pt: (c) => c.parse.text,
 	pd: (c) => c.parse.default,
+	hb: () => hasRequestBody,
 	// response adapter
 	rm: (c) => c.res.map,
 	rc: (c) => c.res.compact ?? c.res.map,

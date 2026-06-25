@@ -109,6 +109,13 @@ export interface ElysiaConfig<
 	strictPath?: boolean
 
 	/**
+	 * Whether should Elysia handle distinction between overlapping path
+	 *
+	 * @default false
+	 */
+	distinctPath?: boolean
+
+	/**
 	 * Automatically register a HEAD handler for every GET route, deriving the
 	 * response headers (e.g. `content-length`) from the GET handler while
 	 * dropping the body.

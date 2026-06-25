@@ -1,11 +1,11 @@
 import { Type } from 'typebox'
 import { Default } from 'typebox/value'
 import { profile } from './utils'
+import { createObjectDefaultMerger } from '../../src/type/validator/default-precompute'
 
 // Compares the current per-call `Default(schema, value)` walk against a
-// precompute-+-structuredClone strategy. Goal: measure whether stashing a
-// frozen "all-defaults" snapshot at validator-construction time and cloning
-// it per request beats TypeBox's recursive Default walk.
+// precomputed default snapshot and the generated merger used by
+// TypeBoxValidator's default fast path.
 
 const ITERS = 1_000_000
 
@@ -87,6 +87,20 @@ function bench(label: string, schema: any, input: () => unknown) {
 			// undefined unchanged. No defaults to fill in.
 			if (v === undefined || v === null) continue
 			deepMerge(precomputed as any, v as any)
+		}
+		stop()
+	}
+
+	{
+		const precomputed = Default(schema, {})
+		const merge = createObjectDefaultMerger(precomputed as any)
+		if (!merge) return
+
+		const stop = profile(`precompute+generated-merge x${ITERS}`)
+		for (let i = 0; i < ITERS; i++) {
+			const v = input()
+			if (v === undefined || v === null) continue
+			merge(v as any)
 		}
 		stop()
 	}

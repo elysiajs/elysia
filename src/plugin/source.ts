@@ -5,12 +5,17 @@ import {
 	endHandlerCapture,
 	Source,
 	Capture,
+	Compiled,
 	type CapturedValidator,
-	type CapturedHandler
+	type CapturedHandler,
+	type HandlerManifest
 } from '../compile/aot'
 import { env } from '../universal'
 import { nullObject } from '../utils'
-import { setCaptureHeaderShorthand } from '../compile/handler'
+import { setCaptureHeaderShorthand, compileHandler } from '../compile/handler'
+import { JITProbe, type JITProbeReason } from '../compile/jit-probe'
+import { Validator } from '../validator'
+import type { InternalRoute } from '../types'
 
 export type AotTarget = 'bun' | 'node' | 'workerd'
 
@@ -63,28 +68,158 @@ export async function compileToSource(
 	app: AnyElysia,
 	options?: CompileToSourceOptions
 ): Promise<string> {
+	return (await captureArtifacts(app, options)).source
+}
+
+export interface CapturedArtifacts {
+	source: string
+	validators: CapturedValidator[]
+	handlers: CapturedHandler[]
+}
+
+export async function captureArtifacts(
+	app: AnyElysia,
+	options?: CompileToSourceOptions
+): Promise<CapturedArtifacts> {
+	const previousAotBuild = env.ELYSIA_AOT_BUILD
 	env.ELYSIA_AOT_BUILD = '1'
 
-	if (!Capture.isCapturing())
-		throw new Error(
-			'[elysia-aot]: ELYSIA_AOT_BUILD=1 must be set to enable AOT capture mode'
-		)
-
-	beginValidatorCapture()
-
-	const modules = (app as { modules?: Promise<unknown> }).modules
-	if (modules) await modules
-
-	if (options?.target !== undefined)
-		setCaptureHeaderShorthand(options.target === 'bun')
-
 	try {
+		if (!Capture.isCapturing())
+			throw new Error(
+				'[elysia-aot]: ELYSIA_AOT_BUILD=1 must be set to enable AOT capture mode'
+			)
+
+		beginValidatorCapture()
+
+		const modules = (app as { modules?: Promise<unknown> }).modules
+		if (modules) await modules
+
+		if (options?.target !== undefined)
+			setCaptureHeaderShorthand(options.target === 'bun')
 		;(app as { compile(): unknown }).compile()
 		const captured = endValidatorCapture()
+		const handlers = endHandlerCapture()
 
-		return emitModule(captured, endHandlerCapture(), options)
+		return {
+			source: emitModule(captured, handlers, options),
+			validators: captured,
+			handlers
+		}
 	} finally {
 		setCaptureHeaderShorthand(undefined)
+
+		if (previousAotBuild === undefined) delete env.ELYSIA_AOT_BUILD
+		else env.ELYSIA_AOT_BUILD = previousAotBuild
+	}
+}
+
+export interface StubbabilityReport {
+	/** Handler JIT is provably unused → handler-only strip is safe. */
+	stubbable: boolean
+
+	/** `sucrose` + the handler `new Function` codegen is unused. */
+	jit: boolean
+
+	/** Why handler JIT cannot be stripped, if any. */
+	reasons: JITProbeReason[]
+}
+
+/**
+ * Decide whether the frozen build can run with handler JIT replaced by a
+ * throwing stub
+ *
+ * Static prediction is unsound
+ *
+ * eg. an inline-eligible handler (`() => 'ok'`) is never captured into
+ * handler manifest and falls through to `sucrose` at runtime
+ *
+ * So instead of guessing, this captures the manifest, registers it in-process
+ * and replays every route through the real `compileHandler` with a tripwire armed
+ *
+ * Handler JIT is only reported stubbable when no handler-JIT entry point was reached
+ */
+export async function analyzeStubbability(
+	app: AnyElysia,
+	options?: CompileToSourceOptions
+): Promise<StubbabilityReport> {
+	const { handlers } = await captureArtifacts(app, options)
+
+	return replayStubbability(app, handlers)
+}
+
+const materialiseHandlersForReplay = (
+	captured: CapturedHandler[]
+): HandlerManifest => {
+	const manifest: HandlerManifest = {}
+	for (const h of captured) {
+		;(manifest[h.method] ??= {})[h.path] = {
+			a: h.alias ? h.alias.split(',') : [],
+			// eslint-disable-next-line sonarjs/code-eval
+			f: new Function(
+				`return ${Source.handlerFactory(h.alias, h.code)}`
+			)() as any
+		}
+	}
+
+	return manifest
+}
+
+/**
+ * Replay a frozen build from already-captured artifacts (no second capture) and
+ * report whether handler JIT was reached. Shared by `analyzeStubbability` and
+ * the single-capture build path.
+ */
+export function replayStubbability(
+	app: AnyElysia,
+	handlers: CapturedHandler[]
+): StubbabilityReport {
+	// Snapshot the in-process registry so detection is side-effect free.
+	const previousCompiled = Compiled.snapshot()
+	const previousAotBuild = env.ELYSIA_AOT_BUILD
+
+	// Replay must NOT be in capture mode, or handler generation records a fresh
+	// manifest instead of exercising the frozen one.
+	if (previousAotBuild !== undefined) delete env.ELYSIA_AOT_BUILD
+
+	try {
+		Compiled.clear()
+		Compiled.handlers = materialiseHandlersForReplay(handlers)
+		Validator.clear()
+
+		const history = (app as { history?: InternalRoute[] }).history ?? []
+
+		JITProbe.begin()
+
+		for (const route of history) {
+			try {
+				if ((route[0] as unknown) === 'WS') {
+					JITProbe.end()
+
+					return {
+						stubbable: false,
+						jit: false,
+						reasons: ['sucrose']
+					}
+				} else compileHandler(route, app)
+			} catch {
+				JITProbe.end()
+
+				return {
+					stubbable: false,
+					jit: false,
+					reasons: ['handler:new-function']
+				}
+			}
+		}
+
+		return JITProbe.end()
+	} finally {
+		Compiled.restore(previousCompiled)
+
+		Validator.clear()
+		if (previousAotBuild !== undefined)
+			env.ELYSIA_AOT_BUILD = previousAotBuild
 	}
 }
 
@@ -142,6 +277,7 @@ function emitModule(
 	const entryParts = (c: CapturedValidator) => {
 		const parts: string[] = []
 		const flags: string[] = []
+
 		if (c.checkValue) {
 			if (c.external) flags.push('e:1')
 			if (c.async) flags.push('a:1')
@@ -188,8 +324,12 @@ function emitModule(
 			parts.push('ps: 1')
 			if (c.precomputedDefault !== undefined)
 				parts.push(`pd: ${JSON.stringify(c.precomputedDefault)}`)
+			if (c.precomputeNull) parts.push('pn: 1')
 			if (c.precomputedObjectDefault !== undefined)
 				parts.push(`pod: ${JSON.stringify(c.precomputedObjectDefault)}`)
+			if (c.defaultCloner) parts.push(`dc: ${c.defaultCloner}`)
+			if (c.objectDefaultMerger)
+				parts.push(`pm: ${c.objectDefaultMerger}`)
 		}
 
 		// per-field custom-error checks
@@ -228,6 +368,8 @@ function emitModule(
 				.join(', ')
 			parts.push(`ic: [${ic}]`)
 		}
+
+		if (c.coercePlan) parts.push(`cp: ${JSON.stringify(c.coercePlan)}`)
 
 		return parts
 	}
@@ -452,15 +594,23 @@ function emitModule(
 
 	let body = '// Generated by Elysia build plugin. Do not edit.\n'
 
-	if (options?.register)
-		body +=
-			`import { Compiled } from ${JSON.stringify(
-				options.registerFrom ?? 'elysia'
-			)}\n` +
-			"import { CheckContext } from 'typebox/schema'\n" +
-			"import { Guard } from 'typebox/guard'\n" +
-			"import { Format } from 'typebox/format'\n" +
-			"import { Hashing } from 'typebox/system'\n"
+	if (options?.register) {
+		body += `import { Compiled } from ${JSON.stringify(
+			options.registerFrom ?? 'elysia'
+		)}\n`
+
+		const generated =
+			branchDecls + unionDecls + validatorDecls + handlerDecls
+		const needs = (symbol: string): boolean =>
+			new RegExp(`\\b${symbol}\\b`).test(generated)
+
+		if (needs('CheckContext'))
+			body += "import { CheckContext } from 'typebox/schema'\n"
+		if (needs('Guard')) body += "import { Guard } from 'typebox/guard'\n"
+		if (needs('Format')) body += "import { Format } from 'typebox/format'\n"
+		if (needs('Hashing'))
+			body += "import { Hashing } from 'typebox/system'\n"
+	}
 
 	body +=
 		'\n' +

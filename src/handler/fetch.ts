@@ -11,7 +11,6 @@ import {
 	requestId,
 	flattenChain,
 	nullObject,
-	getLoosePath,
 	isNotEmpty
 } from '../utils'
 import { handleSet } from '../adapter/utils'
@@ -93,8 +92,26 @@ function findRoute(
 			}
 		}
 	} else {
-		const handler: CompiledHandler =
-			map[request.method]?.[path] ?? map['*']?.[path]
+		const methodMap = map[request.method]
+		let handler: CompiledHandler | undefined = methodMap?.[path]
+
+		if (!handler) {
+			if (
+				!strictPath &&
+				path.length > 1 &&
+				path.charCodeAt(path.length - 1) === 47
+			) {
+				const loose = path.slice(0, -1)
+				handler = methodMap?.[loose]
+				if (!handler) {
+					const anyMap = map['*']
+					handler = anyMap?.[path] ?? anyMap?.[loose]
+				}
+			} else {
+				const anyMap = map['*']
+				handler = anyMap?.[path]
+			}
+		}
 
 		if (handler) {
 			const r = handler(context)
@@ -104,14 +121,6 @@ function findRoute(
 
 		let found =
 			router?.find(request.method, path) ?? router?.find('*', path)
-
-		if (!found && !strictPath) {
-			const loose = getLoosePath(path)
-			if (loose !== path)
-				found =
-					router?.find(request.method, loose) ??
-					router?.find('*', loose)
-		}
 
 		if (found) {
 			context.params = decodeParams(found.params)
@@ -276,26 +285,29 @@ export function createFetchHandler(
 			// @ts-expect-error private property
 			context.trace = trace
 
-			const requestReports = trace.map((c) =>
-				c.request({
+			const requestReports = new Array(traceLength)
+			for (let i = 0; i < traceLength; i++)
+				requestReports[i] = trace[i].request({
 					id: context.rid,
 					event: 'request',
 					name: 'request',
 					begin: performance.now(),
 					total: onRequests.length
 				})
-			)
 
 			try {
 				for (let i = 0; i < onRequests.length; i++) {
-					const endReports = requestReports.map((r) =>
-						r.resolveChild?.shift?.()?.({
-							id: context.rid,
-							event: 'request',
-							name: (onRequests[i] as any).name || 'anonymous',
-							begin: performance.now()
-						})
-					)
+					const endReports = new Array(traceLength)
+					for (let j = 0; j < traceLength; j++)
+						endReports[j] = requestReports[j].resolveChild
+							?.shift?.()
+							?.({
+								id: context.rid,
+								event: 'request',
+								name:
+									(onRequests[i] as any).name || 'anonymous',
+								begin: performance.now()
+							})
 
 					const result = asyncIndexes?.[i]
 						? await onRequests[i](context as any)
@@ -304,7 +316,8 @@ export function createFetchHandler(
 					for (let i = 0; i < traceLength; i++) endReports[i]?.()
 
 					if (result !== undefined) {
-						requestReports.forEach((r) => r.resolve())
+						for (let j = 0; j < traceLength; j++)
+							requestReports[j].resolve()
 						const response = mapResponse(
 							result,
 							context.set
@@ -485,10 +498,28 @@ export function createFetchHandler(
 			}
 		}
 
-		const handler: CompiledHandler =
-			map[request.method]?.[path] ?? map['*']?.[path]
+		const methodMap = map[request.method]
+		let handler: CompiledHandler | undefined = methodMap?.[path]
 
 		try {
+			if (!handler) {
+				if (
+					!strictPath &&
+					path.length > 1 &&
+					path.charCodeAt(path.length - 1) === 47
+				) {
+					const loose = path.slice(0, -1)
+					handler = methodMap?.[loose]
+					if (!handler) {
+						const anyMap = map['*']
+						handler = anyMap?.[path] ?? anyMap?.[loose]
+					}
+				} else {
+					const anyMap = map['*']
+					handler = anyMap?.[path]
+				}
+			}
+
 			if (handler) {
 				const r = handler(context)
 				return r instanceof Promise ? r.catch(catchError(context, handleError, afterResponse)) : r
@@ -496,14 +527,6 @@ export function createFetchHandler(
 
 			let result =
 				router?.find(request.method, path) ?? router?.find('*', path)
-
-			if (!result && !strictPath) {
-				const loose = getLoosePath(path)
-				if (loose !== path)
-					result =
-						router?.find(request.method, loose) ??
-						router?.find('*', loose)
-			}
 
 			if (result) {
 				context.params = decodeParams(result.params)

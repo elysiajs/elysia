@@ -70,8 +70,12 @@ function _hasTypes(
 	}
 
 	if (schema.properties)
-		for (const v of Object.values(schema.properties))
-			if (_hasTypes(types, v)) return true
+		for (const k in schema.properties)
+			if (
+				Object.hasOwn(schema.properties, k) &&
+				_hasTypes(types, schema.properties[k])
+			)
+				return true
 
 	if (
 		typeof schema.additionalProperties === 'object' &&
@@ -80,8 +84,12 @@ function _hasTypes(
 		return true
 
 	if (schema.patternProperties)
-		for (const v of Object.values(schema.patternProperties))
-			if (_hasTypes(types, v)) return true
+		for (const k in schema.patternProperties)
+			if (
+				Object.hasOwn(schema.patternProperties, k) &&
+				_hasTypes(types, schema.patternProperties[k])
+			)
+				return true
 
 	return false
 }
@@ -131,8 +139,12 @@ export function hasProperty(
 			: hasProperty(key, schema.items)
 
 	if (schema.properties)
-		for (const v of Object.values(schema.properties))
-			if (hasProperty(key, v)) return true
+		for (const k in schema.properties)
+			if (
+				Object.hasOwn(schema.properties, k) &&
+				hasProperty(key, schema.properties[k])
+			)
+				return true
 
 	if (
 		typeof schema.additionalProperties === 'object' &&
@@ -141,8 +153,12 @@ export function hasProperty(
 		return true
 
 	if (schema.patternProperties)
-		for (const v of Object.values(schema.patternProperties))
-			if (hasProperty(key, v)) return true
+		for (const k in schema.patternProperties)
+			if (
+				Object.hasOwn(schema.patternProperties, k) &&
+				hasProperty(key, schema.patternProperties[k])
+			)
+				return true
 
 	return false
 }

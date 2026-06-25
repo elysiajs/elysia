@@ -102,21 +102,15 @@ export type ChainNode =
 	  }
 	| { combine: ChainNode; over: ChainNode | undefined }
 
+const flattenNodeStack: ChainNode[] = []
+const flattenPhaseStack: number[] = []
+
 /**
  * Walk the chain tail-first into a fresh `Partial<AppHook>`
  *
- * Walk instruction with explicit stack - works uniformly for linear
- * chains and combine nodes without recursion
+ * Explicit-stack walk (no recursion) so it works uniformly for linear
+ * chains and combine nodes without risking stack overflow on deep chains
  */
-type Task =
-	// visit
-	| { kind: 0; node: ChainNode }
-	// append
-	| { kind: 1; added: Partial<AppHook>; scope?: EventScope }
-
-// reuse array buffer so it doesn't create new array
-const flattenChainStack: Task[] = []
-
 export function flattenChain(
 	start: ChainNode | undefined,
 	keep?: (s: EventScope | undefined) => boolean,
@@ -125,27 +119,44 @@ export function flattenChain(
 	if (!start || start === stopAt) return
 	const result = nullObject() as Partial<AppHook>
 
-	const stack = flattenChainStack
-	stack.length = 0
-	stack.push({ kind: 0, node: start })
+	const nodes = flattenNodeStack
+	const phases = flattenPhaseStack
+	nodes.length = 0
+	phases.length = 0
+	nodes.push(start)
+	phases.push(0)
 
-	while (stack.length) {
-		const task = stack.pop()!
-		if (task.kind === 1) {
-			appendInto(result, task.added, keep, task.scope)
+	while (nodes.length) {
+		const node = nodes.pop()!
+		const phase = phases.pop()!
+
+		if (phase === 1) {
+			appendInto(
+				result,
+				(node as { added: Partial<AppHook> }).added,
+				keep,
+				(node as { scope?: EventScope }).scope
+			)
 			continue
 		}
 
-		const node = task.node
 		if (stopAt && node === stopAt) continue
 		if ('combine' in node) {
 			// Tail-first: visit `over` (older), then `combine` (newer).
-			stack.push({ kind: 0, node: node.combine })
-			if (node.over) stack.push({ kind: 0, node: node.over })
+			nodes.push(node.combine)
+			phases.push(0)
+			if (node.over) {
+				nodes.push(node.over)
+				phases.push(0)
+			}
 		} else {
-			stack.push({ kind: 1, added: node.added, scope: node.scope })
-			if (node.parent && node.parent !== stopAt)
-				stack.push({ kind: 0, node: node.parent })
+			// Append self after its parent has been visited/appended.
+			nodes.push(node)
+			phases.push(1)
+			if (node.parent && node.parent !== stopAt) {
+				nodes.push(node.parent)
+				phases.push(0)
+			}
 		}
 	}
 
@@ -157,13 +168,6 @@ const flattenChainMemos = new WeakMap<
 	WeakMap<ChainNode, Partial<AppHook>>
 >()
 const emptyFlatten = Object.freeze(nullObject()) as Partial<AppHook>
-
-function cloneFlatHook(src: Partial<AppHook>): Partial<AppHook> {
-	const out = Object.assign(nullObject(), src) as Record<string, unknown>
-	for (const key in out)
-		if (Array.isArray(out[key])) out[key] = (out[key] as unknown[]).slice()
-	return out as Partial<AppHook>
-}
 
 export function flattenChainMemo(
 	root: object,
@@ -185,7 +189,10 @@ export function flattenChainMemo(
 
 	if (cached === emptyFlatten) return
 
-	return cloneFlatHook(cached)
+	// `cloneHook` is identical to the former local `cloneFlatHook`: a shallow
+	// copy with per-key array `.slice()` so the caller can mutate the result
+	// without touching the memoised (shared) flatten.
+	return cloneHook(cached)
 }
 
 function appendInto(
@@ -201,11 +208,15 @@ function appendInto(
 		if (v === undefined || v === null) continue
 
 		if (eventProperties.has(key) || key === 'schemas') {
-			const arr = Array.isArray(v) ? v : [v]
 			const existing = (target as any)[key]
 
-			if (existing) (existing as any[]).push(...arr)
-			else (target as any)[key] = arr.slice()
+			if (Array.isArray(v)) {
+				if (existing) {
+					const arr = existing as any[]
+					for (let i = 0; i < v.length; i++) arr.push(v[i])
+				} else (target as any)[key] = v.slice()
+			} else if (existing) (existing as any[]).push(v)
+			else (target as any)[key] = [v]
 		} else (target as any)[key] = v
 	}
 }
@@ -415,13 +426,19 @@ export function mergeArray<
 			return a as any
 		}
 
-		if (bIsArray) return [...b, a] as any
+		if (bIsArray) {
+			const out = new Array(b.length + 1)
+			for (let i = 0; i < b.length; i++) out[i] = b[i]
+			out[b.length] = a
+
+			return out as any
+		}
 
 		return [b, a] as any
 	}
 
 	if (aIsArray && bIsArray) {
-		a.push(...b)
+		for (let i = 0; i < b.length; i++) a.push(b[i])
 		return a as any
 	}
 
@@ -430,7 +447,13 @@ export function mergeArray<
 		return a as any
 	}
 
-	if (bIsArray) return [a, ...b] as any
+	if (bIsArray) {
+		const out = new Array(b.length + 1)
+		out[0] = a
+		for (let i = 0; i < b.length; i++) out[i + 1] = b[i]
+
+		return out as any
+	}
 
 	return [a, b] as any
 }
@@ -659,15 +682,21 @@ export function mergeDeep<
 	if (!isObject(target) || !isObject(source)) return target as A & B
 	if (seen?.has(source)) return target as A & B
 
-	for (const [key, value] of Object.entries(source)) {
+	for (const key in source) {
+		if (!Object.hasOwn(source, key)) continue
+
+		const value = source[key]
 		if (skipKeys?.includes(key) || dangerousKeys.has(key as any)) continue
 
 		if (mergeArray && Array.isArray(value)) {
-			target[key as keyof typeof target] = Array.isArray(
-				(target as any)[key]
-			)
-				? [...(target as any)[key], ...value]
-				: (target[key as keyof typeof target] = value as any)
+			const existing = (target as any)[key]
+
+			// Allocate a fresh array on merge - `existing` may be aliased to a
+			// shared source (e.g. an object-macro's `detail.tags`), so pushing
+			// into it in place would leak across every reuse of that source.
+			target[key as keyof typeof target] = (
+				Array.isArray(existing) ? existing.concat(value) : value
+			) as any
 
 			continue
 		}
@@ -675,7 +704,7 @@ export function mergeDeep<
 		if (!isObject(value) || !(key in target) || isClass(value)) {
 			if ((override || !(key in target)) && !Object.isFrozen(target))
 				try {
-					target[key as keyof typeof target] = value
+					target[key as keyof typeof target] = value as any
 				} catch {}
 
 			continue
@@ -708,10 +737,12 @@ export const isBlob = (value: unknown): value is Blob =>
 export function cloneHook<T extends Partial<AnyLocalHook> | Partial<AppHook>>(
 	src: T
 ): T {
-	const out = Object.assign(nullObject(), src) as Record<string, any>
+	const out = nullObject() as Record<string, any>
 
-	for (const key in out)
-		if (Array.isArray(out[key])) out[key] = (out[key] as unknown[]).slice()
+	for (const key in src) {
+		const value = (src as Record<string, any>)[key]
+		out[key] = Array.isArray(value) ? value.slice() : value
+	}
 
 	return out as T
 }
@@ -751,4 +782,31 @@ export function replaceUrlPath(url: string, path: string) {
 	const qs = url.indexOf('?', i)
 
 	return `${url.slice(0, i)}${path.charCodeAt(0) === 47 ? '' : '/'}${path}${qs === -1 ? '' : url.slice(qs)}`
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+	if (!v || typeof v !== 'object' || Array.isArray(v)) return false
+
+	const proto = Object.getPrototypeOf(v)
+	return proto === Object.prototype || proto === null
+}
+
+export function clonePlainDecorators<T extends Record<string, unknown>>(
+	source: T,
+	seen: WeakMap<object, any> = new WeakMap()
+): T {
+	const existing = seen.get(source)
+	if (existing) return existing
+
+	const out: Record<string, unknown> = nullObject()
+	seen.set(source, out)
+
+	for (const key in source) {
+		const value = source[key]
+		out[key] = isPlainObject(value)
+			? clonePlainDecorators(value, seen)
+			: value
+	}
+
+	return out as T
 }

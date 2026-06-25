@@ -19,6 +19,7 @@ import { isBun } from './universal/constants'
 import { isDynamicRegex, needEncodeRegex, MethodMap } from './constants'
 import { BunAdapter } from './adapter/bun'
 import {
+	clonePlainDecorators,
 	coalesceStandaloneSchemas,
 	createErrorEventHandler,
 	eventProperties,
@@ -77,7 +78,6 @@ import type {
 	ErrorHandler,
 	ErrorDefinitionEntry,
 	ResolveRouteErrors,
-	UnhandledReturnedErrorOf,
 	AfterHandler,
 	BodyHandler,
 	TransformHandler,
@@ -91,10 +91,6 @@ import type {
 	UnwrapRoute,
 	AnyWSLocalHook,
 	CreateEden,
-	CreateEdenResponse,
-	RouteSchema,
-	CreateWSEdenResponse,
-	ComposeElysiaResponse,
 	UnionResponseStatus,
 	IntersectIfObjectSchema,
 	MergeScopedSchemas,
@@ -114,45 +110,12 @@ import type {
 	ExtractErrorFromHandle,
 	HTTPMethod,
 	AddRoute,
-	AddWSRoute,
-	InlineResponse,
-	InlineSchemaResponse
+	AddWSRoute
 } from './types'
 import type { ElysiaStatus } from './error'
 import type { Context, LifecycleContext, ErrorContext } from './context'
 
 const useNodesBuffer: ChainNode[] = []
-
-// Decorators are shared singletons, but a plugin's *nested plain object*
-// decorator must not be aliased into the parent by reference (a per-request
-// mutation through one would otherwise leak into the other instance). Recurse
-// only into plain objects ({} / Object.create(null)); class instances, arrays,
-// functions, Blobs and primitives are kept by reference (intended singletons).
-const isPlainObject = (v: unknown): v is Record<string, unknown> => {
-	if (!v || typeof v !== 'object' || Array.isArray(v)) return false
-	const proto = Object.getPrototypeOf(v)
-	return proto === Object.prototype || proto === null
-}
-
-function clonePlainDecorators<T extends Record<string, unknown>>(
-	source: T,
-	seen: WeakMap<object, any> = new WeakMap()
-): T {
-	const existing = seen.get(source)
-	if (existing) return existing
-
-	const out: Record<string, unknown> = nullObject()
-	seen.set(source, out)
-
-	for (const key in source) {
-		const value = source[key]
-		out[key] = isPlainObject(value)
-			? clonePlainDecorators(value, seen)
-			: value
-	}
-
-	return out as T
-}
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
 
@@ -231,7 +194,9 @@ export class Elysia<
 	private '~derive'?: WeakSet<EventFn<'beforeHandle'>>
 
 	'~router'?: Memoirist<CompiledHandler>
-	'~map'?: { [method: string]: { [path: string]: CompiledHandler } }
+	'~map'?: {
+		[method: string]: { [path: string]: CompiledHandler } | undefined
+	}
 	'~staticResponse'?: {
 		[path: string]: {
 			[method: string]: Response | Promise<Response>
@@ -262,7 +227,15 @@ export class Elysia<
 		this.#resolveMacros()
 
 		const routes = this.#history.map(
-			([method, path, handler, instance, hook, appHook, inheritedChain]) => {
+			([
+				method,
+				path,
+				handler,
+				instance,
+				hook,
+				appHook,
+				inheritedChain
+			]) => {
 				// Compose exactly as the runtime does (local + appHook +
 				// inherited `.use()` chain, origin-deduped) so introspection
 				// surfaces guard/group schemas inherited via `.use()` instead
@@ -6503,15 +6476,15 @@ export class Elysia<
 	#initMap() {
 		// monomorphic access is faster, so we ensure the shape of the map is consistent
 		this['~map'] ??= {
-			GET: nullObject() as any,
-			POST: nullObject() as any,
-			PUT: nullObject() as any,
-			DELETE: nullObject() as any,
-			PATCH: nullObject() as any,
+			GET: undefined as any,
+			POST: undefined as any,
+			PUT: undefined as any,
+			DELETE: undefined as any,
+			PATCH: undefined as any,
 			// Cache check, not uncommon
-			HEAD: nullObject() as any,
-			// CORS preflight, usuaul
-			OPTIONS: nullObject() as any
+			HEAD: undefined as any,
+			// CORS preflight, usual
+			OPTIONS: undefined as any
 		}
 	}
 
@@ -6580,6 +6553,8 @@ export class Elysia<
 		path: string,
 		handler: CompiledHandler
 	) {
+		if (isDynamicRegex.test(path)) return
+
 		this.#initMap()
 
 		const map = (this['~map']![mapMethodBack(method)] ??=
@@ -6646,18 +6621,19 @@ export class Elysia<
 		const wrapHeadHandler = Elysia.#wrapHeadHandler
 
 		const strict = !!this['~config']?.strictPath
+		const routerOptions = strict ? undefined : { loosePath: true }
+		const getRouter = () =>
+			(this['~router'] ??= new Memoirist<CompiledHandler>(
+				routerOptions
+			))
 
-		// Explicit (non-loose) paths per method, so a route's trailing-slash
-		// loose twin never clobbers another route explicitly registered on it
 		let explicitPaths: Map<string, Set<string>> | undefined
-		if (!strict) {
+		if (!strict && this['~config']?.distinctPath) {
 			explicitPaths = new Map()
 			for (let i = 0; i < length; i++) {
 				const route = this.#history![i]
 				const m =
-					(route[0] as any) === 'WS'
-						? 'WS'
-						: mapMethodBack(route[0])
+					(route[0] as any) === 'WS' ? 'WS' : mapMethodBack(route[0])
 				const p = route[1]
 
 				let set = explicitPaths.get(m)
@@ -6681,12 +6657,7 @@ export class Elysia<
 				const options = ws[1]
 
 				if (isDynamicRegex.test(path)) {
-					;(this['~router'] ??= new Memoirist()).add(
-						'WS',
-						path,
-						handler,
-						false
-					)
+					getRouter().add('WS', path, handler, false)
 				} else {
 					this.#initMap()
 					const wsMap = (this['~map']!['WS'] ??= nullObject() as any)
@@ -6757,38 +6728,49 @@ export class Elysia<
 			const autoHead =
 				enableAutoHead && method === 'GET' && !explicitHead?.has(path)
 
-			const registerPattern = (
-				registerMain: (p: string, h: CompiledHandler) => void,
-				registerHead: (p: string, h: CompiledHandler) => void,
-				handler: CompiledHandler,
-				headHandler: CompiledHandler | undefined,
-				registerLoose: boolean
-			) => {
-				const explicitMain = explicitPaths?.get(method)
+			const isDynamic = isDynamicRegex.test(path)
+			const registerLoose =
+				!isDynamic &&
+				!strict &&
+				(path.length === 0 ||
+					path.charCodeAt(path.length - 1) === 47)
+			const explicitMain = registerLoose
+				? explicitPaths?.get(method)
+				: undefined
 
-				const add = (p: string) => {
-					registerMain(p, handler)
-					if (headHandler) registerHead(p, headHandler)
+			if (!isDynamic && !needEncodeRegex.test(path) && !registerLoose) {
+				const map = (methods[method] ??= nullObject() as any)
+				const handler = this.handler(i, precompile, route, sharedStatic)
 
-					if (registerLoose) {
-						const loose = getLoosePath(p)
-						if (loose !== p && !explicitMain?.has(loose)) {
-							registerMain(loose, handler)
-							if (headHandler) registerHead(loose, headHandler)
-						}
-					}
+				map[path] = handler
+
+				if (autoHead) {
+					const head = (methods['HEAD'] ??= nullObject() as any)
+					head[path] = wrapHeadHandler(handler)
 				}
 
-				add(path)
+				continue
+			}
 
-				if (needEncodeRegex.test(path)) {
-					const encoded = encodeURI(path)
-					if (encoded !== path) add(encoded)
+			const variants = [path]
+			if (needEncodeRegex.test(path)) {
+				const encoded = encodeURI(path)
+				if (encoded !== path) variants.push(encoded)
+			}
+
+			const paths: string[] = []
+			for (let v = 0; v < variants.length; v++) {
+				const p = variants[v]
+				paths.push(p)
+				if (registerLoose) {
+					const loose = getLoosePath(p)
+					if (loose !== p && !explicitMain?.has(loose))
+						paths.push(loose)
 				}
 			}
 
-			if (isDynamicRegex.test(path)) {
-				const router = (this['~router'] ??= new Memoirist())
+			if (isDynamic) {
+				const router = getRouter()
 				const handler = this.handler(
 					i,
 					precompile,
@@ -6800,14 +6782,11 @@ export class Elysia<
 					? wrapHeadHandler(handler)
 					: undefined
 
-				registerPattern(
-					(p, h) => router.add(method, p, h, false),
-					(p, h) => router.add('HEAD', p, h, false),
-					handler,
-					headHandler,
-					// dynamic loose twins use a find-time retry, not the trie
-					false
-				)
+				for (let p = 0; p < paths.length; p++) {
+					router.add(method, paths[p], handler, false)
+					if (headHandler)
+						router.add('HEAD', paths[p], headHandler, false)
+				}
 			} else {
 				const map = (methods[method] ??= nullObject() as any)
 				const handler = this.handler(i, precompile, route, sharedStatic)
@@ -6820,17 +6799,10 @@ export class Elysia<
 					? (methods['HEAD'] ??= nullObject() as any)
 					: undefined
 
-				registerPattern(
-					(p, h) => {
-						map[p] = h
-					},
-					(p, h) => {
-						head![p] = h
-					},
-					handler,
-					headHandler,
-					!strict
-				)
+				for (let p = 0; p < paths.length; p++) {
+					map[paths[p]] = handler
+					if (headHandler) head![paths[p]] = headHandler
+				}
 			}
 		}
 	}

@@ -1,5 +1,5 @@
-import { Elysia, file, status, t } from '../src'
-import { Validator } from '../src/validator'
+import { Elysia, t } from '../src'
+import { Validator } from '../src/validator';
 
 const a = t.Object({
 	name: t.String(),

@@ -1,5 +1,6 @@
 import { env } from '../universal'
 import { nullObject } from '../utils'
+import type { CoercePlan } from '../type/coerce'
 
 export type ValidatorSlot =
 	| 'body'
@@ -64,8 +65,14 @@ export interface FrozenValidator {
 	ps?: 1
 	// precomputed default for absent input (`Default(schema, undefined)`)
 	pd?: unknown
+	// precomputed default also applies to explicit `null`
+	pn?: 1
 	// precomputed object-default template (`Default(schema, {})`)
 	pod?: Record<string, unknown>
+	// generated cloner for `pd`
+	dc?: () => unknown
+	// generated merger for `pod`
+	pm?: (value: Record<string, unknown>) => Record<string, unknown>
 	// custom error
 	ce?: Array<{ p: string; c: FrozenCheckFactory; e?: 1 }>
 	// inner codec
@@ -77,6 +84,7 @@ export interface FrozenValidator {
 		// otherwise `s` is a plain (v)=>cleaned cleaner called directly
 		d: FrozenMirror & { x?: 1 }
 	}>
+	cp?: CoercePlan
 }
 
 export interface ValidatorManifest {
@@ -99,6 +107,14 @@ export interface HandlerManifest {
 	[method: string]: {
 		[path: string]: FrozenHandler
 	}
+}
+
+export interface CompiledSnapshot {
+	validators: ValidatorManifest | undefined
+	handlers: HandlerManifest | undefined
+	lazyGroups: Array<() => ValidatorManifest> | undefined
+	lazyGroupOf: Record<string, Record<string, number>> | undefined
+	builtGroups: number[]
 }
 
 // build registry
@@ -125,6 +141,9 @@ export abstract class Compiled {
 
 	static set validators(manifest: ValidatorManifest) {
 		validators = manifest
+		lazyGroups = undefined
+		lazyGroupOf = undefined
+		builtGroups.clear()
 	}
 
 	static registerLazyValidators(
@@ -167,6 +186,27 @@ export abstract class Compiled {
 			validators?.[method]?.[path]?.[slot] !== undefined ||
 			lazyGroupOf?.[method]?.[path] !== undefined
 		)
+	}
+
+	/** @internal preserve registry around in-process AOT analysis */
+	static snapshot(): CompiledSnapshot {
+		return {
+			validators,
+			handlers,
+			lazyGroups,
+			lazyGroupOf,
+			builtGroups: [...builtGroups]
+		}
+	}
+
+	/** @internal restore registry after in-process AOT analysis */
+	static restore(snapshot: CompiledSnapshot) {
+		validators = snapshot.validators
+		handlers = snapshot.handlers
+		lazyGroups = snapshot.lazyGroups
+		lazyGroupOf = snapshot.lazyGroupOf
+		builtGroups.clear()
+		for (const group of snapshot.builtGroups) builtGroups.add(group)
 	}
 
 	/** @internal test isolation */
@@ -538,7 +578,10 @@ export interface CapturedValidator {
 	// preallocated defaults (build-verified), frozen to `ps`/`pd`/`pod`
 	precomputeSafe?: boolean
 	precomputedDefault?: unknown
+	precomputeNull?: boolean
 	precomputedObjectDefault?: Record<string, unknown>
+	defaultCloner?: string
+	objectDefaultMerger?: string
 	// per-field custom-error checks, frozen to `ce`
 	customErrors?: Array<{
 		path: string
@@ -556,6 +599,8 @@ export interface CapturedValidator {
 		external: boolean
 		decode: CapturedMirror
 	}>
+	// coercion plan (primitive coercions)
+	coercePlan?: CoercePlan
 }
 
 let capture: Map<string, CapturedValidator> | undefined
@@ -616,8 +661,6 @@ export function endHandlerCapture(): CapturedHandler[] {
 	return captured
 }
 
-// Set capture fields on the (method,path,slot) entry. Replaces the per-channel
-// setters — call sites pass the CapturedValidator field name(s) directly.
 function captureSet(
 	loc: { method: string; path: string; slot: ValidatorSlot },
 	partial: Partial<CapturedValidator>
