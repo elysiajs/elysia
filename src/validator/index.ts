@@ -102,7 +102,7 @@ export abstract class Validator {
 
 			if (Capture.isCapturing())
 				throw new Error(
-					`[Elysia] ${message} build plugin cannot serialize a pre-compiled schema.`
+					`${message} build plugin cannot serialize a pre-compiled schema.`
 				)
 
 			console.warn(message)

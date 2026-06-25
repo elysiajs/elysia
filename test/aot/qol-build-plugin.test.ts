@@ -33,7 +33,7 @@ describe('pre-compiled schema is refused under the build plugin', () => {
 		endHandlerCapture()
 
 		expect(() => (build() as any).compile()).toThrow(
-			/pre-compiled TypeBox schema/
+			/Compiled schema detected/
 		)
 	})
 
@@ -51,7 +51,7 @@ describe('pre-compiled schema is refused under the build plugin', () => {
 		}
 
 		expect(
-			warnings.some((w) => /pre-compiled TypeBox schema/.test(w))
+			warnings.some((w) => /Compiled schema detected/.test(w))
 		).toBe(true)
 	})
 
@@ -72,7 +72,7 @@ describe('pre-compiled schema is refused under the build plugin', () => {
 		}
 
 		expect(
-			warnings.some((w) => /pre-compiled TypeBox schema/.test(w))
+			warnings.some((w) => /Compiled schema detected/.test(w))
 		).toBe(false)
 	})
 })
