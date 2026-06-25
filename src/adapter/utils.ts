@@ -1,10 +1,10 @@
 import { isNotEmpty, nullObject } from '../utils'
 import { StatusMap } from '../constants'
 
-import { serializeCookie } from '../cookie/utils'
+import { serializeCookie } from '../cookie/serialize'
+import { mapCompactResponse, mapResponse } from './web-standard/handler'
 import { isBun, hasHeaderShorthand } from '../universal/constants'
 import type { Context } from '../context'
-import type { MaybePromise } from '../types'
 
 const setCookie = 'set-cookie' as const
 
@@ -111,7 +111,8 @@ export function handleFile(
 
 	if (set.headers instanceof Headers) {
 		for (const key of Object.keys(defaultHeader))
-			if (!set.headers.has(key)) set.headers.append(key, defaultHeader[key])
+			if (!set.headers.has(key))
+				set.headers.append(key, defaultHeader[key])
 
 		if (immutable) {
 			set.headers.delete('content-length')
@@ -203,10 +204,10 @@ interface CreateHandlerParameter {
 	mapCompactResponse(response: unknown, request?: Request): Response
 }
 
-const enqueueBinaryChunk = (
+function enqueueBinaryChunk(
 	controller: ReadableStreamDefaultController,
 	chunk: unknown
-): MaybePromise<boolean> => {
+) {
 	if (chunk instanceof Blob)
 		return chunk.arrayBuffer().then((buffer) => {
 			controller.enqueue(new Uint8Array(buffer))
@@ -234,7 +235,7 @@ const enqueueBinaryChunk = (
 }
 
 export const createStreamHandler =
-	({ mapResponse, mapCompactResponse }: CreateHandlerParameter) =>
+	(_: CreateHandlerParameter) =>
 	async (
 		generator: Generator | AsyncGenerator | ReadableStream,
 		set?: Context['set'],
@@ -249,11 +250,10 @@ export const createStreamHandler =
 		if (set) handleSet(set)
 		if (init instanceof Promise) init = await init
 
-		// Generator or ReadableStream is returned from a generator function
-		if (init?.value instanceof ReadableStream) {
+		if (init?.value instanceof ReadableStream)
 			// @ts-ignore
 			generator = init.value
-		} else if (init && (typeof init?.done === 'undefined' || init?.done)) {
+		else if (init && (typeof init?.done === 'undefined' || init?.done)) {
 			if (set) return mapResponse(init.value, set, request)
 			return mapCompactResponse(init.value, request)
 		}

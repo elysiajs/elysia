@@ -98,11 +98,11 @@ export abstract class Validator {
 
 		if (isCompiledSchema(schema)) {
 			const message =
-				'[Elysia] A pre-compiled TypeBox schema (TypeCompiler.Compile / t.Compile) was passed as a route schema. Pass the schema itself (e.g. `t.Object({...})`) — Elysia compiles it internally.'
+				'[Elysia] Compiled schema detected. Please pass t.Schema instead.'
 
 			if (Capture.isCapturing())
 				throw new Error(
-					`${message} The AOT build plugin cannot serialize a pre-compiled schema.`
+					`[Elysia] ${message} build plugin cannot serialize a pre-compiled schema.`
 				)
 
 			console.warn(message)

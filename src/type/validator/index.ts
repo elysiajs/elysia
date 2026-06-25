@@ -63,8 +63,8 @@ import {
 	buildDefaultClonerSource,
 	buildObjectDefaultMergeSource,
 	createDefaultCloner,
+	createMergerFromSource,
 	createObjectDefaultMerger,
-	isPrecomputeSafe,
 	verifyPreallocatableDefault
 } from './default-precompute'
 import { buildFrozenCheck } from './frozen-check'
@@ -266,8 +266,12 @@ interface DefaultFastPath {
 	objectTemplate: Record<string, unknown> | undefined
 	/** Generated object/array cloner for `value` when available. */
 	clone?: () => unknown
-	/** Generated partial-object merger for `objectTemplate` when available. */
-	merge?: (value: Record<string, unknown>) => Record<string, unknown>
+	/**
+	 * Generated default merger for present input. Schema-driven when available
+	 * (fills object keys and maps array element defaults); self-guards its input
+	 * shape so a non-matching value passes through unchanged.
+	 */
+	merge?: (value: any) => any
 }
 
 export class TypeBoxValidator<
@@ -399,29 +403,42 @@ export class TypeBoxValidator<
 				merge: frozen.pm
 			}
 		} else {
-			this.precomputeSafe =
-				this.hasDefault && isPrecomputeSafe(this.schema as any)
+			const defaults = this.hasDefault
+				? verifyPreallocatableDefault(
+						this.schema as TSchema,
+						Capture.isCapturing()
+					)
+				: undefined
 
-			if (this.precomputeSafe) {
-				const defaultValue = Default(this.schema, undefined)
-				const obj = Default(this.schema, nullObject()) as unknown
+			if (defaults) {
+				this.precomputeSafe = true
+
 				const objectTemplate =
-					obj && typeof obj === 'object' && !Array.isArray(obj)
-						? (Object.freeze(obj) as Record<string, unknown>)
+					defaults.pod !== undefined
+						? (Object.freeze(defaults.pod) as Record<
+								string,
+								unknown
+							>)
 						: undefined
 
 				this.#defaultFastPath = {
-					value: defaultValue,
-					appliesToNull: true,
+					value: defaults.pd,
+					appliesToNull: defaults.pn,
 					objectTemplate,
-					clone: createDefaultCloner(defaultValue),
-					merge:
-						objectTemplate !== undefined
+					clone:
+						defaults.pd !== undefined
+							? createDefaultCloner(defaults.pd)
+							: undefined,
+					merge: defaults.ms
+						? createMergerFromSource(defaults.ms)
+						: objectTemplate !== undefined
 							? createObjectDefaultMerger(objectTemplate)
 							: undefined
 				}
-			} else
+			} else {
+				this.precomputeSafe = false
 				this.#defaultFastPath = undefined
+			}
 		}
 
 		this.#noValidate = originalElyTyp === ELYSIA_TYPES.NoValidate
@@ -760,10 +777,13 @@ export class TypeBoxValidator<
 					defaults.pd !== undefined
 						? buildDefaultClonerSource(defaults.pd)
 						: undefined
+				// Prefer the schema-driven merger (covers arrays / nested objects);
+				// fall back to the object-template merger for legacy-only bakes.
 				defaultFastPathCapture.objectDefaultMerger =
-					defaults.pod !== undefined
+					defaults.ms ??
+					(defaults.pod !== undefined
 						? buildObjectDefaultMergeSource(defaults.pod)
-						: undefined
+						: undefined)
 			}
 		}
 
@@ -917,17 +937,16 @@ export class TypeBoxValidator<
 
 		// Always deep-clone: the shared template (baked `pd` or the runtime
 		// snapshot) must yield an independent instance per request
-		return defaults.clone
-			? defaults.clone()
-			: structuredClone(value)
+		return defaults.clone ? defaults.clone() : structuredClone(value)
 	}
 
 	#applyPrecomputedObjectDefault(value: Record<string, unknown>) {
 		const defaults = this.#defaultFastPath!
 
-		return defaults.merge
-			? defaults.merge(value)
-			: applyPrecomputed(defaults.objectTemplate!, value)
+		if (defaults.merge) return defaults.merge(value)
+		if (Array.isArray(value)) return value
+
+		return applyPrecomputed(defaults.objectTemplate!, value)
 	}
 
 	private optionalBypass(
@@ -963,9 +982,10 @@ export class TypeBoxValidator<
 				)
 					value = this.#cloneSharedDefault() as any
 				else if (
-					defaults.objectTemplate !== undefined &&
+					value !== null &&
 					typeof value === 'object' &&
-					!Array.isArray(value)
+					(defaults.merge !== undefined ||
+						defaults.objectTemplate !== undefined)
 				)
 					value = this.#applyPrecomputedObjectDefault(
 						value as any
@@ -1049,9 +1069,10 @@ export class TypeBoxValidator<
 				)
 					value = this.#cloneSharedDefault() as Static<T>
 				else if (
-					defaults.objectTemplate !== undefined &&
+					value !== null &&
 					typeof value === 'object' &&
-					!Array.isArray(value)
+					(defaults.merge !== undefined ||
+						defaults.objectTemplate !== undefined)
 				)
 					value = this.#applyPrecomputedObjectDefault(
 						value as any

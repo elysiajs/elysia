@@ -102,6 +102,63 @@ describe('AOT default preallocation', () => {
 			name: 'Date default (codec-on-union)',
 			make: () => t.Object({ d: t.Date({ default: '2020-01-01' }) }),
 			inputs: [{}, { d: '2021-05-05' }, { d: new Date(0) }]
+		},
+		{
+			// schema-driven merger recurses into nested objects without an own
+			// default (the template path could not represent the absent branch)
+			name: 'nested object without own default',
+			make: () =>
+				t.Object({
+					pg: t.Object({
+						limit: t.Number({ default: 10 }),
+						offset: t.Number({ default: 0 })
+					}),
+					s: t.String({ default: 'asc' })
+				}),
+			inputs: [
+				{ pg: {} },
+				{ pg: { limit: 5 } },
+				{ pg: {}, s: 'desc' },
+				{ pg: { limit: 1, offset: 2 }, s: 'x' }
+			]
+		},
+		{
+			// root array of objects: element field defaults filled per element
+			name: 'root array of objects with element defaults',
+			make: () =>
+				t.Array(
+					t.Object({ a: t.Number({ default: 1 }), b: t.String() })
+				),
+			inputs: [[], [{ b: 'x' }], [{ a: 5, b: 'y' }, { b: 'z' }]]
+		},
+		{
+			// array nested inside an object — the common `{ items: [...] }` body
+			name: 'object containing array of objects with element defaults',
+			make: () =>
+				t.Object({
+					items: t.Array(t.Object({ a: t.Number({ default: 1 }) })),
+					page: t.Number({ default: 1 })
+				}),
+			inputs: [
+				{ items: [] },
+				{ items: [{}, { a: 9 }] },
+				{ items: [{}], page: 3 }
+			]
+		},
+		{
+			// array carrying its OWN default + per-element defaults
+			name: 'array with own default and element defaults',
+			make: () =>
+				t.Array(t.Object({ a: t.Number({ default: 1 }) }), {
+					default: [{}]
+				}),
+			inputs: [undefined, [], [{}, {}], [{ a: 7 }]]
+		},
+		{
+			name: 'array of arrays of objects with element defaults',
+			make: () =>
+				t.Array(t.Array(t.Object({ a: t.Number({ default: 2 }) }))),
+			inputs: [[], [[]], [[{}], [{ a: 1 }, {}]]]
 		}
 	]
 
@@ -124,20 +181,14 @@ describe('AOT default preallocation', () => {
 	const NOT_BAKED: Array<{ name: string; make: () => any; inputs: unknown[] }> =
 		[
 			{
-				name: 'nested object without own default',
+				// element is a union carrying a default — the merger cannot
+				// faithfully reproduce branch selection, so it bails
+				name: 'array of union elements with default',
 				make: () =>
-					t.Object({
-						pg: t.Object({
-							limit: t.Number({ default: 10 }),
-							offset: t.Number({ default: 0 })
-						}),
-						s: t.String({ default: 'asc' })
-					}),
-				inputs: [
-					{ pg: { limit: 5 } },
-					{ pg: {}, s: 'desc' },
-					{ pg: { limit: 1, offset: 2 }, s: 'x' }
-				]
+					t.Array(
+						t.Union([t.String(), t.Number()], { default: 'x' })
+					),
+				inputs: [[], ['set'], [1, 'two']]
 			},
 			{
 				name: 'default inside a union branch',
@@ -471,6 +522,198 @@ describe('AOT default preallocation', () => {
 	})
 })
 
+// Regression guard for the adversarial-review finding (2026-06-26): a route
+// returned 200 under the AOT build but 422 under dev `.compile()`. The frozen
+// (AOT) path baked the schema-driven merger while the non-frozen (JIT / dev)
+// path still used the `Default(schema, {})` value template, which cannot fill
+// array element defaults nor recurse into nested objects without their own
+// default. Both paths now share `verifyPreallocatableDefault`; these pins fail
+// if the non-frozen path ever diverges from the capture decision again.
+describe('AOT default preallocation — non-frozen JIT ≡ frozen (regression)', () => {
+	const evalManifest = (src: string): any =>
+		new Function(
+			src
+				.replace('export const validators', 'const validators')
+				.replace('export const handlers', 'const handlers')
+				.replace('export default validators', 'return validators')
+				.replace(/^import .*$/gm, '')
+		)()
+
+	const REGRESSIONS: Array<{
+		name: string
+		make: () => any
+		inputs: unknown[]
+	}> = [
+		{
+			// the exact adversarial shape: a present `[{}]` must FILL the element
+			// default (`[{x:7}]`), not reject as missing `x`
+			name: 'root array, element object carries its own default',
+			make: () =>
+				t.Array(
+					t.Object(
+						{ x: t.Number({ default: 7 }) },
+						{ default: { x: 7 } }
+					)
+				),
+			inputs: [[{}], [{ x: 5 }], [{}, { x: 1 }], []]
+		},
+		{
+			name: 'array element with own default nested in an object',
+			make: () =>
+				t.Object({
+					filters: t.Array(
+						t.Object(
+							{ field: t.String(), op: t.String({ default: 'eq' }) },
+							{ default: { field: 'id', op: 'eq' } }
+						)
+					)
+				}),
+			inputs: [
+				{ filters: [{ field: 'name' }] },
+				{ filters: [] },
+				{ filters: [{ field: 'a', op: 'ne' }, { field: 'b' }] }
+			]
+		},
+		{
+			// divergent nested default: present `{a:{}}` fills the LEAF (3); absent
+			// `a` uses the parent default (2). The merger must not bake the parent.
+			name: 'divergent nested default (leaf vs parent)',
+			make: () =>
+				t.Object(
+					{
+						a: t.Object(
+							{ b: t.Number({ default: 3 }) },
+							{ default: { b: 2 } }
+						)
+					},
+					{ default: { a: { b: 1 } } }
+				),
+			inputs: [{ a: {} }, {}, undefined]
+		},
+		{
+			name: 'nested object without its own default',
+			make: () =>
+				t.Object({
+					pg: t.Object({
+						limit: t.Number({ default: 10 }),
+						offset: t.Number({ default: 0 })
+					}),
+					s: t.String({ default: 'asc' })
+				}),
+			inputs: [
+				{ pg: {} },
+				{ pg: { limit: 5 } },
+				{ pg: { limit: 1, offset: 2 }, s: 'x' }
+			]
+		}
+	]
+
+	for (const { name, make, inputs } of REGRESSIONS)
+		it(`non-frozen bakes + matches frozen: ${name}`, () => {
+			const m = capture(make())
+			expect(entry(m)?.ps).toBe(1)
+
+			const frozen = makeFrozen(make(), m)
+			const jit = makeJit(make())
+
+			// the non-frozen path must ALSO take the fast path — proving it shares
+			// the capture's decision, not the old isPrecomputeSafe template gate
+			expect(jit.precomputeSafe).toBe(true)
+
+			for (const input of inputs) {
+				let frozenOut: unknown
+				let frozenThrew = false
+				try {
+					frozenOut = frozen.FromSync(structuredClone(input))
+				} catch {
+					frozenThrew = true
+				}
+
+				let jitOut: unknown
+				let jitThrew = false
+				try {
+					jitOut = jit.FromSync(structuredClone(input))
+				} catch {
+					jitThrew = true
+				}
+
+				// frozen and non-frozen must agree on BOTH accept/reject and value
+				expect(jitThrew).toBe(frozenThrew)
+				if (!frozenThrew) expect(jitOut).toEqual(frozenOut)
+			}
+		})
+
+	it('pins the filled value: array-element-own-default fills, never rejects', () => {
+		const make = () =>
+			t.Array(
+				t.Object({ x: t.Number({ default: 7 }) }, { default: { x: 7 } })
+			)
+
+		const frozen = makeFrozen(make(), capture(make()))
+		const jit = makeJit(make())
+
+		// the regression: `[{}]` fills the leaf default instead of 422'ing
+		expect(frozen.FromSync([{}])).toEqual([{ x: 7 }])
+		expect(jit.FromSync([{}])).toEqual([{ x: 7 }])
+		expect(frozen.FromSync([{ x: 5 }, {}])).toEqual([{ x: 5 }, { x: 7 }])
+		expect(jit.FromSync([{ x: 5 }, {}])).toEqual([{ x: 5 }, { x: 7 }])
+	})
+
+	it('e2e: AOT build ≡ plain build for array element-own-default', async () => {
+		const build = () =>
+			new Elysia().post(
+				'/batch',
+				{
+					body: t.Array(
+						t.Object(
+							{ x: t.Number({ default: 7 }) },
+							{ default: { x: 7 } }
+						)
+					)
+				},
+				({ body }) => body
+			)
+
+		process.env.ELYSIA_AOT_BUILD = '1'
+		let src: string
+		try {
+			src = await compileToSource(build(), { register: false })
+		} finally {
+			delete process.env.ELYSIA_AOT_BUILD
+		}
+
+		Validator.clear()
+		Compiled.validators = evalManifest(src)
+		const frozen = build()
+		frozen.compile()
+
+		Compiled.clear()
+		Validator.clear()
+		const plain = build()
+		plain.compile()
+
+		const post = (app: Elysia<any, any>, payload: unknown) =>
+			app
+				.handle(
+					new Request('http://localhost/batch', {
+						method: 'POST',
+						headers: { 'content-type': 'application/json' },
+						body: JSON.stringify(payload)
+					})
+				)
+				.then(async (r) => ({ status: r.status, text: await r.text() }))
+
+		for (const payload of [[{}], [{ x: 5 }], [{}, {}], []])
+			expect(await post(frozen, payload)).toEqual(await post(plain, payload))
+
+		// the AOT build must FILL the element default, not reject the request
+		expect(await post(frozen, [{}])).toEqual({
+			status: 200,
+			text: '[{"x":7}]'
+		})
+	})
+})
+
 // The real build emitter (`source.ts`) serializes `ps`/`pd`/`pod` as JS literals
 // — a separate path from the in-process `materialise` harness.
 describe('AOT default preallocation — source emit', () => {
@@ -603,7 +846,11 @@ describe('AOT default preallocation — source emit', () => {
 		})
 		const validators = evalManifest(src)
 
-		expect(validators.POST['/dup'].body.ps).toBeUndefined()
+		// route 2 (`{ nested: {...} }`) now bakes its OWN default; the capture must
+		// reflect route 2, never route 1's stale `first` field
+		const dup = validators.POST['/dup'].body
+		expect(dup.pm?.({ nested: {} })).toEqual({ nested: { x: 'SECOND' } })
+		expect(dup.pm?.({})).not.toHaveProperty('first')
 
 		Validator.clear()
 		Compiled.validators = validators

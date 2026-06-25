@@ -26,7 +26,7 @@ function warnNoFileTypeDetector() {
 	warnedNoFileTypeDetector = true
 
 	console.warn(
-		"[Elysia] Attempt to validate file type without a file type detector, only the file's reported mime type is checked which can be spoofed. This may lead to security risks. We recommend registering a detector with `setFileTypeDetector`, eg. `setFileTypeDetector(fileTypeFromBlob)` using the 'file-type' package."
+		"[Elysia] Attempt to validate file type without a file type detector, please set one using `setFileTypeDetector`"
 	)
 }
 

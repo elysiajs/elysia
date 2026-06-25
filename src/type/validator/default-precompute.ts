@@ -385,7 +385,11 @@ function buildObjectMergeFunction(
 	helpers.push('')
 
 	const keys = Object.keys(defaults)
-	let body = 'const out=Object.create(null);let x;'
+	// non-object / array / null inputs pass straight through, matching
+	// `Default(objectSchema, nonObject) === nonObject` (the runtime dispatch no
+	// longer pre-filters array input, so the merger must self-guard)
+	let body =
+		"if(v===null||typeof v!=='object'||Array.isArray(v))return v;const out=Object.create(null);let x;"
 
 	for (const key of keys) {
 		const access = `v[${JSON.stringify(key)}]`
@@ -454,6 +458,229 @@ export function createObjectDefaultMerger(defaults: Record<string, unknown>) {
 	return source ? fromSource<ObjectDefaultMerger>(source) : undefined
 }
 
+// Compile a schema-driven merger source (`ms`) for the non-AOT runtime path, so
+// it makes the exact same merge decision the frozen manifest baked.
+export function createMergerFromSource(source: string) {
+	return fromSource<(value: any) => any>(source)
+}
+
+type MergeCategory = 'identity' | 'object' | 'array' | 'bail'
+
+function mergeCategory(node: any): MergeCategory {
+	if (!node || typeof node !== 'object') return 'identity'
+	if (!subtreeHasDefault(node)) return 'identity'
+	if (node['~codec'] || node['~refine']) return 'bail'
+
+	const kind = node['~kind']
+	if (
+		kind === 'Union' ||
+		kind === 'Intersect' ||
+		kind === 'Ref' ||
+		kind === 'This' ||
+		kind === 'Cyclic'
+	)
+		return 'bail'
+
+	if (kind === 'Object' || node.type === 'object') return 'object'
+
+	if ((kind === 'Array' || node.type === 'array') && node.items)
+		return !Array.isArray(node.items) && subtreeHasDefault(node.items)
+			? 'array'
+			: 'identity'
+
+	return 'identity'
+}
+
+function mergeExpression(
+	schema: any,
+	varName: string,
+	helpers: string[]
+): { absent: string | undefined; present: string } | undefined {
+	const full = Default(schema, undefined)
+	const child = emitMerger(schema, helpers)
+	if (child === undefined) return
+
+	const absent = full === undefined ? undefined : cloneExpression(full)
+	if (full !== undefined && absent === undefined) return
+
+	let present: string
+	if (child === '') present = varName
+	else
+		present =
+			mergeCategory(schema) === 'object'
+				? `(${varName}!==null&&typeof ${varName}==='object'&&!Array.isArray(${varName})?${child}(${varName}):${varName})`
+				: `(Array.isArray(${varName})?${child}(${varName}):${varName})`
+
+	return { absent, present }
+}
+
+function emitMerger(node: any, helpers: string[]) {
+	const category = mergeCategory(node)
+	if (category === 'identity') return ''
+	if (category === 'bail') return
+
+	const name = `_d${helpers.length}`
+	helpers.push('')
+
+	if (category === 'object') {
+		const props = node.properties ?? {}
+		const handled: string[] = []
+
+		// non-object / array / null inputs pass straight through, matching
+		// `Default(objectSchema, nonObject) === nonObject`
+		let body =
+			"if(v===null||typeof v!=='object'||Array.isArray(v))return v;const out=Object.create(null);let x;"
+
+		for (const key in props) {
+			if (!Object.hasOwn(props, key)) continue
+			const ps = props[key]
+			if (!subtreeHasDefault(ps)) continue
+			if (dangerousKeys.has(key)) return
+
+			const expr = mergeExpression(ps, 'x', helpers)
+			if (!expr) return
+
+			handled.push(key)
+			const access = JSON.stringify(key)
+			body += `x=v[${access}];`
+			body +=
+				expr.absent === undefined
+					? `if(x!==undefined)out[${access}]=${expr.present};`
+					: `out[${access}]=x===undefined?${expr.absent}:${expr.present};`
+		}
+
+		// object default with no fillable child
+		if (!handled.length) {
+			helpers.pop()
+			return ''
+		}
+
+		body += 'for(const k in v){x=v[k];if(x!==undefined'
+		for (const key of handled) body += `&&k!==${JSON.stringify(key)}`
+		body += ')out[k]=x}return out'
+
+		helpers[+name.slice(2)] = `function ${name}(v){${body}}`
+		return name
+	}
+
+	// array: map the element merger over each element
+	const expr = mergeExpression(node.items, 'e', helpers)
+	if (!expr) return
+
+	if (expr.absent === undefined && expr.present === 'e') {
+		// element needs no merging — drop the no-op map
+		helpers.pop()
+		return ''
+	}
+
+	const assign =
+		expr.absent === undefined
+			? `e===undefined?undefined:${expr.present}`
+			: `e===undefined?${expr.absent}:${expr.present}`
+
+	helpers[+name.slice(2)] =
+		`function ${name}(v){if(!Array.isArray(v))return v;` +
+		`const o=new Array(v.length);let e;` +
+		`for(let i=0;i<v.length;i++){e=v[i];o[i]=${assign}}return o}`
+
+	return name
+}
+
+export function buildMergeSource(schema: any) {
+	const category = mergeCategory(schema)
+	if (category !== 'object' && category !== 'array') return
+
+	const helpers: string[] = []
+	const root = emitMerger(schema, helpers)
+	if (!root) return
+
+	return `(function(){${helpers.join(';')};return ${root}})()`
+}
+
+// Forces every nested object/array default to fill at once
+// object slots -> `{}`
+// array slots -> `[<empty element>]`
+// scalars left empty
+function emptyContainers(node: any, depth: number): unknown {
+	if (depth <= 0 || !node || typeof node !== 'object') return
+	const kind = node['~kind']
+
+	if (kind === 'Object' || node.type === 'object') {
+		const out: Record<string, unknown> = nullObject()
+
+		const props = node.properties ?? {}
+		for (const key in props)
+			if (Object.hasOwn(props, key)) {
+				const child = emptyContainers(props[key], depth - 1)
+				if (child !== undefined) out[key] = child
+			}
+		return out
+	}
+
+	if ((kind === 'Array' || node.type === 'array') && node.items && !Array.isArray(node.items)) {
+		const element = emptyContainers(node.items, depth - 1)
+		return element === undefined ? [] : [element]
+	}
+}
+
+// Build-time probes for `validateMergeSource`: empty containers, a fully-nested
+// fill, and a present sentinel at each top-level slot (passthrough must not be
+// clobbered by a default).
+function* mergeProbes(schema: any): Generator<unknown> {
+	yield {}
+	yield []
+
+	const filled = emptyContainers(schema, 6)
+	if (filled !== undefined) yield filled
+
+	const kind = schema['~kind']
+	if (kind === 'Object' || schema.type === 'object') {
+		const props = schema.properties ?? {}
+		for (const key in props)
+			if (Object.hasOwn(props, key)) {
+				yield { [key]: PROBE_SENTINEL }
+				const child = emptyContainers(props[key], 6)
+				if (child !== undefined) yield { [key]: child }
+			}
+	} else if (
+		(kind === 'Array' || schema.type === 'array') &&
+		schema.items &&
+		!Array.isArray(schema.items)
+	) {
+		yield [PROBE_SENTINEL]
+		const element = emptyContainers(schema.items, 6)
+		if (element !== undefined) yield [element, element]
+	}
+}
+
+function validateMergeSource(schema: TSchema, source: string): boolean {
+	const merger = fromSource<(value: unknown) => unknown>(source)
+	if (!merger) return false
+
+	for (const probe of mergeProbes(schema)) {
+		// the runtime only invokes the merger for present, non-null object/array
+		if (probe === null || typeof probe !== 'object') continue
+
+		let expected: unknown
+		try {
+			expected = Default(schema, structuredClone(probe))
+		} catch {
+			return false
+		}
+
+		let actual: unknown
+		try {
+			actual = merger(structuredClone(probe))
+		} catch {
+			return false
+		}
+
+		if (canonical(expected) !== canonical(actual)) return false
+	}
+
+	return true
+}
+
 const PROBE_SENTINEL = '__elysia_default_probe__'
 
 function* defaultProbes(
@@ -499,7 +726,7 @@ function canonical(v: unknown): string {
 }
 
 // ? build-time, check if a default is preallocatable (emittable, JSON-serializable)
-export function verifyPreallocatableDefault(schema: TSchema) {
+export function verifyPreallocatableDefault(schema: TSchema, validate = true) {
 	if (hasUnemittableDefaultValue(schema)) return
 
 	// preallocated default
@@ -514,14 +741,17 @@ export function verifyPreallocatableDefault(schema: TSchema) {
 		return
 	}
 
+	const s = schema as any
+	const rootIsObject = s.type === 'object' || s['~kind'] === 'Object'
+
 	const pod =
-		podRaw && typeof podRaw === 'object' && !Array.isArray(podRaw)
+		rootIsObject &&
+		podRaw &&
+		typeof podRaw === 'object' &&
+		!Array.isArray(podRaw)
 			? (podRaw as Record<string, unknown>)
 			: undefined
 
-	// Raw refs depend on TypeBox Module/$ref resolution semantics. Do not try to
-	// precompute through them; named Elysia model refs are already resolved before
-	// this point and will appear here as concrete schemas.
 	if (containsRefLike(schema)) return
 
 	if (
@@ -532,25 +762,28 @@ export function verifyPreallocatableDefault(schema: TSchema) {
 
 	const nullDefault = isPrecomputeSafe(schema as any)
 
-	if (!nullDefault) {
-		const s = schema as any
+	let ms = buildMergeSource(schema)
+	if (ms !== undefined && validate && !validateMergeSource(schema, ms))
+		ms = undefined
 
-		if (s.type !== 'object' && s['~kind'] !== 'Object') return
+	if (!nullDefault && ms === undefined) {
+		if (!rootIsObject) return
 		if (!structuralPreallocatable(schema as any)) return
 
-		for (const probe of defaultProbes(pod)) {
-			let expected: unknown
+		if (validate)
+			for (const probe of defaultProbes(pod)) {
+				let expected: unknown
 
-			try {
-				expected = Default(schema, structuredClone(probe))
-			} catch {
-				return
+				try {
+					expected = Default(schema, structuredClone(probe))
+				} catch {
+					return
+				}
+
+				const actual = applyPrecomputed(pod!, structuredClone(probe))
+				if (canonical(expected) !== canonical(actual)) return
 			}
-
-			const actual = applyPrecomputed(pod!, structuredClone(probe))
-			if (canonical(expected) !== canonical(actual)) return
-		}
 	}
 
-	return { pd, pn: nullDefault, pod }
+	return { pd, pn: nullDefault, pod, ms }
 }

@@ -241,7 +241,10 @@ describe('Stream', () => {
 		)
 	})
 
-	it('return value if not yield', async () => {
+	// A generator handler ALWAYS streams, even when it returns a value without
+	// yielding — the returned value becomes the single chunk. It must never fall
+	// back to a buffered (non-stream) response.
+	it('return value if not yield still streams', async () => {
 		const app = new Elysia()
 			.get('/', function* ({ set }) {
 				return 'hello'
@@ -254,6 +257,11 @@ describe('Stream', () => {
 			app.handle(req('/')),
 			app.handle(req('/json'))
 		])
+
+		// the response is a chunked stream, not a buffered body
+		expect(response[0].headers.get('transfer-encoding')).toBe('chunked')
+		expect(response[0].body).toBeInstanceOf(ReadableStream)
+		expect(response[1].headers.get('transfer-encoding')).toBe('chunked')
 
 		await expect(response[0].text()).resolves.toBe('hello')
 		await expect(response[1].json()).resolves.toEqual({
@@ -261,12 +269,12 @@ describe('Stream', () => {
 		})
 	})
 
-	it('return async value if not yield', async () => {
+	it('return async value if not yield still streams', async () => {
 		const app = new Elysia()
-			.get('/', function* ({ set }) {
+			.get('/', async function* ({ set }) {
 				return 'hello'
 			})
-			.get('/json', function* ({ set }) {
+			.get('/json', async function* ({ set }) {
 				return { hello: 'world' }
 			})
 
@@ -274,6 +282,9 @@ describe('Stream', () => {
 			app.handle(req('/')),
 			app.handle(req('/json'))
 		])
+
+		expect(response[0].headers.get('transfer-encoding')).toBe('chunked')
+		expect(response[0].body).toBeInstanceOf(ReadableStream)
 
 		await expect(response[0].text()).resolves.toBe('hello')
 		await expect(response[1].json()).resolves.toEqual({

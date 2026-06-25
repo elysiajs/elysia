@@ -35,7 +35,10 @@ const trace = (report: TraceReporter | undefined, fn: Function) =>
 
 const toArray = <T>(v: MaybeArray<T>): T[] => (Array.isArray(v) ? v : [v])
 
-export const mapTransform = map<'transform', [report?: TraceReporter]>(
+export const mapTransform = /*#__PURE__*/ map<
+	'transform',
+	[report?: TraceReporter]
+>(
 	(i, fn, [report]) => {
 		const t = trace(report, fn)
 		return t.begin + `${Await(fn)}tf${at(i)}(c)\n` + t.end()
@@ -506,8 +509,10 @@ export const mapMapResponse = (
 	report?: TraceReporter
 ) => mapChainHook(toArray(_hooks), 'mr', report)
 
-// `try / catch` per hook so a thrown hook doesn't drop the rest
-export const mapAfterResponse = map<'afterResponse', [report?: TraceReporter]>(
+export const mapAfterResponse = /*#__PURE__*/ map<
+	'afterResponse',
+	[report?: TraceReporter]
+>(
 	(i, fn, [report]) => {
 		const t = trace(report, fn)
 		return (
@@ -522,7 +527,7 @@ export const mapAfterResponse = map<'afterResponse', [report?: TraceReporter]>(
 	}
 )
 
-export const mapError = map<
+export const mapError = /*#__PURE__*/ map<
 	'error',
 	[
 		map: string,

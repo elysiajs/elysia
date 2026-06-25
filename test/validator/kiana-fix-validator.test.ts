@@ -31,12 +31,15 @@ describe('kiana validator fixes', () => {
 
 		const v = new TypeBoxValidator(schema)
 
-		// WHY: the divergence means the cheap precompute path is unsound here.
-		expect(v.precomputeSafe).toBe(false)
+		// WHY: the schema-driven merger now bakes this — it recurses per node
+		// instead of snapshotting `Default(schema, {})`, so it fills the LEAF
+		// default on a present nested object and the parent's own default only
+		// when the nested object is absent (the template path bailed here).
+		expect(v.precomputeSafe).toBe(true)
 
 		// WHY: `{a:{}}` supplies the nested object but omits `b`; TypeBox fills
 		// the LEAF default 3, not the parent object default 2. This is the case
-		// the precompute path got wrong (it baked the parent default 2).
+		// the old template precompute path got wrong (it baked the parent default 2).
 		expect(v.FromSync({ a: {} })).toEqual({ a: { b: 3 } })
 
 		// `a` absent → it gets its own object default; root present so the root

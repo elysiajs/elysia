@@ -3993,7 +3993,7 @@ export class Elysia<
 		// `.macro(fn)` has no name to register under, and TS can't reject it
 		if (typeof macro === 'function')
 			throw new Error(
-				'Use `.macro({ name: fn })` instead of `.macro(fn)`'
+				'use `.macro({ name: fn })` instead of `.macro(fn)`'
 			)
 
 		const ext = this.#ext
@@ -6865,7 +6865,7 @@ export class Elysia<
 	>(callback: WrapFn<T>): this {
 		if (this.#fetchFn)
 			console.warn(
-				'[Elysia] .wrap() was called after the fetch handler was built, so it will not take effect. Register .wrap() before .listen() or before accessing .fetch/.handle.'
+				'[Elysia] .wrap() was called after the fetch handler was built'
 			)
 
 		const ext = this.#ext

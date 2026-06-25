@@ -106,12 +106,20 @@ export interface StubPlan {
 	 * when no replayed handler aliases any of them.
 	 */
 	reconstruct: boolean
+
+	/**
+	 * Stub the request-side cookie machinery (parse / jar / signing in
+	 * `cookie/utils` + `cookie/config`) when no replayed handler aliases the
+	 * cookie config (`cc`)
+	 */
+	cookie: boolean
 }
 
 const NO_STUB: StubPlan = {
 	jit: false,
 	ws: false,
-	reconstruct: false
+	reconstruct: false,
+	cookie: false
 } as const
 
 /**
@@ -144,15 +152,11 @@ function planFromReport(
 			jit &&
 			!aliases.has('va') &&
 			!aliases.has('cc') &&
-			!aliases.has('tr')
+			!aliases.has('tr'),
+		cookie: jit && !aliases.has('cc')
 	}
 }
 
-/**
- * The internal runtime modules each stub target maps to, plus the throwing
- * source the bundler swaps in. Paths are matched against both `src/…` (dev /
- * test) and `dist/…` (published) so the alias works in either resolution.
- */
 export const STUB_SOURCES: Record<
 	keyof StubPlan,
 	Array<{ filter: RegExp; source: string }>
@@ -185,6 +189,28 @@ export const STUB_SOURCES: Record<
 				`  static cookie(){return e()}\n` +
 				`  static trace(){return e()}\n` +
 				`}\n`
+		}
+	],
+	cookie: [
+		{
+			filter: /[\\/]cookie[\\/]utils\.(m?js|ts)$/,
+			source:
+				`const e=()=>{throw new Error("[elysia-aot] cookie support was stripped (strip mode) but a route used cookies. Rebuild with strip:false.")}\n` +
+				`export function createCookieJar(){return e()}\n` +
+				`export function parseCookie(){return e()}\n` +
+				`export function parseCookieRaw(){return e()}\n` +
+				`export function parseCookieRawSync(){return e()}\n` +
+				`export function buildCookieJar(){return e()}\n` +
+				`export function signCookieValues(){return e()}\n` +
+				`export function signCookie(){return e()}\n` +
+				`export function unsignCookie(){return e()}\n`
+		},
+		{
+			filter: /[\\/]cookie[\\/]config\.(m?js|ts)$/,
+			source:
+				`const e=()=>{throw new Error("[elysia-aot] cookie support was stripped (strip mode) but a route used cookies. Rebuild with strip:false.")}\n` +
+				`export function compileCookieConfig(){return e()}\n` +
+				`export function isCookieSigned(){return e()}\n`
 		}
 	]
 }

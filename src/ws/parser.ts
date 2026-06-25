@@ -1,22 +1,26 @@
 import type { ServerWebSocket } from './types'
 import type { WSConnectionData } from './context'
 
-function isNumericString(s: string): boolean {
+function isNumericString(s: string) {
 	if (s.length === 0) return false
+
 	let sawDigit = false
 	let sawDot = false
 
 	for (let i = 0; i < s.length; i++) {
 		const c = s.charCodeAt(i)
+
 		if (i === 0 && (c === 43 || c === 45)) continue
 		if (c >= 48 && c <= 57) {
 			sawDigit = true
 			continue
 		}
+
 		if (c === 46 && !sawDot) {
 			sawDot = true
 			continue
 		}
+
 		return false
 	}
 

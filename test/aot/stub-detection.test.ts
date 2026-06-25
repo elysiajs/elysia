@@ -158,7 +158,9 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			jit: true,
 			ws: true,
 			// schema route uses the `va` alias → reconstruct module must be kept
-			reconstruct: false
+			reconstruct: false,
+			// no cookie alias (`cc`) → request-side cookie machinery is stubbable
+			cookie: true
 		})
 
 		const inline = await generateCompiledArtifacts(
@@ -168,7 +170,8 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			jit: true,
 			ws: true,
 			// no validator/cookie/trace alias anywhere → safe to stub reconstruct
-			reconstruct: true
+			reconstruct: true,
+			cookie: true
 		})
 
 		const unsafe = await generateCompiledArtifacts(
@@ -177,7 +180,8 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 		expect(unsafe.stub).toEqual({
 			jit: false,
 			ws: false,
-			reconstruct: false
+			reconstruct: false,
+			cookie: false
 		})
 	})
 

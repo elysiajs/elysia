@@ -45,7 +45,8 @@ export const aot = (
 	let stub: StubPlan = {
 		jit: false,
 		ws: false,
-		reconstruct: false
+		reconstruct: false,
+		cookie: false
 	}
 
 	return {

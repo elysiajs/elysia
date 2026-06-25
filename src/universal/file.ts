@@ -4,6 +4,8 @@ import type { BunFile } from 'bun'
 
 import { isBun } from './constants'
 
+const msft365 = 'application/vnd.openxmlformats-officedocument.'
+
 export const mime = {
 	// web
 	html: 'text/html',
@@ -48,11 +50,11 @@ export const mime = {
 
 	// office
 	doc: 'application/msword',
-	docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+	docx: `${msft365}wordprocessingml.document`,
 	xls: 'application/vnd.ms-excel',
-	xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+	xlsx: `${msft365}spreadsheetml.sheet`,
 	ppt: 'application/vnd.ms-powerpoint',
-	pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+	pptx: `${msft365}presentationml.presentation`
 } as const
 
 export const getFileExtension = (path: string) => {
@@ -70,7 +72,7 @@ let stat: typeof Stat
 const warnMissing = (name?: string) =>
 	console.warn(
 		new Error(
-			`[elysia] \`file\` require \`fs${name ? '.' + name : ''}\` ${name?.includes('.') ? 'module ' : ''}which is not available in this environment`
+			`[Elysia] \`file\` require \`fs${name ? '.' + name : ''}\` ${name?.includes('.') ? 'module ' : ''}which is not available in this environment`
 		)
 	)
 

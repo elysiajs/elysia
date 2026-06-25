@@ -35,7 +35,8 @@ const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/index.ts')
 const STUB_MARKERS = [
 	'handler compiler JIT was stripped',
 	'WebSocket route builder was stripped',
-	'handler reconstruction was stripped'
+	'handler reconstruction was stripped',
+	'cookie support was stripped'
 ] as const
 
 const built: string[] = []
@@ -145,7 +146,8 @@ describe('AOT strip regression — strip:auto (sound: skip when unsafe)', () => 
 		expect(stub).toEqual({
 			jit: false,
 			ws: false,
-			reconstruct: false
+			reconstruct: false,
+			cookie: false
 		})
 
 		const text = await build(
@@ -169,12 +171,15 @@ describe('AOT strip regression — strip:auto (sound: skip when unsafe)', () => 
 			{ strip: 'auto' }
 		)
 		expect(stub.reconstruct).toBe(false)
+		// the route reads the cookie jar → `cc` alias → cookie machinery kept
+		expect(stub.cookie).toBe(false)
 
 		const text = await build(
 			'test/aot/fixtures/regress-strip-cookie.ts',
 			'auto'
 		)
 		expect(text).not.toContain('handler cookie reconstruction was stripped')
+		expect(text).not.toContain('cookie support was stripped')
 
 		const app = await load(text)
 		const res = await app.handle(
@@ -183,6 +188,69 @@ describe('AOT strip regression — strip:auto (sound: skip when unsafe)', () => 
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('ok')
 		expect(res.headers.getAll('set-cookie').length).toBeGreaterThan(0)
+	})
+
+	it('tree-shakes JIT-only codegen helpers when handler JIT is stubbed', async () => {
+		// Build-only (a prior generateCompiledArtifacts would dirty the capture).
+		const text = await build(
+			'test/aot/fixtures/regress-strip-jit-utils.ts',
+			'auto'
+		)
+		expect(text).toContain('handler compiler JIT was stripped')
+
+		// `mapTransform`/`mapError`/`mapAfterResponse` are `const = map(...)`
+		// codegen helpers imported ONLY by the (now-stubbed) handler compiler.
+		// Without the `/*#__PURE__*/` on the `map(...)` call the bundler retains
+		// the factory call because `compile/handler/utils` stays alive for
+		// params.ts. These assertions fail if that annotation is removed.
+		expect(text).not.toContain('mapTransform')
+		expect(text).not.toContain('mapAfterResponse')
+		expect(text).not.toContain('mapError')
+
+		const app = await load(text)
+		const res = await app.handle(post('/u', { name: 'a' }))
+		expect(res.status).toBe(200)
+		await expect(res.json()).resolves.toEqual({ name: 'a' })
+	})
+
+	it('strips request-side cookie machinery when no route reads cookies', async () => {
+		// Build-only: a standalone generateCompiledArtifacts on the same fixture
+		// would dirty the shared app instance and degenerate the build's capture.
+		// The stub marker in the bundle is the proof that `stub.cookie` was applied
+		// (the plan-level cookie:true is covered in stub-detection.test.ts).
+		const text = await build(
+			'test/aot/fixtures/regress-strip-no-cookie.ts',
+			'auto'
+		)
+		// the request-side cookie module was replaced by the throwing stub...
+		expect(text).toContain('cookie support was stripped')
+		// ...and its heavy machinery (HMAC signing) is dropped from the bundle
+		expect(text).not.toContain('importSecretKey')
+		expect(text).not.toContain('crypto.subtle.importKey')
+
+		const app = await load(text)
+		const res = await app.handle(post('/echo', { name: 'a' }))
+		expect(res.status).toBe(200)
+		await expect(res.json()).resolves.toEqual({ name: 'a' })
+	})
+
+	it('SOUNDNESS: manual set.cookie still emits set-cookie under the cookie stub', async () => {
+		// `set.cookie = {...}` (no jar) is invisible to cookie inference, so the
+		// request-side cookie machinery IS stubbed (marker present) — but
+		// response-side `serializeCookie` lives in its own module and must survive,
+		// or the header silently disappears.
+		const text = await build(
+			'test/aot/fixtures/regress-strip-manual-cookie.ts',
+			'auto'
+		)
+		expect(text).toContain('cookie support was stripped')
+
+		const app = await load(text)
+		const res = await app.handle(req('/manual'))
+		expect(res.status).toBe(200)
+		await expect(res.text()).resolves.toBe('ok')
+		// ...yet the split keeps serializeCookie → header still emitted
+		expect(res.headers.getAll('set-cookie')).toEqual(['token=abc'])
 	})
 
 	it('SOUNDNESS: userland sucrose imports are not replaced by handler-JIT strip', async () => {
@@ -210,7 +278,8 @@ describe('AOT strip regression — strip:auto (sound: skip when unsafe)', () => 
 		expect(stub).toEqual({
 			jit: true,
 			ws: true,
-			reconstruct: true
+			reconstruct: true,
+			cookie: true
 		})
 
 		const text = await build(

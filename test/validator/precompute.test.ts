@@ -45,12 +45,12 @@ describe('TypeBoxValidator default precompute', () => {
 		expect(out).toEqual({ a: 'set', b: 'b-default' } as any)
 	})
 
-	it('nested object without own default forces fallback (correctness)', () => {
-		// `Default(schema, {})` does not materialize nested objects that
-		// lack their own `default`, so the precompute snapshot would be
-		// missing the nested skeleton. The safety predicate detects this
-		// and falls back to runtime `Default()`, which DOES recurse into
-		// nested input correctly.
+	it('nested object without own default is baked by the schema-driven merger', () => {
+		// `Default(schema, {})` does not materialize nested objects that lack
+		// their own `default`, so the old value-template snapshot couldn't bake
+		// this. The schema-driven merger recurses into `pagination` from the
+		// schema and fills leaf defaults on present input — identical to runtime
+		// `Default()`.
 		const schema = Type.Object({
 			pagination: Type.Object({
 				limit: Type.Number({ default: 10 }),
@@ -59,7 +59,7 @@ describe('TypeBoxValidator default precompute', () => {
 			sort: Type.String({ default: 'asc' })
 		})
 		const v = new TypeBoxValidator(schema)
-		expect(v.precomputeSafe).toBe(false)
+		expect(v.precomputeSafe).toBe(true)
 		const out = v.FromSync({ pagination: { limit: 25 } } as any)
 		expect(out).toEqual(
 			Default(schema, { pagination: { limit: 25 } }) as any
@@ -105,15 +105,41 @@ describe('TypeBoxValidator default precompute', () => {
 		)
 	})
 
-	it('Codec schema forces the runtime Default fallback', () => {
+	it('Codec schema bakes its leaf default; decode still runs in the pipeline', () => {
 		const schema = Type.Object({
 			id: Type.Codec(Type.String({ default: 'foo' }))
 				.Decode((v) => v)
 				.Encode((v) => v)
 		})
 		const v = new TypeBoxValidator(schema)
-		expect(v.precomputeSafe).toBe(false)
+		// the legacy object-template differential bakes the codec's leaf default;
+		// the codec's Decode is unaffected (it runs in the Check/decode pipeline)
+		expect(v.precomputeSafe).toBe(true)
 		expect(v.FromSync({} as any)).toEqual(Default(schema, {}) as any)
+	})
+
+	it('array element object with its own default fills per element', () => {
+		// Regression (adversarial review 2026-06-26): `isPrecomputeSafe` returns
+		// true for an array whose element object carries its own default, but the
+		// old `Default(schema, {})` template could not fill array element defaults
+		// — so `{rows:[{}]}` wrongly threw in dev (non-frozen) while an AOT build
+		// filled it. The non-frozen path now uses the schema-driven merger and
+		// matches runtime `Default()`.
+		const schema = Type.Object({
+			rows: Type.Array(
+				Type.Object(
+					{ qty: Type.Number({ default: 1 }) },
+					{ default: { qty: 1 } }
+				)
+			)
+		})
+		const v = new TypeBoxValidator(schema)
+		expect(v.precomputeSafe).toBe(true)
+		const out = v.FromSync({ rows: [{}, { qty: 5 }] } as any)
+		expect(out).toEqual(
+			Default(schema, { rows: [{}, { qty: 5 }] }) as any
+		)
+		expect(out).toEqual({ rows: [{ qty: 1 }, { qty: 5 }] } as any)
 	})
 })
 

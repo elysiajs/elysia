@@ -1,10 +1,10 @@
 import { decodeComponent } from 'deuri'
-import { parse, serialize } from './lib'
+import { parse } from './lib'
 
 import { Cookie } from './cookie'
 import { InvalidCookieSignature } from '../error'
 import { dangerousKeys } from '../constants'
-import { constantTimeEqual, isNotEmpty, nullObject } from '../utils'
+import { constantTimeEqual, nullObject } from '../utils'
 
 import type { Context } from '../context'
 import type { BaseCookie, CookieOptions } from './types'
@@ -230,36 +230,6 @@ async function signPending(
 		const [property, value, secret] = pending[i]!
 		property.value = await signCookie(value, secret)
 	}
-}
-
-export function serializeCookie(
-	cookies: Context['set']['cookie']
-): string | string[] | undefined {
-	if (!cookies || !isNotEmpty(cookies)) return
-
-	let set: string | string[] | undefined
-	let isArray = false
-
-	for (const key in cookies) {
-		if (!key) continue
-		const property = cookies[key]
-		if (!property) continue
-
-		const value = property.value
-		if (value === undefined || value === null) continue
-
-		const v = serialize(key, value as string, property)
-
-		if (set) {
-			if (isArray) (set as string[]).push(v)
-			else {
-				set = [set as string, v]
-				isArray = true
-			}
-		} else set = v
-	}
-
-	return set
 }
 
 // eslint-disable-next-line sonarjs/slow-regex -- anchored, single-char class over base64 padding (≤2 chars); linear
