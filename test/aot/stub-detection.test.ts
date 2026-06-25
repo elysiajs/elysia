@@ -160,7 +160,11 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			// schema route uses the `va` alias → reconstruct module must be kept
 			reconstruct: false,
 			// no cookie alias (`cc`) → request-side cookie machinery is stubbable
-			cookie: true
+			cookie: true,
+			// no trace alias (`tr`) → trace runtime is stubbable
+			trace: true,
+			// JIT stubbed → Sucrose never runs → memory's clearSucroseCache edge cut
+			sucrose: true
 		})
 
 		const inline = await generateCompiledArtifacts(
@@ -171,7 +175,9 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			ws: true,
 			// no validator/cookie/trace alias anywhere → safe to stub reconstruct
 			reconstruct: true,
-			cookie: true
+			cookie: true,
+			trace: true,
+			sucrose: true
 		})
 
 		const unsafe = await generateCompiledArtifacts(
@@ -181,7 +187,9 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			jit: false,
 			ws: false,
 			reconstruct: false,
-			cookie: false
+			cookie: false,
+			trace: false,
+			sucrose: false
 		})
 	})
 
@@ -287,6 +295,46 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 				filter.test('/x/dist/compile/handler/reconstruct.mjs')
 			)
 		).toBe(true)
+		// trace/memory filters are scoped to elysia's layout so they don't clobber
+		// dependency modules that share the bare filename (e.g. typebox's memory).
+		expect(
+			STUB_SOURCES.trace.some(({ filter }) =>
+				filter.test('/x/node_modules/elysia/dist/trace.mjs')
+			)
+		).toBe(true)
+		expect(
+			STUB_SOURCES.trace.some(({ filter }) =>
+				filter.test('/x/elysia/src/trace.ts')
+			)
+		).toBe(true)
+		expect(
+			STUB_SOURCES.trace.some(({ filter }) =>
+				filter.test('/x/node_modules/knip/dist/util/trace.js')
+			)
+		).toBe(false)
+		// The sucrose stub cuts the `memory` edge — it must replace elysia's
+		// `memory`, never typebox's `memory/memory.mjs`, and never the public
+		// `sucrose` module (userland helpers like bracketPairRange must survive).
+		expect(
+			STUB_SOURCES.sucrose.some(({ filter }) =>
+				filter.test('/x/node_modules/elysia/dist/memory.mjs')
+			)
+		).toBe(true)
+		expect(
+			STUB_SOURCES.sucrose.some(({ filter }) =>
+				filter.test('/x/elysia/src/memory.ts')
+			)
+		).toBe(true)
+		expect(
+			STUB_SOURCES.sucrose.some(({ filter }) =>
+				filter.test('/x/node_modules/typebox/build/system/memory/memory.mjs')
+			)
+		).toBe(false)
+		expect(
+			STUB_SOURCES.sucrose.some(({ filter }) =>
+				filter.test('/x/elysia/src/sucrose.ts')
+			)
+		).toBe(false)
 	})
 
 	it('Bun plugin swaps sucrose only when handler replay is proven safe', async () => {
@@ -308,6 +356,11 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 		expect(safeOutput).not.toContain('class ElysiaWS')
 		// schema route uses `va`, so the merged reconstruct module is kept
 		expect(safeOutput).not.toContain('handler reconstruction was stripped')
+		// no trace alias → trace runtime is stubbed away
+		expect(safeOutput).not.toContain('class TracerHandle')
+		expect(safeOutput).not.toContain('class TracerLifecycle')
+		// memory's clearSucroseCache edge is cut
+		expect(safeOutput).not.toContain('clearSucroseCache')
 
 		const unsafe = await Bun.build({
 			entrypoints: ['test/aot/fixtures/strip-ws-bundle.ts'],
@@ -325,6 +378,9 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 		expect(unsafeOutput).toContain('[Sucrose] warning')
 		expect(unsafeOutput).toContain('Unsupported content type')
 		expect(unsafeOutput).toContain('class ElysiaWS')
+		// not stubbed → trace runtime + memory's sucrose flush are retained
+		expect(unsafeOutput).toContain('class TracerHandle')
+		expect(unsafeOutput).toContain('clearSucroseCache')
 	})
 
 	it('emitted stripped bundle serves through frozen handlers', async () => {

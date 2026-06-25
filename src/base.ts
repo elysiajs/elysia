@@ -114,6 +114,7 @@ import type {
 } from './types'
 import type { ElysiaStatus } from './error'
 import type { Context, LifecycleContext, ErrorContext } from './context'
+import { Capture } from './compile/aot'
 
 const useNodesBuffer: ChainNode[] = []
 
@@ -6489,8 +6490,11 @@ export class Elysia<
 	}
 
 	compile() {
+		if (Capture.isCapturing()) return this
+
 		this['~config'] ??= nullObject()
 		this['~config']!.precompile = true
+		this.#routerBuilt = false
 
 		void this.fetch
 
@@ -6623,9 +6627,7 @@ export class Elysia<
 		const strict = !!this['~config']?.strictPath
 		const routerOptions = strict ? undefined : { loosePath: true }
 		const getRouter = () =>
-			(this['~router'] ??= new Memoirist<CompiledHandler>(
-				routerOptions
-			))
+			(this['~router'] ??= new Memoirist<CompiledHandler>(routerOptions))
 
 		let explicitPaths: Map<string, Set<string>> | undefined
 		if (!strict && this['~config']?.distinctPath) {
@@ -6732,8 +6734,7 @@ export class Elysia<
 			const registerLoose =
 				!isDynamic &&
 				!strict &&
-				(path.length === 0 ||
-					path.charCodeAt(path.length - 1) === 47)
+				(path.length === 0 || path.charCodeAt(path.length - 1) === 47)
 			const explicitMain = registerLoose
 				? explicitPaths?.get(method)
 				: undefined

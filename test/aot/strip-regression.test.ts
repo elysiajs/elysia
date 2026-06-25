@@ -147,7 +147,9 @@ describe('AOT strip regression — strip:auto (sound: skip when unsafe)', () => 
 			jit: false,
 			ws: false,
 			reconstruct: false,
-			cookie: false
+			cookie: false,
+			trace: false,
+			sucrose: false
 		})
 
 		const text = await build(
@@ -279,7 +281,9 @@ describe('AOT strip regression — strip:auto (sound: skip when unsafe)', () => 
 			jit: true,
 			ws: true,
 			reconstruct: true,
-			cookie: true
+			cookie: true,
+			trace: true,
+			sucrose: true
 		})
 
 		const text = await build(

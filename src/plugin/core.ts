@@ -113,13 +113,32 @@ export interface StubPlan {
 	 * cookie config (`cc`)
 	 */
 	cookie: boolean
+
+	/**
+	 * Stub the trace runtime (`trace.ts` `createTracer` + recorder machinery)
+	 * when no replayed handler aliases trace (`tr`). The live fetch handler keeps
+	 * `createTracer` importable but only calls it when trace handlers exist, so a
+	 * throwing stub is unreachable once detection proves trace is unused
+	 */
+	trace: boolean
+
+	/**
+	 * Stub the `memory` module's `clearSucroseCache` edge when handler JIT is
+	 * stubbed. Sucrose never runs in a precompiled app, so its caches are always
+	 * empty and the flush is a no-op — dropping the import lets the Sucrose
+	 * analyzer tree-shake. `flushMemory`'s other clears are preserved, and the
+	 * public `elysia/sucrose` module is left untouched
+	 */
+	sucrose: boolean
 }
 
 const NO_STUB: StubPlan = {
 	jit: false,
 	ws: false,
 	reconstruct: false,
-	cookie: false
+	cookie: false,
+	trace: false,
+	sucrose: false
 } as const
 
 /**
@@ -153,7 +172,9 @@ function planFromReport(
 			!aliases.has('va') &&
 			!aliases.has('cc') &&
 			!aliases.has('tr'),
-		cookie: jit && !aliases.has('cc')
+		cookie: jit && !aliases.has('cc'),
+		trace: jit && !aliases.has('tr'),
+		sucrose: jit
 	}
 }
 
@@ -211,6 +232,29 @@ export const STUB_SOURCES: Record<
 				`const e=()=>{throw new Error("[elysia-aot] cookie support was stripped (strip mode) but a route used cookies. Rebuild with strip:false.")}\n` +
 				`export function compileCookieConfig(){return e()}\n` +
 				`export function isCookieSigned(){return e()}\n`
+		}
+	],
+	trace: [
+		{
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]trace\.(m?js|ts)$/,
+			source:
+				`const e=()=>{throw new Error("[elysia-aot] trace support was stripped (strip mode) but a route used trace. Rebuild with strip:false.")}\n` +
+				`export function createTracer(){return e()}\n`
+		}
+	],
+	sucrose: [
+		{
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]memory\.(m?js|ts)$/,
+			source:
+				`import { clearContextCache } from './context'\n` +
+				`import { isBun } from './universal/constants'\n` +
+				`import { Validator } from './validator'\n` +
+				`export function flushMemory() {\n` +
+				`	clearContextCache()\n` +
+				`	Validator.clear()\n` +
+				`	if (isBun) Bun.gc()\n` +
+				`	else if (typeof global?.gc === 'function') global.gc()\n` +
+				`}\n`
 		}
 	]
 }

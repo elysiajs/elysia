@@ -46,7 +46,9 @@ export const aot = (
 		jit: false,
 		ws: false,
 		reconstruct: false,
-		cookie: false
+		cookie: false,
+		trace: false,
+		sucrose: false
 	}
 
 	return {
