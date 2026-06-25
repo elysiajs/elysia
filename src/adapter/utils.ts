@@ -234,9 +234,8 @@ function enqueueBinaryChunk(
 	return false
 }
 
-export const createStreamHandler =
-	(_: CreateHandlerParameter) =>
-	async (
+export function createStreamHandler(_: CreateHandlerParameter) {
+	return async (
 		generator: Generator | AsyncGenerator | ReadableStream,
 		set?: Context['set'],
 		request?: Request,
@@ -399,6 +398,7 @@ export const createStreamHandler =
 			set as any
 		)
 	}
+}
 
 export async function* streamResponse(response: Response) {
 	// ReadableStream is async-iterable on every target runtime (verified:
@@ -488,7 +488,7 @@ export function mergeStatus(
 	return responseStatus
 }
 
-export const createResponseHandler = (handler: CreateHandlerParameter) => {
+export function createResponseHandler(handler: CreateHandlerParameter) {
 	const handleStream = createStreamHandler(handler)
 
 	return (response: Response, set?: Context['set'], request?: Request) => {
