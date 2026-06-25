@@ -144,8 +144,8 @@ export class Elysia<
 	'~Volatile': Volatile
 	'~Routes': Routes
 
-	#hasPlugin = false
-	#hasGlobal = false
+	#hasPlugin?: true
+	#hasGlobal?: true
 
 	#ready?: Promise<void>
 	#pending = 0
@@ -6490,8 +6490,6 @@ export class Elysia<
 	}
 
 	compile() {
-		if (Capture.isCapturing()) return this
-
 		this['~config'] ??= nullObject()
 		this['~config']!.precompile = true
 		this.#routerBuilt = false
