@@ -20,7 +20,7 @@ export interface TraceStream {
 	total?: number
 }
 
-interface TraceEndDetail {
+export interface TraceEndDetail {
 	/**
 	 * Timestamp of a function after it's executed since the server start
 	 */
@@ -514,12 +514,11 @@ class TracerLifecycle {
 	}
 }
 
-export const createTracer = (traceListener: TraceHandler) => {
-	return (context: Context) => {
+export const createTracer =
+	(traceListener: TraceHandler) => (context: Context) => {
 		const handle = new TracerHandle()
 
 		traceListener(new TracerLifecycle(handle, context) as any)
 
 		return handle
 	}
-}

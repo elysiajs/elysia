@@ -14,9 +14,19 @@ const variants: Record<string, () => any> = {
 		for (let i = 0; i < total; i++) app.get(`/${i}/:id`, () => 'ok')
 		return app
 	},
+	'dynamic-trailing-default': () => {
+		const app = new Elysia()
+		for (let i = 0; i < total; i++) app.get(`/${i}/:id/`, () => 'ok')
+		return app
+	},
 	'dynamic-strict': () => {
 		const app = new Elysia({ strictPath: true })
 		for (let i = 0; i < total; i++) app.get(`/${i}/:id`, () => 'ok')
+		return app
+	},
+	'dynamic-trailing-strict': () => {
+		const app = new Elysia({ strictPath: true })
+		for (let i = 0; i < total; i++) app.get(`/${i}/:id/`, () => 'ok')
 		return app
 	}
 }
@@ -24,8 +34,11 @@ const variants: Record<string, () => any> = {
 const labels: Record<string, string> = {
 	static: 'Static routes (/N)',
 	'dynamic-default':
-		'Dynamic (/N/:id) — default (1 trie insert; premium vs static = memoirist node)',
-	'dynamic-strict': 'Dynamic (/N/:id) — strictPath (no loose variant)'
+		'Dynamic (/N/:id) — default (Memoirist loosePath, 1 trie insert)',
+	'dynamic-trailing-default':
+		'Dynamic (/N/:id/) — default (Memoirist loosePath, 1 trie insert)',
+	'dynamic-strict': 'Dynamic (/N/:id) — strictPath',
+	'dynamic-trailing-strict': 'Dynamic (/N/:id/) — strictPath'
 }
 
 const which = process.argv[2]

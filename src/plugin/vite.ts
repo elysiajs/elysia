@@ -1,6 +1,8 @@
 import {
-	generateCompiledModule,
+	generateCompiledArtifacts,
 	resolveEntry,
+	STUB_SOURCES,
+	type StubPlan,
 	type ElysiaAotOptions
 } from './core'
 import { rewriteTypeImport } from './treeshake'
@@ -40,13 +42,20 @@ export const aot = (
 	const entryPath = resolveEntry(entry)
 	const treeShake = options?.treeShake ?? true
 	let source = ''
+	let stub: StubPlan = {
+		jit: false,
+		ws: false,
+		reconstruct: false
+	}
 
 	return {
 		name: 'elysia-aot',
 		enforce: 'pre',
 		apply: 'build',
 		async buildStart() {
-			source = await generateCompiledModule(entry, options)
+			const generated = await generateCompiledArtifacts(entry, options)
+			source = generated.source
+			stub = generated.stub
 		},
 		resolveId(id) {
 			if (id === 'elysia/compiled') return VIRTUAL
@@ -55,6 +64,13 @@ export const aot = (
 			if (id === VIRTUAL) return source
 		},
 		transform(code, id) {
+			// Stub when every route is compiled
+			for (const key of Object.keys(STUB_SOURCES) as (keyof StubPlan)[]) {
+				if (!stub[key]) continue
+				for (const { filter, source: stubSource } of STUB_SOURCES[key])
+					if (filter.test(id)) return stubSource
+			}
+
 			let out = code
 			if (treeShake && SOURCE.test(id) && !id.includes('node_modules'))
 				out = rewriteTypeImport(out)

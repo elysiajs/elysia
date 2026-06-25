@@ -307,7 +307,7 @@ export const createStreamHandler =
 		return new Response(
 			new ReadableStream({
 				start(controller) {
-					// Register abort handler once — terminates the iterator and
+					// Register abort handler once, terminates the iterator and
 					// closes the stream so pull() won't be called again.
 					request?.signal?.addEventListener('abort', () => {
 						end = true

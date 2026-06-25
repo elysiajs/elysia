@@ -78,7 +78,6 @@ import type {
 	ErrorHandler,
 	ErrorDefinitionEntry,
 	ResolveRouteErrors,
-	UnhandledReturnedErrorOf,
 	AfterHandler,
 	BodyHandler,
 	TransformHandler,
@@ -92,10 +91,6 @@ import type {
 	UnwrapRoute,
 	AnyWSLocalHook,
 	CreateEden,
-	CreateEdenResponse,
-	RouteSchema,
-	CreateWSEdenResponse,
-	ComposeElysiaResponse,
 	UnionResponseStatus,
 	IntersectIfObjectSchema,
 	MergeScopedSchemas,
@@ -6626,6 +6621,11 @@ export class Elysia<
 		const wrapHeadHandler = Elysia.#wrapHeadHandler
 
 		const strict = !!this['~config']?.strictPath
+		const routerOptions = strict ? undefined : { loosePath: true }
+		const getRouter = () =>
+			(this['~router'] ??= new Memoirist<CompiledHandler>(
+				routerOptions
+			))
 
 		let explicitPaths: Map<string, Set<string>> | undefined
 		if (!strict && this['~config']?.distinctPath) {
@@ -6657,12 +6657,7 @@ export class Elysia<
 				const options = ws[1]
 
 				if (isDynamicRegex.test(path)) {
-					;(this['~router'] ??= new Memoirist()).add(
-						'WS',
-						path,
-						handler,
-						false
-					)
+					getRouter().add('WS', path, handler, false)
 				} else {
 					this.#initMap()
 					const wsMap = (this['~map']!['WS'] ??= nullObject() as any)
@@ -6775,7 +6770,7 @@ export class Elysia<
 			}
 
 			if (isDynamic) {
-				const router = (this['~router'] ??= new Memoirist())
+				const router = getRouter()
 				const handler = this.handler(
 					i,
 					precompile,

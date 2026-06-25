@@ -45,6 +45,10 @@ describe('F19: body route no longer materializes all headers for content-type', 
 
 		// the parse prologue reads content-type straight off the request
 		expect(source).toContain("c.request.headers.get('content-type')")
+		// default parsing can fast-path JSON without materializing parser-only
+		// context state when no custom parser can observe it
+		expect(source).toContain('ct.charCodeAt(12)===106')
+		expect(source).not.toContain('c.contentType=ct')
 		// no full-header materialization
 		expect(source).not.toContain('c.headers=')
 		expect(source).not.toContain('.toJSON()')
@@ -70,6 +74,8 @@ describe('F19: body route no longer materializes all headers for content-type', 
 
 		const { source } = compileRoute(app)
 		expect(source).toContain("c.request.headers.get('content-type')")
+		expect(source).toContain('ct.charCodeAt(12)===106')
+		expect(source).not.toContain('c.contentType=ct')
 		expect(source).not.toContain('c.headers=')
 
 		const ok = await app.handle(post('/echo', { name: 'x' }))
@@ -115,6 +121,34 @@ describe('F19: body route no longer materializes all headers for content-type', 
 		const { source } = compileRoute(app)
 		expect(source).toContain('c.headers=')
 		expect(source).toContain("c.headers['content-type']")
+	})
+
+	it('custom parser still receives parser-only contentType context', async () => {
+		let seen: string | undefined
+		const app = new Elysia().post(
+			'/p',
+			{
+				parse({ contentType, request }) {
+					seen = contentType
+					if (contentType === 'application/json') return request.json()
+				}
+			},
+			({ body }) => body
+		)
+
+		const { source } = compileRoute(app)
+		expect(source).toContain('c.contentType=ct')
+
+		const res = await app.handle(
+			req('/p', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json; charset=utf-8' },
+				body: JSON.stringify({ name: 'saltyaom' })
+			})
+		)
+
+		expect(seen).toBe('application/json')
+		await expect(res.json()).resolves.toEqual({ name: 'saltyaom' })
 	})
 
 	// A headers SCHEMA must still materialize (vali.headers)

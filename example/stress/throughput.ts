@@ -11,6 +11,16 @@ const app = new Elysia()
 		},
 		({ body }) => body
 	)
+	.post(
+		'/json-default',
+		{
+			body: t.Object({
+				name: t.String({ default: 'saltyaom' }),
+				tags: t.Array(t.String(), { default: ['elysia'] })
+			})
+		},
+		({ body }) => body
+	)
 	.get(
 		'/search',
 		{
@@ -41,6 +51,12 @@ const postBase = new Request('http://e.ly/json', {
 	body
 })
 const post = () => postBase.clone()
+const postDefaultBase = new Request('http://e.ly/json-default', {
+	method: 'POST',
+	headers: { 'content-type': 'application/json' },
+	body: '{}'
+})
+const postDefault = () => postDefaultBase.clone()
 
 // Reuse prebuilt no-body Requests so the measured op is framework dispatch,
 // not `new Request` construction (~155ns, which dominated the cheap GET path).
@@ -54,6 +70,7 @@ const getMe = new Request('http://e.ly/me', {
 await handle(getRoot)
 await handle(getUser)
 await handle(post())
+await handle(postDefault())
 await handle(getSearch)
 await handle(getMe)
 
@@ -62,19 +79,26 @@ summary(() => {
 		bench('GET / (plain)', () => handle(getRoot))
 		bench('GET /user/:id (dynamic)', () => handle(getUser))
 		bench('POST /json (body validate)', () => handle(post()))
+		bench('POST /json-default (body + defaults)', () =>
+			handle(postDefault())
+		)
 		bench('GET /search (query coerce)', () => handle(getSearch))
 		bench('GET /me (cookie)', () => handle(getMe))
 	})
 
-	// Mixed traffic: rotate across all 5 routes per op so the radix lookup +
+	// Mixed traffic: rotate across all 6 routes per op so the radix lookup +
 	// compiled handlers can't stay perfectly monomorphic — closer to a server
 	// fielding varied paths (additive, not a replacement for the isolated ones).
 	group('throughput (mixed traffic)', () => {
 		const gets = [getRoot, getUser, getSearch, getMe]
 		let i = 0
-		bench('rotate all 5 routes', () => {
-			const n = i++ % 5
-			return handle(n === 4 ? post() : gets[n])
+		bench('rotate all 6 routes', () => {
+			const n = i++ % 6
+			return n === 4
+				? handle(post())
+				: n === 5
+					? handle(postDefault())
+					: handle(gets[n])
 		})
 	})
 })

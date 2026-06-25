@@ -90,6 +90,14 @@ describe('AOT default preallocation', () => {
 			inputs: [{}, { b: 'false' }]
 		},
 		{
+			name: 'union property with static default',
+			make: () =>
+				t.Object({
+					u: t.Union([t.String(), t.Number()], { default: 'x' })
+				}),
+			inputs: [{}, { u: 'set' }, { u: 1 }]
+		},
+		{
 			// codec-on-union: now bakes after the createSharedReference cache fix
 			name: 'Date default (codec-on-union)',
 			make: () => t.Object({ d: t.Date({ default: '2020-01-01' }) }),
@@ -147,6 +155,28 @@ describe('AOT default preallocation', () => {
 						])
 					}),
 				inputs: [{ u: { kind: 'a' } }, { u: { kind: 'b' } }]
+			},
+			{
+				name: 'raw $ref with own default',
+				make: () => {
+					const User = t.Object(
+						{
+							name: t.String(),
+							tags: t.Array(t.String())
+						},
+						{ $id: 'User' }
+					)
+
+					return t.Object({
+						user: t.Ref(User, {
+							default: { name: 'own', tags: ['own-tag'] }
+						})
+					})
+				},
+				inputs: [
+					{},
+					{ user: { name: 'set', tags: ['custom'] } }
+				]
 			}
 		]
 
@@ -257,6 +287,188 @@ describe('AOT default preallocation', () => {
 		expect(frozen.tb).toBeUndefined()
 		expect(frozen.precomputeSafe).toBe(true)
 	})
+
+	it('materialises generated default cloner/merger and keeps mutable defaults isolated', () => {
+		const make = () =>
+			t.Object(
+				{
+					tags: t.Array(t.String(), { default: ['field'] }),
+					cfg: t.Object(
+						{ list: t.Array(t.Number(), { default: [1] }) },
+						{ default: { list: [1] } }
+					)
+				},
+				{ default: { tags: ['root'], cfg: { list: [1] } } }
+			)
+
+		const m = capture(make())
+		const e = entry(m)
+		expect(typeof e.dc).toBe('function')
+		expect(typeof e.pm).toBe('function')
+
+		const frozen = makeFrozen(make(), m)
+
+		const root = frozen.FromSync(undefined) as any
+		root.tags.push('leak')
+		root.cfg.list.push(2)
+		expect(frozen.FromSync(undefined)).toEqual({
+			tags: ['root'],
+			cfg: { list: [1] }
+		})
+
+		const partial = frozen.FromSync({ cfg: {} }) as any
+		partial.tags.push('leak')
+		partial.cfg.list.push(2)
+		expect(frozen.FromSync({ cfg: {} })).toEqual({
+			tags: ['field'],
+			cfg: { list: [1] }
+		})
+	})
+
+	it('structural AOT precompute does not treat explicit null as absent', () => {
+		const make = () =>
+			t.Object(
+				{
+					x: t.Union([t.String(), t.Number()], {
+						default: 'child'
+					})
+				},
+				{ default: { x: 'root' } } as any
+			)
+
+		const m = capture(make())
+		const e = entry(m)
+		expect(e?.ps).toBe(1)
+		expect(e?.pn).toBeUndefined()
+
+		const frozen = makeFrozen(make(), m)
+		const jit = makeJit(make())
+
+		expect(frozen.FromSync(undefined)).toEqual(jit.FromSync(undefined))
+		expect(frozen.FromSync({})).toEqual(jit.FromSync({}))
+		expect(() => frozen.FromSync(null as any)).toThrow()
+		expect(() => jit.FromSync(null as any)).toThrow()
+	})
+
+	it('precompute-safe defaults keep the legacy null-default behavior', () => {
+		const make = () => t.String({ default: 'foo' })
+		const m = capture(make())
+		const e = entry(m)
+		expect(e?.ps).toBe(1)
+		expect(e?.pn).toBe(1)
+
+		const frozen = makeFrozen(make(), m)
+		const jit = makeJit(make())
+
+		expect(frozen.FromSync(null as any)).toEqual(jit.FromSync(null as any))
+	})
+
+	it('accessor defaults are not snapshotted into generated cloners', () => {
+		let current = 'capture'
+		const make = () => {
+			const def: any = {}
+			Object.defineProperty(def, 'x', {
+				enumerable: true,
+				get: () => current
+			})
+
+			return t.Object({ x: t.String() }, { default: def } as any)
+		}
+
+		const m = capture(make())
+		expect(entry(m)?.ps).toBeUndefined()
+
+		current = 'runtime'
+		const frozen = makeFrozen(make(), m)
+		const jit = makeJit(make())
+
+		expect(frozen.FromSync(undefined)).toEqual(jit.FromSync(undefined))
+		expect(frozen.FromSync(undefined)).toEqual({ x: 'runtime' })
+	})
+
+	it('symbol-key defaults fall back instead of emitting lossy source', () => {
+		const hidden = Symbol('hidden')
+		const make = () =>
+			t.Object(
+				{ x: t.String() },
+				{ default: { x: 'root', [hidden]: 'secret' } } as any
+			)
+
+		const m = capture(make())
+		expect(entry(m)?.ps).toBeUndefined()
+
+		const frozen = makeFrozen(make(), m)
+		const jit = makeJit(make())
+
+		expect(frozen.FromSync(undefined)).toEqual(jit.FromSync(undefined))
+	})
+
+	it('fallback precompute does not leak shared defaults through prototype-shadowing keys', async () => {
+		const build = () =>
+			new Elysia().post(
+				'/x',
+				{
+					body: t.Object({
+						constructor: (t as any).Any({
+							default: { list: [] as string[], bad: NaN }
+						})
+					})
+				},
+				({ body }) => {
+					const value = (body as any).constructor
+					if (value?.list) value.list.push('mut')
+					return value?.list ?? 'no-list'
+				}
+			)
+
+		const once = (app: Elysia<any, any>) =>
+			app
+				.handle(
+					new Request('http://localhost/x', {
+						method: 'POST',
+						headers: { 'content-type': 'application/json' },
+						body: '{}'
+					})
+				)
+				.then((r) => r.text())
+
+		const evalValidators = (src: string): any =>
+			new Function(
+				src
+					.replace('export const validators', 'const validators')
+					.replace('export const handlers', 'const handlers')
+					.replace('export default validators', 'return validators')
+					.replace(/^import .*$/gm, '')
+			)()
+
+		process.env.ELYSIA_AOT_BUILD = '1'
+		let src: string
+		try {
+			src = await compileToSource(build(), { register: false })
+		} finally {
+			delete process.env.ELYSIA_AOT_BUILD
+		}
+
+		Validator.clear()
+		Compiled.validators = evalValidators(src)
+		const frozen = build()
+		frozen.compile()
+
+		const frozenFirst = await once(frozen)
+		const frozenSecond = await once(frozen)
+		expect(frozenSecond).toEqual(frozenFirst)
+		expect(frozenSecond).not.toContain('mut,mut')
+
+		Compiled.clear()
+		Validator.clear()
+		const plain = build()
+		plain.compile()
+
+		const plainFirst = await once(plain)
+		const plainSecond = await once(plain)
+		expect(plainSecond).toEqual(plainFirst)
+		expect(plainSecond).not.toContain('mut,mut')
+	})
 })
 
 // The real build emitter (`source.ts`) serializes `ps`/`pd`/`pod` as JS literals
@@ -274,6 +486,18 @@ describe('AOT default preallocation — source emit', () => {
 			({ query }) => query
 		)
 
+	const buildRootDefault = () =>
+		new Elysia().post(
+			'/cfg',
+			{
+				body: t.Object(
+					{ tags: t.Array(t.String()) },
+					{ default: { tags: ['a'] } }
+				)
+			},
+			({ body }) => body
+		)
+
 	const evalManifest = (src: string): any =>
 		new Function(
 			src
@@ -288,9 +512,30 @@ describe('AOT default preallocation — source emit', () => {
 		try {
 			const src = await compileToSource(build(), { register: false })
 			expect(src).toContain('ps: 1')
+			expect(src).toContain('pm: ')
 			const v = evalManifest(src)
 			expect(v.GET['/u'].query.ps).toBe(1)
 			expect(v.GET['/u'].query.pod).toEqual({ name: 'anon', amount: 0 })
+			expect(typeof v.GET['/u'].query.pm).toBe('function')
+		} finally {
+			delete process.env.ELYSIA_AOT_BUILD
+		}
+	})
+
+	it('emits a generated cloner for root object defaults', async () => {
+		process.env.ELYSIA_AOT_BUILD = '1'
+		try {
+			const src = await compileToSource(buildRootDefault(), {
+				register: false
+			})
+			expect(src).toContain('dc: function(){')
+			const v = evalManifest(src)
+			const cloner = v.POST['/cfg'].body.dc
+			expect(typeof cloner).toBe('function')
+
+			const first = cloner()
+			first.tags.push('leak')
+			expect(cloner()).toEqual({ tags: ['a'] })
 		} finally {
 			delete process.env.ELYSIA_AOT_BUILD
 		}
@@ -320,5 +565,65 @@ describe('AOT default preallocation — source emit', () => {
 			const p = await plain.handle(req('/u' + q)).then((r) => r.json())
 			expect(f).toEqual(p)
 		}
+	})
+
+	it('duplicate route capture clears stale default precompute fields', async () => {
+		const buildDuplicate = () =>
+			new Elysia()
+				.post(
+					'/dup',
+					{
+						body: t.Object({
+							first: t.String({ default: 'FIRST' })
+						})
+					},
+					({ body }) => ({ route: 'first', body })
+				)
+				.post(
+					'/dup',
+					{
+						body: t.Object({
+							nested: t.Object({
+								x: t.String({ default: 'SECOND' })
+							})
+						})
+					},
+					({ body }) => ({ route: 'second', body })
+				)
+
+		const body = () =>
+			new Request('http://localhost/dup', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ nested: {} })
+			})
+
+		const src = await compileToSource(buildDuplicate(), {
+			register: false
+		})
+		const validators = evalManifest(src)
+
+		expect(validators.POST['/dup'].body.ps).toBeUndefined()
+
+		Validator.clear()
+		Compiled.validators = validators
+		const frozen = buildDuplicate()
+		frozen.compile()
+
+		Compiled.clear()
+		Validator.clear()
+		const plain = buildDuplicate()
+		plain.compile()
+
+		const frozenRes = await frozen.handle(body())
+		const plainRes = await plain.handle(body())
+
+		expect({
+			status: frozenRes.status,
+			text: await frozenRes.text()
+		}).toEqual({
+			status: plainRes.status,
+			text: await plainRes.text()
+		})
 	})
 })

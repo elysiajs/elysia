@@ -15,13 +15,12 @@ import { Hashing } from 'typebox/system'
 // (the real build supplies them via import). In-process, `new Function` has no
 // such scope, so we pass them as args — same instances, just a different binding.
 const fn = (src: string) =>
-	new Function(
-		'CheckContext',
-		'Guard',
-		'Format',
-		'Hashing',
-		`return ${src}`
-	)(CheckContext, Guard, Format, Hashing)
+	new Function('CheckContext', 'Guard', 'Format', 'Hashing', `return ${src}`)(
+		CheckContext,
+		Guard,
+		Format,
+		Hashing
+	)
 
 /** Materialise captured handlers into a frozen `{ a, f }` manifest (in-process). */
 export const materialiseHandlers = (
@@ -40,7 +39,7 @@ export const materialiseHandlers = (
 /**
  * Materialise captured validators into a frozen manifest of REAL functions —
  * exactly what the build plugin emits, but in-process for tests. Handles the
- * check (`c`) and exact-mirror (`m`, incl. phase-3.5 union branches) channels.
+ * check (`c`) and exact-mirror (`m`, incl. union branches) channels.
  */
 export const materialise = (
 	captured: CapturedValidator[]
@@ -84,7 +83,9 @@ export const materialise = (
 			setFlags()
 		} else if (c.mirror) {
 			const mir: any = {
-				s: fn(Source.mirrorFactory(c.mirror.source, c.mirror.hasExternals))
+				s: fn(
+					Source.mirrorFactory(c.mirror.source, c.mirror.hasExternals)
+				)
 			}
 			if (c.mirror.u) mir.u = branchTable(c.mirror.u)
 			entry.m = mir
@@ -109,13 +110,17 @@ export const materialise = (
 		}
 
 		// preallocated defaults — round-trip through JSON to match the real
-		// emit (the build serializes `pd`/`pod` via JSON.stringify).
 		if (c.precomputeSafe) {
 			entry.ps = 1
 			if (c.precomputedDefault !== undefined)
 				entry.pd = JSON.parse(JSON.stringify(c.precomputedDefault))
+			if (c.precomputeNull) entry.pn = 1
 			if (c.precomputedObjectDefault !== undefined)
-				entry.pod = JSON.parse(JSON.stringify(c.precomputedObjectDefault))
+				entry.pod = JSON.parse(
+					JSON.stringify(c.precomputedObjectDefault)
+				)
+			if (c.defaultCloner) entry.dc = fn(c.defaultCloner)
+			if (c.objectDefaultMerger) entry.pm = fn(c.objectDefaultMerger)
 		}
 
 		// per-field custom-error checks
@@ -131,7 +136,8 @@ export const materialise = (
 				...(e.external ? { e: 1 } : {})
 			}))
 
-		// inner codecs (t.ObjectString / t.ArrayString)
+		// inner codecs (t.ObjectString / t.ArrayString): per node, open char +
+		// inner check factory + inner decode mirror
 		if (c.innerCodecs?.length)
 			entry.ic = c.innerCodecs.map((e) => {
 				const d: any = {
@@ -142,8 +148,10 @@ export const materialise = (
 						)
 					)
 				}
+
 				if (e.decode.u) d.u = branchTable(e.decode.u)
 				if (e.decode.hasExternals) d.x = 1
+
 				return {
 					o: e.open,
 					c: fn(
@@ -157,7 +165,6 @@ export const materialise = (
 				}
 			})
 
-		// coercion plan — pure JSON, round-trip to match the real emit
 		if (c.coercePlan) entry.cp = JSON.parse(JSON.stringify(c.coercePlan))
 
 		const bySlot = ((m[c.method] ??= {})[c.path] ??= {})

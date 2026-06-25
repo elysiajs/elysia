@@ -2,10 +2,12 @@ import { realpathSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import {
-	generateCompiledModule,
+	generateCompiledArtifacts,
 	resolveEntry,
 	resolveLoader,
 	entryFilter,
+	STUB_SOURCES,
+	type StubPlan,
 	type ElysiaAotOptions
 } from './core'
 import { rewriteTypeImport } from './treeshake'
@@ -41,7 +43,7 @@ const realPath = (path: string): string => {
 export const aot = (entry: string, options?: ElysiaAotOptions) => ({
 	name: 'elysia-aot',
 	async setup(build: any) {
-		const source = await generateCompiledModule(entry, options)
+		const { source, stub } = await generateCompiledArtifacts(entry, options)
 		const entryPath = resolveEntry(entry)
 		const entryReal = realPath(entryPath)
 		const treeShake = options?.treeShake ?? true
@@ -59,6 +61,16 @@ export const aot = (entry: string, options?: ElysiaAotOptions) => ({
 			loader: 'js',
 			resolveDir: dirname(entryPath)
 		}))
+
+		// Stub when every route is compiled
+		for (const key of Object.keys(STUB_SOURCES) as (keyof StubPlan)[]) {
+			if (!stub[key]) continue
+			for (const { filter, source: stubSource } of STUB_SOURCES[key])
+				build.onLoad({ filter }, () => ({
+					contents: stubSource,
+					loader: 'js'
+				}))
+		}
 
 		if (treeShake)
 			// Broad load: rewrite `t` imports in every source file, claiming only

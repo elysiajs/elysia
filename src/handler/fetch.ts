@@ -11,7 +11,6 @@ import {
 	requestId,
 	flattenChain,
 	nullObject,
-	getLoosePath,
 	isNotEmpty
 } from '../utils'
 import { handleSet } from '../adapter/utils'
@@ -122,14 +121,6 @@ function findRoute(
 
 		let found =
 			router?.find(request.method, path) ?? router?.find('*', path)
-
-		if (!found && !strictPath) {
-			const loose = getLoosePath(path)
-			if (loose !== path)
-				found =
-					router?.find(request.method, loose) ??
-					router?.find('*', loose)
-		}
 
 		if (found) {
 			context.params = decodeParams(found.params)
@@ -536,14 +527,6 @@ export function createFetchHandler(
 
 			let result =
 				router?.find(request.method, path) ?? router?.find('*', path)
-
-			if (!result && !strictPath) {
-				const loose = getLoosePath(path)
-				if (loose !== path)
-					result =
-						router?.find(request.method, loose) ??
-						router?.find('*', loose)
-			}
 
 			if (result) {
 				context.params = decodeParams(result.params)

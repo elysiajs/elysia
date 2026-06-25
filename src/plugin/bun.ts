@@ -1,10 +1,12 @@
 import { realpathSync } from 'node:fs'
 import type { BunPlugin } from 'bun'
 import {
-	generateCompiledModule,
+	generateCompiledArtifacts,
 	resolveEntry,
 	resolveLoader,
 	entryFilter,
+	STUB_SOURCES,
+	type StubPlan,
 	type ElysiaAotOptions
 } from './core'
 import { rewriteTypeImport } from './treeshake'
@@ -40,7 +42,7 @@ const realPath = (path: string) => {
 export const aot = (entry: string, options?: ElysiaAotOptions): BunPlugin => ({
 	name: 'elysia-aot',
 	async setup(build) {
-		const source = await generateCompiledModule(entry, options)
+		const { source, stub } = await generateCompiledArtifacts(entry, options)
 		const entryPath = resolveEntry(entry)
 		const entryReal = realPath(entryPath)
 		const treeShake = options?.treeShake ?? true
@@ -57,6 +59,17 @@ export const aot = (entry: string, options?: ElysiaAotOptions): BunPlugin => ({
 			contents: source,
 			loader: 'js'
 		}))
+
+		// Stub when every route is compiled
+		for (const key of Object.keys(STUB_SOURCES) as (keyof StubPlan)[]) {
+			if (!stub[key]) continue
+
+			for (const { filter, source: stubSource } of STUB_SOURCES[key])
+				build.onLoad({ filter }, () => ({
+					contents: stubSource,
+					loader: 'js'
+				}))
+		}
 
 		if (treeShake)
 			build.onLoad({ filter: SOURCE }, async (args) => {

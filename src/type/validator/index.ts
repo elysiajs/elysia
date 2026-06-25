@@ -45,6 +45,7 @@ import {
 	EMPTY_EXTERNALS,
 	Capture,
 	type CheckBuildResult,
+	type CapturedValidator,
 	type FrozenValidator
 } from '../../compile/aot'
 
@@ -59,6 +60,10 @@ import { nullObject } from '../../utils'
 import { ValidationError } from '../../error'
 import {
 	applyPrecomputed,
+	buildDefaultClonerSource,
+	buildObjectDefaultMergeSource,
+	createDefaultCloner,
+	createObjectDefaultMerger,
 	isPrecomputeSafe,
 	verifyPreallocatableDefault
 } from './default-precompute'
@@ -252,10 +257,24 @@ function sourceOnlyValidator(schema: TSchema): BaseTypeBoxValidator {
 	})
 }
 
+interface DefaultFastPath {
+	/** `Default(schema, undefined)`; cloned when object-like. */
+	value: unknown
+	/** Legacy parity: this precomputed default also applies to explicit `null`. */
+	appliesToNull: boolean
+	/** `Default(schema, {})`, used to merge child defaults into partial objects. */
+	objectTemplate: Record<string, unknown> | undefined
+	/** Generated object/array cloner for `value` when available. */
+	clone?: () => unknown
+	/** Generated partial-object merger for `objectTemplate` when available. */
+	merge?: (value: Record<string, unknown>) => Record<string, unknown>
+}
+
 export class TypeBoxValidator<
 	const in out T extends TSchema = TAny
 > extends Validator {
-	// undefined is reconstruct via aot
+	// AOT / frozen validator state
+	// Undefined when the validator was reconstructed from the AOT manifest.
 	tb?: BaseTypeBoxValidator
 
 	// build time check, bound eagerly from the frozen manifest at construction
@@ -273,10 +292,11 @@ export class TypeBoxValidator<
 		value: unknown
 	) => { instancePath: string; error: unknown } | undefined
 
-	// default value
+	// Default fast path (AOT-baked when available, runtime-computed otherwise)
+	// `precomputeSafe` is the public/debug indicator; #defaultFastPath is the
+	// grouped runtime state used by FromSync/FromAsync.
 	precomputeSafe = false
-	#precomputedDefault: unknown
-	#precomputedObjectDefault: Record<string, unknown> | undefined
+	#defaultFastPath?: DefaultFastPath
 
 	#noValidate!: boolean
 	#isForm = false
@@ -365,27 +385,43 @@ export class TypeBoxValidator<
 		}
 
 		if (frozen?.ps === 1) {
-			this.precomputeSafe = true
-			this.#precomputedDefault = frozen.pd
-			this.#precomputedObjectDefault =
+			const objectTemplate =
 				frozen.pod !== undefined
 					? (Object.freeze(frozen.pod) as Record<string, unknown>)
 					: undefined
+
+			this.precomputeSafe = true
+			this.#defaultFastPath = {
+				value: frozen.pd,
+				appliesToNull: frozen.pn === 1,
+				objectTemplate,
+				clone: frozen.dc,
+				merge: frozen.pm
+			}
 		} else {
 			this.precomputeSafe =
 				this.hasDefault && isPrecomputeSafe(this.schema as any)
 
 			if (this.precomputeSafe) {
-				this.#precomputedDefault = Default(this.schema, undefined)
+				const defaultValue = Default(this.schema, undefined)
 				const obj = Default(this.schema, nullObject()) as unknown
-				this.#precomputedObjectDefault =
+				const objectTemplate =
 					obj && typeof obj === 'object' && !Array.isArray(obj)
 						? (Object.freeze(obj) as Record<string, unknown>)
 						: undefined
-			} else {
-				this.#precomputedDefault = undefined
-				this.#precomputedObjectDefault = undefined
-			}
+
+				this.#defaultFastPath = {
+					value: defaultValue,
+					appliesToNull: true,
+					objectTemplate,
+					clone: createDefaultCloner(defaultValue),
+					merge:
+						objectTemplate !== undefined
+							? createObjectDefaultMerger(objectTemplate)
+							: undefined
+				}
+			} else
+				this.#defaultFastPath = undefined
 		}
 
 		this.#noValidate = originalElyTyp === ELYSIA_TYPES.NoValidate
@@ -704,18 +740,37 @@ export class TypeBoxValidator<
 				)
 		}
 
-		if (this.hasDefault) {
-			const pre = verifyPreallocatableDefault(this.schema as TSchema)
-			if (pre)
-				Capture.set(
-					{ method: aot.method, path: aot.path, slot },
-					{
-						precomputeSafe: true,
-						precomputedDefault: pre.pd,
-						precomputedObjectDefault: pre.pod
-					}
-				)
+		const defaultFastPathCapture: Partial<CapturedValidator> = {
+			precomputeSafe: undefined,
+			precomputedDefault: undefined,
+			precomputeNull: undefined,
+			precomputedObjectDefault: undefined,
+			defaultCloner: undefined,
+			objectDefaultMerger: undefined
 		}
+
+		if (this.hasDefault) {
+			const defaults = verifyPreallocatableDefault(this.schema as TSchema)
+			if (defaults) {
+				defaultFastPathCapture.precomputeSafe = true
+				defaultFastPathCapture.precomputedDefault = defaults.pd
+				defaultFastPathCapture.precomputeNull = defaults.pn
+				defaultFastPathCapture.precomputedObjectDefault = defaults.pod
+				defaultFastPathCapture.defaultCloner =
+					defaults.pd !== undefined
+						? buildDefaultClonerSource(defaults.pd)
+						: undefined
+				defaultFastPathCapture.objectDefaultMerger =
+					defaults.pod !== undefined
+						? buildObjectDefaultMergeSource(defaults.pod)
+						: undefined
+			}
+		}
+
+		Capture.set(
+			{ method: aot.method, path: aot.path, slot },
+			defaultFastPathCapture
+		)
 
 		const customErrors = captureCustomErrors(this.schema)
 		if (customErrors)
@@ -854,14 +909,25 @@ export class TypeBoxValidator<
 			: this.FromSync(value, type)
 	}
 
-	// Apply baked ObjectString/ArrayString inner defaults at their value-paths
+	// Clone the shared whole-default template for absent input.
 	#cloneSharedDefault() {
-		const value = this.#precomputedDefault
+		const defaults = this.#defaultFastPath!
+		const value = defaults.value
 		if (value === null || typeof value !== 'object') return value
 
 		// Always deep-clone: the shared template (baked `pd` or the runtime
 		// snapshot) must yield an independent instance per request
-		return structuredClone(value)
+		return defaults.clone
+			? defaults.clone()
+			: structuredClone(value)
+	}
+
+	#applyPrecomputedObjectDefault(value: Record<string, unknown>) {
+		const defaults = this.#defaultFastPath!
+
+		return defaults.merge
+			? defaults.merge(value)
+			: applyPrecomputed(defaults.objectTemplate!, value)
 	}
 
 	private optionalBypass(
@@ -889,16 +955,19 @@ export class TypeBoxValidator<
 
 	async FromAsync(value: Static<T>, type?: string): Promise<Static<T>> {
 		if (this.hasDefault) {
-			if (this.precomputeSafe) {
-				if (value === undefined || value === null)
+			const defaults = this.#defaultFastPath
+			if (defaults) {
+				if (
+					value === undefined ||
+					(value === null && defaults.appliesToNull)
+				)
 					value = this.#cloneSharedDefault() as any
 				else if (
-					this.#precomputedObjectDefault !== undefined &&
+					defaults.objectTemplate !== undefined &&
 					typeof value === 'object' &&
 					!Array.isArray(value)
 				)
-					value = applyPrecomputed(
-						this.#precomputedObjectDefault,
+					value = this.#applyPrecomputedObjectDefault(
 						value as any
 					) as any
 			} else value = Default(this.schema, value) as any
@@ -972,16 +1041,19 @@ export class TypeBoxValidator<
 
 	FromSync(value: Static<T>, type?: string): Static<T> {
 		if (this.hasDefault) {
-			if (this.precomputeSafe) {
-				if (value === undefined || value === null)
+			const defaults = this.#defaultFastPath
+			if (defaults) {
+				if (
+					value === undefined ||
+					(value === null && defaults.appliesToNull)
+				)
 					value = this.#cloneSharedDefault() as Static<T>
 				else if (
-					this.#precomputedObjectDefault !== undefined &&
+					defaults.objectTemplate !== undefined &&
 					typeof value === 'object' &&
 					!Array.isArray(value)
 				)
-					value = applyPrecomputed(
-						this.#precomputedObjectDefault,
+					value = this.#applyPrecomputedObjectDefault(
 						value as any
 					) as Static<T>
 			} else value = Default(this.schema, value) as Static<T>

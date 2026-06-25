@@ -198,7 +198,7 @@
 	"dependencies": {
 		"deuri": "^2.0.1",
 		"exact-mirror": "1.2.2",
-		"memoirist": "^1.0.3"
+		"memoirist": "1.1.0"
 	},
 	"devDependencies": {
 		"@eslint/eslintrc": "^3.3.5",

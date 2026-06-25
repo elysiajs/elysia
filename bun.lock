@@ -7,7 +7,7 @@
       "dependencies": {
         "deuri": "^2.0.1",
         "exact-mirror": "1.2.2",
-        "memoirist": "^1.0.3",
+        "memoirist": "1.1.0",
       },
       "devDependencies": {
         "@eslint/eslintrc": "^3.3.5",
@@ -459,7 +459,7 @@
 
     "lodash.merge": ["lodash.merge@4.6.2", "", {}, "sha512-0KpjqXRVvrYyCsX1swR/XTK0va6VQkQM6MNo7PqW77ByjAhoARA8EfrP1N4+KlKj8YS0ZUCtRT/YUuhyYDujIQ=="],
 
-    "memoirist": ["memoirist@1.0.3", "", {}, "sha512-FYFtRaz6xq98nFhdoCUGjdO+/wofRvLb3T21JXxj2SaBJx3nQ/6BF8xDAAMUeYRvnJbijZtc/ZJUoxb36D9ekw=="],
+    "memoirist": ["memoirist@1.1.0", "", {}, "sha512-9KhJFSx4d/zxM++Rsb5yC3gqg+9boFHpDLcV7NkTWIYfUb3tiRPV4/EIMgw2lX7RdZz04xHMe6JTyJBpUUc/Og=="],
 
     "merge2": ["merge2@1.4.1", "", {}, "sha512-8q7VEgMJW4J8tcfVPy8g09NcQwZdbwFEqhe/WZkoIzjn/3TGDwtOCYtXGxA3O8tPzpczCCDgv+P2P5y00ZJOOg=="],
 

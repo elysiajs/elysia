@@ -505,13 +505,17 @@ describe('Path', () => {
 
 	// Regression (audit H10): dynamic (parameterized) routes were registered
 	// only at the exact path, so `/users/1/` 404'd on `/users/:id` even though
-	// static routes tolerate trailing slashes by default. Register the loose
-	// variant unless strictPath.
+	// static routes tolerate trailing slashes by default. Memoirist now handles
+	// the loose lookup without Elysia retaining a second dynamic route entry.
 	it('dynamic route matches a trailing slash when not strict', async () => {
 		const app = new Elysia().get(
 			'/users/:id',
 			({ params: { id } }) => `user:${id}`
 		)
+		app.compile()
+
+		const router = (app as any)['~router']
+		expect(router.loosePath).toBe(true)
 
 		await expect(
 			app.handle(req('/users/1')).then((r) => r.text())
@@ -522,14 +526,45 @@ describe('Path', () => {
 		).resolves.toBe('user:1')
 	})
 
+	it('dynamic route registered with trailing slash matches without retaining a loose entry', async () => {
+		const app = new Elysia().get(
+			'/users/:id/',
+			({ params: { id } }) => `user:${id}`
+		)
+		app.compile()
+
+		const router = (app as any)['~router']
+		expect(router.loosePath).toBe(true)
+
+		await expect(
+			app.handle(req('/users/1')).then((r) => r.text())
+		).resolves.toBe('user:1')
+		await expect(
+			app.handle(req('/users/1/')).then((r) => r.text())
+		).resolves.toBe('user:1')
+	})
+
 	it('strictPath still rejects a trailing slash on dynamic routes', async () => {
 		const app = new Elysia({ strictPath: true }).get(
 			'/users/:id',
 			({ params: { id } }) => `user:${id}`
 		)
+		app.compile()
+
+		expect((app as any)['~router'].loosePath).toBe(false)
 
 		await expect(
 			app.handle(req('/users/1/')).then((r) => r.status)
 		).resolves.toBe(404)
+	})
+
+	it('dynamic method loose match wins before all-method exact match', async () => {
+		const app = new Elysia()
+			.get('/dynamic/:id', ({ params: { id } }) => `get:${id}`)
+			.all('/dynamic/:id/', ({ params: { id } }) => `all:${id}`)
+
+		await expect(
+			app.handle(req('/dynamic/1/')).then((r) => r.text())
+		).resolves.toBe('get:1')
 	})
 })

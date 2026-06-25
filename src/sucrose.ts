@@ -468,8 +468,6 @@ export function removeDefaultParameter(parameter: string) {
 		const commaIndex = parameter.indexOf(',', index)
 		const bracketIndex = parameter.indexOf('}', index)
 
-		// smallest positive of the two (neither can be 0 — both are searched
-		// from the `=` position), or -1 when both are absent
 		const end =
 			commaIndex === -1
 				? bracketIndex
