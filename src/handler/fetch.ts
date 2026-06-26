@@ -115,11 +115,10 @@ function findRoute(
 
 		if (handler) {
 			const r = handler(context)
-
 			return r instanceof Promise ? r.catch(catchError(context, handleError, afterResponse)) : r
 		}
 
-		let found =
+		const found =
 			router?.find(request.method, path) ?? router?.find('*', path)
 
 		if (found) {
@@ -525,8 +524,8 @@ export function createFetchHandler(
 				return r instanceof Promise ? r.catch(catchError(context, handleError, afterResponse)) : r
 			}
 
-			let result =
-				router?.find(request.method, path) ?? router?.find('*', path)
+			const result =
+				router.find(request.method, path) ?? router?.find('*', path)
 
 			if (result) {
 				context.params = decodeParams(result.params)

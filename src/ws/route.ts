@@ -106,7 +106,8 @@ export function buildWSRoute(
 		{}) as AnyWSLocalHook
 
 	const validators = new RouteValidator(hook as any, {
-		models: app['~ext']?.models
+		models: app['~ext']?.models,
+		aot: { method: 'WS', path: route[1] }
 	})
 
 	const responseValidator = validators.response as
