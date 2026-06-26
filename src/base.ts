@@ -114,7 +114,7 @@ import type {
 } from './types'
 import type { ElysiaStatus } from './error'
 import type { Context, LifecycleContext, ErrorContext } from './context'
-import { Capture } from './compile/aot'
+import { compileFetch } from './compile/fetch'
 
 const useNodesBuffer: ChainNode[] = []
 
@@ -2302,12 +2302,6 @@ export class Elysia<
 		return this.#onBranch('trace', scopeOrFn as any, fn as any)
 	}
 
-	// Promote the locally-accumulated lifecycle one scope outward.
-	// `'plugin'` collapses the Volatile (local) channel into Ephemeral (plugin);
-	// `'global'` collapses both Volatile and Ephemeral into Singleton / Metadata
-	// / Definitions. The drained channels reset to their defaults, mirroring the
-	// runtime scope re-stamp in `#as`. Channeling matches `.derive`
-	// and the per-scope `schemas`/`error` rule documented on EphemeralType.
 	as(type: 'plugin'): Elysia<
 		BasePath,
 		Scope,
@@ -6733,6 +6727,7 @@ export class Elysia<
 				!isDynamic &&
 				!strict &&
 				(path.length === 0 || path.charCodeAt(path.length - 1) === 47)
+
 			const explicitMain = registerLoose
 				? explicitPaths?.get(method)
 				: undefined
@@ -6814,6 +6809,12 @@ export class Elysia<
 		return (this.#fetchFn ??= applyHoc(this, createFetchHandler(this)))
 	}
 
+	// get fetch() {
+	// 	return this.#fetchFn
+	// 		? this.#fetchFn
+	// 		: (this.#fetchFn = compileFetch(this, this.#history ?? []))
+	// }
+
 	#handle?: (
 		url: string | Request,
 		options?: RequestInit
@@ -6880,7 +6881,7 @@ export class Elysia<
 	 *   requests and WebSocket connections immediately. Defaults to
 	 *   draining gracefully.
 	 */
-	stop(closeActiveConnections?: boolean): Promise<void> | void {
+	stop(closeActiveConnections?: boolean) {
 		const server = this.server
 		if (!server) return
 
