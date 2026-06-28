@@ -82,6 +82,9 @@ export const BunAdapter = createAdapter({
 
 		app.server = Bun.serve(serve)
 
+		const onSetup = app['~ext']?.setup
+		if (onSetup) for (let i = 0; i < onSetup.length; i++) onSetup[i](app)
+
 		if (!hasWs) callback?.(app.server!)
 
 		queueMicrotask(() => {

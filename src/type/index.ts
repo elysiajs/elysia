@@ -1,6 +1,10 @@
 import * as TypeRegistry from './exports'
+import type * as TypeBoxType from 'typebox/type'
 
-export const t: typeof TypeRegistry = TypeRegistry
+type TypeBuilder = Omit<typeof TypeBoxType, keyof typeof TypeRegistry> &
+	typeof TypeRegistry
+
+export const t: TypeBuilder = TypeRegistry
 
 export { setupTypebox } from './compat'
 export { System as TypeSystem } from 'typebox/system'

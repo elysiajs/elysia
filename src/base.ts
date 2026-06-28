@@ -110,7 +110,8 @@ import type {
 	ExtractErrorFromHandle,
 	HTTPMethod,
 	AddRoute,
-	AddWSRoute
+	AddWSRoute,
+	GracefulHandler
 } from './types'
 import type { ElysiaStatus } from './error'
 import type { Context, LifecycleContext, ErrorContext } from './context'
@@ -163,6 +164,8 @@ export class Elysia<
 		error?: Map<AnyErrorConstructor, string>
 		parser?: Record<string, BodyHandler<any, any>>
 		hoc?: WrapFn<any>[]
+		setup?: GracefulHandler<any>[]
+		cleanup?: GracefulHandler<any>[]
 	}
 
 	'~hookChain'?: ChainNode
@@ -886,11 +889,27 @@ export class Elysia<
 		return this as any
 	}
 
-	onStart(_listener?: unknown) {
-		return this
-	}
+	/**
+	 * ### setup | Life cycle event
+	 * Called after server is ready for serving
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .setup(({ server }) => {
+	 *         console.log("Running at ${server?.url}:${server?.port}")
+	 *     })
+	 *     .listen(3000)
+	 * ```
+	 */
+	setup(handler: MaybeArray<GracefulHandler<this>>): this {
+		const arr = (this.#ext.setup ??= [])
 
-	onStop(_listener?: unknown) {
+		if (Array.isArray(handler))
+			arr.push(...(handler as GracefulHandler<any>[]))
+		else arr.push(handler as GracefulHandler<any>)
+
 		return this
 	}
 
@@ -4214,7 +4233,9 @@ export class Elysia<
 				parser,
 				macro,
 				error,
-				hoc
+				hoc,
+				setup,
+				cleanup
 			} = app['~ext']
 
 			const ext: NonNullable<(typeof this)['~ext']> = (this['~ext'] ??=
@@ -4263,6 +4284,20 @@ export class Elysia<
 					for (const fn of hoc)
 						if (!ext.hoc.includes(fn)) ext.hoc.push(fn)
 				} else ext.hoc = hoc.slice()
+			}
+
+			if (setup) {
+				if (ext.setup) {
+					for (const fn of setup)
+						if (!ext.setup.includes(fn)) ext.setup.push(fn)
+				} else ext.setup = setup.slice()
+			}
+
+			if (cleanup) {
+				if (ext.cleanup) {
+					for (const fn of cleanup)
+						if (!ext.cleanup.includes(fn)) ext.cleanup.push(fn)
+				} else ext.cleanup = cleanup.slice()
 			}
 		}
 
@@ -6536,7 +6571,31 @@ export class Elysia<
 	}
 
 	/**
-	 * Stop the underlying server (if any). Mirrors `Server.stop()`.
+	 * ### cleanup | Life cycle event
+	 * Called after server stop serving request
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .cleanup((app) => {
+	 *         closeDatabase()
+	 *     })
+	 * ```
+	 */
+	cleanup(handler: MaybeArray<GracefulHandler<this>>): this {
+		const arr = (this.#ext.cleanup ??= [])
+
+		if (Array.isArray(handler))
+			arr.push(...(handler as GracefulHandler<any>[]))
+		else arr.push(handler as GracefulHandler<any>)
+
+		return this
+	}
+
+	/**
+	 * Stop the underlying server (if any), running every `cleanup` handler once
+	 * it has stopped. Mirrors `Server.stop()`.
 	 *
 	 * @param closeActiveConnections Pass `true` to terminate in-flight
 	 *   requests and WebSocket connections immediately. Defaults to
@@ -6548,6 +6607,18 @@ export class Elysia<
 
 		const r = (server as any).stop?.(closeActiveConnections)
 		this.server = undefined
+
+		const handlers = this['~ext']?.cleanup
+		const fire = handlers
+			? () => {
+					for (let i = 0; i < handlers.length; i++) handlers[i](this)
+				}
+			: undefined
+
+		if (r && typeof (r as Promise<void>).then === 'function')
+			return fire ? (r as Promise<void>).then(fire) : r
+
+		fire?.()
 
 		return r
 	}

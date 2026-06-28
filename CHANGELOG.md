@@ -11,6 +11,7 @@ Breaking Change:
 - drop `config.encodeSchema` as always enabled. Can't support both in a type safe manner.
 - `derive` now run in `beforeHandle` (after validation) — it does **not** run when validation fails (a 422 short-circuits before `beforeHandle`). If you need logic that runs before validation, use `transform` instead.
 - removed `on<event>()` lifecycle methods — use the bare `<event>()` method instead (`onRequest`→`request`, `onParse`→`parse`, `onTransform`→`transform`, `onBeforeHandle`→`beforeHandle`, `onAfterHandle`→`afterHandle`, `onAfterResponse`→`afterResponse`, `onError`→`error`)
+- `onStart` renamed to `setup` and `onStop` renamed to `cleanup`. `setup(fn)`
 - removed `.onError()` — use `error()`: `error(Error, fn)` registers a per-class handler, `error(fn)` registers the general error handler
 - removed `resolve` / `.resolve()` — use `derive` / `.derive()`
 - removed the `{ as: 'scope' }` object form for lifecycle scope and `.guard()`: pass a bare-string scope as the first argument, matching every other lifecycle method: `.beforeHandle('plugin', fn)`, `.trace('global', fn)`, and `.guard('plugin', { … })` instead of `.guard({ as: 'plugin', … })`. The local `.guard({ … })` and the sandboxed `.guard(hook, run)` forms are unchanged
