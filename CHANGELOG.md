@@ -14,6 +14,7 @@ Breaking Change:
 - removed `.onError()` — use `error()`: `error(Error, fn)` registers a per-class handler, `error(fn)` registers the general error handler
 - removed `resolve` / `.resolve()` — use `derive` / `.derive()`
 - removed the `{ as: 'scope' }` object form for lifecycle scope and `.guard()`: pass a bare-string scope as the first argument, matching every other lifecycle method: `.beforeHandle('plugin', fn)`, `.trace('global', fn)`, and `.guard('plugin', { … })` instead of `.guard({ as: 'plugin', … })`. The local `.guard({ … })` and the sandboxed `.guard(hook, run)` forms are unchanged
+- removed `.on` due to unsound type safety
 - renamed the `'scoped'` scope to `'plugin'` — `.as('plugin')`, `.derive('plugin', fn)`, `.guard('plugin', { … })`
 - removed deprecated `set.redirect` — use the `redirect()` context helper (`({ redirect }) => redirect('/')`)
 - removed the deprecated `response` context field on `mapResponse`/`afterResponse` handlers — use `responseValue`

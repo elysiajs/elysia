@@ -525,7 +525,7 @@ export function createFetchHandler(
 			}
 
 			const result =
-				router.find(request.method, path) ?? router?.find('*', path)
+				router?.find(request.method, path) ?? router?.find('*', path)
 
 			if (result) {
 				context.params = decodeParams(result.params)

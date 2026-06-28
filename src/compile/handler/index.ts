@@ -286,21 +286,37 @@ export function composeRouteHook(
 		? flattenChainMemo(root, appHook as ChainNode)
 		: undefined
 
-	let rootHook =
+	let inherited =
 		instance !== root
-			? composeRootHook(root, inheritedChain as any)
+			? (flattenChainMemo(root, inheritedChain as any) as
+					| Partial<AppHook>
+					| undefined)
+			: undefined
+	let locals =
+		instance !== root
+			? flattenChain(
+					root['~hookChain'],
+					isLocalScope,
+					inheritedChain as any
+				)
 			: undefined
 
-	if (rootHook && (flatAppHook || localHook)) {
+	if ((inherited || locals) && (flatAppHook || localHook)) {
 		const present = new Set<number>()
 
 		collectHookOrigins(localHook, present)
 		collectHookOrigins(flatAppHook as any, present)
 
-		if (present.size) rootHook = dropHooksByOrigin(rootHook, present)
+		if (present.size) {
+			if (inherited) inherited = dropHooksByOrigin(inherited, present)
+			if (locals) locals = dropHooksByOrigin(locals, present)
+		}
 	}
 
-	let hook = applyHook(localHook, flatAppHook as any, rootHook, true)
+	let hook = applyHook(localHook, flatAppHook as any, inherited, true)
+
+	// Append after-use root hooks last, after the plugin's own hooks.
+	if (locals) hook = hook ? mergeHook(hook, locals, false, true) : locals
 
 	if (instance !== root) {
 		const instanceLocal = flattenChain(

@@ -227,6 +227,41 @@ describe('Error lifecycle', () => {
 		expect(order).toEqual(['A', 'B'])
 	})
 
+	it("runs a plugin's own error handler before an outer one declared after .use()", async () => {
+		// Error handlers compose in registration order as seen by the root
+		// app's chain: the plugin's `.error()` is registered when the plugin is
+		// `.use()`d, before the outer `.error()` that follows it. The plugin's
+		// handler returns first, so its value short-circuits the outer one.
+		const order = <string[]>[]
+
+		const plugin = new Elysia()
+			.error(() => {
+				order.push('plugin')
+
+				return 'plugin'
+			})
+			.get('/sub', () => {
+				throw new Error('boom')
+			})
+
+		const app = new Elysia()
+			.use(plugin)
+			.error(() => {
+				order.push('outer')
+
+				return 'outer'
+			})
+			.get('/main', () => {
+				throw new Error('boom')
+			})
+
+		const sub = await app.handle(req('/sub')).then((x) => x.text())
+
+		expect(sub).toBe('plugin')
+		// outer handler must not have run: the plugin's returned first
+		expect(order).toEqual(['plugin'])
+	})
+
 	it('as global', async () => {
 		const called = <string[]>[]
 

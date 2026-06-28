@@ -65,13 +65,20 @@ export const BunAdapter = createAdapter({
 	listen(app, options, callback) {
 		const _config = (app['~config'] as any)?.serve
 		const _options =
-			typeof options === 'object' ? options : { port: +options }
+			typeof options === 'object'
+				? options
+				: {
+						port: +options,
+						fetch: (request: Request, server: unknown) =>
+							app.fetch(request, server)
+					}
 		const serve = _config ? { ..._config, ..._options } : _options
 
 		const hasWs = app['~hasWS']
 
-		serve.fetch = (request: Request, server: unknown) =>
-			app.fetch(request, server)
+		if (!serve.fetch)
+			serve.fetch = (request: Request, server: unknown) =>
+				app.fetch(request, server)
 
 		app.server = Bun.serve(serve)
 

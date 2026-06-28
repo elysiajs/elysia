@@ -776,25 +776,6 @@ export class Elysia<
 			: this.#on(type, scopeOrFn as EventFn<'beforeHandle'>)
 	}
 
-	on<Event extends AppEvent>(event: Event, fn: EventFn<Event>): this
-	on(...args: any[]): this {
-		if (args.length === 2) {
-			const [event, fn] = args
-			if (event === 'parse' && typeof fn === 'string') {
-				const named = this['~ext']?.parser?.[fn]
-				return this.#onBranch('parse', (named ?? fn) as any)
-			}
-			return this.#onBranch(event, fn)
-		}
-
-		if (args.length === 3) {
-			const [scope, event, fn] = args
-			return this.#onBranch(event, scope, fn)
-		}
-
-		return this
-	}
-
 	request(fn: MaybeArray<PreHandler<{}, Singleton>>): this
 	request(scope: 'local', fn: MaybeArray<PreHandler<{}, Singleton>>): this
 	request(scope: 'plugin', fn: MaybeArray<PreHandler<{}, Singleton>>): this
