@@ -4,27 +4,30 @@ import type { BunFile } from 'bun'
 
 import { isBun } from './constants'
 
+const text = 'text/'
+const application = 'application/'
+const image = 'image/'
 const msft365 = 'application/vnd.openxmlformats-officedocument.'
 
 export const mime = {
 	// web
-	html: 'text/html',
-	htm: 'text/html',
-	css: 'text/css',
-	js: 'application/javascript',
-	ts: 'application/typescript',
-	json: 'application/json',
-	xml: 'application/xml',
+	html: `${text}html`,
+	htm: `${text}html`,
+	css: `${text}css`,
+	js: `${application}/javascript`,
+	ts: `${application}/typescript`,
+	json: `${application}/json`,
+	xml: `${application}/xml`,
 
 	// images
-	jpg: 'image/jpeg',
-	jpeg: 'image/jpeg',
-	png: 'image/png',
-	gif: 'image/gif',
-	webp: 'image/webp',
-	avif: 'image/avif',
-	svg: 'image/svg+xml',
-	ico: 'image/x-icon',
+	jpg: `${image}jpeg`,
+	jpeg: `${image}jpeg`,
+	png: `${image}png`,
+	gif: `${image}gif`,
+	webp: `${image}webp`,
+	avif: `${image}avif`,
+	svg: `${image}svg+xml`,
+	ico: `${image}x-icon`,
 
 	// video
 	mp4: 'video/mp4',
@@ -41,23 +44,23 @@ export const mime = {
 	otf: 'font/otf',
 
 	// docs
-	pdf: 'application/pdf',
-	txt: 'text/plain',
-	csv: 'text/csv',
+	pdf: `${application}/pdf`,
+	txt: `${text}plain`,
+	csv: `${text}csv`,
 
 	// archive
-	zip: 'application/zip',
+	zip: `${application}zip`,
 
 	// office
-	doc: 'application/msword',
+	doc: `${application}/msword`,
 	docx: `${msft365}wordprocessingml.document`,
-	xls: 'application/vnd.ms-excel',
+	xls: `${application}/vnd.ms-excel`,
 	xlsx: `${msft365}spreadsheetml.sheet`,
-	ppt: 'application/vnd.ms-powerpoint',
+	ppt: `${application}/vnd.ms-powerpoint`,
 	pptx: `${msft365}presentationml.presentation`
 } as const
 
-export const getFileExtension = (path: string) => {
+export function getFileExtension(path: string) {
 	const index = path.lastIndexOf('.')
 	if (index === -1) return ''
 
@@ -69,12 +72,13 @@ export const file = (path: string) => new ElysiaFile(path)
 let createReadStream: typeof CreateReadStream
 let stat: typeof Stat
 
-const warnMissing = (name?: string) =>
+function warnMissing(name?: string) {
 	console.warn(
 		new Error(
 			`[Elysia] \`file\` require \`fs${name ? '.' + name : ''}\` ${name?.includes('.') ? 'module ' : ''}which is not available in this environment`
 		)
 	)
+}
 
 export class ElysiaFile {
 	readonly value: unknown

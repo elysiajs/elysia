@@ -14,15 +14,18 @@ export {
 } from './error'
 export {
 	t,
-	TypeSystem,
+	setupTypebox,
 	fileType,
 	setFileTypeDetector,
+	TypeBoxValidator,
+	TypeSystem,
 	type FileTypeDetector
 } from './type'
-export { Compiled } from './compile/aot'
+export { Capture as Manifest, Compiled } from './compile/aot'
 export { file, ElysiaFile } from './universal/file'
 export { Cookie, serializeCookie } from './cookie'
-export { StatusMap } from './constants'
+export { StatusMap, StatusMapBack } from './constants'
+export { Validator, StandardValidator, MultiValidator } from './validator'
 export { env } from './universal'
 
 export {

@@ -2,13 +2,11 @@ import { Elysia, t } from '../src'
 import { Validator } from '../src/validator'
 
 const plugin = new Elysia()
-	.error(() => {
-		console.log('sub')
+	.guard('plugin', {
+		schema: 'standalone',
+		afterHandle() {
 
-		return 'sub'
-	})
-	.get('/sub', () => {
-		throw new Error('b')
+		}
 	})
 
 const app = new Elysia()
