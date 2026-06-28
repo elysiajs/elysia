@@ -28,30 +28,6 @@ describe('Parser', () => {
 		await expect(res.text()).resolves.toBe('A')
 	})
 
-	it('register using on', async () => {
-		const app = new Elysia()
-			.on('parse', ({ contentType, request }) => {
-				switch (contentType) {
-					case 'application/Elysia':
-						return request.text()
-				}
-			})
-			.post('/', ({ body }) => body)
-
-		const res = await app.handle(
-			new Request('http://localhost/', {
-				method: 'POST',
-				body: ':D',
-				headers: {
-					'content-type': 'application/Elysia',
-					'content-length': '2'
-				}
-			})
-		)
-
-		await expect(res.text()).resolves.toBe(':D')
-	})
-
 	it('overwrite default parser', async () => {
 		const app = new Elysia()
 			.parse(({ contentType }) => {

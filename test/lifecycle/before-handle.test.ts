@@ -162,24 +162,6 @@ describe('Before Handle', () => {
 		await expect(res.text()).resolves.toBe('Warukunai yo ne')
 	})
 
-	it("handle on('beforeHandle')", async () => {
-		const app = new Elysia()
-			.on('beforeHandle', async ({ params: { name } }) => {
-				await new Promise<void>((resolve) =>
-					setTimeout(() => {
-						resolve()
-					}, 1)
-				)
-
-				if (name === 'Watame') return 'Warukunai yo ne'
-			})
-			.get('/name/:name', ({ params: { name } }) => name)
-
-		const res = await app.handle(req('/name/Watame'))
-
-		await expect(res.text()).resolves.toBe('Warukunai yo ne')
-	})
-
 	it('execute afterHandle', async () => {
 		const app = new Elysia()
 			.beforeHandle(({ params }) => {

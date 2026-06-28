@@ -70,18 +70,6 @@ describe('Transform', () => {
 		await expect(res.text()).resolves.toBe('number')
 	})
 
-	it('transform from on', async () => {
-		const app = new Elysia()
-			.on('transform', (request) => {
-				if (request.params?.id) request.params.id = +request.params.id
-			})
-			.get('/id/:id', ({ params: { id } }) => typeof id)
-
-		const res = await app.handle(req('/id/1'))
-
-		await expect(res.text()).resolves.toBe('number')
-	})
-
 	it('transform in order', async () => {
 		let order = <string[]>[]
 

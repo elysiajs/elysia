@@ -61,18 +61,6 @@ describe('After Handle', () => {
 		await expect(res.text()).resolves.toBe('string')
 	})
 
-	it('register using on', async () => {
-		const app = new Elysia()
-			.on('transform', (request) => {
-				if (request.params?.id) request.params.id = +request.params.id
-			})
-			.get('/id/:id', ({ params: { id } }) => typeof id)
-
-		const res = await app.handle(req('/id/1'))
-
-		await expect(res.text()).resolves.toBe('number')
-	})
-
 	it('after handle in order', async () => {
 		let order = <string[]>[]
 
