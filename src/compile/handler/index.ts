@@ -27,6 +27,7 @@ import type {
 	AnyLocalHook,
 	AppHook
 } from '../../types'
+import { createContext } from '../../context'
 
 function applyHook(
 	localHook: Partial<AnyLocalHook> | undefined,
@@ -225,19 +226,23 @@ export function buildNativeStaticResponse(
 
 		const hook = applyHook(localHook, flatAppHook as any, rootHook, true)
 
-		if (hook?.mapResponse)
+		if (hook?.mapResponse) {
+			const Context = createContext(root)
+			// eslint-disable-next-line sonarjs/no-clear-text-protocols
+			const context = new Context(new Request('http://e.ly'))
+			// @ts-ignore
+			context.responseValue = handler
+
 			for (let i = 0; i < hook.mapResponse.length; i++) {
 				const fn = hook.mapResponse[i]
 				if (typeof fn !== 'function') continue
 
-				const mapped = (adapter.response.map as Function)(
-					handler,
-					nullObject()
-				)
+				const mapped = fn(context)
 
 				if (mapped instanceof Response || mapped instanceof Promise)
 					return mapped
 			}
+		}
 	}
 
 	const rootHeaders = root['~ext']?.headers

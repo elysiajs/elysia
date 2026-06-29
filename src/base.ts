@@ -203,8 +203,8 @@ export class Elysia<
 		[method: string]: { [path: string]: CompiledHandler } | undefined
 	}
 	'~staticResponse'?: {
-		[path: string]: {
-			[method: string]: Response | Promise<Response>
+		[method: string]: {
+			[path: string]: Response | Promise<Response>
 		}
 	}
 
@@ -6325,11 +6325,10 @@ export class Elysia<
 
 		const wrapHeadHandler = Elysia.#wrapHeadHandler
 
-		const strict = !!this['~config']?.strictPath
-		const routerOptions = strict ? undefined : { loosePath: true }
+		const preferLoosePath = this['~config']?.strictPath !== true
 
 		let explicitPaths: Map<string, Set<string>> | undefined
-		if (!strict && this['~config']?.distinctPath) {
+		if (preferLoosePath && this['~config']?.distinctPath) {
 			explicitPaths = new Map()
 			for (let i = 0; i < length; i++) {
 				const route = this.#history![i]
@@ -6358,9 +6357,9 @@ export class Elysia<
 				const options = ws[1]
 
 				if (isDynamicRegex.test(path)) {
-					;(this['~router'] ??= new Memoirist<CompiledHandler>(
-						routerOptions
-					)).add('WS', path, handler, false)
+					;(this['~router'] ??= new Memoirist<CompiledHandler>({
+						loosePath: preferLoosePath
+					})).add('WS', path, handler, false)
 				} else {
 					this.#initMap()
 					const wsMap = (this['~map']!['WS'] ??= nullObject() as any)
@@ -6424,13 +6423,13 @@ export class Elysia<
 						OPTIONS: undefined as any
 					} as any)
 
-					;(target[path] ??= nullObject() as any)[method] =
+					;(target[method] ??= nullObject() as any)[path] =
 						staticResponse
 
 					if (!this['~config']?.strictPath) {
 						const loose = getLoosePath(path)
 						if (!explicitPaths?.get(method)?.has(loose))
-							(target[loose] ??= nullObject() as any)[method] =
+							(target[method] ??= nullObject() as any)[loose] =
 								staticResponse
 					}
 				}
@@ -6447,7 +6446,7 @@ export class Elysia<
 			const isDynamic = isDynamicRegex.test(path)
 			const registerLoose =
 				!isDynamic &&
-				!strict &&
+				preferLoosePath &&
 				(path.length === 0 || path.charCodeAt(path.length - 1) === 47)
 
 			const explicitMain = registerLoose
@@ -6478,6 +6477,7 @@ export class Elysia<
 			for (let v = 0; v < variants.length; v++) {
 				const p = variants[v]
 				paths.push(p)
+
 				if (registerLoose) {
 					const loose = getLoosePath(p)
 					if (loose !== p && !explicitMain?.has(loose))
@@ -6487,7 +6487,9 @@ export class Elysia<
 
 			if (isDynamic) {
 				const router = (this['~router'] ??=
-					new Memoirist<CompiledHandler>(routerOptions))
+					new Memoirist<CompiledHandler>({
+						loosePath: preferLoosePath
+					}))
 
 				const handler = this.handler(
 					i,

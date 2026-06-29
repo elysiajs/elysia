@@ -18,14 +18,13 @@ export function collectStaticRoutes(app: AnyElysia) {
 	const ready: Record<string, Record<string, Response>> = nullObject()
 	const pending: Array<Promise<void>> = []
 
-	for (const rawPath in source) {
-		const path = needEncodeRegex.test(rawPath)
-			? encodeURI(rawPath)
-			: rawPath
+	for (const method in source) {
+		const paths = source[method]
 
-		const methods = source[rawPath]
-		for (const method in methods) {
-			const value = methods[method]
+		for (let path in paths) {
+			const value = paths[path]
+
+			if (needEncodeRegex.test(path)) path = encodeURI(path)
 
 			if (value instanceof Promise)
 				pending.push(
