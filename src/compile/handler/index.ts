@@ -203,47 +203,42 @@ function composeRootHook(
 
 export function buildNativeStaticResponse(
 	[, , handler, instance, localHook, appHook, inheritedChain]: InternalRoute,
-	root: AnyElysia
+	root: AnyElysia,
+	hasMapResponse?: boolean
 ): Response | Promise<Response> | undefined {
-	if (typeof handler === 'function') return
-
-	if (handler instanceof Error) return
+	if (typeof handler === 'function' || handler instanceof Error) return
 
 	const adapter = root['~config']?.adapter ?? defaultAdapter
 
-	if (localHook) root['~applyMacro'](localHook)
-	resolveChainMacros(root, appHook)
-	if (inheritedChain) resolveChainMacros(root, inheritedChain as ChainNode)
+	if (hasMapResponse) {
+		if (localHook) root['~applyMacro'](localHook)
 
-	const flatAppHook = flattenChainMemo(root, appHook as ChainNode)
-	const rootHook =
-		instance !== root
-			? composeRootHook(root, inheritedChain as any)
-			: undefined
-	const hook = applyHook(localHook, flatAppHook as any, rootHook, true)
+		resolveChainMacros(root, appHook)
+		if (inheritedChain)
+			resolveChainMacros(root, inheritedChain as ChainNode)
 
-	const has = (v: unknown) => (Array.isArray(v) ? v.length > 0 : !!v)
+		const flatAppHook = flattenChainMemo(root, appHook as ChainNode)
+		const rootHook =
+			instance !== root
+				? composeRootHook(root, inheritedChain as any)
+				: undefined
 
-	if (
-		has(hook?.parse) ||
-		has(hook?.transform) ||
-		has(hook?.beforeHandle) ||
-		has(hook?.afterHandle) ||
-		has(hook?.mapResponse) ||
-		has(hook?.afterResponse) ||
-		has(hook?.trace)
-	)
-		return
+		const hook = applyHook(localHook, flatAppHook as any, rootHook, true)
 
-	if (
-		hook?.body ||
-		hook?.query ||
-		hook?.params ||
-		hook?.headers ||
-		hook?.cookie ||
-		(hook?.schemas as unknown[] | undefined)?.length
-	)
-		return
+		if (hook?.mapResponse)
+			for (let i = 0; i < hook.mapResponse.length; i++) {
+				const fn = hook.mapResponse[i]
+				if (typeof fn !== 'function') continue
+
+				const mapped = (adapter.response.map as Function)(
+					handler,
+					nullObject()
+				)
+
+				if (mapped instanceof Response || mapped instanceof Promise)
+					return mapped
+			}
+	}
 
 	const rootHeaders = root['~ext']?.headers
 	const buildSet = () => ({
@@ -252,7 +247,7 @@ export function buildNativeStaticResponse(
 			: nullObject()
 	})
 
-	if (handler instanceof Promise) {
+	if (handler instanceof Promise)
 		return handler.then((resolved) => {
 			if (resolved instanceof Response && !rootHeaders) return resolved
 
@@ -260,15 +255,14 @@ export function buildNativeStaticResponse(
 				resolved,
 				buildSet()
 			)
+
 			return mapped instanceof Response ? mapped : undefined
 		}) as Promise<Response>
-	}
 
 	if (handler instanceof Response && !rootHeaders) return handler
 
 	const mapped = (adapter.response.map as Function)(handler, buildSet())
-	if (mapped instanceof Response) return mapped
-	if (mapped instanceof Promise) return mapped as Promise<Response>
+	if (mapped instanceof Response || mapped instanceof Promise) return mapped
 }
 
 function toArray(name: string, hook: any) {
@@ -414,9 +408,7 @@ export function compileHandler(
 	}
 
 	const buildValidator = () =>
-		hook
-			? Reconstrct.validator(hook as any, root, method, path)
-			: undefined
+		hook ? Reconstrct.validator(hook as any, root, method, path) : undefined
 
 	if (handler instanceof Error) {
 		const error = handler
