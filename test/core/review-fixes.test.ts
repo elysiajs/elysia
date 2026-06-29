@@ -4,17 +4,10 @@ import { mime } from '../../src/universal/file'
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
 
-// Regression tests for the review-reported bugs. Each fails on the pre-fix
-// code and passes after. These use `app.handle()` (no `.listen()`) so they run
-// in any environment, including sandboxes that cannot bind a port.
-
 const upgrade = () =>
 	req('/ws', { headers: { upgrade: 'websocket', connection: 'Upgrade' } })
 
 describe('review fixes', () => {
-	// P1: findRoute nested HTTP routing inside `else (!hasWS)`, so any app with
-	// a WS route plus a request hook / trace path returned 404 for real HTTP
-	// routes on non-upgrade requests.
 	describe('WS-present apps still route HTTP', () => {
 		it('resolves an HTTP route when a WS route + request hook exist', async () => {
 			const app = new Elysia()
@@ -60,9 +53,6 @@ describe('review fixes', () => {
 		})
 	})
 
-	// P1: WS hooks were recomputed from the root's live `~hookChain` instead of
-	// the route snapshot, so plugin-local hooks were skipped on upgrade and
-	// later-registered hooks leaked into earlier WS routes.
 	describe('WS upgrade composes hooks from the route snapshot', () => {
 		it('runs a plugin-local beforeHandle on the WS upgrade', async () => {
 			let ran = 0
@@ -92,8 +82,6 @@ describe('review fixes', () => {
 
 			const res = await app.handle(upgrade())
 			expect(leaked).toBe(0)
-			// not blocked by the later hook (status is the no-server upgrade path,
-			// never 403)
 			expect(res!.status).not.toBe(403)
 		})
 
@@ -118,8 +106,6 @@ describe('review fixes', () => {
 		})
 	})
 
-	// P2: afterResponse must run for sync request-hook errors and must observe
-	// the FINAL status after an async error handler resolves.
 	describe('afterResponse on request-hook errors', () => {
 		it('runs afterResponse when a synchronous request hook throws', async () => {
 			let ran = false
@@ -185,8 +171,6 @@ describe('review fixes', () => {
 		})
 	})
 
-	// P2: `application` already ends in `/`; the template literals added a
-	// second slash, producing invalid `application//x` MIME types.
 	describe('MIME table has no double slashes', () => {
 		it('produces valid application/* MIME types', () => {
 			for (const [ext, value] of Object.entries(mime))

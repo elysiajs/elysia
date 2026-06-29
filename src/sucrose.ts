@@ -579,7 +579,6 @@ function clearCache() {
 }
 
 export function clearSucroseCache(delay?: number | null) {
-	// Can't setTimeout outside fetch in Cloudflare Worker
 	if (delay === null || isCloudflareWorker) return
 	if (delay === undefined) delay = 1 * 60 * 1000
 
@@ -735,8 +734,7 @@ export function sucrose(
 			}
 			caches.set(key, fnInference)
 		}
-		if (typeof event === 'function')
-			functionCaches.set(event, fnInference)
+		if (typeof event === 'function') functionCaches.set(event, fnInference)
 
 		inference = mergeInference(inference, fnInference)
 

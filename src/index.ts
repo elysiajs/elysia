@@ -23,7 +23,6 @@ export {
 } from './type'
 export { Capture as Manifest, Compiled } from './compile/aot'
 export { file, ElysiaFile } from './universal/file'
-export { Cookie, serializeCookie } from './cookie'
 export { StatusMap, StatusMapBack } from './constants'
 export { Validator, StandardValidator, MultiValidator } from './validator'
 export { env } from './universal'

@@ -6191,6 +6191,11 @@ export class Elysia<
 		this['~config']!.precompile = true
 		this.#routerBuilt = false
 
+		if (Capture.isCapturing()) {
+			this.#compiled = undefined
+			this.#fetchFn = undefined
+		}
+
 		void this.fetch
 
 		return this
