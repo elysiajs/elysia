@@ -10,7 +10,8 @@ export {
 	InternalServerError,
 	InvalidCookieSignature,
 	ValidationError,
-	validationDetail
+	validationDetail,
+	type SelectiveStatus
 } from './error'
 export {
 	t,
@@ -35,21 +36,16 @@ export {
 } from './context'
 
 export type {
-	BaseSchema,
 	AnySchema,
+	BaseSchema,
 	StandardSchemaV1Like,
 	StandardJSONSchemaV1Like
 } from './type'
 
-export type { SSEPayload } from './types'
-
-export type {
-	TraceEvent,
-	TraceStream,
-	TraceProcess,
-	TraceListener,
-	TraceHandler
-} from './trace'
+export type { HTTPHeaders, SSEPayload, UnwrapSchema } from './types'
+export type { Cookie } from './cookie/cookie'
+export type { BaseCookie, CookieOptions } from './cookie/types'
+export type { Server } from './universal/server'
 
 export { Elysia }
 export default Elysia

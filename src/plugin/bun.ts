@@ -37,7 +37,17 @@ const realPath = (path: string) => {
  *   outdir: 'dist',
  *   plugins: [aot('src/index.ts')]
  * })
+ *
+ * process.exit(0)
  * ```
+ *
+ * The plugin imports your entry to capture the compiled app, running its
+ * top-level code. `.listen()` is auto-skipped during build (gated on
+ * `ELYSIA_AOT_BUILD`), but any other import-time handle — a DB pool,
+ * `setInterval`, a queue consumer — keeps the process alive after the bundle
+ * is written. End the build script with `process.exit(0)` (the bundle is
+ * already on disk), or gate the side effect with
+ * `if (!process.env.ELYSIA_AOT_BUILD)`.
  */
 export const aot = (entry: string, options?: ElysiaAotOptions): BunPlugin => ({
 	name: 'elysia-aot',

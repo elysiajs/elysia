@@ -34,6 +34,13 @@ const VIRTUAL = '\0elysia/compiled'
  *   plugins: [aot('src/index.ts')]
  * })
  * ```
+ *
+ * The plugin imports your entry to capture the compiled app, running its
+ * top-level code. `.listen()` is auto-skipped during build (gated on
+ * `ELYSIA_AOT_BUILD`), but any other import-time handle — a DB pool,
+ * `setInterval`, a queue consumer — can keep the build process alive after
+ * the bundle is written. Gate the side effect with
+ * `if (!process.env.ELYSIA_AOT_BUILD)`.
  */
 export const aot = (
 	entry: string,
