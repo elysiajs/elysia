@@ -1,27 +1,17 @@
 import { createAdapter } from '..'
 import { WebStandardAdapter } from '../web-standard'
 
+import { needEncodeRegex } from '../../constants'
 import { flushMemory } from '../../memory'
-import { flattenChain, nullObject } from '../../utils'
+import { nullObject } from '../../utils'
 
 import { buildGlobalWSHandler } from '../../ws/route'
 
 import type { AnyElysia } from '../../base'
 
 export function collectStaticRoutes(app: AnyElysia) {
-	if (app['~ext']?.hoc?.length) return
-
-	const hook = flattenChain(app['~hookChain'])
-	if (
-		hook &&
-		(hook?.request?.length ||
-			hook?.mapResponse?.length ||
-			hook?.afterResponse?.length ||
-			hook?.trace?.length)
-	)
-		return
-
 	void app.fetch
+
 	const source = app['~staticResponse']
 	if (!source) return
 
@@ -29,7 +19,9 @@ export function collectStaticRoutes(app: AnyElysia) {
 	const pending: Array<Promise<void>> = []
 
 	for (const rawPath in source) {
-		const path = encodeURI(rawPath)
+		const path = needEncodeRegex.test(rawPath)
+			? encodeURI(rawPath)
+			: rawPath
 
 		const methods = source[rawPath]
 		for (const method in methods) {
@@ -59,32 +51,36 @@ export function collectStaticRoutes(app: AnyElysia) {
 }
 
 export const BunAdapter = createAdapter({
-	...WebStandardAdapter,
 	name: 'bun',
 	runtime: 'bun',
+	isWebStandard: true,
+	parse: WebStandardAdapter.parse,
+	response: WebStandardAdapter.response,
 	listen(app, options, callback) {
 		const _config = (app['~config'] as any)?.serve
-		const _options =
-			typeof options === 'object'
-				? options
-				: {
-						port: +options,
-						fetch: (request: Request, server: unknown) =>
-							app.fetch(request, server)
-					}
-		const serve = _config ? { ..._config, ..._options } : _options
+		const optionsIsObject = typeof options === 'object'
 
-		const hasWs = app['~hasWS']
+		const _options = optionsIsObject
+			? options
+			: // monomorphic
+				{
+					port: +options,
+					fetch: (request: Request, server: unknown) =>
+						app.fetch(request, server)
+				}
 
-		if (!serve.fetch)
-			serve.fetch = (request: Request, server: unknown) =>
+		if (optionsIsObject)
+			_options.fetch = (request: Request, server: unknown) =>
 				app.fetch(request, server)
+
+		const serve = _config ? { ..._config, ..._options } : _options
 
 		app.server = Bun.serve(serve)
 
 		const onSetup = app['~ext']?.setup
 		if (onSetup) for (let i = 0; i < onSetup.length; i++) onSetup[i](app)
 
+		const hasWs = app['~hasWS']
 		if (!hasWs) callback?.(app.server!)
 
 		queueMicrotask(() => {

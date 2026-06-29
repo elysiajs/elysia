@@ -6403,8 +6403,17 @@ export class Elysia<
 				staticResponse = buildNativeStaticResponse(route, this)
 
 				if (staticResponse) {
-					const target = (this['~staticResponse'] ??=
-						nullObject() as any)
+					const target = (this['~staticResponse'] ??= {
+						GET: undefined as any,
+						POST: undefined as any,
+						PUT: undefined as any,
+						DELETE: undefined as any,
+						PATCH: undefined as any,
+						// Cache check, not uncommon
+						HEAD: undefined as any,
+						// CORS preflight, usual
+						OPTIONS: undefined as any
+					} as any)
 
 					;(target[path] ??= nullObject() as any)[method] =
 						staticResponse

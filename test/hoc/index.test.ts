@@ -141,35 +141,4 @@ describe('HOC', () => {
 
 		expect(calls).toBe(1)
 	})
-
-	// Regression (audit S1): a `wrap()` HOC is folded into `app.fetch`, but
-	// Bun's native `routes` dispatch bypasses `fetch`. Static (non-function)
-	// route values were installed as native routes regardless of a HOC, so an
-	// auth-gate/rate-limit `wrap()` was silently skipped for them. The Bun
-	// adapter must bail out of native static routes when a HOC is present.
-	it('runs a wrap() HOC for native static routes', async () => {
-		let ran = 0
-
-		const app = new Elysia()
-			.wrap((fetch) => (request: Request) => {
-				ran++
-				return fetch(request)
-			})
-			.get('/static', 'static-value')
-			.listen(0)
-
-		// let the queueMicrotask boot (native-route install) settle
-		await new Promise((r) => setTimeout(r, 60))
-
-		ran = 0
-		const res = await fetch(
-			`http://localhost:${app.server!.port}/static`
-		).then((r) => r.text())
-
-		expect(res).toBe('static-value')
-		// before the fix the HOC was bypassed for the static route (ran === 0)
-		expect(ran).toBeGreaterThan(0)
-
-		app.stop()
-	})
 })

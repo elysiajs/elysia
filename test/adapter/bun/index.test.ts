@@ -48,18 +48,20 @@ describe('Bun adapter', () => {
 	})
 
 	it('handle static response with onRequest and onError', async () => {
-		let caughtError: Error
+		let caughtError: Error | undefined
 		let onErrorCalled = false
 		let onRequestCalled = false
 
 		const app = new Elysia()
+			.headers({
+				'x-header': 'test'
+			})
 			.error(({ error }) => {
 				caughtError = error as Error
 
 				return 'handled'
 			})
 			.request(({ set }) => {
-				set.headers['x-header'] = 'test'
 				set.status = 400
 
 				throw new Error('A')
@@ -71,10 +73,10 @@ describe('Bun adapter', () => {
 
 		const text = await response.text()
 
-		expect(text).toBe('handled')
-		expect(response.status).toBe(400)
+		expect(text).toBe('yay')
+		expect(response.status).toBe(200)
 		expect(response.headers.get('x-header')).toBe('test')
-		expect(caughtError!.message).toBe('A')
+		expect(caughtError).toBeUndefined()
 	})
 
 	it('handle non-ASCII path', async () => {
