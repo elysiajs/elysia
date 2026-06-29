@@ -1,4 +1,6 @@
 import { Elysia, t } from 'elysia'
+import * as adapterUtils from 'elysia/adapter/utils'
+import * as compiled from 'elysia/compiled'
 
 if ('Bun' in globalThis) {
 	throw new Error('❌ Use Node.js to run this test!')
@@ -8,6 +10,17 @@ setTimeout(() => {
 	console.log('❌ ESM Node.js timed out')
 	process.exit(1)
 }, 5000)
+
+if (
+	typeof adapterUtils.createResponseHandler !== 'function' ||
+	typeof adapterUtils.createStreamHandler !== 'function'
+) {
+	throw new Error('❌ ESM Node.js adapter/utils subpath failed')
+}
+
+if (!('validators' in compiled) || !('handlers' in compiled)) {
+	throw new Error('❌ ESM Node.js compiled subpath failed')
+}
 
 const app = new Elysia().get(
 	'/',

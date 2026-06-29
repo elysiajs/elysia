@@ -14,10 +14,10 @@ export const mime = {
 	html: `${text}html`,
 	htm: `${text}html`,
 	css: `${text}css`,
-	js: `${application}/javascript`,
-	ts: `${application}/typescript`,
-	json: `${application}/json`,
-	xml: `${application}/xml`,
+	js: `${application}javascript`,
+	ts: `${application}typescript`,
+	json: `${application}json`,
+	xml: `${application}xml`,
 
 	// images
 	jpg: `${image}jpeg`,
@@ -44,7 +44,7 @@ export const mime = {
 	otf: 'font/otf',
 
 	// docs
-	pdf: `${application}/pdf`,
+	pdf: `${application}pdf`,
 	txt: `${text}plain`,
 	csv: `${text}csv`,
 
@@ -52,11 +52,11 @@ export const mime = {
 	zip: `${application}zip`,
 
 	// office
-	doc: `${application}/msword`,
+	doc: `${application}msword`,
 	docx: `${msft365}wordprocessingml.document`,
-	xls: `${application}/vnd.ms-excel`,
+	xls: `${application}vnd.ms-excel`,
 	xlsx: `${msft365}spreadsheetml.sheet`,
-	ppt: `${application}/vnd.ms-powerpoint`,
+	ppt: `${application}vnd.ms-powerpoint`,
 	pptx: `${msft365}presentationml.presentation`
 } as const
 

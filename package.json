@@ -1,7 +1,7 @@
 {
 	"name": "elysia",
 	"description": "Ergonomic Framework for Human",
-	"version": "2.0.0-exp.12",
+	"version": "2.0.0-exp.13",
 	"author": {
 		"name": "saltyAom",
 		"url": "https://github.com/SaltyAom",
@@ -49,6 +49,11 @@
 			"types": "./dist/base.d.ts",
 			"import": "./dist/base.mjs",
 			"require": "./dist/base.js"
+		},
+		"./compiled": {
+			"types": "./dist/compiled.d.ts",
+			"import": "./dist/compiled.mjs",
+			"require": "./dist/compiled.js"
 		},
 		"./constants": {
 			"types": "./dist/constants.d.ts",

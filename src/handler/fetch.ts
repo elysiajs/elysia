@@ -49,17 +49,34 @@ const decodeParams = (
 	return params
 }
 
+function finalizeError(
+	context: Context,
+	handleError: (context: Context, error: Error) => unknown,
+	afterResponse: ((context: Context, status?: number) => void) | undefined,
+	error: Error
+) {
+	const resp = handleError(context, error) as Response | Promise<Response>
+	if (!afterResponse) return resp
+
+	if (resp instanceof Promise)
+		return resp.then((r) => {
+			afterResponse(context)
+			return r
+		})
+
+	afterResponse(context)
+
+	return resp
+}
+
 const catchError =
 	(
 		context: Context,
 		handleError: (context: Context, error: Error) => unknown,
 		afterResponse: ((context: Context, status?: number) => void) | undefined
 	) =>
-	(error: Error) => {
-		const resp = handleError(context, error) as Response
-		afterResponse?.(context)
-		return resp
-	}
+	(error: Error) =>
+		finalizeError(context, handleError, afterResponse, error)
 
 function findRoute(
 	context: Context,
@@ -91,7 +108,11 @@ function findRoute(
 				return r instanceof Promise ? (r.catch(catchError(context, handleError, afterResponse)) as any) : r
 			}
 		}
-	} else {
+	}
+
+	// Non-upgrade requests (and upgrades that match no WS route) fall through
+	// to normal HTTP routing — WS presence must not shadow HTTP routes.
+	{
 		const methodMap = map[request.method]
 		let handler: CompiledHandler | undefined = methodMap?.[path]
 
@@ -345,9 +366,12 @@ export function createFetchHandler(
 				for (let i = 0; i < traceLength; i++)
 					requestReports[i].resolve(error)
 
-				const r = handleError(context, error as Error) as Response
-				afterResponse?.(context)
-				return r
+				return finalizeError(
+					context,
+					handleError,
+					afterResponse,
+					error as Error
+				)
 			}
 		}
 	}
@@ -400,9 +424,12 @@ export function createFetchHandler(
 						hasWS
 					)
 				} catch (error) {
-					const r = handleError(context, error as Error) as Response
-					afterResponse?.(context)
-					return r
+					return finalizeError(
+						context,
+						handleError,
+						afterResponse,
+						error as Error
+					)
 				}
 			}
 
@@ -446,7 +473,12 @@ export function createFetchHandler(
 					hasWS
 				)
 			} catch (error) {
-				return handleError(context, error as Error) as Response
+				return finalizeError(
+					context,
+					handleError,
+					afterResponse,
+					error as Error
+				)
 			}
 		}
 	}
@@ -490,9 +522,12 @@ export function createFetchHandler(
 							: (r as any)
 					}
 				} catch (error) {
-					const r = handleError(context, error as Error) as Response
-					afterResponse?.(context)
-					return r
+					return finalizeError(
+						context,
+						handleError,
+						afterResponse,
+						error as Error
+					)
 				}
 			}
 		}
@@ -534,15 +569,21 @@ export function createFetchHandler(
 				return r instanceof Promise ? r.catch(catchError(context, handleError, afterResponse)) : r
 			}
 		} catch (error) {
-			const r = handleError(context, error as Error) as Response
-			afterResponse?.(context)
-			return r
+			return finalizeError(
+				context,
+				handleError,
+				afterResponse,
+				error as Error
+			)
 		}
 
 		if (hasError) {
-			const r = handleError(context, new NotFound()) as Response
-			afterResponse?.(context)
-			return r
+			return finalizeError(
+				context,
+				handleError,
+				afterResponse,
+				new NotFound()
+			)
 		}
 
 		afterResponse?.(context, 404)

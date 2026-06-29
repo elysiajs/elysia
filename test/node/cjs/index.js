@@ -8,6 +8,19 @@ setTimeout(() => {
 }, 5000)
 
 const { Elysia, t } = require('elysia')
+const adapterUtils = require('elysia/adapter/utils')
+const compiled = require('elysia/compiled')
+
+if (
+	typeof adapterUtils.createResponseHandler !== 'function' ||
+	typeof adapterUtils.createStreamHandler !== 'function'
+) {
+	throw new Error('❌ CommonJS Node.js adapter/utils subpath failed')
+}
+
+if (!('validators' in compiled) || !('handlers' in compiled)) {
+	throw new Error('❌ CommonJS Node.js compiled subpath failed')
+}
 
 const app = new Elysia().get(
 	'/',

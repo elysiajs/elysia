@@ -2,7 +2,6 @@ import { isNotEmpty, nullObject } from '../utils'
 import { StatusMap } from '../constants'
 
 import { serializeCookie } from '../cookie/serialize'
-import { mapCompactResponse, mapResponse } from './web-standard/handler'
 import { isBun, hasHeaderShorthand } from '../universal/constants'
 import type { Context } from '../context'
 
@@ -234,7 +233,10 @@ function enqueueBinaryChunk(
 	return false
 }
 
-export function createStreamHandler(_: CreateHandlerParameter) {
+export function createStreamHandler({
+	mapResponse,
+	mapCompactResponse
+}: CreateHandlerParameter) {
 	return async (
 		generator: Generator | AsyncGenerator | ReadableStream,
 		set?: Context['set'],

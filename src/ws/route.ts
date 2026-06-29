@@ -1,7 +1,8 @@
 import { RouteValidator } from '../validator/route'
-import { flattenChain, nullObject } from '../utils'
+import { nullObject } from '../utils'
 import { parseQueryFromURL } from '../parse-query'
 import { getQueryParseChannels } from '../compile/handler/utils'
+import { composeRouteHook } from '../compile/handler'
 
 import { ElysiaWS, isGeneratorObject, type WSConnectionData } from './context'
 import { createMessageParser } from './parser'
@@ -17,7 +18,7 @@ import type {
 	ServerWebSocket,
 	WebSocketHandler
 } from './types'
-import type { InternalRoute } from '../types'
+import type { InternalRoute, AppHook } from '../types'
 
 type AnyFn = (...args: any[]) => any
 type Server = {
@@ -125,7 +126,18 @@ export function buildWSRoute(
 	const queryArray = queryChannels?.array
 	const queryObject = queryChannels?.object
 
-	const flatAppHook = flattenChain(app['~hookChain']) ?? {}
+	const instance = (route[3] as AnyElysia | undefined) ?? app
+	const appHookChain = route[5] as Parameters<typeof composeRouteHook>[2]
+	const inheritedChain = route[6] as Parameters<typeof composeRouteHook>[3]
+
+	const flatAppHook =
+		(composeRouteHook(
+			instance,
+			undefined,
+			appHookChain,
+			inheritedChain,
+			app
+		) as Partial<AppHook> | undefined) ?? ({} as Partial<AppHook>)
 
 	const parseHooks = toArray(hook.parse as any)
 	const transforms = concatHooks(
