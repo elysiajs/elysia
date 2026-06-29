@@ -1770,6 +1770,33 @@ type MacroDefSchema<K, MBody, MHeaders, MQuery, MParams, MCookie> = {
 }
 
 /**
+ * Upper bound for a macro definition's schema channel (`body`/`headers`/…):
+ * a registered model name or an inline schema.
+ *
+ * Used as the `const Body extends …` constraint on `.macro()`. It does not
+ * restrict (valid inputs already satisfy it) — it stops `Body[K]` from being a
+ * bare `unknown`, which is what lets the `| Name` in the field surface model
+ * names to autocomplete (a `unknown | Name` union collapses to `unknown`).
+ * `const` still narrows `Body[K]` to the typed literal for `UnwrapRoute`.
+ */
+export type MacroSchemaChannel<Definitions extends DefinitionBase> = Record<
+	keyof any,
+	AnySchema | (keyof Definitions['typebox'] & string)
+>
+
+type MacroChannel<
+	Channel,
+	Key extends keyof InputSchema,
+	Definitions extends DefinitionBase
+> = {
+	[K in keyof Channel]: MaybeValueOrVoidFunction<
+		{
+			[F in Key]?: Channel[K] | (keyof Definitions['typebox'] & string)
+		} & Record<string, unknown>
+	>
+}
+
+/**
  * Parameter type of the object-form `.macro({ name: definition })`
  *
  * TypeScript cannot infer one generic from a record while ALSO using it to
@@ -1793,17 +1820,11 @@ export type ObjectMacroDefs<
 	Singleton extends SingletonBase,
 	Definitions extends DefinitionBase,
 	MacroNames extends BaseMacro
-> = {
-	[K in keyof Body]: MaybeValueOrVoidFunction<{ body?: Body[K] }>
-} & {
-	[K in keyof Headers]: MaybeValueOrVoidFunction<{ headers?: Headers[K] }>
-} & {
-	[K in keyof Query]: MaybeValueOrVoidFunction<{ query?: Query[K] }>
-} & {
-	[K in keyof Params]: MaybeValueOrVoidFunction<{ params?: Params[K] }>
-} & {
-	[K in keyof Cookie]: MaybeValueOrVoidFunction<{ cookie?: Cookie[K] }>
-} & {
+> = MacroChannel<Body, 'body', Definitions> &
+	MacroChannel<Headers, 'headers', Definitions> &
+	MacroChannel<Query, 'query', Definitions> &
+	MacroChannel<Params, 'params', Definitions> &
+	MacroChannel<Cookie, 'cookie', Definitions> & {
 	[K in keyof N]: MaybeValueOrVoidFunction<
 		MacroProperty<
 			MacroNames & InputSchema<keyof Definitions['typebox'] & string>,

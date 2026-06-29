@@ -12,7 +12,8 @@ import type {
 	InputSchema,
 	AnyLocalHook,
 	GuardSchemaType,
-	ElysiaFormData
+	ElysiaFormData,
+	AnySchema
 } from './types'
 
 export const nullObject = () => Object.create(null)
@@ -810,3 +811,37 @@ export function clonePlainDecorators<T extends Record<string, unknown>>(
 
 	return out as T
 }
+
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+
+function prefix<T extends string, Models extends Record<string, AnySchema>>(
+	prefix: T,
+	models: Models
+): {
+	[k in keyof Models as `${T}.${k & string}`]: Models[k]
+} {
+	const prefixed: Record<string, AnySchema> = nullObject()
+
+	for (const key in models) prefixed[`${prefix}.${key}`] = models[key]
+
+	return prefixed as any
+}
+
+prefix.capitalize = function prefixModelsCapitalize<
+	T extends string,
+	Models extends Record<string, AnySchema>
+>(
+	prefix: T,
+	models: Models
+): {
+	[k in keyof Models as `${T}.${Capitalize<k & string>}`]: Models[k]
+} {
+	const prefixed: Record<string, AnySchema> = nullObject()
+
+	for (const key in models)
+		prefixed[`${prefix}.${capitalize(key)}`] = models[key]
+
+	return prefixed as any
+}
+
+export { prefix }

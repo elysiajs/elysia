@@ -35,6 +35,28 @@ import { expectTypeOf } from 'expect-type'
 		})
 }
 
+// a model name (not an inline schema) resolves into the macro's own ctx
+// and flows to the consuming route
+{
+	new Elysia()
+		.model({ 'test.a': t.Object({ a: t.String() }) })
+		.macro({
+			named: {
+				body: 'test.a',
+				beforeHandle: ({ body }) => {
+					expectTypeOf(body).toEqualTypeOf<{ a: string }>()
+				},
+				derive: ({ body }) => ({ who: body.a })
+			}
+		})
+		.post('/', { named: true }, ({ body, who }) => {
+			expectTypeOf(body).toEqualTypeOf<{ a: string }>()
+			expectTypeOf(who).toEqualTypeOf<string>()
+
+			return 'ok'
+		})
+}
+
 // function form: argument type + own handler ctx + derive flow
 {
 	new Elysia()

@@ -16,6 +16,25 @@ describe('On Request', () => {
 		expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*')
 	})
 
+	it('propagates globally out of a plugin regardless of scope', async () => {
+		const plain = new Elysia().request(({ set }) => {
+			set.headers['x-plain'] = 'yes'
+		})
+		const local = new Elysia().request(({ set }) => {
+			set.headers['x-local'] = 'yes'
+		})
+
+		const app = new Elysia()
+			.use(plain)
+			.use(local)
+			.get('/', () => 'hi')
+
+		const res = await app.handle(req('/'))
+
+		expect(res.headers.get('x-plain')).toBe('yes')
+		expect(res.headers.get('x-local')).toBe('yes')
+	})
+
 	it('handle async', async () => {
 		const app = new Elysia()
 			.request(async ({ set }) => {

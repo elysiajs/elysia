@@ -103,6 +103,7 @@ import type {
 	DefaultMetadata,
 	DocumentDecoration,
 	Handler,
+	MacroSchemaChannel,
 	MacroToProperty,
 	ObjectMacroDefs,
 	WrapFn,
@@ -780,11 +781,8 @@ export class Elysia<
 	}
 
 	request(fn: MaybeArray<PreHandler<{}, Singleton>>): this
-	request(scope: 'local', fn: MaybeArray<PreHandler<{}, Singleton>>): this
-	request(scope: 'plugin', fn: MaybeArray<PreHandler<{}, Singleton>>): this
-	request(scope: 'global', fn: MaybeArray<PreHandler<{}, Singleton>>): this
-	request(scopeOrFn: any, fn?: any): this {
-		return this.#onBranch('request', scopeOrFn as any, fn as any)
+	request(fn?: any): this {
+		return this.#on('request', fn, 'global')
 	}
 
 	parse(
@@ -3203,10 +3201,7 @@ export class Elysia<
 
 	guard(): any {
 		if (arguments.length === 1)
-			return this.#guard(
-				'local',
-				arguments[0] as Partial<AnyWSLocalHook>
-			)
+			return this.#guard('local', arguments[0] as Partial<AnyWSLocalHook>)
 
 		if (arguments.length === 2) {
 			// `guard(hook, callback)` is `group('', hook, callback)`
@@ -3535,11 +3530,8 @@ export class Elysia<
 			const childFlat = flattenChain(child['~hookChain'])
 			const lifted: Partial<AppHook> = nullObject()
 
-			if (childFlat?.request) (lifted as any).request = childFlat.request
 			if (childFlat?.parse) (lifted as any).parse = childFlat.parse
-
-			if ((lifted as any).request || (lifted as any).parse)
-				this.#pushHook(lifted)
+			if ((lifted as any).parse) this.#pushHook(lifted)
 
 			return child
 		}
@@ -3624,11 +3616,11 @@ export class Elysia<
 	 * ```
 	 */
 	macro<
-		const Body,
-		const Headers,
-		const Query,
-		const Params,
-		const Cookie,
+		const Body extends MacroSchemaChannel<Definitions>,
+		const Headers extends MacroSchemaChannel<Definitions>,
+		const Query extends MacroSchemaChannel<Definitions>,
+		const Params extends MacroSchemaChannel<Definitions>,
+		const Cookie extends MacroSchemaChannel<Definitions>,
 		const NewMacro
 	>(
 		macro: ObjectMacroDefs<
@@ -4121,8 +4113,12 @@ export class Elysia<
 			return this
 		}
 
-		if (app !== this && app.pending)
-			return this.#useAsync(app.modules.then(() => app))
+		// An async functional plugin `async (app) => app.get(...)` resolves to
+		// the same instance it mutated in place. Re-applying it would re-walk
+		// `this`'s own chain and duplicate its routes/global hooks onto itself.
+		if (app === this) return this
+
+		if (app.pending) return this.#useAsync(app.modules.then(() => app))
 
 		this.#use(app)
 
