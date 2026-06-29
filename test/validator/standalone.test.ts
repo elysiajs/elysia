@@ -1009,4 +1009,23 @@ describe('standalone validator', () => {
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('fine')
 	})
+
+	it('resolves a model reference passed as a standalone schema', async () => {
+		const app = new Elysia()
+			.model({ sign: t.Object({ id: t.Number() }) })
+			.guard({
+				schema: 'standalone',
+				body: t.Object({ name: t.String() })
+			})
+			.guard({ schema: 'standalone', body: 'sign' })
+			.post('/', ({ body }) => body)
+
+		const correct = await app.handle(post('/', { name: 'a', id: 1 }))
+		expect(correct.status).toBe(200)
+		await expect(correct.json()).resolves.toEqual({ name: 'a', id: 1 })
+
+		// both standalone schemas are enforced: missing `id` (from `sign`) fails
+		const incorrect = await app.handle(post('/', { name: 'a' }))
+		expect(incorrect.status).toBe(422)
+	})
 })

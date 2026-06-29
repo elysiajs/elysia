@@ -29,10 +29,8 @@ export interface ValidatorOptions {
 	slot?: ValidatorSlot
 }
 
-export interface ResponseValidatorOptions extends Omit<
-	ValidatorOptions,
-	'schemas'
-> {
+export interface ResponseValidatorOptions
+	extends Omit<ValidatorOptions, 'schemas'> {
 	schemas?: Record<number, AnySchema>[]
 }
 
@@ -97,6 +95,16 @@ export abstract class Validator {
 		}
 
 		const schema = Validator.reference(name, options?.models)
+
+		if (options?.schemas?.some((v) => typeof v === 'string')) {
+			const models = options.models
+			options = {
+				...options,
+				schemas: options.schemas.map((v) =>
+					Validator.reference(v as any, models)
+				)
+			}
+		}
 
 		if (isCompiledSchema(schema)) {
 			const message =
