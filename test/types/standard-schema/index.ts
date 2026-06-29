@@ -1,9 +1,10 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { Cookie, Elysia, t } from '../../../src'
+import { Elysia, t } from '../../../src'
 
 import z from 'zod'
 
 import { expectTypeOf } from 'expect-type'
+import { Cookie } from '../../../src/cookie';
 
 // ? handle standard schema
 {

@@ -1,4 +1,5 @@
-import { Cookie, Elysia, t } from '../../../src'
+import { Elysia, t } from '../../../src'
+import type { Cookie } from '../../../src/cookie'
 import { expectTypeOf } from 'expect-type'
 import { Prettify } from '../../../src/types'
 

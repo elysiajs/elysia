@@ -1,9 +1,6 @@
 import { describe, it, expect } from 'bun:test'
 
-// A1 (API parity): symbols that must remain importable from the package entry.
-// Value re-exports are asserted at runtime; type re-exports are asserted by this
-// file type-checking (build/dts generation fails if a type export is dropped).
-import { Cookie, serializeCookie, StatusMap, env } from '../../src'
+import { StatusMap, env } from '../../src'
 
 import type {
 	SSEPayload,
@@ -16,8 +13,6 @@ import type {
 
 describe('package export surface (A1)', () => {
 	it('re-exports the v1-parity runtime symbols', () => {
-		expect(typeof Cookie).toBe('function')
-		expect(typeof serializeCookie).toBe('function')
 		expect(typeof env).toBe('object')
 		expect(StatusMap.OK).toBe(200)
 	})

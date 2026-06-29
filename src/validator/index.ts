@@ -29,8 +29,10 @@ export interface ValidatorOptions {
 	slot?: ValidatorSlot
 }
 
-export interface ResponseValidatorOptions
-	extends Omit<ValidatorOptions, 'schemas'> {
+export interface ResponseValidatorOptions extends Omit<
+	ValidatorOptions,
+	'schemas'
+> {
 	schemas?: Record<number, AnySchema>[]
 }
 
@@ -406,7 +408,12 @@ export class MultiValidator extends Validator {
 				'~standard' in validator
 					? // @ts-expect-error
 						validator['~standard'].validate(value).value
-					: Decode(validator as TypeBoxValidator, value)
+					: Decode(
+							(
+								validator as unknown as CompiledTypeBoxValidator
+							).Type(),
+							value
+						)
 
 			if (snapshot! === undefined) snapshot = result
 			else if (Array.isArray(snapshot) && Array.isArray(result))
@@ -457,7 +464,10 @@ export class MultiValidator extends Validator {
 						(validator as TypeBoxValidator).Errors(value)
 					)
 
-				result = Decode(validator as TypeBoxValidator, value)
+				result = Decode(
+					(validator as unknown as CompiledTypeBoxValidator).Type(),
+					value
+				)
 			}
 
 			if (snapshot! === undefined) snapshot = result

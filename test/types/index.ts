@@ -1,17 +1,16 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 
 import {
-	type Cookie,
 	Elysia,
 	file,
 	form,
-	SSEPayload,
 	sse,
 	status,
 	t
 } from '../../src'
 
 import { expectTypeOf } from 'expect-type'
+import { Cookie } from '../../src/cookie'
 
 const app = new Elysia()
 

@@ -1,5 +1,6 @@
-import { Cookie, Elysia, t } from '../../src'
+import { Elysia, t } from '../../src'
 import { expectTypeOf } from 'expect-type'
+import { Cookie } from '../../src/cookie'
 
 // local
 {
