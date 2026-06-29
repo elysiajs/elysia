@@ -71,7 +71,10 @@ describe('Native Static Response', () => {
 			)
 		)
 
-		expect(app['~staticResponse'] ?? {}).not.toHaveProperty('/')
+		// `~staticResponse` is undefined when the feature is disabled — no
+		// entries get populated. `?? {}` so the assertion targets a
+		// non-undefined value either way.
+		expect((app['~staticResponse'] ?? {}).GET ?? {}).not.toHaveProperty('/')
 	})
 
 	it('handle loose path', async () => {
@@ -79,6 +82,9 @@ describe('Native Static Response', () => {
 
 		const app = build(new Elysia().use(plugin).get('/', 'Static Content'))
 
+		// Loose entries share the canonical Response object (no clone), so
+		// clone before reading — consuming the body here would empty the
+		// object Bun serves by reference.
 		expect(app['~staticResponse'].GET['/']).toBeInstanceOf(Response)
 		await expect(
 			app['~staticResponse'].GET['/'].clone().text()
@@ -117,20 +123,25 @@ describe('Native Static Response', () => {
 		await expect(
 			strict['~staticResponse'].GET['/plugin'].text()
 		).resolves.toEqual('Plugin')
-
-		expect(strict['~staticResponse']).not.toHaveProperty('/plugin/')
+		expect(strict['~staticResponse'].GET).not.toHaveProperty('/plugin/')
 	})
 
+	// A precomputed static Response skips the compiled JS handler entirely,
+	// so any hook the JS handler would run per request (mapResponse is what
+	// compression/caching plugins use) MUST disqualify the route — otherwise
+	// native dispatch serves the unmapped bytes while `app.handle` serves
+	// the mapped ones
 	describe('eligibility', () => {
-		it('static app-level mapResponse', async () => {
+		it('static for app-level mapResponse', async () => {
 			const app = build(
 				new Elysia()
 					.mapResponse(() => new Response('MAPPED'))
 					.get('/', 'ok')
 			)
 
-			expect((app['~staticResponse'] ?? {}).GET).toHaveProperty('/')
+			expect((app['~staticResponse'] ?? {}).GET ?? {}).toHaveProperty('/')
 
+			// the JS path is the source of truth for the mapped body
 			await expect(
 				app
 					.handle(new Request('http://localhost/'))
@@ -148,7 +159,9 @@ describe('Native Static Response', () => {
 					'ok'
 				)
 			)
-			expect((scalar['~staticResponse'] ?? {}).GET).toHaveProperty('/')
+			expect((scalar['~staticResponse'] ?? {}).GET ?? {}).toHaveProperty(
+				'/'
+			)
 
 			const array = build(
 				new Elysia().get(
@@ -159,7 +172,9 @@ describe('Native Static Response', () => {
 					'ok'
 				)
 			)
-			expect((array['~staticResponse'] ?? {}).GET).toHaveProperty('/')
+			expect((array['~staticResponse'] ?? {}).GET ?? {}).toHaveProperty(
+				'/'
+			)
 		})
 
 		it('static for guard mapResponse', async () => {
@@ -169,7 +184,7 @@ describe('Native Static Response', () => {
 					.get('/', 'ok')
 			)
 
-			expect((app['~staticResponse'] ?? {}).GET).toHaveProperty('/')
+			expect((app['~staticResponse'] ?? {}).GET ?? {}).toHaveProperty('/')
 		})
 
 		it('static per route for plugin mapResponse, keeping siblings native', async () => {
@@ -179,12 +194,17 @@ describe('Native Static Response', () => {
 
 			const app = build(new Elysia().use(plugin).get('/', 'ok'))
 
-			expect((app['~staticResponse'] ?? {}).GET).toHaveProperty('/in-plugin')
+			expect((app['~staticResponse'] ?? {}).GET ?? {}).toHaveProperty(
+				'/in-plugin'
+			)
 			// per-route granularity: the unhooked sibling stays native
 			expect(app['~staticResponse'].GET['/']).toBeInstanceOf(Response)
 		})
 
-		it('static for a bare 0-parameter hook', async () => {
+		it('bail for a bare 0-parameter hook', async () => {
+			// a scalar hook function's `.length` is its ARITY — a
+			// 0-parameter beforeHandle must still disqualify the route
+			// (it can throw or carry side effects the native path skips)
 			let called = 0
 			const app = build(
 				new Elysia().get(
@@ -198,7 +218,9 @@ describe('Native Static Response', () => {
 				)
 			)
 
-			expect((app['~staticResponse'] ?? {}).GET).toHaveProperty('/')
+			expect((app['~staticResponse'] ?? {}).GET ?? {}).not.toHaveProperty(
+				'/'
+			)
 
 			await app.handle(new Request('http://localhost/'))
 			expect(called).toBe(1)
@@ -214,8 +236,9 @@ describe('Native Static Response', () => {
 					'ok'
 				)
 			)
-
-			expect((afterResponse['~staticResponse'] ?? {}).GET).toHaveProperty('/')
+			expect(
+				(afterResponse['~staticResponse'] ?? {}).GET ?? {}
+			).toHaveProperty('/')
 
 			const trace = build(
 				new Elysia().get(
@@ -226,10 +249,12 @@ describe('Native Static Response', () => {
 					'ok'
 				)
 			)
-			expect((trace['~staticResponse'] ?? {}).GET).toHaveProperty('/')
+			expect((trace['~staticResponse'] ?? {}).GET ?? {}).toHaveProperty(
+				'/'
+			)
 		})
 
-		it('static when the route carries a request schema', async () => {
+		it('bail when the route carries a request schema', async () => {
 			const app = build(
 				new Elysia().get(
 					'/',
@@ -240,7 +265,9 @@ describe('Native Static Response', () => {
 				)
 			)
 
-			expect((app['~staticResponse'] ?? {}).GET).toHaveProperty('/')
+			expect((app['~staticResponse'] ?? {}).GET ?? {}).not.toHaveProperty(
+				'/'
+			)
 
 			expect(
 				(await app.handle(new Request('http://localhost/'))).status

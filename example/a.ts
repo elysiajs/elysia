@@ -10,5 +10,3 @@ const app = new Elysia()
 
 const response = await app.handle('/')
 const value = await response.text()
-
-console.log(response)

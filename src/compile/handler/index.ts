@@ -204,69 +204,79 @@ function composeRootHook(
 
 export function buildNativeStaticResponse(
 	[, , handler, instance, localHook, appHook, inheritedChain]: InternalRoute,
-	root: AnyElysia,
-	hasMapResponse?: boolean
+	root: AnyElysia
 ): Response | Promise<Response> | undefined {
 	if (typeof handler === 'function' || handler instanceof Error) return
 
 	const adapter = root['~config']?.adapter ?? defaultAdapter
+	if (localHook) root['~applyMacro'](localHook)
+	resolveChainMacros(root, appHook)
+	if (inheritedChain) resolveChainMacros(root, inheritedChain as ChainNode)
 
-	if (hasMapResponse) {
-		if (localHook) root['~applyMacro'](localHook)
+	const flatAppHook = flattenChainMemo(root, appHook as ChainNode)
+	const rootHook =
+		instance !== root
+			? composeRootHook(root, inheritedChain as any)
+			: undefined
+	const hook = applyHook(localHook, flatAppHook as any, rootHook, true)
 
-		resolveChainMacros(root, appHook)
-		if (inheritedChain)
-			resolveChainMacros(root, inheritedChain as ChainNode)
+	if (hook) {
+		if (hook?.transform || hook?.beforeHandle || hook?.afterHandle) return
 
-		const flatAppHook = flattenChainMemo(root, appHook as ChainNode)
-		const rootHook =
-			instance !== root
-				? composeRootHook(root, inheritedChain as any)
-				: undefined
-
-		const hook = applyHook(localHook, flatAppHook as any, rootHook, true)
-
-		if (hook?.mapResponse) {
-			const Context = createContext(root)
-			// eslint-disable-next-line sonarjs/no-clear-text-protocols
-			const context = new Context(new Request('http://e.ly'))
-			// @ts-ignore
-			context.responseValue = handler
-
-			for (let i = 0; i < hook.mapResponse.length; i++) {
-				const fn = hook.mapResponse[i]
-				if (typeof fn !== 'function') continue
-
-				const mapped = fn(context)
-
-				if (mapped instanceof Response || mapped instanceof Promise)
-					return mapped
-			}
-		}
+		if (
+			hook?.body ||
+			hook?.query ||
+			hook?.params ||
+			hook?.headers ||
+			hook?.cookie ||
+			(hook?.schemas as unknown[] | undefined)?.length
+		)
+			return
 	}
 
 	const rootHeaders = root['~ext']?.headers
-	const buildSet = () => ({
-		headers: rootHeaders
-			? Object.assign(nullObject(), rootHeaders)
-			: nullObject()
-	})
+
+	const mapResponse = hook?.mapResponse
+		? (value: unknown) => {
+				const Context = createContext(root)
+				// eslint-disable-next-line sonarjs/no-clear-text-protocols
+				const context = new Context(new Request('http://e.ly'))
+				// @ts-ignore
+				context.responseValue = value
+
+				if (!Array.isArray(hook.mapResponse))
+					hook.mapResponse = [hook.mapResponse]
+
+				for (let i = 0; i < hook.mapResponse.length; i++) {
+					const fn = hook.mapResponse[i]
+					if (typeof fn !== 'function') continue
+
+					const mapped = fn(context)
+
+					if (mapped instanceof Response || mapped instanceof Promise)
+						return mapped
+				}
+			}
+		: (value: unknown) => {
+				return (adapter.response.map as Function)(value, {
+					headers: rootHeaders
+						? Object.assign(nullObject(), rootHeaders)
+						: nullObject()
+				})
+			}
 
 	if (handler instanceof Promise)
 		return handler.then((resolved) => {
 			if (resolved instanceof Response && !rootHeaders) return resolved
 
-			const mapped = (adapter.response.map as Function)(
-				resolved,
-				buildSet()
-			)
+			const mapped = mapResponse(resolved)
 
 			return mapped instanceof Response ? mapped : undefined
 		}) as Promise<Response>
 
 	if (handler instanceof Response && !rootHeaders) return handler
 
-	const mapped = (adapter.response.map as Function)(handler, buildSet())
+	const mapped = mapResponse(handler)
 	if (mapped instanceof Response || mapped instanceof Promise) return mapped
 }
 

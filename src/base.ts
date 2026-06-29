@@ -209,7 +209,6 @@ export class Elysia<
 	}
 
 	'~hasWS'?: boolean
-	#hasMapResponse?: boolean
 
 	constructor(config?: ElysiaConfig<BasePath, Scope>) {
 		this['~config'] = config
@@ -1730,8 +1729,6 @@ export class Elysia<
 		>
 	): this
 	mapResponse(scopeOrFn: any, fn?: any): this {
-		this.#hasMapResponse = true
-
 		return this.#onBranch('mapResponse', scopeOrFn, fn)
 	}
 
@@ -4223,9 +4220,6 @@ export class Elysia<
 
 		const hookChain = app['~hookChain']
 
-		if (!this.#hasMapResponse && app.#hasMapResponse)
-			this.#hasMapResponse = true
-
 		if (app['~ext']) {
 			const {
 				decorator,
@@ -6315,6 +6309,7 @@ export class Elysia<
 
 		this.#initMap()
 		const methods = this['~map']!
+
 		const length = this.#history.length
 
 		let explicitHead: Set<string> | undefined
@@ -6324,12 +6319,12 @@ export class Elysia<
 					(explicitHead ??= new Set()).add(this.#history![i][1])
 
 		const wrapHeadHandler = Elysia.#wrapHeadHandler
-
-		const preferLoosePath = this['~config']?.strictPath !== true
+		const isLoose = this['~config']?.strictPath !== true
 
 		let explicitPaths: Map<string, Set<string>> | undefined
-		if (preferLoosePath && this['~config']?.distinctPath) {
+		if (isLoose && this['~config']?.distinctPath) {
 			explicitPaths = new Map()
+
 			for (let i = 0; i < length; i++) {
 				const route = this.#history![i]
 				const m =
@@ -6338,6 +6333,7 @@ export class Elysia<
 
 				let set = explicitPaths.get(m)
 				if (!set) explicitPaths.set(m, (set = new Set()))
+
 				set.add(p)
 				if (needEncodeRegex.test(p)) {
 					const encoded = encodeURI(p)
@@ -6358,15 +6354,16 @@ export class Elysia<
 
 				if (isDynamicRegex.test(path)) {
 					;(this['~router'] ??= new Memoirist<CompiledHandler>({
-						loosePath: preferLoosePath
+						loosePath: isLoose
 					})).add('WS', path, handler, false)
 				} else {
 					this.#initMap()
 					const wsMap = (this['~map']!['WS'] ??= nullObject() as any)
 					wsMap[path] = handler
 
-					if (!this['~config']?.strictPath) {
+					if (isLoose) {
 						const loose = getLoosePath(path)
+
 						if (
 							loose !== path &&
 							!explicitPaths?.get('WS')?.has(loose)
@@ -6404,11 +6401,7 @@ export class Elysia<
 			let staticResponse: Response | Promise<Response> | undefined
 			const maybeStatic = buildStatic && typeof route[2] !== 'function'
 			if (maybeStatic) {
-				staticResponse = buildNativeStaticResponse(
-					route,
-					this,
-					this.#hasMapResponse
-				)
+				staticResponse = buildNativeStaticResponse(route, this)
 
 				if (staticResponse) {
 					const target = (this['~staticResponse'] ??= {
@@ -6446,7 +6439,7 @@ export class Elysia<
 			const isDynamic = isDynamicRegex.test(path)
 			const registerLoose =
 				!isDynamic &&
-				preferLoosePath &&
+				isLoose &&
 				(path.length === 0 || path.charCodeAt(path.length - 1) === 47)
 
 			const explicitMain = registerLoose
@@ -6477,7 +6470,6 @@ export class Elysia<
 			for (let v = 0; v < variants.length; v++) {
 				const p = variants[v]
 				paths.push(p)
-
 				if (registerLoose) {
 					const loose = getLoosePath(p)
 					if (loose !== p && !explicitMain?.has(loose))
@@ -6488,7 +6480,7 @@ export class Elysia<
 			if (isDynamic) {
 				const router = (this['~router'] ??=
 					new Memoirist<CompiledHandler>({
-						loosePath: preferLoosePath
+						loosePath: isLoose
 					}))
 
 				const handler = this.handler(
@@ -6504,7 +6496,6 @@ export class Elysia<
 
 				for (let p = 0; p < paths.length; p++) {
 					router.add(method, paths[p], handler, false)
-
 					if (headHandler)
 						router.add('HEAD', paths[p], headHandler, false)
 				}

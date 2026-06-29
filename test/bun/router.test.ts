@@ -404,6 +404,28 @@ describe('Bun router', () => {
 		app.stop()
 	})
 
+	// Audit F40 (schema bail): a static-value route with a request schema
+	// must NOT be served natively — the compiled handler 422s per request,
+	// so native dispatch would silently flip 422 to 200 and the error hook
+	// would lose those events
+	it('still validates schema-carrying static-value routes with an error hook', async () => {
+		const app = new Elysia()
+			.error(() => {})
+			.get('/q', { query: t.Object({ id: t.String() }) }, 'ok')
+			.listen(0)
+
+		await new Promise((r) => setTimeout(r, 50))
+
+		const base = `http://localhost:${app.server!.port}`
+		expect((await fetch(`${base}/q`)).status).toBe(422)
+
+		const valid = await fetch(`${base}/q?id=1`)
+		expect(valid.status).toBe(200)
+		await expect(valid.text()).resolves.toBe('ok')
+
+		app.stop()
+	})
+
 	// Audit F41: the compiled JS handler applies mapResponse around the
 	// static value (compression/caching plugins rely on it), so the
 	// mapped body must reach the wire — the route must not be installed
