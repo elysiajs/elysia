@@ -43,9 +43,19 @@ export type {
 } from './type'
 
 export type { HTTPHeaders, SSEPayload, UnwrapSchema } from './types'
+export type {
+	RouteSchema,
+	InputSchema,
+	UnwrapRoute,
+	Macro,
+	MacroToProperty,
+	MacroToContext
+} from './types'
 export type { Cookie } from './cookie/cookie'
 export type { BaseCookie, CookieOptions } from './cookie/types'
 export type { Server } from './universal/server'
+export type { TCookieObject, TCookieField } from './type/elysia/cookie'
+export type { TFiles } from './type/elysia/files'
 
 export { Elysia }
 export default Elysia
