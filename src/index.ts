@@ -1,4 +1,4 @@
-import { Elysia } from './base'
+import { Elysia, type AnyElysia } from './base'
 
 export { redirect, sse, form, prefix } from './utils'
 export {
@@ -57,5 +57,5 @@ export type { Server } from './universal/server'
 export type { TCookieObject, TCookieField } from './type/elysia/cookie'
 export type { TFiles } from './type/elysia/files'
 
-export { Elysia }
+export { Elysia, AnyElysia }
 export default Elysia

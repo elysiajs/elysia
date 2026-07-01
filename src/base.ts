@@ -5631,108 +5631,17 @@ export class Elysia<
 				)
 	}
 
-	all<
-		const Path extends string,
-		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends IntersectIfObjectSchema<
-			MergeSchema<
-				UnwrapRoute<
-					Input,
-					Definitions['typebox'],
-					JoinPath<BasePath, Path>
-				>,
-				MergeSchema<
-					Volatile['schema'],
-					MergeSchema<Ephemeral['schema'], Metadata['schema']>
-				>,
-				'',
-				undefined extends Input['params'] ? true : false
-			>,
-			MergeScopedSchemas<
-				Metadata['schemas'],
-				Ephemeral['schemas'],
-				Volatile['schemas']
-			>
-		>,
-		const Decorator extends Singleton & {
-			derive: Ephemeral['derive'] & Volatile['derive']
-		},
-		const MacroContext extends {} extends Metadata['macroFn']
-			? {}
-			: MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
-					Definitions['typebox']
-				>,
-		const Handle extends {} extends MacroContext
-			? InlineHandlerNonMacro<NoInfer<Schema>, NoInfer<Decorator>>
-			: InlineHandler<
-					NoInfer<Schema>,
-					NoInfer<Decorator>,
-					// @ts-ignore
-					MacroContext
-				>
-	>(
-		path: Path,
-		hook: LocalHook<
-			Input,
-			// @ts-ignore
-			Schema & MacroContext,
-			Decorator,
-			Definitions['error'],
-			keyof Metadata['parser']
-		>,
-		fn: Handle
-	): this
-	all<
-		const Path extends string,
-		const Schema extends IntersectIfObjectSchema<
-			MergeSchema<
-				UnwrapRoute<
-					{},
-					Definitions['typebox'],
-					JoinPath<BasePath, Path>
-				>,
-				MergeSchema<
-					Volatile['schema'],
-					MergeSchema<Ephemeral['schema'], Metadata['schema']>
-				>,
-				'',
-				true
-			>,
-			MergeScopedSchemas<
-				Metadata['schemas'],
-				Ephemeral['schemas'],
-				Volatile['schemas']
-			>
-		>,
-		const Decorator extends Singleton & {
-			derive: Ephemeral['derive'] & Volatile['derive']
-		},
-		const Handle extends InlineHandlerNonMacro<
-			NoInfer<Schema>,
-			NoInfer<Decorator>
-		>
-	>(path: Path, fn: Handle & Metadata['macro']): this
-	all(path: string, hookOrFn: unknown, fn?: unknown): this {
-		if (fn === undefined) this.#add('*', path, hookOrFn)
-		else this.#add('*', path, fn, hookOrFn as Partial<AnyLocalHook>)
-
-		return this
-	}
-
 	/**
 	 * ### method
-	 * Register a handler for `path` with an arbitrary HTTP `method`
+	 * Register handler for path with custom method
 	 *
 	 * ---
 	 * @example
 	 * ```typescript
-	 * import { Elysia } from 'elysia'
+	 * import { Elysia, t } from 'elysia'
 	 *
 	 * new Elysia()
-	 *     .method('REPORT', '/', () => 'hi')
+	 *     .method('Elysia', '/', 'hi')
 	 * ```
 	 */
 	method<
@@ -5854,10 +5763,106 @@ export class Elysia<
 		{},
 		Handle
 	>
-	method(method: string, path: string, hookOrFn: unknown, fn?: unknown): any {
+	method(
+		method: HTTPMethod,
+		path: string,
+		hookOrFn: unknown,
+		fn?: unknown
+	): any {
 		return fn === undefined
 			? this.#add(method, path, hookOrFn)
 			: this.#add(method, path, fn, hookOrFn as Partial<AnyLocalHook>)
+	}
+
+	all<
+		const Path extends string,
+		const Input extends Metadata['macro'] &
+			InputSchema<keyof Definitions['typebox'] & string>,
+		const Schema extends IntersectIfObjectSchema<
+			MergeSchema<
+				UnwrapRoute<
+					Input,
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>,
+				'',
+				undefined extends Input['params'] ? true : false
+			>,
+			MergeScopedSchemas<
+				Metadata['schemas'],
+				Ephemeral['schemas'],
+				Volatile['schemas']
+			>
+		>,
+		const Decorator extends Singleton & {
+			derive: Ephemeral['derive'] & Volatile['derive']
+		},
+		const MacroContext extends {} extends Metadata['macroFn']
+			? {}
+			: MacroToContext<
+					Metadata['macroFn'],
+					Omit<Input, NonResolvableMacroKey>,
+					Definitions['typebox']
+				>,
+		const Handle extends {} extends MacroContext
+			? InlineHandlerNonMacro<NoInfer<Schema>, NoInfer<Decorator>>
+			: InlineHandler<
+					NoInfer<Schema>,
+					NoInfer<Decorator>,
+					// @ts-ignore
+					MacroContext
+				>
+	>(
+		path: Path,
+		hook: LocalHook<
+			Input,
+			// @ts-ignore
+			Schema & MacroContext,
+			Decorator,
+			Definitions['error'],
+			keyof Metadata['parser']
+		>,
+		fn: Handle
+	): this
+	all<
+		const Path extends string,
+		const Schema extends IntersectIfObjectSchema<
+			MergeSchema<
+				UnwrapRoute<
+					{},
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>,
+				'',
+				true
+			>,
+			MergeScopedSchemas<
+				Metadata['schemas'],
+				Ephemeral['schemas'],
+				Volatile['schemas']
+			>
+		>,
+		const Decorator extends Singleton & {
+			derive: Ephemeral['derive'] & Volatile['derive']
+		},
+		const Handle extends InlineHandlerNonMacro<
+			NoInfer<Schema>,
+			NoInfer<Decorator>
+		>
+	>(path: Path, fn: Handle & Metadata['macro']): this
+	all(path: string, hookOrFn: unknown, fn?: unknown): this {
+		if (fn === undefined) this.#add('*', path, hookOrFn)
+		else this.#add('*', path, fn, hookOrFn as Partial<AnyLocalHook>)
+
+		return this
 	}
 
 	/**
@@ -6055,7 +6060,6 @@ export class Elysia<
 
 		const adapter = this['~config']?.adapter
 
-		// @ts-expect-error
 		if (!adapter?.websocket && !isBun)
 			throw new Error(
 				`[Elysia] WebSocket is not supported on '${adapter?.name ?? 'web-standard'}' adapter.`
@@ -6557,7 +6561,7 @@ export class Elysia<
 		callback?: ListenCallback
 	) {
 		const listen = (
-			(this['~config']?.adapter ?? isBun) ? BunAdapter : undefined
+			this['~config']?.adapter ?? (isBun ? BunAdapter : undefined)
 		)?.listen
 
 		if (!listen) throw new Error('No adapter provided for listen()')

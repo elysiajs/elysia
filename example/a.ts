@@ -4,27 +4,7 @@ import { Validator } from '../src/validator'
 const a = performance.now()
 
 const app = new Elysia()
-	.model({
-		a: t.Object({
-			a: t.String()
-		}),
-		b: t.Object({
-			b: t.String()
-		})
-	})
-	.macro({
-		a: {
-			body: 'a'
-		}
-	})
-	.post(
-		'/',
-		{
-			a: true,
-			body: 'b'
-		},
-		({ body }) => body
-	)
+	.route('Elysia', '/', 'ok')
 
 app.handle('/', {
 	method: 'POST',

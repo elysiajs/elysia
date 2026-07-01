@@ -37,6 +37,13 @@ export interface ElysiaAdapterOptions {
 	 */
 	isWebStandard: boolean
 
+	/**
+	 * Whether this adapter supports WebSocket.
+	 *
+	 * `.ws()` throws on non-Bun runtimes unless this is set.
+	 */
+	websocket?: boolean
+
 	listen?(
 		app: AnyElysia,
 		options: string | number | Partial<Serve>,
