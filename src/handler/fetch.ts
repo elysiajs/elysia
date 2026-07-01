@@ -14,12 +14,20 @@ import {
 	isNotEmpty
 } from '../utils'
 import { handleSet } from '../adapter/utils'
-import { NotFound } from '../error'
+import { NotFound, PROBLEM_JSON } from '../error'
 import { createTracer } from '../trace'
 
 import type { CompiledHandler, MaybePromise } from '../types'
 
-const getNotFound = cachedResponse('Not Found', 404)
+// RFC 9457 problem+json for the default unmatched-route 404
+const NOT_FOUND_BODY = JSON.stringify({
+	type: 'not-found',
+	title: 'Not Found',
+	status: 404
+})
+const getNotFound = cachedResponse(NOT_FOUND_BODY, 404, {
+	'content-type': PROBLEM_JSON
+})
 
 // Default 404 that still emits `Elysia.headers` defaults / hook-set headers + cookies.
 function notFound(context: Context): Response {
@@ -28,7 +36,10 @@ function notFound(context: Context): Response {
 	if (set.cookie || isNotEmpty(set.headers)) {
 		handleSet(set)
 
-		return new Response('Not Found', {
+		if (!(set.headers as any)['content-type'])
+			(set.headers as any)['content-type'] = PROBLEM_JSON
+
+		return new Response(NOT_FOUND_BODY, {
 			status: 404,
 			headers: set.headers as any
 		})

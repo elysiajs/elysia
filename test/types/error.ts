@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { Elysia, NotFound, status } from '../../src'
+import { Elysia, NotFound, status, problem } from '../../src'
 
 import { expectTypeOf } from 'expect-type'
 
@@ -314,4 +314,35 @@ class OtherError extends Error {
 	expectTypeOf<
 		(typeof resolved)['~Routes']['x']['get']['response'][500]
 	>().toEqualTypeOf<'handled'>()
+}
+
+/**
+ * `problem()` wraps ElysiaStatus, so a returned problem infers its body under
+ * the numeric status code — the point of wrapping status() rather than a bare
+ * error class.
+ */
+{
+	const app = new Elysia().get('/', () => problem({ status: 409 }))
+
+	expectTypeOf<
+		(typeof app)['~Routes']['get']['response'][409]
+	>().toMatchTypeOf<{ type: string; title: string; status: 409 }>()
+}
+
+// a StatusMap name maps to the numeric code key
+{
+	const app = new Elysia().get('/', () => problem({ status: 'Conflict' }))
+
+	expectTypeOf<
+		(typeof app)['~Routes']['get']['response'][409]
+	>().toMatchTypeOf<{ status: 409 }>()
+}
+
+// extension members flow into the inferred body
+{
+	const app = new Elysia().get('/', () => problem({ status: 409, sku: 42 }))
+
+	expectTypeOf<
+		(typeof app)['~Routes']['get']['response'][409]
+	>().toMatchTypeOf<{ sku: number }>()
 }

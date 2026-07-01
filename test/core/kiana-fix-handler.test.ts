@@ -21,7 +21,12 @@ describe('handler fixes (kiana)', () => {
 		const res = await app.handle(req('/nope'))
 
 		expect(res.status).toBe(404)
-		await expect(res.text()).resolves.toBe('Not Found')
+		// unmatched route → RFC 9457 problem+json 404 (still 404, not 500)
+		await expect(res.json()).resolves.toEqual({
+			type: 'not-found',
+			title: 'Not Found',
+			status: 404
+		})
 	})
 
 	// idx4 — a returning error handler whose value is a plain domain object that

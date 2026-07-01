@@ -7,7 +7,7 @@ import { getAsyncIndexes, createErrorHandler } from '../../handler'
 import { flattenChain, nullObject } from '../../utils'
 
 import { WebStandardAdapter } from '../web-standard'
-import { NotFound } from '../../error'
+import { NotFound, problemResponse } from '../../error'
 
 import type { AnyElysia } from '../../base'
 import type { Context } from '../../context'
@@ -108,7 +108,7 @@ export function createRouteMap(app: AnyElysia) {
 	const handleError = createErrorHandler(
 		flattenChain(app['~hookChain'])?.error,
 		WebStandardAdapter.response.map,
-		new Response('Not Found', { status: 404 }),
+		problemResponse({ status: 404, type: 'not-found', title: 'Not Found' }),
 		app['~config']?.allowUnsafeValidationDetails
 	)
 

@@ -234,9 +234,16 @@ describe('kiana validator fixes', () => {
 			prodPayload = error.payload
 		}
 
-		// WHY: production must omit schema-revealing detail.
+		// WHY: production must omit schema-revealing detail (no errors/property/
+		// expected/detail); only the RFC 9457 envelope + safe `on`/`found` remain.
 		expect(prodPayload.errors).toBeUndefined()
-		expect(Object.keys(prodPayload).sort()).toEqual(['found', 'on', 'type'])
+		expect(Object.keys(prodPayload).sort()).toEqual([
+			'found',
+			'on',
+			'status',
+			'title',
+			'type'
+		])
 	})
 
 	// idx16 control — agreeing nested defaults stay correct (value is right even

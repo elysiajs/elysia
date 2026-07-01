@@ -35,15 +35,27 @@ describe('NODE_ENV=production', () => {
 		)
 	})
 
+	// An unhandled error becomes an RFC 9457 problem+json 500. In production the
+	// body collapses to `{type,title,status}` — `detail`/`name`/`cause` are
+	// dropped so a thrown secret can never reach the client.
 	it('masks unhandled generic error messages', async () => {
 		const app = new Elysia().get('/', () => {
 			throw new Error('SECRET: database password leaked from driver')
 		})
 
 		const response = await app.handle(new Request('http://localhost/'))
+		const text = await response.text()
 
-		await expect(response.text()).resolves.toBe('Internal Server Error')
+		expect(text).not.toContain('SECRET')
+		expect(JSON.parse(text)).toEqual({
+			type: 'unknown',
+			title: 'Internal Server Error',
+			status: 500
+		})
 		expect(response.status).toBe(500)
+		expect(response.headers.get('content-type')).toBe(
+			'application/problem+json'
+		)
 	})
 
 	it('masks returned Error messages', async () => {
@@ -57,8 +69,14 @@ describe('NODE_ENV=production', () => {
 		})
 
 		const response = await app.handle(new Request('http://localhost/'))
+		const text = await response.text()
 
-		await expect(response.text()).resolves.toBe('Internal Server Error')
+		expect(text).not.toContain('SECRET')
+		expect(JSON.parse(text)).toEqual({
+			type: 'unknown',
+			title: 'Internal Server Error',
+			status: 500
+		})
 		expect(response.status).toBe(500)
 	})
 
@@ -71,8 +89,9 @@ describe('NODE_ENV=production', () => {
 		const response = mapCompactResponse(error)
 
 		await expect(response.json()).resolves.toEqual({
-			name: 'Error',
-			message: 'Internal Server Error'
+			type: 'unknown',
+			title: 'Internal Server Error',
+			status: 500
 		})
 		expect(response.status).toBe(500)
 	})

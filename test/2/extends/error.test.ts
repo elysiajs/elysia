@@ -117,7 +117,13 @@ describe('Error handler', () => {
 		const response = await app.handle(req('/'))
 
 		expect(response.status).toBe(500)
-		await expect(response.text()).resolves.toBe('oops')
+		// unregistered error → RFC 9457 problem+json 500 (message as `detail`)
+		await expect(response.json()).resolves.toMatchObject({
+			type: 'unknown',
+			title: 'Internal Server Error',
+			status: 500,
+			detail: 'oops'
+		})
 	})
 
 	it('forward error resolved from a promise on a sync route', async () => {
@@ -128,7 +134,12 @@ describe('Error handler', () => {
 		const response = await app.handle(req('/'))
 
 		expect(response.status).toBe(500)
-		await expect(response.text()).resolves.toBe('oops')
+		await expect(response.json()).resolves.toMatchObject({
+			type: 'unknown',
+			title: 'Internal Server Error',
+			status: 500,
+			detail: 'oops'
+		})
 	})
 
 	it('run handlers in registration order for subclasses', async () => {
@@ -200,15 +211,16 @@ describe('Error handler', () => {
 			.use(new Elysia().use(global))
 			.get('/', route)
 
+		// out-of-scope handler → uncaught CustomError → problem+json 500 (detail 'A')
 		await expect(
-			fromLocal.handle(req('/')).then((x) => x.text())
-		).resolves.toBe('A')
+			fromLocal.handle(req('/')).then((x) => x.json())
+		).resolves.toMatchObject({ status: 500, detail: 'A' })
 		await expect(
 			fromPlugin.handle(req('/')).then((x) => x.text())
 		).resolves.toBe('handled')
 		await expect(
-			fromPluginDeep.handle(req('/')).then((x) => x.text())
-		).resolves.toBe('A')
+			fromPluginDeep.handle(req('/')).then((x) => x.json())
+		).resolves.toMatchObject({ status: 500, detail: 'A' })
 		await expect(
 			fromGlobalDeep.handle(req('/')).then((x) => x.text())
 		).resolves.toBe('handled')
@@ -233,7 +245,12 @@ describe('Error handler', () => {
 		const plain = await app.handle(req('/plain'))
 
 		expect(plain.status).toBe(500)
-		await expect(plain.text()).resolves.toBe('plain')
+		// non-CustomError falls through the catch-all → problem+json 500
+		await expect(plain.json()).resolves.toMatchObject({
+			type: 'unknown',
+			status: 500,
+			detail: 'plain'
+		})
 	})
 
 	// Regression (audit H1): an instance-level `.onError` on a plugin must NOT

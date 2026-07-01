@@ -1,11 +1,14 @@
-import { getAsyncIndexes, cachedResponse } from './utils'
+import { getAsyncIndexes } from './utils'
 import { parseQueryFromURL } from '../parse-query'
-import { ValidationError, ElysiaStatus, isProduction } from '../error'
+import {
+	ValidationError,
+	ElysiaStatus,
+	isProduction,
+	internalServerErrorResponse
+} from '../error'
 
 import type { Context } from '../context'
 import type { AppHook } from '../types'
-
-const getDefaultError = cachedResponse('Internal Server Error', 500)
 
 // bypass the compiled-route codegen
 function parseQuery(context: Context) {
@@ -66,6 +69,9 @@ function fallbackErrorResponse(
 	) => unknown,
 	defaultError?: Response
 ): unknown {
+	if (error instanceof ElysiaStatus)
+		return mapResponse(error, context.set, context)
+
 	if (error?.status) {
 		const body =
 			error.response !== undefined
@@ -83,13 +89,15 @@ function fallbackErrorResponse(
 			context.set.status = 500
 
 		return mapResponse(
-			isProduction() ? 'Internal Server Error' : error.message,
+			internalServerErrorResponse(error),
 			context.set,
 			context
 		)
 	}
 
-	return defaultError ? defaultError.clone() : getDefaultError()
+	return defaultError
+		? defaultError.clone()
+		: internalServerErrorResponse(error)
 }
 
 function applyErrorStatus(context: Context, error: any): void {

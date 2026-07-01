@@ -672,8 +672,10 @@ app.use(plugin).group(
 			200: number
 			422: {
 				type: 'validation'
+				title: 'Validation Error'
+				status: 422
+				detail?: string
 				on: string
-				message?: string
 				found?: unknown
 				property?: string
 				expected?: string
@@ -751,8 +753,10 @@ app.use(plugin).group(
 		response: {
 			422: {
 				type: 'validation'
+				title: 'Validation Error'
+				status: 422
+				detail?: string
 				on: string
-				message?: string
 				found?: unknown
 				property?: string
 				expected?: string
@@ -1336,8 +1340,10 @@ const a = app
 		201: string
 		422: {
 			type: 'validation'
+			title: 'Validation Error'
+			status: 422
+			detail?: string
 			on: string
-			message?: string
 			found?: unknown
 			property?: string
 			expected?: string
@@ -1353,8 +1359,10 @@ const a = app
 		202: boolean
 		422: {
 			type: 'validation'
+			title: 'Validation Error'
+			status: 422
+			detail?: string
 			on: string
-			message?: string
 			found?: unknown
 			property?: string
 			expected?: string

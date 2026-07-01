@@ -1,4 +1,9 @@
-import { ElysiaStatus, ParseError, ValidationError } from '../../error'
+import {
+	ElysiaStatus,
+	ParseError,
+	ValidationError,
+	internalServerErrorResponse
+} from '../../error'
 import { parseQueryFromURL } from '../../parse-query'
 import {
 	parseCookieRaw,
@@ -46,6 +51,8 @@ export const HANDLER_PARAMS: Record<string, Resolver> = {
 	pq: () => parseQueryFromURL,
 	pe: () => ParseError,
 	es: () => ElysiaStatus,
+	// RFC 9457 problem+json for an unhandled error in the codegen error tail
+	ise: () => internalServerErrorResponse,
 	// allowUnsafeValidationDetails opt-in: `e instanceof verr` in the error catch
 	verr: () => ValidationError,
 	tee: () => tee,

@@ -2039,8 +2039,10 @@ export type ComposeElysiaResponse<
 				: {
 						422: {
 							type: 'validation'
+							title: 'Validation Error'
+							status: 422
+							detail?: string
 							on: string
-							message?: string
 							found?: unknown
 							property?: string
 							expected?: string

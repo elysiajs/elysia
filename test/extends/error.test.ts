@@ -74,7 +74,7 @@ describe('Error extends', () => {
 		expect(response.status).toBe(404)
 	})
 
-	it('validation error should be application/json', async () => {
+	it('validation error should be application/problem+json', async () => {
 		const app = new Elysia().get(
 			'/',
 			{
@@ -87,7 +87,9 @@ describe('Error extends', () => {
 		const response = await app.handle(req('/'))
 
 		expect(response.status).toBe(422)
-		expect(response.headers.get('content-type')).toBe('application/json')
+		expect(response.headers.get('content-type')).toBe(
+			'application/problem+json'
+		)
 	})
 
 	it('validation error should handle Standard Schema with error.detail', async () => {

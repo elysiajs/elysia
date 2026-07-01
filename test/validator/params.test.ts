@@ -139,7 +139,7 @@ describe('Params Validator', () => {
 			type: 'validation',
 			on: 'params',
 			property: '/id',
-			message: 'must be number',
+			detail: 'must be number',
 			found: {
 				id: '617.1234'
 			},

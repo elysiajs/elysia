@@ -8,7 +8,11 @@ import {
 import { isBun } from '../../universal/constants'
 import { ElysiaFile, mime } from '../../universal/file'
 import { formToFormData, isNotEmpty, nullObject } from '../../utils'
-import { ElysiaStatus, isProduction } from '../../error'
+import {
+	ElysiaStatus,
+	internalServerErrorBody,
+	PROBLEM_JSON
+} from '../../error'
 
 import type { Context } from '../../context'
 import type { MaybePromise } from '../../types'
@@ -99,6 +103,11 @@ export function mapResponse(
 
 			case 'ElysiaStatus':
 				set.status = (response as ElysiaStatus<200>).code
+				if ((response as ElysiaStatus<200>).headers)
+					Object.assign(
+						headers,
+						(response as ElysiaStatus<200>).headers
+					)
 
 				return mapResponse(
 					(response as ElysiaStatus<200>).response,
@@ -135,6 +144,9 @@ export function mapResponse(
 
 	if (response instanceof ElysiaStatus) {
 		set.status = (response as ElysiaStatus<200>).code
+		if ((response as ElysiaStatus<200>).headers)
+			Object.assign(set.headers, (response as ElysiaStatus<200>).headers)
+
 		return mapResponse(
 			(response as ElysiaStatus<200>).response,
 			set,
@@ -201,8 +213,13 @@ export function mapCompactResponse(
 		case 'ElysiaStatus':
 			return mapResponse((response as ElysiaStatus<200>).response, {
 				status: (response as ElysiaStatus<200>).code,
-				headers: nullObject()
-			})
+				headers: (response as ElysiaStatus<200>).headers
+					? Object.assign(
+							nullObject(),
+							(response as ElysiaStatus<200>).headers
+						)
+					: nullObject()
+			} as Context['set'])
 
 		case undefined:
 			return response ? Response.json(response) : new Response('')
@@ -252,25 +269,16 @@ export function errorToResponse(
 		return typeof raw?.then === 'function' ? raw.then(apply) : apply(raw)
 	}
 
-	const headers = (set?.headers ?? nullObject()) as Record<string, string>
+	const status =
+		set?.status && set.status !== 200 ? (set.status as number) : 500
 
-	return Response.json(
-		isProduction()
-			? {
-					name: error?.name,
-					message: 'Internal Server Error'
-				}
-			: {
-					name: error?.name,
-					message: error?.message,
-					cause: error?.cause
-				},
-		{
-			status:
-				set?.status !== 200 ? ((set?.status as number) ?? 500) : 500,
-			headers
-		}
-	)
+	const body = internalServerErrorBody(error)
+	body.status = status
+
+	const headers = (set?.headers ?? nullObject()) as Record<string, string>
+	headers['content-type'] = PROBLEM_JSON
+
+	return new Response(JSON.stringify(body), { status, headers })
 }
 
 function mapFallback(
@@ -301,11 +309,15 @@ function mapFallback(
 		if (response instanceof ElysiaStatus) {
 			if (set) {
 				set.status = response.code
+				if (response.headers)
+					set.headers = { ...set.headers, ...response.headers }
 				return map(response.response, set, request)
 			} else
 				return mapResponse((response as ElysiaStatus<200>).response, {
 					status: (response as ElysiaStatus<200>).code,
-					headers: {}
+					headers: response.headers
+						? { ...response.headers }
+						: {}
 				})
 		}
 

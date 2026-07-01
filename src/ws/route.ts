@@ -6,7 +6,11 @@ import { composeRouteHook } from '../compile/handler'
 
 import { ElysiaWS, isGeneratorObject, type WSConnectionData } from './context'
 import { createMessageParser } from './parser'
-import { ValidationError } from '../error'
+import {
+	ValidationError,
+	internalServerErrorResponse,
+	problemResponse
+} from '../error'
 
 import { isBun } from '../universal/constants'
 
@@ -209,17 +213,20 @@ export function buildWSRoute(
 				if (r instanceof Response) return r
 			} catch {}
 
-		const status = error?.status ?? 500
-		const body =
-			error?.response !== undefined
-				? typeof error.response === 'object'
+		// User-provided error body → keep as-is; unexpected Error → problem+json
+		if (error?.response !== undefined) {
+			const status = error?.status ?? 500
+			const body =
+				typeof error.response === 'object'
 					? JSON.stringify(error.response)
 					: String(error.response)
-				: error instanceof Error
-					? error.message
-					: String(error)
 
-		return new Response(body, { status })
+			return new Response(body, { status })
+		}
+
+		if (error instanceof Error) return internalServerErrorResponse(error)
+
+		return new Response(String(error), { status: error?.status ?? 500 })
 	}
 
 	async function handleError(ws: ElysiaWS<any>, error: unknown) {
@@ -575,10 +582,12 @@ export function buildWSRoute(
 
 			const server = (app as any).server as Server | null
 			if (!server)
-				return new Response(
-					'WebSocket upgrade requires a running server. Call .listen() first.',
-					{ status: 500 }
-				)
+				return problemResponse({
+					status: 500,
+					type: 'internal-server-error',
+					title: 'Internal Server Error',
+					detail: 'WebSocket upgrade requires a running server. Call .listen() first.'
+				})
 
 			const connectionData: WSConnectionData = {
 				id: '',

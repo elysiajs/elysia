@@ -13,10 +13,31 @@ export class ElysiaError<
 	status?: Status
 	response?: Response
 
+	/** RFC 9457 problem `type` slug (overridden per subclass) */
+	problemType = 'about:blank'
+	/** RFC 9457 problem `title` (overridden per subclass) */
+	problemTitle?: string
+
 	constructor(message: string, cause?: Error) {
 		super(message)
 		this.name = this.constructor.name
 		if (cause) this.cause = cause
+	}
+
+	toResponse(headers?: Record<string, any>) {
+		return problemResponse(
+			{
+				type: this.problemType,
+				title: this.problemTitle,
+				status: this.status ?? 500,
+				detail:
+					this.response !== undefined &&
+					this.response !== this.problemTitle
+						? this.response
+						: undefined
+			},
+			headers
+		)
 	}
 }
 
@@ -33,6 +54,8 @@ export const validationDetail =
 
 export class InternalServerError extends ElysiaError {
 	status = 500 as const
+	problemType = 'internal-server-error'
+	problemTitle = 'Internal Server Error'
 
 	constructor(
 		public response = 'Internal Server Error',
@@ -44,6 +67,8 @@ export class InternalServerError extends ElysiaError {
 
 export class NotFound extends ElysiaError {
 	status = 404 as const
+	problemType = 'not-found'
+	problemTitle = 'Not Found'
 
 	constructor(public response = 'Not Found') {
 		super(response)
@@ -53,6 +78,8 @@ export class NotFound extends ElysiaError {
 export class ParseError extends ElysiaError {
 	status = 400 as const
 	response = 'Bad Request'
+	problemType = 'parse'
+	problemTitle = 'Bad Request'
 
 	constructor(cause?: Error) {
 		super('Bad Request', cause)
@@ -386,6 +413,8 @@ export class ValidationError extends ElysiaError {
 		if (this.#productionDetail)
 			return {
 				type: 'validation',
+				title: 'Validation Error',
+				status: 422,
 				on: this.type,
 				found: scopeFound(this.value, first)
 			}
@@ -394,7 +423,7 @@ export class ValidationError extends ElysiaError {
 			? propertyAccessor(first.instancePath ?? first.path)
 			: 'root'
 
-		const message = first?.message ?? this.message
+		const detail = first?.message ?? this.message
 		const errors = (this.errors ?? []).filter(Boolean)
 
 		let expected: unknown
@@ -411,9 +440,11 @@ export class ValidationError extends ElysiaError {
 
 		return {
 			type: 'validation',
+			title: 'Validation Error',
+			status: 422,
+			detail,
 			on: this.type,
 			property,
-			message,
 			expected,
 			found: scopeFound(this.value, first),
 			errors
@@ -441,18 +472,14 @@ export class ValidationError extends ElysiaError {
 			)
 		}
 
-		return new Response(JSON.stringify(this.payload), {
-			status: 422,
-			headers: {
-				...headers,
-				'content-type': 'application/json'
-			}
-		})
+		return problemResponse(this.payload, headers)
 	}
 }
 
 export class InvalidCookieSignature extends ElysiaError {
 	status = 400 as const
+	problemType = 'invalid-cookie-signature'
+	problemTitle = 'Invalid Cookie Signature'
 
 	constructor(
 		public key: string,
@@ -474,8 +501,9 @@ export class ElysiaStatus<
 > {
 	code: Status
 	response!: T
+	headers?: Record<string, string>
 
-	constructor(code: Code, res: T) {
+	constructor(code: Code, res: T, headers?: Record<string, string>) {
 		const response =
 			res ??
 			(code in StatusMapBack
@@ -485,6 +513,8 @@ export class ElysiaStatus<
 		this.code = (StatusMap[code as keyof StatusMap] as Status) ?? code
 
 		if (!emptyHttpStatus.has(code as number)) this.response = response as T
+
+		this.headers = headers
 	}
 
 	get status() {
@@ -499,6 +529,110 @@ export const status = <
 	code: Code,
 	response?: T
 ) => new ElysiaStatus<Code, T>(code, response as T)
+
+export const PROBLEM_JSON = 'application/problem+json'
+
+/**
+ * RFC 9457 Problem Details shape.
+ *
+ * @see https://www.rfc-editor.org/info/rfc9457/
+ */
+export type Problem<
+	Code extends number | keyof StatusMap = number | keyof StatusMap,
+	Extension extends Record<string, unknown> = {}
+> = {
+	/** URI (or slug) identifying the problem type. @default 'about:blank' */
+	type?: string
+
+	/** Short, human-readable summary of the problem type */
+	title?: string
+
+	/** HTTP status — a number or a `StatusMap` name (e.g. `'Conflict'`) */
+	status?: Code
+	/** Human-readable explanation specific to this occurrence */
+
+	detail?: string
+	/** URI identifying the specific occurrence of the problem */
+
+	instance?: string
+} & Extension
+
+type NumericStatus<Code extends number | keyof StatusMap> =
+	Code extends keyof StatusMap ? StatusMap[Code] : Code
+
+type ProblemStatus<P> = P extends {
+	status: infer S extends number | keyof StatusMap
+}
+	? NumericStatus<S>
+	: 500
+
+export function problemBody(
+	p: Problem
+): Record<string, unknown> & { status: number } {
+	const status =
+		typeof p.status === 'string'
+			? (StatusMap[p.status] ?? 500)
+			: (p.status ?? 500)
+
+	const body: any = { type: 'about:blank', ...p, status }
+	if (body.title == null)
+		body.title =
+			(StatusMapBack as Record<number, string>)[status] ?? 'Error'
+
+	return body
+}
+
+export function problemResponse(p: Problem, headers?: Record<string, any>) {
+	const body = problemBody(p)
+
+	return new Response(
+		emptyHttpStatus.has(body.status) ? null : JSON.stringify(body),
+		{
+			status: body.status,
+			headers: { ...headers, 'content-type': PROBLEM_JSON }
+		}
+	)
+}
+
+export function internalServerErrorBody(error: any) {
+	const body: Record<string, unknown> = {
+		type: 'unknown',
+		title: 'Internal Server Error',
+		status: 500
+	}
+
+	if (!isProduction()) {
+		if (error?.message != null) body.detail = error.message
+		if (error?.name) body.name = error.name
+		if (error?.cause !== undefined) body.cause = error.cause
+	}
+
+	return body
+}
+
+export const internalServerErrorResponse = (error: any): Response =>
+	new Response(JSON.stringify(internalServerErrorBody(error)), {
+		status: 500,
+		headers: { 'content-type': PROBLEM_JSON }
+	})
+
+export const problem = <const P extends Problem>(
+	detail: P
+): ElysiaStatus<
+	ProblemStatus<P>,
+	{
+		type: string
+		title: string
+		status: ProblemStatus<P>
+		detail?: string
+		instance?: string
+	} & Omit<P, keyof Problem>
+> =>
+	new ElysiaStatus(
+		(detail.status ?? 500) as any,
+		problemBody(detail) as any,
+		{ 'content-type': PROBLEM_JSON }
+	)
 
 type CheckExcessProps<T, U> = 0 extends 1 & T
 	? T // T is any

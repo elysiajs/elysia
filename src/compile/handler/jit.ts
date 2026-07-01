@@ -16,7 +16,12 @@ import {
 	signCookieValues
 } from '../../cookie/utils'
 
-import { ElysiaStatus, ParseError, ValidationError } from '../../error'
+import {
+	ElysiaStatus,
+	ParseError,
+	ValidationError,
+	internalServerErrorResponse
+} from '../../error'
 import { isDynamicRegex } from '../../constants'
 import { forwardError } from '../../handler/utils'
 import { hasHeaderShorthand } from '../../universal/constants'
@@ -868,6 +873,7 @@ export function compileHandlerJit({
 		if (hasErrorHook) {
 			link(hook!.error!, 'er')
 			link(ElysiaStatus, 'es')
+			link(internalServerErrorResponse, 'ise')
 
 			const allowUnsafeDetail =
 				!!root['~config']?.allowUnsafeValidationDetails
@@ -901,9 +907,9 @@ export function compileHandlerJit({
 				`if(e?.status){${signPrefix}return ${map}(e?.response??e?.message??'',c.set,c.request)}\n` +
 				`c.set.status=500\n` +
 				signPrefix +
-				// Mirror `fallbackErrorResponse`: an unhandled error responds
-				// with its message
-				`return ${map}(e?.message!=null?e.message:'Internal Server Error',c.set,c.request)\n`
+				// Mirror `fallbackErrorResponse`: an unhandled error responds with
+				// an RFC 9457 problem+json 500
+				`return ${map}(ise(e),c.set,c.request)\n`
 		} else {
 			body += endTrace() + schedule
 			body += `throw e\n`

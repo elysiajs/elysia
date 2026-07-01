@@ -3,6 +3,8 @@ import { Elysia, type AnyElysia } from './base'
 export { redirect, sse, form, prefix } from './utils'
 export {
 	status,
+	problem,
+	type Problem,
 	ElysiaError,
 	ElysiaStatus,
 	NotFound,

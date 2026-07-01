@@ -257,7 +257,13 @@ describe('Path', () => {
 		const res = await app.handle(req('/error'))
 
 		expect(res.status).toBe(500)
-		await expect(res.text()).resolves.toBe(error)
+		// returned Error → RFC 9457 problem+json 500 (message surfaced as detail)
+		await expect(res.json()).resolves.toMatchObject({
+			type: 'unknown',
+			title: 'Internal Server Error',
+			status: 500,
+			detail: error
+		})
 	})
 
 	it('handle async', async () => {

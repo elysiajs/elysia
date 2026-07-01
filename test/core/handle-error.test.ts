@@ -4,6 +4,7 @@ import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
 
 describe('Handle Error', () => {
+	// Built-in errors serialize as RFC 9457 problem+json
 	it('handle NOT_FOUND', async () => {
 		const res = await new Elysia()
 			.get('/', () => {
@@ -11,8 +12,13 @@ describe('Handle Error', () => {
 			})
 			.handle(req('/'))
 
-		await expect(res.text()).resolves.toBe('Not Found')
+		await expect(res.json()).resolves.toEqual({
+			type: 'not-found',
+			title: 'Not Found',
+			status: 404
+		})
 		expect(res.status).toBe(404)
+		expect(res.headers.get('content-type')).toBe('application/problem+json')
 	})
 
 	it('handle INTERNAL_SERVER_ERROR', async () => {
@@ -22,7 +28,11 @@ describe('Handle Error', () => {
 			})
 			.handle(req('/'))
 
-		await expect(res.text()).resolves.toBe('Internal Server Error')
+		await expect(res.json()).resolves.toEqual({
+			type: 'internal-server-error',
+			title: 'Internal Server Error',
+			status: 500
+		})
 		expect(res.status).toBe(500)
 	})
 
@@ -229,7 +239,13 @@ describe('Handle Error', () => {
 		const response = await new Elysia().use(route).handle(req('/?aid=a'))
 
 		expect(response.status).toEqual(404)
-		await expect(response.text()).resolves.toEqual('foo')
+		// NotFound('foo') → problem+json with the custom message as `detail`
+		await expect(response.json()).resolves.toEqual({
+			type: 'not-found',
+			title: 'Not Found',
+			status: 404,
+			detail: 'foo'
+		})
 	})
 
 	it('map status error to response', async () => {
@@ -270,6 +286,8 @@ describe('Handle Error', () => {
 		expect(response.status).toEqual(422)
 	})
 
+	// An unhandled generic error → problem+json 500. Outside production the
+	// thrown message is surfaced as `detail`.
 	it('handle generic error', async () => {
 		const res = await new Elysia()
 			.get('/', () => {
@@ -278,7 +296,12 @@ describe('Handle Error', () => {
 			})
 			.handle(req('/'))
 
-		await expect(res.text()).resolves.toBe('a')
+		await expect(res.json()).resolves.toMatchObject({
+			type: 'unknown',
+			title: 'Internal Server Error',
+			status: 500,
+			detail: 'a'
+		})
 		expect(res.status).toBe(500)
 	})
 
@@ -289,7 +312,12 @@ describe('Handle Error', () => {
 
 		const res = await app.handle(req('/'))
 
-		await expect(res.text()).resolves.toBe('a')
+		await expect(res.json()).resolves.toMatchObject({
+			type: 'unknown',
+			title: 'Internal Server Error',
+			status: 500,
+			detail: 'a'
+		})
 		expect(res.status).toBe(500)
 	})
 
@@ -515,7 +543,14 @@ describe('Handle Error', () => {
 		const res = await app.handle(req('/'))
 
 		expect(res.status).toBe(500)
-		await expect(res.text()).resolves.toBe('original error')
+		// toResponse() threw → fall back to the RFC 9457 problem+json 500, with
+		// the original error message surfaced as `detail` (non-production)
+		await expect(res.json()).resolves.toMatchObject({
+			type: 'unknown',
+			title: 'Internal Server Error',
+			status: 500,
+			detail: 'original error'
+		})
 	})
 
 	it('handle async toResponse() that throws an error', async () => {
@@ -532,7 +567,14 @@ describe('Handle Error', () => {
 		const res = await app.handle(req('/'))
 
 		expect(res.status).toBe(500)
-		await expect(res.text()).resolves.toBe('original error')
+		// toResponse() threw → fall back to the RFC 9457 problem+json 500, with
+		// the original error message surfaced as `detail` (non-production)
+		await expect(res.json()).resolves.toMatchObject({
+			type: 'unknown',
+			title: 'Internal Server Error',
+			status: 500,
+			detail: 'original error'
+		})
 	})
 
 	it('send set-cookie header when error is thrown', async () => {

@@ -59,9 +59,16 @@ describe('inline handler fast path (no new Function eval)', () => {
 		const rc = await codegen.handle(req('/'))
 
 		expect(ri.status).toBe(500)
-		await expect(ri.text()).resolves.toBe('boom')
+		// generic 500 → problem+json; inline path must match codegen byte-for-byte
+		const bi = await ri.json()
+		expect(bi).toMatchObject({
+			type: 'unknown',
+			title: 'Internal Server Error',
+			status: 500,
+			detail: 'boom'
+		})
 		expect(rc.status).toBe(ri.status)
-		await expect(rc.text()).resolves.toBe('boom')
+		await expect(rc.json()).resolves.toEqual(bi)
 	})
 
 	it('forwards a rejecting Promise returned by a sync handler', async () => {
@@ -70,7 +77,12 @@ describe('inline handler fast path (no new Function eval)', () => {
 		)
 		const res = await app.handle(req('/'))
 		expect(res.status).toBe(500)
-		await expect(res.text()).resolves.toBe('rejected')
+		await expect(res.json()).resolves.toMatchObject({
+			type: 'unknown',
+			title: 'Internal Server Error',
+			status: 500,
+			detail: 'rejected'
+		})
 	})
 
 	it('resolves a Promise returned by a sync handler to its value', async () => {
