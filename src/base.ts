@@ -2300,12 +2300,6 @@ export class Elysia<
 		return this.#onBranch('trace', scopeOrFn as any, fn as any)
 	}
 
-	// Promote the locally-accumulated lifecycle one scope outward.
-	// `'plugin'` collapses the Volatile (local) channel into Ephemeral (plugin);
-	// `'global'` collapses both Volatile and Ephemeral into Singleton / Metadata
-	// / Definitions. The drained channels reset to their defaults, mirroring the
-	// runtime scope re-stamp in `#as`. Channeling matches `.derive`
-	// and the per-scope `schemas`/`error` rule documented on EphemeralType.
 	as(type: 'plugin'): Elysia<
 		BasePath,
 		Scope,

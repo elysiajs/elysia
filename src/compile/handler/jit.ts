@@ -227,7 +227,6 @@ const createInlineHandlerWithSet = (
 		return map(r, c.set, c.request)
 	}) as CompiledHandler
 
-
 export interface CompileHandlerJitOptions {
 	method: string
 	path: string
@@ -320,24 +319,30 @@ export function compileHandlerJit({
 	const hasTrace = !!traceHandlers?.length
 	const traceCount = hasTrace ? traceHandlers!.length : 0
 
-	const beginTrace = (phase: TraceEvent, total: number): string => {
+	const beginTrace = (
+		phase: TraceEvent,
+		total: number,
+		name: string = phase
+	) => {
 		if (!hasTrace) return ''
 		let s = ''
 		for (let i = 0; i < traceCount; i++)
 			s +=
 				`rp${i}=tr${i}.${phase}({` +
-				`id:c.rid,event:'${phase}',name:'${phase}',` +
+				`id:c.rid,event:'${phase}',name:${JSON.stringify(name)},` +
 				`begin:performance.now(),total:${total}` +
 				`})\n`
 
 		return s
 	}
 
-	const endTrace = (errBinding?: string): string => {
+	const endTrace = (errBinding?: string) => {
 		if (!hasTrace) return ''
+
 		let s = ''
 		for (let i = 0; i < traceCount; i++)
 			s += `rp${i}.resolve(${errBinding ?? ''})\n`
+
 		return s
 	}
 
@@ -724,7 +729,7 @@ export function compileHandlerJit({
 					? (handler as any).name
 					: 'anonymous'
 
-			code += beginTrace('handle', 1)
+			code += beginTrace('handle', 1, handleName)
 			const handleChild = buildReport('handle')!.resolveChild(handleName)
 			code += handleChild.begin
 			if (hasBeforeHandle)

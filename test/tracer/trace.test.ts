@@ -518,14 +518,16 @@ describe('trace', () => {
 
 				done.resolve()
 			})
-			.get('/', () => 'hi')
+			.get('/', function hi() {
+				return 'hi'
+			})
 
 		const response = await app.handle(req('/'))
 		await expect(response.text()).resolves.toBe('hi')
 
 		await done.promise
 
-		expect(name).toBe('handle')
+		expect(name).toBe('hi')
 		expect(endsAfterBegin).toBe(true)
 		expect(resolvedError).toBeNull()
 	})

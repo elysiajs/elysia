@@ -1,22 +1,13 @@
-import { Elysia, t } from '../src'
-import { Validator } from '../src/validator'
-
-const a = performance.now()
+import { Elysia } from "../src";
 
 const app = new Elysia()
-	.route('Elysia', '/', 'ok')
-
-app.handle('/', {
-	method: 'POST',
-	headers: {
-		'Content-Type': 'application/json'
-	},
-	body: JSON.stringify({
-		a: 'a',
-		b: 'test'
+	.trace('global', ({ onHandle }) => {
+		onHandle(({ name }) => {
+			console.log(name) // should be 'a' not 'handle'
+		})
 	})
-})
-	.then((x) => x.json())
-	.then(console.log)
+	.get('/', function a() {
+		return 'ok'
+	})
 
-console.log(`🦊 App ready in ${(performance.now() - a).toFixed(6)}ms`)
+app.handle('/')
