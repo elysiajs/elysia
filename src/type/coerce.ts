@@ -460,16 +460,15 @@ export function captureCoercePlan(
 
 		const ely = c['~elyTyp']
 
-		if (ely === ELYSIA_TYPES.ObjectString && (!o || o['~elyTyp'] !== ely)) {
+		if (
+			(ely === ELYSIA_TYPES.ObjectString ||
+				ely === ELYSIA_TYPES.ArrayString) &&
+			(!o || o['~elyTyp'] !== ely)
+		) {
 			any = true
 			const site: CoerceObjStr = { os: ely }
 			if (o && '~optional' in o) site.o = o['~optional']
 			return site
-		}
-
-		if (ely === ELYSIA_TYPES.ArrayString) {
-			bakeable = false
-			return null
 		}
 
 		// @ts-expect-error

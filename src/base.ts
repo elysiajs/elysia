@@ -6556,12 +6556,10 @@ export class Elysia<
 		options: string | number | Partial<Serve>,
 		callback?: ListenCallback
 	) {
-		if (!this['~config']?.adapter && isBun) {
-			this['~config'] ??= nullObject()
-			this['~config']!.adapter = BunAdapter
-		}
+		const listen = (
+			(this['~config']?.adapter ?? isBun) ? BunAdapter : undefined
+		)?.listen
 
-		const listen = this['~config']?.adapter?.listen
 		if (!listen) throw new Error('No adapter provided for listen()')
 
 		if (!env.ELYSIA_AOT_BUILD) listen(this, options, callback)

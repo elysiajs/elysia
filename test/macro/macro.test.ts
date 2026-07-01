@@ -1300,6 +1300,67 @@ describe('Macro', () => {
 		expect(invalidMacro.status).toBe(422)
 	})
 
+	it('merge activated macro body schema with route-local body schema', async () => {
+		const app = new Elysia()
+			.macro({
+				a: {
+					body: t.Object({ a: t.String() })
+				}
+			})
+			.post(
+				'/',
+				{
+					a: true,
+					body: t.Object({ b: t.String() })
+				},
+				({ body }) => body
+			)
+
+		const merged = await app.handle(post('/', { a: 'a', b: 'test' }))
+		expect(merged.status).toBe(200)
+		await expect(merged.json()).resolves.toEqual({ a: 'a', b: 'test' })
+
+		const missingMacroField = await app.handle(post('/', { b: 'test' }))
+		expect(missingMacroField.status).toBe(422)
+
+		// route-local field stays enforced after the macro merge
+		const missingRouteField = await app.handle(post('/', { a: 'a' }))
+		expect(missingRouteField.status).toBe(422)
+	})
+
+	it('merge activated macro body schema when body is a string model reference', async () => {
+		const build = (macroBody: any, routeBody: any) =>
+			new Elysia()
+				.model({
+					'a.model': t.Object({ a: t.String() }),
+					'b.model': t.Object({ b: t.String() })
+				})
+				.macro({ a: { body: macroBody } })
+				.post('/', { a: true, body: routeBody }, ({ body }) => body)
+
+		const cases = {
+			'macro-ref': build('a.model', t.Object({ b: t.String() })),
+			'route-ref': build(t.Object({ a: t.String() }), 'b.model'),
+			'both-ref': build('a.model', 'b.model')
+					}
+
+		for (const [label, app] of Object.entries(cases)) {
+			const merged = await app.handle(post('/', { a: 'a', b: 'test' }))
+			expect(merged.status, label).toBe(200)
+			await expect(merged.json(), label).resolves.toEqual({
+				a: 'a',
+				b: 'test'
+			})
+
+			expect((await app.handle(post('/', { b: 'test' }))).status, label).toBe(
+				422
+			)
+			expect((await app.handle(post('/', { a: 'a' }))).status, label).toBe(
+				422
+			)
+		}
+	})
+
 	it('create detail if not exists', () => {
 		const app = new Elysia()
 			.macro({

@@ -215,6 +215,36 @@ describe('array (ArrayString) coercion falls back transparently', () => {
 	})
 })
 
+describe('array (ArrayString) with no element coercion IS baked', () => {
+	it('a string-array query bakes the ArrayString site and coerces equal to JIT', async () => {
+		const build = () =>
+			new Elysia().get(
+				'/sarr',
+				{
+					query: t.Object({
+						page: t.Number(),
+						tags: t.Optional(t.Array(t.String()))
+					})
+				},
+				({ query }: any) => query
+			)
+
+		const { validators } = capture(build)
+		expect(slot(validators, 'GET', '/sarr', 'query')?.coercePlan).toBeDefined()
+
+		const url = '/sarr?page=2&tags=' + encodeURIComponent('["a","b"]')
+		const liveRes = await build().handle(req(url))
+		expect(liveRes.status).toBe(200)
+		const liveBody = (await liveRes.json()) as any
+		expect(liveBody.page).toBe(2) // page coerced to a number
+
+		const { app } = freeze(build)
+		const res = await app.handle(req(url))
+		expect(res.status).toBe(200)
+		await expect(res.json()).resolves.toEqual(liveBody)
+	})
+})
+
 describe('non-JSON-serializable constraints fall back (do not silently bake)', () => {
 	// The plan is emitted as JSON; JSON.stringify(Infinity)==='null', so a baked
 	// `{minimum: Infinity}` would round-trip to `{minimum: null}` and the frozen

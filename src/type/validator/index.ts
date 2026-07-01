@@ -333,13 +333,23 @@ export class TypeBoxValidator<
 				: undefined
 
 		let schemaHasRef = false
-		if (name && options?.models)
+		if (name && options?.models) {
 			schema = (
 				moduleCache.getOrInsertComputed(options.models, () =>
 					Module(options.models as Record<string, TSchema>)
 				) as any
 			)[name]
-		else if (options?.models && typeof name !== 'string') {
+
+			// The `isIntersectable` merge above ran on the raw reference and is
+			// discarded by this model lookup, so fold the additive (macro /
+			// guard) schemas back into the resolved model — otherwise a route
+			// whose `body` is a string model ref silently drops them.
+			if (isIntersectable) {
+				const members = [schema, ...options!.schemas!]
+				schema = (shallowMergeObjects(members) ??
+					Evaluate(Intersect(members as any))) as unknown as T
+			}
+		} else if (options?.models && typeof name !== 'string') {
 			schemaHasRef = frozen ? frozen.r === 1 : schemaContainsRef(schema)
 			if (schemaHasRef) {
 				const id = `inline@${++inlineRefId}`
