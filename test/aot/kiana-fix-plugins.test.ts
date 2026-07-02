@@ -24,12 +24,12 @@ describe('kiana plugin fixes', () => {
 		// `import { t } from '<registerFrom>'`, never matches the real
 		// `import { t } from 'elysia'`, and the bundle-size optimization is a silent
 		// no-op. The fix decouples them: the rewrite always targets 'elysia'.
-		it('vite transform still rewrites t when registerFrom is custom', () => {
+		it('vite transform still rewrites t when registerFrom is custom', async () => {
 			const plugin = viteAot('src/index.ts', {
 				registerFrom: './elysia-wrapper'
 			})
 
-			const out = plugin.transform(
+			const out = await plugin.transform(
 				`import { Elysia, t } from 'elysia'\nt.Object({ a: t.String() })`,
 				'/project/src/handlers.ts'
 			)
@@ -43,20 +43,21 @@ describe('kiana plugin fixes', () => {
 			expect(out).toContain('t.Object({ a: t.String() })')
 		})
 
-		it('the underlying rewrite is keyed on the t-import specifier, not registerFrom', () => {
+		it('the underlying rewrite is keyed on the t-import specifier, not registerFrom', async () => {
 			// Passing a registerFrom-style path as `from` is exactly the old bug: the
 			// user imports from 'elysia', so a non-'elysia' `from` matches nothing and
 			// leaves the un-shakeable barrel import in place. This documents WHY the
 			// plugins must default `from` to 'elysia' rather than forward registerFrom.
 			const userCode = `import { t } from 'elysia'\nt.Number()`
 			expect(
-				rewriteTypeImport(userCode, {
+				await rewriteTypeImport(userCode, {
 					from: '/abs/monorepo/src/compile/index.ts'
 				})
 			).toBe(userCode) // wrong `from` ⇒ no rewrite (the regression)
 
 			// default 'elysia' (what the fixed plugins now use) shakes correctly
-			expect(rewriteTypeImport(userCode)).toBe(
+			expect(
+				await rewriteTypeImport(userCode)).toBe(
 				`import * as t from 'elysia/type'\nt.Number()`
 			)
 		})
@@ -69,9 +70,9 @@ describe('kiana plugin fixes', () => {
 		// rewrite emitted next — silently mis-applying an attribute meant for the
 		// original import to the `elysia/type` namespace redirect, and stripping it
 		// from the kept-members line.
-		it('keeps a with-attribute on the sole-t namespace line, not orphaned', () => {
+		it('keeps a with-attribute on the sole-t namespace line, not orphaned', async () => {
 			expect(
-				rewriteTypeImport(
+				await rewriteTypeImport(
 					`import { t } from 'elysia' with { type: 'macro' }\nt.Number()`
 				)
 			).toBe(
@@ -79,9 +80,9 @@ describe('kiana plugin fixes', () => {
 			)
 		})
 
-		it('preserves a with-attribute on BOTH split imports', () => {
+		it('preserves a with-attribute on BOTH split imports', async () => {
 			expect(
-				rewriteTypeImport(
+				await rewriteTypeImport(
 					`import { Elysia, t } from 'elysia' with { type: 'json' }\nt.Object()`
 				)
 			).toBe(
@@ -91,9 +92,9 @@ describe('kiana plugin fixes', () => {
 			)
 		})
 
-		it('handles the legacy `assert` attribute keyword', () => {
+		it('handles the legacy `assert` attribute keyword', async () => {
 			expect(
-				rewriteTypeImport(
+				await rewriteTypeImport(
 					`import { t } from 'elysia' assert { type: 'macro' }\nt.X()`
 				)
 			).toBe(
@@ -101,10 +102,11 @@ describe('kiana plugin fixes', () => {
 			)
 		})
 
-		it('does not swallow a trailing semicolon as an attribute', () => {
+		it('does not swallow a trailing semicolon as an attribute', async () => {
 			// guards the optional attribute group against over-consuming benign
 			// trailing tokens that DO occur in real code
-			expect(rewriteTypeImport(`import { t } from 'elysia';\nt.X()`)).toBe(
+			expect(
+				await rewriteTypeImport(`import { t } from 'elysia';\nt.X()`)).toBe(
 				`import * as t from 'elysia/type';\nt.X()`
 			)
 		})

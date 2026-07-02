@@ -90,7 +90,7 @@ export const aot = (entry: string, options?: ElysiaAotOptions): BunPlugin => ({
 				const original = await Bun.file(args.path).text()
 				let contents = inModules
 					? original
-					: rewriteTypeImport(original)
+					: await rewriteTypeImport(original)
 
 				if (isEntryFile)
 					contents = `import 'elysia/compiled'\n${contents}`

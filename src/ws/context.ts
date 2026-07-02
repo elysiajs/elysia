@@ -197,22 +197,18 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		return this.raw.data
 	}
 
-	#prepare(data: unknown): { wire: string; toValidate: unknown } | null {
+	#prepare(data: unknown): string | null {
 		if (data === undefined) return null
 
 		if (data instanceof ElysiaStatus)
-			return {
-				wire: JSON.stringify({
-					status: data.status,
-					error: data.response
-				}),
-				toValidate: data.response
-			}
+			return JSON.stringify({
+				status: data.status,
+				error: data.response
+			})
 
-		if (typeof data === 'object')
-			return { wire: JSON.stringify(data), toValidate: data }
+		if (typeof data === 'object') return JSON.stringify(data)
 
-		return { wire: data as string, toValidate: data }
+		return data as string
 	}
 
 	#validatedOrError(data: unknown): string | undefined {
@@ -234,16 +230,16 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		data: FlattenResponse<Route['response']> | BufferSource,
 		compress?: boolean
 	): ServerWebSocketSendStatus {
+		if (data === undefined) return 0
 		if (data instanceof ArrayBuffer || ArrayBuffer.isView(data))
 			return this.raw.send(data as unknown as BufferSource, compress)
 
-		const prepared = this.#prepare(data)
-		if (!prepared) return 0
-
+		// validate before stringifying (matches #ping/#pong) — an invalid
+		// payload must not pay the JSON.stringify
 		const err = this.#validatedOrError(data)
 		if (err !== undefined) return this.raw.send(err)
 
-		return this.raw.send(prepared.wire, compress)
+		return this.raw.send(this.#prepare(data)!, compress)
 	}
 
 	#ping(
@@ -256,8 +252,7 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		const err = this.#validatedOrError(data)
 		if (err !== undefined) return this.raw.send(err)
 
-		const prepared = this.#prepare(data)!
-		return this.raw.ping(prepared.wire)
+		return this.raw.ping(this.#prepare(data)!)
 	}
 
 	#pong(
@@ -270,8 +265,7 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		const err = this.#validatedOrError(data)
 		if (err !== undefined) return this.raw.send(err)
 
-		const prepared = this.#prepare(data)!
-		return this.raw.pong(prepared.wire)
+		return this.raw.pong(this.#prepare(data)!)
 	}
 
 	#publish(
@@ -279,6 +273,7 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		data: FlattenResponse<Route['response']> | BufferSource,
 		compress?: boolean
 	): ServerWebSocketSendStatus {
+		if (data === undefined) return 0
 		if (data instanceof ArrayBuffer || ArrayBuffer.isView(data))
 			return this.raw.publish(
 				topic,
@@ -286,13 +281,11 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 				compress
 			)
 
-		const prepared = this.#prepare(data)
-		if (!prepared) return 0
-
+		// validate before stringifying (matches #ping/#pong)
 		const err = this.#validatedOrError(data)
 		if (err !== undefined) return this.raw.send(err)
 
-		return this.raw.publish(topic, prepared.wire, compress)
+		return this.raw.publish(topic, this.#prepare(data)!, compress)
 	}
 
 	#close(code?: number, reason?: string): void {

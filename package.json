@@ -1,7 +1,7 @@
 {
 	"name": "elysia",
 	"description": "Ergonomic Framework for Human",
-	"version": "2.0.0-exp.25",
+	"version": "2.0.0-exp.26",
 	"author": {
 		"name": "saltyAom",
 		"url": "https://github.com/SaltyAom",
@@ -202,6 +202,7 @@
 	],
 	"dependencies": {
 		"deuri": "^2.0.1",
+		"es-module-lexer": "^2.1.0",
 		"exact-mirror": "1.2.2",
 		"memoirist": "1.1.0"
 	},

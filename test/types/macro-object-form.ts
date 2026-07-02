@@ -87,7 +87,9 @@ import { expectTypeOf } from 'expect-type'
 			limit: (max: number) => ({
 				query: t.Object({ page: t.Number() }),
 				derive: ({ query }) => {
-					expectTypeOf(query).toEqualTypeOf<Record<string, string>>()
+					expectTypeOf(query).toEqualTypeOf<
+					Record<string, string | undefined>
+				>()
 
 					return { capped: max }
 				}

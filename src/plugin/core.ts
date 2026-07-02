@@ -18,10 +18,13 @@ export interface ElysiaAotOptions {
 	registerFrom?: string
 
 	/**
-	 * Materialize route handlers as separate modules and load them lazily
+	 * Split the emitted validator manifest into lazily-materialized groups
 	 *
-	 * This can reduce peak memory usage and improve startup time,
-	 * but increase latency for the first request to each route
+	 * Validator entries are registered as grouped thunks: a group's
+	 * validators are constructed on the first request to any route in that
+	 * group, trading first-request latency in unbuilt groups for lower
+	 * startup cost. Handlers are always eager — only validator construction
+	 * is deferred. Pass a number to set the group size explicitly.
 	 *
 	 * @default decided by Elysia based on route batch scale
 	 */
@@ -184,7 +187,7 @@ export const STUB_SOURCES: Record<
 > = {
 	jit: [
 		{
-			filter: /[\\/]compile[\\/]handler[\\/]jit\.(m?js|ts)$/,
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]compile[\\/]handler[\\/]jit\.(m?js|ts)$/,
 			source:
 				`const e=()=>{throw new Error("[elysia-aot] handler compiler JIT was stripped (strip mode) but a route needed runtime compilation. Rebuild with strip:false.")}\n` +
 				`export function compileHandlerJit(){return e()}\n` +
@@ -193,7 +196,7 @@ export const STUB_SOURCES: Record<
 	],
 	ws: [
 		{
-			filter: /[\\/]ws[\\/]route\.(m?js|ts)$/,
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]ws[\\/]route\.(m?js|ts)$/,
 			source:
 				`const e=()=>{throw new Error("[elysia-aot] WebSocket route builder was stripped (strip mode) but a WS route was used. Rebuild with strip:false.")}\n` +
 				`export function buildWSRoute(){return e()}\n` +
@@ -202,7 +205,7 @@ export const STUB_SOURCES: Record<
 	],
 	reconstruct: [
 		{
-			filter: /[\\/]compile[\\/]handler[\\/]reconstruct\.(m?js|ts)$/,
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]compile[\\/]handler[\\/]reconstruct\.(m?js|ts)$/,
 			source:
 				`const e=()=>{throw new Error("[elysia-aot] handler reconstruction was stripped (strip mode) but a route needed it. Rebuild with strip:false.")}\n` +
 				`export class Reconstrct {\n` +
@@ -214,7 +217,7 @@ export const STUB_SOURCES: Record<
 	],
 	cookie: [
 		{
-			filter: /[\\/]cookie[\\/]utils\.(m?js|ts)$/,
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]cookie[\\/]utils\.(m?js|ts)$/,
 			source:
 				`const e=()=>{throw new Error("[elysia-aot] cookie support was stripped (strip mode) but a route used cookies. Rebuild with strip:false.")}\n` +
 				`export function createCookieJar(){return e()}\n` +
@@ -227,7 +230,7 @@ export const STUB_SOURCES: Record<
 				`export function unsignCookie(){return e()}\n`
 		},
 		{
-			filter: /[\\/]cookie[\\/]config\.(m?js|ts)$/,
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]cookie[\\/]config\.(m?js|ts)$/,
 			source:
 				`const e=()=>{throw new Error("[elysia-aot] cookie support was stripped (strip mode) but a route used cookies. Rebuild with strip:false.")}\n` +
 				`export function compileCookieConfig(){return e()}\n` +
@@ -325,9 +328,62 @@ export async function generateCompiledArtifacts(
 				(route: any) => route?.[0] === 'WS'
 			)
 
+		const stub = planFromReport(strip, report, hasWS, aliases)
+
+		const routes =
+			(typedApp as { routes?: { hooks?: Record<string, unknown> }[] })
+				.routes ?? []
+
+		let expectedSlots = 0
+		for (const route of routes) {
+			const hooks = route?.hooks
+			if (!hooks) continue
+
+			for (const slot of [
+				'body',
+				'query',
+				'params',
+				'headers',
+				'cookie',
+				'response'
+			])
+				if (hooks[slot] !== undefined) expectedSlots++
+		}
+
+		const frozenSlots = artifacts.validators.length
+		const stubbed = (Object.keys(stub) as (keyof StubPlan)[]).filter(
+			(key) => stub[key]
+		)
+
+		console.log(
+			`[elysia-aot] routes=${routes.length}` +
+				` handlers=${artifacts.handlers.length}` +
+				` validators=${frozenSlots}/${expectedSlots}` +
+				` stub=${stubbed.join(',') || 'none'}` +
+				(report.jit
+					? ''
+					: ` jit-reachable (${report.reasons.join(', ') || 'unknown'})`)
+		)
+
+		if (options?.target === 'workerd') {
+			if (!report.jit)
+				throw new Error(
+					`[elysia-aot] target 'workerd' but handler JIT is still ` +
+						`reachable (${report.reasons.join(', ') || 'unknown'}). ` +
+						`Every route must be captured into the AOT manifest.`
+				)
+
+			if (frozenSlots < expectedSlots)
+				console.warn(
+					`[elysia-aot] target 'workerd': only ${frozenSlots}/` +
+						`${expectedSlots} validator slots were frozen ` +
+						`unfrozen slots compile at runtime and will fail on workerd.`
+				)
+		}
+
 		return {
 			source: artifacts.source,
-			stub: planFromReport(strip, report, hasWS, aliases)
+			stub
 		}
 	} finally {
 		if (previousAotBuild === undefined) delete process.env.ELYSIA_AOT_BUILD

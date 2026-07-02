@@ -48,6 +48,8 @@ export async function parseCookie(
 	return buildCookieJar(set, raw, config)
 }
 
+const rawJsonValue = new WeakMap<object, string>()
+
 function maybeJsonDecode(value: unknown) {
 	if (typeof value === 'string') {
 		const starts = value.charCodeAt(0)
@@ -55,7 +57,11 @@ function maybeJsonDecode(value: unknown) {
 		// { or [
 		if (starts === 123 || starts === 91)
 			try {
-				return JSON.parse(value)
+				const parsed = JSON.parse(value)
+				if (parsed !== null && typeof parsed === 'object')
+					rawJsonValue.set(parsed, value)
+
+				return parsed
 			} catch {}
 	}
 
@@ -90,7 +96,10 @@ export function parseCookieRawSync(
 		const v = cookies[name]
 		if (v === undefined) continue
 
-		out[name] = maybeJsonDecode(decodeComponent(v) as unknown as string)
+		// fall back to the raw string on malformed percent-encoding
+		out[name] = maybeJsonDecode(
+			(decodeComponent(v) as unknown as string) ?? v
+		)
 	}
 
 	return out
@@ -113,7 +122,8 @@ export async function parseCookieRaw(
 		const v = cookies[name]
 		if (v === undefined) continue
 
-		let value: unknown = decodeComponent(v) as unknown as string
+		// fall back to the raw string on malformed percent-encoding
+		let value: unknown = (decodeComponent(v) as unknown as string) ?? v
 
 		const signCheck = resolveSignSecrets(name, config)
 
@@ -136,8 +146,7 @@ export async function parseCookieRaw(
 				}
 				if (decoded === false) throw new InvalidCookieSignature(name)
 				value = decoded
-			} else
-				throw new InvalidCookieSignature(name)
+			} else throw new InvalidCookieSignature(name)
 		}
 
 		out[name] = maybeJsonDecode(value)
@@ -155,12 +164,23 @@ export function buildCookieJar(
 
 	for (const name in raw) {
 		const fieldDefaults = config.fields[name]?.defaults
-		const entry = Object.assign(nullObject(), config.defaults, fieldDefaults, {
-			value: raw[name]
-		})
+		const entry = Object.assign(
+			nullObject(),
+			config.defaults,
+			fieldDefaults,
+			{
+				value: raw[name]
+			}
+		)
 
 		if (entry.expires instanceof Date)
 			entry.expires = new Date(entry.expires.getTime())
+
+		const value = entry.value
+		if (value !== null && typeof value === 'object') {
+			const raw = rawJsonValue.get(value)
+			if (raw !== undefined) (entry as any)['~raw'] = raw
+		}
 
 		store[name] = entry
 	}
@@ -206,10 +226,14 @@ export function signCookieValues(
 		let value = property.value
 		if (value === undefined || value === null) continue
 
-		if (typeof value === 'object') value = JSON.stringify(value)
-		else if (typeof value !== 'string') value = value + ''
+		if (typeof value === 'object') {
+			value = JSON.stringify(value)
+			if ((property as any)['~raw'] === value) continue
+		} else if (typeof value !== 'string') value = value + ''
 
-		const secret = Array.isArray(r.secrets) ? (r.secrets[0] ?? null) : r.secrets
+		const secret = Array.isArray(r.secrets)
+			? (r.secrets[0] ?? null)
+			: r.secrets
 
 		if (secret === null)
 			throw new TypeError(

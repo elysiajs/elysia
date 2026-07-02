@@ -7,12 +7,7 @@ import { getAsyncIndexes, cachedResponse } from './utils'
 
 import { createContext, type Context } from '../context'
 import { createErrorHandler } from './error'
-import {
-	requestId,
-	flattenChain,
-	nullObject,
-	isNotEmpty
-} from '../utils'
+import { requestId, flattenChain, nullObject, isNotEmpty } from '../utils'
 import { handleSet } from '../adapter/utils'
 import { NotFound, PROBLEM_JSON } from '../error'
 import { createTracer } from '../trace'
@@ -98,25 +93,40 @@ function findRoute(
 	handleError: (context: Context, error: Error) => unknown,
 	afterResponse: ((context: Context, status?: number) => void) | undefined,
 	strictPath: boolean,
-	hasWS?: boolean
+	hasWS?: boolean,
+	hasDynamicWS?: boolean
 ): Response | Promise<Response> {
 	const path = context.path
 
 	if (hasWS) {
-		const upgrade = request.headers.get('upgrade')
-		if (upgrade && upgrade.toLowerCase() === 'websocket') {
-			const handler = map['WS']?.[path]
+		// Probe the WS route tables BEFORE touching headers — reading the
+		// upgrade header materializes `Headers` (~160ns) on every HTTP
+		// request otherwise
+		const handler = map['WS']?.[path]
+		const found =
+			handler === undefined && hasDynamicWS
+				? router?.find('WS', path)
+				: undefined
 
-			if (handler) {
-				const r = handler(context)
-				return r instanceof Promise ? (r.catch(catchError(context, handleError, afterResponse)) as any) : r
-			}
+		if (handler !== undefined || found) {
+			const upgrade = request.headers.get('upgrade')
+			if (upgrade && upgrade.toLowerCase() === 'websocket') {
+				if (handler) {
+					const r = handler(context)
+					return r instanceof Promise
+						? (r.catch(
+								catchError(context, handleError, afterResponse)
+							) as any)
+						: r
+				}
 
-			const found = router?.find('WS', path)
-			if (found) {
-				context.params = decodeParams(found.params)
-				const r = found.store(context)
-				return r instanceof Promise ? (r.catch(catchError(context, handleError, afterResponse)) as any) : r
+				context.params = decodeParams(found!.params)
+				const r = found!.store(context)
+				return r instanceof Promise
+					? (r.catch(
+							catchError(context, handleError, afterResponse)
+						) as any)
+					: r
 			}
 		}
 	}
@@ -147,7 +157,9 @@ function findRoute(
 
 		if (handler) {
 			const r = handler(context)
-			return r instanceof Promise ? r.catch(catchError(context, handleError, afterResponse)) : r
+			return r instanceof Promise
+				? r.catch(catchError(context, handleError, afterResponse))
+				: r
 		}
 
 		const found =
@@ -157,7 +169,9 @@ function findRoute(
 			context.params = decodeParams(found.params)
 
 			const r = found.store(context)
-			return r instanceof Promise ? r.catch(catchError(context, handleError, afterResponse)) : r
+			return r instanceof Promise
+				? r.catch(catchError(context, handleError, afterResponse))
+				: r
 		}
 	}
 
@@ -174,6 +188,7 @@ export function createFetchHandler(
 	const map = app['~map']! ?? nullObject()
 	const router = app['~router']!
 	const hasWS = !!app['~hasWS']
+	const hasDynamicWS = hasWS && !!app['~hasDynamicWS']
 	const strictPath = !!app['~config']?.strictPath
 
 	// standard internet hostname is at minimum 11 characters (http://a.bc)
@@ -345,15 +360,14 @@ export function createFetchHandler(
 				for (let i = 0; i < onRequests.length; i++) {
 					const endReports = new Array(traceLength)
 					for (let j = 0; j < traceLength; j++)
-						endReports[j] = requestReports[j].resolveChild
-							?.shift?.()
-							?.({
-								id: context.rid,
-								event: 'request',
-								name:
-									(onRequests[i] as any).name || 'anonymous',
-								begin: performance.now()
-							})
+						endReports[j] = requestReports[
+							j
+						].resolveChild?.shift?.()?.({
+							id: context.rid,
+							event: 'request',
+							name: (onRequests[i] as any).name || 'anonymous',
+							begin: performance.now()
+						})
 
 					const result = asyncIndexes?.[i]
 						? await onRequests[i](context as any)
@@ -386,7 +400,8 @@ export function createFetchHandler(
 					handleError,
 					afterResponse,
 					strictPath,
-					hasWS
+					hasWS,
+					hasDynamicWS
 				)
 			} catch (error) {
 				for (let i = 0; i < traceLength; i++)
@@ -447,7 +462,8 @@ export function createFetchHandler(
 						handleError,
 						afterResponse,
 						strictPath,
-						hasWS
+						hasWS,
+						hasDynamicWS
 					)
 				} catch (error) {
 					return finalizeError(
@@ -496,7 +512,8 @@ export function createFetchHandler(
 					handleError,
 					afterResponse,
 					strictPath,
-					hasWS
+					hasWS,
+					hasDynamicWS
 				)
 			} catch (error) {
 				return finalizeError(
@@ -526,35 +543,48 @@ export function createFetchHandler(
 		))
 
 		if (hasWS) {
-			const upgrade = request.headers.get('upgrade')
-			if (upgrade && upgrade.toLowerCase() === 'websocket') {
-				// Loose variants are pre-registered in `~map` (build time).
-				const handler = map['WS']?.[path]
+			const handler = map['WS']?.[path]
+			const found =
+				handler === undefined && hasDynamicWS
+					? router?.find('WS', path)
+					: undefined
 
-				try {
-					if (handler) {
-						const r = handler(context)
-						return r instanceof Promise
-							? (r.catch(catchError(context, handleError, afterResponse)) as any)
-							: (r as any)
-					}
+			if (handler !== undefined || found) {
+				const upgrade = request.headers.get('upgrade')
+				if (upgrade && upgrade.toLowerCase() === 'websocket')
+					try {
+						if (handler) {
+							const r = handler(context)
+							return r instanceof Promise
+								? (r.catch(
+										catchError(
+											context,
+											handleError,
+											afterResponse
+										)
+									) as any)
+								: (r as any)
+						}
 
-					const found = router?.find('WS', path)
-					if (found) {
-						context.params = decodeParams(found.params)
-						const r = found.store(context)
+						context.params = decodeParams(found!.params)
+						const r = found!.store(context)
 						return r instanceof Promise
-							? (r.catch(catchError(context, handleError, afterResponse)) as any)
+							? (r.catch(
+									catchError(
+										context,
+										handleError,
+										afterResponse
+									)
+								) as any)
 							: (r as any)
+					} catch (error) {
+						return finalizeError(
+							context,
+							handleError,
+							afterResponse,
+							error as Error
+						)
 					}
-				} catch (error) {
-					return finalizeError(
-						context,
-						handleError,
-						afterResponse,
-						error as Error
-					)
-				}
 			}
 		}
 
@@ -582,7 +612,9 @@ export function createFetchHandler(
 
 			if (handler) {
 				const r = handler(context)
-				return r instanceof Promise ? r.catch(catchError(context, handleError, afterResponse)) : r
+				return r instanceof Promise
+					? r.catch(catchError(context, handleError, afterResponse))
+					: r
 			}
 
 			const result =
@@ -592,7 +624,9 @@ export function createFetchHandler(
 				context.params = decodeParams(result.params)
 
 				const r = result.store(context)
-				return r instanceof Promise ? r.catch(catchError(context, handleError, afterResponse)) : r
+				return r instanceof Promise
+					? r.catch(catchError(context, handleError, afterResponse))
+					: r
 			}
 		} catch (error) {
 			return finalizeError(

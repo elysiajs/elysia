@@ -266,8 +266,13 @@ export function createStreamHandler({
 			(init?.value?.sse ??
 				// @ts-ignore ReadableStream is wrapped with sse()
 				generator?.sse ??
-				// User explicitly set content-type to SSE
-				set?.headers['content-type']?.startsWith('text/event-stream'))
+				(set?.headers instanceof Headers
+					? set.headers
+							.get('content-type')
+							?.startsWith('text/event-stream')
+					: set?.headers['content-type']?.startsWith(
+							'text/event-stream'
+						)))
 
 		const format = isSSE
 			? (data: string) => `data: ${data}\n\n`
@@ -282,7 +287,16 @@ export function createStreamHandler({
 				: 'text/plain'
 
 		const headers = set?.headers
-		if (headers) {
+		if (headers instanceof Headers) {
+			// bracket access on a Headers instance reads/writes JS properties,
+			// silently dropping the streaming defaults (>1 cookie path)
+			if (!headers.has('transfer-encoding'))
+				headers.set('transfer-encoding', 'chunked')
+			if (!headers.has('content-type'))
+				headers.set('content-type', contentType)
+			if (!headers.has('cache-control'))
+				headers.set('cache-control', 'no-cache')
+		} else if (headers) {
 			if (!headers['transfer-encoding'])
 				headers['transfer-encoding'] = 'chunked'
 			if (!headers['content-type']) headers['content-type'] = contentType

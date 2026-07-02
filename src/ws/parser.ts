@@ -1,5 +1,5 @@
-import type { ServerWebSocket } from './types'
-import type { WSConnectionData } from './context'
+// Parse hooks receive the per-message ElysiaWS view (matching the declared
+// `WSParseHandler` type), passed through opaquely here.
 
 function isNumericString(s: string) {
 	if (s.length === 0) return false
@@ -64,7 +64,7 @@ export function createMessageParser(
 ) {
 	if (!parsers || parsers.length === 0)
 		return function parse(
-			_ws: ServerWebSocket<WSConnectionData>,
+			_ws: unknown,
 			rawMessage: string | Buffer
 		) {
 			return defaultWSParse(rawMessage)
@@ -72,7 +72,7 @@ export function createMessageParser(
 
 	// Resume the parser chain from `next` after the first Promise.
 	async function parseAsync(
-		ws: ServerWebSocket<WSConnectionData>,
+		ws: unknown,
 		pending: Promise<unknown>,
 		value: unknown,
 		next: number
@@ -90,7 +90,7 @@ export function createMessageParser(
 	}
 
 	return function parse(
-		ws: ServerWebSocket<WSConnectionData>,
+		ws: unknown,
 		rawMessage: string | Buffer
 	) {
 		let value = defaultWSParse(rawMessage)

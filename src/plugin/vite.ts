@@ -1,3 +1,5 @@
+import { realpathSync } from 'node:fs'
+
 import {
 	generateCompiledArtifacts,
 	resolveEntry,
@@ -7,16 +9,31 @@ import {
 } from './core'
 import { rewriteTypeImport } from './treeshake'
 
+// eslint-disable-next-line sonarjs/single-character-alternation
 const SOURCE = /\.(c|m)?(t|j)sx?$/
+
+const realPath = (path: string): string => {
+	try {
+		return realpathSync(path)
+	} catch {
+		return path
+	}
+}
+
+const toPosix = (path: string): string => path.replace(/\\/g, '/')
 
 export interface ElysiaAotVitePlugin {
 	name: string
 	enforce?: 'pre'
 	apply?: 'build'
 	buildStart(): Promise<void>
+	buildEnd(): void
 	resolveId(id: string): string | undefined
 	load(id: string): string | undefined
-	transform(code: string, id: string): string | undefined
+	transform(
+		code: string,
+		id: string
+	): string | undefined | Promise<string | undefined>
 }
 
 const VIRTUAL = '\0elysia/compiled'
@@ -47,6 +64,17 @@ export const aot = (
 	options?: ElysiaAotOptions
 ): ElysiaAotVitePlugin => {
 	const entryPath = resolveEntry(entry)
+	const entryPosix = toPosix(entryPath)
+	const entryRealPosix = toPosix(realPath(entryPath))
+	let entryMatched = false
+
+	const isEntry = (id: string): boolean => {
+		const posix = toPosix(id)
+		if (posix === entryPosix || posix === entryRealPosix) return true
+
+		return toPosix(realPath(id)) === entryRealPosix
+	}
+
 	const treeShake = options?.treeShake ?? true
 	let source = ''
 	let stub: StubPlan = {
@@ -67,25 +95,43 @@ export const aot = (
 			source = generated.source
 			stub = generated.stub
 		},
+		buildEnd() {
+			if (!entryMatched)
+				throw new Error(
+					`[elysia-aot] entry "${entry}" never appeared in the Vite ` +
+						`module graph — the compiled manifest was not injected. ` +
+						`Check that the plugin entry matches a build input.`
+				)
+		},
 		resolveId(id) {
 			if (id === 'elysia/compiled') return VIRTUAL
 		},
 		load(id) {
 			if (id === VIRTUAL) return source
 		},
-		transform(code, id) {
+		async transform(code, id) {
+			const cleanId = id.split('?', 1)[0]
+
 			// Stub when every route is compiled
 			for (const key of Object.keys(STUB_SOURCES) as (keyof StubPlan)[]) {
 				if (!stub[key]) continue
 				for (const { filter, source: stubSource } of STUB_SOURCES[key])
-					if (filter.test(id)) return stubSource
+					if (filter.test(cleanId)) return stubSource
 			}
 
 			let out = code
-			if (treeShake && SOURCE.test(id) && !id.includes('node_modules'))
-				out = rewriteTypeImport(out)
+			if (
+				treeShake &&
+				SOURCE.test(cleanId) &&
+				!cleanId.includes('node_modules')
+			)
+				out = await rewriteTypeImport(out)
 
-			if (id === entryPath) out = `import 'elysia/compiled'\n${out}`
+			if (isEntry(cleanId)) {
+				entryMatched = true
+				out = `import 'elysia/compiled'\n${out}`
+			}
+
 			return out === code ? undefined : out
 		}
 	}

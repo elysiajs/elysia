@@ -1,6 +1,7 @@
 import { Default } from './type/bridge'
 
 import { StatusMap, StatusMapBack } from './constants'
+import { primitiveElysiaTypes } from './type/constants'
 import { nullObject } from './utils'
 import { env } from './universal/env'
 
@@ -83,6 +84,23 @@ export class ParseError extends ElysiaError {
 
 	constructor(cause?: Error) {
 		super('Bad Request', cause)
+	}
+
+	toResponse(headers?: Record<string, any>) {
+		const cause = this.cause as Error | undefined
+
+		return problemResponse(
+			{
+				type: this.problemType,
+				title: this.problemTitle,
+				status: 400,
+				detail:
+					!isProduction() && cause?.message != null
+						? String(cause.message)
+						: undefined
+			},
+			headers
+		)
 	}
 }
 
@@ -209,11 +227,16 @@ const scopeFound = (value: unknown, first: any): unknown => {
 export class ValidationError extends ElysiaError {
 	status = 422 as const
 
-	customError?: unknown
 	schema?: unknown
-	declare errors: any[]
+	declare message: string
 
 	allowUnsafeValidationDetails = false
+
+	#thunk: () => any[]
+	#findCustomError?: (
+		value: unknown
+	) => { instancePath: string; error: unknown } | undefined
+	#state?: { errors: any[]; custom: unknown; message: string }
 
 	constructor(
 		public type: string | undefined,
@@ -221,146 +244,188 @@ export class ValidationError extends ElysiaError {
 		errors: any[] | (() => any[]),
 		schema?: unknown,
 		// Production-only escape hatch: locate the first failing custom-error
-		// field WITHOUT TypeBox `Errors` (baked/compiled per-field checks). Only
-		// consulted in the production-gated path; dev/`allowUnsafe` use `errors`.
+		// field without TypeBox `Errors` (baked/compiled per-field checks)
 		findCustomError?: (
 			value: unknown
 		) => { instancePath: string; error: unknown } | undefined
 	) {
-		// Always resolve lazily. The real request flow already passes a thunk;
-		// unifying the eager (array) path onto the lazy machinery means the
-		// production gate (`allowUnsafeValidationDetails`, set on the instance by
-		// the error pipeline AFTER construction) is in effect by the time
-		// `errors`/`customError`/`message` are first read.
-		const thunk: () => any[] =
+		// Error(undefined) defines no own `message`
+		// keeping the lazy prototype accessor below reachable
+		// Resolution is deferred so the production gate
+		// (`allowUnsafeValidationDetails`, set on the instance by the error pipeline AFTER construction)
+		// is in effect by the time `errors`/`customError`/`message` are first read.
+		super(undefined as any)
+
+		this.schema = schema
+		this.#thunk =
 			typeof errors === 'function'
 				? (errors as () => any[])
 				: () => errors as any[]
+		this.#findCustomError = findCustomError
 
-		super(`Validation error on ${type ?? 'unknown'}`)
+		Object.defineProperty(this, 'errors', {
+			get: () => this['~resolve']().errors,
+			set(v) {
+				Object.defineProperty(this, 'errors', {
+					value: v,
+					writable: true,
+					enumerable: true,
+					configurable: true
+				})
+			},
+			enumerable: true,
+			configurable: true
+		})
+	}
 
-		this.schema = schema
+	/** @internal lazily resolve and memoize errors/customError/message */
+	'~resolve'() {
+		if (this.#state) return this.#state
 
-		let resolved: any[] | undefined
+		const { type, value } = this
+		const production = isProduction()
+		const allowUnsafe = this.allowUnsafeValidationDetails
+		const findCustomError = this.#findCustomError
+
+		let resolved: any[]
 		let custom: unknown
-		let message: string | undefined
+		let message: string
 
-		const resolve = () => {
-			if (resolved !== undefined) return
+		if (production && !allowUnsafe && findCustomError) {
+			const hit = findCustomError(value)
+			resolved = hit ? [{ instancePath: hit.instancePath }] : []
 
-			const production = isProduction()
-			const allowUnsafe = this.allowUnsafeValidationDetails
-
-			if (production && !allowUnsafe && findCustomError) {
-				const hit = findCustomError(value)
-				resolved = hit ? [{ instancePath: hit.instancePath }] : []
-
-				if (hit && hit.error !== undefined)
-					custom =
-						typeof hit.error === 'function'
-							? hit.error({
-									type: 'validation',
-									on: type,
-									found: scopeFound(value, resolved[0])
-								})
-							: hit.error
-
-				message =
-					custom !== undefined
-						? typeof custom === 'string'
-							? custom
-							: JSON.stringify(custom)
-						: `Validation error on ${type ?? 'unknown'}`
-
-				return
-			}
-
-			resolved = thunk() ?? []
-
-			const sub: any = walkSubSchema(schema, resolved[0]?.instancePath)
-
-			if (sub?.error !== undefined)
+			if (hit && hit.error !== undefined)
 				custom =
-					typeof sub.error === 'function'
-						? sub.error(
-								production && !allowUnsafe
-									? {
-											type: 'validation',
-											on: type,
-											found: scopeFound(
-												value,
-												resolved[0]
-											)
-										}
-									: {
-											type: 'validation',
-											on: type,
-											value,
-											errors: resolved
-										}
-							)
-						: sub.error
+					typeof hit.error === 'function'
+						? hit.error({
+								type: 'validation',
+								on: type,
+								found: scopeFound(value, resolved[0])
+							})
+						: hit.error
 
 			message =
 				custom !== undefined
 					? typeof custom === 'string'
 						? custom
 						: JSON.stringify(custom)
-					: resolved[0]?.message
-						? resolved[0].message
-						: `Validation error on ${type ?? 'unknown'}`
+					: `Validation error on ${type ?? 'unknown'}`
+
+			return (this.#state = { errors: resolved, custom, message })
 		}
 
-		const define = (
-			key: 'errors' | 'customError' | 'message',
-			get: () => unknown,
-			enumerable: boolean
-		) =>
-			Object.defineProperty(this, key, {
-				get,
-				set(v) {
-					Object.defineProperty(this, key, {
-						value: v,
-						writable: true,
-						enumerable,
-						configurable: true
-					})
-				},
-				enumerable,
-				configurable: true
-			})
+		resolved = this.#thunk() ?? []
 
-		define(
-			'errors',
-			() => {
-				resolve()
-				return resolved
-			},
-			true
-		)
-		define(
-			'customError',
-			() => {
-				resolve()
-				return custom
-			},
-			true
-		)
-		define(
-			'message',
-			() => {
-				resolve()
-				return message
-			},
-			false
-		)
+		const sub: any = walkSubSchema(this.schema, resolved[0]?.instancePath)
+
+		if (sub?.error !== undefined)
+			custom =
+				typeof sub.error === 'function'
+					? sub.error(
+							production && !allowUnsafe
+								? {
+										type: 'validation',
+										on: type,
+										found: scopeFound(value, resolved[0])
+									}
+								: {
+										type: 'validation',
+										on: type,
+										value,
+										errors: resolved
+									}
+						)
+					: sub.error
+
+		message =
+			custom !== undefined
+				? typeof custom === 'string'
+					? custom
+					: JSON.stringify(custom)
+				: resolved[0]?.message
+					? resolved[0].message
+					: `Validation error on ${type ?? 'unknown'}`
+
+		return (this.#state = { errors: resolved, custom, message })
+	}
+
+	declare errors: any[]
+
+	get customError(): unknown {
+		return this['~resolve']().custom
+	}
+
+	set customError(v: unknown) {
+		Object.defineProperty(this, 'customError', {
+			value: v,
+			writable: true,
+			enumerable: true,
+			configurable: true
+		})
 	}
 
 	get all() {
 		if (!this.errors) return []
 
 		// need arrow function to preserve `this`
-		return this.errors.filter(Boolean).map((e) => this.#normalizeIssue(e))
+		return this.#collapseCoercionErrors(this.errors.filter(Boolean)).map(
+			(e) => this.#normalizeIssue(e)
+		)
+	}
+
+	#collapseCoercionErrors(errors: any[]) {
+		if (!this.schema || !errors.length) return errors
+
+		let coercionPaths: Map<string, boolean> | undefined
+		let seen: Set<string> | undefined
+		let out: any[] | undefined
+
+		for (let i = 0; i < errors.length; i++) {
+			const e = errors[i]
+			const path = e?.instancePath
+
+			if (
+				typeof path !== 'string' ||
+				typeof e?.schemaPath !== 'string' ||
+				(e.keyword !== 'anyOf' && !e.schemaPath.includes('/anyOf'))
+			) {
+				out?.push(e)
+				continue
+			}
+
+			coercionPaths ??= new Map()
+			let isCoercion = coercionPaths.get(path)
+			if (isCoercion === undefined) {
+				const sub: any = walkSubSchema(this.schema, path)
+				isCoercion =
+					!!sub?.['~elyTyp'] &&
+					primitiveElysiaTypes.has(sub['~elyTyp'])
+				coercionPaths.set(path, isCoercion)
+			}
+
+			if (!isCoercion) {
+				out?.push(e)
+				continue
+			}
+
+			out ??= errors.slice(0, i)
+			seen ??= new Set()
+
+			if (seen.has(path)) continue
+			seen.add(path)
+
+			const internal = e.keyword === '~refine' || e.keyword === 'anyOf'
+			out.push({
+				...e,
+				keyword: internal ? 'type' : e.keyword,
+				schemaPath: e.schemaPath.replace(/\/anyOf(\/\d+)?$/, ''),
+				params: internal ? {} : e.params,
+				message: internal ? (e.params?.message ?? e.message) : e.message
+			})
+		}
+
+		return out ?? errors
 	}
 
 	#normalizeIssue(e: any) {
@@ -408,23 +473,25 @@ export class ValidationError extends ElysiaError {
 	}
 
 	get payload() {
-		const first = (this.errors ?? []).find(Boolean) as any
-
 		if (this.#productionDetail)
 			return {
 				type: 'validation',
 				title: 'Validation Error',
 				status: 422,
 				on: this.type,
-				found: scopeFound(this.value, first)
+				found: scopeFound(this.value, (this.errors ?? []).find(Boolean))
 			}
+
+		const errors = this.#collapseCoercionErrors(
+			(this.errors ?? []).filter(Boolean)
+		)
+		const first = errors[0] as any
 
 		const property = first
 			? propertyAccessor(first.instancePath ?? first.path)
 			: 'root'
 
 		const detail = first?.message ?? this.message
-		const errors = (this.errors ?? []).filter(Boolean)
 
 		let expected: unknown
 		const schemaForExpected = first?.schema ?? this.schema
@@ -476,6 +543,22 @@ export class ValidationError extends ElysiaError {
 	}
 }
 
+Object.defineProperty(ValidationError.prototype, 'message', {
+	get(this: ValidationError) {
+		return this['~resolve']().message
+	},
+	set(this: ValidationError, v: string) {
+		Object.defineProperty(this, 'message', {
+			value: v,
+			writable: true,
+			enumerable: false,
+			configurable: true
+		})
+	},
+	enumerable: false,
+	configurable: true
+})
+
 export class InvalidCookieSignature extends ElysiaError {
 	status = 400 as const
 	problemType = 'invalid-cookie-signature'
@@ -512,7 +595,8 @@ export class ElysiaStatus<
 
 		this.code = (StatusMap[code as keyof StatusMap] as Status) ?? code
 
-		if (!emptyHttpStatus.has(code as number)) this.response = response as T
+		if (!emptyHttpStatus.has(this.code as number))
+			this.response = response as T
 
 		this.headers = headers
 	}

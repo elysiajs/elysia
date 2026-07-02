@@ -24,8 +24,10 @@ app.get('/', ({ headers, query, params, body, store }) => {
 		Record<string, string | undefined>
 	>()
 
-	// ? default query should be Record<string, string>
-	expectTypeOf<typeof query>().toEqualTypeOf<Record<string, string>>()
+	// ? schemaless query values may be absent → string | undefined (H23)
+	expectTypeOf<typeof query>().toEqualTypeOf<
+		Record<string, string | undefined>
+	>()
 
 	// ? default body should be unknown
 	expectTypeOf<typeof body>().toBeUnknown()

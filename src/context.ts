@@ -194,7 +194,7 @@ export type Context<
 		body: PrettifyIfObject<Route['body'] & Singleton['derive']['body']>
 		query: undefined extends Route['query']
 			? {} extends NonNullable<Singleton['derive']['query']>
-				? Record<string, string>
+				? Record<string, string | undefined>
 				: Singleton['derive']['query']
 			: PrettifyIfObject<Route['query'] & Singleton['derive']['query']>
 		params: undefined extends Route['params']

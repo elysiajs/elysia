@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'bun:test'
 
 import { handleFile, responseToSetHeaders } from '../../src/adapter/utils'
-import { createRouteMap } from '../../src/adapter/bun/router'
 import { Elysia } from '../../src'
 
 // idx39: handleFile's Headers-instance branch must apply the accept-ranges /
@@ -74,24 +73,8 @@ describe('responseToSetHeaders strips content-encoding (idx41)', () => {
 	})
 })
 
-// idx40: createRouteMap's returned `fetch` closes over the block-scoped const
-// `handleError`. On the empty-history early-return path, handleError was declared
-// AFTER the early return, so invoking the returned fetch threw
-// `ReferenceError: Cannot access 'handleError' before initialization`. WHY it
-// matters: that fetch is the not-found fallback; calling it must not crash.
-describe('createRouteMap empty-history fetch (idx40)', () => {
-	it('returned fetch does not throw a TDZ ReferenceError', () => {
-		const app = new Elysia()
-		const [, fetch] = createRouteMap(app as any) as [
-			unknown,
-			(request: Request) => Response
-		]
-
-		expect(() => fetch(new Request('http://localhost/'))).not.toThrow(
-			ReferenceError
-		)
-	})
-})
+// idx40 (createRouteMap TDZ) retired 2026-07-03: src/adapter/bun/router.ts was
+// dead code duplicating the fetch pipeline and has been deleted (L17).
 
 // idx25: a custom parse function exact-matches on the content-type. `main`
 // truncated the header at the first `;`, but the kiana rewrite passed the full

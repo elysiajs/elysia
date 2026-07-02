@@ -130,12 +130,12 @@ describe('Params Validator', () => {
 		)
 
 		const res = await app.handle(req('/id/617.1234'))
-		// New TypeBox (1.x) reports JSONSchema-style errors with
-		// `keyword` / `params` / `instancePath`. The shape below
-		// matches what `ValidationError.toResponseBody()` produces.
-		// `anyOf` branch order: [Number (Integer source), Refined
-		// String (codec source for IntegerString)].
-		await expect(res.json()).resolves.toMatchObject({
+		// The param coercion union (Integer | IntegerString) is an internal
+		// implementation detail — its failure must surface as ONE user-facing
+		// issue, not the TypeBox triple (branch type error + `~refine` +
+		// `anyOf` wrapper) leaking `~refine`/`anyOf` schemaPaths.
+		const body = (await res.json()) as any
+		expect(body).toMatchObject({
 			type: 'validation',
 			on: 'params',
 			property: '/id',
@@ -146,26 +146,14 @@ describe('Params Validator', () => {
 			errors: [
 				{
 					keyword: 'type',
-					schemaPath: '#/properties/id/anyOf/0',
+					schemaPath: '#/properties/id',
 					instancePath: '/id',
 					params: { type: 'number' },
 					message: 'must be number'
-				},
-				{
-					keyword: '~refine',
-					schemaPath: '#/properties/id/anyOf/1',
-					instancePath: '/id',
-					params: { index: 0, message: 'must be integer' },
-					message: 'must be integer'
-				},
-				{
-					keyword: 'anyOf',
-					schemaPath: '#/properties/id',
-					instancePath: '/id',
-					message: 'must match a schema in anyOf'
 				}
 			]
 		})
+		expect(body.errors).toHaveLength(1)
 		expect(res.status).toBe(422)
 	})
 

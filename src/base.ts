@@ -128,6 +128,22 @@ const useNodesBuffer: ChainNode[] = []
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
 
+// Guard/group hook handlers (beforeHandle/afterHandle/error) run with
+// plugin/local derive and macro-resolve values present at runtime — their
+// typed context must include them (H14), and the macro channel is `resolve`,
+// not `response` (M11)
+type GuardHookSingleton<
+	Singleton extends SingletonBase,
+	Ephemeral extends EphemeralType,
+	Volatile extends EphemeralType,
+	MacroContext
+> = Singleton & {
+	derive: Ephemeral['derive'] &
+		Volatile['derive'] &
+		// @ts-ignore
+		MacroContext['resolve']
+}
+
 export class Elysia<
 	const in out BasePath extends string = '',
 	const in out Scope extends EventScope = 'local',
@@ -253,6 +269,7 @@ export class Elysia<
 	}
 
 	'~hasWS'?: boolean
+	'~hasDynamicWS'?: boolean
 
 	// Group/guard macro-scope internals that CROSS the module boundary (read by
 	// `localMacroRoot`/`chainResolver` in compile/handler/index.ts), so they stay
@@ -753,7 +770,10 @@ export class Elysia<
 
 		switch (typeof value) {
 			case 'object':
-				if (!value || isEmpty(value)) return this
+				if (!value) return this
+				// named registration must always assign — `.state(name, {})` /
+				// `.state(name, [])` are real (typed) values, not no-ops
+				if (!name && isEmpty(value)) return this
 
 				if (name) {
 					if (!fresh && name in store)
@@ -2314,8 +2334,9 @@ export class Elysia<
 
 			case 2:
 				if (
-					// @ts-ignore
-					scopeOrFnOrError.prototype instanceof Error
+					typeof scopeOrFnOrError === 'function' &&
+					((scopeOrFnOrError as unknown) === Error ||
+						scopeOrFnOrError.prototype instanceof Error)
 				) {
 					const run = (
 						typeof fnOrError === 'function'
@@ -2494,23 +2515,28 @@ export class Elysia<
 					Definitions['typebox']
 				>,
 		const BeforeHandle extends MaybeArray<
-			OptionalHandler<Schema, Singleton>
+			OptionalHandler<
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
 		>,
-		const AfterHandle extends MaybeArray<AfterHandler<Schema, Singleton>>,
+		const AfterHandle extends MaybeArray<AfterHandler<
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>>,
 		const ErrorHandle extends MaybeArray<
-			ErrorHandler<Definitions['error'], Schema, Singleton>
+			ErrorHandler<
+				Definitions['error'],
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
 		>
 	>(
 		hook: GuardLocalHook<
 			Input,
 			// @ts-ignore
 			Schema & MacroContext,
-			Singleton & {
-				derive: Ephemeral['derive'] &
-					Volatile['derive'] &
-					// @ts-ignore
-					MacroContext['response']
-			},
+			GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>,
 			keyof Metadata['parser'],
 			BeforeHandle,
 			AfterHandle,
@@ -2569,23 +2595,28 @@ export class Elysia<
 					Definitions['typebox']
 				>,
 		const BeforeHandle extends MaybeArray<
-			OptionalHandler<Schema, Singleton>
+			OptionalHandler<
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
 		>,
-		const AfterHandle extends MaybeArray<AfterHandler<Schema, Singleton>>,
+		const AfterHandle extends MaybeArray<AfterHandler<
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>>,
 		const ErrorHandle extends MaybeArray<
-			ErrorHandler<Definitions['error'], Schema, Singleton>
+			ErrorHandler<
+				Definitions['error'],
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
 		>
 	>(
 		hook: GuardLocalHook<
 			Input,
 			// @ts-ignore
 			Schema & MacroContext,
-			Singleton & {
-				derive: Ephemeral['derive'] &
-					Volatile['derive'] &
-					// @ts-ignore
-					MacroContext['response']
-			},
+			GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>,
 			keyof Metadata['parser'],
 			BeforeHandle,
 			AfterHandle,
@@ -2648,11 +2679,21 @@ export class Elysia<
 					Definitions['typebox']
 				>,
 		const BeforeHandle extends MaybeArray<
-			OptionalHandler<Schema, Singleton>
+			OptionalHandler<
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
 		>,
-		const AfterHandle extends MaybeArray<AfterHandler<Schema, Singleton>>,
+		const AfterHandle extends MaybeArray<AfterHandler<
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>>,
 		const ErrorHandle extends MaybeArray<
-			ErrorHandler<Definitions['error'], Schema, Singleton>
+			ErrorHandler<
+				Definitions['error'],
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
 		>,
 		const NewElysia extends AnyElysia
 	>(
@@ -2660,12 +2701,7 @@ export class Elysia<
 			Input,
 			// @ts-ignore
 			Schema & MacroContext,
-			Singleton & {
-				derive: Ephemeral['derive'] &
-					Volatile['derive'] &
-					// @ts-ignore
-					MacroContext['response']
-			},
+			GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>,
 			keyof Metadata['parser'],
 			BeforeHandle,
 			AfterHandle,
@@ -2736,11 +2772,21 @@ export class Elysia<
 					Definitions['typebox']
 				>,
 		const BeforeHandle extends MaybeArray<
-			OptionalHandler<Schema, Singleton>
+			OptionalHandler<
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
 		>,
-		const AfterHandle extends MaybeArray<AfterHandler<Schema, Singleton>>,
+		const AfterHandle extends MaybeArray<AfterHandler<
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>>,
 		const ErrorHandle extends MaybeArray<
-			ErrorHandler<Definitions['error'], Schema, Singleton>
+			ErrorHandler<
+				Definitions['error'],
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
 		>,
 		const NewElysia extends AnyElysia
 	>(
@@ -2748,12 +2794,7 @@ export class Elysia<
 			Input,
 			// @ts-ignore
 			Schema & MacroContext,
-			Singleton & {
-				derive: Ephemeral['derive'] &
-					Volatile['derive'] &
-					// @ts-ignore
-					MacroContext['response']
-			},
+			GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>,
 			keyof Metadata['parser'],
 			BeforeHandle,
 			AfterHandle,
@@ -2828,11 +2869,21 @@ export class Elysia<
 					Definitions['typebox']
 				>,
 		const BeforeHandle extends MaybeArray<
-			OptionalHandler<Schema, Singleton>
+			OptionalHandler<
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
 		>,
-		const AfterHandle extends MaybeArray<AfterHandler<Schema, Singleton>>,
+		const AfterHandle extends MaybeArray<AfterHandler<
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>>,
 		const ErrorHandle extends MaybeArray<
-			ErrorHandler<Definitions['error'], Schema, Singleton>
+			ErrorHandler<
+				Definitions['error'],
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
 		>
 	>(
 		scope: 'local',
@@ -2840,12 +2891,7 @@ export class Elysia<
 			Input,
 			// @ts-ignore
 			Schema & MacroContext,
-			Singleton & {
-				derive: Ephemeral['derive'] &
-					Volatile['derive'] &
-					// @ts-ignore
-					MacroContext['response']
-			},
+			GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>,
 			keyof Metadata['parser'],
 			BeforeHandle,
 			AfterHandle,
@@ -2901,11 +2947,21 @@ export class Elysia<
 					Definitions['typebox']
 				>,
 		const BeforeHandle extends MaybeArray<
-			OptionalHandler<Schema, Singleton>
+			OptionalHandler<
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
 		>,
-		const AfterHandle extends MaybeArray<AfterHandler<Schema, Singleton>>,
+		const AfterHandle extends MaybeArray<AfterHandler<
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>>,
 		const ErrorHandle extends MaybeArray<
-			ErrorHandler<Definitions['error'], Schema, Singleton>
+			ErrorHandler<
+				Definitions['error'],
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
 		>
 	>(
 		scope: 'local',
@@ -2913,12 +2969,7 @@ export class Elysia<
 			Input,
 			// @ts-ignore
 			Schema & MacroContext,
-			Singleton & {
-				derive: Ephemeral['derive'] &
-					Volatile['derive'] &
-					// @ts-ignore
-					MacroContext['response']
-			},
+			GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>,
 			keyof Metadata['parser'],
 			BeforeHandle,
 			AfterHandle,
@@ -2979,11 +3030,21 @@ export class Elysia<
 					Definitions['typebox']
 				>,
 		const BeforeHandle extends MaybeArray<
-			OptionalHandler<Schema, Singleton>
+			OptionalHandler<
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
 		>,
-		const AfterHandle extends MaybeArray<AfterHandler<Schema, Singleton>>,
+		const AfterHandle extends MaybeArray<AfterHandler<
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>>,
 		const ErrorHandle extends MaybeArray<
-			ErrorHandler<Definitions['error'], Schema, Singleton>
+			ErrorHandler<
+				Definitions['error'],
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
 		>
 	>(
 		scope: 'plugin',
@@ -2991,12 +3052,7 @@ export class Elysia<
 			Input,
 			// @ts-ignore
 			Schema & MacroContext,
-			Singleton & {
-				derive: Ephemeral['derive'] &
-					Volatile['derive'] &
-					// @ts-ignore
-					MacroContext['response']
-			},
+			GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>,
 			keyof Metadata['parser'],
 			BeforeHandle,
 			AfterHandle,
@@ -3052,11 +3108,21 @@ export class Elysia<
 					Definitions['typebox']
 				>,
 		const BeforeHandle extends MaybeArray<
-			OptionalHandler<Schema, Singleton>
+			OptionalHandler<
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
 		>,
-		const AfterHandle extends MaybeArray<AfterHandler<Schema, Singleton>>,
+		const AfterHandle extends MaybeArray<AfterHandler<
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>>,
 		const ErrorHandle extends MaybeArray<
-			ErrorHandler<Definitions['error'], Schema, Singleton>
+			ErrorHandler<
+				Definitions['error'],
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
 		>
 	>(
 		scope: 'plugin',
@@ -3064,12 +3130,7 @@ export class Elysia<
 			Input,
 			// @ts-ignore
 			Schema & MacroContext,
-			Singleton & {
-				derive: Ephemeral['derive'] &
-					Volatile['derive'] &
-					// @ts-ignore
-					MacroContext['response']
-			},
+			GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>,
 			keyof Metadata['parser'],
 			BeforeHandle,
 			AfterHandle,
@@ -3130,11 +3191,21 @@ export class Elysia<
 					Definitions['typebox']
 				>,
 		const BeforeHandle extends MaybeArray<
-			OptionalHandler<Schema, Singleton>
+			OptionalHandler<
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
 		>,
-		const AfterHandle extends MaybeArray<AfterHandler<Schema, Singleton>>,
+		const AfterHandle extends MaybeArray<AfterHandler<
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>>,
 		const ErrorHandle extends MaybeArray<
-			ErrorHandler<Definitions['error'], Schema, Singleton>
+			ErrorHandler<
+				Definitions['error'],
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
 		>
 	>(
 		scope: 'global',
@@ -3142,12 +3213,7 @@ export class Elysia<
 			Input,
 			// @ts-ignore
 			Schema & MacroContext,
-			Singleton & {
-				derive: Ephemeral['derive'] &
-					Volatile['derive'] &
-					// @ts-ignore
-					MacroContext['response']
-			},
+			GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>,
 			keyof Metadata['parser'],
 			BeforeHandle,
 			AfterHandle,
@@ -3208,11 +3274,21 @@ export class Elysia<
 					Definitions['typebox']
 				>,
 		const BeforeHandle extends MaybeArray<
-			OptionalHandler<Schema, Singleton>
+			OptionalHandler<
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
 		>,
-		const AfterHandle extends MaybeArray<AfterHandler<Schema, Singleton>>,
+		const AfterHandle extends MaybeArray<AfterHandler<
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>>,
 		const ErrorHandle extends MaybeArray<
-			ErrorHandler<Definitions['error'], Schema, Singleton>
+			ErrorHandler<
+				Definitions['error'],
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
 		>
 	>(
 		scope: 'global',
@@ -3220,12 +3296,7 @@ export class Elysia<
 			Input,
 			// @ts-ignore
 			Schema & MacroContext,
-			Singleton & {
-				derive: Ephemeral['derive'] &
-					Volatile['derive'] &
-					// @ts-ignore
-					MacroContext['response']
-			},
+			GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>,
 			keyof Metadata['parser'],
 			BeforeHandle,
 			AfterHandle,
@@ -3383,11 +3454,21 @@ export class Elysia<
 					Definitions['typebox']
 				>,
 		const BeforeHandle extends MaybeArray<
-			OptionalHandler<Schema, Singleton>
+			OptionalHandler<
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
 		>,
-		const AfterHandle extends MaybeArray<AfterHandler<Schema, Singleton>>,
+		const AfterHandle extends MaybeArray<AfterHandler<
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>>,
 		const ErrorHandle extends MaybeArray<
-			ErrorHandler<Definitions['error'], Schema, Singleton>
+			ErrorHandler<
+				Definitions['error'],
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
 		>,
 		const NewElysia extends AnyElysia
 	>(
@@ -3396,12 +3477,7 @@ export class Elysia<
 			Input,
 			// @ts-ignore
 			Schema & MacroContext,
-			Singleton & {
-				derive: Ephemeral['derive'] &
-					Volatile['derive'] &
-					// @ts-ignore
-					MacroContext['response']
-			},
+			GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>,
 			keyof Metadata['parser'],
 			BeforeHandle,
 			AfterHandle,
@@ -3477,11 +3553,21 @@ export class Elysia<
 					Definitions['typebox']
 				>,
 		const BeforeHandle extends MaybeArray<
-			OptionalHandler<Schema, Singleton>
+			OptionalHandler<
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
 		>,
-		const AfterHandle extends MaybeArray<AfterHandler<Schema, Singleton>>,
+		const AfterHandle extends MaybeArray<AfterHandler<
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>>,
 		const ErrorHandle extends MaybeArray<
-			ErrorHandler<Definitions['error'], Schema, Singleton>
+			ErrorHandler<
+				Definitions['error'],
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
 		>,
 		const NewElysia extends AnyElysia
 	>(
@@ -3490,12 +3576,7 @@ export class Elysia<
 			Input,
 			// @ts-ignore
 			Schema & MacroContext,
-			Singleton & {
-				derive: Ephemeral['derive'] &
-					Volatile['derive'] &
-					// @ts-ignore
-					MacroContext['response']
-			},
+			GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>,
 			keyof Metadata['parser'],
 			BeforeHandle,
 			AfterHandle,
@@ -4725,6 +4806,13 @@ export class Elysia<
 		fn: unknown,
 		hook?: Partial<AnyLocalHook>
 	) {
+		// Elysia 1 order (path, handler, hook) would otherwise silently
+		// serve the hook object as a static 200 and discard the handler
+		if (hook !== undefined && (typeof hook !== 'object' || hook === null))
+			throw new Error(
+				`Elysia 2 route signature is (path, hook, handler) — received ${typeof hook} in the hook position for "${method} ${path}". Did you use the Elysia 1 order (path, handler, hook)?`
+			)
+
 		if (this['~Prefix']) path = joinPath(this['~Prefix'], path)
 		else if (path && path.charCodeAt(0) !== 47) path = '/' + path
 
@@ -4891,7 +4979,7 @@ export class Elysia<
 	 *
 	 * new Elysia()
 	 *     .get('/', () => 'hi')
-	 *     .get('/hook', { query: t.String() }, () => 'hi')
+	 *     .get('/hook', { query: t.Object({ name: t.String() }) }, () => 'hi')
 	 * ```
 	 */
 	get<
@@ -5031,7 +5119,7 @@ export class Elysia<
 	 *
 	 * new Elysia()
 	 *     .post('/', () => 'hi')
-	 *     .post('/hook', { query: t.String() }, () => 'hi')
+	 *     .post('/hook', { query: t.Object({ name: t.String() }) }, () => 'hi')
 	 * ```
 	 */
 	post<
@@ -5171,7 +5259,7 @@ export class Elysia<
 	 *
 	 * new Elysia()
 	 *     .put('/', () => 'hi')
-	 *     .put('/hook', { query: t.String() }, () => 'hi')
+	 *     .put('/hook', { query: t.Object({ name: t.String() }) }, () => 'hi')
 	 * ```
 	 */
 	put<
@@ -5311,7 +5399,7 @@ export class Elysia<
 	 *
 	 * new Elysia()
 	 *     .patch('/', () => 'hi')
-	 *     .patch('/hook', { query: t.String() }, () => 'hi')
+	 *     .patch('/hook', { query: t.Object({ name: t.String() }) }, () => 'hi')
 	 * ```
 	 */
 	patch<
@@ -5451,7 +5539,7 @@ export class Elysia<
 	 *
 	 * new Elysia()
 	 *     .delete('/', () => 'hi')
-	 *     .delete('/hook', { query: t.String() }, () => 'hi')
+	 *     .delete('/hook', { query: t.Object({ name: t.String() }) }, () => 'hi')
 	 * ```
 	 */
 	delete<
@@ -5591,7 +5679,7 @@ export class Elysia<
 	 *
 	 * new Elysia()
 	 *     .options('/', () => 'hi')
-	 *     .options('/hook', { query: t.String() }, () => 'hi')
+	 *     .options('/hook', { query: t.Object({ name: t.String() }) }, () => 'hi')
 	 * ```
 	 */
 	options<
@@ -5731,7 +5819,7 @@ export class Elysia<
 	 *
 	 * new Elysia()
 	 *     .head('/', () => 'hi')
-	 *     .head('/hook', { query: t.String() }, () => 'hi')
+	 *     .head('/hook', { query: t.Object({ name: t.String() }) }, () => 'hi')
 	 * ```
 	 */
 	head<
@@ -6589,6 +6677,9 @@ export class Elysia<
 					;(this['~router'] ??= new Memoirist<CompiledHandler>({
 						loosePath: isLoose
 					})).add('WS', path, handler, false)
+					// fetch handler probes the trie for upgrades only when a
+					// dynamic WS route exists (headers stay unmaterialized)
+					this['~hasDynamicWS'] = true
 				} else {
 					this.#initMap()
 					const wsMap = (this['~map']!['WS'] ??= nullObject() as any)
@@ -6869,4 +6960,55 @@ export class Elysia<
 
 		return r
 	}
+
+	// --- Elysia 1 lifecycle API — renamed/removed in 2.0 ---
+	// String-literal types make the rename hint show up inside the TS
+	// "not callable" error; the runtime throwers below cover untyped calls.
+
+	/** @deprecated renamed to `.error()` in Elysia 2 */
+	declare onError: 'onError was renamed to .error() in Elysia 2'
+	/** @deprecated renamed to `.request()` in Elysia 2 */
+	declare onRequest: 'onRequest was renamed to .request() in Elysia 2'
+	/** @deprecated renamed to `.parse()` in Elysia 2 */
+	declare onParse: 'onParse was renamed to .parse() in Elysia 2'
+	/** @deprecated renamed to `.transform()` in Elysia 2 */
+	declare onTransform: 'onTransform was renamed to .transform() in Elysia 2'
+	/** @deprecated renamed to `.beforeHandle()` in Elysia 2 */
+	declare onBeforeHandle: 'onBeforeHandle was renamed to .beforeHandle() in Elysia 2'
+	/** @deprecated renamed to `.afterHandle()` in Elysia 2 */
+	declare onAfterHandle: 'onAfterHandle was renamed to .afterHandle() in Elysia 2'
+	/** @deprecated renamed to `.afterResponse()` in Elysia 2 */
+	declare onAfterResponse: 'onAfterResponse was renamed to .afterResponse() in Elysia 2'
+	/** @deprecated renamed to `.mapResponse()` in Elysia 2 */
+	declare onResponse: 'onResponse was renamed to .mapResponse() in Elysia 2'
+	/** @deprecated removed in Elysia 2 — use the `listen(port, callback)` callback */
+	declare onStart: 'onStart was removed in Elysia 2 — use the listen(port, callback) callback'
+	/** @deprecated removed in Elysia 2 — use `.cleanup()` */
+	declare onStop: 'onStop was removed in Elysia 2 — use .cleanup()'
+	/** @deprecated removed in Elysia 2 — use `.derive()` */
+	declare resolve: 'resolve was removed in Elysia 2 — use .derive() instead'
 }
+
+// runtime throwers for the Elysia 1 members declared above (`declare` emits
+// nothing, so an untyped/JS caller would otherwise get "not a function")
+for (const [old, hint] of [
+	['onError', 'use .error() instead'],
+	['onRequest', 'use .request() instead'],
+	['onParse', 'use .parse() instead'],
+	['onTransform', 'use .transform() instead'],
+	['onBeforeHandle', 'use .beforeHandle() instead'],
+	['onAfterHandle', 'use .afterHandle() instead'],
+	['onAfterResponse', 'use .afterResponse() instead'],
+	['onResponse', 'use .mapResponse() instead'],
+	['onStart', 'use the listen(port, callback) callback instead'],
+	['onStop', 'use .cleanup() instead'],
+	['resolve', 'use .derive() instead']
+] as const)
+	Object.defineProperty(Elysia.prototype, old, {
+		value: function removed() {
+			throw new Error(`.${old}() was removed in Elysia 2 — ${hint}`)
+		},
+		writable: true,
+		enumerable: false,
+		configurable: true
+	})

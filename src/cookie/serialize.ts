@@ -15,8 +15,15 @@ export function serializeCookie(cookies: Context['set']['cookie']) {
 		const property = cookies[key]
 		if (!property) continue
 
-		const value = property.value
+		let value: unknown = property.value
 		if (value === undefined || value === null) continue
+
+		if (typeof value === 'object') {
+			value = JSON.stringify(value)
+
+			// parsed cookie, unchanged since the wire — nothing to set
+			if ((property as any)['~raw'] === value) continue
+		}
 
 		const v = serialize(key, value as string, property)
 

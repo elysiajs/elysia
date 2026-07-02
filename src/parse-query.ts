@@ -92,14 +92,46 @@ export function parseQueryFromURL(
 		const currentValue = result[finalKey]
 
 		if (array && array?.[finalKey]) {
-			if (finalValue.charCodeAt(0) === 91) {
+			let rawValue = hasBothKeyValuePair
+				? input.slice(equalityIndex + 1, endIndex)
+				: ''
+
+			if (flags & VALUE_HAS_PLUS) rawValue = rawValue.replace(/\+/g, ' ')
+
+			const splitRaw = (raw: string): string[] => {
+				const parts = raw.split(',')
+				if (flags & VALUE_NEEDS_DECODE)
+					for (let i = 0; i < parts.length; i++)
+						parts[i] = decodeComponent(parts[i]) ?? parts[i]
+
+				return parts
+			}
+
+			const rawBracket = rawValue.charCodeAt(0) === 91
+			const decodedBracket =
+				!rawBracket && finalValue.charCodeAt(0) === 91
+
+			if (rawBracket || decodedBracket) {
+				const bracketToArray = () => {
+					// 'ids=[]' is an explicit empty array, not ['']
+					if (rawBracket)
+						return (
+							rawValue.length === 2
+								? []
+								: splitRaw(rawValue.slice(1, -1))
+						) as any
+
+					const inner = (finalValue as string).slice(1, -1)
+					return (inner === '' ? [] : inner.split(',')) as any
+				}
+
 				if (object && object?.[finalKey])
 					try {
 						finalValue = JSON.parse(finalValue) as any
 					} catch {
-						finalValue = finalValue.slice(1, -1).split(',') as any
+						finalValue = bracketToArray()
 					}
-				else finalValue = finalValue.slice(1, -1).split(',') as any
+				else finalValue = bracketToArray()
 
 				if (currentValue === undefined) result[finalKey] = finalValue
 				else if (Array.isArray(currentValue))
@@ -121,9 +153,9 @@ export function parseQueryFromURL(
 				} else if (
 					currentValue === undefined &&
 					!(object && object?.[finalKey]) &&
-					finalValue.indexOf(',') !== -1
+					rawValue.indexOf(',') !== -1
 				)
-					finalValue = finalValue.split(',') as any
+					finalValue = splitRaw(rawValue) as any
 
 				if (currentValue === undefined) {
 					result[finalKey] = Array.isArray(finalValue)

@@ -322,7 +322,7 @@ export function buildWSRoute(
 		const ws: ElysiaWS<any> = Object.create(connection)
 
 		try {
-			const p = parseMessage(ws.raw as any, rawMessage)
+			const p = parseMessage(ws as any, rawMessage)
 			let message = p instanceof Promise ? await p : p
 
 			if (bodyValidator) {
@@ -457,7 +457,7 @@ export function buildWSRoute(
 		const ws: ElysiaWS<any> = Object.create(connection)
 
 		try {
-			const p = parseMessage(ws.raw as any, rawMessage)
+			const p = parseMessage(ws as any, rawMessage)
 			if (p instanceof Promise)
 				return p.then(
 					(message) => dispatchParsedSync(ws, message),

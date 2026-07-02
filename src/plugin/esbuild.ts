@@ -93,7 +93,7 @@ export const aot = (entry: string, options?: ElysiaAotOptions) => ({
 				const original = await readFile(args.path, 'utf8')
 				let contents = inModules
 					? original
-					: rewriteTypeImport(original)
+					: await rewriteTypeImport(original)
 
 				if (isEntryFile)
 					contents = `import 'elysia/compiled'\n${contents}`

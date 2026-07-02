@@ -6,14 +6,7 @@ import { ELYSIA_TYPES } from '../constants'
 import type { DateOptions } from '../types'
 import { StringType } from './string'
 import { Union } from './union'
-import {
-	cloneSchema,
-	createSharedReference,
-	elyType,
-	getMeta,
-	Refines,
-	type Refines as RefinesType
-} from './utils'
+import { cloneSchema, createSharedReference, elyType, getMeta } from './utils'
 
 const ISO8601 = /T\d\d(?::\d\d){1,2} \d\d:\d\d$/
 const removeTime = / (\d{2}:\d{2})$/
@@ -104,39 +97,77 @@ export function DateType(
 }
 
 function DateWithProperty(options: DateOptions) {
-	const refines: RefinesType<Date> = []
+	const min = options.minimumTimestamp
+	const max = options.maximumTimestamp
+	const xMin = options.exclusiveMinimumTimestamp
+	const xMax = options.exclusiveMaximumTimestamp
+	const step = options.multipleOfTimestamp
 
-	if (typeof options.minimumTimestamp === 'number')
-		refines.push([
-			(value) => toTimestamp(value) >= options.minimumTimestamp!,
-			`date must be after or equal to ${new Date(options.minimumTimestamp).toISOString()}`
-		])
+	const minMessage =
+		typeof min === 'number'
+			? `date must be after or equal to ${new Date(min).toISOString()}`
+			: undefined
 
-	if (typeof options.maximumTimestamp === 'number')
-		refines.push([
-			(value) => toTimestamp(value) <= options.maximumTimestamp!,
-			`date must be before or equal to ${new Date(options.maximumTimestamp).toISOString()}`
-		])
+	const maxMessage =
+		typeof max === 'number'
+			? `date must be before or equal to ${new Date(max).toISOString()}`
+			: undefined
 
-	if (typeof options.exclusiveMinimumTimestamp === 'number')
-		refines.push([
-			(value) => toTimestamp(value) > options.exclusiveMinimumTimestamp!,
-			`date must be after ${new Date(options.exclusiveMinimumTimestamp).toISOString()}`
-		])
+	const xMinMessage =
+		typeof xMin === 'number'
+			? `date must be after ${new Date(xMin).toISOString()}`
+			: undefined
 
-	if (typeof options.exclusiveMaximumTimestamp === 'number')
-		refines.push([
-			(value) => toTimestamp(value) < options.exclusiveMaximumTimestamp!,
-			`date must be before ${new Date(options.exclusiveMaximumTimestamp).toISOString()}`
-		])
+	const xMaxMessage =
+		typeof xMax === 'number'
+			? `date must be before ${new Date(xMax).toISOString()}`
+			: undefined
 
-	if (typeof options.multipleOfTimestamp === 'number')
-		refines.push([
-			(value) => toTimestamp(value) % options.multipleOfTimestamp! === 0,
-			`date timestamp must be a multiple of ${options.multipleOfTimestamp}`
-		])
+	const stepMessage =
+		typeof step === 'number'
+			? `date timestamp must be a multiple of ${step}`
+			: undefined
 
-	let schema: any = Refines(StringifiedDate, refines as any)
+	let schema: any = StringifiedDate
+
+	if (minMessage || maxMessage || xMinMessage || xMaxMessage || stepMessage) {
+		let failed = 'must be Date'
+
+		schema = Refine(
+			schema,
+			(value: Date | string | number) => {
+				const t = toTimestamp(value)
+
+				if (minMessage && t < (min as number)) {
+					failed = minMessage
+					return false
+				}
+
+				if (maxMessage && t > (max as number)) {
+					failed = maxMessage
+					return false
+				}
+
+				if (xMinMessage && t <= (xMin as number)) {
+					failed = xMinMessage
+					return false
+				}
+
+				if (xMaxMessage && t >= (xMax as number)) {
+					failed = xMaxMessage
+					return false
+				}
+
+				if (stepMessage && t % (step as number) !== 0) {
+					failed = stepMessage
+					return false
+				}
+
+				return true
+			},
+			() => failed
+		)
+	}
 
 	const [, meta] = getMeta(options as any)
 	if (meta) {

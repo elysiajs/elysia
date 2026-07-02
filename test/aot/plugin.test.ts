@@ -188,13 +188,15 @@ describe('AOT plugin', () => {
 		expect(plugin.load('\0not-ours')).toBeUndefined()
 
 		// transform injects the autoload import into the ENTRY only
-		const injected = plugin.transform(
+		const injected = await plugin.transform(
 			'export const app = 1',
 			resolveEntry(VITE_APP)
 		)
 		expect(injected).toBe("import 'elysia/compiled'\nexport const app = 1")
 		// any other module is untouched
-		expect(plugin.transform('x', '/some/other/file.ts')).toBeUndefined()
+		await expect(
+			plugin.transform('x', '/some/other/file.ts')
+		).resolves.toBeUndefined()
 	})
 
 	it('builds with Bun.build (forced lazy) and SERVES a request end-to-end', async () => {

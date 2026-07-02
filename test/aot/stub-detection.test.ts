@@ -253,48 +253,75 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 	})
 
 	it('STUB_SOURCES filters match both src and dist module paths', () => {
-		// Public/source sucrose imports are userland API, not the internal
-		// handler compiler. Strip must never replace them.
+		// Every filter is scoped to elysia's own install dir (H24) — user
+		// modules that share the file layout (cookie/utils, ws/route, ...)
+		// must never be stubbed.
 		expect(
 			STUB_SOURCES.jit.some(({ filter }) =>
-				filter.test('/x/dist/sucrose.js')
+				filter.test('/x/node_modules/elysia/dist/sucrose.js')
 			)
 		).toBe(false)
 		expect(
 			STUB_SOURCES.jit.some(({ filter }) =>
-				filter.test('/x/src/sucrose.ts')
+				filter.test('/x/elysia/src/sucrose.ts')
 			)
 		).toBe(false)
 		expect(
 			STUB_SOURCES.jit.some(({ filter }) =>
-				filter.test('/x/dist/compile/handler/jit.mjs')
+				filter.test('/x/node_modules/elysia/dist/compile/handler/jit.mjs')
 			)
 		).toBe(true)
 		expect(
 			STUB_SOURCES.jit.some(({ filter }) =>
-				filter.test('/x/src/compile/handler/jit.ts')
+				filter.test('/x/elysia/src/compile/handler/jit.ts')
 			)
 		).toBe(true)
 		expect(
 			STUB_SOURCES.ws.some(({ filter }) =>
-				filter.test('/x/dist/ws/route.mjs')
+				filter.test('/x/node_modules/elysia/dist/ws/route.mjs')
 			)
 		).toBe(true)
 		expect(
 			STUB_SOURCES.ws.some(({ filter }) =>
-				filter.test('/x/src/ws/route.ts')
+				filter.test('/x/elysia/src/ws/route.ts')
 			)
 		).toBe(true)
 		expect(
 			STUB_SOURCES.reconstruct.some(({ filter }) =>
-				filter.test('/x/src/compile/handler/reconstruct.ts')
+				filter.test('/x/elysia/src/compile/handler/reconstruct.ts')
 			)
 		).toBe(true)
 		expect(
 			STUB_SOURCES.reconstruct.some(({ filter }) =>
-				filter.test('/x/dist/compile/handler/reconstruct.mjs')
+				filter.test(
+					'/x/node_modules/elysia/dist/compile/handler/reconstruct.mjs'
+				)
 			)
 		).toBe(true)
+		// pnpm layout keeps an /elysia/dist/ segment
+		expect(
+			STUB_SOURCES.cookie.some(({ filter }) =>
+				filter.test(
+					'/x/node_modules/.pnpm/elysia@2.0.0/node_modules/elysia/dist/cookie/utils.mjs'
+				)
+			)
+		).toBe(true)
+		// user modules with the same shape must NOT be stubbed
+		expect(
+			STUB_SOURCES.cookie.some(({ filter }) =>
+				filter.test('/app/src/cookie/utils.ts')
+			)
+		).toBe(false)
+		expect(
+			STUB_SOURCES.ws.some(({ filter }) =>
+				filter.test('/app/src/ws/route.ts')
+			)
+		).toBe(false)
+		expect(
+			STUB_SOURCES.jit.some(({ filter }) =>
+				filter.test('/app/lib/compile/handler/jit.ts')
+			)
+		).toBe(false)
 		// trace/memory filters are scoped to elysia's layout so they don't clobber
 		// dependency modules that share the bare filename (e.g. typebox's memory).
 		expect(

@@ -891,11 +891,6 @@ export type InternalRoute = readonly [
 	appHook: ChainNode | undefined,
 	// Inheritance chain captured on `.use()`
 	inheritedChain?: ChainNode,
-	// Macro-resolution scope for a route registered by a plugin `.use()`d
-	// INSIDE a `.group()`/`.guard(cb)` — the scope-child carrying the group's
-	// macro overrides. `route[3]` stays the plugin (decorators, chain
-	// composition); without this tag the route's macro keys resolve against
-	// the root table and silently miss a group-tightened gate
 	macroScope?: AnyElysia
 ]
 
@@ -1115,7 +1110,10 @@ type SetContentType =
 	| 'model/gltf+json'
 	| 'model/gltf-binary'
 
-export type HTTPHeaders = Record<string, string | number> & {
+// `string[]` in the index signature exists solely so `'set-cookie'?: string |
+// string[]` survives whole-object assignment (`set.headers = {...}`) — the
+// runtime already handles string[] set-cookie
+export type HTTPHeaders = Record<string, string | number | string[]> & {
 	// Authentication
 	'www-authenticate'?: string
 	authorization?: string
@@ -1831,38 +1829,45 @@ export type ObjectMacroDefs<
 	MacroChannel<Query, 'query', Definitions> &
 	MacroChannel<Params, 'params', Definitions> &
 	MacroChannel<Cookie, 'cookie', Definitions> & {
-	[K in keyof N]: MaybeValueOrVoidFunction<
-		MacroProperty<
-			MacroNames & InputSchema<keyof Definitions['typebox'] & string>,
-			IntersectIfObjectSchema<
-				MergeSchema<
-					UnwrapMacroSchema<
-						MacroDefSchema<K, Body, Headers, Query, Params, Cookie>,
-						Definitions['typebox']
+		[K in keyof N]: MaybeValueOrVoidFunction<
+			MacroProperty<
+				MacroNames & InputSchema<keyof Definitions['typebox'] & string>,
+				IntersectIfObjectSchema<
+					MergeSchema<
+						UnwrapMacroSchema<
+							MacroDefSchema<
+								K,
+								Body,
+								Headers,
+								Query,
+								Params,
+								Cookie
+							>,
+							Definitions['typebox']
+						>,
+						AmbientSchema
 					>,
-					AmbientSchema
+					ScopedSchemas
 				>,
-				ScopedSchemas
-			>,
-			Singleton,
-			Definitions['error']
+				Singleton,
+				Definitions['error']
+			>
 		>
-	>
-} & {
-	[K in keyof N]: N[K] extends (...a: any[]) => any
-		? unknown
-		: string extends keyof N[K]
+	} & {
+		[K in keyof N]: N[K] extends (...a: any[]) => any
 			? unknown
-			: {
-					[P in Exclude<
-						keyof N[K],
-						| MacroPropertyKey
-						| InputSchemaKey
-						| keyof MacroNames
-						| keyof N
-					>]: `Unknown macro property '${P & string}'`
-				}
-} & N
+			: string extends keyof N[K]
+				? unknown
+				: {
+						[P in Exclude<
+							keyof N[K],
+							| MacroPropertyKey
+							| InputSchemaKey
+							| keyof MacroNames
+							| keyof N
+						>]: `Unknown macro property '${P & string}'`
+					}
+	} & N
 
 // ? Unwrap Handler Stuff
 export type CreateEden<
@@ -1893,9 +1898,6 @@ export type CreateEdenResponse<
 	MacroContext extends RouteSchema,
 	// This should be handled by ComposeElysiaResponse
 	Res extends PossibleResponse,
-	// Returned `Error` types with no matching `.error(Class, handler)` yet.
-	// Re-resolved by `ResolveRouteErrors` as handlers register; whatever
-	// remains is the default 500 (folded in at the Eden read side)
 	Err extends Error = never
 > = RouteSchema extends MacroContext
 	? {
@@ -1954,9 +1956,6 @@ type Extract200<T> = T extends AnyElysiaStatus
 			| Extract<T, ElysiaStatus<200, any, 200>>['response']
 	: T
 
-// `Error` instances are excluded first everywhere below: built-in errors
-// carry `code`/`status`/`response` so they structurally match
-// AnyElysiaStatus, but they belong to the error pipeline
 export type ValueToResponseSchema<
 	Value,
 	Errors extends ErrorDefinition[] = []
@@ -2029,18 +2028,30 @@ export type UnionResponseStatus<A, B> = {} extends A
 						: never
 			}
 
+type HasInputValidator<Schema extends RouteSchema, Path extends string> =
+	EmptyInputSchema extends Pick<Schema, Exclude<InputSchemaKey, 'params'>>
+		? undefined extends Schema['params']
+			? false
+			: Schema['params'] extends ResolvePath<Path>
+				? ResolvePath<Path> extends Schema['params']
+					? false
+					: true
+				: true
+		: true
+
 export type ComposeElysiaResponse<
 	Schema extends RouteSchema,
 	Handle,
 	Possibility extends PossibleResponse,
-	Errors extends ErrorDefinition[] = []
+	Errors extends ErrorDefinition[] = [],
+	Path extends string = string
 > = ReconcileStatus<
 	// @ts-ignore
 	Schema['response'],
 	UnionResponseStatus<
 		ValueOrFunctionToResponseSchema<Handle, Errors>,
 		Possibility &
-			(EmptyInputSchema extends Pick<Schema, InputSchemaKey>
+			(HasInputValidator<Schema, Path> extends false
 				? {}
 				: {
 						422: {
@@ -2356,7 +2367,8 @@ export type AddRoute<
 							...Definitions['error'],
 							...Ephemeral['error'],
 							...Volatile['error']
-						]
+						],
+						Path
 					>,
 					UnhandledReturnedErrorOf<
 						Handle,
@@ -2422,7 +2434,8 @@ export type AddWSRoute<
 							...Definitions['error'],
 							...Ephemeral['error'],
 							...Volatile['error']
-						]
+						],
+						Path
 					>
 				>
 			}

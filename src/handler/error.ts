@@ -1,22 +1,58 @@
-import { getAsyncIndexes } from './utils'
+import { getAsyncIndexes, cachedResponse } from './utils'
 import { parseQueryFromURL } from '../parse-query'
 import {
+	NotFound,
+	PROBLEM_JSON,
 	ValidationError,
 	ElysiaStatus,
 	isProduction,
 	internalServerErrorResponse
 } from '../error'
+import { isNotEmpty } from '../utils'
 
 import type { Context } from '../context'
 import type { AppHook } from '../types'
 
-// bypass the compiled-route codegen
 function parseQuery(context: Context) {
 	const c = context as any
 
-	if (c.query === undefined && c.qi !== undefined)
-		context.query = parseQueryFromURL(c.request.url, c.qi)
+	if (c.query !== undefined || c.qi === undefined) return
+
+	Object.defineProperty(context, 'query', {
+		configurable: true,
+		enumerable: true,
+		get() {
+			const value = parseQueryFromURL(c.request.url, c.qi)
+			Object.defineProperty(context, 'query', {
+				value,
+				writable: true,
+				enumerable: true,
+				configurable: true
+			})
+			return value
+		},
+		set(value) {
+			Object.defineProperty(context, 'query', {
+				value,
+				writable: true,
+				enumerable: true,
+				configurable: true
+			})
+		}
+	})
 }
+
+const pristineNotFound = cachedResponse(
+	JSON.stringify({ type: 'not-found', title: 'Not Found', status: 404 }),
+	404,
+	{ 'content-type': PROBLEM_JSON }
+)
+
+const isPristineNotFound = (context: Context, error: any) =>
+	error instanceof NotFound &&
+	error.response === 'Not Found' &&
+	!context.set.cookie &&
+	!isNotEmpty(context.set.headers)
 
 function fallbackResponse(
 	context: Context,
@@ -160,6 +196,8 @@ export function createErrorHandler(
 				}
 			}
 
+			if (isPristineNotFound(context, error)) return pristineNotFound()
+
 			return fallbackResponse(context, error, mapResponse, defaultError)
 		}
 
@@ -189,6 +227,8 @@ export function createErrorHandler(
 				return mapResponse(result, context.set, context)
 			}
 		}
+
+		if (isPristineNotFound(context, error)) return pristineNotFound()
 
 		return fallbackResponse(context, error, mapResponse, defaultError)
 	}

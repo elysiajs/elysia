@@ -205,7 +205,9 @@ import { expectTypeOf } from 'expect-type'
 	})
 
 	const app = new Elysia().use(parent).get('/', ({ query }) => {
-		expectTypeOf(query).toEqualTypeOf<Record<string, string>>()
+		expectTypeOf(query).toEqualTypeOf<
+			Record<string, string | undefined>
+		>()
 	})
 }
 
