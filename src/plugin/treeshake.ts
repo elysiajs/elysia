@@ -1,5 +1,3 @@
-import { init, parse } from 'es-module-lexer'
-
 export interface RewriteOptions {
 	/** Specifier the app imports `t` from. @default 'elysia' */
 	from?: string
@@ -7,40 +5,120 @@ export interface RewriteOptions {
 	typeFrom?: string
 }
 
-export async function rewriteTypeImport(
+const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+function nonCodeSpans(code: string): [start: number, end: number][] {
+	const spans: [number, number][] = []
+	const length = code.length
+	let i = 0
+
+	while (i < length) {
+		const c = code.charCodeAt(i)
+
+		// // line comment
+		if (c === 47 && code.charCodeAt(i + 1) === 47) {
+			const start = i
+			const newline = code.indexOf('\n', i + 2)
+			i = newline === -1 ? length : newline
+			spans.push([start, i])
+			continue
+		}
+
+		// /* block comment */
+		if (c === 47 && code.charCodeAt(i + 1) === 42) {
+			const start = i
+			const end = code.indexOf('*/', i + 2)
+			i = end === -1 ? length : end + 2
+			spans.push([start, i])
+			continue
+		}
+
+		// ' or " string (single line)
+		if (c === 34 || c === 39) {
+			const start = i++
+			while (i < length) {
+				const d = code.charCodeAt(i)
+				if (d === 92) i += 2
+				else if (d === c || d === 10) break
+				else i++
+			}
+			i++
+			spans.push([start, i])
+			continue
+		}
+
+		// ` template literal, including nesting through ${ ... }
+		if (c === 96) {
+			const start = i++
+			// stack: -1 = template text, >= 0 = brace depth inside a `${ }`
+			const stack: number[] = [-1]
+
+			while (i < length && stack.length) {
+				const d = code.charCodeAt(i)
+				if (d === 92) {
+					i += 2
+					continue
+				}
+
+				const top = stack[stack.length - 1]
+				if (top === -1) {
+					// template text
+					if (d === 96) stack.pop()
+					else if (d === 36 && code.charCodeAt(i + 1) === 123) {
+						stack.push(0)
+						i++
+					}
+				} else {
+					// interpolation code
+					if (d === 96) stack.push(-1)
+					else if (d === 123) stack[stack.length - 1]++
+					else if (d === 125) {
+						if (top === 0) stack.pop()
+						else stack[stack.length - 1]--
+					}
+				}
+
+				i++
+			}
+
+			spans.push([start, i])
+			continue
+		}
+
+		i++
+	}
+
+	return spans
+}
+
+export function rewriteTypeImport(
 	code: string,
 	options: RewriteOptions = {}
-): Promise<string> {
+): string {
 	const from = options.from ?? 'elysia'
 	const typeFrom = options.typeFrom ?? `${from}/type`
 
 	if (!code.includes(from)) return code
 
-	// es-module-lexer yields exact top-level import spans — import-shaped
-	// text inside strings/template literals/comments is never rewritten
-	await init
+	// `import <clause> from 'elysia'` at line start; skip `import type ...`.
+	// The trailing `(\\s*(?:with|assert)\\s*\\{[^}]*\\})?` consumes an optional
+	const importRe = new RegExp(
+		`(^|\\n)([ \\t]*)import\\s+(?!type\\b)([\\s\\S]*?)\\s+from\\s*(['"])${escape(from)}\\4(\\s*(?:with|assert)\\s*\\{[^}]*\\})?`,
+		'g'
+	)
 
-	let imports: ReturnType<typeof parse>[0]
-	try {
-		;[imports] = parse(code)
-	} catch {
-		// syntax error — leave the file for the bundler to diagnose
-		return code
-	}
-
+	const spans = nonCodeSpans(code)
 	const edits: { start: number; end: number; text: string }[] = []
+	let m: RegExpExecArray | null
 
-	for (const imp of imports) {
-		// skip dynamic imports and other specifiers
-		if (imp.d !== -1 || imp.n !== from) continue
+	while ((m = importRe.exec(code))) {
+		const [full, lead, indent, clause, , attributes] = m
 
-		const statement = code.slice(imp.ss, imp.se)
-		if (/^import\s+type\b/.test(statement)) continue
-
-		// clause = between the `import` keyword and the `from` keyword
-		const clauseEnd = code.lastIndexOf('from', imp.s)
-		if (clauseEnd <= imp.ss) continue // side-effect-only import
-		const clause = code.slice(imp.ss + 'import'.length, clauseEnd).trim()
+		// import-shaped text inside a template literal/comment is data, not
+		// an import — never rewrite it
+		const keyword = m.index + lead.length + indent.length
+		if (spans.some(([start, end]) => keyword >= start && keyword < end))
+			continue
 
 		const braceStart = clause.indexOf('{')
 		if (braceStart === -1) continue // no named imports → nothing to split
@@ -73,22 +151,15 @@ export async function rewriteTypeImport(
 						? `{ ${kept.join(', ')} }`
 						: ''
 
-		// Preserve an import-attributes clause (`with`/`assert {...}`)
-		const attr = code.slice(imp.e + 1, imp.se)
-
-		// match the original line's indentation for the inserted line
-		const lineStart = code.lastIndexOf('\n', imp.ss - 1) + 1
-		const lead = code.slice(lineStart, imp.ss)
-		const indent = /^[ \t]*$/.test(lead) ? lead : ''
-
+		const attr = attributes ?? ''
 		const lines: string[] = []
 		if (keptClause) lines.push(`import ${keptClause} from '${from}'${attr}`)
 		lines.push(`import * as ${alias} from '${typeFrom}'${attr}`)
 
 		edits.push({
-			start: imp.ss,
-			end: imp.se,
-			text: lines.join('\n' + indent)
+			start: m.index,
+			end: m.index + full.length,
+			text: lead + indent + lines.join('\n' + indent)
 		})
 	}
 

@@ -202,7 +202,6 @@
 	],
 	"dependencies": {
 		"deuri": "^2.0.1",
-		"es-module-lexer": "^2.1.0",
 		"exact-mirror": "1.2.2",
 		"memoirist": "1.1.0"
 	},
