@@ -88,6 +88,22 @@ export const StatusMap = {
 } as const
 export type StatusMap = typeof StatusMap
 
+export const traceEvents = [
+	'request',
+	'parse',
+	'transform',
+	'beforeHandle',
+	'handle',
+	'afterHandle',
+	'mapResponse',
+	'afterResponse',
+	'error'
+] as const
+export const traceEventIndex: Record<TraceEvent, number> = Object.fromEntries(
+	traceEvents.map((event, index) => [event, index])
+) as any
+export type TraceEvent = (typeof traceEvents)[number]
+
 export const StatusMapBack = mapBack(StatusMap)
 export type StatusMapBack = typeof StatusMapBack
 

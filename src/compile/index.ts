@@ -1,7 +1,9 @@
 export {
 	compileHandler,
 	composeRouteHook,
-	buildNativeStaticResponse
+	buildNativeStaticResponse,
+	localMacroRoot,
+	resolveLocalHook
 } from './handler'
 export {
 	Compiled,

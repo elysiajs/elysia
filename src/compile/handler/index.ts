@@ -15,6 +15,7 @@ import {
 	flattenChainMemo,
 	fnOrigin,
 	isLocalScope,
+	macroEpoch,
 	mapMethodBack,
 	mergeHook,
 	nullObject,
@@ -160,40 +161,184 @@ function promoteDerive(hook: any) {
 				? [...arr, ...existing]
 				: [...arr, existing]
 			: arr
+
+		const entries = (hook['~deriveEntries'] ??= [])
+		for (let i = 0; i < arr.length; i++) entries.push(arr[i])
 	}
 
 	hook.derive = undefined
 }
 
-function resolveChainMacros(
-	root: AnyElysia,
-	node: ChainNode | undefined
-): void {
-	while (node) {
-		if ('combine' in node) {
-			resolveChainMacros(root, node.combine)
-			node = node.over
-			continue
-		}
+type ResolutionMemo = WeakMap<
+	object,
+	{ e: number; per: WeakMap<object, WeakMap<object, any>> }
+>
 
-		if (node.added) {
-			root['~applyMacro'](node.added)
-			promoteDerive(node.added)
-		}
+function memoScope(
+	memos: ResolutionMemo,
+	root: object,
+	scope: object
+): WeakMap<object, any> {
+	let bucket = memos.get(root)
+	if (!bucket || bucket.e !== macroEpoch()) {
+		bucket = { e: macroEpoch(), per: new WeakMap() }
 
-		node = node.parent
+		memos.set(root, bucket)
 	}
+
+	let perScope = bucket.per.get(scope)
+	if (!perScope) {
+		perScope = new WeakMap()
+		bucket.per.set(scope, perScope)
+	}
+
+	return perScope
 }
+
+// Memo of resolved localHooks (route[4])
+const localHookMemos: ResolutionMemo = new WeakMap()
+
+export function resolveLocalHook(
+	scope: AnyElysia,
+	hook: Partial<AnyLocalHook> | undefined,
+	root: AnyElysia = scope
+): Partial<AnyLocalHook> | undefined {
+	if (!hook) return hook
+
+	const scopeMacro = scope['~ext']?.macro
+	const rootMacro = root === scope ? undefined : root['~ext']?.macro
+	if (!scopeMacro && !rootMacro) return hook
+
+	let hasMacroKey = false
+	for (const key in hook)
+		if (
+			(scopeMacro && key in scopeMacro) ||
+			(rootMacro && key in rootMacro)
+		) {
+			hasMacroKey = true
+			break
+		}
+
+	if (!hasMacroKey) return hook
+
+	const perScope = memoScope(localHookMemos, root, scope)
+
+	let resolved = perScope.get(hook)
+	if (resolved === undefined) {
+		resolved = cloneHook(hook)
+		if (scopeMacro) {
+			scope['~applyMacro'](resolved)
+
+			if (rootMacro)
+				for (const k in resolved)
+					if (k in scopeMacro) delete (resolved as any)[k]
+		}
+		if (rootMacro) root['~applyMacro'](resolved)
+		perScope.set(hook, resolved)
+	}
+
+	return resolved
+}
+
+export function resolveWSLocalHook(
+	scope: AnyElysia,
+	hook: Partial<AnyLocalHook> | undefined,
+	root: AnyElysia = scope
+): Partial<AnyLocalHook> | undefined {
+	const resolved = resolveLocalHook(scope, hook, root)
+	if (!resolved || (resolved as { derive?: unknown }).derive === undefined)
+		return resolved
+
+	const owned = cloneHook(resolved)
+	promoteDerive(owned)
+
+	return owned
+}
+
+// Memo of resolved chain-node `added`
+//
+// Chain node (a `.guard`/`.group`/`.on` entry, possibly carrying a macro key)
+// is shared by reference across every app that reuses the plugin it lives in
+const chainNodeMemos: ResolutionMemo = new WeakMap()
+
+function resolveChainNode(
+	root: AnyElysia,
+	node: ChainNode
+): Partial<AppHook> | undefined {
+	const added = (node as { added?: Partial<AppHook> }).added
+	if (!added) return added
+
+	const scope = localMacroRoot(
+		((node as { owner?: object }).owner as AnyElysia) ?? root,
+		root
+	)
+
+	const scopeMacro = scope['~ext']?.macro
+	const rootMacro = root === scope ? undefined : root['~ext']?.macro
+
+	let needsMacro = false
+	if (scopeMacro || rootMacro)
+		for (const key in added)
+			if (
+				(scopeMacro && key in scopeMacro) ||
+				(rootMacro && key in rootMacro)
+			) {
+				needsMacro = true
+				break
+			}
+
+	if (!needsMacro && (added as { derive?: unknown }).derive === undefined)
+		return added
+
+	const perScope = memoScope(chainNodeMemos, root, scope)
+
+	let resolved = perScope.get(added)
+	if (resolved === undefined) {
+		resolved = cloneHook(added)
+		if (needsMacro) {
+			if (scopeMacro) {
+				scope['~applyMacro'](resolved)
+
+				if (rootMacro)
+					for (const k in resolved)
+						if (k in scopeMacro) delete (resolved as any)[k]
+			}
+			if (rootMacro) root['~applyMacro'](resolved)
+		}
+
+		promoteDerive(resolved)
+		perScope.set(added, resolved)
+	}
+
+	return resolved
+}
+
+const chainResolver = (root: AnyElysia) =>
+	root['~ext']?.macro || root['~scopeChildren']
+		? (node: ChainNode) => resolveChainNode(root, node)
+		: undefined
+
+export const localMacroRoot = (
+	instance: AnyElysia,
+	root: AnyElysia
+): AnyElysia =>
+	instance !== root &&
+	(instance as { '~scopeChild'?: boolean })['~scopeChild'] === true &&
+	instance['~ext']?.macro
+		? instance
+		: root
 
 function composeRootHook(
 	root: AnyElysia,
 	inheritedChain: ChainNode | undefined
 ): Partial<AppHook> | undefined {
-	const inherited = flattenChainMemo(root, inheritedChain)
+	const resolve = chainResolver(root)
+	const inherited = flattenChainMemo(root, inheritedChain, resolve)
 	const locals = flattenChain(
 		root['~hookChain'],
 		isLocalScope,
-		inheritedChain
+		inheritedChain,
+		resolve
 	)
 
 	if (!inherited) return locals
@@ -203,22 +348,37 @@ function composeRootHook(
 }
 
 export function buildNativeStaticResponse(
-	[, , handler, instance, localHook, appHook, inheritedChain]: InternalRoute,
+	[
+		,
+		,
+		handler,
+		instance,
+		localHook,
+		appHook,
+		inheritedChain,
+		macroScope
+	]: InternalRoute,
 	root: AnyElysia
 ): Response | Promise<Response> | undefined {
 	if (typeof handler === 'function' || handler instanceof Error) return
 
 	const adapter = root['~config']?.adapter ?? defaultAdapter
-	if (localHook) root['~applyMacro'](localHook)
-	resolveChainMacros(root, appHook)
-	if (inheritedChain) resolveChainMacros(root, inheritedChain as ChainNode)
+	const ownedHook = resolveLocalHook(
+		localMacroRoot(macroScope ?? instance, root),
+		localHook,
+		root
+	)
 
-	const flatAppHook = flattenChainMemo(root, appHook as ChainNode)
+	const flatAppHook = flattenChainMemo(
+		root,
+		appHook as ChainNode,
+		chainResolver(root)
+	)
 	const rootHook =
 		instance !== root
 			? composeRootHook(root, inheritedChain as any)
 			: undefined
-	const hook = applyHook(localHook, flatAppHook as any, rootHook, true)
+	const hook = applyHook(ownedHook, flatAppHook as any, rootHook, true)
 
 	if (hook) {
 		if (hook?.transform || hook?.beforeHandle || hook?.afterHandle) return
@@ -289,15 +449,25 @@ export function composeRouteHook(
 	localHook: Partial<AnyLocalHook> | undefined,
 	appHook: ChainNode | undefined,
 	inheritedChain: ChainNode | undefined,
-	root: AnyElysia
+	root: AnyElysia,
+	// When plugin was `.use()`d inside a `.group()`/`.guard(cb)`
+	// its macro keys must resolve against that group's overrides, not `root`'s table.
+	macroScope?: AnyElysia
 ): AnyLocalHook | undefined {
+	const resolve = chainResolver(root)
+	localHook = resolveLocalHook(
+		localMacroRoot(macroScope ?? instance, root),
+		localHook,
+		root
+	)
+
 	const flatAppHook = appHook
-		? flattenChainMemo(root, appHook as ChainNode)
+		? flattenChainMemo(root, appHook as ChainNode, resolve)
 		: undefined
 
 	let inherited =
 		instance !== root
-			? (flattenChainMemo(root, inheritedChain as any) as
+			? (flattenChainMemo(root, inheritedChain as any, resolve) as
 					| Partial<AppHook>
 					| undefined)
 			: undefined
@@ -306,7 +476,8 @@ export function composeRouteHook(
 			? flattenChain(
 					root['~hookChain'],
 					isLocalScope,
-					inheritedChain as any
+					inheritedChain as any,
+					resolve
 				)
 			: undefined
 
@@ -364,7 +535,8 @@ export function compileHandler(
 		instance,
 		localHook,
 		appHook,
-		inheritedChain
+		inheritedChain,
+		macroScope
 	]: InternalRoute,
 	root: AnyElysia,
 	precomputedStatic?: Response
@@ -375,12 +547,16 @@ export function compileHandler(
 
 	// When frozen factory does not consume any hook-derived params
 	// Keep non-function/static/Error/precomputed/macro cases on the normal path
-	// to preserve existing compile-time side-effect/order semantics
+	// to preserve existing compile-time side-effect/order semantics.
+	// The macro gate checks the route's RESOLUTION scope, not just `root` — a
+	// group-defined macro may exist only on the scope-child's table (it never
+	// merges back), and skipping resolution here would drop it under AOT.
 	if (
 		reconstructed &&
 		!precomputedStatic &&
 		typeof handler === 'function' &&
 		!root['~ext']?.macro &&
+		!localMacroRoot(macroScope ?? instance, root)['~ext']?.macro &&
 		!reconstructNeedsHookState(reconstructed.a)
 	)
 		return reconstructed.f(
@@ -395,19 +571,16 @@ export function compileHandler(
 			})
 		) as CompiledHandler
 
-	if (root['~ext']?.macro) {
-		if (localHook) root['~applyMacro'](localHook)
-		if (appHook) resolveChainMacros(root, appHook)
-		if (inheritedChain)
-			resolveChainMacros(root, inheritedChain as ChainNode)
-	}
-
+	// Route- and chain-level macros are resolved inside `composeRouteHook`
+	// (localHook via a per-root clone, chain nodes before the memoised flatten
+	// is cached) so no shared registration state is mutated in place.
 	const hook = composeRouteHook(
 		instance,
 		localHook,
 		appHook as any,
 		inheritedChain as any,
-		root
+		root,
+		macroScope
 	)
 
 	if (hook) {

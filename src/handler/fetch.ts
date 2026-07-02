@@ -273,7 +273,18 @@ export function createFetchHandler(
 
 							if (cache)
 								for (let i = 0; i < cache.length; i++) {
-									const r = cache[i].afterResponse({
+									// subscription-gated: unsubscribed = flat
+									// timestamps only (no recorder/literal)
+									const fast = cache[i].b(
+										7,
+										afterResponses?.length ?? 0
+									)
+									if (fast) {
+										cache[i].r(fast)
+										continue
+									}
+
+									const r = cache[i].begin(7, {
 										id: context.rid ?? '',
 										event: 'afterResponse',
 										name: 'afterResponse',
@@ -318,13 +329,17 @@ export function createFetchHandler(
 
 			const requestReports = new Array(traceLength)
 			for (let i = 0; i < traceLength; i++)
-				requestReports[i] = trace[i].request({
-					id: context.rid,
-					event: 'request',
-					name: 'request',
-					begin: performance.now(),
-					total: onRequests.length
-				})
+				// subscription-gated: `b()` returns a truthy numeric token for
+				// an unsubscribed phase (flat timestamps, no recorder/literal)
+				requestReports[i] =
+					trace[i].b(0, onRequests.length) ||
+					trace[i].begin(0, {
+						id: context.rid,
+						event: 'request',
+						name: 'request',
+						begin: performance.now(),
+						total: onRequests.length
+					})
 
 			try {
 				for (let i = 0; i < onRequests.length; i++) {
@@ -348,7 +363,7 @@ export function createFetchHandler(
 
 					if (result !== undefined) {
 						for (let j = 0; j < traceLength; j++)
-							requestReports[j].resolve()
+							trace[j].r(requestReports[j])
 						const response = mapResponse(
 							result,
 							context.set
@@ -360,7 +375,7 @@ export function createFetchHandler(
 				}
 
 				for (let i = 0; i < traceLength; i++)
-					requestReports[i].resolve()
+					trace[i].r(requestReports[i])
 
 				return await findRoute(
 					context,
@@ -375,7 +390,7 @@ export function createFetchHandler(
 				)
 			} catch (error) {
 				for (let i = 0; i < traceLength; i++)
-					requestReports[i].resolve(error)
+					trace[i].r(requestReports[i], error as Error)
 
 				return finalizeError(
 					context,

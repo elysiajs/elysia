@@ -890,7 +890,13 @@ export type InternalRoute = readonly [
 	// `flattenChain(appHook)` materialises the route's compile-time hooks
 	appHook: ChainNode | undefined,
 	// Inheritance chain captured on `.use()`
-	inheritedChain?: ChainNode
+	inheritedChain?: ChainNode,
+	// Macro-resolution scope for a route registered by a plugin `.use()`d
+	// INSIDE a `.group()`/`.guard(cb)` — the scope-child carrying the group's
+	// macro overrides. `route[3]` stays the plugin (decorators, chain
+	// composition); without this tag the route's macro keys resolve against
+	// the root table and silently miss a group-tightened gate
+	macroScope?: AnyElysia
 ]
 
 export type ErrorHandler<

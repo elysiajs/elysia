@@ -61,6 +61,11 @@ export function fnv1a(str: string): number {
  */
 export const fnOrigin = new WeakMap<Function, number>()
 
+// Macro-definition provenance: def → hash of the named plugin that registered
+// to prevent collisions
+// Used by `#use()` to skip macro merges from a plugin that has already been absorbed by parent
+export const macroOrigin = new WeakMap<object | Function, number>()
+
 export const isDownwardScope = (s: EventScope | undefined) =>
 	s === 'plugin' || s === 'global'
 
@@ -100,6 +105,13 @@ export type ChainNode =
 			// `propagated=true` are skipped in subsequent `#use` walks.
 			// Globals propagate regardless of this flag.
 			propagated?: boolean
+			// Instance this node was registered on (`#pushHook` / `#use`
+			// propagation). Macro keys in `added` resolve against the macro
+			// table in scope THERE — a `.guard({ macro: true })` inside a
+			// `.group()` must see the group's override, not the root's
+			// definition (typed `object` to avoid a circular AnyElysia import;
+			// consumers cast)
+			owner?: object
 	  }
 	| { combine: ChainNode; over: ChainNode | undefined }
 
@@ -115,7 +127,12 @@ const flattenPhaseStack: number[] = []
 export function flattenChain(
 	start: ChainNode | undefined,
 	keep?: (s: EventScope | undefined) => boolean,
-	stopAt?: ChainNode
+	stopAt?: ChainNode,
+	// Resolve a node's `added` (expand macros) as it is appended, WITHOUT
+	// mutating the node — nodes are shared by reference across every app that
+	// reuses a plugin, so each root must resolve its own copy. Omitted (raw
+	// `node.added`) when the caller has no macros.
+	resolveAdded?: (node: ChainNode) => Partial<AppHook> | undefined
 ): Partial<AppHook> | undefined {
 	if (!start || start === stopAt) return
 	const result = nullObject() as Partial<AppHook>
@@ -132,12 +149,16 @@ export function flattenChain(
 		const phase = phases.pop()!
 
 		if (phase === 1) {
-			appendInto(
-				result,
-				(node as { added: Partial<AppHook> }).added,
-				keep,
-				(node as { scope?: EventScope }).scope
-			)
+			const added = resolveAdded
+				? resolveAdded(node)
+				: (node as { added: Partial<AppHook> }).added
+			if (added)
+				appendInto(
+					result,
+					added,
+					keep,
+					(node as { scope?: EventScope }).scope
+				)
 			continue
 		}
 
@@ -164,27 +185,46 @@ export function flattenChain(
 	if (isNotEmpty(result)) return result
 }
 
+// Global macro-table epoch. Bumped by `invalidateMacroEpoch` whenever ANY
+// macro table mutates (`.macro()` / `#use` merge); every macro-resolution memo
+// (flattens here, localHook/chainNode memos in `compile/handler`) validates
+// its bucket against the current epoch. Deliberately coarse: per-root deletes
+// cannot reach every consumer (an app that already `.use()`d the mutated
+// instance holds memos keyed under ITSELF), which served stale pre-macro
+// resolutions after an introspect-then-mutate sequence. Registration-time
+// only — memos rebuild lazily and nothing bumps after first compile.
+let macroTableEpoch = 0
+
+export const macroEpoch = () => macroTableEpoch
+export const invalidateMacroEpoch = () => {
+	macroTableEpoch++
+}
+
 const flattenChainMemos = new WeakMap<
 	object,
-	WeakMap<ChainNode, Partial<AppHook>>
+	{ e: number; per: WeakMap<ChainNode, Partial<AppHook>> }
 >()
 const emptyFlatten = Object.freeze(nullObject()) as Partial<AppHook>
 
 export function flattenChainMemo(
 	root: object,
-	start: ChainNode | undefined
+	start: ChainNode | undefined,
+	resolveAdded?: (node: ChainNode) => Partial<AppHook> | undefined
 ): Partial<AppHook> | undefined {
 	if (!start) return
 
-	let perRoot = flattenChainMemos.get(root)
-	if (!perRoot) {
-		perRoot = new WeakMap()
-		flattenChainMemos.set(root, perRoot)
+	let bucket = flattenChainMemos.get(root)
+	if (!bucket || bucket.e !== macroTableEpoch) {
+		bucket = { e: macroTableEpoch, per: new WeakMap() }
+		flattenChainMemos.set(root, bucket)
 	}
+	const perRoot = bucket.per
 
 	let cached = perRoot.get(start)
 	if (cached === undefined) {
-		cached = flattenChain(start) ?? emptyFlatten
+		cached =
+			flattenChain(start, undefined, undefined, resolveAdded) ??
+			emptyFlatten
 		perRoot.set(start, cached)
 	}
 
@@ -208,7 +248,11 @@ function appendInto(
 		const v = (src as any)[key]
 		if (v === undefined || v === null) continue
 
-		if (eventProperties.has(key) || key === 'schemas') {
+		if (
+			eventProperties.has(key) ||
+			key === 'schemas' ||
+			key === '~deriveEntries'
+		) {
 			const existing = (target as any)[key]
 
 			if (Array.isArray(v)) {
@@ -580,7 +624,9 @@ export function coalesceStandaloneSchemas(
 			}
 
 			if (canMerge) {
-				Object.assign(e, entry)
+				// Replace the slot with a fresh merged object instead of
+				// mutating `e` in place
+				existing[i] = Object.assign(nullObject(), e, entry)
 				merged = true
 				break
 			}
@@ -637,6 +683,11 @@ export function mergeHook(
 
 	if (a.schemas || b.schemas)
 		a.schemas = mergeArray(a.schemas, b.schemas, reverse) as any
+
+	const aDerive = (a as any)['~deriveEntries']
+	const bDerive = (b as any)['~deriveEntries']
+	if (aDerive || bDerive)
+		(a as any)['~deriveEntries'] = mergeArray(aDerive, bDerive, reverse)
 
 	return a
 }
@@ -746,6 +797,62 @@ export function cloneHook<T extends Partial<AnyLocalHook> | Partial<AppHook>>(
 	}
 
 	return out as T
+}
+
+export function clonePlainDeep<T>(value: T, seen?: WeakMap<object, any>): T {
+	if (Array.isArray(value)) {
+		seen ??= new WeakMap()
+
+		const hit = seen.get(value)
+		if (hit) return hit
+
+		const out: unknown[] = []
+		seen.set(value, out)
+
+		for (let i = 0; i < value.length; i++)
+			out[i] = clonePlainDeep((value as unknown[])[i], seen)
+
+		return out as T
+	}
+
+	if (isPlainObject(value)) {
+		seen ??= new WeakMap()
+		const hit = seen.get(value)
+		if (hit) return hit
+		const out = nullObject() as Record<string, unknown>
+		seen.set(value, out)
+		for (const key in value)
+			out[key] = clonePlainDeep(
+				(value as Record<string, unknown>)[key],
+				seen
+			)
+
+		return out as T
+	}
+
+	return value
+}
+
+export function guardNonPlainLeaves(
+	target: Record<string, unknown>,
+	source: Record<string, unknown>
+) {
+	for (const key in source) {
+		if (!Object.hasOwn(source, key)) continue
+
+		const sv = source[key]
+		if (!isObject(sv) || isClass(sv)) continue
+
+		const tv = target[key]
+		if (tv === undefined || !isObject(tv)) continue
+
+		if (isPlainObject(tv)) {
+			guardNonPlainLeaves(tv, sv as Record<string, unknown>)
+			continue
+		}
+
+		target[key] = clonePlainDeep(sv)
+	}
 }
 
 export function joinPath(base: string, path: string) {

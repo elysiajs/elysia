@@ -4,7 +4,9 @@ import { applyHoc, createFetchHandler } from './handler'
 import {
 	compileHandler,
 	composeRouteHook,
-	buildNativeStaticResponse
+	buildNativeStaticResponse,
+	localMacroRoot,
+	resolveLocalHook
 } from './compile'
 import { buildWSRoute } from './ws/route'
 import type {
@@ -19,6 +21,7 @@ import { isBun } from './universal/constants'
 import { isDynamicRegex, needEncodeRegex, MethodMap } from './constants'
 import { BunAdapter } from './adapter/bun'
 import {
+	clonePlainDeep,
 	clonePlainDecorators,
 	coalesceStandaloneSchemas,
 	createErrorEventHandler,
@@ -27,11 +30,13 @@ import {
 	fnOrigin,
 	fnv1a,
 	getLoosePath,
+	guardNonPlainLeaves,
 	hookToGuard,
 	isEmpty,
 	isNotEmpty,
 	isRecordNumber,
 	joinPath,
+	macroOrigin,
 	mapMethodBack,
 	mergeDeep,
 	mergeResponse,
@@ -39,7 +44,8 @@ import {
 	pushField,
 	replaceUrlPath,
 	schemaProperties,
-	type ChainNode
+	type ChainNode,
+	invalidateMacroEpoch
 } from './utils'
 
 import type { TRef, TSchema } from 'typebox'
@@ -156,6 +162,21 @@ export class Elysia<
 	#hash?: number
 	#childrenHash?: Set<number>
 
+	// Group/guard macro-scope internals used ONLY within Elysia (base.ts), so
+	// `#`-private like `#hash`/`#childrenHash`. Their cross-module siblings
+	// (read by compile/handler/index.ts) stay tilde-public: `~scopeChild`,
+	// `~scopeChildren`.
+	//
+	// The instance whose `.group()`/`.guard(cb)` created this scope-child.
+	#scopeParent?: AnyElysia
+	// Macro defs a scope-child absorbed via a nested plugin `.use()` (name → def)
+	// — merge-back to the parent copies only these, not the names the group/guard
+	// callback defined itself.
+	#pluginMacros?: Map<string, unknown>
+	// While a FUNCTIONAL plugin `(app) => app.macro(...)` is applying, the macro
+	// names that existed before it ran (the C5 cross-plugin collision window).
+	#macroBaseline?: Set<string>
+
 	'~ext'?: {
 		decorator?: Singleton['decorator']
 		store?: Singleton['store']
@@ -174,20 +195,44 @@ export class Elysia<
 	#history?: InternalRoute[]
 	server?: Server
 
-	#resolveMacros() {
-		if (!this.#history) return
-		for (let i = 0; i < this.#history.length; i++) {
-			const localHook = this.#history[i][4]
-			if (localHook) this['~applyMacro'](localHook)
-		}
-	}
-
 	get history(): InternalRoute[] | undefined {
 		if (!this.#history) return
 
-		this.#resolveMacros()
+		if (!this['~ext']?.macro && !this['~scopeChildren'])
+			return this.#history
 
-		return this.#history
+		// Expose macro-expanded route hooks for introspection WITHOUT mutating
+		// the shared registration tuples. `resolveLocalHook` (the compile path)
+		// resolves against the route's own macro scope (a group scope-child via
+		// route[7]/route[3]) with a root fallback and memoises an IMMUTABLE
+		// expanded clone — so the tuple is never touched and AOT replay, which
+		// reads these same copies, stays in sync. Unchanged hook → same route.
+		return this.#history.map((route) => {
+			const localHook = route[4]
+			if (!localHook) return route
+
+			const localRoot = localMacroRoot(
+				(route[7] as AnyElysia) ?? (route[3] as AnyElysia) ?? this,
+				this as unknown as AnyElysia
+			)
+			const resolved = resolveLocalHook(
+				localRoot,
+				localHook,
+				this as unknown as AnyElysia
+			)
+			if (resolved === localHook) return route
+
+			return [
+				route[0],
+				route[1],
+				route[2],
+				route[3],
+				resolved,
+				route[5],
+				route[6],
+				route[7]
+			] as unknown as InternalRoute
+		})
 	}
 
 	#compiled?: CompiledHandler[]
@@ -196,7 +241,6 @@ export class Elysia<
 	//
 	// Invalidated on `#add`, `#use`, `#on`, `#pushHook`, `.macro()`, `.as()`, `compileHandler`
 	#cachedRoutes?: PublicRoute[]
-	private '~derive'?: WeakSet<EventFn<'beforeHandle'>>
 
 	'~router'?: Memoirist<CompiledHandler>
 	'~map'?: {
@@ -209,6 +253,20 @@ export class Elysia<
 	}
 
 	'~hasWS'?: boolean
+
+	// Group/guard macro-scope internals that CROSS the module boundary (read by
+	// `localMacroRoot`/`chainResolver` in compile/handler/index.ts), so they stay
+	// tilde-public. The base.ts-only siblings are `#`-private above
+	// (`#scopeParent`/`#pluginMacros`/`#macroBaseline`).
+	//
+	// Set on the inline child created by `.group()`/`.guard(cb)`. Reference-copies
+	// the parent macro table, so a callback `.macro()` override is an intra-app
+	// scoped redefinition, not a cross-plugin collision.
+	'~scopeChild'?: boolean
+
+	// Every group/guard scope-child created on (or absorbed into) this instance,
+	// transitively.
+	'~scopeChildren'?: AnyElysia[]
 
 	constructor(config?: ElysiaConfig<BasePath, Scope>) {
 		this['~config'] = config
@@ -229,8 +287,6 @@ export class Elysia<
 
 		if (this.#cachedRoutes) return this.#cachedRoutes
 
-		this.#resolveMacros()
-
 		const routes = this.#history.map(
 			([
 				method,
@@ -239,22 +295,19 @@ export class Elysia<
 				instance,
 				hook,
 				appHook,
-				inheritedChain
+				inheritedChain,
+				macroScope
 			]) => {
-				// Compose exactly as the runtime does (local + appHook +
-				// inherited `.use()` chain, origin-deduped) so introspection
-				// surfaces guard/group schemas inherited via `.use()` instead
-				// of dropping them. `composeRouteHook` returns a fresh clone,
-				// so the in-place response merge below cannot mutate history.
 				const merged: any = composeRouteHook(
 					instance as any,
 					hook as any,
 					appHook as any,
 					inheritedChain as any,
-					this as any
+					this as any,
+					macroScope as any
 				)
 
-				if (merged?.schemas?.length) {
+				if (merged?.schemas?.length)
 					for (const entry of merged.schemas as any[]) {
 						if (!entry?.response) continue
 						merged.response = mergeResponse(
@@ -262,7 +315,6 @@ export class Elysia<
 							entry.response
 						)
 					}
-				}
 
 				if (merged?.response && !isRecordNumber(merged.response))
 					merged.response = { 200: merged.response }
@@ -758,7 +810,13 @@ export class Elysia<
 	): this {
 		const added: Partial<AppHook> = nullObject()
 		;(added as any)[type] = fn
-		this['~hookChain'] = { added, parent: this['~hookChain'], scope }
+
+		this['~hookChain'] = {
+			added,
+			parent: this['~hookChain'],
+			scope,
+			owner: this
+		}
 		this.#cachedRoutes = undefined
 
 		if (scope === 'plugin') this.#hasPlugin = true
@@ -1307,10 +1365,29 @@ export class Elysia<
 	>
 
 	derive(scopeOrFn: EventScope | Function, fn?: Function): any {
-		this['~derive'] ??= new WeakSet()
-		this['~derive'].add((fn ?? scopeOrFn) as EventFn<'beforeHandle'>)
+		const result = this.#onBranch(
+			'beforeHandle',
+			scopeOrFn as any,
+			fn as any
+		)
 
-		return this.#onBranch('beforeHandle', scopeOrFn as any, fn as any)
+		// `.derive()` folds its fn straight into a `beforeHandle` node (no
+		// `derive` channel for `promoteDerive` to catch later), so tag the node
+		// here. Per-node `~deriveEntries` (not a global fn-identity set) is what
+		// lets the codegen merge this into context while the SAME fn used as a
+		// plain guard elsewhere still early-returns. Spread array-form
+		// `.derive([f1, f2])` so each fn is tagged individually (mirrors
+		// `#pushHook`/`promoteDerive`) — tagging the array object would leave the
+		// members untagged and their returns would short-circuit as a response.
+		const node = this['~hookChain'] as { added?: any } | undefined
+		if (node?.added) {
+			const d = fn ?? scopeOrFn
+			const entries = (node.added['~deriveEntries'] ??= [])
+			if (Array.isArray(d)) for (const f of d) entries.push(f)
+			else entries.push(d)
+		}
+
+		return result
 	}
 
 	mapDerive<
@@ -3214,13 +3291,7 @@ export class Elysia<
 	#guard(scope: EventScope, hook: Partial<AnyLocalHook>): this {
 		hookToGuard(hook as any)
 
-		if (hook.derive) {
-			this['~derive'] ??= new WeakSet<EventFn<'beforeHandle'>>()
-			if (Array.isArray(hook.derive))
-				for (const fn of hook.derive)
-					this['~derive'].add(fn as EventFn<'beforeHandle'>)
-			else this['~derive'].add(hook.derive as EventFn<'beforeHandle'>)
-		}
+		// `hook.derive` is folded + tagged by `#pushHook` below.
 
 		const trackFn = (fn: unknown) => {
 			if (typeof fn !== 'function') return
@@ -3503,6 +3574,10 @@ export class Elysia<
 				: undefined
 		) as AnyElysia
 
+		child['~scopeChild'] = true
+		child.#scopeParent = this as unknown as AnyElysia
+		;(this['~scopeChildren'] ??= []).push(child)
+
 		const src = this['~ext']
 		if (src) {
 			const ext = (child['~ext'] ??= nullObject())
@@ -3512,7 +3587,8 @@ export class Elysia<
 			if (src.headers)
 				ext.headers = Object.assign(nullObject(), src.headers)
 			if (src.models) ext.models = Object.assign(nullObject(), src.models)
-			if (src.macro) ext.macro = Object.assign(nullObject(), src.macro)
+
+			if (src.macro) ext.macro = Object.create(src.macro)
 			if (src.parser) ext.parser = Object.assign(nullObject(), src.parser)
 		}
 
@@ -3541,23 +3617,27 @@ export class Elysia<
 		return (this['~ext'] ??= nullObject())
 	}
 
+	#ensureMacroTable(): NonNullable<NonNullable<this['~ext']>['macro']> {
+		const ext = this.#ext
+		if (ext.macro) return ext.macro
+
+		const parent = this['~scopeChild'] ? this.#scopeParent : undefined
+		ext.macro = parent
+			? Object.create(parent.#ensureMacroTable())
+			: nullObject()
+
+		return ext.macro!
+	}
+
 	#pushHook(_hook: Partial<AppHook>, scope?: EventScope): this {
-		// get resolve/derive to beforeHandle
+		// fold derive into beforeHandle
 		let hook = _hook as any
 
 		if (hook.derive) {
 			const promoted = nullObject() as any
 
 			for (const key of Object.keys(hook)) {
-				if (key === 'derive' || key === 'resolve') continue
-
-				if (
-					!eventProperties.has(key as any) &&
-					!schemaProperties.has(key as any) &&
-					key !== 'schema' &&
-					key !== 'schemas'
-				)
-					continue
+				if (key === 'derive') continue
 
 				promoted[key] = (hook as any)[key]
 			}
@@ -3578,12 +3658,19 @@ export class Elysia<
 				} else {
 					promoted.beforeHandle = extras
 				}
+
+				;(promoted['~deriveEntries'] ??= []).push(...extras)
 			}
 
 			hook = promoted
 		}
 
-		this['~hookChain'] = { added: hook, parent: this['~hookChain'], scope }
+		this['~hookChain'] = {
+			added: hook,
+			parent: this['~hookChain'],
+			scope,
+			owner: this
+		}
 		this.#cachedRoutes = undefined
 
 		return this
@@ -3664,16 +3751,34 @@ export class Elysia<
 				'use `.macro({ name: fn })` instead of `.macro(fn)`'
 			)
 
-		const ext = this.#ext
-		const m = (ext.macro ??= nullObject() as any)
+		const m = this.#ensureMacroTable() as any
 
-		for (const key in macro)
+		const baseline = this.#macroBaseline
+
+		for (const key in macro) {
 			if (typeof macro[key] === 'object')
 				macro[key] = hookToGuard(macro[key] as any) as any
+
+			if (this.#hash !== undefined && !macroOrigin.has(macro[key] as any))
+				macroOrigin.set(macro[key] as any, this.#hash)
+
+			if (
+				baseline?.has(key) &&
+				key in m &&
+				(m as any)[key] !== macro[key]
+			)
+				throw new Error(
+					`Macro "${key}" is defined by more than one plugin. ` +
+						`Rename one of them (macro names must be unique across ` +
+						`composed plugins), or give the plugin a \`name\` so ` +
+						`repeated instances deduplicate.`
+				)
+		}
 
 		Object.assign(m, macro)
 
 		this.#cachedRoutes = undefined
+		invalidateMacroEpoch()
 
 		return this as any
 	}
@@ -3724,10 +3829,10 @@ export class Elysia<
 				seen.add(hook)
 			}
 
-			hook.seed = undefined
-
 			for (const k in hook) {
 				const v = (hook as any)[k]
+
+				if (k === 'seed') continue
 				if (k === 'introspect') {
 					v?.(input)
 
@@ -3736,10 +3841,13 @@ export class Elysia<
 				}
 
 				if (k === 'detail') {
-					if (!input.detail) input.detail = nullObject()
+					const base =
+						clonePlainDeep(input.detail) ?? (nullObject() as any)
+
+					guardNonPlainLeaves(base, v)
 
 					input.detail = mergeDeep(
-						input.detail,
+						base,
 						v,
 						undefined,
 						undefined,
@@ -3757,24 +3865,15 @@ export class Elysia<
 					continue
 				}
 
-				if (k === 'derive') {
-					this['~derive'] ??= new WeakSet()
-					if (Array.isArray(v)) {
-						for (const fn of v as any[])
-							if (typeof fn === 'function')
-								this['~derive']!.add(fn)
-					} else if (typeof v === 'function') {
-						this['~derive']!.add(v as any)
-					}
-				}
-
 				if (k === 'schema') {
 					const incoming: any[] = Array.isArray(v) ? v : [v]
 					if (!input.schemas) (input as any).schemas = []
+
 					coalesceStandaloneSchemas(
 						(input as any).schemas as any[],
 						incoming
 					)
+
 					delete input[key]
 					continue
 				}
@@ -3793,19 +3892,42 @@ export class Elysia<
 				}
 
 				if (k in input) {
-					if (Array.isArray(input[k])) {
+					if (eventProperties.has(k) || k === 'derive') {
+						const macroFns = Array.isArray(v) ? v : [v]
+						const existing = Array.isArray(input[k])
+							? input[k]
+							: [input[k]]
+
+						const merged: any[] = []
+
+						// Track only the macro fns actually placed
+						const seen = new Set<any>()
+						for (const fn of macroFns)
+							if (!existing.includes(fn) && !seen.has(fn)) {
+								seen.add(fn)
+								merged.push(fn)
+							}
+
+						for (const fn of existing)
+							if (!seen.has(fn)) merged.push(fn)
+
+						input[k] = merged
+					} else if (Array.isArray(input[k])) {
 						if (Array.isArray(v)) {
 							for (const item of v)
 								if (!input[k].some((e: any) => e === item))
 									input[k].unshift(item)
 						} else if (!input[k].some((item: any) => item === v))
 							input[k].unshift(v)
-						// Just in case same function is applied
 					} else if (input[k] !== v) input[k] = [v, input[k]]
-				} else {
-					input[k] =
-						eventProperties.has(k) && !Array.isArray(v) ? [v] : v
-				}
+				} else
+					input[k] = eventProperties.has(k)
+						? Array.isArray(v)
+							? v.slice()
+							: [v]
+						: Array.isArray(v)
+							? v.slice()
+							: v
 
 				delete input[key]
 			}
@@ -4092,10 +4214,38 @@ export class Elysia<
 		if (!app) return this
 
 		if (typeof app === 'function') {
-			const result = app(this)
+			const prevBaseline = this.#macroBaseline
+			const baseline = new Set<string>()
+			const existingMacro = this['~ext']?.macro
+			if (existingMacro) for (const k in existingMacro) baseline.add(k)
+			this.#macroBaseline = baseline
 
-			if (result && typeof result.then === 'function')
-				return this.#useAsync(result)
+			let result: unknown
+			try {
+				result = app(this)
+			} finally {
+				this.#macroBaseline = prevBaseline
+			}
+
+			if (result && typeof (result as any).then === 'function') {
+				const beforeMacro = new Map(
+					Object.entries(this['~ext']?.macro ?? nullObject())
+				)
+
+				return this.#useAsync(
+					(result as Promise<any>).then((value) => {
+						const after = this['~ext']?.macro
+						if (after)
+							for (const [k, def] of Object.entries(after))
+								if (beforeMacro.get(k) !== def)
+									throw new Error(
+										`Macro ${k} was added by an async plugin which Elysia can't ensure the soundness. Please register macro in the plugin synchronously instead of async.`
+									)
+
+						return value
+					})
+				)
+			}
 
 			return this
 		}
@@ -4107,11 +4257,7 @@ export class Elysia<
 			return this
 		}
 
-		// An async functional plugin `async (app) => app.get(...)` resolves to
-		// the same instance it mutated in place. Re-applying it would re-walk
-		// `this`'s own chain and duplicate its routes/global hooks onto itself.
 		if (app === this) return this
-
 		if (app.pending) return this.#useAsync(app.modules.then(() => app))
 
 		this.#use(app)
@@ -4148,6 +4294,40 @@ export class Elysia<
 			}
 		}
 
+		const incomingMacro = app['~ext']?.macro as
+			| Record<string, unknown>
+			| undefined
+		const existingMacro = this['~ext']?.macro as
+			| Record<string, unknown>
+			| undefined
+
+		if (incomingMacro && existingMacro && !app['~scopeChild'])
+			for (const macroName in incomingMacro) {
+				if (!(macroName in existingMacro)) continue
+
+				const existing = existingMacro[macroName]
+				const incoming = incomingMacro[macroName]
+				if (existing === incoming) continue
+
+				const origin = macroOrigin.get(existing as any)
+				if (
+					origin !== undefined &&
+					origin === macroOrigin.get(incoming as any)
+				)
+					continue
+
+				if (addedByThisCall)
+					for (const h of addedByThisCall)
+						this.#childrenHash!.delete(h)
+
+				throw new Error(
+					`Macro "${macroName}" is defined by more than one plugin.` +
+						`Rename one of them (macro names must be unique across ` +
+						`composed plugins), or give the plugin a \`name\` so ` +
+						`repeated instances deduplicate.`
+				)
+			}
+
 		if (app.#history) {
 			if (app['~hasWS']) this['~hasWS'] = true
 
@@ -4183,22 +4363,19 @@ export class Elysia<
 					? joinPath(this['~Prefix'], route[1])
 					: route[1]
 
+				const macroScope =
+					route[7] ??
+					(this['~scopeChild'] &&
+					(route[3] as AnyElysia | undefined)?.['~scopeChild'] !==
+						true
+						? this
+						: undefined)
+
 				history.push(
-					inheritedChain === childChain
-						? this['~Prefix']
-							? ([
-									route[0],
-									path,
-									route[2],
-									route[3],
-									route[4],
-									route[5],
-									// Preserve the inherited hook chain (index 6).
-									// Dropping it here silently disabled inherited
-									// guards/auth when an app is mounted under a prefix.
-									childChain
-								] as unknown as InternalRoute)
-							: route
+					inheritedChain === childChain &&
+						!this['~Prefix'] &&
+						macroScope === route[7]
+						? route
 						: ([
 								route[0],
 								path,
@@ -4206,10 +4383,19 @@ export class Elysia<
 								route[3],
 								route[4],
 								route[5],
-								inheritedChain
+								// Preserve the inherited hook chain (index 6).
+								// Dropping it here silently disabled inherited
+								// guards/auth when an app is mounted under a prefix.
+								inheritedChain,
+								macroScope
 							] as unknown as InternalRoute)
 				)
 			}
+		}
+
+		if (app['~scopeChildren']) {
+			const children = (this['~scopeChildren'] ??= [])
+			for (const child of app['~scopeChildren']) children.push(child)
 		}
 
 		const hookChain = app['~hookChain']
@@ -4258,8 +4444,38 @@ export class Elysia<
 			}
 
 			if (macro) {
-				if (ext.macro) Object.assign(ext.macro, macro)
-				else ext.macro = Object.assign(nullObject(), macro)
+				if (app['~scopeChild']) {
+					const pluginMacros = app.#pluginMacros
+					let changed = false
+
+					if (pluginMacros?.size) {
+						const target = this.#ensureMacroTable() as any
+						for (const [name, def] of pluginMacros)
+							if (!(name in target)) {
+								;(target as any)[name] = def
+								changed = true
+
+								if (this['~scopeChild'])
+									(this.#pluginMacros ??= new Map()).set(
+										name,
+										def
+									)
+							}
+					}
+					if (changed) invalidateMacroEpoch()
+				} else {
+					Object.assign(this.#ensureMacroTable(), macro)
+
+					if (this['~scopeChild']) {
+						const pluginMacros = (this.#pluginMacros ??=
+							new Map())
+
+						for (const name in macro)
+							pluginMacros.set(name, (macro as any)[name])
+					}
+
+					invalidateMacroEpoch()
+				}
 			}
 
 			if (error) {
@@ -4295,10 +4511,7 @@ export class Elysia<
 			let pluginEvents: Partial<AppHook> | undefined
 			let globalEvents: Partial<AppHook> | undefined
 
-			const derive = app['~derive']
-
 			if (app.#hasGlobal) this.#hasGlobal = true
-			if (derive) this['~derive'] ??= new WeakSet()
 
 			const nodes = useNodesBuffer
 			nodes.length = 0
@@ -4358,13 +4571,6 @@ export class Elysia<
 							: [raw as Function]
 
 						for (const fn of fns) {
-							if (
-								derive &&
-								key === 'beforeHandle' &&
-								app['~derive']?.has(fn as any)
-							)
-								this['~derive']!.add(fn as any)
-
 							const origin = fnOrigin.get(fn)
 							if (
 								origin !== undefined &&
@@ -4383,6 +4589,27 @@ export class Elysia<
 						continue
 					}
 
+					if (key === '~deriveEntries') {
+						// Carry the per-hook derive provenance across propagation —
+						// CONCAT (the fallback below is last-wins, which would drop
+						// every propagated derive but the final one, silently
+						// turning them into early-returning guards). Over-inclusion
+						// is harmless: codegen consults it only for fns actually in
+						// `beforeHandle`, so no origin-dedup is needed here.
+						const entries = (added as any)['~deriveEntries'] as
+							| Function[]
+							| undefined
+						if (!entries) continue
+
+						const target = isGlobal
+							? (globalEvents ??= nullObject())
+							: (pluginEvents ??= nullObject())
+						const list = ((target as any)['~deriveEntries'] ??= [])
+						for (let j = 0; j < entries.length; j++)
+							list.push(entries[j])
+						continue
+					}
+
 					const target = isGlobal
 						? (globalEvents ??= nullObject())
 						: (pluginEvents ??= nullObject())
@@ -4390,12 +4617,19 @@ export class Elysia<
 				}
 			}
 
+			// `owner: app` — a propagated node's macro keys resolve against the
+			// scope they were registered in. When `app` is a group scope-child
+			// (its global/plugin hooks propagate to the parent here), a macro
+			// key in those hooks must see the group's override table; a plain
+			// plugin `app` is not a scope-child, so `localMacroRoot` falls back
+			// to the compiling root as before.
 			if (globalEvents)
 				this['~hookChain'] = {
 					added: globalEvents,
 					parent: this['~hookChain'],
 					scope: 'global',
-					propagated: true
+					propagated: true,
+					owner: app
 				}
 
 			if (pluginEvents)
@@ -4403,7 +4637,8 @@ export class Elysia<
 					added: pluginEvents,
 					parent: this['~hookChain'],
 					scope: 'plugin',
-					propagated: true
+					propagated: true,
+					owner: app
 				}
 		}
 	}

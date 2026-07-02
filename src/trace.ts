@@ -1,3 +1,4 @@
+import { traceEvents } from './constants';
 import type { Context } from './context'
 import type { Prettify, RouteSchema, SingletonBase } from './types'
 
@@ -134,174 +135,78 @@ export type TraceHandler<
 	): unknown
 }
 
-const createProcess = () => {
-	const { promise, resolve } = Promise.withResolvers<TraceProcess>()
-	const { promise: end, resolve: resolveEnd } =
-		Promise.withResolvers<number>()
-	const { promise: error, resolve: resolveError } =
-		Promise.withResolvers<Error | null>()
-
-	const callbacks = <Function[]>[]
-	const callbacksEnd = <Function[]>[]
-
-	return [
-		(callback?: Function) => {
-			if (callback) callbacks.push(callback)
-
-			return promise
-		},
-		(process: TraceStream) => {
-			const processes = <((callback?: Function) => Promise<void>)[]>[]
-			const resolvers = <((process: TraceStream) => () => void)[]>[]
-
-			// When error is return but not thrown
-			let groupError: Error | null = null
-
-			for (let i = 0; i < (process.total ?? 0); i++) {
-				const { promise, resolve } = Promise.withResolvers<void>()
-				const { promise: end, resolve: resolveEnd } =
-					Promise.withResolvers<number>()
-				const { promise: error, resolve: resolveError } =
-					Promise.withResolvers<Error | null>()
-
-				const callbacks = <Function[]>[]
-				const callbacksEnd = <Function[]>[]
-
-				processes.push((callback?: Function) => {
-					if (callback) callbacks.push(callback)
-
-					return promise
-				})
-
-				resolvers.push((process: TraceStream) => {
-					const result = {
-						...process,
-						end,
-						error,
-						index: i,
-						onStop(callback?: Function) {
-							if (callback) callbacksEnd.push(callback)
-
-							return end
-						}
-					} as any
-
-					resolve(result)
-					for (let i = 0; i < callbacks.length; i++)
-						callbacks[i](result)
-
-					let childResolved = false
-					return (error: Error | null = null) => {
-						if (childResolved) return
-						childResolved = true
-
-						const end = performance.now()
-
-						// Catch return error
-						if (error) groupError = error
-
-						const detail = {
-							end,
-							error,
-							// eslint-disable-next-line sonarjs/no-nested-functions -- single inline getter
-							get elapsed() {
-								return end - process.begin
-							}
-						}
-
-						for (let i = 0; i < callbacksEnd.length; i++)
-							callbacksEnd[i](detail)
-
-						resolveEnd(end)
-						resolveError(error)
-					}
-				})
-			}
-
-			const result = {
-				...process,
-				end,
-				error,
-				onEvent(callback?: Function) {
-					for (let i = 0; i < processes.length; i++)
-						processes[i](callback)
-				},
-				onStop(callback?: Function) {
-					if (callback) callbacksEnd.push(callback)
-
-					return end
-				}
-			} as any
-
-			resolve(result)
-			for (let i = 0; i < callbacks.length; i++) callbacks[i](result)
-
-			let parentResolved = false
-			return {
-				resolveChild: resolvers,
-				resolve(error: Error | null = null) {
-					if (parentResolved) return
-					parentResolved = true
-
-					const end = performance.now()
-
-					if (!error && groupError) error = groupError
-
-					const detail = {
-						end,
-						error,
-						get elapsed() {
-							return end - process.begin
-						}
-					}
-
-					for (let i = 0; i < callbacksEnd.length; i++)
-						callbacksEnd[i](detail)
-
-					resolveEnd(end)
-					resolveError(error)
-				}
-			}
-		}
-	] as const
-}
-
-type LiveProcess = ReturnType<typeof createProcess>
-
+// TraceRecorder serves EVERY subscription shape (the old eager
+// createProcess/LiveProcess duplicated identical span semantics for the
+// pre-subscribed case at ~30 promises + ~60 closures per request):
+// - pre-subscription (`lifecycle.on<Event>` BEFORE the phase begins): the
+//   listen promise + queued callbacks settle synchronously inside `begin()`
+//   with the recorder-backed result object
+// - late subscription (after the phase began): resolved result immediately
+// - end/error promises materialize on first access (`#end()`/`#error()`)
+// - child spans allocate promise machinery ONLY when `onEvent` registered a
+//   listener; otherwise a shared group-error closure
 class TraceRecorder {
 	begun?: TraceStream
 	remaining = 0
+	childIndex = 0
 	groupError: Error | null = null
 	ended = false
 	endTime = 0
 	endError: Error | null = null
+	callbacksBegin?: Function[]
 	callbacksEnd?: Function[]
+	callbacksChild?: Function[]
+	pendingPromise?: Promise<TraceProcess<'begin'>>
+	pendingResolve?: (result: TraceProcess<'begin'>) => void
 	endPromise?: Promise<number>
 	endResolve?: (end: number) => void
 	errorPromise?: Promise<Error | null>
 	errorResolve?: (error: Error | null) => void
-	lateResult?: TraceProcess<'begin'>
+	result?: TraceProcess<'begin'>
 	listenFn?: (callback?: Function) => Promise<TraceProcess<'begin'>>
 	childBegin?: (process: TraceStream) => (error?: Error | null) => void
 
-	/** late subscription (`lifecycle.on<Event>` after the phase began) */
 	listen() {
 		if (this.listenFn) return this.listenFn
 
-		return (this.listenFn = (_callback?: Function) =>
-			Promise.resolve(this.#result()))
+		// late subscription (`lifecycle.on<Event>` after the phase began):
+		// resolved result immediately; the callback is not replayed (parity
+		// with the previous behavior)
+		if (this.begun)
+			return (this.listenFn = (_callback?: Function) =>
+				Promise.resolve(this.#result()))
+
+		// pre-subscription: settle at `begin()`
+		const { promise, resolve } =
+			Promise.withResolvers<TraceProcess<'begin'>>()
+		this.pendingPromise = promise
+		this.pendingResolve = resolve
+
+		return (this.listenFn = (callback?: Function) => {
+			if (callback) (this.callbacksBegin ??= []).push(callback)
+
+			return this.pendingPromise!
+		})
 	}
 
 	#result(): TraceProcess<'begin'> {
-		if (this.lateResult) return this.lateResult
+		if (this.result) return this.result
 
 		const slot = this
 
-		return (this.lateResult = {
+		return (this.result = {
 			...this.begun!,
-			end: this.#end(),
-			error: this.#error(),
-			onEvent(_callback?: Function) {},
+			// end/error promises materialize on first ACCESS — a listener
+			// that only reads name/begin (or uses onStop) never allocates them
+			get end() {
+				return slot.#end()
+			},
+			get error() {
+				return slot.#error()
+			},
+			onEvent(callback?: Function) {
+				if (callback) (slot.callbacksChild ??= []).push(callback)
+			},
 			onStop(callback?: Function) {
 				if (callback && !slot.ended)
 					(slot.callbacksEnd ??= []).push(callback)
@@ -338,6 +243,20 @@ class TraceRecorder {
 		this.begun = process
 		this.remaining = process.total ?? 0
 
+		// pre-subscribed listeners settle synchronously at phase begin — the
+		// timing contract the eager LiveProcess used to provide
+		const resolve = this.pendingResolve
+		if (resolve) {
+			this.pendingResolve = undefined
+
+			const result = this.#result()
+			resolve(result)
+
+			const callbacks = this.callbacksBegin
+			if (callbacks)
+				for (let i = 0; i < callbacks.length; i++) callbacks[i](result)
+		}
+
 		return this
 	}
 
@@ -349,21 +268,71 @@ class TraceRecorder {
 		if (this.remaining <= 0) return
 		this.remaining--
 
-		if (!this.childBegin)
-			this.childBegin =
+		const children = this.callbacksChild
+		if (!children?.length)
+			// no child listener: only capture a returned-not-thrown error
+			return (this.childBegin ??=
 				() =>
 				(error: Error | null = null) => {
 					if (error) this.groupError = error
+				})
+
+		const index = this.childIndex++
+		const recorder = this
+
+		return (process: TraceStream) => {
+			const { promise: end, resolve: resolveEnd } =
+				Promise.withResolvers<number>()
+			const { promise: error, resolve: resolveError } =
+				Promise.withResolvers<Error | null>()
+			const callbacksEnd: Function[] = []
+
+			const result = {
+				...process,
+				end,
+				error,
+				index,
+				onStop(callback?: Function) {
+					if (callback) callbacksEnd.push(callback)
+
+					return end
+				}
+			} as any
+
+			for (let i = 0; i < children.length; i++) children[i](result)
+
+			let resolved = false
+			return (err: Error | null = null) => {
+				if (resolved) return
+				resolved = true
+
+				const endAt = performance.now()
+
+				if (err) recorder.groupError = err
+
+				const detail = {
+					end: endAt,
+					error: err,
+					// eslint-disable-next-line sonarjs/no-nested-functions -- single inline getter
+					get elapsed() {
+						return endAt - process.begin
+					}
 				}
 
-		return this.childBegin
+				for (let i = 0; i < callbacksEnd.length; i++)
+					callbacksEnd[i](detail)
+
+				resolveEnd(endAt)
+				resolveError(err)
+			}
+		}
 	}
 
-	resolve(error: Error | null = null) {
+	resolve(error: Error | null = null, at?: number) {
 		if (this.ended) return
 		this.ended = true
 
-		const end = performance.now()
+		const end = at ?? performance.now()
 
 		if (!error && this.groupError) error = this.groupError
 
@@ -390,72 +359,102 @@ class TraceRecorder {
 }
 
 class TracerHandle {
-	slots = new Array<LiveProcess | TraceRecorder | undefined>(9)
+	slots = new Array<TraceRecorder | undefined>(9)
+	rid = ''
+
+	bt?: number[]
+	et?: number[]
+	er?: (Error | null)[]
+	tt?: number[]
+	nm?: string[]
+
+	// Fast begin. Returns 0 when the phase HAS a subscriber (caller falls
+	// through to the eager span-literal path), else `index + 1` — a truthy
+	// token the caller later hands back to `r()`.
+	b(index: number, total: number, name?: string) {
+		if (this.slots[index] !== undefined) return 0
+			; (this.bt ??= [])[index] = performance.now()
+
+		if (total) (this.tt ??= [])[index] = total
+		if (name !== undefined) (this.nm ??= [])[index] = name
+
+		return index + 1
+	}
+
+	// Group-error capture for the fast path: a child lifecycle RETURNED an
+	// error (not thrown) while the phase has no subscriber — record it so a
+	// late listener still observes it (the eager path captures it via the
+	// child closure into the recorder's groupError). Last write wins, like
+	// the recorder.
+	gc(rp: number | TraceRecorder | undefined, error: Error): void {
+		if (typeof rp === 'number') (this.er ??= [])[rp - 1] = error
+	}
+
+	// Resolve a span begun by `b()` (a numeric token) or an eager recorder.
+	// Idempotent; tolerates `undefined` (error thrown before the span began).
+	r(
+		rp: number | TraceRecorder | undefined,
+		error: Error | null = null
+	): void {
+		if (rp === undefined) return
+
+		if (typeof rp === 'number') {
+			const index = rp - 1
+			const et = (this.et ??= [])
+
+			if (et[index] === undefined) {
+				et[index] = performance.now()
+				if (error) (this.er ??= [])[index] = error
+			}
+
+			// a late listen() may have materialized a recorder between begin
+			// and now — settle its promises too (folding a gc()-captured
+			// group error, which the mid-phase materialization cannot see)
+			this.slots[index]?.resolve(
+				error ?? this.er?.[index] ?? null,
+				et[index]
+			)
+			return
+		}
+
+		rp.resolve(error)
+	}
 
 	listen(index: number): NonNullable<TraceRecorder['listenFn']> {
-		const slot = this.slots[index]
+		let slot = this.slots[index]
 
 		if (slot === undefined) {
-			const live = createProcess()
-			this.slots[index] = live
+			slot = new TraceRecorder()
 
-			return live[0] as NonNullable<TraceRecorder['listenFn']>
+			const begin = this.bt?.[index]
+			if (begin !== undefined) {
+				slot.begin({
+					id: this.rid as unknown as number,
+					event: traceEvents[index],
+					name: this.nm?.[index] ?? traceEvents[index],
+					begin,
+					total: this.tt?.[index] ?? 0
+				})
+
+				const end = this.et?.[index]
+				if (end !== undefined)
+					slot.resolve(this.er?.[index] ?? null, end)
+			}
+
+			this.slots[index] = slot
 		}
 
-		if (slot instanceof TraceRecorder) return slot.listen()
-
-		return slot[0] as NonNullable<TraceRecorder['listenFn']>
+		return slot.listen()
 	}
 
+	// Codegen and the fetch path call `begin(index, span)` directly (the phase
+	// index is already known — it's passed to `b()`), so no per-phase forwarders.
 	begin(index: number, process: TraceStream) {
-		const slot = this.slots[index]
+		let slot = this.slots[index]
 
-		if (slot !== undefined) {
-			if (slot instanceof TraceRecorder) return slot.begin(process)
+		if (slot === undefined) this.slots[index] = slot = new TraceRecorder()
 
-			return slot[1](process)
-		}
-
-		const recorder = new TraceRecorder()
-		this.slots[index] = recorder
-
-		return recorder.begin(process)
-	}
-
-	request(process: TraceStream) {
-		return this.begin(0, process)
-	}
-
-	parse(process: TraceStream) {
-		return this.begin(1, process)
-	}
-
-	transform(process: TraceStream) {
-		return this.begin(2, process)
-	}
-
-	beforeHandle(process: TraceStream) {
-		return this.begin(3, process)
-	}
-
-	handle(process: TraceStream) {
-		return this.begin(4, process)
-	}
-
-	afterHandle(process: TraceStream) {
-		return this.begin(5, process)
-	}
-
-	mapResponse(process: TraceStream) {
-		return this.begin(6, process)
-	}
-
-	afterResponse(process: TraceStream) {
-		return this.begin(7, process)
-	}
-
-	error(process: TraceStream) {
-		return this.begin(8, process)
+		return slot.begin(process)
 	}
 }
 
@@ -517,6 +516,7 @@ class TracerLifecycle {
 export const createTracer =
 	(traceListener: TraceHandler) => (context: Context) => {
 		const handle = new TracerHandle()
+		handle.rid = context.rid ?? ''
 
 		traceListener(new TracerLifecycle(handle, context) as any)
 

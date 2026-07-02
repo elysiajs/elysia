@@ -593,4 +593,47 @@ describe('trace', () => {
 		await response.text()
 		expect(order).toEqual(['HANDLE', 'AFTER'])
 	})
+
+	// A plain (non-async-declared) handler that RETURNS a promise must be
+	// awaited under trace. Removing `hasTrace` from `isAsync` (the no-op-tracer
+	// perf win) stopped awaiting it, so the handle span closed on an unsettled
+	// promise (~0ms) and a rejection escaped the route try/catch → the onError
+	// span never fired. `traceForcesAsync` re-forces async for this shape only
+	// (a literal `() => 'hi'` handler stays sync).
+	it('reports real handle duration for a promise-returning plain handler', async () => {
+		let elapsed = -1
+
+		const app = new Elysia()
+			.trace(({ onHandle }) =>
+				onHandle(({ onStop }) =>
+					onStop(({ elapsed: e }) => {
+						elapsed = e
+					})
+				)
+			)
+			.get('/', () => new Promise((r) => setTimeout(() => r('x'), 25)))
+
+		await app.handle(req('/'))
+		await delay(60)
+
+		// was ~0.16ms (span closed on the unsettled promise) before the fix
+		expect(elapsed).toBeGreaterThan(5)
+	})
+
+	it('fires the onError trace span when a promise-returning plain handler rejects', async () => {
+		let errored = false
+
+		const app = new Elysia()
+			.trace(({ onError }) =>
+				onError(() => {
+					errored = true
+				})
+			)
+			.get('/', () => Promise.reject(new Error('boom')))
+
+		await app.handle(req('/'))
+		await delay(60)
+
+		expect(errored).toBe(true)
+	})
 })

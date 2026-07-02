@@ -22,7 +22,7 @@ import {
 	ValidationError,
 	internalServerErrorResponse
 } from '../../error'
-import { isDynamicRegex } from '../../constants'
+import { isDynamicRegex, traceEventIndex } from '../../constants'
 import { forwardError } from '../../handler/utils'
 import { hasHeaderShorthand } from '../../universal/constants'
 
@@ -250,7 +250,6 @@ export function compileHandlerJit({
 	method,
 	path,
 	handler,
-	instance,
 	root,
 	hook,
 	adapter,
@@ -330,10 +329,14 @@ export function compileHandlerJit({
 		name: string = phase
 	) => {
 		if (!hasTrace) return ''
+
+		const index = traceEventIndex[phase]
+
 		let s = ''
 		for (let i = 0; i < traceCount; i++)
 			s +=
-				`rp${i}=tr${i}.${phase}({` +
+				`rp${i}=tr${i}.b(${index},${total}${name !== phase ? ',' + JSON.stringify(name) : ''})||` +
+				`tr${i}.begin(${index},{` +
 				`id:c.rid,event:'${phase}',name:${JSON.stringify(name)},` +
 				`begin:performance.now(),total:${total}` +
 				`})\n`
@@ -346,7 +349,7 @@ export function compileHandlerJit({
 
 		let s = ''
 		for (let i = 0; i < traceCount; i++)
-			s += `rp${i}.resolve(${errBinding ?? ''})\n`
+			s += `tr${i}.r(rp${i}${errBinding ? ',' + errBinding : ''})\n`
 
 		return s
 	}
@@ -371,7 +374,8 @@ export function compileHandlerJit({
 							if (errBinding)
 								close +=
 									`if(${errBinding} instanceof Error){` +
-									`rpc${i}?.(${errBinding})` +
+									`if(rpc${i})rpc${i}(${errBinding});` +
+									`else tr${i}.gc(rp${i},${errBinding})` +
 									`}else{` +
 									`rpc${i}?.()` +
 									`}\n`
@@ -414,13 +418,20 @@ export function compileHandlerJit({
 			hasResponseValidator ||
 			hasErrorHook)
 
+	const traceForcesAsync =
+		hasTrace &&
+		isHandleFunction &&
+		!handlerIsAsync &&
+		(mayReturnPromise(handler as Function) ||
+			mayReturnIdentifier(handler as Function))
+
 	const isAsync =
 		hasBody ||
 		handlerIsAsync ||
 		errorHookForcesAsync ||
 		responseValiForcesAsync ||
+		traceForcesAsync ||
 		afterResponseForcesAsync ||
-		hasTrace ||
 		hasCookieSign ||
 		responseValiAsync ||
 		(hook &&
@@ -623,8 +634,11 @@ export function compileHandlerJit({
 	const resolveHandlePostDrain = hasTrace
 		? (() => {
 				let s = ''
+				// `r()` resolves either shape (numeric fast-path token or
+				// recorder) and tolerates undefined (_hr only set when the
+				// response streamed)
 				for (let i = 0; i < traceCount; i++)
-					s += `_hr${i}?.resolve(_ser)\n`
+					s += `tr${i}.r(_hr${i},_ser)\n`
 				return s
 			})()
 		: ''
@@ -639,7 +653,11 @@ export function compileHandlerJit({
 		hasAfterResponse || hasTrace
 			? `c._arf=true\n` +
 				`${setImmediateFn}(async()=>{` +
-				`if(_stl)for await(const v of _stl){}\n` +
+				// tee branches rethrow a source error (matching direct
+				// iteration); the afterResponse listener only awaits
+				// completion, so swallow it here — the trace drain below
+				// captures it for the span instead
+				`if(_stl){try{for await(const v of _stl){}}catch{}}\n` +
 				drainTraceStream +
 				resolveHandlePostDrain +
 				beginTrace('afterResponse', hook?.afterResponse?.length ?? 0) +
@@ -688,21 +706,12 @@ export function compileHandlerJit({
 			code += beginTrace('beforeHandle', bfLen)
 			if (hasBeforeHandle) {
 				link(hook!.beforeHandle!, 'bf')
-				const rootDerive = root['~derive']
-				const instanceDerive = (instance as AnyElysia | undefined)?.[
-					'~derive'
-				]
-				const deriveSet: WeakSet<any> | undefined =
-					rootDerive && instanceDerive
-						? ({
-								has: (fn: any) =>
-									rootDerive.has(fn) || instanceDerive.has(fn)
-							} as unknown as WeakSet<any>)
-						: (rootDerive ?? instanceDerive)
-
+				const deriveEntries = (
+					hook as { '~deriveEntries'?: Function[] }
+				)['~deriveEntries']
 				code += mapBeforeHandle(
 					hook!.beforeHandle!,
-					deriveSet,
+					deriveEntries?.length ? new Set(deriveEntries) : undefined,
 					link,
 					buildReport('beforeHandle')
 				)
@@ -718,7 +727,7 @@ export function compileHandlerJit({
 		const teeBlock =
 			teeConsumers > 0 && !syncAfterResponse
 				? `if(_r&&(_r[Symbol.iterator]||_r[Symbol.asyncIterator])&&typeof _r.next==='function'){\n` +
-					`const _s=await tee(_r,${teeCount})\n` +
+					`const _s=tee(_r,${teeCount})\n` +
 					`_r=_s[0]\n` +
 					(hasAfterResponse ? `_stl=_s[1]\n` : '') +
 					(hasTrace
@@ -759,7 +768,8 @@ export function compileHandlerJit({
 				`function _fin(c,_r){\n` +
 				`if(_r instanceof Error)throw _r\n` +
 				`if(_r&&(_r[Symbol.iterator]||_r[Symbol.asyncIterator])&&typeof _r.next==='function'){\n` +
-				`return tee(_r,${teeCount}).then((_s)=>_fin2(c,_s[0],_s[1]))\n` +
+				`const _s=tee(_r,${teeCount})\n` +
+				`return _fin2(c,_s[0],_s[1])\n` +
 				`}\n` +
 				`return _fin2(c,_r,undefined)\n` +
 				`}\n` +
@@ -866,7 +876,7 @@ export function compileHandlerJit({
 
 		if (hasTrace) {
 			for (let i = 0; i < traceCount; i++)
-				body += `rp${i}?.resolve(e);rpc${i}?.(e)\n`
+				body += `tr${i}.r(rp${i},e);rpc${i}?.(e)\n`
 			body += beginTrace('error', hook?.error?.length ?? 0)
 		}
 

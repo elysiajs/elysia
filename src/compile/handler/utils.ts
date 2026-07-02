@@ -3,7 +3,6 @@ import { ElysiaStatus } from '../../error'
 import { ELYSIA_TYPES } from '../../type/constants'
 
 import type { Link } from '../types'
-import type { AnyElysia } from '../../base'
 import type { ElysiaAdapter } from '../../adapter'
 import type { AppEvent, AppHook, MaybeArray } from '../../types'
 
@@ -416,15 +415,9 @@ function skipValue(src: string, i: number): number {
 	return -1
 }
 
-// `beforeHandle` / `afterHandle` / `mapResponse` all share a
-// short-circuit shape: each successive hook runs ONLY if the previous
-// one didn't set the gating var (`_r === undefined` or
-// `tmp === undefined`). That cross-iteration state (depth tracking,
-// closing brace count) doesn't fit the per-hook `map` HOF, so these
-// stay as manual loops with `toArray` + `trace` for consistency.
 export function mapBeforeHandle(
 	_hooks: AppHook['beforeHandle'] | AppHook['beforeHandle'][0],
-	derive: AnyElysia['~derive'],
+	derive: Set<Function> | undefined,
 	link: Link,
 	report?: TraceReporter
 ) {
@@ -460,6 +453,7 @@ export function mapBeforeHandle(
 				'if(tmp instanceof es)_r=tmp\n' +
 				`else if(tmp){${merge};tmp=undefined}\n`
 		} else code += 'if(tmp!==undefined)_r=tmp\n'
+
 		code += t.end('tmp')
 	}
 
@@ -469,8 +463,6 @@ export function mapBeforeHandle(
 	return code
 }
 
-// afterHandle + mapResponse share this chain: run each hook until one returns
-// a value, nesting `if(tmp===undefined)` guards. Only the emit prefix differs.
 function mapChainHook(
 	hooks: Function[],
 	prefix: string,

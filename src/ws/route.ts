@@ -2,11 +2,16 @@ import { RouteValidator } from '../validator/route'
 import { nullObject } from '../utils'
 import { parseQueryFromURL } from '../parse-query'
 import { getQueryParseChannels } from '../compile/handler/utils'
-import { composeRouteHook } from '../compile/handler'
+import {
+	composeRouteHook,
+	localMacroRoot,
+	resolveWSLocalHook
+} from '../compile/handler'
 
 import { ElysiaWS, isGeneratorObject, type WSConnectionData } from './context'
 import { createMessageParser } from './parser'
 import {
+	ElysiaStatus,
 	ValidationError,
 	internalServerErrorResponse,
 	problemResponse
@@ -107,8 +112,14 @@ export function buildWSRoute(
 	) => Promise<Response | undefined> | Response | undefined,
 	options: Partial<WebSocketHandler<any>>
 ] {
-	const hook: AnyWSLocalHook = ((route[4] as AnyWSLocalHook | undefined) ??
-		{}) as AnyWSLocalHook
+	const hook: AnyWSLocalHook = (resolveWSLocalHook(
+		localMacroRoot(
+			(route[7] as AnyElysia) ?? (route[3] as AnyElysia) ?? app,
+			app
+		),
+		route[4] as AnyWSLocalHook | undefined,
+		app
+	) ?? nullObject()) as AnyWSLocalHook
 
 	const validators = new RouteValidator(hook as any, {
 		models: app['~ext']?.models,
@@ -140,7 +151,8 @@ export function buildWSRoute(
 			undefined,
 			appHookChain,
 			inheritedChain,
-			app
+			app,
+			route[7] as AnyElysia | undefined
 		) as Partial<AppHook> | undefined) ?? ({} as Partial<AppHook>)
 
 	const parseHooks = toArray(hook.parse as any)
@@ -154,10 +166,23 @@ export function buildWSRoute(
 		hook.beforeHandle as any
 	)
 
-	const deriveSet: WeakSet<any> | undefined = (app as any)['~derive']
-	const messageBeforeHandles: readonly AnyFn[] = deriveSet
-		? allBeforeHandles.filter((fn) => !deriveSet.has(fn))
-		: allBeforeHandles
+	// Per-hook derive provenance (union of the resolved app-chain and this WS
+	// route's own hook), replacing a global fn-identity lookup — a fn used as a
+	// derive elsewhere is NOT treated as a derive here unless it was folded in
+	// as one during THIS route's resolution.
+	const deriveEntries = [
+		...(((flatAppHook as any)['~deriveEntries'] as
+			| Function[]
+			| undefined) ?? []),
+		...(((hook as any)['~deriveEntries'] as Function[] | undefined) ?? [])
+	]
+	const deriveSet = deriveEntries.length
+		? new Set<Function>(deriveEntries)
+		: undefined
+
+	const messageBeforeHandles: readonly AnyFn[] = allBeforeHandles.filter(
+		(fn) => !deriveSet?.has(fn as Function)
+	)
 
 	const afterHandles = concatHooks(
 		flatAppHook.afterHandle as any,
@@ -557,7 +582,15 @@ export function buildWSRoute(
 				const fn = allBeforeHandles[i]
 				let r: unknown = fn(context as any)
 				if (r instanceof Promise) r = await r
-				if (deriveSet?.has(fn)) {
+				// A derive entry merges its return into context — EXCEPT
+				// status()/error() (ElysiaStatus), which ABORTS the upgrade,
+				// mirroring the HTTP codegen's `instanceof es` early-return.
+				// Without this, a derive-based auth guard returning status(401)
+				// would be merged-and-ignored and the connection would upgrade.
+				if (
+					deriveSet?.has(fn as Function) &&
+					!(r instanceof ElysiaStatus)
+				) {
 					if (r && typeof r === 'object')
 						Object.assign(context as any, r)
 				} else if (r !== undefined) {
