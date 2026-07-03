@@ -129,6 +129,33 @@ export const fixtures: Fixture[] = [
 		expect: { query: true },
 		passesToday: true
 	},
+	{
+		// M29 sibling: minified two-hop alias chain reading via the LAST alias.
+		// Over-slicing would drop `b`, losing the only reader of `body`.
+		name: 'minified two-hop alias reads body via last alias',
+		class: 'minified',
+		fn: eval('c=>{const a=c,b=a;return b.body}'),
+		expect: { body: true },
+		passesToday: true
+	},
+	{
+		// Minified three-hop chain: exercises the deepest transitive resolution
+		// (garbage aliases would break the final `.cookie` read).
+		name: 'minified three-hop alias reads cookie',
+		class: 'minified',
+		fn: eval('c=>{const a=c,b=a,d=b;return d.cookie}'),
+		expect: { cookie: true },
+		passesToday: true
+	},
+	{
+		// Minified destructure-with-rename in the body (H26 re-inject path):
+		// `{headers:h}=c` must reduce to the bare `headers` key, not `headersh`.
+		name: 'minified body destructure-rename infers headers',
+		class: 'minified',
+		fn: eval('c=>{const{headers:h}=c;return sink(h)}'),
+		expect: { headers: true },
+		passesToday: true
+	},
 
 	// ─── destructure-with-rename ─────────────────────────────────────────
 	{
@@ -259,7 +286,7 @@ export const fixtures: Fixture[] = [
 			return b
 		},
 		expect: { body: true, query: false },
-		passesToday: false,
+		passesToday: true,
 		bug: 'H5'
 	},
 	{
@@ -270,7 +297,7 @@ export const fixtures: Fixture[] = [
 			return s
 		},
 		expect: { set: true, query: false },
-		passesToday: false,
+		passesToday: true,
 		bug: 'H5'
 	},
 
@@ -283,7 +310,7 @@ export const fixtures: Fixture[] = [
 		class: 'minified',
 		fn: eval('c=>{const a=c,b=a;return b.headers}'),
 		expect: { headers: true },
-		passesToday: false,
+		passesToday: true,
 		bug: 'M29'
 	},
 
@@ -295,7 +322,7 @@ export const fixtures: Fixture[] = [
 		class: 'bound-native',
 		fn: boundHandler,
 		expect: ALL_TRUE,
-		passesToday: false,
+		passesToday: true,
 		bug: 'M30'
 	},
 	{
@@ -303,7 +330,7 @@ export const fixtures: Fixture[] = [
 		class: 'bound-native',
 		fn: Array.prototype.map as any,
 		expect: ALL_TRUE,
-		passesToday: false,
+		passesToday: true,
 		bug: 'M30'
 	}
 ]

@@ -17,7 +17,11 @@ import {
 import { requestId } from '../../utils'
 import { forwardError } from '../../handler/utils'
 import { tee } from '../../adapter/utils'
-import { cloneResponse, hasRequestBody } from './utils'
+import {
+	cloneResponse,
+	getQueryParseChannels,
+	hasRequestBody
+} from './utils'
 
 /**
  * mirror compileHandler params and save in build time
@@ -46,6 +50,10 @@ export const HANDLER_PARAMS: Record<string, Resolver> = {
 	pt: (c) => c.parse.text,
 	pd: (c) => c.parse.default,
 	hb: () => hasRequestBody,
+	qa: (c) =>
+		getQueryParseChannels((c.vali as any)?.query?.schema)?.array,
+	qo: (c) =>
+		getQueryParseChannels((c.vali as any)?.query?.schema)?.object,
 	// response adapter
 	rm: (c) => c.res.map,
 	rc: (c) => c.res.compact ?? c.res.map,

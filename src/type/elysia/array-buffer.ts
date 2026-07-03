@@ -5,7 +5,9 @@ import { isEmpty } from '../../utils'
 import { ELYSIA_TYPES } from '../constants'
 import type { ArrayBufferOptions } from '../types'
 import {
+	cloneSchema,
 	elyType,
+	getMeta,
 	Refines,
 	type Refines as RefinesType
 } from './utils'
@@ -40,5 +42,12 @@ export function ArrayBufferType(property?: ArrayBufferOptions) {
 			`Expect byte to be less than ${property.maxByteLength}`
 		])
 
-	return elyType(ELYSIA_TYPES.ArrayBuffer, Refines(BaseArrayBuffer, refines))
+	let schema: any = Refines(BaseArrayBuffer, refines)
+	const [, meta] = getMeta(property as any)
+	if (meta) {
+		schema = cloneSchema(schema)
+		Object.assign(schema, meta)
+	}
+
+	return elyType(ELYSIA_TYPES.ArrayBuffer, schema)
 }

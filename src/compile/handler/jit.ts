@@ -34,7 +34,7 @@ import { parseQueryFromURL } from '../../parse-query'
 
 import {
 	cloneResponse,
-	getQueryParseArgs,
+	getQueryParseChannels,
 	hasRequestBody,
 	mapAfterHandle,
 	mapAfterResponse,
@@ -541,7 +541,19 @@ export function compileHandlerJit({
 	const hasHeaders = inference.headers || !!vali?.headers
 
 	if (inference.query || vali?.query) {
-		const parseArgs = getQueryParseArgs((vali?.query as any)?.schema)
+		const channels = getQueryParseChannels((vali?.query as any)?.schema)
+
+		let parseArgs = ''
+		if (channels?.array) {
+			link(channels.array, 'qa')
+			parseArgs = ',qa'
+		}
+
+		if (channels?.object) {
+			link(channels.object, 'qo')
+			parseArgs += `${channels.array ? '' : ',undefined'},qo`
+		}
+
 		code += `c.query=pq(c.request.url,c.qi${parseArgs})\n`
 		link(parseQueryFromURL, 'pq')
 	}

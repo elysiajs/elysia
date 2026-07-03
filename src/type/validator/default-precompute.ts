@@ -385,9 +385,8 @@ function buildObjectMergeFunction(
 	helpers.push('')
 
 	const keys = Object.keys(defaults)
-	// non-object / array / null inputs pass straight through, matching
-	// `Default(objectSchema, nonObject) === nonObject` (the runtime dispatch no
-	// longer pre-filters array input, so the merger must self-guard)
+
+	const guard: string[] = []
 	let body =
 		"if(v===null||typeof v!=='object'||Array.isArray(v))return v;const out=Object.create(null);let x;"
 
@@ -403,6 +402,7 @@ function buildObjectMergeFunction(
 		if (d !== null && typeof d === 'object') {
 			if (Array.isArray(d)) {
 				body += `if(x===undefined)${write}=${value};else ${write}=x;`
+				guard.push(`${access}===undefined`)
 				continue
 			}
 
@@ -413,14 +413,24 @@ function buildObjectMergeFunction(
 			if (!nested) return
 
 			body += `if(x===undefined)${write}=${value};else if(x&&typeof x==='object'&&!Array.isArray(x))${write}=${nested}(x);else ${write}=x;`
-		} else body += `${write}=x===undefined?${value}:x;`
+			guard.push(
+				`(${access}===undefined||(typeof ${access}==='object'&&${access}!==null&&!Array.isArray(${access})&&${nested}(${access})!==${access}))`
+			)
+		} else {
+			body += `${write}=x===undefined?${value}:x;`
+			guard.push(`${access}===undefined`)
+		}
 	}
 
 	body += 'for(const k in v){x=v[k];if(x!==undefined'
 	for (const key of keys) body += `&&k!==${JSON.stringify(key)}`
 	body += ')out[k]=x}return out'
 
-	helpers[+name.slice(2)] = `function ${name}(v){${body}}`
+	const fastPath = guard.length
+		? `if(v!==null&&typeof v==='object'&&!Array.isArray(v)&&!(${guard.join('||')}))return v;`
+		: ''
+
+	helpers[+name.slice(2)] = `function ${name}(v){${fastPath}${body}}`
 
 	return name
 }
@@ -491,11 +501,26 @@ function mergeCategory(node: any): MergeCategory {
 	return 'identity'
 }
 
+function presentExpr(child: string, isObject: boolean, varName: string) {
+	if (child === '') return varName
+
+	return isObject
+		? `(${varName}!==null&&typeof ${varName}==='object'&&!Array.isArray(${varName})?${child}(${varName}):${varName})`
+		: `(Array.isArray(${varName})?${child}(${varName}):${varName})`
+}
+
 function mergeExpression(
 	schema: any,
 	varName: string,
 	helpers: string[]
-): { absent: string | undefined; present: string } | undefined {
+):
+	| {
+			absent: string | undefined
+			present: string
+			child: string
+			isObject: boolean
+	  }
+	| undefined {
 	const full = Default(schema, undefined)
 	const child = emitMerger(schema, helpers)
 	if (child === undefined) return
@@ -503,15 +528,10 @@ function mergeExpression(
 	const absent = full === undefined ? undefined : cloneExpression(full)
 	if (full !== undefined && absent === undefined) return
 
-	let present: string
-	if (child === '') present = varName
-	else
-		present =
-			mergeCategory(schema) === 'object'
-				? `(${varName}!==null&&typeof ${varName}==='object'&&!Array.isArray(${varName})?${child}(${varName}):${varName})`
-				: `(Array.isArray(${varName})?${child}(${varName}):${varName})`
+	const isObject = mergeCategory(schema) === 'object'
+	const present = presentExpr(child, isObject, varName)
 
-	return { absent, present }
+	return { absent, present, child, isObject }
 }
 
 function emitMerger(node: any, helpers: string[]) {
@@ -525,6 +545,8 @@ function emitMerger(node: any, helpers: string[]) {
 	if (category === 'object') {
 		const props = node.properties ?? {}
 		const handled: string[] = []
+
+		const guard: string[] = []
 
 		// non-object / array / null inputs pass straight through, matching
 		// `Default(objectSchema, nonObject) === nonObject`
@@ -547,9 +569,19 @@ function emitMerger(node: any, helpers: string[]) {
 				expr.absent === undefined
 					? `if(x!==undefined)out[${access}]=${expr.present};`
 					: `out[${access}]=x===undefined?${expr.absent}:${expr.present};`
+
+			const vk = `v[${access}]`
+			const absentTest =
+				expr.absent === undefined ? undefined : `${vk}===undefined`
+			const presentTest =
+				expr.child === ''
+					? undefined // present value is passed through verbatim
+					: `(${vk}!==undefined&&${presentExpr(expr.child, expr.isObject, vk)}!==${vk})`
+
+			const test = [absentTest, presentTest].filter(Boolean).join('||')
+			if (test) guard.push(test)
 		}
 
-		// object default with no fillable child
 		if (!handled.length) {
 			helpers.pop()
 			return ''
@@ -559,16 +591,18 @@ function emitMerger(node: any, helpers: string[]) {
 		for (const key of handled) body += `&&k!==${JSON.stringify(key)}`
 		body += ')out[k]=x}return out'
 
-		helpers[+name.slice(2)] = `function ${name}(v){${body}}`
+		const fastPath = guard.length
+			? `if(v!==null&&typeof v==='object'&&!Array.isArray(v)&&!(${guard.join('||')}))return v;`
+			: ''
+
+		helpers[+name.slice(2)] = `function ${name}(v){${fastPath}${body}}`
 		return name
 	}
 
-	// array: map the element merger over each element
 	const expr = mergeExpression(node.items, 'e', helpers)
 	if (!expr) return
 
 	if (expr.absent === undefined && expr.present === 'e') {
-		// element needs no merging — drop the no-op map
 		helpers.pop()
 		return ''
 	}
@@ -597,10 +631,6 @@ export function buildMergeSource(schema: any) {
 	return `(function(){${helpers.join(';')};return ${root}})()`
 }
 
-// Forces every nested object/array default to fill at once
-// object slots -> `{}`
-// array slots -> `[<empty element>]`
-// scalars left empty
 function emptyContainers(node: any, depth: number): unknown {
 	if (depth <= 0 || !node || typeof node !== 'object') return
 	const kind = node['~kind']
@@ -617,7 +647,11 @@ function emptyContainers(node: any, depth: number): unknown {
 		return out
 	}
 
-	if ((kind === 'Array' || node.type === 'array') && node.items && !Array.isArray(node.items)) {
+	if (
+		(kind === 'Array' || node.type === 'array') &&
+		node.items &&
+		!Array.isArray(node.items)
+	) {
 		const element = emptyContainers(node.items, depth - 1)
 		return element === undefined ? [] : [element]
 	}

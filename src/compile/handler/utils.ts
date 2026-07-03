@@ -657,21 +657,6 @@ export function getQueryParseChannels(
 	return state
 }
 
-export function getQueryParseArgs(querySchema: any): string {
-	const channels = getQueryParseChannels(querySchema)
-	if (!channels) return ''
-
-	const arrayProps = channels.array
-	const objectProps = channels.object
-
-	const arrLit = arrayProps ? `,${JSON.stringify(arrayProps)}` : ''
-	const objLit = objectProps
-		? `,${arrayProps ? '' : 'undefined,'}${JSON.stringify(objectProps)}`
-		: ''
-
-	return arrLit + objLit
-}
-
 export const Await = (fn: Function) => (isAsyncFunction(fn) ? 'await ' : '')
 
 const awaitGuard = (fn: Function, isAsync: boolean, target: string) =>

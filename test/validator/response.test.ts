@@ -5,6 +5,11 @@ import * as z from 'zod'
 import { describe, expect, it } from 'bun:test'
 import { post, req, upload } from '../utils'
 
+// C14: chunks are Uint8Array; decode for string comparison.
+const dec = new TextDecoder()
+const decodeChunk = (v: unknown): string =>
+	v instanceof Uint8Array ? dec.decode(v) : String(v)
+
 describe('Response Validator', () => {
 	it('validate primitive', async () => {
 		const app = new Elysia().get(
@@ -522,9 +527,9 @@ describe('Response Validator', () => {
 		expect(res.headers.get('content-type')).toBe('text/event-stream')
 
 		// Verify the stream contains the expected SSE data
-		const result = []
+		const result: string[] = []
 		for await (const chunk of streamResponse(res)) {
-			result.push(chunk)
+			result.push(decodeChunk(chunk))
 		}
 
 		expect(result.join('')).toContain('data: {"name":"Alice"}')
@@ -570,9 +575,9 @@ describe('Response Validator', () => {
 		const res = await app.handle(req('/'))
 		expect(res.status).toBe(200)
 
-		const result = []
+		const result: string[] = []
 		for await (const chunk of streamResponse(res)) {
-			result.push(chunk)
+			result.push(decodeChunk(chunk))
 		}
 
 		expect(result.join('')).toContain('"message":"first"')
@@ -599,9 +604,9 @@ describe('Response Validator', () => {
 		expect(res.headers.get('content-type')).toBe('text/event-stream')
 
 		// Verify the stream contains the expected SSE data
-		const result = []
+		const result: string[] = []
 		for await (const chunk of streamResponse(res)) {
-			result.push(chunk)
+			result.push(decodeChunk(chunk))
 		}
 
 		expect(result.join('')).toContain('data: {"name":"Name"}')

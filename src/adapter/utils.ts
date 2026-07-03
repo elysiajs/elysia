@@ -7,6 +7,9 @@ import type { Context } from '../context'
 
 const setCookie = 'set-cookie' as const
 
+const textEncoder = new TextEncoder()
+const encodeChunk = (s: string): Uint8Array => textEncoder.encode(s)
+
 export function handleFile(
 	response: File | Blob,
 	set?: Context['set'],
@@ -342,7 +345,7 @@ export function createStreamHandler({
 					// @ts-ignore
 					if (init.value.toSSE) {
 						// @ts-ignore
-						controller.enqueue(init.value.toSSE())
+						controller.enqueue(encodeChunk(init.value.toSSE()))
 						return
 					}
 
@@ -352,12 +355,17 @@ export function createStreamHandler({
 					if (typeof init.value === 'object')
 						try {
 							controller.enqueue(
-								format(JSON.stringify(init.value))
+								encodeChunk(format(JSON.stringify(init.value)))
 							)
 						} catch {
-							controller.enqueue(format(init.value.toString()))
+							controller.enqueue(
+								encodeChunk(format(init.value.toString()))
+							)
 						}
-					else controller.enqueue(format(init.value.toString()))
+					else
+						controller.enqueue(
+							encodeChunk(format(init.value.toString()))
+						)
 				},
 
 				async pull(controller) {
@@ -384,7 +392,7 @@ export function createStreamHandler({
 						// @ts-ignore
 						if (chunk.toSSE) {
 							// @ts-ignore
-							controller.enqueue(chunk.toSSE())
+							controller.enqueue(encodeChunk(chunk.toSSE()))
 							return
 						}
 
@@ -394,12 +402,17 @@ export function createStreamHandler({
 						if (typeof chunk === 'object')
 							try {
 								controller.enqueue(
-									format(JSON.stringify(chunk))
+									encodeChunk(format(JSON.stringify(chunk)))
 								)
 							} catch {
-								controller.enqueue(format(chunk.toString()))
+								controller.enqueue(
+									encodeChunk(format(chunk.toString()))
+								)
 							}
-						else controller.enqueue(format(chunk.toString()))
+						else
+							controller.enqueue(
+								encodeChunk(format(chunk.toString()))
+							)
 					} catch (error) {
 						controller.error(error)
 					}
@@ -492,6 +505,26 @@ export function mergeStatus(
 	return responseStatus
 }
 
+function cancelPropagatingBody(
+	clonedBody: ReadableStream,
+	orphanedBranch: ReadableStream
+): ReadableStream {
+	const reader = clonedBody.getReader()
+
+	return new ReadableStream({
+		async pull(controller) {
+			const { done, value } = await reader.read()
+
+			if (done) controller.close()
+			else controller.enqueue(value)
+		},
+		cancel(reason) {
+			orphanedBranch.cancel(reason)
+			return reader.cancel(reason)
+		}
+	})
+}
+
 export function createResponseHandler(handler: CreateHandlerParameter) {
 	const handleStream = createStreamHandler(handler)
 
@@ -505,8 +538,14 @@ export function createResponseHandler(handler: CreateHandlerParameter) {
 				return response
 		}
 
+		const cloned = response.clone()
+		const body =
+			cloned.body && response.body
+				? cancelPropagatingBody(cloned.body, response.body)
+				: cloned.body
+
 		const newResponse = new Response(
-			response.clone().body,
+			body,
 			set
 				? {
 						headers: mergeHeaders(response.headers, set.headers),

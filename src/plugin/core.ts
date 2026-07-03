@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs'
+import { existsSync, realpathSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import {
 	compileToSource,
@@ -281,6 +281,8 @@ export interface CompiledArtifacts {
 	stub: StubPlan
 }
 
+const _importedEntries = new Set<string>()
+
 export async function generateCompiledArtifacts(
 	file: string,
 	options?: ElysiaAotOptions
@@ -290,10 +292,44 @@ export async function generateCompiledArtifacts(
 
 	try {
 		const entry = resolveEntry(file)
-		const mod = (await import(entry)) as {
-			app?: unknown
-			default?: unknown
+		const entryReal = realPath(entry)
+
+		let mod: { app?: unknown; default?: unknown }
+
+		if (_importedEntries.has(entryReal)) {
+			console.warn(
+				'[elysia-aot] re-importing "' +
+					entry +
+					'" for rebuild — top-level side effects will re-run. ' +
+					'This is expected in watch/rebuild flows.'
+			)
+
+			const cacheBustSpecifier = entry + '?elysia-aot=' + Date.now()
+			try {
+				mod = (await import(cacheBustSpecifier)) as {
+					app?: unknown
+					default?: unknown
+				}
+			} catch (cacheBustErr) {
+				console.warn(
+					'[elysia-aot] cache-busting import failed, falling back to plain ' +
+						'import (stale manifest risk in watch/rebuild mode). ' +
+						'Error: ' +
+						cacheBustErr
+				)
+				mod = (await import(entry)) as {
+					app?: unknown
+					default?: unknown
+				}
+			}
+		} else {
+			_importedEntries.add(entryReal)
+			mod = (await import(entry)) as {
+				app?: unknown
+				default?: unknown
+			}
 		}
+
 		const app = mod.app ?? mod.default
 
 		if (
@@ -395,4 +431,111 @@ export async function generateCompiledArtifacts(
 		if (previousAotBuild === undefined) delete process.env.ELYSIA_AOT_BUILD
 		else process.env.ELYSIA_AOT_BUILD = previousAotBuild
 	}
+}
+
+// eslint-disable-next-line sonarjs/single-character-alternation
+export const SOURCE_REGEX = /\.(c|m)?(t|j)sx?$/
+
+export const realPath = (path: string): string => {
+	try {
+		return realpathSync(path)
+	} catch {
+		return path
+	}
+}
+
+export interface SetupAotHooksOptions {
+	/** Read a file's UTF-8 text (abstracted so Bun and esbuild can supply their own reader). */
+	readText: (path: string) => Promise<string>
+	entryPath: string
+	source: string
+	stub: StubPlan
+	treeShake: boolean
+
+	/**
+	 * resolveDir for the manifest virtual module load.
+	 * esbuild needs `dirname(entryPath)` so relative imports in the manifest
+	 * resolve correctly; Bun does not use it (pass undefined for Bun).
+	 */
+	resolveDir?: string
+
+	/**
+	 * Build integration object
+	 *
+	 * any because incompatibility between build tools
+	 */
+	build: any
+}
+
+export async function setupAotHooks({
+	readText,
+	entryPath,
+	source,
+	stub,
+	treeShake,
+	resolveDir,
+	build
+}: SetupAotHooksOptions): Promise<void> {
+	const entryReal = realPath(entryPath)
+
+	const isEntry = (path: string): boolean =>
+		path === entryPath || realPath(path) === entryReal
+
+	build.onResolve({ filter: /^elysia\/compiled$/ }, () => ({
+		path: 'manifest',
+		namespace: 'elysia-aot'
+	}))
+
+	build.onLoad(
+		{ filter: /.*/, namespace: 'elysia-aot' },
+		() =>
+			({
+				contents: source,
+				loader: 'js',
+				...(resolveDir !== undefined ? { resolveDir } : {})
+			}) as { contents: string; loader: string; resolveDir?: string }
+	)
+
+	for (const key of Object.keys(STUB_SOURCES) as (keyof StubPlan)[])
+		if (stub[key])
+			for (const { filter, source: stubSource } of STUB_SOURCES[key])
+				build.onLoad({ filter }, () => ({
+					contents: stubSource,
+					loader: 'js'
+				}))
+
+	if (treeShake) {
+		const { rewriteTypeImport } = await import('./treeshake')
+
+		build.onLoad(
+			{ filter: SOURCE_REGEX },
+			async (args: { path: string }) => {
+				const isEntryFile = isEntry(args.path)
+				const inModules = args.path.includes('/node_modules/')
+				if (inModules && !isEntryFile) return undefined
+
+				const original = await readText(args.path)
+				let contents = inModules
+					? original
+					: rewriteTypeImport(original)
+
+				if (isEntryFile)
+					contents = `import 'elysia/compiled'\n${contents}`
+
+				if (contents === original) return undefined
+
+				return { contents, loader: resolveLoader(args.path) }
+			}
+		)
+	} else
+		build.onLoad(
+			{ filter: entryFilter(entryPath) },
+			async (args: { path: string }) => {
+				const original = await readText(args.path)
+				return {
+					contents: `import 'elysia/compiled'\n${original}`,
+					loader: resolveLoader(args.path)
+				}
+			}
+		)
 }

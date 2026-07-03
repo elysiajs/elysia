@@ -5,6 +5,11 @@ import { Elysia, sse } from '../../src'
 import { streamResponse } from '../../src/adapter/utils'
 import { requestId } from '../../src/utils'
 
+// C14: chunks are now Uint8Array; decode them for string comparison.
+const dec = new TextDecoder()
+const decodeChunk = (v: unknown): string =>
+	v instanceof Uint8Array ? dec.decode(v) : String(v)
+
 describe('Stream', () => {
 	it('handle stream', async () => {
 		const expected = ['a', 'b', 'c']
@@ -33,9 +38,10 @@ describe('Stream', () => {
 				reader.read().then(function pump({ done, value }): unknown {
 					if (done) return resolve(acc)
 
-					expect(value.toString()).toBe(expected.shift()!)
+					const s = decodeChunk(value)
+					expect(s).toBe(expected.shift()!)
 
-					acc += value.toString()
+					acc += s
 					return reader.read().then(pump)
 				})
 
@@ -83,9 +89,10 @@ describe('Stream', () => {
 				reader.read().then(function pump({ done, value }): unknown {
 					if (done) return resolve(acc)
 
-					expect(value.toString()).toBe(expected.shift()!)
+					const s = decodeChunk(value)
+					expect(s).toBe(expected.shift()!)
 
-					acc += value.toString()
+					acc += s
 					return reader.read().then(pump)
 				})
 
@@ -268,7 +275,7 @@ describe('Stream', () => {
 				reader.read().then(function pump({ done, value }): unknown {
 					if (done) return resolve()
 
-					expect(value.toString()).toBe(JSON.stringify(expected[i++]))
+					expect(decodeChunk(value)).toBe(JSON.stringify(expected[i++]))
 
 					return reader.read().then(pump)
 				})
@@ -306,7 +313,7 @@ describe('Stream', () => {
 				reader.read().then(function pump({ done, value }): unknown {
 					if (done) return resolve()
 
-					expect(value.toString()).toBe(expected[i++])
+					expect(decodeChunk(value)).toBe(expected[i++])
 
 					return reader.read().then(pump)
 				})
@@ -340,7 +347,7 @@ describe('Stream', () => {
 				reader.read().then(function pump({ done, value }): unknown {
 					if (done) return resolve(acc)
 
-					acc += value.toString()
+					acc += decodeChunk(value)
 					return reader.read().then(pump)
 				})
 
@@ -387,7 +394,7 @@ describe('Stream', () => {
 				reader.read().then(function pump({ done, value }): unknown {
 					if (done) return resolve(acc)
 
-					acc += value.toString()
+					acc += decodeChunk(value)
 					return reader.read().then(pump)
 				})
 
@@ -434,7 +441,7 @@ describe('Stream', () => {
 				reader.read().then(function pump({ done, value }): unknown {
 					if (done) return resolve(acc)
 
-					acc += value.toString()
+					acc += decodeChunk(value)
 					return reader.read().then(pump)
 				})
 
@@ -469,7 +476,7 @@ describe('Stream', () => {
 				reader.read().then(function pump({ done, value }): unknown {
 					if (done) return resolve(acc)
 
-					acc += value.toString()
+					acc += decodeChunk(value)
 					return reader.read().then(pump)
 				})
 
@@ -505,9 +512,9 @@ describe('Stream', () => {
 
 		const response = await app.handle(req('/'))
 
-		const result = []
+		const result: string[] = []
 
-		for await (const a of streamResponse(response)) result.push(a)
+		for await (const a of streamResponse(response)) result.push(decodeChunk(a))
 
 		expect(result).toEqual(['Elysia', 'Eden'])
 	})
@@ -529,9 +536,9 @@ describe('Stream', () => {
 
 		const response = await app.handle(req('/'))
 
-		const result = []
+		const result: string[] = []
 
-		for await (const a of streamResponse(response)) result.push(a)
+		for await (const a of streamResponse(response)) result.push(decodeChunk(a))
 
 		expect(result).toEqual(['Elysia', 'Eden'])
 	})
@@ -553,9 +560,9 @@ describe('Stream', () => {
 
 		const response = await app.handle(req('/'))
 
-		const result = []
+		const result: string[] = []
 
-		for await (const a of streamResponse(response)) result.push(a)
+		for await (const a of streamResponse(response)) result.push(decodeChunk(a))
 
 		expect(result).toEqual(['Elysia', 'Eden'])
 	})
@@ -579,9 +586,9 @@ describe('Stream', () => {
 
 		const response = await app.handle(req('/'))
 
-		const result = []
+		const result: string[] = []
 
-		for await (const a of streamResponse(response)) result.push(a)
+		for await (const a of streamResponse(response)) result.push(decodeChunk(a))
 
 		expect(result).toEqual(['Elysia', 'Eden'].map((x) => `data: ${x}\n\n`))
 		expect(response.headers.get('content-type')).toBe('text/event-stream')
@@ -656,9 +663,9 @@ describe('Stream', () => {
 		const response = await app.handle(req('/sse'))
 		expect(response.headers.get('content-type')).toBe('text/event-stream')
 
-		const result = []
+		const result: string[] = []
 
-		for await (const chunk of streamResponse(response)) result.push(chunk)
+		for await (const chunk of streamResponse(response)) result.push(decodeChunk(chunk))
 		expect(result).toHaveLength(3)
 		expect(result).toEqual([
 			'event: message\ndata: {"meow":"1"}\n\n',

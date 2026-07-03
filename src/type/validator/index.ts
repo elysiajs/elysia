@@ -119,6 +119,77 @@ function schemaContainsRef(node: any, seen = new WeakSet()): boolean {
 	return false
 }
 
+// L8: does a passing `Check` already guarantee this schema carries no excess
+// keys anywhere (so the exact-mirror `Clean` walk has nothing left to strip)?
+//
+// True only for a closed object whose every reachable object is likewise closed
+// and whose leaves cannot rewrite the value. A codec/refine, an open object
+// (`additionalProperties` !== false), `patternProperties`, or any
+// Union/Intersect/Ref/anyOf-style node can let an excess key survive Check (or
+// let Clean change the value), so we bail conservatively on all of them.
+function isCleanSafeNode(node: any, seen: WeakSet<object>): boolean {
+	// leaf / primitive schema — nothing for Clean to strip
+	if (!node || typeof node !== 'object') return true
+	if (seen.has(node)) return false // cycle: bail (Ref/This/Cyclic territory)
+	seen.add(node)
+
+	// A codec/refine can rewrite the value → Clean is not redundant.
+	if (node['~codec'] || node['~refine'] || node['~elyTyp'] !== undefined)
+		return false
+
+	const kind = node['~kind']
+	if (
+		kind === 'Union' ||
+		kind === 'Intersect' ||
+		kind === 'Ref' ||
+		kind === 'This' ||
+		kind === 'Cyclic' ||
+		node.$ref !== undefined ||
+		Array.isArray(node.anyOf) ||
+		Array.isArray(node.allOf) ||
+		Array.isArray(node.oneOf) ||
+		node.not !== undefined ||
+		node.if !== undefined ||
+		node.patternProperties !== undefined
+	)
+		return false
+
+	const isObject = kind === 'Object' || node.type === 'object'
+	if (isObject) {
+		// Must be closed: an open object lets excess keys pass Check.
+		if (node.additionalProperties !== false) return false
+
+		if (node.properties)
+			for (const k in node.properties)
+				if (
+					Object.hasOwn(node.properties, k) &&
+					!isCleanSafeNode(node.properties[k], seen)
+				)
+					return false
+
+		return true
+	}
+
+	if (kind === 'Array' || node.type === 'array') {
+		const items = node.items
+		// tuple items or missing items schema — bail conservatively
+		if (Array.isArray(items) || items === undefined) return false
+		return isCleanSafeNode(items, seen)
+	}
+
+	// Any other leaf (String/Number/Boolean/Date/...): Check-gated, no stripping.
+	return true
+}
+
+function isFullyClosedObject(schema: any): boolean {
+	if (!schema || typeof schema !== 'object') return false
+	// Only worth skipping Clean when the ROOT is a closed object — the request
+	// decode entry (`FromSync`/`From`) always hands an object/array root.
+	const kind = schema['~kind']
+	if (kind !== 'Object' && schema.type !== 'object') return false
+	return isCleanSafeNode(schema, new WeakSet())
+}
+
 // Fast path for the standalone-guard merge: when every member is a plain inline
 // object (own keys ⊆ type/properties/required, no `~elyTyp`)
 function divergesFromEvaluate(node: any, seen: WeakSet<object>) {
@@ -306,6 +377,26 @@ export class TypeBoxValidator<
 	#isForm = false
 	#hasOptional = false
 
+	// L8: Check and Clean are two independent full walks per request. When the
+	// schema is a fully-closed object (additionalProperties:false at every
+	// level, no codec/refine/ref/union), a passing Check already guarantees no
+	// excess keys exist anywhere — so Clean has nothing to strip and can be
+	// skipped. Derived purely from `this.schema`, so it is identical on the JIT
+	// and frozen/AOT-reconstructed paths (no manifest channel needed).
+	// Caveat: exact-mirror Clean normalizes object key ORDER to schema order;
+	// skipping Clean preserves the input's original key order instead. Values
+	// and key sets are identical either way, but key ORDER IS observable on the
+	// wire (e.g. JSON.stringify output order). This is an accepted trade-off:
+	// the extra walk is skipped because key-order differences are benign in
+	// practice for well-typed handlers.
+	// Additional aliasing note: when the M5 same-ref fast-path (no-copy default
+	// merge) AND this Clean-skip both fire together, the validator returns the
+	// raw input object with no defensive copy. This is safe for app.handle
+	// (each request gets a fresh parse), but direct TypeBoxValidator callers
+	// that mutate the returned object would alias the original input. Callers
+	// that need isolation must copy before mutating.
+	#cleanRedundant = false
+
 	constructor(
 		schema: T,
 		options?: ValidatorOptions,
@@ -485,6 +576,14 @@ export class TypeBoxValidator<
 					this.Clean = (value) => Clean(this.schema, value)
 			}
 		}
+
+		// L8: skip the Clean walk when Check already rejects every excess key
+		// (fully-closed object). Not applicable when normalize:'typebox' asks
+		// for TypeBox Clean semantics explicitly, or when there is no Clean.
+		this.#cleanRedundant =
+			!!this.Clean &&
+			options?.normalize !== 'typebox' &&
+			isFullyClosedObject(this.schema)
 
 		if (
 			this.hasCodec &&
@@ -1062,7 +1161,7 @@ export class TypeBoxValidator<
 				)
 		}
 
-		if (this.Clean && !this.#decodeMirror)
+		if (this.Clean && !this.#decodeMirror && !this.#cleanRedundant)
 			value = this.Clean(value) as Static<T>
 
 		if (this.#isForm) this.#unmarkForm(value)
@@ -1128,7 +1227,7 @@ export class TypeBoxValidator<
 				throw this.#error(value, type)
 		}
 
-		if (this.Clean && !this.#decodeMirror)
+		if (this.Clean && !this.#decodeMirror && !this.#cleanRedundant)
 			value = this.Clean(value) as Static<T>
 
 		if (this.#isForm) this.#unmarkForm(value)

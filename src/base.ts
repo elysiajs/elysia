@@ -8,6 +8,7 @@ import {
 	localMacroRoot,
 	resolveLocalHook
 } from './compile'
+import { Capture } from './compile/aot'
 import { buildWSRoute } from './ws/route'
 import type {
 	WSLocalHook,
@@ -15,7 +16,7 @@ import type {
 	WSHandlerResponse
 } from './ws/types'
 
-import { env, ListenCallback, Serve, Server } from './universal'
+import { ListenCallback, Serve, Server } from './universal'
 import { isBun } from './universal/constants'
 
 import { isDynamicRegex, needEncodeRegex, MethodMap } from './constants'
@@ -137,8 +138,12 @@ const removedResolveError = () =>
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
 
-// Guard/group hook handlers (beforeHandle/afterHandle/error) run with
-// plugin/local derive and macro-resolve values present at runtime — their
+interface StaticMapAliases {
+	method: string
+	paths: string[]
+	head: boolean
+}
+
 // typed context must include them (H14), and the macro channel is `resolve`,
 // not `response` (M11)
 type GuardHookSingleton<
@@ -4455,8 +4460,6 @@ export class Elysia<
 		fn: unknown,
 		hook?: Partial<AnyLocalHook>
 	) {
-		// Elysia 1 order (path, handler, hook) would otherwise silently
-		// serve the hook object as a static 200 and discard the handler
 		if (hook !== undefined && (typeof hook !== 'object' || hook === null))
 			throw new Error(
 				`Elysia 2 route signature is (path, hook, handler) — received ${typeof hook} in the hook position for "${method} ${path}". Did you use the Elysia 1 order (path, handler, hook)?`
@@ -6160,7 +6163,8 @@ export class Elysia<
 		index: number,
 		immediate: boolean | undefined = this['~config']?.precompile,
 		route: InternalRoute = this.#history![index],
-		precomputedStatic?: Response
+		precomputedStatic?: Response,
+		aliases?: StaticMapAliases
 	): CompiledHandler {
 		if (this.#compiled?.[index]) return this.#compiled![index]
 
@@ -6181,13 +6185,14 @@ export class Elysia<
 			return handler
 		}
 
-		return this.#jitHandler(index, route, precomputedStatic)
+		return this.#jitHandler(index, route, precomputedStatic, aliases)
 	}
 
 	#jitHandler(
 		index: number,
 		route: InternalRoute,
-		precomputedStatic?: Response
+		precomputedStatic?: Response,
+		aliases?: StaticMapAliases
 	): CompiledHandler {
 		return (context) => {
 			if (this.#compiled![index]) return this.#compiled![index](context)
@@ -6201,7 +6206,22 @@ export class Elysia<
 			)
 
 			this.#compiled![index] = handler
-			this.#saveHandler(route[0], route[1], handler)
+
+			if (aliases) {
+				this.#initMap()
+
+				const map = (this['~map']![aliases.method] ??=
+					nullObject() as any)
+				for (let p = 0; p < aliases.paths.length; p++)
+					map[aliases.paths[p]] = handler
+
+				if (aliases.head) {
+					const head = (this['~map']!['HEAD'] ??= nullObject() as any)
+					const headHandler = Elysia.#wrapHeadHandler(handler)
+					for (let p = 0; p < aliases.paths.length; p++)
+						head[aliases.paths[p]] = headHandler
+				}
+			} else this.#saveHandler(route[0], route[1], handler)
 
 			return handler(context)
 		}
@@ -6257,6 +6277,62 @@ export class Elysia<
 		}) as CompiledHandler
 	}
 
+	#assertRouteModelRefs(route: InternalRoute, method: string) {
+		const models = this['~ext']?.models
+		const path = route[1]
+
+		const checkSlots = (hook: Record<string, unknown> | undefined) => {
+			if (!hook) return
+
+			for (const key in hook) {
+				if (!schemaProperties.has(key)) continue
+
+				const v = hook[key]
+				if (typeof v === 'string') {
+					if (!models || !(v in models))
+						throw new Error(
+							`[Elysia] Unknown model reference "${v}" for ${key} on route ${method} ${path}. Register it with .model('${v}', ...) before listen()/compile().`
+						)
+				} else if (key === 'response' && v && typeof v === 'object') {
+					const record = v as Record<string, unknown>
+					if (
+						'~kind' in record ||
+						'~elyAcl' in record ||
+						'~standard' in record
+					)
+						continue
+
+					for (const status in record) {
+						const r = record[status]
+						if (
+							typeof r === 'string' &&
+							(!models || !(r in models))
+						)
+							throw new Error(
+								`[Elysia] Unknown model reference "${r}" for response ${status} on route ${method} ${path}. Register it with .model('${r}', ...) before listen()/compile().`
+							)
+					}
+				}
+			}
+		}
+
+		const hook = composeRouteHook(
+			route[3] as AnyElysia,
+			route[4] as any,
+			route[5] as any,
+			route[6] as any,
+			this as any,
+			route[7] as AnyElysia | undefined
+		) as (Record<string, unknown> & { schemas?: unknown[] }) | undefined
+
+		checkSlots(hook)
+
+		const schemas = hook?.schemas
+		if (Array.isArray(schemas))
+			for (let s = 0; s < schemas.length; s++)
+				checkSlots(schemas[s] as any)
+	}
+
 	#routerBuilt = false
 	#buildRouter() {
 		if (!this.#history || this.#routerBuilt) return
@@ -6265,12 +6341,6 @@ export class Elysia<
 		const precompile = this['~config']?.precompile
 		const enableAutoHead = this['~config']?.autoHead === true
 
-		// Native static routes (Bun `serve.routes`) are served WITHOUT entering
-		// the fetch handler, so they bypass always-global `.request()` hooks,
-		// `.trace()`, and `.wrap()` HOCs — invisible on the `app.handle`/non-Bun
-		// path but a real prod/test divergence under Bun (auth/rate-limit/logging
-		// registered via those silently skipped). Disable promotion when any is
-		// present so those routes run through the full fetch pipeline instead.
 		const fetchLevelHook = flattenChain(this['~hookChain'])
 		const buildStatic =
 			this['~config']?.nativeStaticResponse !== false &&
@@ -6283,6 +6353,20 @@ export class Elysia<
 
 		const length = this.#history.length
 
+		let hasDuplicate = false
+		const seen = new Map<string, number>()
+		for (let i = 0; i < length; i++) {
+			const route = this.#history![i]
+			const m =
+				(route[0] as any) === 'WS' ? 'WS' : mapMethodBack(route[0])
+			const key = m + ' ' + route[1]
+
+			this.#assertRouteModelRefs(route, m)
+
+			if (seen.has(key)) hasDuplicate = true
+			seen.set(key, i)
+		}
+
 		let explicitHead: Set<string> | undefined
 		if (enableAutoHead)
 			for (let i = 0; i < length; i++)
@@ -6293,7 +6377,7 @@ export class Elysia<
 		const isLoose = this['~config']?.strictPath !== true
 
 		let explicitPaths: Map<string, Set<string>> | undefined
-		if (isLoose && this['~config']?.distinctPath) {
+		if (isLoose) {
 			explicitPaths = new Map()
 
 			for (let i = 0; i < length; i++) {
@@ -6318,6 +6402,12 @@ export class Elysia<
 			const method = mapMethodBack(route[0])
 			const path = route[1]
 
+			if (hasDuplicate) {
+				const key =
+					((route[0] as any) === 'WS' ? 'WS' : method) + ' ' + path
+				if (seen.get(key) !== i) continue
+			}
+
 			if ((route[0] as any) === 'WS') {
 				const ws = buildWSRoute(route, this)
 				const handler = ws[0] as unknown as CompiledHandler
@@ -6327,8 +6417,7 @@ export class Elysia<
 					;(this['~router'] ??= new Memoirist<CompiledHandler>({
 						loosePath: isLoose
 					})).add('WS', path, handler, false)
-					// fetch handler probes the trie for upgrades only when a
-					// dynamic WS route exists (headers stay unmaterialized)
+
 					this['~hasDynamicWS'] = true
 				} else {
 					this.#initMap()
@@ -6357,10 +6446,7 @@ export class Elysia<
 								(existing as any)[key] !== (options as any)[key]
 							) {
 								console.warn(
-									`[Elysia] Conflicting per-route WebSocket option '${key}'`
-								)
-								console.warn(
-									`Bun uses one global WebSocket config per server, so per-route values are not enforced (the last-registered route wins).`
+									`[Elysia] Conflicting per-route WebSocket option '${key}'\nBun uses one global WebSocket config per server, so per-route values are not enforced (the last-registered route wins).`
 								)
 								console.warn(new Error().stack)
 							}
@@ -6422,7 +6508,16 @@ export class Elysia<
 
 			if (!isDynamic && !needEncodeRegex.test(path) && !registerLoose) {
 				const map = (methods[method] ??= nullObject() as any)
-				const handler = this.handler(i, precompile, route, sharedStatic)
+				// Only the auto-HEAD twin is an extra alias here; `#saveHandler`
+				// already re-points the canonical path, so aliases is needed only
+				// to also rewrite the HEAD entry on first compile.
+				const handler = this.handler(
+					i,
+					precompile,
+					route,
+					sharedStatic,
+					autoHead ? { method, paths: [path], head: true } : undefined
+				)
 
 				map[path] = handler
 
@@ -6475,7 +6570,18 @@ export class Elysia<
 				}
 			} else {
 				const map = (methods[method] ??= nullObject() as any)
-				const handler = this.handler(i, precompile, route, sharedStatic)
+
+				const handler = this.handler(
+					i,
+					precompile,
+					route,
+					sharedStatic,
+					{
+						method,
+						paths,
+						head: autoHead
+					}
+				)
 
 				const headHandler = autoHead
 					? wrapHeadHandler(handler)
@@ -6536,7 +6642,7 @@ export class Elysia<
 
 		if (!listen) throw new Error('No adapter provided for listen()')
 
-		if (!env.ELYSIA_AOT_BUILD) listen(this, options, callback)
+		if (!Capture.isAotBuildEnv()) listen(this, options, callback)
 
 		return this
 	}

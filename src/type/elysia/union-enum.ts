@@ -3,7 +3,7 @@ import type { TSchemaOptions } from 'typebox'
 
 import { ELYSIA_TYPES } from '../constants'
 import type { NonEmptyArray, TEnumValue, TUnionEnum } from '../types'
-import { assignOrNew, elyType } from './utils'
+import { elyType } from './utils'
 
 let unionEnumNoEnumerable: {
 	value: 'UnionEnum'
@@ -27,11 +27,9 @@ export function UnionEnum<
 		else if (kind !== type) mixed = true
 	}
 
+	// User-supplied `default` wins over values[0]; never mutate the options bag.
 	const schema = Object.defineProperty(
-		assignOrNew(options, {
-			default: values[0],
-			enum: values
-		}),
+		{ default: values[0], ...options, enum: values },
 		'~kind',
 		(unionEnumNoEnumerable ??= {
 			value: 'UnionEnum',

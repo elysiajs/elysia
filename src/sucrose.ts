@@ -158,9 +158,29 @@ export function removeColonAlias(parameter: string) {
 		const start = parameter.indexOf(':')
 		if (start === -1) break
 
-		let end = parameter.indexOf(',', start)
-		if (end === -1) end = parameter.indexOf('}', start) - 1
-		if (end === -2) end = parameter.length
+		// Drop the `:alias`
+		let end = start + 1
+		while (end < parameter.length) {
+			const char = parameter.charCodeAt(end)
+			if (char !== 32 && char !== 9 && char !== 10) break
+			end++
+		}
+
+		// Consume the alias identifier up to the next delimiter/whitespace.
+		while (end < parameter.length) {
+			const char = parameter.charCodeAt(end)
+
+			// , } space \t \n
+			if (
+				char === 44 ||
+				char === 125 ||
+				char === 32 ||
+				char === 9 ||
+				char === 10
+			)
+				break
+			end++
+		}
 
 		parameter = parameter.slice(0, start) + parameter.slice(end)
 	}
@@ -269,6 +289,8 @@ function findEndIndex(
 			case 44: // ,
 			case 59: // ;
 			case 32: // space
+			case 41: // )
+			case 125: // } end of a minified block, e.g. `{const a=body}`
 				return found
 		}
 
@@ -293,10 +315,17 @@ export function findAlias(
 
 	let content = body
 
+	const spaced = ' = ' + type
+	const minified = '=' + type
+
 	while (true) {
-		let index = findEndIndex(' = ' + type, content)
+		let matchedLength = spaced.length
+		let index = findEndIndex(spaced, content)
 		// V8 engine minified the code
-		if (index === -1) index = findEndIndex('=' + type, content)
+		if (index === -1) {
+			index = findEndIndex(minified, content)
+			matchedLength = minified.length
+		}
 
 		if (index === -1) {
 			/**
@@ -307,18 +336,39 @@ export function findAlias(
 			 * 'const a = body' // true
 			 * ```
 			 **/
-			let lastIndex = content.indexOf(' = ' + type)
-			if (lastIndex === -1) lastIndex = content.indexOf('=' + type)
+			let lastIndex = content.indexOf(spaced)
+			matchedLength = spaced.length
+			if (lastIndex === -1) {
+				lastIndex = content.indexOf(minified)
+				matchedLength = minified.length
+			}
 
-			if (lastIndex + 3 + type.length !== content.length) break
+			if (lastIndex === -1) break
+			if (lastIndex + matchedLength !== content.length) break
 
 			index = lastIndex
 		}
 
 		const part = content.slice(0, index)
 
-		// V8 engine minified the code
-		const lastPart = part.lastIndexOf(' ')
+		let boundary = -1
+		for (let i = part.length - 1; i >= 0; i--) {
+			const char = part.charCodeAt(i)
+			// space , ( ; ) \t \n
+			if (
+				char === 32 ||
+				char === 44 ||
+				char === 40 ||
+				char === 59 ||
+				char === 41 ||
+				char === 9 ||
+				char === 10
+			) {
+				boundary = i
+				break
+			}
+		}
+
 		/**
 		 * aliased variable last character
 		 *
@@ -327,26 +377,22 @@ export function findAlias(
 		 * const { hello } = body // } is the last character
 		 * ```
 		 **/
-		let variable = part.slice(lastPart !== -1 ? lastPart + 1 : -1)
+		const variable = part.slice(boundary + 1)
 
 		// Variable is using object destructuring, find the bracket pair
-		if (variable === '}') {
+		if (variable.charCodeAt(variable.length - 1) === 125) {
 			const [start, end] = bracketPairRangeReverse(part)
 
 			aliases.push(removeColonAlias(content.slice(start, end)))
 
-			content = content.slice(index + 3 + type.length)
+			content = content.slice(index + matchedLength)
 
 			continue
 		}
 
-		// Remove comma
-		while (variable.charCodeAt(0) === 44) variable = variable.slice(1)
-		while (variable.charCodeAt(0) === 9) variable = variable.slice(1)
+		if (variable && !variable.includes('(')) aliases.push(variable)
 
-		if (!variable.includes('(')) aliases.push(variable)
-
-		content = content.slice(index + 3 + type.length)
+		content = content.slice(index + matchedLength)
 	}
 
 	for (let i = 0; i < aliases.length; i++) {
@@ -422,7 +468,6 @@ export function inferBodyReference(
 		if (
 			!inference.query &&
 			(access('query', alias) ||
-				code.includes('return ' + alias) ||
 				code.includes('return ' + alias + '.query'))
 		)
 			inference.query = true
@@ -701,6 +746,25 @@ export function sucrose(
 		}
 
 		const fnInference: Sucrose.Inference = defaultSucrose()
+
+		if (content.includes('[native code]')) {
+			markAllAccessed(fnInference)
+
+			if (!caches.has(key)) {
+				const limit = DEFAULT_CACHE_LIMIT
+				if (caches.size >= limit) {
+					const oldest = caches.keys().next().value
+					if (oldest !== undefined) caches.delete(oldest)
+				}
+				caches.set(key, fnInference)
+			}
+			if (typeof event === 'function')
+				functionCaches.set(event, fnInference)
+
+			inference = mergeInference(inference, fnInference)
+			continue
+		}
+
 		const [parameter, body] = separateFunction(content)
 
 		const rootParameters = findParameterReference(parameter, fnInference)
@@ -730,12 +794,11 @@ export function sucrose(
 		}
 
 		if (!caches.has(key)) {
-			const limit = DEFAULT_CACHE_LIMIT
-			if (caches.size >= limit) {
-				// Drop the oldest (first inserted / least recently used).
+			if (caches.size >= DEFAULT_CACHE_LIMIT) {
 				const oldest = caches.keys().next().value
 				if (oldest !== undefined) caches.delete(oldest)
 			}
+
 			caches.set(key, fnInference)
 		}
 		if (typeof event === 'function') functionCaches.set(event, fnInference)

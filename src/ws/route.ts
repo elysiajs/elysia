@@ -1,4 +1,5 @@
 import { RouteValidator } from '../validator/route'
+import { StandardValidator } from '../validator'
 import { nullObject } from '../utils'
 import { parseQueryFromURL } from '../parse-query'
 import { getQueryParseChannels } from '../compile/handler/utils'
@@ -157,6 +158,16 @@ export async function handleWSResponse(
 	;(ws as any).send(mapped)
 }
 
+const wsOptions = [
+	'maxPayloadLength',
+	'backpressureLimit',
+	'closeOnBackpressureLimit',
+	'idleTimeout',
+	'publishToSelf',
+	'sendPings',
+	'perMessageDeflate'
+] as const
+
 export function buildWSRoute(
 	route: InternalRoute,
 	app: AnyElysia
@@ -220,10 +231,6 @@ export function buildWSRoute(
 		hook.beforeHandle as any
 	)
 
-	// Per-hook derive provenance (union of the resolved app-chain and this WS
-	// route's own hook), replacing a global fn-identity lookup — a fn used as a
-	// derive elsewhere is NOT treated as a derive here unless it was folded in
-	// as one during THIS route's resolution.
 	const deriveEntries = [
 		...(((flatAppHook as any)['~deriveEntries'] as
 			| Function[]
@@ -341,6 +348,9 @@ export function buildWSRoute(
 
 		if (bodyValidator.hasCodec) return bodyValidator.From(message, 'body')
 
+		if (bodyValidator instanceof StandardValidator)
+			return bodyValidator.From(message, 'body')
+
 		if (!bodyValidator.Check(message))
 			throw new ValidationError(
 				'body',
@@ -351,6 +361,26 @@ export function buildWSRoute(
 		return message
 	}
 
+	function validateUpgradeChannel(
+		validator: any,
+		value: unknown,
+		type: 'params' | 'query' | 'headers'
+	): unknown | Promise<unknown> {
+		if (validator instanceof StandardValidator)
+			return validator.From(value, type)
+
+		if (validator.hasCodec) return validator.From(value, type)
+
+		if (!validator.Check(value))
+			throw new ValidationError(
+				type,
+				value,
+				validator.Errors?.(value) ?? []
+			)
+
+		return value
+	}
+
 	function onMessageValidationError(
 		ws: ElysiaWS<any>,
 		error: unknown
@@ -359,6 +389,7 @@ export function buildWSRoute(
 			try {
 				ws.raw.send(error instanceof Error ? error.message : error + '')
 			} catch {}
+
 			return
 		}
 
@@ -577,16 +608,13 @@ export function buildWSRoute(
 
 		try {
 			if (validators.params) {
-				const v = validators.params as any
-				if (!v.Check(context.params ?? {}))
-					return await handleUpgradeError(
-						context,
-						new ValidationError(
-							'params',
-							context.params,
-							v.Errors?.(context.params) ?? []
-						)
-					)
+				let r = validateUpgradeChannel(
+					validators.params as any,
+					context.params ?? {},
+					'params'
+				)
+				if (r instanceof Promise) r = await r
+				context.params = r as any
 			}
 			if (validators.query) {
 				const url = request.url
@@ -596,35 +624,28 @@ export function buildWSRoute(
 					queryArray,
 					queryObject
 				)
-				;(context as any).query = query
 
-				const v = validators.query as any
-				if (!v.Check(query))
-					return await handleUpgradeError(
-						context,
-						new ValidationError(
-							'query',
-							query,
-							v.Errors?.(query) ?? []
-						)
-					)
+				let r = validateUpgradeChannel(
+					validators.query as any,
+					query,
+					'query'
+				)
+				if (r instanceof Promise) r = await r
+				;(context as any).query = r
 			}
 
 			if (validators.headers) {
-				const headers = ((context as any).headers = isBun
+				const headers = isBun
 					? request.headers.toJSON()
-					: Object.fromEntries(request.headers))
+					: Object.fromEntries(request.headers)
 
-				const vali = validators.headers as any
-				if (!vali.Check(headers))
-					return await handleUpgradeError(
-						context,
-						new ValidationError(
-							'headers',
-							headers,
-							vali.Errors?.(headers) ?? []
-						)
-					)
+				let r = validateUpgradeChannel(
+					validators.headers as any,
+					headers,
+					'headers'
+				)
+				if (r instanceof Promise) r = await r
+				;(context as any).headers = r
 			}
 
 			for (let i = 0; i < transforms.length; i++) {
@@ -674,22 +695,20 @@ export function buildWSRoute(
 					detail: 'WebSocket upgrade requires a running server. Call .listen() first.'
 				})
 
-			const connectionData: WSConnectionData = {
-				id: '',
-				context: context as any,
-				validator: responseValidator,
-				defaultValidator: defaultResponseValidator,
-				open: onOpen as any,
-				message: hook.message ? dispatch : undefined,
-				drain: onDrain as any,
-				close: onClose as any,
-				ping: onPing as any,
-				pong: onPong as any
-			}
-
 			const upgraded = server.upgrade(request, {
 				headers: upgradeHeaders,
-				data: connectionData
+				data: {
+					id: '',
+					context: context as any,
+					validator: responseValidator,
+					defaultValidator: defaultResponseValidator,
+					open: onOpen as any,
+					message: hook.message ? dispatch : undefined,
+					drain: onDrain as any,
+					close: onClose as any,
+					ping: onPing as any,
+					pong: onPong as any
+				} satisfies WSConnectionData
 			})
 
 			if (!upgraded)
@@ -702,18 +721,9 @@ export function buildWSRoute(
 	}
 
 	const options: Partial<WebSocketHandler<any>> = nullObject()
-	for (const k of [
-		'maxPayloadLength',
-		'backpressureLimit',
-		'closeOnBackpressureLimit',
-		'idleTimeout',
-		'publishToSelf',
-		'sendPings',
-		'perMessageDeflate'
-	] as const) {
+	for (const k of wsOptions)
 		if ((hook as any)[k] !== undefined)
 			(options as any)[k] = (hook as any)[k]
-	}
 
 	return [fetchHandler, options] as const
 }

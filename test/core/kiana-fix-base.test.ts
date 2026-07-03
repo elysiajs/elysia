@@ -78,7 +78,7 @@ describe('base fixes (kiana)', () => {
 	// other's real map entry. WHY: silent wrong-handler dispatch on a declared
 	// route is a correctness violation that no error surfaces.
 	it('does not let a /foo/ loose twin clobber an explicit /foo route', async () => {
-		const app = new Elysia({ distinctPath: true })
+		const app = new Elysia()
 			.get('/foo', () => 'real-foo')
 			.get('/foo/', () => 'foo-slash')
 
@@ -87,7 +87,7 @@ describe('base fixes (kiana)', () => {
 	})
 
 	it('clobber-guard holds regardless of registration order', async () => {
-		const app = new Elysia({ distinctPath: true })
+		const app = new Elysia()
 			.get('/foo/', () => 'foo-slash')
 			.get('/foo', () => 'real-foo')
 

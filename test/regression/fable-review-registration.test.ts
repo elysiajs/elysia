@@ -136,19 +136,18 @@ describe('fable review — registration footguns', () => {
 			).toThrow(message)
 		})
 
-		it('macro definition { resolve } throws (function form)', async () => {
+		it('macro definition { resolve } throws (function form)', () => {
 			// Function-form macro bodies are produced lazily, so the throw
-			// surfaces when the macro is applied (route compile) rather than
-			// at .macro() — still fails loud, never silently drops.
+			// surfaces when the macro is applied — since M34 composes hooks
+			// at build, that is now a loud build-time throw (was a
+			// per-request 500) — still fails loud, never silently drops.
 			const app = new Elysia()
 				.macro({
 					auth: () => ({ resolve: () => ({ user: 'admin' }) })
 				} as any)
 				.get('/', { auth: true } as any, (c: any) => c.user ?? 'NONE')
 
-			const res = await app.handle(req('/'))
-			expect(res.status).toBe(500)
-			expect(await res.text()).toContain(message)
+			expect(() => app.compile()).toThrow(message)
 		})
 
 		it('derive (the replacement) still works on a guard', async () => {

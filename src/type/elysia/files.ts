@@ -1,7 +1,7 @@
 import { Decode } from 'typebox/type'
 import type { Type } from 'typebox'
 
-import { isEmpty } from '../../utils'
+import { isBlob, isEmpty } from '../../utils'
 import { ELYSIA_TYPES } from '../constants'
 import type { FileOptions, FilesOptions } from '../types'
 import { ArrayType } from './array'
@@ -11,6 +11,7 @@ import {
 	cloneSchema,
 	createSharedReference,
 	elyType,
+	getMeta,
 	Refines,
 	type Refines as RefinesType
 } from './utils'
@@ -69,17 +70,37 @@ function FilesWithProperty(options: FilesOptions) {
 
 	if (options.minItems)
 		refines.push([
-			(value) =>
-				Array.isArray(value) && value.length >= options.minItems!,
+			(value) => {
+				const length = Array.isArray(value)
+					? value.length
+					: isBlob(value)
+						? 1
+						: 0
+
+				return length >= options.minItems!
+			},
 			`Expect at least ${options.minItems} files`
 		])
 
 	if (options.maxItems)
 		refines.push([
-			(value) =>
-				Array.isArray(value) && value.length <= options.maxItems!,
+			(value) => {
+				const len = Array.isArray(value)
+					? value.length
+					: isBlob(value)
+						? 1
+						: 0
+				return len <= options.maxItems!
+			},
 			`Expect less than ${options.maxItems} files`
 		])
 
-	return elyType(ELYSIA_TYPES.Files, Refines(base, refines as any))
+	let schema: any = Refines(base, refines as any)
+	const [, meta] = getMeta(options as any)
+	if (meta) {
+		schema = cloneSchema(schema)
+		Object.assign(schema, meta)
+	}
+
+	return elyType(ELYSIA_TYPES.Files, schema)
 }

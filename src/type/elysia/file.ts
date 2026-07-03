@@ -8,6 +8,7 @@ import {
 	cloneSchema,
 	createSharedReference,
 	elyType,
+	getMeta,
 	Refines,
 	type Refines as RefinesType
 } from './utils'
@@ -98,5 +99,12 @@ function FileWithProperty(options: FilesOptions) {
 		refines.push([checkType, message])
 	}
 
-	return elyType(ELYSIA_TYPES.File, Refines(BaseFile, refines))
+	let schema = Refines(BaseFile, refines)
+	const [, meta] = getMeta(options as any)
+	if (meta) {
+		schema = cloneSchema(schema)
+		Object.assign(schema, meta)
+	}
+
+	return elyType(ELYSIA_TYPES.File, schema)
 }

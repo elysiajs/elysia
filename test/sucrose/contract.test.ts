@@ -69,39 +69,36 @@ describe('sucrose contract — passesToday flag is empirically accurate', () => 
 })
 
 describe('sucrose contract — unit-level defect repros', () => {
-	// H26: removeColonAlias off-by-one leaves the alias tail glued to the
-	// keyword when braces are present. Directly observable at the unit
-	// boundary; the end-to-end path can mask it via a robust re-parse.
-	it('[H26] removeColonAlias mangles braced rename today', () => {
-		// current-wrong: tail char `s` glued, key becomes `headerss`
-		expect(removeColonAlias('{headers:rs}')).toBe('{headerss}')
-		expect(removeColonAlias('{query:q}')).toBe('{queryq}')
-		// Post-fix target (kept as documentation, asserted after the fix):
-		//   expect(removeColonAlias('{headers:rs}')).toBe('{headers}')
+	// H26: removeColonAlias must drop the whole `:alias` span and reduce a
+	// braced rename to the bare keyword, preserving surrounding formatting.
+	it('[H26] removeColonAlias reduces braced rename to bare keyword', () => {
+		expect(removeColonAlias('{headers:rs}')).toBe('{headers}')
+		expect(removeColonAlias('{query:q}')).toBe('{query}')
+		// Spaced form keeps its formatting (space before the closing brace).
+		expect(removeColonAlias('{ headers: rs }')).toBe('{ headers }')
+		expect(removeColonAlias('{ headers: reqHeaders }')).toBe('{ headers }')
 	})
 
-	it('[H26] findAlias re-inject surfaces the mangled key today', () => {
-		// `const {query:q} = c` → the re-injected destructure block is mangled
-		// to `{queryq}`, so downstream retrieveRootparameters sees key `queryq`
-		// (not `query`) — the channel would be dropped.
-		expect(findAlias('c', '{const{query:q}=c;q.a}')).toEqual(['{queryq}', 'a'])
-		// Post-fix target: ['{query}', 'a']
+	it('[H26] findAlias re-inject yields the bare keyword', () => {
+		// `const {query:q} = c` → the re-injected destructure block reduces to
+		// `{query}`, so downstream retrieveRootparameters sees key `query` and
+		// the channel is kept. (`q.a` is a property read on `q`, not an alias of
+		// `c`, so `a` is correctly absent — the old trailing `a` was M29 garbage.)
+		expect(findAlias('c', '{const{query:q}=c;q.a}')).toEqual(['{query}'])
 	})
 
-	// M29: minified `=alias` over-slices by 2. Two aliases → the second is lost;
-	// three aliases → garbage alias strings appear.
-	it('[M29] minified transitive alias is dropped/corrupted today', () => {
-		// spaced baseline is correct
+	// M29: minified `=alias` must return the same alias list as the spaced form,
+	// with no lost or garbage aliases.
+	it('[M29] minified transitive aliases match the spaced form', () => {
+		// spaced baseline
 		expect(findAlias('body', '{ const a = body, b = a }')).toEqual(['a', 'b'])
-		// minified loses the second alias (over-slice by 2)
-		expect(findAlias('body', '{const a=body,b=a}')).toEqual(['a'])
-		// three aliases minified → duplicated/garbage entries
+		// minified must match the spaced form exactly (no lost second alias)
+		expect(findAlias('body', '{const a=body,b=a}')).toEqual(['a', 'b'])
+		// three aliases minified → clean transitive list, no garbage
 		expect(findAlias('body', '{const a=body,b=a,c=b}')).toEqual([
 			'a',
-			'a=body,b',
-			'b'
+			'b',
+			'c'
 		])
-		// Post-fix target:
-		//   ['a','b'] and ['a','b','c'] respectively, no garbage.
 	})
 })
