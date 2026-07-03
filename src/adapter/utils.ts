@@ -106,7 +106,8 @@ export const handleFile = (
 
 	if (set.headers instanceof Headers) {
 		for (const key of Object.keys(defaultHeader))
-			if (key in set.headers) set.headers.append(key, defaultHeader[key])
+			if (defaultHeader[key] && !set.headers.has(key))
+				set.headers.set(key, defaultHeader[key])
 
 		if (immutable) {
 			set.headers.delete('content-length')

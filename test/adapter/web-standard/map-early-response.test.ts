@@ -10,6 +10,12 @@ const defaultContext = {
 	cookie: {}
 }
 
+const createDefaultContext = () => ({
+	headers: {},
+	status: 200,
+	cookie: {}
+})
+
 const createContext = () => ({
 	headers: {
 		'x-powered-by': 'Elysia',
@@ -376,13 +382,26 @@ describe('Web Standard - Map Early Response', () => {
 			form({
 				a: Bun.file('test/kyuukurarin.mp4')
 			}),
-			defaultContext
+			createDefaultContext()
 		)!
 
 		expect(response.headers.get('content-type')).toStartWith(
 			'multipart/form-data'
 		)
 		expect(response.status).toBe(200)
+		expect(await response.formData()).toBeInstanceOf(FormData)
+	})
+
+	it('map formdata with custom context', async () => {
+		const response = mapEarlyResponse(
+			form({
+				name: 'Shiroko'
+			}),
+			createContext()
+		)!
+
+		expect(response.headers.get('x-powered-by')).toBe('Elysia')
+		expect(response.status).toBe(418)
 		expect(await response.formData()).toBeInstanceOf(FormData)
 	})
 })
