@@ -8,6 +8,7 @@ import { compileHandlerJit } from './jit'
 export { setCaptureHeaderShorthand } from './jit'
 import { Reconstrct } from './reconstruct'
 
+import { createContext, type Context } from '../../context'
 import {
 	cloneHook,
 	eventProperties,
@@ -19,6 +20,7 @@ import {
 	mapMethodBack,
 	mergeHook,
 	nullObject,
+	replaceUrlPath,
 	type ChainNode
 } from '../../utils'
 
@@ -28,7 +30,36 @@ import type {
 	AnyLocalHook,
 	AppHook
 } from '../../types'
-import { createContext } from '../../context'
+
+export interface MountHandlerMeta {
+	handle: (request: Request) => unknown
+	suffixLen: number
+}
+
+export function resolveMountHandler(
+	meta: MountHandlerMeta,
+	path: string
+): (c: Context) => unknown {
+	const { handle, suffixLen } = meta
+
+	const rawRoot = suffixLen ? path.slice(0, path.length - suffixLen) : path
+	const encRoot = encodeURI(rawRoot)
+	const rawLen = rawRoot.length
+	const encLen = encRoot.length
+
+	return (c: Context) =>
+		handle(
+			new Request(
+				replaceUrlPath(
+					c.request.url,
+					c.path.slice(
+						c.path.startsWith(encRoot) ? encLen : rawLen
+					) || '/'
+				),
+				c.request
+			)
+		)
+}
 
 function applyHook(
 	localHook: Partial<AnyLocalHook> | undefined,
@@ -543,14 +574,13 @@ export function compileHandler(
 ): CompiledHandler {
 	const adapter = root['~config']?.adapter ?? defaultAdapter
 	const method = mapMethodBack(_method as any)
+
+	const mountMeta =
+		typeof handler === 'function' ? (handler as any)['~mount'] : undefined
+	if (mountMeta) handler = resolveMountHandler(mountMeta, path)
+
 	const reconstructed = Compiled.handlers?.[method]?.[path]
 
-	// When frozen factory does not consume any hook-derived params
-	// Keep non-function/static/Error/precomputed/macro cases on the normal path
-	// to preserve existing compile-time side-effect/order semantics.
-	// The macro gate checks the route's RESOLUTION scope, not just `root` — a
-	// group-defined macro may exist only on the scope-child's table (it never
-	// merges back), and skipping resolution here would drop it under AOT.
 	if (
 		reconstructed &&
 		!precomputedStatic &&

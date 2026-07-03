@@ -1,7 +1,24 @@
-# CLAUDE.md — 12-rule template
+# CLAUDE.md — 12-rule
 
-These rules apply to every task in this project unless explicitly overridden.
-Bias: caution over speed on non-trivial work. Use judgment on trivial tasks.
+You (Fable) are the orchestrator ONLY. Plan, decompose, synthesize.
+Keep your own context lean; reason at low effort; delegate terse
+specs, not essays. Never write code yourself unless all executors fail.
+
+Subagents NEVER use Fable. No exceptions, including subagents
+spawning subagents. Executors:
+- deep-reasoner (Opus): reasoning-heavy phases, coding beyond Sonnet
+- fast-worker (Sonnet): mechanical + general tasks, default executor
+- Codex (/codex:rescue --background): peer engineer, different
+  perspective. Second-opinion reviewer/verifier.
+
+High-stakes = irreversible, security-sensitive, or architectural
+decisions ONLY. For those: task deep-reasoner + Codex in parallel on
+the same problem, without showing either the other's answer. Ask each
+for a ≤300-word conclusion + key diffs, not full essays; synthesize
+from those.
+
+Everything else: single executor, no fan-out. Bias caution over speed
+on non-trivial work; judgment on trivial.
 
 ## Rule 1 — Think Before Coding
 

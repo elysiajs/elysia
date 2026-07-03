@@ -577,6 +577,79 @@ describe('Handle Error', () => {
 		})
 	})
 
+	// H22: the tests above hit the INTERPRETED path (fetch-level handleError). A
+	// no-op `.error()` hook routes the throw through the COMPILED jit tail
+	// (src/compile/handler/jit.ts) instead — the exact path that only handled a
+	// SYNC toResponse() Response. An `async toResponse()` returns a Promise, so
+	// the compiled tail must await it, matching the interpreted path. Without the
+	// fix the Promise is not a Response, so the tail falls through to the
+	// e.status branch and returns the error MESSAGE at the status instead of the
+	// custom Response body.
+	it('compiled tail awaits async toResponse() when thrown (H22)', async () => {
+		class AsyncError extends Error {
+			status = 503
+
+			async toResponse() {
+				await new Promise((resolve) => setTimeout(resolve, 10))
+				return new Response('custom', { status: 503 })
+			}
+		}
+
+		const app = new Elysia().error(() => {}).get('/', () => {
+			throw new AsyncError('boom')
+		})
+
+		const res = await app.handle(req('/'))
+
+		expect(res.status).toBe(503)
+		await expect(res.text()).resolves.toBe('custom')
+		// the raw message must NOT leak as the body (that was the bug)
+		await expect(res.clone().text()).resolves.not.toBe('boom')
+	})
+
+	it('compiled tail keeps sync toResponse() Response fast path (H22)', async () => {
+		class SyncError extends Error {
+			status = 502
+
+			toResponse() {
+				return new Response('custom-sync', { status: 502 })
+			}
+		}
+
+		const app = new Elysia().error(() => {}).get('/', () => {
+			throw new SyncError('boom')
+		})
+
+		const res = await app.handle(req('/'))
+
+		expect(res.status).toBe(502)
+		await expect(res.text()).resolves.toBe('custom-sync')
+	})
+
+	it('compiled tail falls back when async toResponse() rejects (H22)', async () => {
+		class BrokenAsyncError extends Error {
+			async toResponse() {
+				throw new Error('async toResponse failed')
+			}
+		}
+
+		const app = new Elysia().error(() => {}).get('/', () => {
+			throw new BrokenAsyncError('original error')
+		})
+
+		const res = await app.handle(req('/'))
+
+		// reject → fall back to the RFC 9457 problem+json 500 (parity with the
+		// interpreted path's fallbackErrorResponse)
+		expect(res.status).toBe(500)
+		await expect(res.json()).resolves.toMatchObject({
+			type: 'unknown',
+			title: 'Internal Server Error',
+			status: 500,
+			detail: 'original error'
+		})
+	})
+
 	it('send set-cookie header when error is thrown', async () => {
 		const app = new Elysia().get('/', ({ cookie }) => {
 			cookie.session.value = 'test-session-id'

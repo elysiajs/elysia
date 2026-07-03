@@ -42,7 +42,6 @@ import {
 	mergeResponse,
 	nullObject,
 	pushField,
-	replaceUrlPath,
 	schemaProperties,
 	type ChainNode,
 	invalidateMacroEpoch
@@ -125,6 +124,12 @@ import type { Context, LifecycleContext, ErrorContext } from './context'
 import { Capture } from './compile/aot'
 
 const useNodesBuffer: ChainNode[] = []
+
+// `resolve` was removed in Elysia 2 (use `derive`). A `resolve` key on a
+// guard/route hook object or a macro definition body would otherwise be
+// silently dropped — auth context vanishes without error (M13). Fail loud.
+const removedResolveError = () =>
+	new Error(`[Elysia] resolve was removed in Elysia 2 — use derive instead`)
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
 
@@ -2520,10 +2525,12 @@ export class Elysia<
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
 			>
 		>,
-		const AfterHandle extends MaybeArray<AfterHandler<
+		const AfterHandle extends MaybeArray<
+			AfterHandler<
 				Schema,
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>>,
+			>
+		>,
 		const ErrorHandle extends MaybeArray<
 			ErrorHandler<
 				Definitions['error'],
@@ -2600,10 +2607,12 @@ export class Elysia<
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
 			>
 		>,
-		const AfterHandle extends MaybeArray<AfterHandler<
+		const AfterHandle extends MaybeArray<
+			AfterHandler<
 				Schema,
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>>,
+			>
+		>,
 		const ErrorHandle extends MaybeArray<
 			ErrorHandler<
 				Definitions['error'],
@@ -2684,10 +2693,12 @@ export class Elysia<
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
 			>
 		>,
-		const AfterHandle extends MaybeArray<AfterHandler<
+		const AfterHandle extends MaybeArray<
+			AfterHandler<
 				Schema,
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>>,
+			>
+		>,
 		const ErrorHandle extends MaybeArray<
 			ErrorHandler<
 				Definitions['error'],
@@ -2777,10 +2788,12 @@ export class Elysia<
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
 			>
 		>,
-		const AfterHandle extends MaybeArray<AfterHandler<
+		const AfterHandle extends MaybeArray<
+			AfterHandler<
 				Schema,
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>>,
+			>
+		>,
 		const ErrorHandle extends MaybeArray<
 			ErrorHandler<
 				Definitions['error'],
@@ -2874,10 +2887,12 @@ export class Elysia<
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
 			>
 		>,
-		const AfterHandle extends MaybeArray<AfterHandler<
+		const AfterHandle extends MaybeArray<
+			AfterHandler<
 				Schema,
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>>,
+			>
+		>,
 		const ErrorHandle extends MaybeArray<
 			ErrorHandler<
 				Definitions['error'],
@@ -2952,10 +2967,12 @@ export class Elysia<
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
 			>
 		>,
-		const AfterHandle extends MaybeArray<AfterHandler<
+		const AfterHandle extends MaybeArray<
+			AfterHandler<
 				Schema,
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>>,
+			>
+		>,
 		const ErrorHandle extends MaybeArray<
 			ErrorHandler<
 				Definitions['error'],
@@ -3035,10 +3052,12 @@ export class Elysia<
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
 			>
 		>,
-		const AfterHandle extends MaybeArray<AfterHandler<
+		const AfterHandle extends MaybeArray<
+			AfterHandler<
 				Schema,
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>>,
+			>
+		>,
 		const ErrorHandle extends MaybeArray<
 			ErrorHandler<
 				Definitions['error'],
@@ -3113,10 +3132,12 @@ export class Elysia<
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
 			>
 		>,
-		const AfterHandle extends MaybeArray<AfterHandler<
+		const AfterHandle extends MaybeArray<
+			AfterHandler<
 				Schema,
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>>,
+			>
+		>,
 		const ErrorHandle extends MaybeArray<
 			ErrorHandler<
 				Definitions['error'],
@@ -3196,10 +3217,12 @@ export class Elysia<
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
 			>
 		>,
-		const AfterHandle extends MaybeArray<AfterHandler<
+		const AfterHandle extends MaybeArray<
+			AfterHandler<
 				Schema,
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>>,
+			>
+		>,
 		const ErrorHandle extends MaybeArray<
 			ErrorHandler<
 				Definitions['error'],
@@ -3279,10 +3302,12 @@ export class Elysia<
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
 			>
 		>,
-		const AfterHandle extends MaybeArray<AfterHandler<
+		const AfterHandle extends MaybeArray<
+			AfterHandler<
 				Schema,
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>>,
+			>
+		>,
 		const ErrorHandle extends MaybeArray<
 			ErrorHandler<
 				Definitions['error'],
@@ -3360,6 +3385,17 @@ export class Elysia<
 	}
 
 	#guard(scope: EventScope, hook: Partial<AnyLocalHook>): this {
+		// `guard({ as })` was a v1 scoping pattern; in v2 the scope is a
+		// positional argument (`.guard(scope, hook)` / `.as(scope)`) and an
+		// `as` key on the hook object is silently ignored — a silent
+		// auth-scope downgrade. Fail loud instead.
+		if (hook && 'as' in hook)
+			throw new Error(
+				`[Elysia] guard({ as }) was removed in Elysia 2 — use .guard(scope, hook) or .as(scope) instead`
+			)
+
+		if (hook && 'resolve' in hook) throw removedResolveError()
+
 		hookToGuard(hook as any)
 
 		// `hook.derive` is folded + tagged by `#pushHook` below.
@@ -3459,10 +3495,12 @@ export class Elysia<
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
 			>
 		>,
-		const AfterHandle extends MaybeArray<AfterHandler<
+		const AfterHandle extends MaybeArray<
+			AfterHandler<
 				Schema,
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>>,
+			>
+		>,
 		const ErrorHandle extends MaybeArray<
 			ErrorHandler<
 				Definitions['error'],
@@ -3558,10 +3596,12 @@ export class Elysia<
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
 			>
 		>,
-		const AfterHandle extends MaybeArray<AfterHandler<
+		const AfterHandle extends MaybeArray<
+			AfterHandler<
 				Schema,
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>>,
+			>
+		>,
 		const ErrorHandle extends MaybeArray<
 			ErrorHandler<
 				Definitions['error'],
@@ -3650,6 +3690,12 @@ export class Elysia<
 						...this['~config'],
 						name: undefined,
 						seed: undefined,
+						// Don't inherit `as` into the group/guard scope-child:
+						// hooks registered inside the callback default their
+						// scope to `~config.as` (#on), so inheriting `global`
+						// would lift group-local hooks out onto the parent /
+						// consuming app — a scoping/authorization hazard.
+						as: undefined,
 						prefix
 					}
 				: undefined
@@ -3837,8 +3883,12 @@ export class Elysia<
 		const baseline = this.#macroBaseline
 
 		for (const key in macro) {
-			if (typeof macro[key] === 'object')
+			if (typeof macro[key] === 'object') {
+				if (macro[key] && 'resolve' in (macro[key] as object))
+					throw removedResolveError()
+
 				macro[key] = hookToGuard(macro[key] as any) as any
+			}
 
 			if (this.#hash !== undefined && !macroOrigin.has(macro[key] as any))
 				macroOrigin.set(macro[key] as any, this.#hash)
@@ -3889,6 +3939,11 @@ export class Elysia<
 				delete (input as any)[key]
 				continue
 			}
+
+			// Function-form macros produce their hook body lazily, so the
+			// registration-time check in `.macro()` can't see it — a
+			// `resolve` key would silently vanish (M13). Fail loud here.
+			if (isFunction && 'resolve' in hook) throw removedResolveError()
 
 			if (isFunction) {
 				const seedSource = hook.seed ?? value
@@ -4548,8 +4603,7 @@ export class Elysia<
 					Object.assign(this.#ensureMacroTable(), macro)
 
 					if (this['~scopeChild']) {
-						const pluginMacros = (this.#pluginMacros ??=
-							new Map())
+						const pluginMacros = (this.#pluginMacros ??= new Map())
 
 						for (const name in macro)
 							pluginMacros.set(name, (macro as any)[name])
@@ -4812,6 +4866,8 @@ export class Elysia<
 			throw new Error(
 				`Elysia 2 route signature is (path, hook, handler) — received ${typeof hook} in the hook position for "${method} ${path}". Did you use the Elysia 1 order (path, handler, hook)?`
 			)
+
+		if (hook && 'resolve' in hook) throw removedResolveError()
 
 		if (this['~Prefix']) path = joinPath(this['~Prefix'], path)
 		else if (path && path.charCodeAt(0) !== 47) path = '/' + path
@@ -6385,8 +6441,6 @@ export class Elysia<
 		let opts: any
 		if (handler !== undefined) {
 			// 3-arg form: (path, options, handler)
-			// clone so the caller's options object isn't mutated (and reused
-			// across .ws() calls without a spurious 'message' conflict)
 			opts = Object.assign(nullObject(), optionsOrHandler)
 			if (opts.message != null && opts.message !== handler)
 				throw new Error(
@@ -6443,17 +6497,7 @@ export class Elysia<
 
 			if (!run) throw new Error('Invalid handler')
 
-			this.all(
-				'/*',
-				options as any,
-				((c: Context) =>
-					run(
-						new Request(
-							replaceUrlPath(c.request.url, c.path),
-							c.request
-						)
-					)) as any
-			)
+			this.all('/*', options as any, Elysia.#mountHandler(run, 2))
 
 			return this
 		}
@@ -6463,29 +6507,30 @@ export class Elysia<
 
 		if (!handle) throw new Error('Invalid handler')
 
-		const fullPath =
-			typeof path === 'string' && this['~Prefix']
-				? this['~Prefix'] + path
-				: path
+		const endsStar = path.endsWith('*') ? 1 : 0
+		const wildcardSuffix = path.endsWith('/') ? '*' : '/*'
 
-		const length = fullPath.length - (path.endsWith('*') ? 1 : 0)
-		const handler: Handler = (c) =>
-			handle(
-				new Request(
-					replaceUrlPath(c.request.url, c.path.slice(length) || '/'),
-					c.request
-				)
-			)
-
-		this.all(path, options as any, handler as any)
-
+		this.all(path, options as any, Elysia.#mountHandler(handle, endsStar))
 		this.all(
-			path + (path.endsWith('/') ? '*' : '/*'),
+			path + wildcardSuffix,
 			options as any,
-			handler as any
+			Elysia.#mountHandler(handle, wildcardSuffix.length + endsStar)
 		)
 
 		return this
+	}
+
+	static #mountHandler(
+		handle: (request: Request) => MaybePromise<Response>,
+		suffixLen: number
+	) {
+		const placeholder = (() => {
+			throw new Error('[Elysia] unresolved mount handler')
+		}) as Handler & { '~mount'?: unknown }
+
+		placeholder['~mount'] = { handle, suffixLen }
+
+		return placeholder as any
 	}
 
 	#initMap() {
@@ -6625,8 +6670,20 @@ export class Elysia<
 		this.#routerBuilt = true
 
 		const precompile = this['~config']?.precompile
-		const buildStatic = this['~config']?.nativeStaticResponse !== false
 		const enableAutoHead = this['~config']?.autoHead === true
+
+		// Native static routes (Bun `serve.routes`) are served WITHOUT entering
+		// the fetch handler, so they bypass always-global `.request()` hooks,
+		// `.trace()`, and `.wrap()` HOCs — invisible on the `app.handle`/non-Bun
+		// path but a real prod/test divergence under Bun (auth/rate-limit/logging
+		// registered via those silently skipped). Disable promotion when any is
+		// present so those routes run through the full fetch pipeline instead.
+		const fetchLevelHook = flattenChain(this['~hookChain'])
+		const buildStatic =
+			this['~config']?.nativeStaticResponse !== false &&
+			!fetchLevelHook?.request?.length &&
+			!fetchLevelHook?.trace?.length &&
+			!this['~ext']?.hoc?.length
 
 		this.#initMap()
 		const methods = this['~map']!

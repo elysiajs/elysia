@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test'
-import { Elysia, t } from '../../src'
+import { Elysia, t, status } from '../../src'
 import { newWebsocket, wsOpen, wsClose, wsClosed, wsMessage } from './utils'
 import { req } from '../utils'
 
@@ -268,6 +268,83 @@ describe('WebSocket connection', () => {
 
 		expect(upgradeResponse.status).toBe(403)
 		await expect(upgradeResponse.text()).resolves.toBe('forbidden')
+
+		app.stop()
+	})
+
+	// C13: a non-derive beforeHandle returning status()/error() (an ElysiaStatus)
+	// must unwrap to the real HTTP code and body — not be JSON-serialized as an
+	// object with a default 200. Before the fix, `status(401, 'no')` was
+	// serialized as JSON and returned with HTTP 200 (the context default), so
+	// the client never saw a real 401.
+	it('C13: beforeHandle returning status(401) rejects upgrade with real 401', async () => {
+		const app = new Elysia()
+			.ws('/ws', {
+				beforeHandle() {
+					return status(401, 'no')
+				},
+				message() {}
+			})
+			.listen(0)
+
+		const upgradeResponse = await fetch(
+			`http://${app.server!.hostname}:${app.server!.port}/ws`,
+			{
+				headers: {
+					upgrade: 'websocket',
+					connection: 'Upgrade',
+					'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==',
+					'sec-websocket-version': '13'
+				}
+			}
+		)
+
+		expect(upgradeResponse.status).toBe(401)
+		await expect(upgradeResponse.text()).resolves.toBe('no')
+
+		app.stop()
+	})
+
+	// C13 parity: an upgrade-rejection from a non-derive beforeHandle must carry
+	// the same set.headers / set.cookie / content-type the HTTP path would apply.
+	// Before the fix the response was hand-built from only the ElysiaStatus code +
+	// body, dropping set.headers, dropping set.cookie, and defaulting to
+	// text/plain for object bodies.
+	it('C13: upgrade rejection preserves set.headers, set.cookie and JSON content-type', async () => {
+		const app = new Elysia()
+			.ws('/ws', {
+				beforeHandle({ set }) {
+					;(set.headers as any)['x-custom'] = 'yes'
+					// jar-shaped cookie so serializeCookie emits `sid=abc`
+					;(set as any).cookie = { sid: { value: 'abc' } }
+					return status(401, { json: true })
+				},
+				message() {}
+			})
+			.listen(0)
+
+		const upgradeResponse = await fetch(
+			`http://${app.server!.hostname}:${app.server!.port}/ws`,
+			{
+				headers: {
+					upgrade: 'websocket',
+					connection: 'Upgrade',
+					'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==',
+					'sec-websocket-version': '13'
+				}
+			}
+		)
+
+		expect(upgradeResponse.status).toBe(401)
+		// set.headers merged (was dropped before the fix)
+		expect(upgradeResponse.headers.get('x-custom')).toBe('yes')
+		// set.cookie serialized (was dropped before the fix)
+		expect(upgradeResponse.headers.get('set-cookie')).toBe('sid=abc')
+		// object body → application/json (was text/plain before the fix)
+		expect(upgradeResponse.headers.get('content-type')).toContain(
+			'application/json'
+		)
+		await expect(upgradeResponse.json()).resolves.toEqual({ json: true })
 
 		app.stop()
 	})

@@ -53,12 +53,15 @@ describe('validation detail — production gating', () => {
 	it('production omits schema detail, honors allowUnsafe + custom message', async () => {
 		const r = await run('production')
 
-		// default → minimal { type, on, found }, no schema-revealing fields
+		// default → minimal { type, on, property, found }, no schema-revealing
+		// fields. L13: `property` (instance path only) IS now included so the
+		// client knows which field failed; schema-derived `expected`/`errors` are
+		// still withheld.
 		expect(r.default.status).toBe(422)
 		expect(r.default.body.type).toBe('validation')
 		expect(r.default.body.on).toBe('body')
 		expect(r.default.body.found).toEqual({ x: 'not a number' })
-		expect(r.default.body.property).toBeUndefined()
+		expect(r.default.body.property).toBe('/x')
 		expect(r.default.body.expected).toBeUndefined()
 		expect(r.default.body.errors).toBeUndefined()
 
@@ -90,10 +93,101 @@ describe('validation detail — production gating', () => {
 		expect(r.findCustomErrorBypass.body.found).toEqual({ x: 'bad' })
 	})
 
+	it('C8: response-schema failure collapses to a generic 500, never echoing the server value', async () => {
+		const r = await run('production')
+
+		// A response-schema failure is a SERVER bug, not a client (422) error, and
+		// `this.value` is the server's own response. In production it must become a
+		// generic 500 problem+json with NO found/errors/property and no secret.
+		expect(r.responseLeak.status).toBe(500)
+		expect(r.responseLeak.body.type).toBe('internal-server-error')
+		expect(r.responseLeak.body.status).toBe(500)
+		expect(r.responseLeak.body.found).toBeUndefined()
+		expect(r.responseLeak.body.errors).toBeUndefined()
+		// the offending server object (incl. secrets) must not appear anywhere
+		expect(JSON.stringify(r.responseLeak.body)).not.toContain('SECRET')
+		expect(JSON.stringify(r.responseLeak.body)).not.toContain('passwordHash')
+
+		// a custom-error callback on the response schema must not receive the
+		// server value (so it can't echo it) and must not yield a 422
+		expect(r.responseCustomError.status).toBe(500)
+		expect(JSON.stringify(r.responseCustomError.body)).not.toContain(
+			'SECRET_TOKEN'
+		)
+
+		// opt-out restores full response detail under production
+		expect(r.responseAllowUnsafe.status).toBe(422)
+		expect(r.responseAllowUnsafe.body.on).toBe('response')
+	})
+
+	it('L13: request-side production 422 names the failing field while echoing only client input', async () => {
+		const r = await run('production')
+
+		// An API consumer needs to know WHICH field failed to fix their request;
+		// the instance path is safe (no schema info, no messages).
+		expect(r.requestProperty.status).toBe(422)
+		expect(r.requestProperty.body.property).toBe('/x')
+		// still echoes the client's own input (not a server value → safe)
+		expect(r.requestProperty.body.found).toEqual({ x: 'not a number' })
+		// but nothing schema-revealing
+		expect(r.requestProperty.body.errors).toBeUndefined()
+		expect(r.requestProperty.body.expected).toBeUndefined()
+	})
+
+	it('L13: production `property` only reflects instance-path-shaped data', async () => {
+		const r = await run('production')
+
+		// a hand-crafted issue whose only path is a free-text string (no real
+		// validator emits this) must NOT surface as `property` — it collapses to
+		// 'root' so schema/message text can't leak through the trust boundary
+		expect(r.propertyFreeTextString.status).toBe(422)
+		expect(r.propertyFreeTextString.body.property).toBe('root')
+		expect(JSON.stringify(r.propertyFreeTextString.body)).not.toContain(
+			'secret field'
+		)
+		// response-type still fully masked (no property surfaced at all)
+		expect(r.propertyFreeTextString.body.type).toBe('validation')
+
+		// a real `instancePath` JSON pointer still passes through unchanged
+		expect(r.propertyInstancePath.status).toBe(422)
+		expect(r.propertyInstancePath.body.property).toBe('/x')
+	})
+
+	it('L13 Defect 1: Standard Schema object path segments render as `/user/name`, not `[object Object]`', async () => {
+		const r = await run('production')
+
+		// A Standard Schema issue path is an array of `{ key }` objects; production
+		// `payload.property` must extract `.key` per segment (mirroring `found`),
+		// otherwise it emits `/[object Object]/[object Object]` and defeats L13.
+		expect(r.propertyStandardObjectSegments.status).toBe(422)
+		expect(r.propertyStandardObjectSegments.body.property).toBe('/user/name')
+		expect(
+			r.propertyStandardObjectSegments.body.property
+		).not.toContain('[object Object]')
+	})
+
+	it('L13 Defect 2: `.all` dotted path from Standard Schema object segments renders as `user.name`', async () => {
+		// env-independent — same root cause, same shared segment stringifier
+		for (const env of ['production', 'development']) {
+			const r = await run(env)
+			expect(Array.isArray(r.allStandardObjectSegments.body)).toBe(true)
+			expect(r.allStandardObjectSegments.body[0].path).toBe('user.name')
+			expect(
+				r.allStandardObjectSegments.body[0].path
+			).not.toContain('[object Object]')
+		}
+	})
+
 	it('non-production keeps full detail (gate off)', async () => {
 		const r = await run('development')
 
 		expect(r.default.body.property).toBeDefined()
 		expect(r.default.body.errors).toBeArray()
+
+		// C8 is production-only: in dev a response failure keeps 422 + full detail
+		// (the developer inspects their own server's response — no leak surface).
+		expect(r.responseLeak.status).toBe(422)
+		expect(r.responseLeak.body.on).toBe('response')
+		expect(r.responseLeak.body.errors).toBeArray()
 	})
 })

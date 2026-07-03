@@ -125,6 +125,18 @@ function setNested(
 
 		if (typeof key === 'string' && dangerousKeys.has(key)) return
 
+		// skip any out-of-order/sparse index
+		if (
+			Array.isArray(current) &&
+			!(
+				typeof key === 'number' &&
+				Number.isInteger(key) &&
+				key >= 0 &&
+				key <= current.length
+			)
+		)
+			return
+
 		if (i >= len) {
 			current[key] = value
 			return

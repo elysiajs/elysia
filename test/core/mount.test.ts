@@ -228,4 +228,89 @@ describe('Mount', () => {
 		expect(response.status).toBe(302)
 		expect(response.headers.get('location')).toBe('/redirect')
 	})
+
+	// The sub-path strip length must come from the FINAL registered route path
+	// (post prefix-join at `.use()`/build time), not the string known when
+	// `.mount()` runs. Freezing it at registration corrupts the forwarded path
+	// whenever the mounting instance is later prefixed, when the mount path
+	// lacks a leading slash, or when it contains non-ASCII (encoded) chars.
+	const forwarded = (request: Request) =>
+		Response.json({ path: new URL(request.url).pathname })
+
+	it('strips the final path when the mounting instance is later prefixed', async () => {
+		// plugin mounts, THEN gets `.use()`d under a prefixed parent — the
+		// route path grows by `/parent`, so a registration-time strip length
+		// under-strips (previously forwarded `/arent/m/foo`)
+		const plugin = new Elysia().mount('/m', forwarded)
+		const app = new Elysia({ prefix: '/parent' }).use(plugin)
+
+		const path = await app
+			.handle(new Request('http://localhost/parent/m/foo'))
+			.then((x) => x.json() as Promise<{ path: string }>)
+			.then((x) => x.path)
+
+		expect(path).toBe('/foo')
+	})
+
+	it('strips a mount path that lacks a leading slash', async () => {
+		const app = new Elysia().mount('m', forwarded)
+
+		const path = await app
+			.handle(new Request('http://localhost/m/foo'))
+			.then((x) => x.json() as Promise<{ path: string }>)
+			.then((x) => x.path)
+
+		expect(path).toBe('/foo')
+	})
+
+	it('strips a non-ASCII mount path by its encoded length', async () => {
+		// `c.path` at runtime is percent-encoded; the encoded mount root is
+		// longer than the raw string, so a raw-length strip over/under-shoots
+		// (previously forwarded `/C3%A9/x`)
+		const app = new Elysia().mount('/café', forwarded)
+
+		const path = await app
+			.handle(new Request('http://localhost/caf%C3%A9/x'))
+			.then((x) => x.json() as Promise<{ path: string }>)
+			.then((x) => x.path)
+
+		expect(path).toBe('/x')
+	})
+
+	it('keeps a non-ASCII mount root encoded-length-correct under a later prefix', async () => {
+		const plugin = new Elysia().mount('/café', forwarded)
+		const app = new Elysia({ prefix: '/parent' }).use(plugin)
+
+		const path = await app
+			.handle(new Request('http://localhost/parent/caf%C3%A9/x'))
+			.then((x) => x.json() as Promise<{ path: string }>)
+			.then((x) => x.path)
+
+		expect(path).toBe('/x')
+	})
+
+	it('forwards the sub-path with its original encoding preserved', async () => {
+		// the remainder must NOT be decoded — an encoded `%2F` is semantically
+		// distinct from a literal `/` to the mounted sub-app's router
+		const app = new Elysia().mount('/m', forwarded)
+
+		const path = await app
+			.handle(new Request('http://localhost/m/a%2Fb'))
+			.then((x) => x.json() as Promise<{ path: string }>)
+			.then((x) => x.path)
+
+		expect(path).toBe('/a%2Fb')
+	})
+
+	it('strips the prefix from a root mount used under a prefixed parent', async () => {
+		const plugin = new Elysia().mount('/', forwarded)
+		const app = new Elysia({ prefix: '/api' }).use(plugin)
+
+		const path = await app
+			.handle(new Request('http://localhost/api/foo'))
+			.then((x) => x.json() as Promise<{ path: string }>)
+			.then((x) => x.path)
+
+		expect(path).toBe('/foo')
+	})
 })

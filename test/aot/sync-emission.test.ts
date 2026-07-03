@@ -9,6 +9,7 @@ import {
 import { compileHandler } from '../../src/compile'
 import { materialise, materialiseHandlers } from './_manifest'
 import { req, post } from '../utils'
+import { hasSyncHmac } from '../../src/cookie/utils'
 
 /**
  * Async-cliff harness (F1/F11/F23/F24/F25/F26/F46).
@@ -153,8 +154,12 @@ describe('async-cliff: sync routes emit plain Function', () => {
 		).resolves.toBe('hi')
 	})
 
-	// signed cookie — stays async
-	it('GET reading a signed cookie stays AsyncFunction', () => {
+	// signed cookie — H3: signing uses a sync `node:crypto` HMAC when available
+	// (Bun/Node), so a signed-cookie route no longer forces the handler async.
+	// Only the async WebCrypto fallback (edge runtimes without `node:crypto`,
+	// or AOT capture where the deploy target is unknown) keeps it async. See
+	// test/cookie/hmac-parity.test.ts for the AOT-capture-stays-async guard.
+	it('GET reading a signed cookie is sync when a sync HMAC is available', () => {
 		const app = new Elysia({
 			cookie: { sign: ['id'], secrets: 'secret' }
 		}).get('/', ({ cookie }) => {
@@ -162,7 +167,7 @@ describe('async-cliff: sync routes emit plain Function', () => {
 			return 'hi'
 		})
 
-		expect(isAsync(app)).toBe(true)
+		expect(isAsync(app)).toBe(!hasSyncHmac)
 	})
 
 	// F26 — sync parse hook on a bodyless GET

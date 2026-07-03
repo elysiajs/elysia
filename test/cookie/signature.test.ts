@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import { parseCookie, Cookie, signCookie, unsignCookie } from '../../src/cookie'
+import { signCookieSubtle } from '../../src/cookie/utils'
 
 describe('Parse Cookie', () => {
 	it('handle empty cookie', async () => {
@@ -189,6 +190,9 @@ describe('Parse Cookie', () => {
 	// failure sticks a rejected promise in keyCache and every later sign with
 	// that secret re-throws permanently. Verify a retry after a one-shot
 	// failure succeeds.
+	// Targets `signCookieSubtle` directly: the public `signCookie` prefers the
+	// sync `node:crypto` HMAC when available (no importKey), so the WebCrypto
+	// keyCache is only reachable via the fallback path this test guards.
 	it('recovers after a transient importKey failure (rejected key self-evicts)', async () => {
 		const subtle = crypto.subtle as {
 			importKey: (...args: any[]) => Promise<CryptoKey>
@@ -206,10 +210,10 @@ describe('Parse Cookie', () => {
 		}
 
 		try {
-			await expect(signCookie('v', secret)).rejects.toThrow('boom')
+			await expect(signCookieSubtle('v', secret)).rejects.toThrow('boom')
 
 			// the rejected key must have evicted; the retry imports cleanly
-			const signed = await signCookie('v', secret)
+			const signed = await signCookieSubtle('v', secret)
 			expect(signed.startsWith('v.')).toBe(true)
 			await expect(unsignCookie(signed, secret)).resolves.toBe('v')
 		} finally {

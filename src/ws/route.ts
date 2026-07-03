@@ -18,6 +18,7 @@ import {
 } from '../error'
 
 import { isBun } from '../universal/constants'
+import { mapResponse } from '../adapter/web-standard/handler'
 
 import type { AnyElysia } from '../base'
 import type { Context } from '../context'
@@ -71,7 +72,37 @@ async function applyMapResponse(
 	return value
 }
 
-async function handleWSResponse(
+const isBackpressured = (status: unknown) =>
+	typeof status === 'number' && status <= 0
+
+const isEmptyPayload = (payload: unknown) => {
+	if (payload === '' || payload == null) return true
+	if (typeof payload === 'string') return false
+	if (payload instanceof ArrayBuffer || ArrayBuffer.isView(payload))
+		return (payload as ArrayBufferView).byteLength === 0
+
+	return false
+}
+
+function waitForDrain(ws: ElysiaWS<any>) {
+	const data = ws.raw.data
+
+	return new Promise<void>((resolve) => {
+		;(data.resumeWaiters ??= new Set()).add(resolve)
+	})
+}
+
+export function drainWaiters(ws: ElysiaWS<any>) {
+	const waiters = ws.raw.data.resumeWaiters
+	if (!waiters || waiters.size === 0) return
+
+	const pending = [...waiters]
+	waiters.clear()
+
+	for (let i = 0; i < pending.length; i++) pending[i]()
+}
+
+export async function handleWSResponse(
 	ws: ElysiaWS<any>,
 	value: unknown,
 	mapResponses: readonly AnyFn[]
@@ -80,20 +111,43 @@ async function handleWSResponse(
 
 	if (isGeneratorObject(value)) {
 		const iter = value as Iterator<unknown> | AsyncIterator<unknown>
-		while (true) {
-			const step = iter.next()
-			const { value: yielded, done } =
-				step instanceof Promise ? await step : step
+		try {
+			while (true) {
+				const step = iter.next()
+				const { value: yielded, done } =
+					step instanceof Promise ? await step : step
 
-			if (done) return
+				if (done) return
 
-			if (yielded !== undefined) {
+				if (yielded === undefined) continue
+
 				const mapped = mapResponses.length
 					? await applyMapResponse(ws, yielded, mapResponses)
 					: yielded
-				;(ws as any).send(mapped)
+
+				let status = (ws as any).send(mapped)
+				const canBackpressure = !isEmptyPayload(mapped)
+
+				while (canBackpressure && isBackpressured(status)) {
+					// closing
+					if (ws.readyState >= 2) return
+
+					await waitForDrain(ws)
+
+					if (ws.readyState >= 2) return
+
+					if (status === -1) break
+					status = (ws as any).send(mapped)
+				}
 			}
+		} finally {
+			if (typeof (iter as any).return === 'function')
+				try {
+					const r = (iter as any).return()
+					if (r instanceof Promise) await r
+				} catch {}
 		}
+		return
 	}
 
 	const mapped = mapResponses.length
@@ -582,11 +636,7 @@ export function buildWSRoute(
 				const fn = allBeforeHandles[i]
 				let r: unknown = fn(context as any)
 				if (r instanceof Promise) r = await r
-				// A derive entry merges its return into context — EXCEPT
-				// status()/error() (ElysiaStatus), which ABORTS the upgrade,
-				// mirroring the HTTP codegen's `instanceof es` early-return.
-				// Without this, a derive-based auth guard returning status(401)
-				// would be merged-and-ignored and the connection would upgrade.
+
 				if (
 					deriveSet?.has(fn as Function) &&
 					!(r instanceof ElysiaStatus)
@@ -595,9 +645,11 @@ export function buildWSRoute(
 						Object.assign(context as any, r)
 				} else if (r !== undefined) {
 					if (r instanceof Response) return r
-					return new Response(
-						typeof r === 'object' ? JSON.stringify(r) : String(r),
-						{ status: (context.set as any)?.status ?? 200 }
+
+					return mapResponse(
+						r,
+						(context as any).set,
+						(context as any).request
 					)
 				}
 			}
@@ -685,9 +737,12 @@ export function buildGlobalWSHandler(): WebSocketHandler<WSConnectionData> {
 			ws.data.open?.(getElysia(ws))
 		},
 		drain(ws) {
+			drainWaiters(getElysia(ws))
 			ws.data.drain?.(getElysia(ws))
 		},
 		close(ws, code, reason) {
+			drainWaiters(getElysia(ws))
+
 			if (ws.data.closeHandlerInvoked) return
 			ws.data.closeHandlerInvoked = true
 			ws.data.close?.(getElysia(ws), code, reason)

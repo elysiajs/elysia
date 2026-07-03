@@ -93,7 +93,89 @@ const scenarios: Record<string, () => Promise<Response>> = {
 				},
 				() => 'ok'
 			)
-			.handle(post({ user: { age: 'x' } }))
+			.handle(post({ user: { age: 'x' } })),
+
+	// L13: request-side production 422 must name the failing field (`property`)
+	// while still echoing the client's own input — actionable, no schema leak.
+	requestProperty: () =>
+		new Elysia()
+			.post(
+				'/',
+				{ body: t.Object({ x: t.Number() }) },
+				({ body }) => body
+			)
+			.handle(post(bad)),
+
+	// C8: response-schema failure in production leaks the SERVER's response
+	// object via `found`. Must collapse to a generic 500 — no found/errors/value,
+	// no 422 mislabel. Secret-bearing sibling proves the leak is closed.
+	responseLeak: () =>
+		new Elysia()
+			.get(
+				'/',
+				{
+					response: t.Object(
+						{ name: t.String() },
+						{ additionalProperties: false }
+					)
+				},
+				() =>
+					({
+						name: 'a',
+						passwordHash: '$2b$10$SECRET',
+						internalFlag: true
+					}) as any
+			)
+			.handle(new Request('http://localhost/')),
+
+	// C8: a response-schema custom-error callback must not receive/echo the
+	// server value either, and must not produce a 422 custom response.
+	responseCustomError: () =>
+		new Elysia()
+			.get(
+				'/',
+				{
+					response: t.Object(
+						{
+							name: t.String({
+								error: ({ found }: any) =>
+									`leaked: ${JSON.stringify(found)}`
+							})
+						},
+						{ additionalProperties: false }
+					)
+				},
+				() => ({ name: 123, token: 'SECRET_TOKEN' }) as any
+			)
+			.handle(new Request('http://localhost/')),
+
+	// C8 opt-out: allowUnsafeValidationDetails restores full response detail.
+	responseAllowUnsafe: () =>
+		new Elysia({ allowUnsafeValidationDetails: true })
+			.get(
+				'/',
+				{
+					response: t.Object(
+						{ name: t.String() },
+						{ additionalProperties: false }
+					)
+				},
+				() => ({ name: 'a', secret: 'SHOWN' }) as any
+			)
+			.handle(new Request('http://localhost/')),
+
+	// L13 Defect 2: `error.all` builds `path` from Standard Schema issue `path`
+	// arrays whose segments may be `{ key }` OBJECTS. The dotted path must render
+	// `user.name`, NOT `[object Object].[object Object]`. (Env-independent, run in
+	// both prod & dev to prove parity.)
+	allStandardObjectSegments: async () => {
+		const err = new ValidationError(
+			'body',
+			{ user: { name: 123 } },
+			[{ path: [{ key: 'user' }, { key: 'name' }], message: 'Expected string' }]
+		)
+		return new Response(JSON.stringify(err.all), { status: 422 })
+	}
 }
 
 // Proves the production custom-error path uses `findCustomError` and NOT TypeBox
@@ -115,6 +197,47 @@ if ((process.env.NODE_ENV ?? process.env.ENV) === 'production')
 			status: 422
 		})
 	}
+
+// L13 hardening: production is the trust boundary — `payload.property` must only
+// ever reflect instance-path-shaped data. A hand-crafted issue whose only path is
+// a free-text string (no real validator produces this) must NOT surface as
+// `property`; it collapses to 'root'. A real `instancePath` JSON pointer still
+// passes through.
+if ((process.env.NODE_ENV ?? process.env.ENV) === 'production') {
+	scenarios.propertyFreeTextString = async () => {
+		const err = new ValidationError(
+			'body',
+			{ x: 'bad' },
+			[{ path: 'schema says secret field failed' }],
+			{ properties: { x: {} } }
+		)
+		return new Response(JSON.stringify(err.payload), { status: 422 })
+	}
+
+	scenarios.propertyInstancePath = async () => {
+		const err = new ValidationError(
+			'body',
+			{ x: 'bad' },
+			[{ instancePath: '/x' }],
+			{ properties: { x: {} } }
+		)
+		return new Response(JSON.stringify(err.payload), { status: 422 })
+	}
+
+	// L13 Defect 1: Standard Schema issues carry `path` as an array whose segments
+	// may be `{ key }` OBJECTS (not raw PropertyKeys). `payload.property` must
+	// render `/user/name`, NOT `/[object Object]/[object Object]` — a malformed
+	// path defeats L13's own goal of naming the failing field.
+	scenarios.propertyStandardObjectSegments = async () => {
+		const err = new ValidationError(
+			'body',
+			{ user: { name: 123 } },
+			[{ path: [{ key: 'user' }, { key: 'name' }], message: 'Expected string' }],
+			{ properties: { user: {} } }
+		)
+		return new Response(JSON.stringify(err.payload), { status: 422 })
+	}
+}
 
 const out: Record<string, { status: number; body: string }> = {}
 for (const key in scenarios) {

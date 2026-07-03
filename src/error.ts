@@ -104,8 +104,18 @@ export class ParseError extends ElysiaError {
 	}
 }
 
+// Standard Schema issues carry `path` as an array whose segments may be raw
+// PropertyKeys OR `{ key: PropertyKey }` objects. Normalize a segment to its
+// string form (mirrors how `subValueAt` reads `part.key` for `found`) so a path
+// never renders as `[object Object]`.
+const segmentString = (part: unknown): string =>
+	typeof part === 'object' && part !== null
+		? String((part as { key: unknown }).key)
+		: String(part)
+
 const propertyAccessor = (path: unknown): string => {
-	if (Array.isArray(path)) return path.length ? '/' + path.join('/') : 'root'
+	if (Array.isArray(path))
+		return path.length ? '/' + path.map(segmentString).join('/') : 'root'
 	if (typeof path === 'string') return path || 'root'
 	return 'root'
 }
@@ -291,6 +301,9 @@ export class ValidationError extends ElysiaError {
 		let custom: unknown
 		let message: string
 
+		// C8: mask the server value for a response-schema failure in production
+		const maskResponseValue = this.#maskResponseValue
+
 		if (production && !allowUnsafe && findCustomError) {
 			const hit = findCustomError(value)
 			resolved = hit ? [{ instancePath: hit.instancePath }] : []
@@ -301,7 +314,9 @@ export class ValidationError extends ElysiaError {
 						? hit.error({
 								type: 'validation',
 								on: type,
-								found: scopeFound(value, resolved[0])
+								found: maskResponseValue
+									? undefined
+									: scopeFound(value, resolved[0])
 							})
 						: hit.error
 
@@ -327,7 +342,9 @@ export class ValidationError extends ElysiaError {
 								? {
 										type: 'validation',
 										on: type,
-										found: scopeFound(value, resolved[0])
+										found: maskResponseValue
+											? undefined
+											: scopeFound(value, resolved[0])
 									}
 								: {
 										type: 'validation',
@@ -433,7 +450,7 @@ export class ValidationError extends ElysiaError {
 
 		const path = Array.isArray(e.path)
 			? e.path.length
-				? e.path.join('.')
+				? e.path.map(segmentString).join('.')
 				: 'root'
 			: typeof e.path === 'string'
 				? e.path.replace(/^\//, '').replace(/\//g, '.') || 'root'
@@ -452,8 +469,21 @@ export class ValidationError extends ElysiaError {
 		return isProduction() && !this.allowUnsafeValidationDetails
 	}
 
+	get #maskResponseValue() {
+		return this.type === 'response' && this.#productionDetail
+	}
+
 	detail(message: unknown) {
-		if (this.#productionDetail)
+		if (this.#productionDetail) {
+			// C8: never echo a `response`-schema value (server-internal) in
+			// production, even through a user `.error()` hook calling detail().
+			if (this.type === 'response')
+				return {
+					type: 'internal-server-error',
+					on: this.type,
+					message
+				}
+
 			return {
 				type: 'validation',
 				on: this.type,
@@ -463,6 +493,7 @@ export class ValidationError extends ElysiaError {
 				),
 				message
 			}
+		}
 
 		return {
 			type: 'validation',
@@ -473,14 +504,45 @@ export class ValidationError extends ElysiaError {
 	}
 
 	get payload() {
-		if (this.#productionDetail)
+		if (this.#productionDetail) {
+			// C8: a `response`-schema failure is a SERVER bug, and `this.value` is
+			// the server's own (possibly secret-bearing) response object. In
+			// production, collapse it to a generic 500 problem+json — never echo
+			// the raw value, `found`, `property`, or errors. Opt back in with
+			// `allowUnsafeValidationDetails` (falls through to the full branch).
+			if (this.type === 'response')
+				return {
+					type: 'internal-server-error',
+					title: 'Internal Server Error',
+					status: 500
+				}
+
+			const first = (this.errors ?? []).find(Boolean)
+
 			return {
 				type: 'validation',
 				title: 'Validation Error',
 				status: 422,
 				on: this.type,
-				found: scopeFound(this.value, (this.errors ?? []).find(Boolean))
+				// L13: surface WHICH field failed (instance path only — no schema
+				// info, no messages) so an API consumer can fix their request.
+				// Production is the trust boundary: only ever reflect
+				// instance-path-shaped data. Real TypeBox errors carry
+				// `instancePath` (a JSON pointer) and real standard-schema issues
+				// carry `path` as an ARRAY of segments — accept those. Never accept
+				// a raw free-text `path` string (no real validator produces one;
+				// defense-in-depth against a hand-crafted issue leaking text).
+				property: first
+					? propertyAccessor(
+							first.instancePath ??
+								(Array.isArray(first.path)
+									? first.path
+									: undefined)
+						)
+					: 'root',
+				found: scopeFound(this.value, first)
 			}
+		}
 
 		const errors = this.#collapseCoercionErrors(
 			(this.errors ?? []).filter(Boolean)
@@ -519,6 +581,11 @@ export class ValidationError extends ElysiaError {
 	}
 
 	toResponse(headers?: Record<string, any>) {
+		// C8: a masked response-schema failure ALWAYS collapses to a generic 500
+		// problem+json — never a custom-error 422 that could echo the value or
+		// mislabel a server bug. `payload` already returns the generic 500 here.
+		if (this.#maskResponseValue) return problemResponse(this.payload, headers)
+
 		// validateDetail
 		if (this.customError !== undefined) {
 			const isString = typeof this.customError === 'string'

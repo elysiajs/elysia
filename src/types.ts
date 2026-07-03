@@ -482,7 +482,7 @@ export type GuardLocalHook<
 	GuardType extends GuardSchemaType = 'standalone'
 > = (Input extends any ? Input : Prettify<Input>) & {
 	/**
-	 * @default 'standalone'
+	 * @default 'override'
 	 * @since 1.3.0
 	 */
 	schema?: GuardType

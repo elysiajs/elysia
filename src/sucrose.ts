@@ -490,12 +490,32 @@ export function removeDefaultParameter(parameter: string) {
 		.join(', ')
 }
 
+function markAllAccessed(i: Sucrose.Inference) {
+	i.query =
+		i.headers =
+		i.body =
+		i.cookie =
+		i.set =
+		i.server =
+		i.url =
+		i.route =
+		i.path =
+			true
+}
+
 function isContextPassToFunction(
 	context: string,
 	body: string,
 	inference: Sucrose.Inference
 ) {
-	// ! Function is passed to another function, assume as all is accessed
+	if (body.indexOf(context) === -1) return false
+
+	if (body.length > 32768) {
+		markAllAccessed(inference)
+
+		return true
+	}
+
 	try {
 		const captureFunction = new RegExp(
 			`\\w\\((?:.*?)?${context}(?:.*?)?\\)`,
@@ -512,15 +532,7 @@ function isContextPassToFunction(
 			captureFunction.lastIndex < length + (fn ? fn.length : 0)
 		) {
 			if (fn && exactParameter.test(fn)) {
-				inference.query = true
-				inference.headers = true
-				inference.body = true
-				inference.cookie = true
-				inference.set = true
-				inference.server = true
-				inference.url = true
-				inference.route = true
-				inference.path = true
+				markAllAccessed(inference)
 
 				return true
 			}
@@ -536,15 +548,7 @@ function isContextPassToFunction(
 		const nextChar = body.charCodeAt(captureFunction.lastIndex)
 
 		if (nextChar === 41 || nextChar === 44) {
-			inference.query = true
-			inference.headers = true
-			inference.body = true
-			inference.cookie = true
-			inference.set = true
-			inference.server = true
-			inference.url = true
-			inference.route = true
-			inference.path = true
+			markAllAccessed(inference)
 
 			return true
 		}

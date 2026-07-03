@@ -2,14 +2,17 @@ import {
 	ElysiaStatus,
 	ParseError,
 	ValidationError,
-	internalServerErrorResponse
+	internalServerErrorResponse,
+	isProduction
 } from '../../error'
 import { parseQueryFromURL } from '../../parse-query'
 import {
 	parseCookieRaw,
 	parseCookieRawSync,
+	parseCookieRawSigned,
 	buildCookieJar,
-	signCookieValues
+	signCookieValues,
+	signCookieValuesSync
 } from '../../cookie/utils'
 import { requestId } from '../../utils'
 import { forwardError } from '../../handler/utils'
@@ -51,17 +54,21 @@ export const HANDLER_PARAMS: Record<string, Resolver> = {
 	pq: () => parseQueryFromURL,
 	pe: () => ParseError,
 	es: () => ElysiaStatus,
-	// RFC 9457 problem+json for an unhandled error in the codegen error tail
 	ise: () => internalServerErrorResponse,
+	// H22 runtime 5xx-message mask: resolves to the isProduction FUNCTION so the
+	// codegen's `isprod()` reflects runtime NODE_ENV (not baked at build time).
+	isprod: () => isProduction,
 	// allowUnsafeValidationDetails opt-in: `e instanceof verr` in the error catch
 	verr: () => ValidationError,
 	tee: () => tee,
 	cr: () => cloneResponse,
-	// `pcr` kept for replay of older frozen builds; `pcrs` is the F1 sync core.
 	pcr: () => parseCookieRaw,
 	pcrs: () => parseCookieRawSync,
+	pcrsg: () => parseCookieRawSigned,
 	bcj: () => buildCookieJar,
+	// `scv` async WebCrypto sign; `scvs` H3 sync `node:crypto` sign.
 	scv: () => signCookieValues,
+	scvs: () => signCookieValuesSync,
 	// validator
 	va: (c) => c.vali,
 	// returned-error forwarder

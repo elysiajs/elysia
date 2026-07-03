@@ -515,48 +515,20 @@ export function createResponseHandler(handler: CreateHandlerParameter) {
 
 			if (statusUnchanged && !set.cookie && !isNotEmpty(set.headers))
 				return response
-
-			// Headers is mutable in Bun, cheaper than create a new one
-			if (
-				isBun &&
-				statusUnchanged &&
-				!set.cookie &&
-				(set.headers instanceof Headers
-					? !set.headers.has(setCookie)
-					: set.headers[setCookie] === undefined)
-			) {
-				const responseHeaders = response.headers
-
-				// In-place (target === present): no new Headers allocation on
-				// the hot Bun no-status-change path. setCookie is guarded out
-				// above, so that branch never fires here.
-				applySetHeaders(responseHeaders, set.headers, responseHeaders)
-
-				if (
-					!responseHeaders.has('content-length') &&
-					responseHeaders.get('transfer-encoding') === 'chunked'
-				)
-					return handleStream(
-						streamResponse(response),
-						responseToSetHeaders(response, set),
-						request,
-						true
-					) as any
-
-				return response
-			}
 		}
 
 		const newResponse = new Response(
-			response.body,
+			response.clone().body,
 			set
 				? {
 						headers: mergeHeaders(response.headers, set.headers),
-						status: mergeStatus(response.status, set.status) as any
+						status: mergeStatus(response.status, set.status) as any,
+						statusText: response.statusText
 					}
 				: {
 						headers: response.headers,
-						status: response.status
+						status: response.status,
+						statusText: response.statusText
 					}
 		)
 

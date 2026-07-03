@@ -276,5 +276,68 @@ describe('Native Static Response', () => {
 				(await app.handle(new Request('http://localhost/?id=1'))).status
 			).toBe(200)
 		})
+
+		// Native routes (Bun `serve.routes`) are served WITHOUT entering the
+		// fetch handler, so an app-level `.request()` hook / `.wrap()` HOC /
+		// `.trace()` — which run at the fetch level, not per compiled route —
+		// would be silently skipped for a promoted static route under Bun while
+		// `app.handle` runs them. That divergence can drop auth/rate-limit/
+		// logging in prod only, so the presence of any of them must disqualify
+		// native promotion.
+		it('bail for an app-level .request() hook (always-global)', async () => {
+			let called = 0
+			const app = build(
+				new Elysia()
+					.request(() => {
+						called++
+					})
+					.get('/', 'ok')
+			)
+
+			expect((app['~staticResponse'] ?? {}).GET ?? {}).not.toHaveProperty(
+				'/'
+			)
+
+			await app.handle(new Request('http://localhost/'))
+			expect(called).toBe(1)
+		})
+
+		it('bail for a .wrap() higher-order fetch handler', async () => {
+			let wrapped = 0
+			const app = build(
+				new Elysia()
+					.wrap((fetch) => (request) => {
+						wrapped++
+						return fetch(request)
+					})
+					.get('/', 'ok')
+			)
+
+			expect((app['~staticResponse'] ?? {}).GET ?? {}).not.toHaveProperty(
+				'/'
+			)
+
+			await app.handle(new Request('http://localhost/'))
+			expect(wrapped).toBe(1)
+		})
+
+		it('bail for an app-level .trace() handler', async () => {
+			const app = build(new Elysia().trace(() => {}).get('/', 'ok'))
+
+			expect((app['~staticResponse'] ?? {}).GET ?? {}).not.toHaveProperty(
+				'/'
+			)
+		})
+
+		it('a genuinely bare static route still promotes', async () => {
+			// unrelated global hooks (e.g. `.error()`) must not disqualify —
+			// only fetch-level request/wrap/trace do
+			const app = build(new Elysia().error({}).get('/', 'ok'))
+
+			expect(app['~staticResponse'].GET['/']).toBeInstanceOf(Response)
+			await expect(
+				app['~staticResponse'].GET['/'].text()
+			).resolves.toEqual('ok')
+		})
 	})
 })

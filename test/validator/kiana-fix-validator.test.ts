@@ -234,12 +234,17 @@ describe('kiana validator fixes', () => {
 			prodPayload = error.payload
 		}
 
-		// WHY: production must omit schema-revealing detail (no errors/property/
-		// expected/detail); only the RFC 9457 envelope + safe `on`/`found` remain.
+		// WHY: production must omit schema-revealing detail (no errors/expected/
+		// detail). L13: the failing field's `property` (instance path only — no
+		// schema, no messages) IS surfaced so a client can fix their request; the
+		// safe RFC 9457 envelope + `on`/`found` remain.
 		expect(prodPayload.errors).toBeUndefined()
+		expect(prodPayload.expected).toBeUndefined()
+		expect(prodPayload.property).toBe('/x')
 		expect(Object.keys(prodPayload).sort()).toEqual([
 			'found',
 			'on',
+			'property',
 			'status',
 			'title',
 			'type'

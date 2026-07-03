@@ -54,6 +54,8 @@ export interface WSConnectionData {
 	elysia?: ElysiaWS<any>
 	context?: Record<string, unknown>
 
+	resumeWaiters?: Set<() => void>
+
 	validator?: WSResponseValidator
 	defaultValidator?: WSValidatorLike
 }

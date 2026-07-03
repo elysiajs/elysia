@@ -12,15 +12,19 @@ import { compileCookieConfig } from '../../cookie/config'
 import {
 	parseCookieRaw,
 	parseCookieRawSync,
+	parseCookieRawSigned,
 	buildCookieJar,
-	signCookieValues
+	signCookieValues,
+	signCookieValuesSync,
+	hasSyncHmac
 } from '../../cookie/utils'
 
 import {
 	ElysiaStatus,
 	ParseError,
 	ValidationError,
-	internalServerErrorResponse
+	internalServerErrorResponse,
+	isProduction
 } from '../../error'
 import { isDynamicRegex, traceEventIndex } from '../../constants'
 import { forwardError } from '../../handler/utils'
@@ -313,6 +317,10 @@ export function compileHandlerJit({
 		: undefined
 	const hasCookieSign = !!cookieConfig?.hasSign
 
+	const syncCookieSign =
+		hasCookieSign && hasSyncHmac && !Capture.isCapturing()
+	const asyncCookieSign = hasCookieSign && !syncCookieSign
+
 	const hasErrorHook = !!hook?.error?.length
 	const hasAfterResponse = !!hook?.afterResponse?.length
 	const hasBeforeHandle = !!hook?.beforeHandle?.length
@@ -432,7 +440,7 @@ export function compileHandlerJit({
 		responseValiForcesAsync ||
 		traceForcesAsync ||
 		afterResponseForcesAsync ||
-		hasCookieSign ||
+		asyncCookieSign ||
 		responseValiAsync ||
 		(hook &&
 			(!!isAsyncLifecycle(hook?.afterHandle) ||
@@ -469,7 +477,7 @@ export function compileHandlerJit({
 	if ((hasAfterResponse || hasTrace) && !syncAfterResponse)
 		code += 'let _stl\n'
 
-	if (hasCookieSign) code += 'let _sg\n'
+	if (asyncCookieSign) code += 'let _sg\n'
 
 	if (hasTrace) {
 		// fetch handler should already handle trace but fallback just in case
@@ -576,6 +584,9 @@ export function compileHandlerJit({
 		if (!hasCookieSign && !cookieValidIsAsync) {
 			link(parseCookieRawSync, 'pcrs')
 			code += `let _ck=pcrs(c.request.headers.get('cookie'),cc)\n`
+		} else if (syncCookieSign && !cookieValidIsAsync) {
+			link(parseCookieRawSigned, 'pcrsg')
+			code += `let _ck=pcrsg(c.request.headers.get('cookie'),cc)\n`
 		} else {
 			link(parseCookieRaw, 'pcr')
 			code += `let _ck=await pcr(c.request.headers.get('cookie'),cc)\n`
@@ -682,11 +693,14 @@ export function compileHandlerJit({
 
 	const schedule = dedupSchedule ? `_sc()\n` : scheduleAfterResponse
 
-	const signPrefix = hasCookieSign
-		? `_sg=scv(c.set.cookie,cc)\nif(_sg)await _sg\n`
-		: ''
+	const signPrefix = syncCookieSign
+		? `scvs(c.set.cookie,cc)\n`
+		: asyncCookieSign
+			? `_sg=scv(c.set.cookie,cc)\nif(_sg)await _sg\n`
+			: ''
 
-	if (hasCookieSign) link(signCookieValues, 'scv')
+	if (syncCookieSign) link(signCookieValuesSync, 'scvs')
+	else if (asyncCookieSign) link(signCookieValues, 'scv')
 
 	let factoryHelpers = ''
 
@@ -884,11 +898,22 @@ export function compileHandlerJit({
 			link(hook!.error!, 'er')
 			link(ElysiaStatus, 'es')
 			link(internalServerErrorResponse, 'ise')
+			link(isProduction, 'isprod')
 
 			const allowUnsafeDetail =
 				!!root['~config']?.allowUnsafeValidationDetails
 
 			if (allowUnsafeDetail) link(ValidationError, 'verr')
+
+			factoryHelpers +=
+				`${asyncCookieSign ? 'async ' : ''}function _efb(e,c){\n` +
+				(asyncCookieSign ? `let _sg\n` : ``) +
+				`if(e instanceof es){${signPrefix}return ${map}(e,c.set,c.request)}\n` +
+				`if(e?.status){${signPrefix}return ${map}(e?.response!==undefined?e.response:(isprod()&&e.status>=500?'Internal Server Error':(e?.message??'')),c.set,c.request)}\n` +
+				`c.set.status=500\n` +
+				signPrefix +
+				`return ${map}(ise(e),c.set,c.request)\n` +
+				`}\n`
 
 			body +=
 				`c.error=e\n` +
@@ -912,14 +937,13 @@ export function compileHandlerJit({
 				]) +
 				endTrace() +
 				schedule +
-				`if(typeof e?.toResponse==='function'){const _er=e.toResponse();if(_er instanceof Response){${signPrefix}return ${map}(_er,c.set,c.request)}}\n` +
-				`if(e instanceof es){${signPrefix}return ${map}(e,c.set,c.request)}\n` +
-				`if(e?.status){${signPrefix}return ${map}(e?.response??e?.message??'',c.set,c.request)}\n` +
-				`c.set.status=500\n` +
-				signPrefix +
-				// Mirror `fallbackErrorResponse`: an unhandled error responds with
-				// an RFC 9457 problem+json 500
-				`return ${map}(ise(e),c.set,c.request)\n`
+				`if(typeof e?.toResponse==='function')` +
+				`try{\n` +
+				`const _er=e.toResponse()\n` +
+				`if(_er instanceof Promise)return _er.then(${asyncCookieSign ? 'async ' : ''}(_v)=>{if(_v instanceof Response){${signPrefix}return ${map}(_v,c.set,c.request)}return _efb(e,c)},()=>_efb(e,c))\n` +
+				`if(_er instanceof Response){${signPrefix}return ${map}(_er,c.set,c.request)}\n` +
+				`}catch{}\n` +
+				`return _efb(e,c)\n`
 		} else {
 			body += endTrace() + schedule
 			body += `throw e\n`

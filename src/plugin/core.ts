@@ -220,14 +220,20 @@ export const STUB_SOURCES: Record<
 			filter: /[\\/]elysia[\\/](dist|src)[\\/]cookie[\\/]utils\.(m?js|ts)$/,
 			source:
 				`const e=()=>{throw new Error("[elysia-aot] cookie support was stripped (strip mode) but a route used cookies. Rebuild with strip:false.")}\n` +
+				`export const hasSyncHmac=false\n` +
 				`export function createCookieJar(){return e()}\n` +
 				`export function parseCookie(){return e()}\n` +
 				`export function parseCookieRaw(){return e()}\n` +
 				`export function parseCookieRawSync(){return e()}\n` +
+				`export function parseCookieRawSigned(){return e()}\n` +
 				`export function buildCookieJar(){return e()}\n` +
 				`export function signCookieValues(){return e()}\n` +
+				`export function signCookieValuesSync(){return e()}\n` +
 				`export function signCookie(){return e()}\n` +
-				`export function unsignCookie(){return e()}\n`
+				`export function signCookieSubtle(){return e()}\n` +
+				`export function signCookieSync(){return e()}\n` +
+				`export function unsignCookie(){return e()}\n` +
+				`export function unsignCookieSync(){return e()}\n`
 		},
 		{
 			filter: /[\\/]elysia[\\/](dist|src)[\\/]cookie[\\/]config\.(m?js|ts)$/,

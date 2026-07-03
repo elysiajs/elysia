@@ -280,4 +280,118 @@ describe('Form Data DoS hardening', () => {
 		expect(countNodes(out)).toBeLessThanOrEqual(110_000) // ~100k cap + slack
 		expect(elapsed).toBeLessThan(2_000)
 	})
+
+	// SPARSE-ARRAY INFLATION: once a key like `a[0]` makes `a` an Array, a
+	// second field `a.length=4000000000` (or `a['length']`) wrote straight to
+	// `arr.length`, producing a 4-billion-slot sparse array from a ~20-byte
+	// field. Any later iterate/JSON.stringify then walks 2^31 slots → OOM.
+	// The parser now ignores non-index keys on an Array parent, so `length`
+	// leaves the real entries intact.
+	it('ignores a client-supplied length key on an array (no sparse inflation)', () => {
+		for (const lengthKey of ['a.length', "a['length']", 'a["length"]']) {
+			const form = new FormData()
+			form.append('a[0]', 'x')
+			form.append(lengthKey, '4000000000')
+
+			const start = performance.now()
+			const out = formDataToObject(form)
+			const elapsed = performance.now() - start
+
+			expect(Array.isArray(out.a)).toBe(true)
+			// only the real entry survives; length is NOT client-controlled
+			expect((out.a as unknown[]).length).toBe(1)
+			expect((out.a as unknown[])[0]).toBe('x')
+			expect(elapsed).toBeLessThan(1_000)
+		}
+	})
+
+	// A `length` key whose parent is an OBJECT (not an array) is a legitimate
+	// property name and must still be kept — the guard is array-scoped only.
+	it('keeps a length key when the parent is an object', () => {
+		const form = new FormData()
+		form.append('user.name', 'bob')
+		form.append('user.length', '5')
+
+		expect(formDataToObject(form)).toEqual({
+			user: { name: 'bob', length: '5' }
+		})
+	})
+
+	// HUGE NUMERIC INDEX: `a[2000000000]` has the same effect as `.length` —
+	// a 2-billion-slot sparse array. Indices are capped to the node budget, so
+	// an out-of-range index is dropped instead of inflating the array.
+	it('drops an out-of-range numeric array index', () => {
+		const form = new FormData()
+		form.append('a[0]', 'x')
+		form.append('a[2000000000]', 'y')
+
+		const start = performance.now()
+		const out = formDataToObject(form)
+		const elapsed = performance.now() - start
+
+		expect(Array.isArray(out.a)).toBe(true)
+		expect((out.a as unknown[]).length).toBe(1)
+		expect((out.a as unknown[])[0]).toBe('x')
+		expect(elapsed).toBeLessThan(1_000)
+	})
+
+	// SPARSE PRE-ALLOCATION: capping the index below the 100k node budget
+	// still let `a[99999]` pre-allocate a 100k-slot sparse array from a
+	// ~10-byte field — and, since each such key spends only ONE node against
+	// the budget, an attacker multiplies it across many keys (~10^10 slots)
+	// while staying inside the 100k-node budget. The parser now requires an
+	// array index to grow contiguously (`key <= current.length`), so a sparse
+	// jump is dropped: `a[99999]` on an empty array leaves `a` tiny.
+	it('drops a sparse array index (no 100k-slot pre-allocation)', () => {
+		const form = new FormData()
+		form.append('a[99999]', 'x')
+
+		const start = performance.now()
+		const out = formDataToObject(form)
+		const elapsed = performance.now() - start
+
+		// `a` exists as an array but the sparse write is rejected — length stays
+		// tiny (one node), not 100000 slots.
+		expect(Array.isArray(out.a)).toBe(true)
+		expect((out.a as unknown[]).length).toBeLessThanOrEqual(1)
+		expect(elapsed).toBeLessThan(1_000)
+	})
+
+	// The amplification vector: many distinct keys, each a single sparse index,
+	// each costing one node but (pre-fix) each allocating 100k slots. Contiguous
+	// growth closes it — every sparse index is dropped, so the whole body stays
+	// small and fast regardless of how many keys are sent.
+	it('drops many sparse indices without amplifying slot count', () => {
+		const form = new FormData()
+		for (let i = 0; i < 5_000; i++) form.append('k' + i + '[99999]', 'x')
+
+		const start = performance.now()
+		const out = formDataToObject(form)
+		const elapsed = performance.now() - start
+
+		let slots = 0
+		for (const k in out)
+			if (Array.isArray((out as any)[k]))
+				slots += (out as any)[k].length
+		// pre-fix: ~5000 * 100000 = 5e8 slots; post-fix: ~0
+		expect(slots).toBeLessThanOrEqual(5_000)
+		expect(elapsed).toBeLessThan(2_000)
+	})
+
+	// In-bounds indices, nested arrays, and arrays of objects must still parse
+	// — the cap only rejects indices at/above the node budget.
+	it('still parses legitimate indexed and nested arrays', () => {
+		const form = new FormData()
+		form.append('a[0]', 'x')
+		form.append('a[1]', 'y')
+		form.append('b[0].name', 'bob')
+		form.append('b[1].name', 'sue')
+		form.append('c[0][0]', 'deep')
+
+		expect(formDataToObject(form)).toEqual({
+			a: ['x', 'y'],
+			b: [{ name: 'bob' }, { name: 'sue' }],
+			c: [['deep']]
+		})
+	})
 })
