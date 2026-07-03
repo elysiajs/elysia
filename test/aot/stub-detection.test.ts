@@ -64,11 +64,32 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 		expect(r.stubbable).toBe(true)
 	})
 
-	it('WS route is never handler-stubbable', async () => {
+	// WS routes are hand-written closures with no handler-JIT codegen, so they
+	// don't reach sucrose / the handler `new Function`. The replay skips them
+	// and keeps probing HTTP routes; a WS route must NOT blanket-disable
+	// handler-JIT stubbing for the whole app. The WS runtime module is retained
+	// separately via `ws: !hasWS` in the emitted plan (see the plan test below).
+	// Verified end-to-end: a WS app runs with the JIT graph stubbed.
+	it('WS-only app: handler JIT is stubbable (WS never reaches sucrose)', async () => {
 		const app = new Elysia().ws('/ws', { message: () => {} })
 		const r = await analyzeStubbability(app as any)
-		expect(r.jit).toBe(false)
-		expect(r.stubbable).toBe(false)
+		expect(r.jit).toBe(true)
+		expect(r.stubbable).toBe(true)
+		expect(r.reasons).toEqual([])
+	})
+
+	it('WS + HTTP: plan reports the HTTP routes real result, not blanket false', async () => {
+		const app = new Elysia()
+			.post(
+				'/p',
+				{ body: t.Object({ name: t.String() }) },
+				({ body }) => body
+			)
+			.get('/g', () => 'ok')
+			.ws('/ws', { message: () => {} })
+		const r = await analyzeStubbability(app as any)
+		expect(r.jit).toBe(true)
+		expect(r.stubbable).toBe(true)
 	})
 
 	// `mount()` is intentionally NOT special-cased: the forwarding handler is
@@ -180,25 +201,34 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			sucrose: true
 		})
 
-		const unsafe = await generateCompiledArtifacts(
+		// WS-only: the handler-JIT graph is stubbable (WS never reaches it),
+		// but the WS runtime module is RETAINED (`ws: false`) because the app
+		// declares a WS route.
+		const wsOnly = await generateCompiledArtifacts(
 			'test/aot/fixtures/strip-ws.ts'
 		)
-		expect(unsafe.stub).toEqual({
-			jit: false,
+		expect(wsOnly.stub).toEqual({
+			jit: true,
+			// WS routes present → keep the WS runtime module
 			ws: false,
-			reconstruct: false,
-			cookie: false,
-			trace: false,
-			sucrose: false
+			// no validator/cookie/trace alias → safe to stub reconstruct
+			reconstruct: true,
+			cookie: true,
+			trace: true,
+			sucrose: true
 		})
 	})
 
-	it('strip:true throws when handler JIT is still reachable', async () => {
-		await expect(
-			generateCompiledArtifacts('test/aot/fixtures/strip-ws.ts', {
-				strip: true
-			})
-		).rejects.toThrow('AOT handler manifest')
+	it("strip:true succeeds for a WS-only app (WS reaches no handler JIT)", async () => {
+		// A WS route reaches no handler-JIT entry point, so a WS-only app is
+		// fully stubbable and strip:true no longer over-conservatively throws.
+		const built = await generateCompiledArtifacts(
+			'test/aot/fixtures/strip-ws.ts',
+			{ strip: true }
+		)
+		expect(built.stub.jit).toBe(true)
+		// WS runtime module is retained even under strip:true.
+		expect(built.stub.ws).toBe(false)
 	})
 
 	it('SOUNDNESS: a "jit:true" frozen app handles requests from the manifest', async () => {
@@ -389,7 +419,10 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 		// memory's clearSucroseCache edge is cut
 		expect(safeOutput).not.toContain('clearSucroseCache')
 
-		const unsafe = await Bun.build({
+		// WS-only bundle: the handler-JIT graph is still stripped (WS reaches no
+		// sucrose / handler codegen), but the WS runtime module is RETAINED. A
+		// single WS route must not keep the whole JIT graph alive.
+		const ws = await Bun.build({
 			entrypoints: ['test/aot/fixtures/strip-ws-bundle.ts'],
 			plugins: [
 				bunAot('test/aot/fixtures/strip-ws-bundle.ts', {
@@ -399,15 +432,15 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			write: false,
 			target: 'bun'
 		})
-		expect(unsafe.success).toBe(true)
-		const unsafeOutput = await unsafe.outputs[0].text()
-		expect(unsafeOutput).not.toContain('handler compiler JIT was stripped')
-		expect(unsafeOutput).toContain('[Sucrose] warning')
-		expect(unsafeOutput).toContain('Unsupported content type')
-		expect(unsafeOutput).toContain('class ElysiaWS')
-		// not stubbed → trace runtime + memory's sucrose flush are retained
-		expect(unsafeOutput).toContain('class TracerHandle')
-		expect(unsafeOutput).toContain('clearSucroseCache')
+		expect(ws.success).toBe(true)
+		const wsOutput = await ws.outputs[0].text()
+		expect(wsOutput).toContain('handler compiler JIT was stripped')
+		expect(wsOutput).not.toContain('[Sucrose] warning')
+		// WS routes present → WS runtime module is kept
+		expect(wsOutput).toContain('class ElysiaWS')
+		// no trace alias → trace runtime is stubbed away
+		expect(wsOutput).not.toContain('class TracerHandle')
+		expect(wsOutput).not.toContain('clearSucroseCache')
 	})
 
 	it('emitted stripped bundle serves through frozen handlers', async () => {

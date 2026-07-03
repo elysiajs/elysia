@@ -168,21 +168,13 @@ const materialiseHandlersForReplay = (
 	return manifest
 }
 
-/**
- * Replay a frozen build from already-captured artifacts (no second capture) and
- * report whether handler JIT was reached. Shared by `analyzeStubbability` and
- * the single-capture build path.
- */
 export function replayStubbability(
 	app: AnyElysia,
 	handlers: CapturedHandler[]
 ): StubbabilityReport {
-	// Snapshot the in-process registry so detection is side-effect free.
 	const previousCompiled = Compiled.snapshot()
 	const previousAotBuild = env.ELYSIA_AOT_BUILD
 
-	// Replay must NOT be in capture mode, or handler generation records a fresh
-	// manifest instead of exercising the frozen one.
 	if (previousAotBuild !== undefined) delete env.ELYSIA_AOT_BUILD
 
 	try {
@@ -196,15 +188,8 @@ export function replayStubbability(
 
 		for (const route of history) {
 			try {
-				if ((route[0] as unknown) === 'WS') {
-					JITProbe.end()
-
-					return {
-						stubbable: false,
-						jit: false,
-						reasons: ['sucrose']
-					}
-				} else compileHandler(route, app)
+				if ((route[0] as unknown) === 'WS') continue
+				compileHandler(route, app)
 			} catch {
 				JITProbe.end()
 

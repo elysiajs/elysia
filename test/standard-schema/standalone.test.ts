@@ -788,3 +788,65 @@ describe('Standard Schema single-pass validation', () => {
 		expect(value).toEqual({ id: 1, page: 1 })
 	})
 })
+
+// C12: a Standard Schema whose `~standard.validate` returns a Promise, used
+// inside a standalone guard (the MultiValidator path), was silently SKIPPED —
+// `From` checked `!(q instanceof Promise)` and then read `q.value` off the
+// unresolved Promise (undefined). MultiValidator now forces `isAsync` whenever
+// any member is a Standard Schema (vendors cannot be proven synchronous) so the
+// JIT awaits `From`, and each member result is awaited before its issues/value
+// is read. Invalid input must 422, not pass.
+describe('Standard Schema async standalone (C12)', () => {
+	// an async vendor: rejects unless `id` is a number
+	const asyncNumberId = {
+		'~standard': {
+			version: 1,
+			vendor: 'test-async',
+			validate: async (value: any) =>
+				typeof value?.id === 'number'
+					? { value }
+					: { issues: [{ message: 'id must be a number' }] }
+		}
+	} as any
+
+	it('rejects input that an async standard member fails', async () => {
+		const app = new Elysia()
+			.guard({ schema: 'standalone', body: asyncNumberId })
+			.post(
+				'/',
+				{ body: t.Object({ name: t.Literal('lilith') }) },
+				({ body }) => body
+			)
+
+		// invalid per the async schema (id is a string) but valid per the
+		// TypeBox member — must NOT bypass validation
+		const invalid = await app.handle(
+			post('/', { id: 'not-a-number', name: 'lilith' })
+		)
+		expect(invalid.status).toBe(422)
+	})
+
+	it('accepts valid input and returns the merged decoded value', async () => {
+		const app = new Elysia()
+			.guard({ schema: 'standalone', body: asyncNumberId })
+			.post(
+				'/',
+				{ body: t.Object({ name: t.Literal('lilith') }) },
+				({ body }) => body
+			)
+
+		const res = await app.handle(post('/', { id: 7, name: 'lilith' }))
+		expect(res.status).toBe(200)
+		// the async member contributes `id`, the TypeBox member `name`
+		expect(await res.json()).toEqual({ id: 7, name: 'lilith' })
+	})
+
+	it('marks the validator async so the compiled route awaits it', () => {
+		const validator = Validator.create(asyncNumberId, {
+			schemas: [t.Object({ name: t.Literal('lilith') })]
+		})
+
+		expect(validator!.constructor.name).toBe('MultiValidator')
+		expect(validator!.isAsync).toBe(true)
+	})
+})

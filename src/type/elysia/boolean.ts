@@ -8,7 +8,6 @@ const emptyBoolean = Object.freeze(Boolean())
 export function BooleanType(options?: TSchemaOptions): TBoolean {
 	if (!options || isEmpty(options)) return emptyBoolean
 
-	options.type = 'boolean'
-	options['~kind'] = 'Boolean'
-	return Object.defineProperty(options, '~kind', noEnumerable) as any
+	const schema = { ...options, type: 'boolean', '~kind': 'Boolean' }
+	return Object.defineProperty(schema, '~kind', noEnumerable) as any
 }

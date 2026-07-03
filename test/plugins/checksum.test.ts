@@ -149,6 +149,35 @@ describe('Checksum', () => {
 		expect(called).toBe(1)
 	})
 
+	// H2: the single-fn diamond above dedups because `#on` tags the fn in
+	// `fnOrigin`, and the `#use` merge skips fns whose origin is an
+	// already-absorbed child. The ARRAY-form overload (`MaybeArray`) used to
+	// tag only the array object, leaving each element untagged → the merge's
+	// per-element origin lookup missed → dedup bypassed → the array-form
+	// hook ran once per diamond arm. This pins single execution for the
+	// array-form registration too.
+	it('does not run a diamond-shared array-form plugin hook twice', async () => {
+		let called = 0
+
+		const cookie = (options?: Record<string, unknown>) =>
+			new Elysia({
+				name: '@elysiajs/cookie',
+				seed: options
+			}).transform('global', [
+				() => {
+					called++
+				},
+				() => {}
+			])
+
+		const group = new Elysia().use(cookie()).get('/a', () => 'Hi')
+		const app = new Elysia().use(cookie()).use(group)
+
+		await app.handle(req('/a'))
+
+		expect(called).toBe(1)
+	})
+
 	it('Merge global hook', async () => {
 		let count = 0
 

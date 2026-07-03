@@ -3,7 +3,8 @@ import type { Compile as CompileType } from 'typebox/compile'
 import type {
 	Decode as DecodeType,
 	HasCodec as HasCodecType,
-	Default as DefaultType
+	Default as DefaultType,
+	Clone as CloneType
 } from 'typebox/value'
 
 import type { applyCoercions as applyCoercionsType } from './coerce'
@@ -38,6 +39,7 @@ interface TypeboxModule {
 	Intersect: typeof IntersectType
 	Default: typeof DefaultType
 	Ref: typeof RefType
+	Clone: typeof CloneType
 }
 
 const error = new Error(
@@ -98,6 +100,8 @@ export let Default: typeof DefaultType = stub('Default')
 
 export let Ref: typeof RefType = stub('Ref')
 
+export let Clone: typeof CloneType = stub('Clone')
+
 export function useTypebox(mod: TypeboxModule) {
 	live = mod
 
@@ -116,4 +120,5 @@ export function useTypebox(mod: TypeboxModule) {
 	Intersect = mod.Intersect
 	Default = mod.Default
 	Ref = mod.Ref
+	Clone = mod.Clone
 }

@@ -7,8 +7,8 @@ export function isAsyncFunction(fn: Function) {
 	)
 }
 
-const matchResponseClone = /=>\s?response\.clone\(/
-const matchFnReturn = /(?:return|=>)\s?\S+\(|a(?:sync|wait)/
+const matchResponseClone = /=>\s*response\.clone\(/
+const matchFnReturn = /(?:return|=>)\s*\S+\(|a(?:sync|wait)/
 
 export function mayReturnPromise(fn: Function): boolean {
 	const literal = fn.toString()

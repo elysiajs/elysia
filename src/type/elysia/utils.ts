@@ -5,11 +5,15 @@ import { fnv1a } from '../../utils'
 import type { BaseSchema } from '../types'
 import type { ELYSIA_TYPES } from '../constants'
 
-export function cloneSchema<T extends TSchema>(schema: T): T {
-	const target = { ...schema } as T
-	for (const key of Object.getOwnPropertyNames(schema)) {
-		const desc = Object.getOwnPropertyDescriptor(schema, key)
-		if (!desc || desc.enumerable) continue
+export function copyNonEnumerable(
+	src: object,
+	target: object,
+	skipKey?: string
+) {
+	for (const key of Object.getOwnPropertyNames(src)) {
+		const desc = Object.getOwnPropertyDescriptor(src, key)
+		if (!desc || desc.enumerable || key === skipKey) continue
+
 		Object.defineProperty(target, key, {
 			value: desc.value,
 			enumerable: false,
@@ -17,6 +21,11 @@ export function cloneSchema<T extends TSchema>(schema: T): T {
 			configurable: true
 		})
 	}
+}
+
+export function cloneSchema<T extends TSchema>(schema: T): T {
+	const target = { ...schema } as T
+	copyNonEnumerable(schema, target)
 	return target
 }
 
@@ -24,27 +33,13 @@ export function elyType<T extends TSchema>(
 	name: ELYSIA_TYPES[keyof ELYSIA_TYPES],
 	schema: T
 ): T {
-	const elyDesc = Object.getOwnPropertyDescriptor(schema, '~elyTyp')
-	if (
-		Object.isExtensible(schema) &&
-		(!elyDesc || elyDesc.writable !== false)
-	) {
-		// @ts-expect-error
-		schema['~elyTyp'] = name
-		return schema
-	}
+	const target = Object.assign(
+		Object.create(Object.getPrototypeOf(schema)),
+		schema,
+		{ '~elyTyp': name }
+	) as T
 
-	const target = { ...schema, '~elyTyp': name } as T
-	for (const key of Object.getOwnPropertyNames(schema)) {
-		const desc = Object.getOwnPropertyDescriptor(schema, key)
-		if (!desc || desc.enumerable || key === '~elyTyp') continue
-		Object.defineProperty(target, key, {
-			value: desc.value,
-			enumerable: false,
-			writable: true,
-			configurable: true
-		})
-	}
+	copyNonEnumerable(schema, target, '~elyTyp')
 
 	return target
 }

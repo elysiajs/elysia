@@ -64,11 +64,30 @@ import type {
 const parseFormData = 'c.body=await pf(c)\n'
 
 const matchReturnIdentifier =
+	// `=>` may be minified with no gap (`=>x`); `return` always needs a
+	// separator or it fuses into a different identifier (`returnx`).
 	// eslint-disable-next-line sonarjs/regex-complexity
-	/(?:=>|\breturn)\s+(?!(?:true|false|null|undefined|void|new|typeof|async|await|function|class)\b)[A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*\s*(?![\w$([])/
+	/(?:=>\s*|\breturn\s+)(?!(?:true|false|null|undefined|void|new|typeof|async|await|function|class)\b)[A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*\s*(?![\w$([])/
 
 const mayReturnIdentifier = (fn: Function): boolean =>
 	matchReturnIdentifier.test(fn.toString())
+
+const lifecycleMayReturnPromise = (
+	handlers: MaybeArray<Function> | undefined,
+	observed: boolean
+) =>
+	handlers
+		? Array.isArray(handlers)
+			? handlers.some(
+					(fn) =>
+						!isAsyncFunction(fn) &&
+						(mayReturnPromise(fn) ||
+							(observed && mayReturnIdentifier(fn)))
+				)
+			: !isAsyncFunction(handlers) &&
+				(mayReturnPromise(handlers) ||
+					(observed && mayReturnIdentifier(handlers)))
+		: false
 
 let captureHeaderShorthand: boolean | undefined
 export const setCaptureHeaderShorthand = (value: boolean | undefined): void => {
@@ -411,13 +430,6 @@ export function compileHandlerJit({
 		hasErrorHook &&
 		(hasAfterHandle || hasMapResponse || hasResponseValidator)
 
-	const responseValiForcesAsync =
-		hasResponseValidator &&
-		isHandleFunction &&
-		!handlerIsAsync &&
-		(mayReturnPromise(handler as Function) ||
-			mayReturnIdentifier(handler as Function))
-
 	const afterResponseForcesAsync =
 		hasAfterResponse &&
 		(isAsyncLifecycle(hook?.afterResponse) ||
@@ -433,13 +445,28 @@ export function compileHandlerJit({
 		(mayReturnPromise(handler as Function) ||
 			mayReturnIdentifier(handler as Function))
 
+	const handlerResultObserved =
+		isHandleFunction &&
+		!handlerIsAsync &&
+		(hasResponseValidator || hasAfterHandle || hasMapResponse) &&
+		(mayReturnPromise(handler as Function) ||
+			mayReturnIdentifier(handler as Function))
+
+	const lifecycleForcesAsync =
+		!!hook &&
+		(lifecycleMayReturnPromise(hook.beforeHandle, true) ||
+			lifecycleMayReturnPromise(hook.transform, false) ||
+			lifecycleMayReturnPromise(hook.afterHandle, true) ||
+			lifecycleMayReturnPromise(hook.mapResponse, true))
+
 	const isAsync =
 		hasBody ||
 		handlerIsAsync ||
 		errorHookForcesAsync ||
-		responseValiForcesAsync ||
 		traceForcesAsync ||
 		afterResponseForcesAsync ||
+		handlerResultObserved ||
+		lifecycleForcesAsync ||
 		asyncCookieSign ||
 		responseValiAsync ||
 		(hook &&
@@ -552,7 +579,11 @@ export function compileHandlerJit({
 		code += beginTrace('transform', transformLen)
 		if (transformLen) {
 			link(hook!.transform!, 'tf')
-			code += mapTransform(hook!.transform!, [buildReport('transform')])
+			if (isAsync) code += 'let _tf\n'
+			code += mapTransform(hook!.transform!, [
+				isAsync,
+				buildReport('transform')
+			])
 		}
 		code += endTrace()
 	}
@@ -727,6 +758,7 @@ export function compileHandlerJit({
 					hook!.beforeHandle!,
 					deriveEntries?.length ? new Set(deriveEntries) : undefined,
 					link,
+					isAsync,
 					buildReport('beforeHandle')
 				)
 			}
@@ -819,6 +851,7 @@ export function compileHandlerJit({
 					link(hook!.afterHandle!, 'af')
 					code += mapAfterHandle(
 						hook!.afterHandle!,
+						isAsync,
 						buildReport('afterHandle')
 					)
 				}
@@ -832,6 +865,7 @@ export function compileHandlerJit({
 					link(hook!.mapResponse!, 'mr')
 					code += mapMapResponse(
 						hook!.mapResponse!,
+						isAsync,
 						buildReport('mapResponse')
 					)
 				}
@@ -929,7 +963,11 @@ export function compileHandlerJit({
 					res.map,
 					(hasMapResponse
 						? `c.responseValue=_r\n` +
-							mapMapResponse(hook!.mapResponse!, undefined)
+							mapMapResponse(
+								hook!.mapResponse!,
+								isAsync,
+								undefined
+							)
 						: '') +
 						endTrace() +
 						schedule,

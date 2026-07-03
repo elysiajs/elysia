@@ -503,4 +503,40 @@ describe('Parser', () => {
 		expect(parseError).toBe(true)
 		expect(response.status).toBe(400)
 	})
+
+	// H16: `group(prefix, run)`'s parse must apply ONLY to the group's own
+	// routes, never to sibling routes on the parent. A custom `parse` is
+	// route-level (each group route snapshots the group's hook chain), so the
+	// group finalize must NOT lift it onto the parent chain — doing so leaks
+	// the group's body parsing onto routes registered after the group and
+	// silently rewrites their bodies (an auth/validation-shaped hazard). This
+	// pins the scope: /g/* sees the custom parser; sibling routes registered
+	// before AND after the group keep default parsing.
+	it('scopes group() parse to the group, not sibling parent routes', async () => {
+		const app = new Elysia()
+			.post('/before', ({ body }) => body)
+			.group('/g', (g) =>
+				g
+					.parse(() => ({ hijacked: true }))
+					.post('/x', ({ body }) => body)
+			)
+			.post('/after', ({ body }) => body)
+
+		const call = (path: string) =>
+			app
+				.handle(
+					new Request('http://localhost' + path, {
+						method: 'POST',
+						headers: { 'content-type': 'application/json' },
+						body: JSON.stringify({ real: 'payload' })
+					})
+				)
+				.then((r) => r.json())
+
+		// group route uses the custom parser
+		expect(await call('/g/x')).toEqual({ hijacked: true })
+		// siblings before AND after the group keep default JSON parsing
+		expect(await call('/before')).toEqual({ real: 'payload' })
+		expect(await call('/after')).toEqual({ real: 'payload' })
+	})
 })

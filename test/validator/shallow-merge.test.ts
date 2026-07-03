@@ -72,6 +72,36 @@ describe('shallowMergeObjects fires and equals Evaluate(Intersect)', () => {
 			]
 		)
 	})
+
+	it('optional property fires (D1: t.Optional no longer prototype-wraps)', () => {
+		// Under the D1 mutate-clone invariant t.Optional returns a clone with
+		// its markers as OWN props (not an Object.create wrapper), so `type`
+		// survives Evaluate's own-only clone — no divergence, fast path applies.
+		expectEquivalent(
+			() => [
+				t.Object({ id: t.Number() }),
+				t.Object({ maybe: t.Optional(t.String()) })
+			],
+			[{ id: 1 }, { id: 1, maybe: 'x' }, { id: 1, maybe: 5 }, { maybe: 'x' }]
+		)
+	})
+
+	it('deeply-nested optional fires (recursive, own-prop markers)', () => {
+		expectEquivalent(
+			() => [
+				t.Object({
+					outer: t.Object({ inner: t.Optional(t.Number()) })
+				}),
+				t.Object({ b: t.String() })
+			],
+			[
+				{ outer: {}, b: 'x' },
+				{ outer: { inner: 1 }, b: 'x' },
+				{ outer: { inner: 'no' }, b: 'x' },
+				{ outer: {} }
+			]
+		)
+	})
 })
 
 describe('shallowMergeObjects bails (→ Evaluate fallback)', () => {
@@ -106,29 +136,6 @@ describe('shallowMergeObjects bails (→ Evaluate fallback)', () => {
 		expect(
 			shallowMergeObjects([
 				t.Object({ a: t.Number() }, { minProperties: 1 }),
-				t.Object({ b: t.String() })
-			])
-		).toBeNull()
-	})
-
-	it('prototype-wrapped optional property → null (Evaluate drops inherited type)', () => {
-		// t.Optional(t.String()) is Object.create(string); reusing it would be
-		// MORE strict than Evaluate's lossy clone — so we bail to stay identical.
-		expect(
-			shallowMergeObjects([
-				t.Object({ id: t.Number() }),
-				t.Object({ maybe: t.Optional(t.String()) })
-			])
-		).toBeNull()
-	})
-
-	it('DEEPLY-nested optional (inside a nested object) → null', () => {
-		// the divergence can hide at any depth — the detector is recursive
-		expect(
-			shallowMergeObjects([
-				t.Object({
-					outer: t.Object({ inner: t.Optional(t.Number()) })
-				}),
 				t.Object({ b: t.String() })
 			])
 		).toBeNull()

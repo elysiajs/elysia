@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'bun:test'
 import { Type } from 'typebox'
 
+import { Elysia, t } from '../../src'
+import { post } from '../utils'
 import { TypeBoxValidatorCache } from '../../src/type/validator'
 
 // F12: the module-level validator cache used to strongly retain every
@@ -59,5 +61,73 @@ describe('TypeBoxValidatorCache eviction', () => {
 		await new Promise((resolve) => setTimeout(resolve, 250))
 
 		expect(cache.get(make(0))).toBeUndefined()
+	})
+})
+
+// C11: the structural (JSON-key) cache used to ignore `models`. A `$ref`
+// schema stringifies identically no matter what its refs resolve against, so
+// two apps declaring a same-named model with DIFFERENT definitions produced
+// the same key and were served each other's validator — a silent
+// wrong-model / validation-bypass. The cache now mixes a per-`models`-record
+// token into both cache layers when the schema contains a `$ref`.
+describe('TypeBoxValidatorCache models identity (C11)', () => {
+	const make = (i: number) => Type.Object({ [`k${i}`]: Type.String() })
+	const validator = (tag: number) => ({ tag }) as any
+	const refSchema = () => Type.Object({ nested: Type.Ref('Inner') })
+
+	it('does not serve a $ref validator built against different models', () => {
+		const cache = new TypeBoxValidatorCache(60_000)
+
+		const modelsA = { Inner: Type.Object({ v: Type.Number() }) }
+		const modelsB = { Inner: Type.Object({ v: Type.String() }) }
+
+		cache.set(refSchema(), undefined, validator(1), '', modelsA)
+
+		// identical JSON key, different resolved models → must be a MISS
+		expect(
+			cache.get(refSchema(), undefined, '', modelsB)
+		).toBeUndefined()
+		// same models → structural hit is still served
+		expect(
+			(cache.get(refSchema(), undefined, '', modelsA) as any).tag
+		).toBe(1)
+	})
+
+	it('still shares ref-less schemas regardless of models (no perf regression)', () => {
+		const cache = new TypeBoxValidatorCache(60_000)
+
+		cache.set(make(0), undefined, validator(0), '', { a: 1 })
+		// no $ref → the JSON key already captures identity, token is inert
+		expect((cache.get(make(0), undefined, '', { b: 2 }) as any).tag).toBe(
+			0
+		)
+	})
+
+	it('validates each app against its own model definition end-to-end', async () => {
+		const body = t.Object({ nested: t.Ref('Inner') })
+
+		const numberApp = new Elysia({ name: 'number-app' })
+			.model({ Inner: t.Object({ v: t.Number() }) })
+			.post('/x', { body }, ({ body }) => body)
+
+		const stringApp = new Elysia({ name: 'string-app' })
+			.model({ Inner: t.Object({ v: t.String() }) })
+			.post('/x', { body }, ({ body }) => body)
+
+		// warm the cache with the Number app first
+		expect((await numberApp.handle(post('/x', { nested: { v: 1 } }))).status).toBe(200)
+
+		// the String app MUST validate against its own String model, not the
+		// cached Number validator — a number is now rejected
+		expect(
+			(await stringApp.handle(post('/x', { nested: { v: 42 } }))).status
+		).toBe(422)
+		expect(
+			(await stringApp.handle(post('/x', { nested: { v: 'hi' } }))).status
+		).toBe(200)
+		// ...and the Number app still rejects a string
+		expect(
+			(await numberApp.handle(post('/x', { nested: { v: 'x' } }))).status
+		).toBe(422)
 	})
 })

@@ -36,13 +36,16 @@ const toArray = <T>(v: MaybeArray<T>): T[] => (Array.isArray(v) ? v : [v])
 
 export const mapTransform = /*#__PURE__*/ map<
 	'transform',
-	[report?: TraceReporter]
->(
-	(i, fn, [report]) => {
-		const t = trace(report, fn)
-		return t.begin + `${Await(fn)}tf${at(i)}(c)\n` + t.end()
-	}
-)
+	[isAsync: boolean, report?: TraceReporter]
+>((i, fn, [isAsync, report]) => {
+	const t = trace(report, fn)
+	const guard = awaitGuard(fn, isAsync, '_tf')
+	const call = guard
+		? `_tf=tf${at(i)}(c)\n${guard}`
+		: `${Await(fn)}tf${at(i)}(c)\n`
+
+	return t.begin + call + t.end()
+})
 
 const deriveKeyCache = new WeakMap<Function, string[] | null>()
 
@@ -419,6 +422,7 @@ export function mapBeforeHandle(
 	_hooks: AppHook['beforeHandle'] | AppHook['beforeHandle'][0],
 	derive: Set<Function> | undefined,
 	link: Link,
+	isAsync: boolean,
 	report?: TraceReporter
 ) {
 	const hooks = toArray(_hooks)
@@ -437,6 +441,7 @@ export function mapBeforeHandle(
 		const t = trace(report, fn)
 		code += t.begin
 		code += `tmp=${Await(fn)}bf${at(i)}(c)\n`
+		code += awaitGuard(fn, isAsync, 'tmp')
 		if (derive?.has(fn)) {
 			needsEs = true
 			const keys = extractDeriveKeys(fn)
@@ -466,6 +471,7 @@ export function mapBeforeHandle(
 function mapChainHook(
 	hooks: Function[],
 	prefix: string,
+	isAsync: boolean,
 	report?: TraceReporter
 ) {
 	let code = ''
@@ -481,6 +487,7 @@ function mapChainHook(
 		const t = trace(report, fn)
 		code += t.begin
 		code += `tmp=${Await(fn)}${prefix}${at(i)}(c)\n`
+		code += awaitGuard(fn, isAsync, 'tmp')
 		code += t.end('tmp')
 	}
 
@@ -489,35 +496,33 @@ function mapChainHook(
 	return code
 }
 
-export function mapAfterHandle(
+export const mapAfterHandle = (
 	_hooks: AppHook['afterHandle'] | AppHook['afterHandle'][0],
+	isAsync: boolean,
 	report?: TraceReporter
-) {
-	return mapChainHook(toArray(_hooks), 'af', report)
-}
+) => mapChainHook(toArray(_hooks), 'af', isAsync, report)
 
 export const mapMapResponse = (
 	_hooks: AppHook['mapResponse'] | AppHook['mapResponse'][0],
+	isAsync: boolean,
 	report?: TraceReporter
-) => mapChainHook(toArray(_hooks), 'mr', report)
+) => mapChainHook(toArray(_hooks), 'mr', isAsync, report)
 
 export const mapAfterResponse = /*#__PURE__*/ map<
 	'afterResponse',
 	[report?: TraceReporter]
->(
-	(i, fn, [report]) => {
-		const t = trace(report, fn)
-		return (
-			`try{` +
-			t.begin +
-			`${Await(fn)}ar${at(i)}(c)\n` +
-			t.end() +
-			`}catch(_e){` +
-			t.end('_e') +
-			`}\n`
-		)
-	}
-)
+>((i, fn, [report]) => {
+	const t = trace(report, fn)
+	return (
+		`try{` +
+		t.begin +
+		`${Await(fn)}ar${at(i)}(c)\n` +
+		t.end() +
+		`}catch(_e){` +
+		t.end('_e') +
+		`}\n`
+	)
+})
 
 export const mapError = /*#__PURE__*/ map<
 	'error',
@@ -668,3 +673,8 @@ export function getQueryParseArgs(querySchema: any): string {
 }
 
 export const Await = (fn: Function) => (isAsyncFunction(fn) ? 'await ' : '')
+
+const awaitGuard = (fn: Function, isAsync: boolean, target: string) =>
+	isAsync && !isAsyncFunction(fn)
+		? `if(${target} instanceof Promise)${target}=await ${target}\n`
+		: ''

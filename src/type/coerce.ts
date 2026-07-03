@@ -575,22 +575,30 @@ function rebuildObjStr(original: any, site: CoerceObjStr) {
 	return node
 }
 
-const buildCoerceNode = (original: any, node: CoerceNode) =>
+const buildCoerceNode = (original: any, node: CoerceNode, seen: Set<string>) =>
 	isCoerceLeaf(node)
-		? coerceLeaf(node)
+		? coerceLeaf(node, seen)
 		: isCoerceObjStr(node)
 			? rebuildObjStr(original, node)
-			: buildCoercedFromPlan(original, node)
+			: buildCoercedFromPlan(original, node, seen)
 
 const coerceLeafCache = new Map<string, any>()
 
-function coerceLeaf(leaf: CoerceLeaf): any {
+function coerceLeaf(leaf: CoerceLeaf, seen: Set<string>): any {
 	const key = leaf.e + (leaf.c ? JSON.stringify(leaf.c) : '')
-	let node = coerceLeafCache.get(key)
-	if (node === undefined) {
+
+	let node: any
+	if (seen.has(key)) {
 		// @ts-expect-error
 		node = COERCE_LEAF_CTOR[leaf.e]!(leaf.c)
-		coerceLeafCache.set(key, node)
+	} else {
+		seen.add(key)
+		node = coerceLeafCache.get(key)
+		if (node === undefined) {
+			// @ts-expect-error
+			node = COERCE_LEAF_CTOR[leaf.e]!(leaf.c)
+			coerceLeafCache.set(key, node)
+		}
 	}
 
 	// per-use `~optional` wrapper (don't mutate the shared frozen leaf)
@@ -603,7 +611,11 @@ function coerceLeaf(leaf: CoerceLeaf): any {
 	return node
 }
 
-export function buildCoercedFromPlan(original: any, plan: CoercePlan) {
+export function buildCoercedFromPlan(
+	original: any,
+	plan: CoercePlan,
+	seen: Set<string> = new Set()
+) {
 	const out = Object.create(Object.getPrototypeOf(original))
 
 	for (const k in original) out[k] = original[k]
@@ -616,11 +628,11 @@ export function buildCoercedFromPlan(original: any, plan: CoercePlan) {
 	if (plan.p) {
 		const props: Record<string, unknown> = { ...original.properties }
 		for (const k in plan.p)
-			props[k] = buildCoerceNode(original.properties[k], plan.p[k]!)
+			props[k] = buildCoerceNode(original.properties[k], plan.p[k]!, seen)
 		out.properties = props
 	}
 
-	if (plan.i) out.items = buildCoerceNode(original.items, plan.i)
+	if (plan.i) out.items = buildCoerceNode(original.items, plan.i, seen)
 
 	return out
 }

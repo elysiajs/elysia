@@ -17,7 +17,6 @@ export function Union<T extends TSchema[]>(
 			noEnumerable
 		) as any
 
-	options['~kind'] = 'Union'
-	options.anyOf = schemas
-	return Object.defineProperty(options, '~kind', noEnumerable) as any
+	const schema = { ...options, '~kind': 'Union', anyOf: schemas }
+	return Object.defineProperty(schema, '~kind', noEnumerable) as any
 }

@@ -28,7 +28,6 @@ export function StringType(options?: TStringOptions): TString {
 		))
 	}
 
-	options.type = 'string'
-	options['~kind'] = 'String'
-	return Object.defineProperty(options, '~kind', noEnumerable) as any
+	const schema = { ...options, type: 'string', '~kind': 'String' }
+	return Object.defineProperty(schema, '~kind', noEnumerable) as any
 }

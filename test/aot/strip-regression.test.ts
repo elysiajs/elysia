@@ -110,10 +110,19 @@ describe('AOT strip regression — strip:false (must be a no-op)', () => {
 })
 
 describe('AOT strip regression — strip:true (fail loud or serve)', () => {
-	it('throws at build time when handler JIT is still reachable (WS app)', async () => {
-		await expect(
-			build('test/aot/fixtures/regress-strip-true-ws.ts', true)
-		).rejects.toThrow('AOT handler manifest')
+	it('strips the JIT graph for a WS-only app but retains the WS runtime', async () => {
+		// WS routes are hand-written closures that reach no handler-JIT entry
+		// point, so a WS-only app is fully stubbable — strip:true must NOT
+		// over-conservatively throw. The WS runtime module is retained.
+		const text = await build(
+			'test/aot/fixtures/regress-strip-true-ws.ts',
+			true
+		)
+		expect(text).toContain('handler compiler JIT was stripped')
+		expect(text).not.toContain('[Sucrose] warning')
+		// WS present → the WS route builder module is kept, not stubbed
+		expect(text).not.toContain('WebSocket route builder was stripped')
+		expect(text).toContain('class ElysiaWS')
 	})
 
 	it('success path: a fully precompiled app builds AND serves', async () => {
@@ -137,28 +146,37 @@ describe('AOT strip regression — strip:true (fail loud or serve)', () => {
 })
 
 describe('AOT strip regression — strip:auto (sound: skip when unsafe)', () => {
-	it('skips ALL stubbing for an app whose handler JIT stays reachable', async () => {
+	it('a WS route does not blanket-disable stubbing for the HTTP routes', async () => {
+		// A WS route reaches no handler-JIT entry point, so it must NOT poison
+		// the HTTP routes' probe: the JIT graph is stubbed on the HTTP routes'
+		// real result while the WS runtime module is retained (`ws:false`).
 		const { stub } = await generateCompiledArtifacts(
 			'test/aot/fixtures/regress-strip-auto-skip.ts',
 			{ strip: 'auto' }
 		)
 
 		expect(stub).toEqual({
-			jit: false,
+			jit: true,
+			// WS present → keep the WS runtime module
 			ws: false,
-			reconstruct: false,
-			cookie: false,
-			trace: false,
-			sucrose: false
+			reconstruct: true,
+			cookie: true,
+			trace: true,
+			sucrose: true
 		})
 
 		const text = await build(
 			'test/aot/fixtures/regress-strip-auto-skip.ts',
 			'auto'
 		)
-		for (const marker of STUB_MARKERS) expect(text).not.toContain(marker)
+		// JIT graph is stubbed...
+		expect(text).toContain('handler compiler JIT was stripped')
+		expect(text).not.toContain('[Sucrose] warning')
+		// ...but the WS runtime module is retained (never stubbed).
+		expect(text).not.toContain('WebSocket route builder was stripped')
 
 		const app = await load(text)
+		// The HTTP route still serves from the frozen manifest.
 		const ok = await app.handle(req('/'))
 		expect(ok.status).toBe(200)
 		await expect(ok.text()).resolves.toBe('ok')

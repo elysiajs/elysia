@@ -8,7 +8,6 @@ const emptyInteger = Object.freeze(IntegerType())
 export function Integer(options?: TNumberOptions): TInteger {
 	if (!options || isEmpty(options)) return emptyInteger as any
 
-	options.type = 'integer'
-	options['~kind'] = 'Integer'
-	return Object.defineProperty(options, '~kind', noEnumerable) as any
+	const schema = { ...options, type: 'integer', '~kind': 'Integer' }
+	return Object.defineProperty(schema, '~kind', noEnumerable) as any
 }

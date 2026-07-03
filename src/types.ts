@@ -2385,6 +2385,119 @@ export type AddRoute<
 	Volatile
 >
 
+export type HookContextSchema<
+	Metadata extends MetadataBase,
+	Ephemeral extends EphemeralType,
+	Volatile extends EphemeralType,
+	BasePath extends string
+> = MergeSchema<
+	Volatile['schema'],
+	MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+	BasePath
+> &
+	Metadata['schemas'] &
+	Ephemeral['schemas'] &
+	Volatile['schemas']
+
+export type HookContextSingleton<
+	Singleton extends SingletonBase,
+	Ephemeral extends EphemeralType,
+	Volatile extends EphemeralType
+> = Singleton & {
+	derive: Ephemeral['derive'] & Volatile['derive']
+}
+
+export type LocalHookReturn<
+	BasePath extends string,
+	Scope extends EventScope,
+	Singleton extends SingletonBase,
+	Definitions extends DefinitionBase,
+	Metadata extends MetadataBase,
+	Routes extends RouteBase,
+	Ephemeral extends EphemeralType,
+	Volatile extends EphemeralType,
+	ResponseAddition extends PossibleResponse,
+	DeriveAddition extends Record<string, unknown> = {}
+> = Elysia<
+	BasePath,
+	Scope,
+	Singleton,
+	Definitions,
+	Metadata,
+	Routes,
+	Ephemeral,
+	{
+		derive: Volatile['derive'] & DeriveAddition
+		schema: Volatile['schema']
+		schemas: Volatile['schemas']
+		response: UnionResponseStatus<Volatile['response'], ResponseAddition>
+		error: Volatile['error']
+	}
+>
+
+export type PluginHookReturn<
+	BasePath extends string,
+	Scope extends EventScope,
+	Singleton extends SingletonBase,
+	Definitions extends DefinitionBase,
+	Metadata extends MetadataBase,
+	Routes extends RouteBase,
+	Ephemeral extends EphemeralType,
+	Volatile extends EphemeralType,
+	ResponseAddition extends PossibleResponse,
+	DeriveAddition extends Record<string, unknown> = {}
+> = Elysia<
+	BasePath,
+	Scope,
+	Singleton,
+	Definitions,
+	Metadata,
+	Routes,
+	{
+		derive: Ephemeral['derive'] & DeriveAddition
+		schema: Ephemeral['schema']
+		schemas: Ephemeral['schemas']
+		response: UnionResponseStatus<Ephemeral['response'], ResponseAddition>
+		error: Ephemeral['error']
+	},
+	Volatile
+>
+
+export type GlobalHookReturn<
+	BasePath extends string,
+	Scope extends EventScope,
+	Singleton extends SingletonBase,
+	Definitions extends DefinitionBase,
+	Metadata extends MetadataBase,
+	Routes extends RouteBase,
+	Ephemeral extends EphemeralType,
+	Volatile extends EphemeralType,
+	ResponseAddition extends PossibleResponse,
+	DeriveAddition extends Record<string, unknown> = never
+> = Elysia<
+	BasePath,
+	Scope,
+	[DeriveAddition] extends [never]
+		? Singleton
+		: {
+				decorator: Singleton['decorator']
+				store: Singleton['store']
+				derive: Singleton['derive'] & DeriveAddition
+			},
+	Definitions,
+	{
+		schema: Metadata['schema']
+		schemas: Metadata['schemas']
+		macro: Metadata['macro']
+		macroFn: Metadata['macroFn']
+		parser: Metadata['parser']
+		response: UnionResponseStatus<Metadata['response'], ResponseAddition>
+	},
+	Routes,
+	Ephemeral,
+	Volatile
+>
+
 export type AddWSRoute<
 	BasePath extends string,
 	Scope extends EventScope,

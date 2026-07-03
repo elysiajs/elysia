@@ -321,9 +321,7 @@ export function createStreamHandler({
 
 		return new Response(
 			new ReadableStream({
-				start(controller) {
-					// Register abort handler once, terminates the iterator and
-					// closes the stream so pull() won't be called again.
+				async start(controller) {
 					request?.signal?.addEventListener('abort', () => {
 						end = true
 						iterator.return?.()
@@ -333,9 +331,6 @@ export function createStreamHandler({
 						} catch {}
 					})
 
-					// Enqueue the already-extracted init value (first generator
-					// result, used above for SSE detection). Subsequent values
-					// are produced on-demand by pull().
 					if (
 						!init ||
 						init.value instanceof ReadableStream ||
@@ -345,11 +340,16 @@ export function createStreamHandler({
 						return
 
 					// @ts-ignore
-					if (init.value.toSSE)
+					if (init.value.toSSE) {
 						// @ts-ignore
 						controller.enqueue(init.value.toSSE())
-					else if (enqueueBinaryChunk(controller, init.value)) return
-					else if (typeof init.value === 'object')
+						return
+					}
+
+					const p = enqueueBinaryChunk(controller, init.value)
+					if (p !== false) return void (await p)
+
+					if (typeof init.value === 'object')
 						try {
 							controller.enqueue(
 								format(JSON.stringify(init.value))
@@ -379,16 +379,19 @@ export function createStreamHandler({
 							return
 						}
 
-						// null/undefined chunks are skipped; the runtime will
-						// call pull() again since nothing was enqueued.
 						if (chunk === undefined || chunk === null) return
 
 						// @ts-ignore
-						if (chunk.toSSE)
+						if (chunk.toSSE) {
 							// @ts-ignore
 							controller.enqueue(chunk.toSSE())
-						else if (enqueueBinaryChunk(controller, chunk)) return
-						else if (typeof chunk === 'object')
+							return
+						}
+
+						const p = enqueueBinaryChunk(controller, chunk)
+						if (p !== false) return void (await p)
+
+						if (typeof chunk === 'object')
 							try {
 								controller.enqueue(
 									format(JSON.stringify(chunk))
@@ -398,11 +401,7 @@ export function createStreamHandler({
 							}
 						else controller.enqueue(format(chunk.toString()))
 					} catch (error) {
-						console.warn(error)
-
-						try {
-							controller.close()
-						} catch {}
+						controller.error(error)
 					}
 				},
 
@@ -417,9 +416,6 @@ export function createStreamHandler({
 }
 
 export async function* streamResponse(response: Response) {
-	// ReadableStream is async-iterable on every target runtime (verified:
-	// Bun, Node 22, Deno 2, workerd 2025). NOTE: `yield*` cancels the body on
-	// early termination, where the old getReader()+releaseLock() only released.
 	const body = response.body
 	if (body) yield* body as any
 }
@@ -428,14 +424,6 @@ export function handleSet(set: Context['set']) {
 	if (typeof set.status === 'string')
 		set.status = StatusMap[set.status as keyof typeof StatusMap]
 
-	// ? Handle `Elysia.headers` which is created in Context prototype
-	//
-	// If we assign to set.headers, it will mutate the prototype's headers
-	// which cause all responses share the same headers object
-	// A `Headers` instance also has a non-Object prototype, but `for..in` over
-	// it yields nothing/methods and would wipe the real headers (incl.
-	// Set-Cookie). Only flatten the plain object that inherits Context's
-	// shared default headers.
 	const proto = Object.getPrototypeOf(set.headers)
 	if (
 		proto !== null &&

@@ -10,7 +10,7 @@ import type { CoerceOption } from '../type/coerce'
 import { Compiled, Capture, type ValidatorSlot } from '../compile/aot'
 
 import {
-	Decode,
+	Clone,
 	Compile,
 	applyCoercions,
 	TypeBoxValidator,
@@ -150,7 +150,8 @@ export abstract class Validator {
 				const cached = tbCache.get(
 					schema,
 					options?.coerces,
-					normalizeKey
+					normalizeKey,
+					options?.models
 				)
 				if (cached) return cached
 			}
@@ -166,7 +167,13 @@ export abstract class Validator {
 			) as any
 
 			if (!isIntersectable && !skipCache && !bypassCache)
-				tbCache!.set(schema, options?.coerces, validator, normalizeKey)
+				tbCache!.set(
+					schema,
+					options?.coerces,
+					validator,
+					normalizeKey,
+					options?.models
+				)
 			return validator
 		}
 
@@ -257,29 +264,27 @@ const toStatusBased = (
 		: (schema as Record<number, AnySchema>)
 
 export class StandardValidator extends Validator {
-	private validate: (
-		value: unknown
-	) => { value: unknown } | { issues: unknown[] }
+	#validate: (value: unknown) => { value: unknown } | { issues: unknown[] }
 
 	constructor(schema: StandardSchemaV1Like) {
 		super()
 
 		// @ts-expect-error
-		this.validate = schema['~standard'].validate
+		this.#validate = schema['~standard'].validate
 	}
 
 	Check(value: unknown): boolean {
-		return 'value' in this.validate(value)
+		return 'value' in this.#validate(value)
 	}
 
 	Errors(value: unknown): TLocalizedValidationError[] {
 		// @ts-expect-error
-		return this.validate(value).issues ?? []
+		return this.#validate(value).issues ?? []
 	}
 
 	Decode(value: unknown): unknown {
 		// @ts-expect-error
-		return this.validate(value).value
+		return this.#validate(value).value
 	}
 
 	EncodeFrom(value: unknown) {
@@ -287,7 +292,7 @@ export class StandardValidator extends Validator {
 	}
 
 	From(value: unknown, type?: string): unknown {
-		const q = this.validate(value)
+		const q = this.#validate(value)
 
 		if (q instanceof Promise)
 			return q.then((resolved) => {
@@ -308,8 +313,8 @@ export class StandardValidator extends Validator {
 export class MultiValidator extends Validator {
 	override isAsync = false
 
-	private schemas: (TSchema | StandardSchemaV1Like)[]
-	private codecs: boolean[]
+	#schemas: (TSchema | StandardSchemaV1Like)[]
+	#codecs: boolean[]
 
 	constructor(
 		schema: TSchema | StandardSchemaV1Like,
@@ -339,7 +344,8 @@ export class MultiValidator extends Validator {
 					schemas[i] = Compile(
 						applyCoercions(schema, options?.coerces)
 					)
-			}
+			} else
+				this.isAsync = true
 		}
 
 		if (typeboxObjects)
@@ -349,7 +355,7 @@ export class MultiValidator extends Validator {
 				)
 			)
 
-		this.schemas = schemas
+		this.#schemas = schemas
 
 		const codecs: boolean[] = []
 		for (let i = 0; i < schemas.length; i++)
@@ -365,20 +371,45 @@ export class MultiValidator extends Validator {
 						)
 			)
 
-		this.codecs = codecs
+		this.#codecs = codecs
+	}
+
+	static #merge(
+		snapshot: Record<string, unknown> | unknown[] | undefined,
+		result: any
+	): Record<string, unknown> | unknown[] {
+		if (snapshot === undefined) return result
+		if (Array.isArray(snapshot) && Array.isArray(result)) {
+			snapshot.push(...result)
+			return snapshot
+		}
+		if (typeof snapshot === 'object' && typeof result === 'object')
+			return Object.assign(snapshot, result)
+		throw new Error('Unable to merged value with different type')
+	}
+
+	static #syncStandard(schema: StandardSchemaV1Like, value: unknown) {
+		// @ts-expect-error
+		const q = schema['~standard'].validate(value)
+		if (q instanceof Promise)
+			throw new Error(
+				'[Elysia] An asynchronous Standard Schema was used where only synchronous validation is supported. Use it on an HTTP route body/query/etc (which awaits), not on a synchronous path such as WebSocket message validation.'
+			)
+
+		return q
 	}
 
 	Check(value: unknown): boolean {
-		for (let i = 0; i < this.schemas.length; i++) {
-			const validator = this.schemas[i]
+		for (let i = 0; i < this.#schemas.length; i++) {
+			const validator = this.#schemas[i]
 
 			if ('~standard' in validator) {
-				// @ts-expect-error
-				if (validator['~standard'].validate(value).issues) return false
+				if (MultiValidator.#syncStandard(validator, value).issues)
+					return false
 				continue
 			}
 
-			if (!this.codecs[i]) {
+			if (!this.#codecs[i]) {
 				if (!(validator as TypeBoxValidator).Check(value)) return false
 				continue
 			}
@@ -396,10 +427,12 @@ export class MultiValidator extends Validator {
 	Errors(value: unknown): TLocalizedValidationError[] {
 		const errors: TLocalizedValidationError[] = []
 
-		for (const schema of this.schemas)
+		for (const schema of this.#schemas)
 			if ('~standard' in schema) {
-				// @ts-expect-error
-				const issues = schema['~standard'].validate(value).issues
+				const issues = MultiValidator.#syncStandard(
+					schema,
+					value
+				).issues
 				if (issues) errors.push(...issues)
 			} else errors.push(...(schema as TypeBoxValidator).Errors(value))
 
@@ -407,83 +440,120 @@ export class MultiValidator extends Validator {
 	}
 
 	Decode(value: unknown): unknown {
-		let snapshot: Record<string, unknown> | unknown[]
+		let snapshot: Record<string, unknown> | unknown[] | undefined
 
-		for (let i = 0; i < this.schemas.length; i++) {
-			const validator = this.schemas[i]
+		for (let i = 0; i < this.#schemas.length; i++) {
+			const validator = this.#schemas[i]
 
-			const result =
+			snapshot = MultiValidator.#merge(
+				snapshot,
 				'~standard' in validator
-					? // @ts-expect-error
-						validator['~standard'].validate(value).value
-					: Decode(
-							(
-								validator as unknown as CompiledTypeBoxValidator
-							).Type(),
+					? MultiValidator.#syncStandard(validator, value).value
+					: this.#decodeMember(
+							validator as TypeBoxValidator,
+							i,
 							value
 						)
-
-			if (snapshot! === undefined) snapshot = result
-			else if (Array.isArray(snapshot) && Array.isArray(result))
-				snapshot.push(...result)
-			else if (typeof snapshot === 'object' && typeof result === 'object')
-				snapshot = Object.assign(snapshot, result)
-			else throw new Error('Unable to merged value with different type')
+			)
 		}
 
 		return snapshot!
+	}
+
+	#decodeMember(validator: TypeBoxValidator, index: number, value: unknown) {
+		const v = this.#cloneForMember(value)
+		return this.#codecs[index]
+			? (validator as any).Clean((validator as any).Decode(v))
+			: (validator as any).Clean(v)
+	}
+
+	#cloneForMember(value: unknown) {
+		return this.#schemas.length > 1 &&
+			value !== null &&
+			typeof value === 'object'
+			? Clone(value)
+			: value
 	}
 
 	EncodeFrom(value: unknown) {
 		return this.From(value)
 	}
 
-	From(value: unknown, type?: string): unknown {
-		let snapshot: Record<string, unknown> | unknown[]
+	#fromTypeBox(
+		validator: TypeBoxValidator,
+		index: number,
+		value: unknown,
+		type?: string
+	): unknown {
+		if (this.#codecs[index]) {
+			try {
+				return (validator as any).Clean(
+					(validator as any).Decode(this.#cloneForMember(value))
+				)
+			} catch {
+				throw new ValidationError(
+					type,
+					value,
+					(validator as TypeBoxValidator).Errors(value)
+				)
+			}
+		}
 
-		for (let i = 0; i < this.schemas.length; i++) {
-			const validator = this.schemas[i]
+		if (!(validator as TypeBoxValidator).Check(value))
+			throw new ValidationError(
+				type,
+				value,
+				(validator as TypeBoxValidator).Errors(value)
+			)
 
-			let result
+		return (validator as any).Clean(this.#cloneForMember(value))
+	}
+
+	From(value: unknown, type?: string): MaybePromise<unknown> {
+		return this.#fromLoop(value, 0, undefined, type)
+	}
+
+	#fromLoop(
+		value: unknown,
+		start: number,
+		snapshot: Record<string, unknown> | unknown[] | undefined,
+		type?: string
+	): MaybePromise<unknown> {
+		for (let i = start; i < this.#schemas.length; i++) {
+			const validator = this.#schemas[i]
+
 			if ('~standard' in validator) {
 				// @ts-expect-error
 				const q = validator['~standard'].validate(value)
 
-				if (!(q instanceof Promise) && q.issues)
-					throw new ValidationError(type, value, q.issues)
+				if (q instanceof Promise)
+					// eslint-disable-next-line sonarjs/function-inside-loop
+					return q.then((resolved: any) => {
+						if (resolved.issues)
+							throw new ValidationError(
+								type,
+								value,
+								resolved.issues
+							)
 
-				result = q.value
-			} else {
-				if (this.codecs[i]) {
-					// decode-as-gate, see Check
-					try {
-						;(validator as TypeBoxValidator).Decode(value)
-					} catch {
-						throw new ValidationError(
-							type,
+						return this.#fromLoop(
 							value,
-							(validator as TypeBoxValidator).Errors(value)
+							i + 1,
+							MultiValidator.#merge(snapshot, resolved.value),
+							type
 						)
-					}
-				} else if (!(validator as TypeBoxValidator).Check(value))
-					throw new ValidationError(
-						type,
-						value,
-						(validator as TypeBoxValidator).Errors(value)
-					)
+					})
 
-				result = Decode(
-					(validator as unknown as CompiledTypeBoxValidator).Type(),
-					value
-				)
+				if (q.issues) throw new ValidationError(type, value, q.issues)
+
+				snapshot = MultiValidator.#merge(snapshot, q.value)
+				continue
 			}
 
-			if (snapshot! === undefined) snapshot = result
-			else if (Array.isArray(snapshot) && Array.isArray(result))
-				snapshot.push(...result)
-			else if (typeof snapshot === 'object' && typeof result === 'object')
-				snapshot = Object.assign(snapshot, result)
-			else throw new Error('Unable to merged value with different type')
+			snapshot = MultiValidator.#merge(
+				snapshot,
+				this.#fromTypeBox(validator as TypeBoxValidator, i, value, type)
+			)
 		}
 
 		return snapshot!

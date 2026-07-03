@@ -19,7 +19,6 @@ export function Intersect<T extends TSchema[]>(
 			noEnumerable
 		) as any
 
-	options['~kind'] = 'Intersect'
-	options.allOf = schemas
-	return Object.defineProperty(options, '~kind', noEnumerable) as any
+	const schema = { ...options, '~kind': 'Intersect', allOf: schemas }
+	return Object.defineProperty(schema, '~kind', noEnumerable) as any
 }

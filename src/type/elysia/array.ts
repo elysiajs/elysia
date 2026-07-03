@@ -27,9 +27,8 @@ export function ArrayType<T extends TSchema>(
 		enumerable: false
 	}
 
-	Object.defineProperty(options, '~kind', arrayKind)
-	options.type = 'array'
-	options.items = items
+	const schema: any = { ...options, type: 'array', items }
+	Object.defineProperty(schema, '~kind', arrayKind)
 
-	return options as any
+	return schema
 }

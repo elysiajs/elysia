@@ -449,6 +449,294 @@ describe('async-cliff: sync afterResponse behaviour', () => {
 	})
 })
 
+// C7/H21/M2 — the async-inference contract (design/codegen-async-contract.md).
+//
+// Elysia never forces a lifecycle hook async, so a SYNC hook/handler may still
+// *return* a Promise. Codegen must (1) drive the route async when the source
+// heuristic flags such a fn, (2) emit a runtime `instanceof Promise` await
+// guard after each sync hook in an async route (safety-net for heuristic
+// false-negatives), and (3) await `_r` before afterHandle/mapResponse/response
+// -validator observe it. A silently-returned `[object Promise]` is the bug.
+describe('async-cliff: sync fn returning a Promise (C7/H21/M2)', () => {
+	// (a) C7 — a SYNC beforeHandle that returns a Promise must early-return its
+	// RESOLVED value and skip the handler, matching an async beforeHandle. Before
+	// the fix the un-awaited Promise became `_r` and short-circuited the handler,
+	// serialising `[object Promise]` as the response.
+	it('sync beforeHandle returning a Promise resolves + skips the handler', async () => {
+		let handlerRan = false
+		const app = new Elysia().get(
+			'/',
+			{
+				// sync arrow, returns a Promise resolving to a response value
+				beforeHandle: () => Promise.resolve('short') as any
+			},
+			() => {
+				handlerRan = true
+				return 'handler'
+			}
+		)
+
+		// C7 forcing: the heuristic flags the sync beforeHandle → route is async
+		expect(isAsync(app)).toBe(true)
+
+		const res = await app.handle(req('/'))
+		await expect(res.text()).resolves.toBe('short')
+		// handler-skip semantics match standard async-beforeHandle short-circuit
+		expect(handlerRan).toBe(false)
+	})
+
+	// (b) H21 — a SYNC handler returning a Promise + a SYNC afterHandle: the
+	// afterHandle must observe the RESOLVED value, not the Promise. Before the
+	// fix `_r` stayed a Promise (route was sync, only the error path was chained)
+	// so afterHandle saw `[object Promise]`.
+	it('sync handler returning a Promise: sync afterHandle sees the resolved value', async () => {
+		let seen: unknown
+		const app = new Elysia().get(
+			'/',
+			{
+				afterHandle: ({ responseValue }: any) => {
+					seen = responseValue
+					return `wrapped:${responseValue}`
+				}
+			},
+			// sync handler, returns a Promise resolving to a plain value
+			() => Promise.resolve('value') as any
+		)
+
+		// H21 forcing: handler may return a Promise + afterHandle observes it
+		expect(isAsync(app)).toBe(true)
+
+		const res = await app.handle(req('/'))
+		await expect(res.text()).resolves.toBe('wrapped:value')
+		expect(seen).toBe('value')
+	})
+
+	// (b') same for a SYNC mapResponse observing the resolved handler value
+	it('sync handler returning a Promise: sync mapResponse sees the resolved value', async () => {
+		const app = new Elysia().get(
+			'/',
+			{
+				mapResponse: ({ responseValue }: any) =>
+					new Response(`mapped:${responseValue}`)
+			},
+			() => Promise.resolve('value') as any
+		)
+
+		expect(isAsync(app)).toBe(true)
+		const res = await app.handle(req('/'))
+		await expect(res.text()).resolves.toBe('mapped:value')
+	})
+
+	// (c) M2 — a genuinely minified `=>x` handler (no space after `=>`, as a
+	// bundler emits) with a response validator must validate correctly. Test
+	// source in bun is re-tokenised (a space is re-inserted), so the minified
+	// arrow is built via `eval` to preserve the verbatim `=>c` in `.toString()`.
+	it('minified `=>x` handler with a response validator validates', async () => {
+		// eslint-disable-next-line no-eval
+		const minified = (0, eval)('(c)=>c.query.n') as (c: any) => unknown
+		expect(minified.toString()).toContain('=>c') // truly no space
+
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({ n: t.String() }),
+				response: t.String()
+			},
+			minified
+		)
+
+		const ok = await app.handle(req('/?n=hi'))
+		expect(ok.status).toBe(200)
+		await expect(ok.text()).resolves.toBe('hi')
+	})
+
+	// (c') M2 — a minified `=>x` handler that returns a Promise-producing
+	// identifier must be awaited before response validation (heuristic must fire
+	// on the no-space arrow). `p` is a Promise; without the `\s*` fix the route
+	// stays sync and the validator sees a Promise.
+	it('minified `=>x` handler returning a Promise-producing identifier is awaited', async () => {
+		// eslint-disable-next-line no-eval
+		const minified = (0, eval)('(c)=>c.store.p') as (c: any) => unknown
+		expect(minified.toString()).toContain('=>c')
+
+		const app = new Elysia()
+			.state('p', Promise.resolve('deferred'))
+			.get(
+				'/',
+				{ response: t.String() },
+				minified as any
+			)
+
+		// heuristic sees the identifier-return → responseValiForcesAsync fires
+		expect(isAsync(app)).toBe(true)
+		const res = await app.handle(req('/'))
+		expect(res.status).toBe(200)
+		await expect(res.text()).resolves.toBe('deferred')
+	})
+
+	// (d) sync-emission pin — a PROVABLY-sync route (sync handler with a plain
+	// value, sync hooks whose returns provably can't be a Promise) still emits a
+	// plain Function. The forcing additions must not drag a genuinely-sync route
+	// onto the async path.
+	//
+	// NOTE: this pin previously included `afterHandle: ({response}) => response`
+	// and asserted sync. That was the C7 hole (see the identifier-observed tests
+	// below): a pass-through hook returning a bare identifier CAN hold a Promise,
+	// and in a sync route its raw Promise was silently assigned to `_r`. The
+	// fix makes beforeHandle/afterHandle/mapResponse observe the identifier
+	// heuristic, so a `=> identifier` afterHandle now forces async (a
+	// false-positive costs perf only — the contract's mandated failure
+	// direction). This pin now uses hook returns neither heuristic can flag
+	// (empty block / object literal) so it genuinely stays sync.
+	it('provably-sync handler + sync hooks stay a plain Function', () => {
+		const app = new Elysia().get(
+			'/',
+			{
+				// none of these returns can be a Promise the heuristic sees:
+				// empty block + object literal → mayReturnPromise/Identifier miss
+				beforeHandle: () => {},
+				afterHandle: () => {},
+				transform: () => {}
+			},
+			() => ({ ok: 1 })
+		)
+
+		expect(isAsync(app)).toBe(false)
+	})
+
+	// (d0) C7 identifier hole — a bare-identifier beforeHandle (`=> p`) holding a
+	// Promise must force the route async, resolve the hook, and (since the hook
+	// resolved to undefined) run the handler. Before the fix the un-awaited
+	// Promise became a defined `_r`, silently skipping the handler and
+	// serialising "" (the exact Codex repro). Pins both emission and wire.
+	it('bare-identifier beforeHandle returning a Promise forces async and runs the handler', async () => {
+		const p = Promise.resolve(undefined)
+		let handlerRan = false
+		const app = new Elysia().get(
+			'/',
+			{ beforeHandle: () => p },
+			() => {
+				handlerRan = true
+				return 'ok'
+			}
+		)
+
+		// identifier heuristic on an observed-result hook → route async
+		expect(isAsync(app)).toBe(true)
+
+		const res = await app.handle(req('/'))
+		expect(res.status).toBe(200)
+		// hook resolved to undefined → handler runs, its value is the response
+		await expect(res.text()).resolves.toBe('ok')
+		expect(handlerRan).toBe(true)
+	})
+
+	// (d0') a bare-identifier beforeHandle resolving to a DEFINED value must
+	// short-circuit the handler with the RESOLVED value (parity with an async
+	// beforeHandle), not the raw Promise.
+	it('bare-identifier beforeHandle Promise resolving to a value short-circuits with the resolved value', async () => {
+		const p = Promise.resolve('short')
+		let handlerRan = false
+		const app = new Elysia().get(
+			'/',
+			{ beforeHandle: () => p },
+			() => {
+				handlerRan = true
+				return 'handler'
+			}
+		)
+
+		expect(isAsync(app)).toBe(true)
+		const res = await app.handle(req('/'))
+		await expect(res.text()).resolves.toBe('short')
+		expect(handlerRan).toBe(false)
+	})
+
+	// (d0'') afterHandle observing a bare-identifier Promise: the resolved value
+	// (not `[object Promise]`) must reach the wire.
+	it('bare-identifier afterHandle returning a Promise is resolved before it becomes the response', async () => {
+		const p = Promise.resolve('wrapped')
+		const app = new Elysia().get(
+			'/',
+			{ afterHandle: () => p as any },
+			() => 'orig'
+		)
+
+		expect(isAsync(app)).toBe(true)
+		const res = await app.handle(req('/'))
+		await expect(res.text()).resolves.toBe('wrapped')
+	})
+
+	// (d0''') mapResponse observing a bare-identifier Promise resolving to a
+	// Response.
+	it('bare-identifier mapResponse returning a Promise is resolved before it becomes the response', async () => {
+		const p = Promise.resolve(new Response('mapped'))
+		const app = new Elysia().get(
+			'/',
+			{ mapResponse: () => p as any },
+			() => 'orig'
+		)
+
+		expect(isAsync(app)).toBe(true)
+		const res = await app.handle(req('/'))
+		await expect(res.text()).resolves.toBe('mapped')
+	})
+
+	// (d0'''') pass-through `=> response` afterHandle: now forces async (the
+	// identifier heuristic can't prove the identifier isn't a Promise), but its
+	// WIRE behaviour must stay correct — the response passes through unchanged.
+	// This is the contract's mandated failure direction: a false-positive costs
+	// async-route perf, never a wrong value.
+	it('pass-through `=> response` afterHandle stays wire-correct (forces async)', async () => {
+		const app = new Elysia().get(
+			'/',
+			{ afterHandle: ({ response }: any) => response },
+			() => 'passthru'
+		)
+
+		expect(isAsync(app)).toBe(true)
+		const res = await app.handle(req('/'))
+		expect(res.status).toBe(200)
+		await expect(res.text()).resolves.toBe('passthru')
+	})
+
+	// (d0''''') transform's return is DISCARDED, so a bare-identifier transform
+	// holding a Promise cannot corrupt the response — it stays on the narrow
+	// call heuristic and does NOT force async. Pins that transform was correctly
+	// excluded from the identifier heuristic (perf: no async frame for a hook
+	// whose return is never read).
+	it('bare-identifier transform stays sync (return is discarded)', async () => {
+		const p = Promise.resolve('unused')
+		let handlerRan = false
+		const app = new Elysia().get(
+			'/',
+			{ transform: () => p as any },
+			() => {
+				handlerRan = true
+				return 'ok'
+			}
+		)
+
+		expect(isAsync(app)).toBe(false)
+		const res = await app.handle(req('/'))
+		await expect(res.text()).resolves.toBe('ok')
+		expect(handlerRan).toBe(true)
+	})
+
+	// (d') the async-route safety-net guard is emitted for a sync hook: source
+	// must contain the `instanceof Promise` await guard on `tmp`.
+	it('async route emits an instanceof-Promise await guard for a sync beforeHandle', () => {
+		const app = new Elysia().get(
+			'/',
+			{ beforeHandle: () => Promise.resolve('x') as any },
+			() => 'hi'
+		)
+
+		const { source } = compileRoute(app)
+		expect(source).toContain('tmp instanceof Promise')
+	})
+})
+
 // The new sync emissions (F1 `pcrs`, F23 `_ce` IIFE, F24 `_fin`/`_fin2` IIFE)
 // must reconstruct through the frozen-handler path (Compiled.handlers) — the
 // build captures `{alias, code}` and binds the factory instead of eval'ing it

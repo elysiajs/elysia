@@ -209,6 +209,77 @@ describe('idx15 — captured header extraction is runtime portable', () => {
 })
 
 /**
+ * M15 — `compile()` must force the fetch handler to rebuild. Once the fetch
+ * handler exists (first request or `.fetch` access) it is memoised in
+ * `#fetchFn`, so on the non-capture path `compile()` used to clear `#fetchFn`
+ * ONLY under `Capture.isCapturing()`. A route added after the first request
+ * then 404'd forever, even after an explicit `compile()`.
+ *
+ * The rebuild must stay safe for an already-listening server: `Bun.serve`
+ * closes over the fetch handler captured at `listen()` time, and that closure
+ * closes over the `~map` / `~router` objects. Because the rebuild repopulates
+ * those SAME objects in place, the pre-compile closure keeps serving and now
+ * sees the newly added routes too.
+ */
+describe('M15 — compile() rebuilds so routes added after first request serve', () => {
+	it('a route added after the first request responds 200 after compile()', async () => {
+		const app = new Elysia().get('/a', () => 'a')
+
+		// First request builds + memoises the fetch handler.
+		expect((await app.handle(req('/a'))).status).toBe(200)
+
+		app.get('/b', () => 'b')
+
+		// Before compile the new route is not wired into the built router.
+		expect((await app.handle(req('/b'))).status).toBe(404)
+
+		app.compile()
+
+		const res = await app.handle(req('/b'))
+		// Pre-fix: still 404 — compile() was a no-op because #fetchFn existed.
+		expect(res.status).toBe(200)
+		await expect(res.text()).resolves.toBe('b')
+
+		// The original route must not regress.
+		expect((await app.handle(req('/a'))).status).toBe(200)
+	})
+
+	it('a fetch reference captured BEFORE compile() serves the new route (Bun.serve safety)', async () => {
+		const app = new Elysia().get('/a', () => 'a')
+
+		// Simulate the reference Bun.serve holds after listen(): the fetch
+		// closure captured before any new route / compile().
+		const capturedFetch = app.fetch
+		expect((await capturedFetch(req('/a'))).status).toBe(200)
+
+		app.get('/b', () => 'b')
+		app.compile()
+
+		// The pre-compile closure closes over the same ~map/~router objects that
+		// the rebuild repopulated in place, so it now serves the new route.
+		const res = await capturedFetch(req('/b'))
+		expect(res.status).toBe(200)
+		await expect(res.text()).resolves.toBe('b')
+
+		// And the original route still works through the old closure.
+		expect((await capturedFetch(req('/a'))).status).toBe(200)
+	})
+
+	it('works for dynamic routes added after the first request', async () => {
+		const app = new Elysia().get('/u/:id', ({ params }: any) => params.id)
+		const capturedFetch = app.fetch
+		expect((await capturedFetch(req('/u/1'))).status).toBe(200)
+
+		app.get('/v/:id', ({ params }: any) => 'v' + params.id)
+		app.compile()
+
+		const res = await capturedFetch(req('/v/9'))
+		expect(res.status).toBe(200)
+		await expect(res.text()).resolves.toBe('v9')
+	})
+})
+
+/**
  * idx52 — applyHook returned the caller's `localHook` by reference on the
  * rootHook-less path, then compileHandler mutated it in place (promoteDerive
  * moves `derive`→`beforeHandle`, `parse` is arrayified). A hook-options object

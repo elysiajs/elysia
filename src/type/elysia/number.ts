@@ -8,7 +8,6 @@ const emptyNumber = Object.freeze(Number())
 export function NumberType(options?: TNumberOptions): TNumber {
 	if (!options || isEmpty(options)) return emptyNumber
 
-	options.type = 'number'
-	options['~kind'] = 'Number'
-	return Object.defineProperty(options, '~kind', noEnumerable) as any
+	const schema = { ...options, type: 'number', '~kind': 'Number' }
+	return Object.defineProperty(schema, '~kind', noEnumerable) as any
 }
