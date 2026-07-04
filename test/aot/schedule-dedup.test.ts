@@ -8,7 +8,7 @@ import { req } from '../utils'
 /**
  * Schedule-block dedup harness (F10).
  *
- * The afterResponse/trace SCHEDULE block (`c._arf=true` + `setImmediate(async
+ * The afterResponse/trace SCHEDULE block (`c._arf=true` + `queueMicrotask(async
  * () => { ... drain ... afterResponse spans ... })`) used to be concatenated
  * verbatim at the success return, once per error hook inside the catch, and in
  * the catch fallbacks — up to 5 identical copies in a single function, all
@@ -49,9 +49,9 @@ describe('F10: schedule block is emitted once on trace+error routes', () => {
 
 		const { source } = compileRoute(app)
 
-		// the schedule block body (setImmediate closure) appears exactly once
+		// the schedule block body (queueMicrotask closure) appears exactly once
 		expect(count(source, 'function _sc(){')).toBe(1)
-		expect(count(source, 'setImmediate(async()=>{')).toBe(1)
+		expect(count(source, 'queueMicrotask(async()=>{')).toBe(1)
 
 		// it is called at every return path: success + 3 error hooks + fallback
 		expect(count(source, '_sc()')).toBeGreaterThanOrEqual(5)
@@ -75,7 +75,7 @@ describe('F10: schedule block is emitted once on trace+error routes', () => {
 		)
 
 		const { source } = compileRoute(app)
-		expect(count(source, 'setImmediate(async()=>{')).toBe(1)
+		expect(count(source, 'queueMicrotask(async()=>{')).toBe(1)
 		expect(count(source, 'function _sc(){')).toBe(1)
 	})
 })

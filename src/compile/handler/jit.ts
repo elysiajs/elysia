@@ -501,7 +501,7 @@ export function compileHandlerJit({
 			? `_r=h(c)\nif(_r instanceof Promise)_r=await _r\n`
 			: `_r=${isAsync ? 'await ' : ''}h(c)\n`
 		: isStaticResponse
-			? `_r=h.clone()\n`
+			? `_r=cr(h)\n`
 			: isPromiseHandler
 				? `_r=h.then(cr)\n`
 				: `_r=h\n`
@@ -673,12 +673,12 @@ export function compileHandlerJit({
 		? (link(res.map, 'rm') ?? 'rm')
 		: (link(res.compact ?? res.map, 'rc') ?? 'rc')
 
-	if (isPromiseHandler) link(cloneResponse, 'cr')
+	if (isStaticResponse || isPromiseHandler) link(cloneResponse, 'cr')
 
 	const handleInstruction = isHandleFunction
 		? 'h(c)'
 		: isStaticResponse
-			? 'h.clone()'
+			? 'cr(h)'
 			: isPromiseHandler
 				? 'h.then(cr)'
 				: 'h'
@@ -705,16 +705,10 @@ export function compileHandlerJit({
 			})()
 		: ''
 
-	const setImmediateFn = Capture.isCapturing()
-		? ";(typeof setImmediate==='function'?setImmediate:(f)=>Promise.resolve().then(f))"
-		: typeof setImmediate === 'function'
-			? 'setImmediate'
-			: 'Promise.resolve().then'
-
 	const scheduleAfterResponse =
 		hasAfterResponse || hasTrace
 			? `c._arf=true\n` +
-				`${setImmediateFn}(async()=>{` +
+				`queueMicrotask(async()=>{` +
 				// tee branches rethrow a source error (matching direct
 				// iteration); the afterResponse listener only awaits
 				// completion, so swallow it here — the trace drain below

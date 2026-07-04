@@ -26,7 +26,6 @@ import {
 	coalesceStandaloneSchemas,
 	createErrorEventHandler,
 	eventProperties,
-	flattenChain,
 	fnOrigin,
 	fnv1a,
 	getLoosePath,
@@ -128,12 +127,6 @@ import type { ElysiaStatus } from './error'
 import type { Context, LifecycleContext, ErrorContext } from './context'
 
 const useNodesBuffer: ChainNode[] = []
-
-// `resolve` was removed in Elysia 2 (use `derive`). A `resolve` key on a
-// guard/route hook object or a macro definition body would otherwise be
-// silently dropped — auth context vanishes without error (M13). Fail loud.
-const removedResolveError = () =>
-	new Error(`[Elysia] resolve was removed in Elysia 2 — use derive instead`)
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
 
@@ -2988,20 +2981,7 @@ export class Elysia<
 	}
 
 	#guard(scope: EventScope, hook: Partial<AnyLocalHook>): this {
-		// `guard({ as })` was a v1 scoping pattern; in v2 the scope is a
-		// positional argument (`.guard(scope, hook)` / `.as(scope)`) and an
-		// `as` key on the hook object is silently ignored — a silent
-		// auth-scope downgrade. Fail loud instead.
-		if (hook && 'as' in hook)
-			throw new Error(
-				`[Elysia] guard({ as }) was removed in Elysia 2 — use .guard(scope, hook) or .as(scope) instead`
-			)
-
-		if (hook && 'resolve' in hook) throw removedResolveError()
-
 		hookToGuard(hook as any)
-
-		// `hook.derive` is folded + tagged by `#pushHook` below.
 
 		const trackFn = (fn: unknown) => {
 			if (typeof fn !== 'function') return
@@ -3477,12 +3457,8 @@ export class Elysia<
 		const baseline = this.#macroBaseline
 
 		for (const key in macro) {
-			if (typeof macro[key] === 'object') {
-				if (macro[key] && 'resolve' in (macro[key] as object))
-					throw removedResolveError()
-
+			if (typeof macro[key] === 'object')
 				macro[key] = hookToGuard(macro[key] as any) as any
-			}
 
 			if (this.#hash !== undefined && !macroOrigin.has(macro[key] as any))
 				macroOrigin.set(macro[key] as any, this.#hash)
@@ -3533,11 +3509,6 @@ export class Elysia<
 				delete (input as any)[key]
 				continue
 			}
-
-			// Function-form macros produce their hook body lazily, so the
-			// registration-time check in `.macro()` can't see it — a
-			// `resolve` key would silently vanish (M13). Fail loud here.
-			if (isFunction && 'resolve' in hook) throw removedResolveError()
 
 			if (isFunction) {
 				const seedSource = hook.seed ?? value
@@ -4458,8 +4429,6 @@ export class Elysia<
 			throw new Error(
 				`Elysia 2 route signature is (path, hook, handler) — received ${typeof hook} in the hook position for "${method} ${path}". Did you use the Elysia 1 order (path, handler, hook)?`
 			)
-
-		if (hook && 'resolve' in hook) throw removedResolveError()
 
 		if (this['~Prefix']) path = joinPath(this['~Prefix'], path)
 		else if (path && path.charCodeAt(0) !== 47) path = '/' + path

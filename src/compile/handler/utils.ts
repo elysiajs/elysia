@@ -1,4 +1,5 @@
 import { isAsyncFunction } from '../utils'
+import { markResponseTransferable } from '../../adapter/utils'
 import { ElysiaStatus } from '../../error'
 import { ELYSIA_TYPES } from '../../type/constants'
 
@@ -21,7 +22,7 @@ const childName = (fn: unknown) =>
 const noTrace = { begin: '', end: () => '' } as const
 
 export const cloneResponse = (r: unknown) =>
-	r instanceof Response ? r.clone() : r
+	r instanceof Response ? markResponseTransferable(r.clone()) : r
 
 export function hasRequestBody(request: Request) {
 	const length = request.headers.get('content-length')

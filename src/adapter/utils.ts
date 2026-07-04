@@ -9,6 +9,13 @@ const setCookie = 'set-cookie' as const
 
 const textEncoder = new TextEncoder()
 const encodeChunk = (s: string): Uint8Array => textEncoder.encode(s)
+const transferableResponses = new WeakSet<object>()
+
+export function markResponseTransferable<T extends object>(response: T): T {
+	transferableResponses.add(response)
+
+	return response
+}
 
 export function handleFile(
 	response: File | Blob,
@@ -321,18 +328,36 @@ export function createStreamHandler({
 				: (generator as any)[Symbol.asyncIterator]()
 
 		let end = false
+		const signal = request?.signal
+		let onAbort: (() => void) | undefined
+
+		const cleanupAbort = () => {
+			if (signal && onAbort) {
+				signal.removeEventListener('abort', onAbort)
+				onAbort = undefined
+			}
+		}
 
 		return new Response(
 			new ReadableStream({
 				async start(controller) {
-					request?.signal?.addEventListener('abort', () => {
-						end = true
-						iterator.return?.()
+					if (signal) {
+						onAbort = () => {
+							cleanupAbort()
+							end = true
+							iterator.return?.()
 
-						try {
-							controller.close()
-						} catch {}
-					})
+							try {
+								controller.close()
+							} catch {}
+						}
+
+						if (signal.aborted) onAbort()
+						else
+							signal.addEventListener('abort', onAbort, {
+								once: true
+							})
+					}
 
 					if (
 						!init ||
@@ -374,6 +399,7 @@ export function createStreamHandler({
 						try {
 							controller.close()
 						} catch {}
+						cleanupAbort()
 						return
 					}
 
@@ -384,6 +410,7 @@ export function createStreamHandler({
 							try {
 								controller.close()
 							} catch {}
+							cleanupAbort()
 							return
 						}
 
@@ -414,12 +441,14 @@ export function createStreamHandler({
 								encodeChunk(format(chunk.toString()))
 							)
 					} catch (error) {
+						cleanupAbort()
 						controller.error(error)
 					}
 				},
 
 				cancel() {
 					end = true
+					cleanupAbort()
 					iterator.return?.()
 				}
 			}),
@@ -538,11 +567,17 @@ export function createResponseHandler(handler: CreateHandlerParameter) {
 				return response
 		}
 
-		const cloned = response.clone()
-		const body =
-			cloned.body && response.body
-				? cancelPropagatingBody(cloned.body, response.body)
-				: cloned.body
+		let body = response.body
+
+		if (transferableResponses.has(response) && !response.bodyUsed)
+			transferableResponses.delete(response)
+		else {
+			const cloned = response.clone()
+			body =
+				cloned.body && response.body
+					? cancelPropagatingBody(cloned.body, response.body)
+					: cloned.body
+		}
 
 		const newResponse = new Response(
 			body,
