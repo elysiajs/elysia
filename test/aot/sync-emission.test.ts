@@ -259,9 +259,8 @@ describe('async-cliff: sync routes emit plain Function', () => {
 		expect(res.status).toBe(200)
 	})
 
-	// F25 — StandardValidator stays conservatively async (its From may return a
-	// Promise; no per-request probing yet)
-	it('StandardValidator query stays AsyncFunction', () => {
+	// F25 — sync StandardValidator no longer forces async route emission.
+	it('sync StandardValidator query is a plain Function', async () => {
 		const fakeStd = {
 			'~standard': {
 				version: 1,
@@ -277,7 +276,32 @@ describe('async-cliff: sync routes emit plain Function', () => {
 			({ query }) => query
 		)
 
+		expect(isAsync(app)).toBe(false)
+		const res = await app.handle(req('/?q=hi'))
+		expect(res.status).toBe(200)
+		await expect(res.json()).resolves.toEqual({ q: 'hi' })
+	})
+
+	it('async StandardValidator query stays AsyncFunction', async () => {
+		const fakeStd = {
+			'~standard': {
+				version: 1,
+				vendor: 'x',
+				validate: async (v: any) => ({ value: v })
+			}
+		}
+		const app = new Elysia().get(
+			'/',
+			{
+				query: fakeStd as any
+			},
+			({ query }) => query
+		)
+
 		expect(isAsync(app)).toBe(true)
+		const res = await app.handle(req('/?q=hi'))
+		expect(res.status).toBe(200)
+		await expect(res.json()).resolves.toEqual({ q: 'hi' })
 	})
 
 	// F46 — POST+body sync handler emits the conditional-await, not `await h(c)`

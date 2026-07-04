@@ -229,6 +229,12 @@ function parse(
 const isAsyncValidator = (vali: Validator | undefined) =>
 	(vali as Validator | undefined)?.isAsync ?? true
 
+const mayReturnPromiseValidator = (vali: Validator | undefined) =>
+	(vali as Validator | undefined)?.mayReturnPromise === true
+
+const fromArgs = (type: string, isAsync: boolean) =>
+	`'${type}'${isAsync ? ',true' : ''}`
+
 const createInlineHandler = (
 	map: (value: unknown, ...rest: unknown[]) => unknown,
 	h: (context: Context) => unknown
@@ -323,7 +329,9 @@ export function compileHandlerJit({
 			(parseLength > 0 || inference.body) &&
 			parseFirst !== 'none')
 
-	const bodyValiIsAsync = hasBody && isAsyncValidator(vali?.body)
+	const bodyValiIsAsync =
+		hasBody &&
+		(isAsyncValidator(vali?.body) || mayReturnPromiseValidator(vali?.body))
 	const headersValiIsAsync = vali?.headers && isAsyncValidator(vali?.headers)
 	const paramsValiIsAsync = vali?.params && isAsyncValidator(vali?.params)
 	const queryValiIsAsync = vali?.query && isAsyncValidator(vali?.query)
@@ -602,22 +610,22 @@ export function compileHandlerJit({
 
 	if (vali?.body) {
 		link(vali, 'va')
-		code += `c.body=${bodyValiIsAsync ? 'await ' : ''}va.body.From(c.body,'body')\n`
+		code += `c.body=${bodyValiIsAsync ? 'await ' : ''}va.body.From(c.body,${fromArgs('body', bodyValiIsAsync)})\n`
 	}
 
 	if (vali?.headers) {
 		link(vali, 'va')
-		code += `c.headers=${headersValiIsAsync ? 'await ' : ''}va.headers.From(c.headers,'headers')\n`
+		code += `c.headers=${headersValiIsAsync ? 'await ' : ''}va.headers.From(c.headers,${fromArgs('headers', !!headersValiIsAsync)})\n`
 	}
 
 	if (vali?.params) {
 		link(vali, 'va')
-		code += `c.params=${paramsValiIsAsync ? 'await ' : ''}va.params.From(c.params,'params')\n`
+		code += `c.params=${paramsValiIsAsync ? 'await ' : ''}va.params.From(c.params,${fromArgs('params', !!paramsValiIsAsync)})\n`
 	}
 
 	if (vali?.query) {
 		link(vali, 'va')
-		code += `c.query=${queryValiIsAsync ? 'await ' : ''}va.query.From(c.query,'query')\n`
+		code += `c.query=${queryValiIsAsync ? 'await ' : ''}va.query.From(c.query,${fromArgs('query', !!queryValiIsAsync)})\n`
 	}
 
 	if (cookieConfig) {
@@ -639,7 +647,7 @@ export function compileHandlerJit({
 			link(vali, 'va')
 
 			const cookieIsOptional = !!(hook?.cookie as any)?.['~optional']
-			const validateExpr = `_ck=${cookieValidIsAsync ? 'await ' : ''}va.cookie.From(_ck,'cookie')\n`
+			const validateExpr = `_ck=${cookieValidIsAsync ? 'await ' : ''}va.cookie.From(_ck,${fromArgs('cookie', !!cookieValidIsAsync)})\n`
 			if (cookieIsOptional)
 				code += `if(Object.keys(_ck).length){${validateExpr}}\n`
 			else code += validateExpr

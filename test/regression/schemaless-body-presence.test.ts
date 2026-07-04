@@ -46,6 +46,20 @@ describe('schema-less body presence gate', () => {
 		expect(await res.json()).toEqual(json)
 	})
 
+	it('parses a Transfer-Encoding framed body without Content-Length', async () => {
+		const res = await app.handle(
+			new Request('http://e.ly/json', {
+				method: 'POST',
+				headers: {
+					'content-type': 'application/json',
+					'transfer-encoding': 'chunked'
+				},
+				body
+			})
+		)
+		expect(await res.json()).toEqual(json)
+	})
+
 	it('a bodyless POST (Content-Length: 0) is graceful, not a 4xx', async () => {
 		const res = await app.handle(
 			new Request('http://e.ly/json', {

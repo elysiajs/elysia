@@ -462,8 +462,8 @@ describe('Bun router', () => {
 
 		await Bun.sleep(20)
 
-		// no eager build happened: the static-response table is only
-		// populated by #buildRouter, which must wait for the drain
+		// no eager build happened: async plugin routes must be allowed to drain
+		// before Bun's native static-route table is collected
 		expect(app.pending).toBe(true)
 		expect(app['~staticResponse' as keyof typeof app]).toBeUndefined()
 

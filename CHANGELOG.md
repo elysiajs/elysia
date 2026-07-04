@@ -51,6 +51,9 @@ Behavior Change:
 - unhandled errors no longer leak their `message` to the client when `NODE_ENV=production`: a thrown/returned generic `Error` (and any `ElysiaError` with status >= 500 that has no explicit `response`) now responds with `Internal Server Error` instead of the raw error message. Development (non-production) responses are unchanged and still surface the message for debugging. Custom `error()` handlers and `toResponse()` are unaffected
 - the JSON error response produced by the response mapper for a returned/mapped `Error` no longer includes the `cause` field, and its `message` is replaced with `Internal Server Error`, when `NODE_ENV=production` (`cause` commonly wraps the original low-level failure). Non-production output is unchanged (`{ name, message, cause }`)
 - `file()` responses resolve their `content-type` from the file extension case-insensitively — an uppercase or mixed-case extension (e.g. `photo.PNG`, `report.PDF`) now maps to the correct MIME type instead of falling back to `application/octet-stream` (which forced a download). Lowercase extensions are unaffected
+- synchronous Standard Schema validators no longer force async route emission. Body routes are already async and still await promise-returning Standard Schema results; on otherwise-sync channels, declare `validate` as `async` if it can return a `Promise`, otherwise Elysia fails loudly instead of silently putting a pending promise into the request context
+- Bun native static-route `Response` objects are no longer retained on the base Elysia instance during router build. The Bun adapter still collects eligible native static routes for `Bun.serve.routes` during `listen()`, but `app.fetch`/`app.handle` no longer keep the extra base-level static route table alive
+- `autoHead` remains opt-in and may consume a raw handler-returned `Response` stream to synthesize `content-length` when the response has neither `content-length` nor `transfer-encoding`. Return those headers yourself for large/unbounded streams
 
 Feature:
 
@@ -90,6 +93,8 @@ Bug fix:
 - Bun native static routes were never installed when every static response was synchronous (the optimization was dead in its common case)
 - error-path `mapResponse` codegen assigned an undeclared `tmp`, leaking the mapped response onto `globalThis` (and crashing under AOT strict-mode modules)
 - `Cookie` was no longer exported from the package entry, so `import { Cookie } from 'elysia'` (used to type the `cookie` context) failed to resolve
+- schema-less body routes now treat `Transfer-Encoding` as body-present before touching `request.body`, preserving the fast framing-header path for chunked/proxy-framed requests without `Content-Length`
+- valid absolute request URLs with short hosts (for example `http://x/foo` and `http://a.b/foo`) now route correctly under the default `handler.standardHostname` fast path instead of extracting the full URL as the path and returning 404
 
 Type:
 

@@ -26,6 +26,8 @@ export const cloneResponse = (r: unknown) =>
 export function hasRequestBody(request: Request) {
 	const length = request.headers.get('content-length')
 	if (length !== null) return length !== '0'
+	if (request.headers.get('transfer-encoding') !== null) return true
+
 	return request.body != null
 }
 

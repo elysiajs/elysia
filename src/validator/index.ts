@@ -18,6 +18,7 @@ import {
 	Intersect,
 	HasCodec
 } from '../type/bridge'
+import { isAsyncFunction } from '../compile/utils'
 
 export interface ValidatorOptions {
 	models?: Record<keyof any, AnySchema>
@@ -42,6 +43,7 @@ export type ToSubTypeValidator<T> = T extends AnySchema
 
 export abstract class Validator {
 	isAsync: boolean = true
+	mayReturnPromise = false
 
 	abstract Check(value: unknown): boolean
 	abstract Errors(value: unknown): TLocalizedValidationError[]
@@ -64,7 +66,11 @@ export abstract class Validator {
 		return value
 	}
 
-	From?(value: unknown, type?: string): MaybePromise<unknown>
+	From?(
+		value: unknown,
+		type?: string,
+		allowAsync?: boolean
+	): MaybePromise<unknown>
 
 	Clean: ((value: unknown) => unknown) | undefined
 
@@ -263,44 +269,75 @@ const toStatusBased = (
 		? { 200: schema as unknown as AnySchema }
 		: (schema as Record<number, AnySchema>)
 
+const isAsyncStandardSchema = (schema: StandardSchemaV1Like) =>
+	isAsyncFunction((schema['~standard'] as any).validate)
+
+const asyncStandardSchemaError = () =>
+	new Error(
+		'[Elysia] An asynchronous Standard Schema was used where only synchronous validation is supported. Declare the schema validate function as async so Elysia can emit an async route.'
+	)
+
 export class StandardValidator extends Validator {
-	#validate: (value: unknown) => { value: unknown } | { issues: unknown[] }
+	override mayReturnPromise = true
+
+	#validate: (
+		value: unknown
+	) =>
+		| { value: unknown }
+		| { issues: unknown[] }
+		| Promise<{ value: unknown } | { issues: unknown[] }>
 
 	constructor(schema: StandardSchemaV1Like) {
 		super()
 
 		// @ts-expect-error
 		this.#validate = schema['~standard'].validate
+		this.isAsync = isAsyncStandardSchema(schema)
+	}
+
+	#sync(value: unknown) {
+		const q = this.#validate(value)
+
+		if (q instanceof Promise) throw asyncStandardSchemaError()
+
+		return q
 	}
 
 	Check(value: unknown): boolean {
-		return 'value' in this.#validate(value)
+		return 'value' in this.#sync(value)
 	}
 
 	Errors(value: unknown): TLocalizedValidationError[] {
 		// @ts-expect-error
-		return this.#validate(value).issues ?? []
+		return this.#sync(value).issues ?? []
 	}
 
 	Decode(value: unknown): unknown {
 		// @ts-expect-error
-		return this.#validate(value).value
+		return this.#sync(value).value
 	}
 
 	EncodeFrom(value: unknown) {
 		return this.From(value)
 	}
 
-	From(value: unknown, type?: string): unknown {
+	From(
+		value: unknown,
+		type?: string,
+		allowAsync = this.isAsync
+	): unknown {
 		const q = this.#validate(value)
 
-		if (q instanceof Promise)
+		if (q instanceof Promise) {
+			if (!allowAsync) throw asyncStandardSchemaError()
+
 			return q.then((resolved) => {
-				if (resolved.issues)
+				if ('issues' in resolved)
 					throw new ValidationError(type, value, resolved.issues)
 
 				return resolved.value
 			})
+		}
 
 		// @ts-expect-error
 		if (q.issues) throw new ValidationError(type, value, q.issues)
@@ -344,8 +381,10 @@ export class MultiValidator extends Validator {
 					schemas[i] = Compile(
 						applyCoercions(schema, options?.coerces)
 					)
-			} else
-				this.isAsync = true
+			} else {
+				this.mayReturnPromise = true
+				if (isAsyncStandardSchema(schema)) this.isAsync = true
+			}
 		}
 
 		if (typeboxObjects)
@@ -391,10 +430,7 @@ export class MultiValidator extends Validator {
 	static #syncStandard(schema: StandardSchemaV1Like, value: unknown) {
 		// @ts-expect-error
 		const q = schema['~standard'].validate(value)
-		if (q instanceof Promise)
-			throw new Error(
-				'[Elysia] An asynchronous Standard Schema was used where only synchronous validation is supported. Use it on an HTTP route body/query/etc (which awaits), not on a synchronous path such as WebSocket message validation.'
-			)
+		if (q instanceof Promise) throw asyncStandardSchemaError()
 
 		return q
 	}
@@ -509,15 +545,20 @@ export class MultiValidator extends Validator {
 		return (validator as any).Clean(this.#cloneForMember(value))
 	}
 
-	From(value: unknown, type?: string): MaybePromise<unknown> {
-		return this.#fromLoop(value, 0, undefined, type)
+	From(
+		value: unknown,
+		type?: string,
+		allowAsync = this.isAsync
+	): MaybePromise<unknown> {
+		return this.#fromLoop(value, 0, undefined, type, allowAsync)
 	}
 
 	#fromLoop(
 		value: unknown,
 		start: number,
 		snapshot: Record<string, unknown> | unknown[] | undefined,
-		type?: string
+		type?: string,
+		allowAsync = this.isAsync
 	): MaybePromise<unknown> {
 		for (let i = start; i < this.#schemas.length; i++) {
 			const validator = this.#schemas[i]
@@ -526,7 +567,9 @@ export class MultiValidator extends Validator {
 				// @ts-expect-error
 				const q = validator['~standard'].validate(value)
 
-				if (q instanceof Promise)
+				if (q instanceof Promise) {
+					if (!allowAsync) throw asyncStandardSchemaError()
+
 					// eslint-disable-next-line sonarjs/function-inside-loop
 					return q.then((resolved: any) => {
 						if (resolved.issues)
@@ -540,9 +583,11 @@ export class MultiValidator extends Validator {
 							value,
 							i + 1,
 							MultiValidator.#merge(snapshot, resolved.value),
-							type
+							type,
+							allowAsync
 						)
 					})
+				}
 
 				if (q.issues) throw new ValidationError(type, value, q.issues)
 

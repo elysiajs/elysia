@@ -1,50 +1,117 @@
 import { createAdapter } from '..'
 import { WebStandardAdapter } from '../web-standard'
 
-import { needEncodeRegex } from '../../constants'
+import { isDynamicRegex, needEncodeRegex } from '../../constants'
+import { buildNativeStaticResponse } from '../../compile'
 import { flushMemory } from '../../memory'
-import { nullObject } from '../../utils'
+import {
+	flattenChain,
+	getLoosePath,
+	mapMethodBack,
+	nullObject
+} from '../../utils'
 
 import { buildGlobalWSHandler } from '../../ws/route'
 
 import type { AnyElysia } from '../../base'
 
 export function collectStaticRoutes(app: AnyElysia) {
+	if (app['~config']?.nativeStaticResponse === false) return
+
 	void app.fetch
 
-	const source = app['~staticResponse']
-	if (!source) return
+	const fetchLevelHook = flattenChain(app['~hookChain'])
+	if (
+		fetchLevelHook?.request?.length ||
+		fetchLevelHook?.trace?.length ||
+		app['~ext']?.hoc?.length
+	)
+		return
+
+	const history = app.history
+	if (!history?.length) return
 
 	const ready: Record<string, Record<string, Response>> = nullObject()
 	const pending: Array<Promise<void>> = []
+	const strictPath = app['~config']?.strictPath === true
+	const seen = new Map<string, number>()
 
-	for (const method in source) {
-		const paths = source[method]
+	for (let i = 0; i < history.length; i++) {
+		const route = history[i]
+		const method =
+			(route[0] as any) === 'WS' ? 'WS' : mapMethodBack(route[0])
 
-		for (let path in paths) {
-			const value = paths[path]
+		seen.set(method + ' ' + route[1], i)
+	}
 
-			if (needEncodeRegex.test(path)) path = encodeURI(path)
+	let explicitPaths: Map<string, Set<string>> | undefined
+	if (!strictPath) {
+		explicitPaths = new Map()
 
-			if (value instanceof Promise)
-				pending.push(
-					value.then(
-						(resolved) => {
-							if (resolved instanceof Response)
-								(ready[path] ??= nullObject())[method] =
-									resolved
-						},
-						(err) => {
-							console.error(
-								`[Elysia] Static route ${method} ${path} failed to resolve:`,
-								err
-							)
-						}
-					)
-				)
-			else (ready[path] ??= nullObject())[method] = value
+		for (let i = 0; i < history.length; i++) {
+			const route = history[i]
+			const method =
+				(route[0] as any) === 'WS' ? 'WS' : mapMethodBack(route[0])
+
+			const path = route[1]
+			let set = explicitPaths.get(method)
+
+			if (!set) explicitPaths.set(method, (set = new Set()))
+
+			set.add(path)
+			if (needEncodeRegex.test(path)) {
+				const encoded = encodeURI(path)
+				if (encoded !== path) set.add(encoded)
+			}
 		}
 	}
+
+	const add = (
+		method: string,
+		path: string,
+		value: Response | Promise<Response>
+	) => {
+		if (needEncodeRegex.test(path)) path = encodeURI(path)
+
+		if (value instanceof Promise)
+			pending.push(
+				value.then(
+					(resolved) => {
+						if (resolved instanceof Response)
+							(ready[path] ??= nullObject())[method] = resolved
+					},
+					(err) => {
+						console.error(
+							`[Elysia] Static route ${method} ${path} failed to resolve:`,
+							err
+						)
+					}
+				)
+			)
+		else (ready[path] ??= nullObject())[method] = value
+	}
+
+	for (let i = 0; i < history.length; i++) {
+		const route = history[i]
+		if ((route[0] as any) === 'WS') continue
+
+		const method = mapMethodBack(route[0])
+		const path = route[1]
+		if (seen.get(method + ' ' + path) !== i) continue
+
+		const value = buildNativeStaticResponse(route, app)
+		if (!value) continue
+
+		add(method, path, value)
+
+		if (!strictPath && !isDynamicRegex.test(path)) {
+			const loose = getLoosePath(path)
+			if (loose !== path && !explicitPaths?.get(method)?.has(loose))
+				add(method, loose, value)
+		}
+	}
+
+	if (!Object.keys(ready).length && !pending.length) return
 
 	return [ready, pending] as const
 }

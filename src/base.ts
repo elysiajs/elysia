@@ -4,7 +4,6 @@ import { applyHoc, createFetchHandler } from './handler'
 import {
 	compileHandler,
 	composeRouteHook,
-	buildNativeStaticResponse,
 	localMacroRoot,
 	resolveLocalHook
 } from './compile'
@@ -275,11 +274,6 @@ export class Elysia<
 	'~router'?: Memoirist<CompiledHandler>
 	'~map'?: {
 		[method: string]: { [path: string]: CompiledHandler } | undefined
-	}
-	'~staticResponse'?: {
-		[method: string]: {
-			[path: string]: Response | Promise<Response>
-		}
 	}
 
 	'~hasWS'?: boolean
@@ -6341,13 +6335,6 @@ export class Elysia<
 		const precompile = this['~config']?.precompile
 		const enableAutoHead = this['~config']?.autoHead === true
 
-		const fetchLevelHook = flattenChain(this['~hookChain'])
-		const buildStatic =
-			this['~config']?.nativeStaticResponse !== false &&
-			!fetchLevelHook?.request?.length &&
-			!fetchLevelHook?.trace?.length &&
-			!this['~ext']?.hoc?.length
-
 		this.#initMap()
 		const methods = this['~map']!
 
@@ -6458,41 +6445,6 @@ export class Elysia<
 				continue
 			}
 
-			let staticResponse: Response | Promise<Response> | undefined
-			const maybeStatic = buildStatic && typeof route[2] !== 'function'
-			if (maybeStatic) {
-				staticResponse = buildNativeStaticResponse(route, this)
-
-				if (staticResponse) {
-					const target = (this['~staticResponse'] ??= {
-						GET: undefined as any,
-						POST: undefined as any,
-						PUT: undefined as any,
-						DELETE: undefined as any,
-						PATCH: undefined as any,
-						// Cache check, not uncommon
-						HEAD: undefined as any,
-						// CORS preflight, usual
-						OPTIONS: undefined as any
-					} as any)
-
-					;(target[method] ??= nullObject() as any)[path] =
-						staticResponse
-
-					if (!this['~config']?.strictPath) {
-						const loose = getLoosePath(path)
-						if (!explicitPaths?.get(method)?.has(loose))
-							(target[method] ??= nullObject() as any)[loose] =
-								staticResponse
-					}
-				}
-			}
-
-			const sharedStatic =
-				maybeStatic && staticResponse instanceof Response
-					? staticResponse
-					: undefined
-
 			const autoHead =
 				enableAutoHead && method === 'GET' && !explicitHead?.has(path)
 
@@ -6508,14 +6460,12 @@ export class Elysia<
 
 			if (!isDynamic && !needEncodeRegex.test(path) && !registerLoose) {
 				const map = (methods[method] ??= nullObject() as any)
-				// Only the auto-HEAD twin is an extra alias here; `#saveHandler`
-				// already re-points the canonical path, so aliases is needed only
-				// to also rewrite the HEAD entry on first compile.
+
 				const handler = this.handler(
 					i,
 					precompile,
 					route,
-					sharedStatic,
+					undefined,
 					autoHead ? { method, paths: [path], head: true } : undefined
 				)
 
@@ -6556,7 +6506,7 @@ export class Elysia<
 					i,
 					precompile,
 					undefined,
-					sharedStatic
+					undefined
 				)
 
 				const headHandler = autoHead
@@ -6571,17 +6521,11 @@ export class Elysia<
 			} else {
 				const map = (methods[method] ??= nullObject() as any)
 
-				const handler = this.handler(
-					i,
-					precompile,
-					route,
-					sharedStatic,
-					{
-						method,
-						paths,
-						head: autoHead
-					}
-				)
+				const handler = this.handler(i, precompile, route, undefined, {
+					method,
+					paths,
+					head: autoHead
+				})
 
 				const headHandler = autoHead
 					? wrapHeadHandler(handler)

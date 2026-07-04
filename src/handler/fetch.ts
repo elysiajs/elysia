@@ -43,9 +43,9 @@ function notFound(context: Context): Response {
 	return getNotFound()
 }
 
-const decodeParams = (
+function decodeParams(
 	params: Record<string, string>
-): Record<string, string> => {
+) {
 	for (const key in params) {
 		const value = params[key]
 		if (value.indexOf('%') !== -1)
@@ -228,6 +228,7 @@ export function createFetchHandler(
 										set,
 										request
 									)
+
 								return run(i + 1)
 							})
 

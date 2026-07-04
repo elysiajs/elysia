@@ -113,6 +113,10 @@ export interface ElysiaConfig<
 	 * response headers (e.g. `content-length`) from the GET handler while
 	 * dropping the body.
 	 *
+	 * If a GET handler returns a raw `Response` stream with neither
+	 * `content-length` nor `transfer-encoding`, the generated HEAD handler may
+	 * consume that stream to synthesize `content-length`.
+	 *
 	 * An explicit `.head(path, ...)` always takes precedence over the
 	 * auto-generated one.
 	 *
@@ -186,7 +190,8 @@ export interface ElysiaConfig<
 		standardHostname?: boolean
 	}
 	/**
-	 * Enable Bun static response
+	 * Enable Bun adapter native static response collection for eligible literal
+	 * static routes.
 	 *
 	 * @default true
 	 * @since 1.1.11

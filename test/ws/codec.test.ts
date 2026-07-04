@@ -2,14 +2,7 @@ import { describe, it, expect } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { newWebsocket, wsOpen, wsClosed, wsMessage } from './utils'
 
-// H32: WS query/params/headers were Check-only — a codec member like
-// t.Numeric/t.Date passed Check but never DECODED, so the handler saw the raw
-// string while the type claimed a number. The upgrade path now mirrors
-// validateMessageBody: when a channel validator hasCodec it runs `From` so the
-// DECODED value is what gets copied into ElysiaWS. WHY it matters: a handler
-// doing `params.id + 1` would silently string-concat ("41" + 1 = "411")
-// instead of adding — a correctness bug the types actively hide.
-describe('WebSocket upgrade codec decode (H32)', () => {
+describe('WebSocket upgrade codec decode', () => {
 	it('params: t.Numeric reaches the handler as a number, not a string', async () => {
 		const app = new Elysia()
 			.ws('/ws/:id', {
@@ -249,11 +242,12 @@ describe('WebSocket upgrade codec decode (H32)', () => {
 		app.stop()
 	})
 
-	it('sync-function-returning-Promise Standard Schema (spec-legal) also works', async () => {
-		// A non-async function that returns a Promise is spec-legal per
-		// Standard Schema v1 — the validate property is not constrained to
-		// AsyncFunction specifically. From() checks `instanceof Promise`, not
-		// constructor name.
+	it('sync-function-returning-Promise Standard Schema fails loud', async () => {
+		// Elysia classifies Standard Schema asyncness from the validate function
+		// declaration so sync vendors stay on the sync route path. A regular
+		// function that returns a Promise must be declared `async` to opt into
+		// the async route path; otherwise we fail loudly instead of assigning a
+		// Promise into the context channel.
 		const syncReturningPromise = {
 			'~standard': {
 				version: 1,
@@ -274,16 +268,22 @@ describe('WebSocket upgrade codec decode (H32)', () => {
 			})
 			.listen(0)
 
-		const ws = new WebSocket(
-			`ws://${app.server!.hostname}:${app.server!.port}/ws?x=1`
+		const res = await fetch(
+			`http://${app.server!.hostname}:${app.server!.port}/ws?x=1`,
+			{
+				headers: {
+					upgrade: 'websocket',
+					connection: 'Upgrade',
+					'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==',
+					'sec-websocket-version': '13'
+				}
+			}
 		)
-		await wsOpen(ws)
 
-		const got = wsMessage(ws)
-		ws.send('ping')
-		expect((await got).data).toBe('object')
-
-		await wsClosed(ws)
+		expect(res.status).toBe(500)
+		await expect(res.text()).resolves.toContain(
+			'asynchronous Standard Schema'
+		)
 		app.stop()
 	})
 
