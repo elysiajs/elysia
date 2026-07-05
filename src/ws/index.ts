@@ -266,7 +266,7 @@ export const createHandleWSResponse = (
 			: undefined
 
 		const send = (datum: unknown) => {
-			if (validateResponse && validateResponse(datum) === false)
+			if (validateResponse && validateResponse(datum))
 				return ws.send(
 					new ValidationError('message', responseValidator!, datum)
 						.message
@@ -286,12 +286,12 @@ export const createHandleWSResponse = (
 			return (async () => {
 				const first = await init
 
-				if (validateResponse && validateResponse(first))
+				if (validateResponse && validateResponse(first.value))
 					return ws.send(
 						new ValidationError(
 							'message',
 							responseValidator!,
-							first
+							first.value
 						).message
 					)
 
