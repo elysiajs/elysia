@@ -315,6 +315,15 @@ export function buildWSRoute(
 		return new Response(String(error), { status: error?.status ?? 500 })
 	}
 
+	function wsErrorFrame(error: unknown): string {
+		if (error instanceof ValidationError)
+			try {
+				return JSON.stringify(error.payload)
+			} catch {}
+
+		return error instanceof Error ? error.message : error + ''
+	}
+
 	async function handleError(ws: ElysiaWS<any>, error: unknown) {
 		const errCtx: any = Object.create(ws as any)
 		errCtx.error = error
@@ -335,9 +344,8 @@ export function buildWSRoute(
 			}
 		}
 
-		const message = error instanceof Error ? error.message : String(error)
 		try {
-			ws.raw.send(message)
+			ws.raw.send(wsErrorFrame(error))
 		} catch {}
 	}
 
@@ -387,7 +395,7 @@ export function buildWSRoute(
 	): void | Promise<void> {
 		if (errorHandlers.length === 0) {
 			try {
-				ws.raw.send(error instanceof Error ? error.message : error + '')
+				ws.raw.send(wsErrorFrame(error))
 			} catch {}
 
 			return

@@ -71,11 +71,23 @@ export function parse(
 const PRIORITY = '; Priority='
 const SAMESITE = '; SameSite='
 
+// Name is an RFC 6265 token (no separators/whitespace/CTL); attributes just
+// must not carry the `;` separator or control chars.
+// eslint-disable-next-line no-control-regex, sonarjs/duplicates-in-character-class
+const COOKIE_NAME_INVALID = /[\x00-\x1F\x7F()<>@,;:\\"/[\]?={} \t]/
+// eslint-disable-next-line no-control-regex
+const COOKIE_ATTR_INVALID = /[\x00-\x1F\x7F;]/
+
 export function serialize(
 	name: string,
 	value: string = '',
 	options: CookieOptions
 ) {
+	if (COOKIE_NAME_INVALID.test(name))
+		throw new Error(
+			`[Elysia] Invalid cookie name ${JSON.stringify(name)} — cookie names cannot contain separators, whitespace, or control characters.`
+		)
+
 	if (value)
 		value = encodeURIComponent(
 			typeof value === 'object' ? JSON.stringify(value) : value
@@ -87,10 +99,24 @@ export function serialize(
 	if (maxAge !== undefined) str += '; Max-Age=' + maxAge
 
 	const domain = options.domain
-	if (domain) str += '; Domain=' + domain
+	if (domain) {
+		if (COOKIE_ATTR_INVALID.test(domain))
+			throw new Error(
+				`[Elysia] Invalid cookie Domain ${JSON.stringify(domain)}.`
+			)
+
+		str += '; Domain=' + domain
+	}
 
 	const path = options.path
-	if (path) str += '; Path=' + path
+	if (path) {
+		if (COOKIE_ATTR_INVALID.test(path))
+			throw new Error(
+				`[Elysia] Invalid cookie Path ${JSON.stringify(path)}.`
+			)
+
+		str += '; Path=' + path
+	}
 
 	const expires = options.expires
 	if (expires) str += '; Expires=' + expires.toUTCString()

@@ -9,7 +9,12 @@ import { createContext, type Context } from '../context'
 import { createErrorHandler } from './error'
 import { requestId, flattenChain, nullObject, isNotEmpty } from '../utils'
 import { handleSet } from '../adapter/utils'
-import { NotFound, PROBLEM_JSON } from '../error'
+import {
+	NotFound,
+	PROBLEM_JSON,
+	internalServerErrorResponse,
+	isProduction
+} from '../error'
 import { createTracer, unionTracePhases } from '../trace'
 
 import type { CompiledHandler, MaybePromise } from '../types'
@@ -53,22 +58,37 @@ function decodeParams(params: Record<string, string>) {
 	return params
 }
 
+// A poisoned `context.set` (e.g. a CRLF value reflected into a header) makes
+// the error handler's own `mapResponse` re-throw against the same set
 function finalizeError(
 	context: Context,
 	handleError: (context: Context, error: Error) => unknown,
 	afterResponse: ((context: Context, status?: number) => void) | undefined,
 	error: Error
-) {
-	const resp = handleError(context, error) as Response | Promise<Response>
-	if (!afterResponse) return resp
+): Response | Promise<Response> {
+	let resp: Response | Promise<Response>
+	try {
+		resp = handleError(context, error) as Response | Promise<Response>
+	} catch (errorPipelineThrow) {
+		if (!isProduction()) console.error(errorPipelineThrow)
+		resp = internalServerErrorResponse(error)
+	}
 
 	if (resp instanceof Promise)
-		return resp.then((r) => {
-			afterResponse(context)
-			return r
-		})
+		return resp.then(
+			(r) => {
+				afterResponse?.(context)
+				return r
+			},
+			(errorPipelineThrow) => {
+				if (!isProduction()) console.error(errorPipelineThrow)
+				const r = internalServerErrorResponse(error)
+				afterResponse?.(context)
+				return r
+			}
+		)
 
-	afterResponse(context)
+	afterResponse?.(context)
 
 	return resp
 }

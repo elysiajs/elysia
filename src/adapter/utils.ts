@@ -354,6 +354,14 @@ export function createStreamHandler({
 			}
 		}
 
+		const safeReturn = () => {
+			try {
+				const r = iterator.return?.()
+				if (r && typeof (r as Promise<unknown>).then === 'function')
+					(r as Promise<unknown>).catch(() => {})
+			} catch {}
+		}
+
 		return new Response(
 			new ReadableStream({
 				async start(controller) {
@@ -361,7 +369,7 @@ export function createStreamHandler({
 						onAbort = () => {
 							cleanupAbort()
 							end = true
-							iterator.return?.()
+							safeReturn()
 
 							try {
 								controller.close()
@@ -465,7 +473,7 @@ export function createStreamHandler({
 				cancel() {
 					end = true
 					cleanupAbort()
-					iterator.return?.()
+					safeReturn()
 				}
 			}),
 			set as any
@@ -537,6 +545,7 @@ export function mergeHeaders(
 ) {
 	const headers = new Headers(responseHeaders)
 	applySetHeaders(headers, setHeaders, responseHeaders)
+
 	return headers
 }
 

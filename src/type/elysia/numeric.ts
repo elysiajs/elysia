@@ -11,7 +11,9 @@ import { elyType, getMeta } from './utils'
 
 // A finite decimal numeric string: optional sign + digits/decimal point
 // Rejects hex (`0x10`), binary/octal, scientific (`1e3`) and `Infinity`/`NaN`
-const decimalNumber = /^[+-]?(\d+\.?\d*|\.\d+)$/
+// Non-backtracking: the two digit runs are made mutually exclusive so an
+// all-digit-then-nondigit input fails linearly instead of O(n²)
+const decimalNumber = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/
 
 let StringifiedNumber: Type.TCodec<Type.TRefine<Type.TString>, number>
 type NumericSchema = Type.TUnion<

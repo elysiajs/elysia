@@ -272,15 +272,17 @@ describe('L6 — outer catch must survive (marker never drops a real error)', ()
 		await expect(res.text()).resolves.toBe('boom')
 	})
 
-	it('an error hook that itself throws routes the route-rejection into the error pipeline (proves the outer catch is load-bearing)', async () => {
-		// This is the exact escape path that proves the outer `.catch` is
-		// load-bearing. The route's own try/catch runs the error hook, the hook
-		// throws, the async route REJECTS, and the fetch-level `.catch`
-		// (`catchError`) is what receives that rejection and forwards it into
-		// `handleError`. The fetch-level error handler re-runs the same throwing
-		// hook, so the error surfaces at the `handle()` boundary. If the outer
-		// `.catch` were dropped, the route rejection would instead escape as an
-		// UNHANDLED rejection (a process crash), not this observable throw.
+	it('an error hook that itself throws degrades to a clean 500 instead of escaping app.handle (header-injection-1)', async () => {
+		// The route's own try/catch runs the error hook, the hook throws, and the
+		// async route REJECTS into the fetch-level `.catch` (`catchError`) →
+		// `finalizeError` → `handleError`, which re-runs the same throwing hook.
+		// `finalizeError` now GUARDS that re-run (header-injection-1): a throw
+		// from the error pipeline degrades to `internalServerErrorResponse` built
+		// from a fresh header set rather than escaping `app.handle`. Letting it
+		// escape was the crash vector — a naive `app.handle(req).then(send)`
+		// Node bridge turns the rejection into a process-killing unhandled
+		// rejection. The outer catch is still load-bearing (no unhandled
+		// rejection); it now produces an observable 500 instead of re-throwing.
 		const app = new Elysia()
 			.error(() => {
 				throw new Error('error hook itself throws')
@@ -289,17 +291,14 @@ describe('L6 — outer catch must survive (marker never drops a real error)', ()
 				throw new Error('handler boom')
 			})
 
-		// It surfaces synchronously at the boundary (routed through the pipeline)
-		// rather than being swallowed into an unhandled rejection.
-		await expect(
-			app.handle(
-				new Request('http://localhost/', {
-					method: 'POST',
-					headers: { 'content-type': 'application/json' },
-					body: JSON.stringify({ n: 1 })
-				})
-			)
-		).rejects.toThrow('error hook itself throws')
+		const res = await app.handle(
+			new Request('http://localhost/', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ n: 1 })
+			})
+		)
+		expect(res.status).toBe(500)
 	})
 
 	it('an async route with NO error hook rethrows to the fetch-level handler (still a response)', async () => {

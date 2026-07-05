@@ -58,6 +58,15 @@ function handleElysiaFile(
 
 const isNotBun = !isBun
 
+function responseTag(response: unknown): string | undefined {
+	if (response === null || response === undefined) return undefined
+
+	const proto = Object.getPrototypeOf(response)
+	if (proto === null) return 'Object' // Object.create(null) / nullObject
+
+	return proto.constructor?.name
+}
+
 export function mapResponse(
 	response: unknown,
 	set: Context['set'],
@@ -67,7 +76,7 @@ export function mapResponse(
 		handleSet(set)
 		const headers = set.headers
 
-		switch (response?.constructor?.name) {
+		switch (responseTag(response)) {
 			case 'String':
 				if (isNotBun && !headers['content-type'])
 					headers['content-type'] = 'text/plain'
@@ -183,7 +192,7 @@ export function mapCompactResponse(
 	response: unknown,
 	request?: Request
 ): Response {
-	switch (response?.constructor?.name) {
+	switch (responseTag(response)) {
 		case 'String':
 			return new Response(response as string, stringHeaders)
 

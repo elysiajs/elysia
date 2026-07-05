@@ -1133,8 +1133,14 @@ export class TypeBoxValidator<
 		if (this.hasCodec) {
 			if (!this.#noValidate) {
 				collectFileTypeChecks()
-				const valid = this.Check(value)
-				const pendingFile = takeFileTypeChecks()
+
+				let valid: boolean
+				let pendingFile: ReturnType<typeof takeFileTypeChecks>
+				try {
+					valid = this.Check(value)
+				} finally {
+					pendingFile = takeFileTypeChecks()
+				}
 
 				if (!valid) throw this.#error(value, type)
 				if (pendingFile)
@@ -1168,9 +1174,15 @@ export class TypeBoxValidator<
 					)
 				}
 		} else if (!this.#noValidate) {
+			// take() MUST run even if Check throws (type-elysia-2), see above.
 			collectFileTypeChecks()
-			const valid = this.Check(value)
-			const pendingFile = takeFileTypeChecks()
+			let valid: boolean
+			let pendingFile: ReturnType<typeof takeFileTypeChecks>
+			try {
+				valid = this.Check(value)
+			} finally {
+				pendingFile = takeFileTypeChecks()
+			}
 
 			if (!valid) throw this.#error(value, type)
 			if (pendingFile)

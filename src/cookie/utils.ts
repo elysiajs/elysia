@@ -51,11 +51,11 @@ export async function parseCookie(
 const rawJsonValue = new WeakMap<object, string>()
 
 function maybeJsonDecode(value: unknown) {
-	if (typeof value === 'string') {
+	if (typeof value === 'string' && value.length > 1) {
 		const starts = value.charCodeAt(0)
+		const ends = value.charCodeAt(value.length - 1)
 
-		// { or [
-		if (starts === 123 || starts === 91)
+		if ((starts === 123 && ends === 125) || (starts === 91 && ends === 93))
 			try {
 				const parsed = JSON.parse(value)
 				if (parsed !== null && typeof parsed === 'object')

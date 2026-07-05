@@ -20,16 +20,6 @@ async function detectFileType(file: File): Promise<string | undefined> {
 	}
 }
 
-let warnedNoFileTypeDetector = false
-function warnNoFileTypeDetector() {
-	if (warnedNoFileTypeDetector) return
-	warnedNoFileTypeDetector = true
-
-	console.warn(
-		"[Elysia] Attempt to validate file type without a file type detector, please set one using `setFileTypeDetector`"
-	)
-}
-
 export async function fileType(
 	file: MaybeArray<File | undefined>,
 	type: MaybeArray<FileType>
@@ -46,10 +36,7 @@ export async function fileType(
 
 	if (!matchesAnyFileType(file.type, types)) return false
 
-	if (!fileTypeDetectors) {
-		warnNoFileTypeDetector()
-		return true
-	}
+	if (!fileTypeDetectors) return false
 
 	const mime = await detectFileType(file)
 	if (mime && matchesAnyFileType(mime, types)) return true
@@ -90,7 +77,11 @@ export function maybeQueueFileTypeCheck(
 	if (!collecting) return
 
 	if (!fileTypeDetectors) {
-		warnNoFileTypeDetector()
+		;(pendingFileTypeChecks ??= []).push({
+			file: value,
+			check: Promise.resolve(message)
+		})
+
 		return
 	}
 

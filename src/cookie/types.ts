@@ -107,9 +107,7 @@ export interface CookieOptions {
 	 * Key rotation is when an encryption key is retired
 	 * and replaced by generating a new cryptographic key.
 	 *
-	 * When null is provided in array,
-	 * Elysia will allow unsigned cookie for smooth
-	 * transition from unsign to sign
+	 * `null` in the array makes Elysia accept an unsigned cookie (intended only for a one-way unsigned→signed migration)
 	 */
 	secrets?: string | null | (string | null)[]
 }

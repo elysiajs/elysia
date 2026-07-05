@@ -60,7 +60,8 @@ describe('validation detail — production gating', () => {
 		expect(r.default.status).toBe(422)
 		expect(r.default.body.type).toBe('validation')
 		expect(r.default.body.on).toBe('body')
-		expect(r.default.body.found).toEqual({ x: 'not a number' })
+		// error-3: `found` redacted in production (request input may be PII)
+		expect(r.default.body.found).toBeUndefined()
 		expect(r.default.body.property).toBe('/x')
 		expect(r.default.body.expected).toBeUndefined()
 		expect(r.default.body.errors).toBeUndefined()
@@ -74,9 +75,9 @@ describe('validation detail — production gating', () => {
 		expect(r.validationDetailMessage.body.errors).toBeUndefined()
 		expect(r.validationDetailMessage.body.value).toBeUndefined()
 
-		// error.detail() → minimal in production
+		// error.detail() → minimal in production (error-3: no `found` echo)
 		expect(r.detail.body.message).toBe('x must be a number')
-		expect(r.detail.body.found).toEqual({ x: 'not a number' })
+		expect(r.detail.body.found).toBeUndefined()
 		expect(r.detail.body.errors).toBeUndefined()
 
 		// error.detail() → full when allowUnsafe even in production
@@ -90,7 +91,7 @@ describe('validation detail — production gating', () => {
 		// the throwing thunk was never consulted (status 422, message present)
 		expect(r.findCustomErrorBypass.status).toBe(422)
 		expect(r.findCustomErrorBypass.body.message).toBe('from findCustomError')
-		expect(r.findCustomErrorBypass.body.found).toEqual({ x: 'bad' })
+		expect(r.findCustomErrorBypass.body.found).toBeUndefined()
 	})
 
 	it('C8: response-schema failure collapses to a generic 500, never echoing the server value', async () => {
@@ -120,16 +121,18 @@ describe('validation detail — production gating', () => {
 		expect(r.responseAllowUnsafe.body.on).toBe('response')
 	})
 
-	it('L13: request-side production 422 names the failing field while echoing only client input', async () => {
+	it('L13: request-side production 422 names the failing field without echoing input (error-3)', async () => {
 		const r = await run('production')
 
 		// An API consumer needs to know WHICH field failed to fix their request;
 		// the instance path is safe (no schema info, no messages).
 		expect(r.requestProperty.status).toBe(422)
 		expect(r.requestProperty.body.property).toBe('/x')
-		// still echoes the client's own input (not a server value → safe)
-		expect(r.requestProperty.body.found).toEqual({ x: 'not a number' })
-		// but nothing schema-revealing
+		// error-3: `found` is NO LONGER echoed in production — even the client's
+		// own input can carry passwords/tokens/PII that leak into error trackers,
+		// proxy logs, and HAR exports.
+		expect(r.requestProperty.body.found).toBeUndefined()
+		// and nothing schema-revealing
 		expect(r.requestProperty.body.errors).toBeUndefined()
 		expect(r.requestProperty.body.expected).toBeUndefined()
 	})

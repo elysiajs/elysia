@@ -302,9 +302,6 @@ export class ValidationError extends ElysiaError {
 		let custom: unknown
 		let message: string
 
-		// C8: mask the server value for a response-schema failure in production
-		const maskResponseValue = this.#maskResponseValue
-
 		if (production && !allowUnsafe && findCustomError) {
 			const hit = findCustomError(value)
 			resolved = hit ? [{ instancePath: hit.instancePath }] : []
@@ -315,9 +312,7 @@ export class ValidationError extends ElysiaError {
 						? hit.error({
 								type: 'validation',
 								on: type,
-								found: maskResponseValue
-									? undefined
-									: scopeFound(value, resolved[0])
+								found: undefined
 							})
 						: hit.error
 
@@ -343,9 +338,9 @@ export class ValidationError extends ElysiaError {
 								? {
 										type: 'validation',
 										on: type,
-										found: maskResponseValue
-											? undefined
-											: scopeFound(value, resolved[0])
+										// error-3: redact the raw request value from
+										// the custom error fn in production.
+										found: undefined
 									}
 								: {
 										type: 'validation',
@@ -476,8 +471,6 @@ export class ValidationError extends ElysiaError {
 
 	detail(message: unknown) {
 		if (this.#productionDetail) {
-			// C8: never echo a `response`-schema value (server-internal) in
-			// production, even through a user `.error()` hook calling detail().
 			if (this.type === 'response')
 				return {
 					type: 'internal-server-error',
@@ -488,10 +481,6 @@ export class ValidationError extends ElysiaError {
 			return {
 				type: 'validation',
 				on: this.type,
-				found: scopeFound(
-					this.value,
-					(this.errors ?? []).find(Boolean)
-				),
 				message
 			}
 		}
@@ -506,11 +495,6 @@ export class ValidationError extends ElysiaError {
 
 	get payload() {
 		if (this.#productionDetail) {
-			// C8: a `response`-schema failure is a SERVER bug, and `this.value` is
-			// the server's own (possibly secret-bearing) response object. In
-			// production, collapse it to a generic 500 problem+json — never echo
-			// the raw value, `found`, `property`, or errors. Opt back in with
-			// `allowUnsafeValidationDetails` (falls through to the full branch).
 			if (this.type === 'response')
 				return {
 					type: 'internal-server-error',
@@ -525,14 +509,6 @@ export class ValidationError extends ElysiaError {
 				title: 'Validation Error',
 				status: 422,
 				on: this.type,
-				// L13: surface WHICH field failed (instance path only — no schema
-				// info, no messages) so an API consumer can fix their request.
-				// Production is the trust boundary: only ever reflect
-				// instance-path-shaped data. Real TypeBox errors carry
-				// `instancePath` (a JSON pointer) and real standard-schema issues
-				// carry `path` as an ARRAY of segments — accept those. Never accept
-				// a raw free-text `path` string (no real validator produces one;
-				// defense-in-depth against a hand-crafted issue leaking text).
 				property: first
 					? propertyAccessor(
 							first.instancePath ??
@@ -540,8 +516,7 @@ export class ValidationError extends ElysiaError {
 									? first.path
 									: undefined)
 						)
-					: 'root',
-				found: scopeFound(this.value, first)
+					: 'root'
 			}
 		}
 
@@ -582,7 +557,8 @@ export class ValidationError extends ElysiaError {
 	}
 
 	toResponse(headers?: Record<string, any>) {
-		if (this.#maskResponseValue) return problemResponse(this.payload, headers)
+		if (this.#maskResponseValue)
+			return problemResponse(this.payload, headers)
 
 		// validateDetail
 		if (this.customError !== undefined) {
@@ -763,13 +739,32 @@ export function internalServerErrorBody(error: any) {
 	return body
 }
 
-export const internalServerErrorResponse = (error: any): Response =>
-	markResponseTransferable(
-		new Response(JSON.stringify(internalServerErrorBody(error)), {
+export const internalServerErrorResponse = (error: any): Response => {
+	let body: string
+	try {
+		body = JSON.stringify(internalServerErrorBody(error))
+	} catch {
+		// A circular `error.cause` (DB client, Request, stream, looping chain)
+		try {
+			const safe = internalServerErrorBody(error)
+			delete safe.cause
+			body = JSON.stringify(safe)
+		} catch {
+			body = JSON.stringify({
+				type: 'unknown',
+				title: 'Internal Server Error',
+				status: 500
+			})
+		}
+	}
+
+	return markResponseTransferable(
+		new Response(body, {
 			status: 500,
 			headers: { 'content-type': PROBLEM_JSON }
 		})
 	)
+}
 
 export const problem = <const P extends Problem>(
 	detail: P

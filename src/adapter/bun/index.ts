@@ -126,8 +126,11 @@ export const BunAdapter = createAdapter({
 		const _config = (app['~config'] as any)?.serve
 		const optionsIsObject = typeof options === 'object'
 
+		// Copy the caller's options: `serve` (and later `routes`/`websocket`)
+		// is mutated below, and reusing one options object across apps would
+		// otherwise leak app1's static routes/fetch onto app2 (serve-bun-1).
 		const _options = optionsIsObject
-			? options
+			? { ...(options as object) }
 			: // monomorphic
 				{
 					port: +options,

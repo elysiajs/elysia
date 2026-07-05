@@ -124,9 +124,41 @@ import type {
 	GlobalHookReturn
 } from './types'
 import type { ElysiaStatus } from './error'
+import { isProduction } from './error'
 import type { Context, LifecycleContext, ErrorContext } from './context'
 
 const useNodesBuffer: ChainNode[] = []
+
+// Stable identity for non-JSON-serialisable macro-seed references (functions,
+// symbols). `JSON.stringify` drops functions, so `{ check: fnA }` and
+// `{ check: fnB }` both serialise to `{}` and would collide in the macro dedup
+// set — silently dropping the second (possibly auth-bearing) hook (base-2-1,
+// object arm). Giving each distinct reference a stable id keeps the key
+// collision-safe while preserving structural dedup of pure-JSON seeds.
+const macroSeedRefIds = new WeakMap<object, number>()
+let macroSeedRefCounter = 0
+function macroSeedRefId(ref: object): number {
+	let id = macroSeedRefIds.get(ref)
+	if (id === undefined) macroSeedRefIds.set(ref, (id = ++macroSeedRefCounter))
+	return id
+}
+
+// JSON.stringify replacer that represents functions/bigint/symbol/undefined by
+// an identity- or type-tagged token instead of losing them.
+function macroSeedReplacer(_key: string, value: unknown): unknown {
+	switch (typeof value) {
+		case 'function':
+			return '\0fn:' + macroSeedRefId(value as unknown as object)
+		case 'bigint':
+			return '\0bigint:' + (value as bigint).toString()
+		case 'symbol':
+			return '\0sym:' + String(value as symbol)
+		case 'undefined':
+			return '\0undefined'
+		default:
+			return value
+	}
+}
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
 
@@ -3510,7 +3542,7 @@ export class Elysia<
 		input: Partial<AnyLocalHook>,
 		toApply: Partial<AnyLocalHook> = input,
 		iteration = 0,
-		seen = new Set<number | Partial<AnyLocalHook>>()
+		seen = new Set<string | Partial<AnyLocalHook>>()
 	): Partial<AnyLocalHook> {
 		if (iteration >= 16) return input
 		const macro = this['~ext']?.macro
@@ -3533,18 +3565,40 @@ export class Elysia<
 			}
 
 			if (isFunction) {
+				// base-2-1: dedup colliding macro expansions with a
+				// collision-safe key. The old `fnv1a(key + String(value))` both
+				// (a) conflated `1`/`'1'`, `true`/`'true'` etc via `String()` —
+				// silently dropping the second (possibly auth-bearing) hook — and
+				// (b) crashed opaquely on a circular object value. Tag the type so
+				// distinct-type values never collide, use the full string (no
+				// 32-bit hash → no birthday collisions), serialise objects with a
+				// replacer that keeps function/symbol identity (so a value carrying
+				// a distinct auth callback can't collide to `{}`), and fail loud on
+				// circular.
 				const seedSource = hook.seed ?? value
-				const seedStr =
+				const seedType = typeof seedSource
+				let seedKey: string
+				if (
 					seedSource === null ||
 					seedSource === undefined ||
-					typeof seedSource !== 'object'
-						? String(seedSource)
-						: JSON.stringify(seedSource)
+					seedType !== 'object'
+				)
+					seedKey = key + '\0' + seedType + '\0' + String(seedSource)
+				else
+					try {
+						seedKey =
+							key +
+							'\0object\0' +
+							JSON.stringify(seedSource, macroSeedReplacer)
+					} catch {
+						throw new Error(
+							`[Elysia] macro "${key}" received a circular seed value; pass a primitive \`seed\` to dedup it.`
+						)
+					}
 
-				const seed = fnv1a(key + seedStr)
-				if (seen.has(seed)) continue
+				if (seen.has(seedKey)) continue
 
-				seen.add(seed)
+				seen.add(seedKey)
 				hookToGuard(hook)
 			} else {
 				if (seen.has(hook)) continue
@@ -6337,7 +6391,20 @@ export class Elysia<
 
 			this.#assertRouteModelRefs(route, m)
 
-			if (seen.has(key)) hasDuplicate = true
+			if (seen.has(key)) {
+				hasDuplicate = true
+
+				// dx-diagnostics-6: last-wins silently drops the earlier route's
+				// schema/auth. Warn in dev when the override carries a DIFFERENT
+				// handler (skip idempotent plugin re-`.use()`, same handler id).
+				if (!isProduction()) {
+					const prev = this.#history![seen.get(key)!]
+					if (prev[2] !== route[2])
+						console.warn(
+							`[Elysia] Duplicate route ${key} — the later definition overrides the earlier one (its schema/hooks are dropped).`
+						)
+				}
+			}
 			seen.set(key, i)
 		}
 

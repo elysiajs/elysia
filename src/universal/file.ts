@@ -68,7 +68,7 @@ export function getFileExtension(path: string) {
 }
 
 /**
- * Serve a file from a path as the response
+ * Serve a file from a path as the response.
  */
 export const file = (path: string) => new ElysiaFile(path)
 

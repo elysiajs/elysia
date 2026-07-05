@@ -32,6 +32,7 @@ export interface GenericServeOptions {
 
 	/**
 	 * What is the maximum size of a request body? (in bytes)
+	 *
 	 * @default 1024 * 1024 * 128 // 128MB
 	 */
 	maxRequestBodySize?: number
