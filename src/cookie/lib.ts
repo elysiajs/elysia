@@ -1,4 +1,5 @@
 import { nullObject } from '../utils'
+import { InvalidCookie } from './error'
 import type { CookieOptions } from './types'
 
 export function parse(
@@ -84,8 +85,8 @@ export function serialize(
 	options: CookieOptions
 ) {
 	if (COOKIE_NAME_INVALID.test(name))
-		throw new Error(
-			`[Elysia] Invalid cookie name ${JSON.stringify(name)} — cookie names cannot contain separators, whitespace, or control characters.`
+		throw new InvalidCookie(
+			`[Elysia] Invalid cookie name ${JSON.stringify(name)}. Cookie names cannot contain separators, whitespace, or control characters.`
 		)
 
 	if (value)
@@ -101,8 +102,8 @@ export function serialize(
 	const domain = options.domain
 	if (domain) {
 		if (COOKIE_ATTR_INVALID.test(domain))
-			throw new Error(
-				`[Elysia] Invalid cookie Domain ${JSON.stringify(domain)}.`
+			throw new InvalidCookie(
+				`Invalid cookie Domain ${JSON.stringify(domain)}.`
 			)
 
 		str += '; Domain=' + domain
@@ -111,8 +112,8 @@ export function serialize(
 	const path = options.path
 	if (path) {
 		if (COOKIE_ATTR_INVALID.test(path))
-			throw new Error(
-				`[Elysia] Invalid cookie Path ${JSON.stringify(path)}.`
+			throw new InvalidCookie(
+				`Invalid cookie Path ${JSON.stringify(path)}.`
 			)
 
 		str += '; Path=' + path

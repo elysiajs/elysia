@@ -422,8 +422,10 @@ export class MultiValidator extends Validator {
 			snapshot.push(...result)
 			return snapshot
 		}
+
 		if (typeof snapshot === 'object' && typeof result === 'object')
 			return Object.assign(snapshot, result)
+
 		throw new Error('Unable to merged value with different type')
 	}
 

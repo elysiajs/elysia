@@ -2,7 +2,7 @@
 import {
 	Elysia,
 	InternalServerError,
-	InvalidCookieSignature,
+	InvalidCookie,
 	NotFound,
 	ParseError,
 	ValidationError,
@@ -415,7 +415,7 @@ describe('Error lifecycle', () => {
 			cookie: { secrets: 'secrets', sign: ['session'] }
 		})
 			.error(({ error }) => {
-				if (error instanceof InvalidCookieSignature)
+				if (error instanceof InvalidCookie)
 					return 'Where is the signature?'
 			})
 			.get('/', ({ cookie: { session } }) => '')

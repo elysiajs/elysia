@@ -3,7 +3,7 @@ import { Default } from './type/bridge'
 import { StatusMap, StatusMapBack } from './constants'
 import { primitiveElysiaTypes } from './type/constants'
 import { nullObject } from './utils'
-import { markResponseTransferable } from './adapter/utils'
+import { skipClone } from './adapter/transferable'
 import { env } from './universal/env'
 
 export const isProduction = () => (env.NODE_ENV ?? env.ENV) === 'production'
@@ -105,19 +105,17 @@ export class ParseError extends ElysiaError {
 	}
 }
 
-// Standard Schema issues carry `path` as an array whose segments may be raw
-// PropertyKeys OR `{ key: PropertyKey }` objects. Normalize a segment to its
-// string form (mirrors how `subValueAt` reads `part.key` for `found`) so a path
-// never renders as `[object Object]`.
-const segmentString = (part: unknown): string =>
+const segmentString = (part: unknown) =>
 	typeof part === 'object' && part !== null
-		? String((part as { key: unknown }).key)
-		: String(part)
+		? (part as { key: unknown }).key + ''
+		: part + ''
 
-const propertyAccessor = (path: unknown): string => {
+const propertyAccessor = (path: unknown) => {
 	if (Array.isArray(path))
 		return path.length ? '/' + path.map(segmentString).join('/') : 'root'
+
 	if (typeof path === 'string') return path || 'root'
+
 	return 'root'
 }
 
@@ -563,23 +561,22 @@ export class ValidationError extends ElysiaError {
 		// validateDetail
 		if (this.customError !== undefined) {
 			const isString = typeof this.customError === 'string'
-
-			return markResponseTransferable(
-				new Response(
-					isString
-						? (this.customError as string)
-						: JSON.stringify(this.customError),
-					{
-						status: this.status ?? 422,
-						headers: {
-							...headers,
-							'content-type': isString
-								? 'text/plain'
-								: 'application/json'
-						}
+			const response = new Response(
+				isString
+					? (this.customError as string)
+					: JSON.stringify(this.customError),
+				{
+					status: this.status ?? 422,
+					headers: {
+						...headers,
+						'content-type': isString
+							? 'text/plain'
+							: 'application/json'
 					}
-				)
+				}
 			)
+			skipClone.add(response)
+			return response
 		}
 
 		return problemResponse(this.payload, headers)
@@ -601,19 +598,6 @@ Object.defineProperty(ValidationError.prototype, 'message', {
 	enumerable: false,
 	configurable: true
 })
-
-export class InvalidCookieSignature extends ElysiaError {
-	status = 400 as const
-	problemType = 'invalid-cookie-signature'
-	problemTitle = 'Invalid Cookie Signature'
-
-	constructor(
-		public key: string,
-		public response = `"${key}" has invalid cookie signature`
-	) {
-		super(response)
-	}
-}
 
 const emptyHttpStatus = new Set([101, 204, 205, 304, 307, 308])
 
@@ -711,16 +695,19 @@ export function problemBody(
 
 export function problemResponse(p: Problem, headers?: Record<string, any>) {
 	const body = problemBody(p)
-
-	return markResponseTransferable(
-		new Response(
-			emptyHttpStatus.has(body.status) ? null : JSON.stringify(body),
-			{
-				status: body.status,
-				headers: { ...headers, 'content-type': PROBLEM_JSON }
-			}
-		)
+	const response = new Response(
+		emptyHttpStatus.has(body.status) ? null : JSON.stringify(body),
+		{
+			status: body.status,
+			headers: { ...headers, 'content-type': PROBLEM_JSON }
+		}
 	)
+
+	// WeakSet.add() returns the SET, not the element — capture the response
+	// first, then mark it, or `response` becomes the WeakSet.
+	skipClone.add(response)
+
+	return response
 }
 
 export function internalServerErrorBody(error: any) {
@@ -758,12 +745,14 @@ export const internalServerErrorResponse = (error: any): Response => {
 		}
 	}
 
-	return markResponseTransferable(
-		new Response(body, {
-			status: 500,
-			headers: { 'content-type': PROBLEM_JSON }
-		})
-	)
+	const response = new Response(body, {
+		status: 500,
+		headers: { 'content-type': PROBLEM_JSON }
+	})
+
+	skipClone.add(response)
+
+	return response
 }
 
 export const problem = <const P extends Problem>(

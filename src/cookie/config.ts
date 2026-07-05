@@ -1,6 +1,7 @@
 import { nullObject } from '../utils'
 import type { AnySchema } from '../type'
 import type { BaseCookie, CookieOptions } from './types'
+import { InvalidCookie } from './error'
 
 export interface AppCookieConfig extends CookieOptions {
 	sign?: true | string | string[]
@@ -135,10 +136,7 @@ export function compileCookieConfig(
 						fieldKeys.some((n) => !fieldsWithOwnSecrets.has(n))
 					: globalSign.some((n) => !fieldsWithOwnSecrets.has(n))
 
-			if (uncovered)
-				throw new Error(
-					'Cookie sign is configured but no `secrets` is provided.'
-				)
+			if (uncovered) throw InvalidCookie.secret()
 		}
 
 		for (const name in fields)
@@ -147,9 +145,7 @@ export function compileCookieConfig(
 				!hasUsableSecret(fields[name].secrets) &&
 				!hasUsableSecret(globalSecrets)
 			)
-				throw new Error(
-					`Cookie field "${name}" is signed but no \`secrets\` is provided.`
-				)
+				throw InvalidCookie.secret(name)
 	}
 
 	return {
@@ -161,8 +157,6 @@ export function compileCookieConfig(
 	}
 }
 
-const missingSecret = 'No secret is provided to cookie plugin'
-
 export function isCookieSigned(
 	name: string,
 	config: CompiledCookieConfig
@@ -172,7 +166,7 @@ export function isCookieSigned(
 	const field = config.fields[name]
 	if (field?.sign) {
 		const secrets = field.secrets ?? config.globalSecrets
-		if (secrets === undefined) throw new Error(missingSecret)
+		if (secrets === undefined) throw InvalidCookie.secret()
 
 		return { signed: true, secrets }
 	}
@@ -182,7 +176,7 @@ export function isCookieSigned(
 		(Array.isArray(config.globalSign) && config.globalSign.includes(name))
 	) {
 		const secrets = config.globalSecrets
-		if (secrets === undefined) throw new Error(missingSecret)
+		if (secrets === undefined) throw InvalidCookie.secret()
 
 		return { signed: true, secrets }
 	}

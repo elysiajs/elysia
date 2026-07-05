@@ -1,6 +1,7 @@
 import { isNotEmpty, nullObject } from '../utils'
 import { StatusMap } from '../constants'
 
+import { skipClone } from './transferable'
 import { serializeCookie } from '../cookie/serialize'
 import { isBun, hasHeaderShorthand } from '../universal/constants'
 import type { Context } from '../context'
@@ -9,13 +10,6 @@ const setCookie = 'set-cookie' as const
 
 const textEncoder = new TextEncoder()
 const encodeChunk = (s: string): Uint8Array => textEncoder.encode(s)
-const transferableResponses = new WeakSet<object>()
-
-export function markResponseTransferable<T extends object>(response: T): T {
-	transferableResponses.add(response)
-
-	return response
-}
 
 export function handleFile(
 	response: File | Blob,
@@ -596,8 +590,8 @@ export function createResponseHandler(handler: CreateHandlerParameter) {
 
 		let body = response.body
 
-		if (transferableResponses.has(response) && !response.bodyUsed)
-			transferableResponses.delete(response)
+		if (skipClone.has(response) && !response.bodyUsed)
+			skipClone.delete(response)
 		else {
 			const cloned = response.clone()
 			body =

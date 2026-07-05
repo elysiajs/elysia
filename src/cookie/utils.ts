@@ -2,7 +2,7 @@ import { decodeComponent } from 'deuri'
 import { parse } from './lib'
 
 import { Cookie } from './cookie'
-import { InvalidCookieSignature } from '../error'
+import { InvalidCookie } from './error'
 import { dangerousKeys } from '../constants'
 import { constantTimeEqual, nullObject } from '../utils'
 
@@ -123,18 +123,16 @@ export async function parseCookieRaw(
 		const v = cookies[name]
 		if (v === undefined) continue
 
-		// fall back to the raw string on malformed percent-encoding
 		let value: unknown = (decodeComponent(v) as unknown as string) ?? v
-
 		const signCheck = resolveSignSecrets(name, config)
 
 		if (signCheck !== undefined) {
-			if (typeof value !== 'string')
-				throw new InvalidCookieSignature(name)
+			if (typeof value !== 'string') throw InvalidCookie.signature(name)
 
 			if (typeof signCheck === 'string') {
 				const temp = await unsignCookie(value, signCheck)
-				if (temp === false) throw new InvalidCookieSignature(name)
+				if (temp === false) throw InvalidCookie.signature(name)
+
 				value = temp
 			} else if (Array.isArray(signCheck)) {
 				let decoded: string | false = false
@@ -146,9 +144,9 @@ export async function parseCookieRaw(
 					}
 				}
 
-				if (decoded === false) throw new InvalidCookieSignature(name)
+				if (decoded === false) throw InvalidCookie.signature(name)
 				value = decoded
-			} else throw new InvalidCookieSignature(name)
+			} else throw InvalidCookie.signature(name)
 		}
 
 		out[name] = maybeJsonDecode(value)
@@ -180,12 +178,11 @@ export function parseCookieRawSigned(
 		const signCheck = resolveSignSecrets(name, config)
 
 		if (signCheck !== undefined) {
-			if (typeof value !== 'string')
-				throw new InvalidCookieSignature(name)
+			if (typeof value !== 'string') throw InvalidCookie.signature(name)
 
 			if (typeof signCheck === 'string') {
 				const temp = unsignCookieSync(value, signCheck)
-				if (temp === false) throw new InvalidCookieSignature(name)
+				if (temp === false) throw InvalidCookie.signature(name)
 				value = temp
 			} else if (Array.isArray(signCheck)) {
 				let decoded: string | false = false
@@ -196,9 +193,9 @@ export function parseCookieRawSigned(
 						break
 					}
 				}
-				if (decoded === false) throw new InvalidCookieSignature(name)
+				if (decoded === false) throw InvalidCookie.signature(name)
 				value = decoded
-			} else throw new InvalidCookieSignature(name)
+			} else throw InvalidCookie.signature(name)
 		}
 
 		out[name] = maybeJsonDecode(value)

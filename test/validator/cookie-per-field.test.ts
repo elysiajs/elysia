@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { Elysia, t, InvalidCookieSignature } from '../../src'
+import { Elysia, t, InvalidCookie } from '../../src'
 import { signCookie } from '../../src/cookie'
 import { req } from '../utils'
 
@@ -61,7 +61,7 @@ describe('Cookie Per-field Configuration', () => {
 		const app = new Elysia()
 			.error(({ error }) => {
 				// `code` was removed this version; dispatch via instanceof.
-				if (error instanceof InvalidCookieSignature)
+				if (error instanceof InvalidCookie)
 					return new Response('bad-sig', { status: 401 })
 				throw error
 			})

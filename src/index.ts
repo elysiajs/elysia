@@ -10,7 +10,6 @@ export {
 	NotFound,
 	ParseError,
 	InternalServerError,
-	InvalidCookieSignature,
 	ValidationError,
 	validationDetail,
 	type SelectiveStatus
@@ -54,6 +53,7 @@ export type {
 	MacroToContext
 } from './types'
 export type { Cookie } from './cookie/cookie'
+export { InvalidCookie } from './cookie/error'
 export type { BaseCookie, CookieOptions } from './cookie/types'
 export type { Server } from './universal/server'
 export type { TCookieObject, TCookieField } from './type/elysia/cookie'
