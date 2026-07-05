@@ -1,6 +1,7 @@
 import { realpathSync } from 'node:fs'
 
 import {
+	alignStubExtensions,
 	generateCompiledArtifacts,
 	resolveEntry,
 	STUB_SOURCES,
@@ -37,6 +38,7 @@ export interface ElysiaAotVitePlugin {
 }
 
 const VIRTUAL = '\0elysia/compiled'
+const VIRTUAL_TYPE = '\0elysia/type'
 
 /**
  * Elysia AOT build plugin
@@ -51,13 +53,6 @@ const VIRTUAL = '\0elysia/compiled'
  *   plugins: [aot('src/index.ts')]
  * })
  * ```
- *
- * The plugin imports your entry to capture the compiled app, running its
- * top-level code. `.listen()` is auto-skipped during build (gated on
- * `ELYSIA_AOT_BUILD`), but any other import-time handle — a DB pool,
- * `setInterval`, a queue consumer — can keep the build process alive after
- * the bundle is written. Gate the side effect with
- * `if (!process.env.ELYSIA_AOT_BUILD)`.
  */
 export const aot = (
 	entry: string,
@@ -77,13 +72,16 @@ export const aot = (
 
 	const treeShake = options?.treeShake ?? true
 	let source = ''
+	let virtualType: string | undefined
 	let stub: StubPlan = {
 		jit: false,
 		ws: false,
 		reconstruct: false,
 		cookie: false,
 		trace: false,
-		sucrose: false
+		sucrose: false,
+		compat: false,
+		bridge: false
 	}
 
 	return {
@@ -94,6 +92,7 @@ export const aot = (
 			const generated = await generateCompiledArtifacts(entry, options)
 			source = generated.source
 			stub = generated.stub
+			virtualType = generated.virtualType
 		},
 		buildEnd() {
 			if (!entryMatched)
@@ -105,9 +104,14 @@ export const aot = (
 		},
 		resolveId(id) {
 			if (id === 'elysia/compiled') return VIRTUAL
+			// Serve the virtual `elysia/type` (no `setupTypebox`) so unused `t.*`
+			// tree-shake. Applies in sealed + wired modes; `off` leaves it real.
+			if (id === 'elysia/type' && virtualType !== undefined)
+				return VIRTUAL_TYPE
 		},
 		load(id) {
 			if (id === VIRTUAL) return source
+			if (id === VIRTUAL_TYPE) return virtualType
 		},
 		async transform(code, id) {
 			const cleanId = id.split('?', 1)[0]
@@ -116,7 +120,8 @@ export const aot = (
 			for (const key of Object.keys(STUB_SOURCES) as (keyof StubPlan)[]) {
 				if (!stub[key]) continue
 				for (const { filter, source: stubSource } of STUB_SOURCES[key])
-					if (filter.test(cleanId)) return stubSource
+					if (filter.test(cleanId))
+						return alignStubExtensions(stubSource, cleanId)
 			}
 
 			let out = code

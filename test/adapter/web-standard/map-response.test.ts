@@ -85,6 +85,29 @@ describe('Web Standard - Map Response', () => {
 		expect(response.status).toBe(200)
 	})
 
+	// node-divergence-2: an empty return with a null-body status (204/205/304)
+	// must construct a valid Response on every runtime. The `case undefined`
+	// arm built `new Response('', set)`; Node/undici rejects a non-null body
+	// ('' counts) for null-body statuses with `TypeError: Invalid response
+	// status code 204` (→ opaque 500), while Bun accepts ''. So the idiomatic
+	// `set.status = 204; return` gave 204 on Bun but 500 on Node. The fix emits
+	// `null` for the empty body, which is valid for every status. We assert the
+	// runtime-agnostic contract: mapResponse constructs the null-body status
+	// with an empty body without throwing. (CI is Bun-only — it can't exercise
+	// Node's undici directly — so it pins the contract that makes both agree.)
+	it('map empty return on null-body status (204/205/304, node-safe)', async () => {
+		for (const status of [204, 205, 304] as const) {
+			const response = mapResponse(undefined, {
+				...createContext(),
+				status
+			})
+
+			expect(response).toBeInstanceOf(Response)
+			expect(response.status).toBe(status)
+			await expect(response.text()).resolves.toEqual('')
+		}
+	})
+
 	it('map Blob', async () => {
 		const file = Bun.file('./test/images/aris-yuzu.jpg')
 

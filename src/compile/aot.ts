@@ -601,6 +601,9 @@ export interface CapturedValidator {
 	}>
 	// coercion plan (primitive coercions)
 	coercePlan?: CoercePlan
+	// Use to gate a `setupTypebox` stub.
+	// Set at capture time by `frozen-validator.isCapturedBridgeFree`.
+	bridgeFree?: boolean
 }
 
 let capture: Map<string, CapturedValidator> | undefined
@@ -669,6 +672,16 @@ function captureSet(
 	if (e) Object.assign(e, partial)
 }
 
+// Read the in-progress captured entry (all channels an emit will serialize).
+// Used to compute the derived `bridgeFree` marker once every channel is set.
+function captureGet(loc: {
+	method: string
+	path: string
+	slot: ValidatorSlot
+}): CapturedValidator | undefined {
+	return capture?.get(`${loc.method}_${loc.path}_${loc.slot}`)
+}
+
 const isAotBuildEnv = () => !!env.ELYSIA_AOT_BUILD
 
 let captureLogEmitted = false
@@ -687,6 +700,7 @@ const isValidatorCapturing = (): boolean => {
 
 export const Capture = {
 	set: captureSet,
+	get: captureGet,
 	handler: captureHandler,
 	mirrorUnions: captureMirrorUnions,
 	mirrorCodecs: captureMirrorCodecs,

@@ -266,6 +266,9 @@ function appendInto(
 	}
 }
 
+// eslint-disable-next-line no-control-regex
+const notLatin = /[^\x00-\xFF]/
+
 /**
  *
  * @param url URL to redirect to
@@ -274,7 +277,11 @@ function appendInto(
 export const redirect = (
 	url: string,
 	status: 301 | 302 | 303 | 307 | 308 = 302
-) => Response.redirect(url, status)
+) =>
+	new Response(null, {
+		status,
+		headers: { location: notLatin.test(url) ? encodeURI(url) : url }
+	})
 
 export type redirect = typeof redirect
 

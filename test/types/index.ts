@@ -1337,38 +1337,20 @@ const a = app
 		200: string
 	}>()
 
+	// response-only route (no request validator) → no phantom 422 (eden-types-1)
 	expectTypeOf<app['post']['response']>().toEqualTypeOf<{
 		200: string
 		201: string
-		422: {
-			type: 'validation'
-			title: 'Validation Error'
-			status: 422
-			detail?: string
-			on: string
-			found?: unknown
-			property?: string
-			expected?: string
-		}
 	}>()
 
 	expectTypeOf<app['true']['get']['response']>().toEqualTypeOf<{
 		200: boolean
 	}>()
 
+	// response-only route (no request validator) → no phantom 422 (eden-types-1)
 	expectTypeOf<app['true']['post']['response']>().toEqualTypeOf<{
 		200: boolean
 		202: boolean
-		422: {
-			type: 'validation'
-			title: 'Validation Error'
-			status: 422
-			detail?: string
-			on: string
-			found?: unknown
-			property?: string
-			expected?: string
-		}
 	}>()
 
 	expectTypeOf<app['error']['get']['response']>().toEqualTypeOf<{
@@ -3156,8 +3138,9 @@ type a = keyof {}
 	})
 }
 
-// ws `response` schema surfaces in subscribe.response with the auto-422 channel,
-// so Eden clients read the typed outbound message + validation channel.
+// ws `response` schema surfaces in subscribe.response as the typed outbound
+// message. `response` is an OUTPUT schema and cannot trigger a request-time 422,
+// so a response-only ws route must NOT advertise a phantom 422 (eden-types-1).
 {
 	const app = new Elysia().ws('/ws-resp', {
 		response: t.String(),
@@ -3167,7 +3150,7 @@ type a = keyof {}
 	expectTypeOf<Sub['response'][200]>().toEqualTypeOf<string>()
 	expectTypeOf<
 		422 extends keyof Sub['response'] ? true : false
-	>().toEqualTypeOf<true>()
+	>().toEqualTypeOf<false>()
 }
 
 // subscribe has NO `error` key (CreateWSEdenResponse omits it); http get DOES

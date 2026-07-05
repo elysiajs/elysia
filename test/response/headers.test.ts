@@ -150,6 +150,50 @@ describe('Response Headers', () => {
 		expect(headers.get('x-powered-by')).toBe('Elysia')
 	})
 
+	// adapter-2: default headers are now cloned as own props at context
+	// construction (no prototype link), so `handleSet` no longer flattens the
+	// proto chain each request. This pins that the merge is unchanged: default
+	// headers and per-request headers both emit, a per-request write overrides a
+	// default on the same key, and defaults survive across requests.
+	it('merges default headers with per-request headers and overrides on collision', async () => {
+		const app = new Elysia()
+			.headers({
+				'x-powered-by': 'Elysia',
+				'x-frame-options': 'DENY'
+			})
+			.get('/', ({ set }) => {
+				// a fresh per-request header
+				set.headers['x-request-id'] = 'abc'
+				// overrides a default on the same key
+				set.headers['x-powered-by'] = 'Custom'
+				return 'hi'
+			})
+
+		const first = await app.handle(req('/')).then((x) => x.headers)
+		expect(first.get('x-powered-by')).toBe('Custom') // per-request wins
+		expect(first.get('x-frame-options')).toBe('DENY') // default survives
+		expect(first.get('x-request-id')).toBe('abc') // per-request added
+
+		// defaults must not be mutated by the previous request's override
+		const second = await app
+			.handle(req('/second'))
+			.catch(() => null)
+		void second
+		const untouched = await app
+			.handle(req('/'))
+			.then((x) => x.headers)
+		expect(untouched.get('x-powered-by')).toBe('Custom')
+		expect(untouched.get('x-frame-options')).toBe('DENY')
+
+		// a request that does NOT override still sees the pristine default
+		const plainApp = new Elysia()
+			.headers({ 'x-powered-by': 'Elysia' })
+			.get('/', () => 'hi')
+		await plainApp.handle(req('/'))
+		const pristine = await plainApp.handle(req('/')).then((x) => x.headers)
+		expect(pristine.get('x-powered-by')).toBe('Elysia')
+	})
+
 	it('accept header from plugin', async () => {
 		const plugin = new Elysia().headers({
 			'x-powered-by': 'Elysia'

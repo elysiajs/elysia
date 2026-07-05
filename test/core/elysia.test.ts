@@ -257,15 +257,51 @@ describe('Edge Case', () => {
 			third.find((route) => route.path === '/c')!.hooks.transform!.length
 		).toBe(1)
 
-		// compilation mutates stored hooks in place (hookToGuard /
-		// promoteDerive on route[4]) — reads after compile must re-merge
-		// instead of serving a stale pre-compile snapshot
+		// base-3-1: compilation does NOT change `.routes`. `composeRouteHook`
+		// clones `route[4]` before resolving macros (see resolveLocalHook) and
+		// `promoteDerive` mutates the freshly-composed hook, never the stored
+		// tuple — so `.routes` derives purely from `#history` and is identical
+		// before/after a compile. The cache must therefore be RETAINED across
+		// compile (re-merging N routes on every JIT compile is pure waste).
 		app.compile()
 		const fourth = app.routes
-		expect(fourth).not.toBe(third)
+		expect(fourth).toBe(third)
 		expect(
 			fourth.find((route) => route.path === '/c')!.hooks.transform!.length
 		).toBe(1)
+	})
+
+	it('retains the routes cache across a JIT compile (base-3-1)', async () => {
+		// `.routes` is a pure function of `#history`; a route-level JIT compile
+		// (first request to a route) only mutates `#compiled`/`~map`, never
+		// `#history`. So reading `.routes`, serving traffic (which compiles),
+		// then reading again must return the SAME cached array — the compile
+		// path must not spuriously drop the cache. Covers plain, dynamic, WS
+		// and auto-HEAD routes (none of which compile into a NEW `.routes`
+		// entry).
+		const app = new Elysia({ autoHead: true })
+			.get('/a', () => 'a')
+			.get('/c/:id', ({ params }) => params.id)
+			.ws('/ws', { message() {} })
+
+		const before = app.routes
+		const beforeSnapshot = before
+			.map((r) => `${r.method} ${r.path}`)
+			.sort()
+
+		// serve traffic → triggers JIT compile on each route + auto-HEAD
+		await app.handle(req('/a'))
+		await app.handle(req('/c/5'))
+		await app.handle(new Request('http://localhost/a', { method: 'HEAD' }))
+
+		const after = app.routes
+
+		// cache retained: same array identity, no re-derive
+		expect(after).toBe(before)
+		// and the output is byte-identical (no route dropped or added)
+		expect(after.map((r) => `${r.method} ${r.path}`).sort()).toEqual(
+			beforeSnapshot
+		)
 	})
 
 	it('reading routes is idempotent (no hook duplication)', () => {

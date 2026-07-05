@@ -10,7 +10,7 @@ import { createErrorHandler } from './error'
 import { requestId, flattenChain, nullObject, isNotEmpty } from '../utils'
 import { handleSet } from '../adapter/utils'
 import { NotFound, PROBLEM_JSON } from '../error'
-import { createTracer } from '../trace'
+import { createTracer, unionTracePhases } from '../trace'
 
 import type { CompiledHandler, MaybePromise } from '../types'
 
@@ -43,9 +43,7 @@ function notFound(context: Context): Response {
 	return getNotFound()
 }
 
-function decodeParams(
-	params: Record<string, string>
-) {
+function decodeParams(params: Record<string, string>) {
 	for (const key in params) {
 		const value = params[key]
 		if (value.indexOf('%') !== -1)
@@ -98,10 +96,7 @@ function findRoute(
 ): Response | Promise<Response> {
 	const path = context.path
 
-	if (hasWS) {
-		// Probe the WS route tables BEFORE touching headers — reading the
-		// upgrade header materializes `Headers` (~160ns) on every HTTP
-		// request otherwise
+	if (hasWS && request.method === 'GET') {
 		const handler = map['WS']?.[path]
 		const found =
 			handler === undefined && hasDynamicWS
@@ -131,48 +126,40 @@ function findRoute(
 		}
 	}
 
-	// Non-upgrade requests (and upgrades that match no WS route) fall through
-	// to normal HTTP routing — WS presence must not shadow HTTP routes.
-	{
-		const methodMap = map[request.method]
-		let handler: CompiledHandler | undefined = methodMap?.[path]
+	const methodMap = map[request.method]
+	let handler: CompiledHandler | undefined = methodMap?.[path]
 
-		if (!handler) {
-			if (
-				!strictPath &&
-				path.length > 1 &&
-				path.charCodeAt(path.length - 1) === 47
-			) {
-				const loose = path.slice(0, -1)
-				handler = methodMap?.[loose]
-				if (!handler) {
-					const anyMap = map['*']
-					handler = anyMap?.[path] ?? anyMap?.[loose]
-				}
-			} else {
+	if (!handler)
+		if (
+			!strictPath &&
+			path.length > 1 &&
+			path.charCodeAt(path.length - 1) === 47
+		) {
+			const loose = path.slice(0, -1)
+			handler = methodMap?.[loose]
+
+			if (!handler) {
 				const anyMap = map['*']
-				handler = anyMap?.[path]
+				handler = anyMap?.[path] ?? anyMap?.[loose]
 			}
-		}
+		} else handler = map['*']?.[path]
 
-		if (handler) {
-			const r = handler(context)
-			return r instanceof Promise
-				? r.catch(catchError(context, handleError, afterResponse))
-				: r
-		}
+	if (handler) {
+		const r = handler(context)
+		return r instanceof Promise
+			? r.catch(catchError(context, handleError, afterResponse))
+			: r
+	}
 
-		const found =
-			router?.find(request.method, path) ?? router?.find('*', path)
+	const found = router?.find(request.method, path) ?? router?.find('*', path)
 
-		if (found) {
-			context.params = decodeParams(found.params)
+	if (found) {
+		context.params = decodeParams(found.params)
 
-			const r = found.store(context)
-			return r instanceof Promise
-				? r.catch(catchError(context, handleError, afterResponse))
-				: r
-		}
+		const r = found.store(context)
+		return r instanceof Promise
+			? r.catch(catchError(context, handleError, afterResponse))
+			: r
 	}
 
 	if (hasError) throw new NotFound()
@@ -258,7 +245,18 @@ export function createFetchHandler(
 	const traceHandlers = hook?.trace as
 		| ((context: any) => unknown)[]
 		| undefined
+
 	const hasTrace = !!traceHandlers?.length
+
+	const tracePhases = hasTrace
+		? unionTracePhases(traceHandlers as unknown as Function[])
+		: null
+
+	const traceRequestPhase =
+		hasTrace && (tracePhases === null || tracePhases.has('request'))
+
+	const traceAfterResponsePhase =
+		hasTrace && (tracePhases === null || tracePhases.has('afterResponse'))
 
 	const tracerFactories = hasTrace
 		? traceHandlers!.map((fn) => createTracer(fn as any))
@@ -266,7 +264,7 @@ export function createFetchHandler(
 
 	const afterResponses = hook?.afterResponse
 	const afterResponse =
-		afterResponses?.length || hasTrace
+		afterResponses?.length || traceAfterResponsePhase
 			? (context: Context, status?: number) => {
 					if ((context as any)._arf) return
 					;(context as any)._arf = true
@@ -282,10 +280,18 @@ export function createFetchHandler(
 									console.error(e)
 								}
 
-						if (hasTrace) {
-							const cache = (context as any).trace as
+						if (traceAfterResponsePhase) {
+							let cache = (context as any).trace as
 								| any[]
 								| undefined
+
+							if (!cache && tracerFactories) {
+								context.rid ??= requestId()
+								cache = tracerFactories.map((f) =>
+									f(context as any)
+								)
+								;(context as any).trace = cache
+							}
 
 							if (cache)
 								for (let i = 0; i < cache.length; i++) {
@@ -314,7 +320,7 @@ export function createFetchHandler(
 				}
 			: undefined
 
-	if (hasTrace) {
+	if (traceRequestPhase) {
 		const onRequests = hook?.request ?? []
 		const asyncIndexes = onRequests.length
 			? getAsyncIndexes(onRequests)
@@ -345,8 +351,6 @@ export function createFetchHandler(
 
 			const requestReports = new Array(traceLength)
 			for (let i = 0; i < traceLength; i++)
-				// subscription-gated: `b()` returns a truthy numeric token for
-				// an unsubscribed phase (flat timestamps, no recorder/literal)
 				requestReports[i] =
 					trace[i].b(0, onRequests.length) ||
 					trace[i].begin(0, {
@@ -543,7 +547,7 @@ export function createFetchHandler(
 					context.qi
 		))
 
-		if (hasWS) {
+		if (hasWS && request.method === 'GET') {
 			const handler = map['WS']?.[path]
 			const found =
 				handler === undefined && hasDynamicWS

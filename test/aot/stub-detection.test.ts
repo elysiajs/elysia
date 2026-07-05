@@ -185,7 +185,10 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			// no trace alias (`tr`) → trace runtime is stubbable
 			trace: true,
 			// JIT stubbed → Sucrose never runs → memory's clearSucroseCache edge cut
-			sucrose: true
+			sucrose: true,
+			// every validator is bridge-free → sealed: compat stubbed, no reroute
+			compat: true,
+			bridge: false
 		})
 
 		const inline = await generateCompiledArtifacts(
@@ -198,7 +201,10 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			reconstruct: true,
 			cookie: true,
 			trace: true,
-			sucrose: true
+			sucrose: true,
+			// no validators at all → vacuously bridge-free → sealed
+			compat: true,
+			bridge: false
 		})
 
 		// WS-only: the handler-JIT graph is stubbable (WS never reaches it),
@@ -215,7 +221,10 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			reconstruct: true,
 			cookie: true,
 			trace: true,
-			sucrose: true
+			sucrose: true,
+			// WS present → the bridge stays wired (WS validators need it) → off mode
+			compat: false,
+			bridge: false
 		})
 	})
 

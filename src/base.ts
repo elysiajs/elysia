@@ -261,7 +261,10 @@ export class Elysia<
 
 	// Memoized `routes` getter output
 	//
-	// Invalidated on `#add`, `#use`, `#on`, `#pushHook`, `.macro()`, `.as()`, `compileHandler`
+	// Invalidated on `#add`, `#use`, `#on`, `#pushHook`, `.macro()`, `.as()`.
+	// NOT invalidated by compilation: `.routes` derives purely from `#history`
+	// (via `composeRouteHook`) and is byte-identical before/after a JIT compile,
+	// which only mutates `#compiled`/`~map`.
 	#cachedRoutes?: PublicRoute[]
 
 	'~router'?: Memoirist<CompiledHandler>
@@ -2095,6 +2098,25 @@ export class Elysia<
 		}
 	}
 
+	/**
+	 * ### guard
+	 * Apply a hook and schema to every route defined after it on this instance.
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .guard({ body: t.Object({ name: t.String() }) })
+	 *     .post('/', ({ body }) => body)
+	 * ```
+	 *
+	 * @remarks
+	 * Chaining a very large number of `.guard()` calls on a single instance
+	 * (~120+) can exhaust the TypeScript type-instantiation budget and slow or
+	 * error `tsc`, because each `.guard()` re-expands the accumulated schema
+	 * metadata. For large counts, compose the guards across plugins and combine
+	 * them with `.use()` instead.
+	 */
 	guard<
 		const Input extends Metadata['macro'] &
 			InputSchema<keyof Definitions['typebox'] & string>,
@@ -6134,8 +6156,6 @@ export class Elysia<
 		const compiled = (this.#compiled ??= new Array(this.#history!.length))
 
 		if (immediate) {
-			this.#cachedRoutes = undefined
-
 			const handler = compileHandler(
 				this.#history![index],
 				this,
@@ -6159,8 +6179,6 @@ export class Elysia<
 	): CompiledHandler {
 		return (context) => {
 			if (this.#compiled![index]) return this.#compiled![index](context)
-
-			this.#cachedRoutes = undefined
 
 			const handler = compileHandler(
 				this.#history![index],

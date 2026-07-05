@@ -1,4 +1,5 @@
 import { Elysia, t } from '../../src'
+import { expectTypeOf } from 'expect-type'
 
 // M33: a parametric route WITHOUT validators has no validation step at
 // runtime — its Eden response union must not advertise a phantom 422.
@@ -29,3 +30,66 @@ const c = new Elysia().get(
 type C = (typeof c)['~Routes']['q']['get']['response']
 declare const checkC: C
 checkC[422].type satisfies 'validation'
+
+// eden-types-1: a `response` schema is an OUTPUT schema and can never trigger a
+// request-time 422. A route that declares ONLY a `response` schema (no
+// body/query/headers/cookie/params validator) must NOT advertise a phantom 422,
+// otherwise every Eden consumer is told to handle a status the runtime never
+// emits. `response` was wrongly kept in the `HasInputValidator` probe.
+
+// response-only — must NOT have 422, and its record must be exactly { 200: string }
+const respOnly = new Elysia().get(
+	'/only-response',
+	{ response: { 200: t.String() } },
+	() => 'ok'
+)
+type RespOnly = (typeof respOnly)['~Routes']['only-response']['get']['response']
+declare const checkRespOnly: RespOnly
+// @ts-expect-error phantom 422 must be gone for a response-only route
+checkRespOnly[422]
+// full-record equality: the resolved Eden response tree is exactly { 200: string }
+expectTypeOf<RespOnly>().toEqualTypeOf<{ 200: string }>()
+
+// response + body — 422 must remain (load-bearing non-regression: excluding
+// `response` from the probe must not suppress a real body validator's 422)
+const respAndBody = new Elysia().post(
+	'/response-and-body',
+	{ body: t.Object({ n: t.Number() }), response: { 200: t.String() } },
+	() => 'ok'
+)
+type RespAndBody =
+	(typeof respAndBody)['~Routes']['response-and-body']['post']['response']
+declare const checkRespAndBody: RespAndBody
+checkRespAndBody[422].type satisfies 'validation'
+
+// headers-only validator — 422 must remain
+const hdrOnly = new Elysia().get(
+	'/h',
+	{ headers: t.Object({ 'x-token': t.String() }) },
+	() => 'ok'
+)
+type HdrOnly = (typeof hdrOnly)['~Routes']['h']['get']['response']
+declare const checkHdrOnly: HdrOnly
+checkHdrOnly[422].type satisfies 'validation'
+
+// cookie-only validator — 422 must remain
+const ckOnly = new Elysia().get(
+	'/c',
+	{ cookie: t.Object({ session: t.String() }) },
+	() => 'ok'
+)
+type CkOnly = (typeof ckOnly)['~Routes']['c']['get']['response']
+declare const checkCkOnly: CkOnly
+checkCkOnly[422].type satisfies 'validation'
+
+// WS response-only — must NOT have 422 (same root cause propagates via
+// CreateWSEdenResponse -> ComposeElysiaResponse)
+const wsRespOnly = new Elysia().ws('/notify', {
+	response: t.Object({ n: t.Number() }),
+	message(ws) {}
+})
+type WSRespOnly =
+	(typeof wsRespOnly)['~Routes']['notify']['subscribe']['response']
+declare const checkWSRespOnly: WSRespOnly
+// @ts-expect-error phantom 422 must be gone for a WS response-only route
+checkWSRespOnly[422]

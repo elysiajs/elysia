@@ -530,7 +530,7 @@ export class MultiValidator extends Validator {
 				throw new ValidationError(
 					type,
 					value,
-					(validator as TypeBoxValidator).Errors(value)
+					() => (validator as TypeBoxValidator).Errors(value)
 				)
 			}
 		}
@@ -539,7 +539,7 @@ export class MultiValidator extends Validator {
 			throw new ValidationError(
 				type,
 				value,
-				(validator as TypeBoxValidator).Errors(value)
+				() => (validator as TypeBoxValidator).Errors(value)
 			)
 
 		return (validator as any).Clean(this.#cloneForMember(value))

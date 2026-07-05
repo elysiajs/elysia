@@ -1,6 +1,10 @@
 import { RouteValidator } from '../../validator/route'
 import { compileCookieConfig } from '../../cookie/config'
 import { createTracer } from '../../trace'
+import {
+	buildFrozenRouteValidator,
+	isBridgeNotInitialized
+} from './frozen-validator'
 
 import type { AnyLocalHook, HTTPMethod } from '../../types'
 import type { AnyElysia } from '../../base'
@@ -12,13 +16,22 @@ export abstract class Reconstrct {
 		method: HTTPMethod,
 		path: string
 	) {
-		return new RouteValidator(hook, {
-			models: root['~ext']?.models,
-			normalize: root['~config']?.normalize,
-			sanitize: root['~config']?.sanitize,
-			schemas: hook?.schemas,
-			aot: { method, path }
-		})
+		try {
+			return new RouteValidator(hook, {
+				models: root['~ext']?.models,
+				normalize: root['~config']?.normalize,
+				sanitize: root['~config']?.sanitize,
+				schemas: hook?.schemas,
+				aot: { method, path }
+			})
+		} catch (error) {
+			if (!isBridgeNotInitialized(error)) throw error
+
+			const frozen = buildFrozenRouteValidator(hook, root, method, path)
+			if (frozen) return frozen as any
+
+			throw error
+		}
 	}
 
 	static cookie(hook: AnyLocalHook, root: AnyElysia) {

@@ -63,10 +63,9 @@ export function mapResponse(
 	set: Context['set'],
 	request?: Request
 ): Response {
-	const headers = set.headers
-
-	if (set.status !== undefined || set.cookie || isNotEmpty(headers)) {
+	if (set.status !== undefined || set.cookie || isNotEmpty(set.headers)) {
 		handleSet(set)
+		const headers = set.headers
 
 		switch (response?.constructor?.name) {
 			case 'String':
@@ -118,7 +117,7 @@ export function mapResponse(
 			case undefined:
 				return response
 					? Response.json(response, set as ResponseInit)
-					: new Response('', set as ResponseInit)
+					: new Response(null, set as ResponseInit)
 
 			case 'Response':
 				return handleResponse(response as Response, set, request)

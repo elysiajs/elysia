@@ -45,7 +45,7 @@ import {
 	type TraceReporter
 } from './utils'
 import { tee } from '../../adapter/utils'
-import { createTracer, type TraceEvent } from '../../trace'
+import { createTracer, unionTracePhases, type TraceEvent } from '../../trace'
 import { Capture } from '../aot'
 import { JITProbe } from '../jit-probe'
 
@@ -332,10 +332,26 @@ export function compileHandlerJit({
 	const bodyValiIsAsync =
 		hasBody &&
 		(isAsyncValidator(vali?.body) || mayReturnPromiseValidator(vali?.body))
-	const headersValiIsAsync = vali?.headers && isAsyncValidator(vali?.headers)
-	const paramsValiIsAsync = vali?.params && isAsyncValidator(vali?.params)
-	const queryValiIsAsync = vali?.query && isAsyncValidator(vali?.query)
-	const cookieValidIsAsync = vali?.cookie && isAsyncValidator(vali?.cookie)
+
+	const headersValiIsAsync =
+		vali?.headers &&
+		(isAsyncValidator(vali?.headers) ||
+			mayReturnPromiseValidator(vali?.headers))
+
+	const paramsValiIsAsync =
+		vali?.params &&
+		(isAsyncValidator(vali?.params) ||
+			mayReturnPromiseValidator(vali?.params))
+
+	const queryValiIsAsync =
+		vali?.query &&
+		(isAsyncValidator(vali?.query) ||
+			mayReturnPromiseValidator(vali?.query))
+
+	const cookieValidIsAsync =
+		vali?.cookie &&
+		(isAsyncValidator(vali?.cookie) ||
+			mayReturnPromiseValidator(vali?.cookie))
 
 	const appCookieConfig = root['~config']?.cookie
 	const needsCookie = !!vali?.cookie || !!inference.cookie
@@ -358,12 +374,25 @@ export function compileHandlerJit({
 	const hasTrace = !!traceHandlers?.length
 	const traceCount = hasTrace ? traceHandlers!.length : 0
 
+	// Statically-discovered union of subscribed phases across every trace
+	// handler. `null` = un-analyzable → instrument ALL phases (conservative,
+	// no silent loss). A phase absent from the set is never subscribed, so its
+	// per-request `performance.now()` instrumentation is dead and elided.
+	const tracePhases = hasTrace
+		? unionTracePhases(traceHandlers as Function[])
+		: new Set<TraceEvent>()
+	const phaseOn = (phase: TraceEvent) =>
+		hasTrace && (tracePhases === null || tracePhases.has(phase))
+	const hasAnyPhase =
+		hasTrace && (tracePhases === null || tracePhases.size > 0)
+	const traceHandleOn = phaseOn('handle')
+
 	const beginTrace = (
 		phase: TraceEvent,
 		total: number,
 		name: string = phase
 	) => {
-		if (!hasTrace) return ''
+		if (!phaseOn(phase)) return ''
 
 		const index = traceEventIndex[phase]
 
@@ -379,8 +408,8 @@ export function compileHandlerJit({
 		return s
 	}
 
-	const endTrace = (errBinding?: string) => {
-		if (!hasTrace) return ''
+	const endTrace = (phase: TraceEvent, errBinding?: string) => {
+		if (!phaseOn(phase)) return ''
 
 		let s = ''
 		for (let i = 0; i < traceCount; i++)
@@ -390,7 +419,7 @@ export function compileHandlerJit({
 	}
 
 	const buildReport = (phase: TraceEvent): TraceReporter | undefined => {
-		if (!hasTrace) return
+		if (!phaseOn(phase)) return
 
 		return {
 			resolveChild(name: string) {
@@ -447,7 +476,7 @@ export function compileHandlerJit({
 			hasErrorHook)
 
 	const traceForcesAsync =
-		hasTrace &&
+		(traceHandleOn || phaseOn('error') || phaseOn('afterResponse')) &&
 		isHandleFunction &&
 		!handlerIsAsync &&
 		(mayReturnPromise(handler as Function) ||
@@ -591,8 +620,8 @@ export function compileHandlerJit({
 		link(ParseError, 'pe')
 		code += 'try{\n' + parseCode + '}catch(e){throw new pe(e)}\n'
 
-		if (hasTrace) code += endTrace()
-	} else if (hasTrace) code += beginTrace('parse', 0) + endTrace()
+		if (hasTrace) code += endTrace('parse')
+	} else if (hasTrace) code += beginTrace('parse', 0) + endTrace('parse')
 
 	if (hook?.transform?.length || hasTrace) {
 		const transformLen = hook?.transform?.length ?? 0
@@ -605,7 +634,7 @@ export function compileHandlerJit({
 				buildReport('transform')
 			])
 		}
-		code += endTrace()
+		code += endTrace('transform')
 	}
 
 	if (vali?.body) {
@@ -689,11 +718,11 @@ export function compileHandlerJit({
 
 	if (hasAfterResponse) link(hook!.afterResponse!, 'ar')
 
-	const drainTraceStream = hasTrace
+	const drainTraceStream = traceHandleOn
 		? `let _ser\nif(_trs){try{for await(const v of _trs){}}catch(_te){_ser=_te}}\n`
 		: ''
 
-	const resolveHandlePostDrain = hasTrace
+	const resolveHandlePostDrain = traceHandleOn
 		? (() => {
 				let s = ''
 				// `r()` resolves either shape (numeric fast-path token or
@@ -705,14 +734,12 @@ export function compileHandlerJit({
 			})()
 		: ''
 
+	const traceNeedsSchedule = traceHandleOn || phaseOn('afterResponse')
+
 	const scheduleAfterResponse =
-		hasAfterResponse || hasTrace
+		hasAfterResponse || traceNeedsSchedule
 			? `c._arf=true\n` +
 				`queueMicrotask(async()=>{` +
-				// tee branches rethrow a source error (matching direct
-				// iteration); the afterResponse listener only awaits
-				// completion, so swallow it here — the trace drain below
-				// captures it for the span instead
 				`if(_stl){try{for await(const v of _stl){}}catch{}}\n` +
 				drainTraceStream +
 				resolveHandlePostDrain +
@@ -722,7 +749,7 @@ export function compileHandlerJit({
 							buildReport('afterResponse')
 						])
 					: '') +
-				endTrace() +
+				endTrace('afterResponse') +
 				`})\n`
 			: ''
 
@@ -777,12 +804,13 @@ export function compileHandlerJit({
 				)
 			}
 
-			code += endTrace()
+			code += endTrace('beforeHandle')
 		}
 
-		if (hasAfterResponse || hasTrace) link(tee, 'tee')
+		if (hasAfterResponse || traceHandleOn) link(tee, 'tee')
 
-		const teeConsumers = (hasAfterResponse ? 1 : 0) + (hasTrace ? 1 : 0)
+		const teeConsumers =
+			(hasAfterResponse ? 1 : 0) + (traceHandleOn ? 1 : 0)
 		const teeCount = teeConsumers + 1
 		const teeBlock =
 			teeConsumers > 0 && !syncAfterResponse
@@ -790,13 +818,13 @@ export function compileHandlerJit({
 					`const _s=tee(_r,${teeCount})\n` +
 					`_r=_s[0]\n` +
 					(hasAfterResponse ? `_stl=_s[1]\n` : '') +
-					(hasTrace
+					(traceHandleOn
 						? `_trs=_s[${1 + (hasAfterResponse ? 1 : 0)}]\n`
 						: '') +
 					`}\n`
 				: ''
 
-		if (hasTrace) {
+		if (traceHandleOn) {
 			const handleName =
 				(handler as any)?.name &&
 				typeof (handler as any).name === 'string'
@@ -815,7 +843,7 @@ export function compileHandlerJit({
 			code += `if(_trs){\n`
 			for (let i = 0; i < traceCount; i++) code += `_hr${i}=rp${i};\n`
 			code += `}else{\n`
-			code += endTrace()
+			code += endTrace('handle')
 			code += `}\n`
 		} else if (hasBeforeHandle)
 			code += `if(_r===undefined){\n${callHandler}${teeBlock}}\n`
@@ -869,7 +897,7 @@ export function compileHandlerJit({
 						buildReport('afterHandle')
 					)
 				}
-				code += endTrace()
+				code += endTrace('afterHandle')
 			}
 
 			if (hasMapResponse || hasTrace) {
@@ -883,7 +911,7 @@ export function compileHandlerJit({
 						buildReport('mapResponse')
 					)
 				}
-				code += endTrace()
+				code += endTrace('mapResponse')
 			}
 
 			if (hasResponseValidator) {
@@ -937,8 +965,9 @@ export function compileHandlerJit({
 		let body = ''
 
 		if (hasTrace) {
-			for (let i = 0; i < traceCount; i++)
-				body += `tr${i}.r(rp${i},e);rpc${i}?.(e)\n`
+			if (hasAnyPhase)
+				for (let i = 0; i < traceCount; i++)
+					body += `tr${i}.r(rp${i},e);rpc${i}?.(e)\n`
 			body += beginTrace('error', hook?.error?.length ?? 0)
 		}
 
@@ -983,11 +1012,11 @@ export function compileHandlerJit({
 								undefined
 							)
 						: '') +
-						endTrace() +
+						endTrace('error') +
 						schedule,
 					signPrefix
 				]) +
-				endTrace() +
+				endTrace('error') +
 				schedule +
 				`if(typeof e?.toResponse==='function')` +
 				`try{\n` +
@@ -997,7 +1026,7 @@ export function compileHandlerJit({
 				`}catch{}\n` +
 				`return _efb(e,c)\n`
 		} else {
-			body += endTrace() + schedule
+			body += endTrace('error') + schedule
 			body += `throw e\n`
 		}
 
@@ -1014,9 +1043,6 @@ export function compileHandlerJit({
 	if (factoryHelpers)
 		code = `(function(){\n${factoryHelpers}return ${code}})()`
 
-	// Capture the full generated route before the inline fast-path return.
-	// Inline handlers avoid `new Function` at runtime, but a frozen AOT build
-	// still needs a manifest entry so replay can prove handler JIT is unnecessary.
 	Capture.handler({ method, path, alias, code })
 
 	if (!hasTrace && isHandleFunction && !inlineUnsafe) {
@@ -1033,6 +1059,7 @@ export function compileHandlerJit({
 	}
 
 	JITProbe.record('handler:new-function')
+
 	// eslint-disable-next-line sonarjs/code-eval -- AOT codegen is the architecture
 	return new Function('h', alias, `return ${code}`)(handler, ...params)
 }

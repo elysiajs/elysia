@@ -3,6 +3,7 @@ import { Default } from './type/bridge'
 import { StatusMap, StatusMapBack } from './constants'
 import { primitiveElysiaTypes } from './type/constants'
 import { nullObject } from './utils'
+import { markResponseTransferable } from './adapter/utils'
 import { env } from './universal/env'
 
 export const isProduction = () => (env.NODE_ENV ?? env.ENV) === 'production'
@@ -581,28 +582,27 @@ export class ValidationError extends ElysiaError {
 	}
 
 	toResponse(headers?: Record<string, any>) {
-		// C8: a masked response-schema failure ALWAYS collapses to a generic 500
-		// problem+json — never a custom-error 422 that could echo the value or
-		// mislabel a server bug. `payload` already returns the generic 500 here.
 		if (this.#maskResponseValue) return problemResponse(this.payload, headers)
 
 		// validateDetail
 		if (this.customError !== undefined) {
 			const isString = typeof this.customError === 'string'
 
-			return new Response(
-				isString
-					? (this.customError as string)
-					: JSON.stringify(this.customError),
-				{
-					status: this.status ?? 422,
-					headers: {
-						...headers,
-						'content-type': isString
-							? 'text/plain'
-							: 'application/json'
+			return markResponseTransferable(
+				new Response(
+					isString
+						? (this.customError as string)
+						: JSON.stringify(this.customError),
+					{
+						status: this.status ?? 422,
+						headers: {
+							...headers,
+							'content-type': isString
+								? 'text/plain'
+								: 'application/json'
+						}
 					}
-				}
+				)
 			)
 		}
 
@@ -736,12 +736,14 @@ export function problemBody(
 export function problemResponse(p: Problem, headers?: Record<string, any>) {
 	const body = problemBody(p)
 
-	return new Response(
-		emptyHttpStatus.has(body.status) ? null : JSON.stringify(body),
-		{
-			status: body.status,
-			headers: { ...headers, 'content-type': PROBLEM_JSON }
-		}
+	return markResponseTransferable(
+		new Response(
+			emptyHttpStatus.has(body.status) ? null : JSON.stringify(body),
+			{
+				status: body.status,
+				headers: { ...headers, 'content-type': PROBLEM_JSON }
+			}
+		)
 	)
 }
 
@@ -762,10 +764,12 @@ export function internalServerErrorBody(error: any) {
 }
 
 export const internalServerErrorResponse = (error: any): Response =>
-	new Response(JSON.stringify(internalServerErrorBody(error)), {
-		status: 500,
-		headers: { 'content-type': PROBLEM_JSON }
-	})
+	markResponseTransferable(
+		new Response(JSON.stringify(internalServerErrorBody(error)), {
+			status: 500,
+			headers: { 'content-type': PROBLEM_JSON }
+		})
+	)
 
 export const problem = <const P extends Problem>(
 	detail: P

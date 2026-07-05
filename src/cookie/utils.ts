@@ -231,7 +231,9 @@ export function buildCookieJar(
 		const value = entry.value
 		if (value !== null && typeof value === 'object') {
 			const raw = rawJsonValue.get(value)
-			if (raw !== undefined) (entry as any)['~raw'] = raw
+
+			;(entry as any)['~raw'] =
+				raw !== undefined ? raw : JSON.stringify(value)
 		}
 
 		store[name] = entry

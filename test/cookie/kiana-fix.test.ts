@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 
-import { Elysia } from '../../src'
+import { Elysia, problem } from '../../src'
 import { compileCookieConfig } from '../../src/cookie/config'
 import {
 	buildCookieJar,
@@ -61,7 +61,7 @@ describe('cookie sign with no usable secret fails loud (idx3/24/38)', () => {
 		// misconfiguration is rejected — construction throws, the request
 		// rejects, or it errors out, but it must NEVER return a successful 200
 		// echoing the forged value.
-		let app: Elysia
+		let app: any
 		try {
 			app = new Elysia({
 				cookie: { sign: true, secrets: null }
@@ -174,5 +174,216 @@ describe('app + route attribute merge stays correct (idx46)', () => {
 		expect(config.defaults.path).toBe('/route')
 		expect(config.defaults.httpOnly).toBe(false)
 		expect(config.defaults.domain).toBe('example.com')
+	})
+})
+
+// Regression (codex-indep-5): when a handler reassigns `set.headers` to a native
+// `Headers` INSTANCE and sets exactly ONE cookie, `handleSet` wrote the cookie
+// with a bracket property assignment (`set.headers['set-cookie'] = string`). A
+// `Headers` instance has no property setter — the bracket write created an inert
+// own JS property the `Response` header iterator never reads, so the single
+// cookie was SILENTLY DROPPED (getSetCookie().length === 0). Two+ cookies
+// survived only because they took the string[] rebuild path (parseSetCookies via
+// .append). WHY it matters: a lost session/auth cookie is a silent correctness
+// failure with no error and no log — the handler sees the cookie "set" but it
+// never reaches the wire. The fix registers cookies via .append on a Headers
+// instance (append, not set, to preserve multiple set-cookie), and never
+// wrong-values or overwrites a user header (fails closed).
+describe('cookie survives a Headers-instance set.headers (codex-indep-5)', () => {
+	it('one cookie via the jar + Headers set.headers is not dropped', async () => {
+		const app = new Elysia().get('/', ({ set, cookie }) => {
+			set.headers = new Headers() as any
+			cookie.session.value = 'abc123'
+			return 'ok'
+		})
+
+		const res = await app.handle(new Request('http://localhost/'))
+		// before the fix this was 0
+		expect(res.headers.getSetCookie().length).toBe(1)
+		expect(res.headers.getSetCookie()[0]).toContain('session=abc123')
+	})
+
+	it('two cookies via the jar + Headers set.headers both survive (no doubling)', async () => {
+		const app = new Elysia().get('/', ({ set, cookie }) => {
+			set.headers = new Headers() as any
+			cookie.session.value = 'abc123'
+			cookie.theme.value = 'dark'
+			return 'ok'
+		})
+
+		const res = await app.handle(new Request('http://localhost/'))
+		const sc = res.headers.getSetCookie()
+		expect(sc.length).toBe(2)
+		expect(sc.some((c) => c.includes('session=abc123'))).toBe(true)
+		expect(sc.some((c) => c.includes('theme=dark'))).toBe(true)
+	})
+
+	it('set.cookie assigned directly + Headers set.headers survives', async () => {
+		const app = new Elysia().get('/', ({ set }) => {
+			set.headers = new Headers() as any
+			set.cookie = { session: { value: 'abc123' } } as any
+			return 'ok'
+		})
+
+		const res = await app.handle(new Request('http://localhost/'))
+		// before the fix this was 0
+		expect(res.headers.getSetCookie().length).toBe(1)
+		expect(res.headers.getSetCookie()[0]).toContain('session=abc123')
+	})
+
+	it('plain-object set.headers is unaffected (1 and 2 cookies)', async () => {
+		const app = new Elysia()
+			.get('/one', ({ set, cookie }) => {
+				set.headers = {}
+				cookie.session.value = 'abc123'
+				return 'ok'
+			})
+			.get('/two', ({ set, cookie }) => {
+				set.headers = {}
+				cookie.session.value = 'abc123'
+				cookie.theme.value = 'dark'
+				return 'ok'
+			})
+
+		const one = await app.handle(new Request('http://localhost/one'))
+		expect(one.headers.getSetCookie().length).toBe(1)
+
+		const two = await app.handle(new Request('http://localhost/two'))
+		expect(two.headers.getSetCookie().length).toBe(2)
+	})
+
+	it("a user's own .set() header on the Headers instance survives alongside the cookie", async () => {
+		const app = new Elysia().get('/', ({ set, cookie }) => {
+			set.headers = new Headers() as any
+			// a security-relevant header the user set explicitly
+			;(set.headers as unknown as Headers).set('authorization', 'Bearer xyz')
+			cookie.session.value = 'abc123'
+			return 'ok'
+		})
+
+		const res = await app.handle(new Request('http://localhost/'))
+		// no user header is dropped (fails closed, never wrong-valued)
+		expect(res.headers.get('authorization')).toBe('Bearer xyz')
+		expect(res.headers.getSetCookie().length).toBe(1)
+	})
+
+	it('a user-set content-type on the Headers instance is not overwritten', async () => {
+		const app = new Elysia().get('/', ({ set }) => {
+			set.headers = new Headers() as any
+			;(set.headers as unknown as Headers).set('content-type', 'text/custom')
+			return 'body'
+		})
+
+		const res = await app.handle(new Request('http://localhost/'))
+		expect(res.headers.get('content-type')).toBe('text/custom')
+	})
+
+	it('a pre-existing set-cookie on the Headers instance is preserved additively', async () => {
+		const app = new Elysia().get('/', ({ set, cookie }) => {
+			const headers = new Headers()
+			headers.append('set-cookie', 'user=manual; Path=/')
+			set.headers = headers as any
+			cookie.session.value = 'abc123'
+			return 'ok'
+		})
+
+		const res = await app.handle(new Request('http://localhost/'))
+		const sc = res.headers.getSetCookie()
+		expect(sc.length).toBe(2)
+		expect(sc.some((c) => c.includes('user=manual'))).toBe(true)
+		expect(sc.some((c) => c.includes('session=abc123'))).toBe(true)
+	})
+
+	it('framework problem() content-type survives on a Headers-instance set.headers', async () => {
+		// problem() constructs an ElysiaStatus carrying { content-type:
+		// application/problem+json }. Object.assign onto a Headers instance wrote
+		// inert properties, dropping it → the RFC9457 body was served as plain
+		// application/json. The fix assigns status headers via .set on a Headers
+		// instance.
+		const app = new Elysia().get('/', ({ set }) => {
+			set.headers = new Headers() as any
+			;(set.headers as unknown as Headers).set('x-keep', 'yes')
+			return problem({ status: 409, title: 'Conflict', detail: 'boom' })
+		})
+
+		const res = await app.handle(new Request('http://localhost/'))
+		expect(res.status).toBe(409)
+		expect(res.headers.get('content-type')).toBe('application/problem+json')
+		expect(res.headers.get('x-keep')).toBe('yes')
+	})
+
+	// (codex-indep-5, boundary rework) A returned streaming Response is merged
+	// with `set` via responseToSetHeaders/createResponseHandler. That path did
+	// Object.assign / bracket writes into `set.headers`; on a `Headers` instance
+	// those writes were inert, so the returned Response's OWN headers (x-source,
+	// content-type) were dropped and the merge silently lost data. Normalizing
+	// the `Headers` instance to a Record at the boundary makes the merge work.
+	it('returned streaming Response headers merge into a user Headers set.headers', async () => {
+		const app = new Elysia().get('/', ({ set }) => {
+			set.headers = new Headers({ 'x-set': 'from-set' }) as any
+			// force the merge path (a bare-Headers set with no status/cookie is
+			// returned raw; a touched status routes through handleSet + merge)
+			set.status = 200
+			const stream = new ReadableStream({
+				start(controller) {
+					controller.enqueue(new TextEncoder().encode('hello'))
+					controller.close()
+				}
+			})
+			return new Response(stream, {
+				headers: {
+					'x-source': 'from-response',
+					'content-type': 'text/custom'
+				}
+			})
+		})
+
+		const res = await app.handle(new Request('http://localhost/'))
+		// the returned Response's own headers survive the merge
+		expect(res.headers.get('x-source')).toBe('from-response')
+		expect(res.headers.get('content-type')).toBe('text/custom')
+		// and the user's set.headers entry survives too
+		expect(res.headers.get('x-set')).toBe('from-set')
+	})
+
+	// (codex-indep-5, boundary rework) The default 404 handler bracket-wrote
+	// `content-type` onto `set.headers`. When a request-level hook assigned a
+	// `Headers` instance, that write was inert → the RFC9457 problem+json
+	// content-type was silently dropped (served as null / octet-stream), while
+	// the hook's own header (x-foo) survived because the Response was built from
+	// the raw Headers instance. Normalizing at handleSet fixes the content-type.
+	it('404 with a Headers-instance set.headers keeps hook header AND problem+json content-type', async () => {
+		const app = new Elysia()
+			.request(({ set }) => {
+				set.headers = new Headers({ 'x-foo': '1' }) as any
+			})
+			.get('/exists', () => 'ok')
+
+		const res = await app.handle(new Request('http://localhost/missing'))
+		expect(res.status).toBe(404)
+		expect(res.headers.get('x-foo')).toBe('1')
+		expect(res.headers.get('content-type')).toBe('application/problem+json')
+	})
+
+	// (codex-indep-5, boundary rework) A user Headers instance carrying TWO
+	// set-cookie values (via .append) must have BOTH survive normalization —
+	// getSetCookie() (not the comma-joined single-header iterator value) is the
+	// only correct way to extract multi-value set-cookie from a Headers instance.
+	it('a user Headers instance with two appended set-cookie preserves both', async () => {
+		const app = new Elysia().get('/', ({ set }) => {
+			const headers = new Headers()
+			headers.append('set-cookie', 'a=1; Path=/')
+			headers.append('set-cookie', 'b=2; Path=/')
+			set.headers = headers as any
+			// touch status so the response routes through handleSet
+			set.status = 200
+			return 'ok'
+		})
+
+		const res = await app.handle(new Request('http://localhost/'))
+		const sc = res.headers.getSetCookie()
+		expect(sc.length).toBe(2)
+		expect(sc.some((c) => c.includes('a=1'))).toBe(true)
+		expect(sc.some((c) => c.includes('b=2'))).toBe(true)
 	})
 })

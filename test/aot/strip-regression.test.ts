@@ -162,7 +162,10 @@ describe('AOT strip regression — strip:auto (sound: skip when unsafe)', () => 
 			reconstruct: true,
 			cookie: true,
 			trace: true,
-			sucrose: true
+			sucrose: true,
+			// WS present → bridge stays wired (off mode): no compat stub, no reroute
+			compat: false,
+			bridge: false
 		})
 
 		const text = await build(
@@ -308,7 +311,11 @@ describe('AOT strip regression — strip:auto (sound: skip when unsafe)', () => 
 			reconstruct: true,
 			cookie: true,
 			trace: true,
-			sucrose: true
+			sucrose: true,
+			// the mounted sub-app's routes are invisible to capture; the visible
+			// route set is bridge-free → sealed (compat stubbed, no reroute)
+			compat: true,
+			bridge: false
 		})
 
 		const text = await build(

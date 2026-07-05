@@ -143,6 +143,20 @@ export function handleFile(
 	})
 }
 
+export function normalizeHeaders(set: Context['set']) {
+	const headers = set.headers
+	if (!(headers instanceof Headers)) return
+
+	const flat: Record<string, unknown> = Object.create(null)
+
+	for (const [key, value] of headers) if (key !== setCookie) flat[key] = value
+
+	const cookies = headers.getSetCookie()
+	if (cookies.length) flat[setCookie] = cookies
+
+	set.headers = flat as Context['set']['headers']
+}
+
 export function parseSetCookies(headers: Headers, setCookie: string[]) {
 	if (!headers) return headers
 
@@ -163,6 +177,8 @@ export function parseSetCookies(headers: Headers, setCookie: string[]) {
 }
 
 export function responseToSetHeaders(response: Response, set?: Context['set']) {
+	if (set && set.headers instanceof Headers) normalizeHeaders(set)
+
 	if (set?.headers) {
 		if (response) {
 			if (hasHeaderShorthand)
@@ -298,12 +314,12 @@ export function createStreamHandler({
 
 		const headers = set?.headers
 		if (headers instanceof Headers) {
-			// bracket access on a Headers instance reads/writes JS properties,
-			// silently dropping the streaming defaults (>1 cookie path)
 			if (!headers.has('transfer-encoding'))
 				headers.set('transfer-encoding', 'chunked')
+
 			if (!headers.has('content-type'))
 				headers.set('content-type', contentType)
+
 			if (!headers.has('cache-control'))
 				headers.set('cache-control', 'no-cache')
 		} else if (headers) {
@@ -466,12 +482,10 @@ export function handleSet(set: Context['set']) {
 	if (typeof set.status === 'string')
 		set.status = StatusMap[set.status as keyof typeof StatusMap]
 
+	if (set.headers instanceof Headers) normalizeHeaders(set)
+
 	const proto = Object.getPrototypeOf(set.headers)
-	if (
-		proto !== null &&
-		proto !== Object.prototype &&
-		!(set.headers instanceof Headers)
-	) {
+	if (proto !== null && proto !== Object.prototype) {
 		const flat: Record<string, unknown> = Object.create(null)
 
 		for (const key in set.headers) flat[key] = set.headers[key]
@@ -481,15 +495,19 @@ export function handleSet(set: Context['set']) {
 	if (set.cookie && isNotEmpty(set.cookie)) {
 		const cookie = serializeCookie(set.cookie)
 
-		if (cookie) set.headers[setCookie] = cookie
+		if (cookie) {
+			const existing = set.headers[setCookie]
+			if (Array.isArray(existing))
+				set.headers[setCookie] = existing.concat(cookie)
+			else set.headers[setCookie] = cookie
+		}
 	}
 
-	if (set.headers[setCookie] && Array.isArray(set.headers[setCookie])) {
+	if (set.headers[setCookie] && Array.isArray(set.headers[setCookie]))
 		set.headers = parseSetCookies(
 			new Headers(set.headers as any) as Headers,
 			set.headers[setCookie]
 		) as any
-	}
 }
 
 function applySetHeaders(

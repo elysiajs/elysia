@@ -1,0 +1,489 @@
+import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
+import { resolve, join } from 'node:path'
+import { gzipSync } from 'node:zlib'
+import { writeFileSync, rmSync, mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+
+import * as esbuild from 'esbuild'
+
+// The plugin plan (mode/stub) must be read from the SAME dist instance the
+// fixtures' bare `elysia` import resolves to — a `src` core would replay handler
+// JIT against a different `Compiled`/`JITProbe` and mis-report `jit` (→ off).
+// `plugin/core` is not a public export, so load the built module by path.
+const distCore = (await import(
+	resolve(import.meta.dir, '../../dist/plugin/core.mjs')
+)) as typeof import('../../src/plugin/core')
+const { generateCompiledArtifacts } = distCore
+
+/**
+ * Step 3 of the sealed-bundle roadmap: the AOT plugin picks a TypeBox-collapse
+ * mode from the frozen build's `bridgeFree` markers.
+ *
+ *  - Mode A (sealed): every captured validator is bridge-free and the app is
+ *    fully stripped → `type/compat` is stubbed and the bridge is severed, so
+ *    TypeBox collapses (~105K/35K esbuild region).
+ *  - Mode B (wired): at least one validator still needs the bridge (query
+ *    coercion, union, …) → `compat` is stubbed AND `type/bridge` is re-routed to
+ *    the statically-wired `type/bridge-live` mirror, so the bridge works without
+ *    the DCE-fragile `setupTypebox()` anchor (the Bun failure the mirror fixes).
+ *
+ * WHY dist (not src): like the sibling bridge-free / dist-dedup tests, the whole
+ * scenario only manifests through the published module graph — the plugin loaded
+ * from `elysia/plugin/esbuild` must share the `Compiled` instance the fixtures'
+ * bare `elysia` import resolves to. The standard gate builds `dist` first.
+ *
+ * WHY all bundles are built in `beforeAll` then esbuild is stopped BEFORE any
+ * dynamic import: with the esbuild service alive, importing a second
+ * freshly-written `.mjs` in the same process spuriously fails ("Cannot find
+ * module"). Building everything first, stopping esbuild, then importing the
+ * pre-written files sidesteps that interaction.
+ */
+
+const MODE_A = resolve(import.meta.dir, 'fixtures/mode-a-app.ts')
+const MODE_B = resolve(import.meta.dir, 'fixtures/mode-b-app.ts')
+// Regression fixtures for the two mode-misgating defects (see the describe block
+// "AOT mode gating — misgating regressions" below for the full rationale).
+const MODE_GUARD = resolve(import.meta.dir, 'fixtures/mode-guard-app.ts')
+const MODE_MACRO = resolve(import.meta.dir, 'fixtures/mode-macro-app.ts')
+const MODE_LATE = resolve(import.meta.dir, 'fixtures/mode-late-app.ts')
+const MODE_EMPTY = resolve(import.meta.dir, 'fixtures/mode-empty-app.ts')
+const MODE_NORMALIZE = resolve(
+	import.meta.dir,
+	'fixtures/mode-normalize-app.ts'
+)
+
+async function buildEsbuild(app: string): Promise<string> {
+	const { aot } = await import('elysia/plugin/esbuild')
+
+	const previous = process.env.ELYSIA_AOT_BUILD
+	process.env.ELYSIA_AOT_BUILD = '1'
+	try {
+		const result = await esbuild.build({
+			entryPoints: [app],
+			bundle: true,
+			write: false,
+			format: 'esm',
+			platform: 'neutral',
+			minify: true,
+			external: ['node:*'],
+			logLevel: 'silent',
+			plugins: [aot(app)]
+		})
+		return result.outputFiles[0]!.text
+	} finally {
+		if (previous === undefined) delete process.env.ELYSIA_AOT_BUILD
+		else process.env.ELYSIA_AOT_BUILD = previous
+	}
+}
+
+async function buildBun(app: string): Promise<string> {
+	const { aot } = await import('elysia/plugin/bun')
+
+	const previous = process.env.ELYSIA_AOT_BUILD
+	process.env.ELYSIA_AOT_BUILD = '1'
+	try {
+		const result = await Bun.build({
+			entrypoints: [app],
+			target: 'bun',
+			minify: true,
+			plugins: [aot(app)]
+		})
+		if (!result.success) throw new AggregateError(result.logs)
+		return result.outputs[0]!.text()
+	} finally {
+		if (previous === undefined) delete process.env.ELYSIA_AOT_BUILD
+		else process.env.ELYSIA_AOT_BUILD = previous
+	}
+}
+
+let dir: string
+// Bundle text keyed by label; imported app path keyed by label.
+const code: Record<string, string> = {}
+const appPath: Record<string, string> = {}
+
+beforeAll(async () => {
+	dir = mkdtempSync(join(tmpdir(), 'ely-mode-gating-'))
+
+	code.esbuildA = await buildEsbuild(MODE_A)
+	code.esbuildB = await buildEsbuild(MODE_B)
+	code.bunB = await buildBun(MODE_B)
+	// Misgating regressions: the guard/macro/late apps were false-sealed by the
+	// old gate. Build them here (esbuild service alive) so the smoke tests below
+	// import the pre-written bundles after `esbuild.stop()`, matching the file's
+	// build-all-then-stop-then-import discipline (see header).
+	code.esbuildGuard = await buildEsbuild(MODE_GUARD)
+	code.esbuildMacro = await buildEsbuild(MODE_MACRO)
+	code.esbuildLate = await buildEsbuild(MODE_LATE)
+	code.esbuildNormalize = await buildEsbuild(MODE_NORMALIZE)
+
+	// Release the esbuild service before any dynamic import (see file header).
+	await esbuild.stop()
+
+	for (const label of Object.keys(code)) {
+		const file = join(dir, `${label}.mjs`)
+		writeFileSync(file, code[label]!)
+		appPath[label] = file
+	}
+})
+
+afterAll(() => {
+	if (dir) rmSync(dir, { recursive: true, force: true })
+})
+
+async function loadApp(label: string) {
+	const mod = (await import(appPath[label]!)) as {
+		app?: any
+		default?: any
+	}
+	return mod.app ?? mod.default
+}
+
+// TypeBox codec/value engine markers — present only when the bridge dragged the
+// real validator in (mode B / off), absent when TypeBox collapses (mode A).
+const dragsTypeBox = (source: string): boolean =>
+	/typebox\/(value|compile)/.test(source)
+
+describe('AOT mode gating — plan', () => {
+	it('picks mode=sealed when every validator is bridge-free', async () => {
+		const { mode, stub } = await generateCompiledArtifacts(MODE_A)
+
+		expect(mode).toBe('sealed')
+		// compat stubbed, bridge NOT re-routed (severed entirely)
+		expect(stub.compat).toBe(true)
+		expect(stub.bridge).toBe(false)
+	})
+
+	it('flips to mode=wired when a query-coercion / union route is present', async () => {
+		const { mode, stub } = await generateCompiledArtifacts(MODE_B)
+
+		expect(mode).toBe('wired')
+		// compat stubbed AND bridge re-routed to the wired mirror
+		expect(stub.compat).toBe(true)
+		expect(stub.bridge).toBe(true)
+	})
+})
+
+/**
+ * Two CRITICAL mode-misgating defects the plan gate must not commit. The gate
+ * has to model the SAME refusal surface as the runtime
+ * `buildFrozenRouteValidator` (src/compile/handler/frozen-validator.ts), which
+ * returns `undefined` (→ reconstruct rethrows → prod 500 under a severed bridge)
+ * for a route whose `hook.schemas` is non-empty (:340) or when
+ * `normalize: 'typebox'` (:339). The per-slot `bridgeFree` marker cannot see
+ * either condition, so before this fix such apps false-sealed and 500'd on the
+ * first request ("Typebox module isn't initialized").
+ *
+ * DEFECT 1 — standalone-guard / macro schemas live under `hook.schemas`, not the
+ * 6 named slots the coverage floor counts. The captured body validator is marked
+ * bridgeFree, `expectedSlots` is 0, so `frozenSlots >= expectedSlots` and the
+ * `.every()` both passed → sealed → severed bridge → 500.
+ *
+ * DEFECT 2 — a zero-capture app (empty, or routes registered AFTER the capture
+ * snapshot) let `frozenSlots >= 0` and `[].every()` pass vacuously → sealed on
+ * nothing. Marginal runtime harm (strip already 500s a late route at the jit
+ * stub, before the bridge is reached — verified below), but a seal decision must
+ * not rest on vacuous truth. Fix: require `handlers.length > 0` for sealed.
+ */
+describe('AOT mode gating — misgating regressions', () => {
+	it('DEFECT 1: a standalone-guard schema forces wired, not sealed', async () => {
+		// Without the `hook.schemas` gate this is `sealed` (compat stubbed, bridge
+		// severed) and the built app 500s on the first request.
+		const { mode, stub } = await generateCompiledArtifacts(MODE_GUARD)
+		expect(mode).toBe('wired')
+		expect(stub.compat).toBe(true)
+		expect(stub.bridge).toBe(true)
+	})
+
+	it('DEFECT 1: a macro-injected schema forces wired, not sealed', async () => {
+		const { mode, stub } = await generateCompiledArtifacts(MODE_MACRO)
+		expect(mode).toBe('wired')
+		expect(stub.bridge).toBe(true)
+	})
+
+	it('DEFECT 1: the wired guard bundle still enforces the standalone schema (200/422), no setupTypebox', async () => {
+		// The whole point of routing to wired: the mirror keeps the bridge alive so
+		// the standalone body schema validates. Under the buggy sealed mode this
+		// path 500'd ("Typebox module isn't initialized").
+		expect(/setupTypebox\(\)/.test(code.esbuildGuard!)).toBe(false)
+
+		const dir2 = mkdtempSync(join(tmpdir(), 'ely-guard-'))
+		const file = join(dir2, 'guard.mjs')
+		writeFileSync(file, code.esbuildGuard!)
+		const mod = (await import(file)) as { app?: any; default?: any }
+		const app = mod.app ?? mod.default
+
+		const valid = await app.handle(
+			new Request('http://localhost/u', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ name: 'a', age: 5 })
+			})
+		)
+		expect(valid.status).toBe(200)
+		await expect(valid.json()).resolves.toEqual({ name: 'a', age: 5 })
+
+		// `{ age: 'x' }` violates the standalone body (`name` required, `age`
+		// numeric) — a 500 here would mean the severed bridge, a 200 would mean the
+		// schema was dropped. 422 proves the standalone schema is enforced.
+		const invalid = await app.handle(
+			new Request('http://localhost/u', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ age: 'x' })
+			})
+		)
+		expect(invalid.status).toBe(422)
+
+		rmSync(dir2, { recursive: true, force: true })
+	})
+
+	it('DEFECT 1: the wired macro bundle still enforces the macro schema (200/422)', async () => {
+		const dir2 = mkdtempSync(join(tmpdir(), 'ely-macro-'))
+		const file = join(dir2, 'macro.mjs')
+		writeFileSync(file, code.esbuildMacro!)
+		const mod = (await import(file)) as { app?: any; default?: any }
+		const app = mod.app ?? mod.default
+
+		const valid = await app.handle(
+			new Request('http://localhost/u', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ name: 'a' })
+			})
+		)
+		expect(valid.status).toBe(200)
+
+		const invalid = await app.handle(
+			new Request('http://localhost/u', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ age: 'x' })
+			})
+		)
+		expect(invalid.status).toBe(422)
+
+		rmSync(dir2, { recursive: true, force: true })
+	})
+
+	it('DEFECT 2: a zero-route app is NOT sealed (no vacuous seal)', async () => {
+		// Empty app → 0 captured handlers. The old gate sealed on `[].every()`.
+		const { mode } = await generateCompiledArtifacts(MODE_EMPTY)
+		expect(mode).not.toBe('sealed')
+		// `frozenActive` (jit && !hasWS) holds for an empty app, so it lands on the
+		// safe non-vacuous default: wired (mirror present).
+		expect(mode).toBe('wired')
+	})
+
+	it('normalize:"typebox" app is NOT sealed (frozen-validator refuses it; sealed would 500 in prod)', async () => {
+		// frozen-validator.ts:339 returns undefined for any hook when
+		// normalize:'typebox' is set — the Clean path routes through live TypeBox
+		// which a severed bridge cannot serve. Without the routesForbidSeal guard in
+		// planFromReport the gate would seal this app (all body-validator slots ARE
+		// bridge-free, full coverage, handlers > 0) and every request would 500 with
+		// "Typebox module isn't initialized".
+		const { mode, stub } = await generateCompiledArtifacts(MODE_NORMALIZE)
+		expect(mode).not.toBe('sealed')
+		// Falls through to wired — compat stubbed, bridge re-routed to the mirror.
+		expect(mode).toBe('wired')
+		expect(stub.compat).toBe(true)
+		expect(stub.bridge).toBe(true)
+	})
+
+	it('DEFECT 2: a late-registered route is NOT sealed; marginal harm is nil (jit stub fires first)', async () => {
+		// The route is added on a `setTimeout` after the capture snapshot, so the
+		// gate captures 0 routes/handlers. Old gate: sealed on vacuous truth.
+		const { mode } = await generateCompiledArtifacts(MODE_LATE)
+		expect(mode).not.toBe('sealed')
+		expect(mode).toBe('wired')
+
+		// Marginal-severity evidence: under strip mode the late route hits the jit
+		// stub BEFORE the bridge is reached — so the false seal never made the late
+		// route worse than the pre-existing jit-stub failure. The bundle (built in
+		// beforeAll) 500s at the jit stub, not the bridge. (This is why DEFECT 2 is
+		// "vacuous-truth unsoundness" rather than a new runtime regression.)
+		const dir2 = mkdtempSync(join(tmpdir(), 'ely-late-'))
+		const file = join(dir2, 'late.mjs')
+		writeFileSync(file, code.esbuildLate!)
+		const mod = (await import(file)) as { app?: any; default?: any }
+		const app = mod.app ?? mod.default
+		// give the setTimeout a tick to register the late route
+		await new Promise((r) => setTimeout(r, 10))
+
+		const res = await app.handle(new Request('http://localhost/late'))
+		expect(res.status).toBe(500)
+		const body = (await res.json()) as { detail?: string }
+		// The failure is the stripped handler JIT, NOT the severed bridge.
+		expect(body.detail).toContain('handler compiler JIT was stripped')
+		expect(body.detail).not.toContain('Typebox module')
+
+		rmSync(dir2, { recursive: true, force: true })
+	})
+})
+
+describe('AOT mode A (sealed) — esbuild', () => {
+	it('drops TypeBox and stubs setupTypebox', () => {
+		expect(dragsTypeBox(code.esbuildA!)).toBe(false)
+		expect(/setupTypebox\(\)/.test(code.esbuildA!)).toBe(false)
+	})
+
+	it('collapses into the ~105K/35K region', () => {
+		const min = Buffer.byteLength(code.esbuildA!)
+		const gz = gzipSync(code.esbuildA!, { level: 9 }).length
+		// generous ceiling well below the wired ~275K, so a TypeBox regression trips
+		expect(min).toBeLessThan(160_000)
+		expect(gz).toBeLessThan(50_000)
+	})
+
+	it('still validates (200 / 200 / 422)', async () => {
+		const app = await loadApp('esbuildA')
+
+		expect(
+			(await app.handle(new Request('http://localhost/'))).status
+		).toBe(200)
+
+		const valid = await app.handle(
+			new Request('http://localhost/u', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ name: 'a', age: 5 })
+			})
+		)
+		expect(valid.status).toBe(200)
+		await expect(valid.json()).resolves.toEqual({ name: 'a', age: 5 })
+
+		const invalid = await app.handle(
+			new Request('http://localhost/u', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ age: 'x' })
+			})
+		)
+		// fail-closed 422 even though TypeBox `Errors` is severed
+		expect(invalid.status).toBe(422)
+	})
+})
+
+describe('AOT mode B (wired) — esbuild', () => {
+	it('stubs setupTypebox and statically wires the mirror', () => {
+		// compat stubbed → no `setupTypebox()` call anywhere in the bundle
+		expect(/setupTypebox\(\)/.test(code.esbuildB!)).toBe(false)
+		// the mirror (`bridge-live`) top-level `Settings.Set({ unionPrioritySort })`
+		// rides into the bundle — proof it is statically wired, not latched
+		expect(/unionPrioritySort/.test(code.esbuildB!)).toBe(true)
+	})
+
+	it('coerces query Numeric and validates a union body', async () => {
+		const app = await loadApp('esbuildB')
+
+		const coerced = await app.handle(new Request('http://localhost/n?n=1'))
+		expect(coerced.status).toBe(200)
+		expect(await coerced.text()).toBe('1')
+
+		expect(
+			(await app.handle(new Request('http://localhost/n?n=notnum')))
+				.status
+		).toBe(422)
+
+		const unionValid = await app.handle(
+			new Request('http://localhost/u', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ a: 'x' })
+			})
+		)
+		expect(unionValid.status).toBe(200)
+
+		const unionInvalid = await app.handle(
+			new Request('http://localhost/u', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ c: 1 })
+			})
+		)
+		expect(unionInvalid.status).toBe(422)
+	})
+})
+
+/**
+ * The Bun bundler was the ORIGINAL motivation for the mirror: it DCE'd the bare
+ * top-level `setupTypebox()` anchor (compat is `sideEffects:false`), leaving the
+ * bridge un-wired and every request 500ing on "Typebox module isn't
+ * initialized". The static mirror import cannot be DCE'd — this pins that a Bun
+ * build of the wired app works.
+ */
+describe('AOT mode B (wired) — Bun (the DCE case the mirror fixes)', () => {
+	it('stubs setupTypebox and statically wires the mirror', () => {
+		expect(/setupTypebox\(\)/.test(code.bunB!)).toBe(false)
+		expect(/unionPrioritySort/.test(code.bunB!)).toBe(true)
+	})
+
+	it('coerces query Numeric and validates a union body', async () => {
+		const app = await loadApp('bunB')
+
+		const coerced = await app.handle(new Request('http://localhost/n?n=1'))
+		expect(coerced.status).toBe(200)
+		expect(await coerced.text()).toBe('1')
+
+		const unionValid = await app.handle(
+			new Request('http://localhost/u', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ b: 2 })
+			})
+		)
+		expect(unionValid.status).toBe(200)
+	})
+})
+
+/**
+ * Vite has no npm dev-dep here (like the sibling `plugin.test.ts` Vite case), so
+ * exercise the plugin's hook contract directly — Vite just calls these. Uses
+ * src-importing fixtures so the src Vite plugin shares the src `Compiled` (a
+ * dist-importing fixture would capture 0 and fall to `off`). Verifies the same
+ * virtual-t + reroute + compat-stub wiring the esbuild/Bun bundles proved.
+ */
+describe('AOT mode gating — Vite hook contract', () => {
+	const COMPAT = resolve(import.meta.dir, '../../src/type/compat.ts')
+	const BRIDGE = resolve(import.meta.dir, '../../src/type/bridge.ts')
+
+	it('mode A: serves virtual-t, stubs compat, does NOT reroute bridge', async () => {
+		const { aot } = await import('../../src/plugin/vite')
+		const plugin = aot(
+			resolve(import.meta.dir, 'fixtures/mode-a-vite.ts')
+		)
+		await plugin.buildStart()
+
+		// virtual `elysia/type` served (no setupTypebox), 28 export lines
+		const vid = plugin.resolveId('elysia/type')
+		expect(vid).toBe('\0elysia/type')
+		const vt = plugin.load(vid!)!
+		expect(/setupTypebox/.test(vt)).toBe(false)
+		expect(vt.split('\n').filter((l) => l.startsWith('export')).length).toBe(
+			28
+		)
+
+		// compat → no-op stub; bridge left alone (severed, not re-routed)
+		expect(await plugin.transform('x', COMPAT)).toBe(
+			'export function setupTypebox(){}\n'
+		)
+		expect(await plugin.transform('x', BRIDGE)).toBeUndefined()
+	})
+
+	it('mode B: serves virtual-t, stubs compat, RE-ROUTES bridge to bridge-live', async () => {
+		const { aot } = await import('../../src/plugin/vite')
+		const plugin = aot(
+			resolve(import.meta.dir, 'fixtures/mode-b-vite.ts')
+		)
+		await plugin.buildStart()
+
+		expect(plugin.resolveId('elysia/type')).toBe('\0elysia/type')
+
+		expect(await plugin.transform('x', COMPAT)).toBe(
+			'export function setupTypebox(){}\n'
+		)
+		// the reroute — bridge module content replaced with the mirror re-export
+		expect(await plugin.transform('x', BRIDGE)).toBe(
+			"export * from './bridge-live'\n"
+		)
+	})
+})

@@ -140,8 +140,7 @@ export const BunAdapter = createAdapter({
 				app.fetch(request, server)
 
 		const serve = _config ? { ..._config, ..._options } : _options
-
-		app.server = Bun.serve(serve)
+		const server = (app.server = Bun.serve(serve))
 
 		const onSetup = app['~ext']?.setup
 		if (onSetup) for (let i = 0; i < onSetup.length; i++) onSetup[i](app)
@@ -150,6 +149,8 @@ export const BunAdapter = createAdapter({
 		if (!hasWs) callback?.(app.server!)
 
 		queueMicrotask(() => {
+			if (app.server !== server) return
+
 			if (!app.pending) serve.fetch = app.fetch
 
 			const buildWebSocket = () => {
@@ -168,8 +169,10 @@ export const BunAdapter = createAdapter({
 
 				if (staticRoutes[1].length)
 					return Promise.all(staticRoutes[1]).then(() => {
+						if (app.server !== server) return
 						serve.routes = staticRoutes[0]
-						app.server!.reload(serve)
+
+						app.server.reload(serve)
 					})
 
 				if (Object.keys(staticRoutes[0]).length)
@@ -177,24 +180,24 @@ export const BunAdapter = createAdapter({
 			}
 
 			if (app.pending) {
-				if (app.server) app.server.reload(serve)
-				else app.server = Bun.serve(serve)
+				app.server.reload(serve)
 
 				const reloadAfterModules = () => {
+					if (app.server !== server) return
+
 					serve.fetch = app.fetch
 
 					if (hasWs || app['~hasWS']) buildWebSocket()
 
 					collectRoutes()
-					app.server!.reload(serve)
+					app.server.reload(serve)
 				}
 
 				app.modules.then(reloadAfterModules, reloadAfterModules)
 			} else {
 				collectRoutes()
 
-				if (app.server) app.server.reload(serve)
-				else app.server = Bun.serve(serve)
+				app.server.reload(serve)
 			}
 
 			flushMemory()

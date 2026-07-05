@@ -79,7 +79,12 @@ function buildEmptyContext(Base: any, headers: object | null = null) {
 		constructor(public request: Request) {
 			super()
 			this.set = {
-				headers: Object.create(headers),
+				// A proto-linked `set.headers` forces `handleSet` to allocate
+				// + `for..in`-flatten the proto chain on every request
+				headers:
+					headers === null
+						? Object.create(null)
+						: Object.assign(Object.create(null), headers),
 				status: undefined,
 				cookie: undefined
 			}

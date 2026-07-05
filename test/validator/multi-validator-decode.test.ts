@@ -4,6 +4,7 @@ import { Decode } from 'typebox/value'
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
 import { applyCoercions } from '../../src/type/coerce'
+import { Compile } from '../../src/type/bridge'
 import { post } from '../utils'
 
 // H8: MultiValidator.From used to run the interpreted `Value.Decode` per
@@ -171,5 +172,62 @@ describe('MultiValidator decode differential (H8)', () => {
 			.then((x) => x.json())
 
 		expect(value).toEqual({ name: 'lilith' })
+	})
+
+	// validator-runtime-2: a MultiValidator rejection must NOT eagerly run the
+	// full `Errors` walk. `ValidationError` defers that walk behind a thunk so
+	// production (which masks the detail and reads only `.status`) never pays for
+	// it — the single-validator path already does this. `#fromTypeBox` throws by
+	// calling the failing member's `Errors`, so we spy on that member's compiled
+	// `Errors` (typebox `Validator.prototype.Errors`, restored immediately) to
+	// prove the walk is deferred: reading `.status` leaves it un-called, yet
+	// reading `.errors` still yields the correct detail.
+	it('defers the member Errors walk on rejection until detail is read (lazy thunk)', () => {
+		const passthrough = {
+			'~standard': {
+				version: 1,
+				vendor: 'test',
+				validate: () => ({ value: {} })
+			}
+		} as any
+
+		const validator = Validator.create(t.Object({ a: t.Number() }), {
+			schemas: [passthrough]
+		})! as any
+
+		// the failing member is a compiled typebox validator; spy on its shared
+		// prototype `Errors` and restore it so no other test is affected
+		const memberProto = Object.getPrototypeOf(Compile(t.Object({ a: t.Number() }) as any))
+		const realErrors = memberProto.Errors
+		let errorsCalls = 0
+		memberProto.Errors = function (this: any, value: unknown) {
+			errorsCalls++
+			return realErrors.call(this, value)
+		}
+
+		let thrown: any
+		try {
+			try {
+				validator.From({ a: 'not-a-number' }, 'body')
+			} catch (error) {
+				thrown = error
+			}
+
+			// production behavior: read only `.status` — walk must be deferred
+			expect(thrown.status).toBe(422)
+			expect(errorsCalls).toBe(0)
+
+			// dev behavior: reading detail triggers exactly one walk, right path
+			const errors = thrown.errors
+			expect(errorsCalls).toBe(1)
+			expect(Array.isArray(errors)).toBe(true)
+			expect(errors[0]?.instancePath).toBe('/a')
+
+			// memoized: re-reading detail does not re-walk
+			void thrown.errors
+			expect(errorsCalls).toBe(1)
+		} finally {
+			memberProto.Errors = realErrors
+		}
 	})
 })

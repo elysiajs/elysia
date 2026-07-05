@@ -794,46 +794,17 @@ export type InlineHandler<
 		resolve: {}
 	}
 > =
-	| MaybePromise<
-			{} extends Route['response']
-				? InlineResponse
-				: Route['response'][keyof Route['response']]
-	  >
-	| ((
-			context: Context<
-				Route & MacroContext,
-				Singleton & { derive: MacroContext['resolve'] }
-			>
-	  ) =>
-			| MaybePromise<Response>
-			| MaybePromise<
-					{} extends Route['response']
-						? unknown
-						:
-								| (Route['response'] extends {
-										200: any
-								  }
-										?
-												| Route['response'][200]
-												| ElysiaStatus<
-														200,
-														Route['response'][200],
-														200
-												  >
-												| Generator<
-														Route['response'][200]
-												  >
-												| AsyncGenerator<
-														Route['response'][200]
-												  >
-										: unknown)
-								// This could be possible because of set.status
-								| Route['response'][keyof Route['response']]
-								| InlineHandlerResponse<
-										Route['response'] &
-											MacroContext['response']
-								  >
-			  >)
+	// A macro's declared `response` lives in `MacroContext['response']`, not the
+	// route-local `Route['response']`. Merging it into the route and delegating
+	// to `InlineHandlerNonMacro` binds the handler return to the macro response
+	// exactly as a local response would — closing the leak where a macro-only
+	// response left the handler return unchecked. `MacroContext` defaults to
+	// empty (`response: {}`, `resolve: {}`), so this is a NO-OP for non-macro
+	// routes and preserves the macro-derived (`resolve`-channel) context.
+	InlineHandlerNonMacro<
+		Route & MacroContext,
+		Singleton & { derive: MacroContext['resolve'] }
+	>
 
 export type InlineHandlerNonMacro<
 	Route extends RouteSchema = {},
@@ -2027,7 +1998,10 @@ export type UnionResponseStatus<A, B> = {} extends A
 			}
 
 type HasInputValidator<Schema extends RouteSchema, Path extends string> =
-	EmptyInputSchema extends Pick<Schema, Exclude<InputSchemaKey, 'params'>>
+	EmptyInputSchema extends Pick<
+		Schema,
+		Exclude<InputSchemaKey, 'params' | 'response'>
+	>
 		? undefined extends Schema['params']
 			? false
 			: Schema['params'] extends ResolvePath<Path>

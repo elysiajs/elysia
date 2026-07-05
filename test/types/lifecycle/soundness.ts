@@ -297,6 +297,8 @@ import { Prettify } from '../../../src/types'
 
 	type Lifecycle = (typeof app)['~Routes']['post']['response']
 
+	// only `response` schemas are declared (route + macro), no request validator
+	// → no phantom 422 (eden-types-1)
 	expectTypeOf<Lifecycle>().toEqualTypeOf<{
 		200: 'Type Soundness'
 		400: 'Bad Request'
@@ -310,16 +312,6 @@ import { Prettify } from '../../../src/types'
 		409: 'Conflict'
 		410: 'Gone'
 		411: 'Length Required'
-		422: {
-			type: 'validation'
-			title: 'Validation Error'
-			status: 422
-			detail?: string
-			on: string
-			found?: unknown
-			property?: string
-			expected?: string
-		}
 	}>()
 }
 
@@ -349,7 +341,8 @@ import { Prettify } from '../../../src/types'
 	}>()
 }
 
-// Macro with schema should have 422
+// Macro with only a `response` schema (an OUTPUT schema, not a request
+// validator) must NOT inject a phantom 422 (eden-types-1)
 {
 	const app = new Elysia()
 		.macro({
@@ -376,16 +369,6 @@ import { Prettify } from '../../../src/types'
 		200: 'Hello World'
 		401: 'Unauthorized'
 		410: 'Gone'
-		422: {
-			type: 'validation'
-			title: 'Validation Error'
-			status: 422
-			detail?: string
-			on: string
-			found?: unknown
-			property?: string
-			expected?: string
-		}
 	}>()
 }
 

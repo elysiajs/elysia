@@ -259,12 +259,25 @@ describe('async-cliff: sync routes emit plain Function', () => {
 		expect(res.status).toBe(200)
 	})
 
-	// F25 — sync StandardValidator no longer forces async route emission.
-	it('sync StandardValidator query is a plain Function', async () => {
+	// F25 / validator-runtime-1 — a StandardValidator on query/headers/params/
+	// cookie forces the route ASYNC, even when its `validate` is syntactically
+	// synchronous. A StandardValidator sets `mayReturnPromise` unconditionally
+	// (isAsync is a *syntactic* `AsyncFunction` check that cannot see a plain
+	// function which returns a Promise — spec-legal and common in third-party
+	// wrappers). Compiling such a slot sync (the old async-cliff optimization)
+	// made it emit a non-awaited `From(...)` that THREW asyncStandardSchemaError
+	// (HTTP 500) the moment the validate returned a promise — while `body`, which
+	// already ORs in `mayReturnPromise`, worked. The fix mirrors body onto the
+	// other four slots: correctness (no 500) beats saving one async frame. So a
+	// standard-schema query is now an AsyncFunction on purpose; a plain TypeBox
+	// query stays sync (covered above).
+	it('StandardValidator query forces async emission (validator-runtime-1)', async () => {
 		const fakeStd = {
 			'~standard': {
 				version: 1,
 				vendor: 'x',
+				// plain (non-async) function — but standard schemas may return a
+				// promise, so the slot must be compiled async to stay correct
 				validate: (v: any) => ({ value: v })
 			}
 		}
@@ -276,7 +289,7 @@ describe('async-cliff: sync routes emit plain Function', () => {
 			({ query }) => query
 		)
 
-		expect(isAsync(app)).toBe(false)
+		expect(isAsync(app)).toBe(true)
 		const res = await app.handle(req('/?q=hi'))
 		expect(res.status).toBe(200)
 		await expect(res.json()).resolves.toEqual({ q: 'hi' })
@@ -557,7 +570,7 @@ describe('async-cliff: sync fn returning a Promise (C7/H21/M2)', () => {
 	// arrow is built via `eval` to preserve the verbatim `=>c` in `.toString()`.
 	it('minified `=>x` handler with a response validator validates', async () => {
 		// eslint-disable-next-line no-eval
-		const minified = (0, eval)('(c)=>c.query.n') as (c: any) => unknown
+		const minified = (0, eval)('(c)=>c.query.n') as (c: any) => string
 		expect(minified.toString()).toContain('=>c') // truly no space
 
 		const app = new Elysia().get(

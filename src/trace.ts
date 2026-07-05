@@ -1,4 +1,5 @@
-import { traceEvents } from './constants';
+import { traceEvents } from './constants'
+import { separateFunction, retrieveRootparameters, findAlias } from './sucrose'
 import type { Context } from './context'
 import type { Prettify, RouteSchema, SingletonBase } from './types'
 
@@ -12,6 +13,220 @@ export type TraceEvent =
 	| 'mapResponse'
 	| 'afterResponse'
 	| 'error'
+
+const phaseGetter: Record<string, TraceEvent> = {
+	onRequest: 'request',
+	onParse: 'parse',
+	onTransform: 'transform',
+	onBeforeHandle: 'beforeHandle',
+	onHandle: 'handle',
+	onAfterHandle: 'afterHandle',
+	onMapResponse: 'mapResponse',
+	onAfterResponse: 'afterResponse',
+	onError: 'error'
+}
+
+const isIdentCharCode = (code: number) =>
+	(code >= 97 && code <= 122) || // a-z
+	(code >= 65 && code <= 90) || // A-Z
+	(code >= 48 && code <= 57) || // 0-9
+	code === 95 || // _
+	code === 36 // $
+
+function phasesFromDestructure(group: string): Set<TraceEvent> | null {
+	let parameters: Record<string, true>
+	try {
+		;({ parameters } = retrieveRootparameters(group))
+	} catch {
+		return null
+	}
+
+	const out = new Set<TraceEvent>()
+	for (const key in parameters) {
+		// `[` computed key, or spread
+		if (key.charCodeAt(0) === 91 || key.startsWith('...')) return null
+
+		const phase = phaseGetter[key]
+		if (phase) out.add(phase)
+	}
+
+	return out
+}
+
+function phasesFromMemberAccess(
+	p: string,
+	body: string
+): Set<TraceEvent> | null {
+	const out = new Set<TraceEvent>()
+	const len = p.length
+	let i = 0
+
+	while (i < body.length) {
+		const idx = body.indexOf(p, i)
+		if (idx === -1) break
+
+		// word boundary: `p` must be a standalone identifier
+		const before = idx > 0 ? body.charCodeAt(idx - 1) : 0
+		if (
+			isIdentCharCode(before) ||
+			isIdentCharCode(body.charCodeAt(idx + len))
+		) {
+			i = idx + len
+			continue
+		}
+
+		let j = idx + len
+		let optional = false
+		if (body.charCodeAt(j) === 63 /* ? */) {
+			optional = true
+			j++
+		}
+
+		const next = body.charCodeAt(j)
+
+		// `p.onHandle` — static member
+		if (next === 46 /* . */) {
+			j++
+			const s = j
+			while (isIdentCharCode(body.charCodeAt(j))) j++
+			const phase = phaseGetter[body.slice(s, j)]
+			if (phase) out.add(phase)
+			// non-phase members (`p.context`, `p.set`) expose no getter — safe
+			i = j
+			continue
+		}
+
+		// `p['onHandle']` — computed member, only accountable as a string literal
+		if (next === 91 /* [ */) {
+			j++
+			const q = body.charCodeAt(j)
+			if (q !== 34 && q !== 39) return null // not a string literal → dynamic
+			j++
+			const s = j
+			while (j < body.length && body.charCodeAt(j) !== q) {
+				if (body.charCodeAt(j) === 92 /* \ */) return null // escape → bail
+				j++
+			}
+			const name = body.slice(s, j)
+			j++ // closing quote
+			if (body.charCodeAt(j) !== 93 /* ] */) return null
+			j++
+			const phase = phaseGetter[name]
+			if (phase) out.add(phase)
+			i = j
+			continue
+		}
+
+		// `p?` not followed by `.`/`[` → bare reference
+		if (optional) return null
+
+		// bare `p`: accountable ONLY as the RHS of a destructure (`{ … } = p`).
+		// Walk back over `= ` to a `}`.
+		let k = idx - 1
+		while (
+			k >= 0 &&
+			(body.charCodeAt(k) === 32 || body.charCodeAt(k) === 9)
+		)
+			k--
+		if (body.charCodeAt(k) === 61 /* = */) {
+			k--
+			while (
+				k >= 0 &&
+				(body.charCodeAt(k) === 32 || body.charCodeAt(k) === 9)
+			)
+				k--
+			if (body.charCodeAt(k) === 125 /* } */) {
+				i = idx + len
+				continue
+			}
+		}
+
+		// passed to a function, returned, aliased, dynamically indexed → bail
+		return null
+	}
+
+	return out
+}
+
+const tracePhaseCache = new WeakMap<Function, Set<TraceEvent> | null>()
+
+export function scanTracePhases(fn: Function): Set<TraceEvent> | null {
+	const cached = tracePhaseCache.get(fn)
+	if (cached !== undefined) return cached
+
+	const result = computeTracePhases(fn)
+	tracePhaseCache.set(fn, result)
+	return result
+}
+
+function computeTracePhases(fn: Function): Set<TraceEvent> | null {
+	let src: string
+	try {
+		src = Function.prototype.toString.call(fn)
+	} catch {
+		return null
+	}
+
+	if (src.includes('[native code]')) return null
+
+	let param: string
+	let body: string
+	try {
+		;[param, body] = separateFunction(src)
+	} catch {
+		return null
+	}
+
+	if (!param) return null
+
+	let roots: ReturnType<typeof retrieveRootparameters>
+	try {
+		roots = retrieveRootparameters(param)
+	} catch {
+		return null
+	}
+
+	// destructure form: `({ onHandle, set }) => …`
+	if (roots.hasParenthesis) return phasesFromDestructure(param)
+
+	// bare-identifier form: the lifecycle is the first parameter
+	const first = Object.keys(roots.parameters)[0]
+	if (!first) return null
+
+	const inner = body.charCodeAt(0) === 123 ? body.slice(1, -1) : body
+
+	const phases = phasesFromMemberAccess(first, inner)
+	if (phases === null) return null
+
+	// nested destructure aliases: `const { onHandle } = t`
+	const aliases = findAlias(first, inner)
+	for (const alias of aliases) {
+		// a non-destructure alias (`const a = t`) can reach getters we cannot
+		// re-scan for — bail. Destructure aliases (`{ … }`) are accountable.
+		if (alias.charCodeAt(0) !== 123) return null
+
+		const aliasPhases = phasesFromDestructure(alias)
+		if (aliasPhases === null) return null
+		for (const p of aliasPhases) phases.add(p)
+	}
+
+	return phases
+}
+
+export function unionTracePhases(
+	handlers: readonly Function[] | undefined
+): Set<TraceEvent> | null {
+	if (!handlers?.length) return new Set()
+
+	const union = new Set<TraceEvent>()
+	for (let i = 0; i < handlers.length; i++) {
+		const phases = scanTracePhases(handlers[i])
+		if (phases === null) return null
+		for (const p of phases) union.add(p)
+	}
+
+	return union
+}
 
 export interface TraceStream {
 	id: number
@@ -135,16 +350,6 @@ export type TraceHandler<
 	): unknown
 }
 
-// TraceRecorder serves EVERY subscription shape (the old eager
-// createProcess/LiveProcess duplicated identical span semantics for the
-// pre-subscribed case at ~30 promises + ~60 closures per request):
-// - pre-subscription (`lifecycle.on<Event>` BEFORE the phase begins): the
-//   listen promise + queued callbacks settle synchronously inside `begin()`
-//   with the recorder-backed result object
-// - late subscription (after the phase began): resolved result immediately
-// - end/error promises materialize on first access (`#end()`/`#error()`)
-// - child spans allocate promise machinery ONLY when `onEvent` registered a
-//   listener; otherwise a shared group-error closure
 class TraceRecorder {
 	begun?: TraceStream
 	remaining = 0
@@ -196,8 +401,6 @@ class TraceRecorder {
 
 		return (this.result = {
 			...this.begun!,
-			// end/error promises materialize on first ACCESS — a listener
-			// that only reads name/begin (or uses onStop) never allocates them
 			get end() {
 				return slot.#end()
 			},
@@ -368,12 +571,11 @@ class TracerHandle {
 	tt?: number[]
 	nm?: string[]
 
-	// Fast begin. Returns 0 when the phase HAS a subscriber (caller falls
-	// through to the eager span-literal path), else `index + 1` — a truthy
-	// token the caller later hands back to `r()`.
+	// begin
 	b(index: number, total: number, name?: string) {
 		if (this.slots[index] !== undefined) return 0
-			; (this.bt ??= [])[index] = performance.now()
+
+		;(this.bt ??= [])[index] = performance.now()
 
 		if (total) (this.tt ??= [])[index] = total
 		if (name !== undefined) (this.nm ??= [])[index] = name
@@ -381,21 +583,16 @@ class TracerHandle {
 		return index + 1
 	}
 
-	// Group-error capture for the fast path: a child lifecycle RETURNED an
-	// error (not thrown) while the phase has no subscriber — record it so a
-	// late listener still observes it (the eager path captures it via the
-	// child closure into the recorder's groupError). Last write wins, like
-	// the recorder.
-	gc(rp: number | TraceRecorder | undefined, error: Error): void {
+	// Group-error capture
+	gc(rp: number | TraceRecorder | undefined, error: Error) {
 		if (typeof rp === 'number') (this.er ??= [])[rp - 1] = error
 	}
 
-	// Resolve a span begun by `b()` (a numeric token) or an eager recorder.
-	// Idempotent; tolerates `undefined` (error thrown before the span began).
+	// Resolve a span begun by `b()` (begin, a numeric token) or an eager recorder
 	r(
 		rp: number | TraceRecorder | undefined,
 		error: Error | null = null
-	): void {
+	) {
 		if (rp === undefined) return
 
 		if (typeof rp === 'number') {
@@ -407,9 +604,6 @@ class TracerHandle {
 				if (error) (this.er ??= [])[index] = error
 			}
 
-			// a late listen() may have materialized a recorder between begin
-			// and now — settle its promises too (folding a gc()-captured
-			// group error, which the mid-phase materialization cannot see)
 			this.slots[index]?.resolve(
 				error ?? this.er?.[index] ?? null,
 				et[index]
@@ -447,8 +641,6 @@ class TracerHandle {
 		return slot.listen()
 	}
 
-	// Codegen and the fetch path call `begin(index, span)` directly (the phase
-	// index is already known — it's passed to `b()`), so no per-phase forwarders.
 	begin(index: number, process: TraceStream) {
 		let slot = this.slots[index]
 

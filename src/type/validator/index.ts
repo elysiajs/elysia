@@ -68,6 +68,7 @@ import {
 	verifyPreallocatableDefault
 } from './default-precompute'
 import { buildFrozenCheck } from './frozen-check'
+import { isCapturedBridgeFree } from '../../compile/handler/frozen-validator'
 import { buildFindCustomError, captureCustomErrors } from './custom-error'
 import {
 	captureStringCodecEntries,
@@ -413,6 +414,8 @@ export class TypeBoxValidator<
 		}
 
 		const originalElyTyp = (schema as any)?.['~elyTyp']
+		// raw (uncoerced) schema, retained for the bridge-free marker
+		const rawSchema: unknown = schema
 
 		const frozen =
 			options?.aot && options.slot
@@ -617,6 +620,24 @@ export class TypeBoxValidator<
 
 		if (!this.#noValidate)
 			this.#findCustomError = buildFindCustomError(this.schema, frozen)
+
+		if (options?.aot && options.slot && Capture.isCapturing()) {
+			const captured = Capture.get({
+				method: options.aot.method,
+				path: options.aot.path,
+				slot: options.slot
+			})
+
+			if (captured)
+				Capture.set(
+					{
+						method: options.aot.method,
+						path: options.aot.path,
+						slot: options.slot
+					},
+					{ bridgeFree: isCapturedBridgeFree(captured, rawSchema) }
+				)
+		}
 	}
 
 	#error(value: unknown, type?: string): ValidationError {

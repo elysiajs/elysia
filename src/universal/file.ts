@@ -67,6 +67,9 @@ export function getFileExtension(path: string) {
 	return path.slice(index + 1).toLowerCase()
 }
 
+/**
+ * Serve a file from a path as the response
+ */
 export const file = (path: string) => new ElysiaFile(path)
 
 let createReadStream: typeof CreateReadStream
@@ -118,9 +121,13 @@ export class ElysiaFile {
 				stat = fs.promises.stat
 			}
 
-			// Readstream can be only readonce
-			this.value = createReadStream(path)
-			this.stats = stat(path)!
+			const stream = createReadStream(path)
+			stream.on?.('error', () => {})
+			this.value = stream
+
+			const stats = stat(path)!
+			stats?.catch?.(() => {})
+			this.stats = stats
 		}
 	}
 

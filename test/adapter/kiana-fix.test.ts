@@ -54,9 +54,18 @@ describe('responseToSetHeaders strips content-encoding (idx41)', () => {
 
 		const out = responseToSetHeaders(new Response('hi'), set as any)
 
-		expect((out.headers as Headers).get('content-encoding')).toBeNull()
+		// The boundary rework normalizes a `Headers`-instance `set.headers` to a
+		// plain-object `Record` (so every downstream write lands correctly), so
+		// read the result shape-agnostically. Intent is unchanged: the
+		// streaming-blocking content-encoding is stripped, unrelated headers stay.
+		const read = (key: string) =>
+			out.headers instanceof Headers
+				? out.headers.get(key)
+				: (out.headers as Record<string, string>)[key]
+
+		expect(read('content-encoding') ?? null).toBeNull()
 		// unrelated headers are untouched
-		expect((out.headers as Headers).get('content-type')).toBe('text/plain')
+		expect(read('content-type')).toBe('text/plain')
 	})
 
 	it('still removes content-encoding on a plain-object set.headers', () => {
@@ -67,9 +76,9 @@ describe('responseToSetHeaders strips content-encoding (idx41)', () => {
 
 		const out = responseToSetHeaders(new Response('hi'), set as any)
 
-		expect((out.headers as Record<string, string>)['content-encoding']).toBe(
-			undefined
-		)
+		expect(
+			(out.headers as Record<string, string>)['content-encoding']
+		).toBeUndefined()
 	})
 })
 
