@@ -11,7 +11,11 @@ import {
 	type HandlerManifest
 } from '../compile/aot'
 import { env } from '../universal'
+import { installCaptureImpl } from '../compile/aot-capture'
 import { nullObject } from '../utils'
+
+installCaptureImpl()
+
 import { setCaptureHeaderShorthand, compileHandler } from '../compile/handler'
 import { JITProbe, type JITProbeReason } from '../compile/jit-probe'
 import { Validator } from '../validator'

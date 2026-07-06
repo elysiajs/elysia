@@ -1,3 +1,4 @@
+import '../../src/compile/aot-capture' // installs build-only capture impl (mirrors the AOT plugin)
 import { it, expect, afterEach } from 'bun:test'
 import { t, validationDetail } from '../../src'
 import { Validator } from '../../src/validator'

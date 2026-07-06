@@ -1,3 +1,4 @@
+import '../../src/compile/aot-capture' // installs build-only capture impl (mirrors the AOT plugin)
 import { describe, it, expect, afterEach } from 'bun:test'
 
 import { Elysia, t } from '../../src'

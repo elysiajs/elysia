@@ -1,9 +1,5 @@
 import { Evaluate, Intersect, Module } from 'typebox/type'
-import {
-	Compile,
-	Build,
-	type Validator as BaseTypeBoxValidator
-} from 'typebox/schema'
+import { Compile, type Validator as BaseTypeBoxValidator } from 'typebox/schema'
 import type {
 	Static,
 	StaticDecode,
@@ -28,7 +24,6 @@ import createMirror from 'exact-mirror'
 import {
 	applyCoercions,
 	buildCoercedFromPlan,
-	captureCoercePlan,
 	nonAdditionalProperties
 } from '../coerce'
 
@@ -44,8 +39,7 @@ import {
 	collectExternals,
 	EMPTY_EXTERNALS,
 	Capture,
-	type CheckBuildResult,
-	type CapturedValidator,
+	captureImpl,
 	type FrozenValidator
 } from '../../compile/aot'
 
@@ -60,25 +54,15 @@ import { nullObject } from '../../utils'
 import { ValidationError } from '../../error'
 import {
 	applyPrecomputed,
-	buildDefaultClonerSource,
-	buildObjectDefaultMergeSource,
 	createDefaultCloner,
 	createMergerFromSource,
 	createObjectDefaultMerger,
 	verifyPreallocatableDefault
 } from './default-precompute'
-import { buildFrozenCheck } from './frozen-check'
-import { isCapturedBridgeFree } from '../../compile/handler/frozen-validator'
-import { buildFindCustomError, captureCustomErrors } from './custom-error'
-import {
-	captureStringCodecEntries,
-	reconstructInnerCodecs
-} from './string-codec-aot'
+import { buildFindCustomError } from './custom-error'
+import { reconstructInnerCodecs } from './string-codec-aot'
 export { TypeBoxValidatorCache } from './validator-cache'
-import {
-	isFullyClosedObject,
-	schemaContainsRef
-} from './clean-safe'
+import { isFullyClosedObject, schemaContainsRef } from './clean-safe'
 
 import type { MaybePromise } from '../../types'
 
@@ -87,8 +71,7 @@ const moduleCache = new WeakMap<
 	Record<string, TSchema>
 >()
 
-// Fast path for the standalone-guard merge: when every member is a plain inline
-// object (own keys ⊆ type/properties/required, no `~elyTyp`)
+// Fast path for the standalone-guard merge when every member is plain object
 function divergesFromEvaluate(node: any, seen: WeakSet<object>) {
 	if (!node || typeof node !== 'object' || seen.has(node)) return false
 	seen.add(node)
@@ -141,7 +124,7 @@ export function shallowMergeObjects(members: any[]): TSchema | null {
 
 let inlineRefId = 0
 
-const isAsyncPredicate = (v: unknown) =>
+export const isAsyncPredicate = (v: unknown) =>
 	Array.isArray(v)
 		? v.some((x) =>
 				typeof x.check === 'function'
@@ -201,7 +184,7 @@ function findInstancePath(
 	}
 }
 
-function externalsShape(schema: unknown) {
+export function externalsShape(schema: unknown) {
 	let out = ''
 	for (const e of collectExternals(schema))
 		out += e instanceof RegExp ? 'r' : typeof e === 'function' ? 'f' : 'v'
@@ -209,31 +192,19 @@ function externalsShape(schema: unknown) {
 	return out
 }
 
-function sourceOnlyValidator(schema: TSchema): BaseTypeBoxValidator {
-	const buildResult = Build(schema)
-	let full: BaseTypeBoxValidator | undefined
-
-	return new Proxy({} as unknown as BaseTypeBoxValidator, {
-		get(_, prop) {
-			if (prop === 'buildResult') return buildResult
-
-			const f = (full ??= Compile(schema))
-			const value = (f as any)[prop]
-
-			return typeof value === 'function' ? value.bind(f) : value
-		}
-	})
-}
-
 interface DefaultFastPath {
 	/** `Default(schema, undefined)`; cloned when object-like. */
 	value: unknown
+
 	/** Legacy parity: this precomputed default also applies to explicit `null`. */
 	appliesToNull: boolean
+
 	/** `Default(schema, {})`, used to merge child defaults into partial objects. */
 	objectTemplate: Record<string, unknown> | undefined
+
 	/** Generated object/array cloner for `value` when available. */
 	clone?: () => unknown
+
 	/**
 	 * Generated default merger for present input. Schema-driven when available
 	 * (fills object keys and maps array element defaults); self-guards its input
@@ -348,9 +319,11 @@ export class TypeBoxValidator<
 
 		if (!isFrozen) {
 			const capturing = Capture.isCapturing()
-			this.tb = capturing
-				? sourceOnlyValidator(this.schema as TSchema)
-				: Compile(this.schema as TSchema)
+			this.tb =
+				capturing && captureImpl
+					? captureImpl.sourceOnlyValidator(this.schema as TSchema)
+					: Compile(this.schema as TSchema)
+
 			this.hasCodec = HasCodec(this.schema)
 			this.isAsync =
 				// @ts-expect-error private property
@@ -359,8 +332,22 @@ export class TypeBoxValidator<
 
 			this.hasDefault = hasProperty('default', this.schema as any)
 
-			if (capturing) this.#maybeCapture(options, schemaHasRef, schema)
-			else this.#dropCompiledSource()
+			if (capturing && captureImpl && options?.aot && options.slot)
+				captureImpl.maybeCapture({
+					aot: options.aot,
+					slot: options.slot,
+					hasRef: schemaHasRef,
+					originalSchema: schema,
+					schema: this.schema,
+					hasCodec: this.hasCodec,
+					hasDefault: this.hasDefault,
+					coerces: options.coerces,
+					normalize: options.normalize,
+					sanitize: options.sanitize,
+					// @ts-expect-error private property
+					buildResult: this.tb!.buildResult
+				})
+			else if (!capturing) this.#dropCompiledSource()
 		}
 
 		if (frozen?.ps === 1) {
@@ -489,34 +476,13 @@ export class TypeBoxValidator<
 		if (!this.#noValidate)
 			this.#findCustomError = buildFindCustomError(this.schema, frozen)
 
-		if (options?.aot && options.slot && Capture.isCapturing()) {
-			const captured = Capture.get({
-				method: options.aot.method,
-				path: options.aot.path,
-				slot: options.slot
-			})
-
-			if (captured)
-				Capture.set(
-					{
-						method: options.aot.method,
-						path: options.aot.path,
-						slot: options.slot
-					},
-					{
-						bridgeFree: isCapturedBridgeFree(
-							captured,
-							rawSchema,
-							captured.coercePlan && typeof rawSchema !== 'string'
-								? buildCoercedFromPlan(
-										rawSchema,
-										captured.coercePlan
-									)
-								: rawSchema
-						)
-					}
-				)
-		}
+		if (
+			options?.aot &&
+			options.slot &&
+			Capture.isCapturing() &&
+			captureImpl
+		)
+			captureImpl.captureBridgeFree(options.aot, options.slot, rawSchema)
 	}
 
 	#error(value: unknown, type?: string): ValidationError {
@@ -558,50 +524,8 @@ export class TypeBoxValidator<
 			}
 		}
 
-		if (aot && slot) {
-			if (Capture.isCapturing())
-				try {
-					const emitted = createMirror(schema, {
-						Compile,
-						sanitize: options?.sanitize,
-						emit: true
-					}) as { source?: string; externals?: any }
-
-					if (typeof emitted?.source === 'string') {
-						const ext = emitted.externals
-
-						if (!ext)
-							Capture.set(
-								{ method: aot.method, path: aot.path, slot },
-								{
-									mirror: {
-										source: emitted.source,
-										hasExternals: false
-									}
-								}
-							)
-						else if (ext.unions && !ext.hof) {
-							const u = Capture.mirrorUnions(schema, ext.unions)
-
-							if (u)
-								Capture.set(
-									{
-										method: aot.method,
-										path: aot.path,
-										slot
-									},
-									{
-										mirror: {
-											source: emitted.source,
-											hasExternals: true,
-											u
-										}
-									}
-								)
-						}
-					}
-				} catch {}
-		}
+		if (aot && slot && Capture.isCapturing() && captureImpl)
+			captureImpl.captureMirror(schema, aot, slot, options?.sanitize)
 
 		return createMirror(schema, {
 			Compile,
@@ -663,49 +587,14 @@ export class TypeBoxValidator<
 				? !slot?.startsWith('response')
 				: !!slot?.startsWith('response')
 
-		if (aot && slot && Capture.isCapturing() && captureSlot)
-			try {
-				const emitted = createMirror(schema, {
-					Compile,
-					sanitize: options?.sanitize,
-					...dirOpt,
-					emit: true
-				}) as { source?: string; externals?: any }
-
-				if (typeof emitted?.source === 'string') {
-					const ext = emitted.externals
-
-					if (
-						ext?.codecs &&
-						!ext.hof &&
-						Capture.mirrorCodecs(schema, ext.codecs, dir)
-					) {
-						let u:
-							| { identifier: string; code: string }[][]
-							| undefined
-						let freezable = true
-
-						if (ext.unions && ext.unions.length) {
-							u = Capture.mirrorUnions(schema, ext.unions)
-							if (!u) freezable = false
-						}
-
-						if (freezable) {
-							const mirror = {
-								source: emitted.source,
-								hasExternals: true,
-								u
-							}
-							Capture.set(
-								{ method: aot.method, path: aot.path, slot },
-								dir === 'decode'
-									? { decodeMirror: mirror }
-									: { encodeMirror: mirror }
-							)
-						}
-					}
-				}
-			} catch {}
+		if (aot && slot && Capture.isCapturing() && captureSlot && captureImpl)
+			captureImpl.captureCodecMirror(
+				schema,
+				aot,
+				slot,
+				options?.sanitize,
+				dir
+			)
 
 		try {
 			return createMirror(schema, {
@@ -736,103 +625,6 @@ export class TypeBoxValidator<
 		this.hasCodec = frozen.k === 1
 
 		return true
-	}
-
-	#maybeCapture(
-		options: ValidatorOptions | undefined,
-		hasRef: boolean,
-		originalSchema: TSchema
-	): void {
-		const aot = options?.aot
-		const slot = options?.slot
-		if (!aot || !slot || !Capture.isCapturing()) return
-
-		if (
-			this.hasCodec &&
-			!hasRef &&
-			options.coerces &&
-			options.normalize !== false &&
-			options.normalize !== 'typebox'
-		) {
-			const plan = captureCoercePlan(originalSchema, this.schema)
-			if (
-				plan &&
-				externalsShape(buildCoercedFromPlan(originalSchema, plan)) ===
-					externalsShape(this.schema)
-			)
-				Capture.set(
-					{ method: aot.method, path: aot.path, slot },
-					{ coercePlan: plan }
-				)
-		}
-
-		const defaultFastPathCapture: Partial<CapturedValidator> = {
-			precomputeSafe: undefined,
-			precomputedDefault: undefined,
-			precomputeNull: undefined,
-			precomputedObjectDefault: undefined,
-			defaultCloner: undefined,
-			objectDefaultMerger: undefined
-		}
-
-		if (this.hasDefault) {
-			const defaults = verifyPreallocatableDefault(this.schema as TSchema)
-			if (defaults) {
-				defaultFastPathCapture.precomputeSafe = true
-				defaultFastPathCapture.precomputedDefault = defaults.pd
-				defaultFastPathCapture.precomputeNull = defaults.pn
-				defaultFastPathCapture.precomputedObjectDefault = defaults.pod
-				defaultFastPathCapture.defaultCloner =
-					defaults.pd !== undefined
-						? buildDefaultClonerSource(defaults.pd)
-						: undefined
-				// Prefer the schema-driven merger (covers arrays / nested objects);
-				// fall back to the object-template merger for legacy-only bakes.
-				defaultFastPathCapture.objectDefaultMerger =
-					defaults.ms ??
-					(defaults.pod !== undefined
-						? buildObjectDefaultMergeSource(defaults.pod)
-						: undefined)
-			}
-		}
-
-		Capture.set(
-			{ method: aot.method, path: aot.path, slot },
-			defaultFastPathCapture
-		)
-
-		const customErrors = captureCustomErrors(this.schema)
-		if (customErrors)
-			Capture.set(
-				{ method: aot.method, path: aot.path, slot },
-				{ customErrors }
-			)
-
-		const innerCodecs = captureStringCodecEntries(
-			this.schema as TSchema,
-			options?.sanitize
-		)
-		if (innerCodecs)
-			Capture.set(
-				{ method: aot.method, path: aot.path, slot },
-				{ innerCodecs }
-			)
-
-		// @ts-expect-error private property
-		const build = this.tb!.buildResult as CheckBuildResult
-		const cf = buildFrozenCheck(build, this.schema)
-		if (!cf) return
-
-		Capture.set(
-			{ method: aot.method, path: aot.path, slot },
-			{
-				...cf,
-				async: build.external.variables.some(isAsyncPredicate),
-				hasDefault: this.hasDefault,
-				hasCodec: this.hasCodec,
-				hasRef
-			}
-		)
 	}
 
 	#dropCompiledSource(): void {

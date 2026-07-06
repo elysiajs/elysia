@@ -731,8 +731,14 @@ function captureEntry({
 	return e
 }
 
+const aotActivationError = new Error(
+	'Elysia AOT capture module is not activated.'
+)
+
 // @internal test isolation
 export function beginValidatorCapture() {
+	if (captureImpl === undefined) throw aotActivationError
+
 	capture = new Map()
 }
 
@@ -775,21 +781,28 @@ function captureSet(
 	if (e) Object.assign(e, partial)
 }
 
-// Read the in-progress captured entry (all channels an emit will serialize).
-// Used to compute the derived `bridgeFree` marker once every channel is set.
-function captureGet(loc: {
+const captureGet = (loc: {
 	method: string
 	path: string
 	slot: ValidatorSlot
-}): CapturedValidator | undefined {
-	return capture?.get(`${loc.method}_${loc.path}_${loc.slot}`)
-}
+}) => capture?.get(`${loc.method}_${loc.path}_${loc.slot}`)
 
 const isAotBuildEnv = () => !!env.ELYSIA_AOT_BUILD
 
 const isValidatorCapturing = (): boolean => {
-	if (capture !== undefined) return true
-	return isAotBuildEnv()
+	if (capture !== undefined) {
+		if (captureImpl === undefined) throw aotActivationError
+
+		return true
+	}
+
+	if (isAotBuildEnv()) {
+		if (captureImpl === undefined) throw aotActivationError
+
+		return true
+	}
+
+	return false
 }
 
 export const Capture = {
@@ -802,3 +815,57 @@ export const Capture = {
 	isAotBuildEnv: isAotBuildEnv
 } as const
 
+// build-only capture logic
+export interface CaptureImpl {
+	/** Source-only TypeBox validator (retains codegen source for the manifest). */
+	sourceOnlyValidator(schema: any): any
+
+	/**
+	 * Capture the frozen check + defaults + custom-errors + inner-codecs + coerce
+	 * plan for a validator slot. Mirrors the former `#maybeCapture`.
+	 */
+	maybeCapture(args: {
+		aot: { method: string; path: string }
+		slot: ValidatorSlot
+		hasRef: boolean
+		originalSchema: any
+		schema: any
+		hasCodec: boolean
+		hasDefault: boolean
+		coerces: unknown
+		normalize: boolean | 'exactMirror' | 'typebox' | undefined
+		sanitize: unknown
+		buildResult: CheckBuildResult
+	}): void
+
+	/** Capture the exact-mirror clean emit for a slot (former `#setupMirror`). */
+	captureMirror(
+		schema: any,
+		aot: { method: string; path: string },
+		slot: ValidatorSlot,
+		sanitize: unknown
+	): void
+
+	/** Capture the codec decode/encode mirror emit (former `#setupCodecMirror`). */
+	captureCodecMirror(
+		schema: any,
+		aot: { method: string; path: string },
+		slot: ValidatorSlot,
+		sanitize: unknown,
+		dir: 'decode' | 'encode'
+	): void
+
+	/** Derive + store the bridge-free marker once every channel is captured. */
+	captureBridgeFree(
+		aot: { method: string; path: string },
+		slot: ValidatorSlot,
+		rawSchema: unknown
+	): void
+}
+
+/** Installed by the AOT build plugin; undefined at runtime. */
+export let captureImpl: CaptureImpl | undefined
+
+export function setCaptureImpl(impl: CaptureImpl | undefined) {
+	captureImpl = impl
+}

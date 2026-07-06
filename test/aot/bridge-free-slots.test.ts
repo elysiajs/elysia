@@ -9,6 +9,7 @@ import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
 import { RouteValidator } from '../../src/validator/route'
 import { buildFrozenRouteValidator } from '../../src/compile/handler/frozen-validator'
+import '../../src/compile/aot-capture' // installs build-only capture impl (mirrors the AOT plugin)
 import {
 	Compiled,
 	beginValidatorCapture,
