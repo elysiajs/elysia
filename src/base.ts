@@ -244,6 +244,7 @@ export class Elysia<
 
 	'~hasWS'?: boolean
 	'~hasDynamicWS'?: boolean
+	'~hasTrace'?: boolean
 
 	'~scopeChild'?: boolean
 	'~scopeChildren'?: AnyElysia[]
@@ -760,6 +761,8 @@ export class Elysia<
 	): this {
 		const added: Partial<AppHook> = nullObject()
 		;(added as any)[type] = fn
+
+		if (type === 'trace') this['~hasTrace'] = true
 
 		this['~hookChain'] = {
 			added,
@@ -3364,6 +3367,8 @@ export class Elysia<
 			hook = promoted
 		}
 
+		if (hook.trace) this['~hasTrace'] = true
+
 		this['~hookChain'] = {
 			added: hook,
 			parent: this['~hookChain'],
@@ -4032,6 +4037,10 @@ export class Elysia<
 					`[Elysia] Macro "${macroName}" can be only define once`
 				)
 			}
+
+		// unlike `~hasWS` (a WS implies a route), trace registers on the hook
+		// chain — a route-less plugin still traces the parent's routes
+		if (app['~hasTrace']) this['~hasTrace'] = true
 
 		if (app.#history) {
 			if (app['~hasWS']) this['~hasWS'] = true

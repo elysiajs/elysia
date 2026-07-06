@@ -4,14 +4,16 @@ import createMirror from 'exact-mirror'
 
 import { hasProperty } from '../utils'
 import { buildFrozenCheck } from './frozen-check'
-export { reconstructInnerCodecs } from '../../compile/aot'
-import {
-	Capture,
-	collectStringCodecNodes,
-	type CapturedMirror,
-	type CapturedValidator,
-	type CheckBuildResult
+import type {
+	CapturedMirror,
+	CapturedValidator,
+	CheckBuildResult
 } from '../../compile/aot'
+import {
+	captureMirrorCodecs,
+	captureMirrorUnions,
+	collectStringCodecNodes
+} from '../../compile/aot-reconstruct'
 import type { ValidatorOptions } from '../../validator'
 
 // Build time: freeze one ObjectString/ArrayString inner schema into a check
@@ -44,11 +46,11 @@ function captureInnerCodec(
 		const ext = emitted.externals
 
 		if (ext?.hof) return
-		if (ext?.codecs && !Capture.mirrorCodecs(inner, ext.codecs)) return
+		if (ext?.codecs && !captureMirrorCodecs(inner, ext.codecs)) return
 
 		let u: { identifier: string; code: string }[][] | undefined
 		if (ext?.unions && ext.unions.length) {
-			u = Capture.mirrorUnions(inner, ext.unions)
+			u = captureMirrorUnions(inner, ext.unions)
 			if (!u) return
 		}
 

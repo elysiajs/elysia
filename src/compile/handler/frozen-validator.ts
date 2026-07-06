@@ -7,11 +7,7 @@ import { isFullyClosedObject } from '../../type/validator/clean-safe'
 import {
 	Compiled,
 	EMPTY_EXTERNALS,
-	collectMirrorUnions,
-	collectStringCodecNodes,
-	instantiateFrozenBoth,
-	instantiateFrozenDecodeMirror,
-	reconstructInnerCodecs,
+	reconstruct,
 	type CapturedValidator,
 	type FrozenValidator,
 	type ValidatorSlot
@@ -43,7 +39,7 @@ function codecCoercionBridgeFree(
 }
 
 const innerCodecsAligned = (icLength: number | undefined, coerced: unknown) =>
-	collectStringCodecNodes(coerced).length === (icLength ?? 0)
+	reconstruct().collectStringCodecNodes(coerced).length === (icLength ?? 0)
 
 function mirrorUnionsAligned(
 	// `u` may be the runtime factory table (`FrozenCheckFactory[][]`) or the
@@ -53,7 +49,7 @@ function mirrorUnionsAligned(
 ) {
 	if (!u) return true
 
-	const branches = collectMirrorUnions(schema)
+	const branches = reconstruct().collectMirrorUnions(schema)
 	if (branches.length !== u.length) return false
 
 	for (let ui = 0; ui < u.length; ui++)
@@ -125,18 +121,25 @@ class FrozenSlotValidator {
 	) {
 		this.schema = schema
 
-		if (frozen.ic) reconstructInnerCodecs(frozen.ic, schema)
+		if (frozen.ic) reconstruct().reconstructInnerCodecs(frozen.ic, schema)
 
 		this.hasCodec = frozen.k === 1
 
 		if (frozen.k === 1 && frozen.dm) {
-			const both = instantiateFrozenBoth(frozen, schema, raw)
+			const both = reconstruct().instantiateFrozenBoth(
+				frozen,
+				schema,
+				raw
+			)
 			this.#check = both.check!
 			this.#clean = normalize === false ? undefined : both.clean
 			this.#decode =
 				normalize === false
 					? undefined
-					: instantiateFrozenDecodeMirror(frozen.dm, schema)
+					: reconstruct().instantiateFrozenDecodeMirror(
+							frozen.dm,
+							schema
+						)
 		} else {
 			// non-codec covered slot: `e`/`u` are refused, so no externals/unions
 			const both = frozen.cm!(EMPTY_EXTERNALS, undefined)

@@ -1,5 +1,9 @@
 import type { CheckBuildResult } from '../../compile/aot'
-import { collectExternals, externalsMatch, reconstructCheck } from '../../compile/aot'
+import {
+	collectExternals,
+	externalsMatch,
+	reconstructCheck
+} from '../../compile/aot-reconstruct'
 
 export function buildFrozenCheck(
 	build: CheckBuildResult | undefined,

@@ -21,6 +21,14 @@ export interface ElysiaAotOptions {
 	registerFrom?: string
 
 	/**
+	 * Specifier the generated module imports the `Reconstruct` table from.
+	 * Pure — any elysia copy works (registration goes through `Compiled`)
+	 *
+	 * @default 'elysia/reconstruct'
+	 */
+	reconstructFrom?: string
+
+	/**
 	 * Split the emitted validator manifest into lazily-materialized groups
 	 *
 	 * Validator entries are registered as grouped thunks: a group's
@@ -122,9 +130,11 @@ export interface StubPlan {
 
 	/**
 	 * Stub the trace runtime (`trace.ts` `createTracer` + recorder machinery)
-	 * when no replayed handler aliases trace (`tr`). The live fetch handler keeps
-	 * `createTracer` importable but only calls it when trace handlers exist, so a
-	 * throwing stub is unreachable once detection proves trace is unused
+	 * when no replayed handler aliases trace (`tr`), or — even under live
+	 * handler JIT — when the app registers no trace handler at all (`~hasTrace`
+	 * + history sweep; a mount forbids it). Every call site (fetch, JIT
+	 * codegen, frozen reconstruct) only calls in when trace handlers exist, so
+	 * a throwing stub is unreachable once detection proves trace is unused
 	 */
 	trace: boolean
 
@@ -198,10 +208,11 @@ const NO_STUB: StubPlan = {
  *   is not active, so the bridge must stay wired the ordinary way. No compat
  *   stub, no reroute.
  */
-function planFromReport(
+export function planFromReport(
 	strip: boolean | 'auto',
 	report: StubbabilityReport,
 	hasWS: boolean,
+	mayTrace: boolean,
 	aliases: Set<string>,
 	allBridgeFree: boolean,
 	zeroCapture: boolean
@@ -235,7 +246,11 @@ function planFromReport(
 				!aliases.has('cc') &&
 				!aliases.has('tr'),
 			cookie: jit && !aliases.has('cc'),
-			trace: jit && !aliases.has('tr'),
+			// stubbable when fully stripped with no `tr` alias, OR — even
+			// under live JIT — when the app registers no trace handler at all
+			// (every trace call site gates on registered handlers). A `tr`
+			// alias always keeps the runtime, whatever detection said
+			trace: !aliases.has('tr') && (jit || !mayTrace),
 			sucrose: jit,
 			// Both modes stub compat; only the wired mode re-routes the bridge.
 			compat: mode !== 'off',
@@ -532,6 +547,7 @@ export async function generateCompiledArtifacts(
 		const sourceOptions = {
 			register: true,
 			registerFrom: options?.registerFrom,
+			reconstructFrom: options?.reconstructFrom,
 			lazy: options?.lazy,
 			target: options?.target
 		}
@@ -562,6 +578,18 @@ export async function generateCompiledArtifacts(
 			)
 
 		const history = (typedApp as { history?: unknown[] }).history ?? []
+
+		// `~hasTrace` covers every registrar (`.trace()`, `guard`/scoped hook
+		// objects) incl. plugins; the history sweep is a redundant backstop.
+		// A mounted foreign fetch handler may compose its own trace at
+		// runtime, invisible to entry-app detection — treat it as tracing.
+		const mayTrace =
+			!!(typedApp as { ['~hasTrace']?: unknown })['~hasTrace'] ||
+			history.some(
+				(route: any) =>
+					(route?.[4] as { trace?: unknown[] } | undefined)?.trace
+						?.length || route?.[2]?.['~mount']
+			)
 
 		let expectedSlots = 0
 
@@ -627,6 +655,7 @@ export async function generateCompiledArtifacts(
 			strip,
 			report,
 			hasWS,
+			mayTrace,
 			aliases,
 			allBridgeFree,
 			artifacts.handlers.length === 0 && artifacts.validators.length === 0

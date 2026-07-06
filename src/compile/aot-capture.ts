@@ -22,7 +22,21 @@ import {
 	verifyPreallocatableDefault
 } from '../type/validator/default-precompute'
 import { isCapturedBridgeFree } from './handler/frozen-validator'
-import { isAsyncPredicate, externalsShape } from '../type/validator/index'
+import { isAsyncPredicate } from '../type/validator/index'
+import {
+	captureMirrorCodecs,
+	captureMirrorUnions,
+	collectExternals,
+	installReconstructImpl
+} from './aot-reconstruct'
+
+function externalsShape(schema: unknown) {
+	let out = ''
+	for (const e of collectExternals(schema))
+		out += e instanceof RegExp ? 'r' : typeof e === 'function' ? 'f' : 'v'
+
+	return out
+}
 
 function sourceOnlyValidator(schema: TSchema) {
 	const buildResult = Build(schema)
@@ -178,7 +192,7 @@ function captureMirror(
 					}
 				)
 			else if (ext.unions && !ext.hof) {
-				const u = Capture.mirrorUnions(schema, ext.unions)
+				const u = captureMirrorUnions(schema, ext.unions)
 
 				if (u)
 					Capture.set(
@@ -219,13 +233,13 @@ function captureCodecMirror(
 			if (
 				ext?.codecs &&
 				!ext.hof &&
-				Capture.mirrorCodecs(schema, ext.codecs, dir)
+				captureMirrorCodecs(schema, ext.codecs, dir)
 			) {
 				let u: { identifier: string; code: string }[][] | undefined
 				let freezable = true
 
 				if (ext.unions && ext.unions.length) {
-					u = Capture.mirrorUnions(schema, ext.unions)
+					u = captureMirrorUnions(schema, ext.unions)
 					if (!u) freezable = false
 				}
 
@@ -286,6 +300,9 @@ const impl: CaptureImpl = {
 
 export function installCaptureImpl() {
 	setCaptureImpl(impl)
+	// capture consumes the reconstruction table (`isCapturedBridgeFree`,
+	// frozen replay), so wiring one without the other is never valid
+	installReconstructImpl()
 }
 
 installCaptureImpl()

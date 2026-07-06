@@ -3,13 +3,13 @@ import {
 	beginValidatorCapture,
 	endValidatorCapture,
 	endHandlerCapture,
-	Source,
 	Capture,
 	Compiled,
 	type CapturedValidator,
 	type CapturedHandler,
 	type HandlerManifest
 } from '../compile/aot'
+import { Source } from '../compile/aot-reconstruct'
 import { env } from '../universal'
 import { installCaptureImpl } from '../compile/aot-capture'
 import { nullObject } from '../utils'
@@ -66,6 +66,16 @@ export interface CompileToSourceOptions {
 	 * @default 'elysia/coerce-plan'
 	 */
 	coercePlanFrom?: string
+
+	/**
+	 * Specifier the generated module imports the `Reconstruct` table from,
+	 * only emitted when the manifest carries validators. The table is pure,
+	 * so unlike `registerFrom` it may resolve to any elysia copy — the
+	 * registration itself goes through `Compiled` (from `registerFrom`)
+	 *
+	 * @default 'elysia/reconstruct'
+	 */
+	reconstructFrom?: string
 }
 
 export const autoGroupSize = (routes: number): number =>
@@ -555,6 +565,10 @@ function emitModule(
 	if (options?.register && hasCoercePlan)
 		validatorExport += 'Compiled.planRebuilder = buildCoercedFromPlan\n'
 
+	// wire the reconstruction table before the app can observe a frozen entry
+	if (options?.register && captured.length)
+		validatorExport = 'Compiled.reconstruct = Reconstruct\n' + validatorExport
+
 	const aliasRef = new Map<string, string>()
 	const handlerRef = new Map<string, string>()
 
@@ -606,6 +620,11 @@ function emitModule(
 	if (options?.register && hasCoercePlan)
 		body += `import { buildCoercedFromPlan } from ${JSON.stringify(
 			options.coercePlanFrom ?? 'elysia/coerce-plan'
+		)}\n`
+
+	if (options?.register && captured.length)
+		body += `import { Reconstruct } from ${JSON.stringify(
+			options.reconstructFrom ?? 'elysia/reconstruct'
 		)}\n`
 
 	const generated = branchDecls + unionDecls + validatorDecls + handlerDecls

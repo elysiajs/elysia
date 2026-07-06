@@ -9,7 +9,11 @@ import {
 	captureArtifacts,
 	replayStubbability
 } from '../../src/plugin/source'
-import { generateCompiledArtifacts, STUB_SOURCES } from '../../src/plugin/core'
+import {
+	generateCompiledArtifacts,
+	planFromReport,
+	STUB_SOURCES
+} from '../../src/plugin/core'
 import { aot as bunAot } from '../../src/plugin/bun'
 import { materialise, materialiseHandlers } from './_manifest'
 import { post, req } from '../utils'
@@ -494,5 +498,71 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			delete process.env.ELYSIA_AOT_BUILD
 			await rm(tmp, { force: true })
 		}
+	})
+})
+
+/**
+ * The trace stub used to require a fully stripped app (`jit`). It now also
+ * applies under LIVE handler JIT when the app registers no trace handler:
+ * every trace call site (fetch, JIT codegen, frozen reconstruct) gates on
+ * registered handlers, so the throwing stub is unreachable. The gate is only
+ * sound if detection catches EVERY trace registrar — these tests pin both the
+ * gate polarity and the registrar detection.
+ */
+describe('trace stub gate — live-JIT relaxation (planFromReport)', () => {
+	const liveJit = {
+		stubbable: false,
+		jit: false,
+		reasons: ['sucrose']
+	} as any
+
+	const plan = (mayTrace: boolean, aliases = new Set<string>()) =>
+		planFromReport('auto', liveJit, false, mayTrace, aliases, false, false)
+			.plan
+
+	it('live JIT + no trace registered → trace runtime is stubbed', () => {
+		const p = plan(false)
+		expect(p.trace).toBe(true)
+		// the relaxation must not leak into jit-gated stubs
+		expect(p.jit).toBe(false)
+		expect(p.cookie).toBe(false)
+		expect(p.sucrose).toBe(false)
+		expect(p.reconstruct).toBe(false)
+	})
+
+	it('live JIT + trace registered (or mount present) → trace kept', () => {
+		expect(plan(true).trace).toBe(false)
+	})
+
+	it('a `tr` alias always keeps the trace runtime, whatever detection said', () => {
+		// inconsistent state (a handler traces but no registrar was detected)
+		// must fail SAFE: keep the runtime
+		expect(plan(false, new Set(['tr'])).trace).toBe(false)
+	})
+})
+
+describe('trace registrar detection (~hasTrace)', () => {
+	it('.trace() sets the flag on the instance', () => {
+		const app = new Elysia().trace(() => {})
+		expect((app as any)['~hasTrace']).toBe(true)
+		expect((new Elysia() as any)['~hasTrace']).toBeUndefined()
+	})
+
+	it('scoped .trace() and guard({ trace }) set the flag', () => {
+		const scoped = new Elysia().trace('global', () => {})
+		expect((scoped as any)['~hasTrace']).toBe(true)
+
+		// guard-carried trace handlers bypass .trace() (they enter through
+		// the hook-push path) but still run — detection must see them
+		const guarded = new Elysia()
+			.guard({ trace: () => {} } as any)
+			.get('/', () => 'ok')
+		expect((guarded as any)['~hasTrace']).toBe(true)
+	})
+
+	it('a plugin registering trace propagates the flag through .use()', () => {
+		const plugin = new Elysia().trace(() => {})
+		const app = new Elysia().use(plugin).get('/', () => 'ok')
+		expect((app as any)['~hasTrace']).toBe(true)
 	})
 })

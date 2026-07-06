@@ -33,10 +33,7 @@ import { isAsyncFunction } from '../../compile/utils'
 
 import {
 	Compiled,
-	instantiateFrozenMirror,
-	instantiateFrozenDecodeMirror,
-	instantiateFrozenBoth,
-	collectExternals,
+	reconstruct,
 	EMPTY_EXTERNALS,
 	Capture,
 	captureImpl,
@@ -60,7 +57,6 @@ import {
 	verifyPreallocatableDefault
 } from './default-precompute'
 import { buildFindCustomError } from './custom-error'
-import { reconstructInnerCodecs } from './string-codec-aot'
 export { TypeBoxValidatorCache } from './validator-cache'
 import { isFullyClosedObject, schemaContainsRef } from './clean-safe'
 
@@ -182,14 +178,6 @@ function findInstancePath(
 		)
 		if (found !== undefined) return found
 	}
-}
-
-export function externalsShape(schema: unknown) {
-	let out = ''
-	for (const e of collectExternals(schema))
-		out += e instanceof RegExp ? 'r' : typeof e === 'function' ? 'f' : 'v'
-
-	return out
 }
 
 interface DefaultFastPath {
@@ -407,16 +395,22 @@ export class TypeBoxValidator<
 		this.#isForm = originalElyTyp === ELYSIA_TYPES.Form
 		this.#hasOptional = !!(this.schema as any)?.['~optional']
 
-		if (frozen?.ic) reconstructInnerCodecs(frozen.ic, this.schema)
+		if (frozen?.ic) reconstruct().reconstructInnerCodecs(frozen.ic, this.schema)
 
 		if (isFrozen && frozen!.cm) {
-			const both = instantiateFrozenBoth(frozen!, this.schema, schema)
+			const both = reconstruct().instantiateFrozenBoth(
+				frozen!,
+				this.schema,
+				schema
+			)
 			this.reconstructedCheck = both.check
 			this.Clean = options?.normalize === false ? undefined : both.clean
 		} else {
 			if (isFrozen)
 				this.reconstructedCheck = frozen!.c!(
-					frozen!.e ? collectExternals(this.schema) : EMPTY_EXTERNALS
+					frozen!.e
+						? reconstruct().collectExternals(this.schema)
+						: EMPTY_EXTERNALS
 				)
 
 			try {
@@ -510,7 +504,7 @@ export class TypeBoxValidator<
 			return (value: unknown) => {
 				if (clean === undefined)
 					try {
-						clean = instantiateFrozenMirror(m, schema)
+						clean = reconstruct().instantiateFrozenMirror(m, schema)
 					} catch (error) {
 						console.warn(
 							'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
@@ -552,7 +546,11 @@ export class TypeBoxValidator<
 			return (value: unknown) => {
 				if (run === undefined)
 					try {
-						run = instantiateFrozenDecodeMirror(m, schema, dir)
+						run = reconstruct().instantiateFrozenDecodeMirror(
+							m,
+							schema,
+							dir
+						)
 					} catch {
 						run =
 							dir === 'decode'

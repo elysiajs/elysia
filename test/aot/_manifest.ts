@@ -1,11 +1,18 @@
 import {
 	Compiled,
-	Source,
 	type CapturedValidator,
 	type ValidatorManifest,
 	type CapturedHandler,
 	type HandlerManifest
 } from '../../src/compile/aot'
+import {
+	Source,
+	installReconstructImpl
+} from '../../src/compile/aot-reconstruct'
+
+// materialised manifests reconstruct in-process — wire the table like the
+// generated module would
+installReconstructImpl()
 
 import { CheckContext } from 'typebox/schema'
 import { buildCoercedFromPlan } from '../../src/type/coerce-plan'

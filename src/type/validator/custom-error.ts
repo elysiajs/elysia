@@ -1,7 +1,7 @@
 import { Compile, Build } from 'typebox/schema'
 
 import {
-	collectExternals,
+	reconstruct,
 	EMPTY_EXTERNALS,
 	type CheckBuildResult,
 	type CapturedValidator,
@@ -92,7 +92,11 @@ export function buildFindCustomError(
 		const fe = union ? undefined : frozenByPath?.get(path)
 		if (fe)
 			try {
-				check = fe.c(fe.e ? collectExternals(node) : EMPTY_EXTERNALS)
+				check = fe.c(
+					fe.e
+						? reconstruct().collectExternals(node)
+						: EMPTY_EXTERNALS
+				)
 			} catch {}
 		else
 			try {
