@@ -6185,6 +6185,17 @@ export class Elysia<
 		}
 	}
 
+	/**
+	 * Force all route handlers to compile immediately (sets `precompile: true`
+	 * on the config and triggers a fresh build of the fetch handler).
+	 *
+	 * @remarks
+	 * **Memory trade-off (bench-memory-1):** each compiled route retains ~4.8 KB
+	 * (no schema) to ~6.6 KB (validated body) of memory (JSC compiled-function
+	 * representation + closure scope); 1 000 validated routes ≈ 6.6 MB. Without
+	 * this call, routes compile lazily on first request, spreading that cost over
+	 * time. Use the AOT build plugin for the lowest cold-start footprint.
+	 */
 	compile() {
 		this['~config'] ??= nullObject()
 		this['~config']!.precompile = true

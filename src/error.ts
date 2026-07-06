@@ -726,24 +726,27 @@ export function internalServerErrorBody(error: any) {
 	return body
 }
 
-export const internalServerErrorResponse = (error: any): Response => {
-	let body: string
+export function internalServerErrorBodyString(error: any): string {
 	try {
-		body = JSON.stringify(internalServerErrorBody(error))
+		return JSON.stringify(internalServerErrorBody(error))
 	} catch {
 		// A circular `error.cause` (DB client, Request, stream, looping chain)
 		try {
 			const safe = internalServerErrorBody(error)
 			delete safe.cause
-			body = JSON.stringify(safe)
+			return JSON.stringify(safe)
 		} catch {
-			body = JSON.stringify({
+			return JSON.stringify({
 				type: 'unknown',
 				title: 'Internal Server Error',
 				status: 500
 			})
 		}
 	}
+}
+
+export function internalServerErrorResponse(error: any) {
+	const body = internalServerErrorBodyString(error)
 
 	const response = new Response(body, {
 		status: 500,

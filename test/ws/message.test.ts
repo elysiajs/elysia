@@ -726,8 +726,16 @@ describe('WebSocket sync dispatch path', () => {
 		const message = wsMessage(ws)
 		ws.send('x')
 
-		// No error hook — `handleError` falls back to sending the message.
-		expect((await message).data).toBe('parse-boom')
+		// No error hook — `handleError` falls back to wsErrorFrame, which now emits
+		// the same RFC 9457 problem+json body HTTP sends (WS errors -> problem+json,
+		// maintainer 2026-07-06): generic 500 with the message as `detail` in dev.
+		const body = JSON.parse((await message).data as string)
+		expect(body).toMatchObject({
+			type: 'unknown',
+			title: 'Internal Server Error',
+			status: 500,
+			detail: 'parse-boom'
+		})
 
 		await wsClosed(ws)
 		app.stop()

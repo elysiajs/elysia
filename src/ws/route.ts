@@ -12,9 +12,13 @@ import {
 import { ElysiaWS, isGeneratorObject, type WSConnectionData } from './context'
 import { createMessageParser } from './parser'
 import {
+	ElysiaError,
 	ElysiaStatus,
 	ValidationError,
+	internalServerErrorBodyString,
 	internalServerErrorResponse,
+	isProduction,
+	problemBody,
 	problemResponse
 } from '../error'
 
@@ -315,13 +319,75 @@ export function buildWSRoute(
 		return new Response(String(error), { status: error?.status ?? 500 })
 	}
 
-	function wsErrorFrame(error: unknown): string {
+	function wsErrorFrame(error: any): string | Promise<string> {
 		if (error instanceof ValidationError)
 			try {
 				return JSON.stringify(error.payload)
 			} catch {}
 
-		return error instanceof Error ? error.message : error + ''
+		if (error instanceof ElysiaStatus)
+			try {
+				return JSON.stringify({
+					status: error.status,
+					error: error.response
+				})
+			} catch {}
+
+		if (typeof error?.toResponse === 'function') {
+			if (
+				error instanceof ElysiaError &&
+				error.toResponse === ElysiaError.prototype.toResponse
+			)
+				try {
+					return JSON.stringify(
+						problemBody({
+							type: error.problemType,
+							title: error.problemTitle,
+							status: (error.status ?? 500) as any,
+							detail:
+								error.response !== undefined &&
+								error.response !== error.problemTitle
+									? (error.response as any)
+									: undefined
+						})
+					)
+				} catch {}
+
+			try {
+				const r = error.toResponse()
+				return Promise.resolve(r).then((resolved) =>
+					resolved instanceof Response
+						? resolved.text()
+						: wsErrorFrameFallback(error)
+				)
+			} catch {}
+		}
+
+		return wsErrorFrameFallback(error)
+	}
+
+	function wsErrorFrameFallback(error: any): string {
+		if (error?.status) {
+			const body =
+				error.response !== undefined
+					? error.response
+					: isProduction() && error.status >= 500
+						? 'Internal Server Error'
+						: (error.message ?? '')
+
+			return typeof body === 'object' ? JSON.stringify(body) : String(body)
+		}
+
+		return internalServerErrorBodyString(error)
+	}
+
+	function sendErrorFrame(ws: ElysiaWS<any>, error: unknown): void | Promise<void> {
+		const frame = wsErrorFrame(error)
+		if (typeof frame === 'string') {
+			try { ws.raw.send(frame) } catch {}
+			return
+		}
+		return frame.then((f) => { try { ws.raw.send(f) } catch {} }, () => {})
 	}
 
 	async function handleError(ws: ElysiaWS<any>, error: unknown) {
@@ -344,9 +410,7 @@ export function buildWSRoute(
 			}
 		}
 
-		try {
-			ws.raw.send(wsErrorFrame(error))
-		} catch {}
+		sendErrorFrame(ws, error)
 	}
 
 	const bodyValidator = validators.body as any
@@ -393,13 +457,7 @@ export function buildWSRoute(
 		ws: ElysiaWS<any>,
 		error: unknown
 	): void | Promise<void> {
-		if (errorHandlers.length === 0) {
-			try {
-				ws.raw.send(wsErrorFrame(error))
-			} catch {}
-
-			return
-		}
+		if (errorHandlers.length === 0) return sendErrorFrame(ws, error)
 
 		return handleError(ws, error)
 	}
