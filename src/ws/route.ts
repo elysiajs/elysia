@@ -4,9 +4,17 @@ import {
 	buildFrozenRouteValidator,
 	isBridgeNotInitialized
 } from '../compile/handler/frozen-validator'
-import { nullObject } from '../utils'
+import {
+	deriveEntryFn,
+	nullObject,
+	type DeriveEntry
+} from '../utils'
 import { parseQueryFromURL } from '../parse-query'
-import { getQueryParseChannels } from '../compile/handler/utils'
+import {
+	deriveModeQueues,
+	getQueryParseChannels,
+	replaceDeriveContext
+} from '../compile/handler/utils'
 import {
 	composeRouteHook,
 	localMacroRoot,
@@ -240,7 +248,14 @@ export function buildWSRoute(
 			route[7] as AnyElysia | undefined
 		) as Partial<AppHook> | undefined) ?? ({} as Partial<AppHook>)
 
-	const parseHooks = (hook.parse == null ? [] : Array.isArray(hook.parse) ? hook.parse : [hook.parse]) as any[]
+	const parseHooks = (
+		hook.parse == null
+			? []
+			: Array.isArray(hook.parse)
+				? hook.parse
+				: [hook.parse]
+	) as any[]
+
 	const transforms = concatHooks(
 		flatAppHook.transform as any,
 		hook.transform as any
@@ -251,15 +266,19 @@ export function buildWSRoute(
 		hook.beforeHandle as any
 	)
 
-	const deriveEntries = [
-		...(((flatAppHook as any)['~deriveEntries'] as
-			| Function[]
-			| undefined) ?? []),
-		...(((hook as any)['~deriveEntries'] as Function[] | undefined) ?? [])
-	]
-	const deriveSet = deriveEntries.length
-		? new Set<Function>(deriveEntries)
-		: undefined
+		const deriveEntries = [
+			...(((flatAppHook as any)['~deriveEntries'] as
+				| DeriveEntry[]
+				| undefined) ?? []),
+			...(((hook as any)['~deriveEntries'] as
+				| DeriveEntry[]
+				| undefined) ?? [])
+		] as DeriveEntry[]
+
+		const deriveSet = deriveEntries.length
+			? new Set<Function>(deriveEntries.map(deriveEntryFn))
+			: undefined
+		const deriveModes = deriveModeQueues(deriveEntries)
 
 	const messageBeforeHandles: readonly AnyFn[] = allBeforeHandles.filter(
 		(fn) => !deriveSet?.has(fn as Function)
@@ -749,17 +768,19 @@ export function buildWSRoute(
 				if (r instanceof Promise) await r
 			}
 
-			for (let i = 0; i < allBeforeHandles.length; i++) {
-				const fn = allBeforeHandles[i]
-				let r: unknown = fn(context as any)
-				if (r instanceof Promise) r = await r
+				for (let i = 0; i < allBeforeHandles.length; i++) {
+					const fn = allBeforeHandles[i]
+					let r: unknown = fn(context as any)
+					if (r instanceof Promise) r = await r
 
-				if (
-					deriveSet?.has(fn as Function) &&
-					!(r instanceof ElysiaStatus)
-				) {
-					if (r && typeof r === 'object')
-						Object.assign(context as any, r)
+					const deriveMode = deriveModes?.get(fn as Function)?.shift()
+
+					if (deriveMode !== undefined && !(r instanceof ElysiaStatus)) {
+						if (r && typeof r === 'object') {
+							if (deriveMode)
+								context = replaceDeriveContext(context, r)
+							else Object.assign(context as any, r)
+						}
 				} else if (r !== undefined) {
 					if (r instanceof Response) return r
 

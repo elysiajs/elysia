@@ -1,7 +1,7 @@
 import { Elysia } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
+import { post, req } from '../utils'
 
 describe('map derive', () => {
 	it('work', async () => {
@@ -21,6 +21,30 @@ describe('map derive', () => {
 
 		expect(res).toBe('hi')
 		expect(res2).toBe('hi')
+	})
+
+	it('replaces derived values while preserving context fields', async () => {
+		const app = new Elysia()
+			.derive(() => ({
+				old: 'old'
+			}))
+			.mapDerive(({ params }) => ({
+				id: params.id
+			}))
+			.post('/user/:id', (context: any) => ({
+				old: context.old,
+				id: context.id,
+				body: context.body.name
+			}))
+
+		const res = await app
+			.handle(post('/user/1', { name: 'Elysia' }))
+			.then((t) => t.json())
+
+		expect(res).toEqual({
+			id: '1',
+			body: 'Elysia'
+		})
 	})
 
 	it('inherits plugin', async () => {
@@ -190,5 +214,28 @@ describe('map derive', () => {
 		])
 
 		expect(called).toEqual(['/inner', '/outer'])
+	})
+
+	it('global plugin replaces inherited derive values', async () => {
+		const plugin = new Elysia()
+			.derive('global', () => ({
+				old: 'old'
+			}))
+			.mapDerive('global', () => ({
+				name: 'Elysia'
+			}))
+
+		const app = new Elysia()
+			.use(plugin)
+			.get('/', (context: any) => ({
+				old: context.old,
+				name: context.name
+			}))
+
+		const res = await app.handle(req('/')).then((t) => t.json())
+
+		expect(res).toEqual({
+			name: 'Elysia'
+		})
 	})
 })

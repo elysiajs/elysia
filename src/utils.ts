@@ -18,6 +18,16 @@ import type {
 
 export const nullObject = () => Object.create(null)
 
+export type DeriveEntry = Function | readonly [Function, 'mapDerive']
+
+export const mapDeriveEntry = (fn: Function): DeriveEntry => [fn, 'mapDerive']
+
+export const deriveEntryFn = (entry: DeriveEntry) =>
+	Array.isArray(entry) ? entry[0] : entry
+
+export const isMapDeriveEntry = (entry: DeriveEntry) =>
+	Array.isArray(entry) && entry[1] === 'mapDerive'
+
 export const mapMethodBack = (method: MethodMap[keyof MethodMap] | string) =>
 	MethodMapBack[method as MethodMap[keyof MethodMap]] ?? method
 

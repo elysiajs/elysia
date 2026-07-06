@@ -812,12 +812,14 @@ export function compileHandlerJit({
 			code += beginTrace('beforeHandle', bfLen)
 			if (hasBeforeHandle) {
 				link(hook!.beforeHandle!, 'bf')
+
 				const deriveEntries = (
-					hook as { '~deriveEntries'?: Function[] }
+					hook as { '~deriveEntries'?: any[] }
 				)['~deriveEntries']
+
 				code += mapBeforeHandle(
 					hook!.beforeHandle!,
-					deriveEntries?.length ? new Set(deriveEntries) : undefined,
+					deriveEntries,
 					link,
 					isAsync,
 					buildReport('beforeHandle'),

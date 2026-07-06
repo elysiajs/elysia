@@ -36,6 +36,7 @@ import {
 	isRecordNumber,
 	joinPath,
 	macroOrigin,
+	mapDeriveEntry,
 	mapMethodBack,
 	mergeDeep,
 	mergeResponse,
@@ -1182,12 +1183,165 @@ export class Elysia<
 		return result
 	}
 
-	/**
-	 * ### mapDerive
-	 * Alias of {@link derive}. Shares the same implementation at the
-	 * prototype level (see `Elysia.prototype.mapDerive` after the class).
-	 */
-	declare mapDerive: this['derive']
+	mapDerive<
+		const Derivative extends
+			| Record<string, unknown>
+			| ElysiaStatus<any, any, any>
+			| void
+	>(
+		transform: (
+			context: Context<
+				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
+				HookContextSingleton<Singleton, Ephemeral, Volatile>
+			>
+		) => MaybePromise<Derivative>
+	): Elysia<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		{
+			derive: ExcludeElysiaResponse<Derivative>
+			schema: Volatile['schema']
+			schemas: Volatile['schemas']
+			response: UnionResponseStatus<
+				Volatile['response'],
+				ExtractErrorFromHandle<Derivative>
+			>
+			error: Volatile['error']
+		}
+	>
+
+	mapDerive<
+		const Derivative extends
+			| Record<string, unknown>
+			| ElysiaStatus<any, any, any>
+			| void
+	>(
+		scope: 'local',
+		transform: (
+			context: Context<
+				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
+				HookContextSingleton<Singleton, Ephemeral, Volatile>
+			>
+		) => MaybePromise<Derivative>
+	): Elysia<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		{
+			derive: ExcludeElysiaResponse<Derivative>
+			schema: Volatile['schema']
+			schemas: Volatile['schemas']
+			response: UnionResponseStatus<
+				Volatile['response'],
+				ExtractErrorFromHandle<Derivative>
+			>
+			error: Volatile['error']
+		}
+	>
+
+	mapDerive<
+		const Derivative extends
+			| Record<string, unknown>
+			| ElysiaStatus<any, any, any>
+			| void
+	>(
+		scope: 'plugin',
+		transform: (
+			context: LifecycleContext<
+				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
+				HookContextSingleton<Singleton, Ephemeral, Volatile>,
+				undefined,
+				'plugin'
+			>
+		) => MaybePromise<Derivative>
+	): Elysia<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		{
+			derive: ExcludeElysiaResponse<Derivative>
+			schema: Ephemeral['schema']
+			schemas: Ephemeral['schemas']
+			response: UnionResponseStatus<
+				Ephemeral['response'],
+				ExtractErrorFromHandle<Derivative>
+			>
+			error: Ephemeral['error']
+		},
+		Volatile
+	>
+
+	mapDerive<
+		const Derivative extends
+			| Record<string, unknown>
+			| ElysiaStatus<any, any, any>
+			| void
+	>(
+		scope: 'global',
+		transform: (
+			context: LifecycleContext<
+				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
+				HookContextSingleton<Singleton, Ephemeral, Volatile>,
+				undefined,
+				'global'
+			>
+		) => MaybePromise<Derivative>
+	): Elysia<
+		BasePath,
+		Scope,
+		{
+			decorator: Singleton['decorator']
+			store: Singleton['store']
+			derive: ExcludeElysiaResponse<Derivative>
+		},
+		Definitions,
+		{
+			schema: Metadata['schema']
+			schemas: Metadata['schemas']
+			macro: Metadata['macro']
+			macroFn: Metadata['macroFn']
+			parser: Metadata['parser']
+			response: UnionResponseStatus<
+				Metadata['response'],
+				ExtractErrorFromHandle<Derivative>
+			>
+		},
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	mapDerive(scopeOrFn: EventScope | Function, fn?: Function): any {
+		const result = this.#onBranch(
+			'beforeHandle',
+			scopeOrFn as any,
+			fn as any
+		)
+
+		const node = this['~hookChain'] as { added?: any } | undefined
+		if (node?.added) {
+			const d = fn ?? scopeOrFn
+			const entries = (node.added['~deriveEntries'] ??= [])
+
+			if (Array.isArray(d))
+				for (const f of d) entries.push(mapDeriveEntry(f))
+			else entries.push(mapDeriveEntry(d as Function))
+		}
+
+		return result
+	}
 
 	afterHandle<
 		const Handler extends MaybeArray<
@@ -4137,15 +4291,15 @@ export class Elysia<
 						// turning them into early-returning guards). Over-inclusion
 						// is harmless: codegen consults it only for fns actually in
 						// `beforeHandle`, so no origin-dedup is needed here.
-						const entries = (added as any)['~deriveEntries'] as
-							| Function[]
+						const entries = (added as any)[key] as
+							| unknown[]
 							| undefined
 						if (!entries) continue
 
 						const target = isGlobal
 							? (globalEvents ??= nullObject())
 							: (pluginEvents ??= nullObject())
-						const list = ((target as any)['~deriveEntries'] ??= [])
+						const list = ((target as any)[key] ??= [])
 						for (let j = 0; j < entries.length; j++)
 							list.push(entries[j])
 						continue
@@ -6517,5 +6671,3 @@ export class Elysia<
 		return r
 	}
 }
-
-Elysia.prototype.mapDerive = Elysia.prototype.derive as any

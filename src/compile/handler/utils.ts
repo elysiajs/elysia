@@ -1,4 +1,9 @@
 import { isAsyncFunction } from '../utils'
+import {
+	deriveEntryFn,
+	isMapDeriveEntry,
+	type DeriveEntry
+} from '../../utils'
 import { skipClone } from '../../adapter/skip-clone'
 import { ElysiaStatus } from '../../error'
 import { ELYSIA_TYPES } from '../../type/constants'
@@ -69,6 +74,68 @@ export function extractDeriveKeys(fn: Function) {
 	const result = scanDeriveKeys(fn)
 	deriveKeyCache.set(fn, result)
 	return result
+}
+
+export function replaceDeriveContext(context: any, derivative: any) {
+	Object.setPrototypeOf(derivative, Object.getPrototypeOf(context))
+
+	derivative.request = context.request
+	derivative.store = context.store
+	derivative.set = context.set
+	derivative.body = context.body
+	derivative.query = context.query
+	derivative.params = context.params
+	derivative.headers = context.headers
+	derivative.cookie = context.cookie
+	derivative.server = context.server
+	derivative.path = context.path
+	derivative.route = context.route
+	derivative.rid = context.rid
+	derivative.trace = context.trace
+	derivative.qi = context.qi
+	derivative.responseValue = context.responseValue
+	derivative.error = context.error
+	derivative.status = context.status
+	derivative.redirect = context.redirect
+
+	return derivative
+}
+
+export function deriveModeQueues(entries?: readonly DeriveEntry[]) {
+	if (!entries?.length) return
+
+	const queues = new Map<Function, boolean[]>()
+
+	for (let i = 0; i < entries.length; i++) {
+		const entry = entries[i]
+		const fn = deriveEntryFn(entry)
+		const queue = queues.get(fn)
+		const mode = isMapDeriveEntry(entry)
+
+		if (queue) queue.push(mode)
+		else queues.set(fn, [mode])
+	}
+
+	return queues
+}
+
+function deriveModes(hooks: Function[], entries?: readonly DeriveEntry[]) {
+	const queues = deriveModeQueues(entries)
+	if (!queues) return
+
+	let found = false
+	const modes: (boolean | undefined)[] = Array(hooks.length)
+
+	for (let i = 0; i < hooks.length; i++) {
+		const fn = hooks[i]
+		const queue = queues.get(fn)
+		if (!queue?.length) continue
+
+		found = true
+		modes[i] = queue.shift()
+	}
+
+	return found ? modes : undefined
 }
 
 function scanDeriveKeys(fn: Function) {
@@ -337,13 +404,14 @@ function skipValue(src: string, i: number): number {
 
 export function mapBeforeHandle(
 	_hooks: AppHook['beforeHandle'] | AppHook['beforeHandle'][0],
-	derive: Set<Function> | undefined,
+	derive: readonly DeriveEntry[] | undefined,
 	link: Link,
 	isAsync: boolean,
 	report?: TraceReporter,
 	abortGuard?: string
 ) {
 	const hooks = toArray(_hooks)
+	const modes = deriveModes(hooks, derive)
 
 	let code = ''
 	let depth = 0
@@ -360,21 +428,28 @@ export function mapBeforeHandle(
 		code += t.begin
 		code += `tmp=${Await(fn)}bf${at(i)}(c)\n`
 		code += awaitGuard(fn, isAsync, 'tmp')
-		if (derive?.has(fn)) {
+		if (modes?.[i] !== undefined) {
 			needsEs = true
-			const keys = extractDeriveKeys(fn)
-			const merge =
-				keys && keys.length
-					? keys
-							.map(
-								(k) =>
-									`c[${JSON.stringify(k)}]=tmp[${JSON.stringify(k)}]`
-							)
-							.join(';')
-					: 'Object.assign(c,tmp)'
-			code +=
-				'if(tmp instanceof es)_r=tmp\n' +
-				`else if(tmp){${merge};tmp=undefined}\n`
+			if (modes[i]) {
+				link(replaceDeriveContext, 'rdc')
+				code +=
+					'if(tmp instanceof es)_r=tmp\n' +
+					"else if(tmp){if(typeof tmp==='object'||typeof tmp==='function')c=rdc(c,tmp);tmp=undefined}\n"
+			} else {
+				const keys = extractDeriveKeys(fn)
+				const merge =
+					keys && keys.length
+						? keys
+								.map(
+									(k) =>
+										`c[${JSON.stringify(k)}]=tmp[${JSON.stringify(k)}]`
+								)
+								.join(';')
+						: 'Object.assign(c,tmp)'
+				code +=
+					'if(tmp instanceof es)_r=tmp\n' +
+					`else if(tmp){${merge};tmp=undefined}\n`
+			}
 		} else code += 'if(tmp!==undefined)_r=tmp\n'
 
 		code += t.end('tmp')
