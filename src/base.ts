@@ -4425,12 +4425,12 @@ export class Elysia<
 		method: string | MethodMap[keyof MethodMap],
 		path: string,
 		hookOrFn: unknown,
-		fn?: unknown
+		fn?: unknown,
+		hasHook = fn !== undefined
 	) {
 		if (this['~Prefix']) path = joinPath(this['~Prefix'], path)
 		else if (path && path.charCodeAt(0) !== 47) path = '/' + path
 
-		const hasHook = arguments.length === 4
 		const handler = hasHook ? fn : hookOrFn
 		const hook =
 			hasHook
@@ -5969,7 +5969,7 @@ export class Elysia<
 			// 2-arg form: (path, options)
 			opts = optionsOrHandler
 
-		this.#add('WS', path, opts, undefined)
+		this.#add('WS', path, opts, undefined, true)
 
 		return this
 	}
