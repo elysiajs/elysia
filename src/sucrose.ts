@@ -36,18 +36,14 @@ export function separateFunction(code: string): [string, string] {
 
 	// JSC: Starts with '(', is an arrow function
 	if (code.charCodeAt(0) === 40) {
-		index = code.indexOf('=>', code.indexOf(')'))
+		const parameterEnd = findClosingParenthesis(code, 0)
+		index = code.indexOf('=>', parameterEnd)
 
 		if (index !== -1) {
-			let bracketEndIndex = index
-			// Walk back to find bracket end
-			while (bracketEndIndex > 0)
-				if (code.charCodeAt(--bracketEndIndex) === 41) break
-
 			let body = code.slice(index + 2)
 			if (body.charCodeAt(0) === 32) body = body.trimStart()
 
-			return [code.slice(1, bracketEndIndex), body]
+			return [code.slice(1, parameterEnd), body]
 		}
 	}
 
@@ -66,7 +62,7 @@ export function separateFunction(code: string): [string, string] {
 	// Using function keyword
 	if (code.startsWith('function')) {
 		index = code.indexOf('(')
-		const end = code.indexOf(')')
+		const end = findClosingParenthesis(code, index)
 
 		return [code.slice(index + 1, end), code.slice(end + 2)]
 	}
@@ -88,6 +84,19 @@ export function separateFunction(code: string): [string, string] {
 	const x = code.split('\n', 2)
 
 	return [x[0], x[1]]
+}
+
+function findClosingParenthesis(code: string, start: number) {
+	let deep = 1
+
+	for (let index = start + 1; index < code.length; index++) {
+		const char = code.charCodeAt(index)
+
+		if (char === 40) deep++
+		else if (char === 41 && --deep === 0) return index
+	}
+
+	return start
 }
 
 /**
@@ -208,7 +217,8 @@ export function retrieveRootparameters(parameter: string) {
 	// Remove {} from parameter
 	if (parameter.charCodeAt(0) === 123) {
 		hasParenthesis = true
-		parameter = parameter.slice(1, -1)
+		const [, end] = bracketPairRange(parameter)
+		parameter = parameter.slice(1, end - 1)
 	}
 
 	parameter = parameter.replace(/[ \t\n]/g, '')

@@ -627,6 +627,35 @@ describe('Query Validator', () => {
 		expect(response).toBe(JSON.stringify({ name: 'hello' }))
 	})
 
+	it('does not array-coerce inherited query channel names', async () => {
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					constructor: t.String(),
+					hasOwnProperty: t.String(),
+					toString: t.String(),
+					tags: t.Array(t.String())
+				})
+			},
+			({ query }) => query
+		)
+
+		const res = await app.handle(
+			req(
+				'/?constructor=one&hasOwnProperty=two&toString=three&tags=a,b'
+			)
+		)
+
+		expect(res.status).toBe(200)
+		await expect(res.json()).resolves.toEqual({
+			constructor: 'one',
+			hasOwnProperty: 'two',
+			toString: 'three',
+			tags: ['a', 'b']
+		})
+	})
+
 	it('parse union primitive and object', async () => {
 		const app = new Elysia().get(
 			'/',

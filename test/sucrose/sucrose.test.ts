@@ -7,7 +7,7 @@ import {
 	sucrose,
 	clearSucroseCache
 } from '../../src/sucrose'
-import { req } from '../utils'
+import { post, req } from '../utils'
 
 describe('sucrose', () => {
 	it('common 1', () => {
@@ -360,6 +360,19 @@ describe('sucrose', () => {
 			url: true,
 			route: true
 		})
+	})
+
+	it('infers body from a defaulted destructured context', async () => {
+		const app = new Elysia().post(
+			'/',
+			({ body } = { body: { hello: 'fallback' } }) => body
+		)
+
+		const response = await app
+			.handle(post('/', { hello: 'world' }))
+			.then((x) => x.json())
+
+		expect(response).toEqual({ hello: 'world' })
 	})
 
 	// Hooks are shared by reference across all routes (ChainNode design), so

@@ -587,10 +587,10 @@ function arrayItemSchema(v: any): any {
 		}
 }
 
-function isObjectish(v: any) {
+function containsObjectSchema(v: any) {
 	if (!v) return false
 	if (v.type === 'object' || v['~kind'] === 'Object') return true
-	if (Array.isArray(v.anyOf)) return v.anyOf.some(isObjectish)
+	if (Array.isArray(v.anyOf)) return v.anyOf.some(containsObjectSchema)
 
 	return false
 }
@@ -632,14 +632,18 @@ function getQueryParseArgsCollect(
 	if (props)
 		for (const k in props) {
 			const v = props[k]
-			const kind = v?.['~elyTyp']
-			if (containsArray(v)) {
-				;(state.array ??= {})[k] = 1
+			const isArray = containsArray(v)
 
-				const item = arrayItemSchema(v)
-				if (item && isObjectish(item)) (state.object ??= {})[k] = 1
+			if (isArray) {
+				;(state.array ??= Object.create(null))[k] = 1
 			}
-			if (kind === ELYSIA_TYPES.ObjectString) (state.object ??= {})[k] = 1
+
+			if (
+				(isArray && containsObjectSchema(arrayItemSchema(v))) ||
+				v?.['~elyTyp'] === ELYSIA_TYPES.ObjectString
+			) {
+				;(state.object ??= Object.create(null))[k] = 1
+			}
 		}
 
 	for (const key of ['anyOf', 'allOf', 'oneOf'] as const) {

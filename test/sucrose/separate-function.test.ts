@@ -65,6 +65,15 @@ describe('Sucrose: separateFunction', () => {
 		])
 	})
 
+	it('separate function with defaulted destructured parameter', () => {
+		const fn = `function handler({ body } = withFallback()) { return body }`
+
+		expect(separateFunction(fn)).toEqual([
+			'{ body } = withFallback()',
+			'{ return body }'
+		])
+	})
+
 	it('separate minifed arrow param', () => {
 		const arrowParam = `({ sucrose, amber })=>{return "sucrose"}`
 
