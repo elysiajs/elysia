@@ -163,8 +163,10 @@ describe('AOT strip regression — strip:auto (sound: skip when unsafe)', () => 
 			cookie: true,
 			trace: true,
 			sucrose: true,
-			// WS present → bridge stays wired (off mode): no compat stub, no reroute
-			compat: false,
+			// WS no longer forbids sealing: the HTTP handler capture is the
+			// evidence, every captured validator (none) is bridge-free, and WS
+			// validators reconstruct bridge-free → mode A, bridge severed
+			compat: true,
 			bridge: false
 		})
 

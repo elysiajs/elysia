@@ -116,11 +116,14 @@ export interface CompiledSnapshot {
 	lazyGroups: Array<() => ValidatorManifest> | undefined
 	lazyGroupOf: Record<string, Record<string, number>> | undefined
 	builtGroups: number[]
+	planRebuilder: ((original: unknown, plan: CoercePlan) => any) | undefined
 }
 
 // build registry
 let validators: ValidatorManifest | undefined
 let handlers: HandlerManifest | undefined
+
+let planRebuilder: ((original: unknown, plan: CoercePlan) => any) | undefined
 
 // lazy validator groups (sync thunks)
 let lazyGroups: Array<() => ValidatorManifest> | undefined
@@ -138,6 +141,18 @@ export abstract class Compiled {
 
 	static get validators(): ValidatorManifest | undefined {
 		return validators
+	}
+
+	static get planRebuilder():
+		| ((original: unknown, plan: CoercePlan) => any)
+		| undefined {
+		return planRebuilder
+	}
+
+	static set planRebuilder(
+		rebuild: ((original: unknown, plan: CoercePlan) => any) | undefined
+	) {
+		planRebuilder = rebuild
 	}
 
 	static set validators(manifest: ValidatorManifest) {
@@ -196,7 +211,8 @@ export abstract class Compiled {
 			handlers,
 			lazyGroups,
 			lazyGroupOf,
-			builtGroups: [...builtGroups]
+			builtGroups: [...builtGroups],
+			planRebuilder
 		}
 	}
 
@@ -208,6 +224,7 @@ export abstract class Compiled {
 		lazyGroupOf = snapshot.lazyGroupOf
 		builtGroups.clear()
 		for (const group of snapshot.builtGroups) builtGroups.add(group)
+		planRebuilder = snapshot.planRebuilder
 	}
 
 	/** @internal test isolation */
@@ -217,6 +234,7 @@ export abstract class Compiled {
 		lazyGroups = undefined
 		lazyGroupOf = undefined
 		builtGroups.clear()
+		planRebuilder = undefined
 	}
 }
 
@@ -786,6 +804,6 @@ export const Capture = {
 
 /**
  * Reset module-level capture lifecycle state.
- * FOR TESTS ONLY — not exported from the package index.
+ * FOR TESTS ONLY
  */
 export const resetCaptureLifecycleForTests = (): void => undefined

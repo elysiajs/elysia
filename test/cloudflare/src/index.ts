@@ -1,7 +1,7 @@
 // Cloudflare Worker entry for the AOT smoke test (`wrangler.jsonc` `main`).
 //
 // The frozen manifest registers the validators + handlers (it `import { Compiled }
-// from 'elysia'` — the same instance the app reads) BEFORE the app boots; then the
+// from 'elysia'` the same instance the app reads) BEFORE the app boots; then the
 // app serves with NO runtime eval. The real esbuild plugin injects this import
 // automatically; done by hand here so Wrangler's own bundler handles the workerd
 // specifics. The app lives in `./app.mjs` (a manifest-free module so `gen-node.mjs`

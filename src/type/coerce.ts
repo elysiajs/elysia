@@ -14,6 +14,7 @@ import {
 	COERCE_LEAF_CTOR,
 	isCoerceLeaf,
 	isCoerceObjStr,
+	isCoerceUnion,
 	buildCoercedFromPlan as buildCoercedFromScalarPlan,
 	type CoerceLeaf,
 	type CoerceNode,
@@ -469,9 +470,53 @@ export function captureCoercePlan(
 			return leaf
 		}
 
+		// Union with coerced branches (`t.Nullable(t.Number())`, `t.Union([t.Number(), ...])`)
+		// bake per-branch, aligned by index
 		if (
-			(Array.isArray(c.anyOf) &&
-				c.anyOf.some((b: any, i: number) => b !== o?.anyOf?.[i])) ||
+			Array.isArray(c.anyOf) &&
+			c.anyOf.some((b: any, i: number) => b !== o?.anyOf?.[i])
+		) {
+			if (
+				!Array.isArray(o?.anyOf) ||
+				o.anyOf.length !== c.anyOf.length ||
+				c.properties ||
+				c.items
+			) {
+				bakeable = false
+				return null
+			}
+
+			const u: (CoerceNode | null)[] = []
+			let changed = false
+
+			for (let i = 0; i < c.anyOf.length; i++) {
+				if (o.anyOf[i] === c.anyOf[i]) {
+					u.push(null)
+					continue
+				}
+
+				const sub = walk(o.anyOf[i], c.anyOf[i])
+				if (!bakeable) return null
+
+				if (!sub) {
+					bakeable = false
+					return null
+				}
+
+				u.push(sub)
+				changed = true
+			}
+
+			if (!changed) {
+				bakeable = false
+				return null
+			}
+
+			any = true
+			return { u }
+		}
+
+		if (
 			(Array.isArray(c.allOf) &&
 				c.allOf.some((b: any, i: number) => b !== o?.allOf?.[i])) ||
 			(Array.isArray(c.oneOf) &&
@@ -510,12 +555,15 @@ export function captureCoercePlan(
 
 	const plan = walk(original, coerced)
 
+	// a root-level leaf/objstr/union plan is not reconstructable,
+	// `buildCoercedFromPlan` patches properties/items of a cloned root
 	if (
 		!bakeable ||
 		!any ||
 		!plan ||
 		isCoerceLeaf(plan) ||
-		isCoerceObjStr(plan)
+		isCoerceObjStr(plan) ||
+		isCoerceUnion(plan)
 	)
 		return null
 

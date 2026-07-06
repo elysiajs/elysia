@@ -287,22 +287,10 @@ describe('unbakeable coercion (cp capture bailed) — refuses instead of crashin
 	// raw one. Before the `mirrorUnionsAligned` gate these captured
 	// `bridgeFree: true` and `buildFrozenRouteValidator` THREW a TypeError
 	// inside `buildUnions` — a hard 500 on every request under a sealed strip.
+	// NOTE: scalar-inside-Nullable/Union/MaybeEmpty USED to be unbakeable —
+	// they now capture a `CoerceUnion` plan and seal (parity pinned in the
+	// "union coercePlan" describe below).
 	const cases: [string, 'query' | 'body', any][] = [
-		[
-			'scalar inside Nullable',
-			'query',
-			t.Object({ n: t.Nullable(t.Number()) })
-		],
-		[
-			'scalar inside Union',
-			'query',
-			t.Object({ n: t.Union([t.Number(), t.String()]) })
-		],
-		[
-			'scalar inside MaybeEmpty',
-			'query',
-			t.Object({ n: t.MaybeEmpty(t.Number()) })
-		],
 		[
 			'scalar inside Tuple items',
 			'query',
@@ -333,4 +321,78 @@ describe('unbakeable coercion (cp capture bailed) — refuses instead of crashin
 			}).not.toThrow()
 			expect(result).toBeUndefined()
 		})
+})
+
+describe('union coercePlan (CoerceUnion) — bridge-free with wired parity', () => {
+	it('t.Nullable(t.Number()) in query', () => {
+		assertParity(t.Object({ n: t.Nullable(t.Number()) }), [
+			{ n: '1' },
+			{ n: '4.5' },
+			{ n: null },
+			{ n: 7 },
+			{ n: 'x' },
+			{ n: '' },
+			{}
+		])
+	})
+
+	it('t.Union([t.Number(), t.String()]) in query', () => {
+		assertParity(t.Object({ v: t.Union([t.Number(), t.String()]) }), [
+			{ v: '1' },
+			{ v: 'hello' },
+			{ v: 2 },
+			{ v: '' },
+			{}
+		])
+	})
+
+	it('t.MaybeEmpty(t.Number()) in query', () => {
+		assertParity(t.Object({ n: t.MaybeEmpty(t.Number()), s: t.String() }), [
+			{ n: '1', s: 'a' },
+			{ n: '', s: 'a' },
+			{ s: 'a' },
+			{ n: 'x', s: 'a' }
+		])
+	})
+
+	it('t.Optional(t.Nullable(t.Number())) (~optional survives the clone)', () => {
+		assertParity(
+			t.Object({ n: t.Optional(t.Nullable(t.Number())), s: t.String() }),
+			[{ n: '1', s: 'a' }, { n: null, s: 'a' }, { s: 'a' }, { n: 'x', s: 'a' }]
+		)
+	})
+
+	it('constraints inside the nullable branch', () => {
+		assertParity(t.Object({ n: t.Nullable(t.Number({ minimum: 2 })) }), [
+			{ n: '3' },
+			{ n: '1' },
+			{ n: null }
+		])
+	})
+
+	it('nullable nested object (ObjectString branch inside the union)', () => {
+		assertParity(t.Object({ o: t.Nullable(t.Object({ s: t.String() })) }), [
+			{ o: '{"s":"a"}' },
+			{ o: { s: 'a' } },
+			{ o: null },
+			{ o: 'garbage' },
+			{ o: '{"s":1}' }
+		])
+	})
+
+	it('union site mixed with scalar and objstr sites in one plan', () => {
+		assertParity(
+			t.Object({
+				a: t.Nullable(t.Number()),
+				b: t.Number(),
+				o: t.Object({ s: t.String() })
+			}),
+			[
+				{ a: '1', b: '2', o: '{"s":"x"}' },
+				{ a: null, b: '2', o: { s: 'x' } },
+				{ a: 'bad', b: '2', o: '{"s":"x"}' },
+				{ a: '1', b: 'bad', o: '{"s":"x"}' }
+			]
+		)
+	})
 })

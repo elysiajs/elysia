@@ -40,7 +40,7 @@ export interface CompileToSourceOptions {
 	 * Validator entries are registered as grouped thunks: a group's
 	 * validators are constructed on the first request to any route in that
 	 * group, trading first-request latency in unbuilt groups for lower
-	 * startup cost. Handlers are always eager — only validator construction
+	 * startup cost. Handlers are always eager. Only validator construction
 	 * is deferred. Pass a number to set the group size explicitly.
 	 *
 	 * @default decided by Elysia based on route batch scale
@@ -54,6 +54,14 @@ export interface CompileToSourceOptions {
 	 * @default 'elysia'
 	 */
 	registerFrom?: string
+
+	/**
+	 * Specifier the generated module imports `buildCoercedFromPlan`
+	 * from only emitted when the manifest carries a coerce plan (`cp`)
+	 *
+	 * @default 'elysia/coerce-plan'
+	 */
+	coercePlanFrom?: string
 }
 
 export const autoGroupSize = (routes: number): number =>
@@ -251,6 +259,9 @@ function emitModule(
 	// Dedup the whole `u` array (`[[_b0,_b1],…]`) into a shared `_uN` const
 	const unionRef = new Map<string, string>()
 	let unionDecls = ''
+
+	// any emitted `cp:` needs the coerce-plan rebuilder registered at runtime
+	let hasCoercePlan = false
 	const unionTable = (u: { identifier: string; code: string }[][]) => {
 		const str = branchTable(u)
 		let ref = unionRef.get(str)
@@ -357,7 +368,10 @@ function emitModule(
 			parts.push(`ic: [${ic}]`)
 		}
 
-		if (c.coercePlan) parts.push(`cp: ${JSON.stringify(c.coercePlan)}`)
+		if (c.coercePlan) {
+			hasCoercePlan = true
+			parts.push(`cp: ${JSON.stringify(c.coercePlan)}`)
+		}
 
 		return parts
 	}
@@ -534,11 +548,9 @@ function emitModule(
 			(options?.register ? 'Compiled.validators = validators\n' : '')
 	}
 
-	// always eager
-	//
-	// Dedup the factory `_h`, the alias array `_a`, AND the `{ a, f }` wrapper `_w`
-	//
-	// The route tree then holds bare `_w` refs
+	if (options?.register && hasCoercePlan)
+		validatorExport += 'Compiled.planRebuilder = buildCoercedFromPlan\n'
+
 	const aliasRef = new Map<string, string>()
 	const handlerRef = new Map<string, string>()
 
@@ -587,11 +599,13 @@ function emitModule(
 			options.registerFrom ?? 'elysia'
 		)}\n`
 
-	// typebox is a hard dependency — emit these whenever the generated code
-	// references them, regardless of `register` (a register:false module
-	// would otherwise throw ReferenceError when its validators run)
+	if (options?.register && hasCoercePlan)
+		body += `import { buildCoercedFromPlan } from ${JSON.stringify(
+			options.coercePlanFrom ?? 'elysia/coerce-plan'
+		)}\n`
+
 	const generated = branchDecls + unionDecls + validatorDecls + handlerDecls
-	const needs = (symbol: string): boolean =>
+	const needs = (symbol: string) =>
 		new RegExp(`\\b${symbol}\\b`).test(generated)
 
 	if (needs('CheckContext'))

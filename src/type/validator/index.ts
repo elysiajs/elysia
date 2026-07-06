@@ -129,7 +129,6 @@ function schemaContainsRef(node: any, seen = new WeakSet()): boolean {
 // Union/Intersect/Ref/anyOf-style node can let an excess key survive Check (or
 // let Clean change the value), so we bail conservatively on all of them.
 function isCleanSafeNode(node: any, seen: WeakSet<object>): boolean {
-	// leaf / primitive schema — nothing for Clean to strip
 	if (!node || typeof node !== 'object') return true
 	if (seen.has(node)) return false // cycle: bail (Ref/This/Cyclic territory)
 	seen.add(node)
@@ -173,8 +172,8 @@ function isCleanSafeNode(node: any, seen: WeakSet<object>): boolean {
 
 	if (kind === 'Array' || node.type === 'array') {
 		const items = node.items
-		// tuple items or missing items schema — bail conservatively
 		if (Array.isArray(items) || items === undefined) return false
+
 		return isCleanSafeNode(items, seen)
 	}
 
@@ -184,8 +183,6 @@ function isCleanSafeNode(node: any, seen: WeakSet<object>): boolean {
 
 function isFullyClosedObject(schema: any): boolean {
 	if (!schema || typeof schema !== 'object') return false
-	// Only worth skipping Clean when the ROOT is a closed object — the request
-	// decode entry (`FromSync`/`From`) always hands an object/array root.
 	const kind = schema['~kind']
 	if (kind !== 'Object' && schema.type !== 'object') return false
 	return isCleanSafeNode(schema, new WeakSet())
@@ -377,25 +374,6 @@ export class TypeBoxValidator<
 	#noValidate!: boolean
 	#isForm = false
 	#hasOptional = false
-
-	// L8: Check and Clean are two independent full walks per request. When the
-	// schema is a fully-closed object (additionalProperties:false at every
-	// level, no codec/refine/ref/union), a passing Check already guarantees no
-	// excess keys exist anywhere — so Clean has nothing to strip and can be
-	// skipped. Derived purely from `this.schema`, so it is identical on the JIT
-	// and frozen/AOT-reconstructed paths (no manifest channel needed).
-	// Caveat: exact-mirror Clean normalizes object key ORDER to schema order;
-	// skipping Clean preserves the input's original key order instead. Values
-	// and key sets are identical either way, but key ORDER IS observable on the
-	// wire (e.g. JSON.stringify output order). This is an accepted trade-off:
-	// the extra walk is skipped because key-order differences are benign in
-	// practice for well-typed handlers.
-	// Additional aliasing note: when the M5 same-ref fast-path (no-copy default
-	// merge) AND this Clean-skip both fire together, the validator returns the
-	// raw input object with no defensive copy. This is safe for app.handle
-	// (each request gets a fresh parse), but direct TypeBoxValidator callers
-	// that mutate the returned object would alias the original input. Callers
-	// that need isolation must copy before mutating.
 	#cleanRedundant = false
 
 	constructor(
@@ -434,10 +412,6 @@ export class TypeBoxValidator<
 				) as any
 			)[name]
 
-			// The `isIntersectable` merge above ran on the raw reference and is
-			// discarded by this model lookup, so fold the additive (macro /
-			// guard) schemas back into the resolved model — otherwise a route
-			// whose `body` is a string model ref silently drops them.
 			if (isIntersectable) {
 				const members = [schema, ...options!.schemas!]
 				schema = (shallowMergeObjects(members) ??
@@ -460,9 +434,7 @@ export class TypeBoxValidator<
 
 		this.schema = (
 			isFrozen && frozen!.cp
-				? // bake: splice deduped frozen leaves into the live original
-					// schema instead of re-walking (see coerce.ts captureCoercePlan)
-					buildCoercedFromPlan(schema as any, frozen!.cp)
+				? buildCoercedFromPlan(schema as any, frozen!.cp)
 				: isFrozen && !this.hasCodec
 					? schema
 					: applyCoercions(schema as any, options?.coerces)
@@ -580,9 +552,6 @@ export class TypeBoxValidator<
 			}
 		}
 
-		// L8: skip the Clean walk when Check already rejects every excess key
-		// (fully-closed object). Not applicable when normalize:'typebox' asks
-		// for TypeBox Clean semantics explicitly, or when there is no Clean.
 		this.#cleanRedundant =
 			!!this.Clean &&
 			options?.normalize !== 'typebox' &&
@@ -635,7 +604,18 @@ export class TypeBoxValidator<
 						path: options.aot.path,
 						slot: options.slot
 					},
-					{ bridgeFree: isCapturedBridgeFree(captured, rawSchema) }
+					{
+						bridgeFree: isCapturedBridgeFree(
+							captured,
+							rawSchema,
+							captured.coercePlan && typeof rawSchema !== 'string'
+								? buildCoercedFromPlan(
+										rawSchema,
+										captured.coercePlan
+									)
+								: rawSchema
+						)
+					}
 				)
 		}
 	}

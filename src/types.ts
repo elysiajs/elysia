@@ -793,18 +793,10 @@ export type InlineHandler<
 		return: {}
 		resolve: {}
 	}
-> =
-	// A macro's declared `response` lives in `MacroContext['response']`, not the
-	// route-local `Route['response']`. Merging it into the route and delegating
-	// to `InlineHandlerNonMacro` binds the handler return to the macro response
-	// exactly as a local response would — closing the leak where a macro-only
-	// response left the handler return unchecked. `MacroContext` defaults to
-	// empty (`response: {}`, `resolve: {}`), so this is a NO-OP for non-macro
-	// routes and preserves the macro-derived (`resolve`-channel) context.
-	InlineHandlerNonMacro<
-		Route & MacroContext,
-		Singleton & { derive: MacroContext['resolve'] }
-	>
+> = InlineHandlerNonMacro<
+	Route & MacroContext,
+	Singleton & { derive: MacroContext['resolve'] }
+>
 
 export type InlineHandlerNonMacro<
 	Route extends RouteSchema = {},
@@ -1079,9 +1071,6 @@ type SetContentType =
 	| 'model/gltf+json'
 	| 'model/gltf-binary'
 
-// `string[]` in the index signature exists solely so `'set-cookie'?: string |
-// string[]` survives whole-object assignment (`set.headers = {...}`) — the
-// runtime already handles string[] set-cookie
 export type HTTPHeaders = Record<string, string | number | string[]> & {
 	// Authentication
 	'www-authenticate'?: string
@@ -1742,16 +1731,6 @@ type MacroDefSchema<K, MBody, MHeaders, MQuery, MParams, MCookie> = {
 	response: undefined
 }
 
-/**
- * Upper bound for a macro definition's schema channel (`body`/`headers`/…):
- * a registered model name or an inline schema.
- *
- * Used as the `const Body extends …` constraint on `.macro()`. It does not
- * restrict (valid inputs already satisfy it) — it stops `Body[K]` from being a
- * bare `unknown`, which is what lets the `| Name` in the field surface model
- * names to autocomplete (a `unknown | Name` union collapses to `unknown`).
- * `const` still narrows `Body[K]` to the typed literal for `UnwrapRoute`.
- */
 export type MacroSchemaChannel<Definitions extends DefinitionBase> = Record<
 	keyof any,
 	AnySchema | (keyof Definitions['typebox'] & string)

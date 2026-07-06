@@ -34,10 +34,15 @@ export interface CoerceObjStr {
 	o?: unknown
 }
 
-export type CoerceNode = CoerceLeaf | CoerceObjStr | CoercePlan
+export interface CoerceUnion {
+	// anyof per coercion (index → leaf / objstr / union / nested plan)
+	u: (CoerceNode | null)[]
+}
+
+export type CoerceNode = CoerceLeaf | CoerceObjStr | CoerceUnion | CoercePlan
 
 export interface CoercePlan {
-	// per-property coercion (key → leaf / objstr / nested plan)
+	// per-property coercion (key → leaf / objstr / union / nested plan)
 	p?: Record<string, CoerceNode>
 	// single-schema array items coercion
 	i?: CoerceNode
@@ -48,6 +53,9 @@ export const isCoerceLeaf = (x: CoerceNode): x is CoerceLeaf =>
 
 export const isCoerceObjStr = (x: CoerceNode): x is CoerceObjStr =>
 	typeof (x as CoerceObjStr).os === 'number'
+
+export const isCoerceUnion = (x: CoerceNode): x is CoerceUnion =>
+	Array.isArray((x as CoerceUnion).u)
 
 /** Rebuilds an ObjectString/ArrayString coercion site (see `coerce.ts`). */
 export type RebuildObjStr = (original: any, site: CoerceObjStr) => any
@@ -111,12 +119,44 @@ const buildCoerceNode = (
 	node: CoerceNode,
 	seen: Set<string>,
 	objStr: RebuildObjStr
-) =>
+): any =>
 	isCoerceLeaf(node)
 		? coerceLeaf(node, seen)
 		: isCoerceObjStr(node)
 			? objStr(original, node)
-			: buildCoercedFromPlan(original, node, seen, objStr)
+			: isCoerceUnion(node)
+				? rebuildUnion(original, node, seen, objStr)
+				: buildCoercedFromPlan(original, node, seen, objStr)
+
+// clone `original` preserving prototype + non-enumerable markers
+// (`~kind`, `~optional`, `~elyTyp`, ...)
+function cloneSchemaNode(original: any) {
+	const out = Object.create(Object.getPrototypeOf(original))
+
+	for (const k in original) out[k] = original[k]
+
+	for (const s of Object.getOwnPropertyNames(original)) {
+		const d = Object.getOwnPropertyDescriptor(original, s)!
+		if (!d.enumerable) Object.defineProperty(out, s, d)
+	}
+
+	return out
+}
+
+function rebuildUnion(
+	original: any,
+	site: CoerceUnion,
+	seen: Set<string>,
+	objStr: RebuildObjStr
+) {
+	const out = cloneSchemaNode(original)
+
+	out.anyOf = (original.anyOf as any[]).map((branch, i) =>
+		site.u[i] ? buildCoerceNode(branch, site.u[i]!, seen, objStr) : branch
+	)
+
+	return out
+}
 
 const coerceLeafCache = new Map<string, any>()
 
@@ -153,14 +193,7 @@ export function buildCoercedFromPlan(
 	seen: Set<string> = new Set(),
 	objStr: RebuildObjStr = rebuildObjStrShape
 ) {
-	const out = Object.create(Object.getPrototypeOf(original))
-
-	for (const k in original) out[k] = original[k]
-
-	for (const s of Object.getOwnPropertyNames(original)) {
-		const d = Object.getOwnPropertyDescriptor(original, s)!
-		if (!d.enumerable) Object.defineProperty(out, s, d)
-	}
+	const out = cloneSchemaNode(original)
 
 	if (plan.p) {
 		const props: Record<string, unknown> = { ...original.properties }

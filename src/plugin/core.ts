@@ -25,7 +25,7 @@ export interface ElysiaAotOptions {
 	 * Validator entries are registered as grouped thunks: a group's
 	 * validators are constructed on the first request to any route in that
 	 * group, trading first-request latency in unbuilt groups for lower
-	 * startup cost. Handlers are always eager — only validator construction
+	 * startup cost. Handlers are always eager. Only validator construction
 	 * is deferred. Pass a number to set the group size explicitly.
 	 *
 	 * @default decided by Elysia based on route batch scale
@@ -130,7 +130,7 @@ export interface StubPlan {
 	/**
 	 * Stub the `memory` module's `clearSucroseCache` edge when handler JIT is
 	 * stubbed. Sucrose never runs in a precompiled app, so its caches are always
-	 * empty and the flush is a no-op — dropping the import lets the Sucrose
+	 * empty and the flush is a no-op. Dropping the import lets the Sucrose
 	 * analyzer tree-shake. `flushMemory`'s other clears are preserved, and the
 	 * public `elysia/sucrose` module is left untouched
 	 */
@@ -139,7 +139,7 @@ export interface StubPlan {
 	/**
 	 * Stub `type/compat` so `setupTypebox` becomes a no-op, un-wiring the
 	 * TypeBox bridge from the bundle. Set in BOTH sealed (mode A) and wired
-	 * (mode B) builds. In mode A the bridge is severed entirely — every captured
+	 * (mode B) builds. In mode A the bridge is severed entirely. Every captured
 	 * validator is bridge-free so nothing reaches it. In mode B the mirror
 	 * (`bridge` → `bridge-live` reroute) replaces the latch, so `setupTypebox`
 	 * must still be a no-op to guarantee the bridge is wired exactly once
@@ -158,13 +158,13 @@ export interface StubPlan {
 /**
  * Chosen TypeBox-collapse strategy for the build, logged in the dry-run line.
  *
- * - `'sealed'` (mode A): every captured validator is bridge-free and the app is
- *   fully stripped (handler JIT unused, no WS). `compat` is stubbed and the
- *   bridge is severed — TypeBox collapses entirely
+ * - `'sealed'` (mode A): every captured validator is bridge-free (HTTP and WS
+ *   alike) and the app is fully stripped (handler JIT unused). `compat` is
+ *   stubbed and the bridge is severed, TypeBox collapses entirely
  * - `'wired'` (mode B): at least one validator still needs the bridge. `compat`
  *   is stubbed AND the bridge is re-routed to the statically-wired mirror so it
  *   works without the DCE-fragile `setupTypebox()` anchor
- * - `'off'`: no bridge action (strip disabled, or handler JIT still reachable —
+ * - `'off'`: no bridge action (strip disabled, or handler JIT still reachable,
  *   the frozen path is not active so the bridge stays wired the normal way)
  */
 export type BridgeMode = 'sealed' | 'wired' | 'off'
@@ -186,15 +186,15 @@ const NO_STUB: StubPlan = {
  * `true` throws when handler JIT is still reachable; `false` disables.
  *
  * Also decides the TypeBox-collapse `mode`:
- * - `'sealed'` (mode A): the frozen path is active (`jit`), no WS, and EVERY
- *   captured validator is bridge-free (`bridgeFree`). `setupTypebox` is stubbed
- *   and the bridge is severed — nothing reaches it, TypeBox collapses.
- * - `'wired'` (mode B): the frozen path is active but at least one validator
+ * - `'sealed'`: the frozen path is active (`jit`) and EVERY captured
+ *   validator, HTTP and WS is bridge-free (`bridgeFree`). `setupTypebox` is
+ *   stubbed and the bridge is severe, nothing reaches it, TypeBox collapses.
+ * - `'wired'`: the frozen path is active but at least one validator
  *   still needs the bridge. `setupTypebox` is stubbed AND the bridge is
  *   re-routed to the statically-wired mirror (works without the DCE-fragile
  *   `setupTypebox()` anchor).
  * - `'off'`: handler JIT still reachable (or strip disabled). The frozen path
- *   is not active, so the bridge must stay wired the ordinary way — no compat
+ *   is not active, so the bridge must stay wired the ordinary way. No compat
  *   stub, no reroute.
  */
 function planFromReport(
@@ -202,7 +202,8 @@ function planFromReport(
 	report: StubbabilityReport,
 	hasWS: boolean,
 	aliases: Set<string>,
-	allBridgeFree: boolean
+	allBridgeFree: boolean,
+	zeroCapture: boolean
 ): { plan: StubPlan; mode: BridgeMode } {
 	const jit = report.jit
 
@@ -214,22 +215,19 @@ function planFromReport(
 				` Use strip: 'auto' to skip stubbing when the app is not fully precompiled.`
 		)
 
-	// The bridge can only be severed/re-routed when the frozen reconstruction
-	// path is the one that runs (handler JIT stubbed) and no WS route is present
-	// (WS validators are never bridge-free and rebuild through the live bridge).
-	const frozenActive = jit && !hasWS
+	const frozenActive = jit
 	const mode: BridgeMode = !frozenActive
 		? 'off'
 		: allBridgeFree
 			? 'sealed'
-			: 'wired'
+			: hasWS && zeroCapture
+				? 'off'
+				: 'wired'
 
 	return {
 		plan: {
 			jit,
 			ws: !hasWS,
-			// The merged reconstruct module is only safe to stub when no replayed
-			// handler needs validator (`va`), cookie (`cc`), or trace (`tr`) rebuild.
 			reconstruct:
 				jit &&
 				!aliases.has('va') &&
@@ -332,23 +330,12 @@ export const STUB_SOURCES: Record<
 				`}\n`
 		}
 	],
-	// Un-wire the TypeBox bridge: `setupTypebox` becomes a no-op so the
-	// `useTypebox` latch (and everything it drags — the real TypeBoxValidator,
-	// exact-mirror, coercion suite) tree-shakes. Safe in mode A (nothing reaches
-	// the bridge) and required in mode B alongside the `bridge` reroute (so the
-	// mirror is the single wiring path).
 	compat: [
 		{
 			filter: /[\\/]elysia[\\/](dist|src)[\\/]type[\\/]compat\.(m?js|ts)$/,
 			source: `export function setupTypebox(){}\n`
 		}
 	],
-	// Re-route `type/bridge` → the statically-wired `type/bridge-live` mirror.
-	// The late-binding `let` stubs in `bridge` throw until `setupTypebox` wires
-	// them; with compat stubbed that never happens, so a wired build (mode B)
-	// points the bridge specifier at the mirror, whose exports are already the
-	// real TypeBox members. `alignStubExtensions` appends the replaced module's
-	// extension (`.mjs`/`.js`) to `./bridge-live` for dist builds.
 	bridge: [
 		{
 			filter: /[\\/]elysia[\\/](dist|src)[\\/]type[\\/]bridge\.(m?js|ts)$/,
@@ -357,19 +344,6 @@ export const STUB_SOURCES: Record<
 	]
 }
 
-/**
- * Rewrite a stub's extensionless relative imports to match the extension of the
- * real module it replaces
- *
- * The sucrose stub replaces `memory.(mjs|js|ts)`. Its bare relative specifiers
- * (`./context`, …) are correct against the `.ts` source, but against a `.mjs`
- * dist module esbuild's node resolver defaults an extensionless specifier to the
- * sibling CJS `.js` (elysia's package.json has no `"type": "module"`), pulling a
- * whole duplicate CJS copy of the elysia subtree alongside the app's `.mjs` one.
- * Anchoring the specifiers to the replaced file's extension keeps the stub on the
- * same module instances the app already resolves. `./validator` is a directory,
- * so it expands to `./validator/index`
- */
 export const alignStubExtensions = (
 	stubSource: string,
 	targetPath: string
@@ -380,21 +354,13 @@ export const alignStubExtensions = (
 	return stubSource.replace(
 		/(from ')(\.[^']+)(')/g,
 		(_m, open: string, spec: string, close: string) =>
-			open + (spec === './validator' ? spec + '/index' : spec) + ext + close
+			open +
+			(spec === './validator' ? spec + '/index' : spec) +
+			ext +
+			close
 	)
 }
 
-/**
- * Elysia's `t.*` overrides — the 27 names `elysia/type` replaces (or adds) over
- * `typebox/type`. Each maps to its leaf module basename (under `type/elysia/`)
- * and the name it is exported as from that leaf (some leaves rename to avoid
- * shadowing a JS global, e.g. `Array` → `ArrayType`).
- *
- * SINGLE SOURCE OF TRUTH: mirrors `src/type/index.ts` (the runtime `t` object)
- * and `src/type/exports.ts`. `test/aot/virtual-type-drift.test.ts` pins it
- * against the live `t` object vs `typebox/type` (`Object.keys` diff) so a future
- * `t.*` addition/removal that skips this table trips the drift test.
- */
 export const OVERRIDE_MAP: Record<string, { leaf: string; export: string }> = {
 	Accelerate: { leaf: 'accelerate', export: 'Accelerate' },
 	Array: { leaf: 'array', export: 'ArrayType' },
@@ -425,28 +391,15 @@ export const OVERRIDE_MAP: Record<string, { leaf: string; export: string }> = {
 	UnionEnum: { leaf: 'union-enum', export: 'UnionEnum' }
 }
 
-// `createRequire(import.meta.url)` — Rolldown rewrites `import.meta.url` to
-// `pathToFileURL(__filename).href` in the CJS build, so `.resolve` works from
-// this module in both the `.mjs` and `.js` outputs.
+// Rolldown rewrites `import.meta.url` to `pathToFileURL(__filename).href` in the CJS build
+// so `.resolve` works from this module in both the `.mjs` and `.js` outputs.
 const requireFromHere = createRequire(import.meta.url)
 
-/**
- * Resolve a specifier to an absolute path using the SAME resolution the ESM
- * bundle will use (the `import` condition, so `elysia/type` → `.mjs` — the
- * extension every ESM bundle here resolves to, and the one the leaf modules must
- * carry to avoid the CJS dual-copy the `alignStubExtensions` lesson warns of).
- *
- * `import.meta.resolve` honours the `import` condition and is present in the ESM
- * plugin build (the one every bundler integration loads). In the CJS build
- * Rolldown lowers `import.meta` to `{}`, so `import.meta.resolve` is `undefined`
- * and we fall back to `require.resolve`.
- */
 const resolveSpecifier = (specifier: string): string => {
-	// `import.meta.resolve` is bound to `import.meta` (Bun throws if it is called
-	// detached), so invoke it directly rather than destructuring.
 	const meta = import.meta as ImportMeta & {
 		resolve?: (s: string) => string
 	}
+
 	if (typeof meta.resolve === 'function') {
 		const url = meta.resolve(specifier)
 		return url.startsWith('file://') ? new URL(url).pathname : url
@@ -455,22 +408,6 @@ const resolveSpecifier = (specifier: string): string => {
 	return requireFromHere.resolve(specifier)
 }
 
-/**
- * Build the virtual `elysia/type` module source — a plain re-export surface with
- * NO `setupTypebox` call (that is the whole point: consuming `t` this way must
- * not drag the bridge latch).
- *
- * TypeBox's `t.*` names pass through to the user's own `typebox/type` (resolved
- * to an absolute path — the same copy the bundle uses); the 27 Elysia overrides
- * re-export from their leaf modules (absolute paths, because elysia's `exports`
- * map blocks `./dist/*` subpaths). Emitting STATIC NAMED re-exports (not
- * `export *`) is what lets `import * as t from 'elysia/type'` — the specifier the
- * treeshake rewrite emits — tree-shake unused constructors per-member.
- *
- * `typeSpecifier` is the specifier the plugin intercepts (`elysia/type`); it is
- * resolved to locate the dist `type/elysia/*` leaf modules and to derive their
- * extension.
- */
 export async function generateVirtualType(
 	typeSpecifier = 'elysia/type'
 ): Promise<string> {
@@ -478,13 +415,9 @@ export async function generateVirtualType(
 	const typePath = resolveSpecifier(typeSpecifier)
 	const typeboxPath = resolveSpecifier('typebox/type')
 
-	// `elysia/type` resolves to `type/exports.(mjs|js|ts)`; the leaf modules sit
-	// in the sibling `elysia/` directory with the same extension.
 	const ext = typePath.slice(typePath.lastIndexOf('.'))
 	const leafDir = join(dirname(typePath), 'elysia')
 
-	// Enumerate the user's typebox names, minus the overrides Elysia replaces.
-	// Import by file URL so an `.mjs` typebox loads under both plugin formats.
 	const typebox = (await import(pathToFileURL(typeboxPath).href)) as Record<
 		string,
 		unknown
@@ -494,12 +427,11 @@ export async function generateVirtualType(
 		(name) => !overrideNames.has(name)
 	)
 
-	// Absolute specifiers use POSIX separators so the emitted module is valid on
-	// every bundler/platform.
+	// use correct posix (fucking Windows)
 	const toSpecifier = (p: string): string =>
 		JSON.stringify(p.replace(/\\/g, '/'))
 
-	let source = `// Generated by Elysia build plugin — virtual 'elysia/type' re-export surface.\n`
+	let source = `// Generated by Elysia build plugin. Virtual 'elysia/type' re-export surface.\n`
 	source += `export { ${passthrough.join(', ')} } from ${toSpecifier(
 		typeboxPath
 	)}\n`
@@ -557,7 +489,7 @@ export async function generateCompiledArtifacts(
 			console.warn(
 				'[elysia-aot] re-importing "' +
 					entry +
-					'" for rebuild — top-level side effects will re-run. ' +
+					'" for rebuild. top-level side effects will re-run. ' +
 					'This is expected in watch/rebuild flows.'
 			)
 
@@ -633,14 +565,9 @@ export async function generateCompiledArtifacts(
 				.routes ?? []
 
 		let expectedSlots = 0
+
 		// The gate must model the SAME refusal surface as the runtime
-		// `buildFrozenRouteValidator` (compile/handler/frozen-validator.ts). That
-		// function returns `undefined` (→ reconstruct rethrows → prod 500 under a
-		// severed bridge) for a route whose `hook.schemas` is non-empty
-		// (frozen-validator.ts:340) — standalone-guard and macro-injected schemas
-		// live there, NOT in the 6 named slots below. Such a route can never go
-		// bridge-free, so it forbids the sealed mode even though its captured slot
-		// validator may be marked `bridgeFree`.
+		// `buildFrozenRouteValidator` (compile/handler/frozen-validator.ts)
 		let routesForbidSeal = false
 		for (const route of routes) {
 			const hooks = route?.hooks
@@ -663,36 +590,18 @@ export async function generateCompiledArtifacts(
 				if (hooks[slot] !== undefined) expectedSlots++
 		}
 
-		// `normalize: 'typebox'` also makes `buildFrozenRouteValidator` refuse
-		// unconditionally (frozen-validator.ts:339) — the Clean path routes through
-		// live TypeBox, which a severed bridge cannot serve. Visible here on the
-		// app config, so model it rather than surfacing it as a residual.
-		if ((typedApp as { ['~config']?: { normalize?: unknown } })['~config']
-			?.normalize === 'typebox')
+		// `normalize: 'typebox'` need 'typebox/value'
+		if (
+			(typedApp as { ['~config']?: { normalize?: unknown } })['~config']
+				?.normalize === 'typebox'
+		)
 			routesForbidSeal = true
 
 		const frozenSlots = artifacts.validators.length
 
-		// Sealed (mode A) needs EVERY validator bridge-free AND full coverage AND at
-		// least one captured handler AND no route that forbids sealing:
-		//
-		//  - full coverage: an expected-but-unfrozen slot would fall back to the
-		//    wired bridge at runtime, which a severed bridge cannot serve.
-		//    (`frozenSlots` can exceed `expectedSlots` when a response map declares
-		//    multiple statuses — one `response` hook, several frozen entries — so
-		//    `>=` is the floor.)
-		//  - `handlers.length > 0`: a zero-capture app (empty app, or routes that
-		//    register AFTER the capture snapshot) would let both `>= 0` and
-		//    `[].every(...)` pass vacuously and seal on nothing. A seal decision
-		//    must not rest on vacuous truth. Zero-capture → `wired` (safe: the
-		//    mirror is present, so any late/unforeseen bridge use still resolves;
-		//    strip already 500s such late routes at the jit stub, so sealing adds
-		//    no capability, only risk).
-		//  - `!routesForbidSeal`: no `hook.schemas` route, no `normalize:'typebox'`
-		//    (see above) — the two refusals `buildFrozenRouteValidator` makes that
-		//    the per-slot `bridgeFree` marker cannot see.
 		const allBridgeFree =
-			artifacts.handlers.length > 0 &&
+			(artifacts.handlers.length > 0 ||
+				artifacts.validators.length > 0) &&
 			!routesForbidSeal &&
 			frozenSlots >= expectedSlots &&
 			artifacts.validators.every((v) => v.bridgeFree === true)
@@ -702,7 +611,8 @@ export async function generateCompiledArtifacts(
 			report,
 			hasWS,
 			aliases,
-			allBridgeFree
+			allBridgeFree,
+			artifacts.handlers.length === 0 && artifacts.validators.length === 0
 		)
 
 		if (options?.target === 'workerd') {
@@ -721,17 +631,10 @@ export async function generateCompiledArtifacts(
 				)
 		}
 
-		// The virtual `elysia/type` (no `setupTypebox`) applies in both bridge
-		// modes so unused `t.*` constructors tree-shake. Off mode keeps the
-		// wired bridge, so `elysia/type` must stay real (its `setupTypebox` still
-		// wires the bridge the ordinary way).
-		//
-		// The specifier is fixed `elysia/type` to match the treeshake rewrite
-		// target (`rewriteTypeImport` emits `import * as t from 'elysia/type'`),
-		// which the virtual module exists to shake. `registerFrom` only reroutes
-		// the manifest's `Compiled` import, not the type barrel.
 		const virtualType =
-			mode === 'off' ? undefined : await generateVirtualType('elysia/type')
+			mode === 'off'
+				? undefined
+				: await generateVirtualType('elysia/type')
 
 		return {
 			source: artifacts.source,

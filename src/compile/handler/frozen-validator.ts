@@ -1,7 +1,7 @@
+// ! This module must be typebox free
 import { ValidationError } from '../../error'
 import { nullObject } from '../../utils'
 import { ELYSIA_TYPES } from '../../type/constants'
-import { buildCoercedFromPlan } from '../../type/coerce-plan'
 
 import {
 	Compiled,
@@ -78,7 +78,7 @@ function isBridgeFreeComplete(
 		f.k === 1 || // codec decode/encode is not baked here
 		f.ce || // custom-error rebuild falls back to live TypeBox `Compile`
 		f.ic || // inner string codecs drag TypeBox at import
-		f.a === 1 // async refinement (file-type) — keep on the wired path
+		f.a === 1 // async refinement (file-type)
 	)
 		return false
 
@@ -175,6 +175,9 @@ function isFullyClosedObject(schema: any): boolean {
 
 class FrozenSlotValidator {
 	isAsync = false
+	// WS message/upgrade validation branches on `hasCodec` to pick `From`
+	// over bare `Check` (ws/route.ts `validateMessageBody`)
+	hasCodec = false
 
 	#check: (value: unknown) => boolean
 	#clean?: (value: unknown) => unknown
@@ -197,6 +200,8 @@ class FrozenSlotValidator {
 		this.schema = schema
 
 		if (frozen.ic) reconstructInnerCodecs(frozen.ic, schema)
+
+		this.hasCodec = frozen.k === 1
 
 		if (frozen.k === 1 && frozen.dm) {
 			const both = instantiateFrozenBoth(frozen, schema, raw)
@@ -353,11 +358,12 @@ export function buildFrozenRouteValidator(
 		const frozen = Compiled.getValidator(method, path, slot)
 		if (!frozen) return undefined
 
-		// Rebuild the coerced schema BEFORE the gate: the alignment checks
-		// and the slot construction must see the same shape.
-		const coerced = frozen.cp
-			? buildCoercedFromPlan(schema, frozen.cp)
-			: schema
+		let coerced = schema
+		if (frozen.cp) {
+			const rebuild = Compiled.planRebuilder
+			if (!rebuild) return undefined
+			coerced = rebuild(schema, frozen.cp)
+		}
 
 		if (!isBridgeFreeComplete(frozen, coerced, schema)) return undefined
 
@@ -403,10 +409,11 @@ export function buildFrozenRouteValidator(
 const isResponseMap = (schema: any): boolean =>
 	!('~kind' in schema || '~elyAcl' in schema || '~standard' in schema)
 
-/**
- * Build-time twin of `isBridgeFreeComplete`, operating on the captured entry & its schema
- */
-export function isCapturedBridgeFree(c: CapturedValidator, schema: unknown) {
+export function isCapturedBridgeFree(
+	c: CapturedValidator,
+	schema: unknown,
+	coerced: unknown = schema
+) {
 	if (typeof schema === 'string') return false
 
 	/**
@@ -425,10 +432,6 @@ export function isCapturedBridgeFree(c: CapturedValidator, schema: unknown) {
 		!c.async &&
 		!(c.hasDefault && !c.precomputeSafe)
 	) {
-		const coerced = c.coercePlan
-			? buildCoercedFromPlan(schema, c.coercePlan)
-			: schema
-
 		return (
 			innerCodecsAligned(c.innerCodecs?.length, coerced) &&
 			mirrorUnionsAligned(c.mirror.u, schema) &&

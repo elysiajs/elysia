@@ -40,7 +40,7 @@ export const aot = (entry: string, options?: ElysiaAotOptions): BunPlugin => ({
 			stub,
 			treeShake: options?.treeShake ?? true,
 			virtualType,
-			// Bun resolves relative to the project root by default — no resolveDir needed
+			// Bun resolves relative to the project root by default
 			resolveDir: undefined,
 			build
 		})

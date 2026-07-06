@@ -78,19 +78,20 @@ function phasesFromMemberAccess(
 
 		const next = body.charCodeAt(j)
 
-		// `p.onHandle` — static member
+		// `p.onHandle` static member
 		if (next === 46 /* . */) {
 			j++
 			const s = j
 			while (isIdentCharCode(body.charCodeAt(j))) j++
 			const phase = phaseGetter[body.slice(s, j)]
 			if (phase) out.add(phase)
-			// non-phase members (`p.context`, `p.set`) expose no getter — safe
+
+			// non-phase members (`p.context`, `p.set`) expose no getter
 			i = j
 			continue
 		}
 
-		// `p['onHandle']` — computed member, only accountable as a string literal
+		// `p['onHandle']` computed member, only accountable as a string literal
 		if (next === 91 /* [ */) {
 			j++
 			const q = body.charCodeAt(j)
@@ -196,7 +197,7 @@ function computeTracePhases(fn: Function): Set<TraceEvent> | null {
 	const aliases = findAlias(first, inner)
 	for (const alias of aliases) {
 		// a non-destructure alias (`const a = t`) can reach getters we cannot
-		// re-scan for — bail. Destructure aliases (`{ … }`) are accountable.
+		// re-scan for bail. Destructure aliases (`{ … }`) are accountable.
 		if (alias.charCodeAt(0) !== 123) return null
 
 		const aliasPhases = phasesFromDestructure(alias)
@@ -440,8 +441,8 @@ class TraceRecorder {
 		this.begun = process
 		this.remaining = process.total ?? 0
 
-		// pre-subscribed listeners settle synchronously at phase begin — the
-		// timing contract the eager LiveProcess used to provide
+		// pre-subscribed listeners settle synchronously at phase begin
+		// the timing contract the eager LiveProcess used to provide
 		const resolve = this.pendingResolve
 		if (resolve) {
 			this.pendingResolve = undefined
@@ -568,7 +569,6 @@ class TracerHandle {
 	// begin
 	b(index: number, total: number, name?: string) {
 		if (this.slots[index] !== undefined) return 0
-
 		;(this.bt ??= [])[index] = performance.now()
 
 		if (total) (this.tt ??= [])[index] = total
@@ -583,10 +583,7 @@ class TracerHandle {
 	}
 
 	// Resolve a span begun by `b()` (begin, a numeric token) or an eager recorder
-	r(
-		rp: number | TraceRecorder | undefined,
-		error: Error | null = null
-	) {
+	r(rp: number | TraceRecorder | undefined, error: Error | null = null) {
 		if (rp === undefined) return
 
 		if (typeof rp === 'number') {

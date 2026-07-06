@@ -114,8 +114,7 @@ export function rewriteTypeImport(
 	while ((m = importRe.exec(code))) {
 		const [full, lead, indent, clause, , attributes] = m
 
-		// import-shaped text inside a template literal/comment is data, not
-		// an import — never rewrite it
+		// import-shaped text inside a template literal/comment is data, not import
 		const keyword = m.index + lead.length + indent.length
 		if (spans.some(([start, end]) => keyword >= start && keyword < end))
 			continue

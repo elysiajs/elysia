@@ -222,7 +222,12 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			cookie: true,
 			trace: true,
 			sucrose: true,
-			// WS present → the bridge stays wired (WS validators need it) → off mode
+			// WS no longer forces a mode by itself (its validators
+			// reconstruct bridge-free), but a schema-less WS-only app is
+			// ZERO-CAPTURE: sealing must not rest on vacuous truth, and wired
+			// would drag bridge-live for an app that can never need the
+			// bridge — so it keeps the vanilla latch (`off`), where TypeBox
+			// tree-shakes unless user code imports `t`
 			compat: false,
 			bridge: false
 		})

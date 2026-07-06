@@ -1,4 +1,5 @@
 import {
+	Compiled,
 	Source,
 	type CapturedValidator,
 	type ValidatorManifest,
@@ -7,6 +8,7 @@ import {
 } from '../../src/compile/aot'
 
 import { CheckContext } from 'typebox/schema'
+import { buildCoercedFromPlan } from '../../src/type/coerce-plan'
 import { Guard } from 'typebox/guard'
 import { Format } from 'typebox/format'
 import { Hashing } from 'typebox/system'
@@ -165,7 +167,12 @@ export const materialise = (
 				}
 			})
 
-		if (c.coercePlan) entry.cp = JSON.parse(JSON.stringify(c.coercePlan))
+		if (c.coercePlan) {
+			entry.cp = JSON.parse(JSON.stringify(c.coercePlan))
+			// mirror the generated manifest module: any emitted `cp` comes
+			// with the rebuilder registration
+			Compiled.planRebuilder = buildCoercedFromPlan
+		}
 
 		const bySlot = ((m[c.method] ??= {})[c.path] ??= {})
 		bySlot[c.slot] = entry

@@ -653,13 +653,13 @@ export type Problem<
 	/** Short, human-readable summary of the problem type */
 	title?: string
 
-	/** HTTP status — a number or a `StatusMap` name (e.g. `'Conflict'`) */
+	/** HTTP status. A number or a `StatusMap` name (e.g. `'Conflict'`) */
 	status?: Code
+
 	/** Human-readable explanation specific to this occurrence */
-
 	detail?: string
-	/** URI identifying the specific occurrence of the problem */
 
+	/** URI identifying the specific occurrence of the problem */
 	instance?: string
 } & Extension
 
@@ -698,8 +698,6 @@ export function problemResponse(p: Problem, headers?: Record<string, any>) {
 		}
 	)
 
-	// WeakSet.add() returns the SET, not the element — capture the response
-	// first, then mark it, or `response` becomes the WeakSet.
 	skipClone.add(response)
 
 	return response

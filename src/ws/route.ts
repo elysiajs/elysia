@@ -1,5 +1,9 @@
 import { RouteValidator } from '../validator/route'
 import { StandardValidator } from '../validator'
+import {
+	buildFrozenRouteValidator,
+	isBridgeNotInitialized
+} from '../compile/handler/frozen-validator'
 import { nullObject } from '../utils'
 import { parseQueryFromURL } from '../parse-query'
 import { getQueryParseChannels } from '../compile/handler/utils'
@@ -190,10 +194,25 @@ export function buildWSRoute(
 		app
 	) ?? nullObject()) as AnyWSLocalHook
 
-	const validators = new RouteValidator(hook as any, {
-		models: app['~ext']?.models,
-		aot: { method: 'WS', path: route[1] }
-	})
+	let validators: RouteValidator<any>
+	try {
+		validators = new RouteValidator(hook as any, {
+			models: app['~ext']?.models,
+			aot: { method: 'WS', path: route[1] }
+		})
+	} catch (error) {
+		if (!isBridgeNotInitialized(error)) throw error
+
+		const frozen = buildFrozenRouteValidator(
+			hook as any,
+			{ '~ext': app['~ext'] } as AnyElysia,
+			'WS',
+			route[1] as string
+		)
+		if (!frozen) throw error
+
+		validators = frozen as any
+	}
 
 	const responseValidator = validators.response as
 		| { [status: number]: WSValidatorLike }
@@ -375,19 +394,33 @@ export function buildWSRoute(
 						? 'Internal Server Error'
 						: (error.message ?? '')
 
-			return typeof body === 'object' ? JSON.stringify(body) : String(body)
+			return typeof body === 'object'
+				? JSON.stringify(body)
+				: String(body)
 		}
 
 		return internalServerErrorBodyString(error)
 	}
 
-	function sendErrorFrame(ws: ElysiaWS<any>, error: unknown): void | Promise<void> {
+	function sendErrorFrame(
+		ws: ElysiaWS<any>,
+		error: unknown
+	): void | Promise<void> {
 		const frame = wsErrorFrame(error)
 		if (typeof frame === 'string') {
-			try { ws.raw.send(frame) } catch {}
+			try {
+				ws.raw.send(frame)
+			} catch {}
 			return
 		}
-		return frame.then((f) => { try { ws.raw.send(f) } catch {} }, () => {})
+		return frame.then(
+			(f) => {
+				try {
+					ws.raw.send(f)
+				} catch {}
+			},
+			() => {}
+		)
 	}
 
 	async function handleError(ws: ElysiaWS<any>, error: unknown) {

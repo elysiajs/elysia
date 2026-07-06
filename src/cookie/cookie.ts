@@ -105,7 +105,6 @@ export class Cookie<T = any> implements BaseCookie {
 			typeof config === 'function' ? config(this.cookie) : config
 		)
 
-		// explicit write intent — always emit
 		delete (cookie as any)['~raw']
 
 		this.setCookie = cookie
@@ -145,7 +144,6 @@ for (const key of FORWARDED_KEYS)
 			const cookie = this.setCookie
 			cookie[key] = v
 
-			// attribute writes are explicit intent — never suppress
 			delete (cookie as any)['~raw']
 		}
 	})

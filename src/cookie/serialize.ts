@@ -21,7 +21,6 @@ export function serializeCookie(cookies: Context['set']['cookie']) {
 		if (typeof value === 'object') {
 			value = JSON.stringify(value)
 
-			// parsed cookie, unchanged since the wire — nothing to set
 			if ((property as any)['~raw'] === value) continue
 		}
 

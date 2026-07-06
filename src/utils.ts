@@ -97,20 +97,10 @@ export type ChainNode =
 			added: Partial<AppHook>
 			parent: ChainNode | undefined
 			// Scope this node was registered at (`#on` / `#guard`).
-			// All entries in the node share this scope by construction.
 			scope?: EventScope
-			// True if this node was created by `#use` propagation rather
-			// than direct registration. Used to enforce the "plugin scope
-			// propagates exactly one level" rule: `plugin` nodes with
-			// `propagated=true` are skipped in subsequent `#use` walks.
-			// Globals propagate regardless of this flag.
+			// True if this node was created by `#use`
 			propagated?: boolean
-			// Instance this node was registered on (`#pushHook` / `#use`
-			// propagation). Macro keys in `added` resolve against the macro
-			// table in scope THERE — a `.guard({ macro: true })` inside a
-			// `.group()` must see the group's override, not the root's
-			// definition (typed `object` to avoid a circular AnyElysia import;
-			// consumers cast)
+			// Instance this node was registered on
 			owner?: object
 	  }
 	| { combine: ChainNode; over: ChainNode | undefined }
@@ -128,10 +118,6 @@ export function flattenChain(
 	start: ChainNode | undefined,
 	keep?: (s: EventScope | undefined) => boolean,
 	stopAt?: ChainNode,
-	// Resolve a node's `added` (expand macros) as it is appended, WITHOUT
-	// mutating the node — nodes are shared by reference across every app that
-	// reuses a plugin, so each root must resolve its own copy. Omitted (raw
-	// `node.added`) when the caller has no macros.
 	resolveAdded?: (node: ChainNode) => Partial<AppHook> | undefined
 ): Partial<AppHook> | undefined {
 	if (!start || start === stopAt) return
@@ -139,6 +125,7 @@ export function flattenChain(
 
 	const nodes = flattenNodeStack
 	const phases = flattenPhaseStack
+
 	nodes.length = 0
 	phases.length = 0
 	nodes.push(start)
@@ -185,14 +172,13 @@ export function flattenChain(
 	if (isNotEmpty(result)) return result
 }
 
-// Global macro-table epoch. Bumped by `invalidateMacroEpoch` whenever ANY
-// macro table mutates (`.macro()` / `#use` merge); every macro-resolution memo
-// (flattens here, localHook/chainNode memos in `compile/handler`) validates
-// its bucket against the current epoch. Deliberately coarse: per-root deletes
-// cannot reach every consumer (an app that already `.use()`d the mutated
-// instance holds memos keyed under ITSELF), which served stale pre-macro
-// resolutions after an introspect-then-mutate sequence. Registration-time
-// only — memos rebuild lazily and nothing bumps after first compile.
+/**
+ * whenever any macro table mutates (`.macro()` / `#use` merge)
+ * every macro-resolution memo flattens, localHook/chainNode memos
+ * validates against the current epoch
+ *
+ * @see `compile/handler`
+ */
 let macroTableEpoch = 0
 
 export const macroEpoch = () => macroTableEpoch
@@ -218,6 +204,7 @@ export function flattenChainMemo(
 		bucket = { e: macroTableEpoch, per: new WeakMap() }
 		flattenChainMemos.set(root, bucket)
 	}
+
 	const perRoot = bucket.per
 
 	let cached = perRoot.get(start)
@@ -230,9 +217,6 @@ export function flattenChainMemo(
 
 	if (cached === emptyFlatten) return
 
-	// `cloneHook` is identical to the former local `cloneFlatHook`: a shallow
-	// copy with per-key array `.slice()` so the caller can mutate the result
-	// without touching the memoised (shared) flatten.
 	return cloneHook(cached)
 }
 

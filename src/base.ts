@@ -203,12 +203,6 @@ export class Elysia<
 		if (!this['~ext']?.macro && !this['~scopeChildren'])
 			return this.#history
 
-		// Expose macro-expanded route hooks for introspection WITHOUT mutating
-		// the shared registration tuples. `resolveLocalHook` (the compile path)
-		// resolves against the route's own macro scope (a group scope-child via
-		// route[7]/route[3]) with a root fallback and memoises an IMMUTABLE
-		// expanded clone — so the tuple is never touched and AOT replay, which
-		// reads these same copies, stays in sync. Unchanged hook → same route.
 		return this.#history.map((route) => {
 			const localHook = route[4]
 			if (!localHook) return route
@@ -240,11 +234,6 @@ export class Elysia<
 	#compiled?: CompiledHandler[]
 
 	// Memoized `routes` getter output
-	//
-	// Invalidated on `#add`, `#use`, `#on`, `#pushHook`, `.macro()`, `.as()`.
-	// NOT invalidated by compilation: `.routes` derives purely from `#history`
-	// (via `composeRouteHook`) and is byte-identical before/after a JIT compile,
-	// which only mutates `#compiled`/`~map`.
 	#cachedRoutes?: PublicRoute[]
 
 	'~router'?: Memoirist<CompiledHandler>
@@ -255,18 +244,7 @@ export class Elysia<
 	'~hasWS'?: boolean
 	'~hasDynamicWS'?: boolean
 
-	// Group/guard macro-scope internals that CROSS the module boundary (read by
-	// `localMacroRoot`/`chainResolver` in compile/handler/index.ts), so they stay
-	// tilde-public. The base.ts-only siblings are `#`-private above
-	// (`#scopeParent`/`#pluginMacros`/`#macroBaseline`).
-	//
-	// Set on the inline child created by `.group()`/`.guard(cb)`. Reference-copies
-	// the parent macro table, so a callback `.macro()` override is an intra-app
-	// scoped redefinition, not a cross-plugin collision.
 	'~scopeChild'?: boolean
-
-	// Every group/guard scope-child created on (or absorbed into) this instance,
-	// transitively.
 	'~scopeChildren'?: AnyElysia[]
 
 	constructor(config?: ElysiaConfig<BasePath, Scope>) {
@@ -283,6 +261,14 @@ export class Elysia<
 			)
 	}
 
+	/**
+	 * @deprecated use `app.history` instead
+	 *
+	 * Elysia changes it store route internally
+	 * This API is provided as compatibility
+	 *
+	 * Will remove in 2.1
+	 */
 	get routes(): PublicRoute[] {
 		if (!this.#history) return []
 
@@ -755,8 +741,6 @@ export class Elysia<
 		switch (typeof value) {
 			case 'object':
 				if (!value) return this
-				// named registration must always assign — `.state(name, {})` /
-				// `.state(name, [])` are real (typed) values, not no-ops
 				if (!name && isEmpty(value)) return this
 
 				if (name) {
@@ -3277,9 +3261,6 @@ export class Elysia<
 						seed: undefined,
 						// Don't inherit `as` into the group/guard scope-child:
 						// hooks registered inside the callback default their
-						// scope to `~config.as` (#on), so inheriting `global`
-						// would lift group-local hooks out onto the parent /
-						// consuming app — a scoping/authorization hazard.
 						as: undefined,
 						prefix
 					}
@@ -4292,9 +4273,6 @@ export class Elysia<
 					}
 
 					if (key === '~deriveEntries') {
-						// Carry the per-hook derive provenance across propagation —
-						// CONCAT (the fallback below is last-wins, which would drop
-						// every propagated derive but the final one, silently
 						// turning them into early-returning guards). Over-inclusion
 						// is harmless: codegen consults it only for fns actually in
 						// `beforeHandle`, so no origin-dedup is needed here.
@@ -4319,9 +4297,6 @@ export class Elysia<
 				}
 			}
 
-			// `owner: app` — a propagated node's macro keys resolve against the
-			// scope they were registered in. When `app` is a group scope-child
-			// (its global/plugin hooks propagate to the parent here), a macro
 			// key in those hooks must see the group's override table; a plain
 			// plugin `app` is not a scope-child, so `localMacroRoot` falls back
 			// to the compiling root as before.
@@ -6301,8 +6276,7 @@ export class Elysia<
 		)
 			return true
 
-		// Chain sources: route[5] (appHook), route[6] (inheritedChain), and
-		// this['~hookChain'] — memoised per shared start node.
+		// Chain sources: route[5] (appHook), route[6] (inheritedChain)
 		return (
 			this.#chainHasModelRef(route[5] as ChainNode | undefined) ||
 			this.#chainHasModelRef(route[6] as ChainNode | undefined) ||
@@ -6400,7 +6374,8 @@ export class Elysia<
 					const prev = this.#history![seen.get(key)!]
 					if (prev[2] !== route[2])
 						console.warn(
-							`[Elysia] Duplicate route ${key} — the later definition overrides the earlier one (its schema/hooks are dropped).`
+							`[Elysia] Duplicate route ${key} at`,
+							new Error().stack
 						)
 				}
 			}

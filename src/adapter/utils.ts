@@ -810,7 +810,7 @@ export function tee<T>(
 				serve(me, { resolve, reject })
 			),
 
-		// Synchronous-effect return — see the tee() doc comment
+		// Synchronous-effect return, see the tee() doc comment
 		return: (value?: unknown) => {
 			const p = pending[me]
 			if (p) {
