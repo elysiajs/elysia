@@ -34,6 +34,7 @@ import { parseQueryFromURL } from '../../parse-query'
 
 import {
 	cloneResponse,
+	emptyResponse,
 	getQueryParseChannels,
 	hasRequestBody,
 	mapAfterHandle,
@@ -373,18 +374,26 @@ export function compileHandlerJit({
 	const traceHandlers = (hook?.trace as any[] | undefined) ?? undefined
 	const hasTrace = !!traceHandlers?.length
 	const traceCount = hasTrace ? traceHandlers!.length : 0
+	const hasLifecycleHook =
+		parseLength > 0 ||
+		!!hook?.transform?.length ||
+		hasBeforeHandle ||
+		hasAfterHandle ||
+		hasMapResponse ||
+		hasErrorHook ||
+		hasAfterResponse
+	const abortCheck = hasLifecycleHook ? `if(aborted)return emp.clone()\n` : ''
 
-	// Statically-discovered union of subscribed phases across every trace
-	// handler. `null` = un-analyzable → instrument ALL phases (conservative,
-	// no silent loss). A phase absent from the set is never subscribed, so its
-	// per-request `performance.now()` instrumentation is dead and elided.
 	const tracePhases = hasTrace
 		? unionTracePhases(traceHandlers as Function[])
 		: new Set<TraceEvent>()
+
 	const phaseOn = (phase: TraceEvent) =>
 		hasTrace && (tracePhases === null || tracePhases.has(phase))
+
 	const hasAnyPhase =
 		hasTrace && (tracePhases === null || tracePhases.size > 0)
+
 	const traceHandleOn = phaseOn('handle')
 
 	const beginTrace = (
@@ -538,6 +547,14 @@ export function compileHandlerJit({
 	// va,rm,rc,re,pa,pf,pj,pt,pu,er,ar
 	let code = `${isAsync ? 'async ' : ''}function route(c){\n`
 
+	if (hasLifecycleHook) {
+		link(emptyResponse, 'emp')
+		code +=
+			`let aborted=c.request.signal.aborted\n` +
+			`if(!aborted)c.request.signal.addEventListener('abort',()=>{aborted=true},{once:true})\n` +
+			abortCheck
+	}
+
 	if ((hasAfterResponse || hasTrace) && !syncAfterResponse)
 		code += 'let _stl\n'
 
@@ -621,6 +638,7 @@ export function compileHandlerJit({
 		code += 'try{\n' + parseCode + '}catch(e){throw new pe(e)}\n'
 
 		if (hasTrace) code += endTrace('parse')
+		if (hasLifecycleHook) code += abortCheck
 	} else if (hasTrace) code += beginTrace('parse', 0) + endTrace('parse')
 
 	if (hook?.transform?.length || hasTrace) {
@@ -629,12 +647,14 @@ export function compileHandlerJit({
 		if (transformLen) {
 			link(hook!.transform!, 'tf')
 			if (isAsync) code += 'let _tf\n'
-			code += mapTransform(hook!.transform!, [
-				isAsync,
-				buildReport('transform')
-			])
+			code += mapTransform(
+				hook!.transform!,
+				[isAsync, buildReport('transform')],
+				'aborted'
+			)
 		}
 		code += endTrace('transform')
+		if (transformLen) code += abortCheck
 	}
 
 	if (vali?.body) {
@@ -800,11 +820,13 @@ export function compileHandlerJit({
 					deriveEntries?.length ? new Set(deriveEntries) : undefined,
 					link,
 					isAsync,
-					buildReport('beforeHandle')
+					buildReport('beforeHandle'),
+					'aborted'
 				)
 			}
 
 			code += endTrace('beforeHandle')
+			if (hasBeforeHandle) code += abortCheck
 		}
 
 		if (hasAfterResponse || traceHandleOn) link(tee, 'tee')
@@ -849,6 +871,8 @@ export function compileHandlerJit({
 			code += `if(_r===undefined){\n${callHandler}${teeBlock}}\n`
 		else code += callHandler + teeBlock
 
+		if (hasLifecycleHook) code += abortCheck
+
 		if (syncAfterResponse) {
 			link(forwardError, 'fe')
 
@@ -871,7 +895,6 @@ export function compileHandlerJit({
 				`if(_r instanceof Promise)return _r.then(fe).then((_v)=>_fin(c,_v))\n` +
 				`return _fin(c,_r)\n`
 		} else {
-			// Forward a returned `Error` to the error pipeline, like a throw
 			code += `if(_r instanceof Error)throw _r\n`
 			if (!isAsync) {
 				link(forwardError, 'fe')
@@ -894,10 +917,12 @@ export function compileHandlerJit({
 					code += mapAfterHandle(
 						hook!.afterHandle!,
 						isAsync,
-						buildReport('afterHandle')
+						buildReport('afterHandle'),
+						'aborted'
 					)
 				}
 				code += endTrace('afterHandle')
+				if (hasAfterHandle) code += abortCheck
 			}
 
 			if (hasMapResponse || hasTrace) {
@@ -908,10 +933,12 @@ export function compileHandlerJit({
 					code += mapMapResponse(
 						hook!.mapResponse!,
 						isAsync,
-						buildReport('mapResponse')
+						buildReport('mapResponse'),
+						'aborted'
 					)
 				}
 				code += endTrace('mapResponse')
+				if (hasMapResponse) code += abortCheck
 			}
 
 			if (hasResponseValidator) {
@@ -930,6 +957,7 @@ export function compileHandlerJit({
 					`const _vr=va.response[c.set.status??200]\n` +
 					`if(_vr)_r=${awaitStr}_vr.EncodeFrom(_r,'response')\n` +
 					`}\n`
+				if (hasLifecycleHook) code += abortCheck
 			}
 
 			code += schedule
@@ -949,6 +977,7 @@ export function compileHandlerJit({
 			(callHandlerSyncOnAsync
 				? `let _r=h(c)\nif(_r instanceof Promise)_r=await _r\n`
 				: `let _r=${isAsync ? 'await ' : ''}h(c)\n`) +
+			abortCheck +
 			`if(_r instanceof Error)throw _r\n` +
 			(isAsync
 				? `return ${map}(_r,${mapArgs})\n`
@@ -1000,23 +1029,30 @@ export function compileHandlerJit({
 				`if(e?.status)c.set.status=e.status\n` +
 				`else if(c.set.status===undefined||c.set.status===200)c.set.status=500\n` +
 				`let _r${hasMapResponse ? ',tmp' : ''}\n` +
-				mapError(hook!.error!, [
-					map,
-					link,
-					res.map,
-					(hasMapResponse
-						? `c.responseValue=_r\n` +
-							mapMapResponse(
-								hook!.mapResponse!,
-								isAsync,
-								undefined
-							)
-						: '') +
-						endTrace('error') +
-						schedule,
-					signPrefix
-				]) +
+				mapError(
+					hook!.error!,
+					[
+						map,
+						link,
+						res.map,
+						(hasMapResponse
+							? `c.responseValue=_r\n` +
+								mapMapResponse(
+									hook!.mapResponse!,
+									isAsync,
+									undefined,
+									'aborted'
+								)
+							: '') +
+							endTrace('error') +
+							abortCheck +
+							schedule,
+						signPrefix
+					],
+					'aborted'
+				) +
 				endTrace('error') +
+				abortCheck +
 				schedule +
 				`if(typeof e?.toResponse==='function')` +
 				`try{\n` +

@@ -3,6 +3,7 @@ import { skipClone } from '../../adapter/skip-clone'
 import { ElysiaStatus } from '../../error'
 import { ELYSIA_TYPES } from '../../type/constants'
 import { isSpace, isIdentChar, skipString } from '../lexer'
+export { emptyResponse } from '../../handler/utils'
 
 import type { ElysiaAdapter } from '../../adapter'
 import type { AppEvent, AppHook, MaybeArray } from '../../types'
@@ -339,7 +340,8 @@ export function mapBeforeHandle(
 	derive: Set<Function> | undefined,
 	link: Link,
 	isAsync: boolean,
-	report?: TraceReporter
+	report?: TraceReporter,
+	abortGuard?: string
 ) {
 	const hooks = toArray(_hooks)
 
@@ -350,7 +352,7 @@ export function mapBeforeHandle(
 	for (let i = 0; i < hooks.length; i++) {
 		const fn = hooks[i]
 		if (i > 0) {
-			code += `if(_r===undefined){\n`
+			code += `if(${abortGuard ? `!${abortGuard}&&` : ''}_r===undefined){\n`
 			depth++
 		}
 
@@ -388,7 +390,8 @@ function mapChainHook(
 	hooks: Function[],
 	prefix: string,
 	isAsync: boolean,
-	report?: TraceReporter
+	report?: TraceReporter,
+	abortGuard?: string
 ) {
 	let code = ''
 	let depth = 0
@@ -396,7 +399,7 @@ function mapChainHook(
 	for (let i = 0; i < hooks.length; i++) {
 		const fn = hooks[i]
 		if (i > 0) {
-			code += `if(tmp===undefined){\n`
+			code += `if(${abortGuard ? `!${abortGuard}&&` : ''}tmp===undefined){\n`
 			depth++
 		}
 
@@ -415,14 +418,16 @@ function mapChainHook(
 export const mapAfterHandle = (
 	_hooks: AppHook['afterHandle'] | AppHook['afterHandle'][0],
 	isAsync: boolean,
-	report?: TraceReporter
-) => mapChainHook(toArray(_hooks), 'af', isAsync, report)
+	report?: TraceReporter,
+	abortGuard?: string
+) => mapChainHook(toArray(_hooks), 'af', isAsync, report, abortGuard)
 
 export const mapMapResponse = (
 	_hooks: AppHook['mapResponse'] | AppHook['mapResponse'][0],
 	isAsync: boolean,
-	report?: TraceReporter
-) => mapChainHook(toArray(_hooks), 'mr', isAsync, report)
+	report?: TraceReporter,
+	abortGuard?: string
+) => mapChainHook(toArray(_hooks), 'mr', isAsync, report, abortGuard)
 
 export const mapAfterResponse = /*#__PURE__*/ map<
 	'afterResponse',
@@ -468,13 +473,24 @@ export const mapError = /*#__PURE__*/ map<
 function map<Event extends AppEvent, T extends unknown[] = []>(
 	map: (index: number | undefined, fn: AppHook[Event][0], rest: T) => string
 ) {
-	return function (event: MaybeArray<AppHook[Event][0]>, rest?: T) {
+	return function (
+		event: MaybeArray<AppHook[Event][0]>,
+		rest?: T,
+		abortGuard?: string
+	) {
 		if (Array.isArray(event)) {
 			let code = ''
+			let depth = 0
 
-			for (let i = 0; i < event.length; i++)
+			for (let i = 0; i < event.length; i++) {
+				if (i > 0 && abortGuard) {
+					code += `if(!${abortGuard}){\n`
+					depth++
+				}
 				code += map(i, event[i], rest as T)
+			}
 
+			code += '}'.repeat(depth)
 			return code
 		} else return map(undefined, event, rest as T)
 	}

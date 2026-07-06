@@ -83,6 +83,92 @@ describe('On Request', () => {
 		expect(total).toEqual(2)
 	})
 
+	it('stops sync request hooks on abort', async () => {
+		const controller = new AbortController()
+		let secondHookCalled = false
+		let handlerCalled = false
+
+		const app = new Elysia()
+			.request([
+				() => {
+					controller.abort()
+				},
+				() => {
+					secondHookCalled = true
+				}
+			])
+			.get('/', () => {
+				handlerCalled = true
+				return 'NOOP'
+			})
+
+		const res = await app.handle(req('/', { signal: controller.signal }))
+
+		expect(secondHookCalled).toBe(false)
+		expect(handlerCalled).toBe(false)
+		expect(res.status).toBe(200)
+		await expect(res.text()).resolves.toBe('')
+	})
+
+	it('stops async request hooks on abort', async () => {
+		const controller = new AbortController()
+		let secondHookCalled = false
+		let handlerCalled = false
+
+		const app = new Elysia()
+			.request([
+				async () => {
+					controller.abort()
+					await Promise.resolve()
+				},
+				() => {
+					secondHookCalled = true
+				}
+			])
+			.get('/', () => {
+				handlerCalled = true
+				return 'NOOP'
+			})
+
+		const res = await app.handle(req('/', { signal: controller.signal }))
+
+		expect(secondHookCalled).toBe(false)
+		expect(handlerCalled).toBe(false)
+		expect(res.status).toBe(200)
+		await expect(res.text()).resolves.toBe('')
+	})
+
+	it('stops traced request hooks on abort', async () => {
+		const controller = new AbortController()
+		let secondHookCalled = false
+		let handlerCalled = false
+
+		const app = new Elysia()
+			.trace(({ onRequest }) => {
+				onRequest(() => {})
+			})
+			.request([
+				async () => {
+					controller.abort()
+					await Promise.resolve()
+				},
+				() => {
+					secondHookCalled = true
+				}
+			])
+			.get('/', () => {
+				handlerCalled = true
+				return 'NOOP'
+			})
+
+		const res = await app.handle(req('/', { signal: controller.signal }))
+
+		expect(secondHookCalled).toBe(false)
+		expect(handlerCalled).toBe(false)
+		expect(res.status).toBe(200)
+		await expect(res.text()).resolves.toBe('')
+	})
+
 	it('request in order', async () => {
 		let order = <string[]>[]
 

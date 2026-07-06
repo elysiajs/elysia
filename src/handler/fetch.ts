@@ -3,7 +3,7 @@ import { decodeComponent } from 'deuri'
 import { defaultAdapter } from '../adapter/constants'
 
 import type { AnyElysia } from '../base'
-import { getAsyncIndexes, cachedResponse } from './utils'
+import { getAsyncIndexes, cachedResponse, emptyResponse } from './utils'
 
 import { createContext, type Context } from '../context'
 import { createErrorHandler } from './error'
@@ -346,6 +346,17 @@ export function createFetchHandler(
 
 		return async (request: Request): Promise<Response> => {
 			const context = new Context(request)
+			let aborted = request.signal.aborted
+			if (!aborted)
+				request.signal.addEventListener(
+					'abort',
+					() => {
+						aborted = true
+					},
+					{ once: true }
+				)
+			if (aborted) return emptyResponse.clone() as Response
+
 			const url = request.url,
 				s = url.indexOf('/', pathStart)
 			context.path = url.substring(
@@ -398,6 +409,13 @@ export function createFetchHandler(
 
 					for (let i = 0; i < traceLength; i++) endReports[i]?.()
 
+					if (aborted) {
+						for (let j = 0; j < traceLength; j++)
+							trace[j].r(requestReports[j])
+
+						return emptyResponse.clone() as Response
+					}
+
 					if (result !== undefined) {
 						for (let j = 0; j < traceLength; j++)
 							trace[j].r(requestReports[j])
@@ -447,6 +465,17 @@ export function createFetchHandler(
 		if (asyncIndexes)
 			return async (request: Request): Promise<Response> => {
 				const context = new Context(request)
+				let aborted = request.signal.aborted
+				if (!aborted)
+					request.signal.addEventListener(
+						'abort',
+						() => {
+							aborted = true
+						},
+						{ once: true }
+					)
+				if (aborted) return emptyResponse.clone() as Response
+
 				const url = request.url,
 					s = url.indexOf('/', pathStart)
 
@@ -464,6 +493,8 @@ export function createFetchHandler(
 						const result = asyncIndexes?.[i]
 							? await onRequests[i](context)
 							: onRequests[i](context)
+
+						if (aborted) return emptyResponse.clone() as Response
 
 						if (result !== undefined) {
 							const response = mapResponse(
@@ -500,6 +531,17 @@ export function createFetchHandler(
 
 		return (request: Request): MaybePromise<Response> => {
 			const context = new Context(request)
+			let aborted = request.signal.aborted
+			if (!aborted)
+				request.signal.addEventListener(
+					'abort',
+					() => {
+						aborted = true
+					},
+					{ once: true }
+				)
+			if (aborted) return emptyResponse.clone() as Response
+
 			const url = request.url,
 				s = url.indexOf('/', pathStart)
 
@@ -515,6 +557,8 @@ export function createFetchHandler(
 			try {
 				for (let i = 0; i < onRequests.length; i++) {
 					const result = onRequests[i](context)
+					if (aborted) return emptyResponse.clone() as Response
+
 					if (result !== undefined) {
 						const response = mapResponse(
 							result,

@@ -10,15 +10,6 @@ import { compileHandler } from '../../src/compile/handler'
 import { materialise, materialiseHandlers } from '../aot/_manifest'
 import { req } from '../utils'
 
-/**
- * Phase-2 codegen cluster pins (design/fable-tasks.md — M20 / L2 / L6).
- *
- * These sit under the async-inference contract (design/codegen-async-contract.md)
- * and its emission pins (test/aot/sync-emission.test.ts). Everything here asserts
- * on WIRE behaviour (case-insensitive content-type, hoisted query tables,
- * error-hook reachability) so the Bun-only suite can't fake a pass.
- */
-
 afterEach(() => {
 	Compiled.clear()
 	Validator.clear()
@@ -101,15 +92,7 @@ describe('M20 — case-insensitive content-type parse', () => {
 		expect(src).not.toContain('pff')
 	})
 
-	// M20 multipart: `MULTIPART/FORM-DATA` and `Multipart/Form-Data` are both
-	// RFC-2045-legal — the MIME type is case-insensitive. The runtime is not
-	// (Bun throws on uppercase in formData()). The fix re-wraps the request
-	// with a lowercased content-type (preserving the boundary from the original
-	// header) inside adapter.parse.default before calling formData().
 	const multipartBody = (contentType: string) => {
-		// Uppercase in the boundary is the norm (WebKit-style) and is
-		// case-SENSITIVE — the fix must lowercase ONLY the MIME type token,
-		// never the boundary parameter value.
 		const boundary = '----TestBoundaryWebKit123ABC'
 		return new Request('http://localhost/', {
 			method: 'POST',
@@ -143,13 +126,6 @@ describe('M20 — case-insensitive content-type parse', () => {
 	})
 })
 
-// ── L2 — hoisted per-route query parse tables ────────────────────────────────
-//
-// The array/object parse tables were inlined as fresh object literals into the
-// emitted source, allocating a new object every request. They are now linked so
-// the same per-route table object is closed over. Correctness (array + object
-// query decoding) must be unchanged, and the AOT frozen-handler path must replay
-// identically (the tables are rederived from `va.query.schema`).
 describe('L2 — query parse table hoisting', () => {
 	it('no per-request object literal in the emitted query parse call', () => {
 		const app = new Elysia().get(
@@ -193,9 +169,6 @@ describe('L2 — query parse table hoisting', () => {
 	})
 })
 
-// L2 — AOT frozen-handler replay parity. The hoisted `qa`/`qo` tables must
-// rebuild through the manifest (rederived from the captured validator's schema),
-// so a frozen build decodes an array query identically to the JIT build.
 describe('L2 — AOT replay parity', () => {
 	const freeze = async (
 		build: () => Elysia<any, any>,
@@ -320,5 +293,85 @@ describe('L6 — outer catch must survive (marker never drops a real error)', ()
 			})
 		)
 		expect(res.status).toBe(500)
+	})
+})
+
+describe('request abort short-circuits lifecycle hooks', () => {
+	it('emits abort plumbing only for routes with hooks', () => {
+		const plain = new Elysia().get('/plain', () => 'ok')
+		const plainSrc = compileHandler(
+			plain.history![0] as any,
+			plain
+		).toString()
+
+		expect(plainSrc).not.toContain('aborted')
+		expect(plainSrc).not.toContain('emp.clone()')
+
+		const hooked = new Elysia()
+			.beforeHandle(() => {})
+			.get('/hooked', () => 'ok')
+		const hookedSrc = compileHandler(
+			hooked.history![0] as any,
+			hooked
+		).toString()
+
+		expect(hookedSrc).toContain('addEventListener')
+		expect(hookedSrc).toContain('emp.clone()')
+	})
+
+	it('returns an empty response instead of running the next hook after abort', async () => {
+		const controller = new AbortController()
+		let beforeHandleCalled = false
+
+		const app = new Elysia()
+			.transform(async () => {
+				controller.abort()
+				await Promise.resolve()
+			})
+			.beforeHandle(() => {
+				beforeHandleCalled = true
+			})
+			.get('/', () => 'ok')
+
+		const res = await app.handle(
+			new Request('http://localhost/', {
+				signal: controller.signal
+			})
+		)
+
+		expect(beforeHandleCalled).toBe(false)
+		expect(res.status).toBe(200)
+		await expect(res.text()).resolves.toBe('')
+	})
+
+	it('skips later hooks in the same lifecycle array after abort', async () => {
+		const controller = new AbortController()
+		let secondHookCalled = false
+
+		const app = new Elysia().get(
+			'/',
+			{
+				beforeHandle: [
+					async () => {
+						controller.abort()
+						await Promise.resolve()
+					},
+					() => {
+						secondHookCalled = true
+					}
+				]
+			},
+			() => 'ok'
+		)
+
+		const res = await app.handle(
+			new Request('http://localhost/', {
+				signal: controller.signal
+			})
+		)
+
+		expect(secondHookCalled).toBe(false)
+		expect(res.status).toBe(200)
+		await expect(res.text()).resolves.toBe('')
 	})
 })

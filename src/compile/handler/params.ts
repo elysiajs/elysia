@@ -19,6 +19,7 @@ import { forwardError } from '../../handler/utils'
 import { tee } from '../../adapter/utils'
 import {
 	cloneResponse,
+	emptyResponse,
 	getQueryParseChannels,
 	hasRequestBody
 } from './utils'
@@ -63,6 +64,7 @@ export const HANDLER_PARAMS: Record<string, Resolver> = {
 	pe: () => ParseError,
 	es: () => ElysiaStatus,
 	ise: () => internalServerErrorResponse,
+	emp: () => emptyResponse,
 	// H22 runtime 5xx-message mask: resolves to the isProduction FUNCTION so the
 	// codegen's `isprod()` reflects runtime NODE_ENV (not baked at build time).
 	isprod: () => isProduction,

@@ -1,6 +1,10 @@
 import { isAsyncFunction } from '../compile/utils'
 import { isCloudflareWorker } from '../universal/constants'
 
+export const emptyResponse = isCloudflareWorker
+	? { clone: () => new Response(null) }
+	: new Response(null)
+
 export function cachedResponse(
 	body: string,
 	status: number,
