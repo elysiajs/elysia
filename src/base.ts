@@ -4424,20 +4424,27 @@ export class Elysia<
 	#add(
 		method: string | MethodMap[keyof MethodMap],
 		path: string,
-		fn: unknown,
-		hook?: Partial<AnyLocalHook>
+		hookOrFn: unknown,
+		fn?: unknown
 	) {
 		if (this['~Prefix']) path = joinPath(this['~Prefix'], path)
 		else if (path && path.charCodeAt(0) !== 47) path = '/' + path
+
+		const hasHook = arguments.length === 4
+		const handler = hasHook ? fn : hookOrFn
+		const hook =
+			hasHook
+				? (hookOrFn as Partial<AnyLocalHook>)
+				: undefined
 
 		const appHook = this['~hookChain']
 
 		;(this.#history ??= []).push(
 			(appHook
-				? [method, path, fn, this, hook, appHook]
+				? [method, path, handler, this, hook, appHook]
 				: hook
-					? [method, path, fn, this, hook]
-					: [method, path, fn, this]) as unknown as InternalRoute
+					? [method, path, handler, this, hook]
+					: [method, path, handler, this]) as unknown as InternalRoute
 		)
 		this.#cachedRoutes = undefined
 
@@ -4712,14 +4719,7 @@ export class Elysia<
 		Handle
 	>
 	get(path: string, hookOrFn: unknown, fn?: unknown): any {
-		return fn === undefined
-			? this.#add(MethodMap.GET, path, hookOrFn)
-			: this.#add(
-					MethodMap.GET,
-					path,
-					fn,
-					hookOrFn as Partial<AnyLocalHook>
-				)
+		return this.#add(MethodMap.GET, path, hookOrFn, fn)
 	}
 
 	/**
@@ -4852,14 +4852,7 @@ export class Elysia<
 		Handle
 	>
 	post(path: string, hookOrFn: unknown, fn?: unknown): any {
-		return fn === undefined
-			? this.#add(MethodMap.POST, path, hookOrFn)
-			: this.#add(
-					MethodMap.POST,
-					path,
-					fn,
-					hookOrFn as Partial<AnyLocalHook>
-				)
+		return this.#add(MethodMap.POST, path, hookOrFn, fn)
 	}
 
 	/**
@@ -4992,14 +4985,7 @@ export class Elysia<
 		Handle
 	>
 	put(path: string, hookOrFn: unknown, fn?: unknown): any {
-		return fn === undefined
-			? this.#add(MethodMap.PUT, path, hookOrFn)
-			: this.#add(
-					MethodMap.PUT,
-					path,
-					fn,
-					hookOrFn as Partial<AnyLocalHook>
-				)
+		return this.#add(MethodMap.PUT, path, hookOrFn, fn)
 	}
 
 	/**
@@ -5132,14 +5118,7 @@ export class Elysia<
 		Handle
 	>
 	patch(path: string, hookOrFn: unknown, fn?: unknown): any {
-		return fn === undefined
-			? this.#add(MethodMap.PATCH, path, hookOrFn)
-			: this.#add(
-					MethodMap.PATCH,
-					path,
-					fn,
-					hookOrFn as Partial<AnyLocalHook>
-				)
+		return this.#add(MethodMap.PATCH, path, hookOrFn, fn)
 	}
 
 	/**
@@ -5272,14 +5251,7 @@ export class Elysia<
 		Handle
 	>
 	delete(path: string, hookOrFn: unknown, fn?: unknown): any {
-		return fn === undefined
-			? this.#add(MethodMap.DELETE, path, hookOrFn)
-			: this.#add(
-					MethodMap.DELETE,
-					path,
-					fn,
-					hookOrFn as Partial<AnyLocalHook>
-				)
+		return this.#add(MethodMap.DELETE, path, hookOrFn, fn)
 	}
 
 	/**
@@ -5412,14 +5384,7 @@ export class Elysia<
 		Handle
 	>
 	options(path: string, hookOrFn: unknown, fn?: unknown): any {
-		return fn === undefined
-			? this.#add(MethodMap.OPTIONS, path, hookOrFn)
-			: this.#add(
-					MethodMap.OPTIONS,
-					path,
-					fn,
-					hookOrFn as Partial<AnyLocalHook>
-				)
+		return this.#add(MethodMap.OPTIONS, path, hookOrFn, fn)
 	}
 
 	/**
@@ -5552,14 +5517,7 @@ export class Elysia<
 		Handle
 	>
 	head(path: string, hookOrFn: unknown, fn?: unknown): any {
-		return fn === undefined
-			? this.#add(MethodMap.HEAD, path, hookOrFn)
-			: this.#add(
-					MethodMap.HEAD,
-					path,
-					fn,
-					hookOrFn as Partial<AnyLocalHook>
-				)
+		return this.#add(MethodMap.HEAD, path, hookOrFn, fn)
 	}
 
 	/**
@@ -5700,9 +5658,7 @@ export class Elysia<
 		hookOrFn: unknown,
 		fn?: unknown
 	): any {
-		return fn === undefined
-			? this.#add(method, path, hookOrFn)
-			: this.#add(method, path, fn, hookOrFn as Partial<AnyLocalHook>)
+		return this.#add(method, path, hookOrFn, fn)
 	}
 
 	all<
@@ -5790,8 +5746,7 @@ export class Elysia<
 		>
 	>(path: Path, fn: Handle & Metadata['macro']): this
 	all(path: string, hookOrFn: unknown, fn?: unknown): this {
-		if (fn === undefined) this.#add('*', path, hookOrFn)
-		else this.#add('*', path, fn, hookOrFn as Partial<AnyLocalHook>)
+		this.#add('*', path, hookOrFn, fn)
 
 		return this
 	}
@@ -6014,7 +5969,7 @@ export class Elysia<
 			// 2-arg form: (path, options)
 			opts = optionsOrHandler
 
-		this.#add('WS', path, undefined, opts)
+		this.#add('WS', path, opts, undefined)
 
 		return this
 	}
