@@ -1,8 +1,7 @@
-import { Default } from './type/bridge'
+import { Create } from './type/bridge'
 
 import { StatusMap, StatusMapBack } from './constants'
 import { primitiveElysiaTypes } from './type/constants'
-import { nullObject } from './utils'
 import { skipClone } from './adapter/skip-clone'
 import { env } from './universal/env'
 
@@ -252,8 +251,6 @@ export class ValidationError extends ElysiaError {
 		public value: unknown,
 		errors: any[] | (() => any[]),
 		schema?: unknown,
-		// Production-only escape hatch: locate the first failing custom-error
-		// field without TypeBox `Errors` (baked/compiled per-field checks)
 		findCustomError?: (
 			value: unknown
 		) => { instancePath: string; error: unknown } | undefined
@@ -265,6 +262,7 @@ export class ValidationError extends ElysiaError {
 			typeof errors === 'function'
 				? (errors as () => any[])
 				: () => errors as any[]
+
 		this.#findCustomError = findCustomError
 
 		Object.defineProperty(this, 'errors', {
@@ -331,8 +329,6 @@ export class ValidationError extends ElysiaError {
 								? {
 										type: 'validation',
 										on: type,
-										// error-3: redact the raw request value from
-										// the custom error fn in production.
 										found: undefined
 									}
 								: {
@@ -516,6 +512,7 @@ export class ValidationError extends ElysiaError {
 		const errors = this.#collapseCoercionErrors(
 			(this.errors ?? []).filter(Boolean)
 		)
+
 		const first = errors[0] as any
 
 		const property = first
@@ -529,11 +526,7 @@ export class ValidationError extends ElysiaError {
 
 		if (schemaForExpected)
 			try {
-				expected = Default(
-					nullObject(),
-					schemaForExpected as any,
-					undefined
-				)
+				expected = Create(schemaForExpected as any)
 			} catch {}
 
 		return {
@@ -543,8 +536,8 @@ export class ValidationError extends ElysiaError {
 			detail,
 			on: this.type,
 			property,
-			expected,
 			found: scopeFound(this.value, first),
+			expected,
 			errors
 		}
 	}

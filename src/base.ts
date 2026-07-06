@@ -552,8 +552,7 @@ export class Elysia<
 				return this
 
 			default:
-				if (as === 'override' || !(name in target))
-					target[name] = value
+				if (as === 'override' || !(name in target)) target[name] = value
 
 				return this
 		}
@@ -6212,37 +6211,7 @@ export class Elysia<
 
 		this.#initMap()
 		const methods = this['~map']!
-
 		const length = this.#history.length
-
-		let hasDuplicate = false
-		const seen = new Map<string, number>()
-		for (let i = 0; i < length; i++) {
-			const route = this.#history![i]
-			const m =
-				(route[0] as any) === 'WS' ? 'WS' : mapMethodBack(route[0])
-			const key = m + ' ' + route[1]
-
-			if (this.#routeMayHaveModelRef(route))
-				this.#assertRouteModelRefs(route, m)
-
-			if (seen.has(key)) {
-				hasDuplicate = true
-
-				// dx-diagnostics-6: last-wins silently drops the earlier route's
-				// schema/auth. Warn in dev when the override carries a DIFFERENT
-				// handler (skip idempotent plugin re-`.use()`, same handler id).
-				if (!isProduction()) {
-					const prev = this.#history![seen.get(key)!]
-					if (prev[2] !== route[2])
-						console.warn(
-							`[Elysia] Duplicate route ${key} at`,
-							new Error().stack
-						)
-				}
-			}
-			seen.set(key, i)
-		}
 
 		let explicitHead: Set<string> | undefined
 		if (enableAutoHead)
@@ -6279,11 +6248,8 @@ export class Elysia<
 			const method = mapMethodBack(route[0])
 			const path = route[1]
 
-			if (hasDuplicate) {
-				const key =
-					((route[0] as any) === 'WS' ? 'WS' : method) + ' ' + path
-				if (seen.get(key) !== i) continue
-			}
+			if (this.#routeMayHaveModelRef(route))
+				this.#assertRouteModelRefs(route, method)
 
 			if ((route[0] as any) === 'WS') {
 				const ws = buildWSRoute(route, this)

@@ -409,10 +409,7 @@ const resolveSpecifier = (specifier: string): string => {
 	return requireFromHere.resolve(specifier)
 }
 
-export async function generateVirtualType(
-	typeSpecifier = 'elysia/type'
-): Promise<string> {
-	// Resolve the same `elysia/type` and `typebox/type` the bundle will use.
+export async function generateVirtualType(typeSpecifier = 'elysia/type') {
 	const typePath = resolveSpecifier(typeSpecifier)
 	const typeboxPath = resolveSpecifier('typebox/type')
 
@@ -459,10 +456,13 @@ export async function generateCompiledModule(
 
 export interface CompiledArtifacts {
 	source: string
+
 	/** Handler-JIT modules detection proved safe to stub for this app. */
 	stub: StubPlan
+
 	/** Chosen TypeBox-collapse strategy (`sealed` / `wired` / `off`). */
 	mode: BridgeMode
+
 	/**
 	 * Virtual `elysia/type` module source (re-export surface, no `setupTypebox`).
 	 * Served for `elysia/type` in both sealed and wired modes so unused `t.*`
@@ -561,8 +561,7 @@ export async function generateCompiledArtifacts(
 				(route: any) => route?.[0] === 'WS'
 			)
 
-		const history =
-			(typedApp as { history?: unknown[] }).history ?? []
+		const history = (typedApp as { history?: unknown[] }).history ?? []
 
 		let expectedSlots = 0
 
@@ -571,7 +570,16 @@ export async function generateCompiledArtifacts(
 		let routesForbidSeal = false
 		for (const route of history) {
 			const [, , , instance, hook, appHook, inheritedChain, macroScope] =
-				route as [unknown, unknown, unknown, unknown, unknown, unknown, unknown, unknown]
+				route as [
+					unknown,
+					unknown,
+					unknown,
+					unknown,
+					unknown,
+					unknown,
+					unknown,
+					unknown
+				]
 			const hooks = composeRouteHook(
 				instance as any,
 				hook as any,

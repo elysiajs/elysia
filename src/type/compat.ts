@@ -2,7 +2,7 @@ import { useTypebox } from './bridge'
 
 import { Compile } from 'typebox/compile'
 import { Ref } from 'typebox/type'
-import { Decode, HasCodec, Default, Clone } from 'typebox/value'
+import { Create, Decode, HasCodec, Default, Clone } from 'typebox/value'
 import { Settings } from 'typebox/system'
 
 import { applyCoercions } from './coerce'
@@ -28,6 +28,7 @@ export function setupTypebox() {
 
 	useTypebox({
 		Compile,
+		Create,
 		Decode,
 		applyCoercions,
 		TypeBoxValidator: TypeBoxValidator as any,

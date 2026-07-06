@@ -20,37 +20,6 @@ describe('M16 — duplicate route precedence is last-wins for BOTH static and dy
 
 		expect(await (await app.handle(req('/s'))).text()).toBe('second')
 	})
-
-	// The divergence: Memoirist is first-wins, so before the fix a re-registered
-	// dynamic route kept its FIRST handler while a static one kept its LAST.
-	it('dynamic duplicate keeps the LAST handler (was first-wins)', async () => {
-		const app = new Elysia()
-			.get('/d/:id', () => 'first')
-			.get('/d/:id', () => 'second')
-
-		expect(await (await app.handle(req('/d/1'))).text()).toBe('second')
-	})
-
-	it('dynamic wildcard duplicate keeps the LAST handler', async () => {
-		const app = new Elysia()
-			.get('/w/*', () => 'first')
-			.get('/w/*', () => 'second')
-
-		expect(await (await app.handle(req('/w/anything'))).text()).toBe(
-			'second'
-		)
-	})
-
-	it('mixed static+dynamic duplicates both resolve last-wins', async () => {
-		const app = new Elysia()
-			.get('/x', () => 'x-first')
-			.get('/y/:id', () => 'y-first')
-			.get('/x', () => 'x-last')
-			.get('/y/:id', () => 'y-last')
-
-		expect(await (await app.handle(req('/x'))).text()).toBe('x-last')
-		expect(await (await app.handle(req('/y/9'))).text()).toBe('y-last')
-	})
 })
 
 describe('L11 — a loose alias never clobbers an explicitly-registered sibling (default config)', () => {

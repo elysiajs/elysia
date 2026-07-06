@@ -1,13 +1,17 @@
-import { Elysia } from "../src";
+import { Elysia, t, problem } from '../src'
 
-const app = new Elysia()
-	.trace('global', ({ onHandle }) => {
-		onHandle(({ name }) => {
-			console.log(name) // should be 'a' not 'handle'
-		})
-	})
-	.get('/', function a() {
-		return 'ok'
-	})
+export const app = new Elysia()
+	.get(
+		'/',
+		{
+			query: t.Object({
+				name: t.String()
+			})
+		},
+		({ query }) => query
+	)
+	.listen(3000)
 
 app.handle('/')
+	.then((x) => x.json())
+	.then(console.log)

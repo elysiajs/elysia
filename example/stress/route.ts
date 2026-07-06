@@ -9,10 +9,10 @@ const stop = profile('Elysia 2α add route x100k')
 for (let i = 0; i < total; i++) app.get(`/${i}`, () => 'ok')
 
 // full build
-app.listen(3000)
+// app.listen(3000)
 
-// app.fetch
+app.fetch
 stop()
 
-await app.stop?.(true)
-process.exit(0)
+// await app.stop?.(true)
+// process.exit(0)
