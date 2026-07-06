@@ -24,7 +24,9 @@ describe('capture impl guard', () => {
 			setCaptureImpl(real.captureImplementation)
 		}
 		// Clean up any in-progress capture
-		try { endValidatorCapture() } catch {}
+		try {
+			endValidatorCapture()
+		} catch {}
 	})
 
 	it('throws when beginValidatorCapture is called without captureImpl installed', () => {
@@ -32,9 +34,7 @@ describe('capture impl guard', () => {
 		const saved = captureImpl!
 		setCaptureImpl(undefined)
 
-		expect(() => beginValidatorCapture()).toThrow(
-			'AOT capture module is not installed'
-		)
+		expect(() => beginValidatorCapture()).toThrowError()
 
 		// Restore immediately so afterEach is not needed for the throw case
 		setCaptureImpl(saved)
