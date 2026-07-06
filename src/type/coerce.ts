@@ -22,7 +22,6 @@ import {
 } from './coerce-plan'
 
 export {
-	planIsScalarOnly,
 	clearCoerceLeafCache,
 	type CoerceLeaf,
 	type CoerceNode,

@@ -1,8 +1,16 @@
+import { Decode, Refine } from 'typebox/type'
+
 import { ELYSIA_TYPES } from './constants'
+import { nullObject } from '../utils'
 
 import { Numeric } from './elysia/numeric'
 import { BooleanString } from './elysia/boolean-string'
 import { IntegerString } from './elysia/integer-string'
+import { ObjectType } from './elysia/object'
+import { ArrayType } from './elysia/array'
+import { StringType } from './elysia/string'
+import { Union } from './elysia/union'
+import { elyType, getMeta } from './elysia/utils'
 
 export const COERCE_LEAF_CTOR = {
 	[ELYSIA_TYPES.Numeric]: Numeric,
@@ -41,28 +49,61 @@ export const isCoerceLeaf = (x: CoerceNode): x is CoerceLeaf =>
 export const isCoerceObjStr = (x: CoerceNode): x is CoerceObjStr =>
 	typeof (x as CoerceObjStr).os === 'number'
 
-const nodeIsScalarOnly = (node: CoerceNode) =>
-	isCoerceLeaf(node)
-		? true
-		: isCoerceObjStr(node)
-			? false
-			: planIsScalarOnly(node)
-
-export function planIsScalarOnly(plan: CoercePlan): boolean {
-	if (plan.p)
-		for (const k in plan.p) if (!nodeIsScalarOnly(plan.p[k]!)) return false
-
-	return !(plan.i && !nodeIsScalarOnly(plan.i))
-}
-
 /** Rebuilds an ObjectString/ArrayString coercion site (see `coerce.ts`). */
 export type RebuildObjStr = (original: any, site: CoerceObjStr) => any
 
-const objStrRefused: RebuildObjStr = () => {
+const icPlaceholder = () => {
 	throw new Error(
-		'[elysia] CoercePlan contains an ObjectString/ArrayString site but no' +
-			' rebuilder was provided (bridge-free path only rebuilds scalar plans)'
+		'[elysia] ObjectString/ArrayString shape placeholder was not' +
+			' reconstructed. missing inner-codec (ic) entry'
 	)
+}
+
+function ObjectStringShape(property: any, _options?: any) {
+	const [{ properties, ...constraints }, meta] = getMeta(
+		(_options ?? nullObject()) as any
+	)
+	const object = ObjectType(property, constraints)
+
+	const objectString = Decode(
+		Refine(StringType(), icPlaceholder, () => 'must be an object'),
+		icPlaceholder
+	)
+
+	return elyType(
+		ELYSIA_TYPES.ObjectString,
+		Union([object, objectString], meta)
+	)
+}
+
+function ArrayStringShape(property: any, _options?: any) {
+	const [constraints, meta] = getMeta((_options ?? nullObject()) as any)
+	const array = ArrayType(property, constraints)
+
+	const arrayString = Decode(
+		Refine(StringType(), icPlaceholder, () => 'must be an array'),
+		icPlaceholder
+	)
+
+	return elyType(ELYSIA_TYPES.ArrayString, Union([array, arrayString], meta))
+}
+
+// Shape twin of `coerce.ts` `rebuildObjStr`
+// fresh nodes per rebuild, never cached: `reconstructInnerCodecs` mutates them in place
+const rebuildObjStrShape: RebuildObjStr = (original, site) => {
+	const { type, ...rest } = original
+	const node =
+		site.os === ELYSIA_TYPES.ObjectString
+			? ObjectStringShape(rest.properties ?? nullObject(), rest)
+			: ArrayStringShape(rest.items ?? nullObject(), rest)
+
+	if ('o' in site)
+		return Object.defineProperty(node, '~optional', {
+			value: site.o,
+			enumerable: false
+		})
+
+	return node
 }
 
 const buildCoerceNode = (
@@ -110,7 +151,7 @@ export function buildCoercedFromPlan(
 	original: any,
 	plan: CoercePlan,
 	seen: Set<string> = new Set(),
-	objStr: RebuildObjStr = objStrRefused
+	objStr: RebuildObjStr = rebuildObjStrShape
 ) {
 	const out = Object.create(Object.getPrototypeOf(original))
 

@@ -676,7 +676,7 @@ export function buildWSRoute(
 			if (validators.params) {
 				let r = validateUpgradeChannel(
 					validators.params as any,
-					context.params ?? {},
+					context.params ?? nullObject(),
 					'params'
 				)
 				if (r instanceof Promise) r = await r

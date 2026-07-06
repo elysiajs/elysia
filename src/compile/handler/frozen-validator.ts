@@ -1,21 +1,16 @@
-// This module must stay bridge-free: nothing here may reach `type/compat` /
-// `type/bridge` or the TypeBox compile/value machinery. The scalar coercion
-// leaves pulled in via `coerce-plan` only touch `typebox/type` constructors,
-// which sealed bundles already carry.
 import { ValidationError } from '../../error'
 import { nullObject } from '../../utils'
 import { ELYSIA_TYPES } from '../../type/constants'
-import {
-	buildCoercedFromPlan,
-	planIsScalarOnly,
-	type CoercePlan
-} from '../../type/coerce-plan'
+import { buildCoercedFromPlan } from '../../type/coerce-plan'
 
 import {
 	Compiled,
 	EMPTY_EXTERNALS,
+	collectMirrorUnions,
+	collectStringCodecNodes,
 	instantiateFrozenBoth,
 	instantiateFrozenDecodeMirror,
+	reconstructInnerCodecs,
 	type CapturedValidator,
 	type FrozenValidator,
 	type ValidatorSlot
@@ -28,31 +23,52 @@ export const isBridgeNotInitialized = (error: unknown): boolean =>
 	error instanceof Error &&
 	error.message.startsWith("Typebox module isn't initialized")
 
-function codecCoercionBridgeFree(f: FrozenValidator) {
+function codecCoercionBridgeFree(
+	f: FrozenValidator,
+	coerced: unknown,
+	raw: unknown
+) {
 	return (
 		f.k === 1 &&
 		!!f.dm && // the baked decode transformation
-		// raw schema must BE the coerced schema, or the plan must rebuild it
-		// through scalar leaves alone (ObjectString/ArrayString sites need the
-		// full `coerce.ts` rebuilder, which drags `typebox/value`)
-		coercePlanBridgeFree(f.cp) &&
-		!f.ic &&
 		!f.em &&
 		!f.ce &&
 		f.a !== 1 &&
-		!(f.d === 1 && f.ps !== 1)
+		!(f.d === 1 && f.ps !== 1) &&
+		innerCodecsAligned(f.ic?.length, coerced) &&
+		mirrorUnionsAligned(f.u, raw) &&
+		mirrorUnionsAligned(f.dm.u, coerced)
 	)
 }
 
-const coercePlanBridgeFree = (cp: CoercePlan | undefined) =>
-	!cp || planIsScalarOnly(cp)
+const innerCodecsAligned = (icLength: number | undefined, coerced: unknown) =>
+	collectStringCodecNodes(coerced).length === (icLength ?? 0)
 
-function isBridgeFreeComplete(f: FrozenValidator, schema: unknown) {
+function mirrorUnionsAligned(
+	// `u` may be the runtime factory table (`FrozenCheckFactory[][]`) or the
+	// captured source table (`{identifier, code}[][]`), only the dims matter
+	u: readonly (readonly unknown[])[] | undefined,
+	schema: unknown
+) {
+	if (!u) return true
+
+	const branches = collectMirrorUnions(schema)
+	if (branches.length !== u.length) return false
+
+	for (let ui = 0; ui < u.length; ui++)
+		if (branches[ui]!.length !== u[ui]!.length) return false
+
+	return true
+}
+
+function isBridgeFreeComplete(
+	f: FrozenValidator,
+	schema: unknown,
+	raw: unknown
+) {
 	if (!f.cm) return false
 
-	// Slot-level scalar coercion (query/headers/params/cookie explicit codec
-	// leaves): reconstructable from the raw schema without TypeBox.
-	if (codecCoercionBridgeFree(f)) return true
+	if (codecCoercionBridgeFree(f, schema, raw)) return true
 
 	if (
 		f.e === 1 || // needs `collectExternals(coercedSchema)`
@@ -162,34 +178,28 @@ class FrozenSlotValidator {
 
 	#check: (value: unknown) => boolean
 	#clean?: (value: unknown) => unknown
-	// slot-level scalar coercion: string→typed decode (+ Clean), reconstructed
-	// from the raw schema's frozen codec/union closures. When present it REPLACES
-	// `#clean` in `From` (the decode mirror already cleans), exactly like the
-	// wired `FromSync` skips `Clean` when `#decodeMirror` exists.
 	#decode?: (value: unknown) => unknown
 	schema: unknown
 
-	// preallocated default fast path (baked `ps`/`pd`/`pod`/`dc`/`pm`)
 	#hasDefault: boolean
 	#defaultFastPath?: DefaultFastPath
 
-	// root `~optional` schemas short-circuit before Check (parity with
-	// `TypeBoxValidator.optionalBypass`).
 	#hasOptional: boolean
-
 	#noValidate: boolean
 
 	constructor(
 		frozen: FrozenValidator,
+		// coerced slot schema from `buildFrozenRouteValidator`
 		schema: unknown,
+		raw: unknown,
 		normalize: boolean | 'exactMirror' | 'typebox' | undefined
 	) {
-		if (frozen.cp) schema = buildCoercedFromPlan(schema, frozen.cp)
-
 		this.schema = schema
 
+		if (frozen.ic) reconstructInnerCodecs(frozen.ic, schema)
+
 		if (frozen.k === 1 && frozen.dm) {
-			const both = instantiateFrozenBoth(frozen, schema, schema)
+			const both = instantiateFrozenBoth(frozen, schema, raw)
 			this.#check = both.check!
 			this.#clean = normalize === false ? undefined : both.clean
 			this.#decode =
@@ -202,6 +212,7 @@ class FrozenSlotValidator {
 			this.#check = both.check!
 			this.#clean = normalize === false ? undefined : both.clean
 		}
+
 		this.#hasOptional = !!(schema as any)?.['~optional']
 		this.#noValidate =
 			(schema as any)?.['~elyTyp'] === ELYSIA_TYPES.NoValidate
@@ -288,9 +299,6 @@ class FrozenSlotValidator {
 		if (!this.#noValidate && !this.#check(value))
 			throw this.#error(value, type)
 
-		// Codec-coercion slot: the decode mirror does string→typed + Clean in one
-		// pass (parity with wired `FromSync`, which skips `Clean` when
-		// `#decodeMirror` is set). `#decode` is only built when `normalize !== false`.
 		if (this.#decode) return this.#decode(value)
 
 		return this.#clean ? this.#clean(value) : value
@@ -314,23 +322,6 @@ interface FrozenRouteValidatorShape {
 
 const REQUEST_SLOTS = ['body', 'headers', 'query', 'params', 'cookie'] as const
 
-/**
- * Resolve a slot schema to the concrete TypeBox schema the wired path validates.
- *
- * A slot can be a STRING model reference (`.post(path, { body: 'myModel' })`);
- * the wired path resolves it via `Validator.reference(schema, models)` before
- * building anything, so its closed-object / coverage checks and Clean see the
- * resolved object. The bridge-free path receives the RAW hook schema (the bare
- * string), so it must resolve the same way BEFORE any check — otherwise a closed
- * model ref (`type` is a string, not an object) dodges `isFullyClosedObject` and
- * builds bridge-free, diverging from the wired `#cleanRedundant` Clean-skip.
- *
- * Mirrors `Validator.reference` semantics without importing it (that module
- * statically pulls the TypeBox bridge this module must stay free of): non-string
- * passes through; a string that names a registered model resolves; a string that
- * names nothing returns `undefined` so the caller bails and the wired path
- * surfaces the "not found" error loudly instead of silently diverging.
- */
 function resolveModelRef(schema: unknown, root: AnyElysia): unknown {
 	if (typeof schema !== 'string') return schema
 
@@ -340,14 +331,6 @@ function resolveModelRef(schema: unknown, root: AnyElysia): unknown {
 	return undefined
 }
 
-/**
- * Attempt to build an entire route validator bridge-free.
- *
- * Returns `undefined` (caller falls back to the wired `RouteValidator`) unless
- * EVERY declared slot — request and response — is bridge-free-complete. All or
- * nothing per route: a partial mix would still drag the bridge for one slot,
- * defeating the point, and the handler factory expects one uniform validator.
- */
 export function buildFrozenRouteValidator(
 	hook: AnyLocalHook,
 	root: AnyElysia,
@@ -368,9 +351,17 @@ export function buildFrozenRouteValidator(
 		if (!schema) return undefined
 
 		const frozen = Compiled.getValidator(method, path, slot)
-		if (!frozen || !isBridgeFreeComplete(frozen, schema)) return undefined
+		if (!frozen) return undefined
 
-		out[slot] = new FrozenSlotValidator(frozen, schema, normalize)
+		// Rebuild the coerced schema BEFORE the gate: the alignment checks
+		// and the slot construction must see the same shape.
+		const coerced = frozen.cp
+			? buildCoercedFromPlan(schema, frozen.cp)
+			: schema
+
+		if (!isBridgeFreeComplete(frozen, coerced, schema)) return undefined
+
+		out[slot] = new FrozenSlotValidator(frozen, coerced, schema, normalize)
 	}
 
 	const response = hook?.response
@@ -391,11 +382,13 @@ export function buildFrozenRouteValidator(
 				path,
 				`response:${status}` as ValidatorSlot
 			)
-			if (!frozen || !isBridgeFreeComplete(frozen, schema))
+			// response slots never capture `cp`: raw IS the coerced schema
+			if (!frozen || !isBridgeFreeComplete(frozen, schema, schema))
 				return undefined
 
 			responseOut[status as unknown as number] = new FrozenSlotValidator(
 				frozen,
+				schema,
 				schema,
 				normalize
 			)
@@ -411,9 +404,7 @@ const isResponseMap = (schema: any): boolean =>
 	!('~kind' in schema || '~elyAcl' in schema || '~standard' in schema)
 
 /**
- * Build-time twin of `isBridgeFreeComplete`, operating on the captured entry +
- * its schema. The build plugin can aggregate this across every slot to decide
- * whether a manifest is "fully bridge-free"
+ * Build-time twin of `isBridgeFreeComplete`, operating on the captured entry & its schema
  */
 export function isCapturedBridgeFree(c: CapturedValidator, schema: unknown) {
 	if (typeof schema === 'string') return false
@@ -429,14 +420,21 @@ export function isCapturedBridgeFree(c: CapturedValidator, schema: unknown) {
 	if (
 		c.hasCodec &&
 		!!c.decodeMirror &&
-		coercePlanBridgeFree(c.coercePlan) &&
-		!c.innerCodecs?.length &&
 		!c.encodeMirror &&
 		!c.customErrors?.length &&
 		!c.async &&
 		!(c.hasDefault && !c.precomputeSafe)
-	)
-		return true
+	) {
+		const coerced = c.coercePlan
+			? buildCoercedFromPlan(schema, c.coercePlan)
+			: schema
+
+		return (
+			innerCodecsAligned(c.innerCodecs?.length, coerced) &&
+			mirrorUnionsAligned(c.mirror.u, schema) &&
+			mirrorUnionsAligned(c.decodeMirror.u, coerced)
+		)
+	}
 
 	if (
 		c.external || // e

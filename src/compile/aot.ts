@@ -1,5 +1,6 @@
 import { env } from '../universal'
 import { nullObject } from '../utils'
+import { ELYSIA_TYPES } from '../type/constants'
 import type { CoercePlan } from '../type/coerce'
 
 export type ValidatorSlot =
@@ -373,7 +374,7 @@ export const Source = {
 	bothFactory: bothFactorySource
 } as const
 
-function collectMirrorUnions(schema: any, out: unknown[][] = []) {
+export function collectMirrorUnions(schema: any, out: unknown[][] = []) {
 	if (!schema || typeof schema !== 'object') return out
 
 	if (schema.type === 'object' && schema.properties)
@@ -485,6 +486,90 @@ export function instantiateFrozenBoth(
 		frozen.e ? collectExternals(checkSchema) : EMPTY_EXTERNALS,
 		frozen.u ? { unions: buildUnions(frozen.u, mirrorSchema) } : undefined
 	)
+}
+
+// ObjectString/ArrayString inner-codec reconstruction
+//
+// The traversal order is the capture↔reconstruct contract: `ic[i]` aligns 1:1
+// with `nodes[i]` (reconstruct iterates in reverse for bottom-up overwrite)
+//
+// keep self → properties → items → anyOf
+export interface StringCodecNode {
+	inner: any
+	codec: any
+	open: number
+}
+
+export function collectStringCodecNodes(
+	schema: any,
+	out: StringCodecNode[] = []
+): StringCodecNode[] {
+	if (!schema || typeof schema !== 'object') return out
+
+	const ely = schema['~elyTyp']
+	if (ely === ELYSIA_TYPES.ObjectString || ely === ELYSIA_TYPES.ArrayString) {
+		const inner = schema.anyOf?.[0]
+		const codec = schema.anyOf?.[1]
+		if (inner && codec?.['~codec'] && codec['~refine'])
+			out.push({
+				inner,
+				codec,
+				open: ely === ELYSIA_TYPES.ObjectString ? 123 : 91
+			})
+	}
+
+	if (schema.properties)
+		for (const k in schema.properties)
+			collectStringCodecNodes(schema.properties[k], out)
+
+	const items = schema.items
+	if (Array.isArray(items)) {
+		for (const it of items) collectStringCodecNodes(it, out)
+	} else if (items) collectStringCodecNodes(items, out)
+
+	if (Array.isArray(schema.anyOf))
+		for (const b of schema.anyOf) collectStringCodecNodes(b, out)
+
+	return out
+}
+
+/**
+ * Overwrite every ObjectString/ArrayString node's `~refine[0].check` and
+ * `~codec.decode` with the baked `ic` closures. After this runs, the node no
+ * longer calls the constructor's live `typebox/value` Check/Decode
+ *
+ * Iterate in reverse so nested codecs reconstruct bottom-up.
+ */
+export function reconstructInnerCodecs(
+	ic: NonNullable<FrozenValidator['ic']>,
+	schema: any
+): void {
+	const nodes = collectStringCodecNodes(schema)
+
+	for (let i = nodes.length - 1; i >= 0; i--) {
+		const entry = ic[i]
+		const node = nodes[i]
+		if (!entry || !node) continue
+
+		const innerSchema = node.inner
+		const innerCheck = entry.c(entry.e ? collectExternals(innerSchema) : [])
+		const innerMirror = entry.d.x
+			? instantiateFrozenDecodeMirror(entry.d, innerSchema)
+			: (entry.d.s as (value: unknown) => unknown)
+
+		const open = entry.o
+		node.codec['~refine'][0].check = (v: string) => {
+			if (v.charCodeAt(0) !== open) return false
+
+			try {
+				return innerCheck(JSON.parse(v))
+			} catch {
+				return false
+			}
+		}
+
+		node.codec['~codec'].decode = (v: string) => innerMirror(JSON.parse(v))
+	}
 }
 
 /**

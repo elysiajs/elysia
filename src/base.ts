@@ -4579,7 +4579,7 @@ export class Elysia<
 	 * Registered reusable models (via `.model()`), keyed by name.
 	 */
 	get models(): Definitions['typebox'] {
-		return (this['~ext']?.models ?? {}) as Definitions['typebox']
+		return (this['~ext']?.models ?? nullObject()) as Definitions['typebox']
 	}
 
 	Ref<const Key extends keyof Definitions['typebox'] & string>(key: Key) {

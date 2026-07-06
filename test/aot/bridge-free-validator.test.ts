@@ -176,6 +176,19 @@ describe('bridge-free frozen validator — parity with the wired path', () => {
 		])
 	})
 
+	it('handwritten ObjectString (inner codec) is now covered', () => {
+		// The baked `ic` entries replace the node's live typebox/value
+		// check/decode closures (`reconstructInnerCodecs`), so the slot
+		// reconstructs bridge-free. Formerly on the bail list.
+		assertParity(t.Object({ f: t.ObjectString({ a: t.Number() }) }), [
+			{ f: '{"a":1}' }, // JSON string → decoded object
+			{ f: { a: 1 } }, // already-parsed branch
+			{ f: '{"a":"x"}' }, // inner type mismatch → reject
+			{ f: '[1]' }, // wrong opening char → reject
+			{ f: 'not json' } // unparsable → reject
+		])
+	})
+
 	it('optional root object short-circuits before Check', () => {
 		assertParity(t.Optional(t.Object({ a: t.String() })), [
 			undefined,
@@ -208,7 +221,9 @@ describe('bridge-free frozen validator — bail-out matrix', () => {
 		// coercion codec whose decode mirror + union branches reconstruct off the
 		// raw schema with no TypeBox (parity pinned in the "date codec (slot
 		// coercion) is now covered" test below and in bridge-free-slots.test.ts).
-		['ObjectString (inner codec)', t.Object({ f: t.ObjectString({ a: t.Number() }) })],
+		// NOTE: `t.ObjectString(...)` USED to bail here too ("inner codec").
+		// Its baked `ic` entries now reconstruct the inner check/decode closures
+		// bridge-free (parity pinned below and in coerce-plan-bridge-free.test.ts).
 		['custom error', t.Object({ x: t.String({ error: 'bad' }) })],
 		[
 			'fully-closed object (Clean-skip parity)',

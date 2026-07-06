@@ -543,7 +543,7 @@ function emitMerger(node: any, helpers: string[]) {
 	helpers.push('')
 
 	if (category === 'object') {
-		const props = node.properties ?? {}
+		const props = node.properties ?? nullObject()
 		const handled: string[] = []
 
 		const guard: string[] = []
@@ -638,7 +638,7 @@ function emptyContainers(node: any, depth: number): unknown {
 	if (kind === 'Object' || node.type === 'object') {
 		const out: Record<string, unknown> = nullObject()
 
-		const props = node.properties ?? {}
+		const props = node.properties ?? nullObject()
 		for (const key in props)
 			if (Object.hasOwn(props, key)) {
 				const child = emptyContainers(props[key], depth - 1)
@@ -669,7 +669,7 @@ function* mergeProbes(schema: any): Generator<unknown> {
 
 	const kind = schema['~kind']
 	if (kind === 'Object' || schema.type === 'object') {
-		const props = schema.properties ?? {}
+		const props = schema.properties ?? nullObject()
 		for (const key in props)
 			if (Object.hasOwn(props, key)) {
 				yield { [key]: PROBE_SENTINEL }

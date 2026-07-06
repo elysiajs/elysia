@@ -11,29 +11,27 @@ import {
 } from '../../src/compile/aot'
 import { RouteValidator } from '../../src/validator/route'
 import { buildFrozenRouteValidator } from '../../src/compile/handler/frozen-validator'
-import {
-	planIsScalarOnly,
-	clearCoerceLeafCache,
-	type CoercePlan
-} from '../../src/type/coerce-plan'
+import { clearCoerceLeafCache } from '../../src/type/coerce-plan'
 
 import { materialise } from './_manifest'
 
 /**
- * Scalar CoercePlan (`cp`) bridge-free reconstruction.
+ * CoercePlan (`cp`) bridge-free reconstruction.
  *
  * A `t.Number`/`t.Boolean`/`t.Integer` in a query/params/headers root property
- * is COERCED at validator build (`coerceRoot`: Number → Numeric etc.), so the
+ * is COERCED at validator build (`coerceRoot`: Number → Numeric etc.), and a
+ * nested object/array in query is coerced to ObjectString/ArrayString — so the
  * raw hook schema is not the schema the frozen closures were captured from.
  * The capture records that delta as a `coercePlan`, and the bridge-free gates
  * used to refuse ANY plan — one `t.Number` in a query flipped an otherwise
  * fully-sealed build (mode A) into wired (mode B), dragging live TypeBox back
  * into the bundle.
  *
- * These pin the fix: a SCALAR-only plan rebuilds the coerced schema TypeBox-
- * free (`buildCoercedFromPlan`, scalar leaves only) and stays bridge-free with
- * full wired-parity, while a plan containing an ObjectString/ArrayString site
- * still refuses (its rebuild needs `typebox/value`).
+ * These pin the fix: scalar sites rebuild through the scalar leaf ctors, and
+ * ObjectString/ArrayString sites rebuild as SHAPE nodes whose live closures
+ * are replaced by the baked `ic` entries (`reconstructInnerCodecs`) — no
+ * `typebox/value` anywhere. A slot whose os nodes DON'T align 1:1 with its
+ * `ic` entries (e.g. an inner default refused capture) must keep refusing.
  */
 
 const METHOD = 'GET'
@@ -126,26 +124,6 @@ afterEach(() => {
 	clearCoerceLeafCache()
 })
 
-describe('planIsScalarOnly', () => {
-	it('accepts scalar-leaf plans, flat and nested', () => {
-		expect(planIsScalarOnly({ p: { a: { e: 1 } } })).toBe(true)
-		expect(planIsScalarOnly({ i: { e: 2 } })).toBe(true)
-		expect(
-			planIsScalarOnly({ p: { a: { p: { b: { e: 3 } } } } } as CoercePlan)
-		).toBe(true)
-	})
-
-	it('refuses any ObjectString/ArrayString site, however deep', () => {
-		expect(planIsScalarOnly({ p: { a: { os: 1 } } })).toBe(false)
-		expect(planIsScalarOnly({ i: { os: 2 } })).toBe(false)
-		expect(
-			planIsScalarOnly({
-				p: { a: { p: { b: { os: 1 } } } }
-			} as CoercePlan)
-		).toBe(false)
-	})
-})
-
 describe('scalar coercePlan — bridge-free with wired parity', () => {
 	it('t.Number in query (the Numeric coercion)', () => {
 		assertParity(t.Object({ name: t.Number() }), [
@@ -192,20 +170,167 @@ describe('scalar coercePlan — bridge-free with wired parity', () => {
 	})
 })
 
-describe('non-scalar coercePlan — still refuses bridge-free', () => {
-	it('nested object in query (ObjectString site)', () => {
-		const schema = t.Object({ o: t.Object({ n: t.Number() }) })
+describe('ObjectString/ArrayString coercePlan — bridge-free with wired parity', () => {
+	it('nested object in query (ObjectString shape + ic reconstruction)', () => {
+		assertParity(t.Object({ o: t.Object({ n: t.Number() }) }), [
+			{ o: '{"n":1}' }, // JSON string → decoded object
+			{ o: { n: 1 } }, // already-parsed branch
+			{ o: '{"n":"x"}' }, // inner type mismatch → reject
+			{ o: '[1]' }, // wrong opening char → reject
+			{ o: 'not json' }, // unparsable → reject
+			{} // missing required → reject
+		])
+	})
+
+	it('nested array in query (ArrayString shape + ic reconstruction)', () => {
+		assertParity(t.Object({ xs: t.Array(t.String()) }), [
+			{ xs: '["a","b"]' },
+			{ xs: '[]' },
+			{ xs: '[1]' }, // element mismatch → reject
+			{ xs: '{"a":1}' } // wrong opening char → reject
+		])
+	})
+
+	it('mixed scalar + objstr sites in one plan', () => {
+		assertParity(
+			t.Object({ n: t.Number(), o: t.Object({ s: t.String() }) }),
+			[
+				{ n: '1', o: '{"s":"a"}' },
+				{ n: '1', o: { s: 'a' } },
+				{ n: 'x', o: '{"s":"a"}' }, // scalar reject
+				{ n: '1', o: '{"s":1}' } // objstr inner reject
+			]
+		)
+	})
+
+	it('optional nested object (the os site re-attaches ~optional)', () => {
+		assertParity(
+			t.Object({ o: t.Optional(t.Object({ n: t.Number() })), s: t.String() }),
+			[
+				{ o: '{"n":1}', s: 'a' },
+				{ s: 'a' }, // optional absent
+				{ o: 'garbage', s: 'a' } // present but invalid → reject
+			]
+		)
+	})
+
+	it('objstr with inner codec (t.Date inside — ic entry with d.x mirror)', () => {
+		assertParity(t.Object({ o: t.Object({ d: t.Date() }) }), [
+			{ o: '{"d":"2024-01-02T03:04:05.000Z"}' },
+			{ o: '{"d":"garbage"}' }, // inner refine reject
+			{ o: { d: '2024-01-02T03:04:05.000Z' } }
+		])
+	})
+})
+
+describe('ic misalignment — still refuses bridge-free', () => {
+	it('t.Array(t.Number()) in query (double coercion) → slot stays wired', () => {
+		// Query coercion rewrites this BOTH ways: `xs` → ArrayString AND the
+		// items t.Number → Numeric inside the array branch. A wholesale `os`
+		// site can't express the inner rewrite, so the capture-time
+		// `externalsShape` guard drops the plan — no `cp`, but `ic` WAS
+		// captured off the coerced schema. Runtime rebuild = raw schema with 0
+		// os nodes vs 1 ic entry → alignment refuses.
+		const schema = t.Object({ xs: t.Array(t.Number()) })
 		const { query } = freeze(schema)
 
+		expect(query?.coercePlan).toBeUndefined()
+		expect(query?.innerCodecs?.length).toBe(1)
 		expect(query?.bridgeFree).not.toBe(true)
 		expect(bridgeFree(schema)).toBeUndefined()
 	})
 
-	it('nested array in query (ArrayString site)', () => {
-		const schema = t.Object({ xs: t.Array(t.String()) })
+	it('inner default refuses ic capture → slot stays wired', () => {
+		// `captureInnerCodec` refuses an inner `default` (not reconstructed
+		// under seal), so no `ic` is captured — but the plan still has an os
+		// site. 1 shape node vs 0 ic entries → the gate must refuse, or a
+		// throwing shape placeholder would go live.
+		const schema = t.Object({
+			o: t.Object({ n: t.Number({ default: 1 }) })
+		})
 		const { query } = freeze(schema)
 
+		expect(query?.innerCodecs).toBeUndefined()
 		expect(query?.bridgeFree).not.toBe(true)
 		expect(bridgeFree(schema)).toBeUndefined()
 	})
+})
+
+// Capture any slot (query via GET, body via POST) and return its entry.
+function freezeSlot(slot: 'query' | 'body', schema: any) {
+	process.env.ELYSIA_AOT_BUILD = '1'
+	resetCaptureLifecycleForTests()
+	beginValidatorCapture()
+
+	const app =
+		slot === 'body'
+			? new Elysia().post(PATH, { body: schema }, ({ body }) => body)
+			: new Elysia().get(PATH, { query: schema }, ({ query }) => query)
+	;(app as any).compile()
+
+	const captured = endValidatorCapture()
+	endHandlerCapture()
+	delete process.env.ELYSIA_AOT_BUILD
+
+	Compiled.clear()
+	Validator.clear()
+	Compiled.validators = materialise(captured)
+
+	return captured.find((c) => c.slot === slot)
+}
+
+describe('unbakeable coercion (cp capture bailed) — refuses instead of crashing', () => {
+	// A coercion can fire while `captureCoercePlan` still returns null
+	// (unbakeable: coercion inside a union wrapper / tuple, a root-leaf plan,
+	// or a non-JSON-safe constraint bag). The baked `cm`/`dm` union tables are
+	// then sized for the COERCED schema while the runtime rebuild only has the
+	// raw one. Before the `mirrorUnionsAligned` gate these captured
+	// `bridgeFree: true` and `buildFrozenRouteValidator` THREW a TypeError
+	// inside `buildUnions` — a hard 500 on every request under a sealed strip.
+	const cases: [string, 'query' | 'body', any][] = [
+		[
+			'scalar inside Nullable',
+			'query',
+			t.Object({ n: t.Nullable(t.Number()) })
+		],
+		[
+			'scalar inside Union',
+			'query',
+			t.Object({ n: t.Union([t.Number(), t.String()]) })
+		],
+		[
+			'scalar inside MaybeEmpty',
+			'query',
+			t.Object({ n: t.MaybeEmpty(t.Number()) })
+		],
+		[
+			'scalar inside Tuple items',
+			'query',
+			t.Object({ x: t.Tuple([t.Number()]) })
+		],
+		['root-leaf body coercion', 'body', t.Number()],
+		[
+			'jsonSafe drop (Infinity in constraint bag)',
+			'query',
+			t.Object({ n: t.Number({ examples: [Infinity] }) })
+		]
+	]
+
+	for (const [name, slot, schema] of cases)
+		it(`${name} → marker false + clean runtime refusal`, () => {
+			const entry = freezeSlot(slot, schema)
+
+			expect(entry?.bridgeFree).not.toBe(true)
+
+			let result: unknown = 'unset'
+			expect(() => {
+				result = buildFrozenRouteValidator(
+					{ [slot]: schema } as any,
+					root(),
+					slot === 'body' ? 'POST' : 'GET',
+					PATH
+				)
+			}).not.toThrow()
+			expect(result).toBeUndefined()
+		})
 })
