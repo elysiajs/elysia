@@ -3,6 +3,10 @@ import { ValidationError } from '../../error'
 import { nullObject } from '../../utils'
 import { ELYSIA_TYPES } from '../../type/constants'
 import { isFullyClosedObject } from '../../type/validator/clean-safe'
+// `StandardValidator` is bridge-free: it only calls `schema['~standard'].validate`
+// (see validator/index.ts). Importing it drags the late-bound `type/bridge` stubs,
+// not TypeBox itself, so the typebox-free invariant of this module holds.
+import { StandardValidator } from '../../validator'
 
 import {
 	Compiled,
@@ -256,6 +260,23 @@ interface FrozenRouteValidatorShape {
 
 const REQUEST_SLOTS = ['body', 'headers', 'query', 'params', 'cookie'] as const
 
+export const isStandardSchema = (schema: unknown) =>
+	schema != null && typeof schema === 'object' && '~standard' in schema
+
+export function standaloneAllStandard(
+	schemas: Array<Record<string, unknown>> | undefined
+) {
+	if (!schemas || schemas.length === 0) return true
+
+	for (const entry of schemas)
+		for (const key in entry) {
+			const value = entry[key]
+			if (value && !isStandardSchema(value)) return false
+		}
+
+	return true
+}
+
 function resolveModelRef(schema: unknown, root: AnyElysia): unknown {
 	if (typeof schema !== 'string') return schema
 
@@ -284,6 +305,12 @@ export function buildFrozenRouteValidator(
 		const schema = resolveModelRef(raw, root)
 		if (!schema) return undefined
 
+		if (isStandardSchema(schema)) {
+			out[slot] = new StandardValidator(schema as any) as any
+
+			continue
+		}
+
 		const frozen = Compiled.getValidator(method, path, slot)
 		if (!frozen) return undefined
 
@@ -311,6 +338,13 @@ export function buildFrozenRouteValidator(
 
 			const schema = resolveModelRef(raw, root)
 			if (!schema) return undefined
+
+			if (isStandardSchema(schema)) {
+				responseOut[status as unknown as number] =
+					new StandardValidator(schema as any) as any
+
+				continue
+			}
 
 			const frozen = Compiled.getValidator(
 				method,

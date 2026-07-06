@@ -51,6 +51,33 @@ const MODE_NORMALIZE = resolve(
 	import.meta.dir,
 	'fixtures/mode-normalize-app.ts'
 )
+// Standard Schema (Zod) seal fixtures. `~standard` slots never capture into the
+// AOT manifest yet are inherently bridge-free (a live `StandardValidator` needs
+// no TypeBox) — they must NOT block sealing.
+const MODE_STANDARD = resolve(import.meta.dir, 'fixtures/mode-standard-app.ts')
+const MODE_MIXED = resolve(import.meta.dir, 'fixtures/mode-mixed-app.ts')
+const MODE_STANDARD_STANDALONE = resolve(
+	import.meta.dir,
+	'fixtures/mode-standard-standalone-app.ts'
+)
+const MODE_MIXED_STANDALONE = resolve(
+	import.meta.dir,
+	'fixtures/mode-mixed-standalone-app.ts'
+)
+// Standalone all-standard body + a DIRECT mixed response map (200 ~standard,
+// 400 TypeBox). The frozen fallback bails on `hook.schemas`, so the TypeBox 400
+// response slot would get no validator under seal → must be wired.
+const MODE_STANDALONE_MIXED_RESPONSE = resolve(
+	import.meta.dir,
+	'fixtures/mode-standalone-mixed-response-app.ts'
+)
+// PLAIN route (no standalone) with a DIRECT mixed response map. No `hook.schemas`
+// bail, so 200 → live StandardValidator and 400 → frozen TypeBox: this MUST seal
+// with the 400 slot frozen.
+const MODE_PLAIN_MIXED_RESPONSE = resolve(
+	import.meta.dir,
+	'fixtures/mode-plain-mixed-response-e2e-app.ts'
+)
 
 async function buildEsbuild(app: string): Promise<string> {
 	const { aot } = await import('elysia/plugin/esbuild')
@@ -115,6 +142,18 @@ beforeAll(async () => {
 	code.esbuildMacro = await buildEsbuild(MODE_MACRO)
 	code.esbuildLate = await buildEsbuild(MODE_LATE)
 	code.esbuildNormalize = await buildEsbuild(MODE_NORMALIZE)
+	// Standard Schema seal fixtures (built here so the e2e smoke tests import the
+	// pre-written bundles after `esbuild.stop()`).
+	code.esbuildStandard = await buildEsbuild(MODE_STANDARD)
+	code.esbuildMixed = await buildEsbuild(MODE_MIXED)
+	code.esbuildStandardStandalone = await buildEsbuild(
+		MODE_STANDARD_STANDALONE
+	)
+	// Plain mixed-response bundle: e2e-check the frozen 400 response slot fires
+	// under seal (see the "response slot" describe block below).
+	code.esbuildPlainMixedResponse = await buildEsbuild(
+		MODE_PLAIN_MIXED_RESPONSE
+	)
 
 	// Release the esbuild service before any dynamic import (see file header).
 	await esbuild.stop()
@@ -317,6 +356,207 @@ describe('AOT mode gating — misgating regressions', () => {
 		expect(body.detail).not.toContain('Typebox module')
 
 		rmSync(dir2, { recursive: true, force: true })
+	})
+})
+
+/**
+ * Standard Schema (Zod / Valibot) seal support. A `~standard` schema is NOT
+ * captured into the AOT manifest — `Validator.create` returns a
+ * `StandardValidator`, which never calls `captureImpl.maybeCapture`. But a
+ * `StandardValidator` only calls `schema['~standard'].validate` and never
+ * touches the TypeBox bridge, so it is inherently bridge-free and reconstructs
+ * live under seal (`buildFrozenRouteValidator`).
+ *
+ * Before this fix such slots inflated `expectedSlots` without a matching frozen
+ * slot → `frozenSlots >= expectedSlots` failed → mode 'wired' (TypeBox
+ * retained). The gate now excludes `~standard` slots from the count, in lockstep
+ * with the runtime building them live.
+ *
+ * INVARIANT (past incident: false-seals that 500'd): the gate must model the
+ * runtime bail. A standalone (`hook.schemas`) route is bridge-free ONLY when
+ * every standalone slot is `~standard` AND the route has no TypeBox direct slot
+ * (a TypeBox direct slot throws under a severed bridge and the frozen fallback
+ * bails on `hook.schemas`).
+ */
+describe('AOT mode gating — Standard Schema seal', () => {
+	it('a pure Standard Schema app seals (~standard slots excluded from the coverage floor)', async () => {
+		const { mode, stub } = await generateCompiledArtifacts(MODE_STANDARD)
+		expect(mode).toBe('sealed')
+		expect(stub.bridge).toBe(false)
+	})
+
+	it('a mixed route (frozen TypeBox query + live Standard body) seals', async () => {
+		const { mode, stub } = await generateCompiledArtifacts(MODE_MIXED)
+		expect(mode).toBe('sealed')
+		expect(stub.bridge).toBe(false)
+	})
+
+	it('a pure-Standard standalone (all hook.schemas are ~standard) seals', async () => {
+		const { mode } = await generateCompiledArtifacts(
+			MODE_STANDARD_STANDALONE
+		)
+		expect(mode).toBe('sealed')
+	})
+
+	it('a Standard standalone WITH a TypeBox direct slot does NOT seal (lockstep with the runtime bail)', async () => {
+		// standalone all-standard, but a TypeBox `query` direct slot on the same
+		// route. Under seal RouteValidator throws on the TypeBox slot and the frozen
+		// fallback bails on `hook.schemas` → sealing here would 500. Must be wired.
+		const { mode, stub } =
+			await generateCompiledArtifacts(MODE_MIXED_STANDALONE)
+		expect(mode).toBe('wired')
+		expect(stub.bridge).toBe(true)
+	})
+
+	it('the sealed pure-Standard bundle drops TypeBox and still validates (200 / 200 / 422)', async () => {
+		expect(dragsTypeBox(code.esbuildStandard!)).toBe(false)
+
+		const app = await loadApp('esbuildStandard')
+
+		const valid = await app.handle(
+			new Request('http://localhost/u', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ name: 'a', age: 5 })
+			})
+		)
+		expect(valid.status).toBe(200)
+		await expect(valid.json()).resolves.toEqual({ name: 'a', age: 5 })
+
+		// A severed bridge means the Zod validator MUST still run: invalid → 422,
+		// not a 500 ("Typebox module isn't initialized") and not a dropped-schema 200.
+		const invalid = await app.handle(
+			new Request('http://localhost/u', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ age: 'x' })
+			})
+		)
+		expect(invalid.status).toBe(422)
+	})
+
+	it('the sealed mixed bundle fires BOTH the frozen TypeBox slot and the live Standard slot', async () => {
+		expect(dragsTypeBox(code.esbuildMixed!)).toBe(false)
+
+		const app = await loadApp('esbuildMixed')
+
+		// both valid → 200
+		const both = await app.handle(
+			new Request('http://localhost/u?q=hi', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ name: 'a', age: 5 })
+			})
+		)
+		expect(both.status).toBe(200)
+		await expect(both.json()).resolves.toEqual({ name: 'a', age: 5 })
+
+		// invalid body (Zod) → 422 proves the live StandardValidator fires
+		const badBody = await app.handle(
+			new Request('http://localhost/u?q=hi', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ age: 'x' })
+			})
+		)
+		expect(badBody.status).toBe(422)
+
+		// missing query `q` (TypeBox) → 422 proves the frozen TypeBox slot fires
+		const badQuery = await app.handle(
+			new Request('http://localhost/u', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ name: 'a', age: 5 })
+			})
+		)
+		expect(badQuery.status).toBe(422)
+	})
+
+	it('the sealed pure-Standard standalone bundle still enforces its schema (200 / 422)', async () => {
+		expect(dragsTypeBox(code.esbuildStandardStandalone!)).toBe(false)
+
+		const app = await loadApp('esbuildStandardStandalone')
+
+		const valid = await app.handle(
+			new Request('http://localhost/u', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ name: 'a', age: 5 })
+			})
+		)
+		expect(valid.status).toBe(200)
+
+		const invalid = await app.handle(
+			new Request('http://localhost/u', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ age: 'x' })
+			})
+		)
+		expect(invalid.status).toBe(422)
+	})
+})
+
+/**
+ * `response`-slot seal gating. The old gate's `routeHasTypeBoxDirectSlot` only
+ * inspected the five request slots (body/query/params/headers/cookie) and NOT
+ * `response`, so a standalone all-standard route with a DIRECT mixed response map
+ * (200 `~standard`, 400 TypeBox) false-sealed: `standaloneAllStandard` is true and
+ * no request slot is TypeBox, so nothing forbade sealing — but at runtime
+ * `buildFrozenRouteValidator` bails on `hook.schemas`, so the frozen TypeBox 400
+ * response slot got NO validator under a severed bridge → validation bypass / 500.
+ *
+ * The gate now treats a `response` carrying any TypeBox schema (bare schema or a
+ * status map with a non-`~standard` entry) as a TypeBox direct slot: it must
+ * forbid sealing a standalone route (mirroring the `hook.schemas` bail) while a
+ * PLAIN route with the same map still seals (the runtime builds 200 live + 400
+ * frozen, no bail).
+ */
+describe('AOT mode gating — response slot', () => {
+	it('standalone all-standard + mixed response map does NOT seal (mirrors the hook.schemas bail)', async () => {
+		const { mode, stub } = await generateCompiledArtifacts(
+			MODE_STANDALONE_MIXED_RESPONSE
+		)
+		expect(mode).toBe('wired')
+		expect(stub.bridge).toBe(true)
+	})
+
+	it('a PLAIN route with a mixed response map still seals (200 live / 400 frozen, no bail)', async () => {
+		const { mode, stub } = await generateCompiledArtifacts(
+			MODE_PLAIN_MIXED_RESPONSE
+		)
+		expect(mode).toBe('sealed')
+		expect(stub.bridge).toBe(false)
+	})
+
+	it('the sealed plain-mixed bundle drops TypeBox yet the frozen 400 response slot still validates', async () => {
+		expect(dragsTypeBox(code.esbuildPlainMixedResponse!)).toBe(false)
+
+		const app = await loadApp('esbuildPlainMixedResponse')
+
+		// valid 200 (live Zod response) passes
+		const ok = await app.handle(
+			new Request('http://localhost/u', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ name: 'a', age: 5 })
+			})
+		)
+		expect(ok.status).toBe(200)
+		await expect(ok.json()).resolves.toEqual({ name: 'a', age: 5 })
+
+		// the handler emits a 400 whose body violates the frozen TypeBox 400 schema
+		// (`error` must be a string). Under a severed bridge the frozen slot MUST
+		// still run: a malformed 400 body → 422 (response validation), not a silent
+		// pass-through and not a 500 ("Typebox module isn't initialized").
+		const badResponse = await app.handle(
+			new Request('http://localhost/u?bad=1', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ name: 'a', age: 5 })
+			})
+		)
+		expect(badResponse.status).toBe(422)
 	})
 })
 

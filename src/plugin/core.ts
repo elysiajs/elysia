@@ -10,6 +10,10 @@ import {
 	type StubbabilityReport
 } from './source'
 import { composeRouteHook } from '../compile/handler'
+import {
+	isStandardSchema,
+	standaloneAllStandard
+} from '../compile/handler/frozen-validator'
 
 export interface ElysiaAotOptions {
 	/**
@@ -488,6 +492,21 @@ export interface CompiledArtifacts {
 
 const _importedEntries = new Set<string>()
 
+function isStandardResponse(response: unknown) {
+	if (response == null || typeof response !== 'object') return false
+
+	if (isStandardSchema(response)) return true
+
+	if ('~kind' in (response as object) || '~elyAcl' in (response as object))
+		return false
+
+	// A status map: every entry must be a Standard Schema to skip the count.
+	const entries = Object.values(response as Record<string, unknown>)
+	if (entries.length === 0) return false
+
+	return entries.every((v) => isStandardSchema(v))
+}
+
 export async function generateCompiledArtifacts(
 	file: string,
 	options?: ElysiaAotOptions
@@ -561,8 +580,6 @@ export async function generateCompiledArtifacts(
 				mode: 'off'
 			}
 
-		// Single capture, reused for both the emitted manifest and the frozen
-		// stub-detection replay.
 		const artifacts = await captureArtifacts(typedApp, sourceOptions)
 		const report = replayStubbability(typedApp, artifacts.handlers)
 		const aliases = new Set<string>()
@@ -579,10 +596,6 @@ export async function generateCompiledArtifacts(
 
 		const history = (typedApp as { history?: unknown[] }).history ?? []
 
-		// `~hasTrace` covers every registrar (`.trace()`, `guard`/scoped hook
-		// objects) incl. plugins; the history sweep is a redundant backstop.
-		// A mounted foreign fetch handler may compose its own trace at
-		// runtime, invisible to entry-app detection — treat it as tracing.
 		const mayTrace =
 			!!(typedApp as { ['~hasTrace']?: unknown })['~hasTrace'] ||
 			history.some(
@@ -593,8 +606,6 @@ export async function generateCompiledArtifacts(
 
 		let expectedSlots = 0
 
-		// The gate must model the SAME refusal surface as the runtime
-		// `buildFrozenRouteValidator` (compile/handler/frozen-validator.ts)
 		let routesForbidSeal = false
 		for (const route of history) {
 			const [, , , instance, hook, appHook, inheritedChain, macroScope] =
@@ -618,21 +629,39 @@ export async function generateCompiledArtifacts(
 			) as Record<string, unknown> | undefined
 			if (!hooks) continue
 
-			if (
-				Array.isArray((hooks as { schemas?: unknown[] }).schemas) &&
-				(hooks as { schemas: unknown[] }).schemas.length > 0
-			)
-				routesForbidSeal = true
-
+			let routeHasTypeBoxDirectSlot = false
 			for (const slot of [
 				'body',
 				'query',
 				'params',
 				'headers',
-				'cookie',
-				'response'
-			])
-				if (hooks[slot] !== undefined) expectedSlots++
+				'cookie'
+			]) {
+				const value = hooks[slot]
+				if (value === undefined) continue
+				if (isStandardSchema(value)) continue
+				routeHasTypeBoxDirectSlot = true
+				expectedSlots++
+			}
+
+			if (
+				hooks.response !== undefined &&
+				!isStandardResponse(hooks.response)
+			) {
+				routeHasTypeBoxDirectSlot = true
+				expectedSlots++
+			}
+
+			const standalone = (hooks as { schemas?: unknown[] }).schemas
+			if (Array.isArray(standalone) && standalone.length > 0) {
+				if (
+					routeHasTypeBoxDirectSlot ||
+					!standaloneAllStandard(
+						standalone as Array<Record<string, unknown>>
+					)
+				)
+					routesForbidSeal = true
+			}
 		}
 
 		// `normalize: 'typebox'` need 'typebox/value'
