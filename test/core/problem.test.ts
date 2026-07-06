@@ -60,6 +60,27 @@ describe('problem()', () => {
 		})
 	})
 
+	it('accepts status and detail as separate arguments', async () => {
+		const app = new Elysia().get('/', () =>
+			problem(409, {
+				detail: 'SKU 42 is gone',
+				sku: 42
+			})
+		)
+
+		const res = await app.handle(req('/'))
+
+		expect(res.status).toBe(409)
+		expect(res.headers.get('content-type')).toBe('application/problem+json')
+		await expect(res.json()).resolves.toEqual({
+			type: 'about:blank',
+			title: 'Conflict',
+			status: 409,
+			detail: 'SKU 42 is gone',
+			sku: 42
+		})
+	})
+
 	it('works when thrown on a plain route (interpreted error path)', async () => {
 		const app = new Elysia().get('/', () => {
 			throw problem({ status: 418, detail: 'teapot' })

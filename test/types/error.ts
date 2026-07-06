@@ -346,3 +346,12 @@ class OtherError extends Error {
 		(typeof app)['~Routes']['get']['response'][409]
 	>().toMatchTypeOf<{ sku: number }>()
 }
+
+// status-first overload maps to the numeric response key
+{
+	const app = new Elysia().get('/', () => problem(409, { sku: 42 }))
+
+	expectTypeOf<
+		(typeof app)['~Routes']['get']['response'][409]
+	>().toMatchTypeOf<{ status: 409; sku: number }>()
+}

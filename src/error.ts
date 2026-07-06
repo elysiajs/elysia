@@ -665,6 +665,14 @@ type ProblemStatus<P> = P extends {
 	? NumericStatus<S>
 	: 500
 
+type ProblemResponseBody<Status extends number, P> = {
+	type: string
+	title: string
+	status: Status
+	detail?: string
+	instance?: string
+} & Omit<P, keyof Problem>
+
 export function problemBody(
 	p: Problem
 ): Record<string, unknown> & { status: number } {
@@ -744,23 +752,54 @@ export function internalServerErrorResponse(error: any) {
 	return response
 }
 
-export const problem = <const P extends Problem>(
-	detail: P
+/**
+ * RFC 9457 Problem Details function
+ *
+ * @example
+ * ```ts
+ * problem(400, { detail: 'Something went wrong' })
+ * ````
+ *
+ * @see https://www.rfc-editor.org/info/rfc9457
+ */
+export function problem<
+	const Code extends number | keyof StatusMap,
+	const P extends Record<string, unknown> = {}
+>(
+	status: Code,
+	detail?: P & Omit<Problem<Code>, 'status'>
 ): ElysiaStatus<
-	ProblemStatus<P>,
-	{
-		type: string
-		title: string
-		status: ProblemStatus<P>
-		detail?: string
-		instance?: string
-	} & Omit<P, keyof Problem>
-> =>
-	new ElysiaStatus(
-		(detail.status ?? 500) as any,
-		problemBody(detail) as any,
-		{ 'content-type': PROBLEM_JSON }
-	)
+	NumericStatus<Code>,
+	ProblemResponseBody<NumericStatus<Code>, P>
+>
+
+/**
+ * RFC 9457 Problem Details function
+ *
+ * @example
+ * ```ts
+ * problem({ status: 400, detail: 'Something went wrong' })
+ * ````
+ *
+ * @see https://www.rfc-editor.org/info/rfc9457
+ */
+export function problem<const P extends Problem>(
+	detail: P
+): ElysiaStatus<ProblemStatus<P>, ProblemResponseBody<ProblemStatus<P>, P>>
+
+export function problem(
+	statusOrDetail: number | keyof StatusMap | Problem,
+	detail?: Omit<Problem, 'status'>
+): ElysiaStatus<any, any> {
+	const body =
+		typeof statusOrDetail === 'object'
+			? statusOrDetail
+			: { ...detail, status: statusOrDetail }
+
+	return new ElysiaStatus((body.status ?? 500) as any, problemBody(body), {
+		'content-type': PROBLEM_JSON
+	})
+}
 
 type CheckExcessProps<T, U> = 0 extends 1 & T
 	? T // T is any
