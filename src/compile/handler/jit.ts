@@ -967,7 +967,7 @@ export function compileHandlerJit({
 				: `${map}(_r,c.request)`
 
 			if (syncErrorHook)
-				code += `if(_r instanceof Promise)return ${finalMap}.catch((_e)=>_ce(_e,c))\n`
+				code += `if(_r instanceof Promise)return ${finalMap}.catch((_e)=>_ce(_e,c,aborted))\n`
 			code += `return ${finalMap}\n`
 		}
 	} else if (isHandleFunction) {
@@ -982,7 +982,7 @@ export function compileHandlerJit({
 			(isAsync
 				? `return ${map}(_r,${mapArgs})\n`
 				: syncErrorHook
-					? `if(_r instanceof Promise)return ${map}(_r.then(fe),${mapArgs}).catch((_e)=>_ce(_e,c))\n` +
+					? `if(_r instanceof Promise)return ${map}(_r.then(fe),${mapArgs}).catch((_e)=>_ce(_e,c,aborted))\n` +
 						`return ${map}(_r,${mapArgs})\n`
 					: `if(_r instanceof Promise)_r=_r.then(fe)\n` +
 						`return ${map}(_r,${mapArgs})\n`)
@@ -1067,8 +1067,8 @@ export function compileHandlerJit({
 		}
 
 		if (syncErrorHook) {
-			factoryHelpers += `function _ce(e,c){\n${body}}\n`
-			code += `}catch(e){return _ce(e,c)}\n`
+			factoryHelpers += `function _ce(e,c,aborted){\n${body}}\n`
+			code += `}catch(e){return _ce(e,c,aborted)}\n`
 		} else code += `}catch(e){\n${body}}\n`
 	}
 
