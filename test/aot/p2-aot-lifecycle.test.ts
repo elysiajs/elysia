@@ -7,8 +7,7 @@
 import { describe, it, expect, afterEach } from 'bun:test'
 import { env } from '../../src/universal'
 import {
-	Capture,
-	resetCaptureLifecycleForTests
+	Capture
 } from '../../src/compile/aot'
 
 // --- M17: canonical predicate ---
@@ -50,7 +49,6 @@ describe('M17 Capture.isCapturing()', () => {
 	afterEach(() => {
 		if (original === undefined) delete env.ELYSIA_AOT_BUILD
 		else env.ELYSIA_AOT_BUILD = original
-		resetCaptureLifecycleForTests()
 	})
 
 	it('returns false when env not set and no programmatic capture', () => {

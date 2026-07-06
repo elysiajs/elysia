@@ -6,8 +6,7 @@ import {
 	Compiled,
 	beginValidatorCapture,
 	endValidatorCapture,
-	endHandlerCapture,
-	resetCaptureLifecycleForTests
+	endHandlerCapture
 } from '../../src/compile/aot'
 import { RouteValidator } from '../../src/validator/route'
 import { buildFrozenRouteValidator } from '../../src/compile/handler/frozen-validator'
@@ -41,7 +40,6 @@ const PATH = '/x'
 // coercion slot), register it, and return the captured entry.
 function freeze(schema: any) {
 	process.env.ELYSIA_AOT_BUILD = '1'
-	resetCaptureLifecycleForTests()
 	beginValidatorCapture()
 
 	const app = new Elysia().get(PATH, { query: schema }, ({ query }) => query)
@@ -259,7 +257,6 @@ describe('ic misalignment — still refuses bridge-free', () => {
 // Capture any slot (query via GET, body via POST) and return its entry.
 function freezeSlot(slot: 'query' | 'body', schema: any) {
 	process.env.ELYSIA_AOT_BUILD = '1'
-	resetCaptureLifecycleForTests()
 	beginValidatorCapture()
 
 	const app =

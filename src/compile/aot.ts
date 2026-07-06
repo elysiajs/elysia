@@ -802,8 +802,3 @@ export const Capture = {
 	isAotBuildEnv: isAotBuildEnv
 } as const
 
-/**
- * Reset module-level capture lifecycle state.
- * FOR TESTS ONLY
- */
-export const resetCaptureLifecycleForTests = (): void => undefined

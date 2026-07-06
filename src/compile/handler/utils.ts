@@ -1,12 +1,13 @@
 import { isAsyncFunction } from '../utils'
-import { skipClone } from '../../adapter/transferable'
+import { skipClone } from '../../adapter/skip-clone'
 import { ElysiaStatus } from '../../error'
 import { ELYSIA_TYPES } from '../../type/constants'
 import { isSpace, isIdentChar, skipString } from '../lexer'
 
-import type { Link } from '../types'
 import type { ElysiaAdapter } from '../../adapter'
 import type { AppEvent, AppHook, MaybeArray } from '../../types'
+
+export type Link = (v: unknown, key: string) => void
 
 export interface TraceReporter {
 	resolveChild(name: string): {
@@ -107,10 +108,9 @@ function findReturnedObjectStart(src: string) {
 		// `=> {` is a block body: fall through to the single-return logic below.
 	}
 
-	const returns = countReturns(src)
+	const { count: returns, firstIndex: idx } = scanReturns(src)
 	if (returns !== 1) return -1
 
-	const idx = returnKeywordIndex(src)
 	if (idx === -1) return -1
 	let i = idx + 6
 	while (i < src.length && isSpace(src[i])) i++
@@ -172,45 +172,9 @@ function topLevelArrowIndex(src: string): number {
 }
 
 
-function countReturns(src: string): number {
+function scanReturns(src: string): { count: number; firstIndex: number } {
 	let count = 0
-	for (let i = 0; i < src.length; ) {
-		const ch = src[i]
-		if (ch === '"' || ch === "'" || ch === '`') {
-			i = skipString(src, i)
-			continue
-		}
-
-		if (ch === '/' && src[i + 1] === '/') {
-			i = src.indexOf('\n', i)
-			if (i === -1) break
-			continue
-		}
-
-		if (ch === '/' && src[i + 1] === '*') {
-			i = src.indexOf('*/', i)
-			if (i === -1) break
-			i += 2
-			continue
-		}
-
-		if (
-			ch === 'r' &&
-			src.startsWith('return', i) &&
-			!isIdentChar(src[i - 1] ?? ' ') &&
-			!isIdentChar(src[i + 6] ?? ' ')
-		) {
-			count++
-			i += 6
-			continue
-		}
-
-		i++
-	}
-	return count
-}
-
-function returnKeywordIndex(src: string): number {
+	let firstIndex = -1
 	for (let i = 0; i < src.length; ) {
 		const ch = src[i]
 		if (ch === '"' || ch === "'" || ch === '`') {
@@ -237,12 +201,16 @@ function returnKeywordIndex(src: string): number {
 			src.startsWith('return', i) &&
 			!isIdentChar(src[i - 1] ?? ' ') &&
 			!isIdentChar(src[i + 6] ?? ' ')
-		)
-			return i
+		) {
+			if (firstIndex === -1) firstIndex = i
+			count++
+			i += 6
+			continue
+		}
 
 		i++
 	}
-	return -1
+	return { count, firstIndex }
 }
 
 
@@ -609,7 +577,7 @@ export function getQueryParseChannels(
 	return state
 }
 
-export const Await = (fn: Function) => (isAsyncFunction(fn) ? 'await ' : '')
+const Await = (fn: Function) => (isAsyncFunction(fn) ? 'await ' : '')
 
 const awaitGuard = (fn: Function, isAsync: boolean, target: string) =>
 	isAsync && !isAsyncFunction(fn)

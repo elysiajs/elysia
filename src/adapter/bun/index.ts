@@ -2,7 +2,7 @@ import { createAdapter } from '..'
 import { WebStandardAdapter } from '../web-standard'
 
 import { isDynamicRegex, needEncodeRegex } from '../../constants'
-import { buildNativeStaticResponse } from '../../compile'
+import { buildNativeStaticResponse } from '../../compile/handler'
 import { flushMemory } from '../../memory'
 import {
 	flattenChain,

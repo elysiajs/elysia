@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'bun:test'
 import { Elysia } from '../../src'
 import { Validator } from '../../src/validator'
 import { Compiled } from '../../src/compile/aot'
-import { compileHandler } from '../../src/compile'
+import { compileHandler } from '../../src/compile/handler'
 import { extractDeriveKeys } from '../../src/compile/handler/utils'
 import { req } from '../utils'
 

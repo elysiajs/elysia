@@ -9,6 +9,7 @@ import {
 	type AotTarget,
 	type StubbabilityReport
 } from './source'
+import { composeRouteHook } from '../compile/handler'
 
 export interface ElysiaAotOptions {
 	/**
@@ -83,7 +84,7 @@ function findPackageRoot(from: string = process.cwd()) {
 export const resolveEntry = (entry: string): string =>
 	resolve(findPackageRoot(), entry)
 
-export function resolveLoader(entryPath: string) {
+function resolveLoader(entryPath: string) {
 	const ext = entryPath.slice(entryPath.lastIndexOf('.'))
 
 	return ext === '.js' || ext === '.mjs' || ext === '.cjs'
@@ -95,7 +96,7 @@ export function resolveLoader(entryPath: string) {
 				: 'ts'
 }
 
-export const entryFilter = (entryPath: string): RegExp =>
+const entryFilter = (entryPath: string): RegExp =>
 	new RegExp('^' + entryPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$')
 
 /** Runtime handler-JIT module a strip build can replace with a throwing stub. */
@@ -560,17 +561,25 @@ export async function generateCompiledArtifacts(
 				(route: any) => route?.[0] === 'WS'
 			)
 
-		const routes =
-			(typedApp as { routes?: { hooks?: Record<string, unknown> }[] })
-				.routes ?? []
+		const history =
+			(typedApp as { history?: unknown[] }).history ?? []
 
 		let expectedSlots = 0
 
 		// The gate must model the SAME refusal surface as the runtime
 		// `buildFrozenRouteValidator` (compile/handler/frozen-validator.ts)
 		let routesForbidSeal = false
-		for (const route of routes) {
-			const hooks = route?.hooks
+		for (const route of history) {
+			const [, , , instance, hook, appHook, inheritedChain, macroScope] =
+				route as [unknown, unknown, unknown, unknown, unknown, unknown, unknown, unknown]
+			const hooks = composeRouteHook(
+				instance as any,
+				hook as any,
+				appHook as any,
+				inheritedChain as any,
+				typedApp as any,
+				macroScope as any
+			) as Record<string, unknown> | undefined
 			if (!hooks) continue
 
 			if (

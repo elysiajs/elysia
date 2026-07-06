@@ -1,7 +1,5 @@
 // @ts-ignore
 export const isBun = typeof Bun !== 'undefined'
-// @ts-ignore
-export const isDeno = typeof Deno !== 'undefined'
 
 export const isCloudflareWorker = (() => {
 	try {
@@ -24,4 +22,3 @@ export const isCloudflareWorker = (() => {
 })()
 
 export const hasHeaderShorthand = isBun ? 'toJSON' in new Headers() : false
-export const hasSetImmediate = typeof setImmediate === 'function'

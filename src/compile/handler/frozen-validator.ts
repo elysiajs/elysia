@@ -2,6 +2,7 @@
 import { ValidationError } from '../../error'
 import { nullObject } from '../../utils'
 import { ELYSIA_TYPES } from '../../type/constants'
+import { isFullyClosedObject } from '../../type/validator/clean-safe'
 
 import {
 	Compiled,
@@ -96,81 +97,6 @@ interface DefaultFastPath {
 	appliesToNull: boolean
 	clone?: () => unknown
 	merge?: (value: any) => any
-}
-
-function isCleanSafeNode(
-	node: any,
-	visiting: WeakSet<object>,
-	clean: WeakSet<object>
-): boolean {
-	if (!node || typeof node !== 'object') return true
-	if (clean.has(node)) return true
-	if (visiting.has(node)) return false
-
-	visiting.add(node)
-
-	const safe = checkCleanSafeNode(node, visiting, clean)
-
-	visiting.delete(node)
-	if (safe) clean.add(node)
-
-	return safe
-}
-
-function checkCleanSafeNode(
-	node: any,
-	visiting: WeakSet<object>,
-	clean: WeakSet<object>
-): boolean {
-	if (node['~codec'] || node['~refine'] || node['~elyTyp'] !== undefined)
-		return false
-
-	const kind = node['~kind']
-	if (
-		kind === 'Union' ||
-		kind === 'Intersect' ||
-		kind === 'Ref' ||
-		kind === 'This' ||
-		kind === 'Cyclic' ||
-		node.$ref !== undefined ||
-		Array.isArray(node.anyOf) ||
-		Array.isArray(node.allOf) ||
-		Array.isArray(node.oneOf) ||
-		node.not !== undefined ||
-		node.if !== undefined ||
-		node.patternProperties !== undefined
-	)
-		return false
-
-	const isObject = kind === 'Object' || node.type === 'object'
-	if (isObject) {
-		if (node.additionalProperties !== false) return false
-
-		if (node.properties)
-			for (const k in node.properties)
-				if (
-					Object.hasOwn(node.properties, k) &&
-					!isCleanSafeNode(node.properties[k], visiting, clean)
-				)
-					return false
-
-		return true
-	}
-
-	if (kind === 'Array' || node.type === 'array') {
-		const items = node.items
-		if (Array.isArray(items) || items === undefined) return false
-		return isCleanSafeNode(items, visiting, clean)
-	}
-
-	return true
-}
-
-function isFullyClosedObject(schema: any): boolean {
-	if (!schema || typeof schema !== 'object') return false
-	const kind = schema['~kind']
-	if (kind !== 'Object' && schema.type !== 'object') return false
-	return isCleanSafeNode(schema, new WeakSet(), new WeakSet())
 }
 
 class FrozenSlotValidator {

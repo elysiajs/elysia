@@ -1,10 +1,11 @@
 import { isNotEmpty, nullObject } from '../utils'
 import { StatusMap } from '../constants'
 
-import { skipClone } from './transferable'
 import { serializeCookie } from '../cookie/serialize'
 import { isBun, hasHeaderShorthand } from '../universal/constants'
 import type { Context } from '../context'
+
+import { skipClone } from './skip-clone'
 
 const setCookie = 'set-cookie' as const
 
@@ -356,6 +357,41 @@ export function createStreamHandler({
 			} catch {}
 		}
 
+		const closeSafely = (controller: ReadableStreamDefaultController) => {
+			try {
+				controller.close()
+			} catch {}
+			cleanupAbort()
+		}
+
+		const enqueueValue = async (
+			controller: ReadableStreamDefaultController,
+			value: unknown
+		) => {
+			// @ts-ignore
+			if (value.toSSE) {
+				// @ts-ignore
+				controller.enqueue(encodeChunk(value.toSSE()))
+				return
+			}
+
+			const p = enqueueBinaryChunk(controller, value)
+			if (p !== false) return void (await p)
+
+			if (typeof value === 'object')
+				try {
+					controller.enqueue(
+						encodeChunk(format(JSON.stringify(value)))
+					)
+				} catch {
+					controller.enqueue(
+						encodeChunk(format((value as object).toString()))
+					)
+				}
+			else
+				controller.enqueue(encodeChunk(format((value as any).toString())))
+		}
+
 		return new Response(
 			new ReadableStream({
 				async start(controller) {
@@ -385,39 +421,13 @@ export function createStreamHandler({
 					)
 						return
 
-					// @ts-ignore
-					if (init.value.toSSE) {
-						// @ts-ignore
-						controller.enqueue(encodeChunk(init.value.toSSE()))
-						return
-					}
-
-					const p = enqueueBinaryChunk(controller, init.value)
-					if (p !== false) return void (await p)
-
-					if (typeof init.value === 'object')
-						try {
-							controller.enqueue(
-								encodeChunk(format(JSON.stringify(init.value)))
-							)
-						} catch {
-							controller.enqueue(
-								encodeChunk(format(init.value.toString()))
-							)
-						}
-					else
-						controller.enqueue(
-							encodeChunk(format(init.value.toString()))
-						)
+					await enqueueValue(controller, init.value)
 				},
 
 				async pull(controller) {
 					// Respect abort/cancel that happened between pull() calls.
 					if (end) {
-						try {
-							controller.close()
-						} catch {}
-						cleanupAbort()
+						closeSafely(controller)
 						return
 					}
 
@@ -425,39 +435,13 @@ export function createStreamHandler({
 						const { value: chunk, done } = await iterator.next()
 
 						if (done || end) {
-							try {
-								controller.close()
-							} catch {}
-							cleanupAbort()
+							closeSafely(controller)
 							return
 						}
 
 						if (chunk === undefined || chunk === null) return
 
-						// @ts-ignore
-						if (chunk.toSSE) {
-							// @ts-ignore
-							controller.enqueue(encodeChunk(chunk.toSSE()))
-							return
-						}
-
-						const p = enqueueBinaryChunk(controller, chunk)
-						if (p !== false) return void (await p)
-
-						if (typeof chunk === 'object')
-							try {
-								controller.enqueue(
-									encodeChunk(format(JSON.stringify(chunk)))
-								)
-							} catch {
-								controller.enqueue(
-									encodeChunk(format(chunk.toString()))
-								)
-							}
-						else
-							controller.enqueue(
-								encodeChunk(format(chunk.toString()))
-							)
+						await enqueueValue(controller, chunk)
 					} catch (error) {
 						cleanupAbort()
 						controller.error(error)

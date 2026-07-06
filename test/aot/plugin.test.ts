@@ -7,7 +7,7 @@ import { post } from '../utils'
 
 const APP = resolve(import.meta.dir, 'fixtures/app.ts')
 // In-repo `Compiled` source (the stale built `dist` can't resolve `elysia/compile`).
-const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/index.ts')
+const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/aot.ts')
 
 describe('AOT plugin', () => {
 	it('generateCompiledModule emits a self-registering manifest', async () => {

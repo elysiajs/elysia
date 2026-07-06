@@ -8,7 +8,7 @@ import {
 	endValidatorCapture,
 	endHandlerCapture
 } from '../../src/compile/aot'
-import { compileHandler } from '../../src/compile'
+import { compileHandler } from '../../src/compile/handler'
 import { req } from '../utils'
 
 import {

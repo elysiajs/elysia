@@ -2,7 +2,7 @@ import type { Instruction as ExactMirrorInstruction } from 'exact-mirror'
 import type { OpenAPIV3 } from 'openapi-types'
 
 import { ElysiaFile } from './universal/file'
-import { TraceEvent, TraceListener } from './trace'
+import { TraceHandler } from './trace'
 import { MethodMap, type StatusMapBack } from './constants'
 import { ElysiaError, type ElysiaStatus } from './error'
 import type { TypeBoxSchema, AnySchema, StandardSchemaV1Like } from './type'
@@ -385,15 +385,6 @@ export interface InputSchema<Name extends string = string> {
 }
 export type InputSchemaKey = keyof InputSchema
 
-export interface InlineSchemaResponse<Name extends string = string> {
-	body?: unknown
-	headers?: unknown
-	query?: Name | AnySchema
-	params?: Name | AnySchema
-	cookie?: Name | AnySchema
-	response?: Name | AnySchema | Record<number, Name | AnySchema>
-}
-
 export interface EmptyInputSchema {
 	body: unknown
 	headers: unknown
@@ -723,26 +714,6 @@ export type ResolveHandler<
 		| AnyElysiaStatus
 		| void = Record<string, unknown> | ElysiaError | AnyElysiaStatus | void
 > = (context: Context<Route, Singleton>) => MaybePromise<Derivative>
-
-export type TraceHandler<
-	in out Route extends RouteSchema = {},
-	in out Singleton extends SingletonBase = DefaultSingleton
-> = {
-	(
-		lifecycle: Prettify<
-			{
-				id: number
-				context: Context<Route, Singleton>
-				set: Context['set']
-				time: number
-				store: Singleton['store']
-				response: unknown
-			} & {
-				[x in `on${Capitalize<TraceEvent>}`]: TraceListener
-			}
-		>
-	): unknown
-}
 
 export interface BunHTMLBundlelike {
 	index: string
@@ -1876,27 +1847,7 @@ export type CreateWSEdenResponse<
 	Schema extends RouteSchema,
 	MacroContext extends RouteSchema,
 	Res extends PossibleResponse
-> = RouteSchema extends MacroContext
-	? {
-			body: Schema['body']
-			params: IsNever<keyof Schema['params']> extends true
-				? ResolvePath<Path>
-				: Schema['params']
-			query: Schema['query']
-			headers: Schema['headers']
-			response: Prettify<Res>
-		}
-	: {
-			body: Prettify<Schema['body'] & MacroContext['body']>
-			params: IsNever<
-				keyof (Schema['params'] & MacroContext['params'])
-			> extends true
-				? ResolvePath<Path>
-				: Prettify<Schema['params'] & MacroContext['params']>
-			query: Prettify<Schema['query'] & MacroContext['query']>
-			headers: Prettify<Schema['headers'] & MacroContext['headers']>
-			response: Prettify<Res>
-		}
+> = Omit<CreateEdenResponse<Path, Schema, MacroContext, Res>, 'error'>
 
 type Extract200<T> = T extends AnyElysiaStatus
 	?

@@ -8,6 +8,7 @@ import { ELYSIA_TYPES } from '../constants'
 
 import { nullObject } from '../../utils'
 import { isCloudflareWorker } from '../../universal/constants'
+import { schemaSome } from './clean-safe'
 
 const DEFAULT_CACHE_LIMIT = 1024
 const DEFAULT_GC_TIME = 1 * 60 * 1000
@@ -49,74 +50,11 @@ export class TypeBoxValidatorCache {
 		return v
 	}
 
-	static #walkSchema(
-		schema: any,
-		seen: WeakSet<object>,
-		test: (node: any) => boolean
-	): boolean {
-		if (!schema || typeof schema !== 'object' || seen.has(schema))
-			return false
-
-		seen.add(schema)
-
-		if (test(schema)) return true
-
-		const props = schema.properties
-		if (props)
-			for (const k in props)
-				if (TypeBoxValidatorCache.#walkSchema(props[k], seen, test))
-					return true
-
-		const items = schema.items
-		if (Array.isArray(items)) {
-			for (const it of items)
-				if (TypeBoxValidatorCache.#walkSchema(it, seen, test))
-					return true
-		} else if (
-			items &&
-			TypeBoxValidatorCache.#walkSchema(items, seen, test)
-		)
-			return true
-
-		for (const k of ['anyOf', 'allOf', 'oneOf'] as const) {
-			const arr = schema[k]
-			if (Array.isArray(arr))
-				for (const x of arr)
-					if (TypeBoxValidatorCache.#walkSchema(x, seen, test))
-						return true
-		}
-
-		if (
-			schema.additionalProperties &&
-			typeof schema.additionalProperties === 'object' &&
-			TypeBoxValidatorCache.#walkSchema(
-				schema.additionalProperties,
-				seen,
-				test
-			)
-		)
-			return true
-
-		if (
-			schema.not &&
-			TypeBoxValidatorCache.#walkSchema(schema.not, seen, test)
-		)
-			return true
-
-		const pp = schema.patternProperties
-		if (pp)
-			for (const k in pp)
-				if (TypeBoxValidatorCache.#walkSchema(pp[k], seen, test))
-					return true
-
-		return false
-	}
-
 	static #isOpaqueType(schema: any, seen = new WeakSet()): boolean {
-		return TypeBoxValidatorCache.#walkSchema(
+		return schemaSome(
 			schema,
-			seen,
-			(n) => n['~refine'] || n['~elyTyp'] === ELYSIA_TYPES.NoValidate
+			(n) => n['~refine'] || n['~elyTyp'] === ELYSIA_TYPES.NoValidate,
+			seen
 		)
 	}
 
@@ -157,11 +95,7 @@ export class TypeBoxValidatorCache {
 	}
 
 	static #containsRef(schema: any, seen = new WeakSet()): boolean {
-		return TypeBoxValidatorCache.#walkSchema(
-			schema,
-			seen,
-			(n) => !!n['$ref']
-		)
+		return schemaSome(schema, (n) => !!n['$ref'], seen)
 	}
 
 	#lastSchema: TSchema | undefined
@@ -187,7 +121,7 @@ export class TypeBoxValidatorCache {
 		return meta
 	}
 
-	constructor(gcTime: number) {
+	constructor(gcTime: number = DEFAULT_GC_TIME) {
 		this.#gcTime = gcTime
 	}
 
@@ -196,10 +130,7 @@ export class TypeBoxValidatorCache {
 
 		if (this.#gc) clearTimeout(this.#gc)
 
-		this.#gc = setTimeout(
-			() => this.clear(),
-			this.#gcTime ?? DEFAULT_GC_TIME
-		)
+		this.#gc = setTimeout(() => this.clear(), this.#gcTime)
 		;(this.#gc as any).unref?.()
 	}
 

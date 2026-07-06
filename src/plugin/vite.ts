@@ -1,25 +1,14 @@
-import { realpathSync } from 'node:fs'
-
 import {
 	alignStubExtensions,
 	generateCompiledArtifacts,
+	realPath,
 	resolveEntry,
+	SOURCE_REGEX,
 	STUB_SOURCES,
 	type StubPlan,
 	type ElysiaAotOptions
 } from './core'
 import { rewriteTypeImport } from './treeshake'
-
-// eslint-disable-next-line sonarjs/single-character-alternation
-const SOURCE = /\.(c|m)?(t|j)sx?$/
-
-const realPath = (path: string): string => {
-	try {
-		return realpathSync(path)
-	} catch {
-		return path
-	}
-}
 
 const toPosix = (path: string): string => path.replace(/\\/g, '/')
 
@@ -127,10 +116,10 @@ export const aot = (
 			let out = code
 			if (
 				treeShake &&
-				SOURCE.test(cleanId) &&
+				SOURCE_REGEX.test(cleanId) &&
 				!cleanId.includes('node_modules')
 			)
-				out = await rewriteTypeImport(out)
+				out = rewriteTypeImport(out)
 
 			if (isEntry(cleanId)) {
 				entryMatched = true

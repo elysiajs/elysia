@@ -29,7 +29,7 @@ import { post, req } from '../utils'
  * across builds would cross-contaminate captures.
  */
 
-const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/index.ts')
+const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/aot.ts')
 
 /** Stub error markers the bundler injects per target (see `STUB_SOURCES`). */
 const STUB_MARKERS = [

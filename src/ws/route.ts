@@ -44,9 +44,6 @@ type Server = {
 	upgrade(request: Request, options?: { headers?: any; data?: any }): boolean
 }
 
-const toArray = <T>(v: T | T[] | undefined): T[] =>
-	v == null ? [] : Array.isArray(v) ? v : [v]
-
 const EMPTY_HOOKS: readonly AnyFn[] = Object.freeze([]) as any
 
 function concatHooks(
@@ -243,7 +240,7 @@ export function buildWSRoute(
 			route[7] as AnyElysia | undefined
 		) as Partial<AppHook> | undefined) ?? ({} as Partial<AppHook>)
 
-	const parseHooks = toArray(hook.parse as any)
+	const parseHooks = (hook.parse == null ? [] : Array.isArray(hook.parse) ? hook.parse : [hook.parse]) as any[]
 	const transforms = concatHooks(
 		flatAppHook.transform as any,
 		hook.transform as any

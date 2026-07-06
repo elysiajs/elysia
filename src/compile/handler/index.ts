@@ -31,12 +31,12 @@ import type {
 	AppHook
 } from '../../types'
 
-export interface MountHandlerMeta {
+interface MountHandlerMeta {
 	handle: (request: Request) => unknown
 	suffixLen: number
 }
 
-export function resolveMountHandler(
+function resolveMountHandler(
 	meta: MountHandlerMeta,
 	path: string
 ): (c: Context) => unknown {

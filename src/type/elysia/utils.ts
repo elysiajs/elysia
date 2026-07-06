@@ -44,15 +44,6 @@ export function elyType<T extends TSchema>(
 	return target
 }
 
-export function assignOrNew<
-	T extends Record<keyof any, unknown> | undefined,
-	R extends Record<keyof any, unknown>
->(target: T, source: R): undefined extends T ? R : T & R {
-	if (target) return Object.assign(target, source)
-
-	return source as unknown as T & R
-}
-
 export function createSharedReference<
 	const P extends Record<keyof any, unknown>,
 	const T extends TSchema

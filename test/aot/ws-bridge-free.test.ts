@@ -6,8 +6,7 @@ import {
 	Compiled,
 	beginValidatorCapture,
 	endValidatorCapture,
-	endHandlerCapture,
-	resetCaptureLifecycleForTests
+	endHandlerCapture
 } from '../../src/compile/aot'
 import { RouteValidator } from '../../src/validator/route'
 import { buildFrozenRouteValidator } from '../../src/compile/handler/frozen-validator'
@@ -36,7 +35,6 @@ const WS_HOOK = () => ({
 
 function freezeWS(hook: any) {
 	process.env.ELYSIA_AOT_BUILD = '1'
-	resetCaptureLifecycleForTests()
 	beginValidatorCapture()
 
 	const app = new Elysia().ws(PATH, {

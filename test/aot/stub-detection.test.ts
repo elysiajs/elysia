@@ -14,7 +14,7 @@ import { aot as bunAot } from '../../src/plugin/bun'
 import { materialise, materialiseHandlers } from './_manifest'
 import { post, req } from '../utils'
 
-const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/index.ts')
+const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/aot.ts')
 const STRIP_E2E_APP = resolve(import.meta.dir, 'fixtures/strip-e2e-app.ts')
 
 afterEach(() => {

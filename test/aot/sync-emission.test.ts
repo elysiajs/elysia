@@ -6,7 +6,7 @@ import {
 	endHandlerCapture,
 	endValidatorCapture
 } from '../../src/compile/aot'
-import { compileHandler } from '../../src/compile'
+import { compileHandler } from '../../src/compile/handler'
 import { materialise, materialiseHandlers } from './_manifest'
 import { req, post } from '../utils'
 import { hasSyncHmac } from '../../src/cookie/utils'

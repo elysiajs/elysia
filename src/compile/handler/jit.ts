@@ -51,7 +51,7 @@ import { JITProbe } from '../jit-probe'
 
 import { requestId } from '../../utils'
 
-import type { Link } from '../types'
+import type { Link } from './utils'
 import type { Context } from '../../context'
 import type {
 	BodyHandler,

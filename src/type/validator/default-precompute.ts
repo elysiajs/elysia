@@ -9,7 +9,7 @@ type ObjectDefaultMerger = (
 	value: Record<string, unknown>
 ) => Record<string, unknown>
 
-export function isPrecomputeSafe(schema: any, depth = 0) {
+function isPrecomputeSafe(schema: any, depth = 0) {
 	if (!schema || typeof schema !== 'object') return true
 
 	const kind = schema['~kind']
@@ -620,7 +620,7 @@ function emitMerger(node: any, helpers: string[]) {
 	return name
 }
 
-export function buildMergeSource(schema: any) {
+function buildMergeSource(schema: any) {
 	const category = mergeCategory(schema)
 	if (category !== 'object' && category !== 'array') return
 

@@ -3,7 +3,7 @@ import { Default } from './type/bridge'
 import { StatusMap, StatusMapBack } from './constants'
 import { primitiveElysiaTypes } from './type/constants'
 import { nullObject } from './utils'
-import { skipClone } from './adapter/transferable'
+import { skipClone } from './adapter/skip-clone'
 import { env } from './universal/env'
 
 export const isProduction = () => (env.NODE_ENV ?? env.ENV) === 'production'

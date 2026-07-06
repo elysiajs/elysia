@@ -652,14 +652,7 @@ export function clearSucroseCache(delay?: number | null) {
 	}
 }
 
-function scheduleSucroseCacheClear() {
-	if (pendingGC || isCloudflareWorker) return
-
-	pendingGC = setTimeout(clearCache, 1 * 60 * 1000)
-	pendingGC.unref?.()
-}
-
-export function mergeInference(a: Sucrose.Inference, b: Sucrose.Inference) {
+function mergeInference(a: Sucrose.Inference, b: Sucrose.Inference) {
 	return {
 		body: a.body || b.body,
 		cookie: a.cookie || b.cookie,
@@ -673,7 +666,7 @@ export function mergeInference(a: Sucrose.Inference, b: Sucrose.Inference) {
 	}
 }
 
-export const defaultSucrose = () => ({
+const defaultSucrose = () => ({
 	query: false,
 	headers: false,
 	body: false,
@@ -752,7 +745,10 @@ export function sucrose(
 
 		if (needGc) {
 			needGc = false
-			scheduleSucroseCacheClear()
+			if (!pendingGC && !isCloudflareWorker) {
+				pendingGC = setTimeout(clearCache, 1 * 60 * 1000)
+				pendingGC.unref?.()
+			}
 		}
 
 		const fnInference: Sucrose.Inference = defaultSucrose()

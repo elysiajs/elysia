@@ -14,7 +14,6 @@ import {
 	beginValidatorCapture,
 	endValidatorCapture,
 	endHandlerCapture,
-	resetCaptureLifecycleForTests,
 	type CapturedValidator
 } from '../../src/compile/aot'
 import { materialise } from './_manifest'
@@ -88,7 +87,6 @@ const buildSchema = (spec: Record<string, LeafSpec>) => {
 // live TypeBox; the CHILD runs unwired).
 function capture(slot: Slot, schema: any, method: string, path: string) {
 	process.env.ELYSIA_AOT_BUILD = '1'
-	resetCaptureLifecycleForTests()
 	beginValidatorCapture()
 
 	const app = new Elysia()[method.toLowerCase() as 'get'](

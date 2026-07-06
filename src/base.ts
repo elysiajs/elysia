@@ -6,7 +6,7 @@ import {
 	composeRouteHook,
 	localMacroRoot,
 	resolveLocalHook
-} from './compile'
+} from './compile/handler'
 import { Capture } from './compile/aot'
 import { buildWSRoute } from './ws/route'
 import type {
@@ -504,35 +504,38 @@ export class Elysia<
 		return this
 	}
 
-	#decorate(as: ContextAppendType, name: string, value: unknown): this {
+	#setField(
+		field: 'decorator' | 'store',
+		as: ContextAppendType,
+		name: string,
+		value: unknown
+	): this {
 		const ext = this.#ext
-		const fresh = !ext.decorator
-		const decorator = (ext.decorator ??= nullObject()) as Record<
-			string,
-			unknown
-		>
+		const fresh = !ext[field]
+		const target = (ext[field] ??= nullObject()) as Record<string, unknown>
 
 		switch (typeof value) {
 			case 'object':
-				if (value === null || value === undefined) return this
+				if (!value) return this
+				if (!name && isEmpty(value)) return this
 
 				if (name) {
-					if (!fresh && name in decorator)
-						decorator[name] = mergeDeep(
-							decorator[name] as any,
+					if (!fresh && name in target)
+						target[name] = mergeDeep(
+							target[name] as any,
 							value!,
 							undefined,
 							as === 'override'
 						)
-					else decorator[name] = value
+					else target[name] = value
 
 					return this
 				}
 
-				if (fresh) Object.assign(decorator, value)
+				if (fresh) Object.assign(target, value)
 				else
-					ext.decorator = mergeDeep(
-						decorator,
+					ext[field] = mergeDeep(
+						target,
 						value as any,
 						undefined,
 						as === 'override'
@@ -542,18 +545,22 @@ export class Elysia<
 
 			case 'function':
 				if (name) {
-					if (as === 'override' || !(name in decorator))
-						decorator[name] = value
-				} else ext.decorator = (value as Function)(decorator)
+					if (as === 'override' || !(name in target))
+						target[name] = value
+				} else ext[field] = (value as Function)(target)
 
 				return this
 
 			default:
-				if (as === 'override' || !(name in decorator))
-					decorator[name] = value
+				if (as === 'override' || !(name in target))
+					target[name] = value
 
 				return this
 		}
+	}
+
+	#decorate(as: ContextAppendType, name: string, value: unknown): this {
+		return this.#setField('decorator', as, name, value)
 	}
 
 	/**
@@ -734,52 +741,7 @@ export class Elysia<
 	}
 
 	#state(as: ContextAppendType, name: string, value: unknown): this {
-		const ext = this.#ext
-		const fresh = !ext.store
-		const store = (ext.store ??= nullObject()) as Record<string, unknown>
-
-		switch (typeof value) {
-			case 'object':
-				if (!value) return this
-				if (!name && isEmpty(value)) return this
-
-				if (name) {
-					if (!fresh && name in store)
-						store[name] = mergeDeep(
-							store[name] as any,
-							value!,
-							undefined,
-							as === 'override'
-						)
-					else store[name] = value
-
-					return this
-				}
-
-				if (fresh) Object.assign(store, value)
-				else
-					ext.store = mergeDeep(
-						store,
-						value as any,
-						undefined,
-						as === 'override'
-					)
-
-				return this
-
-			case 'function':
-				if (name) {
-					if (as === 'override' || !(name in store))
-						store[name] = value
-				} else ext.store = (value as Function)(store)
-
-				return this
-
-			default:
-				if (as === 'override' || !(name in store)) store[name] = value
-
-				return this
-		}
+		return this.#setField('store', as, name, value)
 	}
 
 	headers(headers: Record<string, string>) {
@@ -1221,112 +1183,12 @@ export class Elysia<
 		return result
 	}
 
-	mapDerive<
-		const Derivative extends
-			| Record<string, unknown>
-			| ElysiaStatus<any, any, any>
-			| void
-	>(
-		transform: (
-			context: Context<
-				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>
-			>
-		) => MaybePromise<Derivative>
-	): LocalHookReturn<
-		BasePath,
-		Scope,
-		Singleton,
-		Definitions,
-		Metadata,
-		Routes,
-		Ephemeral,
-		Volatile,
-		ExtractErrorFromHandle<Derivative>,
-		ExcludeElysiaResponse<Derivative>
-	>
-	mapDerive<
-		const Derivative extends
-			| Record<string, unknown>
-			| ElysiaStatus<any, any, any>
-			| void
-	>(
-		scope: 'local',
-		transform: (
-			context: Context<
-				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>
-			>
-		) => MaybePromise<Derivative>
-	): LocalHookReturn<
-		BasePath,
-		Scope,
-		Singleton,
-		Definitions,
-		Metadata,
-		Routes,
-		Ephemeral,
-		Volatile,
-		ExtractErrorFromHandle<Derivative>,
-		ExcludeElysiaResponse<Derivative>
-	>
-	mapDerive<
-		const Derivative extends
-			| Record<string, unknown>
-			| ElysiaStatus<any, any, any>
-			| void
-	>(
-		scope: 'plugin',
-		transform: (
-			context: LifecycleContext<
-				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>,
-				undefined,
-				'plugin'
-			>
-		) => MaybePromise<Derivative>
-	): PluginHookReturn<
-		BasePath,
-		Scope,
-		Singleton,
-		Definitions,
-		Metadata,
-		Routes,
-		Ephemeral,
-		Volatile,
-		ExtractErrorFromHandle<Derivative>,
-		ExcludeElysiaResponse<Derivative>
-	>
-	mapDerive<
-		const Derivative extends
-			| Record<string, unknown>
-			| ElysiaStatus<any, any, any>
-			| void
-	>(
-		scope: 'global',
-		transform: (
-			context: LifecycleContext<
-				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>,
-				undefined,
-				'global'
-			>
-		) => MaybePromise<Derivative>
-	): GlobalHookReturn<
-		BasePath,
-		Scope,
-		Singleton,
-		Definitions,
-		Metadata,
-		Routes,
-		Ephemeral,
-		Volatile,
-		ExtractErrorFromHandle<Derivative>,
-		ExcludeElysiaResponse<Derivative>
-	>
-	mapDerive(scopeOrFn: EventScope | Function, fn?: Function): any {
-		return (this.derive as any)(scopeOrFn, fn)
-	}
+	/**
+	 * ### mapDerive
+	 * Alias of {@link derive}. Shares the same implementation at the
+	 * prototype level (see `Elysia.prototype.mapDerive` after the class).
+	 */
+	declare mapDerive: this['derive']
 
 	afterHandle<
 		const Handler extends MaybeArray<
@@ -6689,3 +6551,5 @@ export class Elysia<
 		return r
 	}
 }
+
+Elysia.prototype.mapDerive = Elysia.prototype.derive as any

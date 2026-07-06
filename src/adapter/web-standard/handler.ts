@@ -56,8 +56,6 @@ function handleElysiaFile(
 	return handleFile(file.value as any, set, request)
 }
 
-const isNotBun = !isBun
-
 function responseTag(response: unknown): string | undefined {
 	if (response === null || response === undefined) return undefined
 
@@ -78,7 +76,7 @@ export function mapResponse(
 
 		switch (responseTag(response)) {
 			case 'String':
-				if (isNotBun && !headers['content-type'])
+				if (!isBun && !headers['content-type'])
 					headers['content-type'] = 'text/plain'
 
 				return new Response(response as string, set as ResponseInit)
@@ -180,21 +178,16 @@ export function mapResponse(
 	return mapCompactResponse(response, request)
 }
 
-const stringHeaders = isBun
-	? undefined
-	: {
-			headers: {
-				'content-type': 'text/plain'
-			}
-		}
-
 export function mapCompactResponse(
 	response: unknown,
 	request?: Request
 ): Response {
 	switch (responseTag(response)) {
 		case 'String':
-			return new Response(response as string, stringHeaders)
+			return new Response(
+				response as string,
+				isBun ? undefined : { headers: { 'content-type': 'text/plain' } }
+			)
 
 		case 'Array':
 			return Response.json(response)

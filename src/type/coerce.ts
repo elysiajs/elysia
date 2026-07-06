@@ -1,7 +1,7 @@
 import type { TProperties, TSchema, TSchemaOptions } from 'typebox'
 
 import type { BaseSchema } from '.'
-import { ELYSIA_TYPES, primitiveElysiaTypes } from './constants'
+import { ELYSIA_TYPES, noEnumerable, primitiveElysiaTypes } from './constants'
 
 import { ArrayString } from './elysia/array-string'
 import { ObjectString } from './elysia/object-string'
@@ -612,7 +612,6 @@ export const buildCoercedFromPlan = (
 	seen: Set<string> = new Set()
 ) => buildCoercedFromScalarPlan(original, plan, seen, rebuildObjStr)
 
-const noEnumerable = { enumerable: false }
 function cloneNode(node: BaseSchema, out: any): any {
 	if (out !== node) return out
 

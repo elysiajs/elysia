@@ -6,8 +6,7 @@ import {
 	Compiled,
 	beginValidatorCapture,
 	endValidatorCapture,
-	endHandlerCapture,
-	resetCaptureLifecycleForTests
+	endHandlerCapture
 } from '../../src/compile/aot'
 import { RouteValidator } from '../../src/validator/route'
 import {
@@ -49,7 +48,6 @@ const PATH = '/x'
 // entry so we can build both a wired and a bridge-free validator from it.
 function freeze(schema: any) {
 	process.env.ELYSIA_AOT_BUILD = '1'
-	resetCaptureLifecycleForTests()
 	beginValidatorCapture()
 
 	const app = new Elysia().post(PATH, { body: schema }, ({ body }) => body)
@@ -271,7 +269,6 @@ describe('bridge-free frozen validator — model ref coherence', () => {
 	// frozen entry (with its computed bridgeFree marker) and the resolved schema.
 	function freezeModelRef(models: Record<string, any>, ref: string) {
 		process.env.ELYSIA_AOT_BUILD = '1'
-		resetCaptureLifecycleForTests()
 		beginValidatorCapture()
 
 		const app = new Elysia()

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test'
 import { Elysia } from '../../src'
-import { compileHandler } from '../../src/compile'
+import { compileHandler } from '../../src/compile/handler'
 import { req } from '../utils'
 
 /**

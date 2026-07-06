@@ -1,9 +1,6 @@
 import { isEmpty } from '../../utils'
+import { noEnumerable } from '../constants'
 import type { TIntersect, TSchema, TSchemaOptions } from 'typebox'
-
-const noEnumerable = {
-	enumerable: false
-} as const
 
 export function Intersect<T extends TSchema[]>(
 	schemas: [...T],
