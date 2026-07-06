@@ -43,7 +43,8 @@ import {
 	pushField,
 	schemaProperties,
 	type ChainNode,
-	invalidateMacroEpoch
+	invalidateMacroEpoch,
+	serializeMacroSeed
 } from './utils'
 
 import type { TRef, TSchema } from 'typebox'
@@ -121,7 +122,8 @@ import type {
 	HookContextSingleton,
 	LocalHookReturn,
 	PluginHookReturn,
-	GlobalHookReturn
+	GlobalHookReturn,
+	GuardHookSingleton
 } from './types'
 import type { ElysiaStatus } from './error'
 import { isProduction } from './error'
@@ -129,57 +131,12 @@ import type { Context, LifecycleContext, ErrorContext } from './context'
 
 const useNodesBuffer: ChainNode[] = []
 
-// Stable identity for non-JSON-serialisable macro-seed references (functions,
-// symbols). `JSON.stringify` drops functions, so `{ check: fnA }` and
-// `{ check: fnB }` both serialise to `{}` and would collide in the macro dedup
-// set — silently dropping the second (possibly auth-bearing) hook (base-2-1,
-// object arm). Giving each distinct reference a stable id keeps the key
-// collision-safe while preserving structural dedup of pure-JSON seeds.
-const macroSeedRefIds = new WeakMap<object, number>()
-let macroSeedRefCounter = 0
-function macroSeedRefId(ref: object): number {
-	let id = macroSeedRefIds.get(ref)
-	if (id === undefined) macroSeedRefIds.set(ref, (id = ++macroSeedRefCounter))
-	return id
-}
-
-// JSON.stringify replacer that represents functions/bigint/symbol/undefined by
-// an identity- or type-tagged token instead of losing them.
-function macroSeedReplacer(_key: string, value: unknown): unknown {
-	switch (typeof value) {
-		case 'function':
-			return '\0fn:' + macroSeedRefId(value as unknown as object)
-		case 'bigint':
-			return '\0bigint:' + (value as bigint).toString()
-		case 'symbol':
-			return '\0sym:' + String(value as symbol)
-		case 'undefined':
-			return '\0undefined'
-		default:
-			return value
-	}
-}
-
 export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
 
 interface StaticMapAliases {
 	method: string
 	paths: string[]
 	head: boolean
-}
-
-// typed context must include them (H14), and the macro channel is `resolve`,
-// not `response` (M11)
-type GuardHookSingleton<
-	Singleton extends SingletonBase,
-	Ephemeral extends EphemeralType,
-	Volatile extends EphemeralType,
-	MacroContext
-> = Singleton & {
-	derive: Ephemeral['derive'] &
-		Volatile['derive'] &
-		// @ts-ignore
-		MacroContext['resolve']
 }
 
 export class Elysia<
@@ -216,19 +173,10 @@ export class Elysia<
 	#hash?: number
 	#childrenHash?: Set<number>
 
-	// Group/guard macro-scope internals used ONLY within Elysia (base.ts), so
-	// `#`-private like `#hash`/`#childrenHash`. Their cross-module siblings
-	// (read by compile/handler/index.ts) stay tilde-public: `~scopeChild`,
-	// `~scopeChildren`.
-	//
-	// The instance whose `.group()`/`.guard(cb)` created this scope-child.
+	// Group/guard macro-scope internals used ONLY within Elysia (base.ts)
 	#scopeParent?: AnyElysia
 	// Macro defs a scope-child absorbed via a nested plugin `.use()` (name → def)
-	// — merge-back to the parent copies only these, not the names the group/guard
-	// callback defined itself.
 	#pluginMacros?: Map<string, unknown>
-	// While a FUNCTIONAL plugin `(app) => app.macro(...)` is applying, the macro
-	// names that existed before it ran (the C5 cross-plugin collision window).
 	#macroBaseline?: Set<string>
 
 	'~ext'?: {
@@ -3523,10 +3471,7 @@ export class Elysia<
 				(m as any)[key] !== macro[key]
 			)
 				throw new Error(
-					`Macro "${key}" is defined by more than one plugin. ` +
-						`Rename one of them (macro names must be unique across ` +
-						`composed plugins), or give the plugin a \`name\` so ` +
-						`repeated instances deduplicate.`
+					`[Elysia] Macro "${key}" can be only define once`
 				)
 		}
 
@@ -3565,16 +3510,6 @@ export class Elysia<
 			}
 
 			if (isFunction) {
-				// base-2-1: dedup colliding macro expansions with a
-				// collision-safe key. The old `fnv1a(key + String(value))` both
-				// (a) conflated `1`/`'1'`, `true`/`'true'` etc via `String()` —
-				// silently dropping the second (possibly auth-bearing) hook — and
-				// (b) crashed opaquely on a circular object value. Tag the type so
-				// distinct-type values never collide, use the full string (no
-				// 32-bit hash → no birthday collisions), serialise objects with a
-				// replacer that keeps function/symbol identity (so a value carrying
-				// a distinct auth callback can't collide to `{}`), and fail loud on
-				// circular.
 				const seedSource = hook.seed ?? value
 				const seedType = typeof seedSource
 				let seedKey: string
@@ -3589,7 +3524,7 @@ export class Elysia<
 						seedKey =
 							key +
 							'\0object\0' +
-							JSON.stringify(seedSource, macroSeedReplacer)
+							JSON.stringify(seedSource, serializeMacroSeed)
 					} catch {
 						throw new Error(
 							`[Elysia] macro "${key}" received a circular seed value; pass a primitive \`seed\` to dedup it.`
@@ -4016,7 +3951,7 @@ export class Elysia<
 							for (const [k, def] of Object.entries(after))
 								if (beforeMacro.get(k) !== def)
 									throw new Error(
-										`Macro ${k} was added by an async plugin which Elysia can't ensure the soundness. Please register macro in the plugin synchronously instead of async.`
+										`Macro ${k} can only run in sync plugin`
 									)
 
 						return value
@@ -4098,10 +4033,7 @@ export class Elysia<
 						this.#childrenHash!.delete(h)
 
 				throw new Error(
-					`Macro "${macroName}" is defined by more than one plugin.` +
-						`Rename one of them (macro names must be unique across ` +
-						`composed plugins), or give the plugin a \`name\` so ` +
-						`repeated instances deduplicate.`
+					`[Elysia] Macro "${macroName}" can be only define once`
 				)
 			}
 
@@ -4113,9 +4045,6 @@ export class Elysia<
 
 			const preChain = this['~hookChain']
 
-			// 1-slot memo for the {combine, over} pair: routes registered
-			// under the same chain snapshot share `route[6]` by reference, so
-			// consecutive routes repeat the same (childChain, preChain) pair.
 			let lastChildChain: ChainNode | undefined
 			let lastCombined: ChainNode | undefined
 
@@ -4160,9 +4089,6 @@ export class Elysia<
 								route[3],
 								route[4],
 								route[5],
-								// Preserve the inherited hook chain (index 6).
-								// Dropping it here silently disabled inherited
-								// guards/auth when an app is mounted under a prefix.
 								inheritedChain,
 								macroScope
 							] as unknown as InternalRoute)
@@ -4501,11 +4427,6 @@ export class Elysia<
 		fn: unknown,
 		hook?: Partial<AnyLocalHook>
 	) {
-		if (hook !== undefined && (typeof hook !== 'object' || hook === null))
-			throw new Error(
-				`Elysia 2 route signature is (path, hook, handler) — received ${typeof hook} in the hook position for "${method} ${path}". Did you use the Elysia 1 order (path, handler, hook)?`
-			)
-
 		if (this['~Prefix']) path = joinPath(this['~Prefix'], path)
 		else if (path && path.charCodeAt(0) !== 47) path = '/' + path
 
@@ -6188,13 +6109,6 @@ export class Elysia<
 	/**
 	 * Force all route handlers to compile immediately (sets `precompile: true`
 	 * on the config and triggers a fresh build of the fetch handler).
-	 *
-	 * @remarks
-	 * **Memory trade-off (bench-memory-1):** each compiled route retains ~4.8 KB
-	 * (no schema) to ~6.6 KB (validated body) of memory (JSC compiled-function
-	 * representation + closure scope); 1 000 validated routes ≈ 6.6 MB. Without
-	 * this call, routes compile lazily on first request, spreading that cost over
-	 * time. Use the AOT build plugin for the lowest cold-start footprint.
 	 */
 	compile() {
 		this['~config'] ??= nullObject()
@@ -6337,7 +6251,7 @@ export class Elysia<
 				if (typeof v === 'string') {
 					if (!models || !(v in models))
 						throw new Error(
-							`[Elysia] Unknown model reference "${v}" for ${key} on route ${method} ${path}. Register it with .model('${v}', ...) before listen()/compile().`
+							`[Elysia] Unknown model reference "${v}" for ${key} on route ${method} ${path}.`
 						)
 				} else if (key === 'response' && v && typeof v === 'object') {
 					const record = v as Record<string, unknown>
@@ -6355,7 +6269,7 @@ export class Elysia<
 							(!models || !(r in models))
 						)
 							throw new Error(
-								`[Elysia] Unknown model reference "${r}" for response ${status} on route ${method} ${path}. Register it with .model('${r}', ...) before listen()/compile().`
+								`[Elysia] Unknown model reference "${r}" for response ${status} on route ${method} ${path}.`
 							)
 					}
 				}
@@ -6498,7 +6412,7 @@ export class Elysia<
 								(existing as any)[key] !== (options as any)[key]
 							) {
 								console.warn(
-									`[Elysia] Conflicting per-route WebSocket option '${key}'\nBun uses one global WebSocket config per server, so per-route values are not enforced (the last-registered route wins).`
+									`[Elysia] Conflicting per-route WebSocket option '${key}'\nBun uses one global WebSocket config per server, per-route values are not enforced (the last-registered route wins).`
 								)
 								console.warn(new Error().stack)
 							}
@@ -6725,55 +6639,4 @@ export class Elysia<
 
 		return r
 	}
-
-	// --- Elysia 1 lifecycle API — renamed/removed in 2.0 ---
-	// String-literal types make the rename hint show up inside the TS
-	// "not callable" error; the runtime throwers below cover untyped calls.
-
-	/** @deprecated renamed to `.error()` in Elysia 2 */
-	declare onError: 'onError was renamed to .error() in Elysia 2'
-	/** @deprecated renamed to `.request()` in Elysia 2 */
-	declare onRequest: 'onRequest was renamed to .request() in Elysia 2'
-	/** @deprecated renamed to `.parse()` in Elysia 2 */
-	declare onParse: 'onParse was renamed to .parse() in Elysia 2'
-	/** @deprecated renamed to `.transform()` in Elysia 2 */
-	declare onTransform: 'onTransform was renamed to .transform() in Elysia 2'
-	/** @deprecated renamed to `.beforeHandle()` in Elysia 2 */
-	declare onBeforeHandle: 'onBeforeHandle was renamed to .beforeHandle() in Elysia 2'
-	/** @deprecated renamed to `.afterHandle()` in Elysia 2 */
-	declare onAfterHandle: 'onAfterHandle was renamed to .afterHandle() in Elysia 2'
-	/** @deprecated renamed to `.afterResponse()` in Elysia 2 */
-	declare onAfterResponse: 'onAfterResponse was renamed to .afterResponse() in Elysia 2'
-	/** @deprecated renamed to `.mapResponse()` in Elysia 2 */
-	declare onResponse: 'onResponse was renamed to .mapResponse() in Elysia 2'
-	/** @deprecated removed in Elysia 2 — use the `listen(port, callback)` callback */
-	declare onStart: 'onStart was removed in Elysia 2 — use the listen(port, callback) callback'
-	/** @deprecated removed in Elysia 2 — use `.cleanup()` */
-	declare onStop: 'onStop was removed in Elysia 2 — use .cleanup()'
-	/** @deprecated removed in Elysia 2 — use `.derive()` */
-	declare resolve: 'resolve was removed in Elysia 2 — use .derive() instead'
 }
-
-// runtime throwers for the Elysia 1 members declared above (`declare` emits
-// nothing, so an untyped/JS caller would otherwise get "not a function")
-for (const [old, hint] of [
-	['onError', 'use .error() instead'],
-	['onRequest', 'use .request() instead'],
-	['onParse', 'use .parse() instead'],
-	['onTransform', 'use .transform() instead'],
-	['onBeforeHandle', 'use .beforeHandle() instead'],
-	['onAfterHandle', 'use .afterHandle() instead'],
-	['onAfterResponse', 'use .afterResponse() instead'],
-	['onResponse', 'use .mapResponse() instead'],
-	['onStart', 'use the listen(port, callback) callback instead'],
-	['onStop', 'use .cleanup() instead'],
-	['resolve', 'use .derive() instead']
-] as const)
-	Object.defineProperty(Elysia.prototype, old, {
-		value: function removed() {
-			throw new Error(`.${old}() was removed in Elysia 2 — ${hint}`)
-		},
-		writable: true,
-		enumerable: false,
-		configurable: true
-	})

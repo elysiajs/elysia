@@ -274,7 +274,7 @@ const isAsyncStandardSchema = (schema: StandardSchemaV1Like) =>
 
 const asyncStandardSchemaError = () =>
 	new Error(
-		'[Elysia] An asynchronous Standard Schema was used where only synchronous validation is supported. Declare the schema validate function as async so Elysia can emit an async route.'
+		'[Elysia] An asynchronous Standard Schema was used where only synchronous validation is supported.'
 	)
 
 export class StandardValidator extends Validator {

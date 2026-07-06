@@ -2529,4 +2529,16 @@ export type AddWSRoute<
 	Volatile
 >
 
+export type GuardHookSingleton<
+	Singleton extends SingletonBase,
+	Ephemeral extends EphemeralType,
+	Volatile extends EphemeralType,
+	MacroContext
+> = Singleton & {
+	derive: Ephemeral['derive'] &
+		Volatile['derive'] &
+		// @ts-ignore
+		MacroContext['resolve']
+}
+
 export type { TypeBoxSchema, AnySchema, StandardSchemaV1Like } from './type'

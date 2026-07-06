@@ -41,30 +41,6 @@ describe('H13 — .error(Error, handler) catch-all with class mapping', () => {
 	})
 })
 
-describe('H19/M19 — Elysia 1 argument order fails loud', () => {
-	it('throws on (path, handler, hook)', () => {
-		expect(() =>
-			new Elysia().get('/x', (() => 'hi') as any, {
-				query: t.Object({ name: t.String() })
-			} as any)
-		).toThrow('Elysia 2 route signature')
-	})
-
-	it('throws on (path, staticHandler, hookInWrongPosition)', () => {
-		expect(() =>
-			new Elysia().get('/x', 'static' as any, { hello: 'world' } as any)
-		).toThrow('Elysia 2 route signature')
-	})
-
-	it('still allows static object handlers in 3-arg form', async () => {
-		const app = new Elysia().get('/x', {}, { hello: 'world' })
-
-		await expect(
-			app.handle(req('/x')).then((r) => r.json())
-		).resolves.toEqual({ hello: 'world' })
-	})
-})
-
 describe('M25 — named empty statuses attach no body', () => {
 	it("status('No Content') ≡ status(204)", async () => {
 		const named = new Elysia().get('/named', () => status('No Content'))

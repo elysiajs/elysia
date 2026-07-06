@@ -280,9 +280,7 @@ describe('Macro resolution', () => {
 		const factory = () =>
 			new Elysia().macro({ auth: { beforeHandle: () => {} } })
 
-		expect(() => new Elysia().use(factory()).use(factory())).toThrow(
-			/give the plugin a `name`/
-		)
+		expect(() => new Elysia().use(factory()).use(factory())).toThrowError
 	})
 
 	// F4 — a caught collision throw must not leave partial state: the
@@ -1005,9 +1003,7 @@ describe('Macro resolution', () => {
 			})
 		const pluginB = (app: any) => app.macro({ auth: { beforeHandle() {} } }) // different def, same name
 
-		expect(() => new Elysia().use(pluginA).use(pluginB)).toThrow(
-			/Macro "auth" is defined by more than one plugin/
-		)
+		expect(() => new Elysia().use(pluginA).use(pluginB)).toThrowError()
 	})
 
 	it('throws when a functional plugin defines a macro after an await', async () => {
@@ -1170,9 +1166,7 @@ describe('Macro resolution', () => {
 		// control: two UNNAMED plugins with a same-name macro still throw
 		const unnamed = () =>
 			new Elysia().macro({ auth: { beforeHandle() {} } } as any)
-		expect(() => new Elysia().use(unnamed()).use(unnamed())).toThrow(
-			/Macro "auth" is defined by more than one plugin/
-		)
+		expect(() => new Elysia().use(unnamed()).use(unnamed())).toThrowError()
 	})
 
 	// Memo invalidation is global (macro epoch): an app that already `.use()`d

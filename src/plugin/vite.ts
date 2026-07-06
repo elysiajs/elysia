@@ -98,7 +98,7 @@ export const aot = (
 			if (!entryMatched)
 				throw new Error(
 					`[elysia-aot] entry "${entry}" never appeared in the Vite ` +
-						`module graph — the compiled manifest was not injected. ` +
+						`module graph. Compiled manifest was not injected. ` +
 						`Check that the plugin entry matches a build input.`
 				)
 		},

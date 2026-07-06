@@ -258,11 +258,6 @@ export class ValidationError extends ElysiaError {
 			value: unknown
 		) => { instancePath: string; error: unknown } | undefined
 	) {
-		// Error(undefined) defines no own `message`
-		// keeping the lazy prototype accessor below reachable
-		// Resolution is deferred so the production gate
-		// (`allowUnsafeValidationDetails`, set on the instance by the error pipeline AFTER construction)
-		// is in effect by the time `errors`/`customError`/`message` are first read.
 		super(undefined as any)
 
 		this.schema = schema

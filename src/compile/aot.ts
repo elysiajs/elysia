@@ -684,18 +684,9 @@ function captureGet(loc: {
 
 const isAotBuildEnv = () => !!env.ELYSIA_AOT_BUILD
 
-let captureLogEmitted = false
-
 const isValidatorCapturing = (): boolean => {
 	if (capture !== undefined) return true
-	if (!isAotBuildEnv()) return false
-
-	if (!captureLogEmitted) {
-		captureLogEmitted = true
-		console.log('[elysia-aot] build capture mode enabled')
-	}
-
-	return true
+	return isAotBuildEnv()
 }
 
 export const Capture = {
@@ -712,6 +703,4 @@ export const Capture = {
  * Reset module-level capture lifecycle state.
  * FOR TESTS ONLY — not exported from the package index.
  */
-export const resetCaptureLifecycleForTests = (): void => {
-	captureLogEmitted = false
-}
+export const resetCaptureLifecycleForTests = (): void => undefined

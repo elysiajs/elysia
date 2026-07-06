@@ -958,4 +958,32 @@ prefix.capitalize = function prefixModelsCapitalize<
 	return prefixed as any
 }
 
+const macroSeedRefIds = new WeakMap<object, number>()
+let macroSeedRefCounter = 0
+function macroSeedRefId(ref: object): number {
+	let id = macroSeedRefIds.get(ref)
+	if (id === undefined) macroSeedRefIds.set(ref, (id = ++macroSeedRefCounter))
+
+	return id
+}
+
+export function serializeMacroSeed(_key: string, value: unknown): unknown {
+	switch (typeof value) {
+		case 'function':
+			return '\0fn:' + macroSeedRefId(value as unknown as object)
+
+		case 'bigint':
+			return '\0bigint:' + (value as bigint).toString()
+
+		case 'symbol':
+			return '\0sym:' + String(value as symbol)
+
+		case 'undefined':
+			return '\0undefined'
+
+		default:
+			return value
+	}
+}
+
 export { prefix }

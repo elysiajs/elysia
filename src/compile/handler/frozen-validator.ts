@@ -1,39 +1,4 @@
 // This module must stay TypeBox-free
-//
-// COVERAGE — what actually reconstructs bridge-free (precise, because it decides
-// where a future `setupTypebox`-stub can safely apply):
-//   COVERED (non-codec): a slot whose compiled `cm` check needs NO codec — a
-//     plain `t.Object`/`t.Array` with non-codec leaves (`t.String`, `t.Number`,
-//     `t.Boolean`, nested plain objects/arrays), plus preallocated defaults
-//     (`ps`), root `~optional` bypass, and `t.NoValidate`. In a BODY slot a
-//     `t.Number()` leaf arrives as a real number (JSON), so no coercion codec is
-//     attached and the object rides the covered `cm` path.
-//   COVERED (slot coercion): a query/headers/params/cookie object whose leaves
-//     are the standard SCALAR coercion codecs the user wrote EXPLICITLY —
-//     `t.Numeric()`, `t.IntegerString()`, `t.BooleanString()`, `t.Date()`, and
-//     `t.Optional(...)` of those, plus plain scalars alongside them. These carry
-//     `k` (hasCodec) + `dm` (baked decode mirror) + `u` (the Number|Codec-String
-//     union each coercion leaf expands to) + `e` (the Refine predicate closures),
-//     ALL reconstructable from the raw schema by the TypeBox-free `aot.ts`
-//     helpers (`instantiateFrozenBoth` for check+clean unions, `collectExternals`
-//     for the Refine closures, `instantiateFrozenDecodeMirror` for the string→
-//     typed decode + Clean). The decode leaves (`+value`, `new Date(value)`, …)
-//     and Refine predicates are pure closures already frozen into the schema, so
-//     nothing here touches TypeBox. This is gated on the raw schema BEING the
-//     coerced schema (no `cp`); see `codecCoercionBridgeFree`.
-//   REFUSED (bail to the wired path):
-//       (1) any codec slot carrying a coerce PLAN (`cp`): the user wrote a plain
-//           `t.Number()`/`t.Boolean()` in a query and `coerceQuery` rewrote it to
-//           `Numeric`/`BooleanString`. Reconstructing the coerced schema needs
-//           `buildCoercedFromPlan` from `type/coerce.ts`, which statically pulls
-//           `typebox/type` + `typebox/value` (measured: 654 typebox inputs) —
-//           importing it would defeat the sealed bundle. So a codec slot is only
-//           bridge-free when the raw schema already IS the coerced schema.
-//       (2) inner string codecs (`ic`): `t.ObjectString`/`t.ArrayString` (incl.
-//           `t.Array(t.Numeric())` at a query slot, which becomes `ArrayString`).
-//     Also refused: encode mirrors (`em`, response codec), custom errors (`ce`),
-//     async refinement (`a`), non-preallocated defaults, and fully-closed objects
-//     (Clean-skip parity).
 import { ValidationError } from '../../error'
 import { nullObject } from '../../utils'
 import { ELYSIA_TYPES } from '../../type/constants'
@@ -55,28 +20,7 @@ export const isBridgeNotInitialized = (error: unknown): boolean =>
 	error instanceof Error &&
 	error.message.startsWith("Typebox module isn't initialized")
 
-/**
- * A codec (`k`) slot is bridge-free ONLY when it is a slot-level SCALAR coercion
- * schema whose coerced form equals the raw hook schema — i.e. the user wrote the
- * coercion type explicitly (`t.Numeric()`/`t.IntegerString()`/`t.BooleanString()`
- * /`t.Date()`, optionally `t.Optional(...)`), so no coerce PLAN (`cp`) was baked.
- *
- * The reconstruction consumes only TypeBox-free `aot.ts` helpers off the raw
- * schema: `instantiateFrozenBoth` (check + Clean, wiring `e`/`u` from the schema),
- * `instantiateFrozenDecodeMirror` (the string→typed decode + Clean, `dm`). The
- * decode leaves and Refine predicates are pure closures already frozen into the
- * schema, so nothing here touches TypeBox.
- *
- * Refuses the cases the frozen `From` cannot serve bridge-free:
- *  - `cp`: needs `buildCoercedFromPlan` (drags TypeBox) to rebuild the schema.
- *  - `ic`: `t.ObjectString`/`t.ArrayString` inner codecs (JSON-in-string).
- *  - `em`: response-side encode mirror (request codec slots don't set it, but
- *    refuse defensively — the frozen `From` only wires the decode direction).
- *  - `ce`/`a`: custom errors / async refinement — the non-codec path refuses
- *    these too.
- *  - defaults not preallocated (`d` && !`ps`): would call the severed `Default`.
- */
-function codecCoercionBridgeFree(f: FrozenValidator): boolean {
+function codecCoercionBridgeFree(f: FrozenValidator) {
 	return (
 		f.k === 1 &&
 		!!f.dm && // the baked decode transformation

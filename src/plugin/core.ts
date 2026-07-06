@@ -705,21 +705,6 @@ export async function generateCompiledArtifacts(
 			allBridgeFree
 		)
 
-		const stubbed = (Object.keys(stub) as (keyof StubPlan)[]).filter(
-			(key) => stub[key]
-		)
-
-		console.log(
-			`[elysia-aot] routes=${routes.length}` +
-				` handlers=${artifacts.handlers.length}` +
-				` validators=${frozenSlots}/${expectedSlots}` +
-				` mode=${mode}` +
-				` stub=${stubbed.join(',') || 'none'}` +
-				(report.jit
-					? ''
-					: ` jit-reachable (${report.reasons.join(', ') || 'unknown'})`)
-		)
-
 		if (options?.target === 'workerd') {
 			if (!report.jit)
 				throw new Error(

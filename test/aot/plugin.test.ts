@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test'
+import { describe, it, expect, spyOn } from 'bun:test'
 import { resolve } from 'node:path'
 import { rm } from 'node:fs/promises'
 import { post } from '../utils'
@@ -14,6 +14,7 @@ describe('AOT plugin', () => {
 		const { generateCompiledModule } = await import('../../src/plugin/core')
 		const previous = process.env.ELYSIA_AOT_BUILD
 		process.env.ELYSIA_AOT_BUILD = 'keep'
+		const log = spyOn(console, 'log').mockImplementation(() => {})
 
 		let src: string
 		try {
@@ -21,7 +22,9 @@ describe('AOT plugin', () => {
 				registerFrom: REGISTER_FROM
 			})
 			expect(process.env.ELYSIA_AOT_BUILD).toBe('keep')
+			expect(log).not.toHaveBeenCalled()
 		} finally {
+			log.mockRestore()
 			if (previous === undefined) delete process.env.ELYSIA_AOT_BUILD
 			else process.env.ELYSIA_AOT_BUILD = previous
 		}

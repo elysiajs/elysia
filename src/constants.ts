@@ -1,4 +1,4 @@
-const mapBack = <const T extends Record<string, number>>(
+const mapBack = /*#__PURE__*/ <const T extends Record<string, number>>(
 	map: T
 ): {
 	[K in keyof T as T[K]]: K
@@ -7,7 +7,7 @@ const mapBack = <const T extends Record<string, number>>(
 		Object.entries(map).map(([key, value]) => [value, key])
 	) as any
 
-export const MethodMap = {
+export const MethodMap = /*#__PURE__*/ {
 	GET: 0,
 	HEAD: 1,
 	POST: 2,
@@ -23,7 +23,7 @@ export type MethodMap = typeof MethodMap
 export const MethodMapBack = mapBack(MethodMap)
 export type MethodMapBack = typeof MethodMapBack
 
-export const StatusMap = {
+export const StatusMap = /*#__PURE__*/ {
 	Continue: 100,
 	'Switching Protocols': 101,
 	Processing: 102,
@@ -88,7 +88,7 @@ export const StatusMap = {
 } as const
 export type StatusMap = typeof StatusMap
 
-export const traceEvents = [
+export const traceEvents = /*#__PURE__*/ [
 	'request',
 	'parse',
 	'transform',

@@ -58,8 +58,6 @@ function decodeParams(params: Record<string, string>) {
 	return params
 }
 
-// A poisoned `context.set` (e.g. a CRLF value reflected into a header) makes
-// the error handler's own `mapResponse` re-throw against the same set
 function finalizeError(
 	context: Context,
 	handleError: (context: Context, error: Error) => unknown,

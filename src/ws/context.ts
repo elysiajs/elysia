@@ -236,7 +236,7 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		if (data instanceof ArrayBuffer || ArrayBuffer.isView(data))
 			return this.raw.send(data as unknown as BufferSource, compress)
 
-		// validate before stringifying (matches #ping/#pong) — an invalid
+		// validate before stringifying (matches #ping/#pong), an invalid
 		// payload must not pay the JSON.stringify
 		const err = this.#validatedOrError(data)
 		if (err !== undefined) return this.raw.send(err)

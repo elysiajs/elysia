@@ -288,6 +288,7 @@ function collectSignPending(
 			throw new TypeError(
 				`Cookie field "${key}" is signed but no \`secrets\` is provided.`
 			)
+
 		;(pending ??= []).push([property, value as string, secret])
 	}
 
