@@ -13,3 +13,6 @@ app.listen(3000)
 
 // app.fetch
 stop()
+
+await app.stop?.(true)
+process.exit(0)

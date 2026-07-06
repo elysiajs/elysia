@@ -54,3 +54,4 @@ console.log(
 
 for (const ws of sockets) ws.close()
 app.server!.stop?.()
+process.exit(0)

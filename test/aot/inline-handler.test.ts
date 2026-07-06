@@ -62,7 +62,7 @@ describe('inline handler fast path (no new Function eval)', () => {
 		// generic 500 → problem+json; inline path must match codegen byte-for-byte
 		const bi = await ri.json()
 		expect(bi).toMatchObject({
-			type: 'unknown',
+			type: 'internal-server-error',
 			title: 'Internal Server Error',
 			status: 500,
 			detail: 'boom'
@@ -78,7 +78,7 @@ describe('inline handler fast path (no new Function eval)', () => {
 		const res = await app.handle(req('/'))
 		expect(res.status).toBe(500)
 		await expect(res.json()).resolves.toMatchObject({
-			type: 'unknown',
+			type: 'internal-server-error',
 			title: 'Internal Server Error',
 			status: 500,
 			detail: 'rejected'

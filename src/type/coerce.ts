@@ -10,6 +10,26 @@ import { BooleanString } from './elysia/boolean-string'
 import { IntegerString } from './elysia/integer-string'
 import { nullObject } from '../utils'
 
+import {
+	COERCE_LEAF_CTOR,
+	isCoerceLeaf,
+	isCoerceObjStr,
+	buildCoercedFromPlan as buildCoercedFromScalarPlan,
+	type CoerceLeaf,
+	type CoerceNode,
+	type CoerceObjStr,
+	type CoercePlan
+} from './coerce-plan'
+
+export {
+	planIsScalarOnly,
+	clearCoerceLeafCache,
+	type CoerceLeaf,
+	type CoerceNode,
+	type CoerceObjStr,
+	type CoercePlan
+} from './coerce-plan'
+
 interface CoerceOptions {
 	/**
 	 * Replace root
@@ -411,43 +431,6 @@ export function applyCoercions(
 	return schema
 }
 
-const COERCE_LEAF_CTOR = {
-	[ELYSIA_TYPES.Numeric]: Numeric,
-	[ELYSIA_TYPES.Integer]: IntegerString,
-	[ELYSIA_TYPES.BooleanString]: BooleanString
-} as const
-
-export interface CoerceLeaf {
-	// `~elyTyp` of the primitive coercion
-	e: number
-	// constraints bag passed to the leaf constructor (own-enumerable, minus `type`)
-	c?: Record<string, unknown>
-	// `~optional` marker to re-attach (coercion preserves it; the shared leaf can't)
-	o?: unknown
-}
-
-export interface CoerceObjStr {
-	// `~elyTyp`: ObjectString or ArrayString
-	os: number
-	// `~optional` marker to re-attach (symmetric with CoerceLeaf.o)
-	o?: unknown
-}
-
-type CoerceNode = CoerceLeaf | CoerceObjStr | CoercePlan
-
-export interface CoercePlan {
-	// per-property coercion (key → leaf / objstr / nested plan)
-	p?: Record<string, CoerceNode>
-	// single-schema array items coercion
-	i?: CoerceNode
-}
-
-const isCoerceLeaf = (x: CoerceNode): x is CoerceLeaf =>
-	typeof (x as CoerceLeaf).e === 'number'
-
-const isCoerceObjStr = (x: CoerceNode): x is CoerceObjStr =>
-	typeof (x as CoerceObjStr).os === 'number'
-
 export function captureCoercePlan(
 	original: any,
 	coerced: any
@@ -575,72 +558,12 @@ function rebuildObjStr(original: any, site: CoerceObjStr) {
 	return node
 }
 
-const buildCoerceNode = (original: any, node: CoerceNode, seen: Set<string>) =>
-	isCoerceLeaf(node)
-		? coerceLeaf(node, seen)
-		: isCoerceObjStr(node)
-			? rebuildObjStr(original, node)
-			: buildCoercedFromPlan(original, node, seen)
-
-const coerceLeafCache = new Map<string, any>()
-
-function coerceLeaf(leaf: CoerceLeaf, seen: Set<string>): any {
-	const key = leaf.e + (leaf.c ? JSON.stringify(leaf.c) : '')
-
-	let node: any
-	if (seen.has(key)) {
-		// @ts-expect-error
-		node = COERCE_LEAF_CTOR[leaf.e]!(leaf.c)
-	} else {
-		seen.add(key)
-		node = coerceLeafCache.get(key)
-		if (node === undefined) {
-			// @ts-expect-error
-			node = COERCE_LEAF_CTOR[leaf.e]!(leaf.c)
-			coerceLeafCache.set(key, node)
-		}
-	}
-
-	// per-use `~optional` wrapper (don't mutate the shared frozen leaf)
-	if ('o' in leaf)
-		return Object.defineProperty(Object.create(node), '~optional', {
-			value: leaf.o,
-			enumerable: false
-		})
-
-	return node
-}
-
-export function buildCoercedFromPlan(
+/** Full rebuild: scalar leaves + ObjectString/ArrayString sites (wired path). */
+export const buildCoercedFromPlan = (
 	original: any,
 	plan: CoercePlan,
 	seen: Set<string> = new Set()
-) {
-	const out = Object.create(Object.getPrototypeOf(original))
-
-	for (const k in original) out[k] = original[k]
-	// copy non-enumerable property
-	for (const s of Object.getOwnPropertyNames(original)) {
-		const d = Object.getOwnPropertyDescriptor(original, s)!
-		if (!d.enumerable) Object.defineProperty(out, s, d)
-	}
-
-	if (plan.p) {
-		const props: Record<string, unknown> = { ...original.properties }
-		for (const k in plan.p)
-			props[k] = buildCoerceNode(original.properties[k], plan.p[k]!, seen)
-		out.properties = props
-	}
-
-	if (plan.i) out.items = buildCoerceNode(original.items, plan.i, seen)
-
-	return out
-}
-
-/** @internal test isolation */
-export function clearCoerceLeafCache() {
-	coerceLeafCache.clear()
-}
+) => buildCoercedFromScalarPlan(original, plan, seen, rebuildObjStr)
 
 const noEnumerable = { enumerable: false }
 function cloneNode(node: BaseSchema, out: any): any {

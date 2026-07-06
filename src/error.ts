@@ -707,7 +707,7 @@ export function problemResponse(p: Problem, headers?: Record<string, any>) {
 
 export function internalServerErrorBody(error: any) {
 	const body: Record<string, unknown> = {
-		type: 'unknown',
+		type: 'internal-server-error',
 		title: 'Internal Server Error',
 		status: 500
 	}
@@ -732,7 +732,7 @@ export function internalServerErrorBodyString(error: any): string {
 			return JSON.stringify(safe)
 		} catch {
 			return JSON.stringify({
-				type: 'unknown',
+				type: 'internal-server-error',
 				title: 'Internal Server Error',
 				status: 500
 			})

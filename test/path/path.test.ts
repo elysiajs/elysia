@@ -259,7 +259,7 @@ describe('Path', () => {
 		expect(res.status).toBe(500)
 		// returned Error → RFC 9457 problem+json 500 (message surfaced as detail)
 		await expect(res.json()).resolves.toMatchObject({
-			type: 'unknown',
+			type: 'internal-server-error',
 			title: 'Internal Server Error',
 			status: 500,
 			detail: error

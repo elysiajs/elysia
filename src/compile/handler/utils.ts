@@ -2,6 +2,7 @@ import { isAsyncFunction } from '../utils'
 import { skipClone } from '../../adapter/transferable'
 import { ElysiaStatus } from '../../error'
 import { ELYSIA_TYPES } from '../../type/constants'
+import { isSpace, isIdentChar, skipString } from '../lexer'
 
 import type { Link } from '../types'
 import type { ElysiaAdapter } from '../../adapter'
@@ -170,15 +171,6 @@ function topLevelArrowIndex(src: string): number {
 	return -1
 }
 
-const isSpace = (ch: string) =>
-	ch === ' ' || ch === '\n' || ch === '\t' || ch === '\r'
-
-const isIdentChar = (ch: string) =>
-	(ch >= 'a' && ch <= 'z') ||
-	(ch >= 'A' && ch <= 'Z') ||
-	(ch >= '0' && ch <= '9') ||
-	ch === '_' ||
-	ch === '$'
 
 function countReturns(src: string): number {
 	let count = 0
@@ -253,60 +245,6 @@ function returnKeywordIndex(src: string): number {
 	return -1
 }
 
-// Returns the index just past the closing quote
-function skipString(src: string, start: number): number {
-	const quote = src[start]
-	let i = start + 1
-
-	if (quote === '`') {
-		while (i < src.length) {
-			const ch = src[i]
-			if (ch === '\\') {
-				i += 2
-				continue
-			}
-
-			if (ch === '`') return i + 1
-			if (ch === '$' && src[i + 1] === '{') {
-				// skip balanced `${ ... }`
-				let depth = 1
-				i += 2
-
-				while (i < src.length && depth > 0) {
-					const c = src[i]
-					if (c === '"' || c === "'" || c === '`') {
-						i = skipString(src, i)
-						continue
-					}
-
-					if (c === '{') depth++
-					else if (c === '}') depth--
-
-					i++
-				}
-
-				continue
-			}
-
-			i++
-		}
-
-		return i
-	}
-
-	while (i < src.length) {
-		const ch = src[i]
-		if (ch === '\\') {
-			i += 2
-			continue
-		}
-
-		if (ch === quote) return i + 1
-		i++
-	}
-
-	return i
-}
 
 function scanObjectLiteralKeys(src: string, open: number): string[] | null {
 	const keys: string[] = []

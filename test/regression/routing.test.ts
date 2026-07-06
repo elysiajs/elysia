@@ -306,3 +306,68 @@ describe('M34 — unknown model-name schema refs fail loud at build time, not pe
 		expect(() => app.compile()).not.toThrow()
 	})
 })
+
+// PERF-1: `#buildRouter` no longer runs the full `composeRouteHook` assert for
+// every route — a cheap `#routeMayHaveModelRef` pre-scan gates it. The gate must
+// be conservative: any string model ref that could reach the composed hook
+// (route-local, chain-level guard, standalone bag, or a macro that might inject
+// one) still forces the loud build-time error. A false-negative would silently
+// downgrade the loud compile error to an opaque per-request 500 — these pin that
+// the fast path never swallows a real ref. (Shapes 1–4 above cover the rest.)
+describe('PERF-1 — model-ref pre-scan gate stays conservative', () => {
+	it('chain-level (guard-before-routes) string ref STILL throws at compile()', () => {
+		const app = new Elysia()
+			.guard({ query: 'ChainGhost' as any })
+			.get('/a', () => 'x')
+			.get('/b', () => 'y')
+
+		expect(() => app.compile()).toThrow(
+			/Unknown model reference "ChainGhost"/
+		)
+	})
+
+	it('a plain app with NO refs and NO models compiles fine (fast path)', () => {
+		const app = new Elysia()
+			.get('/a', () => 'x')
+			.post(
+				'/b',
+				{
+					body: t.Object({ a: t.String() }),
+					response: { 200: t.String() }
+				},
+				({ body }) => body.a
+			)
+
+		expect(() => app.compile()).not.toThrow()
+	})
+})
+
+// DX-2: a route that fails to COMPILE (e.g. an invalid schema slot) must surface
+// its method + path, not an opaque context-free 500. Both the eager (`compile()`)
+// and lazy (first request → `#jitHandler`) compile paths wrap the throw. Run with
+// `env -u NODE_ENV` — production redaction strips the detail body.
+describe('DX-2 — compile failures carry route context', () => {
+	it('eager compile() throws with the route method + path', () => {
+		const app = new Elysia().get(
+			'/bad',
+			{ headers: { 'x-a': '1' } } as any,
+			'hello' as any
+		)
+
+		expect(() => app.compile()).toThrow(/Failed to compile route GET \/bad/)
+	})
+
+	it('lazy first-request path surfaces the route in the 500 detail', async () => {
+		const app = new Elysia().get(
+			'/bad',
+			{ headers: { 'x-a': '1' } } as any,
+			'hello' as any
+		)
+
+		const res = await app.handle(new Request('http://localhost/bad'))
+		expect(res.status).toBe(500)
+
+		const body = (await res.json()) as { detail?: string }
+		expect(body.detail).toContain('Failed to compile route GET /bad')
+	})
+})

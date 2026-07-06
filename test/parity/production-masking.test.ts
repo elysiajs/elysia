@@ -90,7 +90,7 @@ describe('production masking parity (subprocess NODE_ENV=production)', () => {
 		expect(httpError).not.toContain('secret-detail')
 		const http = JSON.parse(httpError)
 		expect(http).toMatchObject({
-			type: 'unknown',
+			type: 'internal-server-error',
 			title: 'Internal Server Error',
 			status: 500
 		})
@@ -122,7 +122,7 @@ describe('production masking parity (subprocess NODE_ENV=production)', () => {
 		// HTTP: the thrown string never appears; generic 500 body.
 		expect(httpThrowString).not.toContain('secret-string')
 		expect(JSON.parse(httpThrowString)).toMatchObject({
-			type: 'unknown',
+			type: 'internal-server-error',
 			status: 500,
 			title: 'Internal Server Error'
 		})
@@ -140,7 +140,7 @@ describe('production masking parity (subprocess NODE_ENV=production)', () => {
 		// HTTP: the thrown object's contents never appear; generic 500 body.
 		expect(httpThrowObject).not.toContain('secret-object')
 		expect(JSON.parse(httpThrowObject)).toMatchObject({
-			type: 'unknown',
+			type: 'internal-server-error',
 			status: 500,
 			title: 'Internal Server Error'
 		})

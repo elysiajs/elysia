@@ -119,7 +119,7 @@ describe('Error handler', () => {
 		expect(response.status).toBe(500)
 		// unregistered error → RFC 9457 problem+json 500 (message as `detail`)
 		await expect(response.json()).resolves.toMatchObject({
-			type: 'unknown',
+			type: 'internal-server-error',
 			title: 'Internal Server Error',
 			status: 500,
 			detail: 'oops'
@@ -135,7 +135,7 @@ describe('Error handler', () => {
 
 		expect(response.status).toBe(500)
 		await expect(response.json()).resolves.toMatchObject({
-			type: 'unknown',
+			type: 'internal-server-error',
 			title: 'Internal Server Error',
 			status: 500,
 			detail: 'oops'
@@ -247,7 +247,7 @@ describe('Error handler', () => {
 		expect(plain.status).toBe(500)
 		// non-CustomError falls through the catch-all → problem+json 500
 		await expect(plain.json()).resolves.toMatchObject({
-			type: 'unknown',
+			type: 'internal-server-error',
 			status: 500,
 			detail: 'plain'
 		})

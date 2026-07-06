@@ -4432,10 +4432,7 @@ export class Elysia<
 		else if (path && path.charCodeAt(0) !== 47) path = '/' + path
 
 		const handler = hasHook ? fn : hookOrFn
-		const hook =
-			hasHook
-				? (hookOrFn as Partial<AnyLocalHook>)
-				: undefined
+		const hook = hasHook ? (hookOrFn as Partial<AnyLocalHook>) : undefined
 
 		const appHook = this['~hookChain']
 
@@ -6090,11 +6087,20 @@ export class Elysia<
 		const compiled = (this.#compiled ??= new Array(this.#history!.length))
 
 		if (immediate) {
-			const handler = compileHandler(
-				this.#history![index],
-				this,
-				precomputedStatic
-			)
+			let handler: CompiledHandler
+
+			try {
+				handler = compileHandler(
+					this.#history![index],
+					this,
+					precomputedStatic
+				)
+			} catch (error) {
+				throw new Error(
+					`[Elysia] Failed to compile route ${mapMethodBack(route[0])} ${route[1]}: ${(error as Error)?.message ?? error}`,
+					{ cause: error }
+				)
+			}
 
 			compiled![index] = handler
 			this.#saveHandler(route[0], route[1], handler)
@@ -6114,11 +6120,19 @@ export class Elysia<
 		return (context) => {
 			if (this.#compiled![index]) return this.#compiled![index](context)
 
-			const handler = compileHandler(
-				this.#history![index],
-				this,
-				precomputedStatic
-			)
+			let handler: CompiledHandler
+			try {
+				handler = compileHandler(
+					this.#history![index],
+					this,
+					precomputedStatic
+				)
+			} catch (error) {
+				throw new Error(
+					`[Elysia] Failed to compile route ${mapMethodBack(route[0])} ${route[1]}: ${(error as Error)?.message ?? error}`,
+					{ cause: error }
+				)
+			}
 
 			this.#compiled![index] = handler
 
@@ -6127,6 +6141,7 @@ export class Elysia<
 
 				const map = (this['~map']![aliases.method] ??=
 					nullObject() as any)
+
 				for (let p = 0; p < aliases.paths.length; p++)
 					map[aliases.paths[p]] = handler
 
@@ -6190,6 +6205,109 @@ export class Elysia<
 				? r.then(Elysia.#toHeadResponse)
 				: Elysia.#toHeadResponse(r as Response)
 		}) as CompiledHandler
+	}
+
+	#chainRefMemo?: WeakMap<ChainNode, boolean>
+
+	static #slotHasString(h: Record<string, unknown> | undefined) {
+		if (!h || typeof h !== 'object') return false
+
+		for (const key of schemaProperties) {
+			const v = h[key]
+			if (typeof v === 'string') return true
+
+			if (key === 'response' && v && typeof v === 'object') {
+				const record = v as Record<string, unknown>
+				if (
+					'~kind' in record ||
+					'~elyAcl' in record ||
+					'~standard' in record
+				)
+					continue
+
+				for (const status in record)
+					if (typeof record[status] === 'string') return true
+			}
+		}
+
+		return false
+	}
+
+	static #hookHasString(h: Record<string, unknown> | undefined) {
+		if (Elysia.#slotHasString(h)) return true
+
+		const schemas = (h as { schemas?: unknown } | undefined)?.schemas
+		if (Array.isArray(schemas))
+			for (let s = 0; s < schemas.length; s++)
+				if (
+					Elysia.#slotHasString(
+						schemas[s] as Record<string, unknown> | undefined
+					)
+				)
+					return true
+
+		return false
+	}
+
+	#chainHasModelRef(start: ChainNode | undefined): boolean {
+		if (!start) return false
+
+		const memo = (this.#chainRefMemo ??= new WeakMap())
+		const cached = memo.get(start)
+		if (cached !== undefined) return cached
+
+		let found = false
+		const stack: (ChainNode | undefined)[] = [start]
+		while (stack.length) {
+			const node = stack.pop()
+			if (!node) continue
+
+			if ('combine' in node) {
+				stack.push(node.combine)
+				stack.push(node.over)
+			} else {
+				if (
+					Elysia.#hookHasString(
+						node.added as Record<string, unknown> | undefined
+					)
+				) {
+					found = true
+					break
+				}
+				stack.push(node.parent)
+			}
+		}
+
+		memo.set(start, found)
+		return found
+	}
+
+	#routeMayHaveModelRef(route: InternalRoute): boolean {
+		if (this['~ext']?.macro || this['~scopeChildren']) return true
+
+		const localRoot = localMacroRoot(
+			((route[7] as AnyElysia) ??
+				(route[3] as AnyElysia) ??
+				this) as AnyElysia,
+			this as unknown as AnyElysia
+		) as unknown as { '~ext'?: { macro?: unknown } }
+		if (localRoot['~ext']?.macro) return true
+
+		// route[4]: localHook (per-route)
+		if (
+			Elysia.#hookHasString(
+				route[4] as Record<string, unknown> | undefined
+			)
+		)
+			return true
+
+		// Chain sources: route[5] (appHook), route[6] (inheritedChain), and
+		// this['~hookChain'] — memoised per shared start node.
+		return (
+			this.#chainHasModelRef(route[5] as ChainNode | undefined) ||
+			this.#chainHasModelRef(route[6] as ChainNode | undefined) ||
+			this.#chainHasModelRef(this['~hookChain'])
+		)
 	}
 
 	#assertRouteModelRefs(route: InternalRoute, method: string) {
@@ -6269,7 +6387,8 @@ export class Elysia<
 				(route[0] as any) === 'WS' ? 'WS' : mapMethodBack(route[0])
 			const key = m + ' ' + route[1]
 
-			this.#assertRouteModelRefs(route, m)
+			if (this.#routeMayHaveModelRef(route))
+				this.#assertRouteModelRefs(route, m)
 
 			if (seen.has(key)) {
 				hasDuplicate = true

@@ -119,7 +119,7 @@ describe('Web Standard - Map Compact Response', () => {
 		expect(response).toBeInstanceOf(Response)
 		// generic Error → RFC 9457 problem+json
 		await expect(response.json()).resolves.toMatchObject({
-			type: 'unknown',
+			type: 'internal-server-error',
 			title: 'Internal Server Error',
 			status: 500,
 			detail: 'Hello'

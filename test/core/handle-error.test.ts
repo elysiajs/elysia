@@ -297,7 +297,7 @@ describe('Handle Error', () => {
 			.handle(req('/'))
 
 		await expect(res.json()).resolves.toMatchObject({
-			type: 'unknown',
+			type: 'internal-server-error',
 			title: 'Internal Server Error',
 			status: 500,
 			detail: 'a'
@@ -313,7 +313,7 @@ describe('Handle Error', () => {
 		const res = await app.handle(req('/'))
 
 		await expect(res.json()).resolves.toMatchObject({
-			type: 'unknown',
+			type: 'internal-server-error',
 			title: 'Internal Server Error',
 			status: 500,
 			detail: 'a'
@@ -546,7 +546,7 @@ describe('Handle Error', () => {
 		// toResponse() threw → fall back to the RFC 9457 problem+json 500, with
 		// the original error message surfaced as `detail` (non-production)
 		await expect(res.json()).resolves.toMatchObject({
-			type: 'unknown',
+			type: 'internal-server-error',
 			title: 'Internal Server Error',
 			status: 500,
 			detail: 'original error'
@@ -570,7 +570,7 @@ describe('Handle Error', () => {
 		// toResponse() threw → fall back to the RFC 9457 problem+json 500, with
 		// the original error message surfaced as `detail` (non-production)
 		await expect(res.json()).resolves.toMatchObject({
-			type: 'unknown',
+			type: 'internal-server-error',
 			title: 'Internal Server Error',
 			status: 500,
 			detail: 'original error'
@@ -643,7 +643,7 @@ describe('Handle Error', () => {
 		// interpreted path's fallbackErrorResponse)
 		expect(res.status).toBe(500)
 		await expect(res.json()).resolves.toMatchObject({
-			type: 'unknown',
+			type: 'internal-server-error',
 			title: 'Internal Server Error',
 			status: 500,
 			detail: 'original error'

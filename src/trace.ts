@@ -1,5 +1,6 @@
 import { traceEvents } from './constants'
 import { separateFunction, retrieveRootparameters, findAlias } from './sucrose'
+import { isIdentCharCode } from './compile/lexer'
 import type { Context } from './context'
 import type { Prettify, RouteSchema, SingletonBase } from './types'
 
@@ -25,13 +26,6 @@ const phaseGetter: Record<string, TraceEvent> = {
 	onAfterResponse: 'afterResponse',
 	onError: 'error'
 }
-
-const isIdentCharCode = (code: number) =>
-	(code >= 97 && code <= 122) || // a-z
-	(code >= 65 && code <= 90) || // A-Z
-	(code >= 48 && code <= 57) || // 0-9
-	code === 95 || // _
-	code === 36 // $
 
 function phasesFromDestructure(group: string): Set<TraceEvent> | null {
 	let parameters: Record<string, true>

@@ -48,7 +48,7 @@ describe('NODE_ENV=production', () => {
 
 		expect(text).not.toContain('SECRET')
 		expect(JSON.parse(text)).toEqual({
-			type: 'unknown',
+			type: 'internal-server-error',
 			title: 'Internal Server Error',
 			status: 500
 		})
@@ -73,7 +73,7 @@ describe('NODE_ENV=production', () => {
 
 		expect(text).not.toContain('SECRET')
 		expect(JSON.parse(text)).toEqual({
-			type: 'unknown',
+			type: 'internal-server-error',
 			title: 'Internal Server Error',
 			status: 500
 		})
@@ -89,7 +89,7 @@ describe('NODE_ENV=production', () => {
 		const response = mapCompactResponse(error)
 
 		await expect(response.json()).resolves.toEqual({
-			type: 'unknown',
+			type: 'internal-server-error',
 			title: 'Internal Server Error',
 			status: 500
 		})

@@ -1,7 +1,15 @@
-// This module must stay TypeBox-free
+// This module must stay bridge-free: nothing here may reach `type/compat` /
+// `type/bridge` or the TypeBox compile/value machinery. The scalar coercion
+// leaves pulled in via `coerce-plan` only touch `typebox/type` constructors,
+// which sealed bundles already carry.
 import { ValidationError } from '../../error'
 import { nullObject } from '../../utils'
 import { ELYSIA_TYPES } from '../../type/constants'
+import {
+	buildCoercedFromPlan,
+	planIsScalarOnly,
+	type CoercePlan
+} from '../../type/coerce-plan'
 
 import {
 	Compiled,
@@ -24,7 +32,10 @@ function codecCoercionBridgeFree(f: FrozenValidator) {
 	return (
 		f.k === 1 &&
 		!!f.dm && // the baked decode transformation
-		!f.cp && // raw schema must already BE the coerced schema
+		// raw schema must BE the coerced schema, or the plan must rebuild it
+		// through scalar leaves alone (ObjectString/ArrayString sites need the
+		// full `coerce.ts` rebuilder, which drags `typebox/value`)
+		coercePlanBridgeFree(f.cp) &&
 		!f.ic &&
 		!f.em &&
 		!f.ce &&
@@ -32,6 +43,9 @@ function codecCoercionBridgeFree(f: FrozenValidator) {
 		!(f.d === 1 && f.ps !== 1)
 	)
 }
+
+const coercePlanBridgeFree = (cp: CoercePlan | undefined) =>
+	!cp || planIsScalarOnly(cp)
 
 function isBridgeFreeComplete(f: FrozenValidator, schema: unknown) {
 	if (!f.cm) return false
@@ -68,14 +82,6 @@ interface DefaultFastPath {
 	merge?: (value: any) => any
 }
 
-// `visiting` = nodes on the current recursion stack (a revisit is a genuine
-// structural cycle → not clean-safe). `clean` = nodes already fully validated
-// (a revisit is a benign DAG share, e.g. two properties reusing the same cached
-// `t.String()` singleton → clean-safe). Conflating the two (a single `seen`
-// set) wrongly rejected shared leaves as cycles, which let a closed object with
-// repeated leaf schemas slip past `isFullyClosedObject` and build bridge-free
-// while the wired path (whose schema is deep-cloned, so leaves are distinct)
-// skipped Clean via `#cleanRedundant` — a key-order divergence.
 function isCleanSafeNode(
 	node: any,
 	visiting: WeakSet<object>,
@@ -171,12 +177,6 @@ class FrozenSlotValidator {
 	// `TypeBoxValidator.optionalBypass`).
 	#hasOptional: boolean
 
-	// `t.NoValidate(...)` slots skip Check entirely (parity with
-	// `TypeBoxValidator.#noValidate`): the wired `FromSync`/`EncodeFrom` gate
-	// every `Check` behind `!this.#noValidate` but still apply defaults,
-	// optionalBypass, and Clean. Within the bridge-free covered subset (no
-	// codec/union/custom-error/etc.) `#noValidate` gates NOTHING ELSE, so
-	// skipping the `#check` call reproduces the wired semantics exactly.
 	#noValidate: boolean
 
 	constructor(
@@ -184,16 +184,10 @@ class FrozenSlotValidator {
 		schema: unknown,
 		normalize: boolean | 'exactMirror' | 'typebox' | undefined
 	) {
+		if (frozen.cp) schema = buildCoercedFromPlan(schema, frozen.cp)
+
 		this.schema = schema
 
-		// A codec-coercion slot needs its check/Clean wired with the schema's
-		// externals (`e`, the Refine predicate closures) and unions (`u`, the
-		// Number|Codec-String branches each coercion leaf expands to), plus the
-		// decode mirror (`dm`) that turns strings into typed values. All rebuilt
-		// off the raw schema by TypeBox-free `aot.ts` helpers.
-		//
-		// `codecCoercionBridgeFree` gated this slot in — so `frozen.dm` is set and
-		// the raw schema IS the coerced schema (no `cp`).
 		if (frozen.k === 1 && frozen.dm) {
 			const both = instantiateFrozenBoth(frozen, schema, schema)
 			this.#check = both.check!
@@ -435,7 +429,7 @@ export function isCapturedBridgeFree(c: CapturedValidator, schema: unknown) {
 	if (
 		c.hasCodec &&
 		!!c.decodeMirror &&
-		!c.coercePlan &&
+		coercePlanBridgeFree(c.coercePlan) &&
 		!c.innerCodecs?.length &&
 		!c.encodeMirror &&
 		!c.customErrors?.length &&

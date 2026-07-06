@@ -151,7 +151,7 @@ describe('Web Standard - Map Response', () => {
 		expect(response).toBeInstanceOf(Response)
 		// generic Error → RFC 9457 problem+json
 		await expect(response.json()).resolves.toMatchObject({
-			type: 'unknown',
+			type: 'internal-server-error',
 			title: 'Internal Server Error',
 			status: 500,
 			detail: 'Hello'
@@ -277,7 +277,7 @@ describe('Web Standard - Map Response', () => {
 
 		expect(response).toBeInstanceOf(Response)
 		await expect(response.json()).resolves.toMatchObject({
-			type: 'unknown',
+			type: 'internal-server-error',
 			title: 'Internal Server Error',
 			status: 500,
 			detail: 'Hello'

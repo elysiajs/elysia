@@ -731,7 +731,7 @@ describe('WebSocket sync dispatch path', () => {
 		// maintainer 2026-07-06): generic 500 with the message as `detail` in dev.
 		const body = JSON.parse((await message).data as string)
 		expect(body).toMatchObject({
-			type: 'unknown',
+			type: 'internal-server-error',
 			title: 'Internal Server Error',
 			status: 500,
 			detail: 'parse-boom'
