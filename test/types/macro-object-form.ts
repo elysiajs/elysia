@@ -160,3 +160,58 @@ import { expectTypeOf } from 'expect-type'
 	expectTypeOf<Response['409']>().toEqualTypeOf<'Conflict'>()
 	expectTypeOf<Response['410']>().toEqualTypeOf<'Gone'>()
 }
+
+{
+	new Elysia()
+		.macro({
+			ip: {
+				derive({ request, server }) {
+					return { ip: server?.requestIP(request)?.address }
+				}
+			}
+		})
+		.macro({
+			thing: {
+				ip: true,
+				beforeHandle({ ip }) {
+					expectTypeOf(ip).toEqualTypeOf<string | undefined>()
+				},
+				derive({ ip }) {
+					expectTypeOf(ip).toEqualTypeOf<string | undefined>()
+
+					return { forwarded: ip }
+				}
+			}
+		})
+}
+
+{
+	new Elysia()
+		.macro({ auth: { derive: () => ({ user: 'a' as const }) } })
+		.macro({
+			plain: {
+				beforeHandle(ctx) {
+					// @ts-expect-error `user` is not referenced, so not present
+					ctx.user
+				}
+			}
+		})
+}
+
+{
+	new Elysia()
+		.macro({
+			auth: { derive: () => ({ user: 'lilith' as const }) }
+		})
+		.macro({
+			role: (level: 'admin' | 'user') => ({
+				auth: true,
+				beforeHandle() {},
+				derive: () => ({ level })
+			})
+		})
+		.get('/', { role: 'admin' }, ({ user, level }) => {
+			expectTypeOf(user).toEqualTypeOf<'lilith'>()
+			expectTypeOf(level).toEqualTypeOf<'admin' | 'user'>()
+		})
+}

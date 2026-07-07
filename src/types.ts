@@ -910,12 +910,12 @@ export interface PublicRoute {
 
 export type MaybeValueOrVoidFunction<T> = T | ((...a: any) => void | T)
 
-export interface MacroProperty<
-	in out Macro extends BaseMacro = {},
-	in out TypedRoute extends RouteSchema = {},
-	in out Singleton extends SingletonBase = DefaultSingleton,
+export type MacroProperty<
+	Macro extends BaseMacro = {},
+	TypedRoute extends RouteSchema = {},
+	Singleton extends SingletonBase = DefaultSingleton,
 	Errors extends ErrorDefinition[] = []
-> {
+> = Macro & {
 	/**
 	 * Deduplication similar to Elysia.constructor.seed
 	 */
@@ -1720,6 +1720,37 @@ type MacroChannel<
 }
 
 /**
+ * Captures the verbatim `.macro()` definition record into a separate first-pass
+ * generic (mirrors {@link MacroChannel}). This lets each definition's enabled
+ * sibling flags (`{ auth: true }`) be read back without reusing the contextually
+ * typed `NewMacro`, which would form the record -> handler-typing inference
+ * cycle documented on {@link ObjectMacroDefs}.
+ */
+type MacroRefChannel<Refs> = {
+	[K in keyof Refs]: MaybeValueOrVoidFunction<
+		{ [M in keyof Refs[K]]?: Refs[K][M] } & Record<string, unknown>
+	>
+}
+
+/**
+ * `resolve` (derive) context contributed by the sibling macros a definition
+ * enables via `{ name: true }`. Extracted through `infer` because
+ * {@link MacroToContext} is a mapped type whose `resolve` key cannot be indexed
+ * with a plain `['resolve']` on the generic form.
+ */
+type MacroRefResolve<MacroFn, SelectedMacro, Definitions> =
+	MacroToContext<
+		// @ts-ignore MacroFn is the verbatim macroFn record
+		MacroFn,
+		// @ts-ignore SelectedMacro is filtered to MacroFn keys inside
+		SelectedMacro,
+		// @ts-ignore Definitions is the typebox model map
+		Definitions
+	> extends { resolve: infer Resolve }
+		? Resolve
+		: {}
+
+/**
  * Parameter type of the object-form `.macro({ name: definition })`
  *
  * TypeScript cannot infer one generic from a record while ALSO using it to
@@ -1742,12 +1773,17 @@ export type ObjectMacroDefs<
 	ScopedSchemas extends RouteSchema,
 	Singleton extends SingletonBase,
 	Definitions extends DefinitionBase,
-	MacroNames extends BaseMacro
+	MacroNames extends BaseMacro,
+	// Previously-registered macro function definitions
+	MacroFn = {},
+	// Verbatim definition record captured in a first inference pass
+	Refs = {}
 > = MacroChannel<Body, 'body', Definitions> &
 	MacroChannel<Headers, 'headers', Definitions> &
 	MacroChannel<Query, 'query', Definitions> &
 	MacroChannel<Params, 'params', Definitions> &
-	MacroChannel<Cookie, 'cookie', Definitions> & {
+	MacroChannel<Cookie, 'cookie', Definitions> &
+	MacroRefChannel<Refs> & {
 		[K in keyof N]: MaybeValueOrVoidFunction<
 			MacroProperty<
 				MacroNames & InputSchema<keyof Definitions['typebox'] & string>,
@@ -1768,7 +1804,14 @@ export type ObjectMacroDefs<
 					>,
 					ScopedSchemas
 				>,
-				Singleton,
+				Singleton & {
+					derive: Singleton['derive'] &
+						MacroRefResolve<
+							MacroFn,
+							K extends keyof Refs ? Refs[K] : {},
+							Definitions['typebox']
+						>
+				},
 				Definitions['error']
 			>
 		>

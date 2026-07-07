@@ -3406,7 +3406,8 @@ export class Elysia<
 		const Query extends MacroSchemaChannel<Definitions>,
 		const Params extends MacroSchemaChannel<Definitions>,
 		const Cookie extends MacroSchemaChannel<Definitions>,
-		const NewMacro
+		const NewMacro,
+		const Refs = {}
 	>(
 		macro: ObjectMacroDefs<
 			Body,
@@ -3428,7 +3429,9 @@ export class Elysia<
 				derive: Partial<Ephemeral['derive'] & Volatile['derive']>
 			},
 			Definitions,
-			Metadata['macro']
+			Metadata['macro'],
+			Metadata['macroFn'],
+			Refs
 		>
 	): Elysia<
 		BasePath,
