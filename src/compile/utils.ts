@@ -10,10 +10,17 @@ export function isAsyncFunction(fn: Function) {
 const matchResponseClone = /=>\s*response\.clone\(/
 const matchFnReturn = /(?:return|=>)\s*\S+\(|a(?:sync|wait)/
 
+const mayReturnPromiseCache = new WeakMap<Function, boolean>()
+
 export function mayReturnPromise(fn: Function): boolean {
+	let result = mayReturnPromiseCache.get(fn)
+	if (result !== undefined) return result
+
 	const literal = fn.toString()
-	if (matchResponseClone.test(literal)) return false
-	return matchFnReturn.test(literal)
+	result = matchResponseClone.test(literal) ? false : matchFnReturn.test(literal)
+	mayReturnPromiseCache.set(fn, result)
+
+	return result
 }
 
 export const isAsyncLifecycle = (handlers: MaybeArray<Function> | undefined) =>

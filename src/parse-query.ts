@@ -6,6 +6,15 @@ const KEY_NEEDS_DECODE = 2
 const VALUE_HAS_PLUS = 4
 const VALUE_NEEDS_DECODE = 8
 
+function splitRawParts(raw: string, flags: number) {
+	const parts = raw.split(',')
+	if (flags & VALUE_NEEDS_DECODE)
+		for (let i = 0; i < parts.length; i++)
+			parts[i] = decodeComponent(parts[i]) ?? parts[i]
+
+	return parts
+}
+
 // Parse query without array
 export function parseQueryFromURL(
 	input: string,
@@ -98,40 +107,29 @@ export function parseQueryFromURL(
 
 			if (flags & VALUE_HAS_PLUS) rawValue = rawValue.replace(/\+/g, ' ')
 
-			const splitRaw = (raw: string): string[] => {
-				const parts = raw.split(',')
-				if (flags & VALUE_NEEDS_DECODE)
-					for (let i = 0; i < parts.length; i++)
-						parts[i] = decodeComponent(parts[i]) ?? parts[i]
-
-				return parts
-			}
-
 			const rawBracket = rawValue.charCodeAt(0) === 91
 			const decodedBracket =
 				!rawBracket && finalValue.charCodeAt(0) === 91
 
 			if (rawBracket || decodedBracket) {
-				const bracketToArray = () => {
-					// 'ids=[]' is an explicit empty array, not ['']
-					if (rawBracket)
-						return (
-							rawValue.length === 2
-								? []
-								: splitRaw(rawValue.slice(1, -1))
-						) as any
-
+				// 'ids=[]' is an explicit empty array, not ['']
+				let toBracketArray: any
+				if (rawBracket)
+					toBracketArray = rawValue.length === 2
+						? []
+						: splitRawParts(rawValue.slice(1, -1), flags)
+				else {
 					const inner = (finalValue as string).slice(1, -1)
-					return (inner === '' ? [] : inner.split(',')) as any
+					toBracketArray = inner === '' ? [] : inner.split(',')
 				}
 
 				if (object && object?.[finalKey])
 					try {
 						finalValue = JSON.parse(finalValue) as any
 					} catch {
-						finalValue = bracketToArray()
+						finalValue = toBracketArray
 					}
-				else finalValue = bracketToArray()
+				else finalValue = toBracketArray
 
 				if (currentValue === undefined) result[finalKey] = finalValue
 				else if (Array.isArray(currentValue))
@@ -155,7 +153,7 @@ export function parseQueryFromURL(
 					!(object && object?.[finalKey]) &&
 					rawValue.indexOf(',') !== -1
 				)
-					finalValue = splitRaw(rawValue) as any
+					finalValue = splitRawParts(rawValue, flags) as any
 
 				if (currentValue === undefined) {
 					result[finalKey] = Array.isArray(finalValue)

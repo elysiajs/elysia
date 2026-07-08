@@ -574,11 +574,21 @@ function isContextPassToFunction(
 
 	try {
 		const escaped = context.replace(/\$/g, '\\$&')
-		const captureFunction = new RegExp(
-			`\\w\\((?:.*?)?${escaped}(?:.*?)?\\)`,
-			'gs'
-		)
-		const exactParameter = new RegExp(`${escaped}(,|\\))`, 'gs')
+		let cached = contextRegexCache.get(escaped)
+		if (!cached) {
+			if (contextRegexCache.size > 64) contextRegexCache.clear()
+			cached = [
+				new RegExp(`\\w\\((?:.*?)?${escaped}(?:.*?)?\\)`, 'gs'),
+				new RegExp(`${escaped}(,|\\))`, 'gs')
+			]
+			contextRegexCache.set(escaped, cached)
+		}
+
+		const captureFunction = cached[0]
+		const exactParameter = cached[1]
+
+		captureFunction.lastIndex = 0
+		exactParameter.lastIndex = 0
 
 		const length = body.length
 		let fn
@@ -629,6 +639,8 @@ function isContextPassToFunction(
 let pendingGC: Timer | undefined
 const DEFAULT_CACHE_LIMIT = 1024
 
+const contextRegexCache = new Map<string, [RegExp, RegExp]>()
+
 const caches = new Map<number, { content: string; inference: Sucrose.Inference }>()
 
 let functionCaches = new WeakMap<Function, Sucrose.Inference>()
@@ -654,6 +666,7 @@ function rememberInference(
 function clearCache() {
 	caches.clear()
 	functionCaches = new WeakMap()
+	contextRegexCache.clear()
 
 	pendingGC = undefined
 	if (isBun) Bun.gc(false)

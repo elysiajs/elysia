@@ -9,6 +9,9 @@ import { skipClone } from './skip-clone'
 
 const setCookie = 'set-cookie' as const
 
+const sseFormat = (data: string) => `data: ${data}\n\n`
+const identityFormat = (data: string) => data
+
 const textEncoder = new TextEncoder()
 const encodeChunk = (s: string): Uint8Array => textEncoder.encode(s)
 
@@ -295,9 +298,7 @@ export function createStreamHandler({
 							'text/event-stream'
 						)))
 
-		const format = isSSE
-			? (data: string) => `data: ${data}\n\n`
-			: (data: string) => data
+		const format = isSSE ? sseFormat : identityFormat
 
 		const contentType = isSSE
 			? 'text/event-stream'

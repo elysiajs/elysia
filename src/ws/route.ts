@@ -4,11 +4,7 @@ import {
 	buildFrozenRouteValidator,
 	isBridgeNotInitialized
 } from '../compile/handler/frozen-validator'
-import {
-	deriveEntryFn,
-	nullObject,
-	type DeriveEntry
-} from '../utils'
+import { deriveEntryFn, nullObject, type DeriveEntry } from '../utils'
 import { parseQueryFromURL } from '../parse-query'
 import {
 	deriveModes,
@@ -110,10 +106,8 @@ export function drainWaiters(ws: ElysiaWS<any>) {
 	const waiters = ws.raw.data.resumeWaiters
 	if (!waiters || waiters.size === 0) return
 
-	const pending = [...waiters]
-	waiters.clear()
-
-	for (let i = 0; i < pending.length; i++) pending[i]()
+	ws.raw.data.resumeWaiters = undefined
+	for (const fn of waiters) fn()
 }
 
 export async function handleWSResponse(
@@ -266,23 +260,22 @@ export function buildWSRoute(
 		hook.beforeHandle as any
 	)
 
-		const deriveEntries = [
-			...(((flatAppHook as any)['~deriveEntries'] as
-				| DeriveEntry[]
-				| undefined) ?? []),
-			...(((hook as any)['~deriveEntries'] as
-				| DeriveEntry[]
-				| undefined) ?? [])
-		] as DeriveEntry[]
+	const deriveEntries = [
+		...(((flatAppHook as any)['~deriveEntries'] as
+			| DeriveEntry[]
+			| undefined) ?? []),
+		...(((hook as any)['~deriveEntries'] as DeriveEntry[] | undefined) ??
+			[])
+	] as DeriveEntry[]
 
-		const deriveSet = deriveEntries.length
-			? new Set<Function>(deriveEntries.map(deriveEntryFn))
-			: undefined
+	const deriveSet = deriveEntries.length
+		? new Set<Function>(deriveEntries.map(deriveEntryFn))
+		: undefined
 
 	const upgradeDeriveModes = deriveModes(
-			allBeforeHandles as unknown as Function[],
-			deriveEntries
-		)
+		allBeforeHandles as unknown as Function[],
+		deriveEntries
+	)
 
 	const messageBeforeHandles: readonly AnyFn[] = allBeforeHandles.filter(
 		(fn) => !deriveSet?.has(fn as Function)
@@ -774,19 +767,19 @@ export function buildWSRoute(
 				if (r instanceof Promise) await r
 			}
 
-				for (let i = 0; i < allBeforeHandles.length; i++) {
-					const fn = allBeforeHandles[i]
-					let r: unknown = fn(context as any)
-					if (r instanceof Promise) r = await r
+			for (let i = 0; i < allBeforeHandles.length; i++) {
+				const fn = allBeforeHandles[i]
+				let r: unknown = fn(context as any)
+				if (r instanceof Promise) r = await r
 
-					const deriveMode = upgradeDeriveModes?.[i]
+				const deriveMode = upgradeDeriveModes?.[i]
 
-					if (deriveMode !== undefined && !(r instanceof ElysiaStatus)) {
-						if (r && typeof r === 'object') {
-							if (deriveMode)
-								context = replaceDeriveContext(context, r)
-							else Object.assign(context as any, r)
-						}
+				if (deriveMode !== undefined && !(r instanceof ElysiaStatus)) {
+					if (r && typeof r === 'object') {
+						if (deriveMode)
+							context = replaceDeriveContext(context, r)
+						else Object.assign(context as any, r)
+					}
 				} else if (r !== undefined) {
 					if (r instanceof Response) return r
 
@@ -870,15 +863,18 @@ export function buildGlobalWSHandler(): WebSocketHandler<WSConnectionData> {
 			ws.data.open?.(getElysia(ws))
 		},
 		drain(ws) {
-			drainWaiters(getElysia(ws))
-			ws.data.drain?.(getElysia(ws))
+			const elyWs = getElysia(ws)
+
+			drainWaiters(elyWs)
+			ws.data.drain?.(elyWs)
 		},
 		close(ws, code, reason) {
-			drainWaiters(getElysia(ws))
+			const elyWs = getElysia(ws)
+			drainWaiters(elyWs)
 
 			if (ws.data.closeHandlerInvoked) return
 			ws.data.closeHandlerInvoked = true
-			ws.data.close?.(getElysia(ws), code, reason)
+			ws.data.close?.(elyWs, code, reason)
 		},
 		ping(ws, data) {
 			ws.data.ping?.(getElysia(ws), data)

@@ -70,8 +70,15 @@ const matchReturnIdentifier =
 	// eslint-disable-next-line sonarjs/regex-complexity
 	/(?:=>\s*|\breturn\s+)(?!(?:true|false|null|undefined|void|new|typeof|async|await|function|class)\b)[A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*\s*(?![\w$([])/
 
-const mayReturnIdentifier = (fn: Function): boolean =>
-	matchReturnIdentifier.test(fn.toString())
+const mayReturnIdentifierCache = new WeakMap<Function, boolean>()
+
+const mayReturnIdentifier = (fn: Function): boolean => {
+	let result = mayReturnIdentifierCache.get(fn)
+	if (result !== undefined) return result
+	result = matchReturnIdentifier.test(fn.toString())
+	mayReturnIdentifierCache.set(fn, result)
+	return result
+}
 
 const lifecycleMayReturnPromise = (
 	handlers: MaybeArray<Function> | undefined,
@@ -681,15 +688,20 @@ export function compileHandlerJit({
 		link(buildCookieJar, 'bcj')
 		link(cookieConfig, 'cc')
 
+		const cookieHeaderExpr =
+			hasHeaders && !vali?.headers
+				? "c.headers['cookie']"
+				: "c.request.headers.get('cookie')"
+
 		if (!hasCookieSign && !cookieValidIsAsync) {
 			link(parseCookieRawSync, 'pcrs')
-			code += `let _ck=pcrs(c.request.headers.get('cookie'),cc)\n`
+			code += `let _ck=pcrs(${cookieHeaderExpr},cc)\n`
 		} else if (syncCookieSign && !cookieValidIsAsync) {
 			link(parseCookieRawSigned, 'pcrsg')
-			code += `let _ck=pcrsg(c.request.headers.get('cookie'),cc)\n`
+			code += `let _ck=pcrsg(${cookieHeaderExpr},cc)\n`
 		} else {
 			link(parseCookieRaw, 'pcr')
-			code += `let _ck=await pcr(c.request.headers.get('cookie'),cc)\n`
+			code += `let _ck=await pcr(${cookieHeaderExpr},cc)\n`
 		}
 
 		if (vali?.cookie) {

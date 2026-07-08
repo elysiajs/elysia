@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 
-import { Elysia, problem } from '../../src'
+import { Elysia, t, problem } from '../../src'
 import { compileCookieConfig } from '../../src/cookie/config'
 import {
 	buildCookieJar,
@@ -385,5 +385,77 @@ describe('cookie survives a Headers-instance set.headers (codex-indep-5)', () =>
 		expect(sc.length).toBe(2)
 		expect(sc.some((c) => c.includes('a=1'))).toBe(true)
 		expect(sc.some((c) => c.includes('b=2'))).toBe(true)
+	})
+})
+
+// Regression (011): jit.ts cookie header source selection.
+//
+// The guard is `hasHeaders && !vali?.headers`:
+//   - headers-SCHEMA routes: vali?.headers is truthy → guard is false →
+//     jit falls back to c.request.headers.get('cookie'). This is REQUIRED
+//     because the headers validator (vali.headers.From()) strips non-schema
+//     keys from c.headers before the cookie block runs; relying on the dict
+//     would yield undefined for the cookie key even when a Cookie header is
+//     present.
+//   - schema-LESS routes that destructure `headers` (sucrose-inferred):
+//     hasHeaders=true AND vali?.headers is falsy → guard is true →
+//     jit emits c.headers['cookie'] (dict read, no extra Headers.get() cost).
+//
+// The two existing tests pin the headers-schema → .get() fallback path.
+// The third test pins the schema-less inferred-headers → dict-read path.
+describe("jit cookie header source: schema routes use .get() fallback, schema-less use dict read (011)", () => {
+	it('headers-schema route + cookie access and NO Cookie header → empty jar, no 500', async () => {
+		// vali?.headers is truthy → guard false → c.request.headers.get('cookie').
+		// parseCookieRawSync treats falsy header identical to null → empty object.
+		const app = new Elysia().get(
+			'/',
+			{ headers: t.Object({ 'x-token': t.Optional(t.String()) }) },
+			({ cookie }) => Object.keys(cookie).length
+		)
+
+		const res = await app.handle(new Request('http://localhost/'))
+		expect(res.status).toBe(200)
+		expect(await res.text()).toBe('0')
+	})
+
+	it('headers-schema route + cookie access WITH Cookie header → jar populated via .get() fallback', async () => {
+		// vali?.headers is truthy → guard false → .get() path; cookie must still work.
+		const app = new Elysia().get(
+			'/',
+			{ headers: t.Object({ 'x-token': t.Optional(t.String()) }) },
+			({ cookie }) => cookie.session.value ?? ''
+		)
+
+		const res = await app.handle(
+			new Request('http://localhost/', {
+				headers: { cookie: 'session=hello' }
+			})
+		)
+		expect(res.status).toBe(200)
+		expect(await res.text()).toBe('hello')
+	})
+
+	it("schema-less route with destructured headers reads cookie via dict (pins c.headers['cookie'] branch)", async () => {
+		// `headers` is destructured → sucrose sets hasHeaders=true; no headers
+		// validator → vali?.headers is falsy → guard `hasHeaders && !vali?.headers`
+		// is true → jit emits c.headers['cookie'] instead of .get().
+		// Pins the dict-read branch — fails if headers materialisation stops
+		// including the cookie key or the guard regresses.
+		const app = new Elysia().get(
+			'/',
+			({ headers, cookie }) => cookie.session?.value ?? 'none'
+		)
+
+		const withCookie = await app.handle(
+			new Request('http://localhost/', {
+				headers: { cookie: 'session=hello' }
+			})
+		)
+		expect(withCookie.status).toBe(200)
+		expect(await withCookie.text()).toBe('hello')
+
+		const noCookie = await app.handle(new Request('http://localhost/'))
+		expect(noCookie.status).toBe(200)
+		expect(await noCookie.text()).toBe('none')
 	})
 })

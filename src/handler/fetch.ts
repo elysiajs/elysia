@@ -391,8 +391,8 @@ export function createFetchHandler(
 					})
 
 			try {
+				const endReports = new Array(traceLength)
 				for (let i = 0; i < onRequests.length; i++) {
-					const endReports = new Array(traceLength)
 					for (let j = 0; j < traceLength; j++)
 						endReports[j] = requestReports[
 							j

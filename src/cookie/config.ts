@@ -17,6 +17,7 @@ export interface CompiledCookieConfig {
 	defaults: Partial<BaseCookie>
 	fields: Record<string, FieldCookieConfig>
 	globalSign: true | string[] | undefined
+	globalSignSet?: Set<string>
 	globalSecrets: string | null | (string | null)[] | undefined
 	hasSign: boolean
 }
@@ -152,6 +153,7 @@ export function compileCookieConfig(
 		defaults,
 		fields,
 		globalSign,
+		globalSignSet: Array.isArray(globalSign) ? new Set(globalSign) : undefined,
 		globalSecrets,
 		hasSign
 	}
@@ -173,7 +175,7 @@ export function isCookieSigned(
 
 	if (
 		config.globalSign === true ||
-		(Array.isArray(config.globalSign) && config.globalSign.includes(name))
+		config.globalSignSet?.has(name) === true
 	) {
 		const secrets = config.globalSecrets
 		if (secrets === undefined) throw InvalidCookie.secret()

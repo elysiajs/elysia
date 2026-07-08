@@ -39,4 +39,30 @@ describe('SSE field framing', () => {
 		expect(res.headers.get('content-type')).toBe('text/event-stream')
 		expect(await res.text()).toBe('data: ok\n\n')
 	})
+
+	it('single-line data produces exact frame bytes', () => {
+		const event = sse('hello')
+
+		expect(event.toSSE()).toBe('data: hello\n\n')
+	})
+
+	it('multi-line LF data produces one data line per line', () => {
+		const event = sse('a\nb')
+
+		expect(event.toSSE()).toBe('data: a\ndata: b\n\n')
+	})
+
+	it('lone-CR data produces same output as LF data', () => {
+		const crEvent = sse('a\rb')
+		const lfEvent = sse('a\nb')
+
+		expect(crEvent.toSSE()).toBe(lfEvent.toSSE())
+	})
+
+	it('CRLF data produces same output as LF data', () => {
+		const crlfEvent = sse('a\r\nb')
+		const lfEvent = sse('a\nb')
+
+		expect(crlfEvent.toSSE()).toBe(lfEvent.toSSE())
+	})
 })

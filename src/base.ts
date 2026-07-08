@@ -4197,22 +4197,34 @@ export class Elysia<
 
 			if (hoc) {
 				if (ext.hoc) {
+					const seen = new Set(ext.hoc)
 					for (const fn of hoc)
-						if (!ext.hoc.includes(fn)) ext.hoc.push(fn)
+						if (!seen.has(fn)) {
+							seen.add(fn)
+							ext.hoc.push(fn)
+						}
 				} else ext.hoc = hoc.slice()
 			}
 
 			if (setup) {
 				if (ext.setup) {
+					const seen = new Set(ext.setup)
 					for (const fn of setup)
-						if (!ext.setup.includes(fn)) ext.setup.push(fn)
+						if (!seen.has(fn)) {
+							seen.add(fn)
+							ext.setup.push(fn)
+						}
 				} else ext.setup = setup.slice()
 			}
 
 			if (cleanup) {
 				if (ext.cleanup) {
+					const seen = new Set(ext.cleanup)
 					for (const fn of cleanup)
-						if (!ext.cleanup.includes(fn)) ext.cleanup.push(fn)
+						if (!seen.has(fn)) {
+							seen.add(fn)
+							ext.cleanup.push(fn)
+						}
 				} else ext.cleanup = cleanup.slice()
 			}
 		}
@@ -6379,35 +6391,34 @@ export class Elysia<
 		const methods = this['~map']!
 		const length = this.#history.length
 
-		let explicitHead: Set<string> | undefined
-		if (enableAutoHead)
-			for (let i = 0; i < length; i++)
-				if (mapMethodBack(this.#history![i][0]) === 'HEAD')
-					(explicitHead ??= new Set()).add(this.#history![i][1])
-
 		const wrapHeadHandler = Elysia.#wrapHeadHandler
 		const isLoose = this['~config']?.strictPath !== true
 
+		let explicitHead: Set<string> | undefined
 		let explicitPaths: Map<string, Set<string>> | undefined
-		if (isLoose) {
-			explicitPaths = new Map()
+		if (isLoose) explicitPaths = new Map()
 
+		if (enableAutoHead || isLoose)
 			for (let i = 0; i < length; i++) {
 				const route = this.#history![i]
-				const m =
-					(route[0] as any) === 'WS' ? 'WS' : mapMethodBack(route[0])
+				const isWS = (route[0] as any) === 'WS'
+				const m = isWS ? 'WS' : mapMethodBack(route[0])
 				const p = route[1]
 
-				let set = explicitPaths.get(m)
-				if (!set) explicitPaths.set(m, (set = new Set()))
+				if (enableAutoHead && !isWS && m === 'HEAD')
+					(explicitHead ??= new Set()).add(p)
 
-				set.add(p)
-				if (needEncodeRegex.test(p)) {
-					const encoded = encodeURI(p)
-					if (encoded !== p) set.add(encoded)
+				if (explicitPaths) {
+					let set = explicitPaths.get(m)
+					if (!set) explicitPaths.set(m, (set = new Set()))
+
+					set.add(p)
+					if (needEncodeRegex.test(p)) {
+						const encoded = encodeURI(p)
+						if (encoded !== p) set.add(encoded)
+					}
 				}
 			}
-		}
 
 		for (let i = 0; i < length; i++) {
 			const route: InternalRoute = this.#history![i]
@@ -6471,6 +6482,7 @@ export class Elysia<
 				enableAutoHead && method === 'GET' && !explicitHead?.has(path)
 
 			const isDynamic = isDynamicRegex.test(path)
+			const needsEncode = needEncodeRegex.test(path)
 			const registerLoose =
 				!isDynamic &&
 				isLoose &&
@@ -6480,7 +6492,7 @@ export class Elysia<
 				? explicitPaths?.get(method)
 				: undefined
 
-			if (!isDynamic && !needEncodeRegex.test(path) && !registerLoose) {
+			if (!isDynamic && !needsEncode && !registerLoose) {
 				const map = (methods[method] ??= nullObject() as any)
 
 				const handler = this.handler(
@@ -6502,7 +6514,7 @@ export class Elysia<
 			}
 
 			const variants = [path]
-			if (needEncodeRegex.test(path)) {
+			if (needsEncode) {
 				const encoded = encodeURI(path)
 				if (encoded !== path) variants.push(encoded)
 			}

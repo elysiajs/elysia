@@ -14,6 +14,7 @@ import {
 	eventProperties,
 	flattenChain,
 	flattenChainMemo,
+	flattenChainMemoReadonly,
 	fnOrigin,
 	isLocalScope,
 	macroEpoch,
@@ -364,13 +365,16 @@ function composeRootHook(
 	inheritedChain: ChainNode | undefined
 ): Partial<AppHook> | undefined {
 	const resolve = chainResolver(root)
-	const inherited = flattenChainMemo(root, inheritedChain, resolve)
 	const locals = flattenChain(
 		root['~hookChain'],
 		isLocalScope,
 		inheritedChain,
 		resolve
 	)
+
+	const inherited = locals
+		? flattenChainMemo(root, inheritedChain, resolve)
+		: flattenChainMemoReadonly(root, inheritedChain, resolve)
 
 	if (!inherited) return locals
 	if (!locals) return inherited
@@ -496,12 +500,16 @@ export function composeRouteHook(
 		? flattenChainMemo(root, appHook as ChainNode, resolve)
 		: undefined
 
+	// `inherited` is readonly
 	let inherited =
 		instance !== root
-			? (flattenChainMemo(root, inheritedChain as any, resolve) as
-					| Partial<AppHook>
-					| undefined)
+			? (flattenChainMemoReadonly(
+					root,
+					inheritedChain as any,
+					resolve
+				) as Partial<AppHook> | undefined)
 			: undefined
+
 	let locals =
 		instance !== root
 			? flattenChain(

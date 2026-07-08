@@ -202,13 +202,11 @@ const flattenChainMemos = new WeakMap<
 >()
 const emptyFlatten = Object.freeze(nullObject()) as Partial<AppHook>
 
-export function flattenChainMemo(
+function flattenChainCached(
 	root: object,
-	start: ChainNode | undefined,
+	start: ChainNode,
 	resolveAdded?: (node: ChainNode) => Partial<AppHook> | undefined
 ): Partial<AppHook> | undefined {
-	if (!start) return
-
 	let bucket = flattenChainMemos.get(root)
 	if (!bucket || bucket.e !== macroTableEpoch) {
 		bucket = { e: macroTableEpoch, per: new WeakMap() }
@@ -227,7 +225,30 @@ export function flattenChainMemo(
 
 	if (cached === emptyFlatten) return
 
+	return cached
+}
+
+export function flattenChainMemo(
+	root: object,
+	start: ChainNode | undefined,
+	resolveAdded?: (node: ChainNode) => Partial<AppHook> | undefined
+): Partial<AppHook> | undefined {
+	if (!start) return
+
+	const cached = flattenChainCached(root, start, resolveAdded)
+	if (cached === undefined) return
+
 	return cloneHook(cached)
+}
+
+export function flattenChainMemoReadonly(
+	root: object,
+	start: ChainNode | undefined,
+	resolveAdded?: (node: ChainNode) => Partial<AppHook> | undefined
+) {
+	if (!start) return
+
+	return flattenChainCached(root, start, resolveAdded)
 }
 
 function appendInto(
@@ -344,11 +365,15 @@ const sseLineBreak = /\r\n|\r|\n/g
 const sseField = (name: 'id' | 'event', value: string | number) =>
 	`${name}: ${(value + '').replace(sseLineBreak, '')}\n`
 
-const sseData = (value: string) =>
-	value
+const sseData = (value: string) => {
+	if (value.indexOf('\n') === -1 && value.indexOf('\r') === -1)
+		return 'data: ' + value + '\n'
+
+	return value
 		.split(sseLineBreak)
 		.map((line) => `data: ${line}\n`)
 		.join('')
+}
 
 export const sse = <
 	const T extends

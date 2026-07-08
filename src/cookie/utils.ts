@@ -76,7 +76,7 @@ function resolveSignSecrets(
 	if (field?.sign) return field.secrets ?? config.globalSecrets
 	if (
 		config.globalSign === true ||
-		(Array.isArray(config.globalSign) && config.globalSign.includes(name))
+		config.globalSignSet?.has(name) === true
 	)
 		return config.globalSecrets
 }

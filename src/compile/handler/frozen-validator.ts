@@ -194,23 +194,6 @@ class FrozenSlotValidator {
 		return this.#defaultFastPath!.merge!(value)
 	}
 
-	#optionalBypass(value: unknown): { value: unknown } | undefined {
-		const schema = this.schema as any
-
-		if (value === undefined || value === null)
-			return {
-				value: schema['~kind'] === 'Object' ? nullObject() : value
-			}
-
-		if (
-			schema['~kind'] === 'Object' &&
-			typeof value === 'object' &&
-			!Array.isArray(value) &&
-			Object.keys(value as object).length === 0
-		)
-			return { value: nullObject() }
-	}
-
 	From(value: unknown, type?: string): unknown {
 		if (this.#hasDefault) {
 			const defaults = this.#defaultFastPath
@@ -230,8 +213,18 @@ class FrozenSlotValidator {
 		}
 
 		if (this.#hasOptional) {
-			const bypass = this.#optionalBypass(value)
-			if (bypass) return bypass.value
+			const schema = this.schema as any
+
+			if (value === undefined || value === null)
+				return schema['~kind'] === 'Object' ? nullObject() : value
+
+			if (
+				schema['~kind'] === 'Object' &&
+				typeof value === 'object' &&
+				!Array.isArray(value) &&
+				Object.keys(value as object).length === 0
+			)
+				return nullObject()
 		}
 
 		if (!this.#noValidate && !this.#check(value))
