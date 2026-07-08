@@ -636,4 +636,47 @@ describe('trace', () => {
 
 		expect(errored).toBe(true)
 	})
+
+	// Regression: trace tee'd generator (constructor.name 'Object') was
+	// incorrectly serialised as JSON '{}' when set.headers was non-empty.
+	// The iterator guard must be hoisted before the header-carrying block.
+	it('streams async generator when trace + app-level headers are set', async () => {
+		const app = new Elysia()
+			.trace(() => {})
+			.headers({ 'x-powered-by': 'elysia' })
+			.post('/', async function* () {
+				yield '1'
+				yield '2'
+			})
+
+		const response = await app.handle(
+			new Request('http://localhost/', { method: 'POST' })
+		)
+
+		const text = await response.text()
+		expect(text).toBe('12')
+		expect(response.headers.get('content-type')).not.toContain(
+			'application/json'
+		)
+	})
+
+	it('streams async generator when trace + set.headers mutation in handler', async () => {
+		const app = new Elysia()
+			.trace(() => {})
+			.post('/', async function* ({ set }) {
+				set.headers['x-custom'] = 'yes'
+				yield '1'
+				yield '2'
+			})
+
+		const response = await app.handle(
+			new Request('http://localhost/', { method: 'POST' })
+		)
+
+		const text = await response.text()
+		expect(text).toBe('12')
+		expect(response.headers.get('content-type')).not.toContain(
+			'application/json'
+		)
+	})
 })

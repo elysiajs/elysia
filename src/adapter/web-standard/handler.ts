@@ -91,6 +91,12 @@ export function mapResponse(
 						set as ResponseInit
 					)
 
+				// only happen when trace is enabled
+				// because tee is used to clone the stream, which will return a ReadableStream
+				// @ts-expect-error
+				if (typeof response?.next === 'function')
+					return handleStream(response as any, set, request) as any
+
 				return Response.json(response, set as ResponseInit)
 
 			case 'Number':
@@ -186,7 +192,9 @@ export function mapCompactResponse(
 		case 'String':
 			return new Response(
 				response as string,
-				isBun ? undefined : { headers: { 'content-type': 'text/plain' } }
+				isBun
+					? undefined
+					: { headers: { 'content-type': 'text/plain' } }
 			)
 
 		case 'Array':
@@ -316,9 +324,7 @@ function mapFallback(
 			} else
 				return mapResponse((response as ElysiaStatus<200>).response, {
 					status: (response as ElysiaStatus<200>).code,
-					headers: response.headers
-						? { ...response.headers }
-						: {}
+					headers: response.headers ? { ...response.headers } : {}
 				})
 		}
 
