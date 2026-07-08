@@ -12,10 +12,10 @@
  * which several return-bearing bodies trip incidentally).
  *
  * `passesToday` is determined EMPIRICALLY (see contract.test.ts, which runs the
- * corpus and cross-checks this flag) — it is NOT a guess. Fixtures with
- * `passesToday: false` are the executable specs for the Phase-2 fixes
- * (H5/H26/M29/M30); the suite documents their current-wrong output today and
- * flips to a hard assertion once the fix lands.
+ * corpus and cross-checks this flag) — it is NOT a guess. The H5/H26/M29/M30
+ * Phase-2 fixes have all landed; every fixture now has `passesToday: true` and
+ * asserts the contract directly. The flag machinery remains for pinning any
+ * future open defect.
  *
  * All fixtures are given as live functions (so `.toString()` reflects the real
  * engine minifier). Minified shapes that the TS source formatter would expand
@@ -332,6 +332,18 @@ export const fixtures: Fixture[] = [
 		expect: ALL_TRUE,
 		passesToday: true,
 		bug: 'M30'
+	},
+
+	// ─── $-prefixed single-param arrow (minified / bundled) ──────────────
+	// Regression: `$c=>$c.query.a` crashed sucrose with TypeError because the
+	// bare-arrow regex (\w+) excluded `$`, landing in the "Unknown case" which
+	// returned `undefined` for body, then dereferenced it. Fix: regex → [\w$]+.
+	{
+		name: 'dollar-prefix single-param arrow infers query',
+		class: 'minified',
+		fn: eval('$c=>$c.query.a'),
+		expect: { query: true },
+		passesToday: true
 	}
 ]
 

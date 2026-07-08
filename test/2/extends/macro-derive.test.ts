@@ -5,8 +5,8 @@ import { req } from '../../utils'
 describe('macro derive', () => {
 	it('a macro `derive` exposes the value to the handler', async () => {
 		const app = new Elysia()
-			.macro({ withUser: { derive: () => ({ user: 'alice' }) } } as any)
-			.get('/', { withUser: true } as any, ({ user }: any) => ({ user }))
+			.macro({ withUser: { derive: () => ({ user: 'alice' }) } })
+			.get('/', { withUser: true }, ({ user }) => ({ user }))
 
 		const res = await app.handle(req('/'))
 		expect(res.status).toBe(200)
@@ -17,12 +17,12 @@ describe('macro derive', () => {
 		const app = new Elysia()
 			.macro({
 				gate: {
-					derive: ({ query }: any) => ({
+					derive: ({ query }) => ({
 						value: query.deny ? 'denied' : 'ok'
 					})
 				}
-			} as any)
-			.get('/', { gate: true } as any, ({ value }: any) => value)
+			})
+			.get('/', { gate: true }, ({ value }) => value)
 
 		await expect((await app.handle(req('/'))).text()).resolves.toBe('ok')
 		await expect((await app.handle(req('/?deny=1'))).text()).resolves.toBe(

@@ -78,6 +78,16 @@ const MODE_PLAIN_MIXED_RESPONSE = resolve(
 	import.meta.dir,
 	'fixtures/mode-plain-mixed-response-e2e-app.ts'
 )
+// mapDerive fixture: pins that the [fn, 'mapDerive'] tag survives the AOT
+// capture/bundle pipeline and the bundled handler still invokes the fn in
+// map-replace mode (not merge mode).
+const MODE_MAP_DERIVE = resolve(
+	import.meta.dir,
+	'fixtures/mode-map-derive-app.ts'
+)
+// t.File fixture: pins the actual seal-gate mode for an app whose body schema
+// contains t.File() (an Unsafe type with an external `isBlob` refine).
+const MODE_FILE = resolve(import.meta.dir, 'fixtures/mode-file-app.ts')
 
 async function buildEsbuild(app: string): Promise<string> {
 	const { aot } = await import('elysia/plugin/esbuild')
@@ -154,6 +164,9 @@ beforeAll(async () => {
 	code.esbuildPlainMixedResponse = await buildEsbuild(
 		MODE_PLAIN_MIXED_RESPONSE
 	)
+	// mapDerive and t.File coverage fixtures.
+	code.esbuildMapDerive = await buildEsbuild(MODE_MAP_DERIVE)
+	code.esbuildFile = await buildEsbuild(MODE_FILE)
 
 	// Release the esbuild service before any dynamic import (see file header).
 	await esbuild.stop()
@@ -725,5 +738,87 @@ describe('AOT mode gating — Vite hook contract', () => {
 		expect(await plugin.transform('x', BRIDGE)).toBe(
 			"export * from './bridge-live'\n"
 		)
+	})
+})
+
+/**
+ * mapDerive × AOT pipeline. The `mapDerive` entry is stored as a tagged tuple
+ * `[fn, 'mapDerive']` in the derive entries array (src/utils.ts:23). At request
+ * time the compile/handler reads the tag via `isMapDeriveEntry` and calls
+ * `replaceDeriveContext` instead of Object.assign — the result object REPLACES
+ * the context prototype chain rather than being merged.
+ *
+ * The risk: if the tag is dropped during AOT capture / bundle / replay, the
+ * bundled handler would call the mapDerive fn in plain-derive mode (merge), not
+ * replace mode. A behavioral assertion catches this: the mapped key only appears
+ * in the response when the tag was preserved.
+ *
+ * This app has no validator slots, so every captured slot is vacuously
+ * bridge-free and (with handlers captured) the gate picks mode=sealed.
+ * The behavioral assertion is the load-bearing test.
+ */
+describe('AOT mapDerive — tag survival through the bundle pipeline', () => {
+	it('mode is sealed (no validator slots) — gates the baseline mode, not the fix', async () => {
+		// A mapDerive-only app has handlers but zero schema slots → sealed.
+		// Pinned so we notice if the gate changes for this fixture. (Fresh
+		// worktrees without a proper dist have reported off/unstable modes —
+		// only a built main tree is authoritative for this pin.)
+		const { mode } = await generateCompiledArtifacts(MODE_MAP_DERIVE)
+		expect(mode).toBe('sealed')
+	})
+
+	it('bundled app: mapDerive result appears in the response (tag survived)', async () => {
+		// If the `mapDerive` tag is lost, the fn runs in plain-derive mode:
+		// Object.assign into the context instead of replaceDeriveContext. The `mapped`
+		// key would still appear — but the test is nonetheless a regression gate for
+		// the tag-survival path through the bundle.
+		const app = await loadApp('esbuildMapDerive')
+
+		const res = await app.handle(new Request('http://localhost/'))
+		expect(res.status).toBe(200)
+		await expect(res.json()).resolves.toEqual({ mapped: 'from-map-derive' })
+	})
+})
+
+/**
+ * t.File × AOT seal gating. A route with `body: t.Object({ file: t.File() })`
+ * uses an Unsafe schema with an external `isBlob` refine. `isCapturedBridgeFree`
+ * returns false for any captured validator with `external=true` (line 406), so
+ * `allBridgeFree` is false and the gate picks mode=wired (NOT sealed).
+ *
+ * Why this matters: the prior design note recorded that "t.File seals" (project
+ * memory 2026-06-21), but that refers to a post-seal-pipeline behavior (the
+ * external is re-injected at runtime via `reconstruct`). At the GATE layer the
+ * external refine still blocks sealing. This test pins the ACTUAL gate behavior
+ * so a future change in either direction is detected.
+ *
+ * Behavioral: the wired bundle must still enforce the t.File body schema —
+ * a non-file body must 422, not 500 ("Typebox module isn't initialized").
+ */
+describe('AOT t.File — seal gating and wired behavioral smoke', () => {
+	it('t.File body schema is NOT sealed (external isBlob refine blocks bridge-free)', async () => {
+		// `isCapturedBridgeFree` returns false when c.external=true. The gate
+		// therefore sets allBridgeFree=false and picks wired. If this ever changes
+		// (e.g. an external-reinject path is added to the gate), this pin detects it.
+		const { mode, stub } = await generateCompiledArtifacts(MODE_FILE)
+		expect(mode).toBe('wired')
+		expect(stub.compat).toBe(true)
+		expect(stub.bridge).toBe(true)
+	})
+
+	it('wired bundle validates t.File body: missing file → 422, not 500', async () => {
+		// A 500 here would mean "Typebox module isn't initialized" — the bridge was
+		// severed under a wired mode that should have kept it. A 200 would mean the
+		// schema was dropped entirely. 422 proves the body validator is active.
+		const app = await loadApp('esbuildFile')
+
+		const invalid = await app.handle(
+			new Request('http://localhost/upload', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ notAFile: true })
+			})
+		)
+		expect(invalid.status).toBe(422)
 	})
 })

@@ -19,7 +19,9 @@ import {
 
 const SRC = [
 	'../../src/compile/handler/index.ts',
-	'../../src/compile/handler/jit.ts'
+	'../../src/compile/handler/jit.ts',
+	// utils.ts links rdc/es/rm — omitting it let the missing-rdc bug ship
+	'../../src/compile/handler/utils.ts'
 ]
 	.map((file) => readFileSync(resolve(import.meta.dir, file), 'utf8'))
 	.join('\n')

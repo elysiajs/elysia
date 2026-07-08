@@ -138,7 +138,7 @@ export function handleFile(
 	})
 }
 
-export function normalizeHeaders(set: Context['set']) {
+function normalizeHeaders(set: Context['set']) {
 	const headers = set.headers
 	if (!(headers instanceof Headers)) return
 
@@ -517,7 +517,7 @@ function applySetHeaders(
 			else if (!present.has(key)) target.set(key, setHeaders[key] as any)
 }
 
-export function mergeHeaders(
+function mergeHeaders(
 	responseHeaders: Headers,
 	setHeaders: Context['set']['headers']
 ) {
@@ -527,7 +527,7 @@ export function mergeHeaders(
 	return headers
 }
 
-export function mergeStatus(
+function mergeStatus(
 	responseStatus: number,
 	setStatus: Context['set']['status']
 ) {

@@ -118,44 +118,49 @@ const propertyAccessor = (path: unknown) => {
 	return 'root'
 }
 
-const walkComposition = (schema: any, parts: string[]): any => {
+function walkComposition(
+	schema: any,
+	parts: string[],
+	seen: WeakSet<object> = new WeakSet()
+): unknown {
 	if (parts.length === 0) return schema
+	if (!schema || typeof schema !== 'object' || seen.has(schema)) return
 
-	const branches: any[] | undefined =
-		schema.anyOf ?? schema.oneOf ?? schema.allOf
+	seen.add(schema)
 
-	if (Array.isArray(branches)) {
-		for (let i = 0; i < branches.length; i++) {
-			const result = walkComposition(branches[i], parts)
-			if (result !== undefined) return result
+	try {
+		const branches: any[] | undefined =
+			schema.anyOf ?? schema.oneOf ?? schema.allOf
+
+		if (Array.isArray(branches)) {
+			for (let i = 0; i < branches.length; i++) {
+				const result = walkComposition(branches[i], parts, seen)
+				if (result !== undefined) return result
+			}
 		}
+
+		const [head, ...rest] = parts
+		if (schema.properties?.[head])
+			return walkComposition(schema.properties[head], rest, seen)
+
+		if (
+			schema.additionalProperties &&
+			typeof schema.additionalProperties === 'object'
+		)
+			return walkComposition(schema.additionalProperties, rest, seen)
+
+		if (schema.items) return walkComposition(schema.items, rest, seen)
+	} finally {
+		seen.delete(schema)
 	}
-
-	const [head, ...rest] = parts
-	if (schema.properties?.[head])
-		return walkComposition(schema.properties[head], rest)
-
-	if (
-		schema.additionalProperties &&
-		typeof schema.additionalProperties === 'object'
-	)
-		return walkComposition(schema.additionalProperties, rest)
-
-	if (schema.items) return walkComposition(schema.items, rest)
 }
 
-// Walk a TypeBox/Standard schema using an `instancePath` like `/x` or
-// `/items/0`. Returns undefined if can't resolved.
-//
-// in case of allOf/anyOf, first path win
-const walkSubSchema = (schema: any, instancePath: string | undefined) => {
-	if (!schema || !instancePath) return schema
+const walkSubSchema = (schema: any, instancePath: string | undefined) =>
+	!schema || !instancePath
+		? schema
+		: walkComposition(schema, instancePath.split('/').filter(Boolean))
 
-	const parts = instancePath.split('/').filter(Boolean)
-	return walkComposition(schema, parts)
-}
-
-const FOUND_ECHO_LIMIT = 4096
+const FOUND_ECHO_LIMIT = 8192
 const FOUND_ECHO_OMITTED = `[value exceeds ${FOUND_ECHO_LIMIT} byte echo limit]`
 
 const jsonLengthWithin = (value: unknown, budget: number): number => {
@@ -222,7 +227,7 @@ const subValueAt = (value: unknown, path: unknown): unknown => {
 	return current
 }
 
-const scopeFound = (value: unknown, first: any): unknown => {
+function scopeFound(value: unknown, first: any) {
 	if (jsonLengthWithin(value, FOUND_ECHO_LIMIT) >= 0) return value
 
 	const sub = subValueAt(value, first?.instancePath ?? first?.path)

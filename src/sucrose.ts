@@ -1,5 +1,6 @@
 import { fnv1a } from './utils'
 import { isBun, isCloudflareWorker } from './universal/constants'
+import { isProduction } from './error'
 
 import type { Handler, AppHook } from './types'
 
@@ -48,7 +49,7 @@ export function separateFunction(code: string): [string, string] {
 	}
 
 	// V8: bracket is removed for 1 parameter arrow function
-	if (/^(\w+)=>/g.test(code)) {
+	if (/^([\w$]+)=>/g.test(code)) {
 		index = code.indexOf('=>')
 
 		if (index !== -1) {
@@ -572,11 +573,12 @@ function isContextPassToFunction(
 	}
 
 	try {
+		const escaped = context.replace(/\$/g, '\\$&')
 		const captureFunction = new RegExp(
-			`\\w\\((?:.*?)?${context}(?:.*?)?\\)`,
+			`\\w\\((?:.*?)?${escaped}(?:.*?)?\\)`,
 			'gs'
 		)
-		const exactParameter = new RegExp(`${context}(,|\\))`, 'gs')
+		const exactParameter = new RegExp(`${escaped}(,|\\))`, 'gs')
 
 		const length = body.length
 		let fn
@@ -610,13 +612,15 @@ function isContextPassToFunction(
 
 		return false
 	} catch {
-		console.log(
-			'[Sucrose] warning: unexpected isContextPassToFunction error, you may continue development as usual but please report the following to maintainers:'
+		console.warn(
+			'[Sucrose] warning: isContextPassToFunction failed; conservative all-access fallback used'
 		)
-		console.log('--- body ---')
-		console.log(body)
-		console.log('--- context ---')
-		console.log(context)
+		if (!isProduction()) {
+			console.log('--- body ---')
+			console.log(body)
+			console.log('--- context ---')
+			console.log(context)
+		}
 
 		return true
 	}
@@ -625,9 +629,27 @@ function isContextPassToFunction(
 let pendingGC: Timer | undefined
 const DEFAULT_CACHE_LIMIT = 1024
 
-const caches = new Map<number, Sucrose.Inference>()
+const caches = new Map<number, { content: string; inference: Sucrose.Inference }>()
 
 let functionCaches = new WeakMap<Function, Sucrose.Inference>()
+
+function rememberInference(
+	key: number,
+	cached: { content: string; inference: Sucrose.Inference } | undefined,
+	content: string,
+	event: unknown,
+	inference: Sucrose.Inference
+) {
+	if (!cached || cached.content !== content) {
+		if (caches.size >= DEFAULT_CACHE_LIMIT) {
+			const oldest = caches.keys().next().value
+			if (oldest !== undefined) caches.delete(oldest)
+		}
+
+		caches.set(key, { content, inference })
+	}
+	if (typeof event === 'function') functionCaches.set(event, inference)
+}
 
 function clearCache() {
 	caches.clear()
@@ -687,17 +709,13 @@ function pushParse(target: unknown[], array: unknown[]) {
 		if (typeof array[i] === 'function') target.push(array[i])
 }
 
-// never recreate array to reduce memory allocation, just clear and reuse it
-const eventsBuffer = <Handler[]>[]
-
 export function sucrose(
 	handler: Handler | undefined,
 	lifeCycle: Sucrose.LifeCycle | undefined
 ): Sucrose.Inference {
 	let inference: Sucrose.Inference | undefined
 
-	const events = eventsBuffer
-	events.length = 0
+	const events: Handler[] = []
 
 	if (handler && typeof handler === 'function') events.push(handler)
 	if (lifeCycle) {
@@ -728,11 +746,12 @@ export function sucrose(
 
 		const content = event.toString()
 		const key = fnv1a(content)
-		const cachedInference = caches.get(key)
-		if (cachedInference) {
+		const cached = caches.get(key)
+		if (cached && cached.content === content) {
+			const cachedInference = cached.inference
 			// LRU bump: move this key to MRU position by re-inserting.
 			caches.delete(key)
-			caches.set(key, cachedInference)
+			caches.set(key, cached)
 			if (typeof event === 'function')
 				functionCaches.set(event, cachedInference)
 			inference = inference
@@ -756,22 +775,23 @@ export function sucrose(
 		if (content.includes('[native code]')) {
 			markAllAccessed(fnInference)
 
-			if (!caches.has(key)) {
-				const limit = DEFAULT_CACHE_LIMIT
-				if (caches.size >= limit) {
-					const oldest = caches.keys().next().value
-					if (oldest !== undefined) caches.delete(oldest)
-				}
-				caches.set(key, fnInference)
-			}
-			if (typeof event === 'function')
-				functionCaches.set(event, fnInference)
+			rememberInference(key, cached, content, event, fnInference)
 
 			inference = mergeInference(inference, fnInference)
 			continue
 		}
 
 		const [parameter, body] = separateFunction(content)
+
+		if (body === undefined) {
+			// Unknown case: parser could not extract body — degrade to all-true per contract
+			markAllAccessed(fnInference)
+
+			rememberInference(key, cached, content, event, fnInference)
+
+			inference = mergeInference(inference, fnInference)
+			continue
+		}
 
 		const rootParameters = findParameterReference(parameter, fnInference)
 		const mainParameter = extractMainParameter(rootParameters)
@@ -799,15 +819,7 @@ export function sucrose(
 				fnInference.query = true
 		}
 
-		if (!caches.has(key)) {
-			if (caches.size >= DEFAULT_CACHE_LIMIT) {
-				const oldest = caches.keys().next().value
-				if (oldest !== undefined) caches.delete(oldest)
-			}
-
-			caches.set(key, fnInference)
-		}
-		if (typeof event === 'function') functionCaches.set(event, fnInference)
+		rememberInference(key, cached, content, event, fnInference)
 
 		inference = mergeInference(inference, fnInference)
 
@@ -825,8 +837,6 @@ export function sucrose(
 		)
 			break
 	}
-
-	events.length = 0
 
 	// Fall back to defaults when no analysable events were found
 	return inference ?? defaultSucrose()

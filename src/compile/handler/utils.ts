@@ -77,28 +77,29 @@ export function extractDeriveKeys(fn: Function) {
 }
 
 export function replaceDeriveContext(context: any, derivative: any) {
-	Object.setPrototypeOf(derivative, Object.getPrototypeOf(context))
+	const next = Object.create(Object.getPrototypeOf(context))
+	Object.assign(next, derivative)
 
-	derivative.request = context.request
-	derivative.store = context.store
-	derivative.set = context.set
-	derivative.body = context.body
-	derivative.query = context.query
-	derivative.params = context.params
-	derivative.headers = context.headers
-	derivative.cookie = context.cookie
-	derivative.server = context.server
-	derivative.path = context.path
-	derivative.route = context.route
-	derivative.rid = context.rid
-	derivative.trace = context.trace
-	derivative.qi = context.qi
-	derivative.responseValue = context.responseValue
-	derivative.error = context.error
-	derivative.status = context.status
-	derivative.redirect = context.redirect
+	next.request = context.request
+	next.store = context.store
+	next.set = context.set
+	next.body = context.body
+	next.query = context.query
+	next.params = context.params
+	next.headers = context.headers
+	next.cookie = context.cookie
+	next.server = context.server
+	next.path = context.path
+	next.route = context.route
+	next.rid = context.rid
+	next.trace = context.trace
+	next.qi = context.qi
+	next.responseValue = context.responseValue
+	next.error = context.error
+	next.status = context.status
+	next.redirect = context.redirect
 
-	return derivative
+	return next
 }
 
 export function deriveModeQueues(entries?: readonly DeriveEntry[]) {
@@ -119,7 +120,7 @@ export function deriveModeQueues(entries?: readonly DeriveEntry[]) {
 	return queues
 }
 
-function deriveModes(hooks: Function[], entries?: readonly DeriveEntry[]) {
+export function deriveModes(hooks: Function[], entries?: readonly DeriveEntry[]) {
 	const queues = deriveModeQueues(entries)
 	if (!queues) return
 
@@ -651,10 +652,15 @@ function getQueryParseArgsCollect(
 }
 
 // gather metadata for `parseQueryFromURL`
+const queryParseChannelsCache = new WeakMap<object, QueryWalkState | null>()
+
 export function getQueryParseChannels(
 	querySchema: any
 ): QueryWalkState | undefined {
-	if (!querySchema) return
+	if (!querySchema || typeof querySchema !== 'object') return
+
+	const cached = queryParseChannelsCache.get(querySchema)
+	if (cached !== undefined) return cached ?? undefined
 
 	const state: QueryWalkState = {
 		array: undefined,
@@ -663,9 +669,10 @@ export function getQueryParseChannels(
 
 	getQueryParseArgsCollect(querySchema, new WeakSet(), state)
 
-	if (!state.array && !state.object) return undefined
+	const result = state.array || state.object ? state : null
+	queryParseChannelsCache.set(querySchema, result)
 
-	return state
+	return result ?? undefined
 }
 
 const Await = (fn: Function) => (isAsyncFunction(fn) ? 'await ' : '')

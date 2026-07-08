@@ -375,6 +375,39 @@ describe('sucrose', () => {
 		expect(response).toEqual({ hello: 'world' })
 	})
 
+	// Regression: $-prefixed single-param arrow (`$c=>$c.query.a`) crashed
+	// sucrose with TypeError because the bare-arrow regex (\w+) excluded `$`,
+	// landing in the "Unknown case" which returned undefined for body.
+	it('dollar-prefix bare-arrow: sucrose does not throw and infers query', () => {
+		const LIFECYCLE = {
+			afterHandle: [],
+			beforeHandle: [],
+			error: [],
+			mapResponse: [],
+			afterResponse: [],
+			parse: [],
+			request: [],
+			start: [],
+			stop: [],
+			trace: [],
+			transform: []
+		}
+
+		const fn = eval('$c=>$c.query.a')
+		let result: any
+		expect(() => {
+			result = sucrose(fn, LIFECYCLE as any)
+		}).not.toThrow()
+		expect(result.query).toBe(true)
+	})
+
+	it('dollar-prefix bare-arrow: Elysia route returns 200 with correct body', async () => {
+		const app = new Elysia().get('/', eval('$c=>$c.query.a'))
+		const response = await app.handle(new Request('http://localhost/?a=hi'))
+		expect(response.status).toBe(200)
+		expect(await response.text()).toBe('hi')
+	})
+
 	// Hooks are shared by reference across all routes (ChainNode design), so
 	// the same function objects come back on every route compile — sucrose
 	// must memoize by function identity instead of paying

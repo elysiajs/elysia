@@ -11,7 +11,7 @@ import {
 } from '../utils'
 import { parseQueryFromURL } from '../parse-query'
 import {
-	deriveModeQueues,
+	deriveModes,
 	getQueryParseChannels,
 	replaceDeriveContext
 } from '../compile/handler/utils'
@@ -278,7 +278,11 @@ export function buildWSRoute(
 		const deriveSet = deriveEntries.length
 			? new Set<Function>(deriveEntries.map(deriveEntryFn))
 			: undefined
-		const deriveModes = deriveModeQueues(deriveEntries)
+
+	const upgradeDeriveModes = deriveModes(
+			allBeforeHandles as unknown as Function[],
+			deriveEntries
+		)
 
 	const messageBeforeHandles: readonly AnyFn[] = allBeforeHandles.filter(
 		(fn) => !deriveSet?.has(fn as Function)
@@ -406,8 +410,10 @@ export function buildWSRoute(
 			const body =
 				error.response !== undefined
 					? error.response
-					: isProduction() && error.status >= 500
-						? 'Internal Server Error'
+					: isProduction()
+						? error.status >= 500
+							? 'Internal Server Error'
+							: ''
 						: (error.message ?? '')
 
 			return typeof body === 'object'
@@ -773,7 +779,7 @@ export function buildWSRoute(
 					let r: unknown = fn(context as any)
 					if (r instanceof Promise) r = await r
 
-					const deriveMode = deriveModes?.get(fn as Function)?.shift()
+					const deriveMode = upgradeDeriveModes?.[i]
 
 					if (deriveMode !== undefined && !(r instanceof ElysiaStatus)) {
 						if (r && typeof r === 'object') {

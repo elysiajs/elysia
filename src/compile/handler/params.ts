@@ -21,7 +21,8 @@ import {
 	cloneResponse,
 	emptyResponse,
 	getQueryParseChannels,
-	hasRequestBody
+	hasRequestBody,
+	replaceDeriveContext
 } from './utils'
 
 /**
@@ -63,11 +64,12 @@ export const HANDLER_PARAMS: Record<string, Resolver> = {
 	pq: () => parseQueryFromURL,
 	pe: () => ParseError,
 	es: () => ElysiaStatus,
+	rdc: () => replaceDeriveContext,
 	ise: () => internalServerErrorResponse,
 	emp: () => emptyResponse,
 	// H22 runtime 5xx-message mask: resolves to the isProduction FUNCTION so the
 	// codegen's `isprod()` reflects runtime NODE_ENV (not baked at build time).
-	isprod: () => isProduction,
+	isprod: isProduction,
 	// allowUnsafeValidationDetails opt-in: `e instanceof verr` in the error catch
 	verr: () => ValidationError,
 	tee: () => tee,

@@ -2,15 +2,15 @@
 /**
  * Executable enforcement of design/sucrose-contract.md.
  *
- * The suite is GREEN on the current tree while making the H5/H26/M29/M30
- * defects executable specs:
+ * The H5/H26/M29/M30 Phase-2 fixes have all landed; every fixture now has
+ * `passesToday: true` and is asserted to satisfy its `expect` directly.
+ * The `passesToday` mechanism remains available for future open defects:
  *   - `passesToday: true` fixtures are asserted to satisfy their `expect`.
  *   - `passesToday: false` fixtures are asserted to CURRENTLY VIOLATE their
  *     `expect` (a "documents current defect" assertion). This does two things:
  *       1. proves the `passesToday` flag is accurate (not guessed), and
- *       2. flips red the moment the Phase-2 fix lands — at which point the
- *          maintainer sets `passesToday: true` and the fixture becomes a plain
- *          contract assertion. i.e. the defect cannot be fixed silently.
+ *       2. flips red the moment a fix lands — at which point the maintainer
+ *          sets `passesToday: true` and the fixture becomes a plain assertion.
  */
 
 import { describe, it, expect } from 'bun:test'
