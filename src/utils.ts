@@ -328,10 +328,6 @@ export function formToFormData(value: Record<keyof any, unknown>): FormData {
 export const form = <const T extends Record<keyof any, unknown>>(
 	value: T
 ): ElysiaFormData<T> =>
-	// A plain object (not a class instance) keeps V8's fast object shape - the
-	// fields are own enumerable props so the `t.Form` object validator sees
-	// them, and the enumerable `~ely-form` marker flags it as a form for the
-	// response mapper and the `t.Form` refine (`'~ely-form' in value`).
 	({ ...value, '~ely-form': 1 }) as unknown as ElysiaFormData<T>
 
 export const getLoosePath = (path: string) =>
@@ -342,6 +338,17 @@ import type { SSEPayload, Prettify } from './types'
 type FormatSSEPayload<T = unknown> = T extends string
 	? { readonly data: T }
 	: Prettify<SSEPayload<T>>
+
+const sseLineBreak = /\r\n|\r|\n/g
+
+const sseField = (name: 'id' | 'event', value: string | number) =>
+	`${name}: ${(value + '').replace(sseLineBreak, '')}\n`
+
+const sseData = (value: string) =>
+	value
+		.split(sseLineBreak)
+		.map((line) => `data: ${line}\n`)
+		.join('')
 
 export const sse = <
 	const T extends
@@ -381,12 +388,16 @@ export const sse = <
 	payload.toSSE = () => {
 		let s = ''
 		if (payload.id !== undefined && payload.id !== null)
-			s += `id: ${payload.id}\n`
-		if (payload.event) s += `event: ${payload.event}\n`
-		if (payload.retry !== undefined) s += `retry: ${payload.retry}\n`
+			s += sseField('id', payload.id)
+		if (payload.event) s += sseField('event', payload.event)
+		if (
+			typeof payload.retry === 'number' &&
+			Number.isFinite(payload.retry) &&
+			payload.retry >= 0
+		)
+			s += `retry: ${Math.trunc(payload.retry)}\n`
 		if (payload.data === null) s += 'data: null\n'
-		else if (typeof payload.data === 'string')
-			s += `data: ${payload.data}\n`
+		else if (typeof payload.data === 'string') s += sseData(payload.data)
 		else if (typeof payload.data === 'object')
 			s += `data: ${JSON.stringify(payload.data)}\n`
 

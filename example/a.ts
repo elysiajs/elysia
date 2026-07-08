@@ -1,16 +1,3 @@
-import { Elysia, t, problem } from '../src'
+import { Elysia, file } from '../src'
 
-export const app = new Elysia()
-	.macro({
-		ip: {
-			derive({ request, server }) {
-				return { ip: server!.requestIP(request)!.address }
-			}
-		}
-	})
-	.macro({
-		thing: {
-			ip: true,
-			beforeHandle({ ip }) {}
-		}
-	})
+export const app = new Elysia().get('/', () => file('a.txt')).listen(3000)

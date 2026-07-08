@@ -15,7 +15,7 @@ export type TraceEvent =
 	| 'afterResponse'
 	| 'error'
 
-const phaseGetter: Record<string, TraceEvent> = {
+const phaseGetter = {
 	onRequest: 'request',
 	onParse: 'parse',
 	onTransform: 'transform',
@@ -25,7 +25,7 @@ const phaseGetter: Record<string, TraceEvent> = {
 	onMapResponse: 'mapResponse',
 	onAfterResponse: 'afterResponse',
 	onError: 'error'
-}
+} as const
 
 function phasesFromDestructure(group: string): Set<TraceEvent> | null {
 	let parameters: Record<string, true>
