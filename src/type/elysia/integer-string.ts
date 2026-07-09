@@ -10,6 +10,10 @@ import { StringType } from './string'
 import { Union } from './union'
 import { elyType, getMeta } from './utils'
 
+// A finite decimal integer string: optional sign + digits
+// Rejects hex (`0x10`), binary/octal, scientific (`1e3`) and `Infinity`/`NaN`
+const decimalInteger = /^[+-]?\d+$/
+
 let StringifiedInteger: Type.TCodec<Type.TRefine<Type.TString>, number>
 let StrictInteger: Type.TRefine<Type.TNumber>
 type IntegerStringSchema = Type.TUnion<
@@ -20,10 +24,9 @@ export function IntegerString(property?: TNumberOptions) {
 	StringifiedInteger ??= Decode(
 		Refine(
 			StringType(),
-			(value) =>
-				value.trim() !== '' &&
-				!isNaN(+value) &&
-				Number.isInteger(+value),
+			// only a finite decimal integer string (also rejects empty/blank,
+			// since `+'' === 0` would otherwise silently pass)
+			(value) => decimalInteger.test(value),
 			() => 'must be integer'
 		),
 		(value) => +value
@@ -51,7 +54,7 @@ export function IntegerString(property?: TNumberOptions) {
 		Refine(
 			StringType(),
 			(value) => {
-				if (value.trim() === '') return false
+				if (!decimalInteger.test(value)) return false
 				const n = +value
 				if (isNaN(n) || !Number.isInteger(n)) return false
 				if (typeof c.minimum === 'number' && n < c.minimum) return false
