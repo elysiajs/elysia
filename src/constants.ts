@@ -7,22 +7,6 @@ const mapBack = /*#__PURE__*/ <const T extends Record<string, number>>(
 		Object.entries(map).map(([key, value]) => [value, key])
 	) as any
 
-export const MethodMap = /*#__PURE__*/ {
-	GET: 0,
-	HEAD: 1,
-	POST: 2,
-	PUT: 3,
-	DELETE: 4,
-	PATCH: 5,
-	OPTIONS: 6,
-	CONNECT: 7,
-	TRACE: 8
-} as const
-export type MethodMap = typeof MethodMap
-
-export const MethodMapBack = mapBack(MethodMap)
-export type MethodMapBack = typeof MethodMapBack
-
 export const StatusMap = /*#__PURE__*/ {
 	Continue: 100,
 	'Switching Protocols': 101,

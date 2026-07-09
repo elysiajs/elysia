@@ -1,4 +1,4 @@
-import { dangerousKeys, type MethodMap, MethodMapBack } from './constants'
+import { dangerousKeys } from './constants'
 import { ElysiaFile } from './universal/file'
 import { isBun } from './universal/constants'
 
@@ -27,9 +27,6 @@ export const deriveEntryFn = (entry: DeriveEntry) =>
 
 export const isMapDeriveEntry = (entry: DeriveEntry) =>
 	Array.isArray(entry) && entry[1] === 'mapDerive'
-
-export const mapMethodBack = (method: MethodMap[keyof MethodMap] | string) =>
-	MethodMapBack[method as MethodMap[keyof MethodMap]] ?? method
 
 export function isEmpty<T extends Object>(obj: T): boolean {
 	for (const _ in obj) return false

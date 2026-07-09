@@ -3,7 +3,7 @@ import type { OpenAPIV3 } from 'openapi-types'
 
 import { ElysiaFile } from './universal/file'
 import { TraceHandler } from './trace'
-import { MethodMap, type StatusMapBack } from './constants'
+import { type StatusMapBack } from './constants'
 import { ElysiaError, type ElysiaStatus } from './error'
 import type { TypeBoxSchema, AnySchema, StandardSchemaV1Like } from './type'
 
@@ -813,7 +813,7 @@ export type CompiledHandler = (
 ) => MaybePromise<Response>
 
 export type InternalRoute = readonly [
-	method: string | MethodMap[keyof MethodMap],
+	method: string,
 	path: string,
 	handler: unknown,
 	instance: AnyElysia,

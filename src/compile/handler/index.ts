@@ -18,7 +18,6 @@ import {
 	fnOrigin,
 	isLocalScope,
 	macroEpoch,
-	mapMethodBack,
 	mergeHook,
 	nullObject,
 	replaceUrlPath,
@@ -581,7 +580,7 @@ export function compileHandler(
 	precomputedStatic?: Response
 ): CompiledHandler {
 	const adapter = root['~config']?.adapter ?? defaultAdapter
-	const method = mapMethodBack(_method as any)
+	const method = _method
 
 	const mountMeta =
 		typeof handler === 'function' ? (handler as any)['~mount'] : undefined

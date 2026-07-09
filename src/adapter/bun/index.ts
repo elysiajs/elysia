@@ -7,7 +7,6 @@ import { flushMemory } from '../../memory'
 import {
 	flattenChain,
 	getLoosePath,
-	mapMethodBack,
 	nullObject
 } from '../../utils'
 
@@ -39,7 +38,7 @@ export function collectStaticRoutes(app: AnyElysia) {
 	for (let i = 0; i < history.length; i++) {
 		const route = history[i]
 		const method =
-			(route[0] as any) === 'WS' ? 'WS' : mapMethodBack(route[0])
+			route[0]
 
 		seen.set(method + ' ' + route[1], i)
 	}
@@ -51,7 +50,7 @@ export function collectStaticRoutes(app: AnyElysia) {
 		for (let i = 0; i < history.length; i++) {
 			const route = history[i]
 			const method =
-				(route[0] as any) === 'WS' ? 'WS' : mapMethodBack(route[0])
+				route[0]
 
 			const path = route[1]
 			let set = explicitPaths.get(method)
@@ -93,9 +92,9 @@ export function collectStaticRoutes(app: AnyElysia) {
 
 	for (let i = 0; i < history.length; i++) {
 		const route = history[i]
-		if ((route[0] as any) === 'WS') continue
+		if (route[0] === 'WS') continue
 
-		const method = mapMethodBack(route[0])
+		const method = route[0]
 		const path = route[1]
 		if (seen.get(method + ' ' + path) !== i) continue
 

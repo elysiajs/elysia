@@ -18,7 +18,7 @@ import type {
 import { ListenCallback, Serve, Server } from './universal'
 import { isBun } from './universal/constants'
 
-import { isDynamicRegex, needEncodeRegex, MethodMap } from './constants'
+import { isDynamicRegex, needEncodeRegex } from './constants'
 import { BunAdapter } from './adapter/bun'
 import {
 	clonePlainDeep,
@@ -37,7 +37,6 @@ import {
 	joinPath,
 	macroOrigin,
 	mapDeriveEntry,
-	mapMethodBack,
 	mergeDeep,
 	mergeResponse,
 	nullObject,
@@ -198,7 +197,7 @@ export class Elysia<
 	#history?: InternalRoute[]
 	server?: Server
 
-	get history(): InternalRoute[] | undefined {
+	get history() {
 		if (!this.#history) return
 
 		if (!this['~ext']?.macro && !this['~scopeChildren'])
@@ -263,14 +262,6 @@ export class Elysia<
 			)
 	}
 
-	/**
-	 * @deprecated use `app.history` instead
-	 *
-	 * Elysia changes it store route internally
-	 * This API is provided as compatibility
-	 *
-	 * Will remove in 2.1
-	 */
 	get routes(): PublicRoute[] {
 		if (!this.#history) return []
 
@@ -309,7 +300,7 @@ export class Elysia<
 					merged.response = { 200: merged.response }
 
 				return {
-					method: mapMethodBack(method),
+					method,
 					path,
 					handler,
 					hooks: merged
@@ -4436,7 +4427,7 @@ export class Elysia<
 	}
 
 	#add(
-		method: string | MethodMap[keyof MethodMap],
+		method: string,
 		path: string,
 		hookOrFn: unknown,
 		fn?: unknown,
@@ -4730,7 +4721,7 @@ export class Elysia<
 		Handle
 	>
 	get(path: string, hookOrFn: unknown, fn?: unknown): any {
-		return this.#add(MethodMap.GET, path, hookOrFn, fn)
+		return this.#add('GET', path, hookOrFn, fn)
 	}
 
 	/**
@@ -4863,7 +4854,7 @@ export class Elysia<
 		Handle
 	>
 	post(path: string, hookOrFn: unknown, fn?: unknown): any {
-		return this.#add(MethodMap.POST, path, hookOrFn, fn)
+		return this.#add('POST', path, hookOrFn, fn)
 	}
 
 	/**
@@ -4996,7 +4987,7 @@ export class Elysia<
 		Handle
 	>
 	put(path: string, hookOrFn: unknown, fn?: unknown): any {
-		return this.#add(MethodMap.PUT, path, hookOrFn, fn)
+		return this.#add('PUT', path, hookOrFn, fn)
 	}
 
 	/**
@@ -5129,7 +5120,7 @@ export class Elysia<
 		Handle
 	>
 	patch(path: string, hookOrFn: unknown, fn?: unknown): any {
-		return this.#add(MethodMap.PATCH, path, hookOrFn, fn)
+		return this.#add('PATCH', path, hookOrFn, fn)
 	}
 
 	/**
@@ -5262,7 +5253,7 @@ export class Elysia<
 		Handle
 	>
 	delete(path: string, hookOrFn: unknown, fn?: unknown): any {
-		return this.#add(MethodMap.DELETE, path, hookOrFn, fn)
+		return this.#add('DELETE', path, hookOrFn, fn)
 	}
 
 	/**
@@ -5395,7 +5386,7 @@ export class Elysia<
 		Handle
 	>
 	options(path: string, hookOrFn: unknown, fn?: unknown): any {
-		return this.#add(MethodMap.OPTIONS, path, hookOrFn, fn)
+		return this.#add('OPTIONS', path, hookOrFn, fn)
 	}
 
 	/**
@@ -5528,7 +5519,7 @@ export class Elysia<
 		Handle
 	>
 	head(path: string, hookOrFn: unknown, fn?: unknown): any {
-		return this.#add(MethodMap.HEAD, path, hookOrFn, fn)
+		return this.#add('HEAD', path, hookOrFn, fn)
 	}
 
 	/**
@@ -6111,7 +6102,7 @@ export class Elysia<
 				)
 			} catch (error) {
 				throw new Error(
-					`[Elysia] Failed to compile route ${mapMethodBack(route[0])} ${route[1]}: ${(error as Error)?.message ?? error}`,
+					`[Elysia] Failed to compile route ${route[0]} ${route[1]}: ${(error as Error)?.message ?? error}`,
 					{ cause: error }
 				)
 			}
@@ -6143,7 +6134,7 @@ export class Elysia<
 				)
 			} catch (error) {
 				throw new Error(
-					`[Elysia] Failed to compile route ${mapMethodBack(route[0])} ${route[1]}: ${(error as Error)?.message ?? error}`,
+					`[Elysia] Failed to compile route ${route[0]} ${route[1]}: ${(error as Error)?.message ?? error}`,
 					{ cause: error }
 				)
 			}
@@ -6171,17 +6162,12 @@ export class Elysia<
 		}
 	}
 
-	#saveHandler(
-		method: string | MethodMap[keyof MethodMap],
-		path: string,
-		handler: CompiledHandler
-	) {
+	#saveHandler(method: string, path: string, handler: CompiledHandler) {
 		if (isDynamicRegex.test(path)) return
 
 		this.#initMap()
 
-		const map = (this['~map']![mapMethodBack(method)] ??=
-			nullObject() as any)
+		const map = (this['~map']![method] ??= nullObject() as any)
 		map[path] = handler
 	}
 
@@ -6401,8 +6387,8 @@ export class Elysia<
 		if (enableAutoHead || isLoose)
 			for (let i = 0; i < length; i++) {
 				const route = this.#history![i]
-				const isWS = (route[0] as any) === 'WS'
-				const m = isWS ? 'WS' : mapMethodBack(route[0])
+				const isWS = route[0] === 'WS'
+				const m = route[0]
 				const p = route[1]
 
 				if (enableAutoHead && !isWS && m === 'HEAD')
@@ -6422,7 +6408,7 @@ export class Elysia<
 
 		for (let i = 0; i < length; i++) {
 			const route: InternalRoute = this.#history![i]
-			const method = mapMethodBack(route[0])
+			const method = route[0]
 			const path = route[1]
 
 			if (this.#routeMayHaveModelRef(route))
