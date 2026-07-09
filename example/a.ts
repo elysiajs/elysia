@@ -1,14 +1,19 @@
-import { Elysia, file } from '../src'
+import { Elysia } from '../src'
 
-export const app = new Elysia()
-	.trace(() => {})
-	.headers({
-		'x-powered-by': 'elysia'
+new Elysia()
+	.macro({
+		ip: {
+			derive: ({ server, request }) => ({
+				ip: server?.requestIP(request)
+			})
+		}
 	})
-	.post('/', async function* () {
-		await Bun.sleep(1000)
-		yield 1
-		await Bun.sleep(100)
-		yield 1
+	.macro({
+		ip2: {
+			ip: true,
+			derive: ({ ip }) => ({
+				address: ip?.address
+			})
+		}
 	})
-	.listen(3000)
+	.get('/', { ip2: true }, ({ address }) => address)
