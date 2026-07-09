@@ -1,11 +1,11 @@
 import { Create } from './type/bridge'
 
+import { isProduction } from './universal/is-production'
 import { StatusMap, StatusMapBack } from './constants'
 import { primitiveElysiaTypes } from './type/constants'
 import { skipClone } from './adapter/skip-clone'
-import { env } from './universal/env'
 
-export const isProduction = () => (env.NODE_ENV ?? env.ENV) === 'production'
+export { isProduction } from './universal/is-production'
 
 export class ElysiaError<
 	Status extends number = number,

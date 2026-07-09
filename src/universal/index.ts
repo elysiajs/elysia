@@ -10,3 +10,4 @@ export type {
 	ServerWebSocketSendStatus,
 	SocketAddress
 } from './server'
+export { isProduction } from './is-production'

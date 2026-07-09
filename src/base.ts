@@ -7,8 +7,15 @@ import {
 	localMacroRoot,
 	resolveLocalHook
 } from './compile/handler'
-import { Capture } from './compile/aot'
-import { buildWSRoute } from './ws/route'
+import {
+	Capture,
+	Compiled,
+	computeRouteTableShape,
+	ROUTE_TABLE_VERSION,
+	type RouteTableManifest,
+	type RouteTableSlot
+} from './compile/aot'
+import { buildRouter } from './compile/build-router'
 import type {
 	WSLocalHook,
 	WSMessageHandler,
@@ -18,7 +25,7 @@ import type {
 import { ListenCallback, Serve, Server } from './universal'
 import { isBun } from './universal/constants'
 
-import { isDynamicRegex, needEncodeRegex } from './constants'
+import { isDynamicRegex } from './constants'
 import { BunAdapter } from './adapter/bun'
 import {
 	clonePlainDeep,
@@ -28,11 +35,9 @@ import {
 	eventProperties,
 	fnOrigin,
 	fnv1a,
-	getLoosePath,
 	guardNonPlainLeaves,
 	hookToGuard,
 	isEmpty,
-	isNotEmpty,
 	isRecordNumber,
 	joinPath,
 	macroOrigin,
@@ -133,7 +138,7 @@ const useNodesBuffer: ChainNode[] = []
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
 
-interface StaticMapAliases {
+export interface StaticMapAliases {
 	method: string
 	paths: string[]
 	head: boolean
@@ -6207,360 +6212,122 @@ export class Elysia<
 		}) as CompiledHandler
 	}
 
-	#chainRefMemo?: WeakMap<ChainNode, boolean>
+	#replayRouter(routeTableManifest: RouteTableManifest) {
+		if (routeTableManifest.v !== ROUTE_TABLE_VERSION) return false
 
-	static #slotHasString(h: Record<string, unknown> | undefined) {
-		if (!h || typeof h !== 'object') return false
+		const history = this.#history!
+		const shape = computeRouteTableShape(history, this['~config'])
 
-		for (const key of schemaProperties) {
-			const v = h[key]
-			if (typeof v === 'string') return true
+		if (shape !== routeTableManifest.shape)
+			throw new Error(`[elysia-aot] frozen route-table shape mismatch`)
 
-			if (key === 'response' && v && typeof v === 'object') {
-				const record = v as Record<string, unknown>
-				if (
-					'~kind' in record ||
-					'~elyAcl' in record ||
-					'~standard' in record
-				)
-					continue
+		this.#initMap()
+		const methods = this['~map']!
+		this.#compiled ??= new Array(history.length)
 
-				for (const status in record)
-					if (typeof record[status] === 'string') return true
+		const indexOf = new Map<string, number>()
+		for (let i = 0; i < history.length; i++) {
+			const route = history[i]!
+			indexOf.set(route[0] + '\0' + route[1], i)
+		}
+
+		const handlerFor = (
+			slot: RouteTableSlot
+		): CompiledHandler | undefined => {
+			const i = indexOf.get(slot.m + '\0' + slot.p)
+			if (i === undefined) return
+
+			return this.handler(i, true, history[i]!)
+		}
+
+		let bound = 0
+		let expected = 0
+		const staticTree = routeTableManifest.static
+
+		for (const method in staticTree) {
+			const paths = staticTree[method]!
+			const map = (methods[method] ??= nullObject() as any)
+			for (const served in paths) {
+				expected++
+
+				const handler = handlerFor(paths[served]!)
+				if (handler === undefined) continue
+
+				map[served] = handler
+				bound++
 			}
 		}
 
-		return false
-	}
+		const headTree = routeTableManifest.head
+		if (headTree) {
+			const head = (methods['HEAD'] ??= nullObject() as any)
+			for (const served in headTree) {
+				expected++
 
-	static #hookHasString(h: Record<string, unknown> | undefined) {
-		if (Elysia.#slotHasString(h)) return true
+				const handler = handlerFor(headTree[served]!)
+				if (handler === undefined) continue
 
-		const schemas = (h as { schemas?: unknown } | undefined)?.schemas
-		if (Array.isArray(schemas))
-			for (let s = 0; s < schemas.length; s++)
-				if (
-					Elysia.#slotHasString(
-						schemas[s] as Record<string, unknown> | undefined
-					)
-				)
-					return true
-
-		return false
-	}
-
-	#chainHasModelRef(start: ChainNode | undefined): boolean {
-		if (!start) return false
-
-		const memo = (this.#chainRefMemo ??= new WeakMap())
-		const cached = memo.get(start)
-		if (cached !== undefined) return cached
-
-		let found = false
-		const stack: (ChainNode | undefined)[] = [start]
-		while (stack.length) {
-			const node = stack.pop()
-			if (!node) continue
-
-			if ('combine' in node) {
-				stack.push(node.combine)
-				stack.push(node.over)
-			} else {
-				if (
-					Elysia.#hookHasString(
-						node.added as Record<string, unknown> | undefined
-					)
-				) {
-					found = true
-					break
-				}
-				stack.push(node.parent)
+				head[served] = Elysia.#wrapHeadHandler(handler)
+				bound++
 			}
 		}
 
-		memo.set(start, found)
-		return found
-	}
+		const dynamicList = routeTableManifest.dynamic
+		if (dynamicList) {
+			const router = (this['~router'] ??= new Memoirist<CompiledHandler>({
+				loosePath: this['~config']?.strictPath !== true
+			}))
 
-	#routeMayHaveModelRef(route: InternalRoute): boolean {
-		if (this['~ext']?.macro || this['~scopeChildren']) return true
+			for (let d = 0; d < dynamicList.length; d++) {
+				expected++
 
-		const localRoot = localMacroRoot(
-			((route[7] as AnyElysia) ??
-				(route[3] as AnyElysia) ??
-				this) as AnyElysia,
-			this as unknown as AnyElysia
-		) as unknown as { '~ext'?: { macro?: unknown } }
-		if (localRoot['~ext']?.macro) return true
+				const entry = dynamicList[d]!
+				const base = handlerFor(entry.slot)
 
-		// route[4]: localHook (per-route)
-		if (
-			Elysia.#hookHasString(
-				route[4] as Record<string, unknown> | undefined
+				if (base === undefined) continue
+
+				router.add(
+					entry.m,
+					entry.s,
+					entry.h ? Elysia.#wrapHeadHandler(base) : base,
+					false
+				)
+				bound++
+			}
+		}
+
+		if (bound < expected)
+			throw new Error(
+				`[elysia-aot] frozen route-table bound ${bound}/${expected} routes`
 			)
-		)
-			return true
 
-		// Chain sources: route[5] (appHook), route[6] (inheritedChain)
-		return (
-			this.#chainHasModelRef(route[5] as ChainNode | undefined) ||
-			this.#chainHasModelRef(route[6] as ChainNode | undefined) ||
-			this.#chainHasModelRef(this['~hookChain'])
-		)
-	}
+		this.#routerBuilt = true
 
-	#assertRouteModelRefs(route: InternalRoute, method: string) {
-		const models = this['~ext']?.models
-		const path = route[1]
-
-		const checkSlots = (hook: Record<string, unknown> | undefined) => {
-			if (!hook) return
-
-			for (const key in hook) {
-				if (!schemaProperties.has(key)) continue
-
-				const v = hook[key]
-				if (typeof v === 'string') {
-					if (!models || !(v in models))
-						throw new Error(
-							`[Elysia] Unknown model reference "${v}" for ${key} on route ${method} ${path}.`
-						)
-				} else if (key === 'response' && v && typeof v === 'object') {
-					const record = v as Record<string, unknown>
-					if (
-						'~kind' in record ||
-						'~elyAcl' in record ||
-						'~standard' in record
-					)
-						continue
-
-					for (const status in record) {
-						const r = record[status]
-						if (
-							typeof r === 'string' &&
-							(!models || !(r in models))
-						)
-							throw new Error(
-								`[Elysia] Unknown model reference "${r}" for response ${status} on route ${method} ${path}.`
-							)
-					}
-				}
-			}
-		}
-
-		const hook = composeRouteHook(
-			route[3] as AnyElysia,
-			route[4] as any,
-			route[5] as any,
-			route[6] as any,
-			this as any,
-			route[7] as AnyElysia | undefined
-		) as (Record<string, unknown> & { schemas?: unknown[] }) | undefined
-
-		checkSlots(hook)
-
-		const schemas = hook?.schemas
-		if (Array.isArray(schemas))
-			for (let s = 0; s < schemas.length; s++)
-				checkSlots(schemas[s] as any)
+		return true
 	}
 
 	#routerBuilt = false
 	#buildRouter() {
 		if (!this.#history || this.#routerBuilt) return
+
+		const routeTableManifest = Capture.isAotBuildEnv() ? undefined : Compiled.routeTable
+
+		if (routeTableManifest && this.#replayRouter(routeTableManifest)) return
 		this.#routerBuilt = true
 
-		const precompile = this['~config']?.precompile
-		const enableAutoHead = this['~config']?.autoHead === true
-
-		this.#initMap()
-		const methods = this['~map']!
-		const length = this.#history.length
-
-		const wrapHeadHandler = Elysia.#wrapHeadHandler
-		const isLoose = this['~config']?.strictPath !== true
-
-		let explicitHead: Set<string> | undefined
-		let explicitPaths: Map<string, Set<string>> | undefined
-		if (isLoose) explicitPaths = new Map()
-
-		if (enableAutoHead || isLoose)
-			for (let i = 0; i < length; i++) {
-				const route = this.#history![i]
-				const isWS = route[0] === 'WS'
-				const m = route[0]
-				const p = route[1]
-
-				if (enableAutoHead && !isWS && m === 'HEAD')
-					(explicitHead ??= new Set()).add(p)
-
-				if (explicitPaths) {
-					let set = explicitPaths.get(m)
-					if (!set) explicitPaths.set(m, (set = new Set()))
-
-					set.add(p)
-					if (needEncodeRegex.test(p)) {
-						const encoded = encodeURI(p)
-						if (encoded !== p) set.add(encoded)
-					}
-				}
-			}
-
-		for (let i = 0; i < length; i++) {
-			const route: InternalRoute = this.#history![i]
-			const method = route[0]
-			const path = route[1]
-
-			if (this.#routeMayHaveModelRef(route))
-				this.#assertRouteModelRefs(route, method)
-
-			if ((route[0] as any) === 'WS') {
-				const ws = buildWSRoute(route, this)
-				const handler = ws[0] as unknown as CompiledHandler
-				const options = ws[1]
-
-				if (isDynamicRegex.test(path)) {
-					;(this['~router'] ??= new Memoirist<CompiledHandler>({
-						loosePath: isLoose
-					})).add('WS', path, handler, false)
-
-					this['~hasDynamicWS'] = true
-				} else {
-					this.#initMap()
-					const wsMap = (this['~map']!['WS'] ??= nullObject() as any)
-					wsMap[path] = handler
-
-					if (isLoose) {
-						const loose = getLoosePath(path)
-
-						if (
-							loose !== path &&
-							!explicitPaths?.get('WS')?.has(loose)
-						)
-							wsMap[loose] = handler
-					}
-				}
-
-				if (options && isNotEmpty(options)) {
-					this['~config'] ??= nullObject()
-					const existing = (this['~config'] as any).websocket
-
-					if (existing && isBun) {
-						for (const key in options)
-							if (
-								key in existing &&
-								(existing as any)[key] !== (options as any)[key]
-							) {
-								console.warn(
-									`[Elysia] Conflicting per-route WebSocket option '${key}'\nBun uses one global WebSocket config per server, per-route values are not enforced (the last-registered route wins).`
-								)
-								console.warn(new Error().stack)
-							}
-
-						Object.assign(existing, options)
-					} else (this['~config'] as any).websocket = options
-				}
-
-				continue
-			}
-
-			const autoHead =
-				enableAutoHead && method === 'GET' && !explicitHead?.has(path)
-
-			const isDynamic = isDynamicRegex.test(path)
-			const needsEncode = needEncodeRegex.test(path)
-			const registerLoose =
-				!isDynamic &&
-				isLoose &&
-				(path.length === 0 || path.charCodeAt(path.length - 1) === 47)
-
-			const explicitMain = registerLoose
-				? explicitPaths?.get(method)
-				: undefined
-
-			if (!isDynamic && !needsEncode && !registerLoose) {
-				const map = (methods[method] ??= nullObject() as any)
-
-				const handler = this.handler(
-					i,
-					precompile,
+		buildRouter(this as unknown as AnyElysia, {
+			history: this.#history!,
+			handler: (index, immediate, route, precomputedStatic, aliases) =>
+				this.handler(
+					index,
+					immediate,
 					route,
-					undefined,
-					autoHead ? { method, paths: [path], head: true } : undefined
-				)
-
-				map[path] = handler
-
-				if (autoHead) {
-					const head = (methods['HEAD'] ??= nullObject() as any)
-					head[path] = wrapHeadHandler(handler)
-				}
-
-				continue
-			}
-
-			const variants = [path]
-			if (needsEncode) {
-				const encoded = encodeURI(path)
-				if (encoded !== path) variants.push(encoded)
-			}
-
-			const paths: string[] = []
-			for (let v = 0; v < variants.length; v++) {
-				const p = variants[v]
-				paths.push(p)
-				if (registerLoose) {
-					const loose = getLoosePath(p)
-					if (loose !== p && !explicitMain?.has(loose))
-						paths.push(loose)
-				}
-			}
-
-			if (isDynamic) {
-				const router = (this['~router'] ??=
-					new Memoirist<CompiledHandler>({
-						loosePath: isLoose
-					}))
-
-				const handler = this.handler(
-					i,
-					precompile,
-					undefined,
-					undefined
-				)
-
-				const headHandler = autoHead
-					? wrapHeadHandler(handler)
-					: undefined
-
-				for (let p = 0; p < paths.length; p++) {
-					router.add(method, paths[p], handler, false)
-					if (headHandler)
-						router.add('HEAD', paths[p], headHandler, false)
-				}
-			} else {
-				const map = (methods[method] ??= nullObject() as any)
-
-				const handler = this.handler(i, precompile, route, undefined, {
-					method,
-					paths,
-					head: autoHead
-				})
-
-				const headHandler = autoHead
-					? wrapHeadHandler(handler)
-					: undefined
-
-				const head = autoHead
-					? (methods['HEAD'] ??= nullObject() as any)
-					: undefined
-
-				for (let p = 0; p < paths.length; p++) {
-					map[paths[p]] = handler
-					if (headHandler) head![paths[p]] = headHandler
-				}
-			}
-		}
+					precomputedStatic,
+					aliases
+				),
+			initMap: () => this.#initMap(),
+			wrapHeadHandler: Elysia.#wrapHeadHandler
+		})
 	}
 
 	#fetchFn?: (request: Request) => MaybePromise<Response>

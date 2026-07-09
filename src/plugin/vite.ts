@@ -3,8 +3,16 @@ import {
 	generateCompiledArtifacts,
 	realPath,
 	resolveEntry,
+	resolveElysiaRoot,
+	makeIsElysiaModule,
 	SOURCE_REGEX,
 	STUB_SOURCES,
+	ADAPTER_CONSTANTS_FILTER,
+	ADAPTER_BUN_FILTER,
+	IS_PRODUCTION_FILTER,
+	adapterConstantsSource,
+	bunAdapterStubSource,
+	rewriteIsProductionCalls,
 	type StubPlan,
 	type ElysiaAotOptions
 } from './core'
@@ -70,8 +78,13 @@ export const aot = (
 		trace: false,
 		sucrose: false,
 		compat: false,
-		bridge: false
+		bridge: false,
+		adapter: false,
+		isProduction: false,
+		buildRouter: false
 	}
+
+	let isElysiaModule = (_path: string) => false
 
 	return {
 		name: 'elysia-aot',
@@ -82,6 +95,9 @@ export const aot = (
 			source = generated.source
 			stub = generated.stub
 			virtualType = generated.virtualType
+
+			const pkgRoot = resolveElysiaRoot(entryPath)
+			isElysiaModule = makeIsElysiaModule(pkgRoot)
 		},
 		buildEnd() {
 			if (!entryMatched)
@@ -93,8 +109,6 @@ export const aot = (
 		},
 		resolveId(id) {
 			if (id === 'elysia/compiled') return VIRTUAL
-			// Serve the virtual `elysia/type` (no `setupTypebox`) so unused `t.*`
-			// tree-shake. Applies in sealed + wired modes; `off` leaves it real.
 			if (id === 'elysia/type' && virtualType !== undefined)
 				return VIRTUAL_TYPE
 		},
@@ -106,12 +120,35 @@ export const aot = (
 			const cleanId = id.split('?', 1)[0]
 
 			// Stub when every route is compiled
-			for (const key of Object.keys(STUB_SOURCES) as (keyof StubPlan)[]) {
+			for (const key of Object.keys(
+				STUB_SOURCES
+			) as (keyof typeof STUB_SOURCES)[]) {
 				if (!stub[key]) continue
 				for (const { filter, source: stubSource } of STUB_SOURCES[key])
 					if (filter.test(cleanId))
 						return alignStubExtensions(stubSource, cleanId)
 			}
+
+			if (
+				stub.adapter !== false &&
+				ADAPTER_CONSTANTS_FILTER.test(cleanId)
+			)
+				return alignStubExtensions(
+					adapterConstantsSource(stub.adapter),
+					cleanId
+				)
+
+			if (
+				stub.adapter === 'web-standard' &&
+				ADAPTER_BUN_FILTER.test(cleanId)
+			)
+				return alignStubExtensions(bunAdapterStubSource, cleanId)
+
+			if (stub.isProduction && IS_PRODUCTION_FILTER.test(cleanId))
+				return alignStubExtensions(
+					`export const isProduction = () => true\n`,
+					cleanId
+				)
 
 			let out = code
 			if (
@@ -120,6 +157,9 @@ export const aot = (
 				!cleanId.includes('node_modules')
 			)
 				out = rewriteTypeImport(out)
+
+			if (stub.isProduction && isElysiaModule(cleanId))
+				out = rewriteIsProductionCalls(out)
 
 			if (isEntry(cleanId)) {
 				entryMatched = true

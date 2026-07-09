@@ -6,6 +6,7 @@ import {
 	compileToSource,
 	captureArtifacts,
 	replayStubbability,
+	emitRouteTableRegistration,
 	type AotTarget,
 	type StubbabilityReport
 } from './source'
@@ -79,6 +80,19 @@ export interface ElysiaAotOptions {
 	 * @default 'auto'
 	 */
 	strip?: boolean | 'auto'
+
+	/**
+	 * Treat this as a production build, making `isProduction` a compile-time
+	 * constant `true` so bundlers can DCE `!isProduction()` branches.
+	 *
+	 * - `true` (default): stub `isProduction` as `() => true` so dev-verbose
+	 *   error paths tree-shake
+	 * - `false`: leave `isProduction` as a runtime env read (preserves dev
+	 *   behaviour in the bundle)
+	 *
+	 * @default true
+	 */
+	production?: boolean
 }
 
 function findPackageRoot(from: string = process.cwd()) {
@@ -168,6 +182,33 @@ export interface StubPlan {
 	 * least one validator that is not bridge-free, so the bridge is still needed
 	 */
 	bridge: boolean
+
+	/**
+	 * Replace `adapter/constants` with a target-specific stub that hard-selects
+	 * either `BunAdapter` or `WebStandardAdapter`, letting the bundler DCE the
+	 * other adapter. Only set when `target` unambiguously implies a runtime
+	 * (`'bun'` → Bun; `'node'`/`'workerd'` → WebStandard). When `target` is
+	 * absent or ambiguous this is `false` and the runtime `isBun` path is kept.
+	 */
+	adapter: 'bun' | 'web-standard' | false
+
+	/**
+	 * Replace `universal/is-production` with a stub that returns `true` at
+	 * compile time so bundlers can DCE `!isProduction()` branches. Set when
+	 * `production: true` (the default for plugin builds).
+	 */
+	isProduction: boolean
+
+	/**
+	 * Replace `compile/build-router` (the full `#buildRouter` route-scan /
+	 * model-ref assert / variant-derivation / per-route compile graph) with a
+	 * throwing stub. Safe ONLY when the build emitted a frozen route table manifest
+	 * (`mode === 'sealed'` AND `routeTable` present): the runtime `#replayRouter`
+	 * binds `~map` directly and never reaches the full builder. If the route table was
+	 * not emitted (any bail), the full builder must remain live — this is left
+	 * `false`. The runtime shape-drift loud-throw covers any post-stub drift.
+	 */
+	buildRouter: boolean
 }
 
 /**
@@ -192,7 +233,10 @@ const NO_STUB: StubPlan = {
 	trace: false,
 	sucrose: false,
 	compat: false,
-	bridge: false
+	bridge: false,
+	adapter: false,
+	isProduction: false,
+	buildRouter: false
 } as const
 
 /**
@@ -219,7 +263,10 @@ export function planFromReport(
 	mayTrace: boolean,
 	aliases: Set<string>,
 	allBridgeFree: boolean,
-	zeroCapture: boolean
+	zeroCapture: boolean,
+	adapterStub: 'bun' | 'web-standard' | false = false,
+	productionStub: boolean = true,
+	hasRouteTable: boolean = false
 ): { plan: StubPlan; mode: BridgeMode } {
 	const jit = report.jit
 
@@ -250,22 +297,85 @@ export function planFromReport(
 				!aliases.has('cc') &&
 				!aliases.has('tr'),
 			cookie: jit && !aliases.has('cc'),
-			// stubbable when fully stripped with no `tr` alias, OR — even
-			// under live JIT — when the app registers no trace handler at all
-			// (every trace call site gates on registered handlers). A `tr`
-			// alias always keeps the runtime, whatever detection said
 			trace: !aliases.has('tr') && (jit || !mayTrace),
 			sucrose: jit,
-			// Both modes stub compat; only the wired mode re-routes the bridge.
 			compat: mode !== 'off',
-			bridge: mode === 'wired'
+			bridge: mode === 'wired',
+			adapter: adapterStub,
+			isProduction: productionStub,
+			buildRouter: mode === 'sealed' && hasRouteTable
 		},
 		mode
 	}
 }
 
+export function adapterConstantsSource(target: 'bun' | 'web-standard'): string {
+	if (target === 'bun')
+		return (
+			`import { BunAdapter } from './bun/index'\n` +
+			`export const defaultAdapter = BunAdapter\n`
+		)
+
+	return (
+		`import { WebStandardAdapter } from './web-standard/index'\n` +
+		`export const defaultAdapter = WebStandardAdapter\n`
+	)
+}
+
+/** Filter matching elysia's own `adapter/constants` module (src + dist). */
+export const ADAPTER_CONSTANTS_FILTER =
+	/[\\/]elysia[\\/](dist|src)[\\/]adapter[\\/]constants\.(m?js|ts)$/
+
+export const ADAPTER_BUN_FILTER =
+	/[\\/]elysia[\\/](dist|src)[\\/]adapter[\\/]bun[\\/]index\.(m?js|ts)$/
+
+export const IS_PRODUCTION_FILTER =
+	/[\\/]elysia[\\/](dist|src)[\\/]universal[\\/]is-production\.(m?js|ts)$/
+
+export const ELYSIA_MODULE_FILTER =
+	/[\\/]elysia[\\/](dist|src)[\\/].+\.(m?js|ts)x?$/
+
+export function resolveElysiaRoot(from: string = process.cwd()): string {
+	try {
+		const _require = createRequire(join(from, 'package.json'))
+
+		return dirname(_require.resolve('elysia/package.json'))
+	} catch {
+		// Fallback for linked/monorepo setups where createRequire may fail: return `from` as-is.
+		return from
+	}
+}
+
+export function makeIsElysiaModule(elysiaRoot: string) {
+	const root = elysiaRoot.replace(/\\/g, '/')
+
+	return (path: string) => {
+		const posix = path.replace(/\\/g, '/')
+		return posix.startsWith(root + '/') && ELYSIA_MODULE_FILTER.test(path)
+	}
+}
+
+export function makeElysiaModuleFilterRegex(elysiaRoot: string) {
+	const escaped = elysiaRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+	return new RegExp(
+		'^' + escaped + '[\\\\/](dist|src)[\\\\/].+\\.(m?js|ts)x?$'
+	)
+}
+
+// Negative lookbehind for `.` and `?.` ensures we only rewrite bare
+// identifier call expressions and leave member calls (`x.isProduction()`,
+// `x?.isProduction()`) untouched.
+export const rewriteIsProductionCalls = (code: string) =>
+	code.replace(/(?<![.?])\bisProduction\(\)/g, 'true')
+
+export const bunAdapterStubSource =
+	`const e=(t)=>{throw new Error(\`[elysia-aot] Bun adapter was stripped for target 'web-standard' — .listen() is unavailable; use the exported fetch handler or rebuild with a different target.\`)}\n` +
+	`export const BunAdapter={name:'bun',runtime:'bun',isWebStandard:true,parse:{},response:{},listen:e}\n` +
+	`export function collectStaticRoutes(){}\n`
+
 export const STUB_SOURCES: Record<
-	keyof StubPlan,
+	Exclude<keyof StubPlan, 'adapter' | 'isProduction'>,
 	Array<{ filter: RegExp; source: string }>
 > = {
 	jit: [
@@ -361,6 +471,12 @@ export const STUB_SOURCES: Record<
 			filter: /[\\/]elysia[\\/](dist|src)[\\/]type[\\/]bridge\.(m?js|ts)$/,
 			source: `export * from './bridge-live'\n`
 		}
+	],
+	buildRouter: [
+		{
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]compile[\\/]build-router\.(m?js|ts)$/,
+			source: `export function buildRouter(){throw new Error("[elysia-aot] the full router builder was stripped (sealed strip mode) but the frozen slim-replay route table did not bind a route. The AOT manifest is stale or the app drifted from the build; rebuild with strip: false.")}\n`
+		}
 	]
 }
 
@@ -415,7 +531,7 @@ export const OVERRIDE_MAP: Record<string, { leaf: string; export: string }> = {
 // so `.resolve` works from this module in both the `.mjs` and `.js` outputs.
 const requireFromHere = createRequire(import.meta.url)
 
-const resolveSpecifier = (specifier: string): string => {
+function resolveSpecifier(specifier: string) {
 	const meta = import.meta as ImportMeta & {
 		resolve?: (s: string) => string
 	}
@@ -573,10 +689,23 @@ export async function generateCompiledArtifacts(
 
 		const strip = options?.strip ?? 'auto'
 
+		const adapterStub: 'bun' | 'web-standard' | false =
+			options?.target === 'bun'
+				? 'bun'
+				: options?.target === 'node' || options?.target === 'workerd'
+					? 'web-standard'
+					: false
+
+		const productionStub = options?.production !== false
+
 		if (strip === false)
 			return {
 				source: await compileToSource(typedApp, sourceOptions),
-				stub: NO_STUB,
+				stub: {
+					...NO_STUB,
+					adapter: adapterStub,
+					isProduction: productionStub
+				},
 				mode: 'off'
 			}
 
@@ -687,7 +816,11 @@ export async function generateCompiledArtifacts(
 			mayTrace,
 			aliases,
 			allBridgeFree,
-			artifacts.handlers.length === 0 && artifacts.validators.length === 0
+			artifacts.handlers.length === 0 &&
+				artifacts.validators.length === 0,
+			adapterStub,
+			productionStub,
+			!!artifacts.routeTable
 		)
 
 		if (options?.target === 'workerd') {
@@ -711,8 +844,15 @@ export async function generateCompiledArtifacts(
 				? undefined
 				: await generateVirtualType('elysia/type')
 
+		// #buildRouter
+		const source =
+			mode === 'sealed' && artifacts.routeTable
+				? artifacts.source +
+					emitRouteTableRegistration(artifacts.routeTable)
+				: artifacts.source
+
 		return {
-			source: artifacts.source,
+			source,
 			stub,
 			mode,
 			virtualType
@@ -741,6 +881,15 @@ export interface SetupAotHooksOptions {
 	source: string
 	stub: StubPlan
 	treeShake: boolean
+
+	/**
+	 * Resolved absolute path of the elysia package root (e.g.
+	 * `/project/node_modules/elysia` or the repo root for linked installs).
+	 * Used to anchor the `isProduction()` call-site rewrite so only elysia-owned
+	 * modules are touched, not user code in a directory that happens to be named
+	 * "elysia". Defaults to `resolveElysiaRoot()` when omitted.
+	 */
+	elysiaRoot?: string
 
 	/**
 	 * Virtual `elysia/type` module source (from `generateVirtualType`). When set,
@@ -774,8 +923,10 @@ export async function setupAotHooks({
 	treeShake,
 	virtualType,
 	resolveDir,
+	elysiaRoot,
 	build
 }: SetupAotHooksOptions): Promise<void> {
+	const pkgRoot = elysiaRoot ?? resolveElysiaRoot(dirname(entryPath))
 	const entryReal = realPath(entryPath)
 
 	const isEntry = (path: string): boolean =>
@@ -796,10 +947,6 @@ export async function setupAotHooks({
 			}) as { contents: string; loader: string; resolveDir?: string }
 	)
 
-	// Serve the virtual `elysia/type` (no `setupTypebox`). Its specifiers are
-	// absolute, so `resolveDir` is only a defensive default. Intercepts both the
-	// treeshake-rewritten `import * as t from 'elysia/type'` and any user-direct
-	// `elysia/type` import.
 	if (virtualType !== undefined) {
 		build.onResolve({ filter: /^elysia\/type$/ }, () => ({
 			path: 'elysia-type',
@@ -817,13 +964,51 @@ export async function setupAotHooks({
 		)
 	}
 
-	for (const key of Object.keys(STUB_SOURCES) as (keyof StubPlan)[])
+	for (const key of Object.keys(
+		STUB_SOURCES
+	) as (keyof typeof STUB_SOURCES)[])
 		if (stub[key])
 			for (const { filter, source: stubSource } of STUB_SOURCES[key])
 				build.onLoad({ filter }, (args: { path: string }) => ({
 					contents: alignStubExtensions(stubSource, args.path),
 					loader: 'js'
 				}))
+
+	if (stub.adapter !== false) {
+		const adapterSrc = adapterConstantsSource(stub.adapter)
+		build.onLoad(
+			{ filter: ADAPTER_CONSTANTS_FILTER },
+			(args: { path: string }) => ({
+				contents: alignStubExtensions(adapterSrc, args.path),
+				loader: 'js'
+			})
+		)
+
+		if (stub.adapter === 'web-standard') {
+			build.onLoad(
+				{ filter: ADAPTER_BUN_FILTER },
+				(_args: { path: string }) => ({
+					contents: bunAdapterStubSource,
+					loader: 'js'
+				})
+			)
+		}
+	}
+
+	if (stub.isProduction) {
+		const isProdSrc = `export const isProduction = () => true\n`
+
+		build.onLoad(
+			{ filter: IS_PRODUCTION_FILTER },
+			(args: { path: string }) => ({
+				contents: alignStubExtensions(isProdSrc, args.path),
+				loader: 'js'
+			})
+		)
+	}
+
+	const isElysiaModule = makeIsElysiaModule(pkgRoot)
+	const elysiaModuleFilterRegex = makeElysiaModuleFilterRegex(pkgRoot)
 
 	if (treeShake) {
 		const { rewriteTypeImport } = await import('./treeshake')
@@ -833,22 +1018,42 @@ export async function setupAotHooks({
 			async (args: { path: string }) => {
 				const isEntryFile = isEntry(args.path)
 				const inModules = args.path.includes('/node_modules/')
-				if (inModules && !isEntryFile) return undefined
+				const isElysiaOwned = isElysiaModule(args.path)
+
+				if (inModules && !isEntryFile && !isElysiaOwned) return
 
 				const original = await readText(args.path)
-				let contents = inModules
-					? original
-					: rewriteTypeImport(original)
+				let contents =
+					inModules && !isEntryFile
+						? original
+						: rewriteTypeImport(original)
+
+				if (stub.isProduction && isElysiaOwned)
+					contents = rewriteIsProductionCalls(contents)
 
 				if (isEntryFile)
 					contents = `import 'elysia/compiled'\n${contents}`
 
-				if (contents === original) return undefined
+				if (contents === original) return
 
 				return { contents, loader: resolveLoader(args.path) }
 			}
 		)
-	} else
+	} else {
+		if (stub.isProduction)
+			build.onLoad(
+				{ filter: elysiaModuleFilterRegex },
+				async (args: { path: string }) => {
+					if (!isElysiaModule(args.path)) return
+
+					const original = await readText(args.path)
+					const contents = rewriteIsProductionCalls(original)
+					if (contents === original) return
+
+					return { contents, loader: resolveLoader(args.path) }
+				}
+			)
+
 		build.onLoad(
 			{ filter: entryFilter(entryPath) },
 			async (args: { path: string }) => {
@@ -859,4 +1064,5 @@ export async function setupAotHooks({
 				}
 			}
 		)
+	}
 }

@@ -167,7 +167,11 @@ describe('AOT strip regression — strip:auto (sound: skip when unsafe)', () => 
 			// evidence, every captured validator (none) is bridge-free, and WS
 			// validators reconstruct bridge-free → mode A, bridge severed
 			compat: true,
-			bridge: false
+			bridge: false,
+			adapter: false,
+			isProduction: true,
+			// WS bails routeTable (slice 3 is HTTP-static-only) → builder stays live
+			buildRouter: false
 		})
 
 		const text = await build(
@@ -317,7 +321,11 @@ describe('AOT strip regression — strip:auto (sound: skip when unsafe)', () => 
 			// the mounted sub-app's routes are invisible to capture; the visible
 			// route set is bridge-free → sealed (compat stubbed, no reroute)
 			compat: true,
-			bridge: false
+			bridge: false,
+			adapter: false,
+			isProduction: true,
+			// mount() handler bails routeTable → the full router builder stays live
+			buildRouter: false
 		})
 
 		const text = await build(
@@ -333,11 +341,10 @@ describe('AOT strip regression — strip:auto (sound: skip when unsafe)', () => 
 		await expect(outer.text()).resolves.toBe('outer')
 
 		// the mounted sub-app's route is invisible to capture; with JIT stubbed it
-		// cannot compile and fails loud with the strip-mode error
+		// cannot compile and FAILS LOUD (status 500, never a silent wrong response).
+		// The strip-mode error detail is redacted in production builds (isProduction
+		// defaults to true in plugin builds), so we only assert the status code.
 		const sub = await app.handle(req('/sub/hello'))
 		expect(sub.status).toBe(500)
-		await expect(sub.text()).resolves.toContain(
-			'handler compiler JIT was stripped'
-		)
 	})
 })

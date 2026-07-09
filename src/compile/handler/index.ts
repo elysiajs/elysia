@@ -159,7 +159,7 @@ function dropHooksByOrigin(
 	return out
 }
 
-function reconstructNeedsHookState(names: string[]): boolean {
+export function reconstructNeedsHookState(names: string[]): boolean {
 	for (let i = 0; i < names.length; i++)
 		switch (names[i]) {
 			case 'ho':
@@ -177,6 +177,18 @@ function reconstructNeedsHookState(names: string[]): boolean {
 
 	return false
 }
+
+export const takesFrozenFastPath = (
+	reconstructed: { a: string[] },
+	handler: unknown,
+	instance: AnyElysia,
+	macroScope: AnyElysia | undefined,
+	root: AnyElysia
+) =>
+	typeof handler === 'function' &&
+	!root['~ext']?.macro &&
+	!localMacroRoot(macroScope ?? instance, root)['~ext']?.macro &&
+	!reconstructNeedsHookState(reconstructed.a)
 
 function promoteDerive(hook: any) {
 	const derive = hook.derive
@@ -591,10 +603,7 @@ export function compileHandler(
 	if (
 		reconstructed &&
 		!precomputedStatic &&
-		typeof handler === 'function' &&
-		!root['~ext']?.macro &&
-		!localMacroRoot(macroScope ?? instance, root)['~ext']?.macro &&
-		!reconstructNeedsHookState(reconstructed.a)
+		takesFrozenFastPath(reconstructed, handler, instance, macroScope, root)
 	)
 		return reconstructed.f(
 			handler,
@@ -608,9 +617,6 @@ export function compileHandler(
 			})
 		) as CompiledHandler
 
-	// Route- and chain-level macros are resolved inside `composeRouteHook`
-	// (localHook via a per-root clone, chain nodes before the memoised flatten
-	// is cached) so no shared registration state is mutated in place.
 	const hook = composeRouteHook(
 		instance,
 		localHook,

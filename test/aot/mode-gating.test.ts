@@ -104,7 +104,9 @@ async function buildEsbuild(app: string): Promise<string> {
 			minify: true,
 			external: ['node:*'],
 			logLevel: 'silent',
-			plugins: [aot(app)]
+			// production:false: these tests inspect runtime validation errors and
+			// error detail strings that are redacted in production mode.
+			plugins: [aot(app, { production: false })]
 		})
 		return result.outputFiles[0]!.text
 	} finally {
@@ -123,7 +125,9 @@ async function buildBun(app: string): Promise<string> {
 			entrypoints: [app],
 			target: 'bun',
 			minify: true,
-			plugins: [aot(app)]
+			// production:false: these tests inspect runtime validation errors and
+			// error detail strings that are redacted in production mode.
+			plugins: [aot(app, { production: false })]
 		})
 		if (!result.success) throw new AggregateError(result.logs)
 		return result.outputs[0]!.text()
