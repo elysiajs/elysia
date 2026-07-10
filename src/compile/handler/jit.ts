@@ -43,6 +43,8 @@ import {
 	mapError,
 	mapMapResponse,
 	mapTransform,
+	runBeforeHandlePrefix,
+	runBeforeHandlePrefixAsync,
 	type TraceReporter
 } from './utils'
 import { tee } from '../../adapter/utils'
@@ -50,7 +52,7 @@ import { createTracer, unionTracePhases, type TraceEvent } from '../../trace'
 import { Capture } from '../aot'
 import { JITProbe } from '../jit-probe'
 
-import { requestId } from '../../utils'
+import { requestId, type CompactBeforeHandlePrefix } from '../../utils'
 
 import type { Link } from './utils'
 import type { Context } from '../../context'
@@ -96,6 +98,93 @@ const lifecycleMayReturnPromise = (
 				(mayReturnPromise(handlers) ||
 					(observed && mayReturnIdentifier(handlers)))
 		: false
+
+const compactPrefixInference = new WeakMap<
+	CompactBeforeHandlePrefix,
+	Sucrose.Inference
+>()
+const compactPrefixAsync = new WeakMap<CompactBeforeHandlePrefix, boolean>()
+
+const mergeInference = (
+	a: Sucrose.Inference,
+	b: Sucrose.Inference
+): Sucrose.Inference => ({
+	body: a.body || b.body,
+	cookie: a.cookie || b.cookie,
+	headers: a.headers || b.headers,
+	query: a.query || b.query,
+	set: a.set || b.set,
+	server: a.server || b.server,
+	url: a.url || b.url,
+	route: a.route || b.route,
+	path: a.path || b.path
+})
+
+const inferCompactPrefix = (
+	prefix: CompactBeforeHandlePrefix
+): Sucrose.Inference => {
+	const cached = compactPrefixInference.get(prefix)
+	if (cached) return cached
+
+	const pending: CompactBeforeHandlePrefix[] = []
+	let current: CompactBeforeHandlePrefix | undefined = prefix
+	let inference: Sucrose.Inference | undefined
+
+	while (current) {
+		inference = compactPrefixInference.get(current)
+		if (inference) break
+
+		pending.push(current)
+		current = current.previous
+	}
+
+	for (let i = pending.length - 1; i >= 0; i--) {
+		const item = pending[i]!
+		const added = sucrose(undefined, {
+			beforeHandle: item.added as any
+		})
+		inference = inference ? mergeInference(inference, added) : added
+		compactPrefixInference.set(item, inference)
+	}
+
+	return inference!
+}
+
+const compactPrefixForcesAsync = (
+	prefix: CompactBeforeHandlePrefix
+): boolean => {
+	const cached = compactPrefixAsync.get(prefix)
+	if (cached !== undefined) return cached
+
+	const pending: CompactBeforeHandlePrefix[] = []
+	let current: CompactBeforeHandlePrefix | undefined = prefix
+	let value = false
+
+	while (current) {
+		const previous = compactPrefixAsync.get(current)
+		if (previous !== undefined) {
+			value = previous
+			break
+		}
+
+		pending.push(current)
+		current = current.previous
+	}
+
+	for (let i = pending.length - 1; i >= 0; i--) {
+		const item = pending[i]!
+		for (let j = 0; !value && j < item.added.length; j++) {
+			const fn = item.added[j]!
+			value =
+				isAsyncFunction(fn) ||
+				(!isAsyncFunction(fn) &&
+					(mayReturnPromise(fn) || mayReturnIdentifier(fn)))
+		}
+		compactPrefixAsync.set(item, value)
+	}
+
+	return value
+}
 
 let captureHeaderShorthand: boolean | undefined
 export const setCaptureHeaderShorthand = (value: boolean | undefined): void => {
@@ -296,11 +385,17 @@ export function compileHandlerJit({
 	isPromiseHandler
 }: CompileHandlerJitOptions): CompiledHandler {
 	const vali = buildValidator()
+	const beforeHandlePrefix = (hook as any)?.['~beforeHandlePrefix'] as
+		| CompactBeforeHandlePrefix
+		| undefined
 
-	// Any route reaching sucrose missed the handler manifest → needs the JIT.
-	// (The reconstruct fast paths above return before this line.)
 	JITProbe.record('sucrose')
-	const inference = sucrose(handler as any, hook as Sucrose.LifeCycle)
+	let inference = sucrose(handler as any, hook as Sucrose.LifeCycle)
+	if (beforeHandlePrefix)
+		inference = mergeInference(
+			inference,
+			inferCompactPrefix(beforeHandlePrefix)
+		)
 
 	const params = new Set<unknown>()
 	let alias = ''
@@ -374,7 +469,8 @@ export function compileHandlerJit({
 
 	const hasErrorHook = !!hook?.error?.length
 	const hasAfterResponse = !!hook?.afterResponse?.length
-	const hasBeforeHandle = !!hook?.beforeHandle?.length
+	const hasBeforeHandle =
+		!!beforeHandlePrefix?.length || !!hook?.beforeHandle?.length
 	const hasAfterHandle = !!hook?.afterHandle?.length
 	const hasMapResponse = !!hook?.mapResponse?.length
 	const hasResponseValidator = !!vali?.response
@@ -514,7 +610,10 @@ export function compileHandlerJit({
 
 	const lifecycleForcesAsync =
 		!!hook &&
-		(lifecycleMayReturnPromise(hook.beforeHandle, true) ||
+		((beforeHandlePrefix
+			? compactPrefixForcesAsync(beforeHandlePrefix)
+			: false) ||
+			lifecycleMayReturnPromise(hook.beforeHandle, true) ||
 			lifecycleMayReturnPromise(hook.transform, false) ||
 			lifecycleMayReturnPromise(hook.afterHandle, true) ||
 			lifecycleMayReturnPromise(hook.mapResponse, true))
@@ -827,23 +926,42 @@ export function compileHandlerJit({
 		code += `let _r,tmp\n`
 
 		if (hasBeforeHandle || hasTrace) {
-			const bfLen = hook?.beforeHandle?.length ?? 0
+			const bfLen =
+				(beforeHandlePrefix?.length ?? 0) +
+				(hook?.beforeHandle?.length ?? 0)
 			code += beginTrace('beforeHandle', bfLen)
 			if (hasBeforeHandle) {
-				link(hook!.beforeHandle!, 'bf')
+				if (beforeHandlePrefix) {
+					link(beforeHandlePrefix, 'bp')
+					if (isAsync) {
+						link(runBeforeHandlePrefixAsync, 'rbp')
+						code += `tmp=await rbp(bp,c)\n`
+					} else {
+						link(runBeforeHandlePrefix, 'rbp')
+						code += `tmp=rbp(bp,c)\n`
+					}
+					code += `if(tmp!==undefined)_r=tmp\n`
+				}
 
-				const deriveEntries = (hook as { '~deriveEntries'?: any[] })[
-					'~deriveEntries'
-				]
+				if (hook?.beforeHandle?.length) {
+					link(hook.beforeHandle, 'bf')
 
-				code += mapBeforeHandle(
-					hook!.beforeHandle!,
-					deriveEntries,
-					link,
-					isAsync,
-					buildReport('beforeHandle'),
-					'aborted'
-				)
+					const deriveEntries = (
+						hook as { '~deriveEntries'?: any[] }
+					)['~deriveEntries']
+
+					const mapped = mapBeforeHandle(
+						hook.beforeHandle,
+						deriveEntries,
+						link,
+						isAsync,
+						buildReport('beforeHandle'),
+						'aborted'
+					)
+					code += beforeHandlePrefix
+						? `if(!aborted&&_r===undefined){\n${mapped}}\n`
+						: mapped
+				}
 			}
 
 			code += endTrace('beforeHandle')

@@ -4,7 +4,7 @@ import { defaultAdapter } from '../../adapter/constants'
 import { ElysiaFile } from '../../universal/file'
 import { isBun } from '../../universal/constants'
 
-import { Compiled } from '../aot'
+import { Capture, Compiled } from '../aot'
 import { resolveHandlerParams } from './params'
 import { compileHandlerJit } from './jit'
 export { setCaptureHeaderShorthand } from './jit'
@@ -13,11 +13,14 @@ import { Reconstrct } from './reconstruct'
 import { createContext, type Context } from '../../context'
 import {
 	cloneHook,
+	compactBeforeHandleConflicts,
+	compactBeforeHandlePrefix,
 	eventProperties,
 	flattenChain,
 	flattenChainMemo,
 	flattenChainMemoReadonly,
 	fnOrigin,
+	isCompactBeforeHandleOnly,
 	isLocalScope,
 	macroEpoch,
 	mergeHook,
@@ -499,6 +502,52 @@ export function composeRouteHook(
 		? flattenChainMemo(root, appHook as ChainNode, resolve)
 		: undefined
 
+	let locals =
+		instance !== root
+			? flattenChain(
+					root['~hookChain'],
+					isLocalScope,
+					inheritedChain as any,
+					resolve
+				)
+			: undefined
+	const instanceLocal =
+		instance !== root
+			? flattenChain((instance as AnyElysia)['~hookChain'], isLocalScope)
+			: undefined
+
+	const compactPrefix =
+		instance !== root &&
+		!Capture.isCapturing() &&
+		!Capture.isAotBuildEnv() &&
+		resolve === undefined &&
+		isCompactBeforeHandleOnly(localHook as any) &&
+		isCompactBeforeHandleOnly(flatAppHook as any) &&
+		isCompactBeforeHandleOnly(locals as any) &&
+		!instanceLocal?.error
+			? compactBeforeHandlePrefix(inheritedChain)
+			: undefined
+
+	const present = new Set<number>()
+	collectHookOrigins(localHook, present)
+	collectHookOrigins(flatAppHook as any, present)
+
+	if (
+		compactPrefix &&
+		present.size === 0 &&
+		!compactBeforeHandleConflicts(localHook as any) &&
+		!compactBeforeHandleConflicts(flatAppHook as any) &&
+		!compactBeforeHandleConflicts(locals as any)
+	) {
+		let hook = applyHook(localHook, flatAppHook as any, undefined, true)
+		if (locals)
+			hook = hook ? mergeHook(hook, locals, false, true) : (locals as any)
+
+		hook ??= nullObject() as any
+		;(hook as any)['~beforeHandlePrefix'] = compactPrefix
+		return hook
+	}
+
 	// `inherited` is readonly
 	let inherited =
 		instance !== root
@@ -509,22 +558,7 @@ export function composeRouteHook(
 				) as Partial<AppHook> | undefined)
 			: undefined
 
-	let locals =
-		instance !== root
-			? flattenChain(
-					root['~hookChain'],
-					isLocalScope,
-					inheritedChain as any,
-					resolve
-				)
-			: undefined
-
 	if ((inherited || locals) && (flatAppHook || localHook)) {
-		const present = new Set<number>()
-
-		collectHookOrigins(localHook, present)
-		collectHookOrigins(flatAppHook as any, present)
-
 		if (present.size) {
 			if (inherited) inherited = dropHooksByOrigin(inherited, present)
 			if (locals) locals = dropHooksByOrigin(locals, present)
@@ -541,7 +575,9 @@ export function composeRouteHook(
 	let hook = applyHook(
 		localHook,
 		flatAppHook as any,
-		inherited ? (cloneHook(inherited as any) as Partial<AppHook>) : undefined,
+		inherited
+			? (cloneHook(inherited as any) as Partial<AppHook>)
+			: undefined,
 		true
 	)
 
@@ -549,11 +585,6 @@ export function composeRouteHook(
 	if (locals) hook = hook ? mergeHook(hook, locals, false, true) : locals
 
 	if (instance !== root) {
-		const instanceLocal = flattenChain(
-			(instance as AnyElysia)['~hookChain'],
-			isLocalScope
-		)
-
 		const errors = instanceLocal?.error
 		if (errors) {
 			hook ??= nullObject() as any

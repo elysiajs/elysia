@@ -1,6 +1,7 @@
 import {
 	alignStubExtensions,
 	generateCompiledArtifacts,
+	generateCompiledArtifactsIsolated,
 	realPath,
 	resolveEntry,
 	resolveElysiaRoot,
@@ -59,6 +60,7 @@ export const aot = (
 	const entryPosix = toPosix(entryPath)
 	const entryRealPosix = toPosix(realPath(entryPath))
 	let entryMatched = false
+	let initial = true
 
 	const isEntry = (id: string): boolean => {
 		const posix = toPosix(id)
@@ -91,7 +93,11 @@ export const aot = (
 		enforce: 'pre',
 		apply: 'build',
 		async buildStart() {
-			const generated = await generateCompiledArtifacts(entry, options)
+			const generated = initial
+				? await generateCompiledArtifacts(entry, options)
+				: await generateCompiledArtifactsIsolated(entry, options)
+
+			initial = false
 			source = generated.source
 			stub = generated.stub
 			virtualType = generated.virtualType

@@ -2,6 +2,7 @@ import { existsSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { Worker } from 'node:worker_threads'
 import {
 	compileToSource,
 	captureArtifacts,
@@ -624,6 +625,91 @@ export interface CompiledArtifacts {
 
 const _importedEntries = new Set<string>()
 
+type IsolatedGenerationResult =
+	| { ok: true; artifacts: CompiledArtifacts }
+	| {
+			ok: false
+			error: { name: string; message: string; stack?: string }
+	  }
+
+let activeGenerationWorkers = 0
+let lastGenerationWorkerExit: Promise<number> | undefined
+
+/** @internal Test diagnostic for deterministic worker cleanup. */
+export const getAotWorkerDiagnostics = () => ({
+	activeWorkers: activeGenerationWorkers,
+	lastExit: lastGenerationWorkerExit
+})
+
+const workerUrl = (): URL => {
+	const moduleUrl = import.meta.url
+	const extension = moduleUrl.endsWith('.mjs')
+		? '.mjs'
+		: moduleUrl.endsWith('.js')
+			? '.js'
+			: '.ts'
+
+	return new URL('./aot-worker' + extension, moduleUrl)
+}
+
+/** @internal Re-evaluate an entry in a disposable worker for watch rebuilds. */
+export async function generateCompiledArtifactsIsolated(
+	file: string,
+	options?: ElysiaAotOptions
+): Promise<CompiledArtifacts> {
+	const entry = resolveEntry(file)
+
+	console.warn(
+		'[elysia-aot] re-evaluating "' +
+			entry +
+			'" in an isolated worker for rebuild. ' +
+			'Top-level side effects run only inside the worker.'
+	)
+
+	const worker = new Worker(workerUrl(), {
+		workerData: { file: entry, options }
+	})
+	activeGenerationWorkers++
+
+	const exit = new Promise<number>((resolve) => worker.once('exit', resolve))
+	lastGenerationWorkerExit = exit
+
+	try {
+		return await new Promise<CompiledArtifacts>((resolve, reject) => {
+			let received = false
+
+			worker.once('message', (result: IsolatedGenerationResult) => {
+				received = true
+				if (result.ok) return resolve(result.artifacts)
+
+				const error = new Error(
+					`[elysia-aot] isolated rebuild failed for "${entry}": ${result.error.message}`
+				)
+				error.name = result.error.name
+				if (result.error.stack)
+					error.stack += '\nCaused by:\n' + result.error.stack
+				reject(error)
+			})
+			worker.once('error', reject)
+			worker.once('exit', (code) => {
+				if (!received)
+					reject(
+						new Error(
+							`[elysia-aot] isolated rebuild worker for "${entry}" exited with code ${code}`
+						)
+					)
+			})
+		})
+	} finally {
+		try {
+			await worker.terminate()
+		} finally {
+			await exit
+			activeGenerationWorkers--
+		}
+	}
+}
+
 function isStandardResponse(response: unknown) {
 	if (response == null || typeof response !== 'object') return false
 
@@ -1037,7 +1123,8 @@ export async function setupAotHooks({
 				// they need the isProduction() call-site rewrite. All other
 				// node_modules are skipped as before (Defect 1 fix).
 				const isElysiaOwned = isElysiaModule(args.path)
-				if (inModules && !isEntryFile && !isElysiaOwned) return undefined
+				if (inModules && !isEntryFile && !isElysiaOwned)
+					return undefined
 
 				const original = await readText(args.path)
 				// Type-import rewriting applies only to non-node_modules files

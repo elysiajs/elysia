@@ -112,6 +112,144 @@ export type ChainNode =
 	  }
 	| { combine: ChainNode; over: ChainNode | undefined }
 
+export interface CompactBeforeHandleChunk {
+	parent?: CompactBeforeHandleChunk
+	values: readonly Function[]
+}
+
+export interface CompactBeforeHandlePrefix {
+	tail?: CompactBeforeHandleChunk
+	length: number
+	previous?: CompactBeforeHandlePrefix
+	added: readonly Function[]
+}
+
+const COMPACT_CHUNK_SIZE = 32
+const emptyCompactBeforeHandlePrefix: CompactBeforeHandlePrefix = {
+	length: 0,
+	added: []
+}
+const compactBeforeHandleMemos = new WeakMap<
+	ChainNode,
+	CompactBeforeHandlePrefix | false
+>()
+const compactBeforeHandleFunctions = new WeakSet<Function>()
+
+const compactBeforeHandleValues = (
+	hook: Partial<AppHook> | undefined
+): readonly Function[] | false => {
+	if (!hook) return []
+
+	for (const key in hook) if (key !== 'beforeHandle') return false
+
+	const value = hook.beforeHandle
+	if (value === undefined) return []
+	if (typeof value === 'function') return [value]
+	if (!Array.isArray(value)) return false
+	for (let i = 0; i < value.length; i++)
+		if (typeof value[i] !== 'function') return false
+
+	return value.slice() as Function[]
+}
+
+export const isCompactBeforeHandleOnly = (
+	hook: Partial<AppHook> | undefined
+): boolean => compactBeforeHandleValues(hook) !== false
+
+export const compactBeforeHandleConflicts = (
+	hook: Partial<AppHook> | undefined
+): boolean => {
+	const values = compactBeforeHandleValues(hook)
+	if (values === false) return true
+
+	for (let i = 0; i < values.length; i++)
+		if (compactBeforeHandleFunctions.has(values[i]!)) return true
+
+	return false
+}
+
+const appendCompactBeforeHandle = (
+	previous: CompactBeforeHandlePrefix,
+	added: readonly Function[]
+): CompactBeforeHandlePrefix => {
+	if (!added.length) return previous
+
+	let tail = previous.tail
+	let length = previous.length
+
+	for (let i = 0; i < added.length; i++) {
+		const fn = added[i]!
+		compactBeforeHandleFunctions.add(fn)
+
+		if (tail && tail.values.length < COMPACT_CHUNK_SIZE)
+			tail = {
+				parent: tail.parent,
+				values: [...tail.values, fn]
+			}
+		else tail = { parent: tail, values: [fn] }
+		length++
+	}
+
+	return {
+		tail,
+		length,
+		previous: previous.length ? previous : undefined,
+		added
+	}
+}
+
+export function compactBeforeHandlePrefix(
+	start: ChainNode | undefined
+): CompactBeforeHandlePrefix | undefined {
+	if (!start) return
+
+	const pending: Array<{
+		node: Extract<ChainNode, { added: Partial<AppHook> }>
+		values: readonly Function[]
+	}> = []
+	let node: ChainNode | undefined = start
+	let prefix = emptyCompactBeforeHandlePrefix
+
+	while (node) {
+		const cached = compactBeforeHandleMemos.get(node)
+		if (cached !== undefined) {
+			if (cached === false) {
+				for (let i = 0; i < pending.length; i++)
+					compactBeforeHandleMemos.set(pending[i]!.node, false)
+				return
+			}
+			prefix = cached
+			break
+		}
+
+		if ('combine' in node) {
+			compactBeforeHandleMemos.set(node, false)
+			for (let i = 0; i < pending.length; i++)
+				compactBeforeHandleMemos.set(pending[i]!.node, false)
+			return
+		}
+
+		const values = compactBeforeHandleValues(node.added)
+		if (values === false) {
+			compactBeforeHandleMemos.set(node, false)
+			for (let i = 0; i < pending.length; i++)
+				compactBeforeHandleMemos.set(pending[i]!.node, false)
+			return
+		}
+
+		pending.push({ node, values })
+		node = node.parent
+	}
+
+	for (let i = pending.length - 1; i >= 0; i--) {
+		const item = pending[i]!
+		prefix = appendCompactBeforeHandle(prefix, item.values)
+		compactBeforeHandleMemos.set(item.node, prefix)
+	}
+
+	return prefix.length ? prefix : undefined
+}
+
 const flattenNodeStack: ChainNode[] = []
 const flattenPhaseStack: number[] = []
 

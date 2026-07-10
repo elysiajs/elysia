@@ -133,6 +133,12 @@ const useNodesBuffer: ChainNode[] = []
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
 
+// A plain absorbed route needs only identity distinct from its root. Keep this
+// object deliberately property-free: route compilation treats missing local
+// hook/macro state as empty, while `instance !== root` preserves root-hook
+// composition. Eligibility is centralized in #compactRouteOwner below.
+const plainRouteOwner = Object.freeze(nullObject()) as AnyElysia
+
 interface StaticMapAliases {
 	method: string
 	paths: string[]
@@ -4067,6 +4073,7 @@ export class Elysia<
 
 			for (let i = 0; i < length; i++) {
 				const route = app.#history[i]
+				const owner = this.#compactRouteOwner(app, route)
 
 				const childChain = route[6]
 				let inheritedChain: ChainNode | undefined
@@ -4097,13 +4104,14 @@ export class Elysia<
 				history.push(
 					inheritedChain === childChain &&
 						!this['~Prefix'] &&
-						macroScope === route[7]
+						macroScope === route[7] &&
+						owner === route[3]
 						? route
 						: ([
 								route[0],
 								path,
 								route[2],
-								route[3],
+								owner,
 								route[4],
 								route[5],
 								inheritedChain,
@@ -4363,6 +4371,66 @@ export class Elysia<
 					owner: app
 				}
 		}
+	}
+
+	#compactRouteOwner(app: AnyElysia, route: InternalRoute): AnyElysia {
+		// Only routes registered directly on this absorbed app are understood.
+		// Scope/group/nested owners must keep their original instance.
+		if (route[3] !== app) return route[3]
+
+		// WS and mounts have compiler paths beyond the plain HTTP handler. Route
+		// hooks also cover schemas, macros, parsing and mount metadata.
+		if (
+			route[0] === 'WS' ||
+			route[4] !== undefined ||
+			route[7] !== undefined ||
+			typeof route[2] !== 'function' ||
+			(route[2] as any)['~mount']
+		)
+			return route[3]
+
+		// AOT imports are built under this flag. Preserve real instances there so
+		// capture and replay always see the complete owner graph.
+		if (Capture.isAotBuildEnv() || Capture.isCapturing()) return route[3]
+
+		// This predicate is a compiler safety boundary. Any local route-affecting
+		// state makes the owner ineligible rather than teaching the sentinel about
+		// another Elysia property.
+		if (
+			app['~ext'] !== undefined ||
+			app['~hookChain'] !== undefined ||
+			app['~Prefix'] !== undefined ||
+			app['~scopeChild'] === true ||
+			app['~scopeChildren'] !== undefined ||
+			app['~hasWS'] === true ||
+			app['~hasDynamicWS'] === true ||
+			app['~hasTrace'] === true ||
+			app['~router'] !== undefined ||
+			app['~map'] !== undefined ||
+			app.server !== undefined ||
+			app.#hasPlugin === true ||
+			app.#hasGlobal === true ||
+			app.#ready !== undefined ||
+			app.#pending !== 0 ||
+			app.#error !== undefined ||
+			app.#childrenHash !== undefined ||
+			app.#scopeParent !== undefined ||
+			app.#pluginMacros !== undefined ||
+			app.#macroBaseline !== undefined ||
+			app.#compiled !== undefined ||
+			app.#fetchFn !== undefined ||
+			app.#routerBuilt
+		)
+			return route[3]
+
+		// A name and seed affect only #childrenHash deduplication, which has
+		// already happened before route absorption. Other config is uncharacterized.
+		const config = app['~config'] as Record<string, unknown> | undefined
+		if (config)
+			for (const key in config)
+				if (key !== 'name' && key !== 'seed') return route[3]
+
+		return plainRouteOwner
 	}
 
 	get modules(): Promise<void> {

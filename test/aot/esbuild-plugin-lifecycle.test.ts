@@ -13,9 +13,11 @@ const state = globalThis as typeof globalThis & {
 it('reuses setup artifacts for the initial build and regenerates on rebuild', async () => {
 	const warnings: string[] = []
 	const warn = console.warn
+	const previousMarker = process.env.ELYSIA_AOT_LIFECYCLE_MARKER
 	let context: esbuild.BuildContext | undefined
 
 	delete state.__elysiaEsbuildPluginLifecycleEvaluations
+	process.env.ELYSIA_AOT_LIFECYCLE_MARKER = 'initial'
 	console.warn = (...values) => warnings.push(values.join(' '))
 
 	try {
@@ -34,21 +36,26 @@ it('reuses setup artifacts for the initial build and regenerates on rebuild', as
 
 		const initial = await context.rebuild()
 		expect(initial.outputFiles.length).toBeGreaterThan(0)
+		expect(initial.outputFiles[0]?.text).toContain('/initial')
 		expect(state.__elysiaEsbuildPluginLifecycleEvaluations).toBe(1)
 		expect(
-			warnings.filter((value) => value.includes('re-importing'))
+			warnings.filter((value) => value.includes('isolated worker'))
 		).toEqual([])
 
-		await Bun.sleep(2)
+		process.env.ELYSIA_AOT_LIFECYCLE_MARKER = 'rebuilt'
 		const rebuilt = await context.rebuild()
 		expect(rebuilt.outputFiles.length).toBeGreaterThan(0)
-		expect(state.__elysiaEsbuildPluginLifecycleEvaluations).toBe(2)
+		expect(rebuilt.outputFiles[0]?.text).toContain('/rebuilt')
+		expect(state.__elysiaEsbuildPluginLifecycleEvaluations).toBe(1)
 		expect(
-			warnings.filter((value) => value.includes('re-importing'))
+			warnings.filter((value) => value.includes('isolated worker'))
 		).toHaveLength(1)
 	} finally {
 		console.warn = warn
 		await context?.dispose()
+		if (previousMarker === undefined)
+			delete process.env.ELYSIA_AOT_LIFECYCLE_MARKER
+		else process.env.ELYSIA_AOT_LIFECYCLE_MARKER = previousMarker
 		delete state.__elysiaEsbuildPluginLifecycleEvaluations
 	}
 })

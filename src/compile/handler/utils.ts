@@ -2,6 +2,8 @@ import { isAsyncFunction } from '../utils'
 import {
 	deriveEntryFn,
 	isMapDeriveEntry,
+	type CompactBeforeHandleChunk,
+	type CompactBeforeHandlePrefix,
 	type DeriveEntry
 } from '../../utils'
 import { skipClone } from '../../adapter/skip-clone'
@@ -460,6 +462,53 @@ export function mapBeforeHandle(
 	if (needsEs) link(ElysiaStatus, 'es')
 
 	return code
+}
+
+const compactBeforeHandleChunks = (prefix: CompactBeforeHandlePrefix) => {
+	const chunks: CompactBeforeHandleChunk[] = []
+	for (let chunk = prefix.tail; chunk; chunk = chunk.parent)
+		chunks.push(chunk)
+
+	return chunks
+}
+
+type BeforeHandleContext = { request: Request }
+
+export function runBeforeHandlePrefix(
+	prefix: CompactBeforeHandlePrefix,
+	context: BeforeHandleContext
+) {
+	const chunks = compactBeforeHandleChunks(prefix)
+	let first = true
+
+	for (let i = chunks.length - 1; i >= 0; i--) {
+		const values = chunks[i]!.values
+		for (let j = 0; j < values.length; j++) {
+			if (!first && context.request.signal.aborted) return
+			first = false
+			const result = values[j]!(context)
+			if (result !== undefined) return result
+		}
+	}
+}
+
+export async function runBeforeHandlePrefixAsync(
+	prefix: CompactBeforeHandlePrefix,
+	context: BeforeHandleContext
+) {
+	const chunks = compactBeforeHandleChunks(prefix)
+	let first = true
+
+	for (let i = chunks.length - 1; i >= 0; i--) {
+		const values = chunks[i]!.values
+		for (let j = 0; j < values.length; j++) {
+			if (!first && context.request.signal.aborted) return
+			first = false
+			let result = values[j]!(context)
+			if (result instanceof Promise) result = await result
+			if (result !== undefined) return result
+		}
+	}
 }
 
 function mapChainHook(

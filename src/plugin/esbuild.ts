@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import {
 	generateCompiledArtifacts,
+	generateCompiledArtifactsIsolated,
 	resolveEntry,
 	setupAotHooks,
 	type ElysiaAotOptions
@@ -41,10 +42,11 @@ export const aot = (entry: string, options?: ElysiaAotOptions) => ({
 				return
 			}
 
-			const fresh = await generateCompiledArtifacts(entry, options)
+			const fresh = await generateCompiledArtifactsIsolated(entry, options)
 
 			box.source = fresh.source
 			box.stub = fresh.stub
+			box.mode = fresh.mode
 			box.virtualType = fresh.virtualType
 		})
 

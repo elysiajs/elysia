@@ -7,4 +7,6 @@ const state = globalThis as typeof globalThis & {
 state.__elysiaEsbuildPluginLifecycleEvaluations =
 	(state.__elysiaEsbuildPluginLifecycleEvaluations ?? 0) + 1
 
-export const app = new Elysia().get('/', () => 'ok')
+const marker = process.env.ELYSIA_AOT_LIFECYCLE_MARKER ?? 'missing'
+
+export const app = new Elysia().get('/' + marker, () => 'ok')

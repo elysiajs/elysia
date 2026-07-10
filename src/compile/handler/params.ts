@@ -22,7 +22,8 @@ import {
 	emptyResponse,
 	getQueryParseChannels,
 	hasRequestBody,
-	replaceDeriveContext
+	replaceDeriveContext,
+	runBeforeHandlePrefix
 } from './utils'
 
 /**
@@ -90,6 +91,8 @@ export const HANDLER_PARAMS: Record<string, Resolver> = {
 	ho: (c) => c.hook,
 	tf: (c) => c.hook.transform,
 	bf: (c) => c.hook.beforeHandle,
+	bp: (c) => c.hook['~beforeHandlePrefix'],
+	rbp: () => runBeforeHandlePrefix,
 	af: (c) => c.hook.afterHandle,
 	mr: (c) => c.hook.mapResponse,
 	er: (c) => c.hook.error,

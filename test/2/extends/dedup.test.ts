@@ -2,6 +2,28 @@ import { describe, expect, it } from 'bun:test'
 import { Elysia } from '../../../src'
 
 describe('plugin dedup graph', () => {
+	it('deduplicates a named plain plugin per root without cross-root state', async () => {
+		const plugin = new Elysia({ name: 'plain-dedup' }).get(
+			'/plain-dedup',
+			() => 'ok'
+		)
+		const first = new Elysia().use(plugin).use(plugin)
+		const second = new Elysia().use(plugin).use(plugin)
+
+		expect(
+			first.history?.filter((route) => route[1] === '/plain-dedup')
+		).toHaveLength(1)
+		expect(
+			second.history?.filter((route) => route[1] === '/plain-dedup')
+		).toHaveLength(1)
+		await expect((await first.handle('/plain-dedup')).text()).resolves.toBe(
+			'ok'
+		)
+		await expect(
+			(await second.handle('/plain-dedup')).text()
+		).resolves.toBe('ok')
+	})
+
 	it('does not duplicate a sub-plugin shared by sibling plugins', async () => {
 		const order: number[] = []
 
