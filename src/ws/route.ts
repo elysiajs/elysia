@@ -486,20 +486,12 @@ export function buildWSRoute(
 
 	function validateMessageBody(message: unknown) {
 		if (!bodyValidator) return message
-
 		if (bodyValidator.hasCodec) return bodyValidator.From(message, 'body')
 
 		if (bodyValidator instanceof StandardValidator)
 			return bodyValidator.From(message, 'body')
 
-		if (!bodyValidator.Check(message))
-			throw new ValidationError(
-				'body',
-				message,
-				bodyValidator.Errors?.(message) ?? []
-			)
-
-		return message
+		return bodyValidator.EncodeFrom(message, 'body')
 	}
 
 	function validateUpgradeChannel(
@@ -512,14 +504,11 @@ export function buildWSRoute(
 
 		if (validator.hasCodec) return validator.From(value, type)
 
-		if (!validator.Check(value))
-			throw new ValidationError(
-				type,
-				value,
-				validator.Errors?.(value) ?? []
-			)
-
-		return value
+		// Same Check-then-Clean parity as validateMessageBody: HTTP strips
+		// undeclared params/query/headers when a schema is declared, so the WS
+		// upgrade channel must too. EncodeFrom works on both live and sealed
+		// (FrozenSlotValidator) validators; plain Check left extra fields intact.
+		return validator.EncodeFrom(value, type)
 	}
 
 	function onMessageValidationError(

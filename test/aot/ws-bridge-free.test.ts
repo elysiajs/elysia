@@ -177,6 +177,46 @@ describe('WS bridge-free frozen validator', () => {
 			).toBe(wiredRes.Check(r))
 	})
 
+	// Security regression: under a sealed/AOT build the WS body validator is a
+	// FrozenSlotValidator, which exposes strip ONLY via From/EncodeFrom (private
+	// #clean) and has NO public `.Clean`. validateMessageBody must therefore use
+	// EncodeFrom, not `.Clean` — otherwise undeclared attacker fields leak on
+	// exactly the sealed deployments (bundled builds / Cloudflare Workers) while
+	// sealed HTTP still strips, an HTTP/WS mass-assignment asymmetry.
+	it('sealed/frozen WS body strips undeclared props via EncodeFrom (parity with wired)', () => {
+		const hook = { body: t.Object({ a: t.String() }) }
+		freezeWS(hook)
+
+		const wired = new RouteValidator(hook as any, {
+			aot: { method: 'WS', path: PATH }
+		} as any)
+		const frozen = buildFrozenRouteValidator(
+			hook as any,
+			new Elysia() as any,
+			'WS',
+			PATH
+		)
+		expect(frozen).toBeDefined()
+
+		// plain non-codec body → validateMessageBody dispatches through EncodeFrom
+		expect((frozen!.body as any).hasCodec).toBe(false)
+		// the reason EncodeFrom is required: no public Clean on the frozen validator
+		expect((frozen!.body as any).Clean).toBeUndefined()
+
+		const attacker = { a: 'hi', evil: 'INJECTED', nested: { x: 1 } }
+		const wiredOut = (wired.body as any).EncodeFrom(
+			structuredClone(attacker),
+			'body'
+		)
+		const frozenOut = (frozen!.body as any).EncodeFrom(
+			structuredClone(attacker),
+			'body'
+		)
+
+		expect(wiredOut).toEqual({ a: 'hi' })
+		expect(frozenOut).toEqual({ a: 'hi' })
+	})
+
 	it('WS-only app with schemas seals (mode A: compat stubbed, no reroute)', async () => {
 		const { stub } = await generateCompiledArtifacts(
 			'test/aot/fixtures/mode-ws-app.ts'

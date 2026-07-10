@@ -1,3 +1,10 @@
-import { env } from './env'
+import { env, hasReadableEnv } from './env'
 
-export const isProduction = () => (env.NODE_ENV ?? env.ENV) === 'production'
+export const computeIsProduction = (
+	readable: boolean,
+	nodeEnv?: string,
+	elysiaEnv?: string
+) => !readable || (nodeEnv ?? elysiaEnv) === 'production'
+
+export const isProduction = () =>
+	computeIsProduction(hasReadableEnv, env.NODE_ENV, env.ENV)
