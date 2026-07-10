@@ -14,6 +14,9 @@ await build({
 	cjsDefault: false,
 	target: 'node22',
 	format: ['esm', 'cjs'],
+	checks: {
+		emptyImportMeta: false
+	},
 	minify: false,
 	unbundle: true,
 	dts: true,

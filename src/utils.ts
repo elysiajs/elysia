@@ -73,9 +73,6 @@ export const fnOrigin = new WeakMap<Function, number>()
 // Used by `#use()` to skip macro merges from a plugin that has already been absorbed by parent
 export const macroOrigin = new WeakMap<object | Function, number>()
 
-export const isDownwardScope = (s: EventScope | undefined) =>
-	s === 'plugin' || s === 'global'
-
 export const isLocalScope = (s: EventScope | undefined) =>
 	s === 'local' || s === undefined
 
