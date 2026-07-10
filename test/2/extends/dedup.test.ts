@@ -11,10 +11,10 @@ describe('plugin dedup graph', () => {
 		const second = new Elysia().use(plugin).use(plugin)
 
 		expect(
-			first.history?.filter((route) => route[1] === '/plain-dedup')
+			first.history.filter((route) => route.path === '/plain-dedup')
 		).toHaveLength(1)
 		expect(
-			second.history?.filter((route) => route[1] === '/plain-dedup')
+			second.history.filter((route) => route.path === '/plain-dedup')
 		).toHaveLength(1)
 		await expect((await first.handle('/plain-dedup')).text()).resolves.toBe(
 			'ok'
@@ -27,11 +27,12 @@ describe('plugin dedup graph', () => {
 	it('does not duplicate a sub-plugin shared by sibling plugins', async () => {
 		const order: number[] = []
 
-		const shared = new Elysia({ as: 'global', name: 'shared' }).beforeHandle(
-			() => {
-				order.push(3)
-			}
-		)
+		const shared = new Elysia({
+			as: 'global',
+			name: 'shared'
+		}).beforeHandle(() => {
+			order.push(3)
+		})
 
 		const left = new Elysia({ as: 'global', name: 'left' })
 			.beforeHandle(() => {
@@ -157,9 +158,7 @@ describe('plugin dedup graph', () => {
 			})
 			.use(inner)
 
-		const app = new Elysia()
-			.use(outer)
-			.get('/', () => 'k')
+		const app = new Elysia().use(outer).get('/', () => 'k')
 
 		await app.handle('/')
 
@@ -183,9 +182,7 @@ describe('plugin dedup graph', () => {
 			})
 			.use(inner)
 
-		const app = new Elysia()
-			.use(outer)
-			.get('/', () => 'k')
+		const app = new Elysia().use(outer).get('/', () => 'k')
 
 		await app.handle('/')
 
@@ -195,13 +192,10 @@ describe('plugin dedup graph', () => {
 	it('derive runs once when its plugin is shared by siblings', async () => {
 		let count = 0
 
-		const auth = new Elysia({ name: 'auth' }).derive(
-			'global',
-			() => {
-				count++
-				return { user: 'alice' }
-			}
-		)
+		const auth = new Elysia({ name: 'auth' }).derive('global', () => {
+			count++
+			return { user: 'alice' }
+		})
 
 		const a = new Elysia({ name: 'a' }).use(auth)
 		const b = new Elysia({ name: 'b' }).use(auth)

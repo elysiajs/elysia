@@ -11,7 +11,7 @@ const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/aot.ts')
 
 describe('AOT plugin', () => {
 	it('generateCompiledModule emits a self-registering manifest', async () => {
-		const { generateCompiledModule } = await import('../../src/plugin/core')
+		const { generateCompiledModule } = await import('../../src/plugin/aot/core')
 		const previous = process.env.ELYSIA_AOT_BUILD
 		process.env.ELYSIA_AOT_BUILD = 'keep'
 		const log = spyOn(console, 'log').mockImplementation(() => {})
@@ -50,7 +50,7 @@ describe('AOT plugin', () => {
 	// so a schema-less (or simple-schema) app never drags typebox into the bundle.
 	it('emits typebox imports only for the symbols a check references', async () => {
 		const { Elysia, t } = await import('../../src')
-		const { compileToSource } = await import('../../src/plugin/source')
+		const { compileToSource } = await import('../../src/plugin/aot/source')
 		const manifest = (app: any) => compileToSource(app, { register: true })
 
 		// schema-less → zero typebox subpaths
@@ -99,7 +99,7 @@ describe('AOT plugin', () => {
 
 	it('compileToSource restores ELYSIA_AOT_BUILD after direct use', async () => {
 		const { Elysia } = await import('../../src')
-		const { compileToSource } = await import('../../src/plugin/source')
+		const { compileToSource } = await import('../../src/plugin/aot/source')
 		const previous = process.env.ELYSIA_AOT_BUILD
 
 		try {
@@ -121,7 +121,7 @@ describe('AOT plugin', () => {
 	})
 
 	it('Bun.build inlines the manifest + injects the autoload import', async () => {
-		const { aot } = await import('../../src/plugin/bun')
+		const { aot } = await import('../../src/plugin/aot/bun')
 
 		const result = await Bun.build({
 			entrypoints: [APP],
@@ -140,7 +140,7 @@ describe('AOT plugin', () => {
 
 	it('esbuild (Wrangler toolchain) inlines the manifest + injects the autoload', async () => {
 		const esbuild = await import('esbuild')
-		const { aot } = await import('../../src/plugin/esbuild')
+		const { aot } = await import('../../src/plugin/aot/esbuild')
 
 		const result = await esbuild.build({
 			entryPoints: [APP],
@@ -165,8 +165,8 @@ describe('AOT plugin', () => {
 	it('vite plugin generates the manifest + redirects + injects via its hooks', async () => {
 		// Vite isn't installed here, so exercise the plugin's hook contract directly
 		// (Vite just calls these). `resolveEntry` gives the id Vite passes for the entry.
-		const { aot } = await import('../../src/plugin/vite')
-		const { resolveEntry } = await import('../../src/plugin/core')
+		const { aot } = await import('../../src/plugin/aot/vite')
+		const { resolveEntry } = await import('../../src/plugin/aot/core')
 		// Own fixture — generateCompiledModule is non-idempotent on a shared app
 		// (memoized compile), and this test calls it directly like the core test.
 		const VITE_APP = resolve(import.meta.dir, 'fixtures/vite-app.ts')
@@ -203,7 +203,7 @@ describe('AOT plugin', () => {
 	})
 
 	it('builds with Bun.build (forced lazy) and SERVES a request end-to-end', async () => {
-		const { aot } = await import('../../src/plugin/bun')
+		const { aot } = await import('../../src/plugin/aot/bun')
 
 		const result = await Bun.build({
 			entrypoints: [APP],

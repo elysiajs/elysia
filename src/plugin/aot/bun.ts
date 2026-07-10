@@ -14,7 +14,7 @@ import {
  * Relative entry is resolved by the nearest `package.json`
  *
  * ```ts
- * import { aot } from 'elysia/plugin/bun'
+ * import { aot } from 'elysia/plugin/aot/bun'
  *
  * await Bun.build({
  *   entrypoints: ['src/index.ts'],

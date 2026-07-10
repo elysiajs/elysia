@@ -1,4 +1,5 @@
 import { Elysia, t } from '../../src'
+import { autoHead } from '../../src/plugin/auto-head'
 
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
@@ -134,7 +135,7 @@ describe('Edge Case', () => {
 
 		// Routes keep their insertion order in `history`, even when a path
 		// repeats — the duplicate stays in place rather than shifting indices.
-		expect(app.history!.map((route) => route[1])).toEqual([
+		expect(app.history.map((route) => route.path)).toEqual([
 			'/0',
 			'/1',
 			'/2',
@@ -157,7 +158,7 @@ describe('Edge Case', () => {
 			.use(plugin)
 
 		// A plugin's routes are appended in order after the parent's own.
-		expect(app.history!.map((route) => route[1])).toEqual([
+		expect(app.history.map((route) => route.path)).toEqual([
 			'/0',
 			'/1',
 			'/2',
@@ -202,8 +203,8 @@ describe('Edge Case', () => {
 		// {combine, over} node per absorbed route. Identical (childChain,
 		// preChain) pairs must share ONE node — otherwise every ancestor's
 		// history retains O(routes × depth) duplicate combine nodes forever.
-		const a = app.history!.find((route) => route[1] === '/a')!
-		const b = app.history!.find((route) => route[1] === '/b')!
+		const a = app['~routes'].find((route) => route[1] === '/a')!
+		const b = app['~routes'].find((route) => route[1] === '/b')!
 
 		expect(a[6]).toBeDefined()
 		expect(a[6]).toBe(b[6]!)
@@ -279,15 +280,15 @@ describe('Edge Case', () => {
 		// path must not spuriously drop the cache. Covers plain, dynamic, WS
 		// and auto-HEAD routes (none of which compile into a NEW `.routes`
 		// entry).
-		const app = new Elysia({ autoHead: true })
+		const app = new Elysia()
+			.use(autoHead())
 			.get('/a', () => 'a')
 			.get('/c/:id', ({ params }) => params.id)
 			.ws('/ws', { message() {} })
+		await app.modules
 
 		const before = app.routes
-		const beforeSnapshot = before
-			.map((r) => `${r.method} ${r.path}`)
-			.sort()
+		const beforeSnapshot = before.map((r) => `${r.method} ${r.path}`).sort()
 
 		// serve traffic → triggers JIT compile on each route + auto-HEAD
 		await app.handle(req('/a'))
@@ -613,7 +614,8 @@ describe('Edge Case', () => {
 	})
 
 	it('automatically handle HEAD request for GET static path', async () => {
-		const app = new Elysia({ autoHead: true }).get('/', () => 'hello world')
+		const app = new Elysia().use(autoHead()).get('/', () => 'hello world')
+		await app.modules
 
 		const response = await app.handle(
 			new Request('http://localhost', {
@@ -631,10 +633,10 @@ describe('Edge Case', () => {
 	})
 
 	it('automatically handle HEAD request for GET dynamic path', async () => {
-		const app = new Elysia({ autoHead: true }).get(
-			'/:id',
-			() => 'hello world'
-		)
+		const app = new Elysia()
+			.use(autoHead())
+			.get('/:id', () => 'hello world')
+		await app.modules
 
 		const response = await app.handle(
 			new Request('http://localhost/1', {
@@ -648,11 +650,13 @@ describe('Edge Case', () => {
 	})
 
 	it('prefer user-provided HEAD over auto-HEAD for GET', async () => {
-		const app = new Elysia({ autoHead: true })
+		const app = new Elysia()
+			.use(autoHead())
 			.get('/', () => 'hello world')
 			.head('/', ({ set }) => {
 				set.headers['x-source'] = 'manual-head'
 			})
+		await app.modules
 
 		const response = await app.handle(
 			new Request('http://localhost', {
@@ -668,11 +672,13 @@ describe('Edge Case', () => {
 	})
 
 	it('prefer user-provided HEAD over auto-HEAD for dynamic GET', async () => {
-		const app = new Elysia({ autoHead: true })
+		const app = new Elysia()
+			.use(autoHead())
 			.get('/:id', () => 'hello world')
 			.head('/:id', ({ set }) => {
 				set.headers['x-source'] = 'manual-head'
 			})
+		await app.modules
 
 		const response = await app.handle(
 			new Request('http://localhost/1', {
@@ -685,17 +691,17 @@ describe('Edge Case', () => {
 	})
 
 	it('auto-HEAD on an infinite-stream GET returns instead of hanging', async () => {
-		const app = new Elysia({ autoHead: true }).get(
-			'/stream',
-			async function* () {
+		const app = new Elysia()
+			.use(autoHead())
+			.get('/stream', async function* () {
 				// Never terminates — the old `arrayBuffer()` content-length path
 				// would buffer this forever and hang the HEAD request.
 				while (true) {
 					yield 'tick'
 					await new Promise((resolve) => setTimeout(resolve, 1))
 				}
-			}
-		)
+			})
+		await app.modules
 
 		const result = await Promise.race([
 			app.handle(

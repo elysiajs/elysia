@@ -7,7 +7,7 @@ import {
 	generateCompiledArtifacts,
 	generateCompiledArtifactsIsolated,
 	getAotWorkerDiagnostics
-} from '../../src/plugin/core'
+} from '../../src/plugin/aot/core'
 
 const state = globalThis as typeof globalThis & {
 	__elysiaAotRebuildIsolationEvaluations?: number

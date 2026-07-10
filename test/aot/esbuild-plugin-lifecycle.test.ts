@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 
 import * as esbuild from 'esbuild'
 
-import { aot } from '../../src/plugin/esbuild'
+import { aot } from '../../src/plugin/aot/esbuild'
 
 const APP = resolve(import.meta.dir, 'fixtures/esbuild-plugin-lifecycle-app.ts')
 const state = globalThis as typeof globalThis & {

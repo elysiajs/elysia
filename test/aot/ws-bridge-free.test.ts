@@ -10,7 +10,7 @@ import {
 } from '../../src/compile/aot'
 import { RouteValidator } from '../../src/validator/route'
 import { buildFrozenRouteValidator } from '../../src/compile/handler/frozen-validator'
-import { generateCompiledArtifacts } from '../../src/plugin/core'
+import { generateCompiledArtifacts } from '../../src/plugin/aot/core'
 
 import { materialise } from './_manifest'
 

@@ -1219,7 +1219,7 @@ describe('Macro resolution', () => {
 		// repeated introspection reads must not grow/mutate the user's object
 		void app.routes
 		void app.routes
-		void app.history
+		void app['~routes']
 
 		expect(meta.tags).toEqual(['user'])
 		expect(Object.keys(meta)).toEqual(['tags'])

@@ -8,13 +8,13 @@ import {
 	analyzeStubbability,
 	captureArtifacts,
 	replayStubbability
-} from '../../src/plugin/source'
+} from '../../src/plugin/aot/source'
 import {
 	generateCompiledArtifacts,
 	planFromReport,
 	STUB_SOURCES
-} from '../../src/plugin/core'
-import { aot as bunAot } from '../../src/plugin/bun'
+} from '../../src/plugin/aot/core'
+import { aot as bunAot } from '../../src/plugin/aot/bun'
 import { materialise, materialiseHandlers } from './_manifest'
 import { post, req } from '../utils'
 

@@ -6,7 +6,7 @@ import {
 	endValidatorCapture,
 	endHandlerCapture
 } from '../../src/compile/aot'
-import { compileToSource } from '../../src/plugin/source'
+import { compileToSource } from '../../src/plugin/aot/source'
 
 // A `headers` validator makes the handler codegen emit the header-materialization
 // line — `c.headers = c.request.headers.toJSON()` (Bun) vs

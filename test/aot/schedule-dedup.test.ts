@@ -27,7 +27,7 @@ afterEach(() => {
 })
 
 const compileRoute = (app: any, index = 0) => {
-	const route = (app as Elysia).history![index]
+	const route = (app as Elysia)['~routes']![index]
 	const fn = compileHandler(route as any, app)
 	return { fn, source: fn.toString() }
 }

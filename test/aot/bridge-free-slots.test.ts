@@ -484,16 +484,16 @@ describe('bridge-free slot coercion — sealed promotion e2e', () => {
 		if (esbuildBundle !== undefined) return
 
 		const distCore = (await import(
-			resolve(import.meta.dir, '../../dist/plugin/core.mjs')
-		)) as typeof import('../../src/plugin/core')
+			resolve(import.meta.dir, '../../dist/plugin/aot/core.mjs')
+		)) as typeof import('../../src/plugin/aot/core')
 
 		mode = (await distCore.generateCompiledArtifacts(APP, { strip: true }))
 			.mode
 
 		const esbuild = await import('esbuild')
 		const { aot } = (await import(
-			resolve(import.meta.dir, '../../dist/plugin/esbuild.mjs')
-		)) as typeof import('../../src/plugin/esbuild')
+			resolve(import.meta.dir, '../../dist/plugin/aot/esbuild.mjs')
+		)) as typeof import('../../src/plugin/aot/esbuild')
 
 		const previous = process.env.ELYSIA_AOT_BUILD
 		process.env.ELYSIA_AOT_BUILD = '1'

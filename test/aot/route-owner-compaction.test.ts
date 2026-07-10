@@ -5,7 +5,7 @@ import type { InternalRoute } from '../../src/types'
 import { req } from '../utils'
 
 const route = (app: Elysia, path: string): InternalRoute => {
-	const found = app.history?.find((entry) => entry[1] === path)
+	const found = app['~routes']?.find((entry) => entry[1] === path)
 	if (!found) throw new Error(`Missing route ${path}`)
 
 	return found
@@ -179,7 +179,7 @@ describe('absorbed route owner compaction', () => {
 		}
 
 		expectFullOwner(new Elysia().use(websocket), '/ws', websocket)
-		for (const entry of mounted.history ?? [])
+		for (const entry of mounted['~routes'] ?? [])
 			expectFullOwner(new Elysia().use(mounted), entry[1], mounted)
 		expectFullOwner(new Elysia().use(configured), '/configured', configured)
 		expectFullOwner(aotRoot!, '/aot', aot)

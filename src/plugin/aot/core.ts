@@ -10,11 +10,11 @@ import {
 	type AotTarget,
 	type StubbabilityReport
 } from './source'
-import { composeRouteHook } from '../compile/handler'
+import { composeRouteHook } from '../../compile/handler'
 import {
 	isStandardSchema,
 	standaloneAllStandard
-} from '../compile/handler/frozen-validator'
+} from '../../compile/handler/frozen-validator'
 
 export interface ElysiaAotOptions {
 	/**
@@ -649,7 +649,7 @@ const workerUrl = (): URL => {
 			? '.js'
 			: '.ts'
 
-	return new URL('./aot-worker' + extension, moduleUrl)
+	return new URL('./worker' + extension, moduleUrl)
 }
 
 /** @internal Re-evaluate an entry in a disposable worker for watch rebuilds. */
@@ -821,11 +821,9 @@ export async function generateCompiledArtifacts(
 
 		const hasWS =
 			!!(typedApp as { ['~hasWS']?: unknown })['~hasWS'] ||
-			!!(typedApp as { history?: unknown[] }).history?.some(
-				(route: any) => route?.[0] === 'WS'
-			)
+			!!typedApp['~routes']?.some((route: any) => route?.[0] === 'WS')
 
-		const history = (typedApp as { history?: unknown[] }).history ?? []
+		const history = typedApp['~routes'] ?? []
 
 		const mayTrace =
 			!!(typedApp as { ['~hasTrace']?: unknown })['~hasTrace'] ||

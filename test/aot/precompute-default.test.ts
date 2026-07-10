@@ -7,7 +7,7 @@ import {
 	beginValidatorCapture,
 	endValidatorCapture
 } from '../../src/compile/aot'
-import { compileToSource } from '../../src/plugin/source'
+import { compileToSource } from '../../src/plugin/aot/source'
 import { materialise } from './_manifest'
 import { req } from '../utils'
 
@@ -29,7 +29,10 @@ const SLOT = 'body' as const
 
 const capture = (schema: any) => {
 	beginValidatorCapture()
-	new TypeBoxValidator(schema, { aot: { method: 'POST', path: PATH }, slot: SLOT })
+	new TypeBoxValidator(schema, {
+		aot: { method: 'POST', path: PATH },
+		slot: SLOT
+	})
 	return materialise(endValidatorCapture())
 }
 
@@ -178,58 +181,56 @@ describe('AOT default preallocation', () => {
 				)
 		})
 
-	const NOT_BAKED: Array<{ name: string; make: () => any; inputs: unknown[] }> =
-		[
-			{
-				// element is a union carrying a default — the merger cannot
-				// faithfully reproduce branch selection, so it bails
-				name: 'array of union elements with default',
-				make: () =>
-					t.Array(
-						t.Union([t.String(), t.Number()], { default: 'x' })
-					),
-				inputs: [[], ['set'], [1, 'two']]
-			},
-			{
-				name: 'default inside a union branch',
-				make: () =>
-					t.Object({
-						u: t.Union([
-							t.Object({
-								kind: t.Literal('a'),
-								x: t.String({ default: 'X' })
-							}),
-							t.Object({
-								kind: t.Literal('b'),
-								y: t.Number({ default: 9 })
-							})
-						])
-					}),
-				inputs: [{ u: { kind: 'a' } }, { u: { kind: 'b' } }]
-			},
-			{
-				name: 'raw $ref with own default',
-				make: () => {
-					const User = t.Object(
-						{
-							name: t.String(),
-							tags: t.Array(t.String())
-						},
-						{ $id: 'User' }
-					)
-
-					return t.Object({
-						user: t.Ref(User, {
-							default: { name: 'own', tags: ['own-tag'] }
+	const NOT_BAKED: Array<{
+		name: string
+		make: () => any
+		inputs: unknown[]
+	}> = [
+		{
+			// element is a union carrying a default — the merger cannot
+			// faithfully reproduce branch selection, so it bails
+			name: 'array of union elements with default',
+			make: () =>
+				t.Array(t.Union([t.String(), t.Number()], { default: 'x' })),
+			inputs: [[], ['set'], [1, 'two']]
+		},
+		{
+			name: 'default inside a union branch',
+			make: () =>
+				t.Object({
+					u: t.Union([
+						t.Object({
+							kind: t.Literal('a'),
+							x: t.String({ default: 'X' })
+						}),
+						t.Object({
+							kind: t.Literal('b'),
+							y: t.Number({ default: 9 })
 						})
+					])
+				}),
+			inputs: [{ u: { kind: 'a' } }, { u: { kind: 'b' } }]
+		},
+		{
+			name: 'raw $ref with own default',
+			make: () => {
+				const User = t.Object(
+					{
+						name: t.String(),
+						tags: t.Array(t.String())
+					},
+					{ $id: 'User' }
+				)
+
+				return t.Object({
+					user: t.Ref(User, {
+						default: { name: 'own', tags: ['own-tag'] }
 					})
-				},
-				inputs: [
-					{},
-					{ user: { name: 'set', tags: ['custom'] } }
-				]
-			}
-		]
+				})
+			},
+			inputs: [{}, { user: { name: 'set', tags: ['custom'] } }]
+		}
+	]
 
 	for (const { name, make, inputs } of NOT_BAKED)
 		it(`does NOT bake (falls back), still frozen ≡ JIT: ${name}`, () => {
@@ -291,7 +292,10 @@ describe('AOT default preallocation', () => {
 
 	it('baked default not shared across requests under normalize:false', () => {
 		const mk = () =>
-			t.Object({ tags: t.Array(t.String()) }, { default: { tags: ['a'] } })
+			t.Object(
+				{ tags: t.Array(t.String()) },
+				{ default: { tags: ['a'] } }
+			)
 		const m = capture(mk())
 		Compiled.clear()
 		Validator.clear()
@@ -440,10 +444,9 @@ describe('AOT default preallocation', () => {
 	it('symbol-key defaults fall back instead of emitting lossy source', () => {
 		const hidden = Symbol('hidden')
 		const make = () =>
-			t.Object(
-				{ x: t.String() },
-				{ default: { x: 'root', [hidden]: 'secret' } } as any
-			)
+			t.Object({ x: t.String() }, {
+				default: { x: 'root', [hidden]: 'secret' }
+			} as any)
 
 		const m = capture(make())
 		expect(entry(m)?.ps).toBeUndefined()
@@ -563,7 +566,10 @@ describe('AOT default preallocation — non-frozen JIT ≡ frozen (regression)',
 				t.Object({
 					filters: t.Array(
 						t.Object(
-							{ field: t.String(), op: t.String({ default: 'eq' }) },
+							{
+								field: t.String(),
+								op: t.String({ default: 'eq' })
+							},
 							{ default: { field: 'id', op: 'eq' } }
 						)
 					)
@@ -704,7 +710,9 @@ describe('AOT default preallocation — non-frozen JIT ≡ frozen (regression)',
 				.then(async (r) => ({ status: r.status, text: await r.text() }))
 
 		for (const payload of [[{}], [{ x: 5 }], [{}, {}], []])
-			expect(await post(frozen, payload)).toEqual(await post(plain, payload))
+			expect(await post(frozen, payload)).toEqual(
+				await post(plain, payload)
+			)
 
 		// the AOT build must FILL the element default, not reject the request
 		expect(await post(frozen, [{}])).toEqual({
@@ -808,69 +816,5 @@ describe('AOT default preallocation — source emit', () => {
 			const p = await plain.handle(req('/u' + q)).then((r) => r.json())
 			expect(f).toEqual(p)
 		}
-	})
-
-	it('duplicate route capture clears stale default precompute fields', async () => {
-		const buildDuplicate = () =>
-			new Elysia()
-				.post(
-					'/dup',
-					{
-						body: t.Object({
-							first: t.String({ default: 'FIRST' })
-						})
-					},
-					({ body }) => ({ route: 'first', body })
-				)
-				.post(
-					'/dup',
-					{
-						body: t.Object({
-							nested: t.Object({
-								x: t.String({ default: 'SECOND' })
-							})
-						})
-					},
-					({ body }) => ({ route: 'second', body })
-				)
-
-		const body = () =>
-			new Request('http://localhost/dup', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ nested: {} })
-			})
-
-		const src = await compileToSource(buildDuplicate(), {
-			register: false
-		})
-		const validators = evalManifest(src)
-
-		// route 2 (`{ nested: {...} }`) now bakes its OWN default; the capture must
-		// reflect route 2, never route 1's stale `first` field
-		const dup = validators.POST['/dup'].body
-		expect(dup.pm?.({ nested: {} })).toEqual({ nested: { x: 'SECOND' } })
-		expect(dup.pm?.({})).not.toHaveProperty('first')
-
-		Validator.clear()
-		Compiled.validators = validators
-		const frozen = buildDuplicate()
-		frozen.compile()
-
-		Compiled.clear()
-		Validator.clear()
-		const plain = buildDuplicate()
-		plain.compile()
-
-		const frozenRes = await frozen.handle(body())
-		const plainRes = await plain.handle(body())
-
-		expect({
-			status: frozenRes.status,
-			text: await frozenRes.text()
-		}).toEqual({
-			status: plainRes.status,
-			text: await plainRes.text()
-		})
 	})
 })

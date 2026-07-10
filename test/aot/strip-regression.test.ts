@@ -5,8 +5,8 @@ import { rm } from 'node:fs/promises'
 import { Elysia } from '../../src'
 import { Validator } from '../../src/validator'
 import { Compiled } from '../../src/compile/aot'
-import { generateCompiledArtifacts } from '../../src/plugin/core'
-import { aot as bunAot } from '../../src/plugin/bun'
+import { generateCompiledArtifacts } from '../../src/plugin/aot/core'
+import { aot as bunAot } from '../../src/plugin/aot/bun'
 import { post, req } from '../utils'
 
 /**

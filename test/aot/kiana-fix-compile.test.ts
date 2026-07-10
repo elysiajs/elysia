@@ -136,7 +136,7 @@ describe('idx14 — sync handler returning a stored Promise is awaited', () => {
 			{ response: { 200: t.Object({ ok: t.Boolean() }) } },
 			() => ({ ok: true })
 		)
-		const route = (app as any).history![0]
+		const route = (app as any)['~routes']![0]
 		const fn = compileHandler(route, app)
 		expect(fn.constructor.name).toBe('Function')
 	})
@@ -231,8 +231,8 @@ describe('M15 — compile() rebuilds so routes added after first request serve',
 
 		app.get('/b', () => 'b')
 
-		// Before compile the new route is not wired into the built router.
-		expect((await app.handle(req('/b'))).status).toBe(404)
+		// Route registration invalidates the effective router immediately.
+		expect((await app.handle(req('/b'))).status).toBe(200)
 
 		app.compile()
 
@@ -293,7 +293,7 @@ describe('idx52 — compileHandler does not mutate a caller-owned hook', () => {
 		const sharedHook: any = { parse: parseFn, derive: deriveFn }
 
 		const app = new Elysia().get('/a', sharedHook, () => 'ok')
-		const route = (app as any).history![0]
+		const route = (app as any)['~routes']![0]
 		compileHandler(route, app)
 
 		// Pre-fix: promoteDerive set derive→undefined + prepended into

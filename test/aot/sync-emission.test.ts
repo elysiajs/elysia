@@ -38,7 +38,7 @@ afterEach(() => {
 
 /** Compile the i-th route of `app` and return its function + source. */
 const compileRoute = (app: any, index = 0) => {
-	const route = (app as Elysia).history![index]
+	const route = (app as Elysia)['~routes']![index]
 	const fn = compileHandler(route as any, app)
 	return { fn, name: fn.constructor.name, source: fn.toString() }
 }
@@ -599,11 +599,7 @@ describe('async-cliff: sync fn returning a Promise (C7/H21/M2)', () => {
 
 		const app = new Elysia()
 			.state('p', Promise.resolve('deferred'))
-			.get(
-				'/',
-				{ response: t.String() },
-				minified as any
-			)
+			.get('/', { response: t.String() }, minified as any)
 
 		// heuristic sees the identifier-return → responseValiForcesAsync fires
 		expect(isAsync(app)).toBe(true)
@@ -650,14 +646,10 @@ describe('async-cliff: sync fn returning a Promise (C7/H21/M2)', () => {
 	it('bare-identifier beforeHandle returning a Promise forces async and runs the handler', async () => {
 		const p = Promise.resolve(undefined)
 		let handlerRan = false
-		const app = new Elysia().get(
-			'/',
-			{ beforeHandle: () => p },
-			() => {
-				handlerRan = true
-				return 'ok'
-			}
-		)
+		const app = new Elysia().get('/', { beforeHandle: () => p }, () => {
+			handlerRan = true
+			return 'ok'
+		})
 
 		// identifier heuristic on an observed-result hook → route async
 		expect(isAsync(app)).toBe(true)
@@ -675,14 +667,10 @@ describe('async-cliff: sync fn returning a Promise (C7/H21/M2)', () => {
 	it('bare-identifier beforeHandle Promise resolving to a value short-circuits with the resolved value', async () => {
 		const p = Promise.resolve('short')
 		let handlerRan = false
-		const app = new Elysia().get(
-			'/',
-			{ beforeHandle: () => p },
-			() => {
-				handlerRan = true
-				return 'handler'
-			}
-		)
+		const app = new Elysia().get('/', { beforeHandle: () => p }, () => {
+			handlerRan = true
+			return 'handler'
+		})
 
 		expect(isAsync(app)).toBe(true)
 		const res = await app.handle(req('/'))
@@ -746,14 +734,10 @@ describe('async-cliff: sync fn returning a Promise (C7/H21/M2)', () => {
 	it('bare-identifier transform stays sync (return is discarded)', async () => {
 		const p = Promise.resolve('unused')
 		let handlerRan = false
-		const app = new Elysia().get(
-			'/',
-			{ transform: () => p as any },
-			() => {
-				handlerRan = true
-				return 'ok'
-			}
-		)
+		const app = new Elysia().get('/', { transform: () => p as any }, () => {
+			handlerRan = true
+			return 'ok'
+		})
 
 		expect(isAsync(app)).toBe(false)
 		const res = await app.handle(req('/'))

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test'
 
-import { rewriteTypeImport } from '../../src/plugin/treeshake'
+import { rewriteTypeImport } from '../../src/plugin/aot/treeshake'
 
 const expectToParse = (source: string) =>
 	expect(() =>

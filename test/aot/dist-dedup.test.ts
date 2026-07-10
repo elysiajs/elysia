@@ -29,7 +29,7 @@ import * as esbuild from 'esbuild'
  *     is exactly why the src-based AOT tests never caught it.
  *  2. The fixture imports the BARE `elysia` specifier → it resolves to `dist`.
  *     Capture only succeeds when the plugin shares that same elysia instance, so
- *     the plugin is loaded from `elysia/plugin/esbuild` (also `dist`). A `src`
+ *     the plugin is loaded from `elysia/plugin/aot/esbuild` (also `dist`). A `src`
  *     plugin would see a different `Compiled` instance, capture 0 handlers, and
  *     `strip:'auto'` would never fire the sucrose stub under test.
  *  This makes the test depend on `dist` being current — the standard gate builds
@@ -45,7 +45,7 @@ const isElysiaDist = (path: string): boolean =>
 async function buildInputs(): Promise<string[]> {
 	// dist plugin so the captured app shares the elysia instance the fixture's
 	// bare `elysia` import resolves to (see the file header for why).
-	const { aot } = await import('elysia/plugin/esbuild')
+	const { aot } = await import('elysia/plugin/aot/esbuild')
 
 	const result = await esbuild.build({
 		entryPoints: [APP],

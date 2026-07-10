@@ -65,7 +65,7 @@ describe('Macro', () => {
 				() => 'Hello World'
 			)
 
-		expect(app.history![0][4]!.parse?.length).toEqual(1)
+		expect(app['~routes']![0][4]!.parse?.length).toEqual(1)
 	})
 
 	it('appends parse array', async () => {
@@ -85,7 +85,7 @@ describe('Macro', () => {
 				() => 'Hello World'
 			)
 
-		expect(app.history![0][4]!.parse?.length).toEqual(2)
+		expect(app['~routes']![0][4]!.parse?.length).toEqual(2)
 	})
 
 	it('appends transform', async () => {
@@ -105,7 +105,7 @@ describe('Macro', () => {
 				() => 'Hello World'
 			)
 
-		expect(app.history![0][4]!.transform?.length).toEqual(1)
+		expect(app['~routes']![0][4]!.transform?.length).toEqual(1)
 	})
 
 	it('appends transform array', async () => {
@@ -125,7 +125,7 @@ describe('Macro', () => {
 				() => 'Hello World'
 			)
 
-		expect(app.history![0][4]!.transform?.length).toEqual(2)
+		expect(app['~routes']![0][4]!.transform?.length).toEqual(2)
 	})
 
 	it('appends beforeHandle', async () => {
@@ -145,7 +145,7 @@ describe('Macro', () => {
 				() => 'Hello World'
 			)
 
-		expect(app.history![0][4]!.beforeHandle?.length).toEqual(1)
+		expect(app['~routes']![0][4]!.beforeHandle?.length).toEqual(1)
 	})
 
 	it('appends beforeHandle array', async () => {
@@ -165,7 +165,7 @@ describe('Macro', () => {
 				() => 'Hello World'
 			)
 
-		expect(app.history![0][4]!.beforeHandle?.length).toEqual(2)
+		expect(app['~routes']![0][4]!.beforeHandle?.length).toEqual(2)
 	})
 
 	it('appends afterHandle', async () => {
@@ -185,7 +185,7 @@ describe('Macro', () => {
 				() => 'Hello World'
 			)
 
-		expect(app.history![0][4]!.afterHandle?.length).toEqual(1)
+		expect(app['~routes']![0][4]!.afterHandle?.length).toEqual(1)
 	})
 
 	it('appends afterHandle array', async () => {
@@ -205,7 +205,7 @@ describe('Macro', () => {
 				() => 'Hello World'
 			)
 
-		expect(app.history![0][4]!.afterHandle?.length).toEqual(2)
+		expect(app['~routes']![0][4]!.afterHandle?.length).toEqual(2)
 	})
 
 	it('appends error', async () => {
@@ -225,7 +225,7 @@ describe('Macro', () => {
 				() => 'Hello World'
 			)
 
-		expect(app.history![0][4]!.error?.length).toEqual(1)
+		expect(app['~routes']![0][4]!.error?.length).toEqual(1)
 	})
 
 	it('appends error array', async () => {
@@ -245,7 +245,7 @@ describe('Macro', () => {
 				() => 'Hello World'
 			)
 
-		expect(app.history![0][4]!.error?.length).toEqual(2)
+		expect(app['~routes']![0][4]!.error?.length).toEqual(2)
 	})
 
 	it('appends afterResponse', async () => {
@@ -265,7 +265,7 @@ describe('Macro', () => {
 				() => 'Hello World'
 			)
 
-		expect(app.history![0][4]!.afterResponse?.length).toEqual(1)
+		expect(app['~routes']![0][4]!.afterResponse?.length).toEqual(1)
 	})
 
 	it('appends afterResponse array', async () => {
@@ -285,7 +285,7 @@ describe('Macro', () => {
 				() => 'Hello World'
 			)
 
-		expect(app.history![0][4]!.afterResponse?.length).toEqual(2)
+		expect(app['~routes']![0][4]!.afterResponse?.length).toEqual(2)
 	})
 
 	it('handle deduplication', async () => {
@@ -555,9 +555,9 @@ describe('Macro', () => {
 				() => 'a'
 			)
 
-		// Macros run during route compilation; reading `app.history`
+		// Macros run during route compilation; reading `app['~routes']`
 		// triggers compile for each route via the introspection getter.
-		void app.history
+		void app['~routes']
 
 		expect(called).toEqual(['nagisa', 'hifumi'])
 	})
@@ -1044,7 +1044,7 @@ describe('Macro', () => {
 				({ body }) => body
 			)
 
-		expect(app.history![0][4]!.schemas!.length).toBe(1)
+		expect(app['~routes']![0][4]!.schemas!.length).toBe(1)
 
 		const valid = await app.handle(
 			post('/Sartre?focou=Focou', {
@@ -1105,7 +1105,7 @@ describe('Macro', () => {
 				({ body }) => body
 			)
 
-		expect(app.history![0][4]!.schemas!.length).toBe(3)
+		expect(app['~routes']![0][4]!.schemas!.length).toBe(3)
 
 		const response = await app.handle(
 			post('/', {
@@ -1176,7 +1176,7 @@ describe('Macro', () => {
 				({ body }) => body
 			)
 
-		expect(app.history![0][4]!.schemas!.length).toBe(3)
+		expect(app['~routes']![0][4]!.schemas!.length).toBe(3)
 
 		const response = await app.handle(
 			post('/', {
@@ -1264,10 +1264,10 @@ describe('Macro', () => {
 			)
 
 		// route-local body stays in the override channel, never lifted
-		expect(app.history![0][4]!.body).not.toBeUndefined()
-		expect(app.history![0][4]!.schemas).toBeUndefined()
-		expect(app.history![1][4]!.body).not.toBeUndefined()
-		expect(app.history![1][4]!.schemas).toBeUndefined()
+		expect(app['~routes']![0][4]!.body).not.toBeUndefined()
+		expect(app['~routes']![0][4]!.schemas).toBeUndefined()
+		expect(app['~routes']![1][4]!.body).not.toBeUndefined()
+		expect(app['~routes']![1][4]!.schemas).toBeUndefined()
 
 		// { id } fails the guard's body but passes the route-local one:
 		// 200 proves the route-local schema overrides the guard's,
@@ -1342,7 +1342,7 @@ describe('Macro', () => {
 			'macro-ref': build('a.model', t.Object({ b: t.String() })),
 			'route-ref': build(t.Object({ a: t.String() }), 'b.model'),
 			'both-ref': build('a.model', 'b.model')
-					}
+		}
 
 		for (const [label, app] of Object.entries(cases)) {
 			const merged = await app.handle(post('/', { a: 'a', b: 'test' }))
@@ -1352,12 +1352,14 @@ describe('Macro', () => {
 				b: 'test'
 			})
 
-			expect((await app.handle(post('/', { b: 'test' }))).status, label).toBe(
-				422
-			)
-			expect((await app.handle(post('/', { a: 'a' }))).status, label).toBe(
-				422
-			)
+			expect(
+				(await app.handle(post('/', { b: 'test' }))).status,
+				label
+			).toBe(422)
+			expect(
+				(await app.handle(post('/', { a: 'a' }))).status,
+				label
+			).toBe(422)
 		}
 	})
 
@@ -1379,7 +1381,7 @@ describe('Macro', () => {
 				({ body }) => body
 			)
 
-		const route = app.history![0]
+		const route = app['~routes']![0]
 
 		expect(route[4]!.detail).toEqual({
 			summary: 'Lilith',
@@ -1407,7 +1409,7 @@ describe('Macro', () => {
 				({ body }) => body
 			)
 
-		const route = app.history![0]
+		const route = app['~routes']![0]
 
 		expect(route[4]!.detail).toEqual({
 			summary: 'Lilith',
@@ -1439,7 +1441,7 @@ describe('Macro', () => {
 				({ body }) => body
 			)
 
-		const route = app.history![0]
+		const route = app['~routes']![0]
 
 		expect(route[4]!.schemas!.length).toBe(3)
 	})
@@ -1471,7 +1473,7 @@ describe('Macro', () => {
 				({ body }) => body
 			)
 
-		const route = app.history![0]
+		const route = app['~routes']![0]
 
 		// This is 4 because
 		// 1. lilith
@@ -1508,7 +1510,7 @@ describe('Macro', () => {
 				({ body }) => body
 			)
 
-		const route = app.history![0]
+		const route = app['~routes']![0]
 
 		// This is 4 because
 		// 1. lilith
@@ -1547,7 +1549,7 @@ describe('Macro', () => {
 				({ body }) => body
 			)
 
-		const route = app.history![0]
+		const route = app['~routes']![0]
 
 		expect(route[4]!.schemas!.length).toBe(4)
 		expect(route[4]!.detail).toEqual({
@@ -1580,7 +1582,7 @@ describe('Macro', () => {
 				({ body }) => body
 			)
 
-		expect(app.history![0][4]!.schemas!.length).toBe(1)
+		expect(app['~routes']![0][4]!.schemas!.length).toBe(1)
 
 		const valid = await app.handle(
 			post('/Sartre?focou=Focou', {
@@ -1643,7 +1645,7 @@ describe('Macro', () => {
 				({ body }) => body
 			)
 
-		expect(app.history![0][4]!.schemas!.length).toBe(1)
+		expect(app['~routes']![0][4]!.schemas!.length).toBe(1)
 
 		const valid = await app.handle(
 			post('/Sartre?focou=Focou', {
@@ -1706,7 +1708,7 @@ describe('Macro', () => {
 				({ body }) => body
 			)
 
-		expect(app.history![0][4]!.schemas!.length).toBe(3)
+		expect(app['~routes']![0][4]!.schemas!.length).toBe(3)
 
 		const response = await app.handle(
 			post('/', {

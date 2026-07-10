@@ -4,11 +4,7 @@ import { WebStandardAdapter } from '../web-standard'
 import { isDynamicRegex, needEncodeRegex } from '../../constants'
 import { buildNativeStaticResponse } from '../../compile/handler'
 import { flushMemory } from '../../memory'
-import {
-	flattenChain,
-	getLoosePath,
-	nullObject
-} from '../../utils'
+import { flattenChain, getLoosePath, nullObject } from '../../utils'
 
 import { buildGlobalWSHandler } from '../../ws/route'
 
@@ -27,7 +23,7 @@ export function collectStaticRoutes(app: AnyElysia) {
 	)
 		return
 
-	const history = app.history
+	const history = app['~routes']
 	if (!history?.length) return
 
 	const ready: Record<string, Record<string, Response>> = nullObject()
@@ -37,8 +33,7 @@ export function collectStaticRoutes(app: AnyElysia) {
 
 	for (let i = 0; i < history.length; i++) {
 		const route = history[i]
-		const method =
-			route[0]
+		const method = route[0]
 
 		seen.set(method + ' ' + route[1], i)
 	}
@@ -49,8 +44,7 @@ export function collectStaticRoutes(app: AnyElysia) {
 
 		for (let i = 0; i < history.length; i++) {
 			const route = history[i]
-			const method =
-				route[0]
+			const method = route[0]
 
 			const path = route[1]
 			let set = explicitPaths.get(method)
@@ -144,20 +138,20 @@ export const BunAdapter = createAdapter({
 		const serve = _config ? { ..._config, ..._options } : _options
 		const server = (app.server = Bun.serve(serve))
 
-		// Run setup callbacks. If any returns a promise, the server is not
-		// ready until it settles, so the user's `listen` callback (their
-		// readiness signal) must not fire until every setup task completes.
-		// When all setups are synchronous, keep the original synchronous
-		// callback timing.
 		const onSetup = app['~ext']?.setup
 		let setupReady: Promise<unknown> | undefined
 		if (onSetup) {
 			let pendingSetups: Promise<unknown>[] | undefined
+
 			for (let i = 0; i < onSetup.length; i++) {
 				const result = onSetup[i](app)
-				if (result && typeof (result as Promise<unknown>).then === 'function')
+				if (
+					result &&
+					typeof (result as Promise<unknown>).then === 'function'
+				)
 					(pendingSetups ??= []).push(result as Promise<unknown>)
 			}
+
 			if (pendingSetups) setupReady = Promise.all(pendingSetups)
 		}
 

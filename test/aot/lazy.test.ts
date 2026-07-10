@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
 import { Compiled } from '../../src/compile/aot'
-import { compileToSource, autoGroupSize } from '../../src/plugin/source'
+import { compileToSource, autoGroupSize } from '../../src/plugin/aot/source'
 import { post, req } from '../utils'
 
 /**

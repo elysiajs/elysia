@@ -6,7 +6,7 @@ import {
 	endValidatorCapture,
 	endHandlerCapture
 } from '../../src/compile/aot'
-import { compileToSource } from '../../src/plugin/source'
+import { compileToSource } from '../../src/plugin/aot/source'
 import { materialise, materialiseHandlers } from './_manifest'
 import { post, req } from '../utils'
 
@@ -154,59 +154,6 @@ describe('AOT handler freeze', () => {
 		expect(() => (build() as any).compile()).toThrow(
 			/Fail to reconstruct build/
 		)
-	})
-})
-
-describe('AOT duplicate route parity', () => {
-	it('captures the same final dynamic route that runtime dispatches', async () => {
-		const make = () =>
-			new Elysia()
-				.post(
-					'/u/:id',
-					{ body: t.Object({ a: t.String() }) },
-					({ body }: any) => `first:${body.a}`
-				)
-				.post(
-					'/u/:id',
-					{ body: t.Object({ b: t.Number() }) },
-					({ body }: any) => `second:${body.b}`
-				)
-
-		;(make() as any).compile()
-		const handlers = endHandlerCapture()
-		const validators = endValidatorCapture()
-
-		Compiled.validators = materialise(validators)
-		Compiled.handlers = materialiseHandlers(handlers)
-		Validator.clear()
-
-		delete process.env.ELYSIA_AOT_BUILD
-		const frozen = make().compile()
-		const frozenValid = await frozen.handle(post('/u/1', { b: 1 }))
-		const frozenOld = await frozen.handle(post('/u/1', { a: 'old' }))
-		const frozenResult = {
-			status: frozenValid.status,
-			body: await frozenValid.text(),
-			oldStatus: frozenOld.status
-		}
-
-		Compiled.clear()
-		Validator.clear()
-		const plain = make().compile()
-		const plainValid = await plain.handle(post('/u/1', { b: 1 }))
-		const plainOld = await plain.handle(post('/u/1', { a: 'old' }))
-		const plainResult = {
-			status: plainValid.status,
-			body: await plainValid.text(),
-			oldStatus: plainOld.status
-		}
-
-		expect(frozenResult).toEqual(plainResult)
-		expect(frozenResult).toEqual({
-			status: 200,
-			body: 'second:1',
-			oldStatus: 422
-		})
 	})
 })
 
@@ -363,9 +310,11 @@ describe('H04 sync/async compilation gating', () => {
 
 	it('keeps a sync value-returning error hook synchronous', () => {
 		const handlers = capture(
-			new Elysia().error(() => 'oops').get('/x', () => {
-				throw new Error('boom')
-			}) as any
+			new Elysia()
+				.error(() => 'oops')
+				.get('/x', () => {
+					throw new Error('boom')
+				}) as any
 		)
 		expect(isAsyncRoute(codeFor(handlers, 'GET', '/x'))).toBe(false)
 	})

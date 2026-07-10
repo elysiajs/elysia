@@ -90,7 +90,7 @@ const stripBridgePlugin = (): esbuild.Plugin => {
 }
 
 async function buildStripped(): Promise<string> {
-	const { aot } = await import('elysia/plugin/esbuild')
+	const { aot } = await import('elysia/plugin/aot/esbuild')
 
 	const previous = process.env.ELYSIA_AOT_BUILD
 	process.env.ELYSIA_AOT_BUILD = '1'

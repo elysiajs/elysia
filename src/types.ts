@@ -109,23 +109,6 @@ export interface ElysiaConfig<
 	strictPath?: boolean
 
 	/**
-	 * Automatically register a HEAD handler for every GET route, deriving the
-	 * response headers (e.g. `content-length`) from the GET handler while
-	 * dropping the body.
-	 *
-	 * If a GET handler returns a raw `Response` stream with neither
-	 * `content-length` nor `transfer-encoding`, the generated HEAD handler may
-	 * consume that stream to synthesize `content-length`.
-	 *
-	 * An explicit `.head(path, ...)` always takes precedence over the
-	 * auto-generated one.
-	 *
-	 * @default false
-	 * @since 2.0.0
-	 */
-	autoHead?: boolean
-
-	/**
 	 * App-wide WebSocket configuration. Provides defaults for the Bun
 	 * server-level `websocket: {...}` options `maxPayloadLength`,
 	 * `idleTimeout`, `perMessageDeflate`, etc. Per-route values set via
@@ -825,6 +808,13 @@ export type InternalRoute = readonly [
 	inheritedChain?: ChainNode,
 	macroScope?: AnyElysia
 ]
+
+export interface HistoryEntry {
+	readonly sequence: number
+	readonly method: string
+	readonly path: string
+	readonly source?: string
+}
 
 export type ErrorHandler<
 	T extends ErrorDefinition[] = [],

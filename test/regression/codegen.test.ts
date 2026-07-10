@@ -80,7 +80,7 @@ describe('M20 — case-insensitive content-type parse', () => {
 			{ body: t.Object({ n: t.Number() }) },
 			({ body }) => body
 		)
-		const src = compileHandler(app.history![0] as any, app).toString()
+		const src = compileHandler(app['~routes']![0] as any, app).toString()
 
 		// json fast path is the charCodeAt(12)===106 check
 		expect(src).toContain('ct.charCodeAt(12)===106')
@@ -134,7 +134,7 @@ describe('L2 — query parse table hoisting', () => {
 			{ query: t.Object({ tags: t.Array(t.String()) }) },
 			({ query }) => query
 		)
-		const src = compileHandler(app.history![0] as any, app).toString()
+		const src = compileHandler(app['~routes']![0] as any, app).toString()
 
 		const pqLine = src.split('\n').find((l) => l.includes('pq(')) as string
 		expect(pqLine).toBeDefined()
@@ -161,7 +161,7 @@ describe('L2 — query parse table hoisting', () => {
 			{ query: t.Object({ q: t.Optional(t.String()) }) },
 			({ query }) => query
 		)
-		const src = compileHandler(app.history![0] as any, app).toString()
+		const src = compileHandler(app['~routes']![0] as any, app).toString()
 
 		const pqLine = src.split('\n').find((l) => l.includes('pq(')) as string
 		expect(pqLine).toContain('pq(c.request.url,c.qi)')
@@ -301,7 +301,7 @@ describe('request abort short-circuits lifecycle hooks', () => {
 	it('emits abort plumbing only for routes with hooks', () => {
 		const plain = new Elysia().get('/plain', () => 'ok')
 		const plainSrc = compileHandler(
-			plain.history![0] as any,
+			plain['~routes']![0] as any,
 			plain
 		).toString()
 
@@ -312,7 +312,7 @@ describe('request abort short-circuits lifecycle hooks', () => {
 			.beforeHandle(() => {})
 			.get('/hooked', () => 'ok')
 		const hookedSrc = compileHandler(
-			hooked.history![0] as any,
+			hooked['~routes']![0] as any,
 			hooked
 		).toString()
 

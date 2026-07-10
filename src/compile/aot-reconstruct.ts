@@ -159,7 +159,7 @@ const bothFactorySource = (
 			: `function(v){${mirrorSource}}`
 	}}}`
 
-// ? Build-only: these source emitters are imported solely by `plugin/source.ts`
+// ? Build-only: these source emitters are imported solely by `plugin/aot/source.ts`
 export const Source = {
 	checkFactory: checkFactorySource,
 	checkCode: checkCode,

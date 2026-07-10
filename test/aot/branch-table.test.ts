@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
 import { Compiled } from '../../src/compile/aot'
-import { compileToSource } from '../../src/plugin/source'
+import { compileToSource } from '../../src/plugin/aot/source'
 
 /**
  * AOT branch-check table — codec branch-checks (the mirror `u` entries) are

@@ -45,7 +45,7 @@ const VIRTUAL_TYPE = '\0elysia/type'
  *
  * ```ts
  * import { defineConfig } from 'vite'
- * import { aot } from 'elysia/plugin/vite'
+ * import { aot } from 'elysia/plugin/aot/vite'
  *
  * export default defineConfig({
  *   plugins: [aot('src/index.ts')]

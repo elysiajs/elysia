@@ -376,7 +376,7 @@ export function isCapturedBridgeFree(
 	 * A captured `cm` entry is one that froze BOTH check and mirror
 	 * `checkValue && mirror` at emit
 	 *
-	 * @see plugin/source.ts `entryParts`
+	 * @see plugin/aot/source.ts `entryParts`
 	 */
 	if (!(c.checkValue && c.mirror)) return false
 

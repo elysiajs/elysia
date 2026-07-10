@@ -6,7 +6,7 @@
 // no `Headers.toJSON`, so a Node-generated manifest bakes `Object.fromEntries` and
 // runs on workerd. (`setImmediate` is a runtime check in the codegen, so it's
 // already portable regardless of where this runs.)
-import { generateCompiledModule } from '../../dist/plugin/core.mjs'
+import { generateCompiledModule } from '../../dist/plugin/aot/core.mjs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { writeFileSync } from 'node:fs'

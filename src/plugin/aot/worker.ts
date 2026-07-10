@@ -4,7 +4,7 @@ import { generateCompiledArtifacts, type ElysiaAotOptions } from './core'
 
 const port = parentPort
 
-if (!port) throw new Error('[elysia-aot] rebuild worker requires a parent port')
+if (!port) throw new Error('[elysia-aot] worker requires a parent port')
 
 const { file, options } = workerData as {
 	file: string

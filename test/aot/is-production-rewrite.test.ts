@@ -6,9 +6,9 @@ import {
 	makeElysiaModuleFilterRegex,
 	rewriteIsProductionCalls,
 	generateCompiledArtifacts
-} from '../../src/plugin/core'
-import { aot as bunAot } from '../../src/plugin/bun'
-import { aot as viteAot } from '../../src/plugin/vite'
+} from '../../src/plugin/aot/core'
+import { aot as bunAot } from '../../src/plugin/aot/bun'
+import { aot as viteAot } from '../../src/plugin/aot/vite'
 
 const APP = resolve(import.meta.dir, 'fixtures/strip-schema-bundle.ts')
 const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/aot.ts')

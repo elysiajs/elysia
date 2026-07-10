@@ -15,13 +15,13 @@ import {
  *
  * ```ts
  * import * as esbuild from 'esbuild'
- * import { elysiaAot } from 'elysia/plugin/esbuild'
+ * import { aot } from 'elysia/plugin/aot/esbuild'
  *
  * await esbuild.build({
  *   entryPoints: ['src/index.ts'],
  *   bundle: true,
  *   outfile: 'dist/index.js',
- *   plugins: [elysiaAot('src/index.ts')]
+ *   plugins: [aot('src/index.ts')]
  * })
  *
  * process.exit(0)
@@ -42,7 +42,10 @@ export const aot = (entry: string, options?: ElysiaAotOptions) => ({
 				return
 			}
 
-			const fresh = await generateCompiledArtifactsIsolated(entry, options)
+			const fresh = await generateCompiledArtifactsIsolated(
+				entry,
+				options
+			)
 
 			box.source = fresh.source
 			box.stub = fresh.stub
@@ -53,8 +56,16 @@ export const aot = (entry: string, options?: ElysiaAotOptions) => ({
 		const MANIFEST_NS = 'elysia-aot'
 		const VIRTUAL_TYPE_NS = 'elysia-aot-type'
 
-		const manifestLoader = () => ({ contents: box.source, loader: 'js', resolveDir })
-		const virtualTypeLoader = () => ({ contents: box.virtualType, loader: 'js', resolveDir })
+		const manifestLoader = () => ({
+			contents: box.source,
+			loader: 'js',
+			resolveDir
+		})
+		const virtualTypeLoader = () => ({
+			contents: box.virtualType,
+			loader: 'js',
+			resolveDir
+		})
 
 		const buildProxy: any = new Proxy(build, {
 			get(target, prop) {

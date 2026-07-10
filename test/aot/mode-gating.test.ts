@@ -9,10 +9,10 @@ import * as esbuild from 'esbuild'
 // The plugin plan (mode/stub) must be read from the SAME dist instance the
 // fixtures' bare `elysia` import resolves to — a `src` core would replay handler
 // JIT against a different `Compiled`/`JITProbe` and mis-report `jit` (→ off).
-// `plugin/core` is not a public export, so load the built module by path.
+// `plugin/aot/core` is not a public export, so load the built module by path.
 const distCore = (await import(
-	resolve(import.meta.dir, '../../dist/plugin/core.mjs')
-)) as typeof import('../../src/plugin/core')
+	resolve(import.meta.dir, '../../dist/plugin/aot/core.mjs')
+)) as typeof import('../../src/plugin/aot/core')
 const { generateCompiledArtifacts } = distCore
 
 /**
@@ -29,7 +29,7 @@ const { generateCompiledArtifacts } = distCore
  *
  * WHY dist (not src): like the sibling bridge-free / dist-dedup tests, the whole
  * scenario only manifests through the published module graph — the plugin loaded
- * from `elysia/plugin/esbuild` must share the `Compiled` instance the fixtures'
+ * from `elysia/plugin/aot/esbuild` must share the `Compiled` instance the fixtures'
  * bare `elysia` import resolves to. The standard gate builds `dist` first.
  *
  * WHY all bundles are built in `beforeAll` then esbuild is stopped BEFORE any
@@ -90,7 +90,7 @@ const MODE_MAP_DERIVE = resolve(
 const MODE_FILE = resolve(import.meta.dir, 'fixtures/mode-file-app.ts')
 
 async function buildEsbuild(app: string): Promise<string> {
-	const { aot } = await import('elysia/plugin/esbuild')
+	const { aot } = await import('elysia/plugin/aot/esbuild')
 
 	const previous = process.env.ELYSIA_AOT_BUILD
 	process.env.ELYSIA_AOT_BUILD = '1'
@@ -116,7 +116,7 @@ async function buildEsbuild(app: string): Promise<string> {
 }
 
 async function buildBun(app: string): Promise<string> {
-	const { aot } = await import('elysia/plugin/bun')
+	const { aot } = await import('elysia/plugin/aot/bun')
 
 	const previous = process.env.ELYSIA_AOT_BUILD
 	process.env.ELYSIA_AOT_BUILD = '1'
@@ -704,7 +704,7 @@ describe('AOT mode gating — Vite hook contract', () => {
 	const BRIDGE = resolve(import.meta.dir, '../../src/type/bridge.ts')
 
 	it('mode A: serves virtual-t, stubs compat, does NOT reroute bridge', async () => {
-		const { aot } = await import('../../src/plugin/vite')
+		const { aot } = await import('../../src/plugin/aot/vite')
 		const plugin = aot(
 			resolve(import.meta.dir, 'fixtures/mode-a-vite.ts')
 		)
@@ -727,7 +727,7 @@ describe('AOT mode gating — Vite hook contract', () => {
 	})
 
 	it('mode B: serves virtual-t, stubs compat, RE-ROUTES bridge to bridge-live', async () => {
-		const { aot } = await import('../../src/plugin/vite')
+		const { aot } = await import('../../src/plugin/aot/vite')
 		const plugin = aot(
 			resolve(import.meta.dir, 'fixtures/mode-b-vite.ts')
 		)

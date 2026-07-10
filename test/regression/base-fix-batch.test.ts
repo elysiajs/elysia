@@ -1,4 +1,5 @@
 import { Elysia } from '../../src'
+import { autoHead } from '../../src/plugin/auto-head'
 
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
@@ -74,13 +75,14 @@ describe('H16 — auto-HEAD never buffers an unknown-length body', () => {
 				}
 			})
 
-		const app = new Elysia({ autoHead: true }).get(
+		const app = new Elysia().use(autoHead()).get(
 			'/stream',
 			() =>
 				new Response(makeStream(), {
 					headers: { 'content-type': 'application/octet-stream' }
 				})
 		)
+		await app.modules
 
 		// warm the GET wrapper first (separate stream instance)
 		await app.handle(req('/stream'))
@@ -94,13 +96,14 @@ describe('H16 — auto-HEAD never buffers an unknown-length body', () => {
 	})
 
 	it('preserves an already-known content-length without reading the body', async () => {
-		const app = new Elysia({ autoHead: true }).get(
+		const app = new Elysia().use(autoHead()).get(
 			'/known',
 			() =>
 				new Response('hello world', {
 					headers: { 'content-length': '11' }
 				})
 		)
+		await app.modules
 
 		await app.handle(req('/known'))
 

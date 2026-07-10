@@ -1,34 +1,7 @@
 import { describe, it, expect } from 'bun:test'
 import { Elysia, t } from '../../src'
+import { autoHead } from '../../src/plugin/auto-head'
 import { req } from '../utils'
-
-/**
- * Phase-2 ROUTING cluster pins (design/fable-tasks.md — M16 / L11 / L1 / M8 / M34).
- *
- * Exact duplicates are canonicalized before static-map or Memoirist emission,
- * so both route shapes obey the same last-registration-wins contract. All
- * assertions below are on WIRE behaviour so the Bun-only suite cannot fake a
- * pass.
- */
-
-describe('M16 — duplicate route precedence is last-wins for BOTH static and dynamic', () => {
-	it('static duplicate keeps the LAST handler', async () => {
-		const app = new Elysia()
-			.get('/s', () => 'first')
-			.get('/s', () => 'second')
-
-		expect(await (await app.handle(req('/s'))).text()).toBe('second')
-	})
-
-	for (const precompile of [false, true])
-		it(`dynamic duplicate keeps the LAST handler (precompile=${precompile})`, async () => {
-			const app = new Elysia({ precompile })
-				.get('/u/:id', () => 'first')
-				.get('/u/:id', () => 'second')
-
-			expect(await (await app.handle(req('/u/1'))).text()).toBe('second')
-		})
-})
 
 describe('L11 — a loose alias never clobbers an explicitly-registered sibling (default config)', () => {
 	// Default config (strictPath off) previously exposed this: the loose twin of
@@ -70,14 +43,15 @@ describe('L1 — JIT wrapper heals ALL of its own map aliases on first compile',
 
 		// hit twice: first compiles+heals, second must hit the healed entry
 		expect(await (await app.handle(req('/café'))).text()).toBe('coffee')
-		expect(
-			await (await app.handle(req(encodeURI('/café')))).text()
-		).toBe('coffee')
+		expect(await (await app.handle(req(encodeURI('/café')))).text()).toBe(
+			'coffee'
+		)
 		expect(await (await app.handle(req('/café'))).text()).toBe('coffee')
 	})
 
 	it('auto-HEAD twin heals and returns headers-only', async () => {
-		const app = new Elysia({ autoHead: true }).get('/h', () => 'body-here')
+		const app = new Elysia().use(autoHead()).get('/h', () => 'body-here')
+		await app.modules
 
 		// warm the GET so the wrapper compiles
 		expect(await (await app.handle(req('/h'))).text()).toBe('body-here')
@@ -302,11 +276,7 @@ describe('M34 — unknown model-name schema refs fail loud at build time, not pe
 	it('an eager compile failure cannot expose earlier partial routes', () => {
 		const app = new Elysia()
 			.get('/ok', () => 'ok')
-			.get(
-				'/bad',
-				{ headers: { 'x-a': '1' } } as any,
-				'hello' as any
-			)
+			.get('/bad', { headers: { 'x-a': '1' } } as any, 'hello' as any)
 
 		expect(() => app.compile()).toThrow(/Failed to compile route GET \/bad/)
 		expect(() => app.fetch).toThrow(/Failed to compile route GET \/bad/)

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'bun:test'
 
-import { rewriteTypeImport } from '../../src/plugin/treeshake'
-import { aot as viteAot } from '../../src/plugin/vite'
+import { rewriteTypeImport } from '../../src/plugin/aot/treeshake'
+import { aot as viteAot } from '../../src/plugin/aot/vite'
 
 /**
  * Regression tests for kiana build-plugin fixes.

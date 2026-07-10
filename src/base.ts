@@ -108,6 +108,7 @@ import type {
 	DefaultMetadata,
 	DocumentDecoration,
 	Handler,
+	HistoryEntry,
 	MacroSchemaChannel,
 	MacroToProperty,
 	ObjectMacroDefs,
@@ -126,7 +127,6 @@ import type {
 	GuardHookSingleton
 } from './types'
 import type { ElysiaStatus } from './error'
-import { isProduction } from './error'
 import type { Context, LifecycleContext, ErrorContext } from './context'
 
 const useNodesBuffer: ChainNode[] = []
@@ -142,8 +142,9 @@ const plainRouteOwner = Object.freeze(nullObject()) as AnyElysia
 interface StaticMapAliases {
 	method: string
 	paths: string[]
-	head: boolean
 }
+
+const emptyHistory = Object.freeze([]) as readonly HistoryEntry[]
 
 export class Elysia<
 	const in out BasePath extends string = '',
@@ -200,16 +201,42 @@ export class Elysia<
 
 	'~hookChain'?: ChainNode
 
-	#history?: InternalRoute[]
+	#declaredRoutes?: InternalRoute[]
+	#routeSources?: (string | undefined)[]
+	#cachedHistory?: readonly HistoryEntry[]
 	server?: Server
 
-	get history() {
-		if (!this.#history) return
+	get history(): readonly HistoryEntry[] {
+		if (this.#cachedHistory) return this.#cachedHistory
+		if (!this.#declaredRoutes?.length) return emptyHistory
 
-		if (!this['~ext']?.macro && !this['~scopeChildren'])
-			return this.#history
+		const history = new Array<HistoryEntry>(this.#declaredRoutes.length)
+		for (
+			let sequence = 0;
+			sequence < this.#declaredRoutes.length;
+			sequence++
+		) {
+			const route = this.#declaredRoutes[sequence]
+			const source = this.#routeSources?.[sequence]
 
-		return this.#history.map((route) => {
+			history[sequence] = Object.freeze({
+				sequence,
+				method: route[0],
+				path: route[1],
+				...(source === undefined ? {} : { source })
+			})
+		}
+
+		return (this.#cachedHistory = Object.freeze(history))
+	}
+
+	get ['~routes'](): readonly InternalRoute[] {
+		if (!this.#declaredRoutes?.length) return []
+
+		const routes = this.#declaredRoutes
+		if (!this['~ext']?.macro && !this['~scopeChildren']) return routes
+
+		return routes.map((route) => {
 			const localHook = route[4]
 			if (!localHook) return route
 
@@ -235,6 +262,11 @@ export class Elysia<
 				route[7]
 			] as unknown as InternalRoute
 		})
+	}
+
+	['~addRoute'](route: InternalRoute) {
+		this.#registerRoute(route)
+		return this
 	}
 
 	#compiled?: CompiledHandler[]
@@ -269,11 +301,11 @@ export class Elysia<
 	}
 
 	get routes(): PublicRoute[] {
-		if (!this.#history) return []
+		if (!this.#declaredRoutes?.length) return []
 
 		if (this.#cachedRoutes) return this.#cachedRoutes
 
-		const routes = this.#history.map(
+		const routes = this['~routes'].map(
 			([
 				method,
 				path,
@@ -4060,19 +4092,16 @@ export class Elysia<
 
 		if (app['~hasTrace']) this['~hasTrace'] = true
 
-		if (app.#history) {
+		if (app.#declaredRoutes?.length) {
 			if (app['~hasWS']) this['~hasWS'] = true
-
-			const history = (this.#history ??= [])
-			const length = app.#history.length
 
 			const preChain = this['~hookChain']
 
 			let lastChildChain: ChainNode | undefined
 			let lastCombined: ChainNode | undefined
 
-			for (let i = 0; i < length; i++) {
-				const route = app.#history[i]
+			for (let i = 0; i < app.#declaredRoutes.length; i++) {
+				const route = app.#declaredRoutes[i]
 				const owner = this.#compactRouteOwner(app, route)
 
 				const childChain = route[6]
@@ -4101,7 +4130,7 @@ export class Elysia<
 						? this
 						: undefined)
 
-				history.push(
+				this.#registerRoute(
 					inheritedChain === childChain &&
 						!this['~Prefix'] &&
 						macroScope === route[7] &&
@@ -4116,7 +4145,8 @@ export class Elysia<
 								route[5],
 								inheritedChain,
 								macroScope
-							] as unknown as InternalRoute)
+							] as unknown as InternalRoute),
+					name
 				)
 			}
 		}
@@ -4524,16 +4554,29 @@ export class Elysia<
 
 		const appHook = this['~hookChain']
 
-		;(this.#history ??= []).push(
+		this.#registerRoute(
 			(appHook
 				? [method, path, handler, this, hook, appHook]
 				: hook
 					? [method, path, handler, this, hook]
 					: [method, path, handler, this]) as unknown as InternalRoute
 		)
-		this.#cachedRoutes = undefined
 
 		return this
+	}
+
+	#registerRoute(route: InternalRoute, source?: string) {
+		const routes = (this.#declaredRoutes ??= [])
+		const sequence = routes.length
+		routes.push(route)
+
+		if (source) (this.#routeSources ??= [])[sequence] = source
+
+		this.#cachedHistory = undefined
+		this.#cachedRoutes = undefined
+		this.#compiled = undefined
+		this.#fetchFn = undefined
+		this.#routerBuilt = false
 	}
 
 	model<const Name extends string, const Model extends AnySchema>(
@@ -6168,23 +6211,19 @@ export class Elysia<
 	handler(
 		index: number,
 		immediate: boolean | undefined = this['~config']?.precompile,
-		route: InternalRoute = this.#history![index],
+		route: InternalRoute = this['~routes'][index],
 		precomputedStatic?: Response,
 		aliases?: StaticMapAliases
 	): CompiledHandler {
 		if (this.#compiled?.[index]) return this.#compiled![index]
 
-		const compiled = (this.#compiled ??= new Array(this.#history!.length))
+		const compiled = (this.#compiled ??= new Array(this['~routes'].length))
 
 		if (immediate) {
 			let handler: CompiledHandler
 
 			try {
-				handler = compileHandler(
-					this.#history![index],
-					this,
-					precomputedStatic
-				)
+				handler = compileHandler(route, this, precomputedStatic)
 			} catch (error) {
 				throw new Error(
 					`[Elysia] Failed to compile route ${route[0]} ${route[1]}: ${(error as Error)?.message ?? error}`,
@@ -6212,11 +6251,7 @@ export class Elysia<
 
 			let handler: CompiledHandler
 			try {
-				handler = compileHandler(
-					this.#history![index],
-					this,
-					precomputedStatic
-				)
+				handler = compileHandler(route, this, precomputedStatic)
 			} catch (error) {
 				throw new Error(
 					`[Elysia] Failed to compile route ${route[0]} ${route[1]}: ${(error as Error)?.message ?? error}`,
@@ -6234,13 +6269,6 @@ export class Elysia<
 
 				for (let p = 0; p < aliases.paths.length; p++)
 					map[aliases.paths[p]] = handler
-
-				if (aliases.head) {
-					const head = (this['~map']!['HEAD'] ??= nullObject() as any)
-					const headHandler = Elysia.#wrapHeadHandler(handler)
-					for (let p = 0; p < aliases.paths.length; p++)
-						head[aliases.paths[p]] = headHandler
-				}
 			} else this.#saveHandler(route[0], route[1], handler)
 
 			return handler(context)
@@ -6254,30 +6282,6 @@ export class Elysia<
 
 		const map = (this['~map']![method] ??= nullObject() as any)
 		map[path] = handler
-	}
-
-	static #toHeadResponse(response: Response) {
-		if (!(response instanceof Response) || response.body === null)
-			return response
-
-		const headers = response.headers
-
-		response.body.cancel?.().catch(() => {})
-
-		return new Response(null, {
-			status: response.status,
-			headers
-		})
-	}
-
-	static #wrapHeadHandler(handler: CompiledHandler) {
-		return ((context) => {
-			const r = handler(context)
-
-			return r instanceof Promise
-				? r.then(Elysia.#toHeadResponse)
-				: Elysia.#toHeadResponse(r as Response)
-		}) as CompiledHandler
 	}
 
 	#chainRefMemo?: WeakMap<ChainNode, boolean>
@@ -6468,7 +6472,8 @@ export class Elysia<
 
 	#routerBuilt = false
 	#buildRouter() {
-		if (!this.#history || this.#routerBuilt) return
+		if (this.#routerBuilt) return
+		if (!this.#declaredRoutes?.length) return
 
 		const previousMap = this['~map']
 		const previousRouter = this['~router']
@@ -6521,62 +6526,28 @@ export class Elysia<
 
 	#buildRouterUnsafe() {
 		const precompile = this['~config']?.precompile
-		const enableAutoHead = this['~config']?.autoHead === true
 
 		this.#initMap()
 		const methods = this['~map']!
-		const length = this.#history!.length
-		let hasDuplicate = false
-		const effective = new Map<string, Map<string, number>>()
+		const routes = this['~routes']
+		const length = routes.length
 
 		for (let i = 0; i < length; i++) {
-			const route = this.#history![i]
-			const method = route[0]
-			let byPath = effective.get(method)
-			if (!byPath) effective.set(method, (byPath = new Map()))
-
-			const previous = byPath.get(route[1])
-
+			const route = routes[i]
 			if (this.#routeMayHaveModelRef(route))
-				this.#assertRouteModelRefs(route, method)
-
-			if (previous !== undefined) {
-				hasDuplicate = true
-				const earlier = this.#history![previous]
-
-				if (
-					!isProduction() &&
-					(earlier[2] !== route[2] ||
-						earlier[3] !== route[3] ||
-						earlier[4] !== route[4] ||
-						earlier[5] !== route[5] ||
-						earlier[6] !== route[6] ||
-						earlier[7] !== route[7])
-				)
-					console.warn(
-						`[Elysia] Duplicate route ${method} ${route[1]} — the later definition overrides the earlier one (its schema/hooks are dropped).`
-					)
-			}
-
-			byPath.set(route[1], i)
+				this.#assertRouteModelRefs(route, route[0])
 		}
 
-		const wrapHeadHandler = Elysia.#wrapHeadHandler
 		const isLoose = this['~config']?.strictPath !== true
 
-		let explicitHead: Set<string> | undefined
 		let explicitPaths: Map<string, Set<string>> | undefined
 		if (isLoose) explicitPaths = new Map()
 
-		if (enableAutoHead || isLoose)
+		if (isLoose)
 			for (let i = 0; i < length; i++) {
-				const route = this.#history![i]
-				const isWS = route[0] === 'WS'
+				const route = routes[i]
 				const m = route[0]
 				const p = route[1]
-
-				if (enableAutoHead && !isWS && m === 'HEAD')
-					(explicitHead ??= new Set()).add(p)
 
 				if (explicitPaths) {
 					let set = explicitPaths.get(m)
@@ -6591,11 +6562,9 @@ export class Elysia<
 			}
 
 		for (let i = 0; i < length; i++) {
-			const route: InternalRoute = this.#history![i]
+			const route: InternalRoute = routes[i]
 			const method = route[0]
 			const path = route[1]
-
-			if (hasDuplicate && effective.get(method)!.get(path) !== i) continue
 
 			if ((route[0] as any) === 'WS') {
 				const ws = buildWSRoute(route, this)
@@ -6647,9 +6616,6 @@ export class Elysia<
 				continue
 			}
 
-			const autoHead =
-				enableAutoHead && method === 'GET' && !explicitHead?.has(path)
-
 			const isDynamic = isDynamicRegex.test(path)
 			const needsEncode = needEncodeRegex.test(path)
 			const registerLoose =
@@ -6664,20 +6630,9 @@ export class Elysia<
 			if (!isDynamic && !needsEncode && !registerLoose) {
 				const map = (methods[method] ??= nullObject() as any)
 
-				const handler = this.handler(
-					i,
-					precompile,
-					route,
-					undefined,
-					autoHead ? { method, paths: [path], head: true } : undefined
-				)
+				const handler = this.handler(i, precompile, route, undefined)
 
 				map[path] = handler
-
-				if (autoHead) {
-					const head = (methods['HEAD'] ??= nullObject() as any)
-					head[path] = wrapHeadHandler(handler)
-				}
 
 				continue
 			}
@@ -6705,43 +6660,19 @@ export class Elysia<
 						loosePath: isLoose
 					}))
 
-				const handler = this.handler(
-					i,
-					precompile,
-					undefined,
-					undefined
-				)
+				const handler = this.handler(i, precompile, route, undefined)
 
-				const headHandler = autoHead
-					? wrapHeadHandler(handler)
-					: undefined
-
-				for (let p = 0; p < paths.length; p++) {
+				for (let p = 0; p < paths.length; p++)
 					router.add(method, paths[p], handler, false)
-					if (headHandler)
-						router.add('HEAD', paths[p], headHandler, false)
-				}
 			} else {
 				const map = (methods[method] ??= nullObject() as any)
 
 				const handler = this.handler(i, precompile, route, undefined, {
 					method,
-					paths,
-					head: autoHead
+					paths
 				})
 
-				const headHandler = autoHead
-					? wrapHeadHandler(handler)
-					: undefined
-
-				const head = autoHead
-					? (methods['HEAD'] ??= nullObject() as any)
-					: undefined
-
-				for (let p = 0; p < paths.length; p++) {
-					map[paths[p]] = handler
-					if (headHandler) head![paths[p]] = headHandler
-				}
+				for (let p = 0; p < paths.length; p++) map[paths[p]] = handler
 			}
 		}
 	}
@@ -6800,7 +6731,7 @@ export class Elysia<
 			...rest: any[]
 		) => MaybePromise<Response>
 	>(callback: WrapFn<T>): this {
-		if (this.#fetchFn)
+		if (this.#fetchFn && !this.#pending)
 			console.warn(
 				'[Elysia] .wrap() was called after the fetch handler was built'
 			)

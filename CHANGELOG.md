@@ -2,6 +2,20 @@
 
 Breaking Change:
 
+- Replace the newly introduced heavyweight `app.history` tuples with
+  lightweight declaration entries. Executable routes are exposed internally
+  through `~routes`, and `app.routes` contains every declaration. Exact
+  duplicate method/path declarations are unsupported and dispatch precedence is
+  unspecified.
+- Move opt-in automatic HEAD handling from `{ autoHead: true }` to the
+  first-party async `autoHead()` plugin from `elysia/plugin/auto-head`. It
+  registers GET routes declared on the app where it is installed, including
+  routes declared later in the same synchronous chain. Generated HEAD routes
+  are ordinary declarations visible through `history` and `routes`. Await
+  `app.modules` before calling `app.handle` or `app.fetch` directly.
+- Move the AOT bundler plugins under `elysia/plugin/aot`: import Bun, esbuild,
+  and Vite integrations from `elysia/plugin/aot/bun`,
+  `elysia/plugin/aot/esbuild`, and `elysia/plugin/aot/vite` respectively.
 - route handler argument order is now **hook-first**: the verb methods (`get`/`post`/`put`/`patch`/`delete`/`options`/`head`/`all`/`method`) take the hook/schema object **before** the handler — `.get('/', { query }, handler)` instead of `.get('/', handler, { query })`. The hookless form is unchanged (`.get('/', handler)`). `.ws()` matches: its 3-arg form is now `.ws('/ws', options, handler)` (the 2-arg `.ws('/ws', handler)` / `.ws('/ws', options)` forms are unchanged). Declaring the schema first lets the handler's context (`body`/`query`/`params`/…) infer from it, and surfaces an invalid option or handler return at the exact property/handler rather than at the whole call. Migration: move the options/hook object from the last argument to the second.
 - [Internal] remove ArrayQuery
 - [Internal] remove format: `numeric`, `integer`, `objectString`, `booleanString`
@@ -53,7 +67,7 @@ Behavior Change:
 - `file()` responses resolve their `content-type` from the file extension case-insensitively — an uppercase or mixed-case extension (e.g. `photo.PNG`, `report.PDF`) now maps to the correct MIME type instead of falling back to `application/octet-stream` (which forced a download). Lowercase extensions are unaffected
 - synchronous Standard Schema validators no longer force async route emission. Body routes are already async and still await promise-returning Standard Schema results; on otherwise-sync channels, declare `validate` as `async` if it can return a `Promise`, otherwise Elysia fails loudly instead of silently putting a pending promise into the request context
 - Bun native static-route `Response` objects are no longer retained on the base Elysia instance during router build. The Bun adapter still collects eligible native static routes for `Bun.serve.routes` during `listen()`, but `app.fetch`/`app.handle` no longer keep the extra base-level static route table alive
-- `autoHead` remains opt-in and may consume a raw handler-returned `Response` stream to synthesize `content-length` when the response has neither `content-length` nor `transfer-encoding`. Return those headers yourself for large/unbounded streams
+- `autoHead` remains opt-in and cancels the mapped GET response body without buffering it; an existing `content-length` is preserved, but no missing length is synthesized
 
 Feature:
 

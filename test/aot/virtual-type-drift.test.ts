@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'bun:test'
 import * as typebox from 'typebox/type'
 
-import { OVERRIDE_MAP, generateVirtualType } from '../../src/plugin/core'
+import { OVERRIDE_MAP, generateVirtualType } from '../../src/plugin/aot/core'
 import { t } from '../../src/type'
 
 /**

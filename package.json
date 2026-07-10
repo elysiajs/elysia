@@ -95,20 +95,25 @@
 			"import": "./dist/parse-query.mjs",
 			"require": "./dist/parse-query.js"
 		},
-		"./plugin/bun": {
-			"types": "./dist/plugin/bun.d.ts",
-			"import": "./dist/plugin/bun.mjs",
-			"require": "./dist/plugin/bun.js"
+		"./plugin/aot/bun": {
+			"types": "./dist/plugin/aot/bun.d.ts",
+			"import": "./dist/plugin/aot/bun.mjs",
+			"require": "./dist/plugin/aot/bun.js"
 		},
-		"./plugin/esbuild": {
-			"types": "./dist/plugin/esbuild.d.ts",
-			"import": "./dist/plugin/esbuild.mjs",
-			"require": "./dist/plugin/esbuild.js"
+		"./plugin/aot/esbuild": {
+			"types": "./dist/plugin/aot/esbuild.d.ts",
+			"import": "./dist/plugin/aot/esbuild.mjs",
+			"require": "./dist/plugin/aot/esbuild.js"
 		},
-		"./plugin/vite": {
-			"types": "./dist/plugin/vite.d.ts",
-			"import": "./dist/plugin/vite.mjs",
-			"require": "./dist/plugin/vite.js"
+		"./plugin/aot/vite": {
+			"types": "./dist/plugin/aot/vite.d.ts",
+			"import": "./dist/plugin/aot/vite.mjs",
+			"require": "./dist/plugin/aot/vite.js"
+		},
+		"./plugin/auto-head": {
+			"types": "./dist/plugin/auto-head.d.ts",
+			"import": "./dist/plugin/auto-head.mjs",
+			"require": "./dist/plugin/auto-head.js"
 		},
 		"./sucrose": {
 			"types": "./dist/sucrose.d.ts",

@@ -19,8 +19,8 @@ describe('Checksum', () => {
 			.use(group)
 			.get('/cookie', () => 'Hi')
 
-		const hook0 = flattenChain(app.history![0][5])!
-		const hook1 = flattenChain(app.history![1][5])!
+		const hook0 = flattenChain(app['~routes']![0][5])!
+		const hook1 = flattenChain(app['~routes']![1][5])!
 
 		expect(hook0.transform!.length).toBe(1)
 		expect(hook1.transform!.length).toBe(1)
@@ -40,8 +40,8 @@ describe('Checksum', () => {
 			.use(group)
 			.get('/cookie', () => 'Hi')
 
-		const hook0 = flattenChain(app.history![0][5])!
-		const hook1 = flattenChain(app.history![1][5])!
+		const hook0 = flattenChain(app['~routes']![0][5])!
+		const hook1 = flattenChain(app['~routes']![1][5])!
 
 		expect(hook0.transform!.length).toBe(1)
 		expect(hook1.transform!.length).toBe(1)
@@ -65,8 +65,8 @@ describe('Checksum', () => {
 			)
 			.get('/cookie', () => 'Hi')
 
-		const hook0 = flattenChain(app.history![0][5])!
-		const hook1 = flattenChain(app.history![1][5])!
+		const hook0 = flattenChain(app['~routes']![0][5])!
+		const hook1 = flattenChain(app['~routes']![1][5])!
 
 		expect(
 			Math.abs(hook0.transform!.length - hook1.transform!.length)
@@ -87,8 +87,8 @@ describe('Checksum', () => {
 			.use(group)
 			.get('/cookie', () => 'Hi')
 
-		const hook0 = flattenChain(app.history![0][5])!
-		const hook1 = flattenChain(app.history![1][5])!
+		const hook0 = flattenChain(app['~routes']![0][5])!
+		const hook1 = flattenChain(app['~routes']![1][5])!
 
 		expect(
 			Math.abs(hook0.transform!.length - hook1.transform!.length)

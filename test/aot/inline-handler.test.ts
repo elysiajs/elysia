@@ -20,7 +20,7 @@ import { req } from '../utils'
  */
 
 const source = (app: any, i = 0) =>
-	compileHandler((app as Elysia).history![i] as any, app).toString()
+	compileHandler((app as Elysia)['~routes']![i] as any, app).toString()
 
 describe('inline handler fast path (no new Function eval)', () => {
 	it('a plain sync GET takes the inline closure path', () => {

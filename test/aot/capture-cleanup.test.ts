@@ -12,7 +12,7 @@ import { describe, it, expect, afterEach } from 'bun:test'
 import { Elysia } from '../../src'
 import { Validator } from '../../src/validator'
 import { Compiled, Capture, endValidatorCapture, endHandlerCapture } from '../../src/compile/aot'
-import { captureArtifacts } from '../../src/plugin/source'
+import { captureArtifacts } from '../../src/plugin/aot/source'
 
 afterEach(() => {
 	Compiled.clear()

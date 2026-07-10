@@ -1,4 +1,4 @@
-import type { AnyElysia } from '../base'
+import type { AnyElysia } from '../../base'
 import {
 	beginValidatorCapture,
 	endValidatorCapture,
@@ -9,18 +9,20 @@ import {
 	type CapturedValidator,
 	type CapturedHandler,
 	type HandlerManifest
-} from '../compile/aot'
-import { Source } from '../compile/aot-reconstruct'
-import { env } from '../universal'
-import { installCaptureImpl } from '../compile/aot-capture'
-import { nullObject } from '../utils'
+} from '../../compile/aot'
+import { Source } from '../../compile/aot-reconstruct'
+import { env } from '../../universal'
+import { installCaptureImpl } from '../../compile/aot-capture'
+import { nullObject } from '../../utils'
 
 installCaptureImpl()
 
-import { setCaptureHeaderShorthand, compileHandler } from '../compile/handler'
-import { JITProbe, type JITProbeReason } from '../compile/jit-probe'
-import { Validator } from '../validator'
-import type { InternalRoute } from '../types'
+import {
+	setCaptureHeaderShorthand,
+	compileHandler
+} from '../../compile/handler'
+import { JITProbe, type JITProbeReason } from '../../compile/jit-probe'
+import { Validator } from '../../validator'
 
 export type AotTarget = 'bun' | 'node' | 'workerd'
 
@@ -206,7 +208,7 @@ export function replayStubbability(
 		Compiled.handlers = materialiseHandlersForReplay(handlers)
 		Validator.clear()
 
-		const history = (app as { history?: InternalRoute[] }).history ?? []
+		const history = app['~routes'] ?? []
 
 		JITProbe.begin()
 
@@ -569,7 +571,8 @@ function emitModule(
 
 	// wire the reconstruction table before the app can observe a frozen entry
 	if (options?.register && captured.length)
-		validatorExport = 'Compiled.reconstruct = Reconstruct\n' + validatorExport
+		validatorExport =
+			'Compiled.reconstruct = Reconstruct\n' + validatorExport
 
 	const aliasRef = new Map<string, string>()
 	const handlerRef = new Map<string, string>()
