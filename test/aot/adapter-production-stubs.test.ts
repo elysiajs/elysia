@@ -271,11 +271,11 @@ describe('Task B: build-time production flag', () => {
 		expect(stub.isProduction).toBe(false)
 	})
 
-	// E2E: default (production:true) stub replaces the module with
-	// `isProduction = () => true` so bundlers can constant-fold call sites and
-	// DCE dev-only branches.  We verify: (a) the runtime env-read form is gone,
-	// (b) the call-site rewrite folds branches (dev string absent in prod bundle).
-	it('E2E: default build (production:true) — isProduction stubbed and dev branches DCE\'d', async () => {
+	// E2E: default (production:true) stub exports isProduction as `() => true` so
+	// bundlers can constant-fold and DCE `if (!isProduction())` branches.
+	// We verify: (a) the stub IS applied (runtime env-read is gone), (b) no
+	// NODE_ENV check remains after the stub replaces the module.
+	it('E2E: default build (production:true) — isProduction stubbed as () => true, dev branches DCE\'d', async () => {
 		const result = await Bun.build({
 			entrypoints: [APP],
 			plugins: [
@@ -316,7 +316,7 @@ describe('Task B: build-time production flag', () => {
 		// With production:false the runtime env check is preserved
 		expect(out).toContain('NODE_ENV')
 
-		// The production stub must NOT be applied (isProduction retains env read)
+		// The stub IS_PRODUCTION=true constant must NOT appear (not stubbed)
 		expect(out).not.toContain('IS_PRODUCTION = true')
 	})
 })

@@ -196,11 +196,7 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			// no target → no adapter stub (fallback: runtime isBun selection)
 			adapter: false,
 			// production: true by default → isProduction stubbed as compile-time true
-			isProduction: true,
-			// slice 4: a bridge-free schema route now emits routeTable (it binds via
-			// the same reconstruct path the full builder uses), so the full router
-			// builder is dead and stubbable
-			buildRouter: true
+			isProduction: true
 		})
 
 		const inline = await generateCompiledArtifacts(
@@ -218,10 +214,7 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			compat: true,
 			bridge: false,
 			adapter: false,
-			isProduction: true,
-			// schema-free static route → frozen routeTable emitted → the full router
-			// builder is dead (slim replay binds ~map) → stub it out
-			buildRouter: true
+			isProduction: true
 		})
 
 		// WS-only: the handler-JIT graph is stubbable (WS never reaches it),
@@ -248,9 +241,7 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			compat: false,
 			bridge: false,
 			adapter: false,
-			isProduction: true,
-			// WS bails routeTable (slice 3 is HTTP-static-only) → builder stays live
-			buildRouter: false
+			isProduction: true
 		})
 	})
 

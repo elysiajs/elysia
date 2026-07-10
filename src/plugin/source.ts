@@ -5,30 +5,18 @@ import {
 	endHandlerCapture,
 	Capture,
 	Compiled,
-	computeRouteTableShape,
-	ROUTE_TABLE_VERSION,
 	type CapturedValidator,
 	type CapturedHandler,
-	type HandlerManifest,
-	type RouteTableManifest,
-	type DynamicRouteTableEntry,
-	type RouteTableSlot
+	type HandlerManifest
 } from '../compile/aot'
 import { Source } from '../compile/aot-reconstruct'
 import { env } from '../universal'
 import { installCaptureImpl } from '../compile/aot-capture'
-import { nullObject, getLoosePath } from '../utils'
-import { isDynamicRegex, needEncodeRegex } from '../constants'
+import { nullObject } from '../utils'
 
 installCaptureImpl()
 
-import {
-	setCaptureHeaderShorthand,
-	compileHandler,
-	composeRouteHook,
-	localMacroRoot
-} from '../compile/handler'
-import { isStandardSchema } from '../compile/handler/frozen-validator'
+import { setCaptureHeaderShorthand, compileHandler } from '../compile/handler'
 import { JITProbe, type JITProbeReason } from '../compile/jit-probe'
 import { Validator } from '../validator'
 import type { InternalRoute } from '../types'
@@ -112,325 +100,7 @@ export interface CapturedArtifacts {
 	source: string
 	validators: CapturedValidator[]
 	handlers: CapturedHandler[]
-	/**
-	 * Frozen (method, path) → handler route table, or `undefined` when the app is
-	 * outside the slim-replay slice-1 envelope (any WS / dynamic / encoded /
-	 * loose / autoHead / mount / macro / hook-state route). Emitted into the
-	 * manifest only in sealed mode (`core.ts`).
-	 *
-	 * @see design/slim-replay.md
-	 */
-	routeTable?: RouteTableManifest
 }
-
-const REPLAY_SCHEMA_SLOTS = [
-	'body',
-	'query',
-	'params',
-	'headers',
-	'cookie'
-] as const
-
-function routeValidatorsReplayable(
-	app: AnyElysia,
-	route: InternalRoute,
-	bridgeFreeSlots: Set<string> | undefined,
-	normalizeTypebox: boolean
-): boolean {
-	const hook = composeRouteHook(
-		route[3] as AnyElysia,
-		route[4] as any,
-		route[5] as any,
-		route[6] as any,
-		app,
-		route[7] as AnyElysia | undefined
-	) as (Record<string, unknown> & { schemas?: unknown[] }) | undefined
-
-	if (!hook) return true
-
-	if (Array.isArray(hook.schemas) && hook.schemas.length > 0) return false
-
-	// `normalize:'typebox'` needs the severed `typebox/value` bridge.
-	if (normalizeTypebox) return false
-
-	const method = route[0]
-	const path = route[1]
-
-	const slotBridgeFree = (slot: string): boolean =>
-		bridgeFreeSlots?.has(method + '\0' + path + '\0' + slot) === true
-
-	for (const slot of REPLAY_SCHEMA_SLOTS) {
-		const raw = hook[slot]
-		if (raw === undefined) continue
-
-		if (
-			typeof raw === 'string' ||
-			isStandardSchema(raw) ||
-			!slotBridgeFree(slot)
-		)
-			return false
-	}
-
-	const response = hook.response
-	if (response !== undefined) {
-		if (typeof response === 'string' || isStandardSchema(response))
-			return false
-
-		const record = response as Record<string, unknown>
-		const isMap = !(
-			'~kind' in record ||
-			'~elyAcl' in record ||
-			'~standard' in record
-		)
-
-		const statuses = isMap ? Object.keys(record) : ['200']
-
-		for (const status of statuses) {
-			const raw = isMap ? record[status] : response
-			if (raw == null) continue
-
-			if (
-				typeof raw === 'string' ||
-				isStandardSchema(raw) ||
-				!slotBridgeFree(`response:${status}`)
-			)
-				return false
-		}
-	}
-
-	return true
-}
-
-// serialize the real `#buildRouter` output into a frozen route table manifest
-export function captureRouteTable(
-	app: AnyElysia,
-	handlers: CapturedHandler[],
-	validators?: CapturedValidator[]
-): RouteTableManifest | undefined {
-	const a = app as unknown as {
-		history?: InternalRoute[]
-		'~config'?: {
-			strictPath?: boolean
-			autoHead?: boolean
-			normalize?: unknown
-			adapter?: unknown
-		}
-		'~map'?: Record<string, Record<string, unknown> | undefined>
-		'~router'?: {
-			find(method: string, url: string): { store: unknown } | null
-		}
-		'~ext'?: { macro?: unknown }
-		'~hasWS'?: boolean
-	}
-
-	const history = a.history
-	if (!history || history.length === 0) return undefined
-
-	const config = a['~config']
-
-	// Bail the whole app: WS (dedicated slice), app-level macro (JIT hook path).
-	if (a['~hasWS'] || a['~ext']?.macro) return
-
-	const isLoose = config?.strictPath !== true
-	const enableAutoHead = config?.autoHead === true
-	const normalizeTypebox = config?.normalize === 'typebox'
-
-	// Bridge-free captured validator slots, keyed `method\0path\0slot`
-	let bridgeFreeSlots: Set<string> | undefined
-	if (validators)
-		for (const v of validators)
-			if (v.bridgeFree === true)
-				(bridgeFreeSlots ??= new Set()).add(
-					v.method + '\0' + v.path + '\0' + v.slot
-				)
-
-	const aliasOf = new Map<string, string[]>()
-	for (const h of handlers)
-		aliasOf.set(h.method + '\0' + h.path, h.alias ? h.alias.split(',') : [])
-
-	let explicitHead: Set<string> | undefined
-	let explicitPaths: Map<string, Set<string>> | undefined
-	if (isLoose) explicitPaths = new Map()
-
-	if (enableAutoHead || isLoose)
-		for (let i = 0; i < history.length; i++) {
-			const route = history[i]!
-			const isWS = route[0] === 'WS'
-			const m = route[0]
-			const p = route[1]
-
-			if (enableAutoHead && !isWS && m === 'HEAD')
-				(explicitHead ??= new Set()).add(p)
-
-			if (explicitPaths) {
-				let set = explicitPaths.get(m)
-				if (!set) explicitPaths.set(m, (set = new Set()))
-
-				set.add(p)
-				if (needEncodeRegex.test(p)) {
-					const encoded = encodeURI(p)
-					if (encoded !== p) set.add(encoded)
-				}
-			}
-		}
-
-	const staticTree: RouteTableManifest['static'] = {}
-	let headTree: NonNullable<RouteTableManifest['head']> | undefined
-	let dynamicList: DynamicRouteTableEntry[] | undefined
-
-	for (let i = 0; i < history.length; i++) {
-		const route = history[i]!
-		const method = route[0]
-		const path = route[1]
-
-		if (method === 'WS') return undefined
-
-		const aliases = aliasOf.get(method + '\0' + path)
-		if (aliases === undefined) return undefined
-
-		const instance = route[3] as AnyElysia
-		const macroScope = route[7] as AnyElysia | undefined
-		const handler = route[2]
-
-		// Mount handlers resolve to a different fn and always carry hook state
-		if (
-			typeof handler === 'function' &&
-			(handler as { '~mount'?: unknown })['~mount']
-		)
-			return
-
-		if (localMacroRoot(macroScope ?? instance, app)['~ext']?.macro) return
-
-		if (
-			!routeValidatorsReplayable(
-				app,
-				route,
-				bridgeFreeSlots,
-				normalizeTypebox
-			)
-		)
-			return
-
-		const isDynamic = isDynamicRegex.test(path)
-		const needsEncode = needEncodeRegex.test(path)
-
-		const slot: RouteTableSlot = { m: method, p: path }
-
-		if (isDynamic) {
-			const router = a['~router']
-			if (!router) return undefined
-
-			const variants = [path]
-			if (needsEncode) {
-				const encoded = encodeURI(path)
-				if (encoded !== path) variants.push(encoded)
-			}
-
-			const autoHead =
-				enableAutoHead && method === 'GET' && !explicitHead?.has(path)
-
-			dynamicList ??= []
-			for (let v = 0; v < variants.length; v++) {
-				const p = variants[v]!
-				dynamicList.push({ m: method, s: p, slot })
-				if (autoHead) dynamicList.push({ m: 'HEAD', s: p, slot, h: 1 })
-			}
-
-			continue
-		}
-
-		const registerLoose =
-			isLoose &&
-			(path.length === 0 || path.charCodeAt(path.length - 1) === 47)
-
-		const explicitMain = registerLoose
-			? explicitPaths?.get(method)
-			: undefined
-
-		const variants = [path]
-		if (needsEncode) {
-			const encoded = encodeURI(path)
-			if (encoded !== path) variants.push(encoded)
-		}
-
-		const served: string[] = []
-		for (let v = 0; v < variants.length; v++) {
-			const p = variants[v]!
-			served.push(p)
-			if (registerLoose) {
-				const loose = getLoosePath(p)
-				if (loose !== p && !explicitMain?.has(loose)) served.push(loose)
-			}
-		}
-
-		// Verify every derived path actually resolved to this route in real `~map`
-		const servedMap = a['~map']?.[method]
-		if (!servedMap) return
-
-		for (let s = 0; s < served.length; s++)
-			if (servedMap[served[s]!] === undefined) return
-
-		const into = (staticTree[method] ??= {})
-		for (let s = 0; s < served.length; s++) into[served[s]!] = slot
-
-		if (enableAutoHead && method === 'GET' && !explicitHead?.has(path)) {
-			const headMap = a['~map']?.['HEAD']
-			headTree ??= {}
-			for (let s = 0; s < served.length; s++) {
-				if (!headMap || headMap[served[s]!] === undefined) return
-
-				headTree[served[s]!] = slot
-			}
-		}
-	}
-
-	if (dynamicList && !verifyDynamicRouter(a['~router'], history)) return
-
-	return {
-		v: ROUTE_TABLE_VERSION,
-		shape: computeRouteTableShape(history, config),
-		static: staticTree,
-		...(headTree ? { head: headTree } : {}),
-		...(dynamicList ? { dynamic: dynamicList } : {})
-	}
-}
-
-function verifyDynamicRouter(
-	router:
-		| { find(method: string, url: string): { store: unknown } | null }
-		| undefined,
-	history: InternalRoute[]
-) {
-	if (!router) return false
-
-	for (let i = 0; i < history.length; i++) {
-		const route = history[i]!
-		const method = route[0]
-		const path = route[1]
-		if (method === 'WS' || !isDynamicRegex.test(path)) continue
-
-		// Instantiate `:param` → `_p`, `*` → `w` so the concrete URL matches the
-		// dynamic segment (any non-empty literal suffices for Memoirist matching).
-		const probe =
-			'/' +
-			path
-				.split('/')
-				.filter((s) => s.length > 0)
-				.map((seg) =>
-					seg.charCodeAt(0) === 58 || seg.charCodeAt(0) === 42
-						? '_p'
-						: seg
-				)
-				.join('/')
-
-		if (!router.find(method, probe)) return false
-	}
-
-	return true
-}
-
-export const emitRouteTableRegistration = (routeTable: RouteTableManifest) =>
-	`\nCompiled.routeTable = ${JSON.stringify(routeTable)}\n`
 
 export async function captureArtifacts(
 	app: AnyElysia,
@@ -456,13 +126,10 @@ export async function captureArtifacts(
 		const captured = endValidatorCapture()
 		const handlers = endHandlerCapture()
 
-		const routeTable = captureRouteTable(app, handlers, captured)
-
 		return {
 			source: emitModule(captured, handlers, options),
 			validators: captured,
-			handlers,
-			routeTable
+			handlers
 		}
 	} finally {
 		setCaptureHeaderShorthand(undefined)
@@ -900,8 +567,7 @@ function emitModule(
 
 	// wire the reconstruction table before the app can observe a frozen entry
 	if (options?.register && captured.length)
-		validatorExport =
-			'Compiled.reconstruct = Reconstruct\n' + validatorExport
+		validatorExport = 'Compiled.reconstruct = Reconstruct\n' + validatorExport
 
 	const aliasRef = new Map<string, string>()
 	const handlerRef = new Map<string, string>()

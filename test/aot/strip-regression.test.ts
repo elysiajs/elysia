@@ -169,9 +169,7 @@ describe('AOT strip regression — strip:auto (sound: skip when unsafe)', () => 
 			compat: true,
 			bridge: false,
 			adapter: false,
-			isProduction: true,
-			// WS bails routeTable (slice 3 is HTTP-static-only) → builder stays live
-			buildRouter: false
+			isProduction: true
 		})
 
 		const text = await build(
@@ -323,9 +321,7 @@ describe('AOT strip regression — strip:auto (sound: skip when unsafe)', () => 
 			compat: true,
 			bridge: false,
 			adapter: false,
-			isProduction: true,
-			// mount() handler bails routeTable → the full router builder stays live
-			buildRouter: false
+			isProduction: true
 		})
 
 		const text = await build(

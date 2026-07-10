@@ -80,11 +80,11 @@ export const aot = (
 		compat: false,
 		bridge: false,
 		adapter: false,
-		isProduction: false,
-		buildRouter: false
+		isProduction: false
 	}
-
-	let isElysiaModule = (_path: string) => false
+	// Resolved lazily in buildStart; anchors the call-site rewrite to real
+	// elysia modules only (Defect 3 fix, parity with bun/esbuild plugin).
+	let isElysiaModule: (path: string) => boolean = () => false
 
 	return {
 		name: 'elysia-aot',
@@ -95,7 +95,6 @@ export const aot = (
 			source = generated.source
 			stub = generated.stub
 			virtualType = generated.virtualType
-
 			const pkgRoot = resolveElysiaRoot(entryPath)
 			isElysiaModule = makeIsElysiaModule(pkgRoot)
 		},
@@ -109,6 +108,8 @@ export const aot = (
 		},
 		resolveId(id) {
 			if (id === 'elysia/compiled') return VIRTUAL
+			// Serve the virtual `elysia/type` (no `setupTypebox`) so unused `t.*`
+			// tree-shake. Applies in sealed + wired modes; `off` leaves it real.
 			if (id === 'elysia/type' && virtualType !== undefined)
 				return VIRTUAL_TYPE
 		},
@@ -120,19 +121,14 @@ export const aot = (
 			const cleanId = id.split('?', 1)[0]
 
 			// Stub when every route is compiled
-			for (const key of Object.keys(
-				STUB_SOURCES
-			) as (keyof typeof STUB_SOURCES)[]) {
+			for (const key of Object.keys(STUB_SOURCES) as (keyof typeof STUB_SOURCES)[]) {
 				if (!stub[key]) continue
 				for (const { filter, source: stubSource } of STUB_SOURCES[key])
 					if (filter.test(cleanId))
 						return alignStubExtensions(stubSource, cleanId)
 			}
 
-			if (
-				stub.adapter !== false &&
-				ADAPTER_CONSTANTS_FILTER.test(cleanId)
-			)
+			if (stub.adapter !== false && ADAPTER_CONSTANTS_FILTER.test(cleanId))
 				return alignStubExtensions(
 					adapterConstantsSource(stub.adapter),
 					cleanId
@@ -158,6 +154,12 @@ export const aot = (
 			)
 				out = rewriteTypeImport(out)
 
+			// Rewrite `isProduction()` call expressions to `true` in elysia-owned
+			// modules so bundlers can constant-fold and DCE dev-only branches.
+			// Applied after the IS_PRODUCTION_FILTER module stub (which already
+			// returned above), so this only fires for the call-site modules.
+			// `isElysiaModule` is anchored to the resolved package root so user
+			// code in a directory named "elysia" is never touched (Defect 3).
 			if (stub.isProduction && isElysiaModule(cleanId))
 				out = rewriteIsProductionCalls(out)
 

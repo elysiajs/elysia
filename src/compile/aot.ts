@@ -109,68 +109,13 @@ export interface HandlerManifest {
 	}
 }
 
-/**
- * Frozen (method, path) → slot route table, precomputed at build by serializing the
- * real `#buildRouter` output
- */
-export interface RouteTableManifest {
-	/** Schema version */
-	v: number
-
-	/** Fingerprint of the ordered (method, path) history + routing config. */
-	shape: string
-
-	static: {
-		[method: string]: { [servedPath: string]: RouteTableSlot }
-	}
-
-	head?: { [servedPath: string]: RouteTableSlot }
-	dynamic?: Array<DynamicRouteTableEntry>
-}
-
-export interface DynamicRouteTableEntry {
-	/** Memoirist */
-	m: string
-
-	/** Static */
-	s: string
-
-	/** Base `(method, path)` */
-	slot: RouteTableSlot
-
-	/** is auto head */
-	h?: 1
-}
-
-export interface RouteTableSlot {
-	m: string
-	p: string
-}
-
-export const ROUTE_TABLE_VERSION = 1
-
 export interface CompiledSnapshot {
 	validators: ValidatorManifest | undefined
 	handlers: HandlerManifest | undefined
-	routeTable: RouteTableManifest | undefined
 	lazyGroups: Array<() => ValidatorManifest> | undefined
 	lazyGroupOf: Record<string, Record<string, number>> | undefined
 	builtGroups: number[]
 	planRebuilder: ((original: unknown, plan: CoercePlan) => any) | undefined
-}
-
-export function computeRouteTableShape(
-	history: ReadonlyArray<readonly [string, string, ...unknown[]]>,
-	config: { strictPath?: boolean; autoHead?: boolean } | undefined
-) {
-	let out = `strictPath=${config?.strictPath === true ? 1 : 0};autoHead=${
-		config?.autoHead === true ? 1 : 0
-	}\n`
-
-	for (let i = 0; i < history.length; i++)
-		out += history[i]![0] + '\0' + history[i]![1] + '\n'
-
-	return out
 }
 
 /**
@@ -227,7 +172,6 @@ export function reconstruct(): ReconstructImpl {
 // build registry
 let validators: ValidatorManifest | undefined
 let handlers: HandlerManifest | undefined
-let routeTable: RouteTableManifest | undefined
 
 let planRebuilder: ((original: unknown, plan: CoercePlan) => any) | undefined
 
@@ -251,14 +195,6 @@ export abstract class Compiled {
 
 	static set handlers(manifest: HandlerManifest) {
 		handlers = manifest
-	}
-
-	static get routeTable(): RouteTableManifest | undefined {
-		return routeTable
-	}
-
-	static set routeTable(manifest: RouteTableManifest | undefined) {
-		routeTable = manifest
 	}
 
 	static get validators(): ValidatorManifest | undefined {
@@ -331,7 +267,6 @@ export abstract class Compiled {
 		return {
 			validators,
 			handlers,
-			routeTable,
 			lazyGroups,
 			lazyGroupOf,
 			builtGroups: [...builtGroups],
@@ -343,7 +278,6 @@ export abstract class Compiled {
 	static restore(snapshot: CompiledSnapshot) {
 		validators = snapshot.validators
 		handlers = snapshot.handlers
-		routeTable = snapshot.routeTable
 		lazyGroups = snapshot.lazyGroups
 		lazyGroupOf = snapshot.lazyGroupOf
 		builtGroups.clear()
@@ -355,7 +289,6 @@ export abstract class Compiled {
 	static clear() {
 		validators = undefined
 		handlers = undefined
-		routeTable = undefined
 		lazyGroups = undefined
 		lazyGroupOf = undefined
 		builtGroups.clear()
