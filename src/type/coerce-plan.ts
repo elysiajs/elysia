@@ -158,7 +158,13 @@ function rebuildUnion(
 	return out
 }
 
+/** @internal */
+export const COERCE_LEAF_CACHE_LIMIT = 1024
+
 const coerceLeafCache = new Map<string, any>()
+
+/** @internal test isolation */
+export const coerceLeafCacheSize = () => coerceLeafCache.size
 
 function coerceLeaf(leaf: CoerceLeaf, seen: Set<string>) {
 	const key = leaf.e + (leaf.c ? JSON.stringify(leaf.c) : '')
@@ -173,6 +179,15 @@ function coerceLeaf(leaf: CoerceLeaf, seen: Set<string>) {
 		if (node === undefined) {
 			// @ts-expect-error
 			node = COERCE_LEAF_CTOR[leaf.e]!(leaf.c)
+
+			if (coerceLeafCache.size >= COERCE_LEAF_CACHE_LIMIT) {
+				const oldest = coerceLeafCache.keys().next().value
+				if (oldest !== undefined) coerceLeafCache.delete(oldest)
+			}
+
+			coerceLeafCache.set(key, node)
+		} else {
+			coerceLeafCache.delete(key)
 			coerceLeafCache.set(key, node)
 		}
 	}

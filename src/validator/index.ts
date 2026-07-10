@@ -7,7 +7,7 @@ import { type AnySchema, type StandardSchemaV1Like } from '../type'
 
 import type { ElysiaConfig, MaybePromise } from '../types'
 import type { CoerceOption } from '../type/coerce'
-import { nonAdditionalProperties } from '../type/coerce'
+import { clearCoerceLeafCache, nonAdditionalProperties } from '../type/coerce'
 import { Compiled, Capture, type ValidatorSlot } from '../compile/aot'
 
 import {
@@ -22,6 +22,7 @@ import {
 } from '../type/bridge'
 import { isAsyncFunction } from '../compile/utils'
 import { ASYNC_REFINE } from '../type/elysia/file-type'
+import { clearSharedReferenceCaches } from '../type/elysia/utils'
 import { hasProperty } from '../type/utils'
 
 export interface ValidatorOptions {
@@ -251,6 +252,8 @@ export abstract class Validator {
 
 	static clear() {
 		tbCache?.clear()
+		clearCoerceLeafCache()
+		clearSharedReferenceCaches()
 	}
 }
 

@@ -1,3 +1,5 @@
+import { cpus } from 'node:os'
+
 let warnedNoGc = false
 export function gc() {
 	if (typeof Bun !== 'undefined') Bun.gc(true)
@@ -23,6 +25,53 @@ export function memoryUsage() {
 
 	gc()
 	return process.memoryUsage().heapUsed
+}
+
+export function memorySnapshot() {
+	gc()
+
+	if (typeof Bun !== 'undefined') {
+		const { heapStats, memoryUsage } = require('bun:jsc')
+		const memory = memoryUsage()
+		const heap = heapStats()
+
+		return {
+			runtime: 'bun',
+			metric: 'bun:jsc.current',
+			current: memory.current,
+			heapSize: heap.heapSize,
+			extraMemorySize: heap.extraMemorySize,
+			objectCount: heap.objectCount
+		}
+	}
+
+	const memory = process.memoryUsage()
+	return {
+		runtime: 'node',
+		metric: 'process.memoryUsage.heapUsed',
+		current: memory.heapUsed,
+		heapUsed: memory.heapUsed,
+		rss: memory.rss,
+		external: memory.external
+	}
+}
+
+export function environment() {
+	const cpu = cpus()
+	return {
+		runtime: typeof Bun !== 'undefined' ? 'bun' : 'node',
+		runtimeVersion:
+			typeof Bun !== 'undefined' ? Bun.version : process.version,
+		platform: process.platform,
+		arch: process.arch,
+		cpuModel: cpu[0]?.model ?? 'unknown',
+		logicalCpuCount: cpu.length
+	}
+}
+
+export function median(values: number[]) {
+	const sorted = values.toSorted((a, b) => a - b)
+	return sorted[Math.floor(sorted.length / 2)]!
 }
 
 export function profile(title: string) {

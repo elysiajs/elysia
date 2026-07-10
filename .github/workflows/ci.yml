@@ -30,6 +30,16 @@ jobs:
             - name: Test (Cloudflare)
               run: bun run test:cf
 
+            - name: Stress benchmark invariants
+              run: bun run bench:quick -- --out trace/stress-results.json
+
+            - name: Upload stress benchmark report
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: stress-${{ runner.os }}-${{ github.sha }}
+                  path: trace/stress-results.json
+
             - name: Publish Preview
               if: github.event_name == 'pull_request'
               run: bunx pkg-pr-new publish

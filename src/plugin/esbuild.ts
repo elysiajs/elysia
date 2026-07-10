@@ -33,8 +33,14 @@ export const aot = (entry: string, options?: ElysiaAotOptions) => ({
 		const resolveDir = dirname(entryPath)
 
 		const box = await generateCompiledArtifacts(entry, options)
+		let initial = true
 
 		build.onStart(async () => {
+			if (initial) {
+				initial = false
+				return
+			}
+
 			const fresh = await generateCompiledArtifacts(entry, options)
 
 			box.source = fresh.source

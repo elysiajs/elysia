@@ -346,6 +346,53 @@ describe('PERF-1 — model-ref pre-scan gate stays conservative', () => {
 
 		expect(() => app.compile()).not.toThrow()
 	})
+
+	it('finds a ref behind later no-ref propagated hook nodes', () => {
+		const app = new Elysia().guard({ query: 'OlderGhost' as any })
+
+		for (let i = 0; i < 200; i++)
+			app.beforeHandle(i % 2 ? 'plugin' : 'global', () => {})
+
+		app.get('/older', () => 'x')
+
+		expect(() => app.compile()).toThrow(
+			/Unknown model reference "OlderGhost"/
+		)
+	})
+
+	it('finds a ref on the combine side of an absorbed hook chain', () => {
+		const child = new Elysia()
+			.guard({ query: 'CombineGhost' as any })
+			.get('/combine', () => 'x')
+
+		const app = new Elysia().beforeHandle('plugin', () => {}).use(child)
+
+		expect(() => app.compile()).toThrow(
+			/Unknown model reference "CombineGhost"/
+		)
+	})
+
+	it('finds a ref on the over side of an absorbed hook chain', () => {
+		const child = new Elysia()
+			.beforeHandle('plugin', () => {})
+			.get('/over', () => 'x')
+
+		const app = new Elysia().guard({ query: 'OverGhost' as any }).use(child)
+
+		expect(() => app.compile()).toThrow(
+			/Unknown model reference "OverGhost"/
+		)
+	})
+
+	it('memoizes a deep no-ref propagated chain as false', () => {
+		const app = new Elysia()
+
+		for (let i = 0; i < 500; i++) app.beforeHandle('plugin', () => {})
+
+		app.get('/deep', () => 'x')
+
+		expect(() => app.compile()).not.toThrow()
+	})
 })
 
 // DX-2: a route that fails to COMPILE (e.g. an invalid schema slot) must surface

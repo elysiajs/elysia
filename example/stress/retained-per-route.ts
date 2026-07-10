@@ -1,9 +1,10 @@
 import { Elysia } from '../../src'
-import { gc, memoryUsage } from './utils'
+import { environment, memorySnapshot } from './utils'
 
 const total = 50_000
+const json = process.argv.includes('--json')
 
-const variants: Record<string, () => any> = {
+const variants: Record<string, () => Elysia<any, any>> = {
 	static: () => {
 		const app = new Elysia()
 		for (let i = 0; i < total; i++) app.get(`/${i}`, () => 'ok')
@@ -41,32 +42,64 @@ const labels: Record<string, string> = {
 	'dynamic-trailing-strict': 'Dynamic (/N/:id/) — strictPath'
 }
 
-const which = process.argv[2]
+const which = process.argv.find((argument) => variants[argument])
 
-if (which && variants[which]) {
-	// Child: measure exactly one variant in a clean process.
-	gc()
-	const m1 = memoryUsage()
+if (which) {
+	const before = memorySnapshot()
+	const app = variants[which]!()
+	void app.fetch
+	const after = memorySnapshot()
+	const delta = after.current - before.current
+	const result = {
+		name: which,
+		label: labels[which],
+		total,
+		metric: after.metric,
+		before,
+		after,
+		delta,
+		bytesPerRoute: delta / total,
+		environment: environment()
+	}
 
-	const app = variants[which]()
-	void app.fetch // trigger #buildRouter (lazy handlers, precompile off)
+	if (json) console.log(JSON.stringify(result))
+	else {
+		console.log(result.label)
+		console.log('  total    :', (delta / 1024 / 1024).toFixed(2), 'MB')
+		console.log('  per route:', result.bytesPerRoute.toFixed(1), 'bytes\n')
+	}
 
-	gc()
-	const delta = memoryUsage() - m1
-
-	console.log(labels[which])
-	console.log('  total    :', (delta / 1024 / 1024).toFixed(2), 'MB')
-	console.log('  per route:', (delta / total).toFixed(1), 'bytes\n')
-
-	void app // keep alive through measurement
+	void app
 } else {
-	// Parent: spawn one clean child per variant.
+	const results: unknown[] = []
+
 	for (const name of Object.keys(variants)) {
-		const proc = Bun.spawnSync({
-			cmd: ['bun', 'run', import.meta.path, name],
-			stdout: 'inherit',
+		const child = Bun.spawnSync({
+			cmd: [
+				process.execPath,
+				'run',
+				import.meta.path,
+				name,
+				...(json ? ['--json'] : [])
+			],
+			stdout: json ? 'pipe' : 'inherit',
 			stderr: 'inherit'
 		})
-		if (proc.exitCode !== 0) process.exit(proc.exitCode ?? 1)
+
+		if (child.exitCode !== 0) process.exit(child.exitCode ?? 1)
+		if (json)
+			results.push(
+				JSON.parse(new TextDecoder().decode(child.stdout).trim())
+			)
 	}
+
+	if (json)
+		console.log(
+			JSON.stringify({
+				kind: 'retained-per-route',
+				environment: environment(),
+				total,
+				variants: results
+			})
+		)
 }

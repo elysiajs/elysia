@@ -6261,30 +6261,58 @@ export class Elysia<
 		const cached = memo.get(start)
 		if (cached !== undefined) return cached
 
-		let found = false
-		const stack: (ChainNode | undefined)[] = [start]
-		while (stack.length) {
-			const node = stack.pop()
-			if (!node) continue
+		const nodes: ChainNode[] = [start]
+		const phases = [0]
 
-			if ('combine' in node) {
-				stack.push(node.combine)
-				stack.push(node.over)
-			} else {
+		while (nodes.length) {
+			const node = nodes.pop()!
+			const phase = phases.pop()!
+
+			if (memo.get(node) !== undefined) continue
+
+			if (phase === 0) {
 				if (
+					'added' in node &&
 					Elysia.#hookHasString(
 						node.added as Record<string, unknown> | undefined
 					)
 				) {
-					found = true
-					break
+					memo.set(node, true)
+					continue
 				}
-				stack.push(node.parent)
+
+				nodes.push(node)
+				phases.push(1)
+
+				if ('combine' in node) {
+					if (memo.get(node.combine) === undefined) {
+						nodes.push(node.combine)
+						phases.push(0)
+					}
+					if (node.over && memo.get(node.over) === undefined) {
+						nodes.push(node.over)
+						phases.push(0)
+					}
+				} else if (node.parent && memo.get(node.parent) === undefined) {
+					nodes.push(node.parent)
+					phases.push(0)
+				}
+
+				continue
 			}
+
+			memo.set(
+				node,
+				'combine' in node
+					? (memo.get(node.combine) ?? false) ||
+							(node.over ? (memo.get(node.over) ?? false) : false)
+					: node.parent
+						? (memo.get(node.parent) ?? false)
+						: false
+			)
 		}
 
-		memo.set(start, found)
-		return found
+		return memo.get(start)!
 	}
 
 	#routeMayHaveModelRef(route: InternalRoute): boolean {

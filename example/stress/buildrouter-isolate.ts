@@ -1,109 +1,133 @@
 import { Elysia } from '../../src'
-import { gc } from './utils'
+import { environment, gc, median } from './utils'
 
 // Isolate #buildRouter's structural loop cost from handler JIT-compile cost.
-//
-// `void app.fetch` triggers #buildRouter (the route loop) + createFetchHandler
-// (constant in N). We measure at two N and subtract to cancel the constant:
-//   per-route = (T(Nhi) - T(Nlo)) / (Nhi - Nlo)
-//
-// lazy  config => loop installs JIT *thunks*, NO handler compile  => structural-only
-// precompile  => loop also JIT-compiles every handler            => structural + compile
-// (precompile - lazy) per-route = the cost AOT's Compiled.handlers already removes.
-
-const Nlo = 10_000
-const Nhi = 100_000
-const REPS = 7
+// Construction is excluded; the slope between two sizes cancels constant work.
+const sizes = [10_000, 100_000] as const
+const repetitions = 7
+const json = process.argv.includes('--json')
 
 type Build = (n: number) => Elysia<any, any>
 
 const build = {
 	staticFn:
-		(cfg?: any): Build =>
+		(config?: any): Build =>
 		(n) => {
-			const app = new Elysia(cfg)
+			const app = new Elysia(config)
 			for (let i = 0; i < n; i++) app.get(`/${i}`, () => 'ok')
 			return app
 		},
 	staticLiteral:
-		(cfg?: any): Build =>
+		(config?: any): Build =>
 		(n) => {
-			const app = new Elysia(cfg)
+			const app = new Elysia(config)
 			for (let i = 0; i < n; i++) app.get(`/${i}`, 'ok')
 			return app
 		},
 	dynamic:
-		(cfg?: any): Build =>
+		(config?: any): Build =>
 		(n) => {
-			const app = new Elysia(cfg)
-			for (let i = 0; i < n; i++) app.get(`/${i}/:id`, ({ params }) => params.id)
+			const app = new Elysia(config)
+			for (let i = 0; i < n; i++)
+				app.get(`/${i}/:id`, ({ params }) => params.id)
 			return app
 		}
 }
 
-function timeBuild(make: Build, n: number): number {
-	const app = make(n) // construction excluded from timing
+const configurations: [label: string, make: Build][] = [
+	['lazy static-fn  (structural)', build.staticFn()],
+	['precompile static-fn', build.staticFn({ precompile: true })],
+	['lazy static-fn strictPath', build.staticFn({ strictPath: true })],
+	['lazy static-literal (+nativeStatic)', build.staticLiteral()],
+	[
+		'lazy static-literal nativeStatic:off',
+		build.staticLiteral({ nativeStaticResponse: false })
+	],
+	['lazy dynamic    (trie insert)', build.dynamic()],
+	['precompile dynamic', build.dynamic({ precompile: true })]
+]
+
+function timeBuild(make: Build, size: number) {
+	const app = make(size)
 	gc()
-	const t = performance.now()
-	void app.fetch // triggers #buildRouter + createFetchHandler
-	return performance.now() - t
+	const started = performance.now()
+	void app.fetch
+	return performance.now() - started
 }
 
-function median(xs: number[]) {
-	const s = [...xs].sort((a, b) => a - b)
-	return s[s.length >> 1]
+function measure(label: string, make: Build) {
+	const samples = sizes.map(() => [] as number[])
+
+	for (let repetition = 0; repetition < repetitions; repetition++)
+		for (let i = 0; i < sizes.length; i++)
+			samples[i]!.push(timeBuild(make, sizes[i]!))
+
+	const mediansMs = samples.map(median)
+	const nsPerRoute =
+		((mediansMs[1]! - mediansMs[0]!) / (sizes[1] - sizes[0])) * 1e6
+
+	return { label, samplesMs: samples, mediansMs, nsPerRoute }
 }
 
-function perRoute(make: Build) {
-	const lo: number[] = []
-	const hi: number[] = []
-	// interleave to spread JIT/GC noise across both N
-	for (let r = 0; r < REPS; r++) {
-		lo.push(timeBuild(make, Nlo))
-		hi.push(timeBuild(make, Nhi))
-	}
-	const tLo = median(lo)
-	const tHi = median(hi)
-	const ns = ((tHi - tLo) / (Nhi - Nlo)) * 1e6 // ms -> ns/route
-	return { tLo, tHi, ns }
+void build.staticFn()(sizes[0]).fetch
+const rows = configurations.map(([label, make]) => measure(label, make))
+const staticLazy = rows[0]!.nsPerRoute
+const staticPrecompiled = rows[1]!.nsPerRoute
+const staticLiteral = rows[3]!.nsPerRoute
+const dynamic = rows[5]!.nsPerRoute
+const breakdown = {
+	handlerJitNsPerRoute: staticPrecompiled - staticLazy,
+	structuralNsPerRoute: staticLazy,
+	compileToStructuralRatio: (staticPrecompiled - staticLazy) / staticLazy,
+	nativeStaticNsPerRoute: staticLiteral - staticLazy,
+	dynamicVsStaticNsPerRoute: dynamic - staticLazy
 }
 
-function row(label: string, make: Build) {
-	const { tLo, tHi, ns } = perRoute(make)
+if (json) {
 	console.log(
-		`${label.padEnd(34)} ${tLo.toFixed(1).padStart(8)}  ${tHi
-			.toFixed(1)
-			.padStart(9)}  ${ns.toFixed(0).padStart(7)}`
+		JSON.stringify({
+			kind: 'buildrouter',
+			environment: environment(),
+			sizes,
+			repetitions,
+			rows,
+			breakdown
+		})
 	)
-	return ns
+} else {
+	console.log(
+		`Reps=${repetitions}, N=${sizes.join('/')}, per-route = slope (constant canceled)\n`
+	)
+	console.log(
+		`${'config'.padEnd(34)} ${`t@${sizes[0]}`.padStart(8)}  ${`t@${sizes[1]}`.padStart(9)}  ${'ns/rt'.padStart(7)}`
+	)
+	console.log('-'.repeat(64))
+
+	for (const row of rows)
+		console.log(
+			`${row.label.padEnd(34)} ${row.mediansMs[0]!.toFixed(1).padStart(8)}  ${row.mediansMs[1]!.toFixed(1).padStart(9)}  ${row.nsPerRoute.toFixed(0).padStart(7)}`
+		)
+
+	console.log('-'.repeat(64))
+	console.log('\nBreakdown (per-route, ns):')
+	console.log(
+		'  handler JIT-compile (AOT removes) :',
+		breakdown.handlerJitNsPerRoute.toFixed(0)
+	)
+	console.log(
+		'  structural loop     (AOT cannot)  :',
+		breakdown.structuralNsPerRoute.toFixed(0)
+	)
+	console.log(
+		'  compile / structural ratio        :',
+		breakdown.compileToStructuralRatio.toFixed(1) + 'x'
+	)
+	console.log(
+		'  native-static-response add        :',
+		breakdown.nativeStaticNsPerRoute.toFixed(0)
+	)
+	console.log(
+		'  dynamic vs static delta           :',
+		breakdown.dynamicVsStaticNsPerRoute.toFixed(0)
+	)
 }
-
-// warm up the module/JIT before measuring
-void build.staticFn()(Nlo).fetch
-
-console.log(`Reps=${REPS}, N=${Nlo}/${Nhi}, per-route = slope (constant canceled)\n`)
-console.log(
-	`${'config'.padEnd(34)} ${`t@${Nlo}`.padStart(8)}  ${`t@${Nhi}`.padStart(
-		9
-	)}  ${'ns/rt'.padStart(7)}`
-)
-console.log('-'.repeat(64))
-
-const sFn = row('lazy static-fn  (structural)', build.staticFn())
-const sFnPre = row('precompile static-fn', build.staticFn({ precompile: true }))
-row('lazy static-fn strictPath', build.staticFn({ strictPath: true }))
-const sLit = row('lazy static-literal (+nativeStatic)', build.staticLiteral())
-row('lazy static-literal nativeStatic:off', build.staticLiteral({ nativeStaticResponse: false }))
-const dyn = row('lazy dynamic    (trie insert)', build.dynamic())
-row('precompile dynamic', build.dynamic({ precompile: true }))
-
-console.log('-'.repeat(64))
-console.log('\nBreakdown (per-route, ns):')
-console.log('  handler JIT-compile (AOT removes) :', (sFnPre - sFn).toFixed(0))
-console.log('  structural loop     (AOT cannot)  :', sFn.toFixed(0))
-console.log(
-	'  compile / structural ratio        :',
-	((sFnPre - sFn) / sFn).toFixed(1) + 'x'
-)
-console.log('  native-static-response add        :', (sLit - sFn).toFixed(0))
-console.log('  dynamic vs static delta           :', (dyn - sFn).toFixed(0))
