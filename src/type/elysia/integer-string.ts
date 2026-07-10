@@ -17,13 +17,11 @@ type IntegerStringSchema = Type.TUnion<
 >
 let emptyIntegerString: Readonly<IntegerStringSchema>
 export function IntegerString(property?: TNumberOptions) {
+	// Decimal-only integer grammar: optional sign + digits, no hex/scientific/whitespace (L14)
 	StringifiedInteger ??= Decode(
 		Refine(
 			StringType(),
-			(value) =>
-				value.trim() !== '' &&
-				!isNaN(+value) &&
-				Number.isInteger(+value),
+			(value) => /^[+-]?\d+$/.test(value) && Number.isInteger(+value),
 			() => 'must be integer'
 		),
 		(value) => +value
@@ -51,9 +49,11 @@ export function IntegerString(property?: TNumberOptions) {
 		Refine(
 			StringType(),
 			(value) => {
-				if (value.trim() === '') return false
+				// decimal only
+				if (!/^[+-]?\d+$/.test(value)) return false
 				const n = +value
-				if (isNaN(n) || !Number.isInteger(n)) return false
+
+				if (!Number.isInteger(n)) return false
 				if (typeof c.minimum === 'number' && n < c.minimum) return false
 				if (typeof c.maximum === 'number' && n > c.maximum) return false
 				if (
@@ -61,13 +61,16 @@ export function IntegerString(property?: TNumberOptions) {
 					n <= c.exclusiveMinimum
 				)
 					return false
+
 				if (
 					typeof c.exclusiveMaximum === 'number' &&
 					n >= c.exclusiveMaximum
 				)
 					return false
+
 				if (typeof c.multipleOf === 'number' && n % c.multipleOf !== 0)
 					return false
+
 				return true
 			},
 			() => 'must be integer'

@@ -233,6 +233,30 @@ describe('Form Data DoS hardening', () => {
 		})
 	})
 
+	// Regression (H13b): unquoted bracket segments were coerced with unary `+`,
+	// so `user[name]` and `user[email]` both became the key `NaN` and the second
+	// silently overwrote the first (a whole distinct field vanished). Non-digit
+	// bracket segments must stay string keys; only all-digit segments become
+	// numeric array indices.
+	it('keeps distinct non-numeric bracket keys instead of colliding on NaN', () => {
+		const form = new FormData()
+		form.append('user[name]', 'bob')
+		form.append('user[email]', 'bob@x.ab')
+
+		expect(formDataToObject(form)).toEqual({
+			user: { name: 'bob', email: 'bob@x.ab' }
+		})
+	})
+
+	// Digit bracket segments still build arrays (index coercion preserved).
+	it('still coerces all-digit bracket segments to array indices', () => {
+		const form = new FormData()
+		form.append('items[0]', 'a')
+		form.append('items[1]', 'b')
+
+		expect(formDataToObject(form)).toEqual({ items: ['a', 'b'] })
+	})
+
 	// A pathologically deep key name (e.g. `'.'.repeat(2e6)`) would otherwise
 	// allocate one object per segment — hundreds of MB of heap from a few KB of
 	// input. Nesting depth is capped, so a too-deep key stops descending instead

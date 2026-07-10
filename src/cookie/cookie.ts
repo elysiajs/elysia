@@ -17,8 +17,7 @@ type FORWARDED_KEYS = typeof FORWARDED_KEYS
 
 type Updater<T> = T | ((value: T) => T)
 
-export interface Cookie<T = any>
-	extends Pick<BaseCookie, FORWARDED_KEYS[number]> {}
+export interface Cookie extends Pick<BaseCookie, FORWARDED_KEYS[number]> {}
 
 export class Cookie<T = any> implements BaseCookie {
 	#name: string

@@ -4,7 +4,7 @@ import { Elysia, t } from '../../../src'
 import z from 'zod'
 
 import { expectTypeOf } from 'expect-type'
-import { Cookie } from '../../../src/cookie';
+import { Cookie } from '../../../src/cookie'
 
 // ? handle standard schema
 {
@@ -533,5 +533,28 @@ import { Cookie } from '../../../src/cookie';
 						q: 'fouco'
 					})
 		}
+	)
+}
+
+// ? H14 — Standard Schema response position exposes input (not output)
+// A schema with input:string / output:number means the handler must RETURN a
+// string (that the runtime will transform to number), not a number.
+{
+	// Use Zod's transform to create a schema where input=string, output=number
+	const strToNum = z.string().transform(Number)
+
+	// Handlers returning the input type (string) should be accepted
+	new Elysia().get(
+		'/h14',
+		{ response: strToNum },
+		() => 'hello'
+	)
+
+	// Handlers returning the output type (number) should be REJECTED
+	new Elysia().get(
+		'/h14',
+		{ response: strToNum },
+		// @ts-expect-error returning the output type (number) should fail
+		() => 42
 	)
 }

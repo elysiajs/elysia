@@ -302,7 +302,7 @@ export type TraceProcess<
 							callback?: (
 								process: TraceProcess<'begin', false>
 							) => unknown
-						): Promise<void>
+						): void
 					}
 				: {
 						/**
@@ -512,7 +512,6 @@ class TraceRecorder {
 				const detail = {
 					end: endAt,
 					error: err,
-					// eslint-disable-next-line sonarjs/no-nested-functions -- single inline getter
 					get elapsed() {
 						return endAt - process.begin
 					}

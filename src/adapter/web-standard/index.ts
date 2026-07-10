@@ -32,9 +32,13 @@ function parseFormData(context: Context, contentType?: string) {
 		const headers = new Headers(context.request.headers)
 		headers.set('content-type', fixedCt)
 
-		const rewrapped = new Request(context.request, {
-			headers
+		const rewrapped = new Request(context.request.url, {
+			method: context.request.method,
+			headers,
+			body: context.request.body,
+			duplex: 'half'
 		})
+
 		// @ts-ignore
 		return rewrapped.formData().then(formDataToObject)
 	}
@@ -78,6 +82,11 @@ export const WebStandardAdapter = createAdapter({
 
 				default:
 					if (ct.charCodeAt(0) === 116) return context.request.text()
+
+					// (RFC 6839): application/ld+json
+					const semi = ct.indexOf(';')
+					const essence = semi === -1 ? ct : ct.slice(0, semi)
+					if (essence.endsWith('+json')) return context.request.json()
 			}
 		}
 	},

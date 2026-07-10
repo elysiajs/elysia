@@ -61,8 +61,8 @@ function isPrecomputeSafe(schema: any, depth = 0) {
 	return true
 }
 
-// A nested Object WITH its own `default` is precompute-safe only when that
-// own default agrees, field by field, with the defaults its children would fill in
+// Nested Object with `default` is precompute-safe only when default agrees
+// field by field, with the defaults its children would fill in
 function nestedOwnDefaultDiverges(objectSchema: any) {
 	const own = objectSchema.default
 	if (own === null || typeof own !== 'object' || Array.isArray(own))
@@ -512,7 +512,8 @@ function presentExpr(child: string, isObject: boolean, varName: string) {
 function mergeExpression(
 	schema: any,
 	varName: string,
-	helpers: string[]
+	helpers: string[],
+	memo: WeakMap<object, string>
 ):
 	| {
 			absent: string | undefined
@@ -522,7 +523,7 @@ function mergeExpression(
 	  }
 	| undefined {
 	const full = Default(schema, undefined)
-	const child = emitMerger(schema, helpers)
+	const child = emitMerger(schema, helpers, memo)
 	if (child === undefined) return
 
 	const absent = full === undefined ? undefined : cloneExpression(full)
@@ -534,7 +535,13 @@ function mergeExpression(
 	return { absent, present, child, isObject }
 }
 
-function emitMerger(node: any, helpers: string[]) {
+function emitMerger(
+	node: any,
+	helpers: string[],
+	memo: WeakMap<object, string> = new WeakMap()
+) {
+	if (memo.has(node)) return memo.get(node)!
+
 	const category = mergeCategory(node)
 	if (category === 'identity') return ''
 	if (category === 'bail') return
@@ -542,16 +549,20 @@ function emitMerger(node: any, helpers: string[]) {
 	const name = `_d${helpers.length}`
 	helpers.push('')
 
+	memo.set(node, name)
+
 	if (category === 'object') {
 		const props = node.properties ?? nullObject()
 		const handled: string[] = []
 
-		const guard: string[] = []
+		const typeGuard =
+			"if(v===null||typeof v!=='object'||Array.isArray(v))return v;"
+		let tempDecls = 'let x;'
 
-		// non-object / array / null inputs pass straight through, matching
-		// `Default(objectSchema, nonObject) === nonObject`
-		let body =
-			"if(v===null||typeof v!=='object'||Array.isArray(v))return v;const out=Object.create(null);let x;"
+		const guard: string[] = []
+		let mergeBody = 'const out=Object.create(null);'
+
+		let tempCount = 0
 
 		for (const key in props) {
 			if (!Object.hasOwn(props, key)) continue
@@ -559,27 +570,44 @@ function emitMerger(node: any, helpers: string[]) {
 			if (!subtreeHasDefault(ps)) continue
 			if (dangerousKeys.has(key)) return
 
-			const expr = mergeExpression(ps, 'x', helpers)
+			const expr = mergeExpression(ps, 'x', helpers, memo)
 			if (!expr) return
 
 			handled.push(key)
 			const access = JSON.stringify(key)
-			body += `x=v[${access}];`
-			body +=
-				expr.absent === undefined
-					? `if(x!==undefined)out[${access}]=${expr.present};`
-					: `out[${access}]=x===undefined?${expr.absent}:${expr.present};`
-
 			const vk = `v[${access}]`
+
 			const absentTest =
 				expr.absent === undefined ? undefined : `${vk}===undefined`
-			const presentTest =
-				expr.child === ''
-					? undefined // present value is passed through verbatim
-					: `(${vk}!==undefined&&${presentExpr(expr.child, expr.isObject, vk)}!==${vk})`
 
-			const test = [absentTest, presentTest].filter(Boolean).join('||')
-			if (test) guard.push(test)
+			if (expr.child !== '') {
+				// Compute the merged result once into a temp variable.
+				const tmp = `_t${tempCount++}`
+				const typeCheck = expr.isObject
+					? `${vk}!==null&&typeof ${vk}==='object'&&!Array.isArray(${vk})`
+					: `Array.isArray(${vk})`
+				tempDecls += `let ${tmp}=${typeCheck}?${expr.child}(${vk}):${vk};`
+
+				const presentTest = `(${vk}!==undefined&&${tmp}!==${vk})`
+				const test = [absentTest, presentTest]
+					.filter(Boolean)
+					.join('||')
+				if (test) guard.push(test)
+
+				mergeBody +=
+					expr.absent === undefined
+						? `if(${vk}!==undefined)out[${access}]=${tmp};`
+						: `out[${access}]=${vk}===undefined?${expr.absent}:${tmp};`
+			} else {
+				// Identity child — no merger call; retain the original approach.
+				mergeBody += `x=${vk};`
+				mergeBody +=
+					expr.absent === undefined
+						? `if(x!==undefined)out[${access}]=${expr.present};`
+						: `out[${access}]=x===undefined?${expr.absent}:${expr.present};`
+
+				if (absentTest) guard.push(absentTest)
+			}
 		}
 
 		if (!handled.length) {
@@ -587,19 +615,20 @@ function emitMerger(node: any, helpers: string[]) {
 			return ''
 		}
 
-		body += 'for(const k in v){x=v[k];if(x!==undefined'
-		for (const key of handled) body += `&&k!==${JSON.stringify(key)}`
-		body += ')out[k]=x}return out'
+		mergeBody += 'for(const k in v){x=v[k];if(x!==undefined'
+		for (const key of handled) mergeBody += `&&k!==${JSON.stringify(key)}`
+		mergeBody += ')out[k]=x}return out'
 
 		const fastPath = guard.length
-			? `if(v!==null&&typeof v==='object'&&!Array.isArray(v)&&!(${guard.join('||')}))return v;`
+			? `if(!(${guard.join('||')}))return v;`
 			: ''
 
-		helpers[+name.slice(2)] = `function ${name}(v){${fastPath}${body}}`
+		helpers[+name.slice(2)] =
+			`function ${name}(v){${typeGuard}${tempDecls}${fastPath}${mergeBody}}`
 		return name
 	}
 
-	const expr = mergeExpression(node.items, 'e', helpers)
+	const expr = mergeExpression(node.items, 'e', helpers, memo)
 	if (!expr) return
 
 	if (expr.absent === undefined && expr.present === 'e') {
@@ -625,7 +654,8 @@ function buildMergeSource(schema: any) {
 	if (category !== 'object' && category !== 'array') return
 
 	const helpers: string[] = []
-	const root = emitMerger(schema, helpers)
+	const memo = new WeakMap<object, string>()
+	const root = emitMerger(schema, helpers, memo)
 	if (!root) return
 
 	return `(function(){${helpers.join(';')};return ${root}})()`

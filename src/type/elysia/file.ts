@@ -60,7 +60,7 @@ export function File(options?: FileOptions) {
 function FileWithProperty(options: FilesOptions) {
 	const refines: RefinesType<File> = []
 
-	if (options.minSize) {
+	if (options.minSize !== undefined) {
 		const minSize = parseFileUnit(options.minSize!)
 
 		refines.push([
@@ -69,7 +69,7 @@ function FileWithProperty(options: FilesOptions) {
 		])
 	}
 
-	if (options.maxSize) {
+	if (options.maxSize !== undefined) {
 		const maxSize = parseFileUnit(options.maxSize!)
 
 		refines.push([

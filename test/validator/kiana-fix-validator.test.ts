@@ -148,9 +148,11 @@ describe('kiana validator fixes', () => {
 		expect(v.FromSync({ tags: ['a', 'b'] })).toEqual({ tags: ['a', 'b'] })
 	})
 
-	// idx33 (union branch) — a custom error inside a discriminated-union branch
-	// surfaces when the value matches that branch's discriminator but fails its
-	// constraint, and the whole union therefore rejects.
+	// idx33 / H08 (union branch, policy 2A) — a custom error inside a
+	// discriminated-union branch surfaces ONLY because the value matches that
+	// branch's discriminator (`type: 'cat'`) yet fails its constraint. Under the
+	// H08 2A policy the discriminator is what authorises reporting the branch's
+	// message; it is no longer an array-order accident.
 	it('idx33 — surfaces a custom error inside a union branch', () => {
 		process.env.NODE_ENV = 'production'
 
@@ -206,6 +208,158 @@ describe('kiana validator fixes', () => {
 		expect(v.FromSync({ pet: { type: 'dog', bark: true } })).toEqual({
 			pet: { type: 'dog', bark: true }
 		})
+	})
+
+	// H08 (2A) — the branch actually selected by the discriminator reports ITS
+	// OWN custom error, not the first-annotated branch's. Pre-H08 the gate made
+	// every branch eligible once the union failed and array order decided, so an
+	// invalid dog reported the cat branch's message. With discriminator-based
+	// selection the dog value (`type: 'dog'`) must surface the dog error.
+	it('H08 — an invalid discriminated dog reports the DOG branch error, not the cat one', () => {
+		process.env.NODE_ENV = 'production'
+
+		const v = new TypeBoxValidator(
+			t.Object({
+				pet: t.Union([
+					t.Object({
+						type: t.Literal('cat'),
+						meow: t.Boolean({ error: 'meow must be a boolean' })
+					}),
+					t.Object({
+						type: t.Literal('dog'),
+						bark: t.Boolean({ error: 'bark must be a boolean' })
+					})
+				])
+			})
+		)
+
+		let message: string | undefined
+		try {
+			// discriminator says dog, but bark is the wrong type → the dog
+			// branch's message must win even though cat is annotated first.
+			v.FromSync({ pet: { type: 'dog', bark: 'woof' } })
+		} catch (error: any) {
+			message = error.message
+		}
+
+		expect(message).toBe('bark must be a boolean')
+	})
+
+	// H08 (2A) — DELIBERATE behavior change. When no discriminator disambiguates
+	// the branches, the finder must NOT guess a branch's custom message (which
+	// pre-H08 it did by array order — the "wrong branch" bug). It falls back to
+	// the deterministic union-level default error. Annotated unions without a
+	// discriminator therefore lose the per-branch message they only got by luck.
+	it('H08 — an ambiguous (no-discriminator) union falls back to the union-level error', () => {
+		process.env.NODE_ENV = 'production'
+
+		const v = new TypeBoxValidator(
+			t.Object({
+				pet: t.Union([
+					t.Object({ meow: t.Boolean({ error: 'meow error' }) }),
+					t.Object({ bark: t.Boolean({ error: 'bark error' }) })
+				])
+			})
+		)
+
+		let message: string | undefined
+		try {
+			// invalid under both branches, nothing pins it to one → do not guess.
+			v.FromSync({ pet: { meow: 'x' } })
+		} catch (error: any) {
+			message = error.message
+		}
+
+		// WHY: neither branch's custom message may be surfaced; the generic
+		// union-level message is the only deterministic answer.
+		expect(message).not.toBe('meow error')
+		expect(message).not.toBe('bark error')
+		expect(message).toContain('Validation error')
+	})
+
+	// H08 — a property whose NAME contains '/' must be addressed as a single
+	// segment. Paths were joined with raw '/' then split, so `a/b` was
+	// misaddressed to `a -> b`. Segments are now kept as arrays (output uses
+	// RFC 6901 `~1` escaping), so the custom error is found.
+	it('H08 — a slash-named property surfaces its custom error', () => {
+		process.env.NODE_ENV = 'production'
+
+		const v = new TypeBoxValidator(
+			t.Object({
+				'a/b': t.String({ error: 'slash error' })
+			})
+		)
+
+		let error: any
+		try {
+			v.FromSync({ 'a/b': 123 })
+		} catch (e: any) {
+			error = e
+		}
+
+		expect(error?.message).toBe('slash error')
+		// the emitted instancePath escapes the slash per JSON Pointer
+		expect(error?.errors?.[0]?.instancePath).toBe('/a~1b')
+	})
+
+	// H08 — a custom error on a property INSIDE homogeneous array items
+	// (`rows[].name`) must be traversed. The optimized finder used to descend
+	// only the immediate array element error, never nested item properties, so
+	// it fell back to a generic message once another custom error enabled it.
+	it('H08 — a custom error nested in array items (rows[].name) surfaces', () => {
+		process.env.NODE_ENV = 'production'
+
+		const v = new TypeBoxValidator(
+			t.Object({
+				rows: t.Array(
+					t.Object({
+						name: t.String({ error: 'name error' })
+					})
+				)
+			})
+		)
+
+		let message: string | undefined
+		try {
+			v.FromSync({ rows: [{ name: 123 }] })
+		} catch (error: any) {
+			message = error.message
+		}
+
+		expect(message).toBe('name error')
+	})
+
+	// H08 — construction must not be quadratic in the number of annotated fields
+	// under a union. Pre-H08, buildFindCustomError recompiled the WHOLE union
+	// once per annotated leaf (N annotated fields => N full union compiles),
+	// measuring ~203 ms at N=100. A single cached compiled checker per union node
+	// makes this near-linear. Loose bound: 2 branches x 100 annotated fields
+	// must construct well under the old 203 ms floor.
+	it('H08 — union custom-error construction is not quadratic in field count', () => {
+		process.env.NODE_ENV = 'production'
+
+		const N = 100
+		const branchA: Record<string, any> = { type: t.Literal('a') }
+		const branchB: Record<string, any> = { type: t.Literal('b') }
+		for (let i = 0; i < N; i++) {
+			branchA['f' + i] = t.String({ error: 'a' + i })
+			branchB['f' + i] = t.String({ error: 'b' + i })
+		}
+
+		const schema = t.Object({
+			pet: t.Union([t.Object(branchA), t.Object(branchB)])
+		})
+
+		const start = performance.now()
+		// construction is what compiles the finder; instantiate a few to average
+		// out noise without amplifying a linear cost into a false failure.
+		for (let i = 0; i < 3; i++) new TypeBoxValidator(schema)
+		const elapsed = (performance.now() - start) / 3
+
+		// WHY: a generous ceiling that the quadratic path (~203 ms at N=100 for a
+		// SINGLE construction) would blow through, but the cached path clears with
+		// wide margin. Kept loose to stay stable across machines/CI.
+		expect(elapsed).toBeLessThan(150)
 	})
 
 	// idx49 — isProduction must be read from env at call time, not frozen at

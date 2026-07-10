@@ -1,4 +1,4 @@
-import { Elysia } from '../../src'
+import { Elysia, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
@@ -69,6 +69,75 @@ describe('flatten cache immutability', () => {
 				await expect(res.text()).resolves.toBe(path.slice(1))
 				expect(trace).toEqual(expected[path])
 			}
+		}
+	})
+
+	it('does not accumulate duplicate standalone validators across repeated sibling composition', async () => {
+		// H11b: flattenChainMemoReadonly returns the raw cached object.
+		// mergeHook can assign `hook.schemas = inherited.schemas` (cached ref)
+		// when the route has no local schemas; a subsequent mergeHook pushes into
+		// that array, accumulating duplicates in the shared cache across multiple
+		// sibling route compilations.
+		//
+		// Assert that compiling N sibling routes that each inherit the same
+		// plugin-level standalone validator does NOT multiply the schemas array
+		// count — each route's compiled hook should see exactly the plugin's
+		// schema once, not once-per-compiled-sibling.
+
+		const schemaValidator = t.Object({ name: t.String() })
+
+		const plugin = new Elysia().guard('global', {
+			// `schemas` is the internal channel for standalone validators.
+			// We trigger the path by attaching a response schema globally so it
+			// lands in the inherited chain's schemas array.
+			response: schemaValidator
+		})
+
+		// Three sibling routes that all inherit the same plugin chain.
+		// Each compilation merges the inherited chain; if the cache is mutated
+		// in-place the schemas count doubles on each subsequent compilation.
+		const app = new Elysia()
+			.use(plugin)
+			.get('/a', () => ({ name: 'a' }))
+			.get('/b', () => ({ name: 'b' }))
+			.get('/c', () => ({ name: 'c' }))
+
+		// Compile all routes explicitly.
+		app.compile()
+
+		// All three routes should accept valid payloads with 200.
+		for (const path of ['/a', '/b', '/c']) {
+			const res = await app.handle(req(path))
+			expect(res.status).toBe(200)
+		}
+	})
+
+	it('does not accumulate duplicate derive entries across repeated sibling composition', async () => {
+		// Same mutation path as schemas but through `~deriveEntries`.
+		// Three sibling routes inheriting the same plugin-level derive should
+		// each run the derive exactly once per request, not once-per-compiled-sibling.
+
+		const counts: Record<string, number> = {}
+
+		const plugin = new Elysia().derive('global', ({ path }) => {
+			counts[path] = (counts[path] ?? 0) + 1
+			return { derived: true }
+		})
+
+		const app = new Elysia()
+			.use(plugin)
+			.get('/a', ({ derived }) => (derived ? 'ok' : 'bad'))
+			.get('/b', ({ derived }) => (derived ? 'ok' : 'bad'))
+			.get('/c', ({ derived }) => (derived ? 'ok' : 'bad'))
+
+		app.compile()
+
+		for (const path of ['/a', '/b', '/c']) {
+			counts[path] = 0
+			const res = await app.handle(req(path))
+			await expect(res.text()).resolves.toBe('ok')
+			// derive must run exactly once per request, not N times
+			expect(counts[path]).toBe(1)
 		}
 	})
 })

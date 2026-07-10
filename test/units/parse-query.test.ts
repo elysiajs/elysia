@@ -59,6 +59,35 @@ describe('parseQueryFromURL', () => {
 		).toEqual([1, 2])
 	})
 
+	// Regression (H13a): bracket-array detection checked ONLY the opening `[`
+	// then sliced off the last char unconditionally, so `[adminX` became
+	// `admin` — a value that could slip past a role allowlist. Array syntax
+	// now requires a MATCHING closing `]`; otherwise the literal is preserved.
+	it('does not treat an unclosed bracket value as an array', () => {
+		const cfg = { role: 1 as const }
+		const url = 'http://x.ab/p?role=[adminX'
+
+		// An array-typed field wraps a scalar into a single-element array, but
+		// the value must stay the LITERAL `[adminX` — the pre-fix code sliced
+		// the last char off and produced the allowlisted `admin`. The bug is a
+		// leaked/mangled value, so assert the element is verbatim (never `admin`).
+		expect(parseQueryFromURL(url, url.indexOf('?'), cfg).role).toEqual([
+			'[adminX'
+		])
+
+		// a properly closed bracket array still parses to its inner members
+		const ok = 'http://x.ab/p?role=[admin]'
+		expect(parseQueryFromURL(ok, ok.indexOf('?'), cfg).role).toEqual([
+			'admin'
+		])
+
+		// without an array declaration the literal is preserved as-is
+		const plain = 'http://x.ab/p?role=[adminX'
+		expect(parseQueryFromURL(plain, plain.indexOf('?')).role).toBe(
+			'[adminX'
+		)
+	})
+
 	it('preserves repeated bracketed array query order', () => {
 		// The repeated-array path appends into an existing array. This guards the
 		// no-spread push loop so an allocation cleanup cannot reorder values.

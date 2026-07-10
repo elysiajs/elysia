@@ -1,7 +1,7 @@
 import type { StandardJSONSchemaV1Like } from '../types'
 
 export function Accelerate(schema: StandardJSONSchemaV1Like) {
-	const jsonSchema =
+	const raw =
 		// @ts-expect-error
 		schema.toJSONSchema?.() ??
 		// @ts-expect-error
@@ -10,6 +10,7 @@ export function Accelerate(schema: StandardJSONSchemaV1Like) {
 			target: 'draft-2020-12'
 		})
 
+	const jsonSchema = Object.isFrozen(raw) ? Object.assign({}, raw) : raw
 	jsonSchema['~elyAcl'] = true
 
 	return jsonSchema

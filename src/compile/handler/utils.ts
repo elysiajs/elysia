@@ -528,12 +528,14 @@ export const mapError = /*#__PURE__*/ map<
 		link: Link,
 		mapResponse: ElysiaAdapter['response']['map'],
 		schedule: string,
-		sign: string
+		sign: string,
+		isAsync: boolean
 	]
->((i, fn, [map, link, mapResponse, schedule, sign]) => {
+>((i, fn, [map, link, mapResponse, schedule, sign, isAsync]) => {
 	link(mapResponse, 'rm')
 	return (
 		`_r=${Await(fn)}er${at(i)}(c)\n` +
+		awaitGuard(fn, isAsync, '_r') +
 		`if(_r!==undefined){\n` +
 		`if(_r instanceof Response)c.set.status=_r.status\n` +
 		`else if(c.set.status===undefined||c.set.status===200)c.set.status=500\n` +

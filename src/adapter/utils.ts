@@ -632,10 +632,18 @@ export function createResponseHandler(handler: CreateHandlerParameter) {
 	}
 }
 
-const teeChunkCost = (chunk: unknown) =>
-	typeof chunk === 'string'
-		? chunk.length
-		: ((chunk as { byteLength?: number })?.byteLength ?? 64)
+function teeChunkCost(chunk: unknown) {
+	if (typeof chunk === 'string') return chunk.length
+	if (typeof chunk !== 'object' || chunk === null) return 64
+
+	const byteLength = (chunk as { byteLength?: number }).byteLength
+	if (typeof byteLength === 'number') return byteLength
+
+	const size = (chunk as { size?: number }).size
+	if (typeof size === 'number') return size
+
+	return 64
+}
 
 const doneResult = { done: true as const, value: undefined } as const
 

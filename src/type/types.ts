@@ -1,10 +1,10 @@
 import type { TObjectOptions, TSchemaOptions } from 'typebox'
 import type { TLocalizedValidationError } from 'typebox/error'
-import type { Validator } from 'typebox/schema'
 
 import type { ELYSIA_TYPES } from './constants'
 import type { CookieOptions } from '../cookie'
-import type { MaybeArray } from '../types'
+
+type MaybeArray<T> = T | T[]
 
 export type FileUnit = number | `${number}${'k' | 'm'}`
 
@@ -100,9 +100,10 @@ export interface CookieValidatorOptions<T extends Object = {}>
 	 */
 	secrets?: string | string[]
 	/**
-	 * Specified cookie name to be signed globally
+	 * Specified cookie name to be signed globally.
+	 * Pass `true` to sign all cookies.
 	 */
-	sign?: Readonly<(keyof T | (string & {}))[]>
+	sign?: true | Readonly<(keyof T | (string & {}))[]>
 }
 
 export type NonEmptyArray<T> = [T, ...T[]]
@@ -173,44 +174,53 @@ export interface ElysiaTypeCustomErrors {
 export type ElysiaTypeCustomError =
 	ElysiaTypeCustomErrors[keyof ElysiaTypeCustomErrors]
 
-export type ElysiaTypeCustomErrorCallback = (
-	error: {
-		/**
-		 * Error type
-		 */
-		type: 'validation'
-		/**
-		 * Where the error was found
-		 */
-		on: 'body' | 'query' | 'params' | 'headers' | 'cookie' | 'response'
-		found: unknown
-		/**
-		 * Value that caused the error
-		 */
-		value: unknown
-		/**
-		 * Property that caused the error
-		 * (omitted on production)
-		 */
-		property?: string
-		/**
-		 * Error message
-		 * (omitted on production)
-		 */
-		message?: string
-		/**
-		 * Expected value
-		 * (omitted on production)
-		 */
-		expected?: unknown
-		/**
-		 * Array of validation errors
-		 * (omitted on production)
-		 */
-		errors: TLocalizedValidationError[]
-	},
-	validator: Validator<any>
-) => unknown
+/**
+ * The argument shape passed to a custom-error callback.
+ *
+ * The runtime redacts schema-revealing detail in production (and passes only a
+ * partial object), so every field beyond `type`/`on` is optional and may be
+ * `undefined` depending on the environment and validation-detail policy.
+ */
+export type ElysiaTypeCustomErrorCallback = (error: {
+	/**
+	 * Error type
+	 */
+	type: 'validation'
+	/**
+	 * Where the error was found
+	 */
+	on: 'body' | 'query' | 'params' | 'headers' | 'cookie' | 'response'
+	/**
+	 * Value that was found at the failing location
+	 * (omitted / `undefined` on production)
+	 */
+	found?: unknown
+	/**
+	 * Value that caused the error
+	 * (omitted on production)
+	 */
+	value?: unknown
+	/**
+	 * Property that caused the error
+	 * (omitted on production)
+	 */
+	property?: string
+	/**
+	 * Error message
+	 * (omitted on production)
+	 */
+	message?: string
+	/**
+	 * Expected value
+	 * (omitted on production)
+	 */
+	expected?: unknown
+	/**
+	 * Array of validation errors
+	 * (omitted on production)
+	 */
+	errors?: TLocalizedValidationError[]
+}) => unknown
 
 type BaseSchemaRecord = Record<string, BaseSchema>
 

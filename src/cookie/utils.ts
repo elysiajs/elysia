@@ -409,9 +409,11 @@ export async function signCookieSubtle(val: string, secret: string) {
 		encoder.encode(val)
 	)
 
-	return `${val}.${Buffer.from(hmacBuffer)
-		.toString('base64')
-		.replace(removeTrailingEquals, '')}`
+	// Web-native base64: avoid Buffer (unavailable in no-Node environments such
+	// as Cloudflare Workers without nodejs_compat).
+	const b64 = btoa(String.fromCharCode(...new Uint8Array(hmacBuffer)))
+
+	return `${val}.${b64.replace(removeTrailingEquals, '')}`
 }
 
 export async function signCookie(val: string, secret: string | null) {

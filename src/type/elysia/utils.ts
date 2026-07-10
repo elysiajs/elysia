@@ -48,17 +48,27 @@ export function createSharedReference<
 	const P extends Record<keyof any, unknown>,
 	const T extends TSchema
 >(createType: (property: P) => T) {
-	const shared = Object.create(null)
+	const shared = Object.create(null) as Record<
+		number,
+		{ key: string; schema: T }
+	>
 
 	return (property: P): T => {
 		const hash = propertyChecksum(property)
-		if (hash[0] in shared) {
-			if (hash[1]) return createType(property)
+		if (hash[1]) return createType(property)
 
-			return shared[hash[0]]
+		const h = hash[0]
+		const canonicalKey = JSON.stringify(property)
+
+		if (h in shared) {
+			const bucket = shared[h]!
+			if (bucket.key === canonicalKey) return bucket.schema
 		}
 
-		return (shared[hash[0]] = Object.freeze(createType(property)))
+		const schema = Object.freeze(createType(property))
+		shared[h] = { key: canonicalKey, schema }
+
+		return schema
 	}
 }
 

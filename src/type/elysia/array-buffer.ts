@@ -30,13 +30,13 @@ export function ArrayBufferType(property?: ArrayBufferOptions) {
 		[(value) => value instanceof ArrayBuffer, 'must be ArrayBuffer']
 	]
 
-	if (property.minByteLength)
+	if (property.minByteLength !== undefined)
 		refines.push([
 			(value) => value.byteLength >= property.minByteLength!,
 			`Expect byte to be more than ${property.minByteLength}`
 		])
 
-	if (property.maxByteLength)
+	if (property.maxByteLength !== undefined)
 		refines.push([
 			(value) => value.byteLength <= property.maxByteLength!,
 			`Expect byte to be less than ${property.maxByteLength}`

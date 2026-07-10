@@ -1,4 +1,4 @@
-import { isAsyncFunction } from '../compile/utils'
+import { isAsyncFunction, mayReturnPromise } from '../compile/utils'
 import { isCloudflareWorker } from '../universal/constants'
 
 export const emptyResponse = isCloudflareWorker
@@ -30,7 +30,11 @@ export function forwardError<T>(value: T): T {
 export function getAsyncIndexes(onRequests: Function[]) {
 	let asyncIndexes: (true | undefined)[] | undefined
 	for (let i = 0; i < onRequests.length; i++)
-		if (isAsyncFunction(onRequests[i])) {
+		// Widen to async whenever the hook is a native async function or its
+		// source may return a Promise. A synchronously-returned thenable must
+		// be awaited before deciding short-circuit vs continue, otherwise a
+		// raw Promise is mapped as a truthy response (empty 200).
+		if (isAsyncFunction(onRequests[i]) || mayReturnPromise(onRequests[i])) {
 			asyncIndexes ??= new Array(onRequests.length)
 			asyncIndexes[i] = true
 		}

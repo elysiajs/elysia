@@ -107,17 +107,24 @@ export function parseQueryFromURL(
 
 			if (flags & VALUE_HAS_PLUS) rawValue = rawValue.replace(/\+/g, ' ')
 
-			const rawBracket = rawValue.charCodeAt(0) === 91
+			const rawBracket =
+				rawValue.charCodeAt(0) === 91 &&
+				rawValue.charCodeAt(rawValue.length - 1) === 93
 			const decodedBracket =
-				!rawBracket && finalValue.charCodeAt(0) === 91
+				!rawBracket &&
+				finalValue.charCodeAt(0) === 91 &&
+				(finalValue as string).charCodeAt(
+					(finalValue as string).length - 1
+				) === 93
 
 			if (rawBracket || decodedBracket) {
 				// 'ids=[]' is an explicit empty array, not ['']
 				let toBracketArray: any
 				if (rawBracket)
-					toBracketArray = rawValue.length === 2
-						? []
-						: splitRawParts(rawValue.slice(1, -1), flags)
+					toBracketArray =
+						rawValue.length === 2
+							? []
+							: splitRawParts(rawValue.slice(1, -1), flags)
 				else {
 					const inner = (finalValue as string).slice(1, -1)
 					toBracketArray = inner === '' ? [] : inner.split(',')

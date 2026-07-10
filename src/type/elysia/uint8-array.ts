@@ -37,18 +37,23 @@ export function Uint8ArrayType(property?: ArrayBufferOptions) {
 			elyType(ELYSIA_TYPES.Uint8Array, BaseUint8Array)
 		))
 
+	// Accept both Uint8Array and ArrayBuffer (same as the base schema) (L09)
 	const refines: RefinesType<Uint8Array> = [
-		[(value) => value instanceof Uint8Array, 'must be Uint8Array']
+		[
+			(value: unknown) =>
+				value instanceof Uint8Array || value instanceof ArrayBuffer,
+			'must be Uint8Array'
+		]
 	]
 
-	if (property.minByteLength) {
+	if (property.minByteLength !== undefined) {
 		refines.push([
 			(value) => value.byteLength >= property.minByteLength!,
 			`Expect byte to be more than ${property.minByteLength}`
 		])
 	}
 
-	if (property.maxByteLength)
+	if (property.maxByteLength !== undefined)
 		refines.push([
 			(value) => value.byteLength <= property.maxByteLength!,
 			`Expect byte to be less than ${property.maxByteLength}`

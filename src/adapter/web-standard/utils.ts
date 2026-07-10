@@ -107,8 +107,15 @@ function setNested(
 				i += 2 // skip quote + ]
 			} else {
 				const start = i
-				while (i < len && path.charCodeAt(i) !== BRACKET_C) i++
-				key = +path.slice(start, i)
+				let allDigits = i < len
+				while (i < len && path.charCodeAt(i) !== BRACKET_C) {
+					const c = path.charCodeAt(i)
+					if (c < ZERO || c > NINE) allDigits = false
+					i++
+				}
+
+				const segment = path.slice(start, i)
+				key = allDigits ? +segment : segment
 				i++ // skip ]
 			}
 		} else {

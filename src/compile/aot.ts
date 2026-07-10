@@ -401,7 +401,15 @@ const aotActivationError = new Error(
 export function beginValidatorCapture() {
 	if (captureImpl === undefined) throw aotActivationError
 
+	if (capture !== undefined)
+		throw new Error('[elysia-aot]: A capture session is already active.')
+
 	capture = new Map()
+}
+
+export function abortCapture() {
+	capture = undefined
+	handlerCapture = undefined
 }
 
 // @internal test isolation

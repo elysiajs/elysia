@@ -1,12 +1,9 @@
 import type { TObject, TProperties, TSchema } from 'typebox'
 
 import { ObjectType } from './object'
-import type { CookieOptions } from '../../cookie/types'
+import type { CookieValidatorOptions } from '../types'
 
-export interface CookieValidatorOptions extends CookieOptions {
-	sign?: true | string | string[]
-}
-
+export type { CookieValidatorOptions } from '../types'
 export interface CookieSchemaConfig extends CookieValidatorOptions {}
 
 const COOKIE_OPTION_KEYS = [

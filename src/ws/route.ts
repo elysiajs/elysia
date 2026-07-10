@@ -322,10 +322,24 @@ export function buildWSRoute(
 			if (r === undefined) continue
 			if (r instanceof Response) return r
 
-			const status = (context.set as any)?.status ?? 200
+			if (r instanceof ElysiaStatus)
+				return mapResponse(
+					r.response,
+					{
+						status: r.code as number,
+						headers: Object.assign(
+							{},
+							r.headers,
+							(context.set as any)?.headers
+						)
+					} as any,
+					(context as any).request
+				)
+
+			const httpStatus = (context.set as any)?.status ?? 200
 			return new Response(
 				typeof r === 'object' ? JSON.stringify(r) : String(r),
-				{ status }
+				{ status: httpStatus }
 			)
 		}
 
@@ -448,12 +462,19 @@ export function buildWSRoute(
 			error.allowUnsafeValidationDetails = true
 
 		for (let i = 0; i < errorHandlers.length; i++) {
-			let r: unknown = errorHandlers[i](errCtx)
-			if (r instanceof Promise) r = await r
+			let r: unknown
+			try {
+				r = errorHandlers[i](errCtx)
+				if (r instanceof Promise) r = await r
+			} catch {
+				break
+			}
+
 			if (r !== undefined) {
 				try {
 					await handleWSResponse(ws, r, mapResponses)
 				} catch {}
+
 				return
 			}
 		}
@@ -505,7 +526,15 @@ export function buildWSRoute(
 		ws: ElysiaWS<any>,
 		error: unknown
 	): void | Promise<void> {
-		if (errorHandlers.length === 0) return sendErrorFrame(ws, error)
+		if (errorHandlers.length === 0) {
+			if (
+				app['~config']?.allowUnsafeValidationDetails &&
+				error instanceof ValidationError
+			)
+				(error as ValidationError).allowUnsafeValidationDetails = true
+
+			return sendErrorFrame(ws, error)
+		}
 
 		return handleError(ws, error)
 	}
@@ -855,9 +884,28 @@ export function buildGlobalWSHandler(): WebSocketHandler<WSConnectionData> {
 		return elysia
 	}
 
+	const sendErrMsg = (ws: ServerWebSocket<any>, error: unknown) => {
+		try {
+			ws.send(
+				typeof (error as any)?.message === 'string'
+					? (error as any).message
+					: 'Internal Server Error'
+			)
+		} catch {}
+	}
+
 	return {
 		message(ws, message) {
-			ws.data.message?.(getElysia(ws), message)
+			let result: void | Promise<void>
+			try {
+				result = ws.data.message?.(getElysia(ws), message)
+			} catch (error) {
+				// Sync throw from dispatch: send a last-resort frame and bail.
+				sendErrMsg(ws, error)
+				return
+			}
+			if (result instanceof Promise)
+				result.catch((error) => sendErrMsg(ws, error))
 		},
 		open(ws) {
 			ws.data.open?.(getElysia(ws))

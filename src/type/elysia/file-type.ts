@@ -106,13 +106,18 @@ export function matchesAnyFileType(mime: string, types: FileType[]): boolean {
 }
 
 export function checkFileExtension(type: string, extension: string) {
-	if (type.startsWith(extension)) return true
+	const slashIdx = extension.indexOf('/')
+	if (slashIdx === -1) return type.startsWith(extension + '/')
 
-	return (
-		extension.charCodeAt(extension.length - 1) === 42 &&
-		extension.charCodeAt(extension.length - 2) === 47 &&
-		type.startsWith(extension.slice(0, -1))
-	)
+	if (
+		extension.charCodeAt(extension.length - 1) === 42 /* '*' */ &&
+		extension.charCodeAt(extension.length - 2) === 47 /* '/' */
+	) {
+		return type.startsWith(extension.slice(0, -1))
+	}
+
+	// Exact MIME match (e.g. "image/png" must NOT match "image/png-malicious")
+	return type === extension
 }
 
 export function parseFileUnit(size: FileUnit) {

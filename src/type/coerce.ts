@@ -732,8 +732,23 @@ function nonAdditionalPropertiesWalk(
 		}
 	}
 
-	// Apply the strict marker last so the recursion above doesn't
-	// trip over `additionalProperties: false` (boolean, not schema).
+	if (node.$defs) {
+		let newDefs: Record<string, BaseSchema> | undefined
+		for (const k in node.$defs) {
+			const v = node.$defs[k] as BaseSchema
+			const r = nonAdditionalPropertiesWalk(v, seen)
+			if (r !== v) {
+				newDefs ??= { ...node.$defs }
+				newDefs[k] = r
+			}
+		}
+
+		if (newDefs) {
+			out = cloneNode(node, out)
+			out.$defs = newDefs
+		}
+	}
+
 	if (
 		(node.type === 'object' || (node as any)['~kind'] === 'Object') &&
 		!('additionalProperties' in node)

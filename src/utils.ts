@@ -430,30 +430,59 @@ export const sse = <
 	return payload as any
 }
 
-export const constantTimeEqual =
-	typeof crypto?.timingSafeEqual === 'function'
+const _nodeCryptoTimingSafe = (() => {
+	try {
+		const _crypto = (globalThis.process as any)?.getBuiltinModule?.(
+			'node:crypto'
+		)
+
+		if (typeof _crypto?.timingSafeEqual === 'function')
+			return _crypto.timingSafeEqual as (
+				a: Uint8Array,
+				b: Uint8Array
+			) => boolean
+	} catch {}
+})()
+
+const _enc = new TextEncoder()
+
+export const constantTimeEqual: (a: string, b: string) => boolean =
+	_nodeCryptoTimingSafe
 		? (a: string, b: string) => {
-				// Compare as UTF-8 bytes; timingSafeEqual requires equal length
-				const ab = Buffer.from(a, 'utf8')
-				const bb = Buffer.from(b, 'utf8')
+				const ab = _enc.encode(a)
+				const bb = _enc.encode(b)
 
-				if (ab.length !== bb.length) return false
-				return crypto.timingSafeEqual(ab, bb)
+				return ab.length !== bb.length
+					? false
+					: _nodeCryptoTimingSafe(ab, bb)
 			}
-		: (a: string, b: string) => {
-				if (a.length !== b.length) return false
+		: typeof (crypto as any)?.timingSafeEqual === 'function'
+			? (a: string, b: string) => {
+					const ab = _enc.encode(a)
+					const bb = _enc.encode(b)
 
-				let mismatch = 0
-				for (let i = 0; i < a.length; i++)
-					mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i)
+					return ab.length !== bb.length
+						? false
+						: (crypto as any).timingSafeEqual(ab, bb)
+				}
+			: (a: string, b: string) => {
+					if (a.length !== b.length) return false
 
-				return mismatch === 0
-			}
+					let mismatch = 0
+					for (let i = 0; i < a.length; i++)
+						mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i)
+
+					return mismatch === 0
+				}
 
 export const isRecordNumber = (
 	x: Record<keyof object, unknown> | undefined
-): x is Record<number, unknown> =>
-	typeof x === 'object' && Object.keys(x).every((x) => !isNaN(+x))
+): x is Record<number, unknown> => {
+	if (typeof x !== 'object') return false
+
+	const keys = Object.keys(x)
+	return keys.length > 0 && keys.every((k) => !isNaN(+k))
+}
 
 export function mergeResponse(
 	a: InputSchema['response'],

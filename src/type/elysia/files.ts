@@ -58,9 +58,9 @@ export function Files(options?: FilesOptions): TFiles {
 
 function FilesWithProperty(options: FilesOptions) {
 	const fileOptions: FileOptions = {}
-	if (options.type) fileOptions.type = options.type
-	if (options.minSize) fileOptions.minSize = options.minSize
-	if (options.maxSize) fileOptions.maxSize = options.maxSize
+	if (options.type !== undefined) fileOptions.type = options.type
+	if (options.minSize !== undefined) fileOptions.minSize = options.minSize
+	if (options.maxSize !== undefined) fileOptions.maxSize = options.maxSize
 
 	const base: typeof BaseFiles = isEmpty(fileOptions)
 		? BaseFiles
@@ -68,7 +68,7 @@ function FilesWithProperty(options: FilesOptions) {
 
 	const refines: RefinesType<File[]> = []
 
-	if (options.minItems)
+	if (options.minItems !== undefined)
 		refines.push([
 			(value) => {
 				const length = Array.isArray(value)
@@ -82,7 +82,7 @@ function FilesWithProperty(options: FilesOptions) {
 			`Expect at least ${options.minItems} files`
 		])
 
-	if (options.maxItems)
+	if (options.maxItems !== undefined)
 		refines.push([
 			(value) => {
 				const len = Array.isArray(value)

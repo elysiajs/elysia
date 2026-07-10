@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'bun:test'
 import { mapResponse } from '../../../src/adapter/web-standard/handler'
+import { skipClone } from '../../../src/adapter/skip-clone'
 
 // H13: a returned `Response` with an untouched `set` should pass through by
 // reference (no rewrap allocation, no re-locking a single-use stream body),
@@ -170,7 +171,83 @@ describe('mapResponse — shared Response body reuse (C1)', () => {
 		expect(await shared.clone().text()).toBe('hello')
 		expect(shared.headers.get('x-req')).toBeNull()
 	})
+})
 
+// H01: when status/cookies/headers must be merged into a returned Response,
+// `Response.clone()` TEES the body. On normal completion the orphan branch is
+// never drained, so a full second copy of the body stays retained (a 64×1MiB
+// probe re-read all 64 chunks from the orphan). SHIPPED SEMANTICS: unmarked
+// (possibly shared/module-level) Responses keep the clone-tee path so repeated
+// reuse still works; framework-generated PER-REQUEST responses carry the
+// internal `skipClone` transferable marker and transfer their body ZERO-COPY
+// (no clone, no orphan branch, no retained second copy).
+describe('mapResponse — retained bytes on header merge (H01)', () => {
+	// Count how many source chunks are pulled: with a tee, the orphan branch
+	// retains every produced chunk; with zero-copy transfer, chunks flow only
+	// to the single served reader and nothing is buffered on a second branch.
+	const makeCountedStream = (chunks: number, size: number) => {
+		const counter = { pulled: 0 }
+		const stream = new ReadableStream({
+			pull(controller) {
+				if (counter.pulled >= chunks) return controller.close()
+				counter.pulled++
+				controller.enqueue(new Uint8Array(size))
+			}
+		})
+		return { stream, counter }
+	}
+
+	const drain = async (res: Response) => {
+		const reader = res.body!.getReader()
+		for (;;) {
+			const { done } = await reader.read()
+			if (done) break
+		}
+	}
+
+	it('does NOT retain a second body copy for a marked per-request response', async () => {
+		const { stream, counter } = makeCountedStream(8, 1 << 16) // 8 × 64KiB
+		const response = new Response(stream, {
+			headers: { 'content-type': 'application/octet-stream' }
+		})
+		// framework per-request marker → zero-copy transfer path
+		skipClone.add(response)
+
+		const mapped = mapResponse(response, {
+			headers: { 'x-add': '1' }
+		} as any) as Response
+
+		expect(mapped).not.toBe(response)
+		expect(mapped.headers.get('x-add')).toBe('1')
+
+		await drain(mapped)
+
+		// Zero-copy: exactly the 8 chunks the single served reader pulled.
+		// The clone-tee path would additionally buffer all 8 on the orphan
+		// branch (retained until GC) — this asserts retention, not just status.
+		expect(counter.pulled).toBe(8)
+		// no independent second reader survived (marker consumed, body moved)
+		expect(response.bodyUsed).toBe(true)
+	})
+
+	it('unmarked (possibly shared) Response still clone-tees so reuse survives', async () => {
+		// The pinned contract: an unmarked Response must remain re-readable, so
+		// the clone path is REQUIRED here even though it retains an orphan copy.
+		const shared = new Response('hello', {
+			headers: { 'content-type': 'text/plain' }
+		})
+
+		const mapped = mapResponse(shared, {
+			headers: { 'x-add': '1' }
+		} as any) as Response
+
+		expect(await mapped.text()).toBe('hello')
+		// the original stays independently readable (this is why we clone-tee)
+		expect(await shared.clone().text()).toBe('hello')
+	})
+})
+
+describe('mapResponse — shared chunked reuse (C1, cont.)', () => {
 	it('streams a shared chunked Response across repeated requests', async () => {
 		// no content-length + transfer-encoding: chunked routes into the stream
 		// branch, which consumes the CLONED body (never the original)

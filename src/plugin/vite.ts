@@ -84,7 +84,7 @@ export const aot = (
 	}
 	// Resolved lazily in buildStart; anchors the call-site rewrite to real
 	// elysia modules only (Defect 3 fix, parity with bun/esbuild plugin).
-	let isElysiaModule: (path: string) => boolean = () => false
+	let isElysiaModule = (_path: string) => false
 
 	return {
 		name: 'elysia-aot',
@@ -121,14 +121,19 @@ export const aot = (
 			const cleanId = id.split('?', 1)[0]
 
 			// Stub when every route is compiled
-			for (const key of Object.keys(STUB_SOURCES) as (keyof typeof STUB_SOURCES)[]) {
+			for (const key of Object.keys(
+				STUB_SOURCES
+			) as (keyof typeof STUB_SOURCES)[]) {
 				if (!stub[key]) continue
 				for (const { filter, source: stubSource } of STUB_SOURCES[key])
 					if (filter.test(cleanId))
 						return alignStubExtensions(stubSource, cleanId)
 			}
 
-			if (stub.adapter !== false && ADAPTER_CONSTANTS_FILTER.test(cleanId))
+			if (
+				stub.adapter !== false &&
+				ADAPTER_CONSTANTS_FILTER.test(cleanId)
+			)
 				return alignStubExtensions(
 					adapterConstantsSource(stub.adapter),
 					cleanId

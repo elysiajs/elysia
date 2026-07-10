@@ -98,11 +98,17 @@ export class RouteValidator<const in out T extends RouteSchema> {
 				options?.models
 			)
 
+			const coerces = isTb(reference)
+				? coerce(reference)
+				: (standalone?.find(isTb) as AnySchema | undefined)
+					? coerce(standalone!.find(isTb) as AnySchema)
+					: undefined
+
 			;(this as any)[slot] = Validator.create(route[slot] as any, {
 				...options,
 				slot,
 				schemas: standalone,
-				coerces: isTb(reference) ? coerce(reference) : undefined
+				coerces
 			})
 		}
 

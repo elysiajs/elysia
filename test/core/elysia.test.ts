@@ -621,10 +621,13 @@ describe('Edge Case', () => {
 			})
 		)
 
+		// auto-HEAD returns a bodyless 200. It must NOT buffer the GET body to
+		// synthesize `Content-Length` (H16) — the whole point of HEAD is to
+		// avoid materializing the payload. A mapped string body reports no
+		// `content-length` header, so none is emitted.
 		expect(response.status).toBe(200)
-		expect(response.headers.toJSON()).toEqual({
-			'content-length': '11'
-		})
+		expect(response.headers.get('content-length')).toBeNull()
+		expect(await response.text()).toBe('')
 	})
 
 	it('automatically handle HEAD request for GET dynamic path', async () => {
@@ -640,9 +643,8 @@ describe('Edge Case', () => {
 		)
 
 		expect(response.status).toBe(200)
-		expect(response.headers.toJSON()).toEqual({
-			'content-length': '11'
-		})
+		expect(response.headers.get('content-length')).toBeNull()
+		expect(await response.text()).toBe('')
 	})
 
 	it('prefer user-provided HEAD over auto-HEAD for GET', async () => {

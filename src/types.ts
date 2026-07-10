@@ -1252,7 +1252,19 @@ type UnwrapResponseSchema<
 				>
 			}>
 		: UnwrapSchema<Schema, Definitions>
-	: UnwrapSchema<Schema, Definitions>
+	: Schema extends StandardSchemaV1Like
+		? NonNullable<Schema['~standard']['types']>['input']
+		: Schema extends string
+			? Schema extends keyof Definitions
+				? Definitions[Schema] extends TypeBoxSchema
+					? StaticCyclic<Definitions[Schema], Definitions>
+					: Definitions[Schema] extends StandardSchemaV1Like
+						? NonNullable<
+								Definitions[Schema]['~standard']['types']
+							>['input']
+						: unknown
+				: unknown
+			: unknown
 
 export interface UnwrapRoute<
 	in out Schema extends InputSchema<any>,

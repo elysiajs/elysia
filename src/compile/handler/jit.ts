@@ -471,7 +471,10 @@ export function compileHandlerJit({
 	let responseValiAsync = false
 	if (vali?.response)
 		for (const code in vali.response)
-			if (isAsyncValidator(vali.response[code])) {
+			if (
+				isAsyncValidator(vali.response[code]) ||
+				mayReturnPromiseValidator(vali.response[code])
+			) {
 				responseValiAsync = true
 				break
 			}
@@ -481,7 +484,11 @@ export function compileHandlerJit({
 
 	const errorHookForcesAsync =
 		hasErrorHook &&
-		(hasAfterHandle || hasMapResponse || hasResponseValidator)
+		(hasAfterHandle ||
+			hasMapResponse ||
+			hasResponseValidator ||
+			isAsyncLifecycle(hook?.error) ||
+			lifecycleMayReturnPromise(hook?.error, false))
 
 	const afterResponseForcesAsync =
 		hasAfterResponse &&
@@ -825,9 +832,9 @@ export function compileHandlerJit({
 			if (hasBeforeHandle) {
 				link(hook!.beforeHandle!, 'bf')
 
-				const deriveEntries = (
-					hook as { '~deriveEntries'?: any[] }
-				)['~deriveEntries']
+				const deriveEntries = (hook as { '~deriveEntries'?: any[] })[
+					'~deriveEntries'
+				]
 
 				code += mapBeforeHandle(
 					hook!.beforeHandle!,
@@ -960,16 +967,22 @@ export function compileHandlerJit({
 				link(ElysiaStatus, 'es')
 
 				const awaitStr = responseValiAsync ? 'await ' : ''
+				const encodeStatus = responseValiAsync
+					? `(_vr.mayReturnPromise?_vr.From(_r.response,'response',true):_vr.EncodeFrom(_r.response,'response'))`
+					: `_vr.EncodeFrom(_r.response,'response')`
+				const encodeBody = responseValiAsync
+					? `(_vr.mayReturnPromise?_vr.From(_r,'response',true):_vr.EncodeFrom(_r,'response'))`
+					: `_vr.EncodeFrom(_r,'response')`
 
 				code +=
 					`if(_r instanceof es){\n` +
 					`const _vr=va.response[_r.code]\n` +
-					`if(_vr)_r.response=${awaitStr}_vr.EncodeFrom(_r.response,'response')\n` +
+					`if(_vr)_r.response=${awaitStr}${encodeStatus}\n` +
 					`}else if(!(_r instanceof Response)` +
 					`&&!(_r instanceof ReadableStream)` +
 					`&&typeof _r?.next!=='function'){\n` +
 					`const _vr=va.response[c.set.status??200]\n` +
-					`if(_vr)_r=${awaitStr}_vr.EncodeFrom(_r,'response')\n` +
+					`if(_vr)_r=${awaitStr}${encodeBody}\n` +
 					`}\n`
 				if (hasLifecycleHook) code += abortCheck
 			}
@@ -1061,7 +1074,8 @@ export function compileHandlerJit({
 							endTrace('error') +
 							abortCheck +
 							schedule,
-						signPrefix
+						signPrefix,
+						isAsync
 					],
 					'aborted'
 				) +

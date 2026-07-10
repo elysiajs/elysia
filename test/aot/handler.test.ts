@@ -324,3 +324,74 @@ describe('AOT static & promise handler freeze', () => {
 		await expect(jp.text()).resolves.toBe('hi')
 	})
 })
+
+/**
+ * H04 fast-path guard: widening a hook to the async path may only happen when
+ * the hook is *not provably sync*. A plain synchronous route must keep emitting
+ * a synchronous `function route(c)` — otherwise every request eats an extra
+ * microtask. Conversely, a hook whose body returns a Promise must promote the
+ * route to an `async function route(c)` so the thenable is awaited before it is
+ * treated as a short-circuit response.
+ */
+describe('H04 sync/async compilation gating', () => {
+	const capture = (app: Elysia<any, any>) => {
+		;(app as any).compile()
+		const handlers = endHandlerCapture()
+		endValidatorCapture()
+		return handlers
+	}
+
+	const codeFor = (
+		handlers: { method: string; path: string; code: string }[],
+		method: string,
+		path: string
+	) => handlers.find((h) => h.method === method && h.path === path)?.code
+
+	const isAsyncRoute = (code: string | undefined) =>
+		!!code && /async\s+function route\(/.test(code)
+
+	it('keeps a plain sync route synchronous', () => {
+		const handlers = capture(
+			new Elysia().get(
+				'/x',
+				{ beforeHandle: () => {} },
+				() => 'hi'
+			) as any
+		)
+		expect(isAsyncRoute(codeFor(handlers, 'GET', '/x'))).toBe(false)
+	})
+
+	it('keeps a sync value-returning error hook synchronous', () => {
+		const handlers = capture(
+			new Elysia().error(() => 'oops').get('/x', () => {
+				throw new Error('boom')
+			}) as any
+		)
+		expect(isAsyncRoute(codeFor(handlers, 'GET', '/x'))).toBe(false)
+	})
+
+	it('promotes a beforeHandle that returns new Promise() to async', () => {
+		const handlers = capture(
+			new Elysia().get(
+				'/x',
+				{
+					beforeHandle: () =>
+						new Promise<void>((resolve) => resolve()) as any
+				},
+				() => 'hi'
+			) as any
+		)
+		expect(isAsyncRoute(codeFor(handlers, 'GET', '/x'))).toBe(true)
+	})
+
+	it('promotes an error hook that returns new Promise() to async', () => {
+		const handlers = capture(
+			new Elysia()
+				.error(() => new Promise<void>((resolve) => resolve()) as any)
+				.get('/x', () => {
+					throw new Error('boom')
+				}) as any
+		)
+		expect(isAsyncRoute(codeFor(handlers, 'GET', '/x'))).toBe(true)
+	})
+})

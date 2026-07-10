@@ -486,8 +486,6 @@ export function composeRouteHook(
 	appHook: ChainNode | undefined,
 	inheritedChain: ChainNode | undefined,
 	root: AnyElysia,
-	// When plugin was `.use()`d inside a `.group()`/`.guard(cb)`
-	// its macro keys must resolve against that group's overrides, not `root`'s table.
 	macroScope?: AnyElysia
 ): AnyLocalHook | undefined {
 	const resolve = chainResolver(root)
@@ -533,7 +531,19 @@ export function composeRouteHook(
 		}
 	}
 
-	let hook = applyHook(localHook, flatAppHook as any, inherited, true)
+	// Clone `inherited` before it enters `applyHook` as `rootHook`.
+	// `applyHook` → `mergeHook` can assign `hook.schemas = inherited.schemas`
+	// directly (when hook.schemas is falsy and mergeArray returns b), then the
+	// subsequent `mergeHook(hook, locals)` pushes into that array — mutating the
+	// cached object and corrupting every other route that shares the same
+	// flattenChainMemoReadonly result.  cloneHook slices every array field so
+	// the route owns a private copy (H11b fix).
+	let hook = applyHook(
+		localHook,
+		flatAppHook as any,
+		inherited ? (cloneHook(inherited as any) as Partial<AppHook>) : undefined,
+		true
+	)
 
 	// Append after-use root hooks last, after the plugin's own hooks.
 	if (locals) hook = hook ? mergeHook(hook, locals, false, true) : locals

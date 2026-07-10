@@ -257,7 +257,7 @@ export class Elysia<
 		if (config?.name)
 			this.#hash = fnv1a(
 				config.seed
-					? `${config.name}_${typeof config.seed === 'object' ? JSON.stringify(config.seed) : config.seed}`
+					? `${config.name}_${typeof config.seed === 'object' ? JSON.stringify(config.seed, serializeMacroSeed) : config.seed}`
 					: config.name
 			)
 	}
@@ -513,7 +513,20 @@ export class Elysia<
 				if (!name && isEmpty(value)) return this
 
 				if (name) {
-					if (!fresh && name in target)
+					const existing = target[name]
+
+					// `mergeDeep` returns the target unchanged when either side
+					// is not a plain object (primitive/null/array/class-like),
+					// so a cross-kind `override` would silently no-op. When the
+					// kinds are incompatible, replace instead of merge.
+					if (
+						!fresh &&
+						name in target &&
+						!!existing &&
+						typeof existing === 'object' &&
+						!Array.isArray(existing) &&
+						!Array.isArray(value)
+					)
 						target[name] = mergeDeep(
 							target[name] as any,
 							value!,
@@ -3268,8 +3281,6 @@ export class Elysia<
 						...this['~config'],
 						name: undefined,
 						seed: undefined,
-						// Don't inherit `as` into the group/guard scope-child:
-						// hooks registered inside the callback default their
 						as: undefined,
 						prefix
 					}
@@ -3964,6 +3975,15 @@ export class Elysia<
 			return this
 		}
 
+		// import default from ESM module
+		if (
+			typeof app === 'object' &&
+			'default' in app &&
+			app.default &&
+			!('~config' in app)
+		)
+			return this.use(app.default)
+
 		if (app === this) return this
 		if (app.pending) return this.#useAsync(app.modules.then(() => app))
 
@@ -4032,8 +4052,6 @@ export class Elysia<
 				)
 			}
 
-		// unlike `~hasWS` (a WS implies a route), trace registers on the hook
-		// chain — a route-less plugin still traces the parent's routes
 		if (app['~hasTrace']) this['~hasTrace'] = true
 
 		if (app.#history) {
@@ -4327,9 +4345,6 @@ export class Elysia<
 				}
 			}
 
-			// key in those hooks must see the group's override table; a plain
-			// plugin `app` is not a scope-child, so `localMacroRoot` falls back
-			// to the compiling root as before.
 			if (globalEvents)
 				this['~hookChain'] = {
 					added: globalEvents,
@@ -4575,9 +4590,6 @@ export class Elysia<
 
 				return this
 		}
-
-		// just in case
-		return this
 	}
 
 	/**
@@ -5660,7 +5672,12 @@ export class Elysia<
 		hookOrFn: unknown,
 		fn?: unknown
 	): any {
-		return this.#add(method, path, hookOrFn, fn)
+		return this.#add(
+			typeof method === 'string' ? method.toUpperCase() : method,
+			path,
+			hookOrFn,
+			fn
+		)
 	}
 
 	all<
@@ -6177,23 +6194,11 @@ export class Elysia<
 
 		const headers = response.headers
 
-		if (headers.get('transfer-encoding') || headers.get('content-length')) {
-			response.body.cancel?.().catch(() => {})
+		response.body.cancel?.().catch(() => {})
 
-			return new Response(null, {
-				status: response.status,
-				headers
-			})
-		}
-
-		return response.arrayBuffer().then((body) => {
-			const merged = new Headers(headers)
-			merged.set('content-length', String(body.byteLength))
-
-			return new Response(null, {
-				status: response.status,
-				headers: merged
-			})
+		return new Response(null, {
+			status: response.status,
+			headers
 		})
 	}
 
@@ -6419,7 +6424,6 @@ export class Elysia<
 	}
 
 	#buildRouterUnsafe() {
-
 		const precompile = this['~config']?.precompile
 		const enableAutoHead = this['~config']?.autoHead === true
 
@@ -6495,11 +6499,7 @@ export class Elysia<
 			const method = route[0]
 			const path = route[1]
 
-			if (
-				hasDuplicate &&
-				effective.get(method)!.get(path) !== i
-			)
-				continue
+			if (hasDuplicate && effective.get(method)!.get(path) !== i) continue
 
 			if ((route[0] as any) === 'WS') {
 				const ws = buildWSRoute(route, this)
@@ -6754,17 +6754,17 @@ export class Elysia<
 		this.server = undefined
 
 		const handlers = this['~ext']?.cleanup
+
 		const fire = handlers
-			? () => {
-					for (let i = 0; i < handlers.length; i++) handlers[i](this)
+			? async () => {
+					for (let i = 0; i < handlers.length; i++)
+						await handlers[i](this)
 				}
 			: undefined
 
 		if (r && typeof (r as Promise<void>).then === 'function')
-			return fire ? (r as Promise<void>).then(fire) : r
+			return fire ? (r as Promise<void>).then(fire) : (r as Promise<void>)
 
-		fire?.()
-
-		return r
+		return fire?.()
 	}
 }

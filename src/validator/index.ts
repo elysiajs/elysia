@@ -7,6 +7,7 @@ import { type AnySchema, type StandardSchemaV1Like } from '../type'
 
 import type { ElysiaConfig, MaybePromise } from '../types'
 import type { CoerceOption } from '../type/coerce'
+import { nonAdditionalProperties } from '../type/coerce'
 import { Compiled, Capture, type ValidatorSlot } from '../compile/aot'
 
 import {
@@ -16,9 +17,12 @@ import {
 	TypeBoxValidator,
 	TypeBoxValidatorCache,
 	Intersect,
-	HasCodec
+	HasCodec,
+	Default
 } from '../type/bridge'
 import { isAsyncFunction } from '../compile/utils'
+import { ASYNC_REFINE } from '../type/elysia/file-type'
+import { hasProperty } from '../type/utils'
 
 export interface ValidatorOptions {
 	models?: Record<keyof any, AnySchema>
@@ -321,11 +325,7 @@ export class StandardValidator extends Validator {
 		return this.From(value)
 	}
 
-	From(
-		value: unknown,
-		type?: string,
-		allowAsync = this.isAsync
-	): unknown {
+	From(value: unknown, type?: string, allowAsync = this.isAsync): unknown {
 		const q = this.#validate(value)
 
 		if (q instanceof Promise) {
@@ -347,11 +347,23 @@ export class StandardValidator extends Validator {
 	}
 }
 
+const isAsyncPredicate = (v: unknown) =>
+	Array.isArray(v)
+		? v.some((x: any) =>
+				typeof x.check === 'function'
+					? isAsyncFunction(x.check) || x.check[ASYNC_REFINE] === true
+					: false
+			)
+		: false
+
 export class MultiValidator extends Validator {
 	override isAsync = false
 
-	#schemas: (TSchema | StandardSchemaV1Like)[]
+	#schemas: (CompiledTypeBoxValidator | StandardSchemaV1Like)[]
 	#codecs: boolean[]
+	#hasDefaults: boolean[]
+	#tbSchemas: (TSchema | null)[]
+	#asyncMembers: (TypeBoxValidator | null)[]
 
 	constructor(
 		schema: TSchema | StandardSchemaV1Like,
@@ -359,8 +371,19 @@ export class MultiValidator extends Validator {
 	) {
 		super()
 
-		let typeboxObjects
-		const schemas = [schema].concat(options.schemas!)
+		let typeboxObjects: TSchema[] | undefined
+		const schemas = [schema].concat(options.schemas!) as (
+			| TSchema
+			| StandardSchemaV1Like
+			| CompiledTypeBoxValidator
+		)[]
+
+		const codecs: boolean[] = []
+		const hasDefaults: boolean[] = []
+		const tbSchemas: (TSchema | null)[] = []
+		const asyncMembers: (TypeBoxValidator | null)[] = []
+
+		const shouldClose = options?.normalize === false
 
 		for (let i = 0; i < schemas.length; i++) {
 			const schema = schemas[i]
@@ -377,40 +400,100 @@ export class MultiValidator extends Validator {
 					typeboxObjects.push(schema as TSchema)
 					schemas.splice(i, 1)
 					i--
-				} else
-					schemas[i] = Compile(
-						applyCoercions(schema, options?.coerces)
+				} else {
+					const rawSchema = schema as TSchema
+					let coercedSchema = applyCoercions(
+						rawSchema,
+						options?.coerces
 					)
+					if (shouldClose)
+						coercedSchema = nonAdditionalProperties(
+							coercedSchema as any
+						) as TSchema
+
+					const compiled = Compile(coercedSchema)
+					schemas[i] = compiled as any
+
+					codecs.push(HasCodec(coercedSchema))
+
+					const hd = hasProperty('default', rawSchema)
+					hasDefaults.push(hd)
+					tbSchemas.push(hd ? coercedSchema : null)
+
+					const isAsync =
+						(
+							compiled as any
+						).buildResult?.external?.variables?.some(
+							isAsyncPredicate
+						) ?? false
+					if (isAsync) {
+						this.isAsync = true
+
+						asyncMembers.push(
+							Validator.create(rawSchema, {
+								coerces: options?.coerces,
+								normalize: options?.normalize,
+								models: options?.models,
+								sanitize: options?.sanitize
+							})! as unknown as TypeBoxValidator
+						)
+					} else asyncMembers.push(null)
+				}
 			} else {
 				this.mayReturnPromise = true
 				if (isAsyncStandardSchema(schema)) this.isAsync = true
+				codecs.push(false)
+				hasDefaults.push(false)
+				tbSchemas.push(null)
+				asyncMembers.push(null)
 			}
 		}
 
-		if (typeboxObjects)
-			schemas.push(
-				Compile(
-					applyCoercions(Intersect(typeboxObjects), options?.coerces)
+		if (typeboxObjects) {
+			const rawMerged = Intersect(typeboxObjects)
+			let coercedMerged = applyCoercions(rawMerged, options?.coerces)
+
+			if (shouldClose)
+				coercedMerged = nonAdditionalProperties(
+					coercedMerged as any
+				) as TSchema
+
+			const compiled = Compile(coercedMerged)
+			schemas.push(compiled as any)
+
+			codecs.push(HasCodec(coercedMerged))
+			const hd = typeboxObjects.some((s) =>
+				hasProperty('default', s as any)
+			)
+			hasDefaults.push(hd)
+			tbSchemas.push(hd ? coercedMerged : null)
+
+			const isAsync =
+				(compiled as any).buildResult?.external?.variables?.some(
+					isAsyncPredicate
+				) ?? false
+
+			if (isAsync) {
+				this.isAsync = true
+				asyncMembers.push(
+					Validator.create(rawMerged as TSchema, {
+						coerces: options?.coerces,
+						normalize: options?.normalize,
+						models: options?.models,
+						sanitize: options?.sanitize
+					})! as unknown as TypeBoxValidator
 				)
-			)
+			} else asyncMembers.push(null)
+		}
 
-		this.#schemas = schemas
-
-		const codecs: boolean[] = []
-		for (let i = 0; i < schemas.length; i++)
-			codecs.push(
-				'~standard' in schemas[i]
-					? false
-					: HasCodec(
-							(
-								schemas[
-									i
-								] as unknown as CompiledTypeBoxValidator
-							).Type()
-						)
-			)
-
+		this.#schemas = schemas as (
+			| CompiledTypeBoxValidator
+			| StandardSchemaV1Like
+		)[]
 		this.#codecs = codecs
+		this.#hasDefaults = hasDefaults
+		this.#tbSchemas = tbSchemas
+		this.#asyncMembers = asyncMembers
 	}
 
 	static #merge(
@@ -447,13 +530,15 @@ export class MultiValidator extends Validator {
 				continue
 			}
 
+			const compiled = validator as CompiledTypeBoxValidator
+
 			if (!this.#codecs[i]) {
-				if (!(validator as TypeBoxValidator).Check(value)) return false
+				if (!compiled.Check(value)) return false
 				continue
 			}
 
 			try {
-				;(validator as TypeBoxValidator).Decode(value)
+				;(compiled as any).Decode(value)
 			} catch {
 				return false
 			}
@@ -472,7 +557,10 @@ export class MultiValidator extends Validator {
 					value
 				).issues
 				if (issues) errors.push(...issues)
-			} else errors.push(...(schema as TypeBoxValidator).Errors(value))
+			} else
+				errors.push(
+					...(schema as CompiledTypeBoxValidator).Errors(value)
+				)
 
 		return errors
 	}
@@ -488,7 +576,7 @@ export class MultiValidator extends Validator {
 				'~standard' in validator
 					? MultiValidator.#syncStandard(validator, value).value
 					: this.#decodeMember(
-							validator as TypeBoxValidator,
+							validator as CompiledTypeBoxValidator,
 							i,
 							value
 						)
@@ -498,11 +586,16 @@ export class MultiValidator extends Validator {
 		return snapshot!
 	}
 
-	#decodeMember(validator: TypeBoxValidator, index: number, value: unknown) {
+	#decodeMember(
+		compiled: CompiledTypeBoxValidator,
+		index: number,
+		value: unknown
+	) {
 		const v = this.#cloneForMember(value)
+
 		return this.#codecs[index]
-			? (validator as any).Clean((validator as any).Decode(v))
-			: (validator as any).Clean(v)
+			? (compiled as any).Clean((compiled as any).Decode(v))
+			: (compiled as any).Clean(v)
 	}
 
 	#cloneForMember(value: unknown) {
@@ -518,33 +611,41 @@ export class MultiValidator extends Validator {
 	}
 
 	#fromTypeBox(
-		validator: TypeBoxValidator,
+		compiled: CompiledTypeBoxValidator,
 		index: number,
 		value: unknown,
 		type?: string
 	): unknown {
-		if (this.#codecs[index]) {
+		let v = this.#cloneForMember(value)
+
+		if (this.#hasDefaults[index])
+			v = (compiled as any).Default
+				? (compiled as any).Default(v)
+				: Default(this.#tbSchemas[index]!, v)
+
+		if (this.#codecs[index])
 			try {
-				return (validator as any).Clean(
-					(validator as any).Decode(this.#cloneForMember(value))
-				)
+				return (compiled as any).Clean((compiled as any).Decode(v))
 			} catch {
-				throw new ValidationError(
-					type,
-					value,
-					() => (validator as TypeBoxValidator).Errors(value)
+				throw new ValidationError(type, value, () =>
+					(compiled as CompiledTypeBoxValidator).Errors(value)
 				)
 			}
-		}
 
-		if (!(validator as TypeBoxValidator).Check(value))
-			throw new ValidationError(
-				type,
-				value,
-				() => (validator as TypeBoxValidator).Errors(value)
+		if (!(compiled as CompiledTypeBoxValidator).Check(v))
+			throw new ValidationError(type, value, () =>
+				(compiled as CompiledTypeBoxValidator).Errors(v)
 			)
 
-		return (validator as any).Clean(this.#cloneForMember(value))
+		return (compiled as any).Clean(v)
+	}
+
+	#fromTypeBoxAsync(
+		tbv: TypeBoxValidator,
+		value: unknown,
+		type?: string
+	): Promise<unknown> {
+		return (tbv as any).FromAsync(this.#cloneForMember(value), type)
 	}
 
 	From(
@@ -597,9 +698,31 @@ export class MultiValidator extends Validator {
 				continue
 			}
 
+			const asyncTbv = this.#asyncMembers[i]
+			if (asyncTbv) {
+				if (!allowAsync) throw asyncStandardSchemaError()
+
+				return this.#fromTypeBoxAsync(asyncTbv, value, type).then(
+					// eslint-disable-next-line sonarjs/function-inside-loop
+					(result) =>
+						this.#fromLoop(
+							value,
+							i + 1,
+							MultiValidator.#merge(snapshot, result),
+							type,
+							allowAsync
+						)
+				)
+			}
+
 			snapshot = MultiValidator.#merge(
 				snapshot,
-				this.#fromTypeBox(validator as TypeBoxValidator, i, value, type)
+				this.#fromTypeBox(
+					validator as CompiledTypeBoxValidator,
+					i,
+					value,
+					type
+				)
 			)
 		}
 

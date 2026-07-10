@@ -144,11 +144,30 @@ export const BunAdapter = createAdapter({
 		const serve = _config ? { ..._config, ..._options } : _options
 		const server = (app.server = Bun.serve(serve))
 
+		// Run setup callbacks. If any returns a promise, the server is not
+		// ready until it settles, so the user's `listen` callback (their
+		// readiness signal) must not fire until every setup task completes.
+		// When all setups are synchronous, keep the original synchronous
+		// callback timing.
 		const onSetup = app['~ext']?.setup
-		if (onSetup) for (let i = 0; i < onSetup.length; i++) onSetup[i](app)
+		let setupReady: Promise<unknown> | undefined
+		if (onSetup) {
+			let pendingSetups: Promise<unknown>[] | undefined
+			for (let i = 0; i < onSetup.length; i++) {
+				const result = onSetup[i](app)
+				if (result && typeof (result as Promise<unknown>).then === 'function')
+					(pendingSetups ??= []).push(result as Promise<unknown>)
+			}
+			if (pendingSetups) setupReady = Promise.all(pendingSetups)
+		}
 
 		const hasWs = app['~hasWS']
-		if (!hasWs) callback?.(app.server!)
+		if (!hasWs) {
+			if (callback) {
+				if (setupReady) setupReady.then(() => callback(app.server!))
+				else callback(app.server!)
+			}
+		}
 
 		queueMicrotask(() => {
 			if (app.server !== server) return
@@ -204,7 +223,10 @@ export const BunAdapter = createAdapter({
 
 			flushMemory()
 
-			if (hasWs) callback?.(app.server!)
+			if (hasWs && callback) {
+				if (setupReady) setupReady.then(() => callback(app.server!))
+				else callback(app.server!)
+			}
 		})
 	}
 })

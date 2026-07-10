@@ -490,9 +490,14 @@ export function createFetchHandler(
 
 				try {
 					for (let i = 0; i < onRequests.length; i++) {
-						const result = asyncIndexes?.[i]
+						let result = asyncIndexes?.[i]
 							? await onRequests[i](context)
 							: onRequests[i](context)
+
+						// A hook may synchronously return a Promise the
+						// heuristic didn't flag; await it before deciding
+						// short-circuit vs continue.
+						if (result instanceof Promise) result = await result
 
 						if (aborted) return emptyResponse.clone() as Response
 

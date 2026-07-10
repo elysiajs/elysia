@@ -3,6 +3,7 @@ import {
 	beginValidatorCapture,
 	endValidatorCapture,
 	endHandlerCapture,
+	abortCapture,
 	Capture,
 	Compiled,
 	type CapturedValidator,
@@ -133,6 +134,7 @@ export async function captureArtifacts(
 		}
 	} finally {
 		setCaptureHeaderShorthand(undefined)
+		abortCapture()
 
 		if (previousAotBuild === undefined) delete env.ELYSIA_AOT_BUILD
 		else env.ELYSIA_AOT_BUILD = previousAotBuild
