@@ -92,6 +92,52 @@ describe('mapResponse — header merge (C1)', () => {
 	})
 })
 
+describe('mapResponse — Response and framework cookie union (B10)', () => {
+	for (const count of [0, 1, 2, 3])
+		it(`preserves the Response cookie with ${count} framework cookies`, () => {
+			const original = new Response('hi', {
+				headers: { 'set-cookie': 'origin=1' }
+			})
+			const cookie = Object.fromEntries(
+				Array.from({ length: count }, (_, index) => [
+					`framework${index}`,
+					{ value: String(index) }
+				])
+			)
+			const res = mapResponse(original, {
+				headers: {},
+				...(count ? { cookie } : {})
+			} as any)
+
+			expect(res.headers.getSetCookie()).toEqual([
+				'origin=1',
+				...Array.from(
+					{ length: count },
+					(_, index) => `framework${index}=${index}`
+				)
+			])
+			expect(original.headers.getSetCookie()).toEqual(['origin=1'])
+		})
+
+	it('does not duplicate an exact cookie when a mapped Response is mapped again', () => {
+		const set = {
+			headers: new Headers({ 'set-cookie': 'framework=1' })
+		} as any
+		const once = mapResponse(
+			new Response('hi', {
+				headers: { 'set-cookie': 'origin=1' }
+			}),
+			set
+		)
+		const twice = mapResponse(once, set)
+
+		expect(twice.headers.getSetCookie()).toEqual([
+			'origin=1',
+			'framework=1'
+		])
+	})
+})
+
 // C1: a `Response.body` is a one-shot ReadableStream. When a shared/module-level
 // Response is returned from a header-setting route, the rewrap must TEE the body
 // (via `response.clone().body`) so every request gets a fresh readable and the

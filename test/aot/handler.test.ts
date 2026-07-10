@@ -93,6 +93,49 @@ describe('AOT handler freeze', () => {
 		await expect(jit.json()).resolves.toEqual({ ok: true, n: 5 })
 	})
 
+	it('binds runtime isProduction when reconstructing the error tail', async () => {
+		const previousNodeEnv = process.env.NODE_ENV
+		const buildError = () =>
+			new Elysia()
+				.error(() => {})
+				.get('/status', () => {
+					const error: any = new Error('upstream unavailable')
+					error.status = 503
+					throw error
+				})
+
+		try {
+			process.env.NODE_ENV = 'development'
+			;(buildError() as any).compile()
+			const handlers = endHandlerCapture()
+			endValidatorCapture()
+
+			expect(handlers).toHaveLength(1)
+			expect(handlers[0]!.alias.split(',')).toContain('isprod')
+			Compiled.handlers = materialiseHandlers(handlers)
+
+			delete process.env.ELYSIA_AOT_BUILD
+			const frozen = buildError()
+			;(frozen as any).compile()
+
+			const development = await frozen.handle(req('/status'))
+			expect(development.status).toBe(503)
+			await expect(development.text()).resolves.toBe(
+				'upstream unavailable'
+			)
+
+			process.env.NODE_ENV = 'production'
+			const production = await frozen.handle(req('/status'))
+			expect(production.status).toBe(503)
+			await expect(production.text()).resolves.toBe(
+				'Internal Server Error'
+			)
+		} finally {
+			if (previousNodeEnv === undefined) delete process.env.NODE_ENV
+			else process.env.NODE_ENV = previousNodeEnv
+		}
+	})
+
 	it('trusts the manifest alias and fails loud on a corrupt one', () => {
 		;(build() as any).compile()
 		const handlers = endHandlerCapture()
@@ -111,6 +154,59 @@ describe('AOT handler freeze', () => {
 		expect(() => (build() as any).compile()).toThrow(
 			/Fail to reconstruct build/
 		)
+	})
+})
+
+describe('AOT duplicate route parity', () => {
+	it('captures the same final dynamic route that runtime dispatches', async () => {
+		const make = () =>
+			new Elysia()
+				.post(
+					'/u/:id',
+					{ body: t.Object({ a: t.String() }) },
+					({ body }: any) => `first:${body.a}`
+				)
+				.post(
+					'/u/:id',
+					{ body: t.Object({ b: t.Number() }) },
+					({ body }: any) => `second:${body.b}`
+				)
+
+		;(make() as any).compile()
+		const handlers = endHandlerCapture()
+		const validators = endValidatorCapture()
+
+		Compiled.validators = materialise(validators)
+		Compiled.handlers = materialiseHandlers(handlers)
+		Validator.clear()
+
+		delete process.env.ELYSIA_AOT_BUILD
+		const frozen = make().compile()
+		const frozenValid = await frozen.handle(post('/u/1', { b: 1 }))
+		const frozenOld = await frozen.handle(post('/u/1', { a: 'old' }))
+		const frozenResult = {
+			status: frozenValid.status,
+			body: await frozenValid.text(),
+			oldStatus: frozenOld.status
+		}
+
+		Compiled.clear()
+		Validator.clear()
+		const plain = make().compile()
+		const plainValid = await plain.handle(post('/u/1', { b: 1 }))
+		const plainOld = await plain.handle(post('/u/1', { a: 'old' }))
+		const plainResult = {
+			status: plainValid.status,
+			body: await plainValid.text(),
+			oldStatus: plainOld.status
+		}
+
+		expect(frozenResult).toEqual(plainResult)
+		expect(frozenResult).toEqual({
+			status: 200,
+			body: 'second:1',
+			oldStatus: 422
+		})
 	})
 })
 

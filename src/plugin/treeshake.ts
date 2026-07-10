@@ -100,10 +100,9 @@ export function rewriteTypeImport(
 
 	if (!code.includes(from)) return code
 
-	// `import <clause> from 'elysia'` at line start; skip `import type ...`.
-	// The trailing `(\\s*(?:with|assert)\\s*\\{[^}]*\\})?` consumes an optional
+	// Only match import clauses that can contain a named `t` binding
 	const importRe = new RegExp(
-		`(^|\\n)([ \\t]*)import\\s+(?!type\\b)([\\s\\S]*?)\\s+from\\s*(['"])${escape(from)}\\4(\\s*(?:with|assert)\\s*\\{[^}]*\\})?`,
+		`(^|\\n)([ \\t]*)import\\s+(?!type\\b)((?:[A-Za-z_$][\\w$]*\\s*,\\s*)?\\{[^}]*\\})\\s+from\\s*(['"])${escape(from)}\\4(\\s*(?:with|assert)\\s*\\{[^}]*\\})?`,
 		'g'
 	)
 
@@ -125,8 +124,12 @@ export function rewriteTypeImport(
 		if (braceEnd === -1) continue
 
 		const before = clause.slice(0, braceStart).trim() // default import, e.g. "Default,"
-		const members = clause
-			.slice(braceStart + 1, braceEnd)
+		const memberSource = clause.slice(braceStart + 1, braceEnd)
+		// Commas inside comments or string-named imports are not member separators.
+		// Leave complex-but-valid imports untouched instead of guessing.
+		if (/['"`]|\/\/|\/\*/.test(memberSource)) continue
+
+		const members = memberSource
 			.split(',')
 			.map((x) => x.trim())
 			.filter(Boolean)

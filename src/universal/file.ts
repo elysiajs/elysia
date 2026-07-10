@@ -84,11 +84,10 @@ function warnMissing(name?: string) {
 }
 
 export class ElysiaFile {
-	readonly value: unknown
-	readonly stats: ReturnType<typeof Stat> | undefined
+	readonly #value?: BunFile
 
 	constructor(public path: string) {
-		if (isBun) this.value = Bun.file(path)
+		if (isBun) this.#value = Bun.file(path)
 		else {
 			// Browser
 			// @ts-ignore
@@ -120,15 +119,37 @@ export class ElysiaFile {
 				createReadStream = fs.createReadStream
 				stat = fs.promises.stat
 			}
-
-			const stream = createReadStream(path)
-			stream.on?.('error', () => {})
-			this.value = stream
-
-			const stats = stat(path)!
-			stats?.catch?.(() => {})
-			this.stats = stats
 		}
+	}
+
+	get stats() {
+		if (isBun || !stat) return
+
+		const value = stat(this.path)
+		value.catch(() => {})
+
+		return value
+	}
+
+	get value() {
+		if (isBun) return this.#value
+
+		const stream = createReadStream?.(this.path)
+		stream?.on?.('error', () => {})
+
+		return stream
+	}
+
+	slice(start: number, end: number) {
+		if (isBun) return this.#value?.slice(start, end)
+
+		const stream = createReadStream?.(this.path, {
+			start,
+			end: end - 1
+		})
+		stream?.on?.('error', () => {})
+
+		return stream
 	}
 
 	get type() {
@@ -139,8 +160,11 @@ export class ElysiaFile {
 	}
 
 	get length() {
-		if (isBun) return (this.value as BunFile).size
+		if (isBun) return this.#value!.size
 
-		return this.stats?.then((x) => x.size) ?? 0
+		const value = this.stats?.then((x) => x.size)
+		value?.catch(() => {})
+
+		return value ?? 0
 	}
 }

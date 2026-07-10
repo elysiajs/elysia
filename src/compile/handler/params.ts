@@ -69,7 +69,7 @@ export const HANDLER_PARAMS: Record<string, Resolver> = {
 	emp: () => emptyResponse,
 	// H22 runtime 5xx-message mask: resolves to the isProduction FUNCTION so the
 	// codegen's `isprod()` reflects runtime NODE_ENV (not baked at build time).
-	isprod: isProduction,
+	isprod: () => isProduction,
 	// allowUnsafeValidationDetails opt-in: `e instanceof verr` in the error catch
 	verr: () => ValidationError,
 	tee: () => tee,

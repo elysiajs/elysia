@@ -6368,14 +6368,98 @@ export class Elysia<
 	#routerBuilt = false
 	#buildRouter() {
 		if (!this.#history || this.#routerBuilt) return
-		this.#routerBuilt = true
+
+		const previousMap = this['~map']
+		const previousRouter = this['~router']
+		const previousCompiled = this.#compiled
+		const previousHasDynamicWS = this['~hasDynamicWS']
+		const config = this['~config'] as any
+		const hadWebsocket = !!config && Object.hasOwn(config, 'websocket')
+		const previousWebsocket = config?.websocket
+		const websocketSnapshot =
+			previousWebsocket && typeof previousWebsocket === 'object'
+				? { ...previousWebsocket }
+				: previousWebsocket
+
+		this['~map'] = undefined
+		this['~router'] = undefined
+		this.#compiled = previousCompiled?.slice()
+		this['~hasDynamicWS'] = undefined
+
+		try {
+			this.#buildRouterUnsafe()
+
+			const nextMap = this['~map']
+			if (previousMap && nextMap !== previousMap) {
+				Object.assign(previousMap, nextMap)
+				this['~map'] = previousMap
+			}
+
+			const nextRouter = this['~router']
+			if (previousRouter && nextRouter && nextRouter !== previousRouter) {
+				Object.assign(previousRouter, nextRouter)
+				this['~router'] = previousRouter
+			}
+
+			this.#routerBuilt = true
+		} catch (error) {
+			this['~map'] = previousMap
+			this['~router'] = previousRouter
+			this.#compiled = previousCompiled
+			this['~hasDynamicWS'] = previousHasDynamicWS
+
+			if (config) {
+				this['~config'] = config
+				if (hadWebsocket) config.websocket = websocketSnapshot
+				else delete config.websocket
+			} else this['~config'] = undefined
+
+			throw error
+		}
+	}
+
+	#buildRouterUnsafe() {
 
 		const precompile = this['~config']?.precompile
 		const enableAutoHead = this['~config']?.autoHead === true
 
 		this.#initMap()
 		const methods = this['~map']!
-		const length = this.#history.length
+		const length = this.#history!.length
+		let hasDuplicate = false
+		const effective = new Map<string, Map<string, number>>()
+
+		for (let i = 0; i < length; i++) {
+			const route = this.#history![i]
+			const method = route[0]
+			let byPath = effective.get(method)
+			if (!byPath) effective.set(method, (byPath = new Map()))
+
+			const previous = byPath.get(route[1])
+
+			if (this.#routeMayHaveModelRef(route))
+				this.#assertRouteModelRefs(route, method)
+
+			if (previous !== undefined) {
+				hasDuplicate = true
+				const earlier = this.#history![previous]
+
+				if (
+					!isProduction() &&
+					(earlier[2] !== route[2] ||
+						earlier[3] !== route[3] ||
+						earlier[4] !== route[4] ||
+						earlier[5] !== route[5] ||
+						earlier[6] !== route[6] ||
+						earlier[7] !== route[7])
+				)
+					console.warn(
+						`[Elysia] Duplicate route ${method} ${route[1]} — the later definition overrides the earlier one (its schema/hooks are dropped).`
+					)
+			}
+
+			byPath.set(route[1], i)
+		}
 
 		const wrapHeadHandler = Elysia.#wrapHeadHandler
 		const isLoose = this['~config']?.strictPath !== true
@@ -6411,8 +6495,11 @@ export class Elysia<
 			const method = route[0]
 			const path = route[1]
 
-			if (this.#routeMayHaveModelRef(route))
-				this.#assertRouteModelRefs(route, method)
+			if (
+				hasDuplicate &&
+				effective.get(method)!.get(path) !== i
+			)
+				continue
 
 			if ((route[0] as any) === 'WS') {
 				const ws = buildWSRoute(route, this)

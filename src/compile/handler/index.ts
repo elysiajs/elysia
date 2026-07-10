@@ -1,6 +1,8 @@
 import type { AnyElysia } from '../../base'
 
 import { defaultAdapter } from '../../adapter/constants'
+import { ElysiaFile } from '../../universal/file'
+import { isBun } from '../../universal/constants'
 
 import { Compiled } from '../aot'
 import { resolveHandlerParams } from './params'
@@ -644,7 +646,11 @@ export function compileHandler(
 
 	const isHandleFunction = typeof handler === 'function'
 	if (precomputedStatic) handler = precomputedStatic
-	else if (!isHandleFunction && !(handler instanceof Promise)) {
+	else if (
+		!isHandleFunction &&
+		!(handler instanceof Promise) &&
+		!(!isBun && handler instanceof ElysiaFile)
+	) {
 		const rootHeaders = root['~ext']?.headers
 
 		const set = {

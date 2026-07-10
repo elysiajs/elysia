@@ -2,6 +2,11 @@ import { describe, it, expect } from 'bun:test'
 
 import { rewriteTypeImport } from '../../src/plugin/treeshake'
 
+const expectToParse = (source: string) =>
+	expect(() =>
+		new Bun.Transpiler({ loader: 'ts' }).transformSync(source)
+	).not.toThrow()
+
 /**
  * The AOT tree-shake transform rewrites `import { t } from 'elysia'` →
  * `import * as t from 'elysia/type'`. `elysia/type` is 1:1 with `t`, so the
@@ -62,9 +67,48 @@ describe('AOT tree-shake transform', () => {
 		).toBe(`import * as t from '@scope/api/type'\nt.Object()`)
 	})
 
-	// M37: the transform runs on es-module-lexer spans, not a regex — text
-	// that merely LOOKS like an import must never be rewritten, or the
-	// transform silently corrupts user code (docs generators, fixtures, ...)
+	it.each([
+		['side-effect', `import './setup'`],
+		['default', `import Default from './default'`],
+		['namespace', `import * as helpers from './helpers'`],
+		['type-only', `import type { Context } from './context'`],
+		['named', `import { value } from './named'`],
+		['default-plus-named', `import Default, { value } from './mixed'`]
+	])('does not consume a preceding %s import', async (_, prefix) => {
+		const out = await rewriteTypeImport(
+			`${prefix}\nimport { Elysia, t } from 'elysia'\nt.String()`
+		)
+
+		expect(out).toStartWith(`${prefix}\nimport { Elysia } from 'elysia'`)
+		expectToParse(out)
+	})
+
+	it('rewrites default-plus-named and multiline imports without corrupting syntax', async () => {
+		const out = await rewriteTypeImport(`import ElysiaDefault, {
+	Elysia,
+	type Context,
+	t as schema
+} from 'elysia'
+schema.String()`)
+
+		expect(out).toContain(
+			`import ElysiaDefault, { Elysia, type Context } from 'elysia'\nimport * as schema from 'elysia/type'`
+		)
+		expectToParse(out)
+	})
+
+	it.each([
+		['commented', `import { /* keep, comma */ Elysia, t } from 'elysia'`],
+		['string-named', `import { 'x,y' as x, t } from 'elysia'`]
+	])('leaves %s complex valid named imports untouched', async (_, source) => {
+		const out = await rewriteTypeImport(source)
+
+		expect(out).toBe(source)
+		expectToParse(out)
+	})
+
+	// Import-shaped text that merely LOOKS like an import must never be
+	// rewritten, or the transform silently corrupts user code.
 	it('never rewrites import-shaped text inside a template literal', async () => {
 		const doc = "const doc = `\nimport { t } from 'elysia'\n`\nexport {}"
 		expect(await rewriteTypeImport(doc)).toBe(doc)

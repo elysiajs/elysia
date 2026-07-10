@@ -5,11 +5,10 @@ import { req } from '../utils'
 /**
  * Phase-2 ROUTING cluster pins (design/fable-tasks.md — M16 / L11 / L1 / M8 / M34).
  *
- * Current dispatch mechanism (verified at authoring time): plain object lookup.
- * Static routes live in `~map[METHOD][path] = handler` (last-wins, overwrites);
- * dynamic routes live in a Memoirist trie whose `add` is FIRST-wins (only writes
- * `node.store` when `=== null`). All assertions below are on WIRE behaviour so
- * the Bun-only suite cannot fake a pass.
+ * Exact duplicates are canonicalized before static-map or Memoirist emission,
+ * so both route shapes obey the same last-registration-wins contract. All
+ * assertions below are on WIRE behaviour so the Bun-only suite cannot fake a
+ * pass.
  */
 
 describe('M16 — duplicate route precedence is last-wins for BOTH static and dynamic', () => {
@@ -20,6 +19,15 @@ describe('M16 — duplicate route precedence is last-wins for BOTH static and dy
 
 		expect(await (await app.handle(req('/s'))).text()).toBe('second')
 	})
+
+	for (const precompile of [false, true])
+		it(`dynamic duplicate keeps the LAST handler (precompile=${precompile})`, async () => {
+			const app = new Elysia({ precompile })
+				.get('/u/:id', () => 'first')
+				.get('/u/:id', () => 'second')
+
+			expect(await (await app.handle(req('/u/1'))).text()).toBe('second')
+		})
 })
 
 describe('L11 — a loose alias never clobbers an explicitly-registered sibling (default config)', () => {
@@ -273,6 +281,35 @@ describe('M34 — unknown model-name schema refs fail loud at build time, not pe
 		)
 
 		expect(() => app.compile()).not.toThrow()
+	})
+
+	it('a failed lazy build stays loud and can recover without partial routes', async () => {
+		const app = new Elysia()
+			.get('/ok', () => 'ok')
+			.get('/bad', { query: 'Missing' as any }, () => 'bad')
+
+		expect(() => app.fetch).toThrow(/Missing/)
+		expect(() => app.fetch).toThrow(/Missing/)
+		await expect(app.handle(req('/ok'))).rejects.toThrow(/Missing/)
+		expect(() => app.compile()).toThrow(/Missing/)
+
+		app.model({ Missing: t.Object({}) })
+		expect(() => app.compile()).not.toThrow()
+		expect(await (await app.handle(req('/ok'))).text()).toBe('ok')
+		expect(await (await app.handle(req('/bad'))).text()).toBe('bad')
+	})
+
+	it('an eager compile failure cannot expose earlier partial routes', () => {
+		const app = new Elysia()
+			.get('/ok', () => 'ok')
+			.get(
+				'/bad',
+				{ headers: { 'x-a': '1' } } as any,
+				'hello' as any
+			)
+
+		expect(() => app.compile()).toThrow(/Failed to compile route GET \/bad/)
+		expect(() => app.fetch).toThrow(/Failed to compile route GET \/bad/)
 	})
 })
 

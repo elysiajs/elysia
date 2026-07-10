@@ -15,13 +15,6 @@ const DEFAULT_GC_TIME = 1 * 60 * 1000
 
 export class TypeBoxValidatorCache {
 	private static EMPTY = nullObject() as {}
-	private static ignoreKeys = new Set([
-		'title',
-		'description',
-		'tags',
-		'examples',
-		'defaultValue'
-	])
 	private static fnIds = new WeakMap<Function, number>()
 	private static nextFnId = 0
 
@@ -34,8 +27,7 @@ export class TypeBoxValidatorCache {
 		return `<fn:${id}>`
 	}
 
-	static ignoreMeta(k: string, v: unknown): any {
-		if (TypeBoxValidatorCache.ignoreKeys.has(k)) return
+	private static serializeKey(_k: string, v: unknown): any {
 		if (typeof v === 'function') return TypeBoxValidatorCache.fnKey(v)
 
 		if (v && typeof v === 'object' && (v as any)['~optional'] === true) {
@@ -112,7 +104,7 @@ export class TypeBoxValidatorCache {
 			hasRef: TypeBoxValidatorCache.#containsRef(schema),
 			key: special
 				? ''
-				: JSON.stringify(schema, TypeBoxValidatorCache.ignoreMeta)
+				: JSON.stringify(schema, TypeBoxValidatorCache.serializeKey)
 		}
 
 		this.#lastSchema = schema

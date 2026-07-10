@@ -35,22 +35,23 @@ function handleElysiaFile(
 	const headers = set.headers
 	if (contentType) headers['content-type'] = contentType
 
-	if (
-		file.stats &&
-		set.status !== 206 &&
-		set.status !== 304 &&
-		set.status !== 412 &&
-		set.status !== 416
-	)
-		return file.stats!.then((stat) => {
+	const stats = file.stats
+	if (stats)
+		return stats.then((stat) => {
 			const size = stat.size as number
 
-			if (size !== undefined) {
+			if (
+				size !== undefined &&
+				set.status !== 206 &&
+				set.status !== 304 &&
+				set.status !== 412 &&
+				set.status !== 416
+			) {
 				headers['content-range'] = `bytes 0-${size - 1}/${size}`
 				headers['content-length'] = size
 			}
 
-			return handleFile(file.value as any, set, request)
+			return handleFile(file, set, request, size)
 		}) as any
 
 	return handleFile(file.value as any, set, request)

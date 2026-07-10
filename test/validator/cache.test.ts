@@ -4,6 +4,7 @@ import { Type } from 'typebox'
 import { Elysia, t } from '../../src'
 import { post } from '../utils'
 import { TypeBoxValidatorCache } from '../../src/type/validator'
+import { Validator } from '../../src/validator'
 
 // F12: the module-level validator cache used to strongly retain every
 // validator forever (string key → WeakMap keyed by immortal coercion
@@ -129,5 +130,55 @@ describe('TypeBoxValidatorCache models identity (C11)', () => {
 		expect(
 			(await numberApp.handle(post('/x', { nested: { v: 'x' } }))).status
 		).toBe(422)
+	})
+})
+
+describe('TypeBoxValidatorCache metadata-named properties (B01)', () => {
+	const metadataNames = [
+		'title',
+		'description',
+		'tags',
+		'examples',
+		'defaultValue'
+	] as const
+	const validator = (tag: number) => ({ tag }) as any
+
+	it('keeps real property names in the structural key', () => {
+		for (const name of metadataNames) {
+			const cache = new TypeBoxValidatorCache(60_000)
+			cache.set(
+				Type.Object({ [name]: Type.String() }),
+				undefined,
+				validator(1)
+			)
+
+			expect(
+				cache.get(Type.Object({ [name]: Type.Number() }))
+			).toBeUndefined()
+		}
+	})
+
+	it('does not reuse nested validators in either construction order', () => {
+		for (const name of metadataNames)
+			for (const stringFirst of [true, false]) {
+				Validator.clear()
+				const schema = (value: any) =>
+					t.Object({ nested: t.Object({ [name]: value }) })
+				const first = Validator.create(
+					schema(stringFirst ? t.String() : t.Number())
+				)
+				const second = Validator.create(
+					schema(stringFirst ? t.Number() : t.String())
+				)
+				const stringValidator = stringFirst ? first : second
+				const numberValidator = stringFirst ? second : first
+				const stringBody = { nested: { [name]: 'correct' } }
+				const numberBody = { nested: { [name]: 1 } }
+
+				expect(stringValidator.Check(stringBody)).toBe(true)
+				expect(stringValidator.Check(numberBody)).toBe(false)
+				expect(numberValidator.Check(numberBody)).toBe(true)
+				expect(numberValidator.Check(stringBody)).toBe(false)
+			}
 	})
 })

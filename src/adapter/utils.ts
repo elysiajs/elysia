@@ -3,6 +3,7 @@ import { StatusMap } from '../constants'
 
 import { serializeCookie } from '../cookie/serialize'
 import { isBun, hasHeaderShorthand } from '../universal/constants'
+import type { ElysiaFile } from '../universal/file'
 import type { Context } from '../context'
 
 import { skipClone } from './skip-clone'
@@ -16,14 +17,15 @@ const textEncoder = new TextEncoder()
 const encodeChunk = (s: string): Uint8Array => textEncoder.encode(s)
 
 export function handleFile(
-	response: File | Blob,
+	response: File | Blob | ElysiaFile,
 	set?: Context['set'],
-	request?: Request
+	request?: Request,
+	size = (response as File | Blob).size
 ): Response {
 	if (!isBun && response instanceof Promise)
-		return response.then((res) => handleFile(res, set, request)) as any
-
-	const size = response.size
+		return response.then((res) =>
+			handleFile(res, set, request, size)
+		) as any
 
 	const rangeHeader = request?.headers.get('range')
 	if (rangeHeader) {
@@ -69,9 +71,6 @@ export function handleFile(
 				'content-length': String(contentLength)
 			})
 
-			// Blob.slice() exists at runtime but is absent from the ESNext lib typings
-			// (no DOM lib). Cast through unknown to the minimal interface we need.
-			// Pass response.type as third arg so the sliced blob preserves MIME type.
 			return new Response(
 				(
 					response as unknown as {
@@ -79,9 +78,9 @@ export function handleFile(
 							start: number,
 							end: number,
 							contentType?: string
-						): Blob
+						): unknown
 					}
-				).slice(start, end + 1, response.type),
+				).slice(start, end + 1, response.type) as any,
 				{
 					status: 206,
 					headers: mergeHeaders(
@@ -92,6 +91,8 @@ export function handleFile(
 			)
 		}
 	}
+
+	const body = 'value' in response ? response.value : response
 
 	const immutable =
 		set &&
@@ -109,10 +110,10 @@ export function handleFile(
 					: undefined
 			} as Record<string, string>)
 
-	if (!set && !size) return new Response(response as Blob)
+	if (!set && !size) return new Response(body as Blob)
 
 	if (!set)
-		return new Response(response as Blob, {
+		return new Response(body as Blob, {
 			headers: defaultHeader
 		})
 
@@ -126,16 +127,16 @@ export function handleFile(
 			set.headers.delete('accept-ranges')
 		}
 
-		return new Response(response as Blob, set as any)
+		return new Response(body as Blob, set as any)
 	}
 
 	if (isNotEmpty(set.headers))
-		return new Response(response as Blob, {
+		return new Response(body as Blob, {
 			status: set.status as number,
 			headers: Object.assign(defaultHeader, set.headers)
 		})
 
-	return new Response(response as Blob, {
+	return new Response(body as Blob, {
 		status: set.status as number,
 		headers: defaultHeader
 	})
@@ -390,7 +391,9 @@ export function createStreamHandler({
 					)
 				}
 			else
-				controller.enqueue(encodeChunk(format((value as any).toString())))
+				controller.enqueue(
+					encodeChunk(format((value as any).toString()))
+				)
 		}
 
 		return new Response(
@@ -502,20 +505,33 @@ function applySetHeaders(
 	setHeaders: Context['set']['headers'],
 	present: Headers
 ) {
-	if (setHeaders instanceof Headers)
-		for (const key of setHeaders.keys()) {
-			if (key === setCookie) {
-				if (target.has(setCookie)) continue
-
-				for (const cookie of setHeaders.getSetCookie())
+	if (setHeaders instanceof Headers) {
+		const incoming = setHeaders.getSetCookie()
+		if (incoming.length) {
+			const cookies = target.getSetCookie()
+			for (const cookie of incoming)
+				if (!cookies.includes(cookie)) {
 					target.append(setCookie, cookie)
-			} else if (!present.has(key))
-				target.set(key, setHeaders.get(key) ?? '')
+					cookies.push(cookie)
+				}
 		}
-	else
+
+		for (const key of setHeaders.keys())
+			if (key !== setCookie && !present.has(key))
+				target.set(key, setHeaders.get(key) ?? '')
+	} else {
+		let cookies: string[] | undefined
 		for (const key in setHeaders)
-			if (key === setCookie) target.append(key, setHeaders[key] as any)
-			else if (!present.has(key)) target.set(key, setHeaders[key] as any)
+			if (key === setCookie) {
+				const cookie = setHeaders[key] as string
+				cookies ??= target.getSetCookie()
+				if (!cookies.includes(cookie)) {
+					target.append(key, cookie)
+					cookies.push(cookie)
+				}
+			} else if (!present.has(key))
+				target.set(key, setHeaders[key] as any)
+	}
 }
 
 function mergeHeaders(
