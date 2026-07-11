@@ -6699,6 +6699,113 @@ export default class Elysia<
 	}
 
 	/**
+	 * ### query
+	 * Register handler for path with method [QUERY]
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * import { Elysia, t } from 'elysia'
+	 *
+	 * new Elysia()
+	 *     .query('/', () => 'hi')
+	 *     .query('/with-hook', () => 'hi', {
+	 *         response: t.String()
+	 *     })
+	 * ```
+	 */
+	query<
+		const Path extends string,
+		const Input extends Metadata['macro'] &
+			InputSchema<keyof Definitions['typebox'] & string>,
+		const Schema extends IntersectIfObjectSchema<
+			MergeSchema<
+				UnwrapRoute<
+					Input,
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>
+			>,
+			Metadata['standaloneSchema'] &
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema']
+		>,
+		const Decorator extends Singleton & {
+			derive: Ephemeral['derive'] & Volatile['derive']
+			resolve: Ephemeral['resolve'] & Volatile['resolve']
+		},
+		const MacroContext extends {} extends Metadata['macroFn']
+			? {}
+			: MacroToContext<
+					Metadata['macroFn'],
+					Omit<Input, NonResolvableMacroKey>,
+					Definitions['typebox']
+				>,
+		const Handle extends InlineHandler<
+			NoInfer<Schema>,
+			NoInfer<Decorator>,
+			// @ts-ignore
+			MacroContext
+		>
+	>(
+		path: Path,
+		handler: Handle,
+		hook?: LocalHook<
+			Input,
+			// @ts-ignore
+			Schema & MacroContext,
+			Decorator,
+			Definitions['error'],
+			keyof Metadata['parser']
+		>
+	): Elysia<
+		BasePath,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes &
+			CreateEden<
+				JoinPath<BasePath, Path>,
+				{
+					query: CreateEdenResponse<
+						Path,
+						Schema,
+						MacroContext,
+						ComposeElysiaResponse<
+							Schema &
+								MacroContext &
+								Metadata['standaloneSchema'] &
+								Ephemeral['standaloneSchema'] &
+								Volatile['standaloneSchema'],
+							Handle,
+							UnionResponseStatus<
+								Metadata['response'],
+								UnionResponseStatus<
+									Ephemeral['response'],
+									UnionResponseStatus<
+										Volatile['response'],
+										// @ts-ignore
+										MacroContext['return'] & {}
+									>
+								>
+							>
+						>
+					>
+				}
+			>,
+		Ephemeral,
+		Volatile
+	> {
+		this.add('QUERY', path, handler as any, hook)
+
+		return this as any
+	}
+
+	/**
 	 * ### route
 	 * Register handler for path with method [ROUTE]
 	 *
