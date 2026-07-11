@@ -60,8 +60,8 @@ describe('abort short-circuit', () => {
 
 		const app = new Elysia()
 			.request(async () => {
-				// Signal listener fires at a micro-task boundary; abort here so that
-				// by the time the mid-loop check runs, aborted === true.
+				// Bun exposes the aborted flag synchronously, so the post-hook read
+				// observes this abort directly.
 				controller.abort()
 				await Promise.resolve()
 			})

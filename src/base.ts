@@ -146,6 +146,10 @@ interface StaticMapAliases {
 
 const emptyHistory = Object.freeze([]) as readonly HistoryEntry[]
 
+const canRegisterLoose = (path: string, isDynamic: boolean) =>
+	!isDynamic &&
+	(path.length === 0 || path.charCodeAt(path.length - 1) === 47)
+
 export class Elysia<
 	const in out BasePath extends string = '',
 	const in out Scope extends EventScope = 'local',
@@ -6540,24 +6544,32 @@ export class Elysia<
 
 		const isLoose = this['~config']?.strictPath !== true
 
-		let explicitPaths: Map<string, Set<string>> | undefined
-		if (isLoose) explicitPaths = new Map()
-
+		let hasLooseCandidate = false
 		if (isLoose)
+			for (let i = 0; i < length; i++) {
+				const path = routes[i][1]
+				if (canRegisterLoose(path, isDynamicRegex.test(path))) {
+					hasLooseCandidate = true
+					break
+				}
+			}
+
+		let explicitPaths: Map<string, Set<string>> | undefined
+		if (hasLooseCandidate) explicitPaths = new Map()
+
+		if (explicitPaths)
 			for (let i = 0; i < length; i++) {
 				const route = routes[i]
 				const m = route[0]
 				const p = route[1]
 
-				if (explicitPaths) {
-					let set = explicitPaths.get(m)
-					if (!set) explicitPaths.set(m, (set = new Set()))
+				let set = explicitPaths.get(m)
+				if (!set) explicitPaths.set(m, (set = new Set()))
 
-					set.add(p)
-					if (needEncodeRegex.test(p)) {
-						const encoded = encodeURI(p)
-						if (encoded !== p) set.add(encoded)
-					}
+				set.add(p)
+				if (needEncodeRegex.test(p)) {
+					const encoded = encodeURI(p)
+					if (encoded !== p) set.add(encoded)
 				}
 			}
 
@@ -6619,9 +6631,7 @@ export class Elysia<
 			const isDynamic = isDynamicRegex.test(path)
 			const needsEncode = needEncodeRegex.test(path)
 			const registerLoose =
-				!isDynamic &&
-				isLoose &&
-				(path.length === 0 || path.charCodeAt(path.length - 1) === 47)
+				isLoose && canRegisterLoose(path, isDynamic)
 
 			const explicitMain = registerLoose
 				? explicitPaths?.get(method)

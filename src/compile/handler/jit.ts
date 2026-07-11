@@ -485,7 +485,11 @@ export function compileHandlerJit({
 		hasMapResponse ||
 		hasErrorHook ||
 		hasAfterResponse
-	const abortCheck = hasLifecycleHook ? `if(aborted)return emp.clone()\n` : ''
+
+	const abortExpression = 'c.request.signal.aborted'
+	const abortCheck = hasLifecycleHook
+		? `if(${abortExpression})return emp.clone()\n`
+		: ''
 
 	const tracePhases = hasTrace
 		? unionTracePhases(traceHandlers as Function[])
@@ -662,10 +666,7 @@ export function compileHandlerJit({
 
 	if (hasLifecycleHook) {
 		link(emptyResponse, 'emp')
-		code +=
-			`let aborted=c.request.signal.aborted\n` +
-			`if(!aborted)c.request.signal.addEventListener('abort',()=>{aborted=true},{once:true})\n` +
-			abortCheck
+		code += abortCheck
 	}
 
 	if ((hasAfterResponse || hasTrace) && !syncAfterResponse)
@@ -763,7 +764,7 @@ export function compileHandlerJit({
 			code += mapTransform(
 				hook!.transform!,
 				[isAsync, buildReport('transform')],
-				'aborted'
+				abortExpression
 			)
 		}
 		code += endTrace('transform')
@@ -956,10 +957,10 @@ export function compileHandlerJit({
 						link,
 						isAsync,
 						buildReport('beforeHandle'),
-						'aborted'
+						abortExpression
 					)
 					code += beforeHandlePrefix
-						? `if(!aborted&&_r===undefined){\n${mapped}}\n`
+						? `if(!${abortExpression}&&_r===undefined){\n${mapped}}\n`
 						: mapped
 				}
 			}
@@ -1057,7 +1058,7 @@ export function compileHandlerJit({
 						hook!.afterHandle!,
 						isAsync,
 						buildReport('afterHandle'),
-						'aborted'
+						abortExpression
 					)
 				}
 				code += endTrace('afterHandle')
@@ -1073,7 +1074,7 @@ export function compileHandlerJit({
 						hook!.mapResponse!,
 						isAsync,
 						buildReport('mapResponse'),
-						'aborted'
+						abortExpression
 					)
 				}
 				code += endTrace('mapResponse')
@@ -1112,7 +1113,7 @@ export function compileHandlerJit({
 				: `${map}(_r,c.request)`
 
 			if (syncErrorHook)
-				code += `if(_r instanceof Promise)return ${finalMap}.catch((_e)=>_ce(_e,c,aborted))\n`
+				code += `if(_r instanceof Promise)return ${finalMap}.catch((_e)=>_ce(_e,c))\n`
 			code += `return ${finalMap}\n`
 		}
 	} else if (isHandleFunction) {
@@ -1127,7 +1128,7 @@ export function compileHandlerJit({
 			(isAsync
 				? `return ${map}(_r,${mapArgs})\n`
 				: syncErrorHook
-					? `if(_r instanceof Promise)return ${map}(_r.then(fe),${mapArgs}).catch((_e)=>_ce(_e,c,aborted))\n` +
+					? `if(_r instanceof Promise)return ${map}(_r.then(fe),${mapArgs}).catch((_e)=>_ce(_e,c))\n` +
 						`return ${map}(_r,${mapArgs})\n`
 					: `if(_r instanceof Promise)_r=_r.then(fe)\n` +
 						`return ${map}(_r,${mapArgs})\n`)
@@ -1186,7 +1187,7 @@ export function compileHandlerJit({
 									hook!.mapResponse!,
 									isAsync,
 									undefined,
-									'aborted'
+									abortExpression
 								)
 							: '') +
 							endTrace('error') +
@@ -1195,7 +1196,7 @@ export function compileHandlerJit({
 						signPrefix,
 						isAsync
 					],
-					'aborted'
+					abortExpression
 				) +
 				endTrace('error') +
 				abortCheck +
@@ -1213,8 +1214,8 @@ export function compileHandlerJit({
 		}
 
 		if (syncErrorHook) {
-			factoryHelpers += `function _ce(e,c,aborted){\n${body}}\n`
-			code += `}catch(e){return _ce(e,c,aborted)}\n`
+			factoryHelpers += `function _ce(e,c){\n${body}}\n`
+			code += `}catch(e){return _ce(e,c)}\n`
 		} else code += `}catch(e){\n${body}}\n`
 	}
 

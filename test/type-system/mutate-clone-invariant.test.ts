@@ -1,6 +1,8 @@
 import Elysia, { t } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { Value } from 'typebox/value'
+import { flushMemory } from '../../src/memory'
+import { SHARED_REFERENCE_CACHE_LIMIT } from '../../src/type/elysia/utils'
 import { req } from '../utils'
 
 // D1 mutate-vs-clone invariant (design/mutate-clone-invariant.md):
@@ -186,6 +188,44 @@ describe('D1 mutate-clone invariant', () => {
 			expect((a as any).format).toBe('email')
 			// cached singleton — identity stable, and not the caller's bag
 			expect(t.String({ format: 'email' })).toBe(a)
+			expect(Object.isFrozen(a)).toBe(true)
+		})
+
+		it('evicts the least recently used string format', () => {
+			flushMemory()
+			const prefix = 'd1-string-format-lru-'
+			const hot = t.String({ format: `${prefix}hot` })
+			const cold = t.String({ format: `${prefix}cold` })
+
+			for (let i = 2; i < SHARED_REFERENCE_CACHE_LIMIT; i++)
+				t.String({ format: `${prefix}${i}` })
+
+			expect(t.String({ format: `${prefix}hot` })).toBe(hot)
+			const newest = t.String({ format: `${prefix}newest` })
+
+			expect(t.String({ format: `${prefix}hot` })).toBe(hot)
+			expect(t.String({ format: `${prefix}newest` })).toBe(newest)
+			expect(t.String({ format: `${prefix}cold` })).not.toBe(cold)
+		})
+
+		it('flushes formatted strings without changing their schema', () => {
+			flushMemory()
+			const options = { format: 'd1-string-format-flush' }
+			const before = t.String(options)
+
+			flushMemory()
+			const after = t.String(options)
+
+			expect(after).toEqual(before)
+			expect(after).not.toBe(before)
+		})
+
+		it('keeps the no-options string singleton across flushes', () => {
+			const before = t.String()
+
+			flushMemory()
+
+			expect(t.String()).toBe(before)
 		})
 
 		it('no-options singleton fast paths still work', () => {

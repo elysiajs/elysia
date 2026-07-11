@@ -17,6 +17,14 @@ const build = {
 			for (let i = 0; i < n; i++) app.get(`/${i}`, () => 'ok')
 			return app
 		},
+	staticFnLooseCandidate:
+		(config?: any): Build =>
+		(n) => {
+			const app = new Elysia(config)
+			for (let i = 0; i < n; i++)
+				app.get(i === 0 ? '/0/' : `/${i}`, () => 'ok')
+			return app
+		},
 	staticLiteral:
 		(config?: any): Build =>
 		(n) => {
@@ -36,6 +44,10 @@ const build = {
 
 const configurations: [label: string, make: Build][] = [
 	['lazy static-fn  (structural)', build.staticFn()],
+	[
+		'lazy static-fn loose candidate',
+		build.staticFnLooseCandidate()
+	],
 	['precompile static-fn', build.staticFn({ precompile: true })],
 	['lazy static-fn strictPath', build.staticFn({ strictPath: true })],
 	['lazy static-literal (+nativeStatic)', build.staticLiteral()],
@@ -71,10 +83,13 @@ function measure(label: string, make: Build) {
 
 void build.staticFn()(sizes[0]).fetch
 const rows = configurations.map(([label, make]) => measure(label, make))
-const staticLazy = rows[0]!.nsPerRoute
-const staticPrecompiled = rows[1]!.nsPerRoute
-const staticLiteral = rows[3]!.nsPerRoute
-const dynamic = rows[5]!.nsPerRoute
+const byLabel = new Map(rows.map((row) => [row.label, row]))
+const staticLazy = byLabel.get('lazy static-fn  (structural)')!.nsPerRoute
+const staticPrecompiled = byLabel.get('precompile static-fn')!.nsPerRoute
+const staticLiteral = byLabel.get(
+	'lazy static-literal (+nativeStatic)'
+)!.nsPerRoute
+const dynamic = byLabel.get('lazy dynamic    (trie insert)')!.nsPerRoute
 const breakdown = {
 	handlerJitNsPerRoute: staticPrecompiled - staticLazy,
 	structuralNsPerRoute: staticLazy,

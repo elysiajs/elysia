@@ -305,7 +305,8 @@ describe('request abort short-circuits lifecycle hooks', () => {
 			plain
 		).toString()
 
-		expect(plainSrc).not.toContain('aborted')
+		expect(plainSrc).not.toContain('.signal.aborted')
+		expect(plainSrc).not.toContain("addEventListener('abort'")
 		expect(plainSrc).not.toContain('emp.clone()')
 
 		const hooked = new Elysia()
@@ -316,7 +317,8 @@ describe('request abort short-circuits lifecycle hooks', () => {
 			hooked
 		).toString()
 
-		expect(hookedSrc).toContain('addEventListener')
+		expect(hookedSrc).toContain('.signal.aborted')
+		expect(hookedSrc).not.toContain("addEventListener('abort'")
 		expect(hookedSrc).toContain('emp.clone()')
 	})
 

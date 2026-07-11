@@ -47,7 +47,12 @@ export function elyType<T extends TSchema>(
 /** @internal */
 export const SHARED_REFERENCE_CACHE_LIMIT = 1024
 
-const sharedReferenceCaches = new Set<Map<number, any>>()
+const sharedReferenceCaches = new Set<Map<number, any> | Map<string, any>>()
+
+/** @internal */
+export function referenceCache(cache: Map<number, any> | Map<string, any>) {
+	sharedReferenceCaches.add(cache)
+}
 
 /** @internal */
 export function clearSharedReferenceCaches() {
@@ -59,7 +64,7 @@ export function createSharedReference<
 	const T extends TSchema
 >(createType: (property: P) => T) {
 	const shared = new Map<number, { key: string; schema: T }>()
-	sharedReferenceCaches.add(shared)
+	referenceCache(shared)
 
 	return (property: P): T => {
 		const hash = propertyChecksum(property)

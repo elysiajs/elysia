@@ -42,6 +42,7 @@ metric. Historical snapshots under `reference/` are diagnostic and non-gating.
 | `throughput.ts`              | full/manual         | Mitata request-path distributions           |
 | `run.ts`                     | support             | Serial structured runner                    |
 | `apply-plugin.ts`            | manual/experimental | Plugin absorption cost                      |
+| `abort-lifecycle.ts`         | manual/experimental | Lifecycle abort-listener overhead           |
 | `cold-start.ts`              | manual/experimental | Warm-module app construction latency        |
 | `compile-distinct-schema.ts` | manual/experimental | Distinct-schema compilation                 |
 | `compile-with-schema.ts`     | manual/experimental | Shared-schema compilation                   |
@@ -56,6 +57,7 @@ metric. Historical snapshots under `reference/` are diagnostic and non-gating.
 | `route-dynamic.ts`           | manual/experimental | Dynamic route registration/build            |
 | `route.ts`                   | manual/experimental | Static route registration                   |
 | `schema.ts`                  | manual/experimental | Large schema construction                   |
+| `string-format-cache.ts`     | manual/experimental | Formatted-string schema cache retention     |
 | `sucrose.ts`                 | manual/experimental | Sucrose inference caching                   |
 | `upsort-bench.ts`            | manual/experimental | TypeBox union priority sorting              |
 | `utils.ts`                   | support             | GC, memory, median, and environment helpers |

@@ -2,9 +2,12 @@ import { String } from 'typebox/type'
 import type { TString, TStringOptions } from 'typebox'
 
 import { noEnumerable } from '../constants'
+import { referenceCache, SHARED_REFERENCE_CACHE_LIMIT } from './utils'
 
 const emptyString = Object.freeze(String())
-const stringFormatCache: Record<string, TString> = Object.create(null)
+const stringFormatCache = new Map<string, TString>()
+referenceCache(stringFormatCache)
+
 export function StringType(options?: TStringOptions): TString {
 	if (!options) return emptyString
 
@@ -12,10 +15,19 @@ export function StringType(options?: TStringOptions): TString {
 	if (!totalOptions) return emptyString
 
 	if (totalOptions === 1 && options.format) {
-		if (options.format in stringFormatCache)
-			return stringFormatCache[options.format]
+		const cached = stringFormatCache.get(options.format)
+		if (cached) {
+			stringFormatCache.delete(options.format)
+			stringFormatCache.set(options.format, cached)
+			return cached
+		}
 
-		return (stringFormatCache[options.format] = Object.freeze(
+		if (stringFormatCache.size >= SHARED_REFERENCE_CACHE_LIMIT) {
+			const oldest = stringFormatCache.keys().next()
+			if (!oldest.done) stringFormatCache.delete(oldest.value)
+		}
+
+		const schema = Object.freeze(
 			Object.defineProperty(
 				{
 					type: 'string',
@@ -25,7 +37,9 @@ export function StringType(options?: TStringOptions): TString {
 				'~kind',
 				noEnumerable
 			) as any as TString
-		))
+		)
+		stringFormatCache.set(options.format, schema)
+		return schema
 	}
 
 	const schema = { ...options, type: 'string', '~kind': 'String' }

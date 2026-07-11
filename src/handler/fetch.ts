@@ -346,16 +346,8 @@ export function createFetchHandler(
 
 		return async (request: Request): Promise<Response> => {
 			const context = new Context(request)
-			let aborted = request.signal.aborted
-			if (!aborted)
-				request.signal.addEventListener(
-					'abort',
-					() => {
-						aborted = true
-					},
-					{ once: true }
-				)
-			if (aborted) return emptyResponse.clone() as Response
+			if (request.signal.aborted)
+				return emptyResponse.clone() as Response
 
 			const url = request.url,
 				s = url.indexOf('/', pathStart)
@@ -409,7 +401,7 @@ export function createFetchHandler(
 
 					for (let i = 0; i < traceLength; i++) endReports[i]?.()
 
-					if (aborted) {
+					if (request.signal.aborted) {
 						for (let j = 0; j < traceLength; j++)
 							trace[j].r(requestReports[j])
 
@@ -465,16 +457,8 @@ export function createFetchHandler(
 		if (asyncIndexes)
 			return async (request: Request): Promise<Response> => {
 				const context = new Context(request)
-				let aborted = request.signal.aborted
-				if (!aborted)
-					request.signal.addEventListener(
-						'abort',
-						() => {
-							aborted = true
-						},
-						{ once: true }
-					)
-				if (aborted) return emptyResponse.clone() as Response
+				if (request.signal.aborted)
+					return emptyResponse.clone() as Response
 
 				const url = request.url,
 					s = url.indexOf('/', pathStart)
@@ -499,7 +483,8 @@ export function createFetchHandler(
 						// short-circuit vs continue.
 						if (result instanceof Promise) result = await result
 
-						if (aborted) return emptyResponse.clone() as Response
+						if (request.signal.aborted)
+							return emptyResponse.clone() as Response
 
 						if (result !== undefined) {
 							const response = mapResponse(
@@ -536,16 +521,8 @@ export function createFetchHandler(
 
 		return (request: Request): MaybePromise<Response> => {
 			const context = new Context(request)
-			let aborted = request.signal.aborted
-			if (!aborted)
-				request.signal.addEventListener(
-					'abort',
-					() => {
-						aborted = true
-					},
-					{ once: true }
-				)
-			if (aborted) return emptyResponse.clone() as Response
+			if (request.signal.aborted)
+				return emptyResponse.clone() as Response
 
 			const url = request.url,
 				s = url.indexOf('/', pathStart)
@@ -562,7 +539,8 @@ export function createFetchHandler(
 			try {
 				for (let i = 0; i < onRequests.length; i++) {
 					const result = onRequests[i](context)
-					if (aborted) return emptyResponse.clone() as Response
+					if (request.signal.aborted)
+						return emptyResponse.clone() as Response
 
 					if (result !== undefined) {
 						const response = mapResponse(
