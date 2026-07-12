@@ -6553,17 +6553,6 @@ export class Elysia<
 				this.#assertRouteModelRefs(route, route[0])
 		}
 
-		// Duplicate `(method, path)` registration is the user's responsibility;
-		// no dedup pass here (it cost a full extra loop + Set on every build to
-		// catch a rare mistake). LAST registration wins uniformly: the static
-		// map and AOT manifest overwrite, and Memoirist >= 1.2.0 overwrites the
-		// terminal store on a repeat add — so static and dynamic duplicates,
-		// JIT and AOT, all resolve to the last handler. Different methods,
-		// `WS` vs HTTP, and distinct declared paths (`/x` vs `/x/`, literal vs
-		// param) key differently below — never duplicates.
-		// Manifest binding is carried by `~programId` (each app only reads the
-		// program bound to its own id). The fingerprint is the framework-compat
-		// `abi` guard only — O(1), no per-route identity.
 		if (length)
 			Compiled.claim(
 				this['~programId'],
