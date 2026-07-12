@@ -75,7 +75,11 @@ export interface ElysiaAdapterOptions {
 		) => MaybePromise<Record<string, string | string[]>>
 		arrayBuffer: (context: Context) => MaybePromise<ArrayBuffer>
 		formData: (context: Context) => MaybePromise<Record<string, unknown>>
-		default: (context: Context, contentType: string) => MaybePromise<any>
+		default: (
+			context: Context,
+			contentType: string,
+			normalized?: boolean
+		) => MaybePromise<any>
 	}
 	response: {
 		/**

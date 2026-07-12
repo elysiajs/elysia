@@ -291,4 +291,77 @@ describe('Map Response', () => {
 		expect(value).toBe('ok')
 		expect(response.headers.get('x-powered-by')).toBe('Elysia')
 	})
+
+	// C14 / A9: request() early-return must run mapResponse hooks.
+	// Before the fix, mapResponse was called without context so hooks were skipped.
+	it('runs mapResponse when request hook short-circuits (sync path)', async () => {
+		let called = false
+
+		const app = new Elysia()
+			.request(() => 'early')
+			.mapResponse(() => {
+				called = true
+			})
+			.get('/', () => 'unreachable')
+
+		await app.handle(req('/'))
+		expect(called).toBe(true)
+	})
+
+	it('runs mapResponse when request hook short-circuits (async path)', async () => {
+		let called = false
+
+		const app = new Elysia()
+			.request(async () => 'early')
+			.mapResponse(() => {
+				called = true
+			})
+			.get('/', () => 'unreachable')
+
+		await app.handle(req('/'))
+		expect(called).toBe(true)
+	})
+
+	it('mapResponse hook can transform the early-return value from request hook', async () => {
+		const app = new Elysia()
+			.request(() => 'raw')
+			.mapResponse(({ responseValue }) => {
+				if (responseValue === 'raw') return new Response('mapped')
+			})
+			.get('/', () => 'unreachable')
+
+		const res = await app.handle(req('/'))
+		expect(await res.text()).toBe('mapped')
+	})
+
+	it('request hook early-return: mapResponse hook sees responseValue', async () => {
+		let seen: unknown
+
+		const app = new Elysia()
+			.request(() => ({ key: 'val' }))
+			.mapResponse(({ responseValue }) => {
+				seen = responseValue
+			})
+			.get('/', () => 'unreachable')
+
+		await app.handle(req('/'))
+		expect(seen).toEqual({ key: 'val' })
+	})
+
+	it('runs mapResponse on request hook short-circuit with trace active', async () => {
+		let called = false
+
+		const app = new Elysia()
+			.trace(({ onRequest }) => {
+				onRequest(() => {})
+			})
+			.request(() => 'early')
+			.mapResponse(() => {
+				called = true
+			})
+			.get('/', () => 'unreachable')
+
+		await app.handle(req('/'))
+		expect(called).toBe(true)
+	})
 })

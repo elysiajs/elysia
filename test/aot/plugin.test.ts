@@ -11,7 +11,8 @@ const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/aot.ts')
 
 describe('AOT plugin', () => {
 	it('generateCompiledModule emits a self-registering manifest', async () => {
-		const { generateCompiledModule } = await import('../../src/plugin/aot/core')
+		const { generateCompiledModule } =
+			await import('../../src/plugin/aot/core')
 		const previous = process.env.ELYSIA_AOT_BUILD
 		process.env.ELYSIA_AOT_BUILD = 'keep'
 		const log = spyOn(console, 'log').mockImplementation(() => {})
@@ -31,7 +32,7 @@ describe('AOT plugin', () => {
 
 		// small app → emit stays eager (auto-lazy only kicks in for large apps)
 		expect(src).toContain('export const validators')
-		expect(src).toContain('Compiled.validators = validators')
+		expect(src).toContain('Compiled.register({ bf: 1, fingerprint')
 		// This fixture's schemas (plain object/number/string) compile to inlined
 		// checks referencing no typebox runtime symbol, so the manifest pulls in
 		// zero typebox subpaths. Imports are conditional — see the dedicated test.
@@ -61,7 +62,11 @@ describe('AOT plugin', () => {
 
 		// plain object/number inlines its guard → still no typebox runtime import
 		const simple = await manifest(
-			new Elysia().post('/n', { body: t.Object({ v: t.Number() }) }, () => 'ok')
+			new Elysia().post(
+				'/n',
+				{ body: t.Object({ v: t.Number() }) },
+				() => 'ok'
+			)
 		)
 		expect(simple).not.toContain("from 'typebox/")
 
@@ -90,7 +95,11 @@ describe('AOT plugin', () => {
 		const hashing = await manifest(
 			new Elysia().post(
 				'/u',
-				{ body: t.Object({ v: t.Array(t.Number(), { uniqueItems: true }) }) },
+				{
+					body: t.Object({
+						v: t.Array(t.Number(), { uniqueItems: true })
+					})
+				},
 				() => 'ok'
 			)
 		)
@@ -104,15 +113,21 @@ describe('AOT plugin', () => {
 
 		try {
 			delete process.env.ELYSIA_AOT_BUILD
-			await compileToSource(new Elysia().get('/x', () => 'x'), {
-				register: false
-			})
+			await compileToSource(
+				new Elysia().get('/x', () => 'x'),
+				{
+					register: false
+				}
+			)
 			expect(process.env.ELYSIA_AOT_BUILD).toBeUndefined()
 
 			process.env.ELYSIA_AOT_BUILD = 'keep'
-			await compileToSource(new Elysia().get('/y', () => 'y'), {
-				register: false
-			})
+			await compileToSource(
+				new Elysia().get('/y', () => 'y'),
+				{
+					register: false
+				}
+			)
 			expect(process.env.ELYSIA_AOT_BUILD).toBe('keep')
 		} finally {
 			if (previous === undefined) delete process.env.ELYSIA_AOT_BUILD
@@ -132,7 +147,7 @@ describe('AOT plugin', () => {
 		expect(result.success).toBe(true)
 		const out = await result.outputs[0]!.text()
 		// the frozen manifest was inlined and self-registers (zero user wiring)
-		expect(out).toContain('.validators =')
+		expect(out).toContain('.register({')
 		expect(out).toContain('"/body"')
 		// a real check factory body, not the `undefined` stub
 		expect(out).toContain('CheckContext')
@@ -155,8 +170,8 @@ describe('AOT plugin', () => {
 
 		const out = result.outputFiles![0]!.text
 		// frozen manifest inlined + self-registers (validators AND handlers)
-		expect(out).toContain('.validators =')
-		expect(out).toContain('.handlers =')
+		expect(out).toContain('.register({')
+		expect(out).toContain('handlers:')
 		expect(out).toContain('"/body"')
 		// real check + handler factory bodies, not the `undefined` stub
 		expect(out).toContain('CheckContext')

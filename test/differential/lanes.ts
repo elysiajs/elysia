@@ -188,8 +188,8 @@ export const nativeStaticOff = listenLane('native-static-off', {
 
 // Evaluate a generated manifest module in-process. The module's top imports are
 // stripped; `Compiled`, `Reconstruct`, and `buildCoercedFromPlan` are injected
-// as function parameters so its `Compiled.validators = …` assignments land on
-// the SAME `Compiled` singleton the reconstructed app reads from.
+// as function parameters so its `Compiled.register(…)` call lands on the SAME
+// `Compiled` singleton the reconstructed app reads from.
 const evalManifest = (source: string): void => {
 	const body = source
 		.replace(/^import .*$/gm, '')
@@ -221,6 +221,7 @@ const evalManifest = (source: string): void => {
 // | Compiled.lazyGroups / lazyGroupOf        | A     | Compiled.snapshot()/restore()                      |
 // | Compiled.builtGroups (Set)               | A     | Compiled.snapshot()/restore() (copied in/out)      |
 // | Compiled.planRebuilder                   | A     | Compiled.snapshot()/restore()                      |
+// | Compiled pending/claimed app programs    | A     | Compiled.snapshot()/restore()                      |
 // | Compiled.reconstruct (reconstructImpl)   | B*    | idempotent install of the SAME pure Reconstruct    |
 // |                                          |       | table; already installed at module load by         |
 // |                                          |       | aot-capture; re-install is a byte-identical no-op.  |

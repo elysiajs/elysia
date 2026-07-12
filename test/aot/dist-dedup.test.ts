@@ -8,9 +8,8 @@ import * as esbuild from 'esbuild'
  * runtime into the bundle alongside the ESM one the app already resolves.
  *
  * WHY this file exists (intent, not just behavior):
- *  The sucrose stub (`STUB_SOURCES.sucrose`) replaces `memory.(mjs|js|ts)` with a
- *  trimmed `flushMemory` that keeps three relative imports (`./context`,
- *  `./universal/constants`, `./validator`). Those specifiers are extensionless.
+ *  A strip stub with extensionless relative imports could resolve from an ESM
+ *  module to sibling CJS `.js` files.
  *  esbuild's node resolver, seeing elysia's `package.json` has no
  *  `"type":"module"`, defaults an extensionless bare-relative specifier to the
  *  sibling CJS `.js` — so the stub dragged a whole duplicate CJS subtree
@@ -42,7 +41,7 @@ const APP = resolve(import.meta.dir, 'fixtures/dist-dedup-app.ts')
 const isElysiaDist = (path: string): boolean =>
 	/(^|[\\/])dist[\\/].*\.(m?js)$/.test(path) && !path.includes('typebox')
 
-async function buildInputs(): Promise<string[]> {
+async function buildBundle() {
 	// dist plugin so the captured app shares the elysia instance the fixture's
 	// bare `elysia` import resolves to (see the file header for why).
 	const { aot } = await import('elysia/plugin/aot/esbuild')
@@ -63,12 +62,15 @@ async function buildInputs(): Promise<string[]> {
 		([path]) => !path.endsWith('.map')
 	)!
 
-	return Object.keys(output[1].inputs)
+	return {
+		inputs: Object.keys(output[1].inputs),
+		code: result.outputFiles[0]!.text
+	}
 }
 
 describe('AOT plugin — no duplicate CJS elysia copy', () => {
 	it('never retains an elysia dist module under both .js and .mjs', async () => {
-		const inputs = await buildInputs()
+		const { inputs } = await buildBundle()
 
 		// group elysia dist modules by their extensionless base path
 		const extsByBase = new Map<string, Set<string>>()
@@ -89,7 +91,7 @@ describe('AOT plugin — no duplicate CJS elysia copy', () => {
 	})
 
 	it('pulls zero CommonJS (.js) elysia dist modules into an ESM bundle', async () => {
-		const inputs = await buildInputs()
+		const { inputs, code } = await buildBundle()
 
 		const cjs = inputs.filter(
 			(path) => isElysiaDist(path) && path.endsWith('.js')
@@ -100,10 +102,11 @@ describe('AOT plugin — no duplicate CJS elysia copy', () => {
 		expect(cjs).toEqual([])
 
 		// sanity: the ESM copy IS present (so the test can't pass by resolving
-		// nothing) and the sucrose stub actually fired (the module it replaces)
+		// nothing), real sucrose is absent, and a strip-stubbed module is present
 		expect(inputs.some((p) => /(^|[\\/])dist[\\/].*\.mjs$/.test(p))).toBe(true)
-		expect(inputs.some((p) => /(^|[\\/])dist[\\/]memory\.mjs$/.test(p))).toBe(
-			true
+		expect(inputs.some((p) => /(^|[\\/])dist[\\/]sucrose\.mjs$/.test(p))).toBe(
+			false
 		)
+		expect(code).toContain('[elysia-aot] trace support was stripped')
 	})
 })

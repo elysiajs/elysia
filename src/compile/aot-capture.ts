@@ -21,7 +21,10 @@ import {
 	buildObjectDefaultMergeSource,
 	verifyPreallocatableDefault
 } from '../type/validator/default-precompute'
-import { isCapturedBridgeFree } from './handler/frozen-validator'
+import {
+	isCapturedBridgeFree,
+	isCompactDiagnosable
+} from './handler/frozen-validator'
 import { isAsyncPredicate } from '../type/validator/index'
 import {
 	captureMirrorCodecs,
@@ -261,6 +264,29 @@ function captureCodecMirror(
 	} catch {}
 }
 
+// sealed slots whose schema carries a coercion/codec node
+const compactErrorWarned = new Set<string>()
+
+// @internal test isolation — a fresh process starts empty (once per build)
+export function resetCompactErrorWarnings() {
+	compactErrorWarned.clear()
+}
+
+function warnCompactErrorLoss(
+	aot: { method: string; path: string },
+	slot: ValidatorSlot
+) {
+	const key = `${aot.method}\0${aot.path}\0${slot}`
+	if (compactErrorWarned.has(key)) return
+	compactErrorWarned.add(key)
+
+	console.warn(
+		`[elysia-aot]: sealed validator for ${aot.method} ${aot.path} (${slot}) ` +
+			`carries a coercion/codec schema; its 422 error detail will name the ` +
+			`offending field coarsely (best-effort) instead.`
+	)
+}
+
 function captureBridgeFree(
 	aot: { method: string; path: string },
 	slot: ValidatorSlot,
@@ -272,22 +298,22 @@ function captureBridgeFree(
 		slot
 	})
 
-	if (captured)
+	if (captured) {
+		const coerced =
+			captured.coercePlan && typeof rawSchema !== 'string'
+				? buildCoercedFromPlan(rawSchema as any, captured.coercePlan)
+				: rawSchema
+
+		const bridgeFree = isCapturedBridgeFree(captured, rawSchema, coerced)
+
 		Capture.set(
 			{ method: aot.method, path: aot.path, slot },
-			{
-				bridgeFree: isCapturedBridgeFree(
-					captured,
-					rawSchema,
-					captured.coercePlan && typeof rawSchema !== 'string'
-						? buildCoercedFromPlan(
-								rawSchema as any,
-								captured.coercePlan
-							)
-						: rawSchema
-				)
-			}
+			{ bridgeFree }
 		)
+
+		if (bridgeFree && !isCompactDiagnosable(coerced))
+			warnCompactErrorLoss(aot, slot)
+	}
 }
 
 const impl: CaptureImpl = {

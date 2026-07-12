@@ -1,9 +1,67 @@
 import { describe, expect, it } from 'bun:test'
 
 import { Elysia, t } from '../../src'
+import { TypeBoxValidator } from '../../src/type/validator'
 import { post } from '../utils'
 
 describe('Sanitize', () => {
+	it('sanitizes fully-closed bodies like open bodies', async () => {
+		const sanitize = (value: unknown) =>
+			typeof value === 'string' ? value.replaceAll('<', '&lt;') : value
+		const app = new Elysia({ sanitize })
+			.post(
+				'/closed',
+				{
+					body: t.Object(
+						{ value: t.String() },
+						{ additionalProperties: false }
+					)
+				},
+				({ body }) => body
+			)
+			.post(
+				'/open',
+				{
+					body: t.Object(
+						{ value: t.String() },
+						{ additionalProperties: true }
+					)
+				},
+				({ body }) => body
+			)
+
+		const responses = await Promise.all(
+			['/closed', '/open'].map((path) =>
+				app
+					.handle(post(path, { value: '<script>' }))
+					.then((x) => x.json())
+			)
+		)
+
+		expect(responses).toEqual([
+			{ value: '&lt;script>' },
+			{ value: '&lt;script>' }
+		])
+	})
+
+	it('sanitizes a fully-closed body through FromAsync', async () => {
+		const validator = new TypeBoxValidator(
+			t.Object({ value: t.String() }, { additionalProperties: false }),
+			{
+				sanitize: (value) =>
+					typeof value === 'string'
+						? value.replaceAll('<', '&lt;')
+						: value
+			}
+		)
+
+		await expect(
+			validator.FromAsync({ value: '<script>' })
+		).resolves.toEqual({
+			value: '&lt;script>'
+		})
+	})
+
 	it('handle single sanitize', async () => {
 		const app = new Elysia({
 			sanitize: (v) => (v === 'a' ? 'ok' : v)

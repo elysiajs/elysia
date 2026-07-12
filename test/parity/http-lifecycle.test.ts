@@ -292,21 +292,19 @@ describe('HTTP lifecycle parity (per-route JIT + root dispatcher)', () => {
 	})
 
 	// ------------------------------------------------------------------
-	// INTENDED (maintainer 2026-07-06): `.request()` is a REQUEST-LEVEL hook. Its
-	// early-return short-circuits before routing, so route-level hooks — including
-	// `mapResponse` — do NOT run. A per-route handler return DOES run mapResponse;
-	// a `.request()` early-return deliberately does not, because it never enters
-	// the route lifecycle. fetch.ts calls `mapResponse(result, context.set)` with
-	// no `context` arg (fetch.ts:406/471/521); the mapResponse wrapper's
-	// `if (!context) return baseMapResponse(...)` guard (fetch.ts:220) then skips
-	// the entire hook chain. So the same string value gets wrapped by a mapResponse
-	// hook when returned from a route, but intentionally NOT when returned from
-	// `.request()`.
+	// A9 / C14 (plan.md 2026-07-12): `.request()` early-return DOES run mapResponse.
 	//
-	// This asserts the intended contract: request-level early returns must not run
-	// route-level hooks. Not a divergence — a deliberate design boundary.
+	// Prior to A9 the `.request()` early-return called `mapResponse(result, set)`
+	// without the `context` arg (fetch.ts ~line 418/498/556), so the wrapper's
+	// `if (!context) return baseMapResponse(...)` guard skipped the hook chain.
+	// A9 fixes this by passing `context` in all three short-circuit paths.
+	//
+	// This replaces the previous "INTENDED (maintainer 2026-07-06)" test that
+	// asserted the opposite contract. The plan (2026-07-12, post Sol peer review)
+	// supersedes that earlier decision: every terminal now goes through the
+	// mapping tail exactly once. The conflict is surfaced here per Rule 7.
 	// ------------------------------------------------------------------
-	it('INTENDED (maintainer 2026-07-06): .request() early-return is request-level; route-level hooks (mapResponse) do not run', async () => {
+	it('A9/C14: .request() early-return runs mapResponse hooks', async () => {
 		const ran: string[] = []
 		const app = new Elysia()
 			// `.request()` context exposes `path` at runtime; the PreContext type
@@ -330,10 +328,9 @@ describe('HTTP lifecycle parity (per-route JIT + root dispatcher)', () => {
 
 		ran.length = 0
 
-		// .request() early-return -> mapResponse hook does NOT run (intended:
-		// request-level short-circuit never enters the route lifecycle)
+		// .request() early-return -> mapResponse hook ALSO runs (A9 fix)
 		const gated = await app.handle(new Request('http://localhost/gate'))
-		expect(await gated.text()).toBe('GATED') // NOT 'WRAP:GATED'
-		expect(ran).not.toContain('mapResponse')
+		expect(await gated.text()).toBe('WRAP:GATED')
+		expect(ran).toContain('mapResponse')
 	})
 })

@@ -837,4 +837,65 @@ describe('Stream', () => {
 
 		expect(result).toEqual(new Uint8Array([1, 2, 3, 4]))
 	})
+
+	// C13: chunked Response with a non-200 status must preserve that status.
+	// Regression pin for A9 — must pass on fixed code and old code alike
+	// (the defect did not reproduce: status was already preserved correctly).
+	it('preserves custom status on chunked Response returned directly', async () => {
+		const body = new ReadableStream({
+			start(controller) {
+				controller.enqueue(new TextEncoder().encode('ok'))
+				controller.close()
+			}
+		})
+		const app = new Elysia().get(
+			'/',
+			() =>
+				new Response(body, {
+					status: 201,
+					headers: { 'transfer-encoding': 'chunked' }
+				})
+		)
+
+		const res = await app.handle(req('/'))
+		expect(res.status).toBe(201)
+	})
+
+	it('preserves custom status on chunked Response when set.headers are touched', async () => {
+		const app = new Elysia().get('/', ({ set }) => {
+			set.headers['x-custom'] = 'yes'
+			const body = new ReadableStream({
+				start(controller) {
+					controller.enqueue(new TextEncoder().encode('ok'))
+					controller.close()
+				}
+			})
+			return new Response(body, {
+				status: 201,
+				headers: { 'transfer-encoding': 'chunked' }
+			})
+		})
+
+		const res = await app.handle(req('/'))
+		expect(res.status).toBe(201)
+		expect(res.headers.get('x-custom')).toBe('yes')
+	})
+
+	it('preserves set.status on chunked Response when set.status is set explicitly', async () => {
+		const app = new Elysia().get('/', ({ set }) => {
+			set.status = 202
+			const body = new ReadableStream({
+				start(controller) {
+					controller.enqueue(new TextEncoder().encode('ok'))
+					controller.close()
+				}
+			})
+			return new Response(body, {
+				headers: { 'transfer-encoding': 'chunked' }
+			})
+		})
+
+		const res = await app.handle(req('/'))
+		expect(res.status).toBe(202)
+	})
 })

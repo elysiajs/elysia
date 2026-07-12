@@ -64,17 +64,17 @@ export function clearContextCache() {
 
 function buildEmptyContext(Base: any, headers: object | null = null) {
 	return class Context extends Base {
-		params?: Record<string, string>
-		headers?: Record<string, string>
-		qi!: number
-		set: {
+		declare params?: Record<string, string>
+		declare headers?: Record<string, string>
+		declare qi: number
+		declare set: {
 			headers: Record<string, string>
 			status?: number | string
 			cookie?: Record<string, unknown>
 		}
-		rid?: string
-		route?: string
-		trace?: any[]
+		declare rid?: string
+		declare route?: string
+		declare trace?: any[]
 
 		constructor(public request: Request) {
 			super()

@@ -15,6 +15,9 @@
  *                    Date; app.handle() does not. Comparing it would be a clock
  *                    race, not a divergence. Stripped on BOTH sides so a lane
  *                    that emits it and one that doesn't still compare equal.
+ *     - `etag`     — ignored ONLY when emitted by the candidate in the
+ *                    native-static-off-vs-on@listen pair. Bun's native static
+ *                    tier adds it automatically; the JS oracle cannot.
  * • set-cookie     — extracted via getSetCookie() and compared as an ORDERED
  *                    list. Cookie emission order is a contract (write-many); a
  *                    reordering IS a divergence, so it is NOT folded into the
@@ -125,6 +128,14 @@ const headersEqual = (
 	return true
 }
 
+const nativeStaticCandidateHeaders = (
+	lanePair: string,
+	headers: Array<[string, string]>
+) =>
+	lanePair === 'native-static-off-vs-on@listen'
+		? headers.filter(([name]) => name !== 'etag')
+		: headers
+
 const arrayEqual = (a: string[], b: string[]): boolean =>
 	a.length === b.length && a.every((v, i) => v === b[i])
 
@@ -148,7 +159,13 @@ export function compareResponses(
 			candidate: String(candidate.status)
 		}
 
-	if (!headersEqual(oracle.headers, candidate.headers))
+	// Bun owns native-static ETags and conditional handling. Ignore only the
+	// candidate ETag in this exact pair; every other lane still compares it.
+	const candidateHeaders = nativeStaticCandidateHeaders(
+		ctx.lanePair,
+		candidate.headers
+	)
+	if (!headersEqual(oracle.headers, candidateHeaders))
 		return {
 			...ctx,
 			component: 'headers',

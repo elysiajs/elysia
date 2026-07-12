@@ -10,7 +10,7 @@ import { compileHandlerJit } from './jit'
 export { setCaptureHeaderShorthand } from './jit'
 import { Reconstrct } from './reconstruct'
 
-import { createContext, type Context } from '../../context'
+import type { Context } from '../../context'
 import {
 	cloneHook,
 	compactBeforeHandleConflicts,
@@ -398,8 +398,13 @@ export function buildNativeStaticResponse(
 		macroScope
 	]: InternalRoute,
 	root: AnyElysia
-): Response | Promise<Response> | undefined {
-	if (typeof handler === 'function' || handler instanceof Error) return
+) {
+	if (
+		typeof handler === 'function' ||
+		handler instanceof Error ||
+		handler instanceof Promise
+	)
+		return
 
 	const adapter = root['~config']?.adapter ?? defaultAdapter
 	const ownedHook = resolveLocalHook(
@@ -419,64 +424,40 @@ export function buildNativeStaticResponse(
 			: undefined
 	const hook = applyHook(ownedHook, flatAppHook as any, rootHook, true)
 
-	if (hook) {
-		if (hook?.transform || hook?.beforeHandle || hook?.afterHandle) return
+	if (hook)
+		for (const key in hook) {
+			if (key === 'detail' || key === 'tags') continue
 
-		if (
-			hook?.body ||
-			hook?.query ||
-			hook?.params ||
-			hook?.headers ||
-			hook?.cookie ||
-			(hook?.schemas as unknown[] | undefined)?.length
-		)
-			return
-	}
+			const value = (hook as any)[key]
+			if (
+				value !== undefined &&
+				value !== false &&
+				(!Array.isArray(value) || value.length)
+			)
+				return
+		}
 
 	const rootHeaders = root['~ext']?.headers
 
-	const mapResponse = hook?.mapResponse
-		? (value: unknown) => {
-				const Context = createContext(root)
-				// eslint-disable-next-line sonarjs/no-clear-text-protocols
-				const context = new Context(new Request('http://e.ly'))
-				// @ts-ignore
-				context.responseValue = value
-
-				if (!Array.isArray(hook.mapResponse))
-					hook.mapResponse = [hook.mapResponse]
-
-				for (let i = 0; i < hook.mapResponse.length; i++) {
-					const fn = hook.mapResponse[i]
-					if (typeof fn !== 'function') continue
-
-					const mapped = fn(context)
-
-					if (mapped instanceof Response || mapped instanceof Promise)
-						return mapped
-				}
-			}
-		: (value: unknown) => {
-				return (adapter.response.map as Function)(value, {
-					headers: rootHeaders
-						? Object.assign(nullObject(), rootHeaders)
-						: nullObject()
-				})
-			}
-
-	if (handler instanceof Promise)
-		return handler.then((resolved) => {
-			if (resolved instanceof Response && !rootHeaders) return resolved
-
-			const mapped = mapResponse(resolved)
-
-			return mapped instanceof Response ? mapped : undefined
-		}) as Promise<Response>
-
 	if (handler instanceof Response && !rootHeaders) return handler
 
-	const mapped = mapResponse(handler)
-	if (mapped instanceof Response || mapped instanceof Promise) return mapped
+	const mapped = (adapter.response.map as Function)(handler, {
+		headers: rootHeaders
+			? Object.assign(nullObject(), rootHeaders)
+			: nullObject()
+	})
+
+	if (mapped instanceof Response) {
+		if (
+			!mapped.headers.has('content-type') &&
+			(typeof handler === 'string' ||
+				typeof handler === 'number' ||
+				typeof handler === 'boolean')
+		)
+			mapped.headers.set('content-type', 'text/plain;charset=utf-8')
+
+		return mapped
+	}
 }
 
 function toArray(name: string, hook: any) {
@@ -629,7 +610,7 @@ export function compileHandler(
 		typeof handler === 'function' ? (handler as any)['~mount'] : undefined
 	if (mountMeta) handler = resolveMountHandler(mountMeta, path)
 
-	const reconstructed = Compiled.handlers?.[method]?.[path]
+	const reconstructed = Compiled.getHandler(root['~programId'], method, path)
 
 	if (
 		reconstructed &&

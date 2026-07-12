@@ -13,6 +13,58 @@ const post = (body: unknown) =>
 	})
 
 const scenarios: Record<string, () => Promise<Response>> = {
+	cjkEcho: () =>
+		new Elysia()
+			.post(
+				'/',
+				{ body: t.Object({ value: t.Number() }) },
+				({ body }) => body
+			)
+			.handle(post({ value: '界'.repeat(8190) })),
+
+	patternError: () =>
+		new Elysia()
+			.post(
+				'/',
+				{ body: t.Object({ value: t.String({ pattern: '^ok$' }) }) },
+				({ body }) => body
+			)
+			.handle(post({ value: 'bad' })),
+
+	refineNoReplay: async () => {
+		let calls = 0
+		let captured: ValidationError | undefined
+		const response = await new Elysia()
+			.error(({ error }) => {
+				if (error instanceof ValidationError) {
+					captured = error
+					return error.toResponse()
+				}
+			})
+			.post(
+				'/',
+				{
+					body: t.Object({
+						value: t.Refine(t.String(), () => {
+							calls++
+							return false
+						})
+					})
+				},
+				({ body }) => body
+			)
+			.handle(post({ value: 'bad' }))
+
+		const responseBody = await response.json()
+		void captured?.errors
+		void captured?.message
+
+		return Response.json(
+			{ calls, responseStatus: response.status, responseBody },
+			{ status: 422 }
+		)
+	},
+
 	// default → should be minimal in production
 	default: () =>
 		new Elysia()
@@ -169,11 +221,12 @@ const scenarios: Record<string, () => Promise<Response>> = {
 	// `user.name`, NOT `[object Object].[object Object]`. (Env-independent, run in
 	// both prod & dev to prove parity.)
 	allStandardObjectSegments: async () => {
-		const err = new ValidationError(
-			'body',
-			{ user: { name: 123 } },
-			[{ path: [{ key: 'user' }, { key: 'name' }], message: 'Expected string' }]
-		)
+		const err = new ValidationError('body', { user: { name: 123 } }, [
+			{
+				path: [{ key: 'user' }, { key: 'name' }],
+				message: 'Expected string'
+			}
+		])
 		return new Response(JSON.stringify(err.all), { status: 422 })
 	}
 }
@@ -188,7 +241,9 @@ if ((process.env.NODE_ENV ?? process.env.ENV) === 'production')
 			'body',
 			{ x: 'bad' },
 			() => {
-				throw new Error('TypeBox Errors must not be called in production')
+				throw new Error(
+					'TypeBox Errors must not be called in production'
+				)
 			},
 			{ properties: { x: {} } },
 			() => ({ instancePath: '/x', error: 'from findCustomError' })
@@ -232,7 +287,12 @@ if ((process.env.NODE_ENV ?? process.env.ENV) === 'production') {
 		const err = new ValidationError(
 			'body',
 			{ user: { name: 123 } },
-			[{ path: [{ key: 'user' }, { key: 'name' }], message: 'Expected string' }],
+			[
+				{
+					path: [{ key: 'user' }, { key: 'name' }],
+					message: 'Expected string'
+				}
+			],
 			{ properties: { user: {} } }
 		)
 		return new Response(JSON.stringify(err.payload), { status: 422 })

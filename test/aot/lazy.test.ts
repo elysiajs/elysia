@@ -212,7 +212,7 @@ describe('AOT lazy validator groups', () => {
 		expect(src).not.toMatch(/\bnew Function\b/)
 		expect(src).not.toMatch(/\beval\s*\(/)
 		expect(src).not.toMatch(/\bimport\s*\(/) // sync thunks, not dynamic import
-		expect(src).toContain('Compiled.registerLazyValidators')
+		expect(src).toContain('Compiled.register({ bf: 1, fingerprint')
 	})
 
 	it('serves end-to-end through the lazy manifest (≡ eager behaviour)', async () => {

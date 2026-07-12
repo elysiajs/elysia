@@ -74,7 +74,7 @@ describe('M20 — case-insensitive content-type parse', () => {
 		await expect(res.json()).resolves.toEqual({ n: 5 })
 	})
 
-	it('emitted dispatch is restored to pre-M20 form: charCodeAt(12)===106 fast path + pd fallthrough, no _ctl/ctlc/pmrc', () => {
+	it('emits normalized exact dispatch without the removed M20 helpers', () => {
 		const app = new Elysia().post(
 			'/',
 			{ body: t.Object({ n: t.Number() }) },
@@ -82,10 +82,12 @@ describe('M20 — case-insensitive content-type parse', () => {
 		)
 		const src = compileHandler(app['~routes']![0] as any, app).toString()
 
-		// json fast path is the charCodeAt(12)===106 check
-		expect(src).toContain('ct.charCodeAt(12)===106')
-		// default fallthrough to pd (adapter.parse.default handles normalisation)
-		expect(src).toContain('await pd(c,ct)')
+		// Normalise once, then confirm the charCode hint with the exact essence.
+		expect(src).toContain('let ce=nc(ct)')
+		expect(src).toContain(
+			"let cj=(ce.charCodeAt(12)===106&&ce==='application/json')||ce.endsWith('+json')"
+		)
+		expect(src).toContain('c.body=cj?await pj(c):await pd(c,ce,true)')
 		// M20 helpers must NOT appear in the emitted code
 		expect(src).not.toContain('ctlc')
 		expect(src).not.toContain('_ctl')

@@ -16,7 +16,7 @@ import {
 } from '../../cookie/utils'
 import { requestId } from '../../utils'
 import { forwardError } from '../../handler/utils'
-import { tee } from '../../adapter/utils'
+import { normalizeContentType, tee } from '../../adapter/utils'
 import {
 	cloneResponse,
 	emptyResponse,
@@ -52,11 +52,10 @@ export const HANDLER_PARAMS: Record<string, Resolver> = {
 	pa: (c) => c.parse.arrayBuffer,
 	pt: (c) => c.parse.text,
 	pd: (c) => c.parse.default,
+	nc: () => normalizeContentType,
 	hb: () => hasRequestBody,
-	qa: (c) =>
-		getQueryParseChannels((c.vali as any)?.query?.schema)?.array,
-	qo: (c) =>
-		getQueryParseChannels((c.vali as any)?.query?.schema)?.object,
+	qa: (c) => getQueryParseChannels((c.vali as any)?.query?.schema)?.array,
+	qo: (c) => getQueryParseChannels((c.vali as any)?.query?.schema)?.object,
 	// response adapter
 	rm: (c) => c.res.map,
 	rc: (c) => c.res.compact ?? c.res.map,

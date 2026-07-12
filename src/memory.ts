@@ -10,5 +10,5 @@ export function flushMemory() {
 	Validator.clear()
 
 	if (isBun) Bun.gc()
-	else if (typeof global?.gc === 'function') global.gc()
+	else globalThis.gc?.()
 }

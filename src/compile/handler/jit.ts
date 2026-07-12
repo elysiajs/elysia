@@ -47,7 +47,8 @@ import {
 	runBeforeHandlePrefixAsync,
 	type TraceReporter
 } from './utils'
-import { tee } from '../../adapter/utils'
+import { normalizeContentType, tee } from '../../adapter/utils'
+import { ELYSIA_TYPES } from '../../type/constants'
 import { createTracer, unionTracePhases, type TraceEvent } from '../../trace'
 import { Capture } from '../aot'
 import { JITProbe } from '../jit-probe'
@@ -265,6 +266,8 @@ function parse(
 				break
 			}
 
+	const bodyKind = hasFn ? undefined : bodyMediaKind(bodyVali)
+
 	let code =
 		`let ct=((${hasHeaders ? "c.headers['content-type']" : "c.request.headers.get('content-type')"})||'')\n` +
 		'let cti=ct.indexOf(";")\n' +
@@ -310,10 +313,28 @@ function parse(
 		const begin = child ? child.begin : ''
 		const end = child ? child.end() : ''
 		const guard = bodyVali ? 'ct' : 'ct&&hb(c.request)'
+		const mediaGuard =
+			bodyKind === 1
+				? "cj||ce==='application/x-www-form-urlencoded'||ce==='multipart/form-data'"
+				: bodyKind === 2
+					? "cj||(ce.charCodeAt(0)===116&&ce.startsWith('text/'))"
+					: bodyKind === 3
+						? "ce==='multipart/form-data'||ce==='application/octet-stream'"
+						: undefined
+
+		code +=
+			'let ce=nc(ct)\n' +
+			"let cj=(ce.charCodeAt(12)===106&&ce==='application/json')||ce.endsWith('+json')\n"
+		link(normalizeContentType, 'nc')
+
+		if (mediaGuard) {
+			code += `if(ct&&!(${mediaGuard}))throw new es(415,'Unsupported Media Type')\n`
+			link(ElysiaStatus, 'es')
+		}
 
 		code += hasFn
-			? `if(!hasBody&&${guard}){${begin}c.body=ct.charCodeAt(12)===106?await pj(c):await pd(c,ct)\n${end}}\n`
-			: `if(${guard}){${begin}c.body=ct.charCodeAt(12)===106?await pj(c):await pd(c,ct)\n${end}}\n`
+			? `if(!hasBody&&${guard}){${begin}c.body=cj?await pj(c):await pd(c,ce,true)\n${end}}\n`
+			: `if(${guard}){${begin}c.body=cj?await pj(c):await pd(c,ce,true)\n${end}}\n`
 
 		if (!bodyVali) link(hasRequestBody, 'hb')
 		link(adapter.json, 'pj')
@@ -321,6 +342,62 @@ function parse(
 	}
 
 	return hasFn ? 'let hasBody=false,_bp\n' + code : code
+}
+
+// 1 structured/form, 2 scalar, 3 file
+const bodyMediaKind = (bodyVali: Validator | undefined) =>
+	schemaMediaKind((bodyVali as any)?.schema)
+
+function schemaMediaKind(schema: any): number | undefined {
+	if (!schema || typeof schema !== 'object' || '~standard' in schema) return
+
+	const elyType = schema['~elyTyp']
+	if (elyType === ELYSIA_TYPES.File || elyType === ELYSIA_TYPES.Files)
+		return 3
+
+	if (elyType === ELYSIA_TYPES.Form) return 1
+
+	const kind = schema['~kind']
+	if (
+		kind === 'Object' ||
+		kind === 'Array' ||
+		kind === 'FormData' ||
+		schema.type === 'object' ||
+		schema.type === 'array'
+	)
+		return 1
+
+	if (kind === 'File') return 3
+
+	if (
+		kind === 'String' ||
+		kind === 'Number' ||
+		kind === 'Integer' ||
+		kind === 'Boolean' ||
+		kind === 'Null' ||
+		kind === 'Undefined' ||
+		kind === 'Literal' ||
+		(schema.type !== undefined &&
+			['string', 'number', 'integer', 'boolean', 'null'].includes(
+				schema.type
+			))
+	)
+		return 2
+
+	const branches = schema.anyOf ?? schema.oneOf ?? schema.allOf
+	if (!Array.isArray(branches) || !branches.length) return
+
+	let result: number | undefined
+	for (let i = 0; i < branches.length; i++) {
+		const branch = schemaMediaKind(branches[i])
+
+		if (branch === undefined || (result !== undefined && result !== branch))
+			return
+
+		result = branch
+	}
+
+	return result
 }
 
 const isAsyncValidator = (vali: Validator | undefined) =>
@@ -397,20 +474,23 @@ export function compileHandlerJit({
 			inferCompactPrefix(beforeHandlePrefix)
 		)
 
-	const params = new Set<unknown>()
+	const seenKeys = new Set<string>()
+	const paramValues: unknown[] = []
 	let alias = ''
 	function link(v: unknown, key: string) {
 		if (v === 0) {
-			if (!params.has(hook)) {
-				params.add(hook)
+			if (!seenKeys.has('ho')) {
+				seenKeys.add('ho')
+				paramValues.push(hook)
 				alias += `${alias ? ',' : ''}ho`
 			}
 
 			return
 		}
 
-		if (!params.has(v)) {
-			params.add(v)
+		if (!seenKeys.has(key)) {
+			seenKeys.add(key)
+			paramValues.push(v)
 			alias += `${alias ? ',' : ''}${key}`
 		}
 	}
@@ -748,8 +828,12 @@ export function compileHandlerJit({
 			link,
 			buildReport('parse')
 		)
+		const preserveParseStatus = seenKeys.has('es')
 		link(ParseError, 'pe')
-		code += 'try{\n' + parseCode + '}catch(e){throw new pe(e)}\n'
+		code +=
+			'try{\n' +
+			parseCode +
+			`}catch(e){${preserveParseStatus ? 'if(e instanceof es)throw e;' : ''}throw new pe(e)}\n`
 
 		if (hasTrace) code += endTrace('parse')
 		if (hasLifecycleHook) code += abortCheck
@@ -1244,5 +1328,5 @@ export function compileHandlerJit({
 	JITProbe.record('handler:new-function')
 
 	// eslint-disable-next-line sonarjs/code-eval -- AOT codegen is the architecture
-	return new Function('h', alias, `return ${code}`)(handler, ...params)
+	return new Function('h', alias, `return ${code}`)(handler, ...paramValues)
 }

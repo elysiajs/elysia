@@ -163,6 +163,37 @@ const walkSubSchema = (schema: any, instancePath: string | undefined) =>
 const FOUND_ECHO_LIMIT = 8192
 const FOUND_ECHO_OMITTED = `[value exceeds ${FOUND_ECHO_LIMIT} byte echo limit]`
 
+function jsonStringLengthWithin(value: string, budget: number) {
+	budget -= 2
+
+	for (let i = 0; i < value.length && budget >= 0; i++) {
+		const code = value.charCodeAt(i)
+
+		if (code === 34 || code === 92) budget -= 2
+		else if (code < 32)
+			budget -=
+				code === 8 ||
+				code === 9 ||
+				code === 10 ||
+				code === 12 ||
+				code === 13
+					? 2
+					: 6
+		else if (code < 128) budget--
+		else if (code < 2048) budget -= 2
+		else if (code >= 0xd800 && code <= 0xdbff) {
+			const low = value.charCodeAt(i + 1)
+			if (low >= 0xdc00 && low <= 0xdfff) {
+				budget -= 4
+				i++
+			} else budget -= 6
+		} else if (code >= 0xdc00 && code <= 0xdfff) budget -= 6
+		else budget -= 3
+	}
+
+	return budget
+}
+
 const jsonLengthWithin = (value: unknown, budget: number): number => {
 	if (budget < 0) return -1
 
@@ -171,10 +202,10 @@ const jsonLengthWithin = (value: unknown, budget: number): number => {
 			break
 
 		case 'string':
-			return budget - value.length - 2
+			return jsonStringLengthWithin(value, budget)
 
 		case 'number':
-			return budget - String(value).length
+			return budget - (Number.isFinite(value) ? String(value).length : 4)
 
 		case 'boolean':
 			return budget - (value ? 4 : 5)
@@ -188,7 +219,7 @@ const jsonLengthWithin = (value: unknown, budget: number): number => {
 	if (Array.isArray(value)) {
 		budget -= 2
 		for (let i = 0; i < value.length; i++) {
-			budget = jsonLengthWithin(value[i], budget - 1)
+			budget = jsonLengthWithin(value[i], budget - (i ? 1 : 0))
 			if (budget < 0) return -1
 		}
 
@@ -196,12 +227,17 @@ const jsonLengthWithin = (value: unknown, budget: number): number => {
 	}
 
 	budget -= 2
+	let first = true
 	for (const key in value) {
+		budget = jsonStringLengthWithin(key, budget - (first ? 0 : 1)) - 1
+		if (budget < 0) return -1
+
 		budget = jsonLengthWithin(
 			(value as Record<string, unknown>)[key],
-			budget - key.length - 4
+			budget
 		)
 		if (budget < 0) return -1
+		first = false
 	}
 
 	return budget

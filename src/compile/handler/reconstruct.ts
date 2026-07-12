@@ -19,6 +19,7 @@ export abstract class Reconstrct {
 		try {
 			return new RouteValidator(hook, {
 				models: root['~ext']?.models,
+				app: root,
 				normalize: root['~config']?.normalize,
 				sanitize: root['~config']?.sanitize,
 				schemas: hook?.schemas,

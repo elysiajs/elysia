@@ -3,12 +3,21 @@ import { WebStandardAdapter } from '../web-standard'
 
 import { isDynamicRegex, needEncodeRegex } from '../../constants'
 import { buildNativeStaticResponse } from '../../compile/handler'
-import { flushMemory } from '../../memory'
 import { flattenChain, getLoosePath, nullObject } from '../../utils'
 
 import { buildGlobalWSHandler } from '../../ws/route'
 
 import type { AnyElysia } from '../../base'
+
+const nativeStaticMethods = new Set([
+	'GET',
+	'POST',
+	'PUT',
+	'DELETE',
+	'PATCH',
+	'HEAD',
+	'OPTIONS'
+])
 
 export function collectStaticRoutes(app: AnyElysia) {
 	if (app['~config']?.nativeStaticResponse === false) return
@@ -27,7 +36,6 @@ export function collectStaticRoutes(app: AnyElysia) {
 	if (!history?.length) return
 
 	const ready: Record<string, Record<string, Response>> = nullObject()
-	const pending: Array<Promise<void>> = []
 	const strictPath = app['~config']?.strictPath === true
 	const seen = new Map<string, number>()
 
@@ -59,29 +67,9 @@ export function collectStaticRoutes(app: AnyElysia) {
 		}
 	}
 
-	const add = (
-		method: string,
-		path: string,
-		value: Response | Promise<Response>
-	) => {
+	const add = (method: string, path: string, value: Response) => {
 		if (needEncodeRegex.test(path)) path = encodeURI(path)
-
-		if (value instanceof Promise)
-			pending.push(
-				value.then(
-					(resolved) => {
-						if (resolved instanceof Response)
-							(ready[path] ??= nullObject())[method] = resolved
-					},
-					(err) => {
-						console.error(
-							`[Elysia] Static route ${method} ${path} failed to resolve:`,
-							err
-						)
-					}
-				)
-			)
-		else (ready[path] ??= nullObject())[method] = value
+		;(ready[path] ??= nullObject())[method] = value
 	}
 
 	for (let i = 0; i < history.length; i++) {
@@ -91,6 +79,7 @@ export function collectStaticRoutes(app: AnyElysia) {
 		const method = route[0]
 		const path = route[1]
 		if (seen.get(method + ' ' + path) !== i) continue
+		if (!nativeStaticMethods.has(method)) continue
 
 		const value = buildNativeStaticResponse(route, app)
 		if (!value) continue
@@ -104,9 +93,9 @@ export function collectStaticRoutes(app: AnyElysia) {
 		}
 	}
 
-	if (!Object.keys(ready).length && !pending.length) return
+	if (!Object.keys(ready).length) return
 
-	return [ready, pending] as const
+	return [ready, []] as const
 }
 
 export const BunAdapter = createAdapter({
@@ -136,11 +125,73 @@ export const BunAdapter = createAdapter({
 				app.fetch(request, server)
 
 		const serve = _config ? { ..._config, ..._options } : _options
-		const server = (app.server = Bun.serve(serve))
-
 		const onSetup = app['~ext']?.setup
-		let setupReady: Promise<unknown> | undefined
-		if (onSetup) {
+		const needsGate = app.pending || !!onSetup?.length
+		let ready: Promise<unknown> | undefined
+
+		const build = () => {
+			const fetch = app.fetch
+			let routes: ReturnType<typeof collectStaticRoutes>
+
+			try {
+				routes = collectStaticRoutes(app as AnyElysia)
+			} catch (error) {
+				console.warn(
+					'[Elysia] Native static promotion was skipped:',
+					error
+				)
+			}
+
+			const hasWs = app['~hasWS']
+			let websocket: ReturnType<typeof buildGlobalWSHandler> | undefined
+			if (hasWs) {
+				const defaultConfig = (app['~config'] as any)?.websocket
+
+				websocket = defaultConfig
+					? Object.assign(buildGlobalWSHandler(), defaultConfig)
+					: buildGlobalWSHandler()
+			}
+
+			return { fetch, routes, websocket }
+		}
+
+		let built: ReturnType<typeof build> | undefined
+		if (!needsGate) built = build()
+
+		if (needsGate)
+			serve.fetch = (request: Request, server: unknown) =>
+				ready!.then(() => app.fetch(request, server))
+		else serve.fetch = built!.fetch
+
+		const server = (app.server = Bun.serve(serve))
+		const reload = () => {
+			try {
+				server.reload(serve)
+			} catch (error) {
+				if (!serve.routes) throw error
+
+				delete serve.routes
+				console.warn(
+					'[Elysia] Native static promotion was skipped:',
+					error
+				)
+
+				try {
+					server.reload(serve)
+				} catch (fallbackError) {
+					console.error(
+						'[Elysia] Failed to reload Bun server:',
+						fallbackError
+					)
+					throw fallbackError
+				}
+			}
+		}
+
+		const setup = () => {
+			const onSetup = app['~ext']?.setup
+			if (!onSetup) return
+
 			let pendingSetups: Promise<unknown>[] | undefined
 
 			for (let i = 0; i < onSetup.length; i++) {
@@ -152,75 +203,80 @@ export const BunAdapter = createAdapter({
 					(pendingSetups ??= []).push(result as Promise<unknown>)
 			}
 
-			if (pendingSetups) setupReady = Promise.all(pendingSetups)
+			if (pendingSetups) return Promise.all(pendingSetups)
 		}
 
-		const hasWs = app['~hasWS']
-		if (!hasWs) {
-			if (callback) {
-				if (setupReady) setupReady.then(() => callback(app.server!))
-				else callback(app.server!)
-			}
-		}
-
-		queueMicrotask(() => {
+		const rollback = (error: unknown) => {
 			if (app.server !== server) return
 
-			if (!app.pending) serve.fetch = app.fetch
-
-			const buildWebSocket = () => {
-				const defaultConfig = (app['~config'] as any)?.websocket
-
-				serve.websocket = defaultConfig
-					? Object.assign(buildGlobalWSHandler(), defaultConfig)
-					: buildGlobalWSHandler()
+			try {
+				server.stop(true)
+			} catch (stopError) {
+				console.error(stopError)
+			} finally {
+				app.server = undefined
 			}
 
-			if (hasWs) buildWebSocket()
+			const cleanup = app['~ext']?.cleanup
+			if (cleanup)
+				for (let i = cleanup.length - 1; i >= 0; i--)
+					try {
+						const result = cleanup[i](app)
+						if (
+							result &&
+							typeof (result as Promise<unknown>).then ===
+								'function'
+						)
+							Promise.resolve(result).catch(console.error)
+					} catch (cleanupError) {
+						console.error(cleanupError)
+					}
 
-			const collectRoutes = () => {
-				const staticRoutes = collectStaticRoutes(app as AnyElysia)
-				if (!staticRoutes) return
+			return error
+		}
 
-				if (staticRoutes[1].length)
-					return Promise.all(staticRoutes[1]).then(() => {
-						if (app.server !== server) return
-						serve.routes = staticRoutes[0]
+		const publish = () => {
+			if (app.server !== server) return
+			built ??= build()
 
-						app.server.reload(serve)
-					})
+			serve.fetch = built!.fetch
+			if (built!.websocket) serve.websocket = built!.websocket
+			if (built!.routes) serve.routes = built!.routes[0]
 
-				if (Object.keys(staticRoutes[0]).length)
-					serve.routes = staticRoutes[0]
+			if (needsGate || built!.websocket || built!.routes) reload()
+
+			if (callback) callback(server)
+		}
+
+		const start = () => {
+			if (app.server !== server) return
+
+			const setupReady = setup()
+			if (
+				setupReady &&
+				typeof (setupReady as Promise<unknown>).then === 'function'
+			)
+				return Promise.resolve(setupReady).then(publish)
+
+			publish()
+		}
+
+		try {
+			if (app.pending) ready = app.modules.then(start)
+			else {
+				const result = start()
+				if (
+					result &&
+					typeof (result as Promise<unknown>).then === 'function'
+				)
+					ready = result as Promise<unknown>
+				else if (needsGate) ready = Promise.resolve()
 			}
 
-			if (app.pending) {
-				app.server.reload(serve)
-
-				const reloadAfterModules = () => {
-					if (app.server !== server) return
-
-					serve.fetch = app.fetch
-
-					if (hasWs || app['~hasWS']) buildWebSocket()
-
-					collectRoutes()
-					app.server.reload(serve)
-				}
-
-				app.modules.then(reloadAfterModules, reloadAfterModules)
-			} else {
-				collectRoutes()
-
-				app.server.reload(serve)
-			}
-
-			flushMemory()
-
-			if (hasWs && callback) {
-				if (setupReady) setupReady.then(() => callback(app.server!))
-				else callback(app.server!)
-			}
-		})
+			ready?.catch(rollback)
+		} catch (error) {
+			rollback(error)
+			throw error
+		}
 	}
 })

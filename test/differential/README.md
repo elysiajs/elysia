@@ -34,13 +34,15 @@ artifact that must be characterized and excluded with a documented reason.
 | ------------ | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | status       | strict `===`                                                                        | —                                                                                                                                                             |
 | headers      | multiset of `(lowercase-name, value)`, order-insensitive                            | HTTP header order is not semantically meaningful and real sockets may reorder. `content-length` **is** compared.                                              |
-| — `date`     | **STRIPPED** (the only normalization exception)                                     | Real-socket (listen) lanes stamp a wall-clock `Date`; `app.handle()` does not. Comparing it is a clock race, not a divergence. Stripped on **both** sides.    |
+| — `date`     | **STRIPPED globally**                                                               | Real-socket (listen) lanes stamp a wall-clock `Date`; `app.handle()` does not. Comparing it is a clock race, not a divergence. Stripped on **both** sides.    |
+| — `etag`     | **Ignored only on the candidate of `native-static-off-vs-on@listen`**               | Bun's native static tier adds the ETag and conditional handling automatically; the JS oracle cannot emit it. Every other lane pair still compares `etag`.     |
 | set-cookie   | ordered list via `getSetCookie()`                                                   | Cookie emission order is a contract (`write-many`). A reordering **is** a divergence, so set-cookie is NOT folded into the order-insensitive header multiset. |
 | body         | exact bytes (`Uint8Array` from a fully-drained `arrayBuffer`)                       | Streams are fully drained before comparison. Non-UTF-8 bodies are reported as hex.                                                                            |
 | observations | structural deep-equal (P0-9): object keys order-insensitive, arrays order-sensitive | Hook-fire logs and other JSON-able lane facts (read via `lane.observe()`). Same strictness as responses; dispatched through the named comparator registry.    |
 
-`date` is the ONLY stripped header. Do not add another exception without a
-why-comment in `compare.ts`.
+`date` is the only globally stripped header. The `etag` exception is keyed to
+the native-static lane-pair id and candidate side only. Do not add another
+exception without a why-comment in `compare.ts`.
 
 On mismatch, `formatMismatch` reports: lane pair, corpus id, request id, the
 **first** divergent component, and both values (truncated). Debuggability is the
@@ -238,3 +240,8 @@ harness and execute its gate here** — not at D2 time. Specifically:
   comparator into `compare.ts` (P0-9 leaves the comparator registry extensible).
 
 Until those tasks land, this harness stands on its own four v1 pairs.
+
+A2 registers `native-static-literal`, `native-static-after-response`,
+`native-static-all`, and `native-static-request-hook`. The observation entry
+asserts `afterResponse` through `lane.observe()`; the native-static listen pair
+byte-compares all four against the JS lane.

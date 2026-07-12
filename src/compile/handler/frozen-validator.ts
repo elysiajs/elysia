@@ -99,10 +99,189 @@ interface DefaultFastPath {
 	merge?: (value: any) => any
 }
 
+interface CompactError {
+	keyword: string
+	schemaPath: string
+	instancePath: string
+	params: Record<string, unknown>
+	message: string
+}
+
+// TypeBox reports a scalar/type mismatch as `must be <schema.type>`
+// (see `typebox/locale/en_US` — the `type` keyword). We reproduce only the
+// dominant `type`/`required` keywords structurally, with no TypeBox at runtime.
+function jsTypeMatches(value: unknown, type: string) {
+	switch (type) {
+		case 'string':
+			return typeof value === 'string'
+
+		case 'number':
+			return typeof value === 'number'
+
+		case 'integer':
+			return typeof value === 'number' && Number.isInteger(value)
+
+		case 'boolean':
+			return typeof value === 'boolean'
+
+		case 'null':
+			return value === null
+
+		case 'array':
+			return Array.isArray(value)
+
+		case 'object':
+			return (
+				typeof value === 'object' &&
+				value !== null &&
+				!Array.isArray(value)
+			)
+
+		default:
+			return true
+	}
+}
+
+const typeError = (
+	schema: any,
+	instancePath: string,
+	schemaPath: string
+): CompactError => ({
+	keyword: 'type',
+	schemaPath,
+	instancePath,
+	params: { type: schema.type },
+	message: `must be ${schema.type}`
+})
+
+/**
+ * Best-effort, TypeBox-free structural error walker for the bridge-free covered
+ * subset (open objects / scalars / arrays / nesting = no unions, codecs,
+ * or custom errors)
+ **/
+function walkCompactError(
+	schema: any,
+	value: unknown,
+	instancePath: string,
+	schemaPath: string
+): CompactError | undefined {
+	if (!schema || typeof schema !== 'object') return
+
+	const type = schema.type
+
+	if (type === 'object') {
+		if (typeof value !== 'object' || value === null || Array.isArray(value))
+			return typeError(schema, instancePath, schemaPath)
+
+		const required: string[] | undefined = schema.required
+		if (Array.isArray(required))
+			for (const key of required)
+				if (!(key in (value as object)))
+					return {
+						keyword: 'required',
+						schemaPath,
+						instancePath,
+						params: { requiredProperties: [key] },
+						message: `must have required properties ${key}`
+					}
+
+		const properties = schema.properties
+		if (properties)
+			for (const key in properties) {
+				if (!(key in (value as object))) continue
+				const child = walkCompactError(
+					properties[key],
+					(value as any)[key],
+					`${instancePath}/${key}`,
+					`${schemaPath}/properties/${key}`
+				)
+				if (child) return child
+			}
+
+		return
+	}
+
+	if (type === 'array') {
+		if (!Array.isArray(value))
+			return typeError(schema, instancePath, schemaPath)
+
+		const items = schema.items
+		if (items)
+			for (let i = 0; i < value.length; i++) {
+				const child = walkCompactError(
+					items,
+					value[i],
+					`${instancePath}/${i}`,
+					`${schemaPath}/items`
+				)
+				if (child) return child
+			}
+
+		return
+	}
+
+	if (typeof type === 'string' && !jsTypeMatches(value, type))
+		return typeError(schema, instancePath, schemaPath)
+}
+
+function bestEffortCodecError(schema: any, value: unknown): CompactError {
+	if (
+		schema?.type === 'object' &&
+		typeof value === 'object' &&
+		value !== null &&
+		!Array.isArray(value) &&
+		schema.properties
+	)
+		for (const key in schema.properties) {
+			if (!(key in (value as object))) continue
+			if (isCompactDiagnosable(schema.properties[key])) continue
+
+			return {
+				keyword: 'type',
+				schemaPath: `#/properties/${key}`,
+				instancePath: `/${key}`,
+				params: {},
+				message: `must match ${schema.properties[key]?.['~kind'] ?? 'schema'}`
+			}
+		}
+
+	return {
+		keyword: 'type',
+		schemaPath: '#',
+		instancePath: '',
+		params: {},
+		message: `must match ${schema?.['~kind'] ?? 'schema'}`
+	}
+}
+
+export function isCompactDiagnosable(schema: any) {
+	if (!schema || typeof schema !== 'object') return false
+	if (schema.anyOf || schema.oneOf || schema.allOf) return false
+
+	const type = schema.type
+
+	if (type === 'object') {
+		const properties = schema.properties
+		if (properties)
+			for (const key in properties)
+				if (!isCompactDiagnosable(properties[key])) return false
+
+		return true
+	}
+
+	if (type === 'array') return isCompactDiagnosable(schema.items)
+
+	return (
+		type === 'string' ||
+		type === 'number' ||
+		type === 'integer' ||
+		type === 'boolean' ||
+		type === 'null'
+	)
+}
+
 class FrozenSlotValidator {
 	isAsync = false
-	// WS message/upgrade validation branches on `hasCodec` to pick `From`
-	// over bare `Check` (ws/route.ts `validateMessageBody`)
 	hasCodec = false
 
 	#check: (value: unknown) => boolean
@@ -169,15 +348,18 @@ class FrozenSlotValidator {
 		return this.#check(value)
 	}
 
-	Errors(): unknown[] {
-		return []
+	Errors(value: unknown): unknown[] {
+		const hit = walkCompactError(this.schema, value, '', '#')
+		if (hit) return [hit]
+
+		return [bestEffortCodecError(this.schema, value)]
 	}
 
 	#error(value: unknown, type?: string): ValidationError {
 		return new ValidationError(
 			type,
 			value,
-			() => this.Errors(),
+			() => this.Errors(value),
 			this.schema
 		)
 	}
@@ -304,12 +486,17 @@ export function buildFrozenRouteValidator(
 			continue
 		}
 
-		const frozen = Compiled.getValidator(method, path, slot)
+		const frozen = Compiled.getValidator(
+			method,
+			path,
+			slot,
+			root['~programId']
+		)
 		if (!frozen) return undefined
 
 		let coerced = schema
 		if (frozen.cp) {
-			const rebuild = Compiled.planRebuilder
+			const rebuild = Compiled.getPlanRebuilder(root['~programId'])
 			if (!rebuild) return undefined
 			coerced = rebuild(schema, frozen.cp)
 		}
@@ -342,7 +529,8 @@ export function buildFrozenRouteValidator(
 			const frozen = Compiled.getValidator(
 				method,
 				path,
-				`response:${status}` as ValidatorSlot
+				`response:${status}` as ValidatorSlot,
+				root['~programId']
 			)
 			// response slots never capture `cp`: raw IS the coerced schema
 			if (!frozen || !isBridgeFreeComplete(frozen, schema, schema))

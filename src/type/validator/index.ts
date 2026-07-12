@@ -58,7 +58,11 @@ import {
 } from './default-precompute'
 import { buildFindCustomError } from './custom-error'
 export { TypeBoxValidatorCache } from './validator-cache'
-import { isFullyClosedObject, schemaContainsRef } from './clean-safe'
+import {
+	isFullyClosedObject,
+	schemaContainsRef,
+	schemaHasDangerousProperties
+} from './clean-safe'
 
 import type { MaybePromise } from '../../types'
 
@@ -66,6 +70,149 @@ const moduleCache = new WeakMap<
 	Record<string, TSchema>,
 	Record<string, TSchema>
 >()
+
+interface Refinement {
+	check: (value: unknown) => unknown
+}
+
+interface RefinementGroup {
+	refinements: Refinement[]
+	checks: Array<(value: unknown) => unknown>
+}
+
+interface RefineValidation {
+	groups: Set<RefinementGroup>
+	results: Map<RefinementGroup, boolean[][]>
+	replay: boolean
+	occurrences: Map<RefinementGroup, number>
+}
+
+let activeRefineValidation: RefineValidation | undefined
+const refinementGroups = new WeakMap<object, RefinementGroup>()
+
+function collectRefinements(
+	schema: any,
+	out = new Set<RefinementGroup>(),
+	seen = new WeakSet<object>()
+) {
+	if (!schema || typeof schema !== 'object' || seen.has(schema)) return out
+	seen.add(schema)
+
+	const refinements = schema['~refine']
+	if (Array.isArray(refinements)) {
+		let group = refinementGroups.get(refinements)
+		if (!group) {
+			const members = refinements.filter(
+				(refinement): refinement is Refinement =>
+					refinement &&
+					typeof refinement === 'object' &&
+					typeof refinement.check === 'function'
+			)
+
+			if (members.length) {
+				group = {
+					refinements: members,
+					checks: members.map((refinement) => refinement.check)
+				}
+				refinementGroups.set(refinements, group)
+
+				for (let index = 0; index < members.length; index++) {
+					const refinement = members[index]
+					refinement.check = function (value: unknown) {
+						const validation = activeRefineValidation
+						if (!validation?.groups.has(group!))
+							return group!.checks[index].call(this, value)
+
+						let occurrence =
+							validation.occurrences.get(group!) ?? 0
+						if (index === 0) {
+							validation.occurrences.set(group!, ++occurrence)
+							if (!validation.replay) {
+								const results = group!.checks.map((check) =>
+									Boolean(check.call(this, value))
+								)
+								const calls = validation.results.get(group!)
+								if (calls) calls.push(results)
+								else validation.results.set(group!, [results])
+							}
+						}
+
+						return (
+							validation.results.get(group!)?.[occurrence - 1]?.[
+								index
+							] ?? true
+						)
+					}
+				}
+			}
+		}
+
+		if (group) out.add(group)
+	}
+
+	const maps = [
+		schema.properties,
+		schema.patternProperties,
+		schema.dependentSchemas,
+		schema.dependencies,
+		schema.$defs,
+		schema.definitions
+	]
+	for (const map of maps)
+		if (map && typeof map === 'object' && !Array.isArray(map))
+			for (const key of Object.keys(map))
+				collectRefinements(map[key], out, seen)
+
+	if (Array.isArray(schema.items))
+		for (const item of schema.items) collectRefinements(item, out, seen)
+	else collectRefinements(schema.items, out, seen)
+
+	for (const key of [
+		'additionalItems',
+		'additionalProperties',
+		'unevaluatedProperties',
+		'propertyNames',
+		'contains',
+		'unevaluatedItems',
+		'not',
+		'if',
+		'then',
+		'else'
+	])
+		collectRefinements(schema[key], out, seen)
+
+	for (const key of ['prefixItems', 'allOf', 'anyOf', 'oneOf'])
+		if (Array.isArray(schema[key]))
+			for (const child of schema[key])
+				collectRefinements(child, out, seen)
+
+	return out
+}
+
+const materializeModels = (models: Record<string, TSchema>) => {
+	const out: Record<string, TSchema> = {}
+
+	for (const name in models) {
+		const schema = models[name]
+		const value: Record<string, unknown> = {}
+		let source = schema
+
+		while (source && source !== Object.prototype) {
+			for (const key of Object.getOwnPropertyNames(source))
+				if (key !== '$id' && !Object.hasOwn(value, key))
+					Object.defineProperty(
+						value,
+						key,
+						Object.getOwnPropertyDescriptor(source, key)!
+					)
+			source = Object.getPrototypeOf(source)
+		}
+
+		out[name] = value as TSchema
+	}
+
+	return out
+}
 
 // Fast path for the standalone-guard merge when every member is plain object
 function divergesFromEvaluate(node: any, seen: WeakSet<object>) {
@@ -219,6 +366,7 @@ export class TypeBoxValidator<
 
 	#decodeMirror?: (value: unknown) => unknown
 	#encodeMirror?: (value: unknown) => unknown
+	#refinements?: Set<RefinementGroup>
 	#findCustomError?: (
 		value: unknown
 	) => { instancePath: string; error: unknown } | undefined
@@ -258,7 +406,8 @@ export class TypeBoxValidator<
 				? Compiled.getValidator(
 						options.aot.method,
 						options.aot.path,
-						options.slot
+						options.slot,
+						options.app?.['~programId']
 					)
 				: undefined
 
@@ -266,7 +415,11 @@ export class TypeBoxValidator<
 		if (name && options?.models) {
 			schema = (
 				moduleCache.getOrInsertComputed(options.models, () =>
-					Module(options.models as Record<string, TSchema>)
+					Module(
+						materializeModels(
+							options.models as Record<string, TSchema>
+						)
+					)
 				) as any
 			)[name]
 
@@ -338,6 +491,11 @@ export class TypeBoxValidator<
 			else if (!capturing) this.#dropCompiledSource()
 		}
 
+		if (!this.isAsync) {
+			const refinements = collectRefinements(this.schema)
+			if (refinements.size) this.#refinements = refinements
+		}
+
 		if (frozen?.ps === 1) {
 			const objectTemplate =
 				frozen.pod !== undefined
@@ -395,7 +553,8 @@ export class TypeBoxValidator<
 		this.#isForm = originalElyTyp === ELYSIA_TYPES.Form
 		this.#hasOptional = !!(this.schema as any)?.['~optional']
 
-		if (frozen?.ic) reconstruct().reconstructInnerCodecs(frozen.ic, this.schema)
+		if (frozen?.ic)
+			reconstruct().reconstructInnerCodecs(frozen.ic, this.schema)
 
 		if (isFrozen && frozen!.cm) {
 			const both = reconstruct().instantiateFrozenBoth(
@@ -404,7 +563,12 @@ export class TypeBoxValidator<
 				schema
 			)
 			this.reconstructedCheck = both.check
-			this.Clean = options?.normalize === false ? undefined : both.clean
+			this.Clean =
+				options?.normalize === false
+					? undefined
+					: schemaHasDangerousProperties(this.schema)
+						? (value) => Clean(this.schema, value)
+						: both.clean
 		} else {
 			if (isFrozen)
 				this.reconstructedCheck = frozen!.c!(
@@ -434,6 +598,7 @@ export class TypeBoxValidator<
 
 		this.#cleanRedundant =
 			!!this.Clean &&
+			!options?.sanitize &&
 			options?.normalize !== 'typebox' &&
 			isFullyClosedObject(this.schema)
 
@@ -479,14 +644,42 @@ export class TypeBoxValidator<
 			captureImpl.captureBridgeFree(options.aot, options.slot, rawSchema)
 	}
 
-	#error(value: unknown, type?: string): ValidationError {
+	#error(
+		value: unknown,
+		type?: string,
+		errors?: TLocalizedValidationError[]
+	): ValidationError {
 		return new ValidationError(
 			type,
 			value,
-			() => this.Errors(value),
+			errors ?? (() => this.Errors(value)),
 			this.schema,
 			this.#findCustomError
 		)
+	}
+
+	#validate(value: unknown): TLocalizedValidationError[] | undefined {
+		if (!this.#refinements)
+			return this.Check(value as Static<T>) ? undefined : []
+
+		const previous = activeRefineValidation
+		const validation: RefineValidation = {
+			groups: this.#refinements,
+			results: new Map(),
+			replay: false,
+			occurrences: new Map()
+		}
+		activeRefineValidation = validation
+
+		try {
+			if (this.Check(value as Static<T>)) return
+
+			validation.replay = true
+			validation.occurrences.clear()
+			return this.Errors(value)
+		} finally {
+			activeRefineValidation = previous
+		}
 	}
 
 	#setupMirror(
@@ -494,6 +687,9 @@ export class TypeBoxValidator<
 		options?: ValidatorOptions,
 		frozen?: FrozenValidator
 	): ((value: unknown) => unknown) | undefined {
+		if (schemaHasDangerousProperties(this.schema))
+			return (value) => Clean(this.schema, value)
+
 		const aot = options?.aot
 		const slot = options?.slot
 
@@ -535,6 +731,8 @@ export class TypeBoxValidator<
 		frozen: FrozenValidator | undefined,
 		dir: 'decode' | 'encode'
 	): ((value: unknown) => unknown) | undefined {
+		if (schemaHasDangerousProperties(this.schema)) return
+
 		const aot = options?.aot
 		const slot = options?.slot
 		const frozenMirror = dir === 'decode' ? frozen?.dm : frozen?.em
@@ -646,15 +844,25 @@ export class TypeBoxValidator<
 
 	EncodeFrom(value: Static<T>, type?: string): StaticEncode<T> {
 		if (this.#isForm) {
-			if (!this.#noValidate && !this.Check(value))
-				throw this.#error(value, type)
+			const errors = this.#noValidate ? undefined : this.#validate(value)
+			if (errors)
+				throw this.#error(
+					value,
+					type,
+					errors.length ? errors : undefined
+				)
 
 			return value as any
 		}
 
 		if (!this.hasCodec) {
-			if (!this.#noValidate && !this.Check(value))
-				throw this.#error(value, type)
+			const errors = this.#noValidate ? undefined : this.#validate(value)
+			if (errors)
+				throw this.#error(
+					value,
+					type,
+					errors.length ? errors : undefined
+				)
 
 			if (this.Clean) value = this.Clean(value) as Static<T>
 			return value as any
@@ -664,11 +872,14 @@ export class TypeBoxValidator<
 			if (this.#encodeMirror) {
 				const out = this.#encodeMirror(value)
 
-				if (!this.#noValidate && !this.Check(out as any))
+				const errors = this.#noValidate
+					? undefined
+					: this.#validate(out as any)
+				if (errors)
 					throw new ValidationError(
 						type,
 						out,
-						() => this.Errors(out),
+						errors.length ? errors : () => this.Errors(out),
 						this.schema
 					)
 
@@ -704,11 +915,16 @@ export class TypeBoxValidator<
 			value !== null &&
 			typeof value === 'object' &&
 			!('~ely-form' in value)
-		)
+		) {
 			Object.defineProperty(value, '~ely-form', {
 				value: 1,
 				configurable: true
 			})
+
+			return true
+		}
+
+		return false
 	}
 
 	#unmarkForm(value: unknown) {
@@ -797,21 +1013,74 @@ export class TypeBoxValidator<
 			if (bypass) return bypass.value
 		}
 
-		if (this.#isForm) this.#markForm(value)
+		const markedValue = value
+		const marked = this.#isForm ? this.#markForm(value) : false
+		try {
+			if (this.hasCodec) {
+				if (!this.#noValidate) {
+					collectFileTypeChecks()
 
-		if (this.hasCodec) {
-			if (!this.#noValidate) {
+					let errors: TLocalizedValidationError[] | undefined
+					let pendingFile: ReturnType<typeof takeFileTypeChecks>
+					try {
+						errors = this.#validate(value)
+					} finally {
+						pendingFile = takeFileTypeChecks()
+					}
+
+					if (errors)
+						throw this.#error(
+							value,
+							type,
+							errors.length ? errors : undefined
+						)
+					if (pendingFile)
+						await enforceFileTypeChecks(
+							pendingFile,
+							type,
+							value,
+							this.schema
+						)
+				}
+
+				if (this.#decodeMirror)
+					value = this.#decodeMirror(value) as Static<T>
+				else
+					try {
+						value = DecodeUnsafe(
+							nullObject() as {},
+							this.schema,
+							value
+						) as Static<T>
+					} catch (e: any) {
+						if (e instanceof ValidationError) throw e
+						if (e?.error) throw e.error
+						if (e?.status) throw e
+
+						throw new ValidationError(
+							type,
+							value,
+							() => this.Errors(value),
+							this.schema
+						)
+					}
+			} else if (!this.#noValidate) {
+				// take() MUST run even if Check throws (type-elysia-2), see above.
 				collectFileTypeChecks()
-
-				let valid: boolean
+				let errors: TLocalizedValidationError[] | undefined
 				let pendingFile: ReturnType<typeof takeFileTypeChecks>
 				try {
-					valid = this.Check(value)
+					errors = this.#validate(value)
 				} finally {
 					pendingFile = takeFileTypeChecks()
 				}
 
-				if (!valid) throw this.#error(value, type)
+				if (errors)
+					throw this.#error(
+						value,
+						type,
+						errors.length ? errors : undefined
+					)
 				if (pendingFile)
 					await enforceFileTypeChecks(
 						pendingFile,
@@ -821,53 +1090,13 @@ export class TypeBoxValidator<
 					)
 			}
 
-			if (this.#decodeMirror)
-				value = this.#decodeMirror(value) as Static<T>
-			else
-				try {
-					value = DecodeUnsafe(
-						nullObject() as {},
-						this.schema,
-						value
-					) as Static<T>
-				} catch (e: any) {
-					if (e instanceof ValidationError) throw e
-					if (e?.error) throw e.error
-					if (e?.status) throw e
+			if (this.Clean && !this.#decodeMirror && !this.#cleanRedundant)
+				value = this.Clean(value) as Static<T>
 
-					throw new ValidationError(
-						type,
-						value,
-						() => this.Errors(value),
-						this.schema
-					)
-				}
-		} else if (!this.#noValidate) {
-			// take() MUST run even if Check throws (type-elysia-2), see above.
-			collectFileTypeChecks()
-			let valid: boolean
-			let pendingFile: ReturnType<typeof takeFileTypeChecks>
-			try {
-				valid = this.Check(value)
-			} finally {
-				pendingFile = takeFileTypeChecks()
-			}
-
-			if (!valid) throw this.#error(value, type)
-			if (pendingFile)
-				await enforceFileTypeChecks(
-					pendingFile,
-					type,
-					value,
-					this.schema
-				)
+			return value
+		} finally {
+			if (marked) this.#unmarkForm(markedValue)
 		}
-
-		if (this.Clean && !this.#decodeMirror && !this.#cleanRedundant)
-			value = this.Clean(value) as Static<T>
-
-		if (this.#isForm) this.#unmarkForm(value)
-		return value
 	}
 
 	FromSync(value: Static<T>, type?: string): Static<T> {
@@ -896,43 +1125,60 @@ export class TypeBoxValidator<
 			if (bypass) return bypass.value
 		}
 
-		if (this.#isForm) this.#markForm(value)
-
-		if (this.hasCodec) {
-			// See FromAsync for the rationale on skipping `Convert`
-			if (!this.#noValidate && !this.Check(value))
-				throw this.#error(value, type)
-
-			if (this.#decodeMirror)
-				value = this.#decodeMirror(value) as Static<T>
-			else
-				try {
-					value = DecodeUnsafe(
-						nullObject() as {},
-						this.schema,
-						value
-					) as Static<T>
-				} catch (e: any) {
-					if (e instanceof ValidationError) throw e
-					if (e?.error) throw e.error
-					if (e?.status) throw e
-
-					throw new ValidationError(
-						type,
+		const markedValue = value
+		const marked = this.#isForm ? this.#markForm(value) : false
+		try {
+			if (this.hasCodec) {
+				// See FromAsync for the rationale on skipping `Convert`
+				const errors = this.#noValidate
+					? undefined
+					: this.#validate(value)
+				if (errors)
+					throw this.#error(
 						value,
-						() => this.Errors(value),
-						this.schema
+						type,
+						errors.length ? errors : undefined
 					)
-				}
-		} else {
-			if (!this.#noValidate && !this.Check(value))
-				throw this.#error(value, type)
+
+				if (this.#decodeMirror)
+					value = this.#decodeMirror(value) as Static<T>
+				else
+					try {
+						value = DecodeUnsafe(
+							nullObject() as {},
+							this.schema,
+							value
+						) as Static<T>
+					} catch (e: any) {
+						if (e instanceof ValidationError) throw e
+						if (e?.error) throw e.error
+						if (e?.status) throw e
+
+						throw new ValidationError(
+							type,
+							value,
+							() => this.Errors(value),
+							this.schema
+						)
+					}
+			} else {
+				const errors = this.#noValidate
+					? undefined
+					: this.#validate(value)
+				if (errors)
+					throw this.#error(
+						value,
+						type,
+						errors.length ? errors : undefined
+					)
+			}
+
+			if (this.Clean && !this.#decodeMirror && !this.#cleanRedundant)
+				value = this.Clean(value) as Static<T>
+
+			return value
+		} finally {
+			if (marked) this.#unmarkForm(markedValue)
 		}
-
-		if (this.Clean && !this.#decodeMirror && !this.#cleanRedundant)
-			value = this.Clean(value) as Static<T>
-
-		if (this.#isForm) this.#unmarkForm(value)
-		return value
 	}
 }

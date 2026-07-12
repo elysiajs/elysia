@@ -1,5 +1,6 @@
 import { mapCompactResponse, mapResponse } from './handler'
 import { formDataToObject } from './utils'
+import { normalizeContentType } from '../utils'
 
 import { createAdapter } from '..'
 import { parseQuery } from '../../parse-query'
@@ -58,36 +59,39 @@ export const WebStandardAdapter = createAdapter({
 		json: (context) => context.request.json(),
 		text: (context) => context.request.text(),
 		urlencoded: (context) => context.request.text().then(parseQuery),
-		default(context, contentType) {
-			const ct = lowercaseContentType(contentType)
+		default(context, contentType, normalized) {
+			const ct = normalized
+				? contentType
+				: normalizeContentType(contentType)
 
 			switch (ct.charCodeAt(12)) {
 				case 106:
-					return context.request.json()
+					if (ct === 'application/json') return context.request.json()
+
+					break
 
 				case 120:
-					// match both `application/x-www-form-urlencoded` and
-					// `application/xml` / `application/xhtml+xml`
-					// Only urlencoded form has '-' at index 13
-					if (ct.charCodeAt(13) === 45)
+					if (ct === 'application/x-www-form-urlencoded')
 						return context.request.text().then(parseQuery)
 
 					break
 
 				case 111:
-					return context.request.arrayBuffer()
+					if (ct === 'application/octet-stream')
+						return context.request.arrayBuffer()
+
+					break
 
 				case 114:
-					return parseFormData(context, contentType)
-
-				default:
-					if (ct.charCodeAt(0) === 116) return context.request.text()
-
-					// (RFC 6839): application/ld+json
-					const semi = ct.indexOf(';')
-					const essence = semi === -1 ? ct : ct.slice(0, semi)
-					if (essence.endsWith('+json')) return context.request.json()
+					if (ct === 'multipart/form-data')
+						return parseFormData(context)
 			}
+
+			if (ct.charCodeAt(0) === 116 && ct.startsWith('text/'))
+				return context.request.text()
+
+			// RFC 6839 structured syntax suffix
+			if (ct.endsWith('+json')) return context.request.json()
 		}
 	},
 	response: {

@@ -473,13 +473,10 @@ export const STUB_SOURCES: Record<
 			filter: /[\\/]elysia[\\/](dist|src)[\\/]memory\.(m?js|ts)$/,
 			source:
 				`import { clearContextCache } from './context'\n` +
-				`import { isBun } from './universal/constants'\n` +
 				`import { Validator } from './validator'\n` +
 				`export function flushMemory() {\n` +
 				`	clearContextCache()\n` +
 				`	Validator.clear()\n` +
-				`	if (isBun) Bun.gc()\n` +
-				`	else if (typeof global?.gc === 'function') global.gc()\n` +
 				`}\n`
 		}
 	],
@@ -901,12 +898,14 @@ export async function generateCompiledArtifacts(
 			routesForbidSeal = true
 
 		const frozenSlots = artifacts.validators.length
+		// `expectedSlots` is computed by the loop above (typebox slots per
+		// route) — the fingerprint no longer carries a slot count.
 
 		const allBridgeFree =
 			(artifacts.handlers.length > 0 ||
 				artifacts.validators.length > 0) &&
 			!routesForbidSeal &&
-			frozenSlots >= expectedSlots &&
+			frozenSlots === expectedSlots &&
 			artifacts.validators.every((v) => v.bridgeFree === true)
 
 		const { plan: stub, mode } = planFromReport(
@@ -930,7 +929,7 @@ export async function generateCompiledArtifacts(
 						`Every route must be captured into the AOT manifest.`
 				)
 
-			if (frozenSlots < expectedSlots)
+			if (frozenSlots !== expectedSlots)
 				console.warn(
 					`[elysia-aot] target 'workerd': only ${frozenSlots}/` +
 						`${expectedSlots} validator slots were frozen ` +

@@ -177,6 +177,24 @@ describe('D2 self-test — comparator catches injected skew', () => {
 		}
 	})
 
+	it('ignores candidate etag only for the native-static lane pair', async () => {
+		const oracle = await snapshot(new Response('same'))
+		const candidate = await snapshot(
+			new Response('same', { headers: { etag: 'bun-native' } })
+		)
+
+		expect(
+			compareResponses(
+				{ ...ctx, lanePair: 'native-static-off-vs-on@listen' },
+				oracle,
+				candidate
+			)
+		).toBeNull()
+		expect(compareResponses(ctx, oracle, candidate)?.component).toBe(
+			'headers'
+		)
+	})
+
 	it('catches an observation skew and reports component=observation', () => {
 		const oracleObs = ['transform', 'beforeHandle', 'handler']
 		const candidateObs = ['transform', 'handler'] // skipped beforeHandle

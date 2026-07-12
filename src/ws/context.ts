@@ -25,17 +25,13 @@ function pickValidator(
 	data: unknown
 ) {
 	if (!validators) return
-	if (data instanceof ElysiaStatus) {
-		// A status response must be validated against its own status schema,
-		// not the default (200) one. If no validator is registered for this
-		// status, skip validation rather than reusing the 200 validator.
-		return validators[data.status]
-	}
+	if (data instanceof ElysiaStatus) return validators[data.status]
+
 	return defaultValidator
 }
 
 export interface WSConnectionData {
-	id: string
+	id: string | undefined
 	open?: (elysia: ElysiaWS<any>) => void | Promise<void>
 	message?: (
 		elysia: ElysiaWS<any>,

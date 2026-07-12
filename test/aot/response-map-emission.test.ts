@@ -45,9 +45,16 @@ describe('F19: body route no longer materializes all headers for content-type', 
 
 		// the parse prologue reads content-type straight off the request
 		expect(source).toContain("c.request.headers.get('content-type')")
+		expect(
+			source.match(/c\.request\.headers\.get\('content-type'\)/g)
+		).toHaveLength(1)
 		// default parsing can fast-path JSON without materializing parser-only
 		// context state when no custom parser can observe it
-		expect(source).toContain('ct.charCodeAt(12)===106')
+		expect(source).toContain('let ce=nc(ct)')
+		expect(source).toContain(
+			"let cj=(ce.charCodeAt(12)===106&&ce==='application/json')||ce.endsWith('+json')"
+		)
+		expect(source).toContain('c.body=cj?await pj(c):await pd(c,ce,true)')
 		expect(source).not.toContain('c.contentType=ct')
 		// no full-header materialization
 		expect(source).not.toContain('c.headers=')
@@ -74,7 +81,14 @@ describe('F19: body route no longer materializes all headers for content-type', 
 
 		const { source } = compileRoute(app)
 		expect(source).toContain("c.request.headers.get('content-type')")
-		expect(source).toContain('ct.charCodeAt(12)===106')
+		expect(
+			source.match(/c\.request\.headers\.get\('content-type'\)/g)
+		).toHaveLength(1)
+		expect(source).toContain('let ce=nc(ct)')
+		expect(source).toContain(
+			"let cj=(ce.charCodeAt(12)===106&&ce==='application/json')||ce.endsWith('+json')"
+		)
+		expect(source).toContain('c.body=cj?await pj(c):await pd(c,ce,true)')
 		expect(source).not.toContain('c.contentType=ct')
 		expect(source).not.toContain('c.headers=')
 

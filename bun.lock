@@ -7,7 +7,7 @@
       "dependencies": {
         "deuri": "^2.0.1",
         "exact-mirror": "1.2.2",
-        "memoirist": "1.1.0",
+        "memoirist": "1.2.0",
       },
       "devDependencies": {
         "@eslint/eslintrc": "^3.3.5",
@@ -475,7 +475,7 @@
 
     "magic-string-ast": ["magic-string-ast@2.0.0", "", { "dependencies": { "magic-string": "^0.30.21" } }, "sha512-h16Fs25GTaVkwRMbP2Nhb3cFyOy3Fq9x7fp3DVybuiJQ6pePRmcqK+phvXkDUVUlikTI8qS96l0EWF5zl0NyUw=="],
 
-    "memoirist": ["memoirist@1.1.0", "", {}, "sha512-9KhJFSx4d/zxM++Rsb5yC3gqg+9boFHpDLcV7NkTWIYfUb3tiRPV4/EIMgw2lX7RdZz04xHMe6JTyJBpUUc/Og=="],
+    "memoirist": ["memoirist@1.2.0", "", {}, "sha512-ER/xZGlbn4tExSGnZ03jawdq9M7FN3J6VfK8BdYzJkLetZBchOTUG+RQZqaoD9tZegaHUmdsACAzHkXBEew4uA=="],
 
     "minimatch": ["minimatch@3.1.5", "", { "dependencies": { "brace-expansion": "^1.1.7" } }, "sha512-VgjWUsnnT6n+NUk6eZq77zeFdpW2LWDzP6zFGrCbHXiYNul5Dzqk2HHQ5uFH2DNW5Xbp8+jVzaeNt94ssEEl4w=="],
 

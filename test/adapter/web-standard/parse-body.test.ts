@@ -1,6 +1,254 @@
 import { describe, it, expect } from 'bun:test'
-import { Elysia } from '../../../src'
+import { Elysia, t } from '../../../src'
 import { tee } from '../../../src/adapter/utils'
+
+// A12 / Q6: built-in body dispatch confirms the normalized media-type essence.
+// Schema-less routes stay lenient. Schema routes reject a media type with 415
+// only when their top-level body kind makes the mismatch unambiguous; custom
+// parsers and opaque/mixed schemas remain fail-open.
+describe('exact content-type dispatch and schema contract (A12)', () => {
+	for (const precompile of [false, true]) {
+		describe(precompile ? 'precompiled' : 'default', () => {
+			const request = (contentType: string, body: BodyInit) =>
+				new Request('http://localhost/', {
+					method: 'POST',
+					headers: { 'content-type': contentType },
+					body
+				})
+
+			it('does not corrupt unmatched application media types', async () => {
+				const app = new Elysia({ precompile }).post('/', ({ body }) =>
+					body === undefined ? 'unparsed' : typeof body
+				)
+
+				for (const [contentType, body] of [
+					['application/x-ndjson', '{"ok":true}\n'],
+					['application/xml', '<ok>true</ok>'],
+					['application/jwt', 'token']
+				] as const) {
+					const response = await app.handle(
+						request(contentType, body)
+					)
+					expect(response.status).toBe(200)
+					await expect(response.text()).resolves.toBe('unparsed')
+				}
+
+				const javascript = await app.handle(
+					request('text/javascript', 'const ok = true')
+				)
+				expect(javascript.status).toBe(200)
+				await expect(javascript.text()).resolves.toBe('string')
+			})
+
+			it('returns 415 when a media type conflicts with a structured schema', async () => {
+				const app = new Elysia({ precompile }).post(
+					'/',
+					{ body: t.Object({ ok: t.Boolean() }) },
+					({ body }) => body
+				)
+
+				for (const [contentType, body] of [
+					['application/x-ndjson', '{"ok":true}\n'],
+					['application/xml', '<ok>true</ok>'],
+					['text/javascript', '{"ok":true}'],
+					['application/jwt', 'token']
+				] as const)
+					expect(
+						(await app.handle(request(contentType, body))).status
+					).toBe(415)
+			})
+
+			it('keeps absent content-type on the legacy validation path', async () => {
+				const app = new Elysia({ precompile }).post(
+					'/',
+					{ body: t.Object({ ok: t.Boolean() }) },
+					({ body }) => body
+				)
+
+				const response = await app.handle(
+					new Request('http://localhost/', {
+						method: 'POST',
+						body: '{"ok":true}'
+					})
+				)
+				expect(response.status).toBe(422)
+			})
+
+			it('keeps JSON, forms, bytes, and text on their exact lanes', async () => {
+				const echo = new Elysia({ precompile }).post(
+					'/',
+					({ body }) => {
+						if (body instanceof ArrayBuffer) return 'arrayBuffer'
+						return body
+					}
+				)
+
+				for (const contentType of [
+					'application/json',
+					'application/json; charset=utf-8',
+					'Application/JSON; charset=UTF-8',
+					'application/ld+json'
+				])
+					await expect(
+						echo
+							.handle(request(contentType, '{"ok":true}'))
+							.then((x) => x.json())
+					).resolves.toEqual({ ok: true })
+
+				await expect(
+					echo
+						.handle(
+							request(
+								'application/x-www-form-urlencoded',
+								'ok=true'
+							)
+						)
+						.then((x) => x.json())
+				).resolves.toEqual({ ok: 'true' })
+
+				const form = new FormData()
+				form.set('ok', 'true')
+				await expect(
+					echo
+						.handle(
+							new Request('http://localhost/', {
+								method: 'POST',
+								body: form
+							})
+						)
+						.then((x) => x.json())
+				).resolves.toEqual({ ok: 'true' })
+
+				await expect(
+					echo
+						.handle(request('application/octet-stream', 'raw'))
+						.then((x) => x.text())
+				).resolves.toBe('arrayBuffer')
+
+				await expect(
+					echo
+						.handle(request('text/plain', 'raw'))
+						.then((x) => x.text())
+				).resolves.toBe('raw')
+
+				const structured = new Elysia({ precompile }).post(
+					'/',
+					{ body: t.Object({ ok: t.String() }) },
+					({ body }) => body
+				)
+				expect(
+					(
+						await structured.handle(
+							request(
+								'application/x-www-form-urlencoded',
+								'ok=true'
+							)
+						)
+					).status
+				).toBe(200)
+			})
+
+			it('accepts text for scalar schemas and keeps constraint failures at 422', async () => {
+				const app = new Elysia({ precompile }).post(
+					'/',
+					{ body: t.String({ minLength: 3 }) },
+					({ body }) => body
+				)
+
+				expect(
+					(await app.handle(request('text/javascript', 'okay')))
+						.status
+				).toBe(200)
+				expect(
+					(await app.handle(request('text/javascript', 'no'))).status
+				).toBe(422)
+				expect(
+					(await app.handle(request('application/jwt', 'token')))
+						.status
+				).toBe(415)
+
+				const scalarUnion = new Elysia({ precompile }).post(
+					'/',
+					{ body: t.Union([t.String(), t.Boolean()]) },
+					({ body }) => body
+				)
+				expect(
+					(
+						await scalarUnion.handle(
+							request('application/jwt', 'token')
+						)
+					).status
+				).toBe(415)
+			})
+
+			it('accepts only multipart and bytes for file schemas', async () => {
+				const app = new Elysia({ precompile }).post(
+					'/',
+					{ body: t.File() },
+					({ body }) => body
+				)
+
+				expect(
+					(
+						await app.handle(
+							request('application/octet-stream', 'raw')
+						)
+					).status
+				).not.toBe(415)
+
+				const form = new FormData()
+				form.set('file', new Blob(['raw']))
+				expect(
+					(
+						await app.handle(
+							new Request('http://localhost/', {
+								method: 'POST',
+								body: form
+							})
+						)
+					).status
+				).not.toBe(415)
+				expect(
+					(await app.handle(request('application/json', '{}'))).status
+				).toBe(415)
+			})
+
+			it('fails open for custom parsers and mixed schemas', async () => {
+				const custom = new Elysia({ precompile })
+					.parse(({ contentType }) => {
+						if (contentType === 'application/jwt')
+							return { ok: true }
+					})
+					.post(
+						'/',
+						{ body: t.Object({ ok: t.Boolean() }) },
+						({ body }) => body
+					)
+
+				expect(
+					(await custom.handle(request('application/jwt', 'token')))
+						.status
+				).toBe(200)
+
+				const mixed = new Elysia({ precompile }).post(
+					'/',
+					{
+						body: t.Union([
+							t.Object({ ok: t.Boolean() }),
+							t.String()
+						])
+					},
+					({ body }) => body
+				)
+
+				expect(
+					(await mixed.handle(request('application/jwt', 'token')))
+						.status
+				).toBe(422)
+			})
+		})
+	}
+})
 
 // H13c: the default content-type dispatch recognised only fixed-position
 // `application/json`, so structured `+json` suffix types (RFC 6839) —
@@ -117,7 +365,9 @@ describe('tee() byte-cap accounting (H02b)', () => {
 			while (true) {
 				produced++
 				// 1MiB blob per chunk
-				yield new Blob([new Uint8Array(1 << 20)]) as unknown as Uint8Array
+				yield new Blob([
+					new Uint8Array(1 << 20)
+				]) as unknown as Uint8Array
 			}
 		}
 

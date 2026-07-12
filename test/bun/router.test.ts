@@ -367,11 +367,7 @@ describe('Bun router', () => {
 		app.stop()
 	})
 
-	// Audit F40: a precomputed static Response can never throw — no user
-	// code runs on a native hit — so an error hook must NOT disable Bun's
-	// native static dispatch. Misses still enter the JS fetch handler
-	// where NotFound fires, so the hook loses nothing.
-	it('keeps native static dispatch with an error hook', async () => {
+	it('keeps routes with an error hook on the JS lane', async () => {
 		let fired = 0
 
 		const app = new Elysia()
@@ -380,17 +376,16 @@ describe('Bun router', () => {
 			})
 			.get('/health', 'ok')
 
-		// unit seam: the adapter still collects native routes
+		// Arbitrary callbacks are not proven pure, even when this request succeeds.
 		const routes = collectStaticRoutes(app as any)
-		expect(routes).toBeDefined()
-		expect(routes![0]['/health'].GET).toBeInstanceOf(Response)
+		expect(routes).toBeUndefined()
 
 		app.listen(0)
 		await new Promise((r) => setTimeout(r, 50))
 
 		const base = `http://localhost:${app.server!.port}`
 
-		// native hit: no user code runs, the hook must not fire
+		// Successful JS-lane hit: the error hook still must not fire.
 		const hit = await fetch(`${base}/health`)
 		expect(hit.status).toBe(200)
 		await expect(hit.text()).resolves.toBe('ok')
@@ -449,8 +444,11 @@ describe('Bun router', () => {
 
 	// Audit F42: listen()'s boot microtask must not force-build the full
 	// router while async plugins are still pending — the drain would throw
-	// that build away and rebuild everything. Pre-drain requests are served
-	// by the lazy fetch arrow instead.
+	// that build away and rebuild everything.
+	// A6 (transactional startup, plan.md 2026-07-12): pre-drain requests are
+	// no longer served on the partial app (a request must never observe
+	// pre-ready state) — they queue behind the gated fetch and resolve after
+	// the module drain publishes the full app.
 	it('does not force-build the router while async plugins are pending', async () => {
 		let release!: () => void
 		const gate = new Promise<void>((r) => {
@@ -469,10 +467,14 @@ describe('Bun router', () => {
 
 		const base = `http://localhost:${app.server!.port}`
 
-		// pre-drain request is served on demand via the lazy arrow
-		const pre = await fetch(`${base}/`)
-		expect(pre.status).toBe(200)
-		await expect(pre.text()).resolves.toBe('Static')
+		// pre-drain request queues (does not observe the partial app) and
+		// completes once the drain publishes readiness
+		const pre = fetch(`${base}/`)
+		await Bun.sleep(20)
+		release()
+		const preResponse = await pre
+		expect(preResponse.status).toBe(200)
+		await expect(preResponse.text()).resolves.toBe('Static')
 
 		release()
 		await app.modules

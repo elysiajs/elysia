@@ -108,6 +108,82 @@ const makeThrowingThenGetter = () => {
 
 export const corpus: ObservableCorpusEntry[] = []
 
+// ── A2 native-static promotion correctness ────────────────────────────────
+corpus.push({
+	id: 'native-static-literal',
+	tags: ['safe-for-socket', 'static', 'native-static-A2'],
+	define: (app) => app.get('/native/literal', 'literal'),
+	requests: [{ id: 'literal', make: get('/native/literal') }]
+})
+
+{
+	const recorder = makeRecorder()
+	corpus.push({
+		id: 'native-static-after-response',
+		tags: ['safe-for-socket', 'static', 'observe', 'native-static-A2'],
+		recorder,
+		define: (app) =>
+			app.get(
+				'/native/after-response',
+				{
+					afterResponse() {
+						recorder.events.push('afterResponse')
+					}
+				},
+				'literal'
+			),
+		requests: [
+			{ id: 'after-response', make: get('/native/after-response') }
+		]
+	})
+}
+
+corpus.push({
+	id: 'native-static-all',
+	tags: ['safe-for-socket', 'static', 'method', 'native-static-A2'],
+	define: (app) => app.all('/native/all', 'all-literal'),
+	requests: [
+		{ id: 'get', make: get('/native/all') },
+		{
+			id: 'report',
+			make: () => new Request(url('/native/all'), { method: 'REPORT' })
+		}
+	]
+})
+
+corpus.push({
+	id: 'native-static-request-hook',
+	tags: ['safe-for-socket', 'static', 'lifecycle', 'native-static-A2'],
+	define: (app) =>
+		app.get(
+			'/native/request-hook',
+			{
+				mapResponse({ request }) {
+					return new Response(
+						request.headers.get('x-value') ?? 'missing'
+					)
+				}
+			},
+			'literal'
+		),
+	requests: [
+		{
+			id: 'one',
+			make: () =>
+				new Request(url('/native/request-hook'), {
+					headers: { 'x-value': 'one' }
+				})
+		},
+		{
+			id: 'two',
+			make: () =>
+				new Request(url('/native/request-hook'), {
+					headers: { 'x-value': 'two' }
+				})
+		}
+	]
+})
+
 // ── Static / nesting / root ────────────────────────────────────────────────
 corpus.push({
 	id: 'static',
@@ -210,12 +286,28 @@ corpus.push({
 	]
 })
 
-// ── Duplicate (method, path) registration — current winner is LAST-WINS ─────
+// ── Duplicate (method, path) registration: last-wins uniformly ──────────────
+// No dedup enforcement — duplicate registration is the user's responsibility.
+// The LAST registration wins across every lane and route type: the static map
+// and AOT manifest overwrite, and Memoirist >= 1.2.0 overwrites its terminal
+// store on a repeat add. Both static and dynamic duplicates are pinned so a
+// future lane-parity break (e.g. AOT diverging from the router) is caught.
 corpus.push({
-	id: 'duplicate-route',
+	id: 'duplicate-route-static',
 	tags: ['safe-for-socket', 'precedence'],
-	define: (app) => app.get('/dup', () => 'first').get('/dup', () => 'second'),
-	requests: [{ id: 'last-wins', make: get('/dup') }]
+	define: (app) =>
+		app.get('/dup', () => 'first').get('/dup', () => 'second'),
+	requests: [{ id: 'static-last-wins', make: get('/dup') }]
+})
+
+corpus.push({
+	id: 'duplicate-route-dynamic',
+	tags: ['safe-for-socket', 'precedence'],
+	define: (app) =>
+		app
+			.get('/dup/:id', () => 'first')
+			.get('/dup/:id', () => 'second'),
+	requests: [{ id: 'dynamic-last-wins', make: get('/dup/1') }]
 })
 
 // ── Custom method via .all() (no .route() API exists — see README) ──────────

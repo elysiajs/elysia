@@ -7,7 +7,17 @@ import {
 	localMacroRoot,
 	resolveLocalHook
 } from './compile/handler'
-import { Capture } from './compile/aot'
+import {
+	beginCompilerSession,
+	Compiled,
+	createAotFingerprint,
+	createProgramId,
+	endCompilerSession,
+	Capture,
+	type AotFingerprint,
+	type CompilerSession,
+	type ProgramId
+} from './compile/aot'
 import { buildWSRoute } from './ws/route'
 import type {
 	WSLocalHook,
@@ -129,26 +139,19 @@ import type {
 import type { ElysiaStatus } from './error'
 import type { Context, LifecycleContext, ErrorContext } from './context'
 
-const useNodesBuffer: ChainNode[] = []
-
 export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
-
-// A plain absorbed route needs only identity distinct from its root. Keep this
-// object deliberately property-free: route compilation treats missing local
-// hook/macro state as empty, while `instance !== root` preserves root-hook
-// composition. Eligibility is centralized in #compactRouteOwner below.
-const plainRouteOwner = Object.freeze(nullObject()) as AnyElysia
 
 interface StaticMapAliases {
 	method: string
 	paths: string[]
 }
 
+const useNodesBuffer: ChainNode[] = []
+const plainRouteOwner = Object.freeze(nullObject()) as AnyElysia
 const emptyHistory = Object.freeze([]) as readonly HistoryEntry[]
 
 const canRegisterLoose = (path: string, isDynamic: boolean) =>
-	!isDynamic &&
-	(path.length === 0 || path.charCodeAt(path.length - 1) === 47)
+	!isDynamic && (path.length === 0 || path.charCodeAt(path.length - 1) === 47)
 
 export class Elysia<
 	const in out BasePath extends string = '',
@@ -286,11 +289,15 @@ export class Elysia<
 	'~hasWS'?: boolean
 	'~hasDynamicWS'?: boolean
 	'~hasTrace'?: boolean
+	'~programId': ProgramId
+	'~aotFingerprint'?: AotFingerprint
+	'~compilerSession'?: CompilerSession
 
 	'~scopeChild'?: boolean
 	'~scopeChildren'?: AnyElysia[]
 
 	constructor(config?: ElysiaConfig<BasePath, Scope>) {
+		this['~programId'] = createProgramId()
 		this['~config'] = config
 		this['~Prefix'] = config?.prefix as BasePath
 		if (this['~Prefix'] && !this['~Prefix'].startsWith('/'))
@@ -6477,7 +6484,7 @@ export class Elysia<
 	#routerBuilt = false
 	#buildRouter() {
 		if (this.#routerBuilt) return
-		if (!this.#declaredRoutes?.length) return
+		const compilerSession = beginCompilerSession(this)
 
 		const previousMap = this['~map']
 		const previousRouter = this['~router']
@@ -6495,6 +6502,7 @@ export class Elysia<
 		this['~router'] = undefined
 		this.#compiled = previousCompiled?.slice()
 		this['~hasDynamicWS'] = undefined
+		let buildSucceeded = false
 
 		try {
 			this.#buildRouterUnsafe()
@@ -6512,6 +6520,7 @@ export class Elysia<
 			}
 
 			this.#routerBuilt = true
+			buildSucceeded = true
 		} catch (error) {
 			this['~map'] = previousMap
 			this['~router'] = previousRouter
@@ -6525,6 +6534,8 @@ export class Elysia<
 			} else this['~config'] = undefined
 
 			throw error
+		} finally {
+			endCompilerSession(this, compilerSession, !buildSucceeded)
 		}
 	}
 
@@ -6541,6 +6552,23 @@ export class Elysia<
 			if (this.#routeMayHaveModelRef(route))
 				this.#assertRouteModelRefs(route, route[0])
 		}
+
+		// Duplicate `(method, path)` registration is the user's responsibility;
+		// no dedup pass here (it cost a full extra loop + Set on every build to
+		// catch a rare mistake). LAST registration wins uniformly: the static
+		// map and AOT manifest overwrite, and Memoirist >= 1.2.0 overwrites the
+		// terminal store on a repeat add — so static and dynamic duplicates,
+		// JIT and AOT, all resolve to the last handler. Different methods,
+		// `WS` vs HTTP, and distinct declared paths (`/x` vs `/x/`, literal vs
+		// param) key differently below — never duplicates.
+		// Manifest binding is carried by `~programId` (each app only reads the
+		// program bound to its own id). The fingerprint is the framework-compat
+		// `abi` guard only — O(1), no per-route identity.
+		if (length)
+			Compiled.claim(
+				this['~programId'],
+				(this['~aotFingerprint'] = createAotFingerprint())
+			)
 
 		const isLoose = this['~config']?.strictPath !== true
 
@@ -6586,7 +6614,7 @@ export class Elysia<
 				if (isDynamicRegex.test(path)) {
 					;(this['~router'] ??= new Memoirist<CompiledHandler>({
 						loosePath: isLoose
-					})).add('WS', path, handler, false)
+					})).add('WS', path, handler)
 
 					this['~hasDynamicWS'] = true
 				} else {
@@ -6630,8 +6658,7 @@ export class Elysia<
 
 			const isDynamic = isDynamicRegex.test(path)
 			const needsEncode = needEncodeRegex.test(path)
-			const registerLoose =
-				isLoose && canRegisterLoose(path, isDynamic)
+			const registerLoose = isLoose && canRegisterLoose(path, isDynamic)
 
 			const explicitMain = registerLoose
 				? explicitPaths?.get(method)
@@ -6673,7 +6700,7 @@ export class Elysia<
 				const handler = this.handler(i, precompile, route, undefined)
 
 				for (let p = 0; p < paths.length; p++)
-					router.add(method, paths[p], handler, false)
+					router.add(method, paths[p], handler)
 			} else {
 				const map = (methods[method] ??= nullObject() as any)
 

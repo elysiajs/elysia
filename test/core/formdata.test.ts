@@ -1,9 +1,100 @@
 import { Elysia, t, form, file } from '../../src'
 import { describe, expect, it } from 'bun:test'
+import { fileTypeFromBlob } from 'file-type'
 import { req } from '../utils'
 import { formDataToObject } from '../../src/adapter/web-standard/utils'
+import { TypeBoxValidator } from '../../src/type/validator'
+import { setFileTypeDetector } from '../../src/type/elysia/file-type'
+
+const snapshotObject = (value: Record<PropertyKey, unknown>) => ({
+	values: Reflect.ownKeys(value).map((key) => [key, value[key]]),
+	descriptors: Object.getOwnPropertyDescriptors(value),
+	symbols: Object.getOwnPropertySymbols(value),
+	prototype: Object.getPrototypeOf(value)
+})
+
+const expectUnchangedAfterFailure = async (
+	validator: TypeBoxValidator<any>,
+	value: Record<PropertyKey, unknown>,
+	async: boolean
+) => {
+	const before = snapshotObject(value)
+
+	if (async) await expect(validator.FromAsync(value)).rejects.toBeDefined()
+	else expect(() => validator.FromSync(value)).toThrow()
+
+	expect(snapshotObject(value)).toEqual(before)
+}
 
 describe('Form Data', () => {
+	describe('failed validation cleanup', () => {
+		for (const async of [false, true]) {
+			const path = async ? 'async' : 'sync'
+
+			it(`${path} Check failure leaves caller input unchanged`, async () => {
+				await expectUnchangedAfterFailure(
+					new TypeBoxValidator(t.Form({ value: t.String() })),
+					{ value: 1 },
+					async
+				)
+			})
+
+			it(`${path} codec failure leaves caller input unchanged`, async () => {
+				await expectUnchangedAfterFailure(
+					new TypeBoxValidator(
+						t.Form({
+							value: t
+								.Codec(t.String())
+								.Decode(() => {
+									throw new Error('decode failed')
+								})
+								.Encode((value) => value)
+						})
+					),
+					{ value: 'ok' },
+					async
+				)
+			})
+
+			it(`${path} fallback decode error leaves caller input unchanged`, async () => {
+				await expectUnchangedAfterFailure(
+					new TypeBoxValidator(
+						t.Form({
+							value: t
+								.Codec(t.String())
+								.Decode(() => {
+									throw new Error('decode failed')
+								})
+								.Encode((value) => value)
+						}),
+						{ normalize: 'typebox' }
+					),
+					{ value: 'ok' },
+					async
+				)
+			})
+		}
+
+		it('async rejected file check leaves caller input unchanged', async () => {
+			setFileTypeDetector(async () => {
+				throw new Error('detection failed')
+			})
+			const value = {
+				file: new File(['content'], 'image.png', { type: 'image/png' })
+			}
+			const validator = new TypeBoxValidator(
+				t.Form({ file: t.File({ type: 'image' }) }) as any
+			)
+
+			expect(validator.isAsync).toBe(true)
+			try {
+				await expectUnchangedAfterFailure(validator, value, true)
+			} finally {
+				setFileTypeDetector(fileTypeFromBlob)
+			}
+		})
+	})
+
 	it('return Bun.file', async () => {
 		const app = new Elysia().get('/', () =>
 			form({
@@ -395,8 +486,7 @@ describe('Form Data DoS hardening', () => {
 
 		let slots = 0
 		for (const k in out)
-			if (Array.isArray((out as any)[k]))
-				slots += (out as any)[k].length
+			if (Array.isArray((out as any)[k])) slots += (out as any)[k].length
 		// pre-fix: ~5000 * 100000 = 5e8 slots; post-fix: ~0
 		expect(slots).toBeLessThanOrEqual(5_000)
 		expect(elapsed).toBeLessThan(2_000)

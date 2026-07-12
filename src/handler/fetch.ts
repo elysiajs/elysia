@@ -344,13 +344,16 @@ export function createFetchHandler(
 			? getAsyncIndexes(onRequests)
 			: undefined
 
-		return async (request: Request): Promise<Response> => {
+		return async (
+			request: Request,
+			server?: unknown
+		): Promise<Response> => {
 			const context = new Context(request)
-			if (request.signal.aborted)
-				return emptyResponse.clone() as Response
+			if (request.signal.aborted) return emptyResponse.clone() as Response
 
 			const url = request.url,
 				s = url.indexOf('/', pathStart)
+
 			context.path = url.substring(
 				s,
 				// @ts-expect-error
@@ -359,6 +362,8 @@ export function createFetchHandler(
 					: // @ts-expect-error
 						context.qi
 			)
+			// @ts-expect-error
+			context.server = server ?? null
 
 			context.rid = requestId()
 
@@ -413,7 +418,8 @@ export function createFetchHandler(
 							trace[j].r(requestReports[j])
 						const response = mapResponse(
 							result,
-							context.set
+							context.set,
+							context
 						) as Response
 
 						afterResponse?.(context)
@@ -455,7 +461,10 @@ export function createFetchHandler(
 		const asyncIndexes = getAsyncIndexes(onRequests)
 
 		if (asyncIndexes)
-			return async (request: Request): Promise<Response> => {
+			return async (
+				request: Request,
+				server?: unknown
+			): Promise<Response> => {
 				const context = new Context(request)
 				if (request.signal.aborted)
 					return emptyResponse.clone() as Response
@@ -471,6 +480,8 @@ export function createFetchHandler(
 						: // @ts-expect-error
 							context.qi
 				)
+				// @ts-expect-error
+				context.server = server ?? null
 
 				try {
 					for (let i = 0; i < onRequests.length; i++) {
@@ -489,7 +500,8 @@ export function createFetchHandler(
 						if (result !== undefined) {
 							const response = mapResponse(
 								result,
-								context.set
+								context.set,
+								context
 							) as Response
 
 							afterResponse?.(context)
@@ -519,10 +531,9 @@ export function createFetchHandler(
 				}
 			}
 
-		return (request: Request): MaybePromise<Response> => {
+		return (request: Request, server?: unknown): MaybePromise<Response> => {
 			const context = new Context(request)
-			if (request.signal.aborted)
-				return emptyResponse.clone() as Response
+			if (request.signal.aborted) return emptyResponse.clone() as Response
 
 			const url = request.url,
 				s = url.indexOf('/', pathStart)
@@ -535,6 +546,8 @@ export function createFetchHandler(
 					: // @ts-expect-error
 						context.qi
 			)
+			// @ts-expect-error
+			context.server = server ?? null
 
 			try {
 				for (let i = 0; i < onRequests.length; i++) {
@@ -545,7 +558,8 @@ export function createFetchHandler(
 					if (result !== undefined) {
 						const response = mapResponse(
 							result,
-							context.set
+							context.set,
+							context
 						) as Response
 
 						afterResponse?.(context)
@@ -578,7 +592,7 @@ export function createFetchHandler(
 
 	// Fuck DRY, this is the hotest path
 	// so I'm inline the entire thing, ~4-5ns faster on M1
-	return (request: Request): MaybePromise<Response> => {
+	return (request: Request, server?: unknown): MaybePromise<Response> => {
 		const context = new Context(request)
 		const url = request.url,
 			s = url.indexOf('/', pathStart)
@@ -591,6 +605,8 @@ export function createFetchHandler(
 				: // @ts-expect-error
 					context.qi
 		))
+		// @ts-expect-error
+		context.server = server ?? null
 
 		if (hasWS && request.method === 'GET') {
 			const handler = map['WS']?.[path]

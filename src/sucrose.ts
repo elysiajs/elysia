@@ -1,6 +1,6 @@
 import { fnv1a } from './utils'
-import { isBun, isCloudflareWorker } from './universal/constants'
 import { isProduction } from './error'
+import { getCompilerSession } from './compile/aot'
 
 import type { Handler, AppHook } from './types'
 
@@ -440,6 +440,131 @@ export function extractMainParameter(parameter: string) {
 	return parameter.slice(spreadIndex + 3).trimEnd()
 }
 
+function isIdentifierChar(char: number) {
+	// 0-9
+	return (
+		(char >= 48 && char <= 57) ||
+		// A-Z
+		(char >= 65 && char <= 90) ||
+		// a-z
+		(char >= 97 && char <= 122) ||
+		// _ $
+		char === 95 ||
+		char === 36
+	)
+}
+
+export function hasAmbiguousContextUse(code: string, aliases: string[]) {
+	for (const alias of aliases) {
+		if (!alias || alias.charCodeAt(0) === 123) continue
+
+		let from = 0
+		while (true) {
+			const index = code.indexOf(alias, from)
+			if (index === -1) break
+
+			from = index + alias.length
+
+			// Reject partial identifier matches (e.g. alias `c` inside `abc`)
+			const before = index === 0 ? -1 : code.charCodeAt(index - 1)
+			if (before !== -1 && isIdentifierChar(before)) continue
+
+			let spread = index - 1
+			while (spread >= 0) {
+				const char = code.charCodeAt(spread)
+				if (char !== 32 && char !== 9 && char !== 10) break
+				spread--
+			}
+			if (
+				code.charCodeAt(spread) === 46 &&
+				code.charCodeAt(spread - 1) === 46 &&
+				code.charCodeAt(spread - 2) === 46
+			)
+				return true
+
+			// Look at what immediately follows the alias.
+			let after = from
+
+			// Whitespace between the alias and a member operator
+			// (`c .query`, `c\n.query`, `c [k]`) defeats the exact-string
+			// `access()` matcher → treat as ambiguous once we confirm the
+			// next non-space token is a member operator.
+			let hadSpace = false
+			while (after < code.length) {
+				const char = code.charCodeAt(after)
+				if (char !== 32 && char !== 9 && char !== 10) break
+				hadSpace = true
+				after++
+			}
+
+			// Skip an optional-chaining `?.` so `alias?.[k]` / `alias?.query`
+			// are handled like their plain counterparts.
+			if (
+				code.charCodeAt(after) === 63 && // ?
+				code.charCodeAt(after + 1) === 46 // .
+			)
+				after += 2
+
+			const op = code.charCodeAt(after)
+
+			// `.` member access
+			if (op === 46) {
+				// Spaced access (`c .query`)
+				if (hadSpace) return true
+
+				// Whitespace after the dot (`c.  query`) also defeats the
+				// matcher's exact `alias.query` string.
+				let cursor = after + 1
+				while (cursor < code.length) {
+					const char = code.charCodeAt(cursor)
+					if (char !== 32 && char !== 9 && char !== 10) break
+					cursor++
+				}
+				if (cursor !== after + 1) return true
+
+				continue
+			}
+
+			// Computed `[…]` member access
+			if (op !== 91) continue
+
+			// Skip whitespace inside the bracket.
+			let cursor = after + 1
+			while (cursor < code.length) {
+				const char = code.charCodeAt(cursor)
+				if (char !== 32 && char !== 9 && char !== 10) break
+				cursor++
+			}
+
+			// A string-literal key (`alias["query"]`) is statically clear and is
+			// already handled by `access()`
+			const keyChar = code.charCodeAt(cursor)
+			if (keyChar !== 34 && keyChar !== 39) return true // not " or '
+		}
+	}
+
+	// `arguments` gives the handler the whole context array positionally, which
+	// the alias tracker cannot follow
+	let from = 0
+	while (true) {
+		const index = code.indexOf('arguments', from)
+		if (index === -1) break
+
+		from = index + 9
+
+		const before = index === 0 ? -1 : code.charCodeAt(index - 1)
+		const after = code.charCodeAt(from)
+
+		if (
+			(before === -1 || !isIdentifierChar(before)) &&
+			!isIdentifierChar(after)
+		)
+			return true
+	}
+
+	return false
+}
+
 /**
  * Analyze if context is mentioned in body
  */
@@ -572,52 +697,87 @@ function isContextPassToFunction(
 		return true
 	}
 
+	// Linear single-pass scan (replaces the previous O(n²) backtracking regex
+	// `\w\(.*?ctx.*?\)`, which burned ~225ms on a pathological ~31KB body).
+	//
+	// The context is "passed to a function" when its identifier appears as a
+	// bare call argument: bounded on the left by `(` or `,` and on the right by
+	// `)` or `,` (whitespace allowed on either side), where a `(` boundary is a
+	// function-call paren (preceded by an identifier/`]`/`)` — i.e. an invocation
+	// rather than a grouping paren). Member access (`ctx.query`, `ctx[k]`) and
+	// substring collisions (`context` inside `contextual`) do not qualify.
 	try {
-		const escaped = context.replace(/\$/g, '\\$&')
-		let cached = contextRegexCache.get(escaped)
-		if (!cached) {
-			if (contextRegexCache.size > 64) contextRegexCache.clear()
-			cached = [
-				new RegExp(`\\w\\((?:.*?)?${escaped}(?:.*?)?\\)`, 'gs'),
-				new RegExp(`${escaped}(,|\\))`, 'gs')
-			]
-			contextRegexCache.set(escaped, cached)
-		}
+		const ctxLength = context.length
+		const bodyLength = body.length
 
-		const captureFunction = cached[0]
-		const exactParameter = cached[1]
+		let searchFrom = 0
+		while (true) {
+			const index = body.indexOf(context, searchFrom)
+			if (index === -1) break
 
-		captureFunction.lastIndex = 0
-		exactParameter.lastIndex = 0
+			searchFrom = index + ctxLength
 
-		const length = body.length
-		let fn
+			// Whole-token match only.
+			const before = index === 0 ? -1 : body.charCodeAt(index - 1)
+			const afterRaw = body.charCodeAt(searchFrom)
+			if (
+				(before !== -1 && isIdentifierChar(before)) ||
+				(!Number.isNaN(afterRaw) && isIdentifierChar(afterRaw))
+			)
+				continue
 
-		fn = captureFunction.exec(body) + ''
-		while (
-			captureFunction.lastIndex !== 0 &&
-			captureFunction.lastIndex < length + (fn ? fn.length : 0)
-		) {
-			if (fn && exactParameter.test(fn)) {
+			// Right boundary: skip whitespace, must be `)` or `,`.
+			let right = searchFrom
+			while (right < bodyLength) {
+				const char = body.charCodeAt(right)
+				if (char !== 32 && char !== 9 && char !== 10) break
+				right++
+			}
+			const rightChar = body.charCodeAt(right)
+			if (rightChar !== 41 && rightChar !== 44) continue // not `)` or `,`
+
+			// Left boundary: skip whitespace, must be `(` or `,`.
+			let left = index - 1
+			while (left >= 0) {
+				const char = body.charCodeAt(left)
+				if (char !== 32 && char !== 9 && char !== 10) break
+				left--
+			}
+			if (left < 0) continue
+
+			const leftChar = body.charCodeAt(left)
+
+			// `,ctx)` / `,ctx,` — already inside a call's argument list.
+			if (leftChar === 44) {
 				markAllAccessed(inference)
 
 				return true
 			}
 
-			fn = captureFunction.exec(body) + ''
-		}
+			// `(ctx)` / `(ctx,` — the `(` must be an invocation paren, i.e.
+			// preceded by an identifier char, `]`, or `)` (`fn(ctx)`,
+			// `obj.method(ctx)`, `arr[0](ctx)`, `f()(ctx)`). A grouping paren
+			// (e.g. `(ctx) => …`, `= (ctx)`) is not a function call.
+			if (leftChar === 40) {
+				let prev = left - 1
+				while (prev >= 0) {
+					const char = body.charCodeAt(prev)
+					if (char !== 32 && char !== 9 && char !== 10) break
+					prev--
+				}
+				if (prev < 0) continue
 
-		/*
-		Since JavaScript engine already format the code (removing whitespace, newline, etc.),
-		we can safely assume that the next character is either a closing bracket or a comma
-		if the function is passed to another function
-		*/
-		const nextChar = body.charCodeAt(captureFunction.lastIndex)
+				const prevChar = body.charCodeAt(prev)
+				if (
+					isIdentifierChar(prevChar) ||
+					prevChar === 93 || // ]
+					prevChar === 41 // )
+				) {
+					markAllAccessed(inference)
 
-		if (nextChar === 41 || nextChar === 44) {
-			markAllAccessed(inference)
-
-			return true
+					return true
+				}
+			}
 		}
 
 		return false
@@ -636,23 +796,27 @@ function isContextPassToFunction(
 	}
 }
 
-let pendingGC: Timer | undefined
 const DEFAULT_CACHE_LIMIT = 1024
 
-const contextRegexCache = new Map<string, [RegExp, RegExp]>()
+type SourceCache = Map<
+	number,
+	{ content: string; inference: Sucrose.Inference }
+>
 
-const caches = new Map<number, { content: string; inference: Sucrose.Inference }>()
+const sourceCache = () =>
+	getCompilerSession()?.sucroseCache as SourceCache | undefined
 
 let functionCaches = new WeakMap<Function, Sucrose.Inference>()
 
 function rememberInference(
+	caches: SourceCache | undefined,
 	key: number,
 	cached: { content: string; inference: Sucrose.Inference } | undefined,
 	content: string,
 	event: unknown,
 	inference: Sucrose.Inference
 ) {
-	if (!cached || cached.content !== content) {
+	if (caches && (!cached || cached.content !== content)) {
 		if (caches.size >= DEFAULT_CACHE_LIMIT) {
 			const oldest = caches.keys().next().value
 			if (oldest !== undefined) caches.delete(oldest)
@@ -664,27 +828,13 @@ function rememberInference(
 }
 
 function clearCache() {
-	caches.clear()
+	sourceCache()?.clear()
 	functionCaches = new WeakMap()
-	contextRegexCache.clear()
-
-	pendingGC = undefined
-	if (isBun) Bun.gc(false)
 }
 
 export function clearSucroseCache(delay?: number | null) {
-	if (delay === null || isCloudflareWorker) return
-	if (delay === undefined) delay = 1 * 60 * 1000
-
-	if (pendingGC) clearTimeout(pendingGC)
-
-	if (delay) {
-		pendingGC = setTimeout(clearCache, delay)
-		pendingGC.unref?.()
-	} else {
-		pendingGC = undefined
-		clearCache()
-	}
+	if (delay === null) return
+	clearCache()
 }
 
 function mergeInference(a: Sucrose.Inference, b: Sucrose.Inference) {
@@ -743,7 +893,7 @@ export function sucrose(
 			push(events, lifeCycle.afterResponse)
 	}
 
-	let needGc = true
+	const caches = sourceCache()
 
 	for (let i = 0; i < events.length; i++) {
 		const event = events[i]
@@ -759,12 +909,12 @@ export function sucrose(
 
 		const content = event.toString()
 		const key = fnv1a(content)
-		const cached = caches.get(key)
+		const cached = caches?.get(key)
 		if (cached && cached.content === content) {
 			const cachedInference = cached.inference
 			// LRU bump: move this key to MRU position by re-inserting.
-			caches.delete(key)
-			caches.set(key, cached)
+			caches!.delete(key)
+			caches!.set(key, cached)
 			if (typeof event === 'function')
 				functionCaches.set(event, cachedInference)
 			inference = inference
@@ -775,20 +925,12 @@ export function sucrose(
 
 		inference ??= defaultSucrose()
 
-		if (needGc) {
-			needGc = false
-			if (!pendingGC && !isCloudflareWorker) {
-				pendingGC = setTimeout(clearCache, 1 * 60 * 1000)
-				pendingGC.unref?.()
-			}
-		}
-
 		const fnInference: Sucrose.Inference = defaultSucrose()
 
 		if (content.includes('[native code]')) {
 			markAllAccessed(fnInference)
 
-			rememberInference(key, cached, content, event, fnInference)
+			rememberInference(caches, key, cached, content, event, fnInference)
 
 			inference = mergeInference(inference, fnInference)
 			continue
@@ -800,7 +942,7 @@ export function sucrose(
 			// Unknown case: parser could not extract body — degrade to all-true per contract
 			markAllAccessed(fnInference)
 
-			rememberInference(key, cached, content, event, fnInference)
+			rememberInference(caches, key, cached, content, event, fnInference)
 
 			inference = mergeInference(inference, fnInference)
 			continue
@@ -822,8 +964,16 @@ export function sucrose(
 			)
 				code = code.slice(1, -1).trim()
 
-			if (!isContextPassToFunction(mainParameter, code, fnInference))
+			if (!isContextPassToFunction(mainParameter, code, fnInference)) {
 				inferBodyReference(code, aliases, fnInference)
+
+				// C19 correctness floor: any use of the context alias the
+				// classifier could not resolve (computed key, `arguments`) must
+				// conservatively mark every channel accessed rather than leave
+				// a channel silently un-initialised for codegen.
+				if (hasAmbiguousContextUse(code, aliases))
+					markAllAccessed(fnInference)
+			}
 
 			if (
 				!fnInference.query &&
@@ -832,7 +982,7 @@ export function sucrose(
 				fnInference.query = true
 		}
 
-		rememberInference(key, cached, content, event, fnInference)
+		rememberInference(caches, key, cached, content, event, fnInference)
 
 		inference = mergeInference(inference, fnInference)
 

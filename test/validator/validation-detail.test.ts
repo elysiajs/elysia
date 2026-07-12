@@ -30,7 +30,9 @@ const run = async (nodeEnv: string): Promise<Record<string, Scenario>> => {
 	await proc.exited
 
 	if (proc.exitCode !== 0)
-		throw new Error(`fixture exited ${proc.exitCode}:\n${stderr}\n${stdout}`)
+		throw new Error(
+			`fixture exited ${proc.exitCode}:\n${stderr}\n${stdout}`
+		)
 
 	const raw = JSON.parse(stdout.trim()) as Record<
 		string,
@@ -71,7 +73,9 @@ describe('validation detail — production gating', () => {
 		expect(r.allowUnsafe.body.errors).toBeArray()
 
 		// validationDetail custom message is surfaced without leaking schema
-		expect(r.validationDetailMessage.body.message).toBe('x must be a number')
+		expect(r.validationDetailMessage.body.message).toBe(
+			'x must be a number'
+		)
 		expect(r.validationDetailMessage.body.errors).toBeUndefined()
 		expect(r.validationDetailMessage.body.value).toBeUndefined()
 
@@ -90,7 +94,9 @@ describe('validation detail — production gating', () => {
 		// the custom-error path used findCustomError, NOT TypeBox Errors:
 		// the throwing thunk was never consulted (status 422, message present)
 		expect(r.findCustomErrorBypass.status).toBe(422)
-		expect(r.findCustomErrorBypass.body.message).toBe('from findCustomError')
+		expect(r.findCustomErrorBypass.body.message).toBe(
+			'from findCustomError'
+		)
 		expect(r.findCustomErrorBypass.body.found).toBeUndefined()
 	})
 
@@ -107,7 +113,9 @@ describe('validation detail — production gating', () => {
 		expect(r.responseLeak.body.errors).toBeUndefined()
 		// the offending server object (incl. secrets) must not appear anywhere
 		expect(JSON.stringify(r.responseLeak.body)).not.toContain('SECRET')
-		expect(JSON.stringify(r.responseLeak.body)).not.toContain('passwordHash')
+		expect(JSON.stringify(r.responseLeak.body)).not.toContain(
+			'passwordHash'
+		)
 
 		// a custom-error callback on the response schema must not receive the
 		// server value (so it can't echo it) and must not yield a 422
@@ -163,10 +171,12 @@ describe('validation detail — production gating', () => {
 		// `payload.property` must extract `.key` per segment (mirroring `found`),
 		// otherwise it emits `/[object Object]/[object Object]` and defeats L13.
 		expect(r.propertyStandardObjectSegments.status).toBe(422)
-		expect(r.propertyStandardObjectSegments.body.property).toBe('/user/name')
-		expect(
-			r.propertyStandardObjectSegments.body.property
-		).not.toContain('[object Object]')
+		expect(r.propertyStandardObjectSegments.body.property).toBe(
+			'/user/name'
+		)
+		expect(r.propertyStandardObjectSegments.body.property).not.toContain(
+			'[object Object]'
+		)
 	})
 
 	it('L13 Defect 2: `.all` dotted path from Standard Schema object segments renders as `user.name`', async () => {
@@ -175,9 +185,9 @@ describe('validation detail — production gating', () => {
 			const r = await run(env)
 			expect(Array.isArray(r.allStandardObjectSegments.body)).toBe(true)
 			expect(r.allStandardObjectSegments.body[0].path).toBe('user.name')
-			expect(
-				r.allStandardObjectSegments.body[0].path
-			).not.toContain('[object Object]')
+			expect(r.allStandardObjectSegments.body[0].path).not.toContain(
+				'[object Object]'
+			)
 		}
 	})
 
@@ -192,5 +202,26 @@ describe('validation detail — production gating', () => {
 		expect(r.responseLeak.status).toBe(422)
 		expect(r.responseLeak.body.on).toBe('response')
 		expect(r.responseLeak.body.errors).toBeArray()
+	})
+
+	it('C15: bounds the serialized found echo by UTF-8 bytes', async () => {
+		const r = await run('development')
+		const found = JSON.stringify(r.cjkEcho.body.found ?? '')
+
+		expect(r.cjkEcho.status).toBe(422)
+		expect(new TextEncoder().encode(found).length).toBeLessThanOrEqual(8192)
+	})
+
+	it('C23: formats validation failures without replaying user refinements', async () => {
+		const r = await run('development')
+
+		expect(r.refineNoReplay.status).toBe(422)
+		expect(r.refineNoReplay.body.responseStatus).toBe(422)
+		expect(r.refineNoReplay.body.responseBody.errors).toBeArray()
+		expect(r.refineNoReplay.body.calls).toBe(1)
+
+		expect(r.patternError.status).toBe(422)
+		expect(r.patternError.body.errors).toBeArray()
+		expect(r.patternError.body.detail).toContain('pattern')
 	})
 })

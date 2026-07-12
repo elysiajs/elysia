@@ -83,6 +83,9 @@ Feature:
 
 Bug fix:
 
+- Body parsing now confirms an exact normalized media type (including `+json`)
+  and returns 415 when it unambiguously conflicts with a route body schema;
+  schema-less, custom-parser, and ambiguous-schema routes remain lenient.
 - on non-Bun (Node / web-standard) adapters, a plain-string response now sets `content-type: text/plain` again — a stray header literally named `type` (a typo) had replaced it, so the compact-path string response shipped with a wrong header and the auto-derived `text/plain;charset=UTF-8` instead of the intended `text/plain`
 - macro routes had process-order-dependent validation: a one-shot iterator in the macro's schema-lift made the lift a no-op after the first call per process, so two identical routes under a guard could validate differently depending on registration/dispatch order. The lift (which predated the override-channel ruling and contradicted it) is removed — route-local schemas now consistently override an inherited guard schema regardless of order
 - typebox is tree-shakable again: `Elysia` itself no longer holds a static value-edge into the `t`/typebox graph (`.Ref()` now goes through the typebox-free bridge), so bundling an app that never uses `t` drops typebox entirely (esbuild probe: 737KB → 204KB, 0 typebox bytes; schema users unchanged). `import { Elysia } from 'elysia/base'` is now typebox-free at runtime too (~8ms cold import vs ~60ms for the main barrel)
@@ -2813,7 +2816,6 @@ Breaking Change:
 - Rename `.setModel` to `.model`
     - to migrate: rename `setModel` to `model`
 - Remove `hook.schema` to `hook`
-
     - to migrate: remove schema and curly brace `schema.type`:
 
     ```ts
@@ -3687,7 +3689,6 @@ Breaking Change:
 
 - `Context` is now `interface` (non-constructable)
 - `responseHeaders`, `status`, `redirect` is now replaced with `set`
-
     - To migrate:
 
     ```typescript
@@ -3891,7 +3892,6 @@ Feature:
 Breaking Change:
 
 - Moved `store` into `context.store`
-
     - To migrate:
 
     ```typescript
@@ -3904,7 +3904,6 @@ Breaking Change:
 
 - `ref`, and `refFn` is now removed
 - Remove `Plugin` type, simplified Plugin type declaration
-
     - To migrate:
 
     ```typescript
@@ -3918,7 +3917,6 @@ Breaking Change:
     ```
 
 - Migrate `Header` to `Record<string, unknown>`
-
     - To migrate:
 
     ```typescript
