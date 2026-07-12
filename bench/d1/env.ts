@@ -1,0 +1,301 @@
+import { createHash } from 'node:crypto'
+import { readdir, readFile } from 'node:fs/promises'
+import { cpus, release } from 'node:os'
+import { dirname, extname, relative, resolve } from 'node:path'
+
+import type { BunManifest, MachineManifest, PinnedManifest } from './schema'
+
+export const BENCH_SOURCE_FILES = [
+	'bench/d1/env.ts',
+	'bench/d1/inject.ts',
+	'bench/d1/margins.json',
+	'bench/d1/run.ts',
+	'bench/d1/schema.ts',
+	'bench/d1/stats.ts',
+	'bench/d1/fixtures/cold-start.ts',
+	'bench/d1/fixtures/compile-memory.ts',
+	'bench/d1/fixtures/executables.ts',
+	'bench/d1/fixtures/http.ts',
+	'bench/d1/fixtures/native-table.ts',
+	'bench/d1/fixtures/retained.ts',
+	'example/stress/utils.ts',
+	'package.json'
+] as const
+
+export interface D1Environment {
+	machine: MachineManifest
+	bun: BunManifest
+	env: Record<string, string>
+	machineId: string
+}
+
+function text(value: Uint8Array | undefined) {
+	return value ? new TextDecoder().decode(value).trim() : ''
+}
+
+function command(command_: string, args: string[]) {
+	try {
+		const result = Bun.spawnSync({
+			cmd: [command_, ...args],
+			stdout: 'pipe',
+			stderr: 'pipe'
+		})
+		return {
+			code: result.exitCode ?? 1,
+			stdout: text(result.stdout),
+			stderr: text(result.stderr)
+		}
+	} catch (error) {
+		return { code: 1, stdout: '', stderr: String(error) }
+	}
+}
+
+function commandText(command_: string, args: string[]) {
+	const result = command(command_, args)
+	return result.code === 0 ? result.stdout : 'unavailable'
+}
+
+function cleanCpuModel(model: string) {
+	return model
+		.toLowerCase()
+		.replace(/^apple\s+/, '')
+		.replace(/\s+/g, '-')
+		.replace(/[^a-z0-9-]/g, '')
+}
+
+export function deriveMachineId(
+	cpuModel: string,
+	platform: string,
+	arch: string
+) {
+	return `${cleanCpuModel(cpuModel)}-${platform}-${arch}`
+}
+
+function macImage() {
+	const product = commandText('sw_vers', ['-productName'])
+	const build = commandText('sw_vers', ['-buildVersion'])
+	return { product, build }
+}
+
+function powerState() {
+	const battery = commandText('pmset', ['-g', 'batt'])
+	const settings = commandText('pmset', ['-g'])
+	const source =
+		battery.match(/Now drawing from '([^']+)'/i)?.[1] ?? 'unknown'
+	const lowPowerMode =
+		settings.match(/lowpowermode\s+([01])/i)?.[1] ?? 'unknown'
+	return { source, lowPowerMode }
+}
+
+export function relevantEnvironment(
+	environment: NodeJS.ProcessEnv = process.env
+) {
+	return Object.fromEntries(
+		Object.entries(environment)
+			.filter(
+				([key, value]) =>
+					value !== undefined &&
+					(key === 'NODE_ENV' ||
+						key.startsWith('BUN_') ||
+						key.startsWith('D1_'))
+			)
+			.sort(([a], [b]) => a.localeCompare(b))
+	) as Record<string, string>
+}
+
+export function captureEnvironment(): D1Environment {
+	const cpuModel = cpus()[0]?.model ?? 'unknown'
+	const platform = process.platform
+	const arch = process.arch
+	const machine = {
+		machineId: deriveMachineId(cpuModel, platform, arch),
+		cpuModel,
+		arch,
+		platform,
+		osRelease: release(),
+		osImage:
+			platform === 'darwin'
+				? macImage()
+				: { product: 'unavailable', build: 'unavailable' },
+		power:
+			platform === 'darwin'
+				? powerState()
+				: { source: 'unavailable', lowPowerMode: 'unavailable' }
+	}
+	const { machineId, ...machineManifest } = machine
+	const bun = {
+		version: Bun.version,
+		revision: Bun.revision
+	}
+	return {
+		machine: machineManifest,
+		bun,
+		env: relevantEnvironment(),
+		machineId
+	}
+}
+
+function staticImports(source: string) {
+	const imports: string[] = []
+	const pattern =
+		/\b(?:import|export)\s+(?!\()(?:(?:type)\s+)?(?:[\s\S]*?\sfrom\s+)?['"]([^'"]+)['"]/g
+	for (const match of source.matchAll(pattern)) imports.push(match[1]!)
+	return imports
+}
+
+async function resolveLocalImport(
+	repoRoot: string,
+	sourceFile: string,
+	specifier: string
+) {
+	if (!specifier.startsWith('.')) return undefined
+	const base = resolve(repoRoot, dirname(sourceFile), specifier)
+	const candidates = [
+		base,
+		`${base}.ts`,
+		`${base}.json`,
+		resolve(base, 'index.ts')
+	]
+	for (const candidate of candidates) {
+		try {
+			await readFile(candidate)
+			return relative(repoRoot, candidate)
+		} catch {}
+	}
+	return undefined
+}
+
+async function benchTypeScriptFiles(
+	repoRoot: string,
+	directory = 'bench/d1'
+): Promise<string[]> {
+	const result: string[] = []
+	for (const entry of await readdir(resolve(repoRoot, directory), {
+		withFileTypes: true
+	})) {
+		const path = `${directory}/${entry.name}`
+		if (entry.isDirectory())
+			result.push(...(await benchTypeScriptFiles(repoRoot, path)))
+		else if (extname(entry.name) === '.ts') result.push(path)
+	}
+	return result.sort()
+}
+
+export async function assertBenchSourceFileListCoversStaticImports(
+	repoRoot: string
+) {
+	const listed = new Set<string>(BENCH_SOURCE_FILES)
+	if (
+		BENCH_SOURCE_FILES.some(
+			(file) =>
+				file.startsWith('bench/d1/baseline/') ||
+				file.startsWith('bench/d1/runs/') ||
+				file.startsWith('trace/')
+		)
+	)
+		throw new Error(
+			'BENCH_SOURCE_FILES cannot include baseline, runs, or trace output'
+		)
+	const currentBenchFiles = await benchTypeScriptFiles(repoRoot)
+	const missingBenchFiles = currentBenchFiles.filter(
+		(file) => !listed.has(file)
+	)
+	if (missingBenchFiles.length)
+		throw new Error(
+			`BENCH_SOURCE_FILES is missing: ${missingBenchFiles.join(', ')}`
+		)
+	for (const file of BENCH_SOURCE_FILES) {
+		try {
+			await readFile(resolve(repoRoot, file))
+		} catch {
+			throw new Error(`BENCH_SOURCE_FILES names a missing file: ${file}`)
+		}
+	}
+	const queue = currentBenchFiles.slice()
+	const visited = new Set<string>()
+	const missingImports: string[] = []
+	while (queue.length) {
+		const file = queue.pop()!
+		if (visited.has(file)) continue
+		visited.add(file)
+		const source = await readFile(resolve(repoRoot, file), 'utf8')
+		for (const specifier of staticImports(source)) {
+			const imported = await resolveLocalImport(repoRoot, file, specifier)
+			if (!imported || imported.startsWith('src/')) continue
+			if (!listed.has(imported))
+				missingImports.push(`${file} -> ${imported}`)
+			if (imported.startsWith('bench/d1/') && imported.endsWith('.ts'))
+				queue.push(imported)
+			else if (!visited.has(imported)) queue.push(imported)
+		}
+	}
+	if (missingImports.length)
+		throw new Error(
+			`BENCH_SOURCE_FILES misses static imports: ${missingImports.join(', ')}`
+		)
+	return true
+}
+
+export async function benchSourceHash(repoRoot: string) {
+	await assertBenchSourceFileListCoversStaticImports(repoRoot)
+	const hash = createHash('sha256')
+	for (const file of BENCH_SOURCE_FILES) {
+		const bytes = await readFile(resolve(repoRoot, file))
+		hash.update(file)
+		hash.update('\0')
+		hash.update(String(bytes.byteLength))
+		hash.update('\0')
+		hash.update(bytes)
+	}
+	return hash.digest('hex')
+}
+
+export async function capturePinnedManifest(
+	repoRoot: string
+): Promise<PinnedManifest> {
+	const environment = captureEnvironment()
+	return {
+		schemaVersion: 1,
+		kind: 'd1-manifest',
+		machineId: environment.machineId,
+		machine: environment.machine,
+		bun: environment.bun,
+		env: environment.env,
+		benchSourceHash: await benchSourceHash(repoRoot),
+		createdAt: new Date().toISOString()
+	}
+}
+
+export function assertPreflightEqual(
+	current: D1Environment,
+	pinned: PinnedManifest
+) {
+	const compare = {
+		machine: current.machine,
+		bun: current.bun,
+		env: current.env
+	}
+	const expected = {
+		machine: pinned.machine,
+		bun: pinned.bun,
+		env: pinned.env
+	}
+	if (JSON.stringify(compare) !== JSON.stringify(expected))
+		throw new Error(
+			'D1 preflight mismatch: Bun pin, OS image, power state, machine, or D1 environment differs from the pinned manifest'
+		)
+}
+
+export function gitInfo(repoRoot: string) {
+	const commitResult = command('git', ['-C', repoRoot, 'rev-parse', 'HEAD'])
+	if (commitResult.code !== 0)
+		throw new Error(`cannot read git commit: ${commitResult.stderr}`)
+	const status = command('git', [
+		'-C',
+		repoRoot,
+		'status',
+		'--porcelain',
+		'--untracked-files=all'
+	])
+	return { commit: commitResult.stdout, dirty: Boolean(status.stdout) }
+}

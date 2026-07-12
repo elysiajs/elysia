@@ -37,6 +37,20 @@ jobs:
                   name: stress-${{ runner.os }}-${{ github.sha }}
                   path: trace/stress-results.json
 
+            # Shared runners are NOT the D1 pinned environment: this verifies committed
+            # baseline schema, A/A floors vs margins, and bench-source hash only.
+            # Timing/memory gates run on the pinned machine via `bun run bench:d1:gate`.
+            - name: D1 proof-baseline verify
+              run: bun run bench:d1:verify
+
+            - name: Upload D1 artifacts
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: d1-${{ runner.os }}-${{ github.sha }}
+                  path: trace/d1/
+                  if-no-files-found: ignore
+
             - name: Publish Preview
               if: github.event_name == 'pull_request'
               run: bunx pkg-pr-new publish

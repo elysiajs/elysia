@@ -11,8 +11,8 @@ Executors:
 - deep-reasoner (Opus): reasoning-heavy phases, for helping you review/verify your thinking along side Codex gpt-5.6-sol below.
 - Codex (/codex:rescue --background): peer engineer, different
   perspective. Second-opinion, executor reviewer/verifier.
-	- gpt-5.6-luna model with max thinking effort for writing general purpose code, good at following detailed instructions.
-	- gpt-5.6-sol model with high thinking effort for reasoning-heavy tasks, treat as peer engineer for code review, debugging, and complex problem solving.
+	- gpt-5.6-sol model with high effort for writing general purpose code, good at following detailed instructions.
+	- gpt-5.6-sol model with xhigh effort for reasoning-heavy tasks, treat as peer engineer for code review, debugging, and complex problem solving.
 
 For high reasoning tasks, code-review, architecture decisions, use Codex gpt-5.6-sol as a peer engineer to review and verify your thinking.
 

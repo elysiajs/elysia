@@ -210,6 +210,11 @@
 		"bench": "bun run example/stress/run.ts",
 		"bench:quick": "bun run example/stress/run.ts --quick",
 		"bench:throughput": "bun run example/stress/throughput.ts",
+		"bench:d1": "bun run bench/d1/run.ts record",
+		"bench:d1:aa": "bun run bench/d1/run.ts aa",
+		"bench:d1:gate": "bun run bench/d1/run.ts gate",
+		"bench:d1:selftest": "bun run bench/d1/run.ts self-test",
+		"bench:d1:verify": "bun run bench/d1/run.ts verify",
 		"dev": "bun run --watch example/a.ts",
 		"build": "bun build.ts",
 		"release": "bun run test && bun publish"
