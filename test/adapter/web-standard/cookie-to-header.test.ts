@@ -116,4 +116,22 @@ describe('Web Standard - Cookie to Header', () => {
 		const result = serializeCookie(cookies)
 		expect(result).toBeUndefined()
 	})
+
+	it('serialize a removed cookie with matching path and domain', () => {
+		const cookies = {
+			session: {
+				value: '',
+				expires: new Date(0),
+				maxAge: 0,
+				path: '/api',
+				domain: 'millennium.sh'
+			}
+		}
+		const result = serializeCookie(cookies)
+
+		expect(result).toContain('Path=/api')
+		expect(result).toContain('Domain=millennium.sh')
+    expect(result).toContain('Max-Age=0')
+    expect(result).toContain('Expires=Thu, 01 Jan 1970')
+	})
 })
