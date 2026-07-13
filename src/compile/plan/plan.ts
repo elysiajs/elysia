@@ -2,7 +2,6 @@ import type { AnyElysia } from '../../base'
 import type { ElysiaAdapter } from '../../adapter'
 
 import { isAsyncFunction } from '../utils'
-import { frozenRootOf } from '../../generation'
 
 import type { RouteCompileState } from '../handler/descriptor'
 import type { AnyLocalHook } from '../../types'
@@ -70,6 +69,7 @@ export interface RoutePlan {
 
 	// response-mode facts
 	hasSet: boolean
+	responseMode: RouteCompileState['descriptor']['responseMode']
 
 	tail: {
 		hasAfterHandle: boolean
@@ -102,7 +102,7 @@ export function planRoute(
 	hook: AnyLocalHook | undefined,
 	handler: unknown,
 	_adapter: ElysiaAdapter,
-	root: AnyElysia,
+	_root: AnyElysia,
 	isHandleFunction: boolean
 ): RoutePlan {
 	const { descriptor: d, vali, inference } = state
@@ -119,15 +119,7 @@ export function planRoute(
 	const needsQuery = inference.query || !!vali?.query
 	const needsHeaders = inference.headers || !!vali?.headers
 
-	const hasSet =
-		inference.cookie ||
-		inference.set ||
-		!!frozenRootOf(root)['~ext']?.['headers'] ||
-		d.needsCookie ||
-		d.hasAfterResponse ||
-		d.hasErrorHook ||
-		d.hasResponseValidator ||
-		d.hasTrace
+	const hasSet = d.responseMode !== 'compact'
 
 	const main: PlanSegment[] = []
 
@@ -211,6 +203,7 @@ export function planRoute(
 		needsCookie: d.needsCookie,
 		hasBody: d.hasBody,
 		hasSet,
+		responseMode: d.responseMode,
 		tail: {
 			hasAfterHandle: d.hasAfterHandle,
 			hasMapResponse: d.hasMapResponse,

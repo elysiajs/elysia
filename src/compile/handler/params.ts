@@ -10,13 +10,18 @@ import {
 	parseCookieRaw,
 	parseCookieRawSync,
 	parseCookieRawSigned,
+	parseCookieRawLazy,
 	buildCookieJar,
 	signCookieValues,
 	signCookieValuesSync
 } from '../../cookie/utils'
 import { requestId } from '../../utils'
 import { forwardError } from '../../handler/utils'
-import { normalizeContentType, tee } from '../../adapter/utils'
+import {
+	materializeSetHeaders,
+	normalizeContentType,
+	tee
+} from '../../adapter/utils'
 import {
 	cloneResponse,
 	emptyResponse,
@@ -73,10 +78,12 @@ export const HANDLER_PARAMS: Record<string, Resolver> = {
 	// allowUnsafeValidationDetails opt-in: `e instanceof verr` in the error catch
 	verr: () => ValidationError,
 	tee: () => tee,
+	msh: () => materializeSetHeaders,
 	cr: () => cloneResponse,
 	pcr: () => parseCookieRaw,
 	pcrs: () => parseCookieRawSync,
 	pcrsg: () => parseCookieRawSigned,
+	pcrl: () => parseCookieRawLazy,
 	bcj: () => buildCookieJar,
 	// `scv` async WebCrypto sign; `scvs` H3 sync `node:crypto` sign.
 	scv: () => signCookieValues,

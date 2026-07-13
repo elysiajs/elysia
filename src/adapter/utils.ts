@@ -7,8 +7,16 @@ import type { ElysiaFile } from '../universal/file'
 import type { Context } from '../context'
 
 import { skipClone } from './skip-clone'
+import { defaultHeaders } from './default-headers'
 
 const setCookie = 'set-cookie' as const
+
+export function materializeSetHeaders(set: Context['set']) {
+	const headers = set.headers
+	if ((headers as any)[defaultHeaders] !== headers) return headers
+
+	return (set.headers = Object.assign(nullObject(), headers))
+}
 
 const sseFormat = (data: string) => `data: ${data}\n\n`
 const identityFormat = (data: string) => data
@@ -212,6 +220,7 @@ export function parseSetCookies(headers: Headers, setCookie: string[]) {
 
 export function responseToSetHeaders(response: Response, set?: Context['set']) {
 	if (set && set.headers instanceof Headers) normalizeHeaders(set)
+	if (set) materializeSetHeaders(set)
 
 	if (set?.headers) {
 		if (response) {
@@ -344,6 +353,7 @@ export function createStreamHandler({
 					: 'application/json'
 				: 'text/plain'
 
+		if (set) materializeSetHeaders(set)
 		const headers = set?.headers
 		if (headers instanceof Headers) {
 			if (!headers.has('transfer-encoding'))
@@ -518,6 +528,7 @@ export function handleSet(set: Context['set']) {
 	}
 
 	if (set.cookie && isNotEmpty(set.cookie)) {
+		materializeSetHeaders(set)
 		const cookie = serializeCookie(set.cookie)
 
 		if (cookie) {

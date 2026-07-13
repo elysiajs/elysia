@@ -1,6 +1,11 @@
 import { Create } from './type/bridge'
 
 import { isProduction } from './universal/is-production'
+// C2 (N.1): per-schema `expected` default memo. Keyed by schema identity — schemas
+// are snapshot-stable (B5), so the `Create(schema)` walk (~1.5µs) runs once per schema
+// instead of per 422. Shared reference is safe: `expected` only feeds the serialized
+// problem+json payload, never mutated.
+const expectedCache = new WeakMap<object, unknown>()
 import { StatusMap, StatusMapBack } from './constants'
 import { primitiveElysiaTypes } from './type/constants'
 import { skipClone } from './adapter/skip-clone'
@@ -566,9 +571,14 @@ export class ValidationError extends ElysiaError {
 		const schemaForExpected = first?.schema ?? this.schema
 
 		if (schemaForExpected)
-			try {
-				expected = Create(schemaForExpected as any)
-			} catch {}
+			if (expectedCache.has(schemaForExpected as object))
+				expected = expectedCache.get(schemaForExpected as object)
+			else {
+				try {
+					expected = Create(schemaForExpected as any)
+				} catch {}
+				expectedCache.set(schemaForExpected as object, expected)
+			}
 
 		return {
 			type: 'validation',

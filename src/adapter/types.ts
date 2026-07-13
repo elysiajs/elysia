@@ -90,6 +90,8 @@ export interface ElysiaAdapterOptions {
 			set: Context['set'],
 			...params: unknown[]
 		): unknown
+		/** Support immutable shared default headers. */
+		supportsDefaultHeaderSink?: true
 		/**
 		 * Map response without cookie, status or headers
 		 */

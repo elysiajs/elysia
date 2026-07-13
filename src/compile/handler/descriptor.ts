@@ -1,4 +1,5 @@
 import type { AnyElysia } from '../../base'
+import type { ElysiaAdapter } from '../../adapter'
 import { separateFunction, sucrose, type Sucrose } from '../../sucrose'
 
 import type { RouteValidator } from '../../validator/route'
@@ -15,7 +16,7 @@ import { Capture } from '../aot'
 import { frozenRootOf } from '../../generation'
 import { JITProbe } from '../jit-probe'
 
-import type { CompactBeforeHandlePrefix } from '../../utils'
+import { isNotEmpty, type CompactBeforeHandlePrefix } from '../../utils'
 import type { AnyLocalHook, MaybeArray } from '../../types'
 
 export interface RouteDescriptor {
@@ -24,6 +25,11 @@ export interface RouteDescriptor {
 
 	handlerKind: 'function' | 'response' | 'promise' | 'static-value'
 	async: boolean
+	responseMode:
+		| 'compact'
+		| 'default-headers'
+		| 'set'
+		| 'set-with-default-headers'
 
 	// lifecycle presence
 	hasBeforeHandle: boolean
@@ -51,6 +57,7 @@ export interface RouteDescriptor {
 	hasCookieSign: boolean
 	syncCookieSign: boolean
 	asyncCookieSign: boolean
+	lazyCookieVerify: boolean
 
 	// promotion purity fact (native-static eligibility)
 	pureLiteral: boolean
@@ -105,6 +112,7 @@ export interface DescribeRouteInput {
 	path: string
 	handler: unknown
 	root: AnyElysia
+	adapter: ElysiaAdapter
 	hook: AnyLocalHook | undefined
 	buildValidator: () => RouteValidator<any> | undefined
 	isHandleFunction: boolean
@@ -298,7 +306,7 @@ const isIdent = (ch: number) =>
 	ch === 95 ||
 	ch === 36
 
-const UNANALYSABLE = Symbol('cookie-unanalysable')
+const UNANALYSABLE = false as const
 
 // Collect names from one function; returns a set of names, or `UNANALYSABLE`.
 function analyzeCookieFn(fn: Function): Set<string> | typeof UNANALYSABLE {
@@ -852,6 +860,7 @@ export function describeRoute(
 		path,
 		handler,
 		root,
+		adapter,
 		hook,
 		buildValidator,
 		isHandleFunction,
@@ -923,6 +932,20 @@ export function describeRoute(
 	const syncCookieSign =
 		hasCookieSign && hasSyncHmac && !Capture.isCapturing()
 	const asyncCookieSign = hasCookieSign && !syncCookieSign
+
+	const cookieReadsEarly = analyzeCookieReads(
+		handler,
+		hook,
+		inference,
+		!!vali?.cookie
+	)
+	const lazyCookieVerify =
+		hasCookieSign &&
+		cookieConfig?.verify === 'required-fields' &&
+		cookieReadsEarly !== undefined &&
+		!vali?.cookie &&
+		hasSyncHmac &&
+		!Capture.isCapturing()
 
 	const hasErrorHook = !!hook?.error?.length
 	const hasAfterResponse = !!hook?.afterResponse?.length
@@ -1047,19 +1070,35 @@ export function describeRoute(
 				: 'static-value'
 
 	const pureLiteral = isEmptyPipelineHook(hook)
-
-	const cookieReads = analyzeCookieReads(
-		handler,
-		hook,
-		inference,
-		!!vali?.cookie
+	const hasSetEffects =
+		inference.cookie ||
+		inference.set ||
+		needsCookie ||
+		hasAfterResponse ||
+		hasErrorHook ||
+		hasResponseValidator ||
+		hasTrace
+	const hasDefaultHeaders = isNotEmpty(
+		frozenRootOf(root)['~ext']?.headers
 	)
+	const hasDefaultHeaderSink =
+		hasDefaultHeaders && !!adapter.response.supportsDefaultHeaderSink
+	const responseMode: RouteDescriptor['responseMode'] = hasDefaultHeaderSink
+		? hasSetEffects
+			? 'set-with-default-headers'
+			: 'default-headers'
+		: hasSetEffects || hasDefaultHeaders
+			? 'set'
+			: 'compact'
+
+	const cookieReads = cookieReadsEarly
 
 	const descriptor: RouteDescriptor = {
 		method,
 		path,
 		handlerKind,
 		async: !!isAsync,
+		responseMode,
 
 		hasBeforeHandle,
 		hasAfterHandle,
@@ -1084,6 +1123,7 @@ export function describeRoute(
 		hasCookieSign,
 		syncCookieSign,
 		asyncCookieSign,
+		lazyCookieVerify,
 
 		pureLiteral,
 		cookieReads,

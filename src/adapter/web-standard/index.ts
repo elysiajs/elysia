@@ -96,6 +96,7 @@ export const WebStandardAdapter = createAdapter({
 	},
 	response: {
 		map: mapResponse,
+		supportsDefaultHeaderSink: true,
 		compact: mapCompactResponse
 	}
 })

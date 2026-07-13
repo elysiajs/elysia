@@ -9,6 +9,7 @@ import {
 	internalServerErrorResponse
 } from '../error'
 import { isNotEmpty } from '../utils'
+import { materializeSetHeaders } from '../adapter/utils'
 
 import type { Context } from '../context'
 import type { AppHook } from '../types'
@@ -167,6 +168,7 @@ export function createErrorHandler(
 	const asyncIndexes = getAsyncIndexes(onErrors)
 	if (asyncIndexes)
 		return async (context: Context, error: Error) => {
+			materializeSetHeaders(context.set)
 			// @ts-expect-error
 			context.error = error
 			if (allowUnsafe && error instanceof ValidationError)
@@ -207,6 +209,7 @@ export function createErrorHandler(
 		}
 
 	return (context: Context, error: Error) => {
+		materializeSetHeaders(context.set)
 		// @ts-expect-error
 		context.error = error
 		if (allowUnsafe && error instanceof ValidationError)

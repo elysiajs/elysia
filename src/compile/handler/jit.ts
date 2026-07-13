@@ -10,6 +10,7 @@ import {
 	parseCookieRaw,
 	parseCookieRawSync,
 	parseCookieRawSigned,
+	parseCookieRawLazy,
 	buildCookieJar,
 	signCookieValues,
 	signCookieValuesSync
@@ -45,7 +46,11 @@ import {
 	runBeforeHandlePrefixAsync,
 	type TraceReporter
 } from './utils'
-import { normalizeContentType, tee } from '../../adapter/utils'
+import {
+	materializeSetHeaders,
+	normalizeContentType,
+	tee
+} from '../../adapter/utils'
 import { ELYSIA_TYPES } from '../../type/constants'
 import { createTracer, type TraceEvent } from '../../trace'
 import { Capture } from '../aot'
@@ -307,6 +312,21 @@ const createInlineHandlerWithSet = (
 		return map(r, c.set, c.request)
 	}) as CompiledHandler
 
+const createInlineHandlerWithDefaultHeaders = (
+	map: (value: unknown, ...rest: unknown[]) => unknown,
+	h: (context: Context) => unknown
+) =>
+	((c: Context) => {
+		materializeSetHeaders(c.set)
+		const r = h(c)
+
+		if (r instanceof Error) throw r
+		if (r instanceof Promise)
+			return r.then((v) => map(forwardError(v), c.set, c.request))
+
+		return map(r, c.set, c.request)
+	}) as CompiledHandler
+
 export interface CompileHandlerJitOptions {
 	method: string
 	path: string
@@ -348,6 +368,7 @@ export function compileHandlerJit({
 		traceHandleOn,
 		descriptor: {
 			async: isAsync,
+			responseMode,
 			hasBody,
 			bodyValiIsAsync,
 			headersValiIsAsync,
@@ -355,10 +376,10 @@ export function compileHandlerJit({
 			queryValiIsAsync,
 			cookieValiIsAsync: cookieValidIsAsync,
 			responseValiAsync,
-			needsCookie,
 			hasCookieSign,
 			syncCookieSign,
 			asyncCookieSign,
+			lazyCookieVerify,
 			hasErrorHook,
 			hasAfterResponse,
 			hasBeforeHandle,
@@ -522,6 +543,13 @@ export function compileHandlerJit({
 	code = ''
 
 	if (hasErrorHook || hasTrace) code += 'try{\n'
+	if (
+		responseMode === 'set-with-default-headers' &&
+		(inference.set || hasTrace)
+	) {
+		link(materializeSetHeaders, 'msh')
+		code += `msh(c.set)\n`
+	}
 
 	const hasHeaders = inference.headers || !!vali?.headers
 
@@ -621,41 +649,40 @@ export function compileHandlerJit({
 				? "c.headers['cookie']"
 				: "c.request.headers.get('cookie')"
 
-		if (!hasCookieSign && !cookieValidIsAsync) {
-			link(parseCookieRawSync, 'pcrs')
-			code += `let _ck=pcrs(${cookieHeaderExpr},cc)\n`
-		} else if (syncCookieSign && !cookieValidIsAsync) {
-			link(parseCookieRawSigned, 'pcrsg')
-			code += `let _ck=pcrsg(${cookieHeaderExpr},cc)\n`
+		if (lazyCookieVerify) {
+			link(parseCookieRawLazy, 'pcrl')
+			code += `let _ck=pcrl(${cookieHeaderExpr},cc)\n`
+			code += `c.cookie=bcj(c.set,_ck,cc,1)\n`
 		} else {
-			link(parseCookieRaw, 'pcr')
-			code += `let _ck=await pcr(${cookieHeaderExpr},cc)\n`
+			if (!hasCookieSign && !cookieValidIsAsync) {
+				link(parseCookieRawSync, 'pcrs')
+				code += `let _ck=pcrs(${cookieHeaderExpr},cc)\n`
+			} else if (syncCookieSign && !cookieValidIsAsync) {
+				link(parseCookieRawSigned, 'pcrsg')
+				code += `let _ck=pcrsg(${cookieHeaderExpr},cc)\n`
+			} else {
+				link(parseCookieRaw, 'pcr')
+				code += `let _ck=await pcr(${cookieHeaderExpr},cc)\n`
+			}
+
+			if (vali?.cookie) {
+				link(vali, 'va')
+
+				const cookieIsOptional = !!(hook?.cookie as any)?.['~optional']
+				const validateExpr = `_ck=${cookieValidIsAsync ? 'await ' : ''}va.cookie.From(_ck,${fromArgs('cookie', !!cookieValidIsAsync)})\n`
+				if (cookieIsOptional)
+					code += `if(Object.keys(_ck).length){${validateExpr}}\n`
+				else code += validateExpr
+			}
+
+			code += `c.cookie=bcj(c.set,_ck,cc)\n`
 		}
-
-		if (vali?.cookie) {
-			link(vali, 'va')
-
-			const cookieIsOptional = !!(hook?.cookie as any)?.['~optional']
-			const validateExpr = `_ck=${cookieValidIsAsync ? 'await ' : ''}va.cookie.From(_ck,${fromArgs('cookie', !!cookieValidIsAsync)})\n`
-			if (cookieIsOptional)
-				code += `if(Object.keys(_ck).length){${validateExpr}}\n`
-			else code += validateExpr
-		}
-
-		code += `c.cookie=bcj(c.set,_ck,cc)\n`
 	}
 
-	const hasSet =
-		inference.cookie ||
-		inference.set ||
-		!!root['~ext']?.['headers'] ||
-		needsCookie ||
-		hasAfterResponse ||
-		hasErrorHook ||
-		hasResponseValidator ||
-		hasTrace
+	const hasSet = responseMode !== 'compact'
 
 	const res = adapter.response
+	const responseMap = res.map
 
 	/* eslint-disable sonarjs/no-use-of-empty-return-value */
 	const map = hasSet
@@ -1057,9 +1084,18 @@ export function compileHandlerJit({
 			)
 		else if (
 			alias === 'rm' ||
-			(!isAsync && !syncErrorHook && alias === 'rm,fe')
+			alias === 'msh,rm' ||
+			(!isAsync &&
+				!syncErrorHook &&
+				(alias === 'rm,fe' ||
+					alias === 'msh,rm,fe'))
 		)
-			return createInlineHandlerWithSet(res.map as any, handler as any)
+			return responseMode === 'set-with-default-headers' && inference.set
+				? createInlineHandlerWithDefaultHeaders(
+						responseMap as any,
+						handler as any
+					)
+				: createInlineHandlerWithSet(responseMap as any, handler as any)
 	}
 
 	JITProbe.record('handler:new-function')

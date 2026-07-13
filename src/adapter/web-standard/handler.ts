@@ -2,7 +2,8 @@ import {
 	createResponseHandler,
 	createStreamHandler,
 	handleFile,
-	handleSet
+	handleSet,
+	materializeSetHeaders
 } from '../utils'
 
 import { isBun } from '../../universal/constants'
@@ -16,6 +17,7 @@ import {
 
 import type { Context } from '../../context'
 import type { MaybePromise } from '../../types'
+import { defaultHeaders } from '../default-headers'
 
 function handleElysiaFile(
 	file: ElysiaFile,
@@ -32,7 +34,7 @@ function handleElysiaFile(
 				.toLowerCase() as any as keyof typeof mime
 		]
 
-	const headers = set.headers
+	const headers = materializeSetHeaders(set)
 	if (contentType) headers['content-type'] = contentType
 
 	const stats = file.stats
@@ -66,94 +68,105 @@ function responseTag(response: unknown): string | undefined {
 	return proto.constructor?.name
 }
 
+function mapResponseWithSet(
+	response: unknown,
+	set: Context['set'],
+	request?: Request
+): Response {
+	handleSet(set)
+	const headers = set.headers
+
+	switch (responseTag(response)) {
+		case 'String':
+			if (!isBun && !headers['content-type'])
+				materializeSetHeaders(set)['content-type'] = 'text/plain'
+
+			return new Response(response as string, set as ResponseInit)
+
+		case 'Array':
+			return Response.json(response, set as ResponseInit)
+
+		case 'Object':
+			if ((response as Record<string, unknown>)['~ely-form'])
+				return new Response(
+					formToFormData(response as Record<string, unknown>),
+					set as ResponseInit
+				)
+
+			// @ts-expect-error
+			if (typeof response?.next === 'function')
+				return handleStream(response as any, set, request) as any
+
+			return Response.json(response, set as ResponseInit)
+
+		case 'Number':
+		case 'Boolean':
+			return new Response(
+				(response as number | boolean).toString(),
+				set as ResponseInit
+			)
+
+		case 'ElysiaFile':
+			return handleElysiaFile(response as ElysiaFile, set, request)
+
+		case 'File':
+		case 'Blob':
+			return handleFile(response as Blob, set, request)
+
+		case 'ElysiaStatus':
+			set.status = (response as ElysiaStatus<200>).code
+			if ((response as ElysiaStatus<200>).headers)
+				Object.assign(
+					materializeSetHeaders(set),
+					(response as ElysiaStatus<200>).headers
+				)
+
+			return mapResponseWithSet(
+				(response as ElysiaStatus<200>).response,
+				set,
+				request
+			)
+
+		case undefined:
+			return response
+				? Response.json(response, set as ResponseInit)
+				: new Response(null, set as ResponseInit)
+
+		case 'Response':
+			return handleResponse(response as Response, set, request)
+
+		case 'Error':
+			return errorToResponse(response as Error, set)
+
+		case 'Promise':
+			return (response as Promise<any>).then((x) =>
+				mapResponseWithSet(x, set, request)
+			) as any
+
+		case 'Function':
+			return mapResponseWithSet((response as Function)(), set, request)
+
+		case 'FormData':
+			return new Response(response as FormData, set as ResponseInit)
+
+		default:
+			return mapResponseFallback(response, set, request) as Response
+	}
+}
+
 export function mapResponse(
 	response: unknown,
 	set: Context['set'],
 	request?: Request
 ): Response {
-	if (set.status !== undefined || set.cookie || isNotEmpty(set.headers)) {
-		handleSet(set)
-		const headers = set.headers
-
-		switch (responseTag(response)) {
-			case 'String':
-				if (!isBun && !headers['content-type'])
-					headers['content-type'] = 'text/plain'
-
-				return new Response(response as string, set as ResponseInit)
-
-			case 'Array':
-				return Response.json(response, set as ResponseInit)
-
-			case 'Object':
-				if ((response as Record<string, unknown>)['~ely-form'])
-					return new Response(
-						formToFormData(response as Record<string, unknown>),
-						set as ResponseInit
-					)
-
-				// only happen when trace is enabled
-				// because tee is used to clone the stream, which will return a ReadableStream
-				// @ts-expect-error
-				if (typeof response?.next === 'function')
-					return handleStream(response as any, set, request) as any
-
-				return Response.json(response, set as ResponseInit)
-
-			case 'Number':
-			case 'Boolean':
-				return new Response(
-					(response as number | boolean).toString(),
-					set as ResponseInit
-				)
-
-			case 'ElysiaFile':
-				return handleElysiaFile(response as ElysiaFile, set, request)
-
-			case 'File':
-			case 'Blob':
-				return handleFile(response as Blob, set, request)
-
-			case 'ElysiaStatus':
-				set.status = (response as ElysiaStatus<200>).code
-				if ((response as ElysiaStatus<200>).headers)
-					Object.assign(
-						headers,
-						(response as ElysiaStatus<200>).headers
-					)
-
-				return mapResponse(
-					(response as ElysiaStatus<200>).response,
-					set,
-					request
-				)
-
-			case undefined:
-				return response
-					? Response.json(response, set as ResponseInit)
-					: new Response(null, set as ResponseInit)
-
-			case 'Response':
-				return handleResponse(response as Response, set, request)
-
-			case 'Error':
-				return errorToResponse(response as Error, set)
-
-			case 'Promise':
-				return (response as Promise<any>).then((x) =>
-					mapResponse(x, set, request)
-				) as any
-
-			case 'Function':
-				return mapResponse((response as Function)(), set, request)
-
-			case 'FormData':
-				return new Response(response as FormData, set as ResponseInit)
-
-			default:
-				return mapResponseFallback(response, set, request) as Response
-		}
-	}
+	const headers = set.headers
+	if (
+		set.status !== undefined ||
+		set.cookie ||
+		(headers as any)[defaultHeaders] === headers ||
+		isNotEmpty(headers)
+	)
+		return mapResponseWithSet(response, set, request)
 
 	if (response instanceof ElysiaStatus) {
 		set.status = (response as ElysiaStatus<200>).code
@@ -285,7 +298,10 @@ export function errorToResponse(
 	const body = internalServerErrorBody(error)
 	body.status = status
 
-	const headers = (set?.headers ?? nullObject()) as Record<string, string>
+	const headers = (set ? materializeSetHeaders(set) : nullObject()) as Record<
+		string,
+		string
+	>
 	headers['content-type'] = PROBLEM_JSON
 
 	return new Response(JSON.stringify(body), { status, headers })

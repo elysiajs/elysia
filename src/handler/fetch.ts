@@ -8,7 +8,7 @@ import { getAsyncIndexes, cachedResponse, emptyResponse } from './utils'
 import { createContext, type Context } from '../context'
 import { createErrorHandler } from './error'
 import { requestId, flattenChain, nullObject, isNotEmpty } from '../utils'
-import { handleSet } from '../adapter/utils'
+import { handleSet, materializeSetHeaders } from '../adapter/utils'
 import {
 	NotFound,
 	PROBLEM_JSON,
@@ -37,7 +37,7 @@ function notFound(context: Context): Response {
 		handleSet(set)
 
 		if (!(set.headers as any)['content-type'])
-			(set.headers as any)['content-type'] = PROBLEM_JSON
+			(materializeSetHeaders(set) as any)['content-type'] = PROBLEM_JSON
 
 		return new Response(NOT_FOUND_BODY, {
 			status: 404,
@@ -290,13 +290,15 @@ export function createFetchHandler(
 					if (status !== undefined) context.set.status = status
 
 					queueMicrotask(async () => {
-						if (afterResponses)
+						if (afterResponses) {
+							materializeSetHeaders(context.set)
 							for (let i = 0; i < afterResponses.length; i++)
 								try {
 									await afterResponses[i](context as any)
 								} catch (e) {
 									console.error(e)
 								}
+						}
 
 						if (traceAfterResponsePhase) {
 							let cache = (context as any).trace as
@@ -349,6 +351,7 @@ export function createFetchHandler(
 			server?: unknown
 		): Promise<Response> => {
 			const context = new Context(request)
+			materializeSetHeaders(context.set)
 			if (request.signal.aborted) return emptyResponse.clone() as Response
 
 			const url = request.url,
@@ -466,6 +469,7 @@ export function createFetchHandler(
 				server?: unknown
 			): Promise<Response> => {
 				const context = new Context(request)
+				materializeSetHeaders(context.set)
 				if (request.signal.aborted)
 					return emptyResponse.clone() as Response
 
@@ -533,6 +537,7 @@ export function createFetchHandler(
 
 		return (request: Request, server?: unknown): MaybePromise<Response> => {
 			const context = new Context(request)
+			materializeSetHeaders(context.set)
 			if (request.signal.aborted) return emptyResponse.clone() as Response
 
 			const url = request.url,

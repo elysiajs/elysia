@@ -5,6 +5,7 @@ import { InvalidCookie } from './error'
 
 export interface AppCookieConfig extends CookieOptions {
 	sign?: true | string | string[]
+	verify?: 'required-fields' | 'all'
 }
 
 export interface FieldCookieConfig {
@@ -20,6 +21,7 @@ export interface CompiledCookieConfig {
 	globalSignSet?: Set<string>
 	globalSecrets: string | null | (string | null)[] | undefined
 	hasSign: boolean
+	verify: 'required-fields' | 'all'
 }
 
 const ATTRIBUTE_KEYS = new Set([
@@ -149,13 +151,17 @@ export function compileCookieConfig(
 				throw InvalidCookie.secret(name)
 	}
 
+	const verify: 'required-fields' | 'all' =
+		routeConfig?.verify ?? appConfig?.verify ?? 'required-fields'
+
 	return {
 		defaults,
 		fields,
 		globalSign,
 		globalSignSet: Array.isArray(globalSign) ? new Set(globalSign) : undefined,
 		globalSecrets,
-		hasSign
+		hasSign,
+		verify
 	}
 }
 

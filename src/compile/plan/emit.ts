@@ -15,7 +15,11 @@ import {
 	extractDeriveKeys,
 	replaceDeriveContext
 } from '../handler/utils'
-import { tee, normalizeContentType } from '../../adapter/utils'
+import {
+	materializeSetHeaders,
+	normalizeContentType,
+	tee
+} from '../../adapter/utils'
 import { parseCookieRawSync, buildCookieJar } from '../../cookie/utils'
 import { hasHeaderShorthand } from '../../universal/constants'
 import { parseQueryFromURL } from '../../parse-query'
@@ -137,6 +141,10 @@ export function emitResume(
 	if (hasLifecycleHook) {
 		link(emptyResponse, 'emp')
 		prologue += `if(${abortExpr})return emp.clone()\n`
+	}
+	if (plan.responseMode === 'set-with-default-headers' && d.inferenceSet) {
+		link(materializeSetHeaders, 'msh')
+		prologue += `msh(c.set)\n`
 	}
 
 	if (plan.needsQuery) {

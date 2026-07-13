@@ -751,6 +751,7 @@ export function compileHandler(
 		path,
 		handler,
 		root,
+		adapter,
 		hook,
 		buildValidator,
 		isHandleFunction,

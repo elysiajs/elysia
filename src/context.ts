@@ -1,11 +1,12 @@
 import { status, type SelectiveStatus } from './error'
-import { nullObject, redirect } from './utils'
+import { isNotEmpty, nullObject, redirect } from './utils'
 
 import type { AnyElysia } from './base'
 import type { Server } from './universal/server'
 import type { StatusMap } from './constants'
 import type { Cookie } from './cookie'
 import type { BaseCookie } from './cookie/types'
+import { defaultHeaders } from './adapter/default-headers'
 
 import type {
 	RouteSchema,
@@ -63,6 +64,9 @@ export function clearContextCache() {
 }
 
 function buildEmptyContext(Base: any, headers: object | null = null) {
+	const immutableHeaders =
+		headers !== null && Object.isFrozen(headers)
+
 	return class Context extends Base {
 		declare params?: Record<string, string>
 		declare headers?: Record<string, string>
@@ -78,16 +82,21 @@ function buildEmptyContext(Base: any, headers: object | null = null) {
 
 		constructor(public request: Request) {
 			super()
-			this.set = {
-				// A proto-linked `set.headers` forces `handleSet` to allocate
-				// + `for..in`-flatten the proto chain on every request
-				headers:
-					headers === null
-						? Object.create(null)
-						: Object.assign(Object.create(null), headers),
-				status: undefined,
-				cookie: undefined
-			}
+			if (immutableHeaders)
+				this.set = {
+					headers: headers!,
+					status: undefined,
+					cookie: undefined
+				} as any
+			else
+				this.set = {
+					headers:
+						headers === null
+							? Object.create(null)
+							: Object.assign(Object.create(null), headers),
+					status: undefined,
+					cookie: undefined
+				}
 		}
 	}
 }
@@ -99,9 +108,18 @@ export function createContext(
 	if (cached) return cached
 
 	const ext = app['~ext']
-	const headers = ext?.headers
+	const adapter = app['~config']?.adapter
+	let headers = ext?.headers && isNotEmpty(ext.headers)
 		? Object.assign(nullObject(), ext.headers)
 		: null
+
+	if (
+		headers &&
+		(!adapter || adapter.response.supportsDefaultHeaderSink)
+	) {
+		Object.defineProperty(headers, defaultHeaders, { value: headers })
+		Object.freeze(headers)
+	}
 
 	if (headers === null && !ext?.decorator && !ext?.store) {
 		sharedEmptyDecorator ??= buildEmptyDecorator()

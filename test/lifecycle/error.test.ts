@@ -411,6 +411,10 @@ describe('Error lifecycle', () => {
 	})
 
 	it('handle cookie signature error', async () => {
+		// Q8 (C3) lazy verify: signature is verified on first VALUE access, not at
+		// parse time. The handler must read `.value` for the InvalidCookie to throw.
+		// (A route that obtains the handle but never reads the value no longer 400s —
+		// covered by test/cookie/lazy-verify.test.ts.)
 		const app = new Elysia({
 			cookie: { secrets: 'secrets', sign: ['session'] }
 		})
@@ -418,7 +422,7 @@ describe('Error lifecycle', () => {
 				if (error instanceof InvalidCookie)
 					return 'Where is the signature?'
 			})
-			.get('/', ({ cookie: { session } }) => '')
+			.get('/', ({ cookie: { session } }) => session.value)
 
 		const root = await app.handle(
 			new Request('http://localhost/', {

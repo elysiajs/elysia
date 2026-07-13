@@ -4,8 +4,8 @@ const cases = {
 		source: `import Elysia from './dist/index.mjs'; globalThis.app = new Elysia()`
 	},
 	schema: {
-		// Bumped 400→406KB across the semantic-seal train (maintainer sign-off
-		// pending — itemized):
+		// Bumped 400→406→408KB across the semantic-seal + major-surface trains
+		// (maintainer sign-off pending — itemized):
 		//  - B2 resume-emit lane (src/compile/plan/*): ~10KB. Statically imported
 		//    by the handler compiler, so every app pays for the dormant preview
 		//    lane. Follow-up sketched: lazy-registry install (AOT captureImpl
@@ -14,7 +14,11 @@ const cases = {
 		//    deduping schemaMediaKind out of the resume emitter).
 		//  - B6 semantic freeze (src/generation.ts + Q4 guards in base.ts):
 		//    ~1.4KB. Load-bearing seal machinery, not removable.
-		limit: 406 * 1024,
+		//  - C3 lazy signed-cookie verify (Q8): ~530B. resolvePendingCookie +
+		//    parseCookieRawLazy, statically imported by the Cookie class + handler
+		//    compiler (dormant unless a route runs the required-fields lazy lane).
+		//    Same lazy-registry follow-up could tree-shake it from cookie-free apps.
+		limit: 408 * 1024,
 		source: `import { Elysia, t } from './dist/index.mjs'; globalThis.app = new Elysia().get('/', () => 'ok', { query: t.Object({ q: t.String() }) })`
 	}
 } as const

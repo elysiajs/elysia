@@ -470,11 +470,11 @@ export const STUB_SOURCES: Record<
 			source:
 				`const e=()=>{throw new Error("[elysia-aot] cookie support was stripped (strip mode) but a route used cookies. Rebuild with strip:false.")}\n` +
 				`export const hasSyncHmac=false\n` +
-				`export function createCookieJar(){return e()}\n` +
 				`export function parseCookie(){return e()}\n` +
 				`export function parseCookieRaw(){return e()}\n` +
 				`export function parseCookieRawSync(){return e()}\n` +
 				`export function parseCookieRawSigned(){return e()}\n` +
+				`export function parseCookieRawLazy(){return e()}\n` +
 				`export function buildCookieJar(){return e()}\n` +
 				`export function signCookieValues(){return e()}\n` +
 				`export function signCookieValuesSync(){return e()}\n` +
