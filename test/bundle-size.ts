@@ -4,7 +4,17 @@ const cases = {
 		source: `import Elysia from './dist/index.mjs'; globalThis.app = new Elysia()`
 	},
 	schema: {
-		limit: 400 * 1024,
+		// Bumped 400→406KB across the semantic-seal train (maintainer sign-off
+		// pending — itemized):
+		//  - B2 resume-emit lane (src/compile/plan/*): ~10KB. Statically imported
+		//    by the handler compiler, so every app pays for the dormant preview
+		//    lane. Follow-up sketched: lazy-registry install (AOT captureImpl
+		//    pattern) so emit.ts/plan.ts tree-shake out → recovers most of this.
+		//  - B7 columnar route table (src/route-table.ts): ~640B net (offset by
+		//    deduping schemaMediaKind out of the resume emitter).
+		//  - B6 semantic freeze (src/generation.ts + Q4 guards in base.ts):
+		//    ~1.4KB. Load-bearing seal machinery, not removable.
+		limit: 406 * 1024,
 		source: `import { Elysia, t } from './dist/index.mjs'; globalThis.app = new Elysia().get('/', () => 'ok', { query: t.Object({ q: t.String() }) })`
 	}
 } as const

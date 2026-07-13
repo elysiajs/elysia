@@ -3,12 +3,23 @@ import type { AnyElysia } from '../../base'
 import { defaultAdapter } from '../../adapter/constants'
 import { ElysiaFile } from '../../universal/file'
 import { isBun } from '../../universal/constants'
+import { isProduction } from '../../universal/is-production'
 
 import { Capture, Compiled } from '../aot'
+import { frozenRootOf } from '../../generation'
 import { resolveHandlerParams } from './params'
 import { compileHandlerJit } from './jit'
 export { setCaptureHeaderShorthand } from './jit'
+import {
+	describeRoute,
+	isEmptyPipelineHook,
+	routeDescriptors
+} from './descriptor'
 import { Reconstrct } from './reconstruct'
+import { planRoute, type RoutePlan } from '../plan/plan'
+import { emitResume } from '../plan/emit'
+
+export const routePlans = new WeakMap<AnyElysia, Map<string, RoutePlan>>()
 
 import type { Context } from '../../context'
 import {
@@ -35,6 +46,35 @@ import type {
 	AnyLocalHook,
 	AppHook
 } from '../../types'
+
+let warnedResumeAot = false
+function warnResumeAotIgnored(): void {
+	if (warnedResumeAot) return
+	warnedResumeAot = true
+
+	console.warn(
+		'[elysia] experimental.resumeEmit is ignored inside an AOT build/capture environment; using the default JIT lane.'
+	)
+}
+
+const warnedResumeFallback = new Set<string>()
+function warnResumeFallback(
+	method: string,
+	path: string,
+	reasons: string[]
+): void {
+	if (isProduction()) return
+
+	const key = `${method} ${path}`
+	if (warnedResumeFallback.has(key)) return
+
+	warnedResumeFallback.add(key)
+
+	// eslint-disable-next-line no-console
+	console.warn(
+		`[elysia] experimental.resumeEmit: route ${key} falls back to the default lane (unsupported: ${reasons.join(', ')}).`
+	)
+}
 
 interface MountHandlerMeta {
 	handle: (request: Request) => unknown
@@ -241,8 +281,9 @@ export function resolveLocalHook(
 ): Partial<AnyLocalHook> | undefined {
 	if (!hook) return hook
 
-	const scopeMacro = scope['~ext']?.macro
-	const rootMacro = root === scope ? undefined : root['~ext']?.macro
+	const frozenRoot = frozenRootOf(root)
+	const scopeMacro = frozenRootOf(scope)['~ext']?.macro
+	const rootMacro = root === scope ? undefined : frozenRoot['~ext']?.macro
 	if (!scopeMacro && !rootMacro) return hook
 
 	let hasMacroKey = false
@@ -263,13 +304,14 @@ export function resolveLocalHook(
 	if (resolved === undefined) {
 		resolved = cloneHook(hook)
 		if (scopeMacro) {
-			scope['~applyMacro'](resolved)
+			frozenRootOf(scope)['~applyMacro'](resolved)
 
 			if (rootMacro)
 				for (const k in resolved)
 					if (k in scopeMacro) delete (resolved as any)[k]
 		}
-		if (rootMacro) root['~applyMacro'](resolved)
+
+		if (rootMacro) frozenRoot['~applyMacro'](resolved)
 		perScope.set(hook, resolved)
 	}
 
@@ -309,8 +351,9 @@ function resolveChainNode(
 		root
 	)
 
-	const scopeMacro = scope['~ext']?.macro
-	const rootMacro = root === scope ? undefined : root['~ext']?.macro
+	const frozenRoot = frozenRootOf(root)
+	const scopeMacro = frozenRootOf(scope)['~ext']?.macro
+	const rootMacro = root === scope ? undefined : frozenRoot['~ext']?.macro
 
 	let needsMacro = false
 	if (scopeMacro || rootMacro)
@@ -333,13 +376,14 @@ function resolveChainNode(
 		resolved = cloneHook(added)
 		if (needsMacro) {
 			if (scopeMacro) {
-				scope['~applyMacro'](resolved)
+				frozenRootOf(scope)['~applyMacro'](resolved)
 
 				if (rootMacro)
 					for (const k in resolved)
 						if (k in scopeMacro) delete (resolved as any)[k]
 			}
-			if (rootMacro) root['~applyMacro'](resolved)
+
+			if (rootMacro) frozenRoot['~applyMacro'](resolved)
 		}
 
 		promoteDerive(resolved)
@@ -349,10 +393,12 @@ function resolveChainNode(
 	return resolved
 }
 
-const chainResolver = (root: AnyElysia) =>
-	root['~ext']?.macro || root['~scopeChildren']
+const chainResolver = (root: AnyElysia) => {
+	const frozenRoot = frozenRootOf(root)
+	return frozenRoot['~ext']?.macro || frozenRoot['~scopeChildren']
 		? (node: ChainNode) => resolveChainNode(root, node)
 		: undefined
+}
 
 export const localMacroRoot = (
 	instance: AnyElysia,
@@ -360,7 +406,7 @@ export const localMacroRoot = (
 ): AnyElysia =>
 	instance !== root &&
 	(instance as { '~scopeChild'?: boolean })['~scopeChild'] === true &&
-	instance['~ext']?.macro
+	frozenRootOf(instance)['~ext']?.macro
 		? instance
 		: root
 
@@ -370,7 +416,7 @@ function composeRootHook(
 ): Partial<AppHook> | undefined {
 	const resolve = chainResolver(root)
 	const locals = flattenChain(
-		root['~hookChain'],
+		frozenRootOf(root)['~hookChain'],
 		isLocalScope,
 		inheritedChain,
 		resolve
@@ -406,7 +452,8 @@ export function buildNativeStaticResponse(
 	)
 		return
 
-	const adapter = root['~config']?.adapter ?? defaultAdapter
+	const frozenRoot = frozenRootOf(root)
+	const adapter = frozenRoot['~config']?.adapter ?? defaultAdapter
 	const ownedHook = resolveLocalHook(
 		localMacroRoot(macroScope ?? instance, root),
 		localHook,
@@ -424,21 +471,9 @@ export function buildNativeStaticResponse(
 			: undefined
 	const hook = applyHook(ownedHook, flatAppHook as any, rootHook, true)
 
-	if (hook)
-		for (const key in hook) {
-			if (key === 'detail' || key === 'tags') continue
+	if (hook && !isEmptyPipelineHook(hook as any)) return
 
-			const value = (hook as any)[key]
-			if (
-				value !== undefined &&
-				value !== false &&
-				(!Array.isArray(value) || value.length)
-			)
-				return
-		}
-
-	const rootHeaders = root['~ext']?.headers
-
+	const rootHeaders = frozenRoot['~ext']?.headers
 	if (handler instanceof Response && !rootHeaders) return handler
 
 	const mapped = (adapter.response.map as Function)(handler, {
@@ -486,7 +521,7 @@ export function composeRouteHook(
 	let locals =
 		instance !== root
 			? flattenChain(
-					root['~hookChain'],
+					frozenRootOf(root)['~hookChain'],
 					isLocalScope,
 					inheritedChain as any,
 					resolve
@@ -539,20 +574,11 @@ export function composeRouteHook(
 				) as Partial<AppHook> | undefined)
 			: undefined
 
-	if ((inherited || locals) && (flatAppHook || localHook)) {
-		if (present.size) {
-			if (inherited) inherited = dropHooksByOrigin(inherited, present)
-			if (locals) locals = dropHooksByOrigin(locals, present)
-		}
+	if ((inherited || locals) && (flatAppHook || localHook) && present.size) {
+		if (inherited) inherited = dropHooksByOrigin(inherited, present)
+		if (locals) locals = dropHooksByOrigin(locals, present)
 	}
 
-	// Clone `inherited` before it enters `applyHook` as `rootHook`.
-	// `applyHook` → `mergeHook` can assign `hook.schemas = inherited.schemas`
-	// directly (when hook.schemas is falsy and mergeArray returns b), then the
-	// subsequent `mergeHook(hook, locals)` pushes into that array — mutating the
-	// cached object and corrupting every other route that shares the same
-	// flattenChainMemoReadonly result.  cloneHook slices every array field so
-	// the route owns a private copy (H11b fix).
 	let hook = applyHook(
 		localHook,
 		flatAppHook as any,
@@ -603,21 +629,27 @@ export function compileHandler(
 	root: AnyElysia,
 	precomputedStatic?: Response
 ): CompiledHandler {
-	const adapter = root['~config']?.adapter ?? defaultAdapter
+	const frozenRoot = frozenRootOf(root)
+	const adapter = frozenRoot['~config']?.adapter ?? defaultAdapter
 	const method = _method
 
 	const mountMeta =
 		typeof handler === 'function' ? (handler as any)['~mount'] : undefined
 	if (mountMeta) handler = resolveMountHandler(mountMeta, path)
 
-	const reconstructed = Compiled.getHandler(root['~programId'], method, path)
+	const reconstructed = Compiled.getHandler(
+		frozenRoot['~programId'],
+		method,
+		path
+	)
 
 	if (
 		reconstructed &&
 		!precomputedStatic &&
 		typeof handler === 'function' &&
-		!root['~ext']?.macro &&
-		!localMacroRoot(macroScope ?? instance, root)['~ext']?.macro &&
+		!frozenRoot['~ext']?.macro &&
+		!frozenRootOf(localMacroRoot(macroScope ?? instance, root))['~ext']
+			?.macro &&
 		!reconstructNeedsHookState(reconstructed.a)
 	)
 		return reconstructed.f(
@@ -632,9 +664,6 @@ export function compileHandler(
 			})
 		) as CompiledHandler
 
-	// Route- and chain-level macros are resolved inside `composeRouteHook`
-	// (localHook via a per-root clone, chain nodes before the memoised flatten
-	// is cached) so no shared registration state is mutated in place.
 	const hook = composeRouteHook(
 		instance,
 		localHook,
@@ -673,7 +702,7 @@ export function compileHandler(
 		!(handler instanceof Promise) &&
 		!(!isBun && handler instanceof ElysiaFile)
 	) {
-		const rootHeaders = root['~ext']?.headers
+		const rootHeaders = frozenRoot['~ext']?.headers
 
 		const set = {
 			headers: rootHeaders
@@ -688,7 +717,7 @@ export function compileHandler(
 	const isStaticResponse = !isHandleFunction && handler instanceof Response
 	const isPromiseHandler = !isHandleFunction && handler instanceof Promise
 
-	const namedParsers = root['~ext']?.parser
+	const namedParsers = frozenRoot['~ext']?.parser
 	if (namedParsers && hook?.parse) {
 		const resolve = (p: any) =>
 			typeof p === 'string' && p in namedParsers ? namedParsers[p] : p
@@ -717,17 +746,69 @@ export function compileHandler(
 			})
 		) as CompiledHandler
 
+	const state = describeRoute({
+		method,
+		path,
+		handler,
+		root,
+		hook,
+		buildValidator,
+		isHandleFunction,
+		isStaticResponse,
+		isPromiseHandler
+	})
+
+	let descriptors = routeDescriptors.get(root)
+	if (!descriptors) {
+		descriptors = new Map()
+		routeDescriptors.set(root, descriptors)
+	}
+	descriptors.set(`${method} ${path}`, state.descriptor)
+
+	if (frozenRoot['~config']?.experimental?.resumeEmit) {
+		if (Capture.isAotBuildEnv() || Capture.isCapturing()) {
+			warnResumeAotIgnored()
+		} else {
+			const plan = planRoute(
+				state,
+				hook,
+				handler,
+				adapter,
+				root,
+				isHandleFunction
+			)
+
+			let plans = routePlans.get(root)
+			if (!plans) {
+				plans = new Map()
+				routePlans.set(root, plans)
+			}
+			plans.set(`${method} ${path}`, plan)
+
+			if (plan.supported)
+				return emitResume({
+					plan,
+					state,
+					hook,
+					handler,
+					adapter,
+					root
+				})
+			else warnResumeFallback(method, path, plan.unsupportedReasons)
+		}
+	}
+
 	return compileHandlerJit({
 		method,
 		path,
 		handler,
 		instance,
-		root,
+		root: frozenRoot as AnyElysia,
 		hook,
 		adapter,
-		buildValidator,
 		isHandleFunction,
 		isStaticResponse,
-		isPromiseHandler
+		isPromiseHandler,
+		state
 	})
 }

@@ -836,3 +836,114 @@ corpus.push({
 		requests: [{ id: 'ordered-hooks', make: get('/observed') }]
 	})
 }
+
+// ── B2 part-2 additions ─────────────────────────────────────────────────────
+
+// Async request validator (a custom async parser then a body schema): the resume
+// lane transfers through `__resume`; the other lane pairs exercise their own
+// async-validation paths. Covers the 200 (valid) and 422 (invalid) branches.
+corpus.push({
+	id: 'async-validator',
+	tags: ['safe-for-socket', 'body', 'schema', 'async'],
+	define: (app) =>
+		app.post(
+			'/async-validate',
+			{
+				parse: async (c: any) => JSON.parse(await c.request.text()),
+				body: t.Object({ x: t.String() })
+			} as any,
+			({ body }: any) => body
+		),
+	requests: [
+		{ id: 'valid', make: json('/async-validate', { x: 'ok' }) },
+		{ id: 'invalid-422', make: json('/async-validate', { x: 5 }) }
+	]
+})
+
+// beforeHandle returning a NATIVE Promise: resolving `undefined` continues to the
+// handler; resolving a value short-circuits. The resume lane handles both
+// branches natively, and the behavior is pinned across every lane pair.
+corpus.push({
+	id: 'beforehandle-promise-branches',
+	tags: ['safe-for-socket', 'lifecycle', 'async'],
+	define: (app) =>
+		app
+			.get(
+				'/bh-continue',
+				{ beforeHandle: () => Promise.resolve(undefined) } as any,
+				() => 'handler-ran'
+			)
+			.get(
+				'/bh-shortcircuit',
+				{ beforeHandle: () => Promise.resolve('short-wins') } as any,
+				() => 'handler-ran'
+			),
+	requests: [
+		{ id: 'continue', make: get('/bh-continue') },
+		{ id: 'short-circuit', make: get('/bh-shortcircuit') }
+	]
+})
+
+// Async handler that throws AFTER an await: the rejection must surface as the
+// framework 500 identically across lanes (and, for the resume lane, prove the
+// continuation rejection path is not swallowed).
+corpus.push({
+	id: 'async-throw-after-await',
+	tags: ['safe-for-socket', 'error', 'async'],
+	define: (app) =>
+		app.get('/async-throw', async () => {
+			await Promise.resolve()
+			throw new Error('after-await-boom')
+		}),
+	requests: [{ id: 'throws', make: get('/async-throw') }]
+})
+
+// Signed-cookie route: HMAC signing forces the async cookie-sign path (or the
+// sync-HMAC path where available) → resume falls back, but the set-cookie
+// signature bytes are pinned across lanes. The secret is fixed so the signature
+// is deterministic.
+corpus.push({
+	id: 'signed-cookie',
+	tags: ['safe-for-socket', 'cookies'],
+	define: (app) =>
+		app.get(
+			'/signed',
+			{
+				cookie: t.Cookie(
+					{ session: t.Optional(t.String()) },
+					{ secrets: 'sekret', sign: ['session'] }
+				)
+			},
+			({ cookie }: any) => {
+				cookie.session.value = 'signed-value'
+				return 'signed'
+			}
+		),
+	requests: [{ id: 'write-signed', make: get('/signed') }]
+})
+
+// afterResponse observation (P0-9): the hook must fire EXACTLY ONCE and AFTER the
+// response is produced. Genuinely covered by the resume lane (sync afterResponse
+// `_fin`/`_fin2` tee path) — native coverage, not trivial fallback equality.
+{
+	const recorder = makeRecorder()
+	corpus.push({
+		id: 'observed-after-response',
+		tags: ['safe-for-socket', 'observe', 'lifecycle'],
+		recorder,
+		define: (app) =>
+			app.get(
+				'/observed-ar',
+				{
+					afterResponse() {
+						recorder.events.push('afterResponse')
+					}
+				},
+				() => {
+					recorder.events.push('handler')
+					return 'ar-ok'
+				}
+			),
+		requests: [{ id: 'exactly-once', make: get('/observed-ar') }]
+	})
+}

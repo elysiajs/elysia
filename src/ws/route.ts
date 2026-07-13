@@ -5,6 +5,7 @@ import {
 	isBridgeNotInitialized
 } from '../compile/handler/frozen-validator'
 import { deriveEntryFn, nullObject, type DeriveEntry } from '../utils'
+import { frozenRootOf } from '../generation'
 import { parseQueryFromURL } from '../parse-query'
 import {
 	deriveModes,
@@ -278,7 +279,7 @@ export function buildWSRoute(
 	let validators: RouteValidator<any>
 	try {
 		validators = new RouteValidator(hook as any, {
-			models: app['~ext']?.models,
+			models: frozenRootOf(app)['~ext']?.models,
 			app,
 			aot: { method: 'WS', path: route[1] }
 		})
@@ -392,7 +393,7 @@ export function buildWSRoute(
 	): Promise<Response> {
 		;(context as any).error = error
 		if (
-			app['~config']?.allowUnsafeValidationDetails &&
+			frozenRootOf(app)['~config']?.allowUnsafeValidationDetails &&
 			error instanceof ValidationError
 		)
 			error.allowUnsafeValidationDetails = true
@@ -539,7 +540,7 @@ export function buildWSRoute(
 		const errCtx: any = Object.create(ws as any)
 		errCtx.error = error
 		if (
-			app['~config']?.allowUnsafeValidationDetails &&
+			frozenRootOf(app)['~config']?.allowUnsafeValidationDetails &&
 			error instanceof ValidationError
 		)
 			error.allowUnsafeValidationDetails = true
@@ -600,7 +601,7 @@ export function buildWSRoute(
 	): void | Promise<void> {
 		if (errorHandlers.length === 0) {
 			if (
-				app['~config']?.allowUnsafeValidationDetails &&
+				frozenRootOf(app)['~config']?.allowUnsafeValidationDetails &&
 				error instanceof ValidationError
 			)
 				(error as ValidationError).allowUnsafeValidationDetails = true
@@ -782,10 +783,6 @@ export function buildWSRoute(
 		if (!fn) return
 
 		return async (connection: ElysiaWS<any>, bodyArg?: unknown) => {
-			// Per-invocation view over the shared per-connection instance,
-			// mirroring dispatchMessage. Without it, concurrent ping/pong
-			// handlers would clobber each other's `body` (and lifecycle
-			// state) on the shared connection across an await.
 			const ws: ElysiaWS<any> = Object.create(connection)
 			try {
 				if (withBody) ws.body = bodyArg as any

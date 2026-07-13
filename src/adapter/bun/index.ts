@@ -3,7 +3,9 @@ import { WebStandardAdapter } from '../web-standard'
 
 import { isDynamicRegex, needEncodeRegex } from '../../constants'
 import { buildNativeStaticResponse } from '../../compile/handler'
+import { routeRow } from '../../route-table'
 import { flattenChain, getLoosePath, nullObject } from '../../utils'
+import { frozenRootOf } from '../../generation'
 
 import { buildGlobalWSHandler } from '../../ws/route'
 
@@ -24,37 +26,39 @@ export function collectStaticRoutes(app: AnyElysia) {
 
 	void app.fetch
 
-	const fetchLevelHook = flattenChain(app['~hookChain'])
+	// Post-seal (`void app.fetch` sealed the app): read the frozen generation.
+	const frozenRoot = frozenRootOf(app)
+	const fetchLevelHook = flattenChain(frozenRoot['~hookChain'])
 	if (
 		fetchLevelHook?.request?.length ||
 		fetchLevelHook?.trace?.length ||
-		app['~ext']?.hoc?.length
+		frozenRoot['~ext']?.hoc?.length
 	)
 		return
 
-	const history = app['~routes']
-	if (!history?.length) return
+	// The columnar route table is populated by the build; read it (dense IDs,
+	// tuple-free) instead of the authoring log.
+	const table = app['~generation']?.routeTable ?? app['~routeTable']
+	const length = table?.length ?? 0
+	if (!length || !table) return
+
+	const methodCol = table.method
+	const pathCol = table.path
 
 	const ready: Record<string, Record<string, Response>> = nullObject()
-	const strictPath = app['~config']?.strictPath === true
+	const strictPath = frozenRoot['~config']?.strictPath === true
 	const seen = new Map<string, number>()
 
-	for (let i = 0; i < history.length; i++) {
-		const route = history[i]
-		const method = route[0]
-
-		seen.set(method + ' ' + route[1], i)
-	}
+	for (let i = 0; i < length; i++)
+		seen.set(methodCol[i] + ' ' + pathCol[i], i)
 
 	let explicitPaths: Map<string, Set<string>> | undefined
 	if (!strictPath) {
 		explicitPaths = new Map()
 
-		for (let i = 0; i < history.length; i++) {
-			const route = history[i]
-			const method = route[0]
-
-			const path = route[1]
+		for (let i = 0; i < length; i++) {
+			const method = methodCol[i]
+			const path = pathCol[i]
 			let set = explicitPaths.get(method)
 
 			if (!set) explicitPaths.set(method, (set = new Set()))
@@ -72,16 +76,15 @@ export function collectStaticRoutes(app: AnyElysia) {
 		;(ready[path] ??= nullObject())[method] = value
 	}
 
-	for (let i = 0; i < history.length; i++) {
-		const route = history[i]
-		if (route[0] === 'WS') continue
+	for (let i = 0; i < length; i++) {
+		const method = methodCol[i]
+		if (method === 'WS') continue
 
-		const method = route[0]
-		const path = route[1]
+		const path = pathCol[i]
 		if (seen.get(method + ' ' + path) !== i) continue
 		if (!nativeStaticMethods.has(method)) continue
 
-		const value = buildNativeStaticResponse(route, app)
+		const value = buildNativeStaticResponse(routeRow(table, i), app)
 		if (!value) continue
 
 		add(method, path, value)
@@ -108,9 +111,6 @@ export const BunAdapter = createAdapter({
 		const _config = (app['~config'] as any)?.serve
 		const optionsIsObject = typeof options === 'object'
 
-		// Copy the caller's options: `serve` (and later `routes`/`websocket`)
-		// is mutated below, and reusing one options object across apps would
-		// otherwise leak app1's static routes/fetch onto app2 (serve-bun-1).
 		const _options = optionsIsObject
 			? { ...(options as object) }
 			: // monomorphic
@@ -145,7 +145,8 @@ export const BunAdapter = createAdapter({
 			const hasWs = app['~hasWS']
 			let websocket: ReturnType<typeof buildGlobalWSHandler> | undefined
 			if (hasWs) {
-				const defaultConfig = (app['~config'] as any)?.websocket
+				const defaultConfig = (frozenRootOf(app)['~config'] as any)
+					?.websocket
 
 				websocket = defaultConfig
 					? Object.assign(buildGlobalWSHandler(), defaultConfig)

@@ -139,7 +139,33 @@ export interface ElysiaConfig<
 	/**
 	 * Enable experimental features
 	 */
-	experimental?: {}
+	experimental?: {
+		/**
+		 * **Unstable / preview.** Compile route handlers with the resume-skeleton
+		 * emitter (a sync entry + a single `__resume` async continuation) instead
+		 * of the default JIT lane. Only a subset of routes are currently
+		 * supported; unsupported routes transparently fall back to the default
+		 * lane. Never enter AOT builds. Behavior and API may change without
+		 * notice.
+		 *
+		 * @default false
+		 */
+		resumeEmit?: boolean
+
+		/**
+		 * **Unstable / preview.** Defer synchronous `.use(child)` composition to
+		 * the first build/observation boundary. All non-route work (extension
+		 * merges, macros, scope children, hook-chain absorption) still runs eagerly
+		 * in authoring order; only the per-route copy loop is deferred and replayed
+		 * in a single pass, avoiding the O(N·D²) reabsorption cost of deeply nested
+		 * plugin graphs. Unsupported constructs (async plugins, `.use(Promise)`,
+		 * functional `use` returning a promise, cyclic graphs) throw loudly.
+		 * Behavior is response- and route-table-identical to eager composition.
+		 *
+		 * @default false
+		 */
+		lazyCompose?: boolean
+	}
 
 	/**
 	 * If enabled, Elysia will attempt to coerce value to defined type on incoming and outgoing bodies.
@@ -795,6 +821,16 @@ export type CompiledHandler = (
 	context: Partial<Context>
 ) => MaybePromise<Response>
 
+/**
+ * Internal per-route authoring tuple.
+ *
+ * Q17 (B7): tuple field indices are an INTERNAL representation and are
+ * deprecated as a plugin surface. The sealed runtime reads a dense columnar
+ * `RouteTable` (`src/route-table.ts`), not these tuples. Plugins must introspect
+ * routes through the documented `Elysia.routes` / `Elysia.history` getters —
+ * never by indexing this tuple. The raw tuples remain the authoring log at this
+ * release and are physically dropped from strict-production builds at N+3a.
+ */
 export type InternalRoute = readonly [
 	method: string,
 	path: string,

@@ -408,6 +408,39 @@ export const STUB_SOURCES: Record<
 				`const e=()=>{throw new Error("[elysia-aot] handler compiler JIT was stripped (strip mode) but a route needed runtime compilation. Rebuild with strip:false.")}\n` +
 				`export function compileHandlerJit(){return e()}\n` +
 				`export function setCaptureHeaderShorthand(){}\n`
+		},
+		{
+			// `describeRoute` (per-route descriptor) is only ever called on the
+			// live JIT path, immediately before `compileHandlerJit`; it pulls in
+			// `sucrose`. Stub it alongside the JIT compiler so the sucrose
+			// analyzer stays tree-shakeable in strip mode. The always-on exports
+			// `isEmptyPipelineHook` (native-static promotion) and
+			// `routeDescriptors` are sucrose-free and re-implemented here so the
+			// non-JIT path keeps working.
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]compile[\\/]handler[\\/]descriptor\.(m?js|ts)$/,
+			source:
+				`const e=()=>{throw new Error("[elysia-aot] handler compiler JIT was stripped (strip mode) but a route needed runtime compilation. Rebuild with strip:false.")}\n` +
+				`export function describeRoute(){return e()}\n` +
+				`export const routeDescriptors=new WeakMap()\n` +
+				`export function isEmptyPipelineHook(hook){\n` +
+				`	if(!hook)return true\n` +
+				`	for(const key in hook){\n` +
+				`		if(key==='detail'||key==='tags')continue\n` +
+				`		const value=hook[key]\n` +
+				`		if(value!==undefined&&value!==false&&(!Array.isArray(value)||value.length))return false\n` +
+				`	}\n` +
+				`	return true\n` +
+				`}\n`
+		},
+		{
+			// The experimental resume-skeleton lane (`plan/plan.ts` + `plan/emit.ts`)
+			// is only reachable when `experimental.resumeEmit` is set
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]compile[\\/]plan[\\/]plan\.(m?js|ts)$/,
+			source: `export function planRoute(){throw new Error("[elysia-aot] resume-emit plan was stripped (strip mode). Rebuild with strip:false.")}\n`
+		},
+		{
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]compile[\\/]plan[\\/]emit\.(m?js|ts)$/,
+			source: `export function emitResume(){throw new Error("[elysia-aot] resume-emit was stripped (strip mode). Rebuild with strip:false.")}\n`
 		}
 	],
 	ws: [

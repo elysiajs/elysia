@@ -88,6 +88,13 @@ export const jitHandle = handleLane('jit-handle', {})
 export const precompileHandle = handleLane('precompile-handle', {
 	precompile: true
 })
+// B2: the resume-emit lane. `experimental.resumeEmit` selects the plan/emit
+// resume skeleton for supported (sync) routes and falls back to the JIT lane for
+// the rest — so byte-parity against the JIT oracle holds for the whole corpus
+// (covered routes prove the emitter; fallback routes are trivially equal).
+export const resumeHandle = handleLane('resume-handle', {
+	experimental: { resumeEmit: true }
+})
 
 // ── listen transport ────────────────────────────────────────────────────────
 
@@ -176,6 +183,9 @@ async function assertPortClosed(
 export const jitListen = listenLane('jit-listen', {})
 export const precompileListen = listenLane('precompile-listen', {
 	precompile: true
+})
+export const resumeListen = listenLane('resume-listen', {
+	experimental: { resumeEmit: true }
 })
 export const nativeStaticOn = listenLane('native-static-on', {
 	nativeStaticResponse: true
@@ -324,5 +334,19 @@ export const lanePairs: LanePair[] = [
 		id: 'jit-vs-aot-reconstruct@handle',
 		oracle: jitHandle,
 		candidate: aotReconstructHandle
+	},
+	{
+		// B2 gate: the resume-emit lane must be byte-identical to the JIT oracle
+		// across the whole corpus (covered routes exercise the resume skeleton;
+		// unsupported routes fall back to JIT and are trivially equal).
+		id: 'jit-vs-resume@handle',
+		oracle: jitHandle,
+		candidate: resumeHandle
+	},
+	{
+		id: 'jit-vs-resume@listen',
+		oracle: jitListen,
+		candidate: resumeListen,
+		requiresTag: 'safe-for-socket'
 	}
 ]

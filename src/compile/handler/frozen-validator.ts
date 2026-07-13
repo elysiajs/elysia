@@ -7,6 +7,7 @@ import { isFullyClosedObject } from '../../type/validator/clean-safe'
 // (see validator/index.ts). Importing it drags the late-bound `type/bridge` stubs,
 // not TypeBox itself, so the typebox-free invariant of this module holds.
 import { StandardValidator } from '../../validator'
+import { frozenRootOf } from '../../generation'
 
 import {
 	Compiled,
@@ -455,7 +456,9 @@ export function standaloneAllStandard(
 function resolveModelRef(schema: unknown, root: AnyElysia): unknown {
 	if (typeof schema !== 'string') return schema
 
-	const models = root['~ext']?.models as Record<string, unknown> | undefined
+	const models = frozenRootOf(root)['~ext']?.models as
+		| Record<string, unknown>
+		| undefined
 	if (models && schema in models) return models[schema]
 
 	return undefined
@@ -467,10 +470,11 @@ export function buildFrozenRouteValidator(
 	method: HTTPMethod,
 	path: string
 ): FrozenRouteValidatorShape | undefined {
-	if (root['~config']?.normalize === 'typebox') return undefined
+	const frozenRoot = frozenRootOf(root)
+	if (frozenRoot['~config']?.normalize === 'typebox') return undefined
 	if (hook?.schemas) return undefined
 
-	const normalize = root['~config']?.normalize
+	const normalize = frozenRoot['~config']?.normalize
 	const out: FrozenRouteValidatorShape = {}
 
 	for (const slot of REQUEST_SLOTS) {

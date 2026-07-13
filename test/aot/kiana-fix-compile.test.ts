@@ -210,73 +210,112 @@ describe('idx15 — captured header extraction is runtime portable', () => {
 })
 
 /**
- * M15 — `compile()` must force the fetch handler to rebuild. Once the fetch
- * handler exists (first request or `.fetch` access) it is memoised in
- * `#fetchFn`, so on the non-capture path `compile()` used to clear `#fetchFn`
- * ONLY under `Capture.isCapturing()`. A route added after the first request
- * then 404'd forever, even after an explicit `compile()`.
+ * M15/Q4 — `.compile()` must force the fetch handler to (re)build, and the
+ * rebuild machinery it protects must stay demonstrably live under the B6
+ * semantic freeze.
  *
- * The rebuild must stay safe for an already-listening server: `Bun.serve`
- * closes over the fetch handler captured at `listen()` time, and that closure
- * closes over the `~map` / `~router` objects. Because the rebuild repopulates
- * those SAME objects in place, the pre-compile closure keeps serving and now
- * sees the newly added routes too.
+ * The historical M15 bug: once the fetch handler exists (first request or
+ * `.fetch` access) it is memoised in `#fetchFn`, so on the non-capture path
+ * `compile()` used to clear `#fetchFn` ONLY under `Capture.isCapturing()` — a
+ * pre-called `compile()` left a stale fetch and a route was never served.
+ *
+ * Under Q4 the "add a route after the first request, then compile()" vehicle is
+ * dead: the first request SEALS the app, so any later `.get()` throws. The
+ * protection is preserved with Q4-legal vehicles:
+ *   (a) post-seal `.get()` throws the sealed error (retirement of the old
+ *       silent-invalidate-and-rebuild behavior — the throw is the new contract);
+ *   (b) `.compile()` still yields a working fetch that serves EVERY route
+ *       registered before sealing — including routes registered in the WARM,
+ *       still-authorable window after `await app.modules` (async-plugin drain
+ *       builds but does NOT seal), which `.compile()` then seals and serves;
+ *   (c) the internal `~newGeneration()` hot-reload swap rebuilds and republishes,
+ *       so the rebuild machinery M15 guarded still demonstrably rebuilds (a route
+ *       added through the unseal window is served after the swap, old routes stay).
+ *
+ * The Bun.serve safety property still holds: the rebuild repopulates the SAME
+ * `~map` / `~router` objects in place, so a fetch closure captured before the
+ * swap keeps serving and sees the new routes too.
  */
-describe('M15 — compile() rebuilds so routes added after first request serve', () => {
-	it('a route added after the first request responds 200 after compile()', async () => {
+describe('M15/Q4 — compile() rebuilds; post-seal mutation throws', () => {
+	it('post-seal .get() throws instead of silently invalidating (Q4)', async () => {
 		const app = new Elysia().get('/a', () => 'a')
 
-		// First request builds + memoises the fetch handler.
+		// First request builds + memoises the fetch handler AND seals the app.
 		expect((await app.handle(req('/a'))).status).toBe(200)
 
-		app.get('/b', () => 'b')
+		// The retired behavior silently invalidated the router and 404'd until a
+		// rebuild; Q4 makes the sealed instance immutable — the mutation throws.
+		expect(() => app.get('/b', () => 'b')).toThrow('after the app was sealed')
 
-		// Route registration invalidates the effective router immediately.
-		expect((await app.handle(req('/b'))).status).toBe(200)
-
+		// A subsequent .compile() on the sealed app still yields a working fetch for
+		// the routes that WERE registered before sealing (no stale-#fetchFn 404 — the
+		// original M15 protection). If compile() regressed to a no-op leaving a stale
+		// handler, this could observe a torn/empty router.
 		app.compile()
-
-		const res = await app.handle(req('/b'))
-		// Pre-fix: still 404 — compile() was a no-op because #fetchFn existed.
-		expect(res.status).toBe(200)
-		await expect(res.text()).resolves.toBe('b')
-
-		// The original route must not regress.
 		expect((await app.handle(req('/a'))).status).toBe(200)
 	})
 
-	it('a fetch reference captured BEFORE compile() serves the new route (Bun.serve safety)', async () => {
+	it('compile() serves a route registered in the warm (post-drain, pre-seal) window', async () => {
+		// An async plugin: `await app.modules` drains it and does a WARM rebuild that
+		// leaves the app authorable (no seal yet). A route registered in that window
+		// must be served once `.compile()` seals — proving compile() rebuilds the
+		// fetch handler over the full pre-seal route set, not a stale snapshot.
+		const app = new Elysia().use(
+			Promise.resolve(new Elysia().get('/late', () => 'late'))
+		)
+		await app.modules
+		expect(app['~generation']).toBeUndefined() // warm build, still authorable
+
+		app.get('/warm', () => 'warm') // legal: pre-seal authoring
+		app.compile() // seals + builds the fetch handler
+
+		expect((await app.handle(req('/warm'))).status).toBe(200)
+		await expect((await app.handle(req('/warm'))).text()).resolves.toBe(
+			'warm'
+		)
+		// The async-plugin route registered before compile() is served too.
+		expect((await app.handle(req('/late'))).status).toBe(200)
+	})
+
+	it('~newGeneration() rebuilds and republishes; a fetch captured before the swap serves the new route (Bun.serve safety)', async () => {
 		const app = new Elysia().get('/a', () => 'a')
 
-		// Simulate the reference Bun.serve holds after listen(): the fetch
-		// closure captured before any new route / compile().
+		// Simulate the reference Bun.serve holds after listen(): the fetch closure
+		// captured at listen() time. The first call seals the app.
 		const capturedFetch = app.fetch
 		expect((await capturedFetch(req('/a'))).status).toBe(200)
+		const previous = app['~generation']
+		expect(previous).toBeDefined()
 
+		// Dev hot-reload swap: unseal, add a route through the authoring window, then
+		// atomically republish via the internal ~newGeneration() (mirrors
+		// generation.test.ts). This exercises the SAME rebuild machinery M15 guarded.
+		;(app as any)['~generation'] = undefined
 		app.get('/b', () => 'b')
-		app.compile()
+		app['~newGeneration']()
+		expect(app['~generation']).not.toBe(previous)
 
-		// The pre-compile closure closes over the same ~map/~router objects that
-		// the rebuild repopulated in place, so it now serves the new route.
-		const res = await capturedFetch(req('/b'))
-		expect(res.status).toBe(200)
-		await expect(res.text()).resolves.toBe('b')
-
-		// And the original route still works through the old closure.
+		// The rebuild repopulated the same ~map/~router objects in place, so the
+		// pre-swap fetch closure now serves the new route AND the original one.
+		expect((await capturedFetch(req('/b'))).status).toBe(200)
+		await expect((await capturedFetch(req('/b'))).text()).resolves.toBe('b')
 		expect((await capturedFetch(req('/a'))).status).toBe(200)
 	})
 
-	it('works for dynamic routes added after the first request', async () => {
+	it('~newGeneration() rebuilds for dynamic routes added through the unseal window', async () => {
 		const app = new Elysia().get('/u/:id', ({ params }: any) => params.id)
 		const capturedFetch = app.fetch
 		expect((await capturedFetch(req('/u/1'))).status).toBe(200)
 
+		;(app as any)['~generation'] = undefined
 		app.get('/v/:id', ({ params }: any) => 'v' + params.id)
-		app.compile()
+		app['~newGeneration']()
 
 		const res = await capturedFetch(req('/v/9'))
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('v9')
+		// The original dynamic route still resolves through the same router object.
+		expect((await capturedFetch(req('/u/1'))).status).toBe(200)
 	})
 })
 
