@@ -45,9 +45,8 @@ release, macOS product/build, power source, Low Power Mode, and all `NODE_ENV`, 
 files, and `package.json`; baseline/runs/trace output is excluded. The source-list helper is
 unit-testable and fails if a static import is not listed.
 
-GitHub/shared CI is intentionally verify-only: shared runners are not the pinned machine, so
-they schema-validate committed baselines and floors, check active margins are above floors,
-and detect stale source hashes. Timing gates run with `bench:d1:gate` on the pinned machine.
+GitHub/shared CI does not run D1 verification because the baseline and floor artifacts are
+local to the pinned machine. Run `verify` and timing gates on that machine.
 
 On this repository's Bun 1.3.14/macOS execution environment, port 0 is rejected and the
 sandbox also forbids creating a TCP listener. Fixtures therefore attempt port 0, then a
