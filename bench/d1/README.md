@@ -32,14 +32,11 @@ bun run bench:d1:selftest
 
 Promotion refuses a dirty git tree and refuses a machine, Bun, OS-image, power-mode, or D1
 environment mismatch. There is one approved baseline and one floor file per machine ID under
-`bench/d1/baseline/<machine-id>/`; superseded baselines remain in git history.
+the ignored `bench/d1/baseline/<machine-id>/` directory.
 
 Every `record`, `aa`, `gate`, `self-test`, and `verify` run writes a raw artifact to ignored
 `trace/d1/`, including partial samples and an `error` field when the run fails.
-When a run backs a baseline or downstream performance claim, the claiming PR must copy that
-artifact verbatim to `bench/d1/runs/<date>-<commit-short>-<mode>.json` and commit it. The
-harness does not automate that publication step. Shared CI should upload `trace/d1/**` when it
-exists.
+Raw benchmark artifacts are not committed. Shared CI should upload `trace/d1/**` when it exists.
 
 The pinned manifest includes Bun version and revision, platform, architecture, CPU model, OS
 release, macOS product/build, power source, Low Power Mode, and all `NODE_ENV`, `BUN_*`, and

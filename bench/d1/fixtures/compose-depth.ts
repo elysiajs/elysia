@@ -38,10 +38,11 @@ import { resolve } from 'node:path'
 //
 // PENDING-AC (machine is on battery; record/aa/gate preflight-pin AC power and
 // refuse to run). Adding this file to BENCH_SOURCE_FILES (env.ts) changes
-// benchSourceHash. The committed tree does NOT ship a baseline — bench/d1/baseline/
-// is gitignored; only bench/d1/runs/*.json are committed. The local baseline dir
-// on the pinned machine was re-stamped to the new hash (a LOCAL, git-untracked
-// bridge, exactly what record-mode's manifest refresh does at run.ts ~1051 —
+// benchSourceHash. The committed tree does NOT ship a baseline or raw run
+// artifacts; both bench/d1/baseline/ and bench/d1/runs/ are gitignored. The
+// local baseline dir on the pinned machine was re-stamped to the new hash (a
+// LOCAL, git-untracked bridge, exactly what record-mode's manifest refresh does
+// at run.ts ~1051 —
 // re-stamp the hash without re-taking samples, since compose-depth is never
 // exercised by a recording). On return to AC, re-pin + re-record so a real
 // artifact re-establishes provenance for the six gated fixtures:
