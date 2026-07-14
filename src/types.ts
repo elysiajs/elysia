@@ -2561,4 +2561,21 @@ export type GuardHookSingleton<
 		MacroContext['resolve']
 }
 
+export interface StaticMapAliases {
+	method: string
+	paths: string[]
+}
+
+export type LazyComposeEntry =
+	| { kind: 'route'; route: InternalRoute; source?: string }
+	| {
+			kind: 'use'
+			child: AnyElysia
+			preChain: ChainNode | undefined
+			childBaseLen: number
+			childPlan: LazyComposeEntry[] | undefined
+			childPlanLen: number
+			source?: string
+	  }
+
 export type { TypeBoxSchema, AnySchema, StandardSchemaV1Like } from './type'

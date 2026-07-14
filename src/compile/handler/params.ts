@@ -16,7 +16,8 @@ import {
 	signCookieValuesSync
 } from '../../cookie/utils'
 import { requestId } from '../../utils'
-import { forwardError } from '../../handler/utils'
+import { finalizeRouteError, forwardError } from '../../handler/utils'
+import type { AnyElysia } from '../../base'
 import {
 	materializeSetHeaders,
 	normalizeContentType,
@@ -39,6 +40,7 @@ import {
  * @see `test/aot/param-descriptor.test.ts` asserts these keys
  */
 export interface HandlerParamContext {
+	root: AnyElysia
 	parse: Record<string, unknown>
 	res: { map: unknown; compact?: unknown }
 	hook: Record<string, unknown>
@@ -92,6 +94,9 @@ export const HANDLER_PARAMS: Record<string, Resolver> = {
 	va: (c) => c.vali,
 	// returned-error forwarder
 	fe: () => forwardError,
+	// route-level error boundary
+	fre: () => finalizeRouteError,
+	rt: (c) => c.root,
 	// route hook
 	// `link(0, '')`
 	ho: (c) => c.hook,

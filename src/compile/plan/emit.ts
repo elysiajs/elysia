@@ -23,7 +23,7 @@ import {
 import { parseCookieRawSync, buildCookieJar } from '../../cookie/utils'
 import { hasHeaderShorthand } from '../../universal/constants'
 import { parseQueryFromURL } from '../../parse-query'
-import { forwardError } from '../../handler/utils'
+import { finalizeRouteError, forwardError } from '../../handler/utils'
 import { Capture } from '../aot'
 import { JITProbe } from '../jit-probe'
 import { schemaMediaKind } from '../handler/jit'
@@ -73,7 +73,7 @@ export function emitResume(
 	input: EmitInput,
 	options: EmitOptions = {}
 ): CompiledHandler {
-	const { plan, state, hook, handler, adapter } = input
+	const { plan, state, hook, handler, adapter, root } = input
 	const cancellation = options.cancellation ?? 'compat'
 
 	const { vali, cookieConfig } = state
@@ -103,6 +103,8 @@ export function emitResume(
 
 		return key
 	}
+	link(root, 'rt')
+	link(finalizeRouteError, 'fre')
 	const hasSet = plan.hasSet
 	const map = hasSet
 		? (link(res.map, 'rm'), 'rm')
@@ -427,7 +429,7 @@ export function emitResume(
 			const s = step.suspend!
 			const thisPc = suspendPc.get(i)!
 			out += s.invoke
-			const bailTarget = `return __resume(c,${thisPc},_v,_r${hasAsyncResponseValidation ? ',_rvt' : ''})\n`
+			const bailTarget = `return __resume(c,${thisPc},_v,_r${hasAsyncResponseValidation ? ',_rvt' : ''}).catch((_e)=>fre(rt,c,_e))\n`
 			out += s.unconditional
 				? s.guard
 					? `${s.guard} ${bailTarget}`
@@ -464,7 +466,7 @@ export function emitResume(
 		`${cookieConfig ? ',_ck' : ''}` +
 		`${hasAsyncResponseValidation ? ',_rvr,_rvt' : ''}\n`
 
-	const routeSrc = `function route(c){\n${localDecls}${prologue}${fast}}`
+	const routeSrc = `function route(c){try{\n${localDecls}${prologue}${fast}}catch(_e){return fre(rt,c,_e)}}`
 
 	let resumeSrc = ''
 	if (suspendCount > 0) {

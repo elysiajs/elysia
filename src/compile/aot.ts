@@ -6,17 +6,6 @@ import type { CoercePlan } from '../type/coerce'
 export const AOT_MANIFEST_FORMAT = 3
 export const AOT_ABI = `${packageJson.version}:${AOT_MANIFEST_FORMAT}`
 
-// Manifest binding is carried by `ProgramId` (a per-instance symbol): each app
-// only ever reads the program bound to its own id, so cross-app *reads* are
-// impossible. The fingerprint keeps only `abi` — a manifest built by an
-// incompatible framework/manifest-format version is rejected loudly at claim.
-//
-// Route-level identity is deliberately NOT checked. A manifest is a generated
-// artifact emitted from the same source that builds the app, so it cannot
-// realistically diverge from that app's routes. The one residual case — TWO
-// AOT-sealed apps co-hosted in one process where a non-owner builds first and
-// claims the other's pending manifest — is an accepted, documented tradeoff:
-// keep AOT bundles to one sealed app per process (the normal deployment shape).
 export interface AotFingerprint {
 	abi: string
 }

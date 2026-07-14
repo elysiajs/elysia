@@ -142,48 +142,18 @@ import type {
 	LocalHookReturn,
 	PluginHookReturn,
 	GlobalHookReturn,
-	GuardHookSingleton
+	GuardHookSingleton,
+	LazyComposeEntry,
+	StaticMapAliases
 } from './types'
 import type { ElysiaStatus } from './error'
 import type { Context, LifecycleContext, ErrorContext } from './context'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
 
-interface StaticMapAliases {
-	method: string
-	paths: string[]
-}
-
 const useNodesBuffer: ChainNode[] = []
 const plainRouteOwner = Object.freeze(nullObject()) as AnyElysia
 const emptyHistory = Object.freeze([]) as readonly HistoryEntry[]
-
-// experimental.lazyCompose ordered plan entry.
-// `route` — a direct route registration deferred to preserve authoring order
-//   relative to pending `.use` edges.
-// `use` — a deferred `.use(child)` edge. `preChain` is the `~hookChain`
-//   snapshot taken at use-time (before this call's own hook-chain absorption
-//   mutated it), which the eager route loop reads as its inherited chain base.
-type LazyComposeEntry =
-	| { kind: 'route'; route: InternalRoute; source?: string }
-	| {
-			kind: 'use'
-			child: AnyElysia
-			preChain: ChainNode | undefined
-			// Child's own materialised route count (before its own plan started)
-			// and plan length, snapshotted at use-time so post-use child growth
-			// cannot leak later routes into this instance. The DFS recurses into
-			// the child's ORIGINAL direct routes (never its flattened table), so
-			// each original route is emitted exactly once with the accumulated
-			// prefix + chain — Θ(nodes + routes), no re-absorption.
-			childBaseLen: number
-			// The child's own plan ARRAY (captured by reference so an independent
-			// flush of the child — which nulls `child.#lazyPlan` but never mutates
-			// the array — cannot strand these entries) bounded to `childPlanLen`.
-			childPlan: LazyComposeEntry[] | undefined
-			childPlanLen: number
-			source?: string
-	  }
 
 const canRegisterLoose = (path: string, isDynamic: boolean) =>
 	!isDynamic && (path.length === 0 || path.charCodeAt(path.length - 1) === 47)
@@ -248,19 +218,9 @@ export class Elysia<
 	#cachedHistory?: readonly HistoryEntry[]
 	server?: Server
 
-	// experimental.lazyCompose — ordered `route | use` plan.
-	// Populated only while the flag is on AND at least one lazy `.use` is
-	// pending. Once populated, every subsequent route registration and `.use`
-	// is appended here (preserving authoring order) until a build/observation
-	// boundary flushes it via #flushLazyPlan. All non-route composition work
-	// still runs eagerly; only per-route emission into #declaredRoutes waits.
 	#lazyPlan?: LazyComposeEntry[]
-	// #declaredRoutes length when this instance's plan began. Routes below this
-	// index were registered eagerly (pre-plan) and are emitted by a parent's DFS
-	// before any plan entry, preserving authoring order.
-	#lazyPlanBase = 0
-	// Guards the DFS against cyclic-graph re-entrancy while flushing.
-	#flushingLazyPlan = false
+	#lazyPlanBase?: number
+	#flushingLazyPlan?: boolean
 
 	get history(): readonly HistoryEntry[] {
 		if (this.#lazyPlan) this.#flushLazyPlan()
@@ -337,16 +297,15 @@ export class Elysia<
 		[method: string]: { [path: string]: CompiledHandler } | undefined
 	}
 
-	// B7 — dense columnar view of the built router, indexed by dense route ID.
-	// Built in `#buildRouterUnsafe` from the post-flatten `~routes` snapshot; the
-	// sealed runtime reads this instead of retaining raw `InternalRoute` tuples.
-	// The authoring log (`#declaredRoutes`) stays as the `routes`/`history`
-	// introspection surface (Q17).
 	'~routeTable'?: RouteTable
 
 	'~hasWS'?: boolean
 	'~hasDynamicWS'?: boolean
 	'~hasTrace'?: boolean
+	'~finalizeError'?: (
+		context: Context,
+		error: Error
+	) => MaybePromise<Response>
 	'~programId': ProgramId
 	'~aotFingerprint'?: AotFingerprint
 	'~compilerSession'?: CompilerSession
@@ -4208,12 +4167,13 @@ export class Elysia<
 					this.#lazyPlan = []
 					this.#lazyPlanBase = this.#declaredRoutes?.length ?? 0
 				}
+
 				this.#lazyPlan.push({
 					kind: 'use',
 					child: app,
 					preChain: this['~hookChain'],
 					childBaseLen: app.#lazyPlan
-						? app.#lazyPlanBase
+						? (app.#lazyPlanBase ?? 0)
 						: (app.#declaredRoutes?.length ?? 0),
 					childPlan: app.#lazyPlan,
 					childPlanLen: app.#lazyPlan?.length ?? 0,
@@ -4669,17 +4629,16 @@ export class Elysia<
 
 		if (this.#flushingLazyPlan)
 			throw new Error(
-				'[Elysia] experimental.lazyCompose detected a cyclic plugin graph while flushing deferred `.use` composition. Cyclic plugin references are unsupported under the flag.'
+				'[Elysia] experimental.lazyCompose, cyclic plugin references are unsupported under the flag'
 			)
-		this.#flushingLazyPlan = true
 
-		const planLen = plan.length
+		this.#flushingLazyPlan = true
 		this.#lazyPlan = undefined
 		this.#lazyPlanBase = 0
 
 		try {
 			const childAccPrefix = this['~Prefix']
-			for (let i = 0; i < planLen; i++) {
+			for (let i = 0; i < plan.length; i++) {
 				const entry = plan[i]
 				if (entry.kind === 'route') {
 					this.#registerRoute(entry.route, entry.source)
@@ -4862,9 +4821,7 @@ export class Elysia<
 	#assertMutable(api: string) {
 		if (this['~generation'] === undefined) return
 
-		throw new Error(
-			`[Elysia] .${api}() called after the app was sealed. A sealed instance is immutable (Q4) — create a new instance to add more. See migration guide "Q4".`
-		)
+		throw new Error(`[Elysia] .${api}() called after the app was sealed`)
 	}
 
 	#registerRoute(route: InternalRoute, source?: string) {
@@ -6572,10 +6529,14 @@ export class Elysia<
 			try {
 				handler = compileHandler(route, this, precomputedStatic)
 			} catch (error) {
-				throw new Error(
+				const routeError = new Error(
 					`[Elysia] Failed to compile route ${route[0]} ${route[1]}: ${(error as Error)?.message ?? error}`,
 					{ cause: error }
 				)
+				const finalize = this['~finalizeError']
+				if (finalize) return finalize(context as Context, routeError)
+
+				throw routeError
 			}
 
 			this.#compiled![index] = handler

@@ -652,6 +652,7 @@ export function compileHandler(
 		return reconstructed.f(
 			handler,
 			...resolveHandlerParams(reconstructed.a, {
+				root,
 				parse: adapter.parse as any,
 				res: adapter.response as any,
 				hook: nullObject() as any,
@@ -728,6 +729,7 @@ export function compileHandler(
 		return reconstructed.f(
 			handler,
 			...resolveHandlerParams(reconstructed.a, {
+				root,
 				parse: adapter.parse as any,
 				res: adapter.response as any,
 				hook: (hook ?? nullObject()) as any,
@@ -811,6 +813,7 @@ export function compileHandler(
 		handler,
 		instance,
 		root: frozenRoot as AnyElysia,
+		errorRoot: root,
 		hook,
 		adapter,
 		isHandleFunction,

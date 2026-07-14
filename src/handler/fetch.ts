@@ -144,10 +144,38 @@ function findRoute(
 		}
 	}
 
-	const methodMap = map[request.method]
-	let handler: CompiledHandler | undefined = methodMap?.[path]
+	const method = request.method
+	let handler: CompiledHandler | undefined
 
-	if (!handler)
+	switch (method) {
+		case 'GET':
+			handler = map.GET?.[path]
+			break
+		case 'POST':
+			handler = map.POST?.[path]
+			break
+		case 'PUT':
+			handler = map.PUT?.[path]
+			break
+		case 'DELETE':
+			handler = map.DELETE?.[path]
+			break
+		case 'PATCH':
+			handler = map.PATCH?.[path]
+			break
+		case 'HEAD':
+			handler = map.HEAD?.[path]
+			break
+		case 'OPTIONS':
+			handler = map.OPTIONS?.[path]
+			break
+		default:
+			handler = map[method]?.[path]
+	}
+
+	if (!handler) {
+		const methodMap = map[method]
+
 		if (
 			!strictPath &&
 			path.length > 1 &&
@@ -161,23 +189,16 @@ function findRoute(
 				handler = anyMap?.[path] ?? anyMap?.[loose]
 			}
 		} else handler = map['*']?.[path]
-
-	if (handler) {
-		const r = handler(context)
-		return r instanceof Promise
-			? r.catch(catchError(context, handleError, afterResponse))
-			: r
 	}
 
-	const found = router?.find(request.method, path) ?? router?.find('*', path)
+	if (handler) return handler(context)
+
+	const found = router?.find(method, path) ?? router?.find('*', path)
 
 	if (found) {
 		context.params = decodeParams(found.params)
 
-		const r = found.store(context)
-		return r instanceof Promise
-			? r.catch(catchError(context, handleError, afterResponse))
-			: r
+		return found.store(context)
 	}
 
 	if (hasError) throw new NotFound()
@@ -339,6 +360,9 @@ export function createFetchHandler(
 					})
 				}
 			: undefined
+
+	app['~finalizeError'] = (context, error) =>
+		finalizeError(context, handleError, afterResponse, error)
 
 	if (traceRequestPhase) {
 		const onRequests = hook?.request ?? []
@@ -595,8 +619,6 @@ export function createFetchHandler(
 		}
 	}
 
-	// Fuck DRY, this is the hotest path
-	// so I'm inline the entire thing, ~4-5ns faster on M1
 	return (request: Request, server?: unknown): MaybePromise<Response> => {
 		const context = new Context(request)
 		const url = request.url,
@@ -659,63 +681,82 @@ export function createFetchHandler(
 			}
 		}
 
-		const methodMap = map[request.method]
-		let handler: CompiledHandler | undefined = methodMap?.[path]
+		const method = request.method
+		let handler: CompiledHandler | undefined
 
-		try {
-			if (!handler) {
-				if (
-					!strictPath &&
-					path.length > 1 &&
-					path.charCodeAt(path.length - 1) === 47
-				) {
-					const loose = path.slice(0, -1)
-					handler = methodMap?.[loose]
-					if (!handler) {
-						const anyMap = map['*']
-						handler = anyMap?.[path] ?? anyMap?.[loose]
-					}
-				} else {
-					const anyMap = map['*']
-					handler = anyMap?.[path]
-				}
-			}
+		switch (method) {
+			case 'GET':
+				handler = map.GET?.[path]
+				if (handler) return handler(context)
+				break
 
-			if (handler) {
-				const r = handler(context)
-				return r instanceof Promise
-					? r.catch(catchError(context, handleError, afterResponse))
-					: r
-			}
+			case 'POST':
+				handler = map.POST?.[path]
+				if (handler) return handler(context)
+				break
 
-			const result =
-				router?.find(request.method, path) ?? router?.find('*', path)
+			case 'PUT':
+				handler = map.PUT?.[path]
+				if (handler) return handler(context)
+				break
 
-			if (result) {
-				context.params = decodeParams(result.params)
+			case 'DELETE':
+				handler = map.DELETE?.[path]
+				if (handler) return handler(context)
+				break
 
-				const r = result.store(context)
-				return r instanceof Promise
-					? r.catch(catchError(context, handleError, afterResponse))
-					: r
-			}
-		} catch (error) {
-			return finalizeError(
-				context,
-				handleError,
-				afterResponse,
-				error as Error
-			)
+			case 'PATCH':
+				handler = map.PATCH?.[path]
+				if (handler) return handler(context)
+				break
+
+			case 'HEAD':
+				handler = map.HEAD?.[path]
+				if (handler) return handler(context)
+				break
+
+			case 'OPTIONS':
+				handler = map.OPTIONS?.[path]
+				if (handler) return handler(context)
+				break
+
+			default:
+				handler = map[method]?.[path]
+				if (handler) return handler(context)
 		}
 
-		if (hasError) {
+		const methodMap = map[method]
+
+		if (
+			!strictPath &&
+			path.length > 1 &&
+			path.charCodeAt(path.length - 1) === 47
+		) {
+			const loose = path.slice(0, -1)
+			handler = methodMap?.[loose]
+			if (!handler) {
+				const anyMap = map['*']
+				handler = anyMap?.[path] ?? anyMap?.[loose]
+			}
+		} else handler = map['*']?.[path]
+
+		if (handler) return handler(context)
+
+		const result = router?.find(method, path) ?? router?.find('*', path)
+
+		if (result) {
+			context.params = decodeParams(result.params)
+
+			return result.store(context)
+		}
+
+		if (hasError)
 			return finalizeError(
 				context,
 				handleError,
 				afterResponse,
 				new NotFound()
 			)
-		}
 
 		afterResponse?.(context, 404)
 		return notFound(context)

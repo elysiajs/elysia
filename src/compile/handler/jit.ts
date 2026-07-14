@@ -26,8 +26,9 @@ import {
 	isProduction
 } from '../../error'
 import { isDynamicRegex, traceEventIndex } from '../../constants'
-import { forwardError } from '../../handler/utils'
-import { hasHeaderShorthand } from '../../universal/constants'
+import { finalizeRouteError, forwardError } from '../../handler/utils'
+import { hasHeaderShorthand, isBun } from '../../universal/constants'
+import { ElysiaFile } from '../../universal/file'
 
 import { parseQueryFromURL } from '../../parse-query'
 
@@ -288,43 +289,64 @@ const fromArgs = (type: string, isAsync: boolean) =>
 
 const createInlineHandler = (
 	map: (value: unknown, ...rest: unknown[]) => unknown,
-	h: (context: Context) => unknown
+	h: (context: Context) => unknown,
+	root: AnyElysia
 ) =>
 	((c: Context) => {
-		const r = h(c)
-		if (r instanceof Error) throw r
-		if (r instanceof Promise)
-			return r.then((v) => map(forwardError(v), c.request))
+		try {
+			const r = h(c)
+			if (r instanceof Error) throw r
+			if (r instanceof Promise)
+				return r
+					.then((v) => map(forwardError(v), c.request))
+					.catch((error) => finalizeRouteError(root, c, error))
 
-		return map(r, c.request)
+			return map(r, c.request)
+		} catch (error) {
+			return finalizeRouteError(root, c, error)
+		}
 	}) as CompiledHandler
 
 const createInlineHandlerWithSet = (
 	map: (value: unknown, ...rest: unknown[]) => unknown,
-	h: (context: Context) => unknown
+	h: (context: Context) => unknown,
+	root: AnyElysia
 ) =>
 	((c: Context) => {
-		const r = h(c)
-		if (r instanceof Error) throw r
-		if (r instanceof Promise)
-			return r.then((v) => map(forwardError(v), c.set, c.request))
+		try {
+			const r = h(c)
+			if (r instanceof Error) throw r
+			if (r instanceof Promise)
+				return r
+					.then((v) => map(forwardError(v), c.set, c.request))
+					.catch((error) => finalizeRouteError(root, c, error))
 
-		return map(r, c.set, c.request)
+			return map(r, c.set, c.request)
+		} catch (error) {
+			return finalizeRouteError(root, c, error)
+		}
 	}) as CompiledHandler
 
 const createInlineHandlerWithDefaultHeaders = (
 	map: (value: unknown, ...rest: unknown[]) => unknown,
-	h: (context: Context) => unknown
+	h: (context: Context) => unknown,
+	root: AnyElysia
 ) =>
 	((c: Context) => {
-		materializeSetHeaders(c.set)
-		const r = h(c)
+		try {
+			materializeSetHeaders(c.set)
+			const r = h(c)
 
-		if (r instanceof Error) throw r
-		if (r instanceof Promise)
-			return r.then((v) => map(forwardError(v), c.set, c.request))
+			if (r instanceof Error) throw r
+			if (r instanceof Promise)
+				return r
+					.then((v) => map(forwardError(v), c.set, c.request))
+					.catch((error) => finalizeRouteError(root, c, error))
 
-		return map(r, c.set, c.request)
+			return map(r, c.set, c.request)
+		} catch (error) {
+			return finalizeRouteError(root, c, error)
+		}
 	}) as CompiledHandler
 
 export interface CompileHandlerJitOptions {
@@ -333,6 +355,7 @@ export interface CompileHandlerJitOptions {
 	handler: unknown
 	instance: AnyElysia
 	root: AnyElysia
+	errorRoot: AnyElysia
 	hook: AnyLocalHook | undefined
 	adapter: ElysiaAdapter
 	isHandleFunction: boolean
@@ -350,6 +373,7 @@ export function compileHandlerJit({
 	path,
 	handler,
 	root,
+	errorRoot,
 	hook,
 	adapter,
 	isHandleFunction,
@@ -415,6 +439,8 @@ export function compileHandlerJit({
 			alias += `${alias ? ',' : ''}${key}`
 		}
 	}
+	link(errorRoot, 'rt')
+	link(finalizeRouteError, 'fre')
 
 	const abortExpression = 'c.request.signal.aborted'
 	const abortCheck = hasLifecycleHook
@@ -542,7 +568,7 @@ export function compileHandlerJit({
 	const head = code
 	code = ''
 
-	if (hasErrorHook || hasTrace) code += 'try{\n'
+	code += 'try{\n'
 	if (
 		responseMode === 'set-with-default-headers' &&
 		(inference.set || hasTrace)
@@ -960,9 +986,11 @@ export function compileHandlerJit({
 				? `${map}(_r,c.set,c.request)`
 				: `${map}(_r,c.request)`
 
-			if (syncErrorHook)
-				code += `if(_r instanceof Promise)return ${finalMap}.catch((_e)=>_ce(_e,c))\n`
-			code += `return ${finalMap}\n`
+			if (!isAsync)
+				code += syncErrorHook
+					? `if(_r instanceof Promise)return ${finalMap}.catch((_e)=>_ce(_e,c))\n`
+					: `if(_r instanceof Promise)return ${finalMap}.catch((_e)=>fre(rt,c,_e))\n`
+			code += `return ${isAsync ? 'await ' : ''}${finalMap}\n`
 		}
 	} else if (isHandleFunction) {
 		if (!isAsync) link(forwardError, 'fe')
@@ -974,14 +1002,17 @@ export function compileHandlerJit({
 			abortCheck +
 			`if(_r instanceof Error)throw _r\n` +
 			(isAsync
-				? `return ${map}(_r,${mapArgs})\n`
+				? `return await ${map}(_r,${mapArgs})\n`
 				: syncErrorHook
 					? `if(_r instanceof Promise)return ${map}(_r.then(fe),${mapArgs}).catch((_e)=>_ce(_e,c))\n` +
 						`return ${map}(_r,${mapArgs})\n`
-					: `if(_r instanceof Promise)_r=_r.then(fe)\n` +
+					: `if(_r instanceof Promise)return ${map}(_r.then(fe),${mapArgs}).catch((_e)=>fre(rt,c,_e))\n` +
 						`return ${map}(_r,${mapArgs})\n`)
 	} else {
-		code += `return ${mapReturn}`
+		code +=
+			isPromiseHandler || (!isBun && handler instanceof ElysiaFile)
+				? `return ${mapReturn.trim()}.catch((_e)=>fre(rt,c,_e))\n`
+				: `return ${mapReturn}`
 	}
 
 	if (hasErrorHook || hasTrace) {
@@ -1058,14 +1089,15 @@ export function compileHandlerJit({
 				`return _efb(e,c)\n`
 		} else {
 			body += endTrace('error') + schedule
-			body += `throw e\n`
+			body += `return fre(rt,c,e)\n`
 		}
 
 		if (syncErrorHook) {
-			factoryHelpers += `function _ce(e,c){\n${body}}\n`
+			factoryHelpers += `function _ce(e,c){try{\n${body}}catch(_ee){return fre(rt,c,_ee)}}\n`
 			code += `}catch(e){return _ce(e,c)}\n`
-		} else code += `}catch(e){\n${body}}\n`
-	}
+		} else
+			code += `}catch(e){try{\n${body}}catch(_ee){return fre(rt,c,_ee)}}\n`
+	} else code += `}catch(e){return fre(rt,c,e)}\n`
 
 	code += '}'
 
@@ -1075,27 +1107,39 @@ export function compileHandlerJit({
 		code = `(function(){\n${factoryHelpers}return ${code}})()`
 
 	Capture.handler({ method, path, alias, code })
+	const inlineAlias = alias.startsWith('rt,fre,') ? alias.slice(7) : alias
+	const isGeneratorHandler =
+		isHandleFunction &&
+		(handler as Function).constructor.name.endsWith('GeneratorFunction')
 
-	if (!hasTrace && isHandleFunction && !inlineUnsafe) {
-		if (alias === 'rc' || (!isAsync && !syncErrorHook && alias === 'rc,fe'))
+	if (!hasTrace && isHandleFunction && !isGeneratorHandler && !inlineUnsafe) {
+		if (
+			inlineAlias === 'rc' ||
+			(!isAsync && !syncErrorHook && inlineAlias === 'rc,fe')
+		)
 			return createInlineHandler(
 				res.compact ?? (res.map as any),
-				handler as any
+				handler as any,
+				errorRoot
 			)
 		else if (
-			alias === 'rm' ||
-			alias === 'msh,rm' ||
+			inlineAlias === 'rm' ||
+			inlineAlias === 'msh,rm' ||
 			(!isAsync &&
 				!syncErrorHook &&
-				(alias === 'rm,fe' ||
-					alias === 'msh,rm,fe'))
+				(inlineAlias === 'rm,fe' || inlineAlias === 'msh,rm,fe'))
 		)
 			return responseMode === 'set-with-default-headers' && inference.set
 				? createInlineHandlerWithDefaultHeaders(
 						responseMap as any,
-						handler as any
+						handler as any,
+						errorRoot
 					)
-				: createInlineHandlerWithSet(responseMap as any, handler as any)
+				: createInlineHandlerWithSet(
+						responseMap as any,
+						handler as any,
+						errorRoot
+					)
 	}
 
 	JITProbe.record('handler:new-function')

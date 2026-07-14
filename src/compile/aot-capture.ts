@@ -267,7 +267,7 @@ function captureCodecMirror(
 // sealed slots whose schema carries a coercion/codec node
 const compactErrorWarned = new Set<string>()
 
-// @internal test isolation — a fresh process starts empty (once per build)
+// @internal test isolation
 export function resetCompactErrorWarnings() {
 	compactErrorWarned.clear()
 }

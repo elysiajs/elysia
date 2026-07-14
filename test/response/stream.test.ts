@@ -601,6 +601,7 @@ describe('Stream', () => {
 		const app = new Elysia().get('/', async function* ({ set }) {
 			set.headers['access-control-allow-origin'] = '*'
 			set.headers['x-custom-header'] = 'test-value'
+
 			// Throw before yielding - this is the bug scenario from #1677
 			if (true) throw statusFn(500)
 			yield 'unreachable'

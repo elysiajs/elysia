@@ -1,6 +1,9 @@
 import { isAsyncFunction, mayReturnPromise } from '../compile/utils'
 import { isCloudflareWorker } from '../universal/constants'
 
+import type { AnyElysia } from '../base'
+import type { Context } from '../context'
+
 export const emptyResponse = isCloudflareWorker
 	? { clone: () => new Response(null) }
 	: new Response(null)
@@ -25,6 +28,17 @@ export function forwardError<T>(value: T): T {
 	if (value instanceof Error) throw value
 
 	return value
+}
+
+export function finalizeRouteError(
+	app: AnyElysia,
+	context: Partial<Context>,
+	error: unknown
+) {
+	const finalize = app['~finalizeError']
+	if (!finalize) throw error
+
+	return finalize(context as Context, error as Error)
 }
 
 export function getAsyncIndexes(onRequests: Function[]) {
