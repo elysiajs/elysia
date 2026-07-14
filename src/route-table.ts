@@ -6,9 +6,7 @@ import type { ChainNode } from './utils'
 
 export const enum RouteFlag {
 	WS = 1,
-	Dynamic = 2,
-	HasLocalHook = 4,
-	HasMacroScope = 8
+	Dynamic = 2
 }
 
 export interface RouteTable {

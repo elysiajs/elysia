@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 
-import { analyzeCookieReads } from '../../src/compile/handler/descriptor'
+import { analyzeCookieReads } from '../../src/compile/handler/cookie-reads'
 import type { Sucrose } from '../../src/sucrose'
 
 // The cookie-read analyzer performs a conservative static extraction of the
@@ -71,7 +71,9 @@ describe('cookie-read analyzer — analyzable patterns yield names', () => {
 	})
 
 	it('optional chaining on the jar', () => {
-		expect(analyze(({ cookie }: any) => cookie?.sid?.value)).toEqual(['sid'])
+		expect(analyze(({ cookie }: any) => cookie?.sid?.value)).toEqual([
+			'sid'
+		])
 	})
 
 	it('optional chaining on the context alias', () => {
@@ -114,7 +116,9 @@ describe('cookie-read analyzer — analyzable patterns yield names', () => {
 
 describe('cookie-read analyzer — unanalyzable patterns yield undefined', () => {
 	it('Object.keys over the jar (enumeration)', () => {
-		expect(analyze(({ cookie }: any) => Object.keys(cookie))).toBeUndefined()
+		expect(
+			analyze(({ cookie }: any) => Object.keys(cookie))
+		).toBeUndefined()
 	})
 
 	it('the jar passed to a call', () => {
@@ -137,9 +141,7 @@ describe('cookie-read analyzer — unanalyzable patterns yield undefined', () =>
 	})
 
 	it('a nested computed-key destructure', () => {
-		expect(
-			analyze(({ cookie: { ['x']: y } }: any) => y)
-		).toBeUndefined()
+		expect(analyze(({ cookie: { ['x']: y } }: any) => y)).toBeUndefined()
 	})
 
 	it('a computed root key can alias the cookie jar', () => {

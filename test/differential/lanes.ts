@@ -23,6 +23,7 @@
 
 import '../../src/compile/aot-capture' // installs captureImpl (side effect)
 import { Elysia, type AnyElysia } from '../../src'
+import { resumeEmit } from '../../src/experimental/resume'
 import { Compiled, type CompiledSnapshot } from '../../src/compile/aot'
 import { Validator } from '../../src/validator'
 import { captureArtifacts } from '../../src/plugin/aot/source'
@@ -93,7 +94,7 @@ export const precompileHandle = handleLane('precompile-handle', {
 // the rest — so byte-parity against the JIT oracle holds for the whole corpus
 // (covered routes prove the emitter; fallback routes are trivially equal).
 export const resumeHandle = handleLane('resume-handle', {
-	experimental: { resumeEmit: true }
+	experimental: { resumeEmit }
 })
 
 // ── listen transport ────────────────────────────────────────────────────────
@@ -185,7 +186,7 @@ export const precompileListen = listenLane('precompile-listen', {
 	precompile: true
 })
 export const resumeListen = listenLane('resume-listen', {
-	experimental: { resumeEmit: true }
+	experimental: { resumeEmit }
 })
 export const nativeStaticOn = listenLane('native-static-on', {
 	nativeStaticResponse: true

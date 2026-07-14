@@ -15,7 +15,7 @@ export const BENCH_SOURCE_FILES = [
 	'bench/d1/fixtures/cold-start.ts',
 	'bench/d1/fixtures/compile-memory.ts',
 	'bench/d1/fixtures/compose-depth.ts',
-	'bench/d1/fixtures/compose-depth.ts',
+	'bench/d1/fixtures/default-headers.ts',
 	'bench/d1/fixtures/executables.ts',
 	'bench/d1/fixtures/http.ts',
 	'bench/d1/fixtures/native-table.ts',
@@ -140,6 +140,7 @@ export function captureEnvironment(): D1Environment {
 function staticImports(source: string) {
 	const imports: string[] = []
 	const pattern =
+		// eslint-disable-next-line sonarjs/slow-regex -- scans trusted local source files and must support multiline imports
 		/\b(?:import|export)\s+(?!\()(?:(?:type)\s+)?(?:[\s\S]*?\sfrom\s+)?['"]([^'"]+)['"]/g
 	for (const match of source.matchAll(pattern)) imports.push(match[1]!)
 	return imports
@@ -187,6 +188,9 @@ export async function assertBenchSourceFileListCoversStaticImports(
 	repoRoot: string
 ) {
 	const listed = new Set<string>(BENCH_SOURCE_FILES)
+	if (listed.size !== BENCH_SOURCE_FILES.length)
+		throw new Error('BENCH_SOURCE_FILES cannot contain duplicates')
+
 	if (
 		BENCH_SOURCE_FILES.some(
 			(file) =>
@@ -226,9 +230,7 @@ export async function assertBenchSourceFileListCoversStaticImports(
 			if (!imported || imported.startsWith('src/')) continue
 			if (!listed.has(imported))
 				missingImports.push(`${file} -> ${imported}`)
-			if (imported.startsWith('bench/d1/') && imported.endsWith('.ts'))
-				queue.push(imported)
-			else if (!visited.has(imported)) queue.push(imported)
+			if (!visited.has(imported)) queue.push(imported)
 		}
 	}
 	if (missingImports.length)

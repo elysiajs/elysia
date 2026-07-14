@@ -37,10 +37,14 @@ const defaultBlocks = 8
 const defaultRoutes = 1_000
 const defaultRequests = 200
 const defaultWarmup = 50
+const defaultRssWarmup = 20_000
+const defaultRssStep = 10_000
+const defaultRssBlocks = 4
 const defaultResamples = 2_000
 const fixtureIds = [
 	'cold-start',
 	'http',
+	'default-headers',
 	'compile-memory',
 	'retained',
 	'executables',
@@ -144,7 +148,8 @@ function parseJson(text: string, label: string) {
 		return JSON.parse(trimmed) as ChildOutput
 	} catch (error) {
 		throw new Error(
-			`${label} printed invalid JSON: ${String(error)}\n${trimmed.slice(0, 500)}`
+			`${label} printed invalid JSON: ${String(error)}\n${trimmed.slice(0, 500)}`,
+			{ cause: error }
 		)
 	}
 }
@@ -270,6 +275,36 @@ async function measureHttp(base: string) {
 	return samples
 }
 
+async function consumeDefaultHeader(response: Response) {
+	if (!response.ok) throw new Error(`HTTP request failed: ${response.status}`)
+	if (response.headers.get('x-d1-default') !== 'base')
+		throw new Error('default-header response omitted x-d1-default')
+	await response.arrayBuffer()
+}
+
+async function measureDefaultHeaders(base: string) {
+	const samples: number[] = []
+	for (let i = 0; i < defaultWarmup; i++)
+		await consumeDefaultHeader(await fetch(`${base}/`))
+	for (let i = 0; i < defaultRequests; i++) {
+		const started = Bun.nanoseconds()
+		await consumeDefaultHeader(await fetch(`${base}/`))
+		samples.push(Bun.nanoseconds() - started)
+	}
+	// Prime the snapshot route before the retained-RSS observer window.
+	await consumeDefaultHeader(await fetch(`${base}/__d1_snapshot`))
+	for (let i = 0; i < defaultRssWarmup; i++)
+		await consumeDefaultHeader(await fetch(`${base}/`))
+	await consumeDefaultHeader(await fetch(`${base}/__d1_snapshot`))
+	for (let block = 0; block < defaultRssBlocks; block++) {
+		for (let i = 0; i < defaultRssStep; i++)
+			await consumeDefaultHeader(await fetch(`${base}/`))
+		await consumeDefaultHeader(await fetch(`${base}/__d1_snapshot`))
+	}
+
+	return { 'default-headers': samples }
+}
+
 async function runFixtureBlock(
 	fixture: FixtureId,
 	descriptor: VariantDescriptor,
@@ -279,7 +314,12 @@ async function runFixtureBlock(
 		'run',
 		resolve(fixtureRoot, `${fixture}.ts`),
 		'--json',
-		`--routes=${defaultRoutes}`
+		`--routes=${defaultRoutes}`,
+		`--warmup=${defaultWarmup}`,
+		`--requests=${defaultRequests}`,
+		`--rss-warmup=${defaultRssWarmup}`,
+		`--rss-step=${defaultRssStep}`,
+		`--rss-blocks=${defaultRssBlocks}`
 	]
 	const spawnStarted = process.hrtime.bigint()
 	const child = Bun.spawn({
@@ -300,7 +340,9 @@ async function runFixtureBlock(
 	})
 	const stdoutPromise = new Response(child.stdout).text()
 	const stderrState =
-		fixture === 'cold-start' || fixture === 'http'
+		fixture === 'cold-start' ||
+		fixture === 'http' ||
+		fixture === 'default-headers'
 			? await readReady(child)
 			: {
 					ready: Promise.resolve({ port: 0, fallback: false }),
@@ -325,6 +367,19 @@ async function runFixtureBlock(
 		} else {
 			parentSamples = await measureHttp(`http://127.0.0.1:${ready.port}`)
 			await consume(
+				await fetch(`http://127.0.0.1:${ready.port}/__d1_done`)
+			)
+		}
+	} else if (fixture === 'default-headers') {
+		const ready = await stderrState.ready
+		if (ready.fallback) {
+			const fallbackOutput = await stdoutPromise
+			parentSamples = parseJson(fallbackOutput, fixture).samples
+		} else {
+			parentSamples = await measureDefaultHeaders(
+				`http://127.0.0.1:${ready.port}`
+			)
+			await consumeDefaultHeader(
 				await fetch(`http://127.0.0.1:${ready.port}/__d1_done`)
 			)
 		}
@@ -379,6 +434,22 @@ function rawMetricSamples(
 		const samples = execution.parentSamples[shapeName]
 		if (!samples?.length)
 			throw new Error(`HTTP shape samples missing for ${shapeName}`)
+		const percent = suffix === 'p50' ? 50 : suffix === 'p95' ? 95 : 99
+		return { samples, value: percentile(samples, percent) }
+	}
+	if (entry.fixture === 'default-headers') {
+		if (entry.metric === 'retained-rss-slope-bytes-per-request') {
+			const value = Number(output.rssSlopeBytesPerRequest)
+			return { samples: [value], value }
+		}
+		const suffix = entry.metric.match(/-(p50|p95|p99)-ns$/)?.[1]
+		if (!suffix || !execution.parentSamples)
+			throw new Error(
+				`default-header samples missing for ${entry.metric}`
+			)
+		const samples = execution.parentSamples['default-headers']
+		if (!samples?.length)
+			throw new Error('default-header timing samples missing')
 		const percent = suffix === 'p50' ? 50 : suffix === 'p95' ? 95 : 99
 		return { samples, value: percentile(samples, percent) }
 	}
@@ -439,7 +510,9 @@ function emptyRecord(
 				? 'count'
 				: entry.metric.endsWith('-ns')
 					? 'ns'
-					: 'bytes-per-route',
+					: entry.metric.endsWith('-bytes-per-request')
+						? 'bytes-per-request'
+						: 'bytes-per-route',
 		sampleRule: entry.sampleRule,
 		samples: [],
 		blocks: [],

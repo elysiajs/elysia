@@ -200,6 +200,26 @@
 		"margin": null
 	},
 	{
+		"fixture": "default-headers",
+		"metric": "default-headers-p50-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 independent child processes; 200 body-consumed real-socket requests after 50 warmups; immutable app-default header verified on every response",
+		"owner": "C1",
+		"status": "pending-floor",
+		"margin": null
+	},
+	{
+		"fixture": "default-headers",
+		"metric": "retained-rss-slope-bytes-per-request",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 independent child processes; full GC before a 20000-request allocator warmup; RSS snapshots across four 10000-request body-consumed blocks; absolute least-squares slope with a 1-byte reporting floor",
+		"owner": "C1",
+		"status": "pending-floor",
+		"margin": null
+	},
+	{
 		"fixture": "compile-memory",
 		"metric": "build-highwater-bytes-per-route",
 		"kind": "memory",

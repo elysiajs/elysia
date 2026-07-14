@@ -1,16 +1,26 @@
 import { Create } from './type/bridge'
 
 import { isProduction } from './universal/is-production'
-// C2 (N.1): per-schema `expected` default memo. Keyed by schema identity — schemas
-// are snapshot-stable (B5), so the `Create(schema)` walk (~1.5µs) runs once per schema
-// instead of per 422. Shared reference is safe: `expected` only feeds the serialized
-// problem+json payload, never mutated.
-const expectedCache = new WeakMap<object, unknown>()
 import { StatusMap, StatusMapBack } from './constants'
 import { primitiveElysiaTypes } from './type/constants'
 import { skipClone } from './adapter/skip-clone'
 
 export { isProduction } from './universal/is-production'
+
+// Schema snapshots are identity-stable, so the default shape only needs to be
+// created once. The shared reference is observable through error hooks and must
+// be treated as read-only by consumers.
+const expectedCache = new WeakMap<object, unknown>()
+
+function freezeExpected(value: unknown): unknown {
+	if (!value || typeof value !== 'object') return typeof value !== 'function'
+	if (!Array.isArray(value) && (value as any).constructor !== Object) return
+
+	for (const key in value as any)
+		if (!freezeExpected((value as any)[key])) return
+
+	return Object.freeze(value)
+}
 
 export class ElysiaError<
 	Status extends number = number,
@@ -576,8 +586,17 @@ export class ValidationError extends ElysiaError {
 			else {
 				try {
 					expected = Create(schemaForExpected as any)
+					try {
+						const snapshot = structuredClone(expected)
+						expected = snapshot
+						if (freezeExpected(snapshot)) {
+							expectedCache.set(
+								schemaForExpected as object,
+								snapshot
+							)
+						}
+					} catch {}
 				} catch {}
-				expectedCache.set(schemaForExpected as object, expected)
 			}
 
 		return {

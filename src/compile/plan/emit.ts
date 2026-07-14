@@ -27,10 +27,9 @@ import { forwardError } from '../../handler/utils'
 import { Capture } from '../aot'
 import { JITProbe } from '../jit-probe'
 import { schemaMediaKind } from '../handler/jit'
-import { toArray } from '../../utils'
 
 import type { RouteCompileState } from '../handler/descriptor'
-import type { RoutePlan } from './plan'
+import { hookArray, type RoutePlan } from './plan'
 
 import type { AnyLocalHook, CompiledHandler } from '../../types'
 
@@ -174,7 +173,7 @@ export function emitResume(
 	const hasBefore = segments.some((s) => s.kind === 'beforeHandle')
 	const scGuard = 'if(_r===undefined)'
 
-	const beforeHandleArr = toArray(hook?.beforeHandle)
+	const beforeHandleArr = hookArray(hook?.beforeHandle)
 	const beforeDeriveModes = deriveModes(
 		beforeHandleArr,
 		(hook as { '~deriveEntries'?: any[] } | undefined)?.['~deriveEntries']
@@ -376,13 +375,13 @@ export function emitResume(
 		steps.push({ code: `c.responseValue=_r\n` })
 
 	if (t.hasAfterHandle) {
-		const hooks = toArray(hook!.afterHandle)
+		const hooks = hookArray(hook!.afterHandle)
 		link(hook!.afterHandle!, 'af')
 		emitChainHook(steps, hooks, 'af', abortExpr, abortCheck())
 	}
 
 	if (t.hasMapResponse) {
-		const hooks = toArray(hook!.mapResponse)
+		const hooks = hookArray(hook!.mapResponse)
 		link(hook!.mapResponse!, 'mr')
 		emitChainHook(steps, hooks, 'mr', abortExpr, abortCheck())
 	}

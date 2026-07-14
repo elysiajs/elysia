@@ -1177,9 +1177,4 @@ export function serializeMacroSeed(_key: string, value: unknown): unknown {
 	}
 }
 
-export function toArray(v: unknown) {
-	if (!v) return []
-	return Array.isArray(v) ? (v as Function[]) : [v as Function]
-}
-
 export { prefix }

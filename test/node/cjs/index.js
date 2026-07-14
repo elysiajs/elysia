@@ -6,6 +6,7 @@ setTimeout(() => {
 }, 5000)
 
 const { Elysia, file, t } = require('elysia')
+const { resumeEmit } = require('elysia/experimental/resume')
 const adapterUtils = require('elysia/adapter/utils')
 const compiled = require('elysia/compiled')
 const { mkdtemp, readFile, rm, writeFile } = require('node:fs/promises')
@@ -20,6 +21,9 @@ if (
 
 if (!('validators' in compiled) || !('handlers' in compiled))
 	throw new Error('❌ CommonJS Node.js compiled subpath failed')
+
+if (typeof resumeEmit.emitResume !== 'function')
+	throw new Error('❌ CommonJS Node.js experimental/resume subpath failed')
 
 const app = new Elysia().get(
 	'/',

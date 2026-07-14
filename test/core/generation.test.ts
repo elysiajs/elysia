@@ -171,17 +171,16 @@ describe('B6 generation — failed setup publishes nothing', () => {
 
 describe('B6 generation — introspect (Q15)', () => {
 	it('app-side config.introspect surfaces on the generation', async () => {
-		const app = new Elysia({ introspect: true } as any).get(
-			'/',
-			() => 'ok'
-		)
+		const app = new Elysia({ introspect: true }).get('/', () => 'ok')
 		await app.handle(req('/'))
 		expect(generationOf(app).introspect).toBe(true)
 	})
 
-	it('a plugin declaring ~introspect seals its host into introspection', async () => {
-		const plugin = new Elysia({ name: 'introspected' })
-		;(plugin as any)['~introspect'] = true
+	it('a plugin declaring introspect seals its host into introspection', async () => {
+		const plugin = new Elysia({
+			name: 'introspected',
+			introspect: true
+		})
 
 		const app = new Elysia().use(plugin).get('/', () => 'ok')
 		await app.handle(req('/'))

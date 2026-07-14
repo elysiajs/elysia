@@ -1,5 +1,6 @@
 import { status, type SelectiveStatus } from './error'
-import { isNotEmpty, nullObject, redirect } from './utils'
+import { flattenChain, isNotEmpty, nullObject, redirect } from './utils'
+import { isProduction } from './universal/is-production'
 
 import type { AnyElysia } from './base'
 import type { Server } from './universal/server'
@@ -63,11 +64,36 @@ export function clearContextCache() {
 	sharedEmptyContext = null
 }
 
-function buildEmptyContext(Base: any, headers: object | null = null) {
-	const immutableHeaders =
-		headers !== null && Object.isFrozen(headers)
+const pathValue = Symbol('path')
 
-	return class Context extends Base {
+function buildEmptyContext(
+	Base: any,
+	headers: object | null = null,
+	warnPathMutation = false
+) {
+	const immutableHeaders = headers !== null && Object.isFrozen(headers)
+	let warnedPathMutation = false
+	const pathDescriptor: PropertyDescriptor | undefined = warnPathMutation
+		? {
+				enumerable: true,
+				configurable: true,
+				get(this: any) {
+					return this[pathValue]
+				},
+				set(this: any, value: string) {
+					if (pathValue in this && !warnedPathMutation) {
+						warnedPathMutation = true
+						console.warn(
+							'[elysia] context.path is readonly; request-hook rerouting will stop working in a future release.'
+						)
+					}
+
+					this[pathValue] = value
+				}
+			}
+		: undefined
+
+	class Context extends Base {
 		declare params?: Record<string, string>
 		declare headers?: Record<string, string>
 		declare qi: number
@@ -82,6 +108,9 @@ function buildEmptyContext(Base: any, headers: object | null = null) {
 
 		constructor(public request: Request) {
 			super()
+			if (pathDescriptor)
+				Object.defineProperty(this, 'path', pathDescriptor)
+
 			if (immutableHeaders)
 				this.set = {
 					headers: headers!,
@@ -99,6 +128,8 @@ function buildEmptyContext(Base: any, headers: object | null = null) {
 				}
 		}
 	}
+
+	return Context
 }
 
 export function createContext(
@@ -109,27 +140,33 @@ export function createContext(
 
 	const ext = app['~ext']
 	const adapter = app['~config']?.adapter
-	let headers = ext?.headers && isNotEmpty(ext.headers)
-		? Object.assign(nullObject(), ext.headers)
-		: null
+	const warnPathMutation =
+		!isProduction() && !!flattenChain(app['~hookChain'])?.request?.length
+	const headers =
+		ext?.headers && isNotEmpty(ext.headers)
+			? Object.assign(nullObject(), ext.headers)
+			: null
 
-	if (
-		headers &&
-		(!adapter || adapter.response.supportsDefaultHeaderSink)
-	) {
+	if (headers && (!adapter || adapter.response.supportsDefaultHeaderSink)) {
 		Object.defineProperty(headers, defaultHeaders, { value: headers })
 		Object.freeze(headers)
 	}
 
 	if (headers === null && !ext?.decorator && !ext?.store) {
 		sharedEmptyDecorator ??= buildEmptyDecorator()
-		sharedEmptyContext ??= buildEmptyContext(sharedEmptyDecorator)
-		contextCache.set(app, sharedEmptyContext)
+		const context = warnPathMutation
+			? buildEmptyContext(sharedEmptyDecorator, null, true)
+			: (sharedEmptyContext ??= buildEmptyContext(sharedEmptyDecorator))
+		contextCache.set(app, context)
 
-		return sharedEmptyContext
+		return context
 	}
 
-	const context = buildEmptyContext(createBaseContext(app), headers) as any
+	const context = buildEmptyContext(
+		createBaseContext(app),
+		headers,
+		warnPathMutation
+	) as any
 
 	contextCache.set(app, context)
 	return context
@@ -186,7 +223,7 @@ export type ErrorContext<
 		 *
 		 * @example '/id/9'
 		 */
-		path: string
+		readonly path: string
 		/**
 		 * Path as registered to router
 		 *
@@ -272,7 +309,7 @@ export type Context<
 		 *
 		 * @example '/id/9'
 		 */
-		path: string
+		readonly path: string
 		/**
 		 * Path as registered to router
 		 *

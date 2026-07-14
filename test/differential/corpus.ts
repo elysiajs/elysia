@@ -200,6 +200,24 @@ corpus.push({
 	]
 })
 
+// ── C1 immutable default-header sink ──────────────────────────────────────
+corpus.push({
+	id: 'default-headers',
+	tags: ['safe-for-socket', 'headers', 'default-headers-C1'],
+	define: (app) =>
+		app
+			.headers({ 'x-app-default': 'base', 'x-shared': 'default' })
+			.get('/headers/default', () => 'untouched')
+			.get('/headers/patched', ({ set }) => {
+				set.headers['x-shared'] = 'route'
+				return 'patched'
+			}),
+	requests: [
+		{ id: 'untouched', make: get('/headers/default') },
+		{ id: 'request-local-patch', make: get('/headers/patched') }
+	]
+})
+
 // ── Params ─────────────────────────────────────────────────────────────────
 corpus.push({
 	id: 'params',
@@ -295,8 +313,7 @@ corpus.push({
 corpus.push({
 	id: 'duplicate-route-static',
 	tags: ['safe-for-socket', 'precedence'],
-	define: (app) =>
-		app.get('/dup', () => 'first').get('/dup', () => 'second'),
+	define: (app) => app.get('/dup', () => 'first').get('/dup', () => 'second'),
 	requests: [{ id: 'static-last-wins', make: get('/dup') }]
 })
 
@@ -304,9 +321,7 @@ corpus.push({
 	id: 'duplicate-route-dynamic',
 	tags: ['safe-for-socket', 'precedence'],
 	define: (app) =>
-		app
-			.get('/dup/:id', () => 'first')
-			.get('/dup/:id', () => 'second'),
+		app.get('/dup/:id', () => 'first').get('/dup/:id', () => 'second'),
 	requests: [{ id: 'dynamic-last-wins', make: get('/dup/1') }]
 })
 

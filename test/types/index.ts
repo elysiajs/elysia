@@ -1,16 +1,21 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 
-import {
-	Elysia,
-	file,
-	form,
-	sse,
-	status,
-	t
-} from '../../src'
+import { Elysia, file, form, sse, status, t } from '../../src'
 
 import { expectTypeOf } from 'expect-type'
 import { Cookie } from '../../src/cookie'
+import { resumeEmit } from '../../src/experimental/resume'
+
+new Elysia({ experimental: { resumeEmit } })
+// @ts-expect-error resume emitter must be imported so default bundles omit it
+new Elysia({ experimental: { resumeEmit: true } })
+
+new Elysia().get('/readonly-path', (context) => {
+	// The sealed matcher owns routing; handlers cannot rewrite its path.
+	// @ts-expect-error context.path is readonly
+	context.path = '/other'
+	return context.path
+})
 
 const app = new Elysia()
 

@@ -26,6 +26,7 @@ import type {
 	PreContext
 } from './context'
 import type { ChainNode } from './utils'
+import type { ResumeEmit } from './experimental/resume'
 
 export interface ElysiaConfig<
 	in out Prefix extends string | undefined,
@@ -137,20 +138,28 @@ export interface ElysiaConfig<
 	analytic?: boolean
 
 	/**
+	 * Retain the metadata required by introspection tooling after sealing.
+	 * Plugins that provide introspection may enable this for their host.
+	 *
+	 * @default false
+	 */
+	introspect?: boolean
+
+	/**
 	 * Enable experimental features
 	 */
 	experimental?: {
 		/**
 		 * **Unstable / preview.** Compile route handlers with the resume-skeleton
-		 * emitter (a sync entry + a single `__resume` async continuation) instead
-		 * of the default JIT lane. Only a subset of routes are currently
-		 * supported; unsupported routes transparently fall back to the default
-		 * lane. Never enter AOT builds. Behavior and API may change without
-		 * notice.
+		 * emitter imported from `elysia/experimental/resume` (a sync entry + a
+		 * single `__resume` async continuation) instead of the default JIT lane.
+		 * Only a subset of routes are currently supported; unsupported routes
+		 * transparently fall back to the default lane. Never enters AOT builds.
+		 * Behavior and API may change without notice.
 		 *
-		 * @default false
+		 * @default undefined
 		 */
-		resumeEmit?: boolean
+		resumeEmit?: ResumeEmit
 
 		/**
 		 * **Unstable / preview.** Defer synchronous `.use(child)` composition to

@@ -16,11 +16,7 @@ import {
 	routeDescriptors
 } from './descriptor'
 import { Reconstrct } from './reconstruct'
-import { planRoute, type RoutePlan } from '../plan/plan'
-import { emitResume } from '../plan/emit'
-
-export const routePlans = new WeakMap<AnyElysia, Map<string, RoutePlan>>()
-
+import type { RoutePlan } from '../plan/plan'
 import type { Context } from '../../context'
 import {
 	cloneHook,
@@ -47,6 +43,8 @@ import type {
 	AppHook
 } from '../../types'
 
+export const routePlans = new WeakMap<AnyElysia, Map<string, RoutePlan>>()
+
 let warnedResumeAot = false
 function warnResumeAotIgnored(): void {
 	if (warnedResumeAot) return
@@ -70,7 +68,6 @@ function warnResumeFallback(
 
 	warnedResumeFallback.add(key)
 
-	// eslint-disable-next-line no-console
 	console.warn(
 		`[elysia] experimental.resumeEmit: route ${key} falls back to the default lane (unsupported: ${reasons.join(', ')}).`
 	)
@@ -766,11 +763,20 @@ export function compileHandler(
 	}
 	descriptors.set(`${method} ${path}`, state.descriptor)
 
-	if (frozenRoot['~config']?.experimental?.resumeEmit) {
+	const resumeEmit = frozenRoot['~config']?.experimental?.resumeEmit
+	if (resumeEmit) {
+		if (
+			typeof (resumeEmit as any).planRoute !== 'function' ||
+			typeof (resumeEmit as any).emitResume !== 'function'
+		)
+			throw new TypeError(
+				'[elysia] experimental.resumeEmit must be imported from "elysia/experimental/resume".'
+			)
+
 		if (Capture.isAotBuildEnv() || Capture.isCapturing()) {
 			warnResumeAotIgnored()
 		} else {
-			const plan = planRoute(
+			const plan = resumeEmit.planRoute(
 				state,
 				hook,
 				handler,
@@ -787,7 +793,7 @@ export function compileHandler(
 			plans.set(`${method} ${path}`, plan)
 
 			if (plan.supported)
-				return emitResume({
+				return resumeEmit.emitResume({
 					plan,
 					state,
 					hook,

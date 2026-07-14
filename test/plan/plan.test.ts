@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test'
 
 import { Elysia, t } from '../../src'
 import { routePlans } from '../../src/compile/handler'
+import { resumeEmit } from '../../src/experimental/resume'
 import type { RoutePlan, PlanSegment } from '../../src/compile/plan/plan'
 
 // Unit tests over PLAN OBJECTS (not emitted source). The plan is the pure
@@ -19,7 +20,7 @@ const planOf = async (
 	key: string,
 	req: Request
 ): Promise<RoutePlan> => {
-	const app = build(new Elysia({ experimental: { resumeEmit: true } }))
+	const app = build(new Elysia({ experimental: { resumeEmit } }))
 	// A supported route emits the resume handler and never falls back; an
 	// unsupported route falls back but the plan is still recorded.
 	await app.handle(req).catch(() => {})

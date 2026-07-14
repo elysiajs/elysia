@@ -4138,7 +4138,8 @@ export class Elysia<
 	#use(app: AnyElysia) {
 		let addedByThisCall: Set<number> | undefined
 
-		if (app['~introspect']) this['~introspect'] = true
+		if (app['~introspect'] || app['~config']?.introspect)
+			this['~introspect'] = true
 
 		const name = app['~config']?.name
 		if (name) {

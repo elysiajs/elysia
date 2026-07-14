@@ -357,7 +357,7 @@ export function createFetchHandler(
 			const url = request.url,
 				s = url.indexOf('/', pathStart)
 
-			context.path = url.substring(
+			;(context as any).path = url.substring(
 				s,
 				// @ts-expect-error
 				(context.qi = url.indexOf('?', s)) === -1
@@ -476,7 +476,7 @@ export function createFetchHandler(
 				const url = request.url,
 					s = url.indexOf('/', pathStart)
 
-				context.path = url.substring(
+				;(context as any).path = url.substring(
 					s,
 					// @ts-expect-error
 					(context.qi = url.indexOf('?', s)) === -1
@@ -543,7 +543,7 @@ export function createFetchHandler(
 			const url = request.url,
 				s = url.indexOf('/', pathStart)
 
-			context.path = url.substring(
+			;(context as any).path = url.substring(
 				s,
 				// @ts-expect-error
 				(context.qi = url.indexOf('?', s)) === -1
@@ -602,7 +602,7 @@ export function createFetchHandler(
 		const url = request.url,
 			s = url.indexOf('/', pathStart)
 
-		const path = (context.path = url.substring(
+		const path = ((context as any).path = url.substring(
 			s,
 			// @ts-expect-error
 			(context.qi = url.indexOf('?', s)) === -1

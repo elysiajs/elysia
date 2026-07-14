@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test'
 
 import { Elysia, t } from '../../src'
 import { Capture } from '../../src/compile/aot'
+import { resumeEmit } from '../../src/experimental/resume'
 
 // Behavioral parity for the resume-skeleton emitter WITHOUT the differential
 // harness: for each covered fixture, build two apps — default lane vs the
@@ -21,7 +22,7 @@ const norm = async (res: Response) => {
 
 const parity = async (build: Build, makeReq: () => Request) => {
 	const legacy = build(new Elysia())
-	const resume = build(new Elysia({ experimental: { resumeEmit: true } }))
+	const resume = build(new Elysia({ experimental: { resumeEmit } }))
 
 	const [a, b] = await Promise.all([
 		legacy.handle(makeReq()),
@@ -379,7 +380,7 @@ describe('resume-emit selection & guards', () => {
 		const req = () => new Request('http://localhost/budget')
 		const legacyCode = await captureAt(route(new Elysia()), '/budget', req())
 		const resumeCode = await captureAt(
-			route(new Elysia({ experimental: { resumeEmit: true } })),
+			route(new Elysia({ experimental: { resumeEmit } })),
 			'/budget',
 			req()
 		)
@@ -403,7 +404,7 @@ describe('resume-emit selection & guards', () => {
 			req()
 		)
 		const resumeCode = await captureAt(
-			route(new Elysia({ experimental: { resumeEmit: true } })),
+			route(new Elysia({ experimental: { resumeEmit } })),
 			'/budget-async',
 			req()
 		)
@@ -434,7 +435,7 @@ describe('resume-emit selection & guards', () => {
 			const { routePlans } = await import('../../src/compile/handler')
 
 			const app = new Elysia({
-				experimental: { resumeEmit: true }
+				experimental: { resumeEmit }
 			}).get('/', () => 'aot')
 
 			const res = await app.handle(new Request('http://localhost/'))
@@ -451,6 +452,14 @@ describe('resume-emit selection & guards', () => {
 		expect(
 			warnings.some((w) => w.includes('resumeEmit is ignored'))
 		).toBe(true)
+	})
+
+	it('points obsolete boolean configuration to the optional import', () => {
+		const app = new Elysia({
+			experimental: { resumeEmit: true as any }
+		}).get('/', () => 'ok')
+
+		expect(() => app.compile()).toThrow('elysia/experimental/resume')
 	})
 
 	it('covers the sync feature matrix with ZERO fallback warnings (real coverage)', async () => {
@@ -470,7 +479,7 @@ describe('resume-emit selection & guards', () => {
 		try {
 			// Unique paths so the process-global warn-dedup Set can't hide a
 			// regression behind a path already warned by another test.
-			const app = new Elysia({ experimental: { resumeEmit: true } })
+			const app = new Elysia({ experimental: { resumeEmit } })
 				.get(
 					'/cov/resp',
 					{ response: t.Object({ v: t.Number() }) } as any,
@@ -534,7 +543,7 @@ describe('resume-emit selection & guards', () => {
 		}
 
 		try {
-			const app = new Elysia({ experimental: { resumeEmit: true } })
+			const app = new Elysia({ experimental: { resumeEmit } })
 				.get('/na/async', async () => 'h')
 				.post(
 					'/na/async-validate',
@@ -584,7 +593,7 @@ describe('resume-emit selection & guards', () => {
 		}
 
 		try {
-			const app = new Elysia({ experimental: { resumeEmit: true } })
+			const app = new Elysia({ experimental: { resumeEmit } })
 				.get('/fb/error', { error: () => 'e' } as any, () => 'h')
 				.get(
 					'/fb/signed',

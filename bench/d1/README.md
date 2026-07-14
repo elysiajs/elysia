@@ -59,3 +59,10 @@ The chosen default sample rules are the ones recorded in `margins.json`: eight b
 memory/count metrics; and one real port-0 request per cold-start block. `aa` records three
 independent sessions, writes one raw trace artifact per session, and retains the maximum
 observed relative floor width or integer count delta per metric.
+
+The isolated `default-headers` fixture owns C1's evidence. It verifies the immutable app
+default on every response, consumes every body, records p50 latency, then measures the
+absolute least-squares RSS slope across four post-warmup request blocks. Both metrics remain
+`pending-floor` until a quiet pinned-machine A/A run establishes their noise floors. A
+perfectly flat RSS result is reported as one byte/request because D1's relative bootstrap
+rejects zero-valued baselines.

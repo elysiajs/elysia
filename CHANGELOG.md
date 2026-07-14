@@ -5,8 +5,8 @@ Breaking Change:
 - Replace the newly introduced heavyweight `app.history` tuples with
   lightweight declaration entries. Executable routes are exposed internally
   through `~routes`, and `app.routes` contains every declaration. Exact
-  duplicate method/path declarations are unsupported and dispatch precedence is
-  unspecified.
+  duplicate method/path declarations are the user's responsibility; the last
+  registration wins across static, dynamic, and AOT dispatch.
 - Move opt-in automatic HEAD handling from `{ autoHead: true }` to the
   first-party async `autoHead()` plugin from `elysia/plugin/auto-head`. It
   registers GET routes declared on the app where it is installed, including
@@ -46,6 +46,13 @@ Breaking Change:
 
 Behavior Change:
 
+- `context.path` is now readonly. During Release N, assignment still reroutes
+  for compatibility but warns in development when request hooks are present;
+  the field remains enumerable for spreads and serialization.
+- Validation error `payload.expected` values that can be safely snapshotted are
+  cached per schema as shared, deeply frozen values. Error hooks must treat
+  them as readonly; objects returned by user default functions are cloned
+  before caching.
 - EVERY `.guard()` and `.group()` form now defaults to the OVERRIDE channel — the closer to the route, the more power: a nearer guard's schema or the route-local schema replaces an inherited one per field (response per status code). Additive validation (every visible validator runs as its own pass) requires an explicit `schema: 'standalone'` opt-in. Previously the string-scope forms (`.guard('local' | 'plugin' | 'global', …)`) and the sandboxed run forms (`.guard(hook, run)` / `.group(prefix, hook, run)`) forced `standalone` implicitly (the run forms even ignored an explicit `schema: 'override'`) while the object forms defaulted to override — the same method defaulted differently depending on call shape
 - [Type] guard schemas are typed by channel, matching the runtime: override-channel guard schemas land in the scope's `schema` channel (replaced by nearer schemas), `schema: 'standalone'` schemas land in the additive `schemas` channel (intersect). Previously the types treated every guard schema as standalone-intersect
 - [Type] `params` follows the same whole-field override rule as every other input field: the nearest DECLARED params schema's static is the params shape (the runtime validator strips keys outside it, including path-derived ones); path-derived params (`ResolvePath`) apply only when no schema is declared. Previously the types merged guard and route params per-key, claiming keys the runtime had stripped
@@ -71,6 +78,11 @@ Behavior Change:
 
 Feature:
 
+- Add top-level `{ introspect: true }` so apps and introspection plugins can
+  retain the metadata needed after sealing.
+- Add the preview resume emitter as an opt-in capability from
+  `elysia/experimental/resume`; default bundles no longer include its compiler
+  code.
 - `t.File({ type })` / `t.Files({ type })` content-detection failures now report the offending property path (`property: '/avatar'`, `/files/0`) instead of an empty path — the validated value is identity-walked only when a detection fails
 - Adapter v2
 - sub type validator
@@ -2816,6 +2828,7 @@ Breaking Change:
 - Rename `.setModel` to `.model`
     - to migrate: rename `setModel` to `model`
 - Remove `hook.schema` to `hook`
+
     - to migrate: remove schema and curly brace `schema.type`:
 
     ```ts
@@ -3689,6 +3702,7 @@ Breaking Change:
 
 - `Context` is now `interface` (non-constructable)
 - `responseHeaders`, `status`, `redirect` is now replaced with `set`
+
     - To migrate:
 
     ```typescript
@@ -3892,6 +3906,7 @@ Feature:
 Breaking Change:
 
 - Moved `store` into `context.store`
+
     - To migrate:
 
     ```typescript
@@ -3904,6 +3919,7 @@ Breaking Change:
 
 - `ref`, and `refFn` is now removed
 - Remove `Plugin` type, simplified Plugin type declaration
+
     - To migrate:
 
     ```typescript
@@ -3917,6 +3933,7 @@ Breaking Change:
     ```
 
 - Migrate `Header` to `Record<string, unknown>`
+
     - To migrate:
 
     ```typescript

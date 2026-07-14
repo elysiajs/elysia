@@ -5,7 +5,6 @@ import { isAsyncFunction } from '../utils'
 
 import type { RouteCompileState } from '../handler/descriptor'
 import type { AnyLocalHook } from '../../types'
-import { toArray } from '../../utils'
 
 export type Region = 'main' | 'error' | 'completion'
 export type AsyncClass = 'sync' | 'async' | 'maybe'
@@ -97,6 +96,9 @@ export interface RoutePlan {
 
 const noCancel = (): CancellationSites => ({ compat: false, suspension: false })
 
+export const hookArray = (value: unknown): Function[] =>
+	value ? (Array.isArray(value) ? value : [value as Function]) : []
+
 export function planRoute(
 	state: RouteCompileState,
 	hook: AnyLocalHook | undefined,
@@ -137,7 +139,7 @@ export function planRoute(
 			}
 		})
 
-	const transforms = toArray(hook?.transform)
+	const transforms = hookArray(hook?.transform)
 	for (let i = 0; i < transforms.length; i++)
 		main.push({
 			kind: 'transform',
@@ -157,7 +159,7 @@ export function planRoute(
 	pushValidator(main, 'params', vali?.params, d.paramsValiIsAsync)
 	pushValidator(main, 'query', vali?.query, d.queryValiIsAsync)
 
-	const beforeHandle = toArray(hook?.beforeHandle)
+	const beforeHandle = hookArray(hook?.beforeHandle)
 	for (let i = 0; i < beforeHandle.length; i++) {
 		main.push({
 			kind: 'beforeHandle',
