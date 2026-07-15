@@ -27,36 +27,10 @@ const encodeChunk = (s: string): Uint8Array => textEncoder.encode(s)
 export function normalizeContentType(contentType: string) {
 	if (contentType === 'application/json') return contentType
 
-	let start = 0
-	let end = contentType.indexOf(';')
-	if (end === -1) end = contentType.length
-
-	while (
-		start < end &&
-		(contentType.charCodeAt(start) === 32 ||
-			contentType.charCodeAt(start) === 9)
-	)
-		start++
-	while (
-		end > start &&
-		(contentType.charCodeAt(end - 1) === 32 ||
-			contentType.charCodeAt(end - 1) === 9)
-	)
-		end--
-
-	let uppercase = false
-	for (let i = start; i < end; i++) {
-		const code = contentType.charCodeAt(i)
-		if (code >= 65 && code <= 90) {
-			uppercase = true
-			break
-		}
-	}
-
-	if (start !== 0 || end !== contentType.length)
-		contentType = contentType.slice(start, end)
-
-	return uppercase ? contentType.toLowerCase() : contentType
+	const end = contentType.indexOf(';')
+	return (end === -1 ? contentType : contentType.slice(0, end))
+		.trim()
+		.toLowerCase()
 }
 
 export function handleFile(

@@ -1,42 +1,29 @@
 import { resolve } from 'node:path'
 
-import { busyWaitNanoseconds, coldStartOverheadNs } from '../inject'
+import { coldStartOverheadNs } from '../inject'
+import { tryListen } from './utils'
 
 const repoRoot =
 	process.env.D1_ELYSIA_ROOT ?? resolve(import.meta.dir, '../../..')
 const parent = process.env.D1_PARENT === '1'
 
-function listen(app: any) {
-	try {
-		app.listen(0)
-		return true
-	} catch {
-		try {
-			app.listen(40_000 + (process.pid % 10_000))
-			return true
-		} catch {
-			return false
-		}
-	}
-}
-
 async function main() {
 	const importStarted = Bun.nanoseconds()
 	const { Elysia } = await import(repoRoot + '/src/index.ts')
 	const importFinished = Bun.nanoseconds()
-	let app: any
+	const app: any = new Elysia()
 	let stoppedResolve!: () => void
 	const stopped = new Promise<void>((resolve_) => (stoppedResolve = resolve_))
 	const stop = async () => {
 		await app.stop()
 		stoppedResolve()
 	}
-	app = new Elysia().get('/', () => {
+	app.get('/', () => {
 		queueMicrotask(() => void stop())
 		return 'ok'
 	})
 	void app.fetch
-	const socket = listen(app)
+	const socket = tryListen(app)
 	const listenedAt = Bun.nanoseconds()
 	const port = socket ? app.server!.port : 0
 	console.error(`D1_READY ${port}${socket ? '' : ' handle'}`)

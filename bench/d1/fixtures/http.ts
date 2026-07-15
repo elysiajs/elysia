@@ -1,6 +1,7 @@
 import { resolve } from 'node:path'
 
 import { injectHttp } from '../inject'
+import { integerArgument, tryListen } from './utils'
 
 const repoRoot =
 	process.env.D1_ELYSIA_ROOT ?? resolve(import.meta.dir, '../../..')
@@ -14,28 +15,6 @@ const shapes = [
 	'mixed'
 ] as const
 type Shape = (typeof shapes)[number]
-
-function listen(app: any) {
-	try {
-		app.listen(0)
-		return true
-	} catch {
-		try {
-			app.listen(40_000 + (process.pid % 10_000))
-			return true
-		} catch {
-			return false
-		}
-	}
-}
-
-function integerArgument(name: string, fallback: number) {
-	const value = process.argv
-		.find((argument) => argument.startsWith(`--${name}=`))
-		?.slice(name.length + 3)
-	const parsed = value === undefined ? fallback : Number(value)
-	return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
-}
 
 async function consume(response: Response) {
 	if (!response.ok)
@@ -132,14 +111,13 @@ async function main() {
 	const warmup = integerArgument('warmup', 50)
 	const requests = integerArgument('requests', 200)
 	const { Elysia, t } = await import(repoRoot + '/src/index.ts')
-	let app: any
+	const app: any = new Elysia()
 	let stoppedResolve!: () => void
 	const stopped = new Promise<void>((resolve_) => (stoppedResolve = resolve_))
 	const stop = async () => {
 		await app.stop()
 		stoppedResolve()
 	}
-	app = new Elysia()
 	if (process.env.D1_INJECT === 'http') app.request(injectHttp)
 	app.get('/plain', () => 'ok')
 		.get('/dynamic/:id', ({ params }: any) => params.id)
@@ -176,7 +154,7 @@ async function main() {
 			return 'done'
 		})
 	void app.fetch
-	const socket = listen(app)
+	const socket = tryListen(app)
 	const port = socket ? app.server!.port : 0
 	const base = `http://127.0.0.1:${port}`
 	console.error(`D1_READY ${port}${socket ? '' : ' handle'}`)

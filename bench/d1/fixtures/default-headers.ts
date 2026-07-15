@@ -1,32 +1,11 @@
 import { resolve } from 'node:path'
 
 import { gc } from '../../../example/stress/utils'
+import { integerArgument, tryListen } from './utils'
 
 const repoRoot =
 	process.env.D1_ELYSIA_ROOT ?? resolve(import.meta.dir, '../../..')
 const parent = process.env.D1_PARENT === '1'
-
-function integerArgument(name: string, fallback: number) {
-	const value = process.argv
-		.find((argument) => argument.startsWith(`--${name}=`))
-		?.slice(name.length + 3)
-	const parsed = value === undefined ? fallback : Number(value)
-	return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
-}
-
-function listen(app: any) {
-	try {
-		app.listen(0)
-		return true
-	} catch {
-		try {
-			app.listen(40_000 + (process.pid % 10_000))
-			return true
-		} catch {
-			return false
-		}
-	}
-}
 
 async function consume(response: Response) {
 	if (!response.ok)
@@ -127,7 +106,7 @@ async function main() {
 		})
 	void app.fetch
 
-	const socket = listen(app)
+	const socket = tryListen(app)
 	const port = socket ? app.server!.port : 0
 	const base = `http://127.0.0.1:${port}`
 	console.error(`D1_READY ${port}${socket ? '' : ' handle'}`)

@@ -416,11 +416,12 @@ export function createFetchHandler(
 					if (result !== undefined) {
 						for (let j = 0; j < traceLength; j++)
 							trace[j].r(requestReports[j])
-						const response = mapResponse(
+
+						const response = (await mapResponse(
 							result,
 							context.set,
 							context
-						) as Response
+						)) as Response
 
 						afterResponse?.(context)
 						return response
@@ -490,20 +491,17 @@ export function createFetchHandler(
 							? await onRequests[i](context)
 							: onRequests[i](context)
 
-						// A hook may synchronously return a Promise the
-						// heuristic didn't flag; await it before deciding
-						// short-circuit vs continue.
 						if (result instanceof Promise) result = await result
 
 						if (request.signal.aborted)
 							return emptyResponse.clone() as Response
 
 						if (result !== undefined) {
-							const response = mapResponse(
+							const response = (await mapResponse(
 								result,
 								context.set,
 								context
-							) as Response
+							)) as Response
 
 							afterResponse?.(context)
 							return response
@@ -562,7 +560,16 @@ export function createFetchHandler(
 							result,
 							context.set,
 							context
-						) as Response
+						) as Response | Promise<Response>
+
+						if (response instanceof Promise)
+							return response.then(
+								(response) => {
+									afterResponse?.(context)
+									return response
+								},
+								catchError(context, handleError, afterResponse)
+							)
 
 						afterResponse?.(context)
 						return response
@@ -608,7 +615,9 @@ export function createFetchHandler(
 		// @ts-expect-error
 		context.server = server ?? null
 
-		if (hasWS && request.method === 'GET') {
+		const method = request.method
+
+		if (hasWS && method === 'GET') {
 			const handler = map['WS']?.[path]
 			const found =
 				handler === undefined && hasDynamicWS
@@ -654,7 +663,6 @@ export function createFetchHandler(
 			}
 		}
 
-		const method = request.method
 		const methodMap = map[method]
 		let handler: CompiledHandler | undefined = methodMap?.[path]
 		if (handler) return handler(context)

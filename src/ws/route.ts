@@ -614,7 +614,8 @@ export function buildWSRoute(
 
 	const messageHandlerTouchesBody =
 		!!bodyValidator ||
-		handlerMayTouchBody(hook.message as AnyFn | undefined)
+		handlerMayTouchBody(hook.message as AnyFn | undefined) ||
+		errorHandlers.some(handlerMayTouchBody)
 
 	const asyncMessageTouchesBody =
 		messageHandlerTouchesBody ||

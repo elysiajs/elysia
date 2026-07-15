@@ -352,9 +352,7 @@ async function runFixtureBlock(
 	let parentSamples: Record<string, number[]> | undefined
 	if (fixture === 'cold-start') {
 		const ready = await stderrState.ready
-		if (ready.fallback) {
-			spawnToFirst2xxNs = Number((await stdoutPromise).trim() ? 0 : 0)
-		} else {
+		if (!ready.fallback) {
 			const response = await fetch(`http://127.0.0.1:${ready.port}/`)
 			await consume(response)
 			spawnToFirst2xxNs = Number(process.hrtime.bigint() - spawnStarted)

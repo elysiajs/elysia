@@ -364,4 +364,24 @@ describe('Map Response', () => {
 		await app.handle(req('/'))
 		expect(called).toBe(true)
 	})
+
+	it('routes rejected async early-response mapping through error hooks', async () => {
+		for (const mode of ['sync', 'async', 'trace'] as const) {
+			const app: any = new Elysia()
+			if (mode === 'async') app.request(async () => {})
+			if (mode === 'trace')
+				app.trace(({ onRequest }: any) => onRequest(() => {}))
+
+			app.request(() => 'early')
+				.mapResponse(async ({ responseValue }: any) => {
+					if (responseValue === 'early')
+						throw new Error(`map failed: ${mode}`)
+				})
+				.error(({ error }: any) => error.message)
+				.get('/', () => 'unreachable')
+
+			const response = await app.handle(req('/'))
+			expect(await response.text()).toBe(`map failed: ${mode}`)
+		}
+	})
 })

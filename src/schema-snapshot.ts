@@ -1,9 +1,11 @@
 // original user object -> our snapshot
 const snapshots = new WeakMap<object, object>()
+
 // set of snapshots produced for idempotency (snapshot fed back in)
 const produced = new WeakSet<object>()
 
 const schemaProtoMarkers = new Set(['~kind', '~standard', '~unsafe'])
+const schemaSlots = ['body', 'query', 'params', 'headers', 'cookie'] as const
 
 function isClonableProto(proto: object | null): boolean {
 	if (proto === null || proto === Object.prototype) return true
@@ -81,35 +83,11 @@ export function snapshotSchema<T>(schema: T): T {
 function snapshotSlots(target: Record<string, any>): boolean {
 	let touched = false
 
-	const body = target.body
-	if (body != null) {
-		target.body = snapshotSchema(body)
-		touched = true
-	}
-
-	const query = target.query
-	if (query != null) {
-		target.query = snapshotSchema(query)
-		touched = true
-	}
-
-	const params = target.params
-	if (params != null) {
-		target.params = snapshotSchema(params)
-		touched = true
-	}
-
-	const headers = target.headers
-	if (headers != null) {
-		target.headers = snapshotSchema(headers)
-		touched = true
-	}
-
-	const cookie = target.cookie
-	if (cookie != null) {
-		target.cookie = snapshotSchema(cookie)
-		touched = true
-	}
+	for (const slot of schemaSlots)
+		if (target[slot] != null) {
+			target[slot] = snapshotSchema(target[slot])
+			touched = true
+		}
 
 	const response = target.response
 	if (response != null) {
@@ -149,14 +127,7 @@ export function snapshotHookSchemas<T extends Record<string, any> | undefined>(
 	// detect whether anything needs snapshotting without mutating the original
 	let needsCopy = false
 
-	if (
-		hook.body != null ||
-		hook.query != null ||
-		hook.params != null ||
-		hook.headers != null ||
-		hook.cookie != null ||
-		hook.response != null
-	)
+	if (schemaSlots.some((slot) => hook[slot] != null) || hook.response != null)
 		needsCopy = true
 
 	const schemas = hook.schemas
@@ -164,11 +135,7 @@ export function snapshotHookSchemas<T extends Record<string, any> | undefined>(
 		for (const entry of schemas)
 			if (
 				entry &&
-				(entry.body != null ||
-					entry.query != null ||
-					entry.params != null ||
-					entry.headers != null ||
-					entry.cookie != null ||
+				(schemaSlots.some((slot) => entry[slot] != null) ||
 					entry.response != null)
 			) {
 				needsCopy = true

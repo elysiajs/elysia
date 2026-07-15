@@ -1,27 +1,8 @@
 import { resolve } from 'node:path'
+import { integerArgument, tryListen } from './utils'
 
 const repoRoot =
 	process.env.D1_ELYSIA_ROOT ?? resolve(import.meta.dir, '../../..')
-
-function listen(app: any) {
-	try {
-		app.listen(0)
-		return true
-	} catch {
-		try {
-			app.listen(40_000 + (process.pid % 10_000))
-			return true
-		} catch {
-			return false
-		}
-	}
-}
-
-function routeCount() {
-	const argument = process.argv.find((value) => value.startsWith('--routes='))
-	const value = argument ? Number(argument.slice(9)) : 1_000
-	return Number.isInteger(value) && value > 0 ? value : 1_000
-}
 
 function countReady(ready: Record<string, Record<string, Response>>) {
 	return Object.values(ready).reduce(
@@ -31,7 +12,7 @@ function countReady(ready: Record<string, Record<string, Response>>) {
 }
 
 async function main() {
-	const routes = routeCount()
+	const routes = integerArgument('routes', 1_000)
 	const { Elysia } = await import(repoRoot + '/src/index.ts')
 	const { collectStaticRoutes } = await import(
 		repoRoot + '/src/adapter/bun/index.ts'
@@ -43,7 +24,7 @@ async function main() {
 	const promotedRoutes = collected
 		? countReady(collected[0] as Record<string, Record<string, Response>>)
 		: 0
-	const socket = listen(app)
+	const socket = tryListen(app)
 	if (socket) await new Promise((resolve_) => setTimeout(resolve_, 0))
 	const url = `http://127.0.0.1:${socket ? app.server!.port : 0}/d1/native/0`
 	const served = socket

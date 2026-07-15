@@ -74,11 +74,6 @@ describe('route descriptor', () => {
 			inferenceUrl: false,
 			inferencePath: false,
 			handlerIsAsync: false,
-			errorHookForcesAsync: false,
-			afterResponseForcesAsync: false,
-			traceForcesAsync: false,
-			handlerResultObserved: false,
-			lifecycleForcesAsync: false,
 			callHandlerSyncOnAsync: false,
 			syncErrorHook: false,
 			syncAfterResponse: false
@@ -124,7 +119,6 @@ describe('route descriptor', () => {
 			hasBeforeHandle: true,
 			hasLifecycleHook: true,
 			async: false,
-			lifecycleForcesAsync: false,
 			// a request-dependent lifecycle hook disqualifies native-static
 			pureLiteral: false
 		})
@@ -292,8 +286,7 @@ describe('route descriptor', () => {
 		expect(descriptor).toMatchObject({
 			hasMapResponse: true,
 			hasLifecycleHook: true,
-			async: true,
-			lifecycleForcesAsync: true
+			async: true
 		})
 	})
 

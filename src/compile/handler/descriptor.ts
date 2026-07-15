@@ -1,6 +1,6 @@
 import type { AnyElysia } from '../../base'
 import type { ElysiaAdapter } from '../../adapter'
-import { sucrose, type Sucrose } from '../../sucrose'
+import { mergeInference, sucrose, type Sucrose } from '../../sucrose'
 
 import type { RouteValidator } from '../../validator/route'
 import type { Validator } from '../../validator'
@@ -81,13 +81,8 @@ export interface RouteDescriptor {
 	inferenceUrl: boolean
 	inferencePath: boolean
 
-	// async-forcing family + sync fast-path facts
+	// async + sync fast-path facts
 	handlerIsAsync: boolean
-	errorHookForcesAsync: boolean
-	afterResponseForcesAsync: boolean
-	traceForcesAsync: boolean
-	handlerResultObserved: boolean
-	lifecycleForcesAsync: boolean
 	callHandlerSyncOnAsync: boolean
 	syncErrorHook: boolean
 	syncAfterResponse: boolean
@@ -168,21 +163,6 @@ const compactPrefixInference = new WeakMap<
 	Sucrose.Inference
 >()
 const compactPrefixAsync = new WeakMap<CompactBeforeHandlePrefix, boolean>()
-
-export const mergeInference = (
-	a: Sucrose.Inference,
-	b: Sucrose.Inference
-): Sucrose.Inference => ({
-	body: a.body || b.body,
-	cookie: a.cookie || b.cookie,
-	headers: a.headers || b.headers,
-	query: a.query || b.query,
-	set: a.set || b.set,
-	server: a.server || b.server,
-	url: a.url || b.url,
-	route: a.route || b.route,
-	path: a.path || b.path
-})
 
 const inferCompactPrefix = (
 	prefix: CompactBeforeHandlePrefix
@@ -572,11 +552,6 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 		inferencePath: inference.path,
 
 		handlerIsAsync,
-		errorHookForcesAsync: !!errorHookForcesAsync,
-		afterResponseForcesAsync: !!afterResponseForcesAsync,
-		traceForcesAsync: !!traceForcesAsync,
-		handlerResultObserved: !!handlerResultObserved,
-		lifecycleForcesAsync: !!lifecycleForcesAsync,
 		callHandlerSyncOnAsync: !!callHandlerSyncOnAsync,
 		syncErrorHook,
 		syncAfterResponse

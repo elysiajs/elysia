@@ -837,7 +837,7 @@ export function clearSucroseCache(delay?: number | null) {
 	clearCache()
 }
 
-function mergeInference(a: Sucrose.Inference, b: Sucrose.Inference) {
+export function mergeInference(a: Sucrose.Inference, b: Sucrose.Inference) {
 	return {
 		body: a.body || b.body,
 		cookie: a.cookie || b.cookie,

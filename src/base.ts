@@ -4461,7 +4461,6 @@ export class Elysia<
 
 		for (let i = 0; i < limit; i++) {
 			const route = declared[i]
-			const owner = this.#compactRouteOwner(app, route)
 
 			const childChain = route[6]
 			let inheritedChain: ChainNode | undefined
@@ -4477,36 +4476,52 @@ export class Elysia<
 				}
 			}
 
-			const path = this['~Prefix']
-				? joinPath(this['~Prefix'], route[1])
-				: route[1]
-
-			const macroScope =
-				route[7] ??
-				(this['~scopeChild'] &&
-				(route[3] as AnyElysia | undefined)?.['~scopeChild'] !== true
-					? this
-					: undefined)
-
-			this.#registerRoute(
-				inheritedChain === childChain &&
-					!this['~Prefix'] &&
-					macroScope === route[7] &&
-					owner === route[3]
-					? route
-					: ([
-							route[0],
-							path,
-							route[2],
-							owner,
-							route[4],
-							route[5],
-							inheritedChain,
-							macroScope
-						] as unknown as InternalRoute),
+			this.#emitRoute(
+				route,
+				app,
+				this['~scopeChild'] ? this : undefined,
+				this['~Prefix'],
+				inheritedChain,
 				name
 			)
 		}
+	}
+
+	#emitRoute(
+		route: InternalRoute,
+		owner: AnyElysia,
+		macroScope: AnyElysia | undefined,
+		prefix: string | undefined,
+		inheritedChain: ChainNode | undefined,
+		source: string | undefined
+	) {
+		owner = this.#compactRouteOwner(owner, route)
+		const path = prefix ? joinPath(prefix, route[1]) : route[1]
+		macroScope =
+			route[7] ??
+			(macroScope &&
+			(route[3] as AnyElysia | undefined)?.['~scopeChild'] !== true
+				? macroScope
+				: undefined)
+
+		this.#registerRoute(
+			inheritedChain === route[6] &&
+				!prefix &&
+				macroScope === route[7] &&
+				owner === route[3]
+				? route
+				: ([
+						route[0],
+						path,
+						route[2],
+						owner,
+						route[4],
+						route[5],
+						inheritedChain,
+						macroScope
+					] as unknown as InternalRoute),
+			source
+		)
 	}
 
 	#emitLazyRoute(
@@ -4517,39 +4532,18 @@ export class Elysia<
 		over: ChainNode | undefined,
 		source: string | undefined
 	) {
-		const compactedOwner = this.#compactRouteOwner(owner, route)
-
 		const childChain = route[6]
 		let inheritedChain: ChainNode | undefined
 		if (childChain === undefined) inheritedChain = over
 		else if (over === undefined) inheritedChain = childChain
 		else inheritedChain = { combine: childChain, over }
 
-		const path = accPrefix ? joinPath(accPrefix, route[1]) : route[1]
-
-		const resolvedMacroScope =
-			route[7] ??
-			(macroScope &&
-			(route[3] as AnyElysia | undefined)?.['~scopeChild'] !== true
-				? macroScope
-				: undefined)
-
-		this.#registerRoute(
-			inheritedChain === childChain &&
-				!accPrefix &&
-				resolvedMacroScope === route[7] &&
-				compactedOwner === route[3]
-				? route
-				: ([
-						route[0],
-						path,
-						route[2],
-						compactedOwner,
-						route[4],
-						route[5],
-						inheritedChain,
-						resolvedMacroScope
-					] as unknown as InternalRoute),
+		this.#emitRoute(
+			route,
+			owner,
+			macroScope,
+			accPrefix,
+			inheritedChain,
 			source
 		)
 	}

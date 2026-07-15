@@ -280,4 +280,28 @@ describe('WS A8 — ws.body observability (point 3)', () => {
 		await wsClosed(ws)
 		app.stop()
 	})
+
+	it('error hooks observe the message body that caused the error', async () => {
+		const app = new Elysia()
+			.ws('/ws', {
+				message() {
+					throw new Error('boom')
+				},
+				error(ws: any) {
+					return `error:${ws.body}`
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+		await wsOpen(ws)
+
+		const message = wsMessage(ws)
+		ws.send('failed-body')
+
+		expect((await message).data).toBe('error:failed-body')
+
+		await wsClosed(ws)
+		app.stop()
+	})
 })
