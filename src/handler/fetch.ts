@@ -145,37 +145,10 @@ function findRoute(
 	}
 
 	const method = request.method
-	let handler: CompiledHandler | undefined
-
-	switch (method) {
-		case 'GET':
-			handler = map.GET?.[path]
-			break
-		case 'POST':
-			handler = map.POST?.[path]
-			break
-		case 'PUT':
-			handler = map.PUT?.[path]
-			break
-		case 'DELETE':
-			handler = map.DELETE?.[path]
-			break
-		case 'PATCH':
-			handler = map.PATCH?.[path]
-			break
-		case 'HEAD':
-			handler = map.HEAD?.[path]
-			break
-		case 'OPTIONS':
-			handler = map.OPTIONS?.[path]
-			break
-		default:
-			handler = map[method]?.[path]
-	}
+	const methodMap = map[method]
+	let handler: CompiledHandler | undefined = methodMap?.[path]
 
 	if (!handler) {
-		const methodMap = map[method]
-
 		if (
 			!strictPath &&
 			path.length > 1 &&
@@ -682,50 +655,9 @@ export function createFetchHandler(
 		}
 
 		const method = request.method
-		let handler: CompiledHandler | undefined
-
-		switch (method) {
-			case 'GET':
-				handler = map.GET?.[path]
-				if (handler) return handler(context)
-				break
-
-			case 'POST':
-				handler = map.POST?.[path]
-				if (handler) return handler(context)
-				break
-
-			case 'PUT':
-				handler = map.PUT?.[path]
-				if (handler) return handler(context)
-				break
-
-			case 'DELETE':
-				handler = map.DELETE?.[path]
-				if (handler) return handler(context)
-				break
-
-			case 'PATCH':
-				handler = map.PATCH?.[path]
-				if (handler) return handler(context)
-				break
-
-			case 'HEAD':
-				handler = map.HEAD?.[path]
-				if (handler) return handler(context)
-				break
-
-			case 'OPTIONS':
-				handler = map.OPTIONS?.[path]
-				if (handler) return handler(context)
-				break
-
-			default:
-				handler = map[method]?.[path]
-				if (handler) return handler(context)
-		}
-
 		const methodMap = map[method]
+		let handler: CompiledHandler | undefined = methodMap?.[path]
+		if (handler) return handler(context)
 
 		if (
 			!strictPath &&
