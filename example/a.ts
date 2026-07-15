@@ -1,14 +1,7 @@
-import { BunRequest, CookieMap } from 'bun'
 import { Elysia } from '../src'
 
-Bun.serve({
-	routes: {
-		'/': {
-			GET(request) {
-				console.log(request.cookies.set('ok', 'ok'))
+const plugin = <T extends 'global' | 'plugin'>(scope: T) => new Elysia()
+	.beforeHandle(scope, () => { })
 
-				return new Response('ok')
-			}
-		}
-	}
-})
+const app = new Elysia()
+	.get('/', () => {})

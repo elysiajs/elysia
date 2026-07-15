@@ -142,6 +142,8 @@ import type {
 	LocalHookReturn,
 	PluginHookReturn,
 	GlobalHookReturn,
+	ScopedHookReturn,
+	ScopedMapDeriveReturn,
 	GuardHookSingleton,
 	LazyComposeEntry,
 	StaticMapAliases
@@ -921,6 +923,17 @@ export class Elysia<
 			>
 		>
 	): this
+	parse<const HookScope extends EventScope>(
+		scope: HookScope,
+		fn: MaybeArray<
+			BodyHandler<
+				MergeSchema<{}, {}, BasePath>,
+				HookContextSingleton<Singleton, Ephemeral, Volatile>,
+				undefined,
+				HookScope
+			>
+		>
+	): this
 	parse(scopeOrFnOrName: any, fn?: any): this {
 		if (fn === undefined && typeof scopeOrFnOrName === 'string') {
 			const named = this['~ext']?.parser?.[scopeOrFnOrName]
@@ -1040,6 +1053,17 @@ export class Elysia<
 			>
 		>
 	): this
+	transform<const HookScope extends EventScope>(
+		scope: HookScope,
+		fn: MaybeArray<
+			TransformHandler<
+				MergeSchema<{}, {}, BasePath>,
+				HookContextSingleton<Singleton, Ephemeral, Volatile>,
+				undefined,
+				HookScope
+			>
+		>
+	): this
 	transform(scopeOrFn: any, fn?: any): this {
 		return this.#onBranch('transform', scopeOrFn, fn)
 	}
@@ -1124,6 +1148,32 @@ export class Elysia<
 		scope: 'global',
 		fn: Handler
 	): GlobalHookReturn<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile,
+		ElysiaHandlerToResponseSchemaAmbiguous<Handler>
+	>
+
+	beforeHandle<
+		const HookScope extends EventScope,
+		const Handler extends MaybeArray<
+			OptionalHandler<
+				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
+				HookContextSingleton<Singleton, Ephemeral, Volatile>,
+				undefined,
+				HookScope
+			>
+		>
+	>(
+		scope: HookScope,
+		fn: Handler
+	): ScopedHookReturn<
+		HookScope,
 		BasePath,
 		Scope,
 		Singleton,
@@ -1235,6 +1285,36 @@ export class Elysia<
 			>
 		) => MaybePromise<Derivative>
 	): GlobalHookReturn<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile,
+		ExtractErrorFromHandle<Derivative>,
+		ExcludeElysiaResponse<Derivative>
+	>
+
+	derive<
+		const HookScope extends EventScope,
+		const Derivative extends
+			| Record<string, unknown>
+			| ElysiaStatus<any, any, any>
+			| void
+	>(
+		scope: HookScope,
+		transform: (
+			context: LifecycleContext<
+				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
+				HookContextSingleton<Singleton, Ephemeral, Volatile>,
+				undefined,
+				HookScope
+			>
+		) => MaybePromise<Derivative>
+	): ScopedHookReturn<
+		HookScope,
 		BasePath,
 		Scope,
 		Singleton,
@@ -1406,6 +1486,36 @@ export class Elysia<
 		Volatile
 	>
 
+	mapDerive<
+		const HookScope extends EventScope,
+		const Derivative extends
+			| Record<string, unknown>
+			| ElysiaStatus<any, any, any>
+			| void
+	>(
+		scope: HookScope,
+		transform: (
+			context: LifecycleContext<
+				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
+				HookContextSingleton<Singleton, Ephemeral, Volatile>,
+				undefined,
+				HookScope
+			>
+		) => MaybePromise<Derivative>
+	): ScopedMapDeriveReturn<
+		HookScope,
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile,
+		ExtractErrorFromHandle<Derivative>,
+		ExcludeElysiaResponse<Derivative>
+	>
+
 	mapDerive(scopeOrFn: EventScope | Function, fn?: Function): any {
 		const result = this.#onBranch(
 			'beforeHandle',
@@ -1517,6 +1627,32 @@ export class Elysia<
 		ElysiaHandlerToResponseSchemaAmbiguous<Handler>
 	>
 
+	afterHandle<
+		const HookScope extends EventScope,
+		const Handler extends MaybeArray<
+			AfterHandler<
+				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
+				HookContextSingleton<Singleton, Ephemeral, Volatile>,
+				undefined,
+				HookScope
+			>
+		>
+	>(
+		scope: HookScope,
+		fn: Handler
+	): ScopedHookReturn<
+		HookScope,
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile,
+		ElysiaHandlerToResponseSchemaAmbiguous<Handler>
+	>
+
 	afterHandle(scopeOrFn: any, fn?: any): any {
 		return this.#onBranch('afterHandle', scopeOrFn, fn)
 	}
@@ -1560,6 +1696,17 @@ export class Elysia<
 			>
 		>
 	): this
+	mapResponse<const HookScope extends EventScope>(
+		scope: HookScope,
+		fn: MaybeArray<
+			MapResponse<
+				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
+				HookContextSingleton<Singleton, Ephemeral, Volatile>,
+				undefined,
+				HookScope
+			>
+		>
+	): this
 	mapResponse(scopeOrFn: any, fn?: any): this {
 		return this.#onBranch('mapResponse', scopeOrFn, fn)
 	}
@@ -1593,6 +1740,15 @@ export class Elysia<
 			HookContextSingleton<Singleton, Ephemeral, Volatile>,
 			undefined,
 			'global'
+		>
+	): this
+	afterResponse<const HookScope extends EventScope>(
+		scope: HookScope,
+		fn: AfterResponseHandler<
+			HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
+			HookContextSingleton<Singleton, Ephemeral, Volatile>,
+			undefined,
+			HookScope
 		>
 	): this
 	afterResponse(scopeOrFn: any, fn?: any): this {
@@ -1806,6 +1962,36 @@ export class Elysia<
 		scope: 'global',
 		fn: Handler
 	): GlobalHookReturn<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile,
+		ElysiaHandlerToResponseSchemaAmbiguous<Handler>
+	>
+	error<
+		const HookScope extends EventScope,
+		const Handler extends MaybeArray<
+			ErrorHandler<
+				[
+					...Definitions['error'],
+					...Ephemeral['error'],
+					...Volatile['error']
+				],
+				{},
+				Singleton & {
+					derive: Partial<Ephemeral['derive'] & Volatile['derive']>
+				}
+			>
+		>
+	>(
+		scope: HookScope,
+		fn: Handler
+	): ScopedHookReturn<
+		HookScope,
 		BasePath,
 		Scope,
 		Singleton,
@@ -2058,6 +2244,10 @@ export class Elysia<
 	trace(scope: 'local', fn: TraceHandler<any, any>): this
 	trace(scope: 'plugin', fn: TraceHandler<any, any>): this
 	trace(scope: 'global', fn: TraceHandler<any, any>): this
+	trace<const HookScope extends EventScope>(
+		scope: HookScope,
+		fn: TraceHandler<any, any>
+	): this
 	trace(
 		scopeOrFn: EventScope | TraceHandler<any, any>,
 		fn?: TraceHandler<any, any>

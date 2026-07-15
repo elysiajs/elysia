@@ -2490,6 +2490,182 @@ export type GlobalHookReturn<
 	Volatile
 >
 
+export type ScopedHookReturn<
+	HookScope extends EventScope,
+	BasePath extends string,
+	Scope extends EventScope,
+	Singleton extends SingletonBase,
+	Definitions extends DefinitionBase,
+	Metadata extends MetadataBase,
+	Routes extends RouteBase,
+	Ephemeral extends EphemeralType,
+	Volatile extends EphemeralType,
+	ResponseAddition extends PossibleResponse,
+	DeriveAddition extends Record<string, unknown> = never
+> = Elysia<
+	BasePath,
+	Scope,
+	[HookScope] extends ['global']
+		? [DeriveAddition] extends [never]
+			? Singleton
+			: {
+					decorator: Singleton['decorator']
+					store: Singleton['store']
+					derive: Singleton['derive'] & DeriveAddition
+				}
+		: Singleton,
+	Definitions,
+	[HookScope] extends ['global']
+		? {
+				schema: Metadata['schema']
+				schemas: Metadata['schemas']
+				macro: Metadata['macro']
+				macroFn: Metadata['macroFn']
+				parser: Metadata['parser']
+				response: UnionResponseStatus<
+					Metadata['response'],
+					ResponseAddition
+				>
+			}
+		: Metadata,
+	Routes,
+	[HookScope] extends ['global']
+		? Ephemeral
+		: [HookScope] extends ['plugin' | 'global']
+			? {
+					derive: Ephemeral['derive'] &
+						([DeriveAddition] extends [never] ? {} : DeriveAddition)
+					schema: Ephemeral['schema']
+					schemas: Ephemeral['schemas']
+					response: UnionResponseStatus<
+						Ephemeral['response'],
+						ResponseAddition
+					>
+					error: Ephemeral['error']
+				}
+			: Ephemeral,
+	[HookScope] extends ['plugin' | 'global']
+		? Volatile
+		: {
+				derive: Volatile['derive'] &
+					([DeriveAddition] extends [never] ? {} : DeriveAddition)
+				schema: Volatile['schema']
+				schemas: Volatile['schemas']
+				response: UnionResponseStatus<
+					Volatile['response'],
+					ResponseAddition
+				>
+				error: Volatile['error']
+			}
+>
+
+export type ScopedMapDeriveReturn<
+	HookScope extends EventScope,
+	BasePath extends string,
+	Scope extends EventScope,
+	Singleton extends SingletonBase,
+	Definitions extends DefinitionBase,
+	Metadata extends MetadataBase,
+	Routes extends RouteBase,
+	Ephemeral extends EphemeralType,
+	Volatile extends EphemeralType,
+	ResponseAddition extends PossibleResponse,
+	Derive extends Record<string, unknown>
+> = Elysia<
+	BasePath,
+	Scope,
+	[HookScope] extends ['global']
+		? {
+				decorator: Singleton['decorator']
+				store: Singleton['store']
+				derive: Derive
+			}
+		: [HookScope] extends ['plugin' | 'local']
+			? Singleton
+			: {
+					decorator: Singleton['decorator']
+					store: Singleton['store']
+					derive: Partial<Singleton['derive']>
+				},
+	Definitions,
+	[HookScope] extends ['global']
+		? {
+				schema: Metadata['schema']
+				schemas: Metadata['schemas']
+				macro: Metadata['macro']
+				macroFn: Metadata['macroFn']
+				parser: Metadata['parser']
+				response: UnionResponseStatus<
+					Metadata['response'],
+					ResponseAddition
+				>
+			}
+		: Metadata,
+	Routes,
+	[HookScope] extends ['global']
+		? Ephemeral
+		: [HookScope] extends ['plugin']
+			? {
+					derive: Derive
+					schema: Ephemeral['schema']
+					schemas: Ephemeral['schemas']
+					response: UnionResponseStatus<
+						Ephemeral['response'],
+						ResponseAddition
+					>
+					error: Ephemeral['error']
+				}
+			: [HookScope] extends ['local']
+				? Ephemeral
+				: [HookScope] extends ['plugin' | 'global']
+					? {
+							derive: Partial<Ephemeral['derive']> & Derive
+							schema: Ephemeral['schema']
+							schemas: Ephemeral['schemas']
+							response: UnionResponseStatus<
+								Ephemeral['response'],
+								ResponseAddition
+							>
+							error: Ephemeral['error']
+						}
+					: 'plugin' extends HookScope
+						? {
+								derive: Partial<Ephemeral['derive']> &
+									Partial<Derive>
+								schema: Ephemeral['schema']
+								schemas: Ephemeral['schemas']
+								response: UnionResponseStatus<
+									Ephemeral['response'],
+									ResponseAddition
+								>
+								error: Ephemeral['error']
+							}
+						: Ephemeral,
+	[HookScope] extends ['plugin' | 'global']
+		? Volatile
+		: [HookScope] extends ['local']
+			? {
+					derive: Derive
+					schema: Volatile['schema']
+					schemas: Volatile['schemas']
+					response: UnionResponseStatus<
+						Volatile['response'],
+						ResponseAddition
+					>
+					error: Volatile['error']
+				}
+			: {
+					derive: Partial<Volatile['derive']> & Derive
+					schema: Volatile['schema']
+					schemas: Volatile['schemas']
+					response: UnionResponseStatus<
+						Volatile['response'],
+						ResponseAddition
+					>
+					error: Volatile['error']
+				}
+>
+
 export type AddWSRoute<
 	BasePath extends string,
 	Scope extends EventScope,
