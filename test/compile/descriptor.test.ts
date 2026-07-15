@@ -9,10 +9,9 @@ import {
 // Compile every route by driving a request through it, then read the
 // per-route descriptor the JIT populated. A descriptor is a frozen
 // classification of the build-time facts the codegen consumes; if any fact
-// flips (async-forcing, validator asyncness, cookie needs, promotion purity,
-// the cookie-read set), the codegen it drives changes too, so these assertions
-// are the tripwire that a "behaviour-preserving" refactor actually preserved
-// behaviour.
+// flips (async-forcing, validator asyncness, cookie needs, promotion purity),
+// the codegen it drives changes too, so these assertions are the tripwire that
+// a "behaviour-preserving" refactor actually preserved behaviour.
 
 const descriptorOf = async (
 	app: Elysia<any, any>,
@@ -63,7 +62,6 @@ describe('route descriptor', () => {
 			asyncCookieSign: false,
 			lazyCookieVerify: false,
 			pureLiteral: true,
-			cookieReads: [],
 			inferenceBody: false,
 			inferenceQuery: false,
 			inferenceHeaders: false,
@@ -90,8 +88,7 @@ describe('route descriptor', () => {
 			async: false,
 			handlerIsAsync: false,
 			hasLifecycleHook: false,
-			pureLiteral: true,
-			cookieReads: []
+			pureLiteral: true
 		})
 	})
 
@@ -187,7 +184,7 @@ describe('route descriptor', () => {
 		})
 	})
 
-	it('sees a validated cookie and its statically-read names', async () => {
+	it('sees a validated cookie', async () => {
 		const app = new Elysia().get(
 			'/vc',
 			{ cookie: t.Object({ sid: t.String() }) },
@@ -205,8 +202,7 @@ describe('route descriptor', () => {
 		expect(descriptor).toMatchObject({
 			needsCookie: true,
 			hasCookieSign: false,
-			inferenceCookie: true,
-			cookieReads: ['sid']
+			inferenceCookie: true
 		})
 	})
 
@@ -235,8 +231,7 @@ describe('route descriptor', () => {
 			hasCookieSign: true,
 			// node/bun expose a sync HMAC, so signing stays on the sync path
 			syncCookieSign: true,
-			asyncCookieSign: false,
-			cookieReads: ['sid']
+			asyncCookieSign: false
 		})
 	})
 

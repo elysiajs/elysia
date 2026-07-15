@@ -10,6 +10,11 @@ new Elysia({ experimental: { resumeEmit } })
 // @ts-expect-error resume emitter must be imported so default bundles omit it
 new Elysia({ experimental: { resumeEmit: true } })
 
+// Lazy signed-cookie verification mode is configurable app-wide.
+new Elysia({ cookie: { secrets: 'secret', sign: ['sid'], verify: 'all' } })
+// @ts-expect-error signed-cookie verification has only two supported modes
+new Elysia({ cookie: { verify: 'none' } })
+
 new Elysia().get('/readonly-path', (context) => {
 	// The sealed matcher owns routing; handlers cannot rewrite its path.
 	// @ts-expect-error context.path is readonly

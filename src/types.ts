@@ -130,6 +130,11 @@ export interface ElysiaConfig<
 		 * Specified cookie name to be signed globally
 		 */
 		sign?: true | string | string[]
+		/**
+		 * Verify signed cookies lazily on access or eagerly at request entry.
+		 * @default 'required-fields'
+		 */
+		verify?: 'required-fields' | 'all'
 	}
 
 	/**

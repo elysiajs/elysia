@@ -6,7 +6,6 @@ import type { RouteValidator } from '../../validator/route'
 import type { Validator } from '../../validator'
 
 import { isAsyncFunction, isAsyncLifecycle, mayReturnPromise } from '../utils'
-import { analyzeCookieReads } from './cookie-reads'
 
 import { compileCookieConfig } from '../../cookie/config'
 import type { CompiledCookieConfig } from '../../cookie/config'
@@ -62,13 +61,6 @@ export interface RouteDescriptor {
 
 	// promotion purity fact (native-static eligibility)
 	pureLiteral: boolean
-
-	/**
-	 * Conservative static set of cookie names read by the pipeline, or
-	 * `undefined` when the analyser cannot prove the read set is closed.
-	 * `undefined` is always the safe answer.
-	 */
-	cookieReads: readonly string[] | undefined
 
 	// sucrose inference channels
 	inferenceBody: boolean
@@ -348,19 +340,10 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 		hasCookieSign && hasSyncHmac && !Capture.isCapturing()
 	const asyncCookieSign = hasCookieSign && !syncCookieSign
 
-	const cookieReadsEarly = analyzeCookieReads(
-		handler,
-		hook,
-		inference,
-		!!vali?.cookie
-	)
 	const lazyCookieVerify =
-		hasCookieSign &&
+		syncCookieSign &&
 		cookieConfig?.verify === 'required-fields' &&
-		cookieReadsEarly !== undefined &&
-		!vali?.cookie &&
-		hasSyncHmac &&
-		!Capture.isCapturing()
+		!vali?.cookie
 
 	const hasErrorHook = !!hook?.error?.length
 	const hasAfterResponse = !!hook?.afterResponse?.length
@@ -504,8 +487,6 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 			? 'set'
 			: 'compact'
 
-	const cookieReads = cookieReadsEarly
-
 	const descriptor: RouteDescriptor = {
 		method,
 		path,
@@ -539,7 +520,6 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 		lazyCookieVerify,
 
 		pureLiteral,
-		cookieReads,
 
 		inferenceBody: inference.body,
 		inferenceQuery: inference.query,

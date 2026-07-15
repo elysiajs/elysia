@@ -66,10 +66,10 @@ Behavior Change:
   original schema object afterward no longer changes an already registered
   route; register a new schema in a new application generation instead.
 - Signed-cookie verification now defaults to `verify: 'required-fields'`.
-  Statically known signed cookies are verified on first value access, so an
-  invalid signed cookie that the route never reads no longer returns 400.
-  Dynamic or unanalyzable access falls back to eager verification; set
-  `verify: 'all'` to require eager ingress-time verification.
+  On runtimes with synchronous HMAC, signed cookies are verified on first
+  value-bearing access, so an invalid signed cookie that the route never reads
+  no longer returns 400. Async-only runtimes and cookie-validator routes remain
+  eager; set `verify: 'all'` to require eager ingress-time verification.
 - Values returned early from `request()` hooks now pass through `mapResponse`
   before they are sent.
 - EVERY `.guard()` and `.group()` form now defaults to the OVERRIDE channel — the closer to the route, the more power: a nearer guard's schema or the route-local schema replaces an inherited one per field (response per status code). Additive validation (every visible validator runs as its own pass) requires an explicit `schema: 'standalone'` opt-in. Previously the string-scope forms (`.guard('local' | 'plugin' | 'global', …)`) and the sandboxed run forms (`.guard(hook, run)` / `.group(prefix, hook, run)`) forced `standalone` implicitly (the run forms even ignored an explicit `schema: 'override'`) while the object forms defaulted to override — the same method defaulted differently depending on call shape

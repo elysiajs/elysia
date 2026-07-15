@@ -19,7 +19,8 @@ import {
 	unsignCookie,
 	unsignCookieSync,
 	maybeJsonDecode,
-	rawJsonValue
+	rawJsonValue,
+	resolvePendingCookie
 } from './crypto'
 
 // Re-export for the public barrel (src/cookie/index.ts) — byte-identical surface.
@@ -265,6 +266,15 @@ export function buildCookieJar(
 							config.fields[key]?.defaults
 						)
 			))
+		},
+		getOwnPropertyDescriptor(target, key) {
+			const descriptor = Reflect.getOwnPropertyDescriptor(target, key)
+			const entry = descriptor?.value
+
+			if (entry && typeof entry === 'object' && '~unsign' in entry)
+				resolvePendingCookie(entry as Record<string, any>, String(key))
+
+			return descriptor
 		}
 	}) as Record<string, Cookie<unknown>>
 }

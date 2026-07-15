@@ -151,9 +151,6 @@ export function compileCookieConfig(
 				throw InvalidCookie.secret(name)
 	}
 
-	const verify: 'required-fields' | 'all' =
-		routeConfig?.verify ?? appConfig?.verify ?? 'required-fields'
-
 	return {
 		defaults,
 		fields,
@@ -161,7 +158,7 @@ export function compileCookieConfig(
 		globalSignSet: Array.isArray(globalSign) ? new Set(globalSign) : undefined,
 		globalSecrets,
 		hasSign,
-		verify
+		verify: appConfig?.verify ?? 'required-fields'
 	}
 }
 

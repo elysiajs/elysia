@@ -7,13 +7,12 @@
  * The lazy lane is selected iff:
  *   - cookieConfig.hasSign
  *   - verify === 'required-fields' (new default)
- *   - cookieReads is defined (closed read set — sucrose can analyse)
  *   - !vali?.cookie (cookie-validator routes stay eager)
  *   - hasSyncHmac (getter is sync; CF Workers without nodejs_compat stay eager)
  */
 import { describe, expect, it } from 'bun:test'
 import Elysia from '../../src'
-import { signCookieSync, unsignCookieSync } from '../../src/cookie/utils'
+import { signCookieSync } from '../../src/cookie/utils'
 import { hasSyncHmac } from '../../src/cookie/crypto'
 import { t } from '../../src'
 import { InvalidCookie } from '../../src/cookie/error'
@@ -33,7 +32,7 @@ function req(path: string, cookieHeader?: string) {
 // Helper: assert response is a problem+json 400 with the invalid-cookie type
 async function expectInvalidCookieError(
 	res: Response,
-	cookieName: string
+	_cookieName: string
 ): Promise<void> {
 	expect(res.status).toBe(400)
 	const body = await res.json()
@@ -116,26 +115,115 @@ if (!hasSyncHmac) {
 	})
 
 	// -----------------------------------------------------------------------
-	// Test 5: Unanalyzable handler → eager fallback: unread bad sig → 400
-	// WHY: sucrose cannot close the read set when cookie is aliased; the lazy
-	//      lane must fall back to eager so any access still verifies
+	// Test 5: Dynamic access remains lazy until a value is read
+	// WHY: runtime Cookie access, not source analysis, owns verification timing.
 	// -----------------------------------------------------------------------
-	it('[C3-5] unanalyzable handler (alias) → eager fallback: unread bad sig is 400', async () => {
+	it('[C3-5] aliased jar verifies only when its value is read', async () => {
 		const app = new Elysia({
 			cookie: { secrets: SECRET, sign: ['sid'] }
-		}).get('/', ({ cookie }) => {
-			// alias to c.cookie makes sucrose return undefined (unanalyzable)
-			const _jar = cookie
+		}).get('/', ({ cookie, query: { read } }) => {
+			const jar = cookie
+			if (read) return jar.sid.value
 			return 'ok'
 		})
 
-		// Eager mode: even unread, bad sig must 400
-		const res = await app.handle(req('/', 'sid=garbage.nothmac'))
-		expect(res.status).toBe(400)
+		const unread = await app.handle(req('/', 'sid=garbage.nothmac'))
+		expect(unread.status).toBe(200)
+		expect(await unread.text()).toBe('ok')
+
+		const read = await app.handle(req('/?read=1', 'sid=garbage.nothmac'))
+		await expectInvalidCookieError(read, 'sid')
+	})
+
+	it('[C3-5b] computed access verifies only when its value is read', async () => {
+		const app = new Elysia({
+			cookie: { secrets: SECRET, sign: ['sid'] }
+		}).get('/', ({ cookie, query: { read } }) => {
+			const name = 'sid'
+			if (read) return cookie[name].value
+			return 'ok'
+		})
+
+		const unread = await app.handle(req('/', 'sid=garbage.nothmac'))
+		expect(unread.status).toBe(200)
+
+		const read = await app.handle(req('/?read=1', 'sid=garbage.nothmac'))
+		await expectInvalidCookieError(read, 'sid')
+	})
+
+	it('[C3-5c] reflection resolves pending cookies before exposing descriptors', async () => {
+		let pending: boolean | undefined
+		let exposedSecret: unknown
+
+		const app = new Elysia({
+			cookie: { secrets: SECRET, sign: ['sid'] }
+		}).get('/', function ({ cookie }: any) {
+			void cookie.sid
+			const entry = Object.getOwnPropertyDescriptor(
+				arguments[0].cookie,
+				'sid'
+			)?.value
+
+			pending = Object.prototype.hasOwnProperty.call(entry, '~unsign')
+			exposedSecret = entry?.['~unsign']
+
+			return entry?.value
+		})
+
+		const value = signed('hello', SECRET)
+		const valid = await app.handle(req('/', `sid=${value}`))
+		expect(valid.status).toBe(200)
+		expect(await valid.text()).toBe('hello')
+		expect(pending).toBe(false)
+		expect(exposedSecret).toBeUndefined()
+
+		const invalid = await app.handle(req('/', 'sid=garbage.nothmac'))
+		await expectInvalidCookieError(invalid, 'sid')
+	})
+
+	it('[C3-5d] all property-descriptor APIs verify before exposure', async () => {
+		const operations = {
+			reflect: (jar: any) =>
+				Reflect.getOwnPropertyDescriptor(jar, 'sid')?.value.value,
+			all: (jar: any) =>
+				Object.getOwnPropertyDescriptors(jar).sid.value.value
+		}
+
+		for (const [name, operation] of Object.entries(operations)) {
+			const app = new Elysia({
+				cookie: { secrets: SECRET, sign: ['sid'] }
+			}).get(`/${name}`, function ({ cookie }: any) {
+				void cookie.sid
+				return operation(arguments[0].cookie)
+			})
+
+			const res = await app.handle(
+				req(`/${name}`, 'sid=garbage.nothmac')
+			)
+			await expectInvalidCookieError(res, 'sid')
+		}
+	})
+
+	it('[C3-5e] enumeration verifies pending values only when executed', async () => {
+		const app = new Elysia({
+			cookie: { secrets: SECRET, sign: ['sid'] }
+		}).get('/', function ({ cookie, query: { read } }: any) {
+			void cookie.sid
+			if (read) return Object.keys(arguments[0].cookie).join(',')
+			return 'ok'
+		})
+
+		const unread = await app.handle(req('/', 'sid=garbage.nothmac'))
+		expect(unread.status).toBe(200)
+
+		const enumerated = await app.handle(
+			req('/?read=1', 'sid=garbage.nothmac')
+		)
+		await expectInvalidCookieError(enumerated, 'sid')
 	})
 
 	// -----------------------------------------------------------------------
-	// Test 6: verify: 'all' → eager despite analyzable read set
+	// Test 6: verify: 'all' → eager regardless of runtime access
 	// WHY: explicit opt-out of lazy must restore eager behavior everywhere.
 	//      Uses a handler that touches c.cookie (so cookieConfig is compiled)
 	//      but reads a DIFFERENT key, not 'sid'. Under lazy the unread 'sid'
@@ -276,12 +364,12 @@ if (!hasSyncHmac) {
 			cookie: { secrets: SECRET, sign: ['sid'] }
 		}).get('/', async ({ cookie: { sid } }) => {
 			try {
-				sid.value // first access — throws
+				void sid.value // first access — throws
 			} catch {
 				// swallow
 			}
 			try {
-				sid.value // second access — must still throw (marker retained)
+				void sid.value // second access — must still throw (marker retained)
 			} catch (e) {
 				if (e instanceof InvalidCookie) secondStatus = e.status
 				throw e
