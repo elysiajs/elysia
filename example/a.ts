@@ -1,12 +1,14 @@
+import { BunRequest, CookieMap } from 'bun'
 import { Elysia } from '../src'
 
-const app = new Elysia()
-	.get('/', ({ server }) => {
-		console.log(server?.requestIP.toString())
+Bun.serve({
+	routes: {
+		'/': {
+			GET(request) {
+				console.log(request.cookies.set('ok', 'ok'))
 
-		return 'a'
-	})
-	.listen(3000)
-
-app.handle('/')
-fetch('http://localhost:3000')
+				return new Response('ok')
+			}
+		}
+	}
+})
