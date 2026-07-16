@@ -337,7 +337,7 @@ describe('Model', () => {
 		expect(value).toEqual({ message: 'ok', content: [{ id: 3 }] })
 	})
 
-	it('exposes registered models via the .models getter (A6)', () => {
+	it('exposes registered models via the .models getter', () => {
 		const app = new Elysia()
 			.model('string', t.String())
 			.model('number', t.Number())

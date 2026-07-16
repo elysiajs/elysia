@@ -7,7 +7,7 @@ import { applyCoercions } from '../../src/type/coerce'
 import { Compile } from '../../src/type/bridge'
 import { post } from '../utils'
 
-// H8: MultiValidator.From used to run the interpreted `Value.Decode` per
+// MultiValidator.From used to run the interpreted `Value.Decode` per
 // request for every TypeBox member (~52µs vs ~19ns for the equivalent single
 // validator). It now reuses the compiled validator's fast paths — a plain
 // member only strips excess (compiled `Clean`), a codec member decodes once
@@ -20,7 +20,7 @@ import { post } from '../utils'
 // schemas, the MultiValidator output must exactly equal what the old
 // interpreted `Value.Decode` produced. If any plain schema differs, the
 // fast-path is unsound and `needsDecode` would have to be widened.
-describe('MultiValidator decode differential (H8)', () => {
+describe('MultiValidator decode differential', () => {
 	// a permissive Standard Schema that contributes nothing to the merged
 	// object — it forces the mixed-member MultiValidator path so we can observe
 	// a single TypeBox member's decoded contribution in isolation.
@@ -174,7 +174,7 @@ describe('MultiValidator decode differential (H8)', () => {
 		expect(value).toEqual({ name: 'lilith' })
 	})
 
-	// validator-runtime-2: a MultiValidator rejection must NOT eagerly run the
+	// a MultiValidator rejection must NOT eagerly run the
 	// full `Errors` walk. `ValidationError` defers that walk behind a thunk so
 	// production (which masks the detail and reads only `.status`) never pays for
 	// it — the single-validator path already does this. `#fromTypeBox` throws by

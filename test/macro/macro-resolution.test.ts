@@ -5,9 +5,9 @@ import { req } from '../utils'
 import { newWebsocket, wsOpen, wsMessage, wsClosed } from '../ws/utils'
 
 describe('Macro resolution', () => {
-	// C4 — a macro def's hook array must never be aliased/mutated, so compiling
+	// A macro definition's hook array must never be aliased or mutated, so compiling
 	// a two-macro route before a one-macro route cannot leak the second macro.
-	it('does not contaminate a macro across routes by compile order (C4)', async () => {
+	it('does not contaminate a macro across routes by compile order', async () => {
 		let one = 0
 		let two = 0
 
@@ -27,10 +27,10 @@ describe('Macro resolution', () => {
 		expect(two).toBe(0) // macro two must NOT leak into /only-one
 	})
 
-	// C3 — derive-ness is a property of the function, so one plugin instance
+	// Derive behavior belongs to the function, so one plugin instance
 	// consumed by two apps resolves the same in both, regardless of which
 	// compiled first (previously app2 served the derive object as the response).
-	it('resolves a shared-plugin derive macro per app (C3)', async () => {
+	it('resolves a shared-plugin derive macro per app', async () => {
 		const plugin = new Elysia()
 			.macro({ withUser: { derive: () => ({ user: 'kiana' }) } })
 			.get('/me', { withUser: true } as any, ({ user }: any) => user)
@@ -45,7 +45,7 @@ describe('Macro resolution', () => {
 		expect(r2).toBe('kiana')
 	})
 
-	it('resolves a shared-plugin derive macro in reverse compile order (C3)', async () => {
+	it('resolves a shared-plugin derive macro in reverse compile order', async () => {
 		const plugin = new Elysia()
 			.macro({ withUser: { derive: () => ({ user: 'mei' }) } })
 			.get('/me', { withUser: true } as any, ({ user }: any) => user)
@@ -61,9 +61,9 @@ describe('Macro resolution', () => {
 		expect(r2).toBe('mei')
 	})
 
-	// C5 — two plugins defining a macro of the same name would collapse into one
+	// Two plugins defining a macro of the same name would collapse into one
 	// flat table (auth-bypass class). A genuine collision must fail loud.
-	it('throws on a cross-plugin macro name collision (C5)', () => {
+	it('throws on a cross-plugin macro name collision', () => {
 		const a = new Elysia({ name: 'a' }).macro({
 			auth: { beforeHandle: () => {} }
 		})
@@ -74,7 +74,7 @@ describe('Macro resolution', () => {
 		expect(() => new Elysia().use(a).use(b)).toThrow(/Macro "auth"/)
 	})
 
-	it('does not throw when the same plugin instance is reused (C5)', () => {
+	it('does not throw when the same plugin instance is reused', () => {
 		const shared = new Elysia({ name: 'shared' }).macro({
 			tag: { beforeHandle: () => {} }
 		})
@@ -83,9 +83,9 @@ describe('Macro resolution', () => {
 		expect(() => new Elysia().use(shared).use(mid)).not.toThrow()
 	})
 
-	// C6 — introspecting `.routes` before the first request must not cache a
+	// Reading `.routes` before the first request must not cache a
 	// pre-macro flatten that then drops a guard-level macro (silent auth bypass).
-	it('keeps a guard macro after reading .routes pre-request (C6)', async () => {
+	it('keeps a guard macro after reading .routes pre-request', async () => {
 		const app = new Elysia()
 			.macro({
 				auth: {
@@ -105,9 +105,9 @@ describe('Macro resolution', () => {
 		expect(r.status).toBe(401)
 	})
 
-	// H11 — resolution must not mutate the user's hook object, even when it is
+	// resolution must not mutate the user's hook object, even when it is
 	// reused across routes or apps.
-	it('never mutates the user-supplied hook object (H11)', async () => {
+	it('never mutates the user-supplied hook object', async () => {
 		const hook: any = { flag: true }
 		const app = new Elysia()
 			.macro({ flag: { beforeHandle: () => {} } })
@@ -118,7 +118,7 @@ describe('Macro resolution', () => {
 		expect(Object.keys(hook)).toEqual(['flag'])
 	})
 
-	it('resolves the same hook object per app when shared (H11)', async () => {
+	it('resolves the same hook object per app when shared', async () => {
 		let a = 0
 		let b = 0
 		const sharedHook: any = { flag: true }
@@ -140,7 +140,7 @@ describe('Macro resolution', () => {
 		expect(a).toBe(0)
 	})
 
-	it('resolves a shared-plugin chain macro per app (H11 / chain)', async () => {
+	it('resolves a shared-plugin chain macro per app', async () => {
 		let a = 0
 		let b = 0
 		const plugin = new Elysia().guard({ mark: true } as any, (app) =>
@@ -161,9 +161,9 @@ describe('Macro resolution', () => {
 		expect(a).toBe(0)
 	})
 
-	// H17 — an array-form macro meeting a single route hook must produce a flat,
+	// an array-form macro meeting a single route hook must produce a flat,
 	// correctly-ordered array (previously a nested array that 500'd), macro-first.
-	it('keeps array-macro order and never nests (H17)', async () => {
+	it('keeps array-macro order and never nests', async () => {
 		const order: string[] = []
 		const app = new Elysia()
 			.macro({
@@ -204,11 +204,11 @@ describe('Macro resolution', () => {
 		expect(def.beforeHandle.length).toBe(1)
 	})
 
-	// F1 — non-event array channels (`derive`) in a macro def must be COPIED,
+	// non-event array channels (`derive`) in a macro def must be COPIED,
 	// not aliased: a second macro on the same route used to unshift into the
 	// first macro's definition array, leaking its derive into every later
 	// route that used only the first macro (cross-route auth-context leak).
-	it('never mutates an array-form derive def via a sibling macro (F1)', async () => {
+	it('never mutates an array-form derive def via a sibling macro', async () => {
 		const fnA = () => ({ a: 'A' })
 		const fnB = () => ({ b: 'B' })
 		const defA = { derive: [fnA] }
@@ -235,9 +235,9 @@ describe('Macro resolution', () => {
 		expect(onlyA).toEqual({ a: 'A', b: null })
 	})
 
-	// F2 — WS routes bypass composeRouteHook's localHook pass; a macro on a WS
+	// WS routes bypass composeRouteHook's localHook pass; a macro on a WS
 	// route's own hook must still resolve (beforeHandle gate + derive channel).
-	it('resolves a macro on a WS route local hook (F2)', async () => {
+	it('resolves a macro on a WS route local hook', async () => {
 		let gate = 0
 		let derived: unknown
 
@@ -274,20 +274,20 @@ describe('Macro resolution', () => {
 		app.stop()
 	})
 
-	// F3 — an unnamed factory reused twice is a genuine ref-inequality
+	// an unnamed factory reused twice is a genuine ref-inequality
 	// collision; the error must point at the actual remedy (plugin `name`).
-	it('points unnamed-factory collisions at plugin naming (F3)', () => {
+	it('points unnamed-factory collisions at plugin naming', () => {
 		const factory = () =>
 			new Elysia().macro({ auth: { beforeHandle: () => {} } })
 
 		expect(() => new Elysia().use(factory()).use(factory())).toThrowError
 	})
 
-	// F4 — a caught collision throw must not leave partial state: the
+	// a caught collision throw must not leave partial state: the
 	// colliding plugin's routes must not be registered (its macros never
 	// merged — the silent-skip failure mode), and a corrected recomposition
 	// under the SAME plugin name must not be dedup-skipped.
-	it('leaves no partial state behind a caught collision (F4)', async () => {
+	it('leaves no partial state behind a caught collision', async () => {
 		const a = new Elysia({ name: 'a' }).macro({
 			auth: { beforeHandle: () => {} }
 		})
@@ -311,11 +311,11 @@ describe('Macro resolution', () => {
 		)
 	})
 
-	// M3-01 — a macro `detail` merge must not mutate the user's registration
+	// a macro `detail` merge must not mutate the user's registration
 	// hook. `cloneHook` is shallow, so `input.detail` aliased the user's object
 	// and mergeDeep concatenated the macro's tags back INTO the user's array —
 	// corrupting it and growing it on every `.routes`/`.history` read.
-	it('never mutates the user hook detail via a macro detail merge (M3-01)', async () => {
+	it('never mutates the user hook detail via a macro detail merge', async () => {
 		const hook: any = {
 			auth: true,
 			detail: { tags: ['mine'], summary: 'x' }
@@ -340,10 +340,10 @@ describe('Macro resolution', () => {
 		expect(second.hooks.detail.tags).toEqual(['mine', 'auth'])
 	})
 
-	// C5/group — a `.macro()` override INSIDE a group/guard callback is an
-	// intra-app scoped redefinition (last-wins, like calling `.macro()` twice
-	// on the app), NOT a cross-plugin collision. It must not throw C5.
-	it('allows a macro override inside a group callback (C5/group)', async () => {
+	// A `.macro` override inside a group or guard callback is an
+	// intra-app scoped redefinition (last-wins, like calling `.macro` twice
+	// on the app), not a cross-plugin collision.
+	it('allows a macro override inside a group callback', async () => {
 		let outer = 0
 		let inner = 0
 
@@ -361,7 +361,7 @@ describe('Macro resolution', () => {
 		expect(outer).toBe(0)
 	})
 
-	it('allows a macro override inside a guard callback (C5/guard)', () => {
+	it('allows a macro override inside a guard callback', () => {
 		expect(() =>
 			new Elysia()
 				.macro({ auth: { beforeHandle: () => {} } })
@@ -374,7 +374,7 @@ describe('Macro resolution', () => {
 	})
 
 	// Derive-taint — derive-ness is now per RESOLVED HOOK, not a global function
-	// identity. A function used as a `.derive()` on one app, then reused as a
+	// identity. A function used as a `.derive` on one app, then reused as a
 	// plain `beforeHandle` guard on another, must keep early-return (guard)
 	// semantics in the second app. Previously the global tag made the guard's
 	// return merge into context instead of blocking → auth bypass.
@@ -466,10 +466,10 @@ describe('Macro resolution', () => {
 		app.stop()
 	})
 
-	// C3-preservation — the rework must NOT reintroduce C3: a genuine derive
+	// A genuine derive
 	// still MERGES into context and does not become the response (the handler
 	// runs and sees the derived value).
-	it('a genuine derive merges into context and does not short-circuit (C3-preserve)', async () => {
+	it('a genuine derive merges into context and does not short-circuit', async () => {
 		const app = new Elysia()
 			.derive(() => ({ user: 'kiana' }))
 			.get('/me', ({ user }: any) => `hi ${user}`)
@@ -479,10 +479,10 @@ describe('Macro resolution', () => {
 		)
 	})
 
-	// C3-ARRAY-DERIVE — array-form `.derive([f1, f2])` must tag each fn as a
+	// Array-form `.derive([f1, f2])` must tag each function as a
 	// derive, not the array object. Otherwise the members are treated as plain
 	// guards and the first one's returned object short-circuits as the response.
-	it('tags each fn of array-form .derive([f1, f2]) as a derive (C3-ARRAY-DERIVE)', async () => {
+	it('tags each function of array-form .derive([f1, f2]) as a derive', async () => {
 		const app = new Elysia()
 			.derive([() => ({ a: 1 }), () => ({ b: 2 })] as any)
 			.get('/d', ({ a, b }: any) => `a=${a},b=${b}`)
@@ -493,11 +493,11 @@ describe('Macro resolution', () => {
 		)
 	})
 
-	// WS-DERIVE-STATUS — a derive returning status()/error() (ElysiaStatus) on a
+	// WS-DERIVE-STATUS — a derive returning status/error (ElysiaStatus) on a
 	// WS upgrade must ABORT the upgrade (like HTTP), not merge-and-upgrade. Only
 	// the abort/rejection is asserted here; the exact HTTP status code of a WS
 	// upgrade rejection is a separate pre-existing concern.
-	it('a derive returning status() aborts a WS upgrade (WS-DERIVE-STATUS)', async () => {
+	it('a derive returning status aborts a WS upgrade (WS-DERIVE-STATUS)', async () => {
 		const app = new Elysia()
 			.ws('/gated', {
 				derive: ({ status }: any) => status(401, 'no'),
@@ -520,7 +520,7 @@ describe('Macro resolution', () => {
 		expect(String((await m).data)).toBe('pong')
 		await wsClosed(ok)
 
-		// the status()-returning derive must reject (no pong)
+		// the status-returning derive must reject (no pong)
 		const blocked = newWebsocket(app.server!, '/gated')
 		const outcome = await new Promise<'pong' | 'rejected'>((resolve) => {
 			const timer = setTimeout(() => resolve('rejected'), 1500)
@@ -676,15 +676,14 @@ describe('Macro resolution', () => {
 		).toBe(200)
 	})
 
-	// FIX (group override scoping) — a `.macro()` override inside a group/guard
+	// FIX (group override scoping) — a `.macro` override inside a group/guard
 	// callback must be SCOPED to that group's routes (matching `main`): the
 	// group's own routes see the override, but sibling routes registered BEFORE
 	// and AFTER the group (and the parent generally) keep the original macro.
 	// Previously the override was merged back into the parent's single macro
 	// table and, under lazy resolution, clobbered the macro app-wide — silently
-	// disabling a macro-based auth gate on unrelated routes (auth bypass). The
-	// existing C5/group pin only checks the inside-group route, so this pins the
-	// sibling-containment half.
+	// disabling a macro-based auth gate on unrelated routes. The inside-group
+	// check alone misses the sibling-containment half.
 	it('scopes a group macro override to the group, not sibling routes (group override scoping)', async () => {
 		const gate = {
 			role: (need: string) => ({
@@ -746,7 +745,7 @@ describe('Macro resolution', () => {
 		expect((await app.handle(H('/x'))).status).toBe(403) // sibling gated
 	})
 
-	// B — a `.group()`/`.guard(cb)` child prototype-links (not snapshots) the
+	// B — a `.group`/`.guard(cb)` child prototype-links (not snapshots) the
 	// parent macro table, so a macro the parent registers AFTER the group is
 	// created is still seen by in-group routes. A flat snapshot froze the table
 	// at group-creation time: an in-group route resolved against the stale copy,
@@ -806,7 +805,7 @@ describe('Macro resolution', () => {
 		expect(ran).toEqual(['new'])
 	})
 
-	// Mutation pin — a genuine app-level `.derive()` merged onto a route that has
+	// Mutation pin — a genuine app-level `.derive` merged onto a route that has
 	// its OWN hook flows through `mergeHook` (localHook × appHook). `mergeHook`
 	// must carry the derive provenance (`~deriveEntries`) across the merge; if it
 	// drops it, the derive fn is treated as a plain guard and its returned object
@@ -847,14 +846,13 @@ describe('Macro resolution', () => {
 		expect(await r.text()).toBe('1-2') // was the first derive object, short-circuited
 	})
 
-	// ── F1 KNOWN GAPS (partial fix — DO NOT un-skip until F1 is completed) ──
+	// Known gaps: keep skipped until scoped overrides cover these cases.
 	// The group-override SCOPING fix (`localMacroRoot`) only redirects a route's
 	// OWN hook (route[4]) to the group scope-child that carries the override.
 	// Every OTHER macro consumer inside a group still resolves against the parent
 	// table — where the override was WITHHELD by merge-back-only-new — so it
-	// falls back to the parent's ORIGINAL definition. The 4-lens verification
-	// (design/fable-review-sub-tasks.md §7, repros under /tmp/f1-verify/) proved
-	// these residual bypasses vs `main`. Each pin asserts the CORRECT (main)
+	// falls back to the parent's original definition. Each check asserts the
+	// expected scoped-override
 	// behavior and currently FAILS on this tree; the real fix is per-registration-
 	// scope macro resolution (the chain flatten must resolve each node against the
 	// macro table in scope where it was registered). Remove `.skip` when done.
@@ -863,7 +861,7 @@ describe('Macro resolution', () => {
 	// forms (same mechanism: a chain node resolves against the parent, not the
 	// scope-child). A group override that STRENGTHENS a gate must apply to the
 	// group's guarded routes — currently a non-admin reaches the panel (200).
-	it('F1-GAP (chain-node): a guard inside a group honors the group macro override', async () => {
+	it('a guard inside a group honors the group macro override', async () => {
 		const app = new Elysia()
 			.macro({
 				auth: () => ({
@@ -896,9 +894,9 @@ describe('Macro resolution', () => {
 		expect(r.status).toBe(403) // CURRENTLY 200 (bypass)
 	})
 
-	// A plugin `.use()`d inside a group carries `route[3]` = the plugin (not the
+	// A plugin `.use`d inside a group carries `route[3]` = the plugin (not the
 	// scope-child), so its routes resolve against the parent's (weaker) macro.
-	it('F1-GAP (plugin): a plugin route inside a strengthened group honors the override', async () => {
+	it('a plugin route inside a strengthened group honors the override', async () => {
 		const secret = new Elysia().get(
 			'/data',
 			{ auth: true } as any,
@@ -922,9 +920,9 @@ describe('Macro resolution', () => {
 	})
 
 	// merge-back-only-new can't tell a macro that ARRIVED via a nested plugin's
-	// `.use()` (should merge back) from one DEFINED directly in the callback
+	// `.use` (should merge back) from one DEFINED directly in the callback
 	// (main scopes it), so a group-defined NEW macro leaks onto sibling routes.
-	it('F1-GAP (new-macro leak): a macro defined inside a group does not run on siblings', async () => {
+	it('a macro defined inside a group does not run on siblings', async () => {
 		let ran: string[] = []
 		const app = new Elysia()
 			.get('/before', { tag: true } as any, () => 'before')
@@ -950,7 +948,7 @@ describe('Macro resolution', () => {
 		expect(ran).toEqual([]) // CURRENTLY ['x'] (leak)
 	})
 
-	// A group override that resolves to a non-falsy EMPTY def (`() => ({})` —
+	// A group override that resolves to a non-falsy EMPTY def (` => ({})` —
 	// the idiom to DISABLE a macro-gate inside a group) must WIN: the scope
 	// pass owns the key even when its def contributes no channels. The
 	// two-phase resolver's per-key `delete` lives inside `for (k in hook)`,
@@ -987,14 +985,14 @@ describe('Macro resolution', () => {
 		).toBe(401)
 	})
 
-	// C5 for FUNCTIONAL plugins — a functional plugin `.use((app) => app.macro())`
-	// calls `.macro()` on the root directly and never reaches the `#use` throw.
-	// `.macro()` consults the functional-use baseline to reject a cross-plugin
+	// A functional plugin `.use((app) => app.macro)`
+	// calls `.macro` on the root directly and never reaches the `#use` throw.
+	// `.macro` consults the functional-use baseline to reject a cross-plugin
 	// name collision the same way an instance plugin throws. The baseline window
-	// is SYNCHRONOUS (a functional plugin's sync body); a `.macro()` after an
+	// is SYNCHRONOUS (a functional plugin's sync body); a `.macro` after an
 	// async plugin's first `await` is outside it and instead THROWS outright —
 	// async macro definition is unsupported (see the async pins below).
-	it('throws on a cross-plugin macro name collision via functional plugins (C5/functional)', () => {
+	it('throws on a cross-plugin macro name collision via functional plugins', () => {
 		const pluginA = (app: any) =>
 			app.macro({
 				auth: {
@@ -1070,7 +1068,7 @@ describe('Macro resolution', () => {
 		).toBe(200)
 	})
 
-	// ── F1 round-2 pins (adversarial re-verification of the per-scope fix) ──
+	// Adversarial checks for scoped macro overrides.
 
 	// A group whose callback defines its OWN macro creates the scope-child's
 	// table lazily; that table must prototype-link the parent's LIVE table
@@ -1137,12 +1135,12 @@ describe('Macro resolution', () => {
 		expect(ran).toEqual(['root'])
 	})
 
-	// The C5 collision throw must treat two def objects created by re-running
+	// Collision detection must treat two definitions created by re-running
 	// the SAME named plugin factory (the canonical service-locator pattern —
-	// `setup()` per feature module, features composed at root) as
+	// `setup` per feature module, features composed at root) as
 	// deduplication, not a collision: that is exactly what the error message's
 	// "give the plugin a `name`" remedy promises.
-	it('does not throw C5 for a named plugin factory diamond across features', async () => {
+	it('allows a named plugin factory diamond across features', async () => {
 		const setup = () =>
 			new Elysia({ name: 'setup' }).macro({
 				auth: {
@@ -1169,7 +1167,7 @@ describe('Macro resolution', () => {
 		expect(() => new Elysia().use(unnamed()).use(unnamed())).toThrowError()
 	})
 
-	// Memo invalidation is global (macro epoch): an app that already `.use()`d
+	// Memo invalidation is global (macro epoch): an app that already `.use`d
 	// a plugin holds flatten/resolution memos keyed under ITSELF, which a
 	// per-root invalidation could not reach — introspecting `.routes` and THEN
 	// registering a late macro on the plugin served the stale pre-macro
@@ -1226,9 +1224,9 @@ describe('Macro resolution', () => {
 	})
 
 	// A functional plugin may freely refine a macro IT defined during its own run
-	// (not a cross-plugin collision); and a direct author `.macro()` override
+	// (not a cross-plugin collision); and a direct author `.macro` override
 	// outside any plugin keeps intentional last-wins.
-	it('allows a functional plugin to refine its own macro and author last-wins (C5/functional)', async () => {
+	it('allows a functional plugin to refine its own macro with author last-wins', async () => {
 		const H = (p: string) => new Request('http://localhost' + p)
 
 		// intra-plugin refinement: no throw
@@ -1256,7 +1254,7 @@ describe('Macro resolution', () => {
 	// AFTER `.routes` was introspected. If the flatten memo cached the guard's
 	// chain raw (macro unexpanded) and is never invalidated, the late macro is
 	// silently dropped. Documents whether the per-root flatten memo needs
-	// invalidation on `.macro()`.
+	// invalidation on `.macro`.
 	it('EDGE: applies a macro defined after .routes introspection', async () => {
 		const app = new Elysia().guard({ auth: true } as any, (a) =>
 			a.get('/secret', () => 'secret')

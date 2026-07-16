@@ -15,6 +15,11 @@ const distCore = (await import(
 )) as typeof import('../../src/plugin/aot/core')
 const { generateCompiledArtifacts } = distCore
 
+// The seal guard lives on the same dist instance as the fixtures' bare `elysia`
+// import resolves to — assert the post-seal throw against that instance, not the
+// `src` core (which is a different `#assertMutable`).
+const { Elysia } = (await import('elysia')) as typeof import('../../src')
+
 /**
  * Step 3 of the sealed-bundle roadmap: the AOT plugin picks a TypeBox-collapse
  * mode from the frozen build's `bridgeFree` markers.
@@ -345,24 +350,45 @@ describe('AOT mode gating — misgating regressions', () => {
 		expect(stub.bridge).toBe(true)
 	})
 
-	it('DEFECT 2: a late-registered route is NOT sealed; marginal harm is nil (jit stub fires first)', async () => {
-		// The route is added on a `setTimeout` after the capture snapshot, so the
-		// gate captures 0 routes/handlers. Old gate: sealed on vacuous truth.
+	it('DEFECT 2: a post-seal route is NOT captured (no vacuous seal); mutation throws', async () => {
+		// A route registered AFTER the app seals must not retroactively enter the
+		// capture snapshot. `generateCompiledArtifacts` awaits `app.modules` then
+		// compiles (SEALS) the fixture app; the fixture's untracked timer guards on
+		// `~generation` and skips its `.get()` in the capture runtime, so the gate
+		// captures 0 routes/handlers. The old gate sealed on `[].every()` vacuous
+		// truth — the mode must instead land on the safe non-vacuous default (wired).
 		const { mode } = await generateCompiledArtifacts(MODE_LATE)
 		expect(mode).not.toBe('sealed')
 		expect(mode).toBe('wired')
 
-		// Marginal-severity evidence: under strip mode the late route hits the jit
-		// stub BEFORE the bridge is reached — so the false seal never made the late
-		// route worse than the pre-existing jit-stub failure. The bundle (built in
-		// beforeAll) 500s at the jit stub, not the bridge. (This is why DEFECT 2 is
-		// "vacuous-truth unsoundness" rather than a new runtime regression.)
+		// A late route cannot be registered after the snapshot seals at compile
+		// time, so a post-seal authoring mutation THROWS synchronously rather than
+		// silently invalidating and rebuilding. Prove the throw AND that the failed
+		// mutation leaves the sealed capture state untouched (no vacuous seal, no
+		// torn snapshot). This is the direct-call form of the old timer vehicle.
+		const sealed = new Elysia().get('/a', () => 'a')
+		sealed.compile()
+		const generation = (sealed as any)['~generation']
+		const routesBefore = (sealed as any)['~routes'].length
+		expect(() => sealed.get('/late', () => 'late')).toThrow(
+			'after the app was sealed'
+		)
+		// The rejected mutation changed nothing: same generation object, same routes.
+		expect((sealed as any)['~generation']).toBe(generation)
+		expect((sealed as any)['~routes'].length).toBe(routesBefore)
+
+		// Marginal-severity evidence: in the BUNDLE runtime the app is still
+		// authorable when the timer fires (no import-time compile), so the late
+		// route DOES register and the first request reaches the stripped handler-JIT
+		// stub BEFORE the severed bridge. The false seal never made the late route
+		// worse than the pre-existing jit-stub failure — DEFECT 2 is "vacuous-truth
+		// unsoundness", not a new runtime regression.
 		const dir2 = mkdtempSync(join(tmpdir(), 'ely-late-'))
 		const file = join(dir2, 'late.mjs')
 		writeFileSync(file, code.esbuildLate!)
 		const mod = (await import(file)) as { app?: any; default?: any }
 		const app = mod.app ?? mod.default
-		// give the setTimeout a tick to register the late route
+		// give the setTimeout a tick to register the late route (pre-seal window)
 		await new Promise((r) => setTimeout(r, 10))
 
 		const res = await app.handle(new Request('http://localhost/late'))

@@ -536,7 +536,7 @@ import { Cookie } from '../../../src/cookie'
 	)
 }
 
-// ? H14 — Standard Schema response position exposes input (not output)
+// ?  — Standard Schema response position exposes input (not output)
 // A schema with input:string / output:number means the handler must RETURN a
 // string (that the runtime will transform to number), not a number.
 {

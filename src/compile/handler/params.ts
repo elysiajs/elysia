@@ -10,13 +10,19 @@ import {
 	parseCookieRaw,
 	parseCookieRawSync,
 	parseCookieRawSigned,
+	parseCookieRawLazy,
 	buildCookieJar,
 	signCookieValues,
 	signCookieValuesSync
 } from '../../cookie/utils'
 import { requestId } from '../../utils'
-import { forwardError } from '../../handler/utils'
-import { tee } from '../../adapter/utils'
+import { finalizeRouteError, forwardError } from '../../handler/utils'
+import type { AnyElysia } from '../../base'
+import {
+	materializeSetHeaders,
+	normalizeContentType,
+	tee
+} from '../../adapter/utils'
 import {
 	cloneResponse,
 	emptyResponse,
@@ -34,6 +40,7 @@ import {
  * @see `test/aot/param-descriptor.test.ts` asserts these keys
  */
 export interface HandlerParamContext {
+	root: AnyElysia
 	parse: Record<string, unknown>
 	res: { map: unknown; compact?: unknown }
 	hook: Record<string, unknown>
@@ -52,11 +59,10 @@ export const HANDLER_PARAMS: Record<string, Resolver> = {
 	pa: (c) => c.parse.arrayBuffer,
 	pt: (c) => c.parse.text,
 	pd: (c) => c.parse.default,
+	nc: () => normalizeContentType,
 	hb: () => hasRequestBody,
-	qa: (c) =>
-		getQueryParseChannels((c.vali as any)?.query?.schema)?.array,
-	qo: (c) =>
-		getQueryParseChannels((c.vali as any)?.query?.schema)?.object,
+	qa: (c) => getQueryParseChannels((c.vali as any)?.query?.schema)?.array,
+	qo: (c) => getQueryParseChannels((c.vali as any)?.query?.schema)?.object,
 	// response adapter
 	rm: (c) => c.res.map,
 	rc: (c) => c.res.compact ?? c.res.map,
@@ -74,10 +80,12 @@ export const HANDLER_PARAMS: Record<string, Resolver> = {
 	// allowUnsafeValidationDetails opt-in: `e instanceof verr` in the error catch
 	verr: () => ValidationError,
 	tee: () => tee,
+	msh: () => materializeSetHeaders,
 	cr: () => cloneResponse,
 	pcr: () => parseCookieRaw,
 	pcrs: () => parseCookieRawSync,
 	pcrsg: () => parseCookieRawSigned,
+	pcrl: () => parseCookieRawLazy,
 	bcj: () => buildCookieJar,
 	// `scv` async WebCrypto sign; `scvs` H3 sync `node:crypto` sign.
 	scv: () => signCookieValues,
@@ -86,6 +94,9 @@ export const HANDLER_PARAMS: Record<string, Resolver> = {
 	va: (c) => c.vali,
 	// returned-error forwarder
 	fe: () => forwardError,
+	// route-level error boundary
+	fre: () => finalizeRouteError,
+	rt: (c) => c.root,
 	// route hook
 	// `link(0, '')`
 	ho: (c) => c.hook,

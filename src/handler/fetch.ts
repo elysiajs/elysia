@@ -3,12 +3,17 @@ import { decodeComponent } from 'deuri'
 import { defaultAdapter } from '../adapter/constants'
 
 import type { AnyElysia } from '../base'
-import { getAsyncIndexes, cachedResponse, emptyResponse } from './utils'
+import {
+	getAsyncIndexes,
+	emptyResponse,
+	NOT_FOUND_BODY,
+	getNotFound
+} from './utils'
 
 import { createContext, type Context } from '../context'
 import { createErrorHandler } from './error'
 import { requestId, flattenChain, nullObject, isNotEmpty } from '../utils'
-import { handleSet } from '../adapter/utils'
+import { handleSet, materializeSetHeaders } from '../adapter/utils'
 import {
 	NotFound,
 	PROBLEM_JSON,
@@ -19,15 +24,15 @@ import { createTracer, unionTracePhases } from '../trace'
 
 import type { CompiledHandler, MaybePromise } from '../types'
 
-// RFC 9457 problem+json for the default unmatched-route 404
-const NOT_FOUND_BODY = JSON.stringify({
-	type: 'not-found',
-	title: 'Not Found',
-	status: 404
-})
-const getNotFound = cachedResponse(NOT_FOUND_BODY, 404, {
-	'content-type': PROBLEM_JSON
-})
+// Extract path and query-index from a full URL string.
+// Scalar params only — monomorphic so V8/JSC can inline at each call site.
+function extractPath(url: string, context: any, pathStart: number): string {
+	const s = url.indexOf('/', pathStart)
+	return (context.path = url.substring(
+		s,
+		(context.qi = url.indexOf('?', s)) === -1 ? url.length : context.qi
+	))
+}
 
 // Default 404 that still emits `Elysia.headers` defaults / hook-set headers + cookies.
 function notFound(context: Context): Response {
@@ -37,7 +42,7 @@ function notFound(context: Context): Response {
 		handleSet(set)
 
 		if (!(set.headers as any)['content-type'])
-			(set.headers as any)['content-type'] = PROBLEM_JSON
+			(materializeSetHeaders(set) as any)['content-type'] = PROBLEM_JSON
 
 		return new Response(NOT_FOUND_BODY, {
 			status: 404,
@@ -144,10 +149,11 @@ function findRoute(
 		}
 	}
 
-	const methodMap = map[request.method]
+	const method = request.method
+	const methodMap = map[method]
 	let handler: CompiledHandler | undefined = methodMap?.[path]
 
-	if (!handler)
+	if (!handler) {
 		if (
 			!strictPath &&
 			path.length > 1 &&
@@ -161,23 +167,16 @@ function findRoute(
 				handler = anyMap?.[path] ?? anyMap?.[loose]
 			}
 		} else handler = map['*']?.[path]
-
-	if (handler) {
-		const r = handler(context)
-		return r instanceof Promise
-			? r.catch(catchError(context, handleError, afterResponse))
-			: r
 	}
 
-	const found = router?.find(request.method, path) ?? router?.find('*', path)
+	if (handler) return handler(context)
+
+	const found = router?.find(method, path) ?? router?.find('*', path)
 
 	if (found) {
 		context.params = decodeParams(found.params)
 
-		const r = found.store(context)
-		return r instanceof Promise
-			? r.catch(catchError(context, handleError, afterResponse))
-			: r
+		return found.store(context)
 	}
 
 	if (hasError) throw new NotFound()
@@ -290,13 +289,15 @@ export function createFetchHandler(
 					if (status !== undefined) context.set.status = status
 
 					queueMicrotask(async () => {
-						if (afterResponses)
+						if (afterResponses) {
+							materializeSetHeaders(context.set)
 							for (let i = 0; i < afterResponses.length; i++)
 								try {
 									await afterResponses[i](context as any)
 								} catch (e) {
 									console.error(e)
 								}
+						}
 
 						if (traceAfterResponsePhase) {
 							let cache = (context as any).trace as
@@ -338,27 +339,26 @@ export function createFetchHandler(
 				}
 			: undefined
 
+	app['~finalizeError'] = (context, error) =>
+		finalizeError(context, handleError, afterResponse, error)
+
 	if (traceRequestPhase) {
 		const onRequests = hook?.request ?? []
 		const asyncIndexes = onRequests.length
 			? getAsyncIndexes(onRequests)
 			: undefined
 
-		return async (request: Request): Promise<Response> => {
+		return async (
+			request: Request,
+			server?: unknown
+		): Promise<Response> => {
 			const context = new Context(request)
-			if (request.signal.aborted)
-				return emptyResponse.clone() as Response
+			materializeSetHeaders(context.set)
+			if (request.signal.aborted) return emptyResponse.clone() as Response
 
-			const url = request.url,
-				s = url.indexOf('/', pathStart)
-			context.path = url.substring(
-				s,
-				// @ts-expect-error
-				(context.qi = url.indexOf('?', s)) === -1
-					? url.length
-					: // @ts-expect-error
-						context.qi
-			)
+			extractPath(request.url, context, pathStart)
+			// @ts-expect-error
+			context.server = server ?? null
 
 			context.rid = requestId()
 
@@ -411,10 +411,12 @@ export function createFetchHandler(
 					if (result !== undefined) {
 						for (let j = 0; j < traceLength; j++)
 							trace[j].r(requestReports[j])
-						const response = mapResponse(
+
+						const response = (await mapResponse(
 							result,
-							context.set
-						) as Response
+							context.set,
+							context
+						)) as Response
 
 						afterResponse?.(context)
 						return response
@@ -455,22 +457,18 @@ export function createFetchHandler(
 		const asyncIndexes = getAsyncIndexes(onRequests)
 
 		if (asyncIndexes)
-			return async (request: Request): Promise<Response> => {
+			return async (
+				request: Request,
+				server?: unknown
+			): Promise<Response> => {
 				const context = new Context(request)
+				materializeSetHeaders(context.set)
 				if (request.signal.aborted)
 					return emptyResponse.clone() as Response
 
-				const url = request.url,
-					s = url.indexOf('/', pathStart)
-
-				context.path = url.substring(
-					s,
-					// @ts-expect-error
-					(context.qi = url.indexOf('?', s)) === -1
-						? url.length
-						: // @ts-expect-error
-							context.qi
-				)
+				extractPath(request.url, context, pathStart)
+				// @ts-expect-error
+				context.server = server ?? null
 
 				try {
 					for (let i = 0; i < onRequests.length; i++) {
@@ -478,19 +476,17 @@ export function createFetchHandler(
 							? await onRequests[i](context)
 							: onRequests[i](context)
 
-						// A hook may synchronously return a Promise the
-						// heuristic didn't flag; await it before deciding
-						// short-circuit vs continue.
 						if (result instanceof Promise) result = await result
 
 						if (request.signal.aborted)
 							return emptyResponse.clone() as Response
 
 						if (result !== undefined) {
-							const response = mapResponse(
+							const response = (await mapResponse(
 								result,
-								context.set
-							) as Response
+								context.set,
+								context
+							)) as Response
 
 							afterResponse?.(context)
 							return response
@@ -519,22 +515,14 @@ export function createFetchHandler(
 				}
 			}
 
-		return (request: Request): MaybePromise<Response> => {
+		return (request: Request, server?: unknown): MaybePromise<Response> => {
 			const context = new Context(request)
-			if (request.signal.aborted)
-				return emptyResponse.clone() as Response
+			materializeSetHeaders(context.set)
+			if (request.signal.aborted) return emptyResponse.clone() as Response
 
-			const url = request.url,
-				s = url.indexOf('/', pathStart)
-
-			context.path = url.substring(
-				s,
-				// @ts-expect-error
-				(context.qi = url.indexOf('?', s)) === -1
-					? url.length
-					: // @ts-expect-error
-						context.qi
-			)
+			extractPath(request.url, context, pathStart)
+			// @ts-expect-error
+			context.server = server ?? null
 
 			try {
 				for (let i = 0; i < onRequests.length; i++) {
@@ -545,8 +533,18 @@ export function createFetchHandler(
 					if (result !== undefined) {
 						const response = mapResponse(
 							result,
-							context.set
-						) as Response
+							context.set,
+							context
+						) as Response | Promise<Response>
+
+						if (response instanceof Promise)
+							return response.then(
+								(response) => {
+									afterResponse?.(context)
+									return response
+								},
+								catchError(context, handleError, afterResponse)
+							)
 
 						afterResponse?.(context)
 						return response
@@ -576,23 +574,15 @@ export function createFetchHandler(
 		}
 	}
 
-	// Fuck DRY, this is the hotest path
-	// so I'm inline the entire thing, ~4-5ns faster on M1
-	return (request: Request): MaybePromise<Response> => {
+	return (request: Request, server?: unknown): MaybePromise<Response> => {
 		const context = new Context(request)
-		const url = request.url,
-			s = url.indexOf('/', pathStart)
+		const path = extractPath(request.url, context, pathStart)
+		// @ts-expect-error
+		context.server = server ?? null
 
-		const path = (context.path = url.substring(
-			s,
-			// @ts-expect-error
-			(context.qi = url.indexOf('?', s)) === -1
-				? url.length
-				: // @ts-expect-error
-					context.qi
-		))
+		const method = request.method
 
-		if (hasWS && request.method === 'GET') {
+		if (hasWS && method === 'GET') {
 			const handler = map['WS']?.[path]
 			const found =
 				handler === undefined && hasDynamicWS
@@ -638,63 +628,40 @@ export function createFetchHandler(
 			}
 		}
 
-		const methodMap = map[request.method]
+		const methodMap = map[method]
 		let handler: CompiledHandler | undefined = methodMap?.[path]
+		if (handler) return handler(context)
 
-		try {
+		if (
+			!strictPath &&
+			path.length > 1 &&
+			path.charCodeAt(path.length - 1) === 47
+		) {
+			const loose = path.slice(0, -1)
+			handler = methodMap?.[loose]
 			if (!handler) {
-				if (
-					!strictPath &&
-					path.length > 1 &&
-					path.charCodeAt(path.length - 1) === 47
-				) {
-					const loose = path.slice(0, -1)
-					handler = methodMap?.[loose]
-					if (!handler) {
-						const anyMap = map['*']
-						handler = anyMap?.[path] ?? anyMap?.[loose]
-					}
-				} else {
-					const anyMap = map['*']
-					handler = anyMap?.[path]
-				}
+				const anyMap = map['*']
+				handler = anyMap?.[path] ?? anyMap?.[loose]
 			}
+		} else handler = map['*']?.[path]
 
-			if (handler) {
-				const r = handler(context)
-				return r instanceof Promise
-					? r.catch(catchError(context, handleError, afterResponse))
-					: r
-			}
+		if (handler) return handler(context)
 
-			const result =
-				router?.find(request.method, path) ?? router?.find('*', path)
+		const result = router?.find(method, path) ?? router?.find('*', path)
 
-			if (result) {
-				context.params = decodeParams(result.params)
+		if (result) {
+			context.params = decodeParams(result.params)
 
-				const r = result.store(context)
-				return r instanceof Promise
-					? r.catch(catchError(context, handleError, afterResponse))
-					: r
-			}
-		} catch (error) {
-			return finalizeError(
-				context,
-				handleError,
-				afterResponse,
-				error as Error
-			)
+			return result.store(context)
 		}
 
-		if (hasError) {
+		if (hasError)
 			return finalizeError(
 				context,
 				handleError,
 				afterResponse,
 				new NotFound()
 			)
-		}
 
 		afterResponse?.(context, 404)
 		return notFound(context)

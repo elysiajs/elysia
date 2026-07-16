@@ -411,6 +411,10 @@ describe('Error lifecycle', () => {
 	})
 
 	it('handle cookie signature error', async () => {
+		//   lazy verify: signature is verified on first VALUE access, not at
+		// parse time. The handler must read `.value` for the InvalidCookie to throw.
+		// (A route that obtains the handle but never reads the value no longer 400s —
+		// covered by test/cookie/lazy-verify.test.ts.)
 		const app = new Elysia({
 			cookie: { secrets: 'secrets', sign: ['session'] }
 		})
@@ -418,7 +422,7 @@ describe('Error lifecycle', () => {
 				if (error instanceof InvalidCookie)
 					return 'Where is the signature?'
 			})
-			.get('/', ({ cookie: { session } }) => '')
+			.get('/', ({ cookie: { session } }) => session.value)
 
 		const root = await app.handle(
 			new Request('http://localhost/', {
@@ -672,7 +676,7 @@ describe('Error lifecycle', () => {
 	})
 })
 
-// F36: error enumeration is lazy. typebox's interpreted Errors() walk is
+// error enumeration is lazy. typebox's interpreted Errors() walk is
 // O(body) per failure, so throw sites pass a thunk and ValidationError only
 // runs it when something reads `errors` / `message` / `customError` — an
 // error handler returning a constant never pays the walk.
@@ -797,7 +801,7 @@ describe('Lazy validation error enumeration', () => {
 	})
 })
 
-// F37: the default 422 payload echoes the offending value back (`found`).
+// the default 422 payload echoes the offending value back (`found`).
 // A large body was 1:1 reflection amplification (attacker-driven egress,
 // no auth needed) plus an extra O(body) serialization per failure — the echo
 // is now scoped to the failing sub-value once the body exceeds the limit,

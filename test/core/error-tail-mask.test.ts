@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test'
 
-// H22: the COMPILED error tail (jit.ts) must mirror the interpreted path's
+// the COMPILED error tail (jit.ts) must mirror the interpreted path's
 // production 5xx-message mask (src/handler/error.ts fallbackErrorResponse). The
 // mask depends on runtime NODE_ENV, which the tail links as `isprod` — so each
 // scenario runs in a fresh `bun` process with NODE_ENV pre-set.
@@ -35,7 +35,7 @@ const run = async (nodeEnv: string): Promise<Record<string, Scenario>> => {
 	return JSON.parse(stdout.trim()) as Record<string, Scenario>
 }
 
-describe('compiled error tail — production 5xx message mask (H22)', () => {
+describe('compiled error tail — production 5xx message mask', () => {
 	it('masks 5xx error.message in production, mirroring the interpreted path', async () => {
 		const r = await run('production')
 
@@ -66,7 +66,7 @@ describe('compiled error tail — production 5xx message mask (H22)', () => {
 		expect(r.fiveHundred.body).toContain('hunter2')
 	})
 
-	it('H22: a sync-throwing toResponse() falls back to the ORIGINAL error, not the inner throw', async () => {
+	it('a sync-throwing toResponse() falls back to the ORIGINAL error, not the inner throw', async () => {
 		// WHY: the interpreted path wraps toResponse() in try/catch and, on a sync
 		// throw, responds from the ORIGINAL error (5xx-mask). The compiled tail had
 		// no try/catch, so the inner throw escaped and re-entered fetch-level

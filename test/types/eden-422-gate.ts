@@ -1,7 +1,7 @@
 import { Elysia, t } from '../../src'
 import { expectTypeOf } from 'expect-type'
 
-// M33: a parametric route WITHOUT validators has no validation step at
+// a parametric route WITHOUT validators has no validation step at
 // runtime — its Eden response union must not advertise a phantom 422.
 
 // parametric, no validators — must NOT have 422

@@ -197,7 +197,7 @@ describe('Cookie - Unchanged Values', () => {
 		expect(setCookieHeaders[0]).toContain('id')
 	})
 
-	// Regression (perf audit F2 + F22): object change detection compares
+	// Performance regression: object change detection compares
 	// serialized values directly (the fnv1a #hash cache is gone) and Cookie
 	// instances are memoized per jar — an equal-but-not-identical object
 	// written through SEPARATE jar accesses must still suppress the
@@ -217,7 +217,7 @@ describe('Cookie - Unchanged Values', () => {
 		expect(res.headers.getAll('set-cookie').length).toBe(1)
 	})
 
-	// Regression (perf audit F22): dropping the hash shortcut must not break
+	// Performance regression: dropping the hash shortcut must not break
 	// ACTUAL changes — a second write with a different object must win
 	it('should send the latest value when object value changes across writes', async () => {
 		const app = new Elysia().post('/rewrite', ({ cookie: { data } }) => {

@@ -379,7 +379,7 @@ describe('Cookie Response', () => {
 		expect(res.getSetCookie()).toEqual([])
 	})
 
-	// Regression (perf audit F2): buildCookieJar memoizes Cookie instances
+	// Performance regression: buildCookieJar memoizes Cookie instances
 	// per request jar — repeated accesses return the same instance so
 	// change-detection state survives across accesses
 	it('memoizes Cookie instances per request jar', async () => {
@@ -402,7 +402,7 @@ describe('Cookie Response', () => {
 		})
 	})
 
-	// Regression (perf audit F2): request-cookie store entries (defaults
+	// Performance regression: request-cookie store entries (defaults
 	// already merged at parse) are now passed to Cookie by reference instead
 	// of re-merged per access — an attribute-only write must keep emitting
 	// the exact same Set-Cookie bytes

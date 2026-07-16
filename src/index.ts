@@ -23,7 +23,13 @@ export {
 	TypeSystem,
 	type FileTypeDetector
 } from './type'
-export { Capture as Manifest, Compiled } from './compile/aot'
+export {
+	Capture as Manifest,
+	Compiled,
+	type AotFingerprint,
+	type CompilerSession,
+	type ProgramId
+} from './compile/aot'
 export { file, ElysiaFile } from './universal/file'
 export { StatusMap, StatusMapBack } from './constants'
 export { Validator, StandardValidator, MultiValidator } from './validator'

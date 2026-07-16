@@ -20,8 +20,7 @@ import { file } from '../../src/universal/file'
 // OUT-OF-BAND: build `src/index.ts` with `bun build --target=node` and run a
 // plain-`node` server that serves health -> missing-file -> health; before the
 // fix HEALTH_2 never responds (process exits 1), after the fix the server
-// survives (SERVER_SURVIVED, exit 0). See design/stable-fable/findings/
-// fetch-universal-1.md.
+// survives (SERVER_SURVIVED, exit 0).
 describe('file() on a missing path', () => {
 	const MISSING = '/tmp/__elysia_does_not_exist_' + Date.now() + '.bin'
 

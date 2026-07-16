@@ -1,4 +1,5 @@
 import type { BaseCookie } from './types'
+import { resolvePendingCookie } from './crypto'
 
 const FORWARDED_KEYS = [
 	'expires',
@@ -39,7 +40,10 @@ export class Cookie<T = any> implements BaseCookie {
 	}
 
 	get cookie() {
-		return this.#setRef.cookie?.[this.#name] ?? this.#initial
+		const c = this.#setRef.cookie?.[this.#name] ?? this.#initial
+		if (c && '~unsign' in c)
+			resolvePendingCookie(c as Record<string, any>, this.#name)
+		return c
 	}
 
 	set cookie(jar: BaseCookie) {
@@ -50,7 +54,11 @@ export class Cookie<T = any> implements BaseCookie {
 		const j = this.#jar
 		if (!(this.#name in j)) j[this.#name] = this.#initial
 
-		return j[this.#name]
+		const entry = j[this.#name]
+		if (entry && '~unsign' in entry)
+			resolvePendingCookie(entry as Record<string, any>, this.#name)
+
+		return entry
 	}
 
 	protected set setCookie(jar: BaseCookie) {

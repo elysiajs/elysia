@@ -6,6 +6,7 @@ setTimeout(() => {
 }, 5000)
 
 const { Elysia, file, t } = require('elysia')
+const { resumeEmit } = require('elysia/experimental/resume')
 const adapterUtils = require('elysia/adapter/utils')
 const compiled = require('elysia/compiled')
 const { mkdtemp, readFile, rm, writeFile } = require('node:fs/promises')
@@ -20,6 +21,9 @@ if (
 
 if (!('validators' in compiled) || !('handlers' in compiled))
 	throw new Error('❌ CommonJS Node.js compiled subpath failed')
+
+if (typeof resumeEmit.emitResume !== 'function')
+	throw new Error('❌ CommonJS Node.js experimental/resume subpath failed')
 
 const app = new Elysia().get(
 	'/',
@@ -55,7 +59,7 @@ const main = async () => {
 
 		if (!(value instanceof Uint8Array))
 			throw new Error(
-				`❌ C14: stream chunk is ${value?.constructor?.name ?? typeof value}, expected Uint8Array`
+				`❌ stream chunk is ${value?.constructor?.name ?? typeof value}, expected Uint8Array`
 			)
 
 		chunks.push(value)
@@ -64,7 +68,7 @@ const main = async () => {
 	const text = chunks.map((c) => new TextDecoder().decode(c)).join('')
 	if (text !== 'hello world')
 		throw new Error(
-			`❌ C14: stream text is "${text}", expected "hello world"`
+			`❌ stream text is "${text}", expected "hello world"`
 		)
 
 	console.log('✅ CommonJS Node.js stream chunks are Uint8Array')

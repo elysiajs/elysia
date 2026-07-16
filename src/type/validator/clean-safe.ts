@@ -1,4 +1,5 @@
 // ! This module must be typebox free
+import { dangerousKeys } from '../../constants'
 
 export function schemaSome(
 	schema: any,
@@ -12,7 +13,9 @@ export function schemaSome(
 
 	const props = schema.properties
 	if (props)
-		for (const k in props) if (schemaSome(props[k], test, seen)) return true
+		for (const k in props)
+			if (Object.hasOwn(props, k) && schemaSome(props[k], test, seen))
+				return true
 
 	const items = schema.items
 	if (Array.isArray(items)) {
@@ -39,6 +42,17 @@ export function schemaSome(
 
 	return false
 }
+
+export const schemaHasDangerousProperties = (schema: any) =>
+	schemaSome(schema, (node) => {
+		const properties = node.properties
+		if (!properties) return false
+
+		for (const key of dangerousKeys)
+			if (Object.hasOwn(properties, key)) return true
+
+		return false
+	})
 
 export const schemaContainsRef = (node: any, seen = new WeakSet()) =>
 	schemaSome(node, (n) => !!n.$ref, seen)

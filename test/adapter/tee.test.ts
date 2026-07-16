@@ -2,10 +2,10 @@ import { describe, it, expect } from 'bun:test'
 import { tee } from '../../src/adapter/utils'
 import { Elysia } from '../../src'
 
-// H15: tee() drains the source AHEAD of the consumers (the afterResponse/trace
+// tee() drains the source AHEAD of the consumers (the afterResponse/trace
 // timing contract) but bounds the unconsumed window so a long/infinite stream
 // can't materialise.
-describe('tee() bounded drain-ahead (H15)', () => {
+describe('tee() bounded drain-ahead', () => {
 	it('caps how far the producer races ahead of the slowest branch', async () => {
 		let produced = 0
 		async function* src() {
@@ -55,10 +55,10 @@ describe('tee() bounded drain-ahead (H15)', () => {
 		expect(got).toEqual([0, 1, 2])
 	})
 
-	// H9 — the window cap was denominated in ENTRIES only: 64 x 1MB chunks =
+	// the window cap was denominated in ENTRIES only: 64 x 1MB chunks =
 	// 68MB pinned per slow-client stream. The producer must also gate on a
 	// byte cap, whichever hits first.
-	it('caps the window in bytes, not just entries (H9)', async () => {
+	it('caps the window in bytes, not just entries', async () => {
 		let produced = 0
 		async function* megachunks() {
 			while (true) {
@@ -86,16 +86,16 @@ describe('tee() bounded drain-ahead (H15)', () => {
 		await drained
 	})
 
-	// H9/C2 regression — the H9 test above uses a SLOW client, so both branches
-	// never drain to the byte-cap boundary and the resume-gate interaction is
-	// never stressed. A FAST consumer draining both branches past the 4MiB cap
+	// The slow-client test above never drains both branches to the byte-cap
+	// boundary, so it does not exercise the resume-gate interaction.
+	// A fast consumer draining both branches past the 4MiB cap
 	// within <8 large chunks used to WEDGE: `wakeAll()` runs trims before the
 	// producer parks, so a deferred splice never freed the consumed prefix, the
 	// resume gate read an inflated window and stayed shut, and the producer
-	// parked forever — afterResponse/trace never fired, Context pinned (the C2
+	// parked forever — afterResponse/trace never fired, Context pinned (the
 	// leak the rewrite fixed). Guarded by a wall-clock timeout so a wedge fails
 	// loud instead of hanging the suite.
-	it('does not wedge when a fast consumer drains both branches past the byte cap (H9/C2)', async () => {
+	it('does not wedge when a fast consumer drains both branches past the byte cap', async () => {
 		async function* megachunks() {
 			for (let i = 0; i < 30; i++) yield new Uint8Array(1024 * 1024)
 		}
@@ -119,7 +119,7 @@ describe('tee() bounded drain-ahead (H15)', () => {
 		expect(counts).toEqual([30, 30])
 	})
 
-	it('streams every chunk of a large-chunk response and fires afterResponse once (H9/C2 e2e)', async () => {
+	it('streams every chunk of a large-chunk response and fires afterResponse once (end to end)', async () => {
 		let afterResponse = 0
 
 		const app = new Elysia()
@@ -153,11 +153,11 @@ describe('tee() bounded drain-ahead (H15)', () => {
 		expect(afterResponse).toBe(1)
 	})
 
-	// C2 — branches were async generators: parked at an in-body await, their
+	// branches were async generators: parked at an in-body await, their
 	// .return() queued until the STALLED source produced again = never. The
 	// abort-unwind (afterResponse/trace, Context release) hangs off branch-0
 	// return, so it must take effect synchronously without another chunk.
-	it('unwinds on branch-0 return while the source is stalled (C2)', async () => {
+	it('unwinds on branch-0 return while the source is stalled', async () => {
 		let observerDone = false
 		let hang!: () => void
 
@@ -190,7 +190,7 @@ describe('tee() bounded drain-ahead (H15)', () => {
 		hang()
 	})
 
-	it('fires afterResponse when the client aborts a stalled stream (C2 e2e)', async () => {
+	it('fires afterResponse when the client aborts a stalled stream (end to end)', async () => {
 		let afterResponse = 0
 		let hang!: () => void
 

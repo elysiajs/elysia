@@ -1,6 +1,85 @@
 import { env } from '../universal'
 import { nullObject } from '../utils'
+import packageJson from '../../package.json'
 import type { CoercePlan } from '../type/coerce'
+
+export const AOT_MANIFEST_FORMAT = 3
+export const AOT_ABI = `${packageJson.version}:${AOT_MANIFEST_FORMAT}`
+
+export interface AotFingerprint {
+	abi: string
+}
+
+export interface ProgramId {
+	readonly _: unique symbol
+}
+
+export const createProgramId = (): ProgramId => ({}) as ProgramId
+
+export function createAotFingerprint(): AotFingerprint {
+	return { abi: AOT_ABI }
+}
+
+export interface CompilerSession {
+	readonly sucroseCache: Map<number, { content: string; inference: unknown }>
+	capture?: Map<string, CapturedValidator>
+	handlerCapture?: Map<string, CapturedHandler>
+	app?: object
+	external?: true
+	explicitCapture?: true
+}
+
+let activeSession: CompilerSession | undefined
+
+const newCompilerSession = (): CompilerSession => ({
+	sucroseCache: new Map()
+})
+
+export function beginCompilerSession(app: object): CompilerSession {
+	const session = activeSession ?? (activeSession = newCompilerSession())
+	if (env.ELYSIA_AOT_BUILD && !session.external) {
+		session.external = true
+		session.capture = new Map()
+	}
+
+	if (session.app && session.app !== app)
+		throw new Error('[Elysia] Another compiler session is already active.')
+
+	session.app = app
+	;(app as { ['~compilerSession']?: CompilerSession })['~compilerSession'] =
+		session
+
+	return session
+}
+
+export function endCompilerSession(
+	app: object,
+	session: CompilerSession,
+	failed = false
+) {
+	const holder = app as { ['~compilerSession']?: CompilerSession }
+	if (holder['~compilerSession'] === session)
+		delete holder['~compilerSession']
+
+	if (session.app === app) session.app = undefined
+	if (session.external && (!failed || session.explicitCapture)) return
+
+	session.sucroseCache.clear()
+	session.capture = undefined
+	session.handlerCapture = undefined
+	if (activeSession === session) activeSession = undefined
+}
+
+export const getCompilerSession = () => activeSession
+
+/** @internal deterministic session/capture assertions. */
+export const getCompilerSessionDiagnostics = () => ({
+	active: activeSession !== undefined,
+	appAttached: activeSession?.app !== undefined,
+	validators: activeSession?.capture?.size ?? 0,
+	handlers: activeSession?.handlerCapture?.size ?? 0,
+	sucrose: activeSession?.sucroseCache.size ?? 0
+})
 
 export type ValidatorSlot =
 	| 'body'
@@ -116,6 +195,23 @@ export interface CompiledSnapshot {
 	lazyGroupOf: Record<string, Record<string, number>> | undefined
 	builtGroups: number[]
 	planRebuilder: ((original: unknown, plan: CoercePlan) => any) | undefined
+	registered: CompiledProgramRegistration | undefined
+	claimed: boolean
+	programs: WeakMap<ProgramId, CompiledProgram>
+}
+
+export interface CompiledProgramRegistration {
+	bf: 1
+	fingerprint: AotFingerprint
+	validators?: ValidatorManifest
+	handlers?: HandlerManifest
+	lazyGroups?: Array<() => ValidatorManifest>
+	lazyGroupOf?: Record<string, Record<string, number>>
+	planRebuilder?: (original: unknown, plan: CoercePlan) => any
+}
+
+interface CompiledProgram extends CompiledProgramRegistration {
+	builtGroups: Set<number>
 }
 
 /**
@@ -180,7 +276,52 @@ let lazyGroups: Array<() => ValidatorManifest> | undefined
 let lazyGroupOf: Record<string, Record<string, number>> | undefined
 const builtGroups = new Set<number>()
 
+let registered: CompiledProgramRegistration | undefined
+let claimed = false
+let programs = new WeakMap<ProgramId, CompiledProgram>()
+
+const programFor = (id?: ProgramId) => (id ? programs.get(id) : undefined)
+
+const fingerprintMismatch = (
+	manifest: CompiledProgramRegistration,
+	actual: AotFingerprint
+) => {
+	const differences: string[] = []
+	const expected = manifest.fingerprint
+
+	if (manifest.bf !== 1)
+		differences.push(`bf (manifest ${manifest.bf}, app 1)`)
+	if (expected.abi !== actual.abi)
+		differences.push(`abi (manifest ${expected.abi}, app ${actual.abi})`)
+
+	return differences
+}
+
 export abstract class Compiled {
+	static register(manifest: CompiledProgramRegistration) {
+		registered = manifest
+		claimed = false
+	}
+
+	static claim(id: ProgramId, fingerprint: AotFingerprint): boolean {
+		if (!registered || claimed) return false
+
+		const manifest = registered
+		const differences = fingerprintMismatch(manifest, fingerprint)
+		if (differences.length)
+			throw new Error(
+				`[elysia-aot] Registered manifest fingerprint mismatch: ${differences.join('; ')}.`
+			)
+
+		claimed = true
+		registered = undefined
+		programs.set(id, {
+			...manifest,
+			builtGroups: new Set()
+		})
+		return true
+	}
+
 	static get reconstruct(): ReconstructImpl | undefined {
 		return reconstructImpl
 	}
@@ -195,6 +336,17 @@ export abstract class Compiled {
 
 	static set handlers(manifest: HandlerManifest) {
 		handlers = manifest
+	}
+
+	static getHandler(
+		id: ProgramId | undefined,
+		method: string,
+		path: string
+	): FrozenHandler | undefined {
+		const program = programFor(id)
+		return program
+			? program.handlers?.[method]?.[path]
+			: handlers?.[method]?.[path]
 	}
 
 	static get validators(): ValidatorManifest | undefined {
@@ -233,33 +385,77 @@ export abstract class Compiled {
 	static getValidator(
 		method: string,
 		path: string,
-		slot: ValidatorSlot
+		slot: ValidatorSlot,
+		id?: ProgramId
 	): FrozenValidator | undefined {
-		let e = validators?.[method]?.[path]?.[slot]
+		const program = programFor(id)
+		const programGroupOf = program?.lazyGroupOf
+
+		let programValidators = program?.validators
+		let e = programValidators?.[method]?.[path]?.[slot]
+
+		if (program) {
+			if (e !== undefined || !programGroupOf) return e
+
+			const g = programGroupOf[method]?.[path]
+			if (g !== undefined && !program.builtGroups.has(g)) {
+				program.builtGroups.add(g)
+				const slice = program.lazyGroups![g]!()
+
+				programValidators ??= program.validators =
+					nullObject() as ValidatorManifest
+
+				for (const m in slice) {
+					const into = (programValidators[m] ??= nullObject() as any)
+					Object.assign(into, slice[m])
+				}
+
+				e = programValidators?.[method]?.[path]?.[slot]
+			}
+
+			return e
+		}
+
+		e = validators?.[method]?.[path]?.[slot]
 		if (e !== undefined || !lazyGroupOf) return e
 
 		const g = lazyGroupOf[method]?.[path]
 		if (g !== undefined && !builtGroups.has(g)) {
 			builtGroups.add(g)
 			const slice = lazyGroups![g]!()
+
 			for (const m in slice) {
 				const into = (validators![m] ??= nullObject() as any)
 				Object.assign(into, slice[m])
 			}
+
 			e = validators?.[method]?.[path]?.[slot]
 		}
+
 		return e
 	}
 
 	static hasValidator(
 		method: string,
 		path: string,
-		slot: ValidatorSlot
-	): boolean {
+		slot: ValidatorSlot,
+		id?: ProgramId
+	) {
+		const program = programFor(id)
+		if (program)
+			return (
+				program.validators?.[method]?.[path]?.[slot] !== undefined ||
+				program.lazyGroupOf?.[method]?.[path] !== undefined
+			)
+
 		return (
 			validators?.[method]?.[path]?.[slot] !== undefined ||
 			lazyGroupOf?.[method]?.[path] !== undefined
 		)
+	}
+
+	static getPlanRebuilder(id?: ProgramId) {
+		return programFor(id)?.planRebuilder ?? planRebuilder
 	}
 
 	/** @internal preserve registry around in-process AOT analysis */
@@ -270,7 +466,10 @@ export abstract class Compiled {
 			lazyGroups,
 			lazyGroupOf,
 			builtGroups: [...builtGroups],
-			planRebuilder
+			planRebuilder,
+			registered,
+			claimed,
+			programs
 		}
 	}
 
@@ -281,8 +480,13 @@ export abstract class Compiled {
 		lazyGroups = snapshot.lazyGroups
 		lazyGroupOf = snapshot.lazyGroupOf
 		builtGroups.clear()
+
 		for (const group of snapshot.builtGroups) builtGroups.add(group)
+
 		planRebuilder = snapshot.planRebuilder
+		registered = snapshot.registered
+		claimed = snapshot.claimed
+		programs = snapshot.programs
 	}
 
 	/** @internal test isolation */
@@ -293,6 +497,9 @@ export abstract class Compiled {
 		lazyGroupOf = undefined
 		builtGroups.clear()
 		planRebuilder = undefined
+		registered = undefined
+		claimed = false
+		programs = new WeakMap()
 	}
 }
 
@@ -371,8 +578,6 @@ export interface CapturedValidator {
 	bridgeFree?: boolean
 }
 
-let capture: Map<string, CapturedValidator> | undefined
-
 function captureEntry({
 	method,
 	path,
@@ -384,7 +589,9 @@ function captureEntry({
 }) {
 	if (!isValidatorCapturing()) return
 
-	capture ??= new Map()
+	const capture = activeSession?.capture
+	if (!capture) return
+
 	const k = `${method}_${path}_${slot}`
 
 	let e = capture.get(k)
@@ -401,21 +608,36 @@ const aotActivationError = new Error(
 export function beginValidatorCapture() {
 	if (captureImpl === undefined) throw aotActivationError
 
-	if (capture !== undefined)
+	if (activeSession?.capture !== undefined)
 		throw new Error('[elysia-aot]: A capture session is already active.')
 
-	capture = new Map()
+	if (activeSession && !activeSession.external)
+		throw new Error('[elysia-aot]: A compiler session is already active.')
+
+	const session = activeSession ?? (activeSession = newCompilerSession())
+	session.external = true
+	session.explicitCapture = true
+	session.capture = new Map()
 }
 
 export function abortCapture() {
-	capture = undefined
-	handlerCapture = undefined
+	if (!activeSession?.external) return
+
+	activeSession.capture = undefined
+	activeSession.handlerCapture = undefined
+	activeSession.sucroseCache.clear()
+	activeSession = undefined
 }
 
 // @internal test isolation
 export function endValidatorCapture() {
-	const captured = capture ? [...capture.values()] : []
-	capture = undefined
+	const session = activeSession
+	const captured = session?.capture ? [...session.capture.values()] : []
+	if (session) session.capture = undefined
+	if (session?.external && !session.app && !session.handlerCapture) {
+		session.sucroseCache.clear()
+		activeSession = undefined
+	}
 
 	return captured
 }
@@ -427,18 +649,25 @@ export interface CapturedHandler {
 	code: string
 }
 
-let handlerCapture: Map<string, CapturedHandler> | undefined
-
 function captureHandler(v: CapturedHandler) {
 	if (!isValidatorCapturing()) return
 
-	handlerCapture ??= new Map()
-	handlerCapture.set(`${v.method}\0${v.path}`, v)
+	const session = activeSession
+	if (!session) return
+	;(session.handlerCapture ??= new Map()).set(`${v.method}\0${v.path}`, v)
 }
 
 export function endHandlerCapture(): CapturedHandler[] {
-	const captured = handlerCapture ? [...handlerCapture.values()] : []
-	handlerCapture = undefined
+	const session = activeSession
+	const captured = session?.handlerCapture
+		? [...session.handlerCapture.values()]
+		: []
+
+	if (session) session.handlerCapture = undefined
+	if (session?.external && !session.app && !session.capture) {
+		session.sucroseCache.clear()
+		activeSession = undefined
+	}
 
 	return captured
 }
@@ -455,12 +684,12 @@ const captureGet = (loc: {
 	method: string
 	path: string
 	slot: ValidatorSlot
-}) => capture?.get(`${loc.method}_${loc.path}_${loc.slot}`)
+}) => activeSession?.capture?.get(`${loc.method}_${loc.path}_${loc.slot}`)
 
 const isAotBuildEnv = () => !!env.ELYSIA_AOT_BUILD
 
 const isValidatorCapturing = (): boolean => {
-	if (capture !== undefined) {
+	if (activeSession?.capture !== undefined) {
 		if (captureImpl === undefined) throw aotActivationError
 
 		return true

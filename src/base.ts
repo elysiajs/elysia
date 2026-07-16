@@ -7,7 +7,17 @@ import {
 	localMacroRoot,
 	resolveLocalHook
 } from './compile/handler'
-import { Capture } from './compile/aot'
+import {
+	beginCompilerSession,
+	Compiled,
+	createAotFingerprint,
+	createProgramId,
+	endCompilerSession,
+	Capture,
+	type AotFingerprint,
+	type CompilerSession,
+	type ProgramId
+} from './compile/aot'
 import { buildWSRoute } from './ws/route'
 import type {
 	WSLocalHook,
@@ -19,6 +29,13 @@ import { ListenCallback, Serve, Server } from './universal'
 import { isBun } from './universal/constants'
 
 import { isDynamicRegex, needEncodeRegex } from './constants'
+import {
+	buildRouteTable,
+	routeRow,
+	RouteFlag,
+	type RouteTable
+} from './route-table'
+import type { Generation } from './generation'
 import { BunAdapter } from './adapter/bun'
 import {
 	clonePlainDeep,
@@ -50,6 +67,7 @@ import {
 import type { TRef, TSchema } from 'typebox'
 import type { AnySchema } from './type'
 import { Ref as tRef } from './type/bridge'
+import { snapshotHookSchemas, snapshotSchema } from './schema-snapshot'
 
 import type { TraceHandler } from './trace'
 
@@ -124,31 +142,23 @@ import type {
 	LocalHookReturn,
 	PluginHookReturn,
 	GlobalHookReturn,
-	GuardHookSingleton
+	ScopedHookReturn,
+	ScopedMapDeriveReturn,
+	GuardHookSingleton,
+	LazyComposeEntry,
+	StaticMapAliases
 } from './types'
 import type { ElysiaStatus } from './error'
 import type { Context, LifecycleContext, ErrorContext } from './context'
 
-const useNodesBuffer: ChainNode[] = []
-
 export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
 
-// A plain absorbed route needs only identity distinct from its root. Keep this
-// object deliberately property-free: route compilation treats missing local
-// hook/macro state as empty, while `instance !== root` preserves root-hook
-// composition. Eligibility is centralized in #compactRouteOwner below.
+const useNodesBuffer: ChainNode[] = []
 const plainRouteOwner = Object.freeze(nullObject()) as AnyElysia
-
-interface StaticMapAliases {
-	method: string
-	paths: string[]
-}
-
 const emptyHistory = Object.freeze([]) as readonly HistoryEntry[]
 
 const canRegisterLoose = (path: string, isDynamic: boolean) =>
-	!isDynamic &&
-	(path.length === 0 || path.charCodeAt(path.length - 1) === 47)
+	!isDynamic && (path.length === 0 || path.charCodeAt(path.length - 1) === 47)
 
 export class Elysia<
 	const in out BasePath extends string = '',
@@ -210,7 +220,12 @@ export class Elysia<
 	#cachedHistory?: readonly HistoryEntry[]
 	server?: Server
 
+	#lazyPlan?: LazyComposeEntry[]
+	#lazyPlanBase?: number
+	#flushingLazyPlan?: boolean
+
 	get history(): readonly HistoryEntry[] {
+		if (this.#lazyPlan) this.#flushLazyPlan()
 		if (this.#cachedHistory) return this.#cachedHistory
 		if (!this.#declaredRoutes?.length) return emptyHistory
 
@@ -235,6 +250,7 @@ export class Elysia<
 	}
 
 	get ['~routes'](): readonly InternalRoute[] {
+		if (this.#lazyPlan) this.#flushLazyPlan()
 		if (!this.#declaredRoutes?.length) return []
 
 		const routes = this.#declaredRoutes
@@ -283,14 +299,28 @@ export class Elysia<
 		[method: string]: { [path: string]: CompiledHandler } | undefined
 	}
 
+	'~routeTable'?: RouteTable
+
 	'~hasWS'?: boolean
 	'~hasDynamicWS'?: boolean
 	'~hasTrace'?: boolean
+	'~finalizeError'?: (
+		context: Context,
+		error: Error
+	) => MaybePromise<Response>
+	'~programId': ProgramId
+	'~aotFingerprint'?: AotFingerprint
+	'~compilerSession'?: CompilerSession
+
+	'~generation'?: Generation
+
+	'~introspect'?: boolean
 
 	'~scopeChild'?: boolean
 	'~scopeChildren'?: AnyElysia[]
 
 	constructor(config?: ElysiaConfig<BasePath, Scope>) {
+		this['~programId'] = createProgramId()
 		this['~config'] = config
 		this['~Prefix'] = config?.prefix as BasePath
 		if (this['~Prefix'] && !this['~Prefix'].startsWith('/'))
@@ -305,6 +335,7 @@ export class Elysia<
 	}
 
 	get routes(): PublicRoute[] {
+		if (this.#lazyPlan) this.#flushLazyPlan()
 		if (!this.#declaredRoutes?.length) return []
 
 		if (this.#cachedRoutes) return this.#cachedRoutes
@@ -545,6 +576,7 @@ export class Elysia<
 		name: string,
 		value: unknown
 	): this {
+		this.#assertMutable(field === 'store' ? 'state' : 'decorate')
 		const ext = this.#ext
 		const fresh = !ext[field]
 		const target = (ext[field] ??= nullObject()) as Record<string, unknown>
@@ -792,6 +824,7 @@ export class Elysia<
 	}
 
 	headers(headers: Record<string, string>) {
+		this.#assertMutable('headers')
 		const ext = this.#ext
 
 		if (ext.headers) Object.assign(ext!.headers, headers)
@@ -805,6 +838,7 @@ export class Elysia<
 		fn: UnwrapArray<AppHook[Event]>,
 		scope: EventScope = this['~config']?.as as EventScope
 	): this {
+		this.#assertMutable('on' + (type[0].toUpperCase() + type.slice(1)))
 		const added: Partial<AppHook> = nullObject()
 		;(added as any)[type] = fn
 
@@ -889,6 +923,17 @@ export class Elysia<
 			>
 		>
 	): this
+	parse<const HookScope extends EventScope>(
+		scope: HookScope,
+		fn: MaybeArray<
+			BodyHandler<
+				MergeSchema<{}, {}, BasePath>,
+				HookContextSingleton<Singleton, Ephemeral, Volatile>,
+				undefined,
+				HookScope
+			>
+		>
+	): this
 	parse(scopeOrFnOrName: any, fn?: any): this {
 		if (fn === undefined && typeof scopeOrFnOrName === 'string') {
 			const named = this['~ext']?.parser?.[scopeOrFnOrName]
@@ -933,6 +978,7 @@ export class Elysia<
 		Ephemeral,
 		Volatile
 	> {
+		this.#assertMutable('parser')
 		const ext = this.#ext
 		const parsers = (ext.parser ??= nullObject() as Record<
 			string,
@@ -958,6 +1004,7 @@ export class Elysia<
 	 * ```
 	 */
 	setup(handler: MaybeArray<GracefulHandler<this>>): this {
+		this.#assertMutable('setup')
 		const arr = (this.#ext.setup ??= [])
 
 		if (Array.isArray(handler))
@@ -1003,6 +1050,17 @@ export class Elysia<
 				HookContextSingleton<Singleton, Ephemeral, Volatile>,
 				undefined,
 				'global'
+			>
+		>
+	): this
+	transform<const HookScope extends EventScope>(
+		scope: HookScope,
+		fn: MaybeArray<
+			TransformHandler<
+				MergeSchema<{}, {}, BasePath>,
+				HookContextSingleton<Singleton, Ephemeral, Volatile>,
+				undefined,
+				HookScope
 			>
 		>
 	): this
@@ -1090,6 +1148,32 @@ export class Elysia<
 		scope: 'global',
 		fn: Handler
 	): GlobalHookReturn<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile,
+		ElysiaHandlerToResponseSchemaAmbiguous<Handler>
+	>
+
+	beforeHandle<
+		const HookScope extends EventScope,
+		const Handler extends MaybeArray<
+			OptionalHandler<
+				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
+				HookContextSingleton<Singleton, Ephemeral, Volatile>,
+				undefined,
+				HookScope
+			>
+		>
+	>(
+		scope: HookScope,
+		fn: Handler
+	): ScopedHookReturn<
+		HookScope,
 		BasePath,
 		Scope,
 		Singleton,
@@ -1201,6 +1285,36 @@ export class Elysia<
 			>
 		) => MaybePromise<Derivative>
 	): GlobalHookReturn<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile,
+		ExtractErrorFromHandle<Derivative>,
+		ExcludeElysiaResponse<Derivative>
+	>
+
+	derive<
+		const HookScope extends EventScope,
+		const Derivative extends
+			| Record<string, unknown>
+			| ElysiaStatus<any, any, any>
+			| void
+	>(
+		scope: HookScope,
+		transform: (
+			context: LifecycleContext<
+				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
+				HookContextSingleton<Singleton, Ephemeral, Volatile>,
+				undefined,
+				HookScope
+			>
+		) => MaybePromise<Derivative>
+	): ScopedHookReturn<
+		HookScope,
 		BasePath,
 		Scope,
 		Singleton,
@@ -1372,6 +1486,36 @@ export class Elysia<
 		Volatile
 	>
 
+	mapDerive<
+		const HookScope extends EventScope,
+		const Derivative extends
+			| Record<string, unknown>
+			| ElysiaStatus<any, any, any>
+			| void
+	>(
+		scope: HookScope,
+		transform: (
+			context: LifecycleContext<
+				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
+				HookContextSingleton<Singleton, Ephemeral, Volatile>,
+				undefined,
+				HookScope
+			>
+		) => MaybePromise<Derivative>
+	): ScopedMapDeriveReturn<
+		HookScope,
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile,
+		ExtractErrorFromHandle<Derivative>,
+		ExcludeElysiaResponse<Derivative>
+	>
+
 	mapDerive(scopeOrFn: EventScope | Function, fn?: Function): any {
 		const result = this.#onBranch(
 			'beforeHandle',
@@ -1483,6 +1627,32 @@ export class Elysia<
 		ElysiaHandlerToResponseSchemaAmbiguous<Handler>
 	>
 
+	afterHandle<
+		const HookScope extends EventScope,
+		const Handler extends MaybeArray<
+			AfterHandler<
+				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
+				HookContextSingleton<Singleton, Ephemeral, Volatile>,
+				undefined,
+				HookScope
+			>
+		>
+	>(
+		scope: HookScope,
+		fn: Handler
+	): ScopedHookReturn<
+		HookScope,
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile,
+		ElysiaHandlerToResponseSchemaAmbiguous<Handler>
+	>
+
 	afterHandle(scopeOrFn: any, fn?: any): any {
 		return this.#onBranch('afterHandle', scopeOrFn, fn)
 	}
@@ -1526,6 +1696,17 @@ export class Elysia<
 			>
 		>
 	): this
+	mapResponse<const HookScope extends EventScope>(
+		scope: HookScope,
+		fn: MaybeArray<
+			MapResponse<
+				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
+				HookContextSingleton<Singleton, Ephemeral, Volatile>,
+				undefined,
+				HookScope
+			>
+		>
+	): this
 	mapResponse(scopeOrFn: any, fn?: any): this {
 		return this.#onBranch('mapResponse', scopeOrFn, fn)
 	}
@@ -1559,6 +1740,15 @@ export class Elysia<
 			HookContextSingleton<Singleton, Ephemeral, Volatile>,
 			undefined,
 			'global'
+		>
+	): this
+	afterResponse<const HookScope extends EventScope>(
+		scope: HookScope,
+		fn: AfterResponseHandler<
+			HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
+			HookContextSingleton<Singleton, Ephemeral, Volatile>,
+			undefined,
+			HookScope
 		>
 	): this
 	afterResponse(scopeOrFn: any, fn?: any): this {
@@ -1782,6 +1972,36 @@ export class Elysia<
 		Volatile,
 		ElysiaHandlerToResponseSchemaAmbiguous<Handler>
 	>
+	error<
+		const HookScope extends EventScope,
+		const Handler extends MaybeArray<
+			ErrorHandler<
+				[
+					...Definitions['error'],
+					...Ephemeral['error'],
+					...Volatile['error']
+				],
+				{},
+				Singleton & {
+					derive: Partial<Ephemeral['derive'] & Volatile['derive']>
+				}
+			>
+		>
+	>(
+		scope: HookScope,
+		fn: Handler
+	): ScopedHookReturn<
+		HookScope,
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile,
+		ElysiaHandlerToResponseSchemaAmbiguous<Handler>
+	>
 
 	error<
 		const S extends EventScope,
@@ -1944,6 +2164,7 @@ export class Elysia<
 		fnOrError?: AnyErrorConstructor | EventFn<'error'> | unknown,
 		fn?: EventFn<'error'> | unknown
 	): AnyElysia {
+		this.#assertMutable('error')
 		switch (arguments.length) {
 			case 1:
 				if (scopeOrFnOrError && typeof scopeOrFnOrError === 'object') {
@@ -2023,6 +2244,10 @@ export class Elysia<
 	trace(scope: 'local', fn: TraceHandler<any, any>): this
 	trace(scope: 'plugin', fn: TraceHandler<any, any>): this
 	trace(scope: 'global', fn: TraceHandler<any, any>): this
+	trace<const HookScope extends EventScope>(
+		scope: HookScope,
+		fn: TraceHandler<any, any>
+	): this
 	trace(
 		scopeOrFn: EventScope | TraceHandler<any, any>,
 		fn?: TraceHandler<any, any>
@@ -2090,6 +2315,7 @@ export class Elysia<
 	>
 
 	as(target: 'plugin' | 'global'): any {
+		this.#assertMutable('as')
 		this.#as(this['~hookChain'], target === 'global' ? 'global' : 'plugin')
 		this.#cachedRoutes = undefined
 
@@ -3031,6 +3257,7 @@ export class Elysia<
 	}
 
 	#guard(scope: EventScope, hook: Partial<AnyLocalHook>): this {
+		hook = snapshotHookSchemas(hook)
 		hookToGuard(hook as any)
 
 		const trackFn = (fn: unknown) => {
@@ -3304,6 +3531,7 @@ export class Elysia<
 	>
 
 	group() {
+		this.#assertMutable('group')
 		const prefix = arguments[0] as string
 		const schemaOrRun = arguments[1] as
 			| Partial<AnyLocalHook>
@@ -3376,6 +3604,7 @@ export class Elysia<
 	}
 
 	#pushHook(_hook: Partial<AppHook>, scope?: EventScope): this {
+		this.#assertMutable('guard')
 		// fold derive into beforeHandle
 		let hook = _hook as any
 
@@ -3496,6 +3725,7 @@ export class Elysia<
 	>
 
 	macro(macro: Macro) {
+		this.#assertMutable('macro')
 		// `.macro(fn)` has no name to register under, and TS can't reject it
 		if (typeof macro === 'function')
 			throw new Error(
@@ -3972,11 +4202,13 @@ export class Elysia<
 
 	use(app: any): any {
 		if (!app) return this
+		this.#assertMutable('use')
 
 		if (typeof app === 'function') {
 			const prevBaseline = this.#macroBaseline
 			const baseline = new Set<string>()
 			const existingMacro = this['~ext']?.macro
+
 			if (existingMacro) for (const k in existingMacro) baseline.add(k)
 			this.#macroBaseline = baseline
 
@@ -3988,6 +4220,11 @@ export class Elysia<
 			}
 
 			if (result && typeof (result as any).then === 'function') {
+				if (this.#useLazyCompose)
+					throw new Error(
+						'[Elysia] experimental.lazyCompose does not support a functional `use` that returns a Promise (async plugin).'
+					)
+
 				const beforeMacro = new Map(
 					Object.entries(this['~ext']?.macro ?? nullObject())
 				)
@@ -4010,7 +4247,14 @@ export class Elysia<
 			return this
 		}
 
-		if (typeof app.then === 'function') return this.#useAsync(app)
+		if (typeof app.then === 'function') {
+			if (this.#useLazyCompose)
+				throw new Error(
+					'[Elysia] experimental.lazyCompose does not support `.use(Promise)`. Remove the flag for this instance or await the plugin before `.use`.'
+				)
+
+			return this.#useAsync(app)
+		}
 
 		if (Array.isArray(app)) {
 			for (const plugin of app) this.use(plugin)
@@ -4027,7 +4271,13 @@ export class Elysia<
 			return this.use(app.default)
 
 		if (app === this) return this
-		if (app.pending) return this.#useAsync(app.modules.then(() => app))
+		if (app.pending) {
+			if (this.#useLazyCompose)
+				throw new Error(
+					'[Elysia] experimental.lazyCompose does not support a pending (async) plugin. Remove the flag for this instance or await `plugin.modules` before `.use`.'
+				)
+			return this.#useAsync(app.modules.then(() => app))
+		}
 
 		this.#use(app)
 
@@ -4036,6 +4286,9 @@ export class Elysia<
 
 	#use(app: AnyElysia) {
 		let addedByThisCall: Set<number> | undefined
+
+		if (app['~introspect'] || app['~config']?.introspect)
+			this['~introspect'] = true
 
 		const name = app['~config']?.name
 		if (name) {
@@ -4096,62 +4349,30 @@ export class Elysia<
 
 		if (app['~hasTrace']) this['~hasTrace'] = true
 
-		if (app.#declaredRoutes?.length) {
+		if (app.#declaredRoutes?.length || app.#lazyPlan) {
 			if (app['~hasWS']) this['~hasWS'] = true
 
-			const preChain = this['~hookChain']
-
-			let lastChildChain: ChainNode | undefined
-			let lastCombined: ChainNode | undefined
-
-			for (let i = 0; i < app.#declaredRoutes.length; i++) {
-				const route = app.#declaredRoutes[i]
-				const owner = this.#compactRouteOwner(app, route)
-
-				const childChain = route[6]
-				let inheritedChain: ChainNode | undefined
-				if (childChain === undefined) inheritedChain = preChain
-				else if (preChain === undefined) inheritedChain = childChain
-				else if (childChain === lastChildChain)
-					inheritedChain = lastCombined
-				else {
-					lastChildChain = childChain
-					inheritedChain = lastCombined = {
-						combine: childChain,
-						over: preChain
-					}
+			if (this.#useLazyCompose) {
+				if (!this.#lazyPlan) {
+					this.#lazyPlan = []
+					this.#lazyPlanBase = this.#declaredRoutes?.length ?? 0
 				}
 
-				const path = this['~Prefix']
-					? joinPath(this['~Prefix'], route[1])
-					: route[1]
-
-				const macroScope =
-					route[7] ??
-					(this['~scopeChild'] &&
-					(route[3] as AnyElysia | undefined)?.['~scopeChild'] !==
-						true
-						? this
-						: undefined)
-
-				this.#registerRoute(
-					inheritedChain === childChain &&
-						!this['~Prefix'] &&
-						macroScope === route[7] &&
-						owner === route[3]
-						? route
-						: ([
-								route[0],
-								path,
-								route[2],
-								owner,
-								route[4],
-								route[5],
-								inheritedChain,
-								macroScope
-							] as unknown as InternalRoute),
-					name
-				)
+				this.#lazyPlan.push({
+					kind: 'use',
+					child: app,
+					preChain: this['~hookChain'],
+					childBaseLen: app.#lazyPlan
+						? (app.#lazyPlanBase ?? 0)
+						: (app.#declaredRoutes?.length ?? 0),
+					childPlan: app.#lazyPlan,
+					childPlanLen: app.#lazyPlan?.length ?? 0,
+					source: name
+				})
+			} else {
+				if (app.#lazyPlan) app.#flushLazyPlan()
+				if (app.#declaredRoutes?.length)
+					this.#emitChildRoutes(app, this['~hookChain'], name)
 			}
 		}
 
@@ -4407,13 +4628,229 @@ export class Elysia<
 		}
 	}
 
+	get #useLazyCompose() {
+		return (
+			(this['~config'] as any)?.experimental?.lazyCompose === true &&
+			!Capture.isCapturing() &&
+			!Capture.isAotBuildEnv()
+		)
+	}
+
+	#emitChildRoutes(
+		app: AnyElysia,
+		preChain: ChainNode | undefined,
+		name: string | undefined
+	) {
+		const declared = app.#declaredRoutes
+		if (!declared?.length) return
+
+		const limit = declared.length
+
+		let lastChildChain: ChainNode | undefined
+		let lastCombined: ChainNode | undefined
+
+		for (let i = 0; i < limit; i++) {
+			const route = declared[i]
+
+			const childChain = route[6]
+			let inheritedChain: ChainNode | undefined
+			if (childChain === undefined) inheritedChain = preChain
+			else if (preChain === undefined) inheritedChain = childChain
+			else if (childChain === lastChildChain)
+				inheritedChain = lastCombined
+			else {
+				lastChildChain = childChain
+				inheritedChain = lastCombined = {
+					combine: childChain,
+					over: preChain
+				}
+			}
+
+			this.#emitRoute(
+				route,
+				app,
+				this['~scopeChild'] ? this : undefined,
+				this['~Prefix'],
+				inheritedChain,
+				name
+			)
+		}
+	}
+
+	#emitRoute(
+		route: InternalRoute,
+		owner: AnyElysia,
+		macroScope: AnyElysia | undefined,
+		prefix: string | undefined,
+		inheritedChain: ChainNode | undefined,
+		source: string | undefined
+	) {
+		owner = this.#compactRouteOwner(owner, route)
+		const path = prefix ? joinPath(prefix, route[1]) : route[1]
+		macroScope =
+			route[7] ??
+			(macroScope &&
+			(route[3] as AnyElysia | undefined)?.['~scopeChild'] !== true
+				? macroScope
+				: undefined)
+
+		this.#registerRoute(
+			inheritedChain === route[6] &&
+				!prefix &&
+				macroScope === route[7] &&
+				owner === route[3]
+				? route
+				: ([
+						route[0],
+						path,
+						route[2],
+						owner,
+						route[4],
+						route[5],
+						inheritedChain,
+						macroScope
+					] as unknown as InternalRoute),
+			source
+		)
+	}
+
+	#emitLazyRoute(
+		route: InternalRoute,
+		owner: AnyElysia,
+		macroScope: AnyElysia | undefined,
+		accPrefix: string | undefined,
+		over: ChainNode | undefined,
+		source: string | undefined
+	) {
+		const childChain = route[6]
+		let inheritedChain: ChainNode | undefined
+		if (childChain === undefined) inheritedChain = over
+		else if (over === undefined) inheritedChain = childChain
+		else inheritedChain = { combine: childChain, over }
+
+		this.#emitRoute(
+			route,
+			owner,
+			macroScope,
+			accPrefix,
+			inheritedChain,
+			source
+		)
+	}
+
+	#emitLazyNode(
+		node: AnyElysia,
+		usingNode: AnyElysia,
+		accPrefix: string | undefined,
+		over: ChainNode | undefined,
+		macroScope: AnyElysia | undefined,
+		baseLen: number,
+		plan: LazyComposeEntry[] | undefined,
+		planLen: number,
+		source: string | undefined
+	) {
+		if (usingNode['~scopeChild']) macroScope = usingNode
+
+		const declared = node.#declaredRoutes
+		if (declared)
+			for (let i = 0; i < baseLen && i < declared.length; i++)
+				this.#emitLazyRoute(
+					declared[i],
+					node,
+					macroScope,
+					accPrefix,
+					over,
+					source
+				)
+
+		if (!plan) return
+
+		const childAccPrefix = node['~Prefix']
+			? accPrefix
+				? joinPath(accPrefix, node['~Prefix'])
+				: node['~Prefix']
+			: accPrefix
+
+		for (let i = 0; i < planLen && i < plan.length; i++) {
+			const entry = plan[i]
+			if (entry.kind === 'route') {
+				this.#emitLazyRoute(
+					entry.route,
+					node,
+					macroScope,
+					accPrefix,
+					over,
+					entry.source
+				)
+				continue
+			}
+
+			// Thread this use-edge's use-time chain snapshot as the new `over`.
+			const edgeOver =
+				entry.preChain === undefined
+					? over
+					: over === undefined
+						? entry.preChain
+						: { combine: entry.preChain, over }
+
+			this.#emitLazyNode(
+				entry.child,
+				node,
+				childAccPrefix,
+				edgeOver,
+				macroScope,
+				entry.childBaseLen,
+				entry.childPlan,
+				entry.childPlanLen,
+				entry.source
+			)
+		}
+	}
+
+	#flushLazyPlan() {
+		const plan = this.#lazyPlan
+		if (!plan) return
+
+		if (this.#flushingLazyPlan)
+			throw new Error(
+				'[Elysia] experimental.lazyCompose, cyclic plugin references are unsupported under the flag'
+			)
+
+		this.#flushingLazyPlan = true
+		this.#lazyPlan = undefined
+		this.#lazyPlanBase = 0
+
+		try {
+			const childAccPrefix = this['~Prefix']
+			for (let i = 0; i < plan.length; i++) {
+				const entry = plan[i]
+				if (entry.kind === 'route') {
+					this.#registerRoute(entry.route, entry.source)
+					continue
+				}
+
+				const edgeOver = entry.preChain
+
+				this.#emitLazyNode(
+					entry.child,
+					this as unknown as AnyElysia,
+					childAccPrefix,
+					edgeOver,
+					undefined,
+					entry.childBaseLen,
+					entry.childPlan,
+					entry.childPlanLen,
+					entry.source
+				)
+			}
+		} finally {
+			this.#flushingLazyPlan = false
+		}
+	}
+
 	#compactRouteOwner(app: AnyElysia, route: InternalRoute): AnyElysia {
-		// Only routes registered directly on this absorbed app are understood.
-		// Scope/group/nested owners must keep their original instance.
 		if (route[3] !== app) return route[3]
 
-		// WS and mounts have compiler paths beyond the plain HTTP handler. Route
-		// hooks also cover schemas, macros, parsing and mount metadata.
 		if (
 			route[0] === 'WS' ||
 			route[4] !== undefined ||
@@ -4423,13 +4860,9 @@ export class Elysia<
 		)
 			return route[3]
 
-		// AOT imports are built under this flag. Preserve real instances there so
-		// capture and replay always see the complete owner graph.
 		if (Capture.isAotBuildEnv() || Capture.isCapturing()) return route[3]
 
-		// This predicate is a compiler safety boundary. Any local route-affecting
-		// state makes the owner ineligible rather than teaching the sentinel about
-		// another Elysia property.
+		// compiler safety boundary
 		if (
 			app['~ext'] !== undefined ||
 			app['~hookChain'] !== undefined ||
@@ -4457,8 +4890,6 @@ export class Elysia<
 		)
 			return route[3]
 
-		// A name and seed affect only #childrenHash deduplication, which has
-		// already happened before route absorption. Other config is uncharacterized.
 		const config = app['~config'] as Record<string, unknown> | undefined
 		if (config)
 			for (const key in config)
@@ -4483,7 +4914,7 @@ export class Elysia<
 		})
 	}
 
-	get pending(): boolean {
+	get pending() {
 		return this.#pending > 0
 	}
 
@@ -4540,7 +4971,7 @@ export class Elysia<
 		this.#fetchFn = undefined
 		this.#routerBuilt = false
 
-		this.#buildRouter()
+		this.#buildRouter(false)
 	}
 
 	#add(
@@ -4554,7 +4985,9 @@ export class Elysia<
 		else if (path && path.charCodeAt(0) !== 47) path = '/' + path
 
 		const handler = hasHook ? fn : hookOrFn
-		const hook = hasHook ? (hookOrFn as Partial<AnyLocalHook>) : undefined
+		const hook = hasHook
+			? snapshotHookSchemas(hookOrFn as Partial<AnyLocalHook>)
+			: undefined
 
 		const appHook = this['~hookChain']
 
@@ -4569,7 +5002,26 @@ export class Elysia<
 		return this
 	}
 
+	#assertMutable(api: string) {
+		if (this['~generation'] === undefined) return
+
+		throw new Error(`[Elysia] .${api}() called after the app was sealed`)
+	}
+
 	#registerRoute(route: InternalRoute, source?: string) {
+		this.#assertMutable('route')
+
+		if (this.#lazyPlan) {
+			this.#lazyPlan.push({ kind: 'route', route, source })
+			this.#cachedHistory = undefined
+			this.#cachedRoutes = undefined
+			this.#compiled = undefined
+			this.#fetchFn = undefined
+			this.#routerBuilt = false
+
+			return
+		}
+
 		const routes = (this.#declaredRoutes ??= [])
 		const sequence = routes.length
 		routes.push(route)
@@ -4653,6 +5105,7 @@ export class Elysia<
 		name: string | Record<string, AnySchema> | Function,
 		model?: AnySchema
 	): AnyElysia {
+		this.#assertMutable('model')
 		const models = (this.#ext.models ??= nullObject() as Record<
 			string,
 			AnySchema
@@ -4667,8 +5120,7 @@ export class Elysia<
 
 						if ('~standard' in value) models[key] = value
 						else {
-							if (Object.isFrozen(value))
-								value = Object.create(value)
+							value = snapshotSchema(value)
 
 							// @ts-expect-error
 							value.$id ??= key
@@ -4689,8 +5141,7 @@ export class Elysia<
 					let value = remapped[key]
 					if ('~standard' in (value as any)) next[key] = value
 					else {
-						if (Object.isFrozen(value))
-							value = Object.create(value as object)
+						value = snapshotSchema(value)
 						;(value as any).$id ??= key
 						next[key] = value
 					}
@@ -4701,7 +5152,7 @@ export class Elysia<
 			}
 
 			case 'string':
-				models[name] = model!
+				models[name] = snapshotSchema(model!)
 
 				return this
 		}
@@ -6257,10 +6708,14 @@ export class Elysia<
 			try {
 				handler = compileHandler(route, this, precomputedStatic)
 			} catch (error) {
-				throw new Error(
+				const routeError = new Error(
 					`[Elysia] Failed to compile route ${route[0]} ${route[1]}: ${(error as Error)?.message ?? error}`,
 					{ cause: error }
 				)
+				const finalize = this['~finalizeError']
+				if (finalize) return finalize(context as Context, routeError)
+
+				throw routeError
 			}
 
 			this.#compiled![index] = handler
@@ -6475,9 +6930,16 @@ export class Elysia<
 	}
 
 	#routerBuilt = false
-	#buildRouter() {
-		if (this.#routerBuilt) return
-		if (!this.#declaredRoutes?.length) return
+	#buildRouter(seal = false) {
+		if (this.#lazyPlan) this.#flushLazyPlan()
+		if (this.#routerBuilt) {
+			if (seal && this['~generation'] === undefined)
+				this.#publishGeneration()
+
+			return
+		}
+
+		const compilerSession = beginCompilerSession(this)
 
 		const previousMap = this['~map']
 		const previousRouter = this['~router']
@@ -6491,10 +6953,14 @@ export class Elysia<
 				? { ...previousWebsocket }
 				: previousWebsocket
 
+		const previousGeneration = this['~generation']
+
 		this['~map'] = undefined
 		this['~router'] = undefined
 		this.#compiled = previousCompiled?.slice()
 		this['~hasDynamicWS'] = undefined
+		this['~generation'] = undefined
+		let buildSucceeded = false
 
 		try {
 			this.#buildRouterUnsafe()
@@ -6512,11 +6978,15 @@ export class Elysia<
 			}
 
 			this.#routerBuilt = true
+			if (seal) this.#publishGeneration()
+
+			buildSucceeded = true
 		} catch (error) {
 			this['~map'] = previousMap
 			this['~router'] = previousRouter
 			this.#compiled = previousCompiled
 			this['~hasDynamicWS'] = previousHasDynamicWS
+			this['~generation'] = previousGeneration
 
 			if (config) {
 				this['~config'] = config
@@ -6525,7 +6995,34 @@ export class Elysia<
 			} else this['~config'] = undefined
 
 			throw error
+		} finally {
+			endCompilerSession(this, compilerSession, !buildSucceeded)
 		}
+	}
+
+	#publishGeneration() {
+		this['~generation'] = {
+			abi: (this['~aotFingerprint'] ??= createAotFingerprint()),
+			routeTable: this['~routeTable']!,
+			introspect:
+				(this['~config'] as { introspect?: boolean } | undefined)
+					?.introspect === true || this['~introspect'] === true,
+			'~config': this['~config'],
+			'~ext': this['~ext'],
+			'~hookChain': this['~hookChain'],
+			'~scopeChildren': this['~scopeChildren'],
+			'~applyMacro': this['~applyMacro'].bind(this),
+			'~programId': this['~programId']
+		}
+	}
+
+	['~newGeneration']() {
+		this.#fetchFn = undefined
+		this.#routerBuilt = false
+		this['~generation'] = undefined
+		this.#buildRouter(true)
+
+		return this
 	}
 
 	#buildRouterUnsafe() {
@@ -6533,22 +7030,34 @@ export class Elysia<
 
 		this.#initMap()
 		const methods = this['~map']!
-		const routes = this['~routes']
-		const length = routes.length
+		const table = (this['~routeTable'] = buildRouteTable(
+			this['~routes'],
+			this.#routeSources
+		))
+		const method = table.method
+		const path = table.path
+		const flags = table.flags
+		const length = table.length
 
 		for (let i = 0; i < length; i++) {
-			const route = routes[i]
-			if (this.#routeMayHaveModelRef(route))
-				this.#assertRouteModelRefs(route, route[0])
+			const row = routeRow(table, i)
+			if (this.#routeMayHaveModelRef(row))
+				this.#assertRouteModelRefs(row, method[i])
 		}
+
+		if (length)
+			Compiled.claim(
+				this['~programId'],
+				(this['~aotFingerprint'] = createAotFingerprint())
+			)
 
 		const isLoose = this['~config']?.strictPath !== true
 
 		let hasLooseCandidate = false
 		if (isLoose)
 			for (let i = 0; i < length; i++) {
-				const path = routes[i][1]
-				if (canRegisterLoose(path, isDynamicRegex.test(path))) {
+				const p = path[i]
+				if (canRegisterLoose(p, (flags[i] & RouteFlag.Dynamic) !== 0)) {
 					hasLooseCandidate = true
 					break
 				}
@@ -6559,9 +7068,8 @@ export class Elysia<
 
 		if (explicitPaths)
 			for (let i = 0; i < length; i++) {
-				const route = routes[i]
-				const m = route[0]
-				const p = route[1]
+				const m = method[i]
+				const p = path[i]
 
 				let set = explicitPaths.get(m)
 				if (!set) explicitPaths.set(m, (set = new Set()))
@@ -6574,31 +7082,31 @@ export class Elysia<
 			}
 
 		for (let i = 0; i < length; i++) {
-			const route: InternalRoute = routes[i]
-			const method = route[0]
-			const path = route[1]
+			const routeMethod = method[i]
+			const routePath = path[i]
+			const routeFlags = flags[i]
 
-			if ((route[0] as any) === 'WS') {
-				const ws = buildWSRoute(route, this)
+			if ((routeFlags & RouteFlag.WS) !== 0) {
+				const ws = buildWSRoute(routeRow(table, i), this)
 				const handler = ws[0] as unknown as CompiledHandler
 				const options = ws[1]
 
-				if (isDynamicRegex.test(path)) {
+				if ((routeFlags & RouteFlag.Dynamic) !== 0) {
 					;(this['~router'] ??= new Memoirist<CompiledHandler>({
 						loosePath: isLoose
-					})).add('WS', path, handler, false)
+					})).add('WS', routePath, handler)
 
 					this['~hasDynamicWS'] = true
 				} else {
 					this.#initMap()
 					const wsMap = (this['~map']!['WS'] ??= nullObject() as any)
-					wsMap[path] = handler
+					wsMap[routePath] = handler
 
 					if (isLoose) {
-						const loose = getLoosePath(path)
+						const loose = getLoosePath(routePath)
 
 						if (
-							loose !== path &&
+							loose !== routePath &&
 							!explicitPaths?.get('WS')?.has(loose)
 						)
 							wsMap[loose] = handler
@@ -6628,29 +7136,34 @@ export class Elysia<
 				continue
 			}
 
-			const isDynamic = isDynamicRegex.test(path)
-			const needsEncode = needEncodeRegex.test(path)
+			const isDynamic = (routeFlags & RouteFlag.Dynamic) !== 0
+			const needsEncode = needEncodeRegex.test(routePath)
 			const registerLoose =
-				isLoose && canRegisterLoose(path, isDynamic)
+				isLoose && canRegisterLoose(routePath, isDynamic)
 
 			const explicitMain = registerLoose
-				? explicitPaths?.get(method)
+				? explicitPaths?.get(routeMethod)
 				: undefined
 
 			if (!isDynamic && !needsEncode && !registerLoose) {
-				const map = (methods[method] ??= nullObject() as any)
+				const map = (methods[routeMethod] ??= nullObject() as any)
 
-				const handler = this.handler(i, precompile, route, undefined)
+				const handler = this.handler(
+					i,
+					precompile,
+					routeRow(table, i),
+					undefined
+				)
 
-				map[path] = handler
+				map[routePath] = handler
 
 				continue
 			}
 
-			const variants = [path]
+			const variants = [routePath]
 			if (needsEncode) {
-				const encoded = encodeURI(path)
-				if (encoded !== path) variants.push(encoded)
+				const encoded = encodeURI(routePath)
+				if (encoded !== routePath) variants.push(encoded)
 			}
 
 			const paths: string[] = []
@@ -6670,17 +7183,28 @@ export class Elysia<
 						loosePath: isLoose
 					}))
 
-				const handler = this.handler(i, precompile, route, undefined)
+				const handler = this.handler(
+					i,
+					precompile,
+					routeRow(table, i),
+					undefined
+				)
 
 				for (let p = 0; p < paths.length; p++)
-					router.add(method, paths[p], handler, false)
+					router.add(routeMethod, paths[p], handler)
 			} else {
-				const map = (methods[method] ??= nullObject() as any)
+				const map = (methods[routeMethod] ??= nullObject() as any)
 
-				const handler = this.handler(i, precompile, route, undefined, {
-					method,
-					paths
-				})
+				const handler = this.handler(
+					i,
+					precompile,
+					routeRow(table, i),
+					undefined,
+					{
+						method: routeMethod,
+						paths
+					}
+				)
 
 				for (let p = 0; p < paths.length; p++) map[paths[p]] = handler
 			}
@@ -6691,7 +7215,7 @@ export class Elysia<
 	get fetch() {
 		if (this.#fetchFn) return this.#fetchFn
 
-		this.#buildRouter()
+		this.#buildRouter(!this.#pending)
 		return (this.#fetchFn ??= applyHoc(this, createFetchHandler(this)))
 	}
 
@@ -6741,6 +7265,7 @@ export class Elysia<
 			...rest: any[]
 		) => MaybePromise<Response>
 	>(callback: WrapFn<T>): this {
+		this.#assertMutable('wrap')
 		if (this.#fetchFn && !this.#pending)
 			console.warn(
 				'[Elysia] .wrap() was called after the fetch handler was built'
@@ -6766,6 +7291,7 @@ export class Elysia<
 	 * ```
 	 */
 	cleanup(handler: MaybeArray<GracefulHandler<this>>): this {
+		this.#assertMutable('cleanup')
 		const arr = (this.#ext.cleanup ??= [])
 
 		if (Array.isArray(handler))

@@ -1,5 +1,5 @@
 /**
- * L06 — isRecordNumber must not classify an empty object `{}` as a numeric
+ * isRecordNumber must not classify an empty object `{}` as a numeric
  * status map.  `Object.keys({}).every(...)` is vacuously true, so before the
  * fix empty schemas (t.Any(), t.Unknown(), etc.) were misclassified — the
  * `.routes` getter skipped the `{ 200: schema }` wrap, producing incorrect
@@ -11,7 +11,7 @@ import { isRecordNumber } from '../../src/utils'
 import { t } from '../../src'
 import { Elysia } from '../../src'
 
-describe('L06 — isRecordNumber rejects empty objects', () => {
+describe('isRecordNumber rejects empty objects', () => {
 	it('returns false for an empty object (vacuous-true fix)', () => {
 		expect(isRecordNumber({})).toBe(false)
 	})

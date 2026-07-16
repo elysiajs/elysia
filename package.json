@@ -1,7 +1,7 @@
 {
 	"name": "elysia",
 	"description": "Ergonomic Framework for Human",
-	"version": "2.0.0-exp.42",
+	"version": "2.0.0-exp.43",
 	"author": {
 		"name": "saltyAom",
 		"url": "https://github.com/SaltyAom",
@@ -85,6 +85,11 @@
 			"import": "./dist/error.mjs",
 			"require": "./dist/error.js"
 		},
+		"./experimental/resume": {
+			"types": "./dist/experimental/resume.d.ts",
+			"import": "./dist/experimental/resume.mjs",
+			"require": "./dist/experimental/resume.js"
+		},
 		"./memory": {
 			"types": "./dist/memory.d.ts",
 			"import": "./dist/memory.mjs",
@@ -109,6 +114,16 @@
 			"types": "./dist/plugin/aot/vite.d.ts",
 			"import": "./dist/plugin/aot/vite.mjs",
 			"require": "./dist/plugin/aot/vite.js"
+		},
+		"./plugin/aot/unplugin": {
+			"types": "./dist/plugin/aot/unplugin.d.ts",
+			"import": "./dist/plugin/aot/unplugin.mjs",
+			"require": "./dist/plugin/aot/unplugin.js"
+		},
+		"./plugin/aot/rspack": {
+			"types": "./dist/plugin/aot/rspack.d.ts",
+			"import": "./dist/plugin/aot/rspack.mjs",
+			"require": "./dist/plugin/aot/rspack.js"
 		},
 		"./plugin/auto-head": {
 			"types": "./dist/plugin/auto-head.d.ts",
@@ -201,7 +216,7 @@
 	"license": "MIT",
 	"scripts": {
 		"test": "bun run test:functionality && bun run test:types && bun run test:node && bun run test:bundle",
-		"test:functionality": "bun test test && bun run test:imports",
+		"test:functionality": "bun run build && bun test test && bun run test:imports",
 		"test:imports": "bun run test/type-system/import.ts",
 		"test:types": "tsc --project tsconfig.test.json",
 		"test:node": "bun run build && npm install --prefix test/node/cjs && npm install --prefix test/node/esm/ && node test/node/cjs/index.js && node test/node/esm/index.js",
@@ -210,6 +225,11 @@
 		"bench": "bun run example/stress/run.ts",
 		"bench:quick": "bun run example/stress/run.ts --quick",
 		"bench:throughput": "bun run example/stress/throughput.ts",
+		"bench:d1": "bun run bench/d1/run.ts record",
+		"bench:d1:aa": "bun run bench/d1/run.ts aa",
+		"bench:d1:gate": "bun run bench/d1/run.ts gate",
+		"bench:d1:selftest": "bun run bench/d1/run.ts self-test",
+		"bench:d1:verify": "bun run bench/d1/run.ts verify",
 		"dev": "bun run --watch example/a.ts",
 		"build": "bun build.ts",
 		"release": "bun run test && bun publish"
@@ -223,11 +243,12 @@
 	"dependencies": {
 		"deuri": "^2.0.1",
 		"exact-mirror": "1.2.2",
-		"memoirist": "1.1.0"
+		"memoirist": "1.2.0"
 	},
 	"devDependencies": {
 		"@eslint/eslintrc": "^3.3.5",
 		"@eslint/js": "^10.0.1",
+		"@rspack/core": "^2.1.4",
 		"@types/bun": "^1.3.5",
 		"@typescript-eslint/eslint-plugin": "^8.30.1",
 		"@typescript-eslint/parser": "^8.30.1",
@@ -244,9 +265,11 @@
 		"openapi-types": "~12.1.3",
 		"prettier": "^3.5.3",
 		"rolldown-plugin-dts": "^0.24.0",
+		"rspack": "^0.1.1",
 		"tsdown": "^0.21.10",
 		"typebox": "1.3",
 		"typescript": "6",
+		"unplugin": "^3.3.0",
 		"unplugin-macros": "^0.20.2",
 		"valibot": "^1.1.0",
 		"zod": "^4.1.5"

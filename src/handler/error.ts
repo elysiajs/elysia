@@ -1,14 +1,14 @@
-import { getAsyncIndexes, cachedResponse } from './utils'
+import { getAsyncIndexes, getNotFound } from './utils'
 import { parseQueryFromURL } from '../parse-query'
 import {
 	NotFound,
-	PROBLEM_JSON,
 	ValidationError,
 	ElysiaStatus,
 	isProduction,
 	internalServerErrorResponse
 } from '../error'
 import { isNotEmpty } from '../utils'
+import { materializeSetHeaders } from '../adapter/utils'
 
 import type { Context } from '../context'
 import type { AppHook } from '../types'
@@ -42,11 +42,7 @@ function parseQuery(context: Context) {
 	})
 }
 
-const pristineNotFound = cachedResponse(
-	JSON.stringify({ type: 'not-found', title: 'Not Found', status: 404 }),
-	404,
-	{ 'content-type': PROBLEM_JSON }
-)
+const pristineNotFound = getNotFound
 
 const isPristineNotFound = (context: Context, error: any) =>
 	error instanceof NotFound &&
@@ -167,6 +163,7 @@ export function createErrorHandler(
 	const asyncIndexes = getAsyncIndexes(onErrors)
 	if (asyncIndexes)
 		return async (context: Context, error: Error) => {
+			materializeSetHeaders(context.set)
 			// @ts-expect-error
 			context.error = error
 			if (allowUnsafe && error instanceof ValidationError)
@@ -207,6 +204,7 @@ export function createErrorHandler(
 		}
 
 	return (context: Context, error: Error) => {
+		materializeSetHeaders(context.set)
 		// @ts-expect-error
 		context.error = error
 		if (allowUnsafe && error instanceof ValidationError)

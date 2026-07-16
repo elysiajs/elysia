@@ -54,7 +54,7 @@ describe('async setup readiness and awaited cleanup', () => {
 	})
 })
 
-describe('H16 — auto-HEAD never buffers an unknown-length body', () => {
+describe('auto-HEAD never buffers an unknown-length body', () => {
 	it('cancels the stream and omits content-length instead of reading it', async () => {
 		let pulled = 0
 
@@ -114,7 +114,7 @@ describe('H16 — auto-HEAD never buffers an unknown-length body', () => {
 	})
 })
 
-describe('L01 — cross-kind override replaces instead of silently no-oping', () => {
+describe('cross-kind override replaces instead of silently no-oping', () => {
 	it('decorate override replaces a primitive with an object', () => {
 		const app = new Elysia()
 			.decorate('config', 'legacy')
@@ -144,20 +144,29 @@ describe('L01 — cross-kind override replaces instead of silently no-oping', ()
 	})
 })
 
-describe('late-add dev warning', () => {
-	it('.compile() after late add recovers the route to 200', async () => {
+describe('late-add throws after seal', () => {
+	// Original intent: a `.get()` after the first request (once the fetch handler
+	// was materialized) produced a dev-only warning and silently rebuilt. Under
+	// the first request SEALS the app, so late authoring is retired in favour of a
+	// synchronous throw — the warning is superseded by the immutability contract.
+
+	it('.get() after the first request throws instead of silently rebuilding', async () => {
 		const app = new Elysia().get('/first', () => 'first')
-		await app.handle(req('/first'))
+		await app.handle(req('/first')) // seals the app
 
-		app.get('/late', () => 'late')
-		app.compile()
+		// Retired behavior: warn + silent invalidate + recover on next compile().
+		//  behavior: the sealed instance is immutable and the mutation throws.
+		expect(() => app.get('/late', () => 'late')).toThrow(
+			'after the app was sealed'
+		)
 
-		const res = await app.handle(req('/late'))
+		// The seal is intact: the routes registered before sealing still serve.
+		const res = await app.handle(req('/first'))
 		expect(res.status).toBe(200)
-		expect(await res.text()).toBe('late')
+		expect(await res.text()).toBe('first')
 	})
 
-	it('does not warn for routes added during async plugin registration', async () => {
+	it('authoring-then-serve (normal flow) neither throws nor warns', async () => {
 		const calls: string[] = []
 		const orig = console.warn
 		console.warn = (...args: any[]) => {
@@ -167,9 +176,9 @@ describe('late-add dev warning', () => {
 		}
 
 		try {
-			// An async plugin that adds a route: the route is registered
-			// while #pending > 0, so the warn gate must not fire even if
-			// the fetch handler was materialized before the plugin resolved.
+			// An async plugin that adds a route while still authorable (#pending > 0,
+			// pre-seal). Registering all routes BEFORE the first request is the
+			// sanctioned flow: it must not throw and must not warn.
 			let resolvePlugin!: (app: any) => void
 			const blocked = new Promise<void>((res) => {
 				resolvePlugin = res as any
@@ -184,46 +193,42 @@ describe('late-add dev warning', () => {
 				.get('/first', () => 'first')
 				.use(asyncPlugin)
 
-			// Materialize the router before the async plugin resolves.
-			await app.handle(req('/first'))
-
-			// Now resolve the plugin — #pending > 0 during the #add call.
+			// Resolve the plugin and drain BEFORE the first request — the app is
+			// still authorable, so the route registers without tripping the seal.
 			resolvePlugin(undefined)
 			await app.modules
 
-			// No late-add warning should have been emitted.
+			// Both routes serve; the drain did not seal, so this is the happy path.
+			expect((await app.handle(req('/first'))).status).toBe(200)
+			expect((await app.handle(req('/async-added'))).status).toBe(200)
 		} finally {
 			console.warn = orig
 		}
 
+		// No late-add warning should have been emitted on the normal flow.
 		expect(calls.length).toBe(0)
 	})
 
-	it('does not warn in production (NODE_ENV=production)', async () => {
+	it('late-add throws in production too (NODE_ENV=production)', async () => {
 		const prev = process.env.NODE_ENV
 		process.env.NODE_ENV = 'production'
 
-		const calls: string[] = []
-		const orig = console.warn
-		console.warn = (msg: string) => calls.push(msg)
-
 		try {
-			// Fresh app in production: no warn should fire even after materialization.
+			// The seal contract is not dev-only: a post-seal mutation throws in
+			// production as well (the retired warning was dev-only; the throw is not).
 			const app = new Elysia().get('/first', () => 'first')
-			await app.handle(req('/first'))
-			app.get('/late', () => 'late')
+			await app.handle(req('/first')) // seals
+
+			expect(() => app.get('/late', () => 'late')).toThrow(
+				'after the app was sealed'
+			)
 		} finally {
-			console.warn = orig
 			process.env.NODE_ENV = prev
 		}
-
-		// Filter to only Elysia late-add warnings.
-		const elysia = calls.filter((c) => c.includes('materialized'))
-		expect(elysia.length).toBe(0)
 	})
 })
 
-describe('L03 — custom method tokens are normalized to uppercase', () => {
+describe('custom method tokens are normalized to uppercase', () => {
 	it('.method with a lowercase token matches an uppercase Request.method', async () => {
 		const app = new Elysia().method('purge', '/cache', () => 'purged')
 

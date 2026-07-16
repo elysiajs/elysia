@@ -104,7 +104,7 @@ export function replaceDeriveContext(context: any, derivative: any) {
 	return next
 }
 
-export function deriveModeQueues(entries?: readonly DeriveEntry[]) {
+function deriveModeQueues(entries?: readonly DeriveEntry[]) {
 	if (!entries?.length) return
 
 	const queues = new Map<Function, boolean[]>()
@@ -590,7 +590,7 @@ export const mapError = /*#__PURE__*/ map<
 		`else if(c.set.status===undefined||c.set.status===200)c.set.status=500\n` +
 		schedule +
 		sign +
-		`return ${map}(_r,c.set,c.request)\n` +
+		`return _em(c,${map}(_r,c.set,c.request))\n` +
 		`}\n`
 	)
 })

@@ -3,7 +3,7 @@ import { Elysia } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
 
-// Regression coverage for codex-review H04: Promise handling must depend on the
+// Regression coverage for  : Promise handling must depend on the
 // *returned value*, not on function syntax. A hook (or Standard Schema) whose
 // synchronous body returns `new Promise(...)` must be awaited before the
 // framework decides whether to short-circuit. Previously the raw thenable was
@@ -12,7 +12,7 @@ import { req } from '../utils'
 // Each test asserts the intended lifecycle outcome (continue to handler / emit
 // the real error) — a plain `expect(status).toBe(200)` alone would still pass
 // against the buggy empty-200, so the body is asserted too.
-describe('Promise-returning hooks (H04)', () => {
+describe('Promise-returning hooks', () => {
 	it('.request() returning a Promise<undefined> continues to the handler', async () => {
 		const app = new Elysia()
 			// resolves to undefined -> must NOT short-circuit; the raw Promise

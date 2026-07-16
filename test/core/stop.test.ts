@@ -3,7 +3,7 @@ import { describe, expect, it } from 'bun:test'
 import { Elysia } from '../../src'
 
 describe('Stop', () => {
-	// serve-bun-2: BunAdapter.listen defers work into a queueMicrotask. If the
+	// BunAdapter.listen defers work into a queueMicrotask. If the
 	// app is stop()ed BEFORE that microtask runs (the common `listen(); stop()`
 	// of test teardown / a startup-error `finally`), stop() sets
 	// app.server = undefined, and the old microtask then re-`Bun.serve`d a

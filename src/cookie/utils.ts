@@ -4,36 +4,34 @@ import { parse } from './lib'
 import { Cookie } from './cookie'
 import { InvalidCookie } from './error'
 import { dangerousKeys } from '../constants'
-import { constantTimeEqual, nullObject } from '../utils'
+import { nullObject } from '../utils'
 
 import type { Context } from '../context'
 import type { BaseCookie, CookieOptions } from './types'
 import type { CompiledCookieConfig } from './config'
 import { compileCookieConfig, isCookieSigned } from './config'
 
-export function createCookieJar(
-	set: Context['set'],
-	store: Record<string, BaseCookie>,
-	initial?: Partial<BaseCookie>
-): Record<string, Cookie<unknown>> {
-	const cache: Record<string, Cookie<unknown>> = nullObject()
+import {
+	hasSyncHmac,
+	signCookieSyncImpl,
+	signCookie,
+	signCookieSync,
+	unsignCookie,
+	unsignCookieSync,
+	maybeJsonDecode,
+	rawJsonValue,
+	resolvePendingCookie
+} from './crypto'
 
-	return new Proxy(store, {
-		get(_, key: string) {
-			return (cache[key] ??= new Cookie(
-				key,
-				set,
-				key in store
-					? Object.assign(
-							nullObject(),
-							initial ?? nullObject(),
-							store[key]
-						)
-					: Object.assign(nullObject(), initial)
-			))
-		}
-	}) as Record<string, Cookie<unknown>>
-}
+// Re-export for the public barrel (src/cookie/index.ts) — byte-identical surface.
+export {
+	signCookie,
+	signCookieSync,
+	unsignCookie,
+	unsignCookieSync,
+	signCookieSubtle
+} from './crypto'
+export { hasSyncHmac } from './crypto'
 
 // export for test
 export async function parseCookie(
@@ -48,36 +46,13 @@ export async function parseCookie(
 	return buildCookieJar(set, raw, config)
 }
 
-const rawJsonValue = new WeakMap<object, string>()
-
-function maybeJsonDecode(value: unknown) {
-	if (typeof value === 'string' && value.length > 1) {
-		const starts = value.charCodeAt(0)
-		const ends = value.charCodeAt(value.length - 1)
-
-		if ((starts === 123 && ends === 125) || (starts === 91 && ends === 93))
-			try {
-				const parsed = JSON.parse(value)
-				if (parsed !== null && typeof parsed === 'object')
-					rawJsonValue.set(parsed, value)
-
-				return parsed
-			} catch {}
-	}
-
-	return value
-}
-
 function resolveSignSecrets(
 	name: string,
 	config: CompiledCookieConfig
 ): CompiledCookieConfig['globalSecrets'] | undefined {
 	const field = config.fields[name]
 	if (field?.sign) return field.secrets ?? config.globalSecrets
-	if (
-		config.globalSign === true ||
-		config.globalSignSet?.has(name) === true
-	)
+	if (config.globalSign === true || config.globalSignSet?.has(name) === true)
 		return config.globalSecrets
 }
 
@@ -100,6 +75,31 @@ export function parseCookieRawSync(
 		out[name] = maybeJsonDecode(
 			(decodeComponent(v) as unknown as string) ?? v
 		)
+	}
+
+	return out
+}
+
+export function parseCookieRawLazy(
+	cookieString: string | null | undefined,
+	config: CompiledCookieConfig
+): Record<string, unknown> {
+	const out: Record<string, unknown> = nullObject() as any
+	if (!cookieString) return out
+
+	const cookies = parse(cookieString, null)
+
+	for (const name in cookies) {
+		if (dangerousKeys.has(name)) continue
+
+		const v = cookies[name]
+		if (v === undefined) continue
+
+		const decoded = (decodeComponent(v) as unknown as string) ?? v
+		out[name] =
+			resolveSignSecrets(name, config) !== undefined
+				? decoded
+				: maybeJsonDecode(decoded)
 	}
 
 	return out
@@ -207,8 +207,9 @@ export function parseCookieRawSigned(
 export function buildCookieJar(
 	set: Context['set'],
 	raw: Record<string, unknown>,
-	config: CompiledCookieConfig
-): Record<string, Cookie<unknown>> {
+	config: CompiledCookieConfig,
+	lazySign?: 1
+) {
 	const store: Record<string, BaseCookie> = nullObject() as any
 
 	for (const name in raw) {
@@ -225,12 +226,26 @@ export function buildCookieJar(
 		if (entry.expires instanceof Date)
 			entry.expires = new Date(entry.expires.getTime())
 
-		const value = entry.value
-		if (value !== null && typeof value === 'object') {
-			const raw = rawJsonValue.get(value)
+		if (lazySign && typeof entry.value === 'string') {
+			const secrets = resolveSignSecrets(name, config)
+			if (secrets !== undefined) {
+				;(entry as any)['~unsign'] = secrets
+			} else {
+				const value = entry.value
+				if (value !== null && typeof value === 'object') {
+					const raw = rawJsonValue.get(value)
+					;(entry as any)['~raw'] =
+						raw !== undefined ? raw : JSON.stringify(value)
+				}
+			}
+		} else {
+			const value = entry.value
+			if (value !== null && typeof value === 'object') {
+				const raw = rawJsonValue.get(value)
 
-			;(entry as any)['~raw'] =
-				raw !== undefined ? raw : JSON.stringify(value)
+				;(entry as any)['~raw'] =
+					raw !== undefined ? raw : JSON.stringify(value)
+			}
 		}
 
 		store[name] = entry
@@ -251,6 +266,15 @@ export function buildCookieJar(
 							config.fields[key]?.defaults
 						)
 			))
+		},
+		getOwnPropertyDescriptor(target, key) {
+			const descriptor = Reflect.getOwnPropertyDescriptor(target, key)
+			const entry = descriptor?.value
+
+			if (entry && typeof entry === 'object' && '~unsign' in entry)
+				resolvePendingCookie(entry as Record<string, any>, String(key))
+
+			return descriptor
 		}
 	}) as Record<string, Cookie<unknown>>
 }
@@ -288,7 +312,6 @@ function collectSignPending(
 			throw new TypeError(
 				`Cookie field "${key}" is signed but no \`secrets\` is provided.`
 			)
-
 		;(pending ??= []).push([property, value as string, secret])
 	}
 
@@ -334,152 +357,4 @@ async function signPending(
 		const [property, value, secret] = pending[i]!
 		property.value = await signCookie(value, secret)
 	}
-}
-
-// eslint-disable-next-line sonarjs/slow-regex -- anchored, single-char class over base64 padding (≤2 chars); linear
-const removeTrailingEquals = /=+$/g
-const algorithm = { name: 'HMAC', hash: 'SHA-256' } as const
-const encoder = new TextEncoder()
-
-interface NodeCrypto {
-	createHmac: (
-		algorithm: string,
-		key: string
-	) => {
-		update: (data: string) => { digest: (encoding: 'base64') => string }
-	}
-}
-
-const nodeCrypto = (() => {
-	try {
-		return (globalThis.process as any)?.getBuiltinModule?.(
-			'node:crypto'
-		) as NodeCrypto
-	} catch {
-		return undefined
-	}
-})()
-
-export const hasSyncHmac = typeof nodeCrypto?.createHmac === 'function'
-
-function coerceValue(val: unknown): string {
-	if (typeof val === 'object') return JSON.stringify(val)
-	if (typeof val !== 'string') return val + ''
-
-	return val
-}
-
-const signCookieSyncImpl = (val: string, secret: string) =>
-	`${val}.${nodeCrypto!
-		.createHmac('sha256', secret)
-		.update(val)
-		.digest('base64')
-		.replace(removeTrailingEquals, '')}`
-
-// reuse cookie key
-const keyCache = new Map<string, Promise<CryptoKey>>()
-
-function importSecretKey(secret: string): Promise<CryptoKey> {
-	let key = keyCache.get(secret)
-	if (key) return key
-
-	if (keyCache.size >= 256) keyCache.clear()
-
-	key = crypto.subtle.importKey(
-		'raw',
-		encoder.encode(secret),
-		algorithm,
-		false,
-		['sign']
-	)
-
-	key.catch(() => {
-		if (keyCache.get(secret) === key) keyCache.delete(secret)
-	})
-
-	keyCache.set(secret, key)
-
-	return key
-}
-
-export async function signCookieSubtle(val: string, secret: string) {
-	const hmacBuffer = await crypto.subtle.sign(
-		'HMAC',
-		await importSecretKey(secret),
-		encoder.encode(val)
-	)
-
-	// Web-native base64: avoid Buffer (unavailable in no-Node environments such
-	// as Cloudflare Workers without nodejs_compat).
-	const b64 = btoa(String.fromCharCode(...new Uint8Array(hmacBuffer)))
-
-	return `${val}.${b64.replace(removeTrailingEquals, '')}`
-}
-
-export async function signCookie(val: string, secret: string | null) {
-	val = coerceValue(val)
-
-	if (secret === null || secret === undefined)
-		throw new TypeError('Secret key must be provided')
-
-	if (hasSyncHmac) return signCookieSyncImpl(val, secret)
-
-	return signCookieSubtle(val, secret)
-}
-
-/**
- * Synchronous signer for the compiled sync handler path. Callers MUST gate on
- * `hasSyncHmac` (the codegen does); throws otherwise rather than silently
- * degrading.
- */
-export function signCookieSync(val: string, secret: string | null): string {
-	val = coerceValue(val)
-
-	if (secret === null || secret === undefined)
-		throw new TypeError('Secret key must be provided')
-
-	if (!hasSyncHmac)
-		throw new Error('signCookieSync called without a sync HMAC available')
-
-	return signCookieSyncImpl(val, secret)
-}
-
-export async function unsignCookie(input: string, secret: string | null) {
-	if (typeof input !== 'string')
-		throw new TypeError('Signed cookie string must be provided.')
-
-	const dot = input.lastIndexOf('.')
-	if (dot === -1) {
-		if (secret === null) return input
-
-		return false
-	}
-
-	const tentativeValue = input.slice(0, dot)
-
-	if (secret === null) return false
-
-	const expectedInput = await signCookie(tentativeValue, secret)
-
-	return constantTimeEqual(expectedInput, input) ? tentativeValue : false
-}
-
-export function unsignCookieSync(input: string, secret: string | null) {
-	if (typeof input !== 'string')
-		throw new TypeError('Signed cookie string must be provided.')
-
-	const dot = input.lastIndexOf('.')
-	if (dot === -1) {
-		if (secret === null) return input
-
-		return false
-	}
-
-	const tentativeValue = input.slice(0, dot)
-
-	if (secret === null) return false
-
-	const expectedInput = signCookieSync(tentativeValue, secret)
-
-	return constantTimeEqual(expectedInput, input) ? tentativeValue : false
 }

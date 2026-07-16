@@ -789,14 +789,14 @@ describe('Standard Schema single-pass validation', () => {
 	})
 })
 
-// C12: a Standard Schema whose `~standard.validate` returns a Promise, used
+// a Standard Schema whose `~standard.validate` returns a Promise, used
 // inside a standalone guard (the MultiValidator path), was silently SKIPPED —
 // `From` checked `!(q instanceof Promise)` and then read `q.value` off the
 // unresolved Promise (undefined). MultiValidator now marks declared-async
 // Standard Schema members as async so the JIT awaits `From`, and each member
 // result is awaited before its issues/value is read. Invalid input must 422,
 // not pass.
-describe('Standard Schema async standalone (C12)', () => {
+describe('Standard Schema async standalone', () => {
 	// an async vendor: rejects unless `id` is a number
 	const asyncNumberId = {
 		'~standard': {

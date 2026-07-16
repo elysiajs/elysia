@@ -22,7 +22,7 @@ import {
 } from '../../src/cookie/utils'
 
 /**
- * H3 — signed-cookie HMAC is served by a sync `node:crypto` path when available
+ * signed-cookie HMAC is served by a sync `node:crypto` path when available
  * (Bun/Node), falling back to the async `crypto.subtle` WebCrypto path on edge
  * runtimes without `node:crypto` (Cloudflare Workers without `nodejs_compat`,
  * browsers). This file is the correctness net for that split:
@@ -123,7 +123,7 @@ describe('cookie HMAC async un-forcing (codegen)', () => {
 		return { fn, name: fn.constructor.name, source: fn.toString() }
 	}
 
-	// A signed-cookie route whose every other moving part is sync. Before H3
+	// A signed-cookie route whose every other moving part is sync. Previously
 	// this compiled to an AsyncFunction purely because signing was async.
 	const signedApp = () =>
 		new Elysia().get(

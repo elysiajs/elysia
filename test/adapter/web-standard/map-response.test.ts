@@ -502,7 +502,7 @@ describe('Web Standard - Map Response', () => {
 	})
 })
 
-// F27: an untouched set (lazy `status === undefined`, no cookie, no headers)
+// an untouched set (lazy `status === undefined`, no cookie, no headers)
 // must take the compact path instead of the touched-set slow path, while
 // ElysiaStatus and Promise stay excluded so `set.status` writeback (the
 // settled lazy-status design) is preserved for afterResponse/trace observers.

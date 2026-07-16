@@ -1,9 +1,100 @@
 import { Elysia, t, form, file } from '../../src'
 import { describe, expect, it } from 'bun:test'
+import { fileTypeFromBlob } from 'file-type'
 import { req } from '../utils'
 import { formDataToObject } from '../../src/adapter/web-standard/utils'
+import { TypeBoxValidator } from '../../src/type/validator'
+import { setFileTypeDetector } from '../../src/type/elysia/file-type'
+
+const snapshotObject = (value: Record<PropertyKey, unknown>) => ({
+	values: Reflect.ownKeys(value).map((key) => [key, value[key]]),
+	descriptors: Object.getOwnPropertyDescriptors(value),
+	symbols: Object.getOwnPropertySymbols(value),
+	prototype: Object.getPrototypeOf(value)
+})
+
+const expectUnchangedAfterFailure = async (
+	validator: TypeBoxValidator<any>,
+	value: Record<PropertyKey, unknown>,
+	async: boolean
+) => {
+	const before = snapshotObject(value)
+
+	if (async) await expect(validator.FromAsync(value)).rejects.toBeDefined()
+	else expect(() => validator.FromSync(value)).toThrow()
+
+	expect(snapshotObject(value)).toEqual(before)
+}
 
 describe('Form Data', () => {
+	describe('failed validation cleanup', () => {
+		for (const async of [false, true]) {
+			const path = async ? 'async' : 'sync'
+
+			it(`${path} Check failure leaves caller input unchanged`, async () => {
+				await expectUnchangedAfterFailure(
+					new TypeBoxValidator(t.Form({ value: t.String() })),
+					{ value: 1 },
+					async
+				)
+			})
+
+			it(`${path} codec failure leaves caller input unchanged`, async () => {
+				await expectUnchangedAfterFailure(
+					new TypeBoxValidator(
+						t.Form({
+							value: t
+								.Codec(t.String())
+								.Decode(() => {
+									throw new Error('decode failed')
+								})
+								.Encode((value) => value)
+						})
+					),
+					{ value: 'ok' },
+					async
+				)
+			})
+
+			it(`${path} fallback decode error leaves caller input unchanged`, async () => {
+				await expectUnchangedAfterFailure(
+					new TypeBoxValidator(
+						t.Form({
+							value: t
+								.Codec(t.String())
+								.Decode(() => {
+									throw new Error('decode failed')
+								})
+								.Encode((value) => value)
+						}),
+						{ normalize: 'typebox' }
+					),
+					{ value: 'ok' },
+					async
+				)
+			})
+		}
+
+		it('async rejected file check leaves caller input unchanged', async () => {
+			setFileTypeDetector(async () => {
+				throw new Error('detection failed')
+			})
+			const value = {
+				file: new File(['content'], 'image.png', { type: 'image/png' })
+			}
+			const validator = new TypeBoxValidator(
+				t.Form({ file: t.File({ type: 'image' }) }) as any
+			)
+
+			expect(validator.isAsync).toBe(true)
+			try {
+				await expectUnchangedAfterFailure(validator, value, true)
+			} finally {
+				setFileTypeDetector(fileTypeFromBlob)
+			}
+		})
+	})
+
 	it('return Bun.file', async () => {
 		const app = new Elysia().get('/', () =>
 			form({
@@ -92,14 +183,14 @@ describe('Form Data', () => {
 	})
 })
 
-// F44 — `tryParseJson` no longer speculatively `JSON.parse`s a brace/bracket-
+// `tryParseJson` no longer speculatively `JSON.parse`s a brace/bracket-
 // opened field unless it ALSO closes with the matching `}`/`]`. This removes the
 // cheap-to-send / expensive-to-reject asymmetry where a `{aaaa…`-style garbage
 // field paid a full failed parse (exception-as-control-flow scaling with the
 // attacker-chosen length). The pinned JSON-in-multipart pattern uses
 // `JSON.stringify`, whose output always ends in the matching closer, so it is
 // untouched.
-describe('Form Data JSON coercion (F44)', () => {
+describe('Form Data JSON coercion', () => {
 	const echo = () =>
 		new Elysia().post('/', ({ body }) => body as Record<string, unknown>)
 
@@ -151,7 +242,7 @@ describe('Form Data JSON coercion (F44)', () => {
 	it('trailing-whitespace-padded JSON now stays a string (decided behaviour)', async () => {
 		// The closer-check is strict: the LAST char must be the matching closer.
 		// Trailing whitespace (which the old lenient JSON.parse tolerated) is the
-		// one intentional behaviour change of F44 — pinned here so a revert to
+		// one intentional behaviour change of  — pinned here so a revert to
 		// the unguarded parse is caught. `JSON.stringify` never emits this.
 		const form = new FormData()
 		form.append('payload', '{"a":1} ')
@@ -233,7 +324,7 @@ describe('Form Data DoS hardening', () => {
 		})
 	})
 
-	// Regression (H13b): unquoted bracket segments were coerced with unary `+`,
+	// Regression : unquoted bracket segments were coerced with unary `+`,
 	// so `user[name]` and `user[email]` both became the key `NaN` and the second
 	// silently overwrote the first (a whole distinct field vanished). Non-digit
 	// bracket segments must stay string keys; only all-digit segments become
@@ -395,8 +486,7 @@ describe('Form Data DoS hardening', () => {
 
 		let slots = 0
 		for (const k in out)
-			if (Array.isArray((out as any)[k]))
-				slots += (out as any)[k].length
+			if (Array.isArray((out as any)[k])) slots += (out as any)[k].length
 		// pre-fix: ~5000 * 100000 = 5e8 slots; post-fix: ~0
 		expect(slots).toBeLessThanOrEqual(5_000)
 		expect(elapsed).toBeLessThan(2_000)

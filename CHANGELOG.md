@@ -5,8 +5,17 @@ Breaking Change:
 - Replace the newly introduced heavyweight `app.history` tuples with
   lightweight declaration entries. Executable routes are exposed internally
   through `~routes`, and `app.routes` contains every declaration. Exact
-  duplicate method/path declarations are unsupported and dispatch precedence is
-  unspecified.
+  duplicate method/path declarations are the user's responsibility; the last
+  registration wins across static, dynamic, and AOT dispatch.
+- Authoring APIs now throw after the application is sealed by its first
+  `handle`/`fetch`, `.compile()`, or `.listen()`. Register routes, hooks,
+  models, decorators, state, parsers, macros, and plugins before that boundary;
+  hot reload must publish a new application generation.
+- Remove `createCookieJar` from `elysia/cookies`. Use `context.cookie`,
+  `Cookie`, or `parseCookie` instead.
+- AOT artifacts now bind through an app-local `ProgramId` and framework ABI.
+  Keep sealed AOT deployments to one application per process; co-hosting
+  multiple sealed AOT applications in one process is unsupported.
 - Move opt-in automatic HEAD handling from `{ autoHead: true }` to the
   first-party async `autoHead()` plugin from `elysia/plugin/auto-head`. It
   registers GET routes declared on the app where it is installed, including
@@ -46,6 +55,23 @@ Breaking Change:
 
 Behavior Change:
 
+- `context.path` is now readonly. During Release N, assignment still reroutes
+  for compatibility but warns in development when request hooks are present;
+  the field remains enumerable for spreads and serialization.
+- Validation error `payload.expected` values that can be safely snapshotted are
+  cached per schema as shared, deeply frozen values. Error hooks must treat
+  them as readonly; objects returned by user default functions are cloned
+  before caching.
+- Schemas are cloned on first registration and reused by identity. Mutating the
+  original schema object afterward no longer changes an already registered
+  route; register a new schema in a new application generation instead.
+- Signed-cookie verification now defaults to `verify: 'lazy'`.
+  On runtimes with synchronous HMAC, signed cookies are verified on first
+  value-bearing access, so an invalid signed cookie that the route never reads
+  no longer returns 400. Async-only runtimes and cookie-validator routes remain
+  eager; set `verify: 'eager'` to require eager ingress-time verification.
+- Values returned early from `request()` hooks now pass through `mapResponse`
+  before they are sent.
 - EVERY `.guard()` and `.group()` form now defaults to the OVERRIDE channel — the closer to the route, the more power: a nearer guard's schema or the route-local schema replaces an inherited one per field (response per status code). Additive validation (every visible validator runs as its own pass) requires an explicit `schema: 'standalone'` opt-in. Previously the string-scope forms (`.guard('local' | 'plugin' | 'global', …)`) and the sandboxed run forms (`.guard(hook, run)` / `.group(prefix, hook, run)`) forced `standalone` implicitly (the run forms even ignored an explicit `schema: 'override'`) while the object forms defaulted to override — the same method defaulted differently depending on call shape
 - [Type] guard schemas are typed by channel, matching the runtime: override-channel guard schemas land in the scope's `schema` channel (replaced by nearer schemas), `schema: 'standalone'` schemas land in the additive `schemas` channel (intersect). Previously the types treated every guard schema as standalone-intersect
 - [Type] `params` follows the same whole-field override rule as every other input field: the nearest DECLARED params schema's static is the params shape (the runtime validator strips keys outside it, including path-derived ones); path-derived params (`ResolvePath`) apply only when no schema is declared. Previously the types merged guard and route params per-key, claiming keys the runtime had stripped
@@ -71,6 +97,14 @@ Behavior Change:
 
 Feature:
 
+- Add top-level `{ introspect: true }` so apps and introspection plugins can
+  retain the metadata needed after sealing.
+- Add the preview resume emitter as an opt-in capability from
+  `elysia/experimental/resume`; default bundles no longer include its compiler
+  code.
+- Add opt-in `experimental.lazyCompose` to defer synchronous route-copy work
+  until build time for deeply nested plugin graphs. Async plugins, promises,
+  and cyclic graphs fail loudly under the flag.
 - `t.File({ type })` / `t.Files({ type })` content-detection failures now report the offending property path (`property: '/avatar'`, `/files/0`) instead of an empty path — the validated value is identity-walked only when a detection fails
 - Adapter v2
 - sub type validator
@@ -81,8 +115,21 @@ Feature:
 - plain `t.File()` / `t.Files()` (no `type` option) no longer force the async validation path — only schemas that can actually enqueue content detection go through `FromAsync`
 - Validator pre-computes default snapshot at construction for safe schemas (no Union/Codec/Refine/nested-Object-without-default), eliminating per-request `Default()` walk for the common case
 
+Performance:
+
+- Default headers now use a private shared record and materialize a
+  request-local copy only when response state is exposed. Behavior and
+  cross-request isolation are covered; no runtime improvement is claimed until
+  the D1 latency and retained-RSS A/A floors are valid.
+
 Bug fix:
 
+- Body parsing now confirms an exact normalized media type (including `+json`)
+  and returns 415 when it unambiguously conflicts with a route body schema;
+  schema-less, custom-parser, and ambiguous-schema routes remain lenient.
+- `context.server` now receives the active Bun server for socket requests and
+  is `null` for direct `app.handle()` calls; it was previously always
+  `undefined` in handlers.
 - on non-Bun (Node / web-standard) adapters, a plain-string response now sets `content-type: text/plain` again — a stray header literally named `type` (a typo) had replaced it, so the compact-path string response shipped with a wrong header and the auto-derived `text/plain;charset=UTF-8` instead of the intended `text/plain`
 - macro routes had process-order-dependent validation: a one-shot iterator in the macro's schema-lift made the lift a no-op after the first call per process, so two identical routes under a guard could validate differently depending on registration/dispatch order. The lift (which predated the override-channel ruling and contradicted it) is removed — route-local schemas now consistently override an inherited guard schema regardless of order
 - typebox is tree-shakable again: `Elysia` itself no longer holds a static value-edge into the `t`/typebox graph (`.Ref()` now goes through the typebox-free bridge), so bundling an app that never uses `t` drops typebox entirely (esbuild probe: 737KB → 204KB, 0 typebox bytes; schema users unchanged). `import { Elysia } from 'elysia/base'` is now typebox-free at runtime too (~8ms cold import vs ~60ms for the main barrel)
@@ -108,7 +155,6 @@ Bug fix:
 - error-path `mapResponse` codegen assigned an undeclared `tmp`, leaking the mapped response onto `globalThis` (and crashing under AOT strict-mode modules)
 - `Cookie` was no longer exported from the package entry, so `import { Cookie } from 'elysia'` (used to type the `cookie` context) failed to resolve
 - schema-less body routes now treat `Transfer-Encoding` as body-present before touching `request.body`, preserving the fast framing-header path for chunked/proxy-framed requests without `Content-Length`
-- valid absolute request URLs with short hosts (for example `http://x/foo` and `http://a.b/foo`) now route correctly under the default `handler.standardHostname` fast path instead of extracting the full URL as the path and returning 404
 
 Type:
 

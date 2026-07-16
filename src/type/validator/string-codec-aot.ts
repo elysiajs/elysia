@@ -4,6 +4,7 @@ import createMirror from 'exact-mirror'
 
 import { hasProperty } from '../utils'
 import { buildFrozenCheck } from './frozen-check'
+import { schemaHasDangerousProperties } from './clean-safe'
 import type {
 	CapturedMirror,
 	CapturedValidator,
@@ -22,6 +23,8 @@ function captureInnerCodec(
 	open: number,
 	sanitize: ValidatorOptions['sanitize']
 ): NonNullable<CapturedValidator['innerCodecs']>[number] | undefined {
+	if (schemaHasDangerousProperties(inner)) return
+
 	let cf: ReturnType<typeof buildFrozenCheck>
 	try {
 		cf = buildFrozenCheck(

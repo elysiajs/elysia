@@ -3,7 +3,7 @@ import { Elysia, t } from '../../src'
 import { autoHead } from '../../src/plugin/auto-head'
 import { req } from '../utils'
 
-describe('L11 — a loose alias never clobbers an explicitly-registered sibling (default config)', () => {
+describe('a loose alias never clobbers an explicitly-registered sibling (default config)', () => {
 	// Default config (strictPath off) previously exposed this: the loose twin of
 	// `/foo` is `/foo/`, which silently overwrote the REAL `/foo/` handler unless
 	// the (opt-in) `distinctPath` config was set. The protection is now always on.
@@ -32,7 +32,7 @@ describe('L11 — a loose alias never clobbers an explicitly-registered sibling 
 	})
 })
 
-describe('L1 — JIT wrapper heals ALL of its own map aliases on first compile', () => {
+describe('JIT wrapper heals ALL of its own map aliases on first compile', () => {
 	// With lazy (non-precompile) JIT, `.get('/enc é', ...)` registers the wrapper
 	// under both the raw and encodeURI'd twins. Before the fix, first compile
 	// re-pointed only the canonical path; the encoded twin kept dispatching
@@ -91,8 +91,8 @@ describe('L1 — JIT wrapper heals ALL of its own map aliases on first compile',
 	})
 })
 
-describe('M8 — per-route hook composition isolation (shared-mutation guard)', () => {
-	// M8 proposed SHARING the composed+promoteDerive'd hook across routes with
+describe('per-route hook composition isolation (shared-mutation guard)', () => {
+	//  proposed SHARING the composed+promoteDerive'd hook across routes with
 	// identical inherited hooks. This repo has repeatedly hit "alias a hook for
 	// speed -> cross-route mutation leak" bugs. Sharing was NOT done because the
 	// composed hook is mutated in place downstream (promoteDerive, toArray,
@@ -149,7 +149,7 @@ describe('M8 — per-route hook composition isolation (shared-mutation guard)', 
 	})
 })
 
-describe('M34 — unknown model-name schema refs fail loud at build time, not per-request', () => {
+describe('unknown model-name schema refs fail loud at build time, not per-request', () => {
 	it('unknown route-local ref throws at compile() with route + name', () => {
 		const app = new Elysia().get('/', { query: 'Nope' as any }, () => 'ok')
 

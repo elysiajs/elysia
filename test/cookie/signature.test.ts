@@ -85,7 +85,7 @@ describe('Parse Cookie', () => {
 		expect(result.fischl.value).toEqual('fischl')
 	})
 
-	// Regression (audit P3): signed-cookie verification must stay correct after
+	// Regression: signed-cookie verification must stay correct after
 	// swapping the insecure `a === b` fallback (timing side channel off Bun)
 	// for a constant-time compare. Valid signatures verify, tampered ones don't.
 	it('verifies a valid signature and rejects a tampered one (constant-time)', async () => {
@@ -102,7 +102,7 @@ describe('Parse Cookie', () => {
 		await expect(unsignCookie(flipped, secret)).resolves.toBe(false)
 	})
 
-	// Regression (audit P4): a `null` secret is the "allow unsigned" slot in a
+	// Regression: a `null` secret is the "allow unsigned" slot in a
 	// rotation list. A value that LOOKS signed (contains a dot) used to fall
 	// through to signCookie(value, null), which threw 'Secret key must be
 	// provided' → a request-controlled 500 for any dotted value. It must just
@@ -112,7 +112,7 @@ describe('Parse Cookie', () => {
 		await expect(unsignCookie('plain', null)).resolves.toBe('plain')
 	})
 
-	// Regression (audit H3): incoming cookie values must be percent-decoded
+	// Regression: incoming cookie values must be percent-decoded
 	// EXACTLY once. `parse()` already decodes when the raw value contains '%',
 	// and parseCookieRaw decoded a second time — so a correctly-encoded value
 	// like `100%20off` (wire: `100%2520off`) was silently corrupted to
@@ -129,7 +129,7 @@ describe('Parse Cookie', () => {
 		expect(single.greeting.value).toBe('hello world')
 	})
 
-	// Regression (perf audit F5): signCookie caches imported HMAC CryptoKeys
+	// Performance regression: signCookie caches imported HMAC CryptoKeys
 	// per secret at module level — the cache must not change the signature
 	// bytes, so pin them against an independent HMAC implementation
 	it('produces byte-identical signatures with the cached CryptoKey', async () => {
@@ -148,7 +148,7 @@ describe('Parse Cookie', () => {
 		await expect(signCookie('fischl', secret)).resolves.toBe(expected)
 	})
 
-	// Regression (perf audit F5): the CryptoKey cache is keyed PER secret —
+	// Performance regression: the CryptoKey cache is keyed PER secret —
 	// every secret in a rotation list must verify, not just the first one
 	// cached
 	it('verifies both rotation secrets after key caching', async () => {
@@ -176,7 +176,7 @@ describe('Parse Cookie', () => {
 		await expect(unsignCookie(signedOld, newSecret)).resolves.toBe(false)
 	})
 
-	// Regression (perf audit F5): the null/undefined-secret TypeError must
+	// Performance regression: the null/undefined-secret TypeError must
 	// fire BEFORE the key-cache lookup — rotation lists legitimately contain
 	// null slots
 	it('signCookie still throws on a null secret', async () => {
@@ -185,7 +185,7 @@ describe('Parse Cookie', () => {
 		)
 	})
 
-	// Regression (perf audit F5): a FAILED importKey must self-evict from the
+	// Performance regression: a FAILED importKey must self-evict from the
 	// cache (the `.catch` on the cached promise). Without it, a transient
 	// failure sticks a rejected promise in keyCache and every later sign with
 	// that secret re-throws permanently. Verify a retry after a one-shot

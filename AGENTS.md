@@ -1,5 +1,9 @@
 # AGENTS.md — 12-rule template
 
+Additionally, you can use claude-peer-review to help you as a second opinion on your work, especially when you are unsure about a decision or approach. This can help catch potential issues early and ensure that your work aligns with the project's goals and standards.
+
+After you finish an implementation/task, always use claude-peer-review using Fable model to verify your thinking and reasoning.
+
 These rules apply to every task in this project unless explicitly overridden.
 Bias: caution over speed on non-trivial work. Use judgment on trivial tasks.
 

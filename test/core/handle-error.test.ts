@@ -355,7 +355,7 @@ describe('Handle Error', () => {
 		expect(res.status).toBe(418)
 	})
 
-	// F29: the finished Response from toResponse() must pass through by
+	// the finished Response from toResponse() must pass through by
 	// reference — set.status already matches, so rewrapping would only
 	// clone headers and downgrade the in-memory body to a stream
 	it('pass through toResponse() Response by reference when set matches', async () => {
@@ -577,7 +577,7 @@ describe('Handle Error', () => {
 		})
 	})
 
-	// H22: the tests above hit the INTERPRETED path (fetch-level handleError). A
+	// the tests above hit the INTERPRETED path (fetch-level handleError). A
 	// no-op `.error()` hook routes the throw through the COMPILED jit tail
 	// (src/compile/handler/jit.ts) instead — the exact path that only handled a
 	// SYNC toResponse() Response. An `async toResponse()` returns a Promise, so
@@ -585,7 +585,7 @@ describe('Handle Error', () => {
 	// fix the Promise is not a Response, so the tail falls through to the
 	// e.status branch and returns the error MESSAGE at the status instead of the
 	// custom Response body.
-	it('compiled tail awaits async toResponse() when thrown (H22)', async () => {
+	it('compiled tail awaits async toResponse() when thrown', async () => {
 		class AsyncError extends Error {
 			status = 503
 
@@ -607,7 +607,7 @@ describe('Handle Error', () => {
 		await expect(res.clone().text()).resolves.not.toBe('boom')
 	})
 
-	it('compiled tail keeps sync toResponse() Response fast path (H22)', async () => {
+	it('compiled tail keeps sync toResponse() Response fast path', async () => {
 		class SyncError extends Error {
 			status = 502
 
@@ -626,7 +626,7 @@ describe('Handle Error', () => {
 		await expect(res.text()).resolves.toBe('custom-sync')
 	})
 
-	it('compiled tail falls back when async toResponse() rejects (H22)', async () => {
+	it('compiled tail falls back when async toResponse() rejects', async () => {
 		class BrokenAsyncError extends Error {
 			async toResponse() {
 				throw new Error('async toResponse failed')

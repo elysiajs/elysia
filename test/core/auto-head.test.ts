@@ -43,19 +43,32 @@ describe('autoHead plugin', () => {
 		expect(await response.text()).toBe('')
 	})
 
-	it('registers after the router was already built', async () => {
+	it('registers HEAD routes when applied late in authoring order (after routes)', async () => {
+		// Original intent: auto-head must register HEAD routes even when the plugin
+		// is applied AFTER other routes are declared. The supported vehicle is
+		// authoring order (all edits before the first request), not
+		// serve-then-mutate: declare the GET first, then apply auto-head, then serve.
 		const app = new Elysia().get('/x', () => 'get')
-
-		expect((await app.handle(req('/x', { method: 'HEAD' }))).status).toBe(
-			404
-		)
-
 		app.use(autoHead())
 		await app.modules
 
 		expect((await app.handle(req('/x', { method: 'HEAD' }))).status).toBe(
 			200
 		)
+	})
+
+	it('throws when auto-head is applied after the first request', async () => {
+		// The retired "register after the router was already built" behavior
+		// (serve, then `.use(autoHead)`, then serve again) silently rebuilt. Now the
+		// first request seals the app, so applying the plugin afterward is an
+		// immutable-instance violation and must throw — the plugin cannot be smuggled
+		// in past the seal to synthesize HEAD routes.
+		const app = new Elysia().get('/x', () => 'get')
+		expect((await app.handle(req('/x', { method: 'HEAD' }))).status).toBe(
+			404
+		)
+
+		expect(() => app.use(autoHead())).toThrow('after the app was sealed')
 	})
 
 	it('preserves GET lifecycle and mapped headers without replaying hooks', async () => {

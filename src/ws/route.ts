@@ -5,6 +5,7 @@ import {
 	isBridgeNotInitialized
 } from '../compile/handler/frozen-validator'
 import { deriveEntryFn, nullObject, type DeriveEntry } from '../utils'
+import { frozenRootOf } from '../generation'
 import { parseQueryFromURL } from '../parse-query'
 import {
 	deriveModes,
@@ -49,6 +50,88 @@ type Server = {
 }
 
 const EMPTY_HOOKS: readonly AnyFn[] = Object.freeze([]) as any
+
+/**
+ * Build-time (route-registration-time) analysis of a WS `message` handler to
+ * decide whether the per-frame `ws.body` view must be assigned.
+ */
+function handlerMayTouchBody(fn: AnyFn | undefined): boolean {
+	if (!fn) return false
+
+	let source: string
+	try {
+		source = Function.prototype.toString.call(fn)
+	} catch {
+		return true
+	}
+
+	if (source.indexOf('[native code]') !== -1) return true
+
+	if (/\bbody\b/.test(source)) return true
+	if (/\barguments\b/.test(source)) return true
+	if (source.indexOf('[') !== -1) return true
+	if (source.indexOf('...') !== -1) return true
+
+	const parsed = firstParamIdentifier(source)
+	if (parsed === undefined) return true
+
+	const { name: wsName, bodyStart, paramsEnd } = parsed
+
+	if (source.slice(0, paramsEnd).indexOf('(', 1) !== -1) return true
+
+	const body = source.slice(bodyStart)
+
+	const safeName = wsName.replace(/[$]/g, '\\$&')
+	const escaped = new RegExp(`(?<![\\w$.])${safeName}(?![\\w$]|\\s*\\.)`)
+
+	if (escaped.test(body)) return true
+
+	return false
+}
+
+function firstParamIdentifier(
+	source: string
+): { name: string; bodyStart: number; paramsEnd: number } | undefined {
+	const open = source.indexOf('(')
+	if (open === -1) {
+		const m = /^\s*(?:async\s+)?([A-Za-z_$][\w$]*)\s*=>/.exec(source)
+		if (!m) return undefined
+		const end = m.index + m[0].length
+		return { name: m[1], bodyStart: end, paramsEnd: end }
+	}
+
+	// Find the matching close paren of the parameter list.
+	let depth = 0
+	let close = -1
+	for (let i = open; i < source.length; i++) {
+		const c = source[i]
+		if (c === '(') depth++
+		else if (c === ')') {
+			depth--
+			if (depth === 0) {
+				close = i
+				break
+			}
+		}
+	}
+	if (close === -1) return undefined
+
+	const params = source.slice(open + 1, close).trim()
+	if (params.length === 0) return undefined
+
+	// First param up to the first top-level comma.
+	let first = params
+	const comma = params.indexOf(',')
+	if (comma !== -1) first = params.slice(0, comma).trim()
+
+	// Destructuring patterns handled by the `body`/`...`/`[` checks above.
+	if (first[0] === '{' || first[0] === '[') return undefined
+
+	const m = /^([A-Za-z_$][\w$]*)/.exec(first)
+	if (!m) return undefined
+
+	return { name: m[1], bodyStart: close + 1, paramsEnd: close + 1 }
+}
 
 function concatHooks(
 	...sources: Array<AnyFn | AnyFn[] | undefined | null>
@@ -196,7 +279,8 @@ export function buildWSRoute(
 	let validators: RouteValidator<any>
 	try {
 		validators = new RouteValidator(hook as any, {
-			models: app['~ext']?.models,
+			models: frozenRootOf(app)['~ext']?.models,
+			app,
 			aot: { method: 'WS', path: route[1] }
 		})
 	} catch (error) {
@@ -204,7 +288,7 @@ export function buildWSRoute(
 
 		const frozen = buildFrozenRouteValidator(
 			hook as any,
-			{ '~ext': app['~ext'] } as AnyElysia,
+			app,
 			'WS',
 			route[1] as string
 		)
@@ -309,7 +393,7 @@ export function buildWSRoute(
 	): Promise<Response> {
 		;(context as any).error = error
 		if (
-			app['~config']?.allowUnsafeValidationDetails &&
+			frozenRootOf(app)['~config']?.allowUnsafeValidationDetails &&
 			error instanceof ValidationError
 		)
 			error.allowUnsafeValidationDetails = true
@@ -456,7 +540,7 @@ export function buildWSRoute(
 		const errCtx: any = Object.create(ws as any)
 		errCtx.error = error
 		if (
-			app['~config']?.allowUnsafeValidationDetails &&
+			frozenRootOf(app)['~config']?.allowUnsafeValidationDetails &&
 			error instanceof ValidationError
 		)
 			error.allowUnsafeValidationDetails = true
@@ -517,7 +601,7 @@ export function buildWSRoute(
 	): void | Promise<void> {
 		if (errorHandlers.length === 0) {
 			if (
-				app['~config']?.allowUnsafeValidationDetails &&
+				frozenRootOf(app)['~config']?.allowUnsafeValidationDetails &&
 				error instanceof ValidationError
 			)
 				(error as ValidationError).allowUnsafeValidationDetails = true
@@ -528,9 +612,18 @@ export function buildWSRoute(
 		return handleError(ws, error)
 	}
 
-	// Per-route constant. `hook.message` never changes after build.
-	const messageTakesBody =
-		!!hook.message && (hook.message as AnyFn).length >= 2
+	const messageHandlerTouchesBody =
+		!!bodyValidator ||
+		handlerMayTouchBody(hook.message as AnyFn | undefined) ||
+		errorHandlers.some(handlerMayTouchBody)
+
+	const asyncMessageTouchesBody =
+		messageHandlerTouchesBody ||
+		transforms.length > 0 ||
+		messageBeforeHandles.length > 0 ||
+		afterHandles.length > 0 ||
+		afterResponses.length > 0 ||
+		mapResponses.length > 0
 
 	async function dispatchMessage(
 		connection: ElysiaWS<any>,
@@ -552,7 +645,7 @@ export function buildWSRoute(
 				}
 			}
 
-			ws.body = message as any
+			if (asyncMessageTouchesBody) ws.body = message as any
 
 			for (let i = 0; i < transforms.length; i++) {
 				const r = transforms[i](ws as any)
@@ -568,9 +661,7 @@ export function buildWSRoute(
 			}
 
 			if (hook.message) {
-				const result = messageTakesBody
-					? (hook.message as AnyFn)(ws, message)
-					: (hook.message as AnyFn)(ws)
+				const result = (hook.message as AnyFn)(ws, message)
 
 				const resolved =
 					result instanceof Promise ? await result : result
@@ -649,11 +740,9 @@ export function buildWSRoute(
 		message: unknown
 	): void | Promise<void> {
 		try {
-			ws.body = message as any
+			if (messageHandlerTouchesBody) ws.body = message as any
 
-			const result = messageTakesBody
-				? (hook.message as AnyFn)(ws, message)
-				: (hook.message as AnyFn)(ws)
+			const result = (hook.message as AnyFn)(ws, message)
 
 			if (result instanceof Promise)
 				return result.then(
@@ -695,10 +784,6 @@ export function buildWSRoute(
 		if (!fn) return
 
 		return async (connection: ElysiaWS<any>, bodyArg?: unknown) => {
-			// Per-invocation view over the shared per-connection instance,
-			// mirroring dispatchMessage. Without it, concurrent ping/pong
-			// handlers would clobber each other's `body` (and lifecycle
-			// state) on the shared connection across an await.
 			const ws: ElysiaWS<any> = Object.create(connection)
 			try {
 				if (withBody) ws.body = bodyArg as any
@@ -832,7 +917,7 @@ export function buildWSRoute(
 			const upgraded = server.upgrade(request, {
 				headers: upgradeHeaders,
 				data: {
-					id: '',
+					id: undefined,
 					context: context as any,
 					validator: responseValidator,
 					defaultValidator: defaultResponseValidator,

@@ -5,7 +5,7 @@ import * as z from 'zod'
 import { describe, expect, it } from 'bun:test'
 import { post, req, upload } from '../utils'
 
-// C14: chunks are Uint8Array; decode for string comparison.
+// chunks are Uint8Array; decode for string comparison.
 const dec = new TextDecoder()
 const decodeChunk = (v: unknown): string =>
 	v instanceof Uint8Array ? dec.decode(v) : String(v)

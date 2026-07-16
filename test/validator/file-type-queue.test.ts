@@ -5,7 +5,7 @@ import { Elysia, t, setFileTypeDetector } from '../../src'
 import { TypeBoxValidator } from '../../src/type/validator'
 import { upload } from '../utils'
 
-// dx-greenfield-2: `t.File({ type })` now throws at construction if no detector
+// `t.File({ type })` now throws at construction if no detector
 // is registered, so it must be set BEFORE any schema in this file is built
 // (previously only needed at validation time). Register it up front instead of
 // relying on cross-file suite ordering.

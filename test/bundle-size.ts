@@ -1,17 +1,27 @@
-import { gzipSync } from 'node:zlib'
-
 const cases = {
 	core: {
-		limit: 60 * 1024,
-		source: `import Elysia from './dist/index.mjs'; globalThis.app = new Elysia()`
+		limit: 250 * 1024,
+		source: `import Elysia from './dist/index.mjs'; globalThis.app = new Elysia()`,
+		resume: false
 	},
 	schema: {
-		limit: 115 * 1024,
-		source: `import { Elysia, t } from './dist/index.mjs'; globalThis.app = new Elysia().get('/', () => 'ok', { query: t.Object({ q: t.String() }) })`
+		// The optional resume entry keeps default apps under the original 400KB
+		// budget. The columnar route table adds ~640B net, semantic sealing adds
+		// ~1.4KB, and lazy cookie verification adds ~530B. A lazy registry could
+		// later tree-shake the cookie path from cookie-free apps.
+		limit: 400 * 1024,
+		source: `import { Elysia, t } from './dist/index.mjs'; globalThis.app = new Elysia().get('/', () => 'ok', { query: t.Object({ q: t.String() }) })`,
+		resume: false
+	},
+	resume: {
+		// Preview users retain both resume and legacy for route-level fallback.
+		limit: 410 * 1024,
+		source: `import { Elysia, t } from './dist/index.mjs'; import { resumeEmit } from './dist/experimental/resume.mjs'; globalThis.app = new Elysia({ experimental: { resumeEmit } }).get('/', () => 'ok', { query: t.Object({ q: t.String() }) })`,
+		resume: true
 	}
 } as const
 
-for (const [name, { limit, source }] of Object.entries(cases)) {
+for (const [name, { limit, source, resume }] of Object.entries(cases)) {
 	const result = await Bun.build({
 		entrypoints: ['virtual:entry'],
 		target: 'node',
@@ -41,10 +51,20 @@ for (const [name, { limit, source }] of Object.entries(cases)) {
 	if (!result.success)
 		throw new AggregateError(result.logs, `${name} build failed`)
 
-	const raw = await result.outputs[0].arrayBuffer()
-	const gzip = gzipSync(raw, { level: 9 }).byteLength
-	console.log(`${name}: ${gzip} / ${limit} bytes gzip`)
+	const output = result.outputs[0]
+	const raw = await output.arrayBuffer()
+	console.log(`${name}: ${raw.byteLength} / ${limit} bytes`)
 
-	if (gzip > limit)
-		throw new Error(`${name} bundle exceeds its ${limit}-byte gzip budget`)
+	if (raw.byteLength > limit)
+		throw new Error(
+			`${name} bundle exceeds its ${limit}-byte budget (${raw.byteLength} bytes)`
+		)
+
+	const hasResume = new TextDecoder()
+		.decode(raw)
+		.includes('__resume(c,pc,pending')
+	if (hasResume !== resume)
+		throw new Error(
+			`${name} bundle ${hasResume ? 'unexpectedly includes' : 'does not include'} the resume emitter`
+		)
 }

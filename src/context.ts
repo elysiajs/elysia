@@ -1,11 +1,13 @@
 import { status, type SelectiveStatus } from './error'
-import { nullObject, redirect } from './utils'
+import { flattenChain, isNotEmpty, nullObject, redirect } from './utils'
+import { isProduction } from './universal/is-production'
 
 import type { AnyElysia } from './base'
 import type { Server } from './universal/server'
 import type { StatusMap } from './constants'
 import type { Cookie } from './cookie'
 import type { BaseCookie } from './cookie/types'
+import { defaultHeaders } from './adapter/default-headers'
 
 import type {
 	RouteSchema,
@@ -62,34 +64,72 @@ export function clearContextCache() {
 	sharedEmptyContext = null
 }
 
-function buildEmptyContext(Base: any, headers: object | null = null) {
-	return class Context extends Base {
-		params?: Record<string, string>
-		headers?: Record<string, string>
-		qi!: number
-		set: {
+const pathValue = Symbol('path')
+
+function buildEmptyContext(
+	Base: any,
+	headers: object | null = null,
+	warnPathMutation = false
+) {
+	const immutableHeaders = headers !== null && Object.isFrozen(headers)
+	let warnedPathMutation = false
+	const pathDescriptor: PropertyDescriptor | undefined = warnPathMutation
+		? {
+				enumerable: true,
+				configurable: true,
+				get(this: any) {
+					return this[pathValue]
+				},
+				set(this: any, value: string) {
+					if (pathValue in this && !warnedPathMutation) {
+						warnedPathMutation = true
+						console.warn(
+							'[elysia] context.path is readonly; request-hook rerouting will stop working in a future release.'
+						)
+					}
+
+					this[pathValue] = value
+				}
+			}
+		: undefined
+
+	class Context extends Base {
+		declare params?: Record<string, string>
+		declare headers?: Record<string, string>
+		declare qi: number
+		declare set: {
 			headers: Record<string, string>
 			status?: number | string
 			cookie?: Record<string, unknown>
 		}
-		rid?: string
-		route?: string
-		trace?: any[]
+		declare rid?: string
+		declare route?: string
+		declare trace?: any[]
 
 		constructor(public request: Request) {
 			super()
-			this.set = {
-				// A proto-linked `set.headers` forces `handleSet` to allocate
-				// + `for..in`-flatten the proto chain on every request
-				headers:
-					headers === null
-						? Object.create(null)
-						: Object.assign(Object.create(null), headers),
-				status: undefined,
-				cookie: undefined
-			}
+			if (pathDescriptor)
+				Object.defineProperty(this, 'path', pathDescriptor)
+
+			if (immutableHeaders)
+				this.set = {
+					headers: headers!,
+					status: undefined,
+					cookie: undefined
+				} as any
+			else
+				this.set = {
+					headers:
+						headers === null
+							? Object.create(null)
+							: Object.assign(Object.create(null), headers),
+					status: undefined,
+					cookie: undefined
+				}
 		}
 	}
+
+	return Context
 }
 
 export function createContext(
@@ -99,19 +139,34 @@ export function createContext(
 	if (cached) return cached
 
 	const ext = app['~ext']
-	const headers = ext?.headers
-		? Object.assign(nullObject(), ext.headers)
-		: null
+	const adapter = app['~config']?.adapter
+	const warnPathMutation =
+		!isProduction() && !!flattenChain(app['~hookChain'])?.request?.length
+	const headers =
+		ext?.headers && isNotEmpty(ext.headers)
+			? Object.assign(nullObject(), ext.headers)
+			: null
+
+	if (headers && (!adapter || adapter.response.supportsDefaultHeaderSink)) {
+		Object.defineProperty(headers, defaultHeaders, { value: headers })
+		Object.freeze(headers)
+	}
 
 	if (headers === null && !ext?.decorator && !ext?.store) {
 		sharedEmptyDecorator ??= buildEmptyDecorator()
-		sharedEmptyContext ??= buildEmptyContext(sharedEmptyDecorator)
-		contextCache.set(app, sharedEmptyContext)
+		const context = warnPathMutation
+			? buildEmptyContext(sharedEmptyDecorator, null, true)
+			: (sharedEmptyContext ??= buildEmptyContext(sharedEmptyDecorator))
+		contextCache.set(app, context)
 
-		return sharedEmptyContext
+		return context
 	}
 
-	const context = buildEmptyContext(createBaseContext(app), headers) as any
+	const context = buildEmptyContext(
+		createBaseContext(app),
+		headers,
+		warnPathMutation
+	) as any
 
 	contextCache.set(app, context)
 	return context
@@ -168,7 +223,7 @@ export type ErrorContext<
 		 *
 		 * @example '/id/9'
 		 */
-		path: string
+		readonly path: string
 		/**
 		 * Path as registered to router
 		 *
@@ -254,7 +309,7 @@ export type Context<
 		 *
 		 * @example '/id/9'
 		 */
-		path: string
+		readonly path: string
 		/**
 		 * Path as registered to router
 		 *

@@ -1,16 +1,12 @@
 /**
  * Cross-path lifecycle PARITY — HTTP arms only.
  *
- * Finding: maintainability-arch-2 (design/review-stable/findings/maintainability-arch-2.md)
- *
- * Elysia implements the request lifecycle across multiple arms:
- *   1. per-route handler — JIT string codegen (src/compile/handler/jit.ts)
- *   2. root dispatcher — interpreted (src/handler/fetch.ts): onRequest chain,
- *      routing/404, root mapResponse chain, error, afterResponse.
+ * Elysia implements the request lifecycle in per-route generated handlers and
+ * in the root dispatcher. Both must expose the same lifecycle behavior.
  *
  * This suite runs one shared scenario matrix and asserts each observable
  * against ONE expected value where the arms must agree, and PINS the current
- * behavior (with a finding id) where they genuinely diverge. A pinned
+ * behavior where they genuinely diverge. A pinned
  * divergence is a conscious tripwire, not an endorsement — if the behavior
  * changes, this test must be revisited.
  *
@@ -126,7 +122,8 @@ describe('HTTP lifecycle parity (per-route JIT + root dispatcher)', () => {
 	// ------------------------------------------------------------------
 	// Response schema Encode (codec) on the per-route arm.
 	// The JIT arm runs `_vr.EncodeFrom(_r,'response')` (jit.ts:926/931).
-	// WS skips this: pinned ws-3 in http-vs-ws.test.ts.
+	// WebSocket intentionally skips response codec encoding; transport parity
+	// coverage documents that distinction separately.
 	// ------------------------------------------------------------------
 	it('response codec is Encoded on the per-route arm', async () => {
 		const Coded = t
@@ -146,9 +143,9 @@ describe('HTTP lifecycle parity (per-route JIT + root dispatcher)', () => {
 	})
 
 	// ------------------------------------------------------------------
-	// Returned vs thrown status() — must be identical on the HTTP arm.
+	// Returned vs thrown status — must be identical on the HTTP arm.
 	// ------------------------------------------------------------------
-	it('status() returned and thrown produce identical responses', async () => {
+	it('status returned and thrown produce identical responses', async () => {
 		const app = new Elysia()
 			.get('/return', () => status(418, 'teapot'))
 			.get('/throw', () => {
@@ -183,7 +180,7 @@ describe('HTTP lifecycle parity (per-route JIT + root dispatcher)', () => {
 		})
 	})
 
-	it('.error() hook can recover a thrown error into a 200 response', async () => {
+	it('.error hook can recover a thrown error into a 200 response', async () => {
 		const app = new Elysia()
 			.error(({ error }: any) => {
 				if ((error as Error).message === 'recoverable')
@@ -273,7 +270,7 @@ describe('HTTP lifecycle parity (per-route JIT + root dispatcher)', () => {
 		expect(order).toEqual(['beforeHandle', 'afterHandle'])
 	})
 
-	it('.request() early-return short-circuits before routing', async () => {
+	it('.request early-return short-circuits before routing', async () => {
 		const seen: string[] = []
 		const app = new Elysia()
 			.request(({ request }) => {
@@ -291,25 +288,15 @@ describe('HTTP lifecycle parity (per-route JIT + root dispatcher)', () => {
 		expect(seen).toEqual(['request'])
 	})
 
-	// ------------------------------------------------------------------
-	// INTENDED (maintainer 2026-07-06): `.request()` is a REQUEST-LEVEL hook. Its
-	// early-return short-circuits before routing, so route-level hooks — including
-	// `mapResponse` — do NOT run. A per-route handler return DOES run mapResponse;
-	// a `.request()` early-return deliberately does not, because it never enters
-	// the route lifecycle. fetch.ts calls `mapResponse(result, context.set)` with
-	// no `context` arg (fetch.ts:406/471/521); the mapResponse wrapper's
-	// `if (!context) return baseMapResponse(...)` guard (fetch.ts:220) then skips
-	// the entire hook chain. So the same string value gets wrapped by a mapResponse
-	// hook when returned from a route, but intentionally NOT when returned from
-	// `.request()`.
-	//
-	// This asserts the intended contract: request-level early returns must not run
-	// route-level hooks. Not a divergence — a deliberate design boundary.
-	// ------------------------------------------------------------------
-	it('INTENDED (maintainer 2026-07-06): .request() early-return is request-level; route-level hooks (mapResponse) do not run', async () => {
+	// A `.request` early return must run mapResponse exactly once. It used to
+	// call `mapResponse(result, set)`
+	// without the `context` arg (fetch.ts ~line 418/498/556), so the wrapper's
+	// `if (!context) return baseMapResponse(...)` guard skipped the hook chain.
+	// Passing context through every short-circuit path keeps the mapping tail.
+	it('.request early-return runs mapResponse hooks', async () => {
 		const ran: string[] = []
 		const app = new Elysia()
-			// `.request()` context exposes `path` at runtime; the PreContext type
+			// `.request` context exposes `path` at runtime; the PreContext type
 			// doesn't surface it, so widen to `any` to assert against the real API.
 			.request((ctx: any) => {
 				if (ctx.path === '/gate') return 'GATED'
@@ -330,10 +317,9 @@ describe('HTTP lifecycle parity (per-route JIT + root dispatcher)', () => {
 
 		ran.length = 0
 
-		// .request() early-return -> mapResponse hook does NOT run (intended:
-		// request-level short-circuit never enters the route lifecycle)
+		// A request-hook early return also runs mapResponse.
 		const gated = await app.handle(new Request('http://localhost/gate'))
-		expect(await gated.text()).toBe('GATED') // NOT 'WRAP:GATED'
-		expect(ran).not.toContain('mapResponse')
+		expect(await gated.text()).toBe('WRAP:GATED')
+		expect(ran).toContain('mapResponse')
 	})
 })

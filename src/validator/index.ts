@@ -8,7 +8,12 @@ import { type AnySchema, type StandardSchemaV1Like } from '../type'
 import type { ElysiaConfig, MaybePromise } from '../types'
 import type { CoerceOption } from '../type/coerce'
 import { clearCoerceLeafCache, nonAdditionalProperties } from '../type/coerce'
-import { Compiled, Capture, type ValidatorSlot } from '../compile/aot'
+import {
+	Compiled,
+	Capture,
+	type ProgramId,
+	type ValidatorSlot
+} from '../compile/aot'
 
 import {
 	Clone,
@@ -26,6 +31,7 @@ import { clearSharedReferenceCaches } from '../type/elysia/utils'
 import { hasProperty } from '../type/utils'
 
 export interface ValidatorOptions {
+	app?: { ['~programId']?: ProgramId }
 	models?: Record<keyof any, AnySchema>
 	schemas?: AnySchema[]
 	coerces?: CoerceOption[]
@@ -35,8 +41,10 @@ export interface ValidatorOptions {
 	slot?: ValidatorSlot
 }
 
-export interface ResponseValidatorOptions
-	extends Omit<ValidatorOptions, 'schemas'> {
+export interface ResponseValidatorOptions extends Omit<
+	ValidatorOptions,
+	'schemas'
+> {
 	schemas?: Record<number, AnySchema>[]
 }
 
@@ -155,19 +163,29 @@ export abstract class Validator {
 				(Capture.isCapturing() ||
 					(options?.normalize !== 'typebox' &&
 						// lazy-aware: checks existence without materializing the group
-						Compiled.hasValidator(aot.method, aot.path, slot)))
+						Compiled.hasValidator(
+							aot.method,
+							aot.path,
+							slot,
+							options?.app?.['~programId']
+						)))
 
-			if (!isIntersectable && !skipCache && !bypassCache && tbCache) {
-				const cached = tbCache.get(
+			const cache = options?.app ? tbCaches.get(options.app) : tbCache
+
+			if (!isIntersectable && !skipCache && !bypassCache && cache) {
+				const cached = cache.get(
 					schema,
 					options?.coerces,
 					normalizeKey,
 					options?.models
 				)
 				if (cached) return cached
+			} else if (!cache) {
+				// @ts-expect-error
+				const created = new TypeBoxValidatorCache()
+				if (options?.app) tbCaches.set(options.app, created)
+				else tbCache = created
 			}
-			// @ts-expect-error
-			else if (!tbCache) tbCache = new TypeBoxValidatorCache()
 
 			// @ts-expect-error
 			const validator = new TypeBoxValidator(
@@ -178,7 +196,7 @@ export abstract class Validator {
 			) as any
 
 			if (!isIntersectable && !skipCache && !bypassCache)
-				tbCache!.set(
+				(options?.app ? tbCaches.get(options.app) : tbCache)!.set(
 					schema,
 					options?.coerces,
 					validator,
@@ -252,6 +270,7 @@ export abstract class Validator {
 
 	static clear() {
 		tbCache?.clear()
+		tbCaches = new WeakMap()
 		clearCoerceLeafCache()
 		clearSharedReferenceCaches()
 	}
@@ -305,7 +324,8 @@ export class StandardValidator extends Validator {
 	#sync(value: unknown) {
 		const q = this.#validate(value)
 
-		if (q instanceof Promise) throw asyncStandardSchemaError()
+		if (typeof (q as any)?.then === 'function')
+			throw asyncStandardSchemaError()
 
 		return q
 	}
@@ -331,10 +351,10 @@ export class StandardValidator extends Validator {
 	From(value: unknown, type?: string, allowAsync = this.isAsync): unknown {
 		const q = this.#validate(value)
 
-		if (q instanceof Promise) {
+		if (typeof (q as any)?.then === 'function') {
 			if (!allowAsync) throw asyncStandardSchemaError()
 
-			return q.then((resolved) => {
+			return Promise.resolve(q).then((resolved) => {
 				if ('issues' in resolved)
 					throw new ValidationError(type, value, resolved.issues)
 
@@ -518,7 +538,8 @@ export class MultiValidator extends Validator {
 	static #syncStandard(schema: StandardSchemaV1Like, value: unknown) {
 		// @ts-expect-error
 		const q = schema['~standard'].validate(value)
-		if (q instanceof Promise) throw asyncStandardSchemaError()
+		if (typeof (q as any)?.then === 'function')
+			throw asyncStandardSchemaError()
 
 		return q
 	}
@@ -673,11 +694,11 @@ export class MultiValidator extends Validator {
 				// @ts-expect-error
 				const q = validator['~standard'].validate(value)
 
-				if (q instanceof Promise) {
+				if (typeof (q as any)?.then === 'function') {
 					if (!allowAsync) throw asyncStandardSchemaError()
 
 					// eslint-disable-next-line sonarjs/function-inside-loop
-					return q.then((resolved: any) => {
+					return Promise.resolve(q).then((resolved: any) => {
 						if (resolved.issues)
 							throw new ValidationError(
 								type,
@@ -734,3 +755,4 @@ export class MultiValidator extends Validator {
 }
 
 let tbCache: typeof TypeBoxValidatorCache | undefined
+let tbCaches = new WeakMap<object, typeof TypeBoxValidatorCache>()

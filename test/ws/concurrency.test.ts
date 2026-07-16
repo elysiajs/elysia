@@ -2,7 +2,7 @@ import { describe, it, expect } from 'bun:test'
 import { Elysia } from '../../src'
 import { newWebsocket, wsOpen, wsClosed } from './utils'
 
-describe('WebSocket interleaved messages (S2)', () => {
+describe('WebSocket interleaved messages', () => {
 	it('each async message sees its own body across an await', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
@@ -46,7 +46,7 @@ describe('WebSocket interleaved messages (S2)', () => {
 	})
 })
 
-describe('WebSocket per-route option conflict (S3)', () => {
+describe('WebSocket per-route option conflict', () => {
 	const captureWarn = (run: () => void): string[] => {
 		const warnings: string[] = []
 		const orig = console.warn

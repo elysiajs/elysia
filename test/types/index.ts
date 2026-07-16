@@ -1,16 +1,26 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 
-import {
-	Elysia,
-	file,
-	form,
-	sse,
-	status,
-	t
-} from '../../src'
+import { Elysia, file, form, sse, status, t } from '../../src'
 
 import { expectTypeOf } from 'expect-type'
 import { Cookie } from '../../src/cookie'
+import { resumeEmit } from '../../src/experimental/resume'
+
+new Elysia({ experimental: { resumeEmit } })
+// @ts-expect-error resume emitter must be imported so default bundles omit it
+new Elysia({ experimental: { resumeEmit: true } })
+
+// Lazy signed-cookie verification mode is configurable app-wide.
+new Elysia({ cookie: { secrets: 'secret', sign: ['sid'], verify: 'eager' } })
+// @ts-expect-error signed-cookie verification has only two supported modes
+new Elysia({ cookie: { verify: 'none' } })
+
+new Elysia().get('/readonly-path', (context) => {
+	// The sealed matcher owns routing; handlers cannot rewrite its path.
+	// @ts-expect-error context.path is readonly
+	context.path = '/other'
+	return context.path
+})
 
 const app = new Elysia()
 
@@ -24,7 +34,7 @@ app.get('/', ({ headers, query, params, body, store }) => {
 		Record<string, string | undefined>
 	>()
 
-	// ? schemaless query values may be absent → string | undefined (H23)
+	// ? schemaless query values may be absent → string | undefined
 	expectTypeOf<typeof query>().toEqualTypeOf<
 		Record<string, string | undefined>
 	>()

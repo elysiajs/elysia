@@ -1,13 +1,257 @@
 import { describe, it, expect } from 'bun:test'
-import { Elysia } from '../../../src'
+import { Elysia, t } from '../../../src'
 import { tee } from '../../../src/adapter/utils'
 
-// H13c: the default content-type dispatch recognised only fixed-position
+describe('exact content-type dispatch and schema contract', () => {
+	for (const precompile of [false, true]) {
+		describe(precompile ? 'precompiled' : 'default', () => {
+			const request = (contentType: string, body: BodyInit) =>
+				new Request('http://localhost/', {
+					method: 'POST',
+					headers: { 'content-type': contentType },
+					body
+				})
+
+			it('does not corrupt unmatched application media types', async () => {
+				const app = new Elysia({ precompile }).post('/', ({ body }) =>
+					body === undefined ? 'unparsed' : typeof body
+				)
+
+				for (const [contentType, body] of [
+					['application/x-ndjson', '{"ok":true}\n'],
+					['application/xml', '<ok>true</ok>'],
+					['application/jwt', 'token']
+				] as const) {
+					const response = await app.handle(
+						request(contentType, body)
+					)
+					expect(response.status).toBe(200)
+					await expect(response.text()).resolves.toBe('unparsed')
+				}
+
+				const javascript = await app.handle(
+					request('text/javascript', 'const ok = true')
+				)
+				expect(javascript.status).toBe(200)
+				await expect(javascript.text()).resolves.toBe('string')
+			})
+
+			it('returns 415 when a media type conflicts with a structured schema', async () => {
+				const app = new Elysia({ precompile }).post(
+					'/',
+					{ body: t.Object({ ok: t.Boolean() }) },
+					({ body }) => body
+				)
+
+				for (const [contentType, body] of [
+					['application/x-ndjson', '{"ok":true}\n'],
+					['application/xml', '<ok>true</ok>'],
+					['text/javascript', '{"ok":true}'],
+					['application/jwt', 'token']
+				] as const)
+					expect(
+						(await app.handle(request(contentType, body))).status
+					).toBe(415)
+			})
+
+			it('keeps absent content-type on the legacy validation path', async () => {
+				const app = new Elysia({ precompile }).post(
+					'/',
+					{ body: t.Object({ ok: t.Boolean() }) },
+					({ body }) => body
+				)
+
+				const response = await app.handle(
+					new Request('http://localhost/', {
+						method: 'POST',
+						body: '{"ok":true}'
+					})
+				)
+				expect(response.status).toBe(422)
+			})
+
+			it('keeps JSON, forms, bytes, and text on their exact lanes', async () => {
+				const echo = new Elysia({ precompile }).post(
+					'/',
+					({ body }) => {
+						if (body instanceof ArrayBuffer) return 'arrayBuffer'
+						return body
+					}
+				)
+
+				for (const contentType of [
+					'application/json',
+					'application/json; charset=utf-8',
+					'Application/JSON; charset=UTF-8',
+					'application/ld+json'
+				])
+					await expect(
+						echo
+							.handle(request(contentType, '{"ok":true}'))
+							.then((x) => x.json())
+					).resolves.toEqual({ ok: true })
+
+				await expect(
+					echo
+						.handle(
+							request(
+								'application/x-www-form-urlencoded',
+								'ok=true'
+							)
+						)
+						.then((x) => x.json())
+				).resolves.toEqual({ ok: 'true' })
+
+				const form = new FormData()
+				form.set('ok', 'true')
+				await expect(
+					echo
+						.handle(
+							new Request('http://localhost/', {
+								method: 'POST',
+								body: form
+							})
+						)
+						.then((x) => x.json())
+				).resolves.toEqual({ ok: 'true' })
+
+				await expect(
+					echo
+						.handle(request('application/octet-stream', 'raw'))
+						.then((x) => x.text())
+				).resolves.toBe('arrayBuffer')
+
+				await expect(
+					echo
+						.handle(request('text/plain', 'raw'))
+						.then((x) => x.text())
+				).resolves.toBe('raw')
+
+				const structured = new Elysia({ precompile }).post(
+					'/',
+					{ body: t.Object({ ok: t.String() }) },
+					({ body }) => body
+				)
+				expect(
+					(
+						await structured.handle(
+							request(
+								'application/x-www-form-urlencoded',
+								'ok=true'
+							)
+						)
+					).status
+				).toBe(200)
+			})
+
+			it('accepts text for scalar schemas and keeps constraint failures at 422', async () => {
+				const app = new Elysia({ precompile }).post(
+					'/',
+					{ body: t.String({ minLength: 3 }) },
+					({ body }) => body
+				)
+
+				expect(
+					(await app.handle(request('text/javascript', 'okay')))
+						.status
+				).toBe(200)
+				expect(
+					(await app.handle(request('text/javascript', 'no'))).status
+				).toBe(422)
+				expect(
+					(await app.handle(request('application/jwt', 'token')))
+						.status
+				).toBe(415)
+
+				const scalarUnion = new Elysia({ precompile }).post(
+					'/',
+					{ body: t.Union([t.String(), t.Boolean()]) },
+					({ body }) => body
+				)
+				expect(
+					(
+						await scalarUnion.handle(
+							request('application/jwt', 'token')
+						)
+					).status
+				).toBe(415)
+			})
+
+			it('accepts only multipart and bytes for file schemas', async () => {
+				const app = new Elysia({ precompile }).post(
+					'/',
+					{ body: t.File() },
+					({ body }) => body
+				)
+
+				expect(
+					(
+						await app.handle(
+							request('application/octet-stream', 'raw')
+						)
+					).status
+				).not.toBe(415)
+
+				const form = new FormData()
+				form.set('file', new Blob(['raw']))
+				expect(
+					(
+						await app.handle(
+							new Request('http://localhost/', {
+								method: 'POST',
+								body: form
+							})
+						)
+					).status
+				).not.toBe(415)
+				expect(
+					(await app.handle(request('application/json', '{}'))).status
+				).toBe(415)
+			})
+
+			it('fails open for custom parsers and mixed schemas', async () => {
+				const custom = new Elysia({ precompile })
+					.parse(({ contentType }) => {
+						if (contentType === 'application/jwt')
+							return { ok: true }
+					})
+					.post(
+						'/',
+						{ body: t.Object({ ok: t.Boolean() }) },
+						({ body }) => body
+					)
+
+				expect(
+					(await custom.handle(request('application/jwt', 'token')))
+						.status
+				).toBe(200)
+
+				const mixed = new Elysia({ precompile }).post(
+					'/',
+					{
+						body: t.Union([
+							t.Object({ ok: t.Boolean() }),
+							t.String()
+						])
+					},
+					({ body }) => body
+				)
+
+				expect(
+					(await mixed.handle(request('application/jwt', 'token')))
+						.status
+				).toBe(422)
+			})
+		})
+	}
+})
+
+// the default content-type dispatch recognised only fixed-position
 // `application/json`, so structured `+json` suffix types (RFC 6839) —
 // application/ld+json, merge-patch+json, problem+json, vendor `+json` — were
 // NOT routed to the JSON parser. Their bodies arrived as `undefined` and any
 // schema validation failed. They must be parsed as JSON after stripping params.
-describe('content-type dispatch — structured +json suffix (H13c)', () => {
+describe('content-type dispatch — structured +json suffix', () => {
 	const echo = () =>
 		new Elysia().post('/', ({ body }) => body as Record<string, unknown>)
 
@@ -52,12 +296,12 @@ describe('content-type dispatch — structured +json suffix (H13c)', () => {
 	})
 })
 
-// H02a: the uppercase-multipart normalization used `new Request(request,
+// the uppercase-multipart normalization used `new Request(request,
 // {headers})`, which TEES the body — the original request stayed independently
 // readable, retaining a full second copy of a potentially multi-MiB upload. The
 // rewrap must transfer the body stream (no tee), leaving the original body
 // disturbed/unreadable afterward.
-describe('parseFormData — mixed-case multipart does not tee the body (H02a)', () => {
+describe('parseFormData — mixed-case multipart does not tee the body', () => {
 	it('does not retain a second readable copy of the original body', async () => {
 		let originalBodyStillReadable: boolean | undefined
 
@@ -106,18 +350,20 @@ describe('parseFormData — mixed-case multipart does not tee the body (H02a)', 
 	})
 })
 
-// H02b: tee()'s byte cap charged Blobs (and unknown objects) a flat 64 bytes
+// tee()'s byte cap charged Blobs (and unknown objects) a flat 64 bytes
 // because it read `.byteLength`, which Blobs don't have. An undrained branch
 // could buffer ~64 one-MiB Blobs (~64MiB) under a nominal 4MiB cap. Blobs must
 // be charged `.size`; unknown objects charged conservatively (a full budget).
-describe('tee() byte-cap accounting (H02b)', () => {
+describe('tee() byte-cap accounting', () => {
 	it('charges Blobs by .size so the byte cap actually bounds the window', async () => {
 		let produced = 0
 		async function* src() {
 			while (true) {
 				produced++
 				// 1MiB blob per chunk
-				yield new Blob([new Uint8Array(1 << 20)]) as unknown as Uint8Array
+				yield new Blob([
+					new Uint8Array(1 << 20)
+				]) as unknown as Uint8Array
 			}
 		}
 

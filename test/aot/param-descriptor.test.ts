@@ -32,7 +32,7 @@ const linkedNames = () => {
 	for (const m of SRC.matchAll(/\blink\([^,]+,\s*'([a-z0-9]+)'\)/g))
 		names.add(m[1]!)
 	// the `link(0, '')` sentinel adds the composed hook as `ho`
-	if (SRC.includes('params.add(hook)')) names.add('ho')
+	if (SRC.includes("seenKeys.add('ho')")) names.add('ho')
 	return names
 }
 

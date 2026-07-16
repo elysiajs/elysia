@@ -1,11 +1,11 @@
-// Regression pins for design/stable-security/PLAN.md.
-// Each block proves the exploit no longer fires AND that valid input still works.
+// Each security regression proves the exploit no longer fires and valid input
+// still works.
 import { describe, it, expect } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { Numeric } from '../../src/type/elysia/numeric'
 import { Value } from 'typebox/value'
 
-describe('redos-1 — t.Numeric regex is linear, not catastrophic', () => {
+describe('t.Numeric regex is linear, not catastrophic', () => {
 	it('validates a 200KB adversarial all-digit-then-nondigit string in <5ms', () => {
 		const schema = Numeric()
 		const attack = '9'.repeat(200_000) + 'x'
@@ -27,7 +27,7 @@ describe('redos-1 — t.Numeric regex is linear, not catastrophic', () => {
 	})
 })
 
-describe('header-injection-1 — a CRLF-poisoned header never escapes app.handle', () => {
+describe('a CRLF-poisoned header never escapes app.handle', () => {
 	const crlf = 'foo\r\nx-injected: pwned'
 
 	it('reflected CRLF value → clean response, no split, process survives', async () => {
@@ -61,7 +61,7 @@ describe('header-injection-1 — a CRLF-poisoned header never escapes app.handle
 })
 
 
-describe('codex-indep-7 — response dispatch ignores a spoofed constructor.name', () => {
+describe('response dispatch ignores a spoofed constructor.name', () => {
 	it('a client-echoed {constructor:{name}} is treated as a plain object (no 500, no corruption)', async () => {
 		const app = new Elysia().post('/echo', ({ body }) => body)
 
@@ -82,7 +82,7 @@ describe('codex-indep-7 — response dispatch ignores a spoofed constructor.name
 	})
 })
 
-describe('error-3 — production 422 does not echo the request body', () => {
+describe('production 422 does not echo the request body', () => {
 	it('prod redacts `found`; property still names the field', async () => {
 		const prev = process.env.NODE_ENV
 		process.env.NODE_ENV = 'production'
@@ -110,7 +110,7 @@ describe('error-3 — production 422 does not echo the request body', () => {
 	})
 })
 
-describe('base-2-1 — macro seed dedup is collision-safe', () => {
+describe('macro seed dedup is collision-safe', () => {
 	it('a circular seed value fails loud instead of crashing opaquely', () => {
 		const withMacro = new Elysia().macro({
 			auth: () => ({ beforeHandle() {} })
@@ -171,14 +171,14 @@ describe('base-2-1 — macro seed dedup is collision-safe', () => {
 	})
 })
 
-// dx-greenfield-2 (t.File({ type }) throws at construction without a detector)
+//  (t.File({ type }) throws at construction without a detector)
 // is proven indirectly by test/validator/file-type-queue.test.ts, which now
 // MUST register a detector in beforeAll or its `t.File({ type })` schemas throw.
 // A direct in-suite pin is not reliable: the detector is a process global with
 // no reset API, and other suites set it, so the no-detector state can't be
 // guaranteed here.
 
-describe('serve-bun-1 — .listen options object is not mutated', () => {
+describe('.listen options object is not mutated', () => {
 	it('reusing one options object across two apps leaks nothing onto it', () => {
 		const options: Record<string, unknown> = { port: 0 }
 
@@ -197,7 +197,7 @@ describe('serve-bun-1 — .listen options object is not mutated', () => {
 	})
 })
 
-describe('header-injection-2 — cookie name/attributes reject injection chars', () => {
+describe('cookie name/attributes reject injection chars', () => {
 	it('a cookie name with a separator throws', async () => {
 		const { serialize } = await import('../../src/cookie/lib')
 		expect(() => serialize('a;b', 'v', {})).toThrow(/Invalid cookie name/)
@@ -209,7 +209,7 @@ describe('header-injection-2 — cookie name/attributes reject injection chars',
 	})
 })
 
-describe('error-2 — the last-resort 500 never throws', () => {
+describe('the last-resort 500 never throws', () => {
 	it('a circular cause and a throwing getter both degrade to a clean 500', async () => {
 		const { internalServerErrorResponse } = await import('../../src/error')
 

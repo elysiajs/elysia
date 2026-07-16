@@ -42,6 +42,18 @@ describe('inline handler fast path (no new Function eval)', () => {
 		expect(s).toContain('c.set')
 	})
 
+	it('a default-header set-writing GET takes the inline COW path', () => {
+		const app = new Elysia()
+			.headers({ 'x-default': 'base' })
+			.get('/', ({ set }) => {
+				set.status = 201
+				return 'ok'
+			})
+		const s = source(app)
+		expect(s).toContain('materializeSetHeaders')
+		expect(s).not.toContain('function route')
+	})
+
 	it('a header-reading route stays on codegen (inlineUnsafe)', () => {
 		const app = new Elysia().get('/', ({ headers }) => headers['x'] ?? 'ok')
 		expect(source(app)).not.toContain('forwardError')

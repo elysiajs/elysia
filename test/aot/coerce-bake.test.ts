@@ -13,7 +13,7 @@ import { materialise, materialiseHandlers } from './_manifest'
 import { req } from '../utils'
 
 /**
- * Coercion bake (design/coerced-schema-bake.md).
+ * Coercion plans baked into AOT output must match live validation.
  *
  * `applyCoercions` is the dominant frozen-reconstruction cost. The bake captures
  * a plan and, on reconstruct, splices deduped frozen primitive leaves into the

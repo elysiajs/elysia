@@ -3,6 +3,7 @@ import { Type } from 'typebox'
 import { Default } from 'typebox/value'
 
 import { t } from '../../src'
+import { coerceQuery } from '../../src/type/coerce'
 import { TypeBoxValidator } from '../../src/type/validator'
 import { setupTypebox } from '../../src/type/compat'
 
@@ -69,7 +70,7 @@ describe('skip Clean walk on fully-closed objects', () => {
 	})
 
 	it('normalize:"typebox" keeps TypeBox Clean semantics (no fast-path skip)', () => {
-		// normalize:'typebox' opts out of the L8 skip and uses TypeBox `Clean`.
+		// normalize:'typebox' uses TypeBox `Clean` instead of skipping cleanup.
 		// (TypeBox Clean is same-ref/in-place for already-clean input, so we
 		// assert on value, not reference — the point is that the closed-object
 		// skip must NOT hijack the explicit typebox request.)
@@ -149,7 +150,7 @@ describe('default merger returns input unchanged when complete', () => {
 		expect(out).toEqual(Default(schema, { a: { b: {} } }) as any)
 	})
 
-	it('closed object with default: full request-path (M5 + L8) returns input unchanged', () => {
+	it('closed object with a default returns input unchanged through the request path', () => {
 		const schema = Type.Object(
 			{ page: Type.Number({ default: 1 }), name: Type.String() },
 			{ additionalProperties: false }
@@ -157,5 +158,90 @@ describe('default merger returns input unchanged when complete', () => {
 		const v = new TypeBoxValidator(schema)
 		const input = { page: 5, name: 'x' }
 		expect(v.FromSync(input as any)).toBe(input as any)
+	})
+})
+
+describe('refine validation', () => {
+	it('uses only Check on a valid coerced-query path', () => {
+		let checks = 0
+		let errorWalks = 0
+		const validator = new TypeBoxValidator(t.Object({ page: t.Number() }), {
+			coerces: coerceQuery()
+		})
+		const check = validator.Check.bind(validator)
+		validator.Check = (value) => {
+			checks++
+			return check(value)
+		}
+		const errors = validator.Errors.bind(validator)
+		validator.Errors = (value) => {
+			errorWalks++
+			return errors(value)
+		}
+
+		expect(validator.FromSync({ page: '1' } as any)).toEqual({ page: 1 })
+		expect(checks).toBe(1)
+		expect(errorWalks).toBe(0)
+	})
+
+	it('runs a valid user refine once', () => {
+		let calls = 0
+		const validator = new TypeBoxValidator(
+			t.Refine(t.String(), () => {
+				calls++
+				return true
+			})
+		)
+
+		expect(validator.FromSync('ok')).toBe('ok')
+		expect(calls).toBe(1)
+	})
+
+	it('does not run or fail an unvisited sibling refine during error enumeration', () => {
+		let calls = 0
+		const refined = t.Refine(t.String(), () => {
+			calls++
+			return false
+		})
+		const validator = new TypeBoxValidator(
+			t.Object({
+				first: refined,
+				sibling: refined
+			})
+		)
+
+		try {
+			validator.FromSync({ first: 'bad', sibling: 'bad' })
+			expect.unreachable()
+		} catch (error: any) {
+			expect(error.errors).toHaveLength(1)
+		}
+		expect(calls).toBe(1)
+	})
+
+	it('reports every failing refine at one visited schema node once', () => {
+		let first = 0
+		let second = 0
+		const validator = new TypeBoxValidator(
+			t.Refine(
+				t.Refine(t.String(), () => {
+					first++
+					return false
+				}),
+				() => {
+					second++
+					return false
+				}
+			)
+		)
+
+		try {
+			validator.FromSync('bad')
+			expect.unreachable()
+		} catch (error: any) {
+			expect(error.errors).toHaveLength(2)
+		}
+		expect(first).toBe(1)
+		expect(second).toBe(1)
 	})
 })

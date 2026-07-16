@@ -253,7 +253,7 @@ describe('Error handler', () => {
 		})
 	})
 
-	// Regression (audit H1): an instance-level `.onError` on a plugin must NOT
+	// Regression: an instance-level `.onError` on a plugin must NOT
 	// clobber route-level error handlers. A dangling `else;` in the error-merge
 	// codegen left the array reassignment outside the branch, so adding any
 	// plugin `.onError` overwrote the merged handlers with only the
@@ -280,7 +280,7 @@ describe('Error handler', () => {
 		await expect(res.text()).resolves.toBe('mapped')
 	})
 
-	// Regression (audit H5): when there are no mapResponse hooks, `mapResponse`
+	// Regression: when there are no mapResponse hooks, `mapResponse`
 	// IS the bare adapter whose 3rd arg is the Request. createErrorHandler
 	// passed the Context instead, so an onError returning a File/Blob hit
 	// `context.headers.get('range')` — a TypeError that escaped the fetch

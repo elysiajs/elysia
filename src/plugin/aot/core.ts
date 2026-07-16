@@ -219,7 +219,7 @@ export interface StubPlan {
  */
 export type BridgeMode = 'sealed' | 'wired' | 'off'
 
-const NO_STUB: StubPlan = {
+export const NO_STUB: StubPlan = {
 	jit: false,
 	ws: false,
 	reconstruct: false,
@@ -408,6 +408,41 @@ export const STUB_SOURCES: Record<
 				`const e=()=>{throw new Error("[elysia-aot] handler compiler JIT was stripped (strip mode) but a route needed runtime compilation. Rebuild with strip:false.")}\n` +
 				`export function compileHandlerJit(){return e()}\n` +
 				`export function setCaptureHeaderShorthand(){}\n`
+		},
+		{
+			// `describeRoute` (per-route descriptor) is only ever called on the
+			// live JIT path, immediately before `compileHandlerJit`
+			//
+			// it pulls in `sucrose`. Stub it alongside the JIT compiler so the sucrose
+			// analyzer stays tree-shakeable in strip mode
+			//
+			// The always-on exports `isEmptyPipelineHook` (native-static promotion)
+			// and `routeDescriptors` are sucrose-free and re-implemented here so the
+			// non-JIT path keeps working.
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]compile[\\/]handler[\\/]descriptor\.(m?js|ts)$/,
+			source:
+				`const e=()=>{throw new Error("[elysia-aot] handler compiler JIT was stripped (strip mode) but a route needed runtime compilation. Rebuild with strip:false.")}\n` +
+				`export function describeRoute(){return e()}\n` +
+				`export const routeDescriptors=new WeakMap()\n` +
+				`export function isEmptyPipelineHook(hook){\n` +
+				`	if(!hook)return true\n` +
+				`	for(const key in hook){\n` +
+				`		if(key==='detail'||key==='tags')continue\n` +
+				`		const value=hook[key]\n` +
+				`		if(value!==undefined&&value!==false&&(!Array.isArray(value)||value.length))return false\n` +
+				`	}\n` +
+				`	return true\n` +
+				`}\n`
+		},
+		{
+			// The experimental resume-skeleton lane (`plan/plan.ts` + `plan/emit.ts`)
+			// is only reachable when `experimental.resumeEmit` is set
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]compile[\\/]plan[\\/]plan\.(m?js|ts)$/,
+			source: `export function planRoute(){throw new Error("[elysia-aot] resume-emit plan was stripped (strip mode). Rebuild with strip:false.")}\n`
+		},
+		{
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]compile[\\/]plan[\\/]emit\.(m?js|ts)$/,
+			source: `export function emitResume(){throw new Error("[elysia-aot] resume-emit was stripped (strip mode). Rebuild with strip:false.")}\n`
 		}
 	],
 	ws: [
@@ -437,11 +472,11 @@ export const STUB_SOURCES: Record<
 			source:
 				`const e=()=>{throw new Error("[elysia-aot] cookie support was stripped (strip mode) but a route used cookies. Rebuild with strip:false.")}\n` +
 				`export const hasSyncHmac=false\n` +
-				`export function createCookieJar(){return e()}\n` +
 				`export function parseCookie(){return e()}\n` +
 				`export function parseCookieRaw(){return e()}\n` +
 				`export function parseCookieRawSync(){return e()}\n` +
 				`export function parseCookieRawSigned(){return e()}\n` +
+				`export function parseCookieRawLazy(){return e()}\n` +
 				`export function buildCookieJar(){return e()}\n` +
 				`export function signCookieValues(){return e()}\n` +
 				`export function signCookieValuesSync(){return e()}\n` +
@@ -473,13 +508,10 @@ export const STUB_SOURCES: Record<
 			filter: /[\\/]elysia[\\/](dist|src)[\\/]memory\.(m?js|ts)$/,
 			source:
 				`import { clearContextCache } from './context'\n` +
-				`import { isBun } from './universal/constants'\n` +
 				`import { Validator } from './validator'\n` +
 				`export function flushMemory() {\n` +
 				`	clearContextCache()\n` +
 				`	Validator.clear()\n` +
-				`	if (isBun) Bun.gc()\n` +
-				`	else if (typeof global?.gc === 'function') global.gc()\n` +
 				`}\n`
 		}
 	],
@@ -901,12 +933,14 @@ export async function generateCompiledArtifacts(
 			routesForbidSeal = true
 
 		const frozenSlots = artifacts.validators.length
+		// `expectedSlots` is computed by the loop above (typebox slots per
+		// route) — the fingerprint no longer carries a slot count.
 
 		const allBridgeFree =
 			(artifacts.handlers.length > 0 ||
 				artifacts.validators.length > 0) &&
 			!routesForbidSeal &&
-			frozenSlots >= expectedSlots &&
+			frozenSlots === expectedSlots &&
 			artifacts.validators.every((v) => v.bridgeFree === true)
 
 		const { plan: stub, mode } = planFromReport(
@@ -930,7 +964,7 @@ export async function generateCompiledArtifacts(
 						`Every route must be captured into the AOT manifest.`
 				)
 
-			if (frozenSlots < expectedSlots)
+			if (frozenSlots !== expectedSlots)
 				console.warn(
 					`[elysia-aot] target 'workerd': only ${frozenSlots}/` +
 						`${expectedSlots} validator slots were frozen ` +

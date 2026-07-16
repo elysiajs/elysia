@@ -214,7 +214,7 @@ describe('WebSocket non-body schemas', () => {
 		app.stop()
 	})
 
-	// F33: the upgrade path parses query via `parseQueryFromURL` (the same
+	// the upgrade path parses query via `parseQueryFromURL` (the same
 	// scanner HTTP routes use) instead of URLSearchParams +
 	// Object.fromEntries. Duplicate keys must build an array when the
 	// schema declares one — they previously collapsed last-wins and failed
@@ -244,7 +244,7 @@ describe('WebSocket non-body schemas', () => {
 		app.stop()
 	})
 
-	it('query: no query string parses to an empty record (F33)', async () => {
+	it('query: no query string parses to an empty record', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
 				query: t.Object({ name: t.Optional(t.String()) }),

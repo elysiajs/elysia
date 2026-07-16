@@ -13,7 +13,7 @@ import { req, post } from '../utils'
 import { hasSyncHmac } from '../../src/cookie/utils'
 
 /**
- * Async-cliff harness (F1/F11/F23/F24/F25/F26/F46).
+ * Async-cliff harness.
  *
  * `isAsync` in compileHandler historically triggered on feature PRESENCE, not
  * asyncness, so a route whose every moving part is synchronous still compiled
@@ -73,7 +73,7 @@ describe('async-cliff: sync routes emit plain Function', () => {
 		)
 	})
 
-	// F23 — error hook
+	// error hook
 	it('sync GET + sync error hook is a plain Function', async () => {
 		const app = new Elysia().error(() => {}).get('/', () => 'hi')
 
@@ -87,7 +87,7 @@ describe('async-cliff: sync routes emit plain Function', () => {
 		expect(isAsync(app)).toBe(true)
 	})
 
-	// F24 — afterResponse
+	// afterResponse
 	it('sync GET + sync afterResponse is a plain Function', async () => {
 		const app = new Elysia().afterResponse(() => {}).get('/', () => 'hi')
 
@@ -103,7 +103,7 @@ describe('async-cliff: sync routes emit plain Function', () => {
 		expect(isAsync(app)).toBe(true)
 	})
 
-	// F24 regression — error hook + afterResponse must force async. The error
+	// regression — error hook + afterResponse must force async. The error
 	// hook disables the sync `_fin` afterResponse path, so the inline `teeBlock`
 	// emits a top-level `await tee`; the route MUST be async or that compiles an
 	// `await` into a sync function (a SyntaxError swallowed to a 500 on every
@@ -140,7 +140,7 @@ describe('async-cliff: sync routes emit plain Function', () => {
 		await expect(r.text()).resolves.toBe('mapped-err')
 	})
 
-	// F1 — unsigned cookie
+	// unsigned cookie
 	it('GET reading an unsigned cookie is a plain Function', async () => {
 		const app = new Elysia().get('/', ({ cookie }) => {
 			cookie.id.value
@@ -155,7 +155,7 @@ describe('async-cliff: sync routes emit plain Function', () => {
 		).resolves.toBe('hi')
 	})
 
-	// signed cookie — H3: signing uses a sync `node:crypto` HMAC when available
+	// signed cookie —: signing uses a sync `node:crypto` HMAC when available
 	// (Bun/Node), so a signed-cookie route no longer forces the handler async.
 	// Only the async WebCrypto fallback (edge runtimes without `node:crypto`,
 	// or AOT capture where the deploy target is unknown) keeps it async. See
@@ -171,7 +171,7 @@ describe('async-cliff: sync routes emit plain Function', () => {
 		expect(isAsync(app)).toBe(!hasSyncHmac)
 	})
 
-	// F26 — sync parse hook on a bodyless GET
+	// sync parse hook on a bodyless GET
 	it('app-level sync .parse + bodyless GET is a plain Function', async () => {
 		const app = new Elysia().parse(() => {}).get('/', () => 'hi')
 
@@ -179,7 +179,7 @@ describe('async-cliff: sync routes emit plain Function', () => {
 		await expect((await app.handle(req('/'))).text()).resolves.toBe('hi')
 	})
 
-	// F26 — bodyless GET/HEAD skips the parse block entirely (method-gated), so
+	// bodyless GET/HEAD skips the parse block entirely (method-gated), so
 	// even an async parse hook does not drag a bodyless GET onto the async path
 	// (the hook simply doesn't fire on a body-less method, matching v1).
 	it('app-level async .parse + bodyless GET is a plain Function (parse skipped)', async () => {
@@ -189,7 +189,7 @@ describe('async-cliff: sync routes emit plain Function', () => {
 		await expect((await app.handle(req('/'))).text()).resolves.toBe('hi')
 	})
 
-	// F26 — an async parse hook on a POST (real body) still forces async and
+	// an async parse hook on a POST (real body) still forces async and
 	// still runs
 	it('async .parse on a POST stays AsyncFunction and runs', async () => {
 		let ran = false
@@ -206,7 +206,7 @@ describe('async-cliff: sync routes emit plain Function', () => {
 		await expect(res.json()).resolves.toEqual({ ok: 1 })
 	})
 
-	// F26 — explicit body schema on a GET still forces parsing (validation runs)
+	// explicit body schema on a GET still forces parsing (validation runs)
 	it('GET with explicit body schema stays AsyncFunction (parse forced)', () => {
 		const app = new Elysia().get(
 			'/',
@@ -237,7 +237,7 @@ describe('async-cliff: sync routes emit plain Function', () => {
 		})
 	})
 
-	// F25 — MultiValidator is strictly sync → sync route
+	// MultiValidator is strictly sync → sync route
 	it('MultiValidator query (sync) is a plain Function', async () => {
 		const fakeStd = {
 			'~standard': {
@@ -260,7 +260,7 @@ describe('async-cliff: sync routes emit plain Function', () => {
 		expect(res.status).toBe(200)
 	})
 
-	// F25 / validator-runtime-1 — a StandardValidator on query/headers/params/
+	// A StandardValidator on query, headers, params, or
 	// cookie forces the route ASYNC, even when its `validate` is syntactically
 	// synchronous. A StandardValidator sets `mayReturnPromise` unconditionally
 	// (isAsync is a *syntactic* `AsyncFunction` check that cannot see a plain
@@ -272,7 +272,7 @@ describe('async-cliff: sync routes emit plain Function', () => {
 	// other four slots: correctness (no 500) beats saving one async frame. So a
 	// standard-schema query is now an AsyncFunction on purpose; a plain TypeBox
 	// query stays sync (covered above).
-	it('StandardValidator query forces async emission (validator-runtime-1)', async () => {
+	it('StandardValidator query forces async emission', async () => {
 		const fakeStd = {
 			'~standard': {
 				version: 1,
@@ -318,7 +318,7 @@ describe('async-cliff: sync routes emit plain Function', () => {
 		await expect(res.json()).resolves.toEqual({ q: 'hi' })
 	})
 
-	// F46 — POST+body sync handler emits the conditional-await, not `await h(c)`
+	// POST+body sync handler emits the conditional-await, not `await h(c)`
 	it('POST+body sync handler emits conditional await (no `await h(c)`)', () => {
 		const app = new Elysia().post(
 			'/',
@@ -334,7 +334,7 @@ describe('async-cliff: sync routes emit plain Function', () => {
 	})
 })
 
-// F46/F23 — a SYNC handler returning a rejecting Promise must still reject
+// a SYNC handler returning a rejecting Promise must still reject
 // inside the route try/catch so route-level (guard-scoped) error hooks fire,
 // NOT just the fetch-level global handler.
 describe('async-cliff: rejecting promise from sync handler hits route error hook', () => {
@@ -365,7 +365,7 @@ describe('async-cliff: rejecting promise from sync handler hits route error hook
 		await expect(res.text()).resolves.toBe('ok')
 	})
 
-	// F23 — a SYNC throw on a sync error-hook route is caught by the sync
+	// a SYNC throw on a sync error-hook route is caught by the sync
 	// try/catch and the route stays a plain Function
 	it('sync throw on sync error-hook route is handled (plain Function)', async () => {
 		const app = new Elysia()
@@ -383,7 +383,7 @@ describe('async-cliff: rejecting promise from sync handler hits route error hook
 		await expect(res.text()).resolves.toBe('nope')
 	})
 
-	// F23 — error hook + response validator must STAY async (the thrown-then-
+	// error hook + response validator must STAY async (the thrown-then-
 	// handled value runs through response validation; a naive sync drop flips it)
 	it('error hook + response schema stays AsyncFunction', () => {
 		const app = new Elysia()
@@ -400,7 +400,7 @@ describe('async-cliff: rejecting promise from sync handler hits route error hook
 	})
 })
 
-// F24 — sync afterResponse on a sync route stays a plain Function while the
+// sync afterResponse on a sync route stays a plain Function while the
 // hook still fires, and a generator response is still tee'd + drained + hooks
 // fire exactly once.
 describe('async-cliff: sync afterResponse behaviour', () => {
@@ -487,7 +487,7 @@ describe('async-cliff: sync afterResponse behaviour', () => {
 	})
 })
 
-// C7/H21/M2 — the async-inference contract (design/codegen-async-contract.md).
+// Async inference must follow returned values, not formatting or function arity.
 //
 // Elysia never forces a lifecycle hook async, so a SYNC hook/handler may still
 // *return* a Promise. Codegen must (1) drive the route async when the source
@@ -495,8 +495,8 @@ describe('async-cliff: sync afterResponse behaviour', () => {
 // guard after each sync hook in an async route (safety-net for heuristic
 // false-negatives), and (3) await `_r` before afterHandle/mapResponse/response
 // -validator observe it. A silently-returned `[object Promise]` is the bug.
-describe('async-cliff: sync fn returning a Promise (C7/H21/M2)', () => {
-	// (a) C7 — a SYNC beforeHandle that returns a Promise must early-return its
+describe('async-cliff: sync fn returning a Promise', () => {
+	// A sync beforeHandle that returns a Promise must early-return its
 	// RESOLVED value and skip the handler, matching an async beforeHandle. Before
 	// the fix the un-awaited Promise became `_r` and short-circuited the handler,
 	// serialising `[object Promise]` as the response.
@@ -514,7 +514,7 @@ describe('async-cliff: sync fn returning a Promise (C7/H21/M2)', () => {
 			}
 		)
 
-		// C7 forcing: the heuristic flags the sync beforeHandle → route is async
+		// forcing: the heuristic flags the sync beforeHandle → route is async
 		expect(isAsync(app)).toBe(true)
 
 		const res = await app.handle(req('/'))
@@ -523,7 +523,7 @@ describe('async-cliff: sync fn returning a Promise (C7/H21/M2)', () => {
 		expect(handlerRan).toBe(false)
 	})
 
-	// (b) H21 — a SYNC handler returning a Promise + a SYNC afterHandle: the
+	// When a sync handler returns a Promise, a sync afterHandle must observe the
 	// afterHandle must observe the RESOLVED value, not the Promise. Before the
 	// fix `_r` stayed a Promise (route was sync, only the error path was chained)
 	// so afterHandle saw `[object Promise]`.
@@ -541,7 +541,7 @@ describe('async-cliff: sync fn returning a Promise (C7/H21/M2)', () => {
 			() => Promise.resolve('value') as any
 		)
 
-		// H21 forcing: handler may return a Promise + afterHandle observes it
+		// forcing: handler may return a Promise + afterHandle observes it
 		expect(isAsync(app)).toBe(true)
 
 		const res = await app.handle(req('/'))
@@ -549,7 +549,7 @@ describe('async-cliff: sync fn returning a Promise (C7/H21/M2)', () => {
 		expect(seen).toBe('value')
 	})
 
-	// (b') same for a SYNC mapResponse observing the resolved handler value
+	// A sync mapResponse must likewise observe the resolved handler value.
 	it('sync handler returning a Promise: sync mapResponse sees the resolved value', async () => {
 		const app = new Elysia().get(
 			'/',
@@ -565,10 +565,10 @@ describe('async-cliff: sync fn returning a Promise (C7/H21/M2)', () => {
 		await expect(res.text()).resolves.toBe('mapped:value')
 	})
 
-	// (c) M2 — a genuinely minified `=>x` handler (no space after `=>`, as a
+	// A genuinely minified `=>x` handler (no space after `=>`, as a
 	// bundler emits) with a response validator must validate correctly. Test
 	// source in bun is re-tokenised (a space is re-inserted), so the minified
-	// arrow is built via `eval` to preserve the verbatim `=>c` in `.toString()`.
+	// arrow is built via `eval` to preserve the verbatim `=>c` in `.toString`.
 	it('minified `=>x` handler with a response validator validates', async () => {
 		// eslint-disable-next-line no-eval
 		const minified = (0, eval)('(c)=>c.query.n') as (c: any) => string
@@ -588,7 +588,7 @@ describe('async-cliff: sync fn returning a Promise (C7/H21/M2)', () => {
 		await expect(ok.text()).resolves.toBe('hi')
 	})
 
-	// (c') M2 — a minified `=>x` handler that returns a Promise-producing
+	// A minified `=>x` handler that returns a Promise-producing
 	// identifier must be awaited before response validation (heuristic must fire
 	// on the no-space arrow). `p` is a Promise; without the `\s*` fix the route
 	// stays sync and the validator sees a Promise.
@@ -608,13 +608,13 @@ describe('async-cliff: sync fn returning a Promise (C7/H21/M2)', () => {
 		await expect(res.text()).resolves.toBe('deferred')
 	})
 
-	// (d) sync-emission pin — a PROVABLY-sync route (sync handler with a plain
+	// A provably sync route (sync handler with a plain
 	// value, sync hooks whose returns provably can't be a Promise) still emits a
 	// plain Function. The forcing additions must not drag a genuinely-sync route
 	// onto the async path.
 	//
 	// NOTE: this pin previously included `afterHandle: ({response}) => response`
-	// and asserted sync. That was the C7 hole (see the identifier-observed tests
+	// and asserted sync. That was the gap covered by the identifier-observed tests
 	// below): a pass-through hook returning a bare identifier CAN hold a Promise,
 	// and in a sync route its raw Promise was silently assigned to `_r`. The
 	// fix makes beforeHandle/afterHandle/mapResponse observe the identifier
@@ -638,11 +638,11 @@ describe('async-cliff: sync fn returning a Promise (C7/H21/M2)', () => {
 		expect(isAsync(app)).toBe(false)
 	})
 
-	// (d0) C7 identifier hole — a bare-identifier beforeHandle (`=> p`) holding a
+	// A bare-identifier beforeHandle (`=> p`) holding a
 	// Promise must force the route async, resolve the hook, and (since the hook
 	// resolved to undefined) run the handler. Before the fix the un-awaited
 	// Promise became a defined `_r`, silently skipping the handler and
-	// serialising "" (the exact Codex repro). Pins both emission and wire.
+	// serialising "". This pins both emission and wire behavior.
 	it('bare-identifier beforeHandle returning a Promise forces async and runs the handler', async () => {
 		const p = Promise.resolve(undefined)
 		let handlerRan = false
@@ -661,7 +661,7 @@ describe('async-cliff: sync fn returning a Promise (C7/H21/M2)', () => {
 		expect(handlerRan).toBe(true)
 	})
 
-	// (d0') a bare-identifier beforeHandle resolving to a DEFINED value must
+	// A bare-identifier beforeHandle resolving to a defined value must
 	// short-circuit the handler with the RESOLVED value (parity with an async
 	// beforeHandle), not the raw Promise.
 	it('bare-identifier beforeHandle Promise resolving to a value short-circuits with the resolved value', async () => {
@@ -678,7 +678,7 @@ describe('async-cliff: sync fn returning a Promise (C7/H21/M2)', () => {
 		expect(handlerRan).toBe(false)
 	})
 
-	// (d0'') afterHandle observing a bare-identifier Promise: the resolved value
+	// An afterHandle observing a bare-identifier Promise must send the resolved value
 	// (not `[object Promise]`) must reach the wire.
 	it('bare-identifier afterHandle returning a Promise is resolved before it becomes the response', async () => {
 		const p = Promise.resolve('wrapped')
@@ -693,7 +693,7 @@ describe('async-cliff: sync fn returning a Promise (C7/H21/M2)', () => {
 		await expect(res.text()).resolves.toBe('wrapped')
 	})
 
-	// (d0''') mapResponse observing a bare-identifier Promise resolving to a
+	// A mapResponse observing a bare-identifier Promise resolving to a
 	// Response.
 	it('bare-identifier mapResponse returning a Promise is resolved before it becomes the response', async () => {
 		const p = Promise.resolve(new Response('mapped'))
@@ -708,7 +708,7 @@ describe('async-cliff: sync fn returning a Promise (C7/H21/M2)', () => {
 		await expect(res.text()).resolves.toBe('mapped')
 	})
 
-	// (d0'''') pass-through `=> response` afterHandle: now forces async (the
+	// A pass-through `=> response` afterHandle now forces async because the
 	// identifier heuristic can't prove the identifier isn't a Promise), but its
 	// WIRE behaviour must stay correct — the response passes through unchanged.
 	// This is the contract's mandated failure direction: a false-positive costs
@@ -726,7 +726,7 @@ describe('async-cliff: sync fn returning a Promise (C7/H21/M2)', () => {
 		await expect(res.text()).resolves.toBe('passthru')
 	})
 
-	// (d0''''') transform's return is DISCARDED, so a bare-identifier transform
+	// A transform's return is discarded, so a bare-identifier transform
 	// holding a Promise cannot corrupt the response — it stays on the narrow
 	// call heuristic and does NOT force async. Pins that transform was correctly
 	// excluded from the identifier heuristic (perf: no async frame for a hook
@@ -745,7 +745,7 @@ describe('async-cliff: sync fn returning a Promise (C7/H21/M2)', () => {
 		expect(handlerRan).toBe(true)
 	})
 
-	// (d') the async-route safety-net guard is emitted for a sync hook: source
+	// The async-route safety-net guard is emitted for a sync hook: source
 	// must contain the `instanceof Promise` await guard on `tmp`.
 	it('async route emits an instanceof-Promise await guard for a sync beforeHandle', () => {
 		const app = new Elysia().get(
@@ -759,7 +759,7 @@ describe('async-cliff: sync fn returning a Promise (C7/H21/M2)', () => {
 	})
 })
 
-// The new sync emissions (F1 `pcrs`, F23 `_ce` IIFE, F24 `_fin`/`_fin2` IIFE)
+// The new sync emissions (`pcrs`, `_ce` IIFE, and `_fin`/`_fin2` IIFE)
 // must reconstruct through the frozen-handler path (Compiled.handlers) — the
 // build captures `{alias, code}` and binds the factory instead of eval'ing it
 // at request time. This proves the IIFE-wrapped helpers + the `pcrs` alias

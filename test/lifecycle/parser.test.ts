@@ -73,7 +73,7 @@ describe('Parser', () => {
 		await expect(res.json()).resolves.toEqual(body)
 	})
 
-	// Regression (audit P7): the default parser dispatched on charCodeAt(12),
+	// Regression: the default parser dispatched on charCodeAt(12),
 	// where `application/xml` shares 'x' with `application/x-www-form-urlencoded`
 	// and was silently parsed as urlencoded — mangling the XML body into a
 	// bogus object. application/xml must NOT be urlencoded-parsed (it has no
@@ -504,7 +504,7 @@ describe('Parser', () => {
 		expect(response.status).toBe(400)
 	})
 
-	// H16: `group(prefix, run)`'s parse must apply ONLY to the group's own
+	// `group(prefix, run)`'s parse must apply ONLY to the group's own
 	// routes, never to sibling routes on the parent. A custom `parse` is
 	// route-level (each group route snapshots the group's hook chain), so the
 	// group finalize must NOT lift it onto the parent chain — doing so leaks

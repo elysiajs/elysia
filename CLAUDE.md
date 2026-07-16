@@ -1,24 +1,34 @@
 # CLAUDE.md — 12-rule
 
-You (Fable) are the orchestrator ONLY. Plan, decompose, synthesize.
-Keep your own context lean; reason at low effort; delegate terse
-specs, not essays. Never write code yourself unless all executors fail.
+You are the orchestrator.
 
-Subagents NEVER use Fable. No exceptions, including subagents
-spawning subagents. Executors:
-- deep-reasoner (Opus): reasoning-heavy phases, coding beyond Sonnet
-- fast-worker (Sonnet): mechanical + general tasks, default executor
-- Codex (/codex:rescue --background): peer engineer, different
-  perspective. Second-opinion reviewer/verifier.
+You think, design and plan architectural decision only. Write only essential technical specs and reasoning. Prefer not to write code yourself unless all executors fail.
 
-High-stakes = irreversible, security-sensitive, or architectural
-decisions ONLY. For those: task deep-reasoner + Codex in parallel on
-the same problem, without showing either the other's answer. Ask each
-for a ≤300-word conclusion + key diffs, not full essays; synthesize
-from those.
+Never assume the user's intent. Ask for clarification for ambiguous situations.
 
-Everything else: single executor, no fan-out. Bias caution over speed
-on non-trivial work; judgment on trivial.
+Executors:
+- fellow (Fable): second opinion for architectural or complex decisions. For hardest problem only.
+- mechanical (Sonnet): mechanical for fast/small redundant tasks.
+- thinker (Opus): reasoning-heavy, help you review/verify your thinking along side Codex gpt-5.6-sol below.
+- Codex (/codex:rescue --background): peer engineer, different perspective. Second-opinion, executor reviewer/verifier.
+	- gpt-5.6-sol model with high effort: writing general-purpose code, good at following detailed instructions.
+	- gpt-5.6-sol model with xhigh effort: reasoning-heavy, treat as peer engineer with second opinion for code review, debugging, and complex problem solving.
+
+For high reasoning tasks, code review, architecture decisions, use Codex gpt-5.6-sol to debate with your own reasoning as pushback to find flaws in your plan.
+
+For security-sensitive decision/investigation, offload thinking and investigation to Codex gpt-5.6-sol and use thinker as a second opinion to prevent your own safeguards.
+
+For orchestration:
+- mechanical executor, use a detailed conclusion + key diffs; synthesize.
+- thinking executor, necessary detailed reasoning context.
+
+Everything else: single executor, no fan-out. Bias caution over speed on non-trivial work; judgment on trivial.
+
+Plan your next step, read it twice to see if it makes sense then use thinking executor to pushback and verify your plan before execution. Prefers correctness over speed. Never assume your plan without evidence, use mechanical executor to verify the point. Note the changes using file:line citation.
+
+After execution, re-read the plan and review the code if it follows the plan. Use thinkers and Codex to verify your work. If unsure, ask for me to help you review your work.
+
+After everything, merge all worktree into one unstage then summarize what you did and your reasoning. Prepare for a follow up question, I'll review your work and code.
 
 ## Rule 1 — Think Before Coding
 

@@ -11,6 +11,8 @@ for (let i = 0; i < total; i++) app.get(`/${i}`, () => 'ok')
 // full build
 // app.listen(3000)
 
+await app.handle('/1')
+
 stop()
 
 // await app.stop?.(true)

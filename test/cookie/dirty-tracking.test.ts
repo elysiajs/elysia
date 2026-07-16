@@ -5,7 +5,7 @@ import { signCookie } from '../../src/cookie/utils'
 const jsonCookie = (name: string, value: unknown) =>
 	`${name}=${encodeURIComponent(JSON.stringify(value))}`
 
-// M22: dirtiness is decided at serialize time against the raw parse string,
+// dirtiness is decided at serialize time against the raw parse string,
 // so in-place mutation of an object cookie (which never assigns `.value`)
 // must still emit Set-Cookie — silently dropping the write is data loss.
 describe('Cookie - serialize-time dirty tracking', () => {
@@ -80,7 +80,7 @@ describe('Cookie - serialize-time dirty tracking', () => {
 		expect(res.headers.get('set-cookie')).toContain('Path=/x')
 	})
 
-	// M23: a bare/malformed % must fall back to the raw string instead of
+	// a bare/malformed % must fall back to the raw string instead of
 	// silently becoming undefined (data loss)
 	it('falls back to the raw string on malformed percent-encoding', async () => {
 		const app = new Elysia().get(
@@ -98,7 +98,7 @@ describe('Cookie - serialize-time dirty tracking', () => {
 	})
 })
 
-// cookie-1: the whole dirty-tracking contract above uses the NO-schema path.
+// the whole dirty-tracking contract above uses the NO-schema path.
 // Under a cookie SCHEMA the value getter received a FRESH validated object that
 // was never a `rawJsonValue` WeakMap key, so `~raw` was absent, the getter's
 // registration branch (cookie.ts, gated on `'~raw' in cookie`) never fired, and
@@ -109,7 +109,7 @@ describe('Cookie - serialize-time dirty tracking', () => {
 // `~raw` on validated object cookies at the jar boundary so mutation emits while
 // an unchanged/no-op read still suppresses (no over-emit). These pins cover the
 // schema variant on both the JIT (`.compile()`) and lazy/interpreted paths.
-describe('Cookie - dirty tracking under a schema (cookie-1)', () => {
+describe('Cookie - dirty tracking under a schema', () => {
 	const schema = {
 		cookie: t.Cookie({
 			data: t.Optional(t.Object({ count: t.Number() }))

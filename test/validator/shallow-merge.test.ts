@@ -73,8 +73,8 @@ describe('shallowMergeObjects fires and equals Evaluate(Intersect)', () => {
 		)
 	})
 
-	it('optional property fires (D1: t.Optional no longer prototype-wraps)', () => {
-		// Under the D1 mutate-clone invariant t.Optional returns a clone with
+	it('optional property fires (: t.Optional no longer prototype-wraps)', () => {
+		// Under the mutate-clone invariant, t.Optional returns a clone with
 		// its markers as OWN props (not an Object.create wrapper), so `type`
 		// survives Evaluate's own-only clone — no divergence, fast path applies.
 		expectEquivalent(

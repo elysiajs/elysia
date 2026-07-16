@@ -1756,7 +1756,7 @@ describe('Macro', () => {
 		expect(invalid3.status).toBe(422)
 	})
 
-	it('rejects a bare functional macro — must be named (A6)', () => {
+	it('rejects a bare functional macro — must be named', () => {
 		// `.macro(fn)` has no name to register under; TS can't catch it (a
 		// function is structurally assignable to the open `Macro` record), so
 		// without this guard it silently no-ops.

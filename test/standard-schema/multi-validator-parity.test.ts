@@ -1,20 +1,20 @@
 /**
- * H06 — Single-vs-mixed parity regression suite
+ * Single-vs-mixed parity regression suite
  *
  * Each test encodes a behavior axis where MultiValidator (mixed Standard Schema
- * + TypeBox) previously diverged from single TypeBoxValidator.  The intent of
+ * + TypeBox) previously diverged from single TypeBoxValidator. The intent of
  * each test is stated in its name so that a future failure points directly at
  * which parity axis regressed.
  *
  * Axes covered:
- *   1. Query coercion   — standalone t.Number() query in mixed mode must
- *                         coerce "5" → 5 exactly as it does in pure TypeBox
- *   2. Default fill     — missing optional fields receive TypeBox defaults in
- *                         mixed mode just as they do in single mode
- *   3. normalize:false  — extra fields are rejected (not silently accepted) in
- *                         mixed mode just as in single mode
- *   4. Async file MIME  — a standalone t.File({type}) in mixed mode is treated
- *                         async and runs the MIME detector (single always does)
+ * 1. Query coercion — standalone t.Number query in mixed mode must
+ * coerce "5" → 5 exactly as it does in pure TypeBox
+ * 2. Default fill — missing optional fields receive TypeBox defaults in
+ * mixed mode just as they do in single mode
+ * 3. normalize:false — extra fields are rejected (not silently accepted) in
+ * mixed mode just as in single mode
+ * 4. Async file MIME — a standalone t.File({type}) in mixed mode is treated
+ * async and runs the MIME detector (single always does)
  */
 
 import { describe, it, expect } from 'bun:test'
@@ -36,29 +36,23 @@ const passthrough = {
 	}
 } as any
 
-// ---------------------------------------------------------------------------
-// Axis 1: Query coercion parity
-//
-// Patch 1 (route.ts): when the primary schema is a Standard Schema, coercion
-// was not computed for standalone TypeBox members.  The fix falls through to
+// When the primary schema is a Standard Schema, coercion
+// was not computed for standalone TypeBox members. The fix falls through to
 // the first TypeBox standalone member to derive coercion options.
-// ---------------------------------------------------------------------------
-describe('H06 parity — query coercion (Patch 1)', () => {
-	it('single: t.Number() query accepts string "5" and returns 5', async () => {
+describe('query coercion parity', () => {
+	it('single: t.Number query accepts string "5" and returns 5', async () => {
 		const app = new Elysia().get(
 			'/',
 			{ query: t.Object({ page: t.Number() }) },
 			({ query }) => query
 		)
 
-		const res = await app
-			.handle(req('/?page=5'))
-			.then((x) => x.json())
+		const res = await app.handle(req('/?page=5')).then((x) => x.json())
 
 		expect(res.page).toBe(5)
 	})
 
-	it('mixed: standalone t.Number() query coerces "5" → 5 (same as single)', async () => {
+	it('mixed: standalone t.Number query coerces "5" → 5 (same as single)', async () => {
 		// Guard: Standard passthrough as PRIMARY; route: TypeBox as STANDALONE
 		// Before Patch 1, the primary's non-TypeBox nature suppressed coercion
 		// so "5" stayed a string → 422 "must be number".
@@ -73,9 +67,7 @@ describe('H06 parity — query coercion (Patch 1)', () => {
 				({ query }) => query
 			)
 
-		const res = await app
-			.handle(req('/?page=5'))
-			.then((x) => x.json())
+		const res = await app.handle(req('/?page=5')).then((x) => x.json())
 
 		// parity: must be 5, not "5", and not a 422
 		expect(res.page).toBe(5)
@@ -95,14 +87,10 @@ describe('H06 parity — query coercion (Patch 1)', () => {
 	})
 })
 
-// ---------------------------------------------------------------------------
-// Axis 2: Default fill parity
-//
-// Patch 3a: compiled.Default() is now called for TypeBox members that have
+// compiled.Default is called for TypeBox members that have
 // defaults — matching the TypeBoxValidator.FromSync path which runs
 // #defaultFastPath before validating.
-// ---------------------------------------------------------------------------
-describe('H06 parity — TypeBox defaults (Patch 3a)', () => {
+describe('TypeBox default-value parity', () => {
 	it('single: {} with page:default(1) returns {page:1}', async () => {
 		const app = new Elysia().get(
 			'/',
@@ -148,7 +136,10 @@ describe('H06 parity — TypeBox defaults (Patch 3a)', () => {
 			t.Object({ page: t.Number({ default: 1 }), name: t.String() }),
 			{}
 		)!
-		const singleResult = (single as any).FromSync({ name: 'lilith' }, 'body')
+		const singleResult = (single as any).FromSync(
+			{ name: 'lilith' },
+			'body'
+		)
 		expect(singleResult).toEqual({ page: 1, name: 'lilith' })
 
 		// Multi path (Standard passthrough forces MultiValidator)
@@ -156,22 +147,15 @@ describe('H06 parity — TypeBox defaults (Patch 3a)', () => {
 			t.Object({ page: t.Number({ default: 1 }), name: t.String() }),
 			{ schemas: [passthrough] }
 		)!
-		const multiResult = (multi as any).From(
-			{ name: 'lilith' },
-			'body'
-		)
+		const multiResult = (multi as any).From({ name: 'lilith' }, 'body')
 		expect(multiResult).toEqual({ page: 1, name: 'lilith' })
 	})
 })
 
-// ---------------------------------------------------------------------------
-// Axis 3: normalize:false rejection parity
-//
-// Patch 3b: when normalize:false, nonAdditionalProperties is applied to TypeBox
+// When normalize:false, nonAdditionalProperties is applied to TypeBox
 // member schemas before compilation so Check rejects extra fields — matching
 // TypeBoxValidator which applies nonAdditionalProperties at construction time.
-// ---------------------------------------------------------------------------
-describe('H06 parity — normalize:false rejects extra fields (Patch 3b)', () => {
+describe('normalize:false rejection parity', () => {
 	it('single normalize:false: extra field causes 422', async () => {
 		const app = new Elysia({ normalize: false }).post(
 			'/',
@@ -213,18 +197,17 @@ describe('H06 parity — normalize:false rejects extra fields (Patch 3b)', () =>
 
 	// Unit-level parity
 	it('unit — MultiValidator.From with normalize:false rejects extra keys', () => {
-		const single = Validator.create(
-			t.Object({ name: t.String() }),
-			{ normalize: false }
-		)!
+		const single = Validator.create(t.Object({ name: t.String() }), {
+			normalize: false
+		})!
 		expect(() =>
 			(single as any).FromSync({ name: 'lilith', extra: true }, 'body')
 		).toThrow()
 
-		const multi = Validator.create(
-			t.Object({ name: t.String() }),
-			{ schemas: [passthrough], normalize: false }
-		)!
+		const multi = Validator.create(t.Object({ name: t.String() }), {
+			schemas: [passthrough],
+			normalize: false
+		})!
 		expect(() =>
 			(multi as any).From({ name: 'lilith', extra: true }, 'body')
 		).toThrow()
@@ -232,14 +215,11 @@ describe('H06 parity — normalize:false rejects extra fields (Patch 3b)', () =>
 })
 
 // ---------------------------------------------------------------------------
-// Axis 4: Async file MIME detection parity
-//
-// Patch 2 (index.ts): MultiValidator hardcoded isAsync=false and never
-// inspected TypeBox members' async refines.  A standalone t.File({type}) uses
-// an async MIME detector that was silently bypassed.  The fix propagates
+// MultiValidator must inspect TypeBox members for async refinements. It once
+// hardcoded isAsync=false and skipped them. A standalone t.File({type}) uses
+// an async MIME detector that was silently bypassed. The fix propagates
 // isAsync from the compiled member's buildResult.external.variables.
-// ---------------------------------------------------------------------------
-describe('H06 parity — async t.File({type}) MIME detection (Patch 2)', () => {
+describe('async t.File({type}) MIME detection parity', () => {
 	it('single: t.File({type:"image/jpeg"}) validator is marked async', () => {
 		const v = Validator.create(t.File({ type: 'image/jpeg' }), {
 			coerces: undefined as any
@@ -262,7 +242,7 @@ describe('H06 parity — async t.File({type}) MIME detection (Patch 2)', () => {
 
 	it('mixed: t.File({type}) in guard body rejects mismatched MIME', async () => {
 		// This is an integration-level guard: a PNG file where only JPEG is
-		// allowed must be rejected.  Before Patch 2, the async MIME check was
+		// allowed must be rejected. Before Patch 2, the async MIME check was
 		// skipped and the wrong MIME type was accepted.
 		const app = new Elysia()
 			.guard({ schema: 'standalone', body: passthrough })
@@ -273,7 +253,11 @@ describe('H06 parity — async t.File({type}) MIME detection (Patch 2)', () => {
 			)
 
 		const form = new FormData()
-		form.append('file', new Blob(['dummy'], { type: 'image/png' }), 'img.png')
+		form.append(
+			'file',
+			new Blob(['dummy'], { type: 'image/png' }),
+			'img.png'
+		)
 
 		const res = await app.handle(
 			new Request('http://localhost/', { method: 'POST', body: form })

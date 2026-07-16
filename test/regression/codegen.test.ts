@@ -16,7 +16,7 @@ afterEach(() => {
 	Validator.clear()
 })
 
-describe('M20 — case-insensitive content-type parse', () => {
+describe('case-insensitive content-type parse', () => {
 	const jsonBody = (contentType: string) =>
 		new Request('http://localhost/', {
 			method: 'POST',
@@ -74,7 +74,7 @@ describe('M20 — case-insensitive content-type parse', () => {
 		await expect(res.json()).resolves.toEqual({ n: 5 })
 	})
 
-	it('emitted dispatch is restored to pre-M20 form: charCodeAt(12)===106 fast path + pd fallthrough, no _ctl/ctlc/pmrc', () => {
+	it('emits normalized exact dispatch without the removed  helpers', () => {
 		const app = new Elysia().post(
 			'/',
 			{ body: t.Object({ n: t.Number() }) },
@@ -82,11 +82,13 @@ describe('M20 — case-insensitive content-type parse', () => {
 		)
 		const src = compileHandler(app['~routes']![0] as any, app).toString()
 
-		// json fast path is the charCodeAt(12)===106 check
-		expect(src).toContain('ct.charCodeAt(12)===106')
-		// default fallthrough to pd (adapter.parse.default handles normalisation)
-		expect(src).toContain('await pd(c,ct)')
-		// M20 helpers must NOT appear in the emitted code
+		// Normalise once, then confirm the charCode hint with the exact essence.
+		expect(src).toContain('let ce=nc(ct)')
+		expect(src).toContain(
+			"let cj=(ce.charCodeAt(12)===106&&ce==='application/json')||ce.endsWith('+json')"
+		)
+		expect(src).toContain('c.body=cj?await pj(c):await pd(c,ce,true)')
+		//  helpers must NOT appear in the emitted code
 		expect(src).not.toContain('ctlc')
 		expect(src).not.toContain('_ctl')
 		expect(src).not.toContain('pmrc')
@@ -127,7 +129,7 @@ describe('M20 — case-insensitive content-type parse', () => {
 	})
 })
 
-describe('L2 — query parse table hoisting', () => {
+describe('query parse table hoisting', () => {
 	it('no per-request object literal in the emitted query parse call', () => {
 		const app = new Elysia().get(
 			'/',
@@ -170,7 +172,7 @@ describe('L2 — query parse table hoisting', () => {
 	})
 })
 
-describe('L2 — AOT replay parity', () => {
+describe('AOT replay parity', () => {
 	const freeze = async (
 		build: () => Elysia<any, any>,
 		assert: (frozen: Elysia<any, any>) => Promise<void>
@@ -212,9 +214,9 @@ describe('L2 — AOT replay parity', () => {
 	})
 })
 
-// ── L6 — outer `.catch` is load-bearing; nothing may drop it ─────────────────
+// ──  — outer `.catch` is load-bearing; nothing may drop it ─────────────────
 //
-// L6 proposed skipping the fetch-level `.catch` for compiled routes that
+//  proposed skipping the fetch-level `.catch` for compiled routes that
 // "already catch internally". Analysis proved every async route retains a
 // rejection escape: a no-error-hook route rethrows a body-parse/handler throw,
 // and an error-hook route can reject when the error hook itself throws or an
@@ -223,7 +225,7 @@ describe('L2 — AOT replay parity', () => {
 // rejection. These pins fail loudly if a future change drops it: a throwing
 // handler / throwing error hook must still be mapped to a response, never a
 // process-killing rejection.
-describe('L6 — outer catch must survive (marker never drops a real error)', () => {
+describe('outer catch must survive (marker never drops a real error)', () => {
 	it('a throwing handler on an async route still reaches the error mapping', async () => {
 		const app = new Elysia()
 			.error(({ error, set }: any) => {
@@ -246,11 +248,11 @@ describe('L6 — outer catch must survive (marker never drops a real error)', ()
 		await expect(res.text()).resolves.toBe('boom')
 	})
 
-	it('an error hook that itself throws degrades to a clean 500 instead of escaping app.handle (header-injection-1)', async () => {
+	it('an error hook that itself throws degrades to a clean 500 instead of escaping app.handle', async () => {
 		// The route's own try/catch runs the error hook, the hook throws, and the
 		// async route REJECTS into the fetch-level `.catch` (`catchError`) →
 		// `finalizeError` → `handleError`, which re-runs the same throwing hook.
-		// `finalizeError` now GUARDS that re-run (header-injection-1): a throw
+		// `finalizeError` now GUARDS that re-run : a throw
 		// from the error pipeline degrades to `internalServerErrorResponse` built
 		// from a fresh header set rather than escaping `app.handle`. Letting it
 		// escape was the crash vector — a naive `app.handle(req).then(send)`

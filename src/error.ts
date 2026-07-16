@@ -7,6 +7,42 @@ import { skipClone } from './adapter/skip-clone'
 
 export { isProduction } from './universal/is-production'
 
+const expectedCache = new WeakMap<object, unknown>()
+
+function freezeExpected(value: unknown): unknown {
+	if (!value || typeof value !== 'object') return typeof value !== 'function'
+	if (!Array.isArray(value) && (value as any).constructor !== Object) return
+
+	for (const key in value as any)
+		if (!freezeExpected((value as any)[key])) return
+
+	return Object.freeze(value)
+}
+
+function isCacheableExpected(value: unknown, visited = new Set<object>()) {
+	if (value === null || value === undefined) return true
+
+	const t = typeof value
+	if (t === 'string' || t === 'number' || t === 'boolean' || t === 'bigint')
+		return true
+
+	if (t !== 'object') return false
+	const obj = value as object
+
+	if (visited.has(obj)) return true
+
+	const proto = Object.getPrototypeOf(obj)
+	if (proto !== Object.prototype && proto !== null && !Array.isArray(obj))
+		return false
+
+	visited.add(obj)
+
+	for (const key in obj)
+		if (!isCacheableExpected((obj as any)[key], visited)) return false
+
+	return true
+}
+
 export class ElysiaError<
 	Status extends number = number,
 	Response extends string = string
@@ -163,6 +199,37 @@ const walkSubSchema = (schema: any, instancePath: string | undefined) =>
 const FOUND_ECHO_LIMIT = 8192
 const FOUND_ECHO_OMITTED = `[value exceeds ${FOUND_ECHO_LIMIT} byte echo limit]`
 
+function jsonStringLengthWithin(value: string, budget: number) {
+	budget -= 2
+
+	for (let i = 0; i < value.length && budget >= 0; i++) {
+		const code = value.charCodeAt(i)
+
+		if (code === 34 || code === 92) budget -= 2
+		else if (code < 32)
+			budget -=
+				code === 8 ||
+				code === 9 ||
+				code === 10 ||
+				code === 12 ||
+				code === 13
+					? 2
+					: 6
+		else if (code < 128) budget--
+		else if (code < 2048) budget -= 2
+		else if (code >= 0xd800 && code <= 0xdbff) {
+			const low = value.charCodeAt(i + 1)
+			if (low >= 0xdc00 && low <= 0xdfff) {
+				budget -= 4
+				i++
+			} else budget -= 6
+		} else if (code >= 0xdc00 && code <= 0xdfff) budget -= 6
+		else budget -= 3
+	}
+
+	return budget
+}
+
 const jsonLengthWithin = (value: unknown, budget: number): number => {
 	if (budget < 0) return -1
 
@@ -171,10 +238,10 @@ const jsonLengthWithin = (value: unknown, budget: number): number => {
 			break
 
 		case 'string':
-			return budget - value.length - 2
+			return jsonStringLengthWithin(value, budget)
 
 		case 'number':
-			return budget - String(value).length
+			return budget - (Number.isFinite(value) ? String(value).length : 4)
 
 		case 'boolean':
 			return budget - (value ? 4 : 5)
@@ -188,7 +255,7 @@ const jsonLengthWithin = (value: unknown, budget: number): number => {
 	if (Array.isArray(value)) {
 		budget -= 2
 		for (let i = 0; i < value.length; i++) {
-			budget = jsonLengthWithin(value[i], budget - 1)
+			budget = jsonLengthWithin(value[i], budget - (i ? 1 : 0))
 			if (budget < 0) return -1
 		}
 
@@ -196,12 +263,17 @@ const jsonLengthWithin = (value: unknown, budget: number): number => {
 	}
 
 	budget -= 2
+	let first = true
 	for (const key in value) {
+		budget = jsonStringLengthWithin(key, budget - (first ? 0 : 1)) - 1
+		if (budget < 0) return -1
+
 		budget = jsonLengthWithin(
 			(value as Record<string, unknown>)[key],
-			budget - key.length - 4
+			budget
 		)
 		if (budget < 0) return -1
+		first = false
 	}
 
 	return budget
@@ -530,9 +602,30 @@ export class ValidationError extends ElysiaError {
 		const schemaForExpected = first?.schema ?? this.schema
 
 		if (schemaForExpected)
-			try {
-				expected = Create(schemaForExpected as any)
-			} catch {}
+			if (expectedCache.has(schemaForExpected as object))
+				expected = expectedCache.get(schemaForExpected as object)
+			else {
+				try {
+					const created = Create(schemaForExpected as any)
+
+					if (isCacheableExpected(created))
+						try {
+							const snapshot = structuredClone(created)
+							expected = snapshot
+							if (freezeExpected(snapshot)) {
+								expectedCache.set(
+									schemaForExpected as object,
+									snapshot
+								)
+							}
+						} catch {
+							expected = created
+						}
+					else
+						// just recreate exotic value (class instance, Date, etc.)
+						expected = created
+				} catch {}
+			}
 
 		return {
 			type: 'validation',

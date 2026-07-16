@@ -1,23 +1,22 @@
 import type { AnyElysia } from '../../base'
-import { sucrose, type Sucrose } from '../../sucrose'
 
 import type { ElysiaAdapter } from '../../adapter'
 
-import type { RouteValidator } from '../../validator/route'
 import type { Validator } from '../../validator'
 
-import { isAsyncFunction, isAsyncLifecycle, mayReturnPromise } from '../utils'
+import { isAsyncFunction } from '../utils'
 
-import { compileCookieConfig } from '../../cookie/config'
 import {
 	parseCookieRaw,
 	parseCookieRawSync,
 	parseCookieRawSigned,
+	parseCookieRawLazy,
 	buildCookieJar,
 	signCookieValues,
-	signCookieValuesSync,
-	hasSyncHmac
+	signCookieValuesSync
 } from '../../cookie/utils'
+
+import type { RouteCompileState } from './descriptor'
 
 import {
 	ElysiaStatus,
@@ -27,7 +26,7 @@ import {
 	isProduction
 } from '../../error'
 import { isDynamicRegex, traceEventIndex } from '../../constants'
-import { forwardError } from '../../handler/utils'
+import { finalizeRouteError, forwardError } from '../../handler/utils'
 import { hasHeaderShorthand } from '../../universal/constants'
 
 import { parseQueryFromURL } from '../../parse-query'
@@ -47,12 +46,17 @@ import {
 	runBeforeHandlePrefixAsync,
 	type TraceReporter
 } from './utils'
-import { tee } from '../../adapter/utils'
-import { createTracer, unionTracePhases, type TraceEvent } from '../../trace'
+import {
+	materializeSetHeaders,
+	normalizeContentType,
+	tee
+} from '../../adapter/utils'
+import { ELYSIA_TYPES } from '../../type/constants'
+import { createTracer, type TraceEvent } from '../../trace'
 import { Capture } from '../aot'
 import { JITProbe } from '../jit-probe'
 
-import { requestId, type CompactBeforeHandlePrefix } from '../../utils'
+import { requestId } from '../../utils'
 
 import type { Link } from './utils'
 import type { Context } from '../../context'
@@ -65,126 +69,6 @@ import type {
 } from '../../types'
 
 const parseFormData = 'c.body=await pf(c)\n'
-
-const matchReturnIdentifier =
-	// `=>` may be minified with no gap (`=>x`); `return` always needs a
-	// separator or it fuses into a different identifier (`returnx`).
-	// eslint-disable-next-line sonarjs/regex-complexity
-	/(?:=>\s*|\breturn\s+)(?!(?:true|false|null|undefined|void|new|typeof|async|await|function|class)\b)[A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*\s*(?![\w$([])/
-
-const mayReturnIdentifierCache = new WeakMap<Function, boolean>()
-
-const mayReturnIdentifier = (fn: Function): boolean => {
-	let result = mayReturnIdentifierCache.get(fn)
-	if (result !== undefined) return result
-	result = matchReturnIdentifier.test(fn.toString())
-	mayReturnIdentifierCache.set(fn, result)
-	return result
-}
-
-const lifecycleMayReturnPromise = (
-	handlers: MaybeArray<Function> | undefined,
-	observed: boolean
-) =>
-	handlers
-		? Array.isArray(handlers)
-			? handlers.some(
-					(fn) =>
-						!isAsyncFunction(fn) &&
-						(mayReturnPromise(fn) ||
-							(observed && mayReturnIdentifier(fn)))
-				)
-			: !isAsyncFunction(handlers) &&
-				(mayReturnPromise(handlers) ||
-					(observed && mayReturnIdentifier(handlers)))
-		: false
-
-const compactPrefixInference = new WeakMap<
-	CompactBeforeHandlePrefix,
-	Sucrose.Inference
->()
-const compactPrefixAsync = new WeakMap<CompactBeforeHandlePrefix, boolean>()
-
-const mergeInference = (
-	a: Sucrose.Inference,
-	b: Sucrose.Inference
-): Sucrose.Inference => ({
-	body: a.body || b.body,
-	cookie: a.cookie || b.cookie,
-	headers: a.headers || b.headers,
-	query: a.query || b.query,
-	set: a.set || b.set,
-	server: a.server || b.server,
-	url: a.url || b.url,
-	route: a.route || b.route,
-	path: a.path || b.path
-})
-
-const inferCompactPrefix = (
-	prefix: CompactBeforeHandlePrefix
-): Sucrose.Inference => {
-	const cached = compactPrefixInference.get(prefix)
-	if (cached) return cached
-
-	const pending: CompactBeforeHandlePrefix[] = []
-	let current: CompactBeforeHandlePrefix | undefined = prefix
-	let inference: Sucrose.Inference | undefined
-
-	while (current) {
-		inference = compactPrefixInference.get(current)
-		if (inference) break
-
-		pending.push(current)
-		current = current.previous
-	}
-
-	for (let i = pending.length - 1; i >= 0; i--) {
-		const item = pending[i]!
-		const added = sucrose(undefined, {
-			beforeHandle: item.added as any
-		})
-		inference = inference ? mergeInference(inference, added) : added
-		compactPrefixInference.set(item, inference)
-	}
-
-	return inference!
-}
-
-const compactPrefixForcesAsync = (
-	prefix: CompactBeforeHandlePrefix
-): boolean => {
-	const cached = compactPrefixAsync.get(prefix)
-	if (cached !== undefined) return cached
-
-	const pending: CompactBeforeHandlePrefix[] = []
-	let current: CompactBeforeHandlePrefix | undefined = prefix
-	let value = false
-
-	while (current) {
-		const previous = compactPrefixAsync.get(current)
-		if (previous !== undefined) {
-			value = previous
-			break
-		}
-
-		pending.push(current)
-		current = current.previous
-	}
-
-	for (let i = pending.length - 1; i >= 0; i--) {
-		const item = pending[i]!
-		for (let j = 0; !value && j < item.added.length; j++) {
-			const fn = item.added[j]!
-			value =
-				isAsyncFunction(fn) ||
-				(!isAsyncFunction(fn) &&
-					(mayReturnPromise(fn) || mayReturnIdentifier(fn)))
-		}
-		compactPrefixAsync.set(item, value)
-	}
-
-	return value
-}
 
 let captureHeaderShorthand: boolean | undefined
 export const setCaptureHeaderShorthand = (value: boolean | undefined): void => {
@@ -265,6 +149,8 @@ function parse(
 				break
 			}
 
+	const bodyKind = hasFn ? undefined : bodyMediaKind(bodyVali)
+
 	let code =
 		`let ct=((${hasHeaders ? "c.headers['content-type']" : "c.request.headers.get('content-type')"})||'')\n` +
 		'let cti=ct.indexOf(";")\n' +
@@ -310,10 +196,28 @@ function parse(
 		const begin = child ? child.begin : ''
 		const end = child ? child.end() : ''
 		const guard = bodyVali ? 'ct' : 'ct&&hb(c.request)'
+		const mediaGuard =
+			bodyKind === 1
+				? "cj||ce==='application/x-www-form-urlencoded'||ce==='multipart/form-data'"
+				: bodyKind === 2
+					? "cj||(ce.charCodeAt(0)===116&&ce.startsWith('text/'))"
+					: bodyKind === 3
+						? "ce==='multipart/form-data'||ce==='application/octet-stream'"
+						: undefined
+
+		code +=
+			'let ce=nc(ct)\n' +
+			"let cj=(ce.charCodeAt(12)===106&&ce==='application/json')||ce.endsWith('+json')\n"
+		link(normalizeContentType, 'nc')
+
+		if (mediaGuard) {
+			code += `if(ct&&!(${mediaGuard}))throw new es(415,'Unsupported Media Type')\n`
+			link(ElysiaStatus, 'es')
+		}
 
 		code += hasFn
-			? `if(!hasBody&&${guard}){${begin}c.body=ct.charCodeAt(12)===106?await pj(c):await pd(c,ct)\n${end}}\n`
-			: `if(${guard}){${begin}c.body=ct.charCodeAt(12)===106?await pj(c):await pd(c,ct)\n${end}}\n`
+			? `if(!hasBody&&${guard}){${begin}c.body=cj?await pj(c):await pd(c,ce,true)\n${end}}\n`
+			: `if(${guard}){${begin}c.body=cj?await pj(c):await pd(c,ce,true)\n${end}}\n`
 
 		if (!bodyVali) link(hasRequestBody, 'hb')
 		link(adapter.json, 'pj')
@@ -323,39 +227,140 @@ function parse(
 	return hasFn ? 'let hasBody=false,_bp\n' + code : code
 }
 
-const isAsyncValidator = (vali: Validator | undefined) =>
-	(vali as Validator | undefined)?.isAsync ?? true
+// 1 structured/form, 2 scalar, 3 file
+const bodyMediaKind = (bodyVali: Validator | undefined) =>
+	schemaMediaKind((bodyVali as any)?.schema)
 
-const mayReturnPromiseValidator = (vali: Validator | undefined) =>
-	(vali as Validator | undefined)?.mayReturnPromise === true
+export function schemaMediaKind(schema: any): number | undefined {
+	if (!schema || typeof schema !== 'object' || '~standard' in schema) return
+
+	const elyType = schema['~elyTyp']
+	if (elyType === ELYSIA_TYPES.File || elyType === ELYSIA_TYPES.Files)
+		return 3
+
+	if (elyType === ELYSIA_TYPES.Form) return 1
+
+	const kind = schema['~kind']
+	if (
+		kind === 'Object' ||
+		kind === 'Array' ||
+		kind === 'FormData' ||
+		schema.type === 'object' ||
+		schema.type === 'array'
+	)
+		return 1
+
+	if (kind === 'File') return 3
+
+	if (
+		kind === 'String' ||
+		kind === 'Number' ||
+		kind === 'Integer' ||
+		kind === 'Boolean' ||
+		kind === 'Null' ||
+		kind === 'Undefined' ||
+		kind === 'Literal' ||
+		(schema.type !== undefined &&
+			['string', 'number', 'integer', 'boolean', 'null'].includes(
+				schema.type
+			))
+	)
+		return 2
+
+	const branches = schema.anyOf ?? schema.oneOf ?? schema.allOf
+	if (!Array.isArray(branches) || !branches.length) return
+
+	let result: number | undefined
+	for (let i = 0; i < branches.length; i++) {
+		const branch = schemaMediaKind(branches[i])
+
+		if (branch === undefined || (result !== undefined && result !== branch))
+			return
+
+		result = branch
+	}
+
+	return result
+}
 
 const fromArgs = (type: string, isAsync: boolean) =>
 	`'${type}'${isAsync ? ',true' : ''}`
 
 const createInlineHandler = (
 	map: (value: unknown, ...rest: unknown[]) => unknown,
-	h: (context: Context) => unknown
+	h: (context: Context) => unknown,
+	root: AnyElysia
 ) =>
 	((c: Context) => {
-		const r = h(c)
-		if (r instanceof Error) throw r
-		if (r instanceof Promise)
-			return r.then((v) => map(forwardError(v), c.request))
+		try {
+			const r = h(c)
+			if (r instanceof Error) throw r
+			if (r instanceof Promise)
+				return r
+					.then((v) => map(forwardError(v), c.request))
+					.catch((error) => finalizeRouteError(root, c, error))
 
-		return map(r, c.request)
+			const response = map(r, c.request)
+			return typeof (response as any)?.then === 'function'
+				? Promise.resolve(response).catch((error) =>
+						finalizeRouteError(root, c, error)
+					)
+				: response
+		} catch (error) {
+			return finalizeRouteError(root, c, error)
+		}
 	}) as CompiledHandler
 
 const createInlineHandlerWithSet = (
 	map: (value: unknown, ...rest: unknown[]) => unknown,
-	h: (context: Context) => unknown
+	h: (context: Context) => unknown,
+	root: AnyElysia
 ) =>
 	((c: Context) => {
-		const r = h(c)
-		if (r instanceof Error) throw r
-		if (r instanceof Promise)
-			return r.then((v) => map(forwardError(v), c.set, c.request))
+		try {
+			const r = h(c)
+			if (r instanceof Error) throw r
+			if (r instanceof Promise)
+				return r
+					.then((v) => map(forwardError(v), c.set, c.request))
+					.catch((error) => finalizeRouteError(root, c, error))
 
-		return map(r, c.set, c.request)
+			const response = map(r, c.set, c.request)
+			return typeof (response as any)?.then === 'function'
+				? Promise.resolve(response).catch((error) =>
+						finalizeRouteError(root, c, error)
+					)
+				: response
+		} catch (error) {
+			return finalizeRouteError(root, c, error)
+		}
+	}) as CompiledHandler
+
+const createInlineHandlerWithDefaultHeaders = (
+	map: (value: unknown, ...rest: unknown[]) => unknown,
+	h: (context: Context) => unknown,
+	root: AnyElysia
+) =>
+	((c: Context) => {
+		try {
+			materializeSetHeaders(c.set)
+			const r = h(c)
+
+			if (r instanceof Error) throw r
+			if (r instanceof Promise)
+				return r
+					.then((v) => map(forwardError(v), c.set, c.request))
+					.catch((error) => finalizeRouteError(root, c, error))
+
+			const response = map(r, c.set, c.request)
+			return typeof (response as any)?.then === 'function'
+				? Promise.resolve(response).catch((error) =>
+						finalizeRouteError(root, c, error)
+					)
+				: response
+		} catch (error) {
+			return finalizeRouteError(root, c, error)
+		}
 	}) as CompiledHandler
 
 export interface CompileHandlerJitOptions {
@@ -364,12 +369,17 @@ export interface CompileHandlerJitOptions {
 	handler: unknown
 	instance: AnyElysia
 	root: AnyElysia
+	errorRoot: AnyElysia
 	hook: AnyLocalHook | undefined
 	adapter: ElysiaAdapter
-	buildValidator: () => RouteValidator<any> | undefined
 	isHandleFunction: boolean
 	isStaticResponse: boolean
 	isPromiseHandler: boolean
+	/**
+	 * Per-route descriptor + compile artifacts, computed by `describeRoute`.
+	 * The JIT no longer re-derives these facts; it names its emissions off them.
+	 */
+	state: RouteCompileState
 }
 
 export function compileHandlerJit({
@@ -377,131 +387,82 @@ export function compileHandlerJit({
 	path,
 	handler,
 	root,
+	errorRoot,
 	hook,
 	adapter,
-	buildValidator,
 	isHandleFunction,
 	isStaticResponse,
-	isPromiseHandler
+	isPromiseHandler,
+	state
 }: CompileHandlerJitOptions): CompiledHandler {
-	const vali = buildValidator()
-	const beforeHandlePrefix = (hook as any)?.['~beforeHandlePrefix'] as
-		| CompactBeforeHandlePrefix
-		| undefined
+	const {
+		vali,
+		inference,
+		cookieConfig,
+		beforeHandlePrefix,
+		traceHandlers,
+		tracePhases,
+		hasAnyPhase,
+		traceHandleOn,
+		descriptor: {
+			async: isAsync,
+			responseMode,
+			hasBody,
+			bodyValiIsAsync,
+			headersValiIsAsync,
+			paramsValiIsAsync,
+			queryValiIsAsync,
+			cookieValiIsAsync: cookieValidIsAsync,
+			responseValiAsync,
+			hasCookieSign,
+			syncCookieSign,
+			asyncCookieSign,
+			lazyCookieVerify,
+			hasErrorHook,
+			hasAfterResponse,
+			hasBeforeHandle,
+			hasAfterHandle,
+			hasMapResponse,
+			hasResponseValidator,
+			hasTrace,
+			traceCount,
+			hasLifecycleHook,
+			callHandlerSyncOnAsync,
+			syncErrorHook,
+			syncAfterResponse
+		}
+	} = state
 
-	JITProbe.record('sucrose')
-	let inference = sucrose(handler as any, hook as Sucrose.LifeCycle)
-	if (beforeHandlePrefix)
-		inference = mergeInference(
-			inference,
-			inferCompactPrefix(beforeHandlePrefix)
-		)
-
-	const params = new Set<unknown>()
+	const seenKeys = new Set<string>()
+	const paramValues: unknown[] = []
 	let alias = ''
 	function link(v: unknown, key: string) {
 		if (v === 0) {
-			if (!params.has(hook)) {
-				params.add(hook)
+			if (!seenKeys.has('ho')) {
+				seenKeys.add('ho')
+				paramValues.push(hook)
 				alias += `${alias ? ',' : ''}ho`
 			}
 
 			return
 		}
 
-		if (!params.has(v)) {
-			params.add(v)
+		if (!seenKeys.has(key)) {
+			seenKeys.add(key)
+			paramValues.push(v)
 			alias += `${alias ? ',' : ''}${key}`
 		}
 	}
-
-	if (hook && typeof hook.parse === 'function')
-		hook.parse = [hook.parse] as any
-
-	const parseLength = Array.isArray(hook?.parse) ? hook.parse.length : 0
-	const parseFirst = Array.isArray(hook?.parse) ? hook.parse[0] : hook?.parse
-	const hasStandaloneBody = !!(hook as any)?.schemas?.some(
-		(s: any) => s?.body
-	)
-
-	const bodylessMethod = method === 'GET' || method === 'HEAD'
-	const hasBody =
-		!!hook?.body ||
-		hasStandaloneBody ||
-		(!bodylessMethod &&
-			(parseLength > 0 || inference.body) &&
-			parseFirst !== 'none')
-
-	const bodyValiIsAsync =
-		hasBody &&
-		(isAsyncValidator(vali?.body) || mayReturnPromiseValidator(vali?.body))
-
-	const headersValiIsAsync =
-		vali?.headers &&
-		(isAsyncValidator(vali?.headers) ||
-			mayReturnPromiseValidator(vali?.headers))
-
-	const paramsValiIsAsync =
-		vali?.params &&
-		(isAsyncValidator(vali?.params) ||
-			mayReturnPromiseValidator(vali?.params))
-
-	const queryValiIsAsync =
-		vali?.query &&
-		(isAsyncValidator(vali?.query) ||
-			mayReturnPromiseValidator(vali?.query))
-
-	const cookieValidIsAsync =
-		vali?.cookie &&
-		(isAsyncValidator(vali?.cookie) ||
-			mayReturnPromiseValidator(vali?.cookie))
-
-	const appCookieConfig = root['~config']?.cookie
-	const needsCookie = !!vali?.cookie || !!inference.cookie
-	const cookieConfig = needsCookie
-		? compileCookieConfig(hook?.cookie as any, appCookieConfig as any)
-		: undefined
-	const hasCookieSign = !!cookieConfig?.hasSign
-
-	const syncCookieSign =
-		hasCookieSign && hasSyncHmac && !Capture.isCapturing()
-	const asyncCookieSign = hasCookieSign && !syncCookieSign
-
-	const hasErrorHook = !!hook?.error?.length
-	const hasAfterResponse = !!hook?.afterResponse?.length
-	const hasBeforeHandle =
-		!!beforeHandlePrefix?.length || !!hook?.beforeHandle?.length
-	const hasAfterHandle = !!hook?.afterHandle?.length
-	const hasMapResponse = !!hook?.mapResponse?.length
-	const hasResponseValidator = !!vali?.response
-	const traceHandlers = (hook?.trace as any[] | undefined) ?? undefined
-	const hasTrace = !!traceHandlers?.length
-	const traceCount = hasTrace ? traceHandlers!.length : 0
-	const hasLifecycleHook =
-		parseLength > 0 ||
-		!!hook?.transform?.length ||
-		hasBeforeHandle ||
-		hasAfterHandle ||
-		hasMapResponse ||
-		hasErrorHook ||
-		hasAfterResponse
+	link(errorRoot, 'rt')
+	link(finalizeRouteError, 'fre')
 
 	const abortExpression = 'c.request.signal.aborted'
 	const abortCheck = hasLifecycleHook
 		? `if(${abortExpression})return emp.clone()\n`
 		: ''
 
-	const tracePhases = hasTrace
-		? unionTracePhases(traceHandlers as Function[])
-		: new Set<TraceEvent>()
-
 	const phaseOn = (phase: TraceEvent) =>
 		hasTrace && (tracePhases === null || tracePhases.has(phase))
-
-	const hasAnyPhase =
-		hasTrace && (tracePhases === null || tracePhases.size > 0)
-
-	const traceHandleOn = phaseOn('handle')
 
 	const beginTrace = (
 		phase: TraceEvent,
@@ -568,89 +529,6 @@ export function compileHandlerJit({
 		}
 	}
 
-	let responseValiAsync = false
-	if (vali?.response)
-		for (const code in vali.response)
-			if (
-				isAsyncValidator(vali.response[code]) ||
-				mayReturnPromiseValidator(vali.response[code])
-			) {
-				responseValiAsync = true
-				break
-			}
-
-	const handlerIsAsync =
-		isHandleFunction && isAsyncFunction(handler as Function)
-
-	const errorHookForcesAsync =
-		hasErrorHook &&
-		(hasAfterHandle ||
-			hasMapResponse ||
-			hasResponseValidator ||
-			isAsyncLifecycle(hook?.error) ||
-			lifecycleMayReturnPromise(hook?.error, false))
-
-	const afterResponseForcesAsync =
-		hasAfterResponse &&
-		(isAsyncLifecycle(hook?.afterResponse) ||
-			hasAfterHandle ||
-			hasMapResponse ||
-			hasResponseValidator ||
-			hasErrorHook)
-
-	const traceForcesAsync =
-		(traceHandleOn || phaseOn('error') || phaseOn('afterResponse')) &&
-		isHandleFunction &&
-		!handlerIsAsync &&
-		(mayReturnPromise(handler as Function) ||
-			mayReturnIdentifier(handler as Function))
-
-	const handlerResultObserved =
-		isHandleFunction &&
-		!handlerIsAsync &&
-		(hasResponseValidator || hasAfterHandle || hasMapResponse) &&
-		(mayReturnPromise(handler as Function) ||
-			mayReturnIdentifier(handler as Function))
-
-	const lifecycleForcesAsync =
-		!!hook &&
-		((beforeHandlePrefix
-			? compactPrefixForcesAsync(beforeHandlePrefix)
-			: false) ||
-			lifecycleMayReturnPromise(hook.beforeHandle, true) ||
-			lifecycleMayReturnPromise(hook.transform, false) ||
-			lifecycleMayReturnPromise(hook.afterHandle, true) ||
-			lifecycleMayReturnPromise(hook.mapResponse, true))
-
-	const isAsync =
-		hasBody ||
-		handlerIsAsync ||
-		errorHookForcesAsync ||
-		traceForcesAsync ||
-		afterResponseForcesAsync ||
-		handlerResultObserved ||
-		lifecycleForcesAsync ||
-		asyncCookieSign ||
-		responseValiAsync ||
-		(hook &&
-			(!!isAsyncLifecycle(hook?.afterHandle) ||
-				!!isAsyncLifecycle(hook?.beforeHandle) ||
-				!!isAsyncLifecycle(hook?.transform) ||
-				!!isAsyncLifecycle(hook?.mapResponse) ||
-				!!isAsyncLifecycle(hook?.error) ||
-				bodyValiIsAsync ||
-				headersValiIsAsync ||
-				paramsValiIsAsync ||
-				queryValiIsAsync ||
-				cookieValidIsAsync))
-
-	const callHandlerSyncOnAsync =
-		isAsync && isHandleFunction && !handlerIsAsync
-
-	const syncErrorHook = hasErrorHook && !isAsync && !hasTrace
-	const syncAfterResponse =
-		hasAfterResponse && !isAsync && !hasTrace && !hasErrorHook
-
 	const callHandler = isHandleFunction
 		? callHandlerSyncOnAsync
 			? `_r=h(c)\nif(_r instanceof Promise)_r=await _r\n`
@@ -704,7 +582,14 @@ export function compileHandlerJit({
 	const head = code
 	code = ''
 
-	if (hasErrorHook || hasTrace) code += 'try{\n'
+	code += 'try{\n'
+	if (
+		responseMode === 'set-with-default-headers' &&
+		(inference.set || hasTrace)
+	) {
+		link(materializeSetHeaders, 'msh')
+		code += `msh(c.set)\n`
+	}
 
 	const hasHeaders = inference.headers || !!vali?.headers
 
@@ -748,8 +633,12 @@ export function compileHandlerJit({
 			link,
 			buildReport('parse')
 		)
+		const preserveParseStatus = seenKeys.has('es')
 		link(ParseError, 'pe')
-		code += 'try{\n' + parseCode + '}catch(e){throw new pe(e)}\n'
+		code +=
+			'try{\n' +
+			parseCode +
+			`}catch(e){${preserveParseStatus ? 'if(e instanceof es)throw e;' : ''}throw new pe(e)}\n`
 
 		if (hasTrace) code += endTrace('parse')
 		if (hasLifecycleHook) code += abortCheck
@@ -800,41 +689,40 @@ export function compileHandlerJit({
 				? "c.headers['cookie']"
 				: "c.request.headers.get('cookie')"
 
-		if (!hasCookieSign && !cookieValidIsAsync) {
-			link(parseCookieRawSync, 'pcrs')
-			code += `let _ck=pcrs(${cookieHeaderExpr},cc)\n`
-		} else if (syncCookieSign && !cookieValidIsAsync) {
-			link(parseCookieRawSigned, 'pcrsg')
-			code += `let _ck=pcrsg(${cookieHeaderExpr},cc)\n`
+		if (lazyCookieVerify) {
+			link(parseCookieRawLazy, 'pcrl')
+			code += `let _ck=pcrl(${cookieHeaderExpr},cc)\n`
+			code += `c.cookie=bcj(c.set,_ck,cc,1)\n`
 		} else {
-			link(parseCookieRaw, 'pcr')
-			code += `let _ck=await pcr(${cookieHeaderExpr},cc)\n`
+			if (!hasCookieSign && !cookieValidIsAsync) {
+				link(parseCookieRawSync, 'pcrs')
+				code += `let _ck=pcrs(${cookieHeaderExpr},cc)\n`
+			} else if (syncCookieSign && !cookieValidIsAsync) {
+				link(parseCookieRawSigned, 'pcrsg')
+				code += `let _ck=pcrsg(${cookieHeaderExpr},cc)\n`
+			} else {
+				link(parseCookieRaw, 'pcr')
+				code += `let _ck=await pcr(${cookieHeaderExpr},cc)\n`
+			}
+
+			if (vali?.cookie) {
+				link(vali, 'va')
+
+				const cookieIsOptional = !!(hook?.cookie as any)?.['~optional']
+				const validateExpr = `_ck=${cookieValidIsAsync ? 'await ' : ''}va.cookie.From(_ck,${fromArgs('cookie', !!cookieValidIsAsync)})\n`
+				if (cookieIsOptional)
+					code += `if(Object.keys(_ck).length){${validateExpr}}\n`
+				else code += validateExpr
+			}
+
+			code += `c.cookie=bcj(c.set,_ck,cc)\n`
 		}
-
-		if (vali?.cookie) {
-			link(vali, 'va')
-
-			const cookieIsOptional = !!(hook?.cookie as any)?.['~optional']
-			const validateExpr = `_ck=${cookieValidIsAsync ? 'await ' : ''}va.cookie.From(_ck,${fromArgs('cookie', !!cookieValidIsAsync)})\n`
-			if (cookieIsOptional)
-				code += `if(Object.keys(_ck).length){${validateExpr}}\n`
-			else code += validateExpr
-		}
-
-		code += `c.cookie=bcj(c.set,_ck,cc)\n`
 	}
 
-	const hasSet =
-		inference.cookie ||
-		inference.set ||
-		!!root['~ext']?.['headers'] ||
-		needsCookie ||
-		hasAfterResponse ||
-		hasErrorHook ||
-		hasResponseValidator ||
-		hasTrace
+	const hasSet = responseMode !== 'compact'
 
 	const res = adapter.response
+	const responseMap = res.map
 
 	/* eslint-disable sonarjs/no-use-of-empty-return-value */
 	const map = hasSet
@@ -1028,11 +916,12 @@ export function compileHandlerJit({
 				`function _fin2(c,_r,_stl){\n` +
 				`c.responseValue=_r\n` +
 				scheduleAfterResponse +
-				`return ${hasSet ? `${map}(_r,c.set,c.request)` : `${map}(_r,c.request)`}\n` +
+				`const _m=${hasSet ? `${map}(_r,c.set,c.request)` : `${map}(_r,c.request)`}\n` +
+				`return typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>fre(rt,c,_e)):_m\n` +
 				`}\n`
 
 			code +=
-				`if(_r instanceof Promise)return _r.then(fe).then((_v)=>_fin(c,_v))\n` +
+				`if(_r instanceof Promise)return _r.then(fe).then((_v)=>_fin(c,_v)).catch((_e)=>fre(rt,c,_e))\n` +
 				`return _fin(c,_r)\n`
 		} else {
 			code += `if(_r instanceof Error)throw _r\n`
@@ -1112,9 +1001,13 @@ export function compileHandlerJit({
 				? `${map}(_r,c.set,c.request)`
 				: `${map}(_r,c.request)`
 
-			if (syncErrorHook)
-				code += `if(_r instanceof Promise)return ${finalMap}.catch((_e)=>_ce(_e,c))\n`
-			code += `return ${finalMap}\n`
+			if (isAsync) code += `return await ${finalMap}\n`
+			else {
+				code += `const _m=${finalMap}\n`
+				code += syncErrorHook
+					? `return typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>_ce(_e,c)):_m\n`
+					: `return typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>fre(rt,c,_e)):_m\n`
+			}
 		}
 	} else if (isHandleFunction) {
 		if (!isAsync) link(forwardError, 'fe')
@@ -1126,14 +1019,14 @@ export function compileHandlerJit({
 			abortCheck +
 			`if(_r instanceof Error)throw _r\n` +
 			(isAsync
-				? `return ${map}(_r,${mapArgs})\n`
+				? `return await ${map}(_r,${mapArgs})\n`
 				: syncErrorHook
-					? `if(_r instanceof Promise)return ${map}(_r.then(fe),${mapArgs}).catch((_e)=>_ce(_e,c))\n` +
-						`return ${map}(_r,${mapArgs})\n`
-					: `if(_r instanceof Promise)_r=_r.then(fe)\n` +
-						`return ${map}(_r,${mapArgs})\n`)
+					? `if(_r instanceof Promise)_r=_r.then(fe)\nconst _m=${map}(_r,${mapArgs})\nreturn typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>_ce(_e,c)):_m\n`
+					: `if(_r instanceof Promise)_r=_r.then(fe)\nconst _m=${map}(_r,${mapArgs})\nreturn typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>fre(rt,c,_e)):_m\n`)
 	} else {
-		code += `return ${mapReturn}`
+		code +=
+			`const _m=${mapReturn.trim()}\n` +
+			`return typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>fre(rt,c,_e)):_m\n`
 	}
 
 	if (hasErrorHook || hasTrace) {
@@ -1158,13 +1051,14 @@ export function compileHandlerJit({
 			if (allowUnsafeDetail) link(ValidationError, 'verr')
 
 			factoryHelpers +=
+				`function _em(c,_r){return typeof _r?.then==='function'?Promise.resolve(_r).catch((_e)=>fre(rt,c,_e)):_r}\n` +
 				`${asyncCookieSign ? 'async ' : ''}function _efb(e,c){\n` +
 				(asyncCookieSign ? `let _sg\n` : ``) +
-				`if(e instanceof es){${signPrefix}return ${map}(e,c.set,c.request)}\n` +
-				`if(e?.status){${signPrefix}return ${map}(e?.response!==undefined?e.response:(isprod()&&e.status>=500?'Internal Server Error':(e?.message??'')),c.set,c.request)}\n` +
+				`if(e instanceof es){${signPrefix}return _em(c,${map}(e,c.set,c.request))}\n` +
+				`if(e?.status){${signPrefix}return _em(c,${map}(e?.response!==undefined?e.response:(isprod()&&e.status>=500?'Internal Server Error':(e?.message??'')),c.set,c.request))}\n` +
 				`c.set.status=500\n` +
 				signPrefix +
-				`return ${map}(ise(e),c.set,c.request)\n` +
+				`return _em(c,${map}(ise(e),c.set,c.request))\n` +
 				`}\n`
 
 			body +=
@@ -1204,20 +1098,21 @@ export function compileHandlerJit({
 				`if(typeof e?.toResponse==='function')` +
 				`try{\n` +
 				`const _er=e.toResponse()\n` +
-				`if(_er instanceof Promise)return _er.then(${asyncCookieSign ? 'async ' : ''}(_v)=>{if(_v instanceof Response){${signPrefix}return ${map}(_v,c.set,c.request)}return _efb(e,c)},()=>_efb(e,c))\n` +
-				`if(_er instanceof Response){${signPrefix}return ${map}(_er,c.set,c.request)}\n` +
+				`if(typeof _er?.then==='function')return Promise.resolve(_er).then(${asyncCookieSign ? 'async ' : ''}(_v)=>{if(_v instanceof Response){${signPrefix}return _em(c,${map}(_v,c.set,c.request))}return _efb(e,c)},()=>_efb(e,c)).catch((_e)=>fre(rt,c,_e))\n` +
+				`if(_er instanceof Response){${signPrefix}return _em(c,${map}(_er,c.set,c.request))}\n` +
 				`}catch{}\n` +
 				`return _efb(e,c)\n`
 		} else {
 			body += endTrace('error') + schedule
-			body += `throw e\n`
+			body += `return fre(rt,c,e)\n`
 		}
 
 		if (syncErrorHook) {
-			factoryHelpers += `function _ce(e,c){\n${body}}\n`
+			factoryHelpers += `function _ce(e,c){try{\n${body}}catch(_ee){return fre(rt,c,_ee)}}\n`
 			code += `}catch(e){return _ce(e,c)}\n`
-		} else code += `}catch(e){\n${body}}\n`
-	}
+		} else
+			code += `}catch(e){try{\n${body}}catch(_ee){return fre(rt,c,_ee)}}\n`
+	} else code += `}catch(e){return fre(rt,c,e)}\n`
 
 	code += '}'
 
@@ -1227,22 +1122,43 @@ export function compileHandlerJit({
 		code = `(function(){\n${factoryHelpers}return ${code}})()`
 
 	Capture.handler({ method, path, alias, code })
+	const inlineAlias = alias.startsWith('rt,fre,') ? alias.slice(7) : alias
+	const isGeneratorHandler =
+		isHandleFunction &&
+		(handler as Function).constructor.name.endsWith('GeneratorFunction')
 
-	if (!hasTrace && isHandleFunction && !inlineUnsafe) {
-		if (alias === 'rc' || (!isAsync && !syncErrorHook && alias === 'rc,fe'))
+	if (!hasTrace && isHandleFunction && !isGeneratorHandler && !inlineUnsafe) {
+		if (
+			inlineAlias === 'rc' ||
+			(!isAsync && !syncErrorHook && inlineAlias === 'rc,fe')
+		)
 			return createInlineHandler(
 				res.compact ?? (res.map as any),
-				handler as any
+				handler as any,
+				errorRoot
 			)
 		else if (
-			alias === 'rm' ||
-			(!isAsync && !syncErrorHook && alias === 'rm,fe')
+			inlineAlias === 'rm' ||
+			inlineAlias === 'msh,rm' ||
+			(!isAsync &&
+				!syncErrorHook &&
+				(inlineAlias === 'rm,fe' || inlineAlias === 'msh,rm,fe'))
 		)
-			return createInlineHandlerWithSet(res.map as any, handler as any)
+			return responseMode === 'set-with-default-headers' && inference.set
+				? createInlineHandlerWithDefaultHeaders(
+						responseMap as any,
+						handler as any,
+						errorRoot
+					)
+				: createInlineHandlerWithSet(
+						responseMap as any,
+						handler as any,
+						errorRoot
+					)
 	}
 
 	JITProbe.record('handler:new-function')
 
 	// eslint-disable-next-line sonarjs/code-eval -- AOT codegen is the architecture
-	return new Function('h', alias, `return ${code}`)(handler, ...params)
+	return new Function('h', alias, `return ${code}`)(handler, ...paramValues)
 }

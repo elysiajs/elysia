@@ -26,6 +26,7 @@ import type {
 	PreContext
 } from './context'
 import type { ChainNode } from './utils'
+import type { ResumeEmit } from './experimental/resume'
 
 export interface ElysiaConfig<
 	in out Prefix extends string | undefined,
@@ -129,6 +130,11 @@ export interface ElysiaConfig<
 		 * Specified cookie name to be signed globally
 		 */
 		sign?: true | string | string[]
+		/**
+		 * Verify signed cookies lazily on access or eagerly at request entry.
+		 * @default 'lazy'
+		 */
+		verify?: 'lazy' | 'eager'
 	}
 
 	/**
@@ -137,9 +143,43 @@ export interface ElysiaConfig<
 	analytic?: boolean
 
 	/**
+	 * Retain the metadata required by introspection tooling after sealing.
+	 * Plugins that provide introspection may enable this for their host.
+	 *
+	 * @default false
+	 */
+	introspect?: boolean
+
+	/**
 	 * Enable experimental features
 	 */
-	experimental?: {}
+	experimental?: {
+		/**
+		 * **Unstable / preview.** Compile route handlers with the resume-skeleton
+		 * emitter imported from `elysia/experimental/resume` (a sync entry + a
+		 * single `__resume` async continuation) instead of the default JIT lane.
+		 * Only a subset of routes are currently supported; unsupported routes
+		 * transparently fall back to the default lane. Never enters AOT builds.
+		 * Behavior and API may change without notice.
+		 *
+		 * @default undefined
+		 */
+		resumeEmit?: ResumeEmit
+
+		/**
+		 * **Unstable / preview.** Defer synchronous `.use(child)` composition to
+		 * the first build/observation boundary. All non-route work (extension
+		 * merges, macros, scope children, hook-chain absorption) still runs eagerly
+		 * in authoring order; only the per-route copy loop is deferred and replayed
+		 * in a single pass, avoiding the O(N·D²) reabsorption cost of deeply nested
+		 * plugin graphs. Unsupported constructs (async plugins, `.use(Promise)`,
+		 * functional `use` returning a promise, cyclic graphs) throw loudly.
+		 * Behavior is response- and route-table-identical to eager composition.
+		 *
+		 * @default false
+		 */
+		lazyCompose?: boolean
+	}
 
 	/**
 	 * If enabled, Elysia will attempt to coerce value to defined type on incoming and outgoing bodies.
@@ -795,6 +835,16 @@ export type CompiledHandler = (
 	context: Partial<Context>
 ) => MaybePromise<Response>
 
+/**
+ * Internal per-route authoring tuple.
+ *
+ * Q17 (B7): tuple field indices are an INTERNAL representation and are
+ * deprecated as a plugin surface. The sealed runtime reads a dense columnar
+ * `RouteTable` (`src/route-table.ts`), not these tuples. Plugins must introspect
+ * routes through the documented `Elysia.routes` / `Elysia.history` getters —
+ * never by indexing this tuple. The raw tuples remain the authoring log at this
+ * release and are physically dropped from strict-production builds at N+3a.
+ */
 export type InternalRoute = readonly [
 	method: string,
 	path: string,
@@ -2445,6 +2495,182 @@ export type GlobalHookReturn<
 	Volatile
 >
 
+export type ScopedHookReturn<
+	HookScope extends EventScope,
+	BasePath extends string,
+	Scope extends EventScope,
+	Singleton extends SingletonBase,
+	Definitions extends DefinitionBase,
+	Metadata extends MetadataBase,
+	Routes extends RouteBase,
+	Ephemeral extends EphemeralType,
+	Volatile extends EphemeralType,
+	ResponseAddition extends PossibleResponse,
+	DeriveAddition extends Record<string, unknown> = never
+> = Elysia<
+	BasePath,
+	Scope,
+	[HookScope] extends ['global']
+		? [DeriveAddition] extends [never]
+			? Singleton
+			: {
+					decorator: Singleton['decorator']
+					store: Singleton['store']
+					derive: Singleton['derive'] & DeriveAddition
+				}
+		: Singleton,
+	Definitions,
+	[HookScope] extends ['global']
+		? {
+				schema: Metadata['schema']
+				schemas: Metadata['schemas']
+				macro: Metadata['macro']
+				macroFn: Metadata['macroFn']
+				parser: Metadata['parser']
+				response: UnionResponseStatus<
+					Metadata['response'],
+					ResponseAddition
+				>
+			}
+		: Metadata,
+	Routes,
+	[HookScope] extends ['global']
+		? Ephemeral
+		: [HookScope] extends ['plugin' | 'global']
+			? {
+					derive: Ephemeral['derive'] &
+						([DeriveAddition] extends [never] ? {} : DeriveAddition)
+					schema: Ephemeral['schema']
+					schemas: Ephemeral['schemas']
+					response: UnionResponseStatus<
+						Ephemeral['response'],
+						ResponseAddition
+					>
+					error: Ephemeral['error']
+				}
+			: Ephemeral,
+	[HookScope] extends ['plugin' | 'global']
+		? Volatile
+		: {
+				derive: Volatile['derive'] &
+					([DeriveAddition] extends [never] ? {} : DeriveAddition)
+				schema: Volatile['schema']
+				schemas: Volatile['schemas']
+				response: UnionResponseStatus<
+					Volatile['response'],
+					ResponseAddition
+				>
+				error: Volatile['error']
+			}
+>
+
+export type ScopedMapDeriveReturn<
+	HookScope extends EventScope,
+	BasePath extends string,
+	Scope extends EventScope,
+	Singleton extends SingletonBase,
+	Definitions extends DefinitionBase,
+	Metadata extends MetadataBase,
+	Routes extends RouteBase,
+	Ephemeral extends EphemeralType,
+	Volatile extends EphemeralType,
+	ResponseAddition extends PossibleResponse,
+	Derive extends Record<string, unknown>
+> = Elysia<
+	BasePath,
+	Scope,
+	[HookScope] extends ['global']
+		? {
+				decorator: Singleton['decorator']
+				store: Singleton['store']
+				derive: Derive
+			}
+		: [HookScope] extends ['plugin' | 'local']
+			? Singleton
+			: {
+					decorator: Singleton['decorator']
+					store: Singleton['store']
+					derive: Partial<Singleton['derive']>
+				},
+	Definitions,
+	[HookScope] extends ['global']
+		? {
+				schema: Metadata['schema']
+				schemas: Metadata['schemas']
+				macro: Metadata['macro']
+				macroFn: Metadata['macroFn']
+				parser: Metadata['parser']
+				response: UnionResponseStatus<
+					Metadata['response'],
+					ResponseAddition
+				>
+			}
+		: Metadata,
+	Routes,
+	[HookScope] extends ['global']
+		? Ephemeral
+		: [HookScope] extends ['plugin']
+			? {
+					derive: Derive
+					schema: Ephemeral['schema']
+					schemas: Ephemeral['schemas']
+					response: UnionResponseStatus<
+						Ephemeral['response'],
+						ResponseAddition
+					>
+					error: Ephemeral['error']
+				}
+			: [HookScope] extends ['local']
+				? Ephemeral
+				: [HookScope] extends ['plugin' | 'global']
+					? {
+							derive: Partial<Ephemeral['derive']> & Derive
+							schema: Ephemeral['schema']
+							schemas: Ephemeral['schemas']
+							response: UnionResponseStatus<
+								Ephemeral['response'],
+								ResponseAddition
+							>
+							error: Ephemeral['error']
+						}
+					: 'plugin' extends HookScope
+						? {
+								derive: Partial<Ephemeral['derive']> &
+									Partial<Derive>
+								schema: Ephemeral['schema']
+								schemas: Ephemeral['schemas']
+								response: UnionResponseStatus<
+									Ephemeral['response'],
+									ResponseAddition
+								>
+								error: Ephemeral['error']
+							}
+						: Ephemeral,
+	[HookScope] extends ['plugin' | 'global']
+		? Volatile
+		: [HookScope] extends ['local']
+			? {
+					derive: Derive
+					schema: Volatile['schema']
+					schemas: Volatile['schemas']
+					response: UnionResponseStatus<
+						Volatile['response'],
+						ResponseAddition
+					>
+					error: Volatile['error']
+				}
+			: {
+					derive: Partial<Volatile['derive']> & Derive
+					schema: Volatile['schema']
+					schemas: Volatile['schemas']
+					response: UnionResponseStatus<
+						Volatile['response'],
+						ResponseAddition
+					>
+					error: Volatile['error']
+				}
+>
+
 export type AddWSRoute<
 	BasePath extends string,
 	Scope extends EventScope,
@@ -2515,5 +2741,22 @@ export type GuardHookSingleton<
 		// @ts-ignore
 		MacroContext['resolve']
 }
+
+export interface StaticMapAliases {
+	method: string
+	paths: string[]
+}
+
+export type LazyComposeEntry =
+	| { kind: 'route'; route: InternalRoute; source?: string }
+	| {
+			kind: 'use'
+			child: AnyElysia
+			preChain: ChainNode | undefined
+			childBaseLen: number
+			childPlan: LazyComposeEntry[] | undefined
+			childPlanLen: number
+			source?: string
+	  }
 
 export type { TypeBoxSchema, AnySchema, StandardSchemaV1Like } from './type'

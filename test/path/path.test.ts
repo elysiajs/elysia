@@ -509,7 +509,7 @@ describe('Path', () => {
 		)
 	})
 
-	// Regression (audit H10): dynamic (parameterized) routes were registered
+	// Regression: dynamic (parameterized) routes were registered
 	// only at the exact path, so `/users/1/` 404'd on `/users/:id` even though
 	// static routes tolerate trailing slashes by default. Memoirist now handles
 	// the loose lookup without Elysia retaining a second dynamic route entry.

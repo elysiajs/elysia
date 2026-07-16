@@ -1,5 +1,5 @@
 /**
- * L18 — constantTimeEqual should prefer the native timingSafeEqual on the
+ * constantTimeEqual should prefer the native timingSafeEqual on the
  * current runtime (Node/Bun both have it via node:crypto) rather than the
  * handwritten loop, and the fallback loop must still produce correct results.
  *
@@ -12,7 +12,7 @@
 import { describe, expect, it } from 'bun:test'
 import { constantTimeEqual } from '../../src/utils'
 
-describe('L18 — constantTimeEqual', () => {
+describe('constantTimeEqual', () => {
 	it('returns true for identical strings', () => {
 		expect(constantTimeEqual('hello', 'hello')).toBe(true)
 		expect(constantTimeEqual('', '')).toBe(true)
