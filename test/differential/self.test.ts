@@ -1,8 +1,4 @@
-/**
- * A deliberately skewed lane must be caught. An unskewed pair returns no
- * mismatch, while header, body, status, cookie, and observation skews each
- * produce the corresponding divergence report.
- */
+// Each test changes one response component and verifies the reported mismatch.
 
 import { describe, it, expect } from 'bun:test'
 import { jitHandle, type Lane, type Define } from './lanes'
@@ -15,7 +11,6 @@ import {
 
 const ctx = { corpusId: 'self', requestId: 'probe', lanePair: 'self' }
 
-/** Wrap a lane, mutating exactly one facet of its response. */
 type Skew = (res: Response) => Response
 const skewedLane = async (define: Define, skew: Skew): Promise<Lane> => {
 	const inner = await jitHandle.make(define)
@@ -38,7 +33,7 @@ const run = async (lane: Lane, path = '/x'): Promise<ResponseSnapshot> => {
 }
 
 describe('differential comparator detects injected skew', () => {
-	it('unskewed identical lanes PASS (null mismatch)', async () => {
+	it('returns no mismatch for identical lanes', async () => {
 		const a = await jitHandle.make(define)
 		const b = await jitHandle.make(define)
 		try {
@@ -50,10 +45,9 @@ describe('differential comparator detects injected skew', () => {
 		}
 	})
 
-	it('catches a flipped body byte and reports component=body', async () => {
+	it('reports a body mismatch when one byte changes', async () => {
 		const oracle = await jitHandle.make(define)
 		const skewed = await skewedLane(define, (res) => {
-			// Flip one byte of the body.
 			return res.text().then(
 				(t) =>
 					new Response('X' + t.slice(1), {
@@ -63,7 +57,6 @@ describe('differential comparator detects injected skew', () => {
 			) as any
 		})
 		try {
-			// The skew returns a Promise<Response>; resolve it via handle.
 			const oSnap = await run(oracle)
 			const skewedRes = await skewed.handle(
 				new Request('http://localhost/x')
@@ -79,7 +72,7 @@ describe('differential comparator detects injected skew', () => {
 		}
 	})
 
-	it('catches a mutated header and reports component=headers', async () => {
+	it('reports a header mismatch when one header changes', async () => {
 		const oracle = await jitHandle.make(define)
 		const skewed = await skewedLane(define, (res) => {
 			const h = new Headers(res.headers)
@@ -102,7 +95,7 @@ describe('differential comparator detects injected skew', () => {
 		}
 	})
 
-	it('catches a changed status and reports component=status', async () => {
+	it('reports a status mismatch when the status changes', async () => {
 		const oracle = await jitHandle.make(define)
 		const skewed = await skewedLane(
 			define,
@@ -126,13 +119,12 @@ describe('differential comparator detects injected skew', () => {
 		}
 	})
 
-	it('catches reordered set-cookie and reports component=set-cookie', async () => {
+	it('reports a cookie mismatch when cookie order changes', async () => {
 		const oracle = await jitHandle.make(define)
 		const skewed = await skewedLane(define, (res) => {
 			const h = new Headers(res.headers)
 			const cookies = res.headers.getSetCookie?.() ?? []
 			h.delete('set-cookie')
-			// Re-append in REVERSED order — set-cookie is order-sensitive.
 			for (const c of [...cookies].reverse()) h.append('set-cookie', c)
 			return new Response(res.body, { status: res.status, headers: h })
 		})
@@ -141,7 +133,6 @@ describe('differential comparator detects injected skew', () => {
 			const cSnap = await snapshot(
 				await skewed.handle(new Request('http://localhost/x'))
 			)
-			// Sanity: there were multiple cookies to reorder.
 			expect(oSnap.setCookie.length).toBeGreaterThan(1)
 			const m = compareResponses(ctx, oSnap, cSnap)
 			expect(m?.component).toBe('set-cookie')
@@ -151,7 +142,7 @@ describe('differential comparator detects injected skew', () => {
 		}
 	})
 
-	it('date header stripped — a divergent Date does NOT trip the comparator', async () => {
+	it('ignores Date header differences', async () => {
 		const oracle = await jitHandle.make(define)
 		const skewed = await skewedLane(define, (res) => {
 			const h = new Headers(res.headers)
@@ -166,7 +157,6 @@ describe('differential comparator detects injected skew', () => {
 					await skewed.handle(new Request('http://localhost/x'))
 				)
 			)
-			// date is stripped on both sides — no divergence from it.
 			expect(m).toBeNull()
 		} finally {
 			await oracle.dispose()
@@ -192,7 +182,7 @@ describe('differential comparator detects injected skew', () => {
 		)
 	})
 
-	it('catches an observation skew and reports component=observation', () => {
+	it('reports a lifecycle observation mismatch', () => {
 		const oracleObs = ['transform', 'beforeHandle', 'handler']
 		const candidateObs = ['transform', 'handler'] // skipped beforeHandle
 		const m = compareObservations(ctx, oracleObs, candidateObs)
@@ -200,21 +190,18 @@ describe('differential comparator detects injected skew', () => {
 		expect(m?.oracle).toContain('beforeHandle')
 	})
 
-	it('identical observations PASS', () => {
+	it('returns no mismatch for identical observations', () => {
 		const obs = ['a', 'b', 'c']
 		expect(compareObservations(ctx, obs, [...obs])).toBeNull()
 	})
 
-	it('observation deepEqual is order-INSENSITIVE for object keys', () => {
-		// Two lanes emitting the same facts in a different key order must NOT
-		// diverge — this is why we use structural deepEqual, not JSON.stringify.
+	it('treats object key order as insignificant', () => {
 		const oracle = { a: 1, b: [1, 2], c: { x: true } }
 		const candidate = { c: { x: true }, b: [1, 2], a: 1 }
 		expect(compareObservations(ctx, oracle, candidate)).toBeNull()
 	})
 
-	it('observation deepEqual is order-SENSITIVE for arrays', () => {
-		// A hook-fire log's ORDER is the fact — reordering IS a divergence.
+	it('treats array order as significant', () => {
 		const m = compareObservations(ctx, ['a', 'b'], ['b', 'a'])
 		expect(m?.component).toBe('observation')
 	})

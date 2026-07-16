@@ -22,14 +22,6 @@ describe('Plugin', () => {
 		expect(response.status).toBe(200)
 	})
 
-	// `use([...])` must dispatch each element through the SAME path as
-	// single `use(plugin)` — functional plugins get invoked, promise/async
-	// plugins get threaded through the pending queue (so `await app.modules`
-	// resolves them), and resolved instances merge. The old array branch used
-	// the private raw merge, which assumes a resolved Elysia instance, so
-	// functions/promises/pending modules registered nothing and their routes
-	// 404'd (or threw on private-field access). This pins all three element
-	// kinds registering correctly.
 	it('use([...]) dispatches promise, functional, and instance plugins', async () => {
 		const asyncPlugin = (async () => {
 			await Bun.sleep(2)
@@ -42,9 +34,7 @@ describe('Plugin', () => {
 		)
 
 		const app = new Elysia()
-			// heterogeneous array (promise + functional + instance) exercises the
-			// untyped `use(app: any)` fallback; the typed overload models only
-			// `AnyElysia[]`
+			// The typed overload models only Elysia instance arrays.
 			.use([asyncPlugin, fnPlugin, instancePlugin] as any)
 			.get('/', 'root')
 

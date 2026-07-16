@@ -3,24 +3,10 @@ import { Elysia } from '../../src'
 
 import { expectTypeOf } from 'expect-type'
 
-import type {
-	DefaultEphemeral,
-	DefaultMetadata
-} from '../../src/types'
+import type { DefaultEphemeral, DefaultMetadata } from '../../src/types'
 
-/**
- * Async plugin type soundness
- *
- * Chain-ordered contributions (`derive`/`resolve`) of an async plugin land
- * at resolution time — routes declared before the module chain drains never
- * see them, so async `use` must type them `| undefined`. `decorate`/`state`
- * and definitions live on the instance and compile after the drain, so they
- * stay exact. Verified at runtime in test/core/modules.test.ts
- * ("apply async plugin contributions at resolution time").
- *
- * `derive`/`resolve` do not contribute types yet (mid-rewrite), so the
- * plugin's phantom types are declared directly.
- */
+// Async plugin derives may be unavailable before module resolution, while
+// decorators and state remain exact instance types.
 type ResolvePlugin = Elysia<
 	'',
 	'local',
@@ -39,7 +25,7 @@ type ResolvePlugin = Elysia<
 declare const plugin: ResolvePlugin
 declare const makePlugin: () => ResolvePlugin
 
-// ? sync instance use — every contribution stays exact
+// Synchronous instance plugin
 {
 	new Elysia().use(plugin).get('/', (ctx) => {
 		expectTypeOf(ctx.derived).toEqualTypeOf<string>()
@@ -50,17 +36,19 @@ declare const makePlugin: () => ResolvePlugin
 	})
 }
 
-// ? sync functional use — every contribution stays exact
+// Synchronous functional plugin
 {
-	new Elysia().use(() => makePlugin()).get('/', (ctx) => {
-		expectTypeOf(ctx.derived).toEqualTypeOf<string>()
-		expectTypeOf(ctx.decorated).toEqualTypeOf<string>()
+	new Elysia()
+		.use(() => makePlugin())
+		.get('/', (ctx) => {
+			expectTypeOf(ctx.derived).toEqualTypeOf<string>()
+			expectTypeOf(ctx.decorated).toEqualTypeOf<string>()
 
-		return 'ok'
-	})
+			return 'ok'
+		})
 }
 
-// ? async instance use — derive/resolve become | undefined, the rest exact
+// Asynchronous instance plugin
 {
 	new Elysia().use(Promise.resolve(plugin)).get('/', (ctx) => {
 		expectTypeOf(ctx.derived).toEqualTypeOf<string | undefined>()
@@ -71,7 +59,7 @@ declare const makePlugin: () => ResolvePlugin
 	})
 }
 
-// ? dynamic import shape — same as async instance
+// Dynamic import shape
 {
 	new Elysia().use(Promise.resolve({ default: plugin })).get('/', (ctx) => {
 		expectTypeOf(ctx.derived).toEqualTypeOf<string | undefined>()
@@ -81,17 +69,19 @@ declare const makePlugin: () => ResolvePlugin
 	})
 }
 
-// ? async functional use — same as async instance
+// Asynchronous functional plugin
 {
-	new Elysia().use(async () => makePlugin()).get('/', (ctx) => {
-		expectTypeOf(ctx.derived).toEqualTypeOf<string | undefined>()
-		expectTypeOf(ctx.decorated).toEqualTypeOf<string>()
+	new Elysia()
+		.use(async () => makePlugin())
+		.get('/', (ctx) => {
+			expectTypeOf(ctx.derived).toEqualTypeOf<string | undefined>()
+			expectTypeOf(ctx.decorated).toEqualTypeOf<string>()
 
-		return 'ok'
-	})
+			return 'ok'
+		})
 }
 
-// ? real decorate/state flow through async use stays exact
+// Decorator and state types through asynchronous use
 {
 	const real = new Elysia()
 		.decorate('db', 'connection' as const)

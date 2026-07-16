@@ -5,43 +5,12 @@ import { tmpdir } from 'node:os'
 
 import { rspack } from '@rspack/core'
 
-// Load the plugin from DIST (not src): the fixture bare-imports `elysia`, which
-// resolves to this repo's `dist`. The plugin's capture/replay must run against
-// the SAME `Compiled` instance the fixture uses, or handler-JIT replay throws
-// (a `src` core replays against a different `Compiled`). Mirrors the dist-core
-// discipline in mode-gating.test.ts. The standard gate builds `dist` first.
+// The plugin and bare-import fixture must share the same dist Elysia instance.
 const { aot } = (await import(
 	resolve(import.meta.dir, '../../dist/plugin/aot/rspack.mjs')
 )) as typeof import('../../src/plugin/aot/rspack')
 
-/**
- * Rspack integration for the AOT unplugin adapter. Builds a real fixture app
- * through `@rspack/core`'s node API with the `elysia/plugin/aot/rspack` plugin
- * and asserts:
- *   (1) the compilation completes with zero errors,
- *   (2) the emitted bundle carries the self-registering compiled manifest
- *       marker (`.register({` — what `generateCompiledArtifacts` emits),
- *   (3) importing the built output and serving a request via `app.handle`
- *       returns 200 (the manifest self-registered on import → frozen path).
- *
- * WHY the bare-`elysia` fixture: `mode-a-app.ts` imports `elysia`, which
- * resolves to this repo's `dist` via the package self-reference. The plugin
- * (loaded from `../../src/plugin/aot/rspack`) shares that same `Compiled`
- * instance, so the frozen manifest registers against the runtime the built
- * bundle uses. The standard gate builds `dist` first.
- *
- * WHY target 'node': the fixture's `elysia` dist is built for node22 and the
- * built bundle is imported under the (node-compatible) bun test runtime. Node
- * builtins are provided by rspack's node target; nothing Bun-runtime-only is in
- * the manifest path, so the bundle executes here.
- *
- * ORDERING GOTCHA: the native rspack plugin ships its own loader file
- * (`dist/plugin/aot/rspack-loader.mjs`) which the plugin resolves as a sibling
- * at runtime. `bun run build` must run before this test so that loader file
- * exists in `dist` — the standard gate builds `dist` first.
- */
-
-const APP = resolve(import.meta.dir, 'fixtures/mode-a-app.ts')
+const APP = resolve(import.meta.dir, 'fixtures/sealed-app.ts')
 
 const dirs: string[] = []
 
@@ -68,13 +37,7 @@ const buildWithRspack = (entry: string): Promise<{ outFile: string }> => {
 				module: true
 			},
 			optimization: {
-				// Keep the emitted manifest readable so the `.register({` marker grep
-				// is stable (minification would mangle whitespace/identifiers). This is
-				// the ONLY optimization override: default production `sideEffects` /
-				// `usedExports` / `concatenateModules` stay ON, so this test exercises
-				// the real production DCE that would prune a side-effect-only manifest
-				// import. The plugin's per-bundler `rspack(compiler)` hook forces
-				// `sideEffects: true` on the virtual manifest module to keep it.
+				// Keep manifest registration readable while retaining production DCE.
 				minimize: false
 			},
 			resolve: {
@@ -97,10 +60,7 @@ const buildWithRspack = (entry: string): Promise<{ outFile: string }> => {
 					}
 				]
 			},
-			// The plugin serves `elysia/compiled` + `elysia/type` as virtual
-			// modules; bun/node builtins are handled by the node target.
 			plugins: [aot(entry) as any],
-			// Silence perf hints noise on the bundled elysia graph.
 			performance: false,
 			stats: 'errors-warnings'
 		})
@@ -136,23 +96,15 @@ const buildWithRspack = (entry: string): Promise<{ outFile: string }> => {
 	})
 }
 
-describe('AOT rspack — integration', () => {
-	it('builds a fixture app, inlines the manifest, and serves a request (200)', async () => {
+describe('AOT Rspack integration', () => {
+	it('inlines the manifest and serves requests from the bundle', async () => {
 		const { outFile } = await buildWithRspack(APP)
 
-		// (2) manifest marker present in the emitted bundle.
 		const bundle = readFileSync(outFile, 'utf8')
 		expect(bundle).toContain('.register({')
 
-		// native plugin uses real cache files + resolve.alias, NOT unplugin's
-		// `\0`-virtual VFS — no `%00` placeholder artifacts should leak into the
-		// output.
 		expect(bundle).not.toContain('%00')
 
-		// (3) import the built output and serve a request → 200. Importing
-		// self-registers the frozen manifest; `ELYSIA_AOT_BUILD=1` keeps the
-		// bundle's `.listen()` a no-op (mode-a-app has none, but the guard is set
-		// during import for parity with the sibling e2e tests).
 		const previous = process.env.ELYSIA_AOT_BUILD
 		process.env.ELYSIA_AOT_BUILD = '1'
 		try {

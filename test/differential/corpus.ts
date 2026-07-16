@@ -1,25 +1,5 @@
-/**
- * Differential route and request corpus. Each entry describes one app
- * (`define`) plus a set of requests to fire against it. Every lane in the matrix
- * builds a FRESH app from `define` and runs each request against it; `compare.ts`
- * asserts the lanes agree byte-for-byte.
- *
- * ── Elysia API gotchas encoded here ────────────────────────────────────────
- * • Verb signature is `(path, hook, handler)` OR `(path, handler)`. Passing the
- * HANDLER first with a schema object second silently registers the schema as a
- * STATIC RESPONSE (not a bug — it is the 2-arg form with a plain-object body).
- * Every schema-bearing route below therefore uses `(path, {...schema }, fn)`.
- * • There is no `.route(method,...)` custom-method API in this codebase — only
- * the standard verbs and `.all`. Custom HTTP methods are exercised through
- * `.all` (see README "known-gaps").
- * • Request URLs use `http://localhost/...` except the deliberate short-host case.
- *
- * Tags drive matrix subsetting (see differential.test.ts):
- * 'handle-only' — do not run under the real-socket (listen) lanes.
- * 'safe-for-socket' — explicitly safe for listen lanes (default for most).
- * 'known-divergence' — lanes disagree TODAY; skipped via test.todo naming the fix.
- * 'observe' — carries a per-request observation recorder.
- */
+// Each case gets a fresh app and requests. `safe-for-socket` enables socket
+// lanes, `handle-only` excludes them, and `observe` records hook order.
 
 import { Elysia, t, status, redirect, type AnyElysia } from '../../src'
 
@@ -32,12 +12,6 @@ export interface CorpusRequest {
 export interface CorpusEntry {
 	id: string
 	tags: string[]
-	/**
-	 * Build the app under test. Called fresh per (lane, entry). Typed as
-	 * `AnyElysia` (= `Elysia<any…>`): a chained `.get` returns a branded
-	 * `AddRoute<…>` subtype that a bare `Elysia<'',…>` annotation rejects, so the
-	 * corpus uses the widened alias the rest of the codebase uses for this shape.
-	 */
 	define: (app: AnyElysia) => AnyElysia
 	requests: CorpusRequest[]
 }
@@ -51,11 +25,6 @@ const json = (path: string, body: unknown) => () =>
 		body: JSON.stringify(body)
 	})
 
-/**
- * A per-request observation recorder. `define` closes over ONE recorder; each
- * request resets it, runs, then the lane's `observe` returns its contents.
- * This records whether a promoted route still runs its lifecycle hooks.
- */
 export interface Recorder {
 	events: string[]
 	reset(): void
@@ -68,28 +37,16 @@ export const makeRecorder = (): Recorder => ({
 	}
 })
 
-/**
- * Some entries need a recorder shared between `define` and the lane's observe.
- * We attach it to the entry so lanes.ts can wire `observe` to it. Only entries
- * tagged 'observe' set this.
- */
 export interface ObservableCorpusEntry extends CorpusEntry {
 	recorder?: Recorder
 }
 
-// A custom thenable — NOT a native Promise. Elysia's current dispatch checks
-// `instanceof Promise`, so this object is treated as a plain value and serialized
-// as `{}`. All lanes reproduce it identically, so it is pinned rather than skipped.
 const makeThenable = (value: unknown) => ({
 	then(resolve: (v: unknown) => void) {
 		resolve(value)
 	}
 })
 
-// An object whose `then` getter throws when read. Thenable detection that reads
-// `.then` to classify the value will throw; `instanceof Promise` will not. This
-// probes the maybe-classification boundary. Whatever the lanes do today,
-// they must AGREE — if they diverge, retag 'known-divergence' + test.todo (below).
 const makeThrowingThenGetter = () => {
 	const obj = {} as Record<string, unknown>
 	Object.defineProperty(obj, 'then', {
@@ -104,7 +61,6 @@ const makeThrowingThenGetter = () => {
 
 export const corpus: ObservableCorpusEntry[] = []
 
-// ── Native-static promotion correctness ──────────────────────────────────
 corpus.push({
 	id: 'native-static-literal',
 	tags: ['safe-for-socket', 'static', 'native-static'],
@@ -180,7 +136,6 @@ corpus.push({
 	]
 })
 
-// ── Static / nesting / root ────────────────────────────────────────────────
 corpus.push({
 	id: 'static',
 	tags: ['safe-for-socket', 'static'],
@@ -196,7 +151,6 @@ corpus.push({
 	]
 })
 
-// ── Copy-on-write default headers ─────────────────────────────────────────
 corpus.push({
 	id: 'default-headers',
 	tags: ['safe-for-socket', 'headers', 'default-headers'],
@@ -214,7 +168,6 @@ corpus.push({
 	]
 })
 
-// ── Params ─────────────────────────────────────────────────────────────────
 corpus.push({
 	id: 'params',
 	tags: ['safe-for-socket', 'param'],
@@ -231,27 +184,22 @@ corpus.push({
 	]
 })
 
-// ── Encoded + unicode param values ─────────────────────────────────────────
 corpus.push({
 	id: 'param-encoding',
 	tags: ['safe-for-socket', 'param', 'unicode'],
 	define: (app) => app.get('/echo/:v', ({ params }: any) => params.v),
 	requests: [
-		// Thai
 		{
 			id: 'thai',
 			make: get(
 				'/echo/%E0%B8%AA%E0%B8%A7%E0%B8%B1%E0%B8%AA%E0%B8%94%E0%B8%B5'
 			)
 		},
-		// emoji
 		{ id: 'emoji', make: get('/echo/%F0%9F%9A%80') },
-		// percent-encoded reserved chars (slash-encoded stays in the segment)
 		{ id: 'reserved', make: get('/echo/a%2Fb%20c') }
 	]
 })
 
-// ── Wildcard ───────────────────────────────────────────────────────────────
 corpus.push({
 	id: 'wildcard',
 	tags: ['safe-for-socket', 'wildcard'],
@@ -263,7 +211,6 @@ corpus.push({
 	]
 })
 
-// ── Non-tail optional param (supported: `/a/:b?/c`) ─────────────────────────
 corpus.push({
 	id: 'optional-nontail',
 	tags: ['safe-for-socket', 'param', 'optional'],
@@ -275,7 +222,6 @@ corpus.push({
 	]
 })
 
-// ── Trailing-slash / loose-path (strictPath default = false) ────────────────
 corpus.push({
 	id: 'trailing-slash',
 	tags: ['safe-for-socket', 'path'],
@@ -286,7 +232,6 @@ corpus.push({
 	]
 })
 
-// ── Literal shadows param (precedence) ─────────────────────────────────────
 corpus.push({
 	id: 'precedence',
 	tags: ['safe-for-socket', 'param', 'precedence'],
@@ -300,12 +245,6 @@ corpus.push({
 	]
 })
 
-// ── Duplicate (method, path) registration: last-wins uniformly ──────────────
-// No dedup enforcement — duplicate registration is the user's responsibility.
-// The LAST registration wins across every lane and route type: the static map
-// and AOT manifest overwrite, and Memoirist >= 1.2.0 overwrites its terminal
-// store on a repeat add. Both static and dynamic duplicates are pinned so a
-// future lane-parity break (e.g. AOT diverging from the router) is caught.
 corpus.push({
 	id: 'duplicate-route-static',
 	tags: ['safe-for-socket', 'precedence'],
@@ -321,7 +260,6 @@ corpus.push({
 	requests: [{ id: 'dynamic-last-wins', make: get('/dup/1') }]
 })
 
-// ── Custom method via.all (no.route API exists — see README) ──────────
 corpus.push({
 	id: 'all-method',
 	tags: ['safe-for-socket', 'method'],
@@ -340,7 +278,6 @@ corpus.push({
 	]
 })
 
-// ── Query coercion (scalar) ────────────────────────────────────────────────
 corpus.push({
 	id: 'query-scalar',
 	tags: ['safe-for-socket', 'query', 'schema'],
@@ -358,7 +295,6 @@ corpus.push({
 	]
 })
 
-// ── Query with object-in-query + extra keys ────────────────────────────────
 corpus.push({
 	id: 'query-object',
 	tags: ['safe-for-socket', 'query', 'schema'],
@@ -388,7 +324,6 @@ corpus.push({
 	]
 })
 
-// ── JSON body validation ───────────────────────────────────────────────────
 corpus.push({
 	id: 'json-body',
 	tags: ['safe-for-socket', 'body', 'schema'],
@@ -420,7 +355,6 @@ corpus.push({
 				})
 		},
 		{
-			// Own `__proto__` key in the body exercises pollution-safe mirroring.
 			id: 'proto-key',
 			make: () =>
 				new Request(url('/echo'), {
@@ -432,7 +366,6 @@ corpus.push({
 	]
 })
 
-// ── Multipart form (fields only, no File) ──────────────────────────────────
 corpus.push({
 	id: 'multipart-form',
 	tags: ['safe-for-socket', 'body', 'form'],
@@ -455,7 +388,6 @@ corpus.push({
 	]
 })
 
-// ── URL-encoded body ───────────────────────────────────────────────────────
 corpus.push({
 	id: 'urlencoded-body',
 	tags: ['safe-for-socket', 'body', 'form'],
@@ -480,7 +412,6 @@ corpus.push({
 	]
 })
 
-// ── Header schema + single header read ─────────────────────────────────────
 corpus.push({
 	id: 'headers',
 	tags: ['safe-for-socket', 'headers', 'schema'],
@@ -497,12 +428,7 @@ corpus.push({
 				new Request(url('/h'), { headers: { 'x-token': 'secret' } })
 		},
 		{
-			// handle-only: the 422 body echoes the request `host` header, which on
-			// a real socket includes the ephemeral listen port. Two lanes bind two
-			// ports, so their echoed bodies differ ONLY by the port number — a
-			// harness artifact, not a lane divergence (verified identical after
-			// port-normalization). Under app.handle both lanes share the fixed
-			// `http://localhost` host, so no skew. See README "known-gaps".
+			// A socket adds its port to the host echoed by the 422 response.
 			id: 'missing-422',
 			make: get('/h'),
 			tags: ['handle-only']
@@ -510,7 +436,6 @@ corpus.push({
 	]
 })
 
-// ── Cookies: read / write one / write multiple / attributes ────────────────
 corpus.push({
 	id: 'cookies',
 	tags: ['safe-for-socket', 'cookies'],
@@ -525,7 +450,6 @@ corpus.push({
 				return 'set'
 			})
 			.get('/cookie/write-many', ({ cookie }: any) => {
-				// Ordered set-cookie: a then b. Order is compared strictly.
 				cookie.a.value = '1'
 				cookie.b.value = '2'
 				return 'set-many'
@@ -553,7 +477,6 @@ corpus.push({
 	]
 })
 
-// ── Response schema + encode/codec path ────────────────────────────────────
 corpus.push({
 	id: 'response-schema',
 	tags: ['safe-for-socket', 'schema', 'response'],
@@ -578,7 +501,6 @@ corpus.push({
 	]
 })
 
-// ── Errors: 404 / 422 / thrown Error / custom error / status / redirect ───
 corpus.push({
 	id: 'errors',
 	tags: ['safe-for-socket', 'error'],
@@ -602,7 +524,6 @@ corpus.push({
 	]
 })
 
-// ── Custom error class via.error + throw ────────────────────────────────
 class TeapotError extends Error {
 	code = 'TEAPOT'
 	status = 418
@@ -615,7 +536,6 @@ corpus.push({
 	tags: ['safe-for-socket', 'error'],
 	define: (app) =>
 		(app as any)
-			// `.error(Class, fn)` both registers the error class and handles it.
 			.error(TeapotError, ({ error, set }: any) => {
 				set.status = 418
 				return { handled: (error as TeapotError).code }
@@ -626,7 +546,6 @@ corpus.push({
 	requests: [{ id: 'thrown-custom', make: get('/custom') }]
 })
 
-// ── Empty-body / 204 responses ─────────────────────────────────────────────
 corpus.push({
 	id: 'empty-bodies',
 	tags: ['safe-for-socket', 'response'],
@@ -647,7 +566,6 @@ corpus.push({
 	]
 })
 
-// ── Streams: async generator (SSE-ish) + raw byte ReadableStream ───────────
 corpus.push({
 	id: 'streams',
 	tags: ['safe-for-socket', 'stream'],
@@ -674,13 +592,11 @@ corpus.push({
 	]
 })
 
-// ── Lifecycle: beforeHandle short-circuit + onRequest early return + derive ─
 corpus.push({
 	id: 'lifecycle',
 	tags: ['safe-for-socket', 'lifecycle'],
 	define: (app) =>
 		app
-			// `.request` is the request-level early-return hook (no `.onRequest`).
 			.request(({ request }: any) => {
 				if (new URL(request.url).pathname === '/req-gate')
 					return 'REQ-GATED'
@@ -695,19 +611,15 @@ corpus.push({
 			.get('/req-gate', () => 'handler-should-not-run'),
 	requests: [
 		{ id: 'before-short-circuit', make: get('/before') },
-		{ id: 'onrequest-early-return', make: get('/req-gate') },
+		{ id: 'request-hook-early-return', make: get('/req-gate') },
 		{ id: 'derive-visible', make: get('/derived') }
 	]
 })
 
-// ── group/guard with hooks + nested.use chains (plugin in plugin) ──────────
 corpus.push({
 	id: 'plugins-nested',
 	tags: ['safe-for-socket', 'plugin', 'lifecycle'],
 	define: (app) => {
-		// Observable guard hooks stamp a header
-		// so its firing (and the fact it does NOT bleed onto sibling routes) is
-		// detectable across lanes. A no-op ` => undefined` proves nothing.
 		const inner = new Elysia()
 			.guard({
 				beforeHandle: ({ set }: any) => {
@@ -739,13 +651,10 @@ corpus.push({
 	]
 })
 
-// ── Scoped plugin ordering ────────────────────────────────────────────────
 corpus.push({
 	id: 'scoped-ordering',
 	tags: ['safe-for-socket', 'plugin', 'lifecycle'],
 	define: (app) => {
-		// A scoped plugin's hooks propagate to the parent's routes registered
-		// AFTER `.use`. Order must be deterministic across lanes.
 		const scoped = new Elysia().beforeHandle('plugin', ({ set }) => {
 			set.headers['x-scoped'] = 'yes'
 		})
@@ -754,7 +663,6 @@ corpus.push({
 	requests: [{ id: 'after-scoped', make: get('/after-scoped') }]
 })
 
-// ── Async classification ──────────────────────────────────────────────────
 corpus.push({
 	id: 'async-native-promise',
 	tags: ['safe-for-socket', 'async'],
@@ -772,10 +680,7 @@ corpus.push({
 	]
 })
 
-// KNOWN-DIVERGENCE candidate: custom thenables. Empirically (probed 2026-07-12)
-// ALL v1 lanes reproduce the broken `{}` serialization identically, so lanes
-// AGREE and this is pinned rather than skipped. If a future src change makes any
-// lane diverge, retag 'known-divergence' and convert it to test.todo.
+// Custom thenables are serialized as plain objects rather than awaited.
 corpus.push({
 	id: 'async-thenable',
 	tags: ['safe-for-socket', 'async', 'custom-thenable'],
@@ -793,11 +698,7 @@ corpus.push({
 	]
 })
 
-// ── Throwing `then` getter ────────────────────────────────────────────────
-// A handler returning an object whose `.then` getter throws. Probes the
-// maybe-classification boundary. All lanes must agree on the outcome;
-// if a future src change makes any lane diverge, retag 'known-divergence' and
-// convert it to test.todo.
+// A throwing `then` getter follows the normal error path.
 corpus.push({
 	id: 'throwing-then-getter',
 	tags: [
@@ -811,9 +712,7 @@ corpus.push({
 	requests: [{ id: 'handler-throwing-then', make: get('/throwing-then') }]
 })
 
-// ── Short-host request — lanes must agree (both 404 today) ────────────────
-// handle-only: a real socket cannot receive `http://a/` as the request URL; the
-// short-host path-extraction bug only manifests through app.handle.
+// A real socket cannot receive `http://a/` as its request URL.
 corpus.push({
 	id: 'short-host',
 	tags: ['handle-only', 'path', 'short-host'],
@@ -821,9 +720,6 @@ corpus.push({
 	requests: [{ id: 'short-host-root', make: () => new Request('http://a/') }]
 })
 
-// ── Observation entry: hooks push ordered event names ─────────────────────
-// The recorder is shared with the lane via `entry.recorder`; lanes.ts resets it
-// per request and returns its contents from `observe`.
 {
 	const recorder = makeRecorder()
 	corpus.push({
@@ -853,11 +749,6 @@ corpus.push({
 	})
 }
 
-// ── Resume-emitter coverage ───────────────────────────────────────────────
-
-// Async request validator (a custom async parser then a body schema): the resume
-// lane transfers through `__resume`; the other lane pairs exercise their own
-// async-validation paths. Covers the 200 (valid) and 422 (invalid) branches.
 corpus.push({
 	id: 'async-validator',
 	tags: ['safe-for-socket', 'body', 'schema', 'async'],
@@ -876,9 +767,6 @@ corpus.push({
 	]
 })
 
-// beforeHandle returning a NATIVE Promise: resolving `undefined` continues to the
-// handler; resolving a value short-circuits. The resume lane handles both
-// branches natively, and the behavior is pinned across every lane pair.
 corpus.push({
 	id: 'beforehandle-promise-branches',
 	tags: ['safe-for-socket', 'lifecycle', 'async'],
@@ -900,9 +788,6 @@ corpus.push({
 	]
 })
 
-// Async handler that throws AFTER an await: the rejection must surface as the
-// framework 500 identically across lanes (and, for the resume lane, prove the
-// continuation rejection path is not swallowed).
 corpus.push({
 	id: 'async-throw-after-await',
 	tags: ['safe-for-socket', 'error', 'async'],
@@ -914,10 +799,6 @@ corpus.push({
 	requests: [{ id: 'throws', make: get('/async-throw') }]
 })
 
-// Signed-cookie route: HMAC signing forces the async cookie-sign path (or the
-// sync-HMAC path where available) → resume falls back, but the set-cookie
-// signature bytes are pinned across lanes. The secret is fixed so the signature
-// is deterministic.
 corpus.push({
 	id: 'signed-cookie',
 	tags: ['safe-for-socket', 'cookies'],
@@ -938,9 +819,6 @@ corpus.push({
 	requests: [{ id: 'write-signed', make: get('/signed') }]
 })
 
-// The afterResponse hook must fire exactly once and after the
-// response is produced. Genuinely covered by the resume lane (sync afterResponse
-// `_fin`/`_fin2` tee path) — native coverage, not trivial fallback equality.
 {
 	const recorder = makeRecorder()
 	corpus.push({

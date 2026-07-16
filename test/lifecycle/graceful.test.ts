@@ -2,11 +2,8 @@ import { describe, expect, it } from 'bun:test'
 
 import { Elysia } from '../../src'
 
-// `setup` fires after the server is ready; `cleanup` fires when the server is
-// stopped. Both are app-global and must survive `.use()` so a plugin can
-// register cleanup that the root app still runs.
-describe('setup / cleanup life cycle', () => {
-	it('fires setup on listen and cleanup on stop()', async () => {
+describe('Setup and cleanup', () => {
+	it('runs setup on listen and cleanup on stop', async () => {
 		const order: string[] = []
 
 		const app = new Elysia()
@@ -22,7 +19,7 @@ describe('setup / cleanup life cycle', () => {
 		expect(order).toEqual(['setup', 'cleanup'])
 	})
 
-	it('runs handlers registered on a used plugin', async () => {
+	it("runs a plugin's setup and cleanup from its parent app", async () => {
 		const order: string[] = []
 
 		const plugin = new Elysia({ name: 'graceful-plugin' })
@@ -41,7 +38,7 @@ describe('setup / cleanup life cycle', () => {
 		expect(order).toEqual(['plugin-setup', 'app-setup', 'plugin-cleanup'])
 	})
 
-	it('accepts an array of handlers', async () => {
+	it('accepts an array of setup handlers', async () => {
 		const order: string[] = []
 
 		const app = new Elysia()
@@ -53,7 +50,7 @@ describe('setup / cleanup life cycle', () => {
 		await app.stop()
 	})
 
-	it('stop(boolean) still shuts down the server', async () => {
+	it('stop(true) shuts down the server', async () => {
 		const app = new Elysia().get('/health', 'hi').listen(0)
 		const port = app.server!.port
 
@@ -64,9 +61,6 @@ describe('setup / cleanup life cycle', () => {
 		expect(app.server).toBeUndefined()
 	})
 
-	// an async setup task must complete BEFORE the user's listen
-	// callback fires — the callback is the readiness signal, and traffic /
-	// resource use may follow it.
 	it('does not fire the listen callback until async setup settles', async () => {
 		const order: string[] = []
 
@@ -84,14 +78,11 @@ describe('setup / cleanup life cycle', () => {
 			})
 		})
 
-		// setup finished before the callback observed readiness
 		expect(order).toEqual(['setup-done', 'listen-callback'])
 
 		await app.stop()
 	})
 
-	// `await app.stop()` must not resolve while an async cleanup task
-	// is still running, and cleanups run sequentially in registration order.
 	it('awaits async cleanup handlers sequentially before stop() resolves', async () => {
 		const order: string[] = []
 

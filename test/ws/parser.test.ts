@@ -2,11 +2,7 @@ import { describe, it, expect } from 'bun:test'
 import { defaultWSParse, createMessageParser } from '../../src/ws'
 
 describe('defaultWSParse', () => {
-	// '/' (charCode 47) was sniffed as a JSON prefix, paying a
-	// guaranteed-throw JSON.parse per '/'-message. Removing it must not
-	// change ANY output — '/'-prefixed strings can never parse as JSON,
-	// so catch-return and fall-through are observably identical.
-	it('output is unchanged across the prefix corpus', () => {
+	it('parses supported literals without treating slash-prefixed strings as JSON', () => {
 		const corpus: [input: string, expected: unknown][] = [
 			['/', '/'],
 			['/join x', '/join x'],
@@ -33,9 +29,7 @@ describe('defaultWSParse', () => {
 describe('createMessageParser', () => {
 	const fakeWS = {} as any
 
-	// the zero-parser variant must be fully sync — a Promise per
-	// inbound frame was pure engine overhead on the hottest WS path.
-	it('zero-parser variant returns sync (no Promise per message)', () => {
+	it('returns synchronously when no custom parsers are registered', () => {
 		const parse = createMessageParser(undefined)
 
 		const result = parse(fakeWS, '{"a":1}')
@@ -45,7 +39,7 @@ describe('createMessageParser', () => {
 		expect(parse(fakeWS, '/join x')).toBe('/join x')
 	})
 
-	it('fully-sync parser chain returns sync, applied in order', () => {
+	it('applies synchronous parsers in order without returning a Promise', () => {
 		const parse = createMessageParser([
 			(_ws, message) => `${message}-1`,
 			// returning undefined keeps the previous value
@@ -58,7 +52,7 @@ describe('createMessageParser', () => {
 		expect(result).toBe('x-1-2')
 	})
 
-	it('async parser switches to a Promise, resuming the chain in order', async () => {
+	it('returns a Promise and resumes remaining parsers in order', async () => {
 		const parse = createMessageParser([
 			(_ws, message) => `${message}-sync`,
 			async (_ws, message) => `${message}-async`,
@@ -70,15 +64,13 @@ describe('createMessageParser', () => {
 		await expect(result).resolves.toBe('x-sync-async-tail')
 	})
 
-	it('sync parser throw propagates synchronously to the caller', () => {
+	it('throws synchronously when a parser throws', () => {
 		const parse = createMessageParser([
 			() => {
 				throw new Error('boom')
 			}
 		])
 
-		// dispatchMessage's try/catch routes this to handleError — the
-		// throw must stay synchronous, not become a rejected Promise.
 		expect(() => parse(fakeWS, 'x')).toThrow('boom')
 	})
 })

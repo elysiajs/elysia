@@ -6,21 +6,11 @@ import {
 	resolveHandlerParams
 } from '../../src/compile/handler/params'
 
-/**
- * AOT handler-freeze — ParamDescriptor coverage.
- *
- * The full handler freeze (which subsumes sucrose) rebuilds `params` at runtime
- * from the captured `alias` via `HANDLER_PARAMS`. If a `link(value, name)` site
- * in `compileHandler` has no descriptor, a frozen handler would bind the wrong
- * deps — and on Cloudflare there's no `new Function` fallback to save it. So this
- * test pins the dictionary to the EXACT `link` vocabulary: a new `link` name fails
- * here until a descriptor is added; a removed one fails as stale.
- */
+/** Every captured handler dependency needs one runtime parameter descriptor. */
 
 const SRC = [
 	'../../src/compile/handler/index.ts',
 	'../../src/compile/handler/jit.ts',
-	// utils.ts links rdc/es/rm — omitting it let the missing-rdc bug ship
 	'../../src/compile/handler/utils.ts'
 ]
 	.map((file) => readFileSync(resolve(import.meta.dir, file), 'utf8'))
@@ -28,25 +18,21 @@ const SRC = [
 
 const linkedNames = () => {
 	const names = new Set<string>()
-	// link(value, 'name')
 	for (const m of SRC.matchAll(/\blink\([^,]+,\s*'([a-z0-9]+)'\)/g))
 		names.add(m[1]!)
-	// the `link(0, '')` sentinel adds the composed hook as `ho`
 	if (SRC.includes("seenKeys.add('ho')")) names.add('ho')
 	return names
 }
 
-describe('AOT handler ParamDescriptor', () => {
-	it('exactly covers every compileHandler link() name', () => {
+describe('frozen handler parameter descriptors', () => {
+	it('matches every dependency linked by the handler compiler', () => {
 		const linked = linkedNames()
-		expect(linked.size).toBeGreaterThan(20) // sanity: regex actually matched
+		expect(linked.size).toBeGreaterThan(20)
 
 		const missing = [...linked].filter((n) => !(n in HANDLER_PARAMS))
 		const stale = Object.keys(HANDLER_PARAMS).filter((n) => !linked.has(n))
 
-		// a link site with no descriptor → CF would silently bind the wrong dep
 		expect(missing).toEqual([])
-		// a descriptor for a name no longer linked → dead weight
 		expect(stale).toEqual([])
 	})
 
@@ -64,13 +50,12 @@ describe('AOT handler ParamDescriptor', () => {
 			resolveHandlerParams(['pj', 'va', 'bf', 'rc', 'cc', 'tr'], ctx)
 		).toEqual(['PJ', 'VA', 'BF', 'RC', 'CC', 'TR'])
 		expect(resolveHandlerParams([], ctx)).toEqual([])
-		// `rc` falls back to res.map when compact is absent
 		expect(
 			resolveHandlerParams(['rc'], { res: { map: 'M' } } as any)
 		).toEqual(['M'])
 	})
 
-	it('throws loudly on an unknown link name (no silent mis-bind)', () => {
+	it('rejects an unknown dependency name', () => {
 		expect(() => resolveHandlerParams(['bogus'], {} as any)).toThrow(
 			/Fail to reconstruct build/
 		)

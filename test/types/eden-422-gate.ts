@@ -1,17 +1,16 @@
 import { Elysia, t } from '../../src'
 import { expectTypeOf } from 'expect-type'
 
-// a parametric route WITHOUT validators has no validation step at
-// runtime — its Eden response union must not advertise a phantom 422.
+// Path parameters alone do not add a validator, so Eden must omit 422.
 
-// parametric, no validators — must NOT have 422
+// A path parameter without a schema has no validation response.
 const a = new Elysia().get('/id/:id', ({ params }) => params.id)
 type A = (typeof a)['~Routes']['id'][':id']['get']['response']
 declare const checkA: A
-// @ts-expect-error phantom 422 must be gone
+// @ts-expect-error no request validator can produce 422
 checkA[422]
 
-// parametric WITH a real coercing validator — 422 must remain
+// A path parameter schema adds a validation response.
 const b = new Elysia().get(
 	'/n/:id',
 	{ params: t.Object({ id: t.Number() }) },
@@ -21,7 +20,7 @@ type B = (typeof b)['~Routes']['n'][':id']['get']['response']
 declare const checkB: B
 checkB[422].type satisfies 'validation'
 
-// non-parametric with a query validator — 422 must remain
+// A query schema adds a validation response.
 const c = new Elysia().get(
 	'/q',
 	{ query: t.Object({ x: t.String() }) },
@@ -31,13 +30,9 @@ type C = (typeof c)['~Routes']['q']['get']['response']
 declare const checkC: C
 checkC[422].type satisfies 'validation'
 
-// eden-types-1: a `response` schema is an OUTPUT schema and can never trigger a
-// request-time 422. A route that declares ONLY a `response` schema (no
-// body/query/headers/cookie/params validator) must NOT advertise a phantom 422,
-// otherwise every Eden consumer is told to handle a status the runtime never
-// emits. `response` was wrongly kept in the `HasInputValidator` probe.
+// Response schemas describe output and do not add a request-time 422.
 
-// response-only — must NOT have 422, and its record must be exactly { 200: string }
+// A response-only route exposes only its declared response.
 const respOnly = new Elysia().get(
 	'/only-response',
 	{ response: { 200: t.String() } },
@@ -45,13 +40,11 @@ const respOnly = new Elysia().get(
 )
 type RespOnly = (typeof respOnly)['~Routes']['only-response']['get']['response']
 declare const checkRespOnly: RespOnly
-// @ts-expect-error phantom 422 must be gone for a response-only route
+// @ts-expect-error response schemas do not produce request validation errors
 checkRespOnly[422]
-// full-record equality: the resolved Eden response tree is exactly { 200: string }
 expectTypeOf<RespOnly>().toEqualTypeOf<{ 200: string }>()
 
-// response + body — 422 must remain (load-bearing non-regression: excluding
-// `response` from the probe must not suppress a real body validator's 422)
+// A body validator still adds 422 when a response schema is also present.
 const respAndBody = new Elysia().post(
 	'/response-and-body',
 	{ body: t.Object({ n: t.Number() }), response: { 200: t.String() } },
@@ -62,7 +55,7 @@ type RespAndBody =
 declare const checkRespAndBody: RespAndBody
 checkRespAndBody[422].type satisfies 'validation'
 
-// headers-only validator — 422 must remain
+// A headers schema adds a validation response.
 const hdrOnly = new Elysia().get(
 	'/h',
 	{ headers: t.Object({ 'x-token': t.String() }) },
@@ -72,7 +65,7 @@ type HdrOnly = (typeof hdrOnly)['~Routes']['h']['get']['response']
 declare const checkHdrOnly: HdrOnly
 checkHdrOnly[422].type satisfies 'validation'
 
-// cookie-only validator — 422 must remain
+// A cookie schema adds a validation response.
 const ckOnly = new Elysia().get(
 	'/c',
 	{ cookie: t.Object({ session: t.String() }) },
@@ -82,8 +75,7 @@ type CkOnly = (typeof ckOnly)['~Routes']['c']['get']['response']
 declare const checkCkOnly: CkOnly
 checkCkOnly[422].type satisfies 'validation'
 
-// WS response-only — must NOT have 422 (same root cause propagates via
-// CreateWSEdenResponse -> ComposeElysiaResponse)
+// A WebSocket response schema does not add 422 either.
 const wsRespOnly = new Elysia().ws('/notify', {
 	response: t.Object({ n: t.Number() }),
 	message(ws) {}
@@ -91,5 +83,5 @@ const wsRespOnly = new Elysia().ws('/notify', {
 type WSRespOnly =
 	(typeof wsRespOnly)['~Routes']['notify']['subscribe']['response']
 declare const checkWSRespOnly: WSRespOnly
-// @ts-expect-error phantom 422 must be gone for a WS response-only route
+// @ts-expect-error WebSocket response schemas do not validate inbound data
 checkWSRespOnly[422]

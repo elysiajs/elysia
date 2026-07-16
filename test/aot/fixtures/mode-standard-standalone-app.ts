@@ -1,11 +1,7 @@
 import { Elysia } from 'elysia'
 import { z } from 'zod'
 
-// Standalone (`schema: 'standalone'`) with a Standard Schema body. Standalone
-// schemas live under `hook.schemas`, NOT the named slots. When EVERY standalone
-// slot is a Standard Schema (and the route has no TypeBox direct slot), the
-// route reconstructs entirely through `RouteValidator` -> `StandardValidator`
-// without touching the bridge, so the gate may seal it.
+// Standalone Standard Schema validators reconstruct without the TypeBox bridge.
 export const app = new Elysia().guard(
 	{
 		schema: 'standalone',

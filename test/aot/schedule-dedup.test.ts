@@ -5,21 +5,7 @@ import { Compiled } from '../../src/compile/aot'
 import { compileHandler } from '../../src/compile/handler'
 import { req } from '../utils'
 
-/**
- * Schedule-block dedup harness .
- *
- * The afterResponse/trace SCHEDULE block (`c._arf=true` + `queueMicrotask(async
- * () => { ... drain ... afterResponse spans ... })`) used to be concatenated
- * verbatim at the success return, once per error hook inside the catch, and in
- * the catch fallbacks — up to 5 identical copies in a single function, all
- * parsed/JIT'd, only one ever running. It is hoisted into one route-local
- * `function _sc(){...}` declared before the route `try{`, and replaces every
- * site with a `_sc()` call.
- *
- * Codegen is runtime-only — these assertions count emission occurrences in the
- * compiled source and round-trip behaviour (the scheduled afterResponse/trace
- * hooks still fire exactly once on each return path).
- */
+/** Scheduled after-response work is emitted once and still runs once. */
 
 afterEach(() => {
 	Compiled.clear()
@@ -35,8 +21,8 @@ const compileRoute = (app: any, index = 0) => {
 const count = (haystack: string, needle: string) =>
 	haystack.split(needle).length - 1
 
-describe('schedule block is emitted once on trace+error routes', () => {
-	it('trace + 3 error hooks: one `function _sc(){` decl, multiple `_sc()` calls', () => {
+describe('schedule block emission', () => {
+	it('shares one schedule block across trace and error paths', () => {
 		const app = new Elysia()
 			.trace(() => {})
 			.get(
@@ -80,7 +66,7 @@ describe('schedule block is emitted once on trace+error routes', () => {
 	})
 })
 
-describe('behaviour preserved', () => {
+describe('scheduled afterResponse behavior', () => {
 	it('afterResponse fires once on the success path with an error hook present', async () => {
 		let calls = 0
 		const app = new Elysia().get(
@@ -100,11 +86,6 @@ describe('behaviour preserved', () => {
 		expect(calls).toBe(1)
 	})
 
-	// The handler is async so the route is an AsyncFunction (isAsync), the catch
-	// is inlined (not the `_ce` factory helper), and the deduped `_sc()` is the
-	// path exercised on every error return. (A SYNC handler + error hook + sync
-	// afterResponse is a separate codegen combination that the `syncErrorHook`
-	// gate keeps inline.)
 	it('afterResponse fires once when an error hook handles a throw', async () => {
 		let calls = 0
 		const app = new Elysia().get(
@@ -141,8 +122,7 @@ describe('behaviour preserved', () => {
 				afterResponse() {
 					calls++
 				},
-				// error hook returns undefined → falls through to the message
-				// fallback path
+				// Undefined error hooks fall through to the default message.
 				error() {}
 			},
 			async () => {
@@ -156,10 +136,7 @@ describe('behaviour preserved', () => {
 		expect(calls).toBe(1)
 	})
 
-	// The syncAfterResponse `_fin2` factory path (sync route, afterResponse, NO
-	// error hook, NO trace) must KEEP its inline schedule — it lives in a factory
-	// helper that cannot see a route-local `_sc`.
-	it('syncAfterResponse path keeps inline schedule (no _sc helper)', () => {
+	it('keeps inline scheduling when a sync route only has afterResponse', () => {
 		const app = new Elysia().get(
 			'/',
 			{

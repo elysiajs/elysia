@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'bun:test'
 import { Elysia } from '../../../src'
 
-describe('macro order', () => {
-	it('run in order', async () => {
+describe('plugin-scoped hooks', () => {
+	it('runs inherited hooks in order without leaking to later parent routes', async () => {
 		const order: unknown[] = []
 
 		const a1 = new Elysia().beforeHandle('plugin', function a1() {
@@ -45,9 +45,6 @@ describe('macro order', () => {
 		expect(order).toEqual(['root', 1, 2, 3, 4])
 	})
 
-	// Dual of "plugin scope propagates one level up": a plugin-scoped hook on
-	// the parent must also apply DOWNWARD to routes absorbed via .use(). Locks
-	// in the invariant before refactoring how downward propagation is computed.
 	it('plugin-scoped hook on parent applies to absorbed sibling routes', async () => {
 		let count = 0
 
@@ -63,12 +60,6 @@ describe('macro order', () => {
 		expect(count).toBe(1)
 	})
 
-	// Regression: a plugin's inherited hook chain (route tuple
-	// index 6) must survive being absorbed under a prefix. The prefix branch
-	// of #use rebuilt the route tuple WITHOUT the chain, so any inherited
-	// guard/auth/beforeHandle silently stopped running once the composed app
-	// was mounted under `new Elysia({ prefix })` — an auth-bypass. The
-	// no-prefix and prefixed mounts must behave identically.
 	it('inherited hook chain survives mounting under a prefix', async () => {
 		const inner = new Elysia().get('/c', () => 'handler')
 		const guarded = new Elysia()
@@ -86,7 +77,6 @@ describe('macro order', () => {
 			.then((r) => r.text())
 
 		expect(noPrefix).toBe('INTERCEPTED')
-		// before the fix this returned 'handler' (guard bypassed)
 		expect(prefixed).toBe('INTERCEPTED')
 	})
 })

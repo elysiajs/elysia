@@ -24,8 +24,8 @@ class OtherError extends Error {
 	}
 }
 
-describe('Error handler', () => {
-	it('run handler only for matching error class', async () => {
+describe('error handlers', () => {
+	it('runs only the handler registered for the error class', async () => {
 		const app = new Elysia()
 			.error(CustomError, () => 'custom')
 			.error(OtherError, () => 'other')
@@ -44,7 +44,7 @@ describe('Error handler', () => {
 		).resolves.toBe('other')
 	})
 
-	it('map status() returned from handler', async () => {
+	it('maps status() returned by an error handler', async () => {
 		const app = new Elysia()
 			.error(CustomError, ({ error }) => status(418, error.message))
 			.get('/', () => {
@@ -57,7 +57,7 @@ describe('Error handler', () => {
 		await expect(response.text()).resolves.toBe('A')
 	})
 
-	it('forward returned error like a throw', async () => {
+	it('routes a returned error through its handler', async () => {
 		const app = new Elysia()
 			.error(CustomError, ({ error }) => status(418, error.message))
 			.get('/', () => new CustomError('A'))
@@ -68,7 +68,7 @@ describe('Error handler', () => {
 		await expect(response.text()).resolves.toBe('A')
 	})
 
-	it('forward returned error before afterHandle, like a throw', async () => {
+	it('skips afterHandle when a route returns an error', async () => {
 		let ranAfterHandle = false
 
 		const app = new Elysia()
@@ -89,7 +89,7 @@ describe('Error handler', () => {
 		expect(ranAfterHandle).toBe(false)
 	})
 
-	it('forward returned error from async handler', async () => {
+	it('routes an error returned by an async handler', async () => {
 		const app = new Elysia()
 			.error(CustomError, ({ error }) => status(418, error.message))
 			.get('/', async () => new CustomError('A'))
@@ -100,7 +100,7 @@ describe('Error handler', () => {
 		await expect(response.text()).resolves.toBe('A')
 	})
 
-	it('forward a static error value', async () => {
+	it('routes a static error value through its handler', async () => {
 		const app = new Elysia()
 			.error(CustomError, ({ error }) => status(418, error.message))
 			.get('/', new CustomError('A'))
@@ -111,13 +111,12 @@ describe('Error handler', () => {
 		await expect(response.text()).resolves.toBe('A')
 	})
 
-	it('return 500 with message for unregistered returned error', async () => {
+	it('maps an unregistered returned error to 500 problem details', async () => {
 		const app = new Elysia().get('/', () => new Error('oops'))
 
 		const response = await app.handle(req('/'))
 
 		expect(response.status).toBe(500)
-		// unregistered error → RFC 9457 problem+json 500 (message as `detail`)
 		await expect(response.json()).resolves.toMatchObject({
 			type: 'internal-server-error',
 			title: 'Internal Server Error',
@@ -126,7 +125,7 @@ describe('Error handler', () => {
 		})
 	})
 
-	it('forward error resolved from a promise on a sync route', async () => {
+	it('maps a promised error from a synchronous route', async () => {
 		const app = new Elysia().get('/', () =>
 			Promise.resolve(new Error('oops'))
 		)
@@ -142,7 +141,7 @@ describe('Error handler', () => {
 		})
 	})
 
-	it('run handlers in registration order for subclasses', async () => {
+	it('runs matching superclass handlers in registration order', async () => {
 		const parentFirst = new Elysia()
 			.error(CustomError, () => 'parent')
 			.error(ChildError, () => 'child')
@@ -165,7 +164,7 @@ describe('Error handler', () => {
 		).resolves.toBe('child')
 	})
 
-	it('fall through to the next handler when returning undefined', async () => {
+	it('falls through when an error handler returns undefined', async () => {
 		const app = new Elysia()
 			.error(ChildError, () => {})
 			.error(CustomError, () => 'parent')
@@ -178,7 +177,7 @@ describe('Error handler', () => {
 		)
 	})
 
-	it("use the error's declared status for plain returns", async () => {
+	it("uses the error's declared status for plain handler returns", async () => {
 		const app = new Elysia()
 			.error(NotFound, ({ error }) => error.message)
 			.get('/', () => {
@@ -191,7 +190,7 @@ describe('Error handler', () => {
 		await expect(response.text()).resolves.toBe('Not Found')
 	})
 
-	it('apply plugin handlers per scope', async () => {
+	it('applies plugin error handlers according to their scope', async () => {
 		const handler = () => 'handled'
 
 		const local = new Elysia().error(CustomError, handler)
@@ -211,7 +210,6 @@ describe('Error handler', () => {
 			.use(new Elysia().use(global))
 			.get('/', route)
 
-		// out-of-scope handler → uncaught CustomError → problem+json 500 (detail 'A')
 		await expect(
 			fromLocal.handle(req('/')).then((x) => x.json())
 		).resolves.toMatchObject({ status: 500, detail: 'A' })
@@ -226,7 +224,7 @@ describe('Error handler', () => {
 		).resolves.toBe('handled')
 	})
 
-	it('narrow catch-all with instanceof', async () => {
+	it('supports narrowing a catch-all handler with instanceof', async () => {
 		const app = new Elysia()
 			.error(({ error }) => {
 				if (error instanceof CustomError) return 'custom'
@@ -245,7 +243,6 @@ describe('Error handler', () => {
 		const plain = await app.handle(req('/plain'))
 
 		expect(plain.status).toBe(500)
-		// non-CustomError falls through the catch-all → problem+json 500
 		await expect(plain.json()).resolves.toMatchObject({
 			type: 'internal-server-error',
 			status: 500,
@@ -253,12 +250,6 @@ describe('Error handler', () => {
 		})
 	})
 
-	// Regression: an instance-level `.onError` on a plugin must NOT
-	// clobber route-level error handlers. A dangling `else;` in the error-merge
-	// codegen left the array reassignment outside the branch, so adding any
-	// plugin `.onError` overwrote the merged handlers with only the
-	// instance-local ones — the route's error mapper was dropped and the raw
-	// Error.message (internal detail) leaked with a 500.
 	it('instance-level onError does not clobber route-level error handler', async () => {
 		const plugin = new Elysia()
 			.error(() => {})
@@ -275,17 +266,11 @@ describe('Error handler', () => {
 		const app = new Elysia().use(plugin)
 		const res = await app.handle(req('/boom'))
 
-		// before the fix: 500 with body 'SECRET_INTERNAL_DETAIL'
 		expect(res.status).toBe(418)
 		await expect(res.text()).resolves.toBe('mapped')
 	})
 
-	// Regression: when there are no mapResponse hooks, `mapResponse`
-	// IS the bare adapter whose 3rd arg is the Request. createErrorHandler
-	// passed the Context instead, so an onError returning a File/Blob hit
-	// `context.headers.get('range')` — a TypeError that escaped the fetch
-	// handler. The Context's `.request` must be unwrapped for the adapter.
-	it('onError returning a Blob responds without crashing (and honours Range)', async () => {
+	it('onError maps a Blob response and honors its Range request', async () => {
 		const app = new Elysia()
 			.error(() => new Blob(['error-asset'], { type: 'text/plain' }))
 			.get('/boom', () => {
@@ -296,7 +281,6 @@ describe('Error handler', () => {
 		expect(res.status).toBe(500)
 		await expect(res.text()).resolves.toBe('error-asset')
 
-		// the real Request is now forwarded → range requests work
 		const ranged = await app.handle(
 			new Request('http://localhost/boom', {
 				headers: { range: 'bytes=0-3' }

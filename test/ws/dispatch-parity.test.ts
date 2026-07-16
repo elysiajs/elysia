@@ -1,39 +1,10 @@
-/**
- * Invariant: sync and async message-dispatch pipelines must produce
- * byte-identical wire output.
- *
- * src/ws/route.ts computes `syncDispatchEligible` (line ~434):
- *   transforms.length === 0 &&
- *   messageBeforeHandles.length === 0 &&
- *   afterHandles.length === 0 &&
- *   afterResponses.length === 0 &&
- *   mapResponses.length === 0
- *
- * When true → dispatchMessageSync; otherwise → dispatchMessage.
- * These two functions are hand-rolled and must stay in semantic
- * lockstep.  This suite runs every scenario through BOTH a
- * sync-eligible route (bare handler) and a forced-async route
- * (an afterResponse hook that is semantically transparent: it does
- * nothing, returns undefined, introduces no observable side-effects
- * but flips syncDispatchEligible to false).
- *
- * For each scenario the wire output (or close/error frame) from both
- * routes must be identical.
- */
+// A no-op afterResponse hook selects async dispatch without changing output.
+// Each case compares it with hook-free synchronous dispatch.
 
 import { describe, it, expect } from 'bun:test'
 import { Elysia, t } from '../../src'
-import {
-	newWebsocket,
-	wsOpen,
-	wsMessage,
-	wsClosed,
-	wsClose
-} from './utils'
+import { newWebsocket, wsOpen, wsMessage, wsClosed, wsClose } from './utils'
 
-// ---------------------------------------------------------------------------
-// Helper: collect N frames from an open WebSocket
-// ---------------------------------------------------------------------------
 function collectN(ws: WebSocket, n: number): Promise<string[]> {
 	return new Promise((resolve) => {
 		const got: string[] = []
@@ -44,16 +15,9 @@ function collectN(ws: WebSocket, n: number): Promise<string[]> {
 	})
 }
 
-// ---------------------------------------------------------------------------
-// no-op afterResponse — flips syncDispatchEligible but changes nothing else
-// ---------------------------------------------------------------------------
 const noopAfterResponse = () => undefined
 
-// ---------------------------------------------------------------------------
-// Scenario 1 — plain string echo
-// Invariant: both pipelines echo the raw frame byte-for-byte.
-// ---------------------------------------------------------------------------
-describe('dispatch-parity: scenario 1 — plain string echo', () => {
+describe('plain string dispatch', () => {
 	it('sync and async pipelines echo identical strings', async () => {
 		const syncApp = new Elysia()
 			.ws('/ws', {
@@ -94,13 +58,7 @@ describe('dispatch-parity: scenario 1 — plain string echo', () => {
 	})
 })
 
-// ---------------------------------------------------------------------------
-// Scenario 2 — body schema with codec (t.Date + t.Numeric)
-// Invariant: both pipelines decode codec fields identically before the
-// handler runs.  The handler echoes decoded values; both wire responses
-// must be byte-identical JSON.
-// ---------------------------------------------------------------------------
-describe('dispatch-parity: scenario 2 — body schema with codec', () => {
+describe('codec body dispatch', () => {
 	it('sync and async pipelines decode codec fields identically', async () => {
 		const makeApp = (forceAsync: boolean) =>
 			new Elysia()
@@ -144,10 +102,9 @@ describe('dispatch-parity: scenario 2 — body schema with codec', () => {
 
 		const [{ data: ds }, { data: da }] = await Promise.all([mSync, mAsync])
 
-		// Both must produce identical wire JSON.
 		expect(ds).toBe(da)
 
-		// And the common decoded value must be correct.
+		// Equal failures would also match, so assert the decoded value.
 		const parsed = JSON.parse(ds as string)
 		expect(parsed.whenIsDate).toBe(true)
 		expect(parsed.n).toBe(42)
@@ -160,12 +117,7 @@ describe('dispatch-parity: scenario 2 — body schema with codec', () => {
 	})
 })
 
-// ---------------------------------------------------------------------------
-// Scenario 3 — throwing handler
-// Invariant: both pipelines route the throw through the error hook and
-// send an identical error frame.  The connection must remain open.
-// ---------------------------------------------------------------------------
-describe('dispatch-parity: scenario 3 — throwing handler', () => {
+describe('error dispatch', () => {
 	it('sync and async pipelines produce identical error frames on throw', async () => {
 		const makeApp = (forceAsync: boolean) =>
 			new Elysia()
@@ -206,11 +158,7 @@ describe('dispatch-parity: scenario 3 — throwing handler', () => {
 	})
 })
 
-// ---------------------------------------------------------------------------
-// Scenario 4 — generator handler (multiple yields)
-// Invariant: both pipelines stream identical yield sequences.
-// ---------------------------------------------------------------------------
-describe('dispatch-parity: scenario 4 — generator handler', () => {
+describe('generator dispatch', () => {
 	it('sync and async pipelines stream identical generator yield sequences', async () => {
 		const makeApp = (forceAsync: boolean) =>
 			new Elysia()
@@ -251,12 +199,7 @@ describe('dispatch-parity: scenario 4 — generator handler', () => {
 	})
 })
 
-// ---------------------------------------------------------------------------
-// Scenario 5 — handler returning a Promise
-// Invariant: both pipelines await the Promise and send the resolved
-// value as an identical frame.
-// ---------------------------------------------------------------------------
-describe('dispatch-parity: scenario 5 — handler returning a Promise', () => {
+describe('async handler dispatch', () => {
 	it('sync and async pipelines await and send identical resolved values', async () => {
 		const makeApp = (forceAsync: boolean) =>
 			new Elysia()
@@ -295,12 +238,7 @@ describe('dispatch-parity: scenario 5 — handler returning a Promise', () => {
 	})
 })
 
-// ---------------------------------------------------------------------------
-// Scenario 6 — validation failure (invalid body)
-// Invariant: both pipelines send an identical validation-error frame
-// for invalid body (no crash, no close frame for validation errors).
-// ---------------------------------------------------------------------------
-describe('dispatch-parity: scenario 6 — validation failure', () => {
+describe('validation error dispatch', () => {
 	it('sync and async pipelines send identical frames on body validation failure', async () => {
 		const makeApp = (forceAsync: boolean) =>
 			new Elysia()
@@ -321,7 +259,6 @@ describe('dispatch-parity: scenario 6 — validation failure', () => {
 		await wsOpen(wsSync)
 		await wsOpen(wsAsync)
 
-		// Send an integer where a string is expected — triggers validation error.
 		const invalid = JSON.stringify({ name: 999 })
 
 		const mSync = wsMessage(wsSync)
@@ -332,14 +269,11 @@ describe('dispatch-parity: scenario 6 — validation failure', () => {
 
 		const [{ data: ds }, { data: da }] = await Promise.all([mSync, mAsync])
 
-		// Both must send some non-empty error message — exact wording is
-		// owned by TypeBox and may change across versions.
+		// Exact TypeBox error wording may change across versions.
 		expect(typeof ds).toBe('string')
 		expect((ds as string).length).toBeGreaterThan(0)
-		// Core invariant: identical wire output on both paths.
 		expect(ds).toBe(da)
 
-		// The handler must NOT have run — no 'ok:' prefix.
 		expect(ds).not.toMatch(/^ok:/)
 
 		await wsClosed(wsSync)

@@ -1,4 +1,4 @@
-import '../../src/compile/aot-capture' // installs build-only capture impl (mirrors the AOT plugin)
+import '../../src/compile/aot-capture'
 import { describe, it, expect, afterEach } from 'bun:test'
 
 import { Elysia, t } from '../../src'
@@ -15,30 +15,11 @@ import { clearCoerceLeafCache } from '../../src/type/coerce-plan'
 
 import { materialise } from './_manifest'
 
-/**
- * CoercePlan (`cp`) bridge-free reconstruction.
- *
- * A `t.Number`/`t.Boolean`/`t.Integer` in a query/params/headers root property
- * is COERCED at validator build (`coerceRoot`: Number → Numeric etc.), and a
- * nested object/array in query is coerced to ObjectString/ArrayString — so the
- * raw hook schema is not the schema the frozen closures were captured from.
- * The capture records that delta as a `coercePlan`, and the bridge-free gates
- * used to refuse ANY plan — one `t.Number` in a query flipped an otherwise
- * fully-sealed build (mode A) into wired (mode B), dragging live TypeBox back
- * into the bundle.
- *
- * These pin the fix: scalar sites rebuild through the scalar leaf ctors, and
- * ObjectString/ArrayString sites rebuild as SHAPE nodes whose live closures
- * are replaced by the baked `ic` entries (`reconstructInnerCodecs`) — no
- * `typebox/value` anywhere. A slot whose os nodes DON'T align 1:1 with its
- * `ic` entries (e.g. an inner default refused capture) must keep refusing.
- */
+/** Captured coercion plans rebuild query schemas without TypeBox. */
 
 const METHOD = 'GET'
 const PATH = '/x'
 
-// Capture a query-slot manifest for `schema` (query is a root-properties
-// coercion slot), register it, and return the captured entry.
 function freeze(schema: any) {
 	process.env.ELYSIA_AOT_BUILD = '1'
 	beginValidatorCapture()
@@ -61,9 +42,12 @@ const hook = (schema: any) => ({ query: schema })
 const root = () => new Elysia() as any
 
 const wired = (schema: any) =>
-	new RouteValidator(hook(schema) as any, {
-		aot: { method: METHOD, path: PATH }
-	} as any)
+	new RouteValidator(
+		hook(schema) as any,
+		{
+			aot: { method: METHOD, path: PATH }
+		} as any
+	)
 
 const bridgeFree = (schema: any) =>
 	buildFrozenRouteValidator(hook(schema) as any, root(), METHOD, PATH)
@@ -82,11 +66,9 @@ const run = (validator: any, value: unknown): Outcome => {
 	}
 }
 
-// Assert wired ≡ bridge-free for a set of query objects on a given schema.
 function assertParity(schema: any, inputs: unknown[]) {
 	const { query } = freeze(schema)
 
-	// the schema classes here MUST capture a plan — that is the case under test
 	expect(query?.coercePlan, 'expected a coercePlan capture').toBeDefined()
 	expect(query?.bridgeFree, 'expected the slot to be bridge-free').toBe(true)
 
@@ -123,8 +105,8 @@ afterEach(() => {
 	clearCoerceLeafCache()
 })
 
-describe('scalar coercePlan — bridge-free with wired parity', () => {
-	it('t.Number in query (the Numeric coercion)', () => {
+describe('scalar coercion plans without TypeBox', () => {
+	it('coerces number query values', () => {
 		assertParity(t.Object({ name: t.Number() }), [
 			{ name: '42' },
 			{ name: '4.5' },
@@ -136,7 +118,7 @@ describe('scalar coercePlan — bridge-free with wired parity', () => {
 		])
 	})
 
-	it('t.Number with constraints (the plan carries the options bag)', () => {
+	it('preserves number constraints', () => {
 		assertParity(t.Object({ n: t.Number({ minimum: 2 }) }), [
 			{ n: '3' },
 			{ n: '1' },
@@ -145,7 +127,7 @@ describe('scalar coercePlan — bridge-free with wired parity', () => {
 		])
 	})
 
-	it('t.Boolean and t.Integer in query', () => {
+	it('coerces boolean and integer query values', () => {
 		assertParity(t.Object({ b: t.Boolean(), i: t.Integer() }), [
 			{ b: 'true', i: '42' },
 			{ b: 'false', i: '0' },
@@ -154,14 +136,15 @@ describe('scalar coercePlan — bridge-free with wired parity', () => {
 		])
 	})
 
-	it('optional coerced property (the plan re-attaches ~optional)', () => {
-		assertParity(
-			t.Object({ n: t.Optional(t.Number()), s: t.String() }),
-			[{ n: '7', s: 'a' }, { s: 'a' }, { n: 'x', s: 'a' }]
-		)
+	it('preserves optional coerced properties', () => {
+		assertParity(t.Object({ n: t.Optional(t.Number()), s: t.String() }), [
+			{ n: '7', s: 'a' },
+			{ s: 'a' },
+			{ n: 'x', s: 'a' }
+		])
 	})
 
-	it('repeated identical leaves (leaf cache / seen dedupe semantics)', () => {
+	it('reuses equivalent scalar coercion leaves', () => {
 		assertParity(t.Object({ a: t.Number(), b: t.Number() }), [
 			{ a: '1', b: '2' },
 			{ a: '1', b: 'x' }
@@ -169,67 +152,60 @@ describe('scalar coercePlan — bridge-free with wired parity', () => {
 	})
 })
 
-describe('ObjectString/ArrayString coercePlan — bridge-free with wired parity', () => {
-	it('nested object in query (ObjectString shape + ic reconstruction)', () => {
+describe('nested query coercion plans without TypeBox', () => {
+	it('decodes object query values', () => {
 		assertParity(t.Object({ o: t.Object({ n: t.Number() }) }), [
-			{ o: '{"n":1}' }, // JSON string → decoded object
-			{ o: { n: 1 } }, // already-parsed branch
-			{ o: '{"n":"x"}' }, // inner type mismatch → reject
-			{ o: '[1]' }, // wrong opening char → reject
-			{ o: 'not json' }, // unparsable → reject
-			{} // missing required → reject
+			{ o: '{"n":1}' },
+			{ o: { n: 1 } },
+			{ o: '{"n":"x"}' },
+			{ o: '[1]' },
+			{ o: 'not json' },
+			{}
 		])
 	})
 
-	it('nested array in query (ArrayString shape + ic reconstruction)', () => {
+	it('decodes array query values', () => {
 		assertParity(t.Object({ xs: t.Array(t.String()) }), [
 			{ xs: '["a","b"]' },
 			{ xs: '[]' },
-			{ xs: '[1]' }, // element mismatch → reject
-			{ xs: '{"a":1}' } // wrong opening char → reject
+			{ xs: '[1]' },
+			{ xs: '{"a":1}' }
 		])
 	})
 
-	it('mixed scalar + objstr sites in one plan', () => {
+	it('combines scalar and nested-object coercion', () => {
 		assertParity(
 			t.Object({ n: t.Number(), o: t.Object({ s: t.String() }) }),
 			[
 				{ n: '1', o: '{"s":"a"}' },
 				{ n: '1', o: { s: 'a' } },
-				{ n: 'x', o: '{"s":"a"}' }, // scalar reject
-				{ n: '1', o: '{"s":1}' } // objstr inner reject
+				{ n: 'x', o: '{"s":"a"}' },
+				{ n: '1', o: '{"s":1}' }
 			]
 		)
 	})
 
-	it('optional nested object (the os site re-attaches ~optional)', () => {
+	it('preserves optional nested objects', () => {
 		assertParity(
-			t.Object({ o: t.Optional(t.Object({ n: t.Number() })), s: t.String() }),
-			[
-				{ o: '{"n":1}', s: 'a' },
-				{ s: 'a' }, // optional absent
-				{ o: 'garbage', s: 'a' } // present but invalid → reject
-			]
+			t.Object({
+				o: t.Optional(t.Object({ n: t.Number() })),
+				s: t.String()
+			}),
+			[{ o: '{"n":1}', s: 'a' }, { s: 'a' }, { o: 'garbage', s: 'a' }]
 		)
 	})
 
-	it('objstr with inner codec (t.Date inside — ic entry with d.x mirror)', () => {
+	it('decodes codecs inside nested objects', () => {
 		assertParity(t.Object({ o: t.Object({ d: t.Date() }) }), [
 			{ o: '{"d":"2024-01-02T03:04:05.000Z"}' },
-			{ o: '{"d":"garbage"}' }, // inner refine reject
+			{ o: '{"d":"garbage"}' },
 			{ o: { d: '2024-01-02T03:04:05.000Z' } }
 		])
 	})
 })
 
-describe('ic misalignment — still refuses bridge-free', () => {
-	it('t.Array(t.Number()) in query (double coercion) → slot stays wired', () => {
-		// Query coercion rewrites this BOTH ways: `xs` → ArrayString AND the
-		// items t.Number → Numeric inside the array branch. A wholesale `os`
-		// site can't express the inner rewrite, so the capture-time
-		// `externalsShape` guard drops the plan — no `cp`, but `ic` WAS
-		// captured off the coerced schema. Runtime rebuild = raw schema with 0
-		// os nodes vs 1 ic entry → alignment refuses.
+describe('coercion plans that require TypeBox', () => {
+	it('defers arrays with nested number coercion to the wired validator', () => {
 		const schema = t.Object({ xs: t.Array(t.Number()) })
 		const { query } = freeze(schema)
 
@@ -239,11 +215,7 @@ describe('ic misalignment — still refuses bridge-free', () => {
 		expect(bridgeFree(schema)).toBeUndefined()
 	})
 
-	it('inner default refuses ic capture → slot stays wired', () => {
-		// `captureInnerCodec` refuses an inner `default` (not reconstructed
-		// under seal), so no `ic` is captured — but the plan still has an os
-		// site. 1 shape node vs 0 ic entries → the gate must refuse, or a
-		// throwing shape placeholder would go live.
+	it('defers nested defaults to the wired validator', () => {
 		const schema = t.Object({
 			o: t.Object({ n: t.Number({ default: 1 }) })
 		})
@@ -255,7 +227,6 @@ describe('ic misalignment — still refuses bridge-free', () => {
 	})
 })
 
-// Capture any slot (query via GET, body via POST) and return its entry.
 function freezeSlot(slot: 'query' | 'body', schema: any) {
 	process.env.ELYSIA_AOT_BUILD = '1'
 	beginValidatorCapture()
@@ -277,33 +248,23 @@ function freezeSlot(slot: 'query' | 'body', schema: any) {
 	return captured.find((c) => c.slot === slot)
 }
 
-describe('unbakeable coercion (cp capture bailed) — refuses instead of crashing', () => {
-	// A coercion can fire while `captureCoercePlan` still returns null
-	// (unbakeable: coercion inside a union wrapper / tuple, a root-leaf plan,
-	// or a non-JSON-safe constraint bag). The baked `cm`/`dm` union tables are
-	// then sized for the COERCED schema while the runtime rebuild only has the
-	// raw one. Before the `mirrorUnionsAligned` gate these captured
-	// `bridgeFree: true` and `buildFrozenRouteValidator` THREW a TypeError
-	// inside `buildUnions` — a hard 500 on every request under a sealed strip.
-	// NOTE: scalar-inside-Nullable/Union/MaybeEmpty USED to be unbakeable —
-	// they now capture a `CoerceUnion` plan and seal (parity pinned in the
-	// "union coercePlan" describe below).
+describe('uncapturable coercion plans', () => {
 	const cases: [string, 'query' | 'body', any][] = [
 		[
 			'scalar inside Tuple items',
 			'query',
 			t.Object({ x: t.Tuple([t.Number()]) })
 		],
-		['root-leaf body coercion', 'body', t.Number()],
+		['root body coercion', 'body', t.Number()],
 		[
-			'jsonSafe drop (Infinity in constraint bag)',
+			'non-JSON-safe constraints',
 			'query',
 			t.Object({ n: t.Number({ examples: [Infinity] }) })
 		]
 	]
 
 	for (const [name, slot, schema] of cases)
-		it(`${name} → marker false + clean runtime refusal`, () => {
+		it(`does not reconstruct ${name}`, () => {
 			const entry = freezeSlot(slot, schema)
 
 			expect(entry?.bridgeFree).not.toBe(true)
@@ -321,8 +282,8 @@ describe('unbakeable coercion (cp capture bailed) — refuses instead of crashin
 		})
 })
 
-describe('union coercePlan (CoerceUnion) — bridge-free with wired parity', () => {
-	it('t.Nullable(t.Number()) in query', () => {
+describe('union coercion plans without TypeBox', () => {
+	it('coerces nullable number query values', () => {
 		assertParity(t.Object({ n: t.Nullable(t.Number()) }), [
 			{ n: '1' },
 			{ n: '4.5' },
@@ -334,7 +295,7 @@ describe('union coercePlan (CoerceUnion) — bridge-free with wired parity', () 
 		])
 	})
 
-	it('t.Union([t.Number(), t.String()]) in query', () => {
+	it('coerces number-or-string query values', () => {
 		assertParity(t.Object({ v: t.Union([t.Number(), t.String()]) }), [
 			{ v: '1' },
 			{ v: 'hello' },
@@ -344,7 +305,7 @@ describe('union coercePlan (CoerceUnion) — bridge-free with wired parity', () 
 		])
 	})
 
-	it('t.MaybeEmpty(t.Number()) in query', () => {
+	it('coerces optional empty number query values', () => {
 		assertParity(t.Object({ n: t.MaybeEmpty(t.Number()), s: t.String() }), [
 			{ n: '1', s: 'a' },
 			{ n: '', s: 'a' },
@@ -353,14 +314,19 @@ describe('union coercePlan (CoerceUnion) — bridge-free with wired parity', () 
 		])
 	})
 
-	it('t.Optional(t.Nullable(t.Number())) (~optional survives the clone)', () => {
+	it('preserves optional nullable number properties', () => {
 		assertParity(
 			t.Object({ n: t.Optional(t.Nullable(t.Number())), s: t.String() }),
-			[{ n: '1', s: 'a' }, { n: null, s: 'a' }, { s: 'a' }, { n: 'x', s: 'a' }]
+			[
+				{ n: '1', s: 'a' },
+				{ n: null, s: 'a' },
+				{ s: 'a' },
+				{ n: 'x', s: 'a' }
+			]
 		)
 	})
 
-	it('constraints inside the nullable branch', () => {
+	it('preserves constraints inside nullable branches', () => {
 		assertParity(t.Object({ n: t.Nullable(t.Number({ minimum: 2 })) }), [
 			{ n: '3' },
 			{ n: '1' },
@@ -368,7 +334,7 @@ describe('union coercePlan (CoerceUnion) — bridge-free with wired parity', () 
 		])
 	})
 
-	it('nullable nested object (ObjectString branch inside the union)', () => {
+	it('decodes nullable nested objects', () => {
 		assertParity(t.Object({ o: t.Nullable(t.Object({ s: t.String() })) }), [
 			{ o: '{"s":"a"}' },
 			{ o: { s: 'a' } },
@@ -378,7 +344,7 @@ describe('union coercePlan (CoerceUnion) — bridge-free with wired parity', () 
 		])
 	})
 
-	it('union site mixed with scalar and objstr sites in one plan', () => {
+	it('combines union, scalar, and nested-object coercion', () => {
 		assertParity(
 			t.Object({
 				a: t.Nullable(t.Number()),

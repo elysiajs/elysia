@@ -2,14 +2,10 @@ import { describe, it, expect } from 'bun:test'
 import { tee } from '../../src/adapter/utils'
 import { Elysia } from '../../src'
 
-// tee() drains the source AHEAD of the consumers (the afterResponse/trace
-// timing contract) but bounds the unconsumed window so a long/infinite stream
-// can't materialise.
 describe('tee() bounded drain-ahead', () => {
 	it('caps how far the producer races ahead of the slowest branch', async () => {
 		let produced = 0
 		async function* src() {
-			// infinite
 			while (true) {
 				produced++
 				yield produced
@@ -19,22 +15,19 @@ describe('tee() bounded drain-ahead', () => {
 		const cap = 4
 		const [client, listener] = await tee(src(), 2, cap)
 
-		// listener drains as fast as it can (afterResponse-style), but it can't
-		// pull the source past the slow client + cap
 		const drained = (async () => {
 			for await (const _ of listener) {
 			}
 		})()
 
-		// slow client reads only 3
 		for (let i = 0; i < 3; i++) await client.next()
 		await new Promise((r) => setTimeout(r, 20))
 
-		// producer must not race beyond client(3) + cap(4); allow 1 in-flight
+		// One source read may already be in flight.
 		expect(produced).toBeLessThanOrEqual(3 + cap + 1)
 
-		await client.return?.() // branch 0 return stops the infinite source
-		await drained // listener now reaches completion
+		await client.return?.()
+		await drained
 	})
 
 	it('drains streams shorter than the cap eagerly (server-timing preserved)', async () => {
@@ -44,20 +37,15 @@ describe('tee() bounded drain-ahead', () => {
 
 		const [response, listener] = await tee(src(), 2, 64)
 
-		// observer drains fully and reaches completion without the client
 		const seen: number[] = []
 		for await (const v of listener) seen.push(v)
 		expect(seen).toEqual([0, 1, 2])
 
-		// the response branch still sees every value
 		const got: number[] = []
 		for await (const v of response) got.push(v)
 		expect(got).toEqual([0, 1, 2])
 	})
 
-	// the window cap was denominated in ENTRIES only: 64 x 1MB chunks =
-	// 68MB pinned per slow-client stream. The producer must also gate on a
-	// byte cap, whichever hits first.
 	it('caps the window in bytes, not just entries', async () => {
 		let produced = 0
 		async function* megachunks() {
@@ -74,33 +62,21 @@ describe('tee() bounded drain-ahead', () => {
 			}
 		})()
 
-		// client reads one chunk then stalls
 		await client.next()
 		await new Promise((r) => setTimeout(r, 30))
 
-		// 4MiB default byte cap with 1MB chunks → single-digit read-ahead,
-		// not the 64-entry count cap (was 65-66 chunks / +68MB RSS)
 		expect(produced).toBeLessThanOrEqual(8)
 
 		await client.return?.()
 		await drained
 	})
 
-	// The slow-client test above never drains both branches to the byte-cap
-	// boundary, so it does not exercise the resume-gate interaction.
-	// A fast consumer draining both branches past the 4MiB cap
-	// within <8 large chunks used to WEDGE: `wakeAll()` runs trims before the
-	// producer parks, so a deferred splice never freed the consumed prefix, the
-	// resume gate read an inflated window and stayed shut, and the producer
-	// parked forever — afterResponse/trace never fired, Context pinned (the
-	// leak the rewrite fixed). Guarded by a wall-clock timeout so a wedge fails
-	// loud instead of hanging the suite.
-	it('does not wedge when a fast consumer drains both branches past the byte cap', async () => {
+	it('does not wedge when consumers exceed the default byte cap', async () => {
 		async function* megachunks() {
 			for (let i = 0; i < 30; i++) yield new Uint8Array(1024 * 1024)
 		}
 
-		const [a, b] = await tee(megachunks(), 2) // default cap 64 / 4MiB bytes
+		const [a, b] = await tee(megachunks(), 2)
 
 		const count = (branch: AsyncIterableIterator<unknown>) =>
 			(async () => {
@@ -153,10 +129,6 @@ describe('tee() bounded drain-ahead', () => {
 		expect(afterResponse).toBe(1)
 	})
 
-	// branches were async generators: parked at an in-body await, their
-	// .return() queued until the STALLED source produced again = never. The
-	// abort-unwind (afterResponse/trace, Context release) hangs off branch-0
-	// return, so it must take effect synchronously without another chunk.
 	it('unwinds on branch-0 return while the source is stalled', async () => {
 		let observerDone = false
 		let hang!: () => void
@@ -177,8 +149,8 @@ describe('tee() bounded drain-ahead', () => {
 			observerDone = true
 		})()
 
-		await client.next() // consume 'first' — source now parked on the stall
-		await client.return?.() // client abort — must NOT need another chunk
+		await client.next()
+		await client.return?.()
 
 		await Promise.race([
 			drained,
@@ -217,15 +189,11 @@ describe('tee() bounded drain-ahead', () => {
 			await reader.cancel()
 		} catch {}
 
-		// must fire WITHOUT the source producing another chunk
 		await new Promise((r) => setTimeout(r, 200))
 		expect(afterResponse).toBe(1)
 		hang()
 	})
 
-	// A mid-stream source error must reach the consumers (like direct
-	// iteration) instead of dying as an unhandled rejection while branches
-	// end "clean".
 	it('propagates a source error to every branch', async () => {
 		async function* failing() {
 			yield 1
@@ -235,12 +203,38 @@ describe('tee() bounded drain-ahead', () => {
 		const [a, b] = await tee(failing(), 2)
 
 		expect((await a.next()).value).toBe(1)
-		expect(a.next()).rejects.toThrow('boom')
+		await expect(a.next()).rejects.toThrow('boom')
 
 		const drain = async () => {
 			for await (const _ of b) {
 			}
 		}
-		expect(drain()).rejects.toThrow('boom')
+		await expect(drain()).rejects.toThrow('boom')
+	})
+
+	it('charges Blob chunks against the byte cap by size', async () => {
+		let produced = 0
+		async function* megabyteBlobs() {
+			while (true) {
+				produced++
+				yield new Blob([
+					new Uint8Array(1 << 20)
+				]) as unknown as Uint8Array
+			}
+		}
+
+		const [client, listener] = tee(megabyteBlobs(), 2, 1 << 20, 1 << 22)
+		const drained = (async () => {
+			for await (const _ of listener) {
+			}
+		})()
+
+		await client.next()
+		await Promise.resolve()
+
+		expect(produced).toBeLessThanOrEqual(6)
+
+		await client.return?.()
+		await drained
 	})
 })

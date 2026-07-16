@@ -11,12 +11,7 @@ import { compileToSource } from '../../src/plugin/aot/source'
 import { materialise } from './_manifest'
 import { req } from '../utils'
 
-/**
- * AOT default preallocation — bake `Default(schema, …)` templates into the
- * manifest (`ps`/`pd`/`pod`) so the frozen runtime never calls TypeBox
- * `Default()` at construction. A frozen validator must produce byte-identical
- * `FromSync` output to the JIT validator for every input shape.
- */
+/** Frozen defaults must match live validation without runtime TypeBox setup. */
 
 afterEach(() => {
 	Compiled.clear()
@@ -49,7 +44,7 @@ const makeFrozen = (schema: any, m: any) => {
 const makeJit = (schema: any) => {
 	Compiled.clear()
 	Validator.clear()
-	// same slot/coercion, but no manifest → JIT default path
+	// No manifest: use live validation.
 	return new TypeBoxValidator(schema, {
 		aot: { method: 'POST', path: PATH },
 		slot: SLOT
@@ -101,7 +96,7 @@ describe('AOT default preallocation', () => {
 			inputs: [{}, { u: 'set' }, { u: 1 }]
 		},
 		{
-			// codec-on-union: now bakes after the createSharedReference cache fix
+			// Codec-on-union remains bakeable after shared-reference cache reuse.
 			name: 'Date default (codec-on-union)',
 			make: () => t.Object({ d: t.Date({ default: '2020-01-01' }) }),
 			inputs: [{}, { d: '2021-05-05' }, { d: new Date(0) }]
@@ -149,7 +144,6 @@ describe('AOT default preallocation', () => {
 			]
 		},
 		{
-			// array carrying its OWN default + per-element defaults
 			name: 'array with own default and element defaults',
 			make: () =>
 				t.Array(t.Object({ a: t.Number({ default: 1 }) }), {
@@ -233,9 +227,8 @@ describe('AOT default preallocation', () => {
 	]
 
 	for (const { name, make, inputs } of NOT_BAKED)
-		it(`does NOT bake (falls back), still frozen ≡ JIT: ${name}`, () => {
+		it(`falls back while matching frozen and live validation: ${name}`, () => {
 			const m = capture(make())
-			// not preallocatable → no baked default fields
 			expect(entry(m)?.ps).toBeUndefined()
 
 			const jit = makeJit(make())
@@ -260,15 +253,12 @@ describe('AOT default preallocation', () => {
 		const second = frozen.FromSync({}) as { items: string[] }
 
 		expect(first.items).toEqual(['x'])
-		expect(second.items).toEqual([]) // independent instance
+		expect(second.items).toEqual([])
 	})
-
-	// ---- regressions from the adversarial audit (2026-06-19) ----
 
 	it('-0 default is not baked (JSON drops the sign) and -0 is preserved', () => {
 		const mk = () => t.Object({ a: t.Number({ default: -0 }) })
 		const m = capture(mk())
-		// isEmittable rejects -0 → falls back to runtime Default (preserves sign)
 		expect(entry(m)?.ps).toBeUndefined()
 		const frozen = makeFrozen(mk(), m)
 		const jit = makeJit(mk())
@@ -276,8 +266,7 @@ describe('AOT default preallocation', () => {
 	})
 
 	it('baked root-object default with nested array is not shared across requests', () => {
-		// root whole-object default → widened + baked; the undefined-input path
-		// must deep-clone so a handler mutation never leaks to the next request.
+		// Mutation must not leak to the next request.
 		const mk = () =>
 			t.Object(
 				{ cfg: t.Object({ list: t.Array(t.Number()) }) },
@@ -311,17 +300,12 @@ describe('AOT default preallocation', () => {
 		expect(b.tags).toEqual(['a']) // not polluted
 	})
 
-	it('does NOT widen a bare root codec scalar (null divergence)', () => {
-		// t.Numeric as the whole schema: baking would route null→default while
-		// JIT Default rejects null → excluded (no object template).
+	it('does not widen a bare root codec scalar', () => {
 		const m = capture(t.Numeric({ default: 5 }))
 		expect(entry(m)?.ps).toBeUndefined()
 	})
 
-	it('t.Date no longer drops ~codec / stale default across calls (cache fix)', () => {
-		// Regression for the createSharedReference cache-hit bug: the 2nd+
-		// `t.Date({default})` used to lose `~codec` (non-enumerable, dropped by
-		// Object.assign) and return the FIRST call's default.
+	it('t.Date preserves its codec and default across cached construction', () => {
 		const codec = (s: any) => !!s.properties.d['~codec']
 		const def = (s: any) => s.properties.d.default
 		expect(codec(t.Object({ d: t.Date({ default: 'a' }) }))).toBe(true)
@@ -338,7 +322,6 @@ describe('AOT default preallocation', () => {
 		const make = () => t.Object({ age: t.Numeric({ default: 5 }) })
 		const m = capture(make())
 		const frozen = makeFrozen(make(), m)
-		// check froze too → no TypeBox validator retained
 		expect(frozen.tb).toBeUndefined()
 		expect(frozen.precomputeSafe).toBe(true)
 	})
@@ -525,14 +508,8 @@ describe('AOT default preallocation', () => {
 	})
 })
 
-// Regression guard for the adversarial-review finding (2026-06-26): a route
-// returned 200 under the AOT build but 422 under dev `.compile()`. The frozen
-// (AOT) path baked the schema-driven merger while the non-frozen (JIT / dev)
-// path still used the `Default(schema, {})` value template, which cannot fill
-// array element defaults nor recurse into nested objects without their own
-// default. Both paths now share `verifyPreallocatableDefault`; these pins fail
-// if the non-frozen path ever diverges from the capture decision again.
-describe('AOT default preallocation — non-frozen JIT ≡ frozen (regression)', () => {
+/** Frozen and live compilation agree on nested and array element defaults. */
+describe('AOT default preallocation — live and frozen parity', () => {
 	const evalManifest = (src: string): any =>
 		new Function(
 			src
@@ -542,14 +519,12 @@ describe('AOT default preallocation — non-frozen JIT ≡ frozen (regression)',
 				.replace(/^import .*$/gm, '')
 		)()
 
-	const REGRESSIONS: Array<{
+	const CASES: Array<{
 		name: string
 		make: () => any
 		inputs: unknown[]
 	}> = [
 		{
-			// the exact adversarial shape: a present `[{}]` must FILL the element
-			// default (`[{x:7}]`), not reject as missing `x`
 			name: 'root array, element object carries its own default',
 			make: () =>
 				t.Array(
@@ -614,7 +589,7 @@ describe('AOT default preallocation — non-frozen JIT ≡ frozen (regression)',
 		}
 	]
 
-	for (const { name, make, inputs } of REGRESSIONS)
+	for (const { name, make, inputs } of CASES)
 		it(`non-frozen bakes + matches frozen: ${name}`, () => {
 			const m = capture(make())
 			expect(entry(m)?.ps).toBe(1)
@@ -622,8 +597,7 @@ describe('AOT default preallocation — non-frozen JIT ≡ frozen (regression)',
 			const frozen = makeFrozen(make(), m)
 			const jit = makeJit(make())
 
-			// the non-frozen path must ALSO take the fast path — proving it shares
-			// the capture's decision, not the old isPrecomputeSafe template gate
+			// Frozen and live validators must share the same precompute decision.
 			expect(jit.precomputeSafe).toBe(true)
 
 			for (const input of inputs) {
@@ -649,7 +623,7 @@ describe('AOT default preallocation — non-frozen JIT ≡ frozen (regression)',
 			}
 		})
 
-	it('pins the filled value: array-element-own-default fills, never rejects', () => {
+	it('fills array element defaults instead of rejecting them', () => {
 		const make = () =>
 			t.Array(
 				t.Object({ x: t.Number({ default: 7 }) }, { default: { x: 7 } })
@@ -658,14 +632,13 @@ describe('AOT default preallocation — non-frozen JIT ≡ frozen (regression)',
 		const frozen = makeFrozen(make(), capture(make()))
 		const jit = makeJit(make())
 
-		// the regression: `[{}]` fills the leaf default instead of 422'ing
 		expect(frozen.FromSync([{}])).toEqual([{ x: 7 }])
 		expect(jit.FromSync([{}])).toEqual([{ x: 7 }])
 		expect(frozen.FromSync([{ x: 5 }, {}])).toEqual([{ x: 5 }, { x: 7 }])
 		expect(jit.FromSync([{ x: 5 }, {}])).toEqual([{ x: 5 }, { x: 7 }])
 	})
 
-	it('e2e: AOT build ≡ plain build for array element-own-default', async () => {
+	it('AOT and plain builds agree on array element defaults', async () => {
 		const build = () =>
 			new Elysia().post(
 				'/batch',
@@ -714,7 +687,6 @@ describe('AOT default preallocation — non-frozen JIT ≡ frozen (regression)',
 				await post(plain, payload)
 			)
 
-		// the AOT build must FILL the element default, not reject the request
 		expect(await post(frozen, [{}])).toEqual({
 			status: 200,
 			text: '[{"x":7}]'
@@ -722,8 +694,7 @@ describe('AOT default preallocation — non-frozen JIT ≡ frozen (regression)',
 	})
 })
 
-// The real build emitter (`source.ts`) serializes `ps`/`pd`/`pod` as JS literals
-// — a separate path from the in-process `materialise` harness.
+// Source serialization exercises a path that in-process materialization bypasses.
 describe('AOT default preallocation — source emit', () => {
 	const build = () =>
 		new Elysia().get(
@@ -792,7 +763,7 @@ describe('AOT default preallocation — source emit', () => {
 		}
 	})
 
-	it('e2e: frozen app fills baked defaults identically to a plain app', async () => {
+	it('frozen and plain apps fill baked defaults identically', async () => {
 		process.env.ELYSIA_AOT_BUILD = '1'
 		let src: string
 		try {

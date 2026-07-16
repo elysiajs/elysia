@@ -1,28 +1,7 @@
-/**
- * Child process for `bridge-free-subprocess.test.ts`.
- *
- * Runs with the TypeBox bridge NEVER wired: it imports ONLY the reconstruct
- * machinery + `typebox` (for `materialise`), and deliberately does NOT import the
- * elysia type barrel (`src/type/index`), which is the sole caller of
- * `setupTypebox`. So this is a faithful stand-in for a build that stripped compat.
- *
- * Input (env `PAYLOAD`): a JSON file with `{ captured, schema, cases }` produced
- * by the parent (where the bridge IS wired). It:
- *   1. asserts the bridge is unwired (proving the scenario),
- *   2. materialises the captured manifest into `Compiled.validators`,
- *   3. reconstructs the validator bridge-free and runs each case,
- * printing `RESULT <json>` for the parent to assert on.
- *
- * Before the fix, step 3 went through the wired `RouteValidator` and threw
- * "Typebox module isn't initialized" — the parent asserts this child now
- * succeeds where the old path would have failed.
- */
+/** Runs captured validators with the TypeBox bridge deliberately unwired. */
 import { readFileSync } from 'node:fs'
 
-import {
-	Compiled,
-	type CapturedValidator
-} from '../../../src/compile/aot'
+import { Compiled, type CapturedValidator } from '../../../src/compile/aot'
 import { buildFrozenRouteValidator } from '../../../src/compile/handler/frozen-validator'
 import { hasTypes } from '../../../src/type/bridge'
 import { materialise } from '../_manifest'
@@ -30,7 +9,7 @@ import { materialise } from '../_manifest'
 const out = (tag: string, data: unknown) =>
 	console.log(tag, JSON.stringify(data))
 
-// 1. the bridge MUST be unwired here — otherwise the test proves nothing.
+// The bridge must remain unwired for this process to isolate frozen reconstruction.
 try {
 	hasTypes([], { '~kind': 'Object' } as any)
 	out('BRIDGE', 'wired')
@@ -52,20 +31,18 @@ Compiled.validators = materialise(payload.captured)
 const hook = { body: payload.schema } as any
 const root = { '~config': {}, '~ext': {} } as any
 
-// Demonstrate the PRE-CHANGE failure: the wired `RouteValidator` (what
-// `Reconstrct.validator` used unconditionally) throws the stripped-bridge error
-// on its first bridge touch. This is the exact 500 the fix rescues.
-if (process.env.OLD_PATH === '1') {
+// A live RouteValidator must fail here, proving success uses frozen reconstruction.
+if (process.env.USE_LIVE_VALIDATOR === '1') {
 	const { RouteValidator } = await import('../../../src/validator/route')
 	try {
 		// eslint-disable-next-line no-new
 		new RouteValidator(hook, {
 			aot: { method: payload.method, path: payload.path }
 		} as any)
-		out('RESULT', { oldPathThrew: false })
+		out('RESULT', { liveValidatorThrew: false })
 	} catch (error: any) {
 		out('RESULT', {
-			oldPathThrew: true,
+			liveValidatorThrew: true,
 			message: String(error?.message).slice(0, 60)
 		})
 	}

@@ -292,96 +292,81 @@ describe('Map Response', () => {
 		expect(response.headers.get('x-powered-by')).toBe('Elysia')
 	})
 
-	//  / : request() early-return must run mapResponse hooks.
-	// Before the fix, mapResponse was called without context so hooks were skipped.
-	it('runs mapResponse when request hook short-circuits (sync path)', async () => {
-		let called = false
+	describe('request hook early returns', () => {
+		it.each(['synchronous', 'asynchronous', 'traced'] as const)(
+			'runs mapResponse when %s request handling returns early',
+			async (mode) => {
+				let called = false
+				const app = new Elysia()
 
-		const app = new Elysia()
-			.request(() => 'early')
-			.mapResponse(() => {
-				called = true
-			})
-			.get('/', () => 'unreachable')
+				if (mode === 'asynchronous') app.request(async () => 'early')
+				else {
+					if (mode === 'traced')
+						app.trace(({ onRequest }) => onRequest(() => {}))
+					app.request(() => 'early')
+				}
 
-		await app.handle(req('/'))
-		expect(called).toBe(true)
-	})
+				app.mapResponse(() => {
+					called = true
+				}).get('/', () => 'unreachable')
 
-	it('runs mapResponse when request hook short-circuits (async path)', async () => {
-		let called = false
+				await app.handle(req('/'))
 
-		const app = new Elysia()
-			.request(async () => 'early')
-			.mapResponse(() => {
-				called = true
-			})
-			.get('/', () => 'unreachable')
+				expect(called).toBe(true)
+			}
+		)
 
-		await app.handle(req('/'))
-		expect(called).toBe(true)
-	})
-
-	it('mapResponse hook can transform the early-return value from request hook', async () => {
-		const app = new Elysia()
-			.request(() => 'raw')
-			.mapResponse(({ responseValue }) => {
-				if (responseValue === 'raw') return new Response('mapped')
-			})
-			.get('/', () => 'unreachable')
-
-		const res = await app.handle(req('/'))
-		expect(await res.text()).toBe('mapped')
-	})
-
-	it('request hook early-return: mapResponse hook sees responseValue', async () => {
-		let seen: unknown
-
-		const app = new Elysia()
-			.request(() => ({ key: 'val' }))
-			.mapResponse(({ responseValue }) => {
-				seen = responseValue
-			})
-			.get('/', () => 'unreachable')
-
-		await app.handle(req('/'))
-		expect(seen).toEqual({ key: 'val' })
-	})
-
-	it('runs mapResponse on request hook short-circuit with trace active', async () => {
-		let called = false
-
-		const app = new Elysia()
-			.trace(({ onRequest }) => {
-				onRequest(() => {})
-			})
-			.request(() => 'early')
-			.mapResponse(() => {
-				called = true
-			})
-			.get('/', () => 'unreachable')
-
-		await app.handle(req('/'))
-		expect(called).toBe(true)
-	})
-
-	it('routes rejected async early-response mapping through error hooks', async () => {
-		for (const mode of ['sync', 'async', 'trace'] as const) {
-			const app: any = new Elysia()
-			if (mode === 'async') app.request(async () => {})
-			if (mode === 'trace')
-				app.trace(({ onRequest }: any) => onRequest(() => {}))
-
-			app.request(() => 'early')
-				.mapResponse(async ({ responseValue }: any) => {
-					if (responseValue === 'early')
-						throw new Error(`map failed: ${mode}`)
+		it('allows mapResponse to replace the early response', async () => {
+			const app = new Elysia()
+				.request(() => 'raw')
+				.mapResponse(({ responseValue }) => {
+					if (responseValue === 'raw') return new Response('mapped')
 				})
-				.error(({ error }: any) => error.message)
 				.get('/', () => 'unreachable')
 
 			const response = await app.handle(req('/'))
-			expect(await response.text()).toBe(`map failed: ${mode}`)
-		}
+
+			await expect(response.text()).resolves.toBe('mapped')
+		})
+
+		it('exposes the early response as responseValue', async () => {
+			let seen: unknown
+
+			const app = new Elysia()
+				.request(() => ({ key: 'val' }))
+				.mapResponse(({ responseValue }) => {
+					seen = responseValue
+				})
+				.get('/', () => 'unreachable')
+
+			await app.handle(req('/'))
+
+			expect(seen).toEqual({ key: 'val' })
+		})
+
+		it.each(['synchronous', 'asynchronous', 'traced'] as const)(
+			'passes a rejected mapResponse promise to error hooks with %s request handling',
+			async (mode) => {
+				const app = new Elysia()
+
+				if (mode === 'asynchronous') app.request(async () => {})
+				else if (mode === 'traced')
+					app.trace(({ onRequest }) => onRequest(() => {}))
+
+				app.request(() => 'early')
+					.mapResponse(async ({ responseValue }) => {
+						if (responseValue === 'early')
+							throw new Error(`map failed: ${mode}`)
+					})
+					.error(({ error }) => error.message)
+					.get('/', () => 'unreachable')
+
+				const response = await app.handle(req('/'))
+
+				await expect(response.text()).resolves.toBe(
+					`map failed: ${mode}`
+				)
+			}
+		)
 	})
 })

@@ -16,7 +16,7 @@ const expectResponseText = async (
 }
 
 describe('Native Static Response', () => {
-	it('collects bare static routes for the Bun adapter without retaining a base map', async () => {
+	it('collects a bare static route with its mapped content type', async () => {
 		const app = new Elysia().get('/', 'Static Content')
 		void app.fetch
 
@@ -102,13 +102,13 @@ describe('Native Static Response', () => {
 	})
 
 	describe('eligibility', () => {
-		it('bails for methods unsupported by Bun native routes', () => {
+		it('excludes methods unsupported by Bun native routes', () => {
 			const app = new Elysia().all('/all', 'all')
 
 			expect(collect(app)).toBeUndefined()
 		})
 
-		it('bails for app-level mapResponse', async () => {
+		it('excludes routes with app-level mapResponse', async () => {
 			const app = new Elysia()
 				.mapResponse(() => new Response('MAPPED'))
 				.get('/', 'ok')
@@ -122,7 +122,7 @@ describe('Native Static Response', () => {
 			).resolves.toBe('MAPPED')
 		})
 
-		it('bails for route-local mapResponse (scalar and array)', async () => {
+		it('excludes routes with scalar or array route-local mapResponse', async () => {
 			const scalar = new Elysia().get(
 				'/',
 				{
@@ -142,7 +142,7 @@ describe('Native Static Response', () => {
 			expect(route(array, '/')).toBeUndefined()
 		})
 
-		it('bails for guard mapResponse', async () => {
+		it('excludes routes with guard mapResponse', async () => {
 			const app = new Elysia()
 				.guard({ mapResponse: () => new Response('MAPPED') })
 				.get('/', 'ok')
@@ -150,7 +150,7 @@ describe('Native Static Response', () => {
 			expect(route(app, '/')).toBeUndefined()
 		})
 
-		it('bails for plugin mapResponse while keeping siblings native', async () => {
+		it('excludes plugin mapResponse routes while collecting siblings', async () => {
 			const plugin = new Elysia()
 				.mapResponse(() => new Response('MAPPED'))
 				.get('/in-plugin', 'ok')
@@ -161,7 +161,7 @@ describe('Native Static Response', () => {
 			await expectResponseText(route(app, '/'), 'ok')
 		})
 
-		it('bails for a bare 0-parameter hook', async () => {
+		it('excludes routes with a zero-parameter hook', async () => {
 			let called = 0
 			const app = new Elysia().get(
 				'/',
@@ -179,7 +179,7 @@ describe('Native Static Response', () => {
 			expect(called).toBe(1)
 		})
 
-		it('bails for route-local afterResponse and trace', async () => {
+		it('excludes routes with route-local afterResponse or trace', async () => {
 			const afterResponse = new Elysia().get(
 				'/',
 				{
@@ -199,7 +199,7 @@ describe('Native Static Response', () => {
 			expect(route(trace, '/')).toBeUndefined()
 		})
 
-		it('bails when the route carries a request schema', async () => {
+		it('excludes routes with a request schema', async () => {
 			const app = new Elysia().get(
 				'/',
 				{
@@ -217,7 +217,7 @@ describe('Native Static Response', () => {
 			).toBe(200)
 		})
 
-		it('bails for an app-level .request() hook (always-global)', async () => {
+		it('excludes routes with an app-level request hook', async () => {
 			let called = 0
 			const app = new Elysia()
 				.request(() => {
@@ -231,7 +231,7 @@ describe('Native Static Response', () => {
 			expect(called).toBe(1)
 		})
 
-		it('bails for a .wrap() higher-order fetch handler', async () => {
+		it('excludes routes with a higher-order fetch handler', async () => {
 			let wrapped = 0
 			const app = new Elysia()
 				.wrap((fetch) => (request) => {
@@ -246,7 +246,7 @@ describe('Native Static Response', () => {
 			expect(wrapped).toBe(1)
 		})
 
-		it('bails for an app-level .trace() handler', () => {
+		it('excludes routes with an app-level trace hook', () => {
 			const app = new Elysia().trace(() => {}).get('/', 'ok')
 
 			expect(route(app, '/')).toBeUndefined()

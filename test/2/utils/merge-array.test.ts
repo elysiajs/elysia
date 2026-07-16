@@ -2,23 +2,20 @@ import { describe, it, expect } from 'bun:test'
 import { mergeArray } from '../../../src/utils'
 
 describe('mergeArray', () => {
-	// falsy inputs
-	// note: undefined only, empty array is truthy
-	describe('falsy inputs', () => {
-		it('returns b as-is when a is undefined', () => {
+	describe('undefined operands', () => {
+		it('returns the second operand when the first is undefined', () => {
 			expect(mergeArray(undefined, [1, 2])).toEqual([1, 2])
 		})
 
-		it('returns a as-is when b is undefined', () => {
+		it('returns the first operand when the second is undefined', () => {
 			expect(mergeArray([1, 2], undefined)).toEqual([1, 2])
 		})
 
-		it('returns single b unwrapped when a is undefined', () => {
-			// known quirk: type lies, runtime returns the bare value
+		it('returns a scalar second operand without wrapping it', () => {
 			expect(mergeArray(undefined, 'x' as any)).toBe('x')
 		})
 
-		it('returns single a unwrapped when b is undefined', () => {
+		it('returns a scalar first operand without wrapping it', () => {
 			expect(mergeArray('x' as any, undefined)).toBe('x')
 		})
 
@@ -28,8 +25,6 @@ describe('mergeArray', () => {
 		})
 	})
 
-	// forward order
-	// covers all 4 (array|single) × (array|single)
 	describe('forward order (reverse=false)', () => {
 		it('array + array', () => {
 			expect(mergeArray([1, 2], [3, 4])).toEqual([1, 2, 3, 4])
@@ -44,19 +39,17 @@ describe('mergeArray', () => {
 		})
 
 		it('single + single', () => {
-			// @ts-expect-error
+			// @ts-expect-error scalar pairs are supported at runtime
 			expect(mergeArray(1, 2)).toEqual([1, 2])
 		})
 	})
 
-	// reverse order — same matrix
-	// the b.length === 1 fast path
 	describe('reverse order (reverse=true)', () => {
 		it('array + array', () => {
 			expect(mergeArray([1, 2], [3, 4], true)).toEqual([3, 4, 1, 2])
 		})
 
-		it('array + array, b.length === 1 (fast path)', () => {
+		it('array + one-element array', () => {
 			expect(mergeArray([1, 2, 3], [9], true)).toEqual([9, 1, 2, 3])
 		})
 
@@ -69,20 +62,18 @@ describe('mergeArray', () => {
 		})
 
 		it('single + single', () => {
-			// @ts-expect-error
+			// @ts-expect-error scalar pairs are supported at runtime
 			expect(mergeArray(1, 2, true)).toEqual([2, 1])
 		})
 	})
 
-	// mutation contract
-	// a may be mutated, b must NEVER be
 	describe('mutation contract', () => {
 		it('forward array+array: mutates a, leaves b intact', () => {
 			const a = [1, 2]
 			const b = [3, 4]
 			const snapshot = [...b]
 			const result = mergeArray(a, b)
-			expect(result).toBe(a) // returned reference IS a
+			expect(result).toBe(a)
 			expect(a).toEqual([1, 2, 3, 4])
 			expect(b).toEqual(snapshot)
 		})
@@ -101,14 +92,14 @@ describe('mergeArray', () => {
 			const result = mergeArray(a, b, true)
 			expect(result).toEqual([3, 4, 1, 2])
 			expect(b).toEqual(snapshot)
-			expect(result).not.toBe(b) // fresh allocation
+			expect(result).not.toBe(b)
 		})
 
 		it('reverse array+array, b.length === 1: mutates a, leaves b intact', () => {
 			const a = [1, 2]
 			const b = [9]
 			const result = mergeArray(a, b, true)
-			expect(result).toBe(a) // mutated a
+			expect(result).toBe(a)
 			expect(a).toEqual([9, 1, 2])
 			expect(b).toEqual([9])
 		})
@@ -120,21 +111,17 @@ describe('mergeArray', () => {
 			expect(a).toEqual([9, 1, 2])
 		})
 
-		it('single+array branches do not mutate b', () => {
-			const b = [1, 2]
-			const snapshot = [...b]
-			mergeArray(0 as any, b) // ⚠ 0 is falsy — uses different path. Use truthy:
-			const b2 = [1, 2]
-			mergeArray('a' as any, b2)
-			expect(b2).toEqual([1, 2])
-			mergeArray('a' as any, b2, true)
-			expect(b2).toEqual([1, 2])
+		it('does not mutate the second array when the first operand is scalar', () => {
+			const second = [1, 2]
+			mergeArray('a' as any, second)
+			expect(second).toEqual([1, 2])
+			mergeArray('a' as any, second, true)
+			expect(second).toEqual([1, 2])
 		})
 	})
 
-	// behavioral guarantees
 	describe('behavior', () => {
-		it('preserves duplicates (no dedup, unlike old Set version)', () => {
+		it('preserves duplicate values', () => {
 			expect(mergeArray([1, 2, 1], [2, 1])).toEqual([1, 2, 1, 2, 1])
 		})
 
@@ -159,7 +146,7 @@ describe('mergeArray', () => {
 		})
 
 		it('preserves NaN, null, undefined as values', () => {
-			// @ts-expect-error
+			// @ts-expect-error mixed nullable values are supported at runtime
 			expect(mergeArray([NaN], [null, undefined])).toEqual([
 				NaN,
 				null,

@@ -97,7 +97,7 @@ import { Cookie } from '../../../src/cookie'
 			{
 				response: z.literal('lilith')
 			},
-			// @ts-expect-error
+			// @ts-expect-error the response schema accepts only "lilith"
 			() => 'a' as const
 		)
 }
@@ -278,7 +278,7 @@ import { Cookie } from '../../../src/cookie'
 			{
 				response: z.literal('lilith')
 			},
-			// @ts-expect-error
+			// @ts-expect-error the response schema accepts only "lilith"
 			() => 'focou' as const
 		)
 		.get(
@@ -293,7 +293,7 @@ import { Cookie } from '../../../src/cookie'
 			{
 				response: z.literal('lilith')
 			},
-			// @ts-expect-error
+			// @ts-expect-error status 418 expects "fouco"
 			({ status }) => status(418, 'lilith')
 		)
 }
@@ -536,25 +536,19 @@ import { Cookie } from '../../../src/cookie'
 	)
 }
 
-// ?  — Standard Schema response position exposes input (not output)
-// A schema with input:string / output:number means the handler must RETURN a
-// string (that the runtime will transform to number), not a number.
+// Response handlers return the Standard Schema input type; validation then
+// transforms it to the output type.
 {
-	// Use Zod's transform to create a schema where input=string, output=number
 	const strToNum = z.string().transform(Number)
 
-	// Handlers returning the input type (string) should be accepted
-	new Elysia().get(
-		'/h14',
-		{ response: strToNum },
-		() => 'hello'
-	)
+	// The input type is accepted.
+	new Elysia().get('/h14', { response: strToNum }, () => 'hello')
 
-	// Handlers returning the output type (number) should be REJECTED
+	// The transformed output type is rejected as a handler return.
 	new Elysia().get(
 		'/h14',
 		{ response: strToNum },
-		// @ts-expect-error returning the output type (number) should fail
+		// @ts-expect-error The transformed number is not valid handler input.
 		() => 42
 	)
 }

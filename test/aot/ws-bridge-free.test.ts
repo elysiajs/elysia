@@ -14,16 +14,7 @@ import { generateCompiledArtifacts } from '../../src/plugin/aot/core'
 
 import { materialise } from './_manifest'
 
-/**
- * WS bridge-free reconstruction.
- *
- * WS routes build their validators through the same `RouteValidator` with
- * `aot: { method: 'WS', path }`, so their slots are captured into the manifest
- * like HTTP slots. Under a sealed strip, `createWSRoute` catches the severed-
- * bridge throw and reconstructs via `buildFrozenRouteValidator` — these pin
- * that the frozen WS validators match the wired ones, and that WS no longer
- * forces the plugin's bridge mode to `off`.
- */
+/** WebSocket validators reconstruct from the manifest without a TypeBox bridge. */
 
 const PATH = '/chat'
 
@@ -62,8 +53,8 @@ afterEach(() => {
 	Validator.clear()
 })
 
-describe('WS bridge-free frozen validator', () => {
-	it('captures WS slots with bridgeFree markers', () => {
+describe('frozen WebSocket validator reconstruction', () => {
+	it('captures each WebSocket schema slot as bridge-free', () => {
 		const captured = freezeWS(WS_HOOK())
 
 		const slots = captured.map((c) => c.slot).sort()
@@ -72,13 +63,16 @@ describe('WS bridge-free frozen validator', () => {
 		for (const c of captured) expect(c.bridgeFree).toBe(true)
 	})
 
-	it('reconstructs the WS route validator bridge-free with wired parity', () => {
+	it('matches live WebSocket validation without a TypeBox bridge', () => {
 		const hook = WS_HOOK()
 		freezeWS(hook)
 
-		const wired = new RouteValidator(hook as any, {
-			aot: { method: 'WS', path: PATH }
-		} as any)
+		const wired = new RouteValidator(
+			hook as any,
+			{
+				aot: { method: 'WS', path: PATH }
+			} as any
+		)
 		const frozen = buildFrozenRouteValidator(
 			hook as any,
 			new Elysia() as any,
@@ -88,7 +82,6 @@ describe('WS bridge-free frozen validator', () => {
 
 		expect(frozen).toBeDefined()
 
-		// body: message dispatch uses `hasCodec ? From : Check`
 		expect((frozen!.body as any).hasCodec).toBe(
 			(wired.body as any).hasCodec
 		)
@@ -126,12 +119,10 @@ describe('WS bridge-free frozen validator', () => {
 			})()
 
 			expect(f.ok, `body parity for ${JSON.stringify(b)}`).toBe(w.ok)
-			if (w.ok)
-				expect(JSON.stringify(f.v)).toBe(JSON.stringify(w.v))
+			if (w.ok) expect(JSON.stringify(f.v)).toBe(JSON.stringify(w.v))
 			else expect(f.s).toBe(w.s)
 		}
 
-		// query: upgrade validation (Numeric coercion via cp)
 		const queries = [{ room: '7' }, { room: 7 }, { room: 'x' }, {}]
 		for (const q of queries) {
 			const w = (() => {
@@ -162,11 +153,9 @@ describe('WS bridge-free frozen validator', () => {
 			})()
 
 			expect(f.ok, `query parity for ${JSON.stringify(q)}`).toBe(w.ok)
-			if (w.ok)
-				expect(JSON.stringify(f.v)).toBe(JSON.stringify(w.v))
+			if (w.ok) expect(JSON.stringify(f.v)).toBe(JSON.stringify(w.v))
 		}
 
-		// response: WS send validation only uses `Check` (ws/context.ts)
 		const wiredRes = (wired.response as any)[200]
 		const frozenRes = (frozen!.response as any)[200]
 		expect(frozenRes).toBeDefined()
@@ -177,19 +166,16 @@ describe('WS bridge-free frozen validator', () => {
 			).toBe(wiredRes.Check(r))
 	})
 
-	// Security regression: under a sealed/AOT build the WS body validator is a
-	// FrozenSlotValidator, which exposes strip ONLY via From/EncodeFrom (private
-	// #clean) and has NO public `.Clean`. validateMessageBody must therefore use
-	// EncodeFrom, not `.Clean` — otherwise undeclared attacker fields leak on
-	// exactly the sealed deployments (bundled builds / Cloudflare Workers) while
-	// sealed HTTP still strips, an HTTP/WS mass-assignment asymmetry.
-	it('sealed/frozen WS body strips undeclared props via EncodeFrom (parity with wired)', () => {
+	it('strips undeclared body properties without a public Clean method', () => {
 		const hook = { body: t.Object({ a: t.String() }) }
 		freezeWS(hook)
 
-		const wired = new RouteValidator(hook as any, {
-			aot: { method: 'WS', path: PATH }
-		} as any)
+		const wired = new RouteValidator(
+			hook as any,
+			{
+				aot: { method: 'WS', path: PATH }
+			} as any
+		)
 		const frozen = buildFrozenRouteValidator(
 			hook as any,
 			new Elysia() as any,
@@ -198,9 +184,7 @@ describe('WS bridge-free frozen validator', () => {
 		)
 		expect(frozen).toBeDefined()
 
-		// plain non-codec body → validateMessageBody dispatches through EncodeFrom
 		expect((frozen!.body as any).hasCodec).toBe(false)
-		// the reason EncodeFrom is required: no public Clean on the frozen validator
 		expect((frozen!.body as any).Clean).toBeUndefined()
 
 		const attacker = { a: 'hi', evil: 'INJECTED', nested: { x: 1 } }
@@ -217,13 +201,13 @@ describe('WS bridge-free frozen validator', () => {
 		expect(frozenOut).toEqual({ a: 'hi' })
 	})
 
-	it('WS-only app with schemas seals (mode A: compat stubbed, no reroute)', async () => {
+	it('seals a schema-only WebSocket app without rerouting the bridge', async () => {
 		const { stub } = await generateCompiledArtifacts(
 			'test/aot/fixtures/mode-ws-app.ts'
 		)
 
-		expect(stub.ws).toBe(false) // WS runtime module retained
-		expect(stub.compat).toBe(true) // bridge severed
-		expect(stub.bridge).toBe(false) // mode A, not the wired reroute
+		expect(stub.ws).toBe(false)
+		expect(stub.compat).toBe(true)
+		expect(stub.bridge).toBe(false)
 	})
 })

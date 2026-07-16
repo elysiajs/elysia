@@ -13,7 +13,7 @@ export const app = new Elysia()
 	.post(
 		'/echo',
 		{
-			// same shape as /body → must dedup to one factory
+			// Reuse the body schema shape to exercise factory deduplication.
 			body: t.Object({ hello: t.String() })
 		},
 		({ body }) => body

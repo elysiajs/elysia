@@ -5,23 +5,18 @@ import { Elysia, t, setFileTypeDetector } from '../../src'
 import { TypeBoxValidator } from '../../src/type/validator'
 import { upload } from '../utils'
 
-// `t.File({ type })` now throws at construction if no detector
-// is registered, so it must be set BEFORE any schema in this file is built
-// (previously only needed at validation time). Register it up front instead of
-// relying on cross-file suite ordering.
+// Typed file schemas require a detector when they are constructed.
 beforeAll(() => {
 	setFileTypeDetector(fileTypeFromBlob)
 })
 
-// restore the suite-wide detector registered in test/validator/body.test.ts
+// Restore the detector used by the rest of the validator suite.
 afterAll(() => {
 	setFileTypeDetector(fileTypeFromBlob)
 })
 
 describe('file-type queue refinements', () => {
 	it('plain t.File() stays on the sync validation path', () => {
-		// no `type` option → nothing can enqueue async detection, so the
-		// validator must not be forced through FromAsync
 		const plain = new TypeBoxValidator(t.Object({ file: t.File() }) as any)
 		expect(plain.isAsync).toBe(false)
 
@@ -32,7 +27,6 @@ describe('file-type queue refinements', () => {
 	})
 
 	it('failed content detection reports the offending property path', async () => {
-		// detector reports a mime that never matches `type: 'image'`
 		setFileTypeDetector(() => 'application/x-not-an-image')
 
 		const app = new Elysia().post(

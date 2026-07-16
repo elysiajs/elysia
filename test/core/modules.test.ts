@@ -117,7 +117,7 @@ describe('Modules', () => {
 		expect(res).toBe('hi')
 	})
 
-	it('apply async plugin contributions at resolution time', async () => {
+	it('applies async plugin decorators and state, but not derives, to earlier routes', async () => {
 		const app = new Elysia()
 			.use(async (app) => {
 				await sleep(0)
@@ -130,10 +130,6 @@ describe('Modules', () => {
 			.get('/', (c: any) => ({
 				decorated: c.decorated ?? null,
 				stated: c.store?.stated ?? null,
-				// routes declared before the plugin resolves never see
-				// chain-ordered contributions (derive/resolve) — async
-				// `use` types them `| undefined` accordingly
-				// (see test/types/async-use.ts)
 				derived: c.derived ?? null
 			}))
 

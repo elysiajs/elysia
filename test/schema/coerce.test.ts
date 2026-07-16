@@ -4,7 +4,7 @@ import { type BaseSchema } from '../../src/type'
 import { describe, expect, it } from 'bun:test'
 
 describe('coerce schema', () => {
-	it('work', () => {
+	it('transforms a matching nested schema', () => {
 		const schema = Type.Object({
 			name: Type.String()
 		})
@@ -13,12 +13,10 @@ describe('coerce schema', () => {
 			['String', (properties) => Type.Number(properties)]
 		])
 
-		// Check structure (enumerable properties)
 		expect(transformedSchema.type).toBe('object')
 		expect(transformedSchema.required).toEqual(['name'])
 		expect(transformedSchema.properties?.name?.type).toBe('number')
 
-		// Check ~kind values (non-enumerable in TypeBox)
 		expect(transformedSchema['~kind']).toBe('Object')
 		expect(transformedSchema.properties?.name?.['~kind']).toBe('Number')
 	})
@@ -43,8 +41,6 @@ describe('coerce schema', () => {
 				root: true
 			})
 
-			// Root is Object, not String, so no match at root
-			// String inside properties should NOT be replaced
 			expect(result['~kind']).toBe('Object')
 			expect(result.properties?.name?.['~kind']).toBe('String')
 		})
@@ -83,7 +79,6 @@ describe('coerce schema', () => {
 				root: false
 			})
 
-			// Root should not be replaced
 			expect(result['~kind']).toBe('String')
 		})
 
@@ -96,8 +91,6 @@ describe('coerce schema', () => {
 				root: false
 			})
 
-			// Root Object should not be replaced (even if we had Object in fromTo)
-			// But nested String should be replaced
 			expect(result['~kind']).toBe('Object')
 			expect(result.properties?.name?.['~kind']).toBe('Number')
 		})
@@ -116,7 +109,6 @@ describe('coerce schema', () => {
 				{ root: false }
 			)
 
-			// Root Object not replaced, but Number inside is
 			expect(result['~kind']).toBe('Object')
 			expect(result.properties?.count?.['~kind']).toBe('Boolean')
 		})
@@ -145,10 +137,8 @@ describe('coerce schema', () => {
 				{ onlyFirst: 'String' }
 			)
 
-			// Only one String should be replaced
 			expect(callCount).toBe(1)
 
-			// Count how many are still String vs Number
 			const props = result.properties!
 			const kinds = Object.values(props).map((p) => p['~kind'])
 			const numberCount = kinds.filter((k) => k === 'Number').length
@@ -168,8 +158,6 @@ describe('coerce schema', () => {
 				onlyFirst: 'String'
 			})
 
-			// Object iteration order is insertion order in modern JS
-			// First property gets replaced, second stays
 			const props = result.properties!
 			const kinds = Object.values(props).map((p) => p['~kind'])
 			expect(kinds.filter((k) => k === 'Number').length).toBe(1)
@@ -189,8 +177,6 @@ describe('coerce schema', () => {
 				untilNonRootObjectFound: true
 			})
 
-			// The nested object should not be descended into
-			// So the String inside should remain unchanged
 			expect(result['~kind']).toBe('Object')
 			expect(result.properties?.nested?.['~kind']).toBe('Object')
 			expect(result.properties?.nested?.properties?.deep?.['~kind']).toBe(
@@ -207,7 +193,6 @@ describe('coerce schema', () => {
 				untilNonRootObjectFound: true
 			})
 
-			// The nested array should not be descended into
 			expect(result['~kind']).toBe('Object')
 			expect(result.properties?.items?.['~kind']).toBe('Array')
 			expect(
@@ -224,7 +209,6 @@ describe('coerce schema', () => {
 				untilNonRootObjectFound: true
 			})
 
-			// Root object IS processed, so its direct children are transformed
 			expect(result['~kind']).toBe('Object')
 			expect(result.properties?.name?.['~kind']).toBe('Number')
 		})
@@ -236,7 +220,6 @@ describe('coerce schema', () => {
 				untilNonRootObjectFound: true
 			})
 
-			// Root array IS processed
 			expect(result['~kind']).toBe('Array')
 			expect((result.items as BaseSchema)?.['~kind']).toBe('Number')
 		})
@@ -250,7 +233,6 @@ describe('coerce schema', () => {
 
 			const result = coerce(schema, [['String', () => null]])
 
-			// String should remain unchanged since to returned null
 			expect(result.properties?.name?.['~kind']).toBe('String')
 		})
 
@@ -258,7 +240,6 @@ describe('coerce schema', () => {
 			const original = Type.String()
 			const result = coerce(original, [['String', () => null]])
 
-			// Should return same reference since nothing changed
 			expect(result).toBe(original)
 		})
 
@@ -277,7 +258,6 @@ describe('coerce schema', () => {
 				]
 			])
 
-			// First match returns null, so we break - second entry not called
 			expect(secondCalled).toBe(false)
 			expect(result['~kind']).toBe('String')
 		})
@@ -294,9 +274,7 @@ describe('coerce schema', () => {
 
 			const result = coerce(schema, [['String', () => Type.Boolean()]])
 
-			// Number was not changed, should be same reference
 			expect(result.properties?.num).toBe(innerNumber)
-			// String was changed, should be different
 			expect(result.properties?.str).not.toBe(innerString)
 			expect(result.properties?.str?.['~kind']).toBe('Boolean')
 		})
@@ -312,9 +290,7 @@ describe('coerce schema', () => {
 
 			const result = coerce(schema, [['String', () => Type.Boolean()]])
 
-			// The unchanged nested object should be exactly the same reference
 			expect(result.properties?.unchanged).toBe(deepNested)
-			// Root should be different since a child changed
 			expect(result).not.toBe(schema)
 		})
 
@@ -323,10 +299,8 @@ describe('coerce schema', () => {
 				names: Type.Array(Type.Number())
 			})
 
-			// Transform String only, but array contains Number
 			const result = coerce(schema, [['String', () => Type.Boolean()]])
 
-			// The array's items reference should be preserved
 			expect(result.properties?.names).toBe(schema.properties?.names)
 		})
 	})
@@ -341,8 +315,7 @@ describe('coerce schema', () => {
 			expect(result.anyOf?.[1]?.['~kind']).toBe('Number')
 		})
 
-		// TypeBox doesn't use `oneOf`, so this is a synthetic test to ensure we handle any array of schemas in combinators, even if they use different keys
-		it('should traverse and transform schemas in oneOf array', () => {
+		it('should traverse and transform schemas in a synthetic oneOf array', () => {
 			const schema = {
 				'~kind': 'Union',
 				oneOf: [Type.String(), Type.String()]
@@ -372,7 +345,6 @@ describe('coerce schema', () => {
 
 			const result = coerce(schema, [['String', () => Type.Boolean()]])
 
-			// Unchanged schema should be same reference
 			expect(result.anyOf?.[1]).toBe(unchangedSchema)
 		})
 	})
@@ -440,7 +412,6 @@ describe('coerce schema', () => {
 
 			const result = coerce(schema, [['String', () => Type.Number()]])
 
-			// Record creates patternProperties with a pattern key
 			const patternKeys = Object.keys(result.patternProperties || {})
 			expect(patternKeys.length).toBeGreaterThan(0)
 
@@ -451,10 +422,8 @@ describe('coerce schema', () => {
 		it('should preserve unchanged patternProperties', () => {
 			const schema = Type.Record(Type.String(), Type.Number())
 
-			// Only transform Boolean, not Number
 			const result = coerce(schema, [['Boolean', () => Type.String()]])
 
-			// patternProperties should be same reference since nothing changed
 			expect(result.patternProperties).toBe(schema.patternProperties)
 		})
 	})
@@ -494,15 +463,12 @@ describe('coerce schema', () => {
 				{ additionalProperties: additionalSchema }
 			)
 
-			// Transform String only
 			const result = coerce(schema, [['String', () => Type.Boolean()]])
 
-			// additionalProperties is Number, should be same reference
 			expect(result.additionalProperties).toBe(additionalSchema)
 		})
 	})
 
-	// Synthetic test to ensure we only unwrap the $ref target in $defs and not the entire $defs map
 	describe('cyclic schema unwrap', () => {
 		it('should only unwrap the $ref target in $defs', () => {
 			const schema = {
@@ -511,7 +477,6 @@ describe('coerce schema', () => {
 				$defs: {
 					Node: Type.Object({
 						value: Type.String()
-						// In real cyclic schemas, this would ref back
 					}),
 					Other: Type.Object({
 						other: Type.String()
@@ -549,7 +514,6 @@ describe('coerce schema', () => {
 				]
 			])
 
-			// Only 'A' should be walked since it's the referenced def
 			expect(walkCount).toBe(1)
 		})
 	})
@@ -561,7 +525,6 @@ describe('coerce schema', () => {
 				age: Type.Number()
 			})
 
-			// Transform Boolean, but schema has no Boolean
 			const result = coerce(schema, [['Boolean', () => Type.Integer()]])
 
 			expect(result).toBe(schema)
@@ -575,7 +538,6 @@ describe('coerce schema', () => {
 				nested
 			})
 
-			// No matching kind
 			const result = coerce(schema, [['Boolean', () => Type.String()]])
 
 			expect(result).toBe(schema)
@@ -627,12 +589,10 @@ describe('coerce schema', () => {
 				['String', () => Type.Boolean()]
 			])
 
-			// First match wins - should be Number, not Boolean
 			expect(result['~kind']).toBe('Number')
 		})
 	})
 
-	// ? Synthetic test to see if WeakSet guard prevents infinite loops in self-referencing schemas
 	describe('cycle guard', () => {
 		it('should handle self-referencing seen nodes', () => {
 			const schema = Type.Object({
@@ -641,7 +601,6 @@ describe('coerce schema', () => {
 
 			schema.properties.self = schema
 
-			// Should not infinite loop due to WeakSet guard
 			const result = coerce(schema, [['String', () => Type.Number()]])
 
 			expect(result['~kind']).toBe('Object')
@@ -666,7 +625,6 @@ describe('coerce schema', () => {
 			} as BaseSchema
 
 			const result = coerce(schema, [['String', () => Type.Number()]])
-			// Should traverse into properties even without ~kind on root
 			expect(result.properties?.name?.['~kind']).toBe('Number')
 		})
 
@@ -676,7 +634,6 @@ describe('coerce schema', () => {
 				properties: { name: { type: 'string' } }
 			} as any
 
-			// Should not throw, and should return unchanged since no ~kind matches
 			const result = coerce(schema, [['String', () => Type.Number()]])
 			expect(result.properties?.name?.type).toBe('string')
 		})
@@ -684,7 +641,7 @@ describe('coerce schema', () => {
 
 	describe('to callback behavior', () => {
 		it('should receive schema copy with type property deleted', () => {
-			const schema = Type.String() // has type: 'string'
+			const schema = Type.String()
 			let receivedSchema: any
 
 			coerce(schema, [
@@ -698,7 +655,6 @@ describe('coerce schema', () => {
 			])
 
 			expect(receivedSchema.type).toBeUndefined()
-			// ~kind is deleted to easily help with transformations
 			expect(receivedSchema['~kind']).toBeUndefined()
 		})
 
@@ -766,7 +722,7 @@ describe('coerce schema', () => {
 						'String',
 						() => {
 							callCount++
-							if (callCount === 1) return null // First returns null
+							if (callCount === 1) return null
 							return Type.Number()
 						}
 					]
@@ -774,9 +730,7 @@ describe('coerce schema', () => {
 				{ onlyFirst: 'String' }
 			)
 
-			// Should continue to second String after null
 			expect(callCount).toBe(2)
-			// One String replaced, one kept (the one that returned null)
 			const kinds = Object.values(result.properties!).map(
 				(p) => p['~kind']
 			)
@@ -815,7 +769,6 @@ describe('coerce schema', () => {
 				{ root: true, onlyFirst: 'String' }
 			)
 
-			// root: true means only root level matches, String is not at root
 			expect(callCount).toBe(0)
 			expect(result.properties?.name?.['~kind']).toBe('String')
 		})
@@ -831,13 +784,11 @@ describe('coerce schema', () => {
 				{ root: false, untilNonRootObjectFound: true }
 			)
 
-			// Nested object is non-root, so untilNonRootObjectFound returns it as-is
-			// root: false allows replacing non-root, but untilNonRootObjectFound prevents descent
 			expect(result.properties?.nested?.['~kind']).toBe('Object')
 		})
 	})
 
-	describe('stopped behavior mid-combinator', () => {
+	describe('stopping during combinator traversal', () => {
 		it('should stop mid-combinator when onlyFirst triggers', () => {
 			const schema = {
 				'~kind': 'Union',
@@ -862,10 +813,7 @@ describe('coerce schema', () => {
 			expect(callCount).toBe(1)
 		})
 
-		it('should return original node when stopped mid-combinator before newArr created', () => {
-			// NOTE: This documents current behavior - when stopped is set in a combinator
-			// BEFORE newArr is created, the function returns early without applying the change.
-			// This may be intentional for performance or a bug.
+		it('returns the original combinator when traversal stops before allocating a copy', () => {
 			const innerStrings = [Type.String(), Type.String(), Type.String()]
 			const schema = {
 				'~kind': 'Union',
@@ -885,8 +833,6 @@ describe('coerce schema', () => {
 				{ onlyFirst: 'String' }
 			)
 
-			// Current behavior: returns original node immediately when stopped is set
-			// The transformation callback IS called but result is discarded
 			expect(result).toBe(schema)
 			expect(result.anyOf).toBe(innerStrings)
 		})
@@ -900,10 +846,8 @@ describe('coerce schema', () => {
 				$defs: { Exists: Type.String() }
 			} as BaseSchema
 
-			// Should not throw
 			const result = coerce(schema, [['String', () => Type.Number()]])
 			expect(result['~kind']).toBe('Cyclic')
-			// Exists should not be walked since it's not the referenced def
 			expect(result.$defs?.Exists?.['~kind']).toBe('String')
 		})
 
@@ -914,7 +858,6 @@ describe('coerce schema', () => {
 			} as BaseSchema
 
 			const result = coerce(schema, [['String', () => Type.Number()]])
-			// Without $ref, $defs is not traversed
 			expect(result.$defs?.SomeDef?.['~kind']).toBe('String')
 		})
 	})
@@ -931,9 +874,9 @@ describe('coerce schema', () => {
 			const result = coerce(schema, [['String', () => Type.Integer()]])
 			const items = result.items as BaseSchema[]
 
-			expect(items[1]).toBe(unchanged) // Reference preserved
-			expect(items[0]?.['~kind']).toBe('Integer') // Changed
-			expect(items[2]?.['~kind']).toBe('Boolean') // Unchanged
+			expect(items[1]).toBe(unchanged)
+			expect(items[0]?.['~kind']).toBe('Integer')
+			expect(items[2]?.['~kind']).toBe('Boolean')
 		})
 	})
 
@@ -944,8 +887,6 @@ describe('coerce schema', () => {
 
 			const result = coerce(schema, [['String', (s) => s as BaseSchema]])
 
-			// The callback received a copy (with type deleted), so even returning it
-			// means it's not the same reference as the original
 			expect(result.properties?.name).not.toBe(inner)
 			expect(result.properties?.name?.type).toBeUndefined()
 		})
@@ -958,7 +899,6 @@ describe('coerce schema', () => {
 				properties: { valid: Type.String(), invalid: null }
 			} as any
 
-			// Should not throw
 			const result = coerce(schema, [['String', () => Type.Number()]])
 			expect(result.properties?.valid?.['~kind']).toBe('Number')
 			expect(result.properties?.invalid).toBeNull()
@@ -986,9 +926,7 @@ describe('coerce schema', () => {
 
 			const result = coerce(schema, [['String', () => Type.Number()]])
 
-			// items is traversed
 			expect((result.items as BaseSchema[])[0]?.['~kind']).toBe('Number')
-			// additionalItems is NOT traversed (current behavior)
 			expect((result.additionalItems as BaseSchema)?.['~kind']).toBe(
 				'String'
 			)

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'bun:test'
 import { Elysia } from '../../src'
 
-describe('context.path readonly transition', () => {
-	it('warns in development while preserving compatibility behavior', async () => {
+describe('context.path', () => {
+	it('warns once when a request hook assigns to path and still reroutes the request', async () => {
 		const warnings: string[] = []
 		const warn = console.warn
 		console.warn = (...values) => warnings.push(values.join(' '))
@@ -27,7 +27,7 @@ describe('context.path readonly transition', () => {
 		}
 	})
 
-	it('keeps path visible to context serialization while the warning is active', async () => {
+	it('remains enumerable and serializable inside request hooks', async () => {
 		let keys: string[] = []
 		let spread: any
 		let json = ''
@@ -50,7 +50,7 @@ describe('context.path readonly transition', () => {
 		expect(descriptor?.configurable).toBe(true)
 	})
 
-	it('keeps the hook-free path on a plain data property', async () => {
+	it('is a writable data property when no request hook is registered', async () => {
 		let descriptor: PropertyDescriptor | undefined
 		const app = new Elysia().get('/', (context) => {
 			descriptor = Object.getOwnPropertyDescriptor(context, 'path')

@@ -3,25 +3,13 @@ import { Elysia } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
 
-// Fetch-handler and error-tail regressions.
-// Each test fails on the pre-fix code and passes after the fix.
-
-describe('fetch-handler invariants', () => {
-	// findRoute must not crash when the router is undefined.
-	// A static-only app never creates `~router` (it is lazily built only for
-	// dynamic routes). With a `.request` hook (and no trace) an unmatched path is
-	// dispatched into findRoute, whose `router.find(...)` previously threw on the
-	// undefined router and surfaced as a 500 instead of the correct 404.
-	it('returns 404 (not 500) for an unmatched path on a static-only app with a request hook', async () => {
-		const app = new Elysia()
-			// returns undefined => does not short-circuit, falls through to findRoute
-			.request(() => {})
-			.get('/exists', () => 'hi')
+describe('fetch handler', () => {
+	it('returns 404 for an unmatched static-only app with a request hook', async () => {
+		const app = new Elysia().request(() => {}).get('/exists', () => 'hi')
 
 		const res = await app.handle(req('/nope'))
 
 		expect(res.status).toBe(404)
-		// unmatched route → RFC 9457 problem+json 404 (still 404, not 500)
 		await expect(res.json()).resolves.toEqual({
 			type: 'not-found',
 			title: 'Not Found',
@@ -29,11 +17,7 @@ describe('fetch-handler invariants', () => {
 		})
 	})
 
-	// a returning error handler whose value is a plain domain object that
-	// merely carries a `status` field must NOT have that field reused as the HTTP
-	// status. Only ElysiaStatus / Response may dictate the status; otherwise the
-	// error stays 500.
-	it('does not let a returned plain object .status field clobber the error HTTP status', async () => {
+	it('keeps HTTP 500 when an error hook returns a plain object with a status property', async () => {
 		const app = new Elysia()
 			.error(() => ({ status: 'pending', message: 'retry' }))
 			.get('/', () => {
@@ -42,7 +26,6 @@ describe('fetch-handler invariants', () => {
 
 		const res = await app.handle(req('/'))
 
-		// pre-fix: set.status='pending' -> StatusMap['pending']===undefined -> 200
 		expect(res.status).toBe(500)
 		await expect(res.json()).resolves.toEqual({
 			status: 'pending',
@@ -50,9 +33,7 @@ describe('fetch-handler invariants', () => {
 		})
 	})
 
-	//  (companion) — an error handler that DOES return status must still
-	// drive the HTTP status (guards against the fix over-reaching).
-	it('still honors status returned from an error handler', async () => {
+	it('uses an explicit status returned from an error hook', async () => {
 		const app = new Elysia()
 			.error(({ status }) => status(418, 'teapot'))
 			.get('/', () => {
@@ -65,9 +46,7 @@ describe('fetch-handler invariants', () => {
 		await expect(res.text()).resolves.toBe('teapot')
 	})
 
-	//  (sync) — a short-circuiting request hook must still invoke
-	// afterResponse, matching the trace branch.
-	it('runs afterResponse when a sync request hook short-circuits', async () => {
+	it('runs afterResponse when a sync request hook returns a response', async () => {
 		let ran = false
 
 		const app = new Elysia()
@@ -87,9 +66,7 @@ describe('fetch-handler invariants', () => {
 		expect(ran).toBe(true)
 	})
 
-	//  (async) — same, when an async request hook is present (forces the
-	// async non-trace branch).
-	it('runs afterResponse when an async request hook short-circuits', async () => {
+	it('runs afterResponse when an async request hook returns a response', async () => {
 		let ran = false
 
 		const app = new Elysia()
@@ -109,9 +86,7 @@ describe('fetch-handler invariants', () => {
 		expect(ran).toBe(true)
 	})
 
-	// the default 404 must still emit `Elysia.headers` defaults instead of
-	// dropping them via the bare cached Not Found response.
-	it('applies configured default headers to the default 404 response', async () => {
+	it('includes configured default headers in the default 404 response', async () => {
 		const app = new Elysia()
 			.headers({ 'x-powered-by': 'elysia' })
 			.get('/exists', () => 'hi')
@@ -121,12 +96,10 @@ describe('fetch-handler invariants', () => {
 
 		const miss = await app.handle(req('/missing'))
 		expect(miss.status).toBe(404)
-		// pre-fix: getNotFound dropped set.headers => null
 		expect(miss.headers.get('x-powered-by')).toBe('elysia')
 	})
 
-	// headers written by a request hook must also survive the 404.
-	it('applies request-hook headers to the 404 response', async () => {
+	it('includes request-hook headers in the default 404 response', async () => {
 		const app = new Elysia()
 			.request(({ set }) => {
 				set.headers['x-from-hook'] = 'yes'
@@ -138,9 +111,7 @@ describe('fetch-handler invariants', () => {
 		expect(miss.headers.get('x-from-hook')).toBe('yes')
 	})
 
-	// when an error hook handles NotFound and sets a different status,
-	// afterResponse must observe that status, not a hard-coded 404.
-	it('afterResponse observes the error-hook status on a handled NotFound, not 404', async () => {
+	it('afterResponse observes the status chosen by an error hook for a missing route', async () => {
 		let observed: number | undefined
 
 		const app = new Elysia()
@@ -154,12 +125,10 @@ describe('fetch-handler invariants', () => {
 			.get('/x', () => 'real')
 
 		const res = await app.handle(req('/missing'))
-		// client-facing response is correct in both old and new code
 		expect(res.status).toBe(418)
 		await expect(res.text()).resolves.toBe('teapot')
 
 		await Bun.sleep(1)
-		// pre-fix: afterResponse(context, 404) forced set.status back to 404
 		expect(observed).toBe(418)
 	})
 })

@@ -7,46 +7,50 @@ import { tmpdir } from 'node:os'
 import * as esbuild from 'esbuild'
 import * as tb from 'typebox/type'
 
-/**
- * Build-level regression: a frozen app whose validators are fully baked must
- * still VALIDATE requests when `setupTypebox`/compat is stripped from the bundle.
- *
- * WHY this test uses a real `dist` build (not `../../src`): the stripped-bridge
- * failure only manifests through the published module graph. The AOT plugin bakes
- * the validator manifest; a build then replaces `type/compat` with a no-op
- * `setupTypebox` (as a treeshaking build would, to drop TypeBox entirely) and
- * points `elysia/type` at leaf modules that never call `setupTypebox`. With the
- * bridge never wired, the FIRST request to `/u` used to 500 with "Typebox module
- * isn't initialized" — because `Reconstrct.validator` went unconditionally
- * through the bridge-backed `RouteValidator`. The bridge-free reconstruction path
- * rescues it. Against `src`, extensionless resolution and an always-wired bridge
- * hide the whole scenario — which is exactly why a src test would be blind.
- *
- * WHY the fixture imports bare `elysia` + the plugin loads from `elysia/plugin`:
- * capture only succeeds when the app and the plugin share ONE `Compiled`
- * instance (the dist one). A src plugin would capture 0 validators and bake
- * nothing. This depends on `dist` being current — the gate builds it first.
- */
+/** Published bundles validate without TypeBox when every validator is frozen. */
 
 const APP = resolve(import.meta.dir, 'fixtures/dist-dedup-app.ts')
 const LEAF_DIR = resolve(import.meta.dir, '../../dist/type/elysia')
 
-// Elysia's leaf types override a subset of TypeBox's `t.*`; the rest pass through
-// to `typebox/type`. Mirrors the virtual `elysia/type` a treeshaking build emits.
+// Mirror the leaf-only `elysia/type` module emitted by a tree-shaking build.
 const OVERRIDES: Record<string, string> = {
-	Accelerate: 'accelerate', Array: 'array', ArrayBuffer: 'array-buffer',
-	ArrayString: 'array-string', Boolean: 'boolean', BooleanString: 'boolean-string',
-	Cookie: 'cookie', Date: 'date', File: 'file', Files: 'files', Form: 'form',
-	Integer: 'integer', IntegerString: 'integer-string', Intersect: 'intersect',
-	MaybeEmpty: 'maybe-empty', NoValidate: 'no-validate', Nullable: 'nullable',
-	Number: 'number', Numeric: 'numeric', NumericEnum: 'numeric-enum',
-	Object: 'object', ObjectString: 'object-string', Optional: 'optional',
-	String: 'string', Uint8Array: 'uint8-array', Union: 'union', UnionEnum: 'union-enum'
+	Accelerate: 'accelerate',
+	Array: 'array',
+	ArrayBuffer: 'array-buffer',
+	ArrayString: 'array-string',
+	Boolean: 'boolean',
+	BooleanString: 'boolean-string',
+	Cookie: 'cookie',
+	Date: 'date',
+	File: 'file',
+	Files: 'files',
+	Form: 'form',
+	Integer: 'integer',
+	IntegerString: 'integer-string',
+	Intersect: 'intersect',
+	MaybeEmpty: 'maybe-empty',
+	NoValidate: 'no-validate',
+	Nullable: 'nullable',
+	Number: 'number',
+	Numeric: 'numeric',
+	NumericEnum: 'numeric-enum',
+	Object: 'object',
+	ObjectString: 'object-string',
+	Optional: 'optional',
+	String: 'string',
+	Uint8Array: 'uint8-array',
+	Union: 'union',
+	UnionEnum: 'union-enum'
 }
 const LEAF_EXPORT: Record<string, string> = {
-	Array: 'ArrayType', ArrayBuffer: 'ArrayBufferType', Boolean: 'BooleanType',
-	Date: 'DateType', Number: 'NumberType', Object: 'ObjectType',
-	String: 'StringType', Uint8Array: 'Uint8ArrayType'
+	Array: 'ArrayType',
+	ArrayBuffer: 'ArrayBufferType',
+	Boolean: 'BooleanType',
+	Date: 'DateType',
+	Number: 'NumberType',
+	Object: 'ObjectType',
+	String: 'StringType',
+	Uint8Array: 'Uint8ArrayType'
 }
 
 function virtualType(): string {
@@ -65,8 +69,6 @@ function virtualType(): string {
 	return src
 }
 
-// Point `elysia/type` at the virtual module (never calls setupTypebox) and stub
-// `type/compat` so `setupTypebox` becomes a no-op — the bridge is never wired.
 const stripBridgePlugin = (): esbuild.Plugin => {
 	const vt = virtualType()
 	return {
@@ -83,7 +85,10 @@ const stripBridgePlugin = (): esbuild.Plugin => {
 			}))
 			build.onLoad(
 				{ filter: /[\\/]dist[\\/]type[\\/]compat\.mjs$/ },
-				() => ({ contents: `export function setupTypebox(){}\n`, loader: 'js' })
+				() => ({
+					contents: `export function setupTypebox(){}\n`,
+					loader: 'js'
+				})
 			)
 		}
 	}
@@ -120,8 +125,6 @@ afterAll(() => {
 	if (dir) rmSync(dir, { recursive: true, force: true })
 })
 
-// Write the emitted bundle to a temp `.mjs` and import it (Bun rejects an
-// over-long `data:` specifier).
 async function loadBundle(code: string) {
 	dir ??= mkdtempSync(join(tmpdir(), 'ely-bridge-free-strip-'))
 	const file = join(dir, `bundle-${bundleId++}.mjs`)
@@ -129,7 +132,7 @@ async function loadBundle(code: string) {
 	return import(file)
 }
 
-describe('bridge-free strip build (dist)', () => {
+describe('published bundle without the TypeBox bridge', () => {
 	it('validates requests with setupTypebox stubbed out of the bundle', async () => {
 		const code = await buildStripped()
 
@@ -147,7 +150,6 @@ describe('bridge-free strip build (dist)', () => {
 				body: JSON.stringify({ name: 'a', age: 5 })
 			})
 		)
-		// pre-fix: this was a 500 "Typebox module isn't initialized"
 		expect(valid.status).toBe(200)
 		await expect(valid.json()).resolves.toEqual({ name: 'a', age: 5 })
 
@@ -158,20 +160,15 @@ describe('bridge-free strip build (dist)', () => {
 				body: JSON.stringify({ age: 'x' })
 			})
 		)
-		// correct 422 (fail-closed) even though TypeBox `Errors` is severed
 		expect(invalid.status).toBe(422)
 	})
 
-	it('keeps TypeBox collapsed (the whole point of stubbing compat)', async () => {
+	it('keeps TypeBox below the stripped-bundle size ceiling', async () => {
 		const code = await buildStripped()
 
 		const min = Buffer.byteLength(code)
 		const gz = gzipSync(code, { level: 9 }).length
 
-		// A wired build of this app is ~275KB min / ~82KB gz (TypeBox retained).
-		// With compat stubbed and the frozen validators bridge-free, TypeBox must
-		// stay collapsed — assert a generous ceiling well below the wired size so
-		// a future regression that drags TypeBox back in trips this.
 		expect(min).toBeLessThan(160_000)
 		expect(gz).toBeLessThan(50_000)
 	})

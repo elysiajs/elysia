@@ -3,21 +3,7 @@ import { Elysia } from '../../src'
 import { compileHandler } from '../../src/compile/handler'
 import { req } from '../utils'
 
-/**
- * Inline handler fast path.
- *
- * A handler whose only emitted logic is "call h, map the result" is compiled to
- * a plain closure (createInlineHandler / …WithSet) instead of a `new Function`
- * eval. An async handler already qualified (alias 'rc'/'rm'); a SYNC handler
- * additionally links `forwardError` ('fe'), giving alias 'rc,fe'/'rm,fe' and a
- * params.size of 2 — which used to push it onto the eval path. createInlineHandler
- * performs the same Error-throw + Promise + forwardError handling, so the plain
- * sync handler is inline-eligible too.
- *
- * These tests pin (a) that the plain sync handler actually inlines and (b) that
- * the inline path preserves the `fe`/forwardError semantics it replaced — using
- * a codegen-forced sibling (a header read sets inlineUnsafe) as the oracle.
- */
+/** Inline handlers avoid new Function without changing error or Promise behavior. */
 
 const source = (app: any, i = 0) =>
 	compileHandler((app as Elysia)['~routes']![i] as any, app).toString()
@@ -42,7 +28,7 @@ describe('inline handler fast path (no new Function eval)', () => {
 		expect(s).toContain('c.set')
 	})
 
-	it('a default-header set-writing GET takes the inline COW path', () => {
+	it('default headers keep a set-writing GET on the inline path', () => {
 		const app = new Elysia()
 			.headers({ 'x-default': 'base' })
 			.get('/', ({ set }) => {
@@ -59,9 +45,8 @@ describe('inline handler fast path (no new Function eval)', () => {
 		expect(source(app)).not.toContain('forwardError')
 	})
 
-	// Behaviour parity with the codegen path (oracle = a header-read sibling that
-	// is forced onto codegen). A returned Error must forward like a throw.
-	it('forwards a RETURNED Error like a throw — inline matches codegen', async () => {
+	// Compare with a header-reading route forced through code generation.
+	it('forwards a returned Error like a throw and matches codegen', async () => {
 		const inline = new Elysia().get('/', () => new Error('boom'))
 		const codegen = new Elysia().get('/', ({ headers }) =>
 			headers['x'] ? 'x' : new Error('boom')
@@ -71,7 +56,6 @@ describe('inline handler fast path (no new Function eval)', () => {
 		const rc = await codegen.handle(req('/'))
 
 		expect(ri.status).toBe(500)
-		// generic 500 → problem+json; inline path must match codegen byte-for-byte
 		const bi = await ri.json()
 		expect(bi).toMatchObject({
 			type: 'internal-server-error',

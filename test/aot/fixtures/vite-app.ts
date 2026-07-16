@@ -1,9 +1,6 @@
 import { Elysia, t } from '../../../src'
 
-// Separate entry for the vite hook test: `generateCompiledModule` memoizes
-// `app.compile()`, so it's non-idempotent on a shared app (the first capture
-// wins). The bundler tests get fresh app imports; the vite test calls it directly
-// (like the core test), so it needs its own app to capture a real manifest.
+// Use a fresh app because `generateCompiledModule` memoizes `app.compile()`.
 export const app = new Elysia().post(
 	'/v',
 	{

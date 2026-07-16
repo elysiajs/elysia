@@ -427,16 +427,11 @@ describe('Normalize', () => {
 		expect(res.status).toBe(200)
 	})
 
-	it('normalize special-character property names', async () => {
+	it('normalizes property names containing double quotes', async () => {
 		const original = console.warn
 		console.warn = () => {}
 
 		try {
-			// a double-quote in a property name breaks exact-mirror codegen
-			// before 1.1.1 (SyntaxError) while typebox compiles it fine —
-			// normalization must never silently turn off: on exact-mirror
-			// < 1.1.1 this exercises the typebox Clean fallback in
-			// TypeBoxValidator's catch, on >= 1.1.1 the mirror itself
 			const app = new Elysia().post(
 				'/',
 				{

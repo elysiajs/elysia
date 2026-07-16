@@ -3,6 +3,7 @@ import { Elysia, t } from '../../src'
 import { post, req } from '../utils'
 
 describe('group', () => {
+	// Route schemas override inherited fields unless the group is standalone.
 	it('delegate onRequest', async () => {
 		const app = new Elysia()
 			.get('/', () => 'A')
@@ -250,9 +251,6 @@ describe('group', () => {
 				)
 		)
 
-		// the route's own `params` replaces the group's (override is the
-		// default) — `id` is no longer part of the schema and normalization
-		// strips it from the validated params object
 		const valid = app.handle(req('/group/1/saltyaom')).then((x) => x.json())
 		const invalid = app
 			.handle(req('/group/a/saltyaom'))
@@ -343,7 +341,6 @@ describe('group', () => {
 				)
 		)
 
-		// only the route's own `query` validates (override is the default)
 		const value = await app
 			.handle(req('/?name=lilith&playing=true&limit=10'))
 			.then((x) => x.json())

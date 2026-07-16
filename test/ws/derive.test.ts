@@ -2,10 +2,7 @@ import { describe, it, expect } from 'bun:test'
 import { Elysia } from '../../src'
 import { newWebsocket, wsOpen, wsMessage, wsClosed } from './utils'
 
-// One connect→ping→assert→close roundtrip. Each test runs it twice: the
-// derive-mode queue was consumed destructively (.shift()) per request, so the
-// SECOND upgrade mis-classified the derive result as a plain beforeHandle
-// response and returned HTTP 200 instead of opening the socket.
+// Run each route twice to verify derived state remains available on later upgrades.
 const expectDerived = async (server: any, value: string) => {
 	const ws = newWebsocket(server)
 	await wsOpen(ws)
@@ -28,15 +25,12 @@ describe('WebSocket derive', () => {
 			.listen(0)
 
 		await expectDerived(app.server!, 'alice')
-		// Second connection — the regression target
 		await expectDerived(app.server!, 'alice')
 
 		app.stop()
 	})
 
 	it('mapDerive survives a second upgrade to the same route', async () => {
-		// Same regression but exercising the mapDerive code path (mode=true,
-		// i.e. replaceDeriveContext rather than Object.assign).
 		const app = new Elysia()
 			.mapDerive(() => ({ user: 'bob' }))
 			.ws('/ws', {
@@ -47,7 +41,6 @@ describe('WebSocket derive', () => {
 			.listen(0)
 
 		await expectDerived(app.server!, 'bob')
-		// Second connection — the regression target
 		await expectDerived(app.server!, 'bob')
 
 		app.stop()

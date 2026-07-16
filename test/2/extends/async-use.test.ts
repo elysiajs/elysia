@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'bun:test'
 import { Elysia } from '../../../src'
 
-describe('async use', () => {
-	it('accepts Promise<Elysia>', async () => {
+describe('.use() with asynchronous plugins', () => {
+	it('accepts a plugin promise', async () => {
 		const plugin = new Elysia().get('/p', () => 'plugin')
 		const app = new Elysia().use(Promise.resolve(plugin))
 
@@ -12,7 +12,7 @@ describe('async use', () => {
 		expect(res).toBe('plugin')
 	})
 
-	it('accepts async () => Elysia', async () => {
+	it('accepts an asynchronous plugin factory', async () => {
 		const app = new Elysia().use(async () =>
 			new Elysia().get('/p', () => 'plugin')
 		)
@@ -23,7 +23,7 @@ describe('async use', () => {
 		expect(res).toBe('plugin')
 	})
 
-	it('accepts Promise<{ default }> (dynamic import shape)', async () => {
+	it('accepts a dynamic-import module', async () => {
 		const plugin = new Elysia().get('/p', () => 'plugin')
 		const app = new Elysia().use(Promise.resolve({ default: plugin }))
 
@@ -33,10 +33,7 @@ describe('async use', () => {
 		expect(res).toBe('plugin')
 	})
 
-	it('sync calls chained after async use run eagerly', async () => {
-		// Async plugins are background work — they don't gate subsequent
-		// sync registrations. /sync registers immediately and is reachable
-		// without waiting on the pending plugin.
+	it('registers synchronous routes while a plugin is pending', async () => {
 		let resolvePlugin!: (v: any) => void
 		const promise = new Promise((res) => {
 			resolvePlugin = res
@@ -53,7 +50,7 @@ describe('async use', () => {
 		await app.modules
 	})
 
-	it('rebuilds router after drain so plugin routes become reachable', async () => {
+	it('registers plugin routes after app.modules resolves', async () => {
 		const app = new Elysia()
 			.get('/sync', () => 'sync')
 			.use(Promise.resolve(new Elysia().get('/async', () => 'async')))
@@ -68,7 +65,7 @@ describe('async use', () => {
 		expect(both).toEqual(['sync', 'async'])
 	})
 
-	it('async route is unreachable before drain, reachable after (via app.handle)', async () => {
+	it('keeps pending plugin routes unavailable until app.modules resolves', async () => {
 		let resolveLater!: (v: any) => void
 		const pending = new Promise((res) => {
 			resolveLater = res
@@ -78,7 +75,6 @@ describe('async use', () => {
 			.get('/sync', () => 'sync')
 			.use(pending as Promise<any>)
 
-		// Before drain: /async doesn't exist yet, /sync does.
 		const syncBefore = await app
 			.handle('/sync')
 			.then((r) => [r.status, r.text()] as const)
@@ -88,8 +84,6 @@ describe('async use', () => {
 		const asyncBefore = await app.handle('/async').then((r) => r.status)
 		expect(asyncBefore).toBe(404)
 
-		// Resolve the plugin and let the chain settle (#tryDrain rebuilds the
-		// router internally — same path the Bun adapter relies on for reload).
 		resolveLater(new Elysia().get('/async', () => 'async'))
 		await app.modules
 
@@ -100,7 +94,7 @@ describe('async use', () => {
 		expect(syncAfter).toBe('sync')
 	})
 
-	it('rejected async use does not stall drain (pending-- still fires)', async () => {
+	it('reports a rejected plugin without disabling synchronous routes', async () => {
 		const errors: unknown[] = []
 		const orig = console.error
 		console.error = (...a: unknown[]) => {
@@ -118,10 +112,8 @@ describe('async use', () => {
 			} catch (e) {
 				caught = e
 			}
-			// app.modules surfaces the rejection (issue 6).
 			expect((caught as Error)?.message).toBe('boom')
 
-			// Sync route registered before the async use is unaffected.
 			const res = await app.handle('/sync').then((r) => r.text())
 			expect(res).toBe('sync')
 			expect(errors.length).toBeGreaterThan(0)
@@ -130,7 +122,7 @@ describe('async use', () => {
 		}
 	})
 
-	it('app.modules rejects with first error (issue 6)', async () => {
+	it('preserves the first rejection across repeated app.modules reads', async () => {
 		const errors: unknown[] = []
 		const orig = console.error
 		console.error = (...a: unknown[]) => {
@@ -150,7 +142,6 @@ describe('async use', () => {
 			}
 			expect((caught as Error)?.message).toBe('first-fail')
 
-			// Multiple awaits see the same rejection (no consume-on-read).
 			let caught2: unknown
 			try {
 				await app.modules
@@ -163,7 +154,7 @@ describe('async use', () => {
 		}
 	})
 
-	it('a fresh chain after a handled failure starts clean', async () => {
+	it('accepts a new plugin after a previous rejection is observed', async () => {
 		const errors: unknown[] = []
 		const orig = console.error
 		console.error = (...a: unknown[]) => {
@@ -173,13 +164,10 @@ describe('async use', () => {
 		try {
 			const app = new Elysia().use(Promise.reject(new Error('first')))
 
-			// Drain the failed chain; #error is captured.
 			try {
 				await app.modules
 			} catch {}
 
-			// Start a new async use — #error should reset since #ready
-			// was undefined when the new chain started.
 			app.use(Promise.resolve(new Elysia().get('/p', () => 'p')))
 
 			await expect(app.modules).resolves.toBeUndefined()
@@ -191,7 +179,7 @@ describe('async use', () => {
 		}
 	})
 
-	it('app.modules resolves to a no-op promise when nothing is pending', async () => {
+	it('resolves app.modules when no plugin is pending', async () => {
 		const app = new Elysia()
 		await expect(app.modules).resolves.toBeUndefined()
 	})

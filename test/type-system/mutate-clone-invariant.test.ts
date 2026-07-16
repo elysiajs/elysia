@@ -5,37 +5,26 @@ import { flushMemory } from '../../src/memory'
 import { SHARED_REFERENCE_CACHE_LIMIT } from '../../src/type/elysia/utils'
 import { req } from '../utils'
 
-// Schema helper options are immutable inputs: helpers clone before decorating.
-// Public schema constructors must NEVER mutate the object they are given —
-// neither a schema argument (t.NoValidate / t.Optional) nor a user options
-// bag (t.String / t.Number /... adopting the bag as the schema). A naive
-// in-place fix passes the single-app Bun+app.handle suite but silently
-// corrupts every other route that reuses the same object. These tests pin
-// They assert both that the argument stays untouched and that routes reusing it
-// remain behaviorally isolated.
+// Reusing a schema or options object must not let one constructor call change
+// another route's validation.
 
 const ownKeys = (o: object) => Object.getOwnPropertyNames(o).sort()
 
-describe('schema helpers clone instead of mutating input', () => {
-	describe('t.NoValidate must not mutate its argument', () => {
+describe('schema helpers preserve reusable inputs', () => {
+	describe('t.NoValidate', () => {
 		it('leaves the argument schema untouched', () => {
 			const shared = t.Object({ id: t.Number() })
 			const keysBefore = ownKeys(shared)
 
 			const wrapped = t.NoValidate(shared)
 
-			// argument gains no new own keys and no ~elyTyp
 			expect(ownKeys(shared)).toEqual(keysBefore)
 			expect((shared as any)['~elyTyp']).toBeUndefined()
-			// the wrapper carries the marker instead
 			expect((wrapped as any)['~elyTyp']).toBeDefined()
 			expect(wrapped).not.toBe(shared)
 		})
 
-		it('one route wrapped, one not, both validate correctly (incident shape)', async () => {
-			// The exact incident: a single shared schema used with and
-			// without NoValidate. Mutating the shared schema in place would
-			// disable validation on the plain route too.
+		it('does not disable validation for another route using the same schema', async () => {
 			const shared = t.Object({ id: t.Number() })
 
 			const app = new Elysia()
@@ -46,8 +35,6 @@ describe('schema helpers clone instead of mutating input', () => {
 					({ body }) => body
 				)
 
-			// /validated must still reject a bad payload — NoValidate on the
-			// other route must NOT have leaked onto `shared`.
 			const bad = await app.handle(
 				req('/validated', {
 					method: 'POST',
@@ -67,10 +54,7 @@ describe('schema helpers clone instead of mutating input', () => {
 			expect(ok.status).toBe(200)
 		})
 
-		it('does not corrupt a frozen singleton (t.BooleanString incident)', () => {
-			// Regression for the emptyBooleanString/emptyIntegerString incident:
-			// t.NoValidate(t.BooleanString) previously mutated the frozen
-			// singleton, globally disabling validation for BooleanString.
+		it('does not alter the cached t.BooleanString schema', () => {
 			t.NoValidate(t.BooleanString())
 
 			expect(Value.Check(t.BooleanString(), 'true')).toBe(true)
@@ -78,7 +62,7 @@ describe('schema helpers clone instead of mutating input', () => {
 		})
 	})
 
-	describe('t.Optional must not mutate its argument', () => {
+	describe('t.Optional', () => {
 		it('leaves the argument schema untouched', () => {
 			const shared = t.String()
 			const keysBefore = ownKeys(shared)
@@ -91,9 +75,7 @@ describe('schema helpers clone instead of mutating input', () => {
 			expect(optional).not.toBe(shared)
 		})
 
-		it('same schema stays required in one object, optional in another', async () => {
-			// The incident: reusing a schema object as an optional field
-			// silently made it optional everywhere.
+		it('keeps a shared schema required outside the optional wrapper', async () => {
 			const name = t.String()
 
 			const app = new Elysia()
@@ -108,7 +90,6 @@ describe('schema helpers clone instead of mutating input', () => {
 					({ body }) => body
 				)
 
-			// required route rejects the missing field
 			const missing = await app.handle(
 				req('/required', {
 					method: 'POST',
@@ -118,7 +99,6 @@ describe('schema helpers clone instead of mutating input', () => {
 			)
 			expect(missing.status).toBe(422)
 
-			// optional route accepts it
 			const omitted = await app.handle(
 				req('/optional', {
 					method: 'POST',
@@ -129,13 +109,13 @@ describe('schema helpers clone instead of mutating input', () => {
 			expect(omitted.status).toBe(200)
 		})
 
-		it('is idempotent for the same schema (WeakMap dedup)', () => {
+		it('returns the same wrapper for repeated input', () => {
 			const shared = t.String()
 			expect(t.Optional(shared)).toBe(t.Optional(shared))
 		})
 	})
 
-	describe('base constructors must not adopt the options bag', () => {
+	describe('base constructor options', () => {
 		const cases: [name: string, build: (o: any) => unknown][] = [
 			['String', (o) => t.String(o)],
 			['Number', (o) => t.Number(o)],
@@ -154,10 +134,8 @@ describe('schema helpers clone instead of mutating input', () => {
 
 				const schema = build(options) as any
 
-				// options bag is unchanged — no `type`/`~kind`/`anyOf`/etc leaked
 				expect(options).toEqual(before)
 				expect(ownKeys(options)).toEqual(['description'])
-				// and the produced schema is a distinct object
 				expect(schema).not.toBe(options)
 				expect(schema['~kind']).toBe(
 					name === 'Array'
@@ -168,9 +146,7 @@ describe('schema helpers clone instead of mutating input', () => {
 				)
 			})
 
-		it('reusing one options bag yields two distinct, correct schemas', () => {
-			// The incident: passing the same bag to two constructors turned
-			// the first schema into the second.
+		it('one options object produces independent schemas', () => {
 			const options = { description: 'shared' }
 
 			const str = t.String(options)
@@ -178,22 +154,20 @@ describe('schema helpers clone instead of mutating input', () => {
 
 			expect((str as any).type).toBe('string')
 			expect((num as any).type).toBe('number')
-			// the first schema was not retro-mutated into a number
 			expect((str as any).type).toBe('string')
 			expect(str).not.toBe(num)
 		})
 
-		it('string format-only fast path still works', () => {
+		it('reuses an immutable schema when only the string format is supplied', () => {
 			const a = t.String({ format: 'email' })
 			expect((a as any).format).toBe('email')
-			// cached singleton — identity stable, and not the caller's bag
 			expect(t.String({ format: 'email' })).toBe(a)
 			expect(Object.isFrozen(a)).toBe(true)
 		})
 
 		it('evicts the least recently used string format', () => {
 			flushMemory()
-			const prefix = 'd1-string-format-lru-'
+			const prefix = 'string-format-cache-lru-'
 			const hot = t.String({ format: `${prefix}hot` })
 			const cold = t.String({ format: `${prefix}cold` })
 
@@ -210,7 +184,7 @@ describe('schema helpers clone instead of mutating input', () => {
 
 		it('flushes formatted strings without changing their schema', () => {
 			flushMemory()
-			const options = { format: 'd1-string-format-flush' }
+			const options = { format: 'string-format-cache-flush' }
 			const before = t.String(options)
 
 			flushMemory()
@@ -228,7 +202,7 @@ describe('schema helpers clone instead of mutating input', () => {
 			expect(t.String()).toBe(before)
 		})
 
-		it('no-options singleton fast paths still work', () => {
+		it('reuses no-options primitive schemas', () => {
 			expect(t.String()).toBe(t.String())
 			expect(t.Number()).toBe(t.Number())
 			expect(t.Boolean()).toBe(t.Boolean())

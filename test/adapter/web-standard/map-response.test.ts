@@ -85,17 +85,7 @@ describe('Web Standard - Map Response', () => {
 		expect(response.status).toBe(200)
 	})
 
-	// node-divergence-2: an empty return with a null-body status (204/205/304)
-	// must construct a valid Response on every runtime. The `case undefined`
-	// arm built `new Response('', set)`; Node/undici rejects a non-null body
-	// ('' counts) for null-body statuses with `TypeError: Invalid response
-	// status code 204` (→ opaque 500), while Bun accepts ''. So the idiomatic
-	// `set.status = 204; return` gave 204 on Bun but 500 on Node. The fix emits
-	// `null` for the empty body, which is valid for every status. We assert the
-	// runtime-agnostic contract: mapResponse constructs the null-body status
-	// with an empty body without throwing. (CI is Bun-only — it can't exercise
-	// Node's undici directly — so it pins the contract that makes both agree.)
-	it('map empty return on null-body status (204/205/304, node-safe)', async () => {
+	it('map undefined to an empty body for 204, 205, and 304', async () => {
 		for (const status of [204, 205, 304] as const) {
 			const response = mapResponse(undefined, {
 				...createContext(),
@@ -145,11 +135,10 @@ describe('Web Standard - Map Response', () => {
 		expect(response.status).toBe(200)
 	})
 
-	it('map Error', async () => {
+	it('maps Error to RFC 9457 problem details', async () => {
 		const response = mapResponse(new Error('Hello'), createContext())
 
 		expect(response).toBeInstanceOf(Response)
-		// generic Error → RFC 9457 problem+json
 		await expect(response.json()).resolves.toMatchObject({
 			type: 'internal-server-error',
 			title: 'Internal Server Error',
@@ -502,11 +491,7 @@ describe('Web Standard - Map Response', () => {
 	})
 })
 
-// an untouched set (lazy `status === undefined`, no cookie, no headers)
-// must take the compact path instead of the touched-set slow path, while
-// ElysiaStatus and Promise stay excluded so `set.status` writeback (the
-// settled lazy-status design) is preserved for afterResponse/trace observers.
-describe('Web Standard - Map Response (untouched set fast path)', () => {
+describe('Web Standard - Map Response with untouched set', () => {
 	const untouched = () => ({ headers: {} }) as any
 
 	it('map string on an untouched set', async () => {
@@ -546,17 +531,16 @@ describe('Web Standard - Map Response (untouched set fast path)', () => {
 		expect(set.status).toBe(418)
 	})
 
-	it('leave set.headers unmutated for ElysiaFile on an untouched set', async () => {
+	it('maps ElysiaFile without mutating set.headers', async () => {
 		const set = untouched()
 		const response = await mapResponse(file('test/kyuukurarin.mp4'), set)
 
 		expect(response.headers.get('content-type')).toBe('video/mp4')
 		expect(response.headers.get('content-range')).toStartWith('bytes 0-')
-		// compact path: the route-level set must not be written to
 		expect(Object.keys(set.headers)).toHaveLength(0)
 	})
 
-	it('stream generator with set on an untouched set', async () => {
+	it('writes stream headers back to an untouched set', async () => {
 		const set = untouched()
 		const response = await mapResponse(
 			(function* () {
@@ -568,7 +552,6 @@ describe('Web Standard - Map Response (untouched set fast path)', () => {
 
 		expect(response.headers.get('transfer-encoding')).toBe('chunked')
 		await expect(response.text()).resolves.toBe('ab')
-		// stream handling still flows through the set for trace/afterResponse
 		expect(set.headers['transfer-encoding']).toBe('chunked')
 	})
 

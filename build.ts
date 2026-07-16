@@ -12,7 +12,7 @@ await build({
 	outDir: 'dist',
 	entry: ['src/**/*.ts'],
 	cjsDefault: false,
-	target: 'node22',
+	target: 'node24',
 	format: ['esm', 'cjs'],
 	checks: {
 		emptyImportMeta: false

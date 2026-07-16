@@ -3,8 +3,8 @@ import { Elysia, t } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
 
-describe('Transform', () => {
-	it('globally Transform', async () => {
+describe('transform', () => {
+	it('converts path params in an app hook', async () => {
 		const app = new Elysia()
 			.transform(({ params }) => {
 				const p = params as { id?: string | number } | null
@@ -17,7 +17,7 @@ describe('Transform', () => {
 		await expect(res.text()).resolves.toBe('number')
 	})
 
-	it('locally transform', async () => {
+	it('converts path params in a route-local hook', async () => {
 		const app = new Elysia().get(
 			'/id/:id',
 			{
@@ -36,7 +36,7 @@ describe('Transform', () => {
 		await expect(res.text()).resolves.toBe('number')
 	})
 
-	it('group transform', async () => {
+	it('applies a group transform only inside the group', async () => {
 		const app = new Elysia()
 			.group('/scoped/id/:id', (app) =>
 				app
@@ -55,7 +55,7 @@ describe('Transform', () => {
 		await expect(scoped.text()).resolves.toBe('number')
 	})
 
-	it('transform from plugin', async () => {
+	it('propagates global transforms out of plugins', async () => {
 		const transformId = new Elysia().transform('global', ({ params }) => {
 			const p = params as { id?: string | number } | null
 			if (p?.id) p.id = +p.id
@@ -70,7 +70,7 @@ describe('Transform', () => {
 		await expect(res.text()).resolves.toBe('number')
 	})
 
-	it('transform in order', async () => {
+	it('runs transforms in registration order', async () => {
 		let order = <string[]>[]
 
 		const app = new Elysia()
@@ -87,7 +87,7 @@ describe('Transform', () => {
 		expect(order).toEqual(['A', 'B'])
 	})
 
-	it('globally and locally pre handle', async () => {
+	it('runs app transforms before route-local transforms', async () => {
 		const app = new Elysia()
 			.transform(({ params }) => {
 				const p = params as { id?: string | number } | null
@@ -115,7 +115,7 @@ describe('Transform', () => {
 		await expect(res.text()).resolves.toBe('2')
 	})
 
-	it('accept multiple transform', async () => {
+	it('accepts multiple app transforms', async () => {
 		const app = new Elysia()
 			.transform(({ params }) => {
 				const p = params as { id?: string | number } | null
@@ -132,7 +132,7 @@ describe('Transform', () => {
 		await expect(res.text()).resolves.toBe('2')
 	})
 
-	it('transform async', async () => {
+	it('awaits an async route-local transform', async () => {
 		const app = new Elysia().get(
 			'/id/:id',
 			{
@@ -157,19 +157,7 @@ describe('Transform', () => {
 		await expect(res.text()).resolves.toBe('number')
 	})
 
-	it('map returned value', async () => {
-		const app = new Elysia()
-			.transform(({ params }) => {
-				const p = params as { id?: string | number } | null
-				if (p?.id) p.id = +p.id
-			})
-			.get('/id/:id', ({ params: { id } }) => typeof id)
-
-		const res = await app.handle(req('/id/1'))
-		await expect(res.text()).resolves.toBe('number')
-	})
-
-	it('validate property', async () => {
+	it('validates transformed path params', async () => {
 		const app = new Elysia().get(
 			'/id/:id',
 			{
@@ -187,9 +175,6 @@ describe('Transform', () => {
 		expect(invalid).toBe(422)
 	})
 
-	// Transform must run BEFORE body validation (consistent with
-	// query/params/headers), so a transform may reshape an incoming body into
-	// the validated shape — and its output is the thing that gets validated.
 	const post = (body: unknown) =>
 		new Request('http://localhost/', {
 			method: 'POST',
@@ -197,7 +182,7 @@ describe('Transform', () => {
 			body: JSON.stringify(body)
 		})
 
-	it('transform reshapes the body before it is validated', async () => {
+	it('applies a body transform before validation', async () => {
 		const app = new Elysia().post(
 			'/',
 			{
@@ -213,33 +198,30 @@ describe('Transform', () => {
 			({ body }) => body
 		)
 
-		// arrives WITHOUT `name` (invalid) — transform adds it → passes
 		const res = await app.handle(post({ rename: 'Himari' }))
 
 		expect(res.status).toBe(200)
 		await expect(res.json()).resolves.toEqual({ name: 'Himari' })
 	})
 
-	it("transform's body output is validated (invalid after transform → 422)", async () => {
+	it('validates the body after a transform', async () => {
 		const app = new Elysia().post(
 			'/',
 			{
 				body: t.Object({ name: t.String() }),
 				transform({ body }) {
-					// drop the required field — validation (which runs AFTER) catches it
 					delete (body as Record<string, unknown>).name
 				}
 			},
 			({ body }) => body
 		)
 
-		// arrives valid, but transform makes it invalid → 422
 		const res = await app.handle(post({ name: 'Himari' }))
 
 		expect(res.status).toBe(422)
 	})
 
-	it('inherits from plugin', async () => {
+	it('runs a global plugin transform on parent routes', async () => {
 		const transformId = new Elysia().transform('global', ({ params }) => {
 			const p = params as { name?: string } | null
 			if (p?.name === 'Fubuki') p.name = 'Cat'
@@ -254,7 +236,7 @@ describe('Transform', () => {
 		await expect(res.text()).resolves.toBe('Cat')
 	})
 
-	it('not inherits plugin on local', async () => {
+	it('keeps a local transform inside its plugin', async () => {
 		const transformId = new Elysia().transform(({ params }) => {
 			const p = params as { name?: string } | null
 			if (p?.name === 'Fubuki') p.name = 'Cat'
@@ -269,47 +251,7 @@ describe('Transform', () => {
 		await expect(res.text()).resolves.toBe('Fubuki')
 	})
 
-	it('global true', async () => {
-		const called = <string[]>[]
-
-		const plugin = new Elysia()
-			.transform('global', ({ path }) => {
-				called.push(path)
-			})
-			.get('/inner', () => 'NOOP')
-
-		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
-
-		const res = await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/outer'))
-		])
-
-		expect(called).toEqual(['/inner', '/outer'])
-	})
-
-	it('global false', async () => {
-		const called = <string[]>[]
-
-		const plugin = new Elysia()
-			.transform('local', ({ path }) => {
-				called.push(path)
-			})
-			.get('/inner', () => 'NOOP')
-
-		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
-
-		const res = await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/outer'))
-		])
-
-		expect(called).toEqual(['/inner'])
-	})
-
-	// New direct-scope API: `transform('global', fn)` parallels
-	// `onTransform('global', fn)`.
-	it('global true (direct scope)', async () => {
+	it('runs a global plugin transform on plugin and parent routes', async () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
@@ -328,7 +270,7 @@ describe('Transform', () => {
 		expect(called).toEqual(['/inner', '/outer'])
 	})
 
-	it('global false (direct scope)', async () => {
+	it('runs a local plugin transform only on plugin routes', async () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
@@ -347,7 +289,7 @@ describe('Transform', () => {
 		expect(called).toEqual(['/inner'])
 	})
 
-	it('support array', async () => {
+	it('accepts an array of transforms', async () => {
 		let total = 0
 
 		const app = new Elysia()

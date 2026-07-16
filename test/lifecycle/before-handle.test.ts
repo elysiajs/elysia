@@ -3,8 +3,8 @@ import { Elysia } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { delay, req } from '../utils'
 
-describe('Before Handle', () => {
-	it('globally skip main handler', async () => {
+describe('beforeHandle', () => {
+	it('an app hook can short-circuit the route handler', async () => {
 		const app = new Elysia()
 			.beforeHandle(({ params }) => {
 				const { name } = params as { name?: string }
@@ -17,7 +17,7 @@ describe('Before Handle', () => {
 		await expect(res.text()).resolves.toBe('Cat')
 	})
 
-	it('locally skip main handler', async () => {
+	it('a route-local hook can short-circuit the route handler', async () => {
 		const app = new Elysia().get(
 			'/name/:name',
 			{
@@ -33,7 +33,7 @@ describe('Before Handle', () => {
 		await expect(res.text()).resolves.toBe('Cat')
 	})
 
-	it('group before handler', async () => {
+	it('a group hook applies only inside the group', async () => {
 		const app = new Elysia()
 			.group('/type', (app) =>
 				app
@@ -52,7 +52,7 @@ describe('Before Handle', () => {
 		await expect(scoped.text()).resolves.toBe('cat')
 	})
 
-	it('inherits from plugin', async () => {
+	it('propagates global hooks out of plugins', async () => {
 		const transformId = new Elysia().beforeHandle(
 			'global',
 			({ params: { name } }) => {
@@ -69,7 +69,7 @@ describe('Before Handle', () => {
 		await expect(res.text()).resolves.toBe('Cat')
 	})
 
-	it('not inherits plugin on local', async () => {
+	it('keeps local hooks inside plugins', async () => {
 		const beforeHandle = new Elysia().beforeHandle(
 			({ params: { name } }) => {
 				if (name === 'Fubuki') return 'Cat'
@@ -85,7 +85,7 @@ describe('Before Handle', () => {
 		await expect(res.text()).resolves.toBe('Fubuki')
 	})
 
-	it('before handle in order', async () => {
+	it('runs hooks in registration order', async () => {
 		let order = <string[]>[]
 
 		const app = new Elysia()
@@ -102,7 +102,7 @@ describe('Before Handle', () => {
 		expect(order).toEqual(['A', 'B'])
 	})
 
-	it('globally and locally before handle', async () => {
+	it('runs app hooks before route-local hooks', async () => {
 		const app = new Elysia()
 			.beforeHandle(({ params }) => {
 				const { name } = params as { name?: string }
@@ -125,7 +125,7 @@ describe('Before Handle', () => {
 		await expect(korone.text()).resolves.toBe('dog')
 	})
 
-	it('accept multiple before handler', async () => {
+	it('accepts multiple app hooks', async () => {
 		const app = new Elysia()
 			.beforeHandle(({ params }) => {
 				const { name } = params as { name?: string }
@@ -144,7 +144,7 @@ describe('Before Handle', () => {
 		await expect(korone.text()).resolves.toBe('dog')
 	})
 
-	it('handle async', async () => {
+	it('awaits an async route-local hook', async () => {
 		const app = new Elysia().get(
 			'/name/:name',
 			{
@@ -162,7 +162,7 @@ describe('Before Handle', () => {
 		await expect(res.text()).resolves.toBe('Warukunai yo ne')
 	})
 
-	it('execute afterHandle', async () => {
+	it('runs afterHandle after a beforeHandle short-circuit', async () => {
 		const app = new Elysia()
 			.beforeHandle(({ params }) => {
 				const { name } = params as { name?: string }
@@ -179,47 +179,7 @@ describe('Before Handle', () => {
 		await expect(res.text()).resolves.toBe('Not cat')
 	})
 
-	it('as global', async () => {
-		const called = <string[]>[]
-
-		const plugin = new Elysia()
-			.beforeHandle('global', ({ path }) => {
-				called.push(path)
-			})
-			.get('/inner', () => 'NOOP')
-
-		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
-
-		const res = await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/outer'))
-		])
-
-		expect(called).toEqual(['/inner', '/outer'])
-	})
-
-	it('as local', async () => {
-		const called = <string[]>[]
-
-		const plugin = new Elysia()
-			.beforeHandle('local', ({ path }) => {
-				called.push(path)
-			})
-			.get('/inner', () => 'NOOP')
-
-		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
-
-		const res = await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/outer'))
-		])
-
-		expect(called).toEqual(['/inner'])
-	})
-
-	// New direct-scope API: `beforeHandle('global', fn)` parallels
-	// `onBeforeHandle('global', fn)`.
-	it('as global (direct scope)', async () => {
+	it('runs a global plugin hook on plugin and parent routes', async () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
@@ -238,7 +198,7 @@ describe('Before Handle', () => {
 		expect(called).toEqual(['/inner', '/outer'])
 	})
 
-	it('as local (direct scope)', async () => {
+	it('runs a local plugin hook only on plugin routes', async () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
@@ -257,26 +217,7 @@ describe('Before Handle', () => {
 		expect(called).toEqual(['/inner'])
 	})
 
-	it('support array', async () => {
-		let total = 0
-
-		const app = new Elysia()
-			.afterHandle([
-				() => {
-					total++
-				},
-				() => {
-					total++
-				}
-			])
-			.get('/', () => 'NOOP')
-
-		const res = await app.handle(req('/'))
-
-		expect(total).toEqual(2)
-	})
-
-	it('add responseValue to afterHandle, and afterResponse when beforeHandle returns a value', async () => {
+	it('passes a short-circuit value to afterHandle and afterResponse', async () => {
 		let hasAfterHandleResponse = false
 		let hasAfterResponseResponse = false
 

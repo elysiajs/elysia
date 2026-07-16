@@ -3,7 +3,7 @@ import { Elysia } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { req, delay } from '../utils'
 
-describe('On Request', () => {
+describe('request hooks', () => {
 	it('inject headers to response', async () => {
 		const app = new Elysia()
 			.request(({ set }) => {
@@ -16,7 +16,7 @@ describe('On Request', () => {
 		expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*')
 	})
 
-	it('propagates globally out of a plugin regardless of scope', async () => {
+	it('registered by plugins apply to parent routes', async () => {
 		const plain = new Elysia().request(({ set }) => {
 			set.headers['x-plain'] = 'yes'
 		})

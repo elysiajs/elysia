@@ -1,7 +1,7 @@
 import { Elysia, t } from '../../../src'
 import { expectTypeOf } from 'expect-type'
 
-// ? guard(hook) accumulates a standalone schema into subsequent route context
+// Guard body schemas type subsequent routes.
 {
 	new Elysia()
 		.guard({ body: t.Object({ name: t.String() }) })
@@ -10,7 +10,7 @@ import { expectTypeOf } from 'expect-type'
 		})
 }
 
-// ? guard(hook) accumulates a query schema into subsequent route context
+// Guard query schemas type subsequent routes.
 {
 	new Elysia()
 		.guard({ query: t.Object({ page: t.Number() }) })
@@ -19,10 +19,7 @@ import { expectTypeOf } from 'expect-type'
 		})
 }
 
-// ? a bare `.guard({ ... })` is OVERRIDE-channel: the closer to the route,
-// ? the more power — a route-local `response` replaces the guard's per status
-// ? code, so returning only `{ id }` is correct (mirrors the runtime
-// ? "override guard when local is provided" behavior).
+// A route response schema replaces an ordinary guard response schema.
 {
 	new Elysia()
 		.guard({ response: t.Object({ name: t.Literal('cantarella') }) })
@@ -35,8 +32,7 @@ import { expectTypeOf } from 'expect-type'
 		)
 }
 
-// ? without a route-local response, the override guard's response IS the
-// ? route's contract
+// Without a route response schema, the guard constrains the handler return.
 {
 	new Elysia()
 		.guard({ response: t.Object({ name: t.Literal('cantarella') }) })
@@ -48,9 +44,7 @@ import { expectTypeOf } from 'expect-type'
 		.post('/', () => ({ name: 'cantarella' as const }))
 }
 
-// ? `schema: 'standalone'` opts into INTERSECT: every visible standalone
-// ? validator runs, so the handler must satisfy BOTH `{ id }` (route) and
-// ? `{ name: 'cantarella' }` (guard).
+// Standalone guard and route response schemas both constrain the handler.
 {
 	new Elysia()
 		.guard({
@@ -67,7 +61,7 @@ import { expectTypeOf } from 'expect-type'
 		)
 }
 
-// ? guard(hook, run) sandboxed builder sees the schema; routes merge back
+// Guard callback routes receive the guard schema.
 {
 	new Elysia().guard({ body: t.Object({ name: t.String() }) }, (app) =>
 		app.post('/', ({ body }) => {
@@ -77,7 +71,7 @@ import { expectTypeOf } from 'expect-type'
 	)
 }
 
-// ? a local guard schema does NOT leak to a parent via .use
+// Local guard schemas do not affect plugin consumers.
 {
 	const plugin = new Elysia().guard({
 		body: t.Object({ name: t.String() })
@@ -88,7 +82,7 @@ import { expectTypeOf } from 'expect-type'
 	})
 }
 
-// ? guard().as('plugin') promotes the schema one level via .use
+// `.as('plugin')` exposes a guard schema to one consumer.
 {
 	const plugin = new Elysia()
 		.guard({ body: t.Object({ name: t.String() }) })
@@ -101,11 +95,9 @@ import { expectTypeOf } from 'expect-type'
 
 export {}
 
-// ? params are WHOLE-FIELD on the override channel — the nearest DECLARED
-// ? schema's static IS the params shape (the runtime validator strips keys
-// ? outside it, even path-derived ones; verified against the runtime)
+// The nearest declared params schema defines the complete params type.
 {
-	// route-local params replace the wrapper's entirely
+	// Route params replace guard params.
 	new Elysia().guard({ params: t.Object({ id: t.Number() }) }, (app) =>
 		app.get(
 			'/guard/:id/:name',
@@ -118,15 +110,14 @@ export {}
 		)
 	)
 
-	// a silent route inherits the wrapper's params validator — its static
-	// is the shape, path keys it doesn't cover are stripped
+	// Routes without params schemas inherit guard params.
 	new Elysia().guard({ params: t.Object({ id: t.Number() }) }, (app) =>
 		app.get('/guard/:id/:name', ({ params }) => {
 			expectTypeOf(params).toEqualTypeOf<{ id: number }>()
 		})
 	)
 
-	// nested wrappers: the nearer declared schema wins whole-field
+	// The nearest nested guard params schema wins.
 	new Elysia().guard({ params: t.Object({ id: t.Number() }) }, (app) =>
 		app.guard({ params: t.Object({ name: t.Literal('x') }) }, (app) =>
 			app.get('/guard/:id/:name', ({ params }) => {
@@ -135,7 +126,7 @@ export {}
 		)
 	)
 
-	// nothing declared anywhere → raw path strings
+	// Without a params schema, path params remain strings.
 	new Elysia().guard({}, (app) =>
 		app.get('/guard/:id/:name', ({ params }) => {
 			expectTypeOf(params).toEqualTypeOf<{ id: string; name: string }>()

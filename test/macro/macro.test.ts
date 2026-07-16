@@ -527,7 +527,7 @@ describe('Macro', () => {
 		expect(status).toBe(418)
 	})
 
-	it("don't inherits macro to plugin without type reference", () => {
+	it('resolves macro fields on absorbed and local routes', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia().get(
@@ -555,8 +555,6 @@ describe('Macro', () => {
 				() => 'a'
 			)
 
-		// Macros run during route compilation; reading `app['~routes']`
-		// triggers compile for each route via the introspection getter.
 		void app['~routes']
 
 		expect(called).toEqual(['nagisa', 'hifumi'])
@@ -1224,13 +1222,7 @@ describe('Macro', () => {
 		expect(invalid3.status).toBe(422)
 	})
 
-	// registering a macro must not change route-local schema semantics:
-	// route-local fields stay in the override channel (SS1 "override
-	// everywhere") instead of being lifted into the additive schemas
-	// channel — previously the first applyMacro call in a process lifted
-	// them (one-shot iterator bug), making validation process-order
-	// dependent: identical routes returned 422 (route 1) vs 200 (route 2)
-	it('keep route-local schema override under guard regardless of route order', async () => {
+	it('keeps route-local body overrides and macro schemas stable across route order', async () => {
 		const app = new Elysia()
 			.macro({
 				lilith: {
@@ -1263,15 +1255,11 @@ describe('Macro', () => {
 				({ body }) => body
 			)
 
-		// route-local body stays in the override channel, never lifted
 		expect(app['~routes']![0][4]!.body).not.toBeUndefined()
 		expect(app['~routes']![0][4]!.schemas).toBeUndefined()
 		expect(app['~routes']![1][4]!.body).not.toBeUndefined()
 		expect(app['~routes']![1][4]!.schemas).toBeUndefined()
 
-		// { id } fails the guard's body but passes the route-local one:
-		// 200 proves the route-local schema overrides the guard's,
-		// identically on both routes
 		const second = await app.handle(post('/second', { id: 1 }))
 		const first = await app.handle(post('/first', { id: 1 }))
 
@@ -1280,15 +1268,12 @@ describe('Macro', () => {
 		await expect(second.json()).resolves.toEqual({ id: 1 })
 		await expect(first.json()).resolves.toEqual({ id: 1 })
 
-		// the route-local schema is still enforced, not dropped
 		const invalidFirst = await app.handle(post('/first', { name: 'a' }))
 		const invalidSecond = await app.handle(post('/second', { name: 'a' }))
 
 		expect(invalidFirst.status).toBe(422)
 		expect(invalidSecond.status).toBe(422)
 
-		// a macro-produced direct schema field is additive and
-		// still validates on the consuming route
 		const validMacro = await app.handle(
 			post('/macro?user=Lilith', { id: 1 })
 		)
@@ -1300,7 +1285,7 @@ describe('Macro', () => {
 		expect(invalidMacro.status).toBe(422)
 	})
 
-	it('merge activated macro body schema with route-local body schema', async () => {
+	it('merges an activated macro body schema with a route-local body schema', async () => {
 		const app = new Elysia()
 			.macro({
 				a: {
@@ -1323,12 +1308,11 @@ describe('Macro', () => {
 		const missingMacroField = await app.handle(post('/', { b: 'test' }))
 		expect(missingMacroField.status).toBe(422)
 
-		// route-local field stays enforced after the macro merge
 		const missingRouteField = await app.handle(post('/', { a: 'a' }))
 		expect(missingRouteField.status).toBe(422)
 	})
 
-	it('merge activated macro body schema when body is a string model reference', async () => {
+	it('merges activated macro and route body model references', async () => {
 		const build = (macroBody: any, routeBody: any) =>
 			new Elysia()
 				.model({
@@ -1757,9 +1741,6 @@ describe('Macro', () => {
 	})
 
 	it('rejects a bare functional macro — must be named', () => {
-		// `.macro(fn)` has no name to register under; TS can't catch it (a
-		// function is structurally assignable to the open `Macro` record), so
-		// without this guard it silently no-ops.
 		expect(() =>
 			(new Elysia().macro as any)(() => ({ beforeHandle() {} }))
 		).toThrow()

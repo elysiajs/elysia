@@ -5,15 +5,11 @@ import type { TUnion } from 'typebox'
 import { post } from '../utils'
 
 describe('TypeSystem - Date', () => {
-	it('Create', () => {
-		// New typebox has no custom Create hook (unlike the old TypeRegistry):
-		// the Date union's first branch is `Unsafe<Date>`, which Create yields
-		// as `undefined`, and a default Date would be cloned to `{}`. So
-		// `Value.Create(t.Date())` produces no Date instance.
+	it('does not synthesize a Date without a default', () => {
 		expect(Value.Create(t.Date())).toBeUndefined()
 	})
 
-	it('No default date provided', () => {
+	it('omits default metadata when no date default is provided', () => {
 		const schema = t.Date()
 		expect((schema as { default?: unknown }).default).toBeUndefined()
 
@@ -23,7 +19,7 @@ describe('TypeSystem - Date', () => {
 		}
 	})
 
-	it('Default date provided', () => {
+	it('copies an explicit default to every union member', () => {
 		const given = new Date('2025-01-01T00:00:00.000Z')
 		const schema = t.Date({ default: given })
 		expect((schema as { default?: unknown }).default).toEqual(given)
@@ -36,7 +32,7 @@ describe('TypeSystem - Date', () => {
 		}
 	})
 
-	it('Check', () => {
+	it('accepts Date instances and coercible date values', () => {
 		const schema = t.Date()
 
 		expect(Value.Check(schema, new Date())).toEqual(true)
@@ -49,7 +45,7 @@ describe('TypeSystem - Date', () => {
 		expect(Value.Check(schema, null)).toEqual(false)
 	})
 
-	it('Encode', () => {
+	it('encodes valid dates as ISO strings', () => {
 		const schema = t.Date()
 
 		const date = new Date()
@@ -66,17 +62,14 @@ describe('TypeSystem - Date', () => {
 		expect(() => Value.Encode(schema, null)).toThrowError()
 	})
 
-	it('Decode', () => {
+	it('decodes Date instances and date strings to Date', () => {
 		const schema = t.Date()
 
 		expect(Value.Decode(schema, new Date())).toBeInstanceOf(Date)
 		expect(Value.Decode(schema, '2021/1/1')).toBeInstanceOf(Date)
-
-		// Rejection of invalid values is covered by the Check test;
-		// `Value.Decode` runs Convert before its Check gate and is lenient.
 	})
 
-	it('Integrate', async () => {
+	it('decodes valid request dates and rejects invalid strings', async () => {
 		const app = new Elysia().post(
 			'/',
 			{

@@ -3,7 +3,10 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
-import { getAotWorkerDiagnostics, resolveEntry } from '../../src/plugin/aot/core'
+import {
+	getAotWorkerDiagnostics,
+	resolveEntry
+} from '../../src/plugin/aot/core'
 import { aot } from '../../src/plugin/aot/vite'
 
 it('refreshes Vite build artifacts in terminated workers', async () => {

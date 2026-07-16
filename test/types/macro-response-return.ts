@@ -1,13 +1,6 @@
 import { Elysia, t } from '../../src'
 
-// types-dx-1: a macro's declared `response` schema types the CONSUMING route's
-// contract, so it must ALSO constrain the route handler's return — exactly as a
-// route-local `response` schema does. Before the fix, `InlineHandler` gated the
-// handler return on the route-local `Route['response']` (empty for a macro-only
-// route) and never bound `MacroContext['response']`, so ANY return compiled.
-// The fix delegates `InlineHandler` to `InlineHandlerNonMacro<Route &
-// MacroContext, ...>`, folding the macro response into the checked route so a
-// wrong return is a type error. These pins fail if that binding regresses.
+// A macro response schema constrains its consuming route's handler return.
 
 const macro = new Elysia().macro({
 	withId: {
@@ -15,7 +8,6 @@ const macro = new Elysia().macro({
 	}
 })
 
-// wrong-shape object under a macro-supplied response must error
 macro.get(
 	'/obj',
 	{ withId: true },
@@ -23,7 +15,6 @@ macro.get(
 	() => ({ name: 'z' })
 )
 
-// primitive wrong return must error
 macro.get(
 	'/num',
 	{ withId: true },
@@ -31,7 +22,6 @@ macro.get(
 	() => 123
 )
 
-// symbol / bigint wrong returns must error
 macro.get(
 	'/sym',
 	{ withId: true },
@@ -45,7 +35,6 @@ macro.get(
 	() => 1n
 )
 
-// async wrong return must error (the fix additionally closes the async leak)
 macro.get(
 	'/async',
 	{ withId: true },
@@ -53,8 +42,7 @@ macro.get(
 	async () => ({ name: 'z' })
 )
 
-// a macro with a PRIMITIVE response must constrain too (regression proved the
-// primitive-macro-response case leaked exactly like the object case)
+// Primitive macro response schemas constrain handler returns too.
 const macroStr = new Elysia().macro({ asStr: { response: t.String() } })
 macroStr.get(
 	'/str',
@@ -63,31 +51,26 @@ macroStr.get(
 	() => 123
 )
 
-// CORRECT returns must still COMPILE — bare value, async, generator, and
-// `status(...)`-wrapped — so the fix only rejects genuinely-wrong returns.
+// Valid direct, async, and status-wrapped values remain accepted.
 macro.get('/ok', { withId: true }, () => ({ id: 1 }))
 macro.get('/ok-async', { withId: true }, async () => ({ id: 1 }))
-macro.get('/ok-status', { withId: true }, ({ status }) => status(200, { id: 1 }))
-
-// a wrong body inside status(...) must still error under a macro response
-macro.get(
-	'/status-wrong',
-	{ withId: true },
-	({ status }) =>
-		// @ts-expect-error status(200, { name }) violates macro response
-		status(200, { name: 'z' })
+macro.get('/ok-status', { withId: true }, ({ status }) =>
+	status(200, { id: 1 })
 )
 
-// The macro response must not poison the Eden route tree to any/unknown: the
-// stored 200 body stays the concrete macro schema shape.
+// Status-wrapped bodies must also satisfy the macro response schema.
+macro.get('/status-wrong', { withId: true }, ({ status }) =>
+	// @ts-expect-error status(200, { name }) violates macro response
+	status(200, { name: 'z' })
+)
+
+// Eden routes retain the macro response's concrete body type.
 const okApp = macro.get('/ok2', { withId: true }, () => ({ id: 1 }))
 type IsAny<T> = 0 extends 1 & T ? true : false
 type Ok2Body = (typeof okApp)['~Routes']['ok2']['get']['response'][200]
 const _edenConcrete: IsAny<Ok2Body> = false
 
-// Macro-derived (`resolve`-channel) values and instance `derive` values remain
-// available and typed in the handler context — the delegation must preserve the
-// merged macro context, not just the response.
+// Macro and instance-derived values remain typed in the handler context.
 new Elysia()
 	.derive(() => ({ traceId: 'x' as const }))
 	.macro({ auth: { derive: () => ({ userId: 1 as const }) } })
@@ -97,24 +80,19 @@ new Elysia()
 		return { ok: true }
 	})
 
-// ---------------------------------------------------------------------
-// NON-MACRO regression guard: the non-macro path was already fully checked
-// and must be UNCHANGED by this fix.
-// ---------------------------------------------------------------------
-
-// non-macro object response: wrong return still errors
+// Route-local response schemas still constrain handlers without a macro.
 new Elysia().get(
 	'/nm-obj',
 	{ response: t.Object({ id: t.Number() }) },
-	// @ts-expect-error wrong object (non-macro, unchanged)
+	// @ts-expect-error wrong object for the response schema
 	() => ({ name: 'z' })
 )
 
-// bare-value handlers with no schema still compile
+// Handlers without a response schema accept inferred values.
 new Elysia().get('/nm-lit', () => 'lit')
 new Elysia().get('/nm-obj-val', () => ({ a: 1 }))
 
-// bare-value handler with a matching response schema still compiles
+// A matching route-local response remains accepted.
 new Elysia().get(
 	'/nm-val',
 	{ response: t.Object({ name: t.String() }) },

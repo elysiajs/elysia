@@ -1,9 +1,6 @@
-/** AOT build-mode detection and cache-busted import lifecycle. */
 import { describe, it, expect, afterEach } from 'bun:test'
 import { env } from '../../src/universal'
 import { Capture } from '../../src/compile/aot'
-
-// Canonical build-mode predicate.
 
 describe('isAotBuildEnv predicate', () => {
 	const original = env.ELYSIA_AOT_BUILD
@@ -34,8 +31,6 @@ describe('isAotBuildEnv predicate', () => {
 	})
 })
 
-// Capture-state predicate.
-
 describe('Capture.isCapturing', () => {
 	const original = env.ELYSIA_AOT_BUILD
 
@@ -55,26 +50,18 @@ describe('Capture.isCapturing', () => {
 	})
 })
 
-// Cache-busted import specifier construction.
-
 describe('cache-bust import specifier', () => {
 	it('cache-bust specifier embeds elysia-aot query suffix', () => {
-		// Test the specifier shape the plugin uses, without running a real build.
-		// The actual dynamic-import in generateCompiledArtifacts wraps the cache-bust
-		// in a try/catch, so we just verify the pattern is correct.
 		const entry = '/some/project/src/index.ts'
 		const ts = Date.now()
 		const specifier = entry + '?elysia-aot=' + ts
 		expect(specifier).toContain('?elysia-aot=')
 		expect(specifier.startsWith(entry)).toBe(true)
-		// Suffix must be numeric (timestamp)
 		const suffix = specifier.split('?elysia-aot=')[1]
 		expect(Number.isFinite(Number(suffix))).toBe(true)
 	})
 
 	it('two successive cache-bust specifiers for the same entry are distinct', async () => {
-		// Subsequent rebuilds must produce different specifiers so the runtime
-		// treats them as separate modules.
 		const entry = '/some/project/src/index.ts'
 		const s1 = entry + '?elysia-aot=' + Date.now()
 		await new Promise((r) => setTimeout(r, 2))
@@ -83,13 +70,8 @@ describe('cache-bust import specifier', () => {
 	})
 })
 
-// The first import is plain; subsequent imports are cache-busted.
-
-describe('_importedEntries gate', () => {
+describe('repeated entry imports', () => {
 	it('first invocation uses plain entry path (no ?elysia-aot suffix)', async () => {
-		// Validate the decision logic directly via a mock dynamic import so we
-		// never hit the filesystem. We replicate the branching in
-		// generateCompiledArtifacts using the same _importedEntries Set.
 		const seen = new Set<string>()
 		const calls: string[] = []
 
@@ -100,7 +82,6 @@ describe('_importedEntries gate', () => {
 
 		const entry = '/fake/entry-plain.ts'
 
-		// First call: not in set → plain import
 		if (seen.has(entry)) {
 			await fakeImport(entry + '?elysia-aot=' + Date.now())
 		} else {
@@ -126,7 +107,6 @@ describe('_importedEntries gate', () => {
 		const entry = '/fake/entry-rebuild.ts'
 		seen.add(entry) // simulate already-seen (first call already done)
 
-		// Second call: in set → warn + cache-bust
 		if (seen.has(entry)) {
 			warnings.push(
 				'[elysia-aot] re-importing "' +
@@ -144,7 +124,6 @@ describe('_importedEntries gate', () => {
 		expect(warnings[0]).toContain('re-importing')
 		expect(calls).toHaveLength(1)
 		expect(calls[0]).toContain('?elysia-aot=')
-		// suffix is numeric timestamp
 		const suffix = calls[0].split('?elysia-aot=')[1]
 		expect(Number.isFinite(Number(suffix))).toBe(true)
 	})

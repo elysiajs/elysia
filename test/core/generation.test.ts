@@ -5,21 +5,16 @@ import { describe, expect, it } from 'bun:test'
 const req = (path: string, init?: RequestInit) =>
 	new Request(`http://e.ly${path}`, init)
 
-// A sealed generation publishes only after setup, isolates root-specific state,
-// supports atomic replacement, exposes opt-in introspection, and rejects later
-// authoring mutations.
-
 describe('sealed generation publication', () => {
-	it('an unsealed app has no generation; generationOf throws', () => {
+	it('generationOf throws before sealing and frozenRootOf returns the live app', () => {
 		const app = new Elysia().get('/', () => 'ok')
 
 		expect(app['~generation']).toBeUndefined()
 		expect(() => generationOf(app)).toThrow('before the app was sealed')
-		// frozenRootOf falls back to the live root while unsealed.
 		expect(frozenRootOf(app)).toBe(app)
 	})
 
-	it('first handle publishes exactly one generation', async () => {
+	it('the first handle publishes one generation and later handles reuse it', async () => {
 		const app = new Elysia().get('/', () => 'ok')
 
 		await app.handle(req('/'))
@@ -28,16 +23,14 @@ describe('sealed generation publication', () => {
 		expect(generation['~config']).toBe(app['~config'])
 		expect(generation['~ext']).toBe(app['~ext'])
 		expect(generation.routeTable).toBe(app['~routeTable'])
-		// frozenRootOf now routes through the published generation.
 		expect(frozenRootOf(app)).toBe(generation)
 
-		// A second request does not republish.
 		const same = generationOf(app)
 		await app.handle(req('/'))
 		expect(generationOf(app)).toBe(same)
 	})
 
-	it('.compile seals; explicit', () => {
+	it('.compile publishes a generation', () => {
 		const app = new Elysia().get('/', () => 'ok')
 		expect(app['~generation']).toBeUndefined()
 
@@ -47,17 +40,14 @@ describe('sealed generation publication', () => {
 })
 
 describe('sealed generation plugin resolution', () => {
-	it('an async plugin route is served on the first request AFTER drain, generation publishes once', async () => {
+	it('resolving an async plugin stays authorable until its first request seals the app', async () => {
 		const app = new Elysia().use(
 			Promise.resolve(new Elysia().get('/late', () => 'late'))
 		)
 
-		// Draining resolves the async plugin but keeps the app authorable — no
-		// Plugin resolution alone keeps the app authorable; serving seals it.
 		await app.modules
 		expect(app['~generation']).toBeUndefined()
 
-		// The first real request seals: the async route is reachable, published once.
 		const res = await app.handle(req('/late'))
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('late')
@@ -67,7 +57,7 @@ describe('sealed generation plugin resolution', () => {
 })
 
 describe('sealed generation root isolation', () => {
-	it('the same plugin sealed under two roots keeps each root its own resolved state', async () => {
+	it('keeps root-specific state separate when two apps use the same plugin', async () => {
 		const shared = () => (app: Elysia) =>
 			app
 				.decorate('who', 'shared')
@@ -83,7 +73,6 @@ describe('sealed generation root isolation', () => {
 		const ga = generationOf(a)
 		const gb = generationOf(b)
 
-		// Each generation carries its OWN ext (decorators / models), never shared.
 		expect(ga['~ext']).not.toBe(gb['~ext'])
 		expect((ga['~ext'] as any).decorator.root).toBe('A')
 		expect((gb['~ext'] as any).decorator.root).toBe('B')
@@ -94,13 +83,11 @@ describe('sealed generation root isolation', () => {
 })
 
 describe('sealed generation replacement', () => {
-	it('~newGeneration republishes; a new capability is visible only after the swap', async () => {
+	it('~newGeneration publishes routes added since the previous generation', async () => {
 		const app = new Elysia().get('/a', () => 'a')
 		await app.handle(req('/a'))
 		const previous = generationOf(app)
 
-		// Route added via the internal unseal path (mirrors dev hot-reload editing
-		// the source and re-running the module).
 		;(app as any)['~generation'] = undefined
 		app.get('/b', () => 'b')
 		app['~newGeneration']()
@@ -110,14 +97,11 @@ describe('sealed generation replacement', () => {
 		expect((await app.handle(req('/a'))).status).toBe(200)
 	})
 
-	it('concurrent requests around a swap each observe a coherent generation (never mixed)', async () => {
+	it('requests around a swap observe complete old or new generations', async () => {
 		const app = new Elysia().get('/a', () => 'a')
 		await app.handle(req('/a'))
 		const previous = generationOf(app)
 
-		// Fire a burst of requests, swapping in the middle. Each response is a
-		// coherent 200 for a route present in SOME generation — never a torn
-		// half-old/half-new dispatch (the swap only publishes after a full rebuild).
 		const before = Promise.all(
 			Array.from({ length: 8 }, () => app.handle(req('/a')))
 		)
@@ -148,7 +132,6 @@ describe('sealed generation setup failure', () => {
 			})
 		).toThrow('setup boom')
 
-		// The failed setup neither served nor sealed.
 		expect(app['~generation']).toBeUndefined()
 	})
 
@@ -162,20 +145,19 @@ describe('sealed generation setup failure', () => {
 			await app.modules
 		} catch {}
 
-		// The failed async plugin drained; nothing sealed.
 		expect(app['~generation']).toBeUndefined()
 		expect(app.server).toBeUndefined()
 	})
 })
 
 describe('sealed generation introspection', () => {
-	it('app-side config.introspect surfaces on the generation', async () => {
+	it('copies app config.introspect to the generation', async () => {
 		const app = new Elysia({ introspect: true }).get('/', () => 'ok')
 		await app.handle(req('/'))
 		expect(generationOf(app).introspect).toBe(true)
 	})
 
-	it('a plugin declaring introspect seals its host into introspection', async () => {
+	it('enables introspection when a plugin requests it', async () => {
 		const plugin = new Elysia({
 			name: 'introspected',
 			introspect: true
@@ -229,7 +211,7 @@ describe('sealed generation immutability', () => {
 		}
 	})
 
-	it('mutation throws after .compile and after listen (port 0)', async () => {
+	it('authoring mutations throw after .compile and .listen', async () => {
 		const compiled = new Elysia().get('/', () => 'ok')
 		compiled.compile()
 		expect(() => compiled.get('/x', () => 'x')).toThrow(

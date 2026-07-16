@@ -3,22 +3,7 @@ import { Elysia, NotFound, status, problem } from '../../src'
 
 import { expectTypeOf } from 'expect-type'
 
-/**
- * `.error(Class, handler)` type soundness
- *
- * Registered handlers land in scope channels as ordered
- * `{ error, response }` entries. A route returning a registered error maps
- * to the handler's response (the closest handler wins, mirroring runtime
- * hook order); an unmatched error is stored on the route's `error` field
- * and re-resolved as handlers register — Eden folds whatever remains into
- * the default 500. Thrown errors are invisible to TypeScript — returning
- * is the sound path.
- *
- * Custom errors need a distinguishing member (`kind` below): TypeScript is
- * structural, so a memberless `class X extends Error {}` is
- * indistinguishable from `Error` itself. Verified at runtime in
- * test/2/extends/error.test.ts
- */
+// Returned errors resolve through the closest registered class handler.
 
 class MyError extends Error {
 	readonly kind = 'my-error'
@@ -40,14 +25,14 @@ class OtherError extends Error {
 	}
 }
 
-// handler context narrows `error` to the registered class
+// Handler context narrows `error` to the registered class.
 {
 	new Elysia().error(MyError, ({ error }) => {
 		expectTypeOf(error).toEqualTypeOf<MyError>()
 	})
 }
 
-// returned registered error maps to the handler's status() entry
+// A returned error maps to its registered handler response.
 {
 	const app = new Elysia()
 		.error(MyError, ({ error }) => status(404, { message: error.message }))
@@ -58,7 +43,7 @@ class OtherError extends Error {
 	}>()
 }
 
-// the 200 path survives alongside the mapped error
+// Successful and handled-error responses remain distinct.
 {
 	const app = new Elysia()
 		.error(MyError, ({ error }) => status(404, { message: error.message }))
@@ -72,8 +57,7 @@ class OtherError extends Error {
 	}>()
 }
 
-// an unmatched returned error is stored on the route's `error` field until
-// a handler registers; Eden folds whatever remains into the default 500
+// Unhandled returned errors remain in the route's error type.
 {
 	const app = new Elysia().get('/', () => new OtherError('x'))
 
@@ -85,7 +69,7 @@ class OtherError extends Error {
 	>().toEqualTypeOf<OtherError>()
 }
 
-// plain handler return maps to the error's declared status, default 500
+// Plain handler returns use the error's status, or 500 by default.
 {
 	const app = new Elysia()
 		.error(MyError, ({ error }) => error.message)
@@ -105,7 +89,7 @@ class OtherError extends Error {
 	}>()
 }
 
-// first registered match wins, mirroring runtime hook order
+// The first matching class handler determines the response.
 {
 	const app = new Elysia()
 		.error(MyError, () => status(418, 'parent' as const))
@@ -117,9 +101,7 @@ class OtherError extends Error {
 	}>()
 }
 
-// entries are scope-channeled like schemas: a plugin's local (default)
-// handler maps only the plugin's own routes — the parent's routes fall back
-// to the default 500, matching runtime hook scoping
+// Local error handlers apply only to routes on the same instance.
 {
 	const plugin = new Elysia()
 		.error(MyError, ({ error }) => status(404, { message: error.message }))
@@ -141,7 +123,7 @@ class OtherError extends Error {
 	>().toEqualTypeOf<MyError>()
 }
 
-// 'plugin' scope maps the immediate parent but stops there
+// Plugin-scoped handlers apply to the immediate consumer only.
 {
 	const plugin = new Elysia().error('plugin', MyError, ({ error }) =>
 		status(404, { message: error.message })
@@ -167,7 +149,7 @@ class OtherError extends Error {
 	>().toEqualTypeOf<MyError>()
 }
 
-// 'global' scope maps at any depth
+// Global handlers apply at every nesting depth.
 {
 	const plugin = new Elysia().error('global', MyError, ({ error }) =>
 		status(404, { message: error.message })
@@ -182,7 +164,7 @@ class OtherError extends Error {
 	}>()
 }
 
-// catch-all `.error(fn)` does not contribute to route responses
+// Catch-all `.error(fn)` handlers do not add route response types.
 {
 	const app = new Elysia()
 		.error(({ error }) => {
@@ -195,8 +177,7 @@ class OtherError extends Error {
 	}>()
 }
 
-// routes plugins do not need the handler applied to them: handlers cascade
-// downward on use() and absorbed routes are re-resolved
+// Parent handlers apply to routes from composed plugins.
 {
 	const routes = new Elysia().get('/', () => new MyError('x'))
 
@@ -212,8 +193,7 @@ class OtherError extends Error {
 	>().toEqualTypeOf<never>()
 }
 
-// registration order does not matter, mirroring runtime: a handler
-// registered after the route — even after use() — re-resolves it
+// Error handlers map routes even when registered after the route or plugin.
 {
 	const sameInstance = new Elysia()
 		.get('/', () => new MyError('x'))
@@ -236,7 +216,7 @@ class OtherError extends Error {
 	}>()
 }
 
-// the closest handler wins: a plugin's own handler beats the parent's
+// A plugin's own handler takes precedence over its parent's.
 {
 	const routes = new Elysia()
 		.error(MyError, () => status(403, 'plugin' as const))
@@ -251,11 +231,7 @@ class OtherError extends Error {
 	}>()
 }
 
-// T8 regression pins: the route-shape `error` field must survive every
-// composition path (it was dropped by the pre-rewrite guard/group/use
-// merge). The field carries unhandled returned errors for deferred
-// re-resolution — losing it silently breaks `.error(Class, handler)`
-// registered above the composition.
+// Composition preserves returned errors until a matching handler is registered.
 {
 	const direct = new Elysia().get('/x', () =>
 		Math.random() > 0.5 ? new MyError('x') : ('ok' as const)
@@ -301,8 +277,7 @@ class OtherError extends Error {
 		(typeof guarded)['~Routes']['x']['get']['error']
 	>().toEqualTypeOf<MyError>()
 
-	// a parent handler re-resolves the composed route's error: the field
-	// empties and the handler's status folds into the response map
+	// A parent handler removes the matched error and adds its response.
 	const resolved = new Elysia()
 		.use(used)
 		.error(MyError, () => 'handled' as const)
@@ -316,11 +291,7 @@ class OtherError extends Error {
 	>().toEqualTypeOf<'handled'>()
 }
 
-/**
- * `problem()` wraps ElysiaStatus, so a returned problem infers its body under
- * the numeric status code — the point of wrapping status() rather than a bare
- * error class.
- */
+// problem() infers its body under the selected numeric status.
 {
 	const app = new Elysia().get('/', () => problem({ status: 409 }))
 
@@ -329,7 +300,7 @@ class OtherError extends Error {
 	>().toMatchTypeOf<{ type: string; title: string; status: 409 }>()
 }
 
-// a StatusMap name maps to the numeric code key
+// A StatusMap name maps to its numeric response key.
 {
 	const app = new Elysia().get('/', () => problem({ status: 'Conflict' }))
 
@@ -338,7 +309,7 @@ class OtherError extends Error {
 	>().toMatchTypeOf<{ status: 409 }>()
 }
 
-// extension members flow into the inferred body
+// Extension members remain in the inferred body.
 {
 	const app = new Elysia().get('/', () => problem({ status: 409, sku: 42 }))
 
@@ -347,7 +318,7 @@ class OtherError extends Error {
 	>().toMatchTypeOf<{ sku: number }>()
 }
 
-// status-first overload maps to the numeric response key
+// The status-first overload maps to the numeric response key.
 {
 	const app = new Elysia().get('/', () => problem(409, { sku: 42 }))
 

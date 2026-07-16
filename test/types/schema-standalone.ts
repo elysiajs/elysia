@@ -2,9 +2,9 @@ import { Elysia, t } from '../../src'
 import { expectTypeOf } from 'expect-type'
 import { Cookie } from '../../src/cookie'
 
-// local
+// Local scope
 {
-	// Handle standalone
+	// Standalone guards constrain handlers.
 	{
 		new Elysia()
 			.guard({
@@ -24,7 +24,7 @@ import { Cookie } from '../../src/cookie'
 			})
 	}
 
-	// Handle with local schema standalone
+	// Route schemas intersect standalone guard schemas.
 	{
 		new Elysia()
 			.guard({
@@ -52,7 +52,7 @@ import { Cookie } from '../../src/cookie'
 			)
 	}
 
-	// Handle with multiple standalone with local schema
+	// Multiple standalone guard schemas intersect with the route schema.
 	{
 		new Elysia()
 			.guard({
@@ -85,9 +85,7 @@ import { Cookie } from '../../src/cookie'
 			)
 	}
 
-	// Handle standalone after override guard — the override guard's body is
-	// replaced by the route-local one (closer wins); the standalone body still
-	// intersects
+	// Route schemas replace ordinary guards but intersect standalone guards.
 	{
 		new Elysia()
 			.guard({
@@ -118,7 +116,7 @@ import { Cookie } from '../../src/cookie'
 			)
 	}
 
-	// Handle standalone
+	// Standalone guards constrain handlers.
 	{
 		new Elysia()
 			.guard({
@@ -138,7 +136,7 @@ import { Cookie } from '../../src/cookie'
 			})
 	}
 
-	// Handle with local schema standalone
+	// Route schemas intersect standalone guard schemas.
 	{
 		new Elysia()
 			.guard({
@@ -166,7 +164,7 @@ import { Cookie } from '../../src/cookie'
 			)
 	}
 
-	// Handle with multiple standalone with local schema
+	// Multiple standalone guard schemas intersect with the route schema.
 	{
 		new Elysia()
 			.guard({
@@ -199,9 +197,7 @@ import { Cookie } from '../../src/cookie'
 			)
 	}
 
-	// Handle standalone after override guard — the override guard's body is
-	// replaced by the route-local one (closer wins); the standalone body still
-	// intersects
+	// Route schemas replace ordinary guards but intersect standalone guards.
 	{
 		const local = new Elysia()
 			.guard({
@@ -253,9 +249,9 @@ import { Cookie } from '../../src/cookie'
 	}
 }
 
-// scoped
+// Plugin scope
 {
-	// Handle standalone
+	// Standalone guards constrain handlers.
 	{
 		new Elysia()
 			.guard('plugin', {
@@ -275,7 +271,7 @@ import { Cookie } from '../../src/cookie'
 			})
 	}
 
-	// Handle with local schema standalone
+	// Route schemas intersect standalone guard schemas.
 	{
 		new Elysia()
 			.guard('plugin', {
@@ -303,7 +299,7 @@ import { Cookie } from '../../src/cookie'
 			)
 	}
 
-	// Handle with multiple standalone with local schema
+	// Multiple standalone guard schemas intersect with the route schema.
 	{
 		new Elysia()
 			.guard('plugin', {
@@ -336,9 +332,7 @@ import { Cookie } from '../../src/cookie'
 			)
 	}
 
-	// Handle standalone after override guard — the override guard's body is
-	// replaced by the route-local one (closer wins); the standalone body still
-	// intersects
+	// Route schemas replace ordinary guards but intersect standalone guards.
 	{
 		new Elysia()
 			.guard('plugin', {
@@ -369,7 +363,7 @@ import { Cookie } from '../../src/cookie'
 			)
 	}
 
-	// Handle standalone
+	// Standalone guards constrain handlers.
 	{
 		new Elysia()
 			.guard('plugin', {
@@ -389,7 +383,7 @@ import { Cookie } from '../../src/cookie'
 			})
 	}
 
-	// Handle with local schema standalone
+	// Route schemas intersect standalone guard schemas.
 	{
 		new Elysia()
 			.guard('plugin', {
@@ -417,7 +411,7 @@ import { Cookie } from '../../src/cookie'
 			)
 	}
 
-	// Handle with multiple standalone with local schema
+	// Multiple standalone guard schemas intersect with the route schema.
 	{
 		new Elysia()
 			.guard('plugin', {
@@ -450,9 +444,7 @@ import { Cookie } from '../../src/cookie'
 			)
 	}
 
-	// Handle standalone after override guard — the override guard's body is
-	// replaced by the route-local one (closer wins); the standalone body still
-	// intersects
+	// Route schemas replace ordinary guards but intersect standalone guards.
 	{
 		const local = new Elysia()
 			.guard('plugin', {
@@ -546,9 +538,9 @@ import { Cookie } from '../../src/cookie'
 	}
 }
 
-// global
+// Global scope
 {
-	// Handle standalone
+	// Standalone guards constrain handlers.
 	{
 		new Elysia()
 			.guard('global', {
@@ -568,7 +560,7 @@ import { Cookie } from '../../src/cookie'
 			})
 	}
 
-	// Handle with local schema standalone
+	// Route schemas intersect standalone guard schemas.
 	{
 		new Elysia()
 			.guard('global', {
@@ -596,7 +588,7 @@ import { Cookie } from '../../src/cookie'
 			)
 	}
 
-	// Handle with multiple standalone with local schema
+	// Multiple standalone guard schemas intersect with the route schema.
 	{
 		new Elysia()
 			.guard('global', {
@@ -629,9 +621,7 @@ import { Cookie } from '../../src/cookie'
 			)
 	}
 
-	// Handle standalone after override guard — the override guard's body is
-	// replaced by the route-local one (closer wins); the standalone body still
-	// intersects
+	// Route schemas replace ordinary guards but intersect standalone guards.
 	{
 		new Elysia()
 			.guard('global', {
@@ -662,7 +652,7 @@ import { Cookie } from '../../src/cookie'
 			)
 	}
 
-	// Handle standalone
+	// Standalone guards constrain handlers.
 	{
 		new Elysia()
 			.guard('global', {
@@ -682,7 +672,7 @@ import { Cookie } from '../../src/cookie'
 			})
 	}
 
-	// Handle with local schema standalone
+	// Route schemas intersect standalone guard schemas.
 	{
 		new Elysia()
 			.guard('global', {
@@ -710,7 +700,7 @@ import { Cookie } from '../../src/cookie'
 			)
 	}
 
-	// Handle with multiple standalone with local schema
+	// Multiple standalone guard schemas intersect with the route schema.
 	{
 		new Elysia()
 			.guard('global', {
@@ -743,9 +733,7 @@ import { Cookie } from '../../src/cookie'
 			)
 	}
 
-	// Handle standalone after override guard — the override guard's body is
-	// replaced by the route-local one (closer wins); the standalone body still
-	// intersects
+	// Route schemas replace ordinary guards but intersect standalone guards.
 	{
 		const local = new Elysia()
 			.guard('global', {

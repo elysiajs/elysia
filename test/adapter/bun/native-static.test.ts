@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { Elysia } from '../../../src'
+import { Elysia, t } from '../../../src'
 import { collectStaticRoutes } from '../../../src/adapter/bun'
 
 describe('Bun native static promotion', () => {
@@ -117,5 +117,84 @@ describe('Bun native static promotion', () => {
 		} finally {
 			await app.stop(true)
 		}
+	})
+
+	it('serves synchronous static routes alongside dynamic routes', async () => {
+		const app = new Elysia()
+			.get('/static', 'static-value')
+			.get('/dyn/:id', ({ params: { id } }) => `dyn:${id}`)
+			.listen(0)
+
+		await Bun.sleep(50)
+
+		const base = `http://localhost:${app.server!.port}`
+		await expect(
+			fetch(`${base}/static`).then((x) => x.text())
+		).resolves.toBe('static-value')
+		await expect(
+			fetch(`${base}/dyn/1`).then((x) => x.text())
+		).resolves.toBe('dyn:1')
+
+		app.stop()
+	})
+
+	it('keeps routes with an error hook on the JS lane', async () => {
+		let fired = 0
+		const app = new Elysia()
+			.error(() => {
+				fired++
+			})
+			.get('/health', 'ok')
+
+		expect(collectStaticRoutes(app as any)).toBeUndefined()
+
+		app.listen(0)
+		await Bun.sleep(50)
+
+		const base = `http://localhost:${app.server!.port}`
+		const hit = await fetch(`${base}/health`)
+		expect(hit.status).toBe(200)
+		await expect(hit.text()).resolves.toBe('ok')
+		expect(fired).toBe(0)
+
+		expect((await fetch(`${base}/missing`)).status).toBe(404)
+		expect(fired).toBe(1)
+
+		app.stop()
+	})
+
+	it('validates static-value routes with schemas on the JS lane', async () => {
+		const app = new Elysia()
+			.error(() => {})
+			.get('/q', { query: t.Object({ id: t.String() }) }, 'ok')
+			.listen(0)
+
+		await Bun.sleep(50)
+
+		const base = `http://localhost:${app.server!.port}`
+		expect((await fetch(`${base}/q`)).status).toBe(422)
+
+		const valid = await fetch(`${base}/q?id=1`)
+		expect(valid.status).toBe(200)
+		await expect(valid.text()).resolves.toBe('ok')
+
+		app.stop()
+	})
+
+	it('runs mapResponse for static-value routes on the JS lane', async () => {
+		const app = new Elysia()
+			.mapResponse(() => new Response('MAPPED'))
+			.get('/health', 'ok')
+			.listen(0)
+
+		await Bun.sleep(50)
+
+		await expect(
+			fetch(`http://localhost:${app.server!.port}/health`).then((x) =>
+				x.text()
+			)
+		).resolves.toBe('MAPPED')
+
+		app.stop()
 	})
 })

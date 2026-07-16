@@ -2,17 +2,8 @@ import { Elysia } from '../../src'
 import { describe, it, expect } from 'bun:test'
 import { req, post } from '../utils'
 
-// a Standard Schema whose `validate` is SYNTACTICALLY
-// synchronous (not declared `async`) but RETURNS a Promise is spec-legal
-// (StandardSchemaV1: `validate: (v) => Result | Promise<Result>`) and common in
-// third-party wrappers. Elysia detects async-ness via a syntactic
-// `AsyncFunction` name check, which structurally cannot see this — so `isAsync`
-// is false and only the `mayReturnPromise` flag reveals it. `body` already ORs
-// in `mayReturnPromiseValidator`, but query/headers/params/cookie did not, so
-// the same schema 500'd on those four slots (asyncStandardSchemaError) while
-// working on body. This pins that all four now promote to async and validate
-// (200 valid / 422 invalid) instead of throwing a 500. Regressing any slot back
-// to `isAsyncValidator`-only reintroduces the 500.
+// Standard Schema permits a non-async `validate` function to return a Promise.
+// Every request schema position must await that result.
 const promiseSchema = (key: string) =>
 	({
 		'~standard': {
@@ -43,17 +34,19 @@ describe('Standard Schema — sync-declared validate returning a Promise', () =>
 			{ params: promiseSchema('id') },
 			({ params }) => params
 		)
-		.get('/cookie', { cookie: promiseSchema('sid') }, ({ cookie }: any) => ({
-			ok: cookie.sid.value
-		}))
+		.get(
+			'/cookie',
+			{ cookie: promiseSchema('sid') },
+			({ cookie }: any) => ({
+				ok: cookie.sid.value
+			})
+		)
 
 	it('body: valid -> 200, invalid -> 422 (control, already worked)', async () => {
-		expect(
-			(await app.handle(post('/body', { id: '7' }))).status
-		).toBe(200)
-		expect(
-			(await app.handle(post('/body', { id: 'abc' }))).status
-		).toBe(422)
+		expect((await app.handle(post('/body', { id: '7' }))).status).toBe(200)
+		expect((await app.handle(post('/body', { id: 'abc' }))).status).toBe(
+			422
+		)
 	})
 
 	it('query: valid -> 200, invalid -> 422 (was 500)', async () => {

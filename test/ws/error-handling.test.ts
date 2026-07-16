@@ -1,10 +1,9 @@
-import { describe, it, expect, afterEach, beforeEach } from 'bun:test'
+import { describe, it, expect, afterEach } from 'bun:test'
 import { Elysia, t, status, ValidationError } from '../../src'
 import { newWebsocket, wsOpen, wsClosed, wsMessage } from './utils'
 
-// A throwing error hook falls back to the original error frame.
-describe('throwing error hook falls through to sendErrorFrame', () => {
-	it('error frame is still sent when error hook throws; no unhandled rejection', async () => {
+describe('WebSocket errors thrown by error hooks', () => {
+	it('sends an error frame without an unhandled rejection', async () => {
 		const unhandledRejections: unknown[] = []
 		const onUnhandled = (reason: unknown) => {
 			unhandledRejections.push(reason)
@@ -13,7 +12,6 @@ describe('throwing error hook falls through to sendErrorFrame', () => {
 
 		const app = new Elysia()
 			.error((_ctx: any) => {
-				// This hook itself throws — must not escape handleError.
 				throw new Error('secondary hook failure')
 			})
 			.ws('/ws', {
@@ -29,18 +27,14 @@ describe('throwing error hook falls through to sendErrorFrame', () => {
 		const msg = wsMessage(ws)
 		ws.send('trigger')
 
-		// The client must still receive an error frame (not hang forever).
 		const { data } = await msg
 
-		// Settle the event loop so any unhandled rejection would fire.
+		// Let any leaked rejection reach the process listener.
 		await Bun.sleep(30)
 
 		process.off('unhandledRejection', onUnhandled)
 
-		// No unhandled rejection must have escaped.
 		expect(unhandledRejections).toHaveLength(0)
-
-		// The frame must be a non-empty string (original error surfaced).
 		expect(typeof data).toBe('string')
 		expect(String(data).length).toBeGreaterThan(0)
 
@@ -49,9 +43,8 @@ describe('throwing error hook falls through to sendErrorFrame', () => {
 	})
 })
 
-// A rejected dispatch promise must not become an unhandled rejection.
-describe('rejected dispatch promise is caught in global message handler', () => {
-	it('no unhandledRejection when message handler rejects', async () => {
+describe('WebSocket rejected message handlers', () => {
+	it('does not emit an unhandledRejection', async () => {
 		const unhandledRejections: unknown[] = []
 		const onUnhandled = (reason: unknown) => {
 			unhandledRejections.push(reason)
@@ -61,7 +54,6 @@ describe('rejected dispatch promise is caught in global message handler', () => 
 		const app = new Elysia()
 			.ws('/ws', {
 				async message() {
-					// An async message handler that always rejects.
 					await Promise.reject(new Error('dispatch rejected'))
 				}
 			})
@@ -70,22 +62,20 @@ describe('rejected dispatch promise is caught in global message handler', () => 
 		const ws = newWebsocket(app.server!)
 		await wsOpen(ws)
 
-		// Send a message and wait; the dispatch will reject asynchronously.
 		ws.send('trigger')
 
-		// Settle the event loop so the rejection would fire and be caught/not.
+		// Let any leaked rejection reach the process listener.
 		await Bun.sleep(50)
 
 		process.off('unhandledRejection', onUnhandled)
 
-		// No unhandled rejection must have escaped.
 		expect(unhandledRejections).toHaveLength(0)
 
 		await wsClosed(ws)
 		app.stop()
 	})
 
-	it('error frame is sent after dispatch rejects', async () => {
+	it('sends an error frame after the handler rejects', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
 				async message() {
@@ -102,7 +92,6 @@ describe('rejected dispatch promise is caught in global message handler', () => 
 
 		const { data } = await msg
 
-		// The global handler sends a last-resort frame after the rejection.
 		expect(typeof data).toBe('string')
 		expect(String(data).length).toBeGreaterThan(0)
 
@@ -111,13 +100,12 @@ describe('rejected dispatch promise is caught in global message handler', () => 
 	})
 })
 
-// The no-error-handler fast path respects allowUnsafeValidationDetails.
-describe('allowUnsafeValidationDetails on fast-path (no error handlers)', () => {
+describe('WebSocket production validation errors without error hooks', () => {
 	afterEach(() => {
 		delete process.env.NODE_ENV
 	})
 
-	it('production fast-path: collapsed payload when no error handler and flag is false', async () => {
+	it('masks validation details by default in production', async () => {
 		process.env.NODE_ENV = 'production'
 
 		const app = new Elysia()
@@ -136,16 +124,21 @@ describe('allowUnsafeValidationDetails on fast-path (no error handlers)', () => 
 		const { data } = await msg
 		const parsed = JSON.parse(String(data))
 
-		// Without allowUnsafeValidationDetails the payload should be the
-		// collapsed ValidationError payload (no full schema detail exposed).
-		// The exact shape depends on ValidationError.payload but must exist.
-		expect(parsed).toBeDefined()
+		expect(parsed).toMatchObject({
+			type: 'validation',
+			title: 'Validation Error',
+			status: 422,
+			on: 'body'
+		})
+		expect(parsed.detail).toBeUndefined()
+		expect(parsed.found).toBeUndefined()
+		expect(parsed.errors).toBeUndefined()
 
 		await wsClosed(ws)
 		app.stop()
 	})
 
-	it('production fast-path with allowUnsafeValidationDetails=true emits full payload', async () => {
+	it('includes validation details when explicitly enabled in production', async () => {
 		process.env.NODE_ENV = 'production'
 
 		const app = new Elysia({ allowUnsafeValidationDetails: true })
@@ -162,21 +155,26 @@ describe('allowUnsafeValidationDetails on fast-path (no error handlers)', () => 
 		ws.send(JSON.stringify({ x: 'not-a-number' }))
 
 		const { data } = await msg
-		// With the flag set, allowUnsafeValidationDetails is propagated to
-		// ValidationError before sendErrorFrame, so the frame must be non-empty.
-		expect(String(data).length).toBeGreaterThan(0)
+		const parsed = JSON.parse(String(data))
+
+		expect(parsed).toMatchObject({
+			type: 'validation',
+			title: 'Validation Error',
+			status: 422,
+			on: 'body'
+		})
+		expect(typeof parsed.detail).toBe('string')
+		expect(parsed.detail.length).toBeGreaterThan(0)
+		expect(parsed.found).toBeDefined()
+		expect(parsed.errors.length).toBeGreaterThan(0)
 
 		await wsClosed(ws)
 		app.stop()
 	})
 })
 
-// Upgrade validation uses the status returned by an error hook.
-describe('upgrade error hook returning status maps to correct HTTP status', () => {
-	// Probe:.error returns status(401, 'denied') on a query-validation failure.
-	// Before the fix: response was 422 with body `{"code":401,"response":"denied"}`.
-	// After the fix: response must be 401 with body 'denied'.
-	it('error hook returning status(401, "denied") produces HTTP 401 with body "denied"', async () => {
+describe('WebSocket upgrade validation error responses', () => {
+	it('uses the status and text body returned by the error hook', async () => {
 		const app = new Elysia()
 			.error(({ error }: any) => {
 				if (error instanceof ValidationError)
@@ -206,7 +204,7 @@ describe('upgrade error hook returning status maps to correct HTTP status', () =
 		app.stop()
 	})
 
-	it('error hook returning status(403, {msg}) produces HTTP 403 with JSON body', async () => {
+	it('uses the status and JSON body returned by the error hook', async () => {
 		const app = new Elysia()
 			.error(({ error }: any) => {
 				if (error instanceof ValidationError)

@@ -3,8 +3,6 @@ import { resolve } from 'node:path'
 import { rm } from 'node:fs/promises'
 import { post } from '../utils'
 
-/** AOT phase 1 — the build-time emit + Bun plugin. */
-
 const APP = resolve(import.meta.dir, 'fixtures/app.ts')
 // In-repo `Compiled` source (the stale built `dist` can't resolve `elysia/compile`).
 const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/aot.ts')
@@ -30,37 +28,30 @@ describe('AOT plugin', () => {
 			else process.env.ELYSIA_AOT_BUILD = previous
 		}
 
-		// small app → emit stays eager (auto-lazy only kicks in for large apps)
+		// Small manifests stay eager.
 		expect(src).toContain('export const validators')
 		expect(src).toContain('Compiled.register({ bf: 1, fingerprint')
-		// This fixture's schemas (plain object/number/string) compile to inlined
-		// checks referencing no typebox runtime symbol, so the manifest pulls in
-		// zero typebox subpaths. Imports are conditional — see the dedicated test.
+		// Simple schemas require no TypeBox runtime imports.
 		expect(src).not.toContain("from 'typebox/")
-		// externals are passed as params; typebox symbols stay module-global
 		expect(src).not.toContain('function(CheckContext')
 		expect(src).toContain('"/body"')
-		// /body and /echo share a shape → one factory, two references
+		// /body and /echo share one validator factory.
 		expect((src.match(/const _c\d+ =/g) ?? []).length).toBe(2)
-		// phase 2: coerced query freezes too (externals reconstructed)
+		// Coerced query validators are emitted too.
 		expect(src).toContain('"/q"')
 	})
 
-	// The compiled-check source references typebox runtime symbols as module-global
-	// free vars. The manifest must import each ONLY when a check actually uses it,
-	// so a schema-less (or simple-schema) app never drags typebox into the bundle.
+	// Import each TypeBox helper only when generated checks reference it.
 	it('emits typebox imports only for the symbols a check references', async () => {
 		const { Elysia, t } = await import('../../src')
 		const { compileToSource } = await import('../../src/plugin/aot/source')
 		const manifest = (app: any) => compileToSource(app, { register: true })
 
-		// schema-less → zero typebox subpaths
 		const bare = await manifest(
 			new Elysia().get('/', () => 'hi').post('/echo', (c: any) => c.body)
 		)
 		expect(bare).not.toContain("from 'typebox/")
 
-		// plain object/number inlines its guard → still no typebox runtime import
 		const simple = await manifest(
 			new Elysia().post(
 				'/n',
@@ -70,7 +61,7 @@ describe('AOT plugin', () => {
 		)
 		expect(simple).not.toContain("from 'typebox/")
 
-		// format strings reference Format, and ONLY Format
+		// Format is the only runtime helper this schema needs.
 		const format = await manifest(
 			new Elysia().post(
 				'/e',
@@ -193,7 +184,6 @@ describe('AOT plugin', () => {
 		// buildStart generates the manifest source
 		await plugin.buildStart()
 
-		// `elysia/compiled` → virtual id → the generated, self-registering source
 		const virtual = plugin.resolveId('elysia/compiled')
 		expect(virtual).toBe('\0elysia/compiled')
 		expect(plugin.resolveId('some/other/module')).toBeUndefined()
@@ -201,7 +191,6 @@ describe('AOT plugin', () => {
 		const loaded = plugin.load(virtual!)!
 		expect(loaded).toContain('validators')
 		expect(loaded).toContain('handlers')
-		// real inlined check factory body, not the `undefined` stub
 		expect(loaded).toContain('function(External')
 		expect(plugin.load('\0not-ours')).toBeUndefined()
 
@@ -217,7 +206,7 @@ describe('AOT plugin', () => {
 		).resolves.toBeUndefined()
 	})
 
-	it('builds with Bun.build (forced lazy) and SERVES a request end-to-end', async () => {
+	it('builds with forced lazy loading and serves a request', async () => {
 		const { aot } = await import('../../src/plugin/aot/bun')
 
 		const result = await Bun.build({
@@ -231,14 +220,13 @@ describe('AOT plugin', () => {
 		const text = await result.outputs[0]!.text()
 		expect(text).toContain('registerLazyValidators') // forced lazy
 
-		// Run the bundle: importing it self-registers the lazy manifest, then we
-		// drive a REAL request through the frozen path (group materialized on hit).
+		// Import the bundle and trigger lazy validator materialization.
 		const tmp = resolve(import.meta.dir, '_built.lazy.mjs')
 		await Bun.write(tmp, text)
 		process.env.ELYSIA_AOT_BUILD = '1' // skip the bundle's app.listen on import
 		try {
 			const mod: any = await import(tmp)
-			// request-time validators must bind frozen, NOT re-enter capture
+			// Serve through frozen validators after capture ends.
 			delete process.env.ELYSIA_AOT_BUILD
 
 			const ok = await mod.app.handle(post('/body', { hello: 'world' }))

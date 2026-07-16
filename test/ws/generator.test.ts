@@ -2,9 +2,6 @@ import { describe, it, expect } from 'bun:test'
 import { Elysia, t, status } from '../../src'
 import { newWebsocket, wsOpen, wsClosed, wsMessage } from './utils'
 
-/**
- * Helper: collect the next N messages from a WS client into an array.
- */
 function collectMessages(ws: WebSocket, n: number): Promise<string[]> {
 	return new Promise((resolve) => {
 		const got: string[] = []
@@ -171,13 +168,11 @@ describe('WebSocket generator handlers', () => {
 		const ws = newWebsocket(app.server!)
 		await wsOpen(ws)
 
-		// 1st exchange: triggers the throw mid-stream. Expect 'first' then 'caught'.
 		const first = collectMessages(ws, 2)
 		ws.send('boom')
 		const got1 = await first
 		expect(got1).toEqual(['first', 'caught'])
 
-		// Connection is still open — second exchange should also work.
 		const second = collectMessages(ws, 2)
 		ws.send('ok')
 		const got2 = await second
@@ -187,7 +182,7 @@ describe('WebSocket generator handlers', () => {
 		app.stop()
 	})
 
-	it('close receives code + reason via destructured destructure', async () => {
+	it('close receives destructured code and reason', async () => {
 		let seenCode: number | undefined
 		let seenReason: string | undefined
 
@@ -294,12 +289,10 @@ describe('WebSocket generator handlers', () => {
 			`ws://${app.server!.hostname}:${app.server!.port}/ws`
 		)
 		await wsOpen(ws)
-		// Standard browser WS doesn't expose ping(); use the underlying
-		// .ping API that bun's WebSocket exposes.
+		// Bun exposes ping on its WebSocket implementation.
 		;(ws as any).ping('hello-ping')
 		await Bun.sleep(30)
 
-		// Bun delivers the ping payload as a Buffer.
 		expect(seen).toBeDefined()
 		expect(String(seen)).toBe('hello-ping')
 
@@ -336,11 +329,10 @@ describe('WebSocket generator handlers', () => {
 					200: t.Object({ ok: t.Boolean() }),
 					400: t.Object({ reason: t.String() })
 				},
-				// Return the value (or status) — the pipeline calls
-				// ws.send once. Avoid the `return ws.send(...)` pattern
-				// here so we don't double-send.
+				// Return the value so the pipeline sends it once.
 				message({ body }: any) {
-					if (body === 'bad') return status(400, { reason: 'too-bad' })
+					if (body === 'bad')
+						return status(400, { reason: 'too-bad' })
 					return { ok: true }
 				}
 			})
@@ -349,13 +341,10 @@ describe('WebSocket generator handlers', () => {
 		const ws = newWebsocket(app.server!)
 		await wsOpen(ws)
 
-		// Success: 200 schema accepts { ok: true }.
 		const m1 = wsMessage(ws)
 		ws.send('ok')
 		expect(JSON.parse((await m1).data as string)).toEqual({ ok: true })
 
-		// Status path: 400 schema accepts { reason: 'too-bad' }; wire is
-		// `{ status: 400, error: { reason: 'too-bad' } }`.
 		const m2 = wsMessage(ws)
 		ws.send('bad')
 		expect(JSON.parse((await m2).data as string)).toEqual({

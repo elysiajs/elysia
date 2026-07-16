@@ -1,6 +1,4 @@
 import { Elysia } from 'elysia'
 
-// DEFECT 2 (vacuous seal, purest form): an app with ZERO routes/handlers. The
-// old gate sealed on `[].every()` vacuous truth. A seal must rest on real
-// coverage (>= 1 captured handler), so a zero-capture app must NOT be sealed.
+// A routeless app has no captured handler evidence and therefore cannot seal.
 export const app = new Elysia()

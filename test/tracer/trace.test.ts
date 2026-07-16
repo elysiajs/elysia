@@ -505,10 +505,7 @@ describe('trace', () => {
 
 		const app = new Elysia()
 			.trace(async (t) => {
-				// subscribe to NOTHING synchronously: touch an event only
-				// after the request finished — the promise must resolve from
-				// recorded data instead of hanging silently (events without
-				// a pre-begin subscriber skip the Promise machinery)
+				// Late subscribers read the recorded event after the request finishes.
 				await new Promise((resolve) => setTimeout(resolve, 20))
 
 				const handle = await t.onHandle()
@@ -594,12 +591,6 @@ describe('trace', () => {
 		expect(order).toEqual(['HANDLE', 'AFTER'])
 	})
 
-	// A plain (non-async-declared) handler that RETURNS a promise must be
-	// awaited under trace. Removing `hasTrace` from `isAsync` (the no-op-tracer
-	// perf win) stopped awaiting it, so the handle span closed on an unsettled
-	// promise (~0ms) and a rejection escaped the route try/catch → the onError
-	// span never fired. `traceForcesAsync` re-forces async for this shape only
-	// (a literal `() => 'hi'` handler stays sync).
 	it('reports real handle duration for a promise-returning plain handler', async () => {
 		let elapsed = -1
 
@@ -616,7 +607,6 @@ describe('trace', () => {
 		await app.handle(req('/'))
 		await delay(60)
 
-		// was ~0.16ms (span closed on the unsettled promise) before the fix
 		expect(elapsed).toBeGreaterThan(5)
 	})
 
@@ -637,9 +627,6 @@ describe('trace', () => {
 		expect(errored).toBe(true)
 	})
 
-	// Regression: trace tee'd generator (constructor.name 'Object') was
-	// incorrectly serialised as JSON '{}' when set.headers was non-empty.
-	// The iterator guard must be hoisted before the header-carrying block.
 	it('streams async generator when trace + app-level headers are set', async () => {
 		const app = new Elysia()
 			.trace(() => {})

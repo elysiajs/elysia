@@ -1,4 +1,4 @@
-import '../../src/compile/aot-capture' // installs build-only capture impl (mirrors the AOT plugin)
+import '../../src/compile/aot-capture'
 import { describe, it, expect, afterEach } from 'bun:test'
 
 import { Elysia, t } from '../../src'
@@ -15,26 +15,11 @@ import { resetCompactErrorWarnings } from '../../src/compile/aot-capture'
 
 import { materialise } from './_manifest'
 
-/**
- * The frozen (sealed/stripped-bridge) `FrozenSlotValidator.Errors` used to
- * return `[]` unconditionally. On a 422, the wired/live lane names the offending
- * field (`payload.property`, `error.all[i].message`), while the sealed lane
- * returned an empty error list — a SILENT parity gap: a stripped build's 422
- * carried no field detail at all.
- *
- * For open objects, scalars, arrays, and nesting, sealed `.all` must be
- * byte-identical to the wired lane. When a coercion or codec cannot be described
- * faithfully, the build warns once per slot and runtime returns a non-empty,
- * best-effort error naming the offending field. Silent `[]` is never allowed.
- *
- * Each case freezes in isolation (a shared capture Map pollutes cross-schema
- * mirror-union reconstruction — see bridge-free-validator.test.ts).
- */
+// Sealed and wired validators expose the same field-specific errors.
 
 const METHOD = 'POST'
 const PATH = '/x'
 
-// Freeze `schema` as a body slot, capturing any build-time console.warn output.
 function freeze(schema: any): { warns: string[] } {
 	process.env.ELYSIA_AOT_BUILD = '1'
 	resetCompactErrorWarnings()
@@ -79,9 +64,7 @@ const wired = (schema: any) =>
 const bridgeFree = (schema: any) =>
 	buildFrozenRouteValidator(hook(schema) as any, root(), METHOD, PATH)
 
-// Run `From`, returning the thrown ValidationError (or throw if it unexpectedly
-// accepted — the value is always invalid in these cases).
-function reject(validator: any, value: unknown): any {
+function validationError(validator: any, value: unknown): any {
 	try {
 		validator.From(structuredClone(value), 'body')
 	} catch (error) {
@@ -97,7 +80,6 @@ afterEach(() => {
 })
 
 describe('sealed validation errors identify offending fields', () => {
-	// Differential: sealed `.all` must equal the wired lane byte-for-byte.
 	const cases: [string, any, unknown][] = [
 		[
 			'missing required property',
@@ -115,7 +97,7 @@ describe('sealed validation errors identify offending fields', () => {
 			{ user: { name: 5 } }
 		],
 		[
-			'nested missing required',
+			'nested missing required property',
 			t.Object({ user: t.Object({ name: t.String() }) }),
 			{ user: {} }
 		],
@@ -134,50 +116,43 @@ describe('sealed validation errors identify offending fields', () => {
 			const f = bridgeFree(schema)
 			expect(f, 'schema should be sealed bridge-free').toBeDefined()
 
-			const wErr = reject(w.body, input)
-			const fErr = reject(f!.body, input)
+			const wErr = validationError(w.body, input)
+			const fErr = validationError(f!.body, input)
 
-			// Failed sealed validation must retain useful field details.
 			expect(
 				fErr.all.length,
 				'sealed error list must not be empty'
 			).toBeGreaterThan(0)
-
-			// Field-level parity with the wired lane (path + message + params).
 			expect(JSON.stringify(fErr.all)).toBe(JSON.stringify(wErr.all))
-
-			// And the offending field surfaces in the production-safe payload.
 			expect(fErr.payload.property).toBe(wErr.payload.property)
 		})
 
-	it('keeps the sealed error list non-empty and equal to the wired validator', () => {
-		// The old sealed validator returned `[]`, so `fErr.all` was `[]`
-		// and this length assertion (and the parity assertion above) FAILED.
+	it('reports the missing required property', () => {
 		const schema = t.Object({ name: t.String(), age: t.Number() })
 		freeze(schema)
 
-		const fErr = reject(bridgeFree(schema)!.body, { age: 5 })
+		const fErr = validationError(bridgeFree(schema)!.body, { age: 5 })
 
 		expect(fErr.all.length).toBeGreaterThan(0)
 		expect(fErr.all[0].message).toBe('must have required properties name')
 	})
 })
 
-describe('sealed coercion and codec errors degrade visibly', () => {
+describe('sealed codec errors remain visible', () => {
 	it('t.Date slot warns at build time and names the field best-effort', () => {
 		const schema = t.Object({ when: t.Date() })
 		const { warns } = freeze(schema)
 
-		// visible build-time warning (once)
 		const aotWarns = warns.filter((w) => w.includes('[elysia-aot]'))
 		expect(aotWarns.length).toBe(1)
 		expect(aotWarns[0]).toContain('POST /x')
 		expect(aotWarns[0]).toContain('body')
 		expect(aotWarns[0]).toContain('best-effort')
 
-		const fErr = reject(bridgeFree(schema)!.body, { when: 'garbage' })
+		const fErr = validationError(bridgeFree(schema)!.body, {
+			when: 'garbage'
+		})
 
-		// NON-silent: a best-effort entry naming the offending field, never []
 		expect(fErr.all.length).toBeGreaterThan(0)
 		expect(fErr.payload.property).toBe('/when')
 		expect(fErr.payload.property).not.toBe('root')
@@ -189,15 +164,12 @@ describe('sealed coercion and codec errors degrade visibly', () => {
 
 		expect(warns.filter((w) => w.includes('[elysia-aot]')).length).toBe(1)
 
-		const fErr = reject(bridgeFree(schema)!.body, { n: 'abc' })
+		const fErr = validationError(bridgeFree(schema)!.body, { n: 'abc' })
 		expect(fErr.all.length).toBeGreaterThan(0)
 		expect(fErr.payload.property).toBe('/n')
 	})
 
-	it('warning is deduped within one build (once per slot)', () => {
-		// Two sealed slots on the SAME codec schema within one capture session
-		// warn exactly once per (method,path,slot) — not per property, not per
-		// request. The build itself never throws.
+	it('warns once per slot within a build', () => {
 		process.env.ELYSIA_AOT_BUILD = '1'
 		resetCompactErrorWarnings()
 
@@ -220,7 +192,6 @@ describe('sealed coercion and codec errors degrade visibly', () => {
 			delete process.env.ELYSIA_AOT_BUILD
 		}
 
-		// one body slot → one warning, despite two codec properties
 		expect(warns.filter((w) => w.includes('[elysia-aot]')).length).toBe(1)
 	})
 })

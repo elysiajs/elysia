@@ -85,10 +85,7 @@ describe('Parse Cookie', () => {
 		expect(result.fischl.value).toEqual('fischl')
 	})
 
-	// Regression: signed-cookie verification must stay correct after
-	// swapping the insecure `a === b` fallback (timing side channel off Bun)
-	// for a constant-time compare. Valid signatures verify, tampered ones don't.
-	it('verifies a valid signature and rejects a tampered one (constant-time)', async () => {
+	it('verifies a valid signature and rejects tampered signatures', async () => {
 		const secret = 'Fischl von Luftschloss Narfidort'
 		const signed = await signCookie('hello', secret)
 
@@ -96,42 +93,26 @@ describe('Parse Cookie', () => {
 		await expect(
 			unsignCookie('hello.bogus-signature', secret)
 		).resolves.toBe(false)
-		// flipping one byte of a valid signature must be rejected
 		const flipped =
 			signed.slice(0, -1) + (signed.at(-1) === 'A' ? 'B' : 'A')
 		await expect(unsignCookie(flipped, secret)).resolves.toBe(false)
 	})
 
-	// Regression: a `null` secret is the "allow unsigned" slot in a
-	// rotation list. A value that LOOKS signed (contains a dot) used to fall
-	// through to signCookie(value, null), which threw 'Secret key must be
-	// provided' → a request-controlled 500 for any dotted value. It must just
-	// not match (return false), while unsigned values are still accepted.
 	it('null secret does not throw on a dotted value', async () => {
 		await expect(unsignCookie('value.with.dots', null)).resolves.toBe(false)
 		await expect(unsignCookie('plain', null)).resolves.toBe('plain')
 	})
 
-	// Regression: incoming cookie values must be percent-decoded
-	// EXACTLY once. `parse()` already decodes when the raw value contains '%',
-	// and parseCookieRaw decoded a second time — so a correctly-encoded value
-	// like `100%20off` (wire: `100%2520off`) was silently corrupted to
-	// `100 off`. Decoding once must round-trip with what Elysia serializes.
 	it('decodes a cookie value exactly once', async () => {
 		const set = { headers: {}, cookie: {} }
 
-		// `100%2520off` is the on-the-wire encoding of the literal `100%20off`
 		const result = await parseCookie(set, 'discount=100%2520off')
 		expect(result.discount.value).toBe('100%20off')
 
-		// a single-encoded value must still decode (no under-decoding)
 		const single = await parseCookie(set, 'greeting=hello%20world')
 		expect(single.greeting.value).toBe('hello world')
 	})
 
-	// Performance regression: signCookie caches imported HMAC CryptoKeys
-	// per secret at module level — the cache must not change the signature
-	// bytes, so pin them against an independent HMAC implementation
 	it('produces byte-identical signatures with the cached CryptoKey', async () => {
 		const { createHmac } = await import('node:crypto')
 		const secret = 'Fischl von Luftschloss Narfidort'
@@ -143,19 +124,14 @@ describe('Parse Cookie', () => {
 				.digest('base64')
 				.replace(/=+$/, '')
 
-		// sign twice — the second call hits the cache and must match
 		await expect(signCookie('fischl', secret)).resolves.toBe(expected)
 		await expect(signCookie('fischl', secret)).resolves.toBe(expected)
 	})
 
-	// Performance regression: the CryptoKey cache is keyed PER secret —
-	// every secret in a rotation list must verify, not just the first one
-	// cached
-	it('verifies both rotation secrets after key caching', async () => {
+	it('caches CryptoKeys independently for each rotation secret', async () => {
 		const oldSecret = 'old rotation secret'
 		const newSecret = 'new rotation secret'
 
-		// cache both keys via signing
 		const signedOld = await signCookie('fischl', oldSecret)
 		const signedNew = await signCookie('eula', newSecret)
 
@@ -172,28 +148,16 @@ describe('Parse Cookie', () => {
 		expect(result.fischl.value).toEqual('fischl')
 		expect(result.eula.value).toEqual('eula')
 
-		// the wrong (but cached) key must still reject
 		await expect(unsignCookie(signedOld, newSecret)).resolves.toBe(false)
 	})
 
-	// Performance regression: the null/undefined-secret TypeError must
-	// fire BEFORE the key-cache lookup — rotation lists legitimately contain
-	// null slots
 	it('signCookie still throws on a null secret', async () => {
-		expect(signCookie('fischl', null)).rejects.toThrow(
+		await expect(signCookie('fischl', null)).rejects.toThrow(
 			'Secret key must be provided'
 		)
 	})
 
-	// Performance regression: a FAILED importKey must self-evict from the
-	// cache (the `.catch` on the cached promise). Without it, a transient
-	// failure sticks a rejected promise in keyCache and every later sign with
-	// that secret re-throws permanently. Verify a retry after a one-shot
-	// failure succeeds.
-	// Targets `signCookieSubtle` directly: the public `signCookie` prefers the
-	// sync `node:crypto` HMAC when available (no importKey), so the WebCrypto
-	// keyCache is only reachable via the fallback path this test guards.
-	it('recovers after a transient importKey failure (rejected key self-evicts)', async () => {
+	it('signCookieSubtle retries after a transient importKey failure', async () => {
 		const subtle = crypto.subtle as {
 			importKey: (...args: any[]) => Promise<CryptoKey>
 		}
@@ -212,7 +176,6 @@ describe('Parse Cookie', () => {
 		try {
 			await expect(signCookieSubtle('v', secret)).rejects.toThrow('boom')
 
-			// the rejected key must have evicted; the retry imports cleanly
 			const signed = await signCookieSubtle('v', secret)
 			expect(signed.startsWith('v.')).toBe(true)
 			await expect(unsignCookie(signed, secret)).resolves.toBe('v')

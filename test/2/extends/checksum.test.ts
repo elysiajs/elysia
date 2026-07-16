@@ -1,14 +1,13 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import { describe, it, expect } from 'bun:test'
-import { Elysia, t } from '../../../src'
+import { Elysia } from '../../../src'
 import { req } from '../../utils'
 import type { MaybeArray } from '../../../src/types'
 
 const length = (a: MaybeArray<Function> | undefined) =>
 	Array.isArray(a) ? a.length : a ? 1 : 0
 
-describe('Checksum', () => {
-	it('deduplicate plugin', async () => {
+describe('named plugin deduplication and hook inheritance', () => {
+	it('deduplicates the same name and seed across nested uses', async () => {
 		const cookie = (options?: Record<string, unknown>) =>
 			new Elysia({
 				name: '@elysiajs/cookie',
@@ -28,7 +27,7 @@ describe('Checksum', () => {
 		expect(length(b.hooks.transform)).toBe(1)
 	})
 
-	it('Set default checksum if not provided when name is set', async () => {
+	it('deduplicates a named plugin without an explicit seed', async () => {
 		const cookie = (options?: Record<string, unknown>) =>
 			new Elysia({
 				name: '@elysiajs/cookie',
@@ -48,7 +47,7 @@ describe('Checksum', () => {
 		expect(length(b.hooks.transform)).toBe(1)
 	})
 
-	it('Accept plugin when on different different', async () => {
+	it('keeps named plugins with different seeds distinct', async () => {
 		const cookie = (options?: Record<string, unknown>) =>
 			new Elysia({
 				name: '@elysiajs/cookie',
@@ -73,7 +72,7 @@ describe('Checksum', () => {
 		).toBe(1)
 	})
 
-	it('Deduplicate global hook on use', async () => {
+	it('does not duplicate a global hook from a reused named plugin', async () => {
 		const cookie = (options?: Record<string, unknown>) =>
 			new Elysia({
 				name: '@elysiajs/cookie',
@@ -94,7 +93,7 @@ describe('Checksum', () => {
 		).toBe(0)
 	})
 
-	it('Filter inline hook', async () => {
+	it('keeps an inline hook distinct from a deduplicated global hook', async () => {
 		const cookie = (options?: Record<string, unknown>) =>
 			new Elysia({
 				name: '@elysiajs/cookie',
@@ -121,7 +120,7 @@ describe('Checksum', () => {
 		).toBe(1)
 	})
 
-	it('Merge global hook', async () => {
+	it('merges a child global hook after deduplicating a shared plugin', async () => {
 		let count = 0
 
 		const cookie = (options?: Record<string, unknown>) =>
@@ -147,7 +146,7 @@ describe('Checksum', () => {
 		expect(count).toBe(2)
 	})
 
-	it('Run global hook from anonymous child once per request', async () => {
+	it('runs an anonymous child global hook once per request', async () => {
 		let count = 0
 
 		const group = new Elysia()
@@ -165,7 +164,7 @@ describe('Checksum', () => {
 		expect(count).toBe(2)
 	})
 
-	it('deduplicate in new instance', async () => {
+	it('shares a global derive across separately prefixed plugins', async () => {
 		const cookie = (options?: Record<string, unknown>) =>
 			new Elysia({
 				name: '@elysiajs/cookie',
@@ -200,7 +199,7 @@ describe('Checksum', () => {
 		expect(root).toBe('mock')
 	})
 
-	it('invalidate non-root lifecycle', async () => {
+	it('applies nested global derives only to routes that inherit them', async () => {
 		let a = 0
 		let b = 0
 		let c = 0
@@ -248,7 +247,7 @@ describe('Checksum', () => {
 		expect(c).toBe(2)
 	})
 
-	it('read lifecylce top-down', async () => {
+	it('runs a nested global derive only for routes in its branch', async () => {
 		let i = 0
 
 		const plugin = new Elysia()
@@ -256,7 +255,7 @@ describe('Checksum', () => {
 			.use(
 				new Elysia({ prefix: '/call' })
 					.derive('global', () => {
-						i++ // <-- should not be called, when requesting /asdf
+						i++
 						return { test: 'test' }
 					})
 					.get('/', ({ test }) => test)
@@ -271,11 +270,7 @@ describe('Checksum', () => {
 		expect(i).toBe(1)
 	})
 
-	// Same invariant as "read lifecylce top-down" but the two siblings
-	// are .use()'d directly on the compile root (no wrapping plugin).
-	// Catches regressions where the rootHook lookup is correct only when
-	// an extra plugin layer absorbs the propagated hooks first.
-	it('sibling top-down on root without wrapping plugin', async () => {
+	it("does not run a sibling's global derive on another root route", async () => {
 		let i = 0
 
 		const plugin1 = new Elysia({ prefix: '/not-call' }).get(
@@ -298,11 +293,7 @@ describe('Checksum', () => {
 		expect(i).toBe(1)
 	})
 
-	// Verifies the absorption-time stamping accumulates across levels in
-	// the right order. grandparent's d1 must run before child's d2 must
-	// run before grandchild's d3 (deepest registers earliest in route's
-	// own appHook; outer levels prepend via reverse-merge).
-	it('multi-level global derive order across grandparent/child/grandchild', async () => {
+	it('runs inherited global derives from outermost to innermost plugin', async () => {
 		const order: string[] = []
 
 		const grandchild = new Elysia()
@@ -331,15 +322,7 @@ describe('Checksum', () => {
 		expect(order).toEqual(['gp', 'c', 'gc'])
 	})
 
-	// Path 3 of #use mirroring: parent has no hooks of its own, but the
-	// absorbed child has stamped `inheritedChain` slots from its own
-	// prior `.use()`. The mirror takes the share-by-ref branch
-	// (`inheritedChain === childChain` → push original tuple). Locks in
-	// that the inherited chain isn't dropped when parent's preChain is
-	// undefined — without this, a regression that always clones (or
-	// always discards) would silently corrupt the chain on plain
-	// pass-through wrappers.
-	it('absorb stamped child into parent without hooks (share-by-ref)', async () => {
+	it('preserves inherited global derives through a parent without hooks', async () => {
 		const order: string[] = []
 
 		const sub = new Elysia()
@@ -356,8 +339,6 @@ describe('Checksum', () => {
 			})
 			.use(sub)
 
-		// `app` has zero hooks of its own — preChain is undefined when
-		// it absorbs `mid`, hitting the share-by-ref branch for /r.
 		const app = new Elysia().use(mid)
 
 		await app.handle(req('/r'))
@@ -365,11 +346,7 @@ describe('Checksum', () => {
 		expect(order).toEqual(['mid', 'sub'])
 	})
 
-	// Stricter version of the above: multiple hooks per level. Catches
-	// regressions in the stamping merge — specifically, the b.concat(a) /
-	// a.push(...b) branches in mergeArray where ordering can flip if the
-	// merge args (or `reverse` flag) get swapped wrong.
-	it('multi-fn cumulative inheritance preserves intra-level and cross-level order', async () => {
+	it('preserves registration order within and across nested plugins', async () => {
 		const order: string[] = []
 
 		const grandchild = new Elysia()
@@ -410,7 +387,7 @@ describe('Checksum', () => {
 		expect(order).toEqual(['gp1', 'gp2', 'c1', 'c2', 'gc1', 'gc2'])
 	})
 
-	it('handle reference parent-child', async () => {
+	it('keeps parent-derived values available through a deduplicated child', async () => {
 		const parent = new Elysia({ name: 'parent' }).derive('global', () => ({
 			bye: () => 'bye'
 		}))
@@ -431,16 +408,14 @@ describe('Checksum', () => {
 		expect(response).toBe('hi + bye')
 	})
 
-	it('deduplicate local handler from global event', () => {
+	it('keeps local hooks from each parent when global events deduplicate', () => {
 		const ip = new Elysia({ name: 'ip', seed: 'ip' })
 			.derive('global', ({ server, request }) => {
 				return {
 					ip: server?.requestIP(request)
 				}
 			})
-			.beforeHandle(() => {
-				console.log('11')
-			})
+			.beforeHandle(() => {})
 			.get('/ip', ({ ip }) => ip)
 
 		const router1 = new Elysia({ name: 'ip1', seed: 'ip1' })
@@ -450,10 +425,6 @@ describe('Checksum', () => {
 		const router2 = new Elysia({ name: 'ip2', seed: 'ip2' })
 			.use(ip)
 			.get('/ip-2', ({ ip }) => ip)
-
-		const router3 = new Elysia({ name: 'ip2', seed: 'ip2' })
-			.use(ip)
-			.get('/ip-3', ({ ip }) => ip)
 
 		const server = new Elysia({ name: 'server' }).use(router1).use(router2)
 

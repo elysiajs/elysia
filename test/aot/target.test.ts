@@ -8,12 +8,7 @@ import {
 } from '../../src/compile/aot'
 import { compileToSource } from '../../src/plugin/aot/source'
 
-// A `headers` validator makes the handler codegen emit the header-materialization
-// line — `c.headers = c.request.headers.toJSON()` (Bun) vs
-// `Object.fromEntries(c.request.headers)` (Node/workerd). It's the only const
-// baked from the BUILD runtime, so before the `target` option a workerd deploy
-// had to be generated under Node. These tests run under Bun, so forcing
-// `fromEntries` via target proves the override beats the build runtime.
+/** The AOT target selects the runtime-specific header extraction it emits. */
 const build = () =>
 	new Elysia()
 		.beforeHandle(() => {})
@@ -37,8 +32,8 @@ afterEach(() => {
 	Validator.clear()
 })
 
-describe('AOT target option — build-target-baked header path', () => {
-	it("target: 'workerd' bakes Object.fromEntries even when built on Bun", async () => {
+describe('AOT target-specific header extraction', () => {
+	it("emits Object.fromEntries for target: 'workerd' even when built on Bun", async () => {
 		const src = await compileToSource(build() as any, {
 			register: false,
 			target: 'workerd'
@@ -48,7 +43,7 @@ describe('AOT target option — build-target-baked header path', () => {
 		expect(src).not.toInclude(TOJSON)
 	})
 
-	it("target: 'node' bakes Object.fromEntries", async () => {
+	it("emits Object.fromEntries for target: 'node'", async () => {
 		const src = await compileToSource(build() as any, {
 			register: false,
 			target: 'node'
@@ -58,7 +53,7 @@ describe('AOT target option — build-target-baked header path', () => {
 		expect(src).not.toInclude(TOJSON)
 	})
 
-	it("target: 'bun' bakes Headers.toJSON", async () => {
+	it("emits Headers.toJSON for target: 'bun'", async () => {
 		const src = await compileToSource(build() as any, {
 			register: false,
 			target: 'bun'

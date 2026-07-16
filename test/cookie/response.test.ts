@@ -379,9 +379,6 @@ describe('Cookie Response', () => {
 		expect(res.getSetCookie()).toEqual([])
 	})
 
-	// Performance regression: buildCookieJar memoizes Cookie instances
-	// per request jar — repeated accesses return the same instance so
-	// change-detection state survives across accesses
 	it('memoizes Cookie instances per request jar', async () => {
 		const app = new Elysia().get('/identity', ({ cookie }) => ({
 			same: cookie.session === cookie.session,
@@ -402,11 +399,7 @@ describe('Cookie Response', () => {
 		})
 	})
 
-	// Performance regression: request-cookie store entries (defaults
-	// already merged at parse) are now passed to Cookie by reference instead
-	// of re-merged per access — an attribute-only write must keep emitting
-	// the exact same Set-Cookie bytes
-	it('set cookie attribute only on a request cookie', async () => {
+	it('emits an incoming cookie when only an attribute changes', async () => {
 		const app = new Elysia().get('/attr', ({ cookie: { session } }) => {
 			session.domain = 'elysiajs.com'
 
@@ -428,8 +421,6 @@ describe('Cookie Response', () => {
 
 	it('signs a cookie set before a thrown-then-handled error', async () => {
 		const app = new Elysia()
-			// A handler returning from `error()` is still a response — the
-			// cookie it set before throwing must go out SIGNED, not raw.
 			.error(() => 'handled')
 			.get(
 				'/boom',

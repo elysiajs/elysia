@@ -4,8 +4,8 @@ import { t } from '../../src'
 import { hasType } from './has-type'
 import { ELYSIA_TYPES } from '../../src/type/constants'
 
-describe('Has Type', () => {
-	it('find primitive', () => {
+describe('hasType schema traversal', () => {
+	it('finds a primitive kind through a codec', () => {
 		const schema = t
 			.Codec(t.File())
 			.Decode((v) => v)
@@ -14,7 +14,7 @@ describe('Has Type', () => {
 		expect(hasType(ELYSIA_TYPES.File, schema)).toBe(true)
 	})
 
-	it('find in root object', () => {
+	it('finds a kind in an object property', () => {
 		const schema = t.Object({
 			liyue: t.File()
 		})
@@ -22,7 +22,7 @@ describe('Has Type', () => {
 		expect(hasType(ELYSIA_TYPES.File, schema)).toBe(true)
 	})
 
-	it('find in nested object', () => {
+	it('finds a kind in a nested object property', () => {
 		const schema = t.Object({
 			liyue: t.Object({
 				id: t.File()
@@ -32,7 +32,7 @@ describe('Has Type', () => {
 		expect(hasType(ELYSIA_TYPES.File, schema)).toBe(true)
 	})
 
-	it('find in Optional', () => {
+	it('finds a kind inside t.Optional', () => {
 		const schema = t.Optional(
 			t.Object({
 				prop1: t.File()
@@ -42,7 +42,7 @@ describe('Has Type', () => {
 		expect(hasType(ELYSIA_TYPES.File, schema)).toBe(true)
 	})
 
-	it('find on multiple transform', () => {
+	it('finds one of multiple matching properties', () => {
 		const schema = t.Object({
 			id: t.File(),
 			name: t.File()
@@ -51,7 +51,7 @@ describe('Has Type', () => {
 		expect(hasType(ELYSIA_TYPES.File, schema)).toBe(true)
 	})
 
-	it('return false on not found', () => {
+	it('returns false when the kind is absent', () => {
 		const schema = t.Object({
 			name: t.String(),
 			age: t.Number()
@@ -60,7 +60,7 @@ describe('Has Type', () => {
 		expect(hasType(ELYSIA_TYPES.File, schema)).toBe(false)
 	})
 
-	it('found on Union', () => {
+	it('finds a kind in a union property', () => {
 		const schema = t.Object({
 			id: t.Number(),
 			liyue: t.Union([t.Number(), t.File()])
@@ -69,7 +69,7 @@ describe('Has Type', () => {
 		expect(hasType(ELYSIA_TYPES.File, schema)).toBe(true)
 	})
 
-	it('found on direct Union', () => {
+	it('finds a kind in a root union', () => {
 		const schema = t.Union([
 			t.Object({
 				id: t.Number(),
@@ -84,7 +84,7 @@ describe('Has Type', () => {
 		expect(hasType(ELYSIA_TYPES.File, schema)).toBe(true)
 	})
 
-	it('find in Import wrapping File', () => {
+	it('finds a File through a module reference', () => {
 		const schema = t.Module({
 			Avatar: t.File()
 		}).Avatar
@@ -92,7 +92,7 @@ describe('Has Type', () => {
 		expect(hasType(ELYSIA_TYPES.File, schema)).toBe(true)
 	})
 
-	it('find in Import wrapping Object with File', () => {
+	it('finds a File in an object through a module reference', () => {
 		const schema = t.Module({
 			Upload: t.Object({
 				name: t.String(),
@@ -103,7 +103,7 @@ describe('Has Type', () => {
 		expect(hasType(ELYSIA_TYPES.File, schema)).toBe(true)
 	})
 
-	it('return false for Import wrapping Object without File', () => {
+	it('returns false for a module reference without a File', () => {
 		const schema = t.Module({
 			User: t.Object({
 				name: t.String(),
@@ -114,7 +114,7 @@ describe('Has Type', () => {
 		expect(hasType(ELYSIA_TYPES.File, schema)).toBe(false)
 	})
 
-	it('find in Import wrapping Union with File', () => {
+	it('finds a File in a union through a module reference', () => {
 		const schema = t.Module({
 			Data: t.Union([t.Object({ file: t.File() }), t.Null()])
 		}).Data
@@ -122,7 +122,7 @@ describe('Has Type', () => {
 		expect(hasType(ELYSIA_TYPES.File, schema)).toBe(true)
 	})
 
-	it('find in Import wrapping Array of Files', () => {
+	it('recognizes an array of File as Files through a module reference', () => {
 		const schema = t.Module({
 			Uploads: t.Array(t.File())
 		}).Uploads
@@ -130,7 +130,7 @@ describe('Has Type', () => {
 		expect(hasType(ELYSIA_TYPES.Files, schema)).toBe(true)
 	})
 
-	it('find in Import wrapping Array of Files using t.Files', () => {
+	it('finds t.Files through a module reference', () => {
 		const schema = t.Module({
 			Uploads: t.Files()
 		}).Uploads
@@ -138,20 +138,19 @@ describe('Has Type', () => {
 		expect(hasType(ELYSIA_TYPES.Files, schema)).toBe(true)
 	})
 
-	it('find in Array of Files (direct)', () => {
+	it('recognizes a root array of File as Files', () => {
 		const schema = t.Array(t.File())
 
 		expect(hasType(ELYSIA_TYPES.Files, schema)).toBe(true)
 	})
 
-	it('find in Array of Files using t.Files (direct)', () => {
+	it('finds a root t.Files schema', () => {
 		const schema = t.Files()
 
 		expect(hasType(ELYSIA_TYPES.Files, schema)).toBe(true)
 	})
 
-	// Intersect schema tests
-	it('find on direct Intersect', () => {
+	it('finds a kind in a root intersection', () => {
 		const schema = t.Intersect([
 			t.Object({
 				id: t.Number()
@@ -164,7 +163,7 @@ describe('Has Type', () => {
 		expect(hasType(ELYSIA_TYPES.File, schema)).toBe(true)
 	})
 
-	it('do not find on Intersect without File', () => {
+	it('returns false for an intersection without the kind', () => {
 		const schema = t.Intersect([
 			t.Object({
 				id: t.Number()
@@ -177,7 +176,7 @@ describe('Has Type', () => {
 		expect(hasType(ELYSIA_TYPES.File, schema)).toBe(false)
 	})
 
-	it('find on nested Union in Intersect', () => {
+	it('finds a kind in a union nested in an intersection', () => {
 		const schema = t.Intersect([
 			t.Object({
 				id: t.Number()
@@ -188,7 +187,7 @@ describe('Has Type', () => {
 		expect(hasType(ELYSIA_TYPES.File, schema)).toBe(true)
 	})
 
-	it('find File in Intersect referenced via Module.Import()', () => {
+	it('finds a File in an intersection through a module reference', () => {
 		const schema = t.Module({
 			Data: t.Intersect([
 				t.Object({ id: t.Number() }),

@@ -65,17 +65,7 @@ describe('Response Redirect', () => {
 		})
 	})
 
-	// node-divergence-1: redirect() must construct a valid Response for a
-	// RELATIVE url on every runtime. `Response.redirect(url, status)` requires
-	// an absolute URL per WHATWG; Node/undici throws `TypeError: Failed to
-	// parse URL` on a relative url (→ opaque 500), while Bun accepts it. So
-	// `redirect('/login')` worked on Bun but 500'd on Node. The fix builds the
-	// redirect as `new Response(null, { status, headers: { location } })`,
-	// which both runtimes accept verbatim. We assert the runtime-agnostic
-	// contract here: every redirect status keeps the relative location + status
-	// without throwing. (CI is Bun-only — this can't exercise Node's undici
-	// directly — so it pins the contract that makes both runtimes agree.)
-	it('preserve relative location across every redirect status (node-safe)', async () => {
+	it('preserves relative locations across every redirect status', async () => {
 		for (const status of [301, 302, 303, 307, 308] as const) {
 			const app = new Elysia().get('/', ({ redirect }) =>
 				redirect('/login', status)
@@ -88,7 +78,7 @@ describe('Response Redirect', () => {
 		}
 	})
 
-	it('preserve absolute location on redirect (node-safe)', async () => {
+	it('preserves an absolute redirect location', async () => {
 		const app = new Elysia().get('/', ({ redirect }) =>
 			redirect('https://example.com/dashboard')
 		)
@@ -102,9 +92,7 @@ describe('Response Redirect', () => {
 	})
 
 	it('percent-encodes relative unicode location', async () => {
-		const app = new Elysia().get('/', ({ redirect }) =>
-			redirect('/путь')
-		)
+		const app = new Elysia().get('/', ({ redirect }) => redirect('/путь'))
 
 		const response = await app.handle(req('/'))
 
@@ -139,9 +127,7 @@ describe('Response Redirect', () => {
 	})
 
 	it('leaves plain ASCII url byte-identical', async () => {
-		const app = new Elysia().get('/', ({ redirect }) =>
-			redirect('/a%20b')
-		)
+		const app = new Elysia().get('/', ({ redirect }) => redirect('/a%20b'))
 
 		const response = await app.handle(req('/'))
 

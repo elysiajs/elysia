@@ -4,12 +4,12 @@ import { Value } from 'typebox/value'
 import { req } from '../utils'
 
 describe('TypeSystem - BooleanString', () => {
-	it('Create', () => {
+	it('creates false by default and honors an explicit default', () => {
 		expect(Value.Create(t.BooleanString())).toBe(false)
 		expect(Value.Create(t.BooleanString({ default: true }))).toBe(true)
 	})
 
-	it('Check', () => {
+	it('accepts booleans and boolean strings only', () => {
 		const schema = t.BooleanString()
 
 		expect(Value.Check(schema, true)).toBe(true)
@@ -24,18 +24,14 @@ describe('TypeSystem - BooleanString', () => {
 		expect(Value.Check(schema, null)).toBe(false)
 	})
 
-	it('Encode', () => {
-		// BooleanString is a decode-only codec (string -> boolean). As of
-		// TypeBox 1.2.16 the union is matched narrow->broad, so encoding a
-		// boolean resolves through the plain Boolean member and passes through
-		// unchanged instead of throwing.
+	it('preserves booleans during encoding', () => {
 		const schema = t.BooleanString()
 
 		expect(Value.Encode(schema, true)).toBe(true)
 		expect(Value.Encode(schema, false)).toBe(false)
 	})
 
-	it('Decode', () => {
+	it('decodes boolean strings', () => {
 		const schema = t.BooleanString()
 
 		expect(Value.Decode(schema, true)).toBe(true)
@@ -43,12 +39,9 @@ describe('TypeSystem - BooleanString', () => {
 
 		expect(Value.Decode(schema, false)).toBe(false)
 		expect(Value.Decode(schema, 'false')).toBe(false)
-
-		// Rejection of invalid values is covered by the Check test;
-		// `Value.Decode` runs Convert before its Check gate and is lenient.
 	})
 
-	it('Integrate', async () => {
+	it('decodes valid query values and rejects other strings', async () => {
 		const app = new Elysia().get(
 			'/',
 			{

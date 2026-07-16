@@ -1,4 +1,4 @@
-import '../../src/compile/aot-capture' // installs build-only capture impl (mirrors the AOT plugin)
+import '../../src/compile/aot-capture'
 import { describe, expect, it, afterEach } from 'bun:test'
 
 import { Elysia, t } from '../../src'
@@ -21,23 +21,6 @@ import {
 	unsignCookieSync
 } from '../../src/cookie/utils'
 
-/**
- * signed-cookie HMAC is served by a sync `node:crypto` path when available
- * (Bun/Node), falling back to the async `crypto.subtle` WebCrypto path on edge
- * runtimes without `node:crypto` (Cloudflare Workers without `nodejs_compat`,
- * browsers). This file is the correctness net for that split:
- *
- *   1. BYTE PARITY — the sync and WebCrypto implementations must produce
- *      byte-identical signatures for the same (value, secret). If they ever
- *      diverge, cookies signed under one deployment stop verifying under the
- *      other (a silent auth/session break), so this is the load-bearing test.
- *   2. CROSS-PATH ROUND-TRIP — a signature produced by either path must verify
- *      under either path (old deployments' cookies keep working after upgrade).
- *   3. ASYNC UN-FORCING — with a sync HMAC available, a signed-cookie route no
- *      longer forces the whole compiled handler async; the codegen must emit a
- *      plain `Function`, not an `AsyncFunction`.
- */
-
 const secret = 'the-seven-wailings-koan-of-jericho'
 const cases = [
 	'',
@@ -49,10 +32,7 @@ const cases = [
 	'x'.repeat(1024)
 ]
 
-describe('cookie HMAC sync/subtle parity', () => {
-	// Guard the whole premise: the sync path must actually be exercised in this
-	// runtime (Bun ships `node:crypto`). If this ever flips, the perf win is
-	// silently gone — fail loud rather than pass a vacuous parity check.
+describe('cookie HMAC sync and WebCrypto parity', () => {
 	it('sync node:crypto HMAC is available in this runtime', () => {
 		expect(hasSyncHmac).toBe(true)
 	})
@@ -63,7 +43,6 @@ describe('cookie HMAC sync/subtle parity', () => {
 			const subtle = await signCookieSubtle(value, secret)
 
 			expect(sync).toBe(subtle)
-			// format sanity: `value + '.' + base64(hmac)`, no '=' padding
 			expect(sync.startsWith(value + '.')).toBe(true)
 			expect(sync.endsWith('=')).toBe(false)
 		}
@@ -82,9 +61,7 @@ describe('cookie HMAC sync/subtle parity', () => {
 		for (const value of cases) {
 			const signed = await signCookieSubtle(value, secret)
 
-			// signed by subtle → verified by node:crypto (upgrade compat)
 			expect(unsignCookieSync(signed, secret)).toBe(value)
-			// and the async public path still verifies it too
 			await expect(unsignCookie(signed, secret)).resolves.toBe(value)
 		}
 	})
@@ -93,7 +70,6 @@ describe('cookie HMAC sync/subtle parity', () => {
 		for (const value of cases) {
 			const signed = signCookieSync(value, secret)
 
-			// signed by node:crypto → verified by subtle (downgrade compat)
 			const subtleSigned = await signCookieSubtle(value, secret)
 			expect(signed).toBe(subtleSigned)
 			await expect(unsignCookie(signed, secret)).resolves.toBe(value)
@@ -106,12 +82,11 @@ describe('cookie HMAC sync/subtle parity', () => {
 
 		expect(unsignCookieSync(payload + '.deadbeef', secret)).toBe(false)
 		expect(unsignCookieSync(signed, 'wrong-secret')).toBe(false)
-		// no dot + a secret → not a signed cookie
 		expect(unsignCookieSync('plain', secret)).toBe(false)
 	})
 })
 
-describe('cookie HMAC async un-forcing (codegen)', () => {
+describe('compiled signed-cookie handlers', () => {
 	afterEach(() => {
 		Compiled.clear()
 		Validator.clear()
@@ -123,8 +98,6 @@ describe('cookie HMAC async un-forcing (codegen)', () => {
 		return { fn, name: fn.constructor.name, source: fn.toString() }
 	}
 
-	// A signed-cookie route whose every other moving part is sync. Previously
-	// this compiled to an AsyncFunction purely because signing was async.
 	const signedApp = () =>
 		new Elysia().get(
 			'/',
@@ -140,14 +113,12 @@ describe('cookie HMAC async un-forcing (codegen)', () => {
 			}
 		)
 
-	it('signed-cookie sync route compiles to a plain Function (not AsyncFunction)', () => {
-		// only meaningful when the sync HMAC path is active
+	it('uses a synchronous Function when sync HMAC is available', () => {
 		expect(hasSyncHmac).toBe(true)
 
 		const { name, source } = compileRoute(signedApp())
 
 		expect(name).toBe('Function')
-		// sync parse + sync sign, no `await` on the cookie path
 		expect(source.includes('pcrsg(')).toBe(true)
 		expect(source.includes('scvs(')).toBe(true)
 		expect(source.includes('await pcr(')).toBe(false)
@@ -161,8 +132,6 @@ describe('cookie HMAC async un-forcing (codegen)', () => {
 
 		expect(setCookie.startsWith('name=himari.')).toBe(true)
 
-		// the emitted signature must verify (round-trip through the parser):
-		// feed it back in and the handler must accept it without a 400/500.
 		const value = setCookie.split(';')[0].slice('name='.length)
 		const echo = await app.handle(
 			req('/', { headers: { cookie: `name=${value}` } })
@@ -170,12 +139,7 @@ describe('cookie HMAC async un-forcing (codegen)', () => {
 		expect(echo.status).toBe(200)
 	})
 
-	// The frozen AOT handler may ship to a runtime WITHOUT `node:crypto`
-	// (Cloudflare Workers without `nodejs_compat`), where only `crypto.subtle`
-	// exists. So under capture the codegen must stay conservatively async even
-	// though `hasSyncHmac` is true in the build runtime — otherwise a sync
-	// handler baked on Bun would break signed cookies on workerd.
-	it('stays async (WebCrypto) under AOT capture regardless of hasSyncHmac', () => {
+	it('stays async for WebCrypto portability under AOT capture', () => {
 		expect(Capture.isCapturing()).toBe(false)
 
 		const prev = process.env.ELYSIA_AOT_BUILD
@@ -188,15 +152,11 @@ describe('cookie HMAC async un-forcing (codegen)', () => {
 			expect(name).toBe('AsyncFunction')
 			expect(source.includes('await pcr(')).toBe(true)
 			expect(source.includes('_sg=scv(')).toBe(true)
-			// sync cookie helpers must NOT be linked under capture
 			expect(source.includes('pcrsg(')).toBe(false)
 			expect(source.includes('scvs(')).toBe(false)
 		} finally {
 			if (prev === undefined) delete process.env.ELYSIA_AOT_BUILD
 			else process.env.ELYSIA_AOT_BUILD = prev
-			// Reset AOT capture state: compileHandler under ELYSIA_AOT_BUILD=1
-			// lazily initialises the module-level `capture` Map; even after the env
-			// var is restored `isCapturing()` stays true until both maps are cleared.
 			endValidatorCapture()
 			endHandlerCapture()
 		}

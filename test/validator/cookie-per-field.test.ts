@@ -60,7 +60,6 @@ describe('Cookie Per-field Configuration', () => {
 
 		const app = new Elysia()
 			.error(({ error }) => {
-				// `code` was removed this version; dispatch via instanceof.
 				if (error instanceof InvalidCookie)
 					return new Response('bad-sig', { status: 401 })
 				throw error

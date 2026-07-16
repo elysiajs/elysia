@@ -5,7 +5,6 @@ import { Elysia, sse } from '../../src'
 import { streamResponse } from '../../src/adapter/utils'
 import { requestId } from '../../src/utils'
 
-// chunks are now Uint8Array; decode them for string comparison.
 const dec = new TextDecoder()
 const decodeChunk = (v: unknown): string =>
 	v instanceof Uint8Array ? dec.decode(v) : String(v)
@@ -103,16 +102,13 @@ describe('Stream', () => {
 		expect(response).toBe('ab')
 	})
 
-	// `streamResponse` re-streams a Response body (chunked, unknown length). It
-	// now uses `yield* body` instead of a manual getReader()/releaseLock() loop;
-	// these pin the mid-stream abort semantics of that change.
 	it('streamResponse cancels the source body on a mid-stream abort', async () => {
 		let cancelled = false
 		const body = new ReadableStream<Uint8Array>({
 			start(controller) {
 				controller.enqueue(new Uint8Array([1]))
 				controller.enqueue(new Uint8Array([2]))
-				// left open on purpose — only an abort should end it
+				// Remains open so returning from the generator must cancel it.
 			},
 			cancel() {
 				cancelled = true
@@ -125,11 +121,8 @@ describe('Stream', () => {
 		expect(first.done).toBe(false)
 		expect([...(first.value as Uint8Array)]).toEqual([1])
 
-		// consumer bails out before the stream ends (client disconnect)
 		await gen.return(undefined as any)
 
-		// `yield* body` forwards .return() to the body's async iterator, which
-		// cancels the upstream — the old getReader()+releaseLock() did not.
 		expect(cancelled).toBe(true)
 	})
 
@@ -275,7 +268,9 @@ describe('Stream', () => {
 				reader.read().then(function pump({ done, value }): unknown {
 					if (done) return resolve()
 
-					expect(decodeChunk(value)).toBe(JSON.stringify(expected[i++]))
+					expect(decodeChunk(value)).toBe(
+						JSON.stringify(expected[i++])
+					)
 
 					return reader.read().then(pump)
 				})
@@ -514,7 +509,8 @@ describe('Stream', () => {
 
 		const result: string[] = []
 
-		for await (const a of streamResponse(response)) result.push(decodeChunk(a))
+		for await (const a of streamResponse(response))
+			result.push(decodeChunk(a))
 
 		expect(result).toEqual(['Elysia', 'Eden'])
 	})
@@ -538,7 +534,8 @@ describe('Stream', () => {
 
 		const result: string[] = []
 
-		for await (const a of streamResponse(response)) result.push(decodeChunk(a))
+		for await (const a of streamResponse(response))
+			result.push(decodeChunk(a))
 
 		expect(result).toEqual(['Elysia', 'Eden'])
 	})
@@ -562,7 +559,8 @@ describe('Stream', () => {
 
 		const result: string[] = []
 
-		for await (const a of streamResponse(response)) result.push(decodeChunk(a))
+		for await (const a of streamResponse(response))
+			result.push(decodeChunk(a))
 
 		expect(result).toEqual(['Elysia', 'Eden'])
 	})
@@ -588,7 +586,8 @@ describe('Stream', () => {
 
 		const result: string[] = []
 
-		for await (const a of streamResponse(response)) result.push(decodeChunk(a))
+		for await (const a of streamResponse(response))
+			result.push(decodeChunk(a))
 
 		expect(result).toEqual(['Elysia', 'Eden'].map((x) => `data: ${x}\n\n`))
 		expect(response.headers.get('content-type')).toBe('text/event-stream')
@@ -666,7 +665,8 @@ describe('Stream', () => {
 
 		const result: string[] = []
 
-		for await (const chunk of streamResponse(response)) result.push(decodeChunk(chunk))
+		for await (const chunk of streamResponse(response))
+			result.push(decodeChunk(chunk))
 		expect(result).toHaveLength(3)
 		expect(result).toEqual([
 			'event: message\ndata: {"meow":"1"}\n\n',
@@ -793,17 +793,14 @@ describe('Stream', () => {
 		expect(result).toEqual(expected)
 	})
 
-	// re-streamed Response bodies must pass through byte-identical —
-	// UTF-8 decoding each chunk corrupted non-UTF-8 bytes (U+FFFD) and
-	// multi-byte characters split across chunk boundaries
-	it('preserve exact bytes when re-streaming a touched-set chunked Response', async () => {
+	it('preserves exact bytes when re-streaming a chunked Response', async () => {
 		const app = new Elysia().get('/', ({ set }) => {
 			set.headers['x-touch'] = '1'
 
 			return new Response(
 				new ReadableStream({
 					start(controller) {
-						// € (e2 82 ac) split across chunks + non-UTF-8 tail
+						// Split UTF-8 plus invalid bytes catch accidental text decoding.
 						controller.enqueue(new Uint8Array([0xe2, 0x82]))
 						controller.enqueue(new Uint8Array([0xac, 0xff, 0x00]))
 						controller.close()
@@ -817,7 +814,6 @@ describe('Stream', () => {
 		const result = new Uint8Array(await response.arrayBuffer())
 
 		expect(response.headers.get('x-touch')).toBe('1')
-		// binary first chunk pins the deliberate headerless default
 		expect(response.headers.get('content-type')).toBe(
 			'application/octet-stream'
 		)
@@ -839,9 +835,6 @@ describe('Stream', () => {
 		expect(result).toEqual(new Uint8Array([1, 2, 3, 4]))
 	})
 
-	// chunked Response with a non-200 status must preserve that status.
-	// Regression pin for  — must pass on fixed code and old code alike
-	// (the defect did not reproduce: status was already preserved correctly).
 	it('preserves custom status on chunked Response returned directly', async () => {
 		const body = new ReadableStream({
 			start(controller) {

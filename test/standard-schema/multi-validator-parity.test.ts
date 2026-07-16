@@ -1,22 +1,3 @@
-/**
- * Single-vs-mixed parity regression suite
- *
- * Each test encodes a behavior axis where MultiValidator (mixed Standard Schema
- * + TypeBox) previously diverged from single TypeBoxValidator. The intent of
- * each test is stated in its name so that a future failure points directly at
- * which parity axis regressed.
- *
- * Axes covered:
- * 1. Query coercion — standalone t.Number query in mixed mode must
- * coerce "5" → 5 exactly as it does in pure TypeBox
- * 2. Default fill — missing optional fields receive TypeBox defaults in
- * mixed mode just as they do in single mode
- * 3. normalize:false — extra fields are rejected (not silently accepted) in
- * mixed mode just as in single mode
- * 4. Async file MIME — a standalone t.File({type}) in mixed mode is treated
- * async and runs the MIME detector (single always does)
- */
-
 import { describe, it, expect } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
@@ -24,10 +5,7 @@ import { req, post } from '../utils'
 import { upload } from '../utils'
 import { z } from 'zod'
 
-// ---------------------------------------------------------------------------
-// Shared passthrough Standard Schema — contributes nothing to the value so the
-// TypeBox member's behavior can be observed in isolation on the multi path
-// ---------------------------------------------------------------------------
+// Returns no fields so each test isolates the TypeBox member.
 const passthrough = {
 	'~standard': {
 		version: 1,
@@ -36,11 +14,8 @@ const passthrough = {
 	}
 } as any
 
-// When the primary schema is a Standard Schema, coercion
-// was not computed for standalone TypeBox members. The fix falls through to
-// the first TypeBox standalone member to derive coercion options.
-describe('query coercion parity', () => {
-	it('single: t.Number query accepts string "5" and returns 5', async () => {
+describe('TypeBox query coercion with Standard Schema guards', () => {
+	it('coerces numeric strings without a guard', async () => {
 		const app = new Elysia().get(
 			'/',
 			{ query: t.Object({ page: t.Number() }) },
@@ -52,10 +27,7 @@ describe('query coercion parity', () => {
 		expect(res.page).toBe(5)
 	})
 
-	it('mixed: standalone t.Number query coerces "5" → 5 (same as single)', async () => {
-		// Guard: Standard passthrough as PRIMARY; route: TypeBox as STANDALONE
-		// Before Patch 1, the primary's non-TypeBox nature suppressed coercion
-		// so "5" stayed a string → 422 "must be number".
+	it('coerces numeric strings with a standalone Standard Schema guard', async () => {
 		const app = new Elysia()
 			.guard({
 				schema: 'standalone',
@@ -69,11 +41,10 @@ describe('query coercion parity', () => {
 
 		const res = await app.handle(req('/?page=5')).then((x) => x.json())
 
-		// parity: must be 5, not "5", and not a 422
 		expect(res.page).toBe(5)
 	})
 
-	it('mixed: Standard-primary + TypeBox-standalone query rejects non-numeric string', async () => {
+	it('rejects non-numeric strings with a standalone Standard Schema guard', async () => {
 		const app = new Elysia()
 			.guard({ schema: 'standalone', query: passthrough })
 			.get(
@@ -87,11 +58,8 @@ describe('query coercion parity', () => {
 	})
 })
 
-// compiled.Default is called for TypeBox members that have
-// defaults — matching the TypeBoxValidator.FromSync path which runs
-// #defaultFastPath before validating.
-describe('TypeBox default-value parity', () => {
-	it('single: {} with page:default(1) returns {page:1}', async () => {
+describe('TypeBox defaults with Standard Schema guards', () => {
+	it('applies defaults without a guard', async () => {
 		const app = new Elysia().get(
 			'/',
 			{ query: t.Object({ page: t.Number({ default: 1 }) }) },
@@ -102,8 +70,7 @@ describe('TypeBox default-value parity', () => {
 		expect(res).toEqual({ page: 1 })
 	})
 
-	it('mixed: {} with page:default(1) returns {page:1} (same as single)', async () => {
-		// Before Patch 3a, multi skipped compiled.Default so {} → 422 required.
+	it('applies defaults with a standalone Standard Schema guard', async () => {
 		const app = new Elysia()
 			.guard({ schema: 'standalone', query: passthrough })
 			.get(
@@ -116,7 +83,7 @@ describe('TypeBox default-value parity', () => {
 		expect(res).toEqual({ page: 1 })
 	})
 
-	it('mixed: provided value overrides default (no over-application)', async () => {
+	it('keeps provided values instead of applying defaults', async () => {
 		const app = new Elysia()
 			.guard({ schema: 'standalone', query: passthrough })
 			.get(
@@ -129,9 +96,7 @@ describe('TypeBox default-value parity', () => {
 		expect(res.page).toBe(7)
 	})
 
-	// Unit-level parity: Validator.create directly
-	it('unit — MultiValidator.From fills TypeBox defaults (parity with single)', () => {
-		// Single path
+	it('applies defaults through Validator.create', () => {
 		const single = Validator.create(
 			t.Object({ page: t.Number({ default: 1 }), name: t.String() }),
 			{}
@@ -142,7 +107,6 @@ describe('TypeBox default-value parity', () => {
 		)
 		expect(singleResult).toEqual({ page: 1, name: 'lilith' })
 
-		// Multi path (Standard passthrough forces MultiValidator)
 		const multi = Validator.create(
 			t.Object({ page: t.Number({ default: 1 }), name: t.String() }),
 			{ schemas: [passthrough] }
@@ -152,11 +116,8 @@ describe('TypeBox default-value parity', () => {
 	})
 })
 
-// When normalize:false, nonAdditionalProperties is applied to TypeBox
-// member schemas before compilation so Check rejects extra fields — matching
-// TypeBoxValidator which applies nonAdditionalProperties at construction time.
-describe('normalize:false rejection parity', () => {
-	it('single normalize:false: extra field causes 422', async () => {
+describe('TypeBox normalization with Standard Schema guards', () => {
+	it('rejects extra fields without a guard when normalize is false', async () => {
 		const app = new Elysia({ normalize: false }).post(
 			'/',
 			{ body: t.Object({ name: t.String() }) },
@@ -167,9 +128,7 @@ describe('normalize:false rejection parity', () => {
 		expect(res.status).toBe(422)
 	})
 
-	it('mixed normalize:false: extra field causes 422 (parity with single)', async () => {
-		// Before Patch 3b, multi skipped nonAdditionalProperties so the extra
-		// field was silently accepted instead of causing a 422.
+	it('rejects extra fields with a standalone guard when normalize is false', async () => {
 		const app = new Elysia({ normalize: false })
 			.guard({ schema: 'standalone', body: passthrough })
 			.post(
@@ -182,7 +141,7 @@ describe('normalize:false rejection parity', () => {
 		expect(res.status).toBe(422)
 	})
 
-	it('mixed normalize:false: valid body (no extra) returns 200', async () => {
+	it('accepts declared fields with a standalone guard', async () => {
 		const app = new Elysia({ normalize: false })
 			.guard({ schema: 'standalone', body: passthrough })
 			.post(
@@ -195,8 +154,7 @@ describe('normalize:false rejection parity', () => {
 		expect(res.status).toBe(200)
 	})
 
-	// Unit-level parity
-	it('unit — MultiValidator.From with normalize:false rejects extra keys', () => {
+	it('rejects extra fields through Validator.create', () => {
 		const single = Validator.create(t.Object({ name: t.String() }), {
 			normalize: false
 		})!
@@ -214,36 +172,23 @@ describe('normalize:false rejection parity', () => {
 	})
 })
 
-// ---------------------------------------------------------------------------
-// MultiValidator must inspect TypeBox members for async refinements. It once
-// hardcoded isAsync=false and skipped them. A standalone t.File({type}) uses
-// an async MIME detector that was silently bypassed. The fix propagates
-// isAsync from the compiled member's buildResult.external.variables.
-describe('async t.File({type}) MIME detection parity', () => {
-	it('single: t.File({type:"image/jpeg"}) validator is marked async', () => {
+describe('TypeBox file validation with Standard Schema guards', () => {
+	it('marks a MIME type validator as async', () => {
 		const v = Validator.create(t.File({ type: 'image/jpeg' }), {
 			coerces: undefined as any
 		})
-		// TypeBoxValidator.isAsync is true when the schema has async externals
 		expect(v!.isAsync).toBe(true)
 	})
 
-	it('mixed: standalone t.File({type}) causes MultiValidator.isAsync=true (Patch 2)', () => {
-		// Before Patch 2, isAsync stayed false even when a TypeBox member had
-		// an async refine — the JIT compiled the route sync and never awaited
-		// the MIME check, so a mismatched MIME type would pass validation.
+	it('marks a mixed validator with a MIME type schema as async', () => {
 		const v = Validator.create(passthrough, {
 			schemas: [t.File({ type: 'image/jpeg' }) as any]
 		})
 		expect(v!.constructor.name).toBe('MultiValidator')
-		// parity with single: must be async
 		expect(v!.isAsync).toBe(true)
 	})
 
-	it('mixed: t.File({type}) in guard body rejects mismatched MIME', async () => {
-		// This is an integration-level guard: a PNG file where only JPEG is
-		// allowed must be rejected. Before Patch 2, the async MIME check was
-		// skipped and the wrong MIME type was accepted.
+	it('rejects a mismatched MIME type with a standalone guard', async () => {
 		const app = new Elysia()
 			.guard({ schema: 'standalone', body: passthrough })
 			.post(
@@ -262,7 +207,6 @@ describe('async t.File({type}) MIME detection parity', () => {
 		const res = await app.handle(
 			new Request('http://localhost/', { method: 'POST', body: form })
 		)
-		// 422: MIME mismatch must be detected even on the multi path
 		expect(res.status).toBe(422)
 	})
 })

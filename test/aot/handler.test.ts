@@ -10,20 +10,11 @@ import { compileToSource } from '../../src/plugin/aot/source'
 import { materialise, materialiseHandlers } from './_manifest'
 import { post, req } from '../utils'
 
-/**
- * AOT handler freeze (step 1: capture + emit + bind).
- *
- * `compileHandler` normally `new Function`s the per-route pipeline. The build
- * captures `{alias, code}`; the runtime binds the emitted factory with the live
- * `(handler, ...params)` instead of eval'ing — eval-free, so it runs on Cloudflare
- * (where request-time `new Function` is banned). The `alias`-match guard means a
- * config drift falls back to `new Function` rather than mis-binding.
- */
+/** Captured handlers bind emitted factories without request-time evaluation. */
 
 beforeEach(() => {
 	process.env.ELYSIA_AOT_BUILD = '1' // capture mode
-	// Drain capture leaked by other AOT tests: they compile apps under the same
-	// env but only drain validators, so `handlerCapture` would accumulate here.
+	// Isolate the shared capture registries from other AOT tests.
 	endValidatorCapture()
 	endHandlerCapture()
 })
@@ -33,8 +24,7 @@ afterEach(() => {
 	Validator.clear()
 })
 
-// Hook + validation + response → params.size > 1 → goes through `new Function`
-// (not the `createInlineHandler` fast path), so there's a handler to freeze.
+// Force the generated-handler path rather than the inline fast path.
 const build = () =>
 	new Elysia()
 		.beforeHandle(() => {})
@@ -49,17 +39,15 @@ const build = () =>
 
 describe('AOT handler freeze', () => {
 	it('binds the frozen factory (no new Function) and behaves identically to JIT', async () => {
-		// ── capture (env set by beforeEach) ─────────────────────────────────
 		;(build() as any).compile()
 		const handlers = endHandlerCapture()
 		const validators = endValidatorCapture()
 
-		expect(handlers.length).toBe(1) // the /x handler was captured
+		expect(handlers.length).toBe(1)
 		expect(handlers[0]!.method).toBe('POST')
 		expect(handlers[0]!.path).toBe('/x')
-		expect(handlers[0]!.alias.length).toBeGreaterThan(0) // has deps (hook/validators)
+		expect(handlers[0]!.alias.length).toBeGreaterThan(0)
 
-		// ── register, spying the factory so we can prove it was bound ───────
 		const manifest = materialiseHandlers(handlers)
 		let factoryCalls = 0
 		const realF = manifest.POST!['/x']!.f
@@ -73,17 +61,15 @@ describe('AOT handler freeze', () => {
 		Compiled.handlers = manifest
 		expect(Compiled.handlers?.POST?.['/x']).toBeDefined()
 
-		// ── frozen run (no build env) ───────────────────────────────────────
 		delete process.env.ELYSIA_AOT_BUILD
 		const frozenApp = build()
 		;(frozenApp as any).compile()
-		expect(factoryCalls).toBe(1) // the frozen factory bound — NOT `new Function`
+		expect(factoryCalls).toBe(1)
 
 		const frozen = await frozenApp.handle(post('/x', { n: 5 }))
 		expect(frozen.status).toBe(200)
 		await expect(frozen.json()).resolves.toEqual({ ok: true, n: 5 })
 
-		// ── JIT reference (no manifest) — same behaviour ────────────────────
 		Compiled.clear()
 		Validator.clear()
 		const jitApp = build()
@@ -141,10 +127,7 @@ describe('AOT handler freeze', () => {
 		const handlers = endHandlerCapture()
 		endValidatorCapture()
 
-		// The full freeze skips codegen, so there's no runtime alias to compare —
-		// it trusts the captured `a` (deterministic + completeness-tested). A corrupt
-		// name has no ParamDescriptor, so it throws at compile (fail loud) rather
-		// than mis-binding. Normal operation never hits this.
+		// A corrupt alias must fail compilation instead of binding the wrong value.
 		const manifest = materialiseHandlers(handlers)
 		manifest.POST!['/x']!.a = ['bogus']
 		Validator.clear()
@@ -157,12 +140,7 @@ describe('AOT handler freeze', () => {
 	})
 })
 
-/**
- * Same-shape routes share ONE handler pipeline (the schemas live in the
- * validators, referenced by param — not inlined in the handler code). The emit
- * must dedup the factory `_h`, the alias array `_a`, AND the `{ a, f }` wrapper
- * `_w`, leaving the route tree as bare `_w` refs (no per-route object/array).
- */
+/** Same-shape routes share their factory, aliases, and manifest wrapper. */
 describe('AOT handler emit dedup', () => {
 	it('shares the factory, alias, and wrapper across same-shape routes', async () => {
 		const app = new Elysia()
@@ -192,24 +170,15 @@ describe('AOT handler emit dedup', () => {
 		const src = await compileToSource(app as any, { register: false })
 		delete process.env.ELYSIA_AOT_BUILD
 
-		// one of each, despite three routes
 		expect((src.match(/const _h\d+ =/g) ?? []).length).toBe(1)
 		expect((src.match(/const _a\d+ =/g) ?? []).length).toBe(1)
 		expect((src.match(/const _w\d+ =/g) ?? []).length).toBe(1)
-		// the wrapper holds a REFERENCE to the alias array, not an inline literal
 		expect(src).toMatch(/_w0 = \{ a: _a0, f: _h0 \}/)
-		// all three routes point at the same shared wrapper
 		expect((src.match(/: _w0\b/g) ?? []).length).toBe(3)
 	})
 })
 
-/**
- * Static-value and Promise handlers that carry a blocking hook
- * (parse/transform/beforeHandle/afterHandle) bypass `buildNativeStaticResponse`,
- * so without freezing they fall through to `compileHandler`'s `new Function` tail
- * at runtime — an `EvalError` on Cloudflare. The freeze must cover them too, not
- * just `typeof handler === 'function'` routes. These tests guard that hole.
- */
+/** Static and Promise handlers with lifecycle hooks must also be captured. */
 describe('AOT static & promise handler freeze', () => {
 	const build = () =>
 		new Elysia()
@@ -221,7 +190,6 @@ describe('AOT static & promise handler freeze', () => {
 		const handlers = endHandlerCapture()
 		endValidatorCapture()
 
-		// Before the fix only function handlers were captured — these were absent.
 		expect(handlers.map((h) => h.path).sort()).toEqual(['/p', '/s'])
 		expect(handlers.every((h) => h.method === 'GET')).toBe(true)
 	})
@@ -244,11 +212,10 @@ describe('AOT static & promise handler freeze', () => {
 		Validator.clear()
 		Compiled.handlers = manifest
 
-		// ── frozen run (no build env) ───────────────────────────────────────
 		delete process.env.ELYSIA_AOT_BUILD
 		const frozenApp = build()
 		;(frozenApp as any).compile()
-		expect(calls['/s']).toBe(1) // frozen factory bound — NOT `new Function`
+		expect(calls['/s']).toBe(1)
 		expect(calls['/p']).toBe(1)
 
 		const s = await frozenApp.handle(req('/s'))
@@ -258,7 +225,6 @@ describe('AOT static & promise handler freeze', () => {
 		expect(p.status).toBe(200)
 		await expect(p.text()).resolves.toBe('hi')
 
-		// ── JIT reference (no manifest) — same behaviour ────────────────────
 		Compiled.clear()
 		Validator.clear()
 		const jitApp = build()
@@ -272,14 +238,7 @@ describe('AOT static & promise handler freeze', () => {
 	})
 })
 
-/**
- * Widening a hook to the async path may only happen when
- * the hook is *not provably sync*. A plain synchronous route must keep emitting
- * a synchronous `function route(c)` — otherwise every request eats an extra
- * microtask. Conversely, a hook whose body returns a Promise must promote the
- * route to an `async function route(c)` so the thenable is awaited before it is
- * treated as a short-circuit response.
- */
+/** Promise-returning hooks require async handlers; provably sync hooks do not. */
 describe('sync/async compilation gating', () => {
 	const capture = (app: Elysia<any, any>) => {
 		;(app as any).compile()

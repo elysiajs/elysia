@@ -33,8 +33,8 @@ const expectEquivalent = (mk: () => any[], values: unknown[]) => {
 	}
 }
 
-describe('shallowMergeObjects fires and equals Evaluate(Intersect)', () => {
-	it('disjoint primitives + required', () => {
+describe('shallowMergeObjects matches evaluated intersections', () => {
+	it('merges disjoint required primitive properties', () => {
 		expectEquivalent(
 			() => [t.Object({ id: t.Number() }), t.Object({ tok: t.String() })],
 			[
@@ -47,7 +47,7 @@ describe('shallowMergeObjects fires and equals Evaluate(Intersect)', () => {
 		)
 	})
 
-	it('codec property (t.Date) survives by reference', () => {
+	it('preserves a codec property', () => {
 		expectEquivalent(
 			() => [t.Object({ when: t.Date() }), t.Object({ n: t.Number() })],
 			[
@@ -58,7 +58,7 @@ describe('shallowMergeObjects fires and equals Evaluate(Intersect)', () => {
 		)
 	})
 
-	it('nested object + format/pattern + 3 members', () => {
+	it('merges nested and formatted properties across three members', () => {
 		expectEquivalent(
 			() => [
 				t.Object({ a: t.Object({ b: t.Number() }) }),
@@ -73,20 +73,22 @@ describe('shallowMergeObjects fires and equals Evaluate(Intersect)', () => {
 		)
 	})
 
-	it('optional property fires (: t.Optional no longer prototype-wraps)', () => {
-		// Under the mutate-clone invariant, t.Optional returns a clone with
-		// its markers as OWN props (not an Object.create wrapper), so `type`
-		// survives Evaluate's own-only clone — no divergence, fast path applies.
+	it('merges an optional property without falling back to Evaluate', () => {
 		expectEquivalent(
 			() => [
 				t.Object({ id: t.Number() }),
 				t.Object({ maybe: t.Optional(t.String()) })
 			],
-			[{ id: 1 }, { id: 1, maybe: 'x' }, { id: 1, maybe: 5 }, { maybe: 'x' }]
+			[
+				{ id: 1 },
+				{ id: 1, maybe: 'x' },
+				{ id: 1, maybe: 5 },
+				{ maybe: 'x' }
+			]
 		)
 	})
 
-	it('deeply-nested optional fires (recursive, own-prop markers)', () => {
+	it('merges a nested optional property', () => {
 		expectEquivalent(
 			() => [
 				t.Object({
@@ -102,48 +104,8 @@ describe('shallowMergeObjects fires and equals Evaluate(Intersect)', () => {
 			]
 		)
 	})
-})
 
-describe('shallowMergeObjects bails (→ Evaluate fallback)', () => {
-	it('overlapping keys → null (Evaluate intersects them)', () => {
-		expect(
-			shallowMergeObjects([
-				t.Object({ id: t.Number() }),
-				t.Object({ id: t.String() })
-			])
-		).toBeNull()
-	})
-
-	it('non-object member → null', () => {
-		expect(
-			shallowMergeObjects([
-				t.Object({ a: t.Number() }),
-				t.String() as any
-			])
-		).toBeNull()
-	})
-
-	it('additionalProperties → null', () => {
-		expect(
-			shallowMergeObjects([
-				t.Object({ a: t.Number() }, { additionalProperties: false }),
-				t.Object({ b: t.String() })
-			])
-		).toBeNull()
-	})
-
-	it('object-level constraint (minProperties) → null', () => {
-		expect(
-			shallowMergeObjects([
-				t.Object({ a: t.Number() }, { minProperties: 1 }),
-				t.Object({ b: t.String() })
-			])
-		).toBeNull()
-	})
-
-	it('optional WITH an options bag still fires (own keys survive Evaluate)', () => {
-		// t.Optional(t.Number({ default: 1 })) has own keys → Evaluate preserves
-		// them → no divergence → fast path is safe
+	it('merges an optional property with an options object', () => {
 		expectEquivalent(
 			() => [
 				t.Object({ a: t.Optional(t.Number({ default: 1 })) }),
@@ -154,12 +116,46 @@ describe('shallowMergeObjects bails (→ Evaluate fallback)', () => {
 	})
 })
 
-describe('accessor (getter) schema options — intentionally NOT detected', () => {
-	// Getters in schema options are an anti-pattern; detecting them would cost a
-	// `getOwnPropertyDescriptor` per key (~25% slower). The fast path reuses the
-	// node and ENFORCES the getter constraint — stricter and more correct than
-	// Evaluate's silent drop. Documented deviation, not a regression.
-	it('a getter-valued constraint FIRES and is enforced (not dropped)', () => {
+describe('shallowMergeObjects returns null when a shallow merge is unsafe', () => {
+	it('rejects overlapping keys', () => {
+		expect(
+			shallowMergeObjects([
+				t.Object({ id: t.Number() }),
+				t.Object({ id: t.String() })
+			])
+		).toBeNull()
+	})
+
+	it('rejects a non-object member', () => {
+		expect(
+			shallowMergeObjects([
+				t.Object({ a: t.Number() }),
+				t.String() as any
+			])
+		).toBeNull()
+	})
+
+	it('rejects an additionalProperties option', () => {
+		expect(
+			shallowMergeObjects([
+				t.Object({ a: t.Number() }, { additionalProperties: false }),
+				t.Object({ b: t.String() })
+			])
+		).toBeNull()
+	})
+
+	it('rejects an object-level constraint', () => {
+		expect(
+			shallowMergeObjects([
+				t.Object({ a: t.Number() }, { minProperties: 1 }),
+				t.Object({ b: t.String() })
+			])
+		).toBeNull()
+	})
+})
+
+describe('getter-valued schema options', () => {
+	it('preserves and enforces a getter-valued constraint', () => {
 		const merged = shallowMergeObjects([
 			t.Object({
 				a: t.Number({
@@ -172,7 +168,6 @@ describe('accessor (getter) schema options — intentionally NOT detected', () =
 		])
 
 		expect(merged).not.toBeNull()
-		// the fast path keeps the live getter → the constraint is enforced
 		expect(Check(merged as any, { a: 5, b: 'x' })).toBe(false)
 		expect(Check(merged as any, { a: 5000, b: 'x' })).toBe(true)
 	})

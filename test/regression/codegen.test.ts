@@ -62,7 +62,7 @@ describe('case-insensitive content-type parse', () => {
 		await expect(res.json()).resolves.toEqual({ n: 5 })
 	})
 
-	it('still parses the lowercase hot path (no regression, no double-read)', async () => {
+	it('parses lowercase application/json through the exact-match path', async () => {
 		const app = new Elysia().post(
 			'/',
 			{ body: t.Object({ n: t.Number() }) },
@@ -74,7 +74,7 @@ describe('case-insensitive content-type parse', () => {
 		await expect(res.json()).resolves.toEqual({ n: 5 })
 	})
 
-	it('emits normalized exact dispatch without the removed  helpers', () => {
+	it('normalizes Content-Type before exact JSON dispatch', () => {
 		const app = new Elysia().post(
 			'/',
 			{ body: t.Object({ n: t.Number() }) },
@@ -82,13 +82,11 @@ describe('case-insensitive content-type parse', () => {
 		)
 		const src = compileHandler(app['~routes']![0] as any, app).toString()
 
-		// Normalise once, then confirm the charCode hint with the exact essence.
 		expect(src).toContain('let ce=nc(ct)')
 		expect(src).toContain(
 			"let cj=(ce.charCodeAt(12)===106&&ce==='application/json')||ce.endsWith('+json')"
 		)
 		expect(src).toContain('c.body=cj?await pj(c):await pd(c,ce,true)')
-		//  helpers must NOT appear in the emitted code
 		expect(src).not.toContain('ctlc')
 		expect(src).not.toContain('_ctl')
 		expect(src).not.toContain('pmrc')
@@ -120,7 +118,7 @@ describe('case-insensitive content-type parse', () => {
 		await expect(res.json()).resolves.toEqual({ x: 'y' })
 	})
 
-	it('lowercase multipart/form-data is unaffected (no regression)', async () => {
+	it('parses lowercase multipart/form-data', async () => {
 		const app = new Elysia().post('/', ({ body }) => body)
 
 		const res = await app.handle(multipartBody('multipart/form-data'))
@@ -129,7 +127,7 @@ describe('case-insensitive content-type parse', () => {
 	})
 })
 
-describe('query parse table hoisting', () => {
+describe('compiled query parse tables', () => {
 	it('no per-request object literal in the emitted query parse call', () => {
 		const app = new Elysia().get(
 			'/',
@@ -172,7 +170,7 @@ describe('query parse table hoisting', () => {
 	})
 })
 
-describe('AOT replay parity', () => {
+describe('AOT query parsing', () => {
 	const freeze = async (
 		build: () => Elysia<any, any>,
 		assert: (frozen: Elysia<any, any>) => Promise<void>
@@ -214,19 +212,8 @@ describe('AOT replay parity', () => {
 	})
 })
 
-// ──  — outer `.catch` is load-bearing; nothing may drop it ─────────────────
-//
-//  proposed skipping the fetch-level `.catch` for compiled routes that
-// "already catch internally". Analysis proved every async route retains a
-// rejection escape: a no-error-hook route rethrows a body-parse/handler throw,
-// and an error-hook route can reject when the error hook itself throws or an
-// async `toResponse().then(→map)` rejects. So the outer `.catch` is NOT
-// droppable — it is the last line of defense against a crashing unhandled
-// rejection. These pins fail loudly if a future change drops it: a throwing
-// handler / throwing error hook must still be mapped to a response, never a
-// process-killing rejection.
-describe('outer catch must survive (marker never drops a real error)', () => {
-	it('a throwing handler on an async route still reaches the error mapping', async () => {
+describe('fetch-level error fallback for compiled routes', () => {
+	it('maps an async handler exception through the application error hook', async () => {
 		const app = new Elysia()
 			.error(({ error, set }: any) => {
 				set.status = 418
@@ -248,17 +235,7 @@ describe('outer catch must survive (marker never drops a real error)', () => {
 		await expect(res.text()).resolves.toBe('boom')
 	})
 
-	it('an error hook that itself throws degrades to a clean 500 instead of escaping app.handle', async () => {
-		// The route's own try/catch runs the error hook, the hook throws, and the
-		// async route REJECTS into the fetch-level `.catch` (`catchError`) →
-		// `finalizeError` → `handleError`, which re-runs the same throwing hook.
-		// `finalizeError` now GUARDS that re-run : a throw
-		// from the error pipeline degrades to `internalServerErrorResponse` built
-		// from a fresh header set rather than escaping `app.handle`. Letting it
-		// escape was the crash vector — a naive `app.handle(req).then(send)`
-		// Node bridge turns the rejection into a process-killing unhandled
-		// rejection. The outer catch is still load-bearing (no unhandled
-		// rejection); it now produces an observable 500 instead of re-throwing.
+	it('returns 500 when the application error hook also throws', async () => {
 		const app = new Elysia()
 			.error(() => {
 				throw new Error('error hook itself throws')

@@ -297,8 +297,7 @@ import { Prettify } from '../../../src/types'
 
 	type Lifecycle = (typeof app)['~Routes']['post']['response']
 
-	// only `response` schemas are declared (route + macro), no request validator
-	// → no phantom 422 (eden-types-1)
+	// Output-only schemas do not add a request validation response.
 	expectTypeOf<Lifecycle>().toEqualTypeOf<{
 		200: 'Type Soundness'
 		400: 'Bad Request'
@@ -341,8 +340,7 @@ import { Prettify } from '../../../src/types'
 	}>()
 }
 
-// Macro with only a `response` schema (an OUTPUT schema, not a request
-// validator) must NOT inject a phantom 422 (eden-types-1)
+// A macro with only a response schema does not add request validation.
 {
 	const app = new Elysia()
 		.macro({
@@ -2021,9 +2019,7 @@ import { Prettify } from '../../../src/types'
 	}>()
 }
 
-// Inherit macro context: the inherited derive reaches the CONSUMING route
-// (cross-macro context is not visible to the inheriting macro's OWN
-// handlers in the object form)
+// Inherited macro derivations reach routes using the inheriting macro.
 {
 	new Elysia()
 		.macro({

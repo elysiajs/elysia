@@ -95,7 +95,7 @@ describe('Checksum', () => {
 		).toBe(0)
 	})
 
-	it('Filter inline hook', async () => {
+	it('keeps inline transforms while deduplicating shared transforms', async () => {
 		const cookie = (options?: Record<string, unknown>) =>
 			new Elysia({
 				name: '@elysiajs/cookie',
@@ -115,9 +115,6 @@ describe('Checksum', () => {
 			.use(group)
 			.get('/cookie', () => 'Hi')
 
-		// `/a` (routes[0]) has the deduplicated global cookie transform plus its
-		// own inline transform → 2; `/cookie` (routes[1]) only the cookie
-		// transform → 1.
 		const routes = app.routes
 		const hook0 = routes[0].hooks
 		const hook1 = routes[1].hooks
@@ -138,9 +135,6 @@ describe('Checksum', () => {
 				called++
 			})
 
-		// `cookie` is a shared dependency of both `group` and `app`. Its hook
-		// reaches `/a` via the route's own chain AND the inherited chain, but
-		// must run only once.
 		const group = new Elysia().use(cookie()).get('/a', () => 'Hi')
 		const app = new Elysia().use(cookie()).use(group)
 
@@ -149,13 +143,6 @@ describe('Checksum', () => {
 		expect(called).toBe(1)
 	})
 
-	// the single-fn diamond above dedups because `#on` tags the fn in
-	// `fnOrigin`, and the `#use` merge skips fns whose origin is an
-	// already-absorbed child. The ARRAY-form overload (`MaybeArray`) used to
-	// tag only the array object, leaving each element untagged → the merge's
-	// per-element origin lookup missed → dedup bypassed → the array-form
-	// hook ran once per diamond arm. This pins single execution for the
-	// array-form registration too.
 	it('does not run a diamond-shared array-form plugin hook twice', async () => {
 		let called = 0
 
@@ -386,16 +373,14 @@ describe('Checksum', () => {
 		expect(response).toBe('hi + bye')
 	})
 
-	it('deduplicate local handler from global event', () => {
+	it('deduplicates a global derive when its plugin is reused', () => {
 		const ip = new Elysia({ name: 'ip', seed: 'ip' })
 			.derive('global', ({ server, request }) => {
 				return {
 					ip: server?.requestIP(request)
 				}
 			})
-			.beforeHandle(() => {
-				console.log('11')
-			})
+			.beforeHandle(() => {})
 			.get('/ip', ({ ip }) => ip)
 
 		const router1 = new Elysia({ name: 'ip1', seed: 'ip1' })
@@ -406,15 +391,8 @@ describe('Checksum', () => {
 			.use(ip)
 			.get('/ip-2', ({ ip }) => ip)
 
-		const router3 = new Elysia({ name: 'ip2', seed: 'ip2' })
-			.use(ip)
-			.get('/ip-3', ({ ip }) => ip)
-
 		const server = new Elysia({ name: 'server' }).use(router1).use(router2)
 
-		// `derive` now registers on `beforeHandle` (not `transform`). The `/ip`
-		// route sees the global `derive` once (deduplicated despite `ip` being
-		// used by both routers) plus its local `onBeforeHandle` — two in total.
 		expect(
 			server.routes.find((x) => x.path === '/ip')?.hooks.beforeHandle
 		).toHaveLength(2)

@@ -51,11 +51,8 @@ describe('Custom Response Type', () => {
 
 		const response = await app.handle(req('/'))
 
-		// Response's Content-Type takes precedence
 		expect(response.headers.get('Content-Type')).toBe('text/plain')
-		// set.headers adds non-conflicting headers
 		expect(response.headers.get('X-Framework')).toBe('Elysia')
-		// Response's own headers are preserved
 		expect(response.headers.get('X-Custom')).toBe('custom-value')
 	})
 })

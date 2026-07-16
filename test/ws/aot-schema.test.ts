@@ -10,17 +10,11 @@ import {
 import { materialise } from '../aot/_manifest'
 import { newWebsocket, wsOpen, wsMessage, wsClosed } from './utils'
 
-/**
- * WS body/query/response validators freeze into the AOT validator manifest the
- * same way HTTP routes do — driven by the `aot: { method: 'WS', path }` option
- * in `buildWSRoute`. Before this, WS routes recompiled TypeBox at runtime even
- * inside a frozen build. `WS` matches the `~map` method key, so no collision
- * with HTTP methods.
- */
+// Frozen WebSocket builds capture and reuse body, query, and response validators.
 
 beforeEach(() => {
-	process.env.ELYSIA_AOT_BUILD = '1' // capture mode
-	// Drain capture leaked by sibling AOT tests (same env, validators only drained)
+	process.env.ELYSIA_AOT_BUILD = '1'
+	// Shared capture state may contain validators from another AOT test.
 	endValidatorCapture()
 	endHandlerCapture()
 })
@@ -38,9 +32,7 @@ const build = () =>
 		message() {}
 	})
 
-// Codec body (Date + Numeric) — both arrive as strings on the wire and must be
-// DECODED before the handler runs. Echoes typed tags so the behavioural diff can
-// prove the reconstructed validator coerced exactly like the JIT one.
+// Echo decoded types so frozen and JIT validators can be compared.
 const buildCodec = () =>
 	new Elysia().ws('/ws', {
 		body: t.Object({ when: t.Date(), n: t.Numeric() }),
@@ -59,8 +51,7 @@ const buildCodec = () =>
 		}
 	})
 
-// Drain + capture a fresh build, then leave capture mode and return the manifest.
-// `builder` is typed loosely — `.ws()` returns an `AddWSRoute`, not a bare Elysia.
+// `.ws()` returns AddWSRoute, so builders use the concrete value through `any`.
 const captureManifest = (builder: () => any) => {
 	process.env.ELYSIA_AOT_BUILD = '1'
 	endValidatorCapture()
@@ -71,7 +62,6 @@ const captureManifest = (builder: () => any) => {
 	return captured
 }
 
-// Open a socket, send one frame, resolve the echoed message, close.
 const sendBody = async (app: any, payload: string): Promise<string> => {
 	const ws = newWebsocket(app.server!)
 	await wsOpen(ws)
@@ -82,22 +72,21 @@ const sendBody = async (app: any, payload: string): Promise<string> => {
 	return data as string
 }
 
-describe('AOT WebSocket schema freeze', () => {
-	it('captures WS body/query/response validators under the WS method', () => {
+describe('AOT WebSocket schemas', () => {
+	it('captures body, query, and response validators for WebSocket routes', () => {
 		;(build() as any).compile()
 		const captured = endValidatorCapture()
 
 		const ws = captured.filter((v) => v.method === 'WS' && v.path === '/ws')
 		const slots = ws.map((v) => String(v.slot))
 
-		// the whole point: WS validators were captured at all
 		expect(ws.length).toBeGreaterThan(0)
 		expect(slots).toContain('body')
 		expect(slots).toContain('query')
 		expect(slots.some((s) => s.startsWith('response'))).toBe(true)
 	})
 
-	it('runtime buildWSRoute consults the manifest (reconstruct, not recompile)', () => {
+	it('reuses captured validators instead of recompiling them', () => {
 		const captured = captureManifest(build)
 
 		Validator.clear()
@@ -105,9 +94,7 @@ describe('AOT WebSocket schema freeze', () => {
 		expect(Compiled.hasValidator('WS', '/ws', 'body')).toBe(true)
 		expect(Compiled.hasValidator('WS', '/ws', 'query')).toBe(true)
 
-		// Spy the REAL reconstruct fetch (type/validator/index.ts -> Compiled.getValidator).
-		// `.not.toThrow()` is too weak — a silent recompile would also pass — so prove
-		// the frozen build actually pulled each WS slot OUT of the manifest.
+		// A successful build alone cannot distinguish reuse from recompilation.
 		const original = Compiled.getValidator
 		const hits: string[] = []
 		;(Compiled as any).getValidator = (m: string, p: string, s: any) => {
@@ -126,15 +113,13 @@ describe('AOT WebSocket schema freeze', () => {
 		expect(hits).toContain('query')
 	})
 
-	it('frozen WS validates + coerces identically to JIT (behavioural diff)', async () => {
+	it('frozen and JIT routes validate and decode messages identically', async () => {
 		const VALID = JSON.stringify({
 			when: '2020-01-01T00:00:00.000Z',
 			n: '42'
 		})
-		// both fields invalid: 'not-a-date' Date + non-numeric 'abc'
 		const INVALID = JSON.stringify({ when: 'not-a-date', n: 'abc' })
 
-		// ── frozen (AOT-reconstructed) ─────────────────────────────────────
 		const captured = captureManifest(buildCodec)
 		Validator.clear()
 		Compiled.validators = materialise(captured)
@@ -145,7 +130,6 @@ describe('AOT WebSocket schema freeze', () => {
 		const frozenInvalid = await sendBody(frozenApp, INVALID)
 		frozenApp.stop()
 
-		// ── JIT reference (no manifest) ────────────────────────────────────
 		Compiled.clear()
 		Validator.clear()
 		const jitApp = buildCodec().listen(0)
@@ -153,7 +137,6 @@ describe('AOT WebSocket schema freeze', () => {
 		const jitInvalid = await sendBody(jitApp, INVALID)
 		jitApp.stop()
 
-		// coercion really happened on the frozen path (string -> Date/number)
 		expect(JSON.parse(frozenValid)).toEqual({
 			whenIsDate: true,
 			iso: '2020-01-01T00:00:00.000Z',
@@ -161,11 +144,9 @@ describe('AOT WebSocket schema freeze', () => {
 			nType: 'number'
 		})
 
-		// frozen === JIT for both valid decode and invalid rejection
 		expect(JSON.parse(frozenValid)).toEqual(JSON.parse(jitValid))
 		expect(frozenInvalid).toBe(jitInvalid)
 
-		// invalid input was rejected, not silently echoed as the handler output
 		expect(frozenInvalid).not.toBe(frozenValid)
 		expect(frozenInvalid.length).toBeGreaterThan(0)
 	})

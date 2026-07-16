@@ -4,23 +4,6 @@ import { Elysia, file, form, sse, status, t } from '../../src'
 
 import { expectTypeOf } from 'expect-type'
 import { Cookie } from '../../src/cookie'
-import { resumeEmit } from '../../src/experimental/resume'
-
-new Elysia({ experimental: { resumeEmit } })
-// @ts-expect-error resume emitter must be imported so default bundles omit it
-new Elysia({ experimental: { resumeEmit: true } })
-
-// Lazy signed-cookie verification mode is configurable app-wide.
-new Elysia({ cookie: { secrets: 'secret', sign: ['sid'], verify: 'eager' } })
-// @ts-expect-error signed-cookie verification has only two supported modes
-new Elysia({ cookie: { verify: 'none' } })
-
-new Elysia().get('/readonly-path', (context) => {
-	// The sealed matcher owns routing; handlers cannot rewrite its path.
-	// @ts-expect-error context.path is readonly
-	context.path = '/other'
-	return context.path
-})
 
 const app = new Elysia()
 
@@ -34,7 +17,7 @@ app.get('/', ({ headers, query, params, body, store }) => {
 		Record<string, string | undefined>
 	>()
 
-	// ? schemaless query values may be absent → string | undefined
+	// Schemaless query values may be absent.
 	expectTypeOf<typeof query>().toEqualTypeOf<
 		Record<string, string | undefined>
 	>()
@@ -495,7 +478,7 @@ const b = app
 	})
 }
 
-// ? It resolve void
+// Optional async derivations include undefined in their result.
 {
 	app.derive(async ({ headers }) => {
 		if (Math.random() > 0.5)
@@ -514,12 +497,12 @@ app.derive(({ headers }) => {
 	}
 })
 	.get('/', ({ authorization }) => {
-		// ? infers derive type
+		// Derived values retain their inferred type.
 		expectTypeOf<typeof authorization>().toBeString()
 	})
 	.decorate('a', 'b')
 	.derive(({ a }) => {
-		// ? derive from current context
+		// Derivations can read the current context.
 		expectTypeOf<typeof a>().toBeString()
 
 		return {
@@ -527,18 +510,18 @@ app.derive(({ headers }) => {
 		}
 	})
 	.get('/', ({ a, b }) => {
-		// ? save previous derivation
+		// Existing decorations remain available.
 		expectTypeOf<typeof a>().toBeString()
-		// ? derive from context
+		// Derived values are available to handlers.
 		expectTypeOf<typeof b>().toBeString()
 	})
-	// ? Resolve should not include in onRequest
+	// Derived values are unavailable during request hooks.
 	.request((context) => {
 		expectTypeOf<
 			'b' extends keyof typeof context ? true : false
 		>().toEqualTypeOf<false>()
 	})
-	// ? Resolve should not include in onTransform
+	// Derived values are available during transform hooks.
 	.transform((context) => {
 		expectTypeOf<
 			'b' extends keyof typeof context ? true : false
@@ -1176,7 +1159,7 @@ const a = app
 	// })
 	.decorate('a', 'b')
 	.derive(({ a }) => {
-		// ? derive from current context
+		// Derivations can read the current context.
 		expectTypeOf<typeof a>().toBeString()
 
 		return {
@@ -1184,18 +1167,18 @@ const a = app
 		}
 	})
 	.get('/', ({ a, b }) => {
-		// ? save previous derivation
+		// Existing decorations remain available.
 		expectTypeOf<typeof a>().toBeString()
-		// ? derive from context
+		// Derived values are available to handlers.
 		expectTypeOf<typeof b>().toBeString()
 	})
-	// ? a prior `.derive` runs in the transform stage, so it IS visible here
+	// A prior derive is visible during transform.
 	.transform((context) => {
 		expectTypeOf<
 			'b' extends keyof typeof context ? true : false
 		>().toEqualTypeOf<true>()
 	})
-	// ? Resolve should not include in onBeforeHandle
+	// Derived values remain visible to beforeHandle.
 	.beforeHandle((context) => {
 		expectTypeOf<
 			'b' extends keyof typeof context ? true : false
@@ -1209,16 +1192,15 @@ const a = app
 		.get(
 			'/',
 			{
-				// ? Should contains macro
+				// Registered macro option is accepted.
 				a: 'a'
 			},
 			() => {}
 		)
 		.get(
 			'/',
-			// ? Should have error
 			{
-				// @ts-expect-error
+				// @ts-expect-error macro option `a` expects a string
 				a: 1
 			},
 			() => {}
@@ -1229,7 +1211,7 @@ const a = app
 		.get(
 			'/',
 			{
-				// ? Should merge macro
+				// Options from both registered macros are accepted.
 				a: 'a',
 				b: 2
 			},
@@ -1237,7 +1219,7 @@ const a = app
 		)
 		.guard(
 			{
-				// ? Should contains macro
+				// Guard accepts both registered macro options.
 				a: 'a',
 				b: 2
 			},
@@ -1245,7 +1227,7 @@ const a = app
 				app.get(
 					'/',
 					{
-						// ? Should contains macro
+						// Nested routes retain both macro options.
 						a: 'a',
 						b: 2
 					},
@@ -1347,7 +1329,7 @@ const a = app
 		200: string
 	}>()
 
-	// response-only route (no request validator) → no phantom 422 (eden-types-1)
+	// Response schemas add declared statuses without adding 422.
 	expectTypeOf<app['post']['response']>().toEqualTypeOf<{
 		200: string
 		201: string
@@ -1357,7 +1339,6 @@ const a = app
 		200: boolean
 	}>()
 
-	// response-only route (no request validator) → no phantom 422 (eden-types-1)
 	expectTypeOf<app['true']['post']['response']>().toEqualTypeOf<{
 		200: boolean
 		202: boolean
@@ -2805,7 +2786,7 @@ type a = keyof {}
 		{
 			beforeHandle: ({ status }) => {
 				if (Math.random() > 0.5) {
-					// @ts-expect-error
+					// @ts-expect-error macro `a` expects a string
 					return status(401, { a: 'Unauthorized' })
 				}
 
@@ -3034,14 +3015,7 @@ type a = keyof {}
 	)
 }
 
-// ───────────────────────────────────────────────────────────────────────────
-// WebSocket footgun coverage (ctx + route-tree). Locks in the behavior fixed in
-// the ws-nesting type port; see CHANGELOG. Bug-exposing gaps are tracked
-// separately, not asserted here.
-// ───────────────────────────────────────────────────────────────────────────
-
-// ws send/publish payloads must match the `response` schema — guards against
-// silently reverting to `string | BufferSource`.
+// WebSocket send and publish payloads must match the response schema.
 {
 	new Elysia().ws('/ws-send-string', {
 		response: t.String(),
@@ -3061,8 +3035,7 @@ type a = keyof {}
 	})
 }
 
-// ws.query / ws.headers reflect their schemas top-level on the ctx, alongside
-// ws.params (existing tests only cover params).
+// WebSocket handlers receive typed params, query, and headers.
 {
 	new Elysia().ws('/ws-ctx-data/:id', {
 		params: t.Object({ id: t.Number() }),
@@ -3078,8 +3051,7 @@ type a = keyof {}
 	})
 }
 
-// Non-message ws handlers carry no inbound payload, so ws.body is `never` even
-// with a declared body schema.
+// Non-message WebSocket handlers have no inbound body.
 {
 	new Elysia().ws('/ws-body-open', {
 		body: t.Object({ name: t.String() }),
@@ -3089,8 +3061,7 @@ type a = keyof {}
 	})
 }
 
-// `message` is the one ws handler with an inbound payload: ws.body and the
-// destructured `{ body }` are typed from the `body` schema (the core ws use).
+// Message handlers receive the declared body type.
 {
 	new Elysia().ws('/ws-msg-body', {
 		body: t.Object({ name: t.String() }),
@@ -3106,8 +3077,7 @@ type a = keyof {}
 	})
 }
 
-// ws `message` may return `status(code, value)` for a status-keyed `response`,
-// validated against the matching schema (mirrors HTTP handlers).
+// Message status returns must match the schema for that status.
 {
 	new Elysia().ws('/ws-status', {
 		response: {
@@ -3131,8 +3101,7 @@ type a = keyof {}
 	})
 }
 
-// A value-macro applied on a ws route type-checks its argument exactly like on
-// HTTP routes: correct literal accepted, wrong type errors.
+// WebSocket macro options use the macro's declared value type.
 {
 	const app = new Elysia().macro({
 		a(_a: string) {}
@@ -3148,9 +3117,7 @@ type a = keyof {}
 	})
 }
 
-// ws `response` schema surfaces in subscribe.response as the typed outbound
-// message. `response` is an OUTPUT schema and cannot trigger a request-time 422,
-// so a response-only ws route must NOT advertise a phantom 422 (eden-types-1).
+// WebSocket response schemas type outbound messages without adding 422.
 {
 	const app = new Elysia().ws('/ws-resp', {
 		response: t.String(),
@@ -3163,8 +3130,7 @@ type a = keyof {}
 	>().toEqualTypeOf<false>()
 }
 
-// subscribe has NO `error` key (CreateWSEdenResponse omits it); http get DOES
-// (`error: never`). This is the single distinguishing field of the two shapes.
+// WebSocket route types omit `error`; HTTP route types include it.
 {
 	const ws = new Elysia().ws('/ws-err', { message() {} })
 	type WsSub = (typeof ws)['~Routes']['ws-err']['subscribe']
@@ -3178,8 +3144,7 @@ type a = keyof {}
 	>().toEqualTypeOf<true>()
 }
 
-// group query (outer) + guard headers (inner) both merge into one subscribe —
-// the realistic 'auth gateway wrapping a socket' shape.
+// Group and guard schemas both reach nested WebSocket routes.
 {
 	const app = new Elysia().group(
 		'/v1ws',
@@ -3195,8 +3160,7 @@ type a = keyof {}
 	expectTypeOf<Sub['headers']>().toEqualTypeOf<{ authorization: string }>()
 }
 
-// get + ws at the SAME path coexist as distinct keys; neither clobbers the
-// other and the ws body schema survives on subscribe.
+// HTTP and WebSocket routes can share a path without losing either schema.
 {
 	const app = new Elysia()
 		.get('/dual', () => 'hi')
@@ -3211,9 +3175,7 @@ type a = keyof {}
 	expectTypeOf<Route['subscribe']['body']>().toEqualTypeOf<{ text: string }>()
 }
 
-// 3-arg ws form: a generator handler's `yield` type flows into
-// subscribe.response (typed streamed messages for Eden), with no explicit
-// `response` schema.
+// Generator yield types become WebSocket response types.
 {
 	const app = new Elysia().ws('/ws-gen', function* () {
 		yield { tick: 1 }
@@ -3222,7 +3184,7 @@ type a = keyof {}
 	expectTypeOf<Sub['response'][200]>().toEqualTypeOf<{ tick: number }>()
 }
 
-// async generator handler
+// Async generator yield types become WebSocket response types.
 {
 	const app = new Elysia().ws('/ws-agen', async function* () {
 		yield 'hello'
@@ -3231,8 +3193,7 @@ type a = keyof {}
 	expectTypeOf<Sub['response'][200]>().toEqualTypeOf<string>()
 }
 
-// 3-arg form with a body schema in options: the handler ctx is typed
-// (ws.body) AND the yield flows into subscribe.response.
+// Generator handlers receive the body type and expose their yield type.
 {
 	const app = new Elysia().ws(
 		'/ws-echo',
@@ -3247,17 +3208,14 @@ type a = keyof {}
 	expectTypeOf<Sub['body']>().toEqualTypeOf<{ text: string }>()
 }
 
-// 3-arg ws form with a PLAIN (non-generator) handler: its return type flows
-// into subscribe.response (a void-returning handler contributes nothing).
+// Plain handler return types become WebSocket response types.
 {
 	const app = new Elysia().ws('/ws-ret', () => ({ ok: true }))
 	type Sub = (typeof app)['~Routes']['ws-ret']['subscribe']
 	expectTypeOf<Sub['response'][200]>().toEqualTypeOf<{ ok: boolean }>()
 }
 
-// 3-arg form WITH options + a plain (non-generator) handler: the handler
-// return flows into subscribe.response just like the 2-arg-function form,
-// and the ctx (ws.body) is typed from the options schema.
+// Plain handlers receive the body type and expose their return type.
 {
 	const app = new Elysia().ws(
 		'/ws-3arg-ret',

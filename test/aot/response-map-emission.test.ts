@@ -5,26 +5,7 @@ import { Compiled } from '../../src/compile/aot'
 import { compileHandler } from '../../src/compile/handler'
 import { req, post } from '../utils'
 
-/**
- * Response-map emission harness.
- *
- * a body-bearing route used to materialize ALL request headers via
- * `c.request.headers.toJSON()` just to read `content-type` once. The parse
- * codegen already reads `c.request.headers.get('content-type')` directly when
- * `!hasHeaders`, so the materialization is pure waste unless something actually
- * reads `c.headers` (handler/parser/lifecycle fn → `inference.headers`, or a
- * `headers` schema → `vali.headers`).
- *
- * `hasSet` over-included `hasHeaders`, routing set-untouched responses
- * through the `rm`/handleSet slow path. Reading request headers is a READ; it
- * can never write `c.set`, so such routes take the compact `rc` path. Routes
- * that DO write set (cookie jar, app default headers, response validation,
- * afterResponse/error/trace set.status writeback) stay on `rm`.
- *
- * Codegen is runtime-only — the type gate cannot catch emission bugs, so these
- * assertions inspect the COMPILED FUNCTION source (`fn.toString()`) and also
- * round-trip behaviour through `app.handle`.
- */
+/** Body parsing materializes all headers only when route code needs them. */
 
 afterEach(() => {
 	Compiled.clear()
@@ -37,34 +18,29 @@ const compileRoute = (app: any, index = 0) => {
 	return { fn, name: fn.constructor.name, source: fn.toString() }
 }
 
-describe('body route no longer materializes all headers for content-type', () => {
-	it('POST echo body reads content-type directly (no toJSON) and uses rc', () => {
+describe('body parsing without full header access', () => {
+	it('reads content-type once and uses compact response mapping', () => {
 		const app = new Elysia().post('/echo', ({ body }) => body)
 
 		const { source } = compileRoute(app)
 
-		// the parse prologue reads content-type straight off the request
 		expect(source).toContain("c.request.headers.get('content-type')")
 		expect(
 			source.match(/c\.request\.headers\.get\('content-type'\)/g)
 		).toHaveLength(1)
-		// default parsing can fast-path JSON without materializing parser-only
-		// context state when no custom parser can observe it
 		expect(source).toContain('let ce=nc(ct)')
 		expect(source).toContain(
 			"let cj=(ce.charCodeAt(12)===106&&ce==='application/json')||ce.endsWith('+json')"
 		)
 		expect(source).toContain('c.body=cj?await pj(c):await pd(c,ce,true)')
 		expect(source).not.toContain('c.contentType=ct')
-		// no full-header materialization
 		expect(source).not.toContain('c.headers=')
 		expect(source).not.toContain('.toJSON()')
-		//  consequence: untouched-set body route uses the compact map
 		expect(source).toContain('rc(_r,c.request)')
 		expect(source).not.toContain('rm(')
 	})
 
-	it('POST echo body still parses correctly', async () => {
+	it('parses JSON bodies without a schema', async () => {
 		const app = new Elysia().post('/echo', ({ body }) => body)
 		const res = await app.handle(post('/echo', { name: 'saltyaom' }))
 		await expect(res.json()).resolves.toEqual({ name: 'saltyaom' })
@@ -99,17 +75,14 @@ describe('body route no longer materializes all headers for content-type', () =>
 		expect(bad.status).toBe(422)
 	})
 
-	// A handler that READS c.headers still materializes them (inference.headers)
-	it('handler reading c.headers still materializes headers but uses rc', async () => {
+	it('materializes headers when the handler reads them', async () => {
 		const app = new Elysia().post(
 			'/h',
 			({ headers }) => headers['x-foo'] ?? 'none'
 		)
 
 		const { source } = compileRoute(app)
-		// materialization is preserved because the handler reads c.headers
 		expect(source).toContain('c.headers=')
-		// but it still cannot write set → compact path
 		expect(source).toContain('rc(')
 		expect(source).not.toContain('rm(')
 
@@ -119,9 +92,7 @@ describe('body route no longer materializes all headers for content-type', () =>
 		await expect(res.text()).resolves.toBe('bar')
 	})
 
-	// A custom parser reading ctx.headers must still materialize (sucrose sets
-	// inference.headers from the parser fn source)
-	it('parser reading ctx.headers still materializes headers', () => {
+	it('materializes headers when a custom parser reads them', () => {
 		const app = new Elysia().post(
 			'/p',
 			{
@@ -166,8 +137,7 @@ describe('body route no longer materializes all headers for content-type', () =>
 		await expect(res.json()).resolves.toEqual({ name: 'saltyaom' })
 	})
 
-	// A headers SCHEMA must still materialize (vali.headers)
-	it('headers schema still materializes headers', () => {
+	it('materializes headers for a headers schema', () => {
 		const app = new Elysia().post(
 			'/hs',
 			{
@@ -182,17 +152,15 @@ describe('body route no longer materializes all headers for content-type', () =>
 	})
 })
 
-describe('hasHeaders is not a hasSet term', () => {
-	it('GET reading c.headers uses the compact rc path', async () => {
+describe('header reads and response set handling', () => {
+	it('a GET that only reads headers uses compact response mapping', async () => {
 		const app = new Elysia().get(
 			'/h',
 			({ headers }) => headers['x-foo'] ?? ''
 		)
 
 		const { source } = compileRoute(app)
-		// reads headers → materialized
 		expect(source).toContain('c.headers=')
-		// but cannot write set → rc, no c.set in the map call
 		expect(source).toContain('rc(_r,c.request)')
 		expect(source).not.toContain('c.set')
 
@@ -207,13 +175,7 @@ describe('hasHeaders is not a hasSet term', () => {
 		})
 
 		const { source } = compileRoute(app)
-		// inference.set → the set-aware map receives c.set, whether emitted as
-		// codegen `rm(_r,c.set,c.request)` or — for a plain sync handler that
-		// takes the no-eval inline path — `createInlineHandlerWithSet`'s
-		// `map(r, c.set, c.request)`. Either way c.set is passed; never the
-		// compact rc (which would drop the write).
 		expect(source).toContain('c.set')
-		// behaviour: the write reaches the response
 		const res = await app.handle(req('/s'))
 		expect(res.headers.get('x-y')).toBe('z')
 	})
@@ -229,11 +191,7 @@ describe('hasHeaders is not a hasSet term', () => {
 		expect(res.headers.get('x-app')).toBe('default')
 	})
 
-	// status writeback must still work: an afterResponse route keeps hasSet (and
-	// the rm map, here inside the `_fin2` helper) so afterResponse observes the
-	// written-back set.status === 418. This is the load-bearing reason
-	// hasAfterResponse must stay in hasSet even though hasHeaders was removed.
-	it('status() + afterResponse: set.status writeback is observed (rm retained)', async () => {
+	it('afterResponse observes status writeback', async () => {
 		let observed: unknown
 		const app = new Elysia()
 			.afterResponse(({ set }) => {
@@ -247,12 +205,7 @@ describe('hasHeaders is not a hasSet term', () => {
 		expect(observed).toBe(418)
 	})
 
-	// A set-writing route keeps hasSet → the set-aware map (passing c.set), while
-	// a header-only-reading sibling does NOT (compact rc) — proving hasHeaders is
-	// not a hasSet term. The set-writer is a plain sync handler so it takes the
-	// no-eval inline path (createInlineHandlerWithSet); the header-reader
-	// materializes headers (inlineUnsafe) so it stays on codegen and emits rc.
-	it('writeback-bearing route is set-aware; header-read route uses compact rc', async () => {
+	it('set writes stay set-aware while header-only reads stay compact', async () => {
 		const writes = new Elysia().get('/w', ({ set }) => {
 			set.status = 418
 			return 'hi'

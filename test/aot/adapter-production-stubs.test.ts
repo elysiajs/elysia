@@ -14,12 +14,8 @@ import { aot as viteAot } from '../../src/plugin/aot/vite'
 const APP = resolve(import.meta.dir, 'fixtures/strip-schema-bundle.ts')
 const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/aot.ts')
 
-// ---------------------------------------------------------------------------
-// Target-gated adapter stubs
-// ---------------------------------------------------------------------------
-
 describe('target-gated adapter stubs', () => {
-	it('FILTER: ADAPTER_BUN_FILTER matches elysia src and dist adapter/bun/index paths', () => {
+	it('matches Elysia src and dist Bun adapter paths', () => {
 		expect(
 			ADAPTER_BUN_FILTER.test('/x/elysia/src/adapter/bun/index.ts')
 		).toBe(true)
@@ -28,22 +24,17 @@ describe('target-gated adapter stubs', () => {
 				'/x/node_modules/elysia/dist/adapter/bun/index.mjs'
 			)
 		).toBe(true)
-		// must NOT match user modules or the adapter root
 		expect(ADAPTER_BUN_FILTER.test('/app/src/adapter/bun/index.ts')).toBe(
 			false
 		)
 		expect(
-			ADAPTER_BUN_FILTER.test(
-				'/x/elysia/src/adapter/constants.ts'
-			)
+			ADAPTER_BUN_FILTER.test('/x/elysia/src/adapter/constants.ts')
 		).toBe(false)
 	})
 
-	it('FILTER: ADAPTER_CONSTANTS_FILTER matches elysia src and dist paths', () => {
+	it('matches Elysia src and dist adapter constants paths', () => {
 		expect(
-			ADAPTER_CONSTANTS_FILTER.test(
-				'/x/elysia/src/adapter/constants.ts'
-			)
+			ADAPTER_CONSTANTS_FILTER.test('/x/elysia/src/adapter/constants.ts')
 		).toBe(true)
 		expect(
 			ADAPTER_CONSTANTS_FILTER.test(
@@ -55,11 +46,9 @@ describe('target-gated adapter stubs', () => {
 				'/x/node_modules/elysia/dist/adapter/constants.js'
 			)
 		).toBe(true)
-		// must NOT match user modules that happen to share the path shape
 		expect(
 			ADAPTER_CONSTANTS_FILTER.test('/app/src/adapter/constants.ts')
 		).toBe(false)
-		// pnpm layout
 		expect(
 			ADAPTER_CONSTANTS_FILTER.test(
 				'/x/node_modules/.pnpm/elysia@2.0.0/node_modules/elysia/dist/adapter/constants.mjs'
@@ -67,28 +56,28 @@ describe('target-gated adapter stubs', () => {
 		).toBe(true)
 	})
 
-	it('stub plan: target:bun → adapter:bun', async () => {
+	it('selects the Bun adapter for target:bun', async () => {
 		const { stub } = await generateCompiledArtifacts(APP, {
 			target: 'bun'
 		})
 		expect(stub.adapter).toBe('bun')
 	})
 
-	it('stub plan: target:node → adapter:web-standard', async () => {
+	it('selects the web-standard adapter for target:node', async () => {
 		const { stub } = await generateCompiledArtifacts(APP, {
 			target: 'node'
 		})
 		expect(stub.adapter).toBe('web-standard')
 	})
 
-	it('stub plan: target:workerd → adapter:web-standard', async () => {
+	it('selects the web-standard adapter for target:workerd', async () => {
 		const { stub } = await generateCompiledArtifacts(APP, {
 			target: 'workerd'
 		})
 		expect(stub.adapter).toBe('web-standard')
 	})
 
-	it('stub plan: no target → adapter:false (fallback: runtime isBun check)', async () => {
+	it('leaves adapter selection to the runtime when target is omitted', async () => {
 		const { stub } = await generateCompiledArtifacts(APP)
 		expect(stub.adapter).toBe(false)
 	})
@@ -103,18 +92,17 @@ describe('target-gated adapter stubs', () => {
 
 	it('adapterConstantsSource: web-standard stub exports WebStandardAdapter, no isBun check', () => {
 		const src = adapterConstantsSource('web-standard')
-		expect(src).toContain("import { WebStandardAdapter } from './web-standard/index'")
-		expect(src).toContain('export const defaultAdapter = WebStandardAdapter')
+		expect(src).toContain(
+			"import { WebStandardAdapter } from './web-standard/index'"
+		)
+		expect(src).toContain(
+			'export const defaultAdapter = WebStandardAdapter'
+		)
 		expect(src).not.toContain('isBun')
 		expect(src).not.toContain('BunAdapter')
 	})
 
-	// End-to-end: target:node/workerd → `adapter/constants` stub hard-sets
-	// `defaultAdapter = WebStandardAdapter` AND `adapter/bun/index` is replaced
-	// with a throwing stub so `Bun.serve` never appears in the bundle.
-	// This is the key win: base.ts imports BunAdapter directly from adapter/bun,
-	// so the adapter/constants stub alone was not enough.
-	it('E2E: target:node bundle — no Bun.serve in output (adapter/bun fully stubbed)', async () => {
+	it('node bundles remove Bun.serve and include the Bun adapter stub', async () => {
 		const result = await Bun.build({
 			entrypoints: [APP],
 			plugins: [
@@ -129,17 +117,12 @@ describe('target-gated adapter stubs', () => {
 		expect(result.success).toBe(true)
 		const out = await result.outputs[0].text()
 
-		// adapter/constants stub hard-selects WebStandardAdapter (no ternary)
 		expect(out).not.toContain('isBun ? BunAdapter : WebStandardAdapter')
-
-		// adapter/bun stub eliminated Bun.serve from the bundle
 		expect(out).not.toContain('Bun.serve')
-
-		// The stub error message IS present (the throwing stub exported BunAdapter)
 		expect(out).toContain('Bun adapter was stripped')
 	})
 
-	it('E2E: target:workerd bundle — no Bun.serve in output', async () => {
+	it('workerd bundles remove Bun.serve and include the Bun adapter stub', async () => {
 		const result = await Bun.build({
 			entrypoints: [APP],
 			plugins: [
@@ -158,9 +141,7 @@ describe('target-gated adapter stubs', () => {
 		expect(out).toContain('Bun adapter was stripped')
 	})
 
-	// End-to-end: target:bun → `adapter/constants` stub hard-sets
-	// `defaultAdapter = BunAdapter`.
-	it('E2E: target:bun bundle — defaultAdapter is hard-set to BunAdapter', async () => {
+	it('Bun bundles select BunAdapter at build time', async () => {
 		const result = await Bun.build({
 			entrypoints: [APP],
 			plugins: [
@@ -179,9 +160,7 @@ describe('target-gated adapter stubs', () => {
 		expect(out).not.toContain('isBun ? BunAdapter : WebStandardAdapter')
 	})
 
-	// End-to-end: no target → runtime isBun check is preserved in adapter/constants
-	// and the real BunAdapter (with Bun.serve) is retained in the bundle.
-	it('E2E: no target → runtime isBun ternary present and Bun.serve retained', async () => {
+	it('bundles without a target preserve runtime adapter detection', async () => {
 		const result = await Bun.build({
 			entrypoints: [APP],
 			plugins: [
@@ -196,18 +175,12 @@ describe('target-gated adapter stubs', () => {
 		expect(result.success).toBe(true)
 		const out = await result.outputs[0].text()
 
-		// Without a target the original isBun ternary must be present
 		expect(out).toContain('isBun ? BunAdapter : WebStandardAdapter')
-
-		// The real adapter/bun/index is not stubbed: Bun.serve IS in the bundle
 		expect(out).toContain('Bun.serve')
-
-		// No stub error message
 		expect(out).not.toContain('Bun adapter was stripped')
 	})
 
-	// End-to-end: target:bun → adapter/bun is NOT stubbed (Bun is the intended runtime)
-	it('E2E: target:bun bundle — Bun.serve retained (adapter/bun not stubbed for Bun target)', async () => {
+	it('Bun bundles retain Bun.serve without the adapter stub', async () => {
 		const result = await Bun.build({
 			entrypoints: [APP],
 			plugins: [
@@ -222,18 +195,13 @@ describe('target-gated adapter stubs', () => {
 		expect(result.success).toBe(true)
 		const out = await result.outputs[0].text()
 
-		// Bun adapter is the intended adapter: Bun.serve must be present
 		expect(out).toContain('Bun.serve')
 		expect(out).not.toContain('Bun adapter was stripped')
 	})
 })
 
-// ---------------------------------------------------------------------------
-// Build-time production flag
-// ---------------------------------------------------------------------------
-
 describe('build-time production flag', () => {
-	it('FILTER: IS_PRODUCTION_FILTER matches elysia src and dist paths', () => {
+	it('matches Elysia src and dist production modules', () => {
 		expect(
 			IS_PRODUCTION_FILTER.test(
 				'/x/elysia/src/universal/is-production.ts'
@@ -244,38 +212,31 @@ describe('build-time production flag', () => {
 				'/x/node_modules/elysia/dist/universal/is-production.mjs'
 			)
 		).toBe(true)
-		// must NOT match user modules
 		expect(
-			IS_PRODUCTION_FILTER.test(
-				'/app/src/universal/is-production.ts'
-			)
+			IS_PRODUCTION_FILTER.test('/app/src/universal/is-production.ts')
 		).toBe(false)
 	})
 
-	it('stub plan: production option absent → isProduction:true (default)', async () => {
+	it('defaults the production stub to true', async () => {
 		const { stub } = await generateCompiledArtifacts(APP)
 		expect(stub.isProduction).toBe(true)
 	})
 
-	it('stub plan: production:true → isProduction:true', async () => {
+	it('sets the production stub when production is true', async () => {
 		const { stub } = await generateCompiledArtifacts(APP, {
 			production: true
 		})
 		expect(stub.isProduction).toBe(true)
 	})
 
-	it('stub plan: production:false → isProduction:false', async () => {
+	it('disables the production stub when production is false', async () => {
 		const { stub } = await generateCompiledArtifacts(APP, {
 			production: false
 		})
 		expect(stub.isProduction).toBe(false)
 	})
 
-	// E2E: default (production:true) stub exports isProduction as `() => true` so
-	// bundlers can constant-fold and DCE `if (!isProduction())` branches.
-	// We verify: (a) the stub IS applied (runtime env-read is gone), (b) no
-	// NODE_ENV check remains after the stub replaces the module.
-	it('E2E: default build (production:true) — isProduction stubbed as () => true, dev branches DCE\'d', async () => {
+	it('production builds remove runtime environment checks', async () => {
 		const result = await Bun.build({
 			entrypoints: [APP],
 			plugins: [
@@ -292,12 +253,10 @@ describe('build-time production flag', () => {
 		expect(result.success).toBe(true)
 		const out = await result.outputs[0].text()
 
-		// The runtime env check (original: env.NODE_ENV === 'production') must
-		// NOT appear in the is-production module section
 		expect(out).not.toContain('NODE_ENV')
 	})
 
-	it('E2E: production:false build — isProduction retains runtime env check', async () => {
+	it('development builds retain runtime environment checks', async () => {
 		const result = await Bun.build({
 			entrypoints: [APP],
 			plugins: [
@@ -313,76 +272,47 @@ describe('build-time production flag', () => {
 		expect(result.success).toBe(true)
 		const out = await result.outputs[0].text()
 
-		// With production:false the runtime env check is preserved
 		expect(out).toContain('NODE_ENV')
-
-		// The stub IS_PRODUCTION=true constant must NOT appear (not stubbed)
 		expect(out).not.toContain('IS_PRODUCTION = true')
 	})
 })
-
-// ---------------------------------------------------------------------------
-// Vite plugin parity — adapter/bun stub
-// ---------------------------------------------------------------------------
 
 describe('Vite plugin: adapter/bun stub parity', () => {
 	const bunIndexId = '/x/node_modules/elysia/dist/adapter/bun/index.mjs'
 	const bunSrcId = '/x/elysia/src/adapter/bun/index.ts'
 	const unrelatedId = '/app/src/mymodule.ts'
 
-	// Helper: build a minimal StubPlan with the given adapter value, then call
-	// the plugin's transform hook directly.  We bypass buildStart (which runs
-	// the full AOT pipeline) by constructing the plugin with a known stub.
-	// The vite plugin stores the stub in closure; we cannot inject it without
-	// buildStart, so we test via the transform logic by calling the exported
-	// plugin and wiring a pre-set stub plan ourselves.
-	//
-	// Instead, we test the underlying building blocks that the vite transform
-	// delegates to — same filters and same stub source — and confirm the
-	// integration: that ADAPTER_BUN_FILTER.test + bunAdapterStubSource is what
-	// vite.ts actually imports and uses (not a copy).
-
-	it('bunAdapterStubSource is the single source of truth (no string duplication)', () => {
-		// The constant must contain the key discriminator used in all E2E tests
+	it('uses the shared Bun adapter stub source', () => {
 		expect(bunAdapterStubSource).toContain('Bun adapter was stripped')
 		expect(bunAdapterStubSource).toContain('collectStaticRoutes')
 		expect(bunAdapterStubSource).toContain('BunAdapter')
-		// Must NOT contain Bun.serve (the whole point of the stub)
 		expect(bunAdapterStubSource).not.toContain('Bun.serve')
 	})
 
-	it('ADAPTER_BUN_FILTER matches adapter/bun/index paths that vite transform would intercept', () => {
+	it('matches Bun adapter paths handled by the transform', () => {
 		expect(ADAPTER_BUN_FILTER.test(bunIndexId)).toBe(true)
 		expect(ADAPTER_BUN_FILTER.test(bunSrcId)).toBe(true)
 		expect(ADAPTER_BUN_FILTER.test(unrelatedId)).toBe(false)
 	})
 
-	it('vite plugin transform: web-standard target + adapter/bun id → returns stub (not undefined)', async () => {
-		// We use Bun.build with the real vite plugin internals by shimming through
-		// the transform hook directly.  The aot() function returns the plugin
-		// object with a transform method we can call without running buildStart.
-		// We inject a stub plan by calling the plugin with a fixture entry and
-		// overriding the stub closure via the plugin's own transform after manually
-		// setting its internal state through buildStart.
-		//
-		// Simpler approach: create the plugin, run buildStart with a web-standard
-		// target fixture, then call transform with an adapter/bun module id.
+	it('replaces the Bun adapter for web-standard targets', async () => {
 		const plugin = viteAot(APP, {
 			registerFrom: REGISTER_FROM,
-			target: 'node' // node → web-standard adapter stub plan
+			target: 'node'
 		})
 
-		// buildStart populates the stub plan inside the plugin closure
 		await plugin.buildStart()
 
-		// transform should intercept the adapter/bun module and return the stub
-		const result = await plugin.transform('// original bun adapter code\nBun.serve({})', bunIndexId)
+		const result = await plugin.transform(
+			'// original bun adapter code\nBun.serve({})',
+			bunIndexId
+		)
 		expect(result).toBeDefined()
 		expect(result).toContain('Bun adapter was stripped')
 		expect(result).not.toContain('Bun.serve')
 	})
 
-	it('vite plugin transform: bun target + adapter/bun id → does NOT stub (returns undefined or original)', async () => {
+	it('keeps the Bun adapter for Bun targets', async () => {
 		const plugin = viteAot(APP, {
 			registerFrom: REGISTER_FROM,
 			target: 'bun' // bun target → adapter:'bun', no bun-adapter stub
@@ -390,22 +320,24 @@ describe('Vite plugin: adapter/bun stub parity', () => {
 
 		await plugin.buildStart()
 
-		// For a bun target, transform must NOT intercept adapter/bun/index
-		const result = await plugin.transform('// original bun adapter code\nBun.serve({})', bunIndexId)
-		// Returns undefined (no transformation) or the original (after tree-shake rewrite)
-		// Either way, the stub must NOT be returned
+		const result = await plugin.transform(
+			'// original bun adapter code\nBun.serve({})',
+			bunIndexId
+		)
 		expect(result ?? '').not.toContain('Bun adapter was stripped')
 	})
 
-	it('vite plugin transform: no target + adapter/bun id → does NOT stub', async () => {
+	it('keeps the Bun adapter when no target is declared', async () => {
 		const plugin = viteAot(APP, {
 			registerFrom: REGISTER_FROM
-			// no target → adapter:false
 		})
 
 		await plugin.buildStart()
 
-		const result = await plugin.transform('// original bun adapter code\nBun.serve({})', bunIndexId)
+		const result = await plugin.transform(
+			'// original bun adapter code\nBun.serve({})',
+			bunIndexId
+		)
 		expect(result ?? '').not.toContain('Bun adapter was stripped')
 	})
 })

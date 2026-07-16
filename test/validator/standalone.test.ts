@@ -991,11 +991,7 @@ describe('standalone validator', () => {
 		expect(incorrect3.status).toBe(422)
 	})
 
-	// Regression: a standalone response schema with no 200 entry
-	// mapped to `undefined` in the single-schema branch (the record branch
-	// already had `.filter(Boolean)`), and Validator.create then threw
-	// `'~kind' in undefined` — turning every request on the route into a 500.
-	it('standalone response schema without a 200 entry does not 500', async () => {
+	it('accepts a standalone response schema without a 200 entry', async () => {
 		const app = new Elysia()
 			.guard({
 				schema: 'standalone',
@@ -1005,7 +1001,6 @@ describe('standalone validator', () => {
 
 		const res = await app.handle(new Request('http://localhost/ok'))
 
-		// before the fix: 500 with an opaque '~kind' in undefined TypeError
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('fine')
 	})
@@ -1024,7 +1019,6 @@ describe('standalone validator', () => {
 		expect(correct.status).toBe(200)
 		await expect(correct.json()).resolves.toEqual({ name: 'a', id: 1 })
 
-		// both standalone schemas are enforced: missing `id` (from `sign`) fails
 		const incorrect = await app.handle(post('/', { name: 'a' }))
 		expect(incorrect.status).toBe(422)
 	})

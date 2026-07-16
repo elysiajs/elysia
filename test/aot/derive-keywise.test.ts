@@ -6,21 +6,7 @@ import { compileHandler } from '../../src/compile/handler'
 import { extractDeriveKeys } from '../../src/compile/handler/utils'
 import { req } from '../utils'
 
-/**
- * Derive key-wise merge harness .
- *
- * Derive merge used to emit the generic reflective `Object.assign(c,tmp)`.
- * statically recovers the returned object literal's keys and emits monomorphic
- * `c.user=tmp.user` stores instead — 2.3-4x faster. The hazard is silent
- * over-match: a scanner that misreads the source DROPS keys (auth-context
- * corruption). So the scanner must extract the EXACT key set or BAIL to
- * Object.assign — never a partial set.
- *
- * This file pins (1) the scanner's exact key set / bail decision across a fuzz
- * set, (2) a differential check that the emitted merge deep-equals Object.assign
- * for every analyzable derive, (3) the codegen emission, and (4) end-to-end that
- * derived keys still reach the handler.
- */
+/** Derive keys must be recovered exactly or fall back to Object.assign. */
 
 afterEach(() => {
 	Compiled.clear()
@@ -107,9 +93,7 @@ describe('extractDeriveKeys exact key set or bail', () => {
 			'conditional / multi return'
 		],
 		[(c: any) => ({ [(c as any).k]: 1 }), 'computed key'],
-		// shorthand bail — built via `new Function` so the transpiler cannot expand
-		// the `{ user, role }` shorthand (no `key:` colon) into explicit pairs; the
-		// scanner must reject it.
+		// `new Function` preserves shorthand properties for the rejection case.
 		[
 			new Function('c', 'const user=1,role=2; return { user, role }'),
 			'shorthand'
@@ -152,8 +136,7 @@ describe('extractDeriveKeys exact key set or bail', () => {
 })
 
 describe('differential — key merge deep-equals Object.assign', () => {
-	// For each analyzable derive, run it against a representative context and
-	// confirm the keys-emitted merge produces the SAME object as Object.assign.
+	// Recovered-key merging must match Object.assign.
 	const ctx = {
 		b: 'bee',
 		headers: { authorization: 'token' },

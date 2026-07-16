@@ -79,7 +79,7 @@ for (const rejection of rejectionCases)
 			await expect(response.text()).resolves.toBe('mapped error')
 		}
 
-		it('runs the error lifecycle from the inline handler', async () => {
+		it('handles a response-map rejection on a route without hooks', async () => {
 			const { adapter, mapError, onError, seen } = setup()
 			const app = new Elysia({ adapter })
 				.get('/', () => routeValue)
@@ -88,7 +88,7 @@ for (const rejection of rejectionCases)
 			await expectHandled(app, mapError, seen)
 		})
 
-		it('runs the error lifecycle from a generated beforeHandle route', async () => {
+		it('handles a response-map rejection on a route with beforeHandle', async () => {
 			const { adapter, mapError, onError, seen } = setup()
 			const app = new Elysia({ adapter })
 				.get('/', { beforeHandle() {} }, () => routeValue)
@@ -97,7 +97,7 @@ for (const rejection of rejectionCases)
 			await expectHandled(app, mapError, seen)
 		})
 
-		it('runs the error lifecycle from the generated handler-only tail', async () => {
+		it('handles a response-map rejection when the handler reads context', async () => {
 			const { adapter, mapError, onError, seen } = setup()
 			const app = new Elysia({ adapter })
 				.get('/', ({ headers }) => {
@@ -110,7 +110,7 @@ for (const rejection of rejectionCases)
 			await expectHandled(app, mapError, seen)
 		})
 
-		it('runs the sync error hook from a generated set route', async () => {
+		it('handles a response-map rejection when the handler mutates set', async () => {
 			const { adapter, mapError, onError, seen } = setup()
 			const app = new Elysia({ adapter })
 				.error(onError)

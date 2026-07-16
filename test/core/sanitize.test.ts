@@ -5,7 +5,7 @@ import { TypeBoxValidator } from '../../src/type/validator'
 import { post } from '../utils'
 
 describe('Sanitize', () => {
-	it('sanitizes fully-closed bodies like open bodies', async () => {
+	it('sanitizes bodies whether additionalProperties is false or true', async () => {
 		const sanitize = (value: unknown) =>
 			typeof value === 'string' ? value.replaceAll('<', '&lt;') : value
 		const app = new Elysia({ sanitize })
@@ -44,7 +44,7 @@ describe('Sanitize', () => {
 		])
 	})
 
-	it('sanitizes a fully-closed body through FromAsync', async () => {
+	it('FromAsync sanitizes a body with additionalProperties false', async () => {
 		const validator = new TypeBoxValidator(
 			t.Object({ value: t.String() }, { additionalProperties: false }),
 			{

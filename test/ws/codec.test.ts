@@ -2,14 +2,12 @@ import { describe, it, expect } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { newWebsocket, wsOpen, wsClosed, wsMessage } from './utils'
 
-describe('WebSocket upgrade codec decode', () => {
-	it('params: t.Numeric reaches the handler as a number, not a string', async () => {
+describe('WebSocket upgrade schema decoding', () => {
+	it('decodes Numeric route parameters before the handler', async () => {
 		const app = new Elysia()
 			.ws('/ws/:id', {
 				params: t.Object({ id: t.Numeric() }),
 				message({ ws, params }: any) {
-					// If decode did not run, `params.id` would be the string
-					// "42" and `typeof` would be "string".
 					ws.send(`${typeof params.id}:${params.id + 1}`)
 				}
 			})
@@ -20,14 +18,13 @@ describe('WebSocket upgrade codec decode', () => {
 
 		const got = wsMessage(ws)
 		ws.send('ping')
-		// decoded → number 42, +1 = 43 (arithmetic, not "421" concat)
 		expect((await got).data).toBe('number:43')
 
 		await wsClosed(ws)
 		app.stop()
 	})
 
-	it('query: t.Numeric decodes before the handler and before Check gating', async () => {
+	it('decodes Numeric query parameters before the handler', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
 				query: t.Object({ page: t.Numeric() }),
@@ -50,12 +47,14 @@ describe('WebSocket upgrade codec decode', () => {
 		app.stop()
 	})
 
-	it('headers: t.Numeric decodes into the handler view', async () => {
+	it('decodes Numeric headers before the handler', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
 				headers: t.Object({ 'x-version': t.Numeric() }),
 				message({ ws, headers }: any) {
-					ws.send(`${typeof headers['x-version']}:${headers['x-version']}`)
+					ws.send(
+						`${typeof headers['x-version']}:${headers['x-version']}`
+					)
 				}
 			})
 			.listen(0)
@@ -74,7 +73,7 @@ describe('WebSocket upgrade codec decode', () => {
 		app.stop()
 	})
 
-	it('codec validation failure still rejects the upgrade (422)', async () => {
+	it('rejects invalid codec values during upgrade', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
 				query: t.Object({ page: t.Numeric() }),
@@ -84,7 +83,6 @@ describe('WebSocket upgrade codec decode', () => {
 			})
 			.listen(0)
 
-		// `page=abc` is not a valid number — decode/Check must reject.
 		const res = await fetch(
 			`http://${app.server!.hostname}:${app.server!.port}/ws?page=abc`,
 			{
@@ -101,7 +99,7 @@ describe('WebSocket upgrade codec decode', () => {
 		app.stop()
 	})
 
-	it('non-codec channels are unchanged (t.String query round-trips verbatim)', async () => {
+	it('passes String query parameters through unchanged', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
 				query: t.Object({ name: t.String() }),
@@ -124,10 +122,7 @@ describe('WebSocket upgrade codec decode', () => {
 		app.stop()
 	})
 
-	// Async Standard Schema on WS upgrade channels (query/params/headers) is now
-	// SUPPORTED. From() may return a Promise; fetchHandler awaits it before
-	// assigning the decoded value into the context channel. The handshake stays
-	// promise-free when all channel validators are sync.
+	// WebSocket upgrade schemas may validate and decode asynchronously.
 
 	const makeAsyncStandardSchema = (decode?: (v: unknown) => unknown) => ({
 		'~standard': {
@@ -149,14 +144,12 @@ describe('WebSocket upgrade codec decode', () => {
 		}
 	})
 
-	it('async Standard Schema on query: valid input opens connection and handler sees decoded value', async () => {
-		// The async schema decodes the query by stringifying it; handler echoes
-		// it back so we can verify the decoded value reached the handler.
+	it('awaits async Standard Schema decoding for query parameters', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
-				query: makeAsyncStandardSchema(
-					(v: any) => ({ decoded: v?.page })
-				) as any,
+				query: makeAsyncStandardSchema((v: any) => ({
+					decoded: v?.page
+				})) as any,
 				message({ ws, query }: any) {
 					ws.send(JSON.stringify(query))
 				}
@@ -171,19 +164,18 @@ describe('WebSocket upgrade codec decode', () => {
 		const got = wsMessage(ws)
 		ws.send('ping')
 		const msg = JSON.parse((await got).data as string)
-		// The async schema decoded { page: '7' } → { decoded: '7' }
 		expect(msg.decoded).toBe('7')
 
 		await wsClosed(ws)
 		app.stop()
 	})
 
-	it('async Standard Schema on params: valid input opens connection and handler sees decoded value', async () => {
+	it('awaits async Standard Schema decoding for route parameters', async () => {
 		const app = new Elysia()
 			.ws('/ws/:id', {
-				params: makeAsyncStandardSchema(
-					(v: any) => ({ id: v?.id + '-decoded' })
-				) as any,
+				params: makeAsyncStandardSchema((v: any) => ({
+					id: v?.id + '-decoded'
+				})) as any,
 				message({ ws, params }: any) {
 					ws.send(params.id)
 				}
@@ -201,15 +193,15 @@ describe('WebSocket upgrade codec decode', () => {
 		app.stop()
 	})
 
-	it('async Standard Schema on query: invalid input rejects upgrade with same status as sync path', async () => {
-		// Schema rejects (returns issues) for any input where page is missing.
+	it('rejects invalid async Standard Schema query parameters', async () => {
 		const rejectingAsyncSchema = {
 			'~standard': {
 				version: 1,
 				vendor: 'test',
 				validate: async (value: unknown) => {
 					const v = value as any
-					if (!v?.page) return { issues: [{ message: 'page is required' }] }
+					if (!v?.page)
+						return { issues: [{ message: 'page is required' }] }
 					return { value }
 				}
 			}
@@ -224,7 +216,6 @@ describe('WebSocket upgrade codec decode', () => {
 			})
 			.listen(0)
 
-		// No ?page — schema rejects
 		const res = await fetch(
 			`http://${app.server!.hostname}:${app.server!.port}/ws`,
 			{
@@ -237,22 +228,16 @@ describe('WebSocket upgrade codec decode', () => {
 			}
 		)
 
-		// Must reject with the same status as a sync validation failure
 		expect(res.status).toBe(422)
 		app.stop()
 	})
 
-	it('sync-function-returning-Promise Standard Schema fails loud', async () => {
-		// Elysia classifies Standard Schema asyncness from the validate function
-		// declaration so sync vendors stay on the sync route path. A regular
-		// function that returns a Promise must be declared `async` to opt into
-		// the async route path; otherwise we fail loudly instead of assigning a
-		// Promise into the context channel.
+	it('rejects a Promise returned by a non-async Standard Schema validator', async () => {
+		// Promise-returning validators must declare async so the route awaits them.
 		const syncReturningPromise = {
 			'~standard': {
 				version: 1,
 				vendor: 'test',
-				// regular function, but returns a Promise
 				validate: function (value: unknown) {
 					return Promise.resolve({ value })
 				}
@@ -287,22 +272,18 @@ describe('WebSocket upgrade codec decode', () => {
 		app.stop()
 	})
 
-	it('async Standard Schema on body does NOT throw at registration (body path is async-capable)', () => {
-		// Body is dispatched via async dispatch paths that await From() —
-		// async Standard Schema on body is supported and must not throw.
+	it('accepts async Standard Schema validators for message bodies', () => {
 		expect(() => {
-			new Elysia()
-				.ws('/ws', {
-					body: makeAsyncStandardSchema() as any,
-					message({ ws }: any) {
-						ws.send('reached')
-					}
-				})
-				.fetch
+			new Elysia().ws('/ws', {
+				body: makeAsyncStandardSchema() as any,
+				message({ ws }: any) {
+					ws.send('reached')
+				}
+			}).fetch
 		}).not.toThrow()
 	})
 
-	it('sync Standard Schema on query validates correctly (does not throw, does not reject valid input)', async () => {
+	it('accepts synchronous Standard Schema validators for query parameters', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
 				query: makeSyncStandardSchema() as any,
@@ -318,7 +299,6 @@ describe('WebSocket upgrade codec decode', () => {
 		await wsOpen(ws)
 		const got = wsMessage(ws)
 		ws.send('ping')
-		// query should have been passed through (object), not rejected
 		expect((await got).data).toBe('object')
 
 		await wsClosed(ws)

@@ -1,20 +1,7 @@
 import { describe, it, expect } from 'bun:test'
 
-/**
- * `src/type/bridge-live.ts` is the statically-wired twin of `src/type/bridge.ts`.
- * The AOT build plugin re-routes `type/bridge` → `type/bridge-live` in wired
- * (mode B) builds when it stubs `type/compat` (so the `setupTypebox` latch is
- * gone). For that reroute to be sound, `bridge-live` must expose EXACTLY the
- * same wired members `bridge` exposes after `setupTypebox()` runs — same
- * function/class identities — and `useTypebox` must be an idempotent no-op so a
- * stray re-wire cannot un-latch anything.
- *
- * This pins that value-for-value parity: if `compat`'s `setupTypebox` injection
- * (or the mirror) ever drifts, one of these members diverges and this fails.
- */
-describe('bridge-live mirror parity', () => {
-	// The bridge members are typed against TypeBox; runtime identity is what the
-	// reroute depends on, so compare the runtime bindings.
+/** The statically wired bridge must match a bridge initialized at runtime. */
+describe('statically wired TypeBox bridge', () => {
 	const MEMBERS = [
 		'Compile',
 		'Decode',
@@ -34,8 +21,7 @@ describe('bridge-live mirror parity', () => {
 		'Clone'
 	] as const
 
-	it('exports the same wired members as bridge after setupTypebox()', async () => {
-		// Wire the real bridge first (this is what an ordinary elysia import does).
+	it('matches every runtime export from an initialized bridge', async () => {
 		const { setupTypebox } = await import('../../src/type/compat')
 		setupTypebox()
 
@@ -49,14 +35,12 @@ describe('bridge-live mirror parity', () => {
 		>
 
 		for (const member of MEMBERS) {
-			// Same runtime identity — the reroute swaps the module, not the value.
 			expect(live[member]).toBe(bridge[member])
-			// And it must actually be the real (non-throwing stub) member.
 			expect(live[member]).toBeDefined()
 		}
 	})
 
-	it('exports useTypebox as an idempotent no-op', async () => {
+	it('keeps useTypebox idempotent', async () => {
 		const { setupTypebox } = await import('../../src/type/compat')
 		setupTypebox()
 
@@ -68,16 +52,13 @@ describe('bridge-live mirror parity', () => {
 		expect(typeof live.useTypebox).toBe('function')
 
 		const before = live.Compile
-		// Re-wiring with garbage must not change the already-wired members.
 		live.useTypebox({})
 		expect(live.Compile).toBe(before)
 	})
 
-	it('matches the TypeboxModule shape bridge.useTypebox expects (tsc)', () => {
-		// Compile-time parity: `bridge-live.ts` types its assembled module against
-		// `Parameters<typeof useTypebox>[0]` (bridge's own `TypeboxModule`). If a
-		// member were missing or mistyped, `bun run build` / tsc would fail before
-		// this test runs. Assert the module imports cleanly as a runtime witness.
-		expect(() => import('../../src/type/bridge-live')).not.toThrow()
+	it('imports the runtime bridge module successfully', async () => {
+		await expect(
+			import('../../src/type/bridge-live')
+		).resolves.toBeDefined()
 	})
 })

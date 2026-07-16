@@ -130,10 +130,7 @@ describe('ElysiaType.NoValidate', () => {
 		await expect(res.text()).resolves.toBe('string instead of number!')
 	})
 
-	it('should work with actual Date when using t.NoValidate(t.Date())', async () => {
-		// Under strict "skip Check only", Date's bidirectional codec still
-		// runs Encode → ISO string (instead of the JS .toString() form the
-		// raw response handler would produce).
+	it('encodes a Date even when validation is skipped', async () => {
 		const testDate = new Date('2025-01-01T00:00:00Z')
 		const app = new Elysia().get(
 			'/',
@@ -164,12 +161,7 @@ describe('ElysiaType.NoValidate', () => {
 		await expect(res.text()).resolves.toBe('not-a-number')
 	})
 
-	// `t.BooleanString` and `t.Numeric` use unidirectional `Type.Decode`
-	// codecs (Decode-only; Encode throws "Encode not implemented").
-	// `NoValidate` follows a "skip Check, never reject" contract — when
-	// the codec's Encode throws, the value passes through unchanged
-	// instead of surfacing as 422.
-	it('NoValidate(t.BooleanString()) passes through on Encode failure', async () => {
+	it('passes through a BooleanString value when encoding is unavailable', async () => {
 		const app = new Elysia().get(
 			'/',
 			{
@@ -336,10 +328,7 @@ describe('ElysiaType.NoValidate', () => {
 		await expect(res.text()).resolves.toBe('test')
 	})
 
-	it('passes string through NoValidate(t.Date()) — Date.Encode handles non-Date input', async () => {
-		// `t.Date()`'s Encode is `(v) => v instanceof Date ? toISOString : v + ''`,
-		// so a string return is encoded into itself. Under strict skip-Check-only
-		// semantic, Encode still runs but doesn't break for primitive strings.
+	it('passes a string through t.NoValidate(t.Date())', async () => {
 		const app = new Elysia().get(
 			'/',
 			{ response: t.NoValidate(t.Date()) },

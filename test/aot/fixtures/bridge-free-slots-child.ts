@@ -1,36 +1,12 @@
-/**
- * Child process for `bridge-free-slots.test.ts`.
- *
- * Twin of `bridge-free-child.ts`, but for SLOT-LEVEL scalar coercion
- * (query/headers/params/cookie: `t.Numeric()`, `t.IntegerString()`,
- * `t.BooleanString()`, `t.Date()`, `t.Optional(...)` of those, + plain scalars).
- *
- * The bridge is NEVER wired here: it imports ONLY the reconstruct machinery and
- * the PURE coercion constructors from `src/type/elysia/*` (which do NOT pull the
- * type barrel's `setupTypebox` side effect), NOT the elysia type barrel. So it is
- * a faithful stand-in for a sealed build with `compat` stripped and the bridge
- * severed.
- *
- * Input (env `PAYLOAD`): `{ captured, spec, cases, method, path, slot }` produced
- * by the parent (where the bridge IS wired for capture). The child:
- *   1. asserts the bridge is unwired (proving the scenario),
- *   2. rebuilds the coercion schema from `spec` using the pure constructors,
- *   3. materialises the captured manifest into `Compiled.validators`,
- *   4. reconstructs the validator bridge-free and runs each case,
- * printing `RESULT <json>` for the parent to assert on.
- */
+/** Runs captured scalar coercion with the TypeBox bridge deliberately unwired. */
 import { readFileSync } from 'node:fs'
 
-import {
-	Compiled,
-	type CapturedValidator
-} from '../../../src/compile/aot'
+import { Compiled, type CapturedValidator } from '../../../src/compile/aot'
 import { buildFrozenRouteValidator } from '../../../src/compile/handler/frozen-validator'
 import { hasTypes } from '../../../src/type/bridge'
 import { materialise } from '../_manifest'
 
-// PURE coercion constructors — importing these does NOT wire the bridge
-// (verified: they import `typebox/type` + local leaves, never the type barrel).
+// Leaf coercion imports avoid the type barrel that wires the bridge.
 import { Numeric } from '../../../src/type/elysia/numeric'
 import { IntegerString } from '../../../src/type/elysia/integer-string'
 import { BooleanString } from '../../../src/type/elysia/boolean-string'
@@ -39,7 +15,7 @@ import { DateType } from '../../../src/type/elysia/date'
 const out = (tag: string, data: unknown) =>
 	console.log(tag, JSON.stringify(data))
 
-// 1. the bridge MUST be unwired here — otherwise the test proves nothing.
+// The bridge must remain unwired for this process to isolate frozen reconstruction.
 try {
 	hasTypes([], { '~kind': 'Object' } as any)
 	out('BRIDGE', 'wired')
@@ -48,8 +24,10 @@ try {
 	out('BRIDGE', 'unwired')
 }
 
-type LeafSpec =
-	| { t: 'numeric' | 'integer' | 'boolean' | 'date' | 'string'; optional?: boolean }
+type LeafSpec = {
+	t: 'numeric' | 'integer' | 'boolean' | 'date' | 'string'
+	optional?: boolean
+}
 
 const payload = JSON.parse(readFileSync(process.env.PAYLOAD!, 'utf8')) as {
 	captured: CapturedValidator[]
@@ -62,8 +40,7 @@ const payload = JSON.parse(readFileSync(process.env.PAYLOAD!, 'utf8')) as {
 
 const optional = (schema: any, isOptional?: boolean) => {
 	if (!isOptional) return schema
-	// mirror `t.Optional`: attach a non-enumerable `~optional` marker (parity with
-	// how the pure ctors preserve it through coercion).
+	// Mirror the non-enumerable marker used by t.Optional.
 	return Object.defineProperty(Object.create(schema), '~optional', {
 		value: true,
 		enumerable: false
@@ -88,8 +65,7 @@ const buildLeaf = (leaf: LeafSpec): unknown => {
 	}
 }
 
-// Rebuild the slot schema (a plain object whose leaves are the pure coercion
-// constructors) — the SAME shape the parent captured against.
+// Rebuild the same plain-object slot schema captured by the parent.
 const properties: Record<string, unknown> = {}
 const required: string[] = []
 for (const key in payload.spec) {

@@ -48,8 +48,7 @@ import { expectTypeOf } from 'expect-type'
 		)
 }
 
-// ? Form as a REQUEST body decodes to the plain field object (not the
-// ElysiaFormData wrapper used for responses) — the decode/encode split.
+// Request form bodies decode to plain field objects.
 {
 	new Elysia().post(
 		'/',
@@ -125,11 +124,9 @@ import { expectTypeOf } from 'expect-type'
 	)
 }
 
-// `StaticCyclic` threads registered models as the resolution context. These pins
-// lock that a `t.Ref('model')` still resolves once models are registered — the
-// soundness boundary for passing `Defs` directly (vs the old `TCyclic` wrapper).
+// Registered model references resolve in route schemas.
 
-// a model that references ANOTHER model (cross-model ref), via string ref
+// Models can reference other registered models.
 {
 	const Model = new Elysia().model({
 		inner: t.Object({ v: t.String() }),
@@ -137,11 +134,14 @@ import { expectTypeOf } from 'expect-type'
 	})
 
 	Model.post('/', { body: 'outer' }, ({ body }) => {
-		expectTypeOf<typeof body>().toEqualTypeOf<{ a: number; child: { v: string } }>()
+		expectTypeOf<typeof body>().toEqualTypeOf<{
+			a: number
+			child: { v: string }
+		}>()
 	})
 }
 
-// recursive / self-referencing model resolves (structurally) without blowing up
+// Recursive models resolve structurally.
 {
 	const Model = new Elysia().model({
 		category: t.Object({
@@ -151,25 +151,31 @@ import { expectTypeOf } from 'expect-type'
 	})
 
 	Model.post('/', { body: 'category' }, ({ body }) => {
-		expectTypeOf<typeof body extends { name: string } ? true : false>().toEqualTypeOf<true>()
+		expectTypeOf<
+			typeof body extends { name: string } ? true : false
+		>().toEqualTypeOf<true>()
 		expectTypeOf<
 			undefined extends (typeof body)['parent'] ? true : false
 		>().toEqualTypeOf<true>()
 	})
 }
 
-// `t.Module` — a self-contained cyclic namespace used as a route schema
+// `t.Module` supports self-references in route schemas.
 {
 	const Module = t.Module({
 		User: t.Object({ name: t.String(), friend: t.Optional(t.Ref('User')) })
 	})
 
-	new Elysia().model({ z: t.Number() }).post('/', { body: Module.User }, ({ body }) => {
-		expectTypeOf<typeof body extends { name: string } ? true : false>().toEqualTypeOf<true>()
-		expectTypeOf<
-			undefined extends (typeof body)['friend'] ? true : false
-		>().toEqualTypeOf<true>()
-	})
+	new Elysia()
+		.model({ z: t.Number() })
+		.post('/', { body: Module.User }, ({ body }) => {
+			expectTypeOf<
+				typeof body extends { name: string } ? true : false
+			>().toEqualTypeOf<true>()
+			expectTypeOf<
+				undefined extends (typeof body)['friend'] ? true : false
+			>().toEqualTypeOf<true>()
+		})
 }
 
 // Transform Tuple<ElysiaFile> to Files[]

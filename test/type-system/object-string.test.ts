@@ -4,7 +4,7 @@ import { Value } from 'typebox/value'
 import { req } from '../utils'
 
 describe('TypeSystem - ObjectString', () => {
-	it('Create', () => {
+	it('creates an empty object unless a default is provided', () => {
 		expect(Value.Create(t.ObjectString({}))).toEqual({})
 		expect(
 			Value.Create(
@@ -18,7 +18,7 @@ describe('TypeSystem - ObjectString', () => {
 		).toBe('{}')
 	})
 
-	it('Check', () => {
+	it('accepts objects matching the property schema', () => {
 		const schema = t.ObjectString({
 			pageIndex: t.Number(),
 			pageLimit: t.Number()
@@ -27,11 +27,7 @@ describe('TypeSystem - ObjectString', () => {
 		expect(Value.Check(schema, { pageIndex: 1, pageLimit: 1 })).toBe(true)
 	})
 
-	it('Encode', () => {
-		// ObjectString is a decode-only codec (string -> object). As of TypeBox
-		// 1.2.16 the union is matched narrow->broad, so encoding an object
-		// resolves through the plain Object member and passes through unchanged
-		// instead of throwing.
+	it('preserves objects during encoding', () => {
 		const schema = t.ObjectString({
 			pageIndex: t.Number(),
 			pageLimit: t.Number()
@@ -48,7 +44,7 @@ describe('TypeSystem - ObjectString', () => {
 		})
 	})
 
-	it('Decode', () => {
+	it('decodes valid JSON objects and rejects missing properties', () => {
 		const schema = t.ObjectString({
 			pageIndex: t.Number(),
 			pageLimit: t.Number()
@@ -74,7 +70,7 @@ describe('TypeSystem - ObjectString', () => {
 		).toThrow()
 	})
 
-	it('Integrate', async () => {
+	it('decodes JSON objects in query parameters', async () => {
 		const app = new Elysia().get(
 			'/',
 			{
@@ -97,7 +93,7 @@ describe('TypeSystem - ObjectString', () => {
 		expect(res2.status).toBe(422)
 	})
 
-	it('Optional', async () => {
+	it('supports optional object-string properties', async () => {
 		const schema = t.Object({
 			name: t.String(),
 			metadata: t.Optional(
@@ -120,7 +116,7 @@ describe('TypeSystem - ObjectString', () => {
 		expect(Value.Check(schema, { name: 'test', metadata: {} })).toBe(false)
 	})
 
-	it('Default value', async () => {
+	it('uses and validates an object default', async () => {
 		const schema = t.ObjectString(
 			{
 				pageIndex: t.Number(),

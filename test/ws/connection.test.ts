@@ -192,7 +192,6 @@ describe('WebSocket connection', () => {
 		const ws = newWebsocket(app.server!)
 		await wsOpen(ws)
 
-		// Three messages on the same connection.
 		const tokens: string[] = []
 		ws.onmessage = (e) => tokens.push(String(e.data))
 
@@ -202,8 +201,6 @@ describe('WebSocket connection', () => {
 
 		await Bun.sleep(50)
 
-		// All three should return the SAME token — derive fired once on
-		// upgrade and the value persists for the lifetime of the connection.
 		expect(deriveCalls).toBe(1)
 		expect(tokens).toEqual(['t1', 't1', 't1'])
 
@@ -211,7 +208,7 @@ describe('WebSocket connection', () => {
 		app.stop()
 	})
 
-	it('transform fires at BOTH upgrade and per-message', async () => {
+	it('transform runs during upgrade and for each message', async () => {
 		let calls = 0
 
 		const app = new Elysia()
@@ -227,7 +224,6 @@ describe('WebSocket connection', () => {
 
 		const ws = newWebsocket(app.server!)
 		await wsOpen(ws)
-		// At this point transform should have fired ONCE (upgrade).
 		expect(calls).toBe(1)
 
 		const got1 = wsMessage(ws)
@@ -272,12 +268,7 @@ describe('WebSocket connection', () => {
 		app.stop()
 	})
 
-	// a non-derive beforeHandle returning status()/error() (an ElysiaStatus)
-	// must unwrap to the real HTTP code and body — not be JSON-serialized as an
-	// object with a default 200. Before the fix, `status(401, 'no')` was
-	// serialized as JSON and returned with HTTP 200 (the context default), so
-	// the client never saw a real 401.
-	it('beforeHandle returning status(401) rejects upgrade with real 401', async () => {
+	it('beforeHandle status response rejects an upgrade with its status and body', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
 				beforeHandle() {
@@ -305,12 +296,7 @@ describe('WebSocket connection', () => {
 		app.stop()
 	})
 
-	//  parity: an upgrade-rejection from a non-derive beforeHandle must carry
-	// the same set.headers / set.cookie / content-type the HTTP path would apply.
-	// Before the fix the response was hand-built from only the ElysiaStatus code +
-	// body, dropping set.headers, dropping set.cookie, and defaulting to
-	// text/plain for object bodies.
-	it('upgrade rejection preserves set.headers, set.cookie and JSON content-type', async () => {
+	it('beforeHandle upgrade rejection preserves headers, cookies and JSON content type', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
 				beforeHandle({ set }) {
@@ -336,11 +322,8 @@ describe('WebSocket connection', () => {
 		)
 
 		expect(upgradeResponse.status).toBe(401)
-		// set.headers merged (was dropped before the fix)
 		expect(upgradeResponse.headers.get('x-custom')).toBe('yes')
-		// set.cookie serialized (was dropped before the fix)
 		expect(upgradeResponse.headers.get('set-cookie')).toBe('sid=abc')
-		// object body → application/json (was text/plain before the fix)
 		expect(upgradeResponse.headers.get('content-type')).toContain(
 			'application/json'
 		)

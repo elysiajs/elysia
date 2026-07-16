@@ -4,11 +4,7 @@ import { buildRouteTable, routeRow, RouteFlag } from '../../src/route-table'
 import { collectStaticRoutes } from '../../src/adapter/bun'
 import { describe, expect, it } from 'bun:test'
 
-// Fixture apps exercise nested plugins, prefixes, guards, WebSockets, macros,
-// and the lazyCompose flag both on and off. Each returns the
-// built app (router + `~routeTable` populated) plus its raw authoring tuples.
 const buildFixture = (lazyCompose: boolean) => {
-	// Verb signature is (path, hook, fn) — hook second, handler third.
 	const child = new Elysia({ prefix: '/child' })
 		.get('/a', { query: t.Object({ q: t.String() }) }, () => 'a')
 		.ws('/socket', { message() {} })
@@ -27,7 +23,6 @@ const buildFixture = (lazyCompose: boolean) => {
 		.use(guarded)
 		.get('/tail', { auth: true }, () => 'tail')
 
-	// Force flatten + router build so `~routeTable` exists.
 	void app.fetch
 
 	return app
@@ -36,7 +31,7 @@ const buildFixture = (lazyCompose: boolean) => {
 const rawTuples = (app: any): readonly any[] => app['~routes']
 
 describe('columnar route table', () => {
-	describe('structural parity — columns match authoring tuples field-by-field', () => {
+	describe('stores every authoring tuple field', () => {
 		for (const lazyCompose of [false, true])
 			it(`lazyCompose=${lazyCompose}`, () => {
 				const app = buildFixture(lazyCompose)
@@ -49,7 +44,6 @@ describe('columnar route table', () => {
 				for (let i = 0; i < tuples.length; i++) {
 					const t = tuples[i]
 
-					// Dense IDs === flatten order; each column === its tuple field.
 					expect(table.method[i]).toBe(t[0])
 					expect(table.path[i]).toBe(t[1])
 					expect(table.handler[i]).toBe(t[2])
@@ -58,12 +52,10 @@ describe('columnar route table', () => {
 					expect(table.appHook[i]).toBe(t[5])
 					expect(table.inheritedChain[i]).toBe(t[6])
 
-					// Side table: macroScope present iff tuple[7] present.
 					if (t[7] === undefined)
 						expect(table.macroScope.has(i)).toBe(false)
 					else expect(table.macroScope.get(i)).toBe(t[7])
 
-					// Flags reflect WS + dynamic-path facts.
 					expect(!!(table.flags[i] & RouteFlag.WS)).toBe(
 						t[0] === 'WS'
 					)
@@ -74,7 +66,7 @@ describe('columnar route table', () => {
 			})
 	})
 
-	it('routeRow reconstructs a fresh tuple equal field-by-field to the authoring tuple', () => {
+	it('routeRow returns a fresh tuple with every stored field', () => {
 		const app = buildFixture(false)
 		const table = app['~routeTable']
 		const tuples = rawTuples(app)
@@ -85,14 +77,13 @@ describe('columnar route table', () => {
 
 			for (let f = 0; f < 8; f++) expect(row[f]).toBe(t[f])
 
-			// The row is a distinct array object, never the authoring tuple.
 			expect(row).not.toBe(t)
 		}
 	})
 
-	describe('no-tuple retention (heap reachability, expressed as identity)', () => {
+	describe('does not retain authoring tuple arrays', () => {
 		for (const lazyCompose of [false, true])
-			it(`no column or side-table value is a raw authoring tuple array (lazyCompose=${lazyCompose})`, () => {
+			it(`lazyCompose=${lazyCompose}`, () => {
 				const app = buildFixture(lazyCompose)
 				const table = app['~routeTable']
 				const tuples = new Set<unknown>(rawTuples(app))
@@ -119,19 +110,15 @@ describe('columnar route table', () => {
 			})
 	})
 
-	it('runtime is independent of the authoring tuples — serving after clearing the authoring copy', async () => {
+	it('builds an empty table from an empty declaration list', () => {
+		expect(buildRouteTable([]).length).toBe(0)
+	})
+
+	it('serves static and dynamic routes after route table construction', async () => {
 		const app = new Elysia()
 			.get('/', () => 'root')
 			.get('/dyn/:id', ({ params }) => params.id)
 		void app.fetch
-
-		// The router (map/router) + `~routeTable` are built. A separately-built
-		// table off a *cleared* authoring array must still describe the routes,
-		// proving the table carries fields, not tuple references. (We cannot null
-		// the private `#declaredRoutes`; instead we rebuild the table from an
-		// emptied source and assert the live router still serves — the live table
-		// was built from real tuples that the router no longer needs.)
-		expect(buildRouteTable([]).length).toBe(0)
 
 		await expect(
 			app.handle(new Request('http://localhost/')).then((r) => r.text())
@@ -143,7 +130,7 @@ describe('columnar route table', () => {
 		).resolves.toBe('42')
 	})
 
-	it('buildRouteTable is O(n)-ish in construction (10k/1k time ratio < 30)', () => {
+	it('construction stays below 30x when the route count grows 10x', () => {
 		const build = (n: number) => {
 			const tuples: any[] = []
 			for (let i = 0; i < n; i++)
@@ -162,7 +149,6 @@ describe('columnar route table', () => {
 			return Bun.nanoseconds() - start
 		}
 
-		// Warm up JIT.
 		build(1)
 		build(100)
 
@@ -172,8 +158,8 @@ describe('columnar route table', () => {
 		expect(t10k / t1k).toBeLessThan(30)
 	})
 
-	describe('consumer behavior parity through the table', () => {
-		it('native-static promoted route still serves (collectStaticRoutes reads the table)', async () => {
+	describe('route table consumers', () => {
+		it('serves a route promoted to a native static response', async () => {
 			const app = new Elysia().get('/static', 'Static Content')
 			const ready = collectStaticRoutes(app as any)?.[0]
 
@@ -187,7 +173,6 @@ describe('columnar route table', () => {
 		it('auto-head route serves via the table', async () => {
 			const { autoHead } = await import('../../src/plugin/auto-head')
 			const app = new Elysia().use(autoHead()).get('/page', () => 'body')
-			// autoHead registers HEAD routes asynchronously (awaits a microtask).
 			await app.modules
 			void app.fetch
 
@@ -198,11 +183,10 @@ describe('columnar route table', () => {
 			await expect(head.text()).resolves.toBe('')
 		})
 
-		it('WS upgrade route builds and registers through the table', async () => {
+		it('registers a WebSocket upgrade route', async () => {
 			const app = new Elysia().ws('/ws', { message() {} })
 			void app.fetch
 
-			// WS handler registered in the static map under the WS pseudo-method.
 			expect(app['~map']?.['WS']?.['/ws']).toBeTypeOf('function')
 
 			const table = app['~routeTable']
@@ -211,7 +195,7 @@ describe('columnar route table', () => {
 			expect(table.flags[wsIndex] & RouteFlag.WS).toBeTruthy()
 		})
 
-		it('macro + guard + nested-plugin fixture serves every route correctly', async () => {
+		it('serves macro, guard, dynamic, and nested plugin routes', async () => {
 			const app = buildFixture(false)
 
 			const cases: Array<[string, string]> = [

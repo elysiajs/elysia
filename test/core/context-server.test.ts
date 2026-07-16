@@ -2,11 +2,8 @@ import { describe, expect, it } from 'bun:test'
 
 import { Elysia } from '../../src'
 
-// Regression for: createFetchHandler returned a single-arg (request) function,
-// so the server arg passed by the Bun adapter was silently ignored and
-// context.server was always undefined in handlers.
 describe('context.server', () => {
-	it('context.server is defined inside handler when listening on a real socket', async () => {
+	it('exposes the listening server inside a route handler', async () => {
 		let captured: unknown = 'not-set'
 
 		const app = new Elysia().get('/ping', ({ server }) => {
@@ -17,7 +14,6 @@ describe('context.server', () => {
 		const server = app.listen(0)
 
 		try {
-			// Let the microtask queue settle so Bun.serve is called
 			await new Promise((r) => setTimeout(r, 20))
 
 			const port = (app.server as any)?.port
@@ -34,7 +30,7 @@ describe('context.server', () => {
 		}
 	})
 
-	it('context.server is null (not throwing) when using app.handle()', async () => {
+	it('is null when a request is handled without a server', async () => {
 		let captured: unknown = 'not-set'
 
 		const app = new Elysia().get('/ping', ({ server }) => {

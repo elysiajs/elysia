@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 import { Elysia } from '../../../src'
 
-describe('plugin dedup graph', () => {
+describe('plugin deduplication', () => {
 	it('deduplicates a named plain plugin per root without cross-root state', async () => {
 		const plugin = new Elysia({ name: 'plain-dedup' }).get(
 			'/plain-dedup',
@@ -56,7 +56,7 @@ describe('plugin dedup graph', () => {
 		expect(order).toEqual([1, 3, 2])
 	})
 
-	it('dedup by name+seed across multiple instances', async () => {
+	it('deduplicates separate instances with the same name and seed', async () => {
 		let count = 0
 		const cookie = (options?: Record<string, unknown>) =>
 			new Elysia({
@@ -99,7 +99,7 @@ describe('plugin dedup graph', () => {
 		expect(count).toBe(2)
 	})
 
-	it('dedup transitively through three levels', async () => {
+	it('deduplicates a shared plugin through three nesting levels', async () => {
 		const order: number[] = []
 
 		const leaf = new Elysia({ as: 'global', name: 'leaf' }).beforeHandle(
@@ -162,8 +162,6 @@ describe('plugin dedup graph', () => {
 
 		await app.handle('/')
 
-		// outer's plugin-scoped hook propagates one level (to app), inner's
-		// plugin-scoped hook does not propagate past outer.
 		expect(order).toEqual(['outer'])
 	})
 
@@ -235,11 +233,9 @@ describe('plugin dedup graph', () => {
 		expect(order).toEqual(['late'])
 	})
 
-	it('does not dedup an unnamed sub-plugin shared by sibling plugins', async () => {
+	it('runs an unnamed shared plugin once for each parent', async () => {
 		const order: number[] = []
 
-		// shared has no name → not deduplicated. Even though both `left`
-		// and `right` reference the same instance, it should run twice.
 		const shared = new Elysia({ as: 'global' }).beforeHandle(() => {
 			order.push(3)
 		})
@@ -266,11 +262,9 @@ describe('plugin dedup graph', () => {
 		expect(order).toEqual([1, 3, 2, 3])
 	})
 
-	it('anonymous sub-plugins propagate but do not dedup by name', async () => {
+	it('runs every anonymous plugin instance', async () => {
 		const order: number[] = []
 
-		// Two distinct anonymous instances — no name, so each contributes
-		// independently. Both should run.
 		const a = new Elysia({ as: 'global' }).beforeHandle(() => {
 			order.push(1)
 		})
@@ -288,11 +282,7 @@ describe('plugin dedup graph', () => {
 		expect(order).toEqual([1, 2])
 	})
 
-	// The per-parent absorption snapshot lives on each parent (currently
-	// `~routeSnapshot`), not on the route tuple. The same anonymous
-	// sub-plugin used in two parents with different hook contexts must
-	// see each parent's hooks independently — no bleed.
-	it('absorbed plugin sees per-parent hook context, not bled across parents', async () => {
+	it("uses each parent's hook context when a plugin is shared", async () => {
 		const order: string[] = []
 
 		const sub = new Elysia({ prefix: '/sub' }).get('/r', () => 'ok')
@@ -320,11 +310,7 @@ describe('plugin dedup graph', () => {
 		expect(order).toEqual(['B'])
 	})
 
-	// Side-table indexes must stay aligned with `#routes` even when
-	// direct routes are registered on root before AND after a `.use()`
-	// that propagates hooks. Misalignment would show up as the wrong
-	// route picking up the wrong hook.
-	it('mixed direct and absorbed routes — hook scoping stays aligned', async () => {
+	it('scopes hooks correctly across mixed direct and absorbed routes', async () => {
 		let count = 0
 
 		const plug = new Elysia({ prefix: '/p' })

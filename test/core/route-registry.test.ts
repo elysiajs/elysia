@@ -84,7 +84,7 @@ describe('route registry', () => {
 		])
 	})
 
-	it('reuses the projected route while building dynamic macro routes', () => {
+	it('does not rebuild the projected route table for every dynamic route', () => {
 		const app = new Elysia().macro({
 			noop() {
 				return {}

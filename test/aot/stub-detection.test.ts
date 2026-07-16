@@ -26,12 +26,7 @@ afterEach(() => {
 	Validator.clear()
 })
 
-/**
- * The strip detector decides whether a frozen build can run with handler JIT
- * (`sucrose`) replaced by a throwing stub. The decision MUST be sound:
- * a false "stubbable" ships a build that crashes at runtime, so every "true"
- * here is also exercised against a live frozen replay.
- */
+/** Handler JIT may be stubbed only when every frozen route can serve without it. */
 describe('AOT strip detection (analyzeStubbability)', () => {
 	it('handler-stubbable: body schema + non-inline handler', async () => {
 		const app = new Elysia().post(
@@ -68,12 +63,7 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 		expect(r.stubbable).toBe(true)
 	})
 
-	// WS routes are hand-written closures with no handler-JIT codegen, so they
-	// don't reach sucrose / the handler `new Function`. The replay skips them
-	// and keeps probing HTTP routes; a WS route must NOT blanket-disable
-	// handler-JIT stubbing for the whole app. The WS runtime module is retained
-	// separately via `ws: !hasWS` in the emitted plan (see the plan test below).
-	// Verified end-to-end: a WS app runs with the JIT graph stubbed.
+	// WebSocket routes do not call the HTTP handler compiler.
 	it('WS-only app: handler JIT is stubbable (WS never reaches sucrose)', async () => {
 		const app = new Elysia().ws('/ws', { message: () => {} })
 		const r = await analyzeStubbability(app as any)
@@ -82,7 +72,7 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 		expect(r.reasons).toEqual([])
 	})
 
-	it('WS + HTTP: plan reports the HTTP routes real result, not blanket false', async () => {
+	it('reports HTTP stubbability for mixed WebSocket and HTTP apps', async () => {
 		const app = new Elysia()
 			.post(
 				'/p',
@@ -96,12 +86,8 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 		expect(r.stubbable).toBe(true)
 	})
 
-	// `mount()` is intentionally NOT special-cased: the forwarding handler is
-	// captured and inline-eligible, so the replay sees a fully precompiled app.
-	// A mounted sub-app compiles lazily and is invisible to AOT capture, so
-	// stripping + mount + AOT is a documented user caveat (use strip:false or
-	// AOT-build the mounted app), not something the detector guards against.
-	it('mounted app is reported stubbable (mount + AOT strip is a documented caveat)', async () => {
+	// Mounted subapps must be built separately or used with strip:false.
+	it('treats a captured mount forwarding handler as stubbable', async () => {
 		const inner = new Elysia().get('/hello', () => 'from-inner')
 		const app = new Elysia().mount('/sub', inner.handle)
 
@@ -166,8 +152,7 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 		const report = replayStubbability(new Elysia() as any, [])
 		expect(report.stubbable).toBe(true)
 
-		// Before this regression fix, replayStubbability restored only the visible
-		// validators object after Compiled.clear(), losing lazyGroups/lazyGroupOf.
+		// Replay restores both validators and their lazy-group metadata.
 		// The route still looked unmaterialized, but no longer resolved.
 		expect(Compiled.hasValidator('GET', '/lazy', 'body')).toBe(true)
 		expect(built).toBe(0)
@@ -182,20 +167,13 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 		expect(safe.stub).toEqual({
 			jit: true,
 			ws: true,
-			// schema route uses the `va` alias → reconstruct module must be kept
 			reconstruct: false,
-			// no cookie alias (`cc`) → request-side cookie machinery is stubbable
 			cookie: true,
-			// no trace alias (`tr`) → trace runtime is stubbable
 			trace: true,
-			// JIT stubbed → Sucrose never runs → memory's clearSucroseCache edge cut
 			sucrose: true,
-			// every validator is bridge-free → sealed: compat stubbed, no reroute
 			compat: true,
 			bridge: false,
-			// no target → no adapter stub (fallback: runtime isBun selection)
 			adapter: false,
-			// production: true by default → isProduction stubbed as compile-time true
 			isProduction: true
 		})
 
@@ -205,39 +183,27 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 		expect(inline.stub).toEqual({
 			jit: true,
 			ws: true,
-			// no validator/cookie/trace alias anywhere → safe to stub reconstruct
 			reconstruct: true,
 			cookie: true,
 			trace: true,
 			sucrose: true,
-			// no validators at all → vacuously bridge-free → sealed
 			compat: true,
 			bridge: false,
 			adapter: false,
 			isProduction: true
 		})
 
-		// WS-only: the handler-JIT graph is stubbable (WS never reaches it),
-		// but the WS runtime module is RETAINED (`ws: false`) because the app
-		// declares a WS route.
 		const wsOnly = await generateCompiledArtifacts(
 			'test/aot/fixtures/strip-ws.ts'
 		)
 		expect(wsOnly.stub).toEqual({
 			jit: true,
-			// WS routes present → keep the WS runtime module
 			ws: false,
-			// no validator/cookie/trace alias → safe to stub reconstruct
 			reconstruct: true,
 			cookie: true,
 			trace: true,
 			sucrose: true,
-			// WS no longer forces a mode by itself (its validators
-			// reconstruct bridge-free), but a schema-less WS-only app is
-			// ZERO-CAPTURE: sealing must not rest on vacuous truth, and wired
-			// would drag bridge-live for an app that can never need the
-			// bridge — so it keeps the vanilla latch (`off`), where TypeBox
-			// tree-shakes unless user code imports `t`
+			// A schema-less WS app needs neither sealed nor wired TypeBox setup.
 			compat: false,
 			bridge: false,
 			adapter: false,
@@ -245,22 +211,16 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 		})
 	})
 
-	it("strip:true succeeds for a WS-only app (WS reaches no handler JIT)", async () => {
-		// A WS route reaches no handler-JIT entry point, so a WS-only app is
-		// fully stubbable and strip:true no longer over-conservatively throws.
+	it('strip:true succeeds for a WS-only app (WS reaches no handler JIT)', async () => {
 		const built = await generateCompiledArtifacts(
 			'test/aot/fixtures/strip-ws.ts',
 			{ strip: true }
 		)
 		expect(built.stub.jit).toBe(true)
-		// WS runtime module is retained even under strip:true.
 		expect(built.stub.ws).toBe(false)
 	})
 
-	it('SOUNDNESS: a "jit:true" frozen app handles requests from the manifest', async () => {
-		// Prove the green light is real. The detector replays the frozen handler
-		// manifest under a tripwire that increments on handler-JIT entry points.
-		// Then a real frozen app handles requests from that same manifest.
+	it('a frozen app with stripped handler JIT serves requests from its manifest', async () => {
 		const build = () =>
 			new Elysia().post(
 				'/u',
@@ -308,10 +268,7 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 		expect(bad.status).toBe(422)
 	})
 
-	it('STUB_SOURCES filters match both src and dist module paths', () => {
-		// Every filter is scoped to elysia's own install dir  — user
-		// modules that share the file layout (cookie/utils, ws/route, ...)
-		// must never be stubbed.
+	it('stub filters match Elysia source and distribution modules', () => {
 		expect(
 			STUB_SOURCES.jit.some(({ filter }) =>
 				filter.test('/x/node_modules/elysia/dist/sucrose.js')
@@ -324,7 +281,9 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 		).toBe(false)
 		expect(
 			STUB_SOURCES.jit.some(({ filter }) =>
-				filter.test('/x/node_modules/elysia/dist/compile/handler/jit.mjs')
+				filter.test(
+					'/x/node_modules/elysia/dist/compile/handler/jit.mjs'
+				)
 			)
 		).toBe(true)
 		expect(
@@ -354,7 +313,6 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 				)
 			)
 		).toBe(true)
-		// pnpm layout keeps an /elysia/dist/ segment
 		expect(
 			STUB_SOURCES.cookie.some(({ filter }) =>
 				filter.test(
@@ -362,7 +320,7 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 				)
 			)
 		).toBe(true)
-		// user modules with the same shape must NOT be stubbed
+		// Filters ignore user modules with matching paths.
 		expect(
 			STUB_SOURCES.cookie.some(({ filter }) =>
 				filter.test('/app/src/cookie/utils.ts')
@@ -378,8 +336,7 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 				filter.test('/app/lib/compile/handler/jit.ts')
 			)
 		).toBe(false)
-		// trace/memory filters are scoped to elysia's layout so they don't clobber
-		// dependency modules that share the bare filename (e.g. typebox's memory).
+		// Filters are scoped to Elysia-owned paths.
 		expect(
 			STUB_SOURCES.trace.some(({ filter }) =>
 				filter.test('/x/node_modules/elysia/dist/trace.mjs')
@@ -395,9 +352,7 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 				filter.test('/x/node_modules/knip/dist/util/trace.js')
 			)
 		).toBe(false)
-		// The sucrose stub cuts the `memory` edge — it must replace elysia's
-		// `memory`, never typebox's `memory/memory.mjs`, and never the public
-		// `sucrose` module (userland helpers like bracketPairRange must survive).
+		// The memory stub excludes TypeBox and the public sucrose module.
 		expect(
 			STUB_SOURCES.sucrose.some(({ filter }) =>
 				filter.test('/x/node_modules/elysia/dist/memory.mjs')
@@ -410,7 +365,9 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 		).toBe(true)
 		expect(
 			STUB_SOURCES.sucrose.some(({ filter }) =>
-				filter.test('/x/node_modules/typebox/build/system/memory/memory.mjs')
+				filter.test(
+					'/x/node_modules/typebox/build/system/memory/memory.mjs'
+				)
 			)
 		).toBe(false)
 		expect(
@@ -437,17 +394,12 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 		expect(safeOutput).not.toContain('[Sucrose] warning')
 		expect(safeOutput).not.toContain('Unsupported content type')
 		expect(safeOutput).not.toContain('class ElysiaWS')
-		// schema route uses `va`, so the merged reconstruct module is kept
 		expect(safeOutput).not.toContain('handler reconstruction was stripped')
-		// no trace alias → trace runtime is stubbed away
 		expect(safeOutput).not.toContain('class TracerHandle')
 		expect(safeOutput).not.toContain('class TracerLifecycle')
-		// memory's clearSucroseCache edge is cut
 		expect(safeOutput).not.toContain('clearSucroseCache')
 
-		// WS-only bundle: the handler-JIT graph is still stripped (WS reaches no
-		// sucrose / handler codegen), but the WS runtime module is RETAINED. A
-		// single WS route must not keep the whole JIT graph alive.
+		// WebSocket routes keep the WS runtime while dropping HTTP handler JIT.
 		const ws = await Bun.build({
 			entrypoints: ['test/aot/fixtures/strip-ws-bundle.ts'],
 			plugins: [
@@ -462,9 +414,7 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 		const wsOutput = await ws.outputs[0].text()
 		expect(wsOutput).toContain('handler compiler JIT was stripped')
 		expect(wsOutput).not.toContain('[Sucrose] warning')
-		// WS routes present → WS runtime module is kept
 		expect(wsOutput).toContain('class ElysiaWS')
-		// no trace alias → trace runtime is stubbed away
 		expect(wsOutput).not.toContain('class TracerHandle')
 		expect(wsOutput).not.toContain('clearSucroseCache')
 	})
@@ -509,14 +459,7 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 	})
 })
 
-/**
- * The trace stub used to require a fully stripped app (`jit`). It now also
- * applies under LIVE handler JIT when the app registers no trace handler:
- * every trace call site (fetch, JIT codegen, frozen reconstruct) gates on
- * registered handlers, so the throwing stub is unreachable. The gate is only
- * sound if detection catches EVERY trace registrar — these tests pin both the
- * gate polarity and the registrar detection.
- */
+/** Trace can be stubbed only when no reachable handler can emit trace events. */
 describe('trace stub gate — live-JIT relaxation (planFromReport)', () => {
 	const liveJit = {
 		stubbable: false,

@@ -8,8 +8,7 @@ describe('WebSocket interleaved messages', () => {
 			.ws('/ws', {
 				async message(ws) {
 					const before = ws.body as unknown as string
-					// 'slow' finishes AFTER 'fast', so a shared per-connection
-					// instance would let 'fast' overwrite 'slow's `body`.
+					// Complete out of order to expose shared message context.
 					await Bun.sleep(before === 'slow' ? 40 : 1)
 					ws.send(
 						JSON.stringify({
@@ -36,9 +35,7 @@ describe('WebSocket interleaved messages', () => {
 		ws.send('fast')
 		await done
 
-		// each message's body must be consistent before & after the await
 		for (const r of got) expect(r.after).toBe(r.before)
-		// and both distinct bodies must survive (not both clobbered to one)
 		expect(got.map((r) => r.before).sort()).toEqual(['fast', 'slow'])
 
 		await wsClosed(ws)
@@ -70,13 +67,12 @@ describe('WebSocket per-route option conflict', () => {
 
 		expect(
 			warnings.some(
-				(w) =>
-					w.includes('maxPayloadLength') && w.includes('WebSocket')
+				(w) => w.includes('maxPayloadLength') && w.includes('WebSocket')
 			)
 		).toBe(true)
 	})
 
-	it('does NOT warn when per-route options agree', () => {
+	it('does not warn when per-route options agree', () => {
 		const warnings = captureWarn(() => {
 			const app = new Elysia()
 				.ws('/a', { message() {}, maxPayloadLength: 1024 })
@@ -85,8 +81,6 @@ describe('WebSocket per-route option conflict', () => {
 			void app
 		})
 
-		expect(warnings.some((w) => w.includes('maxPayloadLength'))).toBe(
-			false
-		)
+		expect(warnings.some((w) => w.includes('maxPayloadLength'))).toBe(false)
 	})
 })

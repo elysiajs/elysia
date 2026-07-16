@@ -74,9 +74,7 @@ describe('WebSocket message', () => {
 		await wsOpen(wsBob)
 		await wsOpen(wsAlice)
 
-		// Both clients see the open event before the server-side `open`
-		// handler has necessarily run (and thus before either is
-		// subscribed). Wait a tick so subscriptions are in place.
+		// Client open events may precede the server subscription hooks.
 		await Bun.sleep(50)
 
 		const messageBob = wsMessage(wsBob)
@@ -187,9 +185,7 @@ describe('WebSocket message', () => {
 		const { type, data } = await message
 
 		expect(type).toBe('message')
-		// Validation error message wording is owned by typebox; assert that
-		// SOME error message was returned (non-empty) rather than depend on
-		// a substring that drifts between typebox versions.
+		// TypeBox error wording is not part of this contract.
 		expect(typeof data).toBe('string')
 		expect((data as string).length).toBeGreaterThan(0)
 
@@ -249,8 +245,7 @@ describe('WebSocket message', () => {
 		const { type, data } = await message
 
 		expect(type).toBe('message')
-		// Standard Schema (zod) error wording is owned by zod and changes
-		// across versions; assert that SOME error message was returned.
+		// Zod error wording is not part of this contract.
 		expect(typeof data).toBe('string')
 		expect((data as string).length).toBeGreaterThan(0)
 
@@ -323,7 +318,7 @@ describe('WebSocket message', () => {
 
 		const message = wsMessage(ws)
 
-		ws.send(JSON.stringify("Hello!"))
+		ws.send(JSON.stringify('Hello!'))
 
 		const { type, data } = await message
 		expect(type).toBe('message')
@@ -448,7 +443,7 @@ describe('WebSocket message', () => {
 
 		const message = wsMessage(ws)
 
-		ws.send(JSON.stringify("/hello"))
+		ws.send(JSON.stringify('/hello'))
 
 		const { type, data } = await message
 		expect(type).toBe('message')
@@ -588,45 +583,42 @@ describe('WebSocket message', () => {
 		app.stop()
 	})
 
-    it('handle validation error with onError', async () => {
-        const app = new Elysia()
-            .error(() => {
-                return 'caught'
-            })
-            .ws('/ws', {
-                body: t.Object({
-                    name: t.String()
-                }),
-                message(ws, message) {
-                    return ws.send(message)
-                }
-            })
-            .listen(0)
+	it('handle validation error with onError', async () => {
+		const app = new Elysia()
+			.error(() => {
+				return 'caught'
+			})
+			.ws('/ws', {
+				body: t.Object({
+					name: t.String()
+				}),
+				message(ws, message) {
+					return ws.send(message)
+				}
+			})
+			.listen(0)
 
-        const ws = newWebsocket(app.server!)
+		const ws = newWebsocket(app.server!)
 
-        await wsOpen(ws)
+		await wsOpen(ws)
 
-        const message = wsMessage(ws)
+		const message = wsMessage(ws)
 
-        ws.send(JSON.stringify({
-            name: 123, // expecting a string
-        }))
+		ws.send(
+			JSON.stringify({
+				name: 123 // expecting a string
+			})
+		)
 
-        const { type, data } = await message
+		const { type, data } = await message
 
-        expect(type).toBe('message')
-        expect(data).toBe('caught')
+		expect(type).toBe('message')
+		expect(data).toBe('caught')
 
-        await wsClosed(ws)
-        app.stop()
-    })
+		await wsClosed(ws)
+		app.stop()
+	})
 
-	// Regression: `.compile()` iterated ALL route history including
-	// WebSocket tuples and overwrote map['WS'][path] (the upgrade handler) with
-	// a generic compiled HTTP handler — so WS upgrades broke after compile()
-	// (and via the AOT build path which calls compile()). Echo must still work
-	// when the app is eagerly compiled before listen.
 	it('keeps WebSocket upgrade working after .compile()', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
@@ -653,9 +645,7 @@ describe('WebSocket message', () => {
 	})
 })
 
-// hook-free routes now dispatch messages on a fully-sync
-// path (no per-message Promise); async parsers/handlers are still
-// awaited via runtime guards and sync throws still reach error handling.
+// Hook-free routes dispatch synchronously while still supporting async work.
 describe('WebSocket sync dispatch path', () => {
 	it("raw '/'-prefixed frame arrives as the raw string", async () => {
 		const app = new Elysia()
@@ -726,9 +716,7 @@ describe('WebSocket sync dispatch path', () => {
 		const message = wsMessage(ws)
 		ws.send('x')
 
-		// No error hook — `handleError` falls back to wsErrorFrame, which now emits
-		// the same RFC 9457 problem+json body HTTP sends (WS errors -> problem+json,
-		// maintainer 2026-07-06): generic 500 with the message as `detail` in dev.
+		// Without an error hook, the client receives the default problem body.
 		const body = JSON.parse((await message).data as string)
 		expect(body).toMatchObject({
 			type: 'internal-server-error',
@@ -799,8 +787,6 @@ describe('WebSocket sync dispatch path', () => {
 		app.stop()
 	})
 
-	// Pins mapResponse's inclusion in the sync-eligibility condition: a
-	// route whose ONLY hook is mapResponse must still map the result.
 	it('mapResponse still applies when it is the only hook', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
@@ -825,11 +811,8 @@ describe('WebSocket sync dispatch path', () => {
 		app.stop()
 	})
 
-	// the non-`ElysiaStatus` response fallback (`200 ?? first entry`)
-	// is now resolved once per route — a bag WITHOUT a 200 entry must
-	// still validate plain sends against its first entry, and an
-	// `status(...)` send must still pick the status-keyed entry.
-	it('response bag without a 200 entry still validates via its first entry', async () => {
+	// Without a 200 schema, plain responses use the first registered validator.
+	it('uses the first response schema when no 200 schema is registered', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
 				response: {
@@ -845,13 +828,10 @@ describe('WebSocket sync dispatch path', () => {
 		const ws = newWebsocket(app.server!)
 		await wsOpen(ws)
 
-		// Valid against the 201 (first/default) entry.
 		const m1 = wsMessage(ws)
 		ws.send('good')
 		expect(JSON.parse((await m1).data as string)).toEqual({ ok: true })
 
-		// Invalid — a validation error message is sent instead of the
-		// payload.
 		const m2 = wsMessage(ws)
 		ws.send('bad')
 		const failed = (await m2).data as string

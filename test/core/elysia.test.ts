@@ -133,8 +133,6 @@ describe('Edge Case', () => {
 			.get('/1', () => '-')
 			.get('/4', () => '4')
 
-		// Routes keep their insertion order in `history`, even when a path
-		// repeats — the duplicate stays in place rather than shifting indices.
 		expect(app.history.map((route) => route.path)).toEqual([
 			'/0',
 			'/1',
@@ -157,7 +155,6 @@ describe('Edge Case', () => {
 			.get('/2', () => '2')
 			.use(plugin)
 
-		// A plugin's routes are appended in order after the parent's own.
 		expect(app.history.map((route) => route.path)).toEqual([
 			'/0',
 			'/1',
@@ -168,7 +165,7 @@ describe('Edge Case', () => {
 		])
 	})
 
-	it('get routes', () => {
+	it('exposes absorbed routes through .routes', () => {
 		const plugin = new Elysia().get('/', () => 'hello')
 
 		const main = new Elysia().use(plugin).get('/2', () => 'hi')
@@ -176,7 +173,7 @@ describe('Edge Case', () => {
 		expect(main.routes.length).toBe(2)
 	})
 
-	it('share one combine node across routes absorbed under the same chain', async () => {
+	it('shares one combine node across routes absorbed under the same chain', async () => {
 		const called: string[] = []
 
 		const inner = new Elysia()
@@ -198,18 +195,12 @@ describe('Edge Case', () => {
 			})
 			.use(mid)
 
-		// ≥2 hook-bearing `.use` levels make both `route[6]` (the child's
-		// inherited chain) and the absorbing chain non-empty, producing a
-		// {combine, over} node per absorbed route. Identical (childChain,
-		// preChain) pairs must share ONE node — otherwise every ancestor's
-		// history retains O(routes × depth) duplicate combine nodes forever.
 		const a = app['~routes'].find((route) => route[1] === '/a')!
 		const b = app['~routes'].find((route) => route[1] === '/b')!
 
 		expect(a[6]).toBeDefined()
 		expect(a[6]).toBe(b[6]!)
 
-		// sharing the node must not change hook execution
 		const resA = await app.handle(req('/a'))
 		await expect(resA.text()).resolves.toBe('a')
 		const forA = called.splice(0)
@@ -222,16 +213,12 @@ describe('Edge Case', () => {
 		expect(forA.length).toBeGreaterThan(0)
 	})
 
-	it('memoize routes getter until mutation', () => {
+	it('memoizes the routes getter until registration changes', () => {
 		const app = new Elysia().get('/a', () => 'a')
 
-		// repeated reads return the same array identity (cached snapshot,
-		// matching `.history` reference semantics) — re-materializing per
-		// access makes `app.routes[i]` in a loop quadratic
 		const first = app.routes
 		expect(app.routes).toBe(first)
 
-		// adding a route invalidates the snapshot
 		app.get('/b', () => 'b')
 
 		const second = app.routes
@@ -239,8 +226,6 @@ describe('Edge Case', () => {
 		expect(second.length).toBe(2)
 		expect(app.routes).toBe(second)
 
-		// absorbing a plugin (routes + macro + hook) invalidates it too,
-		// and macro resolution still applies to the new snapshot
 		const plugin = new Elysia()
 			.macro({
 				tagged: {
@@ -258,12 +243,6 @@ describe('Edge Case', () => {
 			third.find((route) => route.path === '/c')!.hooks.transform!.length
 		).toBe(1)
 
-		// compilation does NOT change `.routes`. `composeRouteHook`
-		// clones `route[4]` before resolving macros (see resolveLocalHook) and
-		// `promoteDerive` mutates the freshly-composed hook, never the stored
-		// tuple — so `.routes` derives purely from `#history` and is identical
-		// before/after a compile. The cache must therefore be RETAINED across
-		// compile (re-merging N routes on every JIT compile is pure waste).
 		app.compile()
 		const fourth = app.routes
 		expect(fourth).toBe(third)
@@ -273,13 +252,6 @@ describe('Edge Case', () => {
 	})
 
 	it('retains the routes cache across a JIT compile', async () => {
-		// `.routes` is a pure function of `#history`; a route-level JIT compile
-		// (first request to a route) only mutates `#compiled`/`~map`, never
-		// `#history`. So reading `.routes`, serving traffic (which compiles),
-		// then reading again must return the SAME cached array — the compile
-		// path must not spuriously drop the cache. Covers plain, dynamic, WS
-		// and auto-HEAD routes (none of which compile into a NEW `.routes`
-		// entry).
 		const app = new Elysia()
 			.use(autoHead())
 			.get('/a', () => 'a')
@@ -290,16 +262,13 @@ describe('Edge Case', () => {
 		const before = app.routes
 		const beforeSnapshot = before.map((r) => `${r.method} ${r.path}`).sort()
 
-		// serve traffic → triggers JIT compile on each route + auto-HEAD
 		await app.handle(req('/a'))
 		await app.handle(req('/c/5'))
 		await app.handle(new Request('http://localhost/a', { method: 'HEAD' }))
 
 		const after = app.routes
 
-		// cache retained: same array identity, no re-derive
 		expect(after).toBe(before)
-		// and the output is byte-identical (no route dropped or added)
 		expect(after.map((r) => `${r.method} ${r.path}`).sort()).toEqual(
 			beforeSnapshot
 		)
@@ -317,8 +286,6 @@ describe('Edge Case', () => {
 
 		const first = app.routes[0].hooks.transform!.length
 
-		// `routes` merges hooks lazily; reading it must not mutate the stored
-		// route, so repeated reads return the same shape.
 		expect(app.routes[0].hooks.transform!.length).toBe(first)
 		expect(app.routes[0].hooks.transform!.length).toBe(first)
 	})
@@ -463,14 +430,13 @@ describe('Edge Case', () => {
 		})
 	})
 
-	it('serve async static route repeatedly', async () => {
+	it('serves an async static response repeatedly', async () => {
 		const app = new Elysia().get('/', Promise.resolve(new Response('hi')))
 
 		const first = await app.handle(req('/'))
 		expect(first.status).toBe(200)
 		await expect(first.text()).resolves.toBe('hi')
 
-		// the resolved Response must be cloned per serve, not consumed
 		const second = await app.handle(req('/'))
 		expect(second.status).toBe(200)
 		await expect(second.text()).resolves.toBe('hi')
@@ -623,10 +589,6 @@ describe('Edge Case', () => {
 			})
 		)
 
-		// auto-HEAD returns a bodyless 200. It must NOT buffer the GET body to
-		// synthesize `Content-Length`  — the whole point of HEAD is to
-		// avoid materializing the payload. A mapped string body reports no
-		// `content-length` header, so none is emitted.
 		expect(response.status).toBe(200)
 		expect(response.headers.get('content-length')).toBeNull()
 		expect(await response.text()).toBe('')
@@ -649,7 +611,7 @@ describe('Edge Case', () => {
 		expect(await response.text()).toBe('')
 	})
 
-	it('prefer user-provided HEAD over auto-HEAD for GET', async () => {
+	it('prefers an explicit HEAD route over auto-HEAD for a static GET', async () => {
 		const app = new Elysia()
 			.use(autoHead())
 			.get('/', () => 'hello world')
@@ -664,14 +626,12 @@ describe('Edge Case', () => {
 			})
 		)
 
-		// The explicit HEAD handler runs (its custom header is present) instead
-		// of the GET-derived auto-HEAD (which would carry `content-length: 11`).
 		expect(response.status).toBe(200)
 		expect(response.headers.get('x-source')).toBe('manual-head')
 		expect(response.headers.get('content-length')).not.toBe('11')
 	})
 
-	it('prefer user-provided HEAD over auto-HEAD for dynamic GET', async () => {
+	it('prefers an explicit HEAD route over auto-HEAD for a dynamic GET', async () => {
 		const app = new Elysia()
 			.use(autoHead())
 			.get('/:id', () => 'hello world')
@@ -694,8 +654,6 @@ describe('Edge Case', () => {
 		const app = new Elysia()
 			.use(autoHead())
 			.get('/stream', async function* () {
-				// Never terminates — the old `arrayBuffer()` content-length path
-				// would buffer this forever and hang the HEAD request.
 				while (true) {
 					yield 'tick'
 					await new Promise((resolve) => setTimeout(resolve, 1))
@@ -714,14 +672,10 @@ describe('Edge Case', () => {
 
 		expect(result).not.toBe('TIMEOUT')
 		expect((result as Response).status).toBe(200)
-		// HEAD must not carry a body
 		expect((result as Response).body).toBeNull()
 	})
 
 	it('does not auto-register HEAD for GET unless autoHead is enabled', async () => {
-		// auto-HEAD is opt-in: without `autoHead`, a HEAD request to a
-		// GET-only route has no handler and falls through to 404 rather than
-		// silently deriving one from the GET handler.
 		const app = new Elysia().get('/', () => 'hello world')
 
 		const response = await app.handle(

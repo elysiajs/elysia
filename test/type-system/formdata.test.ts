@@ -187,8 +187,6 @@ describe('Nested FormData with optionnal file (patch operation)', async () => {
 		const body = new FormData()
 		body.append('name', 'Updated Product')
 		body.append('image', bunFile)
-		// metadata and variants fields are omitted (should be OK since they're optional)
-
 		const response = await app.handle(
 			new Request('http://localhost/product/123', {
 				method: 'PATCH',
@@ -469,8 +467,6 @@ describe('Nested FormData with optional t.ArrayString and t.ObjectString (PATCH 
 		const body = new FormData()
 		body.append('name', 'Updated Product Complex')
 		body.append('image', bunFile)
-		// metadata and variants fields are omitted (should be OK since they're optional)
-
 		const response = await app.handle(
 			new Request('http://localhost/product-complex/456', {
 				method: 'PATCH',
@@ -740,7 +736,6 @@ describe('Zod (for standard schema) with File and nested Object', () => {
 		)
 
 		const formData = new FormData()
-		// aris-yuzu.jpg is a jpeg — the png refine must reject it
 		formData.append('file', bunFile)
 
 		const response = await app.handle(
@@ -928,8 +923,6 @@ describe('Zod (for standard schema) with File and nested Object', () => {
 		const formData = new FormData()
 		formData.append('file', bunFile)
 		formData.append('name', 'Test Product')
-		// Omit optional fields
-
 		const response = await app.handle(
 			new Request('http://localhost/upload', {
 				method: 'POST',

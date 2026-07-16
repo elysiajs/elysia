@@ -7,8 +7,6 @@ import * as v from 'valibot'
 import { type } from 'arktype'
 import { post, req } from '../utils'
 
-// wraps a Standard Schema's validate with an invocation counter so tests can
-// pin how many times the engine actually runs a full parse per request
 const counted = <T extends { '~standard': any }>(schema: T) => {
 	let calls = 0
 
@@ -253,7 +251,6 @@ describe('Standard Schema Standalone', () => {
 	it('validate multiple schema together', async () => {
 		const app = new Elysia()
 			.error(({ error }) => {
-				// `code` was removed this version; detect via instanceof.
 				if (!(error instanceof ValidationError)) console.log(error)
 			})
 			.guard({
@@ -619,9 +616,6 @@ describe('Standard Schema Standalone', () => {
 	})
 })
 
-// a Standard Schema's validate is a full O(body) parse (eg. an entire Zod
-// parse) — validating once and reusing the result is the difference between
-// 1x and 2x validation CPU per request, so the invocation count is pinned
 describe('Standard Schema single-pass validation', () => {
 	it('StandardValidator.From validates once per success and reuses the issues in hand on failure', () => {
 		const id = counted(z.object({ id: z.number() }))
@@ -635,8 +629,6 @@ describe('Standard Schema single-pass validation', () => {
 			expect.unreachable()
 		} catch (error) {
 			expect(error).toBeInstanceOf(ValidationError)
-			// the issues come from the single validate call — re-running
-			// validate just to enumerate them doubles every 422's cost
 			expect((error as ValidationError).errors[0].message).toInclude(
 				'expected number'
 			)
@@ -651,13 +643,11 @@ describe('Standard Schema single-pass validation', () => {
 			schemas: [t.Object({ name: t.Literal('lilith') })]
 		})!
 
-		// success: zod strips its unknowns, typebox Clean strips the rest
 		expect(
 			validator.From!({ id: 1, name: 'lilith', extra: false }, 'body')
 		).toEqual({ id: 1, name: 'lilith' })
 		expect(id.count()).toBe(1)
 
-		// failure: still a single validate call, no Check-then-Errors re-run
 		expect(() =>
 			validator.From!({ id: 'a', name: 'lilith' }, 'body')
 		).toThrow(ValidationError)
@@ -670,7 +660,6 @@ describe('Standard Schema single-pass validation', () => {
 			schemas: [t.Object({ name: t.Literal('lilith') })]
 		})!
 
-		// standard member fails first: its issues are thrown as-is
 		try {
 			validator.From!({ id: 'a', name: 'fouco' }, 'body')
 			expect.unreachable()
@@ -680,7 +669,6 @@ describe('Standard Schema single-pass validation', () => {
 			expect(all[0].path).toBe('id')
 		}
 
-		// typebox member fails alone: same errors the old aggregate produced
 		try {
 			validator.From!({ id: 1, name: 'fouco' }, 'body')
 			expect.unreachable()
@@ -700,8 +688,6 @@ describe('Standard Schema single-pass validation', () => {
 			}
 		)!
 
-		// query coercions wrap the member in codecs: Convert accepts the
-		// stringified form that the raw compiled Check would reject
 		expect(lenient.Check({ id: '1', ok: 'true' })).toBe(true)
 		expect(lenient.From!({ id: '1', ok: 'true' }, 'query')).toEqual({
 			id: 1,
@@ -709,7 +695,6 @@ describe('Standard Schema single-pass validation', () => {
 		})
 		expect(lenient.Check({ id: '1', ok: 'maybe' })).toBe(false)
 
-		// codec-less (body) members stay strict: no Convert leniency
 		const strict = Validator.create(
 			counted(z.object({ id: z.number() })).schema,
 			{ schemas: [t.Object({ n: t.Number() })] }
@@ -789,15 +774,7 @@ describe('Standard Schema single-pass validation', () => {
 	})
 })
 
-// a Standard Schema whose `~standard.validate` returns a Promise, used
-// inside a standalone guard (the MultiValidator path), was silently SKIPPED —
-// `From` checked `!(q instanceof Promise)` and then read `q.value` off the
-// unresolved Promise (undefined). MultiValidator now marks declared-async
-// Standard Schema members as async so the JIT awaits `From`, and each member
-// result is awaited before its issues/value is read. Invalid input must 422,
-// not pass.
-describe('Standard Schema async standalone', () => {
-	// an async vendor: rejects unless `id` is a number
+describe('asynchronous Standard Schema standalone guards', () => {
 	const asyncNumberId = {
 		'~standard': {
 			version: 1,
@@ -818,8 +795,6 @@ describe('Standard Schema async standalone', () => {
 				({ body }) => body
 			)
 
-		// invalid per the async schema (id is a string) but valid per the
-		// TypeBox member — must NOT bypass validation
 		const invalid = await app.handle(
 			post('/', { id: 'not-a-number', name: 'lilith' })
 		)
@@ -837,7 +812,6 @@ describe('Standard Schema async standalone', () => {
 
 		const res = await app.handle(post('/', { id: 7, name: 'lilith' }))
 		expect(res.status).toBe(200)
-		// the async member contributes `id`, the TypeBox member `name`
 		expect(await res.json()).toEqual({ id: 7, name: 'lilith' })
 	})
 

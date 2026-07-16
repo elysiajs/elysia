@@ -113,11 +113,10 @@ describe('Web Standard - Map Compact Response', () => {
 		expect(response.status).toBe(200)
 	})
 
-	it('map Error', async () => {
+	it('maps Error to RFC 9457 problem details', async () => {
 		const response = mapCompactResponse(new Error('Hello'))
 
 		expect(response).toBeInstanceOf(Response)
-		// generic Error → RFC 9457 problem+json
 		await expect(response.json()).resolves.toMatchObject({
 			type: 'internal-server-error',
 			title: 'Internal Server Error',

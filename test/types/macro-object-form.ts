@@ -1,7 +1,7 @@
 import { Elysia, t } from '../../src'
 import { expectTypeOf } from 'expect-type'
 
-// own handler ctx sees the macro's own schema (previously named-form-only)
+// Object-form macro hooks receive the macro's schema.
 {
 	new Elysia().macro({
 		thing: {
@@ -18,7 +18,7 @@ import { expectTypeOf } from 'expect-type'
 	})
 }
 
-// schema AND derive result reach the consuming route
+// Routes using an object-form macro receive its schema and derived values.
 {
 	new Elysia()
 		.macro({
@@ -35,8 +35,7 @@ import { expectTypeOf } from 'expect-type'
 		})
 }
 
-// a model name (not an inline schema) resolves into the macro's own ctx
-// and flows to the consuming route
+// Named models type both macro hooks and routes using the macro.
 {
 	new Elysia()
 		.model({ 'test.a': t.Object({ a: t.String() }) })
@@ -57,7 +56,7 @@ import { expectTypeOf } from 'expect-type'
 		})
 }
 
-// function form: argument type + own handler ctx + derive flow
+// Function-form macro options determine derived route values.
 {
 	new Elysia()
 		.macro({
@@ -76,11 +75,8 @@ import { expectTypeOf } from 'expect-type'
 		})
 }
 
-// function form with schema: the route receives schema + derive result.
-// The fn form's OWN handlers see the schema-less default ctx (the schema
-// lives inside the function's return — TypeScript cannot thread it back
-// into a sibling property's contextual type); annotate the ctx parameter
-// or use the object form when the own handler needs the schema typed
+// A function-form macro passes its schema and derived values to the route.
+// Its own derive callback keeps the schemaless context type.
 {
 	new Elysia()
 		.macro({
@@ -88,8 +84,8 @@ import { expectTypeOf } from 'expect-type'
 				query: t.Object({ page: t.Number() }),
 				derive: ({ query }) => {
 					expectTypeOf(query).toEqualTypeOf<
-					Record<string, string | undefined>
-				>()
+						Record<string, string | undefined>
+					>()
 
 					return { capped: max }
 				}
@@ -101,7 +97,7 @@ import { expectTypeOf } from 'expect-type'
 		})
 }
 
-// a typo'd definition key is rejected
+// Unknown macro definition keys are rejected.
 {
 	new Elysia().macro({
 		thing: {
@@ -112,7 +108,7 @@ import { expectTypeOf } from 'expect-type'
 	})
 }
 
-// a typo'd macro (inherited) name is rejected
+// Unregistered inherited macro names are rejected.
 {
 	new Elysia().macro({ auth: { derive: () => ({ user: 'a' }) } }).macro({
 		admin: {
@@ -122,7 +118,7 @@ import { expectTypeOf } from 'expect-type'
 	})
 }
 
-// referencing a previously-registered macro or a sibling still works
+// Macros can reference earlier and sibling macro definitions.
 {
 	new Elysia()
 		.macro({ auth: { derive: () => ({ user: 'a' }) } })
@@ -141,8 +137,7 @@ import { expectTypeOf } from 'expect-type'
 		})
 }
 
-// the macro's own declared response does NOT constrain its own hooks —
-// hook status returns are collected additively into the route's response
+// Declared macro responses and lifecycle status returns both reach the route.
 {
 	const app = new Elysia()
 		.macro({

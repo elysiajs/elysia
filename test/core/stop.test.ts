@@ -3,15 +3,6 @@ import { describe, expect, it } from 'bun:test'
 import { Elysia } from '../../src'
 
 describe('Stop', () => {
-	// BunAdapter.listen defers work into a queueMicrotask. If the
-	// app is stop()ed BEFORE that microtask runs (the common `listen(); stop()`
-	// of test teardown / a startup-error `finally`), stop() sets
-	// app.server = undefined, and the old microtask then re-`Bun.serve`d a
-	// SECOND, live, orphaned server bound to a port the caller already
-	// "stopped" — a silent resource leak that also kept the process alive. The
-	// fix captures the server identity and abandons the deferred serve/reload
-	// when app.server no longer matches. These pins instrument Bun.serve to
-	// prove exactly one server is ever created and none survive the stop.
 	const withServeCount = async (run: () => void | Promise<void>) => {
 		const realServe = Bun.serve.bind(Bun)
 		let calls = 0
@@ -25,7 +16,6 @@ describe('Stop', () => {
 
 		try {
 			await run()
-			// let the queued microtask + any module promise settle
 			await new Promise((r) => setTimeout(r, 50))
 
 			let liveOrphans = 0
@@ -37,9 +27,7 @@ describe('Stop', () => {
 					)
 					await res.text().catch(() => {})
 					liveOrphans++
-				} catch {
-					// connection refused = not live (good)
-				}
+				} catch {}
 			}
 
 			return { calls, liveOrphans, created }
@@ -53,7 +41,7 @@ describe('Stop', () => {
 		}
 	}
 
-	it('listen() then immediate stop() creates exactly one server and leaks no orphan', async () => {
+	it('stops immediately after listen without creating an orphan server', async () => {
 		const result = await withServeCount(() => {
 			const app = new Elysia().get('/', () => 'hi')
 			app.listen(0)
@@ -65,7 +53,7 @@ describe('Stop', () => {
 		expect(result!.liveOrphans).toBe(0)
 	})
 
-	it('async-plugin app: listen() then immediate stop() also creates exactly one server', async () => {
+	it('stops an async-plugin app immediately without creating an orphan server', async () => {
 		const result = await withServeCount(() => {
 			const app = new Elysia()
 				.use(Promise.resolve(new Elysia().get('/p', () => 'p')))
@@ -79,21 +67,16 @@ describe('Stop', () => {
 		expect(result!.liveOrphans).toBe(0)
 	})
 
-	it('stop() during the async-modules window does not throw and leaves no server', async () => {
+	it('stops while async modules resolve without throwing or leaving a server', async () => {
 		let threw: unknown
 		const result = await withServeCount(async () => {
 			const slow = new Promise<any>((resolve) =>
-				setTimeout(
-					() => resolve(new Elysia().get('/p', () => 'p')),
-					40
-				)
+				setTimeout(() => resolve(new Elysia().get('/p', () => 'p')), 40)
 			)
 			const app = new Elysia().use(slow as any).get('/', () => 'hi')
 			app.listen(0)
 
 			try {
-				// stop after the initial microtask ran but before the slow
-				// plugin resolves — reloadAfterModules must bail, not TypeError
 				await new Promise((r) => setTimeout(r, 15))
 				app.stop()
 				await new Promise((r) => setTimeout(r, 120))

@@ -5,7 +5,7 @@ import * as z from 'zod'
 import { describe, expect, it } from 'bun:test'
 import { post, req, upload } from '../utils'
 
-// chunks are Uint8Array; decode for string comparison.
+// Stream chunks are Uint8Array values.
 const dec = new TextDecoder()
 const decodeChunk = (v: unknown): string =>
 	v instanceof Uint8Array ? dec.decode(v) : String(v)
@@ -584,9 +584,7 @@ describe('Response Validator', () => {
 		expect(result.join('')).toContain('"message":"second"')
 	})
 
-	it('validate SSE with Zod schema (bug report scenario)', async () => {
-		// This test reproduces the exact bug report:
-		// https://github.com/elysiajs/elysia/issues/1490
+	it('validates SSE produced with a Zod response schema', async () => {
 		const Schema = z.object({
 			data: z.object({
 				name: z.string()
@@ -599,11 +597,9 @@ describe('Response Validator', () => {
 
 		const res = await app.handle(req('/'))
 
-		// Should not throw validation error
 		expect(res.status).toBe(200)
 		expect(res.headers.get('content-type')).toBe('text/event-stream')
 
-		// Verify the stream contains the expected SSE data
 		const result: string[] = []
 		for await (const chunk of streamResponse(res)) {
 			result.push(decodeChunk(chunk))

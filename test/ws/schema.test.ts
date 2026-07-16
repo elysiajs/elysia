@@ -36,7 +36,6 @@ describe('WebSocket non-body schemas', () => {
 			})
 			.listen(0)
 
-		// Missing `name` query param — upgrade should be rejected.
 		const upgradeResponse = await fetch(
 			`http://${app.server!.hostname}:${app.server!.port}/ws`,
 			{
@@ -185,7 +184,6 @@ describe('WebSocket non-body schemas', () => {
 			})
 			.listen(0)
 
-		// Success path.
 		const ws = new WebSocket(
 			`ws://${app.server!.hostname}:${app.server!.port}/ws?name=zoe`
 		)
@@ -197,7 +195,6 @@ describe('WebSocket non-body schemas', () => {
 
 		await wsClosed(ws)
 
-		// Failure path.
 		const upgradeResponse = await fetch(
 			`http://${app.server!.hostname}:${app.server!.port}/ws`,
 			{
@@ -214,12 +211,7 @@ describe('WebSocket non-body schemas', () => {
 		app.stop()
 	})
 
-	// the upgrade path parses query via `parseQueryFromURL` (the same
-	// scanner HTTP routes use) instead of URLSearchParams +
-	// Object.fromEntries. Duplicate keys must build an array when the
-	// schema declares one — they previously collapsed last-wins and failed
-	// a t.Array validation that PASSES on an equivalent HTTP route.
-	it('query: t.Array schema receives duplicate keys as an array (HTTP parity)', async () => {
+	it('query: preserves duplicate values when the schema expects an array', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
 				query: t.Object({ id: t.Array(t.String()) }),
@@ -244,7 +236,7 @@ describe('WebSocket non-body schemas', () => {
 		app.stop()
 	})
 
-	it('query: no query string parses to an empty record', async () => {
+	it('query: passes an empty object when the upgrade has no query string', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
 				query: t.Object({ name: t.Optional(t.String()) }),

@@ -2,7 +2,7 @@ import { t } from '../../src'
 import { Validator } from '../../src/validator'
 import { expectTypeOf } from 'expect-type'
 
-// schema validator (getSchemaValidator was renamed to Validator.create)
+// Schema validators preserve their decoded type.
 {
 	const schema = t.Object({
 		id: t.Number(),

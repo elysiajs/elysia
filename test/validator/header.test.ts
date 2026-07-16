@@ -445,7 +445,6 @@ describe('Header Validator', () => {
 						year: t.Numeric({ minimum: 1900, maximum: 2160 })
 					}),
 					error({ error }) {
-						// `code` was removed this version; dispatch via instanceof.
 						if (error instanceof ValidationError) err = error
 					}
 				},

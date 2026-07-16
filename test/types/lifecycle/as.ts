@@ -5,7 +5,7 @@ class MyError extends Error {
 	readonly kind = 'my-error'
 }
 
-// ? as('scoped') promotes a local resolve to propagate one level via .use
+// `.as('plugin')` exposes derived values to the immediate consumer.
 {
 	const plugin = new Elysia()
 		.derive(() => ({ token: 'abc' as const }))
@@ -16,7 +16,7 @@ class MyError extends Error {
 	})
 }
 
-// ? as('global') promotes a local resolve to propagate everywhere
+// `.as('global')` exposes derived values through nested consumers.
 {
 	const plugin = new Elysia()
 		.derive(() => ({ token: 'abc' as const }))
@@ -29,7 +29,7 @@ class MyError extends Error {
 	})
 }
 
-// ? as('scoped') is one hop only — a scoped resolve does not leak two levels
+// `.as('plugin')` stops exposing derived values after one consumer.
 {
 	const plugin = new Elysia()
 		.derive(() => ({ token: 'abc' as const }))
@@ -42,9 +42,7 @@ class MyError extends Error {
 	})
 }
 
-// ? as('global') promotes a local .error() handler to map at any depth —
-// ? equivalent to registering it with `.error('global', MyError, …)`. This
-// ? exercises the error-channel promotion (Volatile/Ephemeral → Definitions).
+// `.as('global')` exposes error handlers at every nesting depth.
 {
 	const plugin = new Elysia()
 		.error(MyError, ({ error }) => status(404, { message: error.message }))
@@ -59,44 +57,39 @@ class MyError extends Error {
 	}>()
 }
 
-// ? as('global') promotes a guard's RESPONSE constraint so a wrong-return
-// ? handler is a TYPE error at ANY depth (negative-direction pins — these were
-// ? the @ts-expect-error tripwires in test/core/as.test.ts that the type gate
-// ? stopped covering once it narrowed off the runtime suite).
+// `.as('global')` applies guard response constraints at every nesting depth.
 {
 	const inner = new Elysia()
 		.guard({ response: t.Number() })
-		// @ts-expect-error handler must satisfy the guarded response: t.Number()
+		// @ts-expect-error guarded routes must return numbers
 		.get('/inner', () => 'a')
 		.as('global')
 
 	const plugin = new Elysia()
 		.use(inner)
-		// @ts-expect-error globally-promoted response: t.Number() rejects boolean
+		// @ts-expect-error the global response constraint rejects booleans
 		.get('/plugin', () => true)
 
 	new Elysia()
 		.use(plugin)
-		// @ts-expect-error promoted globally — still rejects a string two levels up
+		// @ts-expect-error the global response constraint reaches nested consumers
 		.get('/', () => 'not a number')
 }
 
-// ? as('plugin') promotes the response constraint ONE hop only: it rejects a
-// ? wrong return in the immediate parent, but does NOT reach the grandparent.
+// `.as('plugin')` applies response constraints to the immediate consumer only.
 {
 	const inner = new Elysia()
 		.guard({ response: t.Number() })
-		// @ts-expect-error handler must satisfy the guarded response: t.Number()
+		// @ts-expect-error guarded routes must return numbers
 		.get('/inner', () => 'a')
 		.as('plugin')
 
 	const plugin = new Elysia()
 		.use(inner)
-		// @ts-expect-error one-hop-promoted response rejects boolean in the parent
+		// @ts-expect-error the plugin response constraint rejects booleans
 		.get('/plugin', () => true)
 
-	// two levels up the plugin-scoped response no longer applies, so a
-	// non-number return is allowed (NO @ts-expect-error here is the assertion).
+	// The plugin response constraint stops before the grandparent.
 	new Elysia().use(plugin).get('/', () => 'not a number')
 }
 

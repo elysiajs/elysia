@@ -73,11 +73,6 @@ describe('Parser', () => {
 		await expect(res.json()).resolves.toEqual(body)
 	})
 
-	// Regression: the default parser dispatched on charCodeAt(12),
-	// where `application/xml` shares 'x' with `application/x-www-form-urlencoded`
-	// and was silently parsed as urlencoded — mangling the XML body into a
-	// bogus object. application/xml must NOT be urlencoded-parsed (it has no
-	// built-in parser → body stays unparsed for a custom onParse).
 	it('does not parse application/xml as urlencoded', async () => {
 		const app = new Elysia().post('/', ({ body }) => ({
 			type: typeof body,
@@ -94,7 +89,6 @@ describe('Parser', () => {
 			)
 			.then((r) => r.json())) as { type: string; isObject: boolean }
 
-		// before the fix `body` was a urlencoded-parsed object with garbage keys
 		expect(res.isObject).toBe(false)
 	})
 
@@ -504,14 +498,6 @@ describe('Parser', () => {
 		expect(response.status).toBe(400)
 	})
 
-	// `group(prefix, run)`'s parse must apply ONLY to the group's own
-	// routes, never to sibling routes on the parent. A custom `parse` is
-	// route-level (each group route snapshots the group's hook chain), so the
-	// group finalize must NOT lift it onto the parent chain — doing so leaks
-	// the group's body parsing onto routes registered after the group and
-	// silently rewrites their bodies (an auth/validation-shaped hazard). This
-	// pins the scope: /g/* sees the custom parser; sibling routes registered
-	// before AND after the group keep default parsing.
 	it('scopes group() parse to the group, not sibling parent routes', async () => {
 		const app = new Elysia()
 			.post('/before', ({ body }) => body)
@@ -533,9 +519,7 @@ describe('Parser', () => {
 				)
 				.then((r) => r.json())
 
-		// group route uses the custom parser
 		expect(await call('/g/x')).toEqual({ hijacked: true })
-		// siblings before AND after the group keep default JSON parsing
 		expect(await call('/before')).toEqual({ real: 'payload' })
 		expect(await call('/after')).toEqual({ real: 'payload' })
 	})

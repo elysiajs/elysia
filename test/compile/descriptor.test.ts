@@ -6,12 +6,7 @@ import {
 	type RouteDescriptor
 } from '../../src/compile/handler/descriptor'
 
-// Compile every route by driving a request through it, then read the
-// per-route descriptor the JIT populated. A descriptor is a frozen
-// classification of the build-time facts the codegen consumes; if any fact
-// flips (async-forcing, validator asyncness, cookie needs, promotion purity),
-// the codegen it drives changes too, so these assertions are the tripwire that
-// a "behaviour-preserving" refactor actually preserved behaviour.
+// A request compiles the route and publishes the facts used by code generation.
 
 const descriptorOf = async (
 	app: Elysia<any, any>,
@@ -106,8 +101,10 @@ describe('route descriptor', () => {
 	})
 
 	it('marks a sync beforeHandle as present without forcing async', async () => {
-		const app = new Elysia().get('/bh', { beforeHandle: () => {} }, () =>
-			'hi'
+		const app = new Elysia().get(
+			'/bh',
+			{ beforeHandle: () => {} },
+			() => 'hi'
 		)
 
 		const descriptor = await descriptorOf(app, 'GET /bh', get('/bh'))

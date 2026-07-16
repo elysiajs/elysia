@@ -1,23 +1,6 @@
 import { describe, it, expect } from 'bun:test'
 import { Elysia, t } from '../../src'
 
-// Differential harness for `experimental.lazyCompose`.
-//
-// Under the flag, `.use(sync child)` keeps all non-route composition work eager
-// (ext merges, macros, scope children, hook-chain absorption) and defers ONLY
-// the per-route copy loop into an ordered `route | use` plan. At the first
-// observation/build boundary a single-pass DFS emits every original route once
-// with the accumulated prefix + inherited chain — Θ(nodes + routes) instead of
-// the eager O(N·D²) reabsorption.
-//
-// Each fixture is built TWICE from the same builder — once eager, once with the
-// flag on for every instance — and the two must be indistinguishable:
-// 1. `app.routes` structurally identical (length, order, method, path)
-// 2. response status + headers (minus Date) + body identical over a request
-// matrix
-// This is what makes the flag safe to ship: it can only ever be a no-op on
-// observable behavior. If the two diverge, the deferral changed semantics.
-
 type Build = (
 	opt: Record<string, unknown>
 ) => Elysia<any, any, any, any, any, any, any, any>
@@ -55,7 +38,6 @@ const send = (app: any, req: Req) => {
 	return app.handle(new Request(`http://e.ly${req.path}`, init))
 }
 
-// Build both variants, assert route-table + response parity across the matrix.
 const assertParity = async (build: Build, matrix: Req[]) => {
 	const eager = build(eagerOpt())
 	const lazy = build(lazyOpt())
@@ -76,8 +58,8 @@ const assertParity = async (build: Build, matrix: Req[]) => {
 	}
 }
 
-describe('experimental.lazyCompose — differential parity', () => {
-	it('flag off is a pure no-op (baseline route table)', () => {
+describe('experimental.lazyCompose parity', () => {
+	it('disabled mode keeps the baseline route table', () => {
 		const app = new Elysia()
 			.get('/a', () => 'a')
 			.use(new Elysia({ prefix: '/p' }).get('/b', () => 'b'))
@@ -304,7 +286,6 @@ describe('experimental.lazyCompose — differential parity', () => {
 					.use(inner)
 					.get('/x', () => 'ax')
 				const p1 = new Elysia({ prefix: '/p1', ...opt }).use(shared)
-				// Force-flush the shared child between the two parents' uses.
 				void shared.routes.length
 				const p2 = new Elysia({ prefix: '/p2', ...opt }).use(shared)
 				return new Elysia(opt).use(p1).use(p2)
@@ -331,7 +312,7 @@ describe('experimental.lazyCompose — differential parity', () => {
 			[{ path: '/f/fx' }, { path: '/r' }]
 		))
 
-	it('a child mutated after `.use` does not leak later routes (frozen frontier)', () =>
+	it('a child mutated after `.use` does not add its later routes', () =>
 		assertParity(
 			(opt) => {
 				const child = new Elysia({ prefix: '/c', ...opt }).get(
@@ -339,8 +320,6 @@ describe('experimental.lazyCompose — differential parity', () => {
 					() => 'early'
 				)
 				const root = new Elysia(opt).use(child)
-				// Registered after `.use`: eager already copied only the use-time
-				// snapshot, so this must NOT appear in `root` under either mode.
 				child.get('/late', () => 'late')
 				return root
 			},
@@ -363,7 +342,7 @@ describe('experimental.lazyCompose — differential parity', () => {
 	})
 })
 
-describe('experimental.lazyCompose — unsupported constructs throw loudly', () => {
+describe('experimental.lazyCompose unsupported plugins', () => {
 	it('`.use(Promise)` throws naming the flag', () => {
 		expect(() =>
 			new Elysia({ experimental: { lazyCompose: true } }).use(
@@ -396,8 +375,8 @@ describe('experimental.lazyCompose — unsupported constructs throw loudly', () 
 	})
 })
 
-describe('experimental.lazyCompose — depth sanity (avoids O(N·D²))', () => {
-	it('deep chain flushes far below eager cost', () => {
+describe('experimental.lazyCompose deep plugin chains', () => {
+	it('builds a deep chain within the lazy cost ceiling', () => {
 		const DEPTH = 64
 		const PER_LEVEL = 4 // ~256 routes, D deep — the reabsorption stress shape
 
@@ -417,7 +396,6 @@ describe('experimental.lazyCompose — depth sanity (avoids O(N·D²))', () => {
 			return node
 		}
 
-		// Warm both codepaths so the measurement excludes first-call JIT.
 		build(eagerOpt())
 		build(lazyOpt())
 
@@ -436,7 +414,6 @@ describe('experimental.lazyCompose — depth sanity (avoids O(N·D²))', () => {
 		const eager = time(eagerOpt())
 		const lazy = time(lazyOpt())
 
-		// Same route table, and lazy well under the generous anti-flake ceiling.
 		expect(lazy.routes).toBe(eager.routes)
 		expect(lazy.ms).toBeLessThan(eager.ms * 0.6)
 	})

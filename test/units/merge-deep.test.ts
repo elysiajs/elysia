@@ -17,25 +17,11 @@ describe('mergeDeep', () => {
 	})
 
 	it('merges arrays target-first without leaking into a shared source', () => {
-		// The same source can be merged into many targets (e.g. an object-macro's
-		// shared `detail.tags`). Merging must not mutate that source in place, or
-		// one route's merge would corrupt every other route using it.
+		// Route macros may reuse the same source object.
 		const source = { lifecycle: ['plugin', 'route'] }
 
-		const a = mergeDeep(
-			{ lifecycle: ['a'] },
-			source,
-			undefined,
-			true,
-			true
-		)
-		const b = mergeDeep(
-			{ lifecycle: ['b'] },
-			source,
-			undefined,
-			true,
-			true
-		)
+		const a = mergeDeep({ lifecycle: ['a'] }, source, undefined, true, true)
+		const b = mergeDeep({ lifecycle: ['b'] }, source, undefined, true, true)
 
 		expect(a.lifecycle).toEqual(['a', 'plugin', 'route'])
 		expect(b.lifecycle).toEqual(['b', 'plugin', 'route'])
@@ -185,5 +171,35 @@ describe('mergeDeep', () => {
 		expect(resB).toBe('1')
 		expect(resC).toBe('2')
 		expect(resD).toBe('2')
+	})
+
+	it('ignores an override for a getter-only property', () => {
+		const target: Record<string, unknown> = {}
+		Object.defineProperty(target, 'sameKey', {
+			get: () => 1,
+			enumerable: true,
+			configurable: false
+		})
+
+		expect(() =>
+			mergeDeep(target, { sameKey: 2 }, undefined, true)
+		).not.toThrow()
+		expect(target.sameKey).toBe(1)
+	})
+
+	it('merges through a non-writable object property', () => {
+		const inner = { a: 1 }
+		const target: Record<string, unknown> = {}
+		Object.defineProperty(target, 'cfg', {
+			value: inner,
+			writable: false,
+			enumerable: true,
+			configurable: false
+		})
+
+		expect(() =>
+			mergeDeep(target, { cfg: { b: 2 } }, undefined, true)
+		).not.toThrow()
+		expect(inner).toEqual({ a: 1, b: 2 })
 	})
 })

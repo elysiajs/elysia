@@ -10,8 +10,7 @@ import {
 	installReconstructImpl
 } from '../../src/compile/aot-reconstruct'
 
-// materialised manifests reconstruct in-process — wire the table like the
-// generated module would
+// Reconstruct in-process manifests through the same table as generated modules.
 installReconstructImpl()
 
 import { CheckContext } from 'typebox/schema'
@@ -20,9 +19,7 @@ import { Guard } from 'typebox/guard'
 import { Format } from 'typebox/format'
 import { Hashing } from 'typebox/system'
 
-// The check factories close over module-global CheckContext/Guard/Format/Hashing
-// (the real build supplies them via import). In-process, `new Function` has no
-// such scope, so we pass them as args — same instances, just a different binding.
+// `new Function` receives the module globals that generated imports normally bind.
 const fn = (src: string) =>
 	new Function('CheckContext', 'Guard', 'Format', 'Hashing', `return ${src}`)(
 		CheckContext,
@@ -31,7 +28,7 @@ const fn = (src: string) =>
 		Hashing
 	)
 
-/** Materialise captured handlers into a frozen `{ a, f }` manifest (in-process). */
+/** Materialise captured handlers into a frozen `{ a, f }` manifest. */
 export const materialiseHandlers = (
 	captured: CapturedHandler[]
 ): HandlerManifest => {
@@ -45,11 +42,7 @@ export const materialiseHandlers = (
 	return m
 }
 
-/**
- * Materialise captured validators into a frozen manifest of REAL functions —
- * exactly what the build plugin emits, but in-process for tests. Handles the
- * check (`c`) and exact-mirror (`m`, incl. union branches) channels.
- */
+/** Materialise captured validators into the frozen manifest emitted by builds. */
 export const materialise = (
 	captured: CapturedValidator[]
 ): ValidatorManifest => {
@@ -70,7 +63,7 @@ export const materialise = (
 			)
 
 		if (c.checkValue && c.mirror) {
-			// merged: one factory → { check, clean }; `u` rides at entry level
+			// One factory provides both check and clean operations.
 			entry.cm = fn(
 				Source.bothFactory(
 					c.identifier!,
@@ -100,7 +93,7 @@ export const materialise = (
 			entry.m = mir
 		}
 
-		// request-side decode mirror (always factory: codecs ride in `d`)
+		// Request-side decode mirror.
 		if (c.decodeMirror) {
 			const dm: any = {
 				s: fn(Source.mirrorFactory(c.decodeMirror.source, true))
@@ -109,7 +102,7 @@ export const materialise = (
 			entry.dm = dm
 		}
 
-		// response-side encode mirror (symmetric to dm)
+		// Response-side encode mirror.
 		if (c.encodeMirror) {
 			const em: any = {
 				s: fn(Source.mirrorFactory(c.encodeMirror.source, true))
@@ -118,7 +111,7 @@ export const materialise = (
 			entry.em = em
 		}
 
-		// preallocated defaults — round-trip through JSON to match the real
+		// Preallocated defaults use the same JSON round-trip as generated output.
 		if (c.precomputeSafe) {
 			entry.ps = 1
 			if (c.precomputedDefault !== undefined)
@@ -132,7 +125,7 @@ export const materialise = (
 			if (c.objectDefaultMerger) entry.pm = fn(c.objectDefaultMerger)
 		}
 
-		// per-field custom-error checks
+		// Per-field custom error checks.
 		if (c.customErrors?.length)
 			entry.ce = c.customErrors.map((e) => ({
 				p: e.path,
@@ -145,8 +138,7 @@ export const materialise = (
 				...(e.external ? { e: 1 } : {})
 			}))
 
-		// inner codecs (t.ObjectString / t.ArrayString): per node, open char +
-		// inner check factory + inner decode mirror
+		// Inner ObjectString and ArrayString codec nodes.
 		if (c.innerCodecs?.length)
 			entry.ic = c.innerCodecs.map((e) => {
 				const d: any = {
@@ -176,8 +168,7 @@ export const materialise = (
 
 		if (c.coercePlan) {
 			entry.cp = JSON.parse(JSON.stringify(c.coercePlan))
-			// mirror the generated manifest module: any emitted `cp` comes
-			// with the rebuilder registration
+			// Coercion plans require the generated module's rebuilder registration.
 			Compiled.planRebuilder = buildCoercedFromPlan
 		}
 

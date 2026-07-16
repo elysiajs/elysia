@@ -108,9 +108,7 @@ import { expectTypeOf } from 'expect-type'
 	})
 }
 
-// string-scope guard twins of the `{ as: scope }` cases above — the
-// `.guard(scope, hook)` form must apply macro context with the same
-// scope-correct propagation
+// `.guard(scope, hooks)` applies macro-derived values at the selected scope.
 {
 	const plugin = new Elysia()
 		.macro({
@@ -189,8 +187,7 @@ import { expectTypeOf } from 'expect-type'
 	})
 }
 
-// string-scope guard also accumulates the hook's SCHEMA with scope-correct
-// propagation
+// `.guard(scope, hooks)` applies hook schemas at the selected scope.
 {
 	const plugin = new Elysia()
 		.guard('plugin', {
@@ -205,9 +202,7 @@ import { expectTypeOf } from 'expect-type'
 	})
 
 	const app = new Elysia().use(parent).get('/', ({ query }) => {
-		expectTypeOf(query).toEqualTypeOf<
-			Record<string, string | undefined>
-		>()
+		expectTypeOf(query).toEqualTypeOf<Record<string, string | undefined>>()
 	})
 }
 
@@ -382,10 +377,7 @@ const app = new Elysia()
 		}
 	)
 
-// Macro name extends macro. The definition's OWN handlers see only the
-// definition's own schema (cross-macro context cannot be threaded into the
-// own-handler ctx without collapsing the object-form inference) — the
-// CONSUMING route sees the full merged schema via macroFn recursion
+// Macro hooks receive their own schema; inheriting routes receive both schemas.
 {
 	new Elysia()
 		.macro({
@@ -432,7 +424,7 @@ const app = new Elysia()
 		.get(
 			'/',
 			{
-				// @ts-expect-error
+				// @ts-expect-error macro `a` accepts only the literal "a"
 				a: 'b'
 			},
 			'ok'
@@ -440,9 +432,7 @@ const app = new Elysia()
 		.listen(3000)
 }
 
-// Function-form macro: the call-site value is the option object, not a boolean.
-// Guards the parameterised-macro overload from regressing to the old
-// boolean-accepting form (a `true` / wrong-shape must error).
+// Function-form macros require their declared option type.
 {
 	new Elysia()
 		.macro({
@@ -469,10 +459,7 @@ const app = new Elysia()
 		)
 }
 
-// A macro's declared `response` types the CONSUMING route's contract; the
-// macro's OWN lifecycle handlers are NOT constrained by it — their actual
-// returns (any value or status) are collected additively into the route's
-// response union instead (see the bounded-status soundness suite)
+// Macro lifecycle handlers may return values alongside a response schema.
 {
 	new Elysia().macro({
 		ok: {
@@ -484,11 +471,7 @@ const app = new Elysia()
 	})
 }
 
-// Inherited derive flows two hops: macro `auth` derives `userId`, macro
-// `admin` applies `{ auth: true }`, and a route applying `{ admin: true }`
-// sees it. Guards the recursive macro-inheritance derive path. (The derive
-// is NOT visible to admin's OWN handlers — cross-macro context cannot reach
-// the own-handler ctx in the object form.)
+// A route sees values derived through an inherited macro.
 {
 	new Elysia()
 		.macro({

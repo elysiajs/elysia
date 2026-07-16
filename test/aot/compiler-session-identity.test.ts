@@ -47,8 +47,8 @@ afterEach(() => {
 	Validator.clear()
 })
 
-describe('CompilerSession and app-local AOT identity', () => {
-	it('claims once: different-schema and identical later apps compile fresh', async () => {
+describe('AOT manifest ownership and compiler sessions', () => {
+	it('only the first compatible app consumes a registered manifest', async () => {
 		const { handlers } = await register()
 		const original = handlers.POST!['/x']!.f
 		let frozenFactoryCalls = 0
@@ -77,15 +77,16 @@ describe('CompilerSession and app-local AOT identity', () => {
 		expect(frozenFactoryCalls).toBe(1)
 	})
 
-	it('rejects a manifest built by an incompatible framework abi', async () => {
+	it('rejects a manifest built by an incompatible framework ABI', async () => {
 		const { artifacts, validators, handlers } = await register()
 
-		// re-register the same manifest with a bumped abi — a manifest built by
-		// an incompatible framework/format version is rejected loudly
 		Compiled.clear()
 		Compiled.register({
 			bf: 1,
-			fingerprint: { ...artifacts.fingerprint, abi: 'from-the-future:99' },
+			fingerprint: {
+				...artifacts.fingerprint,
+				abi: 'from-the-future:99'
+			},
 			validators,
 			handlers
 		})
@@ -93,13 +94,8 @@ describe('CompilerSession and app-local AOT identity', () => {
 		expect(() => void buildA().fetch).toThrow('abi')
 	})
 
-	it('does not check route identity — binding is programId + abi only', async () => {
-		// Route-level identity is intentionally not verified (a manifest is a
-		// generated artifact from the app's own source and cannot realistically
-		// diverge). A registered manifest binds by programId + abi; the accepted
-		// tradeoff is one AOT-sealed app per process. This pins that a build
-		// does NOT throw a route-table mismatch.
-		await register() // manifest is for POST /x
+	it('binds by program ID and ABI without comparing route tables', async () => {
+		await register()
 
 		const other = new Elysia({ precompile: true }).get(
 			'/other',
@@ -113,7 +109,7 @@ describe('CompilerSession and app-local AOT identity', () => {
 		).toBe('other')
 	})
 
-	it('claims manifest routes while allowing a late route to use JIT', async () => {
+	it('uses the manifest for captured routes and JIT for later routes', async () => {
 		const { handlers } = await register()
 		const original = handlers.POST!['/x']!.f
 		let frozenFactoryCalls = 0
@@ -124,13 +120,15 @@ describe('CompilerSession and app-local AOT identity', () => {
 
 		const app = buildA().get('/late', () => 'late')
 		expect((await app.handle(post('/x', { a: 'ok' }))).status).toBe(200)
-		expect(await (await app.handle(new Request('http://localhost/late'))).text()).toBe(
-			'late'
-		)
+		expect(
+			await (
+				await app.handle(new Request('http://localhost/late'))
+			).text()
+		).toBe('late')
 		expect(frozenFactoryCalls).toBe(1)
 	})
 
-	it('does not let a routeless app consume the registered manifest', async () => {
+	it('leaves a registered manifest available after compiling a routeless app', async () => {
 		const { handlers } = await register()
 		const original = handlers.POST!['/x']!.f
 		let frozenFactoryCalls = 0
@@ -146,7 +144,7 @@ describe('CompilerSession and app-local AOT identity', () => {
 		expect(frozenFactoryCalls).toBe(1)
 	})
 
-	it('does not mix a claimed program with global replay handlers', async () => {
+	it('ignores global replay handlers after an app claims its manifest', async () => {
 		const stale = await captureArtifacts(
 			new Elysia({ precompile: true }).get('/late', () => 'stale')
 		)
@@ -154,9 +152,7 @@ describe('CompilerSession and app-local AOT identity', () => {
 		Compiled.handlers = materialiseHandlers(stale.handlers)
 
 		const app = buildA().get('/late', () => 'fresh')
-		const response = await app.handle(
-			new Request('http://localhost/late')
-		)
+		const response = await app.handle(new Request('http://localhost/late'))
 		expect(await response.text()).toBe('fresh')
 	})
 

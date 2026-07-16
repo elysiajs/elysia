@@ -6,12 +6,6 @@ import { post } from '../utils'
 import { TypeBoxValidatorCache } from '../../src/type/validator'
 import { Validator } from '../../src/validator'
 
-// the module-level validator cache used to strongly retain every
-// validator forever (string key → WeakMap keyed by immortal coercion
-// singletons). It now mirrors sucrose's policy: an LRU cap (1024) plus an
-// unref'd idle timer that clears the cache once construction goes quiet.
-// Live validators stay retained by their compiled handler closures, so an
-// eviction merely recompiles on the next structural miss.
 describe('TypeBoxValidatorCache eviction', () => {
 	const make = (i: number) => Type.Object({ [`k${i}`]: Type.String() })
 	const validator = (tag: number) => ({ tag }) as any
@@ -21,7 +15,6 @@ describe('TypeBoxValidatorCache eviction', () => {
 
 		cache.set(make(0), undefined, validator(0))
 
-		// distinct object, same structure → structural (JSON-key) hit
 		expect((cache.get(make(0)) as any).tag).toBe(0)
 	})
 
@@ -31,9 +24,7 @@ describe('TypeBoxValidatorCache eviction', () => {
 		for (let i = 0; i <= 1024; i++)
 			cache.set(make(i), undefined, validator(i))
 
-		// the first insert fell off the LRU end...
 		expect(cache.get(make(0))).toBeUndefined()
-		// ...while recent entries are still served
 		expect((cache.get(make(1024)) as any).tag).toBe(1024)
 	})
 
@@ -43,8 +34,6 @@ describe('TypeBoxValidatorCache eviction', () => {
 		for (let i = 0; i < 1024; i++)
 			cache.set(make(i), undefined, validator(i))
 
-		// cache is full — touching the oldest entry must save it from the
-		// next eviction
 		expect((cache.get(make(0)) as any).tag).toBe(0)
 
 		cache.set(make(1024), undefined, validator(1024))
@@ -65,12 +54,6 @@ describe('TypeBoxValidatorCache eviction', () => {
 	})
 })
 
-// the structural (JSON-key) cache used to ignore `models`. A `$ref`
-// schema stringifies identically no matter what its refs resolve against, so
-// two apps declaring a same-named model with DIFFERENT definitions produced
-// the same key and were served each other's validator — a silent
-// wrong-model / validation-bypass. The cache now mixes a per-`models`-record
-// token into both cache layers when the schema contains a `$ref`.
 describe('TypeBoxValidatorCache models identity', () => {
 	const make = (i: number) => Type.Object({ [`k${i}`]: Type.String() })
 	const validator = (tag: number) => ({ tag }) as any
@@ -84,24 +67,17 @@ describe('TypeBoxValidatorCache models identity', () => {
 
 		cache.set(refSchema(), undefined, validator(1), '', modelsA)
 
-		// identical JSON key, different resolved models → must be a MISS
-		expect(
-			cache.get(refSchema(), undefined, '', modelsB)
-		).toBeUndefined()
-		// same models → structural hit is still served
+		expect(cache.get(refSchema(), undefined, '', modelsB)).toBeUndefined()
 		expect(
 			(cache.get(refSchema(), undefined, '', modelsA) as any).tag
 		).toBe(1)
 	})
 
-	it('still shares ref-less schemas regardless of models (no perf regression)', () => {
+	it('shares schemas without references across model registries', () => {
 		const cache = new TypeBoxValidatorCache(60_000)
 
 		cache.set(make(0), undefined, validator(0), '', { a: 1 })
-		// no $ref → the JSON key already captures identity, token is inert
-		expect((cache.get(make(0), undefined, '', { b: 2 }) as any).tag).toBe(
-			0
-		)
+		expect((cache.get(make(0), undefined, '', { b: 2 }) as any).tag).toBe(0)
 	})
 
 	it('validates each app against its own model definition end-to-end', async () => {
@@ -115,18 +91,16 @@ describe('TypeBoxValidatorCache models identity', () => {
 			.model({ Inner: t.Object({ v: t.String() }) })
 			.post('/x', { body }, ({ body }) => body)
 
-		// warm the cache with the Number app first
-		expect((await numberApp.handle(post('/x', { nested: { v: 1 } }))).status).toBe(200)
+		expect(
+			(await numberApp.handle(post('/x', { nested: { v: 1 } }))).status
+		).toBe(200)
 
-		// the String app MUST validate against its own String model, not the
-		// cached Number validator — a number is now rejected
 		expect(
 			(await stringApp.handle(post('/x', { nested: { v: 42 } }))).status
 		).toBe(422)
 		expect(
 			(await stringApp.handle(post('/x', { nested: { v: 'hi' } }))).status
 		).toBe(200)
-		// ...and the Number app still rejects a string
 		expect(
 			(await numberApp.handle(post('/x', { nested: { v: 'x' } }))).status
 		).toBe(422)

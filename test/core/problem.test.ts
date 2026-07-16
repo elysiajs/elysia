@@ -3,18 +3,14 @@ import { Elysia, problem } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
 
-// RFC 9457 problem+json authoring helper. `problem()` wraps ElysiaStatus so it
-// works in return, throw, and onError positions and always emits
-// `application/problem+json`.
 describe('problem()', () => {
-	it('returns problem+json with defaults filled', async () => {
+	it('fills the default type and title', async () => {
 		const app = new Elysia().get('/', () => problem({ status: 409 }))
 
 		const res = await app.handle(req('/'))
 
 		expect(res.status).toBe(409)
 		expect(res.headers.get('content-type')).toBe('application/problem+json')
-		// `type` defaults to about:blank, `title` to the HTTP status phrase
 		await expect(res.json()).resolves.toEqual({
 			type: 'about:blank',
 			title: 'Conflict',
@@ -23,9 +19,7 @@ describe('problem()', () => {
 	})
 
 	it('accepts a StatusMap name and normalizes it to the numeric code', async () => {
-		const app = new Elysia().get('/', () =>
-			problem({ status: 'Conflict' })
-		)
+		const app = new Elysia().get('/', () => problem({ status: 'Conflict' }))
 
 		const res = await app.handle(req('/'))
 
@@ -81,7 +75,7 @@ describe('problem()', () => {
 		})
 	})
 
-	it('works when thrown on a plain route (interpreted error path)', async () => {
+	it('serializes a thrown problem without an error hook', async () => {
 		const app = new Elysia().get('/', () => {
 			throw problem({ status: 418, detail: 'teapot' })
 		})
@@ -96,9 +90,8 @@ describe('problem()', () => {
 		})
 	})
 
-	it('works when thrown on a route with an error hook (AOT codegen path)', async () => {
+	it('serializes a thrown problem through an error hook', async () => {
 		const app = new Elysia()
-			// forces the compiled error catch block
 			.error(() => {})
 			.get('/', () => {
 				throw problem({ status: 418, detail: 'teapot' })
@@ -114,7 +107,7 @@ describe('problem()', () => {
 		})
 	})
 
-	it('works when returned from onError', async () => {
+	it('serializes a problem returned by an error hook', async () => {
 		const app = new Elysia()
 			.error(({ error }: { error: unknown }) =>
 				problem({ status: 500, detail: (error as Error).message })

@@ -1,55 +1,19 @@
-/**
- * Differential response comparison rules.
- *
- * The COMPARISON RULES ARE THE PRODUCT: debuggability on mismatch is the point.
- * Every normalization exception below carries a why-comment. Do not add an
- * exception without one.
- *
- * ── Rules ───────────────────────────────────────────────────────────────────
- * • status — strict equality.
- * • headers — multiset of (lowercase-name, value). ORDER-INSENSITIVE
- * because HTTP header order is not semantically meaningful and
- * real sockets may reorder. content-length IS compared.
- * normalization exceptions (the ONLY ones):
- * - `date` — STRIPPED. Real-socket (listen) lanes stamp a wall-clock
- * Date; app.handle does not. Comparing it would be a clock
- * race, not a divergence. Stripped on BOTH sides so a lane
- * that emits it and one that doesn't still compare equal.
- * - `etag` — ignored ONLY when emitted by the candidate in the
- * native-static-off-vs-on@listen pair. Bun's native static
- * tier adds it automatically; the JS oracle cannot.
- * • set-cookie — extracted via getSetCookie and compared as an ORDERED
- * list. Cookie emission order is a contract (write-many); a
- * reordering IS a divergence, so it is NOT folded into the
- * order-insensitive header multiset.
- * • body — exact bytes (Uint8Array from a fully-drained arrayBuffer).
- * • observations — structural deep-equal: object keys order-insensitive,
- * arrays order-sensitive. Dispatched via the comparator
- * registry (`comparators`) so more comparators remain local.
- */
+// Compare status, normalized headers, ordered cookies, body bytes, then
+// lifecycle observations. Header order and wall-clock Date are ignored.
 
-/** A normalized, comparable snapshot of a Response. */
 export interface ResponseSnapshot {
 	status: number
-	/** Sorted `name: value` pairs, `date` stripped, set-cookie excluded. */
 	headers: Array<[string, string]>
-	/** Ordered set-cookie list (getSetCookie). */
 	setCookie: string[]
-	/** Full response body bytes. */
 	body: Uint8Array
 }
 
-/** Headers stripped from the comparison. Each MUST have a why-comment above. */
 const STRIPPED_HEADERS = new Set([
-	// Real-socket lanes stamp wall-clock Date; app.handle does not. A clock,
-	// not a divergence.
+	// Socket lanes stamp wall-clock Date; app.handle does not.
 	'date'
 ])
 
-/**
- * Fully drain a Response into a comparable snapshot. Consumes the body — pass a
- * fresh Response (never reuse across lanes).
- */
+// Consumes the response body.
 export async function snapshot(res: Response): Promise<ResponseSnapshot> {
 	const setCookie =
 		typeof res.headers.getSetCookie === 'function'
@@ -59,7 +23,7 @@ export async function snapshot(res: Response): Promise<ResponseSnapshot> {
 	const headers: Array<[string, string]> = []
 	for (const [name, value] of res.headers) {
 		const lower = name.toLowerCase()
-		if (lower === 'set-cookie') continue // ordered channel, handled separately
+		if (lower === 'set-cookie') continue
 		if (STRIPPED_HEADERS.has(lower)) continue
 		headers.push([lower, value])
 	}
@@ -80,7 +44,6 @@ export async function snapshot(res: Response): Promise<ResponseSnapshot> {
 	return { status: res.status, headers, setCookie, body }
 }
 
-/** Which component of the response diverged first. */
 export type DivergentComponent =
 	| 'status'
 	| 'headers'
@@ -93,7 +56,6 @@ export interface Mismatch {
 	requestId: string
 	lanePair: string
 	component: DivergentComponent
-	/** Human-readable, truncated. */
 	oracle: string
 	candidate: string
 }
@@ -103,10 +65,9 @@ const truncate = (s: string) =>
 	s.length > MAX ? s.slice(0, MAX) + `…(+${s.length - MAX})` : s
 
 const decoder = new TextDecoder('utf-8', { fatal: false })
-/** Render bytes for a report: UTF-8 if it round-trips, else hex. */
+// Render valid UTF-8 as text and arbitrary bytes as hex.
 const renderBody = (bytes: Uint8Array): string => {
 	const text = decoder.decode(bytes)
-	// If re-encoding the decoded text yields the same bytes, it was valid UTF-8.
 	if (new TextEncoder().encode(text).length === bytes.length)
 		return JSON.stringify(text)
 	return `<${bytes.length} bytes: ${[...bytes.slice(0, 32)].map((b) => b.toString(16).padStart(2, '0')).join(' ')}${bytes.length > 32 ? '…' : ''}>`
@@ -142,10 +103,7 @@ const arrayEqual = (a: string[], b: string[]): boolean =>
 const fmtHeaders = (h: Array<[string, string]>) =>
 	'{' + h.map(([k, v]) => `${k}: ${v}`).join(', ') + '}'
 
-/**
- * Compare two response snapshots. Returns the FIRST divergent component (status
- * → headers → set-cookie → body), or null if identical.
- */
+// Return the first mismatch in status → headers → cookies → body order.
 export function compareResponses(
 	ctx: { corpusId: string; requestId: string; lanePair: string },
 	oracle: ResponseSnapshot,
@@ -159,8 +117,7 @@ export function compareResponses(
 			candidate: String(candidate.status)
 		}
 
-	// Bun owns native-static ETags and conditional handling. Ignore only the
-	// candidate ETag in this exact pair; every other lane still compares it.
+	// Bun adds ETags only to the promoted native-static candidate.
 	const candidateHeaders = nativeStaticCandidateHeaders(
 		ctx.lanePair,
 		candidate.headers
@@ -192,16 +149,9 @@ export function compareResponses(
 	return null
 }
 
-/**
- * Structural deep equality. Order-insensitive for object keys (a set of
- * facts is unordered), order-SENSITIVE for arrays (a hook-fire log's order IS the
- * fact). No dependencies. `JSON.stringify` would have been order-SENSITIVE for
- * object keys — a false divergence when two lanes emit the same facts in a
- * different key order — so it is deliberately NOT used for equality here.
- */
+// Object key order is insignificant; array order records lifecycle order.
 export function deepEqual(a: unknown, b: unknown): boolean {
 	if (a === b) return true
-	// NaN === NaN is false but they are structurally equal.
 	if (typeof a === 'number' && typeof b === 'number')
 		return Number.isNaN(a) && Number.isNaN(b)
 	if (
@@ -217,7 +167,6 @@ export function deepEqual(a: unknown, b: unknown): boolean {
 	if (aIsArr !== bIsArr) return false
 
 	if (aIsArr) {
-		// Arrays: order-SENSITIVE, positional compare.
 		const av = a as unknown[]
 		const bv = b as unknown[]
 		if (av.length !== bv.length) return false
@@ -226,7 +175,6 @@ export function deepEqual(a: unknown, b: unknown): boolean {
 		return true
 	}
 
-	// Plain objects: order-INSENSITIVE over own enumerable keys.
 	const ao = a as Record<string, unknown>
 	const bo = b as Record<string, unknown>
 	const aKeys = Object.keys(ao)
@@ -239,7 +187,6 @@ export function deepEqual(a: unknown, b: unknown): boolean {
 	return true
 }
 
-/** Structural deep-equal comparison of lane observations. */
 export function compareObservations(
 	ctx: { corpusId: string; requestId: string; lanePair: string },
 	oracle: unknown,
@@ -249,18 +196,11 @@ export function compareObservations(
 	return {
 		...ctx,
 		component: 'observation',
-		// Rendered for the report only — equality above is structural, not textual.
 		oracle: truncate(JSON.stringify(oracle) ?? 'undefined'),
 		candidate: truncate(JSON.stringify(candidate) ?? 'undefined')
 	}
 }
 
-/**
- * The matrix dispatches through named comparators so more comparison types can
- * be added without touching the matrix. A comparator
- * takes the oracle + candidate facts (already snapshotted) and returns the FIRST
- * mismatch or null. Keep it lean — a `Record` of functions, no classes.
- */
 export type Comparator<T = any> = (
 	ctx: { corpusId: string; requestId: string; lanePair: string },
 	oracle: T,
@@ -272,7 +212,6 @@ export const comparators: Record<string, Comparator> = {
 	observation: compareObservations as Comparator
 }
 
-/** Format a mismatch into a one-line, actionable report. */
 export function formatMismatch(m: Mismatch): string {
 	return (
 		`differential mismatch [${m.lanePair}] ` +

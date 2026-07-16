@@ -118,7 +118,7 @@ describe('Params Validator', () => {
 		expect(res.status).toBe(200)
 	})
 
-	it('parse malformed integer', async () => {
+	it('reports one user-facing error for a malformed integer', async () => {
 		const app = new Elysia().get(
 			'/id/:id',
 			{
@@ -130,10 +130,6 @@ describe('Params Validator', () => {
 		)
 
 		const res = await app.handle(req('/id/617.1234'))
-		// The param coercion union (Integer | IntegerString) is an internal
-		// implementation detail — its failure must surface as ONE user-facing
-		// issue, not the TypeBox triple (branch type error + `~refine` +
-		// `anyOf` wrapper) leaking `~refine`/`anyOf` schemaPaths.
 		const body = (await res.json()) as any
 		expect(body).toMatchObject({
 			type: 'validation',
@@ -292,7 +288,6 @@ describe('Params Validator', () => {
 						year: t.Numeric({ minimum: 1900, maximum: 2160 })
 					}),
 					error({ error }) {
-						// `code` was removed this version; dispatch via instanceof.
 						if (error instanceof ValidationError) err = error
 					}
 				},

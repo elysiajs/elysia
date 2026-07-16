@@ -4,7 +4,6 @@ import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
 
 describe('Handle Error', () => {
-	// Built-in errors serialize as RFC 9457 problem+json
 	it('handle NOT_FOUND', async () => {
 		const res = await new Elysia()
 			.get('/', () => {
@@ -239,7 +238,6 @@ describe('Handle Error', () => {
 		const response = await new Elysia().use(route).handle(req('/?aid=a'))
 
 		expect(response.status).toEqual(404)
-		// NotFound('foo') → problem+json with the custom message as `detail`
 		await expect(response.json()).resolves.toEqual({
 			type: 'not-found',
 			title: 'Not Found',
@@ -286,8 +284,6 @@ describe('Handle Error', () => {
 		expect(response.status).toEqual(422)
 	})
 
-	// An unhandled generic error → problem+json 500. Outside production the
-	// thrown message is surfaced as `detail`.
 	it('handle generic error', async () => {
 		const res = await new Elysia()
 			.get('/', () => {
@@ -355,10 +351,7 @@ describe('Handle Error', () => {
 		expect(res.status).toBe(418)
 	})
 
-	// the finished Response from toResponse() must pass through by
-	// reference — set.status already matches, so rewrapping would only
-	// clone headers and downgrade the in-memory body to a stream
-	it('pass through toResponse() Response by reference when set matches', async () => {
+	it('passes through a matching toResponse() Response by reference', async () => {
 		const original = Response.json({ error: 'hello' }, { status: 418 })
 
 		class ErrorA extends Error {
@@ -543,8 +536,6 @@ describe('Handle Error', () => {
 		const res = await app.handle(req('/'))
 
 		expect(res.status).toBe(500)
-		// toResponse() threw → fall back to the RFC 9457 problem+json 500, with
-		// the original error message surfaced as `detail` (non-production)
 		await expect(res.json()).resolves.toMatchObject({
 			type: 'internal-server-error',
 			title: 'Internal Server Error',
@@ -567,8 +558,6 @@ describe('Handle Error', () => {
 		const res = await app.handle(req('/'))
 
 		expect(res.status).toBe(500)
-		// toResponse() threw → fall back to the RFC 9457 problem+json 500, with
-		// the original error message surfaced as `detail` (non-production)
 		await expect(res.json()).resolves.toMatchObject({
 			type: 'internal-server-error',
 			title: 'Internal Server Error',
@@ -577,14 +566,6 @@ describe('Handle Error', () => {
 		})
 	})
 
-	// the tests above hit the INTERPRETED path (fetch-level handleError). A
-	// no-op `.error()` hook routes the throw through the COMPILED jit tail
-	// (src/compile/handler/jit.ts) instead — the exact path that only handled a
-	// SYNC toResponse() Response. An `async toResponse()` returns a Promise, so
-	// the compiled tail must await it, matching the interpreted path. Without the
-	// fix the Promise is not a Response, so the tail falls through to the
-	// e.status branch and returns the error MESSAGE at the status instead of the
-	// custom Response body.
 	it('compiled tail awaits async toResponse() when thrown', async () => {
 		class AsyncError extends Error {
 			status = 503
@@ -595,15 +576,16 @@ describe('Handle Error', () => {
 			}
 		}
 
-		const app = new Elysia().error(() => {}).get('/', () => {
-			throw new AsyncError('boom')
-		})
+		const app = new Elysia()
+			.error(() => {})
+			.get('/', () => {
+				throw new AsyncError('boom')
+			})
 
 		const res = await app.handle(req('/'))
 
 		expect(res.status).toBe(503)
 		await expect(res.text()).resolves.toBe('custom')
-		// the raw message must NOT leak as the body (that was the bug)
 		await expect(res.clone().text()).resolves.not.toBe('boom')
 	})
 
@@ -616,9 +598,11 @@ describe('Handle Error', () => {
 			}
 		}
 
-		const app = new Elysia().error(() => {}).get('/', () => {
-			throw new SyncError('boom')
-		})
+		const app = new Elysia()
+			.error(() => {})
+			.get('/', () => {
+				throw new SyncError('boom')
+			})
 
 		const res = await app.handle(req('/'))
 
@@ -633,14 +617,14 @@ describe('Handle Error', () => {
 			}
 		}
 
-		const app = new Elysia().error(() => {}).get('/', () => {
-			throw new BrokenAsyncError('original error')
-		})
+		const app = new Elysia()
+			.error(() => {})
+			.get('/', () => {
+				throw new BrokenAsyncError('original error')
+			})
 
 		const res = await app.handle(req('/'))
 
-		// reject → fall back to the RFC 9457 problem+json 500 (parity with the
-		// interpreted path's fallbackErrorResponse)
 		expect(res.status).toBe(500)
 		await expect(res.json()).resolves.toMatchObject({
 			type: 'internal-server-error',
@@ -667,11 +651,10 @@ describe('Handle Error', () => {
 	it('send set-cookie header when response validation error occurs', async () => {
 		const app = new Elysia().get(
 			'/',
-			// assert set-cookie survives the response-validation error
 			{
 				response: t.Number()
 			},
-			// @ts-expect-error deliberately returns an invalid response to
+			// @ts-expect-error response is intentionally invalid
 			({ cookie }) => {
 				cookie.session.value = 'test-session-id'
 				return 'invalid response'

@@ -408,21 +408,15 @@ describe('Path', () => {
 		const before = Object.keys(map).length
 
 		for (let i = 0; i < 1000; i++) await app.handle(req(`/missing/${i}`))
-		// over-encoded / garbage variants must not be cached either
 		for (let i = 0; i < 200; i++) await app.handle(req(`/%66oo${i}`))
 
 		expect(Object.keys(map).length).toBe(before)
 
-		// exact route still resolves
 		await expect(
 			app.handle(req('/foo')).then((r) => r.text())
 		).resolves.toBe('hi')
 	})
 
-	// The decode path was moved to build time (encodeURI stored alongside
-	// ~map). A non-ASCII route must match both its literal form and its
-	// canonical percent-encoded form (the usual on-the-wire shape), without a
-	// per-request decode or any map growth.
 	it('matches a non-ASCII route by its encoded and literal form', async () => {
 		const app = new Elysia().get('/menu/café', () => 'coffee')
 		await app.handle(req('/menu/café'))
@@ -436,19 +430,13 @@ describe('Path', () => {
 		await expect(
 			app.handle(req('/menu/caf%C3%A9')).then((r) => r.text())
 		).resolves.toBe('coffee')
-		// trailing slash on the encoded form (loose) still matches
 		await expect(
 			app.handle(req('/menu/caf%C3%A9/')).then((r) => r.text())
 		).resolves.toBe('coffee')
 
-		// the encoded key is precomputed at build time, not added per request
 		expect(Object.keys(map).length).toBe(keys)
 	})
 
-	// A static route registered without a trailing slash should not retain a
-	// second loose `~map` key. The fetch path still checks the canonical key on
-	// a trailing-slash miss before falling through to the dynamic router, so
-	// static-literal routes keep winning over param routes.
 	it('static route matches a trailing slash without retaining a loose key', async () => {
 		const app = new Elysia().get('/x', () => 'x')
 		app.compile()
@@ -491,9 +479,9 @@ describe('Path', () => {
 			.get('/x', () => 'get loose')
 			.all('/x/', () => 'all exact')
 
-		await expect(app.handle(req('/x/')).then((r) => r.text())).resolves.toBe(
-			'get loose'
-		)
+		await expect(
+			app.handle(req('/x/')).then((r) => r.text())
+		).resolves.toBe('get loose')
 	})
 
 	it('static route registered with trailing slash still matches without it', async () => {
@@ -509,10 +497,6 @@ describe('Path', () => {
 		)
 	})
 
-	// Regression: dynamic (parameterized) routes were registered
-	// only at the exact path, so `/users/1/` 404'd on `/users/:id` even though
-	// static routes tolerate trailing slashes by default. Memoirist now handles
-	// the loose lookup without Elysia retaining a second dynamic route entry.
 	it('dynamic route matches a trailing slash when not strict', async () => {
 		const app = new Elysia().get(
 			'/users/:id',
@@ -526,7 +510,6 @@ describe('Path', () => {
 		await expect(
 			app.handle(req('/users/1')).then((r) => r.text())
 		).resolves.toBe('user:1')
-		// before the fix this 404'd
 		await expect(
 			app.handle(req('/users/1/')).then((r) => r.text())
 		).resolves.toBe('user:1')

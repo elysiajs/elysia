@@ -2,8 +2,8 @@ import Elysia, { t } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
 
-describe('TypeSystem - ObjectString', () => {
-	it('Format email', async () => {
+describe('TypeSystem - String format', () => {
+	it('accepts a valid email query value', async () => {
 		const testString = 'foo@example.com'
 		const app = new Elysia().get(
 			'/',
@@ -22,7 +22,7 @@ describe('TypeSystem - ObjectString', () => {
 
 		await expect(res1.json()).resolves.toEqual({ email: testString })
 	})
-	it('Format hostname', async () => {
+	it('accepts a valid hostname query value', async () => {
 		const testString = 'www'
 		const app = new Elysia().get(
 			'/',
@@ -41,7 +41,7 @@ describe('TypeSystem - ObjectString', () => {
 
 		await expect(res1.json()).resolves.toEqual({ host: testString })
 	})
-	it('Format date', async () => {
+	it('accepts a valid date query value', async () => {
 		const testString = '2024-01-01'
 		const app = new Elysia().get(
 			'/',

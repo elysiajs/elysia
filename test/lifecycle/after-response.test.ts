@@ -3,8 +3,8 @@ import { Elysia } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
 
-describe('After Handle', () => {
-	it('set response status', async () => {
+describe('afterResponse status', () => {
+	it('observes an explicit response status', async () => {
 		let status: number
 
 		const app = new Elysia()
@@ -20,7 +20,7 @@ describe('After Handle', () => {
 		expect(status!).toBe(401)
 	})
 
-	it('set response status for default 404', async () => {
+	it('observes the default status for a missing route', async () => {
 		let status: number
 
 		const app = new Elysia().afterResponse(({ set }) => {

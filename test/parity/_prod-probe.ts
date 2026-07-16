@@ -1,26 +1,14 @@
-/**
- * Production-mode probe, executed as a subprocess by production-masking.test.ts
- * with NODE_ENV=production. Must NOT be imported by the main test run (that run
- * stays WITHOUT NODE_ENV). Emits a single JSON line on stdout.
- */
+// Production subprocess entry point; do not import it into the main test run.
+// Prints one JSON payload for its caller.
 
 import { Elysia, t } from '../../src'
 
 async function main() {
-	// --- HTTP in production ---
-	// Validate the BODY channel so it is apples-to-apples with the WS route,
-	// which validates `body`.
 	const http = new Elysia()
-		.post(
-			'/v',
-			{ body: t.Object({ n: t.Number() }) },
-			({ body }) => body.n
-		)
+		.post('/v', { body: t.Object({ n: t.Number() }) }, ({ body }) => body.n)
 		.get('/e', () => {
 			throw new Error('secret-detail')
 		})
-		// Non-Error throws: bare string and plain object. HTTP masks both to a
-		// generic 500 in production (fallbackErrorResponse -> internalServerError).
 		.get('/str', () => {
 			throw 'secret-string'
 		})
@@ -43,7 +31,6 @@ async function main() {
 	r = await http.handle(new Request('http://localhost/obj'))
 	const httpThrowObject = await r.text()
 
-	// --- WS in production ---
 	const app = new Elysia()
 		.ws('/v', {
 			body: t.Object({ n: t.Number() }),
@@ -70,8 +57,7 @@ async function main() {
 
 	const server = app.server!
 
-	// Resolve as soon as `expect` frames arrive; the timeout is only a failure
-	// fallback so a broken transport surfaces as a wrong-length assertion.
+	// Resolve on the expected frame count; the timeout prevents a hung probe.
 	function probe(
 		path: string,
 		send: string,

@@ -1,8 +1,6 @@
 import { Elysia, t } from 'elysia'
 
-// DEFECT 1 (macro schema): a macro that contributes a `body` schema injects it
-// under `hook.schemas` (not the named `body` slot). Same refusal surface as the
-// standalone guard → must be `wired`, never `sealed`.
+// Macro-provided schemas live under hook.schemas and require wired validation.
 const plugin = new Elysia().macro({
 	withBody: {
 		body: t.Object({ name: t.String() })

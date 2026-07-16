@@ -4,6 +4,7 @@ import { describe, expect, it } from 'bun:test'
 import { post, req } from '../utils'
 
 describe('guard', () => {
+	// Nearer schemas override inherited fields unless a guard is standalone.
 	it('inherits global', async () => {
 		const app = new Elysia().state('counter', 0).guard(
 			{
@@ -232,11 +233,6 @@ describe('guard', () => {
 		expect(response).toEqual([422, 422, 422])
 	})
 
-	// Note: EVERY guard form defaults to the OVERRIDE channel — the closer
-	// to the route, the more power. A nearer guard's schema replaces an
-	// inherited one per field / response status. Additive validation
-	// (every visible validator runs) requires an explicit
-	// `schema: 'standalone'` opt-in.
 	it('nearer guard overrides inherited response', async () => {
 		let called = 0
 
@@ -252,8 +248,6 @@ describe('guard', () => {
 
 		const plugin = new Elysia()
 			.use(inner)
-			// the nearer guard's Boolean response REPLACES the inherited
-			// global Number for routes on this instance
 			.guard({
 				response: t.Boolean(),
 				transform() {
@@ -272,8 +266,6 @@ describe('guard', () => {
 		])
 
 		expect(called).toBe(4)
-		// `/plugin` returns `true` — the nearer Boolean replaced Number, so
-		// it passes. `/inner` and `/` only see the global Number.
 		expect(response).toEqual([422, 200, 422])
 	})
 
@@ -309,9 +301,6 @@ describe('guard', () => {
 		])
 
 		expect(called).toBe(5)
-		// The plugin-scope String is NEARER than the inherited global
-		// Number, so it replaces it on `/plugin` AND on `/` (plugin scope
-		// reaches the consumer one level up). `/inner` only sees Number.
 		expect(response).toEqual([422, 200, 200])
 	})
 
@@ -435,9 +424,6 @@ describe('guard', () => {
 				)
 		)
 
-		// the route's own `params` replaces the wrapper's (override is the
-		// default) — `id` is no longer part of the schema and normalization
-		// strips it from the validated params object
 		const valid = app.handle(req('/guard/1/saltyaom')).then((x) => x.json())
 		const invalid = app
 			.handle(req('/guard/a/saltyaom'))
@@ -499,8 +485,6 @@ describe('guard', () => {
 				)
 		)
 
-		// only the route's own `query` validates (override is the default);
-		// the wrappers' `name`/`limit` constraints are replaced
 		const value = await app
 			.handle(req('/?name=lilith&playing=true&limit=10'))
 			.then((x) => x.json())

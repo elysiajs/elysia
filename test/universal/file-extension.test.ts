@@ -2,13 +2,6 @@ import { describe, expect, it } from 'bun:test'
 
 import { getFileExtension, mime } from '../../src/universal/file'
 
-// Why this matters: `getFileExtension` feeds the `mime` lookup that sets the
-// `content-type` for `file(...)` responses. The `mime` table is keyed by
-// lowercase extensions, so an uppercase/mixed-case path component (common on
-// Windows uploads, e.g. `PHOTO.JPG`) must still resolve to the correct MIME
-// type. If it doesn't, the framework silently falls back to
-// `application/octet-stream`, which forces a download instead of rendering and
-// is a real behavioural regression for static assets.
 describe('getFileExtension', () => {
 	it('lowercases the extension so MIME lookup is case-insensitive', () => {
 		expect(getFileExtension('a.JPG')).toBe('jpg')

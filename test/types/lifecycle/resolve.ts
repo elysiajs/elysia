@@ -1,7 +1,7 @@
 import { Elysia } from '../../../src'
 import { expectTypeOf } from 'expect-type'
 
-// ? local resolve flows into later handler context
+// Local derived values reach later handlers on the same instance.
 {
 	new Elysia()
 		.derive(() => ({ token: 'abc' as const }))
@@ -10,7 +10,7 @@ import { expectTypeOf } from 'expect-type'
 		})
 }
 
-// ? derive + resolve compose
+// Chained derivations compose their values.
 {
 	new Elysia()
 		.derive(() => ({ a: 1 as const }))
@@ -24,7 +24,7 @@ import { expectTypeOf } from 'expect-type'
 		})
 }
 
-// ? local resolve does NOT leak via .use
+// Local derived values do not reach plugin consumers.
 {
 	const plugin = new Elysia().derive(() => ({ token: 'abc' as const }))
 
@@ -33,7 +33,7 @@ import { expectTypeOf } from 'expect-type'
 	})
 }
 
-// ? scoped resolve propagates one level
+// Plugin-scoped derived values reach one consumer.
 {
 	const plugin = new Elysia().derive('plugin', () => ({
 		token: 'abc' as const
@@ -44,7 +44,7 @@ import { expectTypeOf } from 'expect-type'
 	})
 }
 
-// ? global resolve propagates everywhere
+// Global derived values reach nested consumers.
 {
 	const plugin = new Elysia().derive('global', () => ({
 		token: 'abc' as const

@@ -132,11 +132,7 @@ describe('Error lifecycle', () => {
 		expect(response.status).toBe(500)
 	})
 
-	it('coerces a stray set.status = 200 in an error handler to 500', async () => {
-		// `undefined` is the default status now, not 200; a 200 reaching the
-		// error path is a leftover from the aborted success path (a handler or
-		// beforeHandle that optimistically set 200 then threw), so it must not
-		// escape as the error response status
+	it('defaults set.status = 200 in an error handler to HTTP 500', async () => {
 		const app = new Elysia()
 			.error(({ set }) => {
 				set.status = 200
@@ -154,8 +150,6 @@ describe('Error lifecycle', () => {
 	})
 
 	it('respects an explicit status() recovery from an error handler', async () => {
-		// an explicit status(200) is a deliberate choice (carried by the
-		// ElysiaStatus code), not a leftover — it must still win
 		const app = new Elysia()
 			.error(({ status }) => status(200, 'recovered'))
 			.get('/', () => {
@@ -168,7 +162,7 @@ describe('Error lifecycle', () => {
 		expect(response.status).toBe(200)
 	})
 
-	it('return correct number status on error function', async () => {
+	it('maps a numeric status code with a response value', async () => {
 		const app = new Elysia().get('/', ({ status }) =>
 			status(418, 'I am a teapot')
 		)
@@ -178,7 +172,7 @@ describe('Error lifecycle', () => {
 		expect(response.status).toBe(418)
 	})
 
-	it('return correct named status on error function', async () => {
+	it('maps a named status code with a response value', async () => {
 		const app = new Elysia().get('/', ({ status }) =>
 			status("I'm a teapot", 'I am a teapot')
 		)
@@ -188,7 +182,7 @@ describe('Error lifecycle', () => {
 		expect(response.status).toBe(418)
 	})
 
-	it('return correct number status without value on error function', async () => {
+	it('uses the default body for a numeric status code', async () => {
 		const app = new Elysia().get('/', ({ status }) => status(418))
 
 		const response = await app.handle(req('/'))
@@ -197,7 +191,7 @@ describe('Error lifecycle', () => {
 		await expect(response.text()).resolves.toBe("I'm a teapot")
 	})
 
-	it('return correct named status without value on error function', async () => {
+	it('uses the default body for a named status code', async () => {
 		const app = new Elysia().get('/', ({ status }) =>
 			status("I'm a teapot")
 		)
@@ -228,10 +222,6 @@ describe('Error lifecycle', () => {
 	})
 
 	it("runs a plugin's own error handler before an outer one declared after .use()", async () => {
-		// Error handlers compose in registration order as seen by the root
-		// app's chain: the plugin's `.error()` is registered when the plugin is
-		// `.use()`d, before the outer `.error()` that follows it. The plugin's
-		// handler returns first, so its value short-circuits the outer one.
 		const order = <string[]>[]
 
 		const plugin = new Elysia()
@@ -258,63 +248,10 @@ describe('Error lifecycle', () => {
 		const sub = await app.handle(req('/sub')).then((x) => x.text())
 
 		expect(sub).toBe('plugin')
-		// outer handler must not have run: the plugin's returned first
 		expect(order).toEqual(['plugin'])
 	})
 
-	it('as global', async () => {
-		const called = <string[]>[]
-
-		const plugin = new Elysia()
-			.error('global', ({ path }) => {
-				called.push(path)
-
-				return {}
-			})
-			.get('/inner', () => {
-				throw new Error('A')
-			})
-
-		const app = new Elysia().use(plugin).get('/outer', () => {
-			throw new Error('A')
-		})
-
-		const res = await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/outer'))
-		])
-
-		expect(called).toEqual(['/inner', '/outer'])
-	})
-
-	it('as local', async () => {
-		const called = <string[]>[]
-
-		const plugin = new Elysia()
-			.error('local', ({ path }) => {
-				called.push(path)
-
-				return {}
-			})
-			.get('/inner', () => {
-				throw new Error('A')
-			})
-
-		const app = new Elysia().use(plugin).get('/outer', () => {
-			throw new Error('A')
-		})
-
-		const res = await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/outer'))
-		])
-
-		expect(called).toEqual(['/inner'])
-	})
-
-	// New direct-scope API: `error('global', fn)` parallels
-	// `onError('global', fn)`.
-	it('as global (direct scope)', async () => {
+	it('runs a global plugin error hook on plugin and parent routes', async () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
@@ -339,7 +276,7 @@ describe('Error lifecycle', () => {
 		expect(called).toEqual(['/inner', '/outer'])
 	})
 
-	it('as local (direct scope)', async () => {
+	it('runs a local plugin error hook only on plugin routes', async () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
@@ -362,25 +299,6 @@ describe('Error lifecycle', () => {
 		])
 
 		expect(called).toEqual(['/inner'])
-	})
-
-	it('support array', async () => {
-		let total = 0
-
-		const app = new Elysia()
-			.afterHandle([
-				() => {
-					total++
-				},
-				() => {
-					total++
-				}
-			])
-			.get('/', () => 'NOOP')
-
-		const res = await app.handle(req('/'))
-
-		expect(total).toEqual(2)
 	})
 
 	it('handle custom error thrown in onRequest', async () => {
@@ -410,11 +328,7 @@ describe('Error lifecycle', () => {
 		})
 	})
 
-	it('handle cookie signature error', async () => {
-		//   lazy verify: signature is verified on first VALUE access, not at
-		// parse time. The handler must read `.value` for the InvalidCookie to throw.
-		// (A route that obtains the handle but never reads the value no longer 400s —
-		// covered by test/cookie/lazy-verify.test.ts.)
+	it('handles an invalid cookie signature when its value is read', async () => {
 		const app = new Elysia({
 			cookie: { secrets: 'secrets', sign: ['session'] }
 		})
@@ -676,10 +590,6 @@ describe('Error lifecycle', () => {
 	})
 })
 
-// error enumeration is lazy. typebox's interpreted Errors() walk is
-// O(body) per failure, so throw sites pass a thunk and ValidationError only
-// runs it when something reads `errors` / `message` / `customError` — an
-// error handler returning a constant never pays the walk.
 describe('Lazy validation error enumeration', () => {
 	it('never enumerates errors when the error hook returns a constant', async () => {
 		const spy = spyOn(TypeBoxValidator.prototype, 'Errors')
@@ -725,8 +635,6 @@ describe('Lazy validation error enumeration', () => {
 			const data = (await res.json()) as any
 
 			expect(res.status).toBe(422)
-			// payload reads `errors` + `message` + `customError`; the
-			// enumeration must be memoized across them
 			expect(spy).toHaveBeenCalledTimes(1)
 			expect(data.errors).toBeArray()
 			expect(data.errors.length).toBeGreaterThan(0)
@@ -750,7 +658,6 @@ describe('Lazy validation error enumeration', () => {
 			return errors
 		})
 
-		// nothing read yet — the thunk must not have run
 		expect(calls).toBe(0)
 
 		const eager = new ValidationError('body', { x: 'a' }, errors)
@@ -760,7 +667,6 @@ describe('Lazy validation error enumeration', () => {
 		expect(lazy.customError).toBe(eager.customError)
 		expect(calls).toBe(1)
 
-		// own-enumerable parity: spread / stringify / keys keep `errors`
 		expect({ ...lazy }.errors).toEqual(errors)
 		expect(JSON.parse(JSON.stringify(lazy)).errors).toEqual(
 			JSON.parse(JSON.stringify(eager)).errors
@@ -801,12 +707,7 @@ describe('Lazy validation error enumeration', () => {
 	})
 })
 
-// the default 422 payload echoes the offending value back (`found`).
-// A large body was 1:1 reflection amplification (attacker-driven egress,
-// no auth needed) plus an extra O(body) serialization per failure — the echo
-// is now scoped to the failing sub-value once the body exceeds the limit,
-// while small bodies stay byte-identical.
-describe('Scoped found echo on the default 422 payload', () => {
+describe('Validation error payload echo limits', () => {
 	const bigItems = Array.from({ length: 1024 }, (_, i) => `item-${i}`)
 
 	it('echoes small bodies verbatim', async () => {
@@ -865,8 +766,6 @@ describe('Scoped found echo on the default 422 payload', () => {
 
 		expect(res.status).toBe(422)
 		expect(data.found).toContain('echo limit')
-		// no reflection amplification: a ~14KB body must not produce a
-		// body-sized response
 		expect(text.length).toBeLessThan(8192)
 	})
 
@@ -877,8 +776,6 @@ describe('Scoped found echo on the default 422 payload', () => {
 		])
 
 		expect((err.payload as any).found).toBe('bad')
-		// `.value` and `.all` are user-facing — only the payload echo is
-		// scoped
 		expect(err.value).toBe(big)
 		expect(err.all[0].value).toBe(big)
 	})

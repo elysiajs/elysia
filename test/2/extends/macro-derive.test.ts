@@ -13,7 +13,7 @@ describe('macro derive', () => {
 		await expect(res.json()).resolves.toEqual({ user: 'alice' })
 	})
 
-	it('macro `derive` sees the request (promoted into beforeHandle)', async () => {
+	it('macro `derive` receives request context', async () => {
 		const app = new Elysia()
 			.macro({
 				gate: {

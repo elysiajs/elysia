@@ -1,10 +1,7 @@
 import { Elysia } from '../../src'
 import { expectTypeOf } from 'expect-type'
 
-// guard/group hook handlers (beforeHandle/afterHandle/error) run
-// AFTER derive and macro resolution at runtime — their typed context must
-// include instance-derive values and macro-derived (resolve-channel) values,
-// which flow through `MacroContext['resolve']`, not `['response']`.
+// Guard and group hooks receive values derived by the instance and its macros.
 {
 	new Elysia()
 		.macro({
@@ -24,14 +21,13 @@ import { expectTypeOf } from 'expect-type'
 				expectTypeOf(ctx.traceId).toEqualTypeOf<'x'>()
 			},
 			error: (ctx) => {
-				// error hooks can fire BEFORE derive runs (parse/validation
-				// errors) — ErrorContext deliberately omits derive values
+				// Error hooks omit values that may not have been derived yet.
 				expectTypeOf(ctx).not.toHaveProperty('traceId')
 			}
 		})
 }
 
-// group() hook handlers get the same context
+// Group hook handlers receive instance-derived values.
 {
 	new Elysia()
 		.derive(() => ({ traceId: 'x' as const }))

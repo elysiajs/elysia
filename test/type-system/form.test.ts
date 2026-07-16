@@ -6,9 +6,7 @@ import { Value } from 'typebox/value'
 import { req } from '../utils'
 
 describe('TypeSystem - Form', () => {
-	it('Create', () => {
-		// `Value.Create` builds from the schema, so it has no `~ely-form`
-		// marker (that's added by `form()`, not the type) - an empty object.
+	it('creates an empty form unless a default is provided', () => {
 		expect(Value.Create(t.Form({}))).toEqual({} as any)
 
 		expect(
@@ -29,7 +27,7 @@ describe('TypeSystem - Form', () => {
 		)
 	})
 
-	it('Check', () => {
+	it('validates form fields', () => {
 		const schema = t.Form({
 			name: t.String(),
 			age: t.Number()
@@ -58,7 +56,7 @@ describe('TypeSystem - Form', () => {
 		}
 	})
 
-	it('Integrate', async () => {
+	it('validates form responses', async () => {
 		const app = new Elysia()
 			.get(
 				'/form/:name',
@@ -107,7 +105,6 @@ describe('TypeSystem - Form', () => {
 			({ body }) => ({
 				name: body.name,
 				isFile: body.file instanceof File,
-				// the internal `~ely-form` marker must NOT leak into ctx.body
 				keys: Object.keys(body)
 			})
 		)
@@ -138,7 +135,7 @@ describe('TypeSystem - Form', () => {
 		)
 
 		const fd = new FormData()
-		fd.append('name', 'saltyaom') // missing `file`
+		fd.append('name', 'saltyaom')
 
 		const res = await app.handle(req('/', { method: 'POST', body: fd }))
 		expect(res.status).toBe(422)

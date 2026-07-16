@@ -4,7 +4,7 @@ import { Value } from 'typebox/value'
 import { req } from '../utils'
 
 describe('TypeSystem - ArrayString', () => {
-	it('Create', () => {
+	it('creates an empty array unless a default is provided', () => {
 		// @ts-expect-error t.ArrayString requires an items schema
 		expect(Value.Create(t.ArrayString())).toEqual([])
 
@@ -17,34 +17,27 @@ describe('TypeSystem - ArrayString', () => {
 		).toBe('[]')
 	})
 
-	it('Check', () => {
+	it('accepts decoded arrays', () => {
 		const schema = t.ArrayString(t.Number())
 
 		expect(Value.Check(schema, [1])).toBe(true)
 	})
 
-	it('Encode', () => {
-		// ArrayString is a decode-only codec (string -> array). As of TypeBox
-		// 1.2.16 the union is matched narrow->broad, so encoding an array
-		// resolves through the plain Array member and passes through unchanged
-		// instead of throwing.
+	it('preserves arrays during encoding', () => {
 		const schema = t.ArrayString(t.Number())
 
 		expect(Value.Encode(schema, [1])).toEqual([1])
 	})
 
-	it('Decode', () => {
+	it('decodes JSON arrays and rejects non-array strings', () => {
 		const schema = t.ArrayString(t.Number())
 
 		expect(Value.Decode<typeof schema>(schema, '[1]')).toEqual([1])
 
-		// `Value.Decode` runs Convert before its Check gate so it coerces
-		// loosely; the framework validates with Check (`FromSync` Checks
-		// before decoding), which rejects a non-array string.
 		expect(Value.Check(schema, '1')).toBe(false)
 	})
 
-	it('Integrate', async () => {
+	it('decodes arrays in request bodies', async () => {
 		const app = new Elysia().post(
 			'/',
 			{

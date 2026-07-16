@@ -1,7 +1,7 @@
 import { expectTypeOf } from 'expect-type'
 import { Elysia } from '../../src'
 
-// ? async plugin should mark derive/resolve as partial, decorate/state stay exact
+// Async plugin-derived values are optional; decorations and state remain exact.
 {
 	const serviceA = async () => {
 		await Bun.sleep(1)
@@ -41,7 +41,7 @@ import { Elysia } from '../../src'
 		})
 }
 
-// ? inline async should mark scoped derive/resolve as partial, decorate/state stay exact
+// Inline plugin-scoped async derivations are optional; decorations and state remain exact.
 {
 	const serviceA = new Elysia().use(async (app) => {
 		await Bun.sleep(1)
@@ -82,7 +82,7 @@ import { Elysia } from '../../src'
 		})
 }
 
-// ? async plugin should mark scoped derive/resolve as partial, decorate/state stay exact
+// Plugin-scoped async derivations are optional; decorations and state remain exact.
 {
 	const serviceA = async () => {
 		await Bun.sleep(1)
@@ -123,7 +123,7 @@ import { Elysia } from '../../src'
 		})
 }
 
-// ? inline async should mark scoped derive/resolve as partial, decorate/state stay exact
+// Inline plugin-scoped async derivations are optional; decorations and state remain exact.
 {
 	const serviceA = new Elysia().use(async (app) => {
 		await Bun.sleep(1)
@@ -164,7 +164,7 @@ import { Elysia } from '../../src'
 		})
 }
 
-// ? async plugin should mark global derive/resolve as partial, decorate/state stay exact
+// Global async derivations are optional; decorations and state remain exact.
 {
 	const serviceA = async () => {
 		await Bun.sleep(1)
@@ -205,7 +205,7 @@ import { Elysia } from '../../src'
 		})
 }
 
-// ? inline async should mark global derive/resolve as partial, decorate/state stay exact
+// Inline global async derivations are optional; decorations and state remain exact.
 {
 	const serviceA = new Elysia().use(async (app) => {
 		await Bun.sleep(1)

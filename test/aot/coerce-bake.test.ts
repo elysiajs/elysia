@@ -12,16 +12,7 @@ import {
 import { materialise, materialiseHandlers } from './_manifest'
 import { req } from '../utils'
 
-/**
- * Coercion plans baked into AOT output must match live validation.
- *
- * `applyCoercions` is the dominant frozen-reconstruction cost. The bake captures
- * a plan and, on reconstruct, splices deduped frozen primitive leaves into the
- * live original schema instead of re-walking. These tests encode the WHY: the
- * spliced schema must coerce IDENTICALLY to the live path (a wrong splice
- * silently mis-validates, since the frozen check consumes externals by index),
- * and out-of-scope schemas must transparently fall back.
- */
+/** Baked coercion must match live validation or fall back completely. */
 
 afterEach(() => {
 	Compiled.clear()
@@ -31,9 +22,7 @@ afterEach(() => {
 })
 
 const capture = (build: () => any) => {
-	// self-isolate: the real build captures with an EMPTY manifest. A prior test
-	// file leaving Compiled populated for a reused path would send capture down
-	// the frozen path (no plan emitted), so start clean.
+	// Capture must start without a previously registered manifest.
 	Compiled.clear()
 	Validator.clear()
 	clearCoerceLeafCache()
@@ -63,7 +52,10 @@ const slot = (
 	method: string,
 	path: string,
 	s: string
-) => validators.find((v) => v.method === method && v.path === path && v.slot === s)
+) =>
+	validators.find(
+		(v) => v.method === method && v.path === path && v.slot === s
+	)
 
 describe('captures a coercion plan for primitive coercions', () => {
 	it('records a plan for a numeric/boolean query', () => {
@@ -83,11 +75,13 @@ describe('captures a coercion plan for primitive coercions', () => {
 
 		const q = slot(validators, 'GET', '/s', 'query')
 		expect(q?.coercePlan).toBeDefined()
-		// only the two coerced primitives carry a leaf; the string does not
-		expect(Object.keys(q!.coercePlan!.p!).sort()).toEqual(['active', 'page'])
+		// Coercion leaves are emitted for page and active.
+		expect(Object.keys(q!.coercePlan!.p!).sort()).toEqual([
+			'active',
+			'page'
+		])
 		expect((q!.coercePlan!.p!.page as any).e).toBe(1) // ELYSIA_TYPES.Numeric
-		// constraints mirror coerce's own `{ type, ...rest }` spread (the leaf is
-		// rebuilt by the SAME `Numeric(rest)` call), so `minimum` must survive
+		// Numeric constraints survive plan reconstruction.
 		expect((q!.coercePlan!.p!.page as any).c.minimum).toBe(1)
 	})
 })
@@ -117,19 +111,17 @@ describe('frozen reconstruction coerces identically to the live path', () => {
 
 		const { app } = freeze(build)
 		const res = await app.handle(req('/s?page=3&active=true&count=7&q=hi'))
-		// must coerce identically — NOT return raw strings (broken splice) or 422
 		expect(res.status).toBe(200)
 		await expect(res.json()).resolves.toEqual(liveBody)
 	})
 
-	it('rejects out-of-constraint values identically (422), proving the check is intact', async () => {
+	it('rejects out-of-range values like live validation', async () => {
 		const { app } = freeze(build)
-		// page minimum:1 → page=0 must 422 under the baked schema too
 		const res = await app.handle(req('/s?page=0&active=true&count=7&q=hi'))
 		expect(res.status).toBe(422)
 	})
 
-	it('was actually baked (plan present), not silently falling back', () => {
+	it('emits a coercion plan instead of falling back', () => {
 		const { validators } = capture(build)
 		expect(slot(validators, 'GET', '/s', 'query')?.coercePlan).toBeDefined()
 	})
@@ -148,7 +140,7 @@ describe('optional coerced fields keep their optionality', () => {
 			({ query }: any) => query ?? {}
 		)
 
-	it('absent optional is fine; present optional is coerced (frozen)', async () => {
+	it('coerces present values without requiring absent fields', async () => {
 		const { app } = freeze(build)
 		const present = await app.handle(req('/o?page=4&q=x'))
 		expect(present.status).toBe(200)
@@ -160,8 +152,8 @@ describe('optional coerced fields keep their optionality', () => {
 	})
 })
 
-describe('nested-object query (ObjectString) is baked', () => {
-	it('bakes the ObjectString site and coerces identically (frozen ≡ JIT)', async () => {
+describe('nested object query coercion', () => {
+	it('emits a plan and matches live coercion', async () => {
 		const build = () =>
 			new Elysia().get(
 				'/n',
@@ -175,9 +167,6 @@ describe('nested-object query (ObjectString) is baked', () => {
 			)
 
 		const { validators } = capture(build)
-		// ObjectString inner stays original (JSON values already typed) → the
-		// `toObjectString` rebuild matches → the plan IS emitted; the existing
-		// `ic` channel fills the codec closures.
 		expect(slot(validators, 'GET', '/n', 'query')?.coercePlan).toBeDefined()
 
 		const { app } = freeze(build)
@@ -185,12 +174,15 @@ describe('nested-object query (ObjectString) is baked', () => {
 		expect((await build().handle(req(url))).status).toBe(200)
 		const res = await app.handle(req(url))
 		expect(res.status).toBe(200)
-		await expect(res.json()).resolves.toEqual({ page: 2, filter: { since: 9 } })
+		await expect(res.json()).resolves.toEqual({
+			page: 2,
+			filter: { since: 9 }
+		})
 	})
 })
 
-describe('array (ArrayString) coercion falls back transparently', () => {
-	it('a typed-array query is NOT baked (element coercion) but still coerces', async () => {
+describe('array element coercion fallback', () => {
+	it('falls back for numeric arrays while preserving coercion', async () => {
 		const build = () =>
 			new Elysia().get(
 				'/arr',
@@ -204,9 +196,9 @@ describe('array (ArrayString) coercion falls back transparently', () => {
 			)
 
 		const { validators } = capture(build)
-		// ArrayString coerces its elements → a cheap rebuild would diverge → no
-		// plan; the whole slot falls back to applyCoercions + ic.
-		expect(slot(validators, 'GET', '/arr', 'query')?.coercePlan).toBeUndefined()
+		expect(
+			slot(validators, 'GET', '/arr', 'query')?.coercePlan
+		).toBeUndefined()
 
 		const { app } = freeze(build)
 		const url = '/arr?page=2&tags=' + encodeURIComponent('[1,2]')
@@ -216,8 +208,8 @@ describe('array (ArrayString) coercion falls back transparently', () => {
 	})
 })
 
-describe('array (ArrayString) with no element coercion IS baked', () => {
-	it('a string-array query bakes the ArrayString site and coerces equal to JIT', async () => {
+describe('string array coercion plans', () => {
+	it('bakes and matches live coercion', async () => {
 		const build = () =>
 			new Elysia().get(
 				'/sarr',
@@ -231,7 +223,9 @@ describe('array (ArrayString) with no element coercion IS baked', () => {
 			)
 
 		const { validators } = capture(build)
-		expect(slot(validators, 'GET', '/sarr', 'query')?.coercePlan).toBeDefined()
+		expect(
+			slot(validators, 'GET', '/sarr', 'query')?.coercePlan
+		).toBeDefined()
 
 		const url = '/sarr?page=2&tags=' + encodeURIComponent('["a","b"]')
 		const liveRes = await build().handle(req(url))
@@ -246,12 +240,9 @@ describe('array (ArrayString) with no element coercion IS baked', () => {
 	})
 })
 
-describe('non-JSON-serializable constraints fall back (do not silently bake)', () => {
-	// The plan is emitted as JSON; JSON.stringify(Infinity)==='null', so a baked
-	// `{minimum: Infinity}` would round-trip to `{minimum: null}` and the frozen
-	// schema would ACCEPT inputs the source REJECTS. The externalsShape differential
-	// is blind to constraint values, so captureCoercePlan must bail on such values.
-	it('Infinity bound bails → frozen rejects identically to JIT (not a silent 200)', async () => {
+describe('non-JSON-safe constraint fallback', () => {
+	// Infinity becomes null in JSON, so a coercion plan cannot preserve it.
+	it('does not bake Infinity constraints and matches live rejection', async () => {
 		const build = () =>
 			new Elysia().get(
 				'/inf',
@@ -260,12 +251,11 @@ describe('non-JSON-serializable constraints fall back (do not silently bake)', (
 			)
 
 		const { validators } = capture(build)
-		// must NOT bake (JSON would corrupt Infinity → null)
-		expect(slot(validators, 'GET', '/inf', 'query')?.coercePlan).toBeUndefined()
+		expect(
+			slot(validators, 'GET', '/inf', 'query')?.coercePlan
+		).toBeUndefined()
 
 		const { app } = freeze(build)
-		// minimum:Infinity rejects every finite number — frozen must 422 like JIT,
-		// NOT 200 (which is what a corrupted minimum:null leaf would wrongly do)
 		expect((await build().handle(req('/inf?n=5'))).status).toBe(422)
 		expect((await app.handle(req('/inf?n=5'))).status).toBe(422)
 	})
@@ -279,7 +269,9 @@ describe('non-JSON-serializable constraints fall back (do not silently bake)', (
 			)
 
 		const { validators } = capture(build)
-		expect(slot(validators, 'GET', '/fin', 'query')?.coercePlan).toBeDefined()
+		expect(
+			slot(validators, 'GET', '/fin', 'query')?.coercePlan
+		).toBeDefined()
 
 		const { app } = freeze(build)
 		expect((await app.handle(req('/fin?n=5'))).status).toBe(422)
@@ -302,7 +294,6 @@ describe('shared leaf is not corrupted across optional/required reuse', () => {
 			)
 
 		const { app } = freeze(build)
-		// required `a` missing → 422; both present → coerced
 		expect((await app.handle(req('/m?b=2'))).status).toBe(422)
 		const ok = await app.handle(req('/m?a=5&b=2'))
 		expect(ok.status).toBe(200)

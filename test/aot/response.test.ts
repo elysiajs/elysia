@@ -1,4 +1,4 @@
-import '../../src/compile/aot-capture' // installs build-only capture impl (mirrors the AOT plugin)
+import '../../src/compile/aot-capture'
 import { describe, it, expect, afterEach } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
@@ -10,21 +10,14 @@ import {
 } from '../../src/compile/aot'
 import { materialise } from './_manifest'
 
-/**
- * AOT response freezing — response validators are keyed PER STATUS
- * (`response:<status>`) and frozen like every request slot. Before this, the
- * `response` slot was never set (route.ts can't add it — it doesn't know the
- * statuses), so response validators fell through to `Compile` + `createMirror`
- * on every boot. That's invisible in request-only synthetic apps but dominates
- * boot in real, response-heavy APIs (≈3.9× boot on a response-heavy app).
- */
+/** Response validators are frozen independently for each declared status. */
 
 afterEach(() => {
 	Compiled.clear()
 	Validator.clear()
 })
 
-const RESP = () =>
+const buildResponseApp = () =>
 	new Elysia().get(
 		'/u',
 		{
@@ -37,12 +30,11 @@ const RESP = () =>
 	)
 
 describe('AOT response freezing', () => {
-	it('captures + freezes a validator for EACH declared status', () => {
+	it('captures a separate frozen validator for each declared status', () => {
 		beginValidatorCapture()
-		RESP().compile()
+		buildResponseApp().compile()
 		const m = materialise(endValidatorCapture())
 
-		// one frozen entry per status — not a single bare `response`
 		expect(m.GET?.['/u']?.['response:200']).toBeDefined()
 		expect(m.GET?.['/u']?.['response:404']).toBeDefined()
 		expect(
@@ -52,18 +44,17 @@ describe('AOT response freezing', () => {
 		Validator.clear()
 		Compiled.validators = m
 
-		// a response:200 validator binds the frozen check (Compile skipped) + validates
 		const v = Validator.create(
 			t.Object({ id: t.String(), name: t.String() }),
 			{ aot: { method: 'GET', path: '/u' }, slot: 'response:200' }
 		) as any
-		expect(v.tb).toBeUndefined() // frozen-bound, not compiled
-		expect(v.reconstructedCheck).toBeDefined() // bound eagerly at construction
+		expect(v.tb).toBeUndefined()
+		expect(v.reconstructedCheck).toBeDefined()
 		expect(v.Check({ id: 'a', name: 'b' })).toBe(true)
 		expect(v.Check({ id: 1 })).toBe(false)
 	})
 
-	it('differential: frozen response Clean ≡ JIT Clean (extra stripped)', () => {
+	it('strips undeclared properties identically in frozen and live validators', () => {
 		const schema = () => t.Object({ id: t.String(), n: t.Number() })
 
 		beginValidatorCapture()
@@ -78,12 +69,10 @@ describe('AOT response freezing', () => {
 			.compile()
 		const m = materialise(endValidatorCapture())
 
-		// JIT reference (no manifest)
 		Validator.clear()
 		Compiled.clear()
-		const jit = new TypeBoxValidator(schema()) as any
+		const live = new TypeBoxValidator(schema()) as any
 
-		// frozen
 		Validator.clear()
 		Compiled.validators = m
 		const frozen = Validator.create(schema(), {
@@ -94,7 +83,7 @@ describe('AOT response freezing', () => {
 		expect(frozen.tb).toBeUndefined()
 		const input = { id: 'a', n: 1, extra: 'strip' }
 		expect(frozen.Clean?.(structuredClone(input))).toEqual(
-			jit.Clean?.(structuredClone(input))
+			live.Clean?.(structuredClone(input))
 		)
 	})
 })

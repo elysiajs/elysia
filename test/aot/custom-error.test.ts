@@ -1,4 +1,4 @@
-import '../../src/compile/aot-capture' // installs build-only capture impl (mirrors the AOT plugin)
+import '../../src/compile/aot-capture'
 import { it, expect, afterEach } from 'bun:test'
 import { t, validationDetail } from '../../src'
 import { Validator } from '../../src/validator'
@@ -10,13 +10,7 @@ import {
 } from '../../src/compile/aot'
 import { materialise } from './_manifest'
 
-/**
- * AOT custom-error capture — freeze a per-field check for each `error`-annotated
- * field so the production error path can locate the failing field without
- * TypeBox `Errors`. (The production gate itself is exercised in
- * test/validator/validation-detail.test.ts via a spawned NODE_ENV=production
- * fixture; here we verify the baked `ce` channel reconstructs + validates.)
- */
+/** Custom error fields retain their own frozen checks and instance paths. */
 
 afterEach(() => {
 	Compiled.clear()
@@ -35,7 +29,7 @@ const capture = (schema: any) => {
 }
 const entry = (m: any) => m.POST?.[P]?.[S]
 
-it('bakes a per-field check (ce) that reconstructs + validates', () => {
+it('reconstructs and runs a check for each custom-error field', () => {
 	const m = capture(
 		t.Object({ age: t.Number({ error: 'age must be a number' }) })
 	)
@@ -44,13 +38,12 @@ it('bakes a per-field check (ce) that reconstructs + validates', () => {
 	expect(ce.length).toBe(1)
 	expect(ce[0].p).toBe('/age')
 
-	// reconstruct the frozen field check: c(externals) -> (value) -> boolean
 	const check = ce[0].c(ce[0].e ? [] : [])
 	expect(check(5)).toBe(true)
 	expect(check('not a number')).toBe(false)
 })
 
-it('captures nested + multiple custom-error fields by instancePath', () => {
+it('records nested custom-error fields by instance path', () => {
 	const m = capture(
 		t.Object({
 			a: t.String({ error: 'a' }),
@@ -63,7 +56,7 @@ it('captures nested + multiple custom-error fields by instancePath', () => {
 	expect(ce.map((e) => e.p).sort()).toEqual(['/a', '/nested/b'])
 })
 
-it('no custom errors → no ce channel', () => {
+it('omits custom-error checks when the schema has none', () => {
 	const m = capture(t.Object({ x: t.Number() }))
 	expect(entry(m)?.ce).toBeUndefined()
 })

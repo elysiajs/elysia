@@ -50,8 +50,6 @@ describe('Bun transactional startup', () => {
 		}
 
 		try {
-			// build-time failure injector: an unknown named model reference
-			// throws inside #buildRouterUnsafe, before Bun.serve is reached
 			const app = new Elysia().get(
 				'/x',
 				{ body: 'DoesNotExist' },
@@ -160,8 +158,6 @@ describe('Bun transactional startup', () => {
 				new Request('http://localhost/x'),
 				server
 			)
-			// the late plugin injects an unknown model reference → the drain
-			// build throws, and the async failure must stop the server
 			resolve(
 				new Elysia().get('/y', { body: 'DoesNotExist' }, () => 'second')
 			)

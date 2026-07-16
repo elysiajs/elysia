@@ -17,19 +17,13 @@ import { Guard } from 'typebox/guard'
 import { Format } from 'typebox/format'
 import { Hashing } from 'typebox/system'
 
-/**
- * AOT coerce freeze — freeze coerced/codec checks (non-empty externals) by rebuilding
- * `External[]` from the live schema (build-verified). The runtime walk and the
- * verification share `collectExternals`, so they always agree.
- */
+/** Frozen request validators preserve codec coercion and cleaning. */
 
 afterEach(() => {
 	Compiled.clear()
 	Validator.clear()
 })
 
-// Capture by constructing TypeBoxValidator directly (no route coercion), so a
-// reference `new TypeBoxValidator(schema)` is an apples-to-apples comparison.
 const captureDirect = (
 	schema: any,
 	method: string,
@@ -44,8 +38,8 @@ const captureDirect = (
 	return materialise(endValidatorCapture())
 }
 
-describe('AOT coerce freeze (coerced/codec checks, externals reconstructed)', () => {
-	it('end-to-end: a frozen coerced query coerces and validates', async () => {
+describe('frozen request coercion', () => {
+	it('coerces and validates query values on a real route', async () => {
 		const build = () =>
 			new Elysia().get(
 				'/q',
@@ -55,11 +49,10 @@ describe('AOT coerce freeze (coerced/codec checks, externals reconstructed)', ()
 				({ query }) => query
 			)
 
-		// capture through the real route (query coercion applied)
 		beginValidatorCapture()
 		build().compile()
 		const m = materialise(endValidatorCapture())
-		expect(m.GET?.['/q']?.query).toBeDefined() // coerced query frozen
+		expect(m.GET?.['/q']?.query).toBeDefined()
 
 		Validator.clear()
 		Compiled.validators = m
@@ -68,17 +61,13 @@ describe('AOT coerce freeze (coerced/codec checks, externals reconstructed)', ()
 
 		const ok = await app.handle(req('/q?page=3&limit=10'))
 		expect(ok.status).toBe(200)
-		await expect(ok.json()).resolves.toEqual({ page: 3, limit: 10 }) // coerced to numbers
+		await expect(ok.json()).resolves.toEqual({ page: 3, limit: 10 })
 
 		const bad = await app.handle(req('/q?page=abc&limit=10'))
 		expect(bad.status).toBe(422)
 	})
 
-	it('freezes the request-side decode mirror (dm) and decodes via it, eval-free', () => {
-		// a hasCodec query: Numeric (codec-in-union), BooleanString (codec-in-union)
-		// and Date (codec-on-union). Each must coerce string → primitive from the
-		// FROZEN decode mirror, whose `d.codecs` are rebuilt from the live schema —
-		// no runtime `createMirror`/`Compile`/`new Function`.
+	it('matches runtime decoding without compiling at runtime', () => {
 		const make = () =>
 			t.Object({
 				page: t.Numeric(),
@@ -87,12 +76,11 @@ describe('AOT coerce freeze (coerced/codec checks, externals reconstructed)', ()
 			})
 
 		const m = captureDirect(make(), 'GET', '/dm', 'query')
-		// the decode mirror was captured AND frozen (not skipped as unfreezable)
 		expect(m.GET?.['/dm']?.query?.dm).toBeDefined()
 
 		Compiled.clear()
 		Validator.clear()
-		const compiled = new TypeBoxValidator(make()) as any // runtime reference
+		const compiled = new TypeBoxValidator(make()) as any
 
 		Validator.clear()
 		Compiled.validators = m
@@ -101,9 +89,8 @@ describe('AOT coerce freeze (coerced/codec checks, externals reconstructed)', ()
 			slot: 'query'
 		}) as any
 
-		expect(frozen.tb).toBeUndefined() // Compile skipped → genuinely frozen
+		expect(frozen.tb).toBeUndefined()
 
-		// differential: the frozen decode ≡ the compiled (runtime) decode
 		const inputs = [
 			{ page: '5', active: 'true', when: '2020-01-02' },
 			{ page: '0', active: 'false', when: '2021-06-15' },
@@ -114,7 +101,6 @@ describe('AOT coerce freeze (coerced/codec checks, externals reconstructed)', ()
 				compiled.FromSync(structuredClone(input))
 			)
 
-		// the codecs really ran: strings became primitives
 		const out = frozen.FromSync({
 			page: '7',
 			active: 'false',
@@ -125,17 +111,12 @@ describe('AOT coerce freeze (coerced/codec checks, externals reconstructed)', ()
 		expect(out.when).toBeInstanceOf(Date)
 	})
 
-	it('executes the frozen decode mirror on the merged (cm) path, not DecodeUnsafe', () => {
-		// A codec query freezes check+clean MERGED as `cm`, so the constructor takes
-		// the `if (cm)` branch. The decode mirror (`dm`) must STILL run there — a
-		// regression that skips it silently falls back to the interpreted,
-		// shared-schema-mutating DecodeUnsafe (and defeats the no-eval guarantee).
+	it('uses the frozen decoder for merged check-and-clean validators', () => {
 		const make = () => t.Object({ n: t.Numeric() })
 		const m = captureDirect(make(), 'GET', '/dmlive', 'query')
-		expect(m.GET?.['/dmlive']?.query?.cm).toBeDefined() // merged check+clean
-		expect(m.GET?.['/dmlive']?.query?.dm).toBeDefined() // and a decode mirror
+		expect(m.GET?.['/dmlive']?.query?.cm).toBeDefined()
+		expect(m.GET?.['/dmlive']?.query?.dm).toBeDefined()
 
-		// swap the frozen decode mirror for a counter so we can prove it RAN
 		let dmCalls = 0
 		m.GET!['/dmlive']!.query!.dm!.s = (() => (v: unknown) => {
 			dmCalls++
@@ -150,17 +131,13 @@ describe('AOT coerce freeze (coerced/codec checks, externals reconstructed)', ()
 		}) as any
 
 		frozen.FromSync({ n: '5' })
-		expect(dmCalls).toBe(1) // the frozen dm decoded; DecodeUnsafe was NOT used
+		expect(dmCalls).toBe(1)
 	})
 
-	it('codec route cleans once: #decodeMirror cleans, the trailing this.Clean is skipped', () => {
-		// createMirror(., { decode: true }) decodes AND cleans in one pass, so the
-		// trailing `this.Clean` would clean a SECOND time. The guard
-		// `!this.#decodeMirror` skips it on codec routes. TRIPWIRE: drop the guard
-		// and `cleanCalls` becomes 1 (the redundant second clean).
+	it('cleans codec values once', () => {
 		const v = new TypeBoxValidator(t.Object({ n: t.Numeric() })) as any
 		expect(v.hasCodec).toBe(true)
-		expect(typeof v.Clean).toBe('function') // there IS a clean that gets skipped
+		expect(typeof v.Clean).toBe('function')
 
 		let cleanCalls = 0
 		const realClean = v.Clean
@@ -170,21 +147,15 @@ describe('AOT coerce freeze (coerced/codec checks, externals reconstructed)', ()
 		}
 
 		const out = v.FromSync({ n: '5', extra: 'x' })
-		expect(out).toEqual({ n: 5 }) // decoded (5) AND cleaned (extra stripped)…
-		expect(cleanCalls).toBe(0) // …by #decodeMirror; this.Clean was NOT re-run
+		expect(out).toEqual({ n: 5 })
+		expect(cleanCalls).toBe(0)
 	})
 
-	it('frozen decode-mirror degrade still decodes AND cleans (guard stays correct)', () => {
-		// If instantiateFrozenDecodeMirror ever throws, #setupDecodeMirror degrades
-		// to interpreted DecodeUnsafe — which does NOT clean (verified: it keeps
-		// unknown keys). Since From now SKIPS this.Clean whenever #decodeMirror is
-		// set, the degrade must clean itself. TRIPWIRE: an un-cleaning degrade leaks
-		// `extra` into the output.
+	it('cleans values when frozen decoder reconstruction fails', () => {
 		const make = () => t.Object({ n: t.Numeric() })
 		const m = captureDirect(make(), 'GET', '/degrade', 'query')
 		expect(m.GET?.['/degrade']?.query?.dm).toBeDefined()
 
-		// force instantiateFrozenDecodeMirror to throw -> take the branch-1 degrade
 		m.GET!['/degrade']!.query!.dm!.s = (() => {
 			throw new Error('boom')
 		}) as any
@@ -197,23 +168,16 @@ describe('AOT coerce freeze (coerced/codec checks, externals reconstructed)', ()
 		}) as any
 
 		const out = frozen.FromSync({ n: '5', extra: 'x' })
-		expect(out).toEqual({ n: 5 }) // DecodeUnsafe (n->5) + the degrade's own clean
+		expect(out).toEqual({ n: 5 })
 	})
 
-	it('survives a reordering value op on a shared coercion union (no frozen-reconstruct 500)', () => {
-		// Regression guard: a value op (Decode/Encode/Clean) on the SHARED t.Date()
-		// singleton must not reorder its `anyOf` and break the AOT freeze's by-index
-		// union reconstruction (wrong branch externals -> `External[0].every` -> 500).
-		// Was a real bug via TypeBox's in-place UnionPrioritySort; fixed upstream in
-		// typebox >= 1.2.12 (sort no longer mutates the member array).
+	it('remains valid after a value operation on a shared codec union', () => {
 		const make = () => t.Object({ when: t.Date() })
 		const m = captureDirect(make(), 'GET', '/reorder', 'query')
 
 		Validator.clear()
 		Compiled.validators = m
 
-		// an unrelated value op that calls UnionPrioritySort on the SAME shared
-		// t.Date() singleton — would permanently reorder it without the bridge
 		Value.Decode(t.Object({ other: t.Date() }) as any, {
 			other: '2024-01-01'
 		})
@@ -227,12 +191,7 @@ describe('AOT coerce freeze (coerced/codec checks, externals reconstructed)', ()
 		expect(out.when).toBeInstanceOf(Date)
 	})
 
-	it('real build path: compileToSource -> eval -> frozen decode (no runtime new Function)', async () => {
-		// The other decode tests use the in-process `materialise`; this exercises
-		// the REAL emit path: compileToSource produces a JS source STRING (what the
-		// bundler ships), we eval it, register it, then reconstruct a frozen
-		// validator and confirm it DECODES CORRECTLY through that eval'd source.
-		// (emitModule's `dm:` emission itself is pinned by branch-table.test.ts.)
+	it('reconstructs emitted validators without runtime compilation', async () => {
 		const make = () =>
 			t.Object({
 				page: t.Numeric(),
@@ -255,12 +214,6 @@ describe('AOT coerce freeze (coerced/codec checks, externals reconstructed)', ()
 			delete process.env.ELYSIA_AOT_BUILD
 		}
 
-		// NOTE: we don't assert `dm:` is in the source here. In the full-suite run a
-		// prior test can leave global state where the decode mirror falls back to a
-		// runtime mirror instead of freezing; the decode is correct either way, which
-		// is the contract we assert below. `dm:` presence is pinned by branch-table.
-
-		// eval the emitted module (its check factories close over these globals)
 		const validators = new Function(
 			'CheckContext',
 			'Guard',
@@ -275,7 +228,7 @@ describe('AOT coerce freeze (coerced/codec checks, externals reconstructed)', ()
 
 		Compiled.clear()
 		Validator.clear()
-		const reference = new TypeBoxValidator(make()) as any // non-AOT (JIT)
+		const reference = new TypeBoxValidator(make()) as any
 
 		Validator.clear()
 		Compiled.validators = validators
@@ -284,9 +237,8 @@ describe('AOT coerce freeze (coerced/codec checks, externals reconstructed)', ()
 			slot: 'query'
 		}) as any
 
-		expect(frozen.tb).toBeUndefined() // genuinely frozen, no runtime Compile
+		expect(frozen.tb).toBeUndefined()
 
-		// the frozen decode (from the eval'd source) ≡ the JIT reference
 		for (const input of [
 			{ page: '5', active: 'true', when: '2024-03-04T05:06:07.000Z' },
 			{ page: 9, active: 'false', when: '2021-01-01' }
@@ -295,7 +247,6 @@ describe('AOT coerce freeze (coerced/codec checks, externals reconstructed)', ()
 				reference.FromSync(structuredClone(input))
 			)
 
-		// and the codecs actually decoded: strings -> primitives
 		const out = frozen.FromSync({
 			page: '7',
 			active: 'true',
@@ -354,13 +305,13 @@ describe('AOT coerce freeze (coerced/codec checks, externals reconstructed)', ()
 		]
 
 	for (const { name, make, inputs } of SHAPES)
-		it(`differential: ${name} — frozen ≡ compiled`, () => {
+		it(`${name}: frozen checks match runtime checks`, () => {
 			const path = `/${name.replace(/\W/g, '')}`
 			const m = captureDirect(make(), 'GET', path, 'query')
 
 			Compiled.clear()
 			Validator.clear()
-			const compiled = new TypeBoxValidator(make()) // reference (Compile)
+			const compiled = new TypeBoxValidator(make())
 
 			Validator.clear()
 			Compiled.validators = m
@@ -369,7 +320,7 @@ describe('AOT coerce freeze (coerced/codec checks, externals reconstructed)', ()
 				slot: 'query'
 			}) as any
 
-			expect(frozen.tb).toBeUndefined() // Compile skipped
+			expect(frozen.tb).toBeUndefined()
 			for (const input of inputs)
 				expect(frozen.Check(input)).toBe(compiled.Check(input as any))
 		})

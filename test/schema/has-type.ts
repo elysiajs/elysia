@@ -5,10 +5,6 @@ import { ELYSIA_TYPES, primitiveElysiaTypes } from '../../src/type/constants'
 
 const iterators = ['anyOf', 'oneOf', 'allOf'] as const
 
-// Moved here from src/type/utils.ts: `hasType` (singular) has no production
-// callers — only these tests. Production uses `hasTypes` (plural). Kept verbatim
-// as the unit under test; `hasType(t, s)` === `hasTypes([t], s)` for a single
-// type, modulo `_hasTypes`' dual `~kind`/`~elyTyp` check.
 export function hasType(
 	type: string | ELYSIA_TYPES[keyof ELYSIA_TYPES],
 	rawSchema: BaseSchema | TSchema

@@ -2,12 +2,6 @@ import { describe, expect, it } from 'bun:test'
 
 import { responseToSetHeaders } from '../../src/adapter/utils'
 
-// Regression: merging a returned/re-streamed Response's headers into
-// `set` used a `key in set.headers` guard. On non-Bun runtimes that took the
-// `for…entries()` branch, that guard meant a freshly-created empty `set.headers`
-// received NOTHING (every header dropped), and an existing `set.headers` only
-// had pre-existing keys updated — inconsistent with the Bun `Object.assign`
-// path. Both branches must copy all response headers (except content-encoding).
 describe('responseToSetHeaders', () => {
 	it('copies all response headers into a fresh set', () => {
 		const response = new Response('x', {
@@ -30,7 +24,6 @@ describe('responseToSetHeaders', () => {
 			status: undefined
 		} as any)
 
-		// pre-existing header kept, response headers added
 		expect(set?.headers['x-pre']).toBe('p')
 		expect(set?.headers['content-type']).toBe('application/xml')
 		expect(set?.headers['x-custom']).toBe('1')

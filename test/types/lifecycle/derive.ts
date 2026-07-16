@@ -1,7 +1,7 @@
 import { Elysia } from '../../../src'
 import { expectTypeOf } from 'expect-type'
 
-// ? local derive flows into later handler context
+// Local derived values reach later handlers on the same instance.
 {
 	new Elysia()
 		.derive(() => ({ name: 'hare' as const }))
@@ -10,7 +10,7 @@ import { expectTypeOf } from 'expect-type'
 		})
 }
 
-// ? chained derive accumulates
+// Chained derivations accumulate their values.
 {
 	new Elysia()
 		.derive(() => ({ first: 'hare' as const }))
@@ -21,7 +21,7 @@ import { expectTypeOf } from 'expect-type'
 		})
 }
 
-// ? local derive does NOT leak to a consumer via .use
+// Local derived values do not reach plugin consumers.
 {
 	const plugin = new Elysia().derive(() => ({ name: 'hare' as const }))
 
@@ -30,7 +30,7 @@ import { expectTypeOf } from 'expect-type'
 	})
 }
 
-// ? scoped derive propagates exactly one level via .use
+// Plugin-scoped derived values reach exactly one consumer.
 {
 	const plugin = new Elysia().derive('plugin', () => ({
 		name: 'hare' as const
@@ -45,7 +45,7 @@ import { expectTypeOf } from 'expect-type'
 	})
 }
 
-// ? global derive propagates to every consumer
+// Global derived values reach every nested consumer.
 {
 	const plugin = new Elysia().derive('global', () => ({
 		name: 'hare' as const
@@ -60,7 +60,7 @@ import { expectTypeOf } from 'expect-type'
 	})
 }
 
-// ? derive can read previously-derived properties
+// A derivation can read previously derived values.
 {
 	new Elysia()
 		.derive(() => ({ a: 1 as const }))

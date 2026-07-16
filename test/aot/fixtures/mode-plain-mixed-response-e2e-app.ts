@@ -1,10 +1,8 @@
 import { Elysia, t, status } from 'elysia'
 import { z } from 'zod'
 
-// e2e variant: the handler can emit a 400. The 400 body is validated against the
-// frozen TypeBox response schema. Under seal (TypeBox dropped) that frozen slot
-// must still run — a malformed 400 body → 422 (response validation), not a
-// silent pass or a 500.
+// A malformed 400 response must still reach the frozen TypeBox response validator
+// after the app seals without TypeBox.
 export const app = new Elysia().post(
 	'/u',
 	{
@@ -16,7 +14,7 @@ export const app = new Elysia().post(
 	},
 	({ body, query }) => {
 		if ((query as Record<string, unknown>).bad === '1')
-			// violates the 400 schema (`error` must be a string)
+			// The 400 schema requires an error string.
 			return status(400, { wrong: 123 } as never)
 		return body
 	}

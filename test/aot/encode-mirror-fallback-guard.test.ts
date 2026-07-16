@@ -19,22 +19,21 @@ const codecSchema = () => t.Object({ when: t.Date(), n: t.Number() })
 const value = () => ({ when: new Date('2020-01-01T00:00:00.000Z'), n: 1 })
 const encoded = { when: '2020-01-01T00:00:00.000Z', n: 1 }
 
-describe('encode-mirror fallback guard (CYCLE 5)', () => {
-	it('a slot-less validator DOES hit the interpreted Encode (sanity)', () => {
+describe('response encode mirror selection', () => {
+	it('uses interpreted Encode when no response slot is provided', () => {
 		const v = new (TypeBoxValidator as any)(codecSchema())
 		encodeSpy.mockClear()
 		expect(v.EncodeFrom(value(), 'response')).toEqual(encoded)
 		expect(encodeSpy).toHaveBeenCalled()
 	})
 
-	it('a default-config codec response route encodes via the mirror, not Encode', async () => {
+	it('uses the encode mirror for a codec response route', async () => {
 		const app = new Elysia().get(
 			'/codec',
 			{ response: codecSchema() },
 			() => value()
 		)
 
-		// first request compiles + encodes; mirror setup uses createMirror, never Encode
 		encodeSpy.mockClear()
 		const res = await app.handle(req('/codec'))
 
@@ -42,7 +41,7 @@ describe('encode-mirror fallback guard (CYCLE 5)', () => {
 		expect(encodeSpy).not.toHaveBeenCalled()
 	})
 
-	it('stays on the mirror across warmed requests', async () => {
+	it('continues using the mirror after the route is warm', async () => {
 		const app = new Elysia().get(
 			'/codec',
 			{ response: codecSchema() },

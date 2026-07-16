@@ -1,28 +1,35 @@
 import { Elysia } from '../../../src'
 import { expectTypeOf } from 'expect-type'
 
-const beforeHandle = <Scope extends 'local' | 'plugin' | 'global'>(
+const withBeforeHandle = <Scope extends 'local' | 'plugin' | 'global'>(
 	scope: Scope
 ) => new Elysia().beforeHandle(scope, () => 'ok' as const)
 
-const mapDerive = <Scope extends 'local' | 'plugin' | 'global'>(scope: Scope) =>
+const withMappedDerive = <Scope extends 'local' | 'plugin' | 'global'>(
+	scope: Scope
+) =>
 	new Elysia()
 		.derive('global', () => ({ global: true as const }))
 		.derive('plugin', () => ({ plugin: true as const }))
 		.derive(() => ({ local: true as const }))
 		.mapDerive(scope, () => ({ mapped: true as const }))
 
-const derive = <Scope extends 'local' | 'plugin' | 'global'>(scope: Scope) =>
-	new Elysia().derive(scope, () => ({ derived: true as const }))
+const withDerivedValue = <Scope extends 'local' | 'plugin' | 'global'>(
+	scope: Scope
+) => new Elysia().derive(scope, () => ({ derived: true as const }))
 
-const mapDeriveResponse = <Scope extends 'local' | 'plugin'>(scope: Scope) =>
+const withMappedDeriveResponse = <Scope extends 'local' | 'plugin'>(
+	scope: Scope
+) =>
 	new Elysia().mapDerive(scope, ({ status }) =>
 		Math.random()
 			? { mapped: true as const }
 			: status(418, 'teapot' as const)
 	)
 
-const lifecycle = <Scope extends 'local' | 'plugin' | 'global'>(scope: Scope) =>
+const withLifecycleHooks = <Scope extends 'local' | 'plugin' | 'global'>(
+	scope: Scope
+) =>
 	new Elysia()
 		.parse(scope, () => {})
 		.transform(scope, () => {})
@@ -35,47 +42,68 @@ const lifecycle = <Scope extends 'local' | 'plugin' | 'global'>(scope: Scope) =>
 		.error(scope, () => {})
 		.trace(scope, () => {})
 
-const global = lifecycle('global')
-const plugin = lifecycle('plugin')
-const local = lifecycle('local')
-const union = lifecycle(Math.random() ? 'global' : 'plugin')
-const localUnion = lifecycle(
+const globalLifecycle = withLifecycleHooks('global')
+const pluginLifecycle = withLifecycleHooks('plugin')
+const localLifecycle = withLifecycleHooks('local')
+const globalOrPluginLifecycle = withLifecycleHooks(
+	Math.random() ? 'global' : 'plugin'
+)
+const anyScopeLifecycle = withLifecycleHooks(
 	Math.random() ? 'local' : Math.random() ? 'global' : 'plugin'
 )
-const globalBeforeHandle = beforeHandle('global')
-const pluginBeforeHandle = beforeHandle('plugin')
-const unionBeforeHandle = beforeHandle(Math.random() ? 'global' : 'plugin')
-const globalMapDerive = mapDerive('global')
-const pluginMapDerive = mapDerive('plugin')
-const localMapDerive = mapDerive('local')
-const unionMapDerive = mapDerive(Math.random() ? 'global' : 'plugin')
-const localUnionMapDerive = mapDerive(
+const globalBeforeHandle = withBeforeHandle('global')
+const pluginBeforeHandle = withBeforeHandle('plugin')
+const globalOrPluginBeforeHandle = withBeforeHandle(
+	Math.random() ? 'global' : 'plugin'
+)
+const globalMappedDerive = withMappedDerive('global')
+const pluginMappedDerive = withMappedDerive('plugin')
+const localMappedDerive = withMappedDerive('local')
+const globalOrPluginMappedDerive = withMappedDerive(
+	Math.random() ? 'global' : 'plugin'
+)
+const anyScopeMappedDerive = withMappedDerive(
 	Math.random() ? 'local' : Math.random() ? 'global' : 'plugin'
 )
-const localGlobalMapDerive = mapDerive(Math.random() ? 'local' : 'global')
-const unionDerive = derive(Math.random() ? 'global' : 'plugin')
-const localGlobalDerive = derive(Math.random() ? 'local' : 'global')
-const localPluginMapDeriveResponse = mapDeriveResponse(
+const localOrGlobalMappedDerive = withMappedDerive(
+	Math.random() ? 'local' : 'global'
+)
+const globalOrPluginDerivedValue = withDerivedValue(
+	Math.random() ? 'global' : 'plugin'
+)
+const localOrGlobalDerivedValue = withDerivedValue(
+	Math.random() ? 'local' : 'global'
+)
+const localOrPluginMappedResponse = withMappedDeriveResponse(
 	Math.random() ? 'local' : 'plugin'
 )
 
-expectTypeOf(global['~Singleton']['derive']).toEqualTypeOf<{
+// Literal scopes preserve mapped values at the selected scope.
+expectTypeOf(globalLifecycle['~Singleton']['derive']).toEqualTypeOf<{
 	readonly mapped: true
 }>()
-expectTypeOf(plugin['~Ephemeral']['derive']).toEqualTypeOf<{
+expectTypeOf(pluginLifecycle['~Ephemeral']['derive']).toEqualTypeOf<{
 	readonly mapped: true
 }>()
-expectTypeOf(local['~Volatile']['derive']).toEqualTypeOf<{
+expectTypeOf(localLifecycle['~Volatile']['derive']).toEqualTypeOf<{
 	readonly mapped: true
 }>()
-expectTypeOf(union['~Ephemeral']['derive']['derived']).toEqualTypeOf<
+
+// Union scopes keep shared values required and branch-only values optional.
+expectTypeOf(
+	globalOrPluginLifecycle['~Ephemeral']['derive']['derived']
+).toEqualTypeOf<true | undefined>()
+expectTypeOf(
+	globalOrPluginLifecycle['~Ephemeral']['derive']['mapped']
+).toEqualTypeOf<true>()
+expectTypeOf(anyScopeLifecycle['~Volatile']['derive']['derived']).toEqualTypeOf<
 	true | undefined
 >()
-expectTypeOf(union['~Ephemeral']['derive']['mapped']).toEqualTypeOf<true>()
-expectTypeOf(localUnion['~Volatile']['derive']['derived']).toEqualTypeOf<
-	true | undefined
->()
-expectTypeOf(localUnion['~Volatile']['derive']['mapped']).toEqualTypeOf<true>()
+expectTypeOf(
+	anyScopeLifecycle['~Volatile']['derive']['mapped']
+).toEqualTypeOf<true>()
+
+// beforeHandle response types follow the selected propagation scope.
 expectTypeOf(globalBeforeHandle['~Metadata']['response']).toEqualTypeOf<{
 	200: 'ok'
 }>()
@@ -84,70 +112,79 @@ expectTypeOf(pluginBeforeHandle['~Ephemeral']['response']).toEqualTypeOf<{
 	200: 'ok'
 }>()
 expectTypeOf(pluginBeforeHandle['~Volatile']['response']).toEqualTypeOf<{}>()
-expectTypeOf(unionBeforeHandle['~Ephemeral']['response']).toEqualTypeOf<{
-	200: 'ok'
-}>()
-expectTypeOf(globalMapDerive['~Volatile']['derive']).toEqualTypeOf<{
+expectTypeOf(
+	globalOrPluginBeforeHandle['~Ephemeral']['response']
+).toEqualTypeOf<{ 200: 'ok' }>()
+
+// mapDerive replaces values at its scope while preserving more local values.
+expectTypeOf(globalMappedDerive['~Volatile']['derive']).toEqualTypeOf<{
 	readonly local: true
 }>()
-expectTypeOf(pluginMapDerive['~Volatile']['derive']).toEqualTypeOf<{
+expectTypeOf(pluginMappedDerive['~Volatile']['derive']).toEqualTypeOf<{
 	readonly local: true
 }>()
-expectTypeOf(localMapDerive['~Volatile']['derive']).toEqualTypeOf<{
+expectTypeOf(localMappedDerive['~Volatile']['derive']).toEqualTypeOf<{
 	readonly mapped: true
 }>()
-expectTypeOf(unionMapDerive['~Singleton']['derive']['global']).toEqualTypeOf<
-	true | undefined
->()
-expectTypeOf(unionMapDerive['~Ephemeral']['derive']['plugin']).toEqualTypeOf<
-	true | undefined
->()
+
+// Union mapDerive scopes preserve every possible branch.
 expectTypeOf(
-	unionMapDerive['~Ephemeral']['derive']['mapped']
-).toEqualTypeOf<true>()
-expectTypeOf(
-	unionMapDerive['~Volatile']['derive']['local']
-).toEqualTypeOf<true>()
-expectTypeOf(
-	localUnionMapDerive['~Singleton']['derive']['global']
+	globalOrPluginMappedDerive['~Singleton']['derive']['global']
 ).toEqualTypeOf<true | undefined>()
 expectTypeOf(
-	localUnionMapDerive['~Ephemeral']['derive']['plugin']
+	globalOrPluginMappedDerive['~Ephemeral']['derive']['plugin']
 ).toEqualTypeOf<true | undefined>()
 expectTypeOf(
-	localUnionMapDerive['~Ephemeral']['derive']['mapped']
-).toEqualTypeOf<true | undefined>()
-expectTypeOf(localUnionMapDerive['~Volatile']['derive']['local']).toEqualTypeOf<
-	true | undefined
->()
-expectTypeOf(
-	localUnionMapDerive['~Volatile']['derive']['mapped']
+	globalOrPluginMappedDerive['~Ephemeral']['derive']['mapped']
 ).toEqualTypeOf<true>()
 expectTypeOf(
-	localGlobalMapDerive['~Singleton']['derive']['global']
-).toEqualTypeOf<true | undefined>()
-expectTypeOf(
-	localGlobalMapDerive['~Ephemeral']['derive']['plugin']
+	globalOrPluginMappedDerive['~Volatile']['derive']['local']
 ).toEqualTypeOf<true>()
 expectTypeOf(
-	localGlobalMapDerive['~Volatile']['derive']['local']
+	anyScopeMappedDerive['~Singleton']['derive']['global']
 ).toEqualTypeOf<true | undefined>()
 expectTypeOf(
-	localGlobalMapDerive['~Volatile']['derive']['mapped']
+	anyScopeMappedDerive['~Ephemeral']['derive']['plugin']
+).toEqualTypeOf<true | undefined>()
+expectTypeOf(
+	anyScopeMappedDerive['~Ephemeral']['derive']['mapped']
+).toEqualTypeOf<true | undefined>()
+expectTypeOf(
+	anyScopeMappedDerive['~Volatile']['derive']['local']
+).toEqualTypeOf<true | undefined>()
+expectTypeOf(
+	anyScopeMappedDerive['~Volatile']['derive']['mapped']
 ).toEqualTypeOf<true>()
-expectTypeOf(unionDerive['~Ephemeral']['derive']).toEqualTypeOf<{
+expectTypeOf(
+	localOrGlobalMappedDerive['~Singleton']['derive']['global']
+).toEqualTypeOf<true | undefined>()
+expectTypeOf(
+	localOrGlobalMappedDerive['~Ephemeral']['derive']['plugin']
+).toEqualTypeOf<true>()
+expectTypeOf(
+	localOrGlobalMappedDerive['~Volatile']['derive']['local']
+).toEqualTypeOf<true | undefined>()
+expectTypeOf(
+	localOrGlobalMappedDerive['~Volatile']['derive']['mapped']
+).toEqualTypeOf<true>()
+
+// Derived values stay required when every union branch defines them.
+expectTypeOf(globalOrPluginDerivedValue['~Ephemeral']['derive']).toEqualTypeOf<{
 	readonly derived: true
 }>()
-expectTypeOf(localGlobalDerive['~Volatile']['derive']).toEqualTypeOf<{
+expectTypeOf(localOrGlobalDerivedValue['~Volatile']['derive']).toEqualTypeOf<{
 	readonly derived: true
 }>()
+
+// A local | plugin scope keeps the mapped value optional and retains responses.
 expectTypeOf(
-	localPluginMapDeriveResponse['~Ephemeral']['derive']['mapped']
+	localOrPluginMappedResponse['~Ephemeral']['derive']['mapped']
 ).toEqualTypeOf<true | undefined>()
 expectTypeOf(
-	localPluginMapDeriveResponse['~Ephemeral']['response']
+	localOrPluginMappedResponse['~Ephemeral']['response']
 ).toEqualTypeOf<{
 	418: 'teapot'
 }>()
 
-new Elysia().use(union)
+// A lifecycle chain with a union scope remains usable as a plugin.
+new Elysia().use(globalOrPluginLifecycle)

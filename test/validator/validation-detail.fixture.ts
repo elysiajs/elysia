@@ -1,7 +1,5 @@
-// Spawned by validation-detail.test.ts with NODE_ENV toggled. `isProduction` in
-// src/error.ts is a module-load constant, so production behavior can only be
-// exercised from a fresh process with NODE_ENV already set — hence this fixture.
-// Prints a JSON map of { scenario: { status, body } } for the current env.
+// Run in a child process so production and development scenarios do not share
+// validator caches or environment state.
 import { Elysia, t, validationDetail, ValidationError } from '../../src'
 
 const bad = { x: 'not a number' }
@@ -13,7 +11,7 @@ const post = (body: unknown) =>
 	})
 
 const scenarios: Record<string, () => Promise<Response>> = {
-	cjkEcho: () =>
+	oversizedMultibyteInput: () =>
 		new Elysia()
 			.post(
 				'/',
@@ -22,7 +20,7 @@ const scenarios: Record<string, () => Promise<Response>> = {
 			)
 			.handle(post({ value: '界'.repeat(8190) })),
 
-	patternError: () =>
+	patternFailure: () =>
 		new Elysia()
 			.post(
 				'/',
@@ -31,7 +29,7 @@ const scenarios: Record<string, () => Promise<Response>> = {
 			)
 			.handle(post({ value: 'bad' })),
 
-	refineNoReplay: async () => {
+	refinementCallCount: async () => {
 		let calls = 0
 		let captured: ValidationError | undefined
 		const response = await new Elysia()
@@ -65,8 +63,7 @@ const scenarios: Record<string, () => Promise<Response>> = {
 		)
 	},
 
-	// default → should be minimal in production
-	default: () =>
+	maskedRequest: () =>
 		new Elysia()
 			.post(
 				'/',
@@ -75,8 +72,7 @@ const scenarios: Record<string, () => Promise<Response>> = {
 			)
 			.handle(post(bad)),
 
-	// allowUnsafe → full detail even in production
-	allowUnsafe: () =>
+	unsafeRequest: () =>
 		new Elysia({ allowUnsafeValidationDetails: true })
 			.post(
 				'/',
@@ -85,8 +81,7 @@ const scenarios: Record<string, () => Promise<Response>> = {
 			)
 			.handle(post(bad)),
 
-	// custom message via validationDetail → message shown, no schema leak
-	validationDetailMessage: () =>
+	customRequestMessage: () =>
 		new Elysia()
 			.post(
 				'/',
@@ -101,8 +96,7 @@ const scenarios: Record<string, () => Promise<Response>> = {
 			)
 			.handle(post(bad)),
 
-	// error.detail in an error hook → minimal in production
-	detail: () =>
+	maskedErrorDetail: () =>
 		new Elysia()
 			.error(({ error }) => {
 				if (error instanceof ValidationError)
@@ -119,8 +113,7 @@ const scenarios: Record<string, () => Promise<Response>> = {
 			)
 			.handle(post(bad)),
 
-	// error.detail with allowUnsafe → full even in production
-	detailAllowUnsafe: () =>
+	unsafeErrorDetail: () =>
 		new Elysia({ allowUnsafeValidationDetails: true })
 			.error(({ error }) => {
 				if (error instanceof ValidationError)
@@ -129,7 +122,6 @@ const scenarios: Record<string, () => Promise<Response>> = {
 			.post('/', { body: t.Object({ x: t.Number() }) }, () => 'ok')
 			.handle(post(bad)),
 
-	// nested custom error → exercises findCustomError path navigation (/user/age)
 	nestedCustomError: () =>
 		new Elysia()
 			.post(
@@ -147,9 +139,7 @@ const scenarios: Record<string, () => Promise<Response>> = {
 			)
 			.handle(post({ user: { age: 'x' } })),
 
-	// request-side production 422 must name the failing field (`property`)
-	// while still echoing the client's own input — actionable, no schema leak.
-	requestProperty: () =>
+	maskedRequestProperty: () =>
 		new Elysia()
 			.post(
 				'/',
@@ -158,10 +148,7 @@ const scenarios: Record<string, () => Promise<Response>> = {
 			)
 			.handle(post(bad)),
 
-	// A response-schema failure in production must not leak the server response
-	// object via `found`. Must collapse to a generic 500 — no found/errors/value,
-	// no 422 mislabel. Secret-bearing sibling proves the leak is closed.
-	responseLeak: () =>
+	maskedResponse: () =>
 		new Elysia()
 			.get(
 				'/',
@@ -180,9 +167,7 @@ const scenarios: Record<string, () => Promise<Response>> = {
 			)
 			.handle(new Request('http://localhost/')),
 
-	// A response-schema custom-error callback must not receive or echo the
-	// server value either, and must not produce a 422 custom response.
-	responseCustomError: () =>
+	maskedResponseCustomError: () =>
 		new Elysia()
 			.get(
 				'/',
@@ -201,8 +186,7 @@ const scenarios: Record<string, () => Promise<Response>> = {
 			)
 			.handle(new Request('http://localhost/')),
 
-	// The explicit opt-out restores full response detail.
-	responseAllowUnsafe: () =>
+	unsafeResponse: () =>
 		new Elysia({ allowUnsafeValidationDetails: true })
 			.get(
 				'/',
@@ -216,11 +200,7 @@ const scenarios: Record<string, () => Promise<Response>> = {
 			)
 			.handle(new Request('http://localhost/')),
 
-	// Defect 2: `error.all` builds `path` from Standard Schema issue `path`
-	// arrays whose segments may be `{ key }` OBJECTS. The dotted path must render
-	// `user.name`, NOT `[object Object].[object Object]`. (Env-independent, run in
-	// both prod & dev to prove parity.)
-	allStandardObjectSegments: async () => {
+	standardPathInAll: async () => {
 		const err = new ValidationError('body', { user: { name: 123 } }, [
 			{
 				path: [{ key: 'user' }, { key: 'name' }],
@@ -231,12 +211,8 @@ const scenarios: Record<string, () => Promise<Response>> = {
 	}
 }
 
-// Proves the production custom-error path uses `findCustomError` and NOT TypeBox
-// `Errors`: the thunk throws, so if resolve consulted it the access below would
-// throw. In production it must resolve the message from findCustomError instead.
-// (Production only — in dev resolve WOULD call the thunk, by design.)
 if ((process.env.NODE_ENV ?? process.env.ENV) === 'production')
-	scenarios.findCustomErrorBypass = async () => {
+	scenarios.customErrorWithoutErrorEnumeration = async () => {
 		const err = new ValidationError(
 			'body',
 			{ x: 'bad' },
@@ -253,13 +229,8 @@ if ((process.env.NODE_ENV ?? process.env.ENV) === 'production')
 		})
 	}
 
-// hardening: production is the trust boundary — `payload.property` must only
-// ever reflect instance-path-shaped data. A hand-crafted issue whose only path is
-// a free-text string (no real validator produces this) must NOT surface as
-// `property`; it collapses to 'root'. A real `instancePath` JSON pointer still
-// passes through.
 if ((process.env.NODE_ENV ?? process.env.ENV) === 'production') {
-	scenarios.propertyFreeTextString = async () => {
+	scenarios.freeTextPath = async () => {
 		const err = new ValidationError(
 			'body',
 			{ x: 'bad' },
@@ -269,7 +240,7 @@ if ((process.env.NODE_ENV ?? process.env.ENV) === 'production') {
 		return new Response(JSON.stringify(err.payload), { status: 422 })
 	}
 
-	scenarios.propertyInstancePath = async () => {
+	scenarios.instancePath = async () => {
 		const err = new ValidationError(
 			'body',
 			{ x: 'bad' },
@@ -279,11 +250,7 @@ if ((process.env.NODE_ENV ?? process.env.ENV) === 'production') {
 		return new Response(JSON.stringify(err.payload), { status: 422 })
 	}
 
-	// Defect 1: Standard Schema issues carry `path` as an array whose segments
-	// may be `{ key }` OBJECTS (not raw PropertyKeys). `payload.property` must
-	// render `/user/name`, NOT `/[object Object]/[object Object]` — a malformed
-	// path defeats 's own goal of naming the failing field.
-	scenarios.propertyStandardObjectSegments = async () => {
+	scenarios.standardPathInPayload = async () => {
 		const err = new ValidationError(
 			'body',
 			{ user: { name: 123 } },

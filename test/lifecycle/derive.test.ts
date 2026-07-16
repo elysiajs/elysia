@@ -4,7 +4,7 @@ import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
 
 describe('derive', () => {
-	it('work', async () => {
+	it('adds returned fields to the request context', async () => {
 		const app = new Elysia()
 			.derive(() => ({
 				hi: () => 'hi'
@@ -15,7 +15,7 @@ describe('derive', () => {
 		expect(res).toBe('hi')
 	})
 
-	it('inherits plugin', async () => {
+	it('propagates global derives through plugins', async () => {
 		const plugin = new Elysia().derive('global', () => ({
 			hi: () => 'hi'
 		}))
@@ -26,7 +26,7 @@ describe('derive', () => {
 		expect(res).toBe('hi')
 	})
 
-	it('inherits plugin on local', async () => {
+	it('does not propagate local derives out of plugins', async () => {
 		const plugin = new Elysia().derive(() => ({
 			hi: () => 'hi'
 		}))
@@ -40,7 +40,7 @@ describe('derive', () => {
 		expect(res).toBe('true')
 	})
 
-	it('derive in order', async () => {
+	it('runs derives in registration order', async () => {
 		let order = <string[]>[]
 
 		const app = new Elysia()
@@ -59,7 +59,7 @@ describe('derive', () => {
 		expect(order).toEqual(['A', 'B'])
 	})
 
-	it('can mutate store', async () => {
+	it('can expose a helper that mutates the store', async () => {
 		const app = new Elysia()
 			.state('counter', 1)
 			.derive(({ store }) => ({
@@ -75,7 +75,7 @@ describe('derive', () => {
 		expect(res).toBe('2')
 	})
 
-	it('derive with static analysis', async () => {
+	it('can read a destructured request header', async () => {
 		const app = new Elysia()
 			.derive(({ headers: { name } }) => ({
 				name
@@ -95,7 +95,38 @@ describe('derive', () => {
 		expect(res).toBe('Elysia')
 	})
 
-	it('as global', async () => {
+	it('runs between app and route-local beforeHandle hooks', async () => {
+		const order: string[] = []
+
+		const app = new Elysia()
+			.beforeHandle(() => {
+				order.push('app beforeHandle')
+			})
+			.derive(() => {
+				order.push('derive')
+
+				return { name: 'Ina' }
+			})
+			.get(
+				'/',
+				{
+					beforeHandle() {
+						order.push('route beforeHandle')
+					}
+				},
+				({ name }) => name
+			)
+
+		await app.handle(req('/'))
+
+		expect(order).toEqual([
+			'app beforeHandle',
+			'derive',
+			'route beforeHandle'
+		])
+	})
+
+	it('runs a global derive on plugin and parent routes', async () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
@@ -116,7 +147,7 @@ describe('derive', () => {
 		expect(called).toEqual(['/inner', '/outer'])
 	})
 
-	it('as local', async () => {
+	it('runs a local derive only on routes declared by its plugin', async () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
@@ -137,7 +168,7 @@ describe('derive', () => {
 		expect(called).toEqual(['/inner'])
 	})
 
-	it('as scoped', async () => {
+	it('runs a plugin-scoped derive through one composition level', async () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
@@ -161,26 +192,7 @@ describe('derive', () => {
 		expect(called).toEqual(['/inner', '/middle'])
 	})
 
-	it('support array', async () => {
-		let total = 0
-
-		const app = new Elysia()
-			.afterHandle([
-				() => {
-					total++
-				},
-				() => {
-					total++
-				}
-			])
-			.get('/', () => 'NOOP')
-
-		const res = await app.handle(req('/'))
-
-		expect(total).toEqual(2)
-	})
-
-	it('handle error', async () => {
+	it('uses a status returned from derive as the response', async () => {
 		const app = new Elysia()
 			.derive(({ status }) => status(418))
 			.get('/', () => '')
@@ -190,7 +202,7 @@ describe('derive', () => {
 		expect(res).toEqual("I'm a teapot")
 	})
 
-	it('handle return derive without throw', async () => {
+	it('does not send a status returned from derive through the error hook', async () => {
 		let isOnErrorCalled = false
 
 		const app = new Elysia()
@@ -203,5 +215,16 @@ describe('derive', () => {
 		await app.handle(req('/'))
 
 		expect(isOnErrorCalled).toBe(false)
+	})
+
+	it('preserves a status returned from derive through plugin composition', async () => {
+		const route = new Elysia()
+			.derive(({ status }) => status(418))
+			.get('/', () => '')
+
+		const response = await new Elysia().use(route).handle(req('/'))
+
+		expect(response.status).toBe(418)
+		await expect(response.text()).resolves.toBe("I'm a teapot")
 	})
 })

@@ -5,16 +5,11 @@ const cases = {
 		resume: false
 	},
 	schema: {
-		// The optional resume entry keeps default apps under the original 400KB
-		// budget. The columnar route table adds ~640B net, semantic sealing adds
-		// ~1.4KB, and lazy cookie verification adds ~530B. A lazy registry could
-		// later tree-shake the cookie path from cookie-free apps.
 		limit: 400 * 1024,
 		source: `import { Elysia, t } from './dist/index.mjs'; globalThis.app = new Elysia().get('/', () => 'ok', { query: t.Object({ q: t.String() }) })`,
 		resume: false
 	},
 	resume: {
-		// Preview users retain both resume and legacy for route-level fallback.
 		limit: 410 * 1024,
 		source: `import { Elysia, t } from './dist/index.mjs'; import { resumeEmit } from './dist/experimental/resume.mjs'; globalThis.app = new Elysia({ experimental: { resumeEmit } }).get('/', () => 'ok', { query: t.Object({ q: t.String() }) })`,
 		resume: true

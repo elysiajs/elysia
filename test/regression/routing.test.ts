@@ -3,11 +3,8 @@ import { Elysia, t } from '../../src'
 import { autoHead } from '../../src/plugin/auto-head'
 import { req } from '../utils'
 
-describe('a loose alias never clobbers an explicitly-registered sibling (default config)', () => {
-	// Default config (strictPath off) previously exposed this: the loose twin of
-	// `/foo` is `/foo/`, which silently overwrote the REAL `/foo/` handler unless
-	// the (opt-in) `distinctPath` config was set. The protection is now always on.
-	it('explicit /foo/ is not clobbered by /foo loose twin — default config', async () => {
+describe('loose path aliases', () => {
+	it('preserves explicit slash and non-slash routes', async () => {
 		const app = new Elysia()
 			.get('/foo', () => 'real-foo')
 			.get('/foo/', () => 'foo-slash')
@@ -16,7 +13,7 @@ describe('a loose alias never clobbers an explicitly-registered sibling (default
 		expect(await (await app.handle(req('/foo/'))).text()).toBe('foo-slash')
 	})
 
-	it('holds regardless of registration order — default config', async () => {
+	it('preserves both routes regardless of registration order', async () => {
 		const app = new Elysia()
 			.get('/foo/', () => 'foo-slash')
 			.get('/foo', () => 'real-foo')
@@ -32,16 +29,10 @@ describe('a loose alias never clobbers an explicitly-registered sibling (default
 	})
 })
 
-describe('JIT wrapper heals ALL of its own map aliases on first compile', () => {
-	// With lazy (non-precompile) JIT, `.get('/enc é', ...)` registers the wrapper
-	// under both the raw and encodeURI'd twins. Before the fix, first compile
-	// re-pointed only the canonical path; the encoded twin kept dispatching
-	// through the wrapper forever. Behaviourally both twins must serve correctly
-	// across repeated requests (which is what forces the wrapper to have healed).
+describe('JIT route aliases', () => {
 	it('encoded-twin alias resolves consistently across repeated requests', async () => {
 		const app = new Elysia().get('/café', () => 'coffee')
 
-		// hit twice: first compiles+heals, second must hit the healed entry
 		expect(await (await app.handle(req('/café'))).text()).toBe('coffee')
 		expect(await (await app.handle(req(encodeURI('/café')))).text()).toBe(
 			'coffee'
@@ -53,7 +44,6 @@ describe('JIT wrapper heals ALL of its own map aliases on first compile', () => 
 		const app = new Elysia().use(autoHead()).get('/h', () => 'body-here')
 		await app.modules
 
-		// warm the GET so the wrapper compiles
 		expect(await (await app.handle(req('/h'))).text()).toBe('body-here')
 
 		const head = await app.handle(req('/h', { method: 'HEAD' }))
@@ -65,43 +55,23 @@ describe('JIT wrapper heals ALL of its own map aliases on first compile', () => 
 		const app = new Elysia().get('/dir/', () => 'dir')
 
 		expect(await (await app.handle(req('/dir/'))).text()).toBe('dir')
-		// loose twin `/dir`
 		expect(await (await app.handle(req('/dir'))).text()).toBe('dir')
 		expect(await (await app.handle(req('/dir/'))).text()).toBe('dir')
 	})
 
-	// Structural pin: heal must RE-POINT every map alias to the SAME compiled
-	// handler as the canonical path, not leave aliases forwarding through the
-	// retained JIT wrapper. Behavioural pins alone can't see this (the wrapper
-	// forwards correctly via its `#compiled` fast-path) — assert on `~map`.
-	it('warmed map aliases point at the SAME handler as the canonical path', async () => {
+	it('warmed aliases share the canonical compiled handler', async () => {
 		const app = new Elysia().get('/dir/', () => 'dir')
 
-		// warm — first compile triggers the heal
 		await app.handle(req('/dir/'))
 		await app.handle(req('/dir'))
 
 		const map = (app as any)['~map'].GET
-		// canonical `/dir/` and loose twin `/dir` must be the identical healed fn
 		expect(map['/dir/']).toBe(map['/dir'])
-		// and it must no longer be the raw JIT wrapper (which forwards but
-		// retains its closure) — a healed handler is a stable identity across
-		// both keys, which only holds once BOTH were rewritten to the compiled fn
 		expect(typeof map['/dir']).toBe('function')
 	})
 })
 
-describe('per-route hook composition isolation (shared-mutation guard)', () => {
-	//  proposed SHARING the composed+promoteDerive'd hook across routes with
-	// identical inherited hooks. This repo has repeatedly hit "alias a hook for
-	// speed -> cross-route mutation leak" bugs. Sharing was NOT done because the
-	// composed hook is mutated in place downstream (promoteDerive, toArray,
-	// named-parser remap, buildNativeStaticResponse's mapResponse rewrite). This
-	// pin locks in the ISOLATION invariant: two routes under the same guard must
-	// have INDEPENDENT composed hooks — per-request derive state on one route
-	// must never bleed into the other, and their derived values must be distinct
-	// objects. If a future change shares the composition and one route mutates
-	// it, this fails.
+describe('per-route hook composition', () => {
 	it('shared-guard derive state does not bleed across two identical routes', async () => {
 		let counter = 0
 
@@ -111,14 +81,10 @@ describe('per-route hook composition isolation (shared-mutation guard)', () => {
 			.get('/a', ({ ticket }: any) => ticket)
 			.get('/b', ({ ticket }: any) => ticket)
 
-		// Each request must get a fresh, independent derive result. If the two
-		// routes shared a mutable composed hook and the derive array were spliced
-		// / reused in place, the second route could observe stale state.
 		const a1 = await (await app.handle(req('/a'))).text()
 		const b1 = await (await app.handle(req('/b'))).text()
 		const a2 = await (await app.handle(req('/a'))).text()
 
-		// strictly increasing, per-request — no cross-route reuse of a value
 		expect(Number(a1)).toBeGreaterThan(0)
 		expect(Number(b1)).toBe(Number(a1) + 1)
 		expect(Number(a2)).toBe(Number(b1) + 1)
@@ -129,7 +95,6 @@ describe('per-route hook composition isolation (shared-mutation guard)', () => {
 
 		const app = new Elysia()
 			.guard({})
-			// /a carries an extra local beforeHandle; /b must NOT run it
 			.get(
 				'/a',
 				{
@@ -142,14 +107,14 @@ describe('per-route hook composition isolation (shared-mutation guard)', () => {
 			.get('/b', () => 'b')
 
 		await app.handle(req('/b'))
-		expect(marks).toEqual([]) // /b never ran /a's local hook
+		expect(marks).toEqual([])
 
 		await app.handle(req('/a'))
 		expect(marks).toEqual(['a-local'])
 	})
 })
 
-describe('unknown model-name schema refs fail loud at build time, not per-request', () => {
+describe('model references', () => {
 	it('unknown route-local ref throws at compile() with route + name', () => {
 		const app = new Elysia().get('/', { query: 'Nope' as any }, () => 'ok')
 
@@ -187,16 +152,7 @@ describe('unknown model-name schema refs fail loud at build time, not per-reques
 		expect(() => app.compile()).not.toThrow()
 	})
 
-	// A string ref does NOT only live on the route-local hook — it also enters at
-	// COMPOSE time (guard/group chain nodes, standalone slot bags, macros) and the
-	// `response: { default }` status key sidesteps the digit-first heuristic. Each
-	// of these previously slipped past the build-time assert and re-surfaced as the
-	// opaque per-request `Schema reference "X" not found in models` 500. Pin every
-	// shape to the LOUD build-time error.
-
-	// Shape 1 — the most common: a guard-level `{ query: 'X' }` inherited by the
-	// route. Lives on a chain node, never on route[4].
-	it('unknown GUARD-level ref throws loud at compile()', () => {
+	it('unknown guard-level ref throws during compilation', () => {
 		const app = new Elysia()
 			.guard({ query: 'GuardQ' as any })
 			.get('/', () => 'x')
@@ -205,9 +161,7 @@ describe('unknown model-name schema refs fail loud at build time, not per-reques
 		expect(() => app.compile()).toThrow(/GET \//)
 	})
 
-	// Shape 2 — guard-level STANDALONE schema: rides the composed hook's
-	// `schemas[]` slot bag, not a direct key.
-	it('unknown guard-level STANDALONE ref throws loud at compile()', () => {
+	it('unknown standalone guard ref throws during compilation', () => {
 		const app = new Elysia()
 			.guard({ schema: 'standalone', query: 'GuardGhost' as any })
 			.get('/', () => 'x')
@@ -217,9 +171,7 @@ describe('unknown model-name schema refs fail loud at build time, not per-reques
 		)
 	})
 
-	// Shape 3 — a MACRO that injects a schema: the ref only exists after macro
-	// resolution (`~applyMacro`), which the raw-route scan never ran.
-	it('unknown MACRO-injected schema ref throws loud at compile()', () => {
+	it('unknown macro-injected ref throws during compilation', () => {
 		const app = new Elysia()
 			.macro({ withSchema: () => ({ query: 'MacroGhost' as any }) })
 			.get('/', { withSchema: true }, () => 'x')
@@ -229,10 +181,7 @@ describe('unknown model-name schema refs fail loud at build time, not per-reques
 		)
 	})
 
-	// Shape 4 — `response: { default: 'X' }` with NO digit key: `default` is a
-	// real status key at runtime (Validator.response), but the digit-first
-	// heuristic never fired on it.
-	it('unknown response DEFAULT-key ref throws loud with the status', () => {
+	it('unknown default response ref reports its status key', () => {
 		const app = new Elysia().get(
 			'/r',
 			{ response: { default: 'BadRef' as any } },
@@ -243,11 +192,7 @@ describe('unknown model-name schema refs fail loud at build time, not per-reques
 		expect(() => app.compile()).toThrow(/response default/)
 	})
 
-	// False-throw guard: a BARE inline response schema whose object happens to
-	// carry a `default`-named property (or a top-level `default` schema option)
-	// is a single schema, NOT a status record — its keys are not model refs and
-	// must not be scanned. Distinguished by `~kind` exactly as the runtime does.
-	it('bare inline response schema with a `default` property does NOT throw', () => {
+	it('accepts an inline response schema with a `default` property', () => {
 		const app = new Elysia().get(
 			'/inline',
 			{ response: t.Object({ default: t.String() }) },
@@ -283,15 +228,8 @@ describe('unknown model-name schema refs fail loud at build time, not per-reques
 	})
 })
 
-// PERF-1: `#buildRouter` no longer runs the full `composeRouteHook` assert for
-// every route — a cheap `#routeMayHaveModelRef` pre-scan gates it. The gate must
-// be conservative: any string model ref that could reach the composed hook
-// (route-local, chain-level guard, standalone bag, or a macro that might inject
-// one) still forces the loud build-time error. A false-negative would silently
-// downgrade the loud compile error to an opaque per-request 500 — these pin that
-// the fast path never swallows a real ref. (Shapes 1–4 above cover the rest.)
-describe('PERF-1 — model-ref pre-scan gate stays conservative', () => {
-	it('chain-level (guard-before-routes) string ref STILL throws at compile()', () => {
+describe('model reference pre-scan', () => {
+	it('finds a guard ref inherited by multiple routes', () => {
 		const app = new Elysia()
 			.guard({ query: 'ChainGhost' as any })
 			.get('/a', () => 'x')
@@ -302,7 +240,7 @@ describe('PERF-1 — model-ref pre-scan gate stays conservative', () => {
 		)
 	})
 
-	it('a plain app with NO refs and NO models compiles fine (fast path)', () => {
+	it('accepts an application without model references', () => {
 		const app = new Elysia()
 			.get('/a', () => 'x')
 			.post(
@@ -365,12 +303,8 @@ describe('PERF-1 — model-ref pre-scan gate stays conservative', () => {
 	})
 })
 
-// DX-2: a route that fails to COMPILE (e.g. an invalid schema slot) must surface
-// its method + path, not an opaque context-free 500. Both the eager (`compile()`)
-// and lazy (first request → `#jitHandler`) compile paths wrap the throw. Run with
-// `env -u NODE_ENV` — production redaction strips the detail body.
-describe('DX-2 — compile failures carry route context', () => {
-	it('eager compile() throws with the route method + path', () => {
+describe('route compilation errors', () => {
+	it('eager compilation includes the route method and path', () => {
 		const app = new Elysia().get(
 			'/bad',
 			{ headers: { 'x-a': '1' } } as any,
@@ -380,7 +314,7 @@ describe('DX-2 — compile failures carry route context', () => {
 		expect(() => app.compile()).toThrow(/Failed to compile route GET \/bad/)
 	})
 
-	it('lazy first-request path surfaces the route in the 500 detail', async () => {
+	it('lazy compilation includes the route in the error response', async () => {
 		const app = new Elysia().get(
 			'/bad',
 			{ headers: { 'x-a': '1' } } as any,

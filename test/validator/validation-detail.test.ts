@@ -1,8 +1,6 @@
 import { describe, it, expect } from 'bun:test'
 
-// `isProduction` (src/error.ts) is evaluated once at module load, so the gate
-// can't be toggled in-process. Each scenario is therefore run in a fresh `bun`
-// process (see validation-detail.fixture.ts) with NODE_ENV pre-set.
+// Run each environment in a child process so its scenarios share no module state.
 const FIXTURE = new URL('./validation-detail.fixture.ts', import.meta.url)
 	.pathname
 
@@ -11,7 +9,9 @@ interface Scenario {
 	body: any
 }
 
-const run = async (nodeEnv: string): Promise<Record<string, Scenario>> => {
+const runFixture = async (
+	nodeEnv: string
+): Promise<Record<string, Scenario>> => {
 	const env: Record<string, string> = {}
 	for (const k in process.env)
 		if (process.env[k] !== undefined) env[k] = process.env[k] as string
@@ -51,177 +51,180 @@ const run = async (nodeEnv: string): Promise<Record<string, Scenario>> => {
 	return parsed
 }
 
-describe('validation detail — production gating', () => {
-	it('production omits schema detail, honors allowUnsafe + custom message', async () => {
-		const r = await run('production')
+const results = new Map<string, Promise<Record<string, Scenario>>>()
 
-		// default → minimal { type, on, property, found }, no schema-revealing
-		// fields.: `property` (instance path only) IS now included so the
-		// client knows which field failed; schema-derived `expected`/`errors` are
-		// still withheld.
-		expect(r.default.status).toBe(422)
-		expect(r.default.body.type).toBe('validation')
-		expect(r.default.body.on).toBe('body')
-		// `found` redacted in production (request input may be PII)
-		expect(r.default.body.found).toBeUndefined()
-		expect(r.default.body.property).toBe('/x')
-		expect(r.default.body.expected).toBeUndefined()
-		expect(r.default.body.errors).toBeUndefined()
+const run = (nodeEnv: string) => {
+	let result = results.get(nodeEnv)
+	if (!result) {
+		result = runFixture(nodeEnv)
+		results.set(nodeEnv, result)
+	}
+	return result
+}
 
-		// allowUnsafeValidationDetails → full detail restored in production
-		expect(r.allowUnsafe.body.property).toBeDefined()
-		expect(r.allowUnsafe.body.errors).toBeArray()
+describe('validation detail', () => {
+	describe('production masking', () => {
+		it('keeps request failures actionable without exposing input or schema details', async () => {
+			const r = await run('production')
 
-		// validationDetail custom message is surfaced without leaking schema
-		expect(r.validationDetailMessage.body.message).toBe(
-			'x must be a number'
-		)
-		expect(r.validationDetailMessage.body.errors).toBeUndefined()
-		expect(r.validationDetailMessage.body.value).toBeUndefined()
+			expect(r.maskedRequest.status).toBe(422)
+			expect(r.maskedRequest.body.type).toBe('validation')
+			expect(r.maskedRequest.body.on).toBe('body')
+			expect(r.maskedRequest.body.property).toBe('/x')
+			expect(r.maskedRequest.body.found).toBeUndefined()
+			expect(r.maskedRequest.body.expected).toBeUndefined()
+			expect(r.maskedRequest.body.errors).toBeUndefined()
+		})
 
-		// error.detail → minimal in production (: no `found` echo)
-		expect(r.detail.body.message).toBe('x must be a number')
-		expect(r.detail.body.found).toBeUndefined()
-		expect(r.detail.body.errors).toBeUndefined()
+		it('restores request details when allowUnsafeValidationDetails is enabled', async () => {
+			const r = await run('production')
 
-		// error.detail → full when allowUnsafe even in production
-		expect(r.detailAllowUnsafe.body.errors).toBeArray()
+			expect(r.unsafeRequest.body.property).toBeDefined()
+			expect(r.unsafeRequest.body.errors).toBeArray()
+			expect(r.unsafeErrorDetail.body.errors).toBeArray()
+		})
 
-		// nested custom error resolves via findCustomError path navigation
-		expect(r.nestedCustomError.status).toBe(422)
-		expect(r.nestedCustomError.body.message).toBe('age must be a number')
+		it('returns custom messages without exposing schema details', async () => {
+			const r = await run('production')
 
-		// the custom-error path used findCustomError, NOT TypeBox Errors:
-		// the throwing thunk was never consulted (status 422, message present)
-		expect(r.findCustomErrorBypass.status).toBe(422)
-		expect(r.findCustomErrorBypass.body.message).toBe(
-			'from findCustomError'
-		)
-		expect(r.findCustomErrorBypass.body.found).toBeUndefined()
+			expect(r.customRequestMessage.body.message).toBe(
+				'x must be a number'
+			)
+			expect(r.customRequestMessage.body.errors).toBeUndefined()
+			expect(r.customRequestMessage.body.value).toBeUndefined()
+			expect(r.maskedErrorDetail.body.message).toBe('x must be a number')
+			expect(r.maskedErrorDetail.body.found).toBeUndefined()
+			expect(r.maskedErrorDetail.body.errors).toBeUndefined()
+		})
+
+		it('finds a nested custom error without enumerating TypeBox errors', async () => {
+			const r = await run('production')
+
+			expect(r.nestedCustomError.status).toBe(422)
+			expect(r.nestedCustomError.body.message).toBe(
+				'age must be a number'
+			)
+			expect(r.customErrorWithoutErrorEnumeration.status).toBe(422)
+			expect(r.customErrorWithoutErrorEnumeration.body.message).toBe(
+				'from findCustomError'
+			)
+			expect(
+				r.customErrorWithoutErrorEnumeration.body.found
+			).toBeUndefined()
+		})
+
+		it('returns a generic 500 without echoing an invalid server response', async () => {
+			const r = await run('production')
+
+			expect(r.maskedResponse.status).toBe(500)
+			expect(r.maskedResponse.body.type).toBe('internal-server-error')
+			expect(r.maskedResponse.body.status).toBe(500)
+			expect(r.maskedResponse.body.found).toBeUndefined()
+			expect(r.maskedResponse.body.errors).toBeUndefined()
+			expect(JSON.stringify(r.maskedResponse.body)).not.toContain(
+				'SECRET'
+			)
+			expect(JSON.stringify(r.maskedResponse.body)).not.toContain(
+				'passwordHash'
+			)
+		})
+
+		it('does not pass an invalid server response to a custom error callback', async () => {
+			const r = await run('production')
+
+			expect(r.maskedResponseCustomError.status).toBe(500)
+			expect(
+				JSON.stringify(r.maskedResponseCustomError.body)
+			).not.toContain('SECRET_TOKEN')
+		})
+
+		it('restores response details when allowUnsafeValidationDetails is enabled', async () => {
+			const r = await run('production')
+
+			expect(r.unsafeResponse.status).toBe(422)
+			expect(r.unsafeResponse.body.on).toBe('response')
+		})
+
+		it('names the failing request field without echoing input', async () => {
+			const r = await run('production')
+
+			expect(r.maskedRequestProperty.status).toBe(422)
+			expect(r.maskedRequestProperty.body.property).toBe('/x')
+			expect(r.maskedRequestProperty.body.found).toBeUndefined()
+			expect(r.maskedRequestProperty.body.errors).toBeUndefined()
+			expect(r.maskedRequestProperty.body.expected).toBeUndefined()
+		})
+
+		it('only derives property from structured instance paths', async () => {
+			const r = await run('production')
+
+			expect(r.freeTextPath.status).toBe(422)
+			expect(r.freeTextPath.body.property).toBe('root')
+			expect(JSON.stringify(r.freeTextPath.body)).not.toContain(
+				'secret field'
+			)
+			expect(r.freeTextPath.body.type).toBe('validation')
+			expect(r.instancePath.status).toBe(422)
+			expect(r.instancePath.body.property).toBe('/x')
+		})
 	})
 
-	it('returns a generic 500 without echoing an invalid server response', async () => {
-		const r = await run('production')
+	describe('Standard Schema path formatting', () => {
+		it('renders object path segments as a JSON pointer in payload.property', async () => {
+			const r = await run('production')
 
-		// A response-schema failure is a SERVER bug, not a client (422) error, and
-		// `this.value` is the server's own response. In production it must become a
-		// generic 500 problem+json with NO found/errors/property and no secret.
-		expect(r.responseLeak.status).toBe(500)
-		expect(r.responseLeak.body.type).toBe('internal-server-error')
-		expect(r.responseLeak.body.status).toBe(500)
-		expect(r.responseLeak.body.found).toBeUndefined()
-		expect(r.responseLeak.body.errors).toBeUndefined()
-		// the offending server object (incl. secrets) must not appear anywhere
-		expect(JSON.stringify(r.responseLeak.body)).not.toContain('SECRET')
-		expect(JSON.stringify(r.responseLeak.body)).not.toContain(
-			'passwordHash'
-		)
-
-		// a custom-error callback on the response schema must not receive the
-		// server value (so it can't echo it) and must not yield a 422
-		expect(r.responseCustomError.status).toBe(500)
-		expect(JSON.stringify(r.responseCustomError.body)).not.toContain(
-			'SECRET_TOKEN'
-		)
-
-		// opt-out restores full response detail under production
-		expect(r.responseAllowUnsafe.status).toBe(422)
-		expect(r.responseAllowUnsafe.body.on).toBe('response')
-	})
-
-	it('request-side production 422 names the failing field without echoing input', async () => {
-		const r = await run('production')
-
-		// An API consumer needs to know WHICH field failed to fix their request;
-		// the instance path is safe (no schema info, no messages).
-		expect(r.requestProperty.status).toBe(422)
-		expect(r.requestProperty.body.property).toBe('/x')
-		// `found` is NO LONGER echoed in production — even the client's
-		// own input can carry passwords/tokens/PII that leak into error trackers,
-		// proxy logs, and HAR exports.
-		expect(r.requestProperty.body.found).toBeUndefined()
-		// and nothing schema-revealing
-		expect(r.requestProperty.body.errors).toBeUndefined()
-		expect(r.requestProperty.body.expected).toBeUndefined()
-	})
-
-	it('production `property` only reflects instance-path-shaped data', async () => {
-		const r = await run('production')
-
-		// a hand-crafted issue whose only path is a free-text string (no real
-		// validator emits this) must NOT surface as `property` — it collapses to
-		// 'root' so schema/message text can't leak through the trust boundary
-		expect(r.propertyFreeTextString.status).toBe(422)
-		expect(r.propertyFreeTextString.body.property).toBe('root')
-		expect(JSON.stringify(r.propertyFreeTextString.body)).not.toContain(
-			'secret field'
-		)
-		// response-type still fully masked (no property surfaced at all)
-		expect(r.propertyFreeTextString.body.type).toBe('validation')
-
-		// a real `instancePath` JSON pointer still passes through unchanged
-		expect(r.propertyInstancePath.status).toBe(422)
-		expect(r.propertyInstancePath.body.property).toBe('/x')
-	})
-
-	it('Standard Schema object path segments render as `/user/name`, not `[object Object]`', async () => {
-		const r = await run('production')
-
-		// A Standard Schema issue path is an array of `{ key }` objects; production
-		// `payload.property` must extract `.key` per segment (mirroring `found`),
-		// otherwise it emits `/[object Object]/[object Object]` and hides the field.
-		expect(r.propertyStandardObjectSegments.status).toBe(422)
-		expect(r.propertyStandardObjectSegments.body.property).toBe(
-			'/user/name'
-		)
-		expect(r.propertyStandardObjectSegments.body.property).not.toContain(
-			'[object Object]'
-		)
-	})
-
-	it('`.all` dotted path from Standard Schema object segments renders as `user.name`', async () => {
-		// env-independent — same root cause, same shared segment stringifier
-		for (const env of ['production', 'development']) {
-			const r = await run(env)
-			expect(Array.isArray(r.allStandardObjectSegments.body)).toBe(true)
-			expect(r.allStandardObjectSegments.body[0].path).toBe('user.name')
-			expect(r.allStandardObjectSegments.body[0].path).not.toContain(
+			expect(r.standardPathInPayload.status).toBe(422)
+			expect(r.standardPathInPayload.body.property).toBe('/user/name')
+			expect(r.standardPathInPayload.body.property).not.toContain(
 				'[object Object]'
 			)
-		}
+		})
+
+		it('renders object path segments as dotted paths in error.all', async () => {
+			for (const env of ['production', 'development']) {
+				const r = await run(env)
+				expect(Array.isArray(r.standardPathInAll.body)).toBe(true)
+				expect(r.standardPathInAll.body[0].path).toBe('user.name')
+				expect(r.standardPathInAll.body[0].path).not.toContain(
+					'[object Object]'
+				)
+			}
+		})
 	})
 
-	it('non-production keeps full detail (gate off)', async () => {
-		const r = await run('development')
+	describe('development detail', () => {
+		it('includes full request and response validation details', async () => {
+			const r = await run('development')
 
-		expect(r.default.body.property).toBeDefined()
-		expect(r.default.body.errors).toBeArray()
+			expect(r.maskedRequest.body.property).toBeDefined()
+			expect(r.maskedRequest.body.errors).toBeArray()
+			expect(r.maskedResponse.status).toBe(422)
+			expect(r.maskedResponse.body.on).toBe('response')
+			expect(r.maskedResponse.body.errors).toBeArray()
+		})
 
-		// Production masking does not apply in development, which keeps full detail.
-		// (the developer inspects their own server's response — no leak surface).
-		expect(r.responseLeak.status).toBe(422)
-		expect(r.responseLeak.body.on).toBe('response')
-		expect(r.responseLeak.body.errors).toBeArray()
-	})
+		it('bounds the serialized found value by UTF-8 bytes', async () => {
+			const r = await run('development')
+			const found = JSON.stringify(
+				r.oversizedMultibyteInput.body.found ?? ''
+			)
 
-	it('bounds the serialized found echo by UTF-8 bytes', async () => {
-		const r = await run('development')
-		const found = JSON.stringify(r.cjkEcho.body.found ?? '')
+			expect(r.oversizedMultibyteInput.status).toBe(422)
+			expect(new TextEncoder().encode(found).length).toBeLessThanOrEqual(
+				8192
+			)
+		})
 
-		expect(r.cjkEcho.status).toBe(422)
-		expect(new TextEncoder().encode(found).length).toBeLessThanOrEqual(8192)
-	})
+		it('formats failures without replaying user refinements', async () => {
+			const r = await run('development')
 
-	it('formats validation failures without replaying user refinements', async () => {
-		const r = await run('development')
-
-		expect(r.refineNoReplay.status).toBe(422)
-		expect(r.refineNoReplay.body.responseStatus).toBe(422)
-		expect(r.refineNoReplay.body.responseBody.errors).toBeArray()
-		expect(r.refineNoReplay.body.calls).toBe(1)
-
-		expect(r.patternError.status).toBe(422)
-		expect(r.patternError.body.errors).toBeArray()
-		expect(r.patternError.body.detail).toContain('pattern')
+			expect(r.refinementCallCount.status).toBe(422)
+			expect(r.refinementCallCount.body.responseStatus).toBe(422)
+			expect(r.refinementCallCount.body.responseBody.errors).toBeArray()
+			expect(r.refinementCallCount.body.calls).toBe(1)
+			expect(r.patternFailure.status).toBe(422)
+			expect(r.patternFailure.body.errors).toBeArray()
+			expect(r.patternFailure.body.detail).toContain('pattern')
+		})
 	})
 })

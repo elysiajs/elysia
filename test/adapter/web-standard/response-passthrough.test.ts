@@ -2,43 +2,30 @@ import { describe, it, expect } from 'bun:test'
 import { mapResponse } from '../../../src/adapter/web-standard/handler'
 import { skipClone } from '../../../src/adapter/skip-clone'
 
-// a returned `Response` with an untouched `set` should pass through by
-// reference (no rewrap allocation, no re-locking a single-use stream body),
-// while a touched `set` still rewraps so headers/status are applied.
 describe('mapResponse — Response pass-through', () => {
 	it('returns a Response by reference when set is untouched', () => {
 		const original = new Response('hi')
 		expect(mapResponse(original, { headers: {} } as any)).toBe(original)
 	})
 
-	it('rewraps (not by reference) when set.status is assigned', () => {
+	it('returns a new Response when set.status changes', () => {
 		const original = new Response('hi')
 		const res = mapResponse(original, { headers: {}, status: 201 } as any)
 		expect(res).not.toBe(original)
 		expect(res.status).toBe(201)
 	})
 
-	// a touched set with the same status must NOT mutate the returned
-	// Response in place — a shared/module-level Response would otherwise carry
-	// one request's headers onto the next. It rewraps via response.body (which
-	// preserves the in-memory body and its content-length) and leaves the
-	// original untouched.
-	it('rewraps and leaves the original untouched when set.headers is applied', () => {
+	it('applies set.headers without mutating the original Response', () => {
 		const original = new Response('hi')
 		const res = mapResponse(original, {
 			headers: { 'x-add': '1' }
 		} as any)
 		expect(res).not.toBe(original)
 		expect(res.headers.get('x-add')).toBe('1')
-		// the returned Response must not be mutated in place
 		expect(original.headers.get('x-add')).toBeNull()
 	})
 })
 
-// the error.toResponse() flow (validation 422s, custom errors) reaches
-// mapResponse with set.status already equal to the finished Response's own
-// status — nothing would change, so the Response must pass through by
-// reference instead of being torn apart and rewrapped as a stream body.
 describe('mapResponse — no-op set pass-through', () => {
 	it('passes a Response through by reference when set.status matches', () => {
 		const original = new Response('error', { status: 422 })
@@ -49,7 +36,7 @@ describe('mapResponse — no-op set pass-through', () => {
 		expect(res).toBe(original)
 	})
 
-	it('rewraps when cookies are set', () => {
+	it('returns a new Response when cookies are set', () => {
 		const original = new Response('error', { status: 422 })
 		const res = mapResponse(original, {
 			headers: {},
@@ -62,10 +49,6 @@ describe('mapResponse — no-op set pass-through', () => {
 	})
 })
 
-// header merge boundaries — mergeHeaders precedence (response wins) is
-// applied onto a fresh clone (never the original), and set-cookie always falls
-// back to the rewrap path so a shared/cached Response can never accumulate
-// cookies.
 describe('mapResponse — header merge', () => {
 	it('response headers win over set.headers on the merged clone', () => {
 		const original = new Response('hi', {
@@ -77,18 +60,16 @@ describe('mapResponse — header merge', () => {
 		expect(res).not.toBe(original)
 		expect(res.headers.get('x-a')).toBe('response')
 		expect(res.headers.get('x-b')).toBe('set')
-		// original stays as it was returned by the handler
 		expect(original.headers.get('x-b')).toBeNull()
 	})
 
-	it('rewraps when set.headers carries set-cookie', () => {
+	it('returns a new Response when set.headers contains Set-Cookie', () => {
 		const original = new Response('hi')
 		const res = mapResponse(original, {
 			headers: { 'set-cookie': 'a=b' }
 		} as any)
 		expect(res).not.toBe(original)
 		expect(res.headers.getAll('set-cookie')).toEqual(['a=b'])
-		// in-place merge must be skipped: the original stays untouched
 		expect(original.headers.get('set-cookie')).toBeNull()
 	})
 })
@@ -139,16 +120,8 @@ describe('mapResponse — Response and framework cookie union', () => {
 	})
 })
 
-// a `Response.body` is a one-shot ReadableStream. When a shared/module-level
-// Response is returned from a header-setting route, the rewrap must TEE the body
-// (via `response.clone().body`) so every request gets a fresh readable and the
-// original stays consumable for the next hit. Rewrapping with the raw
-// `response.body` transferred (locked) the stream, so request 1 worked and
-// request 2 threw `ReadableStream has already been used` → HTTP 500. WHY this
-// matters: returning a cached Response is an idiomatic micro-optimization; it
-// must survive repeated use, not blow up on the 2nd request.
 describe('mapResponse — shared Response body reuse', () => {
-	it('rereads the body across repeated requests (teed, not consumed)', async () => {
+	it('preserves the body across repeated mappings', async () => {
 		const shared = new Response('hello', {
 			headers: { 'content-type': 'text/plain' }
 		})
@@ -158,33 +131,18 @@ describe('mapResponse — shared Response body reuse', () => {
 				headers: { 'x-req': String(n) }
 			} as any) as Response
 
-			// body readable every time — the raw-body rewrap threw here on n===2
 			expect(await res.text()).toBe('hello')
 			expect(res.status).toBe(200)
-			// content-type preserved from the original response
 			expect(res.headers.get('content-type')).toBe('text/plain')
-			// per-request header isolation: only this request's x-req is present
 			expect(res.headers.get('x-req')).toBe(String(n))
 		}
 
-		// the shared original is never consumed or mutated by the rewrap
 		expect(await shared.clone().text()).toBe('hello')
 		expect(shared.headers.get('x-req')).toBeNull()
 	})
 })
 
-// when status/cookies/headers must be merged into a returned Response,
-// `Response.clone()` TEES the body. On normal completion the orphan branch is
-// never drained, so a full second copy of the body stays retained (a 64×1MiB
-// probe re-read all 64 chunks from the orphan). SHIPPED SEMANTICS: unmarked
-// (possibly shared/module-level) Responses keep the clone-tee path so repeated
-// reuse still works; framework-generated PER-REQUEST responses carry the
-// internal `skipClone` transferable marker and transfer their body ZERO-COPY
-// (no clone, no orphan branch, no retained second copy).
-describe('mapResponse — retained bytes on header merge', () => {
-	// Count how many source chunks are pulled: with a tee, the orphan branch
-	// retains every produced chunk; with zero-copy transfer, chunks flow only
-	// to the single served reader and nothing is buffered on a second branch.
+describe('mapResponse — Response body ownership', () => {
 	const makeCountedStream = (chunks: number, size: number) => {
 		const counter = { pulled: 0 }
 		const stream = new ReadableStream({
@@ -205,12 +163,11 @@ describe('mapResponse — retained bytes on header merge', () => {
 		}
 	}
 
-	it('does NOT retain a second body copy for a marked per-request response', async () => {
-		const { stream, counter } = makeCountedStream(8, 1 << 16) // 8 × 64KiB
+	it('does not retain a second body copy for a marked response', async () => {
+		const { stream, counter } = makeCountedStream(8, 1 << 16)
 		const response = new Response(stream, {
 			headers: { 'content-type': 'application/octet-stream' }
 		})
-		// framework per-request marker → zero-copy transfer path
 		skipClone.add(response)
 
 		const mapped = mapResponse(response, {
@@ -222,17 +179,11 @@ describe('mapResponse — retained bytes on header merge', () => {
 
 		await drain(mapped)
 
-		// Zero-copy: exactly the 8 chunks the single served reader pulled.
-		// The clone-tee path would additionally buffer all 8 on the orphan
-		// branch (retained until GC) — this asserts retention, not just status.
 		expect(counter.pulled).toBe(8)
-		// no independent second reader survived (marker consumed, body moved)
 		expect(response.bodyUsed).toBe(true)
 	})
 
-	it('unmarked (possibly shared) Response still clone-tees so reuse survives', async () => {
-		// The pinned contract: an unmarked Response must remain re-readable, so
-		// the clone path is REQUIRED here even though it retains an orphan copy.
+	it('preserves an unmarked Response for reuse', async () => {
 		const shared = new Response('hello', {
 			headers: { 'content-type': 'text/plain' }
 		})
@@ -242,19 +193,15 @@ describe('mapResponse — retained bytes on header merge', () => {
 		} as any) as Response
 
 		expect(await mapped.text()).toBe('hello')
-		// the original stays independently readable (this is why we clone-tee)
 		expect(await shared.clone().text()).toBe('hello')
 	})
 })
 
-describe('mapResponse — shared chunked reuse (continued)', () => {
+describe('mapResponse — shared chunked Response reuse', () => {
 	it('streams a shared chunked Response across repeated requests', async () => {
-		// no content-length + transfer-encoding: chunked routes into the stream
-		// branch, which consumes the CLONED body (never the original)
-		const shared = new Response(
-			new TextEncoder().encode('shared-chunk'),
-			{ headers: { 'transfer-encoding': 'chunked' } }
-		)
+		const shared = new Response(new TextEncoder().encode('shared-chunk'), {
+			headers: { 'transfer-encoding': 'chunked' }
+		})
 
 		const read = async (res: Response) => {
 			const reader = res.body!.getReader()

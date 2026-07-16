@@ -3,8 +3,8 @@ import { Elysia } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { post, req } from '../utils'
 
-describe('map derive', () => {
-	it('work', async () => {
+describe('mapDerive', () => {
+	it('replaces the derived context with its returned fields', async () => {
 		const app = new Elysia()
 			.derive(() => ({
 				hi: () => 'hi'
@@ -47,7 +47,7 @@ describe('map derive', () => {
 		})
 	})
 
-	it('inherits plugin', async () => {
+	it('maps a global derive inside a plugin', async () => {
 		const plugin = new Elysia()
 			.derive('global', () => ({
 				hi: () => 'hi'
@@ -67,7 +67,7 @@ describe('map derive', () => {
 		expect(res2).toBe('hi')
 	})
 
-	it('not inherits plugin on local', async () => {
+	it('keeps a local mapped derive inside its plugin', async () => {
 		const plugin = new Elysia()
 			.derive(() => ({
 				hi: () => 'hi'
@@ -76,17 +76,23 @@ describe('map derive', () => {
 				...derivatives,
 				hi2: () => 'hi'
 			}))
+			.get('/mapped', ({ hi2 }) => hi2())
 
 		const app = new Elysia()
 			.use(plugin)
 			// @ts-expect-error
 			.get('/', ({ hi2 }) => typeof hi2 === 'undefined')
 
-		const res = await app.handle(req('/')).then((t) => t.text())
-		expect(res).toBe('true')
+		const [outer, inner] = await Promise.all([
+			app.handle(req('/')).then((response) => response.text()),
+			app.handle(req('/mapped')).then((response) => response.text())
+		])
+
+		expect(outer).toBe('true')
+		expect(inner).toBe('hi')
 	})
 
-	it('can mutate store', async () => {
+	it('can expose a helper that mutates the store', async () => {
 		const app = new Elysia()
 			.state('counter', 1)
 			.mapDerive(({ store }) => ({
@@ -102,7 +108,7 @@ describe('map derive', () => {
 		expect(res).toBe('2')
 	})
 
-	it('derive with static analysis', async () => {
+	it('can read a destructured request header', async () => {
 		const app = new Elysia()
 			.mapDerive(({ headers: { name } }) => ({
 				name
@@ -122,7 +128,7 @@ describe('map derive', () => {
 		expect(res).toBe('Elysia')
 	})
 
-	it('store in the same stack as transform', async () => {
+	it('runs between app and route-local beforeHandle hooks', async () => {
 		const stack: number[] = []
 
 		const app = new Elysia()
@@ -155,7 +161,7 @@ describe('map derive', () => {
 		expect(stack).toEqual([1, 2, 3])
 	})
 
-	it('map derive in order', async () => {
+	it('runs mapped derives in registration order', async () => {
 		let order = <string[]>[]
 
 		const app = new Elysia()
@@ -174,7 +180,7 @@ describe('map derive', () => {
 		expect(order).toEqual(['A', 'B'])
 	})
 
-	it('as local', async () => {
+	it('runs locally only on routes declared by its plugin', async () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
@@ -195,7 +201,7 @@ describe('map derive', () => {
 		expect(called).toEqual(['/inner'])
 	})
 
-	it('as global', async () => {
+	it('runs globally on plugin and parent routes', async () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
@@ -225,12 +231,10 @@ describe('map derive', () => {
 				name: 'Elysia'
 			}))
 
-		const app = new Elysia()
-			.use(plugin)
-			.get('/', (context: any) => ({
-				old: context.old,
-				name: context.name
-			}))
+		const app = new Elysia().use(plugin).get('/', (context: any) => ({
+			old: context.old,
+			name: context.name
+		}))
 
 		const res = await app.handle(req('/')).then((t) => t.json())
 
@@ -239,7 +243,7 @@ describe('map derive', () => {
 		})
 	})
 
-	it('handler sees both mapped properties and all context fields after mapDerive', async () => {
+	it('preserves request context fields beside mapped properties', async () => {
 		let capturedContext: any
 
 		const app = new Elysia()
@@ -259,12 +263,11 @@ describe('map derive', () => {
 		expect(capturedContext.path).toBe('/')
 	})
 
-	it('context field takes precedence over same-named derivative property', async () => {
+	it('gives request context fields precedence over mapped properties', async () => {
 		let capturedPath: any
 
 		const app = new Elysia()
 			.mapDerive(() => ({
-				// derivative also has 'path' — context value must win
 				path: 'SHOULD_BE_OVERWRITTEN'
 			}))
 			.get('/real-path', (context: any) => {
@@ -274,56 +277,44 @@ describe('map derive', () => {
 
 		await app.handle(req('/real-path'))
 
-		// The real context.path must overwrite derivative.path
 		expect(capturedPath).toBe('/real-path')
 	})
 
-	it('shared-object pollution: mapDerive must not mutate the returned object', async () => {
-		// If the user returns a shared/cached object, it must not be reparented
-		// or polluted with request-scoped context fields (cross-request leak).
+	it('does not mutate a shared returned object', async () => {
 		const shared = { user: 'x' }
 		const originalProto = Object.getPrototypeOf(shared)
 
-		const app = new Elysia()
-			.mapDerive(() => shared)
-			.get('/', () => 'ok')
+		const app = new Elysia().mapDerive(() => shared).get('/', () => 'ok')
 
 		await app.handle(req('/'))
 		await app.handle(req('/'))
 
-		// Prototype must be untouched
 		expect(Object.getPrototypeOf(shared)).toBe(originalProto)
-		// Request-scoped fields must NOT be on the shared object
 		expect('request' in shared).toBe(false)
 		expect('set' in shared).toBe(false)
 	})
 
-	it('cross-request leak: request A set must not be visible via shared object during request B', async () => {
-		// Regression for: replaceDeriveContext writing context fields onto derivative
-		// means a cached derivative carries stale per-request state into future requests.
+	it('does not copy request state onto a shared returned object', async () => {
 		const shared = { user: 'singleton' }
 		const setValues: any[] = []
 
 		const app = new Elysia()
 			.mapDerive(() => shared)
 			.get('/', () => {
-				// shared must not have been mutated with any request's set
-				setValues.push(('set' in shared) ? (shared as any).set : undefined)
+				setValues.push(
+					'set' in shared ? (shared as any).set : undefined
+				)
 				return 'ok'
 			})
 
 		await app.handle(req('/'))
 		await app.handle(req('/'))
 
-		// shared must never have request.set injected into it
 		expect(setValues[0]).toBeUndefined()
 		expect(setValues[1]).toBeUndefined()
 	})
 
-	it('mapDerive derivative getters are snapshotted at merge (Object.assign copies value, not descriptor)', async () => {
-		// Object.assign copies the current VALUE of an accessor, not the getter descriptor.
-		// This is a documented behavior: live getters do not survive the merge.
-		// Tests assert the post-fix behavior explicitly so a future reader understands the contract.
+	it('snapshots getter values when merging mapped properties', async () => {
 		let callCount = 0
 		const derivative = {
 			get computed() {
@@ -334,12 +325,13 @@ describe('map derive', () => {
 
 		const app = new Elysia()
 			.mapDerive(() => derivative)
-			.get('/', (context: any) => context.computed ?? 'undefined')
+			.get('/', (context: any) => [context.computed, context.computed])
 
-		const res = await app.handle(req('/')).then((t) => t.text())
+		const res = await app
+			.handle(req('/'))
+			.then((response) => response.json())
 
-		// The getter was called once (during Object.assign) and the value was
-		// snapshotted — the handler sees the string, not a live getter.
-		expect(res).toMatch(/^computed-/)
+		expect(res).toEqual(['computed-1', 'computed-1'])
+		expect(callCount).toBe(1)
 	})
 })

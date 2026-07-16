@@ -1,6 +1,3 @@
-// Standalone esbuild → workerd build: our esbuild AOT plugin produces a
-// workerd-deployable bundle directly (no Wrangler bundling). Run under Bun, yet
-// `target: 'workerd'` bakes the workerd header path — so no Node-generation step.
 import * as esbuild from 'esbuild'
 import { aot } from 'elysia/plugin/aot/esbuild'
 import { resolve, dirname } from 'node:path'
