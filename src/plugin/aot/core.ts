@@ -411,11 +411,13 @@ export const STUB_SOURCES: Record<
 		},
 		{
 			// `describeRoute` (per-route descriptor) is only ever called on the
-			// live JIT path, immediately before `compileHandlerJit`; it pulls in
-			// `sucrose`. Stub it alongside the JIT compiler so the sucrose
-			// analyzer stays tree-shakeable in strip mode. The always-on exports
-			// `isEmptyPipelineHook` (native-static promotion) and
-			// `routeDescriptors` are sucrose-free and re-implemented here so the
+			// live JIT path, immediately before `compileHandlerJit`
+			//
+			// it pulls in `sucrose`. Stub it alongside the JIT compiler so the sucrose
+			// analyzer stays tree-shakeable in strip mode
+			//
+			// The always-on exports `isEmptyPipelineHook` (native-static promotion)
+			// and `routeDescriptors` are sucrose-free and re-implemented here so the
 			// non-JIT path keeps working.
 			filter: /[\\/]elysia[\\/](dist|src)[\\/]compile[\\/]handler[\\/]descriptor\.(m?js|ts)$/,
 			source:

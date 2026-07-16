@@ -26,7 +26,6 @@ export function collectStaticRoutes(app: AnyElysia) {
 
 	void app.fetch
 
-	// Post-seal (`void app.fetch` sealed the app): read the frozen generation.
 	const frozenRoot = frozenRootOf(app)
 	const fetchLevelHook = flattenChain(frozenRoot['~hookChain'])
 	if (
@@ -36,29 +35,27 @@ export function collectStaticRoutes(app: AnyElysia) {
 	)
 		return
 
-	// The columnar route table is populated by the build; read it (dense IDs,
-	// tuple-free) instead of the authoring log.
 	const table = app['~generation']?.routeTable ?? app['~routeTable']
 	const length = table?.length ?? 0
-	if (!length || !table) return
+	if (!table || !length) return
 
-	const methodCol = table.method
-	const pathCol = table.path
+	const methods = table.method
+	const paths = table.path
 
 	const ready: Record<string, Record<string, Response>> = nullObject()
 	const strictPath = frozenRoot['~config']?.strictPath === true
 	const seen = new Map<string, number>()
 
 	for (let i = 0; i < length; i++)
-		seen.set(methodCol[i] + ' ' + pathCol[i], i)
+		seen.set(methods[i] + ' ' + paths[i], i)
 
 	let explicitPaths: Map<string, Set<string>> | undefined
 	if (!strictPath) {
 		explicitPaths = new Map()
 
 		for (let i = 0; i < length; i++) {
-			const method = methodCol[i]
-			const path = pathCol[i]
+			const method = methods[i]
+			const path = paths[i]
 			let set = explicitPaths.get(method)
 
 			if (!set) explicitPaths.set(method, (set = new Set()))
@@ -77,10 +74,10 @@ export function collectStaticRoutes(app: AnyElysia) {
 	}
 
 	for (let i = 0; i < length; i++) {
-		const method = methodCol[i]
+		const method = methods[i]
 		if (method === 'WS') continue
 
-		const path = pathCol[i]
+		const path = paths[i]
 		if (seen.get(method + ' ' + path) !== i) continue
 		if (!nativeStaticMethods.has(method)) continue
 
@@ -266,6 +263,7 @@ export const BunAdapter = createAdapter({
 			if (app.pending) ready = app.modules.then(start)
 			else {
 				const result = start()
+
 				if (
 					result &&
 					typeof (result as Promise<unknown>).then === 'function'

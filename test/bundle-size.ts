@@ -13,7 +13,7 @@ const cases = {
 		//    ~1.4KB. Load-bearing seal machinery, not removable.
 		//  - C3 lazy signed-cookie verify (Q8): ~530B. resolvePendingCookie +
 		//    parseCookieRawLazy, statically imported by the Cookie class + handler
-		//    compiler (dormant unless a route runs the required-fields lazy lane).
+		//    compiler (dormant unless a route runs the lazy lazy lane).
 		//    Same lazy-registry follow-up could tree-shake it from cookie-free apps.
 		limit: 400 * 1024,
 		source: `import { Elysia, t } from './dist/index.mjs'; globalThis.app = new Elysia().get('/', () => 'ok', { query: t.Object({ q: t.String() }) })`,

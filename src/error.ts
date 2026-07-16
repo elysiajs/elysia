@@ -19,10 +19,6 @@ function freezeExpected(value: unknown): unknown {
 	return Object.freeze(value)
 }
 
-// Classify-only walk: same rules as freezeExpected but read-only, with cycle safety.
-// Returns true iff value is safe to structuredClone and cache (primitives, plain
-// objects/arrays recursively; rejects class instances, Date, RegExp, Map, Set,
-// typed arrays, functions, etc.).
 function isCacheableExpected(value: unknown, visited = new Set<object>()) {
 	if (value === null || value === undefined) return true
 

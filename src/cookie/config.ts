@@ -5,7 +5,7 @@ import { InvalidCookie } from './error'
 
 export interface AppCookieConfig extends CookieOptions {
 	sign?: true | string | string[]
-	verify?: 'required-fields' | 'all'
+	verify?: 'lazy' | 'eager'
 }
 
 export interface FieldCookieConfig {
@@ -21,7 +21,7 @@ export interface CompiledCookieConfig {
 	globalSignSet?: Set<string>
 	globalSecrets: string | null | (string | null)[] | undefined
 	hasSign: boolean
-	verify: 'required-fields' | 'all'
+	verify: 'lazy' | 'eager'
 }
 
 const ATTRIBUTE_KEYS = new Set([
@@ -158,7 +158,7 @@ export function compileCookieConfig(
 		globalSignSet: Array.isArray(globalSign) ? new Set(globalSign) : undefined,
 		globalSecrets,
 		hasSign,
-		verify: appConfig?.verify ?? 'required-fields'
+		verify: appConfig?.verify ?? 'lazy'
 	}
 }
 

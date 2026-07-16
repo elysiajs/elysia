@@ -3,9 +3,6 @@ import { ValidationError } from '../../error'
 import { nullObject } from '../../utils'
 import { ELYSIA_TYPES } from '../../type/constants'
 import { isFullyClosedObject } from '../../type/validator/clean-safe'
-// `StandardValidator` is bridge-free: it only calls `schema['~standard'].validate`
-// (see validator/index.ts). Importing it drags the late-bound `type/bridge` stubs,
-// not TypeBox itself, so the typebox-free invariant of this module holds.
 import { StandardValidator } from '../../validator'
 import { frozenRootOf } from '../../generation'
 
@@ -109,8 +106,7 @@ interface CompactError {
 }
 
 // TypeBox reports a scalar/type mismatch as `must be <schema.type>`
-// (see `typebox/locale/en_US` — the `type` keyword). We reproduce only the
-// dominant `type`/`required` keywords structurally, with no TypeBox at runtime.
+// reproduce only the dominant `type`/`required` keywords structurally
 function jsTypeMatches(value: unknown, type: string) {
 	switch (type) {
 		case 'string':

@@ -132,9 +132,9 @@ export interface ElysiaConfig<
 		sign?: true | string | string[]
 		/**
 		 * Verify signed cookies lazily on access or eagerly at request entry.
-		 * @default 'required-fields'
+		 * @default 'lazy'
 		 */
-		verify?: 'required-fields' | 'all'
+		verify?: 'lazy' | 'eager'
 	}
 
 	/**

@@ -4,10 +4,10 @@ import type { AnyElysia } from './base'
 import type { AnyLocalHook, InternalRoute } from './types'
 import type { ChainNode } from './utils'
 
-export const enum RouteFlag {
-	WS = 1,
-	Dynamic = 2
-}
+export const RouteFlag = {
+	WS: 1,
+	Dynamic: 2
+} as const
 
 export interface RouteTable {
 	readonly length: number
@@ -74,8 +74,8 @@ export function buildRouteTable(
 	}
 }
 
-export function routeRow(table: RouteTable, id: number): InternalRoute {
-	return [
+export const routeRow = (table: RouteTable, id: number) =>
+	[
 		table.method[id],
 		table.path[id],
 		table.handler[id],
@@ -85,4 +85,3 @@ export function routeRow(table: RouteTable, id: number): InternalRoute {
 		table.inheritedChain[id],
 		table.macroScope.get(id)
 	] as unknown as InternalRoute
-}

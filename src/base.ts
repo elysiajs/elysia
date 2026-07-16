@@ -5120,11 +5120,6 @@ export class Elysia<
 
 						if ('~standard' in value) models[key] = value
 						else {
-							// Snapshot so a caller mutating the schema object
-							// after `.model()` cannot change it, and so the
-							// `$id` write lands on our clone, never the user's
-							// object (C3). snapshotSchema returns a fresh mutable
-							// object, so the frozen-object dance is unneeded.
 							value = snapshotSchema(value)
 
 							// @ts-expect-error

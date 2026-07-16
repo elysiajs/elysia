@@ -15,9 +15,9 @@ import {
 	PROBLEM_JSON
 } from '../../error'
 
+import { defaultHeaders } from '../default-headers'
 import type { Context } from '../../context'
 import type { MaybePromise } from '../../types'
-import { defaultHeaders } from '../default-headers'
 
 function handleElysiaFile(
 	file: ElysiaFile,

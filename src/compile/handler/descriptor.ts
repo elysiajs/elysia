@@ -331,7 +331,7 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 
 	const lazyCookieVerify =
 		syncCookieSign &&
-		cookieConfig?.verify === 'required-fields' &&
+		cookieConfig?.verify === 'lazy' &&
 		!vali?.cookie
 
 	const hasErrorHook = !!hook?.error?.length

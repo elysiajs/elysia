@@ -2,10 +2,6 @@ import { describe, it, expect } from 'bun:test'
 import { Elysia, t } from '../../../src'
 import { tee } from '../../../src/adapter/utils'
 
-// A12 / Q6: built-in body dispatch confirms the normalized media-type essence.
-// Schema-less routes stay lenient. Schema routes reject a media type with 415
-// only when their top-level body kind makes the mismatch unambiguous; custom
-// parsers and opaque/mixed schemas remain fail-open.
 describe('exact content-type dispatch and schema contract (A12)', () => {
 	for (const precompile of [false, true]) {
 		describe(precompile ? 'precompiled' : 'default', () => {

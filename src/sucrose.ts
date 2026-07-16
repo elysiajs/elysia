@@ -691,21 +691,12 @@ function isContextPassToFunction(
 ) {
 	if (body.indexOf(context) === -1) return false
 
-	if (body.length > 32768) {
+	if (body.length > 32_768) {
 		markAllAccessed(inference)
 
 		return true
 	}
 
-	// Linear single-pass scan (replaces the previous O(n²) backtracking regex
-	// `\w\(.*?ctx.*?\)`, which burned ~225ms on a pathological ~31KB body).
-	//
-	// The context is "passed to a function" when its identifier appears as a
-	// bare call argument: bounded on the left by `(` or `,` and on the right by
-	// `)` or `,` (whitespace allowed on either side), where a `(` boundary is a
-	// function-call paren (preceded by an identifier/`]`/`)` — i.e. an invocation
-	// rather than a grouping paren). Member access (`ctx.query`, `ctx[k]`) and
-	// substring collisions (`context` inside `contextual`) do not qualify.
 	try {
 		const ctxLength = context.length
 		const bodyLength = body.length
@@ -754,7 +745,7 @@ function isContextPassToFunction(
 				return true
 			}
 
-			// `(ctx)` / `(ctx,` — the `(` must be an invocation paren, i.e.
+			// `(ctx)` / `(ctx,` the `(` must be an invocation paren, i.e.
 			// preceded by an identifier char, `]`, or `)` (`fn(ctx)`,
 			// `obj.method(ctx)`, `arr[0](ctx)`, `f()(ctx)`). A grouping paren
 			// (e.g. `(ctx) => …`, `= (ctx)`) is not a function call.
@@ -912,9 +903,9 @@ export function sucrose(
 		const cached = caches?.get(key)
 		if (cached && cached.content === content) {
 			const cachedInference = cached.inference
-			// LRU bump: move this key to MRU position by re-inserting.
 			caches!.delete(key)
 			caches!.set(key, cached)
+
 			if (typeof event === 'function')
 				functionCaches.set(event, cachedInference)
 			inference = inference
@@ -939,7 +930,7 @@ export function sucrose(
 		const [parameter, body] = separateFunction(content)
 
 		if (body === undefined) {
-			// Unknown case: parser could not extract body — degrade to all-true per contract
+			// Unknown case: parser could not extract body, degrade to all-true per contract
 			markAllAccessed(fnInference)
 
 			rememberInference(caches, key, cached, content, event, fnInference)
@@ -967,10 +958,6 @@ export function sucrose(
 			if (!isContextPassToFunction(mainParameter, code, fnInference)) {
 				inferBodyReference(code, aliases, fnInference)
 
-				// C19 correctness floor: any use of the context alias the
-				// classifier could not resolve (computed key, `arguments`) must
-				// conservatively mark every channel accessed rather than leave
-				// a channel silently un-initialised for codegen.
 				if (hasAmbiguousContextUse(code, aliases))
 					markAllAccessed(fnInference)
 			}

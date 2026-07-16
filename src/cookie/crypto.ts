@@ -27,7 +27,7 @@ const nodeCrypto = (() => {
 
 export const hasSyncHmac = typeof nodeCrypto?.createHmac === 'function'
 
-function coerceValue(val: unknown): string {
+function coerceValue(val: unknown) {
 	if (typeof val === 'object') return JSON.stringify(val)
 	if (typeof val !== 'string') return val + ''
 
@@ -92,7 +92,7 @@ export async function signCookie(val: string, secret: string | null) {
 	return signCookieSubtle(val, secret)
 }
 
-export function signCookieSync(val: string, secret: string | null): string {
+export function signCookieSync(val: string, secret: string | null) {
 	val = coerceValue(val)
 
 	if (secret === null || secret === undefined)
@@ -164,10 +164,7 @@ export function maybeJsonDecode(value: unknown) {
 	return value
 }
 
-export function resolvePendingCookie(
-	entry: Record<string, any>,
-	name: string
-) {
+export function resolvePendingCookie(entry: Record<string, any>, name: string) {
 	const value = entry.value
 	const secrets = entry['~unsign'] as string | (string | null)[]
 
@@ -179,8 +176,7 @@ export function resolvePendingCookie(
 
 	let decoded: string | false = false
 
-	if (typeof secrets === 'string')
-		decoded = unsignCookieSync(value, secrets)
+	if (typeof secrets === 'string') decoded = unsignCookieSync(value, secrets)
 	else if (Array.isArray(secrets))
 		for (let i = 0; i < secrets.length; i++) {
 			const temp = unsignCookieSync(value, secrets[i]!)
@@ -190,8 +186,7 @@ export function resolvePendingCookie(
 			}
 		}
 
-	if (decoded === false)
-		throw InvalidCookie.signature(name)
+	if (decoded === false) throw InvalidCookie.signature(name)
 
 	// Success: update entry in-place, then remove the pending marker.
 	const resolvedValue = maybeJsonDecode(decoded)

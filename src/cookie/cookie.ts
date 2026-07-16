@@ -41,7 +41,8 @@ export class Cookie<T = any> implements BaseCookie {
 
 	get cookie() {
 		const c = this.#setRef.cookie?.[this.#name] ?? this.#initial
-		if (c && '~unsign' in c) resolvePendingCookie(c as Record<string, any>, this.#name)
+		if (c && '~unsign' in c)
+			resolvePendingCookie(c as Record<string, any>, this.#name)
 		return c
 	}
 
@@ -52,8 +53,11 @@ export class Cookie<T = any> implements BaseCookie {
 	protected get setCookie() {
 		const j = this.#jar
 		if (!(this.#name in j)) j[this.#name] = this.#initial
-		const entry = j[this.#name]                         // resolve the FINAL entry (P1)
-		if (entry && '~unsign' in entry) resolvePendingCookie(entry as Record<string, any>, this.#name)
+
+		const entry = j[this.#name]
+		if (entry && '~unsign' in entry)
+			resolvePendingCookie(entry as Record<string, any>, this.#name)
+
 		return entry
 	}
 

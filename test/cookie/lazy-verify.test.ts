@@ -6,7 +6,7 @@
  *
  * The lazy lane is selected iff:
  *   - cookieConfig.hasSign
- *   - verify === 'required-fields' (new default)
+ *   - verify === 'lazy' (new default)
  *   - !vali?.cookie (cookie-validator routes stay eager)
  *   - hasSyncHmac (getter is sync; CF Workers without nodejs_compat stay eager)
  */
@@ -110,7 +110,9 @@ if (!hasSyncHmac) {
 		expect(await noFlag.text()).toBe('skip')
 
 		// With flag: handler reads sid.value → 400
-		const withFlag = await app.handle(req('/?flag=1', 'sid=garbage.nothmac'))
+		const withFlag = await app.handle(
+			req('/?flag=1', 'sid=garbage.nothmac')
+		)
 		await expectInvalidCookieError(withFlag, 'sid')
 	})
 
@@ -197,9 +199,7 @@ if (!hasSyncHmac) {
 				return operation(arguments[0].cookie)
 			})
 
-			const res = await app.handle(
-				req(`/${name}`, 'sid=garbage.nothmac')
-			)
+			const res = await app.handle(req(`/${name}`, 'sid=garbage.nothmac'))
 			await expectInvalidCookieError(res, 'sid')
 		}
 	})
@@ -223,20 +223,22 @@ if (!hasSyncHmac) {
 	})
 
 	// -----------------------------------------------------------------------
-	// Test 6: verify: 'all' → eager regardless of runtime access
+	// Test 6: verify: 'eager' → eager regardless of runtime access
 	// WHY: explicit opt-out of lazy must restore eager behavior everywhere.
 	//      Uses a handler that touches c.cookie (so cookieConfig is compiled)
 	//      but reads a DIFFERENT key, not 'sid'. Under lazy the unread 'sid'
 	//      would not be verified; under eager it must be.
 	// -----------------------------------------------------------------------
-	it("[C3-6] verify:'all' → eager: reading other cookie still verifies unread signed cookie", async () => {
+	it("[C3-6] verify:'eager': reading other cookie still verifies unread signed cookie", async () => {
 		const app = new Elysia({
-			cookie: { secrets: SECRET, sign: ['sid'], verify: 'all' }
+			cookie: { secrets: SECRET, sign: ['sid'], verify: 'eager' }
 		}).get('/', ({ cookie: { other } }) => other.value ?? 'none')
 
 		// 'other' is not signed; 'sid' is signed but unread.
-		// With verify:'all' (eager), the bad sid sig must cause 400 at parse time.
-		const res = await app.handle(req('/', 'sid=garbage.nothmac; other=hello'))
+		// With verify:'eager', the bad sid sig must cause 400 at parse time.
+		const res = await app.handle(
+			req('/', 'sid=garbage.nothmac; other=hello')
+		)
 		expect(res.status).toBe(400)
 	})
 
@@ -295,7 +297,9 @@ if (!hasSyncHmac) {
 			cookie: { secrets: SECRET, sign: ['data'] }
 		}).get('/', ({ cookie: { data } }) => data.value)
 
-		const res = await app.handle(req('/', `data=${encodeURIComponent(val)}`))
+		const res = await app.handle(
+			req('/', `data=${encodeURIComponent(val)}`)
+		)
 		expect(res.status).toBe(200)
 		const body = await res.json()
 		expect(body).toEqual({ count: 7 })

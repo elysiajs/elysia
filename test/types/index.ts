@@ -11,7 +11,7 @@ new Elysia({ experimental: { resumeEmit } })
 new Elysia({ experimental: { resumeEmit: true } })
 
 // Lazy signed-cookie verification mode is configurable app-wide.
-new Elysia({ cookie: { secrets: 'secret', sign: ['sid'], verify: 'all' } })
+new Elysia({ cookie: { secrets: 'secret', sign: ['sid'], verify: 'eager' } })
 // @ts-expect-error signed-cookie verification has only two supported modes
 new Elysia({ cookie: { verify: 'none' } })
 
