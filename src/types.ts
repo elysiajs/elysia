@@ -980,7 +980,7 @@ type MergeResponseStatus<A> = {
 			? { [A in Status]: 1 }
 			: never
 		// @ts-ignore A is checked in key computation
-	>]: Extract<A, { code: status }>['response'] extends infer Value
+	>]: Extract<A, { code: status }> extends { response: infer Value }
 		? IsAny<Value> extends true
 			? // @ts-ignore status is always in Status Map
 				InvertedStatusMap[status]
@@ -2205,6 +2205,20 @@ export type ElysiaHandlerToResponseSchema<in out Handle extends Function> =
 			: {}
 	>
 
+export type ElysiaErrorHandlerToResponseSchema<in out Handle extends Function> =
+	Prettify<
+		Handle extends (...a: any) => MaybePromise<infer R>
+			? ValueToResponseSchema<Exclude<R, undefined>> &
+					(Extract200<Exclude<R, undefined>> extends infer R500
+						? undefined extends R500
+							? {}
+							: IsNever<R500> extends true
+								? {}
+								: { 500: R500 }
+						: {})
+			: {}
+	>
+
 export type ElysiaHandlerToResponseSchemas<
 	Handle extends Function[],
 	Carry extends PossibleResponse = {}
@@ -2214,6 +2228,22 @@ export type ElysiaHandlerToResponseSchemas<
 			Rest,
 			// @ts-ignore trust me bro
 			UnionResponseStatus<ElysiaHandlerToResponseSchema<Current>, Carry>
+		>
+	: Prettify<Carry>
+
+export type ElysiaErrorHandlerToResponseSchemas<
+	Handle extends Function[],
+	Carry extends PossibleResponse = {}
+> = Handle extends [infer Current, ...infer Rest]
+	? ElysiaErrorHandlerToResponseSchemas<
+			Rest extends Function[] ? Rest : [],
+			// @ts-ignore trust me bro
+			UnionResponseStatus<
+				Current extends Function
+					? ElysiaErrorHandlerToResponseSchema<Current>
+					: {},
+				Carry
+			>
 		>
 	: Prettify<Carry>
 

@@ -2498,6 +2498,44 @@ type a = keyof {}
 	})
 }
 
+// onError should expose custom JSON error response under error status
+{
+	const app = new Elysia()
+		.onError(() => ({
+			failure: 'Server is during maintenance' as string
+		}))
+		.get('/error', () => {
+			throw new Error('Server is during maintenance')
+		})
+
+	expectTypeOf<
+		(typeof app)['~Routes']['error']['get']['response']
+	>().toEqualTypeOf<{
+		200: {
+			failure: string
+		}
+		500: {
+			failure: string
+		}
+	}>()
+}
+
+// onError should preserve explicit status responses
+{
+	const app = new Elysia()
+		.onError(({ status }) =>
+			status(401, { error: 'Unauthorized' as string })
+		)
+		.get('/error', () => {
+			throw new Error('Unauthorized')
+		})
+
+	type Response = (typeof app)['~Routes']['error']['get']['response']
+	const _typeTest: Response extends { 401: { error: string } }
+		? true
+		: false = true
+}
+
 // onAfterHandle should have response
 {
 	new Elysia().onAfterHandle(

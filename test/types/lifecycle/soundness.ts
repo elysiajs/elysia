@@ -1011,6 +1011,7 @@ import { Prettify } from '../../../src/types'
 		401: 'fouco'
 		404: 'lilith'
 		418: 'sartre'
+		500: 'fouco' | 'sartre' | 'lilith'
 	}>()
 }
 
@@ -1032,6 +1033,7 @@ import { Prettify } from '../../../src/types'
 		401: 'fouco'
 		404: 'lilith'
 		418: 'sartre'
+		500: 'fouco' | 'sartre' | 'lilith'
 	}>()
 }
 
@@ -1053,6 +1055,7 @@ import { Prettify } from '../../../src/types'
 		401: 'fouco'
 		404: 'lilith'
 		418: 'sartre'
+		500: 'fouco' | 'sartre' | 'lilith'
 	}>()
 }
 
