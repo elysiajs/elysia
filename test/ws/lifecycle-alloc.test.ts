@@ -2,13 +2,13 @@ import { describe, it, expect } from 'bun:test'
 import { Elysia } from '../../src'
 import { newWebsocket, wsOpen, wsClosed, wsMessage } from './utils'
 
-// F7 — ElysiaWS exposes its raw-socket + self methods via memoizing getters
+// ElysiaWS exposes its raw-socket + self methods via memoizing getters
 // (bound lazily on first access, cached onto the connection) instead of 14
 // eager binds per connection. These tests pin the behaviour the getters MUST
 // preserve: detached methods survive destructuring, the bound closure is shared
 // across messages, and error handlers can still reach the methods via the
 // prototype chain.
-describe('WebSocket lazy-bound methods (F7)', () => {
+describe('WebSocket lazy-bound methods', () => {
 	it('a detached method (const { send } = ws) keeps its receiver', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
@@ -44,7 +44,7 @@ describe('WebSocket lazy-bound methods (F7)', () => {
 	it('the same bound send is reused across messages on one connection', async () => {
 		// The getter memoizes onto the CONNECTION (raw.data.elysia), not onto the
 		// per-message Object.create view — so two messages must observe the exact
-		// same function identity. A per-message memoization would defeat F7.
+		// same function identity. A per-message memoization would defeat .
 		const identities: unknown[] = []
 
 		const app = new Elysia()
@@ -104,11 +104,11 @@ describe('WebSocket lazy-bound methods (F7)', () => {
 	})
 })
 
-// F13 — the upgrade Context is sprayed onto the ElysiaWS instance by the lazy
+// the upgrade Context is sprayed onto the ElysiaWS instance by the lazy
 // constructor; its sole consumer is getElysia, so ws.data.context is released to
 // undefined afterwards to avoid double-retaining the upgrade Request/set for the
 // whole connection lifetime.
-describe('WebSocket connection retention (F13)', () => {
+describe('WebSocket connection retention', () => {
 	it('ws.data.context is released after the connection materialises', async () => {
 		let contextAfterOpen: unknown = Symbol('unset')
 

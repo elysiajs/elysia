@@ -3,7 +3,7 @@ import { Elysia, t } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { req, post } from '../utils'
 
-describe('base fixes (kiana)', () => {
+describe('registration invariants', () => {
 	it('keeps query validation on a guard that also declares derive', async () => {
 		const app = new Elysia()
 			.guard({
@@ -45,7 +45,7 @@ describe('base fixes (kiana)', () => {
 		expect((await app.handle(req('/api/x?x=ok'))).status).toBe(200)
 	})
 
-	// idx6 — an array-valued guard `derive` must register its ELEMENT functions
+	// an array-valued guard `derive` must register its ELEMENT functions
 	// in the ~derive WeakSet (so each is compiled as a derive, merging into
 	// context) instead of registering the array object as a single key (which
 	// makes each element compile as a normal beforeHandle guard whose object
@@ -72,7 +72,7 @@ describe('base fixes (kiana)', () => {
 		})
 	})
 
-	// idx7 — an explicitly-registered route must not be clobbered by the
+	// an explicitly-registered route must not be clobbered by the
 	// trailing-slash loose twin of another route. With strictPath off, /foo and
 	// /foo/ are distinct registrations; building one must not overwrite the
 	// other's real map entry. WHY: silent wrong-handler dispatch on a declared
@@ -102,12 +102,12 @@ describe('base fixes (kiana)', () => {
 		expect(await (await app.handle(req('/bar/'))).text()).toBe('bar')
 	})
 
-	// idx8 — schemas inherited via `.use()` under a parent guard/group must
+	// schemas inherited via `.use` under a parent guard/group must
 	// appear in `.routes` introspection (consumed by OpenAPI/Swagger). The
 	// getter previously ignored the inheritedChain tuple slot, so docs disagreed
 	// with the runtime (which DOES enforce the inherited guard).
-	// idx8 — `.routes` introspection must surface schemas inherited via
-	// `.use()` under a parent guard/group (OpenAPI/Swagger), matching what the
+	// `.routes` introspection must surface schemas inherited via
+	// `.use` under a parent guard/group (OpenAPI/Swagger), matching what the
 	// runtime enforces. `composeRouteHook` is shared by the runtime and the
 	// getter so the two cannot diverge (a prior approximate fold double-counted
 	// hooks and was reverted; the origin-dedup in the shared path prevents it).
@@ -121,17 +121,17 @@ describe('base fixes (kiana)', () => {
 		expect((await app.handle(req('/x'))).status).toBe(422)
 		expect((await app.handle(req('/x?q=hi'))).status).toBe(200)
 
-		// introspection reflects it too (was dropped before idx8)
+		// introspection reflects it too (was dropped before )
 		const route = app.routes.find((r) => r.path === '/x')
 		expect(route).toBeDefined()
 		expect((route!.hooks as any)?.query).toBeDefined()
 	})
 
-	// idx9 — headers() must not alias the caller's object. A subsequent
-	// .headers() call does Object.assign into the stored object; if it is the
+	// headers must not alias the caller's object. A subsequent
+	// .headers call does Object.assign into the stored object; if it is the
 	// caller's variable, the user's object (and any other instance sharing it)
 	// is mutated. WHY: a public builder method must not mutate its argument.
-	it('does not mutate the caller object passed to headers()', () => {
+	it('does not mutate the caller object passed to headers', () => {
 		const shared = { 'x-a': '1' }
 		const app = new Elysia().headers(shared)
 
@@ -146,10 +146,10 @@ describe('base fixes (kiana)', () => {
 		})
 	})
 
-	// idx10 — ws() must not mutate the caller's options object by writing
-	// opts.message. Reusing one options object across .ws() calls would
+	// ws must not mutate the caller's options object by writing
+	// opts.message. Reusing one options object across .ws calls would
 	// otherwise leave a stale message and throw a spurious conflict error.
-	it('does not mutate the caller options across multiple ws() calls', () => {
+	it('does not mutate the caller options across multiple ws calls', () => {
 		const opts = { idleTimeout: 5 } as any
 		const hA = () => {}
 		const hB = () => {}
@@ -164,7 +164,7 @@ describe('base fixes (kiana)', () => {
 		expect(opts).toEqual({ idleTimeout: 5 })
 	})
 
-	// idx44 — a plugin's nested plain-object decorator must not be aliased into
+	// a plugin's nested plain-object decorator must not be aliased into
 	// the parent by reference; otherwise the two instances share the object and
 	// a mutation through one leaks into the other. Class instances / functions
 	// (intended singletons) are still shared by reference.

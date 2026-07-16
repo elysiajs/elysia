@@ -2,7 +2,7 @@ import { describe, it, expect } from 'bun:test'
 import { Elysia, t } from '../../../src'
 import { tee } from '../../../src/adapter/utils'
 
-describe('exact content-type dispatch and schema contract (A12)', () => {
+describe('exact content-type dispatch and schema contract', () => {
 	for (const precompile of [false, true]) {
 		describe(precompile ? 'precompiled' : 'default', () => {
 			const request = (contentType: string, body: BodyInit) =>
@@ -246,12 +246,12 @@ describe('exact content-type dispatch and schema contract (A12)', () => {
 	}
 })
 
-// H13c: the default content-type dispatch recognised only fixed-position
+// the default content-type dispatch recognised only fixed-position
 // `application/json`, so structured `+json` suffix types (RFC 6839) —
 // application/ld+json, merge-patch+json, problem+json, vendor `+json` — were
 // NOT routed to the JSON parser. Their bodies arrived as `undefined` and any
 // schema validation failed. They must be parsed as JSON after stripping params.
-describe('content-type dispatch — structured +json suffix (H13c)', () => {
+describe('content-type dispatch — structured +json suffix', () => {
 	const echo = () =>
 		new Elysia().post('/', ({ body }) => body as Record<string, unknown>)
 
@@ -296,12 +296,12 @@ describe('content-type dispatch — structured +json suffix (H13c)', () => {
 	})
 })
 
-// H02a: the uppercase-multipart normalization used `new Request(request,
+// the uppercase-multipart normalization used `new Request(request,
 // {headers})`, which TEES the body — the original request stayed independently
 // readable, retaining a full second copy of a potentially multi-MiB upload. The
 // rewrap must transfer the body stream (no tee), leaving the original body
 // disturbed/unreadable afterward.
-describe('parseFormData — mixed-case multipart does not tee the body (H02a)', () => {
+describe('parseFormData — mixed-case multipart does not tee the body', () => {
 	it('does not retain a second readable copy of the original body', async () => {
 		let originalBodyStillReadable: boolean | undefined
 
@@ -350,11 +350,11 @@ describe('parseFormData — mixed-case multipart does not tee the body (H02a)', 
 	})
 })
 
-// H02b: tee()'s byte cap charged Blobs (and unknown objects) a flat 64 bytes
+// tee()'s byte cap charged Blobs (and unknown objects) a flat 64 bytes
 // because it read `.byteLength`, which Blobs don't have. An undrained branch
 // could buffer ~64 one-MiB Blobs (~64MiB) under a nominal 4MiB cap. Blobs must
 // be charged `.size`; unknown objects charged conservatively (a full budget).
-describe('tee() byte-cap accounting (H02b)', () => {
+describe('tee() byte-cap accounting', () => {
 	it('charges Blobs by .size so the byte cap actually bounds the window', async () => {
 		let produced = 0
 		async function* src() {

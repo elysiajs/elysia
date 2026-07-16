@@ -101,7 +101,7 @@ const scenarios: Record<string, () => Promise<Response>> = {
 			)
 			.handle(post(bad)),
 
-	// error.detail() in an error hook → minimal in production
+	// error.detail in an error hook → minimal in production
 	detail: () =>
 		new Elysia()
 			.error(({ error }) => {
@@ -119,7 +119,7 @@ const scenarios: Record<string, () => Promise<Response>> = {
 			)
 			.handle(post(bad)),
 
-	// error.detail() with allowUnsafe → full even in production
+	// error.detail with allowUnsafe → full even in production
 	detailAllowUnsafe: () =>
 		new Elysia({ allowUnsafeValidationDetails: true })
 			.error(({ error }) => {
@@ -147,7 +147,7 @@ const scenarios: Record<string, () => Promise<Response>> = {
 			)
 			.handle(post({ user: { age: 'x' } })),
 
-	// L13: request-side production 422 must name the failing field (`property`)
+	// request-side production 422 must name the failing field (`property`)
 	// while still echoing the client's own input — actionable, no schema leak.
 	requestProperty: () =>
 		new Elysia()
@@ -158,7 +158,7 @@ const scenarios: Record<string, () => Promise<Response>> = {
 			)
 			.handle(post(bad)),
 
-	// C8: response-schema failure in production leaks the SERVER's response
+	// A response-schema failure in production must not leak the server response
 	// object via `found`. Must collapse to a generic 500 — no found/errors/value,
 	// no 422 mislabel. Secret-bearing sibling proves the leak is closed.
 	responseLeak: () =>
@@ -180,7 +180,7 @@ const scenarios: Record<string, () => Promise<Response>> = {
 			)
 			.handle(new Request('http://localhost/')),
 
-	// C8: a response-schema custom-error callback must not receive/echo the
+	// A response-schema custom-error callback must not receive or echo the
 	// server value either, and must not produce a 422 custom response.
 	responseCustomError: () =>
 		new Elysia()
@@ -201,7 +201,7 @@ const scenarios: Record<string, () => Promise<Response>> = {
 			)
 			.handle(new Request('http://localhost/')),
 
-	// C8 opt-out: allowUnsafeValidationDetails restores full response detail.
+	// The explicit opt-out restores full response detail.
 	responseAllowUnsafe: () =>
 		new Elysia({ allowUnsafeValidationDetails: true })
 			.get(
@@ -216,7 +216,7 @@ const scenarios: Record<string, () => Promise<Response>> = {
 			)
 			.handle(new Request('http://localhost/')),
 
-	// L13 Defect 2: `error.all` builds `path` from Standard Schema issue `path`
+	// Defect 2: `error.all` builds `path` from Standard Schema issue `path`
 	// arrays whose segments may be `{ key }` OBJECTS. The dotted path must render
 	// `user.name`, NOT `[object Object].[object Object]`. (Env-independent, run in
 	// both prod & dev to prove parity.)
@@ -232,9 +232,9 @@ const scenarios: Record<string, () => Promise<Response>> = {
 }
 
 // Proves the production custom-error path uses `findCustomError` and NOT TypeBox
-// `Errors`: the thunk throws, so if resolve() consulted it the access below would
+// `Errors`: the thunk throws, so if resolve consulted it the access below would
 // throw. In production it must resolve the message from findCustomError instead.
-// (Production only — in dev resolve() WOULD call the thunk, by design.)
+// (Production only — in dev resolve WOULD call the thunk, by design.)
 if ((process.env.NODE_ENV ?? process.env.ENV) === 'production')
 	scenarios.findCustomErrorBypass = async () => {
 		const err = new ValidationError(
@@ -253,7 +253,7 @@ if ((process.env.NODE_ENV ?? process.env.ENV) === 'production')
 		})
 	}
 
-// L13 hardening: production is the trust boundary — `payload.property` must only
+// hardening: production is the trust boundary — `payload.property` must only
 // ever reflect instance-path-shaped data. A hand-crafted issue whose only path is
 // a free-text string (no real validator produces this) must NOT surface as
 // `property`; it collapses to 'root'. A real `instancePath` JSON pointer still
@@ -279,10 +279,10 @@ if ((process.env.NODE_ENV ?? process.env.ENV) === 'production') {
 		return new Response(JSON.stringify(err.payload), { status: 422 })
 	}
 
-	// L13 Defect 1: Standard Schema issues carry `path` as an array whose segments
+	// Defect 1: Standard Schema issues carry `path` as an array whose segments
 	// may be `{ key }` OBJECTS (not raw PropertyKeys). `payload.property` must
 	// render `/user/name`, NOT `/[object Object]/[object Object]` — a malformed
-	// path defeats L13's own goal of naming the failing field.
+	// path defeats 's own goal of naming the failing field.
 	scenarios.propertyStandardObjectSegments = async () => {
 		const err = new ValidationError(
 			'body',

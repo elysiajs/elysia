@@ -6,16 +6,16 @@ import { compileHandler } from '../../src/compile/handler'
 import { req, post } from '../utils'
 
 /**
- * Response-map emission harness (F9 + F19).
+ * Response-map emission harness.
  *
- * F19 — a body-bearing route used to materialize ALL request headers via
+ * a body-bearing route used to materialize ALL request headers via
  * `c.request.headers.toJSON()` just to read `content-type` once. The parse
  * codegen already reads `c.request.headers.get('content-type')` directly when
  * `!hasHeaders`, so the materialization is pure waste unless something actually
  * reads `c.headers` (handler/parser/lifecycle fn → `inference.headers`, or a
  * `headers` schema → `vali.headers`).
  *
- * F9 — `hasSet` over-included `hasHeaders`, routing set-untouched responses
+ * `hasSet` over-included `hasHeaders`, routing set-untouched responses
  * through the `rm`/handleSet slow path. Reading request headers is a READ; it
  * can never write `c.set`, so such routes take the compact `rc` path. Routes
  * that DO write set (cookie jar, app default headers, response validation,
@@ -37,7 +37,7 @@ const compileRoute = (app: any, index = 0) => {
 	return { fn, name: fn.constructor.name, source: fn.toString() }
 }
 
-describe('F19: body route no longer materializes all headers for content-type', () => {
+describe('body route no longer materializes all headers for content-type', () => {
 	it('POST echo body reads content-type directly (no toJSON) and uses rc', () => {
 		const app = new Elysia().post('/echo', ({ body }) => body)
 
@@ -59,7 +59,7 @@ describe('F19: body route no longer materializes all headers for content-type', 
 		// no full-header materialization
 		expect(source).not.toContain('c.headers=')
 		expect(source).not.toContain('.toJSON()')
-		// F9 consequence: untouched-set body route uses the compact map
+		//  consequence: untouched-set body route uses the compact map
 		expect(source).toContain('rc(_r,c.request)')
 		expect(source).not.toContain('rm(')
 	})
@@ -182,7 +182,7 @@ describe('F19: body route no longer materializes all headers for content-type', 
 	})
 })
 
-describe('F9: hasHeaders is not a hasSet term', () => {
+describe('hasHeaders is not a hasSet term', () => {
 	it('GET reading c.headers uses the compact rc path', async () => {
 		const app = new Elysia().get(
 			'/h',
@@ -232,7 +232,7 @@ describe('F9: hasHeaders is not a hasSet term', () => {
 	// status writeback must still work: an afterResponse route keeps hasSet (and
 	// the rm map, here inside the `_fin2` helper) so afterResponse observes the
 	// written-back set.status === 418. This is the load-bearing reason
-	// hasAfterResponse must stay in hasSet even though F9 dropped hasHeaders.
+	// hasAfterResponse must stay in hasSet even though hasHeaders was removed.
 	it('status() + afterResponse: set.status writeback is observed (rm retained)', async () => {
 		let observed: unknown
 		const app = new Elysia()

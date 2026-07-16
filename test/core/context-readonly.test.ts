@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'bun:test'
 import { Elysia } from '../../src'
 
-describe('context.path readonly transition (Q1)', () => {
-	it('warns in development while preserving the N compatibility behavior', async () => {
+describe('context.path readonly transition', () => {
+	it('warns in development while preserving compatibility behavior', async () => {
 		const warnings: string[] = []
 		const warn = console.warn
 		console.warn = (...values) => warnings.push(values.join(' '))

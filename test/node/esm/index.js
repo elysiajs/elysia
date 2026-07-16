@@ -62,7 +62,7 @@ while (true) {
 	if (done) break
 	if (!(value instanceof Uint8Array))
 		throw new Error(
-			`❌ C14: stream chunk is ${value?.constructor?.name ?? typeof value}, expected Uint8Array`
+			`❌ stream chunk is ${value?.constructor?.name ?? typeof value}, expected Uint8Array`
 		)
 
 	chunks.push(value)
@@ -70,7 +70,7 @@ while (true) {
 
 const text = chunks.map((c) => new TextDecoder().decode(c)).join('')
 if (text !== 'hello world')
-	throw new Error(`❌ C14: stream text is "${text}", expected "hello world"`)
+	throw new Error(`❌ stream text is "${text}", expected "hello world"`)
 
 console.log('✅ ESM Node.js stream chunks are Uint8Array')
 

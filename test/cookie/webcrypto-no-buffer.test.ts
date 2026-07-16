@@ -1,5 +1,5 @@
 /**
- * H12 — signCookieSubtle must not depend on Node `Buffer`.
+ * signCookieSubtle must not depend on Node `Buffer`.
  *
  * The function is the WebCrypto fallback path used in environments WITHOUT
  * node:crypto (e.g. Cloudflare Workers without nodejs_compat).  Before the
@@ -28,7 +28,7 @@ const cases = [
 	'x'.repeat(512)
 ]
 
-describe('H12 — signCookieSubtle is Buffer-free', () => {
+describe('signCookieSubtle is Buffer-free', () => {
 	it('produces byte-identical output to the node:crypto HMAC reference', async () => {
 		const { createHmac } = await import('node:crypto')
 

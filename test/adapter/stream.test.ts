@@ -1,17 +1,17 @@
 import { describe, it, expect } from 'bun:test'
 import { Elysia } from '../../src'
 
-// M1 — Blob enqueue ordering: enqueueBinaryChunk returned a truthy Promise for
+// Blob enqueue ordering: enqueueBinaryChunk returned a truthy Promise for
 // Blobs; start()/pull() treated truthy as "done" and advanced without awaiting
 // it, so pull() could be re-entered before the Blob bytes landed, reordering
 // chunks or splitting them across the wrong delivery window.
-describe('stream Blob ordering (M1)', () => {
+describe('stream Blob ordering', () => {
 	it('Blob bytes arrive before subsequent string chunk', async () => {
 		const blobContent = 'hello from blob'
 		const afterBlob = ' world'
 
 		const app = new Elysia().get('/blob-then-string', async function* () {
-			// M1: if start() returns without awaiting the Blob, pull() fires
+			// if start() returns without awaiting the Blob, pull() fires
 			// before the blob bytes are enqueued, corrupting delivery order.
 			yield new Blob([blobContent])
 			yield afterBlob
@@ -43,7 +43,7 @@ describe('stream Blob ordering (M1)', () => {
 	})
 
 	it('Blob as the first (init) chunk arrives complete and in order', async () => {
-		// M1 also affects start() — the init value's Blob Promise was not returned
+		//  also affects start() — the init value's Blob Promise was not returned
 		// from start(), so the runtime called pull() immediately after start()
 		// before the arrayBuffer() resolved.
 		const blobText = 'blob-init-chunk'
@@ -59,11 +59,11 @@ describe('stream Blob ordering (M1)', () => {
 	})
 })
 
-// M9 — Mid-stream generator errors were swallowed: pull()'s catch did
+// Mid-stream generator errors were swallowed: pull()'s catch did
 // console.warn + controller.close(), so the client saw a clean EOF instead of
 // a stream error. Downstream readers could not distinguish a successful end of
 // data from a mid-flight failure.
-describe('stream mid-stream error propagation (M9)', () => {
+describe('stream mid-stream error propagation', () => {
 	it('reader observes a stream error when the generator throws mid-stream', async () => {
 		const app = new Elysia().get('/error-mid', async function* () {
 			yield 'first chunk'
@@ -78,7 +78,7 @@ describe('stream mid-stream error propagation (M9)', () => {
 		expect(first.done).toBe(false)
 
 		// The next read must reject (stream error), not resolve with done=true.
-		// M9: before the fix this resolved {done:true} (clean close).
+		// before the fix this resolved {done:true} (clean close).
 		// The specific error class (TypeError vs Error) is irrelevant to the invariant.
 		await expect(reader.read()).rejects.toThrow()
 	})

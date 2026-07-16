@@ -27,7 +27,7 @@ describe('Query', () => {
 		await expect(response.text()).resolves.toEqual('sucrose')
 	})
 
-	// Regression (audit P8): sucrose's access regex only matched `ctx.query`
+	// Regression: sucrose's access regex only matched `ctx.query`
 	// (and bracket forms), not optional chaining `ctx?.query`. A handler using
 	// optional chaining therefore didn't infer query usage, so it was never
 	// parsed and read back undefined at runtime.

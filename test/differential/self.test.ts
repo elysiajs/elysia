@@ -1,10 +1,7 @@
 /**
- * D2 harness self-test (n-proof.md D2): "a deliberately-skewed lane must be
- * caught." This proves the comparator actually detects divergence — a harness
- * that cannot fail is worthless. It exercises BOTH directions:
- *   • an unskewed lane pair PASSES (compareResponses returns null),
- *   • a header-skew / body-skew / status-skew / set-cookie-skew / observation-
- *     skew each PRODUCE the correct divergence report.
+ * A deliberately skewed lane must be caught. An unskewed pair returns no
+ * mismatch, while header, body, status, cookie, and observation skews each
+ * produce the corresponding divergence report.
  */
 
 import { describe, it, expect } from 'bun:test'
@@ -40,7 +37,7 @@ const run = async (lane: Lane, path = '/x'): Promise<ResponseSnapshot> => {
 	return snapshot(res)
 }
 
-describe('D2 self-test — comparator catches injected skew', () => {
+describe('differential comparator detects injected skew', () => {
 	it('unskewed identical lanes PASS (null mismatch)', async () => {
 		const a = await jitHandle.make(define)
 		const b = await jitHandle.make(define)

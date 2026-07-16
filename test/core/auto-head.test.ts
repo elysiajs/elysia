@@ -45,7 +45,7 @@ describe('autoHead plugin', () => {
 
 	it('registers HEAD routes when applied late in authoring order (after routes)', async () => {
 		// Original intent: auto-head must register HEAD routes even when the plugin
-		// is applied AFTER other routes are declared. Under Q4 the vehicle is
+		// is applied AFTER other routes are declared. The supported vehicle is
 		// authoring order (all edits before the first request), not
 		// serve-then-mutate: declare the GET first, then apply auto-head, then serve.
 		const app = new Elysia().get('/x', () => 'get')
@@ -57,10 +57,10 @@ describe('autoHead plugin', () => {
 		)
 	})
 
-	it('applying auto-head AFTER the first request throws (Q4 sealed)', async () => {
+	it('throws when auto-head is applied after the first request', async () => {
 		// The retired "register after the router was already built" behavior
-		// (serve, then `.use(autoHead())`, then serve again) silently rebuilt. Under
-		// B6 the first request seals the app, so applying the plugin afterward is an
+		// (serve, then `.use(autoHead)`, then serve again) silently rebuilt. Now the
+		// first request seals the app, so applying the plugin afterward is an
 		// immutable-instance violation and must throw — the plugin cannot be smuggled
 		// in past the seal to synthesize HEAD routes.
 		const app = new Elysia().get('/x', () => 'get')

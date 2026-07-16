@@ -3,9 +3,9 @@ import { Elysia, t, sse } from '../../src'
 import { ValidationError, status } from '../../src/error'
 import { req } from '../utils'
 
-// Pins for design/fable-tasks.md Phase 1 fixes
+// Runtime contracts that previously regressed across unrelated code paths.
 
-describe('H12 — named empty state registrations', () => {
+describe('named empty state registrations', () => {
 	it('keeps .state(name, {}) and .state(name, [])', async () => {
 		const app = new Elysia()
 			.state('list', [] as string[])
@@ -19,7 +19,9 @@ describe('H12 — named empty state registrations', () => {
 
 		// typed store properties must exist at runtime, otherwise typed-clean
 		// code crashes on first property access
-		await expect(app.handle(req('/')).then((r) => r.json())).resolves.toEqual({
+		await expect(
+			app.handle(req('/')).then((r) => r.json())
+		).resolves.toEqual({
 			list: [],
 			obj: {},
 			hasList: true,
@@ -28,7 +30,7 @@ describe('H12 — named empty state registrations', () => {
 	})
 })
 
-describe('H13 — .error(Error, handler) catch-all with class mapping', () => {
+describe('.error(Error, handler) catch-all with class mapping', () => {
 	it('routes bare Error through the class overload, not the scope overload', async () => {
 		const app = new Elysia()
 			.error(Error, ({ error }) => `caught: ${(error as Error).message}`)
@@ -41,7 +43,7 @@ describe('H13 — .error(Error, handler) catch-all with class mapping', () => {
 	})
 })
 
-describe('M25 — named empty statuses attach no body', () => {
+describe('named empty statuses attach no body', () => {
 	it("status('No Content') ≡ status(204)", async () => {
 		const named = new Elysia().get('/named', () => status('No Content'))
 		const numeric = new Elysia().get('/numeric', () => status(204))
@@ -58,7 +60,7 @@ describe('M25 — named empty statuses attach no body', () => {
 	})
 })
 
-describe('M24 — malformed-body 400 carries dev detail', () => {
+describe('malformed-body 400 carries dev detail', () => {
 	it('includes the parse cause message outside production', async () => {
 		const app = new Elysia().post(
 			'/',
@@ -82,7 +84,7 @@ describe('M24 — malformed-body 400 carries dev detail', () => {
 	})
 })
 
-describe('L14 — coercion-union 422 does not leak internals', () => {
+describe('coercion-union 422 does not leak internals', () => {
 	it('collapses the anyOf triple into one issue per field', async () => {
 		const app = new Elysia().get(
 			'/x',
@@ -102,14 +104,13 @@ describe('L14 — coercion-union 422 does not leak internals', () => {
 	})
 })
 
-describe('M26 — array query params split before percent-decoding', () => {
+describe('array query params split before percent-decoding', () => {
 	const app = new Elysia().get(
 		'/x',
 		{ query: t.Object({ ids: t.Array(t.String()) }) },
 		({ query }) => query.ids
 	)
-	const run = (q: string) =>
-		app.handle(req(`/x?${q}`)).then((r) => r.json())
+	const run = (q: string) => app.handle(req(`/x?${q}`)).then((r) => r.json())
 
 	it('keeps %2C as a literal comma inside an element', async () => {
 		// decode-before-split made a%2Cb indistinguishable from a,b
@@ -131,7 +132,7 @@ describe('M26 — array query params split before percent-decoding', () => {
 	})
 })
 
-describe('H33 — streaming headers survive a multi-cookie response', () => {
+describe('streaming headers survive a multi-cookie response', () => {
 	it('keeps content-type/cache-control when >1 cookie is set', async () => {
 		// >1 cookie flips set.headers into a Headers instance; the streaming
 		// defaults must not be written as dead JS properties on it
@@ -151,7 +152,7 @@ describe('H33 — streaming headers survive a multi-cookie response', () => {
 	})
 })
 
-describe('L4 — lazy ValidationError keeps its lazy/enumerable contract', () => {
+describe('lazy ValidationError keeps its lazy/enumerable contract', () => {
 	it('does not run the thunk until read and memoizes across accessors', () => {
 		let calls = 0
 		const error = new ValidationError('body', { x: 1 }, () => {

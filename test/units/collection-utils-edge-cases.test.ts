@@ -8,14 +8,14 @@ import {
 	type ChainNode
 } from '../../src/utils'
 
-// idx26 — mergeDeep dropped the try/catch around property assignment.
+// mergeDeep dropped the try/catch around property assignment.
 // WHY it matters: registration-time merges (.decorate('override', name, value)
 // / .state('override', ...)) re-run mergeDeep against a previously stored named
 // value. If that value carries a getter-only / non-writable own property, the
 // bare `target[key] = value` throws TypeError in ESM strict mode and crashes the
-// whole .decorate()/.state() call. main swallowed it; kiana must too. A getter
+// whole .decorate/.state call. The merge must ignore that assignment too. A getter
 // stays untouched rather than crashing the merge.
-describe('mergeDeep — getter-only / non-writable property (idx26)', () => {
+describe('mergeDeep — getter-only / non-writable property', () => {
 	it('does not throw when overriding a getter-only property', () => {
 		const target: Record<string, unknown> = {}
 		Object.defineProperty(target, 'sameKey', {
@@ -24,7 +24,9 @@ describe('mergeDeep — getter-only / non-writable property (idx26)', () => {
 			configurable: false
 		})
 
-		expect(() => mergeDeep(target, { sameKey: 2 }, undefined, true)).not.toThrow()
+		expect(() =>
+			mergeDeep(target, { sameKey: 2 }, undefined, true)
+		).not.toThrow()
 		// assignment was swallowed: getter still returns its original value
 		expect((target as any).sameKey).toBe(1)
 	})
@@ -45,14 +47,14 @@ describe('mergeDeep — getter-only / non-writable property (idx26)', () => {
 	})
 })
 
-// idx42 — appendInto must treat the `schema` guard marker as a scalar mode
+// appendInto must treat the `schema` guard marker as a scalar mode
 // string, not an array element. WHY: a guard node carries `schema: 'standalone'`
 // | 'override' as a mode flag (consumed elsewhere as a scalar, and dropped on
-// cross-`.use()` propagation). Pushing it into an array yields a bogus
+// cross-`.use` propagation). Pushing it into an array yields a bogus
 // `schema: ['standalone', ...]` type-lie at the public `routes` introspection
 // boundary. `schemas` (plural, the real extracted schema objects) MUST still
 // accumulate as an array.
-describe('flattenChain — schema marker stays scalar (idx42)', () => {
+describe('flattenChain — schema marker stays scalar', () => {
 	it('keeps the schema marker as a scalar string, not an array', () => {
 		const parent: ChainNode = {
 			added: { schema: 'override' as any },
@@ -89,13 +91,13 @@ describe('flattenChain — schema marker stays scalar (idx42)', () => {
 	})
 })
 
-// idx48 — cloneHook must deep-copy ALL array hook keys (incl. `schemas` and
+// cloneHook must deep-copy ALL array hook keys (incl. `schemas` and
 // `derive`), not only `eventProperties`. WHY: applyHook does
 // mergeHook(cloneHook(local), appHook); mergeHook's mergeArray mutates side `a`
 // in place. If cloneHook aliases `schemas`/`derive`, the merge mutates the
 // route's SHARED original local hook, so on any recompile inherited entries
 // accumulate/duplicate. The clone must own fresh arrays.
-describe('cloneHook — deep-copies schemas/derive (idx48)', () => {
+describe('cloneHook — deep-copies schemas/derive', () => {
 	it('does not alias the schemas array', () => {
 		const local = { schemas: [{ body: { type: 'string' } }] as any }
 		const cloned = cloneHook(local)

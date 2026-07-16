@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'bun:test'
 import { Elysia, t } from '../../src'
 
-// Differential harness for `experimental.lazyCompose` (B5 part 2).
+// Differential harness for `experimental.lazyCompose`.
 //
 // Under the flag, `.use(sync child)` keeps all non-route composition work eager
 // (ext merges, macros, scope children, hook-chain absorption) and defers ONLY
@@ -12,13 +12,15 @@ import { Elysia, t } from '../../src'
 //
 // Each fixture is built TWICE from the same builder — once eager, once with the
 // flag on for every instance — and the two must be indistinguishable:
-//   1. `app.routes` structurally identical (length, order, method, path)
-//   2. response status + headers (minus Date) + body identical over a request
-//      matrix
+// 1. `app.routes` structurally identical (length, order, method, path)
+// 2. response status + headers (minus Date) + body identical over a request
+// matrix
 // This is what makes the flag safe to ship: it can only ever be a no-op on
 // observable behavior. If the two diverge, the deferral changed semantics.
 
-type Build = (opt: Record<string, unknown>) => Elysia<any, any, any, any, any, any, any, any>
+type Build = (
+	opt: Record<string, unknown>
+) => Elysia<any, any, any, any, any, any, any, any>
 
 const eagerOpt = () => ({}) as Record<string, unknown>
 const lazyOpt = () =>
@@ -45,7 +47,10 @@ const send = (app: any, req: Req) => {
 	if (req.headers) init.headers = req.headers
 	if (req.body !== undefined) {
 		init.body = JSON.stringify(req.body)
-		init.headers = { 'content-type': 'application/json', ...(req.headers ?? {}) }
+		init.headers = {
+			'content-type': 'application/json',
+			...(req.headers ?? {})
+		}
 	}
 	return app.handle(new Request(`http://e.ly${req.path}`, init))
 }
@@ -151,11 +156,7 @@ describe('experimental.lazyCompose — differential parity', () => {
 						.guard({ query: t.Object({ n: t.Numeric() }) })
 						.get('/x', ({ query }: any) => query.n * 2)
 				),
-			[
-				{ path: '/g/x?n=5' },
-				{ path: '/g/x?n=abc' },
-				{ path: '/g/x' }
-			]
+			[{ path: '/g/x?n=5' }, { path: '/g/x?n=abc' }, { path: '/g/x' }]
 		))
 
 	it('decorator, store and model reference validation across a plugin seam', () =>

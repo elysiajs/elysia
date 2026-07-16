@@ -73,7 +73,7 @@ describe('flatten cache immutability', () => {
 	})
 
 	it('does not accumulate duplicate standalone validators across repeated sibling composition', async () => {
-		// H11b: flattenChainMemoReadonly returns the raw cached object.
+		// flattenChainMemoReadonly returns the raw cached object.
 		// mergeHook can assign `hook.schemas = inherited.schemas` (cached ref)
 		// when the route has no local schemas; a subsequent mergeHook pushes into
 		// that array, accumulating duplicates in the shared cache across multiple

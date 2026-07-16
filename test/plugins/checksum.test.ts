@@ -149,7 +149,7 @@ describe('Checksum', () => {
 		expect(called).toBe(1)
 	})
 
-	// H2: the single-fn diamond above dedups because `#on` tags the fn in
+	// the single-fn diamond above dedups because `#on` tags the fn in
 	// `fnOrigin`, and the `#use` merge skips fns whose origin is an
 	// already-absorbed child. The ARRAY-form overload (`MaybeArray`) used to
 	// tag only the array object, leaving each element untagged → the merge's

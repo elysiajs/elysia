@@ -1,11 +1,9 @@
 /**
- * A19 — Context own-field shape parity between src and dist.
- *
  * Bun executes TypeScript source with ES2022 class-field semantics
  * (useDefineForClassFields=true): every class field declaration that lacks
- * `declare` becomes an own property even when never assigned.  The built
+ * `declare` becomes an own property even when never assigned. The built
  * dist strips unassigned field declarations, leaving only constructor-
- * assigned slots.  This test pins that both forms produce identical shapes.
+ * assigned slots. This test pins that both forms produce identical shapes.
  */
 import { describe, it, expect } from 'bun:test'
 import { existsSync } from 'node:fs'
@@ -14,11 +12,11 @@ import { resolve } from 'node:path'
 const DIST_CONTEXT = resolve(import.meta.dir, '../../dist/context.js')
 const DIST_INDEX = resolve(import.meta.dir, '../../dist/index.js')
 
-describe('Context own-field shape parity (A19)', () => {
+describe('Context own-field shape parity', () => {
 	it('src and dist Context construct identical own-field names', async () => {
 		if (!existsSync(DIST_CONTEXT) || !existsSync(DIST_INDEX)) {
 			console.log(
-				'[A19] dist/ absent — skipping dist parity check (run `bun run build` first)'
+				'dist/ absent — skipping Context parity check (run `bun run build` first)'
 			)
 			// skip — don't fail on a cold checkout with no dist
 			return

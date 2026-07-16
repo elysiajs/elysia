@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test'
 
 import { responseToSetHeaders } from '../../src/adapter/utils'
 
-// Regression (audit H6): merging a returned/re-streamed Response's headers into
+// Regression: merging a returned/re-streamed Response's headers into
 // `set` used a `key in set.headers` guard. On non-Bun runtimes that took the
 // `for…entries()` branch, that guard meant a freshly-created empty `set.headers`
 // received NOTHING (every header dropped), and an existing `set.headers` only

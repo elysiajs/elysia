@@ -1,31 +1,31 @@
 /**
- * D2 differential harness — committed comparison rules (n-proof.md P0-10).
+ * Differential response comparison rules.
  *
  * The COMPARISON RULES ARE THE PRODUCT: debuggability on mismatch is the point.
  * Every normalization exception below carries a why-comment. Do not add an
  * exception without one.
  *
  * ── Rules ───────────────────────────────────────────────────────────────────
- * • status         — strict equality.
- * • headers        — multiset of (lowercase-name, value). ORDER-INSENSITIVE
- *                    because HTTP header order is not semantically meaningful and
- *                    real sockets may reorder. content-length IS compared.
- *   normalization exceptions (the ONLY ones):
- *     - `date`     — STRIPPED. Real-socket (listen) lanes stamp a wall-clock
- *                    Date; app.handle() does not. Comparing it would be a clock
- *                    race, not a divergence. Stripped on BOTH sides so a lane
- *                    that emits it and one that doesn't still compare equal.
- *     - `etag`     — ignored ONLY when emitted by the candidate in the
- *                    native-static-off-vs-on@listen pair. Bun's native static
- *                    tier adds it automatically; the JS oracle cannot.
- * • set-cookie     — extracted via getSetCookie() and compared as an ORDERED
- *                    list. Cookie emission order is a contract (write-many); a
- *                    reordering IS a divergence, so it is NOT folded into the
- *                    order-insensitive header multiset.
- * • body           — exact bytes (Uint8Array from a fully-drained arrayBuffer).
- * • observations   — structural deep-equal (P0-9): object keys order-insensitive,
- *                    arrays order-sensitive. Dispatched via the comparator
- *                    registry (`comparators`) so B5 can add more later.
+ * • status — strict equality.
+ * • headers — multiset of (lowercase-name, value). ORDER-INSENSITIVE
+ * because HTTP header order is not semantically meaningful and
+ * real sockets may reorder. content-length IS compared.
+ * normalization exceptions (the ONLY ones):
+ * - `date` — STRIPPED. Real-socket (listen) lanes stamp a wall-clock
+ * Date; app.handle does not. Comparing it would be a clock
+ * race, not a divergence. Stripped on BOTH sides so a lane
+ * that emits it and one that doesn't still compare equal.
+ * - `etag` — ignored ONLY when emitted by the candidate in the
+ * native-static-off-vs-on@listen pair. Bun's native static
+ * tier adds it automatically; the JS oracle cannot.
+ * • set-cookie — extracted via getSetCookie and compared as an ORDERED
+ * list. Cookie emission order is a contract (write-many); a
+ * reordering IS a divergence, so it is NOT folded into the
+ * order-insensitive header multiset.
+ * • body — exact bytes (Uint8Array from a fully-drained arrayBuffer).
+ * • observations — structural deep-equal: object keys order-insensitive,
+ * arrays order-sensitive. Dispatched via the comparator
+ * registry (`comparators`) so more comparators remain local.
  */
 
 /** A normalized, comparable snapshot of a Response. */
@@ -41,7 +41,7 @@ export interface ResponseSnapshot {
 
 /** Headers stripped from the comparison. Each MUST have a why-comment above. */
 const STRIPPED_HEADERS = new Set([
-	// Real-socket lanes stamp wall-clock Date; app.handle() does not. A clock,
+	// Real-socket lanes stamp wall-clock Date; app.handle does not. A clock,
 	// not a divergence.
 	'date'
 ])
@@ -193,7 +193,7 @@ export function compareResponses(
 }
 
 /**
- * Structural deep equality (P0-9). Order-INSENSITIVE for object keys (a set of
+ * Structural deep equality. Order-insensitive for object keys (a set of
  * facts is unordered), order-SENSITIVE for arrays (a hook-fire log's order IS the
  * fact). No dependencies. `JSON.stringify` would have been order-SENSITIVE for
  * object keys — a false divergence when two lanes emit the same facts in a
@@ -239,7 +239,7 @@ export function deepEqual(a: unknown, b: unknown): boolean {
 	return true
 }
 
-/** Structural deep-equal comparison of lane observations (P0-9). */
+/** Structural deep-equal comparison of lane observations. */
 export function compareObservations(
 	ctx: { corpusId: string; requestId: string; lanePair: string },
 	oracle: unknown,
@@ -256,9 +256,8 @@ export function compareObservations(
 }
 
 /**
- * Typed comparator registry (P0-9). The matrix dispatches through named
- * comparators so future tasks can register more without touching the matrix:
- * B5 will add a `flatten`-structural comparator here when it lands. A comparator
+ * The matrix dispatches through named comparators so more comparison types can
+ * be added without touching the matrix. A comparator
  * takes the oracle + candidate facts (already snapshotted) and returns the FIRST
  * mismatch or null. Keep it lean — a `Record` of functions, no classes.
  */

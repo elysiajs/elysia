@@ -340,7 +340,7 @@ describe('Bun router', () => {
 		).resolves.toBe('/items/types/:id')
 	})
 
-	// Regression (audit H16): when every static response is synchronous the
+	// Regression: when every static response is synchronous the
 	// `pending` array is empty, and `collectRoutes` only installed
 	// `serve.routes` when there were pending promises — so Bun.serve's native
 	// static-route dispatch was never wired up. The optimization being dead
@@ -399,7 +399,7 @@ describe('Bun router', () => {
 		app.stop()
 	})
 
-	// Audit F40 (schema bail): a static-value route with a request schema
+	// Schema bail: a static-value route with a request schema
 	// must NOT be served natively — the compiled handler 422s per request,
 	// so native dispatch would silently flip 422 to 200 and the error hook
 	// would lose those events
@@ -421,7 +421,7 @@ describe('Bun router', () => {
 		app.stop()
 	})
 
-	// Audit F41: the compiled JS handler applies mapResponse around the
+	// The compiled JS handler applies mapResponse around the
 	// static value (compression/caching plugins rely on it), so the
 	// mapped body must reach the wire — the route must not be installed
 	// as a precomputed native static Response serving stale bytes
@@ -442,11 +442,10 @@ describe('Bun router', () => {
 		app.stop()
 	})
 
-	// Audit F42: listen()'s boot microtask must not force-build the full
+	// listen()'s boot microtask must not force-build the full
 	// router while async plugins are still pending — the drain would throw
 	// that build away and rebuild everything.
-	// A6 (transactional startup, plan.md 2026-07-12): pre-drain requests are
-	// no longer served on the partial app (a request must never observe
+	// Pre-drain requests are not served on the partial app: a request must never observe
 	// pre-ready state) — they queue behind the gated fetch and resolve after
 	// the module drain publishes the full app.
 	it('does not force-build the router while async plugins are pending', async () => {
@@ -492,7 +491,7 @@ describe('Bun router', () => {
 		app.stop()
 	})
 
-	// Audit F42 (websocket): ws routes and per-route ws options only exist
+	// WebSocket routes and per-route options only exist
 	// after the post-drain rebuild — `reloadAfterModules` must rebuild
 	// `serve.websocket`, including when every ws route lives in the
 	// pending plugin (`~hasWS` is false at listen time)

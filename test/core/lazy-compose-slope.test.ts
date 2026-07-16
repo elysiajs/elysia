@@ -1,24 +1,18 @@
 import { describe, it, expect } from 'bun:test'
 import { Elysia } from '../../src'
 
-// B5 experimental.lazyCompose — build-cost SLOPE gate.
-//
-// This is the gating assertion for the D1 compose-depth grid fixture
+// This is the gating assertion for the compose-depth benchmark fixture
 // (bench/d1/fixtures/compose-depth.ts). That fixture measures lazy-vs-eager
-// build cost over depth×routes but CANNOT gate through D1's record/aa/gate
+// build cost over depth×routes but cannot use the benchmark's record/aa/gate
 // machinery: those compare two Elysia git-commit roots and extract one scalar
 // per metric, whereas lazy-vs-eager is a flag toggle within one commit over a
-// grid (see the fixture header). design/n-proof.md's escape hatch is to put such
-// an assertion in a plain `bun test` — this file.
+// grid (see the fixture header), so the assertion runs as a plain unit test.
 //
-// CLAIM. The eager `.use` re-absorption path is superlinear in nesting depth
+// The eager `.use` re-absorption path is superlinear in nesting depth
 // (Θ(N·D²): each level re-absorbs the whole accumulated subtree), while
 // experimental.lazyCompose is sub-linear in depth (single-pass DFS flatten,
-// Θ(nodes+routes)). Concretely, at a fixed route budget:
-//   - eager build cost grows steeply with depth (d64/d16 well above linear-ish);
-//   - lazy build cost is near-flat with depth (d64/d16 close to 1);
-//   - lazy's depth slope is far below eager's;
-//   - and at a nested depth, lazy is a large constant-factor faster than eager.
+// Θ(nodes+routes)). At a fixed route budget, eager build cost must grow steeply
+// with depth while lazy build cost stays near-flat and materially lower.
 // If the deferral ever regressed into re-absorption, eager and lazy slopes would
 // converge and these bounds would break — that is what the test protects.
 

@@ -6,13 +6,13 @@ import { compileHandler } from '../../src/compile/handler'
 import { req } from '../utils'
 
 /**
- * Schedule-block dedup harness (F10).
+ * Schedule-block dedup harness .
  *
  * The afterResponse/trace SCHEDULE block (`c._arf=true` + `queueMicrotask(async
  * () => { ... drain ... afterResponse spans ... })`) used to be concatenated
  * verbatim at the success return, once per error hook inside the catch, and in
  * the catch fallbacks — up to 5 identical copies in a single function, all
- * parsed/JIT'd, only one ever running. F10 hoists it into one route-local
+ * parsed/JIT'd, only one ever running. It is hoisted into one route-local
  * `function _sc(){...}` declared before the route `try{`, and replaces every
  * site with a `_sc()` call.
  *
@@ -35,7 +35,7 @@ const compileRoute = (app: any, index = 0) => {
 const count = (haystack: string, needle: string) =>
 	haystack.split(needle).length - 1
 
-describe('F10: schedule block is emitted once on trace+error routes', () => {
+describe('schedule block is emitted once on trace+error routes', () => {
 	it('trace + 3 error hooks: one `function _sc(){` decl, multiple `_sc()` calls', () => {
 		const app = new Elysia()
 			.trace(() => {})
@@ -80,7 +80,7 @@ describe('F10: schedule block is emitted once on trace+error routes', () => {
 	})
 })
 
-describe('F10: behaviour preserved', () => {
+describe('behaviour preserved', () => {
 	it('afterResponse fires once on the success path with an error hook present', async () => {
 		let calls = 0
 		const app = new Elysia().get(
@@ -103,8 +103,8 @@ describe('F10: behaviour preserved', () => {
 	// The handler is async so the route is an AsyncFunction (isAsync), the catch
 	// is inlined (not the `_ce` factory helper), and the deduped `_sc()` is the
 	// path exercised on every error return. (A SYNC handler + error hook + sync
-	// afterResponse is a separate, pre-existing Wave-3a codegen combination that
-	// F10 deliberately does not touch — the `syncErrorHook` gate keeps it inline.)
+	// afterResponse is a separate codegen combination that the `syncErrorHook`
+	// gate keeps inline.)
 	it('afterResponse fires once when an error hook handles a throw', async () => {
 		let calls = 0
 		const app = new Elysia().get(

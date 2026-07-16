@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'bun:test'
 import { Elysia } from '../../src'
 
-// C14: all text chunks (plain, JSON, SSE) must arrive as Uint8Array so the
+// All text chunks (plain, JSON, SSE) must arrive as Uint8Array so the
 // stream works on Node/Deno/CF Workers (Bun auto-encodes; others do not).
-describe('C14 — stream chunks are Uint8Array', () => {
+describe('stream chunks are Uint8Array', () => {
 	it('plain string chunk is enqueued as Uint8Array', async () => {
 		const app = new Elysia().get('/str', async function* () {
 			yield 'hello'
@@ -21,8 +21,7 @@ describe('C14 — stream chunks are Uint8Array', () => {
 		}
 
 		expect(chunks.length).toBeGreaterThan(0)
-		for (const chunk of chunks)
-			expect(chunk).toBeInstanceOf(Uint8Array)
+		for (const chunk of chunks) expect(chunk).toBeInstanceOf(Uint8Array)
 
 		const text = chunks
 			.map((c) => new TextDecoder().decode(c as Uint8Array))
@@ -47,11 +46,10 @@ describe('C14 — stream chunks are Uint8Array', () => {
 		}
 
 		expect(chunks.length).toBeGreaterThan(0)
-		for (const chunk of chunks)
-			expect(chunk).toBeInstanceOf(Uint8Array)
+		for (const chunk of chunks) expect(chunk).toBeInstanceOf(Uint8Array)
 	})
 
-	it('SSE toSSE() chunk is enqueued as Uint8Array', async () => {
+	it('SSE toSSE chunk is enqueued as Uint8Array', async () => {
 		const app = new Elysia().get('/sse', async function* () {
 			yield { data: 'msg1', sse: true, toSSE: () => 'data: msg1\n\n' }
 			yield { data: 'msg2', sse: true, toSSE: () => 'data: msg2\n\n' }
@@ -68,8 +66,7 @@ describe('C14 — stream chunks are Uint8Array', () => {
 		}
 
 		expect(chunks.length).toBeGreaterThan(0)
-		for (const chunk of chunks)
-			expect(chunk).toBeInstanceOf(Uint8Array)
+		for (const chunk of chunks) expect(chunk).toBeInstanceOf(Uint8Array)
 
 		const text = chunks
 			.map((c) => new TextDecoder().decode(c as Uint8Array))
@@ -111,18 +108,17 @@ describe('C14 — stream chunks are Uint8Array', () => {
 		}
 
 		expect(chunks.length).toBeGreaterThan(0)
-		for (const chunk of chunks)
-			expect(chunk).toBeInstanceOf(Uint8Array)
+		for (const chunk of chunks) expect(chunk).toBeInstanceOf(Uint8Array)
 
 		const combined = [...chunks[0], ...chunks[1]]
 		expect(combined).toEqual([1, 2, 3, 4, 5, 6])
 	})
 })
 
-// L10: handleSet copy-on-write — the flatten must be skipped when a request
+// handleSet copy-on-write — the flatten must be skipped when a request
 // never mutated set.headers, but default headers must still appear.
 // The critical invariant: first request's mutations must NOT bleed into second.
-describe('L10 — handleSet copy-on-write default headers', () => {
+describe('handleSet copy-on-write default headers', () => {
 	it('default headers appear on response when request does not mutate them', async () => {
 		const app = new Elysia()
 			.headers({ 'x-powered-by': 'elysia' })

@@ -1,7 +1,5 @@
 /**
- * C2 (N.1) — per-schema `expected` default memo.
- *
- * Intent: `Create(schema)` (~1.5µs walk) must run ONCE per schema identity, not
+ * `Create(schema)` (~1.5µs walk) must run once per schema identity, not
  * per 422 occurrence. Encoded behaviorally: two separate 422s on the same route
  * (same snapshot-stable schema) yield the SAME cached `expected` reference. A
  * cache miss would re-`Create` and produce a distinct object.
@@ -9,7 +7,7 @@
 import { describe, expect, it } from 'bun:test'
 import { Elysia, t, ValidationError } from '../../src'
 
-describe('C2 expected-value cache', () => {
+describe('validation expected-value cache', () => {
 	it('reuses one deeply frozen `expected` value without cross-request mutation', async () => {
 		const expecteds: any[] = []
 		let mutationApplied: boolean | undefined
@@ -79,7 +77,7 @@ describe('C2 expected-value cache', () => {
 			})
 		)
 
-		// Create() default for the object schema — shape is preserved, not corrupted.
+		// Create default for the object schema — shape is preserved, not corrupted.
 		expect(expected).toBeDefined()
 		expect(typeof expected).toBe('object')
 	})
@@ -121,11 +119,11 @@ describe('C2 expected-value cache', () => {
 		expect(cloneAttempts).toBe(2)
 	})
 
-	it('returns Create() output as-is for exotic values (no clone, no cache)', () => {
+	it('returns Create output as-is for exotic values (no clone, no cache)', () => {
 		// Date is an exotic (class instance) — isCacheableExpected rejects it.
 		// The fix: no structuredClone, no freeze, no cache. Each 422 re-calls
-		// Create() (which calls the default fn), so creates === 2. The returned
-		// reference is the original Create() output; prototype is intact.
+		// Create (which calls the default fn), so creates === 2. The returned
+		// reference is the original Create output; prototype is intact.
 		let creates = 0
 		const shared = { value: new Date(0) }
 		const schema = t.Any({
@@ -147,12 +145,12 @@ describe('C2 expected-value cache', () => {
 		// prototype of the Date value is preserved (not degraded to plain object)
 		expect(first.value).toBeInstanceOf(Date)
 		expect(first.value.getTime()).toBe(0)
-		// Create() called twice — no caching for exotics
+		// Create called twice — no caching for exotics
 		expect(creates).toBe(2)
 	})
 
 	it('pinned: class-instance default retains prototype, is not cached, is not frozen', async () => {
-		// Regression pin for the P2 fix: before the fix, structuredClone was called
+		// Before the fix, structuredClone was called
 		// BEFORE classification, stripping the prototype off class instances and
 		// caching the degraded plain-object clone. After the fix, class instances
 		// bypass clone/freeze/cache entirely.
@@ -166,10 +164,10 @@ describe('C2 expected-value cache', () => {
 
 		const instance = new Sentinel()
 
-		// t.Any with a class instance as default — Create() returns the instance directly.
+		// t.Any with a class instance as default — Create returns the instance directly.
 		const schema = t.Any({ default: instance })
 
-		// Drive through ValidationError directly — Create() returns the class
+		// Drive through ValidationError directly — Create returns the class
 		// instance default as-is, which is the exotic case under test.
 		const getExpected = () =>
 			new ValidationError('body', null, [], schema).payload.expected
@@ -177,19 +175,18 @@ describe('C2 expected-value cache', () => {
 		const first = getExpected() as Sentinel
 		const second = getExpected() as Sentinel
 
-		// (a) prototype and methods are intact — not degraded to plain object
+		// Prototype and methods remain intact rather than becoming a plain object.
 		expect(first).toBeInstanceOf(Sentinel)
 		expect(first.greet()).toBe('hello from sentinel')
 		expect(second).toBeInstanceOf(Sentinel)
 		expect(second.greet()).toBe('hello from sentinel')
 
-		// (b) two calls do NOT share one frozen cached reference
-		//     (both equal `instance` because Create() returns it directly, but
-		//      neither is a frozen cached clone — verify not frozen)
+		// Both calls equal `instance` because Create returns it directly, but they
+		// must not become a shared frozen cache entry.
 		expect(first).toBe(instance)
 		expect(second).toBe(instance)
 
-		// (c) the value is not frozen
+		// The original class instance remains mutable.
 		expect(Object.isFrozen(first)).toBe(false)
 	})
 })

@@ -12,7 +12,7 @@ import { materialise, materialiseHandlers } from './_manifest'
 import { post, req } from '../utils'
 
 /**
- * Regression net for the kiana `src/compile/handler/index.ts` fixes.
+ * Regression net for the  `src/compile/handler/index.ts` fixes.
  *
  * These cover correctness holes the type gate cannot see (codegen + the AOT
  * capture/reconstruct replay path). Each test fails on the pre-fix code and
@@ -25,14 +25,14 @@ afterEach(() => {
 })
 
 /**
- * idx2 — route-inline named-parser strings (`parse: ['name']`) must resolve to
+ * route-inline named-parser strings (`parse: ['name']`) must resolve to
  * functions BEFORE the reconstruct early-return. On the AOT-frozen path the
  * captured source is `c.body=await ho.parse[0](c,ct)`; if `hook.parse[0]` is
  * still the literal `'double'`, replay calls `'double'(c,ct)` → ParseError → 400.
  * This is the eval-banned deploy path (Cloudflare), so a 400 here is a hard
  * functional break on a documented usage pattern.
  */
-describe('idx2 — named-parser strings resolve on the reconstruct path', () => {
+describe('named-parser strings resolve on the reconstruct path', () => {
 	beforeEach(() => {
 		process.env.ELYSIA_AOT_BUILD = '1'
 		endValidatorCapture()
@@ -74,13 +74,13 @@ describe('idx2 — named-parser strings resolve on the reconstruct path', () => 
 })
 
 /**
- * idx13 — merging an instance-local `.error()` into a route whose own error hook
+ * merging an instance-local `.error` into a route whose own error hook
  * is a SINGLE (non-array) function must not throw. The pre-fix code ran
  * `existing.includes(fn)` on a bare function (`.includes` undefined) →
  * `TypeError` at compile → the route returns 500 with the TypeError body
  * instead of invoking the user's error handler.
  */
-describe('idx13 — single-function error hook merges without throwing', () => {
+describe('single-function error hook merges without throwing', () => {
 	it('invokes the route error handler (599) instead of crashing (500)', async () => {
 		const plugin = new Elysia()
 			.get(
@@ -107,12 +107,12 @@ describe('idx13 — single-function error hook merges without throwing', () => {
 })
 
 /**
- * idx14 — a sync handler returning a STORED Promise (bare identifier, no call /
+ * a sync handler returning a STORED Promise (bare identifier, no call /
  * async / await token) defeated `mayReturnPromise`, so the route compiled sync
  * and the response validator ran `EncodeFrom` on the unawaited Promise (shape
  * `{}`) → 422 instead of resolving the Promise and validating its value.
  */
-describe('idx14 — sync handler returning a stored Promise is awaited', () => {
+describe('sync handler returning a stored Promise is awaited', () => {
 	it('resolves the Promise before response validation (200, not 422)', async () => {
 		const cached = Promise.resolve({ ok: true })
 		const app = new Elysia().get(
@@ -143,13 +143,13 @@ describe('idx14 — sync handler returning a stored Promise is awaited', () => {
 })
 
 /**
- * idx15 — header extraction baked into a CAPTURED handler must be runtime
+ * header extraction baked into a CAPTURED handler must be runtime
  * portable. Capturing on Bun (where `Headers.toJSON` exists) previously baked
- * the literal `c.request.headers.toJSON()`, which throws on Node/Workers (no
+ * the literal `c.request.headers.toJSON`, which throws on Node/Workers (no
  * `Headers.prototype.toJSON`) on every request. With no declared target the
  * capture must emit a guarded, cross-runtime form.
  */
-describe('idx15 — captured header extraction is runtime portable', () => {
+describe('captured header extraction is runtime portable', () => {
 	beforeEach(() => {
 		process.env.ELYSIA_AOT_BUILD = '1'
 		endValidatorCapture()
@@ -166,7 +166,7 @@ describe('idx15 — captured header extraction is runtime portable', () => {
 			({ headers }: any) => headers['x-test']
 		)
 
-	it('does not bake an unguarded toJSON() into the captured source', () => {
+	it('does not bake an unguarded toJSON into the captured source', () => {
 		;(build() as any).compile()
 		const handlers = endHandlerCapture()
 		endValidatorCapture()
@@ -176,7 +176,7 @@ describe('idx15 — captured header extraction is runtime portable', () => {
 
 		// The captured code reads headers...
 		expect(code).toContain('c.headers=')
-		// ...but never with a bare, unguarded `.toJSON()` that crashes on
+		//...but never with a bare, unguarded `.toJSON` that crashes on
 		// runtimes lacking it. If toJSON is referenced it must be optional.
 		expect(code).not.toContain('headers.toJSON()')
 		if (code.includes('toJSON')) {
@@ -210,55 +210,45 @@ describe('idx15 — captured header extraction is runtime portable', () => {
 })
 
 /**
- * M15/Q4 — `.compile()` must force the fetch handler to (re)build, and the
- * rebuild machinery it protects must stay demonstrably live under the B6
- * semantic freeze.
- *
- * The historical M15 bug: once the fetch handler exists (first request or
+ * Once the fetch handler exists (first request or
  * `.fetch` access) it is memoised in `#fetchFn`, so on the non-capture path
- * `compile()` used to clear `#fetchFn` ONLY under `Capture.isCapturing()` — a
- * pre-called `compile()` left a stale fetch and a route was never served.
+ * `compile` used to clear `#fetchFn` ONLY under `Capture.isCapturing` — a
+ * pre-called `compile` left a stale fetch and a route was never served.
  *
- * Under Q4 the "add a route after the first request, then compile()" vehicle is
- * dead: the first request SEALS the app, so any later `.get()` throws. The
- * protection is preserved with Q4-legal vehicles:
- *   (a) post-seal `.get()` throws the sealed error (retirement of the old
- *       silent-invalidate-and-rebuild behavior — the throw is the new contract);
- *   (b) `.compile()` still yields a working fetch that serves EVERY route
- *       registered before sealing — including routes registered in the WARM,
- *       still-authorable window after `await app.modules` (async-plugin drain
- *       builds but does NOT seal), which `.compile()` then seals and serves;
- *   (c) the internal `~newGeneration()` hot-reload swap rebuilds and republishes,
- *       so the rebuild machinery M15 guarded still demonstrably rebuilds (a route
- *       added through the unseal window is served after the swap, old routes stay).
+ * The first request seals the app, so later authoring mutations throw. `compile`
+ * must still serve every route registered before sealing, including routes added
+ * after async plugins drain, and `~newGeneration` must rebuild and republish
+ * during an internal hot-reload swap.
  *
  * The Bun.serve safety property still holds: the rebuild repopulates the SAME
  * `~map` / `~router` objects in place, so a fetch closure captured before the
  * swap keeps serving and sees the new routes too.
  */
-describe('M15/Q4 — compile() rebuilds; post-seal mutation throws', () => {
-	it('post-seal .get() throws instead of silently invalidating (Q4)', async () => {
+describe('compile rebuild and sealed-app immutability', () => {
+	it('post-seal .get throws instead of silently invalidating', async () => {
 		const app = new Elysia().get('/a', () => 'a')
 
 		// First request builds + memoises the fetch handler AND seals the app.
 		expect((await app.handle(req('/a'))).status).toBe(200)
 
 		// The retired behavior silently invalidated the router and 404'd until a
-		// rebuild; Q4 makes the sealed instance immutable — the mutation throws.
-		expect(() => app.get('/b', () => 'b')).toThrow('after the app was sealed')
+		// rebuild; the sealed instance is immutable, so the mutation throws.
+		expect(() => app.get('/b', () => 'b')).toThrow(
+			'after the app was sealed'
+		)
 
-		// A subsequent .compile() on the sealed app still yields a working fetch for
+		// A subsequent.compile on the sealed app still yields a working fetch for
 		// the routes that WERE registered before sealing (no stale-#fetchFn 404 — the
-		// original M15 protection). If compile() regressed to a no-op leaving a stale
+		// original protection). If compile regressed to a no-op leaving a stale
 		// handler, this could observe a torn/empty router.
 		app.compile()
 		expect((await app.handle(req('/a'))).status).toBe(200)
 	})
 
-	it('compile() serves a route registered in the warm (post-drain, pre-seal) window', async () => {
+	it('compile serves a route registered in the warm (post-drain, pre-seal) window', async () => {
 		// An async plugin: `await app.modules` drains it and does a WARM rebuild that
 		// leaves the app authorable (no seal yet). A route registered in that window
-		// must be served once `.compile()` seals — proving compile() rebuilds the
+		// must be served once `.compile` seals — proving compile rebuilds the
 		// fetch handler over the full pre-seal route set, not a stale snapshot.
 		const app = new Elysia().use(
 			Promise.resolve(new Elysia().get('/late', () => 'late'))
@@ -273,23 +263,23 @@ describe('M15/Q4 — compile() rebuilds; post-seal mutation throws', () => {
 		await expect((await app.handle(req('/warm'))).text()).resolves.toBe(
 			'warm'
 		)
-		// The async-plugin route registered before compile() is served too.
+		// The async-plugin route registered before compile is served too.
 		expect((await app.handle(req('/late'))).status).toBe(200)
 	})
 
-	it('~newGeneration() rebuilds and republishes; a fetch captured before the swap serves the new route (Bun.serve safety)', async () => {
+	it('~newGeneration rebuilds and republishes; a fetch captured before the swap serves the new route (Bun.serve safety)', async () => {
 		const app = new Elysia().get('/a', () => 'a')
 
-		// Simulate the reference Bun.serve holds after listen(): the fetch closure
-		// captured at listen() time. The first call seals the app.
+		// Simulate the reference Bun.serve holds after listen: the fetch closure
+		// captured at listen time. The first call seals the app.
 		const capturedFetch = app.fetch
 		expect((await capturedFetch(req('/a'))).status).toBe(200)
 		const previous = app['~generation']
 		expect(previous).toBeDefined()
 
 		// Dev hot-reload swap: unseal, add a route through the authoring window, then
-		// atomically republish via the internal ~newGeneration() (mirrors
-		// generation.test.ts). This exercises the SAME rebuild machinery M15 guarded.
+		// atomically republish via the internal ~newGeneration (mirrors
+		// generation.test.ts). This exercises the same rebuild machinery.
 		;(app as any)['~generation'] = undefined
 		app.get('/b', () => 'b')
 		app['~newGeneration']()
@@ -302,11 +292,10 @@ describe('M15/Q4 — compile() rebuilds; post-seal mutation throws', () => {
 		expect((await capturedFetch(req('/a'))).status).toBe(200)
 	})
 
-	it('~newGeneration() rebuilds for dynamic routes added through the unseal window', async () => {
+	it('~newGeneration rebuilds for dynamic routes added through the unseal window', async () => {
 		const app = new Elysia().get('/u/:id', ({ params }: any) => params.id)
 		const capturedFetch = app.fetch
 		expect((await capturedFetch(req('/u/1'))).status).toBe(200)
-
 		;(app as any)['~generation'] = undefined
 		app.get('/v/:id', ({ params }: any) => 'v' + params.id)
 		app['~newGeneration']()
@@ -320,12 +309,12 @@ describe('M15/Q4 — compile() rebuilds; post-seal mutation throws', () => {
 })
 
 /**
- * idx52 — applyHook returned the caller's `localHook` by reference on the
+ * applyHook returned the caller's `localHook` by reference on the
  * rootHook-less path, then compileHandler mutated it in place (promoteDerive
  * moves `derive`→`beforeHandle`, `parse` is arrayified). A hook-options object
  * shared across routes would be silently rewritten under the caller's feet.
  */
-describe('idx52 — compileHandler does not mutate a caller-owned hook', () => {
+describe('compileHandler does not mutate a caller-owned hook', () => {
 	it('leaves a shared hook-options object untouched after compile', () => {
 		const parseFn = () => undefined
 		const deriveFn = () => ({})

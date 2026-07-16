@@ -49,7 +49,7 @@ describe('Response Headers', () => {
 		expect(res.headers.get('x-powered-by')).toBe('Elysia')
 	})
 
-	// C1: a returned Response must NOT be mutated in place. Elysia rebuilds it
+	// a returned Response must NOT be mutated in place. Elysia rebuilds it
 	// into a fresh Response so a shared/module-level Response cannot carry one
 	// request's `set.headers` onto a later response. The static in-memory body
 	// and its content-length must survive the rebuild.
@@ -76,7 +76,7 @@ describe('Response Headers', () => {
 		expect(original!.headers.get('x-powered-by')).toBeNull()
 	})
 
-	// C1 regression: two routes returning the SAME module-level Response with
+	//  regression: two routes returning the SAME module-level Response with
 	// different per-request set.headers must not contaminate each other, and
 	// the shared object must never be mutated. Before the fix, the Bun fast
 	// path mutated response.headers in place, so request B saw request A's
@@ -106,7 +106,7 @@ describe('Response Headers', () => {
 		expect(b).not.toBe(shared)
 	})
 
-	// C1: when a handler returns a Response with a custom statusText AND
+	// when a handler returns a Response with a custom statusText AND
 	// set.headers is non-empty (forcing a rebuild), the rebuild must carry
 	// statusText through. Before the fix, `new Response(body, initWithoutStatusText)`
 	// dropped it, so `res.statusText` became '' even though the handler set it.

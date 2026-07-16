@@ -1,5 +1,5 @@
 /**
- * Regression test for C7: JIT dependency slots linked by value equality.
+ * Regression test for : JIT dependency slots linked by value equality.
  *
  * When two distinct parse slots (e.g. `parse.json` and `parse.default`) hold the
  * same function reference, the old Set<unknown>-based dedup silently dropped the
@@ -13,7 +13,7 @@ import { Elysia, t } from '../../src'
 import { createAdapter } from '../../src/adapter'
 import { WebStandardAdapter } from '../../src/adapter/web-standard'
 
-describe('JIT slot dedup (C7)', () => {
+describe('JIT slot dedup', () => {
 	it('both pj and pd aliases are bound when parse.json === parse.default', async () => {
 		// A single shared function stands in for both parse.json and parse.default.
 		// This is the value-equality collision that the old code deduped incorrectly.

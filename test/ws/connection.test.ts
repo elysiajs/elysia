@@ -272,12 +272,12 @@ describe('WebSocket connection', () => {
 		app.stop()
 	})
 
-	// C13: a non-derive beforeHandle returning status()/error() (an ElysiaStatus)
+	// a non-derive beforeHandle returning status()/error() (an ElysiaStatus)
 	// must unwrap to the real HTTP code and body — not be JSON-serialized as an
 	// object with a default 200. Before the fix, `status(401, 'no')` was
 	// serialized as JSON and returned with HTTP 200 (the context default), so
 	// the client never saw a real 401.
-	it('C13: beforeHandle returning status(401) rejects upgrade with real 401', async () => {
+	it('beforeHandle returning status(401) rejects upgrade with real 401', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
 				beforeHandle() {
@@ -305,12 +305,12 @@ describe('WebSocket connection', () => {
 		app.stop()
 	})
 
-	// C13 parity: an upgrade-rejection from a non-derive beforeHandle must carry
+	//  parity: an upgrade-rejection from a non-derive beforeHandle must carry
 	// the same set.headers / set.cookie / content-type the HTTP path would apply.
 	// Before the fix the response was hand-built from only the ElysiaStatus code +
 	// body, dropping set.headers, dropping set.cookie, and defaulting to
 	// text/plain for object bodies.
-	it('C13: upgrade rejection preserves set.headers, set.cookie and JSON content-type', async () => {
+	it('upgrade rejection preserves set.headers, set.cookie and JSON content-type', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
 				beforeHandle({ set }) {

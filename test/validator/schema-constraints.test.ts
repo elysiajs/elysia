@@ -4,12 +4,12 @@ import { Value } from 'typebox/value'
 import { t } from '../../src'
 import { applyCoercions, coerceBody, coerceQuery } from '../../src/type/coerce'
 
-// Regression tests for the kiana-branch elysia-type fixes. Each assertion
+// Regression tests for the -branch elysia-type fixes. Each assertion
 // targets the EXACT boundary / literal that the buggy code mishandled — the
 // pre-existing suites only probe values far from the boundary, so these are
 // the cases that distinguish correct from incorrect behavior.
 
-describe('idx19 — t.Date timestamp bounds use the correct inclusive/exclusive operator', () => {
+describe('t.Date timestamp bounds use the correct inclusive/exclusive operator', () => {
 	const ts = 1000
 
 	// WHY: `minimumTimestamp` follows the JSON-Schema convention (inclusive),
@@ -43,7 +43,7 @@ describe('idx19 — t.Date timestamp bounds use the correct inclusive/exclusive 
 	})
 })
 
-describe('idx36 — t.Date enforces multipleOfTimestamp', () => {
+describe('t.Date enforces multipleOfTimestamp', () => {
 	// WHY: the option is declared in DateOptions, so a caller opting into it
 	// expects enforcement. The bug never read it, so the constraint was a no-op
 	// and any otherwise-valid date passed.
@@ -54,7 +54,7 @@ describe('idx36 — t.Date enforces multipleOfTimestamp', () => {
 	})
 })
 
-describe('idx20 — t.Files enforces minItems down to 1', () => {
+describe('t.Files enforces minItems down to 1', () => {
 	// WHY: `t.Files({ minItems: 1 })` declares "at least one file required"; an
 	// empty array must be rejected. The bug only added the length refine when
 	// minItems > 1, so minItems:1 silently accepted zero files.
@@ -67,7 +67,7 @@ describe('idx20 — t.Files enforces minItems down to 1', () => {
 	})
 })
 
-describe('idx34 — t.File min/maxSize bounds are inclusive', () => {
+describe('t.File min/maxSize bounds are inclusive', () => {
 	// WHY: a file whose size equals minSize/maxSize satisfies the constraint and
 	// must pass (matching the historical validateFile semantics). The bug used
 	// strict `>`/`<`, 422-ing the exact-boundary file.
@@ -83,33 +83,36 @@ describe('idx34 — t.File min/maxSize bounds are inclusive', () => {
 	})
 })
 
-describe('idx35 — t.ArrayBuffer byteLength bounds are inclusive (parity with t.Uint8Array)', () => {
+describe('t.ArrayBuffer byteLength bounds are inclusive (parity with t.Uint8Array)', () => {
 	// WHY: ArrayBuffer and Uint8Array share the same option type; their boundary
 	// semantics must match. The bug made ArrayBuffer exclusive while Uint8Array
 	// stayed inclusive, so the exact-size buffer passed only for one of them.
 	it('an 8-byte buffer satisfies minByteLength:8 and maxByteLength:8', () => {
 		const ab = new ArrayBuffer(8)
-		expect(Value.Check(t.ArrayBuffer({ minByteLength: 8 } as any), ab)).toBe(
-			true
-		)
-		expect(Value.Check(t.ArrayBuffer({ maxByteLength: 8 } as any), ab)).toBe(
-			true
-		)
+		expect(
+			Value.Check(t.ArrayBuffer({ minByteLength: 8 } as any), ab)
+		).toBe(true)
+		expect(
+			Value.Check(t.ArrayBuffer({ maxByteLength: 8 } as any), ab)
+		).toBe(true)
 		// matches the Uint8Array sibling at the same boundary
 		const u8 = new Uint8Array(8)
-		expect(
-			Value.Check(t.Uint8Array({ minByteLength: 8 } as any), u8)
-		).toBe(true)
+		expect(Value.Check(t.Uint8Array({ minByteLength: 8 } as any), u8)).toBe(
+			true
+		)
 	})
 
 	it('a 7-byte buffer is rejected by minByteLength:8', () => {
 		expect(
-			Value.Check(t.ArrayBuffer({ minByteLength: 8 } as any), new ArrayBuffer(7))
+			Value.Check(
+				t.ArrayBuffer({ minByteLength: 8 } as any),
+				new ArrayBuffer(7)
+			)
 		).toBe(false)
 	})
 })
 
-describe('idx21 — t.Numeric only accepts finite decimal strings', () => {
+describe('t.Numeric only accepts finite decimal strings', () => {
 	// WHY: t.Numeric decodes with unary `+`, which parses hex/scientific/Infinity
 	// to surprising numbers a handler expecting a finite decimal never bargained
 	// for. The validator must reject those literals at the boundary.
@@ -137,7 +140,7 @@ describe('idx21 — t.Numeric only accepts finite decimal strings', () => {
 	})
 })
 
-describe('idx30 — coerce.cloneNode preserves non-enumerable markers on cloned containers', () => {
+describe('coerce.cloneNode preserves non-enumerable markers on cloned containers', () => {
 	// WHY: when coercion clones a container because a child changed, the clone
 	// must keep the Elysia markers (`~optional`/`~refine`/`~codec`) and `~kind`;
 	// downstream readers (opaque/optional/refine handling) key off them. The bug

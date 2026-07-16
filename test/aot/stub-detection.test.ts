@@ -309,7 +309,7 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 	})
 
 	it('STUB_SOURCES filters match both src and dist module paths', () => {
-		// Every filter is scoped to elysia's own install dir (H24) — user
+		// Every filter is scoped to elysia's own install dir  — user
 		// modules that share the file layout (cookie/utils, ws/route, ...)
 		// must never be stubbed.
 		expect(

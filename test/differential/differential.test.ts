@@ -1,21 +1,19 @@
 /**
- * D2 differential harness — the matrix (n-proof.md D2, P0-8..P0-11).
+ * Differential execution matrix.
  *
  * For each v1 lane pair × each corpus entry × each request:
- *   build a FRESH oracle app and a FRESH candidate app, fire the SAME request
- *   against both, and assert byte-identical responses (compare.ts rules).
- *   Observation entries (P0-9) additionally read each lane's per-request
- *   hook-fire log THROUGH `lane.observe()` and assert it matches across lanes
- *   (structural deep-equal, via the `observation` comparator).
+ * build a FRESH oracle app and a FRESH candidate app, fire the SAME request
+ * against both, and assert byte-identical responses (compare.ts rules).
+ * Observation entries additionally read each lane's per-request
+ * hook-fire log THROUGH `lane.observe` and assert it matches across lanes
+ * (structural deep-equal, via the `observation` comparator).
  *
  * Lane pairs are grouped into describe blocks. Listen-transport pairs subset the
  * corpus to entries tagged 'safe-for-socket' (a real socket cannot receive the
  * short-host `http://a/` request — that entry is 'handle-only'; see README).
  *
- * Known-divergence entries (lanes disagree TODAY) are skipped via `test.todo`
- * naming the owning fix task. There are currently NONE — the custom-thenable
- * bug (A5) reproduces identically across all v1 lanes, so it is PINNED, not
- * skipped. See README.
+ * Known-divergence entries are skipped via `test.todo`. There are currently
+ * none: every lane reproduces the custom-thenable behavior identically.
  */
 
 import { describe, it, expect } from 'bun:test'
@@ -29,7 +27,7 @@ const entryInPair = (entry: ObservableCorpusEntry, pair: LanePair): boolean =>
 
 /**
  * A request is excluded from listen (socket) pairs if it is tagged 'handle-only'
- * — e.g. it echoes the request `host` header, which on a real socket carries the
+ * e.g. it echoes the request `host` header, which on a real socket carries the
  * ephemeral port and would differ per-lane (a harness artifact, not a divergence).
  */
 const requestInPair = (request: { tags?: string[] }, pair: LanePair): boolean =>
@@ -41,7 +39,7 @@ const isKnownDivergence = (entry: ObservableCorpusEntry): boolean =>
 	entry.tags.includes('known-divergence')
 
 /**
- * P0-6a: dispose BOTH lanes even if one dispose throws, aggregating errors so a
+ * Dispose both lanes even if one dispose throws, aggregating errors so a
  * candidate-dispose failure cannot silently skip the oracle-dispose (which frees
  * the oracle's listen port). Runs every dispose, then rethrows the first failure
  * with the rest attached.
@@ -73,13 +71,13 @@ for (const pair of lanePairs) {
 					if (!requestInPair(request, pair)) continue
 					it(`${entry.id} › ${request.id}`, async () => {
 						// The corpus recorder is shared with `define` via closure;
-						// this snapshotter is what each lane returns from observe()
-						// (P0-9). Undefined for entries with no recorder.
+						// this snapshotter is what each lane returns from observe
+						// Undefined for entries with no recorder.
 						const observe: Observe | undefined = entry.recorder
 							? () => [...entry.recorder!.events]
 							: undefined
 
-						// P0-6a: construct INSIDE try so a candidate.make() throw
+						// Construct inside try so a candidate.make throw
 						// cannot leak an already-built oracle. Both are disposed in
 						// finally regardless of which (if any) was built.
 						let oracle:
@@ -105,7 +103,7 @@ for (const pair of lanePairs) {
 							}
 
 							// Reset the shared recorder, run oracle, read its
-							// observation THROUGH lane.observe() (P0-9) immediately —
+							// observation through lane.observe immediately —
 							// before the candidate run overwrites the shared recorder.
 							entry.recorder?.reset()
 							const oracleRes = await oracle.handle(
@@ -125,7 +123,7 @@ for (const pair of lanePairs) {
 							])
 
 							// Dispatch response comparison through the named
-							// comparator registry (P0-9) so B5 can register more
+							// comparator registry so more comparison types can be added
 							// without touching the matrix.
 							const respMismatch = comparators.response(
 								ctx,
@@ -151,7 +149,7 @@ for (const pair of lanePairs) {
 								).toBeGreaterThan(0)
 							}
 						} finally {
-							// P0-11 + P0-6a: dispose BOTH in finally, aggregating
+							// Dispose both lanes in finally, aggregating
 							// errors so one failure cannot skip the other.
 							await disposeAll([candidate, oracle])
 						}

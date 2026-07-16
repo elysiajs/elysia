@@ -292,7 +292,7 @@ describe('Map Response', () => {
 		expect(response.headers.get('x-powered-by')).toBe('Elysia')
 	})
 
-	// C14 / A9: request() early-return must run mapResponse hooks.
+	//  / : request() early-return must run mapResponse hooks.
 	// Before the fix, mapResponse was called without context so hooks were skipped.
 	it('runs mapResponse when request hook short-circuits (sync path)', async () => {
 		let called = false

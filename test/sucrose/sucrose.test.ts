@@ -2,11 +2,7 @@
 import { describe, expect, it } from 'bun:test'
 import { Elysia } from '../../src'
 
-import {
-	separateFunction,
-	sucrose,
-	clearSucroseCache
-} from '../../src/sucrose'
+import { separateFunction, sucrose, clearSucroseCache } from '../../src/sucrose'
 import { post, req } from '../utils'
 
 describe('sucrose', () => {
@@ -408,12 +404,12 @@ describe('sucrose', () => {
 		expect(await response.text()).toBe('hi')
 	})
 
-	// C19 conservative-true floor: an unclassified use of a context alias must
+	// An unclassified use of a context alias must conservatively
 	// mark every channel accessed instead of leaving it silently false (which
 	// would make codegen skip channel init and the handler read `undefined`).
 	// Each of these forms defeats the pattern-based classifier and, before the
 	// fix, returned a bare 500 (or wrong value) at runtime.
-	describe('conservative-true floor (C19)', () => {
+	describe('conservative context inference', () => {
 		it('computed context access c[k] (non-foldable key) returns real data', async () => {
 			// `c[k]` where k is not constant-foldable — engine keeps `c[k]` in
 			// toString, so the `.query` matcher never sees the channel.
@@ -462,8 +458,11 @@ describe('sucrose', () => {
 
 		it('spaced member access (c .query) returns real data', async () => {
 			// eval keeps the whitespace in the source string; the exact-match
-			// `c.query` matcher misses `c .query`.
-			const app = new Elysia().get('/', eval('(c) => { return c .query.name }'))
+			// `c.query` matcher misses the spaced `c .query` form.
+			const app = new Elysia().get(
+				'/',
+				eval('(c) => { return c .query.name }')
+			)
 
 			const response = await app.handle(req('/?name=spaced'))
 			expect(response.status).toBe(200)

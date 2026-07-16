@@ -622,7 +622,7 @@ describe('WebSocket message', () => {
         app.stop()
     })
 
-	// Regression (audit H4): `.compile()` iterated ALL route history including
+	// Regression: `.compile()` iterated ALL route history including
 	// WebSocket tuples and overwrote map['WS'][path] (the upgrade handler) with
 	// a generic compiled HTTP handler — so WS upgrades broke after compile()
 	// (and via the AOT build path which calls compile()). Echo must still work
@@ -653,11 +653,11 @@ describe('WebSocket message', () => {
 	})
 })
 
-// F30/F6/F32: hook-free routes now dispatch messages on a fully-sync
+// hook-free routes now dispatch messages on a fully-sync
 // path (no per-message Promise); async parsers/handlers are still
 // awaited via runtime guards and sync throws still reach error handling.
 describe('WebSocket sync dispatch path', () => {
-	it("F32: raw '/'-prefixed frame arrives as the raw string", async () => {
+	it("raw '/'-prefixed frame arrives as the raw string", async () => {
 		const app = new Elysia()
 			.ws('/ws', {
 				message(ws, message) {
@@ -683,7 +683,7 @@ describe('WebSocket sync dispatch path', () => {
 		app.stop()
 	})
 
-	it('F6: async parse hook is awaited before the handler runs', async () => {
+	it('async parse hook is awaited before the handler runs', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
 				parse: async (_ws, message) => {
@@ -708,7 +708,7 @@ describe('WebSocket sync dispatch path', () => {
 		app.stop()
 	})
 
-	it('F6: throwing sync parse hook reaches error handling', async () => {
+	it('throwing sync parse hook reaches error handling', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
 				parse() {
@@ -741,7 +741,7 @@ describe('WebSocket sync dispatch path', () => {
 		app.stop()
 	})
 
-	it('F30: sync handler throw reaches the error hook with no unhandled rejection', async () => {
+	it('sync handler throw reaches the error hook with no unhandled rejection', async () => {
 		const rejections: unknown[] = []
 		const onRejection = (e: unknown) => {
 			rejections.push(e)
@@ -777,7 +777,7 @@ describe('WebSocket sync dispatch path', () => {
 		}
 	})
 
-	it('F30: async handler return value on a hook-free route is awaited and sent', async () => {
+	it('async handler return value on a hook-free route is awaited and sent', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
 				async message(_ws, message) {
@@ -801,7 +801,7 @@ describe('WebSocket sync dispatch path', () => {
 
 	// Pins mapResponse's inclusion in the sync-eligibility condition: a
 	// route whose ONLY hook is mapResponse must still map the result.
-	it('F30: mapResponse still applies when it is the only hook', async () => {
+	it('mapResponse still applies when it is the only hook', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
 				message(_ws, message) {
@@ -825,11 +825,11 @@ describe('WebSocket sync dispatch path', () => {
 		app.stop()
 	})
 
-	// F31: the non-`ElysiaStatus` response fallback (`200 ?? first entry`)
+	// the non-`ElysiaStatus` response fallback (`200 ?? first entry`)
 	// is now resolved once per route — a bag WITHOUT a 200 entry must
 	// still validate plain sends against its first entry, and an
 	// `status(...)` send must still pick the status-keyed entry.
-	it('F31: response bag without a 200 entry still validates via its first entry', async () => {
+	it('response bag without a 200 entry still validates via its first entry', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
 				response: {

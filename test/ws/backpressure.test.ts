@@ -2,7 +2,7 @@ import { describe, it, expect } from 'bun:test'
 import { handleWSResponse, drainWaiters } from '../../src/ws/route'
 
 /**
- * H10 regression — generator streaming must honour ws.send() backpressure.
+ *  regression — generator streaming must honour ws.send() backpressure.
  *
  * Real backpressure is impractical to reproduce in a unit test, so we drive
  * the exported `handleWSResponse` with a FAKE ws whose send() returns scripted
@@ -45,7 +45,7 @@ class FakeWS {
 
 const tick = () => new Promise<void>((r) => setTimeout(r, 0))
 
-describe('WebSocket generator backpressure (H10)', () => {
+describe('WebSocket generator backpressure', () => {
 	it('healthy buffer (>0): streams every yield with no pause (fast path)', async () => {
 		const ws = new FakeWS([], 5) // always "5 bytes sent"
 		function* gen() {
@@ -86,7 +86,7 @@ describe('WebSocket generator backpressure (H10)', () => {
 
 	it('status 0 on an OPEN socket (refused, not enqueued): pauses then RE-SENDS the same frame after drain — no silent loss', async () => {
 		// 'a' is refused (0) → pause. After drain, the SAME 'a' is re-sent and
-		// this time succeeds (1). This is the core H10 data-loss guard: a 0 on
+		// this time succeeds (1). This is the core data-loss guard: a 0 on
 		// an open socket must not drop the frame.
 		const ws = new FakeWS([0, 1, 1, 1])
 
@@ -208,7 +208,7 @@ describe('WebSocket generator backpressure (H10)', () => {
 		expect(ranFinally).toBe(true)
 	})
 
-	// H10 deadlock: Bun's `send('')` returns 0 meaning "0 bytes sent", NOT
+	//  deadlock: Bun's `send('')` returns 0 meaning "0 bytes sent", NOT
 	// backpressure. An empty yield (common in heartbeat/keep-alive streams) must
 	// NOT be mistaken for a full buffer — otherwise the loop parks on a `drain`
 	// that never fires (an empty frame added nothing to drain) and every
@@ -240,7 +240,7 @@ describe('WebSocket generator backpressure (H10)', () => {
 		expect(ws.sent).toEqual(['first', '', 'third'])
 	})
 
-	// The empty-payload success rule must not disturb the genuine H10 guard: a 0
+	// The empty-payload success rule must not disturb the genuine guard: a 0
 	// on a NON-empty frame on an open socket is still refusal → pause + re-send.
 	it('empty yield success does not weaken the non-empty 0-refusal re-send guard', async () => {
 		// 'a' (non-empty) → 0 refused → pause. '' would be 0 too but is empty →

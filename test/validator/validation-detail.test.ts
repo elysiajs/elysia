@@ -56,13 +56,13 @@ describe('validation detail — production gating', () => {
 		const r = await run('production')
 
 		// default → minimal { type, on, property, found }, no schema-revealing
-		// fields. L13: `property` (instance path only) IS now included so the
+		// fields.: `property` (instance path only) IS now included so the
 		// client knows which field failed; schema-derived `expected`/`errors` are
 		// still withheld.
 		expect(r.default.status).toBe(422)
 		expect(r.default.body.type).toBe('validation')
 		expect(r.default.body.on).toBe('body')
-		// error-3: `found` redacted in production (request input may be PII)
+		// `found` redacted in production (request input may be PII)
 		expect(r.default.body.found).toBeUndefined()
 		expect(r.default.body.property).toBe('/x')
 		expect(r.default.body.expected).toBeUndefined()
@@ -79,12 +79,12 @@ describe('validation detail — production gating', () => {
 		expect(r.validationDetailMessage.body.errors).toBeUndefined()
 		expect(r.validationDetailMessage.body.value).toBeUndefined()
 
-		// error.detail() → minimal in production (error-3: no `found` echo)
+		// error.detail → minimal in production (: no `found` echo)
 		expect(r.detail.body.message).toBe('x must be a number')
 		expect(r.detail.body.found).toBeUndefined()
 		expect(r.detail.body.errors).toBeUndefined()
 
-		// error.detail() → full when allowUnsafe even in production
+		// error.detail → full when allowUnsafe even in production
 		expect(r.detailAllowUnsafe.body.errors).toBeArray()
 
 		// nested custom error resolves via findCustomError path navigation
@@ -100,7 +100,7 @@ describe('validation detail — production gating', () => {
 		expect(r.findCustomErrorBypass.body.found).toBeUndefined()
 	})
 
-	it('C8: response-schema failure collapses to a generic 500, never echoing the server value', async () => {
+	it('returns a generic 500 without echoing an invalid server response', async () => {
 		const r = await run('production')
 
 		// A response-schema failure is a SERVER bug, not a client (422) error, and
@@ -129,14 +129,14 @@ describe('validation detail — production gating', () => {
 		expect(r.responseAllowUnsafe.body.on).toBe('response')
 	})
 
-	it('L13: request-side production 422 names the failing field without echoing input (error-3)', async () => {
+	it('request-side production 422 names the failing field without echoing input', async () => {
 		const r = await run('production')
 
 		// An API consumer needs to know WHICH field failed to fix their request;
 		// the instance path is safe (no schema info, no messages).
 		expect(r.requestProperty.status).toBe(422)
 		expect(r.requestProperty.body.property).toBe('/x')
-		// error-3: `found` is NO LONGER echoed in production — even the client's
+		// `found` is NO LONGER echoed in production — even the client's
 		// own input can carry passwords/tokens/PII that leak into error trackers,
 		// proxy logs, and HAR exports.
 		expect(r.requestProperty.body.found).toBeUndefined()
@@ -145,7 +145,7 @@ describe('validation detail — production gating', () => {
 		expect(r.requestProperty.body.expected).toBeUndefined()
 	})
 
-	it('L13: production `property` only reflects instance-path-shaped data', async () => {
+	it('production `property` only reflects instance-path-shaped data', async () => {
 		const r = await run('production')
 
 		// a hand-crafted issue whose only path is a free-text string (no real
@@ -164,12 +164,12 @@ describe('validation detail — production gating', () => {
 		expect(r.propertyInstancePath.body.property).toBe('/x')
 	})
 
-	it('L13 Defect 1: Standard Schema object path segments render as `/user/name`, not `[object Object]`', async () => {
+	it('Standard Schema object path segments render as `/user/name`, not `[object Object]`', async () => {
 		const r = await run('production')
 
 		// A Standard Schema issue path is an array of `{ key }` objects; production
 		// `payload.property` must extract `.key` per segment (mirroring `found`),
-		// otherwise it emits `/[object Object]/[object Object]` and defeats L13.
+		// otherwise it emits `/[object Object]/[object Object]` and hides the field.
 		expect(r.propertyStandardObjectSegments.status).toBe(422)
 		expect(r.propertyStandardObjectSegments.body.property).toBe(
 			'/user/name'
@@ -179,7 +179,7 @@ describe('validation detail — production gating', () => {
 		)
 	})
 
-	it('L13 Defect 2: `.all` dotted path from Standard Schema object segments renders as `user.name`', async () => {
+	it('`.all` dotted path from Standard Schema object segments renders as `user.name`', async () => {
 		// env-independent — same root cause, same shared segment stringifier
 		for (const env of ['production', 'development']) {
 			const r = await run(env)
@@ -197,14 +197,14 @@ describe('validation detail — production gating', () => {
 		expect(r.default.body.property).toBeDefined()
 		expect(r.default.body.errors).toBeArray()
 
-		// C8 is production-only: in dev a response failure keeps 422 + full detail
+		// Production masking does not apply in development, which keeps full detail.
 		// (the developer inspects their own server's response — no leak surface).
 		expect(r.responseLeak.status).toBe(422)
 		expect(r.responseLeak.body.on).toBe('response')
 		expect(r.responseLeak.body.errors).toBeArray()
 	})
 
-	it('C15: bounds the serialized found echo by UTF-8 bytes', async () => {
+	it('bounds the serialized found echo by UTF-8 bytes', async () => {
 		const r = await run('development')
 		const found = JSON.stringify(r.cjkEcho.body.found ?? '')
 
@@ -212,7 +212,7 @@ describe('validation detail — production gating', () => {
 		expect(new TextEncoder().encode(found).length).toBeLessThanOrEqual(8192)
 	})
 
-	it('C23: formats validation failures without replaying user refinements', async () => {
+	it('formats validation failures without replaying user refinements', async () => {
 		const r = await run('development')
 
 		expect(r.refineNoReplay.status).toBe(422)

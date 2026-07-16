@@ -5,12 +5,11 @@ import { describe, expect, it } from 'bun:test'
 const req = (path: string, init?: RequestInit) =>
 	new Request(`http://e.ly${path}`, init)
 
-// B6 — root-local semantic freeze. These pin the seal contract that does NOT
-// depend on the (orchestrator-owned) Q4 late-mutation arbitration: generation
-// publication timing, per-root isolation, the accessor, hot-reload swaps, failed
-// setup, introspect, and the mutation guard firing on each authoring API family.
+// A sealed generation publishes only after setup, isolates root-specific state,
+// supports atomic replacement, exposes opt-in introspection, and rejects later
+// authoring mutations.
 
-describe('B6 generation — publication', () => {
+describe('sealed generation publication', () => {
 	it('an unsealed app has no generation; generationOf throws', () => {
 		const app = new Elysia().get('/', () => 'ok')
 
@@ -20,7 +19,7 @@ describe('B6 generation — publication', () => {
 		expect(frozenRootOf(app)).toBe(app)
 	})
 
-	it('first handle() publishes exactly one generation', async () => {
+	it('first handle publishes exactly one generation', async () => {
 		const app = new Elysia().get('/', () => 'ok')
 
 		await app.handle(req('/'))
@@ -38,7 +37,7 @@ describe('B6 generation — publication', () => {
 		expect(generationOf(app)).toBe(same)
 	})
 
-	it('.compile() seals; explicit', () => {
+	it('.compile seals; explicit', () => {
 		const app = new Elysia().get('/', () => 'ok')
 		expect(app['~generation']).toBeUndefined()
 
@@ -47,14 +46,14 @@ describe('B6 generation — publication', () => {
 	})
 })
 
-describe('B6 generation — delayed plugins resolved before serve', () => {
+describe('sealed generation plugin resolution', () => {
 	it('an async plugin route is served on the first request AFTER drain, generation publishes once', async () => {
 		const app = new Elysia().use(
 			Promise.resolve(new Elysia().get('/late', () => 'late'))
 		)
 
 		// Draining resolves the async plugin but keeps the app authorable — no
-		// generation yet (A6: publish only post-resolution AND at a real seal).
+		// Plugin resolution alone keeps the app authorable; serving seals it.
 		await app.modules
 		expect(app['~generation']).toBeUndefined()
 
@@ -67,7 +66,7 @@ describe('B6 generation — delayed plugins resolved before serve', () => {
 	})
 })
 
-describe('B6 generation — per-root isolation', () => {
+describe('sealed generation root isolation', () => {
 	it('the same plugin sealed under two roots keeps each root its own resolved state', async () => {
 		const shared = () => (app: Elysia) =>
 			app
@@ -94,7 +93,7 @@ describe('B6 generation — per-root isolation', () => {
 	})
 })
 
-describe('B6 generation — hot-reload swap', () => {
+describe('sealed generation replacement', () => {
 	it('~newGeneration republishes; a new capability is visible only after the swap', async () => {
 		const app = new Elysia().get('/a', () => 'a')
 		await app.handle(req('/a'))
@@ -135,7 +134,7 @@ describe('B6 generation — hot-reload swap', () => {
 	})
 })
 
-describe('B6 generation — failed setup publishes nothing', () => {
+describe('sealed generation setup failure', () => {
 	it('a synchronous throw during a functional plugin leaves no generation', () => {
 		const boom = () => {
 			throw new Error('setup boom')
@@ -169,7 +168,7 @@ describe('B6 generation — failed setup publishes nothing', () => {
 	})
 })
 
-describe('B6 generation — introspect (Q15)', () => {
+describe('sealed generation introspection', () => {
 	it('app-side config.introspect surfaces on the generation', async () => {
 		const app = new Elysia({ introspect: true }).get('/', () => 'ok')
 		await app.handle(req('/'))
@@ -194,14 +193,14 @@ describe('B6 generation — introspect (Q15)', () => {
 	})
 })
 
-describe('B6 generation — post-seal mutation throws (Q4)', () => {
+describe('sealed generation immutability', () => {
 	const sealed = async () => {
 		const app = new Elysia().get('/', () => 'ok')
 		await app.handle(req('/'))
 		return app
 	}
 
-	it('every authoring API family throws after first handle()', async () => {
+	it('every authoring API family throws after first handle', async () => {
 		const cases: Array<[string, (a: any) => unknown]> = [
 			['get (verb)', (a) => a.get('/x', () => 'x')],
 			['post (verb)', (a) => a.post('/x', () => 'x')],
@@ -230,7 +229,7 @@ describe('B6 generation — post-seal mutation throws (Q4)', () => {
 		}
 	})
 
-	it('mutation throws after .compile() and after listen (port 0)', async () => {
+	it('mutation throws after .compile and after listen (port 0)', async () => {
 		const compiled = new Elysia().get('/', () => 'ok')
 		compiled.compile()
 		expect(() => compiled.get('/x', () => 'x')).toThrow(

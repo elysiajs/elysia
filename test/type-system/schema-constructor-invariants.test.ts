@@ -42,8 +42,11 @@ describe('UnionEnum default precedence and no mutation', () => {
 	it('validation still works end-to-end after options reuse', async () => {
 		const schema = t.Object({ color: t.UnionEnum(['red', 'blue']) })
 
-		const app = new Elysia()
-			.post('/color', { body: schema }, ({ body }) => body)
+		const app = new Elysia().post(
+			'/color',
+			{ body: schema },
+			({ body }) => body
+		)
 
 		const ok = await app.handle(
 			req('/color', {

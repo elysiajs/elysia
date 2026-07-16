@@ -3,9 +3,9 @@ import { Elysia } from '../../src'
 import { req } from '../utils'
 
 /**
- * flattenChain memo harness (F16).
+ * flattenChain memo harness .
  *
- * `compileHandler` re-flattens the same shared chain head once per route. F16
+ * `compileHandler` re-flattens the same shared chain head once per route.
  * memoizes the no-keep/no-stopAt flatten ROOT-SCOPED, handing out a fresh clone
  * each call (consumers mutate the result). The hazard is macro staleness: macro
  * resolution mutates `node.added` in place per-root, so a node-keyed (not
@@ -14,7 +14,7 @@ import { req } from '../utils'
  * composition behaviour identical regardless of compile order.
  */
 
-describe('F16: shared chain head, many routes', () => {
+describe('shared chain head, many routes', () => {
 	it('app-level hooks apply identically across all routes (shared head)', async () => {
 		const order: string[] = []
 		const app = new Elysia()
@@ -43,7 +43,7 @@ describe('F16: shared chain head, many routes', () => {
 	})
 })
 
-describe('F16: cross-root macro staleness', () => {
+describe('cross-root macro staleness', () => {
 	// One plugin instance, two consumer apps; only one consumer registers a route
 	// that triggers a macro. Compile the macro-LESS app first (worst case for a
 	// naive node-keyed cache), then assert the macro app still runs its macro
@@ -129,7 +129,7 @@ describe('F16: cross-root macro staleness', () => {
 	})
 })
 
-describe('F16: memo returns mutation-safe clones', () => {
+describe('memo returns mutation-safe clones', () => {
 	// Two apps using the same plugin must not corrupt each other's hooks via the
 	// shared cache (consumers mutate the flatten result in place — promoteDerive,
 	// fn→[fn], mergeHook). If the memo leaked the cached object by reference, the

@@ -1,8 +1,7 @@
-# D2 — Differential harness (old lane = oracle)
+# Differential harness
 
 Route corpus × request corpus × lane pairs → byte-compare. Runs under `bun test`
-as part of the standing repo gate (parity, not timing — the test runner is the
-right home). Implements `design/n-proof.md` § D2 (revision 2, P0-8 … P0-11).
+as part of the standing repo gate. This tests behavioral parity, not timing.
 
 ```
 test/differential/
@@ -30,15 +29,15 @@ artifact that must be characterized and excluded with a documented reason.
 
 ## Comparison rules (committed — `compare.ts`)
 
-| Component    | Rule                                                                                | Why / normalization                                                                                                                                           |
-| ------------ | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| status       | strict `===`                                                                        | —                                                                                                                                                             |
-| headers      | multiset of `(lowercase-name, value)`, order-insensitive                            | HTTP header order is not semantically meaningful and real sockets may reorder. `content-length` **is** compared.                                              |
-| — `date`     | **STRIPPED globally**                                                               | Real-socket (listen) lanes stamp a wall-clock `Date`; `app.handle()` does not. Comparing it is a clock race, not a divergence. Stripped on **both** sides.    |
-| — `etag`     | **Ignored only on the candidate of `native-static-off-vs-on@listen`**               | Bun's native static tier adds the ETag and conditional handling automatically; the JS oracle cannot emit it. Every other lane pair still compares `etag`.     |
-| set-cookie   | ordered list via `getSetCookie()`                                                   | Cookie emission order is a contract (`write-many`). A reordering **is** a divergence, so set-cookie is NOT folded into the order-insensitive header multiset. |
-| body         | exact bytes (`Uint8Array` from a fully-drained `arrayBuffer`)                       | Streams are fully drained before comparison. Non-UTF-8 bodies are reported as hex.                                                                            |
-| observations | structural deep-equal (P0-9): object keys order-insensitive, arrays order-sensitive | Hook-fire logs and other JSON-able lane facts (read via `lane.observe()`). Same strictness as responses; dispatched through the named comparator registry.    |
+| Component    | Rule                                                                         | Why / normalization                                                                                                                                           |
+| ------------ | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| status       | strict `===`                                                                 | —                                                                                                                                                             |
+| headers      | multiset of `(lowercase-name, value)`, order-insensitive                     | HTTP header order is not semantically meaningful and real sockets may reorder. `content-length` **is** compared.                                              |
+| — `date`     | **STRIPPED globally**                                                        | Real-socket (listen) lanes stamp a wall-clock `Date`; `app.handle()` does not. Comparing it is a clock race, not a divergence. Stripped on **both** sides.    |
+| — `etag`     | **Ignored only on the candidate of `native-static-off-vs-on@listen`**        | Bun's native static tier adds the ETag and conditional handling automatically; the JS oracle cannot emit it. Every other lane pair still compares `etag`.     |
+| set-cookie   | ordered list via `getSetCookie()`                                            | Cookie emission order is a contract (`write-many`). A reordering **is** a divergence, so set-cookie is NOT folded into the order-insensitive header multiset. |
+| body         | exact bytes (`Uint8Array` from a fully-drained `arrayBuffer`)                | Streams are fully drained before comparison. Non-UTF-8 bodies are reported as hex.                                                                            |
+| observations | structural deep-equal: object keys order-insensitive, arrays order-sensitive | Hook-fire logs and other JSON-able lane facts (read via `lane.observe()`). Same strictness as responses; dispatched through the named comparator registry.    |
 
 `date` is the only globally stripped header. The `etag` exception is keyed to
 the native-static lane-pair id and candidate side only. Do not add another
@@ -56,28 +55,28 @@ Two transports:
   `http://localhost` host.
 - **`listen`** — `app.listen(0)` + real `fetch`; the corpus URL is rewritten
   onto the bound port. `dispose()` force-stops the server (`stop(true)`) and
-  proves the port was released by probing it (P0-8, below).
+  proves the port was released by probing it.
 
 Only same-transport lanes are ever compared — a real socket adds
 `content-type`/`content-length` that `app.handle()` omits, so handle-vs-listen
 comparison is meaningless.
 
-The four v1 lane pairs:
+The lane pairs:
 
-| pair id                          | oracle               | candidate               | transport | what it catches                                 |
-| -------------------------------- | -------------------- | ----------------------- | --------- | ----------------------------------------------- |
-| `jit-vs-precompile@handle`       | jit                  | `precompile:true`       | handle    | JIT vs eager-compile lowering divergence        |
-| `jit-vs-precompile@listen`       | jit                  | `precompile:true`       | listen    | + adapter-layer / real-socket divergence        |
-| `native-static-off-vs-on@listen` | nativeStatic **OFF** | nativeStatic **ON**     | listen    | A2's exact future gate shape (static promotion) |
-| `jit-vs-aot-reconstruct@handle`  | jit                  | AOT capture→reconstruct | handle    | the seam A1+B1 will flip (reuses `test/aot`)    |
+| pair id                          | oracle               | candidate               | transport | what it catches                          |
+| -------------------------------- | -------------------- | ----------------------- | --------- | ---------------------------------------- |
+| `jit-vs-precompile@handle`       | jit                  | `precompile:true`       | handle    | JIT vs eager-compile lowering divergence |
+| `jit-vs-precompile@listen`       | jit                  | `precompile:true`       | listen    | + adapter-layer / real-socket divergence |
+| `native-static-off-vs-on@listen` | nativeStatic **OFF** | nativeStatic **ON**     | listen    | static promotion parity                  |
+| `jit-vs-aot-reconstruct@handle`  | jit                  | AOT capture→reconstruct | handle    | reconstructed-handler parity             |
+| `jit-vs-resume@handle`           | jit                  | resume emitter          | handle    | resume-emitter parity                    |
+| `jit-vs-resume@listen`           | jit                  | resume emitter          | listen    | resume emitter plus real-socket parity   |
 
-**Native-static orientation (P1-5).** The plain-JS lane (nativeStatic **OFF**) is
-the **oracle**; promotion (**ON**) is the **candidate**. A2's future gate reads
-"promoted routes are byte-identical to the JS lane", so the JS lane is the
-reference and promotion is what's under test — the pair is oriented OFF→ON to
-match that gate.
+**Native-static orientation.** The plain-JS lane (nativeStatic **OFF**) is the
+oracle and promotion (**ON**) is the candidate. Promoted routes must remain
+byte-identical to the JS lane.
 
-**Observations flow through `lane.observe()` (P0-9).** Entries tagged `observe`
+**Observations flow through `lane.observe`.** Entries tagged `observe`
 carry a shared `Recorder`; the matrix builds a snapshotter closure over it and
 passes it to `make(define, observe)`. Each lane attaches it verbatim to
 `Lane.observe`, so the matrix reads the hook-fire log **through `lane.observe()`**
@@ -85,24 +84,24 @@ passes it to `make(define, observe)`. Each lane attaches it verbatim to
 `observation` comparator. Comparison is **structural deep-equal** (`compare.ts`
 `deepEqual`): order-insensitive for object keys, order-**sensitive** for arrays (a
 hook-fire log's order IS the fact). Response comparison likewise dispatches
-through the named comparator registry (`comparators.response`), so B5 can register
-a `flatten`-structural comparator later without touching the matrix.
+through the named comparator registry (`comparators.response`) so new comparison
+types do not require changes to the matrix.
 
-**Lane lifecycle (P0-11 + P0-6a).** `Lane.dispose()` is mandatory. Lanes are
+**Lane lifecycle.** `Lane.dispose` is mandatory. Lanes are
 constructed **inside** the `try`, so a candidate-`make()` failure cannot leak an
 already-built oracle; both are disposed in `finally` via `disposeAll`, which runs
 **every** dispose and aggregates errors (`AggregateError`) so one dispose failure
 cannot silently skip the other (which frees a listen port). Every
 `(lane, corpus entry)` gets a fresh app and every call a fresh `Request`.
 
-**Listen-lane port closure (P0-8).** `app.server === undefined` after `stop(true)`
+**Listen-lane port closure.** `app.server === undefined` after `stop(true)`
 proves only that Elysia dropped its handle, **not** that the OS released the port.
 `dispose()` therefore probes the captured port: a `fetch` to it must be
 **refused** (connection refused / abort). The close is asynchronous, so the probe
 retries for up to ~200ms before hard-failing dispose with a "port … still
 accepts" error.
 
-**AOT-reconstruct lane — process-global state (P0-6b).** This lane snapshots the
+**AOT-reconstruct lane process-global state.** This lane snapshots the
 global compile registry (`Compiled.snapshot()`) before building, captures the
 app's frozen manifest with `captureArtifacts({ register: true })`, evaluates the
 manifest module in-process (imports stripped; `Compiled`/`Reconstruct`/
@@ -164,7 +163,7 @@ Tag conventions:
 - `handle-only` — excluded from `listen` pairs (entry-level or per-request). Use
   when a response reflects the request URL/host, since two lanes bind two ports.
 - `observe` — carries a shared `Recorder` on `entry.recorder`; the matrix resets
-  it per request and compares the hook-fire log across lanes (P0-9).
+  it per request and compares the hook-fire log across lanes.
 - `known-divergence` — lanes genuinely disagree today; the entry is wrapped in
   `describe.todo` naming the fixing task. **None currently.**
 
@@ -184,9 +183,9 @@ Tag conventions:
 
 | item                       | scope                   | reason                                                                                                                                                                                                                                                                                |
 | -------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `short-host` entry         | `handle-only`           | `new Request('http://a/')` cannot be delivered to a real socket; the short-host path-extraction bug (**A7**) only manifests through `app.handle()`. Both lanes agree (404 today).                                                                                                     |
+| `short-host` entry         | `handle-only`           | `new Request('http://a/')` cannot be delivered to a real socket; the short-host path behavior only manifests through `app.handle()`. Both lanes agree (404 today).                                                                                                                    |
 | `headers/missing-422`      | `handle-only` (request) | The 422 body echoes the request `host` header, which on a real socket carries the ephemeral listen port. Two lanes bind two ports → bodies differ **only** by the port (verified identical after port-normalization). A harness artifact, not a divergence. Runs fine under `handle`. |
-| WS routes                  | out of scope (v1)       | `design/n-proof.md` non-goals: A8 / N+3c own WS gates.                                                                                                                                                                                                                                |
+| WS routes                  | out of scope            | WebSocket behavior has dedicated tests under `test/ws`.                                                                                                                                                                                                                               |
 | `t.File` multipart uploads | out of scope (v1)       | Corpus keeps multipart to plain fields; file bodies add fixture weight without new lowering coverage.                                                                                                                                                                                 |
 
 ### Pinned pre-fix behavior (NOT a divergence — all lanes agree)
@@ -194,23 +193,23 @@ Tag conventions:
 - **Custom-thenable handlers (`async-thenable` entry).** A non-Promise thenable
   (`{ then(res) { res(v) } }`) returned from a handler or `beforeHandle` is
   currently serialized as `{}` (Elysia branches on `instanceof Promise`). This is
-  the known thenable-bypass bug fixed by **A5**. All four v1 lanes reproduce it
+  the current handler-thenable behavior. All lanes reproduce it
   **identically**, so it is PINNED (asserted for cross-lane agreement) rather than
   skipped. If a future `src` change makes any lane diverge here, retag the entry
-  `known-divergence` and convert its matrix rows to `describe.todo('… A5')` — do
+  `known-divergence` and convert its matrix rows to `describe.todo` — do
   not silently drop it.
 
-- **Throwing-`then`-getter handler (`throwing-then-getter` entry, P1-4).** A
+- **Throwing-`then`-getter handler (`throwing-then-getter` entry).** A
   handler returning an object whose `.then` is a **getter that throws** probes the
-  maybe-classification boundary (A5/B2's `maybe`). Verdict at authoring
+  maybe-classification boundary. The current behavior is that
   (2026-07-12): Elysia reads `.then` during thenable detection, the getter throws,
   and the error path catches it — **all v1 lanes return `500`
   `application/problem+json` (`detail: then-getter-boom`) identically**. Lanes
   AGREE, so it is PINNED (not `known-divergence`, no `test.todo`). If a future
-  `src` change (e.g. B2's `maybe` classifier reading `.then` differently) makes any
-  lane diverge, retag `known-divergence` and convert to `test.todo` naming B2/A5.
+  source change makes any lane diverge, retag `known-divergence` and convert it
+  to `test.todo`.
 
-### Observable lifecycle hooks in the corpus (P1-4)
+### Observable lifecycle hooks in the corpus
 
 The `plugins-nested` entry's guard `beforeHandle` hooks **stamp response headers**
 (`x-inner-guard` / `x-grp-guard`) instead of being no-op `() => undefined`. This
@@ -219,29 +218,11 @@ makes each guard's firing — and the fact it does **not** bleed onto sibling ro
 proves nothing; a header-stamping hook is a real cross-lane assertion of hook
 propagation topology.
 
-## P0-8 — temporal deviation (surfaced, not silent)
+## Specialized coverage
 
-`design/plan.md`'s D2 gate says "A2/B2/B5 differential gates execute on it." Those
-tasks **do not exist yet at D2 time**, so they cannot literally execute here now.
-D2's done-ness is therefore: the harness, corpus, and comparison rules committed;
-the self-test green; and the four v1 lane pairs green. **Each of A2, B2, and B5
-MUST, as part of its own done-ness, register its lane + corpus additions on this
-harness and execute its gate here** — not at D2 time. Specifically:
-
-- **A2** (native static promotion): register a corpus entry with an
-  `afterResponse` hook on a promotable static route and assert, via the
-  `native-static-on-vs-off@listen` pair + an observation, that the route is not
-  promoted **and** its hook still fires.
-- **B2** (plan/emit split): assert emitted `route(c)` behavior is byte-parity vs
-  the old lane across the whole corpus (this pair set), and add the
-  throwing-`then`-getter (`maybe`) corpus entry.
-- **B5** (authoring DAG + immutable snapshots): assert flatten output is identical
-  to the old composition across the corpus, and register its flatten-structural
-  comparator into `compare.ts` (P0-9 leaves the comparator registry extensible).
-
-Until those tasks land, this harness stands on its own four v1 pairs.
-
-A2 registers `native-static-literal`, `native-static-after-response`,
+Static promotion registers `native-static-literal`, `native-static-after-response`,
 `native-static-all`, and `native-static-request-hook`. The observation entry
 asserts `afterResponse` through `lane.observe()`; the native-static listen pair
-byte-compares all four against the JS lane.
+byte-compares all four against the JS lane. Resume-emitter lanes compare both
+in-process and real-socket behavior against JIT. Lazy composition has its own
+structural parity tests under `test/core/lazy-compose.test.ts`.

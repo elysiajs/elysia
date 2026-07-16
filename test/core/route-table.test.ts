@@ -4,8 +4,8 @@ import { buildRouteTable, routeRow, RouteFlag } from '../../src/route-table'
 import { collectStaticRoutes } from '../../src/adapter/bun'
 import { describe, expect, it } from 'bun:test'
 
-// Fixture apps exercising the consumers B7 converts: nested plugins/prefixes,
-// guards, WS, macro, and the lazyCompose flag both on and off. Each returns the
+// Fixture apps exercise nested plugins, prefixes, guards, WebSockets, macros,
+// and the lazyCompose flag both on and off. Each returns the
 // built app (router + `~routeTable` populated) plus its raw authoring tuples.
 const buildFixture = (lazyCompose: boolean) => {
 	// Verb signature is (path, hook, fn) — hook second, handler third.
@@ -35,7 +35,7 @@ const buildFixture = (lazyCompose: boolean) => {
 
 const rawTuples = (app: any): readonly any[] => app['~routes']
 
-describe('B7 columnar route table', () => {
+describe('columnar route table', () => {
 	describe('structural parity — columns match authoring tuples field-by-field', () => {
 		for (const lazyCompose of [false, true])
 			it(`lazyCompose=${lazyCompose}`, () => {

@@ -1,8 +1,7 @@
 /**
- * Regression pins for the whole-branch code review (2026-06-18).
- * Each test fails if the specific bug it names comes back. The pre-existing
- * suite passed *with* these bugs present, so these encode the intent the
- * fixes restored. See memory `kiana-review-2026-06-18`.
+ * Coercion and lifecycle regressions that the earlier suite did not detect.
+ * Each test names the behavior it protects so it fails clearly if that
+ * contract changes.
  */
 import { describe, expect, it } from 'bun:test'
 import { Value } from 'typebox/value'
@@ -19,7 +18,7 @@ import { defaultWSParse } from '../../src/ws/parser'
 const req = (path: string, init?: RequestInit) =>
 	new Request('http://localhost' + path, init)
 
-describe('review 2026-06-18 regressions', () => {
+describe('coercion and lifecycle regressions', () => {
 	// #5 — empty/blank strings must NOT pass numeric coercion (used to decode 0)
 	it('numeric coercion rejects empty/blank strings', () => {
 		expect(Value.Check(Numeric(), '')).toBe(false)

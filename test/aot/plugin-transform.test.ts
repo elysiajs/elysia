@@ -4,18 +4,18 @@ import { rewriteTypeImport } from '../../src/plugin/aot/treeshake'
 import { aot as viteAot } from '../../src/plugin/aot/vite'
 
 /**
- * Regression tests for kiana build-plugin fixes.
+ * AOT build-plugin source-transform regressions.
  *
- * idx27/28 — the treeshake `from` (where USER source imports `t`) was wrongly
+ * the treeshake `from` (where USER source imports `t`) was wrongly
  *   set to `registerFrom` (where the MANIFEST imports `Compiled`). A custom
  *   `registerFrom` therefore silently disabled the headline tree-shake.
- * idx43 — the import-rewrite regex stopped at the specifier quote and orphaned a
+ * the import-rewrite regex stopped at the specifier quote and orphaned a
  *   trailing import-attributes clause (`with {...}` / `assert {...}`) onto the
  *   wrong rewritten line.
  */
 
-describe('kiana plugin fixes', () => {
-	describe('idx27/28 — registerFrom must not disable tree-shaking', () => {
+describe('AOT plugin source transforms', () => {
+	describe('registerFrom must not disable tree-shaking', () => {
 		// WHY: `registerFrom` is the Compiled-import path of the generated manifest,
 		// a DIFFERENT concept from the specifier the user writes `import { t } from`.
 		// They only coincide when both are unset (default 'elysia'). A monorepo /
@@ -56,14 +56,13 @@ describe('kiana plugin fixes', () => {
 			).toBe(userCode) // wrong `from` ⇒ no rewrite (the regression)
 
 			// default 'elysia' (what the fixed plugins now use) shakes correctly
-			expect(
-				await rewriteTypeImport(userCode)).toBe(
+			expect(await rewriteTypeImport(userCode)).toBe(
 				`import * as t from 'elysia/type'\nt.Number()`
 			)
 		})
 	})
 
-	describe('idx43 — import attributes must not be orphaned/mis-attributed', () => {
+	describe('import attributes must not be orphaned/mis-attributed', () => {
 		// WHY: a `with {...}` / `assert {...}` clause describes the module being
 		// imported. The old regex stopped at the closing quote of the specifier, so
 		// the attribute survived in place and ended up glued to whatever line the
@@ -106,9 +105,8 @@ describe('kiana plugin fixes', () => {
 			// guards the optional attribute group against over-consuming benign
 			// trailing tokens that DO occur in real code
 			expect(
-				await rewriteTypeImport(`import { t } from 'elysia';\nt.X()`)).toBe(
-				`import * as t from 'elysia/type';\nt.X()`
-			)
+				await rewriteTypeImport(`import { t } from 'elysia';\nt.X()`)
+			).toBe(`import * as t from 'elysia/type';\nt.X()`)
 		})
 	})
 })

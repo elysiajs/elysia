@@ -5,19 +5,19 @@ import { flushMemory } from '../../src/memory'
 import { SHARED_REFERENCE_CACHE_LIMIT } from '../../src/type/elysia/utils'
 import { req } from '../utils'
 
-// D1 mutate-vs-clone invariant (design/mutate-clone-invariant.md):
+// Schema helper options are immutable inputs: helpers clone before decorating.
 // Public schema constructors must NEVER mutate the object they are given —
 // neither a schema argument (t.NoValidate / t.Optional) nor a user options
-// bag (t.String / t.Number / ... adopting the bag as the schema). A naive
+// bag (t.String / t.Number /... adopting the bag as the schema). A naive
 // in-place fix passes the single-app Bun+app.handle suite but silently
 // corrupts every other route that reuses the same object. These tests pin
-// (a) the argument is untouched after the call, and (b) end-to-end behavioral
-// isolation — the concrete incident shapes.
+// They assert both that the argument stays untouched and that routes reusing it
+// remain behaviorally isolated.
 
 const ownKeys = (o: object) => Object.getOwnPropertyNames(o).sort()
 
-describe('D1 mutate-clone invariant', () => {
-	describe('C9 — t.NoValidate must not mutate its argument', () => {
+describe('schema helpers clone instead of mutating input', () => {
+	describe('t.NoValidate must not mutate its argument', () => {
 		it('leaves the argument schema untouched', () => {
 			const shared = t.Object({ id: t.Number() })
 			const keysBefore = ownKeys(shared)
@@ -33,7 +33,7 @@ describe('D1 mutate-clone invariant', () => {
 		})
 
 		it('one route wrapped, one not, both validate correctly (incident shape)', async () => {
-			// The exact C9 incident: a single shared schema used with and
+			// The exact incident: a single shared schema used with and
 			// without NoValidate. Mutating the shared schema in place would
 			// disable validation on the plain route too.
 			const shared = t.Object({ id: t.Number() })
@@ -69,7 +69,7 @@ describe('D1 mutate-clone invariant', () => {
 
 		it('does not corrupt a frozen singleton (t.BooleanString incident)', () => {
 			// Regression for the emptyBooleanString/emptyIntegerString incident:
-			// t.NoValidate(t.BooleanString()) previously mutated the frozen
+			// t.NoValidate(t.BooleanString) previously mutated the frozen
 			// singleton, globally disabling validation for BooleanString.
 			t.NoValidate(t.BooleanString())
 
@@ -78,7 +78,7 @@ describe('D1 mutate-clone invariant', () => {
 		})
 	})
 
-	describe('C10 — t.Optional must not mutate its argument', () => {
+	describe('t.Optional must not mutate its argument', () => {
 		it('leaves the argument schema untouched', () => {
 			const shared = t.String()
 			const keysBefore = ownKeys(shared)
@@ -92,7 +92,7 @@ describe('D1 mutate-clone invariant', () => {
 		})
 
 		it('same schema stays required in one object, optional in another', async () => {
-			// The C10 incident: reusing a schema object as an optional field
+			// The incident: reusing a schema object as an optional field
 			// silently made it optional everywhere.
 			const name = t.String()
 
@@ -135,7 +135,7 @@ describe('D1 mutate-clone invariant', () => {
 		})
 	})
 
-	describe('H29 — base constructors must not adopt the options bag', () => {
+	describe('base constructors must not adopt the options bag', () => {
 		const cases: [name: string, build: (o: any) => unknown][] = [
 			['String', (o) => t.String(o)],
 			['Number', (o) => t.Number(o)],
@@ -169,7 +169,7 @@ describe('D1 mutate-clone invariant', () => {
 			})
 
 		it('reusing one options bag yields two distinct, correct schemas', () => {
-			// The H29 incident: passing the same bag to two constructors turned
+			// The incident: passing the same bag to two constructors turned
 			// the first schema into the second.
 			const options = { description: 'shared' }
 

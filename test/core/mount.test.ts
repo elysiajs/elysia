@@ -266,7 +266,7 @@ describe('Mount', () => {
 	it('strips a non-ASCII mount path by its encoded length', async () => {
 		// `c.path` at runtime is percent-encoded; the encoded mount root is
 		// longer than the raw string, so a raw-length strip over/under-shoots
-		// (previously forwarded `/C3%A9/x`)
+		// It previously dropped the leading UTF-8 escape and forwarded a malformed path.
 		const app = new Elysia().mount('/café', forwarded)
 
 		const path = await app

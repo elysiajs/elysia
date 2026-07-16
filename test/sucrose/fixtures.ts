@@ -2,22 +2,18 @@
 /**
  * Sucrose static-analysis fixture corpus.
  *
- * Each fixture pins the CONTRACT (design/sucrose-contract.md): which context
- * channels `sucrose()` must infer for a given handler shape, and the mandated
+ * Each fixture pins which context
+ * channels `sucrose` must infer for a given handler shape, and the mandated
  * failure direction.
  *
- * `expect` is a PARTIAL assertion — only the listed channels are checked. This
- * lets a fixture assert its real channel(s) without coupling to unrelated
- * false-positives elsewhere in the analyzer (e.g. the H5 spurious-query bug,
- * which several return-bearing bodies trip incidentally).
+ * `expect` is a partial assertion: only the listed channels are checked. This
+ * lets a fixture assert its real channels without coupling to unrelated false
+ * positives elsewhere in the analyzer.
  *
- * `passesToday` is determined EMPIRICALLY (see contract.test.ts, which runs the
- * corpus and cross-checks this flag) — it is NOT a guess. The H5/H26/M29/M30
- * Phase-2 fixes have all landed; every fixture now has `passesToday: true` and
- * asserts the contract directly. The flag machinery remains for pinning any
- * future open defect.
+ * `passesToday` is measured by contract.test.ts. Every current fixture passes;
+ * the flag remains available for documenting a future open defect.
  *
- * All fixtures are given as live functions (so `.toString()` reflects the real
+ * All fixtures are given as live functions (so `.toString` reflects the real
  * engine minifier). Minified shapes that the TS source formatter would expand
  * are produced via `eval` to defeat prettier/tsc reformatting.
  */
@@ -48,7 +44,11 @@ export interface Fixture {
 	/** Empirically-measured: does sucrose satisfy `expect` on the current tree? */
 	passesToday: boolean
 	/** For failing fixtures: which contract bug they pin. */
-	bug?: 'H5' | 'H26' | 'M29' | 'M30'
+	defect?:
+		| 'spurious-query'
+		| 'renamed-destructure'
+		| 'minified-alias'
+		| 'native-handler'
 }
 
 // A whole-context handler bound to `this` -> stringifies to `[native code]`.
@@ -130,7 +130,7 @@ export const fixtures: Fixture[] = [
 		passesToday: true
 	},
 	{
-		// M29 sibling: minified two-hop alias chain reading via the LAST alias.
+		// sibling: minified two-hop alias chain reading via the LAST alias.
 		// Over-slicing would drop `b`, losing the only reader of `body`.
 		name: 'minified two-hop alias reads body via last alias',
 		class: 'minified',
@@ -148,7 +148,7 @@ export const fixtures: Fixture[] = [
 		passesToday: true
 	},
 	{
-		// Minified destructure-with-rename in the body (H26 re-inject path):
+		// Minified destructure-with-rename in the body ( re-inject path):
 		// `{headers:h}=c` must reduce to the bare `headers` key, not `headersh`.
 		name: 'minified body destructure-rename infers headers',
 		class: 'minified',
@@ -267,19 +267,19 @@ export const fixtures: Fixture[] = [
 	{
 		name: 'class method',
 		class: 'method',
-		// only assert body (its real channel); a bare `return c.body` also trips
-		// H5's spurious query, which we do not couple to here.
+		// Only assert body: a bare `return c.body` also trips an unrelated
+		// spurious-query case that this fixture does not cover.
 		fn: new ClassHandler().handle,
 		expect: { body: true },
 		passesToday: true
 	},
 
-	// ═══ DEFECT REPROS (executable Phase-2 specs) ════════════════════════
+	// Defect regressions
 
-	// H5 — bare `return <alias>` falsely infers query. Contract: false-positive
+	// bare `return <alias>` falsely infers query. Contract: false-positive
 	// query is a 3× per-request cost; `return <alias>` alone must NOT set query.
 	{
-		name: 'H5: return body-alias must not infer query',
+		name: 'return body alias must not infer query',
 		class: 'original',
 		fn: (c: any) => {
 			const b = c.body
@@ -287,10 +287,10 @@ export const fixtures: Fixture[] = [
 		},
 		expect: { body: true, query: false },
 		passesToday: true,
-		bug: 'H5'
+		defect: 'spurious-query'
 	},
 	{
-		name: 'H5: return set-alias must not infer query',
+		name: 'return set alias must not infer query',
 		class: 'original',
 		fn: (c: any) => {
 			const s = c.set
@@ -298,40 +298,40 @@ export const fixtures: Fixture[] = [
 		},
 		expect: { set: true, query: false },
 		passesToday: true,
-		bug: 'H5'
+		defect: 'spurious-query'
 	},
 
-	// M29 — minified `=alias` over-slices by 2, dropping transitive aliases.
+	// minified `=alias` over-slices by 2, dropping transitive aliases.
 	// Here the SECOND alias `b` (of the whole context) is the only reader of
 	// `headers`; the minified over-slice drops it → headers silently lost
 	// (forbidden false-negative). Spaced form infers headers correctly.
 	{
-		name: 'M29: minified transitive alias drops headers',
+		name: 'minified transitive alias retains headers',
 		class: 'minified',
 		fn: eval('c=>{const a=c,b=a;return b.headers}'),
 		expect: { headers: true },
 		passesToday: true,
-		bug: 'M29'
+		defect: 'minified-alias'
 	},
 
-	// M30 — bound / native handlers stringify to `[native code]`; today they
+	// bound / native handlers stringify to `[native code]`; today they
 	// infer all-false → every read context prop is silently undefined
 	// (forbidden). Contract decision: markAllAccessed (conservative all-true).
 	{
-		name: 'M30: bound handler → all-true',
+		name: 'bound handler → all-true',
 		class: 'bound-native',
 		fn: boundHandler,
 		expect: ALL_TRUE,
 		passesToday: true,
-		bug: 'M30'
+		defect: 'native-handler'
 	},
 	{
-		name: 'M30: native function → all-true',
+		name: 'native function → all-true',
 		class: 'bound-native',
 		fn: Array.prototype.map as any,
 		expect: ALL_TRUE,
 		passesToday: true,
-		bug: 'M30'
+		defect: 'native-handler'
 	},
 
 	// ─── $-prefixed single-param arrow (minified / bundled) ──────────────
@@ -348,14 +348,14 @@ export const fixtures: Fixture[] = [
 ]
 
 /**
- * Unit-level repros that live below the `sucrose()` end-to-end surface, where
+ * Unit-level repros that live below the `sucrose` end-to-end surface, where
  * the defect is directly observable (the end-to-end path sometimes masks it via
  * a robust re-parse). Asserted in contract.test.ts against the exported
  * internals.
  */
 export interface UnitRepro {
 	name: string
-	bug: 'H26' | 'M29'
+	defect: 'renamed-destructure' | 'minified-alias'
 	/** Runs the internal, returns the observed value. */
 	run: () => unknown
 	/** What the internal produces TODAY (wrong). */

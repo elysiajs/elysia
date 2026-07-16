@@ -11,7 +11,7 @@ import type {
 	TraceHandler
 } from '../../src'
 
-describe('package export surface (A1)', () => {
+describe('package export surface', () => {
 	it('re-exports the v1-parity runtime symbols', () => {
 		expect(typeof env).toBe('object')
 		expect(StatusMap.OK).toBe(200)

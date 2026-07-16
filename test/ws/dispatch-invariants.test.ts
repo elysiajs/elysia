@@ -15,13 +15,13 @@ function collectMessages(ws: WebSocket, n: number): Promise<string[]> {
 	})
 }
 
-describe('kiana ws fixes', () => {
-	// idx22: a generator's `return <value>` terminates iteration; it is NOT a
+describe('WebSocket dispatch invariants', () => {
+	// a generator's `return <value>` terminates iteration; it is NOT a
 	// yield, so it must not be sent as an extra message. `for...of` /
 	// `for await` semantics discard the return value — handleWSResponse must
 	// match. WHY: leaking the return value sends a trailing message the
 	// handler never intended (e.g. `return 'b'` used purely to stop early).
-	it('idx22: generator return value is not sent as a trailing message', async () => {
+	it('generator return value is not sent as a trailing message', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
 				message: function* ({ body }: any) {
@@ -49,7 +49,7 @@ describe('kiana ws fixes', () => {
 		app.stop()
 	})
 
-	it('idx22: async generator return value is not sent', async () => {
+	it('async generator return value is not sent', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
 				message: async function* ({ body }: any) {
@@ -73,14 +73,14 @@ describe('kiana ws fixes', () => {
 		app.stop()
 	})
 
-	// idx23: a status response with no validator registered for its code must
+	// a status response with no validator registered for its code must
 	// NOT be validated against the default (200) schema. WHY: a 503 body that
 	// is legitimately shaped differently from the 200 success body would be
 	// rejected by the 200 schema and the client would receive a
 	// ValidationError string instead of the intended `{ status, error }`
 	// envelope. With only a 200 schema declared, a `status(503, ...)` send
 	// has no registered validator and must skip validation.
-	it('idx23: status with no registered validator is not validated against 200 schema', async () => {
+	it('status with no registered validator is not validated against 200 schema', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
 				response: {
@@ -90,8 +90,7 @@ describe('kiana ws fixes', () => {
 					// `{ message: 'down' }` does NOT satisfy the 200 schema
 					// `{ ok: boolean }`; if the 200 validator is wrongly
 					// applied this becomes a ValidationError instead.
-					if (body === 'fail')
-						return status(503, { message: 'down' })
+					if (body === 'fail') return status(503, { message: 'down' })
 					return { ok: true }
 				}
 			})
@@ -110,12 +109,12 @@ describe('kiana ws fixes', () => {
 		app.stop()
 	})
 
-	// idx37: when an error handler returns a value, it is streamed via
+	// when an error handler returns a value, it is streamed via
 	// handleWSResponse — and mapResponse must run on it, exactly like the
 	// success path. WHY: the wire payload for an error-handler return must be
 	// shaped consistently with the success path (and with HTTP); dropping
 	// mapResponse on the error path silently diverges the two.
-	it('idx37: error-handler return value passes through mapResponse', async () => {
+	it('error-handler return value passes through mapResponse', async () => {
 		const app = new Elysia()
 			.error(() => {
 				return 'caught'
@@ -142,13 +141,13 @@ describe('kiana ws fixes', () => {
 		app.stop()
 	})
 
-	// idx47: concurrent async ping handlers must each see their own payload
+	// concurrent async ping handlers must each see their own payload
 	// across an await — the lifecycle path must isolate per-invocation `body`
 	// via Object.create, exactly like the message path. WHY: a shared
 	// per-connection instance lets a later ping overwrite an earlier
 	// in-flight handler's `body`, so the first handler resumes reading the
 	// wrong payload.
-	it('idx47: concurrent ping handlers each keep their own body across an await', async () => {
+	it('concurrent ping handlers each keep their own body across an await', async () => {
 		const seen: { before: string; after: string }[] = []
 
 		const app = new Elysia()
@@ -169,7 +168,6 @@ describe('kiana ws fixes', () => {
 
 		const ws = newWebsocket(app.server!)
 		await wsOpen(ws)
-
 		;(ws as any).ping('slow')
 		;(ws as any).ping('fast')
 

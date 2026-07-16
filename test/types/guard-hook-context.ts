@@ -1,7 +1,7 @@
 import { Elysia } from '../../src'
 import { expectTypeOf } from 'expect-type'
 
-// H14/M11: guard/group hook handlers (beforeHandle/afterHandle/error) run
+// guard/group hook handlers (beforeHandle/afterHandle/error) run
 // AFTER derive and macro resolution at runtime — their typed context must
 // include instance-derive values and macro-derived (resolve-channel) values,
 // which flow through `MacroContext['resolve']`, not `['response']`.

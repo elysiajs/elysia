@@ -7,7 +7,7 @@ import { req } from '../utils'
 const upgrade = () =>
 	req('/ws', { headers: { upgrade: 'websocket', connection: 'Upgrade' } })
 
-describe('review fixes', () => {
+describe('routing and lifecycle regressions', () => {
 	describe('WS-present apps still route HTTP', () => {
 		it('resolves an HTTP route when a WS route + request hook exist', async () => {
 			const app = new Elysia()

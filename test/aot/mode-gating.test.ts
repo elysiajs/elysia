@@ -15,7 +15,7 @@ const distCore = (await import(
 )) as typeof import('../../src/plugin/aot/core')
 const { generateCompiledArtifacts } = distCore
 
-// The Q4 seal guard lives on the SAME dist instance the fixtures' bare `elysia`
+// The seal guard lives on the same dist instance as the fixtures' bare `elysia`
 // import resolves to — assert the post-seal throw against that instance, not the
 // `src` core (which is a different `#assertMutable`).
 const { Elysia } = (await import('elysia')) as typeof import('../../src')
@@ -350,7 +350,7 @@ describe('AOT mode gating — misgating regressions', () => {
 		expect(stub.bridge).toBe(true)
 	})
 
-	it('DEFECT 2: a post-seal route is NOT captured (no vacuous seal); mutation throws (Q4)', async () => {
+	it('DEFECT 2: a post-seal route is NOT captured (no vacuous seal); mutation throws', async () => {
 		// A route registered AFTER the app seals must not retroactively enter the
 		// capture snapshot. `generateCompiledArtifacts` awaits `app.modules` then
 		// compiles (SEALS) the fixture app; the fixture's untracked timer guards on
@@ -361,7 +361,7 @@ describe('AOT mode gating — misgating regressions', () => {
 		expect(mode).not.toBe('sealed')
 		expect(mode).toBe('wired')
 
-		// Q4 semantics for "late route": under B6 the snapshot is sealed at compile
+		// A late route cannot be registered after the snapshot seals at compile
 		// time, so a post-seal authoring mutation THROWS synchronously rather than
 		// silently invalidating and rebuilding. Prove the throw AND that the failed
 		// mutation leaves the sealed capture state untouched (no vacuous seal, no

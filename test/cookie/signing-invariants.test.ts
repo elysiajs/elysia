@@ -8,7 +8,7 @@ import {
 	signCookieValues
 } from '../../src/cookie/utils'
 
-// Regression (kiana idx3/idx24/idx38): a cookie declared signed with NO usable
+// Regression: a cookie declared signed with NO usable
 // secret used to silently degrade to plaintext — the config validator only
 // guarded `secrets === undefined`, so scalar `null` / all-null arrays slipped
 // through. signed:true was reported, the write path emitted an UNSIGNED cookie
@@ -17,7 +17,7 @@ import {
 // signing is a trust-bearing security boundary; a no-op signer must fail loud
 // at config time, never silently accept forgery. Policy: a field declared
 // signed with no usable secret throws.
-describe('cookie sign with no usable secret fails loud (idx3/24/38)', () => {
+describe('cookie sign with no usable secret fails loud', () => {
 	it('rejects a global { sign: true, secrets: null } config at compile', () => {
 		// undefined was already guarded; null must be treated the same
 		expect(() => compileCookieConfig(undefined, { sign: true })).toThrow()
@@ -92,7 +92,7 @@ describe('cookie sign with no usable secret fails loud (idx3/24/38)', () => {
 		expect(status === 200 && body.includes('admin')).toBe(false)
 	})
 
-	it('read path never returns a signature-suffixed value unverified (idx24 defensive)', async () => {
+	it('read path never returns a signature-suffixed value unverified (defensive path)', async () => {
 		// Hand-built config that bypasses compile-time validation: a signed
 		// field whose resolved secret is scalar null. The read path used to
 		// enter the verify block, match neither branch, and return the forged
@@ -110,7 +110,7 @@ describe('cookie sign with no usable secret fails loud (idx3/24/38)', () => {
 		).rejects.toThrow()
 	})
 
-	it('write path never emits an unsigned cookie for a signed field (idx38 defensive)', () => {
+	it('write path never emits an unsigned cookie for a signed field (defensive path)', () => {
 		// Hand-built config: signed but the only secret slot is null. The write
 		// path used to `continue` and ship the value unsigned; it must throw.
 		const config = {
@@ -127,7 +127,7 @@ describe('cookie sign with no usable secret fails loud (idx3/24/38)', () => {
 	})
 })
 
-// Regression (kiana idx31): buildCookieJar copied config.defaults into each
+// Regression: buildCookieJar copied config.defaults into each
 // per-request store entry with a shallow Object.assign, so an object-valued
 // attribute (`expires`, a Date) was shared BY REFERENCE with the
 // registration-time default. A handler mutating cookie.expires IN PLACE
@@ -135,7 +135,7 @@ describe('cookie sign with no usable secret fails loud (idx3/24/38)', () => {
 // config is captured once at registration and reused across all requests on the
 // route — a per-request handler must never be able to leak state into a sibling
 // request via a shared Date.
-describe('per-request cookie defaults are isolated (idx31)', () => {
+describe('per-request cookie defaults are isolated', () => {
 	it('in-place mutation of cookie.expires does not corrupt the shared default', () => {
 		const shared = new Date('2030-01-01T00:00:00.000Z')
 		const config = compileCookieConfig(undefined, { expires: shared })
@@ -157,11 +157,11 @@ describe('per-request cookie defaults are isolated (idx31)', () => {
 	})
 })
 
-// Regression (kiana idx46): when both app- and route-level attributes are
+// Regression: when both app- and route-level attributes are
 // present, compileCookieConfig used to recompute getAttributes twice in the
 // merge spread. The cleanup reuses the precomputed vars — pin that the merged
 // defaults are still correct (route attribute wins over app, both survive).
-describe('app + route attribute merge stays correct (idx46)', () => {
+describe('app + route attribute merge stays correct', () => {
 	it('merges app and route cookie attributes with route winning', () => {
 		const schema = { config: { path: '/route', httpOnly: false } }
 		const config = compileCookieConfig(schema as any, {
@@ -177,19 +177,19 @@ describe('app + route attribute merge stays correct (idx46)', () => {
 	})
 })
 
-// Regression (codex-indep-5): when a handler reassigns `set.headers` to a native
+// Regression: when a handler reassigns `set.headers` to a native
 // `Headers` INSTANCE and sets exactly ONE cookie, `handleSet` wrote the cookie
 // with a bracket property assignment (`set.headers['set-cookie'] = string`). A
 // `Headers` instance has no property setter — the bracket write created an inert
 // own JS property the `Response` header iterator never reads, so the single
-// cookie was SILENTLY DROPPED (getSetCookie().length === 0). Two+ cookies
+// cookie was silently dropped (`getSetCookie().length === 0`). Two+ cookies
 // survived only because they took the string[] rebuild path (parseSetCookies via
 // .append). WHY it matters: a lost session/auth cookie is a silent correctness
 // failure with no error and no log — the handler sees the cookie "set" but it
 // never reaches the wire. The fix registers cookies via .append on a Headers
 // instance (append, not set, to preserve multiple set-cookie), and never
 // wrong-values or overwrites a user header (fails closed).
-describe('cookie survives a Headers-instance set.headers (codex-indep-5)', () => {
+describe('cookie survives a Headers-instance set.headers', () => {
 	it('one cookie via the jar + Headers set.headers is not dropped', async () => {
 		const app = new Elysia().get('/', ({ set, cookie }) => {
 			set.headers = new Headers() as any
@@ -252,11 +252,14 @@ describe('cookie survives a Headers-instance set.headers (codex-indep-5)', () =>
 		expect(two.headers.getSetCookie().length).toBe(2)
 	})
 
-	it("a user's own .set() header on the Headers instance survives alongside the cookie", async () => {
+	it("a user's own .set header on the Headers instance survives alongside the cookie", async () => {
 		const app = new Elysia().get('/', ({ set, cookie }) => {
 			set.headers = new Headers() as any
 			// a security-relevant header the user set explicitly
-			;(set.headers as unknown as Headers).set('authorization', 'Bearer xyz')
+			;(set.headers as unknown as Headers).set(
+				'authorization',
+				'Bearer xyz'
+			)
 			cookie.session.value = 'abc123'
 			return 'ok'
 		})
@@ -270,7 +273,10 @@ describe('cookie survives a Headers-instance set.headers (codex-indep-5)', () =>
 	it('a user-set content-type on the Headers instance is not overwritten', async () => {
 		const app = new Elysia().get('/', ({ set }) => {
 			set.headers = new Headers() as any
-			;(set.headers as unknown as Headers).set('content-type', 'text/custom')
+			;(set.headers as unknown as Headers).set(
+				'content-type',
+				'text/custom'
+			)
 			return 'body'
 		})
 
@@ -294,8 +300,8 @@ describe('cookie survives a Headers-instance set.headers (codex-indep-5)', () =>
 		expect(sc.some((c) => c.includes('session=abc123'))).toBe(true)
 	})
 
-	it('framework problem() content-type survives on a Headers-instance set.headers', async () => {
-		// problem() constructs an ElysiaStatus carrying { content-type:
+	it('framework problem content-type survives on a Headers-instance set.headers', async () => {
+		// problem constructs an ElysiaStatus carrying { content-type:
 		// application/problem+json }. Object.assign onto a Headers instance wrote
 		// inert properties, dropping it → the RFC9457 body was served as plain
 		// application/json. The fix assigns status headers via .set on a Headers
@@ -312,7 +318,7 @@ describe('cookie survives a Headers-instance set.headers (codex-indep-5)', () =>
 		expect(res.headers.get('x-keep')).toBe('yes')
 	})
 
-	// (codex-indep-5, boundary rework) A returned streaming Response is merged
+	// (boundary rework) A returned streaming Response is merged
 	// with `set` via responseToSetHeaders/createResponseHandler. That path did
 	// Object.assign / bracket writes into `set.headers`; on a `Headers` instance
 	// those writes were inert, so the returned Response's OWN headers (x-source,
@@ -346,7 +352,7 @@ describe('cookie survives a Headers-instance set.headers (codex-indep-5)', () =>
 		expect(res.headers.get('x-set')).toBe('from-set')
 	})
 
-	// (codex-indep-5, boundary rework) The default 404 handler bracket-wrote
+	// (boundary rework) The default 404 handler bracket-wrote
 	// `content-type` onto `set.headers`. When a request-level hook assigned a
 	// `Headers` instance, that write was inert → the RFC9457 problem+json
 	// content-type was silently dropped (served as null / octet-stream), while
@@ -365,7 +371,7 @@ describe('cookie survives a Headers-instance set.headers (codex-indep-5)', () =>
 		expect(res.headers.get('content-type')).toBe('application/problem+json')
 	})
 
-	// (codex-indep-5, boundary rework) A user Headers instance carrying TWO
+	// (boundary rework) A user Headers instance carrying TWO
 	// set-cookie values (via .append) must have BOTH survive normalization —
 	// getSetCookie() (not the comma-joined single-header iterator value) is the
 	// only correct way to extract multi-value set-cookie from a Headers instance.
@@ -388,12 +394,12 @@ describe('cookie survives a Headers-instance set.headers (codex-indep-5)', () =>
 	})
 })
 
-// Regression (011): jit.ts cookie header source selection.
+// Regression: jit.ts cookie header source selection.
 //
 // The guard is `hasHeaders && !vali?.headers`:
 //   - headers-SCHEMA routes: vali?.headers is truthy → guard is false →
 //     jit falls back to c.request.headers.get('cookie'). This is REQUIRED
-//     because the headers validator (vali.headers.From()) strips non-schema
+//     because the headers validator (vali.headers.From) strips non-schema
 //     keys from c.headers before the cookie block runs; relying on the dict
 //     would yield undefined for the cookie key even when a Cookie header is
 //     present.
@@ -401,9 +407,9 @@ describe('cookie survives a Headers-instance set.headers (codex-indep-5)', () =>
 //     hasHeaders=true AND vali?.headers is falsy → guard is true →
 //     jit emits c.headers['cookie'] (dict read, no extra Headers.get() cost).
 //
-// The two existing tests pin the headers-schema → .get() fallback path.
+// The two existing tests pin the headers-schema → .get fallback path.
 // The third test pins the schema-less inferred-headers → dict-read path.
-describe("jit cookie header source: schema routes use .get() fallback, schema-less use dict read (011)", () => {
+describe('jit cookie header source: schema routes use .get fallback, schema-less use dict read (011)', () => {
 	it('headers-schema route + cookie access and NO Cookie header → empty jar, no 500', async () => {
 		// vali?.headers is truthy → guard false → c.request.headers.get('cookie').
 		// parseCookieRawSync treats falsy header identical to null → empty object.
@@ -418,8 +424,8 @@ describe("jit cookie header source: schema routes use .get() fallback, schema-le
 		expect(await res.text()).toBe('0')
 	})
 
-	it('headers-schema route + cookie access WITH Cookie header → jar populated via .get() fallback', async () => {
-		// vali?.headers is truthy → guard false → .get() path; cookie must still work.
+	it('headers-schema route + cookie access WITH Cookie header → jar populated via .get fallback', async () => {
+		// vali?.headers is truthy → guard false → .get path; cookie must still work.
 		const app = new Elysia().get(
 			'/',
 			{ headers: t.Object({ 'x-token': t.Optional(t.String()) }) },
@@ -438,7 +444,7 @@ describe("jit cookie header source: schema routes use .get() fallback, schema-le
 	it("schema-less route with destructured headers reads cookie via dict (pins c.headers['cookie'] branch)", async () => {
 		// `headers` is destructured → sucrose sets hasHeaders=true; no headers
 		// validator → vali?.headers is falsy → guard `hasHeaders && !vali?.headers`
-		// is true → jit emits c.headers['cookie'] instead of .get().
+		// is true → jit emits c.headers['cookie'] instead of .get.
 		// Pins the dict-read branch — fails if headers materialisation stops
 		// including the cookie key or the guard regresses.
 		const app = new Elysia().get(

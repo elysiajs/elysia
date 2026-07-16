@@ -2,7 +2,7 @@ import { Elysia } from '../../src'
 import { describe, it, expect } from 'bun:test'
 import { req, post } from '../utils'
 
-// validator-runtime-1: a Standard Schema whose `validate` is SYNTACTICALLY
+// a Standard Schema whose `validate` is SYNTACTICALLY
 // synchronous (not declared `async`) but RETURNS a Promise is spec-legal
 // (StandardSchemaV1: `validate: (v) => Result | Promise<Result>`) and common in
 // third-party wrappers. Elysia detects async-ness via a syntactic

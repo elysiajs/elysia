@@ -7,9 +7,9 @@ import { extractDeriveKeys } from '../../src/compile/handler/utils'
 import { req } from '../utils'
 
 /**
- * Derive key-wise merge harness (F45).
+ * Derive key-wise merge harness .
  *
- * Derive merge used to emit the generic reflective `Object.assign(c,tmp)`. F45
+ * Derive merge used to emit the generic reflective `Object.assign(c,tmp)`.
  * statically recovers the returned object literal's keys and emits monomorphic
  * `c.user=tmp.user` stores instead — 2.3-4x faster. The hazard is silent
  * over-match: a scanner that misreads the source DROPS keys (auth-context
@@ -41,7 +41,7 @@ const applyKeyMerge = (keys: string[], src: Record<string, unknown>) => {
 	return target
 }
 
-describe('F45: extractDeriveKeys exact key set or bail', () => {
+describe('extractDeriveKeys exact key set or bail', () => {
 	const analyzable: [Function, string[], string][] = [
 		[() => ({ user: 'bob' }), ['user'], 'single identifier key'],
 		[
@@ -151,7 +151,7 @@ describe('F45: extractDeriveKeys exact key set or bail', () => {
 		})
 })
 
-describe('F45: differential — key merge deep-equals Object.assign', () => {
+describe('differential — key merge deep-equals Object.assign', () => {
 	// For each analyzable derive, run it against a representative context and
 	// confirm the keys-emitted merge produces the SAME object as Object.assign.
 	const ctx = {
@@ -186,7 +186,7 @@ describe('F45: differential — key merge deep-equals Object.assign', () => {
 		})
 })
 
-describe('F45: codegen emission', () => {
+describe('codegen emission', () => {
 	it('object-literal derive emits key-wise stores, not Object.assign', () => {
 		const app = new Elysia()
 			.derive(() => ({ user: 'bob', role: 'admin' }))
@@ -220,7 +220,7 @@ describe('F45: codegen emission', () => {
 	})
 })
 
-describe('F45: end-to-end derived keys reach the handler', () => {
+describe('end-to-end derived keys reach the handler', () => {
 	it('static-key derive: keys are on the context', async () => {
 		const app = new Elysia()
 			.derive(() => ({ user: 'bob', role: 'admin' }))

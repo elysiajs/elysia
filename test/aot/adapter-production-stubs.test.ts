@@ -15,10 +15,10 @@ const APP = resolve(import.meta.dir, 'fixtures/strip-schema-bundle.ts')
 const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/aot.ts')
 
 // ---------------------------------------------------------------------------
-// Task A — target-gated adapter stub
+// Target-gated adapter stubs
 // ---------------------------------------------------------------------------
 
-describe('Task A: target-gated adapter stub', () => {
+describe('target-gated adapter stubs', () => {
 	it('FILTER: ADAPTER_BUN_FILTER matches elysia src and dist adapter/bun/index paths', () => {
 		expect(
 			ADAPTER_BUN_FILTER.test('/x/elysia/src/adapter/bun/index.ts')
@@ -229,10 +229,10 @@ describe('Task A: target-gated adapter stub', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Task B — build-time production flag
+// Build-time production flag
 // ---------------------------------------------------------------------------
 
-describe('Task B: build-time production flag', () => {
+describe('build-time production flag', () => {
 	it('FILTER: IS_PRODUCTION_FILTER matches elysia src and dist paths', () => {
 		expect(
 			IS_PRODUCTION_FILTER.test(

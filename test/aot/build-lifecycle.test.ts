@@ -1,18 +1,11 @@
-/**
- * Phase-2 AOT lifecycle pins
- *
- * M17: canonical ELYSIA_AOT_BUILD predicate
- * M27: cache-bust import path construction (tested without a real bundler run)
- */
+/** AOT build-mode detection and cache-busted import lifecycle. */
 import { describe, it, expect, afterEach } from 'bun:test'
 import { env } from '../../src/universal'
-import {
-	Capture
-} from '../../src/compile/aot'
+import { Capture } from '../../src/compile/aot'
 
-// --- M17: canonical predicate ---
+// Canonical build-mode predicate.
 
-describe('M17 isAotBuildEnv predicate', () => {
+describe('isAotBuildEnv predicate', () => {
 	const original = env.ELYSIA_AOT_BUILD
 
 	afterEach(() => {
@@ -41,9 +34,9 @@ describe('M17 isAotBuildEnv predicate', () => {
 	})
 })
 
-// --- M17: isCapturing() predicate ---
+// Capture-state predicate.
 
-describe('M17 Capture.isCapturing()', () => {
+describe('Capture.isCapturing', () => {
 	const original = env.ELYSIA_AOT_BUILD
 
 	afterEach(() => {
@@ -62,9 +55,9 @@ describe('M17 Capture.isCapturing()', () => {
 	})
 })
 
-// --- M27: cache-bust specifier construction ---
+// Cache-busted import specifier construction.
 
-describe('M27 cache-bust import specifier', () => {
+describe('cache-bust import specifier', () => {
 	it('cache-bust specifier embeds elysia-aot query suffix', () => {
 		// Test the specifier shape the plugin uses, without running a real build.
 		// The actual dynamic-import in generateCompiledArtifacts wraps the cache-bust
@@ -90,12 +83,12 @@ describe('M27 cache-bust import specifier', () => {
 	})
 })
 
-// --- M27-B: first-call plain / subsequent-call cache-bust behaviour ---
+// The first import is plain; subsequent imports are cache-busted.
 
-describe('M27-B _importedEntries gate', () => {
+describe('_importedEntries gate', () => {
 	it('first invocation uses plain entry path (no ?elysia-aot suffix)', async () => {
 		// Validate the decision logic directly via a mock dynamic import so we
-		// never hit the filesystem.  We replicate the branching in
+		// never hit the filesystem. We replicate the branching in
 		// generateCompiledArtifacts using the same _importedEntries Set.
 		const seen = new Set<string>()
 		const calls: string[] = []

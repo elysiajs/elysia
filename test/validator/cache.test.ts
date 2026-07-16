@@ -6,7 +6,7 @@ import { post } from '../utils'
 import { TypeBoxValidatorCache } from '../../src/type/validator'
 import { Validator } from '../../src/validator'
 
-// F12: the module-level validator cache used to strongly retain every
+// the module-level validator cache used to strongly retain every
 // validator forever (string key → WeakMap keyed by immortal coercion
 // singletons). It now mirrors sucrose's policy: an LRU cap (1024) plus an
 // unref'd idle timer that clears the cache once construction goes quiet.
@@ -65,13 +65,13 @@ describe('TypeBoxValidatorCache eviction', () => {
 	})
 })
 
-// C11: the structural (JSON-key) cache used to ignore `models`. A `$ref`
+// the structural (JSON-key) cache used to ignore `models`. A `$ref`
 // schema stringifies identically no matter what its refs resolve against, so
 // two apps declaring a same-named model with DIFFERENT definitions produced
 // the same key and were served each other's validator — a silent
 // wrong-model / validation-bypass. The cache now mixes a per-`models`-record
 // token into both cache layers when the schema contains a `$ref`.
-describe('TypeBoxValidatorCache models identity (C11)', () => {
+describe('TypeBoxValidatorCache models identity', () => {
 	const make = (i: number) => Type.Object({ [`k${i}`]: Type.String() })
 	const validator = (tag: number) => ({ tag }) as any
 	const refSchema = () => Type.Object({ nested: Type.Ref('Inner') })
@@ -133,7 +133,7 @@ describe('TypeBoxValidatorCache models identity (C11)', () => {
 	})
 })
 
-describe('TypeBoxValidatorCache metadata-named properties (B01)', () => {
+describe('TypeBoxValidatorCache metadata-named properties', () => {
 	const metadataNames = [
 		'title',
 		'description',

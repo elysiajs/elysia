@@ -413,7 +413,7 @@ describe('resume-emit selection & guards', () => {
 		expect(resumeCode.length).toBeGreaterThan(0)
 		// eslint-disable-next-line no-console
 		console.log(
-			`[B2 budget] suspending route: legacy=${legacyCode.length}B resume=${resumeCode.length}B ratio=${(resumeCode.length / legacyCode.length).toFixed(2)}x`
+			`[code-size budget] suspending route: legacy=${legacyCode.length}B resume=${resumeCode.length}B ratio=${(resumeCode.length / legacyCode.length).toFixed(2)}x`
 		)
 		expect(resumeCode.length).toBeLessThanOrEqual(legacyCode.length * 3)
 	})
@@ -530,7 +530,7 @@ describe('resume-emit selection & guards', () => {
 	})
 
 	it('NATIVELY covers async routes (NO fallback) and asserts plan.supported', async () => {
-		// The B2 deliverable: async-capable routes get a sync entry + `__resume`
+		// Async-capable routes get a sync entry plus `__resume`.
 		// continuation, so they are SUPPORTED natively — they must NOT warn. Assert
 		// both the absence of a fallback warning AND `plan.supported === true` via
 		// the routePlans WeakMap for representative async shapes (async handler,

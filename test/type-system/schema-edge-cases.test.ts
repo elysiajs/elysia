@@ -1,7 +1,4 @@
-/**
- * Regression tests for codex-review P2 L-series fixes.
- * L07, L08, L09, L12, L14, L15
- */
+/** Schema edge cases whose optimized paths must match their general behavior. */
 import { Elysia, t } from '../../src'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { Check } from 'typebox/value'
@@ -13,10 +10,8 @@ import {
 	SHARED_REFERENCE_CACHE_LIMIT
 } from '../../src/type/elysia/utils'
 
-// ---------------------------------------------------------------------------
-// L07 — createSharedReference collision guard
-// ---------------------------------------------------------------------------
-describe('L07 — createSharedReference equality check on hash hit', () => {
+// Shared-reference hashes must still compare full schema values.
+describe('createSharedReference equality check on hash hit', () => {
 	beforeEach(() => Validator.clear())
 	afterEach(() => Validator.clear())
 
@@ -77,7 +72,7 @@ describe('L07 — createSharedReference equality check on hash hit', () => {
 		expect(t.Files({ maxItems: 10_000 } as any)).not.toBe(files)
 	})
 
-	it('clears resident shared schemas through Validator.clear()', () => {
+	it('clears resident shared schemas through Validator.clear', () => {
 		const options = { minSize: 3_000_000 }
 		const resident = t.File(options)
 
@@ -86,7 +81,7 @@ describe('L07 — createSharedReference equality check on hash hit', () => {
 		expect(t.File(options)).not.toBe(resident)
 	})
 
-	it('clears resident shared schemas through public flushMemory()', () => {
+	it('clears resident shared schemas through public flushMemory', () => {
 		const options = { minSize: 4_000_000 }
 		const resident = t.File(options)
 
@@ -118,9 +113,9 @@ describe('L07 — createSharedReference equality check on hash hit', () => {
 })
 
 // ---------------------------------------------------------------------------
-// L08 — zero-bound maximums must be respected (not skipped via truthiness)
+// Zero-valued maximums must not be skipped by truthiness checks.
 // ---------------------------------------------------------------------------
-describe('L08 — zero maximums are enforced', () => {
+describe('zero maximums are enforced', () => {
 	it('t.File maxSize:0 rejects any non-empty file', async () => {
 		const app = new Elysia().post(
 			'/',
@@ -172,9 +167,9 @@ describe('L08 — zero maximums are enforced', () => {
 })
 
 // ---------------------------------------------------------------------------
-// L09 — Uint8Array with options still accepts ArrayBuffer input
+// Uint8Array schemas with options still accept ArrayBuffer input.
 // ---------------------------------------------------------------------------
-describe('L09 — t.Uint8Array with options accepts ArrayBuffer', () => {
+describe('t.Uint8Array with options accepts ArrayBuffer', () => {
 	it('accepts ArrayBuffer when minByteLength is specified', () => {
 		const schema = t.Uint8Array({ minByteLength: 1 })
 		// ArrayBuffer(4) should pass the min constraint
@@ -193,9 +188,9 @@ describe('L09 — t.Uint8Array with options accepts ArrayBuffer', () => {
 })
 
 // ---------------------------------------------------------------------------
-// L12 — nonAdditionalProperties walks $defs
+// Additional-property analysis includes schemas under $defs.
 // ---------------------------------------------------------------------------
-describe('L12 — nonAdditionalProperties walks $defs', () => {
+describe('nonAdditionalProperties walks $defs', () => {
 	it('closes objects inside $defs', () => {
 		const schema = {
 			'~kind': 'Object',
@@ -238,10 +233,14 @@ describe('L12 — nonAdditionalProperties walks $defs', () => {
 })
 
 // ---------------------------------------------------------------------------
-// L14 — IntegerString decimal-only grammar
+// IntegerString accepts decimal syntax only.
 // ---------------------------------------------------------------------------
-describe('L14 — IntegerString decimal-only grammar', () => {
-	const app = new Elysia().get('/', { query: t.Object({ n: t.Integer() }) }, ({ query }) => query.n)
+describe('IntegerString decimal-only grammar', () => {
+	const app = new Elysia().get(
+		'/',
+		{ query: t.Object({ n: t.Integer() }) },
+		({ query }) => query.n
+	)
 
 	for (const [qs, ok, label] of [
 		['42', true, 'accepts plain decimal integers'],
@@ -252,39 +251,53 @@ describe('L14 — IntegerString decimal-only grammar', () => {
 		['-5', true, 'accepts negative integers']
 	] as [string, boolean, string][]) {
 		it(label, async () => {
-			const res = await app.handle(new Request(`http://localhost/?n=${qs}`))
+			const res = await app.handle(
+				new Request(`http://localhost/?n=${qs}`)
+			)
 			expect(res.status).toBe(ok ? 200 : 422)
 		})
 	}
 })
 
 // ---------------------------------------------------------------------------
-// L15 — exact MIME match (no prefix attack)
+// File extensions require exact MIME matches, not prefixes.
 // ---------------------------------------------------------------------------
-describe('L15 — checkFileExtension exact MIME match', () => {
+describe('checkFileExtension exact MIME match', () => {
 	it('image/png does NOT match image/png-malicious', () => {
 		// Import the function to test directly
-		const { checkFileExtension } = require('../../src/type/elysia/file-type')
-		expect(checkFileExtension('image/png-malicious', 'image/png')).toBe(false)
+		const {
+			checkFileExtension
+		} = require('../../src/type/elysia/file-type')
+		expect(checkFileExtension('image/png-malicious', 'image/png')).toBe(
+			false
+		)
 	})
 
 	it('image/png matches image/png (exact)', () => {
-		const { checkFileExtension } = require('../../src/type/elysia/file-type')
+		const {
+			checkFileExtension
+		} = require('../../src/type/elysia/file-type')
 		expect(checkFileExtension('image/png', 'image/png')).toBe(true)
 	})
 
 	it('wildcard image/* matches image/png', () => {
-		const { checkFileExtension } = require('../../src/type/elysia/file-type')
+		const {
+			checkFileExtension
+		} = require('../../src/type/elysia/file-type')
 		expect(checkFileExtension('image/png', 'image/*')).toBe(true)
 	})
 
 	it('wildcard image/* does NOT match audio/mpeg', () => {
-		const { checkFileExtension } = require('../../src/type/elysia/file-type')
+		const {
+			checkFileExtension
+		} = require('../../src/type/elysia/file-type')
 		expect(checkFileExtension('audio/mpeg', 'image/*')).toBe(false)
 	})
 
 	it('category alias "image" matches image/png', () => {
-		const { checkFileExtension } = require('../../src/type/elysia/file-type')
+		const {
+			checkFileExtension
+		} = require('../../src/type/elysia/file-type')
 		expect(checkFileExtension('image/png', 'image')).toBe(true)
 	})
 
@@ -300,7 +313,9 @@ describe('L15 — checkFileExtension exact MIME match', () => {
 		)
 
 		// Build a File object that reports its type as 'image/png-malicious'
-		const file = new File(['fake'], 'test.png', { type: 'image/png-malicious' })
+		const file = new File(['fake'], 'test.png', {
+			type: 'image/png-malicious'
+		})
 
 		const body = new FormData()
 		body.append('file', file)

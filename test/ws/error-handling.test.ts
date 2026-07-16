@@ -2,8 +2,8 @@ import { describe, it, expect, afterEach, beforeEach } from 'bun:test'
 import { Elysia, t, status, ValidationError } from '../../src'
 import { newWebsocket, wsOpen, wsClosed, wsMessage } from './utils'
 
-// ── H18-fix-1: throwing error hook must not escape; original error frame sent ──
-describe('H18-fix-1: throwing error hook falls through to sendErrorFrame', () => {
+// A throwing error hook falls back to the original error frame.
+describe('throwing error hook falls through to sendErrorFrame', () => {
 	it('error frame is still sent when error hook throws; no unhandled rejection', async () => {
 		const unhandledRejections: unknown[] = []
 		const onUnhandled = (reason: unknown) => {
@@ -49,8 +49,8 @@ describe('H18-fix-1: throwing error hook falls through to sendErrorFrame', () =>
 	})
 })
 
-// ── H18-fix-2: rejected dispatch promise must not become unhandled rejection ──
-describe('H18-fix-2: rejected dispatch promise is caught in global message handler', () => {
+// A rejected dispatch promise must not become an unhandled rejection.
+describe('rejected dispatch promise is caught in global message handler', () => {
 	it('no unhandledRejection when message handler rejects', async () => {
 		const unhandledRejections: unknown[] = []
 		const onUnhandled = (reason: unknown) => {
@@ -111,8 +111,8 @@ describe('H18-fix-2: rejected dispatch promise is caught in global message handl
 	})
 })
 
-// ── H18-fix-3: allowUnsafeValidationDetails respected on no-error-handler fast path ──
-describe('H18-fix-3: allowUnsafeValidationDetails on fast-path (no error handlers)', () => {
+// The no-error-handler fast path respects allowUnsafeValidationDetails.
+describe('allowUnsafeValidationDetails on fast-path (no error handlers)', () => {
 	afterEach(() => {
 		delete process.env.NODE_ENV
 	})
@@ -171,15 +171,16 @@ describe('H18-fix-3: allowUnsafeValidationDetails on fast-path (no error handler
 	})
 })
 
-// ── H18-fix-4: upgrade-validation error hook returning status() uses correct code ──
-describe('H18-fix-4: upgrade error hook returning status() maps to correct HTTP status', () => {
-	// Probe: .error() returns status(401, 'denied') on a query-validation failure.
+// Upgrade validation uses the status returned by an error hook.
+describe('upgrade error hook returning status maps to correct HTTP status', () => {
+	// Probe:.error returns status(401, 'denied') on a query-validation failure.
 	// Before the fix: response was 422 with body `{"code":401,"response":"denied"}`.
 	// After the fix: response must be 401 with body 'denied'.
 	it('error hook returning status(401, "denied") produces HTTP 401 with body "denied"', async () => {
 		const app = new Elysia()
 			.error(({ error }: any) => {
-				if (error instanceof ValidationError) return status(401, 'denied')
+				if (error instanceof ValidationError)
+					return status(401, 'denied')
 			})
 			.ws('/ws', {
 				query: t.Object({ name: t.String() }),
@@ -230,7 +231,9 @@ describe('H18-fix-4: upgrade error hook returning status() maps to correct HTTP 
 		)
 
 		expect(upgradeResponse.status).toBe(403)
-		await expect(upgradeResponse.json()).resolves.toEqual({ msg: 'forbidden' })
+		await expect(upgradeResponse.json()).resolves.toEqual({
+			msg: 'forbidden'
+		})
 
 		app.stop()
 	})

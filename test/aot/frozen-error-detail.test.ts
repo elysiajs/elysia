@@ -16,22 +16,16 @@ import { resetCompactErrorWarnings } from '../../src/compile/aot-capture'
 import { materialise } from './_manifest'
 
 /**
- * A15 (C20 / contract Q11) — sealed error-detail: warn, don't fail.
- *
- * The frozen (sealed/stripped-bridge) `FrozenSlotValidator.Errors()` used to
+ * The frozen (sealed/stripped-bridge) `FrozenSlotValidator.Errors` used to
  * return `[]` unconditionally. On a 422, the wired/live lane names the offending
  * field (`payload.property`, `error.all[i].message`), while the sealed lane
  * returned an empty error list — a SILENT parity gap: a stripped build's 422
  * carried no field detail at all.
  *
- * This pins:
- *   1. For the compact-diagnosable subset (open objects / scalars / arrays /
- *      nesting), sealed `.all` is byte-identical to the wired lane (path +
- *      message + schemaPath + params) — a differential assertion.
- *   2. For a coercion/codec schema the sealed target cannot pinpoint faithfully,
- *      a build-time warning fires (visible, once per slot) AND the runtime still
- *      returns a NON-empty best-effort error naming the offending field. The ban
- *      is on silent `[]`, never on the warning.
+ * For open objects, scalars, arrays, and nesting, sealed `.all` must be
+ * byte-identical to the wired lane. When a coercion or codec cannot be described
+ * faithfully, the build warns once per slot and runtime returns a non-empty,
+ * best-effort error naming the offending field. Silent `[]` is never allowed.
  *
  * Each case freezes in isolation (a shared capture Map pollutes cross-schema
  * mirror-union reconstruction — see bridge-free-validator.test.ts).
@@ -51,7 +45,11 @@ function freeze(schema: any): { warns: string[] } {
 
 	try {
 		beginValidatorCapture()
-		const app = new Elysia().post(PATH, { body: schema }, ({ body }) => body)
+		const app = new Elysia().post(
+			PATH,
+			{ body: schema },
+			({ body }) => body
+		)
 		;(app as any).compile()
 		const captured = endValidatorCapture()
 		endHandlerCapture()
@@ -71,9 +69,12 @@ const hook = (schema: any) => ({ body: schema })
 const root = () => new Elysia() as any
 
 const wired = (schema: any) =>
-	new RouteValidator(hook(schema) as any, {
-		aot: { method: METHOD, path: PATH }
-	} as any)
+	new RouteValidator(
+		hook(schema) as any,
+		{
+			aot: { method: METHOD, path: PATH }
+		} as any
+	)
 
 const bridgeFree = (schema: any) =>
 	buildFrozenRouteValidator(hook(schema) as any, root(), METHOD, PATH)
@@ -95,7 +96,7 @@ afterEach(() => {
 	Validator.clear()
 })
 
-describe('A15 — sealed 422 lists offending fields (compact-diagnosable subset)', () => {
+describe('sealed validation errors identify offending fields', () => {
 	// Differential: sealed `.all` must equal the wired lane byte-for-byte.
 	const cases: [string, any, unknown][] = [
 		[
@@ -136,7 +137,7 @@ describe('A15 — sealed 422 lists offending fields (compact-diagnosable subset)
 			const wErr = reject(w.body, input)
 			const fErr = reject(f!.body, input)
 
-			// The whole point of A15: the sealed lane no longer returns `[]`.
+			// Failed sealed validation must retain useful field details.
 			expect(
 				fErr.all.length,
 				'sealed error list must not be empty'
@@ -149,8 +150,8 @@ describe('A15 — sealed 422 lists offending fields (compact-diagnosable subset)
 			expect(fErr.payload.property).toBe(wErr.payload.property)
 		})
 
-	it('fail-on-old proof: sealed error list is non-empty and matches wired', () => {
-		// On the pre-A15 code `Errors()` returned `[]`, so `fErr.all` was `[]`
+	it('keeps the sealed error list non-empty and equal to the wired validator', () => {
+		// The old sealed validator returned `[]`, so `fErr.all` was `[]`
 		// and this length assertion (and the parity assertion above) FAILED.
 		const schema = t.Object({ name: t.String(), age: t.Number() })
 		freeze(schema)
@@ -158,14 +159,12 @@ describe('A15 — sealed 422 lists offending fields (compact-diagnosable subset)
 		const fErr = reject(bridgeFree(schema)!.body, { age: 5 })
 
 		expect(fErr.all.length).toBeGreaterThan(0)
-		expect(fErr.all[0].message).toBe(
-			'must have required properties name'
-		)
+		expect(fErr.all[0].message).toBe('must have required properties name')
 	})
 })
 
-describe('A15 — coercion/codec schema: warn, best-effort, never silent []', () => {
-	it('t.Date() slot warns at build time and names the field best-effort', () => {
+describe('sealed coercion and codec errors degrade visibly', () => {
+	it('t.Date slot warns at build time and names the field best-effort', () => {
 		const schema = t.Object({ when: t.Date() })
 		const { warns } = freeze(schema)
 
@@ -184,7 +183,7 @@ describe('A15 — coercion/codec schema: warn, best-effort, never silent []', ()
 		expect(fErr.payload.property).not.toBe('root')
 	})
 
-	it('t.Numeric() slot warns and rejects with a non-empty error', () => {
+	it('t.Numeric slot warns and rejects with a non-empty error', () => {
 		const schema = t.Object({ n: t.Numeric() })
 		const { warns } = freeze(schema)
 
@@ -222,13 +221,11 @@ describe('A15 — coercion/codec schema: warn, best-effort, never silent []', ()
 		}
 
 		// one body slot → one warning, despite two codec properties
-		expect(
-			warns.filter((w) => w.includes('[elysia-aot]')).length
-		).toBe(1)
+		expect(warns.filter((w) => w.includes('[elysia-aot]')).length).toBe(1)
 	})
 })
 
-describe('A15 — fully-structural schema does NOT warn', () => {
+describe('sealed structural schemas retain full error details', () => {
 	it('plain object/scalar/array schema seals without any warning', () => {
 		const { warns } = freeze(
 			t.Object({

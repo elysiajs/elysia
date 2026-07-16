@@ -2,18 +2,12 @@ import { describe, it, expect } from 'bun:test'
 import { Elysia } from '../../src'
 import { newWebsocket, wsOpen, wsMessage, wsClosed } from './utils'
 
-// A8 (Train N-correctness):
-//   1. Event args are the public positional contract — arity (`fn.length`)
-//      must NOT gate argument delivery. Default-param and rest-param message
-//      handlers still receive the real body positionally.
-//   2. Every connection gets a unique, stable, non-empty id (seeded `undefined`
-//      so the getter mints one; previously seeded `''` → all ids collided).
-//   3. The per-frame `ws.body` view is allocated only when the handler may
-//      observe it, with conservative fallback; correctness of `ws.body` is
-//      preserved for touched AND unanalyzable handlers.
+// Event arguments follow the public positional contract: function arity must
+// not gate body delivery. Connection ids are non-empty, unique, and stable.
+// `ws.body` remains observable for both directly accessed and escaped contexts.
 
-describe('WS A8 — positional body delivery (point 1)', () => {
-	it('delivers body positionally to a default-param handler (fails on old arity gate)', async () => {
+describe('WebSocket positional body delivery', () => {
+	it('delivers body to a default-parameter handler', async () => {
 		// `.length` is 1 here (default param not counted) — the old
 		// `messageTakesBody = fn.length >= 2` gate would call `fn(ws)` and the
 		// handler would see the default `'DEFAULT'` instead of the real body.
@@ -38,7 +32,7 @@ describe('WS A8 — positional body delivery (point 1)', () => {
 		app.stop()
 	})
 
-	it('delivers body positionally to a rest-param handler (fails on old arity gate)', async () => {
+	it('delivers body to a rest-parameter handler', async () => {
 		// `.length` is 1 (rest param not counted) — old gate would call `fn(ws)`
 		// and `args` would be empty.
 		const app = new Elysia()
@@ -63,8 +57,8 @@ describe('WS A8 — positional body delivery (point 1)', () => {
 	})
 })
 
-describe('WS A8 — connection id (point 2)', () => {
-	it('gives two concurrent connections distinct non-empty ids (fails on old id: "")', async () => {
+describe('WebSocket connection ids', () => {
+	it('gives concurrent connections distinct non-empty ids', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
 				message(ws) {
@@ -125,7 +119,7 @@ describe('WS A8 — connection id (point 2)', () => {
 	})
 })
 
-describe('WS A8 — ws.body observability (point 3)', () => {
+describe('WebSocket body observability', () => {
 	it('untouched-body handler works (allocation skipped path)', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
@@ -170,7 +164,7 @@ describe('WS A8 — ws.body observability (point 3)', () => {
 	})
 
 	it('unanalyzable (bound) handler observes correct ws.body (conservative fallback)', async () => {
-		// A bound function's source is `function () { [native code] }` — the
+		// A bound function's source is `function { [native code] }` — the
 		// analysis cannot see whether it touches `.body`, so it must
 		// conservatively allocate. The bound impl reads `ws.body`.
 		function impl(this: unknown, ws: any) {

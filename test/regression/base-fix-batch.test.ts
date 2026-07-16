@@ -54,7 +54,7 @@ describe('async setup readiness and awaited cleanup', () => {
 	})
 })
 
-describe('H16 — auto-HEAD never buffers an unknown-length body', () => {
+describe('auto-HEAD never buffers an unknown-length body', () => {
 	it('cancels the stream and omits content-length instead of reading it', async () => {
 		let pulled = 0
 
@@ -114,7 +114,7 @@ describe('H16 — auto-HEAD never buffers an unknown-length body', () => {
 	})
 })
 
-describe('L01 — cross-kind override replaces instead of silently no-oping', () => {
+describe('cross-kind override replaces instead of silently no-oping', () => {
 	it('decorate override replaces a primitive with an object', () => {
 		const app = new Elysia()
 			.decorate('config', 'legacy')
@@ -144,9 +144,9 @@ describe('L01 — cross-kind override replaces instead of silently no-oping', ()
 	})
 })
 
-describe('late-add throws after seal (Q4)', () => {
+describe('late-add throws after seal', () => {
 	// Original intent: a `.get()` after the first request (once the fetch handler
-	// was materialized) produced a dev-only warning and silently rebuilt. Under B6
+	// was materialized) produced a dev-only warning and silently rebuilt. Under
 	// the first request SEALS the app, so late authoring is retired in favour of a
 	// synchronous throw — the warning is superseded by the immutability contract.
 
@@ -155,7 +155,7 @@ describe('late-add throws after seal (Q4)', () => {
 		await app.handle(req('/first')) // seals the app
 
 		// Retired behavior: warn + silent invalidate + recover on next compile().
-		// Q4 behavior: the sealed instance is immutable and the mutation throws.
+		//  behavior: the sealed instance is immutable and the mutation throws.
 		expect(() => app.get('/late', () => 'late')).toThrow(
 			'after the app was sealed'
 		)
@@ -228,7 +228,7 @@ describe('late-add throws after seal (Q4)', () => {
 	})
 })
 
-describe('L03 — custom method tokens are normalized to uppercase', () => {
+describe('custom method tokens are normalized to uppercase', () => {
 	it('.method with a lowercase token matches an uppercase Request.method', async () => {
 		const app = new Elysia().method('purge', '/cache', () => 'purged')
 

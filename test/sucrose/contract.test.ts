@@ -1,16 +1,16 @@
 // @ts-nocheck
 /**
- * Executable enforcement of design/sucrose-contract.md.
+ * Executable contract for context-use inference.
  *
- * The H5/H26/M29/M30 Phase-2 fixes have all landed; every fixture now has
- * `passesToday: true` and is asserted to satisfy its `expect` directly.
+ * Every fixture currently has `passesToday: true` and is asserted to satisfy
+ * its `expect` directly.
  * The `passesToday` mechanism remains available for future open defects:
- *   - `passesToday: true` fixtures are asserted to satisfy their `expect`.
- *   - `passesToday: false` fixtures are asserted to CURRENTLY VIOLATE their
- *     `expect` (a "documents current defect" assertion). This does two things:
- *       1. proves the `passesToday` flag is accurate (not guessed), and
- *       2. flips red the moment a fix lands — at which point the maintainer
- *          sets `passesToday: true` and the fixture becomes a plain assertion.
+ * - `passesToday: true` fixtures are asserted to satisfy their `expect`.
+ * - `passesToday: false` fixtures are asserted to CURRENTLY VIOLATE their
+ * `expect` (a "documents current defect" assertion). This does two things:
+ * 1. proves the `passesToday` flag is accurate (not guessed), and
+ * 2. flips red the moment a fix lands — at which point the maintainer
+ * sets `passesToday: true` and the fixture becomes a plain assertion.
  */
 
 import { describe, it, expect } from 'bun:test'
@@ -46,9 +46,8 @@ describe('sucrose contract — fixture corpus', () => {
 					expect(actual[channel]).toBe(want)
 			})
 		} else {
-			// Executable defect spec. GREEN today because the fixture currently
-			// FAILS the contract; will go RED when the Phase-2 fix lands.
-			it(`[${fx.bug}] documents current defect — ${fx.name}`, () => {
+			// A failing fixture documents current behavior and turns red when fixed.
+			it(`[${fx.defect}] documents current defect — ${fx.name}`, () => {
 				const actual = infer(fx.fn)
 				expect(satisfies(actual, fx.expect)).toBe(false)
 			})
@@ -69,9 +68,9 @@ describe('sucrose contract — passesToday flag is empirically accurate', () => 
 })
 
 describe('sucrose contract — unit-level defect repros', () => {
-	// H26: removeColonAlias must drop the whole `:alias` span and reduce a
+	// removeColonAlias must drop the whole `:alias` span and reduce a
 	// braced rename to the bare keyword, preserving surrounding formatting.
-	it('[H26] removeColonAlias reduces braced rename to bare keyword', () => {
+	it('removeColonAlias reduces braced rename to bare keyword', () => {
 		expect(removeColonAlias('{headers:rs}')).toBe('{headers}')
 		expect(removeColonAlias('{query:q}')).toBe('{query}')
 		// Spaced form keeps its formatting (space before the closing brace).
@@ -79,19 +78,22 @@ describe('sucrose contract — unit-level defect repros', () => {
 		expect(removeColonAlias('{ headers: reqHeaders }')).toBe('{ headers }')
 	})
 
-	it('[H26] findAlias re-inject yields the bare keyword', () => {
+	it('findAlias re-inject yields the bare keyword', () => {
 		// `const {query:q} = c` → the re-injected destructure block reduces to
 		// `{query}`, so downstream retrieveRootparameters sees key `query` and
 		// the channel is kept. (`q.a` is a property read on `q`, not an alias of
-		// `c`, so `a` is correctly absent — the old trailing `a` was M29 garbage.)
+		// `c`, so `a` is correctly absent — the old trailing `a` was garbage.)
 		expect(findAlias('c', '{const{query:q}=c;q.a}')).toEqual(['{query}'])
 	})
 
-	// M29: minified `=alias` must return the same alias list as the spaced form,
+	// minified `=alias` must return the same alias list as the spaced form,
 	// with no lost or garbage aliases.
-	it('[M29] minified transitive aliases match the spaced form', () => {
+	it('minified transitive aliases match the spaced form', () => {
 		// spaced baseline
-		expect(findAlias('body', '{ const a = body, b = a }')).toEqual(['a', 'b'])
+		expect(findAlias('body', '{ const a = body, b = a }')).toEqual([
+			'a',
+			'b'
+		])
 		// minified must match the spaced form exactly (no lost second alias)
 		expect(findAlias('body', '{const a=body,b=a}')).toEqual(['a', 'b'])
 		// three aliases minified → clean transitive list, no garbage

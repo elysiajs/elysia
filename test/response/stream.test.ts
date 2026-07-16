@@ -5,7 +5,7 @@ import { Elysia, sse } from '../../src'
 import { streamResponse } from '../../src/adapter/utils'
 import { requestId } from '../../src/utils'
 
-// C14: chunks are now Uint8Array; decode them for string comparison.
+// chunks are now Uint8Array; decode them for string comparison.
 const dec = new TextDecoder()
 const decodeChunk = (v: unknown): string =>
 	v instanceof Uint8Array ? dec.decode(v) : String(v)
@@ -793,7 +793,7 @@ describe('Stream', () => {
 		expect(result).toEqual(expected)
 	})
 
-	// F20: re-streamed Response bodies must pass through byte-identical —
+	// re-streamed Response bodies must pass through byte-identical —
 	// UTF-8 decoding each chunk corrupted non-UTF-8 bytes (U+FFFD) and
 	// multi-byte characters split across chunk boundaries
 	it('preserve exact bytes when re-streaming a touched-set chunked Response', async () => {
@@ -839,8 +839,8 @@ describe('Stream', () => {
 		expect(result).toEqual(new Uint8Array([1, 2, 3, 4]))
 	})
 
-	// C13: chunked Response with a non-200 status must preserve that status.
-	// Regression pin for A9 — must pass on fixed code and old code alike
+	// chunked Response with a non-200 status must preserve that status.
+	// Regression pin for  — must pass on fixed code and old code alike
 	// (the defect did not reproduce: status was already preserved correctly).
 	it('preserves custom status on chunked Response returned directly', async () => {
 		const body = new ReadableStream({

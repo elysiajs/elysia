@@ -273,14 +273,14 @@ describe('AOT static & promise handler freeze', () => {
 })
 
 /**
- * H04 fast-path guard: widening a hook to the async path may only happen when
+ * Widening a hook to the async path may only happen when
  * the hook is *not provably sync*. A plain synchronous route must keep emitting
  * a synchronous `function route(c)` — otherwise every request eats an extra
  * microtask. Conversely, a hook whose body returns a Promise must promote the
  * route to an `async function route(c)` so the thenable is awaited before it is
  * treated as a short-circuit response.
  */
-describe('H04 sync/async compilation gating', () => {
+describe('sync/async compilation gating', () => {
 	const capture = (app: Elysia<any, any>) => {
 		;(app as any).compile()
 		const handlers = endHandlerCapture()

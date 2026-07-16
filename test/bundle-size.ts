@@ -5,16 +5,10 @@ const cases = {
 		resume: false
 	},
 	schema: {
-		// The optional B2 resume entry keeps default apps under the original 400KB
-		// budget. Remaining semantic-seal additions (maintainer sign-off pending):
-		//  - B7 columnar route table (src/route-table.ts): ~640B net (offset by
-		//    deduping schemaMediaKind out of the resume emitter).
-		//  - B6 semantic freeze (src/generation.ts + Q4 guards in base.ts):
-		//    ~1.4KB. Load-bearing seal machinery, not removable.
-		//  - C3 lazy signed-cookie verify (Q8): ~530B. resolvePendingCookie +
-		//    parseCookieRawLazy, statically imported by the Cookie class + handler
-		//    compiler (dormant unless a route runs the lazy lazy lane).
-		//    Same lazy-registry follow-up could tree-shake it from cookie-free apps.
+		// The optional resume entry keeps default apps under the original 400KB
+		// budget. The columnar route table adds ~640B net, semantic sealing adds
+		// ~1.4KB, and lazy cookie verification adds ~530B. A lazy registry could
+		// later tree-shake the cookie path from cookie-free apps.
 		limit: 400 * 1024,
 		source: `import { Elysia, t } from './dist/index.mjs'; globalThis.app = new Elysia().get('/', () => 'ok', { query: t.Object({ q: t.String() }) })`,
 		resume: false

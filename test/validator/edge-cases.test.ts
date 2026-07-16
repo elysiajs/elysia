@@ -70,7 +70,7 @@ describe('skip Clean walk on fully-closed objects', () => {
 	})
 
 	it('normalize:"typebox" keeps TypeBox Clean semantics (no fast-path skip)', () => {
-		// normalize:'typebox' opts out of the L8 skip and uses TypeBox `Clean`.
+		// normalize:'typebox' uses TypeBox `Clean` instead of skipping cleanup.
 		// (TypeBox Clean is same-ref/in-place for already-clean input, so we
 		// assert on value, not reference — the point is that the closed-object
 		// skip must NOT hijack the explicit typebox request.)
@@ -150,7 +150,7 @@ describe('default merger returns input unchanged when complete', () => {
 		expect(out).toEqual(Default(schema, { a: { b: {} } }) as any)
 	})
 
-	it('closed object with default: full request-path (M5 + L8) returns input unchanged', () => {
+	it('closed object with a default returns input unchanged through the request path', () => {
 		const schema = Type.Object(
 			{ page: Type.Number({ default: 1 }), name: Type.String() },
 			{ additionalProperties: false }

@@ -1,18 +1,15 @@
 /**
  * Cross-transport lifecycle PARITY — HTTP per-route JIT vs WS hand-rolled.
  *
- * Finding: maintainability-arch-2 (design/review-stable/findings/maintainability-arch-2.md)
- *
  * The per-route lifecycle is authored twice: JIT string codegen
  * (src/compile/handler/jit.ts) for HTTP, and hand-rolled interpreted closures
  * (src/ws/route.ts dispatchMessage / dispatchMessageSync) for WS. There is no
- * shared spec, so drift is only caught in production. This suite runs the same
- * scenario through both transports and:
- *   - asserts equality against ONE shared expected value where they must agree,
- *   - PINS the current behavior (with a finding id) where they genuinely diverge.
+ * shared implementation, so drift needs direct coverage. This suite runs the
+ * same scenario through both transports, asserting a shared expected value
+ * where they agree and pinning current behavior where they diverge.
  *
  * A pinned divergence is a conscious tripwire. If the pinned behavior changes,
- * this test breaks on purpose — revisit the finding, do not silently re-baseline.
+ * this test breaks on purpose so the transport contract is revisited explicitly.
  *
  * WS uses a real Bun.serve() + WebSocket client (see test/ws/*). Runs WITHOUT
  * NODE_ENV; production masking is in production-masking.test.ts.
@@ -159,7 +156,7 @@ describe('HTTP-vs-WS lifecycle parity', () => {
 
 	// ------------------------------------------------------------------
 	// Body validation failure — both transports emit RFC 9457 problem+json.
-	// (dx-greenfield-5 previously claimed WS was a bare string — since FIXED.)
+	// ( previously claimed WS was a bare string — since FIXED.)
 	// ------------------------------------------------------------------
 	it('body validation failure is RFC 9457 problem+json on BOTH transports', async () => {
 		const httpApp = new Elysia().post(
@@ -286,11 +283,11 @@ describe('HTTP-vs-WS lifecycle parity', () => {
 	// ==================================================================
 
 	// ------------------------------------------------------------------
-	// PIN ws-3: WS send does NOT run response codec Encode; HTTP does.
+	// Current behavior: WS send does NOT run response codec Encode; HTTP does.
 	// Same response schema + payload → success on HTTP, ValidationError on WS.
 	// (jit.ts:926/931 EncodeFrom vs ws/context.ts #send Check-only + JSON.stringify)
 	// ------------------------------------------------------------------
-	it('PIN ws-3: response codec Encode runs on HTTP but not WS', async () => {
+	it('Current behavior: response codec Encode runs on HTTP but not WS', async () => {
 		const httpApp = new Elysia().get(
 			'/c',
 			{ response: t.Object({ v: Coded }) },
@@ -312,7 +309,7 @@ describe('HTTP-vs-WS lifecycle parity', () => {
 		const { frames } = await wsProbe(wsApp.server!, '/c', 'go')
 		wsApp.stop()
 
-		// DIVERGENCE (ws-3): WS never Encodes. The codec's underlying type is
+		// DIVERGENCE : WS never Encodes. The codec's underlying type is
 		// String, so Check(rawNumber) fails → WS emits a validation error frame
 		// instead of the encoded body. If WS ever gains Encode-on-send this
 		// assertion must flip to the shared "{"v":"n:42"}" expectation.
@@ -322,11 +319,11 @@ describe('HTTP-vs-WS lifecycle parity', () => {
 	})
 
 	// ------------------------------------------------------------------
-	// PIN maintainability-arch-2: afterHandle return value — HTTP replaces the
+	// Current behavior: afterHandle return value — HTTP replaces the
 	// response, WS discards it. (jit.ts reassigns _r from mapAfterHandle; WS
 	// route.ts:458-461 awaits afterHandles only for timing, ignores the return.)
 	// ------------------------------------------------------------------
-	it('PIN maintainability-arch-2: afterHandle return replaces response on HTTP, discarded on WS', async () => {
+	it('Current behavior: afterHandle return replaces response on HTTP, discarded on WS', async () => {
 		const httpApp = new Elysia().get(
 			'/after',
 			{ afterHandle: () => 'AFTER-WINS' },
@@ -354,7 +351,7 @@ describe('HTTP-vs-WS lifecycle parity', () => {
 	})
 
 	// ------------------------------------------------------------------
-	// PARITY (was PIN maintainability-arch-2): thrown status() preserves both the
+	// Parity: thrown status() preserves both the
 	// status code and the response value on BOTH transports. HTTP unwraps
 	// ElysiaStatus into a raw `418 "teapot"` response; WS emits the structured
 	// frame `{status,error}` — the SAME shape a RETURNED status() emits over WS
@@ -407,7 +404,7 @@ describe('HTTP-vs-WS lifecycle parity', () => {
 	})
 
 	// ------------------------------------------------------------------
-	// PARITY (was PIN dx-greenfield-5): WS errors are now RFC 9457 problem+json,
+	// Parity: WS errors are now RFC 9457 problem+json,
 	// at parity with HTTP (maintainer 2026-07-06). A generic thrown Error yields
 	// the SAME body byte-for-byte on both transports — problem+json with `detail`
 	// in dev. wsErrorFrame() reuses HTTP's internalServerErrorBody() builder, so
@@ -446,7 +443,7 @@ describe('HTTP-vs-WS lifecycle parity', () => {
 	})
 
 	// ------------------------------------------------------------------
-	// PARITY (Codex defect): a NON-Error throw (`throw 'x'`, `throw {..}`) never
+	// PARITY ( defect): a NON-Error throw (`throw 'x'`, `throw {..}`) never
 	// leaks its own content on either transport, even in dev, AND now emits the
 	// SAME body byte-for-byte (WS errors -> problem+json, maintainer 2026-07-06).
 	// HTTP's fallbackErrorResponse routes non-Error, non-status throws to the
@@ -518,18 +515,18 @@ describe('HTTP-vs-WS lifecycle parity', () => {
 	})
 
 	// ------------------------------------------------------------------
-	// close-race (Codex 2026-07-06): the WS error frame is sent SYNCHRONOUSLY.
+	// close-race ( 2026-07-06): the WS error frame is sent SYNCHRONOUSLY.
 	// Making wsErrorFrame async (to await error.toResponse().text() for byte-parity)
 	// regressed this: the frame send became awaited, so a close the handler queues
 	// in the SAME turn (`finally { queueMicrotask(() => ws.close()) }`) wins the
-	// microtask race and the frame is silently dropped (Codex repro: frames=[]).
+	// microtask race and the frame is silently dropped ( repro: frames=[]).
 	// The fix makes every sync-computable arm return a string sent in-turn; the
 	// error frame MUST still arrive before the close takes effect.
 	//
 	// wsProbe resolves the moment `expect` frames arrive, so a dropped frame
 	// surfaces as frames.length 0 (timeout) rather than a hang.
 	// ------------------------------------------------------------------
-	it('close-race: generic Error frame survives a close queued in finally (Codex 2026-07-06)', async () => {
+	it('close-race: generic Error frame survives a close queued in finally ( 2026-07-06)', async () => {
 		const wsApp = new Elysia()
 			.ws('/race', {
 				message(ws: any) {
@@ -557,7 +554,7 @@ describe('HTTP-vs-WS lifecycle parity', () => {
 	// subclass uses the BASE ElysiaError.toResponse, so wsErrorFrame reconstructs
 	// its problem+json body synchronously (problemBody) → frame beats the close.
 	// Byte-parity with the HTTP wire is asserted alongside.
-	it('close-race: thrown ElysiaError subclass frame survives a queued close, byte-equal to HTTP (Codex 2026-07-06)', async () => {
+	it('close-race: thrown ElysiaError subclass frame survives a queued close, byte-equal to HTTP ( 2026-07-06)', async () => {
 		class Teapot extends ElysiaError {
 			status = 418 as any
 			problemType = 'teapot'

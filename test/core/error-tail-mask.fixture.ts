@@ -5,7 +5,7 @@
 //
 // Every app attaches a no-op `.error()` hook: that routes errors through the
 // compiled jit tail (src/compile/handler/jit.ts) instead of the fetch-level
-// interpreted handler — the exact path H22 says was missing the 5xx mask.
+// interpreted handler — the exact path that previously missed the 5xx mask.
 import { Elysia } from '../../src'
 
 const get = () => new Request('http://localhost/')
@@ -17,7 +17,7 @@ const throwing = (mut: (e: any) => void) =>
 		throw e
 	})
 
-// H22: a user error class whose `toResponse()` throws SYNCHRONOUSLY. The
+// a user error class whose `toResponse()` throws SYNCHRONOUSLY. The
 // interpreted `fallbackResponse` (src/handler/error.ts) wraps `toResponse()` in
 // try/catch and falls back to the ORIGINAL error (5xx-mask/es/ise). The compiled
 // tail must mirror that: a sync throw from `toResponse()` must NOT escape with
@@ -68,7 +68,7 @@ const scenarios: Record<string, () => Promise<Response>> = {
 	// higher 5xx also masked
 	fiveOhThree: () => throwing((e) => (e.status = 503)).handle(get()),
 
-	// H22 sync-throw: compiled tail must fall back to the ORIGINAL error, not
+	//  sync-throw: compiled tail must fall back to the ORIGINAL error, not
 	// leak the inner throw. Prod → 5xx masked; dev → original message. The
 	// interpreted twin is the reference the compiled path must match.
 	syncThrowCompiled: compiledThrow,

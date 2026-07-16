@@ -247,7 +247,7 @@ describe('AOT default preallocation', () => {
 				)
 		})
 
-	it('baked array default is not shared across requests (H7)', () => {
+	it('baked array default is not shared across requests', () => {
 		const make = () =>
 			t.Object({ items: t.Array(t.String(), { default: [] }) })
 		const m = capture(make())

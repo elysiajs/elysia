@@ -63,7 +63,7 @@ describe('macro order', () => {
 		expect(count).toBe(1)
 	})
 
-	// Regression (audit C1): a plugin's inherited hook chain (route tuple
+	// Regression: a plugin's inherited hook chain (route tuple
 	// index 6) must survive being absorbed under a prefix. The prefix branch
 	// of #use rebuilt the route tuple WITHOUT the chain, so any inherited
 	// guard/auth/beforeHandle silently stopped running once the composed app

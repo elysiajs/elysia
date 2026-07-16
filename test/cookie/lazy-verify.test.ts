@@ -1,14 +1,7 @@
 /**
- * C3 — Lazy signed-cookie verify (Q8)
- *
- * Tests 1–12c from design/c3-lazy-cookie-verify.md §Tests.
- * Test 13 (full gate) is excluded per spec.
- *
- * The lazy lane is selected iff:
- *   - cookieConfig.hasSign
- *   - verify === 'lazy' (new default)
- *   - !vali?.cookie (cookie-validator routes stay eager)
- *   - hasSyncHmac (getter is sync; CF Workers without nodejs_compat stay eager)
+ * Signed cookies are verified when their value is observed. Explicit eager
+ * verification and routes with cookie validators still verify at request entry.
+ * Runtimes without synchronous HMAC support also use eager verification.
  */
 import { describe, expect, it } from 'bun:test'
 import Elysia from '../../src'
@@ -42,17 +35,14 @@ async function expectInvalidCookieError(
 
 // Skip all tests on runtimes without sync HMAC (the lazy lane is unavailable there)
 if (!hasSyncHmac) {
-	describe('C3 lazy signed-cookie verify [SKIP — no sync HMAC]', () => {
+	describe('lazy signed-cookie verification without synchronous HMAC', () => {
 		it('skipped', () => {})
 	})
 } else {
 	const SECRET = 'test-lazy-secret'
 
-	// -----------------------------------------------------------------------
-	// Test 1: Lazy lane, valid signature, handler reads → correct value, 200
-	// WHY: the core contract — valid signed cookie must be accessible by value
-	// -----------------------------------------------------------------------
-	it('[C3-1] lazy lane: valid signature reads correct value', async () => {
+	// A valid signed cookie must be accessible by value.
+	it('reads a valid signed cookie', async () => {
 		const val = signed('hello', SECRET)
 
 		const app = new Elysia({
@@ -64,11 +54,8 @@ if (!hasSyncHmac) {
 		expect(await res.text()).toBe('hello')
 	})
 
-	// -----------------------------------------------------------------------
-	// Test 2: Invalid signature + handler reads → 400, body matches eager lane
-	// WHY: signature failure must surface as InvalidCookie even on lazy path
-	// -----------------------------------------------------------------------
-	it('[C3-2] invalid signature + handler reads → 400', async () => {
+	// Signature failure must surface even when verification is deferred.
+	it('rejects an invalid signature when the handler reads it', async () => {
 		const app = new Elysia({
 			cookie: { secrets: SECRET, sign: ['sid'] }
 		}).get('/', ({ cookie: { sid } }) => sid.value)
@@ -77,12 +64,8 @@ if (!hasSyncHmac) {
 		await expectInvalidCookieError(res, 'sid')
 	})
 
-	// -----------------------------------------------------------------------
-	// Test 3: Invalid signature on a cookie the handler NEVER reads → 200
-	// WHY: THE Q8 semantic-flip. Verification cost moved to access, not ingress.
-	//      An invalid signature on an unread cookie must not 400 the request.
-	// -----------------------------------------------------------------------
-	it('[C3-3] unread invalid signed cookie → 200 (Q8 semantic-flip)', async () => {
+	// Verification happens on access, so an unread invalid cookie is ignored.
+	it('allows an unread invalid signed cookie', async () => {
 		const app = new Elysia({
 			cookie: { secrets: SECRET, sign: ['sid'] }
 		}).get('/', () => 'ok') // never reads c.cookie
@@ -92,11 +75,8 @@ if (!hasSyncHmac) {
 		expect(await res.text()).toBe('ok')
 	})
 
-	// -----------------------------------------------------------------------
-	// Test 4: Conditional read — bad sig → 200 without flag, 400 with flag
-	// WHY: verification cost only on ACTUAL ACCESS proves lazy timing
-	// -----------------------------------------------------------------------
-	it('[C3-4] conditional read: no-flag path skips verify, flag path triggers it', async () => {
+	// A conditional read makes the verification boundary observable.
+	it('verifies an invalid signature only on the branch that reads it', async () => {
 		const app = new Elysia({
 			cookie: { secrets: SECRET, sign: ['sid'] }
 		}).get('/', ({ cookie: { sid }, query: { flag } }) => {
@@ -116,11 +96,8 @@ if (!hasSyncHmac) {
 		await expectInvalidCookieError(withFlag, 'sid')
 	})
 
-	// -----------------------------------------------------------------------
-	// Test 5: Dynamic access remains lazy until a value is read
-	// WHY: runtime Cookie access, not source analysis, owns verification timing.
-	// -----------------------------------------------------------------------
-	it('[C3-5] aliased jar verifies only when its value is read', async () => {
+	// Runtime Cookie access, not source analysis, owns verification timing.
+	it('verifies through an aliased jar only when its value is read', async () => {
 		const app = new Elysia({
 			cookie: { secrets: SECRET, sign: ['sid'] }
 		}).get('/', ({ cookie, query: { read } }) => {
@@ -137,7 +114,7 @@ if (!hasSyncHmac) {
 		await expectInvalidCookieError(read, 'sid')
 	})
 
-	it('[C3-5b] computed access verifies only when its value is read', async () => {
+	it('verifies through computed access only when its value is read', async () => {
 		const app = new Elysia({
 			cookie: { secrets: SECRET, sign: ['sid'] }
 		}).get('/', ({ cookie, query: { read } }) => {
@@ -153,7 +130,7 @@ if (!hasSyncHmac) {
 		await expectInvalidCookieError(read, 'sid')
 	})
 
-	it('[C3-5c] reflection resolves pending cookies before exposing descriptors', async () => {
+	it('resolves pending cookies before reflection exposes descriptors', async () => {
 		let pending: boolean | undefined
 		let exposedSecret: unknown
 
@@ -183,7 +160,7 @@ if (!hasSyncHmac) {
 		await expectInvalidCookieError(invalid, 'sid')
 	})
 
-	it('[C3-5d] all property-descriptor APIs verify before exposure', async () => {
+	it('verifies before every property-descriptor API exposes a cookie', async () => {
 		const operations = {
 			reflect: (jar: any) =>
 				Reflect.getOwnPropertyDescriptor(jar, 'sid')?.value.value,
@@ -204,7 +181,7 @@ if (!hasSyncHmac) {
 		}
 	})
 
-	it('[C3-5e] enumeration verifies pending values only when executed', async () => {
+	it('verifies pending values only when enumeration executes', async () => {
 		const app = new Elysia({
 			cookie: { secrets: SECRET, sign: ['sid'] }
 		}).get('/', function ({ cookie, query: { read } }: any) {
@@ -222,14 +199,10 @@ if (!hasSyncHmac) {
 		await expectInvalidCookieError(enumerated, 'sid')
 	})
 
-	// -----------------------------------------------------------------------
-	// Test 6: verify: 'eager' → eager regardless of runtime access
-	// WHY: explicit opt-out of lazy must restore eager behavior everywhere.
-	//      Uses a handler that touches c.cookie (so cookieConfig is compiled)
-	//      but reads a DIFFERENT key, not 'sid'. Under lazy the unread 'sid'
-	//      would not be verified; under eager it must be.
-	// -----------------------------------------------------------------------
-	it("[C3-6] verify:'eager': reading other cookie still verifies unread signed cookie", async () => {
+	// Explicit eager verification must restore eager behavior everywhere.
+	// The handler touches c.cookie but reads another key, so only eager mode
+	// verifies the unread signed cookie.
+	it("verify:'eager' rejects an unread invalid signed cookie", async () => {
 		const app = new Elysia({
 			cookie: { secrets: SECRET, sign: ['sid'], verify: 'eager' }
 		}).get('/', ({ cookie: { other } }) => other.value ?? 'none')
@@ -242,12 +215,9 @@ if (!hasSyncHmac) {
 		expect(res.status).toBe(400)
 	})
 
-	// -----------------------------------------------------------------------
-	// Test 7: Cookie-validator route → eager; validated values are unsigned
-	// WHY: validator consumes raw _ck before jar exists (jit.ts:635 before :645)
-	//      so vali?.cookie routes must stay on eager lane
-	// -----------------------------------------------------------------------
-	it('[C3-7] cookie-validator route → eager; value is unsigned', async () => {
+	// The validator consumes raw cookies before the jar exists, so these routes
+	// must verify eagerly.
+	it('eagerly verifies and unsigns cookies before cookie validation', async () => {
 		const val = signed('world', SECRET)
 
 		const app = new Elysia({
@@ -266,11 +236,8 @@ if (!hasSyncHmac) {
 		expect(await res.text()).toBe('world')
 	})
 
-	// -----------------------------------------------------------------------
-	// Test 8: Secret-rotation array in lazy lane
-	// WHY: must try all secrets; signed with secrets[1] must verify
-	// -----------------------------------------------------------------------
-	it('[C3-8] secret-rotation array: signed with secrets[1] verifies', async () => {
+	// Secret rotation must try every configured secret.
+	it('accepts a cookie signed with an older rotation secret', async () => {
 		const secrets = ['new-secret', 'old-secret']
 		const val = signed('rotated', 'old-secret') // signed with secrets[1]
 
@@ -283,12 +250,9 @@ if (!hasSyncHmac) {
 		expect(await res.text()).toBe('rotated')
 	})
 
-	// -----------------------------------------------------------------------
-	// Test 9: Signed JSON-object cookie: lazy resolve round-trips
-	// WHY: maybeJsonDecode + rawJsonValue must work on lazy path;
-	//      '~raw' suppression prevents re-sign on unchanged object
-	// -----------------------------------------------------------------------
-	it('[C3-9] signed JSON object: round-trips value; unchanged obj is not re-signed', async () => {
+	// JSON decoding and raw-value tracking must work on the lazy path so an
+	// unchanged object is not signed again.
+	it('round-trips an unchanged signed JSON object without re-signing it', async () => {
 		const obj = { count: 7 }
 		const jsonStr = JSON.stringify(obj)
 		const val = signed(jsonStr, SECRET)
@@ -308,13 +272,9 @@ if (!hasSyncHmac) {
 		expect(res.headers.getAll('set-cookie').length).toBe(0)
 	})
 
-	// -----------------------------------------------------------------------
-	// Test 10: Attribute-write only (cookie.x.maxAge = 5) on signed inbound
-	// WHY: setCookie chokepoint (P1) — attribute write promotes entry into
-	//      set.cookie; without resolution, the raw signed string would be
-	//      re-signed (double-sign). Must contain the original unsigned value re-signed.
-	// -----------------------------------------------------------------------
-	it('[C3-10] attribute-write only → Set-Cookie has correctly re-signed ORIGINAL value (no double-sign)', async () => {
+	// An attribute write promotes the entry into the outgoing jar. It must first
+	// resolve the original value so the inbound signature is not signed again.
+	it('re-signs the original value once when only an attribute changes', async () => {
 		const val = signed('session-token', SECRET)
 
 		const app = new Elysia({
@@ -341,12 +301,9 @@ if (!hasSyncHmac) {
 		expect(setCookie).not.toContain(val + '.')
 	})
 
-	// -----------------------------------------------------------------------
-	// Test 11: Dotless/non-string signed value parity with eager
-	// WHY: should produce same 400 as eager on a value with no dot
-	//      (unless a null secret is present in the array)
-	// -----------------------------------------------------------------------
-	it('[C3-11] dotless value without null secret → 400 (parity with eager)', async () => {
+	// A dotless value is unsigned and must be rejected unless a null secret is
+	// present in the rotation array.
+	it('rejects a dotless value when no null secret is configured', async () => {
 		const app = new Elysia({
 			cookie: { secrets: SECRET, sign: ['sid'] }
 		}).get('/', ({ cookie: { sid } }) => sid.value)
@@ -356,12 +313,9 @@ if (!hasSyncHmac) {
 		expect(res.status).toBe(400)
 	})
 
-	// -----------------------------------------------------------------------
-	// Test 12: Second access after failed verify → still 400 (marker retained)
-	// WHY: the '~unsign' marker is KEPT on failure so re-access still throws,
-	//      never silently returning the raw signed string
-	// -----------------------------------------------------------------------
-	it('[C3-12] second access after failed verify → still 400 (marker retained)', async () => {
+	// The pending-verification marker remains after failure so another access
+	// cannot silently return the raw signed string.
+	it('rejects every access after signature verification fails', async () => {
 		let secondStatus: number | undefined
 
 		const app = new Elysia({
@@ -387,13 +341,9 @@ if (!hasSyncHmac) {
 		expect(secondStatus).toBe(400)
 	})
 
-	// -----------------------------------------------------------------------
-	// Test 12b: WRITE after a caught failed read → re-throws 400
-	// WHY: P2 — `set value` reads `this.cookie` first, which re-throws when
-	//      the marker is still present. Tests that write after caught fail
-	//      does not silently succeed.
-	// -----------------------------------------------------------------------
-	it('[C3-12b] write after caught failed read → re-throws 400 (marker retained)', async () => {
+	// Writing reads the current cookie first and must rethrow a prior verification
+	// failure instead of silently succeeding.
+	it('rejects a write after a caught verification failure', async () => {
 		const app = new Elysia({
 			cookie: { secrets: SECRET, sign: ['sid'] }
 		}).get('/', ({ cookie: { sid } }) => {
@@ -413,12 +363,9 @@ if (!hasSyncHmac) {
 		expect(res.status).toBe(400)
 	})
 
-	// -----------------------------------------------------------------------
-	// Test 12c: Null-secret rotation member (P2 parity)
-	// WHY: a null member accepts unsigned/dotless values — mirrors unsignCookieSync's
-	//      secret===null path exactly. Parity with eager lane.
-	// -----------------------------------------------------------------------
-	it('[C3-12c] null-secret rotation member: signed verifies; unsigned accepted via null slot', async () => {
+	// A null member accepts unsigned values while other rotation members still
+	// verify signed values.
+	it('accepts signed and unsigned values when rotation includes a null secret', async () => {
 		const secrets: (string | null)[] = [null, SECRET]
 		// Cookie signed with SECRET (secrets[1])
 		const signedVal = signed('myval', SECRET)
@@ -438,15 +385,12 @@ if (!hasSyncHmac) {
 		expect(await resUnsigned.text()).toBe('plain')
 	})
 
-	// -----------------------------------------------------------------------
-	// Test 13a–c: FORGERY GUARD (P0 regression) — an UNSIGNED value on a signed
-	// name must 400, never reach the handler unverified. Bare JSON object/array
-	// forms are the dangerous case: if the lazy parser JSON-decoded them before
-	// the mark gate, the non-string entry would skip `~unsign` and be accepted.
-	// WHY: signed cookies exist for tamper detection; a forged `{"admin":true}`
+	// An unsigned value on a signed name must never bypass verification merely
+	// because it parses as JSON. Otherwise a non-string entry could skip pending
+	// signature verification and reach the handler.
+	// Signed cookies exist for tamper detection; a forged `{"admin":true}`
 	// must be rejected exactly as the eager lane rejects it.
-	// -----------------------------------------------------------------------
-	it('[C3-13a] forged unsigned JSON object on signed name → 400', async () => {
+	it('rejects a forged unsigned JSON object on a signed name', async () => {
 		const app = new Elysia({
 			cookie: { secrets: SECRET, sign: ['sid'] }
 		}).get('/', ({ cookie: { sid } }) => sid.value)
@@ -455,7 +399,7 @@ if (!hasSyncHmac) {
 		await expectInvalidCookieError(res, 'sid')
 	})
 
-	it('[C3-13b] forged unsigned JSON array on signed name → 400', async () => {
+	it('rejects a forged unsigned JSON array on a signed name', async () => {
 		const app = new Elysia({
 			cookie: { secrets: SECRET, sign: ['sid'] }
 		}).get('/', ({ cookie: { sid } }) => sid.value)
@@ -464,7 +408,7 @@ if (!hasSyncHmac) {
 		await expectInvalidCookieError(res, 'sid')
 	})
 
-	it('[C3-13c] forged unsigned dotless string on signed name → 400', async () => {
+	it('rejects a forged unsigned dotless string on a signed name', async () => {
 		const app = new Elysia({
 			cookie: { secrets: SECRET, sign: ['sid'] }
 		}).get('/', ({ cookie: { sid } }) => sid.value)

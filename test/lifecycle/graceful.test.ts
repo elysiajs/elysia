@@ -64,7 +64,7 @@ describe('setup / cleanup life cycle', () => {
 		expect(app.server).toBeUndefined()
 	})
 
-	// H05(b): an async setup task must complete BEFORE the user's listen
+	// an async setup task must complete BEFORE the user's listen
 	// callback fires — the callback is the readiness signal, and traffic /
 	// resource use may follow it.
 	it('does not fire the listen callback until async setup settles', async () => {
@@ -90,7 +90,7 @@ describe('setup / cleanup life cycle', () => {
 		await app.stop()
 	})
 
-	// H05(a): `await app.stop()` must not resolve while an async cleanup task
+	// `await app.stop()` must not resolve while an async cleanup task
 	// is still running, and cleanups run sequentially in registration order.
 	it('awaits async cleanup handlers sequentially before stop() resolves', async () => {
 		const order: string[] = []

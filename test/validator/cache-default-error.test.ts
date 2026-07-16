@@ -4,21 +4,20 @@ import { t, validationDetail } from '../../src'
 import { Validator } from '../../src/validator'
 import { TypeBoxValidator } from '../../src/type/validator'
 
-// Regression tests for the kiana validator-group fixes (idx 16, 17, 18, 33, 49).
-// Each test fails on the pre-fix code and passes after.
+// Validator cache, default-value, and custom-error regressions.
 
-describe('kiana validator fixes', () => {
+describe('validator cache, defaults, and custom errors', () => {
 	afterEach(() => {
 		Validator.clear()
 		delete process.env.NODE_ENV
 	})
 
-	// idx16 — a nested object whose OWN default disagrees with a deeper child's
+	// a nested object whose OWN default disagrees with a deeper child's
 	// default must NOT take the precompute fast path, because applyPrecomputed
 	// would bake the object's own default (`{b:2}`) while TypeBox fills the
 	// child default (`3`) for a partially-supplied nested object. The handler
 	// must receive what TypeBox's authoritative `Default` produces.
-	it('idx16 — divergent nested default is filled per child default, not the parent default', () => {
+	it('divergent nested default is filled per child default, not the parent default', () => {
 		const schema = t.Object(
 			{
 				a: t.Object(
@@ -50,11 +49,11 @@ describe('kiana validator fixes', () => {
 		expect(v.FromSync(undefined as any)).toEqual({ a: { b: 1 } })
 	})
 
-	// idx17 — MultiValidator merges two array results. Because `typeof [] ===
+	// MultiValidator merges two array results. Because `typeof [] ===
 	// 'object'`, the object branch used to shadow the array branch and arrays
 	// were index-merged via Object.assign (wrong elements + wrong length)
 	// instead of concatenated. The array branch must run first.
-	it('idx17 — MultiValidator concatenates arrays instead of index-merging them', () => {
+	it('MultiValidator concatenates arrays instead of index-merging them', () => {
 		const standalone = {
 			'~standard': {
 				version: 1,
@@ -79,11 +78,11 @@ describe('kiana validator fixes', () => {
 		expect(out.length).toBe(4)
 	})
 
-	// idx18 — the process-global validator cache is keyed by schema JSON +
+	// the process-global validator cache is keyed by schema JSON +
 	// coercions, but two apps sharing a structurally identical schema with
 	// DIFFERENT normalize strategies must not receive each other's validator
 	// (their `Clean` differs). The normalize mode must be part of the key.
-	it('idx18 — normalize mode is part of the cache key (no cross-mode aliasing)', () => {
+	it('normalize mode is part of the cache key (no cross-mode aliasing)', () => {
 		const vTypebox: any = Validator.create(t.Object({ a: t.String() }), {
 			normalize: 'typebox'
 		})
@@ -97,7 +96,7 @@ describe('kiana validator fixes', () => {
 		expect(vTypebox.Clean).not.toBe(vMirror.Clean)
 	})
 
-	it('idx18 — identical schema + same normalize mode still shares the cache', () => {
+	it('identical schema + same normalize mode still shares the cache', () => {
 		const a: any = Validator.create(t.Object({ a: t.String() }), {
 			normalize: 'exactMirror'
 		})
@@ -109,11 +108,11 @@ describe('kiana validator fixes', () => {
 		expect(a).toBe(b)
 	})
 
-	// idx33 — a custom `error` on an array's element schema must reach the
+	// a custom `error` on an array's element schema must reach the
 	// production 422 payload. collectCustomErrorNodes used to descend only
 	// `properties`, never array `items`, so the element error was dropped and
 	// production fell back to a generic message (and invoked TypeBox Errors).
-	it('idx33 — custom error on an array element schema surfaces in production', () => {
+	it('custom error on an array element schema surfaces in production', () => {
 		process.env.NODE_ENV = 'production'
 
 		const v = new TypeBoxValidator(
@@ -133,7 +132,7 @@ describe('kiana validator fixes', () => {
 		expect(message).toBe('bad tag')
 	})
 
-	it('idx33 — a valid array does not falsely trigger the element custom error', () => {
+	it('a valid array does not falsely trigger the element custom error', () => {
 		process.env.NODE_ENV = 'production'
 
 		const v = new TypeBoxValidator(
@@ -148,12 +147,12 @@ describe('kiana validator fixes', () => {
 		expect(v.FromSync({ tags: ['a', 'b'] })).toEqual({ tags: ['a', 'b'] })
 	})
 
-	// idx33 / H08 (union branch, policy 2A) — a custom error inside a
+	//  / (union branch, policy 2A) — a custom error inside a
 	// discriminated-union branch surfaces ONLY because the value matches that
 	// branch's discriminator (`type: 'cat'`) yet fails its constraint. Under the
-	// H08 2A policy the discriminator is what authorises reporting the branch's
+	// 2A policy the discriminator is what authorises reporting the branch's
 	// message; it is no longer an array-order accident.
-	it('idx33 — surfaces a custom error inside a union branch', () => {
+	it('surfaces a custom error inside a union branch', () => {
 		process.env.NODE_ENV = 'production'
 
 		const v = new TypeBoxValidator(
@@ -183,9 +182,9 @@ describe('kiana validator fixes', () => {
 		expect(message).toBe('meow must be a boolean')
 	})
 
-	// idx33 (union branch) — the branch gate prevents a false positive: a value
+	//  (union branch) — the branch gate prevents a false positive: a value
 	// valid under a SIBLING branch must NOT trigger the other branch's error.
-	it('idx33 — a value valid under a sibling union branch does not false-trigger', () => {
+	it('a value valid under a sibling union branch does not false-trigger', () => {
 		process.env.NODE_ENV = 'production'
 
 		const v = new TypeBoxValidator(
@@ -210,12 +209,12 @@ describe('kiana validator fixes', () => {
 		})
 	})
 
-	// H08 (2A) — the branch actually selected by the discriminator reports ITS
-	// OWN custom error, not the first-annotated branch's. Pre-H08 the gate made
+	// (2A) — the branch actually selected by the discriminator reports ITS
+	// OWN custom error, not the first-annotated branch's. Pre- the gate made
 	// every branch eligible once the union failed and array order decided, so an
 	// invalid dog reported the cat branch's message. With discriminator-based
 	// selection the dog value (`type: 'dog'`) must surface the dog error.
-	it('H08 — an invalid discriminated dog reports the DOG branch error, not the cat one', () => {
+	it('an invalid discriminated dog reports the DOG branch error, not the cat one', () => {
 		process.env.NODE_ENV = 'production'
 
 		const v = new TypeBoxValidator(
@@ -245,12 +244,12 @@ describe('kiana validator fixes', () => {
 		expect(message).toBe('bark must be a boolean')
 	})
 
-	// H08 (2A) — DELIBERATE behavior change. When no discriminator disambiguates
+	// When no discriminator disambiguates
 	// the branches, the finder must NOT guess a branch's custom message (which
-	// pre-H08 it did by array order — the "wrong branch" bug). It falls back to
+	// it previously selected by array order). It falls back to
 	// the deterministic union-level default error. Annotated unions without a
 	// discriminator therefore lose the per-branch message they only got by luck.
-	it('H08 — an ambiguous (no-discriminator) union falls back to the union-level error', () => {
+	it('an ambiguous (no-discriminator) union falls back to the union-level error', () => {
 		process.env.NODE_ENV = 'production'
 
 		const v = new TypeBoxValidator(
@@ -277,11 +276,11 @@ describe('kiana validator fixes', () => {
 		expect(message).toContain('Validation error')
 	})
 
-	// H08 — a property whose NAME contains '/' must be addressed as a single
+	// a property whose NAME contains '/' must be addressed as a single
 	// segment. Paths were joined with raw '/' then split, so `a/b` was
 	// misaddressed to `a -> b`. Segments are now kept as arrays (output uses
 	// RFC 6901 `~1` escaping), so the custom error is found.
-	it('H08 — a slash-named property surfaces its custom error', () => {
+	it('a slash-named property surfaces its custom error', () => {
 		process.env.NODE_ENV = 'production'
 
 		const v = new TypeBoxValidator(
@@ -302,11 +301,11 @@ describe('kiana validator fixes', () => {
 		expect(error?.errors?.[0]?.instancePath).toBe('/a~1b')
 	})
 
-	// H08 — a custom error on a property INSIDE homogeneous array items
+	// a custom error on a property INSIDE homogeneous array items
 	// (`rows[].name`) must be traversed. The optimized finder used to descend
 	// only the immediate array element error, never nested item properties, so
 	// it fell back to a generic message once another custom error enabled it.
-	it('H08 — a custom error nested in array items (rows[].name) surfaces', () => {
+	it('a custom error nested in array items (rows[].name) surfaces', () => {
 		process.env.NODE_ENV = 'production'
 
 		const v = new TypeBoxValidator(
@@ -329,13 +328,13 @@ describe('kiana validator fixes', () => {
 		expect(message).toBe('name error')
 	})
 
-	// H08 — construction must not be quadratic in the number of annotated fields
-	// under a union. Pre-H08, buildFindCustomError recompiled the WHOLE union
+	// construction must not be quadratic in the number of annotated fields
+	// under a union. Pre-, buildFindCustomError recompiled the WHOLE union
 	// once per annotated leaf (N annotated fields => N full union compiles),
 	// measuring ~203 ms at N=100. A single cached compiled checker per union node
 	// makes this near-linear. Loose bound: 2 branches x 100 annotated fields
 	// must construct well under the old 203 ms floor.
-	it('H08 — union custom-error construction is not quadratic in field count', () => {
+	it('union custom-error construction is not quadratic in field count', () => {
 		process.env.NODE_ENV = 'production'
 
 		const N = 100
@@ -362,10 +361,10 @@ describe('kiana validator fixes', () => {
 		expect(elapsed).toBeLessThan(150)
 	})
 
-	// idx49 — isProduction must be read from env at call time, not frozen at
+	// isProduction must be read from env at call time, not frozen at
 	// module load. A NODE_ENV set AFTER import (serverless cold path / bootstrap)
 	// must still gate the schema-revealing validation detail.
-	it('idx49 — production gate reads NODE_ENV lazily (set after import)', () => {
+	it('production gate reads NODE_ENV lazily (set after import)', () => {
 		const v = new TypeBoxValidator(t.Object({ x: t.Number() }))
 
 		// dev: full detail (errors) is exposed
@@ -389,9 +388,9 @@ describe('kiana validator fixes', () => {
 		}
 
 		// WHY: production must omit schema-revealing detail (no errors/expected/
-		// detail). L13: the failing field's `property` (instance path only — no
+		// detail).: the failing field's `property` (instance path only — no
 		// schema, no messages) IS surfaced so a client can fix their request.
-		// error-3: `found` is NO LONGER echoed — it reflected the raw request
+		// `found` is NO LONGER echoed — it reflected the raw request
 		// body/query (passwords/tokens/PII) into a structured prod response.
 		expect(prodPayload.errors).toBeUndefined()
 		expect(prodPayload.expected).toBeUndefined()
@@ -406,10 +405,10 @@ describe('kiana validator fixes', () => {
 		])
 	})
 
-	// idx16 control — agreeing nested defaults stay correct (value is right even
+	// Agreeing nested defaults stay correct even
 	// though it now takes the validated path). Guards against a "fix" that
 	// returns the wrong value for the agreeing case.
-	it('idx16 control — agreeing nested defaults still produce the correct value', () => {
+	it('agreeing nested defaults still produce the correct value', () => {
 		const schema = t.Object(
 			{
 				a: t.Object(

@@ -1,5 +1,5 @@
 /**
- * H09: AOT capture state is non-transactional and non-reentrant.
+ * AOT capture state must remain transactional and non-reentrant.
  *
  * Tests:
  * 1. A failed capture (route with missing model) leaves isCapturing()=false
@@ -22,7 +22,7 @@ afterEach(() => {
 	try { endHandlerCapture() } catch {}
 })
 
-describe('H09 — capture cleanup', () => {
+describe('capture cleanup', () => {
 	it('leaves isCapturing()=false and empty maps after a failed capture', async () => {
 		// An app referencing an undeclared model should throw during compile.
 		const bad = new Elysia()

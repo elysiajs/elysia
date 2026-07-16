@@ -151,7 +151,7 @@ describe('schema snapshot, mutation hazard', () => {
 	}
 })
 
-describe('B5 schema snapshot — helper semantics', () => {
+describe('schema snapshot — helper semantics', () => {
 	it('deep-clones on first sighting, preserving ~kind and type', () => {
 		const schema = t.Object({ a: t.String() })
 		const snap = snapshotSchema(schema)

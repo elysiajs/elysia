@@ -34,7 +34,7 @@ app.get('/', ({ headers, query, params, body, store }) => {
 		Record<string, string | undefined>
 	>()
 
-	// ? schemaless query values may be absent → string | undefined (H23)
+	// ? schemaless query values may be absent → string | undefined
 	expectTypeOf<typeof query>().toEqualTypeOf<
 		Record<string, string | undefined>
 	>()

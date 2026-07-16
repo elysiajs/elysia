@@ -991,7 +991,7 @@ describe('standalone validator', () => {
 		expect(incorrect3.status).toBe(422)
 	})
 
-	// Regression (audit H9): a standalone response schema with no 200 entry
+	// Regression: a standalone response schema with no 200 entry
 	// mapped to `undefined` in the single-schema branch (the record branch
 	// already had `.filter(Boolean)`), and Validator.create then threw
 	// `'~kind' in undefined` — turning every request on the route into a 500.

@@ -1,16 +1,13 @@
 /**
  * Production error-masking PARITY across transports.
  *
- * Finding: maintainability-arch-2 + dx-greenfield-5.
- *
  * HTTP masks error/validation detail in production (drops detail/found/errors,
  * generic 500 body). This suite runs a subprocess with NODE_ENV=production
  * (the main test run itself must stay WITHOUT NODE_ENV, so masking is probed
  * out-of-process) and compares HTTP vs WS.
  *
  * Where they agree (validation masking) we assert a shared invariant. Where
- * they diverge (generic-error masking) we PIN current behavior with the
- * finding id.
+ * they diverge (generic-error masking) we pin current behavior explicitly.
  */
 
 import { describe, it, expect } from 'bun:test'
@@ -76,7 +73,7 @@ describe('production masking parity (subprocess NODE_ENV=production)', () => {
 	})
 
 	// ------------------------------------------------------------------
-	// PARITY (was PIN dx-greenfield-5): a generic thrown Error's message is
+	// Parity: a generic thrown Error's message is
 	// MASKED on BOTH transports in production, AND the WS frame is now the exact
 	// HTTP problem+json body (WS errors -> problem+json, maintainer 2026-07-06).
 	// wsErrorFrame() reuses internalServerErrorBody(), whose prod branch drops
@@ -104,7 +101,7 @@ describe('production masking parity (subprocess NODE_ENV=production)', () => {
 	})
 
 	// ------------------------------------------------------------------
-	// PARITY (Codex defect: non-Error throws leaked verbatim on WS). A bare
+	// PARITY ( defect: non-Error throws leaked verbatim on WS). A bare
 	// `throw 'secret-string'` or `throw {password}` is fully masked on BOTH
 	// transports in production AND emits the exact same problem+json body (WS
 	// errors -> problem+json, maintainer 2026-07-06). HTTP falls through

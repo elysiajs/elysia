@@ -196,7 +196,7 @@ describe('plan/planRoute', () => {
 		// An async handler forces the whole route async, but the resume skeleton
 		// gives it a sync `route(c)` entry that transfers into `__resume` on the
 		// first actual Promise — it is SUPPORTED, not a legacy fallback. This is the
-		// named B2 deliverable: async-capable routes get native resume coverage.
+		// Async-capable routes get native resume coverage.
 		const asyncRoute = await planOf(
 			(e) => e.get('/', async () => 'h'),
 			'GET /',

@@ -258,7 +258,7 @@ describe('Edge Case', () => {
 			third.find((route) => route.path === '/c')!.hooks.transform!.length
 		).toBe(1)
 
-		// base-3-1: compilation does NOT change `.routes`. `composeRouteHook`
+		// compilation does NOT change `.routes`. `composeRouteHook`
 		// clones `route[4]` before resolving macros (see resolveLocalHook) and
 		// `promoteDerive` mutates the freshly-composed hook, never the stored
 		// tuple — so `.routes` derives purely from `#history` and is identical
@@ -272,7 +272,7 @@ describe('Edge Case', () => {
 		).toBe(1)
 	})
 
-	it('retains the routes cache across a JIT compile (base-3-1)', async () => {
+	it('retains the routes cache across a JIT compile', async () => {
 		// `.routes` is a pure function of `#history`; a route-level JIT compile
 		// (first request to a route) only mutates `#compiled`/`~map`, never
 		// `#history`. So reading `.routes`, serving traffic (which compiles),
@@ -624,7 +624,7 @@ describe('Edge Case', () => {
 		)
 
 		// auto-HEAD returns a bodyless 200. It must NOT buffer the GET body to
-		// synthesize `Content-Length` (H16) — the whole point of HEAD is to
+		// synthesize `Content-Length`  — the whole point of HEAD is to
 		// avoid materializing the payload. A mapped string body reports no
 		// `content-length` header, so none is emitted.
 		expect(response.status).toBe(200)

@@ -9,7 +9,7 @@ import { createContext } from '../../src/context'
 import { ElysiaStatus } from '../../src/error'
 import { req } from '../utils'
 
-describe('C1 default-header sink', () => {
+describe('copy-on-write default headers', () => {
 	it('recognizes defaults marked by another Elysia copy', () => {
 		const headers = Object.assign(Object.create(null), {
 			'x-default': 'base'
@@ -140,9 +140,9 @@ describe('C1 default-header sink', () => {
 		const response = await app.handle(req('/'))
 		expect(response.status).toBe(200)
 		expect(response.headers.get('x-opaque')).toBe('yes')
-		expect(routeDescriptors.get(app as any)?.get('GET /')?.responseMode).toBe(
-			'set-with-default-headers'
-		)
+		expect(
+			routeDescriptors.get(app as any)?.get('GET /')?.responseMode
+		).toBe('set-with-default-headers')
 	})
 
 	it('materializes defaults for internal error, status, 404, and cookie patches', async () => {
@@ -160,10 +160,7 @@ describe('C1 default-header sink', () => {
 
 		const statusApp = new Elysia()
 			.headers({ 'x-default': 'base' })
-			.get(
-				'/',
-				() => new ElysiaStatus(201, 'ok', { 'x-status': 'yes' })
-			)
+			.get('/', () => new ElysiaStatus(201, 'ok', { 'x-status': 'yes' }))
 		const statusResponse = await statusApp.handle(req('/'))
 		expect(statusResponse.status).toBe(201)
 		expect(statusResponse.headers.get('x-status')).toBe('yes')
@@ -243,8 +240,8 @@ describe('C1 default-header sink', () => {
 	it('keeps an empty default-header declaration compact', async () => {
 		const app = new Elysia().headers({}).get('/', () => 'ok')
 		await app.handle(req('/'))
-		expect(routeDescriptors.get(app as any)?.get('GET /')?.responseMode).toBe(
-			'compact'
-		)
+		expect(
+			routeDescriptors.get(app as any)?.get('GET /')?.responseMode
+		).toBe('compact')
 	})
 })

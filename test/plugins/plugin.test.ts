@@ -22,7 +22,7 @@ describe('Plugin', () => {
 		expect(response.status).toBe(200)
 	})
 
-	// M14: `use([...])` must dispatch each element through the SAME path as
+	// `use([...])` must dispatch each element through the SAME path as
 	// single `use(plugin)` — functional plugins get invoked, promise/async
 	// plugins get threaded through the pending queue (so `await app.modules`
 	// resolves them), and resolved instances merge. The old array branch used

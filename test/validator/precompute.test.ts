@@ -209,7 +209,7 @@ describe('t.Cookie field-form ignores `sign` option', () => {
 		expect(setCookie.split(';')[0]).toBe('token=plain')
 	})
 
-	// Regression (audit H7): the precomputed default is shared across requests.
+	// Regression: the precomputed default is shared across requests.
 	// With `normalize:false` there is no Clean() to clone the validated value,
 	// so a nested mutable default (e.g. `t.Array(..., { default: [] })`) was
 	// handed to every request BY REFERENCE — one request's handler mutation
@@ -241,7 +241,7 @@ describe('t.Cookie field-form ignores `sign` option', () => {
 	})
 })
 
-// H07 — emitMerger memoization: differential correctness
+// emitMerger memoization: differential correctness
 // Proves that the WeakMap memoization and generated-code single-call
 // optimisation changed no output values vs TypeBox's runtime Default().
 describe('emitMerger memoization — differential correctness vs Default()', () => {
@@ -359,7 +359,7 @@ describe('emitMerger memoization — differential correctness vs Default()', () 
 	})
 })
 
-// H07 — cold-start regression: width-4 depth-7 all-containers-present schema.
+// cold-start regression: width-4 depth-7 all-containers-present schema.
 //
 // IMPORTANT: the schema uses SHARED sub-schema object references so that each
 // shared node is compiled exactly once by the WeakMap memo. Without the memo,
@@ -369,10 +369,10 @@ describe('emitMerger memoization — differential correctness vs Default()', () 
 //
 // The test measures `verifyPreallocatableDefault` (the build-time step that
 // generates and validates the merger source) because it is the primary cost
-// bottleneck: without the fix it takes ~374 ms on M1 (9 MB `new Function`);
+// bottleneck: without the fix it takes ~374 ms on an Apple M1 (9 MB `new Function`);
 // with the fix it takes ~18 ms (6 KB source). The < 100 ms threshold is safely
 // above the post-fix value and well below the pre-fix value.
-describe('emitMerger cold-start regression (H07)', () => {
+describe('emitMerger cold-start regression', () => {
 	it('width-4 depth-7 shared sub-schemas: merger construction under 100 ms', () => {
 		// Build bottom-up with the SAME sub-schema object at each level so the
 		// WeakMap memo collapses repeated visits from O(4^depth) to O(depth).

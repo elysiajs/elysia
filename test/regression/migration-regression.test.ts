@@ -1,8 +1,6 @@
 /**
- * Regression pins for four registration-path defects from the fable full
- * review (design/fable-full-review.md): M12, H15, M13, M31.
- *
- * Each test encodes WHY the behavior matters — every one of these is a silent
+ * Registration-path regressions where equivalent APIs previously diverged.
+ * Each test encodes why the behavior matters: every case is a silent
  * auth/scoping footgun where a v1 pattern compiled and ran with different
  * (weaker) semantics instead of failing loud. The pre-existing suite passed
  * *with* these bugs present, so these tests encode the intent the fixes
