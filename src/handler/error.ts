@@ -1,8 +1,7 @@
-import { getAsyncIndexes, cachedResponse } from './utils'
+import { getAsyncIndexes, getNotFound } from './utils'
 import { parseQueryFromURL } from '../parse-query'
 import {
 	NotFound,
-	PROBLEM_JSON,
 	ValidationError,
 	ElysiaStatus,
 	isProduction,
@@ -43,11 +42,7 @@ function parseQuery(context: Context) {
 	})
 }
 
-const pristineNotFound = cachedResponse(
-	JSON.stringify({ type: 'not-found', title: 'Not Found', status: 404 }),
-	404,
-	{ 'content-type': PROBLEM_JSON }
-)
+const pristineNotFound = getNotFound
 
 const isPristineNotFound = (context: Context, error: any) =>
 	error instanceof NotFound &&

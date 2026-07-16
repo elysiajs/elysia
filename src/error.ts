@@ -7,9 +7,6 @@ import { skipClone } from './adapter/skip-clone'
 
 export { isProduction } from './universal/is-production'
 
-// Schema snapshots are identity-stable, so the default shape only needs to be
-// created once. The shared reference is observable through error hooks and must
-// be treated as read-only by consumers.
 const expectedCache = new WeakMap<object, unknown>()
 
 function freezeExpected(value: unknown): unknown {
@@ -20,6 +17,34 @@ function freezeExpected(value: unknown): unknown {
 		if (!freezeExpected((value as any)[key])) return
 
 	return Object.freeze(value)
+}
+
+// Classify-only walk: same rules as freezeExpected but read-only, with cycle safety.
+// Returns true iff value is safe to structuredClone and cache (primitives, plain
+// objects/arrays recursively; rejects class instances, Date, RegExp, Map, Set,
+// typed arrays, functions, etc.).
+function isCacheableExpected(value: unknown, visited = new Set<object>()) {
+	if (value === null || value === undefined) return true
+
+	const t = typeof value
+	if (t === 'string' || t === 'number' || t === 'boolean' || t === 'bigint')
+		return true
+
+	if (t !== 'object') return false
+	const obj = value as object
+
+	if (visited.has(obj)) return true
+
+	const proto = Object.getPrototypeOf(obj)
+	if (proto !== Object.prototype && proto !== null && !Array.isArray(obj))
+		return false
+
+	visited.add(obj)
+
+	for (const key in obj)
+		if (!isCacheableExpected((obj as any)[key], visited)) return false
+
+	return true
 }
 
 export class ElysiaError<
@@ -585,17 +610,24 @@ export class ValidationError extends ElysiaError {
 				expected = expectedCache.get(schemaForExpected as object)
 			else {
 				try {
-					expected = Create(schemaForExpected as any)
-					try {
-						const snapshot = structuredClone(expected)
-						expected = snapshot
-						if (freezeExpected(snapshot)) {
-							expectedCache.set(
-								schemaForExpected as object,
-								snapshot
-							)
+					const created = Create(schemaForExpected as any)
+
+					if (isCacheableExpected(created))
+						try {
+							const snapshot = structuredClone(created)
+							expected = snapshot
+							if (freezeExpected(snapshot)) {
+								expectedCache.set(
+									schemaForExpected as object,
+									snapshot
+								)
+							}
+						} catch {
+							expected = created
 						}
-					} catch {}
+					else
+						// just recreate exotic value (class instance, Date, etc.)
+						expected = created
 				} catch {}
 			}
 

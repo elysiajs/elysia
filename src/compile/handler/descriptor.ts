@@ -62,12 +62,12 @@ export interface RouteDescriptor {
 	// promotion purity fact (native-static eligibility)
 	pureLiteral: boolean
 
-	// sucrose inference channels
+	// sucrose
 	inferenceBody: boolean
 	inferenceQuery: boolean
 	inferenceHeaders: boolean
 	inferenceCookie: boolean
-	inferenceSet: boolean
+	inferenceSet: boolean // consumed by emit.ts
 	inferenceServer: boolean
 	inferenceRoute: boolean
 	inferenceUrl: boolean
@@ -110,7 +110,7 @@ export interface DescribeRouteInput {
 
 /**
  * Route descriptors, keyed by root instance → `METHOD path` → descriptor.
- * Populated on each JIT compile for tests, audit, and the B6 root-local freeze.
+ * Populated on each JIT compile for tests, audit, and root-local freeze.
  */
 export const routeDescriptors = new WeakMap<
 	AnyElysia,
@@ -125,11 +125,13 @@ const matchReturnIdentifier =
 
 const mayReturnIdentifierCache = new WeakMap<Function, boolean>()
 
-export const mayReturnIdentifier = (fn: Function): boolean => {
+export function mayReturnIdentifier(fn: Function) {
 	let result = mayReturnIdentifierCache.get(fn)
 	if (result !== undefined) return result
+
 	result = matchReturnIdentifier.test(fn.toString())
 	mayReturnIdentifierCache.set(fn, result)
+
 	return result
 }
 
@@ -186,9 +188,7 @@ const inferCompactPrefix = (
 	return inference!
 }
 
-const compactPrefixForcesAsync = (
-	prefix: CompactBeforeHandlePrefix
-): boolean => {
+function compactPrefixForcesAsync(prefix: CompactBeforeHandlePrefix) {
 	const cached = compactPrefixAsync.get(prefix)
 	if (cached !== undefined) return cached
 
@@ -229,15 +229,10 @@ const mayReturnPromiseValidator = (vali: Validator | undefined) =>
 	(vali as Validator | undefined)?.mayReturnPromise === true
 
 /**
- * Shared "route has no request-dependent lifecycle" fact.
- *
  * Extracted from `buildNativeStaticResponse`'s for-in check so the native
- * static promotion predicate and the descriptor's `pureLiteral` fact agree by
- * construction. Returns `true` when the resolved pipeline hook is effectively
- * empty (every field absent / false / an empty array), ignoring the
- * documentation-only `detail` / `tags` fields.
+ * static promotion predicate
  */
-export function isEmptyPipelineHook(hook: AnyLocalHook | undefined): boolean {
+export function isEmptyPipelineHook(hook: AnyLocalHook | undefined) {
 	if (!hook) return true
 
 	for (const key in hook) {
@@ -255,12 +250,6 @@ export function isEmptyPipelineHook(hook: AnyLocalHook | undefined): boolean {
 	return true
 }
 
-/**
- * Compute the full route descriptor + compile state. This holds the EXACT
- * derivation code that used to live at the top of `compileHandlerJit`, moved
- * out verbatim (same order, same semantics), including the
- * `JITProbe.record('sucrose')` call and the `hook.parse` array normalisation.
- */
 export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 	const {
 		method,

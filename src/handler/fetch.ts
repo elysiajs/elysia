@@ -3,7 +3,12 @@ import { decodeComponent } from 'deuri'
 import { defaultAdapter } from '../adapter/constants'
 
 import type { AnyElysia } from '../base'
-import { getAsyncIndexes, cachedResponse, emptyResponse } from './utils'
+import {
+	getAsyncIndexes,
+	emptyResponse,
+	NOT_FOUND_BODY,
+	getNotFound
+} from './utils'
 
 import { createContext, type Context } from '../context'
 import { createErrorHandler } from './error'
@@ -19,15 +24,15 @@ import { createTracer, unionTracePhases } from '../trace'
 
 import type { CompiledHandler, MaybePromise } from '../types'
 
-// RFC 9457 problem+json for the default unmatched-route 404
-const NOT_FOUND_BODY = JSON.stringify({
-	type: 'not-found',
-	title: 'Not Found',
-	status: 404
-})
-const getNotFound = cachedResponse(NOT_FOUND_BODY, 404, {
-	'content-type': PROBLEM_JSON
-})
+// Extract path and query-index from a full URL string.
+// Scalar params only — monomorphic so V8/JSC can inline at each call site.
+function extractPath(url: string, context: any, pathStart: number): string {
+	const s = url.indexOf('/', pathStart)
+	return (context.path = url.substring(
+		s,
+		(context.qi = url.indexOf('?', s)) === -1 ? url.length : context.qi
+	))
+}
 
 // Default 404 that still emits `Elysia.headers` defaults / hook-set headers + cookies.
 function notFound(context: Context): Response {
@@ -351,17 +356,7 @@ export function createFetchHandler(
 			materializeSetHeaders(context.set)
 			if (request.signal.aborted) return emptyResponse.clone() as Response
 
-			const url = request.url,
-				s = url.indexOf('/', pathStart)
-
-			;(context as any).path = url.substring(
-				s,
-				// @ts-expect-error
-				(context.qi = url.indexOf('?', s)) === -1
-					? url.length
-					: // @ts-expect-error
-						context.qi
-			)
+			extractPath(request.url, context, pathStart)
 			// @ts-expect-error
 			context.server = server ?? null
 
@@ -471,17 +466,7 @@ export function createFetchHandler(
 				if (request.signal.aborted)
 					return emptyResponse.clone() as Response
 
-				const url = request.url,
-					s = url.indexOf('/', pathStart)
-
-				;(context as any).path = url.substring(
-					s,
-					// @ts-expect-error
-					(context.qi = url.indexOf('?', s)) === -1
-						? url.length
-						: // @ts-expect-error
-							context.qi
-				)
+				extractPath(request.url, context, pathStart)
 				// @ts-expect-error
 				context.server = server ?? null
 
@@ -535,17 +520,7 @@ export function createFetchHandler(
 			materializeSetHeaders(context.set)
 			if (request.signal.aborted) return emptyResponse.clone() as Response
 
-			const url = request.url,
-				s = url.indexOf('/', pathStart)
-
-			;(context as any).path = url.substring(
-				s,
-				// @ts-expect-error
-				(context.qi = url.indexOf('?', s)) === -1
-					? url.length
-					: // @ts-expect-error
-						context.qi
-			)
+			extractPath(request.url, context, pathStart)
 			// @ts-expect-error
 			context.server = server ?? null
 
@@ -601,17 +576,7 @@ export function createFetchHandler(
 
 	return (request: Request, server?: unknown): MaybePromise<Response> => {
 		const context = new Context(request)
-		const url = request.url,
-			s = url.indexOf('/', pathStart)
-
-		const path = ((context as any).path = url.substring(
-			s,
-			// @ts-expect-error
-			(context.qi = url.indexOf('?', s)) === -1
-				? url.length
-				: // @ts-expect-error
-					context.qi
-		))
+		const path = extractPath(request.url, context, pathStart)
 		// @ts-expect-error
 		context.server = server ?? null
 

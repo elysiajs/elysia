@@ -121,7 +121,11 @@ describe('C2 expected-value cache', () => {
 		expect(cloneAttempts).toBe(2)
 	})
 
-	it('isolates fresh snapshots that cannot be deeply frozen', () => {
+	it('returns Create() output as-is for exotic values (no clone, no cache)', () => {
+		// Date is an exotic (class instance) — isCacheableExpected rejects it.
+		// The fix: no structuredClone, no freeze, no cache. Each 422 re-calls
+		// Create() (which calls the default fn), so creates === 2. The returned
+		// reference is the original Create() output; prototype is intact.
 		let creates = 0
 		const shared = { value: new Date(0) }
 		const schema = t.Any({
@@ -135,11 +139,57 @@ describe('C2 expected-value cache', () => {
 
 		const first = expected() as typeof shared
 		const second = expected() as typeof shared
-		expect(first).not.toBe(shared)
-		expect(second).not.toBe(shared)
-		expect(second).not.toBe(first)
-		expect(first.value).not.toBe(shared.value)
+		// exotic path: expected = created (= shared), no clone
+		expect(first).toBe(shared)
+		expect(second).toBe(shared)
+		// not frozen — exotic values are never frozen
+		expect(Object.isFrozen(first)).toBe(false)
+		// prototype of the Date value is preserved (not degraded to plain object)
+		expect(first.value).toBeInstanceOf(Date)
 		expect(first.value.getTime()).toBe(0)
+		// Create() called twice — no caching for exotics
 		expect(creates).toBe(2)
+	})
+
+	it('pinned: class-instance default retains prototype, is not cached, is not frozen', async () => {
+		// Regression pin for the P2 fix: before the fix, structuredClone was called
+		// BEFORE classification, stripping the prototype off class instances and
+		// caching the degraded plain-object clone. After the fix, class instances
+		// bypass clone/freeze/cache entirely.
+
+		class Sentinel {
+			readonly tag = 'sentinel'
+			greet() {
+				return `hello from ${this.tag}`
+			}
+		}
+
+		const instance = new Sentinel()
+
+		// t.Any with a class instance as default — Create() returns the instance directly.
+		const schema = t.Any({ default: instance })
+
+		// Drive through ValidationError directly — Create() returns the class
+		// instance default as-is, which is the exotic case under test.
+		const getExpected = () =>
+			new ValidationError('body', null, [], schema).payload.expected
+
+		const first = getExpected() as Sentinel
+		const second = getExpected() as Sentinel
+
+		// (a) prototype and methods are intact — not degraded to plain object
+		expect(first).toBeInstanceOf(Sentinel)
+		expect(first.greet()).toBe('hello from sentinel')
+		expect(second).toBeInstanceOf(Sentinel)
+		expect(second.greet()).toBe('hello from sentinel')
+
+		// (b) two calls do NOT share one frozen cached reference
+		//     (both equal `instance` because Create() returns it directly, but
+		//      neither is a frozen cached clone — verify not frozen)
+		expect(first).toBe(instance)
+		expect(second).toBe(instance)
+
+		// (c) the value is not frozen
+		expect(Object.isFrozen(first)).toBe(false)
 	})
 })

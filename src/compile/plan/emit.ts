@@ -163,12 +163,8 @@ export function emitResume(
 		prologue += `c.query=pq(c.request.url,c.qi${parseArgs})\n`
 	}
 
-	if (hasHeaders) {
-		if (Capture.isCapturing())
-			prologue += `c.headers=c.request.headers.toJSON?.()??Object.fromEntries(c.request.headers)\n`
-		else
-			prologue += `c.headers=${hasHeaderShorthand ? 'c.request.headers.toJSON()' : 'Object.fromEntries(c.request.headers)'}\n`
-	}
+	if (hasHeaders)
+		prologue += `c.headers=${hasHeaderShorthand ? 'c.request.headers.toJSON()' : 'Object.fromEntries(c.request.headers)'}\n`
 
 	const steps: Step[] = []
 	const segments = plan.region.main

@@ -28,6 +28,7 @@
         "openapi-types": "~12.1.3",
         "prettier": "^3.5.3",
         "rolldown-plugin-dts": "^0.24.0",
+        "rspack": "^0.1.1",
         "tsdown": "^0.21.10",
         "typebox": "1.3",
         "typescript": "6",
@@ -536,6 +537,8 @@
     "rolldown-plugin-dts": ["rolldown-plugin-dts@0.24.0", "", { "dependencies": { "@babel/generator": "8.0.0-rc.4", "@babel/helper-validator-identifier": "8.0.0-rc.4", "@babel/parser": "8.0.0-rc.4", "ast-kit": "^3.0.0-beta.1", "birpc": "^4.0.0", "dts-resolver": "^2.1.3", "get-tsconfig": "5.0.0-beta.5", "obug": "^2.1.1" }, "peerDependencies": { "@ts-macro/tsc": "^0.3.6", "@typescript/native-preview": ">=7.0.0-dev.20260325.1", "rolldown": "^1.0.0-rc.12", "typescript": "^6.0.0", "vue-tsc": "~3.2.0" }, "optionalPeers": ["@ts-macro/tsc", "@typescript/native-preview", "typescript", "vue-tsc"] }, "sha512-liB3IEQKijJoNmSDJt9GU4aRD/Xu6BUzO/xdc71NC4TtbZ6Fr0PauVEhAhP4KR4EalkevBOiJHdiHFNHLjtB2Q=="],
 
     "rolldown-string": ["rolldown-string@0.3.0", "", { "dependencies": { "magic-string": "^0.30.21" }, "peerDependencies": { "rolldown": "*" }, "optionalPeers": ["rolldown"] }, "sha512-qGhBPNSv/27uzFBQdO+Cs4YAXC/1PKznD7Jz5Fl7NIAIlteuTPBTBWBhCpJ2AFTqLsoKvvUr7wSjqSUip0Fkpg=="],
+
+    "rspack": ["rspack@0.1.1", "", {}, "sha512-zpANutBHz39nA0ZBOwP4FL69aXNjLXCboc+LsFAoE34PU0aGntbaFBp0qkP73Ro0y2AjEosqmvH5mwfWDUfPyg=="],
 
     "safe-regex": ["safe-regex@2.1.1", "", { "dependencies": { "regexp-tree": "~0.1.1" } }, "sha512-rx+x8AMzKb5Q5lQ95Zoi6ZbJqwCLkqi3XuJXp5P3rT8OEc6sZCJG5AE5dU3lsgRr/F4Bs31jSlVN+j5KrsGu9A=="],
 

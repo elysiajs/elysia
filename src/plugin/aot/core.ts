@@ -219,7 +219,7 @@ export interface StubPlan {
  */
 export type BridgeMode = 'sealed' | 'wired' | 'off'
 
-const NO_STUB: StubPlan = {
+export const NO_STUB: StubPlan = {
 	jit: false,
 	ws: false,
 	reconstruct: false,

@@ -2,7 +2,7 @@ import type { AnyElysia } from '../base'
 import type { Serve, ListenCallback } from '../universal'
 
 import type { Context } from '../context'
-import { type AnyLocalHook, MaybePromise } from '../types'
+import { MaybePromise } from '../types'
 
 /**
  * Elysia adapter 2
@@ -50,21 +50,6 @@ export interface ElysiaAdapterOptions {
 		callback?: ListenCallback
 	): void
 
-	/**
-	 * Stop server from serving
-	 *
-	 * ---
-	 * @example
-	 * ```typescript
-	 * app.stop()
-	 * ```
-	 *
-	 * @example
-	 * ```typescript
-	 * app.stop(true) // Abruptly any requests inflight
-	 * ```
-	 */
-	stop?(app: AnyElysia, closeActiveConnections?: boolean): Promise<void>
 	parse: {
 		json: (
 			context: Context
@@ -96,34 +81,5 @@ export interface ElysiaAdapterOptions {
 		 * Map response without cookie, status or headers
 		 */
 		compact?(response: unknown, ...params: unknown[]): unknown
-		/**
-		 * Compile inline to value
-		 *
-		 * @example
-		 * ```ts
-		 * Elysia().get('/', 'static')
-		 * ```
-		 */
-		static?(
-			handle: unknown,
-			hooks: AnyLocalHook,
-			setHeaders?: Context['set']['headers'],
-			...params: unknown[]
-		): (() => unknown) | undefined
-		/**
-		 * If the runtime support cloning response
-		 *
-		 * eg. Bun.serve({ static })
-		 */
-		nativeStatic?(
-			handle: unknown,
-			hooks: AnyLocalHook,
-			set?: Context['set']
-		): (() => MaybePromise<Response>) | undefined
 	}
-
-	/**
-	 * override Elysia's default fetch function
-	 */
-	fetch?(app: AnyElysia): (request: Request) => MaybePromise<Response>
 }

@@ -11,6 +11,7 @@ import {
 	ADAPTER_CONSTANTS_FILTER,
 	ADAPTER_BUN_FILTER,
 	IS_PRODUCTION_FILTER,
+	NO_STUB,
 	adapterConstantsSource,
 	bunAdapterStubSource,
 	rewriteIsProductionCalls,
@@ -72,20 +73,7 @@ export const aot = (
 	const treeShake = options?.treeShake ?? true
 	let source = ''
 	let virtualType: string | undefined
-	let stub: StubPlan = {
-		jit: false,
-		ws: false,
-		reconstruct: false,
-		cookie: false,
-		trace: false,
-		sucrose: false,
-		compat: false,
-		bridge: false,
-		adapter: false,
-		isProduction: false
-	}
-	// Resolved lazily in buildStart; anchors the call-site rewrite to real
-	// elysia modules only (Defect 3 fix, parity with bun/esbuild plugin).
+	let stub: StubPlan = { ...NO_STUB }
 	let isElysiaModule = (_path: string) => false
 
 	return {

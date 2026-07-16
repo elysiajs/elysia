@@ -619,8 +619,7 @@ function emitModule(
 	handlerExport += '}\n'
 
 	const fingerprintExport = options?.register
-		? `// TODO(B5): schema snapshot identity\n` +
-			`export const fingerprint = ${JSON.stringify(fingerprint)}\n`
+		? `export const fingerprint = ${JSON.stringify(fingerprint)}\n`
 		: ''
 	const registration = options?.register
 		? `Compiled.register({ bf: 1, fingerprint, ` +

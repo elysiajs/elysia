@@ -1,5 +1,6 @@
 import { isAsyncFunction, mayReturnPromise } from '../compile/utils'
 import { isCloudflareWorker } from '../universal/constants'
+import { PROBLEM_JSON } from '../error'
 
 import type { AnyElysia } from '../base'
 import type { Context } from '../context'
@@ -23,6 +24,16 @@ export function cachedResponse(
 					headers
 				})).clone() as Response)
 }
+
+export const NOT_FOUND_BODY = JSON.stringify({
+	type: 'not-found',
+	title: 'Not Found',
+	status: 404
+})
+
+export const getNotFound = cachedResponse(NOT_FOUND_BODY, 404, {
+	'content-type': PROBLEM_JSON
+})
 
 export function forwardError<T>(value: T): T {
 	if (value instanceof Error) throw value

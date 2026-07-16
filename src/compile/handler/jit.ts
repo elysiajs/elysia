@@ -27,8 +27,7 @@ import {
 } from '../../error'
 import { isDynamicRegex, traceEventIndex } from '../../constants'
 import { finalizeRouteError, forwardError } from '../../handler/utils'
-import { hasHeaderShorthand, isBun } from '../../universal/constants'
-import { ElysiaFile } from '../../universal/file'
+import { hasHeaderShorthand } from '../../universal/constants'
 
 import { parseQueryFromURL } from '../../parse-query'
 
@@ -301,7 +300,12 @@ const createInlineHandler = (
 					.then((v) => map(forwardError(v), c.request))
 					.catch((error) => finalizeRouteError(root, c, error))
 
-			return map(r, c.request)
+			const response = map(r, c.request)
+			return typeof (response as any)?.then === 'function'
+				? Promise.resolve(response).catch((error) =>
+						finalizeRouteError(root, c, error)
+					)
+				: response
 		} catch (error) {
 			return finalizeRouteError(root, c, error)
 		}
@@ -321,7 +325,12 @@ const createInlineHandlerWithSet = (
 					.then((v) => map(forwardError(v), c.set, c.request))
 					.catch((error) => finalizeRouteError(root, c, error))
 
-			return map(r, c.set, c.request)
+			const response = map(r, c.set, c.request)
+			return typeof (response as any)?.then === 'function'
+				? Promise.resolve(response).catch((error) =>
+						finalizeRouteError(root, c, error)
+					)
+				: response
 		} catch (error) {
 			return finalizeRouteError(root, c, error)
 		}
@@ -343,7 +352,12 @@ const createInlineHandlerWithDefaultHeaders = (
 					.then((v) => map(forwardError(v), c.set, c.request))
 					.catch((error) => finalizeRouteError(root, c, error))
 
-			return map(r, c.set, c.request)
+			const response = map(r, c.set, c.request)
+			return typeof (response as any)?.then === 'function'
+				? Promise.resolve(response).catch((error) =>
+						finalizeRouteError(root, c, error)
+					)
+				: response
 		} catch (error) {
 			return finalizeRouteError(root, c, error)
 		}
@@ -902,11 +916,12 @@ export function compileHandlerJit({
 				`function _fin2(c,_r,_stl){\n` +
 				`c.responseValue=_r\n` +
 				scheduleAfterResponse +
-				`return ${hasSet ? `${map}(_r,c.set,c.request)` : `${map}(_r,c.request)`}\n` +
+				`const _m=${hasSet ? `${map}(_r,c.set,c.request)` : `${map}(_r,c.request)`}\n` +
+				`return typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>fre(rt,c,_e)):_m\n` +
 				`}\n`
 
 			code +=
-				`if(_r instanceof Promise)return _r.then(fe).then((_v)=>_fin(c,_v))\n` +
+				`if(_r instanceof Promise)return _r.then(fe).then((_v)=>_fin(c,_v)).catch((_e)=>fre(rt,c,_e))\n` +
 				`return _fin(c,_r)\n`
 		} else {
 			code += `if(_r instanceof Error)throw _r\n`
@@ -986,11 +1001,13 @@ export function compileHandlerJit({
 				? `${map}(_r,c.set,c.request)`
 				: `${map}(_r,c.request)`
 
-			if (!isAsync)
+			if (isAsync) code += `return await ${finalMap}\n`
+			else {
+				code += `const _m=${finalMap}\n`
 				code += syncErrorHook
-					? `if(_r instanceof Promise)return ${finalMap}.catch((_e)=>_ce(_e,c))\n`
-					: `if(_r instanceof Promise)return ${finalMap}.catch((_e)=>fre(rt,c,_e))\n`
-			code += `return ${isAsync ? 'await ' : ''}${finalMap}\n`
+					? `return typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>_ce(_e,c)):_m\n`
+					: `return typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>fre(rt,c,_e)):_m\n`
+			}
 		}
 	} else if (isHandleFunction) {
 		if (!isAsync) link(forwardError, 'fe')
@@ -1004,15 +1021,12 @@ export function compileHandlerJit({
 			(isAsync
 				? `return await ${map}(_r,${mapArgs})\n`
 				: syncErrorHook
-					? `if(_r instanceof Promise)return ${map}(_r.then(fe),${mapArgs}).catch((_e)=>_ce(_e,c))\n` +
-						`return ${map}(_r,${mapArgs})\n`
-					: `if(_r instanceof Promise)return ${map}(_r.then(fe),${mapArgs}).catch((_e)=>fre(rt,c,_e))\n` +
-						`return ${map}(_r,${mapArgs})\n`)
+					? `if(_r instanceof Promise)_r=_r.then(fe)\nconst _m=${map}(_r,${mapArgs})\nreturn typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>_ce(_e,c)):_m\n`
+					: `if(_r instanceof Promise)_r=_r.then(fe)\nconst _m=${map}(_r,${mapArgs})\nreturn typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>fre(rt,c,_e)):_m\n`)
 	} else {
 		code +=
-			isPromiseHandler || (!isBun && handler instanceof ElysiaFile)
-				? `return ${mapReturn.trim()}.catch((_e)=>fre(rt,c,_e))\n`
-				: `return ${mapReturn}`
+			`const _m=${mapReturn.trim()}\n` +
+			`return typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>fre(rt,c,_e)):_m\n`
 	}
 
 	if (hasErrorHook || hasTrace) {
@@ -1037,13 +1051,14 @@ export function compileHandlerJit({
 			if (allowUnsafeDetail) link(ValidationError, 'verr')
 
 			factoryHelpers +=
+				`function _em(c,_r){return typeof _r?.then==='function'?Promise.resolve(_r).catch((_e)=>fre(rt,c,_e)):_r}\n` +
 				`${asyncCookieSign ? 'async ' : ''}function _efb(e,c){\n` +
 				(asyncCookieSign ? `let _sg\n` : ``) +
-				`if(e instanceof es){${signPrefix}return ${map}(e,c.set,c.request)}\n` +
-				`if(e?.status){${signPrefix}return ${map}(e?.response!==undefined?e.response:(isprod()&&e.status>=500?'Internal Server Error':(e?.message??'')),c.set,c.request)}\n` +
+				`if(e instanceof es){${signPrefix}return _em(c,${map}(e,c.set,c.request))}\n` +
+				`if(e?.status){${signPrefix}return _em(c,${map}(e?.response!==undefined?e.response:(isprod()&&e.status>=500?'Internal Server Error':(e?.message??'')),c.set,c.request))}\n` +
 				`c.set.status=500\n` +
 				signPrefix +
-				`return ${map}(ise(e),c.set,c.request)\n` +
+				`return _em(c,${map}(ise(e),c.set,c.request))\n` +
 				`}\n`
 
 			body +=
@@ -1083,8 +1098,8 @@ export function compileHandlerJit({
 				`if(typeof e?.toResponse==='function')` +
 				`try{\n` +
 				`const _er=e.toResponse()\n` +
-				`if(_er instanceof Promise)return _er.then(${asyncCookieSign ? 'async ' : ''}(_v)=>{if(_v instanceof Response){${signPrefix}return ${map}(_v,c.set,c.request)}return _efb(e,c)},()=>_efb(e,c))\n` +
-				`if(_er instanceof Response){${signPrefix}return ${map}(_er,c.set,c.request)}\n` +
+				`if(typeof _er?.then==='function')return Promise.resolve(_er).then(${asyncCookieSign ? 'async ' : ''}(_v)=>{if(_v instanceof Response){${signPrefix}return _em(c,${map}(_v,c.set,c.request))}return _efb(e,c)},()=>_efb(e,c)).catch((_e)=>fre(rt,c,_e))\n` +
+				`if(_er instanceof Response){${signPrefix}return _em(c,${map}(_er,c.set,c.request))}\n` +
 				`}catch{}\n` +
 				`return _efb(e,c)\n`
 		} else {
