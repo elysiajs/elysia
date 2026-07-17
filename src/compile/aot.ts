@@ -608,8 +608,15 @@ const aotActivationError = new Error(
 export function beginValidatorCapture() {
 	if (captureImpl === undefined) throw aotActivationError
 
-	if (activeSession?.capture !== undefined)
-		throw new Error('[elysia-aot]: A capture session is already active.')
+	if (activeSession?.capture !== undefined) {
+		if (activeSession.explicitCapture)
+			throw new Error(
+				'[elysia-aot]: A capture session is already active.'
+			)
+
+		activeSession.explicitCapture = true
+		return
+	}
 
 	if (activeSession && !activeSession.external)
 		throw new Error('[elysia-aot]: A compiler session is already active.')
