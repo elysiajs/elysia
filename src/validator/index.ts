@@ -155,22 +155,32 @@ export abstract class Validator {
 			const slot = options?.slot
 
 			const normalizeKey =
-				options?.normalize === 'typebox' ? 'typebox' : ''
+				(options?.normalize === 'typebox' ? 'typebox' : '') +
+				(slot?.startsWith('response') ? '\0r' : '')
 
-			const bypassCache =
+			const appHasFrozen =
 				!!aot &&
 				!!slot &&
-				(Capture.isCapturing() ||
-					(options?.normalize !== 'typebox' &&
-						// lazy-aware: checks existence without materializing the group
-						Compiled.hasValidator(
-							aot.method,
-							aot.path,
-							slot,
-							options?.app?.['~programId']
-						)))
+				Compiled.hasValidator(
+					aot.method,
+					aot.path,
+					slot,
+					options?.app?.['~programId']
+				)
 
-			const cache = options?.app ? tbCaches.get(options.app) : tbCache
+			const appSpecific = appHasFrozen || Capture.isCapturing()
+			const app = options?.app
+
+			const bypassCache =
+				(!!aot && !!slot && Capture.isCapturing()) ||
+				(appHasFrozen && options?.normalize !== 'typebox') ||
+				(appSpecific && !app)
+
+			let cache = appSpecific
+				? app
+					? tbCaches.get(app)
+					: undefined
+				: tbCache
 
 			if (!isIntersectable && !skipCache && !bypassCache && cache) {
 				const cached = cache.get(
@@ -180,10 +190,11 @@ export abstract class Validator {
 					options?.models
 				)
 				if (cached) return cached
-			} else if (!cache) {
+			} else if (!cache && !bypassCache) {
 				// @ts-expect-error
 				const created = new TypeBoxValidatorCache()
-				if (options?.app) tbCaches.set(options.app, created)
+				cache = created
+				if (appSpecific && app) tbCaches.set(app, created)
 				else tbCache = created
 			}
 
@@ -196,7 +207,7 @@ export abstract class Validator {
 			) as any
 
 			if (!isIntersectable && !skipCache && !bypassCache)
-				(options?.app ? tbCaches.get(options.app) : tbCache)!.set(
+				cache!.set(
 					schema,
 					options?.coerces,
 					validator,

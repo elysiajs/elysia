@@ -87,4 +87,63 @@ describe('refinement evaluation', () => {
 		expect(first).toBe(1)
 		expect(second).toBe(1)
 	})
+
+	// A refine predicate may itself run the SAME validator instance (recursion
+	// through the public validate path). The pooled scratch is per-validator, so
+	// the nested call must NOT reuse the outer call's occupied slots — otherwise
+	// the nested #validate bumps the shared epoch / resets the occurrence
+	// counters and the outer Check reads wrong-occurrence verdicts, ACCEPTING an
+	// invalid input. This encodes that same-validator reentrancy stays isolated.
+	it('does not corrupt outer verdicts on same-validator recursion', () => {
+		let validator: TypeBoxValidator<any>
+		const refined = t.Refine(t.String(), (value: string) => {
+			// On the recursion trigger, validate a strictly-valid sub-input on
+			// the SAME instance, then reject the outer element. If the nested
+			// call clobbers the outer scratch, the outer array is wrongly
+			// accepted despite this `false`.
+			if (value === 'trigger') {
+				validator.Check(['ok'] as any)
+				return false
+			}
+			return true
+		})
+		validator = new TypeBoxValidator(t.Array(refined))
+
+		try {
+			validator.FromSync(['ok', 'trigger'] as any)
+			expect.unreachable('recursion clobbered the outer verdict slot')
+		} catch (error: any) {
+			// The second element ("trigger") must be reported as invalid.
+			expect(error.errors.length).toBeGreaterThanOrEqual(1)
+		}
+	})
+
+	// Pooled verdict rows persist across validations. When one request records
+	// verdicts for occurrences [0,1] and the next request short-circuits at
+	// occurrence 0 (element 0 fails structurally/refine-wise, Check stops), the
+	// Errors() replay must NOT read occurrence 1's STALE row from the previous
+	// request. An occurrence never recorded in THIS validation must replay as a
+	// pass (unvisited sibling), never inherit a prior failure.
+	it('does not inherit stale verdicts for unvisited occurrences', () => {
+		const refined = t.Refine(t.String(), (value: string) => value !== 'bad')
+		const validator = new TypeBoxValidator(t.Array(refined))
+
+		// First request: occ0 = 'ok' (true), occ1 = 'bad' (false) — records both.
+		try {
+			validator.FromSync(['ok', 'bad'] as any)
+			expect.unreachable()
+		} catch (error: any) {
+			expect(error.errors).toHaveLength(1)
+		}
+
+		// Second request: occ0 = 'bad' (false) short-circuits. occ1 = 'ok' is
+		// never recorded this validation; its stale row from request 1 must not
+		// resurface as a phantom error on the passing element.
+		try {
+			validator.FromSync(['bad', 'ok'] as any)
+			expect.unreachable()
+		} catch (error: any) {
+			expect(error.errors).toHaveLength(1)
+		}
+	})
 })

@@ -288,79 +288,43 @@ const fromArgs = (type: string, isAsync: boolean) =>
 
 const createInlineHandler = (
 	map: (value: unknown, ...rest: unknown[]) => unknown,
-	h: (context: Context) => unknown,
-	root: AnyElysia
+	h: (context: Context) => unknown
 ) =>
 	((c: Context) => {
-		try {
-			const r = h(c)
-			if (r instanceof Error) throw r
-			if (r instanceof Promise)
-				return r
-					.then((v) => map(forwardError(v), c.request))
-					.catch((error) => finalizeRouteError(root, c, error))
+		const r = h(c)
+		if (r instanceof Error) throw r
+		if (r instanceof Promise)
+			return r.then((v) => map(forwardError(v), c.request))
 
-			const response = map(r, c.request)
-			return typeof (response as any)?.then === 'function'
-				? Promise.resolve(response).catch((error) =>
-						finalizeRouteError(root, c, error)
-					)
-				: response
-		} catch (error) {
-			return finalizeRouteError(root, c, error)
-		}
+		return map(r, c.request)
 	}) as CompiledHandler
 
 const createInlineHandlerWithSet = (
 	map: (value: unknown, ...rest: unknown[]) => unknown,
-	h: (context: Context) => unknown,
-	root: AnyElysia
+	h: (context: Context) => unknown
 ) =>
 	((c: Context) => {
-		try {
-			const r = h(c)
-			if (r instanceof Error) throw r
-			if (r instanceof Promise)
-				return r
-					.then((v) => map(forwardError(v), c.set, c.request))
-					.catch((error) => finalizeRouteError(root, c, error))
+		const r = h(c)
+		if (r instanceof Error) throw r
+		if (r instanceof Promise)
+			return r.then((v) => map(forwardError(v), c.set, c.request))
 
-			const response = map(r, c.set, c.request)
-			return typeof (response as any)?.then === 'function'
-				? Promise.resolve(response).catch((error) =>
-						finalizeRouteError(root, c, error)
-					)
-				: response
-		} catch (error) {
-			return finalizeRouteError(root, c, error)
-		}
+		return map(r, c.set, c.request)
 	}) as CompiledHandler
 
 const createInlineHandlerWithDefaultHeaders = (
 	map: (value: unknown, ...rest: unknown[]) => unknown,
-	h: (context: Context) => unknown,
-	root: AnyElysia
+	h: (context: Context) => unknown
 ) =>
 	((c: Context) => {
-		try {
-			materializeSetHeaders(c.set)
-			const r = h(c)
+		materializeSetHeaders(c.set)
+		const r = h(c)
 
-			if (r instanceof Error) throw r
-			if (r instanceof Promise)
-				return r
-					.then((v) => map(forwardError(v), c.set, c.request))
-					.catch((error) => finalizeRouteError(root, c, error))
+		if (r instanceof Error) throw r
+		if (r instanceof Promise)
+			return r.then((v) => map(forwardError(v), c.set, c.request))
 
-			const response = map(r, c.set, c.request)
-			return typeof (response as any)?.then === 'function'
-				? Promise.resolve(response).catch((error) =>
-						finalizeRouteError(root, c, error)
-					)
-				: response
-		} catch (error) {
-			return finalizeRouteError(root, c, error)
-		}
+		return map(r, c.set, c.request)
 	}) as CompiledHandler
 
 export interface CompileHandlerJitOptions {
@@ -1134,8 +1098,7 @@ export function compileHandlerJit({
 		)
 			return createInlineHandler(
 				res.compact ?? (res.map as any),
-				handler as any,
-				errorRoot
+				handler as any
 			)
 		else if (
 			inlineAlias === 'rm' ||
@@ -1147,13 +1110,11 @@ export function compileHandlerJit({
 			return responseMode === 'set-with-default-headers' && inference.set
 				? createInlineHandlerWithDefaultHeaders(
 						responseMap as any,
-						handler as any,
-						errorRoot
+						handler as any
 					)
 				: createInlineHandlerWithSet(
 						responseMap as any,
-						handler as any,
-						errorRoot
+						handler as any
 					)
 	}
 

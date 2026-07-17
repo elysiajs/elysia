@@ -105,6 +105,25 @@ const catchError =
 	(error: Error) =>
 		finalizeError(context, handleError, afterResponse, error)
 
+function dispatchResult(
+	result: unknown,
+	context: Context,
+	handleError: (context: Context, error: Error) => unknown,
+	afterResponse: ((context: Context, status?: number) => void) | undefined
+): MaybePromise<Response> {
+	if (result instanceof Promise)
+		return result.catch(
+			catchError(context, handleError, afterResponse)
+		) as Promise<Response>
+
+	if (typeof (result as any)?.then === 'function')
+		return Promise.resolve(result).catch(
+			catchError(context, handleError, afterResponse)
+		) as Promise<Response>
+
+	return result as Response
+}
+
 function findRoute(
 	context: Context,
 	request: Request,
@@ -169,14 +188,25 @@ function findRoute(
 		} else handler = map['*']?.[path]
 	}
 
-	if (handler) return handler(context)
+	if (handler)
+		return dispatchResult(
+			handler(context),
+			context,
+			handleError,
+			afterResponse
+		)
 
 	const found = router?.find(method, path) ?? router?.find('*', path)
 
 	if (found) {
 		context.params = decodeParams(found.params)
 
-		return found.store(context)
+		return dispatchResult(
+			found.store(context),
+			context,
+			handleError,
+			afterResponse
+		)
 	}
 
 	if (hasError) throw new NotFound()
@@ -223,6 +253,7 @@ export function createFetchHandler(
 				const run = (i: number): unknown => {
 					for (; i < mapResponseHooks.length; i++) {
 						const result = mapResponseHooks[i](context)
+
 						if (result instanceof Promise)
 							// eslint-disable-next-line sonarjs/function-inside-loop -- promise continuation for the hook at index i
 							return result.then((resolved) => {
@@ -628,31 +659,59 @@ export function createFetchHandler(
 			}
 		}
 
-		const methodMap = map[method]
-		let handler: CompiledHandler | undefined = methodMap?.[path]
-		if (handler) return handler(context)
+		try {
+			const methodMap = map[method]
 
-		if (
-			!strictPath &&
-			path.length > 1 &&
-			path.charCodeAt(path.length - 1) === 47
-		) {
-			const loose = path.slice(0, -1)
-			handler = methodMap?.[loose]
-			if (!handler) {
-				const anyMap = map['*']
-				handler = anyMap?.[path] ?? anyMap?.[loose]
+			let handler: CompiledHandler | undefined = methodMap?.[path]
+			if (handler)
+				return dispatchResult(
+					handler(context),
+					context,
+					handleError,
+					afterResponse
+				)
+
+			if (
+				!strictPath &&
+				path.length > 1 &&
+				path.charCodeAt(path.length - 1) === 47
+			) {
+				const loose = path.slice(0, -1)
+				handler = methodMap?.[loose]
+				if (!handler) {
+					const anyMap = map['*']
+					handler = anyMap?.[path] ?? anyMap?.[loose]
+				}
+			} else handler = map['*']?.[path]
+
+			if (handler)
+				return dispatchResult(
+					handler(context),
+					context,
+					handleError,
+					afterResponse
+				)
+
+			const result =
+				router?.find(method, path) ?? router?.find('*', path)
+
+			if (result) {
+				context.params = decodeParams(result.params)
+
+				return dispatchResult(
+					result.store(context),
+					context,
+					handleError,
+					afterResponse
+				)
 			}
-		} else handler = map['*']?.[path]
-
-		if (handler) return handler(context)
-
-		const result = router?.find(method, path) ?? router?.find('*', path)
-
-		if (result) {
-			context.params = decodeParams(result.params)
-
-			return result.store(context)
+		} catch (error) {
+			return finalizeError(
+				context,
+				handleError,
+				afterResponse,
+				error as Error
+			)
 		}
 
 		if (hasError)

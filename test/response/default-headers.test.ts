@@ -133,7 +133,7 @@ describe('application default headers', () => {
 			context.set.headers['x-opaque'] = 'yes'
 			return 'ok'
 		}
-		const app = new Elysia()
+		const app = new Elysia({ introspect: true })
 			.headers({ 'x-default': 'base' })
 			.get('/', (context) => opaque(context))
 
@@ -223,7 +223,7 @@ describe('application default headers', () => {
 	})
 
 	it('records response modes for plain and set-aware routes', async () => {
-		const app = new Elysia()
+		const app = new Elysia({ introspect: true })
 			.headers({ 'x-default': 'base' })
 			.get('/default', () => 'ok')
 			.get('/set', ({ set }) => {
@@ -244,7 +244,9 @@ describe('application default headers', () => {
 	})
 
 	it('keeps routes without declared defaults on the compact response path', async () => {
-		const app = new Elysia().headers({}).get('/', () => 'ok')
+		const app = new Elysia({ introspect: true })
+			.headers({})
+			.get('/', () => 'ok')
 		await app.handle(req('/'))
 		expect(
 			routeDescriptors.get(app as any)?.get('GET /')?.responseMode

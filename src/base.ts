@@ -6666,50 +6666,65 @@ export class Elysia<
 	handler(
 		index: number,
 		immediate: boolean | undefined = this['~config']?.precompile,
-		route: InternalRoute = this['~routes'][index],
+		route?: InternalRoute,
 		precomputedStatic?: Response,
-		aliases?: StaticMapAliases
+		aliases?: StaticMapAliases,
+		table?: RouteTable
 	): CompiledHandler {
 		if (this.#compiled?.[index]) return this.#compiled![index]
 
 		const compiled = (this.#compiled ??= new Array(this['~routes'].length))
 
 		if (immediate) {
+			const row = route ?? this['~routes'][index]
 			let handler: CompiledHandler
 
 			try {
-				handler = compileHandler(route, this, precomputedStatic)
+				handler = compileHandler(row, this, precomputedStatic)
 			} catch (error) {
 				throw new Error(
-					`[Elysia] Failed to compile route ${route[0]} ${route[1]}: ${(error as Error)?.message ?? error}`,
+					`[Elysia] Failed to compile route ${row[0]} ${row[1]}: ${(error as Error)?.message ?? error}`,
 					{ cause: error }
 				)
 			}
 
 			compiled![index] = handler
-			this.#saveHandler(route[0], route[1], handler)
+			this.#saveHandler(row[0], row[1], handler)
 
 			return handler
 		}
 
-		return this.#jitHandler(index, route, precomputedStatic, aliases)
+		return this.#jitHandler(
+			index,
+			route ?? (table ? undefined : this['~routes'][index]),
+			precomputedStatic,
+			aliases,
+			table
+		)
 	}
 
 	#jitHandler(
 		index: number,
-		route: InternalRoute,
+		route: InternalRoute | undefined,
 		precomputedStatic?: Response,
-		aliases?: StaticMapAliases
+		aliases?: StaticMapAliases,
+		table?: RouteTable
 	): CompiledHandler {
 		return (context) => {
 			if (this.#compiled![index]) return this.#compiled![index](context)
 
+			const materialized = route ?? routeRow(table!, index)
+
 			let handler: CompiledHandler
 			try {
-				handler = compileHandler(route, this, precomputedStatic)
+				handler = compileHandler(
+					materialized,
+					this,
+					precomputedStatic
+				)
 			} catch (error) {
 				const routeError = new Error(
-					`[Elysia] Failed to compile route ${route[0]} ${route[1]}: ${(error as Error)?.message ?? error}`,
+					`[Elysia] Failed to compile route ${materialized[0]} ${materialized[1]}: ${(error as Error)?.message ?? error}`,
 					{ cause: error }
 				)
 				const finalize = this['~finalizeError']
@@ -6728,7 +6743,7 @@ export class Elysia<
 
 				for (let p = 0; p < aliases.paths.length; p++)
 					map[aliases.paths[p]] = handler
-			} else this.#saveHandler(route[0], route[1], handler)
+			} else this.#saveHandler(materialized[0], materialized[1], handler)
 
 			return handler(context)
 		}
@@ -6846,12 +6861,17 @@ export class Elysia<
 		return memo.get(start)!
 	}
 
-	#routeMayHaveModelRef(route: InternalRoute): boolean {
+	// Reads the needed columns directly off the columnar table so the gate
+	// loop never materializes an 8-slot row for a route that has no model ref.
+	#routeMayHaveModelRef(table: RouteTable, i: number): boolean {
 		if (this['~ext']?.macro || this['~scopeChildren']) return true
 
+		const macroScope = table.macroScope.get(i) // route[7]
+		const owner = table.owner[i] // route[3]
+
 		const localRoot = localMacroRoot(
-			((route[7] as AnyElysia) ??
-				(route[3] as AnyElysia) ??
+			((macroScope as AnyElysia) ??
+				(owner as AnyElysia) ??
 				this) as AnyElysia,
 			this as unknown as AnyElysia
 		) as unknown as { '~ext'?: { macro?: unknown } }
@@ -6860,15 +6880,19 @@ export class Elysia<
 		// route[4]: localHook (per-route)
 		if (
 			Elysia.#hookHasString(
-				route[4] as Record<string, unknown> | undefined
+				table.localHook[i] as Record<string, unknown> | undefined
 			)
 		)
 			return true
 
 		// Chain sources: route[5] (appHook), route[6] (inheritedChain)
 		return (
-			this.#chainHasModelRef(route[5] as ChainNode | undefined) ||
-			this.#chainHasModelRef(route[6] as ChainNode | undefined) ||
+			this.#chainHasModelRef(
+				table.appHook[i] as ChainNode | undefined
+			) ||
+			this.#chainHasModelRef(
+				table.inheritedChain[i] as ChainNode | undefined
+			) ||
 			this.#chainHasModelRef(this['~hookChain'])
 		)
 	}
@@ -7039,11 +7063,9 @@ export class Elysia<
 		const flags = table.flags
 		const length = table.length
 
-		for (let i = 0; i < length; i++) {
-			const row = routeRow(table, i)
-			if (this.#routeMayHaveModelRef(row))
-				this.#assertRouteModelRefs(row, method[i])
-		}
+		for (let i = 0; i < length; i++)
+			if (this.#routeMayHaveModelRef(table, i))
+				this.#assertRouteModelRefs(routeRow(table, i), method[i])
 
 		if (length)
 			Compiled.claim(
@@ -7151,8 +7173,10 @@ export class Elysia<
 				const handler = this.handler(
 					i,
 					precompile,
-					routeRow(table, i),
-					undefined
+					undefined,
+					undefined,
+					undefined,
+					table
 				)
 
 				map[routePath] = handler
@@ -7186,8 +7210,10 @@ export class Elysia<
 				const handler = this.handler(
 					i,
 					precompile,
-					routeRow(table, i),
-					undefined
+					undefined,
+					undefined,
+					undefined,
+					table
 				)
 
 				for (let p = 0; p < paths.length; p++)
@@ -7198,12 +7224,13 @@ export class Elysia<
 				const handler = this.handler(
 					i,
 					precompile,
-					routeRow(table, i),
+					undefined,
 					undefined,
 					{
 						method: routeMethod,
 						paths
-					}
+					},
+					table
 				)
 
 				for (let p = 0; p < paths.length; p++) map[paths[p]] = handler

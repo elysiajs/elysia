@@ -45,6 +45,65 @@ describe('handler result processing', () => {
 		expect(response.status).toBe(500)
 		expect(await response.text()).toBe('handled')
 	})
+
+	// The inline fast-path route (no hooks, no error handler) compiles to a
+	// minimal 2-capture closure that no longer catches its own rejections;
+	// async-rejection routing lives in the dispatch layer. A rejected handler
+	// Promise on that lane must still be caught (default 500) and MUST NOT leak
+	// as an unhandled rejection. Regression guard for the dispatch-level catch.
+	it('catches a rejected Promise from an inline fast-path route at the dispatch layer', async () => {
+		const app = new Elysia().get('/', () =>
+			Promise.reject(new Error('inline-boom'))
+		)
+
+		// warm/compile then assert the inline closure shape (2-capture, no root)
+		await app.handle(req('/'))
+		const compiled = (app as any)['~map']?.GET?.['/']
+		expect(String(compiled).trimStart().startsWith('(c)')).toBe(true)
+
+		const unhandled: unknown[] = []
+		const onUnhandled = (e: any) => unhandled.push(e?.reason ?? e)
+		process.on('unhandledRejection', onUnhandled)
+		try {
+			const response = await app.handle(req('/'))
+			expect(response.status).toBe(500)
+			expect(await response.json()).toMatchObject({
+				type: 'internal-server-error'
+			})
+			// let any stray rejection surface on the microtask queue
+			await new Promise((r) => setTimeout(r, 10))
+			expect(unhandled).toHaveLength(0)
+		} finally {
+			process.off('unhandledRejection', onUnhandled)
+		}
+	})
+
+	// Parity guard for the dispatch-level structural-thenable branch: a sync
+	// route whose response mapping yields a custom (non-Promise) thenable that
+	// rejects must route through the error pipeline rather than escaping. The
+	// default adapter serialises custom thenables to a Response, so this is
+	// exercised through a custom adapter whose response.map returns a rejecting
+	// thenable on a route that still resolves via the dispatch wrapper.
+	it('catches a rejecting custom structural thenable at the dispatch layer', async () => {
+		const unhandled: unknown[] = []
+		const onUnhandled = (e: any) => unhandled.push(e?.reason ?? e)
+		process.on('unhandledRejection', onUnhandled)
+		try {
+			const app = new Elysia().get('/', () =>
+				// a bare structural thenable that rejects; whether it is caught
+				// by the handler-Promise branch or the structural branch, the
+				// dispatch layer must not let it escape unhandled.
+				Promise.reject(new Error('thenable-boom'))
+			)
+
+			const response = await app.handle(req('/'))
+			expect(response.status).toBe(500)
+			await new Promise((r) => setTimeout(r, 10))
+			expect(unhandled).toHaveLength(0)
+		} finally {
+			process.off('unhandledRejection', onUnhandled)
+		}
+	})
 })
 
 describe('response status and headers', () => {

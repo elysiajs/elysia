@@ -758,12 +758,15 @@ export function compileHandler(
 		isPromiseHandler
 	})
 
-	let descriptors = routeDescriptors.get(root)
-	if (!descriptors) {
-		descriptors = new Map()
-		routeDescriptors.set(root, descriptors)
+	if (root['~introspect'] === true || root['~config']?.introspect === true) {
+		let descriptors = routeDescriptors.get(root)
+		if (!descriptors) {
+			descriptors = new Map()
+			routeDescriptors.set(root, descriptors)
+		}
+
+		descriptors.set(`${method} ${path}`, state.descriptor)
 	}
-	descriptors.set(`${method} ${path}`, state.descriptor)
 
 	const resumeEmit = frozenRoot['~config']?.experimental?.resumeEmit
 	if (resumeEmit) {

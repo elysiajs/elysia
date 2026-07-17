@@ -80,15 +80,52 @@ interface RefinementGroup {
 	checks: Array<(value: unknown) => unknown>
 }
 
+interface RefineSlot {
+	// bumped once per #validate
+	epoch: number
+	// bumped again before the failure-path Errors() walk
+	replayEpoch: number
+	occurrences: number
+	// How many occurrence rows were recorded during this validation's recording pass
+	recorded: number
+	verdicts: boolean[][]
+}
+
 interface RefineValidation {
-	groups: Set<RefinementGroup>
-	results: Map<RefinementGroup, boolean[][]>
+	slots: Map<RefinementGroup, RefineSlot>
+	epoch: number
+	replayEpoch: number
 	replay: boolean
-	occurrences: Map<RefinementGroup, number>
+	active: boolean
+	checking: boolean
 }
 
 let activeRefineValidation: RefineValidation | undefined
 const refinementGroups = new WeakMap<object, RefinementGroup>()
+
+// Slots seed at epoch 0 so the first #validate call (epoch 1) resets them.
+const freshRefineValidation = (
+	groups: Set<RefinementGroup>
+): RefineValidation => {
+	const slots = new Map<RefinementGroup, RefineSlot>()
+	for (const group of groups)
+		slots.set(group, {
+			epoch: 0,
+			replayEpoch: 0,
+			occurrences: 0,
+			recorded: 0,
+			verdicts: []
+		})
+
+	return {
+		slots,
+		epoch: 0,
+		replayEpoch: 0,
+		replay: false,
+		active: false,
+		checking: false
+	}
+}
 
 function collectRefinements(
 	schema: any,
@@ -120,28 +157,45 @@ function collectRefinements(
 					const refinement = members[index]
 					refinement.check = function (value: unknown) {
 						const validation = activeRefineValidation
-						if (!validation?.groups.has(group!))
+						const slot = validation?.slots.get(group!)
+						if (slot === undefined)
 							return group!.checks[index].call(this, value)
 
-						let occurrence =
-							validation.occurrences.get(group!) ?? 0
-						if (index === 0) {
-							validation.occurrences.set(group!, ++occurrence)
-							if (!validation.replay) {
-								const results = group!.checks.map((check) =>
-									Boolean(check.call(this, value))
-								)
-								const calls = validation.results.get(group!)
-								if (calls) calls.push(results)
-								else validation.results.set(group!, [results])
+						if (!validation!.replay) {
+							if (slot.epoch !== validation!.epoch) {
+								slot.epoch = validation!.epoch
+								slot.occurrences = 0
+								slot.recorded = 0
 							}
+
+							if (index === 0) {
+								const occurrence = slot.occurrences++
+								slot.recorded = slot.occurrences
+
+								let results = slot.verdicts[occurrence]
+								if (results === undefined)
+									slot.verdicts[occurrence] = results = []
+
+								const checks = group!.checks
+								for (let i = 0; i < checks.length; i++)
+									results[i] = Boolean(
+										checks[i].call(this, value)
+									)
+							}
+
+							return slot.verdicts[slot.occurrences - 1]![index]
 						}
 
-						return (
-							validation.results.get(group!)?.[occurrence - 1]?.[
-								index
-							] ?? true
-						)
+						if (slot.replayEpoch !== validation!.replayEpoch) {
+							slot.replayEpoch = validation!.replayEpoch
+							slot.occurrences = 0
+						}
+
+						if (index === 0) slot.occurrences++
+
+						if (slot.occurrences > slot.recorded) return true
+
+						return slot.verdicts[slot.occurrences - 1][index]
 					}
 				}
 			}
@@ -367,6 +421,9 @@ export class TypeBoxValidator<
 	#decodeMirror?: (value: unknown) => unknown
 	#encodeMirror?: (value: unknown) => unknown
 	#refinements?: Set<RefinementGroup>
+	// Pooled once per validator; #validate resets it via an epoch counter rather than re-allocating
+	// Safe because #validate is synchronous and nesting only ever interleaves different validator
+	#refineScratch?: RefineValidation
 	#findCustomError?: (
 		value: unknown
 	) => { instancePath: string; error: unknown } | undefined
@@ -662,23 +719,32 @@ export class TypeBoxValidator<
 		if (!this.#refinements)
 			return this.Check(value as Static<T>) ? undefined : []
 
+		const pool = (this.#refineScratch ??= freshRefineValidation(
+			this.#refinements
+		))
+
+		const usingPool = !pool.active
+		const validation = usingPool
+			? pool
+			: freshRefineValidation(this.#refinements)
+
 		const previous = activeRefineValidation
-		const validation: RefineValidation = {
-			groups: this.#refinements,
-			results: new Map(),
-			replay: false,
-			occurrences: new Map()
-		}
+		if (usingPool) pool.active = true
+		validation.epoch++
+		validation.replay = false
 		activeRefineValidation = validation
 
 		try {
 			if (this.Check(value as Static<T>)) return
 
 			validation.replay = true
-			validation.occurrences.clear()
+			// Replay re-walks occurrences from zero without re-invoking
+			// refines and without wiping the recorded verdict rows.
+			validation.replayEpoch++
 			return this.Errors(value)
 		} finally {
 			activeRefineValidation = previous
+			if (usingPool) pool.active = false
 		}
 	}
 
@@ -802,6 +868,30 @@ export class TypeBoxValidator<
 	}
 
 	Check(value: Static<T>): boolean {
+		const pool = this.#refineScratch
+		if (pool?.active && this.#refinements) {
+			if (pool.checking) {
+				const previous = activeRefineValidation
+				activeRefineValidation = undefined
+				try {
+					return this.#rawCheck(value)
+				} finally {
+					activeRefineValidation = previous
+				}
+			}
+
+			pool.checking = true
+			try {
+				return this.#rawCheck(value)
+			} finally {
+				pool.checking = false
+			}
+		}
+
+		return this.#rawCheck(value)
+	}
+
+	#rawCheck(value: Static<T>): boolean {
 		if (this.reconstructedCheck) return this.reconstructedCheck(value)
 
 		return this.tb!.Check(value)
