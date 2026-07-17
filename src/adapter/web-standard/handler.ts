@@ -49,7 +49,6 @@ function handleElysiaFile(
 				set.status !== 412 &&
 				set.status !== 416
 			) {
-				headers['content-range'] = `bytes 0-${size - 1}/${size}`
 				headers['content-length'] = size
 			}
 
@@ -312,8 +311,7 @@ function mapFallback(
 		response: unknown,
 		set: Context['set'],
 		request?: Request
-	) => Response | undefined,
-	mustReturn = true
+	) => Response | undefined
 ) {
 	return (
 		response: unknown,
@@ -374,8 +372,7 @@ function mapFallback(
 			// @ts-expect-error
 			return new Response(response.value, set as ResponseInit)
 
-		if (mustReturn)
-			return new Response(response as any, set as ResponseInit)
+		return new Response(response as any, set as ResponseInit)
 	}
 }
 

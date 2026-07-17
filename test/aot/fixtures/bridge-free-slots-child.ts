@@ -1,10 +1,10 @@
 /** Runs captured scalar coercion with the TypeBox bridge deliberately unwired. */
 import { readFileSync } from 'node:fs'
 
-import { Compiled, type CapturedValidator } from '../../../src/compile/aot'
+import { type CapturedValidator } from '../../../src/compile/aot'
 import { buildFrozenRouteValidator } from '../../../src/compile/handler/frozen-validator'
 import { hasTypes } from '../../../src/type/bridge'
-import { materialise } from '../_manifest'
+import { claimManifest, materialise } from '../_manifest'
 
 // Leaf coercion imports avoid the type barrel that wires the bridge.
 import { Numeric } from '../../../src/type/elysia/numeric'
@@ -79,10 +79,10 @@ const schema = Object.defineProperty(
 	{ value: 'Object', enumerable: false }
 )
 
-Compiled.validators = materialise(payload.captured)
+const claimed = claimManifest({ validators: materialise(payload.captured) })
 
 const hook = { [payload.slot]: schema } as any
-const root = { '~config': {}, '~ext': {} } as any
+const root = { ...claimed, '~config': {}, '~ext': {} } as any
 
 const validator = buildFrozenRouteValidator(
 	hook,

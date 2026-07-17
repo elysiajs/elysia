@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import Elysia from '../../src'
-import { signCookieSync } from '../../src/cookie/utils'
-import { hasSyncHmac } from '../../src/cookie/crypto'
+import { signCookieSync, hasSyncHmac } from '../../src/cookie/crypto'
 import { t } from '../../src'
 import { InvalidCookie } from '../../src/cookie/error'
 

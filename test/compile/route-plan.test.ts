@@ -13,7 +13,9 @@ const planOf = async (
 	key: string,
 	req: Request
 ): Promise<RoutePlan> => {
-	const app = build(new Elysia({ experimental: { resumeEmit } }))
+	const app = build(
+		new Elysia({ introspect: true, experimental: { resumeEmit } })
+	)
 	await app.handle(req).catch(() => {})
 	const map = routePlans.get(app as any)
 	expect(map).toBeDefined()
@@ -23,9 +25,9 @@ const planOf = async (
 }
 
 const get = (path = '/') => new Request('http://localhost' + path)
-const kinds = (plan: RoutePlan) => plan.region.main.map((s) => s.kind)
+const kinds = (plan: RoutePlan) => plan.segments.map((s) => s.kind)
 const seg = (plan: RoutePlan, kind: string): PlanSegment =>
-	plan.region.main.find((s) => s.kind === kind)!
+	plan.segments.find((s) => s.kind === kind)!
 
 describe('route plan classification', () => {
 	it('classifies only the opaque handler as maybe on a synchronous route', async () => {
@@ -37,7 +39,7 @@ describe('route plan classification', () => {
 		const handler = seg(plan, 'handler')
 		expect(handler.asyncClass).toBe('maybe')
 
-		const nonHandler = plan.region.main.filter((s) => s.kind !== 'handler')
+		const nonHandler = plan.segments.filter((s) => s.kind !== 'handler')
 		for (const s of nonHandler) expect(s.asyncClass).toBe('sync')
 	})
 
@@ -86,7 +88,6 @@ describe('route plan classification', () => {
 		)
 		const bh = seg(plan, 'beforeHandle')
 		expect(bh.asyncClass).toBe('maybe')
-		expect(bh.mayShortCircuit).toBe(true)
 	})
 
 	it('classifies an async beforeHandle as async', async () => {
@@ -125,25 +126,6 @@ describe('route plan classification', () => {
 			'validate:headers',
 			'validate:query'
 		])
-	})
-
-	it('places every main segment in the main region; error/completion regions are empty', async () => {
-		const plan = await planOf(
-			(e) =>
-				e.get(
-					'/',
-					{
-						transform: (c: any) => {},
-						beforeHandle: () => {}
-					} as any,
-					() => 'h'
-				),
-			'GET /',
-			get()
-		)
-		for (const s of plan.region.main) expect(s.region).toBe('main')
-		expect(plan.region.error).toEqual([])
-		expect(plan.region.completion).toEqual([])
 	})
 
 	it('supports synchronous afterHandle and records it in the response tail', async () => {
@@ -199,18 +181,13 @@ describe('route plan classification', () => {
 		expect(asyncParser.unsupportedReasons).toEqual([])
 	})
 
-	it('assimilates handler results as promises', async () => {
-		const plan = await planOf((e) => e.get('/', () => 'h'), 'GET /', get())
-		expect(plan.assimilation).toBe('promise')
-	})
-
 	it('records cancellation sites in the compat channel when the route has lifecycle hooks', async () => {
 		const plan = await planOf(
 			(e) => e.get('/', { beforeHandle: () => {} } as any, () => 'h'),
 			'GET /',
 			get()
 		)
-		expect(seg(plan, 'beforeHandle').cancellationSites.compat).toBe(true)
+		expect(seg(plan, 'beforeHandle').cancellationSites).toBe(true)
 	})
 
 	it('never assigns sync to an opaque transform callable', async () => {

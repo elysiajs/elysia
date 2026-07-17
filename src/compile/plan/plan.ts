@@ -6,7 +6,6 @@ import { isAsyncFunction } from '../utils'
 import type { RouteCompileState } from '../handler/descriptor'
 import type { AnyLocalHook } from '../../types'
 
-export type Region = 'main' | 'error' | 'completion'
 export type AsyncClass = 'sync' | 'async' | 'maybe'
 export type SegmentKind =
 	| 'parse'
@@ -21,25 +20,8 @@ export type SegmentKind =
 	| 'error-hook'
 	| 'afterResponse'
 
-export interface CancellationSites {
-	/**
-	 * `compat` mode emits an abort check at the same effective site as the
-	 * legacy lane. True when the legacy lane would place its `abortCheck` after
-	 * this segment.
-	 */
-	compat: boolean
-
-	/**
-	 * `suspension` mode emits an abort check ONLY at post-await points. True when
-	 * this segment can suspend (asyncClass !== 'sync') and control resumes after
-	 * an await.
-	 */
-	suspension: boolean
-}
-
 export interface PlanSegment {
 	kind: SegmentKind
-	region: Region
 
 	link:
 		| { via: 'handler' }
@@ -49,9 +31,11 @@ export interface PlanSegment {
 		| { via: 'cookie-sign' }
 
 	asyncClass: AsyncClass
-	mayShortCircuit: boolean
-	touchesSet: boolean
-	cancellationSites: CancellationSites
+	/**
+	 * An abort check is emitted at the same effective site as the legacy lane.
+	 * True when the legacy lane would place its `abortCheck` after this segment.
+	 */
+	cancellationSites: boolean
 }
 
 export interface RoutePlan {
@@ -63,8 +47,6 @@ export interface RoutePlan {
 	// context channel needs, read straight from the descriptor (never re-derived)
 	needsQuery: boolean
 	needsHeaders: boolean
-	needsCookie: boolean
-	hasBody: boolean
 
 	// response-mode facts
 	hasSet: boolean
@@ -74,27 +56,15 @@ export interface RoutePlan {
 		hasAfterHandle: boolean
 		hasMapResponse: boolean
 		hasResponseValidator: boolean
-		/** afterResponse scheduling (sync-only in the covered set). */
-		hasAfterResponse: boolean
 		/** `true` when the covered afterResponse uses the sync `_fin` tee path. */
 		syncAfterResponse: boolean
-		/** cookie jar wiring (sync, unsigned in the covered set). */
-		needsCookie: boolean
 	}
 
-	assimilation: 'promise'
-
-	region: {
-		main: PlanSegment[]
-		error: PlanSegment[]
-		completion: PlanSegment[]
-	}
+	segments: PlanSegment[]
 
 	supported: boolean
 	unsupportedReasons: string[]
 }
-
-const noCancel = (): CancellationSites => ({ compat: false, suspension: false })
 
 export const hookArray = (value: unknown): Function[] =>
 	value ? (Array.isArray(value) ? value : [value as Function]) : []
@@ -128,31 +98,22 @@ export function planRoute(
 	if (d.hasBody)
 		main.push({
 			kind: 'parse',
-			region: 'main',
 			link: { via: 'parse' },
 			asyncClass: 'async',
-			mayShortCircuit: false,
-			touchesSet: false,
-			cancellationSites: {
-				compat: d.hasLifecycleHook,
-				suspension: true
-			}
+			cancellationSites: d.hasLifecycleHook
 		})
 
 	const transforms = hookArray(hook?.transform)
 	for (let i = 0; i < transforms.length; i++)
 		main.push({
 			kind: 'transform',
-			region: 'main',
 			link: { via: 'hook', event: 'transform', index: i },
 			asyncClass: callableClass(transforms[i]),
-			mayShortCircuit: false,
-			touchesSet: true,
-			cancellationSites: noCancel()
+			cancellationSites: false
 		})
 
 	if (transforms.length)
-		main[main.length - 1]!.cancellationSites.compat = d.hasLifecycleHook
+		main[main.length - 1]!.cancellationSites = d.hasLifecycleHook
 
 	pushValidator(main, 'body', vali?.body, d.bodyValiIsAsync)
 	pushValidator(main, 'headers', vali?.headers, d.headersValiIsAsync)
@@ -163,21 +124,17 @@ export function planRoute(
 	for (let i = 0; i < beforeHandle.length; i++) {
 		main.push({
 			kind: 'beforeHandle',
-			region: 'main',
 			link: { via: 'hook', event: 'beforeHandle', index: i },
 			asyncClass: callableClass(beforeHandle[i]),
-			mayShortCircuit: true,
-			touchesSet: true,
-			cancellationSites: noCancel()
+			cancellationSites: false
 		})
 	}
 
 	if (beforeHandle.length)
-		main[main.length - 1]!.cancellationSites.compat = d.hasLifecycleHook
+		main[main.length - 1]!.cancellationSites = d.hasLifecycleHook
 
 	main.push({
 		kind: 'handler',
-		region: 'main',
 		link: { via: 'handler' },
 		asyncClass: isHandleFunction
 			? d.handlerIsAsync
@@ -186,15 +143,8 @@ export function planRoute(
 			: d.handlerKind === 'promise'
 				? 'async'
 				: 'sync',
-		mayShortCircuit: false,
-		touchesSet: false,
-		cancellationSites: noCancel()
+		cancellationSites: false
 	})
-
-	if (d.hasLifecycleHook)
-		for (const seg of main)
-			if (seg.asyncClass !== 'sync')
-				seg.cancellationSites.suspension = true
 
 	return {
 		method: d.method,
@@ -202,24 +152,15 @@ export function planRoute(
 		handlerKind: d.handlerKind,
 		needsQuery,
 		needsHeaders,
-		needsCookie: d.needsCookie,
-		hasBody: d.hasBody,
 		hasSet,
 		responseMode: d.responseMode,
 		tail: {
 			hasAfterHandle: d.hasAfterHandle,
 			hasMapResponse: d.hasMapResponse,
 			hasResponseValidator: d.hasResponseValidator,
-			hasAfterResponse: d.hasAfterResponse,
-			syncAfterResponse: d.syncAfterResponse,
-			needsCookie: d.needsCookie
+			syncAfterResponse: d.syncAfterResponse
 		},
-		assimilation: 'promise',
-		region: {
-			main,
-			error: [],
-			completion: []
-		},
+		segments: main,
 		supported: unsupportedReasons.length === 0,
 		unsupportedReasons
 	}
@@ -235,12 +176,9 @@ function pushValidator(
 
 	main.push({
 		kind: `validate:${slot}` as SegmentKind,
-		region: 'main',
 		link: { via: 'validator', slot },
 		asyncClass: isAsync ? 'async' : 'sync',
-		mayShortCircuit: false,
-		touchesSet: false,
-		cancellationSites: noCancel()
+		cancellationSites: false
 	})
 }
 

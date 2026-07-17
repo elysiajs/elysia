@@ -29,7 +29,7 @@ import { JITProbe } from '../jit-probe'
 import { schemaMediaKind } from '../handler/jit'
 
 import type { RouteCompileState } from '../handler/descriptor'
-import { hookArray, type RoutePlan } from './plan'
+import { hookArray, type PlanSegment, type RoutePlan } from './plan'
 
 import type { AnyLocalHook, CompiledHandler } from '../../types'
 
@@ -42,10 +42,6 @@ export interface EmitInput {
 	root: AnyElysia
 }
 
-export interface EmitOptions {
-	cancellation?: 'compat' | 'suspension'
-}
-
 interface Suspend {
 	/** Flat statement invoking the callable, leaving its result in `_v`. */
 	invoke: string
@@ -53,8 +49,6 @@ interface Suspend {
 	unconditional: boolean
 	/** Short-circuit guard prefix applied to invoke/bail (e.g. `if(_r===undefined)`). */
 	guard: string
-	/** Post-await abort check (suspension mode), rendered in the resume case. */
-	postAwaitAbort: string
 	/** Fast-lane statement(s) run with the settled value in `_v`. */
 	settle: string
 	/** Resume-lane await statement; leaves the awaited value in `_v`. */
@@ -69,12 +63,8 @@ interface Step {
 	suspend?: Suspend
 }
 
-export function emitResume(
-	input: EmitInput,
-	options: EmitOptions = {}
-): CompiledHandler {
+export function emitResume(input: EmitInput): CompiledHandler {
 	const { plan, state, hook, handler, adapter, root } = input
-	const cancellation = options.cancellation ?? 'compat'
 
 	const { vali, cookieConfig } = state
 	const d = state.descriptor
@@ -123,14 +113,7 @@ export function emitResume(
 	}
 
 	const compatAbortFor = (compat: boolean) =>
-		cancellation === 'compat' && compat && hasLifecycleHook
-			? abortCheck()
-			: ''
-
-	const postAwaitAbortFor = (suspension: boolean) =>
-		cancellation === 'suspension' && suspension && hasLifecycleHook
-			? abortCheck()
-			: ''
+		compat && hasLifecycleHook ? abortCheck() : ''
 
 	const hasHeaders = plan.needsHeaders
 	const t = plan.tail
@@ -167,7 +150,7 @@ export function emitResume(
 		prologue += `c.headers=${hasHeaderShorthand ? 'c.request.headers.toJSON()' : 'Object.fromEntries(c.request.headers)'}\n`
 
 	const steps: Step[] = []
-	const segments = plan.region.main
+	const segments = plan.segments
 	const hasBefore = segments.some((s) => s.kind === 'beforeHandle')
 	const scGuard = 'if(_r===undefined)'
 
@@ -207,7 +190,6 @@ export function emitResume(
 						invoke: `${g}_v=va.cookie.From(_ck,'cookie',true)\n`,
 						unconditional: !cookieIsOptional,
 						guard: g.trim(),
-						postAwaitAbort: '',
 						settle: `${g}_ck=_v\n`,
 						resumeAwait: `_v=await pending\n`,
 						resumeSettle: `_ck=_v\n`
@@ -227,10 +209,7 @@ export function emitResume(
 	}
 
 	for (const seg of segments) {
-		const compatAbort = compatAbortFor(seg.cancellationSites.compat)
-		const postAwaitAbort = postAwaitAbortFor(
-			seg.cancellationSites.suspension
-		)
+		const compatAbort = compatAbortFor(seg.cancellationSites)
 
 		if (seg.kind === 'parse') {
 			const parseCode = emitBodyParse(
@@ -249,7 +228,6 @@ export function emitResume(
 					invoke: `_v=(async()=>{\n${parseCode}})()\n`,
 					unconditional: true,
 					guard: '',
-					postAwaitAbort,
 					settle: compatAbort,
 					resumeAwait: wrapAwait,
 					resumeSettle: compatAbort
@@ -267,7 +245,6 @@ export function emitResume(
 					invoke: `_v=${a}[${idx}](c)\n`,
 					unconditional: seg.asyncClass === 'async',
 					guard: '',
-					postAwaitAbort,
 					settle: compatAbort,
 					resumeAwait: `await pending\n`,
 					resumeSettle: compatAbort
@@ -286,7 +263,6 @@ export function emitResume(
 						invoke: `_v=va.${slot}.From(c.${slot},'${slot}',true)\n`,
 						unconditional: true,
 						guard: '',
-						postAwaitAbort,
 						settle: `c.${slot}=_v\n` + compatAbort,
 						resumeAwait: `_v=await pending\n`,
 						resumeSettle: `c.${slot}=_v\n` + compatAbort
@@ -343,7 +319,6 @@ export function emitResume(
 					invoke: `${scGuard} _v=${a}[${idx}](c)\n`,
 					unconditional: seg.asyncClass === 'async',
 					guard: scGuard,
-					postAwaitAbort,
 					settle,
 					resumeAwait: `_v=await pending\n`,
 					resumeSettle: settle
@@ -359,8 +334,7 @@ export function emitResume(
 				hasBefore,
 				scGuard,
 				handlerKind: plan.handlerKind,
-				link,
-				postAwaitAbort
+				link
 			})
 		}
 	}
@@ -448,12 +422,7 @@ export function emitResume(
 		if (!step.suspend) continue
 
 		const s = step.suspend
-		cases.push(
-			s.resumeAwait +
-				s.postAwaitAbort +
-				s.resumeSettle +
-				renderFrom(i + 1)
-		)
+		cases.push(s.resumeAwait + s.resumeSettle + renderFrom(i + 1))
 	}
 
 	// assemble
@@ -502,15 +471,10 @@ interface HandlerCtx {
 	scGuard: string
 	handlerKind: RoutePlan['handlerKind']
 	link: (v: unknown, key: string) => string
-	postAwaitAbort: string
 }
 
-function emitHandler(
-	seg: RoutePlan['region']['main'][number],
-	steps: Step[],
-	ctx: HandlerCtx
-): void {
-	const { hasBefore, scGuard, handlerKind, link, postAwaitAbort } = ctx
+function emitHandler(seg: PlanSegment, steps: Step[], ctx: HandlerCtx): void {
+	const { hasBefore, scGuard, handlerKind, link } = ctx
 	const g = hasBefore ? scGuard : ''
 
 	if (handlerKind === 'function') {
@@ -520,7 +484,6 @@ function emitHandler(
 					invoke: `${g ? `${g} ` : ''}_v=h(c)\n`,
 					unconditional: true,
 					guard: g,
-					postAwaitAbort,
 					settle: '',
 					resumeAwait: `_v=await pending\n`,
 					resumeSettle: `${g ? `${g} ` : ''}_r=_v\n`
@@ -536,7 +499,6 @@ function emitHandler(
 				invoke: `${g ? `${g} ` : ''}_v=h(c)\n`,
 				unconditional: false,
 				guard: g,
-				postAwaitAbort,
 				settle: `${g ? `${g} ` : ''}_r=_v\n`,
 				resumeAwait: `_v=fe(await pending)\n`,
 				resumeSettle: `${g ? `${g} ` : ''}_r=_v\n`
@@ -560,7 +522,6 @@ function emitHandler(
 				invoke: `${g ? `${g} ` : ''}_v=h.then(cr)\n`,
 				unconditional: true,
 				guard: g,
-				postAwaitAbort,
 				settle: '',
 				resumeAwait: `_v=await pending\n`,
 				resumeSettle: `${g ? `${g} ` : ''}_r=_v\n`
@@ -585,32 +546,17 @@ function emitChainHook(
 		const fn = hooks[i]!
 		const at = `[${i}]`
 		const guard = i > 0 ? `if(!${abortExpr}&&tmp===undefined) ` : ''
-		const isAsyncFn = isAsyncFunction(fn)
 
-		if (isAsyncFn)
-			steps.push({
-				suspend: {
-					invoke: `${guard}_v=${prefix}${at}(c)\n`,
-					unconditional: true,
-					guard: guard.trim(),
-					postAwaitAbort: '',
-					settle: `${guard}tmp=_v\n`,
-					resumeAwait: `_v=await pending\n`,
-					resumeSettle: `${guard}tmp=_v\n`
-				}
-			})
-		else
-			steps.push({
-				suspend: {
-					invoke: `${guard}_v=${prefix}${at}(c)\n`,
-					unconditional: false,
-					guard: guard.trim(),
-					postAwaitAbort: '',
-					settle: `${guard}tmp=_v\n`,
-					resumeAwait: `_v=await pending\n`,
-					resumeSettle: `${guard}tmp=_v\n`
-				}
-			})
+		steps.push({
+			suspend: {
+				invoke: `${guard}_v=${prefix}${at}(c)\n`,
+				unconditional: isAsyncFunction(fn),
+				guard: guard.trim(),
+				settle: `${guard}tmp=_v\n`,
+				resumeAwait: `_v=await pending\n`,
+				resumeSettle: `${guard}tmp=_v\n`
+			}
+		})
 	}
 
 	steps.push({
@@ -662,7 +608,6 @@ function emitResponseValidation(
 				`else if(_rvt==='b')_v=_rvr.mayReturnPromise?_rvr.From(_r,'response',true):_rvr.EncodeFrom(_r,'response')\n`,
 			unconditional: false,
 			guard: `if(_rvt) `,
-			postAwaitAbort: '',
 			settle:
 				`if(_rvt==='s')_r.response=_v\nelse if(_rvt==='b')_r=_v\n` +
 				abortCheck,

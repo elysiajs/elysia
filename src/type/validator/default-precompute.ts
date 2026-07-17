@@ -661,114 +661,33 @@ function buildMergeSource(schema: any) {
 	return `(function(){${helpers.join(';')};return ${root}})()`
 }
 
-function emptyContainers(node: any, depth: number): unknown {
-	if (depth <= 0 || !node || typeof node !== 'object') return
-	const kind = node['~kind']
-
-	if (kind === 'Object' || node.type === 'object') {
-		const out: Record<string, unknown> = nullObject()
-
-		const props = node.properties ?? nullObject()
-		for (const key in props)
-			if (Object.hasOwn(props, key)) {
-				const child = emptyContainers(props[key], depth - 1)
-				if (child !== undefined) out[key] = child
-			}
-		return out
-	}
-
-	if (
-		(kind === 'Array' || node.type === 'array') &&
-		node.items &&
-		!Array.isArray(node.items)
-	) {
-		const element = emptyContainers(node.items, depth - 1)
-		return element === undefined ? [] : [element]
-	}
+// Build-time differential probes (empty containers, sentinel fills) live in
+// build-only `src/compile/aot-capture.ts`
+export interface DefaultProbeImpl {
+	validateMergeSource(schema: TSchema, source: string): boolean
+	validateObjectDefault(
+		schema: TSchema,
+		pod: Record<string, unknown>
+	): boolean
 }
 
-// Build-time probes for `validateMergeSource`: empty containers, a fully-nested
-// fill, and a present sentinel at each top-level slot (passthrough must not be
-// clobbered by a default).
-function* mergeProbes(schema: any): Generator<unknown> {
-	yield {}
-	yield []
+let probeImpl: DefaultProbeImpl | undefined
 
-	const filled = emptyContainers(schema, 6)
-	if (filled !== undefined) yield filled
-
-	const kind = schema['~kind']
-	if (kind === 'Object' || schema.type === 'object') {
-		const props = schema.properties ?? nullObject()
-		for (const key in props)
-			if (Object.hasOwn(props, key)) {
-				yield { [key]: PROBE_SENTINEL }
-				const child = emptyContainers(props[key], 6)
-				if (child !== undefined) yield { [key]: child }
-			}
-	} else if (
-		(kind === 'Array' || schema.type === 'array') &&
-		schema.items &&
-		!Array.isArray(schema.items)
-	) {
-		yield [PROBE_SENTINEL]
-		const element = emptyContainers(schema.items, 6)
-		if (element !== undefined) yield [element, element]
-	}
+export function setDefaultProbeImpl(impl: DefaultProbeImpl) {
+	probeImpl = impl
 }
 
-function validateMergeSource(schema: TSchema, source: string): boolean {
-	const merger = fromSource<(value: unknown) => unknown>(source)
-	if (!merger) return false
+function probe() {
+	if (!probeImpl)
+		throw new Error(
+			'[Elysia] validating a preallocatable default requires the ' +
+				'build-only AOT capture module (src/compile/aot-capture)'
+		)
 
-	for (const probe of mergeProbes(schema)) {
-		// the runtime only invokes the merger for present, non-null object/array
-		if (probe === null || typeof probe !== 'object') continue
-
-		let expected: unknown
-		try {
-			expected = Default(schema, structuredClone(probe))
-		} catch {
-			return false
-		}
-
-		let actual: unknown
-		try {
-			actual = merger(structuredClone(probe))
-		} catch {
-			return false
-		}
-
-		if (canonical(expected) !== canonical(actual)) return false
-	}
-
-	return true
+	return probeImpl
 }
 
-const PROBE_SENTINEL = '__elysia_default_probe__'
-
-function* defaultProbes(
-	pod: Record<string, unknown> | undefined
-): Generator<Record<string, unknown>> {
-	if (!pod) return
-	yield {}
-
-	for (const k in pod) {
-		yield { [k]: PROBE_SENTINEL }
-
-		const d = pod[k]
-		if (d && typeof d === 'object' && !Array.isArray(d)) {
-			yield { [k]: {} }
-
-			for (const k2 in d as Record<string, unknown>) {
-				yield { [k]: { [k2]: PROBE_SENTINEL } }
-				break
-			}
-		}
-	}
-}
-
-function canonical(v: unknown): string {
+export function canonical(v: unknown): string {
 	if (v === undefined) return '\0u'
 	if (Object.is(v, -0)) return '-0'
 	if (v === null || typeof v !== 'object') return JSON.stringify(v) ?? '\0u'
@@ -812,7 +731,9 @@ export function verifyPreallocatableDefault(schema: TSchema, validate = true) {
 		rootIsObject &&
 		podRaw &&
 		typeof podRaw === 'object' &&
-		!Array.isArray(podRaw)
+		!Array.isArray(podRaw) &&
+		// empty pod = no present-object defaults → passthrough, not a no-op copy
+		Object.keys(podRaw).length !== 0
 			? (podRaw as Record<string, unknown>)
 			: undefined
 
@@ -827,26 +748,19 @@ export function verifyPreallocatableDefault(schema: TSchema, validate = true) {
 	const nullDefault = isPrecomputeSafe(schema as any)
 
 	let ms = buildMergeSource(schema)
-	if (ms !== undefined && validate && !validateMergeSource(schema, ms))
+	if (ms !== undefined && validate && !probe().validateMergeSource(schema, ms))
 		ms = undefined
 
 	if (!nullDefault && ms === undefined) {
 		if (!rootIsObject) return
 		if (!structuralPreallocatable(schema as any)) return
 
-		if (validate)
-			for (const probe of defaultProbes(pod)) {
-				let expected: unknown
-
-				try {
-					expected = Default(schema, structuredClone(probe))
-				} catch {
-					return
-				}
-
-				const actual = applyPrecomputed(pod!, structuredClone(probe))
-				if (canonical(expected) !== canonical(actual)) return
-			}
+		if (
+			validate &&
+			pod !== undefined &&
+			!probe().validateObjectDefault(schema, pod)
+		)
+			return
 	}
 
 	return { pd, pn: nullDefault, pod, ms }

@@ -1,14 +1,21 @@
 // Build-time only implementation
 import { Compile, Build } from 'typebox/schema'
 import type { TSchema } from 'typebox/type'
+import { Default } from 'typebox/value'
 import createMirror from 'exact-mirror'
 
 import {
+	aotActivationError,
 	Capture,
+	captureImpl,
+	CompilerState,
 	setCaptureImpl,
 	type CaptureImpl,
-	type CheckBuildResult,
+	type CapturedHandler,
 	type CapturedValidator,
+	type CheckBuildResult,
+	type CompiledSnapshot,
+	type CompilerSession,
 	type ValidatorSlot
 } from './aot'
 
@@ -17,21 +24,161 @@ import { buildFrozenCheck } from '../type/validator/frozen-check'
 import { captureCustomErrors } from '../type/validator/custom-error'
 import { captureStringCodecEntries } from '../type/validator/string-codec-aot'
 import {
+	applyPrecomputed,
 	buildDefaultClonerSource,
 	buildObjectDefaultMergeSource,
+	canonical,
+	createMergerFromSource,
+	setDefaultProbeImpl,
 	verifyPreallocatableDefault
 } from '../type/validator/default-precompute'
 import {
 	isCapturedBridgeFree,
 	isCompactDiagnosable
 } from './handler/frozen-validator'
-import { isAsyncPredicate } from '../type/validator/index'
+import { isAsyncPredicate } from '../type/elysia/file-type'
+import { nullObject } from '../utils'
+import { collectExternals } from './aot-reconstruct'
 import {
 	captureMirrorCodecs,
 	captureMirrorUnions,
-	collectExternals,
 	installReconstructImpl
-} from './aot-reconstruct'
+} from './aot-emit'
+
+// ─── capture-only default-precompute probes ────────────────────────────────
+// Moved out of src/type/validator/default-precompute.ts (runtime graph) and
+// injected back via `setDefaultProbeImpl`; only `validate=true` (capturing)
+// paths ever reach them.
+
+function emptyContainers(node: any, depth: number): unknown {
+	if (depth <= 0 || !node || typeof node !== 'object') return
+	const kind = node['~kind']
+
+	if (kind === 'Object' || node.type === 'object') {
+		const out: Record<string, unknown> = nullObject()
+
+		const props = node.properties ?? nullObject()
+		for (const key in props)
+			if (Object.hasOwn(props, key)) {
+				const child = emptyContainers(props[key], depth - 1)
+				if (child !== undefined) out[key] = child
+			}
+		return out
+	}
+
+	if (
+		(kind === 'Array' || node.type === 'array') &&
+		node.items &&
+		!Array.isArray(node.items)
+	) {
+		const element = emptyContainers(node.items, depth - 1)
+		return element === undefined ? [] : [element]
+	}
+}
+
+// Build-time probes for `validateMergeSource`: empty containers, a fully-nested
+// fill, and a present sentinel at each top-level slot (passthrough must not be
+// clobbered by a default).
+function* mergeProbes(schema: any): Generator<unknown> {
+	yield {}
+	yield []
+
+	const filled = emptyContainers(schema, 6)
+	if (filled !== undefined) yield filled
+
+	const kind = schema['~kind']
+	if (kind === 'Object' || schema.type === 'object') {
+		const props = schema.properties ?? nullObject()
+		for (const key in props)
+			if (Object.hasOwn(props, key)) {
+				yield { [key]: PROBE_SENTINEL }
+				const child = emptyContainers(props[key], 6)
+				if (child !== undefined) yield { [key]: child }
+			}
+	} else if (
+		(kind === 'Array' || schema.type === 'array') &&
+		schema.items &&
+		!Array.isArray(schema.items)
+	) {
+		yield [PROBE_SENTINEL]
+		const element = emptyContainers(schema.items, 6)
+		if (element !== undefined) yield [element, element]
+	}
+}
+
+function validateMergeSource(schema: TSchema, source: string): boolean {
+	const merger = createMergerFromSource(source)
+	if (!merger) return false
+
+	for (const probe of mergeProbes(schema)) {
+		// the runtime only invokes the merger for present, non-null object/array
+		if (probe === null || typeof probe !== 'object') continue
+
+		let expected: unknown
+		try {
+			expected = Default(schema, structuredClone(probe))
+		} catch {
+			return false
+		}
+
+		let actual: unknown
+		try {
+			actual = merger(structuredClone(probe))
+		} catch {
+			return false
+		}
+
+		if (canonical(expected) !== canonical(actual)) return false
+	}
+
+	return true
+}
+
+const PROBE_SENTINEL = '__elysia_default_probe__'
+
+function* defaultProbes(
+	pod: Record<string, unknown> | undefined
+): Generator<Record<string, unknown>> {
+	if (!pod) return
+	yield {}
+
+	for (const k in pod) {
+		yield { [k]: PROBE_SENTINEL }
+
+		const d = pod[k]
+		if (d && typeof d === 'object' && !Array.isArray(d)) {
+			yield { [k]: {} }
+
+			for (const k2 in d as Record<string, unknown>) {
+				yield { [k]: { [k2]: PROBE_SENTINEL } }
+				break
+			}
+		}
+	}
+}
+
+function validateObjectDefault(
+	schema: TSchema,
+	pod: Record<string, unknown>
+): boolean {
+	for (const probe of defaultProbes(pod)) {
+		let expected: unknown
+		try {
+			expected = Default(schema, structuredClone(probe))
+		} catch {
+			return false
+		}
+
+		const actual = applyPrecomputed(pod, structuredClone(probe))
+		if (canonical(expected) !== canonical(actual)) return false
+	}
+
+	return true
+}
+
+setDefaultProbeImpl({ validateMergeSource, validateObjectDefault })
+
+// ───────────────────────────────────────────────────────────────────────────
 
 function externalsShape(schema: unknown) {
 	let out = ''
@@ -314,6 +461,102 @@ function captureBridgeFree(
 		if (bridgeFree && !isCompactDiagnosable(coerced))
 			warnCompactErrorLoss(aot, slot)
 	}
+}
+
+// The rest are for build/test-only
+
+// @internal test isolation
+export function beginValidatorCapture() {
+	if (captureImpl === undefined) throw aotActivationError
+
+	const active = CompilerState.session
+	if (active?.capture !== undefined) {
+		if (active.explicitCapture)
+			throw new Error(
+				'[elysia-aot]: A capture session is already active.'
+			)
+
+		active.explicitCapture = true
+		return
+	}
+
+	if (active && !active.external)
+		throw new Error('[elysia-aot]: A compiler session is already active.')
+
+	const session =
+		active ?? (CompilerState.session = CompilerState.newSession())
+	session.external = true
+	session.explicitCapture = true
+	session.capture = new Map()
+}
+
+export function abortCapture() {
+	const session = CompilerState.session
+	if (!session?.external) return
+
+	session.capture = undefined
+	session.handlerCapture = undefined
+	session.sucroseCache.clear()
+	CompilerState.session = undefined
+}
+
+function endCaptureSession(session: CompilerSession) {
+	if (
+		session.external &&
+		!session.app &&
+		!session.capture &&
+		!session.handlerCapture
+	) {
+		session.sucroseCache.clear()
+		CompilerState.session = undefined
+	}
+}
+
+// @internal test isolation
+export function endValidatorCapture() {
+	const session = CompilerState.session
+	const captured = session?.capture ? [...session.capture.values()] : []
+	if (session) {
+		session.capture = undefined
+		endCaptureSession(session)
+	}
+
+	return captured
+}
+
+export function endHandlerCapture(): CapturedHandler[] {
+	const session = CompilerState.session
+	const captured = session?.handlerCapture
+		? [...session.handlerCapture.values()]
+		: []
+
+	if (session) {
+		session.handlerCapture = undefined
+		endCaptureSession(session)
+	}
+
+	return captured
+}
+
+/** @internal deterministic session/capture assertions. */
+export const getCompilerSessionDiagnostics = () => {
+	const session = CompilerState.session
+
+	return {
+		active: session !== undefined,
+		appAttached: session?.app !== undefined,
+		validators: session?.capture?.size ?? 0,
+		handlers: session?.handlerCapture?.size ?? 0,
+		sucrose: session?.sucroseCache.size ?? 0
+	}
+}
+
+/** @internal preserve registry around in-process AOT analysis */
+export const snapshotCompiled = (): CompiledSnapshot => CompilerState.registry
+
+/** @internal restore registry after in-process AOT analysis */
+export function restoreCompiled(snapshot: CompiledSnapshot) {
+	CompilerState.registry = snapshot
 }
 
 const impl: CaptureImpl = {

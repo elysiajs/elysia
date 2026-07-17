@@ -51,21 +51,11 @@ describe('route descriptor', () => {
 			queryValiIsAsync: false,
 			cookieValiIsAsync: false,
 			responseValiAsync: false,
-			needsCookie: false,
 			hasCookieSign: false,
 			syncCookieSign: false,
 			asyncCookieSign: false,
 			lazyCookieVerify: false,
-			pureLiteral: true,
-			inferenceBody: false,
-			inferenceQuery: false,
-			inferenceHeaders: false,
-			inferenceCookie: false,
 			inferenceSet: false,
-			inferenceServer: false,
-			inferenceRoute: false,
-			inferenceUrl: false,
-			inferencePath: false,
 			handlerIsAsync: false,
 			callHandlerSyncOnAsync: false,
 			syncErrorHook: false,
@@ -82,8 +72,7 @@ describe('route descriptor', () => {
 			handlerKind: 'function',
 			async: false,
 			handlerIsAsync: false,
-			hasLifecycleHook: false,
-			pureLiteral: true
+			hasLifecycleHook: false
 		})
 	})
 
@@ -112,9 +101,7 @@ describe('route descriptor', () => {
 		expect(descriptor).toMatchObject({
 			hasBeforeHandle: true,
 			hasLifecycleHook: true,
-			async: false,
-			// a request-dependent lifecycle hook disqualifies native-static
-			pureLiteral: false
+			async: false
 		})
 	})
 
@@ -158,8 +145,7 @@ describe('route descriptor', () => {
 			hasBody: true,
 			// body reading is async → the route is async
 			async: true,
-			bodyValiIsAsync: false,
-			inferenceBody: true
+			bodyValiIsAsync: false
 		})
 	})
 
@@ -175,9 +161,7 @@ describe('route descriptor', () => {
 		expect(descriptor).toMatchObject({
 			hasBody: false,
 			async: false,
-			queryValiIsAsync: false,
-			// the handler destructures `query`
-			inferenceQuery: true
+			queryValiIsAsync: false
 		})
 	})
 
@@ -197,9 +181,7 @@ describe('route descriptor', () => {
 		)
 
 		expect(descriptor).toMatchObject({
-			needsCookie: true,
-			hasCookieSign: false,
-			inferenceCookie: true
+			hasCookieSign: false
 		})
 	})
 
@@ -224,7 +206,6 @@ describe('route descriptor', () => {
 		)
 
 		expect(descriptor).toMatchObject({
-			needsCookie: true,
 			hasCookieSign: true,
 			// node/bun expose a sync HMAC, so signing stays on the sync path
 			syncCookieSign: true,
@@ -243,8 +224,7 @@ describe('route descriptor', () => {
 
 		expect(descriptor).toMatchObject({
 			hasTrace: true,
-			traceCount: 1,
-			pureLiteral: false
+			traceCount: 1
 		})
 	})
 
@@ -324,8 +304,7 @@ describe('route descriptor', () => {
 			handlerKind: 'function',
 			// the macro expanded into a beforeHandle
 			hasBeforeHandle: true,
-			hasLifecycleHook: true,
-			pureLiteral: false
+			hasLifecycleHook: true
 		})
 	})
 

@@ -145,7 +145,6 @@ import type {
 	ScopedHookReturn,
 	ScopedMapDeriveReturn,
 	GuardHookSingleton,
-	LazyComposeEntry,
 	StaticMapAliases
 } from './types'
 import type { ElysiaStatus } from './error'
@@ -220,12 +219,7 @@ export class Elysia<
 	#cachedHistory?: readonly HistoryEntry[]
 	server?: Server
 
-	#lazyPlan?: LazyComposeEntry[]
-	#lazyPlanBase?: number
-	#flushingLazyPlan?: boolean
-
 	get history(): readonly HistoryEntry[] {
-		if (this.#lazyPlan) this.#flushLazyPlan()
 		if (this.#cachedHistory) return this.#cachedHistory
 		if (!this.#declaredRoutes?.length) return emptyHistory
 
@@ -250,7 +244,6 @@ export class Elysia<
 	}
 
 	get ['~routes'](): readonly InternalRoute[] {
-		if (this.#lazyPlan) this.#flushLazyPlan()
 		if (!this.#declaredRoutes?.length) return []
 
 		const routes = this.#declaredRoutes
@@ -335,7 +328,6 @@ export class Elysia<
 	}
 
 	get routes(): PublicRoute[] {
-		if (this.#lazyPlan) this.#flushLazyPlan()
 		if (!this.#declaredRoutes?.length) return []
 
 		if (this.#cachedRoutes) return this.#cachedRoutes
@@ -4220,11 +4212,6 @@ export class Elysia<
 			}
 
 			if (result && typeof (result as any).then === 'function') {
-				if (this.#useLazyCompose)
-					throw new Error(
-						'[Elysia] experimental.lazyCompose does not support a functional `use` that returns a Promise (async plugin).'
-					)
-
 				const beforeMacro = new Map(
 					Object.entries(this['~ext']?.macro ?? nullObject())
 				)
@@ -4247,14 +4234,7 @@ export class Elysia<
 			return this
 		}
 
-		if (typeof app.then === 'function') {
-			if (this.#useLazyCompose)
-				throw new Error(
-					'[Elysia] experimental.lazyCompose does not support `.use(Promise)`. Remove the flag for this instance or await the plugin before `.use`.'
-				)
-
-			return this.#useAsync(app)
-		}
+		if (typeof app.then === 'function') return this.#useAsync(app)
 
 		if (Array.isArray(app)) {
 			for (const plugin of app) this.use(plugin)
@@ -4271,13 +4251,7 @@ export class Elysia<
 			return this.use(app.default)
 
 		if (app === this) return this
-		if (app.pending) {
-			if (this.#useLazyCompose)
-				throw new Error(
-					'[Elysia] experimental.lazyCompose does not support a pending (async) plugin. Remove the flag for this instance or await `plugin.modules` before `.use`.'
-				)
-			return this.#useAsync(app.modules.then(() => app))
-		}
+		if (app.pending) return this.#useAsync(app.modules.then(() => app))
 
 		this.#use(app)
 
@@ -4349,31 +4323,10 @@ export class Elysia<
 
 		if (app['~hasTrace']) this['~hasTrace'] = true
 
-		if (app.#declaredRoutes?.length || app.#lazyPlan) {
+		if (app.#declaredRoutes?.length) {
 			if (app['~hasWS']) this['~hasWS'] = true
 
-			if (this.#useLazyCompose) {
-				if (!this.#lazyPlan) {
-					this.#lazyPlan = []
-					this.#lazyPlanBase = this.#declaredRoutes?.length ?? 0
-				}
-
-				this.#lazyPlan.push({
-					kind: 'use',
-					child: app,
-					preChain: this['~hookChain'],
-					childBaseLen: app.#lazyPlan
-						? (app.#lazyPlanBase ?? 0)
-						: (app.#declaredRoutes?.length ?? 0),
-					childPlan: app.#lazyPlan,
-					childPlanLen: app.#lazyPlan?.length ?? 0,
-					source: name
-				})
-			} else {
-				if (app.#lazyPlan) app.#flushLazyPlan()
-				if (app.#declaredRoutes?.length)
-					this.#emitChildRoutes(app, this['~hookChain'], name)
-			}
+			this.#emitChildRoutes(app, this['~hookChain'], name)
 		}
 
 		if (app['~scopeChildren']) {
@@ -4628,14 +4581,6 @@ export class Elysia<
 		}
 	}
 
-	get #useLazyCompose() {
-		return (
-			(this['~config'] as any)?.experimental?.lazyCompose === true &&
-			!Capture.isCapturing() &&
-			!Capture.isAotBuildEnv()
-		)
-	}
-
 	#emitChildRoutes(
 		app: AnyElysia,
 		preChain: ChainNode | undefined,
@@ -4712,140 +4657,6 @@ export class Elysia<
 					] as unknown as InternalRoute),
 			source
 		)
-	}
-
-	#emitLazyRoute(
-		route: InternalRoute,
-		owner: AnyElysia,
-		macroScope: AnyElysia | undefined,
-		accPrefix: string | undefined,
-		over: ChainNode | undefined,
-		source: string | undefined
-	) {
-		const childChain = route[6]
-		let inheritedChain: ChainNode | undefined
-		if (childChain === undefined) inheritedChain = over
-		else if (over === undefined) inheritedChain = childChain
-		else inheritedChain = { combine: childChain, over }
-
-		this.#emitRoute(
-			route,
-			owner,
-			macroScope,
-			accPrefix,
-			inheritedChain,
-			source
-		)
-	}
-
-	#emitLazyNode(
-		node: AnyElysia,
-		usingNode: AnyElysia,
-		accPrefix: string | undefined,
-		over: ChainNode | undefined,
-		macroScope: AnyElysia | undefined,
-		baseLen: number,
-		plan: LazyComposeEntry[] | undefined,
-		planLen: number,
-		source: string | undefined
-	) {
-		if (usingNode['~scopeChild']) macroScope = usingNode
-
-		const declared = node.#declaredRoutes
-		if (declared)
-			for (let i = 0; i < baseLen && i < declared.length; i++)
-				this.#emitLazyRoute(
-					declared[i],
-					node,
-					macroScope,
-					accPrefix,
-					over,
-					source
-				)
-
-		if (!plan) return
-
-		const childAccPrefix = node['~Prefix']
-			? accPrefix
-				? joinPath(accPrefix, node['~Prefix'])
-				: node['~Prefix']
-			: accPrefix
-
-		for (let i = 0; i < planLen && i < plan.length; i++) {
-			const entry = plan[i]
-			if (entry.kind === 'route') {
-				this.#emitLazyRoute(
-					entry.route,
-					node,
-					macroScope,
-					accPrefix,
-					over,
-					entry.source
-				)
-				continue
-			}
-
-			// Thread this use-edge's use-time chain snapshot as the new `over`.
-			const edgeOver =
-				entry.preChain === undefined
-					? over
-					: over === undefined
-						? entry.preChain
-						: { combine: entry.preChain, over }
-
-			this.#emitLazyNode(
-				entry.child,
-				node,
-				childAccPrefix,
-				edgeOver,
-				macroScope,
-				entry.childBaseLen,
-				entry.childPlan,
-				entry.childPlanLen,
-				entry.source
-			)
-		}
-	}
-
-	#flushLazyPlan() {
-		const plan = this.#lazyPlan
-		if (!plan) return
-
-		if (this.#flushingLazyPlan)
-			throw new Error(
-				'[Elysia] experimental.lazyCompose, cyclic plugin references are unsupported under the flag'
-			)
-
-		this.#flushingLazyPlan = true
-		this.#lazyPlan = undefined
-		this.#lazyPlanBase = 0
-
-		try {
-			const childAccPrefix = this['~Prefix']
-			for (let i = 0; i < plan.length; i++) {
-				const entry = plan[i]
-				if (entry.kind === 'route') {
-					this.#registerRoute(entry.route, entry.source)
-					continue
-				}
-
-				const edgeOver = entry.preChain
-
-				this.#emitLazyNode(
-					entry.child,
-					this as unknown as AnyElysia,
-					childAccPrefix,
-					edgeOver,
-					undefined,
-					entry.childBaseLen,
-					entry.childPlan,
-					entry.childPlanLen,
-					entry.source
-				)
-			}
-		} finally {
-			this.#flushingLazyPlan = false
-		}
 	}
 
 	#compactRouteOwner(app: AnyElysia, route: InternalRoute): AnyElysia {
@@ -5010,17 +4821,6 @@ export class Elysia<
 
 	#registerRoute(route: InternalRoute, source?: string) {
 		this.#assertMutable('route')
-
-		if (this.#lazyPlan) {
-			this.#lazyPlan.push({ kind: 'route', route, source })
-			this.#cachedHistory = undefined
-			this.#cachedRoutes = undefined
-			this.#compiled = undefined
-			this.#fetchFn = undefined
-			this.#routerBuilt = false
-
-			return
-		}
 
 		const routes = (this.#declaredRoutes ??= [])
 		const sequence = routes.length
@@ -6955,7 +6755,6 @@ export class Elysia<
 
 	#routerBuilt = false
 	#buildRouter(seal = false) {
-		if (this.#lazyPlan) this.#flushLazyPlan()
 		if (this.#routerBuilt) {
 			if (seal && this['~generation'] === undefined)
 				this.#publishGeneration()

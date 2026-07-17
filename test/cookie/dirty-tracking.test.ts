@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test'
 import { Elysia, t } from '../../src'
-import { signCookie } from '../../src/cookie/utils'
+import { signCookie } from '../../src/cookie/crypto'
 
 const jsonCookie = (name: string, value: unknown) =>
 	`${name}=${encodeURIComponent(JSON.stringify(value))}`

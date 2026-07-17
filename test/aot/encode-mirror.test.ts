@@ -3,13 +3,12 @@ import { describe, it, expect, afterEach } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
 import { TypeBoxValidator } from '../../src/type/validator'
+import { Compiled, type ValidatorManifest } from '../../src/compile/aot'
 import {
-	Compiled,
 	beginValidatorCapture,
-	endValidatorCapture,
-	type ValidatorManifest
-} from '../../src/compile/aot'
-import { materialise } from './_manifest'
+	endValidatorCapture
+} from '../../src/compile/aot-capture'
+import { claimManifest, materialise, registerManifest } from './_manifest'
 import { req } from '../utils'
 
 /** Frozen codec responses encode and clean without interpreted TypeBox calls. */
@@ -50,10 +49,10 @@ describe('frozen response encoding', () => {
 		const jit = new TypeBoxValidator(make()) as any
 
 		Validator.clear()
-		Compiled.validators = m
 		const frozen = Validator.create(make() as any, {
 			aot: { method: 'GET', path: '/em' },
-			slot: 'response:200' as any
+			slot: 'response:200' as any,
+			app: claimManifest({ validators: m })
 		}) as any
 
 		expect(frozen.tb).toBeUndefined()
@@ -83,10 +82,10 @@ describe('frozen response encoding', () => {
 		}) as any
 
 		Validator.clear()
-		Compiled.validators = m
 		const frozen = Validator.create(make() as any, {
 			aot: { method: 'GET', path: '/emlive' },
-			slot: 'response:200' as any
+			slot: 'response:200' as any,
+			app: claimManifest({ validators: m })
 		}) as any
 
 		frozen.EncodeFrom(
@@ -103,10 +102,10 @@ describe('frozen response encoding', () => {
 
 		const m = captureResponse(make(), '/eq')
 		Validator.clear()
-		Compiled.validators = m
 		const frozen = Validator.create(make() as any, {
 			aot: { method: 'GET', path: '/eq' },
-			slot: 'response:200' as any
+			slot: 'response:200' as any,
+			app: claimManifest({ validators: m })
 		}) as any
 
 		const dirty = {
@@ -139,7 +138,7 @@ describe('frozen response encoding', () => {
 		expect(m.GET?.['/u']?.['response:200']?.em).toBeDefined()
 
 		Validator.clear()
-		Compiled.validators = m
+		registerManifest({ validators: m })
 		const app = build()
 		app.compile()
 

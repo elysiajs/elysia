@@ -3,11 +3,11 @@ import { it, expect, afterEach } from 'bun:test'
 import { t, validationDetail } from '../../src'
 import { Validator } from '../../src/validator'
 import { TypeBoxValidator } from '../../src/type/validator'
+import { Compiled } from '../../src/compile/aot'
 import {
-	Compiled,
 	beginValidatorCapture,
 	endValidatorCapture
-} from '../../src/compile/aot'
+} from '../../src/compile/aot-capture'
 import { materialise } from './_manifest'
 
 /** Custom error fields retain their own frozen checks and instance paths. */

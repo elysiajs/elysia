@@ -2,11 +2,11 @@ import '../../src/compile/aot-capture'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 
 import { Elysia, t } from '../../src'
+import { Compiled } from '../../src/compile/aot'
 import {
 	abortCapture,
-	Compiled,
 	getCompilerSessionDiagnostics
-} from '../../src/compile/aot'
+} from '../../src/compile/aot-capture'
 import { captureArtifacts } from '../../src/plugin/aot/source'
 import { Validator } from '../../src/validator'
 import { post } from '../utils'
@@ -144,14 +144,22 @@ describe('AOT manifest ownership and compiler sessions', () => {
 		expect(frozenFactoryCalls).toBe(1)
 	})
 
-	it('ignores global replay handlers after an app claims its manifest', async () => {
+	it('ignores a stale registration after an app claims its manifest', async () => {
 		const stale = await captureArtifacts(
 			new Elysia({ precompile: true }).get('/late', () => 'stale')
 		)
 		await register()
-		Compiled.handlers = materialiseHandlers(stale.handlers)
 
 		const app = buildA().get('/late', () => 'fresh')
+		expect((await app.handle(post('/x', { a: 'ok' }))).status).toBe(200)
+
+		// a registration arriving after the claim must never rebind the app
+		Compiled.register({
+			bf: 1,
+			fingerprint: stale.fingerprint,
+			handlers: materialiseHandlers(stale.handlers)
+		})
+
 		const response = await app.handle(new Request('http://localhost/late'))
 		expect(await response.text()).toBe('fresh')
 	})

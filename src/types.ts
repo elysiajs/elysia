@@ -1,10 +1,10 @@
 import type { Instruction as ExactMirrorInstruction } from 'exact-mirror'
 import type { OpenAPIV3 } from 'openapi-types'
 
-import { ElysiaFile } from './universal/file'
+import type { ElysiaFile } from './universal/file'
 import { TraceHandler } from './trace'
 import { type StatusMapBack } from './constants'
-import { ElysiaError, type ElysiaStatus } from './error'
+import type { ElysiaError, ElysiaStatus } from './error'
 import type { TypeBoxSchema, AnySchema, StandardSchemaV1Like } from './type'
 
 import type {
@@ -165,20 +165,6 @@ export interface ElysiaConfig<
 		 * @default undefined
 		 */
 		resumeEmit?: ResumeEmit
-
-		/**
-		 * **Unstable / preview.** Defer synchronous `.use(child)` composition to
-		 * the first build/observation boundary. All non-route work (extension
-		 * merges, macros, scope children, hook-chain absorption) still runs eagerly
-		 * in authoring order; only the per-route copy loop is deferred and replayed
-		 * in a single pass, avoiding the O(N·D²) reabsorption cost of deeply nested
-		 * plugin graphs. Unsupported constructs (async plugins, `.use(Promise)`,
-		 * functional `use` returning a promise, cyclic graphs) throw loudly.
-		 * Behavior is response- and route-table-identical to eager composition.
-		 *
-		 * @default false
-		 */
-		lazyCompose?: boolean
 	}
 
 	/**
@@ -268,12 +254,6 @@ export type SSEPayload<
 export type MaybeArray<T> = T | T[]
 export type MaybePromise<T> = T | Promise<T>
 export type IsAny<T> = 0 extends 1 & T ? true : false
-
-export type IsUnknown<T> = [unknown] extends [T]
-	? IsAny<T> extends true
-		? false
-		: true
-	: false
 
 export type IsTuple<T> = T extends readonly any[]
 	? number extends T['length']
@@ -730,13 +710,12 @@ export type GracefulHandler<in Instance extends AnyElysia> = (
 
 export type ResolveHandler<
 	in out Route extends RouteSchema,
-	in out Singleton extends SingletonBase,
-	Derivative extends
-		| Record<string, unknown>
-		| ElysiaError
-		| AnyElysiaStatus
-		| void = Record<string, unknown> | ElysiaError | AnyElysiaStatus | void
-> = (context: Context<Route, Singleton>) => MaybePromise<Derivative>
+	in out Singleton extends SingletonBase
+> = (
+	context: Context<Route, Singleton>
+) => MaybePromise<
+	Record<string, unknown> | ElysiaError | AnyElysiaStatus | void
+>
 
 export interface BunHTMLBundlelike {
 	index: string
@@ -835,26 +814,13 @@ export type CompiledHandler = (
 	context: Partial<Context>
 ) => MaybePromise<Response>
 
-/**
- * Internal per-route authoring tuple.
- *
- * Q17 (B7): tuple field indices are an INTERNAL representation and are
- * deprecated as a plugin surface. The sealed runtime reads a dense columnar
- * `RouteTable` (`src/route-table.ts`), not these tuples. Plugins must introspect
- * routes through the documented `Elysia.routes` / `Elysia.history` getters —
- * never by indexing this tuple. The raw tuples remain the authoring log at this
- * release and are physically dropped from strict-production builds at N+3a.
- */
 export type InternalRoute = readonly [
 	method: string,
 	path: string,
 	handler: unknown,
 	instance: AnyElysia,
 	hook: AnyLocalHook | undefined,
-	// Chain node ref captured at route registraion time
-	// `flattenChain(appHook)` materialises the route's compile-time hooks
 	appHook: ChainNode | undefined,
-	// Inheritance chain captured on `.use()`
 	inheritedChain?: ChainNode,
 	macroScope?: AnyElysia
 ]
@@ -1572,12 +1538,6 @@ type MergeResponseStatus<A> = {
 		: never
 }
 
-type MergeAllStatus<T> = {
-	[K in T extends any ? keyof T : never]: T extends Record<K, infer V>
-		? V
-		: never
-}
-
 type ExtractAllResponseFromMacro<A> =
 	IsNever<A> extends true
 		? {}
@@ -1602,22 +1562,13 @@ type ExtractAllResponseFromMacro<A> =
 
 type FlattenMacroResponse<T> = T extends object
 	? '_' extends keyof T
-		? MergeFlattenMacroResponse<
+		? UnionResponseStatus<
 				Omit<T, '_'>,
-				FlattenMacroResponse<MergeAllStatus<T['_']>>
+				FlattenMacroResponse<MergeStatusUnion<T['_']>>
 			>
 		: T
 	: T
 
-type MergeFlattenMacroResponse<A, B> = {
-	[K in keyof A | keyof B]: K extends keyof A
-		? K extends keyof B
-			? A[K] | B[K]
-			: A[K]
-		: K extends keyof B
-			? B[K]
-			: never
-}
 type UnionMacroContext<A> = UnionToIntersect<{
 	[K in Exclude<keyof A, 'return'>]: A[K]
 }> & {

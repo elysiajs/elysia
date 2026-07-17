@@ -19,7 +19,6 @@ import type {
 	DefaultSingleton
 } from './types'
 
-let baseCache = new WeakMap<AnyElysia, new () => any>()
 let contextCache = new WeakMap<AnyElysia, new (request: Request) => any>()
 
 let sharedEmptyDecorator: any = null
@@ -31,19 +30,15 @@ function buildEmptyDecorator() {
 	return Decorator
 }
 
+// Only reachable on a `contextCache` miss, so it runs at most once per app
+// per cache generation — no per-app cache of its own is needed.
 export function createBaseContext(app: AnyElysia) {
-	const cached = baseCache.get(app)
-	if (cached) return cached
-
 	const ext = app['~ext']
 	const decorator = ext?.decorator
 	const store = ext?.store
 
-	if (!decorator && !store) {
-		sharedEmptyDecorator ??= buildEmptyDecorator()
-		baseCache.set(app, sharedEmptyDecorator)
-		return sharedEmptyDecorator
-	}
+	if (!decorator && !store)
+		return (sharedEmptyDecorator ??= buildEmptyDecorator())
 
 	class Decorator {}
 	Object.assign(Decorator.prototype, {
@@ -53,12 +48,10 @@ export function createBaseContext(app: AnyElysia) {
 		redirect
 	})
 
-	baseCache.set(app, Decorator)
 	return Decorator
 }
 
 export function clearContextCache() {
-	baseCache = new WeakMap()
 	contextCache = new WeakMap()
 	sharedEmptyDecorator = null
 	sharedEmptyContext = null
@@ -172,6 +165,53 @@ export function createContext(
 	return context
 }
 
+type ContextBase<
+	in out Route extends RouteSchema,
+	in out Singleton extends SingletonBase
+> = {
+	server: Server | null
+	redirect: redirect
+
+	set: {
+		headers: HTTPHeaders
+		status?: number | keyof StatusMap
+		/**
+		 * ! Internal Property
+		 *
+		 * Use `Context.cookie` instead
+		 */
+		cookie?: Record<string, BaseCookie>
+	}
+
+	status: {} extends Route['response']
+		? typeof status
+		: SelectiveStatus<Route['response']>
+
+	/**
+	 * Path extracted from incoming URL
+	 *
+	 * Represent a value extracted from URL
+	 *
+	 * @example '/id/9'
+	 */
+	readonly path: string
+	/**
+	 * Path as registered to router
+	 *
+	 * Represent a path registered to a router, not a URL.
+	 * Set only for dynamic routes; for static routes, fall back to `path`.
+	 *
+	 * @example '/id/:id'
+	 */
+	route?: string
+	/**
+	 * Per-request id, populated when `.trace(...)` is registered.
+	 */
+	rid?: string
+	request: Request
+	store: Singleton['store']
+}
+
 export type ErrorContext<
 	in out Route extends RouteSchema = {},
 	in out Singleton extends SingletonBase = DefaultSingleton,
@@ -197,49 +237,8 @@ export type ErrorContext<
 						Cookie<Route['cookie'][key]>
 					>
 				}
-
-		server: Server | null
-		redirect: redirect
-
-		set: {
-			headers: HTTPHeaders
-			status?: number | keyof StatusMap
-			/**
-			 * ! Internal Property
-			 *
-			 * Use `Context.cookie` instead
-			 */
-			cookie?: Record<string, BaseCookie>
-		}
-
-		status: {} extends Route['response']
-			? typeof status
-			: SelectiveStatus<Route['response']>
-
-		/**
-		 * Path extracted from incoming URL
-		 *
-		 * Represent a value extracted from URL
-		 *
-		 * @example '/id/9'
-		 */
-		readonly path: string
-		/**
-		 * Path as registered to router
-		 *
-		 * Represent a path registered to a router, not a URL.
-		 * Set only for dynamic routes; for static routes, fall back to `path`.
-		 *
-		 * @example '/id/:id'
-		 */
-		route?: string
-		/**
-		 * Per-request id, populated when `.trace(...)` is registered.
-		 */
-		rid?: string
-		request: Request
-		store: Singleton['store']
-	} & Singleton['decorator'] &
+	} & ContextBase<Route, Singleton> &
+		Singleton['decorator'] &
 		Singleton['derive']
 >
 
@@ -287,49 +286,8 @@ export type Context<
 							>
 						}
 					>
-
-		server: Server | null
-		redirect: redirect
-
-		set: {
-			headers: HTTPHeaders
-			status?: number | keyof StatusMap
-			/**
-			 * ! Internal Property
-			 *
-			 * Use `Context.cookie` instead
-			 */
-			cookie?: Record<string, BaseCookie>
-		}
-
-		/**
-		 * Path extracted from incoming URL
-		 *
-		 * Represent a value extracted from URL
-		 *
-		 * @example '/id/9'
-		 */
-		readonly path: string
-		/**
-		 * Path as registered to router
-		 *
-		 * Represent a path registered to a router, not a URL.
-		 * Set only for dynamic routes; for static routes, fall back to `path`.
-		 *
-		 * @example '/id/:id'
-		 */
-		route?: string
-		/**
-		 * Per-request id, populated when `.trace(...)` is registered.
-		 */
-		rid?: string
-		request: Request
-		store: Singleton['store']
-
-		status: {} extends Route['response']
-			? typeof status
-			: SelectiveStatus<Route['response']>
-	} & Singleton['decorator'] &
+	} & ContextBase<Route, Singleton> &
+		Singleton['decorator'] &
 		Omit<Singleton['derive'], keyof InputSchema>
 >
 

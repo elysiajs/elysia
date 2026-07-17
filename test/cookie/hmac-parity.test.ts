@@ -3,12 +3,11 @@ import { describe, expect, it, afterEach } from 'bun:test'
 
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
+import { Compiled, Capture } from '../../src/compile/aot'
 import {
-	Compiled,
-	Capture,
 	endValidatorCapture,
 	endHandlerCapture
-} from '../../src/compile/aot'
+} from '../../src/compile/aot-capture'
 import { compileHandler } from '../../src/compile/handler'
 import { req } from '../utils'
 
@@ -19,7 +18,7 @@ import {
 	signCookieSubtle,
 	unsignCookie,
 	unsignCookieSync
-} from '../../src/cookie/utils'
+} from '../../src/cookie/crypto'
 
 const secret = 'the-seven-wailings-koan-of-jericho'
 const cases = [

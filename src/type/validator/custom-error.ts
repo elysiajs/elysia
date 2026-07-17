@@ -9,6 +9,7 @@ import {
 } from '../../compile/aot'
 import { buildFrozenCheck } from './frozen-check'
 import { nullObject } from '../../utils'
+import { subValueAt } from '../../error'
 
 interface UnionInfo {
 	node: any
@@ -108,16 +109,6 @@ function collectCustomErrorNodes(
 	seen.delete(schema)
 
 	return out
-}
-
-function subValueAt(value: any, segments: string[]): unknown {
-	let cur = value
-	for (const part of segments) {
-		if (cur === null || typeof cur !== 'object') return
-		cur = cur[part]
-	}
-
-	return cur
 }
 
 const literalOf = (propSchema: any) => {

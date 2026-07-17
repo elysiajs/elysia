@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { signCookieSubtle, unsignCookie } from '../../src/cookie/utils'
+import { signCookieSubtle, unsignCookie } from '../../src/cookie/crypto'
 
 const secret = 'cookie-signing-secret'
 const cases = [

@@ -2,13 +2,17 @@ import '../../src/compile/aot-capture'
 import { describe, it, expect, afterEach } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
+import { Compiled } from '../../src/compile/aot'
 import {
-	Compiled,
 	endHandlerCapture,
 	endValidatorCapture
-} from '../../src/compile/aot'
+} from '../../src/compile/aot-capture'
 import { compileHandler } from '../../src/compile/handler'
-import { materialise, materialiseHandlers } from './_manifest'
+import {
+	materialise,
+	materialiseHandlers,
+	registerManifest
+} from './_manifest'
 import { req, post } from '../utils'
 import { hasSyncHmac } from '../../src/cookie/utils'
 
@@ -631,8 +635,10 @@ describe('frozen handler reconstruction', () => {
 
 		delete process.env.ELYSIA_AOT_BUILD
 		Validator.clear()
-		Compiled.validators = materialise(validators)
-		Compiled.handlers = materialiseHandlers(handlers)
+		registerManifest({
+			validators: materialise(validators),
+			handlers: materialiseHandlers(handlers)
+		})
 
 		const frozen = build()
 		;(frozen as any).compile()

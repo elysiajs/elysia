@@ -1,10 +1,6 @@
 import type { BunPlugin } from 'bun'
-import {
-	generateCompiledArtifacts,
-	resolveEntry,
-	setupAotHooks,
-	type ElysiaAotOptions
-} from './core'
+import { createAotPluginHooks, setupAotOnLoad } from './hooks'
+import type { ElysiaAotOptions } from './core'
 
 /**
  * Elysia AOT build plugin
@@ -28,21 +24,10 @@ import {
 export const aot = (entry: string, options?: ElysiaAotOptions): BunPlugin => ({
 	name: 'elysia-aot',
 	async setup(build) {
-		const { source, stub, virtualType } = await generateCompiledArtifacts(
-			entry,
-			options
-		)
-
-		await setupAotHooks({
+		await setupAotOnLoad(build, createAotPluginHooks(entry, options), {
 			readText: (path) => Bun.file(path).text(),
-			entryPath: resolveEntry(entry),
-			source,
-			stub,
-			treeShake: options?.treeShake ?? true,
-			virtualType,
 			// Bun resolves relative to the project root by default
-			resolveDir: undefined,
-			build
+			resolveDir: undefined
 		})
 	}
 })

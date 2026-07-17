@@ -1,10 +1,10 @@
 /** Runs captured validators with the TypeBox bridge deliberately unwired. */
 import { readFileSync } from 'node:fs'
 
-import { Compiled, type CapturedValidator } from '../../../src/compile/aot'
+import { type CapturedValidator } from '../../../src/compile/aot'
 import { buildFrozenRouteValidator } from '../../../src/compile/handler/frozen-validator'
 import { hasTypes } from '../../../src/type/bridge'
-import { materialise } from '../_manifest'
+import { claimManifest, materialise } from '../_manifest'
 
 const out = (tag: string, data: unknown) =>
 	console.log(tag, JSON.stringify(data))
@@ -26,10 +26,10 @@ const payload = JSON.parse(readFileSync(process.env.PAYLOAD!, 'utf8')) as {
 	path: string
 }
 
-Compiled.validators = materialise(payload.captured)
+const claimed = claimManifest({ validators: materialise(payload.captured) })
 
 const hook = { body: payload.schema } as any
-const root = { '~config': {}, '~ext': {} } as any
+const root = { ...claimed, '~config': {}, '~ext': {} } as any
 
 // A live RouteValidator must fail here, proving success uses frozen reconstruction.
 if (process.env.USE_LIVE_VALIDATOR === '1') {

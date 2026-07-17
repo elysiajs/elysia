@@ -42,8 +42,6 @@ function parseQuery(context: Context) {
 	})
 }
 
-const pristineNotFound = getNotFound
-
 const isPristineNotFound = (context: Context, error: any) =>
 	error instanceof NotFound &&
 	error.response === 'Not Found' &&
@@ -198,7 +196,7 @@ export function createErrorHandler(
 				}
 			}
 
-			if (isPristineNotFound(context, error)) return pristineNotFound()
+			if (isPristineNotFound(context, error)) return getNotFound()
 
 			return fallbackResponse(context, error, mapResponse, defaultError)
 		}
@@ -231,7 +229,7 @@ export function createErrorHandler(
 			}
 		}
 
-		if (isPristineNotFound(context, error)) return pristineNotFound()
+		if (isPristineNotFound(context, error)) return getNotFound()
 
 		return fallbackResponse(context, error, mapResponse, defaultError)
 	}

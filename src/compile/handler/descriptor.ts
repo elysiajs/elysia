@@ -53,25 +53,13 @@ export interface RouteDescriptor {
 	responseValiAsync: boolean
 
 	// cookie
-	needsCookie: boolean
 	hasCookieSign: boolean
 	syncCookieSign: boolean
 	asyncCookieSign: boolean
 	lazyCookieVerify: boolean
 
-	// promotion purity fact (native-static eligibility)
-	pureLiteral: boolean
-
 	// sucrose
-	inferenceBody: boolean
-	inferenceQuery: boolean
-	inferenceHeaders: boolean
-	inferenceCookie: boolean
 	inferenceSet: boolean // consumed by emit.ts
-	inferenceServer: boolean
-	inferenceRoute: boolean
-	inferenceUrl: boolean
-	inferencePath: boolean
 
 	// async + sync fast-path facts
 	handlerIsAsync: boolean
@@ -456,7 +444,6 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 				? 'promise'
 				: 'static-value'
 
-	const pureLiteral = isEmptyPipelineHook(hook)
 	const hasSetEffects =
 		inference.cookie ||
 		inference.set ||
@@ -502,23 +489,12 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 		cookieValiIsAsync: !!cookieValidIsAsync,
 		responseValiAsync,
 
-		needsCookie,
 		hasCookieSign,
 		syncCookieSign,
 		asyncCookieSign,
 		lazyCookieVerify,
 
-		pureLiteral,
-
-		inferenceBody: inference.body,
-		inferenceQuery: inference.query,
-		inferenceHeaders: inference.headers,
-		inferenceCookie: inference.cookie,
 		inferenceSet: inference.set,
-		inferenceServer: inference.server,
-		inferenceRoute: inference.route,
-		inferenceUrl: inference.url,
-		inferencePath: inference.path,
 
 		handlerIsAsync,
 		callHandlerSyncOnAsync: !!callHandlerSyncOnAsync,

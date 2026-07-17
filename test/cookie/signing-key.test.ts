@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 
-import { signCookieValues, unsignCookie } from '../../src/cookie/utils'
+import { signCookieValues } from '../../src/cookie/utils'
+import { unsignCookie } from '../../src/cookie/crypto'
 import { compileCookieConfig } from '../../src/cookie/config'
 
 describe('cookie signing key selection', () => {

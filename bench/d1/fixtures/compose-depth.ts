@@ -192,7 +192,22 @@ function iterationsFor(depth: number, routes: number) {
 	return 5
 }
 
+// parked: lazyCompose lane dropped pre-N+1; re-lands with the N+3a authoring DAG — see design/necessity-audit-2026-07-17.md
+const PARKED = true
+
 async function main() {
+	if (PARKED) {
+		console.log(
+			JSON.stringify({
+				fixture: 'compose-depth',
+				schemaVersion: 1,
+				mode: 'parked',
+				parked: true
+			})
+		)
+		return
+	}
+
 	const { Elysia } = await import(repoRoot + '/src/index.ts')
 	const grid: Grid = { Elysia }
 

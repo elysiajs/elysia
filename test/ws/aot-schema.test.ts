@@ -1,13 +1,13 @@
-import '../../src/compile/aot-capture' // installs build-only capture impl (mirrors the AOT plugin)
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
+import { Compiled } from '../../src/compile/aot'
+// importing `aot-capture` also installs the build-only capture impl (side effect)
 import {
-	Compiled,
 	endValidatorCapture,
 	endHandlerCapture
-} from '../../src/compile/aot'
-import { materialise } from '../aot/_manifest'
+} from '../../src/compile/aot-capture'
+import { materialise, registerManifest } from '../aot/_manifest'
 import { newWebsocket, wsOpen, wsMessage, wsClosed } from './utils'
 
 // Frozen WebSocket builds capture and reuse body, query, and response validators.
@@ -90,25 +90,35 @@ describe('AOT WebSocket schemas', () => {
 		const captured = captureManifest(build)
 
 		Validator.clear()
-		Compiled.validators = materialise(captured)
-		expect(Compiled.hasValidator('WS', '/ws', 'body')).toBe(true)
-		expect(Compiled.hasValidator('WS', '/ws', 'query')).toBe(true)
+		// Register the frozen manifest as a generated module would; the next
+		// build claims it through its own `~programId` (program lane).
+		registerManifest({ validators: materialise(captured) })
 
 		// A successful build alone cannot distinguish reuse from recompilation.
 		const original = Compiled.getValidator
 		const hits: string[] = []
-		;(Compiled as any).getValidator = (m: string, p: string, s: any) => {
-			const entry = original.call(Compiled, m, p, s)
+		;(Compiled as any).getValidator = (
+			m: string,
+			p: string,
+			s: any,
+			id?: any
+		) => {
+			const entry = original.call(Compiled, m, p, s, id)
 			if (m === 'WS' && p === '/ws' && entry !== undefined)
 				hits.push(String(s))
 			return entry
 		}
+		let app: any
 		try {
-			;(build() as any).compile()
+			app = build()
+			app.compile()
 		} finally {
 			;(Compiled as any).getValidator = original
 		}
 
+		const id = app['~programId']
+		expect(Compiled.hasValidator('WS', '/ws', 'body', id)).toBe(true)
+		expect(Compiled.hasValidator('WS', '/ws', 'query', id)).toBe(true)
 		expect(hits).toContain('body')
 		expect(hits).toContain('query')
 	})
@@ -122,10 +132,18 @@ describe('AOT WebSocket schemas', () => {
 
 		const captured = captureManifest(buildCodec)
 		Validator.clear()
-		Compiled.validators = materialise(captured)
-		expect(Compiled.hasValidator('WS', '/ws', 'body')).toBe(true)
+		// Register the frozen manifest; `buildCodec()` below claims it.
+		registerManifest({ validators: materialise(captured) })
 
 		const frozenApp = buildCodec().listen(0)
+		expect(
+			Compiled.hasValidator(
+				'WS',
+				'/ws',
+				'body',
+				(frozenApp as any)['~programId']
+			)
+		).toBe(true)
 		const frozenValid = await sendBody(frozenApp, VALID)
 		const frozenInvalid = await sendBody(frozenApp, INVALID)
 		frozenApp.stop()

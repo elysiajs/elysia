@@ -3,13 +3,16 @@ import { describe, it, expect, afterEach } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
 import { clearCoerceLeafCache } from '../../src/type/coerce'
+import { Compiled, type CapturedValidator } from '../../src/compile/aot'
 import {
-	Compiled,
 	endHandlerCapture,
-	endValidatorCapture,
-	type CapturedValidator
-} from '../../src/compile/aot'
-import { materialise, materialiseHandlers } from './_manifest'
+	endValidatorCapture
+} from '../../src/compile/aot-capture'
+import {
+	materialise,
+	materialiseHandlers,
+	registerManifest
+} from './_manifest'
 import { req } from '../utils'
 
 /** Baked coercion must match live validation or fall back completely. */
@@ -40,8 +43,10 @@ const freeze = (build: () => any) => {
 	const { handlers, validators } = capture(build)
 	Validator.clear()
 	clearCoerceLeafCache()
-	Compiled.validators = materialise(validators)
-	Compiled.handlers = materialiseHandlers(handlers)
+	registerManifest({
+		validators: materialise(validators),
+		handlers: materialiseHandlers(handlers)
+	})
 	const app = build()
 	;(app as any).compile()
 	return { app, validators }

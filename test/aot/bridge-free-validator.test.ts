@@ -3,12 +3,12 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
+import { Compiled, type ProgramId } from '../../src/compile/aot'
 import {
-	Compiled,
 	beginValidatorCapture,
 	endValidatorCapture,
 	endHandlerCapture
-} from '../../src/compile/aot'
+} from '../../src/compile/aot-capture'
 import { RouteValidator } from '../../src/validator/route'
 import {
 	buildFrozenRouteValidator,
@@ -16,7 +16,7 @@ import {
 	isCapturedBridgeFree
 } from '../../src/compile/handler/frozen-validator'
 
-import { materialise } from './_manifest'
+import { claimManifest, materialise } from './_manifest'
 
 /** Frozen validators must match wired validation without using TypeBox. */
 
@@ -36,21 +36,25 @@ function freeze(schema: any) {
 
 	Compiled.clear()
 	Validator.clear()
-	Compiled.validators = materialise(captured)
+	claimed = claimManifest({ validators: materialise(captured) })
 
 	const body = captured.find((c) => c.slot === 'body')
 
 	return { app, body }
 }
 
+// program claimed by the latest `freeze()`/`freezeModelRef()`
+let claimed: { ['~programId']: ProgramId }
+
 const hook = (schema: any) => ({ body: schema })
-const root = () => new Elysia() as any
+const root = () => claimed as any
 
 const wired = (schema: any) =>
 	new RouteValidator(
 		hook(schema) as any,
 		{
-			aot: { method: METHOD, path: PATH }
+			aot: { method: METHOD, path: PATH },
+			app: claimed
 		} as any
 	)
 
@@ -223,7 +227,7 @@ describe('model references without TypeBox', () => {
 
 		Compiled.clear()
 		Validator.clear()
-		Compiled.validators = materialise(captured)
+		claimed = claimManifest({ validators: materialise(captured) })
 
 		return captured.find((c) => c.slot === 'body')!
 	}
@@ -240,7 +244,7 @@ describe('model references without TypeBox', () => {
 		expect(captured.bridgeFree).toBe(false)
 		expect(isCapturedBridgeFree(captured, 'closed')).toBe(false)
 
-		const root = { '~config': {}, '~ext': { models } } as any
+		const root = { ...claimed, '~config': {}, '~ext': { models } } as any
 		expect(
 			buildFrozenRouteValidator(
 				{ body: 'closed' } as any,
@@ -255,12 +259,13 @@ describe('model references without TypeBox', () => {
 		const models = { open: t.Object({ a: t.String(), b: t.String() }) }
 		freezeModelRef(models, 'open')
 
-		const root = { '~config': {}, '~ext': { models } } as any
+		const root = { ...claimed, '~config': {}, '~ext': { models } } as any
 		const w = new RouteValidator(
 			{ body: 'open' } as any,
 			{
 				models,
-				aot: { method: METHOD, path: PATH }
+				aot: { method: METHOD, path: PATH },
+				app: claimed
 			} as any
 		)
 		const f = buildFrozenRouteValidator(
@@ -287,7 +292,7 @@ describe('model references without TypeBox', () => {
 		const models = { open: t.Object({ a: t.String() }) }
 		freezeModelRef(models, 'open')
 
-		const root = { '~config': {}, '~ext': { models } } as any
+		const root = { ...claimed, '~config': {}, '~ext': { models } } as any
 		expect(
 			buildFrozenRouteValidator(
 				{ body: 'missing' } as any,

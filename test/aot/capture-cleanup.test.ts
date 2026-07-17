@@ -2,12 +2,11 @@ import '../../src/compile/aot-capture' // installs captureImpl
 import { describe, it, expect, afterEach } from 'bun:test'
 import { Elysia } from '../../src'
 import { Validator } from '../../src/validator'
+import { Compiled, Capture } from '../../src/compile/aot'
 import {
-	Compiled,
-	Capture,
 	endValidatorCapture,
 	endHandlerCapture
-} from '../../src/compile/aot'
+} from '../../src/compile/aot-capture'
 import { captureArtifacts } from '../../src/plugin/aot/source'
 
 afterEach(() => {

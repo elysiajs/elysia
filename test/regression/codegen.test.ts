@@ -2,13 +2,17 @@ import '../../src/compile/aot-capture' // installs build-only capture impl (mirr
 import { describe, it, expect, afterEach } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
+import { Compiled } from '../../src/compile/aot'
 import {
-	Compiled,
 	endHandlerCapture,
 	endValidatorCapture
-} from '../../src/compile/aot'
+} from '../../src/compile/aot-capture'
 import { compileHandler } from '../../src/compile/handler'
-import { materialise, materialiseHandlers } from '../aot/_manifest'
+import {
+	materialise,
+	materialiseHandlers,
+	registerManifest
+} from '../aot/_manifest'
 import { req } from '../utils'
 
 afterEach(() => {
@@ -185,8 +189,10 @@ describe('AOT query parsing', () => {
 
 		delete process.env.ELYSIA_AOT_BUILD
 		Validator.clear()
-		Compiled.validators = materialise(validators)
-		Compiled.handlers = materialiseHandlers(handlers)
+		registerManifest({
+			validators: materialise(validators),
+			handlers: materialiseHandlers(handlers)
+		})
 
 		const frozen = build()
 		;(frozen as any).compile()

@@ -3,12 +3,12 @@ import { describe, it, expect, afterEach } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
 import { TypeBoxValidator } from '../../src/type/validator'
+import { Compiled } from '../../src/compile/aot'
 import {
-	Compiled,
 	beginValidatorCapture,
 	endValidatorCapture
-} from '../../src/compile/aot'
-import { materialise } from './_manifest'
+} from '../../src/compile/aot-capture'
+import { claimManifest, materialise } from './_manifest'
 
 /** Response validators are frozen independently for each declared status. */
 
@@ -42,11 +42,14 @@ describe('AOT response freezing', () => {
 		).toBeUndefined()
 
 		Validator.clear()
-		Compiled.validators = m
 
 		const v = Validator.create(
 			t.Object({ id: t.String(), name: t.String() }),
-			{ aot: { method: 'GET', path: '/u' }, slot: 'response:200' }
+			{
+				aot: { method: 'GET', path: '/u' },
+				slot: 'response:200',
+				app: claimManifest({ validators: m })
+			}
 		) as any
 		expect(v.tb).toBeUndefined()
 		expect(v.reconstructedCheck).toBeDefined()
@@ -74,10 +77,10 @@ describe('AOT response freezing', () => {
 		const live = new TypeBoxValidator(schema()) as any
 
 		Validator.clear()
-		Compiled.validators = m
 		const frozen = Validator.create(schema(), {
 			aot: { method: 'GET', path: '/u' },
-			slot: 'response:200'
+			slot: 'response:200',
+			app: claimManifest({ validators: m })
 		}) as any
 
 		expect(frozen.tb).toBeUndefined()

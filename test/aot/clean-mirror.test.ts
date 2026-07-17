@@ -3,12 +3,12 @@ import { describe, it, expect, afterEach } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
 import { TypeBoxValidator } from '../../src/type/validator'
+import { Compiled } from '../../src/compile/aot'
 import {
-	Compiled,
 	beginValidatorCapture,
 	endValidatorCapture
-} from '../../src/compile/aot'
-import { materialise } from './_manifest'
+} from '../../src/compile/aot-capture'
+import { claimManifest, materialise, registerManifest } from './_manifest'
 import { req } from '../utils'
 
 /** Frozen codec validators clean values the same way as runtime validators. */
@@ -86,10 +86,10 @@ describe('frozen codec cleaning', () => {
 			const jit = new TypeBoxValidator(make()) as any
 
 			Validator.clear()
-			Compiled.validators = m
 			const frozen = Validator.create(make() as any, {
 				aot: { method: 'GET', path },
-				slot: 'query'
+				slot: 'query',
+				app: claimManifest({ validators: m })
 			}) as any
 
 			expect(frozen.tb).toBeUndefined()
@@ -112,7 +112,7 @@ describe('frozen codec cleaning', () => {
 		build().compile()
 		const m = materialise(endValidatorCapture())
 		Validator.clear()
-		Compiled.validators = m
+		registerManifest({ validators: m })
 
 		const app = build()
 		app.compile()

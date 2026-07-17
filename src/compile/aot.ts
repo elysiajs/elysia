@@ -72,15 +72,6 @@ export function endCompilerSession(
 
 export const getCompilerSession = () => activeSession
 
-/** @internal deterministic session/capture assertions. */
-export const getCompilerSessionDiagnostics = () => ({
-	active: activeSession !== undefined,
-	appAttached: activeSession?.app !== undefined,
-	validators: activeSession?.capture?.size ?? 0,
-	handlers: activeSession?.handlerCapture?.size ?? 0,
-	sucrose: activeSession?.sucroseCache.size ?? 0
-})
-
 export type ValidatorSlot =
 	| 'body'
 	| 'query'
@@ -189,12 +180,6 @@ export interface HandlerManifest {
 }
 
 export interface CompiledSnapshot {
-	validators: ValidatorManifest | undefined
-	handlers: HandlerManifest | undefined
-	lazyGroups: Array<() => ValidatorManifest> | undefined
-	lazyGroupOf: Record<string, Record<string, number>> | undefined
-	builtGroups: number[]
-	planRebuilder: ((original: unknown, plan: CoercePlan) => any) | undefined
 	registered: CompiledProgramRegistration | undefined
 	claimed: boolean
 	programs: WeakMap<ProgramId, CompiledProgram>
@@ -266,16 +251,6 @@ export function reconstruct(): ReconstructImpl {
 }
 
 // build registry
-let validators: ValidatorManifest | undefined
-let handlers: HandlerManifest | undefined
-
-let planRebuilder: ((original: unknown, plan: CoercePlan) => any) | undefined
-
-// lazy validator groups (sync thunks)
-let lazyGroups: Array<() => ValidatorManifest> | undefined
-let lazyGroupOf: Record<string, Record<string, number>> | undefined
-const builtGroups = new Set<number>()
-
 let registered: CompiledProgramRegistration | undefined
 let claimed = false
 let programs = new WeakMap<ProgramId, CompiledProgram>()
@@ -330,56 +305,12 @@ export abstract class Compiled {
 		reconstructImpl = impl
 	}
 
-	static get handlers(): HandlerManifest | undefined {
-		return handlers
-	}
-
-	static set handlers(manifest: HandlerManifest) {
-		handlers = manifest
-	}
-
 	static getHandler(
 		id: ProgramId | undefined,
 		method: string,
 		path: string
 	): FrozenHandler | undefined {
-		const program = programFor(id)
-		return program
-			? program.handlers?.[method]?.[path]
-			: handlers?.[method]?.[path]
-	}
-
-	static get validators(): ValidatorManifest | undefined {
-		return validators
-	}
-
-	static get planRebuilder():
-		| ((original: unknown, plan: CoercePlan) => any)
-		| undefined {
-		return planRebuilder
-	}
-
-	static set planRebuilder(
-		rebuild: ((original: unknown, plan: CoercePlan) => any) | undefined
-	) {
-		planRebuilder = rebuild
-	}
-
-	static set validators(manifest: ValidatorManifest) {
-		validators = manifest
-		lazyGroups = undefined
-		lazyGroupOf = undefined
-		builtGroups.clear()
-	}
-
-	static registerLazyValidators(
-		groups: Array<() => ValidatorManifest>,
-		groupOf: Record<string, Record<string, number>>
-	) {
-		lazyGroups = groups
-		lazyGroupOf = groupOf
-		builtGroups.clear()
-		validators ??= nullObject() as ValidatorManifest
+		return programFor(id)?.handlers?.[method]?.[path]
 	}
 
 	static getValidator(
@@ -389,47 +320,26 @@ export abstract class Compiled {
 		id?: ProgramId
 	): FrozenValidator | undefined {
 		const program = programFor(id)
-		const programGroupOf = program?.lazyGroupOf
+		if (!program) return undefined
 
-		let programValidators = program?.validators
+		let programValidators = program.validators
 		let e = programValidators?.[method]?.[path]?.[slot]
+		if (e !== undefined || !program.lazyGroupOf) return e
 
-		if (program) {
-			if (e !== undefined || !programGroupOf) return e
+		const g = program.lazyGroupOf[method]?.[path]
+		if (g !== undefined && !program.builtGroups.has(g)) {
+			program.builtGroups.add(g)
+			const slice = program.lazyGroups![g]!()
 
-			const g = programGroupOf[method]?.[path]
-			if (g !== undefined && !program.builtGroups.has(g)) {
-				program.builtGroups.add(g)
-				const slice = program.lazyGroups![g]!()
-
-				programValidators ??= program.validators =
-					nullObject() as ValidatorManifest
-
-				for (const m in slice) {
-					const into = (programValidators[m] ??= nullObject() as any)
-					Object.assign(into, slice[m])
-				}
-
-				e = programValidators?.[method]?.[path]?.[slot]
-			}
-
-			return e
-		}
-
-		e = validators?.[method]?.[path]?.[slot]
-		if (e !== undefined || !lazyGroupOf) return e
-
-		const g = lazyGroupOf[method]?.[path]
-		if (g !== undefined && !builtGroups.has(g)) {
-			builtGroups.add(g)
-			const slice = lazyGroups![g]!()
+			programValidators ??= program.validators =
+				nullObject() as ValidatorManifest
 
 			for (const m in slice) {
-				const into = (validators![m] ??= nullObject() as any)
+				const into = (programValidators[m] ??= nullObject() as any)
 				Object.assign(into, slice[m])
 			}
 
-			e = validators?.[method]?.[path]?.[slot]
+			e = programValidators?.[method]?.[path]?.[slot]
 		}
 
 		return e
@@ -442,64 +352,45 @@ export abstract class Compiled {
 		id?: ProgramId
 	) {
 		const program = programFor(id)
-		if (program)
-			return (
-				program.validators?.[method]?.[path]?.[slot] !== undefined ||
-				program.lazyGroupOf?.[method]?.[path] !== undefined
-			)
+		if (!program) return false
 
 		return (
-			validators?.[method]?.[path]?.[slot] !== undefined ||
-			lazyGroupOf?.[method]?.[path] !== undefined
+			program.validators?.[method]?.[path]?.[slot] !== undefined ||
+			program.lazyGroupOf?.[method]?.[path] !== undefined
 		)
 	}
 
 	static getPlanRebuilder(id?: ProgramId) {
-		return programFor(id)?.planRebuilder ?? planRebuilder
-	}
-
-	/** @internal preserve registry around in-process AOT analysis */
-	static snapshot(): CompiledSnapshot {
-		return {
-			validators,
-			handlers,
-			lazyGroups,
-			lazyGroupOf,
-			builtGroups: [...builtGroups],
-			planRebuilder,
-			registered,
-			claimed,
-			programs
-		}
-	}
-
-	/** @internal restore registry after in-process AOT analysis */
-	static restore(snapshot: CompiledSnapshot) {
-		validators = snapshot.validators
-		handlers = snapshot.handlers
-		lazyGroups = snapshot.lazyGroups
-		lazyGroupOf = snapshot.lazyGroupOf
-		builtGroups.clear()
-
-		for (const group of snapshot.builtGroups) builtGroups.add(group)
-
-		planRebuilder = snapshot.planRebuilder
-		registered = snapshot.registered
-		claimed = snapshot.claimed
-		programs = snapshot.programs
+		return programFor(id)?.planRebuilder
 	}
 
 	/** @internal test isolation */
 	static clear() {
-		validators = undefined
-		handlers = undefined
-		lazyGroups = undefined
-		lazyGroupOf = undefined
-		builtGroups.clear()
-		planRebuilder = undefined
 		registered = undefined
 		claimed = false
 		programs = new WeakMap()
+	}
+}
+
+/**
+ * @internal build/test-only state access for the capture module
+ * (`aot-capture.ts`): session teardown/reentrancy + registry snapshot.
+ */
+export const CompilerState = {
+	get session() {
+		return activeSession
+	},
+	set session(session: CompilerSession | undefined) {
+		activeSession = session
+	},
+	newSession: newCompilerSession,
+	get registry(): CompiledSnapshot {
+		return { registered, claimed, programs }
+	},
+	set registry(snapshot: CompiledSnapshot) {
+		registered = snapshot.registered
+		claimed = snapshot.claimed
+		programs = snapshot.programs
 	}
 }
 
@@ -600,54 +491,10 @@ function captureEntry({
 	return e
 }
 
-const aotActivationError = new Error(
+/** @internal shared with `aot-capture.ts` (`beginValidatorCapture`). */
+export const aotActivationError = new Error(
 	'Elysia AOT capture module is not activated.'
 )
-
-// @internal test isolation
-export function beginValidatorCapture() {
-	if (captureImpl === undefined) throw aotActivationError
-
-	if (activeSession?.capture !== undefined) {
-		if (activeSession.explicitCapture)
-			throw new Error(
-				'[elysia-aot]: A capture session is already active.'
-			)
-
-		activeSession.explicitCapture = true
-		return
-	}
-
-	if (activeSession && !activeSession.external)
-		throw new Error('[elysia-aot]: A compiler session is already active.')
-
-	const session = activeSession ?? (activeSession = newCompilerSession())
-	session.external = true
-	session.explicitCapture = true
-	session.capture = new Map()
-}
-
-export function abortCapture() {
-	if (!activeSession?.external) return
-
-	activeSession.capture = undefined
-	activeSession.handlerCapture = undefined
-	activeSession.sucroseCache.clear()
-	activeSession = undefined
-}
-
-// @internal test isolation
-export function endValidatorCapture() {
-	const session = activeSession
-	const captured = session?.capture ? [...session.capture.values()] : []
-	if (session) session.capture = undefined
-	if (session?.external && !session.app && !session.handlerCapture) {
-		session.sucroseCache.clear()
-		activeSession = undefined
-	}
-
-	return captured
-}
 
 export interface CapturedHandler {
 	method: string
@@ -662,21 +509,6 @@ function captureHandler(v: CapturedHandler) {
 	const session = activeSession
 	if (!session) return
 	;(session.handlerCapture ??= new Map()).set(`${v.method}\0${v.path}`, v)
-}
-
-export function endHandlerCapture(): CapturedHandler[] {
-	const session = activeSession
-	const captured = session?.handlerCapture
-		? [...session.handlerCapture.values()]
-		: []
-
-	if (session) session.handlerCapture = undefined
-	if (session?.external && !session.app && !session.capture) {
-		session.sucroseCache.clear()
-		activeSession = undefined
-	}
-
-	return captured
 }
 
 function captureSet(

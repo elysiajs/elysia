@@ -2,10 +2,7 @@ import { nullObject } from '../utils'
 import { InvalidCookie } from './error'
 import type { CookieOptions } from './types'
 
-export function parse(
-	str: string,
-	decode?: null | ((str: string) => string | undefined)
-): Record<string, string | undefined> {
+export function parse(str: string): Record<string, string | undefined> {
 	const obj = nullObject()
 	const len = str.length
 
@@ -51,16 +48,7 @@ export function parse(
 			)
 				ve--
 
-			const raw = str.slice(vs, ve)
-			if (decode) obj[key] = decode(raw)
-			else if (decode === null) obj[key] = raw
-			else if (raw.indexOf('%') === -1) obj[key] = raw
-			else
-				try {
-					obj[key] = decodeURIComponent(raw)
-				} catch {
-					obj[key] = raw
-				}
+			obj[key] = str.slice(vs, ve)
 		}
 
 		i = semi + 1
@@ -89,10 +77,7 @@ export function serialize(
 			`[Elysia] Invalid cookie name ${JSON.stringify(name)}. Cookie names cannot contain separators, whitespace, or control characters.`
 		)
 
-	if (value)
-		value = encodeURIComponent(
-			typeof value === 'object' ? JSON.stringify(value) : value
-		)
+	if (value) value = encodeURIComponent(value)
 
 	let str = `${name}=${value}`
 

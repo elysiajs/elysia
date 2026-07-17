@@ -1,13 +1,11 @@
 /** Missing capture support must fail instead of producing a partial manifest. */
-import '../../src/compile/aot-capture'
-import { describe, it, expect, afterEach } from 'bun:test'
 import {
 	abortCapture,
 	beginValidatorCapture,
-	endValidatorCapture,
-	captureImpl,
-	setCaptureImpl
-} from '../../src/compile/aot'
+	endValidatorCapture
+} from '../../src/compile/aot-capture'
+import { describe, it, expect, afterEach } from 'bun:test'
+import { captureImpl, setCaptureImpl } from '../../src/compile/aot'
 import { Elysia } from '../../src'
 
 describe('validator capture availability', () => {

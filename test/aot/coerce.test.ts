@@ -2,13 +2,12 @@ import { describe, it, expect, afterEach } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
 import { TypeBoxValidator } from '../../src/type/validator'
+import { Compiled, type ValidatorManifest } from '../../src/compile/aot'
 import {
-	Compiled,
 	beginValidatorCapture,
-	endValidatorCapture,
-	type ValidatorManifest
-} from '../../src/compile/aot'
-import { materialise } from './_manifest'
+	endValidatorCapture
+} from '../../src/compile/aot-capture'
+import { claimManifest, materialise, registerManifest } from './_manifest'
 import { req } from '../utils'
 import { Value } from 'typebox/value'
 import { compileToSource } from '../../src/plugin/aot/source'
@@ -55,7 +54,7 @@ describe('frozen request coercion', () => {
 		expect(m.GET?.['/q']?.query).toBeDefined()
 
 		Validator.clear()
-		Compiled.validators = m
+		registerManifest({ validators: m })
 		const app = build()
 		app.compile()
 
@@ -83,10 +82,10 @@ describe('frozen request coercion', () => {
 		const compiled = new TypeBoxValidator(make()) as any
 
 		Validator.clear()
-		Compiled.validators = m
 		const frozen = Validator.create(make() as any, {
 			aot: { method: 'GET', path: '/dm' },
-			slot: 'query'
+			slot: 'query',
+			app: claimManifest({ validators: m })
 		}) as any
 
 		expect(frozen.tb).toBeUndefined()
@@ -124,10 +123,10 @@ describe('frozen request coercion', () => {
 		}) as any
 
 		Validator.clear()
-		Compiled.validators = m
 		const frozen = Validator.create(make() as any, {
 			aot: { method: 'GET', path: '/dmlive' },
-			slot: 'query'
+			slot: 'query',
+			app: claimManifest({ validators: m })
 		}) as any
 
 		frozen.FromSync({ n: '5' })
@@ -161,10 +160,10 @@ describe('frozen request coercion', () => {
 		}) as any
 
 		Validator.clear()
-		Compiled.validators = m
 		const frozen = Validator.create(make() as any, {
 			aot: { method: 'GET', path: '/degrade' },
-			slot: 'query'
+			slot: 'query',
+			app: claimManifest({ validators: m })
 		}) as any
 
 		const out = frozen.FromSync({ n: '5', extra: 'x' })
@@ -176,7 +175,7 @@ describe('frozen request coercion', () => {
 		const m = captureDirect(make(), 'GET', '/reorder', 'query')
 
 		Validator.clear()
-		Compiled.validators = m
+		const holder = claimManifest({ validators: m })
 
 		Value.Decode(t.Object({ other: t.Date() }) as any, {
 			other: '2024-01-01'
@@ -184,7 +183,8 @@ describe('frozen request coercion', () => {
 
 		const frozen = Validator.create(make() as any, {
 			aot: { method: 'GET', path: '/reorder' },
-			slot: 'query'
+			slot: 'query',
+			app: holder
 		}) as any
 
 		const out = frozen.FromSync({ when: '2024-03-04T05:06:07.000Z' })
@@ -231,10 +231,10 @@ describe('frozen request coercion', () => {
 		const reference = new TypeBoxValidator(make()) as any
 
 		Validator.clear()
-		Compiled.validators = validators
 		const frozen = new TypeBoxValidator(make() as any, {
 			aot: { method: 'GET', path: '/q' },
-			slot: 'query'
+			slot: 'query',
+			app: claimManifest({ validators })
 		}) as any
 
 		expect(frozen.tb).toBeUndefined()
@@ -314,10 +314,10 @@ describe('frozen request coercion', () => {
 			const compiled = new TypeBoxValidator(make())
 
 			Validator.clear()
-			Compiled.validators = m
 			const frozen = Validator.create(make() as any, {
 				aot: { method: 'GET', path },
-				slot: 'query'
+				slot: 'query',
+				app: claimManifest({ validators: m })
 			}) as any
 
 			expect(frozen.tb).toBeUndefined()

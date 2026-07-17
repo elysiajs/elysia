@@ -553,6 +553,12 @@ export function buildFrozenRouteValidator(
 const isResponseMap = (schema: any): boolean =>
 	!('~kind' in schema || '~elyAcl' in schema || '~standard' in schema)
 
+// truthy `cm` stand-in: the adapter below only feeds the acceptance gate,
+// which reads `cm` for presence and never instantiates it
+const capturedBothMarker = (() => ({})) as unknown as NonNullable<
+	FrozenValidator['cm']
+>
+
 export function isCapturedBridgeFree(
 	c: CapturedValidator,
 	schema: unknown,
@@ -568,35 +574,21 @@ export function isCapturedBridgeFree(
 	 */
 	if (!(c.checkValue && c.mirror)) return false
 
-	if (
-		c.hasCodec &&
-		!!c.decodeMirror &&
-		!c.encodeMirror &&
-		!c.customErrors?.length &&
-		!c.async &&
-		!(c.hasDefault && !c.precomputeSafe)
-	) {
-		return (
-			innerCodecsAligned(c.innerCodecs?.length, coerced) &&
-			mirrorUnionsAligned(c.mirror.u, schema) &&
-			mirrorUnionsAligned(c.decodeMirror.u, coerced)
-		)
-	}
-
-	if (
-		c.external || // e
-		c.mirror.u || // u
-		c.decodeMirror || // dm
-		c.encodeMirror || // em
-		c.hasCodec || // k
-		c.customErrors?.length || // ce
-		c.innerCodecs?.length || // ic
-		c.async // a
+	return isBridgeFreeComplete(
+		{
+			cm: capturedBothMarker,
+			e: c.external ? 1 : undefined,
+			u: c.mirror.u as any,
+			dm: c.decodeMirror as any,
+			em: c.encodeMirror as any,
+			k: c.hasCodec ? 1 : undefined,
+			ce: c.customErrors?.length ? (c.customErrors as any) : undefined,
+			ic: c.innerCodecs?.length ? (c.innerCodecs as any) : undefined,
+			a: c.async ? 1 : undefined,
+			d: c.hasDefault ? 1 : undefined,
+			ps: c.precomputeSafe ? 1 : undefined
+		},
+		coerced,
+		schema
 	)
-		return false
-
-	if (c.hasDefault && !c.precomputeSafe) return false
-	if (isFullyClosedObject(schema)) return false
-
-	return true
 }

@@ -3,17 +3,17 @@ import { describe, it, expect, afterEach } from 'bun:test'
 
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
+import { Compiled, type ProgramId } from '../../src/compile/aot'
 import {
-	Compiled,
 	beginValidatorCapture,
 	endValidatorCapture,
 	endHandlerCapture
-} from '../../src/compile/aot'
+} from '../../src/compile/aot-capture'
 import { RouteValidator } from '../../src/validator/route'
 import { buildFrozenRouteValidator } from '../../src/compile/handler/frozen-validator'
 import { clearCoerceLeafCache } from '../../src/type/coerce-plan'
 
-import { materialise } from './_manifest'
+import { claimManifest, materialise } from './_manifest'
 
 /** Captured coercion plans rebuild query schemas without TypeBox. */
 
@@ -33,19 +33,23 @@ function freeze(schema: any) {
 
 	Compiled.clear()
 	Validator.clear()
-	Compiled.validators = materialise(captured)
+	claimed = claimManifest({ validators: materialise(captured) })
 
 	return { query: captured.find((c) => c.slot === 'query') }
 }
 
+// program claimed by the latest `freeze()`/`freezeSlot()`
+let claimed: { ['~programId']: ProgramId }
+
 const hook = (schema: any) => ({ query: schema })
-const root = () => new Elysia() as any
+const root = () => claimed as any
 
 const wired = (schema: any) =>
 	new RouteValidator(
 		hook(schema) as any,
 		{
-			aot: { method: METHOD, path: PATH }
+			aot: { method: METHOD, path: PATH },
+			app: claimed
 		} as any
 	)
 
@@ -243,7 +247,7 @@ function freezeSlot(slot: 'query' | 'body', schema: any) {
 
 	Compiled.clear()
 	Validator.clear()
-	Compiled.validators = materialise(captured)
+	claimed = claimManifest({ validators: materialise(captured) })
 
 	return captured.find((c) => c.slot === slot)
 }

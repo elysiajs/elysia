@@ -90,58 +90,23 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		return this
 	}
 
-	get sendText(): ServerWebSocket['sendText'] {
-		const raw = this.raw
-		return memoize(this, 'sendText', raw.sendText.bind(raw))
-	}
-
-	get sendBinary(): ServerWebSocket['sendBinary'] {
-		const raw = this.raw
-		return memoize(this, 'sendBinary', raw.sendBinary.bind(raw))
-	}
-
-	get terminate(): ServerWebSocket['terminate'] {
-		const raw = this.raw
-		return memoize(this, 'terminate', raw.terminate.bind(raw))
-	}
-
-	get publishText(): ServerWebSocket['publishText'] {
-		const raw = this.raw
-		return memoize(this, 'publishText', raw.publishText.bind(raw))
-	}
-
-	get publishBinary(): ServerWebSocket['publishBinary'] {
-		const raw = this.raw
-		return memoize(this, 'publishBinary', raw.publishBinary.bind(raw))
-	}
-
-	get subscribe(): ServerWebSocket['subscribe'] {
-		const raw = this.raw
-		return memoize(this, 'subscribe', raw.subscribe.bind(raw))
-	}
-
-	get unsubscribe(): ServerWebSocket['unsubscribe'] {
-		const raw = this.raw
-		return memoize(this, 'unsubscribe', raw.unsubscribe.bind(raw))
-	}
-
-	get isSubscribed(): ServerWebSocket['isSubscribed'] {
-		const raw = this.raw
-		return memoize(this, 'isSubscribed', raw.isSubscribed.bind(raw))
-	}
-
-	get cork(): ServerWebSocket['cork'] {
-		const raw = this.raw
-		return memoize(this, 'cork', raw.cork.bind(raw) as any)
-	}
-
-	get remoteAddress(): string {
-		return memoize(this, 'remoteAddress', this.raw.remoteAddress)
-	}
-
-	get binaryType(): 'nodebuffer' | 'arraybuffer' | 'uint8array' | undefined {
-		return memoize(this, 'binaryType', this.raw.binaryType)
-	}
+	// Raw-passthrough memoizing getters: installed on the prototype by the
+	// rawPassthroughKeys loop below the class body.
+	declare readonly sendText: ServerWebSocket['sendText']
+	declare readonly sendBinary: ServerWebSocket['sendBinary']
+	declare readonly terminate: ServerWebSocket['terminate']
+	declare readonly publishText: ServerWebSocket['publishText']
+	declare readonly publishBinary: ServerWebSocket['publishBinary']
+	declare readonly subscribe: ServerWebSocket['subscribe']
+	declare readonly unsubscribe: ServerWebSocket['unsubscribe']
+	declare readonly isSubscribed: ServerWebSocket['isSubscribed']
+	declare readonly cork: ServerWebSocket['cork']
+	declare readonly remoteAddress: string
+	declare readonly binaryType:
+		| 'nodebuffer'
+		| 'arraybuffer'
+		| 'uint8array'
+		| undefined
 
 	get send(): (
 		data: FlattenResponse<Route['response']> | BufferSource,
@@ -303,6 +268,37 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		this.raw.close(code, reason)
 	}
 }
+
+const rawPassthroughKeys = [
+	'sendText',
+	'sendBinary',
+	'terminate',
+	'publishText',
+	'publishBinary',
+	'subscribe',
+	'unsubscribe',
+	'isSubscribed',
+	'cork',
+	'remoteAddress',
+	'binaryType'
+] as const
+
+for (const key of rawPassthroughKeys)
+	Object.defineProperty(ElysiaWS.prototype, key, {
+		// Match the class-getter descriptor the loop replaces.
+		configurable: true,
+		enumerable: false,
+		get(this: ElysiaWS<any>) {
+			const raw = this.raw
+			const value = (raw as any)[key]
+
+			return memoize(
+				this,
+				key,
+				typeof value === 'function' ? value.bind(raw) : value
+			)
+		}
+	})
 
 export function isGeneratorObject(value: unknown): boolean {
 	if (value == null || typeof value !== 'object') return false

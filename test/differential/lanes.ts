@@ -5,12 +5,14 @@ import '../../src/compile/aot-capture' // installs captureImpl (side effect)
 import { Elysia, type AnyElysia } from '../../src'
 import { resumeEmit } from '../../src/experimental/resume'
 import { Compiled, type CompiledSnapshot } from '../../src/compile/aot'
+import {
+	snapshotCompiled,
+	restoreCompiled
+} from '../../src/compile/aot-capture'
 import { Validator } from '../../src/validator'
 import { captureArtifacts } from '../../src/plugin/aot/source'
-import {
-	installReconstructImpl,
-	Reconstruct
-} from '../../src/compile/aot-reconstruct'
+import { Reconstruct } from '../../src/compile/aot-reconstruct'
+import { installReconstructImpl } from '../../src/compile/aot-emit'
 import { buildCoercedFromPlan } from '../../src/type/coerce-plan'
 
 export type Define = (app: AnyElysia) => AnyElysia
@@ -164,7 +166,7 @@ export const aotReconstructHandle = {
 	id: 'aot-reconstruct-handle',
 	transport: 'handle',
 	async make(define, observe?) {
-		const snapshot: CompiledSnapshot = Compiled.snapshot()
+		const snapshot: CompiledSnapshot = snapshotCompiled()
 
 		Compiled.clear()
 		Validator.clear()
@@ -184,7 +186,7 @@ export const aotReconstructHandle = {
 			handle: (req) => app.handle(req),
 			observe,
 			async dispose() {
-				Compiled.restore(snapshot)
+				restoreCompiled(snapshot)
 				Validator.clear()
 			}
 		}

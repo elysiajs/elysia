@@ -9,15 +9,13 @@ import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
 import { RouteValidator } from '../../src/validator/route'
 import { buildFrozenRouteValidator } from '../../src/compile/handler/frozen-validator'
-import '../../src/compile/aot-capture'
+import { Compiled, type CapturedValidator } from '../../src/compile/aot'
 import {
-	Compiled,
 	beginValidatorCapture,
 	endValidatorCapture,
-	endHandlerCapture,
-	type CapturedValidator
-} from '../../src/compile/aot'
-import { materialise } from './_manifest'
+	endHandlerCapture
+} from '../../src/compile/aot-capture'
+import { claimManifest, materialise } from './_manifest'
 
 /** Slot coercion without TypeBox must match the wired validator exactly. */
 
@@ -88,12 +86,13 @@ function wiredResults(
 	cases: unknown[]
 ) {
 	Compiled.clear()
-	Compiled.validators = materialise(captured)
+	const claimed = claimManifest({ validators: materialise(captured) })
 
 	const validator = new RouteValidator(
 		{ [slot]: schema } as any,
 		{
-			aot: { method, path }
+			aot: { method, path },
+			app: claimed
 		} as any
 	)
 
@@ -186,17 +185,18 @@ function assertExactParity(
 	const captured = capture(slot, schema, method, path)
 
 	Compiled.clear()
-	Compiled.validators = materialise(captured)
+	const claimed = claimManifest({ validators: materialise(captured) })
 
 	const wired = new RouteValidator(
 		{ [slot]: schema } as any,
 		{
-			aot: { method, path }
+			aot: { method, path },
+			app: claimed
 		} as any
 	) as any
 	const frozen = buildFrozenRouteValidator(
 		{ [slot]: schema } as any,
-		{ '~config': {}, '~ext': {} } as any,
+		{ ...claimed, '~config': {}, '~ext': {} } as any,
 		method as any,
 		path
 	)
@@ -348,17 +348,18 @@ describe('exact values from slot coercion', () => {
 		const captured = capture('query', schema, 'GET', '/d')
 
 		Compiled.clear()
-		Compiled.validators = materialise(captured)
+		const claimed = claimManifest({ validators: materialise(captured) })
 
 		const wired = new RouteValidator(
 			{ query: schema } as any,
 			{
-				aot: { method: 'GET', path: '/d' }
+				aot: { method: 'GET', path: '/d' },
+				app: claimed
 			} as any
 		) as any
 		const frozen = buildFrozenRouteValidator(
 			{ query: schema } as any,
-			{ '~config': {}, '~ext': {} } as any,
+			{ ...claimed, '~config': {}, '~ext': {} } as any,
 			'GET' as any,
 			'/d'
 		) as any
@@ -379,17 +380,18 @@ describe('exact values from slot coercion', () => {
 		const captured = capture('query', schema, 'GET', '/z')
 
 		Compiled.clear()
-		Compiled.validators = materialise(captured)
+		const claimed = claimManifest({ validators: materialise(captured) })
 
 		const wired = new RouteValidator(
 			{ query: schema } as any,
 			{
-				aot: { method: 'GET', path: '/z' }
+				aot: { method: 'GET', path: '/z' },
+				app: claimed
 			} as any
 		) as any
 		const frozen = buildFrozenRouteValidator(
 			{ query: schema } as any,
-			{ '~config': {}, '~ext': {} } as any,
+			{ ...claimed, '~config': {}, '~ext': {} } as any,
 			'GET' as any,
 			'/z'
 		) as any

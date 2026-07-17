@@ -11,10 +11,7 @@ describe('infer body reference', () => {
 			body: false,
 			cookie: false,
 			set: false,
-			server: false,
-			path: false,
-			route: false,
-			url: false
+			route: false
 		} satisfies Sucrose.Inference
 
 		inferBodyReference(code, aliases, inference)
@@ -31,10 +28,7 @@ describe('infer body reference', () => {
 			body: false,
 			cookie: false,
 			set: false,
-			server: false,
-			path: false,
-			route: false,
-			url: false
+			route: false
 		} satisfies Sucrose.Inference
 
 		inferBodyReference(code, aliases, inference)
@@ -58,10 +52,7 @@ describe('infer body reference', () => {
 			headers: false,
 			query: true,
 			set: true,
-			server: false,
-			path: false,
-			route: false,
-			url: false
+			route: false
 		} satisfies Sucrose.Inference
 
 		inferBodyReference(code, aliases, inference)
@@ -72,10 +63,7 @@ describe('infer body reference', () => {
 			headers: false,
 			query: true,
 			set: true,
-			server: false,
-			path: false,
-			route: false,
-			url: false
+			route: false
 		})
 	})
 
@@ -92,10 +80,7 @@ describe('infer body reference', () => {
 			headers: false,
 			query: true,
 			set: true,
-			server: false,
-			path: false,
-			route: false,
-			url: false
+			route: false
 		} satisfies Sucrose.Inference
 
 		inferBodyReference(code, aliases, inference)
@@ -106,16 +91,13 @@ describe('infer body reference', () => {
 			headers: false,
 			query: true,
 			set: true,
-			server: false,
-			path: false,
-			route: false,
-			url: false
+			route: false
 		})
 	})
 
 	it('infer dot notation', () => {
 		const code = `
-			context.server?.upgrade(request)
+			context.set?.headers
 		`
 		const aliases = ['context']
 		const inference = {
@@ -124,14 +106,11 @@ describe('infer body reference', () => {
 			body: false,
 			cookie: false,
 			set: false,
-			server: false,
-			path: false,
-			route: false,
-			url: false
+			route: false
 		} satisfies Sucrose.Inference
 
 		inferBodyReference(code, aliases, inference)
 
-		expect(inference.server as boolean).toBe(true)
+		expect(inference.set as boolean).toBe(true)
 	})
 })

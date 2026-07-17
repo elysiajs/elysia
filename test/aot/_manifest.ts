@@ -1,14 +1,14 @@
 import {
 	Compiled,
+	createAotFingerprint,
+	createProgramId,
 	type CapturedValidator,
+	type ProgramId,
 	type ValidatorManifest,
 	type CapturedHandler,
 	type HandlerManifest
 } from '../../src/compile/aot'
-import {
-	Source,
-	installReconstructImpl
-} from '../../src/compile/aot-reconstruct'
+import { Source, installReconstructImpl } from '../../src/compile/aot-emit'
 
 // Reconstruct in-process manifests through the same table as generated modules.
 installReconstructImpl()
@@ -18,6 +18,38 @@ import { buildCoercedFromPlan } from '../../src/type/coerce-plan'
 import { Guard } from 'typebox/guard'
 import { Format } from 'typebox/format'
 import { Hashing } from 'typebox/system'
+
+interface TestManifest {
+	validators?: ValidatorManifest
+	handlers?: HandlerManifest
+	lazyGroups?: Array<() => ValidatorManifest>
+	lazyGroupOf?: Record<string, Record<string, number>>
+}
+
+/**
+ * Register a materialised manifest on the program lane, like a generated
+ * module would. The next app build claims it through its own `~programId`.
+ */
+export const registerManifest = (manifest: TestManifest) =>
+	Compiled.register({
+		bf: 1,
+		fingerprint: createAotFingerprint(),
+		planRebuilder: buildCoercedFromPlan,
+		...manifest
+	})
+
+/**
+ * Register + claim under a fresh ProgramId without booting an app. The
+ * returned holder threads the id as ValidatorOptions `app` or a frozen root.
+ */
+export const claimManifest = (
+	manifest: TestManifest
+): { ['~programId']: ProgramId } => {
+	const id = createProgramId()
+	registerManifest(manifest)
+	Compiled.claim(id, createAotFingerprint())
+	return { '~programId': id }
+}
 
 // `new Function` receives the module globals that generated imports normally bind.
 const fn = (src: string) =>
@@ -166,11 +198,8 @@ export const materialise = (
 				}
 			})
 
-		if (c.coercePlan) {
-			entry.cp = JSON.parse(JSON.stringify(c.coercePlan))
-			// Coercion plans require the generated module's rebuilder registration.
-			Compiled.planRebuilder = buildCoercedFromPlan
-		}
+		// Coercion plans rely on the rebuilder `registerManifest` registers.
+		if (c.coercePlan) entry.cp = JSON.parse(JSON.stringify(c.coercePlan))
 
 		const bySlot = ((m[c.method] ??= {})[c.path] ??= {})
 		bySlot[c.slot] = entry

@@ -43,9 +43,6 @@ describe('sucrose', () => {
 			body: false,
 			cookie: false,
 			set: false,
-			server: false,
-			path: false,
-			url: false,
 			route: false
 		})
 	})
@@ -77,9 +74,6 @@ describe('sucrose', () => {
 			body: false,
 			cookie: true,
 			set: true,
-			server: false,
-			path: false,
-			url: false,
 			route: false
 		})
 	})
@@ -148,9 +142,6 @@ describe('sucrose', () => {
 			headers: false,
 			query: true,
 			set: false,
-			server: false,
-			path: false,
-			url: false,
 			route: false
 		})
 	})
@@ -181,9 +172,6 @@ describe('sucrose', () => {
 			body: true,
 			cookie: true,
 			set: true,
-			server: true,
-			path: true,
-			url: true,
 			route: true
 		})
 	})
@@ -214,9 +202,6 @@ describe('sucrose', () => {
 			body: true,
 			cookie: true,
 			set: true,
-			server: true,
-			path: true,
-			url: true,
 			route: true
 		})
 	})
@@ -224,8 +209,8 @@ describe('sucrose', () => {
 	it('infer single object destructure property', () => {
 		expect(
 			sucrose(
-				({ server }) => {
-					console.log(server)
+				({ route }) => {
+					console.log(route)
 				},
 				{
 					afterHandle: [],
@@ -247,10 +232,7 @@ describe('sucrose', () => {
 			body: false,
 			cookie: false,
 			set: false,
-			server: true,
-			path: false,
-			url: false,
-			route: false
+			route: true
 		})
 	})
 
@@ -303,7 +285,7 @@ describe('sucrose', () => {
 		expect(response.status).toBe(200)
 	})
 
-	it('access route, url, path', () => {
+	it('access route', () => {
 		expect(
 			sucrose(
 				(context) => {
@@ -329,9 +311,6 @@ describe('sucrose', () => {
 			body: false,
 			cookie: false,
 			set: false,
-			server: false,
-			path: true,
-			url: true,
 			route: true
 		})
 	})
@@ -348,9 +327,6 @@ describe('sucrose', () => {
 			body: true,
 			cookie: true,
 			set: true,
-			server: true,
-			path: true,
-			url: true,
 			route: true
 		})
 	})

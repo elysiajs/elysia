@@ -26,7 +26,7 @@ import {
 	Default
 } from '../type/bridge'
 import { isAsyncFunction } from '../compile/utils'
-import { ASYNC_REFINE } from '../type/elysia/file-type'
+import { isAsyncPredicate } from '../type/elysia/file-type'
 import { clearSharedReferenceCaches } from '../type/elysia/utils'
 import { hasProperty } from '../type/utils'
 
@@ -69,14 +69,6 @@ export abstract class Validator {
 		if (models && schema in models) return models[schema]
 
 		throw new Error(`Schema reference "${schema}" not found in models`)
-	}
-
-	Decode(value: unknown): unknown {
-		return value
-	}
-
-	Encode(value: unknown): unknown {
-		return value
 	}
 
 	From?(
@@ -350,11 +342,6 @@ export class StandardValidator extends Validator {
 		return this.#sync(value).issues ?? []
 	}
 
-	Decode(value: unknown): unknown {
-		// @ts-expect-error
-		return this.#sync(value).value
-	}
-
 	EncodeFrom(value: unknown) {
 		return this.From(value)
 	}
@@ -380,15 +367,6 @@ export class StandardValidator extends Validator {
 		return q.value
 	}
 }
-
-const isAsyncPredicate = (v: unknown) =>
-	Array.isArray(v)
-		? v.some((x: any) =>
-				typeof x.check === 'function'
-					? isAsyncFunction(x.check) || x.check[ASYNC_REFINE] === true
-					: false
-			)
-		: false
 
 export class MultiValidator extends Validator {
 	override isAsync = false
@@ -419,6 +397,39 @@ export class MultiValidator extends Validator {
 
 		const shouldClose = options?.normalize === false
 
+		const compileMember = (rawSchema: TSchema, hd: boolean) => {
+			let coercedSchema = applyCoercions(rawSchema, options?.coerces)
+			if (shouldClose)
+				coercedSchema = nonAdditionalProperties(
+					coercedSchema as any
+				) as TSchema
+
+			const compiled = Compile(coercedSchema)
+
+			codecs.push(HasCodec(coercedSchema))
+			hasDefaults.push(hd)
+			tbSchemas.push(hd ? coercedSchema : null)
+
+			const isAsync =
+				(compiled as any).buildResult?.external?.variables?.some(
+					isAsyncPredicate
+				) ?? false
+			if (isAsync) {
+				this.isAsync = true
+
+				asyncMembers.push(
+					Validator.create(rawSchema, {
+						coerces: options?.coerces,
+						normalize: options?.normalize,
+						models: options?.models,
+						sanitize: options?.sanitize
+					})! as unknown as TypeBoxValidator
+				)
+			} else asyncMembers.push(null)
+
+			return compiled
+		}
+
 		for (let i = 0; i < schemas.length; i++) {
 			const schema = schemas[i]
 			const isTypeBox = '~kind' in schema
@@ -434,45 +445,11 @@ export class MultiValidator extends Validator {
 					typeboxObjects.push(schema as TSchema)
 					schemas.splice(i, 1)
 					i--
-				} else {
-					const rawSchema = schema as TSchema
-					let coercedSchema = applyCoercions(
-						rawSchema,
-						options?.coerces
-					)
-					if (shouldClose)
-						coercedSchema = nonAdditionalProperties(
-							coercedSchema as any
-						) as TSchema
-
-					const compiled = Compile(coercedSchema)
-					schemas[i] = compiled as any
-
-					codecs.push(HasCodec(coercedSchema))
-
-					const hd = hasProperty('default', rawSchema)
-					hasDefaults.push(hd)
-					tbSchemas.push(hd ? coercedSchema : null)
-
-					const isAsync =
-						(
-							compiled as any
-						).buildResult?.external?.variables?.some(
-							isAsyncPredicate
-						) ?? false
-					if (isAsync) {
-						this.isAsync = true
-
-						asyncMembers.push(
-							Validator.create(rawSchema, {
-								coerces: options?.coerces,
-								normalize: options?.normalize,
-								models: options?.models,
-								sanitize: options?.sanitize
-							})! as unknown as TypeBoxValidator
-						)
-					} else asyncMembers.push(null)
-				}
+				} else
+					schemas[i] = compileMember(
+						schema as TSchema,
+						hasProperty('default', schema as TSchema)
+					) as any
 			} else {
 				this.mayReturnPromise = true
 				if (isAsyncStandardSchema(schema)) this.isAsync = true
@@ -483,42 +460,13 @@ export class MultiValidator extends Validator {
 			}
 		}
 
-		if (typeboxObjects) {
-			const rawMerged = Intersect(typeboxObjects)
-			let coercedMerged = applyCoercions(rawMerged, options?.coerces)
-
-			if (shouldClose)
-				coercedMerged = nonAdditionalProperties(
-					coercedMerged as any
-				) as TSchema
-
-			const compiled = Compile(coercedMerged)
-			schemas.push(compiled as any)
-
-			codecs.push(HasCodec(coercedMerged))
-			const hd = typeboxObjects.some((s) =>
-				hasProperty('default', s as any)
+		if (typeboxObjects)
+			schemas.push(
+				compileMember(
+					Intersect(typeboxObjects) as TSchema,
+					typeboxObjects.some((s) => hasProperty('default', s as any))
+				) as any
 			)
-			hasDefaults.push(hd)
-			tbSchemas.push(hd ? coercedMerged : null)
-
-			const isAsync =
-				(compiled as any).buildResult?.external?.variables?.some(
-					isAsyncPredicate
-				) ?? false
-
-			if (isAsync) {
-				this.isAsync = true
-				asyncMembers.push(
-					Validator.create(rawMerged as TSchema, {
-						coerces: options?.coerces,
-						normalize: options?.normalize,
-						models: options?.models,
-						sanitize: options?.sanitize
-					})! as unknown as TypeBoxValidator
-				)
-			} else asyncMembers.push(null)
-		}
 
 		this.#schemas = schemas as (
 			| CompiledTypeBoxValidator
@@ -598,39 +546,6 @@ export class MultiValidator extends Validator {
 				)
 
 		return errors
-	}
-
-	Decode(value: unknown): unknown {
-		let snapshot: Record<string, unknown> | unknown[] | undefined
-
-		for (let i = 0; i < this.#schemas.length; i++) {
-			const validator = this.#schemas[i]
-
-			snapshot = MultiValidator.#merge(
-				snapshot,
-				'~standard' in validator
-					? MultiValidator.#syncStandard(validator, value).value
-					: this.#decodeMember(
-							validator as CompiledTypeBoxValidator,
-							i,
-							value
-						)
-			)
-		}
-
-		return snapshot!
-	}
-
-	#decodeMember(
-		compiled: CompiledTypeBoxValidator,
-		index: number,
-		value: unknown
-	) {
-		const v = this.#cloneForMember(value)
-
-		return this.#codecs[index]
-			? (compiled as any).Clean((compiled as any).Decode(v))
-			: (compiled as any).Clean(v)
 	}
 
 	#cloneForMember(value: unknown) {

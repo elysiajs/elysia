@@ -1,3 +1,5 @@
+import { skipString } from '../../compile/lexer'
+
 export interface RewriteOptions {
 	/** Specifier the app imports `t` from. @default 'elysia' */
 	from?: string
@@ -49,38 +51,8 @@ function nonCodeSpans(code: string): [start: number, end: number][] {
 
 		// ` template literal, including nesting through ${ ... }
 		if (c === 96) {
-			const start = i++
-			// stack: -1 = template text, >= 0 = brace depth inside a `${ }`
-			const stack: number[] = [-1]
-
-			while (i < length && stack.length) {
-				const d = code.charCodeAt(i)
-				if (d === 92) {
-					i += 2
-					continue
-				}
-
-				const top = stack[stack.length - 1]
-				if (top === -1) {
-					// template text
-					if (d === 96) stack.pop()
-					else if (d === 36 && code.charCodeAt(i + 1) === 123) {
-						stack.push(0)
-						i++
-					}
-				} else {
-					// interpolation code
-					if (d === 96) stack.push(-1)
-					else if (d === 123) stack[stack.length - 1]++
-					else if (d === 125) {
-						if (top === 0) stack.pop()
-						else stack[stack.length - 1]--
-					}
-				}
-
-				i++
-			}
-
+			const start = i
+			i = skipString(code, i)
 			spans.push([start, i])
 			continue
 		}

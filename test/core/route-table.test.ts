@@ -4,7 +4,7 @@ import { buildRouteTable, routeRow, RouteFlag } from '../../src/route-table'
 import { collectStaticRoutes } from '../../src/adapter/bun'
 import { describe, expect, it } from 'bun:test'
 
-const buildFixture = (lazyCompose: boolean) => {
+const buildFixture = () => {
 	const child = new Elysia({ prefix: '/child' })
 		.get('/a', { query: t.Object({ q: t.String() }) }, () => 'a')
 		.ws('/socket', { message() {} })
@@ -13,9 +13,7 @@ const buildFixture = (lazyCompose: boolean) => {
 		.guard({ beforeHandle() {} })
 		.get('/guarded', () => 'g')
 
-	const app = new Elysia(
-		lazyCompose ? { experimental: { lazyCompose: true } } : undefined
-	)
+	const app = new Elysia()
 		.macro({ auth: { resolve: () => ({ user: 'x' }) } })
 		.get('/', () => 'root')
 		.get('/dyn/:id', ({ params }) => params.id)
@@ -31,43 +29,38 @@ const buildFixture = (lazyCompose: boolean) => {
 const rawTuples = (app: any): readonly any[] => app['~routes']
 
 describe('columnar route table', () => {
-	describe('stores every authoring tuple field', () => {
-		for (const lazyCompose of [false, true])
-			it(`lazyCompose=${lazyCompose}`, () => {
-				const app = buildFixture(lazyCompose)
-				const table = app['~routeTable']
-				const tuples = rawTuples(app)
+	it('stores every authoring tuple field', () => {
+		const app = buildFixture()
+		const table = app['~routeTable']
+		const tuples = rawTuples(app)
 
-				expect(table).toBeDefined()
-				expect(table.length).toBe(tuples.length)
+		expect(table).toBeDefined()
+		expect(table.length).toBe(tuples.length)
 
-				for (let i = 0; i < tuples.length; i++) {
-					const t = tuples[i]
+		for (let i = 0; i < tuples.length; i++) {
+			const t = tuples[i]
 
-					expect(table.method[i]).toBe(t[0])
-					expect(table.path[i]).toBe(t[1])
-					expect(table.handler[i]).toBe(t[2])
-					expect(table.owner[i]).toBe(t[3])
-					expect(table.localHook[i]).toBe(t[4])
-					expect(table.appHook[i]).toBe(t[5])
-					expect(table.inheritedChain[i]).toBe(t[6])
+			expect(table.method[i]).toBe(t[0])
+			expect(table.path[i]).toBe(t[1])
+			expect(table.handler[i]).toBe(t[2])
+			expect(table.owner[i]).toBe(t[3])
+			expect(table.localHook[i]).toBe(t[4])
+			expect(table.appHook[i]).toBe(t[5])
+			expect(table.inheritedChain[i]).toBe(t[6])
 
-					if (t[7] === undefined)
-						expect(table.macroScope.has(i)).toBe(false)
-					else expect(table.macroScope.get(i)).toBe(t[7])
+			if (t[7] === undefined)
+				expect(table.macroScope.has(i)).toBe(false)
+			else expect(table.macroScope.get(i)).toBe(t[7])
 
-					expect(!!(table.flags[i] & RouteFlag.WS)).toBe(
-						t[0] === 'WS'
-					)
-					expect(!!(table.flags[i] & RouteFlag.Dynamic)).toBe(
-						/[:*]/.test(t[1])
-					)
-				}
-			})
+			expect(!!(table.flags[i] & RouteFlag.WS)).toBe(t[0] === 'WS')
+			expect(!!(table.flags[i] & RouteFlag.Dynamic)).toBe(
+				/[:*]/.test(t[1])
+			)
+		}
 	})
 
 	it('routeRow returns a fresh tuple with every stored field', () => {
-		const app = buildFixture(false)
+		const app = buildFixture()
 		const table = app['~routeTable']
 		const tuples = rawTuples(app)
 
@@ -81,33 +74,30 @@ describe('columnar route table', () => {
 		}
 	})
 
-	describe('does not retain authoring tuple arrays', () => {
-		for (const lazyCompose of [false, true])
-			it(`lazyCompose=${lazyCompose}`, () => {
-				const app = buildFixture(lazyCompose)
-				const table = app['~routeTable']
-				const tuples = new Set<unknown>(rawTuples(app))
+	it('does not retain authoring tuple arrays', () => {
+		const app = buildFixture()
+		const table = app['~routeTable']
+		const tuples = new Set<unknown>(rawTuples(app))
 
-				const columns = [
-					table.method,
-					table.path,
-					table.handler,
-					table.owner,
-					table.localHook,
-					table.appHook,
-					table.inheritedChain,
-					table.flags
-				]
+		const columns = [
+			table.method,
+			table.path,
+			table.handler,
+			table.owner,
+			table.localHook,
+			table.appHook,
+			table.inheritedChain,
+			table.flags
+		]
 
-				for (const column of columns)
-					for (const value of column)
-						expect(tuples.has(value)).toBe(false)
+		for (const column of columns)
+			for (const value of column)
+				expect(tuples.has(value)).toBe(false)
 
-				for (const value of table.macroScope.values())
-					expect(tuples.has(value)).toBe(false)
-				for (const value of table.source.values())
-					expect(tuples.has(value)).toBe(false)
-			})
+		for (const value of table.macroScope.values())
+			expect(tuples.has(value)).toBe(false)
+		for (const value of table.source.values())
+			expect(tuples.has(value)).toBe(false)
 	})
 
 	it('builds an empty table from an empty declaration list', () => {
@@ -196,7 +186,7 @@ describe('columnar route table', () => {
 		})
 
 		it('serves macro, guard, dynamic, and nested plugin routes', async () => {
-			const app = buildFixture(false)
+			const app = buildFixture()
 
 			const cases: Array<[string, string]> = [
 				['http://localhost/', 'root'],

@@ -234,23 +234,8 @@ export interface BaseSchema {
 	type?: string
 	$schema?: string
 	const?: unknown[]
-	// title?: string
-	// description?: string
-	// multipleOf?: number
-	// maximum?: number
-	// exclusiveMaximum?: boolean
-	// minimum?: number
-	// exclusiveMinimum?: boolean
-	// maxLength?: number
-	// minLength?: number
-	// pattern?: string
 	additionalItems?: boolean | BaseSchema
 	items?: BaseSchema | BaseSchema[]
-	// maxItems?: number
-	// minItems?: number
-	// uniqueItems?: boolean
-	// maxProperties?: number
-	// minProperties?: number
 	required?: string[]
 	additionalProperties?: boolean | BaseSchema
 	definitions?: BaseSchemaRecord

@@ -4,41 +4,51 @@ import { dangerousKeys } from '../../constants'
 export function schemaSome(
 	schema: any,
 	test: (node: any) => boolean,
-	seen: WeakSet<object> = new WeakSet()
+	seen: WeakSet<object> = new WeakSet(),
+	// stop descending below a matching node (the node itself is still tested)
+	prune?: (node: any) => boolean
 ) {
 	if (!schema || typeof schema !== 'object' || seen.has(schema)) return false
 	seen.add(schema)
 
 	if (test(schema)) return true
+	if (prune && prune(schema)) return false
 
 	const props = schema.properties
 	if (props)
 		for (const k in props)
-			if (Object.hasOwn(props, k) && schemaSome(props[k], test, seen))
+			if (
+				Object.hasOwn(props, k) &&
+				schemaSome(props[k], test, seen, prune)
+			)
 				return true
 
 	const items = schema.items
 	if (Array.isArray(items)) {
-		for (const it of items) if (schemaSome(it, test, seen)) return true
-	} else if (items && schemaSome(items, test, seen)) return true
+		for (const it of items)
+			if (schemaSome(it, test, seen, prune)) return true
+	} else if (items && schemaSome(items, test, seen, prune)) return true
 
 	for (const k of ['anyOf', 'allOf', 'oneOf'] as const) {
 		const arr = schema[k]
 		if (Array.isArray(arr))
-			for (const x of arr) if (schemaSome(x, test, seen)) return true
+			for (const x of arr)
+				if (schemaSome(x, test, seen, prune)) return true
 	}
 
 	if (
 		schema.additionalProperties &&
 		typeof schema.additionalProperties === 'object' &&
-		schemaSome(schema.additionalProperties, test, seen)
+		schemaSome(schema.additionalProperties, test, seen, prune)
 	)
 		return true
 
-	if (schema.not && schemaSome(schema.not, test, seen)) return true
+	if (schema.not && schemaSome(schema.not, test, seen, prune)) return true
 
 	const pp = schema.patternProperties
-	if (pp) for (const k in pp) if (schemaSome(pp[k], test, seen)) return true
+	if (pp)
+		for (const k in pp)
+			if (schemaSome(pp[k], test, seen, prune)) return true
 
 	return false
 }

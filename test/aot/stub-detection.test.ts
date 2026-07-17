@@ -15,7 +15,12 @@ import {
 	STUB_SOURCES
 } from '../../src/plugin/aot/core'
 import { aot as bunAot } from '../../src/plugin/aot/bun'
-import { materialise, materialiseHandlers } from './_manifest'
+import {
+	claimManifest,
+	materialise,
+	materialiseHandlers,
+	registerManifest
+} from './_manifest'
 import { post, req } from '../utils'
 
 const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/aot.ts')
@@ -97,7 +102,12 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 	})
 
 	it('detection is side-effect free (registry restored afterwards)', async () => {
-		const before = Compiled.validators
+		const { '~programId': id } = claimManifest({
+			validators: { GET: { '/kept': { body: { d: 1 } } } } as any
+		})
+		const before = Compiled.getValidator('GET', '/kept', 'body', id)
+		expect(before).toBeDefined()
+
 		await analyzeStubbability(
 			new Elysia().post(
 				'/',
@@ -105,12 +115,13 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 				({ body }) => body
 			) as any
 		)
-		expect(Compiled.validators).toBe(before)
+
+		expect(Compiled.getValidator('GET', '/kept', 'body', id)).toBe(before!)
 	})
 
 	it('detection clears temporary handlers when only validators existed before replay', async () => {
-		Compiled.validators = {}
-		expect(Compiled.handlers).toBeUndefined()
+		const { '~programId': id } = claimManifest({ validators: {} })
+		expect(Compiled.getHandler(id, 'POST', '/')).toBeUndefined()
 
 		await analyzeStubbability(
 			new Elysia().post(
@@ -120,14 +131,13 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			) as any
 		)
 
-		expect(Compiled.validators).toEqual({})
-		expect(Compiled.handlers).toBeUndefined()
+		expect(Compiled.getHandler(id, 'POST', '/')).toBeUndefined()
 	})
 
 	it('replay is side-effect free for unmaterialized lazy validator groups', () => {
 		let built = 0
-		Compiled.registerLazyValidators(
-			[
+		const { '~programId': id } = claimManifest({
+			lazyGroups: [
 				() => {
 					built++
 					return {
@@ -139,14 +149,14 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 					} as any
 				}
 			],
-			{
+			lazyGroupOf: {
 				GET: {
 					'/lazy': 0
 				}
 			}
-		)
+		})
 
-		expect(Compiled.hasValidator('GET', '/lazy', 'body')).toBe(true)
+		expect(Compiled.hasValidator('GET', '/lazy', 'body', id)).toBe(true)
 		expect(built).toBe(0)
 
 		const report = replayStubbability(new Elysia() as any, [])
@@ -154,9 +164,9 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 
 		// Replay restores both validators and their lazy-group metadata.
 		// The route still looked unmaterialized, but no longer resolved.
-		expect(Compiled.hasValidator('GET', '/lazy', 'body')).toBe(true)
+		expect(Compiled.hasValidator('GET', '/lazy', 'body', id)).toBe(true)
 		expect(built).toBe(0)
-		expect(Compiled.getValidator('GET', '/lazy', 'body')?.d).toBe(1)
+		expect(Compiled.getValidator('GET', '/lazy', 'body', id)?.d).toBe(1)
 		expect(built).toBe(1)
 	})
 
@@ -241,8 +251,10 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 		// app.
 		Compiled.clear()
 		Validator.clear()
-		Compiled.validators = materialise(validators)
-		Compiled.handlers = materialiseHandlers(handlers)
+		registerManifest({
+			validators: materialise(validators),
+			handlers: materialiseHandlers(handlers)
+		})
 
 		const frozen = build()
 		frozen.compile()

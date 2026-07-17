@@ -1,5 +1,5 @@
 /**
- * Frozen-manifest reconstruction + source emitters.
+ * Frozen-manifest reconstruction.
  *
  * Kept out of `aot.ts` so apps that never load a generated manifest module
  * tree-shake it: runtime call sites reach these through `reconstruct()`
@@ -8,12 +8,12 @@
  * Everything here is pure (no module state): the stateful registration goes
  * through `Compiled` from `registerFrom`, so a duplicate copy of this module
  * resolving from another elysia install still reconstructs correctly.
+ *
+ * The build-only source emitters/verifiers live in `aot-emit.ts`.
  */
 import { ELYSIA_TYPES } from '../type/constants'
 import {
-	Compiled,
 	EMPTY_EXTERNALS,
-	type CheckBuildResult,
 	type FrozenCheckFactory,
 	type FrozenMirror,
 	type FrozenMirrorFactory,
@@ -21,39 +21,6 @@ import {
 	type ReconstructImpl,
 	type StringCodecNode
 } from './aot'
-
-export function reconstructCheck(build: CheckBuildResult): {
-	defs: string
-	value: string
-} {
-	const defs = build.functions.join(';\n')
-
-	if (!build.useUnevaluated) {
-		const single = /^([A-Za-z_$][\w$]*)\(value\)$/.exec(build.entry.trim())
-		if (single) return { defs, value: single[1] }
-	}
-
-	const statements =
-		(build.useUnevaluated
-			? 'const context = new CheckContext({}, {});\n'
-			: '') + `return ${build.entry}`
-
-	return { defs, value: `(value) => { ${statements} }` }
-}
-
-const checkCode = (defs: string, value: string) => `${defs}; return ${value}`
-
-function reconstructCheckCode(build: CheckBuildResult) {
-	const { defs, value } = reconstructCheck(build)
-	return checkCode(defs, value)
-}
-
-// emit into bundle for frozen check
-const checkFactorySource = (identifier: string, code: string) =>
-	`function(${identifier}){${code}}`
-
-const handlerFactorySource = (alias: string, code: string) =>
-	`function(h${alias ? ',' + alias : ''}){return ${code}}`
 
 const isValueLikeExternal = (v: unknown) =>
 	v === null || (typeof v !== 'object' && typeof v !== 'function')
@@ -105,69 +72,6 @@ export function collectExternals(schema: any, out: unknown[] = []) {
 	return out
 }
 
-export function externalsMatch(a: unknown[], b: unknown[]) {
-	if (a.length !== b.length) return false
-
-	for (let i = 0; i < a.length; i++) {
-		const x = a[i] as any
-		const y = b[i] as any
-
-		if (x === y) continue
-
-		if (x instanceof RegExp && y instanceof RegExp) {
-			if (x.source !== y.source || x.flags !== y.flags) return false
-			continue
-		}
-
-		if (Array.isArray(x) && Array.isArray(y)) {
-			if (x.length !== y.length) return false
-
-			let ok = true
-			for (let j = 0; j < x.length; j++)
-				if (x[j] !== y[j]) {
-					ok = false
-					break
-				}
-
-			if (ok) continue
-		}
-
-		return false
-	}
-
-	return true
-}
-
-const mirrorFactorySource = (source: string, hasExternals: boolean) =>
-	hasExternals
-		? // union: a factory `(d) => (v) => cleaned`. `d` injects the branch checks
-			`function(d){${source}}`
-		: // plain: the cleaner `(v) => cleaned` directly (no unused-`d` factory)
-			`function(v){${source}}`
-
-// Merged check + mirror factory (cm)
-const bothFactorySource = (
-	identifier: string,
-	checkDefs: string,
-	checkValue: string,
-	mirrorSource: string,
-	mirrorHasExternals: boolean
-) =>
-	`function(${identifier},d){${checkDefs}; return{check:${checkValue},clean:${
-		mirrorHasExternals
-			? `(function(d){${mirrorSource}})(d)`
-			: `function(v){${mirrorSource}}`
-	}}}`
-
-// ? Build-only: these source emitters are imported solely by `plugin/aot/source.ts`
-export const Source = {
-	checkFactory: checkFactorySource,
-	checkCode: checkCode,
-	handlerFactory: handlerFactorySource,
-	mirrorFactory: mirrorFactorySource,
-	bothFactory: bothFactorySource
-} as const
-
 export function collectMirrorUnions(schema: any, out: unknown[][] = []) {
 	if (!schema || typeof schema !== 'object') return out
 
@@ -191,7 +95,7 @@ export function collectMirrorUnions(schema: any, out: unknown[][] = []) {
 	return out
 }
 
-function collectMirrorCodecs(
+export function collectMirrorCodecs(
 	schema: any,
 	out: Function[] = [],
 	dir: 'decode' | 'encode' = 'decode'
@@ -257,12 +161,6 @@ export function instantiateFrozenDecodeMirror(
 
 	return (frozen.s as FrozenMirrorFactory)(d)
 }
-
-export const instantiateFrozenEncodeMirror = (
-	frozen: FrozenMirror,
-	schema: unknown
-): ((value: unknown) => unknown) =>
-	instantiateFrozenDecodeMirror(frozen, schema, 'encode')
 
 export function instantiateFrozenBoth(
 	frozen: FrozenValidator,
@@ -356,68 +254,6 @@ export function reconstructInnerCodecs(
 	}
 }
 
-/**
- * verify that mirror unions can be reconstructed in build time
- *
- * return undefined if not reconstructable
- * `truthUnions` is `mir.externals.unions` (compiled branches).
- */
-export function captureMirrorUnions(schema: unknown, truthUnions: any[][]) {
-	const branchSchemas = collectMirrorUnions(schema)
-	if (branchSchemas.length !== truthUnions.length) return
-
-	const u: { identifier: string; code: string }[][] = []
-
-	for (let ui = 0; ui < truthUnions.length; ui++) {
-		if (
-			!branchSchemas[ui] ||
-			branchSchemas[ui]!.length !== truthUnions[ui]!.length
-		)
-			return
-
-		const branch: { identifier: string; code: string }[] = []
-
-		for (let i = 0; i < truthUnions[ui]!.length; i++) {
-			const build = truthUnions[ui]![i]?.buildResult as
-				| CheckBuildResult
-				| undefined
-
-			if (!build?.functions?.length || !build.entry) return
-
-			// the live branch schema must reproduce this branch's externals
-			if (
-				!externalsMatch(
-					collectExternals(branchSchemas[ui]![i]),
-					build.external.variables
-				)
-			)
-				return
-
-			branch.push({
-				identifier: build.external.identifier,
-				code: reconstructCheckCode(build)
-			})
-		}
-
-		u.push(branch)
-	}
-	return u
-}
-
-export function captureMirrorCodecs(
-	schema: unknown,
-	truthCodecs: Function[],
-	dir: 'decode' | 'encode' = 'decode'
-) {
-	const codecs = collectMirrorCodecs(schema, [], dir)
-	if (codecs.length !== truthCodecs.length) return false
-
-	for (let i = 0; i < codecs.length; i++)
-		if (codecs[i] !== truthCodecs[i]) return false
-
-	return true
-}
-
 /** Runtime reconstruction table the generated manifest module registers. */
 export const Reconstruct: ReconstructImpl = {
 	collectExternals,
@@ -427,8 +263,4 @@ export const Reconstruct: ReconstructImpl = {
 	instantiateFrozenDecodeMirror,
 	instantiateFrozenBoth,
 	reconstructInnerCodecs
-}
-
-export function installReconstructImpl() {
-	Compiled.reconstruct = Reconstruct
 }

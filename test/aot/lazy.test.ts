@@ -3,6 +3,7 @@ import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
 import { Compiled } from '../../src/compile/aot'
 import { compileToSource, autoGroupSize } from '../../src/plugin/aot/source'
+import { claimManifest, registerManifest } from './_manifest'
 import { post, req } from '../utils'
 
 /** Lazy manifests build each validator group only when one of its routes is used. */
@@ -63,18 +64,21 @@ describe('lazy AOT validators', () => {
 		})
 
 		Validator.clear()
-		Compiled.registerLazyValidators(spied, groupOf)
-		Compiled.handlers = handlers
+		const { '~programId': id } = claimManifest({
+			lazyGroups: spied,
+			lazyGroupOf: groupOf,
+			handlers
+		})
 
 		expect(calls).toEqual([0, 0])
 
-		expect(Compiled.getValidator('POST', '/body', 'body')).toBeDefined()
+		expect(Compiled.getValidator('POST', '/body', 'body', id)).toBeDefined()
 		expect(calls).toEqual([1, 0])
 
-		Compiled.getValidator('POST', '/body', 'body')
+		Compiled.getValidator('POST', '/body', 'body', id)
 		expect(calls).toEqual([1, 0])
 
-		expect(Compiled.getValidator('GET', '/q', 'query')).toBeDefined()
+		expect(Compiled.getValidator('GET', '/q', 'query', id)).toBeDefined()
 		expect(calls).toEqual([1, 1])
 	})
 
@@ -89,44 +93,26 @@ describe('lazy AOT validators', () => {
 			return g()
 		})
 		Validator.clear()
-		Compiled.registerLazyValidators(spied, groupOf)
-		Compiled.handlers = handlers
-
-		expect(Compiled.hasValidator('POST', '/body', 'body')).toBe(true)
-		expect(calls).toEqual([0, 0])
-		expect(Compiled.hasValidator('POST', '/nope', 'body')).toBe(false)
-	})
-
-	it('clears lazy group metadata when eager validators replace it', async () => {
-		const src = await compileToSource(build(), { register: false, lazy: 1 })
-		delete process.env.ELYSIA_AOT_BUILD
-		const { groups, groupOf } = evalLazy(src)
-
-		const calls = [0, 0]
-		const spied = groups.map((g: () => unknown, i: number) => () => {
-			calls[i]++
-			return g()
+		const { '~programId': id } = claimManifest({
+			lazyGroups: spied,
+			lazyGroupOf: groupOf,
+			handlers
 		})
 
-		Compiled.registerLazyValidators(spied, groupOf)
-		expect(Compiled.hasValidator('POST', '/body', 'body')).toBe(true)
+		expect(Compiled.hasValidator('POST', '/body', 'body', id)).toBe(true)
 		expect(calls).toEqual([0, 0])
-
-		Compiled.validators = {}
-
-		expect(Compiled.hasValidator('POST', '/body', 'body')).toBe(false)
-		expect(Compiled.getValidator('POST', '/body', 'body')).toBeUndefined()
-		expect(calls).toEqual([0, 0])
+		expect(Compiled.hasValidator('POST', '/nope', 'body', id)).toBe(false)
 	})
 
 	it('hoists schemas shared across groups', async () => {
 		const body = t.Object({ hello: t.String() })
-		const app = new Elysia()
-			.post('/a', { body }, ({ body }: any) => body)
-			.post('/b', { body }, ({ body }: any) => body)
-			.post('/c', { body }, ({ body }: any) => body)
+		const make = () =>
+			new Elysia()
+				.post('/a', { body }, ({ body }: any) => body)
+				.post('/b', { body }, ({ body }: any) => body)
+				.post('/c', { body }, ({ body }: any) => body)
 
-		const src = await compileToSource(app as any, {
+		const src = await compileToSource(make() as any, {
 			register: false,
 			lazy: 1
 		})
@@ -138,8 +124,12 @@ describe('lazy AOT validators', () => {
 
 		const { groups, groupOf, handlers } = evalLazy(src)
 		Validator.clear()
-		Compiled.registerLazyValidators(groups, groupOf)
-		Compiled.handlers = handlers
+		registerManifest({
+			lazyGroups: groups,
+			lazyGroupOf: groupOf,
+			handlers
+		})
+		const app = make()
 		const ok = await app.handle(post('/b', { hello: 'world' }))
 		expect(ok.status).toBe(200)
 		await expect(ok.json()).resolves.toEqual({ hello: 'world' })
@@ -204,8 +194,11 @@ describe('lazy AOT validators', () => {
 		const { groups, groupOf, handlers } = evalLazy(src)
 
 		Validator.clear()
-		Compiled.registerLazyValidators(groups, groupOf)
-		Compiled.handlers = handlers
+		registerManifest({
+			lazyGroups: groups,
+			lazyGroupOf: groupOf,
+			handlers
+		})
 
 		const app = build()
 		const ok = await app.handle(post('/body', { hello: 'world' }))

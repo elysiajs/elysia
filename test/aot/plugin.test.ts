@@ -162,7 +162,7 @@ describe('AOT plugin', () => {
 		const out = result.outputFiles![0]!.text
 		// frozen manifest inlined + self-registers (validators AND handlers)
 		expect(out).toContain('.register({')
-		expect(out).toContain('handlers:')
+		expect(out).toMatch(/\.register\(\{[^}]*\bvalidators\b[^}]*\bhandlers\b/)
 		expect(out).toContain('"/body"')
 		// real check + handler factory bodies, not the `undefined` stub
 		expect(out).toContain('CheckContext')
@@ -218,7 +218,7 @@ describe('AOT plugin', () => {
 		expect(result.success).toBe(true)
 
 		const text = await result.outputs[0]!.text()
-		expect(text).toContain('registerLazyValidators') // forced lazy
+		expect(text).toContain('lazyGroups') // forced lazy
 
 		// Import the bundle and trigger lazy validator materialization.
 		const tmp = resolve(import.meta.dir, '_built.lazy.mjs')

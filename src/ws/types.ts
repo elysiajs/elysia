@@ -1,5 +1,3 @@
-import type { TSchema } from 'typebox'
-
 import type { Context } from '../context'
 import type {
 	BaseMacro,
@@ -17,20 +15,7 @@ import type {
 	MapResponse
 } from '../types'
 
-type TypedArray =
-	| Uint8Array
-	| Uint8ClampedArray
-	| Uint16Array
-	| Uint32Array
-	| Int8Array
-	| Int16Array
-	| Int32Array
-	| BigUint64Array
-	| BigInt64Array
-	| Float32Array
-	| Float64Array
-
-export type BufferSource = TypedArray | DataView | ArrayBufferLike
+export type BufferSource = ArrayBufferView | ArrayBufferLike
 
 export type ServerWebSocketSendStatus = number
 
@@ -269,5 +254,3 @@ export interface WSValidatorLike {
 export type WSResponseValidator =
 	| { [status: number]: WSValidatorLike }
 	| undefined
-
-export type { TSchema }

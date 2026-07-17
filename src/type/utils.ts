@@ -1,8 +1,19 @@
 import { type BaseSchema, type AnySchema } from '.'
 
 import { ELYSIA_TYPES, primitiveElysiaTypes } from './constants'
+import { schemaSome } from './validator/clean-safe'
 
-const iterators = ['anyOf', 'oneOf', 'allOf'] as const
+// primitive Elysia types bake their constraints into internal members —
+// don't descend below them (their own node is still tested)
+const prunePrimitive = (node: any) =>
+	'~elyTyp' in node && primitiveElysiaTypes.has(node['~elyTyp'])
+
+// import-style `$ref` + `$defs` (typebox 1.x `Type.Module` / Cyclic);
+// bare inner `$ref` without `$defs` is deliberately not followed
+const refTarget = (node: any) =>
+	node.$ref && node.$defs
+		? node.$defs[node.$ref as keyof typeof node.$defs]
+		: undefined
 
 export function hasTypes(
 	types: (string | ELYSIA_TYPES[keyof ELYSIA_TYPES])[],
@@ -10,88 +21,31 @@ export function hasTypes(
 ) {
 	if ('~standard' in schema) return false
 
-	return _hasTypes(new Set(types), schema as BaseSchema)
-}
+	const set = new Set<unknown>(types)
+	const seen = new WeakSet<object>()
+	const wantsFiles = set.has(ELYSIA_TYPES.Files)
 
-function _hasTypes(
-	types: Set<string | ELYSIA_TYPES[keyof ELYSIA_TYPES]>,
-	schema: BaseSchema
-): boolean {
-	if (!schema) return false
-
-	if (
-		(schema['~kind'] !== undefined && types.has(schema['~kind'])) ||
-		('~elyTyp' in schema && types.has(schema['~elyTyp']!))
-	)
-		return true
-
-	if (
-		typeof schema !== 'object' ||
-		('~elyTyp' in schema &&
-			primitiveElysiaTypes.has(schema['~elyTyp'] as any))
-	)
-		return false
-
-	if (schema['~kind'] === 'Cyclic')
-		if (schema.$defs![schema.$ref as keyof typeof schema.$defs])
-			return _hasTypes(
-				types,
-				schema.$defs![schema.$ref as keyof typeof schema.$defs]
-			)
-
-	// Import-style `$ref` + `$defs` (typebox 1.x `Type.Module`).
-	if (
-		schema.$ref &&
-		schema.$defs &&
-		schema.$defs[schema.$ref as keyof typeof schema.$defs]
-	)
-		return _hasTypes(
-			types,
-			schema.$defs[schema.$ref as keyof typeof schema.$defs] as BaseSchema
-		)
-
-	for (const key of iterators)
-		if (schema[key] && schema[key].some((s) => _hasTypes(types, s)))
-			return true
-
-	if (schema.not && _hasTypes(types, schema.not)) return true
-
-	if (schema.items) {
-		if (Array.isArray(schema.items))
-			return schema.items.some((s) => _hasTypes(types, s))
-
+	const test = (node: any): boolean => {
 		if (
-			types.has(ELYSIA_TYPES.Files) &&
-			(schema.items as BaseSchema)['~elyTyp'] === ELYSIA_TYPES.File
+			(node['~kind'] !== undefined && set.has(node['~kind'])) ||
+			('~elyTyp' in node && set.has(node['~elyTyp']))
 		)
 			return true
 
-		return _hasTypes(types, schema.items)
+		// t.Files carries File-typed items
+		if (
+			wantsFiles &&
+			node.items &&
+			!Array.isArray(node.items) &&
+			node.items['~elyTyp'] === ELYSIA_TYPES.File
+		)
+			return true
+
+		const target = refTarget(node)
+		return target ? schemaSome(target, test, seen, prunePrimitive) : false
 	}
 
-	if (schema.properties)
-		for (const k in schema.properties)
-			if (
-				Object.hasOwn(schema.properties, k) &&
-				_hasTypes(types, schema.properties[k])
-			)
-				return true
-
-	if (
-		typeof schema.additionalProperties === 'object' &&
-		_hasTypes(types, schema.additionalProperties)
-	)
-		return true
-
-	if (schema.patternProperties)
-		for (const k in schema.patternProperties)
-			if (
-				Object.hasOwn(schema.patternProperties, k) &&
-				_hasTypes(types, schema.patternProperties[k])
-			)
-				return true
-
-	return false
+	return schemaSome(schema, test, seen, prunePrimitive)
 }
 
 export function hasProperty(
@@ -100,65 +54,14 @@ export function hasProperty(
 ): boolean {
 	if (!schema) return false
 
-	if (key in schema) return true
+	const seen = new WeakSet<object>()
 
-	if (
-		typeof schema !== 'object' ||
-		('~elyTyp' in schema &&
-			primitiveElysiaTypes.has(schema['~elyTyp'] as any))
-	)
-		return false
+	const test = (node: any): boolean => {
+		if (key in node) return true
 
-	if (
-		schema['~kind'] === 'Cyclic' &&
-		schema.$defs?.[schema.$ref as keyof typeof schema.$defs]
-	)
-		return hasProperty(
-			key,
-			schema.$defs[schema.$ref as keyof typeof schema.$defs] as any
-		)
+		const target = refTarget(node)
+		return target ? schemaSome(target, test, seen, prunePrimitive) : false
+	}
 
-	if (
-		schema.$ref &&
-		schema.$defs &&
-		schema.$defs[schema.$ref as keyof typeof schema.$defs]
-	)
-		return hasProperty(
-			key,
-			schema.$defs[schema.$ref as keyof typeof schema.$defs] as any
-		)
-
-	for (const k of iterators)
-		if (schema[k]?.some((s: BaseSchema) => hasProperty(key, s))) return true
-
-	if (schema.not && hasProperty(key, schema.not)) return true
-
-	if (schema.items)
-		return Array.isArray(schema.items)
-			? schema.items.some((s) => hasProperty(key, s))
-			: hasProperty(key, schema.items)
-
-	if (schema.properties)
-		for (const k in schema.properties)
-			if (
-				Object.hasOwn(schema.properties, k) &&
-				hasProperty(key, schema.properties[k])
-			)
-				return true
-
-	if (
-		typeof schema.additionalProperties === 'object' &&
-		hasProperty(key, schema.additionalProperties)
-	)
-		return true
-
-	if (schema.patternProperties)
-		for (const k in schema.patternProperties)
-			if (
-				Object.hasOwn(schema.patternProperties, k) &&
-				hasProperty(key, schema.patternProperties[k])
-			)
-				return true
-
-	return false
+	return schemaSome(schema, test, seen, prunePrimitive)
 }

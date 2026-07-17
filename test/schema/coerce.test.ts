@@ -165,66 +165,6 @@ describe('coerce schema', () => {
 		})
 	})
 
-	describe('untilNonRootObjectFound option', () => {
-		it('should skip non-root Object entirely', () => {
-			const schema = Type.Object({
-				nested: Type.Object({
-					deep: Type.String()
-				})
-			})
-
-			const result = coerce(schema, [['String', () => Type.Number()]], {
-				untilNonRootObjectFound: true
-			})
-
-			expect(result['~kind']).toBe('Object')
-			expect(result.properties?.nested?.['~kind']).toBe('Object')
-			expect(result.properties?.nested?.properties?.deep?.['~kind']).toBe(
-				'String'
-			)
-		})
-
-		it('should skip non-root Array entirely', () => {
-			const schema = Type.Object({
-				items: Type.Array(Type.String())
-			})
-
-			const result = coerce(schema, [['String', () => Type.Number()]], {
-				untilNonRootObjectFound: true
-			})
-
-			expect(result['~kind']).toBe('Object')
-			expect(result.properties?.items?.['~kind']).toBe('Array')
-			expect(
-				(result.properties?.items?.items as BaseSchema)?.['~kind']
-			).toBe('String')
-		})
-
-		it('should still process root Object properties at first level', () => {
-			const schema = Type.Object({
-				name: Type.String()
-			})
-
-			const result = coerce(schema, [['String', () => Type.Number()]], {
-				untilNonRootObjectFound: true
-			})
-
-			expect(result['~kind']).toBe('Object')
-			expect(result.properties?.name?.['~kind']).toBe('Number')
-		})
-
-		it('should process root Array items', () => {
-			const schema = Type.Array(Type.String())
-
-			const result = coerce(schema, [['String', () => Type.Number()]], {
-				untilNonRootObjectFound: true
-			})
-
-			expect(result['~kind']).toBe('Array')
-			expect((result.items as BaseSchema)?.['~kind']).toBe('Number')
-		})
-	})
-
 	describe('to returning null', () => {
 		it('should skip replacement when to returns null', () => {
 			const schema = Type.Object({
@@ -773,19 +713,6 @@ describe('coerce schema', () => {
 			expect(result.properties?.name?.['~kind']).toBe('String')
 		})
 
-		it('root: false + untilNonRootObjectFound', () => {
-			const schema = Type.Object({
-				nested: Type.Object({ value: Type.String() })
-			})
-
-			const result = coerce(
-				schema,
-				[['Object', () => Type.Array(Type.Any())]],
-				{ root: false, untilNonRootObjectFound: true }
-			)
-
-			expect(result.properties?.nested?.['~kind']).toBe('Object')
-		})
 	})
 
 	describe('stopping during combinator traversal', () => {

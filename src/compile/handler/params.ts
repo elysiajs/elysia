@@ -39,7 +39,7 @@ import {
  *
  * @see `test/aot/param-descriptor.test.ts` asserts these keys
  */
-export interface HandlerParamContext {
+interface HandlerParamContext {
 	root: AnyElysia
 	parse: Record<string, unknown>
 	res: { map: unknown; compact?: unknown }
@@ -51,6 +51,7 @@ export interface HandlerParamContext {
 
 type Resolver = (c: HandlerParamContext) => unknown
 
+/** @internal exported for test/aot/param-descriptor.test.ts */
 export const HANDLER_PARAMS: Record<string, Resolver> = {
 	// parse adapter
 	pf: (c) => c.parse.formData,

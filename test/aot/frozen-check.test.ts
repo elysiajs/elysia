@@ -2,13 +2,12 @@ import '../../src/compile/aot-capture'
 import { describe, it, expect, afterEach } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
+import { Compiled, type ValidatorManifest } from '../../src/compile/aot'
 import {
-	Compiled,
 	beginValidatorCapture,
-	endValidatorCapture,
-	type ValidatorManifest
-} from '../../src/compile/aot'
-import { materialise } from './_manifest'
+	endValidatorCapture
+} from '../../src/compile/aot-capture'
+import { claimManifest, materialise, registerManifest } from './_manifest'
 import { post } from '../utils'
 
 /** Frozen checks are selected by method, path, and validator slot. */
@@ -65,7 +64,7 @@ describe('frozen validator checks', () => {
 			frozenBound = true
 			return (orig as any)(...d)
 		}) as any
-		Compiled.validators = m
+		registerManifest({ validators: m })
 
 		const app = bodyApp()
 		app.compile()
@@ -82,11 +81,11 @@ describe('frozen validator checks', () => {
 	it('validates without a runtime TypeBox compiler', () => {
 		const m = captureManifest(bodyApp)
 		Validator.clear()
-		Compiled.validators = m
 
 		const v = Validator.create(t.Object({ hello: t.String() }) as any, {
 			aot: { method: 'POST', path: '/body' },
-			slot: 'body'
+			slot: 'body',
+			app: claimManifest({ validators: m })
 		}) as any
 
 		expect(v.tb).toBeUndefined()

@@ -1,9 +1,5 @@
 import type { AnyElysia } from '../../base'
 import {
-	beginValidatorCapture,
-	endValidatorCapture,
-	endHandlerCapture,
-	abortCapture,
 	Capture,
 	Compiled,
 	type CapturedValidator,
@@ -12,12 +8,18 @@ import {
 	createAotFingerprint,
 	type AotFingerprint
 } from '../../compile/aot'
-import { Source } from '../../compile/aot-reconstruct'
+// importing `aot-capture` also installs the capture impl (module side effect)
+import {
+	beginValidatorCapture,
+	endValidatorCapture,
+	endHandlerCapture,
+	abortCapture,
+	snapshotCompiled,
+	restoreCompiled
+} from '../../compile/aot-capture'
+import { Source } from '../../compile/aot-emit'
 import { env } from '../../universal'
-import { installCaptureImpl } from '../../compile/aot-capture'
 import { nullObject } from '../../utils'
-
-installCaptureImpl()
 
 import {
 	setCaptureHeaderShorthand,
@@ -206,14 +208,22 @@ export function replayStubbability(
 	app: AnyElysia,
 	handlers: CapturedHandler[]
 ): StubbabilityReport {
-	const previousCompiled = Compiled.snapshot()
+	const previousCompiled = snapshotCompiled()
 	const previousAotBuild = env.ELYSIA_AOT_BUILD
 
 	if (previousAotBuild !== undefined) delete env.ELYSIA_AOT_BUILD
 
 	try {
 		Compiled.clear()
-		Compiled.handlers = materialiseHandlersForReplay(handlers)
+		// replay on the program lane: `compileHandler` looks up the replayed
+		// app's own `~programId`
+		const fingerprint = createAotFingerprint()
+		Compiled.register({
+			bf: 1,
+			fingerprint,
+			handlers: materialiseHandlersForReplay(handlers)
+		})
+		Compiled.claim(app['~programId'], fingerprint)
 		Validator.clear()
 
 		const history = app['~routes'] ?? []
@@ -237,7 +247,7 @@ export function replayStubbability(
 
 		return JITProbe.end()
 	} finally {
-		Compiled.restore(previousCompiled)
+		restoreCompiled(previousCompiled)
 
 		Validator.clear()
 		if (previousAotBuild !== undefined)

@@ -10,11 +10,11 @@ import type {
 	CapturedValidator,
 	CheckBuildResult
 } from '../../compile/aot'
+import { collectStringCodecNodes } from '../../compile/aot-reconstruct'
 import {
 	captureMirrorCodecs,
-	captureMirrorUnions,
-	collectStringCodecNodes
-} from '../../compile/aot-reconstruct'
+	captureMirrorUnions
+} from '../../compile/aot-emit'
 import type { ValidatorOptions } from '../../validator'
 
 // Build time: freeze one ObjectString/ArrayString inner schema into a check

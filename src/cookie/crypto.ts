@@ -144,6 +144,52 @@ export function unsignCookieSync(input: string, secret: string | null) {
 	return constantTimeEqual(expectedInput, input) ? tentativeValue : false
 }
 
+export function unsignWithSecretsSync(
+	name: string,
+	value: unknown,
+	secrets: string | null | (string | null)[] | undefined
+) {
+	if (typeof value !== 'string') throw InvalidCookie.signature(name)
+
+	if (typeof secrets === 'string') {
+		const temp = unsignCookieSync(value, secrets)
+		if (temp === false) throw InvalidCookie.signature(name)
+
+		return temp
+	}
+
+	if (Array.isArray(secrets))
+		for (let i = 0; i < secrets.length; i++) {
+			const temp = unsignCookieSync(value, secrets[i]!)
+			if (temp !== false) return temp
+		}
+
+	throw InvalidCookie.signature(name)
+}
+
+export async function unsignWithSecrets(
+	name: string,
+	value: unknown,
+	secrets: string | null | (string | null)[] | undefined
+) {
+	if (typeof value !== 'string') throw InvalidCookie.signature(name)
+
+	if (typeof secrets === 'string') {
+		const temp = await unsignCookie(value, secrets)
+		if (temp === false) throw InvalidCookie.signature(name)
+
+		return temp
+	}
+
+	if (Array.isArray(secrets))
+		for (let i = 0; i < secrets.length; i++) {
+			const temp = await unsignCookie(value, secrets[i]!)
+			if (temp !== false) return temp
+		}
+
+	throw InvalidCookie.signature(name)
+}
+
 export const rawJsonValue = new WeakMap<object, string>()
 
 export function maybeJsonDecode(value: unknown) {
@@ -166,7 +212,6 @@ export function maybeJsonDecode(value: unknown) {
 
 export function resolvePendingCookie(entry: Record<string, any>, name: string) {
 	const value = entry.value
-	const secrets = entry['~unsign'] as string | (string | null)[]
 
 	if (typeof value !== 'string') throw InvalidCookie.signature(name)
 	if (!hasSyncHmac)
@@ -174,19 +219,11 @@ export function resolvePendingCookie(entry: Record<string, any>, name: string) {
 			`resolvePendingCookie called without sync HMAC — unreachable under correct lane gating (cookie: "${name}")`
 		)
 
-	let decoded: string | false = false
-
-	if (typeof secrets === 'string') decoded = unsignCookieSync(value, secrets)
-	else if (Array.isArray(secrets))
-		for (let i = 0; i < secrets.length; i++) {
-			const temp = unsignCookieSync(value, secrets[i]!)
-			if (temp !== false) {
-				decoded = temp
-				break
-			}
-		}
-
-	if (decoded === false) throw InvalidCookie.signature(name)
+	const decoded = unsignWithSecretsSync(
+		name,
+		value,
+		entry['~unsign'] as string | (string | null)[]
+	)
 
 	// Success: update entry in-place, then remove the pending marker.
 	const resolvedValue = maybeJsonDecode(decoded)

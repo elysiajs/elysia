@@ -178,16 +178,8 @@ export function parseSetCookies(headers: Headers, setCookie: string[]) {
 
 	headers.delete('set-cookie')
 
-	for (let i = 0; i < setCookie.length; i++) {
-		const index = setCookie[i].indexOf('=')
-
-		headers.append(
-			'set-cookie',
-			`${setCookie[i].slice(0, index)}=${
-				setCookie[i].slice(index + 1) || ''
-			}`
-		)
-	}
+	for (let i = 0; i < setCookie.length; i++)
+		headers.append('set-cookie', setCookie[i])
 
 	return headers
 }
@@ -228,10 +220,7 @@ export function responseToSetHeaders(response: Response, set?: Context['set']) {
 	}
 
 	// ? `content-encoding` prevents response streaming
-	if (set!.headers instanceof Headers) {
-		if (set!.headers.has('content-encoding'))
-			set!.headers.delete('content-encoding')
-	} else if (set!.headers['content-encoding'])
+	if (set!.headers['content-encoding'])
 		delete set!.headers['content-encoding']
 
 	return set!

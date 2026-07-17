@@ -162,29 +162,31 @@ export function compileCookieConfig(
 	}
 }
 
+export function resolveSignSecrets(
+	name: string,
+	config: CompiledCookieConfig
+): CompiledCookieConfig['globalSecrets'] | undefined {
+	const field = config.fields[name]
+	if (field?.sign) return field.secrets ?? config.globalSecrets
+	if (config.globalSign === true || config.globalSignSet?.has(name) === true)
+		return config.globalSecrets
+}
+
 export function isCookieSigned(
 	name: string,
 	config: CompiledCookieConfig
 ):
 	| { signed: true; secrets: string | null | (string | null)[] }
 	| { signed: false } {
-	const field = config.fields[name]
-	if (field?.sign) {
-		const secrets = field.secrets ?? config.globalSecrets
-		if (secrets === undefined) throw InvalidCookie.secret()
-
-		return { signed: true, secrets }
-	}
+	const secrets = resolveSignSecrets(name, config)
+	if (secrets !== undefined) return { signed: true, secrets }
 
 	if (
+		config.fields[name]?.sign ||
 		config.globalSign === true ||
 		config.globalSignSet?.has(name) === true
-	) {
-		const secrets = config.globalSecrets
-		if (secrets === undefined) throw InvalidCookie.secret()
-
-		return { signed: true, secrets }
-	}
+	)
+		throw InvalidCookie.secret()
 
 	return { signed: false }
 }

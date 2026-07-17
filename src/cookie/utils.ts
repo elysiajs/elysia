@@ -2,35 +2,30 @@ import { decodeComponent } from 'deuri'
 import { parse } from './lib'
 
 import { Cookie } from './cookie'
-import { InvalidCookie } from './error'
 import { dangerousKeys } from '../constants'
 import { nullObject } from '../utils'
 
 import type { Context } from '../context'
 import type { BaseCookie, CookieOptions } from './types'
 import type { CompiledCookieConfig } from './config'
-import { compileCookieConfig, isCookieSigned } from './config'
+import {
+	compileCookieConfig,
+	isCookieSigned,
+	resolveSignSecrets
+} from './config'
 
 import {
 	hasSyncHmac,
 	signCookieSyncImpl,
 	signCookie,
 	signCookieSync,
-	unsignCookie,
-	unsignCookieSync,
+	unsignWithSecrets,
+	unsignWithSecretsSync,
 	maybeJsonDecode,
 	rawJsonValue,
 	resolvePendingCookie
 } from './crypto'
 
-// Re-export for the public barrel (src/cookie/index.ts) — byte-identical surface.
-export {
-	signCookie,
-	signCookieSync,
-	unsignCookie,
-	unsignCookieSync,
-	signCookieSubtle
-} from './crypto'
 export { hasSyncHmac } from './crypto'
 
 // export for test
@@ -46,16 +41,6 @@ export async function parseCookie(
 	return buildCookieJar(set, raw, config)
 }
 
-function resolveSignSecrets(
-	name: string,
-	config: CompiledCookieConfig
-): CompiledCookieConfig['globalSecrets'] | undefined {
-	const field = config.fields[name]
-	if (field?.sign) return field.secrets ?? config.globalSecrets
-	if (config.globalSign === true || config.globalSignSet?.has(name) === true)
-		return config.globalSecrets
-}
-
 export function parseCookieRawSync(
 	cookieString: string | null | undefined,
 	_config: CompiledCookieConfig
@@ -63,7 +48,7 @@ export function parseCookieRawSync(
 	const out: Record<string, unknown> = nullObject() as any
 	if (!cookieString) return out
 
-	const cookies = parse(cookieString, null)
+	const cookies = parse(cookieString)
 
 	for (const name in cookies) {
 		if (dangerousKeys.has(name)) continue
@@ -87,7 +72,7 @@ export function parseCookieRawLazy(
 	const out: Record<string, unknown> = nullObject() as any
 	if (!cookieString) return out
 
-	const cookies = parse(cookieString, null)
+	const cookies = parse(cookieString)
 
 	for (const name in cookies) {
 		if (dangerousKeys.has(name)) continue
@@ -115,7 +100,7 @@ export async function parseCookieRaw(
 	const out: Record<string, unknown> = nullObject() as any
 	if (!cookieString) return out
 
-	const cookies = parse(cookieString, null)
+	const cookies = parse(cookieString)
 
 	for (const name in cookies) {
 		if (dangerousKeys.has(name)) continue
@@ -126,28 +111,8 @@ export async function parseCookieRaw(
 		let value: unknown = (decodeComponent(v) as unknown as string) ?? v
 		const signCheck = resolveSignSecrets(name, config)
 
-		if (signCheck !== undefined) {
-			if (typeof value !== 'string') throw InvalidCookie.signature(name)
-
-			if (typeof signCheck === 'string') {
-				const temp = await unsignCookie(value, signCheck)
-				if (temp === false) throw InvalidCookie.signature(name)
-
-				value = temp
-			} else if (Array.isArray(signCheck)) {
-				let decoded: string | false = false
-				for (let i = 0; i < signCheck.length; i++) {
-					const temp = await unsignCookie(value, signCheck[i])
-					if (temp !== false) {
-						decoded = temp
-						break
-					}
-				}
-
-				if (decoded === false) throw InvalidCookie.signature(name)
-				value = decoded
-			} else throw InvalidCookie.signature(name)
-		}
+		if (signCheck !== undefined)
+			value = await unsignWithSecrets(name, value, signCheck)
 
 		out[name] = maybeJsonDecode(value)
 	}
@@ -164,7 +129,7 @@ export function parseCookieRawSigned(
 	const out: Record<string, unknown> = nullObject() as any
 	if (!cookieString) return out
 
-	const cookies = parse(cookieString, null)
+	const cookies = parse(cookieString)
 
 	for (const name in cookies) {
 		if (dangerousKeys.has(name)) continue
@@ -177,26 +142,8 @@ export function parseCookieRawSigned(
 
 		const signCheck = resolveSignSecrets(name, config)
 
-		if (signCheck !== undefined) {
-			if (typeof value !== 'string') throw InvalidCookie.signature(name)
-
-			if (typeof signCheck === 'string') {
-				const temp = unsignCookieSync(value, signCheck)
-				if (temp === false) throw InvalidCookie.signature(name)
-				value = temp
-			} else if (Array.isArray(signCheck)) {
-				let decoded: string | false = false
-				for (let i = 0; i < signCheck.length; i++) {
-					const temp = unsignCookieSync(value, signCheck[i])
-					if (temp !== false) {
-						decoded = temp
-						break
-					}
-				}
-				if (decoded === false) throw InvalidCookie.signature(name)
-				value = decoded
-			} else throw InvalidCookie.signature(name)
-		}
+		if (signCheck !== undefined)
+			value = unsignWithSecretsSync(name, value, signCheck)
 
 		out[name] = maybeJsonDecode(value)
 	}
@@ -228,16 +175,7 @@ export function buildCookieJar(
 
 		if (lazySign && typeof entry.value === 'string') {
 			const secrets = resolveSignSecrets(name, config)
-			if (secrets !== undefined) {
-				;(entry as any)['~unsign'] = secrets
-			} else {
-				const value = entry.value
-				if (value !== null && typeof value === 'object') {
-					const raw = rawJsonValue.get(value)
-					;(entry as any)['~raw'] =
-						raw !== undefined ? raw : JSON.stringify(value)
-				}
-			}
+			if (secrets !== undefined) (entry as any)['~unsign'] = secrets
 		} else {
 			const value = entry.value
 			if (value !== null && typeof value === 'object') {

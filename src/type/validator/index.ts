@@ -29,7 +29,6 @@ import {
 
 import { ELYSIA_TYPES } from '../constants'
 import { Validator, type ValidatorOptions } from '../../validator'
-import { isAsyncFunction } from '../../compile/utils'
 
 import {
 	Compiled,
@@ -42,11 +41,11 @@ import {
 
 import { hasProperty } from '../utils'
 import {
-	ASYNC_REFINE,
 	collectFileTypeChecks,
 	takeFileTypeChecks,
 	type PendingFileTypeCheck
 } from '../elysia/file'
+import { isAsyncPredicate } from '../elysia/file-type'
 import { nullObject } from '../../utils'
 import { ValidationError } from '../../error'
 import {
@@ -320,15 +319,6 @@ export function shallowMergeObjects(members: any[]): TSchema | null {
 }
 
 let inlineRefId = 0
-
-export const isAsyncPredicate = (v: unknown) =>
-	Array.isArray(v)
-		? v.some((x) =>
-				typeof x.check === 'function'
-					? isAsyncFunction(x.check) || x.check[ASYNC_REFINE] === true
-					: false
-			)
-		: false
 
 async function enforceFileTypeChecks(
 	pending: PendingFileTypeCheck[],

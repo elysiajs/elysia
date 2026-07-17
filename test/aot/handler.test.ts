@@ -1,13 +1,17 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
+import { Compiled } from '../../src/compile/aot'
 import {
-	Compiled,
 	endValidatorCapture,
 	endHandlerCapture
-} from '../../src/compile/aot'
+} from '../../src/compile/aot-capture'
 import { compileToSource } from '../../src/plugin/aot/source'
-import { materialise, materialiseHandlers } from './_manifest'
+import {
+	materialise,
+	materialiseHandlers,
+	registerManifest
+} from './_manifest'
 import { post, req } from '../utils'
 
 /** Captured handlers bind emitted factories without request-time evaluation. */
@@ -57,9 +61,11 @@ describe('AOT handler freeze', () => {
 		}
 
 		Validator.clear()
-		Compiled.validators = materialise(validators)
-		Compiled.handlers = manifest
-		expect(Compiled.handlers?.POST?.['/x']).toBeDefined()
+		registerManifest({
+			validators: materialise(validators),
+			handlers: manifest
+		})
+		expect(manifest.POST?.['/x']).toBeDefined()
 
 		delete process.env.ELYSIA_AOT_BUILD
 		const frozenApp = build()
@@ -98,7 +104,7 @@ describe('AOT handler freeze', () => {
 
 			expect(handlers).toHaveLength(1)
 			expect(handlers[0]!.alias.split(',')).toContain('isprod')
-			Compiled.handlers = materialiseHandlers(handlers)
+			registerManifest({ handlers: materialiseHandlers(handlers) })
 
 			delete process.env.ELYSIA_AOT_BUILD
 			const frozen = buildError()
@@ -131,7 +137,7 @@ describe('AOT handler freeze', () => {
 		const manifest = materialiseHandlers(handlers)
 		manifest.POST!['/x']!.a = ['bogus']
 		Validator.clear()
-		Compiled.handlers = manifest
+		registerManifest({ handlers: manifest })
 
 		delete process.env.ELYSIA_AOT_BUILD
 		expect(() => (build() as any).compile()).toThrow(
@@ -210,7 +216,7 @@ describe('AOT static & promise handler freeze', () => {
 		}
 
 		Validator.clear()
-		Compiled.handlers = manifest
+		registerManifest({ handlers: manifest })
 
 		delete process.env.ELYSIA_AOT_BUILD
 		const frozenApp = build()

@@ -2,13 +2,17 @@ import '../../src/compile/aot-capture'
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
+import { Compiled } from '../../src/compile/aot'
 import {
-	Compiled,
 	endHandlerCapture,
 	endValidatorCapture
-} from '../../src/compile/aot'
+} from '../../src/compile/aot-capture'
 import { compileHandler } from '../../src/compile/handler'
-import { materialise, materialiseHandlers } from './_manifest'
+import {
+	materialise,
+	materialiseHandlers,
+	registerManifest
+} from './_manifest'
 import { post, req } from '../utils'
 
 afterEach(() => {
@@ -42,8 +46,10 @@ describe('AOT reconstruction of named parsers', () => {
 		expect(handlers.length).toBe(1)
 
 		Validator.clear()
-		Compiled.validators = materialise(validators)
-		Compiled.handlers = materialiseHandlers(handlers)
+		registerManifest({
+			validators: materialise(validators),
+			handlers: materialiseHandlers(handlers)
+		})
 
 		delete process.env.ELYSIA_AOT_BUILD
 		const frozenApp = build()
@@ -144,8 +150,10 @@ describe('portable captured header extraction', () => {
 		const validators = endValidatorCapture()
 
 		Validator.clear()
-		Compiled.validators = materialise(validators)
-		Compiled.handlers = materialiseHandlers(handlers)
+		registerManifest({
+			validators: materialise(validators),
+			handlers: materialiseHandlers(handlers)
+		})
 
 		delete process.env.ELYSIA_AOT_BUILD
 		const frozenApp = build()

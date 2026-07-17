@@ -7,12 +7,12 @@ import { join, resolve } from 'node:path'
 
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
+import { Compiled } from '../../src/compile/aot'
 import {
-	Compiled,
 	beginValidatorCapture,
 	endValidatorCapture,
 	endHandlerCapture
-} from '../../src/compile/aot'
+} from '../../src/compile/aot-capture'
 
 /** A child process proves frozen validation works before TypeBox is initialized. */
 

@@ -1,5 +1,6 @@
 import type { FileType, FileUnit } from '../types'
 import type { MaybeArray, MaybePromise } from '../../types'
+import { isAsyncFunction } from '../../compile/utils'
 
 export type FileTypeDetector = (
 	file: File
@@ -55,6 +56,15 @@ export interface PendingFileTypeCheck {
 }
 
 export const ASYNC_REFINE = '~elyAsyncRefine'
+
+export const isAsyncPredicate = (v: unknown) =>
+	Array.isArray(v)
+		? v.some((x: any) =>
+				typeof x.check === 'function'
+					? isAsyncFunction(x.check) || x.check[ASYNC_REFINE] === true
+					: false
+			)
+		: false
 
 export function collectFileTypeChecks() {
 	collecting = true

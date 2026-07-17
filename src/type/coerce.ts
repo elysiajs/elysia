@@ -44,10 +44,6 @@ interface CoerceOptions {
 	 **/
 	onlyFirst?: 'object' | 'array' | (string & {})
 	/**
-	 * Traverse until object is found except root object
-	 **/
-	untilNonRootObjectFound?: boolean
-	/**
 	 * Only root object
 	 */
 	rootPropertiesOnly?: boolean
@@ -99,13 +95,6 @@ export function coerce(
 		memo.set(node, null)
 
 		const kind = node['~kind'] as string | undefined
-
-		if (
-			options?.untilNonRootObjectFound &&
-			!isRoot &&
-			(kind === 'Object' || kind === 'Array')
-		)
-			return node
 
 		const canReplace =
 			rootOption === undefined ||

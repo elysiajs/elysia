@@ -507,7 +507,10 @@ describe('resume emitter selection', () => {
 		}
 
 		try {
-			const app = new Elysia({ experimental: { resumeEmit } })
+			const app = new Elysia({
+				introspect: true,
+				experimental: { resumeEmit }
+			})
 				.get('/na/async', async () => 'h')
 				.post(
 					'/na/async-validate',

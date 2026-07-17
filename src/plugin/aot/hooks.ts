@@ -171,3 +171,74 @@ export const createAotPluginHooks = (
 		}
 	}
 }
+
+const resolveLoader = (path: string) => {
+	const ext = path.slice(path.lastIndexOf('.'))
+
+	return ext === '.js' || ext === '.mjs' || ext === '.cjs'
+		? 'js'
+		: ext === '.jsx'
+			? 'jsx'
+			: ext === '.tsx'
+				? 'tsx'
+				: 'ts'
+}
+
+export interface AotOnLoadAdapterOptions {
+	/** Read a file's UTF-8 text (abstracted so Bun and esbuild can supply their own reader). */
+	readText: (path: string) => Promise<string>
+
+	/**
+	 * resolveDir for the manifest/virtual-type module loads.
+	 * esbuild needs `dirname(entryPath)` so relative imports in the manifest
+	 * resolve correctly; Bun does not use it (pass undefined for Bun).
+	 */
+	resolveDir?: string
+}
+
+export async function setupAotOnLoad(
+	build: any,
+	hooks: AotPluginHooks,
+	{ readText, resolveDir }: AotOnLoadAdapterOptions
+) {
+	await hooks.buildStart()
+
+	// Read `hooks.load` at load time so watch rebuilds serve fresh artifacts.
+	const virtualLoad = (id: string) => () =>
+		({
+			contents: hooks.load(id)!,
+			loader: 'js',
+			...(resolveDir !== undefined ? { resolveDir } : {})
+		}) as { contents: string; loader: string; resolveDir?: string }
+
+	build.onResolve({ filter: /^elysia\/compiled$/ }, () => ({
+		path: 'manifest',
+		namespace: 'elysia-aot'
+	}))
+
+	build.onLoad(
+		{ filter: /.*/, namespace: 'elysia-aot' },
+		virtualLoad(VIRTUAL)
+	)
+
+	build.onResolve({ filter: /^elysia\/type$/ }, () =>
+		hooks.resolveId('elysia/type') !== undefined
+			? { path: 'elysia-type', namespace: 'elysia-aot-type' }
+			: undefined
+	)
+
+	build.onLoad(
+		{ filter: /.*/, namespace: 'elysia-aot-type' },
+		virtualLoad(VIRTUAL_TYPE)
+	)
+
+	build.onLoad({ filter: SOURCE_REGEX }, async (args: { path: string }) => {
+		if (!hooks.isTransformCandidate(args.path)) return undefined
+
+		const original = await readText(args.path)
+		const contents = await hooks.transform(original, args.path)
+		if (contents === undefined) return undefined
+
+		return { contents, loader: resolveLoader(args.path) }
+	})
+}

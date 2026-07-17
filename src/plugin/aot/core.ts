@@ -115,21 +115,6 @@ function findPackageRoot(from: string = process.cwd()) {
 export const resolveEntry = (entry: string): string =>
 	resolve(findPackageRoot(), entry)
 
-function resolveLoader(entryPath: string) {
-	const ext = entryPath.slice(entryPath.lastIndexOf('.'))
-
-	return ext === '.js' || ext === '.mjs' || ext === '.cjs'
-		? 'js'
-		: ext === '.jsx'
-			? 'jsx'
-			: ext === '.tsx'
-				? 'tsx'
-				: 'ts'
-}
-
-const entryFilter = (entryPath: string): RegExp =>
-	new RegExp('^' + entryPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$')
-
 /** Runtime handler-JIT module a strip build can replace with a throwing stub. */
 export interface StubPlan {
 	/** Stub the internal handler codegen module. */
@@ -768,40 +753,16 @@ export async function generateCompiledArtifacts(
 		const entry = resolveEntry(file)
 		const entryReal = realPath(entry)
 
-		let mod: { app?: unknown; default?: unknown }
+		// Repeated in-process build of the same entry: a plain re-import would
+		// hand back the module-cached, already-captured app. Re-evaluate in an
+		// isolated worker instead (same path watch rebuilds use).
+		if (_importedEntries.has(entryReal))
+			return generateCompiledArtifactsIsolated(file, options)
 
-		if (_importedEntries.has(entryReal)) {
-			console.warn(
-				'[elysia-aot] re-importing "' +
-					entry +
-					'" for rebuild. top-level side effects will re-run. ' +
-					'This is expected in watch/rebuild flows.'
-			)
-
-			const cacheBustSpecifier = entry + '?elysia-aot=' + Date.now()
-			try {
-				mod = (await import(cacheBustSpecifier)) as {
-					app?: unknown
-					default?: unknown
-				}
-			} catch (cacheBustErr) {
-				console.warn(
-					'[elysia-aot] cache-busting import failed, falling back to plain ' +
-						'import (stale manifest risk in watch/rebuild mode). ' +
-						'Error: ' +
-						cacheBustErr
-				)
-				mod = (await import(entry)) as {
-					app?: unknown
-					default?: unknown
-				}
-			}
-		} else {
-			_importedEntries.add(entryReal)
-			mod = (await import(entry)) as {
-				app?: unknown
-				default?: unknown
-			}
+		_importedEntries.add(entryReal)
+		const mod = (await import(entry)) as {
+			app?: unknown
+			default?: unknown
 		}
 
 		const app = mod.app ?? mod.default
@@ -1000,205 +961,3 @@ export const realPath = (path: string): string => {
 	}
 }
 
-export interface SetupAotHooksOptions {
-	/** Read a file's UTF-8 text (abstracted so Bun and esbuild can supply their own reader). */
-	readText: (path: string) => Promise<string>
-	entryPath: string
-	source: string
-	stub: StubPlan
-	treeShake: boolean
-
-	/**
-	 * Resolved absolute path of the elysia package root (e.g.
-	 * `/project/node_modules/elysia` or the repo root for linked installs).
-	 * Used to anchor the `isProduction()` call-site rewrite so only elysia-owned
-	 * modules are touched, not user code in a directory that happens to be named
-	 * "elysia". Defaults to `resolveElysiaRoot()` when omitted.
-	 */
-	elysiaRoot?: string
-
-	/**
-	 * Virtual `elysia/type` module source (from `generateVirtualType`). When set,
-	 * `elysia/type` is intercepted and served this re-export surface so unused
-	 * `t.*` constructors tree-shake and `setupTypebox` is not pulled through the
-	 * type barrel. `undefined` leaves `elysia/type` resolving to the real module
-	 * (off mode).
-	 */
-	virtualType?: string
-
-	/**
-	 * resolveDir for the manifest virtual module load.
-	 * esbuild needs `dirname(entryPath)` so relative imports in the manifest
-	 * resolve correctly; Bun does not use it (pass undefined for Bun).
-	 */
-	resolveDir?: string
-
-	/**
-	 * Build integration object
-	 *
-	 * any because incompatibility between build tools
-	 */
-	build: any
-}
-
-export async function setupAotHooks({
-	readText,
-	entryPath,
-	source,
-	stub,
-	treeShake,
-	virtualType,
-	resolveDir,
-	elysiaRoot,
-	build
-}: SetupAotHooksOptions): Promise<void> {
-	const pkgRoot = elysiaRoot ?? resolveElysiaRoot(dirname(entryPath))
-	const entryReal = realPath(entryPath)
-
-	const isEntry = (path: string): boolean =>
-		path === entryPath || realPath(path) === entryReal
-
-	build.onResolve({ filter: /^elysia\/compiled$/ }, () => ({
-		path: 'manifest',
-		namespace: 'elysia-aot'
-	}))
-
-	build.onLoad(
-		{ filter: /.*/, namespace: 'elysia-aot' },
-		() =>
-			({
-				contents: source,
-				loader: 'js',
-				...(resolveDir !== undefined ? { resolveDir } : {})
-			}) as { contents: string; loader: string; resolveDir?: string }
-	)
-
-	// Serve the virtual `elysia/type` (no `setupTypebox`). Its specifiers are
-	// absolute, so `resolveDir` is only a defensive default. Intercepts both the
-	// treeshake-rewritten `import * as t from 'elysia/type'` and any user-direct
-	// `elysia/type` import.
-	if (virtualType !== undefined) {
-		build.onResolve({ filter: /^elysia\/type$/ }, () => ({
-			path: 'elysia-type',
-			namespace: 'elysia-aot-type'
-		}))
-
-		build.onLoad(
-			{ filter: /.*/, namespace: 'elysia-aot-type' },
-			() =>
-				({
-					contents: virtualType,
-					loader: 'js',
-					...(resolveDir !== undefined ? { resolveDir } : {})
-				}) as { contents: string; loader: string; resolveDir?: string }
-		)
-	}
-
-	for (const key of Object.keys(
-		STUB_SOURCES
-	) as (keyof typeof STUB_SOURCES)[])
-		if (stub[key])
-			for (const { filter, source: stubSource } of STUB_SOURCES[key])
-				build.onLoad({ filter }, (args: { path: string }) => ({
-					contents: alignStubExtensions(stubSource, args.path),
-					loader: 'js'
-				}))
-
-	if (stub.adapter !== false) {
-		const adapterSrc = adapterConstantsSource(stub.adapter)
-		build.onLoad(
-			{ filter: ADAPTER_CONSTANTS_FILTER },
-			(args: { path: string }) => ({
-				contents: alignStubExtensions(adapterSrc, args.path),
-				loader: 'js'
-			})
-		)
-
-		if (stub.adapter === 'web-standard') {
-			build.onLoad(
-				{ filter: ADAPTER_BUN_FILTER },
-				(_args: { path: string }) => ({
-					contents: bunAdapterStubSource,
-					loader: 'js'
-				})
-			)
-		}
-	}
-
-	if (stub.isProduction) {
-		const isProdSrc = `export const isProduction = () => true\n`
-
-		build.onLoad(
-			{ filter: IS_PRODUCTION_FILTER },
-			(args: { path: string }) => ({
-				contents: alignStubExtensions(isProdSrc, args.path),
-				loader: 'js'
-			})
-		)
-	}
-
-	// Anchored predicate + esbuild filter for the isProduction() call-site rewrite.
-	// makeIsElysiaModule anchors to the resolved package root so user code in a
-	// directory named "elysia" is never touched (Defect 3).
-	const isElysiaModule = makeIsElysiaModule(pkgRoot)
-	const elysiaModuleFilterRegex = makeElysiaModuleFilterRegex(pkgRoot)
-
-	if (treeShake) {
-		const { rewriteTypeImport } = await import('./treeshake')
-
-		build.onLoad(
-			{ filter: SOURCE_REGEX },
-			async (args: { path: string }) => {
-				const isEntryFile = isEntry(args.path)
-				const inModules = args.path.includes('/node_modules/')
-				// Allow elysia-owned dist modules through even when in node_modules —
-				// they need the isProduction() call-site rewrite. All other
-				// node_modules are skipped as before (Defect 1 fix).
-				const isElysiaOwned = isElysiaModule(args.path)
-				if (inModules && !isEntryFile && !isElysiaOwned)
-					return undefined
-
-				const original = await readText(args.path)
-				// Type-import rewriting applies only to non-node_modules files
-				// (same as before; elysia dist modules are already built).
-				let contents =
-					inModules && !isEntryFile
-						? original
-						: rewriteTypeImport(original)
-
-				if (stub.isProduction && isElysiaOwned)
-					contents = rewriteIsProductionCalls(contents)
-
-				if (isEntryFile)
-					contents = `import 'elysia/compiled'\n${contents}`
-
-				if (contents === original) return undefined
-
-				return { contents, loader: resolveLoader(args.path) }
-			}
-		)
-	} else {
-		if (stub.isProduction)
-			build.onLoad(
-				{ filter: elysiaModuleFilterRegex },
-				async (args: { path: string }) => {
-					if (!isElysiaModule(args.path)) return undefined
-					const original = await readText(args.path)
-					const contents = rewriteIsProductionCalls(original)
-					if (contents === original) return undefined
-					return { contents, loader: resolveLoader(args.path) }
-				}
-			)
-
-		build.onLoad(
-			{ filter: entryFilter(entryPath) },
-			async (args: { path: string }) => {
-				const original = await readText(args.path)
-				return {
-					contents: `import 'elysia/compiled'\n${original}`,
-					loader: resolveLoader(args.path)
-				}
-			}
-		)
-	}
-}

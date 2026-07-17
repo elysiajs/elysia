@@ -58,7 +58,8 @@ const assertParity = async (build: Build, matrix: Req[]) => {
 	}
 }
 
-describe('experimental.lazyCompose parity', () => {
+// parked: lazyCompose lane dropped pre-N+1; re-lands with the N+3a authoring DAG — see design/necessity-audit-2026-07-17.md
+describe.skip('experimental.lazyCompose parity', () => {
 	it('disabled mode keeps the baseline route table', () => {
 		const app = new Elysia()
 			.get('/a', () => 'a')
@@ -342,7 +343,8 @@ describe('experimental.lazyCompose parity', () => {
 	})
 })
 
-describe('experimental.lazyCompose unsupported plugins', () => {
+// parked: lazyCompose lane dropped pre-N+1; re-lands with the N+3a authoring DAG — see design/necessity-audit-2026-07-17.md
+describe.skip('experimental.lazyCompose unsupported plugins', () => {
 	it('`.use(Promise)` throws naming the flag', () => {
 		expect(() =>
 			new Elysia({ experimental: { lazyCompose: true } }).use(
@@ -375,7 +377,8 @@ describe('experimental.lazyCompose unsupported plugins', () => {
 	})
 })
 
-describe('experimental.lazyCompose deep plugin chains', () => {
+// parked: lazyCompose lane dropped pre-N+1; re-lands with the N+3a authoring DAG — see design/necessity-audit-2026-07-17.md
+describe.skip('experimental.lazyCompose deep plugin chains', () => {
 	it('builds a deep chain within the lazy cost ceiling', () => {
 		const DEPTH = 64
 		const PER_LEVEL = 4 // ~256 routes, D deep — the reabsorption stress shape

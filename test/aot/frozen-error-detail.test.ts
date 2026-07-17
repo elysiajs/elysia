@@ -3,17 +3,17 @@ import { describe, it, expect, afterEach } from 'bun:test'
 
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
+import { Compiled, type ProgramId } from '../../src/compile/aot'
 import {
-	Compiled,
 	beginValidatorCapture,
 	endValidatorCapture,
-	endHandlerCapture
-} from '../../src/compile/aot'
+	endHandlerCapture,
+	resetCompactErrorWarnings
+} from '../../src/compile/aot-capture'
 import { RouteValidator } from '../../src/validator/route'
 import { buildFrozenRouteValidator } from '../../src/compile/handler/frozen-validator'
-import { resetCompactErrorWarnings } from '../../src/compile/aot-capture'
 
-import { materialise } from './_manifest'
+import { claimManifest, materialise } from './_manifest'
 
 // Sealed and wired validators expose the same field-specific errors.
 
@@ -41,7 +41,7 @@ function freeze(schema: any): { warns: string[] } {
 
 		Compiled.clear()
 		Validator.clear()
-		Compiled.validators = materialise(captured)
+		claimed = claimManifest({ validators: materialise(captured) })
 	} finally {
 		console.warn = original
 		delete process.env.ELYSIA_AOT_BUILD
@@ -50,14 +50,18 @@ function freeze(schema: any): { warns: string[] } {
 	return { warns }
 }
 
+// program claimed by the latest `freeze()`
+let claimed: { ['~programId']: ProgramId }
+
 const hook = (schema: any) => ({ body: schema })
-const root = () => new Elysia() as any
+const root = () => claimed as any
 
 const wired = (schema: any) =>
 	new RouteValidator(
 		hook(schema) as any,
 		{
-			aot: { method: METHOD, path: PATH }
+			aot: { method: METHOD, path: PATH },
+			app: claimed
 		} as any
 	)
 

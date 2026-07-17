@@ -11,10 +11,7 @@ export namespace Sucrose {
 		body: boolean
 		cookie: boolean
 		set: boolean
-		server: boolean
 		route: boolean
-		url: boolean
-		path: boolean
 	}
 
 	export type LifeCycle = Partial<Partial<AppHook>>
@@ -273,10 +270,7 @@ function findParameterReference(
 	if (parameters.body) inference.body = true
 	if (parameters.cookie) inference.cookie = true
 	if (parameters.set) inference.set = true
-	if (parameters.server) inference.server = true
 	if (parameters.route) inference.route = true
-	if (parameters.url) inference.url = true
-	if (parameters.path) inference.path = true
 
 	if (hasParenthesis) return `{ ${Object.keys(parameters).join(', ')} }`
 
@@ -593,10 +587,7 @@ export function inferBodyReference(
 			if (parameters.body) inference.body = true
 			if (parameters.cookie) inference.cookie = true
 			if (parameters.set) inference.set = true
-			if (parameters.server) inference.server = true
-			if (parameters.url) inference.url = true
 			if (parameters.route) inference.route = true
-			if (parameters.path) inference.path = true
 
 			continue
 		}
@@ -617,12 +608,8 @@ export function inferBodyReference(
 			inference.cookie = true
 
 		if (!inference.set && access('set', alias)) inference.set = true
-		if (!inference.server && access('server', alias))
-			inference.server = true
 
 		if (!inference.route && access('route', alias)) inference.route = true
-		if (!inference.url && access('url', alias)) inference.url = true
-		if (!inference.path && access('path', alias)) inference.path = true
 
 		if (
 			inference.query &&
@@ -630,10 +617,7 @@ export function inferBodyReference(
 			inference.body &&
 			inference.cookie &&
 			inference.set &&
-			inference.server &&
-			inference.route &&
-			inference.url &&
-			inference.path
+			inference.route
 		)
 			break
 	}
@@ -672,16 +656,7 @@ export function removeDefaultParameter(parameter: string) {
 }
 
 function markAllAccessed(i: Sucrose.Inference) {
-	i.query =
-		i.headers =
-		i.body =
-		i.cookie =
-		i.set =
-		i.server =
-		i.url =
-		i.route =
-		i.path =
-			true
+	i.query = i.headers = i.body = i.cookie = i.set = i.route = true
 }
 
 function isContextPassToFunction(
@@ -835,10 +810,7 @@ export function mergeInference(a: Sucrose.Inference, b: Sucrose.Inference) {
 		headers: a.headers || b.headers,
 		query: a.query || b.query,
 		set: a.set || b.set,
-		server: a.server || b.server,
-		url: a.url || b.url,
-		route: a.route || b.route,
-		path: a.path || b.path
+		route: a.route || b.route
 	}
 }
 
@@ -848,10 +820,7 @@ const defaultSucrose = () => ({
 	body: false,
 	cookie: false,
 	set: false,
-	server: false,
-	url: false,
-	route: false,
-	path: false
+	route: false
 })
 
 function push(target: unknown[], array: unknown[]) {
@@ -980,10 +949,7 @@ export function sucrose(
 			inference.body &&
 			inference.cookie &&
 			inference.set &&
-			inference.server &&
-			inference.url &&
-			inference.route &&
-			inference.path
+			inference.route
 		)
 			break
 	}

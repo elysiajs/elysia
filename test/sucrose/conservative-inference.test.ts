@@ -10,9 +10,6 @@ const allContextProperties = {
 	body: true,
 	cookie: true,
 	set: true,
-	server: true,
-	path: true,
-	url: true,
 	route: true
 }
 
@@ -22,9 +19,6 @@ const queryOnly = {
 	body: false,
 	cookie: false,
 	set: false,
-	server: false,
-	path: false,
-	url: false,
 	route: false
 }
 

@@ -25,11 +25,12 @@ import {
 	ElysiaStatus,
 	ValidationError,
 	internalServerErrorBodyString,
-	internalServerErrorResponse,
 	isProduction,
 	problemBody,
 	problemResponse
 } from '../error'
+
+import { createErrorHandler } from '../handler/error'
 
 import { isBun } from '../universal/constants'
 import { mapResponse } from '../adapter/web-standard/handler'
@@ -248,6 +249,104 @@ export async function handleWSResponse(
 	;(ws as any).send(mapped)
 }
 
+function wsErrorFrame(error: any): string | Promise<string> {
+	if (error instanceof ValidationError)
+		try {
+			return JSON.stringify(error.payload)
+		} catch {}
+
+	if (error instanceof ElysiaStatus)
+		try {
+			return JSON.stringify({
+				status: error.status,
+				error: error.response
+			})
+		} catch {}
+
+	if (typeof error?.toResponse === 'function') {
+		if (
+			error instanceof ElysiaError &&
+			error.toResponse === ElysiaError.prototype.toResponse
+		)
+			try {
+				return JSON.stringify(
+					problemBody({
+						type: error.problemType,
+						title: error.problemTitle,
+						status: (error.status ?? 500) as any,
+						detail:
+							error.response !== undefined &&
+							error.response !== error.problemTitle
+								? (error.response as any)
+								: undefined
+					})
+				)
+			} catch {}
+
+		try {
+			const r = error.toResponse()
+			return Promise.resolve(r).then((resolved) =>
+				resolved instanceof Response
+					? resolved.text()
+					: wsErrorFrameFallback(error)
+			)
+		} catch {}
+	}
+
+	return wsErrorFrameFallback(error)
+}
+
+function wsErrorFrameFallback(error: any): string {
+	if (error?.status) {
+		const body =
+			error.response !== undefined
+				? error.response
+				: isProduction()
+					? error.status >= 500
+						? 'Internal Server Error'
+						: ''
+					: (error.message ?? '')
+
+		return typeof body === 'object' ? JSON.stringify(body) : String(body)
+	}
+
+	return internalServerErrorBodyString(error)
+}
+
+function sendErrorFrame(
+	ws: ElysiaWS<any>,
+	error: unknown
+): void | Promise<void> {
+	const frame = wsErrorFrame(error)
+	if (typeof frame === 'string') {
+		try {
+			ws.raw.send(frame)
+		} catch {}
+		return
+	}
+	return frame.then(
+		(f) => {
+			try {
+				ws.raw.send(f)
+			} catch {}
+		},
+		() => {}
+	)
+}
+
+function validateUpgradeChannel(
+	validator: any,
+	value: unknown,
+	type: 'params' | 'query' | 'headers'
+): unknown | Promise<unknown> {
+	if (validator instanceof StandardValidator)
+		return validator.From(value, type)
+
+	if (validator.hasCodec) return validator.From(value, type)
+
+	return validator.EncodeFrom(value, type)
+}
+
 const wsOptions = [
 	'maxPayloadLength',
 	'backpressureLimit',
@@ -387,154 +486,17 @@ export function buildWSRoute(
 
 	const parseMessage = createMessageParser(parseHooks as any)
 
-	async function handleUpgradeError(
-		context: Context,
-		error: any
-	): Promise<Response> {
-		;(context as any).error = error
-		if (
-			frozenRootOf(app)['~config']?.allowUnsafeValidationDetails &&
-			error instanceof ValidationError
-		)
-			error.allowUnsafeValidationDetails = true
-		if (error?.status) (context.set as any).status = error.status
-
-		for (let i = 0; i < errorHandlers.length; i++) {
-			let r: unknown = errorHandlers[i](context as any)
-			if (r instanceof Promise) r = await r
-
-			if (r === undefined) continue
-			if (r instanceof Response) return r
-
-			if (r instanceof ElysiaStatus)
-				return mapResponse(
-					r.response,
-					{
-						status: r.code as number,
-						headers: Object.assign(
-							{},
-							r.headers,
-							(context.set as any)?.headers
-						)
-					} as any,
-					(context as any).request
-				)
-
-			const httpStatus = (context.set as any)?.status ?? 200
-			return new Response(
-				typeof r === 'object' ? JSON.stringify(r) : String(r),
-				{ status: httpStatus }
-			)
-		}
-
-		if (typeof error?.toResponse === 'function')
-			try {
-				const r = error.toResponse()
-				if (r instanceof Response) return r
-			} catch {}
-
-		// User-provided error body → keep as-is; unexpected Error → problem+json
-		if (error?.response !== undefined) {
-			const status = error?.status ?? 500
-			const body =
-				typeof error.response === 'object'
-					? JSON.stringify(error.response)
-					: String(error.response)
-
-			return new Response(body, { status })
-		}
-
-		if (error instanceof Error) return internalServerErrorResponse(error)
-
-		return new Response(String(error), { status: error?.status ?? 500 })
-	}
-
-	function wsErrorFrame(error: any): string | Promise<string> {
-		if (error instanceof ValidationError)
-			try {
-				return JSON.stringify(error.payload)
-			} catch {}
-
-		if (error instanceof ElysiaStatus)
-			try {
-				return JSON.stringify({
-					status: error.status,
-					error: error.response
-				})
-			} catch {}
-
-		if (typeof error?.toResponse === 'function') {
-			if (
-				error instanceof ElysiaError &&
-				error.toResponse === ElysiaError.prototype.toResponse
-			)
-				try {
-					return JSON.stringify(
-						problemBody({
-							type: error.problemType,
-							title: error.problemTitle,
-							status: (error.status ?? 500) as any,
-							detail:
-								error.response !== undefined &&
-								error.response !== error.problemTitle
-									? (error.response as any)
-									: undefined
-						})
-					)
-				} catch {}
-
-			try {
-				const r = error.toResponse()
-				return Promise.resolve(r).then((resolved) =>
-					resolved instanceof Response
-						? resolved.text()
-						: wsErrorFrameFallback(error)
-				)
-			} catch {}
-		}
-
-		return wsErrorFrameFallback(error)
-	}
-
-	function wsErrorFrameFallback(error: any): string {
-		if (error?.status) {
-			const body =
-				error.response !== undefined
-					? error.response
-					: isProduction()
-						? error.status >= 500
-							? 'Internal Server Error'
-							: ''
-						: (error.message ?? '')
-
-			return typeof body === 'object'
-				? JSON.stringify(body)
-				: String(body)
-		}
-
-		return internalServerErrorBodyString(error)
-	}
-
-	function sendErrorFrame(
-		ws: ElysiaWS<any>,
-		error: unknown
-	): void | Promise<void> {
-		const frame = wsErrorFrame(error)
-		if (typeof frame === 'string') {
-			try {
-				ws.raw.send(frame)
-			} catch {}
-			return
-		}
-		return frame.then(
-			(f) => {
-				try {
-					ws.raw.send(f)
-				} catch {}
-			},
-			() => {}
-		)
-	}
+	const handleUpgradeError = createErrorHandler(
+		errorHandlers.length ? (errorHandlers as any) : undefined,
+		((response: unknown, set: Context['set'], context?: Context) =>
+			mapResponse(
+				response,
+				set,
+				(context as { request?: Request } | undefined)?.request
+			)) as any,
+		undefined,
+		frozenRootOf(app)['~config']?.allowUnsafeValidationDetails
+	)
 
 	async function handleError(ws: ElysiaWS<any>, error: unknown) {
 		const errCtx: any = Object.create(ws as any)
@@ -578,23 +540,6 @@ export function buildWSRoute(
 		return bodyValidator.EncodeFrom(message, 'body')
 	}
 
-	function validateUpgradeChannel(
-		validator: any,
-		value: unknown,
-		type: 'params' | 'query' | 'headers'
-	): unknown | Promise<unknown> {
-		if (validator instanceof StandardValidator)
-			return validator.From(value, type)
-
-		if (validator.hasCodec) return validator.From(value, type)
-
-		// Same Check-then-Clean parity as validateMessageBody: HTTP strips
-		// undeclared params/query/headers when a schema is declared, so the WS
-		// upgrade channel must too. EncodeFrom works on both live and sealed
-		// (FrozenSlotValidator) validators; plain Check left extra fields intact.
-		return validator.EncodeFrom(value, type)
-	}
-
 	function onMessageValidationError(
 		ws: ElysiaWS<any>,
 		error: unknown
@@ -616,74 +561,6 @@ export function buildWSRoute(
 		!!bodyValidator ||
 		handlerMayTouchBody(hook.message as AnyFn | undefined) ||
 		errorHandlers.some(handlerMayTouchBody)
-
-	const asyncMessageTouchesBody =
-		messageHandlerTouchesBody ||
-		transforms.length > 0 ||
-		messageBeforeHandles.length > 0 ||
-		afterHandles.length > 0 ||
-		afterResponses.length > 0 ||
-		mapResponses.length > 0
-
-	async function dispatchMessage(
-		connection: ElysiaWS<any>,
-		rawMessage: string | Buffer
-	) {
-		const ws: ElysiaWS<any> = Object.create(connection)
-
-		try {
-			const p = parseMessage(ws as any, rawMessage)
-			let message = p instanceof Promise ? await p : p
-
-			if (bodyValidator) {
-				try {
-					const decoded = validateMessageBody(message)
-					message =
-						decoded instanceof Promise ? await decoded : decoded
-				} catch (err) {
-					return onMessageValidationError(ws, err)
-				}
-			}
-
-			if (asyncMessageTouchesBody) ws.body = message as any
-
-			for (let i = 0; i < transforms.length; i++) {
-				const r = transforms[i](ws as any)
-				if (r instanceof Promise) await r
-			}
-			for (let i = 0; i < messageBeforeHandles.length; i++) {
-				let r: unknown = messageBeforeHandles[i](ws as any)
-				if (r instanceof Promise) r = await r
-				if (r !== undefined) {
-					await handleWSResponse(ws, r, mapResponses)
-					return
-				}
-			}
-
-			if (hook.message) {
-				const result = (hook.message as AnyFn)(ws, message)
-
-				const resolved =
-					result instanceof Promise ? await result : result
-
-				if (resolved !== undefined)
-					await handleWSResponse(ws, resolved, mapResponses)
-			}
-
-			for (let i = 0; i < afterHandles.length; i++) {
-				const r = afterHandles[i](ws as any)
-				if (r instanceof Promise) await r
-			}
-			for (let i = 0; i < afterResponses.length; i++) {
-				try {
-					const r = afterResponses[i](ws as any)
-					if (r instanceof Promise) await r
-				} catch {}
-			}
-		} catch (error) {
-			await handleError(ws, error)
-		}
-	}
 
 	const syncDispatchEligible =
 		transforms.length === 0 &&
@@ -725,14 +602,14 @@ export function buildWSRoute(
 
 			if (decoded instanceof Promise)
 				return decoded.then(
-					(m) => runMessageSync(ws, m),
+					(m) => runMessage(ws, m),
 					(error) => onMessageValidationError(ws, error)
 				)
 
 			message = decoded
 		}
 
-		return runMessageSync(ws, message)
+		return runMessage(ws, message)
 	}
 
 	function runMessageSync(
@@ -756,6 +633,46 @@ export function buildWSRoute(
 		}
 	}
 
+	async function runMessageFull(ws: ElysiaWS<any>, message: unknown) {
+		try {
+			ws.body = message as any
+
+			for (let i = 0; i < transforms.length; i++) {
+				const r = transforms[i](ws as any)
+				if (r instanceof Promise) await r
+			}
+			for (let i = 0; i < messageBeforeHandles.length; i++) {
+				let r: unknown = messageBeforeHandles[i](ws as any)
+				if (r instanceof Promise) r = await r
+				if (r !== undefined) {
+					await handleWSResponse(ws, r, mapResponses)
+					return
+				}
+			}
+
+			const result = (hook.message as AnyFn)(ws, message)
+			const resolved = result instanceof Promise ? await result : result
+
+			if (resolved !== undefined)
+				await handleWSResponse(ws, resolved, mapResponses)
+
+			for (let i = 0; i < afterHandles.length; i++) {
+				const r = afterHandles[i](ws as any)
+				if (r instanceof Promise) await r
+			}
+			for (let i = 0; i < afterResponses.length; i++) {
+				try {
+					const r = afterResponses[i](ws as any)
+					if (r instanceof Promise) await r
+				} catch {}
+			}
+		} catch (error) {
+			await handleError(ws, error)
+		}
+	}
+
+	const runMessage = syncDispatchEligible ? runMessageSync : runMessageFull
+
 	function dispatchMessageSync(
 		connection: ElysiaWS<any>,
 		rawMessage: string | Buffer
@@ -775,10 +692,6 @@ export function buildWSRoute(
 			return handleError(ws, error)
 		}
 	}
-
-	const dispatch = syncDispatchEligible
-		? dispatchMessageSync
-		: dispatchMessage
 
 	function wrapLifecycle(fn: AnyFn | undefined, withBody: boolean) {
 		if (!fn) return
@@ -922,7 +835,7 @@ export function buildWSRoute(
 					validator: responseValidator,
 					defaultValidator: defaultResponseValidator,
 					open: onOpen as any,
-					message: hook.message ? dispatch : undefined,
+					message: hook.message ? dispatchMessageSync : undefined,
 					drain: onDrain as any,
 					close: onClose as any,
 					ping: onPing as any,
@@ -935,7 +848,9 @@ export function buildWSRoute(
 					status: 400
 				})
 		} catch (error) {
-			return handleUpgradeError(context, error)
+			return handleUpgradeError(context, error as Error) as
+				| Response
+				| Promise<Response>
 		}
 	}
 

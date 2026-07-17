@@ -11,7 +11,7 @@ import { Validator } from '../../src/validator'
 import {
 	beginValidatorCapture,
 	endValidatorCapture
-} from '../../src/compile/aot'
+} from '../../src/compile/aot-capture'
 
 describe('TypeBoxValidatorCache eviction', () => {
 	const make = (i: number) => Type.Object({ [`k${i}`]: Type.String() })

@@ -40,7 +40,8 @@ const bestMs = (
 	return { ms: best, realized }
 }
 
-describe('experimental.lazyCompose build scaling', () => {
+// parked: lazyCompose lane dropped pre-N+1; re-lands with the N+3a authoring DAG — see design/necessity-audit-2026-07-17.md
+describe.skip('experimental.lazyCompose build scaling', () => {
 	it('grows slower with nesting depth than eager composition', () => {
 		const ROUTES = 1_000
 		const ITER = 7

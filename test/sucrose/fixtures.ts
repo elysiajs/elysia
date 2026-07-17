@@ -48,10 +48,7 @@ const ALL_TRUE: Expect = {
 	headers: true,
 	cookie: true,
 	set: true,
-	server: true,
-	route: true,
-	url: true,
-	path: true
+	route: true
 }
 
 export const fixtures: Fixture[] = [
@@ -77,10 +74,10 @@ export const fixtures: Fixture[] = [
 		passesToday: true
 	},
 	{
-		name: 'route / url / path via whole context',
+		name: 'route via whole context',
 		class: 'whole-context',
 		fn: (c: any) => log(c.url, c.path, c.route),
-		expect: { url: true, route: true, path: true },
+		expect: { route: true },
 		passesToday: true
 	},
 
@@ -196,10 +193,10 @@ export const fixtures: Fixture[] = [
 		passesToday: true
 	},
 	{
-		name: 'optional chaining c.server?.upgrade',
+		name: 'optional chaining c.set?.headers',
 		class: 'optional-chain',
-		fn: (c: any) => c.server?.upgrade,
-		expect: { server: true },
+		fn: (c: any) => c.set?.headers,
+		expect: { set: true },
 		passesToday: true
 	},
 

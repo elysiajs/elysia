@@ -279,13 +279,15 @@ const jsonLengthWithin = (value: unknown, budget: number): number => {
 	return budget
 }
 
-const subValueAt = (value: unknown, path: unknown): unknown => {
+// empty parts resolve to `value` itself (root-level errors); an unrecognized
+// path shape resolves to undefined
+export function subValueAt(value: unknown, path: unknown) {
 	let parts: any[] | undefined
 
 	if (typeof path === 'string') parts = path.split('/').filter(Boolean)
 	else if (Array.isArray(path)) parts = path
 
-	if (!parts?.length) return
+	if (!parts) return
 
 	let current: any = value
 	for (let i = 0; i < parts.length; i++) {

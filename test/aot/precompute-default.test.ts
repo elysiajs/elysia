@@ -2,13 +2,13 @@ import { describe, it, expect, afterEach } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
 import { TypeBoxValidator } from '../../src/type/validator'
+import { Compiled } from '../../src/compile/aot'
 import {
-	Compiled,
 	beginValidatorCapture,
 	endValidatorCapture
-} from '../../src/compile/aot'
+} from '../../src/compile/aot-capture'
 import { compileToSource } from '../../src/plugin/aot/source'
-import { materialise } from './_manifest'
+import { claimManifest, materialise, registerManifest } from './_manifest'
 import { req } from '../utils'
 
 /** Frozen defaults must match live validation without runtime TypeBox setup. */
@@ -34,10 +34,10 @@ const capture = (schema: any) => {
 const makeFrozen = (schema: any, m: any) => {
 	Compiled.clear()
 	Validator.clear()
-	Compiled.validators = m
 	return new TypeBoxValidator(schema, {
 		aot: { method: 'POST', path: PATH },
-		slot: SLOT
+		slot: SLOT,
+		app: claimManifest({ validators: m })
 	}) as any
 }
 
@@ -288,11 +288,11 @@ describe('AOT default preallocation', () => {
 		const m = capture(mk())
 		Compiled.clear()
 		Validator.clear()
-		Compiled.validators = m
 		const frozen = new TypeBoxValidator(mk(), {
 			aot: { method: 'POST', path: PATH },
 			slot: SLOT,
-			normalize: false
+			normalize: false,
+			app: claimManifest({ validators: m })
 		}) as any
 		const a = frozen.FromSync(undefined) as any
 		a.tags.push('LEAK')
@@ -487,7 +487,7 @@ describe('AOT default preallocation', () => {
 		}
 
 		Validator.clear()
-		Compiled.validators = evalValidators(src)
+		registerManifest({ validators: evalValidators(src) })
 		const frozen = build()
 		frozen.compile()
 
@@ -662,7 +662,7 @@ describe('AOT default preallocation — live and frozen parity', () => {
 		}
 
 		Validator.clear()
-		Compiled.validators = evalManifest(src)
+		registerManifest({ validators: evalManifest(src) })
 		const frozen = build()
 		frozen.compile()
 
@@ -773,7 +773,7 @@ describe('AOT default preallocation — source emit', () => {
 		}
 
 		Validator.clear()
-		Compiled.validators = evalManifest(src)
+		registerManifest({ validators: evalManifest(src) })
 		const frozen = build()
 		frozen.compile()
 

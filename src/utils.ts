@@ -711,7 +711,7 @@ export function mergeArray<
  * route's `appHook` was captured on the child and still holds the original.
  * The fn must run once, in `b`'s position.
  */
-export function dedupedMergeArray<
+function dedupedMergeArray<
 	A extends MaybeArray<unknown> | undefined,
 	B extends MaybeArray<unknown> | undefined
 >(

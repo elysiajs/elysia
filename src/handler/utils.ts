@@ -9,7 +9,7 @@ export const emptyResponse = isCloudflareWorker
 	? { clone: () => new Response(null) }
 	: new Response(null)
 
-export function cachedResponse(
+function cachedResponse(
 	body: string,
 	status: number,
 	headers?: Record<string, string>

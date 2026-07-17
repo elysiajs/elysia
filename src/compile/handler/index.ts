@@ -790,12 +790,17 @@ export function compileHandler(
 				isHandleFunction
 			)
 
-			let plans = routePlans.get(root)
-			if (!plans) {
-				plans = new Map()
-				routePlans.set(root, plans)
+			if (
+				root['~introspect'] === true ||
+				root['~config']?.introspect === true
+			) {
+				let plans = routePlans.get(root)
+				if (!plans) {
+					plans = new Map()
+					routePlans.set(root, plans)
+				}
+				plans.set(`${method} ${path}`, plan)
 			}
-			plans.set(`${method} ${path}`, plan)
 
 			if (plan.supported)
 				return resumeEmit.emitResume({

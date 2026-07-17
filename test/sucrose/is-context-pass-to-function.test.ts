@@ -32,10 +32,7 @@ describe('isContextPassToFunction', () => {
 		expect(result.body).toBe(true)
 		expect(result.cookie).toBe(true)
 		expect(result.set).toBe(true)
-		expect(result.server).toBe(true)
-		expect(result.url).toBe(true)
 		expect(result.route).toBe(true)
-		expect(result.path).toBe(true)
 	})
 
 	it('keeps narrow inference when the whole context is not passed', () => {
@@ -50,7 +47,7 @@ describe('isContextPassToFunction', () => {
 		expect(result.body).toBe(false)
 		expect(result.cookie).toBe(false)
 		expect(result.set).toBe(false)
-		expect(result.server).toBe(false)
+		expect(result.route).toBe(false)
 	})
 
 	it('analyzes a 300 KB handler within two seconds', () => {
@@ -80,10 +77,7 @@ describe('isContextPassToFunction', () => {
 		expect(result.body).toBe(true)
 		expect(result.cookie).toBe(true)
 		expect(result.set).toBe(true)
-		expect(result.server).toBe(true)
-		expect(result.url).toBe(true)
 		expect(result.route).toBe(true)
-		expect(result.path).toBe(true)
 	})
 
 	it('infers direct access through a dollar-prefixed context narrowly', () => {

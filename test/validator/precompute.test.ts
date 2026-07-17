@@ -7,6 +7,10 @@ import { TypeBoxValidator } from '../../src/type/validator'
 import { setupTypebox } from '../../src/type/compat'
 import { req } from '../utils'
 
+// verifyPreallocatableDefault(schema) validates by default, which requires
+// the build-only capture probes to be installed.
+import '../../src/compile/aot-capture'
+
 // Direct validator construction requires initialized custom types.
 setupTypebox()
 
