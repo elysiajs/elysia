@@ -2,9 +2,13 @@ import { Elysia, t, form, file } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { fileTypeFromBlob } from 'file-type'
 import { req } from '../utils'
-import { formDataToObject } from '../../src/adapter/web-standard/utils'
+import {
+	formDataToObject,
+	formDataToObjectFlatFastPath
+} from '../../src/adapter/web-standard/utils'
 import { TypeBoxValidator } from '../../src/type/validator'
 import { setFileTypeDetector } from '../../src/type/elysia/file-type'
+import { resumeEmit } from '../../src/experimental/resume'
 
 const snapshotObject = (value: Record<PropertyKey, unknown>) => ({
 	values: Reflect.ownKeys(value).map((key) => [key, value[key]]),
@@ -427,4 +431,80 @@ describe('Form Data resource bounds', () => {
 			c: [['deep']]
 		})
 	})
+})
+
+describe('flat FormData fast path', () => {
+	const parity = (form: FormData) => {
+		const expected = formDataToObject(form)
+		const actual = formDataToObjectFlatFastPath(form)
+
+		expect(Reflect.ownKeys(actual)).toEqual(Reflect.ownKeys(expected))
+		expect(actual).toEqual(expected)
+		expect(Object.getPrototypeOf(actual)).toBe(null)
+	}
+
+	it('matches the generic oracle for flat, duplicate, and nested inputs', () => {
+		const flat = new FormData()
+		flat.append('name', 'elysia')
+		flat.append('meta', '{"ok":true}')
+		flat.append('__proto__', 'safe')
+		flat.append('0', 'zero')
+		parity(flat)
+
+		const duplicate = new FormData()
+		duplicate.append('asset', '{"name":"avatar"}')
+		duplicate.append('asset', new File(['image'], 'avatar.png'))
+		parity(duplicate)
+
+		for (const entries of [
+			[
+				['user', 'flat'],
+				['user.name', 'nested']
+			],
+			[
+				['items[0]', 'a'],
+				['items[1]', 'b']
+			],
+			[["a['unterminated", 'value']]
+		] as const) {
+			const nested = new FormData()
+			for (const [key, value] of entries) nested.append(key, value)
+			parity(nested)
+		}
+	})
+
+	for (const [name, experimental] of [
+		['jit', { flatFormDataFastPath: true }],
+		['resume', { flatFormDataFastPath: true, resumeEmit }]
+	] as const)
+		it(`parses explicit and inferred multipart bodies through ${name}`, async () => {
+			const app = new Elysia({ experimental })
+				.post('/explicit', { parse: 'formdata' }, ({ body }) => body)
+				.post(
+					'/inferred',
+					{
+						body: t.Object({ name: t.String(), age: t.Numeric() })
+					},
+					({ body }) => body
+				)
+
+			const request = (path: string) => {
+				const body = new FormData()
+				body.append('name', 'Ada')
+				body.append('age', '36')
+				return app.handle(
+					new Request(`http://localhost${path}`, {
+						method: 'POST',
+						body
+					})
+				)
+			}
+
+			await expect(
+				request('/explicit').then((x) => x.json())
+			).resolves.toEqual({ name: 'Ada', age: '36' })
+			await expect(
+				request('/inferred').then((x) => x.json())
+			).resolves.toEqual({ name: 'Ada', age: 36 })
+		})
 })

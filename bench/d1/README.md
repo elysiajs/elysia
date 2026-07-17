@@ -30,6 +30,15 @@ bun run bench:d1:gate
 bun run bench:d1:selftest
 ```
 
+Use `bun run bench:d1:aa --owners=C4b,C4d`,
+`bun run bench:d1:gate --owners=C4b,C4d`, and
+`bun run bench:d1:verify --owners=C4b,C4d` when a leaf train must calibrate, evaluate, and
+verify only its registered margins without changing unrelated established tolerances. The
+selected owners, feature environments, fixtures, and exact active margins are recorded in
+artifacts. Unscoped A/A and gate runs stay on default production behavior and exclude these
+leaf-owned fixtures and margins; unscoped verification continues to validate every active
+registry entry.
+
 Promotion refuses a dirty git tree and refuses a machine, Bun, OS-image, power-mode, or D1
 environment mismatch. There is one approved baseline and one floor file per machine ID under
 the ignored `bench/d1/baseline/<machine-id>/` directory.
@@ -66,3 +75,13 @@ absolute least-squares RSS slope across four post-warmup request blocks. Both me
 `pending-floor` until a quiet pinned-machine A/A run establishes their noise floors. A
 perfectly flat RSS result is reported as one byte/request because D1's relative bootstrap
 rejects zero-valued baselines.
+
+The default-off C4d prototype is enabled with
+`ELYSIA_EXPERIMENTAL_BUN_CRYPTO_HASHER=1`. The `crypto-hmac` fixture records both direct
+HMAC signing and an in-process signed-cookie handler; runtimes without `Bun.CryptoHasher`
+fall back to `node:crypto`, then Web Crypto.
+
+The default-off C4b prototype uses `experimental.flatFormDataFastPath`. D1 enables it only
+for the candidate with `D1_EXPERIMENTAL_FLAT_FORMDATA_FAST_PATH=1`. The `formdata` fixture
+records both isolated flat conversion and an in-process multipart handler; duplicate or
+nested keys remain on the generic converter.

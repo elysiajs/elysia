@@ -15,8 +15,10 @@ export const BENCH_SOURCE_FILES = [
 	'bench/d1/fixtures/cold-start.ts',
 	'bench/d1/fixtures/compile-memory.ts',
 	'bench/d1/fixtures/compose-depth.ts',
+	'bench/d1/fixtures/crypto-hmac.ts',
 	'bench/d1/fixtures/default-headers.ts',
 	'bench/d1/fixtures/executables.ts',
+	'bench/d1/fixtures/formdata.ts',
 	'bench/d1/fixtures/http.ts',
 	'bench/d1/fixtures/native-table.ts',
 	'bench/d1/fixtures/retained.ts',
@@ -99,6 +101,7 @@ export function relevantEnvironment(
 				([key, value]) =>
 					value !== undefined &&
 					(key === 'NODE_ENV' ||
+						key === 'ELYSIA_EXPERIMENTAL_BUN_CRYPTO_HASHER' ||
 						key.startsWith('BUN_') ||
 						key.startsWith('D1_'))
 			)

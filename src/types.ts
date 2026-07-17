@@ -165,6 +165,14 @@ export interface ElysiaConfig<
 		 * @default undefined
 		 */
 		resumeEmit?: ResumeEmit
+
+		/**
+		 * **Unstable / preview.** Convert flat FormData without allocating the
+		 * generic grouping map. Duplicate or nested keys use the generic lane.
+		 *
+		 * @default false
+		 */
+		flatFormDataFastPath?: boolean
 	}
 
 	/**

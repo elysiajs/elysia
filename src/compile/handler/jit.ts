@@ -68,8 +68,6 @@ import type {
 	MaybeArray
 } from '../../types'
 
-const parseFormData = 'c.body=await pf(c)\n'
-
 let captureHeaderShorthand: boolean | undefined
 export const setCaptureHeaderShorthand = (value: boolean | undefined): void => {
 	captureHeaderShorthand = value
@@ -78,13 +76,14 @@ export const setCaptureHeaderShorthand = (value: boolean | undefined): void => {
 function builtinParser(
 	adapter: ElysiaAdapter['parse'],
 	parse: string,
-	link: Link
+	link: Link,
+	flatFormDataFastPath = false
 ) {
 	switch (parse) {
 		case 'formdata':
 		case 'multipart/form-data':
 			link(adapter.formData, 'pf')
-			return parseFormData
+			return `c.body=await pf(c${flatFormDataFastPath ? ',true' : ''})\n`
 
 		case 'json':
 		case 'application/json':
@@ -120,7 +119,8 @@ function parse(
 	bodyVali: Validator | undefined,
 	hasHeaders: boolean,
 	link: Link,
-	report?: TraceReporter
+	report?: TraceReporter,
+	flatFormDataFastPath = false
 ) {
 	if (parsers && typeof parsers === 'function')
 		parsers = [parsers] as ContentType[] | BodyHandler[]
@@ -137,7 +137,16 @@ function parse(
 		const begin = child ? child.begin : ''
 		const end = child ? child.end() : ''
 
-		return begin + builtinParser(adapter, parsers as string, link) + end
+		return (
+			begin +
+			builtinParser(
+				adapter,
+				parsers as string,
+				link,
+				flatFormDataFastPath
+			) +
+			end
+		)
 	}
 
 	let hasFn = false
@@ -184,7 +193,12 @@ function parse(
 				const child = report?.resolveChild(parser as string)
 				if (i) code += 'if(!hasBody){\n'
 				if (child) code += child.begin
-				code += builtinParser(adapter, parser as string, link)
+				code += builtinParser(
+					adapter,
+					parser as string,
+					link,
+					flatFormDataFastPath
+				)
 				if (child) code += child.end()
 				if (i) code += '}\n'
 				break
@@ -216,8 +230,8 @@ function parse(
 		}
 
 		code += hasFn
-			? `if(!hasBody&&${guard}){${begin}c.body=cj?await pj(c):await pd(c,ce,true)\n${end}}\n`
-			: `if(${guard}){${begin}c.body=cj?await pj(c):await pd(c,ce,true)\n${end}}\n`
+			? `if(!hasBody&&${guard}){${begin}c.body=cj?await pj(c):await pd(c,ce,true${flatFormDataFastPath ? ',true' : ''})\n${end}}\n`
+			: `if(${guard}){${begin}c.body=cj?await pj(c):await pd(c,ce,true${flatFormDataFastPath ? ',true' : ''})\n${end}}\n`
 
 		if (!bodyVali) link(hasRequestBody, 'hb')
 		link(adapter.json, 'pj')
@@ -595,7 +609,8 @@ export function compileHandlerJit({
 			vali?.body,
 			hasHeaders,
 			link,
-			buildReport('parse')
+			buildReport('parse'),
+			root['~config']?.experimental?.flatFormDataFastPath === true
 		)
 		const preserveParseStatus = seenKeys.has('es')
 		link(ParseError, 'pe')

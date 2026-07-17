@@ -15,6 +15,13 @@ interface NodeCrypto {
 	}
 }
 
+type BunCryptoHasher = new (
+	algorithm: 'sha256',
+	key: string
+) => {
+	update: (data: string) => { digest: (encoding: 'base64') => string }
+}
+
 const nodeCrypto = (() => {
 	try {
 		return (globalThis.process as any)?.getBuiltinModule?.(
@@ -25,7 +32,20 @@ const nodeCrypto = (() => {
 	}
 })()
 
-export const hasSyncHmac = typeof nodeCrypto?.createHmac === 'function'
+const bunCryptoHasher = (globalThis as any).Bun?.CryptoHasher as
+	| BunCryptoHasher
+	| undefined
+const preferBunCryptoHasher =
+	(globalThis.process as any)?.env
+		?.ELYSIA_EXPERIMENTAL_BUN_CRYPTO_HASHER === '1'
+
+export const hmacProvider =
+	preferBunCryptoHasher && typeof bunCryptoHasher === 'function'
+		? 'bun'
+		: typeof nodeCrypto?.createHmac === 'function'
+			? 'node'
+			: 'subtle'
+export const hasSyncHmac = hmacProvider !== 'subtle'
 
 function coerceValue(val: unknown) {
 	if (typeof val === 'object') return JSON.stringify(val)
@@ -34,12 +54,21 @@ function coerceValue(val: unknown) {
 	return val
 }
 
-export const signCookieSyncImpl = (val: string, secret: string) =>
-	`${val}.${nodeCrypto!
-		.createHmac('sha256', secret)
+export const signCookieBun = (val: string, secret: string) =>
+	`${val}.${new bunCryptoHasher!('sha256', secret)
 		.update(val)
 		.digest('base64')
 		.replace(removeTrailingEquals, '')}`
+
+export const signCookieSyncImpl =
+	hmacProvider === 'bun'
+		? signCookieBun
+		: (val: string, secret: string) =>
+				`${val}.${nodeCrypto!
+					.createHmac('sha256', secret)
+					.update(val)
+					.digest('base64')
+					.replace(removeTrailingEquals, '')}`
 
 // reuse cookie key
 export const keyCache = new Map<string, Promise<CryptoKey>>()

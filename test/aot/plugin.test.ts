@@ -8,6 +8,18 @@ const APP = resolve(import.meta.dir, 'fixtures/app.ts')
 const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/aot.ts')
 
 describe('AOT plugin', () => {
+	it('bakes the flat FormData fast path into the captured parser call', async () => {
+		const { Elysia } = await import('../../src')
+		const { captureArtifacts } = await import('../../src/plugin/aot/source')
+		const app = new Elysia({
+			experimental: { flatFormDataFastPath: true }
+		}).post('/', { parse: 'formdata' }, ({ body }) => body)
+
+		const { source } = await captureArtifacts(app, { register: true })
+
+		expect(source).toContain('pf(c,true)')
+	})
+
 	it('generateCompiledModule emits a self-registering manifest', async () => {
 		const { generateCompiledModule } =
 			await import('../../src/plugin/aot/core')

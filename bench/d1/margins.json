@@ -220,6 +220,46 @@
 		"margin": null
 	},
 	{
+		"fixture": "crypto-hmac",
+		"metric": "direct-sign-ns-per-op",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 paired child-process blocks; median of 200 samples after 50 warmups; each sample averages 100 synchronous cookie signatures",
+		"owner": "C4d",
+		"status": "active",
+		"margin": 0.06
+	},
+	{
+		"fixture": "crypto-hmac",
+		"metric": "signed-cookie-handle-p50-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 paired child-process blocks; 200 body-consumed in-process app.handle requests after 50 warmups; each request verifies and re-signs one cookie",
+		"owner": "C4d",
+		"status": "active",
+		"margin": 0.13
+	},
+	{
+		"fixture": "formdata",
+		"metric": "flat-convert-p50-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 paired child-process blocks; median of 200 samples after 50 warmups; each sample converts the same 8-field flat FormData 100 times",
+		"owner": "C4b",
+		"status": "active",
+		"margin": 0.065
+	},
+	{
+		"fixture": "formdata",
+		"metric": "flat-handle-p50-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 paired child-process blocks; 200 body-consumed in-process app.handle requests after 50 warmups; each request parses one 8-field flat multipart body",
+		"owner": "C4b",
+		"status": "active",
+		"margin": 0.1
+	},
+	{
 		"fixture": "compile-memory",
 		"metric": "build-highwater-bytes-per-route",
 		"kind": "memory",

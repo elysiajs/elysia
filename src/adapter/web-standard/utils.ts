@@ -200,3 +200,23 @@ export function formDataToObject(form: FormData): Record<string, unknown> {
 
 	return body
 }
+
+export function formDataToObjectFlatFastPath(
+	form: FormData
+): Record<string, unknown> {
+	const body: Record<string, unknown> = nullObject()
+	let fallback: Record<string, unknown> | undefined
+
+	form.forEach((value, key) => {
+		if (fallback) return
+		if (HAS_NESTING.test(key) || Object.hasOwn(body, key)) {
+			fallback = formDataToObject(form)
+			return
+		}
+
+		body[key] =
+			typeof value === 'string' ? (tryParseJson(value) ?? value) : value
+	})
+
+	return fallback ?? body
+}

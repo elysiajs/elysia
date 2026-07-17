@@ -45,6 +45,8 @@ const fixtureIds = [
 	'cold-start',
 	'http',
 	'default-headers',
+	'crypto-hmac',
+	'formdata',
 	'compile-memory',
 	'retained',
 	'executables',
@@ -53,6 +55,27 @@ const fixtureIds = [
 
 type FixtureId = (typeof fixtureIds)[number]
 type ChildOutput = Record<string, any>
+const leafPerfOwners = new Set(['C4b', 'C4d'])
+
+function selectedOwners() {
+	const ownerArgument = process.argv
+		.find((argument) => argument.startsWith('--owners='))
+		?.slice('--owners='.length)
+
+	return ownerArgument
+		? new Set(ownerArgument.split(',').filter(Boolean))
+		: undefined
+}
+
+function leafPerfEnvironment(owners: Set<string> | undefined) {
+	const environment: Record<string, string> = {}
+	if (owners?.has('C4b'))
+		environment.D1_EXPERIMENTAL_FLAT_FORMDATA_FAST_PATH = '1'
+	if (owners?.has('C4d'))
+		environment.ELYSIA_EXPERIMENTAL_BUN_CRYPTO_HASHER = '1'
+
+	return environment
+}
 
 interface RunContext {
 	startedAt: string
@@ -451,6 +474,17 @@ function rawMetricSamples(
 		const percent = suffix === 'p50' ? 50 : suffix === 'p95' ? 95 : 99
 		return { samples, value: percentile(samples, percent) }
 	}
+	if (
+		entry.fixture === 'crypto-hmac' ||
+		entry.fixture === 'formdata'
+	) {
+		const samples = output.samples?.[entry.metric]
+		if (!Array.isArray(samples) || !samples.length)
+			throw new Error(
+				`${entry.fixture} samples missing for ${entry.metric}`
+			)
+		return { samples, value: percentile(samples, 50) }
+	}
 	const values: Record<string, number> = {
 		'build-highwater-bytes-per-route':
 			Number(output.maxRSS) / Number(output.routes),
@@ -506,7 +540,7 @@ function emptyRecord(
 		unit:
 			entry.kind === 'count'
 				? 'count'
-				: entry.metric.endsWith('-ns')
+				: entry.kind === 'timing'
 					? 'ns'
 					: entry.metric.endsWith('-bytes-per-request')
 						? 'bytes-per-request'
@@ -1137,8 +1171,18 @@ async function aaMode(
 ) {
 	const manifest = await ensurePinned(context.environment.machineId, true)
 	const git = gitInfo(repoRoot)
-	const a = descriptor('A', repoRoot, git.commit)
-	const b = descriptor('B', repoRoot, git.commit)
+	const owners = selectedOwners()
+	const environment = leafPerfEnvironment(owners)
+	const aaEntries = registry.entries.filter((entry) =>
+		owners ? owners.has(entry.owner) : !leafPerfOwners.has(entry.owner)
+	)
+	const aaFixtureIds = fixtureIds.filter((fixture) =>
+		aaEntries.some((entry) => entry.fixture === fixture)
+	)
+	if (!aaFixtureIds.length)
+		throw new Error(`no D1 fixtures for owners: ${[...owners!].join(', ')}`)
+	const a = descriptor('A', repoRoot, git.commit, environment)
+	const b = descriptor('B', repoRoot, git.commit, environment)
 	capture.variants.push(a, b)
 	const sessions: FloorsSession[] = []
 	for (let sessionIndex = 0; sessionIndex < 3; sessionIndex++) {
@@ -1151,7 +1195,7 @@ async function aaMode(
 			b,
 			registry,
 			seed,
-			fixtureIds,
+			aaFixtureIds,
 			defaultBlocks,
 			(records) => {
 				captureFixtures(capture, records)
@@ -1248,10 +1292,26 @@ async function gateMode(
 	context: RunContext,
 	capture: ArtifactCapture
 ) {
-	const active = registry.entries.filter((entry) => entry.status === 'active')
+	const owners = selectedOwners()
+	const active = registry.entries.filter(
+		(entry) =>
+			entry.status === 'active' &&
+			(owners
+				? owners.has(entry.owner)
+				: !leafPerfOwners.has(entry.owner))
+	)
+	const reportOnly = registry.entries.filter(
+		(entry) =>
+			entry.status === 'report-only' &&
+			(owners
+				? owners.has(entry.owner)
+				: !leafPerfOwners.has(entry.owner))
+	)
 	if (!active.length)
 		throw new Error(
-			'no active D1 margins; run aa, then register numeric margins before gate'
+			owners
+				? `no active D1 margins for owners: ${[...owners].join(', ')}`
+				: 'no active D1 margins; run aa, then register numeric margins before gate'
 		)
 	const manifest = await ensurePinned(context.environment.machineId, false)
 	const baseline = await readJson<RawArtifact>(
@@ -1266,6 +1326,9 @@ async function gateMode(
 			'baseline benchSourceHash is stale; record and promote a new baseline'
 		)
 	const worktree = resolve(traceRoot, `baseline-worktree-${process.pid}`)
+	const gateFixtureIds = fixtureIds.filter((fixture) =>
+		[...active, ...reportOnly].some((entry) => entry.fixture === fixture)
+	)
 	await mkdir(traceRoot, { recursive: true })
 	const added = command('git', [
 		'worktree',
@@ -1279,14 +1342,19 @@ async function gateMode(
 	try {
 		const git = gitInfo(repoRoot)
 		const a = descriptor('baseline', worktree, baseline.commit)
-		const b = descriptor('candidate', repoRoot, git.commit)
+		const b = descriptor(
+			'candidate',
+			repoRoot,
+			git.commit,
+			leafPerfEnvironment(owners)
+		)
 		capture.variants.push(a, b)
 		const fixtures = await runPairedBlocks(
 			a,
 			b,
 			registry,
 			context.seed,
-			fixtureIds,
+			gateFixtureIds,
 			defaultBlocks,
 			(records) => captureFixtures(capture, records)
 		)
@@ -1338,9 +1406,7 @@ async function gateMode(
 			results.push(result)
 			capture.comparisons.push(result)
 		}
-		for (const entry of registry.entries.filter(
-			(item) => item.status === 'report-only'
-		)) {
+		for (const entry of reportOnly) {
 			const record = fixtures.find(
 				(item) =>
 					key(item.fixture, item.metric) ===
@@ -1368,6 +1434,8 @@ async function gateMode(
 		}
 		capture.provenance = {
 			baselineManifest: manifest,
+			...(owners ? { owners: [...owners] } : {}),
+			fixtures: gateFixtureIds,
 			activeMargins: active.map((entry) =>
 				key(entry.fixture, entry.metric)
 			)
@@ -1574,6 +1642,16 @@ async function verifyMode(
 	capture: ArtifactCapture
 ) {
 	capture.variants.push(descriptor('verify', repoRoot, context.commit))
+	const owners = selectedOwners()
+	const active = registry.entries.filter(
+		(entry) =>
+			entry.status === 'active' &&
+			(!owners || owners.has(entry.owner))
+	)
+	if (owners && !active.length)
+		throw new Error(
+			`no active D1 margins for owners: ${[...owners].join(', ')}`
+		)
 	await assertBenchSourceFileListCoversStaticImports(repoRoot)
 	const environment = captureEnvironment()
 	const currentHash = await benchSourceHash(repoRoot)
@@ -1607,9 +1685,7 @@ async function verifyMode(
 			)
 		if (JSON.stringify(floors.bun) !== JSON.stringify(manifest.bun))
 			throw new Error(`manifest and floors Bun pins differ: ${machineId}`)
-		for (const entry of registry.entries.filter(
-			(item) => item.status === 'active'
-		)) {
+		for (const entry of active) {
 			const entryKey = key(entry.fixture, entry.metric)
 			if (entry.kind === 'count') {
 				const countDelta = floors.countDeltas[entryKey]
@@ -1663,7 +1739,11 @@ async function verifyMode(
 		}
 		console.log(`verify: baseline directory valid for ${machineId}`)
 	}
-	capture.provenance = { verifiedBaselineDirectories: machineIds }
+	capture.provenance = {
+		verifiedBaselineDirectories: machineIds,
+		...(owners ? { owners: [...owners] } : {}),
+		activeMargins: active.map((entry) => key(entry.fixture, entry.metric))
+	}
 }
 
 function isMode(value: string | undefined): value is D1Mode {

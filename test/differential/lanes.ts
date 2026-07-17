@@ -60,6 +60,12 @@ export const precompileHandle = handleLane('precompile-handle', {
 export const resumeHandle = handleLane('resume-handle', {
 	experimental: { resumeEmit }
 })
+export const flatFormDataFastPathHandle = handleLane(
+	'flat-formdata-fast-path-handle',
+	{
+		experimental: { flatFormDataFastPath: true }
+	}
+)
 
 // Real-socket lanes
 
@@ -227,6 +233,12 @@ export const lanePairs: LanePair[] = [
 		id: 'jit-vs-resume@handle',
 		oracle: jitHandle,
 		candidate: resumeHandle
+	},
+	{
+		id: 'formdata-default-vs-flat-fast-path@handle',
+		oracle: jitHandle,
+		candidate: flatFormDataFastPathHandle,
+		requiresTag: 'form'
 	},
 	{
 		id: 'jit-vs-resume@listen',

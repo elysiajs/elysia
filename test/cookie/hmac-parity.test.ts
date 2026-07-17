@@ -13,6 +13,7 @@ import { req } from '../utils'
 
 import {
 	hasSyncHmac,
+	signCookieBun,
 	signCookie,
 	signCookieSync,
 	signCookieSubtle,
@@ -31,9 +32,99 @@ const cases = [
 	'x'.repeat(1024)
 ]
 
+const cryptoModuleUrl = new URL('../../src/cookie/crypto.ts', import.meta.url)
+	.href
+
+function selectorProbe(
+	flag: '0' | '1',
+	disableBun = false,
+	disableNode = false
+) {
+	const script = `
+		if (${disableBun}) Bun.CryptoHasher = undefined
+		if (${disableNode}) process.getBuiltinModule = undefined
+		const crypto = await import(${JSON.stringify(cryptoModuleUrl)})
+		console.log(JSON.stringify({
+			provider: crypto.hmacProvider,
+			signed: await crypto.signCookie('session', 'secret')
+		}))
+	`
+	const child = Bun.spawnSync({
+		cmd: [process.execPath, '-e', script],
+		env: {
+			...process.env,
+			ELYSIA_EXPERIMENTAL_BUN_CRYPTO_HASHER: flag
+		},
+		stdout: 'pipe',
+		stderr: 'pipe'
+	})
+
+	expect(child.exitCode).toBe(0)
+	return JSON.parse(new TextDecoder().decode(child.stdout)) as {
+		provider: 'bun' | 'node' | 'subtle'
+		signed: string
+	}
+}
+
+function deterministicString(seed: number, length: number) {
+	const alphabet = ['a', '\0', 'é', '日', '🍣', '\ud800']
+	let state = seed | 0
+	let out = ''
+	for (let i = 0; i < length; i++) {
+		state ^= state << 13
+		state ^= state >>> 17
+		state ^= state << 5
+		out += alphabet[(state >>> 0) % alphabet.length]
+	}
+	return out
+}
+
 describe('cookie HMAC sync and WebCrypto parity', () => {
 	it('sync node:crypto HMAC is available in this runtime', () => {
 		expect(hasSyncHmac).toBe(true)
+	})
+
+	it('selects Bun only when enabled and falls back through node to subtle', () => {
+		const expected = selectorProbe('0')
+		expect(expected.provider).toBe('node')
+
+		const bun = selectorProbe('1')
+		expect(bun.provider).toBe('bun')
+		expect(bun.signed).toBe(expected.signed)
+
+		const node = selectorProbe('1', true)
+		expect(node.provider).toBe('node')
+		expect(node.signed).toBe(expected.signed)
+
+		const subtle = selectorProbe('1', true, true)
+		expect(subtle.provider).toBe('subtle')
+		expect(subtle.signed).toBe(expected.signed)
+	})
+
+	it('Bun, node, and subtle remain byte-identical under deterministic fuzz', async () => {
+		const { createHmac } = await import('node:crypto')
+		const lengths = [0, 1, 63, 64, 65, 127, 128, 129, 1024, 4096]
+		const secretLengths = lengths.slice(1)
+
+		for (let i = 0; i < 256; i++) {
+			const value = deterministicString(i + 1, lengths[i % lengths.length]!)
+			const secret = deterministicString(
+				i + 257,
+				secretLengths[(i * 7) % secretLengths.length]!
+			)
+			const node = `${value}.${createHmac('sha256', secret)
+				.update(value)
+				.digest('base64')
+				.replace(/=+$/, '')}`
+			const bun = signCookieBun(value, secret)
+			const subtle = await signCookieSubtle(value, secret)
+
+			expect(bun).toBe(node)
+			expect(subtle).toBe(node)
+			expect(bun.endsWith('=')).toBe(false)
+			expect(unsignCookieSync(bun, secret)).toBe(value)
+			await expect(unsignCookie(subtle, secret)).resolves.toBe(value)
+		}
 	})
 
 	it('sync and WebCrypto signatures are byte-identical', async () => {

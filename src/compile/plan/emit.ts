@@ -217,7 +217,8 @@ export function emitResume(input: EmitInput): CompiledHandler {
 				hook,
 				vali?.body,
 				hasHeaders,
-				link
+				link,
+				root['~config']?.experimental?.flatFormDataFastPath === true
 			)
 			const preserveParseStatus = seenKeys.has('es')
 			link(ParseError, 'pe')
@@ -625,7 +626,8 @@ function emitBodyParse(
 	hook: AnyLocalHook | undefined,
 	bodyVali: unknown,
 	hasHeaders: boolean,
-	link: (v: unknown, key: string) => string
+	link: (v: unknown, key: string) => string,
+	flatFormDataFastPath = false
 ) {
 	let parsers = hook?.parse as any
 	const parse = adapter.parse
@@ -637,7 +639,7 @@ function emitBodyParse(
 		(parsers?.length === 1 && typeof parsers[0] === 'string')
 	) {
 		if (parsers.length === 1) parsers = parsers[0]
-		return builtinParser(parse, parsers as string, link)
+		return builtinParser(parse, parsers as string, link, flatFormDataFastPath)
 	}
 
 	let hasFn = false
@@ -680,7 +682,12 @@ function emitBodyParse(
 			} else {
 				hasType = true
 				if (i) code += 'if(!hasBody){\n'
-				code += builtinParser(parse, parser as string, link)
+				code += builtinParser(
+					parse,
+					parser as string,
+					link,
+					flatFormDataFastPath
+				)
 				if (i) code += '}\n'
 				break
 			}
@@ -709,8 +716,8 @@ function emitBodyParse(
 		}
 
 		code += hasFn
-			? `if(!hasBody&&${guard}){c.body=cj?await pj(c):await pd(c,ce,true)\n}\n`
-			: `if(${guard}){c.body=cj?await pj(c):await pd(c,ce,true)\n}\n`
+			? `if(!hasBody&&${guard}){c.body=cj?await pj(c):await pd(c,ce,true${flatFormDataFastPath ? ',true' : ''})\n}\n`
+			: `if(${guard}){c.body=cj?await pj(c):await pd(c,ce,true${flatFormDataFastPath ? ',true' : ''})\n}\n`
 
 		if (!bodyVali) link(hasRequestBody, 'hb')
 
@@ -721,18 +728,17 @@ function emitBodyParse(
 	return hasFn ? 'let hasBody=false,_bp\n' + code : code
 }
 
-const parseFormData = 'c.body=await pf(c)\n'
-
 function builtinParser(
 	adapter: ElysiaAdapter['parse'],
 	parser: string,
-	link: (v: unknown, key: string) => string
+	link: (v: unknown, key: string) => string,
+	flatFormDataFastPath = false
 ): string {
 	switch (parser) {
 		case 'formdata':
 		case 'multipart/form-data':
 			link(adapter.formData, 'pf')
-			return parseFormData
+			return `c.body=await pf(c${flatFormDataFastPath ? ',true' : ''})\n`
 
 		case 'json':
 		case 'application/json':
