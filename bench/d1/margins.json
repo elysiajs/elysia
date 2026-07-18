@@ -863,5 +863,45 @@
 		"owner": "N+1",
 		"status": "report-only",
 		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "reused-query-plan-retained-current-bytes-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired clean child processes; 1000 RouteValidators retain one reused four-scalar query schema and assert one shared fused QueryPlan; bun:jsc current delta divided by validator count",
+		"owner": "N+1-query",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "reused-query-plan-retained-heap-size-bytes-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired clean child processes; 1000 RouteValidators retain one reused four-scalar query schema and assert one shared fused QueryPlan; bun:jsc heapSize delta divided by validator count",
+		"owner": "N+1-query",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "reused-query-plan-retained-extra-memory-bytes-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired clean child processes; 1000 RouteValidators retain one reused four-scalar query schema and assert one shared fused QueryPlan; bun:jsc extraMemorySize delta divided by validator count",
+		"owner": "N+1-query",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "reused-query-plan-retained-rss-bytes-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired clean child processes; 1000 RouteValidators retain one reused four-scalar query schema and assert one shared fused QueryPlan; process RSS delta divided by validator count",
+		"owner": "N+1-query",
+		"status": "report-only",
+		"margin": null
 	}
 ]

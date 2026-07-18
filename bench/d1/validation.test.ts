@@ -17,7 +17,11 @@ const metrics = [
 	'query-post-error-retained-rss-bytes-per-validator',
 	'query-post-error-function-executables-per-validator',
 	'query-post-error-function-code-blocks-per-validator',
-	'query-post-error-unlinked-function-executables-per-validator'
+	'query-post-error-unlinked-function-executables-per-validator',
+	'reused-query-plan-retained-current-bytes-per-validator',
+	'reused-query-plan-retained-heap-size-bytes-per-validator',
+	'reused-query-plan-retained-extra-memory-bytes-per-validator',
+	'reused-query-plan-retained-rss-bytes-per-validator'
 ]
 
 it('registers and emits finite invalid-query D1 samples', () => {

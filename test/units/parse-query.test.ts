@@ -11,6 +11,7 @@ import {
 	parseQueryFromURL
 } from '../../src/parse-query'
 import { RouteValidator } from '../../src/validator/route'
+import { createValidationPlan } from '../../src/validator/validation-plan'
 import {
 	VALIDATION_PLAN_FUSED_QUERY,
 	VALIDATION_PLAN_ORACLE
@@ -205,6 +206,46 @@ describe('QueryPlan', () => {
 				'active'
 			])
 		}
+	})
+
+	it('reuses one frozen scalar plan per cached validator', () => {
+		const app = {}
+		const shared = t.Object({ page: t.Number() })
+		const first = new RouteValidator(
+			{ query: shared },
+			{ app, validationPlan }
+		)
+		const second = new RouteValidator(
+			{ query: shared },
+			{ app, validationPlan }
+		)
+		const unique = new RouteValidator(
+			{ query: t.Object({ page: t.Number() }) },
+			{ app, validationPlan }
+		)
+
+		expect(first.query).toBe(second.query)
+		expect(first.queryPlan).toBe(second.queryPlan)
+		expect(Object.isFrozen(first.queryPlan)).toBe(true)
+		expect(unique.queryPlan).not.toBe(first.queryPlan)
+	})
+
+	it('builds the scalar plan before generic channel collection', () => {
+		const schema = t.Object({ page: t.Number() })
+		const validator = new ValidationPlanValidator(
+			schema,
+			createValidationPlan(schema, 'string')!,
+			undefined,
+			true
+		)
+		const trap = Object.create(validator.schema)
+		Object.defineProperty(trap, 'properties', {
+			get() {
+				throw new Error('generic query channels were collected')
+			}
+		})
+
+		expect(createQueryPlan(trap, validator, true).fused).toBe(true)
 	})
 
 	it('fails closed for unsupported additional values', () => {

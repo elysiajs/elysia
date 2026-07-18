@@ -421,6 +421,24 @@ describe('ValidationPlan common lane', () => {
 		expect(oracleCalls).toBe(1)
 	})
 
+	it('retries a throwing oracle factory and caches it only after success', () => {
+		const schema = t.Object({ value: t.Number() })
+		const plan = createValidationPlan(schema, 'string')!
+		let oracleCalls = 0
+		const validator = new ValidationPlanValidator(schema, plan, () => {
+			if (++oracleCalls === 1) throw new Error('factory failed')
+
+			return { FromSync: () => ({ value: -1 }) }
+		})
+
+		expect(() => validator.FromSync({ value: 'bad' })).toThrow(
+			'factory failed'
+		)
+		expect(validator.FromSync({ value: 'bad' })).toEqual({ value: -1 })
+		expect(validator.FromSync({ value: 'bad' })).toEqual({ value: -1 })
+		expect(oracleCalls).toBe(2)
+	})
+
 	it('snapshots only required oracle options', () => {
 		let appReads = 0
 		const options: any = {

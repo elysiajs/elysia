@@ -1044,6 +1044,30 @@ corpus.push({
 })
 
 corpus.push({
+	id: 'routing-contract-edges',
+	tags: ['safe-for-socket', 'param', 'wildcard', 'unicode', 'precedence'],
+	define: (app) =>
+		app
+			.get('/time:zone', ({ params }: any) => `zone:${params.zone}`)
+			.get('/asset*', ({ params }: any) => `asset:${params['*']}`)
+			.get('/empty/:id/tail', ({ params }: any) => params.id)
+			.get('/alias-a/café', () => 'raw-first')
+			.get('/alias-a/caf%C3%A9', () => 'encoded-last')
+			.get('/alias-b/caf%C3%A9', () => 'encoded-first')
+			.get('/alias-b/café', () => 'raw-last'),
+	requests: [
+		{ id: 'embedded-param', make: get('/timeUTC') },
+		{ id: 'prefix-wildcard-deep', make: get('/assetfoo/bar') },
+		{ id: 'prefix-wildcard-empty', make: get('/asset') },
+		{ id: 'empty-param-rejected', make: get('/empty//tail') },
+		{ id: 'encoded-last-via-raw', make: get('/alias-a/café') },
+		{ id: 'encoded-last-via-encoded', make: get('/alias-a/caf%C3%A9') },
+		{ id: 'raw-last-via-raw', make: get('/alias-b/café') },
+		{ id: 'raw-last-via-encoded', make: get('/alias-b/caf%C3%A9') }
+	]
+})
+
+corpus.push({
 	id: 'dynamic-route-context',
 	tags: ['safe-for-socket', 'param', 'route'],
 	define: (app) =>

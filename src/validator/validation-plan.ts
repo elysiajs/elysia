@@ -952,7 +952,13 @@ export class ValidationPlanValidator<
 	}
 
 	#getOracle() {
-		return (this.#oracle ??= this.#oracleFactory!())
+		if (this.#oracleFactory === undefined) return this.#oracle
+
+		const oracle = this.#oracleFactory()
+		this.#oracle = oracle
+		this.#oracleFactory = undefined
+
+		return oracle
 	}
 
 	[VALIDATION_PLAN_ORACLE](value: unknown, type?: string) {

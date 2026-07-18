@@ -219,20 +219,12 @@ const decimal = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/
 const integer = /^[+-]?\d+$/
 const invalidScalar = Symbol('elysia.query.invalid')
 const invalidFusedQueries = new WeakSet<Record<string, unknown>>()
+const scalarQueryPlans = new WeakMap<object, QueryPlan>()
 
 function scalarQueryPlan(
 	validator: any,
 	exactBuiltIn: boolean
-):
-	| Pick<
-			QueryPlan,
-			| 'fused'
-			| 'fromURL'
-			| 'validate'
-			| 'scalarRoot'
-			| 'scalarIndex'
-	  >
-	| undefined {
+): QueryPlan | undefined {
 	if (
 		!exactBuiltIn ||
 		validator?.[VALIDATION_PLAN_FUSED_QUERY] !== true ||
@@ -242,6 +234,10 @@ function scalarQueryPlan(
 		typeof validator[VALIDATION_PLAN_ORACLE] !== 'function'
 	)
 		return
+
+	const cached = scalarQueryPlans.get(validator)
+	if (cached) return cached
+
 	const root = validator?.plan?.root
 	if (
 		root?.kind !== 1 ||
@@ -304,13 +300,17 @@ function scalarQueryPlan(
 	}
 	Object.freeze(index)
 
-	return Object.freeze({
+	const plan: QueryPlan = Object.freeze({
+		parse: parseQueryFromURL,
 		fused: true as const,
 		fromURL: parseScalarQueryFromURL,
 		validate: validateScalarQuery,
 		scalarRoot: root,
 		scalarIndex: index
 	})
+	scalarQueryPlans.set(validator, plan)
+
+	return plan
 }
 
 function coerceScalar(kind: ScalarKind, value: unknown) {
@@ -540,23 +540,21 @@ export function createQueryPlan(
 	exactBuiltIn = false
 ): QueryPlan {
 	if (!querySchema || typeof querySchema !== 'object') return emptyQueryPlan
+	const fused = scalarQueryPlan(validator, exactBuiltIn)
+	if (fused) return fused
 
 	const state: {
 		array?: Record<string, 1>
 		object?: Record<string, 1>
 	} = {}
 	collectQueryPlan(querySchema, new WeakSet(), state)
-	const fused = scalarQueryPlan(validator, exactBuiltIn)
-	if (!state.array && !state.object && !fused) return emptyQueryPlan
+	if (!state.array && !state.object) return emptyQueryPlan
 
-	const plan = Object.freeze({
+	return Object.freeze({
 		parse: parseQueryFromURL,
 		array: state.array ? Object.freeze(state.array) : undefined,
-		object: state.object ? Object.freeze(state.object) : undefined,
-		...fused
+		object: state.object ? Object.freeze(state.object) : undefined
 	})
-
-	return plan
 }
 
 export function getQueryParseChannels(querySchema: any) {

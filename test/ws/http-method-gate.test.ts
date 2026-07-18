@@ -48,4 +48,24 @@ describe('WebSocket upgrade method routing', () => {
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('ok')
 	})
+
+	it('does not let a static WebSocket route shadow dynamic HTTP', async () => {
+		const app = new Elysia()
+			.ws('/thing', { message() {} })
+			.get('/:id', ({ params }) => `get:${params.id}`)
+
+		await expect(
+			app.handle(req('/thing')).then((response) => response.text())
+		).resolves.toBe('get:thing')
+	})
+
+	it('does not let a static WebSocket route shadow an all-method route', async () => {
+		const app = new Elysia()
+			.ws('/thing', { message() {} })
+			.all('/thing', () => 'all')
+
+		await expect(
+			app.handle(req('/thing')).then((response) => response.text())
+		).resolves.toBe('all')
+	})
 })

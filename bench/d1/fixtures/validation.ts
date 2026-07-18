@@ -635,6 +635,48 @@ async function main() {
 	Validator.clear()
 	gc()
 
+	const reusedQuerySchema = t.Object({
+		name: t.String(),
+		page: t.Number(),
+		limit: t.Integer(),
+		active: t.Boolean()
+	})
+	const reusedQueryApp = new Elysia()
+	const reusedQueryPlanBefore = memorySnapshot()
+	const reusedQueryPlanBeforeRss = process.memoryUsage().rss
+	const reusedQueryRoutes = Array.from(
+		{ length: validators },
+		() =>
+			new RouteValidator(
+				{ query: reusedQuerySchema },
+				{
+					normalize: true,
+					validationPlan: queryRoutePlan,
+					app: reusedQueryApp
+				}
+			)
+	)
+	if (new Set(reusedQueryRoutes.map((route) => route.query)).size !== 1)
+		throw new Error(
+			'reused-schema fixture did not reuse its query validator'
+		)
+	const reusedFusedPlans = reusedQueryRoutes
+		.map((route) => route.queryPlan)
+		.filter((plan) => plan?.fused)
+	if (
+		(validationLane === 'candidate' &&
+			(reusedFusedPlans.length !== validators ||
+				new Set(reusedFusedPlans).size !== 1)) ||
+		(validationLane !== 'candidate' && reusedFusedPlans.length !== 0)
+	)
+		throw new Error('reused-schema fixture selected the wrong query plan')
+	gc()
+	const reusedQueryPlanAfter = memorySnapshot()
+	const reusedQueryPlanAfterRss = process.memoryUsage().rss
+	reusedQueryRoutes.length = 0
+	Validator.clear()
+	gc()
+
 	const retainedBodySchemas = Array.from({ length: validators }, (_, index) =>
 		t.Object({
 			user: t.Object({
@@ -816,6 +858,25 @@ async function main() {
 							(queryPlanAfter.extraMemorySize ?? 0)) /
 							validators
 					],
+				'reused-query-plan-retained-current-bytes-per-validator': [
+					(reusedQueryPlanAfter.current -
+						reusedQueryPlanBefore.current) /
+						validators
+				],
+				'reused-query-plan-retained-heap-size-bytes-per-validator': [
+					((reusedQueryPlanAfter.heapSize ?? 0) -
+						(reusedQueryPlanBefore.heapSize ?? 0)) /
+						validators
+				],
+				'reused-query-plan-retained-extra-memory-bytes-per-validator': [
+					((reusedQueryPlanAfter.extraMemorySize ?? 0) -
+						(reusedQueryPlanBefore.extraMemorySize ?? 0)) /
+						validators
+				],
+				'reused-query-plan-retained-rss-bytes-per-validator': [
+					(reusedQueryPlanAfterRss - reusedQueryPlanBeforeRss) /
+						validators
+				],
 				'json-body-retained-current-bytes-per-validator': [
 					(bodyAfter.current - bodyBefore.current) / validators
 				],
