@@ -30,9 +30,9 @@ bun run bench:d1:gate
 bun run bench:d1:selftest
 ```
 
-Use `bun run bench:d1:aa --owners=C4b,C4d`,
-`bun run bench:d1:gate --owners=C4b,C4d`, and
-`bun run bench:d1:verify --owners=C4b,C4d` when a leaf train must calibrate, evaluate, and
+Use `bun run bench:d1:aa --owners=<owner>`,
+`bun run bench:d1:gate --owners=<owner>`, and
+`bun run bench:d1:verify --owners=<owner>` when a leaf train must calibrate, evaluate, and
 verify only its registered margins without changing unrelated established tolerances. The
 selected owners, feature environments, fixtures, and exact active margins are recorded in
 artifacts. Unscoped A/A and gate runs stay on default production behavior and exclude these
@@ -69,12 +69,22 @@ memory/count metrics; and one real port-0 request per cold-start block. `aa` rec
 independent sessions, writes one raw trace artifact per session, and retains the maximum
 observed relative floor width or integer count delta per metric.
 
-The isolated `default-headers` fixture owns C1's evidence. It verifies the immutable app
-default on every response, consumes every body, records p50 latency, then measures the
-absolute least-squares RSS slope across four post-warmup request blocks. Both metrics remain
-`pending-floor` until a quiet pinned-machine A/A run establishes their noise floors. A
-perfectly flat RSS result is reported as one byte/request because D1's relative bootstrap
-rejects zero-valued baselines.
+The `default-headers` fixture owns C1's evidence. It verifies the immutable app default on
+every response, consumes every body, records direct-mapper and integrated p50 latency, then
+measures the absolute least-squares RSS slope across four post-warmup request blocks. The RSS
+slope is an absolute flatness check and remains report-only: a perfectly flat result is
+reported as one byte/request because D1's relative bootstrap rejects zero-valued baselines.
+The direct metric times only response construction; a separate body-consumed in-process metric
+captures integration cost, while the real-socket metric remains report-only as the transport
+safety check.
+
+C1 gates the current implementation against the same revision with the adapter's default-header
+sink forced off; the candidate enables it with `D1_C1_DEFAULT_HEADER_SINK=1`. C4a gates against
+`340322120836100ea15f67d6f6b5708e0945d1db`, the mechanically identified parent of the
+framing-first probe; its candidate is the direct child
+`e8c51e63407ea3f59479db14500f04cca742ba2b`. It records both the direct framed presence check
+and a schema-less POST without including later commits. Because these owners have distinct
+baselines, run each owner separately.
 
 The default-off C4d prototype is enabled with
 `ELYSIA_EXPERIMENTAL_BUN_CRYPTO_HASHER=1`. The `crypto-hmac` fixture records both direct

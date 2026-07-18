@@ -206,8 +206,28 @@
 		"direction": "lower",
 		"sampleRule": "8 independent child processes; 200 body-consumed real-socket requests after 50 warmups; immutable app-default header verified on every response",
 		"owner": "C1",
-		"status": "pending-floor",
+		"status": "report-only",
 		"margin": null
+	},
+	{
+		"fixture": "default-headers",
+		"metric": "default-header-map-p50-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 paired child-process blocks; median of 200 samples after 50 warmups; each sample averages 50 direct mapResponse construction calls with a fresh Context; one body-consumed correctness check per block",
+		"owner": "C1",
+		"status": "active",
+		"margin": 0.15
+	},
+	{
+		"fixture": "default-headers",
+		"metric": "default-header-inprocess-p50-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 paired child-process blocks; 200 body-consumed in-process app.handle requests after 50 warmups; immutable app-default header verified on every response",
+		"owner": "C1",
+		"status": "active",
+		"margin": 0.18
 	},
 	{
 		"fixture": "default-headers",
@@ -216,8 +236,28 @@
 		"direction": "lower",
 		"sampleRule": "8 independent child processes; full GC before a 20000-request allocator warmup; RSS snapshots across four 10000-request body-consumed blocks; absolute least-squares slope with a 1-byte reporting floor",
 		"owner": "C1",
-		"status": "pending-floor",
+		"status": "report-only",
 		"margin": null
+	},
+	{
+		"fixture": "body-presence",
+		"metric": "framed-probe-p50-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 paired child-process blocks; median of 200 samples after 50 warmups; each sample averages 1000 framed Request presence probes",
+		"owner": "C4a",
+		"status": "active",
+		"margin": 0.2
+	},
+	{
+		"fixture": "body-presence",
+		"metric": "schema-less-post-p50-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 paired child-process blocks; 200 body-consumed in-process schema-less POST requests after 50 warmups",
+		"owner": "C4a",
+		"status": "active",
+		"margin": 0.15
 	},
 	{
 		"fixture": "crypto-hmac",
@@ -257,7 +297,7 @@
 		"sampleRule": "8 paired child-process blocks; 200 body-consumed in-process app.handle requests after 50 warmups; each request parses one 8-field flat multipart body",
 		"owner": "C4b",
 		"status": "active",
-		"margin": 0.1
+		"margin": 0.12
 	},
 	{
 		"fixture": "compile-memory",

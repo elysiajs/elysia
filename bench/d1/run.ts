@@ -45,6 +45,7 @@ const fixtureIds = [
 	'cold-start',
 	'http',
 	'default-headers',
+	'body-presence',
 	'crypto-hmac',
 	'formdata',
 	'compile-memory',
@@ -55,7 +56,14 @@ const fixtureIds = [
 
 type FixtureId = (typeof fixtureIds)[number]
 type ChildOutput = Record<string, any>
-const leafPerfOwners = new Set(['C4b', 'C4d'])
+const leafPerfOwners = new Set(['C1', 'C4a', 'C4b', 'C4d'])
+const historicalBaselineByOwner: Record<string, string> = {
+	C4a: '340322120836100ea15f67d6f6b5708e0945d1db'
+}
+const historicalCandidateByOwner: Record<string, string> = {
+	C4a: 'e8c51e63407ea3f59479db14500f04cca742ba2b'
+}
+const currentBaselineOwners = new Set(['C1'])
 
 function selectedOwners() {
 	const ownerArgument = process.argv
@@ -69,6 +77,7 @@ function selectedOwners() {
 
 function leafPerfEnvironment(owners: Set<string> | undefined) {
 	const environment: Record<string, string> = {}
+	if (owners?.has('C1')) environment.D1_C1_DEFAULT_HEADER_SINK = '1'
 	if (owners?.has('C4b'))
 		environment.D1_EXPERIMENTAL_FLAT_FORMDATA_FAST_PATH = '1'
 	if (owners?.has('C4d'))
@@ -463,6 +472,9 @@ function rawMetricSamples(
 			const value = Number(output.rssSlopeBytesPerRequest)
 			return { samples: [value], value }
 		}
+		const direct = output.samples?.[entry.metric]
+		if (Array.isArray(direct) && direct.length)
+			return { samples: direct, value: percentile(direct, 50) }
 		const suffix = entry.metric.match(/-(p50|p95|p99)-ns$/)?.[1]
 		if (!suffix || !execution.parentSamples)
 			throw new Error(
@@ -476,7 +488,8 @@ function rawMetricSamples(
 	}
 	if (
 		entry.fixture === 'crypto-hmac' ||
-		entry.fixture === 'formdata'
+		entry.fixture === 'formdata' ||
+		entry.fixture === 'body-presence'
 	) {
 		const samples = output.samples?.[entry.metric]
 		if (!Array.isArray(samples) || !samples.length)
@@ -1314,38 +1327,95 @@ async function gateMode(
 				: 'no active D1 margins; run aa, then register numeric margins before gate'
 		)
 	const manifest = await ensurePinned(context.environment.machineId, false)
-	const baseline = await readJson<RawArtifact>(
-		baselinePath(context.environment.machineId)
-	)
-	validateArtifact(baseline)
+	const dedicatedOwner = owners?.size === 1 ? [...owners][0] : undefined
+	const historicalCommit = dedicatedOwner
+		? historicalBaselineByOwner[dedicatedOwner]
+		: undefined
+	const historicalCandidate = dedicatedOwner
+		? historicalCandidateByOwner[dedicatedOwner]
+		: undefined
+	const currentFlagOff =
+		!!dedicatedOwner && currentBaselineOwners.has(dedicatedOwner)
 	if (
-		baseline.benchSourceHash !== context.benchSourceHash ||
-		manifest.benchSourceHash !== context.benchSourceHash
+		owners &&
+		[...owners].some(
+			(owner) =>
+				owner in historicalBaselineByOwner ||
+				currentBaselineOwners.has(owner)
+		) &&
+		owners.size !== 1
+	)
+		throw new Error(
+			'C1 and C4a gates must run one owner at a time because their baselines differ'
+		)
+	let promotedBaseline: RawArtifact | undefined
+	if (!historicalCommit && !currentFlagOff) {
+		promotedBaseline = await readJson<RawArtifact>(
+			baselinePath(context.environment.machineId)
+		)
+		validateArtifact(promotedBaseline)
+	}
+	if (
+		promotedBaseline?.benchSourceHash !== undefined &&
+		promotedBaseline.benchSourceHash !== context.benchSourceHash
 	)
 		throw new Error(
 			'baseline benchSourceHash is stale; record and promote a new baseline'
 		)
-	const worktree = resolve(traceRoot, `baseline-worktree-${process.pid}`)
+	if (manifest.benchSourceHash !== context.benchSourceHash)
+		throw new Error(
+			'pinned manifest benchSourceHash is stale; run record --promote'
+		)
+	const baselineWorktree = currentFlagOff
+		? undefined
+		: resolve(traceRoot, `baseline-worktree-${process.pid}`)
+	const candidateWorktree = historicalCandidate
+		? resolve(traceRoot, `candidate-worktree-${process.pid}`)
+		: undefined
+	const baselineCommit =
+		historicalCommit ?? promotedBaseline?.commit ?? gitInfo(repoRoot).commit
+	const candidateCommit = historicalCandidate ?? gitInfo(repoRoot).commit
 	const gateFixtureIds = fixtureIds.filter((fixture) =>
 		[...active, ...reportOnly].some((entry) => entry.fixture === fixture)
 	)
 	await mkdir(traceRoot, { recursive: true })
-	const added = command('git', [
-		'worktree',
-		'add',
-		'--detach',
-		worktree,
-		baseline.commit
-	])
-	if (added.code !== 0)
-		throw new Error(`cannot create baseline worktree: ${added.stderr}`)
 	try {
-		const git = gitInfo(repoRoot)
-		const a = descriptor('baseline', worktree, baseline.commit)
+		if (baselineWorktree) {
+			const added = command('git', [
+				'worktree',
+				'add',
+				'--detach',
+				baselineWorktree,
+				baselineCommit
+			])
+			if (added.code !== 0)
+				throw new Error(
+					`cannot create baseline worktree: ${added.stderr}`
+				)
+		}
+		if (candidateWorktree) {
+			const added = command('git', [
+				'worktree',
+				'add',
+				'--detach',
+				candidateWorktree,
+				candidateCommit
+			])
+			if (added.code !== 0)
+				throw new Error(
+					`cannot create candidate worktree: ${added.stderr}`
+				)
+		}
+		const a = descriptor(
+			'baseline',
+			baselineWorktree ?? repoRoot,
+			baselineCommit,
+			currentFlagOff ? { D1_C1_DEFAULT_HEADER_SINK: '0' } : undefined
+		)
 		const b = descriptor(
 			'candidate',
-			repoRoot,
-			git.commit,
+			candidateWorktree ?? repoRoot,
+			candidateCommit,
 			leafPerfEnvironment(owners)
 		)
 		capture.variants.push(a, b)
@@ -1434,6 +1504,11 @@ async function gateMode(
 		}
 		capture.provenance = {
 			baselineManifest: manifest,
+			baselineSelection: currentFlagOff
+				? 'current revision, feature forced off'
+				: historicalCommit
+					? `historical parent ${historicalCommit}; candidate ${candidateCommit}`
+					: 'promoted D1 baseline',
 			...(owners ? { owners: [...owners] } : {}),
 			fixtures: gateFixtureIds,
 			activeMargins: active.map((entry) =>
@@ -1446,17 +1521,32 @@ async function gateMode(
 			)
 		process.exitCode = verdictExitCode(results)
 	} finally {
-		const removed = command('git', [
-			'worktree',
-			'remove',
-			'--force',
-			worktree
-		])
-		if (removed.code !== 0)
-			console.error(
-				`warning: could not remove baseline worktree: ${removed.stderr}`
-			)
-		await rm(worktree, { recursive: true, force: true })
+		if (candidateWorktree) {
+			const removed = command('git', [
+				'worktree',
+				'remove',
+				'--force',
+				candidateWorktree
+			])
+			if (removed.code !== 0)
+				console.error(
+					`warning: could not remove candidate worktree: ${removed.stderr}`
+				)
+			await rm(candidateWorktree, { recursive: true, force: true })
+		}
+		if (baselineWorktree) {
+			const removed = command('git', [
+				'worktree',
+				'remove',
+				'--force',
+				baselineWorktree
+			])
+			if (removed.code !== 0)
+				console.error(
+					`warning: could not remove baseline worktree: ${removed.stderr}`
+				)
+			await rm(baselineWorktree, { recursive: true, force: true })
+		}
 	}
 }
 
@@ -1645,8 +1735,7 @@ async function verifyMode(
 	const owners = selectedOwners()
 	const active = registry.entries.filter(
 		(entry) =>
-			entry.status === 'active' &&
-			(!owners || owners.has(entry.owner))
+			entry.status === 'active' && (!owners || owners.has(entry.owner))
 	)
 	if (owners && !active.length)
 		throw new Error(
@@ -1731,7 +1820,11 @@ async function verifyMode(
 					key(record.fixture, record.metric)
 				)
 			)
-			for (const entry of registry.entries)
+			for (const entry of registry.entries.filter(
+				(entry) =>
+					!(entry.owner in historicalBaselineByOwner) &&
+					!currentBaselineOwners.has(entry.owner)
+			))
 				if (!baselineKeys.has(key(entry.fixture, entry.metric)))
 					throw new Error(
 						`baseline ${machineId} is missing ${key(entry.fixture, entry.metric)}`

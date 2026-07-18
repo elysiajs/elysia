@@ -17,6 +17,7 @@ export const BENCH_SOURCE_FILES = [
 	'bench/d1/fixtures/compose-depth.ts',
 	'bench/d1/fixtures/crypto-hmac.ts',
 	'bench/d1/fixtures/default-headers.ts',
+	'bench/d1/fixtures/body-presence.ts',
 	'bench/d1/fixtures/executables.ts',
 	'bench/d1/fixtures/formdata.ts',
 	'bench/d1/fixtures/http.ts',

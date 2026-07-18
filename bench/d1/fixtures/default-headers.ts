@@ -66,6 +66,40 @@ async function exercise(
 	return samples
 }
 
+async function measureMapper(app: any, warmup: number, requests: number) {
+	const { createContext } = await import(repoRoot + '/src/context.ts')
+	const { mapResponse } = await import(
+		repoRoot + '/src/adapter/web-standard/handler.ts'
+	)
+	const Context = createContext(app)
+	const batch = 50
+	const run = () => {
+		const context = new Context(new Request('http://localhost/'))
+		return mapResponse('ok', context.set, context.request)
+	}
+	for (let i = 0; i < warmup * batch; i++) run()
+	const samples: number[] = []
+	for (let sample = 0; sample < requests; sample++) {
+		const started = Bun.nanoseconds()
+		for (let i = 0; i < batch; i++) run()
+		samples.push((Bun.nanoseconds() - started) / batch)
+	}
+	await consume(run())
+	return samples
+}
+
+async function measureInProcess(app: any, warmup: number, requests: number) {
+	const run = () => app.handle(new Request('http://localhost/'))
+	for (let i = 0; i < warmup; i++) await consume(await run())
+	const samples: number[] = []
+	for (let i = 0; i < requests; i++) {
+		const started = Bun.nanoseconds()
+		await consume(await run())
+		samples.push(Bun.nanoseconds() - started)
+	}
+	return samples
+}
+
 async function main() {
 	const warmup = integerArgument('warmup', 50)
 	const requests = integerArgument('requests', 200)
@@ -73,12 +107,24 @@ async function main() {
 	const rssStep = integerArgument('rss-step', 10_000)
 	const rssBlocks = integerArgument('rss-blocks', 4)
 	const { Elysia } = await import(repoRoot + '/src/index.ts')
+	const { createAdapter } = await import(repoRoot + '/src/adapter/index.ts')
+	const { defaultAdapter } = await import(
+		repoRoot + '/src/adapter/constants.ts'
+	)
+	const sinkEnabled = process.env.D1_C1_DEFAULT_HEADER_SINK === '1'
+	const adapter = createAdapter({
+		...defaultAdapter,
+		response: {
+			...defaultAdapter.response,
+			supportsDefaultHeaderSink: sinkEnabled ? true : undefined
+		}
+	})
 	const rssSnapshots: { requests: number; rss: number }[] = []
 	let handled = 0
 	let snapshotPrimed = false
 	let stoppedResolve!: () => void
 	const stopped = new Promise<void>((resolve_) => (stoppedResolve = resolve_))
-	const app: any = new Elysia()
+	const app: any = new Elysia({ adapter })
 	const stop = async () => {
 		await app.stop()
 		stoppedResolve()
@@ -105,6 +151,8 @@ async function main() {
 			return 'done'
 		})
 	void app.fetch
+	const mapperSamples = await measureMapper(app, warmup, requests)
+	const inProcessSamples = await measureInProcess(app, warmup, requests)
 
 	const socket = tryListen(app)
 	const port = socket ? app.server!.port : 0
@@ -136,12 +184,17 @@ async function main() {
 			fixture: 'default-headers',
 			port,
 			transport: socket ? 'socket' : 'handle-fallback',
+			sinkEnabled,
 			warmup,
 			requests,
 			rssWarmup,
 			rssStep,
 			rssBlocks,
-			samples: { 'default-headers': samples },
+			samples: {
+				'default-headers': samples,
+				'default-header-map-p50-ns': mapperSamples,
+				'default-header-inprocess-p50-ns': inProcessSamples
+			},
 			rssSnapshots,
 			rssSlopeBytesPerRequest: retainedRssSlope(rssSnapshots)
 		})
