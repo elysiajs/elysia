@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'bun:test'
 
 import { t } from '../../src'
-import { hasProperty } from '../../src/type/utils'
+import { hasProperty, hasTypes } from '../../src/type/utils'
 
 describe('hasProperty', () => {
 	it('finds property in Object schema', () => {
@@ -61,6 +61,19 @@ describe('hasProperty', () => {
 
 	it('returns false for undefined schema', () => {
 		expect(hasProperty('default', undefined as any)).toBe(false)
+	})
+
+	it('ignores properties and types in unused definitions', () => {
+		const schema = {
+			type: 'string',
+			'~kind': 'String',
+			$defs: {
+				Unused: t.File({ default: 'unused' })
+			}
+		} as any
+
+		expect(hasProperty('default', schema)).toBe(false)
+		expect(hasTypes(['File'], schema)).toBe(false)
 	})
 
 	it('handles deeply nested structures', () => {

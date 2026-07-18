@@ -1,4 +1,5 @@
 import { Elysia, t, ValidationError } from '../../src'
+import { validationPlan } from '../../src/experimental/validation-plan'
 import { Validator } from '../../src/validator'
 import { coerceQuery } from '../../src/type/coerce'
 import { describe, it, expect } from 'bun:test'
@@ -816,11 +817,17 @@ describe('asynchronous Standard Schema standalone guards', () => {
 	})
 
 	it('marks the validator async so the compiled route awaits it', () => {
-		const validator = Validator.create(asyncNumberId, {
+		const legacy = Validator.create(asyncNumberId, {
 			schemas: [t.Object({ name: t.Literal('lilith') })]
 		})
+		const candidate = Validator.create(asyncNumberId, {
+			schemas: [t.Object({ name: t.Literal('lilith') })],
+			app: { '~config': { experimental: { validationPlan } } }
+		})
 
-		expect(validator!.constructor.name).toBe('MultiValidator')
-		expect(validator!.isAsync).toBe(true)
+		expect(legacy!.constructor.name).toBe('LegacyMultiValidator')
+		expect(candidate!.constructor.name).toBe('ValidationPlanMultiValidator')
+		expect(legacy!.isAsync).toBe(true)
+		expect(candidate!.isAsync).toBe(true)
 	})
 })

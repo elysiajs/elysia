@@ -1,41 +1,34 @@
-import { describe, it, expect } from 'bun:test'
+import { describe, expect, it } from 'bun:test'
+import { Check, Errors } from 'typebox/value'
+
 import { t } from '../../src'
-import { shallowMergeObjects } from '../../src/type/validator'
-import { Evaluate, Intersect } from 'typebox/type'
-import { Check, Decode, Errors } from 'typebox/value'
+import { validationPlan } from '../../src/experimental/validation-plan'
+import { Validator } from '../../src/validator'
 
-const decode = (s: any, v: unknown) => {
-	try {
-		return JSON.stringify(Decode(s, v))
-	} catch {
-		return 'THROW'
-	}
-}
+const candidate = (options: Record<string, unknown>) =>
+	({
+		...options,
+		app: { '~config': { experimental: { validationPlan } } }
+	}) as any
 
-const expectEquivalent = (mk: () => any[], values: unknown[]) => {
-	const fast = shallowMergeObjects(mk())
-	expect(fast).not.toBeNull()
-	const slow = Evaluate(Intersect(mk() as any))
+// Q10 keeps author-declared intersections as constraint conjunctions. Only
+// route + standalone composition moved to the ordered transform/merge form.
+const expectConstraintConjunction = (mk: () => any[], values: unknown[]) => {
+	const declared = t.Intersect(mk() as any)
+	const validator = Validator.create(declared)!
 
-	expect(Object.keys((fast as any).properties).sort()).toEqual(
-		Object.keys((slow as any).properties).sort()
-	)
-	expect([...((fast as any).required ?? [])].sort()).toEqual(
-		[...((slow as any).required ?? [])].sort()
-	)
-
-	for (const v of values) {
-		expect(Check(fast as any, v)).toBe(Check(slow as any, v))
-		expect([...Errors(fast as any, v)].length).toBe(
-			[...Errors(slow as any, v)].length
+	expect(validator.constructor.name).toBe('TypeBoxValidator')
+	for (const value of values) {
+		expect(validator.Check(value)).toBe(Check(declared, value))
+		expect(validator.Errors(value).length).toBe(
+			[...Errors(declared, value)].length
 		)
-		expect(decode(fast, v)).toBe(decode(slow, v))
 	}
 }
 
-describe('shallowMergeObjects matches evaluated intersections', () => {
-	it('merges disjoint required primitive properties', () => {
-		expectEquivalent(
+describe('author-declared intersection constraints', () => {
+	it('combines disjoint required primitive properties', () => {
+		expectConstraintConjunction(
 			() => [t.Object({ id: t.Number() }), t.Object({ tok: t.String() })],
 			[
 				{ id: 5, tok: 'x' },
@@ -48,7 +41,7 @@ describe('shallowMergeObjects matches evaluated intersections', () => {
 	})
 
 	it('preserves a codec property', () => {
-		expectEquivalent(
+		expectConstraintConjunction(
 			() => [t.Object({ when: t.Date() }), t.Object({ n: t.Number() })],
 			[
 				{ when: '2020-01-01T00:00:00.000Z', n: 1 },
@@ -58,8 +51,8 @@ describe('shallowMergeObjects matches evaluated intersections', () => {
 		)
 	})
 
-	it('merges nested and formatted properties across three members', () => {
-		expectEquivalent(
+	it('combines nested and formatted properties across three members', () => {
+		expectConstraintConjunction(
 			() => [
 				t.Object({ a: t.Object({ b: t.Number() }) }),
 				t.Object({ email: t.String({ format: 'email' }) }),
@@ -73,8 +66,8 @@ describe('shallowMergeObjects matches evaluated intersections', () => {
 		)
 	})
 
-	it('merges an optional property without falling back to Evaluate', () => {
-		expectEquivalent(
+	it('preserves optional properties', () => {
+		expectConstraintConjunction(
 			() => [
 				t.Object({ id: t.Number() }),
 				t.Object({ maybe: t.Optional(t.String()) })
@@ -88,8 +81,8 @@ describe('shallowMergeObjects matches evaluated intersections', () => {
 		)
 	})
 
-	it('merges a nested optional property', () => {
-		expectEquivalent(
+	it('preserves nested optional properties', () => {
+		expectConstraintConjunction(
 			() => [
 				t.Object({
 					outer: t.Object({ inner: t.Optional(t.Number()) })
@@ -105,8 +98,8 @@ describe('shallowMergeObjects matches evaluated intersections', () => {
 		)
 	})
 
-	it('merges an optional property with an options object', () => {
-		expectEquivalent(
+	it('preserves defaults on optional properties', () => {
+		expectConstraintConjunction(
 			() => [
 				t.Object({ a: t.Optional(t.Number({ default: 1 })) }),
 				t.Object({ b: t.String() })
@@ -114,61 +107,65 @@ describe('shallowMergeObjects matches evaluated intersections', () => {
 			[{ b: 'x' }, { a: 5, b: 'x' }, { a: 'no', b: 'x' }]
 		)
 	})
-})
 
-describe('shallowMergeObjects returns null when a shallow merge is unsafe', () => {
-	it('rejects overlapping keys', () => {
-		expect(
-			shallowMergeObjects([
-				t.Object({ id: t.Number() }),
-				t.Object({ id: t.String() })
-			])
-		).toBeNull()
-	})
-
-	it('rejects a non-object member', () => {
-		expect(
-			shallowMergeObjects([
-				t.Object({ a: t.Number() }),
-				t.String() as any
-			])
-		).toBeNull()
-	})
-
-	it('rejects an additionalProperties option', () => {
-		expect(
-			shallowMergeObjects([
-				t.Object({ a: t.Number() }, { additionalProperties: false }),
-				t.Object({ b: t.String() })
-			])
-		).toBeNull()
-	})
-
-	it('rejects an object-level constraint', () => {
-		expect(
-			shallowMergeObjects([
-				t.Object({ a: t.Number() }, { minProperties: 1 }),
-				t.Object({ b: t.String() })
-			])
-		).toBeNull()
-	})
-})
-
-describe('getter-valued schema options', () => {
-	it('preserves and enforces a getter-valued constraint', () => {
-		const merged = shallowMergeObjects([
+	it('preserves getter-valued constraints', () => {
+		let reads = 0
+		const schema = t.Intersect([
 			t.Object({
 				a: t.Number({
 					get minimum() {
+						reads++
 						return 1000
 					}
 				})
 			}),
 			t.Object({ b: t.String() })
 		])
+		const validator = Validator.create(schema)!
 
-		expect(merged).not.toBeNull()
-		expect(Check(merged as any, { a: 5, b: 'x' })).toBe(false)
-		expect(Check(merged as any, { a: 5000, b: 'x' })).toBe(true)
+		expect(validator.Check({ a: 5, b: 'x' })).toBe(false)
+		expect(validator.Check({ a: 5000, b: 'x' })).toBe(true)
+		expect(reads).toBeGreaterThan(0)
+	})
+})
+
+describe('Q10 composition split', () => {
+	it('does not turn route + standalone schemas into a TypeBox intersection', () => {
+		const validator = Validator.create(
+			t.Object({ a: t.Number() }),
+			candidate({
+				schemas: [t.Object({ b: t.String() })]
+			})
+		)!
+
+		expect(validator.constructor.name).toBe('ValidationPlanMultiValidator')
+		expect(validator.From!({ a: 1, b: 'x' }, 'body')).toEqual({
+			a: 1,
+			b: 'x'
+		})
+	})
+
+	it('enforces overlapping member constraints independently', () => {
+		const validator = Validator.create(
+			t.Object({ id: t.Number() }),
+			candidate({
+				schemas: [t.Object({ id: t.Number({ minimum: 10 }) })]
+			})
+		)!
+
+		expect(() => validator.From!({ id: 5 }, 'body')).toThrow()
+		expect(validator.From!({ id: 12 }, 'body')).toEqual({ id: 12 })
+	})
+
+	it('keeps object-level constraints on each member', () => {
+		const validator = Validator.create(
+			t.Object({ a: t.Optional(t.Number()) }, { minProperties: 1 }),
+			candidate({
+				schemas: [t.Object({ b: t.Optional(t.String()) })]
+			})
+		)!
+
+		expect(() => validator.From!({}, 'body')).toThrow()
+		expect(validator.From!({ a: 1 }, 'body')).toEqual({ a: 1 })
 	})
 })

@@ -29,18 +29,16 @@ import { isDynamicRegex, traceEventIndex } from '../../constants'
 import { finalizeRouteError, forwardError } from '../../handler/utils'
 import { hasHeaderShorthand } from '../../universal/constants'
 
-import { parseQueryFromURL } from '../../parse-query'
+import { getQueryParseChannels, parseQueryFromURL } from '../../parse-query'
 
 import {
 	cloneResponse,
 	emptyResponse,
-	getQueryParseChannels,
 	hasRequestBody,
-	mapAfterHandle,
+	mapChainHook,
 	mapAfterResponse,
 	mapBeforeHandle,
 	mapError,
-	mapMapResponse,
 	mapTransform,
 	runBeforeHandlePrefix,
 	runBeforeHandlePrefixAsync,
@@ -113,7 +111,7 @@ function builtinParser(
 	}
 }
 
-function parse(
+export function emitBodyParse(
 	adapter: ElysiaAdapter['parse'],
 	parsers: MaybeArray<ContentType | BodyHandler> | undefined,
 	bodyVali: Validator | undefined,
@@ -570,23 +568,43 @@ export function compileHandlerJit({
 	}
 
 	const hasHeaders = inference.headers || !!vali?.headers
+	const fusedQuery = !!(
+		root['~config']?.experimental?.validationPlan &&
+		vali?.queryPlan?.fused &&
+		!hasBody &&
+		!vali?.body &&
+		!vali?.headers &&
+		!vali?.params &&
+		!hook?.transform?.length
+	)
 
 	if (inference.query || vali?.query) {
-		const channels = getQueryParseChannels((vali?.query as any)?.schema)
+		if (fusedQuery) {
+			link(vali, 'va')
+			code += `c.query=va.queryPlan.fromURL(c.request.url,c.qi)\n`
+		} else if (
+			root['~config']?.experimental?.validationPlan &&
+			vali?.queryPlan
+		) {
+			link(vali, 'va')
+			code += `c.query=va.queryPlan.parse(c.request.url,c.qi,va.queryPlan.array,va.queryPlan.object)\n`
+		} else {
+			const channels = getQueryParseChannels((vali?.query as any)?.schema)
 
-		let parseArgs = ''
-		if (channels?.array) {
-			link(channels.array, 'qa')
-			parseArgs = ',qa'
+			let parseArgs = ''
+			if (channels?.array) {
+				link(channels.array, 'qa')
+				parseArgs = ',qa'
+			}
+
+			if (channels?.object) {
+				link(channels.object, 'qo')
+				parseArgs += `${channels.array ? '' : ',undefined'},qo`
+			}
+
+			code += `c.query=pq(c.request.url,c.qi${parseArgs})\n`
+			link(parseQueryFromURL, 'pq')
 		}
-
-		if (channels?.object) {
-			link(channels.object, 'qo')
-			parseArgs += `${channels.array ? '' : ',undefined'},qo`
-		}
-
-		code += `c.query=pq(c.request.url,c.qi${parseArgs})\n`
-		link(parseQueryFromURL, 'pq')
 	}
 
 	if (hasHeaders) {
@@ -603,7 +621,7 @@ export function compileHandlerJit({
 		const parseLen = Array.isArray(hook?.parse) ? hook!.parse!.length : 0
 		if (hasTrace) code += beginTrace('parse', parseLen)
 
-		const parseCode = parse(
+		const parseCode = emitBodyParse(
 			adapter.parse,
 			hook?.parse,
 			vali?.body,
@@ -656,7 +674,10 @@ export function compileHandlerJit({
 
 	if (vali?.query) {
 		link(vali, 'va')
-		code += `c.query=${queryValiIsAsync ? 'await ' : ''}va.query.From(c.query,${fromArgs('query', !!queryValiIsAsync)})\n`
+		if (fusedQuery)
+			code += `c.query=va.queryPlan.validate(c.query,va.query)\n`
+		else
+			code += `c.query=${queryValiIsAsync ? 'await ' : ''}va.query.From(c.query,${fromArgs('query', !!queryValiIsAsync)})\n`
 	}
 
 	if (cookieConfig) {
@@ -922,8 +943,9 @@ export function compileHandlerJit({
 				code += beginTrace('afterHandle', afLen)
 				if (hasAfterHandle) {
 					link(hook!.afterHandle!, 'af')
-					code += mapAfterHandle(
+					code += mapChainHook(
 						hook!.afterHandle!,
+						'af',
 						isAsync,
 						buildReport('afterHandle'),
 						abortExpression
@@ -938,8 +960,9 @@ export function compileHandlerJit({
 				code += beginTrace('mapResponse', mrLen)
 				if (hasMapResponse) {
 					link(hook!.mapResponse!, 'mr')
-					code += mapMapResponse(
+					code += mapChainHook(
 						hook!.mapResponse!,
+						'mr',
 						isAsync,
 						buildReport('mapResponse'),
 						abortExpression
@@ -1056,8 +1079,9 @@ export function compileHandlerJit({
 						res.map,
 						(hasMapResponse
 							? `c.responseValue=_r\n` +
-								mapMapResponse(
+								mapChainHook(
 									hook!.mapResponse!,
+									'mr',
 									isAsync,
 									undefined,
 									abortExpression
@@ -1127,10 +1151,7 @@ export function compileHandlerJit({
 						responseMap as any,
 						handler as any
 					)
-				: createInlineHandlerWithSet(
-						responseMap as any,
-						handler as any
-					)
+				: createInlineHandlerWithSet(responseMap as any, handler as any)
 	}
 
 	JITProbe.record('handler:new-function')

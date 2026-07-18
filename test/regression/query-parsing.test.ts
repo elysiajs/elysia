@@ -29,3 +29,29 @@ describe('array query parameters', () => {
 		await expect(run('ids=[]')).resolves.toEqual([])
 	})
 })
+
+describe('legacy query planning', () => {
+	it('keeps JSON-looking String/Object union values as strings', async () => {
+		const app = new Elysia().get(
+			'/union',
+			{
+				query: t.Object({
+					value: t.Union([t.String(), t.Object({ name: t.String() })])
+				})
+			},
+			({ query }) => ({
+				kind: typeof query.value,
+				value: query.value
+			})
+		)
+		const raw = '{"name":"elysia"}'
+		const response = await app.handle(
+			req('/union?value=' + encodeURIComponent(raw))
+		)
+
+		await expect(response.json()).resolves.toEqual({
+			kind: 'string',
+			value: raw
+		})
+	})
+})

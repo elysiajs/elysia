@@ -7,6 +7,9 @@ export interface CorpusRequest {
 	id: string
 	make: () => Request
 	tags?: string[]
+	// Intentional contract flips use direct old/new golden tests instead of
+	// asking the byte-parity oracle to call the changed result equivalent.
+	excludePairs?: string[]
 }
 
 export interface CorpusEntry {
@@ -24,6 +27,9 @@ const json = (path: string, body: unknown) => () =>
 		headers: { 'content-type': 'application/json' },
 		body: JSON.stringify(body)
 	})
+const standard = (vendor: string, validate: (value: any) => unknown): any => ({
+	'~standard': { version: 1, vendor, validate }
+})
 
 export interface Recorder {
 	events: string[]
@@ -86,6 +92,859 @@ corpus.push({
 			),
 		requests: [
 			{ id: 'after-response', make: get('/native/after-response') }
+		]
+	})
+}
+
+corpus.push({
+	id: 'inference-template-regex-division',
+	tags: ['inference'],
+	define: (app) =>
+		app.post('/inference/lexical', (c: any) => {
+			const ignored = /c\.cookie/u
+			const text = 'c.set'
+			return `${text}:${ignored}:${10 / c.body.count}:${c.query.value}`
+		}),
+	requests: [
+		{
+			id: 'lexical',
+			make: () =>
+				new Request(url('/inference/lexical?value=ok'), {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: '{"count":2}'
+				})
+		}
+	]
+})
+
+corpus.push({
+	id: 'inference-unicode-computed-forwarded',
+	tags: ['inference'],
+	define: (app) => {
+		const key = 'query'
+		const read = (context: any) => context.query.value
+		const nestedArrow = function (context: any) {
+			const project = (value: any) => value.name
+			void project
+			return context.headers['x-nested']
+		}
+		// Keep the reference lane independently inferable so this request fails
+		// specifically when the candidate omits a computed-destructured channel.
+		const computedDestructuring =
+			app['~config']?.experimental?.inference === 'candidate'
+				? ({ ['query']: q }: any) => q.value
+				: (context: any) => context.query.value
+		return app
+			.get(
+				'/inference/unicode',
+				(context: any) =>
+					`${context.装饰 ?? 'unicode'}:${context.headers['x-unicode']}`
+			)
+			.get('/inference/computed', (context: any) => context[key].value)
+			.get(
+				'/inference/computed-destructuring',
+				computedDestructuring
+			)
+			.get('/inference/forwarded', (context: any) => read(context))
+			.get('/inference/nested-arrow', nestedArrow)
+			.get('/inference/zero-parameter', () => 'compact')
+	},
+	requests: [
+		{
+			id: 'unicode',
+			make: () =>
+				new Request(url('/inference/unicode'), {
+					headers: { 'x-unicode': 'yes' }
+				})
+		},
+		{ id: 'computed', make: get('/inference/computed?value=ok') },
+		{
+			id: 'computed-destructuring',
+			make: get('/inference/computed-destructuring?value=ok')
+		},
+		{ id: 'forwarded', make: get('/inference/forwarded?value=ok') },
+		{
+			id: 'nested-arrow',
+			make: () =>
+				new Request(url('/inference/nested-arrow'), {
+					headers: { 'x-nested': 'ok' }
+				})
+		},
+		{ id: 'zero-parameter', make: get('/inference/zero-parameter') }
+	]
+})
+
+corpus.push({
+	id: 'inference-forged-native-bound',
+	tags: ['inference'],
+	define: (app) => {
+		const forged = (context: any) => context.query.value
+		Object.defineProperty(forged, 'toString', {
+			value: () => '(context) => context.query.value'
+		})
+		const bound = ((context: any) => context.query.value).bind(null)
+		return app
+			.get('/inference/forged', forged)
+			.get('/inference/bound', bound)
+			.get('/inference/native', String as any)
+	},
+	requests: [
+		{ id: 'forged', make: get('/inference/forged?value=ok') },
+		{ id: 'bound', make: get('/inference/bound?value=ok') },
+		{ id: 'native', make: get('/inference/native') }
+	]
+})
+
+corpus.push({
+	id: 'inference-lifecycle-overrides',
+	tags: ['inference'],
+	define: (app) =>
+		app.group('', (group) =>
+			group
+				.guard({
+					inference: { query: false, headers: true, body: true },
+					beforeHandle() {}
+				})
+				.get(
+					'/inference/overrides',
+					{
+						inference: { query: true, headers: false },
+						beforeHandle(context: any) {
+							context.set.headers['x-inference'] = 'lifecycle'
+						}
+					},
+					(context: any) => context.query.value
+				)
+				.get(
+					'/inference/validator-force',
+					{
+						query: t.Object({ value: t.String() }),
+						inference: { query: false }
+					},
+					({ query }: any) => query.value
+				)
+		),
+	requests: [
+		{ id: 'overrides', make: get('/inference/overrides?value=ok') },
+		{
+			id: 'validator-force',
+			make: get('/inference/validator-force?value=ok')
+		}
+	]
+})
+
+corpus.push({
+	id: 'validation-nested-defaults',
+	tags: ['safe-for-socket', 'body', 'schema'],
+	define: (app) =>
+		app.post(
+			'/validation/nested-defaults',
+			{
+				body: t.Object({
+					profile: t.Object(
+						{
+							settings: t.Object(
+								{
+									theme: t.String({ default: 'dark' }),
+									pageSize: t.Number({ default: 20 })
+								},
+								{ default: {} }
+							)
+						},
+						{ default: {} }
+					)
+				})
+			},
+			({ body }) => body
+		),
+	requests: [
+		{ id: 'missing-all', make: json('/validation/nested-defaults', {}) },
+		{
+			id: 'missing-leaves',
+			make: json('/validation/nested-defaults', {
+				profile: { settings: {} }
+			})
+		},
+		{
+			id: 'explicit-values',
+			make: json('/validation/nested-defaults', {
+				profile: { settings: { theme: 'light', pageSize: 50 } }
+			})
+		}
+	]
+})
+
+corpus.push({
+	id: 'validation-object-array-string',
+	tags: ['safe-for-socket', 'query', 'schema'],
+	define: (app) =>
+		app.get(
+			'/validation/string-codecs',
+			{
+				query: t.Object({
+					filter: t.ObjectString({
+						min: t.Number(),
+						label: t.String()
+					}),
+					ids: t.ArrayString(t.Number())
+				})
+			},
+			({ query }) => query
+		),
+	requests: [
+		{
+			id: 'decode-both',
+			make: get(
+				'/validation/string-codecs?filter=' +
+					encodeURIComponent('{"min":1,"label":"a"}') +
+					'&ids=' +
+					encodeURIComponent('[1,2,3]')
+			)
+		},
+		{
+			id: 'invalid-object-string',
+			make: get(
+				'/validation/string-codecs?filter=' +
+					encodeURIComponent('{"min":"x","label":"a"}') +
+					'&ids=' +
+					encodeURIComponent('[1,2,3]')
+			)
+		},
+		{
+			id: 'invalid-array-string',
+			make: get(
+				'/validation/string-codecs?filter=' +
+					encodeURIComponent('{"min":1,"label":"a"}') +
+					'&ids=' +
+					encodeURIComponent('[1,"x"]')
+			)
+		}
+	]
+})
+
+corpus.push({
+	id: 'validation-object-union',
+	tags: ['safe-for-socket', 'body', 'schema'],
+	define: (app) =>
+		app.post(
+			'/validation/object-union',
+			{
+				body: t.Union([
+					t.Object({
+						kind: t.Literal('count'),
+						value: t.Number()
+					}),
+					t.Object({
+						kind: t.Literal('label'),
+						value: t.String()
+					})
+				])
+			},
+			({ body }) => body
+		),
+	requests: [
+		{
+			id: 'number-branch',
+			make: json('/validation/object-union', {
+				kind: 'count',
+				value: 1
+			})
+		},
+		{
+			id: 'string-branch',
+			make: json('/validation/object-union', {
+				kind: 'label',
+				value: 'one'
+			})
+		},
+		{
+			id: 'invalid-branch',
+			make: json('/validation/object-union', {
+				kind: 'count',
+				value: 'one'
+			})
+		}
+	]
+})
+
+corpus.push({
+	id: 'validation-ref-cyclic',
+	tags: ['safe-for-socket', 'body', 'schema'],
+	define: (app) => {
+		const Job = t.Object({ title: t.String() }, { $id: 'D2Job' })
+		const Person = t.Object(
+			{ name: t.String(), job: t.Ref('D2Job') },
+			{ $id: 'D2Person' }
+		)
+		const Node = t.Cyclic(
+			{
+				node: t.Object({
+					value: t.String(),
+					next: t.Nullable(t.Ref('node'))
+				})
+			},
+			'node'
+		)
+
+		return app
+			.model({ D2Job: Job, D2Person: Person })
+			.post(
+				'/validation/ref',
+				{ body: t.Ref('D2Person') },
+				({ body }) => body
+			)
+			.post('/validation/cyclic', { body: Node }, ({ body }) => body)
+	},
+	requests: [
+		{
+			id: 'ref-valid',
+			make: json('/validation/ref', {
+				name: 'Ada',
+				job: { title: 'compiler' }
+			})
+		},
+		{
+			id: 'ref-invalid',
+			make: json('/validation/ref', {
+				name: 'Ada',
+				job: { title: 1 }
+			})
+		},
+		{
+			id: 'cyclic-valid',
+			make: json('/validation/cyclic', {
+				value: 'root',
+				next: { value: 'leaf', next: null }
+			})
+		},
+		{
+			id: 'cyclic-invalid',
+			make: json('/validation/cyclic', {
+				value: 'root',
+				next: { value: 1, next: null }
+			})
+		}
+	]
+})
+
+{
+	const recorder = makeRecorder()
+	corpus.push({
+		id: 'validation-refine-codec-calls',
+		tags: ['safe-for-socket', 'body', 'schema', 'observe'],
+		recorder,
+		define: (app) => {
+			const Name = t.Refine(t.String(), (value: string) => {
+				recorder.events.push(`refine:${value}`)
+				return value !== 'bad'
+			})
+			const Count = t
+				.Codec(t.String())
+				.Decode((value: string) => {
+					recorder.events.push(`decode:${value}`)
+					return Number(value)
+				})
+				.Encode((value: number) => {
+					recorder.events.push(`encode:${value}`)
+					return String(value)
+				})
+
+			return app.post(
+				'/validation/refine-codec',
+				{
+					body: t.Object({ name: Name, count: Count }),
+					response: t.Object({ name: t.String(), count: Count })
+				},
+				({ body }) => body
+			)
+		},
+		requests: [
+			{
+				id: 'success-counts',
+				make: json('/validation/refine-codec', {
+					name: 'ok',
+					count: '2'
+				})
+			},
+			{
+				id: 'refine-failure-counts',
+				make: json('/validation/refine-codec', {
+					name: 'bad',
+					count: '2'
+				})
+			}
+		]
+	})
+}
+
+{
+	const recorder = makeRecorder()
+	corpus.push({
+		id: 'validation-standard-schema',
+		tags: ['safe-for-socket', 'body', 'schema', 'async', 'observe'],
+		recorder,
+		define: (app) => {
+			const validate = (kind: string, value: any) => {
+				recorder.events.push(kind)
+				return typeof value?.id === 'number'
+					? { value: { id: value.id, kind } }
+					: { issues: [{ message: 'id must be a number' }] }
+			}
+			const sync = standard('d2-sync', (value) => validate('sync', value))
+			const async = standard('d2-async', async (value) =>
+				validate('async', value)
+			)
+			const thenable = standard('d2-thenable', (value) =>
+				makeThenable(validate('thenable', value))
+			)
+
+			return app
+				.post(
+					'/validation/standard-sync',
+					{ body: sync },
+					({ body }) => body
+				)
+				.post(
+					'/validation/standard-async',
+					{ body: async },
+					({ body }) => body
+				)
+				.post(
+					'/validation/standard-thenable',
+					{ body: thenable },
+					({ body }) => body
+				)
+		},
+		requests: [
+			{
+				id: 'sync-success',
+				make: json('/validation/standard-sync', { id: 1 })
+			},
+			{
+				id: 'sync-failure',
+				make: json('/validation/standard-sync', { id: 'x' })
+			},
+			{
+				id: 'async-success',
+				make: json('/validation/standard-async', { id: 1 })
+			},
+			{
+				id: 'async-failure',
+				make: json('/validation/standard-async', { id: 'x' })
+			},
+			{
+				id: 'thenable-success',
+				make: json('/validation/standard-thenable', { id: 1 })
+			},
+			{
+				id: 'thenable-failure',
+				make: json('/validation/standard-thenable', { id: 'x' })
+			}
+		]
+	})
+}
+
+{
+	const recorder = makeRecorder()
+	corpus.push({
+		id: 'validation-response-encode-status',
+		tags: ['safe-for-socket', 'response', 'schema', 'observe'],
+		recorder,
+		define: (app) => {
+			const coded = (label: string) =>
+				t
+					.Codec(t.String())
+					.Decode((value: string) => Number(value))
+					.Encode((value: number) => {
+						recorder.events.push(`${label}:${value}`)
+						return `${label}:${value}`
+					})
+
+			return app
+				.get(
+					'/validation/response-200',
+					{ response: { 200: t.Object({ value: coded('ok') }) } },
+					() => ({ value: 1 })
+				)
+				.get(
+					'/validation/response-201',
+					{
+						response: { 201: t.Object({ value: coded('created') }) }
+					},
+					() => status(201, { value: 2 })
+				)
+		},
+		requests: [
+			{ id: 'default-status', make: get('/validation/response-200') },
+			{ id: 'created-status', make: get('/validation/response-201') }
+		]
+	})
+}
+
+{
+	const recorder = makeRecorder()
+	corpus.push({
+		id: 'validation-q10-standalone-route',
+		tags: ['safe-for-socket', 'body', 'schema', 'observe', 'q10'],
+		recorder,
+		define: (app) => {
+			const standalone = standard('d2-q10', (value) => {
+				recorder.events.push('standalone')
+				return typeof value?.guarded === 'string'
+					? {
+							value: {
+								route: value.route,
+								guarded: value.guarded.toUpperCase()
+							}
+						}
+					: { issues: [{ message: 'guarded must be a string' }] }
+			})
+
+			return app
+				.guard({ schema: 'standalone', body: standalone })
+				.post(
+					'/validation/q10',
+					{ body: t.Object({ route: t.Number() }) },
+					({ body }) => body
+				)
+		},
+		requests: [
+			{
+				id: 'both-pass',
+				make: json('/validation/q10', { guarded: 'yes', route: 1 })
+			},
+			{
+				id: 'standalone-fails',
+				make: json('/validation/q10', { guarded: 1, route: 1 })
+			}
+		]
+	})
+}
+
+corpus.push({
+	id: 'validation-q10-first-member-failure',
+	tags: ['safe-for-socket', 'body', 'schema', 'q10'],
+	define: (app) =>
+		app
+			.guard({
+				schema: 'standalone',
+				body: standard('d2-q10-unreached', (value) => ({ value }))
+			})
+			.post(
+				'/validation/q10-first-failure',
+				{ body: t.Object({ route: t.Number() }) },
+				({ body }) => body
+			),
+	requests: [
+		{
+			id: 'route-fails-before-standalone',
+			excludePairs: ['jit-vs-validation-plan@handle'],
+			make: json('/validation/q10-first-failure', {
+				guarded: 'yes',
+				route: 'x'
+			})
+		}
+	]
+})
+
+{
+	const recorder = makeRecorder()
+	corpus.push({
+		id: 'validation-q10-typebox-order',
+		tags: [
+			'safe-for-socket',
+			'body',
+			'response',
+			'schema',
+			'observe',
+			'q10'
+		],
+		recorder,
+		define: (app) => {
+			const coded = (label: string) =>
+				t
+					.Codec(t.String())
+					.Decode((value: string) => {
+						recorder.events.push(`decode:${label}:${value}`)
+						return Number(value)
+					})
+					.Encode((value: number) => {
+						recorder.events.push(`encode:${label}:${value}`)
+						return String(value)
+					})
+
+			return app
+				.guard({
+					schema: 'standalone',
+					body: t.Object(
+						{ guarded: coded('guarded') },
+						{ additionalProperties: false }
+					),
+					response: {
+						201: t.Object({ guarded: coded('response-guarded') })
+					}
+				})
+				.post(
+					'/validation/q10-typebox',
+					{
+						body: t.Object(
+							{
+								route: coded('route'),
+								fallback: t.Number({ default: 9 })
+							},
+							{ additionalProperties: false }
+						),
+						response: {
+							201: t.Object({ route: coded('response-route') })
+						}
+					},
+					({ body }) =>
+						status(201, {
+							route: body.route,
+							guarded: body.guarded
+						})
+				)
+		},
+		requests: [
+			{
+				id: 'ordered-codecs-and-default',
+				make: json('/validation/q10-typebox', {
+					route: '1',
+					guarded: '2'
+				})
+			},
+			{
+				id: 'later-member-failure',
+				make: json('/validation/q10-typebox', {
+					route: '1',
+					guarded: 'not-a-number'
+				})
+			}
+		]
+	})
+}
+
+corpus.push({
+	id: 'validation-q10-closed-extra',
+	tags: ['safe-for-socket', 'body', 'schema', 'q10'],
+	define: (app) =>
+		app
+			.guard({
+				schema: 'standalone',
+				body: t.Object(
+					{ guarded: t.String() },
+					{ additionalProperties: false }
+				)
+			})
+			.post(
+				'/validation/q10-closed-extra',
+				{
+					body: t.Object(
+						{ route: t.Number() },
+						{ additionalProperties: false }
+					)
+				},
+				({ body }) => body
+			),
+	requests: [
+		{
+			id: 'known-sibling-keys',
+			make: json('/validation/q10-closed-extra', {
+				route: 1,
+				guarded: 'yes'
+			})
+		},
+		{
+			id: 'true-extra',
+			excludePairs: ['jit-vs-validation-plan@handle'],
+			make: json('/validation/q10-closed-extra', {
+				route: 1,
+				guarded: 'yes',
+				extra: true
+			})
+		}
+	]
+})
+
+{
+	const recorder = makeRecorder()
+	corpus.push({
+		id: 'validation-form-codecs',
+		tags: ['safe-for-socket', 'body', 'schema', 'form', 'observe'],
+		recorder,
+		define: (app) => {
+			const snapshot = (label: string, body: any) => {
+				const prototype = Object.getPrototypeOf(body)
+				const descriptors = Reflect.ownKeys(body)
+					.map((key) => {
+						const descriptor = Object.getOwnPropertyDescriptor(
+							body,
+							key
+						)!
+						return `${String(key)}:${+!!descriptor.enumerable}${+!!descriptor.configurable}${+!!descriptor.writable}`
+					})
+					.sort()
+					.join(',')
+				recorder.events.push(
+					`${label}:marker=${Object.hasOwn(body, '~ely-form')}:proto=${prototype === null ? 'null' : prototype === Object.prototype ? 'object' : 'other'}:symbols=${Object.getOwnPropertySymbols(body).length}:descriptors=${descriptors}`
+				)
+			}
+
+			return app
+				.post(
+					'/validation/form-codecs',
+					{
+						body: t.Form({
+							metadata: t.ObjectString({ name: t.String() }),
+							ids: t.ArrayString(t.Number())
+						}),
+						error({ body }) {
+							snapshot('sync-error', body)
+						}
+					},
+					({ body }) => {
+						snapshot('handler', body)
+						return body
+					}
+				)
+				.post(
+					'/validation/form-codecs-async',
+					{
+						body: t.Form({
+							metadata: t.ObjectString({ name: t.String() }),
+							ids: t.ArrayString(t.Number()),
+							file: t.File({ type: 'image/jpeg' })
+						}),
+						error({ body }) {
+							snapshot('async-error', body)
+						}
+					},
+					({ body }) => body
+				)
+		},
+		requests: [
+			{
+				id: 'valid',
+				make: () => {
+					const body = new FormData()
+					body.append('metadata', '{"name":"d2"}')
+					body.append('ids', '[1,2]')
+					return new Request(url('/validation/form-codecs'), {
+						method: 'POST',
+						body
+					})
+				}
+			},
+			{
+				id: 'invalid-sync-preserves-input',
+				make: () => {
+					const body = new FormData()
+					body.append('metadata', '{"name":1}')
+					body.append('ids', '[1,2]')
+					return new Request(url('/validation/form-codecs'), {
+						method: 'POST',
+						body
+					})
+				}
+			},
+			{
+				id: 'invalid-async-preserves-input',
+				make: () => {
+					const body = new FormData()
+					body.append('metadata', '{"name":"d2"}')
+					body.append('ids', '[1,2]')
+					body.append(
+						'file',
+						new Blob(['not-jpeg'], { type: 'image/png' }),
+						'not-jpeg.png'
+					)
+					return new Request(url('/validation/form-codecs-async'), {
+						method: 'POST',
+						body
+					})
+				}
+			}
+		]
+	})
+}
+
+corpus.push({
+	id: 'validation-prototype-key',
+	tags: ['safe-for-socket', 'body', 'schema'],
+	define: (app) => {
+		const properties = Object.defineProperty(
+			{ value: t.Number() },
+			'__proto__',
+			{
+				value: t.Object({ polluted: t.String() }),
+				enumerable: true
+			}
+		)
+
+		return app.post(
+			'/validation/prototype-key',
+			{ body: t.Object(properties as any) },
+			({ body }) => ({
+				value: body.value,
+				own: Object.hasOwn(body as object, '__proto__'),
+				plainPrototype:
+					Object.getPrototypeOf(body) === Object.prototype,
+				polluted: (body as any).polluted ?? null
+			})
+		)
+	},
+	requests: [
+		{
+			id: 'own-proto-data-property',
+			make: () =>
+				new Request(url('/validation/prototype-key'), {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: '{"value":1,"__proto__":{"polluted":"no"}}'
+				})
+		}
+	]
+})
+
+{
+	const recorder = makeRecorder()
+	corpus.push({
+		id: 'validation-commit-on-failure',
+		tags: ['safe-for-socket', 'body', 'schema', 'observe'],
+		recorder,
+		define: (app) =>
+			app.post(
+				'/validation/commit-on-failure',
+				{
+					body: t.Object({
+						coerced: t.Numeric(),
+						tail: t.Literal('ok')
+					}),
+					transform({ body }) {
+						recorder.events.push(
+							`before:${typeof (body as any).coerced}`
+						)
+					},
+					error({ body }) {
+						recorder.events.push(
+							`error:${typeof (body as any).coerced}`
+						)
+					}
+				},
+				({ body }) => {
+					recorder.events.push('handler')
+					return body
+				}
+			),
+		requests: [
+			{
+				id: 'later-field-fails',
+				make: json('/validation/commit-on-failure', {
+					coerced: '1',
+					tail: 'bad'
+				})
+			}
 		]
 	})
 }
@@ -182,6 +1041,17 @@ corpus.push({
 		{ id: 'single', make: get('/user/42') },
 		{ id: 'multi', make: get('/user/7/post/99') }
 	]
+})
+
+corpus.push({
+	id: 'dynamic-route-context',
+	tags: ['safe-for-socket', 'param', 'route'],
+	define: (app) =>
+		app.get('/route/:id', ({ route, params }: any) => ({
+			route,
+			id: params.id
+		})),
+	requests: [{ id: 'pattern', make: get('/route/42') }]
 })
 
 corpus.push({
@@ -296,6 +1166,82 @@ corpus.push({
 })
 
 corpus.push({
+	id: 'query-scalar-fused-grammar',
+	tags: ['safe-for-socket', 'query', 'schema'],
+	define: (app) =>
+		app
+			.get(
+				'/qf',
+				{
+					query: t.Object({
+						name: t.String(),
+						page: t.Number(),
+						limit: t.Integer(),
+						active: t.Boolean(),
+						optional: t.Optional(t.Number()),
+						fallback: t.Number({ default: '3' as any })
+					})
+				},
+				({ query }) => query
+			)
+				.get(
+					'/qfc',
+				{
+					query: t.Object(
+						{ page: t.Number() },
+						{ additionalProperties: false }
+					)
+				},
+					({ query }) => query
+				)
+				.post(
+					'/qfp',
+					{
+						body: t.Object({ value: t.Number() }),
+						query: t.Object({ page: t.Number() })
+					},
+					({ body, query }) => ({ body, query })
+				),
+	requests: [
+		{
+			id: 'encoded-plus-unknown-default',
+			make: get(
+				'/qf?name=' +
+					encodeURIComponent('hello world') +
+					'&page=.5&limit=-2&active=false&ignored=yes'
+			)
+		},
+		{
+			id: 'last-duplicate-wins',
+			make: get(
+				'/qf?active=true&limit=1&limit=10&page=bad&page=2&name=elysia'
+			)
+		},
+		{
+			id: 'last-invalid-uses-oracle',
+			make: get('/qf?name=elysia&page=2&page=bad&limit=10&active=true')
+		},
+		{
+			id: 'empty-and-required',
+			make: get('/qf?name=&page=&limit=10&active=true')
+		},
+			{
+				id: 'closed-additional-uses-oracle',
+				make: get('/qfc?page=2&unknown=yes')
+			},
+			{
+				id: 'body-parse-error-precedes-query-error',
+				make: () =>
+					new Request(url('/qfp?page=bad'), {
+						method: 'POST',
+						headers: { 'content-type': 'application/json' },
+						body: '{'
+					})
+			}
+	]
+})
+
+corpus.push({
 	id: 'query-object',
 	tags: ['safe-for-socket', 'query', 'schema'],
 	define: (app) =>
@@ -320,6 +1266,97 @@ corpus.push({
 					encodeURIComponent('{"min":1,"max":9}') +
 					'&extra=ignored'
 			)
+		}
+	]
+})
+
+corpus.push({
+	id: 'query-fused-error-order',
+	tags: ['query', 'schema'],
+	define: (app) =>
+		app
+			.error(({ query }: any) => ({ queryType: typeof query.page }))
+			.post(
+				'/qfe',
+				{
+					body: t.Object({ value: t.Number() }),
+					query: t.Object({ page: t.Number() })
+				},
+				({ body, query }) => ({ body, query })
+			),
+	requests: [
+		{
+			id: 'body-error-sees-raw-query',
+			make: () =>
+				new Request(url('/qfe?page=1'), {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: '{'
+				})
+		}
+	]
+})
+
+corpus.push({
+	id: 'query-array-grammar',
+	tags: ['safe-for-socket', 'query', 'schema'],
+	define: (app) =>
+		app.get(
+			'/qa',
+			{
+				query: t.Object({
+					ids: t.Array(t.String()),
+					rows: t.Array(t.Object({ n: t.Numeric() }))
+				})
+			},
+			({ query }) => query
+		),
+	requests: [
+		{
+			id: 'comma-bracket-repeat-and-object',
+			make: get(
+				'/qa?ids=a,b&ids=[c,d]&rows=' +
+					encodeURIComponent('{"n":1}') +
+					'&rows=' +
+					encodeURIComponent('{"n":"2"}')
+			)
+		},
+		{
+			id: 'empty-array',
+			make: get('/qa?ids=[]&rows=[]')
+		}
+	]
+})
+
+corpus.push({
+	id: 'query-plan-fallbacks',
+	tags: ['safe-for-socket', 'query', 'schema'],
+	define: (app) => {
+		const standard = {
+			'~standard': {
+				version: 1,
+				vendor: 'd2-query',
+				validate: (value: unknown) => ({ value })
+			}
+		}
+
+		return app
+			.model('QueryIds', t.Object({ id: t.Array(t.String()) }))
+			.get('/query-ref', { query: 'QueryIds' }, ({ query }) => query)
+			.get(
+				'/query-standard',
+				{ query: standard as any },
+				({ query }) => query
+			)
+	},
+	requests: [
+		{
+			id: 'model-ref-array',
+			make: get('/query-ref?id=a&id=b')
+		},
+		{
+			id: 'standard-generic-last-wins',
+			make: get('/query-standard?id=a&id=b')
 		}
 	]
 })

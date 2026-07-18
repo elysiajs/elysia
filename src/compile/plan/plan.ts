@@ -1,6 +1,7 @@
 import type { AnyElysia } from '../../base'
 import type { ElysiaAdapter } from '../../adapter'
 
+import { isDynamicRegex } from '../../constants'
 import { isAsyncFunction } from '../utils'
 
 import type { RouteCompileState } from '../handler/descriptor'
@@ -47,6 +48,7 @@ export interface RoutePlan {
 	// context channel needs, read straight from the descriptor (never re-derived)
 	needsQuery: boolean
 	needsHeaders: boolean
+	needsRoute: boolean
 
 	// response-mode facts
 	hasSet: boolean
@@ -90,6 +92,7 @@ export function planRoute(
 
 	const needsQuery = inference.query || !!vali?.query
 	const needsHeaders = inference.headers || !!vali?.headers
+	const needsRoute = inference.route && isDynamicRegex.test(d.path)
 
 	const hasSet = d.responseMode !== 'compact'
 
@@ -152,6 +155,7 @@ export function planRoute(
 		handlerKind: d.handlerKind,
 		needsQuery,
 		needsHeaders,
+		needsRoute,
 		hasSet,
 		responseMode: d.responseMode,
 		tail: {

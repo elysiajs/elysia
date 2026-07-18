@@ -10,9 +10,13 @@ const entryInPair = (entry: ObservableCorpusEntry, pair: LanePair): boolean =>
 	!pair.requiresTag || entry.tags.includes(pair.requiresTag)
 
 // Socket lanes skip responses that include the lane-specific port.
-const requestInPair = (request: { tags?: string[] }, pair: LanePair): boolean =>
-	pair.oracle.transport === 'handle' ||
-	!(request.tags ?? []).includes('handle-only')
+const requestInPair = (
+	request: { tags?: string[]; excludePairs?: string[] },
+	pair: LanePair
+): boolean =>
+	!request.excludePairs?.includes(pair.id) &&
+	(pair.oracle.transport === 'handle' ||
+		!(request.tags ?? []).includes('handle-only'))
 
 // Run every disposer before reporting their failures.
 const disposeAll = async (

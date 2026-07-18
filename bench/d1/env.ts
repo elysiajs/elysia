@@ -12,6 +12,7 @@ export const BENCH_SOURCE_FILES = [
 	'bench/d1/run.ts',
 	'bench/d1/schema.ts',
 	'bench/d1/stats.ts',
+	'bench/d1/validation.test.ts',
 	'bench/d1/fixtures/cold-start.ts',
 	'bench/d1/fixtures/compile-memory.ts',
 	'bench/d1/fixtures/compose-depth.ts',
@@ -23,6 +24,7 @@ export const BENCH_SOURCE_FILES = [
 	'bench/d1/fixtures/http.ts',
 	'bench/d1/fixtures/native-table.ts',
 	'bench/d1/fixtures/retained.ts',
+	'bench/d1/fixtures/validation.ts',
 	'bench/d1/fixtures/utils.ts',
 	'example/stress/utils.ts',
 	'package.json'

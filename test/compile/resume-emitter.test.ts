@@ -3,6 +3,7 @@ import { describe, expect, it } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { Capture } from '../../src/compile/aot'
 import { resumeEmit } from '../../src/experimental/resume'
+import { validationPlan } from '../../src/experimental/validation-plan'
 
 // Each parity case compares status, stable headers, and body text with the
 // default emitter.
@@ -195,6 +196,56 @@ describe('resume emitter parity', () => {
 				),
 			GET('/?n=5')
 		))
+	it('query plan composes with the resume emitter', async () => {
+		const build = (app: Elysia<any>) =>
+			app.get(
+				'/',
+				{ query: t.Object({ id: t.Array(t.String()) }) },
+				({ query }) => query
+			)
+		const legacy = build(new Elysia())
+		const candidate = build(
+			new Elysia({
+				experimental: { resumeEmit, validationPlan }
+			})
+		)
+
+		const [expected, actual] = await Promise.all([
+			legacy.handle(new Request('http://localhost/?id=a&id=b')),
+			candidate.handle(new Request('http://localhost/?id=a&id=b'))
+		])
+		expect(await norm(actual)).toEqual(await norm(expected))
+	})
+	it('fuses scalar query parsing with the resume emitter', async () => {
+		const build = (app: Elysia<any>) =>
+			app.get(
+				'/',
+				{
+					query: t.Object({
+						page: t.Number(),
+						active: t.Boolean(),
+						limit: t.Integer({ default: 10 })
+					})
+				},
+				({ query }) => query
+			)
+		const legacy = build(new Elysia())
+		const candidate = build(
+			new Elysia({ experimental: { resumeEmit, validationPlan } })
+		)
+
+		for (const path of [
+			'/?page=bad&page=2&active=false',
+			'/?page=bad&active=true'
+		]) {
+			const request = GET(path)
+			const [expected, actual] = await Promise.all([
+				legacy.handle(request()),
+				candidate.handle(request())
+			])
+			expect(await norm(actual)).toEqual(await norm(expected))
+		}
+	})
 	it('rejects an invalid body after an async custom parser', () =>
 		parity(
 			(e) =>

@@ -1,5 +1,6 @@
 /** Runs captured validators with the TypeBox bridge deliberately unwired. */
 import { readFileSync } from 'node:fs'
+import { validationPlan } from '../../../src/experimental/validation-plan'
 
 import { type CapturedValidator } from '../../../src/compile/aot'
 import { buildFrozenRouteValidator } from '../../../src/compile/handler/frozen-validator'
@@ -24,12 +25,20 @@ const payload = JSON.parse(readFileSync(process.env.PAYLOAD!, 'utf8')) as {
 	cases: unknown[]
 	method: string
 	path: string
+	slot?: 'body' | 'query'
 }
 
 const claimed = claimManifest({ validators: materialise(payload.captured) })
 
-const hook = { body: payload.schema } as any
-const root = { ...claimed, '~config': {}, '~ext': {} } as any
+const slot = payload.slot ?? 'body'
+const hook = { [slot]: payload.schema } as any
+const root = {
+	...claimed,
+	'~config': {
+		experimental: slot === 'query' ? { validationPlan } : undefined
+	},
+	'~ext': {}
+} as any
 
 // A live RouteValidator must fail here, proving success uses frozen reconstruction.
 if (process.env.USE_LIVE_VALIDATOR === '1') {
@@ -56,14 +65,21 @@ const validator = buildFrozenRouteValidator(
 	payload.path
 )
 
-if (!validator || !(validator as any).body) {
+const channel = validator?.[slot]
+if (!validator || !channel) {
 	out('RESULT', { reconstructed: false })
 	process.exit(0)
 }
 
 const results = payload.cases.map((value) => {
 	try {
-		return { ok: true, value: (validator as any).body.From(value, 'body') }
+		if (slot === 'query') {
+			const plan = (validator as any).queryPlan
+			const url = `http://localhost/?${value}`
+			value = plan.parse(url, url.indexOf('?'), plan.array, plan.object)
+		}
+
+		return { ok: true, value: channel.From(value, slot) }
 	} catch (error: any) {
 		return { ok: false, status: error?.status ?? 500 }
 	}

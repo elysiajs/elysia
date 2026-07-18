@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'bun:test'
 import { Elysia, t } from '../../src'
+import { validationPlan } from '../../src/experimental/validation-plan'
 import { Validator } from '../../src/validator'
 import { req, post } from '../utils'
 import { upload } from '../utils'
@@ -181,11 +182,18 @@ describe('TypeBox file validation with Standard Schema guards', () => {
 	})
 
 	it('marks a mixed validator with a MIME type schema as async', () => {
-		const v = Validator.create(passthrough, {
+		const legacy = Validator.create(passthrough, {
 			schemas: [t.File({ type: 'image/jpeg' }) as any]
 		})
-		expect(v!.constructor.name).toBe('MultiValidator')
-		expect(v!.isAsync).toBe(true)
+		const candidate = Validator.create(passthrough, {
+			schemas: [t.File({ type: 'image/jpeg' }) as any],
+			app: { '~config': { experimental: { validationPlan } } }
+		})
+
+		expect(legacy!.constructor.name).toBe('LegacyMultiValidator')
+		expect(candidate!.constructor.name).toBe('ValidationPlanMultiValidator')
+		expect(legacy!.isAsync).toBe(true)
+		expect(candidate!.isAsync).toBe(true)
 	})
 
 	it('rejects a mismatched MIME type with a standalone guard', async () => {

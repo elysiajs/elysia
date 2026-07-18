@@ -25,7 +25,9 @@ export abstract class Reconstrct {
 				normalize: frozenRoot['~config']?.normalize,
 				sanitize: frozenRoot['~config']?.sanitize,
 				schemas: hook?.schemas,
-				aot: { method, path }
+				aot: { method, path },
+				validationPlan:
+					frozenRoot['~config']?.experimental?.validationPlan
 			})
 		} catch (error) {
 			if (!isBridgeNotInitialized(error)) throw error

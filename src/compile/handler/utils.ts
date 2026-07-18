@@ -8,7 +8,6 @@ import {
 } from '../../utils'
 import { skipClone } from '../../adapter/skip-clone'
 import { ElysiaStatus } from '../../error'
-import { ELYSIA_TYPES } from '../../type/constants'
 import { isSpace, isIdentChar, skipString } from '../lexer'
 export { emptyResponse } from '../../handler/utils'
 
@@ -122,7 +121,10 @@ function deriveModeQueues(entries?: readonly DeriveEntry[]) {
 	return queues
 }
 
-export function deriveModes(hooks: Function[], entries?: readonly DeriveEntry[]) {
+export function deriveModes(
+	hooks: Function[],
+	entries?: readonly DeriveEntry[]
+) {
 	const queues = deriveModeQueues(entries)
 	if (!queues) return
 
@@ -242,7 +244,6 @@ function topLevelArrowIndex(src: string): number {
 	return -1
 }
 
-
 function scanReturns(src: string): { count: number; firstIndex: number } {
 	let count = 0
 	let firstIndex = -1
@@ -283,7 +284,6 @@ function scanReturns(src: string): { count: number; firstIndex: number } {
 	}
 	return { count, firstIndex }
 }
-
 
 function scanObjectLiteralKeys(src: string, open: number): string[] | null {
 	const keys: string[] = []
@@ -511,13 +511,14 @@ export async function runBeforeHandlePrefixAsync(
 	}
 }
 
-function mapChainHook(
-	hooks: Function[],
+export function mapChainHook(
+	_hooks: MaybeArray<Function>,
 	prefix: string,
 	isAsync: boolean,
 	report?: TraceReporter,
 	abortGuard?: string
 ) {
+	const hooks = toArray(_hooks)
 	let code = ''
 	let depth = 0
 
@@ -539,20 +540,6 @@ function mapChainHook(
 	code += `if(tmp!==undefined)_r=c.responseValue=tmp\n`
 	return code
 }
-
-export const mapAfterHandle = (
-	_hooks: AppHook['afterHandle'] | AppHook['afterHandle'][0],
-	isAsync: boolean,
-	report?: TraceReporter,
-	abortGuard?: string
-) => mapChainHook(toArray(_hooks), 'af', isAsync, report, abortGuard)
-
-export const mapMapResponse = (
-	_hooks: AppHook['mapResponse'] | AppHook['mapResponse'][0],
-	isAsync: boolean,
-	report?: TraceReporter,
-	abortGuard?: string
-) => mapChainHook(toArray(_hooks), 'mr', isAsync, report, abortGuard)
 
 export const mapAfterResponse = /*#__PURE__*/ map<
 	'afterResponse',
@@ -625,106 +612,6 @@ function map<Event extends AppEvent, T extends unknown[] = []>(
 
 const at = (index: number | undefined) =>
 	index === undefined ? '' : `[${index}]`
-
-function arrayItemSchema(v: any): any {
-	if (!v) return
-	if (v.type === 'array' || v['~kind'] === 'Array') return v.items
-	if (Array.isArray(v.anyOf))
-		for (const x of v.anyOf) {
-			const it = arrayItemSchema(x)
-			if (it) return it
-		}
-}
-
-function containsObjectSchema(v: any) {
-	if (!v) return false
-	if (v.type === 'object' || v['~kind'] === 'Object') return true
-	if (Array.isArray(v.anyOf)) return v.anyOf.some(containsObjectSchema)
-
-	return false
-}
-
-function containsArray(v: any, seen?: WeakSet<object>) {
-	if (!v || typeof v !== 'object') return false
-	if (seen?.has(v)) return false
-
-	if (v.type === 'array' || v['~kind'] === 'Array') return true
-	if (v['~elyTyp'] === ELYSIA_TYPES.ArrayString) return true
-
-	for (const key of ['anyOf', 'allOf', 'oneOf'] as const) {
-		const arr = v[key]
-		if (Array.isArray(arr)) {
-			seen ??= new WeakSet<object>()
-			seen.add(v)
-			for (const x of arr) if (containsArray(x, seen)) return true
-		}
-	}
-
-	return false
-}
-
-interface QueryWalkState {
-	array: Record<string, 1> | undefined
-	object: Record<string, 1> | undefined
-}
-
-function getQueryParseArgsCollect(
-	node: any,
-	seen: WeakSet<object>,
-	state: QueryWalkState
-): void {
-	if (!node || typeof node !== 'object' || seen.has(node)) return
-	seen.add(node)
-
-	const props = node.properties
-
-	if (props)
-		for (const k in props) {
-			const v = props[k]
-			const isArray = containsArray(v)
-
-			if (isArray) {
-				;(state.array ??= Object.create(null))[k] = 1
-			}
-
-			if (
-				(isArray && containsObjectSchema(arrayItemSchema(v))) ||
-				v?.['~elyTyp'] === ELYSIA_TYPES.ObjectString
-			) {
-				;(state.object ??= Object.create(null))[k] = 1
-			}
-		}
-
-	for (const key of ['anyOf', 'allOf', 'oneOf'] as const) {
-		const arr = node[key]
-		if (Array.isArray(arr))
-			for (const x of arr) getQueryParseArgsCollect(x, seen, state)
-	}
-}
-
-// gather metadata for `parseQueryFromURL`
-const queryParseChannelsCache = new WeakMap<object, QueryWalkState | null>()
-
-export function getQueryParseChannels(
-	querySchema: any
-): QueryWalkState | undefined {
-	if (!querySchema || typeof querySchema !== 'object') return
-
-	const cached = queryParseChannelsCache.get(querySchema)
-	if (cached !== undefined) return cached ?? undefined
-
-	const state: QueryWalkState = {
-		array: undefined,
-		object: undefined
-	}
-
-	getQueryParseArgsCollect(querySchema, new WeakSet(), state)
-
-	const result = state.array || state.object ? state : null
-	queryParseChannelsCache.set(querySchema, result)
-
-	return result ?? undefined
-}
 
 const Await = (fn: Function) => (isAsyncFunction(fn) ? 'await ' : '')
 

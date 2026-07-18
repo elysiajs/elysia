@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'bun:test'
 import { Elysia, t, ValidationError } from '../../src'
+import { validationPlan } from '../../src/experimental/validation-plan'
 import { newWebsocket, wsOpen, wsClosed, wsMessage } from './utils'
 
 describe('WebSocket non-body schemas', () => {
@@ -233,6 +234,131 @@ describe('WebSocket non-body schemas', () => {
 		})
 
 		await wsClosed(ws)
+		app.stop()
+	})
+
+	it('query: validation plan preserves duplicate array values', async () => {
+		const app = new Elysia({
+			experimental: { validationPlan }
+		})
+			.ws('/ws', {
+				query: t.Object({ id: t.Array(t.String()) }),
+				message({ ws, query }: any) {
+					ws.send(JSON.stringify(query))
+				}
+			})
+			.listen(0)
+
+		const ws = new WebSocket(
+			`ws://${app.server!.hostname}:${app.server!.port}/ws?id=a&id=b`
+		)
+		await wsOpen(ws)
+
+		const got = wsMessage(ws)
+		ws.send('ping')
+		expect(JSON.parse((await got).data as string)).toEqual({
+			id: ['a', 'b']
+		})
+
+		await wsClosed(ws)
+		app.stop()
+	})
+
+	it('query: validation plan fuses scalar values at upgrade', async () => {
+		const app = new Elysia({ experimental: { validationPlan } })
+			.ws('/ws', {
+				query: t.Object({
+					page: t.Number(),
+					active: t.Boolean()
+				}),
+				message({ ws, query }: any) {
+					ws.send(JSON.stringify(query))
+				}
+			})
+			.listen(0)
+
+		const ws = new WebSocket(
+			`ws://${app.server!.hostname}:${app.server!.port}/ws?page=bad&page=2&active=false`
+		)
+		await wsOpen(ws)
+		const got = wsMessage(ws)
+		ws.send('ping')
+		expect(JSON.parse((await got).data as string)).toEqual({
+			page: 2,
+			active: false
+		})
+		await wsClosed(ws)
+
+		const invalid = await fetch(
+			`http://${app.server!.hostname}:${app.server!.port}/ws?page=bad&active=true`,
+			{
+				headers: {
+					upgrade: 'websocket',
+					connection: 'Upgrade',
+					'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==',
+					'sec-websocket-version': '13'
+				}
+			}
+		)
+		expect(invalid.status).toBe(422)
+		app.stop()
+	})
+
+	it('query: validation plan preserves codec decoding at upgrade', async () => {
+		const Coded = t
+			.Codec(t.String())
+			.Decode((value: string) => Number(value.replace(/^n:/, '')))
+			.Encode((value: number) => `n:${value}`)
+		const app = new Elysia({ experimental: { validationPlan } })
+			.ws('/ws', {
+				query: t.Object({ value: Coded }),
+				message({ ws, query }: any) {
+					ws.send(`${typeof query.value}:${query.value}`)
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!, '/ws?value=n:42')
+		await wsOpen(ws)
+		const got = wsMessage(ws)
+		ws.send('ping')
+		expect((await got).data).toBe('number:42')
+		await wsClosed(ws)
+		app.stop()
+	})
+
+	it('query: validation plan preserves non-codec required and default semantics', async () => {
+		const app = new Elysia({ experimental: { validationPlan } })
+			.ws('/ws', {
+				query: t.Object({
+					name: t.String(),
+					mode: t.Optional(t.String({ default: 'safe' }))
+				}),
+				message({ ws, query }: any) {
+					ws.send(`${query.name}:${query.mode}`)
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!, '/ws?name=elysia')
+		await wsOpen(ws)
+		const got = wsMessage(ws)
+		ws.send('ping')
+		expect((await got).data).toBe('elysia:undefined')
+		await wsClosed(ws)
+
+		const missing = await fetch(
+			`http://${app.server!.hostname}:${app.server!.port}/ws`,
+			{
+				headers: {
+					upgrade: 'websocket',
+					connection: 'Upgrade',
+					'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==',
+					'sec-websocket-version': '13'
+				}
+			}
+		)
+		expect(missing.status).toBe(422)
 		app.stop()
 	})
 

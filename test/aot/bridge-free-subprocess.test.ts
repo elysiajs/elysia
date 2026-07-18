@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
 import { Elysia, t } from '../../src'
+import { validationPlan } from '../../src/experimental/validation-plan'
 import { Validator } from '../../src/validator'
 import { Compiled } from '../../src/compile/aot'
 import {
@@ -46,12 +47,36 @@ function capture(schema: any) {
 	return captured.filter((c) => c.slot === 'body')
 }
 
-function writePayload(captured: unknown, schema: unknown, cases: unknown[]) {
+function captureQuery(schema: any) {
+	process.env.ELYSIA_AOT_BUILD = '1'
+	beginValidatorCapture()
+
+	const app = new Elysia({ experimental: { validationPlan } }).get(
+		PATH,
+		{ query: schema },
+		({ query }) => query
+	)
+	;(app as any).compile()
+
+	const captured = endValidatorCapture()
+	endHandlerCapture()
+	delete process.env.ELYSIA_AOT_BUILD
+
+	return captured.filter((c) => c.slot === 'query')
+}
+
+function writePayload(
+	captured: unknown,
+	schema: unknown,
+	cases: unknown[],
+	method = METHOD,
+	slot: 'body' | 'query' = 'body'
+) {
 	dir = mkdtempSync(join(tmpdir(), 'ely-bridge-free-'))
 	const file = join(dir, 'payload.json')
 	writeFileSync(
 		file,
-		JSON.stringify({ captured, schema, cases, method: METHOD, path: PATH })
+		JSON.stringify({ captured, schema, cases, method, path: PATH, slot })
 	)
 	return file
 }
@@ -144,5 +169,37 @@ describe('frozen validation without a TypeBox bridge', () => {
 		}
 		expect(result.liveValidatorThrew).toBe(true)
 		expect(result.message).toContain("Typebox module isn't initialized")
+	})
+
+	it('rebuilds an experimental query plan in an unwired process', () => {
+		const schema = t.Object({ id: t.Array(t.String()) })
+		const captured = captureQuery(schema)
+		const file = writePayload(
+			captured,
+			{
+				'~kind': 'Object',
+				type: 'object',
+				properties: {
+					id: {
+						'~kind': 'Array',
+						type: 'array',
+						items: { '~kind': 'String', type: 'string' }
+					}
+				},
+				required: ['id']
+			},
+			['id=a&id=b'],
+			'GET',
+			'query'
+		)
+
+		const { proc, parsed } = runChild(file)
+
+		expect(proc.status, proc.stderr).toBe(0)
+		expect(parsed.BRIDGE).toBe('unwired')
+		expect(parsed.RESULT).toEqual({
+			reconstructed: true,
+			results: [{ ok: true, value: { id: ['a', 'b'] } }]
+		})
 	})
 })

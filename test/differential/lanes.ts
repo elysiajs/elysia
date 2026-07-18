@@ -4,6 +4,7 @@
 import '../../src/compile/aot-capture' // installs captureImpl (side effect)
 import { Elysia, type AnyElysia } from '../../src'
 import { resumeEmit } from '../../src/experimental/resume'
+import { validationPlan } from '../../src/experimental/validation-plan'
 import { Compiled, type CompiledSnapshot } from '../../src/compile/aot'
 import {
 	snapshotCompiled,
@@ -64,6 +65,15 @@ export const flatFormDataFastPathHandle = handleLane(
 	'flat-formdata-fast-path-handle',
 	{
 		experimental: { flatFormDataFastPath: true }
+	}
+)
+export const validationPlanHandle = handleLane('validation-plan-handle', {
+	experimental: { validationPlan }
+})
+export const inferenceCandidateHandle = handleLane(
+	'inference-candidate-handle',
+	{
+		experimental: { inference: 'candidate' }
 	}
 )
 
@@ -143,6 +153,12 @@ export const precompileListen = listenLane('precompile-listen', {
 export const resumeListen = listenLane('resume-listen', {
 	experimental: { resumeEmit }
 })
+export const inferenceCandidateListen = listenLane(
+	'inference-candidate-listen',
+	{
+		experimental: { inference: 'candidate' }
+	}
+)
 export const nativeStaticOn = listenLane('native-static-on', {
 	nativeStaticResponse: true
 })
@@ -211,6 +227,23 @@ export const lanePairs: LanePair[] = [
 		id: 'jit-vs-precompile@handle',
 		oracle: jitHandle,
 		candidate: precompileHandle
+	},
+	{
+		id: 'jit-vs-validation-plan@handle',
+		oracle: jitHandle,
+		candidate: validationPlanHandle
+	},
+	{
+		id: 'inference-oracle-vs-candidate@handle',
+		oracle: jitHandle,
+		candidate: inferenceCandidateHandle,
+		requiresTag: 'inference'
+	},
+	{
+		id: 'inference-oracle-vs-candidate@listen',
+		oracle: jitListen,
+		candidate: inferenceCandidateListen,
+		requiresTag: 'inference'
 	},
 	{
 		id: 'jit-vs-precompile@listen',

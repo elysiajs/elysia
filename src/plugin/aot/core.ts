@@ -412,7 +412,7 @@ export const STUB_SOURCES: Record<
 				`export function isEmptyPipelineHook(hook){\n` +
 				`	if(!hook)return true\n` +
 				`	for(const key in hook){\n` +
-				`		if(key==='detail'||key==='tags')continue\n` +
+				`		if(key==='detail'||key==='tags'||key==='inference')continue\n` +
 				`		const value=hook[key]\n` +
 				`		if(value!==undefined&&value!==false&&(!Array.isArray(value)||value.length))return false\n` +
 				`	}\n` +
@@ -960,4 +960,3 @@ export const realPath = (path: string): string => {
 		return path
 	}
 }
-

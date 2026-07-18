@@ -6,12 +6,8 @@ import {
 } from '../compile/handler/frozen-validator'
 import { deriveEntryFn, nullObject, type DeriveEntry } from '../utils'
 import { frozenRootOf } from '../generation'
-import { parseQueryFromURL } from '../parse-query'
-import {
-	deriveModes,
-	getQueryParseChannels,
-	replaceDeriveContext
-} from '../compile/handler/utils'
+import { getQueryParseChannels, parseQueryFromURL } from '../parse-query'
+import { deriveModes, replaceDeriveContext } from '../compile/handler/utils'
 import {
 	composeRouteHook,
 	localMacroRoot,
@@ -46,6 +42,12 @@ import type {
 import type { InternalRoute, AppHook } from '../types'
 
 type AnyFn = (...args: any[]) => any
+
+const isThenable = (value: unknown): value is PromiseLike<unknown> =>
+	value !== null &&
+	(typeof value === 'object' || typeof value === 'function') &&
+	typeof (value as any).then === 'function'
+
 type Server = {
 	upgrade(request: Request, options?: { headers?: any; data?: any }): boolean
 }
@@ -375,11 +377,13 @@ export function buildWSRoute(
 		app
 	) ?? nullObject()) as AnyWSLocalHook
 
+	const frozenRoot = frozenRootOf(app)
 	let validators: RouteValidator<any>
 	try {
 		validators = new RouteValidator(hook as any, {
-			models: frozenRootOf(app)['~ext']?.models,
+			models: frozenRoot['~ext']?.models,
 			app,
+			validationPlan: frozenRoot['~config']?.experimental?.validationPlan,
 			aot: { method: 'WS', path: route[1] }
 		})
 	} catch (error) {
@@ -405,9 +409,13 @@ export function buildWSRoute(
 			responseValidator[Object.keys(responseValidator)[0] as any])
 		: undefined
 
-	const queryChannels = getQueryParseChannels(
-		(validators.query as any)?.schema
-	)
+	const queryPlan = !!frozenRoot['~config']?.experimental?.validationPlan
+		? validators.queryPlan
+		: undefined
+	const fusedQuery = queryPlan?.fused && !!(validators.query as any)?.hasCodec
+	const queryChannels = queryPlan
+		? undefined
+		: getQueryParseChannels((validators.query as any)?.schema)
 	const queryArray = queryChannels?.array
 	const queryObject = queryChannels?.object
 
@@ -600,8 +608,8 @@ export function buildWSRoute(
 				return onMessageValidationError(ws, error)
 			}
 
-			if (decoded instanceof Promise)
-				return decoded.then(
+			if (isThenable(decoded))
+				return Promise.resolve(decoded).then(
 					(m) => runMessage(ws, m),
 					(error) => onMessageValidationError(ws, error)
 				)
@@ -743,25 +751,44 @@ export function buildWSRoute(
 					context.params ?? nullObject(),
 					'params'
 				)
-				if (r instanceof Promise) r = await r
+				if (isThenable(r)) r = await r
 				context.params = r as any
 			}
 			if (validators.query) {
 				const url = request.url
-				const query = parseQueryFromURL(
-					url,
-					(context as any).qi ?? url.indexOf('?'),
-					queryArray,
-					queryObject
-				)
+					const query = fusedQuery
+						? queryPlan.fromURL!(
+								url,
+								(context as any).qi ?? url.indexOf('?')
+							)
+					: queryPlan
+						? queryPlan.parse(
+								url,
+								(context as any).qi ?? url.indexOf('?'),
+								queryPlan.array,
+								queryPlan.object
+							)
+						: parseQueryFromURL(
+								url,
+								(context as any).qi ?? url.indexOf('?'),
+								queryArray,
+								queryObject
+							)
 
-				let r = validateUpgradeChannel(
-					validators.query as any,
-					query,
-					'query'
-				)
-				if (r instanceof Promise) r = await r
-				;(context as any).query = r
+					if (fusedQuery)
+						(context as any).query = queryPlan.validate!(
+							query,
+							validators.query as any
+						)
+					else {
+					let r = validateUpgradeChannel(
+						validators.query as any,
+						query,
+						'query'
+					)
+					if (isThenable(r)) r = await r
+					;(context as any).query = r
+				}
 			}
 
 			if (validators.headers) {
@@ -774,7 +801,7 @@ export function buildWSRoute(
 					headers,
 					'headers'
 				)
-				if (r instanceof Promise) r = await r
+				if (isThenable(r)) r = await r
 				;(context as any).headers = r
 			}
 

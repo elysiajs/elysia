@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 import { Elysia, t } from '../../src'
+import { validationPlan } from '../../src/experimental/validation-plan'
 import { Validator } from '../../src/validator'
 import { Compiled } from '../../src/compile/aot'
 import {
@@ -7,11 +8,7 @@ import {
 	endHandlerCapture
 } from '../../src/compile/aot-capture'
 import { compileToSource } from '../../src/plugin/aot/source'
-import {
-	materialise,
-	materialiseHandlers,
-	registerManifest
-} from './_manifest'
+import { materialise, materialiseHandlers, registerManifest } from './_manifest'
 import { post, req } from '../utils'
 
 /** Captured handlers bind emitted factories without request-time evaluation. */
@@ -143,6 +140,39 @@ describe('AOT handler freeze', () => {
 		expect(() => (build() as any).compile()).toThrow(
 			/Fail to reconstruct build/
 		)
+	})
+
+	it('rebuilds the experimental query plan through the validator binding', async () => {
+		const buildQuery = () =>
+			new Elysia({ experimental: { validationPlan } })
+				.beforeHandle(() => {})
+				.get(
+					'/query',
+					{ query: t.Object({ id: t.Array(t.String()) }) },
+					({ query }) => query
+				)
+
+		;(buildQuery() as any).compile()
+		const handlers = endHandlerCapture()
+		const validators = endValidatorCapture()
+		const aliases = handlers[0]!.alias.split(',')
+
+		expect(aliases).toContain('va')
+		expect(aliases).not.toContain('qa')
+		expect(aliases).not.toContain('qo')
+		expect(aliases).not.toContain('pq')
+
+		registerManifest({
+			validators: materialise(validators),
+			handlers: materialiseHandlers(handlers)
+		})
+		delete process.env.ELYSIA_AOT_BUILD
+
+		const app = buildQuery()
+		;(app as any).compile()
+		const response = await app.handle(req('/query?id=a&id=b'))
+		expect(response.status).toBe(200)
+		await expect(response.json()).resolves.toEqual({ id: ['a', 'b'] })
 	})
 })
 

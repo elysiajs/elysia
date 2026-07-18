@@ -15,6 +15,7 @@ import {
 	type ValidatorSlot
 } from '../aot'
 
+import { createQueryPlan, type QueryPlan } from '../../parse-query'
 import type { AnyLocalHook, HTTPMethod } from '../../types'
 import type { AnyElysia } from '../../base'
 
@@ -425,6 +426,7 @@ interface FrozenRouteValidatorShape {
 	body?: FrozenSlotValidator
 	headers?: FrozenSlotValidator
 	query?: FrozenSlotValidator
+	queryPlan?: QueryPlan
 	params?: FrozenSlotValidator
 	cookie?: FrozenSlotValidator
 	response?: Record<number, FrozenSlotValidator>
@@ -505,6 +507,9 @@ export function buildFrozenRouteValidator(
 
 		out[slot] = new FrozenSlotValidator(frozen, coerced, schema, normalize)
 	}
+
+	if (out.query && !!frozenRoot['~config']?.experimental?.validationPlan)
+		out.queryPlan = createQueryPlan((out.query as any).schema, out.query)
 
 	const response = hook?.response
 	if (response) {

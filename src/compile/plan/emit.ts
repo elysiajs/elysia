@@ -8,25 +8,19 @@ import { ParseError, ElysiaStatus } from '../../error'
 import {
 	cloneResponse,
 	emptyResponse,
-	getQueryParseChannels,
-	hasRequestBody,
 	mapAfterResponse,
 	deriveModes,
 	extractDeriveKeys,
 	replaceDeriveContext
 } from '../handler/utils'
-import {
-	materializeSetHeaders,
-	normalizeContentType,
-	tee
-} from '../../adapter/utils'
+import { materializeSetHeaders, tee } from '../../adapter/utils'
 import { parseCookieRawSync, buildCookieJar } from '../../cookie/utils'
 import { hasHeaderShorthand } from '../../universal/constants'
-import { parseQueryFromURL } from '../../parse-query'
+import { getQueryParseChannels, parseQueryFromURL } from '../../parse-query'
 import { finalizeRouteError, forwardError } from '../../handler/utils'
 import { Capture } from '../aot'
 import { JITProbe } from '../jit-probe'
-import { schemaMediaKind } from '../handler/jit'
+import { emitBodyParse } from '../handler/jit'
 
 import type { RouteCompileState } from '../handler/descriptor'
 import { hookArray, type PlanSegment, type RoutePlan } from './plan'
@@ -116,6 +110,15 @@ export function emitResume(input: EmitInput): CompiledHandler {
 		compat && hasLifecycleHook ? abortCheck() : ''
 
 	const hasHeaders = plan.needsHeaders
+	const fusedQuery = !!(
+		root['~config']?.experimental?.validationPlan &&
+		vali?.queryPlan?.fused &&
+		!d.hasBody &&
+		!vali?.body &&
+		!vali?.headers &&
+		!vali?.params &&
+		!hook?.transform?.length
+	)
 	const t = plan.tail
 	const hasAsyncResponseValidation =
 		t.hasResponseValidator && d.responseValiAsync
@@ -126,24 +129,36 @@ export function emitResume(input: EmitInput): CompiledHandler {
 		link(emptyResponse, 'emp')
 		prologue += `if(${abortExpr})return emp.clone()\n`
 	}
+	if (plan.needsRoute) prologue += `c.route=${JSON.stringify(plan.path)}\n`
 	if (plan.responseMode === 'set-with-default-headers' && d.inferenceSet) {
 		link(materializeSetHeaders, 'msh')
 		prologue += `msh(c.set)\n`
 	}
 
 	if (plan.needsQuery) {
-		const channels = getQueryParseChannels((vali?.query as any)?.schema)
-		let parseArgs = ''
-		if (channels?.array) {
-			link(channels.array, 'qa')
-			parseArgs = ',qa'
+		if (fusedQuery) {
+			link(vali, 'va')
+			prologue += `c.query=va.queryPlan.fromURL(c.request.url,c.qi)\n`
+		} else if (
+			root['~config']?.experimental?.validationPlan &&
+			vali?.queryPlan
+		) {
+			link(vali, 'va')
+			prologue += `c.query=va.queryPlan.parse(c.request.url,c.qi,va.queryPlan.array,va.queryPlan.object)\n`
+		} else {
+			const channels = getQueryParseChannels((vali?.query as any)?.schema)
+			let parseArgs = ''
+			if (channels?.array) {
+				link(channels.array, 'qa')
+				parseArgs = ',qa'
+			}
+			if (channels?.object) {
+				link(channels.object, 'qo')
+				parseArgs += `${channels.array ? '' : ',undefined'},qo`
+			}
+			link(parseQueryFromURL, 'pq')
+			prologue += `c.query=pq(c.request.url,c.qi${parseArgs})\n`
 		}
-		if (channels?.object) {
-			link(channels.object, 'qo')
-			parseArgs += `${channels.array ? '' : ',undefined'},qo`
-		}
-		link(parseQueryFromURL, 'pq')
-		prologue += `c.query=pq(c.request.url,c.qi${parseArgs})\n`
 	}
 
 	if (hasHeaders)
@@ -213,11 +228,12 @@ export function emitResume(input: EmitInput): CompiledHandler {
 
 		if (seg.kind === 'parse') {
 			const parseCode = emitBodyParse(
-				adapter,
-				hook,
+				adapter.parse,
+				hook?.parse,
 				vali?.body,
 				hasHeaders,
 				link,
+				undefined,
 				root['~config']?.experimental?.flatFormDataFastPath === true
 			)
 			const preserveParseStatus = seenKeys.has('es')
@@ -258,6 +274,12 @@ export function emitResume(input: EmitInput): CompiledHandler {
 		if (seg.kind.startsWith('validate:')) {
 			const slot = (seg.link as any).slot as string
 			link(vali!, 'va')
+			if (slot === 'query' && fusedQuery) {
+				steps.push({
+					code: `c.query=va.queryPlan.validate(c.query,va.query)\n`
+				})
+				continue
+			}
 			if (seg.asyncClass === 'async') {
 				steps.push({
 					suspend: {
@@ -618,154 +640,6 @@ function emitResponseValidation(
 				abortCheck
 		}
 	})
-}
-
-// body parser
-function emitBodyParse(
-	adapter: ElysiaAdapter,
-	hook: AnyLocalHook | undefined,
-	bodyVali: unknown,
-	hasHeaders: boolean,
-	link: (v: unknown, key: string) => string,
-	flatFormDataFastPath = false
-) {
-	let parsers = hook?.parse as any
-	const parse = adapter.parse
-
-	if (parsers && typeof parsers === 'function') parsers = [parsers]
-
-	if (
-		typeof parsers === 'string' ||
-		(parsers?.length === 1 && typeof parsers[0] === 'string')
-	) {
-		if (parsers.length === 1) parsers = parsers[0]
-		return builtinParser(parse, parsers as string, link, flatFormDataFastPath)
-	}
-
-	let hasFn = false
-	if (parsers)
-		for (let i = 0; i < parsers.length; i++)
-			if (typeof parsers[i] === 'function') {
-				hasFn = true
-				break
-			}
-
-	// Media-kind guard (mirrors jit.ts `parse`): a strongly-typed body schema
-	// (object/array=1, scalar=2, file=3) rejects an incompatible content-type with
-	// a 415 instead of proceeding to parse+422. Only applies when there is no
-	// custom function parser.
-	const bodyKind = hasFn
-		? undefined
-		: schemaMediaKind((bodyVali as any)?.schema)
-
-	let code =
-		`let ct=((${hasHeaders ? "c.headers['content-type']" : "c.request.headers.get('content-type')"})||'')\n` +
-		'let cti=ct.indexOf(";")\n' +
-		'if(cti!==-1)ct=ct.slice(0,cti)\n' +
-		(hasFn ? 'c.contentType=ct\n' : '')
-
-	let hasType = false
-	if (parsers)
-		for (let i = 0; i < parsers.length; i++) {
-			const parser = parsers[i]
-			if (typeof parser === 'function') {
-				link(0, '')
-				if (i) code += 'if(!hasBody){'
-				code += isAsyncFunction(parser as Function)
-					? `c.body=await ho.parse[${i}](c,ct)\n`
-					: `_bp=ho.parse[${i}](c,ct)\n` +
-						`if(_bp instanceof Promise)_bp=await _bp\n` +
-						`c.body=_bp\n`
-				code += 'hasBody=c.body!==undefined\n'
-
-				if (i) code += '}\n'
-			} else {
-				hasType = true
-				if (i) code += 'if(!hasBody){\n'
-				code += builtinParser(
-					parse,
-					parser as string,
-					link,
-					flatFormDataFastPath
-				)
-				if (i) code += '}\n'
-				break
-			}
-		}
-
-	if (!hasType) {
-		const guard = bodyVali ? 'ct' : 'ct&&hb(c.request)'
-		const mediaGuard =
-			bodyKind === 1
-				? "cj||ce==='application/x-www-form-urlencoded'||ce==='multipart/form-data'"
-				: bodyKind === 2
-					? "cj||(ce.charCodeAt(0)===116&&ce.startsWith('text/'))"
-					: bodyKind === 3
-						? "ce==='multipart/form-data'||ce==='application/octet-stream'"
-						: undefined
-
-		code +=
-			'let ce=nc(ct)\n' +
-			"let cj=(ce.charCodeAt(12)===106&&ce==='application/json')||ce.endsWith('+json')\n"
-
-		link(normalizeContentType, 'nc')
-
-		if (mediaGuard) {
-			code += `if(ct&&!(${mediaGuard}))throw new es(415,'Unsupported Media Type')\n`
-			link(ElysiaStatus, 'es')
-		}
-
-		code += hasFn
-			? `if(!hasBody&&${guard}){c.body=cj?await pj(c):await pd(c,ce,true${flatFormDataFastPath ? ',true' : ''})\n}\n`
-			: `if(${guard}){c.body=cj?await pj(c):await pd(c,ce,true${flatFormDataFastPath ? ',true' : ''})\n}\n`
-
-		if (!bodyVali) link(hasRequestBody, 'hb')
-
-		link(parse.json, 'pj')
-		link(parse.default, 'pd')
-	}
-
-	return hasFn ? 'let hasBody=false,_bp\n' + code : code
-}
-
-function builtinParser(
-	adapter: ElysiaAdapter['parse'],
-	parser: string,
-	link: (v: unknown, key: string) => string,
-	flatFormDataFastPath = false
-): string {
-	switch (parser) {
-		case 'formdata':
-		case 'multipart/form-data':
-			link(adapter.formData, 'pf')
-			return `c.body=await pf(c${flatFormDataFastPath ? ',true' : ''})\n`
-
-		case 'json':
-		case 'application/json':
-			link(adapter.json, 'pj')
-			return 'c.body=await pj(c)\n'
-
-		case 'urlencoded':
-		case 'application/x-www-form-urlencoded':
-			link(adapter.urlencoded, 'pu')
-			return 'c.body=await pu(c)\n'
-
-		case 'arrayBuffer':
-		case 'application/octet-stream':
-			link(adapter.arrayBuffer, 'pa')
-			return 'c.body=await pa(c)\n'
-
-		case 'text':
-		case 'text/plain':
-			link(adapter.text, 'pt')
-			return 'c.body=await pt(c)\n'
-
-		case 'none':
-			return ''
-
-		default:
-			throw new Error(`Unsupported content type: ${parser}`)
-	}
 }
 
 function buildSyncAfterResponse(finalMap: string, afterResponse: unknown) {

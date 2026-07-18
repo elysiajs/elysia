@@ -413,5 +413,455 @@
 		"status": "active",
 		"margin": 0,
 		"tolerance": 0
+	},
+	{
+		"fixture": "validation",
+		"metric": "route-scalar-query-p50-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired child-process blocks; median of 200 samples after 50 warmups; each sample averages 100 full app.handle scalar query routes including URL parsing, coercion, validation, and response mapping",
+		"owner": "N+1-query",
+		"status": "active",
+		"margin": 0.12
+	},
+	{
+		"fixture": "validation",
+		"metric": "route-repeated-query-p50-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired child-process blocks; median of 200 samples after 50 warmups; each sample averages 100 full app.handle scalar query routes with repeated numeric keys and last-value-wins semantics",
+		"owner": "N+1-query",
+		"status": "active",
+		"margin": 0.08
+	},
+	{
+		"fixture": "validation",
+		"metric": "route-invalid-query-p50-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired child-process blocks; median of 200 samples after 50 warmups; each sample averages 100 full app.handle scalar query routes that reject an invalid number and materialize the HTTP 422 response",
+		"owner": "N+1-query",
+		"status": "active",
+		"margin": 0.1
+	},
+	{
+		"fixture": "validation",
+		"metric": "query-plan-construction-p50-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired child-process blocks; median of 200 unique four-scalar query RouteValidator constructions after 50 unique warmups; candidate fusion compared with the same ValidationPlan route path with fusion disabled",
+		"owner": "N+1-query",
+		"status": "active",
+		"margin": 0.18
+	},
+	{
+		"fixture": "validation",
+		"metric": "query-plan-retained-current-bytes-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired child processes; 1000 unique fusion-eligible four-scalar query RouteValidators retained across full GC; candidate compared with the same ValidationPlan route path with query fusion disabled",
+		"owner": "N+1-query",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "query-plan-retained-heap-size-bytes-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired child processes; 1000 unique fusion-eligible four-scalar query RouteValidators retained across full GC; JSC heap delta per validator",
+		"owner": "N+1-query",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "query-plan-retained-extra-memory-bytes-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired child processes; 1000 unique fusion-eligible four-scalar query RouteValidators retained across full GC; JSC extra-memory delta per validator",
+		"owner": "N+1-query",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "query-plan-retained-rss-bytes-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired child processes; 1000 unique fusion-eligible four-scalar query RouteValidators retained across full GC; process RSS delta per validator",
+		"owner": "N+1-query",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "query-plan-post-error-retained-current-bytes-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired child processes; retained-current increase after one invalid query per eligible validator materializes the unchanged oracle fallback",
+		"owner": "N+1-query",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "query-plan-post-error-retained-heap-size-bytes-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired child processes; JSC heap increase after one invalid query per eligible validator materializes the unchanged oracle fallback",
+		"owner": "N+1-query",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "query-plan-post-error-retained-extra-memory-bytes-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired child processes; JSC extra-memory increase after one invalid query per eligible validator materializes the unchanged oracle fallback",
+		"owner": "N+1-query",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "scalar-query-p50-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired child-process blocks; median of 200 samples after 50 warmups; each sample averages 100 current-oracle scalar query FromSync calls with emitted checksum",
+		"owner": "N+1",
+		"status": "active",
+		"margin": 0.1
+	},
+	{
+		"fixture": "validation",
+		"metric": "invalid-query-p50-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired child-process blocks; median of 200 samples after 50 warmups; each sample averages 100 invalid scalar query FromSync calls and materializes the lazy error list",
+		"owner": "N+1",
+		"status": "pending-floor",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "object-string-p50-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired child-process blocks; median of 200 samples after 50 warmups; each sample averages 100 ObjectString string-branch FromSync calls with emitted checksum",
+		"owner": "N+1",
+		"status": "active",
+		"margin": 0.1
+	},
+	{
+		"fixture": "validation",
+		"metric": "array-string-p50-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired child-process blocks; median of 200 samples after 50 warmups; each sample averages 100 ArrayString string-branch FromSync calls with emitted checksum",
+		"owner": "N+1",
+		"status": "active",
+		"margin": 0.16
+	},
+	{
+		"fixture": "validation",
+		"metric": "json-body-p50-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired child-process blocks; median of 200 samples after 50 warmups; each sample averages 100 pre-parsed JSON body FromSync calls with exact normalization and emitted checksum",
+		"owner": "N+1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "validator-construction-p50-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired child-process blocks; median of 200 samples after 50 warmups; each sample constructs one query validator from a distinct prebuilt schema; final validator result is checksummed",
+		"owner": "N+1",
+		"status": "active",
+		"margin": 0.2
+	},
+	{
+		"fixture": "validation",
+		"metric": "pathological-inference-p50-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired child-process blocks; median of 5 fresh-handler samples after 1 warmup; each handler source is exactly 31 KiB and inferred query access is checksummed",
+		"owner": "N+1",
+		"status": "active",
+		"margin": 0.55
+	},
+	{
+		"fixture": "validation",
+		"metric": "construction-highwater-current-bytes-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired clean child processes; 1000 distinct prebuilt schemas; bun:jsc current sampled every 32 constructed and warmed validators; peak delta from the full-GC pre-construction snapshot divided by validator count",
+		"owner": "N+1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "retained-current-bytes-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired clean child processes; 1000 distinct prebuilt schemas; full GC before construction and after all validators are retained and warmed; bun:jsc current delta divided by validator count",
+		"owner": "N+1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "retained-heap-size-bytes-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired clean child processes; 1000 distinct prebuilt schemas; full GC before construction and after all validators are retained and warmed; bun:jsc heapSize delta divided by validator count",
+		"owner": "N+1",
+		"status": "active",
+		"margin": 0.006
+	},
+	{
+		"fixture": "validation",
+		"metric": "retained-extra-memory-bytes-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired clean child processes; 1000 distinct prebuilt schemas; full GC before construction and after all validators are retained and warmed; bun:jsc extraMemorySize delta divided by validator count",
+		"owner": "N+1",
+		"status": "active",
+		"margin": 0.16
+	},
+	{
+		"fixture": "validation",
+		"metric": "retained-rss-bytes-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired clean child processes; 1000 distinct prebuilt schemas; full GC before construction and after all validators are retained and warmed; process RSS delta divided by validator count",
+		"owner": "N+1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "query-post-error-retained-current-bytes-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired clean child processes; incremental post-GC bun:jsc current after 1000 retained distinct query validators each reject once and materialize lazy errors",
+		"owner": "N+1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "query-post-error-retained-heap-size-bytes-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired clean child processes; incremental post-GC bun:jsc heapSize after 1000 retained distinct query validators each reject once and materialize lazy errors",
+		"owner": "N+1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "query-post-error-retained-extra-memory-bytes-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired clean child processes; incremental post-GC bun:jsc extraMemorySize after 1000 retained distinct query validators each reject once and materialize lazy errors",
+		"owner": "N+1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "query-post-error-retained-rss-bytes-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired clean child processes; incremental process RSS after 1000 retained distinct query validators each reject once and materialize lazy errors, divided by validator count",
+		"owner": "N+1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "query-post-error-function-executables-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired clean child processes; incremental FunctionExecutable heap-object delta after 1000 retained distinct query validators each reject once and materialize lazy errors",
+		"owner": "N+1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "query-post-error-function-code-blocks-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired clean child processes; incremental FunctionCodeBlock heap-object delta after 1000 retained distinct query validators each reject once and materialize lazy errors",
+		"owner": "N+1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "query-post-error-unlinked-function-executables-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired clean child processes; incremental UnlinkedFunctionExecutable heap-object delta after 1000 retained distinct query validators each reject once and materialize lazy errors",
+		"owner": "N+1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "json-body-validator-construction-p50-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired child-process blocks; median of 200 samples after 50 warmups; each sample constructs one body validator from a distinct prebuilt schema and checksums the final normalized result",
+		"owner": "N+1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "json-body-construction-highwater-current-bytes-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired clean child processes; distinct prebuilt body schemas; bun:jsc current sampled every 32 constructed validators and at the phase boundary; peak delta divided by constructed validator count",
+		"owner": "N+1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "json-body-retained-current-bytes-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired clean child processes; 1000 distinct body schemas; full GC before construction and after all validators are retained and warmed; bun:jsc current delta divided by validator count",
+		"owner": "N+1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "json-body-retained-heap-size-bytes-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired clean child processes; 1000 distinct body schemas; full GC before construction and after all validators are retained and warmed; bun:jsc heapSize delta divided by validator count",
+		"owner": "N+1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "json-body-retained-extra-memory-bytes-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired clean child processes; 1000 distinct body schemas; full GC before construction and after all validators are retained and warmed; bun:jsc extraMemorySize delta divided by validator count",
+		"owner": "N+1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "json-body-retained-rss-bytes-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired clean child processes; 1000 distinct body schemas; full GC before construction and after all validators are retained and warmed; process RSS delta divided by validator count",
+		"owner": "N+1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "json-body-retained-function-executables-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired clean child processes; FunctionExecutable heap-object delta after 1000 distinct body validators are retained and warmed, divided by validator count",
+		"owner": "N+1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "json-body-retained-function-code-blocks-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired clean child processes; FunctionCodeBlock heap-object delta after 1000 distinct body validators are retained and warmed, divided by validator count",
+		"owner": "N+1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "json-body-retained-unlinked-function-executables-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired clean child processes; UnlinkedFunctionExecutable heap-object delta after 1000 distinct body validators are retained and warmed, divided by validator count",
+		"owner": "N+1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "json-body-post-error-retained-current-bytes-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired clean child processes; incremental post-GC bun:jsc current after every retained body validator rejects once and materializes lazy errors",
+		"owner": "N+1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "json-body-post-error-retained-heap-size-bytes-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired clean child processes; incremental post-GC bun:jsc heapSize after every retained body validator rejects once and materializes lazy errors",
+		"owner": "N+1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "json-body-post-error-retained-extra-memory-bytes-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired clean child processes; incremental post-GC bun:jsc extraMemorySize after every retained body validator rejects once and materializes lazy errors",
+		"owner": "N+1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "json-body-post-error-function-executables-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired clean child processes; incremental FunctionExecutable heap-object delta after every retained body validator rejects once and materializes lazy errors",
+		"owner": "N+1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "json-body-post-error-function-code-blocks-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired clean child processes; incremental FunctionCodeBlock heap-object delta after every retained body validator rejects once and materializes lazy errors",
+		"owner": "N+1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "validation",
+		"metric": "json-body-post-error-unlinked-function-executables-per-validator",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 randomized paired clean child processes; incremental UnlinkedFunctionExecutable heap-object delta after every retained body validator rejects once and materializes lazy errors",
+		"owner": "N+1",
+		"status": "report-only",
+		"margin": null
 	}
 ]

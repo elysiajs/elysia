@@ -56,6 +56,14 @@ describe('route descriptor', () => {
 			asyncCookieSign: false,
 			lazyCookieVerify: false,
 			inferenceSet: false,
+			inference: {
+				query: false,
+				headers: false,
+				body: false,
+				cookie: false,
+				set: false,
+				route: false
+			},
 			handlerIsAsync: false,
 			callHandlerSyncOnAsync: false,
 			syncErrorHook: false,

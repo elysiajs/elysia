@@ -53,16 +53,27 @@ export function schemaSome(
 	return false
 }
 
-export const schemaHasDangerousProperties = (schema: any) =>
-	schemaSome(schema, (node) => {
+export const schemaHasDangerousProperties = (schema: any) => {
+	const seen = new WeakSet<object>()
+	const visit = (node: any): boolean => schemaSome(node, test, seen)
+	const test = (node: any): boolean => {
 		const properties = node.properties
-		if (!properties) return false
+		if (properties)
+			for (const key of dangerousKeys)
+				if (Object.hasOwn(properties, key)) return true
 
-		for (const key of dangerousKeys)
-			if (Object.hasOwn(properties, key)) return true
+		for (const key of ['$defs', 'definitions']) {
+			const definitions = node[key]
+			if (definitions && typeof definitions === 'object')
+				for (const name of Object.keys(definitions))
+					if (visit(definitions[name])) return true
+		}
 
 		return false
-	})
+	}
+
+	return visit(schema)
+}
 
 export const schemaContainsRef = (node: any, seen = new WeakSet()) =>
 	schemaSome(node, (n) => !!n.$ref, seen)

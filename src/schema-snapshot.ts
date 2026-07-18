@@ -127,7 +127,11 @@ export function snapshotHookSchemas<T extends Record<string, any> | undefined>(
 	// detect whether anything needs snapshotting without mutating the original
 	let needsCopy = false
 
-	if (schemaSlots.some((slot) => hook[slot] != null) || hook.response != null)
+	if (
+		hook.inference != null ||
+		schemaSlots.some((slot) => hook[slot] != null) ||
+		hook.response != null
+	)
 		needsCopy = true
 
 	const schemas = hook.schemas
@@ -149,6 +153,7 @@ export function snapshotHookSchemas<T extends Record<string, any> | undefined>(
 		Object.create(Object.getPrototypeOf(hook)),
 		hook
 	)
+	if (hook.inference) copy.inference = { ...hook.inference }
 
 	snapshotSlots(copy)
 

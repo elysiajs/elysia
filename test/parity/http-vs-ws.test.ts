@@ -210,7 +210,7 @@ describe('HTTP and WebSocket lifecycle', () => {
 		expect(frames).toEqual(['5'])
 	})
 
-	it('Date response bodies match even though only HTTP applies response encoding', async () => {
+	it('Date response bodies match after HTTP and WebSocket response encoding', async () => {
 		const iso = '2020-01-01T00:00:00.000Z'
 
 		const httpApp = new Elysia().get(
@@ -238,7 +238,7 @@ describe('HTTP and WebSocket lifecycle', () => {
 		expect(frames).toEqual([`{"when":"${iso}"}`])
 	})
 
-	it('encodes response codecs on HTTP but validates raw values on WebSocket', async () => {
+	it('encodes response codecs identically on HTTP and WebSocket', async () => {
 		const httpApp = new Elysia().get(
 			'/c',
 			{ response: t.Object({ v: Coded }) },
@@ -259,9 +259,7 @@ describe('HTTP and WebSocket lifecycle', () => {
 		const { frames } = await wsProbe(wsApp.server!, '/c', 'go')
 		wsApp.stop()
 
-		expect(frames).toHaveLength(1)
-		expect(frames[0]).not.toBe('{"v":"n:42"}')
-		expect(frames[0]).toContain('must be string')
+		expect(frames).toEqual(['{"v":"n:42"}'])
 	})
 
 	it('uses afterHandle return values on HTTP but not WebSocket', async () => {

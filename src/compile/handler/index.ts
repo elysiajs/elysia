@@ -557,6 +557,12 @@ export function composeRouteHook(
 			hook = hook ? mergeHook(hook, locals, false, true) : (locals as any)
 
 		hook ??= nullObject() as any
+		if (compactPrefix.inference)
+			(hook as any).inference = Object.assign(
+				{},
+				compactPrefix.inference,
+				(hook as any).inference
+			)
 		;(hook as any)['~beforeHandlePrefix'] = compactPrefix
 		return hook
 	}

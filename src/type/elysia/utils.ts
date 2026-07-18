@@ -3,14 +3,14 @@ import type { Static, TSchema } from 'typebox'
 
 import { fnv1a } from '../../utils'
 import type { BaseSchema } from '../types'
-import type { ELYSIA_TYPES } from '../constants'
+import { ELYSIA_BUILTIN, ELYSIA_TYPES } from '../constants'
 
 export function copyNonEnumerable(
 	src: object,
 	target: object,
 	skipKey?: string
 ) {
-	for (const key of Object.getOwnPropertyNames(src)) {
+	for (const key of Reflect.ownKeys(src)) {
 		const desc = Object.getOwnPropertyDescriptor(src, key)
 		if (!desc || desc.enumerable || key === skipKey) continue
 
@@ -40,6 +40,31 @@ export function elyType<T extends TSchema>(
 	) as T
 
 	copyNonEnumerable(schema, target, '~elyTyp')
+
+	if (
+		name === ELYSIA_TYPES.Numeric ||
+		name === ELYSIA_TYPES.Integer ||
+		name === ELYSIA_TYPES.BooleanString ||
+		name === ELYSIA_TYPES.ObjectString ||
+		name === ELYSIA_TYPES.ArrayString
+	) {
+		const first = (schema as any).anyOf?.[0]
+		const second = (schema as any).anyOf?.[1]
+		const firstRefine = first?.['~refine']
+		const secondRefine = second?.['~refine']
+		const codec = second?.['~codec']
+		Object.defineProperty(target, ELYSIA_BUILTIN, {
+			value: Object.freeze({
+				type: name,
+				firstCheck: firstRefine?.[0]?.check,
+				firstError: firstRefine?.[0]?.error,
+				check: secondRefine?.[0]?.check,
+				error: secondRefine?.[0]?.error,
+				decode: codec?.decode,
+				encode: codec?.encode
+			})
+		})
+	}
 
 	return target
 }

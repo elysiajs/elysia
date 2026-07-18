@@ -95,3 +95,21 @@ The default-off C4b prototype uses `experimental.flatFormDataFastPath`. D1 enabl
 for the candidate with `D1_EXPERIMENTAL_FLAT_FORMDATA_FAST_PATH=1`. The `formdata` fixture
 records both isolated flat conversion and an in-process multipart handler; duplicate or
 nested keys remain on the generic converter.
+
+The N+1 `validation` fixture records the current validator oracle for scalar query coercion,
+materialized invalid-query errors, ObjectString, ArrayString, JSON-body normalization,
+distinct-schema construction, and a 31 KiB pathological Sucrose handler. It separately records
+construction high-water and post-GC retained memory per validator. For 1000 retained distinct
+query validators it also records the incremental current, heap, extra, RSS, and executable/code
+memory after every validator rejects once and its lazy errors are read. Owner-scoped A/A runs
+request the candidate lane on both sides; gates compare `D1_VALIDATION_LANE=oracle` with
+`candidate`. The lane value is retained in each raw artifact's variant environment and the
+fixture refuses a descriptor/output mismatch. Invalid-query latency remains `pending-floor`;
+post-error memory is report-only until repeated pinned-machine evidence justifies active margins.
+The query-fusion owner separately gates full-route invalid-query latency so the oracle fallback
+cannot regress while valid scalar and repeated-key routes improve.
+It also gates unique eligible RouteValidator construction against the same plan with fusion
+disabled; retention remains report-only because the comparison is too noisy for promotion.
+For non-positive report-only baselines, `observedDelta` and its raw-unit CI bootstrap paired block
+differences; the separately reported baseline and candidate values are marginal medians and need
+not subtract to the paired delta.

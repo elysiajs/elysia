@@ -15,10 +15,7 @@ import { requestId } from '../utils'
 function pickValidator(
 	validators:
 		| {
-				[status: number]: {
-					Check(v: unknown): boolean
-					Errors(v: unknown): any[]
-				}
+				[status: number]: WSValidatorLike
 		  }
 		| undefined,
 	defaultValidator: WSValidatorLike | undefined,
@@ -160,21 +157,21 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		return this.raw.data
 	}
 
-	#prepare(data: unknown): string | null {
+	#prepare(data: unknown, value: unknown): string | null {
 		if (data === undefined) return null
 
 		if (data instanceof ElysiaStatus)
 			return JSON.stringify({
 				status: data.status,
-				error: data.response
+				error: value
 			})
 
-		if (typeof data === 'object') return JSON.stringify(data)
+		if (typeof value === 'object') return JSON.stringify(value)
 
-		return data as string
+		return value as string
 	}
 
-	#validatedOrError(data: unknown): string | undefined {
+	#encodeOrError(data: unknown): { value: unknown } | { error: string } {
 		const connectionData = this.raw.data
 		const v = pickValidator(
 			connectionData?.validator as any,
@@ -182,11 +179,36 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 			data
 		)
 
-		if (!v) return
 		const value = data instanceof ElysiaStatus ? data.response : data
+		if (!v) return { value }
+		if (!v.EncodeFrom)
+			return v.Check(value)
+				? { value }
+				: {
+						error: new ValidationError(
+							'message',
+							value,
+							v.Errors(value)
+						).message
+					}
 
-		if (v.Check(value)) return
-		return new ValidationError('message', value, v.Errors(value)).message
+		try {
+			const encoded = v.EncodeFrom(value, 'message')
+			if (typeof (encoded as any)?.then === 'function') {
+				Promise.resolve(encoded).catch(() => { })
+
+				throw new Error(
+					'[Elysia] An asynchronous Standard Schema was used where only synchronous validation is supported.'
+				)
+			}
+
+			return { value: encoded }
+		} catch (error) {
+			if (error instanceof ValidationError)
+				return { error: error.message }
+
+			throw error
+		}
 	}
 
 	#send(
@@ -197,12 +219,20 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		if (data instanceof ArrayBuffer || ArrayBuffer.isView(data))
 			return this.raw.send(data as unknown as BufferSource, compress)
 
-		// validate before stringifying (matches #ping/#pong), an invalid
-		// payload must not pay the JSON.stringify
-		const err = this.#validatedOrError(data)
-		if (err !== undefined) return this.raw.send(err)
+		const result = this.#encodeOrError(data)
 
-		return this.raw.send(this.#prepare(data)!, compress)
+		if ('error' in result) return this.raw.send(result.error)
+		if (
+			!(data instanceof ElysiaStatus) &&
+			(result.value instanceof ArrayBuffer ||
+				ArrayBuffer.isView(result.value))
+		)
+			return this.raw.send(
+				result.value as unknown as BufferSource,
+				compress
+			)
+
+		return this.raw.send(this.#prepare(data, result.value)!, compress)
 	}
 
 	#ping(
@@ -212,10 +242,16 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		if (data instanceof ArrayBuffer || ArrayBuffer.isView(data))
 			return this.raw.ping(data as unknown as BufferSource)
 
-		const err = this.#validatedOrError(data)
-		if (err !== undefined) return this.raw.send(err)
+		const result = this.#encodeOrError(data)
+		if ('error' in result) return this.raw.send(result.error)
+		if (
+			!(data instanceof ElysiaStatus) &&
+			(result.value instanceof ArrayBuffer ||
+				ArrayBuffer.isView(result.value))
+		)
+			return this.raw.ping(result.value as unknown as BufferSource)
 
-		return this.raw.ping(this.#prepare(data)!)
+		return this.raw.ping(this.#prepare(data, result.value)!)
 	}
 
 	#pong(
@@ -225,10 +261,16 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		if (data instanceof ArrayBuffer || ArrayBuffer.isView(data))
 			return this.raw.pong(data as unknown as BufferSource)
 
-		const err = this.#validatedOrError(data)
-		if (err !== undefined) return this.raw.send(err)
+		const result = this.#encodeOrError(data)
+		if ('error' in result) return this.raw.send(result.error)
+		if (
+			!(data instanceof ElysiaStatus) &&
+			(result.value instanceof ArrayBuffer ||
+				ArrayBuffer.isView(result.value))
+		)
+			return this.raw.pong(result.value as unknown as BufferSource)
 
-		return this.raw.pong(this.#prepare(data)!)
+		return this.raw.pong(this.#prepare(data, result.value)!)
 	}
 
 	#publish(
@@ -244,11 +286,24 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 				compress
 			)
 
-		// validate before stringifying (matches #ping/#pong)
-		const err = this.#validatedOrError(data)
-		if (err !== undefined) return this.raw.send(err)
+		const result = this.#encodeOrError(data)
+		if ('error' in result) return this.raw.send(result.error)
+		if (
+			!(data instanceof ElysiaStatus) &&
+			(result.value instanceof ArrayBuffer ||
+				ArrayBuffer.isView(result.value))
+		)
+			return this.raw.publish(
+				topic,
+				result.value as unknown as BufferSource,
+				compress
+			)
 
-		return this.raw.publish(topic, this.#prepare(data)!, compress)
+		return this.raw.publish(
+			topic,
+			this.#prepare(data, result.value)!,
+			compress
+		)
 	}
 
 	#close(code?: number, reason?: string): void {

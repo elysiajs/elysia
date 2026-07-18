@@ -21,7 +21,11 @@ export function createAotFingerprint(): AotFingerprint {
 }
 
 export interface CompilerSession {
-	readonly sucroseCache: Map<number, { content: string; inference: unknown }>
+	readonly sucroseCache: Map<
+		string,
+		{ content: string; inference: unknown; bytes: number }
+	>
+	sucroseCacheBytes: number
 	capture?: Map<string, CapturedValidator>
 	handlerCapture?: Map<string, CapturedHandler>
 	app?: object
@@ -32,7 +36,8 @@ export interface CompilerSession {
 let activeSession: CompilerSession | undefined
 
 const newCompilerSession = (): CompilerSession => ({
-	sucroseCache: new Map()
+	sucroseCache: new Map(),
+	sucroseCacheBytes: 0
 })
 
 export function beginCompilerSession(app: object): CompilerSession {
@@ -65,6 +70,7 @@ export function endCompilerSession(
 	if (session.external && (!failed || session.explicitCapture)) return
 
 	session.sucroseCache.clear()
+	session.sucroseCacheBytes = 0
 	session.capture = undefined
 	session.handlerCapture = undefined
 	if (activeSession === session) activeSession = undefined

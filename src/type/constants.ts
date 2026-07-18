@@ -19,6 +19,19 @@ export const ELYSIA_TYPES = {
 
 export type ELYSIA_TYPES = typeof ELYSIA_TYPES
 
+/** @internal */
+export const ELYSIA_BUILTIN = Symbol('elysia.builtin')
+/** @internal */
+export const VALIDATION_PLAN_QUERY = Symbol('elysia.validationPlan.query')
+/** @internal */
+export const VALIDATION_PLAN_FUSED_QUERY = Symbol(
+	'elysia.validationPlan.fusedQuery'
+)
+/** @internal */
+export const VALIDATION_PLAN_BUILTIN = Symbol('elysia.validationPlan.builtin')
+/** @internal */
+export const VALIDATION_PLAN_ORACLE = Symbol('elysia.validationPlan.oracle')
+
 export const primitiveElysiaTypes = new Set([
 	ELYSIA_TYPES.Numeric,
 	ELYSIA_TYPES.Integer,

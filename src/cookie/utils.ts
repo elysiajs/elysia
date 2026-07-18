@@ -18,7 +18,6 @@ import {
 	hasSyncHmac,
 	signCookieSyncImpl,
 	signCookie,
-	signCookieSync,
 	unsignWithSecrets,
 	unsignWithSecretsSync,
 	maybeJsonDecode,
@@ -275,18 +274,7 @@ export function signCookieValues(
 	return signPending(pending)
 }
 
-export function signCookieValuesSync(
-	cookies: Context['set']['cookie'] | undefined,
-	config: CompiledCookieConfig
-) {
-	const pending = collectSignPending(cookies, config)
-	if (!pending) return
-
-	for (let i = 0; i < pending.length; i++) {
-		const [property, value, secret] = pending[i]!
-		property.value = signCookieSync(value, secret)
-	}
-}
+export const signCookieValuesSync = signCookieValues
 
 async function signPending(
 	pending: [property: BaseCookie, value: string, secret: string][]

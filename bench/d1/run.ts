@@ -21,8 +21,10 @@ import type {
 	VariantDescriptor,
 	VariantSide
 } from './schema'
+import { metricUnit, recordsAaFloor } from './schema'
 import {
 	bootstrapRelativeMedianDelta,
+	compareReportOnlyMetric,
 	compareMetric,
 	lowerMedian,
 	percentile,
@@ -50,20 +52,21 @@ const fixtureIds = [
 	'formdata',
 	'compile-memory',
 	'retained',
+	'validation',
 	'executables',
 	'native-table'
 ] as const
 
 type FixtureId = (typeof fixtureIds)[number]
 type ChildOutput = Record<string, any>
-const leafPerfOwners = new Set(['C1', 'C4a', 'C4b', 'C4d'])
+const leafPerfOwners = new Set(['C1', 'C4a', 'C4b', 'C4d', 'N+1', 'N+1-query'])
 const historicalBaselineByOwner: Record<string, string> = {
 	C4a: '340322120836100ea15f67d6f6b5708e0945d1db'
 }
 const historicalCandidateByOwner: Record<string, string> = {
 	C4a: 'e8c51e63407ea3f59479db14500f04cca742ba2b'
 }
-const currentBaselineOwners = new Set(['C1'])
+const currentBaselineOwners = new Set(['C1', 'N+1', 'N+1-query'])
 
 function selectedOwners() {
 	const ownerArgument = process.argv
@@ -82,8 +85,18 @@ function leafPerfEnvironment(owners: Set<string> | undefined) {
 		environment.D1_EXPERIMENTAL_FLAT_FORMDATA_FAST_PATH = '1'
 	if (owners?.has('C4d'))
 		environment.ELYSIA_EXPERIMENTAL_BUN_CRYPTO_HASHER = '1'
+	if (owners?.has('N+1') || owners?.has('N+1-query'))
+		environment.D1_VALIDATION_LANE = 'candidate'
 
 	return environment
+}
+
+function currentBaselineEnvironment(
+	owner: string | undefined
+): Record<string, string> | undefined {
+	if (owner === 'C1') return { D1_C1_DEFAULT_HEADER_SINK: '0' }
+	if (owner === 'N+1') return { D1_VALIDATION_LANE: 'oracle' }
+	if (owner === 'N+1-query') return { D1_VALIDATION_LANE: 'query-oracle' }
 }
 
 interface RunContext {
@@ -368,7 +381,7 @@ async function runFixtureBlock(
 			D1_PARENT: '1',
 			D1_BLOCK: blockId
 		},
-		timeout: 120_000
+		timeout: 300_000
 	})
 	const stdoutPromise = new Response(child.stdout).text()
 	const stderrState =
@@ -424,6 +437,13 @@ async function runFixtureBlock(
 			`${fixture} child exited ${exitCode}:\n${stderr}\n${stdout}`
 		)
 	const output = parseJson(stdout, fixture)
+	if (fixture === 'validation') {
+		const expected = descriptor.env.D1_VALIDATION_LANE ?? 'oracle'
+		if (output.validationLane !== expected)
+			throw new Error(
+				`validation fixture lane mismatch: ${output.validationLane} !== ${expected}`
+			)
+	}
 	if (
 		fixture === 'cold-start' &&
 		output.fallbackSpawnToFirst2xxNs !== undefined
@@ -489,7 +509,8 @@ function rawMetricSamples(
 	if (
 		entry.fixture === 'crypto-hmac' ||
 		entry.fixture === 'formdata' ||
-		entry.fixture === 'body-presence'
+		entry.fixture === 'body-presence' ||
+		entry.fixture === 'validation'
 	) {
 		const samples = output.samples?.[entry.metric]
 		if (!Array.isArray(samples) || !samples.length)
@@ -550,14 +571,7 @@ function emptyRecord(
 		variant,
 		metric: entry.metric,
 		kind: entry.kind,
-		unit:
-			entry.kind === 'count'
-				? 'count'
-				: entry.kind === 'timing'
-					? 'ns'
-					: entry.metric.endsWith('-bytes-per-request')
-						? 'bytes-per-request'
-						: 'bytes-per-route',
+		unit: metricUnit(entry),
 		sampleRule: entry.sampleRule,
 		samples: [],
 		blocks: [],
@@ -1137,7 +1151,9 @@ async function recordMode(
 	capture: ArtifactCapture
 ) {
 	const git = gitInfo(repoRoot)
-	const variant = descriptor('candidate', repoRoot, git.commit)
+	const variant = descriptor('oracle', repoRoot, git.commit, {
+		D1_VALIDATION_LANE: 'oracle'
+	})
 	capture.variants.push(variant)
 	if (process.argv.includes('--promote')) {
 		if (git.dirty)
@@ -1189,6 +1205,12 @@ async function aaMode(
 	const aaEntries = registry.entries.filter((entry) =>
 		owners ? owners.has(entry.owner) : !leafPerfOwners.has(entry.owner)
 	)
+	const aaRegistry = {
+		entries: aaEntries,
+		byKey: new Map(
+			aaEntries.map((entry) => [key(entry.fixture, entry.metric), entry])
+		)
+	}
 	const aaFixtureIds = fixtureIds.filter((fixture) =>
 		aaEntries.some((entry) => entry.fixture === fixture)
 	)
@@ -1206,7 +1228,7 @@ async function aaMode(
 		const fixtures = await runPairedBlocks(
 			a,
 			b,
-			registry,
+			aaRegistry,
 			seed,
 			aaFixtureIds,
 			defaultBlocks,
@@ -1220,9 +1242,10 @@ async function aaMode(
 		const widths: Record<string, number> = {}
 		const countDeltas: Record<string, number> = {}
 		for (const record of fixtures) {
-			const entry = registry.byKey.get(
+			const entry = aaRegistry.byKey.get(
 				key(record.fixture, record.metric)
 			)!
+			if (!recordsAaFloor(entry)) continue
 			const destination = entry.kind === 'count' ? countDeltas : widths
 			destination[key(record.fixture, record.metric)] = floorWidth(
 				record,
@@ -1346,7 +1369,7 @@ async function gateMode(
 		owners.size !== 1
 	)
 		throw new Error(
-			'C1 and C4a gates must run one owner at a time because their baselines differ'
+			'owner-scoped current or historical baselines must run one owner at a time'
 		)
 	let promotedBaseline: RawArtifact | undefined
 	if (!historicalCommit && !currentFlagOff) {
@@ -1410,7 +1433,9 @@ async function gateMode(
 			'baseline',
 			baselineWorktree ?? repoRoot,
 			baselineCommit,
-			currentFlagOff ? { D1_C1_DEFAULT_HEADER_SINK: '0' } : undefined
+			currentFlagOff
+				? currentBaselineEnvironment(dedicatedOwner)
+				: undefined
 		)
 		const b = descriptor(
 			'candidate',
@@ -1487,20 +1512,31 @@ async function gateMode(
 					`gate did not collect ${key(entry.fixture, entry.metric)}`
 				)
 			printSummary(record)
-			const result: ComparisonResult = {
-				...comparisonForRecord(
-					record,
-					entry,
-					0,
-					context.seed,
-					context.resamples
-				),
-				verdict: 'report-only'
-			}
+			const values = blockValues(record)
+			if (typeof values !== 'object' || !('baseline' in values))
+				throw new Error(`not a paired record: ${record.metric}`)
+			const result = compareReportOnlyMetric({
+				fixture: record.fixture,
+				metric: record.metric,
+				kind: entry.kind,
+				direction: entry.direction,
+				margin: 0,
+				baselineBlocks: values.baseline,
+				candidateBlocks: values.candidate,
+				seed: context.seed,
+				resamples: context.resamples
+			})
 			capture.comparisons.push(result)
-			console.log(
-				`REPORT CI ${key(entry.fixture, entry.metric)} low=${result.ci!.low} high=${result.ci!.high} width=${result.ci!.width}`
-			)
+			if (result.ci)
+				console.log(
+					result.deltaScale === 'raw-difference'
+						? `REPORT PAIRED RAW CI ${key(entry.fixture, entry.metric)} pairedDelta=${result.observedDelta} low=${result.ci.low} high=${result.ci.high} width=${result.ci.width}`
+						: `REPORT CI ${key(entry.fixture, entry.metric)} low=${result.ci.low} high=${result.ci.high} width=${result.ci.width}`
+				)
+			else
+				console.log(
+					`REPORT RAW ${key(entry.fixture, entry.metric)} baseline=${result.baseline} candidate=${result.candidate} delta=${result.observedDelta}`
+				)
 		}
 		capture.provenance = {
 			baselineManifest: manifest,

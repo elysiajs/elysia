@@ -1,7 +1,6 @@
 import type { TSchema } from 'typebox/type'
 import type { TLocalizedValidationError } from 'typebox/error'
 import type { Validator as CompiledTypeBoxValidator } from 'typebox/compile'
-
 import { ValidationError } from '../error'
 import { type AnySchema, type StandardSchemaV1Like } from '../type'
 
@@ -29,9 +28,16 @@ import { isAsyncFunction } from '../compile/utils'
 import { isAsyncPredicate } from '../type/elysia/file-type'
 import { clearSharedReferenceCaches } from '../type/elysia/utils'
 import { hasProperty } from '../type/utils'
+import { VALIDATION_PLAN_BUILTIN } from '../type/constants'
+import type { ValidationPlanExtension } from '../experimental/validation-plan'
 
 export interface ValidatorOptions {
-	app?: { ['~programId']?: ProgramId }
+	app?: {
+		['~programId']?: ProgramId
+		['~config']?: {
+			experimental?: { validationPlan?: ValidationPlanExtension }
+		}
+	}
 	models?: Record<keyof any, AnySchema>
 	schemas?: AnySchema[]
 	coerces?: CoerceOption[]
@@ -39,6 +45,7 @@ export interface ValidatorOptions {
 	sanitize?: ElysiaConfig<any, any>['sanitize']
 	aot?: { method: string; path: string }
 	slot?: ValidatorSlot
+	validationPlan?: ValidationPlanExtension
 }
 
 export interface ResponseValidatorOptions extends Omit<
@@ -46,6 +53,18 @@ export interface ResponseValidatorOptions extends Omit<
 	'schemas'
 > {
 	schemas?: Record<number, AnySchema>[]
+}
+
+function createTypeBoxOracleFactory(
+	schema: TSchema,
+	coerces: CoerceOption[] | undefined,
+	normalize: ValidatorOptions['normalize'],
+	slot: ValidatorSlot | undefined
+) {
+	return () =>
+		// Keep these dependencies aligned with ValidationPlan's fail-closed admission.
+		// @ts-expect-error TypeBox bridge exposes an instance-shaped class type
+		new TypeBoxValidator(schema, { coerces, normalize, slot })
 }
 
 export type ToSubTypeValidator<T> = T extends AnySchema
@@ -132,12 +151,18 @@ export abstract class Validator {
 		let isIntersectable = false
 
 		if (options?.schemas?.length) {
+			const candidate =
+				options.app?.['~config']?.experimental?.validationPlan
+			const composed = candidate?.compose?.(schema, options)
+
+			if (composed) return composed as any
+
 			if (
 				'~kind' in schema &&
 				options.schemas.every((v) => '~kind' in v || '~elyAcl' in v)
 			)
 				isIntersectable = true
-			else return new MultiValidator(schema, options) as any
+			else return new LegacyMultiValidator(schema, options) as any
 		}
 
 		if ('~kind' in schema || '~elyAcl' in schema) {
@@ -162,6 +187,70 @@ export abstract class Validator {
 
 			const appSpecific = appHasFrozen || Capture.isCapturing()
 			const app = options?.app
+
+			const isResponseSlot =
+				options?.slot?.startsWith('response') === true
+
+			if (
+				options?.validationPlan &&
+				!isIntersectable &&
+				!appHasFrozen &&
+				!Capture.isCapturing() &&
+				!options.sanitize &&
+				options.normalize !== false &&
+				options.normalize !== 'typebox' &&
+				typeof name !== 'string'
+			) {
+				const domain = isResponseSlot
+					? 'encode'
+					: options.slot === 'body'
+						? 'json'
+						: options.slot === 'query' ||
+							  options.slot === 'headers' ||
+							  options.slot === 'cookie'
+							? 'string'
+							: undefined
+				const planKey = options.slot ?? domain ?? ''
+				const cachedPlan = app
+					? validationPlanCaches.get(app)?.get(schema)?.get(planKey)
+					: undefined
+				const validator =
+					domain &&
+					!(
+						domain === 'json' &&
+						(options.validationPlan as any)[VALIDATION_PLAN_BUILTIN] === true
+					)
+					? options.validationPlan.create?.(
+							schema as TSchema,
+							domain,
+							createTypeBoxOracleFactory(
+								schema as TSchema,
+								options.coerces,
+								options.normalize,
+								options.slot
+							),
+							options.slot === 'query',
+							options,
+							cachedPlan
+						)
+					: undefined
+
+				if (validator) {
+					if (app) {
+						let bySchema = validationPlanCaches.get(app)
+						if (!bySchema)
+							validationPlanCaches.set(
+								app,
+								(bySchema = new WeakMap())
+							)
+						let bySlot = bySchema.get(schema)
+						if (!bySlot) bySchema.set(schema, (bySlot = new Map()))
+						bySlot.set(planKey, validator)
+					}
+
+					return validator as any
+				}
+			}
 
 			const bypassCache =
 				(!!aot && !!slot && Capture.isCapturing()) ||
@@ -276,6 +365,7 @@ export abstract class Validator {
 		tbCaches = new WeakMap()
 		clearCoerceLeafCache()
 		clearSharedReferenceCaches()
+		validationPlanCaches = new WeakMap()
 	}
 }
 
@@ -368,7 +458,7 @@ export class StandardValidator extends Validator {
 	}
 }
 
-export class MultiValidator extends Validator {
+class LegacyMultiValidator extends Validator {
 	override isAsync = false
 
 	#schemas: (CompiledTypeBoxValidator | StandardSchemaV1Like)[]
@@ -394,11 +484,10 @@ export class MultiValidator extends Validator {
 		const hasDefaults: boolean[] = []
 		const tbSchemas: (TSchema | null)[] = []
 		const asyncMembers: (TypeBoxValidator | null)[] = []
-
-		const shouldClose = options?.normalize === false
+		const shouldClose = options.normalize === false
 
 		const compileMember = (rawSchema: TSchema, hd: boolean) => {
-			let coercedSchema = applyCoercions(rawSchema, options?.coerces)
+			let coercedSchema = applyCoercions(rawSchema, options.coerces)
 			if (shouldClose)
 				coercedSchema = nonAdditionalProperties(
 					coercedSchema as any
@@ -416,13 +505,12 @@ export class MultiValidator extends Validator {
 				) ?? false
 			if (isAsync) {
 				this.isAsync = true
-
 				asyncMembers.push(
 					Validator.create(rawSchema, {
-						coerces: options?.coerces,
-						normalize: options?.normalize,
-						models: options?.models,
-						sanitize: options?.sanitize
+						coerces: options.coerces,
+						normalize: options.normalize,
+						models: options.models,
+						sanitize: options.sanitize
 					})! as unknown as TypeBoxValidator
 				)
 			} else asyncMembers.push(null)
@@ -431,28 +519,28 @@ export class MultiValidator extends Validator {
 		}
 
 		for (let i = 0; i < schemas.length; i++) {
-			const schema = schemas[i]
-			const isTypeBox = '~kind' in schema
+			const member = schemas[i]
+			const isTypeBox = '~kind' in member
 
-			if (!isTypeBox && !('~standard' in schema))
+			if (!isTypeBox && !('~standard' in member))
 				throw new Error(
 					'Elysia Validator support only TypeBox and Standard Schema'
 				)
 
 			if (isTypeBox) {
-				if (schema['~kind'] === 'Object') {
+				if (member['~kind'] === 'Object') {
 					typeboxObjects ??= []
-					typeboxObjects.push(schema as TSchema)
+					typeboxObjects.push(member as TSchema)
 					schemas.splice(i, 1)
 					i--
 				} else
 					schemas[i] = compileMember(
-						schema as TSchema,
-						hasProperty('default', schema as TSchema)
+						member as TSchema,
+						hasProperty('default', member as TSchema)
 					) as any
 			} else {
 				this.mayReturnPromise = true
-				if (isAsyncStandardSchema(schema)) this.isAsync = true
+				if (isAsyncStandardSchema(member)) this.isAsync = true
 				codecs.push(false)
 				hasDefaults.push(false)
 				tbSchemas.push(null)
@@ -508,13 +596,12 @@ export class MultiValidator extends Validator {
 			const validator = this.#schemas[i]
 
 			if ('~standard' in validator) {
-				if (MultiValidator.#syncStandard(validator, value).issues)
+				if (LegacyMultiValidator.#syncStandard(validator, value).issues)
 					return false
 				continue
 			}
 
 			const compiled = validator as CompiledTypeBoxValidator
-
 			if (!this.#codecs[i]) {
 				if (!compiled.Check(value)) return false
 				continue
@@ -535,7 +622,7 @@ export class MultiValidator extends Validator {
 
 		for (const schema of this.#schemas)
 			if ('~standard' in schema) {
-				const issues = MultiValidator.#syncStandard(
+				const issues = LegacyMultiValidator.#syncStandard(
 					schema,
 					value
 				).issues
@@ -623,7 +710,6 @@ export class MultiValidator extends Validator {
 				if (typeof (q as any)?.then === 'function') {
 					if (!allowAsync) throw asyncStandardSchemaError()
 
-					// eslint-disable-next-line sonarjs/function-inside-loop
 					return Promise.resolve(q).then((resolved: any) => {
 						if (resolved.issues)
 							throw new ValidationError(
@@ -635,7 +721,10 @@ export class MultiValidator extends Validator {
 						return this.#fromLoop(
 							value,
 							i + 1,
-							MultiValidator.#merge(snapshot, resolved.value),
+							LegacyMultiValidator.#merge(
+								snapshot,
+								resolved.value
+							),
 							type,
 							allowAsync
 						)
@@ -644,7 +733,7 @@ export class MultiValidator extends Validator {
 
 				if (q.issues) throw new ValidationError(type, value, q.issues)
 
-				snapshot = MultiValidator.#merge(snapshot, q.value)
+				snapshot = LegacyMultiValidator.#merge(snapshot, q.value)
 				continue
 			}
 
@@ -653,19 +742,18 @@ export class MultiValidator extends Validator {
 				if (!allowAsync) throw asyncStandardSchemaError()
 
 				return this.#fromTypeBoxAsync(asyncTbv, value, type).then(
-					// eslint-disable-next-line sonarjs/function-inside-loop
 					(result) =>
 						this.#fromLoop(
 							value,
 							i + 1,
-							MultiValidator.#merge(snapshot, result),
+							LegacyMultiValidator.#merge(snapshot, result),
 							type,
 							allowAsync
 						)
 				)
 			}
 
-			snapshot = MultiValidator.#merge(
+			snapshot = LegacyMultiValidator.#merge(
 				snapshot,
 				this.#fromTypeBox(
 					validator as CompiledTypeBoxValidator,
@@ -680,5 +768,11 @@ export class MultiValidator extends Validator {
 	}
 }
 
+export { LegacyMultiValidator as MultiValidator }
+
 let tbCache: typeof TypeBoxValidatorCache | undefined
 let tbCaches = new WeakMap<object, typeof TypeBoxValidatorCache>()
+let validationPlanCaches = new WeakMap<
+	object,
+	WeakMap<object, Map<string, Validator>>
+>()

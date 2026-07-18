@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test'
 
 import { Elysia, t } from '../../src'
 import { TypeBoxValidator } from '../../src/type/validator'
+import { schemaHasDangerousProperties } from '../../src/type/validator/clean-safe'
 
 const schema = (
 	key = '__proto__',
@@ -30,6 +31,27 @@ const expectSafePrototype = (value: any, key = '__proto__') => {
 }
 
 describe('prototype-safe normalization', () => {
+	it('finds dangerous properties in reference definition containers', () => {
+		for (const key of ['$defs', 'definitions'])
+			expect(
+				schemaHasDangerousProperties({ [key]: { Nested: schema() } })
+			).toBe(true)
+	})
+
+	it('does not use exact-mirror for dangerous properties inside a cyclic definition', () => {
+		const cyclic = (t as any).Cyclic({ Node: t.Object({}) }, 'Node')
+		Object.defineProperty(cyclic.$defs.Node.properties, '__proto__', {
+			value: t.Object({ polluted: t.String() }),
+			enumerable: true
+		})
+		cyclic.$defs.Node.required.push('__proto__')
+
+		const normalized = new TypeBoxValidator(cyclic).FromSync(body())
+
+		expectSafePrototype(normalized)
+		expect((normalized as any).__proto__).toEqual({ polluted: 'yes' })
+	})
+
 	it('keeps __proto__, constructor, and prototype as own data properties', () => {
 		for (const key of ['__proto__', 'constructor', 'prototype']) {
 			const normalized = new TypeBoxValidator(schema(key)).FromSync(

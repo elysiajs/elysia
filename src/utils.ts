@@ -119,6 +119,7 @@ export interface CompactBeforeHandlePrefix {
 	length: number
 	previous?: CompactBeforeHandlePrefix
 	added: readonly Function[]
+	inference?: AppHook['inference']
 }
 
 const COMPACT_CHUNK_SIZE = 32
@@ -137,7 +138,8 @@ const compactBeforeHandleValues = (
 ): readonly Function[] | false => {
 	if (!hook) return []
 
-	for (const key in hook) if (key !== 'beforeHandle') return false
+	for (const key in hook)
+		if (key !== 'beforeHandle' && key !== 'inference') return false
 
 	const value = hook.beforeHandle
 	if (value === undefined) return []
@@ -167,9 +169,10 @@ export const compactBeforeHandleConflicts = (
 
 const appendCompactBeforeHandle = (
 	previous: CompactBeforeHandlePrefix,
-	added: readonly Function[]
+	added: readonly Function[],
+	inference: AppHook['inference'] | undefined
 ): CompactBeforeHandlePrefix => {
-	if (!added.length) return previous
+	if (!added.length && !inference) return previous
 
 	let tail = previous.tail
 	let length = previous.length
@@ -190,8 +193,11 @@ const appendCompactBeforeHandle = (
 	return {
 		tail,
 		length,
-		previous: previous.length ? previous : undefined,
-		added
+		previous: previous.length || previous.inference ? previous : undefined,
+		added,
+		inference: inference
+			? Object.assign({}, previous.inference, inference)
+			: previous.inference
 	}
 }
 
@@ -203,6 +209,7 @@ export function compactBeforeHandlePrefix(
 	const pending: Array<{
 		node: Extract<ChainNode, { added: Partial<AppHook> }>
 		values: readonly Function[]
+		inference: AppHook['inference'] | undefined
 	}> = []
 	let node: ChainNode | undefined = start
 	let prefix = emptyCompactBeforeHandlePrefix
@@ -234,13 +241,13 @@ export function compactBeforeHandlePrefix(
 			return
 		}
 
-		pending.push({ node, values })
+		pending.push({ node, values, inference: node.added.inference })
 		node = node.parent
 	}
 
 	for (let i = pending.length - 1; i >= 0; i--) {
 		const item = pending[i]!
-		prefix = appendCompactBeforeHandle(prefix, item.values)
+		prefix = appendCompactBeforeHandle(prefix, item.values, item.inference)
 		compactBeforeHandleMemos.set(item.node, prefix)
 	}
 
@@ -409,7 +416,13 @@ function appendInto(
 				} else (target as any)[key] = v.slice()
 			} else if (existing) (existing as any[]).push(v)
 			else (target as any)[key] = [v]
-		} else (target as any)[key] = v
+		} else if (key === 'inference')
+			(target as any).inference = Object.assign(
+				{},
+				(target as any).inference,
+				v
+			)
+		else (target as any)[key] = v
 	}
 }
 
@@ -881,6 +894,9 @@ export function mergeHook(
 
 	if (a.schemas || b.schemas)
 		a.schemas = mergeArray(a.schemas, b.schemas, reverse) as any
+
+	if (a.inference || b.inference)
+		a.inference = Object.assign({}, b.inference, a.inference)
 
 	const aDerive = (a as any)['~deriveEntries']
 	const bDerive = (b as any)['~deriveEntries']

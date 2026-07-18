@@ -5,7 +5,7 @@ import {
 	internalServerErrorResponse,
 	isProduction
 } from '../../error'
-import { parseQueryFromURL } from '../../parse-query'
+import { getQueryParseChannels, parseQueryFromURL } from '../../parse-query'
 import {
 	parseCookieRaw,
 	parseCookieRawSync,
@@ -26,7 +26,6 @@ import {
 import {
 	cloneResponse,
 	emptyResponse,
-	getQueryParseChannels,
 	hasRequestBody,
 	replaceDeriveContext,
 	runBeforeHandlePrefix

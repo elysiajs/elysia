@@ -25,7 +25,8 @@ export function injectCompileHighwater(route: number) {
 
 export function injectRetained(route: number) {
 	if (injection !== 'retained') return
-	const bytes = new Uint8Array(1_024)
+	// Keep the self-test signal comfortably above pinned-machine allocator noise.
+	const bytes = new Uint8Array(2_048)
 	bytes[route % bytes.length] = route & 255
 	retained.push(bytes)
 }

@@ -27,6 +27,7 @@ import type {
 } from './context'
 import type { ChainNode } from './utils'
 import type { ResumeEmit } from './experimental/resume'
+import type { ValidationPlanExtension } from './experimental/validation-plan'
 
 export interface ElysiaConfig<
 	in out Prefix extends string | undefined,
@@ -150,10 +151,16 @@ export interface ElysiaConfig<
 	 */
 	introspect?: boolean
 
+	/** Exact partial override for automatically inferred context channels. */
+	inference?: InferenceOverride
+
 	/**
 	 * Enable experimental features
 	 */
 	experimental?: {
+		/** Use the N+1 conservative single-pass handler scanner. */
+		inference?: 'candidate'
+
 		/**
 		 * **Unstable / preview.** Compile route handlers with the resume-skeleton
 		 * emitter imported from `elysia/experimental/resume` (a sync entry + a
@@ -173,6 +180,14 @@ export interface ElysiaConfig<
 		 * @default false
 		 */
 		flatFormDataFastPath?: boolean
+
+		/**
+		 * **Unstable / preview.** Enable the fused validation-plan lane imported
+		 * from `elysia/experimental/validation-plan`.
+		 *
+		 * @default false
+		 */
+		validationPlan?: ValidationPlanExtension
 	}
 
 	/**
@@ -384,7 +399,19 @@ export interface AppHook {
 	cookie: AnySchema
 	response: AnySchema | Record<number, AnySchema>
 	schemas: RouteSchema[]
+	inference: InferenceOverride
 }
+
+export interface Inference {
+	query: boolean
+	headers: boolean
+	body: boolean
+	cookie: boolean
+	set: boolean
+	route: boolean
+}
+
+export type InferenceOverride = Partial<Inference>
 
 export interface InputSchema<Name extends string = string> {
 	body?: Name | AnySchema
@@ -413,6 +440,7 @@ export type LocalHook<
 	Parser extends keyof any = ''
 > = {
 	detail?: DocumentDecoration
+	inference?: InferenceOverride
 
 	/**
 	 * Short for 'Content-Type'
@@ -488,6 +516,7 @@ export type GuardLocalHook<
 	schema?: GuardType
 
 	detail?: DocumentDecoration
+	inference?: InferenceOverride
 	/**
 	 * Short for 'Content-Type'
 	 *

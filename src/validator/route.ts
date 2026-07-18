@@ -8,7 +8,8 @@ import {
 	coerceStringToStructure,
 	hasTypes
 } from '../type/bridge'
-import { ELYSIA_TYPES } from '../type/constants'
+import { ELYSIA_TYPES, VALIDATION_PLAN_BUILTIN } from '../type/constants'
+import { createQueryPlan, type QueryPlan } from '../parse-query'
 
 import type { AnySchema } from '../type'
 
@@ -21,8 +22,10 @@ interface RouteSchema {
 	response?: Record<number, AnySchema>
 }
 
-export interface RouteValidatorOptions
-	extends Omit<ValidatorOptions, 'coerces' | 'schemas' | 'slot'> {
+export interface RouteValidatorOptions extends Omit<
+	ValidatorOptions,
+	'coerces' | 'schemas' | 'slot'
+> {
 	schemas?: {
 		body: AnySchema
 		headers: AnySchema
@@ -32,6 +35,8 @@ export interface RouteValidatorOptions
 		response: Record<number, AnySchema>
 	}[]
 }
+
+export const D1_VALIDATION_IMPLEMENTATION = 'candidate' as const
 
 // @ts-expect-error
 const isTb = (schema: unknown): schema is AnySchema => '~kind' in schema
@@ -72,6 +77,7 @@ export class RouteValidator<const in out T extends RouteSchema> {
 	body: ToSubTypeValidator<T['body']> | undefined
 	headers: ToSubTypeValidator<T['headers']> | undefined
 	query: ToSubTypeValidator<T['query']> | undefined
+	queryPlan: QueryPlan | undefined
 	params: ToSubTypeValidator<T['params']> | undefined
 	cookie: ToSubTypeValidator<T['cookie']> | undefined
 	response:
@@ -104,12 +110,20 @@ export class RouteValidator<const in out T extends RouteSchema> {
 					? coerce(standalone!.find(isTb) as AnySchema)
 					: undefined
 
-			;(this as any)[slot] = Validator.create(route[slot] as any, {
+			const validator = Validator.create(route[slot] as any, {
 				...options,
 				slot,
 				schemas: standalone,
 				coerces
 			})
+			;(this as any)[slot] = validator
+			if (slot === 'query' && options?.validationPlan)
+				this.queryPlan = createQueryPlan(
+					(validator as any)?.schema,
+					validator,
+					(options.validationPlan as any)[VALIDATION_PLAN_BUILTIN] ===
+						true
+				)
 		}
 
 		const responseStandalone = pickStandalone(

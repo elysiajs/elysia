@@ -21,7 +21,7 @@ describe('MultiValidator array merging', () => {
 			schemas: [standalone as any]
 		})
 
-		expect(mv.constructor.name).toBe('MultiValidator')
+		expect(mv.constructor.name).toBe('LegacyMultiValidator')
 
 		const out = mv.From(['a', 'b', 'c'], 'body') as unknown[]
 

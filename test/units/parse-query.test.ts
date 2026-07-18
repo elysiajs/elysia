@@ -1,6 +1,20 @@
 import { describe, expect, it } from 'bun:test'
 
-import { parseQueryFromURL } from '../../src/parse-query'
+import { t } from '../../src'
+import {
+	validationPlan,
+	ValidationPlanValidator
+} from '../../src/experimental/validation-plan'
+import {
+	createQueryPlan,
+	getQueryParseChannels,
+	parseQueryFromURL
+} from '../../src/parse-query'
+import { RouteValidator } from '../../src/validator/route'
+import {
+	VALIDATION_PLAN_FUSED_QUERY,
+	VALIDATION_PLAN_ORACLE
+} from '../../src/type/constants'
 
 const parse = (url: string) => parseQueryFromURL(url, url.indexOf('?'))
 
@@ -77,5 +91,305 @@ describe('parseQueryFromURL', () => {
 				cfg
 			).key as unknown
 		).toEqual(['1', '2', '3', '4'])
+	})
+})
+
+describe('QueryPlan', () => {
+	it('freezes schema-derived parse channels without retaining a cache', () => {
+		const schema = t.Object({
+			ids: t.Array(t.String()),
+			filter: t.ObjectString({ name: t.String() })
+		})
+		const plan = createQueryPlan(schema)
+
+		expect(createQueryPlan(schema)).not.toBe(plan)
+		expect(Object.isFrozen(plan)).toBe(true)
+		expect(Object.isFrozen(plan.array)).toBe(true)
+		expect(Object.isFrozen(plan.object)).toBe(true)
+		expect(Object.getPrototypeOf(plan.array!)).toBeNull()
+		expect(Object.getPrototypeOf(plan.object!)).toBeNull()
+
+		const url =
+			'http://x.ab/p?ids=a,b&ids=[c,d]&filter=' +
+			encodeURIComponent('{"name":"elysia"}')
+		expect(
+			plan.parse(url, url.indexOf('?'), plan.array, plan.object)
+		).toEqual({
+			ids: ['a', 'b', 'c', 'd'],
+			filter: { name: 'elysia' }
+		})
+	})
+
+	it('fuses scalar parsing, duplicate resolution, defaults, and validation', () => {
+		const validator = new RouteValidator(
+			{
+				query: t.Object({
+					name: t.String(),
+					page: t.Number(),
+					limit: t.Integer(),
+					active: t.Boolean(),
+					fallback: t.Number({ default: '3' as any })
+				})
+			},
+			{ validationPlan }
+		)
+		const plan = validator.queryPlan!
+		const url =
+			'http://x.ab/p?name=hello+world&page=bad&page=2&limit=10&active=false&ignored=yes'
+
+		expect(plan.fused).toBe(true)
+		let oracleCalls = 0
+		const shouldNotCall = {
+			From() {
+				oracleCalls++
+				throw new Error('valid fused query reached the oracle')
+			},
+			[VALIDATION_PLAN_ORACLE]() {
+				oracleCalls++
+				throw new Error('valid fused query reached the oracle')
+			}
+		}
+		const parsed = plan.fromURL!(url, url.indexOf('?'))
+		expect(Object.getPrototypeOf(parsed)).toBeNull()
+		expect(plan.validate!(parsed, shouldNotCall)).toEqual({
+			name: 'hello world',
+			page: 2,
+			limit: 10,
+			active: false,
+			fallback: 3
+		})
+		expect(
+			Object.keys(
+				plan.validate!(
+					plan.fromURL!(
+						'http://x.ab/p?active=true&limit=2&page=1&name=x',
+						'http://x.ab/p'.length
+					),
+					shouldNotCall
+				)
+			)
+		).toEqual(['name', 'page', 'limit', 'active', 'fallback'])
+		expect(oracleCalls).toBe(0)
+
+		const leadingDefault = new RouteValidator(
+			{
+				query: t.Object({
+					fallback: t.Number({ default: '3' as any }),
+					page: t.Number()
+				})
+			},
+			{ validationPlan }
+		)
+		const leadingPlan = leadingDefault.queryPlan!
+		const leadingUrl = 'http://x.ab/p?page=1'
+		expect(
+			leadingPlan.validate!(
+				leadingPlan.fromURL!(leadingUrl, leadingUrl.indexOf('?')),
+				shouldNotCall
+			)
+		).toEqual({ fallback: 3, page: 1 })
+		expect(oracleCalls).toBe(0)
+
+		const invalidUrl =
+			'http://x.ab/p?name=x&page=bad&limit=2&active=true'
+		const invalid = plan.fromURL!(invalidUrl, invalidUrl.indexOf('?'))
+		try {
+			plan.validate!(invalid, validator.query as any)
+			expect.unreachable()
+		} catch (error: any) {
+			expect(Reflect.ownKeys(error.value)).toEqual([
+				'fallback',
+				'name',
+				'page',
+				'limit',
+				'active'
+			])
+		}
+	})
+
+	it('fails closed for unsupported additional values', () => {
+		const closed = new RouteValidator(
+			{
+				query: t.Object(
+					{ page: t.Number() },
+					{ additionalProperties: false }
+				)
+			},
+			{ validationPlan }
+		)
+		const open = new RouteValidator(
+			{
+				query: t.Object(
+					{ page: t.Number() },
+					{ additionalProperties: true }
+				)
+			},
+			{ validationPlan }
+		)
+
+		expect(closed.queryPlan?.fused).toBe(true)
+		expect(open.queryPlan?.fused).toBeUndefined()
+	})
+
+	it('falls back instead of admitting numeric strings that overflow', () => {
+		const overflow = '9'.repeat(400)
+		for (const value of [t.Number(), t.Integer()]) {
+			const validator = new RouteValidator(
+				{ query: t.Object({ value }) },
+				{ validationPlan }
+			)
+			const plan = validator.queryPlan!
+			const url = `http://x.ab/p?value=${overflow}`
+			const query = plan.fromURL!(url, url.indexOf('?'))
+			let oracleValue: unknown
+
+			expect(() =>
+				plan.validate!(query, {
+					[VALIDATION_PLAN_ORACLE](value: unknown) {
+						oracleValue = value
+						throw new Error('oracle fallback')
+					}
+				} as any)
+			).toThrow()
+			expect(oracleValue).toEqual({ value: overflow })
+		}
+	})
+
+	it('admits only the built-in synchronous plan and safe property names', () => {
+		const schema = t.Object({ page: t.Number() })
+		const delegated = { ...validationPlan }
+		const builtIn = new RouteValidator(
+			{ query: schema },
+			{ validationPlan }
+		).query as any
+		const fake = {
+			plan: builtIn.plan,
+			isAsync: false,
+			mayReturnPromise: false,
+			From: builtIn.From.bind(builtIn)
+		}
+
+		expect(createQueryPlan(schema, fake, true).fused).toBeUndefined()
+		expect(createQueryPlan(schema, builtIn).fused).toBeUndefined()
+		expect(createQueryPlan(schema, builtIn, true).fused).toBe(true)
+		expect(
+			new RouteValidator(
+				{ query: schema },
+				{ validationPlan: delegated }
+			).queryPlan?.fused
+		).toBeUndefined()
+		expect(
+			createQueryPlan(schema, {
+				...fake,
+				[VALIDATION_PLAN_FUSED_QUERY]: true,
+				isAsync: true
+			}, true).fused
+		).toBeUndefined()
+
+		const originalFrom = builtIn.From
+		builtIn.From = function (value: unknown, type?: string) {
+			return {
+				...originalFrom.call(this, value, type),
+				custom: true
+			}
+		}
+		expect(createQueryPlan(schema, builtIn, true).fused).toBeUndefined()
+
+		for (const key of ['__proto__', 'constructor', 'prototype']) {
+			const properties = Object.create(null)
+			properties[key] = t.String()
+			const route = new RouteValidator(
+				{ query: t.Object(properties) },
+				{ validationPlan }
+			)
+			expect(route.queryPlan?.fused).toBeUndefined()
+		}
+	})
+
+	it('rejects fusion after built-in validator prototypes are replaced', () => {
+		const original = ValidationPlanValidator.prototype.From
+		try {
+			ValidationPlanValidator.prototype.From = function (
+				value: unknown,
+				type?: string
+			) {
+				return original.call(this, value, type)
+			}
+			const route = new RouteValidator(
+				{ query: t.Object({ page: t.Number() }) },
+				{ validationPlan }
+			)
+			expect(route.queryPlan?.fused).toBeUndefined()
+		} finally {
+			ValidationPlanValidator.prototype.From = original
+		}
+	})
+
+	it('keeps generic and malformed-input behavior unchanged', () => {
+		const plan = createQueryPlan(undefined)
+		const url =
+			'http://x.ab/p?key=first&key=last&bad=%E0%A4%A&__proto__=safe'
+		const parsed = plan.parse(
+			url,
+			url.indexOf('?'),
+			plan.array,
+			plan.object
+		)
+
+		expect(Object.getPrototypeOf(parsed)).toBeNull()
+		expect(parsed.key).toBe('last')
+		expect(parsed.bad).toBe('%E0%A4%A')
+		expect(parsed.__proto__).toBe('safe')
+	})
+
+	it('fails closed instead of recursing forever on cyclic schemas', () => {
+		const cyclic: any = {}
+		cyclic.anyOf = [cyclic]
+
+		expect(() => createQueryPlan(cyclic)).not.toThrow()
+		expect(createQueryPlan(cyclic).array).toBeUndefined()
+		expect(createQueryPlan(cyclic).object).toBeUndefined()
+	})
+
+	it('does not retain candidate state in the legacy validator', () => {
+		const route = { query: t.Object({ id: t.Array(t.String()) }) }
+
+		expect(new RouteValidator(route).queryPlan).toBeUndefined()
+		expect(
+			new RouteValidator(route, { validationPlan }).queryPlan
+		).toBeDefined()
+	})
+
+	it('keeps the legacy union parser independent from QueryPlan', () => {
+		const schema = {
+			type: 'object',
+			properties: {
+				value: {
+					anyOf: [
+						{ type: 'string' },
+						{
+							type: 'object',
+							properties: { name: { type: 'string' } }
+						}
+					]
+				}
+			}
+		}
+		const plan = createQueryPlan(schema)
+		const legacy = getQueryParseChannels(schema)
+		const url =
+			'http://x.ab/p?value=' + encodeURIComponent('{"name":"elysia"}')
+
+		expect(
+			parseQueryFromURL(
+				url,
+				url.indexOf('?'),
+				legacy?.array,
+				legacy?.object
+			).value
+		).toBe('{"name":"elysia"}')
+		expect(
+			plan.parse(url, url.indexOf('?'), plan.array, plan.object).value
+		).toBe('{"name":"elysia"}')
 	})
 })

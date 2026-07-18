@@ -1,6 +1,6 @@
 import Memoirist from 'memoirist'
 
-import { applyHoc, createFetchHandler } from './handler'
+import { applyHoc, createFetchHandler } from './handler/fetch'
 import {
 	compileHandler,
 	composeRouteHook,
@@ -159,6 +159,92 @@ const emptyHistory = Object.freeze([]) as readonly HistoryEntry[]
 const canRegisterLoose = (path: string, isDynamic: boolean) =>
 	!isDynamic && (path.length === 0 || path.charCodeAt(path.length - 1) === 47)
 
+type WithDecorator<
+	Singleton extends SingletonBase,
+	Decorator extends Record<string, unknown>
+> = {
+	decorator: Decorator
+	store: Singleton['store']
+	derive: Singleton['derive']
+}
+
+type WithStore<
+	Singleton extends SingletonBase,
+	Store extends Record<string, unknown>
+> = {
+	decorator: Singleton['decorator']
+	store: Store
+	derive: Singleton['derive']
+}
+
+type RouteInput<
+	Definitions extends DefinitionBase,
+	Metadata extends MetadataBase
+> = Metadata['macro'] & InputSchema<keyof Definitions['typebox'] & string>
+
+type ResolvedRouteSchema<
+	Definitions extends DefinitionBase,
+	Metadata extends MetadataBase,
+	Ephemeral extends EphemeralType,
+	Volatile extends EphemeralType,
+	BasePath extends string,
+	Path extends string,
+	Input extends InputSchema<keyof Definitions['typebox'] & string>
+> = IntersectIfObjectSchema<
+	MergeSchema<
+		UnwrapRoute<Input, Definitions['typebox'], JoinPath<BasePath, Path>>,
+		MergeSchema<
+			Volatile['schema'],
+			MergeSchema<Ephemeral['schema'], Metadata['schema']>
+		>,
+		'',
+		undefined extends Input['params'] ? true : false
+	>,
+	MergeScopedSchemas<
+		Metadata['schemas'],
+		Ephemeral['schemas'],
+		Volatile['schemas']
+	>
+>
+
+type RouteDecorator<
+	Singleton extends SingletonBase,
+	Ephemeral extends EphemeralType,
+	Volatile extends EphemeralType
+> = Singleton & {
+	derive: Ephemeral['derive'] & Volatile['derive']
+}
+
+type RouteMacroContext<
+	Definitions extends DefinitionBase,
+	Metadata extends MetadataBase,
+	Input extends RouteInput<Definitions, Metadata>
+> = {} extends Metadata['macroFn']
+	? {}
+	: MacroToContext<
+			Metadata['macroFn'],
+			Omit<Input, NonResolvableMacroKey>,
+			Definitions['typebox']
+		>
+
+type GuardSchema<
+	Definitions extends DefinitionBase,
+	Metadata extends MetadataBase,
+	Ephemeral extends EphemeralType,
+	Volatile extends EphemeralType,
+	Path extends string,
+	Input extends InputSchema<keyof Definitions['typebox'] & string>
+> = MergeSchema<
+	UnwrapRoute<Input, Definitions['typebox'], Path>,
+	MergeSchema<
+		Volatile['schema'],
+		MergeSchema<Ephemeral['schema'], Metadata['schema']>
+	>
+> &
+	Metadata['schemas'] &
+	Ephemeral['schemas'] &
+	Volatile['schemas']
+
 export class Elysia<
 	const in out BasePath extends string = '',
 	const in out Scope extends EventScope = 'local',
@@ -314,7 +400,9 @@ export class Elysia<
 
 	constructor(config?: ElysiaConfig<BasePath, Scope>) {
 		this['~programId'] = createProgramId()
-		this['~config'] = config
+		this['~config'] = config?.inference
+			? { ...config, inference: { ...config.inference } }
+			: config
 		this['~Prefix'] = config?.prefix as BasePath
 		if (this['~Prefix'] && !this['~Prefix'].startsWith('/'))
 			this['~Prefix'] = `/${this['~Prefix']}` as BasePath
@@ -396,11 +484,10 @@ export class Elysia<
 	): Elysia<
 		BasePath,
 		Scope,
-		{
-			decorator: Prettify<Singleton['decorator'] & { [k in Name]: Value }>
-			store: Singleton['store']
-			derive: Singleton['derive']
-		},
+		WithDecorator<
+			Singleton,
+			Prettify<Singleton['decorator'] & { [k in Name]: Value }>
+		>,
 		Definitions,
 		Metadata,
 		Routes,
@@ -413,11 +500,10 @@ export class Elysia<
 	): Elysia<
 		BasePath,
 		Scope,
-		{
-			decorator: Prettify<Singleton['decorator'] & NewDecorators>
-			store: Singleton['store']
-			derive: Singleton['derive']
-		},
+		WithDecorator<
+			Singleton,
+			Prettify<Singleton['decorator'] & NewDecorators>
+		>,
 		Definitions,
 		Metadata,
 		Routes,
@@ -430,11 +516,7 @@ export class Elysia<
 	): Elysia<
 		BasePath,
 		Scope,
-		{
-			decorator: NewDecorators
-			store: Singleton['store']
-			derive: Singleton['derive']
-		},
+		WithDecorator<Singleton, NewDecorators>,
 		Definitions,
 		Metadata,
 		Routes,
@@ -449,11 +531,10 @@ export class Elysia<
 	): Elysia<
 		BasePath,
 		Scope,
-		{
-			decorator: Prettify<Singleton['decorator'] & { [k in Name]: Value }>
-			store: Singleton['store']
-			derive: Singleton['derive']
-		},
+		WithDecorator<
+			Singleton,
+			Prettify<Singleton['decorator'] & { [k in Name]: Value }>
+		>,
 		Definitions,
 		Metadata,
 		Routes,
@@ -468,13 +549,12 @@ export class Elysia<
 	): Elysia<
 		BasePath,
 		Scope,
-		{
-			decorator: Prettify<
+		WithDecorator<
+			Singleton,
+			Prettify<
 				Omit<Singleton['decorator'], Name> & { [k in Name]: Value }
 			>
-			store: Singleton['store']
-			derive: Singleton['derive']
-		},
+		>,
 		Definitions,
 		Metadata,
 		Routes,
@@ -488,11 +568,10 @@ export class Elysia<
 	): Elysia<
 		BasePath,
 		Scope,
-		{
-			decorator: Prettify<Singleton['decorator'] & NewDecorators>
-			store: Singleton['store']
-			derive: Singleton['derive']
-		},
+		WithDecorator<
+			Singleton,
+			Prettify<Singleton['decorator'] & NewDecorators>
+		>,
 		Definitions,
 		Metadata,
 		Routes,
@@ -506,14 +585,13 @@ export class Elysia<
 	): Elysia<
 		BasePath,
 		Scope,
-		{
-			decorator: Prettify<
+		WithDecorator<
+			Singleton,
+			Prettify<
 				Omit<Singleton['decorator'], keyof NewDecorators> &
 					NewDecorators
 			>
-			store: Singleton['store']
-			derive: Singleton['derive']
-		},
+		>,
 		Definitions,
 		Metadata,
 		Routes,
@@ -652,11 +730,10 @@ export class Elysia<
 	): Elysia<
 		BasePath,
 		Scope,
-		{
-			decorator: Singleton['decorator']
-			store: Prettify<Singleton['store'] & { [k in Name]: Value }>
-			derive: Singleton['derive']
-		},
+		WithStore<
+			Singleton,
+			Prettify<Singleton['store'] & { [k in Name]: Value }>
+		>,
 		Definitions,
 		Metadata,
 		Routes,
@@ -669,11 +746,7 @@ export class Elysia<
 	): Elysia<
 		BasePath,
 		Scope,
-		{
-			decorator: Singleton['decorator']
-			store: Prettify<Singleton['store'] & NewStore>
-			derive: Singleton['derive']
-		},
+		WithStore<Singleton, Prettify<Singleton['store'] & NewStore>>,
 		Definitions,
 		Metadata,
 		Routes,
@@ -686,11 +759,7 @@ export class Elysia<
 	): Elysia<
 		BasePath,
 		Scope,
-		{
-			decorator: Singleton['decorator']
-			store: NewStore
-			derive: Singleton['derive']
-		},
+		WithStore<Singleton, NewStore>,
 		Definitions,
 		Metadata,
 		Routes,
@@ -705,11 +774,10 @@ export class Elysia<
 	): Elysia<
 		BasePath,
 		Scope,
-		{
-			decorator: Singleton['decorator']
-			store: Prettify<Singleton['store'] & { [k in Name]: Value }>
-			derive: Singleton['derive']
-		},
+		WithStore<
+			Singleton,
+			Prettify<Singleton['store'] & { [k in Name]: Value }>
+		>,
 		Definitions,
 		Metadata,
 		Routes,
@@ -724,13 +792,10 @@ export class Elysia<
 	): Elysia<
 		BasePath,
 		Scope,
-		{
-			decorator: Singleton['decorator']
-			store: Prettify<
-				Omit<Singleton['store'], Name> & { [k in Name]: Value }
-			>
-			derive: Singleton['derive']
-		},
+		WithStore<
+			Singleton,
+			Prettify<Omit<Singleton['store'], Name> & { [k in Name]: Value }>
+		>,
 		Definitions,
 		Metadata,
 		Routes,
@@ -744,11 +809,7 @@ export class Elysia<
 	): Elysia<
 		BasePath,
 		Scope,
-		{
-			decorator: Singleton['decorator']
-			store: Prettify<Singleton['store'] & NewStore>
-			derive: Singleton['derive']
-		},
+		WithStore<Singleton, Prettify<Singleton['store'] & NewStore>>,
 		Definitions,
 		Metadata,
 		Routes,
@@ -762,11 +823,10 @@ export class Elysia<
 	): Elysia<
 		BasePath,
 		Scope,
-		{
-			decorator: Singleton['decorator']
-			store: Prettify<Omit<Singleton['store'], keyof NewStore> & NewStore>
-			derive: Singleton['derive']
-		},
+		WithStore<
+			Singleton,
+			Prettify<Omit<Singleton['store'], keyof NewStore> & NewStore>
+		>,
 		Definitions,
 		Metadata,
 		Routes,
@@ -2364,25 +2424,20 @@ export class Elysia<
 	 * them with `.use()` instead.
 	 */
 	guard<
-		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<Input, Definitions['typebox'], BasePath>,
-			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>
-			>
-		> &
-			Metadata['schemas'] &
-			Ephemeral['schemas'] &
-			Volatile['schemas'],
-		const MacroContext extends {} extends Metadata['macroFn']
-			? {}
-			: MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
-					Definitions['typebox']
-				>,
+		const Input extends RouteInput<Definitions, Metadata>,
+		const Schema extends GuardSchema<
+			Definitions,
+			Metadata,
+			Ephemeral,
+			Volatile,
+			BasePath,
+			Input
+		>,
+		const MacroContext extends RouteMacroContext<
+			Definitions,
+			Metadata,
+			Input
+		>,
 		const BeforeHandle extends MaybeArray<
 			OptionalHandler<
 				Schema,
@@ -2446,25 +2501,20 @@ export class Elysia<
 	>
 
 	guard<
-		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<Input, Definitions['typebox'], BasePath>,
-			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>
-			>
-		> &
-			Metadata['schemas'] &
-			Ephemeral['schemas'] &
-			Volatile['schemas'],
-		const MacroContext extends {} extends Metadata['macroFn']
-			? {}
-			: MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
-					Definitions['typebox']
-				>,
+		const Input extends RouteInput<Definitions, Metadata>,
+		const Schema extends GuardSchema<
+			Definitions,
+			Metadata,
+			Ephemeral,
+			Volatile,
+			BasePath,
+			Input
+		>,
+		const MacroContext extends RouteMacroContext<
+			Definitions,
+			Metadata,
+			Input
+		>,
 		const BeforeHandle extends MaybeArray<
 			OptionalHandler<
 				Schema,
@@ -2532,25 +2582,20 @@ export class Elysia<
 	// `guard(hook, run)` is `group('', hook, run)`: a scope-bound hook plus a
 	// sandboxed builder whose routes merge back into this instance.
 	guard<
-		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<Input, Definitions['typebox'], BasePath>,
-			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>
-			>
-		> &
-			Metadata['schemas'] &
-			Ephemeral['schemas'] &
-			Volatile['schemas'],
-		const MacroContext extends {} extends Metadata['macroFn']
-			? {}
-			: MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
-					Definitions['typebox']
-				>,
+		const Input extends RouteInput<Definitions, Metadata>,
+		const Schema extends GuardSchema<
+			Definitions,
+			Metadata,
+			Ephemeral,
+			Volatile,
+			BasePath,
+			Input
+		>,
+		const MacroContext extends RouteMacroContext<
+			Definitions,
+			Metadata,
+			Input
+		>,
 		const BeforeHandle extends MaybeArray<
 			OptionalHandler<
 				Schema,
@@ -2627,25 +2672,20 @@ export class Elysia<
 	>
 
 	guard<
-		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<Input, Definitions['typebox'], BasePath>,
-			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>
-			>
-		> &
-			Metadata['schemas'] &
-			Ephemeral['schemas'] &
-			Volatile['schemas'],
-		const MacroContext extends {} extends Metadata['macroFn']
-			? {}
-			: MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
-					Definitions['typebox']
-				>,
+		const Input extends RouteInput<Definitions, Metadata>,
+		const Schema extends GuardSchema<
+			Definitions,
+			Metadata,
+			Ephemeral,
+			Volatile,
+			BasePath,
+			Input
+		>,
+		const MacroContext extends RouteMacroContext<
+			Definitions,
+			Metadata,
+			Input
+		>,
 		const BeforeHandle extends MaybeArray<
 			OptionalHandler<
 				Schema,
@@ -2726,25 +2766,20 @@ export class Elysia<
 	>
 
 	guard<
-		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<Input, Definitions['typebox'], BasePath>,
-			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>
-			>
-		> &
-			Metadata['schemas'] &
-			Ephemeral['schemas'] &
-			Volatile['schemas'],
-		const MacroContext extends {} extends Metadata['macroFn']
-			? {}
-			: MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
-					Definitions['typebox']
-				>,
+		const Input extends RouteInput<Definitions, Metadata>,
+		const Schema extends GuardSchema<
+			Definitions,
+			Metadata,
+			Ephemeral,
+			Volatile,
+			BasePath,
+			Input
+		>,
+		const MacroContext extends RouteMacroContext<
+			Definitions,
+			Metadata,
+			Input
+		>,
 		const BeforeHandle extends MaybeArray<
 			OptionalHandler<
 				Schema,
@@ -2806,25 +2841,20 @@ export class Elysia<
 	>
 
 	guard<
-		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<Input, Definitions['typebox'], BasePath>,
-			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>
-			>
-		> &
-			Metadata['schemas'] &
-			Ephemeral['schemas'] &
-			Volatile['schemas'],
-		const MacroContext extends {} extends Metadata['macroFn']
-			? {}
-			: MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
-					Definitions['typebox']
-				>,
+		const Input extends RouteInput<Definitions, Metadata>,
+		const Schema extends GuardSchema<
+			Definitions,
+			Metadata,
+			Ephemeral,
+			Volatile,
+			BasePath,
+			Input
+		>,
+		const MacroContext extends RouteMacroContext<
+			Definitions,
+			Metadata,
+			Input
+		>,
 		const BeforeHandle extends MaybeArray<
 			OptionalHandler<
 				Schema,
@@ -2891,25 +2921,20 @@ export class Elysia<
 	>
 
 	guard<
-		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<Input, Definitions['typebox'], BasePath>,
-			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>
-			>
-		> &
-			Metadata['schemas'] &
-			Ephemeral['schemas'] &
-			Volatile['schemas'],
-		const MacroContext extends {} extends Metadata['macroFn']
-			? {}
-			: MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
-					Definitions['typebox']
-				>,
+		const Input extends RouteInput<Definitions, Metadata>,
+		const Schema extends GuardSchema<
+			Definitions,
+			Metadata,
+			Ephemeral,
+			Volatile,
+			BasePath,
+			Input
+		>,
+		const MacroContext extends RouteMacroContext<
+			Definitions,
+			Metadata,
+			Input
+		>,
 		const BeforeHandle extends MaybeArray<
 			OptionalHandler<
 				Schema,
@@ -2971,25 +2996,20 @@ export class Elysia<
 	>
 
 	guard<
-		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<Input, Definitions['typebox'], BasePath>,
-			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>
-			>
-		> &
-			Metadata['schemas'] &
-			Ephemeral['schemas'] &
-			Volatile['schemas'],
-		const MacroContext extends {} extends Metadata['macroFn']
-			? {}
-			: MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
-					Definitions['typebox']
-				>,
+		const Input extends RouteInput<Definitions, Metadata>,
+		const Schema extends GuardSchema<
+			Definitions,
+			Metadata,
+			Ephemeral,
+			Volatile,
+			BasePath,
+			Input
+		>,
+		const MacroContext extends RouteMacroContext<
+			Definitions,
+			Metadata,
+			Input
+		>,
 		const BeforeHandle extends MaybeArray<
 			OptionalHandler<
 				Schema,
@@ -3056,25 +3076,20 @@ export class Elysia<
 	>
 
 	guard<
-		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<Input, Definitions['typebox'], BasePath>,
-			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>
-			>
-		> &
-			Metadata['schemas'] &
-			Ephemeral['schemas'] &
-			Volatile['schemas'],
-		const MacroContext extends {} extends Metadata['macroFn']
-			? {}
-			: MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
-					Definitions['typebox']
-				>,
+		const Input extends RouteInput<Definitions, Metadata>,
+		const Schema extends GuardSchema<
+			Definitions,
+			Metadata,
+			Ephemeral,
+			Volatile,
+			BasePath,
+			Input
+		>,
+		const MacroContext extends RouteMacroContext<
+			Definitions,
+			Metadata,
+			Input
+		>,
 		const BeforeHandle extends MaybeArray<
 			OptionalHandler<
 				Schema,
@@ -3141,25 +3156,20 @@ export class Elysia<
 	>
 
 	guard<
-		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<Input, Definitions['typebox'], BasePath>,
-			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>
-			>
-		> &
-			Metadata['schemas'] &
-			Ephemeral['schemas'] &
-			Volatile['schemas'],
-		const MacroContext extends {} extends Metadata['macroFn']
-			? {}
-			: MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
-					Definitions['typebox']
-				>,
+		const Input extends RouteInput<Definitions, Metadata>,
+		const Schema extends GuardSchema<
+			Definitions,
+			Metadata,
+			Ephemeral,
+			Volatile,
+			BasePath,
+			Input
+		>,
+		const MacroContext extends RouteMacroContext<
+			Definitions,
+			Metadata,
+			Input
+		>,
 		const BeforeHandle extends MaybeArray<
 			OptionalHandler<
 				Schema,
@@ -3318,29 +3328,20 @@ export class Elysia<
 
 	group<
 		const Prefix extends string,
-		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<
-				Input,
-				Definitions['typebox'],
-				JoinPath<BasePath, Prefix>
-			>,
-			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>
-			>
-		> &
-			Metadata['schemas'] &
-			Ephemeral['schemas'] &
-			Volatile['schemas'],
-		const MacroContext extends {} extends Metadata['macroFn']
-			? {}
-			: MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
-					Definitions['typebox']
-				>,
+		const Input extends RouteInput<Definitions, Metadata>,
+		const Schema extends GuardSchema<
+			Definitions,
+			Metadata,
+			Ephemeral,
+			Volatile,
+			JoinPath<BasePath, Prefix>,
+			Input
+		>,
+		const MacroContext extends RouteMacroContext<
+			Definitions,
+			Metadata,
+			Input
+		>,
 		const BeforeHandle extends MaybeArray<
 			OptionalHandler<
 				Schema,
@@ -3419,29 +3420,20 @@ export class Elysia<
 
 	group<
 		const Prefix extends string,
-		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<
-				Input,
-				Definitions['typebox'],
-				JoinPath<BasePath, Prefix>
-			>,
-			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>
-			>
-		> &
-			Metadata['schemas'] &
-			Ephemeral['schemas'] &
-			Volatile['schemas'],
-		const MacroContext extends {} extends Metadata['macroFn']
-			? {}
-			: MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
-					Definitions['typebox']
-				>,
+		const Input extends RouteInput<Definitions, Metadata>,
+		const Schema extends GuardSchema<
+			Definitions,
+			Metadata,
+			Ephemeral,
+			Volatile,
+			JoinPath<BasePath, Prefix>,
+			Input
+		>,
+		const MacroContext extends RouteMacroContext<
+			Definitions,
+			Metadata,
+			Input
+		>,
 		const BeforeHandle extends MaybeArray<
 			OptionalHandler<
 				Schema,
@@ -4985,38 +4977,22 @@ export class Elysia<
 	 */
 	get<
 		const Path extends string,
-		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends IntersectIfObjectSchema<
-			MergeSchema<
-				UnwrapRoute<
-					Input,
-					Definitions['typebox'],
-					JoinPath<BasePath, Path>
-				>,
-				MergeSchema<
-					Volatile['schema'],
-					MergeSchema<Ephemeral['schema'], Metadata['schema']>
-				>,
-				'',
-				undefined extends Input['params'] ? true : false
-			>,
-			MergeScopedSchemas<
-				Metadata['schemas'],
-				Ephemeral['schemas'],
-				Volatile['schemas']
-			>
+		const Input extends RouteInput<Definitions, Metadata>,
+		const Schema extends ResolvedRouteSchema<
+			Definitions,
+			Metadata,
+			Ephemeral,
+			Volatile,
+			BasePath,
+			Path,
+			Input
 		>,
-		const Decorator extends Singleton & {
-			derive: Ephemeral['derive'] & Volatile['derive']
-		},
-		const MacroContext extends {} extends Metadata['macroFn']
-			? {}
-			: MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
-					Definitions['typebox']
-				>,
+		const Decorator extends RouteDecorator<Singleton, Ephemeral, Volatile>,
+		const MacroContext extends RouteMacroContext<
+			Definitions,
+			Metadata,
+			Input
+		>,
 		const Handle extends {} extends MacroContext
 			? InlineHandlerNonMacro<NoInfer<Schema>, NoInfer<Decorator>>
 			: InlineHandler<
@@ -5053,29 +5029,16 @@ export class Elysia<
 	>
 	get<
 		const Path extends string,
-		const Schema extends IntersectIfObjectSchema<
-			MergeSchema<
-				UnwrapRoute<
-					{},
-					Definitions['typebox'],
-					JoinPath<BasePath, Path>
-				>,
-				MergeSchema<
-					Volatile['schema'],
-					MergeSchema<Ephemeral['schema'], Metadata['schema']>
-				>,
-				'',
-				true
-			>,
-			MergeScopedSchemas<
-				Metadata['schemas'],
-				Ephemeral['schemas'],
-				Volatile['schemas']
-			>
+		const Schema extends ResolvedRouteSchema<
+			Definitions,
+			Metadata,
+			Ephemeral,
+			Volatile,
+			BasePath,
+			Path,
+			{}
 		>,
-		const Decorator extends Singleton & {
-			derive: Ephemeral['derive'] & Volatile['derive']
-		},
+		const Decorator extends RouteDecorator<Singleton, Ephemeral, Volatile>,
 		const Handle extends InlineHandlerNonMacro<
 			NoInfer<Schema>,
 			NoInfer<Decorator>
@@ -5118,38 +5081,22 @@ export class Elysia<
 	 */
 	post<
 		const Path extends string,
-		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends IntersectIfObjectSchema<
-			MergeSchema<
-				UnwrapRoute<
-					Input,
-					Definitions['typebox'],
-					JoinPath<BasePath, Path>
-				>,
-				MergeSchema<
-					Volatile['schema'],
-					MergeSchema<Ephemeral['schema'], Metadata['schema']>
-				>,
-				'',
-				undefined extends Input['params'] ? true : false
-			>,
-			MergeScopedSchemas<
-				Metadata['schemas'],
-				Ephemeral['schemas'],
-				Volatile['schemas']
-			>
+		const Input extends RouteInput<Definitions, Metadata>,
+		const Schema extends ResolvedRouteSchema<
+			Definitions,
+			Metadata,
+			Ephemeral,
+			Volatile,
+			BasePath,
+			Path,
+			Input
 		>,
-		const Decorator extends Singleton & {
-			derive: Ephemeral['derive'] & Volatile['derive']
-		},
-		const MacroContext extends {} extends Metadata['macroFn']
-			? {}
-			: MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
-					Definitions['typebox']
-				>,
+		const Decorator extends RouteDecorator<Singleton, Ephemeral, Volatile>,
+		const MacroContext extends RouteMacroContext<
+			Definitions,
+			Metadata,
+			Input
+		>,
 		const Handle extends {} extends MacroContext
 			? InlineHandlerNonMacro<NoInfer<Schema>, NoInfer<Decorator>>
 			: InlineHandler<
@@ -5186,29 +5133,16 @@ export class Elysia<
 	>
 	post<
 		const Path extends string,
-		const Schema extends IntersectIfObjectSchema<
-			MergeSchema<
-				UnwrapRoute<
-					{},
-					Definitions['typebox'],
-					JoinPath<BasePath, Path>
-				>,
-				MergeSchema<
-					Volatile['schema'],
-					MergeSchema<Ephemeral['schema'], Metadata['schema']>
-				>,
-				'',
-				true
-			>,
-			MergeScopedSchemas<
-				Metadata['schemas'],
-				Ephemeral['schemas'],
-				Volatile['schemas']
-			>
+		const Schema extends ResolvedRouteSchema<
+			Definitions,
+			Metadata,
+			Ephemeral,
+			Volatile,
+			BasePath,
+			Path,
+			{}
 		>,
-		const Decorator extends Singleton & {
-			derive: Ephemeral['derive'] & Volatile['derive']
-		},
+		const Decorator extends RouteDecorator<Singleton, Ephemeral, Volatile>,
 		const Handle extends InlineHandlerNonMacro<
 			NoInfer<Schema>,
 			NoInfer<Decorator>
@@ -5251,38 +5185,22 @@ export class Elysia<
 	 */
 	put<
 		const Path extends string,
-		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends IntersectIfObjectSchema<
-			MergeSchema<
-				UnwrapRoute<
-					Input,
-					Definitions['typebox'],
-					JoinPath<BasePath, Path>
-				>,
-				MergeSchema<
-					Volatile['schema'],
-					MergeSchema<Ephemeral['schema'], Metadata['schema']>
-				>,
-				'',
-				undefined extends Input['params'] ? true : false
-			>,
-			MergeScopedSchemas<
-				Metadata['schemas'],
-				Ephemeral['schemas'],
-				Volatile['schemas']
-			>
+		const Input extends RouteInput<Definitions, Metadata>,
+		const Schema extends ResolvedRouteSchema<
+			Definitions,
+			Metadata,
+			Ephemeral,
+			Volatile,
+			BasePath,
+			Path,
+			Input
 		>,
-		const Decorator extends Singleton & {
-			derive: Ephemeral['derive'] & Volatile['derive']
-		},
-		const MacroContext extends {} extends Metadata['macroFn']
-			? {}
-			: MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
-					Definitions['typebox']
-				>,
+		const Decorator extends RouteDecorator<Singleton, Ephemeral, Volatile>,
+		const MacroContext extends RouteMacroContext<
+			Definitions,
+			Metadata,
+			Input
+		>,
 		const Handle extends {} extends MacroContext
 			? InlineHandlerNonMacro<NoInfer<Schema>, NoInfer<Decorator>>
 			: InlineHandler<
@@ -5319,29 +5237,16 @@ export class Elysia<
 	>
 	put<
 		const Path extends string,
-		const Schema extends IntersectIfObjectSchema<
-			MergeSchema<
-				UnwrapRoute<
-					{},
-					Definitions['typebox'],
-					JoinPath<BasePath, Path>
-				>,
-				MergeSchema<
-					Volatile['schema'],
-					MergeSchema<Ephemeral['schema'], Metadata['schema']>
-				>,
-				'',
-				true
-			>,
-			MergeScopedSchemas<
-				Metadata['schemas'],
-				Ephemeral['schemas'],
-				Volatile['schemas']
-			>
+		const Schema extends ResolvedRouteSchema<
+			Definitions,
+			Metadata,
+			Ephemeral,
+			Volatile,
+			BasePath,
+			Path,
+			{}
 		>,
-		const Decorator extends Singleton & {
-			derive: Ephemeral['derive'] & Volatile['derive']
-		},
+		const Decorator extends RouteDecorator<Singleton, Ephemeral, Volatile>,
 		const Handle extends InlineHandlerNonMacro<
 			NoInfer<Schema>,
 			NoInfer<Decorator>
@@ -5384,38 +5289,22 @@ export class Elysia<
 	 */
 	patch<
 		const Path extends string,
-		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends IntersectIfObjectSchema<
-			MergeSchema<
-				UnwrapRoute<
-					Input,
-					Definitions['typebox'],
-					JoinPath<BasePath, Path>
-				>,
-				MergeSchema<
-					Volatile['schema'],
-					MergeSchema<Ephemeral['schema'], Metadata['schema']>
-				>,
-				'',
-				undefined extends Input['params'] ? true : false
-			>,
-			MergeScopedSchemas<
-				Metadata['schemas'],
-				Ephemeral['schemas'],
-				Volatile['schemas']
-			>
+		const Input extends RouteInput<Definitions, Metadata>,
+		const Schema extends ResolvedRouteSchema<
+			Definitions,
+			Metadata,
+			Ephemeral,
+			Volatile,
+			BasePath,
+			Path,
+			Input
 		>,
-		const Decorator extends Singleton & {
-			derive: Ephemeral['derive'] & Volatile['derive']
-		},
-		const MacroContext extends {} extends Metadata['macroFn']
-			? {}
-			: MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
-					Definitions['typebox']
-				>,
+		const Decorator extends RouteDecorator<Singleton, Ephemeral, Volatile>,
+		const MacroContext extends RouteMacroContext<
+			Definitions,
+			Metadata,
+			Input
+		>,
 		const Handle extends {} extends MacroContext
 			? InlineHandlerNonMacro<NoInfer<Schema>, NoInfer<Decorator>>
 			: InlineHandler<
@@ -5452,29 +5341,16 @@ export class Elysia<
 	>
 	patch<
 		const Path extends string,
-		const Schema extends IntersectIfObjectSchema<
-			MergeSchema<
-				UnwrapRoute<
-					{},
-					Definitions['typebox'],
-					JoinPath<BasePath, Path>
-				>,
-				MergeSchema<
-					Volatile['schema'],
-					MergeSchema<Ephemeral['schema'], Metadata['schema']>
-				>,
-				'',
-				true
-			>,
-			MergeScopedSchemas<
-				Metadata['schemas'],
-				Ephemeral['schemas'],
-				Volatile['schemas']
-			>
+		const Schema extends ResolvedRouteSchema<
+			Definitions,
+			Metadata,
+			Ephemeral,
+			Volatile,
+			BasePath,
+			Path,
+			{}
 		>,
-		const Decorator extends Singleton & {
-			derive: Ephemeral['derive'] & Volatile['derive']
-		},
+		const Decorator extends RouteDecorator<Singleton, Ephemeral, Volatile>,
 		const Handle extends InlineHandlerNonMacro<
 			NoInfer<Schema>,
 			NoInfer<Decorator>
@@ -5517,38 +5393,22 @@ export class Elysia<
 	 */
 	delete<
 		const Path extends string,
-		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends IntersectIfObjectSchema<
-			MergeSchema<
-				UnwrapRoute<
-					Input,
-					Definitions['typebox'],
-					JoinPath<BasePath, Path>
-				>,
-				MergeSchema<
-					Volatile['schema'],
-					MergeSchema<Ephemeral['schema'], Metadata['schema']>
-				>,
-				'',
-				undefined extends Input['params'] ? true : false
-			>,
-			MergeScopedSchemas<
-				Metadata['schemas'],
-				Ephemeral['schemas'],
-				Volatile['schemas']
-			>
+		const Input extends RouteInput<Definitions, Metadata>,
+		const Schema extends ResolvedRouteSchema<
+			Definitions,
+			Metadata,
+			Ephemeral,
+			Volatile,
+			BasePath,
+			Path,
+			Input
 		>,
-		const Decorator extends Singleton & {
-			derive: Ephemeral['derive'] & Volatile['derive']
-		},
-		const MacroContext extends {} extends Metadata['macroFn']
-			? {}
-			: MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
-					Definitions['typebox']
-				>,
+		const Decorator extends RouteDecorator<Singleton, Ephemeral, Volatile>,
+		const MacroContext extends RouteMacroContext<
+			Definitions,
+			Metadata,
+			Input
+		>,
 		const Handle extends {} extends MacroContext
 			? InlineHandlerNonMacro<NoInfer<Schema>, NoInfer<Decorator>>
 			: InlineHandler<
@@ -5585,29 +5445,16 @@ export class Elysia<
 	>
 	delete<
 		const Path extends string,
-		const Schema extends IntersectIfObjectSchema<
-			MergeSchema<
-				UnwrapRoute<
-					{},
-					Definitions['typebox'],
-					JoinPath<BasePath, Path>
-				>,
-				MergeSchema<
-					Volatile['schema'],
-					MergeSchema<Ephemeral['schema'], Metadata['schema']>
-				>,
-				'',
-				true
-			>,
-			MergeScopedSchemas<
-				Metadata['schemas'],
-				Ephemeral['schemas'],
-				Volatile['schemas']
-			>
+		const Schema extends ResolvedRouteSchema<
+			Definitions,
+			Metadata,
+			Ephemeral,
+			Volatile,
+			BasePath,
+			Path,
+			{}
 		>,
-		const Decorator extends Singleton & {
-			derive: Ephemeral['derive'] & Volatile['derive']
-		},
+		const Decorator extends RouteDecorator<Singleton, Ephemeral, Volatile>,
 		const Handle extends InlineHandlerNonMacro<
 			NoInfer<Schema>,
 			NoInfer<Decorator>
@@ -5650,38 +5497,22 @@ export class Elysia<
 	 */
 	options<
 		const Path extends string,
-		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends IntersectIfObjectSchema<
-			MergeSchema<
-				UnwrapRoute<
-					Input,
-					Definitions['typebox'],
-					JoinPath<BasePath, Path>
-				>,
-				MergeSchema<
-					Volatile['schema'],
-					MergeSchema<Ephemeral['schema'], Metadata['schema']>
-				>,
-				'',
-				undefined extends Input['params'] ? true : false
-			>,
-			MergeScopedSchemas<
-				Metadata['schemas'],
-				Ephemeral['schemas'],
-				Volatile['schemas']
-			>
+		const Input extends RouteInput<Definitions, Metadata>,
+		const Schema extends ResolvedRouteSchema<
+			Definitions,
+			Metadata,
+			Ephemeral,
+			Volatile,
+			BasePath,
+			Path,
+			Input
 		>,
-		const Decorator extends Singleton & {
-			derive: Ephemeral['derive'] & Volatile['derive']
-		},
-		const MacroContext extends {} extends Metadata['macroFn']
-			? {}
-			: MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
-					Definitions['typebox']
-				>,
+		const Decorator extends RouteDecorator<Singleton, Ephemeral, Volatile>,
+		const MacroContext extends RouteMacroContext<
+			Definitions,
+			Metadata,
+			Input
+		>,
 		const Handle extends {} extends MacroContext
 			? InlineHandlerNonMacro<NoInfer<Schema>, NoInfer<Decorator>>
 			: InlineHandler<
@@ -5718,29 +5549,16 @@ export class Elysia<
 	>
 	options<
 		const Path extends string,
-		const Schema extends IntersectIfObjectSchema<
-			MergeSchema<
-				UnwrapRoute<
-					{},
-					Definitions['typebox'],
-					JoinPath<BasePath, Path>
-				>,
-				MergeSchema<
-					Volatile['schema'],
-					MergeSchema<Ephemeral['schema'], Metadata['schema']>
-				>,
-				'',
-				true
-			>,
-			MergeScopedSchemas<
-				Metadata['schemas'],
-				Ephemeral['schemas'],
-				Volatile['schemas']
-			>
+		const Schema extends ResolvedRouteSchema<
+			Definitions,
+			Metadata,
+			Ephemeral,
+			Volatile,
+			BasePath,
+			Path,
+			{}
 		>,
-		const Decorator extends Singleton & {
-			derive: Ephemeral['derive'] & Volatile['derive']
-		},
+		const Decorator extends RouteDecorator<Singleton, Ephemeral, Volatile>,
 		const Handle extends InlineHandlerNonMacro<
 			NoInfer<Schema>,
 			NoInfer<Decorator>
@@ -5783,38 +5601,22 @@ export class Elysia<
 	 */
 	head<
 		const Path extends string,
-		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends IntersectIfObjectSchema<
-			MergeSchema<
-				UnwrapRoute<
-					Input,
-					Definitions['typebox'],
-					JoinPath<BasePath, Path>
-				>,
-				MergeSchema<
-					Volatile['schema'],
-					MergeSchema<Ephemeral['schema'], Metadata['schema']>
-				>,
-				'',
-				undefined extends Input['params'] ? true : false
-			>,
-			MergeScopedSchemas<
-				Metadata['schemas'],
-				Ephemeral['schemas'],
-				Volatile['schemas']
-			>
+		const Input extends RouteInput<Definitions, Metadata>,
+		const Schema extends ResolvedRouteSchema<
+			Definitions,
+			Metadata,
+			Ephemeral,
+			Volatile,
+			BasePath,
+			Path,
+			Input
 		>,
-		const Decorator extends Singleton & {
-			derive: Ephemeral['derive'] & Volatile['derive']
-		},
-		const MacroContext extends {} extends Metadata['macroFn']
-			? {}
-			: MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
-					Definitions['typebox']
-				>,
+		const Decorator extends RouteDecorator<Singleton, Ephemeral, Volatile>,
+		const MacroContext extends RouteMacroContext<
+			Definitions,
+			Metadata,
+			Input
+		>,
 		const Handle extends {} extends MacroContext
 			? InlineHandlerNonMacro<NoInfer<Schema>, NoInfer<Decorator>>
 			: InlineHandler<
@@ -5851,29 +5653,16 @@ export class Elysia<
 	>
 	head<
 		const Path extends string,
-		const Schema extends IntersectIfObjectSchema<
-			MergeSchema<
-				UnwrapRoute<
-					{},
-					Definitions['typebox'],
-					JoinPath<BasePath, Path>
-				>,
-				MergeSchema<
-					Volatile['schema'],
-					MergeSchema<Ephemeral['schema'], Metadata['schema']>
-				>,
-				'',
-				true
-			>,
-			MergeScopedSchemas<
-				Metadata['schemas'],
-				Ephemeral['schemas'],
-				Volatile['schemas']
-			>
+		const Schema extends ResolvedRouteSchema<
+			Definitions,
+			Metadata,
+			Ephemeral,
+			Volatile,
+			BasePath,
+			Path,
+			{}
 		>,
-		const Decorator extends Singleton & {
-			derive: Ephemeral['derive'] & Volatile['derive']
-		},
+		const Decorator extends RouteDecorator<Singleton, Ephemeral, Volatile>,
 		const Handle extends InlineHandlerNonMacro<
 			NoInfer<Schema>,
 			NoInfer<Decorator>
@@ -5916,38 +5705,22 @@ export class Elysia<
 	method<
 		const Method extends HTTPMethod,
 		const Path extends string,
-		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends IntersectIfObjectSchema<
-			MergeSchema<
-				UnwrapRoute<
-					Input,
-					Definitions['typebox'],
-					JoinPath<BasePath, Path>
-				>,
-				MergeSchema<
-					Volatile['schema'],
-					MergeSchema<Ephemeral['schema'], Metadata['schema']>
-				>,
-				'',
-				undefined extends Input['params'] ? true : false
-			>,
-			MergeScopedSchemas<
-				Metadata['schemas'],
-				Ephemeral['schemas'],
-				Volatile['schemas']
-			>
+		const Input extends RouteInput<Definitions, Metadata>,
+		const Schema extends ResolvedRouteSchema<
+			Definitions,
+			Metadata,
+			Ephemeral,
+			Volatile,
+			BasePath,
+			Path,
+			Input
 		>,
-		const Decorator extends Singleton & {
-			derive: Ephemeral['derive'] & Volatile['derive']
-		},
-		const MacroContext extends {} extends Metadata['macroFn']
-			? {}
-			: MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
-					Definitions['typebox']
-				>,
+		const Decorator extends RouteDecorator<Singleton, Ephemeral, Volatile>,
+		const MacroContext extends RouteMacroContext<
+			Definitions,
+			Metadata,
+			Input
+		>,
 		const Handle extends {} extends MacroContext
 			? InlineHandlerNonMacro<NoInfer<Schema>, NoInfer<Decorator>>
 			: InlineHandler<
@@ -5986,29 +5759,16 @@ export class Elysia<
 	method<
 		const Method extends HTTPMethod,
 		const Path extends string,
-		const Schema extends IntersectIfObjectSchema<
-			MergeSchema<
-				UnwrapRoute<
-					{},
-					Definitions['typebox'],
-					JoinPath<BasePath, Path>
-				>,
-				MergeSchema<
-					Volatile['schema'],
-					MergeSchema<Ephemeral['schema'], Metadata['schema']>
-				>,
-				'',
-				true
-			>,
-			MergeScopedSchemas<
-				Metadata['schemas'],
-				Ephemeral['schemas'],
-				Volatile['schemas']
-			>
+		const Schema extends ResolvedRouteSchema<
+			Definitions,
+			Metadata,
+			Ephemeral,
+			Volatile,
+			BasePath,
+			Path,
+			{}
 		>,
-		const Decorator extends Singleton & {
-			derive: Ephemeral['derive'] & Volatile['derive']
-		},
+		const Decorator extends RouteDecorator<Singleton, Ephemeral, Volatile>,
 		const Handle extends InlineHandlerNonMacro<
 			NoInfer<Schema>,
 			NoInfer<Decorator>
@@ -6048,38 +5808,22 @@ export class Elysia<
 
 	all<
 		const Path extends string,
-		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends IntersectIfObjectSchema<
-			MergeSchema<
-				UnwrapRoute<
-					Input,
-					Definitions['typebox'],
-					JoinPath<BasePath, Path>
-				>,
-				MergeSchema<
-					Volatile['schema'],
-					MergeSchema<Ephemeral['schema'], Metadata['schema']>
-				>,
-				'',
-				undefined extends Input['params'] ? true : false
-			>,
-			MergeScopedSchemas<
-				Metadata['schemas'],
-				Ephemeral['schemas'],
-				Volatile['schemas']
-			>
+		const Input extends RouteInput<Definitions, Metadata>,
+		const Schema extends ResolvedRouteSchema<
+			Definitions,
+			Metadata,
+			Ephemeral,
+			Volatile,
+			BasePath,
+			Path,
+			Input
 		>,
-		const Decorator extends Singleton & {
-			derive: Ephemeral['derive'] & Volatile['derive']
-		},
-		const MacroContext extends {} extends Metadata['macroFn']
-			? {}
-			: MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
-					Definitions['typebox']
-				>,
+		const Decorator extends RouteDecorator<Singleton, Ephemeral, Volatile>,
+		const MacroContext extends RouteMacroContext<
+			Definitions,
+			Metadata,
+			Input
+		>,
 		const Handle extends {} extends MacroContext
 			? InlineHandlerNonMacro<NoInfer<Schema>, NoInfer<Decorator>>
 			: InlineHandler<
@@ -6102,29 +5846,16 @@ export class Elysia<
 	): this
 	all<
 		const Path extends string,
-		const Schema extends IntersectIfObjectSchema<
-			MergeSchema<
-				UnwrapRoute<
-					{},
-					Definitions['typebox'],
-					JoinPath<BasePath, Path>
-				>,
-				MergeSchema<
-					Volatile['schema'],
-					MergeSchema<Ephemeral['schema'], Metadata['schema']>
-				>,
-				'',
-				true
-			>,
-			MergeScopedSchemas<
-				Metadata['schemas'],
-				Ephemeral['schemas'],
-				Volatile['schemas']
-			>
+		const Schema extends ResolvedRouteSchema<
+			Definitions,
+			Metadata,
+			Ephemeral,
+			Volatile,
+			BasePath,
+			Path,
+			{}
 		>,
-		const Decorator extends Singleton & {
-			derive: Ephemeral['derive'] & Volatile['derive']
-		},
+		const Decorator extends RouteDecorator<Singleton, Ephemeral, Volatile>,
 		const Handle extends InlineHandlerNonMacro<
 			NoInfer<Schema>,
 			NoInfer<Decorator>

@@ -14,6 +14,9 @@ export namespace Sucrose {
 		route: boolean
 	}
 
+	export type InferenceOverride = Partial<Inference>
+	export type Implementation = 'oracle' | 'candidate'
+
 	export type LifeCycle = Partial<Partial<AppHook>>
 }
 
@@ -762,40 +765,60 @@ function isContextPassToFunction(
 	}
 }
 
-const DEFAULT_CACHE_LIMIT = 1024
+const SOURCE_CACHE_LIMIT = 1024 * 1024
 
-type SourceCache = Map<
-	number,
-	{ content: string; inference: Sucrose.Inference }
->
+type SourceCacheEntry = {
+	content: string
+	inference: Sucrose.Inference
+	bytes: number
+}
 
-const sourceCache = () =>
-	getCompilerSession()?.sucroseCache as SourceCache | undefined
+const compilerSession = () => getCompilerSession()
 
-let functionCaches = new WeakMap<Function, Sucrose.Inference>()
+let oracleFunctionCaches = new WeakMap<Function, Sucrose.Inference>()
+let candidateFunctionCaches = new WeakMap<Function, Sucrose.Inference>()
 
 function rememberInference(
-	caches: SourceCache | undefined,
-	key: number,
-	cached: { content: string; inference: Sucrose.Inference } | undefined,
+	lane: Sucrose.Implementation,
+	key: string,
+	cached: SourceCacheEntry | undefined,
 	content: string,
 	event: unknown,
-	inference: Sucrose.Inference
+	inference: Sucrose.Inference,
+	functionCache: WeakMap<Function, Sucrose.Inference>
 ) {
-	if (caches && (!cached || cached.content !== content)) {
-		if (caches.size >= DEFAULT_CACHE_LIMIT) {
-			const oldest = caches.keys().next().value
-			if (oldest !== undefined) caches.delete(oldest)
-		}
+	const immutable = Object.freeze({ ...inference })
+	const session = compilerSession()
+	const caches = session?.sucroseCache as
+		| Map<string, SourceCacheEntry>
+		| undefined
+	if (session && caches && (!cached || cached.content !== content)) {
+		const bytes = content.length * 2 + 64
+		if (bytes <= SOURCE_CACHE_LIMIT) {
+			while (session.sucroseCacheBytes + bytes > SOURCE_CACHE_LIMIT) {
+				const oldest = caches.keys().next().value
+				if (oldest === undefined) break
+				const removed = caches.get(oldest)
+				caches.delete(oldest)
+				if (removed) session.sucroseCacheBytes -= removed.bytes
+			}
 
-		caches.set(key, { content, inference })
+			const cacheKey = `${lane}:${key}`
+			const previous = caches.get(cacheKey)
+			if (previous) session.sucroseCacheBytes -= previous.bytes
+			caches.set(cacheKey, { content, inference: immutable, bytes })
+			session.sucroseCacheBytes += bytes
+		}
 	}
-	if (typeof event === 'function') functionCaches.set(event, inference)
+	if (typeof event === 'function') functionCache.set(event, immutable)
 }
 
 function clearCache() {
-	sourceCache()?.clear()
-	functionCaches = new WeakMap()
+	const session = compilerSession()
+	session?.sucroseCache.clear()
+	if (session) session.sucroseCacheBytes = 0
+	oracleFunctionCaches = new WeakMap()
+	candidateFunctionCaches = new WeakMap()
 }
 
 export function clearSucroseCache(delay?: number | null) {
@@ -832,12 +855,10 @@ function pushParse(target: unknown[], array: unknown[]) {
 		if (typeof array[i] === 'function') target.push(array[i])
 }
 
-export function sucrose(
+function collectInferenceEvents(
 	handler: Handler | undefined,
 	lifeCycle: Sucrose.LifeCycle | undefined
-): Sucrose.Inference {
-	let inference: Sucrose.Inference | undefined
-
+) {
 	const events: Handler[] = []
 
 	if (handler && typeof handler === 'function') events.push(handler)
@@ -853,13 +874,26 @@ export function sucrose(
 			push(events, lifeCycle.afterResponse)
 	}
 
-	const caches = sourceCache()
+	return events
+}
+
+export function sucroseOracle(
+	handler: Handler | undefined,
+	lifeCycle: Sucrose.LifeCycle | undefined
+): Sucrose.Inference {
+	let inference: Sucrose.Inference | undefined
+
+	const events = collectInferenceEvents(handler, lifeCycle)
+
+	const caches = compilerSession()?.sucroseCache as
+		| Map<string, SourceCacheEntry>
+		| undefined
 
 	for (let i = 0; i < events.length; i++) {
 		const event = events[i]
 		if (!event) continue
 
-		const memoized = functionCaches.get(event as Function)
+		const memoized = oracleFunctionCaches.get(event as Function)
 		if (memoized) {
 			inference = inference
 				? mergeInference(inference, memoized)
@@ -868,15 +902,16 @@ export function sucrose(
 		}
 
 		const content = event.toString()
-		const key = fnv1a(content)
-		const cached = caches?.get(key)
+		const key = String(fnv1a(content))
+		const cacheKey = `oracle:${key}`
+		const cached = caches?.get(cacheKey)
 		if (cached && cached.content === content) {
 			const cachedInference = cached.inference
-			caches!.delete(key)
-			caches!.set(key, cached)
+			caches!.delete(cacheKey)
+			caches!.set(cacheKey, cached)
 
 			if (typeof event === 'function')
-				functionCaches.set(event, cachedInference)
+				oracleFunctionCaches.set(event, cachedInference)
 			inference = inference
 				? mergeInference(inference, cachedInference)
 				: cachedInference
@@ -890,7 +925,15 @@ export function sucrose(
 		if (content.includes('[native code]')) {
 			markAllAccessed(fnInference)
 
-			rememberInference(caches, key, cached, content, event, fnInference)
+			rememberInference(
+				'oracle',
+				key,
+				cached,
+				content,
+				event,
+				fnInference,
+				oracleFunctionCaches
+			)
 
 			inference = mergeInference(inference, fnInference)
 			continue
@@ -902,7 +945,15 @@ export function sucrose(
 			// Unknown case: parser could not extract body, degrade to all-true per contract
 			markAllAccessed(fnInference)
 
-			rememberInference(caches, key, cached, content, event, fnInference)
+			rememberInference(
+				'oracle',
+				key,
+				cached,
+				content,
+				event,
+				fnInference,
+				oracleFunctionCaches
+			)
 
 			inference = mergeInference(inference, fnInference)
 			continue
@@ -938,7 +989,15 @@ export function sucrose(
 				fnInference.query = true
 		}
 
-		rememberInference(caches, key, cached, content, event, fnInference)
+		rememberInference(
+			'oracle',
+			key,
+			cached,
+			content,
+			event,
+			fnInference,
+			oracleFunctionCaches
+		)
 
 		inference = mergeInference(inference, fnInference)
 
@@ -957,3 +1016,667 @@ export function sucrose(
 	// Fall back to defaults when no analysable events were found
 	return inference ?? defaultSucrose()
 }
+
+type ScanToken = {
+	k: 'i' | 's' | 'p'
+	value: string
+}
+
+const prefixKeywords = new Set([
+	'await',
+	'case',
+	'delete',
+	'do',
+	'else',
+	'in',
+	'instanceof',
+	'new',
+	'of',
+	'return',
+	'throw',
+	'typeof',
+	'void',
+	'yield'
+])
+
+const isIdentifierStart = (char: number) =>
+	(char >= 65 && char <= 90) ||
+	(char >= 97 && char <= 122) ||
+	char === 36 ||
+	char === 95 ||
+	char >= 128
+
+const isIdentifierPart = (char: number) =>
+	isIdentifierStart(char) || (char >= 48 && char <= 57)
+
+function decodeIdentifier(value: string): string | undefined {
+	if (!value.includes('\\u')) return value
+
+	let decoded = ''
+	for (let i = 0; i < value.length; i++) {
+		if (value.charCodeAt(i) !== 92 || value.charCodeAt(i + 1) !== 117) {
+			decoded += value[i]
+			continue
+		}
+
+		i += 2
+		let hex: string
+		if (value.charCodeAt(i) === 123) {
+			const end = value.indexOf('}', i + 1)
+			if (end === -1) return
+			hex = value.slice(i + 1, end)
+			i = end
+		} else {
+			hex = value.slice(i, i + 4)
+			if (hex.length !== 4) return
+			i += 3
+		}
+
+		const codePoint = Number.parseInt(hex, 16)
+		if (!Number.isFinite(codePoint) || codePoint > 0x10ffff) return
+		decoded += String.fromCodePoint(codePoint)
+	}
+
+	return decoded
+}
+
+function scanTokens(source: string): ScanToken[] | undefined {
+	const tokens: ScanToken[] = []
+	let index = 0
+	let canEndExpression = false
+
+	const scanCode = (templateExpression = false): boolean => {
+		let templateDepth = 0
+
+		while (index < source.length) {
+			const char = source.charCodeAt(index)
+
+			if (char === 32 || char === 9 || char === 10 || char === 13) {
+				index++
+				continue
+			}
+
+			if (char === 92 && source.charCodeAt(index + 1) !== 117)
+				return false
+
+			if (char === 47) {
+				const next = source.charCodeAt(index + 1)
+				if (next === 47) {
+					index += 2
+					while (
+						index < source.length &&
+						source.charCodeAt(index) !== 10 &&
+						source.charCodeAt(index) !== 13
+					)
+						index++
+					continue
+				}
+				if (next === 42) {
+					index += 2
+					while (
+						index + 1 < source.length &&
+						!(
+							source.charCodeAt(index) === 42 &&
+							source.charCodeAt(index + 1) === 47
+						)
+					)
+						index++
+					if (index + 1 >= source.length) return false
+					index += 2
+					continue
+				}
+
+				if (!canEndExpression) {
+					index++
+					let escaped = false
+					let characterClass = false
+					let closed = false
+					while (index < source.length) {
+						const regexChar = source.charCodeAt(index++)
+						if (escaped) {
+							escaped = false
+							continue
+						}
+						if (regexChar === 92) {
+							escaped = true
+							continue
+						}
+						if (regexChar === 91) characterClass = true
+						else if (regexChar === 93) characterClass = false
+						else if (regexChar === 47 && !characterClass) {
+							closed = true
+							break
+						} else if (regexChar === 10 || regexChar === 13)
+							return false
+					}
+					if (!closed) return false
+					while (isIdentifierPart(source.charCodeAt(index))) index++
+					canEndExpression = true
+					continue
+				}
+
+				tokens.push({ k: 'p', value: '/' })
+				index++
+				canEndExpression = false
+				continue
+			}
+
+			if (char === 34 || char === 39) {
+				const quote = char
+				const start = ++index
+				let escaped = false
+				while (index < source.length) {
+					const stringChar = source.charCodeAt(index)
+					if (escaped) escaped = false
+					else if (stringChar === 92) escaped = true
+					else if (stringChar === quote) break
+					else if (stringChar === 10 || stringChar === 13)
+						return false
+					index++
+				}
+				if (index >= source.length) return false
+				tokens.push({
+					k: 's',
+					value: source.slice(start, index)
+				})
+				index++
+				canEndExpression = true
+				continue
+			}
+
+			if (char === 96) {
+				index++
+				let closed = false
+				while (index < source.length) {
+					const templateChar = source.charCodeAt(index)
+					if (templateChar === 92) {
+						index += 2
+						continue
+					}
+					if (templateChar === 96) {
+						index++
+						closed = true
+						break
+					}
+					if (
+						templateChar === 36 &&
+						source.charCodeAt(index + 1) === 123
+					) {
+						index += 2
+						canEndExpression = false
+						if (!scanCode(true)) return false
+						continue
+					}
+					index++
+				}
+				if (!closed) return false
+				canEndExpression = true
+				continue
+			}
+
+			if (
+				isIdentifierStart(char) ||
+				(char === 92 && source.charCodeAt(index + 1) === 117)
+			) {
+				const start = index
+				if (char === 92) {
+					index += 2
+					if (source.charCodeAt(index) === 123) {
+						const end = source.indexOf('}', index + 1)
+						if (end === -1) return false
+						index = end + 1
+					} else {
+						for (let digit = 0; digit < 4; digit++) {
+							const hex = source.charCodeAt(index + digit)
+							if (
+								!(
+									(hex >= 48 && hex <= 57) ||
+									(hex >= 65 && hex <= 70) ||
+									(hex >= 97 && hex <= 102)
+								)
+							)
+								return false
+						}
+						index += 4
+					}
+				} else index++
+				while (index < source.length) {
+					const identifierChar = source.charCodeAt(index)
+					if (isIdentifierPart(identifierChar)) {
+						index++
+						continue
+					}
+					if (
+						identifierChar === 92 &&
+						source.charCodeAt(index + 1) === 117
+					) {
+						index += 2
+						if (source.charCodeAt(index) === 123) {
+							const end = source.indexOf('}', index + 1)
+							if (end === -1) return false
+							index = end + 1
+						} else {
+							for (let digit = 0; digit < 4; digit++) {
+								const hex = source.charCodeAt(index + digit)
+								if (
+									!(
+										(hex >= 48 && hex <= 57) ||
+										(hex >= 65 && hex <= 70) ||
+										(hex >= 97 && hex <= 102)
+									)
+								)
+									return false
+							}
+							index += 4
+						}
+						continue
+					}
+					break
+				}
+				const value = decodeIdentifier(source.slice(start, index))
+				if (value === undefined) return false
+				tokens.push({ k: 'i', value })
+				canEndExpression = !prefixKeywords.has(value)
+				continue
+			}
+
+			if (char >= 48 && char <= 57) {
+				index++
+				while (isIdentifierPart(source.charCodeAt(index))) index++
+				canEndExpression = true
+				continue
+			}
+
+			if (templateExpression) {
+				if (char === 123) templateDepth++
+				else if (char === 125) {
+					if (templateDepth === 0) {
+						index++
+						return true
+					}
+					templateDepth--
+				}
+			}
+
+			let value = source[index]
+			const pair = source.slice(index, index + 2)
+			const triple = source.slice(index, index + 3)
+			if (triple === '...') value = triple
+			else if (
+				pair === '?.' ||
+				pair === '=>' ||
+				pair === '++' ||
+				pair === '--'
+			)
+				value = pair
+			tokens.push({ k: 'p', value })
+			index += value.length
+			if (value !== '++' && value !== '--')
+				canEndExpression =
+					value === ')' || value === ']' || value === '}'
+		}
+
+		return !templateExpression
+	}
+
+	return scanCode() ? tokens : undefined
+}
+
+const channel = (value: string): keyof Sucrose.Inference | undefined => {
+	switch (value) {
+		case 'query':
+		case 'headers':
+		case 'body':
+		case 'cookie':
+		case 'set':
+		case 'route':
+			return value
+	}
+}
+
+function computedDestructuringChannel(
+	tokens: ScanToken[],
+	index: number
+): false | keyof Sucrose.Inference {
+	const property = tokens[index + 1]
+	return (
+		(property?.k === 's' &&
+			!property.value.includes('\\') &&
+			tokens[index + 2]?.value === ']' &&
+			channel(property.value)) ||
+		false
+	)
+}
+
+function inferCandidateFunction(event: Function): Sucrose.Inference {
+	const inference = defaultSucrose()
+
+	if (Object.hasOwn(event, 'toString')) {
+		markAllAccessed(inference)
+		return inference
+	}
+
+	let source: string
+	try {
+		source = Function.prototype.toString.call(event)
+	} catch {
+		markAllAccessed(inference)
+		return inference
+	}
+
+	if (
+		source.includes('[native code]') ||
+		source.trimStart().startsWith('class')
+	) {
+		markAllAccessed(inference)
+		return inference
+	}
+
+	let tokens: ScanToken[] | undefined
+	try {
+		tokens = scanTokens(source)
+	} catch {
+		markAllAccessed(inference)
+		return inference
+	}
+	if (!tokens?.length) {
+		markAllAccessed(inference)
+		return inference
+	}
+
+	let arrow = -1
+	const callableStart = tokens[0].value === 'async' ? 1 : 0
+	if (tokens[callableStart]?.value !== 'function') {
+		let parentheses = 0
+		let brackets = 0
+		let braces = 0
+		for (let i = callableStart; i < tokens.length; i++) {
+			const value = tokens[i].value
+			if (value === '(') parentheses++
+			else if (value === ')') parentheses--
+			else if (value === '[') brackets++
+			else if (value === ']') brackets--
+			else if (value === '{') {
+				if (parentheses === 0 && brackets === 0 && braces === 0) break
+				braces++
+			} else if (value === '}') braces--
+			else if (
+				value === '=>' &&
+				parentheses === 0 &&
+				brackets === 0 &&
+				braces === 0
+			) {
+				arrow = i
+				break
+			}
+		}
+	}
+
+	let parameterStart = -1
+	let parameterEnd = -1
+	let bodyStart = -1
+	if (arrow !== -1) {
+		bodyStart = arrow + 1
+		if (tokens[arrow - 1]?.value === ')') {
+			let depth = 1
+			for (let i = arrow - 2; i >= 0; i--) {
+				if (tokens[i].value === ')') depth++
+				else if (tokens[i].value === '(' && --depth === 0) {
+					parameterStart = i + 1
+					parameterEnd = arrow - 1
+					break
+				}
+			}
+		} else {
+			parameterStart = arrow - 1
+			parameterEnd = arrow
+		}
+	} else {
+		for (let i = 0; i < tokens.length; i++)
+			if (tokens[i].value === '(') {
+				parameterStart = i + 1
+				let depth = 1
+				for (let j = i + 1; j < tokens.length; j++) {
+					if (tokens[j].value === '(') depth++
+					else if (tokens[j].value === ')' && --depth === 0) {
+						parameterEnd = j
+						bodyStart = j + 1
+						break
+					}
+				}
+				break
+			}
+	}
+
+	if (parameterStart < 0 || parameterEnd < parameterStart || bodyStart < 0) {
+		markAllAccessed(inference)
+		return inference
+	}
+
+	const aliases = new Set<string>()
+	const first = tokens[parameterStart]
+	if (parameterStart === parameterEnd) {
+		// A zero-parameter handler cannot name the context except through
+		// `arguments`, which is handled conservatively in the body scan
+	} else if (first?.k === 'i') aliases.add(first.value)
+	else if (first?.value === '{') {
+		let depth = 0
+		for (let i = parameterStart; i < parameterEnd; i++) {
+			const token = tokens[i]
+			if (token.value === '{') depth++
+			else if (token.value === '}') depth--
+			else if (
+				token.value === '[' &&
+				depth === 1 &&
+				(tokens[i - 1]?.value === '{' || tokens[i - 1]?.value === ',')
+			) {
+				const computed = computedDestructuringChannel(tokens, i)
+				if (computed === false) {
+					markAllAccessed(inference)
+					return inference
+				}
+				if (computed) inference[computed] = true
+			} else if (token.value === '...' && depth === 1) {
+				const rest = tokens[i + 1]
+				if (rest?.k === 'i') aliases.add(rest.value)
+			} else if (token.k === 'i' && depth === 1) {
+				const key = channel(token.value)
+				if (key) inference[key] = true
+			}
+		}
+	} else {
+		markAllAccessed(inference)
+		return inference
+	}
+
+	type Pattern = [
+		channels: Set<false | keyof Sucrose.Inference>,
+		rest?: string
+	]
+	const patterns: Pattern[] = []
+	let closedPattern: Pattern | undefined
+
+	for (let i = bodyStart; i < tokens.length; i++) {
+		const token = tokens[i]
+		if (token.value === '{') {
+			patterns.push([new Set()])
+			closedPattern = undefined
+			continue
+		}
+		if (token.value === '}') {
+			closedPattern = patterns.pop()
+			continue
+		}
+		if (patterns.length) {
+			const current = patterns[patterns.length - 1]
+			if (
+				token.value === '[' &&
+				(tokens[i - 1]?.value === '{' || tokens[i - 1]?.value === ',')
+			) {
+				const computed = computedDestructuringChannel(tokens, i)
+				current[0].add(computed)
+			} else if (token.value === '...' && tokens[i + 1]?.k === 'i')
+				current[1] = tokens[i + 1].value
+			else if (token.k === 'i') {
+				const key = channel(token.value)
+				if (key) current[0].add(key)
+			}
+		}
+
+		if (token.value === '=') {
+			const right = tokens[i + 1]
+			let member = i + 2
+			if (tokens[member]?.value === '?.') member++
+			if (
+				right?.k === 'i' &&
+				aliases.has(right.value) &&
+				tokens[member]?.value !== '.' &&
+				tokens[member]?.value !== '[' &&
+				tokens[member]?.k !== 'i'
+			) {
+				const left = tokens[i - 1]
+				if (left?.k === 'i') aliases.add(left.value)
+				else if (left?.value === '}' && closedPattern) {
+					for (const key of closedPattern[0]) {
+						if (key === false) {
+							markAllAccessed(inference)
+							return inference
+						}
+						inference[key] = true
+					}
+					if (closedPattern[1]) aliases.add(closedPattern[1])
+				}
+			}
+			continue
+		}
+
+		if (token.k !== 'i') continue
+		if (token.value === 'arguments' || token.value === 'eval') {
+			markAllAccessed(inference)
+			break
+		}
+		if (!aliases.has(token.value)) continue
+
+		let next = i + 1
+		if (tokens[next]?.value === '?.') next++
+		if (tokens[next]?.value === '.') next++
+
+		if (tokens[next]?.k === 'i' && next > i + 1) {
+			const key = channel(tokens[next].value)
+			if (key) inference[key] = true
+			continue
+		}
+
+		if (tokens[next]?.value === '[') {
+			const property = tokens[next + 1]
+			const key = property?.k === 's' && channel(property.value)
+			if (key && tokens[next + 2]?.value === ']') inference[key] = true
+			else markAllAccessed(inference)
+			if (
+				inference.query &&
+				inference.headers &&
+				inference.body &&
+				inference.cookie &&
+				inference.set &&
+				inference.route
+			)
+				break
+			continue
+		}
+
+		if (
+			tokens[i - 1]?.value === '=' &&
+			(tokens[i - 2]?.k === 'i' || tokens[i - 2]?.value === '}')
+		)
+			continue
+
+		markAllAccessed(inference)
+		break
+	}
+
+	return inference
+}
+
+export function sucroseCandidate(
+	handler: Handler | undefined,
+	lifeCycle: Sucrose.LifeCycle | undefined
+): Sucrose.Inference {
+	let inference: Sucrose.Inference | undefined
+	const events = collectInferenceEvents(handler, lifeCycle)
+
+	const caches = compilerSession()?.sucroseCache as
+		| Map<string, SourceCacheEntry>
+		| undefined
+	for (let i = 0; i < events.length; i++) {
+		const event = events[i] as Function
+		if (!event) continue
+
+		let inferred = candidateFunctionCaches.get(event)
+		if (!inferred) {
+			if (Object.hasOwn(event, 'toString')) {
+				inferred = Object.freeze({ ...inferCandidateFunction(event) })
+				candidateFunctionCaches.set(event, inferred)
+				inference = inference
+					? mergeInference(inference, inferred)
+					: inferred
+				continue
+			}
+
+			let content: string
+			try {
+				content = Function.prototype.toString.call(event)
+			} catch {
+				content = ''
+			}
+			const key = String(fnv1a(content))
+			const cacheKey = `candidate:${key}`
+			const cached = caches?.get(cacheKey)
+			if (cached?.content === content) {
+				inferred = cached.inference
+				caches!.delete(cacheKey)
+				caches!.set(cacheKey, cached)
+				candidateFunctionCaches.set(event, inferred)
+			} else {
+				inferred = inferCandidateFunction(event)
+				rememberInference(
+					'candidate',
+					key,
+					cached,
+					content,
+					event,
+					inferred,
+					candidateFunctionCaches
+				)
+			}
+		}
+
+		inference = inference ? mergeInference(inference, inferred) : inferred
+		if (
+			inference.query &&
+			inference.headers &&
+			inference.body &&
+			inference.cookie &&
+			inference.set &&
+			inference.route
+		)
+			break
+	}
+
+	return Object.freeze(inference ? { ...inference } : defaultSucrose())
+}
+
+const d1InferenceImplementation: Sucrose.Implementation =
+	(globalThis as any).process?.env?.D1_VALIDATION_LANE === 'candidate'
+		? 'candidate'
+		: 'oracle'
+
+export const D1_INFERENCE_IMPLEMENTATION = d1InferenceImplementation
+
+export const sucrose = (
+	handler: Handler | undefined,
+	lifeCycle: Sucrose.LifeCycle | undefined,
+	implementation: Sucrose.Implementation = d1InferenceImplementation
+) =>
+	implementation === 'candidate'
+		? sucroseCandidate(handler, lifeCycle)
+		: sucroseOracle(handler, lifeCycle)

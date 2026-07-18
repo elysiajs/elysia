@@ -1,6 +1,11 @@
 import type { AnyElysia } from '../../base'
 import type { ElysiaAdapter } from '../../adapter'
-import { mergeInference, sucrose, type Sucrose } from '../../sucrose'
+import {
+	D1_INFERENCE_IMPLEMENTATION,
+	mergeInference,
+	sucrose,
+	type Sucrose
+} from '../../sucrose'
 
 import type { RouteValidator } from '../../validator/route'
 import type { Validator } from '../../validator'
@@ -17,7 +22,7 @@ import { frozenRootOf } from '../../generation'
 import { JITProbe } from '../jit-probe'
 
 import { isNotEmpty, type CompactBeforeHandlePrefix } from '../../utils'
-import type { AnyLocalHook, MaybeArray } from '../../types'
+import type { AnyLocalHook, InferenceOverride, MaybeArray } from '../../types'
 
 export interface RouteDescriptor {
 	method: string
@@ -60,6 +65,7 @@ export interface RouteDescriptor {
 
 	// sucrose
 	inferenceSet: boolean // consumed by emit.ts
+	inference: Sucrose.Inference
 
 	// async + sync fast-path facts
 	handlerIsAsync: boolean
@@ -140,16 +146,21 @@ export const lifecycleMayReturnPromise = (
 					(observed && mayReturnIdentifier(handlers)))
 		: false
 
-const compactPrefixInference = new WeakMap<
-	CompactBeforeHandlePrefix,
-	Sucrose.Inference
->()
+const compactPrefixInference: Record<
+	Sucrose.Implementation,
+	WeakMap<CompactBeforeHandlePrefix, Sucrose.Inference>
+> = {
+	oracle: new WeakMap(),
+	candidate: new WeakMap()
+}
 const compactPrefixAsync = new WeakMap<CompactBeforeHandlePrefix, boolean>()
 
-const inferCompactPrefix = (
-	prefix: CompactBeforeHandlePrefix
-): Sucrose.Inference => {
-	const cached = compactPrefixInference.get(prefix)
+function inferCompactPrefix(
+	prefix: CompactBeforeHandlePrefix,
+	implementation: Sucrose.Implementation
+): Sucrose.Inference {
+	const cache = compactPrefixInference[implementation]
+	const cached = cache.get(prefix)
 	if (cached) return cached
 
 	const pending: CompactBeforeHandlePrefix[] = []
@@ -157,7 +168,7 @@ const inferCompactPrefix = (
 	let inference: Sucrose.Inference | undefined
 
 	while (current) {
-		inference = compactPrefixInference.get(current)
+		inference = cache.get(current)
 		if (inference) break
 
 		pending.push(current)
@@ -166,11 +177,15 @@ const inferCompactPrefix = (
 
 	for (let i = pending.length - 1; i >= 0; i--) {
 		const item = pending[i]!
-		const added = sucrose(undefined, {
-			beforeHandle: item.added as any
-		})
+		const added = sucrose(
+			undefined,
+			{
+				beforeHandle: item.added as any
+			},
+			implementation
+		)
 		inference = inference ? mergeInference(inference, added) : added
-		compactPrefixInference.set(item, inference)
+		cache.set(item, inference)
 	}
 
 	return inference!
@@ -224,7 +239,7 @@ export function isEmptyPipelineHook(hook: AnyLocalHook | undefined) {
 	if (!hook) return true
 
 	for (const key in hook) {
-		if (key === 'detail' || key === 'tags') continue
+		if (key === 'detail' || key === 'tags' || key === 'inference') continue
 
 		const value = (hook as any)[key]
 		if (
@@ -236,6 +251,35 @@ export function isEmptyPipelineHook(hook: AnyLocalHook | undefined) {
 	}
 
 	return true
+}
+
+export function applyInferenceOverride(
+	inference: Sucrose.Inference,
+	override: InferenceOverride | undefined
+): Sucrose.Inference {
+	if (!override) return inference
+
+	return {
+		query:
+			typeof override.query === 'boolean'
+				? override.query
+				: inference.query,
+		headers:
+			typeof override.headers === 'boolean'
+				? override.headers
+				: inference.headers,
+		body:
+			typeof override.body === 'boolean' ? override.body : inference.body,
+		cookie:
+			typeof override.cookie === 'boolean'
+				? override.cookie
+				: inference.cookie,
+		set: typeof override.set === 'boolean' ? override.set : inference.set,
+		route:
+			typeof override.route === 'boolean'
+				? override.route
+				: inference.route
+	}
 }
 
 export function describeRoute(input: DescribeRouteInput): RouteCompileState {
@@ -258,12 +302,31 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 		| undefined
 
 	JITProbe.record('sucrose')
-	let inference = sucrose(handler as any, hook as Sucrose.LifeCycle)
+	const inferenceImplementation =
+		frozenRootOf(root)['~config']?.experimental?.inference ??
+		D1_INFERENCE_IMPLEMENTATION
+	let inference = sucrose(
+		handler as any,
+		hook as Sucrose.LifeCycle,
+		inferenceImplementation
+	)
 	if (beforeHandlePrefix)
 		inference = mergeInference(
 			inference,
-			inferCompactPrefix(beforeHandlePrefix)
+			inferCompactPrefix(beforeHandlePrefix, inferenceImplementation)
 		)
+
+	inference = applyInferenceOverride(
+		inference,
+		frozenRootOf(root)['~config']?.inference
+	)
+	inference = applyInferenceOverride(inference, hook?.inference)
+	inference = { ...inference }
+
+	if (vali?.query) inference.query = true
+	if (vali?.headers) inference.headers = true
+	if (vali?.body) inference.body = true
+	if (vali?.cookie) inference.cookie = true
 
 	if (hook && typeof hook.parse === 'function')
 		hook.parse = [hook.parse] as any
@@ -318,9 +381,7 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 	const asyncCookieSign = hasCookieSign && !syncCookieSign
 
 	const lazyCookieVerify =
-		syncCookieSign &&
-		cookieConfig?.verify === 'lazy' &&
-		!vali?.cookie
+		syncCookieSign && cookieConfig?.verify === 'lazy' && !vali?.cookie
 
 	const hasErrorHook = !!hook?.error?.length
 	const hasAfterResponse = !!hook?.afterResponse?.length
@@ -495,6 +556,7 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 		lazyCookieVerify,
 
 		inferenceSet: inference.set,
+		inference,
 
 		handlerIsAsync,
 		callHandlerSyncOnAsync: !!callHandlerSyncOnAsync,

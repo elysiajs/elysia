@@ -567,13 +567,9 @@ const impl: CaptureImpl = {
 	captureBridgeFree
 }
 
-export function installCaptureImpl() {
-	setCaptureImpl(impl)
-	// capture consumes the reconstruction table (`isCapturedBridgeFree`,
-	// frozen replay), so wiring one without the other is never valid
-	installReconstructImpl()
-}
-
-installCaptureImpl()
+setCaptureImpl(impl)
+// capture consumes the reconstruction table (`isCapturedBridgeFree`,
+// frozen replay), so wiring one without the other is never valid
+installReconstructImpl()
 
 export { impl as captureImplementation }

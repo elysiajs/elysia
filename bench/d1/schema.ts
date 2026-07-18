@@ -95,13 +95,30 @@ export interface ComparisonResult {
 	tolerance?: number
 	baseline: number
 	candidate: number
+	// With deltaScale=raw-difference this is the median paired block
+	// difference, not candidate minus the two marginal medians above.
 	observedDelta: number
+	deltaScale?: 'relative' | 'raw-difference'
 	ci?: {
 		low: number
 		high: number
 		width: number
 	}
 	verdict: Verdict | 'report-only'
+}
+
+export function metricUnit(entry: Pick<MarginEntry, 'kind' | 'metric'>) {
+	if (entry.kind === 'count') return 'count'
+	if (entry.kind === 'timing') return 'ns'
+	if (entry.metric.endsWith('-bytes-per-request')) return 'bytes-per-request'
+	if (entry.metric.endsWith('-bytes-per-validator'))
+		return 'bytes-per-validator'
+	if (entry.metric.endsWith('-per-validator')) return 'count-per-validator'
+	return 'bytes-per-route'
+}
+
+export function recordsAaFloor(entry: Pick<MarginEntry, 'status'>) {
+	return entry.status !== 'report-only'
 }
 
 export interface RawArtifact {

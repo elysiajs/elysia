@@ -147,6 +147,45 @@ export function bootstrapRelativeMedianDelta(
 	}
 }
 
+export function bootstrapPairedMedianDifference(
+	baselineBlocks: number[],
+	candidateBlocks: number[],
+	seed: number,
+	resamples = 2_000
+): BootstrapCI {
+	if (baselineBlocks.length !== candidateBlocks.length)
+		throw new Error('paired bootstrap requires equal block counts')
+	if (baselineBlocks.length < 2)
+		throw new Error('paired bootstrap requires at least two blocks')
+	if (resamples < 2_000)
+		throw new Error('paired bootstrap requires at least 2000 resamples')
+	if (![...baselineBlocks, ...candidateBlocks].every(Number.isFinite))
+		throw new Error('paired bootstrap requires finite samples')
+
+	const differences = baselineBlocks.map(
+		(baseline, index) => candidateBlocks[index]! - baseline
+	)
+	const random = seededPrng(seed)
+	const deltas = new Array<number>(resamples)
+	for (let sample = 0; sample < resamples; sample++) {
+		const resampled = new Array<number>(differences.length)
+		for (let i = 0; i < differences.length; i++)
+			resampled[i] =
+				differences[Math.floor(random() * differences.length)]!
+		deltas[sample] = median(resampled)
+	}
+	const low = percentile(deltas, 2.5)
+	const high = percentile(deltas, 97.5)
+	return {
+		medianDelta: median(differences),
+		low,
+		high,
+		width: high - low,
+		resamples,
+		seed
+	}
+}
+
 function normalizedRegression(
 	delta: number,
 	direction: Exclude<MetricDirection, 'equal'>
@@ -227,5 +266,40 @@ export function compareMetric(input: CompareInput): ComparisonResult {
 			width: regressionHigh - regressionLow
 		},
 		verdict
+	}
+}
+
+export function compareReportOnlyMetric(input: CompareInput): ComparisonResult {
+	if (
+		input.kind !== 'count' &&
+		input.baselineBlocks.some((value) => value <= 0)
+	) {
+		const ci = bootstrapPairedMedianDifference(
+			input.baselineBlocks,
+			input.candidateBlocks,
+			input.seed,
+			input.resamples
+		)
+		const baseline = median(input.baselineBlocks)
+		const candidate = median(input.candidateBlocks)
+		return {
+			fixture: input.fixture,
+			metric: input.metric,
+			kind: input.kind,
+			direction: input.direction,
+			margin: 0,
+			baseline,
+			candidate,
+			observedDelta: ci.medianDelta,
+			deltaScale: 'raw-difference',
+			ci: { low: ci.low, high: ci.high, width: ci.width },
+			verdict: 'report-only'
+		}
+	}
+
+	return {
+		...compareMetric(input),
+		deltaScale: input.kind === 'count' ? 'raw-difference' : 'relative',
+		verdict: 'report-only'
 	}
 }
