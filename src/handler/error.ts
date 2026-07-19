@@ -1,4 +1,4 @@
-import { getAsyncIndexes, getNotFound } from './utils'
+import { getAsyncIndexes, getNotFound, settleResponse } from './utils'
 import { parseQueryFromURL } from '../parse-query'
 import {
 	NotFound,
@@ -42,13 +42,13 @@ function parseQuery(context: Context) {
 	})
 }
 
-const isPristineNotFound = (context: Context, error: any) =>
+export const isPristineNotFound = (context: Context, error: any) =>
 	error instanceof NotFound &&
 	error.response === 'Not Found' &&
 	!context.set.cookie &&
 	!isNotEmpty(context.set.headers)
 
-function fallbackResponse(
+export function fallbackResponse(
 	context: Context,
 	error: any,
 	mapResponse: (
@@ -144,8 +144,14 @@ export function createErrorHandler(
 		...any: unknown[]
 	) => unknown,
 	defaultError?: Response,
-	allowUnsafe = false
+	allowUnsafe = false,
+	compatCancellation = false
 ) {
+	const settle = (context: Context, value: unknown) =>
+		compatCancellation || typeof (value as any)?.then !== 'function'
+			? value
+			: settleResponse(context.request, value)
+
 	if (!onErrors)
 		return (context: Context, error: Error) => {
 			// @ts-expect-error
@@ -155,7 +161,10 @@ export function createErrorHandler(
 			applyErrorStatus(context, error)
 
 			parseQuery(context)
-			return fallbackResponse(context, error, mapResponse, defaultError)
+			return settle(
+				context,
+				fallbackResponse(context, error, mapResponse, defaultError)
+			)
 		}
 
 	const asyncIndexes = getAsyncIndexes(onErrors)
@@ -171,14 +180,37 @@ export function createErrorHandler(
 			parseQuery(context)
 
 			for (let i = 0; i < onErrors.length; i++) {
-				let result = asyncIndexes?.[i]
-					? await onErrors[i](context as any)
-					: onErrors[i](context as any)
+				let result: unknown
+				let suspended = false
+				try {
+					if (asyncIndexes?.[i]) {
+						suspended = true
+						result = await onErrors[i](context as any)
+					} else {
+						result = onErrors[i](context as any)
 
-				// A hook may synchronously return a Promise the heuristic
-				// didn't flag; await it before treating it as the response so
-				// a raw Promise can't suppress the fallback (empty 500).
-				if (result instanceof Promise) result = await result
+						if (result instanceof Promise) {
+							suspended = true
+							result = await result
+						}
+					}
+				} catch (hookError) {
+					if (
+						!compatCancellation &&
+						suspended &&
+						context.request.signal.aborted
+					)
+						return new Response()
+
+					throw hookError
+				}
+
+				if (
+					!compatCancellation &&
+					suspended &&
+					context.request.signal.aborted
+				)
+					return new Response()
 
 				if (result !== undefined) {
 					if (
@@ -192,13 +224,19 @@ export function createErrorHandler(
 					)
 						context.set.status = 500
 
-					return mapResponse(result, context.set, context)
+					return settle(
+						context,
+						mapResponse(result, context.set, context)
+					)
 				}
 			}
 
 			if (isPristineNotFound(context, error)) return getNotFound()
 
-			return fallbackResponse(context, error, mapResponse, defaultError)
+			return settle(
+				context,
+				fallbackResponse(context, error, mapResponse, defaultError)
+			)
 		}
 
 	return (context: Context, error: Error) => {
@@ -225,12 +263,18 @@ export function createErrorHandler(
 				)
 					context.set.status = 500
 
-				return mapResponse(result, context.set, context)
+				return settle(
+					context,
+					mapResponse(result, context.set, context)
+				)
 			}
 		}
 
 		if (isPristineNotFound(context, error)) return getNotFound()
 
-		return fallbackResponse(context, error, mapResponse, defaultError)
+		return settle(
+			context,
+			fallbackResponse(context, error, mapResponse, defaultError)
+		)
 	}
 }

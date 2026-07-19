@@ -7,6 +7,11 @@ new Elysia({ experimental: { resumeEmit } })
 // @ts-expect-error a boolean would make the optional implementation part of every bundle
 new Elysia({ experimental: { resumeEmit: true } })
 
+new Elysia({ experimental: { cancellation: 'suspension' } })
+new Elysia({ experimental: { cancellation: 'compat' } })
+// @ts-expect-error cancellation accepts only the two Q12 policies
+new Elysia({ experimental: { cancellation: 'poll' } })
+
 new Elysia({ experimental: { flatFormDataFastPath: true } })
 // @ts-expect-error flat FormData fast path is a boolean feature flag
 new Elysia({ experimental: { flatFormDataFastPath: 'yes' } })

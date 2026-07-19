@@ -26,7 +26,11 @@ import {
 	isProduction
 } from '../../error'
 import { isDynamicRegex, traceEventIndex } from '../../constants'
-import { finalizeRouteError, forwardError } from '../../handler/utils'
+import {
+	finalizeRouteError,
+	forwardError,
+	settleResponse
+} from '../../handler/utils'
 import { hasHeaderShorthand } from '../../universal/constants'
 
 import { getQueryParseChannels, parseQueryFromURL } from '../../parse-query'
@@ -75,33 +79,39 @@ function builtinParser(
 	adapter: ElysiaAdapter['parse'],
 	parse: string,
 	link: Link,
-	flatFormDataFastPath = false
+	flatFormDataFastPath = false,
+	suspensionMark?: string
 ) {
+	const boundary = (expression: string) =>
+		suspensionMark
+			? `(${suspensionMark},await ${expression})`
+			: `await ${expression}`
+
 	switch (parse) {
 		case 'formdata':
 		case 'multipart/form-data':
 			link(adapter.formData, 'pf')
-			return `c.body=await pf(c${flatFormDataFastPath ? ',true' : ''})\n`
+			return `c.body=${boundary(`pf(c${flatFormDataFastPath ? ',true' : ''})`)}\n`
 
 		case 'json':
 		case 'application/json':
 			link(adapter.json, 'pj')
-			return 'c.body=await pj(c)\n'
+			return `c.body=${boundary('pj(c)')}\n`
 
 		case 'urlencoded':
 		case 'application/x-www-form-urlencoded':
 			link(adapter.urlencoded, 'pu')
-			return 'c.body=await pu(c)\n'
+			return `c.body=${boundary('pu(c)')}\n`
 
 		case 'arrayBuffer':
 		case 'application/octet-stream':
 			link(adapter.arrayBuffer, 'pa')
-			return 'c.body=await pa(c)\n'
+			return `c.body=${boundary('pa(c)')}\n`
 
 		case 'text':
 		case 'text/plain':
 			link(adapter.text, 'pt')
-			return 'c.body=await pt(c)\n'
+			return `c.body=${boundary('pt(c)')}\n`
 
 		case 'none':
 			return ''
@@ -118,8 +128,14 @@ export function emitBodyParse(
 	hasHeaders: boolean,
 	link: Link,
 	report?: TraceReporter,
-	flatFormDataFastPath = false
+	flatFormDataFastPath = false,
+	suspensionMark?: string
 ) {
+	const boundary = (expression: string) =>
+		suspensionMark
+			? `(${suspensionMark},await ${expression})`
+			: `await ${expression}`
+
 	if (parsers && typeof parsers === 'function')
 		parsers = [parsers] as ContentType[] | BodyHandler[]
 
@@ -141,7 +157,8 @@ export function emitBodyParse(
 				adapter,
 				parsers as string,
 				link,
-				flatFormDataFastPath
+				flatFormDataFastPath,
+				suspensionMark
 			) +
 			end
 		)
@@ -178,9 +195,9 @@ export function emitBodyParse(
 				if (child) code += child.begin
 
 				code += isAsyncFunction(parser as Function)
-					? `c.body=await ho.parse[${i}](c,ct)\n`
+					? `c.body=${boundary(`ho.parse[${i}](c,ct)`)}\n`
 					: `_bp=ho.parse[${i}](c,ct)\n` +
-						`if(_bp instanceof Promise)_bp=await _bp\n` +
+						`if(_bp instanceof Promise)_bp=${boundary('_bp')}\n` +
 						`c.body=_bp\n`
 				code += 'hasBody=c.body!==undefined\n'
 				if (child) code += child.end()
@@ -195,7 +212,8 @@ export function emitBodyParse(
 					adapter,
 					parser as string,
 					link,
-					flatFormDataFastPath
+					flatFormDataFastPath,
+					suspensionMark
 				)
 				if (child) code += child.end()
 				if (i) code += '}\n'
@@ -227,9 +245,10 @@ export function emitBodyParse(
 			link(ElysiaStatus, 'es')
 		}
 
+		const fallback = `c.body=cj?${boundary('pj(c)')}:${boundary(`pd(c,ce,true${flatFormDataFastPath ? ',true' : ''})`)}\n`
 		code += hasFn
-			? `if(!hasBody&&${guard}){${begin}c.body=cj?await pj(c):await pd(c,ce,true${flatFormDataFastPath ? ',true' : ''})\n${end}}\n`
-			: `if(${guard}){${begin}c.body=cj?await pj(c):await pd(c,ce,true${flatFormDataFastPath ? ',true' : ''})\n${end}}\n`
+			? `if(!hasBody&&${guard}){${begin}${fallback}${end}}\n`
+			: `if(${guard}){${begin}${fallback}${end}}\n`
 
 		if (!bodyVali) link(hasRequestBody, 'hb')
 		link(adapter.json, 'pj')
@@ -298,6 +317,20 @@ export function schemaMediaKind(schema: any): number | undefined {
 const fromArgs = (type: string, isAsync: boolean) =>
 	`'${type}'${isAsync ? ',true' : ''}`
 
+const settleInline = (
+	handler: CompiledHandler,
+	settle?: typeof settleResponse
+) => {
+	if (!settle) return handler
+
+	return ((c: Context) => {
+		const value = handler(c)
+		return typeof (value as any)?.then === 'function'
+			? settle(c.request, value)
+			: value
+	}) as CompiledHandler
+}
+
 const createInlineHandler = (
 	map: (value: unknown, ...rest: unknown[]) => unknown,
 	h: (context: Context) => unknown
@@ -339,6 +372,20 @@ const createInlineHandlerWithDefaultHeaders = (
 		return map(r, c.set, c.request)
 	}) as CompiledHandler
 
+const createInlineHandlerWithDefaultResponseState = (
+	map: (value: unknown, ...rest: unknown[]) => unknown,
+	h: (context: Context) => unknown,
+	set: NonNullable<RouteCompileState['defaultResponseState']>
+) =>
+	((c: Context) => {
+		const r = h(c)
+		if (r instanceof Error) throw r
+		if (r instanceof Promise)
+			return r.then((v) => map(forwardError(v), set, c.request))
+
+		return map(r, set, c.request)
+	}) as CompiledHandler
+
 export interface CompileHandlerJitOptions {
 	method: string
 	path: string
@@ -374,6 +421,7 @@ export function compileHandlerJit({
 	const {
 		vali,
 		inference,
+		defaultResponseState,
 		cookieConfig,
 		beforeHandlePrefix,
 		traceHandlers,
@@ -383,6 +431,8 @@ export function compileHandlerJit({
 		descriptor: {
 			async: isAsync,
 			responseMode,
+			contextMode,
+			headerKeys,
 			hasBody,
 			bodyValiIsAsync,
 			headersValiIsAsync,
@@ -432,10 +482,26 @@ export function compileHandlerJit({
 	link(errorRoot, 'rt')
 	link(finalizeRouteError, 'fre')
 
+	const compatCancellation =
+		root['~config']?.experimental?.cancellation === 'compat'
 	const abortExpression = 'c.request.signal.aborted'
-	const abortCheck = hasLifecycleHook
-		? `if(${abortExpression})return emp.clone()\n`
+	const abortCheck =
+		hasLifecycleHook && compatCancellation
+			? `if(${abortExpression})return emp.clone()\n`
+			: ''
+	const suspensionAbortCheck = !compatCancellation
+		? `if(${abortExpression})return new Response()\n`
 		: ''
+	const settleAtSuspension = (value: string) => {
+		if (compatCancellation) return `Promise.resolve(${value})`
+		link(settleResponse, 's')
+		return `s(c.request,${value})`
+	}
+	const abortGuard = compatCancellation ? abortExpression : undefined
+	const awaitBoundary = (statement: string) =>
+		suspensionAbortCheck
+			? `try{${statement}}catch(e){${suspensionAbortCheck}throw e}\n${suspensionAbortCheck}`
+			: statement
 
 	const phaseOn = (phase: TraceEvent) =>
 		hasTrace && (tracePhases === null || tracePhases.has(phase))
@@ -470,6 +536,17 @@ export function compileHandlerJit({
 
 		return s
 	}
+	const endTraceChild = (phase: TraceEvent, errBinding?: string) => {
+		if (!phaseOn(phase)) return ''
+
+		let s = ''
+		for (let i = 0; i < traceCount; i++)
+			s += `rpc${i}?.(${errBinding ?? ''})\n`
+
+		return s
+	}
+	const phaseSuspensionAbort = (phase: TraceEvent) =>
+		suspensionAbortCheck ? endTrace(phase) + suspensionAbortCheck : ''
 
 	const buildReport = (phase: TraceEvent): TraceReporter | undefined => {
 		if (!phaseOn(phase)) return
@@ -505,22 +582,37 @@ export function compileHandlerJit({
 		}
 	}
 
-	const callHandler = isHandleFunction
-		? callHandlerSyncOnAsync
-			? `_r=h(c)\nif(_r instanceof Promise)_r=await _r\n`
-			: `_r=${isAsync ? 'await ' : ''}h(c)\n`
-		: isStaticResponse
-			? `_r=cr(h)\n`
-			: isPromiseHandler
-				? `_r=h.then(cr)\n`
-				: `_r=h\n`
+	const buildCallHandler = (check: string, suspensionMark = '') =>
+		isHandleFunction
+			? callHandlerSyncOnAsync
+				? `_r=h(c)\nif(_r instanceof Promise){${suspensionMark}${check ? `try{_r=await _r}catch(e){${check}throw e}\n` : `_r=await _r\n`}${check}}\n`
+				: isAsync
+					? check
+						? `${suspensionMark}try{_r=await h(c)}catch(e){${check}throw e}\n${check}`
+						: `${suspensionMark}_r=await h(c)\n`
+					: `_r=h(c)\n`
+			: isStaticResponse
+				? `_r=cr(h)\n`
+				: isPromiseHandler
+					? `_r=h.then(cr)\n`
+					: `_r=h\n`
+
+	const callHandler = buildCallHandler(suspensionAbortCheck)
 
 	// va,rm,rc,re,pa,pf,pj,pt,pu,er,ar
 	let code = `${isAsync ? 'async ' : ''}function route(c){\n`
+	if (contextMode === 'set') code += `void c.set\n`
 
+	if (hasLifecycleHook && compatCancellation) link(emptyResponse, 'emp')
 	if (hasLifecycleHook) {
-		link(emptyResponse, 'emp')
 		code += abortCheck
+	}
+	if (
+		responseMode === 'set-with-default-headers' &&
+		(hasTrace || inference.set)
+	) {
+		link(materializeSetHeaders, 'msh')
+		code += `msh(c.set)\n`
 	}
 
 	if ((hasAfterResponse || hasTrace) && !syncAfterResponse)
@@ -559,14 +651,6 @@ export function compileHandlerJit({
 	code = ''
 
 	code += 'try{\n'
-	if (
-		responseMode === 'set-with-default-headers' &&
-		(inference.set || hasTrace)
-	) {
-		link(materializeSetHeaders, 'msh')
-		code += `msh(c.set)\n`
-	}
-
 	const hasHeaders = inference.headers || !!vali?.headers
 	const fusedQuery = !!(
 		root['~config']?.experimental?.validationPlan &&
@@ -607,7 +691,14 @@ export function compileHandlerJit({
 		}
 	}
 
-	if (hasHeaders) {
+	if (hasHeaders && headerKeys !== null) {
+		code += `c.headers=Object.create(null)\nlet _hv\n`
+		for (const key of headerKeys) {
+			const literal = JSON.stringify(key)
+			code += `if((_hv=c.request.headers.get(${literal}))!==null)c.headers[${literal}]=_hv\n`
+		}
+		inlineUnsafe = true
+	} else if (hasHeaders) {
 		if (captureHeaderShorthand === undefined && Capture.isCapturing())
 			code += `c.headers=c.request.headers.toJSON?.()??Object.fromEntries(c.request.headers)\n`
 		else {
@@ -618,6 +709,10 @@ export function compileHandlerJit({
 	}
 
 	if (hasBody) {
+		const parseSuspensionMark = suspensionAbortCheck
+			? '_bs=true'
+			: undefined
+		if (parseSuspensionMark) code += 'let _bs=false\n'
 		const parseLen = Array.isArray(hook?.parse) ? hook!.parse!.length : 0
 		if (hasTrace) code += beginTrace('parse', parseLen)
 
@@ -628,17 +723,21 @@ export function compileHandlerJit({
 			hasHeaders,
 			link,
 			buildReport('parse'),
-			root['~config']?.experimental?.flatFormDataFastPath === true
+			root['~config']?.experimental?.flatFormDataFastPath === true,
+			parseSuspensionMark
 		)
+		const parseAbortCheck = parseSuspensionMark
+			? `if(_bs&&${abortExpression}){${endTraceChild('parse')}${endTrace('parse')}return new Response()}\n`
+			: ''
 		const preserveParseStatus = seenKeys.has('es')
 		link(ParseError, 'pe')
 		code +=
 			'try{\n' +
 			parseCode +
-			`}catch(e){${preserveParseStatus ? 'if(e instanceof es)throw e;' : ''}throw new pe(e)}\n`
+			`}catch(e){${parseAbortCheck}${preserveParseStatus ? 'if(e instanceof es)throw e;' : ''}throw new pe(e)}\n`
 
 		if (hasTrace) code += endTrace('parse')
-		if (hasLifecycleHook) code += abortCheck
+		code += abortCheck + parseAbortCheck
 	} else if (hasTrace) code += beginTrace('parse', 0) + endTrace('parse')
 
 	if (hook?.transform?.length || hasTrace) {
@@ -649,8 +748,12 @@ export function compileHandlerJit({
 			if (isAsync) code += 'let _tf\n'
 			code += mapTransform(
 				hook!.transform!,
-				[isAsync, buildReport('transform')],
-				abortExpression
+				[
+					isAsync,
+					buildReport('transform'),
+					phaseSuspensionAbort('transform')
+				],
+				abortGuard
 			)
 		}
 		code += endTrace('transform')
@@ -659,25 +762,30 @@ export function compileHandlerJit({
 
 	if (vali?.body) {
 		link(vali, 'va')
-		code += `c.body=${bodyValiIsAsync ? 'await ' : ''}va.body.From(c.body,${fromArgs('body', bodyValiIsAsync)})\n`
+		const statement = `c.body=${bodyValiIsAsync ? 'await ' : ''}va.body.From(c.body,${fromArgs('body', bodyValiIsAsync)})\n`
+		code += bodyValiIsAsync ? awaitBoundary(statement) : statement
 	}
 
 	if (vali?.headers) {
 		link(vali, 'va')
-		code += `c.headers=${headersValiIsAsync ? 'await ' : ''}va.headers.From(c.headers,${fromArgs('headers', !!headersValiIsAsync)})\n`
+		const statement = `c.headers=${headersValiIsAsync ? 'await ' : ''}va.headers.From(c.headers,${fromArgs('headers', !!headersValiIsAsync)})\n`
+		code += headersValiIsAsync ? awaitBoundary(statement) : statement
 	}
 
 	if (vali?.params) {
 		link(vali, 'va')
-		code += `c.params=${paramsValiIsAsync ? 'await ' : ''}va.params.From(c.params,${fromArgs('params', !!paramsValiIsAsync)})\n`
+		const statement = `c.params=${paramsValiIsAsync ? 'await ' : ''}va.params.From(c.params,${fromArgs('params', !!paramsValiIsAsync)})\n`
+		code += paramsValiIsAsync ? awaitBoundary(statement) : statement
 	}
 
 	if (vali?.query) {
 		link(vali, 'va')
 		if (fusedQuery)
 			code += `c.query=va.queryPlan.validate(c.query,va.query)\n`
-		else
-			code += `c.query=${queryValiIsAsync ? 'await ' : ''}va.query.From(c.query,${fromArgs('query', !!queryValiIsAsync)})\n`
+		else {
+			const statement = `c.query=${queryValiIsAsync ? 'await ' : ''}va.query.From(c.query,${fromArgs('query', !!queryValiIsAsync)})\n`
+			code += queryValiIsAsync ? awaitBoundary(statement) : statement
+		}
 	}
 
 	if (cookieConfig) {
@@ -702,14 +810,19 @@ export function compileHandlerJit({
 				code += `let _ck=pcrsg(${cookieHeaderExpr},cc)\n`
 			} else {
 				link(parseCookieRaw, 'pcr')
-				code += `let _ck=await pcr(${cookieHeaderExpr},cc)\n`
+				code +=
+					`let _ck\n` +
+					awaitBoundary(`_ck=await pcr(${cookieHeaderExpr},cc)\n`)
 			}
 
 			if (vali?.cookie) {
 				link(vali, 'va')
 
 				const cookieIsOptional = !!(hook?.cookie as any)?.['~optional']
-				const validateExpr = `_ck=${cookieValidIsAsync ? 'await ' : ''}va.cookie.From(_ck,${fromArgs('cookie', !!cookieValidIsAsync)})\n`
+				const statement = `_ck=${cookieValidIsAsync ? 'await ' : ''}va.cookie.From(_ck,${fromArgs('cookie', !!cookieValidIsAsync)})\n`
+				const validateExpr = cookieValidIsAsync
+					? awaitBoundary(statement)
+					: statement
 				if (cookieIsOptional)
 					code += `if(Object.keys(_ck).length){${validateExpr}}\n`
 				else code += validateExpr
@@ -720,6 +833,8 @@ export function compileHandlerJit({
 	}
 
 	const hasSet = responseMode !== 'compact'
+	const setArg = responseMode === 'default-headers' ? 'dhs' : 'c.set'
+	if (responseMode === 'default-headers') link(defaultResponseState!, 'dhs')
 
 	const res = adapter.response
 	const responseMap = res.map
@@ -740,7 +855,7 @@ export function compileHandlerJit({
 				: 'h'
 
 	const mapReturn = hasSet
-		? `rm(${handleInstruction},c.set,c.request)\n`
+		? `rm(${handleInstruction},${setArg},c.request)\n`
 		: `rc(${handleInstruction},c.request)\n`
 
 	if (hasAfterResponse) link(hook!.afterResponse!, 'ar')
@@ -795,7 +910,7 @@ export function compileHandlerJit({
 	const signPrefix = syncCookieSign
 		? `scvs(c.set.cookie,cc)\n`
 		: asyncCookieSign
-			? `_sg=scv(c.set.cookie,cc)\nif(_sg)await _sg\n`
+			? `_sg=scv(c.set.cookie,cc)\nif(_sg){${awaitBoundary('await _sg\n')}}\n`
 			: ''
 
 	if (syncCookieSign) link(signCookieValuesSync, 'scvs')
@@ -824,10 +939,13 @@ export function compileHandlerJit({
 					link(beforeHandlePrefix, 'bp')
 					if (isAsync) {
 						link(runBeforeHandlePrefixAsync, 'rbp')
-						code += `tmp=await rbp(bp,c)\n`
+						const prefixAwait = `tmp=await rbp(bp,c,${compatCancellation})\n`
+						code += suspensionAbortCheck
+							? `try{${prefixAwait}}catch(e){${phaseSuspensionAbort('beforeHandle')}throw e}\n${phaseSuspensionAbort('beforeHandle')}`
+							: prefixAwait
 					} else {
 						link(runBeforeHandlePrefix, 'rbp')
-						code += `tmp=rbp(bp,c)\n`
+						code += `tmp=rbp(bp,c,${compatCancellation})\n`
 					}
 					code += `if(tmp!==undefined)_r=tmp\n`
 				}
@@ -845,10 +963,13 @@ export function compileHandlerJit({
 						link,
 						isAsync,
 						buildReport('beforeHandle'),
-						abortExpression
+						abortGuard,
+						phaseSuspensionAbort('beforeHandle')
 					)
 					code += beforeHandlePrefix
-						? `if(!${abortExpression}&&_r===undefined){\n${mapped}}\n`
+						? compatCancellation
+							? `if(!${abortExpression}&&_r===undefined){\n${mapped}}\n`
+							: `if(_r===undefined){\n${mapped}}\n`
 						: mapped
 				}
 			}
@@ -875,6 +996,9 @@ export function compileHandlerJit({
 				: ''
 
 		if (traceHandleOn) {
+			const traceHandleMaySuspend =
+				!compatCancellation && isHandleFunction && isAsync
+			if (traceHandleMaySuspend) code += `let _hs=false\n`
 			const handleName =
 				(handler as any)?.name &&
 				typeof (handler as any).name === 'string'
@@ -884,11 +1008,16 @@ export function compileHandlerJit({
 			code += beginTrace('handle', 1, handleName)
 			const handleChild = buildReport('handle')!.resolveChild(handleName)
 			code += handleChild.begin
+			const tracedCallHandler = traceHandleMaySuspend
+				? `try{${buildCallHandler('', '_hs=true\n')}}catch(e){if(_hs&&${abortExpression}){${handleChild.end('e')}${endTrace('handle', 'e')}return new Response()}throw e}\n`
+				: callHandler
 			if (hasBeforeHandle)
-				code += `if(_r===undefined){\n${callHandler}${teeBlock}}\n`
-			else code += callHandler + teeBlock
+				code += `if(_r===undefined){\n${tracedCallHandler}${teeBlock}}\n`
+			else code += tracedCallHandler + teeBlock
 
 			code += handleChild.end('_r')
+			if (traceHandleMaySuspend)
+				code += `if(_hs&&${abortExpression}){${endTrace('handle')}return new Response()}\n`
 
 			code += `if(_trs){\n`
 			for (let i = 0; i < traceCount; i++) code += `_hr${i}=rp${i};\n`
@@ -917,11 +1046,11 @@ export function compileHandlerJit({
 				`c.responseValue=_r\n` +
 				scheduleAfterResponse +
 				`const _m=${hasSet ? `${map}(_r,c.set,c.request)` : `${map}(_r,c.request)`}\n` +
-				`return typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>fre(rt,c,_e)):_m\n` +
+				`return typeof _m?.then==='function'?${settleAtSuspension('_m')}.catch(e=>fre(rt,c,e)):_m\n` +
 				`}\n`
 
 			code +=
-				`if(_r instanceof Promise)return _r.then(fe).then((_v)=>_fin(c,_v)).catch((_e)=>fre(rt,c,_e))\n` +
+				`if(_r instanceof Promise)return _r.then(fe).then(v=>{${suspensionAbortCheck}return _fin(c,v)}).catch(e=>fre(rt,c,e))\n` +
 				`return _fin(c,_r)\n`
 		} else {
 			code += `if(_r instanceof Error)throw _r\n`
@@ -948,7 +1077,8 @@ export function compileHandlerJit({
 						'af',
 						isAsync,
 						buildReport('afterHandle'),
-						abortExpression
+						abortGuard,
+						phaseSuspensionAbort('afterHandle')
 					)
 				}
 				code += endTrace('afterHandle')
@@ -965,7 +1095,8 @@ export function compileHandlerJit({
 						'mr',
 						isAsync,
 						buildReport('mapResponse'),
-						abortExpression
+						abortGuard,
+						phaseSuspensionAbort('mapResponse')
 					)
 				}
 				code += endTrace('mapResponse')
@@ -983,16 +1114,18 @@ export function compileHandlerJit({
 				const encodeBody = responseValiAsync
 					? `(_vr.mayReturnPromise?_vr.From(_r,'response',true):_vr.EncodeFrom(_r,'response'))`
 					: `_vr.EncodeFrom(_r,'response')`
+				const encodeStatusStatement = `_r.response=${awaitStr}${encodeStatus}\n`
+				const encodeBodyStatement = `_r=${awaitStr}${encodeBody}\n`
 
 				code +=
 					`if(_r instanceof es){\n` +
 					`const _vr=va.response[_r.code]\n` +
-					`if(_vr)_r.response=${awaitStr}${encodeStatus}\n` +
+					`if(_vr){${responseValiAsync ? awaitBoundary(encodeStatusStatement) : encodeStatusStatement}}\n` +
 					`}else if(!(_r instanceof Response)` +
 					`&&!(_r instanceof ReadableStream)` +
 					`&&typeof _r?.next!=='function'){\n` +
 					`const _vr=va.response[c.set.status??200]\n` +
-					`if(_vr)_r=${awaitStr}${encodeBody}\n` +
+					`if(_vr){${responseValiAsync ? awaitBoundary(encodeBodyStatement) : encodeBodyStatement}}\n` +
 					`}\n`
 				if (hasLifecycleHook) code += abortCheck
 			}
@@ -1003,32 +1136,43 @@ export function compileHandlerJit({
 				? `${map}(_r,c.set,c.request)`
 				: `${map}(_r,c.request)`
 
-			if (isAsync) code += `return await ${finalMap}\n`
+			if (isAsync)
+				code +=
+					`let _m\n` +
+					`_m=${finalMap}\n` +
+					`if(typeof _m?.then==='function'){${awaitBoundary(`_m=await _m\n`)}}\n` +
+					`return _m\n`
 			else {
 				code += `const _m=${finalMap}\n`
+				const settled = settleAtSuspension('_m')
 				code += syncErrorHook
-					? `return typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>_ce(_e,c)):_m\n`
-					: `return typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>fre(rt,c,_e)):_m\n`
+					? `return typeof _m?.then==='function'?${settled}.catch(e=>_ce(e,c)):_m\n`
+					: `return typeof _m?.then==='function'?${settled}.catch(e=>fre(rt,c,e)):_m\n`
 			}
 		}
 	} else if (isHandleFunction) {
 		if (!isAsync) link(forwardError, 'fe')
-		const mapArgs = hasSet ? 'c.set,c.request' : 'c.request'
-		code +=
-			(callHandlerSyncOnAsync
-				? `let _r=h(c)\nif(_r instanceof Promise)_r=await _r\n`
-				: `let _r=${isAsync ? 'await ' : ''}h(c)\n`) +
-			abortCheck +
-			`if(_r instanceof Error)throw _r\n` +
-			(isAsync
-				? `return await ${map}(_r,${mapArgs})\n`
-				: syncErrorHook
-					? `if(_r instanceof Promise)_r=_r.then(fe)\nconst _m=${map}(_r,${mapArgs})\nreturn typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>_ce(_e,c)):_m\n`
-					: `if(_r instanceof Promise)_r=_r.then(fe)\nconst _m=${map}(_r,${mapArgs})\nreturn typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>fre(rt,c,_e)):_m\n`)
+		const mapArgs = hasSet ? `${setArg},c.request` : 'c.request'
+		code += `let _r\n` + callHandler + abortCheck
+		code += `if(_r instanceof Error)throw _r\n`
+		if (isAsync)
+			code +=
+				`let _m\n` +
+				`_m=${map}(_r,${mapArgs})\n` +
+				`if(typeof _m?.then==='function'){${awaitBoundary(`_m=await _m\n`)}}\n` +
+				`return _m\n`
+		else {
+			code += `if(_r instanceof Promise)_r=_r.then(fe)\nconst _m=${map}(_r,${mapArgs})\n`
+			const settled = settleAtSuspension('_m')
+			code += syncErrorHook
+				? `return typeof _m?.then==='function'?${settled}.catch(e=>_ce(e,c)):_m\n`
+				: `return typeof _m?.then==='function'?${settled}.catch(e=>fre(rt,c,e)):_m\n`
+		}
 	} else {
+		const settled = settleAtSuspension('_m')
 		code +=
 			`const _m=${mapReturn.trim()}\n` +
-			`return typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>fre(rt,c,_e)):_m\n`
+			`return typeof _m?.then==='function'?${settled}.catch(e=>fre(rt,c,e)):_m\n`
 	}
 
 	if (hasErrorHook || hasTrace) {
@@ -1052,8 +1196,9 @@ export function compileHandlerJit({
 
 			if (allowUnsafeDetail) link(ValidationError, 'verr')
 
+			const settleErrorMap = `${settleAtSuspension('_r')}.catch(e=>fre(rt,c,e))`
 			factoryHelpers +=
-				`function _em(c,_r){return typeof _r?.then==='function'?Promise.resolve(_r).catch((_e)=>fre(rt,c,_e)):_r}\n` +
+				`function _em(c,_r){return typeof _r?.then==='function'?${settleErrorMap}:_r}\n` +
 				`${asyncCookieSign ? 'async ' : ''}function _efb(e,c){\n` +
 				(asyncCookieSign ? `let _sg\n` : ``) +
 				`if(e instanceof es){${signPrefix}return _em(c,${map}(e,c.set,c.request))}\n` +
@@ -1084,16 +1229,19 @@ export function compileHandlerJit({
 									'mr',
 									isAsync,
 									undefined,
-									abortExpression
+									abortGuard,
+									phaseSuspensionAbort('error')
 								)
 							: '') +
 							endTrace('error') +
 							abortCheck +
 							schedule,
 						signPrefix,
-						isAsync
+						isAsync,
+						phaseSuspensionAbort('error'),
+						buildReport('error')
 					],
-					abortExpression
+					abortGuard
 				) +
 				endTrace('error') +
 				abortCheck +
@@ -1101,7 +1249,7 @@ export function compileHandlerJit({
 				`if(typeof e?.toResponse==='function')` +
 				`try{\n` +
 				`const _er=e.toResponse()\n` +
-				`if(typeof _er?.then==='function')return Promise.resolve(_er).then(${asyncCookieSign ? 'async ' : ''}(_v)=>{if(_v instanceof Response){${signPrefix}return _em(c,${map}(_v,c.set,c.request))}return _efb(e,c)},()=>_efb(e,c)).catch((_e)=>fre(rt,c,_e))\n` +
+				`if(typeof _er?.then==='function')return ${settleAtSuspension('_er')}.then(${asyncCookieSign ? 'async ' : ''}v=>{${suspensionAbortCheck}if(v instanceof Response){${signPrefix}return _em(c,${map}(v,c.set,c.request))}return _efb(e,c)},()=>_efb(e,c)).catch(x=>fre(rt,c,x))\n` +
 				`if(_er instanceof Response){${signPrefix}return _em(c,${map}(_er,c.set,c.request))}\n` +
 				`}catch{}\n` +
 				`return _efb(e,c)\n`
@@ -1111,10 +1259,10 @@ export function compileHandlerJit({
 		}
 
 		if (syncErrorHook) {
-			factoryHelpers += `function _ce(e,c){try{\n${body}}catch(_ee){return fre(rt,c,_ee)}}\n`
+			factoryHelpers += `function _ce(e,c){try{\n${body}}catch(x){return fre(rt,c,x)}}\n`
 			code += `}catch(e){return _ce(e,c)}\n`
 		} else
-			code += `}catch(e){try{\n${body}}catch(_ee){return fre(rt,c,_ee)}}\n`
+			code += `}catch(e){try{\n${body}}catch(x){${endTraceChild('error', 'x')}${endTrace('error', 'x')}return fre(rt,c,x)}}\n`
 	} else code += `}catch(e){return fre(rt,c,e)}\n`
 
 	code += '}'
@@ -1126,32 +1274,56 @@ export function compileHandlerJit({
 
 	Capture.handler({ method, path, alias, code })
 	const inlineAlias = alias.startsWith('rt,fre,') ? alias.slice(7) : alias
+	const inlineSettle = inlineAlias.endsWith(',s') ? settleResponse : undefined
+	const inlineShape = inlineSettle ? inlineAlias.slice(0, -2) : inlineAlias
 	const isGeneratorHandler =
 		isHandleFunction &&
 		(handler as Function).constructor.name.endsWith('GeneratorFunction')
 
-	if (!hasTrace && isHandleFunction && !isGeneratorHandler && !inlineUnsafe) {
+	if (
+		!hasTrace &&
+		isHandleFunction &&
+		!isGeneratorHandler &&
+		!inlineUnsafe &&
+		(compatCancellation || !isAsync)
+	) {
 		if (
-			inlineAlias === 'rc' ||
-			(!isAsync && !syncErrorHook && inlineAlias === 'rc,fe')
+			inlineShape === 'rc' ||
+			(!isAsync && !syncErrorHook && inlineShape === 'rc,fe')
 		)
-			return createInlineHandler(
-				res.compact ?? (res.map as any),
-				handler as any
+			return settleInline(
+				createInlineHandler(
+					res.compact ?? (res.map as any),
+					handler as any
+				),
+				inlineSettle
 			)
 		else if (
-			inlineAlias === 'rm' ||
-			inlineAlias === 'msh,rm' ||
+			inlineShape === 'rm' ||
+			inlineShape === 'msh,rm' ||
 			(!isAsync &&
 				!syncErrorHook &&
-				(inlineAlias === 'rm,fe' || inlineAlias === 'msh,rm,fe'))
+				(inlineShape === 'rm,fe' || inlineShape === 'msh,rm,fe'))
 		)
-			return responseMode === 'set-with-default-headers' && inference.set
-				? createInlineHandlerWithDefaultHeaders(
-						responseMap as any,
-						handler as any
-					)
-				: createInlineHandlerWithSet(responseMap as any, handler as any)
+			return settleInline(
+				responseMode === 'default-headers'
+					? createInlineHandlerWithDefaultResponseState(
+							responseMap as any,
+							handler as any,
+							defaultResponseState!
+						)
+					: responseMode === 'set-with-default-headers' &&
+						  inference.set
+						? createInlineHandlerWithDefaultHeaders(
+								responseMap as any,
+								handler as any
+							)
+						: createInlineHandlerWithSet(
+								responseMap as any,
+								handler as any
+							),
+				inlineSettle
+			)
 	}
 
 	JITProbe.record('handler:new-function')

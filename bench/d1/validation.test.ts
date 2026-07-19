@@ -1,7 +1,7 @@
 import { expect, it } from 'bun:test'
 
 import { metricUnit, recordsAaFloor } from './schema'
-import { compareReportOnlyMetric } from './stats'
+import { compareMetric, compareReportOnlyMetric } from './stats'
 
 const fixture = new URL('./fixtures/validation.ts', import.meta.url).pathname
 const margins = (await Bun.file(
@@ -84,6 +84,7 @@ it('reports zero-baseline samples raw and executable metrics as counts', () => {
 		candidate: 11,
 		observedDelta: 11,
 		deltaScale: 'raw-difference',
+		claim: 'report-only',
 		verdict: 'report-only'
 	})
 	expect(result.ci).toMatchObject({ low: 10, high: 12, width: 2 })
@@ -103,6 +104,7 @@ it('reports zero-baseline samples raw and executable metrics as counts', () => {
 		candidate: 3,
 		observedDelta: 3,
 		deltaScale: 'raw-difference',
+		claim: 'report-only',
 		verdict: 'report-only'
 	})
 	expect(mixedSign.ci).toMatchObject({ low: 3, high: 3, width: 0 })
@@ -141,4 +143,39 @@ it('reports zero-baseline samples raw and executable metrics as counts', () => {
 		expect(metricUnit({ kind: 'memory', metric })).toBe(
 			'count-per-validator'
 		)
+})
+
+it('distinguishes measurable improvement from non-regression', () => {
+	const input = {
+		fixture: 'runtime-lowering',
+		metric: 'context-light-p50-ns',
+		kind: 'timing' as const,
+		direction: 'lower' as const,
+		margin: 0.05,
+		baselineBlocks: [100, 100, 100, 100],
+		seed: 1,
+		resamples: 2_000
+	}
+
+	expect(
+		compareMetric({
+			...input,
+			claim: 'non-regression',
+			candidateBlocks: [99, 99, 99, 99]
+		}).verdict
+	).toBe('pass')
+	expect(
+		compareMetric({
+			...input,
+			claim: 'improvement',
+			candidateBlocks: [99, 99, 99, 99]
+		}).verdict
+	).toBe('fail')
+	expect(
+		compareMetric({
+			...input,
+			claim: 'improvement',
+			candidateBlocks: [90, 90, 90, 90]
+		}).verdict
+	).toBe('pass')
 })

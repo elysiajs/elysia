@@ -83,7 +83,7 @@ describe('request hooks', () => {
 		expect(total).toEqual(2)
 	})
 
-	it('stops sync request hooks on abort', async () => {
+	it('finishes sync request hooks after abort', async () => {
 		const controller = new AbortController()
 		let secondHookCalled = false
 		let handlerCalled = false
@@ -104,9 +104,35 @@ describe('request hooks', () => {
 
 		const res = await app.handle(req('/', { signal: controller.signal }))
 
+		expect(secondHookCalled).toBe(true)
+		expect(handlerCalled).toBe(true)
+		expect(res.status).toBe(200)
+		await expect(res.text()).resolves.toBe('NOOP')
+	})
+
+	it('keeps sync request-hook polling in compat mode', async () => {
+		const controller = new AbortController()
+		let secondHookCalled = false
+		let handlerCalled = false
+
+		const app = new Elysia({
+			experimental: { cancellation: 'compat' }
+		})
+			.request([
+				() => controller.abort(),
+				() => {
+					secondHookCalled = true
+				}
+			])
+			.get('/', () => {
+				handlerCalled = true
+				return 'NOOP'
+			})
+
+		const res = await app.handle(req('/', { signal: controller.signal }))
+
 		expect(secondHookCalled).toBe(false)
 		expect(handlerCalled).toBe(false)
-		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('')
 	})
 

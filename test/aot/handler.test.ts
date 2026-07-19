@@ -39,6 +39,24 @@ const build = () =>
 		)
 
 describe('AOT handler freeze', () => {
+	it('binds the captured Q12 settlement helper', async () => {
+		const buildQ12 = () =>
+			new Elysia().beforeHandle(() => {}).get('/q12', () => 'ok')
+
+		;(buildQ12() as any).compile()
+		const handlers = endHandlerCapture()
+		endValidatorCapture()
+
+		expect(handlers).toHaveLength(1)
+		expect(handlers[0]!.alias.split(',')).toContain('s')
+		registerManifest({ handlers: materialiseHandlers(handlers) })
+
+		delete process.env.ELYSIA_AOT_BUILD
+		const app = buildQ12()
+		;(app as any).compile()
+		await expect((await app.handle(req('/q12'))).text()).resolves.toBe('ok')
+	})
+
 	it('binds the frozen factory (no new Function) and behaves identically to JIT', async () => {
 		;(build() as any).compile()
 		const handlers = endHandlerCapture()

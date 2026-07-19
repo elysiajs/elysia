@@ -90,7 +90,9 @@ describe('case-insensitive content-type parse', () => {
 		expect(src).toContain(
 			"let cj=(ce.charCodeAt(12)===106&&ce==='application/json')||ce.endsWith('+json')"
 		)
-		expect(src).toContain('c.body=cj?await pj(c):await pd(c,ce,true)')
+		expect(src).toMatch(
+			/c\.body=cj\?\(?[^\n]*await pj\(c\)\)?\:\(?[^\n]*await pd\(c,ce,true\)\)?/
+		)
 		expect(src).not.toContain('ctlc')
 		expect(src).not.toContain('_ctl')
 		expect(src).not.toContain('pmrc')
@@ -283,7 +285,7 @@ describe('fetch-level error fallback for compiled routes', () => {
 })
 
 describe('request abort short-circuits lifecycle hooks', () => {
-	it('emits abort plumbing only for routes with hooks', () => {
+	it('emits abort plumbing only for compat polling or suspension sites', () => {
 		const plain = new Elysia().get('/plain', () => 'ok')
 		const plainSrc = compileHandler(
 			plain['~routes']![0] as any,
@@ -302,9 +304,35 @@ describe('request abort short-circuits lifecycle hooks', () => {
 			hooked
 		).toString()
 
-		expect(hookedSrc).toContain('.signal.aborted')
+		expect(hookedSrc).not.toContain(
+			'if(c.request.signal.aborted)return emp.clone()'
+		)
+		expect(hookedSrc).toContain('s(c.request,_m)')
 		expect(hookedSrc).not.toContain("addEventListener('abort'")
-		expect(hookedSrc).toContain('emp.clone()')
+
+		const compat = new Elysia({
+			experimental: { cancellation: 'compat' }
+		})
+			.beforeHandle(() => {})
+			.get('/compat', () => 'ok')
+		const compatSrc = compileHandler(
+			compat['~routes']![0] as any,
+			compat
+		).toString()
+
+		expect(compatSrc).toContain('.signal.aborted')
+		expect(compatSrc).toContain('emp.clone()')
+
+		const suspended = new Elysia()
+			.beforeHandle(async () => {})
+			.get('/suspended', () => 'ok')
+		const suspendedSrc = compileHandler(
+			suspended['~routes']![0] as any,
+			suspended
+		).toString()
+
+		expect(suspendedSrc).toContain('.signal.aborted')
+		expect(suspendedSrc).not.toContain('emp.clone()')
 	})
 
 	it('returns an empty response instead of running the next hook after abort', async () => {

@@ -276,7 +276,7 @@ describe('synchronous route emission', () => {
 		)
 
 		const { source } = compileRoute(app)
-		expect(source).toContain('if(_r instanceof Promise)_r=await _r')
+		expect(source).toMatch(/if\(_r instanceof Promise\)(?:\{|_r=await _r)/)
 		expect(source).not.toMatch(/_r=await h\(c\)/)
 	})
 })

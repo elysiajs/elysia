@@ -5,6 +5,7 @@ import {
 	routeDescriptors,
 	type RouteDescriptor
 } from '../../src/compile/handler/descriptor'
+import { resumeEmit } from '../../src/experimental/resume'
 
 // A request compiles the route and publishes the facts used by code generation.
 
@@ -35,6 +36,8 @@ describe('route descriptor', () => {
 			handlerKind: 'response',
 			async: false,
 			responseMode: 'compact',
+			contextMode: 'compact',
+			headerKeys: [],
 			hasBeforeHandle: false,
 			hasAfterHandle: false,
 			hasMapResponse: false,
@@ -69,6 +72,147 @@ describe('route descriptor', () => {
 			syncErrorHook: false,
 			syncAfterResponse: false
 		})
+	})
+
+	it('selects compact and set Context modes from whole-pipeline effects', async () => {
+		const app = new Elysia({ introspect: true })
+			.get('/compact', () => 'ok')
+			.get('/set', ({ set }) => {
+				set.status = 201
+				return 'ok'
+			})
+
+		const compact = await descriptorOf(app, 'GET /compact', get('/compact'))
+		const set = await descriptorOf(app, 'GET /set', get('/set'))
+
+		expect(compact.contextMode).toBe('compact')
+		expect(set.contextMode).toBe('set')
+	})
+
+	it('records literal header keys and fails open for dynamic reads', async () => {
+		const app = new Elysia({ introspect: true })
+			.get('/literal', ({ headers: { authorization } }) => authorization)
+			.get('/alias', ({ headers: h }) => h.authorization)
+			.get('/bracket', ({ headers }) => headers['x-extra'])
+			.get(
+				'/dynamic',
+				({ headers }) => headers[Object.keys({ 'x-extra': true })[0]]
+			)
+
+		const request = (path: string) =>
+			new Request('http://localhost' + path, {
+				headers: { authorization: 'bearer', 'x-extra': 'extra' }
+			})
+
+		expect(await (await app.handle(request('/literal'))).text()).toBe(
+			'bearer'
+		)
+		expect(await (await app.handle(request('/alias'))).text()).toBe(
+			'bearer'
+		)
+		expect(await (await app.handle(request('/bracket'))).text()).toBe(
+			'extra'
+		)
+		expect(await (await app.handle(request('/dynamic'))).text()).toBe(
+			'extra'
+		)
+
+		const descriptors = routeDescriptors.get(app as any)!
+		expect(descriptors.get('GET /literal')?.headerKeys).toEqual([
+			'authorization'
+		])
+		expect(descriptors.get('GET /alias')?.headerKeys).toEqual([
+			'authorization'
+		])
+		expect(descriptors.get('GET /bracket')?.headerKeys).toEqual(['x-extra'])
+		expect(descriptors.get('GET /dynamic')?.headerKeys).toBeNull()
+	})
+
+	for (const [emitter, experimental] of [
+		['jit', undefined],
+		['resume', { resumeEmit }]
+	] as const) {
+		it(`${emitter} preserves cookies with partial headers`, async () => {
+			const app = new Elysia(experimental ? { experimental } : {}).get(
+				'/cookie',
+				({ headers: { authorization }, cookie }) =>
+					`${authorization}:${cookie.token.value}`
+			)
+			const response = await app.handle(
+				new Request('http://localhost/cookie', {
+					headers: {
+						authorization: 'bearer',
+						cookie: 'token=secret'
+					}
+				})
+			)
+
+			expect(await response.text()).toBe('bearer:secret')
+		})
+
+		it(`${emitter} preserves repeated nested header destructuring`, async () => {
+			const app = new Elysia(experimental ? { experimental } : {}).get(
+				'/headers',
+				({ headers: { authorization }, headers: { origin } }) =>
+					`${authorization}:${origin}`
+			)
+			const response = await app.handle(
+				new Request('http://localhost/headers', {
+					headers: { authorization: 'bearer', origin: 'elysia' }
+				})
+			)
+
+			expect(await response.text()).toBe('bearer:elysia')
+		})
+	}
+
+	it('fails open for header reads that cannot preserve full-object semantics', async () => {
+		const cases: [string, (context: any) => unknown][] = [
+			['computed', ({ headers }) => headers[globalThis.name]],
+			['rest', ({ headers: { authorization, ...headers } }) => headers],
+			['escape', ({ headers }) => headers],
+			['uppercase', ({ headers }) => headers.Authorization],
+			['opaque', (context) => Object(context).headers.authorization],
+			[
+				'redestructured-context',
+				(context) => {
+					const { headers } = context
+					return (
+						context.headers.authorization ??
+						Object.keys(headers).length
+					)
+				}
+			],
+			[
+				'context-rest',
+				({ ...rest }) => Object(rest).headers.authorization
+			],
+			['invalid-name', ({ headers }) => headers['not valid']],
+			['set-cookie', ({ headers }) => headers['set-cookie']]
+		]
+		let app = new Elysia({ introspect: true })
+		for (const [path, handler] of cases) app = app.get('/' + path, handler)
+
+		for (const [path] of cases) await app.handle(get('/' + path))
+		const descriptors = routeDescriptors.get(app as any)!
+		for (const [path] of cases)
+			expect(descriptors.get(`GET /${path}`)?.headerKeys).toBeNull()
+	})
+
+	it('keeps compact error paths safe when response state is materialized late', async () => {
+		const app = new Elysia({ introspect: true }).get('/error', () => {
+			throw new Error('late')
+		})
+
+		const response = await app.handle(get('/error'))
+		expect(response.status).toBe(500)
+		expect(await response.json()).toMatchObject({
+			status: 500,
+			detail: 'late'
+		})
+		expect(
+			routeDescriptors.get(app as any)?.get('GET /error')?.contextMode
+		).toBe('compact')
 	})
 
 	it('classifies a plain synchronous function handler', async () => {

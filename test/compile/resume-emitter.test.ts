@@ -459,6 +459,37 @@ describe('resume emitter selection', () => {
 		expect(resumeCode.length).toBeLessThanOrEqual(legacyCode.length * 3)
 	})
 
+	it('puts suspension checks in __resume while compat keeps entry polling', async () => {
+		const route = (e: Elysia<any>) =>
+			e.get('/cancel-source', { beforeHandle: async () => {} } as any, () => 'h')
+		const req = () => new Request('http://localhost/cancel-source')
+		const suspension = await captureAt(
+			route(new Elysia({ experimental: { resumeEmit } })),
+			'/cancel-source',
+			req()
+		)
+		const compat = await captureAt(
+			route(
+				new Elysia({
+					experimental: { resumeEmit, cancellation: 'compat' }
+				})
+			),
+			'/cancel-source',
+			req()
+		)
+
+		expect(suspension).toContain('await pending')
+		expect(suspension).toContain(
+			'if(c.request.signal.aborted)return new Response()'
+		)
+		expect(suspension).not.toContain(
+			'if(c.request.signal.aborted)return emp.clone()'
+		)
+		expect(compat).toContain(
+			'if(c.request.signal.aborted)return emp.clone()'
+		)
+	})
+
 	it('ignores the flag inside an AOT build env and warns, using the default lane', async () => {
 		const origIsAot = (Capture as any).isAotBuildEnv
 		;(Capture as any).isAotBuildEnv = () => true
@@ -601,7 +632,7 @@ describe('resume emitter selection', () => {
 		}
 	})
 
-	it('warns when unsupported routes fall back', async () => {
+	it('only warns for still-unsupported signed-cookie routes', async () => {
 		const warnings: string[] = []
 		const origWarn = console.warn
 		console.warn = (...args: unknown[]) => {
@@ -625,11 +656,7 @@ describe('resume emitter selection', () => {
 			for (const p of ['/fb/error', '/fb/signed'])
 				await app.handle(new Request('http://localhost' + p))
 
-			expect(
-				warnings.some(
-					(w) => w.includes('/fb/error') && w.includes('errorHook')
-				)
-			).toBe(true)
+			expect(warnings.some((w) => w.includes('/fb/error'))).toBe(false)
 			expect(
 				warnings.some(
 					(w) => w.includes('/fb/signed') && w.includes('cookieSign')

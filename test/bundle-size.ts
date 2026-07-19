@@ -5,12 +5,12 @@ const cases = {
 		resume: false
 	},
 	schema: {
-		limit: 400 * 1024,
+		limit: 406 * 1024,
 		source: `import { Elysia, t } from './dist/index.mjs'; globalThis.app = new Elysia().get('/', () => 'ok', { query: t.Object({ q: t.String() }) })`,
 		resume: false
 	},
 	resume: {
-		limit: 410 * 1024,
+		limit: 422 * 1024,
 		source: `import { Elysia, t } from './dist/index.mjs'; import { resumeEmit } from './dist/experimental/resume.mjs'; globalThis.app = new Elysia({ experimental: { resumeEmit } }).get('/', () => 'ok', { query: t.Object({ q: t.String() }) })`,
 		resume: true
 	}

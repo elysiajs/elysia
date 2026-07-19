@@ -56,7 +56,7 @@ describe('abort short-circuit', () => {
 		await expectShortCircuit(app, controller, () => handlerCalled)
 	})
 
-	it('resolves trace reports when a pre-aborted request short-circuits', async () => {
+	it('lets a traced synchronous pipeline finish when pre-aborted', async () => {
 		let handlerCalled = false
 
 		const app = new Elysia()
@@ -67,10 +67,17 @@ describe('abort short-circuit', () => {
 				return 'never'
 			})
 
-		await expectShortCircuit(app, preAborted(), () => handlerCalled)
+		const res = await app.handle(
+			new Request('http://localhost/', {
+				signal: preAborted().signal
+			})
+		)
+
+		expect(handlerCalled).toBe(true)
+		await expect(res.text()).resolves.toBe('never')
 	})
 
-	it('skips the route for a pre-aborted request with a sync request hook', async () => {
+	it('lets a synchronous request hook and route finish when pre-aborted', async () => {
 		let handlerCalled = false
 
 		const app = new Elysia()
@@ -78,6 +85,27 @@ describe('abort short-circuit', () => {
 			.get('/', () => {
 				handlerCalled = true
 
+				return 'never'
+			})
+
+		const res = await app.handle(
+			new Request('http://localhost/', {
+				signal: preAborted().signal
+			})
+		)
+
+		expect(handlerCalled).toBe(true)
+		await expect(res.text()).resolves.toBe('never')
+	})
+
+	it('keeps pre-abort polling in compat mode', async () => {
+		let handlerCalled = false
+		const app = new Elysia({
+			experimental: { cancellation: 'compat' }
+		})
+			.request(() => {})
+			.get('/', () => {
+				handlerCalled = true
 				return 'never'
 			})
 

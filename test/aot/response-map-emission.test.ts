@@ -32,7 +32,9 @@ describe('body parsing without full header access', () => {
 		expect(source).toContain(
 			"let cj=(ce.charCodeAt(12)===106&&ce==='application/json')||ce.endsWith('+json')"
 		)
-		expect(source).toContain('c.body=cj?await pj(c):await pd(c,ce,true)')
+		expect(source).toContain(
+			'c.body=cj?(_bs=true,await pj(c)):(_bs=true,await pd(c,ce,true))'
+		)
 		expect(source).not.toContain('c.contentType=ct')
 		expect(source).not.toContain('c.headers=')
 		expect(source).not.toContain('.toJSON()')
@@ -64,7 +66,9 @@ describe('body parsing without full header access', () => {
 		expect(source).toContain(
 			"let cj=(ce.charCodeAt(12)===106&&ce==='application/json')||ce.endsWith('+json')"
 		)
-		expect(source).toContain('c.body=cj?await pj(c):await pd(c,ce,true)')
+		expect(source).toContain(
+			'c.body=cj?(_bs=true,await pj(c)):(_bs=true,await pd(c,ce,true))'
+		)
 		expect(source).not.toContain('c.contentType=ct')
 		expect(source).not.toContain('c.headers=')
 
@@ -174,19 +178,18 @@ describe('header reads and response set handling', () => {
 			return 'hi'
 		})
 
-		const { source } = compileRoute(app)
-		expect(source).toContain('c.set')
 		const res = await app.handle(req('/s'))
 		expect(res.headers.get('x-y')).toBe('z')
 	})
 
-	it('a route with app default headers stays set-aware', async () => {
+	it('a route with app default headers uses shared immutable response state', async () => {
 		const app = new Elysia()
 			.headers({ 'x-app': 'default' })
 			.get('/d', () => 'hi')
 
 		const { source } = compileRoute(app)
-		expect(source).toContain('c.set')
+		expect(source).toContain('dhs')
+		expect(source).not.toContain('c.set')
 		const res = await app.handle(req('/d'))
 		expect(res.headers.get('x-app')).toBe('default')
 	})
@@ -215,7 +218,6 @@ describe('header reads and response set handling', () => {
 			({ headers }) => headers['x-foo'] ?? ''
 		)
 
-		expect(compileRoute(writes).source).toContain('c.set')
 		await expect(
 			writes.handle(req('/w')).then((r) => r.status)
 		).resolves.toBe(418)

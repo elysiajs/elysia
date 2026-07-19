@@ -48,6 +48,20 @@ for (const pair of lanePairs) {
 						const observe: Observe | undefined = entry.recorder
 							? () => [...entry.recorder!.events]
 							: undefined
+						const drainExpectedObservation = async () => {
+							if (!Array.isArray(request.expectedObservation)) {
+								await Bun.sleep(0)
+								return
+							}
+							for (
+								let attempt = 0;
+								attempt < 20 &&
+								entry.recorder!.events.length <
+									request.expectedObservation.length;
+								attempt++
+							)
+								await Bun.sleep(1)
+						}
 
 						// Partial setup must still dispose a successfully built lane.
 						let oracle:
@@ -76,18 +90,17 @@ for (const pair of lanePairs) {
 							const oracleRes = await oracle.handle(
 								request.make()
 							)
+							const oSnap = await snapshot(oracleRes)
+							await drainExpectedObservation()
 							const oracleObs = oracle.observe?.()
 
 							entry.recorder?.reset()
 							const candidateRes = await candidate.handle(
 								request.make()
 							)
+							const cSnap = await snapshot(candidateRes)
+							await drainExpectedObservation()
 							const candidateObs = candidate.observe?.()
-
-							const [oSnap, cSnap] = await Promise.all([
-								snapshot(oracleRes),
-								snapshot(candidateRes)
-							])
 
 							const respMismatch = comparators.response(
 								ctx,
@@ -98,6 +111,10 @@ for (const pair of lanePairs) {
 								throw new Error(formatMismatch(respMismatch))
 
 							if (oracleObs !== undefined) {
+								if (request.expectedObservation !== undefined)
+									expect(oracleObs).toEqual(
+										request.expectedObservation
+									)
 								const obsMismatch = comparators.observation(
 									ctx,
 									oracleObs,

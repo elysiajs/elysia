@@ -2,6 +2,7 @@ import type { AnyElysia } from '../../base'
 import type { ElysiaAdapter } from '../../adapter'
 import {
 	D1_INFERENCE_IMPLEMENTATION,
+	inferHeaderKeys,
 	mergeInference,
 	sucrose,
 	type Sucrose
@@ -23,6 +24,10 @@ import { JITProbe } from '../jit-probe'
 
 import { isNotEmpty, type CompactBeforeHandlePrefix } from '../../utils'
 import type { AnyLocalHook, InferenceOverride, MaybeArray } from '../../types'
+import {
+	contextDefaults,
+	type DefaultResponseState
+} from '../../adapter/default-headers'
 
 export interface RouteDescriptor {
 	method: string
@@ -35,6 +40,8 @@ export interface RouteDescriptor {
 		| 'default-headers'
 		| 'set'
 		| 'set-with-default-headers'
+	contextMode: 'compact' | 'set'
+	headerKeys: readonly string[] | null
 
 	// lifecycle presence
 	hasBeforeHandle: boolean
@@ -87,6 +94,7 @@ export interface RouteCompileState {
 	tracePhases: Set<TraceEvent> | null
 	hasAnyPhase: boolean
 	traceHandleOn: boolean
+	defaultResponseState: DefaultResponseState | undefined
 }
 
 export interface DescribeRouteInput {
@@ -523,6 +531,17 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 		: hasSetEffects || hasDefaultHeaders
 			? 'set'
 			: 'compact'
+	const contextMode: RouteDescriptor['contextMode'] =
+		responseMode === 'set' || responseMode === 'set-with-default-headers'
+			? 'set'
+			: 'compact'
+	let headerKeys = vali?.headers
+		? null
+		: inference.headers
+			? inferHeaderKeys(handler as any, hook as Sucrose.LifeCycle)
+			: Object.freeze([])
+	if (needsCookie && headerKeys !== null && !headerKeys.includes('cookie'))
+		headerKeys = [...headerKeys, 'cookie']
 
 	const descriptor: RouteDescriptor = {
 		method,
@@ -530,6 +549,8 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 		handlerKind,
 		async: !!isAsync,
 		responseMode,
+		contextMode,
+		headerKeys,
 
 		hasBeforeHandle,
 		hasAfterHandle,
@@ -575,6 +596,9 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 		traceHandlers,
 		tracePhases,
 		hasAnyPhase,
-		traceHandleOn
+		traceHandleOn,
+		defaultResponseState: hasDefaultHeaderSink
+			? contextDefaults(root).response
+			: undefined
 	}
 }

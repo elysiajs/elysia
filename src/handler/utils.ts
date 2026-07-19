@@ -1,6 +1,6 @@
 import { isAsyncFunction, mayReturnPromise } from '../compile/utils'
 import { isCloudflareWorker } from '../universal/constants'
-import { PROBLEM_JSON } from '../error'
+import { NotFound, PROBLEM_JSON } from '../error'
 
 import type { AnyElysia } from '../base'
 import type { Context } from '../context'
@@ -35,6 +35,21 @@ export const getNotFound = cachedResponse(NOT_FOUND_BODY, 404, {
 	'content-type': PROBLEM_JSON
 })
 
+export const frameworkNotFound = Object.freeze({ code: 'NOT_FOUND' })
+
+export const materializeFrameworkError = (error: unknown) =>
+	error === frameworkNotFound ? new NotFound() : error
+
+export const settleResponse = async (request: Request, value: unknown) => {
+	try {
+		value = await value
+	} catch (error) {
+		if (!request.signal.aborted) throw error
+	}
+
+	return request.signal.aborted ? new Response() : value
+}
+
 export function forwardError<T>(value: T): T {
 	if (value instanceof Error) throw value
 
@@ -49,7 +64,10 @@ export function finalizeRouteError(
 	const finalize = app['~finalizeError']
 	if (!finalize) throw error
 
-	return finalize(context as Context, error as Error)
+	return finalize(
+		context as Context,
+		materializeFrameworkError(error) as Error
+	)
 }
 
 export function getAsyncIndexes(onRequests: Function[]) {

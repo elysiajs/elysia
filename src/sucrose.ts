@@ -777,6 +777,7 @@ const compilerSession = () => getCompilerSession()
 
 let oracleFunctionCaches = new WeakMap<Function, Sucrose.Inference>()
 let candidateFunctionCaches = new WeakMap<Function, Sucrose.Inference>()
+const literalHeaderName = /^[!#$%&'*+\-.^_`|~0-9a-z]+$/
 
 function rememberInference(
 	lane: Sucrose.Implementation,
@@ -875,6 +876,102 @@ function collectInferenceEvents(
 	}
 
 	return events
+}
+
+function literalHeaderKeys(event: Function): readonly string[] | null {
+	let source: string
+	try {
+		source = Function.prototype.toString.call(event)
+	} catch {
+		return null
+	}
+
+	if (
+		Object.hasOwn(event, 'toString') ||
+		source.includes('[native code]') ||
+		/\b(?:arguments|eval)\b/.test(source)
+	)
+		return null
+
+	const [parameter, body] = separateFunction(source)
+	if (body === undefined) return null
+
+	const keys = new Set<string>()
+	const touchesHeaders = inferCandidateFunction(event).headers
+	if (!touchesHeaders) return []
+	if (parameter.includes('...') || parameter.includes('[')) return null
+
+	let hasNested = false
+	for (const nested of parameter.matchAll(/\bheaders\s*:\s*\{([^{}]*)\}/g)) {
+		hasNested = true
+		for (const item of nested[1].split(',')) {
+			const key = item.trim().split(/\s*[:=]\s*/, 1)[0]
+			if (!key) continue
+			if (!/^[a-z_$][a-z0-9_$-]*$/.test(key)) return null
+			keys.add(key)
+		}
+	}
+	if (hasNested) return [...keys]
+
+	const destructured =
+		/^\s*\{[\s\S]*\bheaders\s*(?::\s*([A-Za-z_$][\w$]*))?[\s\S]*\}\s*$/.exec(
+			parameter.trim()
+		)
+	const alias =
+		destructured?.[1] ?? (destructured ? 'headers' : parameter.trim())
+	if (!/^[A-Za-z_$][\w$]*$/.test(alias)) return null
+	if (
+		!destructured &&
+		findAlias(alias, body).some(
+			(candidate) => candidate.charCodeAt(0) === 123
+		)
+	)
+		return null
+
+	const escaped = alias.replace(/[$]/g, '\\$&')
+	const channelSource = destructured
+		? `\\b${escaped}`
+		: `\\b${escaped}\\s*(?:\\?\\.\\s*)?\\.\\s*headers`
+	const channel = new RegExp(channelSource + '\\b', 'g')
+	const read = new RegExp(
+		`${channelSource}\\s*(?:\\?\\.\\s*)?(?:\\.\\s*([A-Za-z_$][\\w$]*)|\\[\\s*(['\"])([^'\"]+)\\2\\s*\\])`,
+		'g'
+	)
+
+	let channelCount = 0
+	while (channel.exec(body)) channelCount++
+	let readCount = 0
+	for (let match: RegExpExecArray | null; (match = read.exec(body)); ) {
+		const key = match[1] ?? match[3]
+		if (
+			!key ||
+			key === 'set-cookie' ||
+			key !== key.toLowerCase() ||
+			!literalHeaderName.test(key)
+		)
+			return null
+		keys.add(key)
+		readCount++
+	}
+
+	if (channelCount !== readCount || readCount === 0) return null
+
+	return [...keys]
+}
+
+export function inferHeaderKeys(
+	handler: Handler | undefined,
+	lifeCycle: Sucrose.LifeCycle | undefined
+): readonly string[] | null {
+	const keys = new Set<string>()
+	for (const event of collectInferenceEvents(handler, lifeCycle)) {
+		if (typeof event !== 'function') continue
+		const inferred = literalHeaderKeys(event)
+		if (inferred === null) return null
+		for (const key of inferred) keys.add(key)
+	}
+
+	return [...keys]
 }
 
 export function sucroseOracle(

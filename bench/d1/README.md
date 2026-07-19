@@ -113,3 +113,13 @@ disabled; retention remains report-only because the comparison is too noisy for 
 For non-positive report-only baselines, `observedDelta` and its raw-unit CI bootstrap paired block
 differences; the separately reported baseline and candidate values are marginal medians and need
 not subtract to the paired delta.
+
+The N+2b runtime-lowering train owns `runtime-lowering` and `runtime-http`. `N+2b` compares
+the pre-train `f6ed3463` runtime with the candidate; `N+2b-q12` compares the candidate's explicit
+`experimental.cancellation: 'compat'` lane with omitted/default suspension cancellation on the
+same revision. Registrations declare whether they require a measurable improvement, merely bound
+a regression, or are report-only. Improvement gates require the confidence interval to clear the
+negative calibrated threshold; a statistically acceptable non-regression is not promoted as a win.
+All N+2b thresholds remain `pending-floor` until fresh pinned-machine A/A calibration, and blocked
+completion memory plus the integrated real-socket mix remain report-only until repeated evidence
+supports a bound or aggregate claim.

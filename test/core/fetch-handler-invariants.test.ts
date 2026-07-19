@@ -1,9 +1,50 @@
 import { Elysia } from '../../src'
+import { createContext } from '../../src/context'
 
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
 
 describe('fetch handler', () => {
+	it('does not inspect the request or materialize response state for an empty app', async () => {
+		const app = new Elysia().decorate('marker', true)
+		const fetch = app.fetch
+		const Context = createContext(app)
+		const descriptor = Object.getOwnPropertyDescriptor(
+			Context.prototype,
+			'set'
+		)!
+		let reads = 0
+		let urlReads = 0
+		const request = new Proxy(req('/missing'), {
+			get(target, key) {
+				if (key === 'url') urlReads++
+				return Reflect.get(target, key, target)
+			}
+		})
+
+		Object.defineProperty(Context.prototype, 'set', {
+			...descriptor,
+			get(this: any) {
+				reads++
+				return descriptor.get!.call(this)
+			}
+		})
+
+		try {
+			const response = await fetch(request)
+			expect(response.status).toBe(404)
+			await expect(response.json()).resolves.toEqual({
+				type: 'not-found',
+				title: 'Not Found',
+				status: 404
+			})
+			expect(urlReads).toBe(0)
+			expect(reads).toBe(0)
+		} finally {
+			Object.defineProperty(Context.prototype, 'set', descriptor)
+		}
+	})
+
 	it('returns 404 for an unmatched static-only app with a request hook', async () => {
 		const app = new Elysia().request(() => {}).get('/exists', () => 'hi')
 
@@ -44,6 +85,33 @@ describe('fetch handler', () => {
 
 		expect(res.status).toBe(418)
 		await expect(res.text()).resolves.toBe('teapot')
+	})
+
+	it('routes dynamic lookup failures through the error pipeline', async () => {
+		let observedRequest: Request | undefined
+		const app = new Elysia()
+			.error(({ error, path, request }) => {
+				observedRequest = request
+				return `${error.message}:${path}`
+			})
+			.get('/id/:id', ({ params }) => params.id)
+
+		void app.fetch
+		const router = (app as any)['~router']
+		const find = router.find
+		router.find = () => {
+			throw new Error('router failed')
+		}
+
+		const request = req('/id/42')
+		try {
+			const response = await app.handle(request)
+			expect(response.status).toBe(500)
+			await expect(response.text()).resolves.toBe('router failed:/id/42')
+			expect(observedRequest).toBe(request)
+		} finally {
+			router.find = find
+		}
 	})
 
 	it('runs afterResponse when a sync request hook returns a response', async () => {

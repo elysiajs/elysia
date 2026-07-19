@@ -138,14 +138,28 @@ describe('route plan classification', () => {
 		expect(afterHandle.tail.hasAfterHandle).toBe(true)
 	})
 
-	it('marks routes with error hooks as unsupported', async () => {
+	it('plans error hooks without falling back', async () => {
 		const errorHook = await planOf(
 			(e) => e.get('/', { error: () => 'e' } as any, () => 'h'),
 			'GET /',
 			get()
 		)
-		expect(errorHook.supported).toBe(false)
-		expect(errorHook.unsupportedReasons).toContain('errorHook')
+		expect(errorHook.supported).toBe(true)
+		expect(errorHook.error.hasHook).toBe(true)
+		expect(errorHook.unsupportedReasons).not.toContain('errorHook')
+	})
+
+	it('keeps trace routes on the mature lane', async () => {
+		const traced = await planOf(
+			(e) =>
+				e
+					.trace(({ onHandle }) => onHandle(() => {}))
+					.get('/', () => 'h'),
+			'GET /',
+			get()
+		)
+		expect(traced.supported).toBe(false)
+		expect(traced.unsupportedReasons).toContain('trace')
 	})
 
 	it('supports an async handler', async () => {
@@ -188,6 +202,20 @@ describe('route plan classification', () => {
 			get()
 		)
 		expect(seg(plan, 'beforeHandle').cancellationSites).toBe(true)
+		expect(plan.cancellation).toBe('suspension')
+	})
+
+	it('records the explicit compat cancellation policy', async () => {
+		const app = new Elysia({
+			introspect: true,
+			experimental: { resumeEmit, cancellation: 'compat' }
+		}).get('/', { beforeHandle: () => {} } as any, () => 'h')
+
+		await app.handle(get())
+
+		expect(routePlans.get(app as any)!.get('GET /')!.cancellation).toBe(
+			'compat'
+		)
 	})
 
 	it('never assigns sync to an opaque transform callable', async () => {

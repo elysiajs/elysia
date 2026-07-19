@@ -13,7 +13,11 @@ const compile = <T extends Elysia>(app: T): T => {
 	return app
 }
 
-const abortPrefix = async (asyncHook: boolean, flatFallback: boolean) => {
+const abortPrefix = async (
+	asyncHook: boolean,
+	flatFallback: boolean,
+	cancellation: 'compat' | 'suspension' = 'compat'
+) => {
 	const controller = new AbortController()
 	const order: string[] = []
 	const abort = asyncHook
@@ -48,7 +52,12 @@ const abortPrefix = async (asyncHook: boolean, flatFallback: boolean) => {
 			order.push('handler')
 			return 'target'
 		})
-	const app = new Elysia().use(first).use(second).use(target)
+	const app = new Elysia({
+		experimental: { cancellation }
+	})
+		.use(first)
+		.use(second)
+		.use(target)
 	if (!flatFallback) compile(app)
 
 	const response = await app.handle(
@@ -155,7 +164,19 @@ describe('eager propagated-hook prefixes', () => {
 			})
 		})
 
-	it('runs the first sync compact prefix for a pre-aborted request', () => {
+	it('stops after an async compact-prefix suspension in default mode', async () => {
+		const compact = await abortPrefix(true, false, 'suspension')
+		const fallback = await abortPrefix(true, true, 'suspension')
+
+		expect(compact).toEqual(fallback)
+		expect(compact).toEqual({
+			status: 200,
+			body: '',
+			order: ['abort']
+		})
+	})
+
+	it('runs all sync compact prefixes for a pre-aborted request in suspension mode', () => {
 		const controller = new AbortController()
 		controller.abort()
 		const order: string[] = []
@@ -178,16 +199,20 @@ describe('eager propagated-hook prefixes', () => {
 			}
 		}
 
-		runBeforeHandlePrefix(prefix, {
-			request: new Request('http://localhost', {
-				signal: controller.signal
-			})
-		})
+		runBeforeHandlePrefix(
+			prefix,
+			{
+				request: new Request('http://localhost', {
+					signal: controller.signal
+				})
+			},
+			false
+		)
 
-		expect(order).toEqual(['first-prefix'])
+		expect(order).toEqual(['first-prefix', 'later-prefix'])
 	})
 
-	it('runs the first async compact prefix for a pre-aborted request', async () => {
+	it('stops after the first async compact-prefix suspension when pre-aborted', async () => {
 		const controller = new AbortController()
 		controller.abort()
 		const order: string[] = []
@@ -211,13 +236,39 @@ describe('eager propagated-hook prefixes', () => {
 			}
 		}
 
-		await runBeforeHandlePrefixAsync(prefix, {
-			request: new Request('http://localhost', {
-				signal: controller.signal
-			})
-		})
+		await runBeforeHandlePrefixAsync(
+			prefix,
+			{
+				request: new Request('http://localhost', {
+					signal: controller.signal
+				})
+			},
+			false
+		)
 
 		expect(order).toEqual(['first-prefix'])
+	})
+
+	it('observes cancellation when an async compact prefix rejects', async () => {
+		const controller = new AbortController()
+		const prefix: CompactBeforeHandlePrefix = {
+			length: 1,
+			added: [],
+			tail: {
+				values: [() => {
+					controller.abort()
+					return Promise.reject(new Error('cancelled'))
+				}]
+			}
+		}
+
+		await expect(
+			runBeforeHandlePrefixAsync(prefix, {
+				request: new Request('http://localhost/', {
+					signal: controller.signal
+				})
+			}, false)
+		).resolves.toBeUndefined()
 	})
 
 	it('compiles a deep eligible prefix lazily when its final route is hit first', async () => {

@@ -2,6 +2,7 @@ import type { AnyElysia } from '../../base'
 import type { ElysiaAdapter } from '../../adapter'
 
 import { isDynamicRegex } from '../../constants'
+import { frozenRootOf } from '../../generation'
 import { isAsyncFunction } from '../utils'
 
 import type { RouteCompileState } from '../handler/descriptor'
@@ -42,6 +43,7 @@ export interface PlanSegment {
 export interface RoutePlan {
 	method: string
 	path: string
+	cancellation: 'suspension' | 'compat'
 
 	handlerKind: RouteCompileState['descriptor']['handlerKind']
 
@@ -49,6 +51,8 @@ export interface RoutePlan {
 	needsQuery: boolean
 	needsHeaders: boolean
 	needsRoute: boolean
+	contextMode: RouteCompileState['descriptor']['contextMode']
+	headerKeys: RouteCompileState['descriptor']['headerKeys']
 
 	// response-mode facts
 	hasSet: boolean
@@ -58,8 +62,13 @@ export interface RoutePlan {
 		hasAfterHandle: boolean
 		hasMapResponse: boolean
 		hasResponseValidator: boolean
-		/** `true` when the covered afterResponse uses the sync `_fin` tee path. */
+		hasAfterResponse: boolean
 		syncAfterResponse: boolean
+	}
+
+	error: {
+		hasHook: boolean
+		allowUnsafeValidationDetails: boolean
 	}
 
 	segments: PlanSegment[]
@@ -76,18 +85,15 @@ export function planRoute(
 	hook: AnyLocalHook | undefined,
 	handler: unknown,
 	_adapter: ElysiaAdapter,
-	_root: AnyElysia,
+	root: AnyElysia,
 	isHandleFunction: boolean
 ): RoutePlan {
 	const { descriptor: d, vali, inference } = state
 
 	const unsupportedReasons: string[] = []
 
-	if (d.hasErrorHook) unsupportedReasons.push('errorHook')
 	if (d.hasTrace) unsupportedReasons.push('trace')
 	if (d.hasCookieSign) unsupportedReasons.push('cookieSign')
-	if (d.hasAfterResponse && !d.syncAfterResponse)
-		unsupportedReasons.push('afterResponse')
 	if (state.beforeHandlePrefix) unsupportedReasons.push('beforeHandlePrefix')
 
 	const needsQuery = inference.query || !!vali?.query
@@ -112,11 +118,8 @@ export function planRoute(
 			kind: 'transform',
 			link: { via: 'hook', event: 'transform', index: i },
 			asyncClass: callableClass(transforms[i]),
-			cancellationSites: false
+			cancellationSites: d.hasLifecycleHook
 		})
-
-	if (transforms.length)
-		main[main.length - 1]!.cancellationSites = d.hasLifecycleHook
 
 	pushValidator(main, 'body', vali?.body, d.bodyValiIsAsync)
 	pushValidator(main, 'headers', vali?.headers, d.headersValiIsAsync)
@@ -129,12 +132,9 @@ export function planRoute(
 			kind: 'beforeHandle',
 			link: { via: 'hook', event: 'beforeHandle', index: i },
 			asyncClass: callableClass(beforeHandle[i]),
-			cancellationSites: false
+			cancellationSites: d.hasLifecycleHook
 		})
 	}
-
-	if (beforeHandle.length)
-		main[main.length - 1]!.cancellationSites = d.hasLifecycleHook
 
 	main.push({
 		kind: 'handler',
@@ -146,23 +146,34 @@ export function planRoute(
 			: d.handlerKind === 'promise'
 				? 'async'
 				: 'sync',
-		cancellationSites: false
+		cancellationSites: d.hasLifecycleHook
 	})
 
 	return {
 		method: d.method,
 		path: d.path,
+		cancellation:
+			frozenRootOf(root)['~config']?.experimental?.cancellation ??
+			'suspension',
 		handlerKind: d.handlerKind,
 		needsQuery,
 		needsHeaders,
 		needsRoute,
+		contextMode: d.contextMode,
+		headerKeys: d.headerKeys,
 		hasSet,
 		responseMode: d.responseMode,
 		tail: {
 			hasAfterHandle: d.hasAfterHandle,
 			hasMapResponse: d.hasMapResponse,
 			hasResponseValidator: d.hasResponseValidator,
+			hasAfterResponse: d.hasAfterResponse,
 			syncAfterResponse: d.syncAfterResponse
+		},
+		error: {
+			hasHook: d.hasErrorHook,
+			allowUnsafeValidationDetails:
+				!!root['~config']?.allowUnsafeValidationDetails
 		},
 		segments: main,
 		supported: unsupportedReasons.length === 0,

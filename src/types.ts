@@ -162,6 +162,14 @@ export interface ElysiaConfig<
 		inference?: 'candidate'
 
 		/**
+		 * Observe request cancellation at suspension boundaries by default, or
+		 * retain legacy entry and between-callback polling.
+		 *
+		 * @default 'suspension'
+		 */
+		cancellation?: 'suspension' | 'compat'
+
+		/**
 		 * **Unstable / preview.** Compile route handlers with the resume-skeleton
 		 * emitter imported from `elysia/experimental/resume` (a sync entry + a
 		 * single `__resume` async continuation) instead of the default JIT lane.

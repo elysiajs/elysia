@@ -55,13 +55,32 @@ const toArray = <T>(v: MaybeArray<T>): T[] => (Array.isArray(v) ? v : [v])
 
 export const mapTransform = /*#__PURE__*/ map<
 	'transform',
-	[isAsync: boolean, report?: TraceReporter]
->((i, fn, [isAsync, report]) => {
+	[isAsync: boolean, report?: TraceReporter, suspensionAbort?: string]
+>((i, fn, [isAsync, report, suspensionAbort]) => {
 	const t = trace(report, fn)
-	const guard = awaitGuard(fn, isAsync, '_tf')
+	if (suspensionAbort && report) {
+		if (isAsyncFunction(fn))
+			return (
+				t.begin +
+				`try{await tf${at(i)}(c)}catch(_e){${t.end('_e')}${suspensionAbort}throw _e}\n` +
+				t.end() +
+				suspensionAbort
+			)
+
+		if (isAsync)
+			return (
+				t.begin +
+				`_tf=tf${at(i)}(c)\n` +
+				`if(_tf instanceof Promise){try{_tf=await _tf}catch(_e){${t.end('_e')}${suspensionAbort}throw _e}\n${t.end()}${suspensionAbort}}else{${t.end()}}\n`
+			)
+	}
+
+	const guard = awaitGuard(fn, isAsync, '_tf', suspensionAbort)
 	const call = guard
 		? `_tf=tf${at(i)}(c)\n${guard}`
-		: `${Await(fn)}tf${at(i)}(c)\n`
+		: isAsyncFunction(fn) && suspensionAbort
+			? `try{await tf${at(i)}(c)}catch(_e){${suspensionAbort}throw _e}\n${suspensionAbort}`
+			: `${Await(fn)}tf${at(i)}(c)\n`
 
 	return t.begin + call + t.end()
 })
@@ -411,7 +430,8 @@ export function mapBeforeHandle(
 	link: Link,
 	isAsync: boolean,
 	report?: TraceReporter,
-	abortGuard?: string
+	abortGuard?: string,
+	suspensionAbort?: string
 ) {
 	const hooks = toArray(_hooks)
 	const modes = deriveModes(hooks, derive)
@@ -429,8 +449,19 @@ export function mapBeforeHandle(
 
 		const t = trace(report, fn)
 		code += t.begin
-		code += `tmp=${Await(fn)}bf${at(i)}(c)\n`
-		code += awaitGuard(fn, isAsync, 'tmp')
+		let closedAtBoundary = false
+		if (isAsyncFunction(fn) && suspensionAbort) {
+			code += `try{tmp=await bf${at(i)}(c)}catch(_e){${t.end('_e')}${suspensionAbort}throw _e}\n${t.end('tmp')}${suspensionAbort}`
+			closedAtBoundary = !!report
+		} else if (isAsync && suspensionAbort && report) {
+			code +=
+				`tmp=bf${at(i)}(c)\n` +
+				`if(tmp instanceof Promise){try{tmp=await tmp}catch(_e){${t.end('_e')}${suspensionAbort}throw _e}\n${t.end('tmp')}${suspensionAbort}}else{${t.end('tmp')}}\n`
+			closedAtBoundary = true
+		} else {
+			code += `tmp=${Await(fn)}bf${at(i)}(c)\n`
+			code += awaitGuard(fn, isAsync, 'tmp', suspensionAbort)
+		}
 		if (modes?.[i] !== undefined) {
 			needsEs = true
 			if (modes[i]) {
@@ -455,7 +486,7 @@ export function mapBeforeHandle(
 			}
 		} else code += 'if(tmp!==undefined)_r=tmp\n'
 
-		code += t.end('tmp')
+		if (!closedAtBoundary) code += t.end('tmp')
 	}
 
 	code += '}'.repeat(depth)
@@ -476,7 +507,8 @@ type BeforeHandleContext = { request: Request }
 
 export function runBeforeHandlePrefix(
 	prefix: CompactBeforeHandlePrefix,
-	context: BeforeHandleContext
+	context: BeforeHandleContext,
+	compat = true
 ) {
 	const chunks = compactBeforeHandleChunks(prefix)
 	let first = true
@@ -484,7 +516,7 @@ export function runBeforeHandlePrefix(
 	for (let i = chunks.length - 1; i >= 0; i--) {
 		const values = chunks[i]!.values
 		for (let j = 0; j < values.length; j++) {
-			if (!first && context.request.signal.aborted) return
+			if (compat && !first && context.request.signal.aborted) return
 			first = false
 			const result = values[j]!(context)
 			if (result !== undefined) return result
@@ -494,7 +526,8 @@ export function runBeforeHandlePrefix(
 
 export async function runBeforeHandlePrefixAsync(
 	prefix: CompactBeforeHandlePrefix,
-	context: BeforeHandleContext
+	context: BeforeHandleContext,
+	compat = true
 ) {
 	const chunks = compactBeforeHandleChunks(prefix)
 	let first = true
@@ -502,10 +535,19 @@ export async function runBeforeHandlePrefixAsync(
 	for (let i = chunks.length - 1; i >= 0; i--) {
 		const values = chunks[i]!.values
 		for (let j = 0; j < values.length; j++) {
-			if (!first && context.request.signal.aborted) return
+			if (compat && !first && context.request.signal.aborted) return
 			first = false
 			let result = values[j]!(context)
-			if (result instanceof Promise) result = await result
+			if (result instanceof Promise) {
+				try {
+					result = await result
+				} catch (error) {
+					if (!compat && context.request.signal.aborted) return
+
+					throw error
+				}
+				if (!compat && context.request.signal.aborted) return
+			}
 			if (result !== undefined) return result
 		}
 	}
@@ -516,7 +558,8 @@ export function mapChainHook(
 	prefix: string,
 	isAsync: boolean,
 	report?: TraceReporter,
-	abortGuard?: string
+	abortGuard?: string,
+	suspensionAbort?: string
 ) {
 	const hooks = toArray(_hooks)
 	let code = ''
@@ -531,9 +574,20 @@ export function mapChainHook(
 
 		const t = trace(report, fn)
 		code += t.begin
-		code += `tmp=${Await(fn)}${prefix}${at(i)}(c)\n`
-		code += awaitGuard(fn, isAsync, 'tmp')
-		code += t.end('tmp')
+		let closedAtBoundary = false
+		if (isAsyncFunction(fn) && suspensionAbort) {
+			code += `try{tmp=await ${prefix}${at(i)}(c)}catch(_e){${t.end('_e')}${suspensionAbort}throw _e}\n${t.end('tmp')}${suspensionAbort}`
+			closedAtBoundary = !!report
+		} else if (isAsync && suspensionAbort && report) {
+			code +=
+				`tmp=${prefix}${at(i)}(c)\n` +
+				`if(tmp instanceof Promise){try{tmp=await tmp}catch(_e){${t.end('_e')}${suspensionAbort}throw _e}\n${t.end('tmp')}${suspensionAbort}}else{${t.end('tmp')}}\n`
+			closedAtBoundary = true
+		} else {
+			code += `tmp=${Await(fn)}${prefix}${at(i)}(c)\n`
+			code += awaitGuard(fn, isAsync, 'tmp', suspensionAbort)
+		}
+		if (!closedAtBoundary) code += t.end('tmp')
 	}
 
 	code += '}'.repeat(depth)
@@ -549,7 +603,8 @@ export const mapAfterResponse = /*#__PURE__*/ map<
 	return (
 		`try{` +
 		t.begin +
-		`${Await(fn)}ar${at(i)}(c)\n` +
+		`const _ar=ar${at(i)}(c)\n` +
+		`if(typeof _ar?.then==='function')await _ar\n` +
 		t.end() +
 		`}catch(_e){` +
 		t.end('_e') +
@@ -565,22 +620,62 @@ export const mapError = /*#__PURE__*/ map<
 		mapResponse: ElysiaAdapter['response']['map'],
 		schedule: string,
 		sign: string,
-		isAsync: boolean
+		isAsync: boolean,
+		suspensionAbort?: string,
+		report?: TraceReporter
 	]
->((i, fn, [map, link, mapResponse, schedule, sign, isAsync]) => {
-	link(mapResponse, 'rm')
-	return (
-		`_r=${Await(fn)}er${at(i)}(c)\n` +
-		awaitGuard(fn, isAsync, '_r') +
-		`if(_r!==undefined){\n` +
-		`if(_r instanceof Response)c.set.status=_r.status\n` +
-		`else if(c.set.status===undefined||c.set.status===200)c.set.status=500\n` +
-		schedule +
-		sign +
-		`return _em(c,${map}(_r,c.set,c.request))\n` +
-		`}\n`
-	)
-})
+>(
+	(
+		i,
+		fn,
+		[
+			map,
+			link,
+			mapResponse,
+			schedule,
+			sign,
+			isAsync,
+			suspensionAbort,
+			report
+		]
+	) => {
+		link(mapResponse, 'rm')
+		const t = trace(report, fn)
+		let call: string
+
+		if (report && isAsyncFunction(fn))
+			call =
+				t.begin +
+				`try{_r=await er${at(i)}(c)}catch(_e){${t.end('_e')}${suspensionAbort ?? ''}throw _e}\n` +
+				t.end() +
+				(suspensionAbort ?? '')
+		else if (report && isAsync)
+			call =
+				t.begin +
+				`try{_r=er${at(i)}(c)}catch(_e){${t.end('_e')}throw _e}\n` +
+				`if(_r instanceof Promise){try{_r=await _r}catch(_e){${t.end('_e')}${suspensionAbort ?? ''}throw _e}\n${t.end()}${suspensionAbort ?? ''}}else{${t.end()}}\n`
+		else {
+			const invoke =
+				isAsyncFunction(fn) && suspensionAbort
+					? `try{_r=await er${at(i)}(c)}catch(_e){${suspensionAbort}throw _e}\n${suspensionAbort}`
+					: `_r=${Await(fn)}er${at(i)}(c)\n` +
+						awaitGuard(fn, isAsync, '_r', suspensionAbort)
+			call = report
+				? `try{${t.begin}${invoke}${t.end()}}catch(_e){${t.end('_e')}throw _e}\n`
+				: invoke
+		}
+		return (
+			call +
+			`if(_r!==undefined){\n` +
+			`if(_r instanceof Response)c.set.status=_r.status\n` +
+			`else if(c.set.status===undefined||c.set.status===200)c.set.status=500\n` +
+			schedule +
+			sign +
+			`return _em(c,${map}(_r,c.set,c.request))\n` +
+			`}\n`
+		)
+	}
+)
 
 // NOTE: must stay a `function` declaration so `mapTransform`,
 // `mapAfterResponse`, and `mapError` above can use it.
@@ -615,7 +710,14 @@ const at = (index: number | undefined) =>
 
 const Await = (fn: Function) => (isAsyncFunction(fn) ? 'await ' : '')
 
-const awaitGuard = (fn: Function, isAsync: boolean, target: string) =>
+const awaitGuard = (
+	fn: Function,
+	isAsync: boolean,
+	target: string,
+	afterAwait = ''
+) =>
 	isAsync && !isAsyncFunction(fn)
-		? `if(${target} instanceof Promise)${target}=await ${target}\n`
+		? afterAwait
+			? `if(${target} instanceof Promise){try{${target}=await ${target}}catch(_e){${afterAwait}throw _e}\n${afterAwait}}\n`
+			: `if(${target} instanceof Promise)${target}=await ${target}\n`
 		: ''

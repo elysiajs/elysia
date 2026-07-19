@@ -67,6 +67,9 @@ function responseTag(response: unknown): string | undefined {
 	return proto.constructor?.name
 }
 
+const writableSet = (set: Context['set']) =>
+	Object.isFrozen(set) ? ({ ...set } as Context['set']) : set
+
 function mapResponseWithSet(
 	response: unknown,
 	set: Context['set'],
@@ -77,8 +80,10 @@ function mapResponseWithSet(
 
 	switch (responseTag(response)) {
 		case 'String':
-			if (!isBun && !headers['content-type'])
+			if (!isBun && !headers['content-type']) {
+				set = writableSet(set)
 				materializeSetHeaders(set)['content-type'] = 'text/plain'
+			}
 
 			return new Response(response as string, set as ResponseInit)
 
@@ -94,7 +99,11 @@ function mapResponseWithSet(
 
 			// @ts-expect-error
 			if (typeof response?.next === 'function')
-				return handleStream(response as any, set, request) as any
+				return handleStream(
+					response as any,
+					writableSet(set),
+					request
+				) as any
 
 			return Response.json(response, set as ResponseInit)
 
@@ -106,13 +115,18 @@ function mapResponseWithSet(
 			)
 
 		case 'ElysiaFile':
-			return handleElysiaFile(response as ElysiaFile, set, request)
+			return handleElysiaFile(
+				response as ElysiaFile,
+				writableSet(set),
+				request
+			)
 
 		case 'File':
 		case 'Blob':
 			return handleFile(response as Blob, set, request)
 
 		case 'ElysiaStatus':
+			set = writableSet(set)
 			set.status = (response as ElysiaStatus<200>).code
 			if ((response as ElysiaStatus<200>).headers)
 				Object.assign(
@@ -132,10 +146,14 @@ function mapResponseWithSet(
 				: new Response(null, set as ResponseInit)
 
 		case 'Response':
-			return handleResponse(response as Response, set, request)
+			return handleResponse(
+				response as Response,
+				writableSet(set),
+				request
+			)
 
 		case 'Error':
-			return errorToResponse(response as Error, set)
+			return errorToResponse(response as Error, writableSet(set))
 
 		case 'Promise':
 			return (response as Promise<any>).then((x) =>
@@ -149,7 +167,11 @@ function mapResponseWithSet(
 			return new Response(response as FormData, set as ResponseInit)
 
 		default:
-			return mapResponseFallback(response, set, request) as Response
+			return mapResponseFallback(
+				response,
+				writableSet(set),
+				request
+			) as Response
 	}
 }
 

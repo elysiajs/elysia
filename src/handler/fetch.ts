@@ -7,7 +7,9 @@ import {
 	getAsyncIndexes,
 	emptyResponse,
 	NOT_FOUND_BODY,
-	getNotFound
+	getNotFound,
+	frameworkNotFound,
+	settleResponse
 } from './utils'
 
 import { createContext, type Context } from '../context'
@@ -67,14 +69,17 @@ function finalizeError(
 	context: Context,
 	handleError: (context: Context, error: Error) => unknown,
 	afterResponse: ((context: Context, status?: number) => void) | undefined,
-	error: Error
+	error: unknown
 ): Response | Promise<Response> {
+	if (error === frameworkNotFound) error = new NotFound()
 	let resp: Response | Promise<Response>
 	try {
-		resp = handleError(context, error) as Response | Promise<Response>
+		resp = handleError(context, error as Error) as
+			| Response
+			| Promise<Response>
 	} catch (errorPipelineThrow) {
 		if (!isProduction()) console.error(errorPipelineThrow)
-		resp = internalServerErrorResponse(error)
+		resp = internalServerErrorResponse(error as Error)
 	}
 
 	if (resp instanceof Promise)
@@ -85,7 +90,7 @@ function finalizeError(
 			},
 			(errorPipelineThrow) => {
 				if (!isProduction()) console.error(errorPipelineThrow)
-				const r = internalServerErrorResponse(error)
+				const r = internalServerErrorResponse(error as Error)
 				afterResponse?.(context)
 				return r
 			}
@@ -224,6 +229,8 @@ export function createFetchHandler(
 	const hasWS = !!app['~hasWS']
 	const hasDynamicWS = hasWS && !!app['~hasDynamicWS']
 	const strictPath = !!app['~config']?.strictPath
+	const compatCancellation =
+		app['~config']?.experimental?.cancellation === 'compat'
 
 	// standard internet hostname is at minimum 11 characters (http://a.bc)
 	const pathStart =
@@ -242,6 +249,10 @@ export function createFetchHandler(
 	const mapResponseHooks = hook?.mapResponse as
 		| ((context: Context) => unknown)[]
 		| undefined
+	const settleMapResponse = (mapped: unknown, request?: Request) =>
+		compatCancellation || !request || !(mapped instanceof Promise)
+			? mapped
+			: settleResponse(request, mapped)
 	const mapResponse = mapResponseHooks?.length
 		? (response: unknown, set: Context['set'], context?: Context) => {
 				if (!context) return baseMapResponse(response, set)
@@ -256,38 +267,67 @@ export function createFetchHandler(
 
 						if (result instanceof Promise)
 							// eslint-disable-next-line sonarjs/function-inside-loop -- promise continuation for the hook at index i
-							return result.then((resolved) => {
-								if (resolved !== undefined)
-									return baseMapResponse(
-										resolved,
-										set,
-										request
+							return result.then(
+								// eslint-disable-next-line sonarjs/function-inside-loop
+								(resolved) => {
+									if (
+										!compatCancellation &&
+										context.request.signal.aborted
 									)
+										return new Response()
 
-								return run(i + 1)
-							})
+									if (resolved !== undefined)
+										return settleMapResponse(
+											baseMapResponse(
+												resolved,
+												set,
+												request
+											),
+											request
+										)
+
+									return run(i + 1)
+								},
+								(error) => {
+									if (
+										!compatCancellation &&
+										context.request.signal.aborted
+									)
+										return new Response()
+
+									throw error
+								}
+							)
 
 						if (result !== undefined)
-							return baseMapResponse(result, set, request)
+							return settleMapResponse(
+								baseMapResponse(result, set, request),
+								request
+							)
 					}
 
-					return baseMapResponse(response, set, request)
+					return settleMapResponse(
+						baseMapResponse(response, set, request),
+						request
+					)
 				}
 
 				return run(0)
 			}
-		: (response: unknown, set: Context['set'], context?: Context) =>
-				baseMapResponse(
-					response,
-					set,
-					(context as { request?: Request } | undefined)?.request
+		: (response: unknown, set: Context['set'], context?: Context) => {
+				const request = context?.request
+				return settleMapResponse(
+					baseMapResponse(response, set, request),
+					request
 				)
+			}
 
 	const handleError = createErrorHandler(
 		hook?.error,
 		mapResponse as any,
 		undefined,
-		app['~config']?.allowUnsafeValidationDetails
+		app['~config']?.allowUnsafeValidationDetails,
+		compatCancellation
 	)
 
 	const traceHandlers = hook?.trace as
@@ -369,6 +409,7 @@ export function createFetchHandler(
 					})
 				}
 			: undefined
+	const fast404 = !hasError && !afterResponse && !app['~ext']?.headers
 
 	app['~finalizeError'] = (context, error) =>
 		finalizeError(context, handleError, afterResponse, error)
@@ -385,7 +426,8 @@ export function createFetchHandler(
 		): Promise<Response> => {
 			const context = new Context(request)
 			materializeSetHeaders(context.set)
-			if (request.signal.aborted) return emptyResponse.clone() as Response
+			if (compatCancellation && request.signal.aborted)
+				return emptyResponse.clone() as Response
 
 			extractPath(request.url, context, pathStart)
 			// @ts-expect-error
@@ -426,13 +468,40 @@ export function createFetchHandler(
 							begin: performance.now()
 						})
 
-					const result = asyncIndexes?.[i]
-						? await onRequests[i](context as any)
-						: onRequests[i](context as any)
+					let suspended = false
+					let result: unknown
+					if (compatCancellation && asyncIndexes?.[i]) {
+						result = await onRequests[i](context as any)
+						suspended = true
+					} else {
+						result = onRequests[i](context as any)
+						if (result instanceof Promise)
+							try {
+								result = await result
+								suspended = true
+							} catch (error) {
+								if (
+									!compatCancellation &&
+									request.signal.aborted
+								) {
+									for (let j = 0; j < traceLength; j++) {
+										endReports[j]?.()
+										trace[j].r(requestReports[j])
+									}
+
+									return new Response()
+								}
+
+								throw error
+							}
+					}
 
 					for (let i = 0; i < traceLength; i++) endReports[i]?.()
 
-					if (request.signal.aborted) {
+					if (
+						(compatCancellation || suspended) &&
+						request.signal.aborted
+					) {
 						for (let j = 0; j < traceLength; j++)
 							trace[j].r(requestReports[j])
 
@@ -494,7 +563,7 @@ export function createFetchHandler(
 			): Promise<Response> => {
 				const context = new Context(request)
 				materializeSetHeaders(context.set)
-				if (request.signal.aborted)
+				if (compatCancellation && request.signal.aborted)
 					return emptyResponse.clone() as Response
 
 				extractPath(request.url, context, pathStart)
@@ -503,13 +572,32 @@ export function createFetchHandler(
 
 				try {
 					for (let i = 0; i < onRequests.length; i++) {
-						let result = asyncIndexes?.[i]
-							? await onRequests[i](context)
-							: onRequests[i](context)
+						let suspended = false
+						let result: unknown
+						if (compatCancellation && asyncIndexes?.[i]) {
+							result = await onRequests[i](context)
+							suspended = true
+						} else {
+							result = onRequests[i](context)
+							if (result instanceof Promise)
+								try {
+									result = await result
+									suspended = true
+								} catch (error) {
+									if (
+										!compatCancellation &&
+										request.signal.aborted
+									)
+										return new Response()
 
-						if (result instanceof Promise) result = await result
+									throw error
+								}
+						}
 
-						if (request.signal.aborted)
+						if (
+							(compatCancellation || suspended) &&
+							request.signal.aborted
+						)
 							return emptyResponse.clone() as Response
 
 						if (result !== undefined) {
@@ -549,7 +637,8 @@ export function createFetchHandler(
 		return (request: Request, server?: unknown): MaybePromise<Response> => {
 			const context = new Context(request)
 			materializeSetHeaders(context.set)
-			if (request.signal.aborted) return emptyResponse.clone() as Response
+			if (compatCancellation && request.signal.aborted)
+				return emptyResponse.clone() as Response
 
 			extractPath(request.url, context, pathStart)
 			// @ts-expect-error
@@ -558,7 +647,7 @@ export function createFetchHandler(
 			try {
 				for (let i = 0; i < onRequests.length; i++) {
 					const result = onRequests[i](context)
-					if (request.signal.aborted)
+					if (compatCancellation && request.signal.aborted)
 						return emptyResponse.clone() as Response
 
 					if (result !== undefined) {
@@ -605,25 +694,34 @@ export function createFetchHandler(
 		}
 	}
 
+	if (fast404 && !router && !hasWS && !app['~routes'].length)
+		return () => getNotFound()
+
 	return (request: Request, server?: unknown): MaybePromise<Response> => {
-		const context = new Context(request)
-		const path = extractPath(request.url, context, pathStart)
-		// @ts-expect-error
-		context.server = server ?? null
-
+		const url = request.url
+		const pathIndex = url.indexOf('/', pathStart)
+		const qi = url.indexOf('?', pathIndex)
+		const path = url.substring(pathIndex, qi === -1 ? url.length : qi)
 		const method = request.method
+		let context: Context | undefined
 
-		if (hasWS && method === 'GET') {
-			const handler = map['WS']?.[path]
-			const found =
-				handler === undefined && hasDynamicWS
-					? router?.find('WS', path)
-					: undefined
+		try {
+			if (hasWS && method === 'GET') {
+				const handler = map['WS']?.[path]
+				const found =
+					handler === undefined && hasDynamicWS
+						? router?.find('WS', path)
+						: undefined
 
-			if (handler !== undefined || found) {
-				const upgrade = request.headers.get('upgrade')
-				if (upgrade && upgrade.toLowerCase() === 'websocket')
-					try {
+				if (handler !== undefined || found) {
+					const upgrade = request.headers.get('upgrade')
+					if (upgrade && upgrade.toLowerCase() === 'websocket') {
+						context = new Context(request)
+						;(context as any).path = path
+						;(context as any).qi = qi
+						// @ts-expect-error
+						context.server = server ?? null
+
 						if (handler) {
 							const r = handler(context)
 							return r instanceof Promise
@@ -648,41 +746,37 @@ export function createFetchHandler(
 									)
 								) as any)
 							: (r as any)
-					} catch (error) {
-						return finalizeError(
-							context,
-							handleError,
-							afterResponse,
-							error as Error
-						)
 					}
-			}
-		}
-
-		try {
-			const methodMap = map[method]
-
-			let handler: CompiledHandler | undefined = methodMap?.[path]
-			if (handler)
-				return dispatchResult(
-					handler(context),
-					context,
-					handleError,
-					afterResponse
-				)
-
-			if (
-				!strictPath &&
-				path.length > 1 &&
-				path.charCodeAt(path.length - 1) === 47
-			) {
-				const loose = path.slice(0, -1)
-				handler = methodMap?.[loose]
-				if (!handler) {
-					const anyMap = map['*']
-					handler = anyMap?.[path] ?? anyMap?.[loose]
 				}
-			} else handler = map['*']?.[path]
+			}
+
+			const methodMap = map[method]
+			let handler: CompiledHandler | undefined = methodMap?.[path]
+			if (!handler) {
+				if (
+					!strictPath &&
+					path.length > 1 &&
+					path.charCodeAt(path.length - 1) === 47
+				) {
+					const loose = path.slice(0, -1)
+					handler = methodMap?.[loose]
+					if (!handler) {
+						const anyMap = map['*']
+						handler = anyMap?.[path] ?? anyMap?.[loose]
+					}
+				} else handler = map['*']?.[path]
+			}
+
+			const result = handler
+				? undefined
+				: (router?.find(method, path) ?? router?.find('*', path))
+			if (!handler && !result && fast404) return getNotFound()
+
+			context = new Context(request)
+			;(context as any).path = path
+			;(context as any).qi = qi
+			// @ts-expect-error
+			context.server = server ?? null
 
 			if (handler)
 				return dispatchResult(
@@ -691,9 +785,6 @@ export function createFetchHandler(
 					handleError,
 					afterResponse
 				)
-
-			const result =
-				router?.find(method, path) ?? router?.find('*', path)
 
 			if (result) {
 				context.params = decodeParams(result.params)
@@ -705,7 +796,26 @@ export function createFetchHandler(
 					afterResponse
 				)
 			}
+
+			if (hasError)
+				return finalizeError(
+					context,
+					handleError,
+					afterResponse,
+					frameworkNotFound
+				)
+
+			afterResponse?.(context, 404)
+			return notFound(context)
 		} catch (error) {
+			if (!context) {
+				context = new Context(request)
+				;(context as any).path = path
+				;(context as any).qi = qi
+				// @ts-expect-error
+				context.server = server ?? null
+			}
+
 			return finalizeError(
 				context,
 				handleError,
@@ -713,17 +823,6 @@ export function createFetchHandler(
 				error as Error
 			)
 		}
-
-		if (hasError)
-			return finalizeError(
-				context,
-				handleError,
-				afterResponse,
-				new NotFound()
-			)
-
-		afterResponse?.(context, 404)
-		return notFound(context)
 	}
 }
 

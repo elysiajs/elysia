@@ -503,7 +503,8 @@ export function buildWSRoute(
 				(context as { request?: Request } | undefined)?.request
 			)) as any,
 		undefined,
-		frozenRootOf(app)['~config']?.allowUnsafeValidationDetails
+		frozenRootOf(app)['~config']?.allowUnsafeValidationDetails,
+		frozenRootOf(app)['~config']?.experimental?.cancellation === 'compat'
 	)
 
 	async function handleError(ws: ElysiaWS<any>, error: unknown) {
@@ -756,11 +757,11 @@ export function buildWSRoute(
 			}
 			if (validators.query) {
 				const url = request.url
-					const query = fusedQuery
-						? queryPlan.fromURL!(
-								url,
-								(context as any).qi ?? url.indexOf('?')
-							)
+				const query = fusedQuery
+					? queryPlan.fromURL!(
+							url,
+							(context as any).qi ?? url.indexOf('?')
+						)
 					: queryPlan
 						? queryPlan.parse(
 								url,
@@ -775,12 +776,12 @@ export function buildWSRoute(
 								queryObject
 							)
 
-					if (fusedQuery)
-						(context as any).query = queryPlan.validate!(
-							query,
-							validators.query as any
-						)
-					else {
+				if (fusedQuery)
+					(context as any).query = queryPlan.validate!(
+						query,
+						validators.query as any
+					)
+				else {
 					let r = validateUpgradeChannel(
 						validators.query as any,
 						query,

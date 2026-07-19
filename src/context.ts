@@ -1,5 +1,5 @@
 import { status, type SelectiveStatus } from './error'
-import { flattenChain, isNotEmpty, nullObject, redirect } from './utils'
+import { flattenChain, redirect } from './utils'
 import { isProduction } from './universal/is-production'
 
 import type { AnyElysia } from './base'
@@ -7,7 +7,10 @@ import type { Server } from './universal/server'
 import type { StatusMap } from './constants'
 import type { Cookie } from './cookie'
 import type { BaseCookie } from './cookie/types'
-import { defaultHeaders } from './adapter/default-headers'
+import {
+	clearContextDefaults,
+	contextDefaults
+} from './adapter/default-headers'
 
 import type {
 	RouteSchema,
@@ -20,9 +23,14 @@ import type {
 } from './types'
 
 let contextCache = new WeakMap<AnyElysia, new (request: Request) => any>()
-
 let sharedEmptyDecorator: any = null
 let sharedEmptyContext: any = null
+
+interface ResponseState {
+	headers: Record<string, string>
+	status?: number | string
+	cookie?: Record<string, unknown>
+}
 
 function buildEmptyDecorator() {
 	class Decorator {}
@@ -30,8 +38,6 @@ function buildEmptyDecorator() {
 	return Decorator
 }
 
-// Only reachable on a `contextCache` miss, so it runs at most once per app
-// per cache generation — no per-app cache of its own is needed.
 export function createBaseContext(app: AnyElysia) {
 	const ext = app['~ext']
 	const decorator = ext?.decorator
@@ -53,6 +59,7 @@ export function createBaseContext(app: AnyElysia) {
 
 export function clearContextCache() {
 	contextCache = new WeakMap()
+	clearContextDefaults()
 	sharedEmptyDecorator = null
 	sharedEmptyContext = null
 }
@@ -64,7 +71,6 @@ function buildEmptyContext(
 	headers: object | null = null,
 	warnPathMutation = false
 ) {
-	const immutableHeaders = headers !== null && Object.isFrozen(headers)
 	let warnedPathMutation = false
 	const pathDescriptor: PropertyDescriptor | undefined = warnPathMutation
 		? {
@@ -90,11 +96,6 @@ function buildEmptyContext(
 		declare params?: Record<string, string>
 		declare headers?: Record<string, string>
 		declare qi: number
-		declare set: {
-			headers: Record<string, string>
-			status?: number | string
-			cookie?: Record<string, unknown>
-		}
 		declare rid?: string
 		declare route?: string
 		declare trace?: any[]
@@ -103,22 +104,36 @@ function buildEmptyContext(
 			super()
 			if (pathDescriptor)
 				Object.defineProperty(this, 'path', pathDescriptor)
+		}
 
-			if (immutableHeaders)
-				this.set = {
-					headers: headers!,
-					status: undefined,
-					cookie: undefined
-				} as any
-			else
-				this.set = {
-					headers:
-						headers === null
-							? Object.create(null)
+		get set(): ResponseState {
+			const value = {
+				headers:
+					headers === null
+						? Object.create(null)
+						: Object.isFrozen(headers)
+							? headers
 							: Object.assign(Object.create(null), headers),
-					status: undefined,
-					cookie: undefined
-				}
+				status: undefined,
+				cookie: undefined
+			}
+
+			Object.defineProperty(this, 'set', {
+				value,
+				writable: true,
+				enumerable: true,
+				configurable: true
+			})
+			return value
+		}
+
+		set set(value) {
+			Object.defineProperty(this, 'set', {
+				value,
+				writable: true,
+				enumerable: true,
+				configurable: true
+			})
 		}
 	}
 
@@ -132,18 +147,9 @@ export function createContext(
 	if (cached) return cached
 
 	const ext = app['~ext']
-	const adapter = app['~config']?.adapter
 	const warnPathMutation =
 		!isProduction() && !!flattenChain(app['~hookChain'])?.request?.length
-	const headers =
-		ext?.headers && isNotEmpty(ext.headers)
-			? Object.assign(nullObject(), ext.headers)
-			: null
-
-	if (headers && (!adapter || adapter.response.supportsDefaultHeaderSink)) {
-		Object.defineProperty(headers, defaultHeaders, { value: headers })
-		Object.freeze(headers)
-	}
+	const { headers } = contextDefaults(app)
 
 	if (headers === null && !ext?.decorator && !ext?.store) {
 		sharedEmptyDecorator ??= buildEmptyDecorator()

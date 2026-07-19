@@ -10,6 +10,7 @@ export interface CorpusRequest {
 	// Intentional contract flips use direct old/new golden tests instead of
 	// asking the byte-parity oracle to call the changed result equivalent.
 	excludePairs?: string[]
+	expectedObservation?: unknown
 }
 
 export interface CorpusEntry {
@@ -73,6 +74,120 @@ corpus.push({
 	define: (app) => app.get('/native/literal', 'literal'),
 	requests: [{ id: 'literal', make: get('/native/literal') }]
 })
+
+{
+	const recorder = makeRecorder()
+	corpus.push({
+		id: 'observed-context-identity',
+		tags: ['safe-for-socket', 'observe', 'lifecycle'],
+		recorder,
+		define: (app) => {
+			let first: unknown
+			const observe = (context: unknown) => {
+				first ??= context
+				recorder.events.push(context === first ? 'same' : 'different')
+			}
+			return app.get(
+				'/observed-context-identity',
+				{
+					transform: observe,
+					beforeHandle: observe,
+					afterHandle: observe,
+					afterResponse: observe
+				} as any,
+				(context: any) => {
+					observe(context)
+					return 'same-context'
+				}
+			)
+		},
+		requests: [
+			{
+				id: 'all-lifecycle-sites',
+				make: get('/observed-context-identity'),
+				expectedObservation: ['same', 'same', 'same', 'same', 'same']
+			}
+		]
+	})
+}
+
+{
+	const recorder = makeRecorder()
+	corpus.push({
+		id: 'observed-hooked-404',
+		tags: ['safe-for-socket', 'observe', 'error'],
+		recorder,
+		define: (app) =>
+			app.error(({ error }: any) => {
+				if (error?.status !== 404) return
+				recorder.events.push(
+					`${error.name}:${error.status}:${error instanceof Error}`
+				)
+				return 'observed-miss'
+			}),
+		requests: [
+			{
+				id: 'materializes-not-found',
+				make: get('/observed-missing'),
+				expectedObservation: ['NotFound:404:true']
+			}
+		]
+	})
+}
+
+{
+	const recorder = makeRecorder()
+	corpus.push({
+		id: 'observed-trace-shapes',
+		tags: ['safe-for-socket', 'observe', 'trace'],
+		recorder,
+		define: (app) =>
+			app
+				.trace(({ onRequest, onHandle }: any) => {
+					onRequest(() => recorder.events.push('request'))
+					onHandle(() => recorder.events.push('handle'))
+				})
+				.get('/observed-trace', () => 'traced'),
+		requests: [
+			{
+				id: 'request-and-handle',
+				make: get('/observed-trace'),
+				expectedObservation: ['request', 'handle']
+			}
+		]
+	})
+}
+
+for (const asyncHook of [false, true]) {
+	const recorder = makeRecorder()
+	corpus.push({
+		id: `observed-after-response-${asyncHook ? 'async' : 'sync'}`,
+		tags: ['safe-for-socket', 'observe', 'lifecycle'],
+		recorder,
+		define: (app) =>
+			app.get(
+				`/observed-after-response-${asyncHook ? 'async' : 'sync'}`,
+				{
+					afterResponse: asyncHook
+						? async () => {
+								await Promise.resolve()
+								recorder.events.push('afterResponse')
+							}
+						: () => recorder.events.push('afterResponse')
+				} as any,
+				() => 'after-response'
+			),
+		requests: [
+			{
+				id: 'exactly-once-after-body',
+				make: get(
+					`/observed-after-response-${asyncHook ? 'async' : 'sync'}`
+				),
+				expectedObservation: ['afterResponse']
+			}
+		]
+	})
+}
 
 {
 	const recorder = makeRecorder()

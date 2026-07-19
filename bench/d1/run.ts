@@ -30,6 +30,7 @@ import {
 	percentile,
 	summarize
 } from './stats'
+import { busyWaitNanoseconds } from './inject'
 
 const repoRoot = resolve(import.meta.dir, '../..')
 const traceRoot = resolve(repoRoot, 'trace/d1')
@@ -53,20 +54,32 @@ const fixtureIds = [
 	'compile-memory',
 	'retained',
 	'validation',
+	'runtime-lowering',
+	'runtime-http',
 	'executables',
 	'native-table'
 ] as const
 
 type FixtureId = (typeof fixtureIds)[number]
 type ChildOutput = Record<string, any>
-const leafPerfOwners = new Set(['C1', 'C4a', 'C4b', 'C4d', 'N+1', 'N+1-query'])
+const leafPerfOwners = new Set([
+	'C1',
+	'C4a',
+	'C4b',
+	'C4d',
+	'N+1',
+	'N+1-query',
+	'N+2b',
+	'N+2b-q12'
+])
 const historicalBaselineByOwner: Record<string, string> = {
-	C4a: '340322120836100ea15f67d6f6b5708e0945d1db'
+	C4a: '340322120836100ea15f67d6f6b5708e0945d1db',
+	'N+2b': 'f6ed34632a997e17b09b91da1c400a93557b5815'
 }
 const historicalCandidateByOwner: Record<string, string> = {
 	C4a: 'e8c51e63407ea3f59479db14500f04cca742ba2b'
 }
-const currentBaselineOwners = new Set(['C1', 'N+1', 'N+1-query'])
+const currentBaselineOwners = new Set(['C1', 'N+1', 'N+1-query', 'N+2b-q12'])
 
 function selectedOwners() {
 	const ownerArgument = process.argv
@@ -87,6 +100,10 @@ function leafPerfEnvironment(owners: Set<string> | undefined) {
 		environment.ELYSIA_EXPERIMENTAL_BUN_CRYPTO_HASHER = '1'
 	if (owners?.has('N+1') || owners?.has('N+1-query'))
 		environment.D1_VALIDATION_LANE = 'candidate'
+	if (owners?.has('N+2b') || owners?.has('N+2b-q12')) {
+		environment.D1_N2B_CANCELLATION = 'default'
+		environment.D1_N2B_CANDIDATE = '1'
+	}
 
 	return environment
 }
@@ -97,6 +114,7 @@ function currentBaselineEnvironment(
 	if (owner === 'C1') return { D1_C1_DEFAULT_HEADER_SINK: '0' }
 	if (owner === 'N+1') return { D1_VALIDATION_LANE: 'oracle' }
 	if (owner === 'N+1-query') return { D1_VALIDATION_LANE: 'query-oracle' }
+	if (owner === 'N+2b-q12') return { D1_N2B_CANCELLATION: 'compat' }
 }
 
 interface RunContext {
@@ -350,6 +368,65 @@ async function measureDefaultHeaders(base: string) {
 	return { 'default-headers': samples }
 }
 
+function runtimeHttpRequest(base: string, index: number) {
+	const path = [
+		'/context',
+		'/header',
+		'/sync',
+		'/async',
+		'/after',
+		'/trace',
+		'/invalid',
+		'/missing'
+	][index % 8]!
+	return fetch(base + path, {
+		...(index % 8 === 1
+			? { headers: { 'x-one': 'one', 'x-two': 'two' } }
+			: {}),
+		...(index % 8 === 6
+			? {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: '{"id":"bad"}'
+				}
+			: {})
+	})
+}
+
+async function measureRuntimeHttp(base: string, injectRuntime: boolean) {
+	for (let index = 0; index < defaultWarmup; index++) {
+		if (injectRuntime) busyWaitNanoseconds(200_000)
+		const response = await runtimeHttpRequest(base, index)
+		await validateRuntimeHttpResponse(response, index)
+	}
+	const samples: number[] = []
+	for (let index = 0; index < defaultRequests; index++) {
+		const started = Bun.nanoseconds()
+		if (injectRuntime) busyWaitNanoseconds(200_000)
+		const response = await runtimeHttpRequest(base, index)
+		await validateRuntimeHttpResponse(response, index)
+		samples.push(Bun.nanoseconds() - started)
+	}
+	return { 'integrated-real-socket-mix': samples }
+}
+
+async function validateRuntimeHttpResponse(response: Response, index: number) {
+	const shape = index % 8
+	const expectedStatus = shape === 6 ? 422 : shape === 7 ? 404 : 200
+	const body = await response.text()
+	if (response.status !== expectedStatus)
+		throw new Error(
+			`runtime HTTP shape ${shape}: ${response.status} !== ${expectedStatus}`
+		)
+	const expectedBody = ['context', 'one', 'sync', 'async', 'after', 'trace'][
+		shape
+	]
+	if (expectedBody !== undefined && body !== expectedBody)
+		throw new Error(`runtime HTTP shape ${shape} returned ${body}`)
+	if (shape >= 6 && body.length === 0)
+		throw new Error(`runtime HTTP shape ${shape} returned an empty error`)
+}
+
 async function runFixtureBlock(
 	fixture: FixtureId,
 	descriptor: VariantDescriptor,
@@ -387,7 +464,8 @@ async function runFixtureBlock(
 	const stderrState =
 		fixture === 'cold-start' ||
 		fixture === 'http' ||
-		fixture === 'default-headers'
+		fixture === 'default-headers' ||
+		fixture === 'runtime-http'
 			? await readReady(child)
 			: {
 					ready: Promise.resolve({ port: 0, fallback: false }),
@@ -426,6 +504,21 @@ async function runFixtureBlock(
 				await fetch(`http://127.0.0.1:${ready.port}/__d1_done`)
 			)
 		}
+	} else if (fixture === 'runtime-http') {
+		const ready = await stderrState.ready
+		if (ready.fallback) {
+			const fallbackOutput = await stdoutPromise
+			parentSamples = parseJson(fallbackOutput, fixture).samples
+		} else {
+			const base = `http://127.0.0.1:${ready.port}`
+			parentSamples = await measureRuntimeHttp(
+				base,
+				descriptor.env.D1_INJECT === 'n2b-runtime'
+			)
+			await fetch(`${base}/__d1_done`).then((response) =>
+				response.arrayBuffer()
+			)
+		}
 	}
 	const [stdout, stderr, exitCode] = await Promise.all([
 		stdoutPromise,
@@ -442,6 +535,32 @@ async function runFixtureBlock(
 		if (output.validationLane !== expected)
 			throw new Error(
 				`validation fixture lane mismatch: ${output.validationLane} !== ${expected}`
+			)
+	}
+	if (fixture === 'runtime-lowering' || fixture === 'runtime-http') {
+		const expected = descriptor.env.D1_N2B_CANCELLATION ?? 'default'
+		if (output.cancellationLane !== expected)
+			throw new Error(
+				`${fixture} cancellation lane mismatch: ${output.cancellationLane} !== ${expected}`
+			)
+		if (!Number.isInteger(output.fallbackWarnings))
+			throw new Error(
+				`${fixture} did not report resume fallback warnings`
+			)
+		if (
+			descriptor.commit !== historicalBaselineByOwner['N+2b'] &&
+			output.fallbackWarnings !== 0
+		)
+			throw new Error(
+				`${fixture} candidate unexpectedly fell back from resume lowering ${output.fallbackWarnings} time(s)`
+			)
+		if (
+			fixture === 'runtime-lowering' &&
+			descriptor.env.D1_N2B_CANDIDATE === '1' &&
+			output.allocationContextMode !== 'compact'
+		)
+			throw new Error(
+				'runtime-lowering candidate did not report a compact allocation route'
 			)
 	}
 	if (
@@ -510,13 +629,24 @@ function rawMetricSamples(
 		entry.fixture === 'crypto-hmac' ||
 		entry.fixture === 'formdata' ||
 		entry.fixture === 'body-presence' ||
-		entry.fixture === 'validation'
+		entry.fixture === 'validation' ||
+		entry.fixture === 'runtime-lowering'
 	) {
 		const samples = output.samples?.[entry.metric]
 		if (!Array.isArray(samples) || !samples.length)
 			throw new Error(
 				`${entry.fixture} samples missing for ${entry.metric}`
 			)
+		return { samples, value: percentile(samples, 50) }
+	}
+	if (entry.fixture === 'runtime-http') {
+		if (!execution.parentSamples)
+			throw new Error('runtime HTTP parent samples missing')
+		const samples =
+			execution.parentSamples['integrated-real-socket-mix'] ??
+			execution.parentSamples[entry.metric]
+		if (!samples?.length)
+			throw new Error(`runtime HTTP samples missing for ${entry.metric}`)
 		return { samples, value: percentile(samples, 50) }
 	}
 	const values: Record<string, number> = {
@@ -742,6 +872,20 @@ function validateMargins(value: unknown): MarginRegistry {
 			entry.status !== 'report-only'
 		)
 			throw new Error(`invalid margin status: ${entry.status}`)
+		const claim =
+			entry.claim ??
+			(entry.status === 'report-only' ? 'report-only' : 'non-regression')
+		if (
+			claim !== 'improvement' &&
+			claim !== 'non-regression' &&
+			claim !== 'report-only'
+		)
+			throw new Error(`invalid margin claim: ${claim}`)
+		if ((entry.status === 'report-only') !== (claim === 'report-only'))
+			throw new Error(
+				`margin status/claim mismatch: ${entry.fixture}/${entry.metric}`
+			)
+		entry.claim = claim
 		if (entry.status !== 'active' && entry.margin !== null)
 			throw new Error(
 				`non-active margin must be null: ${entry.fixture}/${entry.metric}`
@@ -939,6 +1083,7 @@ function comparisonForRecord(
 		metric: record.metric,
 		kind: entry.kind,
 		direction: entry.direction,
+		claim: entry.claim,
 		margin,
 		tolerance: entry.tolerance,
 		baselineBlocks: values.baseline,
@@ -1520,6 +1665,7 @@ async function gateMode(
 				metric: record.metric,
 				kind: entry.kind,
 				direction: entry.direction,
+				claim: entry.claim,
 				margin: 0,
 				baselineBlocks: values.baseline,
 				candidateBlocks: values.candidate,
@@ -1624,6 +1770,21 @@ async function selfTest(
 			injection: 'executables',
 			fixture: 'executables',
 			targetMetrics: ['FunctionExecutable']
+		},
+		{
+			injection: 'n2b-runtime',
+			fixture: 'runtime-http',
+			targetMetrics: ['integrated-real-socket-mix-p50-ns']
+		},
+		{
+			injection: 'n2b-retained',
+			fixture: 'runtime-lowering',
+			targetMetrics: ['blocked-before-release-current-bytes-per-request']
+		},
+		{
+			injection: 'n2b-executables',
+			fixture: 'runtime-lowering',
+			targetMetrics: ['runtime-FunctionExecutable']
 		}
 	]
 	capture.provenance = {
@@ -1769,10 +1930,10 @@ async function verifyMode(
 ) {
 	capture.variants.push(descriptor('verify', repoRoot, context.commit))
 	const owners = selectedOwners()
-	const active = registry.entries.filter(
-		(entry) =>
-			entry.status === 'active' && (!owners || owners.has(entry.owner))
+	const selected = registry.entries.filter(
+		(entry) => !owners || owners.has(entry.owner)
 	)
+	const active = selected.filter((entry) => entry.status === 'active')
 	if (owners && !active.length)
 		throw new Error(
 			`no active D1 margins for owners: ${[...owners].join(', ')}`
@@ -1871,7 +2032,10 @@ async function verifyMode(
 	capture.provenance = {
 		verifiedBaselineDirectories: machineIds,
 		...(owners ? { owners: [...owners] } : {}),
-		activeMargins: active.map((entry) => key(entry.fixture, entry.metric))
+		activeMargins: active.map((entry) => key(entry.fixture, entry.metric)),
+		pendingMargins: selected
+			.filter((entry) => entry.status === 'pending-floor')
+			.map((entry) => key(entry.fixture, entry.metric))
 	}
 }
 

@@ -16,8 +16,13 @@ import {
 	signCookieValuesSync
 } from '../../cookie/utils'
 import { requestId } from '../../utils'
-import { finalizeRouteError, forwardError } from '../../handler/utils'
+import {
+	finalizeRouteError,
+	forwardError,
+	settleResponse
+} from '../../handler/utils'
 import type { AnyElysia } from '../../base'
+import { contextDefaults } from '../../adapter/default-headers'
 import {
 	materializeSetHeaders,
 	normalizeContentType,
@@ -66,6 +71,7 @@ export const HANDLER_PARAMS: Record<string, Resolver> = {
 	// response adapter
 	rm: (c) => c.res.map,
 	rc: (c) => c.res.compact ?? c.res.map,
+	dhs: (c) => contextDefaults(c.root).response,
 	// constants
 	rid: () => requestId,
 	pq: () => parseQueryFromURL,
@@ -96,6 +102,9 @@ export const HANDLER_PARAMS: Record<string, Resolver> = {
 	fe: () => forwardError,
 	// route-level error boundary
 	fre: () => finalizeRouteError,
+	// Q12 settlement helper; capture emits the one-byte alias to keep generated
+	// resume/JIT source within the bundle budget.
+	s: () => settleResponse,
 	rt: (c) => c.root,
 	// route hook
 	// `link(0, '')`

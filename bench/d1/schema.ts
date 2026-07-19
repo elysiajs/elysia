@@ -3,6 +3,7 @@ export const D1_KIND = 'd1' as const
 
 export type MetricKind = 'timing' | 'memory' | 'count'
 export type MetricDirection = 'lower' | 'higher' | 'equal'
+export type MetricClaim = 'improvement' | 'non-regression' | 'report-only'
 export type Verdict = 'pass' | 'fail' | 'inconclusive'
 export type VariantSide = 'A' | 'B'
 
@@ -91,6 +92,7 @@ export interface ComparisonResult {
 	metric: string
 	kind: MetricKind
 	direction: MetricDirection
+	claim?: MetricClaim
 	margin: number
 	tolerance?: number
 	baseline: number
@@ -110,6 +112,8 @@ export interface ComparisonResult {
 export function metricUnit(entry: Pick<MarginEntry, 'kind' | 'metric'>) {
 	if (entry.kind === 'count') return 'count'
 	if (entry.kind === 'timing') return 'ns'
+	if (entry.metric.endsWith('-objects-per-request'))
+		return 'objects-per-request'
 	if (entry.metric.endsWith('-bytes-per-request')) return 'bytes-per-request'
 	if (entry.metric.endsWith('-bytes-per-validator'))
 		return 'bytes-per-validator'
@@ -152,6 +156,8 @@ export interface MarginEntry {
 	metric: string
 	kind: MetricKind
 	direction: MetricDirection
+	/** Defaults to non-regression for existing entries. */
+	claim?: MetricClaim
 	sampleRule: string
 	owner: string
 	// report-only: samples are collected and published in artifacts but never

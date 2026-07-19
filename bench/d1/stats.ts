@@ -1,5 +1,6 @@
 import type {
 	ComparisonResult,
+	MetricClaim,
 	MetricDirection,
 	MetricKind,
 	Verdict
@@ -26,6 +27,7 @@ export interface CompareInput {
 	metric: string
 	kind: MetricKind
 	direction: MetricDirection
+	claim?: MetricClaim
 	margin: number
 	tolerance?: number
 	baselineBlocks: number[]
@@ -223,6 +225,7 @@ export function compareMetric(input: CompareInput): ComparisonResult {
 			metric: input.metric,
 			kind: input.kind,
 			direction: input.direction,
+			claim: input.claim ?? 'non-regression',
 			margin,
 			tolerance,
 			baseline,
@@ -245,10 +248,12 @@ export function compareMetric(input: CompareInput): ComparisonResult {
 	const high = normalizedRegression(ci.high, input.direction)
 	const regressionLow = Math.min(low, high)
 	const regressionHigh = Math.max(low, high)
+	const claim = input.claim ?? 'non-regression'
+	const limit = claim === 'improvement' ? -margin : margin
 	const verdict: Verdict =
-		regressionHigh <= margin
+		regressionHigh <= limit
 			? 'pass'
-			: regressionLow > margin
+			: regressionLow > limit
 				? 'fail'
 				: 'inconclusive'
 	return {
@@ -256,6 +261,7 @@ export function compareMetric(input: CompareInput): ComparisonResult {
 		metric: input.metric,
 		kind: input.kind,
 		direction: input.direction,
+		claim,
 		margin,
 		baseline: median(input.baselineBlocks),
 		candidate: median(input.candidateBlocks),
@@ -287,6 +293,7 @@ export function compareReportOnlyMetric(input: CompareInput): ComparisonResult {
 			metric: input.metric,
 			kind: input.kind,
 			direction: input.direction,
+			claim: 'report-only',
 			margin: 0,
 			baseline,
 			candidate,
@@ -299,6 +306,7 @@ export function compareReportOnlyMetric(input: CompareInput): ComparisonResult {
 
 	return {
 		...compareMetric(input),
+		claim: 'report-only',
 		deltaScale: input.kind === 'count' ? 'raw-difference' : 'relative',
 		verdict: 'report-only'
 	}

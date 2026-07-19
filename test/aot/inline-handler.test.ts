@@ -12,9 +12,9 @@ describe('inline handler fast path (no new Function eval)', () => {
 	it('a plain sync GET takes the inline closure path', () => {
 		const app = new Elysia().get('/', () => 'ok')
 		const s = source(app)
-		// the inline closure captures `forwardError` directly; the codegen path
-		// would reference the linked `fe` alias inside a `function route` body.
-		expect(s).toContain('forwardError')
+		// Default-mode inline closures are wrapped by the Q12 settlement boundary;
+		// codegen would instead expose a `function route` body.
+		expect(s).toContain('settle')
 		expect(s).not.toContain('function route')
 	})
 
@@ -24,11 +24,11 @@ describe('inline handler fast path (no new Function eval)', () => {
 			return 'ok'
 		})
 		const s = source(app)
-		expect(s).toContain('forwardError')
-		expect(s).toContain('c.set')
+		expect(s).toContain('settle')
+		expect(s).not.toContain('function route')
 	})
 
-	it('default headers keep a set-writing GET on the inline path', () => {
+	it('default headers keep a set-writing GET on the inline path', async () => {
 		const app = new Elysia()
 			.headers({ 'x-default': 'base' })
 			.get('/', ({ set }) => {
@@ -36,8 +36,12 @@ describe('inline handler fast path (no new Function eval)', () => {
 				return 'ok'
 			})
 		const s = source(app)
-		expect(s).toContain('materializeSetHeaders')
+		expect(s).toContain('settle')
 		expect(s).not.toContain('function route')
+
+		const res = await app.handle(req('/'))
+		expect(res.status).toBe(201)
+		expect(res.headers.get('x-default')).toBe('base')
 	})
 
 	it('a header-reading route stays on codegen (inlineUnsafe)', () => {
@@ -86,6 +90,32 @@ describe('inline handler fast path (no new Function eval)', () => {
 		const res = await app.handle(req('/'))
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('async-ok')
+	})
+
+	it('settles a Promise-returning inline mapper at the default cancellation boundary', async () => {
+		const controller = new AbortController()
+		const app = new Elysia().get('/', () => () => {
+			controller.abort()
+			return Promise.resolve('mapped')
+		})
+
+		expect(source(app)).not.toContain('function route')
+		const res = await app.handle(req('/', { signal: controller.signal }))
+		await expect(res.text()).resolves.toBe('')
+	})
+
+	it('keeps Promise-returning inline mapper settlement legacy-compatible', async () => {
+		const controller = new AbortController()
+		const app = new Elysia({
+			experimental: { cancellation: 'compat' }
+		}).get('/', () => () => {
+			controller.abort()
+			return Promise.resolve('mapped')
+		})
+
+		expect(source(app)).toContain('forwardError')
+		const res = await app.handle(req('/', { signal: controller.signal }))
+		await expect(res.text()).resolves.toBe('mapped')
 	})
 
 	it('a returned Error reaches an error hook (set.status writeback intact)', async () => {

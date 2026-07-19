@@ -1,6 +1,7 @@
 const injection = process.env.D1_INJECT
 const retained: Uint8Array[] = []
 const executables: Function[] = []
+const n2bRetained: Uint8Array[] = []
 const coldStartStarted = Bun.nanoseconds()
 
 export function busyWaitNanoseconds(duration: number) {
@@ -32,6 +33,17 @@ export function injectRetained(route: number) {
 }
 
 export function injectExecutable(route: number) {
-	if (injection !== 'executables') return
+	if (injection !== 'executables' && injection !== 'n2b-executables') return
 	executables.push(new Function(`return ${route}`))
+}
+
+export function injectN2bRuntime() {
+	if (injection === 'n2b-runtime') busyWaitNanoseconds(200_000)
+}
+
+export function injectN2bRetained(index: number) {
+	if (injection !== 'n2b-retained') return
+	const bytes = new Uint8Array(64 * 1024)
+	bytes[index % bytes.length] = index & 255
+	n2bRetained.push(bytes)
 }
