@@ -1,9 +1,7 @@
 import {
 	ElysiaStatus,
 	ParseError,
-	ValidationError,
-	internalServerErrorResponse,
-	isProduction
+	ValidationError
 } from '../../error'
 import { getQueryParseChannels, parseQueryFromURL } from '../../parse-query'
 import {
@@ -21,6 +19,7 @@ import {
 	forwardError,
 	settleResponse
 } from '../../handler/utils'
+import { fallbackResponse } from '../../handler/error'
 import type { AnyElysia } from '../../base'
 import { contextDefaults } from '../../adapter/default-headers'
 import {
@@ -78,11 +77,7 @@ export const HANDLER_PARAMS: Record<string, Resolver> = {
 	pe: () => ParseError,
 	es: () => ElysiaStatus,
 	rdc: () => replaceDeriveContext,
-	ise: () => internalServerErrorResponse,
 	emp: () => emptyResponse,
-	// H22 runtime 5xx-message mask: resolves to the isProduction FUNCTION so the
-	// codegen's `isprod()` reflects runtime NODE_ENV (not baked at build time).
-	isprod: () => isProduction,
 	// allowUnsafeValidationDetails opt-in: `e instanceof verr` in the error catch
 	verr: () => ValidationError,
 	tee: () => tee,
@@ -102,6 +97,7 @@ export const HANDLER_PARAMS: Record<string, Resolver> = {
 	fe: () => forwardError,
 	// route-level error boundary
 	fre: () => finalizeRouteError,
+	fr: () => fallbackResponse,
 	// Q12 settlement helper; capture emits the one-byte alias to keep generated
 	// resume/JIT source within the bundle budget.
 	s: () => settleResponse,

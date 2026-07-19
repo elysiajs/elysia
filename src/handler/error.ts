@@ -62,8 +62,27 @@ export function fallbackResponse(
 		try {
 			const r = error.toResponse()
 
-			if (r instanceof Promise)
-				return r.then(
+			if (r instanceof Response)
+				return mapResponse(r, context.set, context)
+
+			let pending: Promise<unknown> | undefined
+			if (r instanceof Promise) pending = r
+			else {
+				const then = r?.then
+				if (typeof then === 'function')
+					pending = new Promise((resolve, reject) => {
+						queueMicrotask(() => {
+							try {
+								Reflect.apply(then, r, [resolve, reject])
+							} catch (error) {
+								reject(error)
+							}
+						})
+					})
+			}
+
+			if (pending)
+				return pending.then(
 					(resolved) =>
 						resolved instanceof Response
 							? mapResponse(resolved, context.set, context)
@@ -81,9 +100,6 @@ export function fallbackResponse(
 							defaultError
 						)
 				)
-
-			if (r instanceof Response)
-				return mapResponse(r, context.set, context)
 		} catch {}
 
 	return fallbackErrorResponse(context, error, mapResponse, defaultError)
@@ -125,9 +141,11 @@ function fallbackErrorResponse(
 		)
 	}
 
-	return defaultError
-		? defaultError.clone()
-		: internalServerErrorResponse(error)
+	return mapResponse(
+		defaultError ? defaultError.clone() : internalServerErrorResponse(error),
+		context.set,
+		context
+	)
 }
 
 function applyErrorStatus(context: Context, error: any): void {

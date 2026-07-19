@@ -192,6 +192,43 @@ describe('Q12 cancellation policy', () => {
 			await expect(response.text()).resolves.toBe('')
 		})
 
+		for (const [phase, listener] of [
+			['transform', 'onTransform'],
+			['beforeHandle', 'onBeforeHandle'],
+			['afterHandle', 'onAfterHandle'],
+			['mapResponse', 'onMapResponse']
+		] as const)
+			it(`${emitterName}: rejected ${phase} aborts retain trace errors`, async () => {
+				const controller = new AbortController()
+				const errors: string[] = []
+				const hook = async () => {
+					controller.abort()
+					await Promise.resolve()
+					throw new Error(`${phase} rejected`)
+				}
+				const app = appFor(emitter, 'suspension')
+					.trace((lifecycle: any) => {
+						lifecycle[listener](({ onEvent, onStop }: any) => {
+							onEvent(({ onStop }: any) =>
+								onStop(({ error }: any) =>
+									errors.push(`child:${error?.message}`)
+								)
+							)
+							onStop(({ error }: any) =>
+								errors.push(`parent:${error?.message}`)
+							)
+						})
+					})
+					.get('/', { [phase]: hook } as any, () => 'ok')
+
+				const response = await app.handle(request(controller))
+				await expect(response.text()).resolves.toBe('')
+				expect(errors).toEqual([
+					`child:${phase} rejected`,
+					`parent:${phase} rejected`
+				])
+			})
+
 		for (const cancellation of policies)
 			it(`${emitterName}/${cancellation}: body suspension observes cancellation`, async () => {
 				const controller = new AbortController()

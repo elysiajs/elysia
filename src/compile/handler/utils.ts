@@ -97,29 +97,52 @@ export function extractDeriveKeys(fn: Function) {
 }
 
 export function replaceDeriveContext(context: any, derivative: any) {
-	const next = Object.create(Object.getPrototypeOf(context))
-	Object.assign(next, derivative)
+	if (context === derivative) return context
 
-	next.request = context.request
-	next.store = context.store
-	next.set = context.set
-	next.body = context.body
-	next.query = context.query
-	next.params = context.params
-	next.headers = context.headers
-	next.cookie = context.cookie
-	next.server = context.server
-	next.path = context.path
-	next.route = context.route
-	next.rid = context.rid
-	next.trace = context.trace
-	next.qi = context.qi
-	next.responseValue = context.responseValue
-	next.error = context.error
-	next.status = context.status
-	next.redirect = context.redirect
+	const mapped = Object.assign(Object.create(null), derivative)
 
-	return next
+	const request = context.request
+	const store = context.store
+	const set = context.set
+	const body = context.body
+	const query = context.query
+	const params = context.params
+	const headers = context.headers
+	const cookie = context.cookie
+	const server = context.server
+	const path = context.path
+	const route = context.route
+	const rid = context.rid
+	const trace = context.trace
+	const qi = context.qi
+	const responseValue = context.responseValue
+	const error = context.error
+	const status = context.status
+	const redirect = context.redirect
+
+	for (const key of Reflect.ownKeys(context)) delete context[key]
+	Object.assign(context, mapped)
+
+	context.request = request
+	context.store = store
+	context.set = set
+	context.body = body
+	context.query = query
+	context.params = params
+	context.headers = headers
+	context.cookie = cookie
+	context.server = server
+	context.path = path
+	context.route = route
+	context.rid = rid
+	context.trace = trace
+	context.qi = qi
+	context.responseValue = responseValue
+	context.error = error
+	context.status = status
+	context.redirect = redirect
+
+	return context
 }
 
 function deriveModeQueues(entries?: readonly DeriveEntry[]) {

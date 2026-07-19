@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test'
 
 import { Elysia, t } from '../../src'
 import { routePlans } from '../../src/compile/handler'
+import { RouteEffect } from '../../src/compile/handler/descriptor'
 import { resumeEmit } from '../../src/experimental/resume'
 import type { RoutePlan, PlanSegment } from '../../src/compile/plan/plan'
 
@@ -41,6 +42,31 @@ describe('route plan classification', () => {
 
 		const nonHandler = plan.segments.filter((s) => s.kind !== 'handler')
 		for (const s of nonHandler) expect(s.asyncClass).toBe('sync')
+	})
+
+	it('carries the sealed effect mask without per-channel copies', async () => {
+		const plan = await planOf(
+			(e) =>
+				e.get('/items/:id', ({ query, headers, route, set }) => {
+					set.status = 201
+					return `${route}:${query.q}:${headers.authorization}`
+				}),
+			'GET /items/:id',
+			new Request('http://localhost/items/1?q=one', {
+				headers: { authorization: 'bearer' }
+			})
+		)
+
+		expect(plan.effectMask).toBe(
+			RouteEffect.Query |
+				RouteEffect.Headers |
+				RouteEffect.Route |
+				RouteEffect.SetHeaders
+		)
+		expect(plan).not.toHaveProperty('needsQuery')
+		expect(plan).not.toHaveProperty('needsHeaders')
+		expect(plan).not.toHaveProperty('needsRoute')
+		expect(plan).not.toHaveProperty('hasSet')
 	})
 
 	it('classifies an async function handler as async', async () => {
@@ -149,7 +175,7 @@ describe('route plan classification', () => {
 		expect(errorHook.unsupportedReasons).not.toContain('errorHook')
 	})
 
-	it('keeps trace routes on the mature lane', async () => {
+	it('plans trace routes for the resume lane', async () => {
 		const traced = await planOf(
 			(e) =>
 				e
@@ -158,8 +184,8 @@ describe('route plan classification', () => {
 			'GET /',
 			get()
 		)
-		expect(traced.supported).toBe(false)
-		expect(traced.unsupportedReasons).toContain('trace')
+		expect(traced.supported).toBe(true)
+		expect(traced.unsupportedReasons).not.toContain('trace')
 	})
 
 	it('supports an async handler', async () => {

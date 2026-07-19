@@ -373,29 +373,44 @@ async function main() {
 
 	let gate = deferred()
 	let blockedStarted = 0
+	let blockedFullGcSnapshots = 0
+	const blockedSnapshot = () => {
+		blockedFullGcSnapshots++
+		return {
+			...memorySnapshot(),
+			rss: process.memoryUsage().rss
+		}
+	}
 	const blocked = new Elysia(config).get('/blocked', async () => {
 		const index = blockedStarted++
 		injectN2bRetained(index)
 		await gate.promise
 		return 'released'
 	})
-	gc()
-	const blockedBase = memorySnapshot()
-	const blockedBaseRss = process.memoryUsage().rss
+	const blockedWarmup = blocked.handle(
+		new Request('http://localhost/blocked?warmup=1')
+	)
+	await Promise.resolve()
+	const blockedWarmups = blockedStarted
+	if (blockedWarmups !== 1)
+		throw new Error('blocked warmup fixture did not reach suspension')
+	gate.resolve()
+	await consume(await blockedWarmup)
+	blockedStarted = 0
+	gate = deferred()
+	const blockedBase = blockedSnapshot()
 	const releaseBatch = Array.from({ length: blockedRequests }, (_, index) =>
 		blocked.handle(new Request(`http://localhost/blocked?release=${index}`))
 	)
 	await Promise.resolve()
 	if (blockedStarted !== blockedRequests)
 		throw new Error('blocked completion fixture did not reach suspension')
-	const blockedBeforeRelease = memorySnapshot()
-	const blockedBeforeReleaseRss = process.memoryUsage().rss
+	const blockedBeforeRelease = blockedSnapshot()
 	gate.resolve()
 	for (const response of await Promise.all(releaseBatch))
 		await consume(response)
 	releaseBatch.length = 0
-	const blockedAfterRelease = memorySnapshot()
-	const blockedAfterReleaseRss = process.memoryUsage().rss
+	const blockedAfterRelease = blockedSnapshot()
 
 	gate = deferred()
 	const abortOffset = blockedStarted
@@ -414,40 +429,31 @@ async function main() {
 	if (blockedStarted !== abortOffset + blockedRequests)
 		throw new Error('abort fixture did not reach suspension')
 	for (const controller of controllers) controller.abort()
-	const blockedAfterAbort = memorySnapshot()
-	const blockedAfterAbortRss = process.memoryUsage().rss
+	const blockedAfterAbort = blockedSnapshot()
 	gate.resolve()
 	await Promise.allSettled(abortBatch)
 	abortBatch.length = 0
 	controllers.length = 0
-	const blockedAfterAbortRelease = memorySnapshot()
-	const blockedAfterAbortReleaseRss = process.memoryUsage().rss
+	const blockedAfterAbortRelease = blockedSnapshot()
 	const blockedDeltas = (
-		snapshot: ReturnType<typeof memorySnapshot>,
-		rss: number
+		snapshot: ReturnType<typeof blockedSnapshot>,
+		base = blockedBase
 	) => ({
-		current: (snapshot.current - blockedBase.current) / blockedRequests,
-		heapSize: (snapshot.heapSize - blockedBase.heapSize) / blockedRequests,
+		current: (snapshot.current - base.current) / blockedRequests,
+		heapSize: (snapshot.heapSize - base.heapSize) / blockedRequests,
 		extraMemorySize:
-			(snapshot.extraMemorySize - blockedBase.extraMemorySize) /
-			blockedRequests,
-		rss: (rss - blockedBaseRss) / blockedRequests
+			(snapshot.extraMemorySize - base.extraMemorySize) / blockedRequests,
+		rss: (snapshot.rss - base.rss) / blockedRequests
 	})
-	const beforeReleaseDeltas = blockedDeltas(
-		blockedBeforeRelease,
-		blockedBeforeReleaseRss
-	)
-	const afterReleaseDeltas = blockedDeltas(
-		blockedAfterRelease,
-		blockedAfterReleaseRss
-	)
+	const beforeReleaseDeltas = blockedDeltas(blockedBeforeRelease)
+	const afterReleaseDeltas = blockedDeltas(blockedAfterRelease)
 	const afterAbortDeltas = blockedDeltas(
 		blockedAfterAbort,
-		blockedAfterAbortRss
+		blockedAfterRelease
 	)
 	const afterAbortReleaseDeltas = blockedDeltas(
 		blockedAfterAbortRelease,
-		blockedAfterAbortReleaseRss
+		blockedAfterRelease
 	)
 
 	gc()
@@ -481,6 +487,8 @@ async function main() {
 			allocationRequests,
 			allocationContextMode: allocationDescriptor?.contextMode,
 			blockedRequests,
+			blockedWarmups,
+			blockedFullGcSnapshots,
 			identityCallbacks: identity.length,
 			fallbackWarnings,
 			traceFallbackWarnings,

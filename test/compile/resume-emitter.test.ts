@@ -459,9 +459,83 @@ describe('resume emitter selection', () => {
 		expect(resumeCode.length).toBeLessThanOrEqual(legacyCode.length * 3)
 	})
 
+	it('compiles resume helpers without an invoked factory wrapper', async () => {
+		const OriginalFunction = globalThis.Function
+		let body = ''
+		;(globalThis as any).Function = function (...args: unknown[]) {
+			const source = String(args.at(-1))
+			if (source.includes('async function __resume')) body = source
+			return OriginalFunction(...args)
+		}
+
+		try {
+			await new Elysia({ experimental: { resumeEmit } })
+				.get('/factory-body', async () => 'ok')
+				.handle(new Request('http://localhost/factory-body'))
+		} finally {
+			globalThis.Function = OriginalFunction
+		}
+
+		expect(body).toContain('return function route(c)')
+		expect(body).not.toContain('return (function(){')
+	})
+
+	it('selects the resume emitter for traced routes', async () => {
+		const warnings: string[] = []
+		const warn = console.warn
+		console.warn = (...args: unknown[]) => warnings.push(String(args[0]))
+		try {
+			const app = new Elysia({
+				introspect: true,
+				experimental: { resumeEmit }
+			})
+				.trace(({ onHandle }) => onHandle(() => {}))
+				.get('/trace-resume', async () => 'ok')
+
+			const code = await captureAt(
+				app as any,
+				'/trace-resume',
+				new Request('http://localhost/trace-resume')
+			)
+			const { routePlans } = await import('../../src/compile/handler')
+			const plan = routePlans.get(app as any)!.get('GET /trace-resume')!
+
+			expect(code).toContain('async function __resume')
+			expect(code).toContain('.b(4,1')
+			expect(plan.supported).toBe(true)
+			expect(plan.unsupportedReasons).not.toContain('trace')
+			expect(
+				warnings.some((warning) => warning.includes('/trace-resume'))
+			).toBe(false)
+		} finally {
+			console.warn = warn
+		}
+	})
+
+	it('keeps untraced resume source free of trace machinery', async () => {
+		const code = await captureAt(
+			new Elysia({ experimental: { resumeEmit } }).get(
+				'/plain-resume',
+				() => 'ok'
+			),
+			'/plain-resume',
+			new Request('http://localhost/plain-resume')
+		)
+
+		expect(code).toContain('function route(c)')
+		expect(code).not.toContain('c.trace')
+		expect(code).not.toContain('performance.now()')
+		expect(code).not.toContain('resolveChild')
+		expect(code).not.toMatch(/\brp\d/)
+	})
+
 	it('puts suspension checks in __resume while compat keeps entry polling', async () => {
 		const route = (e: Elysia<any>) =>
-			e.get('/cancel-source', { beforeHandle: async () => {} } as any, () => 'h')
+			e.get(
+				'/cancel-source',
+				{ beforeHandle: async () => {} } as any,
+				() => 'h'
+			)
 		const req = () => new Request('http://localhost/cancel-source')
 		const suspension = await captureAt(
 			route(new Elysia({ experimental: { resumeEmit } })),

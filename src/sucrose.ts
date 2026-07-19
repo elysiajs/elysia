@@ -911,7 +911,15 @@ function literalHeaderKeys(event: Function): readonly string[] | null {
 			keys.add(key)
 		}
 	}
-	if (hasNested) return [...keys]
+	if (hasNested) {
+		const remaining = parameter.replace(
+			/\bheaders\s*:\s*\{([^{}]*)\}/g,
+			''
+		)
+		return /(?:^|[{,])\s*headers\s*(?=[:,}=])/.test(remaining)
+			? null
+			: [...keys]
+	}
 
 	const destructured =
 		/^\s*\{[\s\S]*\bheaders\s*(?::\s*([A-Za-z_$][\w$]*))?[\s\S]*\}\s*$/.exec(

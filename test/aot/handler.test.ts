@@ -100,7 +100,7 @@ describe('AOT handler freeze', () => {
 		await expect(jit.json()).resolves.toEqual({ ok: true, n: 5 })
 	})
 
-	it('binds runtime isProduction when reconstructing the error tail', async () => {
+	it('binds the shared fallback when reconstructing the error tail', async () => {
 		const previousNodeEnv = process.env.NODE_ENV
 		const buildError = () =>
 			new Elysia()
@@ -118,7 +118,7 @@ describe('AOT handler freeze', () => {
 			endValidatorCapture()
 
 			expect(handlers).toHaveLength(1)
-			expect(handlers[0]!.alias.split(',')).toContain('isprod')
+			expect(handlers[0]!.alias.split(',')).toContain('fr')
 			registerManifest({ handlers: materialiseHandlers(handlers) })
 
 			delete process.env.ELYSIA_AOT_BUILD

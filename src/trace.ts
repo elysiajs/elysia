@@ -384,6 +384,8 @@ class TraceRecorder {
 		this.pendingResolve = resolve
 
 		return (this.listenFn = (callback?: Function) => {
+			if (this.begun) return Promise.resolve(this.#result())
+
 			if (callback) (this.callbacksBegin ??= []).push(callback)
 
 			return this.pendingPromise!
@@ -447,11 +449,13 @@ class TraceRecorder {
 		const resolve = this.pendingResolve
 		if (resolve) {
 			this.pendingResolve = undefined
+			this.pendingPromise = undefined
 
 			const result = this.#result()
 			resolve(result)
 
 			const callbacks = this.callbacksBegin
+			this.callbacksBegin = undefined
 			if (callbacks)
 				for (let i = 0; i < callbacks.length; i++) callbacks[i](result)
 		}
@@ -480,32 +484,58 @@ class TraceRecorder {
 		const recorder = this
 
 		return (process: TraceStream) => {
-			const { promise: end, resolve: resolveEnd } =
-				Promise.withResolvers<number>()
-			const { promise: error, resolve: resolveError } =
-				Promise.withResolvers<Error | null>()
-			const callbacksEnd: Function[] = []
+			let endAt = 0
+			let endError: Error | null = null
+			let end: Promise<number> | undefined
+			let resolveEnd: ((end: number) => void) | undefined
+			let error: Promise<Error | null> | undefined
+			let resolveError: ((error: Error | null) => void) | undefined
+			let callbacksEnd: Function[] | undefined
+			let resolved = false
+
+			const getEnd = () => {
+				if (end) return end
+				if (resolved) return (end = Promise.resolve(endAt))
+
+				const pending = Promise.withResolvers<number>()
+				resolveEnd = pending.resolve
+				return (end = pending.promise)
+			}
+
+			const getError = () => {
+				if (error) return error
+				if (resolved) return (error = Promise.resolve(endError))
+
+				const pending = Promise.withResolvers<Error | null>()
+				resolveError = pending.resolve
+				return (error = pending.promise)
+			}
 
 			const result = {
 				...process,
-				end,
-				error,
+				get end() {
+					return getEnd()
+				},
+				get error() {
+					return getError()
+				},
 				index,
 				onStop(callback?: Function) {
-					if (callback) callbacksEnd.push(callback)
+					if (callback && !resolved)
+						(callbacksEnd ??= []).push(callback)
 
-					return end
+					return getEnd()
 				}
 			} as any
 
 			for (let i = 0; i < children.length; i++) children[i](result)
 
-			let resolved = false
 			return (err: Error | null = null) => {
 				if (resolved) return
 				resolved = true
 
-				const endAt = performance.now()
+				endAt = performance.now()
+				endError = err
 
 				if (err) recorder.groupError = err
 
@@ -517,11 +547,19 @@ class TraceRecorder {
 					}
 				}
 
-				for (let i = 0; i < callbacksEnd.length; i++)
-					callbacksEnd[i](detail)
+				const callbacks = callbacksEnd
+				callbacksEnd = undefined
+				const settleEnd = resolveEnd
+				resolveEnd = undefined
+				const settleError = resolveError
+				resolveError = undefined
 
-				resolveEnd(endAt)
-				resolveError(err)
+				if (callbacks)
+					for (let i = 0; i < callbacks.length; i++)
+						callbacks[i](detail)
+
+				settleEnd?.(endAt)
+				settleError?.(err)
 			}
 		}
 	}
@@ -538,6 +576,13 @@ class TraceRecorder {
 		this.endError = error
 
 		const callbacks = this.callbacksEnd
+		this.callbacksEnd = undefined
+		this.callbacksChild = undefined
+		this.childBegin = undefined
+		const resolveEnd = this.endResolve
+		this.endResolve = undefined
+		const resolveError = this.errorResolve
+		this.errorResolve = undefined
 		if (callbacks) {
 			const begun = this.begun!
 			const detail = {
@@ -551,8 +596,8 @@ class TraceRecorder {
 			for (let i = 0; i < callbacks.length; i++) callbacks[i](detail)
 		}
 
-		this.endResolve?.(end)
-		this.errorResolve?.(error)
+		resolveEnd?.(end)
+		resolveError?.(error)
 	}
 }
 

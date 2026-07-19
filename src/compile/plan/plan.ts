@@ -1,7 +1,6 @@
 import type { AnyElysia } from '../../base'
 import type { ElysiaAdapter } from '../../adapter'
 
-import { isDynamicRegex } from '../../constants'
 import { frozenRootOf } from '../../generation'
 import { isAsyncFunction } from '../utils'
 
@@ -48,14 +47,11 @@ export interface RoutePlan {
 	handlerKind: RouteCompileState['descriptor']['handlerKind']
 
 	// context channel needs, read straight from the descriptor (never re-derived)
-	needsQuery: boolean
-	needsHeaders: boolean
-	needsRoute: boolean
+	effectMask: number
 	contextMode: RouteCompileState['descriptor']['contextMode']
 	headerKeys: RouteCompileState['descriptor']['headerKeys']
 
 	// response-mode facts
-	hasSet: boolean
 	responseMode: RouteCompileState['descriptor']['responseMode']
 
 	tail: {
@@ -88,19 +84,12 @@ export function planRoute(
 	root: AnyElysia,
 	isHandleFunction: boolean
 ): RoutePlan {
-	const { descriptor: d, vali, inference } = state
+	const { descriptor: d, vali } = state
 
 	const unsupportedReasons: string[] = []
 
-	if (d.hasTrace) unsupportedReasons.push('trace')
 	if (d.hasCookieSign) unsupportedReasons.push('cookieSign')
 	if (state.beforeHandlePrefix) unsupportedReasons.push('beforeHandlePrefix')
-
-	const needsQuery = inference.query || !!vali?.query
-	const needsHeaders = inference.headers || !!vali?.headers
-	const needsRoute = inference.route && isDynamicRegex.test(d.path)
-
-	const hasSet = d.responseMode !== 'compact'
 
 	const main: PlanSegment[] = []
 
@@ -156,12 +145,9 @@ export function planRoute(
 			frozenRootOf(root)['~config']?.experimental?.cancellation ??
 			'suspension',
 		handlerKind: d.handlerKind,
-		needsQuery,
-		needsHeaders,
-		needsRoute,
+		effectMask: d.effectMask,
 		contextMode: d.contextMode,
 		headerKeys: d.headerKeys,
-		hasSet,
 		responseMode: d.responseMode,
 		tail: {
 			hasAfterHandle: d.hasAfterHandle,

@@ -18,6 +18,7 @@ import type { CompiledCookieConfig } from '../../cookie/config'
 import { hasSyncHmac } from '../../cookie/utils'
 
 import { unionTracePhases, type TraceEvent } from '../../trace'
+import { isDynamicRegex } from '../../constants'
 import { Capture } from '../aot'
 import { frozenRootOf } from '../../generation'
 import { JITProbe } from '../jit-probe'
@@ -28,6 +29,13 @@ import {
 	contextDefaults,
 	type DefaultResponseState
 } from '../../adapter/default-headers'
+
+export const RouteEffect = {
+	Query: 1,
+	Headers: 1 << 1,
+	Route: 1 << 2,
+	SetHeaders: 1 << 3
+} as const
 
 export interface RouteDescriptor {
 	method: string
@@ -42,6 +50,7 @@ export interface RouteDescriptor {
 		| 'set-with-default-headers'
 	contextMode: 'compact' | 'set'
 	headerKeys: readonly string[] | null
+	effectMask: number
 
 	// lifecycle presence
 	hasBeforeHandle: boolean
@@ -70,10 +79,6 @@ export interface RouteDescriptor {
 	asyncCookieSign: boolean
 	lazyCookieVerify: boolean
 
-	// sucrose
-	inferenceSet: boolean // consumed by emit.ts
-	inference: Sucrose.Inference
-
 	// async + sync fast-path facts
 	handlerIsAsync: boolean
 	callHandlerSyncOnAsync: boolean
@@ -86,7 +91,6 @@ export interface RouteCompileState {
 	descriptor: RouteDescriptor
 
 	vali: RouteValidator<any> | undefined
-	inference: Sucrose.Inference
 	cookieConfig: CompiledCookieConfig | undefined
 
 	beforeHandlePrefix: CompactBeforeHandlePrefix | undefined
@@ -542,6 +546,13 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 			: Object.freeze([])
 	if (needsCookie && headerKeys !== null && !headerKeys.includes('cookie'))
 		headerKeys = [...headerKeys, 'cookie']
+	const effectMask =
+		(inference.query ? RouteEffect.Query : 0) |
+		(inference.headers ? RouteEffect.Headers : 0) |
+		((inference.route || hasTrace) && isDynamicRegex.test(path)
+			? RouteEffect.Route
+			: 0) |
+		(inference.set || hasTrace ? RouteEffect.SetHeaders : 0)
 
 	const descriptor: RouteDescriptor = {
 		method,
@@ -551,6 +562,7 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 		responseMode,
 		contextMode,
 		headerKeys,
+		effectMask,
 
 		hasBeforeHandle,
 		hasAfterHandle,
@@ -576,9 +588,6 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 		asyncCookieSign,
 		lazyCookieVerify,
 
-		inferenceSet: inference.set,
-		inference,
-
 		handlerIsAsync,
 		callHandlerSyncOnAsync: !!callHandlerSyncOnAsync,
 		syncErrorHook,
@@ -589,7 +598,6 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 		descriptor,
 
 		vali,
-		inference,
 		cookieConfig,
 
 		beforeHandlePrefix,

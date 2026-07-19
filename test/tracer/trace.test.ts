@@ -529,6 +529,65 @@ describe('trace', () => {
 		expect(resolvedError).toBeNull()
 	})
 
+	it('keeps a saved phase listener usable after settlement', async () => {
+		let listen!: () => Promise<TraceProcess<'begin'>>
+
+		const app = new Elysia()
+			.trace((trace) => {
+				listen = trace.onHandle
+			})
+			.get('/', function savedListener() {
+				return 'ok'
+			})
+
+		await app.handle(req('/'))
+
+		const process = await listen()
+		expect(process.name).toBe('savedListener')
+		expect(await process.end).toBeGreaterThanOrEqual(process.begin)
+		expect(await process.error).toBeNull()
+	})
+
+	it('allocates child completion promises only when observed', async () => {
+		const withResolvers = Promise.withResolvers
+		let allocations = 0
+		let childEnd: Promise<number> | undefined
+		let childError: Promise<Error | null> | undefined
+		let childAllocations: number[] | undefined
+		;(Promise as any).withResolvers = () => {
+			allocations++
+			return withResolvers.call(Promise)
+		}
+
+		try {
+			const app = new Elysia()
+				.trace(({ onHandle }) => {
+					onHandle(({ onEvent }) => {
+						const beforeChild = allocations
+
+						onEvent((child) => {
+							childAllocations = [beforeChild, allocations]
+
+							childEnd = child.end
+							childAllocations.push(allocations)
+
+							childError = child.error
+							childAllocations.push(allocations)
+						})
+					})
+				})
+				.get('/', () => 'ok')
+
+			await app.handle(req('/'))
+		} finally {
+			;(Promise as any).withResolvers = withResolvers
+		}
+
+		expect(childAllocations).toEqual([1, 1, 2, 3])
+		expect(await childEnd).toBeGreaterThan(0)
+		expect(await childError).toBeNull()
+	})
+
 	it('report late-accessed error of a throwing lifecycle', async () => {
 		const done = Promise.withResolvers<void>()
 

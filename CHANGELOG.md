@@ -55,6 +55,10 @@ Breaking Change:
 
 Behavior Change:
 
+- Request cancellation is now observed at suspension boundaries by default;
+  synchronous work runs to completion. Set
+  `experimental.cancellation: 'compat'` to retain legacy entry and
+  between-callback polling.
 - `context.path` is now readonly. During Release N, assignment still reroutes
   for compatibility but warns in development when request hooks are present;
   the field remains enumerable for spreads and serialization.

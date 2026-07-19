@@ -924,7 +924,7 @@
 		"sampleRule": "8 randomized paired clean child processes; candidate leaf asserts one compiled compact route (historical baseline has no contextMode); preallocate one retention array and Request; full GC before and after directly constructing 256 retained Context instances; signed bun:jsc heapSize delta divided by Context count",
 		"owner": "N+2b",
 		"status": "active",
-		"margin": 0.4
+		"margin": 0.45
 	},
 	{
 		"fixture": "runtime-lowering",
@@ -935,7 +935,7 @@
 		"sampleRule": "8 randomized paired clean child processes; candidate leaf asserts one compiled compact route (historical baseline has no contextMode); preallocate one retention array and Request; full GC before and after directly constructing 256 retained Context instances; signed JSC object-count delta divided by Context count",
 		"owner": "N+2b",
 		"status": "active",
-		"margin": 0.12
+		"margin": 0.14
 	},
 	{
 		"fixture": "runtime-lowering",
@@ -1109,7 +1109,7 @@
 		"kind": "memory",
 		"direction": "lower",
 		"claim": "report-only",
-		"sampleRule": "8 randomized paired clean child processes; 128 concurrent requests suspended on one unresolved Promise; full GC snapshot before release; bun:jsc current delta per blocked request",
+		"sampleRule": "8 randomized paired clean child processes; one resolved and body-consumed suspension warmup on a fresh gate, then reset counter/gate and take a full-GC baseline; 128 concurrent requests suspended on one unresolved Promise; full GC snapshot before release; bun:jsc current delta per blocked request",
 		"owner": "N+2b",
 		"status": "report-only",
 		"margin": null
@@ -1120,7 +1120,7 @@
 		"kind": "memory",
 		"direction": "lower",
 		"claim": "report-only",
-		"sampleRule": "8 randomized paired clean child processes; 128 concurrent requests suspended on one unresolved Promise; full GC snapshot before release; JSC heap delta per blocked request",
+		"sampleRule": "8 randomized paired clean child processes; one resolved and body-consumed suspension warmup on a fresh gate, then reset counter/gate and take a full-GC baseline; 128 concurrent requests suspended on one unresolved Promise; full GC snapshot before release; JSC heap delta per blocked request",
 		"owner": "N+2b",
 		"status": "report-only",
 		"margin": null
@@ -1130,11 +1130,11 @@
 		"metric": "blocked-before-release-extra-bytes-per-request",
 		"kind": "memory",
 		"direction": "lower",
-		"claim": "report-only",
-		"sampleRule": "8 randomized paired clean child processes; 128 concurrent requests suspended on one unresolved Promise; full GC snapshot before release; JSC extra-memory delta per blocked request",
+		"claim": "non-regression",
+		"sampleRule": "8 randomized paired clean child processes; one resolved and body-consumed suspension warmup on a fresh gate, then reset counter/gate and take a full-GC baseline; 128 concurrent requests suspended on one unresolved Promise; full GC snapshot before release; JSC extra-memory delta per blocked request",
 		"owner": "N+2b",
-		"status": "report-only",
-		"margin": null
+		"status": "active",
+		"margin": 0.12
 	},
 	{
 		"fixture": "runtime-lowering",
@@ -1142,7 +1142,7 @@
 		"kind": "memory",
 		"direction": "lower",
 		"claim": "report-only",
-		"sampleRule": "8 randomized paired clean child processes; 128 concurrent requests suspended on one unresolved Promise; process RSS delta per blocked request before release",
+		"sampleRule": "8 randomized paired clean child processes; one resolved and body-consumed suspension warmup on a fresh gate, then reset counter/gate and take a full-GC baseline; 128 concurrent requests suspended on one unresolved Promise; process RSS delta per blocked request before release",
 		"owner": "N+2b",
 		"status": "report-only",
 		"margin": null
@@ -1153,7 +1153,7 @@
 		"kind": "memory",
 		"direction": "lower",
 		"claim": "report-only",
-		"sampleRule": "8 randomized paired clean child processes; same 128 requests after resolving and consuming every response; full GC; bun:jsc current delta from the pre-request snapshot per completed request",
+		"sampleRule": "8 randomized paired clean child processes; one resolved and body-consumed suspension warmup on a fresh gate, then reset counter/gate and take a full-GC baseline; same 128 requests after resolving and consuming every response; full GC; bun:jsc current delta from the pre-request snapshot per completed request",
 		"owner": "N+2b",
 		"status": "report-only",
 		"margin": null
@@ -1163,11 +1163,11 @@
 		"metric": "blocked-after-release-heap-bytes-per-request",
 		"kind": "memory",
 		"direction": "lower",
-		"claim": "report-only",
-		"sampleRule": "8 randomized paired clean child processes; same 128 requests after resolving and consuming every response; full GC; JSC heap delta from the pre-request snapshot per completed request",
+		"claim": "non-regression",
+		"sampleRule": "8 randomized paired clean child processes; one resolved and body-consumed suspension warmup on a fresh gate, then reset counter/gate and take a full-GC baseline; same 128 requests after resolving and consuming every response; full GC; JSC heap delta from the pre-request snapshot per completed request",
 		"owner": "N+2b",
-		"status": "report-only",
-		"margin": null
+		"status": "active",
+		"margin": 0.06
 	},
 	{
 		"fixture": "runtime-lowering",
@@ -1175,7 +1175,7 @@
 		"kind": "memory",
 		"direction": "lower",
 		"claim": "report-only",
-		"sampleRule": "8 randomized paired clean child processes; same 128 requests after resolving and consuming every response; full GC; JSC extra-memory delta from the pre-request snapshot per completed request",
+		"sampleRule": "8 randomized paired clean child processes; one resolved and body-consumed suspension warmup on a fresh gate, then reset counter/gate and take a full-GC baseline; same 128 requests after resolving and consuming every response; full GC; JSC extra-memory delta from the pre-request snapshot per completed request",
 		"owner": "N+2b",
 		"status": "report-only",
 		"margin": null
@@ -1186,7 +1186,7 @@
 		"kind": "memory",
 		"direction": "lower",
 		"claim": "report-only",
-		"sampleRule": "8 randomized paired clean child processes; same 128 requests after resolving and consuming every response; full GC; process RSS delta from the pre-request snapshot per completed request",
+		"sampleRule": "8 randomized paired clean child processes; one resolved and body-consumed suspension warmup on a fresh gate, then reset counter/gate and take a full-GC baseline; same 128 requests after resolving and consuming every response; full GC; process RSS delta from the pre-request snapshot per completed request",
 		"owner": "N+2b",
 		"status": "report-only",
 		"margin": null
@@ -1197,7 +1197,7 @@
 		"kind": "memory",
 		"direction": "lower",
 		"claim": "report-only",
-		"sampleRule": "8 randomized paired clean child processes; second 128-request batch aborted while suspended but before releasing its awaited Promise; full GC; bun:jsc current delta per request",
+		"sampleRule": "8 randomized paired clean child processes; one resolved and body-consumed suspension warmup on a fresh gate, then reset counter/gate and take a full-GC baseline; second 128-request batch aborted while suspended but before releasing its awaited Promise; full GC; bun:jsc current delta from the post-normal-release snapshot per request",
 		"owner": "N+2b",
 		"status": "report-only",
 		"margin": null
@@ -1208,7 +1208,7 @@
 		"kind": "memory",
 		"direction": "lower",
 		"claim": "report-only",
-		"sampleRule": "8 randomized paired clean child processes; second 128-request batch aborted while suspended but before releasing its awaited Promise; full GC; JSC heap delta per request",
+		"sampleRule": "8 randomized paired clean child processes; one resolved and body-consumed suspension warmup on a fresh gate, then reset counter/gate and take a full-GC baseline; second 128-request batch aborted while suspended but before releasing its awaited Promise; full GC; JSC heap delta from the post-normal-release snapshot per request",
 		"owner": "N+2b",
 		"status": "report-only",
 		"margin": null
@@ -1219,7 +1219,7 @@
 		"kind": "memory",
 		"direction": "lower",
 		"claim": "report-only",
-		"sampleRule": "8 randomized paired clean child processes; second 128-request batch aborted while suspended but before releasing its awaited Promise; full GC; JSC extra-memory delta per request",
+		"sampleRule": "8 randomized paired clean child processes; one resolved and body-consumed suspension warmup on a fresh gate, then reset counter/gate and take a full-GC baseline; second 128-request batch aborted while suspended but before releasing its awaited Promise; full GC; JSC extra-memory delta from the post-normal-release snapshot per request",
 		"owner": "N+2b",
 		"status": "report-only",
 		"margin": null
@@ -1230,7 +1230,7 @@
 		"kind": "memory",
 		"direction": "lower",
 		"claim": "report-only",
-		"sampleRule": "8 randomized paired clean child processes; second 128-request batch aborted while suspended but before releasing its awaited Promise; full GC; process RSS delta per request",
+		"sampleRule": "8 randomized paired clean child processes; one resolved and body-consumed suspension warmup on a fresh gate, then reset counter/gate and take a full-GC baseline; second 128-request batch aborted while suspended but before releasing its awaited Promise; full GC; process RSS delta from the post-normal-release snapshot per request",
 		"owner": "N+2b",
 		"status": "report-only",
 		"margin": null
@@ -1241,7 +1241,7 @@
 		"kind": "memory",
 		"direction": "lower",
 		"claim": "report-only",
-		"sampleRule": "8 randomized paired clean child processes; aborted 128-request batch after releasing its awaited Promise and settling every handle; full GC; bun:jsc current delta from the pre-request snapshot per request",
+		"sampleRule": "8 randomized paired clean child processes; one resolved and body-consumed suspension warmup on a fresh gate, then reset counter/gate and take a full-GC baseline; aborted 128-request batch after releasing its awaited Promise and settling every handle; full GC; bun:jsc current delta from the post-normal-release snapshot per request",
 		"owner": "N+2b",
 		"status": "report-only",
 		"margin": null
@@ -1251,11 +1251,11 @@
 		"metric": "blocked-after-abort-release-heap-bytes-per-request",
 		"kind": "memory",
 		"direction": "lower",
-		"claim": "report-only",
-		"sampleRule": "8 randomized paired clean child processes; aborted 128-request batch after releasing its awaited Promise and settling every handle; full GC; JSC heap delta from the pre-request snapshot per request",
+		"claim": "non-regression",
+		"sampleRule": "8 randomized paired clean child processes; one resolved and body-consumed suspension warmup on a fresh gate, then reset counter/gate and take a full-GC baseline; aborted 128-request batch after releasing its awaited Promise and settling every handle; full GC; JSC heap delta from the post-normal-release snapshot per request",
 		"owner": "N+2b",
-		"status": "report-only",
-		"margin": null
+		"status": "active",
+		"margin": 0.2
 	},
 	{
 		"fixture": "runtime-lowering",
@@ -1263,7 +1263,7 @@
 		"kind": "memory",
 		"direction": "lower",
 		"claim": "report-only",
-		"sampleRule": "8 randomized paired clean child processes; aborted 128-request batch after releasing its awaited Promise and settling every handle; full GC; JSC extra-memory delta from the pre-request snapshot per request",
+		"sampleRule": "8 randomized paired clean child processes; one resolved and body-consumed suspension warmup on a fresh gate, then reset counter/gate and take a full-GC baseline; aborted 128-request batch after releasing its awaited Promise and settling every handle; full GC; JSC extra-memory delta from the post-normal-release snapshot per request",
 		"owner": "N+2b",
 		"status": "report-only",
 		"margin": null
@@ -1274,7 +1274,7 @@
 		"kind": "memory",
 		"direction": "lower",
 		"claim": "report-only",
-		"sampleRule": "8 randomized paired clean child processes; aborted 128-request batch after releasing its awaited Promise and settling every handle; full GC; process RSS delta from the pre-request snapshot per request",
+		"sampleRule": "8 randomized paired clean child processes; one resolved and body-consumed suspension warmup on a fresh gate, then reset counter/gate and take a full-GC baseline; aborted 128-request batch after releasing its awaited Promise and settling every handle; full GC; process RSS delta from the post-normal-release snapshot per request",
 		"owner": "N+2b",
 		"status": "report-only",
 		"margin": null

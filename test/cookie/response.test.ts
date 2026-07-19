@@ -444,4 +444,28 @@ describe('Cookie Response', () => {
 			`name=${await signCookie('seminar: Himari', secrets)}; Path=/`
 		])
 	})
+
+	it('signs a cookie on the unhandled route-error fallback', async () => {
+		const app = new Elysia().get(
+			'/boom',
+			{
+				cookie: t.Cookie(
+					{ name: t.Optional(t.String()) },
+					{ secrets, sign: ['name'] }
+				),
+				error: () => undefined
+			},
+			({ cookie: { name } }) => {
+				name.value = 'seminar: Himari'
+				throw {}
+			}
+		)
+
+		const response = await app.handle(req('/boom'))
+
+		expect(response.status).toBe(500)
+		expect(getCookies(response)).toEqual([
+			`name=${await signCookie('seminar: Himari', secrets)}; Path=/`
+		])
+	})
 })

@@ -55,12 +55,15 @@ const required = [
 	'runtime-UnlinkedFunctionExecutable'
 ]
 
-it('registers the exact active N+2b gates', () => {
+it('registers the exact gated N+2b metrics', () => {
 	const entries = margins.filter((entry) => entry.owner.startsWith('N+2b'))
-	const active = [
+	const gated = [
 		'context-light-bytes-per-request',
 		'context-light-objects-per-request',
 		'context-identity-mismatches',
+		'blocked-before-release-extra-bytes-per-request',
+		'blocked-after-release-heap-bytes-per-request',
+		'blocked-after-abort-release-heap-bytes-per-request',
 		'runtime-FunctionExecutable',
 		'runtime-FunctionCodeBlock',
 		'runtime-UnlinkedFunctionExecutable'
@@ -68,14 +71,16 @@ it('registers the exact active N+2b gates', () => {
 	expect(entries.length).toBeGreaterThanOrEqual(required.length)
 	expect(
 		entries
-			.filter((entry) => entry.status === 'active')
+			.filter((entry) => entry.status !== 'report-only')
 			.map((entry) => entry.metric)
 			.sort()
-	).toEqual(active.sort())
+	).toEqual(gated.sort())
 	for (const metric of [...required, 'integrated-real-socket-mix-p50-ns']) {
 		const entry = entries.find((item) => item.metric === metric)
 		expect(entry, metric).toBeDefined()
-		expect(['active', 'report-only']).toContain(entry!.status)
+		expect(['pending-floor', 'active', 'report-only']).toContain(
+			entry!.status
+		)
 		if (entry!.status === 'active') expect(entry!.margin).toBeNumber()
 		else expect(entry!.margin).toBeNull()
 		expect(['improvement', 'non-regression', 'report-only']).toContain(
@@ -107,8 +112,11 @@ it('emits finite samples and preserves both cancellation descriptors', () => {
 		expect(output.cancellationLane).toBe(lane)
 		expect(output.allocationContextMode).toBe('compact')
 		expect(output.identityCallbacks).toBe(5)
+		expect(output.blockedWarmups).toBe(1)
+		expect(output.blockedRequests).toBe(10)
+		expect(output.blockedFullGcSnapshots).toBe(5)
 		expect(Number.isInteger(output.fallbackWarnings)).toBeTrue()
-		expect(output.traceFallbackWarnings).toBeGreaterThanOrEqual(1)
+		expect(output.traceFallbackWarnings).toBe(0)
 		for (const metric of required)
 			expect(
 				output.samples[metric].length > 0 &&
@@ -131,7 +139,7 @@ it('runs the integrated runtime mix over a socket or explicit fallback', () => {
 	expect(output.cancellationLane).toBe('default')
 	expect(output.traceCount).toBe(1)
 	expect(output.afterResponseCount).toBe(1)
-	expect(output.traceFallbackWarnings).toBeGreaterThanOrEqual(1)
+	expect(output.traceFallbackWarnings).toBe(0)
 	expect(
 		output.samples['integrated-real-socket-mix-p50-ns'].every(
 			Number.isFinite

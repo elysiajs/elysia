@@ -120,6 +120,19 @@ the pre-train `f6ed3463` runtime with the candidate; `N+2b-q12` compares the can
 same revision. Registrations declare whether they require a measurable improvement, merely bound
 a regression, or are report-only. Improvement gates require the confidence interval to clear the
 negative calibrated threshold; a statistically acceptable non-regression is not promoted as a win.
-All N+2b thresholds remain `pending-floor` until fresh pinned-machine A/A calibration, and blocked
-completion memory plus the integrated real-socket mix remain report-only until repeated evidence
+N+2b actively gates blocked extra memory before release, heap after normal completion, and heap
+after aborted completion at calibrated 12%, 6%, and 20% non-regression bounds backed by fresh
+pinned-machine A/A floors. Each clean child resolves and body-consumes exactly one `/blocked`
+suspension before the base snapshot, then resets the counter and gate so lazy route compilation is
+excluded and both measured batches retain the configured size (capped at 128 requests). Clean gate
+`6167732c` passes heap after normal and aborted completion, but blocked extra memory before release
+is inconclusive: observed `0.11056011189522538`, 95% CI `[0.08076140410378159,
+0.12177442429765904]`, against the `0.12` margin. After deleting the runtime IIFE, FunctionCodeBlock
+passes at 56/56 with tolerance 1, while FunctionExecutable 5/4 and UnlinkedFunctionExecutable 4/3
+fail exact equality with tolerance 0. The preceding IIFE version passed those exact executable
+counts but failed FunctionCodeBlock at 56/58 with tolerance 1. Release N+2b therefore remains
+unpromoted pending an explicit gate-policy or architecture decision. Other blocked-completion
+memory metrics and the integrated real-socket mix remain report-only until repeated evidence
 supports a bound or aggregate claim.
+The owner accepts this state as a best-effort checkpoint; future evidence work may increase the
+retention sample and revisit executable-count policy without retroactively promoting this gate.

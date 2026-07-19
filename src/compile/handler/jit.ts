@@ -16,16 +16,14 @@ import {
 	signCookieValuesSync
 } from '../../cookie/utils'
 
-import type { RouteCompileState } from './descriptor'
+import { RouteEffect, type RouteCompileState } from './descriptor'
 
 import {
 	ElysiaStatus,
 	ParseError,
-	ValidationError,
-	internalServerErrorResponse,
-	isProduction
+	ValidationError
 } from '../../error'
-import { isDynamicRegex, traceEventIndex } from '../../constants'
+import { fallbackResponse } from '../../handler/error'
 import {
 	finalizeRouteError,
 	forwardError,
@@ -55,6 +53,7 @@ import {
 } from '../../adapter/utils'
 import { ELYSIA_TYPES } from '../../type/constants'
 import { createTracer, type TraceEvent } from '../../trace'
+import { createTraceCodegen } from './trace-codegen'
 import { Capture } from '../aot'
 import { JITProbe } from '../jit-probe'
 
@@ -73,6 +72,32 @@ import type {
 let captureHeaderShorthand: boolean | undefined
 export const setCaptureHeaderShorthand = (value: boolean | undefined): void => {
 	captureHeaderShorthand = value
+}
+
+export function buildSyncAfterResponse(
+	finalMap: string,
+	afterResponse: unknown,
+	compatCancellation: boolean
+) {
+	return (
+		`function _fin(c,_r){\n` +
+		`if(_r instanceof Error)throw _r\n` +
+		`if(_r&&(_r[Symbol.iterator]||_r[Symbol.asyncIterator])&&typeof _r.next==='function'){\n` +
+		`const _s=tee(_r,2)\n` +
+		`return _fin2(c,_s[0],_s[1])\n` +
+		`}\n` +
+		`return _fin2(c,_r,undefined)\n` +
+		`}\n` +
+		`function _fin2(c,_r,_stl){\n` +
+		`c.responseValue=_r\n` +
+		`c._arf=true\n` +
+		`queueMicrotask(async()=>{if(_stl){try{for await(const v of _stl){}}catch{}}\n` +
+		mapAfterResponse(afterResponse as any, [undefined]) +
+		`})\n` +
+		`const _m=${finalMap}\n` +
+		`return typeof _m?.then==='function'?${compatCancellation ? 'Promise.resolve(_m)' : 's(c.request,_m)'}.catch(e=>fre(rt,c,e)):_m\n` +
+		`}\n`
+	)
 }
 
 function builtinParser(
@@ -420,7 +445,6 @@ export function compileHandlerJit({
 }: CompileHandlerJitOptions): CompiledHandler {
 	const {
 		vali,
-		inference,
 		defaultResponseState,
 		cookieConfig,
 		beforeHandlePrefix,
@@ -433,6 +457,7 @@ export function compileHandlerJit({
 			responseMode,
 			contextMode,
 			headerKeys,
+			effectMask,
 			hasBody,
 			bodyValiIsAsync,
 			headersValiIsAsync,
@@ -506,36 +531,11 @@ export function compileHandlerJit({
 	const phaseOn = (phase: TraceEvent) =>
 		hasTrace && (tracePhases === null || tracePhases.has(phase))
 
-	const beginTrace = (
-		phase: TraceEvent,
-		total: number,
-		name: string = phase
-	) => {
-		if (!phaseOn(phase)) return ''
-
-		const index = traceEventIndex[phase]
-
-		let s = ''
-		for (let i = 0; i < traceCount; i++)
-			s +=
-				`rp${i}=tr${i}.b(${index},${total}${name !== phase ? ',' + JSON.stringify(name) : ''})||` +
-				`tr${i}.begin(${index},{` +
-				`id:c.rid,event:'${phase}',name:${JSON.stringify(name)},` +
-				`begin:performance.now(),total:${total}` +
-				`})\n`
-
-		return s
-	}
-
-	const endTrace = (phase: TraceEvent, errBinding?: string) => {
-		if (!phaseOn(phase)) return ''
-
-		let s = ''
-		for (let i = 0; i < traceCount; i++)
-			s += `tr${i}.r(rp${i}${errBinding ? ',' + errBinding : ''})\n`
-
-		return s
-	}
+	const {
+		begin: beginTrace,
+		end: endTrace,
+		report: buildReport
+	} = createTraceCodegen(traceCount, phaseOn)
 	const endTraceChild = (phase: TraceEvent, errBinding?: string) => {
 		if (!phaseOn(phase)) return ''
 
@@ -547,40 +547,6 @@ export function compileHandlerJit({
 	}
 	const phaseSuspensionAbort = (phase: TraceEvent) =>
 		suspensionAbortCheck ? endTrace(phase) + suspensionAbortCheck : ''
-
-	const buildReport = (phase: TraceEvent): TraceReporter | undefined => {
-		if (!phaseOn(phase)) return
-
-		return {
-			resolveChild(name: string) {
-				let begin = ''
-				for (let i = 0; i < traceCount; i++)
-					begin +=
-						`rpc${i}=rp${i}.resolveChild?.shift?.()?.({` +
-						`id:c.rid,event:'${phase}',name:${JSON.stringify(name)},` +
-						`begin:performance.now()` +
-						`})\n`
-				return {
-					begin,
-					end(errBinding?: string) {
-						let close = ''
-						for (let i = 0; i < traceCount; i++) {
-							if (errBinding)
-								close +=
-									`if(${errBinding} instanceof Error){` +
-									`if(rpc${i})rpc${i}(${errBinding});` +
-									`else tr${i}.gc(rp${i},${errBinding})` +
-									`}else{` +
-									`rpc${i}?.()` +
-									`}\n`
-							else close += `rpc${i}?.()\n`
-						}
-						return close
-					}
-				}
-			}
-		}
-	}
 
 	const buildCallHandler = (check: string, suspensionMark = '') =>
 		isHandleFunction
@@ -609,7 +575,7 @@ export function compileHandlerJit({
 	}
 	if (
 		responseMode === 'set-with-default-headers' &&
-		(hasTrace || inference.set)
+		effectMask & RouteEffect.SetHeaders
 	) {
 		link(materializeSetHeaders, 'msh')
 		code += `msh(c.set)\n`
@@ -642,7 +608,7 @@ export function compileHandlerJit({
 	// paramless handler
 	let inlineUnsafe = false
 
-	if ((hasTrace || inference.route) && isDynamicRegex.test(path as string)) {
+	if (effectMask & RouteEffect.Route) {
 		code += `c.route=${JSON.stringify(path)}\n`
 		inlineUnsafe = true
 	}
@@ -651,7 +617,7 @@ export function compileHandlerJit({
 	code = ''
 
 	code += 'try{\n'
-	const hasHeaders = inference.headers || !!vali?.headers
+	const hasHeaders = !!(effectMask & RouteEffect.Headers)
 	const fusedQuery = !!(
 		root['~config']?.experimental?.validationPlan &&
 		vali?.queryPlan?.fused &&
@@ -662,7 +628,7 @@ export function compileHandlerJit({
 		!hook?.transform?.length
 	)
 
-	if (inference.query || vali?.query) {
+	if (effectMask & RouteEffect.Query) {
 		if (fusedQuery) {
 			link(vali, 'va')
 			code += `c.query=va.queryPlan.fromURL(c.request.url,c.qi)\n`
@@ -1032,22 +998,15 @@ export function compileHandlerJit({
 
 		if (syncAfterResponse) {
 			link(forwardError, 'fe')
+			if (!compatCancellation) link(settleResponse, 's')
 
-			factoryHelpers +=
-				`function _fin(c,_r){\n` +
-				`if(_r instanceof Error)throw _r\n` +
-				`if(_r&&(_r[Symbol.iterator]||_r[Symbol.asyncIterator])&&typeof _r.next==='function'){\n` +
-				`const _s=tee(_r,${teeCount})\n` +
-				`return _fin2(c,_s[0],_s[1])\n` +
-				`}\n` +
-				`return _fin2(c,_r,undefined)\n` +
-				`}\n` +
-				`function _fin2(c,_r,_stl){\n` +
-				`c.responseValue=_r\n` +
-				scheduleAfterResponse +
-				`const _m=${hasSet ? `${map}(_r,c.set,c.request)` : `${map}(_r,c.request)`}\n` +
-				`return typeof _m?.then==='function'?${settleAtSuspension('_m')}.catch(e=>fre(rt,c,e)):_m\n` +
-				`}\n`
+			factoryHelpers += buildSyncAfterResponse(
+				hasSet
+					? `${map}(_r,c.set,c.request)`
+					: `${map}(_r,c.request)`,
+				hook!.afterResponse!,
+				compatCancellation
+			)
 
 			code +=
 				`if(_r instanceof Promise)return _r.then(fe).then(v=>{${suspensionAbortCheck}return _fin(c,v)}).catch(e=>fre(rt,c,e))\n` +
@@ -1188,8 +1147,7 @@ export function compileHandlerJit({
 		if (hasErrorHook) {
 			link(hook!.error!, 'er')
 			link(ElysiaStatus, 'es')
-			link(internalServerErrorResponse, 'ise')
-			link(isProduction, 'isprod')
+			link(fallbackResponse, 'fr')
 
 			const allowUnsafeDetail =
 				!!root['~config']?.allowUnsafeValidationDetails
@@ -1199,14 +1157,7 @@ export function compileHandlerJit({
 			const settleErrorMap = `${settleAtSuspension('_r')}.catch(e=>fre(rt,c,e))`
 			factoryHelpers +=
 				`function _em(c,_r){return typeof _r?.then==='function'?${settleErrorMap}:_r}\n` +
-				`${asyncCookieSign ? 'async ' : ''}function _efb(e,c){\n` +
-				(asyncCookieSign ? `let _sg\n` : ``) +
-				`if(e instanceof es){${signPrefix}return _em(c,${map}(e,c.set,c.request))}\n` +
-				`if(e?.status){${signPrefix}return _em(c,${map}(e?.response!==undefined?e.response:(isprod()&&e.status>=500?'Internal Server Error':(e?.message??'')),c.set,c.request))}\n` +
-				`c.set.status=500\n` +
-				signPrefix +
-				`return _em(c,${map}(ise(e),c.set,c.request))\n` +
-				`}\n`
+				`${asyncCookieSign ? 'async ' : ''}function _efb(e,c){${asyncCookieSign ? 'let _sg\n' : ''}let _a=false\nconst _f=fr(c,e,${asyncCookieSign ? 'async ' : ''}v=>{${suspensionAbortCheck ? `if(_a&&${abortExpression})return new Response()\n` : ''}${signPrefix}return ${map}(v,c.set,c.request)})\n_a=true\nreturn _em(c,_f)}\n`
 
 			body +=
 				`c.error=e\n` +
@@ -1246,12 +1197,6 @@ export function compileHandlerJit({
 				endTrace('error') +
 				abortCheck +
 				schedule +
-				`if(typeof e?.toResponse==='function')` +
-				`try{\n` +
-				`const _er=e.toResponse()\n` +
-				`if(typeof _er?.then==='function')return ${settleAtSuspension('_er')}.then(${asyncCookieSign ? 'async ' : ''}v=>{${suspensionAbortCheck}if(v instanceof Response){${signPrefix}return _em(c,${map}(v,c.set,c.request))}return _efb(e,c)},()=>_efb(e,c)).catch(x=>fre(rt,c,x))\n` +
-				`if(_er instanceof Response){${signPrefix}return _em(c,${map}(_er,c.set,c.request))}\n` +
-				`}catch{}\n` +
 				`return _efb(e,c)\n`
 		} else {
 			body += endTrace('error') + schedule
@@ -1313,7 +1258,7 @@ export function compileHandlerJit({
 							defaultResponseState!
 						)
 					: responseMode === 'set-with-default-headers' &&
-						  inference.set
+						  effectMask & RouteEffect.SetHeaders
 						? createInlineHandlerWithDefaultHeaders(
 								responseMap as any,
 								handler as any

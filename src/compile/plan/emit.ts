@@ -2,16 +2,22 @@ import type { AnyElysia } from '../../base'
 import type { ElysiaAdapter } from '../../adapter'
 
 import { isAsyncFunction } from '../utils'
+import type { TraceEvent } from '../../constants'
+import { createTracer } from '../../trace'
+import { requestId } from '../../utils'
 
 import { ParseError, ElysiaStatus, ValidationError } from '../../error'
 
 import {
 	cloneResponse,
 	emptyResponse,
-	mapAfterResponse,
 	deriveModes,
 	extractDeriveKeys,
-	replaceDeriveContext
+	mapAfterResponse,
+	mapChainHook,
+	mapError,
+	replaceDeriveContext,
+	type TraceReporter
 } from '../handler/utils'
 import {
 	finalizeRouteError,
@@ -26,9 +32,10 @@ import { getQueryParseChannels, parseQueryFromURL } from '../../parse-query'
 import { fallbackResponse, isPristineNotFound } from '../../handler/error'
 import { Capture } from '../aot'
 import { JITProbe } from '../jit-probe'
-import { emitBodyParse } from '../handler/jit'
+import { buildSyncAfterResponse, emitBodyParse } from '../handler/jit'
 
-import type { RouteCompileState } from '../handler/descriptor'
+import { RouteEffect, type RouteCompileState } from '../handler/descriptor'
+import { createTraceCodegen } from '../handler/trace-codegen'
 import { hookArray, type PlanSegment, type RoutePlan } from './plan'
 
 import type { AnyLocalHook, CompiledHandler } from '../../types'
@@ -46,17 +53,19 @@ interface Suspend {
 	/** Flat statement invoking the callable, leaving its result in `_v`. */
 	invoke: string
 	/** `true` for AsyncFunction / known-async ops → suspends unconditionally. */
-	unconditional: boolean
+	force?: boolean
 	/** Short-circuit guard prefix applied to invoke/bail (e.g. `if(_r===undefined)`). */
-	guard: string
+	guard?: string
 	/** Fast-lane statement(s) run with the settled value in `_v`. */
 	settle: string
-	/** Resume-lane await statement; leaves the awaited value in `_v`. */
-	resumeAwait: string
-	/** Resume-lane statement(s) run after the await (uses `_v`). */
-	resumeSettle: string
+	/** Non-default resume await statement. Defaults to `_v=await pending`. */
+	resumeAwait?: string
+	/** Non-default resume settlement. Defaults to the fast-lane settlement. */
+	resumeSettle?: string
 	/** Optional cancellation check for a boundary that may only suspend internally. */
 	resumeAbort?: string
+	/** Optional cancellation check for a rejected suspension. */
+	resumeRejectAbort?: string
 	/** Optional error conversion after the cancellation check. */
 	resumeCatch?: string
 }
@@ -69,185 +78,18 @@ interface Step {
 
 const resumeObserverStream = Symbol('elysia.resumeObserverStream')
 
-function scheduleRouteFinalizer(
-	context: any,
-	afterResponse: Function[] | undefined
-) {
-	if (context._arf) return
-	context._arf = true
-	const stream = context[resumeObserverStream] as
-		| AsyncIterable<unknown>
-		| Iterable<unknown>
-		| undefined
-	context[resumeObserverStream] = undefined
-
-	queueMicrotask(async () => {
-		if (stream)
-			try {
-				for await (const _ of stream) void _
-			} catch {}
-
-		if (afterResponse)
-			for (let i = 0; i < afterResponse.length; i++) {
-				const hook = afterResponse[i]!
-
-				try {
-					const result = hook(context)
-					if (typeof result?.then === 'function') await result
-				} catch {}
-			}
-	})
-}
-
-function runRouteError(
-	root: AnyElysia,
-	context: any,
-	error: any,
-	errorHooks: Function[] | undefined,
-	mapResponse: Function,
-	mapResponseHooks: Function[] | undefined,
-	afterResponse: Function[] | undefined,
-	allowUnsafeValidationDetails: boolean,
-	suspensionCancellation: boolean
-): unknown {
-	context.error = error
-	if (allowUnsafeValidationDetails && error instanceof ValidationError)
-		error.allowUnsafeValidationDetails = true
-
-	if (error?.status) context.set.status = error.status
-	else if (context.set.status === undefined || context.set.status === 200)
-		context.set.status = 500
-
-	const cancelled = () =>
-		suspensionCancellation && context.request.signal.aborted
-	const cancel = () => new Response()
-
-	const fail = (pipelineError: unknown) =>
-		finalizeRouteError(root, context, pipelineError)
-	const boundary = (value: unknown) =>
-		suspensionCancellation
-			? settleResponse(context.request, value)
-			: Promise.resolve(value)
-
-	const map = (value: unknown) => {
-		const finish = (mappedValue: unknown) => {
-			context.responseValue = mappedValue
-			scheduleRouteFinalizer(context, afterResponse)
-
-			try {
-				const result = mapResponse(
-					mappedValue,
-					context.set,
-					context.request
-				)
-				return typeof result?.then === 'function'
-					? boundary(result).catch(fail)
-					: result
-			} catch (error) {
-				return fail(error)
-			}
-		}
-
-		context.responseValue = value
-		if (!mapResponseHooks?.length) return finish(value)
-
-		const next = (index: number): unknown => {
-			for (; index < mapResponseHooks.length; index++) {
-				let result: any
-				try {
-					result = mapResponseHooks[index]!(context)
-				} catch (error) {
-					return fail(error)
-				}
-
-				if (typeof result?.then === 'function')
-					return boundary(result).then((resolved) => {
-						if (cancelled()) return cancel()
-						return resolved === undefined
-							? next(index + 1)
-							: finish(resolved)
-					}, fail)
-
-				if (result !== undefined) return finish(result)
-			}
-
-			return finish(value)
-		}
-
-		return next(0)
-	}
-
-	const fallback = () => {
-		if (isPristineNotFound(context, error)) {
-			scheduleRouteFinalizer(context, afterResponse)
-			return getNotFound()
-		}
-
-		try {
-			const result = fallbackResponse(
-				context,
-				error,
-				(value) => map(value) as any
-			)
-			return typeof (result as any)?.then === 'function'
-				? boundary(result).catch(fail)
-				: result
-		} catch (fallbackError) {
-			return fail(fallbackError)
-		}
-	}
-
-	const use = (value: unknown) => {
-		if (value === undefined) return
-
-		if (value instanceof ElysiaStatus || value instanceof Response)
-			context.set.status = value.status
-		else if (context.set.status === undefined || context.set.status === 200)
-			context.set.status = 500
-
-		return map(value)
-	}
-
-	const next = (index: number): unknown => {
-		if (!errorHooks) return fallback()
-
-		for (; index < errorHooks.length; index++) {
-			const hook = errorHooks[index]!
-
-			let result: any
-			try {
-				result = hook(context)
-			} catch (hookError) {
-				return fail(hookError)
-			}
-
-			if (typeof result?.then === 'function')
-				return Promise.resolve(result).then(
-					(resolved) => {
-						if (cancelled()) return cancel()
-						return resolved === undefined
-							? next(index + 1)
-							: use(resolved)
-					},
-					(hookError) => (cancelled() ? cancel() : fail(hookError))
-				)
-
-			const response = use(result)
-			if (result !== undefined) return response
-		}
-
-		return fallback()
-	}
-
-	return next(0)
-}
-
 export function emitResume(input: EmitInput): CompiledHandler {
 	const { plan, state, hook, handler, adapter, root } = input
 
 	const { vali, cookieConfig, defaultResponseState } = state
 	const d = state.descriptor
 	const res = adapter.response
+	const { traceHandlers, tracePhases, traceHandleOn } = state
+	const hasTrace = d.hasTrace
+	const traceCount = d.traceCount
+	const phaseOn = hasTrace
+		? (phase: TraceEvent) => tracePhases === null || tracePhases.has(phase)
+		: undefined
 
 	// linking (mirrors the `link` closure)
 	const seenKeys = new Set<string>()
@@ -274,32 +116,94 @@ export function emitResume(input: EmitInput): CompiledHandler {
 	}
 	link(root, 'rt')
 	link(finalizeRouteError, 'fre')
-	const hasSet = plan.hasSet
+	const hasSet = plan.responseMode !== 'compact'
 	const map = hasSet
 		? (link(res.map, 'rm'), 'rm')
 		: (link(res.compact ?? res.map, 'rc'), 'rc')
 
-	const setArg = d.responseMode === 'default-headers' ? 'dhs' : 'c.set'
-	if (d.responseMode === 'default-headers') link(defaultResponseState!, 'dhs')
+	const setArg = plan.responseMode === 'default-headers' ? 'dhs' : 'c.set'
+	if (plan.responseMode === 'default-headers')
+		link(defaultResponseState!, 'dhs')
 	const mapArgs = hasSet ? `${setArg},c.request` : 'c.request'
 	const finalMap = `${map}(_r,${mapArgs})`
 
 	const hasLifecycleHook = d.hasLifecycleHook
 	const compatCancellation = plan.cancellation === 'compat'
 	const abortExpr = 'c.request.signal.aborted'
+	let traceAbort = ''
 	const abortCheck = (lifecycleOnly = true) => {
 		if (lifecycleOnly && !hasLifecycleHook) return ''
-		if (!lifecycleOnly) return `if(${abortExpr})return new Response()\n`
+		if (!lifecycleOnly)
+			return traceAbort
+				? `if(${abortExpr}){${traceAbort}return new Response()}\n`
+				: `if(${abortExpr})return new Response()\n`
 
 		link(emptyResponse, 'emp')
-		return `if(${abortExpr})return emp.clone()\n`
+		return traceAbort
+			? `if(${abortExpr}){${traceAbort}return emp.clone()}\n`
+			: `if(${abortExpr})return emp.clone()\n`
 	}
 
 	const compatAbortFor = (site: boolean) =>
 		compatCancellation && site && hasLifecycleHook ? abortCheck() : ''
-	const suspensionAbort = compatCancellation ? '' : abortCheck(false)
+	let suspensionAbort = compatCancellation ? '' : abortCheck(false)
 
-	const hasHeaders = plan.needsHeaders
+	const traceParams: string[] = []
+	const tracePass: string[] = []
+	let tracePrologue = ''
+	let traceDecls = ''
+	let handlePass = ''
+	let traceHandlerDecl = ''
+	let traceCatch = ''
+	let traceResumeHandles = ''
+	let traceBeforePrologue = ''
+
+	const traceCodegen = hasTrace
+		? createTraceCodegen(traceCount, phaseOn!)
+		: undefined
+	const beginTrace = traceCodegen?.begin
+	const endTrace = traceCodegen?.end
+	const buildReport = traceCodegen?.report
+
+	if (hasTrace) {
+		const wrapped = traceHandlers!.map((fn: any) => createTracer(fn))
+		link(wrapped, 'tr')
+		link(requestId, 'rid')
+		tracePrologue = `c.rid??=rid()\nc.trace??=[${wrapped.map((_, i) => `tr[${i}](c)`).join(',')}]\n`
+		for (let i = 0; i < traceCount; i++) {
+			tracePrologue += `const tr${i}=c.trace[${i}]\n`
+			traceResumeHandles += `const tr${i}=c.trace[${i}]\n`
+			traceDecls += `${i ? ',' : 'let '}rp${i},rpc${i},_hr${i}`
+			traceParams.push(`rp${i}`, `rpc${i}`, `_hr${i}`)
+			tracePass.push(`rp${i}`, `rpc${i}`, `_hr${i}`)
+		}
+		traceDecls += '\n'
+		traceHandlerDecl = 'let _hi=false\n'
+		traceParams.push('_hi')
+		tracePass.push('_hi')
+		handlePass = traceCount
+			? ',' +
+				Array.from({ length: traceCount }, (_, i) => `_hr${i}`).join(
+					','
+				)
+			: ''
+		for (let i = 0; i < traceCount; i++) traceAbort += `rpc${i}?.()\n`
+		for (let i = 0; i < traceCount; i++) traceAbort += `tr${i}.r(rp${i})\n`
+		traceCatch = Array.from(
+			{ length: traceCount },
+			(_, i) => `tr${i}.r(rp${i},e),rpc${i}?.(e)`
+		).join(',')
+		suspensionAbort = compatCancellation ? '' : abortCheck(false)
+	}
+	const traceRejectAbortFor = (
+		phase: TraceEvent,
+		child?: ReturnType<TraceReporter['resolveChild']>
+	) =>
+		!compatCancellation && child
+			? `if(${abortExpr}){${child.end('e')}${endTrace!(phase, 'e')}return new Response()}\n`
+			: undefined
+
+	const hasHeaders = !!(plan.effectMask & RouteEffect.Headers)
 	const fusedQuery = !!(
 		root['~config']?.experimental?.validationPlan &&
 		vali?.queryPlan?.fused &&
@@ -310,23 +214,29 @@ export function emitResume(input: EmitInput): CompiledHandler {
 		!hook?.transform?.length
 	)
 	const t = plan.tail
-	const needsObserver = t.hasAfterResponse && !t.syncAfterResponse
+	const needsObserver =
+		(t.hasAfterResponse || traceHandleOn) && !t.syncAfterResponse
 	const hasAsyncResponseValidation =
 		t.hasResponseValidator && d.responseValiAsync
 
 	// prologue (sync channels: abort short-circuit, query, headers)
 	let prologue = ''
 	if (plan.contextMode === 'set') prologue += `void c.set\n`
-	if (plan.responseMode === 'set-with-default-headers' && d.inferenceSet) {
+	if (
+		plan.responseMode === 'set-with-default-headers' &&
+		plan.effectMask & RouteEffect.SetHeaders
+	) {
 		link(materializeSetHeaders, 'msh')
-		prologue += `msh(c.set)\n`
+		if (hasTrace) traceBeforePrologue = `msh(c.set)\n`
+		else prologue += `msh(c.set)\n`
 	}
 	if (hasLifecycleHook && compatCancellation) {
 		link(emptyResponse, 'emp')
 		prologue += `if(${abortExpr})return emp.clone()\n`
 	}
-	if (plan.needsRoute) prologue += `c.route=${JSON.stringify(plan.path)}\n`
-	if (plan.needsQuery) {
+	if (plan.effectMask & RouteEffect.Route)
+		prologue += `c.route=${JSON.stringify(plan.path)}\n`
+	if (plan.effectMask & RouteEffect.Query) {
 		if (fusedQuery) {
 			link(vali, 'va')
 			prologue += `c.query=va.queryPlan.fromURL(c.request.url,c.qi)\n`
@@ -402,10 +312,9 @@ export function emitResume(input: EmitInput): CompiledHandler {
 				steps.push({
 					suspend: {
 						invoke: `${g}_v=va.cookie.From(_ck,'cookie',true)\n`,
-						unconditional: !cookieIsOptional,
+						force: !cookieIsOptional,
 						guard: g.trim(),
 						settle: `${g}_ck=_v\n`,
-						resumeAwait: `_v=await pending\n`,
 						resumeSettle: `_ck=_v\n`
 					}
 				})
@@ -422,7 +331,68 @@ export function emitResume(input: EmitInput): CompiledHandler {
 		steps.push({ code: `c.cookie=bcj(c.set,_ck,cc)\n` })
 	}
 
+	let parseClosed = !hasTrace
+	let transformOpened = false
+	let transformClosed = false
+	let beforeOpened = false
+	let beforeClosed = false
+	if (hasTrace)
+		steps.push({
+			code: beginTrace!('parse', hookArray(hook?.parse).length)
+		})
+
 	for (const seg of segments) {
+		if (hasTrace) {
+			if (!parseClosed && seg.kind !== 'parse') {
+				steps.push({ code: endTrace!('parse') })
+				parseClosed = true
+				steps.push({
+					code: beginTrace!('transform', transforms.length)
+				})
+				transformOpened = true
+			}
+
+			if (
+				transformOpened &&
+				!transformClosed &&
+				seg.kind !== 'transform'
+			) {
+				steps.push({ code: endTrace!('transform') })
+				transformClosed = true
+			}
+
+			if (seg.kind === 'beforeHandle' && !beforeOpened) {
+				steps.push({
+					code: beginTrace!('beforeHandle', beforeHandleArr.length)
+				})
+				beforeOpened = true
+			}
+
+			if (seg.kind === 'handler') {
+				if (!beforeOpened) {
+					steps.push({
+						code: beginTrace!(
+							'beforeHandle',
+							beforeHandleArr.length
+						)
+					})
+					beforeOpened = true
+				}
+
+				if (!beforeClosed) {
+					steps.push({ code: endTrace!('beforeHandle') })
+					beforeClosed = true
+				}
+
+				const handleName =
+					(handler as any)?.name &&
+					typeof (handler as any).name === 'string'
+						? (handler as any).name
+						: 'anonymous'
+				steps.push({ code: beginTrace!('handle', 1, handleName) })
+			}
+		}
+
 		const compatAbort = compatAbortFor(seg.cancellationSites)
 
 		if (seg.kind === 'parse') {
@@ -432,24 +402,23 @@ export function emitResume(input: EmitInput): CompiledHandler {
 				vali?.body,
 				hasHeaders,
 				link,
-				undefined,
+				buildReport?.('parse'),
 				root['~config']?.experimental?.flatFormDataFastPath === true,
 				compatCancellation ? undefined : '_bs=true'
 			)
+
 			const preserveParseStatus = seenKeys.has('es')
 			link(ParseError, 'pe')
 
 			steps.push({
 				suspend: {
 					invoke: `_bs=false\n_v=(async()=>{\n${parseCode}})()\n`,
-					unconditional: true,
-					guard: '',
+					force: true,
 					settle: compatAbort,
 					resumeAwait: `await pending\n`,
-					resumeSettle: compatAbort,
 					resumeAbort: compatCancellation
 						? undefined
-						: `if(_bs&&${abortExpr})return new Response()\n`,
+						: `if(_bs&&${abortExpr}){${traceAbort}return new Response()}\n`,
 					resumeCatch: `${preserveParseStatus ? 'if(e instanceof es)throw e;' : ''}throw new pe(e)`
 				}
 			})
@@ -460,14 +429,18 @@ export function emitResume(input: EmitInput): CompiledHandler {
 		if (seg.kind === 'transform') {
 			const idx = (seg.link as any).index
 			const a = link(hook!.transform!, 'tf')
+			const child = buildReport?.('transform')?.resolveChild(
+				(transforms[idx] as any)?.name || 'anonymous'
+			)
+
 			steps.push({
 				suspend: {
-					invoke: `_v=${a}[${idx}](c)\n`,
-					unconditional: seg.asyncClass === 'async',
-					guard: '',
-					settle: compatAbort,
+					invoke: `${child?.begin ?? ''}_v=${a}[${idx}](c)\n`,
+					force: seg.asyncClass === 'async',
+					settle: (child?.end() ?? '') + compatAbort,
 					resumeAwait: `await pending\n`,
-					resumeSettle: compatAbort
+					resumeRejectAbort: traceRejectAbortFor('transform', child),
+					resumeCatch: child ? child.end('e') + 'throw e' : undefined
 				}
 			})
 
@@ -477,28 +450,26 @@ export function emitResume(input: EmitInput): CompiledHandler {
 		if (seg.kind.startsWith('validate:')) {
 			const slot = (seg.link as any).slot as string
 			link(vali!, 'va')
+
 			if (slot === 'query' && fusedQuery) {
 				steps.push({
 					code: `c.query=va.queryPlan.validate(c.query,va.query)\n`
 				})
 				continue
 			}
-			if (seg.asyncClass === 'async') {
+
+			if (seg.asyncClass === 'async')
 				steps.push({
 					suspend: {
 						invoke: `_v=va.${slot}.From(c.${slot},'${slot}',true)\n`,
-						unconditional: true,
-						guard: '',
-						settle: `c.${slot}=_v\n` + compatAbort,
-						resumeAwait: `_v=await pending\n`,
-						resumeSettle: `c.${slot}=_v\n` + compatAbort
+						force: true,
+						settle: `c.${slot}=_v\n` + compatAbort
 					}
 				})
-			} else {
+			else
 				steps.push({
 					code: `c.${slot}=va.${slot}.From(c.${slot},'${slot}')\n`
 				})
-			}
 
 			continue
 		}
@@ -539,15 +510,27 @@ export function emitResume(input: EmitInput): CompiledHandler {
 					`else if(_v){${merge};_v=undefined}}\n`
 			}
 
-			const settle = post + compatAbort
+			const child = buildReport?.('beforeHandle')?.resolveChild(
+				(fn as any)?.name || 'anonymous'
+			)
+			const settle = child
+				? d.async && !compatCancellation
+					? `${scGuard}{${child.end('_v')}${post}}\n${compatAbort}`
+					: `${scGuard}{${post}${child.end('_v')}}\n${compatAbort}`
+				: post + compatAbort
 			steps.push({
 				suspend: {
-					invoke: `${scGuard} _v=${a}[${idx}](c)\n`,
-					unconditional: seg.asyncClass === 'async',
+					invoke: child
+						? `${scGuard}{${child.begin}_v=${a}[${idx}](c)}\n`
+						: `${scGuard} _v=${a}[${idx}](c)\n`,
+					force: seg.asyncClass === 'async',
 					guard: scGuard,
 					settle,
-					resumeAwait: `_v=await pending\n`,
-					resumeSettle: settle
+					resumeRejectAbort: traceRejectAbortFor(
+						'beforeHandle',
+						child
+					),
+					resumeCatch: child ? child.end('e') + 'throw e' : undefined
 				}
 			})
 
@@ -556,48 +539,109 @@ export function emitResume(input: EmitInput): CompiledHandler {
 
 		if (seg.kind === 'handler') {
 			emitCookieSteps()
+			let traceBegin = ''
+			let traceFinish = ''
+			let traceReject: string | undefined
+			let traceRejectAbort: string | undefined
+			if (hasTrace) {
+				const handleName =
+					(handler as any)?.name &&
+					typeof (handler as any).name === 'string'
+						? (handler as any).name
+						: 'anonymous'
+				const child = buildReport!('handle')?.resolveChild(handleName)
+				const finishHandle =
+					(child?.end('_r') ?? '') +
+					(traceHandleOn
+						? `if(_r&&(_r[Symbol.iterator]||_r[Symbol.asyncIterator])&&typeof _r.next==='function'){const _s=tee(_r,2);_r=_s[0];c[ros]=_s[1];${Array.from({ length: traceCount }, (_, i) => `_hr${i}=rp${i}`).join(';')}}else{${endTrace!('handle')}}\n`
+						: endTrace!('handle'))
+				traceBegin = `_hi=true\n${child?.begin ?? ''}`
+				traceFinish = `if(_hi){${finishHandle}}\n`
+				traceReject = child ? child.end('e') + 'throw e' : undefined
+				traceRejectAbort = traceRejectAbortFor('handle', child)
+			}
+
+			if (traceHandleOn) {
+				link(tee, 'tee')
+				link(resumeObserverStream, 'ros')
+			}
+
 			emitHandler(seg, steps, {
 				hasBefore,
 				scGuard,
 				handlerKind: plan.handlerKind,
 				link,
-				compatAbort
+				compatAbort,
+				traceBegin,
+				traceFinish,
+				traceReject,
+				traceRejectAbort
 			})
+
+			if (hasTrace)
+				steps.push({
+					code: Array.from(
+						{ length: traceCount },
+						(_, i) => `if(_hr${i}===undefined)tr${i}.r(rp${i})\n`
+					).join('')
+				})
 		}
+	}
+	if (hasTrace) {
+		if (!parseClosed) steps.push({ code: endTrace!('parse') })
+		if (!transformOpened)
+			steps.push({ code: beginTrace!('transform', transforms.length) })
+		if (!transformClosed) steps.push({ code: endTrace!('transform') })
 	}
 
 	// response tail steps (after handler)
 	if (plan.handlerKind === 'function')
 		steps.push({ code: `if(_r instanceof Error)throw _r\n` })
 
-	if (t.hasAfterHandle || t.hasMapResponse)
+	if (t.hasAfterHandle || t.hasMapResponse || hasTrace)
 		steps.push({ code: `c.responseValue=_r\n` })
 
+	const afterHandleHooks = hookArray(hook?.afterHandle)
+	if (hasTrace)
+		steps.push({
+			code: beginTrace!('afterHandle', afterHandleHooks.length)
+		})
 	if (t.hasAfterHandle) {
-		const hooks = hookArray(hook!.afterHandle)
+		const hooks = afterHandleHooks
 		link(hook!.afterHandle!, 'af')
 		emitChainHook(
 			steps,
 			hooks,
 			'af',
 			compatCancellation ? abortExpr : undefined,
-			''
+			'',
+			buildReport?.('afterHandle'),
+			(child) => traceRejectAbortFor('afterHandle', child)
 		)
 		steps.push({ code: compatAbortFor(true) })
 	}
+	if (hasTrace) steps.push({ code: endTrace!('afterHandle') })
 
+	const mapResponseHooks = hookArray(hook?.mapResponse)
+	if (hasTrace)
+		steps.push({
+			code: beginTrace!('mapResponse', mapResponseHooks.length)
+		})
 	if (t.hasMapResponse) {
-		const hooks = hookArray(hook!.mapResponse)
+		const hooks = mapResponseHooks
 		link(hook!.mapResponse!, 'mr')
 		emitChainHook(
 			steps,
 			hooks,
 			'mr',
 			compatCancellation ? abortExpr : undefined,
-			''
+			'',
+			buildReport?.('mapResponse'),
+			(child) => traceRejectAbortFor('mapResponse', child)
 		)
 		steps.push({ code: compatAbortFor(true) })
 	}
+	if (hasTrace) steps.push({ code: endTrace!('mapResponse') })
 
 	if (t.hasResponseValidator) {
 		link(vali!, 'va')
@@ -605,38 +649,122 @@ export function emitResume(input: EmitInput): CompiledHandler {
 		emitResponseValidation(steps, d.responseValiAsync, compatAbortFor(true))
 	}
 
-	// Async/maybe afterResponse hooks share one stream-aware finalizer. The
-	// synchronous descriptor keeps the mature generated `_fin` path below.
-	const hasFinalizer = needsObserver
+	let factoryHelpers = ''
+	const traceFinalizer =
+		hasTrace &&
+		(traceHandleOn || phaseOn!('afterResponse') || t.hasAfterResponse)
+	const hasFinalizer = traceFinalizer || needsObserver
+	const useRouteError = plan.error.hasHook || hasTrace
+	const afterResponseHooks = hookArray(hook?.afterResponse)
+	const finalizerPass = traceFinalizer ? handlePass : ''
 	let terminal = ''
+	if (hasFinalizer || useRouteError) {
+		if (afterResponseHooks.length) link(afterResponseHooks, 'ar')
+		link(resumeObserverStream, 'ros')
+		factoryHelpers += buildRouteFinalizer(
+			traceFinalizer ? traceCount : 0,
+			traceFinalizer && traceHandleOn,
+			traceFinalizer
+				? beginTrace!('afterResponse', afterResponseHooks.length)
+				: '',
+			traceFinalizer ? endTrace!('afterResponse') : '',
+			afterResponseHooks,
+			traceFinalizer ? buildReport!('afterResponse') : undefined
+		)
+	}
 	if (hasFinalizer) {
-		link(scheduleRouteFinalizer, 'srf')
-		link(hookArray(hook?.afterResponse), 'ar')
-		if (needsObserver) {
+		if (needsObserver && !traceHandleOn) {
 			link(tee, 'tee')
-			link(resumeObserverStream, 'ros')
 			terminal +=
 				`if(!c[ros]&&_r&&(_r[Symbol.iterator]||_r[Symbol.asyncIterator])&&typeof _r.next==='function'){\n` +
 				`const _s=tee(_r,2)\n_r=_s[0]\nc[ros]=_s[1]\n}\n`
 		}
-		terminal += `c.responseValue=_r\nsrf(c,ar)\n`
+		terminal += `c.responseValue=_r\n_sf(c${finalizerPass})\n`
 	}
 
-	const useRouteError = plan.error.hasHook
 	let catchError = 'fre(rt,c,e)'
 	if (useRouteError) {
-		link(runRouteError, 'hre')
-		const er = link(hookArray(hook?.error), 'er')
-		const mr = link(hookArray(hook?.mapResponse), 'mrh')
-		const ar = link(hookArray(hook?.afterResponse), 'ar')
-		const handleError =
-			`hre(rt,c,e,${er},${map},${mr},${ar},` +
-			`${plan.error.allowUnsafeValidationDetails},${!compatCancellation})`
-		catchError = handleError
+		const errors = hookArray(hook?.error)
+		if (errors.length) link(errors, 'er')
+		link(fallbackResponse, 'fr')
+		link(isPristineNotFound, 'ipn')
+		link(getNotFound, 'gnf')
+		if (!compatCancellation) link(settleResponse, 's')
+		const errorAbort = compatCancellation
+			? ''
+			: (endTrace?.('error') ?? '') + abortCheck(false)
+		const errorSchedule = `_sf(c${finalizerPass})\n`
+		let errorHookTail = ''
+		if (t.hasMapResponse) {
+			link(hook!.mapResponse!, 'mr')
+			errorHookTail +=
+				`c.responseValue=_r\n` +
+				mapChainHook(
+					hook!.mapResponse!,
+					'mr',
+					true,
+					undefined,
+					undefined,
+					errorAbort
+				)
+		}
+		const errorFallbackTail = (endTrace?.('error') ?? '') + errorSchedule
+		errorHookTail += errorFallbackTail
+
+		const settleError = compatCancellation
+			? 'Promise.resolve(_r)'
+			: 's(c.request,_r)'
+		const errorTraceParams = hasTrace
+			? ',' +
+				Array.from(
+					{ length: traceCount },
+					(_, i) => `rp${i},rpc${i}`
+				).join(',') +
+				(traceFinalizer ? handlePass : '')
+			: ''
+		const errorTraceDecls = hasTrace
+			? Array.from(
+					{ length: traceCount },
+					(_, i) => `const tr${i}=c.trace[${i}]\n`
+				).join('')
+			: ''
+		factoryHelpers +=
+			`function _em(c,_r){return typeof _r?.then==='function'?${settleError}:_r}\n` +
+			`function _erm(c,_r${errorTraceParams}){${errorTraceDecls}${errorFallbackTail}return _em(c,${map}(_r,${mapArgs}))}\n` +
+			`async function _ce(e,c${handlePass}){${hasTrace ? Array.from({ length: traceCount }, (_, i) => `const tr${i}=c.trace[${i}]\nlet rp${i},rpc${i}\n`).join('') : ''}try{\n` +
+			(hasTrace ? beginTrace!('error', errors.length) : '') +
+			`c.error=e\n` +
+			(plan.error.allowUnsafeValidationDetails
+				? `if(e instanceof verr)e.allowUnsafeValidationDetails=true\n`
+				: '') +
+			`if(e?.status)c.set.status=e.status\nelse if(c.set.status===undefined||c.set.status===200)c.set.status=500\n` +
+			`let _r,tmp\n` +
+			(errors.length
+				? mapError(errors as any, [
+						map,
+						link,
+						res.map,
+						errorHookTail,
+						'',
+						true,
+						errorAbort,
+						buildReport?.('error')
+					])
+				: '') +
+			`if(ipn(c,e)){${endTrace?.('error') ?? ''}${errorSchedule}return gnf()}\n` +
+			`const _f=fr(c,e,v=>_erm(c,v${errorTraceParams}))\n` +
+			`if(typeof _f?.then==='function')return await ${compatCancellation ? 'Promise.resolve(_f)' : 's(c.request,_f)'}\n` +
+			errorFallbackTail +
+			`return _f\n` +
+			`}catch(x){${endTrace?.('error', 'x') ?? ''}return fre(rt,c,x)}}\n`
+		if (plan.error.allowUnsafeValidationDetails)
+			link(ValidationError, 'verr')
+		catchError = hasTrace
+			? `(${traceCatch},_ce(e,c${handlePass}))`
+			: `_ce(e,c)`
 	}
 
-	let factoryHelpers = ''
-	if (t.syncAfterResponse) {
+	if (t.syncAfterResponse && !hasTrace) {
 		link(tee, 'tee')
 		link(hook!.afterResponse!, 'ar')
 		if (!compatCancellation) link(settleResponse, 's')
@@ -650,7 +778,7 @@ export function emitResume(input: EmitInput): CompiledHandler {
 
 	const routeMapError =
 		useRouteError || hasFinalizer ? `return ${catchError}` : 'throw e'
-	if (t.syncAfterResponse) {
+	if (t.syncAfterResponse && !hasTrace) {
 		// `_fin` owns response mapping and completion scheduling.
 	} else if (compatCancellation)
 		terminal +=
@@ -687,8 +815,8 @@ export function emitResume(input: EmitInput): CompiledHandler {
 			const s = step.suspend!
 			const thisPc = suspendPc.get(i)!
 			out += s.invoke
-			const bailTarget = `return __resume(c,${thisPc},_v,_r${hasAsyncResponseValidation ? ',_t' : ''}${hasParse ? ',_bs' : ''}).catch(e=>${catchError})\n`
-			out += s.unconditional
+			const bailTarget = `return __resume(c,${thisPc},_v,_r${hasAsyncResponseValidation ? ',_t' : ''}${hasParse ? ',_bs' : ''}${tracePass.length ? ',' + tracePass.join(',') : ''}).catch(e=>${catchError})\n`
+			out += s.force
 				? s.guard
 					? `${s.guard} ${bailTarget}`
 					: bailTarget
@@ -710,12 +838,16 @@ export function emitResume(input: EmitInput): CompiledHandler {
 		if (!step.suspend) continue
 
 		const s = step.suspend
+		const resumeAwaitSource = s.resumeAwait ?? `_v=await pending\n`
 		const resumeAbort = s.resumeAbort ?? suspensionAbort
+		const resumeRejectAbort = s.resumeRejectAbort ?? resumeAbort
 		const resumeAwait =
 			resumeAbort || s.resumeCatch
-				? `try{\n${s.resumeAwait}}catch(e){${resumeAbort}${s.resumeCatch ?? 'throw e'}}\n${resumeAbort}`
-				: s.resumeAwait
-		cases.push(resumeAwait + s.resumeSettle + renderFrom(i + 1))
+				? `try{\n${resumeAwaitSource}}catch(e){${resumeRejectAbort}${s.resumeCatch ?? 'throw e'}}\n${resumeAbort}`
+				: resumeAwaitSource
+		cases.push(
+			resumeAwait + (s.resumeSettle ?? s.settle) + renderFrom(i + 1)
+		)
 	}
 
 	// assemble
@@ -723,9 +855,10 @@ export function emitResume(input: EmitInput): CompiledHandler {
 		`let _r,_v${hasTailPipeline ? ',tmp' : ''}` +
 		`${useRouteError || hasFinalizer || !compatCancellation ? ',_o' : ''}` +
 		`${cookieConfig ? ',_ck' : ''}` +
-		`${hasAsyncResponseValidation ? ',_w,_t' : ''}${hasParse ? ',_bs' : ''}\n`
+		`${hasAsyncResponseValidation ? ',_w,_t' : ''}${hasParse ? ',_bs' : ''}\n` +
+		traceHandlerDecl
 
-	const routeSrc = `function route(c){try{\n${localDecls}${prologue}${fast}}catch(e){return ${catchError}}}`
+	const routeSrc = `function route(c){${traceDecls}${traceBeforePrologue}${tracePrologue}try{\n${localDecls}${prologue}${fast}}catch(e){return ${catchError}}}`
 
 	let resumeSrc = ''
 	if (suspendCount > 0) {
@@ -733,7 +866,8 @@ export function emitResume(input: EmitInput): CompiledHandler {
 		for (let i = 0; i < cases.length; i++) sw += `case ${i}:\n${cases[i]}`
 		sw += `}\n`
 		resumeSrc =
-			`async function __resume(c,pc,pending,_r${hasAsyncResponseValidation ? ',_t' : ''}${hasParse ? ',_bs' : ''}){\n` +
+			`async function __resume(c,pc,pending,_r${hasAsyncResponseValidation ? ',_t' : ''}${hasParse ? ',_bs' : ''}${traceParams.length ? ',' + traceParams.join(',') : ''}){\n` +
+			traceResumeHandles +
 			`let _v${hasTailPipeline ? ',tmp' : ''}${cookieConfig ? ',_ck' : ''}${hasAsyncResponseValidation ? ',_w' : ''}${useRouteError || hasFinalizer || !compatCancellation ? ',_o' : ''}\n` +
 			sw +
 			`}\n`
@@ -754,10 +888,13 @@ export function emitResume(input: EmitInput): CompiledHandler {
 	JITProbe.record('handler:new-function')
 
 	// eslint-disable-next-line sonarjs/code-eval -- resume codegen
-	return new Function('h', alias, `return ${factory}`)(
-		handler,
-		...paramValues
-	) as CompiledHandler
+	return new Function(
+		'h',
+		alias,
+		resumeSrc || factoryHelpers
+			? `${factoryHelpers}${resumeSrc}return ${routeSrc}`
+			: `return ${routeSrc}`
+	)(handler, ...paramValues) as CompiledHandler
 }
 
 interface HandlerCtx {
@@ -766,22 +903,40 @@ interface HandlerCtx {
 	handlerKind: RoutePlan['handlerKind']
 	link: (v: unknown, key: string) => string
 	compatAbort: string
+	traceBegin: string
+	traceFinish: string
+	traceReject?: string
+	traceRejectAbort?: string
 }
 
 function emitHandler(seg: PlanSegment, steps: Step[], ctx: HandlerCtx): void {
-	const { hasBefore, scGuard, handlerKind, link, compatAbort } = ctx
+	const {
+		hasBefore,
+		scGuard,
+		handlerKind,
+		link,
+		compatAbort,
+		traceBegin,
+		traceFinish,
+		traceReject,
+		traceRejectAbort
+	} = ctx
 	const g = hasBefore ? scGuard : ''
+	const invoke = (statement: string) =>
+		`${traceBegin}${g ? `${g} ` : ''}${statement}\n`
+	const skippedSettle = g && traceBegin ? traceFinish + compatAbort : ''
 
 	if (handlerKind === 'function') {
 		if (seg.asyncClass === 'async') {
 			steps.push({
 				suspend: {
-					invoke: `${g ? `${g} ` : ''}_v=h(c)\n`,
-					unconditional: true,
+					invoke: invoke('_v=h(c)'),
+					force: true,
 					guard: g,
-					settle: '',
-					resumeAwait: `_v=await pending\n`,
-					resumeSettle: `${g ? `${g} ` : ''}_r=_v\n${compatAbort}`
+					settle: skippedSettle,
+					resumeSettle: `${g ? `${g} ` : ''}_r=_v\n${traceFinish}${compatAbort}`,
+					resumeRejectAbort: traceRejectAbort,
+					resumeCatch: traceReject
 				}
 			})
 			return
@@ -791,12 +946,12 @@ function emitHandler(seg: PlanSegment, steps: Step[], ctx: HandlerCtx): void {
 
 		steps.push({
 			suspend: {
-				invoke: `${g ? `${g} ` : ''}_v=h(c)\n`,
-				unconditional: false,
+				invoke: invoke('_v=h(c)'),
 				guard: g,
-				settle: `${g ? `${g} ` : ''}_r=_v\n${compatAbort}`,
+				settle: `${g ? `${g} ` : ''}_r=_v\n${traceFinish}${compatAbort}`,
 				resumeAwait: `_v=fe(await pending)\n`,
-				resumeSettle: `${g ? `${g} ` : ''}_r=_v\n${compatAbort}`
+				resumeRejectAbort: traceRejectAbort,
+				resumeCatch: traceReject
 			}
 		})
 
@@ -805,7 +960,9 @@ function emitHandler(seg: PlanSegment, steps: Step[], ctx: HandlerCtx): void {
 
 	if (handlerKind === 'response') {
 		link(cloneResponse, 'cr')
-		steps.push({ code: `${g ? `${g} ` : ''}_r=cr(h)\n${compatAbort}` })
+		steps.push({
+			code: invoke('_r=cr(h)') + traceFinish + compatAbort
+		})
 
 		return
 	}
@@ -814,19 +971,22 @@ function emitHandler(seg: PlanSegment, steps: Step[], ctx: HandlerCtx): void {
 		link(cloneResponse, 'cr')
 		steps.push({
 			suspend: {
-				invoke: `${g ? `${g} ` : ''}_v=h.then(cr)\n`,
-				unconditional: true,
+				invoke: invoke('_v=h.then(cr)'),
+				force: true,
 				guard: g,
-				settle: '',
-				resumeAwait: `_v=await pending\n`,
-				resumeSettle: `${g ? `${g} ` : ''}_r=_v\n${compatAbort}`
+				settle: skippedSettle,
+				resumeSettle: `${g ? `${g} ` : ''}_r=_v\n${traceFinish}${compatAbort}`,
+				resumeRejectAbort: traceRejectAbort,
+				resumeCatch: traceReject
 			}
 		})
 		return
 	}
 
 	// static-value
-	steps.push({ code: `${g ? `${g} ` : ''}_r=h\n${compatAbort}` })
+	steps.push({
+		code: invoke('_r=h') + traceFinish + compatAbort
+	})
 }
 
 // mirror mapChainHook
@@ -835,10 +995,15 @@ function emitChainHook(
 	hooks: Function[],
 	prefix: string,
 	abortExpr: string | undefined,
-	abortCheck: string
+	abortCheck: string,
+	report?: TraceReporter,
+	rejectAbort?: (
+		child?: ReturnType<TraceReporter['resolveChild']>
+	) => string | undefined
 ): void {
 	for (let i = 0; i < hooks.length; i++) {
 		const fn = hooks[i]!
+		const child = report?.resolveChild((fn as any)?.name || 'anonymous')
 		const at = `[${i}]`
 		const guard =
 			i > 0
@@ -848,12 +1013,16 @@ function emitChainHook(
 				: ''
 		steps.push({
 			suspend: {
-				invoke: `${guard}_v=${prefix}${at}(c)\n`,
-				unconditional: isAsyncFunction(fn),
+				invoke: guard
+					? `${guard}{${child?.begin ?? ''}_v=${prefix}${at}(c)}\n`
+					: `${child?.begin ?? ''}_v=${prefix}${at}(c)\n`,
+				force: isAsyncFunction(fn),
 				guard: guard.trim(),
-				settle: `${guard}tmp=_v\n`,
-				resumeAwait: `_v=await pending\n`,
-				resumeSettle: `${guard}tmp=_v\n`
+				settle: guard
+					? `${guard}{${child?.end() ?? ''}tmp=_v}\n`
+					: `${child?.end() ?? ''}tmp=_v\n`,
+				resumeRejectAbort: rejectAbort?.(child),
+				resumeCatch: child ? child.end('e') + 'throw e' : undefined
 			}
 		})
 	}
@@ -905,41 +1074,47 @@ function emitResponseValidation(
 			invoke:
 				`if(_t==='s')_v=_w.mayReturnPromise?_w.From(_r.response,'response',true):_w.EncodeFrom(_r.response,'response')\n` +
 				`else if(_t==='b')_v=_w.mayReturnPromise?_w.From(_r,'response',true):_w.EncodeFrom(_r,'response')\n`,
-			unconditional: false,
 			guard: `if(_t) `,
 			settle:
-				`if(_t==='s')_r.response=_v\nelse if(_t==='b')_r=_v\n` +
-				abortCheck,
-			resumeAwait: `_v=await pending\n`,
-			resumeSettle:
 				`if(_t==='s')_r.response=_v\nelse if(_t==='b')_r=_v\n` +
 				abortCheck
 		}
 	})
 }
 
-function buildSyncAfterResponse(
-	finalMap: string,
-	afterResponse: unknown,
-	compatCancellation: boolean
+function buildRouteFinalizer(
+	traceCount: number,
+	traceHandleOn: boolean,
+	beginAfterResponse: string,
+	endAfterResponse: string,
+	afterResponse: Function[],
+	report?: {
+		resolveChild(name: string): {
+			begin: string
+			end: (error?: string) => string
+		}
+	}
 ) {
+	const handleParams = Array.from(
+		{ length: traceCount },
+		(_, i) => `_hr${i}`
+	).join(',')
+	let body = ''
+	for (let i = 0; i < traceCount; i++)
+		body += `const tr${i}=c.trace[${i}]\nlet rp${i},rpc${i}\n`
+	body += `let _ser\nif(_st){try{for await(const _ of _st)void _}catch(e){_ser=e}}\n`
+	if (traceHandleOn)
+		for (let i = 0; i < traceCount; i++) body += `tr${i}.r(_hr${i},_ser)\n`
+	body += beginAfterResponse
+	if (afterResponse.length)
+		body += mapAfterResponse(afterResponse as any, [report])
+	body += endAfterResponse
+
 	return (
-		`function _fin(c,_r){\n` +
-		`if(_r instanceof Error)throw _r\n` +
-		`if(_r&&(_r[Symbol.iterator]||_r[Symbol.asyncIterator])&&typeof _r.next==='function'){\n` +
-		`const _s=tee(_r,2)\n` +
-		`return _fin2(c,_s[0],_s[1])\n` +
-		`}\n` +
-		`return _fin2(c,_r,undefined)\n` +
-		`}\n` +
-		`function _fin2(c,_r,_stl){\n` +
-		`c.responseValue=_r\n` +
-		`c._arf=true\n` +
-		`queueMicrotask(async()=>{if(_stl){try{for await(const v of _stl){}}catch{}}\n` +
-		mapAfterResponse(afterResponse as any, [undefined]) +
-		`})\n` +
-		`const _m=${finalMap}\n` +
-		`return typeof _m?.then==='function'?${compatCancellation ? 'Promise.resolve(_m)' : 's(c.request,_m)'}.catch(e=>fre(rt,c,e)):_m\n` +
+		`function _sf(c${handleParams ? ',' + handleParams : ''}){\n` +
+		`if(c._arf)return\nc._arf=true\n` +
+		`const _st=c[ros]\nc[ros]=undefined\n` +
+		`queueMicrotask(async()=>{${body}})\n` +
 		`}\n`
 	)
 }

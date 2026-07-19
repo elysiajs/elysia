@@ -1,9 +1,107 @@
 import { Elysia } from '../../src'
+import { resumeEmit } from '../../src/experimental/resume'
 
 import { describe, expect, it } from 'bun:test'
 import { post, req } from '../utils'
 
 describe('mapDerive', () => {
+	for (const [mode, config] of [
+		['jit', {}],
+		['resume', { experimental: { resumeEmit } }]
+	] as const)
+		it(`preserves Context identity in ${mode}`, async () => {
+			const contexts: any[] = []
+			let prototype: object | null
+			let oldInMap: unknown
+			let mapContext: any
+			let getterCalls = 0
+			const getterObservations: any[] = []
+			const derivative = {
+				get mapped() {
+					getterCalls++
+					getterObservations.push({
+						context: mapContext,
+						old: mapContext.old,
+						path: mapContext.path
+					})
+					return `mapped-${getterCalls}`
+				},
+				request: 'wrong',
+				store: 'wrong',
+				set: 'wrong',
+				path: 'wrong'
+			}
+			let observed: any
+
+			const app = new Elysia(config)
+				.state('name', 'Elysia')
+				.derive((context) => {
+					contexts.push(context)
+					return { old: 'old' }
+				})
+				.mapDerive((context: any) => {
+					contexts.push(context)
+					mapContext = context
+					oldInMap = context.old
+					return derivative
+				})
+				.get(
+					'/identity',
+					{
+						transform(context) {
+							contexts.push(context)
+							prototype = Object.getPrototypeOf(context)
+						},
+						beforeHandle(context) {
+							contexts.push(context)
+						},
+						afterHandle(context) {
+							contexts.push(context)
+						}
+					},
+					(context: any) => {
+						contexts.push(context)
+						observed = {
+							old: context.old,
+							mapped: [context.mapped, context.mapped],
+							request: context.request,
+							store: context.store,
+							set: context.set,
+							path: context.path
+						}
+						return 'ok'
+					}
+				)
+
+			const request = req('/identity')
+			await app.handle(request)
+
+			expect(contexts).toHaveLength(6)
+			expect(contexts.every((context) => context === contexts[0])).toBeTrue()
+			expect(Object.getPrototypeOf(contexts[0])).toBe(prototype!)
+			expect(oldInMap).toBe('old')
+			expect(observed).toEqual({
+				old: undefined,
+				mapped: ['mapped-1', 'mapped-1'],
+				request,
+				store: { name: 'Elysia' },
+				set: observed.set,
+				path: '/identity'
+			})
+			expect(getterCalls).toBe(1)
+			expect(getterObservations).toEqual([
+				{ context: contexts[0], old: 'old', path: '/identity' }
+			])
+			expect(derivative).toEqual({
+				mapped: 'mapped-2',
+				request: 'wrong',
+				store: 'wrong',
+				set: 'wrong',
+				path: 'wrong'
+			})
+			expect(getterCalls).toBe(2)
+		})
+
 	it('replaces the derived context with its returned fields', async () => {
 		const app = new Elysia()
 			.derive(() => ({

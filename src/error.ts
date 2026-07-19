@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { Create } from './type/bridge'
 
 import { isProduction } from './universal/is-production'
@@ -43,18 +44,23 @@ function isCacheableExpected(value: unknown, visited = new Set<object>()) {
 	return true
 }
 
+export interface ElysiaError<
+	Status extends number = number,
+	Response extends string = string
+> {
+	status?: Status
+	response?: Response
+	problemTitle?: string
+}
+
 export class ElysiaError<
 	Status extends number = number,
 	Response extends string = string
 > extends Error {
-	status?: Status
-	response?: Response
-
 	/** RFC 9457 problem `type` slug (overridden per subclass) */
 	problemType = 'about:blank'
-	/** RFC 9457 problem `title` (overridden per subclass) */
-	problemTitle?: string
 
+	/** RFC 9457 problem `title` (overridden per subclass) */
 	constructor(message: string, cause?: Error) {
 		super(message)
 		this.name = this.constructor.name
@@ -102,15 +108,21 @@ export class InternalServerError extends ElysiaError {
 	}
 }
 
-export class NotFound extends ElysiaError {
-	status = 404 as const
+export interface NotFound {
+	status: 404
+	problemTitle: string
+}
+
+export class NotFound extends ElysiaError<404> {
 	problemType = 'not-found'
-	problemTitle = 'Not Found'
 
 	constructor(public response = 'Not Found') {
 		super(response)
 	}
 }
+
+NotFound.prototype.status = 404
+NotFound.prototype.problemTitle = 'Not Found'
 
 export class ParseError extends ElysiaError {
 	status = 400 as const

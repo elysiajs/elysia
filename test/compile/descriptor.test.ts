@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test'
 
 import { Elysia, t } from '../../src'
 import {
+	RouteEffect,
 	routeDescriptors,
 	type RouteDescriptor
 } from '../../src/compile/handler/descriptor'
@@ -38,6 +39,7 @@ describe('route descriptor', () => {
 			responseMode: 'compact',
 			contextMode: 'compact',
 			headerKeys: [],
+			effectMask: 0,
 			hasBeforeHandle: false,
 			hasAfterHandle: false,
 			hasMapResponse: false,
@@ -58,15 +60,6 @@ describe('route descriptor', () => {
 			syncCookieSign: false,
 			asyncCookieSign: false,
 			lazyCookieVerify: false,
-			inferenceSet: false,
-			inference: {
-				query: false,
-				headers: false,
-				body: false,
-				cookie: false,
-				set: false,
-				route: false
-			},
 			handlerIsAsync: false,
 			callHandlerSyncOnAsync: false,
 			syncErrorHook: false,
@@ -87,6 +80,51 @@ describe('route descriptor', () => {
 
 		expect(compact.contextMode).toBe('compact')
 		expect(set.contextMode).toBe('set')
+	})
+
+	it('seals validator and lifecycle channel effects into one mask', async () => {
+		const app = new Elysia({ introspect: true })
+			.get(
+				'/validated',
+				{
+					query: t.Object({ q: t.Optional(t.String()) }),
+					headers: t.Object({ authorization: t.Optional(t.String()) })
+				} as any,
+				() => 'ok'
+			)
+			.get('/items/:id', ({ route, set }) => {
+				set.status = 201
+				return route
+			})
+
+		await app.handle(get('/validated'))
+		await app.handle(get('/items/1'))
+
+		const descriptors = routeDescriptors.get(app as any)!
+		expect(descriptors.get('GET /validated')?.effectMask).toBe(
+			RouteEffect.Query | RouteEffect.Headers
+		)
+		expect(descriptors.get('GET /items/:id')?.effectMask).toBe(
+			RouteEffect.Route | RouteEffect.SetHeaders
+		)
+	})
+
+	it('adds trace route and set-header effects only where they are usable', async () => {
+		const app = new Elysia({ introspect: true })
+			.trace(({ onHandle }) => onHandle(() => {}))
+			.get('/static', () => 'ok')
+			.get('/dynamic/:id', () => 'ok')
+
+		await app.handle(get('/static'))
+		await app.handle(get('/dynamic/1'))
+
+		const descriptors = routeDescriptors.get(app as any)!
+		expect(descriptors.get('GET /static')?.effectMask).toBe(
+			RouteEffect.SetHeaders
+		)
+		expect(descriptors.get('GET /dynamic/:id')?.effectMask).toBe(
+			RouteEffect.Route | RouteEffect.SetHeaders
+		)
 	})
 
 	it('records literal header keys and fails open for dynamic reads', async () => {
@@ -132,6 +170,33 @@ describe('route descriptor', () => {
 		['jit', undefined],
 		['resume', { resumeEmit }]
 	] as const) {
+		it(`${emitter} consumes the sealed channel mask`, async () => {
+			const app = new Elysia({
+				introspect: true,
+				...(experimental ? { experimental } : {})
+			}).get('/effects/:id', ({ query, headers, route, set }) => {
+				set.status = 201
+				return `${route}:${query.q}:${headers.authorization}`
+			})
+			const response = await app.handle(
+				new Request('http://localhost/effects/1?q=one', {
+					headers: { authorization: 'bearer' }
+				})
+			)
+
+			expect(response.status).toBe(201)
+			expect(await response.text()).toBe('/effects/:id:one:bearer')
+			expect(
+				routeDescriptors.get(app as any)?.get('GET /effects/:id')
+					?.effectMask
+			).toBe(
+				RouteEffect.Query |
+					RouteEffect.Headers |
+					RouteEffect.Route |
+					RouteEffect.SetHeaders
+			)
+		})
+
 		it(`${emitter} preserves cookies with partial headers`, async () => {
 			const app = new Elysia(experimental ? { experimental } : {}).get(
 				'/cookie',
@@ -163,6 +228,48 @@ describe('route descriptor', () => {
 			)
 
 			expect(await response.text()).toBe('bearer:elysia')
+		})
+
+		it(`${emitter} materializes full headers when nested destructuring also aliases the object`, async () => {
+			const app = new Elysia({
+				introspect: true,
+				...(experimental ? { experimental } : {})
+			}).get(
+				'/headers',
+				({ headers: all, headers: { authorization } }) =>
+					`${authorization}:${all.origin}`
+			)
+			const response = await app.handle(
+				new Request('http://localhost/headers', {
+					headers: { authorization: 'bearer', origin: 'elysia' }
+				})
+			)
+
+			expect(await response.text()).toBe('bearer:elysia')
+			expect(
+				routeDescriptors.get(app as any)?.get('GET /headers')?.headerKeys
+			).toBeNull()
+		})
+
+		it(`${emitter} materializes full headers for a Unicode object alias`, async () => {
+			const app = new Elysia({
+				introspect: true,
+				...(experimental ? { experimental } : {})
+			}).get(
+				'/headers',
+				({ headers: 全部, headers: { authorization } }) =>
+					`${authorization}:${全部.origin}`
+			)
+			const response = await app.handle(
+				new Request('http://localhost/headers', {
+					headers: { authorization: 'bearer', origin: 'elysia' }
+				})
+			)
+
+			expect(await response.text()).toBe('bearer:elysia')
+			expect(
+				routeDescriptors.get(app as any)?.get('GET /headers')?.headerKeys
+			).toBeNull()
 		})
 	}
 
