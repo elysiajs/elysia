@@ -4,12 +4,12 @@ import type { TLocalizedValidationError } from 'typebox/error'
 import type { AnySchema, StandardSchemaV1Like } from '../type'
 import type { MaybePromise } from '../types'
 import { Capture } from '../compile/aot'
-import { StandardValidator, Validator, type ValidatorOptions } from './index'
-
-const asyncStandardSchemaError = () =>
-	new Error(
-		'[Elysia] An asynchronous Standard Schema was used where only synchronous validation is supported.'
-	)
+import {
+	asyncStandardSchemaError,
+	StandardValidator,
+	Validator,
+	type ValidatorOptions
+} from './index'
 
 const anySibling = Object.freeze(
 	Object.defineProperty({}, '~kind', { value: 'Any' })

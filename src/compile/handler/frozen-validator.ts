@@ -370,10 +370,6 @@ class FrozenSlotValidator {
 		return defaults.clone ? defaults.clone() : structuredClone(value)
 	}
 
-	#applyDefault(value: any) {
-		return this.#defaultFastPath!.merge!(value)
-	}
-
 	From(value: unknown, type?: string): unknown {
 		if (this.#hasDefault) {
 			const defaults = this.#defaultFastPath
@@ -388,7 +384,7 @@ class FrozenSlotValidator {
 					typeof value === 'object' &&
 					defaults.merge !== undefined
 				)
-					value = this.#applyDefault(value)
+					value = defaults.merge(value)
 			}
 		}
 

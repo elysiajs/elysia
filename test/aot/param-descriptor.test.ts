@@ -20,7 +20,6 @@ const linkedNames = () => {
 	const names = new Set<string>()
 	for (const m of SRC.matchAll(/\blink\([^,]+,\s*'([a-z0-9]+)'\)/g))
 		names.add(m[1]!)
-	if (SRC.includes("seenKeys.add('ho')")) names.add('ho')
 	return names
 }
 

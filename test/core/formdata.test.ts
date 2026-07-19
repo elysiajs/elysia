@@ -8,7 +8,6 @@ import {
 } from '../../src/adapter/web-standard/utils'
 import { TypeBoxValidator } from '../../src/type/validator'
 import { setFileTypeDetector } from '../../src/type/elysia/file-type'
-import { resumeEmit } from '../../src/experimental/resume'
 
 const snapshotObject = (value: Record<PropertyKey, unknown>) => ({
 	values: Reflect.ownKeys(value).map((key) => [key, value[key]]),
@@ -474,8 +473,7 @@ describe('flat FormData fast path', () => {
 	})
 
 	for (const [name, experimental] of [
-		['jit', { flatFormDataFastPath: true }],
-		['resume', { flatFormDataFastPath: true, resumeEmit }]
+		['jit', { flatFormDataFastPath: true }]
 	] as const)
 		it(`parses explicit and inferred multipart bodies through ${name}`, async () => {
 			const app = new Elysia({ experimental })

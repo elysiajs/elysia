@@ -1,14 +1,10 @@
 import { Elysia } from '../../src'
-import { resumeEmit } from '../../src/experimental/resume'
 
 import { describe, expect, it } from 'bun:test'
 import { post, req } from '../utils'
 
 describe('mapDerive', () => {
-	for (const [mode, config] of [
-		['jit', {}],
-		['resume', { experimental: { resumeEmit } }]
-	] as const)
+	for (const [mode, config] of [['jit', {}]] as const)
 		it(`preserves Context identity in ${mode}`, async () => {
 			const contexts: any[] = []
 			let prototype: object | null

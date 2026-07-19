@@ -12,21 +12,6 @@ const repoRoot =
 	process.env.D1_ELYSIA_ROOT ?? resolve(import.meta.dir, '../../..')
 const cancellationLane = process.env.D1_N2B_CANCELLATION ?? 'default'
 const candidate = process.env.D1_N2B_CANDIDATE === '1'
-let fallbackWarnings = 0
-let traceFallbackWarnings = 0
-const originalWarn = console.warn
-console.warn = (...arguments_: unknown[]) => {
-	if (arguments_.some((value) => String(value).includes('falls back'))) {
-		if (
-			arguments_.some((value) =>
-				String(value).includes('unsupported: trace')
-			)
-		)
-			traceFallbackWarnings++
-		else fallbackWarnings++
-	}
-	originalWarn(...arguments_)
-}
 
 if (cancellationLane !== 'default' && cancellationLane !== 'compat')
 	throw new Error(`invalid D1 N+2b cancellation lane: ${cancellationLane}`)
@@ -92,22 +77,17 @@ async function main() {
 	const batch = 25
 	const allocationRequests = Math.min(routes, 256)
 	const blockedRequests = Math.min(routes, 128)
-	const [
-		{ Elysia, t },
-		{ resumeEmit },
-		{ createContext },
-		descriptorModule,
-		jsc
-	] = await Promise.all([
-		import(repoRoot + '/src/index.ts'),
-		import(repoRoot + '/src/experimental/resume.ts'),
-		import(repoRoot + '/src/context.ts'),
-		import(repoRoot + '/src/compile/handler/descriptor.ts'),
-		import('bun:jsc')
-	])
-	const experimental: Record<string, unknown> = { resumeEmit }
-	if (cancellationLane === 'compat') experimental.cancellation = 'compat'
-	const config = { experimental } as any
+	const [{ Elysia, t }, { createContext }, descriptorModule, jsc] =
+		await Promise.all([
+			import(repoRoot + '/src/index.ts'),
+			import(repoRoot + '/src/context.ts'),
+			import(repoRoot + '/src/compile/handler/descriptor.ts'),
+			import('bun:jsc')
+		])
+	const config =
+		cancellationLane === 'compat'
+			? { experimental: { cancellation: 'compat' as const } }
+			: {}
 
 	const contextLight = new Elysia(config).get('/context', () => {
 		injectN2bRuntime()
@@ -490,8 +470,6 @@ async function main() {
 			blockedWarmups,
 			blockedFullGcSnapshots,
 			identityCallbacks: identity.length,
-			fallbackWarnings,
-			traceFallbackWarnings,
 			samples: {
 				'context-light-p50-ns': contextLightSamples,
 				'context-light-bytes-per-request': [contextBytes],

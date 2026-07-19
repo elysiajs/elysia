@@ -54,88 +54,6 @@ type Server = {
 
 const EMPTY_HOOKS: readonly AnyFn[] = Object.freeze([]) as any
 
-/**
- * Build-time (route-registration-time) analysis of a WS `message` handler to
- * decide whether the per-frame `ws.body` view must be assigned.
- */
-function handlerMayTouchBody(fn: AnyFn | undefined): boolean {
-	if (!fn) return false
-
-	let source: string
-	try {
-		source = Function.prototype.toString.call(fn)
-	} catch {
-		return true
-	}
-
-	if (source.indexOf('[native code]') !== -1) return true
-
-	if (/\bbody\b/.test(source)) return true
-	if (/\barguments\b/.test(source)) return true
-	if (source.indexOf('[') !== -1) return true
-	if (source.indexOf('...') !== -1) return true
-
-	const parsed = firstParamIdentifier(source)
-	if (parsed === undefined) return true
-
-	const { name: wsName, bodyStart, paramsEnd } = parsed
-
-	if (source.slice(0, paramsEnd).indexOf('(', 1) !== -1) return true
-
-	const body = source.slice(bodyStart)
-
-	const safeName = wsName.replace(/[$]/g, '\\$&')
-	const escaped = new RegExp(`(?<![\\w$.])${safeName}(?![\\w$]|\\s*\\.)`)
-
-	if (escaped.test(body)) return true
-
-	return false
-}
-
-function firstParamIdentifier(
-	source: string
-): { name: string; bodyStart: number; paramsEnd: number } | undefined {
-	const open = source.indexOf('(')
-	if (open === -1) {
-		const m = /^\s*(?:async\s+)?([A-Za-z_$][\w$]*)\s*=>/.exec(source)
-		if (!m) return undefined
-		const end = m.index + m[0].length
-		return { name: m[1], bodyStart: end, paramsEnd: end }
-	}
-
-	// Find the matching close paren of the parameter list.
-	let depth = 0
-	let close = -1
-	for (let i = open; i < source.length; i++) {
-		const c = source[i]
-		if (c === '(') depth++
-		else if (c === ')') {
-			depth--
-			if (depth === 0) {
-				close = i
-				break
-			}
-		}
-	}
-	if (close === -1) return undefined
-
-	const params = source.slice(open + 1, close).trim()
-	if (params.length === 0) return undefined
-
-	// First param up to the first top-level comma.
-	let first = params
-	const comma = params.indexOf(',')
-	if (comma !== -1) first = params.slice(0, comma).trim()
-
-	// Destructuring patterns handled by the `body`/`...`/`[` checks above.
-	if (first[0] === '{' || first[0] === '[') return undefined
-
-	const m = /^([A-Za-z_$][\w$]*)/.exec(first)
-	if (!m) return undefined
-
-	return { name: m[1], bodyStart: close + 1, paramsEnd: close + 1 }
-}
-
 function concatHooks(
 	...sources: Array<AnyFn | AnyFn[] | undefined | null>
 ): readonly AnyFn[] {
@@ -566,11 +484,6 @@ export function buildWSRoute(
 		return handleError(ws, error)
 	}
 
-	const messageHandlerTouchesBody =
-		!!bodyValidator ||
-		handlerMayTouchBody(hook.message as AnyFn | undefined) ||
-		errorHandlers.some(handlerMayTouchBody)
-
 	const syncDispatchEligible =
 		transforms.length === 0 &&
 		messageBeforeHandles.length === 0 &&
@@ -626,7 +539,7 @@ export function buildWSRoute(
 		message: unknown
 	): void | Promise<void> {
 		try {
-			if (messageHandlerTouchesBody) ws.body = message as any
+			ws.body = message as any
 
 			const result = (hook.message as AnyFn)(ws, message)
 

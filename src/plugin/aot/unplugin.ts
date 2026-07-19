@@ -29,8 +29,6 @@ export interface ElysiaAotUnpluginFactoryResult {
 	webpack?: (compiler: unknown) => void
 }
 
-const cleanIdOf = (id: string): string => id.split('?', 1)[0]
-
 const VIRTUAL_MANIFEST_RESOURCE = /%00elysia%2Fcompiled/
 
 interface RulesCompiler {
@@ -86,7 +84,7 @@ export const aotFactory = (
 		},
 		// required so webpack/rspack don't pipe every module through the loader.
 		transformInclude(id) {
-			return hooks.isTransformCandidate(cleanIdOf(id))
+			return hooks.isTransformCandidate(id.split('?', 1)[0])
 		},
 		transform(code, id) {
 			return hooks.transform(code, id)

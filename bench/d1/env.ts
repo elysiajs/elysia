@@ -16,7 +16,6 @@ export const BENCH_SOURCE_FILES = [
 	'bench/d1/validation.test.ts',
 	'bench/d1/fixtures/cold-start.ts',
 	'bench/d1/fixtures/compile-memory.ts',
-	'bench/d1/fixtures/compose-depth.ts',
 	'bench/d1/fixtures/crypto-hmac.ts',
 	'bench/d1/fixtures/default-headers.ts',
 	'bench/d1/fixtures/body-presence.ts',

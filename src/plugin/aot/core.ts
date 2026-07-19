@@ -328,8 +328,7 @@ export const ELYSIA_MODULE_FILTER =
  * directory named `elysia` (like this repo itself) from having their code
  * rewritten.
  *
- * Pass the result to both the esbuild `filter` (convert to RegExp via
- * `makeElysiaModuleFilterRegex`) and the Vite transform (`isElysiaModule`).
+ * The transform hooks use the result to identify Elysia modules.
  */
 export function resolveElysiaRoot(from: string = process.cwd()): string {
 	try {
@@ -355,19 +354,6 @@ export function makeIsElysiaModule(
 		const posix = path.replace(/\\/g, '/')
 		return posix.startsWith(root + '/') && ELYSIA_MODULE_FILTER.test(path)
 	}
-}
-
-/**
- * Build an esbuild-compatible RegExp that anchors to the resolved elysia root
- * so the `onLoad` pre-filter is as tight as possible. esbuild uses this as an
- * initial path filter before calling the callback, so we still double-check
- * with `makeIsElysiaModule` inside the callback.
- */
-export function makeElysiaModuleFilterRegex(elysiaRoot: string): RegExp {
-	const escaped = elysiaRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-	return new RegExp(
-		'^' + escaped + '[\\\\/](dist|src)[\\\\/].+\\.(m?js|ts)x?$'
-	)
 }
 
 export function rewriteIsProductionCalls(code: string): string {
@@ -418,16 +404,6 @@ export const STUB_SOURCES: Record<
 				`	}\n` +
 				`	return true\n` +
 				`}\n`
-		},
-		{
-			// The experimental resume-skeleton lane (`plan/plan.ts` + `plan/emit.ts`)
-			// is only reachable when `experimental.resumeEmit` is set
-			filter: /[\\/]elysia[\\/](dist|src)[\\/]compile[\\/]plan[\\/]plan\.(m?js|ts)$/,
-			source: `export function planRoute(){throw new Error("[elysia-aot] resume-emit plan was stripped (strip mode). Rebuild with strip:false.")}\n`
-		},
-		{
-			filter: /[\\/]elysia[\\/](dist|src)[\\/]compile[\\/]plan[\\/]emit\.(m?js|ts)$/,
-			source: `export function emitResume(){throw new Error("[elysia-aot] resume-emit was stripped (strip mode). Rebuild with strip:false.")}\n`
 		}
 	],
 	ws: [
@@ -463,13 +439,7 @@ export const STUB_SOURCES: Record<
 				`export function parseCookieRawSigned(){return e()}\n` +
 				`export function parseCookieRawLazy(){return e()}\n` +
 				`export function buildCookieJar(){return e()}\n` +
-				`export function signCookieValues(){return e()}\n` +
-				`export function signCookieValuesSync(){return e()}\n` +
-				`export function signCookie(){return e()}\n` +
-				`export function signCookieSubtle(){return e()}\n` +
-				`export function signCookieSync(){return e()}\n` +
-				`export function unsignCookie(){return e()}\n` +
-				`export function unsignCookieSync(){return e()}\n`
+				`export function signCookieValues(){return e()}\n`
 		},
 		{
 			filter: /[\\/]elysia[\\/](dist|src)[\\/]cookie[\\/]config\.(m?js|ts)$/,

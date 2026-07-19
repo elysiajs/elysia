@@ -12,8 +12,7 @@ import {
 	parseCookieRawSigned,
 	parseCookieRawLazy,
 	buildCookieJar,
-	signCookieValues,
-	signCookieValuesSync
+	signCookieValues
 } from '../../cookie/utils'
 
 import { RouteEffect, type RouteCompileState } from './descriptor'
@@ -65,8 +64,7 @@ import type {
 	BodyHandler,
 	ContentType,
 	CompiledHandler,
-	AnyLocalHook,
-	MaybeArray
+	AnyLocalHook
 } from '../../types'
 
 let captureHeaderShorthand: boolean | undefined
@@ -148,7 +146,7 @@ function builtinParser(
 
 export function emitBodyParse(
 	adapter: ElysiaAdapter['parse'],
-	parsers: MaybeArray<ContentType | BodyHandler> | undefined,
+	hook: AnyLocalHook | undefined,
 	bodyVali: Validator | undefined,
 	hasHeaders: boolean,
 	link: Link,
@@ -156,6 +154,7 @@ export function emitBodyParse(
 	flatFormDataFastPath = false,
 	suspensionMark?: string
 ) {
+	let parsers = hook?.parse
 	const boundary = (expression: string) =>
 		suspensionMark
 			? `(${suspensionMark},await ${expression})`
@@ -211,7 +210,7 @@ export function emitBodyParse(
 			const parser = parsers[i]
 
 			if (typeof parser === 'function') {
-				link(0, '')
+				link(hook, 'ho')
 
 				const child = report?.resolveChild(
 					(parser as any).name || 'anonymous'
@@ -415,7 +414,6 @@ export interface CompileHandlerJitOptions {
 	method: string
 	path: string
 	handler: unknown
-	instance: AnyElysia
 	root: AnyElysia
 	errorRoot: AnyElysia
 	hook: AnyLocalHook | undefined
@@ -488,16 +486,6 @@ export function compileHandlerJit({
 	const paramValues: unknown[] = []
 	let alias = ''
 	function link(v: unknown, key: string) {
-		if (v === 0) {
-			if (!seenKeys.has('ho')) {
-				seenKeys.add('ho')
-				paramValues.push(hook)
-				alias += `${alias ? ',' : ''}ho`
-			}
-
-			return
-		}
-
 		if (!seenKeys.has(key)) {
 			seenKeys.add(key)
 			paramValues.push(v)
@@ -684,7 +672,7 @@ export function compileHandlerJit({
 
 		const parseCode = emitBodyParse(
 			adapter.parse,
-			hook?.parse,
+			hook,
 			vali?.body,
 			hasHeaders,
 			link,
@@ -879,7 +867,7 @@ export function compileHandlerJit({
 			? `_sg=scv(c.set.cookie,cc)\nif(_sg){${awaitBoundary('await _sg\n')}}\n`
 			: ''
 
-	if (syncCookieSign) link(signCookieValuesSync, 'scvs')
+	if (syncCookieSign) link(signCookieValues, 'scvs')
 	else if (asyncCookieSign) link(signCookieValues, 'scv')
 
 	let factoryHelpers = ''

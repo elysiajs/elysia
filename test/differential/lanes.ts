@@ -3,7 +3,6 @@
 
 import '../../src/compile/aot-capture' // installs captureImpl (side effect)
 import { Elysia, type AnyElysia } from '../../src'
-import { resumeEmit } from '../../src/experimental/resume'
 import { validationPlan } from '../../src/experimental/validation-plan'
 import { Compiled, type CompiledSnapshot } from '../../src/compile/aot'
 import {
@@ -57,9 +56,6 @@ const handleLane = (
 export const jitHandle = handleLane('jit-handle', {})
 export const precompileHandle = handleLane('precompile-handle', {
 	precompile: true
-})
-export const resumeHandle = handleLane('resume-handle', {
-	experimental: { resumeEmit }
 })
 export const flatFormDataFastPathHandle = handleLane(
 	'flat-formdata-fast-path-handle',
@@ -149,9 +145,6 @@ async function assertPortClosed(
 export const jitListen = listenLane('jit-listen', {})
 export const precompileListen = listenLane('precompile-listen', {
 	precompile: true
-})
-export const resumeListen = listenLane('resume-listen', {
-	experimental: { resumeEmit }
 })
 export const inferenceCandidateListen = listenLane(
 	'inference-candidate-listen',
@@ -263,20 +256,9 @@ export const lanePairs: LanePair[] = [
 		candidate: aotReconstructHandle
 	},
 	{
-		id: 'jit-vs-resume@handle',
-		oracle: jitHandle,
-		candidate: resumeHandle
-	},
-	{
 		id: 'formdata-default-vs-flat-fast-path@handle',
 		oracle: jitHandle,
 		candidate: flatFormDataFastPathHandle,
 		requiresTag: 'form'
-	},
-	{
-		id: 'jit-vs-resume@listen',
-		oracle: jitListen,
-		candidate: resumeListen,
-		requiresTag: 'safe-for-socket'
 	}
 ]

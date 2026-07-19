@@ -7,21 +7,6 @@ const repoRoot =
 	process.env.D1_ELYSIA_ROOT ?? resolve(import.meta.dir, '../../..')
 const parent = process.env.D1_PARENT === '1'
 const cancellationLane = process.env.D1_N2B_CANCELLATION ?? 'default'
-let fallbackWarnings = 0
-let traceFallbackWarnings = 0
-const originalWarn = console.warn
-console.warn = (...arguments_: unknown[]) => {
-	if (arguments_.some((value) => String(value).includes('falls back'))) {
-		if (
-			arguments_.some((value) =>
-				String(value).includes('unsupported: trace')
-			)
-		)
-			traceFallbackWarnings++
-		else fallbackWarnings++
-	}
-	originalWarn(...arguments_)
-}
 
 if (cancellationLane !== 'default' && cancellationLane !== 'compat')
 	throw new Error(`invalid D1 N+2b cancellation lane: ${cancellationLane}`)
@@ -85,13 +70,11 @@ async function samples(
 async function main() {
 	const warmup = integerArgument('warmup', 50)
 	const requests = integerArgument('requests', 200)
-	const [{ Elysia, t }, { resumeEmit }] = await Promise.all([
-		import(repoRoot + '/src/index.ts'),
-		import(repoRoot + '/src/experimental/resume.ts')
-	])
-	const experimental: Record<string, unknown> = { resumeEmit }
-	if (cancellationLane === 'compat') experimental.cancellation = 'compat'
-	const config = { experimental } as any
+	const { Elysia, t } = await import(repoRoot + '/src/index.ts')
+	const config =
+		cancellationLane === 'compat'
+			? { experimental: { cancellation: 'compat' as const } }
+			: {}
 	let traceCount = 0
 	let afterResponseCount = 0
 	const tracePlugin = new Elysia()
@@ -174,8 +157,6 @@ async function main() {
 			requests,
 			traceCount,
 			afterResponseCount,
-			fallbackWarnings,
-			traceFallbackWarnings,
 			samples: { 'integrated-real-socket-mix-p50-ns': values }
 		})
 	)

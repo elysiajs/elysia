@@ -229,6 +229,14 @@ function maybeCapture(args: {
 		normalize,
 		buildResult
 	} = args
+	const captured: Partial<CapturedValidator> = {
+		precomputeSafe: undefined,
+		precomputedDefault: undefined,
+		precomputeNull: undefined,
+		precomputedObjectDefault: undefined,
+		defaultCloner: undefined,
+		objectDefaultMerger: undefined
+	}
 
 	if (
 		hasCodec &&
@@ -243,34 +251,22 @@ function maybeCapture(args: {
 			externalsShape(buildCoercedFromPlan(originalSchema, plan)) ===
 				externalsShape(schema)
 		)
-			Capture.set(
-				{ method: aot.method, path: aot.path, slot },
-				{ coercePlan: plan }
-			)
-	}
-
-	const defaultFastPathCapture: Partial<CapturedValidator> = {
-		precomputeSafe: undefined,
-		precomputedDefault: undefined,
-		precomputeNull: undefined,
-		precomputedObjectDefault: undefined,
-		defaultCloner: undefined,
-		objectDefaultMerger: undefined
+			captured.coercePlan = plan
 	}
 
 	if (hasDefault) {
 		const defaults = verifyPreallocatableDefault(schema as TSchema)
 		if (defaults) {
-			defaultFastPathCapture.precomputeSafe = true
-			defaultFastPathCapture.precomputedDefault = defaults.pd
-			defaultFastPathCapture.precomputeNull = defaults.pn
-			defaultFastPathCapture.precomputedObjectDefault = defaults.pod
-			defaultFastPathCapture.defaultCloner =
+			captured.precomputeSafe = true
+			captured.precomputedDefault = defaults.pd
+			captured.precomputeNull = defaults.pn
+			captured.precomputedObjectDefault = defaults.pod
+			captured.defaultCloner =
 				defaults.pd !== undefined
 					? buildDefaultClonerSource(defaults.pd)
 					: undefined
 
-			defaultFastPathCapture.objectDefaultMerger =
+			captured.objectDefaultMerger =
 				defaults.ms ??
 				(defaults.pod !== undefined
 					? buildObjectDefaultMergeSource(defaults.pod)
@@ -278,41 +274,26 @@ function maybeCapture(args: {
 		}
 	}
 
-	Capture.set(
-		{ method: aot.method, path: aot.path, slot },
-		defaultFastPathCapture
-	)
-
 	const customErrors = captureCustomErrors(schema)
-	if (customErrors)
-		Capture.set(
-			{ method: aot.method, path: aot.path, slot },
-			{ customErrors }
-		)
+	if (customErrors) captured.customErrors = customErrors
 
 	const innerCodecs = captureStringCodecEntries(
 		schema as TSchema,
 		args.sanitize as any
 	)
-	if (innerCodecs)
-		Capture.set(
-			{ method: aot.method, path: aot.path, slot },
-			{ innerCodecs }
-		)
+	if (innerCodecs) captured.innerCodecs = innerCodecs
 
 	const cf = buildFrozenCheck(buildResult, schema)
-	if (!cf) return
-
-	Capture.set(
-		{ method: aot.method, path: aot.path, slot },
-		{
+	if (cf)
+		Object.assign(captured, {
 			...cf,
 			async: buildResult.external.variables.some(isAsyncPredicate),
 			hasDefault,
 			hasCodec,
 			hasRef
-		}
-	)
+		})
+
+	Capture.set({ method: aot.method, path: aot.path, slot }, captured)
 }
 
 function captureMirror(

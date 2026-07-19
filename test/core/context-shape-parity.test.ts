@@ -4,10 +4,6 @@ import { resolve } from 'node:path'
 
 const DIST_CONTEXT = resolve(import.meta.dir, '../../dist/context.js')
 const DIST_INDEX = resolve(import.meta.dir, '../../dist/index.js')
-const DIST_RESUME = resolve(
-	import.meta.dir,
-	'../../dist/experimental/resume.js'
-)
 
 describe('Context own-field shape parity', () => {
 	it('materializes request-owned response state only on first read', async () => {
@@ -97,56 +93,35 @@ describe('Context own-field shape parity', () => {
 	})
 
 	it('source and distribution handled routes preserve Context shape and identity', async () => {
-		if (
-			!existsSync(DIST_CONTEXT) ||
-			!existsSync(DIST_INDEX) ||
-			!existsSync(DIST_RESUME)
-		)
-			return
+		if (!existsSync(DIST_CONTEXT) || !existsSync(DIST_INDEX)) return
 
 		const srcIdx = await import('../../src/index.ts')
-		const srcResume = await import('../../src/experimental/resume.ts')
 		const distIdx = await import(DIST_INDEX)
-		const distResume = await import(DIST_RESUME)
-		const observe = async (Elysia: any, resumeEmit: any) => {
+		const observe = async (Elysia: any) => {
 			const contexts: any[] = []
-			let fallbackWarnings = 0
-			const originalWarn = console.warn
-			console.warn = (...arguments_: unknown[]) => {
-				if (arguments_.some((value) => String(value).includes('falls back')))
-					fallbackWarnings++
-				originalWarn(...arguments_)
-			}
-			try {
-				const app = new Elysia({ experimental: { resumeEmit } }).get(
-					'/',
-					{
-						transform(context: any) {
-							contexts.push(context)
-						},
-						beforeHandle(context: any) {
-							contexts.push(context)
-						},
-						afterHandle(context: any) {
-							contexts.push(context)
-						}
-					},
-					(context: any) => {
+			const app = new Elysia().get(
+				'/',
+				{
+					transform(context: any) {
 						contexts.push(context)
-						return 'ok'
+					},
+					beforeHandle(context: any) {
+						contexts.push(context)
+					},
+					afterHandle(context: any) {
+						contexts.push(context)
 					}
-				)
-				const response = await app.handle(
-					new Request('http://localhost/')
-				)
-				await response.text()
-			} finally {
-				console.warn = originalWarn
-			}
+				},
+				(context: any) => {
+					contexts.push(context)
+					return 'ok'
+				}
+			)
+			const response = await app.handle(new Request('http://localhost/'))
+			await response.text()
 			const first = contexts[0]
 			return {
 				callbacks: contexts.length,
-				fallbackWarnings,
 				identityMismatches: contexts.filter(
 					(context) => context !== first
 				).length,
@@ -154,13 +129,9 @@ describe('Context own-field shape parity', () => {
 			}
 		}
 
-		const source = await observe(srcIdx.Elysia, srcResume.resumeEmit)
-		const distribution = await observe(
-			distIdx.Elysia,
-			distResume.resumeEmit
-		)
+		const source = await observe(srcIdx.Elysia)
+		const distribution = await observe(distIdx.Elysia)
 		expect(source.callbacks).toBe(4)
-		expect(source.fallbackWarnings).toBe(0)
 		expect(source.identityMismatches).toBe(0)
 		expect(source).toEqual(distribution)
 	})

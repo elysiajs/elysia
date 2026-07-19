@@ -10,8 +10,7 @@ import {
 	parseCookieRawSigned,
 	parseCookieRawLazy,
 	buildCookieJar,
-	signCookieValues,
-	signCookieValuesSync
+	signCookieValues
 } from '../../cookie/utils'
 import { requestId } from '../../utils'
 import {
@@ -88,9 +87,9 @@ export const HANDLER_PARAMS: Record<string, Resolver> = {
 	pcrsg: () => parseCookieRawSigned,
 	pcrl: () => parseCookieRawLazy,
 	bcj: () => buildCookieJar,
-	// `scv` async WebCrypto sign; `scvs` H3 sync `node:crypto` sign.
+	// `scv` may use async WebCrypto; `scvs` is emitted only with sync HMAC.
 	scv: () => signCookieValues,
-	scvs: () => signCookieValuesSync,
+	scvs: () => signCookieValues,
 	// validator
 	va: (c) => c.vali,
 	// returned-error forwarder
@@ -103,7 +102,6 @@ export const HANDLER_PARAMS: Record<string, Resolver> = {
 	s: () => settleResponse,
 	rt: (c) => c.root,
 	// route hook
-	// `link(0, '')`
 	ho: (c) => c.hook,
 	tf: (c) => c.hook.transform,
 	bf: (c) => c.hook.beforeHandle,
@@ -119,20 +117,13 @@ export const HANDLER_PARAMS: Record<string, Resolver> = {
 } as const
 
 export function resolveHandlerParams(names: string[], c: HandlerParamContext) {
-	const length = names.length
-	if (!length) return []
-
-	const out: unknown[] = new Array(length)
-
-	for (let i = 0; i < length; i++) {
-		const resolve = HANDLER_PARAMS[names[i]!]
+	return names.map((name) => {
+		const resolve = HANDLER_PARAMS[name]
 		if (!resolve)
 			throw new Error(
-				`[elysia-aot]: Fail to reconstruct build, missing "${names[i]}" param`
+				`[elysia-aot]: Fail to reconstruct build, missing "${name}" param`
 			)
 
-		out[i] = resolve(c)
-	}
-
-	return out
+		return resolve(c)
+	})
 }

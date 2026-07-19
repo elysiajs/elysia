@@ -85,11 +85,6 @@
 			"import": "./dist/error.mjs",
 			"require": "./dist/error.js"
 		},
-		"./experimental/resume": {
-			"types": "./dist/experimental/resume.d.ts",
-			"import": "./dist/experimental/resume.mjs",
-			"require": "./dist/experimental/resume.js"
-		},
 		"./experimental/validation-plan": {
 			"types": "./dist/experimental/validation-plan.d.ts",
 			"import": "./dist/experimental/validation-plan.mjs",

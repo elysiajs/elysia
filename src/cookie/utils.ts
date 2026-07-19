@@ -274,8 +274,6 @@ export function signCookieValues(
 	return signPending(pending)
 }
 
-export const signCookieValuesSync = signCookieValues
-
 async function signPending(
 	pending: [property: BaseCookie, value: string, secret: string][]
 ): Promise<void> {

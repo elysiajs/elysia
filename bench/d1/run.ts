@@ -543,17 +543,6 @@ async function runFixtureBlock(
 			throw new Error(
 				`${fixture} cancellation lane mismatch: ${output.cancellationLane} !== ${expected}`
 			)
-		if (!Number.isInteger(output.fallbackWarnings))
-			throw new Error(
-				`${fixture} did not report resume fallback warnings`
-			)
-		if (
-			descriptor.commit !== historicalBaselineByOwner['N+2b'] &&
-			output.fallbackWarnings !== 0
-		)
-			throw new Error(
-				`${fixture} candidate unexpectedly fell back from resume lowering ${output.fallbackWarnings} time(s)`
-			)
 		if (
 			fixture === 'runtime-lowering' &&
 			descriptor.env.D1_N2B_CANDIDATE === '1' &&

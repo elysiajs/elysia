@@ -391,7 +391,7 @@ const toStatusBased = (
 const isAsyncStandardSchema = (schema: StandardSchemaV1Like) =>
 	isAsyncFunction((schema['~standard'] as any).validate)
 
-const asyncStandardSchemaError = () =>
+export const asyncStandardSchemaError = () =>
 	new Error(
 		'[Elysia] An asynchronous Standard Schema was used where only synchronous validation is supported.'
 	)

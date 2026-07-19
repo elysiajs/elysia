@@ -1,12 +1,8 @@
 import { describe, expect, it } from 'bun:test'
 
 import { Elysia } from '../../src'
-import { resumeEmit } from '../../src/experimental/resume'
 
-const emitters = [
-	['jit', {}],
-	['resume', { resumeEmit }]
-] as const
+const emitters = [['jit', {}]] as const
 
 const policies = ['suspension', 'compat'] as const
 

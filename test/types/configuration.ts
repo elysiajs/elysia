@@ -1,11 +1,5 @@
 import { Elysia } from '../../src'
-import { resumeEmit } from '../../src/experimental/resume'
 import { validationPlan } from '../../src/experimental/validation-plan'
-
-// Resume emission requires the explicitly imported implementation.
-new Elysia({ experimental: { resumeEmit } })
-// @ts-expect-error a boolean would make the optional implementation part of every bundle
-new Elysia({ experimental: { resumeEmit: true } })
 
 new Elysia({ experimental: { cancellation: 'suspension' } })
 new Elysia({ experimental: { cancellation: 'compat' } })

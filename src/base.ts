@@ -608,32 +608,27 @@ export class Elysia<
 		nameOrDecorators?: unknown,
 		value?: unknown
 	): AnyElysia {
-		switch (arguments.length) {
+		return this.#dispatchField('decorator', arguments)
+	}
+
+	#dispatchField(field: 'decorator' | 'store', args: IArguments): this {
+		const first = args[0]
+
+		switch (args.length) {
 			case 1:
-				return this.#decorate('append', '', typeOrNameOrDecorators)
+				return this.#setField(field, 'append', '', first)
 
 			case 2:
-				if (
-					typeOrNameOrDecorators === 'append' ||
-					typeOrNameOrDecorators === 'override'
-				)
-					return this.#decorate(
-						typeOrNameOrDecorators,
-						'',
-						nameOrDecorators
-					)
-
-				return this.#decorate(
-					'append',
-					typeOrNameOrDecorators as string,
-					nameOrDecorators
-				)
+				return first === 'append' || first === 'override'
+					? this.#setField(field, first, '', args[1])
+					: this.#setField(field, 'append', first as string, args[1])
 
 			case 3:
-				return this.#decorate(
-					typeOrNameOrDecorators as ContextAppendType,
-					nameOrDecorators as string,
-					value
+				return this.#setField(
+					field,
+					first as ContextAppendType,
+					args[1] as string,
+					args[2]
 				)
 		}
 
@@ -706,10 +701,6 @@ export class Elysia<
 
 				return this
 		}
-	}
-
-	#decorate(as: ContextAppendType, name: string, value: unknown): this {
-		return this.#setField('decorator', as, name, value)
 	}
 
 	/**
@@ -843,36 +834,7 @@ export class Elysia<
 		nameOrStore?: unknown,
 		value?: unknown
 	): AnyElysia {
-		switch (arguments.length) {
-			case 1:
-				return this.#state('append', '', typeOrNameOrStore)
-
-			case 2:
-				if (
-					typeOrNameOrStore === 'append' ||
-					typeOrNameOrStore === 'override'
-				)
-					return this.#state(typeOrNameOrStore, '', nameOrStore)
-
-				return this.#state(
-					'append',
-					typeOrNameOrStore as string,
-					nameOrStore
-				)
-
-			case 3:
-				return this.#state(
-					typeOrNameOrStore as ContextAppendType,
-					nameOrStore as string,
-					value
-				)
-		}
-
-		return this
-	}
-
-	#state(as: ContextAppendType, name: string, value: unknown): this {
-		return this.#setField('store', as, name, value)
+		return this.#dispatchField('store', arguments)
 	}
 
 	headers(headers: Record<string, string>) {
@@ -944,37 +906,6 @@ export class Elysia<
 		>
 	): this
 	parse(name: string): this
-	parse(
-		scope: 'local',
-		fn: MaybeArray<
-			BodyHandler<
-				MergeSchema<{}, {}, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>
-			>
-		>
-	): this
-	parse(
-		scope: 'plugin',
-		fn: MaybeArray<
-			BodyHandler<
-				MergeSchema<{}, {}, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>,
-				undefined,
-				'plugin'
-			>
-		>
-	): this
-	parse(
-		scope: 'global',
-		fn: MaybeArray<
-			BodyHandler<
-				MergeSchema<{}, {}, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>,
-				undefined,
-				'global'
-			>
-		>
-	): this
 	parse<const HookScope extends EventScope>(
 		scope: HookScope,
 		fn: MaybeArray<
@@ -1074,37 +1005,6 @@ export class Elysia<
 			>
 		>
 	): this
-	transform(
-		scope: 'local',
-		fn: MaybeArray<
-			TransformHandler<
-				MergeSchema<{}, {}, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>
-			>
-		>
-	): this
-	transform(
-		scope: 'plugin',
-		fn: MaybeArray<
-			TransformHandler<
-				MergeSchema<{}, {}, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>,
-				undefined,
-				'plugin'
-			>
-		>
-	): this
-	transform(
-		scope: 'global',
-		fn: MaybeArray<
-			TransformHandler<
-				MergeSchema<{}, {}, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>,
-				undefined,
-				'global'
-			>
-		>
-	): this
 	transform<const HookScope extends EventScope>(
 		scope: HookScope,
 		fn: MaybeArray<
@@ -1130,76 +1030,6 @@ export class Elysia<
 	>(
 		fn: Handler
 	): LocalHookReturn<
-		BasePath,
-		Scope,
-		Singleton,
-		Definitions,
-		Metadata,
-		Routes,
-		Ephemeral,
-		Volatile,
-		ElysiaHandlerToResponseSchemaAmbiguous<Handler>
-	>
-
-	beforeHandle<
-		const Handler extends MaybeArray<
-			OptionalHandler<
-				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>
-			>
-		>
-	>(
-		scope: 'local',
-		fn: Handler
-	): LocalHookReturn<
-		BasePath,
-		Scope,
-		Singleton,
-		Definitions,
-		Metadata,
-		Routes,
-		Ephemeral,
-		Volatile,
-		ElysiaHandlerToResponseSchemaAmbiguous<Handler>
-	>
-
-	beforeHandle<
-		const Handler extends MaybeArray<
-			OptionalHandler<
-				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>,
-				undefined,
-				'plugin'
-			>
-		>
-	>(
-		scope: 'plugin',
-		fn: Handler
-	): PluginHookReturn<
-		BasePath,
-		Scope,
-		Singleton,
-		Definitions,
-		Metadata,
-		Routes,
-		Ephemeral,
-		Volatile,
-		ElysiaHandlerToResponseSchemaAmbiguous<Handler>
-	>
-
-	beforeHandle<
-		const Handler extends MaybeArray<
-			OptionalHandler<
-				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>,
-				undefined,
-				'global'
-			>
-		>
-	>(
-		scope: 'global',
-		fn: Handler
-	): GlobalHookReturn<
 		BasePath,
 		Scope,
 		Singleton,
@@ -1254,89 +1084,6 @@ export class Elysia<
 			>
 		) => MaybePromise<Derivative>
 	): LocalHookReturn<
-		BasePath,
-		Scope,
-		Singleton,
-		Definitions,
-		Metadata,
-		Routes,
-		Ephemeral,
-		Volatile,
-		ExtractErrorFromHandle<Derivative>,
-		ExcludeElysiaResponse<Derivative>
-	>
-
-	derive<
-		const Derivative extends
-			| Record<string, unknown>
-			| ElysiaStatus<any, any, any>
-			| void
-	>(
-		scope: 'local',
-		transform: (
-			context: Context<
-				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>
-			>
-		) => MaybePromise<Derivative>
-	): LocalHookReturn<
-		BasePath,
-		Scope,
-		Singleton,
-		Definitions,
-		Metadata,
-		Routes,
-		Ephemeral,
-		Volatile,
-		ExtractErrorFromHandle<Derivative>,
-		ExcludeElysiaResponse<Derivative>
-	>
-
-	// Scoped (`'plugin'`): accumulate into the Ephemeral derive channel.
-	derive<
-		const Derivative extends
-			| Record<string, unknown>
-			| ElysiaStatus<any, any, any>
-			| void
-	>(
-		scope: 'plugin',
-		transform: (
-			context: LifecycleContext<
-				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>,
-				undefined,
-				'plugin'
-			>
-		) => MaybePromise<Derivative>
-	): PluginHookReturn<
-		BasePath,
-		Scope,
-		Singleton,
-		Definitions,
-		Metadata,
-		Routes,
-		Ephemeral,
-		Volatile,
-		ExtractErrorFromHandle<Derivative>,
-		ExcludeElysiaResponse<Derivative>
-	>
-
-	derive<
-		const Derivative extends
-			| Record<string, unknown>
-			| ElysiaStatus<any, any, any>
-			| void
-	>(
-		scope: 'global',
-		transform: (
-			context: LifecycleContext<
-				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>,
-				undefined,
-				'global'
-			>
-		) => MaybePromise<Derivative>
-	): GlobalHookReturn<
 		BasePath,
 		Scope,
 		Singleton,
@@ -1431,114 +1178,6 @@ export class Elysia<
 	>
 
 	mapDerive<
-		const Derivative extends
-			| Record<string, unknown>
-			| ElysiaStatus<any, any, any>
-			| void
-	>(
-		scope: 'local',
-		transform: (
-			context: Context<
-				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>
-			>
-		) => MaybePromise<Derivative>
-	): Elysia<
-		BasePath,
-		Scope,
-		Singleton,
-		Definitions,
-		Metadata,
-		Routes,
-		Ephemeral,
-		{
-			derive: ExcludeElysiaResponse<Derivative>
-			schema: Volatile['schema']
-			schemas: Volatile['schemas']
-			response: UnionResponseStatus<
-				Volatile['response'],
-				ExtractErrorFromHandle<Derivative>
-			>
-			error: Volatile['error']
-		}
-	>
-
-	mapDerive<
-		const Derivative extends
-			| Record<string, unknown>
-			| ElysiaStatus<any, any, any>
-			| void
-	>(
-		scope: 'plugin',
-		transform: (
-			context: LifecycleContext<
-				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>,
-				undefined,
-				'plugin'
-			>
-		) => MaybePromise<Derivative>
-	): Elysia<
-		BasePath,
-		Scope,
-		Singleton,
-		Definitions,
-		Metadata,
-		Routes,
-		{
-			derive: ExcludeElysiaResponse<Derivative>
-			schema: Ephemeral['schema']
-			schemas: Ephemeral['schemas']
-			response: UnionResponseStatus<
-				Ephemeral['response'],
-				ExtractErrorFromHandle<Derivative>
-			>
-			error: Ephemeral['error']
-		},
-		Volatile
-	>
-
-	mapDerive<
-		const Derivative extends
-			| Record<string, unknown>
-			| ElysiaStatus<any, any, any>
-			| void
-	>(
-		scope: 'global',
-		transform: (
-			context: LifecycleContext<
-				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>,
-				undefined,
-				'global'
-			>
-		) => MaybePromise<Derivative>
-	): Elysia<
-		BasePath,
-		Scope,
-		{
-			decorator: Singleton['decorator']
-			store: Singleton['store']
-			derive: ExcludeElysiaResponse<Derivative>
-		},
-		Definitions,
-		{
-			schema: Metadata['schema']
-			schemas: Metadata['schemas']
-			macro: Metadata['macro']
-			macroFn: Metadata['macroFn']
-			parser: Metadata['parser']
-			response: UnionResponseStatus<
-				Metadata['response'],
-				ExtractErrorFromHandle<Derivative>
-			>
-		},
-		Routes,
-		Ephemeral,
-		Volatile
-	>
-
-	mapDerive<
 		const HookScope extends EventScope,
 		const Derivative extends
 			| Record<string, unknown>
@@ -1610,76 +1249,6 @@ export class Elysia<
 	>
 
 	afterHandle<
-		const Handler extends MaybeArray<
-			AfterHandler<
-				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>
-			>
-		>
-	>(
-		scope: 'local',
-		fn: Handler
-	): LocalHookReturn<
-		BasePath,
-		Scope,
-		Singleton,
-		Definitions,
-		Metadata,
-		Routes,
-		Ephemeral,
-		Volatile,
-		ElysiaHandlerToResponseSchemaAmbiguous<Handler>
-	>
-
-	afterHandle<
-		const Handler extends MaybeArray<
-			AfterHandler<
-				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>,
-				undefined,
-				'plugin'
-			>
-		>
-	>(
-		scope: 'plugin',
-		fn: Handler
-	): PluginHookReturn<
-		BasePath,
-		Scope,
-		Singleton,
-		Definitions,
-		Metadata,
-		Routes,
-		Ephemeral,
-		Volatile,
-		ElysiaHandlerToResponseSchemaAmbiguous<Handler>
-	>
-
-	afterHandle<
-		const Handler extends MaybeArray<
-			AfterHandler<
-				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>,
-				undefined,
-				'global'
-			>
-		>
-	>(
-		scope: 'global',
-		fn: Handler
-	): GlobalHookReturn<
-		BasePath,
-		Scope,
-		Singleton,
-		Definitions,
-		Metadata,
-		Routes,
-		Ephemeral,
-		Volatile,
-		ElysiaHandlerToResponseSchemaAmbiguous<Handler>
-	>
-
-	afterHandle<
 		const HookScope extends EventScope,
 		const Handler extends MaybeArray<
 			AfterHandler<
@@ -1717,37 +1286,6 @@ export class Elysia<
 			>
 		>
 	): this
-	mapResponse(
-		scope: 'local',
-		fn: MaybeArray<
-			MapResponse<
-				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>
-			>
-		>
-	): this
-	mapResponse(
-		scope: 'plugin',
-		fn: MaybeArray<
-			MapResponse<
-				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>,
-				undefined,
-				'plugin'
-			>
-		>
-	): this
-	mapResponse(
-		scope: 'global',
-		fn: MaybeArray<
-			MapResponse<
-				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>,
-				undefined,
-				'global'
-			>
-		>
-	): this
 	mapResponse<const HookScope extends EventScope>(
 		scope: HookScope,
 		fn: MaybeArray<
@@ -1767,31 +1305,6 @@ export class Elysia<
 		fn: AfterResponseHandler<
 			HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
 			HookContextSingleton<Singleton, Ephemeral, Volatile>
-		>
-	): this
-	afterResponse(
-		scope: 'local',
-		fn: AfterResponseHandler<
-			HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
-			HookContextSingleton<Singleton, Ephemeral, Volatile>
-		>
-	): this
-	afterResponse(
-		scope: 'plugin',
-		fn: AfterResponseHandler<
-			HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
-			HookContextSingleton<Singleton, Ephemeral, Volatile>,
-			undefined,
-			'plugin'
-		>
-	): this
-	afterResponse(
-		scope: 'global',
-		fn: AfterResponseHandler<
-			HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
-			HookContextSingleton<Singleton, Ephemeral, Volatile>,
-			undefined,
-			'global'
 		>
 	): this
 	afterResponse<const HookScope extends EventScope>(
@@ -2293,9 +1806,6 @@ export class Elysia<
 	}
 
 	trace(fn: TraceHandler<any, any>): this
-	trace(scope: 'local', fn: TraceHandler<any, any>): this
-	trace(scope: 'plugin', fn: TraceHandler<any, any>): this
-	trace(scope: 'global', fn: TraceHandler<any, any>): this
 	trace<const HookScope extends EventScope>(
 		scope: HookScope,
 		fn: TraceHandler<any, any>
@@ -6584,10 +6094,7 @@ export class Elysia<
 
 		this.#initMap()
 		const methods = this['~map']!
-		const table = (this['~routeTable'] = buildRouteTable(
-			this['~routes'],
-			this.#routeSources
-		))
+		const table = (this['~routeTable'] = buildRouteTable(this['~routes']))
 		const method = table.method
 		const path = table.path
 		const flags = table.flags

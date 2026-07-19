@@ -103,12 +103,6 @@ Feature:
 
 - Add top-level `{ introspect: true }` so apps and introspection plugins can
   retain the metadata needed after sealing.
-- Add the preview resume emitter as an opt-in capability from
-  `elysia/experimental/resume`; default bundles no longer include its compiler
-  code.
-- Add opt-in `experimental.lazyCompose` to defer synchronous route-copy work
-  until build time for deeply nested plugin graphs. Async plugins, promises,
-  and cyclic graphs fail loudly under the flag.
 - `t.File({ type })` / `t.Files({ type })` content-detection failures now report the offending property path (`property: '/avatar'`, `/files/0`) instead of an empty path — the validated value is identity-walked only when a detection fails
 - Adapter v2
 - sub type validator

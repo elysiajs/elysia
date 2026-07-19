@@ -115,8 +115,6 @@ it('emits finite samples and preserves both cancellation descriptors', () => {
 		expect(output.blockedWarmups).toBe(1)
 		expect(output.blockedRequests).toBe(10)
 		expect(output.blockedFullGcSnapshots).toBe(5)
-		expect(Number.isInteger(output.fallbackWarnings)).toBeTrue()
-		expect(output.traceFallbackWarnings).toBe(0)
 		for (const metric of required)
 			expect(
 				output.samples[metric].length > 0 &&
@@ -139,7 +137,6 @@ it('runs the integrated runtime mix over a socket or explicit fallback', () => {
 	expect(output.cancellationLane).toBe('default')
 	expect(output.traceCount).toBe(1)
 	expect(output.afterResponseCount).toBe(1)
-	expect(output.traceFallbackWarnings).toBe(0)
 	expect(
 		output.samples['integrated-real-socket-mix-p50-ns'].every(
 			Number.isFinite

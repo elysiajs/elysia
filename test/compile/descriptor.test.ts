@@ -6,7 +6,6 @@ import {
 	routeDescriptors,
 	type RouteDescriptor
 } from '../../src/compile/handler/descriptor'
-import { resumeEmit } from '../../src/experimental/resume'
 
 // A request compiles the route and publishes the facts used by code generation.
 
@@ -166,10 +165,7 @@ describe('route descriptor', () => {
 		expect(descriptors.get('GET /dynamic')?.headerKeys).toBeNull()
 	})
 
-	for (const [emitter, experimental] of [
-		['jit', undefined],
-		['resume', { resumeEmit }]
-	] as const) {
+	for (const [emitter, experimental] of [['jit', undefined]] as const) {
 		it(`${emitter} consumes the sealed channel mask`, async () => {
 			const app = new Elysia({
 				introspect: true,
