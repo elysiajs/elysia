@@ -56,6 +56,7 @@ const fixtureIds = [
 	'validation',
 	'runtime-lowering',
 	'runtime-http',
+	'response-body-cookie',
 	'executables',
 	'native-table'
 ] as const
@@ -70,11 +71,13 @@ const leafPerfOwners = new Set([
 	'N+1',
 	'N+1-query',
 	'N+2b',
-	'N+2b-q12'
+	'N+2b-q12',
+	'N+2c'
 ])
 const historicalBaselineByOwner: Record<string, string> = {
 	C4a: '340322120836100ea15f67d6f6b5708e0945d1db',
-	'N+2b': 'f6ed34632a997e17b09b91da1c400a93557b5815'
+	'N+2b': 'f6ed34632a997e17b09b91da1c400a93557b5815',
+	'N+2c': '697c0286'
 }
 const historicalCandidateByOwner: Record<string, string> = {
 	C4a: 'e8c51e63407ea3f59479db14500f04cca742ba2b'
@@ -104,6 +107,7 @@ function leafPerfEnvironment(owners: Set<string> | undefined) {
 		environment.D1_N2B_CANCELLATION = 'default'
 		environment.D1_N2B_CANDIDATE = '1'
 	}
+	if (owners?.has('N+2c')) environment.D1_N2C_CANDIDATE = '1'
 
 	return environment
 }
@@ -619,7 +623,8 @@ function rawMetricSamples(
 		entry.fixture === 'formdata' ||
 		entry.fixture === 'body-presence' ||
 		entry.fixture === 'validation' ||
-		entry.fixture === 'runtime-lowering'
+		entry.fixture === 'runtime-lowering' ||
+		entry.fixture === 'response-body-cookie'
 	) {
 		const samples = output.samples?.[entry.metric]
 		if (!Array.isArray(samples) || !samples.length)

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 
-import { Elysia } from '../../src'
+import { borrow, Elysia } from '../../src'
 import { createAdapter } from '../../src/adapter'
 import { materializeSetHeaders } from '../../src/adapter/utils'
 import { WebStandardAdapter } from '../../src/adapter/web-standard'
@@ -65,9 +65,11 @@ describe('application default headers', () => {
 	})
 
 	it('preserves a reusable Response body and its own headers', async () => {
-		const shared = new Response('payload', {
-			headers: { 'x-response': 'yes' }
-		})
+		const shared = borrow(
+			new Response('payload', {
+				headers: { 'x-response': 'yes' }
+			})
+		)
 		const app = new Elysia()
 			.headers({ 'x-default': 'base' })
 			.get('/', () => shared)

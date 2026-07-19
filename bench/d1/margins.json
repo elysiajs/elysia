@@ -1326,5 +1326,82 @@
 		"status": "active",
 		"margin": 0,
 		"tolerance": 0
+	},
+	{
+		"fixture": "response-body-cookie",
+		"metric": "owned-patched-response-p50-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"claim": "improvement",
+		"sampleRule": "8 randomized paired clean child-process blocks; historical baseline 697c0286 versus candidate revision; median of 200 samples after 50 warmups; each sample averages 25 app.handle calls returning a fresh request-owned Response with one patched header and consumes every body; header and body correctness preflight per block",
+		"owner": "N+2c",
+		"status": "active",
+		"margin": 0.15
+	},
+	{
+		"fixture": "response-body-cookie",
+		"metric": "owned-patched-response-retained-heap-bytes-per-request",
+		"kind": "memory",
+		"direction": "lower",
+		"claim": "improvement",
+		"sampleRule": "8 randomized paired clean child processes; historical baseline 697c0286 versus candidate revision; compiled and warmed route; full-GC heap delta for 256 retained unconsumed fresh request-owned Responses with one patched header, divided by response count; every retained body and header verified and consumed after the observation snapshot",
+		"owner": "N+2c",
+		"status": "active",
+		"margin": 0.03
+	},
+	{
+		"fixture": "response-body-cookie",
+		"metric": "owned-patched-response-retained-objects-per-request",
+		"kind": "memory",
+		"direction": "lower",
+		"claim": "improvement",
+		"sampleRule": "8 randomized paired clean child processes; historical baseline 697c0286 versus candidate revision; compiled and warmed route; full-GC JSC object-count delta for 256 retained unconsumed fresh request-owned Responses with one patched header, divided by response count; every retained body and header verified and consumed after the observation snapshot",
+		"owner": "N+2c",
+		"status": "active",
+		"margin": 0.01
+	},
+	{
+		"fixture": "response-body-cookie",
+		"metric": "certified-byte-stream-p50-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"claim": "improvement",
+		"sampleRule": "8 randomized paired clean child-process blocks; historical baseline 697c0286 uses the same unmarked generic ReadableStream path and candidate certifies the same Uint8Array stream with bytes(); median of 200 samples after 50 warmups; each sample averages 25 app.handle calls and consumes every 256-byte body; exact body correctness preflight per block",
+		"owner": "N+2c",
+		"status": "active",
+		"margin": 0.12
+	},
+	{
+		"fixture": "response-body-cookie",
+		"metric": "cookie-ten-read-one-p50-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"claim": "improvement",
+		"sampleRule": "8 randomized paired clean child-process blocks; historical baseline 697c0286 versus candidate revision; median of 200 samples after 50 warmups; each sample averages 25 body-consumed app.handle calls with ten incoming cookies while the handler reads only c0.value; exact returned-cookie correctness preflight per block",
+		"owner": "N+2c",
+		"status": "active",
+		"margin": 0.1
+	},
+	{
+		"fixture": "response-body-cookie",
+		"metric": "cookie-ten-read-one-retained-heap-bytes-per-request",
+		"kind": "memory",
+		"direction": "lower",
+		"claim": "improvement",
+		"sampleRule": "8 randomized paired clean child processes; historical baseline 697c0286 versus candidate revision; full-GC heap delta for 1000 retained cookie jars after body-consumed app.handle calls with ten incoming cookies and only c0.value read, divided by request count; exact returned-cookie correctness checked for every request",
+		"owner": "N+2c",
+		"status": "active",
+		"margin": 0.01
+	},
+	{
+		"fixture": "response-body-cookie",
+		"metric": "cookie-ten-read-one-retained-objects-per-request",
+		"kind": "memory",
+		"direction": "lower",
+		"claim": "improvement",
+		"sampleRule": "8 randomized paired clean child processes; historical baseline 697c0286 versus candidate revision; full-GC JSC object-count delta for 1000 retained cookie jars after body-consumed app.handle calls with ten incoming cookies and only c0.value read, divided by request count; exact returned-cookie correctness checked for every request",
+		"owner": "N+2c",
+		"status": "active",
+		"margin": 0.005
 	}
 ]

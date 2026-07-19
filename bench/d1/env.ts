@@ -26,6 +26,7 @@ export const BENCH_SOURCE_FILES = [
 	'bench/d1/fixtures/retained.ts',
 	'bench/d1/fixtures/runtime-http.ts',
 	'bench/d1/fixtures/runtime-lowering.ts',
+	'bench/d1/fixtures/response-body-cookie.ts',
 	'bench/d1/fixtures/validation.ts',
 	'bench/d1/fixtures/utils.ts',
 	'example/stress/utils.ts',

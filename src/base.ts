@@ -4575,20 +4575,7 @@ export class Elysia<
 		return this.#add('GET', path, hookOrFn, fn)
 	}
 
-	/**
-	 * ### post
-	 * Register handler for path with method [POST]
-	 *
-	 * ---
-	 * @example
-	 * ```typescript
-	 * import { Elysia, t } from 'elysia'
-	 *
-	 * new Elysia()
-	 *     .post('/', () => 'hi')
-	 *     .post('/hook', { query: t.Object({ name: t.String() }) }, () => 'hi')
-	 * ```
-	 */
+	/** Register a handler for a path with method [POST]. */
 	post<
 		const Path extends string,
 		const Input extends RouteInput<Definitions, Metadata>,
@@ -4679,20 +4666,7 @@ export class Elysia<
 		return this.#add('POST', path, hookOrFn, fn)
 	}
 
-	/**
-	 * ### put
-	 * Register handler for path with method [PUT]
-	 *
-	 * ---
-	 * @example
-	 * ```typescript
-	 * import { Elysia, t } from 'elysia'
-	 *
-	 * new Elysia()
-	 *     .put('/', () => 'hi')
-	 *     .put('/hook', { query: t.Object({ name: t.String() }) }, () => 'hi')
-	 * ```
-	 */
+	/** Register a handler for a path with method [PUT]. */
 	put<
 		const Path extends string,
 		const Input extends RouteInput<Definitions, Metadata>,
@@ -4783,20 +4757,7 @@ export class Elysia<
 		return this.#add('PUT', path, hookOrFn, fn)
 	}
 
-	/**
-	 * ### patch
-	 * Register handler for path with method [PATCH]
-	 *
-	 * ---
-	 * @example
-	 * ```typescript
-	 * import { Elysia, t } from 'elysia'
-	 *
-	 * new Elysia()
-	 *     .patch('/', () => 'hi')
-	 *     .patch('/hook', { query: t.Object({ name: t.String() }) }, () => 'hi')
-	 * ```
-	 */
+	/** Register a handler for a path with method [PATCH]. */
 	patch<
 		const Path extends string,
 		const Input extends RouteInput<Definitions, Metadata>,
@@ -4887,20 +4848,7 @@ export class Elysia<
 		return this.#add('PATCH', path, hookOrFn, fn)
 	}
 
-	/**
-	 * ### delete
-	 * Register handler for path with method [DELETE]
-	 *
-	 * ---
-	 * @example
-	 * ```typescript
-	 * import { Elysia, t } from 'elysia'
-	 *
-	 * new Elysia()
-	 *     .delete('/', () => 'hi')
-	 *     .delete('/hook', { query: t.Object({ name: t.String() }) }, () => 'hi')
-	 * ```
-	 */
+	/** Register a handler for a path with method [DELETE]. */
 	delete<
 		const Path extends string,
 		const Input extends RouteInput<Definitions, Metadata>,
@@ -4991,20 +4939,7 @@ export class Elysia<
 		return this.#add('DELETE', path, hookOrFn, fn)
 	}
 
-	/**
-	 * ### options
-	 * Register handler for path with method [OPTIONS]
-	 *
-	 * ---
-	 * @example
-	 * ```typescript
-	 * import { Elysia, t } from 'elysia'
-	 *
-	 * new Elysia()
-	 *     .options('/', () => 'hi')
-	 *     .options('/hook', { query: t.Object({ name: t.String() }) }, () => 'hi')
-	 * ```
-	 */
+	/** Register a handler for a path with method [OPTIONS]. */
 	options<
 		const Path extends string,
 		const Input extends RouteInput<Definitions, Metadata>,
@@ -5095,20 +5030,7 @@ export class Elysia<
 		return this.#add('OPTIONS', path, hookOrFn, fn)
 	}
 
-	/**
-	 * ### head
-	 * Register handler for path with method [HEAD]
-	 *
-	 * ---
-	 * @example
-	 * ```typescript
-	 * import { Elysia, t } from 'elysia'
-	 *
-	 * new Elysia()
-	 *     .head('/', () => 'hi')
-	 *     .head('/hook', { query: t.Object({ name: t.String() }) }, () => 'hi')
-	 * ```
-	 */
+	/** Register a handler for a path with method [HEAD]. */
 	head<
 		const Path extends string,
 		const Input extends RouteInput<Definitions, Metadata>,
@@ -5199,19 +5121,7 @@ export class Elysia<
 		return this.#add('HEAD', path, hookOrFn, fn)
 	}
 
-	/**
-	 * ### method
-	 * Register handler for path with custom method
-	 *
-	 * ---
-	 * @example
-	 * ```typescript
-	 * import { Elysia, t } from 'elysia'
-	 *
-	 * new Elysia()
-	 *     .method('Elysia', '/', 'hi')
-	 * ```
-	 */
+	/** Register a handler for a path with a custom method. */
 	method<
 		const Method extends HTTPMethod,
 		const Path extends string,

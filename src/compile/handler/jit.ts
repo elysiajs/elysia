@@ -2,8 +2,6 @@ import type { AnyElysia } from '../../base'
 
 import type { ElysiaAdapter } from '../../adapter'
 
-import type { Validator } from '../../validator'
-
 import { isAsyncFunction } from '../utils'
 
 import {
@@ -15,13 +13,13 @@ import {
 	signCookieValues
 } from '../../cookie/utils'
 
-import { RouteEffect, type RouteCompileState } from './descriptor'
-
 import {
-	ElysiaStatus,
-	ParseError,
-	ValidationError
-} from '../../error'
+	RouteEffect,
+	type BodyPlan,
+	type RouteCompileState
+} from './descriptor'
+
+import { ElysiaStatus, ParseError, ValidationError } from '../../error'
 import { fallbackResponse } from '../../handler/error'
 import {
 	finalizeRouteError,
@@ -50,7 +48,6 @@ import {
 	normalizeContentType,
 	tee
 } from '../../adapter/utils'
-import { ELYSIA_TYPES } from '../../type/constants'
 import { createTracer, type TraceEvent } from '../../trace'
 import { createTraceCodegen } from './trace-codegen'
 import { Capture } from '../aot'
@@ -60,12 +57,7 @@ import { requestId } from '../../utils'
 
 import type { Link } from './utils'
 import type { Context } from '../../context'
-import type {
-	BodyHandler,
-	ContentType,
-	CompiledHandler,
-	AnyLocalHook
-} from '../../types'
+import type { CompiledHandler, AnyLocalHook } from '../../types'
 
 let captureHeaderShorthand: boolean | undefined
 export const setCaptureHeaderShorthand = (value: boolean | undefined): void => {
@@ -81,7 +73,9 @@ export function buildSyncAfterResponse(
 		`function _fin(c,_r){\n` +
 		`if(_r instanceof Error)throw _r\n` +
 		`if(_r&&(_r[Symbol.iterator]||_r[Symbol.asyncIterator])&&typeof _r.next==='function'){\n` +
+		`const _sse=_r.sse===true\n` +
 		`const _s=tee(_r,2)\n` +
+		`if(_sse)_s[0].sse=true\n` +
 		`return _fin2(c,_s[0],_s[1])\n` +
 		`}\n` +
 		`return _fin2(c,_r,undefined)\n` +
@@ -146,31 +140,21 @@ function builtinParser(
 
 export function emitBodyParse(
 	adapter: ElysiaAdapter['parse'],
-	hook: AnyLocalHook | undefined,
-	bodyVali: Validator | undefined,
+	plan: BodyPlan,
+	parserHook: AnyLocalHook | undefined,
 	hasHeaders: boolean,
 	link: Link,
 	report?: TraceReporter,
 	flatFormDataFastPath = false,
 	suspensionMark?: string
 ) {
-	let parsers = hook?.parse
 	const boundary = (expression: string) =>
 		suspensionMark
 			? `(${suspensionMark},await ${expression})`
 			: `await ${expression}`
 
-	if (parsers && typeof parsers === 'function')
-		parsers = [parsers] as ContentType[] | BodyHandler[]
-
-	if (
-		typeof parsers === 'string' ||
-		// is probably array
-		(parsers?.length === 1 && typeof parsers[0] === 'string')
-	) {
-		if (parsers.length === 1) parsers = parsers[0] as any
-
-		const builtinName = parsers as string
+	if (plan.mode === 'builtin') {
+		const builtinName = plan.builtin!
 		const child = report?.resolveChild(builtinName)
 		const begin = child ? child.begin : ''
 		const end = child ? child.end() : ''
@@ -179,7 +163,7 @@ export function emitBodyParse(
 			begin +
 			builtinParser(
 				adapter,
-				parsers as string,
+				builtinName,
 				link,
 				flatFormDataFastPath,
 				suspensionMark
@@ -188,29 +172,20 @@ export function emitBodyParse(
 		)
 	}
 
-	let hasFn = false
-	let hasType = false
-	if (parsers)
-		for (let i = 0; i < parsers.length; i++)
-			if (typeof parsers[i] === 'function') {
-				hasFn = true
-				break
-			}
-
-	const bodyKind = hasFn ? undefined : bodyMediaKind(bodyVali)
+	const parsers = parserHook?.parse as any[] | undefined
 
 	let code =
 		`let ct=((${hasHeaders ? "c.headers['content-type']" : "c.request.headers.get('content-type')"})||'')\n` +
 		'let cti=ct.indexOf(";")\n' +
 		'if(cti!==-1)ct=ct.slice(0,cti)\n' +
-		(hasFn ? 'c.contentType=ct\n' : '')
+		(plan.custom ? 'c.contentType=ct\n' : '')
 
-	if (parsers)
-		for (let i = 0; i < parsers.length; i++) {
-			const parser = parsers[i]
+	if (plan.mode === 'chain')
+		for (let i = 0; i < plan.parserCount; i++) {
+			const parser = parsers![i]
 
 			if (typeof parser === 'function') {
-				link(hook, 'ho')
+				link(parserHook, 'ho')
 
 				const child = report?.resolveChild(
 					(parser as any).name || 'anonymous'
@@ -227,8 +202,6 @@ export function emitBodyParse(
 				if (child) code += child.end()
 				if (i) code += '}\n'
 			} else {
-				hasType = true
-
 				const child = report?.resolveChild(parser as string)
 				if (i) code += 'if(!hasBody){\n'
 				if (child) code += child.begin
@@ -245,17 +218,18 @@ export function emitBodyParse(
 			}
 		}
 
-	if (!hasType) {
+	if (plan.fallback) {
 		const child = report?.resolveChild('default')
 		const begin = child ? child.begin : ''
 		const end = child ? child.end() : ''
-		const guard = bodyVali ? 'ct' : 'ct&&hb(c.request)'
+		const guard =
+			plan.presence === 'content-type' ? 'ct' : 'ct&&hb(c.request)'
 		const mediaGuard =
-			bodyKind === 1
+			plan.mediaKind === 1
 				? "cj||ce==='application/x-www-form-urlencoded'||ce==='multipart/form-data'"
-				: bodyKind === 2
+				: plan.mediaKind === 2
 					? "cj||(ce.charCodeAt(0)===116&&ce.startsWith('text/'))"
-					: bodyKind === 3
+					: plan.mediaKind === 3
 						? "ce==='multipart/form-data'||ce==='application/octet-stream'"
 						: undefined
 
@@ -270,72 +244,16 @@ export function emitBodyParse(
 		}
 
 		const fallback = `c.body=cj?${boundary('pj(c)')}:${boundary(`pd(c,ce,true${flatFormDataFastPath ? ',true' : ''})`)}\n`
-		code += hasFn
+		code += plan.custom
 			? `if(!hasBody&&${guard}){${begin}${fallback}${end}}\n`
 			: `if(${guard}){${begin}${fallback}${end}}\n`
 
-		if (!bodyVali) link(hasRequestBody, 'hb')
+		if (plan.presence === 'framing') link(hasRequestBody, 'hb')
 		link(adapter.json, 'pj')
 		link(adapter.default, 'pd')
 	}
 
-	return hasFn ? 'let hasBody=false,_bp\n' + code : code
-}
-
-// 1 structured/form, 2 scalar, 3 file
-const bodyMediaKind = (bodyVali: Validator | undefined) =>
-	schemaMediaKind((bodyVali as any)?.schema)
-
-export function schemaMediaKind(schema: any): number | undefined {
-	if (!schema || typeof schema !== 'object' || '~standard' in schema) return
-
-	const elyType = schema['~elyTyp']
-	if (elyType === ELYSIA_TYPES.File || elyType === ELYSIA_TYPES.Files)
-		return 3
-
-	if (elyType === ELYSIA_TYPES.Form) return 1
-
-	const kind = schema['~kind']
-	if (
-		kind === 'Object' ||
-		kind === 'Array' ||
-		kind === 'FormData' ||
-		schema.type === 'object' ||
-		schema.type === 'array'
-	)
-		return 1
-
-	if (kind === 'File') return 3
-
-	if (
-		kind === 'String' ||
-		kind === 'Number' ||
-		kind === 'Integer' ||
-		kind === 'Boolean' ||
-		kind === 'Null' ||
-		kind === 'Undefined' ||
-		kind === 'Literal' ||
-		(schema.type !== undefined &&
-			['string', 'number', 'integer', 'boolean', 'null'].includes(
-				schema.type
-			))
-	)
-		return 2
-
-	const branches = schema.anyOf ?? schema.oneOf ?? schema.allOf
-	if (!Array.isArray(branches) || !branches.length) return
-
-	let result: number | undefined
-	for (let i = 0; i < branches.length; i++) {
-		const branch = schemaMediaKind(branches[i])
-
-		if (branch === undefined || (result !== undefined && result !== branch))
-			return
-
-		result = branch
-	}
-
-	return result
+	return plan.custom ? 'let hasBody=false,_bp\n' + code : code
 }
 
 const fromArgs = (type: string, isAsync: boolean) =>
@@ -363,9 +281,9 @@ const createInlineHandler = (
 		const r = h(c)
 		if (r instanceof Error) throw r
 		if (r instanceof Promise)
-			return r.then((v) => map(forwardError(v), c.request))
+			return r.then((v) => map(forwardError(v), c.request, true))
 
-		return map(r, c.request)
+		return map(r, c.request, true)
 	}) as CompiledHandler
 
 const createInlineHandlerWithSet = (
@@ -376,9 +294,9 @@ const createInlineHandlerWithSet = (
 		const r = h(c)
 		if (r instanceof Error) throw r
 		if (r instanceof Promise)
-			return r.then((v) => map(forwardError(v), c.set, c.request))
+			return r.then((v) => map(forwardError(v), c.set, c.request, true))
 
-		return map(r, c.set, c.request)
+		return map(r, c.set, c.request, true)
 	}) as CompiledHandler
 
 const createInlineHandlerWithDefaultHeaders = (
@@ -391,9 +309,9 @@ const createInlineHandlerWithDefaultHeaders = (
 
 		if (r instanceof Error) throw r
 		if (r instanceof Promise)
-			return r.then((v) => map(forwardError(v), c.set, c.request))
+			return r.then((v) => map(forwardError(v), c.set, c.request, true))
 
-		return map(r, c.set, c.request)
+		return map(r, c.set, c.request, true)
 	}) as CompiledHandler
 
 const createInlineHandlerWithDefaultResponseState = (
@@ -405,9 +323,9 @@ const createInlineHandlerWithDefaultResponseState = (
 		const r = h(c)
 		if (r instanceof Error) throw r
 		if (r instanceof Promise)
-			return r.then((v) => map(forwardError(v), set, c.request))
+			return r.then((v) => map(forwardError(v), set, c.request, true))
 
-		return map(r, set, c.request)
+		return map(r, set, c.request, true)
 	}) as CompiledHandler
 
 export interface CompileHandlerJitOptions {
@@ -418,9 +336,6 @@ export interface CompileHandlerJitOptions {
 	errorRoot: AnyElysia
 	hook: AnyLocalHook | undefined
 	adapter: ElysiaAdapter
-	isHandleFunction: boolean
-	isStaticResponse: boolean
-	isPromiseHandler: boolean
 	/**
 	 * Per-route descriptor + compile artifacts, computed by `describeRoute`.
 	 * The JIT no longer re-derives these facts; it names its emissions off them.
@@ -436,13 +351,11 @@ export function compileHandlerJit({
 	errorRoot,
 	hook,
 	adapter,
-	isHandleFunction,
-	isStaticResponse,
-	isPromiseHandler,
 	state
 }: CompileHandlerJitOptions): CompiledHandler {
 	const {
 		vali,
+		bodyParserHook,
 		defaultResponseState,
 		cookieConfig,
 		beforeHandlePrefix,
@@ -452,11 +365,13 @@ export function compileHandlerJit({
 		traceHandleOn,
 		descriptor: {
 			async: isAsync,
+			bodyPlan,
 			responseMode,
+			handlerKind,
+			isStaticResponse,
 			contextMode,
 			headerKeys,
 			effectMask,
-			hasBody,
 			bodyValiIsAsync,
 			headersValiIsAsync,
 			paramsValiIsAsync,
@@ -481,6 +396,9 @@ export function compileHandlerJit({
 			syncAfterResponse
 		}
 	} = state
+	const hasBody = bodyPlan.enabled
+	const isHandleFunction = handlerKind === 'function'
+	const isPromiseHandler = handlerKind === 'promise'
 
 	const seenKeys = new Set<string>()
 	const paramValues: unknown[] = []
@@ -667,13 +585,13 @@ export function compileHandlerJit({
 			? '_bs=true'
 			: undefined
 		if (parseSuspensionMark) code += 'let _bs=false\n'
-		const parseLen = Array.isArray(hook?.parse) ? hook!.parse!.length : 0
+		const parseLen = bodyPlan.parserCount
 		if (hasTrace) code += beginTrace('parse', parseLen)
 
 		const parseCode = emitBodyParse(
 			adapter.parse,
-			hook,
-			vali?.body,
+			bodyPlan,
+			bodyParserHook,
 			hasHeaders,
 			link,
 			buildReport('parse'),
@@ -809,8 +727,8 @@ export function compileHandlerJit({
 				: 'h'
 
 	const mapReturn = hasSet
-		? `rm(${handleInstruction},${setArg},c.request)\n`
-		: `rc(${handleInstruction},c.request)\n`
+		? `rm(${handleInstruction},${setArg},c.request,true)\n`
+		: `rc(${handleInstruction},c.request,true)\n`
 
 	if (hasAfterResponse) link(hook!.afterResponse!, 'ar')
 
@@ -940,8 +858,10 @@ export function compileHandlerJit({
 		const teeBlock =
 			teeConsumers > 0 && !syncAfterResponse
 				? `if(_r&&(_r[Symbol.iterator]||_r[Symbol.asyncIterator])&&typeof _r.next==='function'){\n` +
+					`const _sse=_r.sse===true\n` +
 					`const _s=tee(_r,${teeCount})\n` +
 					`_r=_s[0]\n` +
+					`if(_sse)_r.sse=true\n` +
 					(hasAfterResponse ? `_stl=_s[1]\n` : '') +
 					(traceHandleOn
 						? `_trs=_s[${1 + (hasAfterResponse ? 1 : 0)}]\n`
@@ -990,8 +910,8 @@ export function compileHandlerJit({
 
 			factoryHelpers += buildSyncAfterResponse(
 				hasSet
-					? `${map}(_r,c.set,c.request)`
-					: `${map}(_r,c.request)`,
+					? `${map}(_r,c.set,c.request,true)`
+					: `${map}(_r,c.request,true)`,
 				hook!.afterResponse!,
 				compatCancellation
 			)
@@ -1080,8 +1000,8 @@ export function compileHandlerJit({
 			code += schedule
 			code += signPrefix
 			const finalMap = hasSet
-				? `${map}(_r,c.set,c.request)`
-				: `${map}(_r,c.request)`
+				? `${map}(_r,c.set,c.request,true)`
+				: `${map}(_r,c.request,true)`
 
 			if (isAsync)
 				code +=
@@ -1099,7 +1019,7 @@ export function compileHandlerJit({
 		}
 	} else if (isHandleFunction) {
 		if (!isAsync) link(forwardError, 'fe')
-		const mapArgs = hasSet ? `${setArg},c.request` : 'c.request'
+		const mapArgs = hasSet ? `${setArg},c.request,true` : 'c.request,true'
 		code += `let _r\n` + callHandler + abortCheck
 		code += `if(_r instanceof Error)throw _r\n`
 		if (isAsync)
@@ -1145,7 +1065,7 @@ export function compileHandlerJit({
 			const settleErrorMap = `${settleAtSuspension('_r')}.catch(e=>fre(rt,c,e))`
 			factoryHelpers +=
 				`function _em(c,_r){return typeof _r?.then==='function'?${settleErrorMap}:_r}\n` +
-				`${asyncCookieSign ? 'async ' : ''}function _efb(e,c){${asyncCookieSign ? 'let _sg\n' : ''}let _a=false\nconst _f=fr(c,e,${asyncCookieSign ? 'async ' : ''}v=>{${suspensionAbortCheck ? `if(_a&&${abortExpression})return new Response()\n` : ''}${signPrefix}return ${map}(v,c.set,c.request)})\n_a=true\nreturn _em(c,_f)}\n`
+				`${asyncCookieSign ? 'async ' : ''}function _efb(e,c){${asyncCookieSign ? 'let _sg\n' : ''}let _a=false\nconst _f=fr(c,e,${asyncCookieSign ? 'async ' : ''}v=>{${suspensionAbortCheck ? `if(_a&&${abortExpression})return new Response()\n` : ''}${signPrefix}return ${map}(v,c.set,c.request,true)})\n_a=true\nreturn _em(c,_f)}\n`
 
 			body +=
 				`c.error=e\n` +

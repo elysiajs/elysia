@@ -1,6 +1,7 @@
 import type { AnyElysia } from '../../base'
 
 import { defaultAdapter } from '../../adapter/constants'
+import { borrow } from '../../adapter/response-ownership'
 import { ElysiaFile } from '../../universal/file'
 import { isBun } from '../../universal/constants'
 
@@ -46,6 +47,9 @@ interface MountHandlerMeta {
 	suffixLen: number
 }
 
+const markBorrowedResponse = (value: unknown) =>
+	value instanceof Response ? borrow(value) : value
+
 function resolveMountHandler(
 	meta: MountHandlerMeta,
 	path: string
@@ -57,8 +61,8 @@ function resolveMountHandler(
 	const rawLen = rawRoot.length
 	const encLen = encRoot.length
 
-	return (c: Context) =>
-		handle(
+	return (c: Context) => {
+		const result = handle(
 			new Request(
 				replaceUrlPath(
 					c.request.url,
@@ -69,6 +73,10 @@ function resolveMountHandler(
 				c.request
 			)
 		)
+		return typeof (result as Promise<unknown>)?.then === 'function'
+			? Promise.resolve(result).then(markBorrowedResponse)
+			: markBorrowedResponse(result)
+	}
 }
 
 function applyHook(
@@ -683,7 +691,17 @@ export function compileHandler(
 		}
 
 		const mapped = (adapter.response.map as Function)(handler, set)
-		if (mapped instanceof Response) handler = mapped
+		if (mapped instanceof Response) {
+			if (
+				!mapped.headers.has('content-type') &&
+				(typeof handler === 'string' ||
+					typeof handler === 'number' ||
+					typeof handler === 'boolean')
+			)
+				mapped.headers.set('content-type', 'text/plain;charset=utf-8')
+
+			handler = mapped
+		}
 	}
 
 	const isStaticResponse = !isHandleFunction && handler instanceof Response
@@ -750,9 +768,6 @@ export function compileHandler(
 		errorRoot: root,
 		hook,
 		adapter,
-		isHandleFunction,
-		isStaticResponse,
-		isPromiseHandler,
 		state
 	})
 }

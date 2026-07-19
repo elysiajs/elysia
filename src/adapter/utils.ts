@@ -1,4 +1,4 @@
-import { isNotEmpty, nullObject } from '../utils'
+import { isByteStream, isNotEmpty, nullObject } from '../utils'
 import { StatusMap } from '../constants'
 
 import { serializeCookie } from '../cookie/serialize'
@@ -6,7 +6,7 @@ import { isBun, hasHeaderShorthand } from '../universal/constants'
 import type { ElysiaFile } from '../universal/file'
 import type { Context } from '../context'
 
-import { skipClone } from './skip-clone'
+import { isBorrowedResponse } from './response-ownership'
 import { defaultHeaders } from './default-headers'
 
 const setCookie = 'set-cookie' as const
@@ -230,9 +230,14 @@ interface CreateHandlerParameter {
 	mapResponse(
 		response: unknown,
 		set: Context['set'],
-		request?: Request
+		request?: Request,
+		owned?: boolean
 	): Response
-	mapCompactResponse(response: unknown, request?: Request): Response
+	mapCompactResponse(
+		response: unknown,
+		request?: Request,
+		owned?: boolean
+	): Response
 }
 
 function enqueueBinaryChunk(
@@ -273,12 +278,33 @@ export function createStreamHandler({
 		generator: Generator | AsyncGenerator | ReadableStream,
 		set?: Context['set'],
 		request?: Request,
-		skipFormat?: boolean
+		skipFormat?: boolean,
+		owned = false
 	) => {
+		if (isByteStream(generator)) {
+			if (set) {
+				handleSet(set)
+				const headers = materializeSetHeaders(set)
+				if (headers instanceof Headers) {
+					if (!headers.has('content-type'))
+						headers.set('content-type', 'application/octet-stream')
+				} else if (!headers['content-type'])
+					headers['content-type'] = 'application/octet-stream'
+
+				return new Response(generator, set as ResponseInit)
+			}
+
+			return new Response(generator, {
+				headers: { 'content-type': 'application/octet-stream' }
+			})
+		}
+
+		const typedSSE = !skipFormat && generator?.sse === true
+
 		// Since ReadableStream doesn't have next, init might be undefined
-		let init = (generator as Generator).next?.() as
-			| IteratorResult<unknown>
-			| undefined
+		let init = (
+			typedSSE ? undefined : (generator as Generator).next?.()
+		) as IteratorResult<unknown> | undefined
 
 		if (set) handleSet(set)
 		if (init instanceof Promise) init = await init
@@ -287,24 +313,25 @@ export function createStreamHandler({
 			// @ts-ignore
 			generator = init.value
 		else if (init && (typeof init?.done === 'undefined' || init?.done)) {
-			if (set) return mapResponse(init.value, set, request)
-			return mapCompactResponse(init.value, request)
+			if (set) return mapResponse(init.value, set, request, owned)
+			return mapCompactResponse(init.value, request, owned)
 		}
 
 		// Check if stream is from a pre-formatted Response body
 		const isSSE =
-			!skipFormat &&
-			// @ts-ignore First SSE result is wrapped with sse()
-			(init?.value?.sse ??
-				// @ts-ignore ReadableStream is wrapped with sse()
-				generator?.sse ??
-				(set?.headers instanceof Headers
-					? set.headers
-							.get('content-type')
-							?.startsWith('text/event-stream')
-					: set?.headers['content-type']?.startsWith(
-							'text/event-stream'
-						)))
+			typedSSE ||
+			(!skipFormat &&
+				// @ts-ignore First SSE result is wrapped with sse()
+				(init?.value?.sse ??
+					// @ts-ignore ReadableStream is wrapped with sse()
+					generator?.sse ??
+					(set?.headers instanceof Headers
+						? set.headers
+								.get('content-type')
+								?.startsWith('text/event-stream')
+						: set?.headers['content-type']?.startsWith(
+								'text/event-stream'
+							))))
 
 		const format = isSSE ? sseFormat : identityFormat
 
@@ -319,7 +346,7 @@ export function createStreamHandler({
 		if (set) materializeSetHeaders(set)
 		const headers = set?.headers
 		if (headers instanceof Headers) {
-			if (!headers.has('transfer-encoding'))
+			if (!typedSSE && !headers.has('transfer-encoding'))
 				headers.set('transfer-encoding', 'chunked')
 
 			if (!headers.has('content-type'))
@@ -328,11 +355,19 @@ export function createStreamHandler({
 			if (!headers.has('cache-control'))
 				headers.set('cache-control', 'no-cache')
 		} else if (headers) {
-			if (!headers['transfer-encoding'])
+			if (!typedSSE && !headers['transfer-encoding'])
 				headers['transfer-encoding'] = 'chunked'
 			if (!headers['content-type']) headers['content-type'] = contentType
 			if (!headers['cache-control']) headers['cache-control'] = 'no-cache'
-		} else
+		} else if (typedSSE)
+			set = {
+				status: 200,
+				headers: {
+					'content-type': contentType,
+					'cache-control': 'no-cache'
+				}
+			}
+		else
 			set = {
 				status: 200,
 				headers: {
@@ -349,6 +384,8 @@ export function createStreamHandler({
 				: (generator as any)[Symbol.asyncIterator]()
 
 		let end = false
+		let finalized = false
+		let returned = false
 		const signal = request?.signal
 		let onAbort: (() => void) | undefined
 
@@ -360,6 +397,9 @@ export function createStreamHandler({
 		}
 
 		const safeReturn = () => {
+			if (returned) return
+			returned = true
+
 			try {
 				const r = iterator.return?.()
 				if (r && typeof (r as Promise<unknown>).then === 'function')
@@ -367,11 +407,22 @@ export function createStreamHandler({
 			} catch {}
 		}
 
-		const closeSafely = (controller: ReadableStreamDefaultController) => {
-			try {
-				controller.close()
-			} catch {}
+		const finalize = (
+			controller?: ReadableStreamDefaultController,
+			returnSource = false,
+			error?: { value: unknown }
+		) => {
+			if (finalized) return
+			finalized = true
+			end = true
 			cleanupAbort()
+			if (returnSource) safeReturn()
+			if (!controller) return
+
+			try {
+				if (error) controller.error(error.value)
+				else controller.close()
+			} catch {}
 		}
 
 		const enqueueValue = async (
@@ -405,67 +456,63 @@ export function createStreamHandler({
 		}
 
 		return new Response(
-			new ReadableStream({
-				async start(controller) {
-					if (signal) {
-						onAbort = () => {
-							cleanupAbort()
-							end = true
-							safeReturn()
+			new ReadableStream(
+				{
+					async start(controller) {
+						if (signal) {
+							onAbort = () => finalize(controller, true)
 
-							try {
-								controller.close()
-							} catch {}
+							if (signal.aborted) onAbort()
+							else
+								signal.addEventListener('abort', onAbort, {
+									once: true
+								})
 						}
 
-						if (signal.aborted) onAbort()
-						else
-							signal.addEventListener('abort', onAbort, {
-								once: true
-							})
-					}
+						if (
+							!init ||
+							init.value instanceof ReadableStream ||
+							init.value === undefined ||
+							init.value === null
+						)
+							return
 
-					if (
-						!init ||
-						init.value instanceof ReadableStream ||
-						init.value === undefined ||
-						init.value === null
-					)
-						return
+						try {
+							await enqueueValue(controller, init.value)
+						} catch (error) {
+							finalize(controller, true, { value: error })
+						}
+					},
 
-					await enqueueValue(controller, init.value)
-				},
-
-				async pull(controller) {
-					// Respect abort/cancel that happened between pull() calls.
-					if (end) {
-						closeSafely(controller)
-						return
-					}
-
-					try {
-						const { value: chunk, done } = await iterator.next()
-
-						if (done || end) {
-							closeSafely(controller)
+					async pull(controller) {
+						// Respect abort/cancel that happened between pull() calls.
+						if (end) {
+							finalize(controller)
 							return
 						}
 
-						if (chunk === undefined || chunk === null) return
+						try {
+							const { value: chunk, done } = await iterator.next()
 
-						await enqueueValue(controller, chunk)
-					} catch (error) {
-						cleanupAbort()
-						controller.error(error)
+							if (done || end) {
+								finalize(controller, end && !done)
+								return
+							}
+
+							if (chunk === undefined || chunk === null) return
+
+							await enqueueValue(controller, chunk)
+						} catch (error) {
+							finalize(controller, true, { value: error })
+						}
+					},
+
+					cancel() {
+						finalize(undefined, true)
 					}
 				},
-
-				cancel() {
-					end = true
-					cleanupAbort()
-					safeReturn()
-				}
-			}),
+				typedSSE ? { highWaterMark: 0 } : undefined
+			),
 			set as any
 		)
 	}
@@ -567,7 +614,8 @@ function mergeStatus(
 
 function cancelPropagatingBody(
 	clonedBody: ReadableStream,
-	orphanedBranch: ReadableStream
+	orphanedBranch: ReadableStream,
+	preserveOrphan = false
 ): ReadableStream {
 	const reader = clonedBody.getReader()
 
@@ -579,6 +627,13 @@ function cancelPropagatingBody(
 			else controller.enqueue(value)
 		},
 		cancel(reason) {
+			if (preserveOrphan) {
+				// Tee waits for every branch before resolving cancellation
+				// Detach this response while leaving the owner reusable branch intact
+				reader.cancel(reason).catch(() => {})
+				return
+			}
+
 			orphanedBranch.cancel(reason)
 			return reader.cancel(reason)
 		}
@@ -588,25 +643,46 @@ function cancelPropagatingBody(
 export function createResponseHandler(handler: CreateHandlerParameter) {
 	const handleStream = createStreamHandler(handler)
 
-	return (response: Response, set?: Context['set'], request?: Request) => {
+	return (
+		response: Response,
+		set?: Context['set'],
+		request?: Request,
+		owned = false
+	) => {
+		const explicitlyBorrowed = isBorrowedResponse(response)
+		const borrowed = !owned || explicitlyBorrowed
+		const mustClone = owned && explicitlyBorrowed
+
+		if (!borrowed && (response.bodyUsed || response.body?.locked))
+			throw new TypeError(
+				'Cannot transfer a consumed or locked Response body'
+			)
+
 		if (set) {
 			const status = mergeStatus(response.status, set.status)
 			const statusUnchanged =
 				status === undefined || status === response.status
 
-			if (statusUnchanged && !set.cookie && !isNotEmpty(set.headers))
+			if (
+				!mustClone &&
+				statusUnchanged &&
+				!set.cookie &&
+				!isNotEmpty(set.headers)
+			)
 				return response
-		}
+		} else if (!mustClone) return response
 
 		let body = response.body
 
-		if (skipClone.has(response) && !response.bodyUsed)
-			skipClone.delete(response)
-		else {
+		if (borrowed) {
 			const cloned = response.clone()
 			body =
 				cloned.body && response.body
-					? cancelPropagatingBody(cloned.body, response.body)
+					? cancelPropagatingBody(
+							cloned.body,
+							response.body,
+							explicitlyBorrowed
+						)
 					: cloned.body
 		}
 
@@ -626,6 +702,7 @@ export function createResponseHandler(handler: CreateHandlerParameter) {
 		)
 
 		if (
+			borrowed &&
 			!(newResponse as Response).headers.has('content-length') &&
 			(newResponse as Response).headers.get('transfer-encoding') ===
 				'chunked'

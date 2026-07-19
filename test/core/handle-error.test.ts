@@ -583,10 +583,11 @@ describe('Handle Error', () => {
 			})
 
 		const res = await app.handle(req('/'))
+		const cloned = res.clone()
 
 		expect(res.status).toBe(503)
 		await expect(res.text()).resolves.toBe('custom')
-		await expect(res.clone().text()).resolves.not.toBe('boom')
+		await expect(cloned.text()).resolves.not.toBe('boom')
 	})
 
 	it('compiled tail keeps sync toResponse() Response fast path', async () => {

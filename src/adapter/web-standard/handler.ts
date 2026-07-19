@@ -73,7 +73,8 @@ const writableSet = (set: Context['set']) =>
 function mapResponseWithSet(
 	response: unknown,
 	set: Context['set'],
-	request?: Request
+	request?: Request,
+	owned = false
 ): Response {
 	handleSet(set)
 	const headers = set.headers
@@ -102,7 +103,9 @@ function mapResponseWithSet(
 				return handleStream(
 					response as any,
 					writableSet(set),
-					request
+					request,
+					undefined,
+					owned
 				) as any
 
 			return Response.json(response, set as ResponseInit)
@@ -137,7 +140,8 @@ function mapResponseWithSet(
 			return mapResponseWithSet(
 				(response as ElysiaStatus<200>).response,
 				set,
-				request
+				request,
+				owned
 			)
 
 		case undefined:
@@ -149,19 +153,30 @@ function mapResponseWithSet(
 			return handleResponse(
 				response as Response,
 				writableSet(set),
-				request
+				request,
+				owned
 			)
 
 		case 'Error':
-			return errorToResponse(response as Error, writableSet(set))
+			return errorToResponse(
+				response as Error,
+				writableSet(set),
+				request,
+				owned
+			)
 
 		case 'Promise':
 			return (response as Promise<any>).then((x) =>
-				mapResponseWithSet(x, set, request)
+				mapResponseWithSet(x, set, request, owned)
 			) as any
 
 		case 'Function':
-			return mapResponseWithSet((response as Function)(), set, request)
+			return mapResponseWithSet(
+				(response as Function)(),
+				set,
+				request,
+				owned
+			)
 
 		case 'FormData':
 			return new Response(response as FormData, set as ResponseInit)
@@ -170,7 +185,8 @@ function mapResponseWithSet(
 			return mapResponseFallback(
 				response,
 				writableSet(set),
-				request
+				request,
+				owned
 			) as Response
 	}
 }
@@ -178,7 +194,8 @@ function mapResponseWithSet(
 export function mapResponse(
 	response: unknown,
 	set: Context['set'],
-	request?: Request
+	request?: Request,
+	owned = false
 ): Response {
 	const headers = set.headers
 	if (
@@ -187,7 +204,7 @@ export function mapResponse(
 		(headers as any)[defaultHeaders] === headers ||
 		isNotEmpty(headers)
 	)
-		return mapResponseWithSet(response, set, request)
+		return mapResponseWithSet(response, set, request, owned)
 
 	if (response instanceof ElysiaStatus) {
 		set.status = (response as ElysiaStatus<200>).code
@@ -197,15 +214,19 @@ export function mapResponse(
 		return mapResponse(
 			(response as ElysiaStatus<200>).response,
 			set,
-			request
+			request,
+			owned
 		)
 	}
 
-	if (response instanceof Response) return response
+	if (response instanceof Response)
+		return owned
+			? handleResponse(response, undefined, request, true)
+			: response
 
 	if (response instanceof Promise)
 		return (response as Promise<any>).then((x) =>
-			mapResponse(x, set, request)
+			mapResponse(x, set, request, owned)
 		) as any
 
 	// Stream response defers a 'set' API, assume that it may include 'set'
@@ -214,14 +235,21 @@ export function mapResponse(
 		typeof response?.next === 'function' ||
 		response instanceof ReadableStream
 	)
-		return handleStream(response as any, set, request) as any
+		return handleStream(
+			response as any,
+			set,
+			request,
+			undefined,
+			owned
+		) as any
 
-	return mapCompactResponse(response, request)
+	return mapCompactResponse(response, request, owned)
 }
 
 export function mapCompactResponse(
 	response: unknown,
-	request?: Request
+	request?: Request,
+	owned = false
 ): Response {
 	switch (responseTag(response)) {
 		case 'String':
@@ -255,33 +283,40 @@ export function mapCompactResponse(
 			return handleFile(response as File, undefined, request)
 
 		case 'ElysiaStatus':
-			return mapResponse((response as ElysiaStatus<200>).response, {
-				status: (response as ElysiaStatus<200>).code,
-				headers: (response as ElysiaStatus<200>).headers
-					? Object.assign(
-							nullObject(),
-							(response as ElysiaStatus<200>).headers
-						)
-					: nullObject()
-			} as Context['set'])
+			return mapResponse(
+				(response as ElysiaStatus<200>).response,
+				{
+					status: (response as ElysiaStatus<200>).code,
+					headers: (response as ElysiaStatus<200>).headers
+						? Object.assign(
+								nullObject(),
+								(response as ElysiaStatus<200>).headers
+							)
+						: nullObject()
+				} as Context['set'],
+				request,
+				owned
+			)
 
 		case undefined:
 			return response ? Response.json(response) : new Response('')
 
 		case 'Response':
-			return response as Response
+			return owned
+				? handleResponse(response as Response, undefined, request, true)
+				: (response as Response)
 
 		case 'Error':
-			return errorToResponse(response as Error)
+			return errorToResponse(response as Error, undefined, request, owned)
 
 		case 'Promise':
 			return (response as any as Promise<unknown>).then((x) =>
-				mapCompactResponse(x, request)
+				mapCompactResponse(x, request, owned)
 			) as any
 
 		// ? Maybe response or Blob
 		case 'Function':
-			return mapCompactResponse((response as Function)(), request)
+			return mapCompactResponse((response as Function)(), request, owned)
 
 		case 'FormData':
 			return new Response(response as FormData)
@@ -290,21 +325,24 @@ export function mapCompactResponse(
 			return mapCompactResponseFallback(
 				response,
 				undefined,
-				request
+				request,
+				owned
 			) as Response
 	}
 }
 
 export function errorToResponse(
 	error: Error & { toResponse?(): MaybePromise<Response> },
-	set?: Context['set']
+	set?: Context['set'],
+	request?: Request,
+	owned = false
 ) {
 	if (error?.toResponse) {
 		const targetSet = set ?? ({ headers: nullObject() } as Context['set'])
 
 		const apply = (resolved: unknown) => {
 			if (resolved instanceof Response) targetSet.status = resolved.status
-			return mapResponse(resolved, targetSet)
+			return mapResponse(resolved, targetSet, request, owned)
 		}
 
 		const raw = error.toResponse()
@@ -332,37 +370,44 @@ function mapFallback(
 	map: (
 		response: unknown,
 		set: Context['set'],
-		request?: Request
+		request?: Request,
+		owned?: boolean
 	) => Response | undefined
 ) {
 	return (
 		response: unknown,
 		set?: Context['set'],
-		request?: Request
+		request?: Request,
+		owned = false
 	): Response | undefined => {
 		// recheck Response, Promise, Error because some library may extends Response
 		if (response instanceof Response)
-			return handleResponse(response, set, request)
+			return handleResponse(response, set, request, owned)
 
 		if (response instanceof Promise)
 			return response.then((x) =>
-				map(x, set as Context['set'], request)
+				map(x, set as Context['set'], request, owned)
 			) as any
 
 		if (response instanceof Error)
-			return errorToResponse(response as Error, set)
+			return errorToResponse(response as Error, set, request, owned)
 
 		if (response instanceof ElysiaStatus) {
 			if (set) {
 				set.status = response.code
 				if (response.headers)
 					set.headers = { ...set.headers, ...response.headers }
-				return map(response.response, set, request)
+				return map(response.response, set, request, owned)
 			} else
-				return mapResponse((response as ElysiaStatus<200>).response, {
-					status: (response as ElysiaStatus<200>).code,
-					headers: response.headers ? { ...response.headers } : {}
-				})
+				return mapResponse(
+					(response as ElysiaStatus<200>).response,
+					{
+						status: (response as ElysiaStatus<200>).code,
+						headers: response.headers ? { ...response.headers } : {}
+					},
+					request,
+					owned
+				)
 		}
 
 		if (
@@ -370,11 +415,17 @@ function mapFallback(
 			typeof response?.next === 'function' ||
 			response instanceof ReadableStream
 		)
-			return handleStream(response as any, set, request) as any
+			return handleStream(
+				response as any,
+				set,
+				request,
+				undefined,
+				owned
+			) as any
 
 		if (typeof (response as Promise<unknown>)?.then === 'function')
 			return (response as Promise<unknown>).then((x) =>
-				map(x, set as Context['set'], request)
+				map(x, set as Context['set'], request, owned)
 			) as any
 
 		// custom class with an array-like value
@@ -386,7 +437,8 @@ function mapFallback(
 			return map(
 				(response as any).toResponse(),
 				set as Context['set'],
-				request
+				request,
+				owned
 			)
 
 		// @ts-expect-error
@@ -399,8 +451,8 @@ function mapFallback(
 }
 
 const mapResponseFallback = mapFallback(mapResponse)
-const mapCompactResponseFallback = mapFallback((response, _, request) =>
-	mapCompactResponse(response, request)
+const mapCompactResponseFallback = mapFallback((response, _, request, owned) =>
+	mapCompactResponse(response, request, owned)
 )
 
 const handleResponse = createResponseHandler({

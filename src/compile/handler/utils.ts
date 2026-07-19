@@ -6,7 +6,6 @@ import {
 	type CompactBeforeHandlePrefix,
 	type DeriveEntry
 } from '../../utils'
-import { skipClone } from '../../adapter/skip-clone'
 import { ElysiaStatus } from '../../error'
 import { isSpace, isIdentChar, skipString } from '../lexer'
 export { emptyResponse } from '../../handler/utils'
@@ -31,11 +30,7 @@ const childName = (fn: unknown) =>
 const noTrace = { begin: '', end: () => '' } as const
 
 export function cloneResponse(r: unknown) {
-	if (r instanceof Response) {
-		const cloned = r.clone()
-		skipClone.add(cloned)
-		return cloned
-	}
+	if (r instanceof Response) return r.clone()
 
 	return r
 }
@@ -694,7 +689,7 @@ export const mapError = /*#__PURE__*/ map<
 			`else if(c.set.status===undefined||c.set.status===200)c.set.status=500\n` +
 			schedule +
 			sign +
-			`return _em(c,${map}(_r,c.set,c.request))\n` +
+			`return _em(c,${map}(_r,c.set,c.request,true))\n` +
 			`}\n`
 		)
 	}

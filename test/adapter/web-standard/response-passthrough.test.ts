@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'bun:test'
 import { mapResponse } from '../../../src/adapter/web-standard/handler'
-import { skipClone } from '../../../src/adapter/skip-clone'
 
 describe('mapResponse — Response pass-through', () => {
 	it('returns a Response by reference when set is untouched', () => {
@@ -163,16 +162,19 @@ describe('mapResponse — Response body ownership', () => {
 		}
 	}
 
-	it('does not retain a second body copy for a marked response', async () => {
+	it('does not retain a second body copy for an owned response', async () => {
 		const { stream, counter } = makeCountedStream(8, 1 << 16)
 		const response = new Response(stream, {
 			headers: { 'content-type': 'application/octet-stream' }
 		})
-		skipClone.add(response)
-
-		const mapped = mapResponse(response, {
-			headers: { 'x-add': '1' }
-		} as any) as Response
+		const mapped = mapResponse(
+			response,
+			{
+				headers: { 'x-add': '1' }
+			} as any,
+			undefined,
+			true
+		) as Response
 
 		expect(mapped).not.toBe(response)
 		expect(mapped.headers.get('x-add')).toBe('1')

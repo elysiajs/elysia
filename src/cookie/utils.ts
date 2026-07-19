@@ -150,6 +150,144 @@ export function parseCookieRawSigned(
 	return out
 }
 
+interface CookieJarState {
+	set: Context['set']
+	pending: Record<string, unknown>
+	keys: string[]
+	config: CompiledCookieConfig
+	lazySign?: 1
+	cache: Record<string, Cookie<unknown>>
+}
+
+const cookieJarStates = new WeakMap<
+	Record<string, BaseCookie>,
+	CookieJarState
+>()
+
+const getCookieJarState = (target: Record<string, BaseCookie>) =>
+	cookieJarStates.get(target)!
+
+function materializeCookie(
+	target: Record<string, BaseCookie>,
+	name: string,
+	state: CookieJarState
+) {
+	if (Object.hasOwn(target, name)) return target[name]
+	if (!Object.hasOwn(state.pending, name)) return
+
+	const fieldDefaults = state.config.fields[name]?.defaults
+	const entry = Object.assign(
+		nullObject(),
+		state.config.defaults,
+		fieldDefaults,
+		{
+			value: state.pending[name]
+		}
+	) as BaseCookie
+
+	if (entry.expires instanceof Date)
+		entry.expires = new Date(entry.expires.getTime())
+
+	if (state.lazySign && typeof entry.value === 'string') {
+		const secrets = resolveSignSecrets(name, state.config)
+		if (secrets !== undefined) (entry as any)['~unsign'] = secrets
+	} else {
+		const value = entry.value
+		if (value !== null && typeof value === 'object') {
+			const raw = rawJsonValue.get(value)
+
+			;(entry as any)['~raw'] =
+				raw !== undefined ? raw : JSON.stringify(value)
+		}
+	}
+
+	target[name] = entry
+	delete state.pending[name]
+
+	return entry
+}
+
+const cookieJarHandler: ProxyHandler<Record<string, BaseCookie>> = {
+	get(target, key) {
+		if (typeof key !== 'string') return Reflect.get(target, key)
+
+		const state = getCookieJarState(target)
+		return (state.cache[key] ??= new Cookie(
+			key,
+			state.set,
+			materializeCookie(target, key, state) ??
+				Object.assign(
+					nullObject(),
+					state.config.defaults,
+					state.config.fields[key]?.defaults
+				)
+		))
+	},
+	has(target, key) {
+		const state = getCookieJarState(target)
+		return (
+			(typeof key === 'string' && Object.hasOwn(state.pending, key)) ||
+			Reflect.has(target, key)
+		)
+	},
+	ownKeys(target) {
+		const state = getCookieJarState(target)
+		const keys: (string | symbol)[] = []
+
+		for (const key of state.keys)
+			if (Object.hasOwn(state.pending, key) || Object.hasOwn(target, key))
+				keys.push(key)
+
+		for (const key of Reflect.ownKeys(target))
+			if (typeof key !== 'string') keys.push(key)
+
+		return keys
+	},
+	getOwnPropertyDescriptor(target, key) {
+		const state = getCookieJarState(target)
+		if (typeof key === 'string') materializeCookie(target, key, state)
+
+		const descriptor = Reflect.getOwnPropertyDescriptor(target, key)
+		const entry = descriptor?.value
+
+		if (entry && typeof entry === 'object' && '~unsign' in entry)
+			resolvePendingCookie(entry as Record<string, any>, String(key))
+
+		return descriptor
+	},
+	deleteProperty(target, key) {
+		const state = getCookieJarState(target)
+		const exists =
+			typeof key === 'string' &&
+			(Object.hasOwn(state.pending, key) || Object.hasOwn(target, key))
+
+		if (typeof key === 'string') delete state.pending[key]
+		const deleted = Reflect.deleteProperty(target, key)
+
+		if (deleted && exists) state.keys.splice(state.keys.indexOf(key), 1)
+
+		return deleted
+	},
+	defineProperty(target, key, descriptor) {
+		const state = getCookieJarState(target)
+		const exists =
+			typeof key === 'string' &&
+			(Object.hasOwn(state.pending, key) || Object.hasOwn(target, key))
+
+		if (typeof key === 'string') delete state.pending[key]
+		const defined = Reflect.defineProperty(target, key, descriptor)
+
+		if (defined && typeof key === 'string' && !exists) state.keys.push(key)
+
+		return defined
+	},
+	preventExtensions(target) {
+		const state = getCookieJarState(target)
+		for (const name of state.keys) materializeCookie(target, name, state)
+		return Reflect.preventExtensions(target)
+	}
+}
+
 export function buildCookieJar(
 	set: Context['set'],
 	raw: Record<string, unknown>,
@@ -157,63 +295,23 @@ export function buildCookieJar(
 	lazySign?: 1
 ) {
 	const store: Record<string, BaseCookie> = nullObject() as any
-
+	const pending: Record<string, unknown> = nullObject() as any
+	const keys: string[] = []
 	for (const name in raw) {
-		const fieldDefaults = config.fields[name]?.defaults
-		const entry = Object.assign(
-			nullObject(),
-			config.defaults,
-			fieldDefaults,
-			{
-				value: raw[name]
-			}
-		)
-
-		if (entry.expires instanceof Date)
-			entry.expires = new Date(entry.expires.getTime())
-
-		if (lazySign && typeof entry.value === 'string') {
-			const secrets = resolveSignSecrets(name, config)
-			if (secrets !== undefined) (entry as any)['~unsign'] = secrets
-		} else {
-			const value = entry.value
-			if (value !== null && typeof value === 'object') {
-				const raw = rawJsonValue.get(value)
-
-				;(entry as any)['~raw'] =
-					raw !== undefined ? raw : JSON.stringify(value)
-			}
-		}
-
-		store[name] = entry
+		pending[name] = raw[name]
+		keys.push(name)
 	}
 
-	const cache: Record<string, Cookie<unknown>> = nullObject()
+	cookieJarStates.set(store, {
+		set,
+		pending,
+		keys,
+		config,
+		lazySign,
+		cache: nullObject()
+	})
 
-	return new Proxy(store, {
-		get(_, key: string) {
-			return (cache[key] ??= new Cookie(
-				key,
-				set,
-				key in store
-					? store[key]
-					: Object.assign(
-							nullObject(),
-							config.defaults,
-							config.fields[key]?.defaults
-						)
-			))
-		},
-		getOwnPropertyDescriptor(target, key) {
-			const descriptor = Reflect.getOwnPropertyDescriptor(target, key)
-			const entry = descriptor?.value
-
-			if (entry && typeof entry === 'object' && '~unsign' in entry)
-				resolvePendingCookie(entry as Record<string, any>, String(key))
-
-			return descriptor
-		}
-	}) as Record<string, Cookie<unknown>>
+	return new Proxy(store, cookieJarHandler) as Record<string, Cookie<unknown>>
 }
 
 function collectSignPending(

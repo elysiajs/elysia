@@ -19,6 +19,7 @@ import { hasSyncHmac } from '../../cookie/utils'
 
 import { unionTracePhases, type TraceEvent } from '../../trace'
 import { isDynamicRegex } from '../../constants'
+import { ELYSIA_TYPES } from '../../type/constants'
 import { Capture } from '../aot'
 import { frozenRootOf } from '../../generation'
 import { JITProbe } from '../jit-probe'
@@ -37,17 +38,34 @@ export const RouteEffect = {
 	SetHeaders: 1 << 3
 } as const
 
+export type HandlerKind = 'function' | 'response' | 'promise' | 'static-value'
+
+export type ResponseMode =
+	| 'compact'
+	| 'default-headers'
+	| 'set'
+	| 'set-with-default-headers'
+
+export interface BodyPlan {
+	enabled: boolean
+	mode: 'none' | 'builtin' | 'chain' | 'default'
+	builtin: string | null
+	parserCount: number
+	custom: boolean
+	fallback: boolean
+	mediaKind: 0 | 1 | 2 | 3
+	presence: 'none' | 'content-type' | 'framing'
+}
+
 export interface RouteDescriptor {
 	method: string
 	path: string
 
-	handlerKind: 'function' | 'response' | 'promise' | 'static-value'
+	handlerKind: HandlerKind
+	isStaticResponse: boolean
 	async: boolean
-	responseMode:
-		| 'compact'
-		| 'default-headers'
-		| 'set'
-		| 'set-with-default-headers'
+	bodyPlan: BodyPlan
+	responseMode: ResponseMode
 	contextMode: 'compact' | 'set'
 	headerKeys: readonly string[] | null
 	effectMask: number
@@ -62,7 +80,6 @@ export interface RouteDescriptor {
 	hasTrace: boolean
 	traceCount: number
 	hasLifecycleHook: boolean
-
 	hasBody: boolean
 
 	// per-slot validator asyncness
@@ -89,6 +106,7 @@ export interface RouteDescriptor {
 // Non-serialisable artifacts the JIT still needs, bundled with the descriptor.
 export interface RouteCompileState {
 	descriptor: RouteDescriptor
+	bodyParserHook: AnyLocalHook | undefined
 
 	vali: RouteValidator<any> | undefined
 	cookieConfig: CompiledCookieConfig | undefined
@@ -243,6 +261,115 @@ const isAsyncValidator = (vali: Validator | undefined) =>
 const mayReturnPromiseValidator = (vali: Validator | undefined) =>
 	(vali as Validator | undefined)?.mayReturnPromise === true
 
+// 1 structured/form, 2 scalar, 3 file
+function schemaMediaKind(schema: any): 0 | 1 | 2 | 3 {
+	if (!schema || typeof schema !== 'object' || '~standard' in schema) return 0
+
+	const elyType = schema['~elyTyp']
+	if (elyType === ELYSIA_TYPES.File || elyType === ELYSIA_TYPES.Files)
+		return 3
+	if (elyType === ELYSIA_TYPES.Form) return 1
+
+	const kind = schema['~kind']
+	if (
+		kind === 'Object' ||
+		kind === 'Array' ||
+		kind === 'FormData' ||
+		schema.type === 'object' ||
+		schema.type === 'array'
+	)
+		return 1
+	if (kind === 'File') return 3
+
+	if (
+		kind === 'String' ||
+		kind === 'Number' ||
+		kind === 'Integer' ||
+		kind === 'Boolean' ||
+		kind === 'Null' ||
+		kind === 'Undefined' ||
+		kind === 'Literal' ||
+		(schema.type !== undefined &&
+			['string', 'number', 'integer', 'boolean', 'null'].includes(
+				schema.type
+			))
+	)
+		return 2
+
+	const branches = schema.anyOf ?? schema.oneOf ?? schema.allOf
+	if (!Array.isArray(branches) || !branches.length) return 0
+
+	let result: 0 | 1 | 2 | 3 = 0
+	for (let i = 0; i < branches.length; i++) {
+		const branch = schemaMediaKind(branches[i])
+		if (branch === 0 || (result !== 0 && result !== branch)) return 0
+		result = branch
+	}
+
+	return result
+}
+
+function createBodyPlan(
+	enabled: boolean,
+	parse: AnyLocalHook['parse'],
+	bodyVali: Validator | undefined
+): BodyPlan {
+	if (!enabled)
+		return {
+			enabled: false,
+			mode: 'none',
+			builtin: null,
+			parserCount: 0,
+			custom: false,
+			fallback: false,
+			mediaKind: 0,
+			presence: 'none'
+		}
+
+	if (typeof parse === 'string')
+		return {
+			enabled: true,
+			mode: 'builtin',
+			builtin: parse,
+			parserCount: 1,
+			custom: false,
+			fallback: false,
+			mediaKind: 0,
+			presence: 'none'
+		}
+
+	const parsers = Array.isArray(parse) ? parse : []
+	if (parsers.length === 1 && typeof parsers[0] === 'string')
+		return {
+			enabled: true,
+			mode: 'builtin',
+			builtin: parsers[0],
+			parserCount: 1,
+			custom: false,
+			fallback: false,
+			mediaKind: 0,
+			presence: 'none'
+		}
+
+	let custom = false
+	let builtin = false
+	for (let i = 0; i < parsers.length; i++)
+		if (typeof parsers[i] === 'function') custom = true
+		else builtin = true
+
+	const fallback = !builtin
+	return {
+		enabled: true,
+		mode: parsers.length ? 'chain' : 'default',
+		builtin: null,
+		parserCount: parsers.length,
+		custom,
+		fallback,
+		mediaKind: custom ? 0 : schemaMediaKind((bodyVali as any)?.schema),
+		presence: fallback ? (bodyVali ? 'content-type' : 'framing') : 'none'
+	}
+}
+
 /**
  * Extracted from `buildNativeStaticResponse`'s for-in check so the native
  * static promotion predicate
@@ -356,6 +483,7 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 		(!bodylessMethod &&
 			(parseLength > 0 || inference.body) &&
 			parseFirst !== 'none')
+	const bodyPlan = createBodyPlan(hasBody, hook?.parse, vali?.body)
 
 	const bodyValiIsAsync =
 		hasBody &&
@@ -509,7 +637,7 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 	const syncAfterResponse =
 		hasAfterResponse && !isAsync && !hasTrace && !hasErrorHook
 
-	const handlerKind: RouteDescriptor['handlerKind'] = isHandleFunction
+	const handlerKind: HandlerKind = isHandleFunction
 		? 'function'
 		: isStaticResponse
 			? 'response'
@@ -528,7 +656,7 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 	const hasDefaultHeaders = isNotEmpty(frozenRootOf(root)['~ext']?.headers)
 	const hasDefaultHeaderSink =
 		hasDefaultHeaders && !!adapter.response.supportsDefaultHeaderSink
-	const responseMode: RouteDescriptor['responseMode'] = hasDefaultHeaderSink
+	const responseMode: ResponseMode = hasDefaultHeaderSink
 		? hasSetEffects
 			? 'set-with-default-headers'
 			: 'default-headers'
@@ -558,7 +686,9 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 		method,
 		path,
 		handlerKind,
+		isStaticResponse,
 		async: !!isAsync,
+		bodyPlan,
 		responseMode,
 		contextMode,
 		headerKeys,
@@ -573,7 +703,6 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 		hasTrace,
 		traceCount,
 		hasLifecycleHook,
-
 		hasBody,
 
 		bodyValiIsAsync: !!bodyValiIsAsync,
@@ -596,6 +725,7 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 
 	return {
 		descriptor,
+		bodyParserHook: bodyPlan.mode === 'chain' ? hook : undefined,
 
 		vali,
 		cookieConfig,

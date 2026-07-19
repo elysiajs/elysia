@@ -501,6 +501,25 @@ export const getLoosePath = (path: string) =>
 
 import type { SSEPayload, Prettify } from './types'
 
+const byteStreams = new WeakSet<ReadableStream<Uint8Array>>()
+
+/**
+ * Certify a byte stream for direct Response body pass-through.
+ *
+ * The returned Response owns this exact stream. Cancel it through the response
+ * body reader; preserving identity means Elysia does not install a second
+ * request-signal reader after the body is locked.
+ */
+export const bytes = <T extends ReadableStream<Uint8Array>>(stream: T): T => {
+	byteStreams.add(stream)
+	return stream
+}
+
+export const isByteStream = (
+	value: unknown
+): value is ReadableStream<Uint8Array> =>
+	typeof value === 'object' && value !== null && byteStreams.has(value as any)
+
 type FormatSSEPayload<T = unknown> = T extends string
 	? { readonly data: T }
 	: Prettify<SSEPayload<T>>

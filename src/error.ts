@@ -4,7 +4,6 @@ import { Create } from './type/bridge'
 import { isProduction } from './universal/is-production'
 import { StatusMap, StatusMapBack } from './constants'
 import { primitiveElysiaTypes } from './type/constants'
-import { skipClone } from './adapter/skip-clone'
 
 export { isProduction } from './universal/is-production'
 
@@ -675,7 +674,6 @@ export class ValidationError extends ElysiaError {
 					}
 				}
 			)
-			skipClone.add(response)
 			return response
 		}
 
@@ -811,8 +809,6 @@ export function problemResponse(p: Problem, headers?: Record<string, any>) {
 		}
 	)
 
-	skipClone.add(response)
-
 	return response
 }
 
@@ -858,8 +854,6 @@ export function internalServerErrorResponse(error: any) {
 		status: 500,
 		headers: { 'content-type': PROBLEM_JSON }
 	})
-
-	skipClone.add(response)
 
 	return response
 }

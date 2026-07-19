@@ -1,4 +1,4 @@
-import { Elysia } from '../../src'
+import { borrow, Elysia } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
@@ -71,7 +71,7 @@ describe('Response Headers', () => {
 	})
 
 	it('does not leak set.headers across requests sharing a Response', async () => {
-		const shared = new Response('x')
+		const shared = borrow(new Response('x'))
 
 		const app = new Elysia()
 			.get('/a', ({ set }) => {

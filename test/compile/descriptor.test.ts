@@ -34,7 +34,18 @@ describe('route descriptor', () => {
 			method: 'GET',
 			path: '/s',
 			handlerKind: 'response',
+			isStaticResponse: true,
 			async: false,
+			bodyPlan: {
+				enabled: false,
+				mode: 'none',
+				builtin: null,
+				parserCount: 0,
+				custom: false,
+				fallback: false,
+				mediaKind: 0,
+				presence: 'none'
+			},
 			responseMode: 'compact',
 			contextMode: 'compact',
 			headerKeys: [],
@@ -63,6 +74,23 @@ describe('route descriptor', () => {
 			callHandlerSyncOnAsync: false,
 			syncErrorHook: false,
 			syncAfterResponse: false
+		})
+	})
+
+	it('classifies and executes a promise handler', async () => {
+		const app = new Elysia({ introspect: true }).get(
+			'/promise',
+			Promise.resolve(new Response('hi'))
+		)
+
+		const response = await app.handle(get('/promise'))
+
+		expect(await response.text()).toBe('hi')
+		expect(
+			routeDescriptors.get(app as any)?.get('GET /promise')
+		).toMatchObject({
+			handlerKind: 'promise',
+			isStaticResponse: false
 		})
 	})
 
@@ -243,7 +271,8 @@ describe('route descriptor', () => {
 
 			expect(await response.text()).toBe('bearer:elysia')
 			expect(
-				routeDescriptors.get(app as any)?.get('GET /headers')?.headerKeys
+				routeDescriptors.get(app as any)?.get('GET /headers')
+					?.headerKeys
 			).toBeNull()
 		})
 
@@ -264,7 +293,8 @@ describe('route descriptor', () => {
 
 			expect(await response.text()).toBe('bearer:elysia')
 			expect(
-				routeDescriptors.get(app as any)?.get('GET /headers')?.headerKeys
+				routeDescriptors.get(app as any)?.get('GET /headers')
+					?.headerKeys
 			).toBeNull()
 		})
 	}
@@ -397,10 +427,78 @@ describe('route descriptor', () => {
 
 		expect(descriptor).toMatchObject({
 			handlerKind: 'function',
+			isStaticResponse: false,
 			hasBody: true,
+			bodyPlan: {
+				enabled: true,
+				mode: 'default',
+				builtin: null,
+				parserCount: 0,
+				custom: false,
+				fallback: true,
+				mediaKind: 1,
+				presence: 'content-type'
+			},
 			// body reading is async → the route is async
 			async: true,
 			bodyValiIsAsync: false
+		})
+	})
+
+	it('plans the C4a framing fallback once for schema-less bodies', async () => {
+		const app = new Elysia({ introspect: true }).post(
+			'/body',
+			{ parse: [() => undefined] } as any,
+			({ body }) => body
+		)
+		const response = await app.handle(
+			new Request('http://localhost/body', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: '{"value":"ok"}'
+			})
+		)
+
+		expect(await response.json()).toEqual({ value: 'ok' })
+		expect(
+			routeDescriptors.get(app as any)?.get('POST /body')?.bodyPlan
+		).toEqual({
+			enabled: true,
+			mode: 'chain',
+			builtin: null,
+			parserCount: 1,
+			custom: true,
+			fallback: true,
+			mediaKind: 0,
+			presence: 'framing'
+		})
+	})
+
+	it('plans an explicit built-in parser without a presence fallback', async () => {
+		const app = new Elysia({ introspect: true }).post(
+			'/json',
+			{ parse: 'json' } as any,
+			({ body }) => body
+		)
+		const response = await app.handle(
+			new Request('http://localhost/json', {
+				method: 'POST',
+				body: '{"value":"ok"}'
+			})
+		)
+
+		expect(await response.json()).toEqual({ value: 'ok' })
+		expect(
+			routeDescriptors.get(app as any)?.get('POST /json')?.bodyPlan
+		).toEqual({
+			enabled: true,
+			mode: 'builtin',
+			builtin: 'json',
+			parserCount: 1,
+			custom: false,
+			fallback: false,
+			mediaKind: 0,
+			presence: 'none'
 		})
 	})
 

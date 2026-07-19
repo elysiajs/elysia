@@ -136,3 +136,10 @@ memory metrics and the integrated real-socket mix remain report-only until repea
 supports a bound or aggregate claim.
 The owner accepts this state as a best-effort checkpoint; future evidence work may increase the
 retention sample and revisit executable-count policy without retroactively promoting this gate.
+
+The N+2c `response-body-cookie` fixture compares the pre-train `697c0286` runtime with the
+candidate. It body-consumes fresh owned Responses with one header patch, generic versus
+certified byte streams, and requests carrying ten cookies while reading one. Separate full-GC
+snapshots retain patched Responses and cookie jars to gate heap and object-count reductions.
+Every block verifies response bodies, patched/source headers, byte-stream content type, and the
+selected cookie before reporting a sample.
