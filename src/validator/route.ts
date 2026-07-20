@@ -43,8 +43,8 @@ export interface RouteValidatorOptions extends Omit<
 
 export const D1_VALIDATION_IMPLEMENTATION = 'candidate' as const
 
-// @ts-expect-error
-const isTb = (schema: unknown): schema is AnySchema => '~kind' in schema
+const isTb = (schema: unknown): schema is AnySchema =>
+	schema != null && typeof schema === 'object' && '~kind' in schema
 
 function pickStandalone<K extends keyof RouteSchema>(
 	schemas: NonNullable<RouteValidatorOptions['schemas']> | undefined,

@@ -50,6 +50,8 @@ const error = new Error(
 
 let live: TypeboxModule | undefined
 
+export const isTypeboxInitialized = () => live !== undefined
+
 function ensure(): TypeboxModule {
 	if (!live) throw error
 

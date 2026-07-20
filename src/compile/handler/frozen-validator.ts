@@ -27,10 +27,6 @@ import { createQueryPlan, type QueryPlan } from '../../parse-query'
 import type { AnyLocalHook, HTTPMethod } from '../../types'
 import type { AnyElysia } from '../../base'
 
-export const isBridgeNotInitialized = (error: unknown): boolean =>
-	error instanceof Error &&
-	error.message.startsWith("Typebox module isn't initialized")
-
 function codecCoercionBridgeFree(
 	f: FrozenValidator,
 	coerced: unknown,
@@ -271,20 +267,40 @@ export const isStandardSchema = (schema: unknown) =>
 	schema != null && typeof schema === 'object' && '~standard' in schema
 
 export function standaloneAllStandard(
-	schemas: Array<Record<string, unknown>> | undefined
+	schemas: Array<Record<string, unknown>> | undefined,
+	root?: AnyElysia
 ) {
 	if (!schemas || schemas.length === 0) return true
 
 	for (const entry of schemas)
 		for (const key in entry) {
-			const value = entry[key]
-			if (value && !isStandardSchema(value)) return false
+			let value = entry[key]
+			if (root && typeof value === 'string')
+				value = resolveModelRef(value, root) ?? value
+			if (!value) continue
+
+			if (
+				key === 'response' &&
+				typeof value === 'object' &&
+				isResponseMap(value)
+			) {
+				for (const raw of Object.values(value)) {
+					let schema = raw
+					if (root && typeof schema === 'string')
+						schema = resolveModelRef(schema, root) ?? schema
+					if (schema && !isStandardSchema(schema)) return false
+				}
+
+				continue
+			}
+
+			if (!isStandardSchema(value)) return false
 		}
 
 	return true
 }
 
-function resolveModelRef(schema: unknown, root: AnyElysia): unknown {
+export function resolveModelRef(schema: unknown, root: AnyElysia): unknown {
 	if (typeof schema !== 'string') return schema
 
 	const models = frozenRootOf(root)['~ext']?.models as
@@ -389,7 +405,7 @@ export function buildFrozenRouteValidator(
 	return out
 }
 
-const isResponseMap = (schema: any): boolean =>
+export const isResponseMap = (schema: any): boolean =>
 	!('~kind' in schema || '~elyAcl' in schema || '~standard' in schema)
 
 // truthy `cm` stand-in: the adapter below only feeds the acceptance gate,

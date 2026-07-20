@@ -1,9 +1,7 @@
 import { RouteValidator } from '../validator/route'
 import { StandardValidator } from '../validator'
-import {
-	buildFrozenRouteValidator,
-	isBridgeNotInitialized
-} from '../compile/handler/frozen-validator'
+import { isTypeboxInitialized } from '../type/bridge'
+import { buildFrozenRouteValidator } from '../compile/handler/frozen-validator'
 import { deriveEntryFn, nullObject, type DeriveEntry } from '../utils'
 import { frozenRootOf, type RuntimeServerBinding } from '../generation'
 import { getQueryParseChannels, parseQueryFromURL } from '../parse-query'
@@ -741,27 +739,21 @@ export function buildWSRoute(
 		frozenRoot['~config']?.allowUnsafeValidationDetails === true
 	const compatCancellation =
 		frozenRoot['~config']?.experimental?.cancellation === 'compat'
-	let validators: RouteValidator<any>
-	try {
+	let validators = !isTypeboxInitialized()
+		? (buildFrozenRouteValidator(
+				hook as any,
+				app,
+				'WS',
+				route[1] as string
+			) as RouteValidator<any> | undefined)
+		: undefined
+	if (!validators)
 		validators = new RouteValidator(hook as any, {
 			models: frozenRoot['~ext']?.models,
 			app,
 			validationPlan: frozenRoot['~config']?.experimental?.validationPlan,
 			aot: { method: 'WS', path: route[1] }
 		})
-	} catch (error) {
-		if (!isBridgeNotInitialized(error)) throw error
-
-		const frozen = buildFrozenRouteValidator(
-			hook as any,
-			app,
-			'WS',
-			route[1] as string
-		)
-		if (!frozen) throw error
-
-		validators = frozen as any
-	}
 
 	const responseValidator = validators.response as
 		| { [status: number]: WSValidatorLike }

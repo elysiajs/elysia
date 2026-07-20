@@ -54,7 +54,7 @@ export interface CompileToSourceOptions {
 	 * startup cost. Handlers are always eager. Only validator construction
 	 * is deferred. Pass a number to set the group size explicitly.
 	 *
-	 * @default decided by Elysia based on route batch scale
+	 * @default false
 	 */
 	lazy?: boolean | number
 
@@ -461,7 +461,7 @@ function emitModule(
 	}
 
 	const autoSize = autoGroupSize(order.length)
-	const lazy = options?.lazy ?? Math.ceil(order.length / autoSize) > 128
+	const lazy = options?.lazy ?? false
 
 	if (lazy) {
 		const groupSize = typeof lazy === 'number' ? lazy : autoSize

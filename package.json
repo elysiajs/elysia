@@ -221,7 +221,7 @@
 		"test:types": "tsc --project tsconfig.test.json",
 		"test:node": "bun run build && node test/node/index.mjs",
 		"test:bundle": "bun run test/bundle-size.ts",
-		"test:cf": "bun run build && npm install --prefix test/cloudflare && cd test/cloudflare && bun run cf-typegen && bun run test",
+		"test:cf": "bun run build && npm install --prefix test/cloudflare && cd test/cloudflare && bun run cf-typegen && bun run test && bun run test:standalone",
 		"bench": "bun run example/stress/run.ts",
 		"bench:quick": "bun run example/stress/run.ts --quick",
 		"bench:throughput": "bun run example/stress/throughput.ts",

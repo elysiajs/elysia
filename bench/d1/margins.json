@@ -1755,5 +1755,49 @@
 		"owner": "N+3a",
 		"status": "active",
 		"margin": 0.035
+	},
+	{
+		"fixture": "aot-cold-start",
+		"metric": "import-to-first-valid-response-7x-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"claim": "improvement",
+		"sampleRule": "16 randomized paired blocks with 7 clean measure children per block; historical pre-sprint 7e70df83 default auto-lazy baseline versus default auto-eager candidate; both omit the public strip option so strip:'auto' applies, both run in production, both package roots end in /elysia, and both dist trees are freshly built outside timing; A/A mirrors the exact current product source into the same nested-worktree versus repository-root layout; each block builds the same 1000-route AOT artifact outside timing with syntax and whitespace minified and stable identifiers, then measures clean-child artifact import through the first valid response on the last route",
+		"owner": "N+3b",
+		"status": "active",
+		"margin": 0.06
+	},
+	{
+		"fixture": "aot-cold-start",
+		"metric": "artifact-bytes",
+		"kind": "memory",
+		"direction": "lower",
+		"claim": "improvement",
+		"sampleRule": "16 randomized paired clean child-process blocks; historical pre-sprint 7e70df83 default auto-lazy baseline versus default auto-eager candidate; both omit the public strip option so strip:'auto' applies, both run in production, both package roots end in /elysia, and both dist trees are freshly built outside timing; A/A mirrors the exact current product source into the same nested-worktree versus repository-root layout; same 1000-route AOT artifact with syntax and whitespace minified and stable identifiers; artifact build occurs outside cold timing",
+		"owner": "N+3b",
+		"status": "active",
+		"margin": 0.04
+	},
+	{
+		"fixture": "aot-cold-start",
+		"metric": "manifest-raw-bytes",
+		"kind": "memory",
+		"direction": "lower",
+		"claim": "improvement",
+		"sampleRule": "16 randomized paired build blocks; historical pre-sprint 7e70df83 default auto-lazy baseline versus default auto-eager candidate; both omit the public strip option so strip:'auto' applies, both run in production, and both use package roots ending in /elysia; raw generated registration manifest bytes for the same 1000-route app",
+		"owner": "N+3b",
+		"status": "active",
+		"margin": 0.25
+	},
+	{
+		"fixture": "aot-cold-start",
+		"metric": "manifest-gzip-bytes",
+		"kind": "memory",
+		"direction": "lower",
+		"claim": "improvement",
+		"sampleRule": "16 randomized paired build blocks; historical pre-sprint 7e70df83 default auto-lazy baseline versus default auto-eager candidate; both omit the public strip option so strip:'auto' applies, both run in production, and both use package roots ending in /elysia; gzip level 9 bytes for the generated registration manifest of the same 1000-route app",
+		"owner": "N+3b",
+		"status": "active",
+		"margin": 0.25
 	}
 ]

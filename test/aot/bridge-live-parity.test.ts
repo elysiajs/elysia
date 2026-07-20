@@ -38,6 +38,8 @@ describe('statically wired TypeBox bridge', () => {
 			expect(live[member]).toBe(bridge[member])
 			expect(live[member]).toBeDefined()
 		}
+		expect(bridge.isTypeboxInitialized()).toBe(true)
+		expect(live.isTypeboxInitialized()).toBe(true)
 	})
 
 	it('keeps useTypebox idempotent', async () => {

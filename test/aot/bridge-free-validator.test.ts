@@ -12,7 +12,6 @@ import {
 import { RouteValidator } from '../../src/validator/route'
 import {
 	buildFrozenRouteValidator,
-	isBridgeNotInitialized,
 	isCapturedBridgeFree
 } from '../../src/compile/handler/frozen-validator'
 
@@ -202,18 +201,6 @@ describe('schemas that require TypeBox', () => {
 			freeze(schema)
 			expect(bridgeFree(schema)).toBeUndefined()
 		})
-})
-
-describe('missing TypeBox bridge detection', () => {
-	it('matches only bridge initialization errors', () => {
-		expect(
-			isBridgeNotInitialized(
-				new Error("Typebox module isn't initialized yet. Import `t`")
-			)
-		).toBe(true)
-		expect(isBridgeNotInitialized(new Error('something else'))).toBe(false)
-		expect(isBridgeNotInitialized('not an error')).toBe(false)
-	})
 })
 
 describe('NoValidate without TypeBox', () => {

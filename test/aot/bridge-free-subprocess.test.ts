@@ -65,6 +65,23 @@ function captureQuery(schema: any) {
 	return captured.filter((c) => c.slot === 'query')
 }
 
+function captureWS(schema: any) {
+	process.env.ELYSIA_AOT_BUILD = '1'
+	beginValidatorCapture()
+
+	const app = new Elysia().ws(PATH, {
+		body: schema,
+		message() {}
+	})
+	;(app as any).compile()
+
+	const captured = endValidatorCapture()
+	endHandlerCapture()
+	delete process.env.ELYSIA_AOT_BUILD
+
+	return captured.filter((c) => c.method === 'WS' && c.slot === 'body')
+}
+
 function writePayload(
 	captured: unknown,
 	schema: unknown,
@@ -131,6 +148,7 @@ describe('frozen validation without a TypeBox bridge', () => {
 
 		expect(proc.status, proc.stderr).toBe(0)
 		expect(parsed.BRIDGE).toBe('unwired')
+		expect(parsed.READY).toBe(false)
 
 		const result = parsed.RESULT as {
 			reconstructed: boolean
@@ -162,6 +180,7 @@ describe('frozen validation without a TypeBox bridge', () => {
 
 		expect(proc.status, proc.stderr).toBe(0)
 		expect(parsed.BRIDGE).toBe('unwired')
+		expect(parsed.READY).toBe(false)
 
 		const result = parsed.RESULT as {
 			liveValidatorThrew: boolean
@@ -169,6 +188,66 @@ describe('frozen validation without a TypeBox bridge', () => {
 		}
 		expect(result.liveValidatorThrew).toBe(true)
 		expect(result.message).toContain("Typebox module isn't initialized")
+	})
+
+	it('reconstructs before the ordinary validator can touch the bridge', () => {
+		const schema = t.Object({ id: t.String() })
+		const captured = captureQuery(schema)
+		const file = writePayload(
+			captured,
+			{
+				'~kind': 'Object',
+				type: 'object',
+				properties: {
+					id: { '~kind': 'String', type: 'string' }
+				},
+				required: ['id']
+			},
+			['id=ok'],
+			'GET',
+			'query'
+		)
+
+		const { proc, parsed } = runChild(file, {
+			USE_RECONSTRUCT_VALIDATOR: '1'
+		})
+
+		expect(proc.status, proc.stderr).toBe(0)
+		expect(parsed.BRIDGE).toBe('unwired')
+		expect(parsed.READY).toBe(false)
+		expect(parsed.RESULT).toEqual({
+			reconstructed: true,
+			routeValidatorTouched: false,
+			results: [{ ok: true, value: { id: 'ok' } }]
+		})
+	})
+
+	it('builds a WebSocket route before its validator can touch the bridge', () => {
+		const captured = captureWS(t.Object({ message: t.String() }))
+		const file = writePayload(
+			captured,
+			{
+				'~kind': 'Object',
+				type: 'object',
+				properties: {
+					message: { '~kind': 'String', type: 'string' }
+				},
+				required: ['message']
+			},
+			[],
+			'WS'
+		)
+
+		const { proc, parsed } = runChild(file, { USE_WS_BUILD: '1' })
+
+		expect(proc.status, proc.stderr).toBe(0)
+		expect(parsed.BRIDGE).toBe('unwired')
+		expect(parsed.READY).toBe(false)
+		expect(parsed.READY_BEFORE_BUILD).toBe(false)
+		expect(parsed.RESULT).toEqual({
+			reconstructed: true,
+			routeValidatorTouched: false
+		})
 	})
 
 	it('rebuilds an experimental query plan in an unwired process', () => {
@@ -197,8 +276,10 @@ describe('frozen validation without a TypeBox bridge', () => {
 
 		expect(proc.status, proc.stderr).toBe(0)
 		expect(parsed.BRIDGE).toBe('unwired')
+		expect(parsed.READY).toBe(false)
 		expect(parsed.RESULT).toEqual({
 			reconstructed: true,
+			routeValidatorTouched: false,
 			results: [{ ok: true, value: { id: ['a', 'b'] } }]
 		})
 	})

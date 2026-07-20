@@ -1,13 +1,18 @@
-import { mkdir, readdir, readFile, rename, rm } from 'node:fs/promises'
+import { cp, mkdir, readdir, readFile, rename, rm } from 'node:fs/promises'
 import { dirname, relative, resolve } from 'node:path'
 
 import {
+	assertOwnerBenchSourcePins,
 	assertBenchSourceFileListCoversStaticImports,
 	assertPreflightEqual,
 	benchSourceHash,
 	captureEnvironment,
 	capturePinnedManifest,
-	gitInfo
+	floorsForBenchSourceHash,
+	gitInfo,
+	pinOwnerBenchSourceHashes,
+	PRODUCT_SOURCE_INPUTS,
+	productSourceHash
 } from './env'
 import type {
 	ComparisonResult,
@@ -37,6 +42,7 @@ const traceRoot = resolve(repoRoot, 'trace/d1')
 const baselineRoot = resolve(repoRoot, 'bench/d1/baseline')
 const fixtureRoot = resolve(repoRoot, 'bench/d1/fixtures')
 const defaultBlocks = 8
+const n3bBlocks = 16
 const defaultRoutes = 1_000
 const defaultRequests = 200
 const defaultWarmup = 50
@@ -46,6 +52,7 @@ const defaultRssBlocks = 4
 const defaultResamples = 2_000
 const fixtureIds = [
 	'cold-start',
+	'aot-cold-start',
 	'http',
 	'default-headers',
 	'body-presence',
@@ -74,13 +81,15 @@ const leafPerfOwners = new Set([
 	'N+2b',
 	'N+2b-q12',
 	'N+2c',
-	'N+3a'
+	'N+3a',
+	'N+3b'
 ])
 const historicalBaselineByOwner: Record<string, string> = {
 	C4a: '340322120836100ea15f67d6f6b5708e0945d1db',
 	'N+2b': 'f6ed34632a997e17b09b91da1c400a93557b5815',
 	'N+2c': '697c0286',
-	'N+3a': 'd4fb01a3'
+	'N+3a': 'd4fb01a3',
+	'N+3b': '7e70df83b6b778aed80fcabcdc2c283bd5b2929a'
 }
 const historicalCandidateByOwner: Record<string, string> = {
 	C4a: 'e8c51e63407ea3f59479db14500f04cca742ba2b'
@@ -113,6 +122,10 @@ function leafPerfEnvironment(owners: Set<string> | undefined) {
 	if (owners?.has('N+2c')) environment.D1_N2C_CANDIDATE = '1'
 	if (owners?.has('N+3a')) {
 		environment.D1_N3A_IMAGE = 'strict'
+		environment.NODE_ENV = 'production'
+	}
+	if (owners?.has('N+3b')) {
+		environment.D1_N3B_CANDIDATE = '1'
 		environment.NODE_ENV = 'production'
 	}
 
@@ -572,6 +585,27 @@ async function runFixtureBlock(
 		if (output.build !== 'precompile')
 			throw new Error('retention-seal did not report a precompiled build')
 	}
+	if (fixture === 'aot-cold-start') {
+		if (output.routes !== defaultRoutes)
+			throw new Error(
+				`aot-cold-start route count mismatch: ${output.routes} !== ${defaultRoutes}`
+			)
+		if (output.build !== 'standalone-aot')
+			throw new Error(
+				'aot-cold-start did not report a standalone AOT build'
+			)
+		const label = descriptor.env.D1_N3B_CANDIDATE
+		const expected =
+			label === '1'
+				? 'auto-eager'
+				: label === '0'
+					? 'auto-lazy'
+					: undefined
+		if (expected !== undefined && output.image !== expected)
+			throw new Error(
+				`aot-cold-start image mismatch: ${output.image} !== ${expected}`
+			)
+	}
 	if (
 		fixture === 'cold-start' &&
 		output.fallbackSpawnToFirst2xxNs !== undefined
@@ -635,6 +669,7 @@ function rawMetricSamples(
 		return { samples, value: percentile(samples, percent) }
 	}
 	if (
+		entry.fixture === 'aot-cold-start' ||
 		entry.fixture === 'crypto-hmac' ||
 		entry.fixture === 'formdata' ||
 		entry.fixture === 'body-presence' ||
@@ -1084,9 +1119,100 @@ function descriptor(
 	label: string,
 	elysiaRoot: string,
 	commit: string,
-	env: Record<string, string> = {}
+	env: Record<string, string> = {},
+	variantProductSourceHash?: string
 ): VariantDescriptor {
-	return { label, elysiaRoot, commit, env }
+	return {
+		label,
+		elysiaRoot,
+		commit,
+		...(variantProductSourceHash
+			? { productSourceHash: variantProductSourceHash }
+			: {}),
+		env
+	}
+}
+
+async function buildN3bPackage(root: string, label: string) {
+	const built = Bun.spawnSync({
+		cmd: [process.execPath, 'run', 'build'],
+		cwd: root,
+		stdout: 'pipe',
+		stderr: 'pipe'
+	})
+	if (built.exitCode !== 0)
+		throw new Error(
+			`cannot build ${label} N+3b package:\n${new TextDecoder().decode(built.stdout)}\n${new TextDecoder().decode(built.stderr)}`
+		)
+
+	const typeSurface = Bun.file(resolve(root, 'dist/type/exports.mjs'))
+	if (!(await typeSurface.exists()) || typeSurface.size <= 0)
+		throw new Error(
+			`${label} N+3b build did not emit dist/type/exports.mjs`
+		)
+}
+
+async function mirrorProductSource(sourceRoot: string, targetRoot: string) {
+	for (const path of PRODUCT_SOURCE_INPUTS) {
+		const target = resolve(targetRoot, path)
+		await rm(target, { recursive: true, force: true })
+		await mkdir(dirname(target), { recursive: true })
+		await cp(resolve(sourceRoot, path), target, { recursive: true })
+	}
+}
+
+async function removeWorktree(worktree: string, parent: string, label: string) {
+	const removed = command('git', ['worktree', 'remove', '--force', worktree])
+	if (removed.code !== 0)
+		console.error(
+			`warning: could not remove ${label} worktree: ${removed.stderr}`
+		)
+	await rm(parent, { recursive: true, force: true })
+}
+
+async function prepareN3bAaLayout(
+	commit: string,
+	environment: Record<string, string>
+) {
+	const parent = resolve(traceRoot, `aa-worktree-${process.pid}`)
+	const worktree = resolve(parent, 'elysia')
+	await mkdir(parent, { recursive: true })
+	const added = command('git', [
+		'worktree',
+		'add',
+		'--detach',
+		worktree,
+		commit
+	])
+	if (added.code !== 0) {
+		await rm(parent, { recursive: true, force: true })
+		throw new Error(`cannot create N+3b A/A worktree: ${added.stderr}`)
+	}
+
+	const cleanup = () => removeWorktree(worktree, parent, 'N+3b A/A')
+	try {
+		const expectedHash = await productSourceHash(repoRoot)
+		await mirrorProductSource(repoRoot, worktree)
+		const mirroredHash = await productSourceHash(worktree)
+		if (mirroredHash !== expectedHash)
+			throw new Error(
+				`N+3b A/A source mirror mismatch: ${mirroredHash} !== ${expectedHash}`
+			)
+
+		await buildN3bPackage(worktree, 'A/A nested')
+		await buildN3bPackage(repoRoot, 'A/A repository')
+		if ((await productSourceHash(repoRoot)) !== expectedHash)
+			throw new Error('N+3b candidate source changed during A/A setup')
+
+		return {
+			a: descriptor('A', worktree, commit, environment, mirroredHash),
+			b: descriptor('B', repoRoot, commit, environment, expectedHash),
+			cleanup
+		}
+	} catch (error) {
+		await cleanup()
+		throw error
+	}
 }
 
 function comparisonForRecord(
@@ -1177,6 +1303,11 @@ function validateArtifact(value: unknown): asserts value is RawArtifact {
 			!variant.env
 		)
 			throw new Error('invalid variant descriptor')
+		if (
+			variant.productSourceHash !== undefined &&
+			!/^[a-f0-9]{64}$/.test(variant.productSourceHash)
+		)
+			throw new Error('invalid variant product source hash')
 	}
 	for (const record of artifact.fixtures) {
 		if (
@@ -1234,6 +1365,11 @@ function validateFloors(value: unknown): asserts value is FloorsFile {
 		!floors.countDeltas
 	)
 		throw new Error('floors file is incomplete')
+	if (
+		floors.benchSourceHash !== undefined &&
+		!/^[a-f0-9]{64}$/.test(floors.benchSourceHash)
+	)
+		throw new Error('floors benchmark-source pin is invalid')
 	for (const session of floors.sessions) {
 		if (
 			!session.sessionId ||
@@ -1276,6 +1412,18 @@ function validateManifest(value: unknown): asserts value is PinnedManifest {
 		!manifest.createdAt
 	)
 		throw new Error('manifest schema mismatch')
+	if (
+		manifest.ownerBenchSourceHashes !== undefined &&
+		(typeof manifest.ownerBenchSourceHashes !== 'object' ||
+			Array.isArray(manifest.ownerBenchSourceHashes) ||
+			Object.entries(manifest.ownerBenchSourceHashes).some(
+				([owner, hash]) =>
+					!owner ||
+					typeof hash !== 'string' ||
+					!/^[a-f0-9]{64}$/.test(hash)
+			))
+	)
+		throw new Error('manifest owner benchmark-source pins are invalid')
 }
 
 async function makeContext(seed = randomSeed()) {
@@ -1317,6 +1465,7 @@ async function recordMode(
 	capture: ArtifactCapture
 ) {
 	const git = gitInfo(repoRoot)
+	let pinnedManifest: PinnedManifest | undefined
 	const variant = descriptor('oracle', repoRoot, git.commit, {
 		D1_VALIDATION_LANE: 'oracle'
 	})
@@ -1324,7 +1473,10 @@ async function recordMode(
 	if (process.argv.includes('--promote')) {
 		if (git.dirty)
 			throw new Error('refusing baseline promotion from a dirty git tree')
-		await ensurePinned(context.environment.machineId, true)
+		pinnedManifest = await ensurePinned(
+			context.environment.machineId,
+			true
+		)
 	}
 	const fixtures = await runRecordBlocks(
 		variant,
@@ -1351,10 +1503,16 @@ async function recordMode(
 		// Promotion re-establishes the pin: refresh the manifest so its
 		// benchSourceHash matches the sources this baseline was recorded with.
 		// Environment equality was already asserted when the context was made.
-		await writeJson(
-			manifestPath(context.environment.machineId),
-			await capturePinnedManifest(repoRoot)
-		)
+		const refreshedManifest = await capturePinnedManifest(repoRoot)
+		await writeJson(manifestPath(context.environment.machineId), {
+			...refreshedManifest,
+			...(pinnedManifest?.ownerBenchSourceHashes
+				? {
+						ownerBenchSourceHashes:
+							pinnedManifest.ownerBenchSourceHashes
+					}
+				: {})
+		})
 		console.log(`promoted: ${baselinePath(context.environment.machineId)}`)
 	}
 }
@@ -1364,7 +1522,10 @@ async function aaMode(
 	context: RunContext,
 	capture: ArtifactCapture
 ) {
-	const manifest = await ensurePinned(context.environment.machineId, true)
+	const manifestFile = manifestPath(context.environment.machineId)
+	const manifest = (await exists(manifestFile))
+		? await ensurePinned(context.environment.machineId, false)
+		: await capturePinnedManifest(repoRoot)
 	const git = gitInfo(repoRoot)
 	const owners = selectedOwners()
 	const environment = leafPerfEnvironment(owners)
@@ -1382,111 +1543,158 @@ async function aaMode(
 	)
 	if (!aaFixtureIds.length)
 		throw new Error(`no D1 fixtures for owners: ${[...owners!].join(', ')}`)
-	const a = descriptor('A', repoRoot, git.commit, environment)
-	const b = descriptor('B', repoRoot, git.commit, environment)
-	capture.variants.push(a, b)
-	const sessions: FloorsSession[] = []
-	for (let sessionIndex = 0; sessionIndex < 3; sessionIndex++) {
-		const seed = effectiveSeed(context.seed + sessionIndex)
-		const sessionStartedAt = new Date().toISOString()
-		const sessionCapture = newArtifactCapture()
-		sessionCapture.variants.push(a, b)
-		const fixtures = await runPairedBlocks(
-			a,
-			b,
-			aaRegistry,
-			seed,
-			aaFixtureIds,
-			defaultBlocks,
-			(records) => {
-				captureFixtures(capture, records)
-				captureFixtures(sessionCapture, records)
+	const n3bLayout = owners?.size === 1 && owners.has('N+3b')
+	const prepared = n3bLayout
+		? await prepareN3bAaLayout(git.commit, environment)
+		: {
+				a: descriptor('A', repoRoot, git.commit, environment),
+				b: descriptor('B', repoRoot, git.commit, environment),
+				cleanup: async () => {}
 			}
-		)
-		captureFixtures(capture, fixtures)
-		captureFixtures(sessionCapture, fixtures)
-		const widths: Record<string, number> = {}
-		const countDeltas: Record<string, number> = {}
-		for (const record of fixtures) {
-			const entry = aaRegistry.byKey.get(
-				key(record.fixture, record.metric)
-			)!
-			if (!recordsAaFloor(entry)) continue
-			const destination = entry.kind === 'count' ? countDeltas : widths
-			destination[key(record.fixture, record.metric)] = floorWidth(
-				record,
-				entry,
+	const { a, b } = prepared
+	try {
+		capture.variants.push(a, b)
+		const sessions: FloorsSession[] = []
+		for (let sessionIndex = 0; sessionIndex < 3; sessionIndex++) {
+			const seed = effectiveSeed(context.seed + sessionIndex)
+			const sessionStartedAt = new Date().toISOString()
+			const sessionCapture = newArtifactCapture()
+			sessionCapture.variants.push(a, b)
+			const fixtures = await runPairedBlocks(
+				a,
+				b,
+				aaRegistry,
 				seed,
-				context.resamples
+				aaFixtureIds,
+				n3bLayout ? n3bBlocks : defaultBlocks,
+				(records) => {
+					captureFixtures(capture, records)
+					captureFixtures(sessionCapture, records)
+				}
 			)
-		}
-		const sessionId = `${context.startedAt}-${sessionIndex}`
-		const rawArtifact = await writeTrace(
-			contextArtifact(
-				{ ...context, startedAt: sessionStartedAt, seed },
-				'aa',
-				sessionCapture.variants,
-				sessionCapture.fixtures,
-				undefined,
-				{ sessionIndex, sessionId }
-			),
-			`session-${sessionIndex}`
-		)
-		const session: FloorsSession = {
-			sessionId,
-			startedAt: sessionStartedAt,
-			seed,
-			resamples: context.resamples,
-			rawArtifact: relative(repoRoot, rawArtifact),
-			widths,
-			countDeltas,
-			provenance: {
-				machineId: context.environment.machineId,
-				bun: manifest.bun,
-				variants: [a, b]
+			captureFixtures(capture, fixtures)
+			captureFixtures(sessionCapture, fixtures)
+			const widths: Record<string, number> = {}
+			const countDeltas: Record<string, number> = {}
+			for (const record of fixtures) {
+				const entry = aaRegistry.byKey.get(
+					key(record.fixture, record.metric)
+				)!
+				if (!recordsAaFloor(entry)) continue
+				const destination =
+					entry.kind === 'count' ? countDeltas : widths
+				destination[key(record.fixture, record.metric)] = floorWidth(
+					record,
+					entry,
+					seed,
+					context.resamples
+				)
+			}
+			const sessionId = `${context.startedAt}-${sessionIndex}`
+			const rawArtifact = await writeTrace(
+				contextArtifact(
+					{ ...context, startedAt: sessionStartedAt, seed },
+					'aa',
+					sessionCapture.variants,
+					sessionCapture.fixtures,
+					undefined,
+					{ sessionIndex, sessionId }
+				),
+				`session-${sessionIndex}`
+			)
+			const session: FloorsSession = {
+				sessionId,
+				startedAt: sessionStartedAt,
+				seed,
+				resamples: context.resamples,
+				rawArtifact: relative(repoRoot, rawArtifact),
+				widths,
+				countDeltas,
+				provenance: {
+					machineId: context.environment.machineId,
+					bun: manifest.bun,
+					variants: [a, b]
+				}
+			}
+			sessions.push(session)
+			capture.provenance = {
+				sessions: sessions.map(
+					({ sessionId, rawArtifact, seed, startedAt }) => ({
+						sessionId,
+						rawArtifact,
+						seed,
+						startedAt
+					})
+				)
 			}
 		}
-		sessions.push(session)
-		capture.provenance = {
-			sessions: sessions.map(
-				({ sessionId, rawArtifact, seed, startedAt }) => ({
-					sessionId,
-					rawArtifact,
-					seed,
-					startedAt
-				})
-			)
+		if (
+			n3bLayout &&
+			((await productSourceHash(a.elysiaRoot)) !== a.productSourceHash ||
+				(await productSourceHash(b.elysiaRoot)) !== b.productSourceHash)
+		)
+			throw new Error('N+3b product source changed during A/A sampling')
+
+		const path = floorsPath(context.environment.machineId)
+		let floors: FloorsFile = {
+			schemaVersion: 2,
+			kind: 'd1-floors',
+			machineId: context.environment.machineId,
+			bun: manifest.bun,
+			benchSourceHash: context.benchSourceHash,
+			sessions: [],
+			floors: {},
+			countDeltas: {}
 		}
-	}
-	const path = floorsPath(context.environment.machineId)
-	let floors: FloorsFile = {
-		schemaVersion: 2,
-		kind: 'd1-floors',
-		machineId: context.environment.machineId,
-		bun: manifest.bun,
-		sessions: [],
-		floors: {},
-		countDeltas: {}
-	}
-	if (await exists(path)) {
-		const existing = await readJson<unknown>(path)
-		if ((existing as Partial<FloorsFile>).schemaVersion === 2) {
-			validateFloors(existing)
-			floors = existing
+		if (await exists(path)) {
+			const existing = await readJson<unknown>(path)
+			if ((existing as Partial<FloorsFile>).schemaVersion === 2) {
+				validateFloors(existing)
+				floors = floorsForBenchSourceHash(
+					existing,
+					context.benchSourceHash
+				)
+			}
 		}
+		floors.sessions.push(...sessions)
+		for (const session of sessions)
+			for (const [metric, width] of Object.entries(session.widths))
+				floors.floors[metric] = Math.max(
+					floors.floors[metric] ?? 0,
+					width
+				)
+		for (const session of sessions)
+			for (const [metric, delta] of Object.entries(session.countDeltas))
+				floors.countDeltas[metric] = Math.max(
+					floors.countDeltas[metric] ?? 0,
+					delta
+				)
+		const refreshedManifest = await capturePinnedManifest(repoRoot)
+		if (refreshedManifest.benchSourceHash !== context.benchSourceHash)
+			throw new Error('D1 benchmark source changed during A/A sampling')
+		await writeJson(path, floors)
+		await writeJson(
+			manifestPath(context.environment.machineId),
+			owners
+				? pinOwnerBenchSourceHashes(
+						manifest,
+						owners,
+						context.benchSourceHash
+					)
+				: {
+						...refreshedManifest,
+						...(manifest.ownerBenchSourceHashes
+							? {
+									ownerBenchSourceHashes:
+										manifest.ownerBenchSourceHashes
+								}
+							: {})
+					}
+		)
+		console.log(`floors: ${path}`)
+	} finally {
+		await prepared.cleanup()
 	}
-	floors.sessions.push(...sessions)
-	for (const session of sessions)
-		for (const [metric, width] of Object.entries(session.widths))
-			floors.floors[metric] = Math.max(floors.floors[metric] ?? 0, width)
-	for (const session of sessions)
-		for (const [metric, delta] of Object.entries(session.countDeltas))
-			floors.countDeltas[metric] = Math.max(
-				floors.countDeltas[metric] ?? 0,
-				delta
-			)
-	await writeJson(path, floors)
-	console.log(`floors: ${path}`)
 }
 
 async function gateMode(
@@ -1551,15 +1759,37 @@ async function gateMode(
 		throw new Error(
 			'baseline benchSourceHash is stale; record and promote a new baseline'
 		)
-	if (manifest.benchSourceHash !== context.benchSourceHash)
+	if (owners)
+		assertOwnerBenchSourcePins(
+			manifest,
+			owners,
+			context.benchSourceHash
+		)
+	else if (manifest.benchSourceHash !== context.benchSourceHash)
 		throw new Error(
 			'pinned manifest benchSourceHash is stale; run record --promote'
 		)
-	const baselineWorktree = currentFlagOff
+	const floors = await readJson<FloorsFile>(
+		floorsPath(context.environment.machineId)
+	)
+	validateFloors(floors)
+	if (floors.benchSourceHash !== context.benchSourceHash)
+		throw new Error(
+			`A/A floors benchmark-source pin is missing or stale; run bun run bench:d1:aa${
+				owners ? ` --owners=${[...owners].sort().join(',')}` : ''
+			}`
+		)
+	const baselineWorktreeParent = currentFlagOff
 		? undefined
 		: resolve(traceRoot, `baseline-worktree-${process.pid}`)
-	const candidateWorktree = historicalCandidate
+	const baselineWorktree = baselineWorktreeParent
+		? resolve(baselineWorktreeParent, 'elysia')
+		: undefined
+	const candidateWorktreeParent = historicalCandidate
 		? resolve(traceRoot, `candidate-worktree-${process.pid}`)
+		: undefined
+	const candidateWorktree = candidateWorktreeParent
+		? resolve(candidateWorktreeParent, 'elysia')
 		: undefined
 	const baselineCommit =
 		historicalCommit ?? promotedBaseline?.commit ?? gitInfo(repoRoot).commit
@@ -1570,6 +1800,7 @@ async function gateMode(
 	await mkdir(traceRoot, { recursive: true })
 	try {
 		if (baselineWorktree) {
+			await mkdir(baselineWorktreeParent!, { recursive: true })
 			const added = command('git', [
 				'worktree',
 				'add',
@@ -1583,6 +1814,7 @@ async function gateMode(
 				)
 		}
 		if (candidateWorktree) {
+			await mkdir(candidateWorktreeParent!, { recursive: true })
 			const added = command('git', [
 				'worktree',
 				'add',
@@ -1595,6 +1827,16 @@ async function gateMode(
 					`cannot create candidate worktree: ${added.stderr}`
 				)
 		}
+		const candidateRoot = candidateWorktree ?? repoRoot
+		let baselineProductSourceHash: string | undefined
+		let candidateProductSourceHash: string | undefined
+		if (dedicatedOwner === 'N+3b' && baselineWorktree) {
+			await buildN3bPackage(baselineWorktree, 'historical')
+			await buildN3bPackage(candidateRoot, 'candidate')
+			baselineProductSourceHash =
+				await productSourceHash(baselineWorktree)
+			candidateProductSourceHash = await productSourceHash(candidateRoot)
+		}
 		const a = descriptor(
 			'baseline',
 			baselineWorktree ?? repoRoot,
@@ -1603,13 +1845,20 @@ async function gateMode(
 				? currentBaselineEnvironment(dedicatedOwner)
 				: dedicatedOwner === 'N+3a'
 					? leafPerfEnvironment(owners)
-					: undefined
+					: dedicatedOwner === 'N+3b'
+						? {
+								D1_N3B_CANDIDATE: '0',
+								NODE_ENV: 'production'
+							}
+						: undefined,
+			baselineProductSourceHash
 		)
 		const b = descriptor(
 			'candidate',
-			candidateWorktree ?? repoRoot,
+			candidateRoot,
 			candidateCommit,
-			leafPerfEnvironment(owners)
+			leafPerfEnvironment(owners),
+			candidateProductSourceHash
 		)
 		capture.variants.push(a, b)
 		const fixtures = await runPairedBlocks(
@@ -1618,15 +1867,17 @@ async function gateMode(
 			registry,
 			context.seed,
 			gateFixtureIds,
-			defaultBlocks,
+			dedicatedOwner === 'N+3b' ? n3bBlocks : defaultBlocks,
 			(records) => captureFixtures(capture, records)
 		)
 		captureFixtures(capture, fixtures)
-		const results: ComparisonResult[] = []
-		const floors = await readJson<FloorsFile>(
-			floorsPath(context.environment.machineId)
+		if (
+			dedicatedOwner === 'N+3b' &&
+			((await productSourceHash(a.elysiaRoot)) !== a.productSourceHash ||
+				(await productSourceHash(b.elysiaRoot)) !== b.productSourceHash)
 		)
-		validateFloors(floors)
+			throw new Error('N+3b product source changed during gate sampling')
+		const results: ComparisonResult[] = []
 		for (const entry of active) {
 			const entryKey = key(entry.fixture, entry.metric)
 			if (entry.kind === 'count') {
@@ -1737,7 +1988,10 @@ async function gateMode(
 				console.error(
 					`warning: could not remove candidate worktree: ${removed.stderr}`
 				)
-			await rm(candidateWorktree, { recursive: true, force: true })
+			await rm(candidateWorktreeParent!, {
+				recursive: true,
+				force: true
+			})
 		}
 		if (baselineWorktree) {
 			const removed = command('git', [
@@ -1750,7 +2004,10 @@ async function gateMode(
 				console.error(
 					`warning: could not remove baseline worktree: ${removed.stderr}`
 				)
-			await rm(baselineWorktree, { recursive: true, force: true })
+			await rm(baselineWorktreeParent!, {
+				recursive: true,
+				force: true
+			})
 		}
 	}
 }
@@ -1761,7 +2018,8 @@ async function selfTest(
 	capture: ArtifactCapture
 ) {
 	const control = descriptor('control', repoRoot, context.commit, {
-		D1_INJECT: ''
+		D1_INJECT: '',
+		NODE_ENV: 'production'
 	})
 	capture.variants.push(control)
 	const classes: Array<{
@@ -1773,6 +2031,11 @@ async function selfTest(
 			injection: 'cold-start',
 			fixture: 'cold-start',
 			targetMetrics: ['spawn-to-first-2xx-ns']
+		},
+		{
+			injection: 'aot-cold-start',
+			fixture: 'aot-cold-start',
+			targetMetrics: ['import-to-first-valid-response-7x-ns']
 		},
 		{
 			injection: 'http',
@@ -1877,7 +2140,7 @@ async function selfTest(
 						) + 0.01
 			return comparisonForRecord(
 				controlRecord,
-				entry,
+				{ ...entry, claim: 'non-regression' },
 				controlMargin,
 				context.seed,
 				context.resamples
@@ -1894,7 +2157,8 @@ async function selfTest(
 				`self-test A/A control was not pass for ${item.injection}: ${controlResults.map((result) => `${result.metric}=${result.verdict}`).join(', ')}`
 			)
 		const injected = descriptor('injected', repoRoot, context.commit, {
-			D1_INJECT: item.injection
+			D1_INJECT: item.injection,
+			NODE_ENV: 'production'
 		})
 		capture.variants.push(injected)
 		const injectedFixtures = await runPairedBlocks(
@@ -1981,7 +2245,14 @@ async function verifyMode(
 			throw new Error(
 				`manifest machine ID does not match directory: ${machineId}`
 			)
-		if (manifest.benchSourceHash !== currentHash)
+		if (owners)
+			assertOwnerBenchSourcePins(
+				manifest,
+				owners,
+				currentHash,
+				`committed manifest ${machineId}`
+			)
+		else if (manifest.benchSourceHash !== currentHash)
 			throw new Error(
 				`committed manifest benchSourceHash is stale: ${machineId}`
 			)
@@ -1994,6 +2265,13 @@ async function verifyMode(
 			)
 		if (JSON.stringify(floors.bun) !== JSON.stringify(manifest.bun))
 			throw new Error(`manifest and floors Bun pins differ: ${machineId}`)
+		if (floors.benchSourceHash !== currentHash)
+			throw new Error(
+				`committed floors benchmark-source pin is missing or stale: ${machineId}; ` +
+					`run bun run bench:d1:aa${
+						owners ? ` --owners=${[...owners].sort().join(',')}` : ''
+					}`
+			)
 		for (const entry of active) {
 			const entryKey = key(entry.fixture, entry.metric)
 			if (entry.kind === 'count') {
@@ -2015,8 +2293,13 @@ async function verifyMode(
 				throw new Error(`active margin is not above floor: ${entryKey}`)
 		}
 
+		const baselineEntries = (owners ? selected : registry.entries).filter(
+			(entry) =>
+				!(entry.owner in historicalBaselineByOwner) &&
+				!currentBaselineOwners.has(entry.owner)
+		)
 		const baselineFile = baselinePath(machineId)
-		if (await exists(baselineFile)) {
+		if (baselineEntries.length > 0 && (await exists(baselineFile))) {
 			const baseline = await readJson<RawArtifact>(baselineFile)
 			validateArtifact(baseline)
 			if (baseline.machineId !== machineId)
@@ -2040,11 +2323,7 @@ async function verifyMode(
 					key(record.fixture, record.metric)
 				)
 			)
-			for (const entry of registry.entries.filter(
-				(entry) =>
-					!(entry.owner in historicalBaselineByOwner) &&
-					!currentBaselineOwners.has(entry.owner)
-			))
+			for (const entry of baselineEntries)
 				if (!baselineKeys.has(key(entry.fixture, entry.metric)))
 					throw new Error(
 						`baseline ${machineId} is missing ${key(entry.fixture, entry.metric)}`

@@ -5243,12 +5243,7 @@ export class Elysia<
 		hookOrFn: unknown,
 		fn?: unknown
 	): any {
-		return this.#add(
-			typeof method === 'string' ? method.toUpperCase() : method,
-			path,
-			hookOrFn,
-			fn
-		)
+		return this.#add(method.toUpperCase(), path, hookOrFn, fn)
 	}
 
 	all<
@@ -6180,6 +6175,7 @@ export class Elysia<
 			const routeMethod = method[i]
 			const routePath = path[i]
 			const routeFlags = flags[i]
+			Capture.beginRoute(routeMethod, routePath)
 
 			if ((routeFlags & RouteFlag.WS) !== 0) {
 				const ws = buildWSRoute(
@@ -6197,7 +6193,6 @@ export class Elysia<
 
 					this['~hasDynamicWS'] = true
 				} else {
-					this.#initMap()
 					const wsMap = (this['~map']!['WS'] ??= nullObject() as any)
 					wsMap[routePath] = handler
 

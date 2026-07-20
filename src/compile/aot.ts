@@ -28,6 +28,7 @@ export interface CompilerSession {
 	sucroseCacheBytes: number
 	capture?: Map<string, CapturedValidator>
 	handlerCapture?: Map<string, CapturedHandler>
+	captureRoutes?: Set<string>
 	app?: object
 	external?: true
 	explicitCapture?: true
@@ -45,6 +46,7 @@ export function beginCompilerSession(app: object): CompilerSession {
 	if (env.ELYSIA_AOT_BUILD && !session.external) {
 		session.external = true
 		session.capture = new Map()
+		session.captureRoutes = new Set()
 	}
 
 	if (session.app && session.app !== app)
@@ -73,6 +75,7 @@ export function endCompilerSession(
 	session.sucroseCacheBytes = 0
 	session.capture = undefined
 	session.handlerCapture = undefined
+	session.captureRoutes = undefined
 	if (activeSession === session) activeSession = undefined
 }
 
@@ -263,21 +266,6 @@ let programs = new WeakMap<ProgramId, CompiledProgram>()
 
 const programFor = (id?: ProgramId) => (id ? programs.get(id) : undefined)
 
-const fingerprintMismatch = (
-	manifest: CompiledProgramRegistration,
-	actual: AotFingerprint
-) => {
-	const differences: string[] = []
-	const expected = manifest.fingerprint
-
-	if (manifest.bf !== 1)
-		differences.push(`bf (manifest ${manifest.bf}, app 1)`)
-	if (expected.abi !== actual.abi)
-		differences.push(`abi (manifest ${expected.abi}, app ${actual.abi})`)
-
-	return differences
-}
-
 export abstract class Compiled {
 	static register(manifest: CompiledProgramRegistration) {
 		registered = manifest
@@ -288,10 +276,9 @@ export abstract class Compiled {
 		if (!registered || claimed) return false
 
 		const manifest = registered
-		const differences = fingerprintMismatch(manifest, fingerprint)
-		if (differences.length)
+		if (manifest.fingerprint.abi !== fingerprint.abi)
 			throw new Error(
-				`[elysia-aot] Registered manifest fingerprint mismatch: ${differences.join('; ')}.`
+				`[elysia-aot] Registered manifest fingerprint mismatch: abi (manifest ${manifest.fingerprint.abi}, app ${fingerprint.abi}).`
 			)
 
 		claimed = true
@@ -521,6 +508,23 @@ function captureHandler(v: CapturedHandler) {
 	;(session.handlerCapture ??= new Map()).set(`${v.method}\0${v.path}`, v)
 }
 
+function beginCaptureRoute(method: string, path: string) {
+	const session = activeSession
+	if (!session?.capture) return
+	const route = `${method}\0${path}`
+	const routes = (session.captureRoutes ??= new Set())
+	if (!routes.has(route)) {
+		routes.add(route)
+		return
+	}
+
+	for (const [key, captured] of session.capture ?? [])
+		if (captured.method === method && captured.path === path)
+			session.capture!.delete(key)
+
+	session.handlerCapture?.delete(route)
+}
+
 function captureSet(
 	loc: { method: string; path: string; slot: ValidatorSlot },
 	partial: Partial<CapturedValidator>
@@ -556,6 +560,7 @@ const isValidatorCapturing = (): boolean => {
 export const Capture = {
 	set: captureSet,
 	get: captureGet,
+	beginRoute: beginCaptureRoute,
 	handler: captureHandler,
 	isCapturing: isValidatorCapturing,
 	isAotBuildEnv: isAotBuildEnv

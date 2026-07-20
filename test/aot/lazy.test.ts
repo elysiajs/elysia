@@ -214,6 +214,20 @@ describe('lazy AOT validators', () => {
 })
 
 describe('lazy AOT group sizing', () => {
+	it('defaults to eager validators so large manifests add no lazy thunks', async () => {
+		const body = t.Object({ value: t.String() })
+		const app = new Elysia()
+		for (let i = 0; i < 516; i++)
+			app.post(`/r${i}`, { body }, ({ body }: any) => body)
+
+		const source = await compileToSource(app as any, {
+			register: false
+		})
+		expect(source).toContain('export const validators')
+		expect(source).not.toContain('export const groups')
+		expect(source).not.toContain('const _groups')
+	})
+
 	it('scales the group size by route count', () => {
 		expect(autoGroupSize(1)).toBe(1)
 		expect(autoGroupSize(63)).toBe(1)

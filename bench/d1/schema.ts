@@ -11,6 +11,8 @@ export interface VariantDescriptor {
 	label: string
 	elysiaRoot: string
 	commit: string
+	/** Exact product/build input hash; present for source-sensitive gates. */
+	productSourceHash?: string
 	env: Record<string, string>
 }
 
@@ -42,6 +44,8 @@ export interface PinnedManifest {
 	bun: BunManifest
 	env: Record<string, string>
 	benchSourceHash: string
+	/** Last harness hash calibrated independently by each leaf owner. */
+	ownerBenchSourceHashes?: Record<string, string>
 	createdAt: string
 }
 
@@ -112,6 +116,7 @@ export interface ComparisonResult {
 export function metricUnit(entry: Pick<MarginEntry, 'kind' | 'metric'>) {
 	if (entry.kind === 'count') return 'count'
 	if (entry.kind === 'timing') return 'ns'
+	if (entry.metric.endsWith('-bytes')) return 'bytes'
 	if (entry.metric.endsWith('-objects-per-request'))
 		return 'objects-per-request'
 	if (entry.metric.endsWith('-bytes-per-request')) return 'bytes-per-request'
@@ -183,6 +188,8 @@ export interface FloorsFile {
 	kind: 'd1-floors'
 	machineId: string
 	bun: BunManifest
+	/** Harness hash shared by every accumulated floor in this file. */
+	benchSourceHash?: string
 	sessions: FloorsSession[]
 	floors: Record<string, number>
 	countDeltas: Record<string, number>

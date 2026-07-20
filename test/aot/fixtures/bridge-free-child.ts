@@ -3,9 +3,10 @@ import { readFileSync } from 'node:fs'
 import { validationPlan } from '../../../src/experimental/validation-plan'
 
 import { type CapturedValidator } from '../../../src/compile/aot'
+import { Reconstrct } from '../../../src/compile/handler/reconstruct'
 import { buildFrozenRouteValidator } from '../../../src/compile/handler/frozen-validator'
-import { hasTypes } from '../../../src/type/bridge'
-import { claimManifest, materialise } from '../_manifest'
+import { hasTypes, isTypeboxInitialized } from '../../../src/type/bridge'
+import { claimManifest, materialise, registerManifest } from '../_manifest'
 
 const out = (tag: string, data: unknown) =>
 	console.log(tag, JSON.stringify(data))
@@ -18,6 +19,7 @@ try {
 } catch {
 	out('BRIDGE', 'unwired')
 }
+out('READY', isTypeboxInitialized())
 
 const payload = JSON.parse(readFileSync(process.env.PAYLOAD!, 'utf8')) as {
 	captured: CapturedValidator[]
@@ -28,10 +30,36 @@ const payload = JSON.parse(readFileSync(process.env.PAYLOAD!, 'utf8')) as {
 	slot?: 'body' | 'query'
 }
 
-const claimed = claimManifest({ validators: materialise(payload.captured) })
-
 const slot = payload.slot ?? 'body'
-const hook = { [slot]: payload.schema } as any
+let routeValidatorTouched = false
+const schema =
+	process.env.USE_RECONSTRUCT_VALIDATOR === '1' ||
+	process.env.USE_WS_BUILD === '1'
+		? new Proxy(payload.schema as object, {
+				has(target, key) {
+					if (key === '~kind') routeValidatorTouched = true
+					return Reflect.has(target, key)
+				}
+			})
+		: payload.schema
+const hook = { [slot]: schema } as any
+
+const manifest = { validators: materialise(payload.captured) }
+if (process.env.USE_WS_BUILD === '1') {
+	registerManifest(manifest)
+	const { Elysia } = await import('../../../src/base')
+	out('READY_BEFORE_BUILD', isTypeboxInitialized())
+	const app = new Elysia().ws(payload.path, {
+		body: schema as any,
+		message() {}
+	})
+	routeValidatorTouched = false
+	app.compile()
+	out('RESULT', { reconstructed: true, routeValidatorTouched })
+	process.exit(0)
+}
+
+const claimed = claimManifest(manifest)
 const root = {
 	...claimed,
 	'~config': {
@@ -58,12 +86,15 @@ if (process.env.USE_LIVE_VALIDATOR === '1') {
 	process.exit(0)
 }
 
-const validator = buildFrozenRouteValidator(
-	hook,
-	root,
-	payload.method as any,
-	payload.path
-)
+const validator =
+	process.env.USE_RECONSTRUCT_VALIDATOR === '1'
+		? Reconstrct.validator(hook, root, payload.method as any, payload.path)
+		: buildFrozenRouteValidator(
+				hook,
+				root,
+				payload.method as any,
+				payload.path
+			)
 
 const channel = validator?.[slot]
 if (!validator || !channel) {
@@ -85,4 +116,4 @@ const results = payload.cases.map((value) => {
 	}
 })
 
-out('RESULT', { reconstructed: true, results })
+out('RESULT', { reconstructed: true, routeValidatorTouched, results })

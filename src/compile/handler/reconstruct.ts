@@ -2,10 +2,8 @@ import { RouteValidator } from '../../validator/route'
 import { compileCookieConfig } from '../../cookie/config'
 import { createTracer } from '../../trace'
 import { frozenRootOf } from '../../generation'
-import {
-	buildFrozenRouteValidator,
-	isBridgeNotInitialized
-} from './frozen-validator'
+import { isTypeboxInitialized } from '../../type/bridge'
+import { buildFrozenRouteValidator } from './frozen-validator'
 
 import type { AnyLocalHook, HTTPMethod } from '../../types'
 import type { AnyElysia } from '../../base'
@@ -17,26 +15,21 @@ export abstract class Reconstrct {
 		method: HTTPMethod,
 		path: string
 	) {
-		const frozenRoot = frozenRootOf(root)
-		try {
-			return new RouteValidator(hook, {
-				models: frozenRoot['~ext']?.models,
-				app: root,
-				normalize: frozenRoot['~config']?.normalize,
-				sanitize: frozenRoot['~config']?.sanitize,
-				schemas: hook?.schemas,
-				aot: { method, path },
-				validationPlan:
-					frozenRoot['~config']?.experimental?.validationPlan
-			})
-		} catch (error) {
-			if (!isBridgeNotInitialized(error)) throw error
-
+		if (!isTypeboxInitialized()) {
 			const frozen = buildFrozenRouteValidator(hook, root, method, path)
 			if (frozen) return frozen as any
-
-			throw error
 		}
+
+		const frozenRoot = frozenRootOf(root)
+		return new RouteValidator(hook, {
+			models: frozenRoot['~ext']?.models,
+			app: root,
+			normalize: frozenRoot['~config']?.normalize,
+			sanitize: frozenRoot['~config']?.sanitize,
+			schemas: hook?.schemas,
+			aot: { method, path },
+			validationPlan: frozenRoot['~config']?.experimental?.validationPlan
+		})
 	}
 
 	static cookie(hook: AnyLocalHook, root: AnyElysia) {

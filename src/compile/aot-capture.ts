@@ -469,6 +469,7 @@ export function beginValidatorCapture() {
 	session.external = true
 	session.explicitCapture = true
 	session.capture = new Map()
+	session.captureRoutes = new Set()
 }
 
 export function abortCapture() {
@@ -477,6 +478,7 @@ export function abortCapture() {
 
 	session.capture = undefined
 	session.handlerCapture = undefined
+	session.captureRoutes = undefined
 	session.sucroseCache.clear()
 	CompilerState.session = undefined
 }
@@ -499,6 +501,7 @@ export function endValidatorCapture() {
 	const captured = session?.capture ? [...session.capture.values()] : []
 	if (session) {
 		session.capture = undefined
+		session.captureRoutes = undefined
 		endCaptureSession(session)
 	}
 

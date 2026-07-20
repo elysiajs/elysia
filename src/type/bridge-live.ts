@@ -21,6 +21,7 @@ import { hasTypes } from './utils'
 Settings.Set({ unionPrioritySort: false })
 
 export function useTypebox(_mod?: Parameters<typeof bridgeUseTypebox>[0]) {}
+export const isTypeboxInitialized = () => true
 
 export {
 	Compile,

@@ -3,7 +3,12 @@ import { readdir, readFile } from 'node:fs/promises'
 import { cpus, release } from 'node:os'
 import { dirname, extname, relative, resolve } from 'node:path'
 
-import type { BunManifest, MachineManifest, PinnedManifest } from './schema'
+import type {
+	BunManifest,
+	FloorsFile,
+	MachineManifest,
+	PinnedManifest
+} from './schema'
 
 export const BENCH_SOURCE_FILES = [
 	'bench/d1/env.ts',
@@ -14,7 +19,9 @@ export const BENCH_SOURCE_FILES = [
 	'bench/d1/stats.ts',
 	'bench/d1/runtime-lowering.test.ts',
 	'bench/d1/retention-seal.test.ts',
+	'bench/d1/provenance.test.ts',
 	'bench/d1/validation.test.ts',
+	'bench/d1/fixtures/aot-cold-start.ts',
 	'bench/d1/fixtures/cold-start.ts',
 	'bench/d1/fixtures/compile-memory.ts',
 	'bench/d1/fixtures/crypto-hmac.ts',
@@ -33,6 +40,14 @@ export const BENCH_SOURCE_FILES = [
 	'bench/d1/fixtures/utils.ts',
 	'example/stress/utils.ts',
 	'package.json'
+] as const
+
+export const PRODUCT_SOURCE_INPUTS = [
+	'src',
+	'build.ts',
+	'package.json',
+	'bun.lock',
+	'tsconfig.json'
 ] as const
 
 export interface D1Environment {
@@ -266,6 +281,47 @@ export async function benchSourceHash(repoRoot: string) {
 	return hash.digest('hex')
 }
 
+async function productSourceFiles(repoRoot: string, path: string) {
+	const absolute = resolve(repoRoot, path)
+	const entries = await readdir(absolute, { withFileTypes: true }).catch(
+		() => undefined
+	)
+	if (!entries) return [path]
+
+	const files: string[] = []
+	for (const entry of entries) {
+		if (entry.name.startsWith('.')) continue
+		const child = `${path}/${entry.name}`
+		if (entry.isDirectory())
+			files.push(...(await productSourceFiles(repoRoot, child)))
+		else if (entry.isFile()) files.push(child)
+	}
+	return files
+}
+
+/** Hashes the exact product and build inputs used by an N+3b variant. */
+export async function productSourceHash(repoRoot: string) {
+	const files = (
+		await Promise.all(
+			PRODUCT_SOURCE_INPUTS.map((path) =>
+				productSourceFiles(repoRoot, path)
+			)
+		)
+	)
+		.flat()
+		.sort()
+	const hash = createHash('sha256')
+	for (const file of files) {
+		const bytes = await readFile(resolve(repoRoot, file))
+		hash.update(file)
+		hash.update('\0')
+		hash.update(String(bytes.byteLength))
+		hash.update('\0')
+		hash.update(bytes)
+	}
+	return hash.digest('hex')
+}
+
 export async function capturePinnedManifest(
 	repoRoot: string
 ): Promise<PinnedManifest> {
@@ -279,6 +335,58 @@ export async function capturePinnedManifest(
 		env: environment.env,
 		benchSourceHash: await benchSourceHash(repoRoot),
 		createdAt: new Date().toISOString()
+	}
+}
+
+export function pinOwnerBenchSourceHashes(
+	manifest: PinnedManifest,
+	owners: Iterable<string>,
+	currentHash: string
+): PinnedManifest {
+	const pins = new Map(Object.entries(manifest.ownerBenchSourceHashes ?? {}))
+	for (const owner of [...owners].sort()) pins.set(owner, currentHash)
+
+	return {
+		...manifest,
+		ownerBenchSourceHashes: Object.fromEntries(
+			[...pins].sort(([left], [right]) => left.localeCompare(right))
+		)
+	}
+}
+
+export function assertOwnerBenchSourcePins(
+	manifest: PinnedManifest,
+	owners: Iterable<string>,
+	currentHash: string,
+	label = 'pinned manifest'
+) {
+	for (const owner of [...owners].sort()) {
+		const pinnedHash = manifest.ownerBenchSourceHashes?.[owner]
+		if (pinnedHash === undefined)
+			throw new Error(
+				`${label} has no benchmark-source pin for owner '${owner}'; ` +
+					`run bun run bench:d1:aa --owners=${owner}`
+			)
+		if (pinnedHash !== currentHash)
+			throw new Error(
+				`${label} benchmark-source pin is stale for owner '${owner}'; ` +
+					`run bun run bench:d1:aa --owners=${owner}`
+			)
+	}
+}
+
+export function floorsForBenchSourceHash(
+	floors: FloorsFile,
+	currentHash: string
+): FloorsFile {
+	if (floors.benchSourceHash === currentHash) return floors
+
+	return {
+		...floors,
+		benchSourceHash: currentHash,
+		sessions: [],
+		floors: {},
+		countDeltas: {}
 	}
 }
 

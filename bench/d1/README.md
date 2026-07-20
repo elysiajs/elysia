@@ -33,11 +33,27 @@ bun run bench:d1:selftest
 Use `bun run bench:d1:aa --owners=<owner>`,
 `bun run bench:d1:gate --owners=<owner>`, and
 `bun run bench:d1:verify --owners=<owner>` when a leaf train must calibrate, evaluate, and
-verify only its registered margins without changing unrelated established tolerances. The
+verify only its registered margins without changing unrelated tolerances calibrated on the same
+benchmark-source hash. A harness change invalidates every old tolerance; the first subsequent A/A
+run resets them, and each owner must recalibrate before its next gate. The
 selected owners, feature environments, fixtures, and exact active margins are recorded in
 artifacts. Unscoped A/A and gate runs stay on default production behavior and exclude these
 leaf-owned fixtures and margins; unscoped verification continues to validate every active
 registry entry.
+
+After all A/A sessions succeed and benchmark source is confirmed unchanged, unscoped A/A refreshes
+the pinned manifest's global benchmark-source hash. Owner-scoped A/A records the same current hash
+only for each selected owner and leaves the global pin unchanged, so it cannot approve unrelated
+owner fixtures. Owner-scoped gate and verify require those owner pins; an older manifest without
+them fails with the exact A/A command needed to establish one. A failed or source-mutated A/A run
+does not advance any pin, including when no manifest existed before the run. Owners compared with
+a promoted baseline must still refresh that measurement through `record --promote` when its harness
+hash is stale; historical-commit and current-revision baselines do not depend on that shared artifact.
+
+The shared floors file also records the exact benchmark-source hash calibrated by all accumulated
+sessions. The first A/A run after any harness change discards every older floor before adding its
+selected sessions; subsequent owner and unscoped A/A runs on that same hash safely accumulate.
+Gate and verify reject a missing or stale floors hash before using any threshold.
 
 `N+3a` measures the strict production retention seal against legacy revision `d4fb01a3`
 with `precompile: true` on both sides so it compares post-build images rather than the
@@ -164,3 +180,24 @@ certified byte streams, and requests carrying ten cookies while reading one. Sep
 snapshots retain patched Responses and cookie jars to gate heap and object-count reductions.
 Every block verifies response bodies, patched/source headers, byte-stream content type, and the
 selected cookie before reporting a sample.
+
+The N+3b `aot-cold-start` fixture compares the pre-sprint `7e70df83` default auto-lazy image
+with the default auto-eager candidate. Both omit the public `strip` option (`strip: 'auto'`), run
+the same 1,000 validated routes in production, and use package roots ending in `/elysia`.
+Build time is excluded, syntax and whitespace are minified, and identifiers remain stable so
+worktree-dependent renaming cannot contaminate cold timing. Both product trees are freshly built
+before sampling, each variant records a hash of its exact product/build inputs, and A/A mirrors the
+current source into the gate's nested-worktree versus repository-root layout. The fixture records raw and gzip
+manifest bytes, whole-artifact bytes, and seven clean-child imports through a body-consumed valid
+response on the last route in each of 16 paired blocks. Active gates require 25% smaller raw and gzip manifests,
+4% fewer artifact bytes, and 6% faster import-to-first-valid-response. Provenance hardening forced
+a fresh corrected-candidate calibration and gate. A/A trace
+`trace/d1/aa-20260720T151504Z-7e70df83.json` records harness hash
+`1fa83a973380bef27dca0ac574d7416f5d09fb791853400b0cc95effeacca1b8`; its conservative
+16-block timing floor is 1.9574%, with zero byte floors, below the unchanged 6% target. Final gate
+`trace/d1/gate-20260720T151637Z-7e70df83.json` records candidate product hash
+`d4b4de6d67e21b84ca96de1f9bf33d87d39f510c55586800ece9f73b4527fa8a` and passed every active
+margin: median import-to-first-valid-response fell from 37.613875 ms to 32.6790415 ms (13.1197%;
+95% CI 12.4634–13.9395%), whole-artifact bytes fell from 572,425 to 545,411 (4.7192%), raw manifest
+bytes from 71,898 to 40,961 (43.0290%), and gzip manifest bytes from 9,312 to 5,836 (37.3282%).
+The implementation and regression tests separately prove removal of the earlier expected-exception allowance.

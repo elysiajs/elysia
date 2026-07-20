@@ -12,9 +12,12 @@ import {
 } from './source'
 import { composeRouteHook } from '../../compile/handler'
 import {
+	isResponseMap,
 	isStandardSchema,
+	resolveModelRef,
 	standaloneAllStandard
 } from '../../compile/handler/frozen-validator'
+import type { AnyElysia } from '../../base'
 
 export interface ElysiaAotOptions {
 	/**
@@ -42,7 +45,7 @@ export interface ElysiaAotOptions {
 	 * startup cost. Handlers are always eager. Only validator construction
 	 * is deferred. Pass a number to set the group size explicitly.
 	 *
-	 * @default decided by Elysia based on route batch scale
+	 * @default false
 	 */
 	lazy?: boolean | number
 
@@ -707,25 +710,68 @@ export async function generateCompiledArtifactsIsolated(
 	}
 }
 
-function isStandardResponse(response: unknown) {
-	if (response == null || typeof response !== 'object') return false
+function typeBoxResponseSlots(response: unknown, root?: AnyElysia) {
+	if (root && typeof response === 'string')
+		response = resolveModelRef(response, root) ?? response
 
-	if (isStandardSchema(response)) return true
+	if (response == null || isStandardSchema(response)) return []
+	if (typeof response !== 'object') return ['response:200']
+	if (!isResponseMap(response)) return ['response:200']
 
-	if ('~kind' in (response as object) || '~elyAcl' in (response as object))
-		return false
+	const slots: string[] = []
+	for (const [status, raw] of Object.entries(response)) {
+		let schema = raw
+		if (root && typeof schema === 'string')
+			schema = resolveModelRef(schema, root) ?? schema
+		if (schema && !isStandardSchema(schema))
+			slots.push(`response:${status}`)
+	}
 
-	// A status map: every entry must be a Standard Schema to skip the count.
-	const entries = Object.values(response as Record<string, unknown>)
-	if (entries.length === 0) return false
+	return slots
+}
 
-	return entries.every((v) => isStandardSchema(v))
+function typeBoxValidatorSlots(
+	hooks: Record<string, unknown>,
+	root?: AnyElysia
+) {
+	const slots = typeBoxResponseSlots(hooks.response, root)
+	for (const slot of ['body', 'query', 'params', 'headers', 'cookie']) {
+		let value = hooks[slot]
+		if (root && typeof value === 'string')
+			value = resolveModelRef(value, root) ?? value
+		if (value && !isStandardSchema(value)) slots.push(slot)
+	}
+
+	return slots
+}
+
+/** @internal Deterministic coverage count for one canonical route hook. */
+export function countTypeBoxValidatorSlots(
+	hooks: Record<string, unknown>,
+	root?: AnyElysia
+) {
+	return typeBoxValidatorSlots(hooks, root).length
+}
+
+const validatorSlotKey = (method: unknown, path: unknown, slot: unknown) =>
+	`${method}\0${path}\0${slot}`
+
+const describeValidatorSlot = (key: string) => {
+	const [method, path, slot] = key.split('\0')
+	return `${method} ${path} (${slot})`
 }
 
 export async function generateCompiledArtifacts(
 	file: string,
 	options?: ElysiaAotOptions
 ): Promise<CompiledArtifacts> {
+	const strip = options?.strip ?? 'auto'
+	if (options?.target === 'workerd' && strip === false)
+		throw new Error(
+			`[elysia-aot] target 'workerd' cannot disable AOT stripping because ` +
+				`runtime handler and validator compilation is unavailable on workerd.`
+		)
+
 	const previousAotBuild = process.env.ELYSIA_AOT_BUILD
 	process.env.ELYSIA_AOT_BUILD = '1'
 
@@ -761,8 +807,6 @@ export async function generateCompiledArtifacts(
 			lazy: options?.lazy,
 			target: options?.target
 		}
-
-		const strip = options?.strip ?? 'auto'
 
 		const adapterStub: 'bun' | 'web-standard' | false =
 			options?.target === 'bun'
@@ -806,11 +850,15 @@ export async function generateCompiledArtifacts(
 						?.length || route?.[2]?.['~mount']
 			)
 
-		let expectedSlots = 0
+		const expectedSlotKeys = new Set<string>()
 
 		let routesForbidSeal = false
-		for (const route of history) {
-			const [, , , instance, hook, appHook, inheritedChain, macroScope] =
+		const winningRoutes = new Map<string, (typeof history)[number]>()
+		for (const route of history)
+			winningRoutes.set(`${route[0]}\0${route[1]}`, route)
+
+		for (const route of winningRoutes.values()) {
+			const [method, path, , instance, hook, appHook, inheritedChain, macroScope] =
 				route as [
 					unknown,
 					unknown,
@@ -831,35 +879,18 @@ export async function generateCompiledArtifacts(
 			) as Record<string, unknown> | undefined
 			if (!hooks) continue
 
-			let routeHasTypeBoxDirectSlot = false
-			for (const slot of [
-				'body',
-				'query',
-				'params',
-				'headers',
-				'cookie'
-			]) {
-				const value = hooks[slot]
-				if (value === undefined) continue
-				if (isStandardSchema(value)) continue
-				routeHasTypeBoxDirectSlot = true
-				expectedSlots++
-			}
-
-			if (
-				hooks.response !== undefined &&
-				!isStandardResponse(hooks.response)
-			) {
-				routeHasTypeBoxDirectSlot = true
-				expectedSlots++
-			}
+			const routeSlots = typeBoxValidatorSlots(hooks, typedApp)
+			const routeHasTypeBoxDirectSlot = routeSlots.length > 0
+			for (const slot of routeSlots)
+				expectedSlotKeys.add(validatorSlotKey(method, path, slot))
 
 			const standalone = (hooks as { schemas?: unknown[] }).schemas
 			if (Array.isArray(standalone) && standalone.length > 0) {
 				if (
 					routeHasTypeBoxDirectSlot ||
 					!standaloneAllStandard(
-						standalone as Array<Record<string, unknown>>
+						standalone as Array<Record<string, unknown>>,
+						typedApp
 					)
 				)
 					routesForbidSeal = true
@@ -874,14 +905,24 @@ export async function generateCompiledArtifacts(
 			routesForbidSeal = true
 
 		const frozenSlots = artifacts.validators.length
-		// `expectedSlots` is computed by the loop above (typebox slots per
-		// route) — the fingerprint no longer carries a slot count.
+		const capturedSlotKeys = new Set(
+			artifacts.validators.map((validator) =>
+				validatorSlotKey(
+					validator.method,
+					validator.path,
+					validator.slot
+				)
+			)
+		)
+		const slotKeysMatch =
+			capturedSlotKeys.size === expectedSlotKeys.size &&
+			[...expectedSlotKeys].every((key) => capturedSlotKeys.has(key))
 
 		const allBridgeFree =
 			(artifacts.handlers.length > 0 ||
 				artifacts.validators.length > 0) &&
 			!routesForbidSeal &&
-			frozenSlots === expectedSlots &&
+			slotKeysMatch &&
 			artifacts.validators.every((v) => v.bridgeFree === true)
 
 		const { plan: stub, mode } = planFromReport(
@@ -905,11 +946,31 @@ export async function generateCompiledArtifacts(
 						`Every route must be captured into the AOT manifest.`
 				)
 
-			if (frozenSlots !== expectedSlots)
-				console.warn(
-					`[elysia-aot] target 'workerd': only ${frozenSlots}/` +
-						`${expectedSlots} validator slots were frozen ` +
-						`unfrozen slots compile at runtime and will fail on workerd.`
+			if (!slotKeysMatch) {
+				const missing = [...expectedSlotKeys].filter(
+					(key) => !capturedSlotKeys.has(key)
+				)
+				const unexpected = [...capturedSlotKeys].filter(
+					(key) => !expectedSlotKeys.has(key)
+				)
+				throw new Error(
+					`[elysia-aot] target 'workerd': captured ${frozenSlots} validator slots ` +
+						`but expected ${expectedSlotKeys.size}. ` +
+						(missing.length
+							? `Missing: ${missing.map(describeValidatorSlot).join(', ')}. `
+							: '') +
+						(unexpected.length
+							? `Unexpected: ${unexpected.map(describeValidatorSlot).join(', ')}. `
+							: '') +
+						`The frozen manifest must exactly cover the app because runtime compilation is unavailable on workerd.`
+				)
+			}
+
+			if (mode !== 'sealed')
+				throw new Error(
+					`[elysia-aot] target 'workerd' requires a sealed AOT manifest, ` +
+						`but validator reconstruction selected mode '${mode}'. ` +
+						`Runtime TypeBox compilation is unavailable on workerd.`
 				)
 		}
 
