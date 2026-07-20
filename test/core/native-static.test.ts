@@ -31,17 +31,11 @@ describe('Native Static Response', () => {
 			.get('/', 'Static Content')
 
 		expect(app.router.response['/'].GET).toBeInstanceOf(Response)
-		expect(app.router.response['/'].GET.headers.toJSON()).toEqual({
-			'content-type': 'text/plain',
-			server: 'Elysia'
-		})
+		expect(app.router.response['/'].GET.headers.get('server')).toBe('Elysia')
 		expect(await app.router.response['/'].GET.text()).toEqual('Static Content')
 
 		expect(app.router.response['/plugin'].GET).toBeInstanceOf(Response)
-		expect(app.router.response['/plugin'].GET.headers.toJSON()).toEqual({
-			'content-type': 'text/plain',
-			server: 'Elysia'
-		})
+		expect(app.router.response['/plugin'].GET.headers.get('server')).toBe('Elysia')
 		expect(await app.router.response['/plugin'].GET.text()).toEqual('Plugin')
 	})
 

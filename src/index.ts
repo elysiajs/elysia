@@ -165,7 +165,7 @@ import type {
 	UnknownRouteSchema,
 	MaybeFunction,
 	InlineHandlerNonMacro,
-	Router
+	Router,
 } from './types'
 import {
 	coercePrimitiveRoot,
@@ -420,7 +420,7 @@ export default class Elysia<
 
 	'~adapter': ElysiaAdapter
 
-	env(model: TObject<any>, _env = env) {
+	env(model: TObject, _env = env) {
 		const validator = getSchemaValidator(model, {
 			modules: this.definitions.typebox,
 			dynamic: true,
@@ -805,6 +805,10 @@ export default class Elysia<
 				Object.assign({}, this.config.detail!),
 				localHook.detail
 			)
+
+		if (path === '/ip') {
+			// console.log(path, this.event, localHookToLifeCycleStore(localHook))
+		}
 
 		const hooks = isNotEmpty(this.event)
 			? mergeHook(this.event, localHookToLifeCycleStore(localHook))
@@ -3650,6 +3654,10 @@ export default class Elysia<
 
 		for (const handle of handles) {
 			const fn = asHookType(handle, 'global', { skipIfHasType: true })
+			if (this.config.name || this.config.seed)
+				fn.checksum = checksum(
+					this.config.name + JSON.stringify(this.config.seed)
+				)
 
 			switch (type) {
 				case 'start':
@@ -4686,6 +4694,80 @@ export default class Elysia<
 			}
 		)
 
+		// Handle dynamic imports (Promises) used inside guard callback
+		if (instance.promisedModules.size > 0) {
+			let processedUntil = instance.router.history.length
+
+			for (const promise of instance.promisedModules.promises) {
+				this.promisedModules.add(
+					promise.then(() => {
+						const {
+							body,
+							headers,
+							query,
+							params,
+							cookie,
+							response,
+							...guardHook
+						} = hook
+
+						const hasStandaloneSchema =
+							body || headers || query || params || cookie || response
+
+						const startIndex = processedUntil
+						processedUntil = instance.router.history.length
+
+						for (
+							let i = startIndex;
+							i < instance.router.history.length;
+							i++
+						) {
+							const {
+								method,
+								path,
+								handler,
+								hooks: localHook
+							} = instance.router.history[i]
+
+							this.add(
+								method,
+								path,
+								handler,
+								mergeHook(guardHook as AnyLocalHook, {
+									...((localHook || {}) as AnyLocalHook),
+									error: !localHook.error
+										? sandbox.event.error
+										: Array.isArray(localHook.error)
+											? [
+													...(localHook.error ?? []),
+													...(sandbox.event.error ?? [])
+												]
+											: [
+													localHook.error,
+													...(sandbox.event.error ?? [])
+												],
+									standaloneValidator: !hasStandaloneSchema
+										? localHook.standaloneValidator
+										: [
+												...(localHook.standaloneValidator ??
+													[]),
+												{
+													body,
+													headers,
+													query,
+													params,
+													cookie,
+													response
+												}
+											]
+								})
+							)
+						}
+					})
+				)
+			}
+		}
+
 		return this as any
 	}
 
@@ -5598,21 +5680,7 @@ export default class Elysia<
 									})()
 
 			const handler: Handler = ({ request, path }) =>
-				run(
-					new Request(replaceUrlPath(request.url, path), {
-						method: request.method,
-						headers: request.headers,
-						signal: request.signal,
-						credentials: request.credentials,
-						referrerPolicy: request.referrerPolicy as any,
-						duplex: request.duplex,
-						redirect: request.redirect,
-						mode: request.mode,
-						keepalive: request.keepalive,
-						integrity: request.integrity,
-						body: request.body
-					})
-				)
+				run(new Request(replaceUrlPath(request.url, path), request))
 
 			this.route('ALL', '/*', handler as any, {
 				parse: 'none',
@@ -5648,19 +5716,7 @@ export default class Elysia<
 			handle(
 				new Request(
 					replaceUrlPath(request.url, path.slice(length) || '/'),
-					{
-						method: request.method,
-						headers: request.headers,
-						signal: request.signal,
-						credentials: request.credentials,
-						referrerPolicy: request.referrerPolicy as any,
-						duplex: request.duplex,
-						redirect: request.redirect,
-						mode: request.mode,
-						keepalive: request.keepalive,
-						integrity: request.integrity,
-						body: request.body
-					}
+					request
 				)
 			)
 
@@ -5800,7 +5856,10 @@ export default class Elysia<
 							Input,
 							Definitions['typebox'],
 							JoinPath<BasePath, Path>
-						>
+						>,
+						Metadata['macroFn'],
+						Omit<Input, NonResolvableMacroKey>,
+						Definitions['typebox']
 					>
 				}
 			>,
@@ -5915,7 +5974,10 @@ export default class Elysia<
 							Input,
 							Definitions['typebox'],
 							JoinPath<BasePath, Path>
-						>
+						>,
+						Metadata['macroFn'],
+						Omit<Input, NonResolvableMacroKey>,
+						Definitions['typebox']
 					>
 				}
 			>,
@@ -6030,7 +6092,10 @@ export default class Elysia<
 							Input,
 							Definitions['typebox'],
 							JoinPath<BasePath, Path>
-						>
+						>,
+						Metadata['macroFn'],
+						Omit<Input, NonResolvableMacroKey>,
+						Definitions['typebox']
 					>
 				}
 			>,
@@ -6143,7 +6208,10 @@ export default class Elysia<
 							Input,
 							Definitions['typebox'],
 							JoinPath<BasePath, Path>
-						>
+						>,
+						Metadata['macroFn'],
+						Omit<Input, NonResolvableMacroKey>,
+						Definitions['typebox']
 					>
 				}
 			>,
@@ -6256,7 +6324,10 @@ export default class Elysia<
 							Input,
 							Definitions['typebox'],
 							JoinPath<BasePath, Path>
-						>
+						>,
+						Metadata['macroFn'],
+						Omit<Input, NonResolvableMacroKey>,
+						Definitions['typebox']
 					>
 				}
 			>,
@@ -6369,7 +6440,10 @@ export default class Elysia<
 							Input,
 							Definitions['typebox'],
 							JoinPath<BasePath, Path>
-						>
+						>,
+						Metadata['macroFn'],
+						Omit<Input, NonResolvableMacroKey>,
+						Definitions['typebox']
 					>
 				}
 			>,
@@ -6482,7 +6556,10 @@ export default class Elysia<
 							Input,
 							Definitions['typebox'],
 							JoinPath<BasePath, Path>
-						>
+						>,
+						Metadata['macroFn'],
+						Omit<Input, NonResolvableMacroKey>,
+						Definitions['typebox']
 					>
 				}
 			>,
@@ -6595,7 +6672,10 @@ export default class Elysia<
 							Input,
 							Definitions['typebox'],
 							JoinPath<BasePath, Path>
-						>
+						>,
+						Metadata['macroFn'],
+						Omit<Input, NonResolvableMacroKey>,
+						Definitions['typebox']
 					>
 				}
 			>,
@@ -6708,7 +6788,10 @@ export default class Elysia<
 							Input,
 							Definitions['typebox'],
 							JoinPath<BasePath, Path>
-						>
+						>,
+						Metadata['macroFn'],
+						Omit<Input, NonResolvableMacroKey>,
+						Definitions['typebox']
 					>
 				}
 			>,
@@ -6828,7 +6911,10 @@ export default class Elysia<
 							Input,
 							Definitions['typebox'],
 							JoinPath<BasePath, Path>
-						>
+						>,
+						Metadata['macroFn'],
+						Omit<Input, NonResolvableMacroKey>,
+						Definitions['typebox']
 					>
 				}
 			>,
@@ -6935,7 +7021,10 @@ export default class Elysia<
 							Input,
 							Definitions['typebox'],
 							JoinPath<BasePath, Path>
-						>
+						>,
+						Metadata['macroFn'],
+						Omit<Input, NonResolvableMacroKey>,
+						Definitions['typebox']
 					>
 				}
 			>,
@@ -8361,6 +8450,8 @@ export type {
 	UnwrapSchema,
 	UnwrapSchemaInput,
 	UnwrapSchemaOutput,
+	AnySchema,
+	ModelsToTypes,
 	Checksum,
 	DocumentDecoration,
 	InferContext,

@@ -1240,6 +1240,27 @@ export type MacroToContext<
 		: {}
 >
 
+export type MacroToInputContext<
+	in out MacroFn extends Macro = {},
+	in out SelectedMacro extends BaseMacro = {},
+	in out Definitions extends DefinitionBase['typebox'] = {},
+	in out R extends 1[] = []
+> = Prettify<
+	InnerMacroToInputContext<
+		MacroFn,
+		Pick<SelectedMacro, Extract<keyof MacroFn, keyof SelectedMacro>>,
+		Definitions,
+		R
+	> extends infer A
+		? {
+				[K in Exclude<keyof A, 'return'>]: UnionToIntersect<A[K]>
+			} & Prettify<{
+				// @ts-ignore
+				return: FlattenMacroResponse<A['return']>
+			}>
+		: {}
+>
+
 // There's only resolve that can add new properties to Context
 type InnerMacroToContext<
 	MacroFn extends Macro = {},
@@ -1310,10 +1331,94 @@ type InnerMacroToContext<
 				}[keyof SelectedMacro]
 			>
 
+type InnerMacroToInputContext<
+	MacroFn extends Macro = {},
+	SelectedMacro extends BaseMacro = {},
+	Definitions extends DefinitionBase['typebox'] = {},
+	R extends 1[] = []
+> = {} extends SelectedMacro
+	? {}
+	: R['length'] extends 15
+		? {}
+		: UnionMacroContext<
+				{
+					[key in keyof SelectedMacro]: ReturnTypeIfPossible<
+						MacroFn[key],
+						SelectedMacro[key]
+					> extends infer Value
+						? {
+								resolve: ExtractResolveFromMacro<
+									Extract<
+										Exclude<
+											FunctionArrayReturnType<
+												// @ts-ignore Trust me bro
+												Value['resolve']
+											>,
+											AnyElysiaCustomStatusResponse
+										>,
+										Record<any, unknown>
+									>
+								>
+							} & UnwrapMacroSchemaInput<
+								// @ts-ignore Trust me bro
+								Value,
+								Definitions
+							> &
+								ExtractAllResponseFromMacro<
+									FunctionArrayReturnTypeNonNullable<
+										// @ts-expect-error type is checked in key mapping
+										Value['beforeHandle']
+									>
+								> &
+								ExtractAllResponseFromMacro<
+									FunctionArrayReturnTypeNonNullable<
+										// @ts-expect-error type is checked in key mapping
+										Value['afterHandle']
+									>
+								> &
+								ExtractAllResponseFromMacro<
+									// @ts-expect-error type is checked in key mapping
+									FunctionArrayReturnType<Value['error']>
+								> &
+								ExtractOnlyResponseFromMacro<
+									FunctionArrayReturnTypeNonNullable<
+										// @ts-expect-error type is checked in key mapping
+										Value['resolve']
+									>
+								> &
+								InnerMacroToInputContext<
+									MacroFn,
+									// @ts-ignore trust me bro
+									Pick<
+										Value,
+										Extract<keyof MacroFn, keyof Value>
+									>,
+									Definitions,
+									[...R, 1]
+								>
+						: {}
+				}[keyof SelectedMacro]
+			>
+
 type UnwrapMacroSchema<
 	T extends Partial<InputSchema<any>>,
 	Definitions extends DefinitionBase['typebox'] = {}
 > = UnwrapRoute<
+	{
+		body: 'body' extends keyof T ? T['body'] : undefined
+		headers: 'headers' extends keyof T ? T['headers'] : undefined
+		query: 'query' extends keyof T ? T['query'] : undefined
+		params: 'params' extends keyof T ? T['params'] : undefined
+		cookie: 'cookie' extends keyof T ? T['cookie'] : undefined
+		response: 'response' extends keyof T ? T['response'] : undefined
+	},
+	Definitions
+>
+
+type UnwrapMacroSchemaInput<
+	T extends Partial<InputSchema<any>>,
+	Definitions extends DefinitionBase['typebox'] = {}
+> = UnwrapRouteInput<
 	{
 		body: 'body' extends keyof T ? T['body'] : undefined
 		headers: 'headers' extends keyof T ? T['headers'] : undefined
@@ -2851,7 +2956,14 @@ export type CreateEdenResponse<
 	// This should be handled by ComposeElysiaResponse
 	Res extends PossibleResponse,
 	InputSchema extends RouteSchema = Schema,
-	InputMacroContext extends RouteSchema = MacroContext
+	InputMacroFn extends Macro = {},
+	InputSelectedMacro extends BaseMacro = {},
+	InputDefinitions extends DefinitionBase['typebox'] = {},
+	InputMacroContext extends RouteSchema = MacroToInputContext<
+		InputMacroFn,
+		InputSelectedMacro,
+		InputDefinitions
+	>
 > = RouteSchema extends MacroContext
 	? {
 			body: Schema['body']
@@ -2940,4 +3052,8 @@ export interface Router {
 			| { [method: string]: MaybePromise<Response | undefined> }
 	}
 	history: InternalRoute[]
+}
+
+export type ModelsToTypes<T extends Record<keyof any, AnySchema>> = {
+	[K in keyof T]: UnwrapSchema<T[K]>
 }

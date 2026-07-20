@@ -58,9 +58,10 @@ export const WebStandardAdapter: ElysiaAdapter = {
 					`const m=k.match(/^(.+)\\[(\\d+)\\]$/);` +
 					`return m?{name:m[1],index:parseInt(m[2],10)}:null` +
 					`}\n` +
-					`for(const key of form.keys()){` +
+					`const grouped=new Map()\n` +
+					`form.forEach((v,k)=>{const l=grouped.get(k);if(l)l.push(v);else grouped.set(k,[v])})\n` +
+					`for(const [key,value] of grouped){` +
 					`if(c.body[key])continue\n` +
-					`const value=form.getAll(key)\n` +
 					`let finalValue\n` +
     				`if(value.length===1){\n` +
     				`const sv=value[0]\n` +

@@ -638,4 +638,72 @@ describe('Cookie Validation', () => {
 
 		expect(second.status).toBe(200)
 	})
+
+	it('handle prototype pollution', () => {
+		const app = new Elysia().get('/profile', ({ cookie }) => {
+			const proto = Object.getPrototypeOf(cookie)
+			const protoIsClean = proto === Object.prototype || proto === null
+			return {
+				hasPhantomValue: 'value' in cookie,
+				prototypeIsClean: protoIsClean,
+				prototype: proto,
+				enumeratedKeys: (() => {
+					const keys: string[] = []
+					for (const k in cookie) keys.push(k)
+					return keys
+				})()
+			}
+		})
+
+		expect(
+			app
+				.handle(
+					new Request('http://localhost/profile', {
+						headers: {
+							cookie: 'a=hi;__proto__=%7B%22injected%22%3A%22polluted%22%7D'
+						}
+					})
+				)
+				.then((x) => x.json())
+		).resolves.toEqual({
+			hasPhantomValue: false,
+			prototypeIsClean: true,
+			prototype: null,
+			enumeratedKeys: ['a']
+		})
+	})
+
+	it('transform cookie value', async () => {
+		let innerValue: any = null
+
+		const app = new Elysia().get(
+			'/',
+			({ cookie: { thing } }) => {
+				innerValue = thing.value
+
+				return thing.value
+			},
+			{
+				cookie: t.Object({
+					thing: t.Number()
+				})
+			}
+		)
+
+		const value = await app
+			.handle(
+				new Request('http://localhost:3000/', {
+					headers: {
+						cookie: 'thing=9'
+					}
+				})
+			)
+			.then((response) => response.json())
+
+		expect(value).toBe(9)
+		expect(typeof value).toBe('number')
+
+		expect(innerValue).toBe(9)
+		expect(typeof innerValue).toBe('number')
+	})
 })

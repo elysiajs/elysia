@@ -150,7 +150,7 @@ export class Cookie<T> implements ElysiaCookie {
 	constructor(
 		private name: string,
 		private jar: Record<string, ElysiaCookie>,
-		private initial: Partial<ElysiaCookie> = {}
+		private initial: Partial<ElysiaCookie> = Object.create(null)
 	) {}
 
 	get cookie() {
@@ -350,7 +350,7 @@ export const createCookieJar = (
 	store: Record<string, ElysiaCookie>,
 	initial?: Partial<ElysiaCookie>
 ): Record<string, Cookie<unknown>> => {
-	if (!set.cookie) set.cookie = {}
+	if (!set.cookie) set.cookie = Object.create(null)
 
 	return new Proxy(store, {
 		get(_, key: string) {
@@ -379,18 +379,24 @@ export const parseCookie = async (
 		...initial
 	}: CookieOptions & {
 		sign?: true | string | string[]
-	} = {}
+	} = Object.create(null)
 ) => {
-	if (!cookieString) return createCookieJar(set, {}, initial)
+	if (!cookieString) return createCookieJar(set, Object.create(null), initial)
 
 	const isStringKey = typeof secrets === 'string'
 	if (sign && sign !== true && !Array.isArray(sign)) sign = [sign]
 
-	const jar: Record<string, ElysiaCookie> = {}
+	const jar: Record<string, ElysiaCookie> = Object.create(null)
 
 	const cookies = parse(cookieString)
 	for (const [name, v] of Object.entries(cookies)) {
-		if (v === undefined) continue
+		if (
+			v === undefined ||
+			name === '__proto__' ||
+			name === 'constructor' ||
+			name === 'prototype'
+		)
+			continue
 
 		let value = decode(v)
 
@@ -440,9 +446,8 @@ export const parseCookie = async (
 				} catch {}
 		}
 
-		jar[name] = {
-			value
-		}
+		jar[name] = Object.create(null)
+		jar[name].value = value
 	}
 
 	return createCookieJar(set, jar, initial)

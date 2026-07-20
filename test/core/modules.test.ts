@@ -248,4 +248,55 @@ describe('Modules', () => {
 		const text = await response.text()
 		expect(text).toEqual('GET /plugin')
 	})
+
+	it('register dynamic import routes inside guard', async () => {
+		const app = new Elysia().guard(
+			{},
+			(app) => app.use(import('../modules').then((m) => m.lazyInstance))
+		)
+
+		await app.modules
+
+		const res = await app.handle(req('/lazy-instance'))
+
+		expect(res.status).toBe(200)
+		expect(await res.text()).toBe('lazy-instance')
+	})
+
+	it('register multiple dynamic import routes inside guard', async () => {
+		const lazyA = Promise.resolve(new Elysia().get('/a', () => 'a'))
+		const lazyB = Promise.resolve(new Elysia().get('/b', () => 'b'))
+
+		let hookCalls = 0
+
+		const app = new Elysia().guard(
+			{ beforeHandle: () => { hookCalls++ } },
+			(app) => app.use(lazyA).use(lazyB)
+		)
+
+		await app.modules
+
+		expect((await app.handle(req('/a'))).status).toBe(200)
+		expect((await app.handle(req('/b'))).status).toBe(200)
+		expect(hookCalls).toBe(2)
+	})
+
+	it('register dynamic import routes inside guard with hook', async () => {
+		let called = false
+
+		const app = new Elysia().guard(
+			{
+				beforeHandle: () => {
+					called = true
+				}
+			},
+			(app) => app.use(import('../modules').then((m) => m.lazyInstance))
+		)
+
+		await app.modules
+
+		await app.handle(req('/lazy-instance'))
+
+		expect(called).toBe(true)
+	})
 })

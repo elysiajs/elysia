@@ -156,7 +156,7 @@ export type Context<
 					: never
 			: PrettifyIfObject<Route['params'] & Singleton['resolve']['params']>
 		headers: undefined extends Route['headers']
-			? {} extends NonNullable<Singleton['resolve']['query']>
+			? {} extends NonNullable<Singleton['resolve']['headers']>
 				? Record<string, string | undefined>
 				: Singleton['resolve']['headers']
 			: PrettifyIfObject<

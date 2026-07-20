@@ -19,7 +19,8 @@ const handleElysiaFile = (
 	file: ElysiaFile,
 	set: Context['set'] = {
 		headers: {}
-	}
+	},
+	request?: Request
 ) => {
 	const path = file.path
 	const contentType =
@@ -42,10 +43,10 @@ const handleElysiaFile = (
 				set.headers['content-length'] = size
 			}
 
-			return handleFile(file.value as any, set)
+			return handleFile(file.value as any, set, request)
 		}) as any
 
-	return handleFile(file.value as any, set)
+	return handleFile(file.value as any, set, request)
 }
 
 export const mapResponse = (
@@ -58,22 +59,26 @@ export const mapResponse = (
 
 		switch (response?.constructor?.name) {
 			case 'String':
-				set.headers['content-type'] = 'text/plain'
+				if (!set.headers['content-type'])
+					set.headers['content-type'] = 'text/plain'
+
 				return new Response(response as string, set as any)
 
 			case 'Array':
 			case 'Object':
-				set.headers['content-type'] = 'application/json'
+				if (!set.headers['content-type'])
+					set.headers['content-type'] = 'application/json'
+
 				return new Response(JSON.stringify(response), set as any)
 
 			case 'ElysiaFile':
-				return handleElysiaFile(response as ElysiaFile, set)
+				return handleElysiaFile(response as ElysiaFile, set, request)
 
 			case 'File':
-				return handleFile(response as File, set)
+				return handleFile(response as File, set, request)
 
 			case 'Blob':
-				return handleFile(response as Blob, set)
+				return handleFile(response as Blob, set, request)
 
 			case 'ElysiaCustomStatusResponse':
 				set.status = (response as ElysiaCustomStatusResponse<200>).code
@@ -208,22 +213,26 @@ export const mapEarlyResponse = (
 
 		switch (response?.constructor?.name) {
 			case 'String':
-				set.headers['content-type'] = 'text/plain'
+				if (!set.headers['content-type'])
+					set.headers['content-type'] = 'text/plain'
+
 				return new Response(response as string, set as any)
 
 			case 'Array':
 			case 'Object':
-				set.headers['content-type'] = 'application/json'
+				if (!set.headers['content-type'])
+					set.headers['content-type'] = 'application/json'
+
 				return new Response(JSON.stringify(response), set as any)
 
 			case 'ElysiaFile':
-				return handleElysiaFile(response as ElysiaFile, set)
+				return handleElysiaFile(response as ElysiaFile, set, request)
 
 			case 'File':
-				return handleFile(response as File, set)
+				return handleFile(response as File, set, request)
 
 			case 'Blob':
-				return handleFile(response as File | Blob, set)
+				return handleFile(response as File | Blob, set, request)
 
 			case 'ElysiaCustomStatusResponse':
 				set.status = (response as ElysiaCustomStatusResponse<200>).code
@@ -335,22 +344,26 @@ export const mapEarlyResponse = (
 	} else
 		switch (response?.constructor?.name) {
 			case 'String':
-				set.headers['content-type'] = 'text/plain'
+				if (!set.headers['content-type'])
+					set.headers['content-type'] = 'text/plain'
+
 				return new Response(response as string)
 
 			case 'Array':
 			case 'Object':
-				set.headers['content-type'] = 'application/json'
+				if (!set.headers['content-type'])
+					set.headers['content-type'] = 'application/json'
+
 				return new Response(JSON.stringify(response), set as any)
 
 			case 'ElysiaFile':
-				return handleElysiaFile(response as ElysiaFile, set)
+				return handleElysiaFile(response as ElysiaFile, set, request)
 
 			case 'File':
-				return handleFile(response as File, set)
+				return handleFile(response as File, set, request)
 
 			case 'Blob':
-				return handleFile(response as File | Blob, set)
+				return handleFile(response as File | Blob, set, request)
 
 			case 'ElysiaCustomStatusResponse':
 				set.status = (response as ElysiaCustomStatusResponse<200>).code
@@ -483,13 +496,13 @@ export const mapCompactResponse = (
 			})
 
 		case 'ElysiaFile':
-			return handleElysiaFile(response as ElysiaFile)
+			return handleElysiaFile(response as ElysiaFile, undefined, request)
 
 		case 'File':
-			return handleFile(response as File)
+			return handleFile(response as File, undefined, request)
 
 		case 'Blob':
-			return handleFile(response as File | Blob)
+			return handleFile(response as File | Blob, undefined, request)
 
 		case 'ElysiaCustomStatusResponse':
 			return mapResponse(

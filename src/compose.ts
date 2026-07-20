@@ -341,7 +341,7 @@ const composeValidationFactory = ({
 							`}catch{` +
 							`throw new ValidationError('response',validator.response[${status}],${name},${allowUnsafeValidationDetails})` +
 							`}`
-						: `throw new ValidationError('response',validator.response[${status}],${name}),${allowUnsafeValidationDetails}`) +
+						: `throw new ValidationError('response',validator.response[${status}],${name},${allowUnsafeValidationDetails})`) +
 					`}`
 			} else {
 				if (!appliedCleaner) code += clean()
@@ -894,10 +894,9 @@ export const composeHandler = ({
 		return `const _res=${response}` + after + `return _res`
 	}
 
-	const mapResponseContext =
-		maybeStream && adapter.mapResponseContext
-			? `,${adapter.mapResponseContext}`
-			: ''
+	const mapResponseContext = adapter.mapResponseContext
+		? `,${adapter.mapResponseContext}`
+		: ''
 
 	if (hasTrace || inference.route) fnLiteral += `c.route=\`${path}\`\n`
 	if (hasTrace || hooks.afterResponse?.length)
@@ -975,7 +974,7 @@ export const composeHandler = ({
 					break
 
 				default:
-					if ((parser[0] as string) in app['~parser']) {
+					if (parser in app['~parser']) {
 						fnLiteral += hasHeaders
 							? `let contentType = c.headers['content-type']`
 							: `let contentType = c.request.headers.get('content-type')`
@@ -1614,7 +1613,7 @@ export const composeHandler = ({
 			// ! Get latest app.config.cookie
 			validator.cookie.config = mergeCookie(
 				validator.cookie.config,
-				validator.cookie?.config ?? {}
+				app.config.cookie ?? {}
 			)
 
 			fnLiteral +=
@@ -1636,7 +1635,7 @@ export const composeHandler = ({
 				fnLiteral +=
 					`for(const k of Object.keys(cookieValue))` +
 					`c.cookie[k].value=cookieValue[k]\n`
-			} else if (validator.body?.schema?.noValidate !== true) {
+			} else if (validator.cookie?.schema?.noValidate !== true) {
 				fnLiteral +=
 					`if(validator.cookie.Check(cookieValue)===false){` +
 					validation.validate('cookie', 'cookieValue') +
@@ -1645,7 +1644,7 @@ export const composeHandler = ({
 				if (validator.cookie.hasTransform)
 					fnLiteral += coerceTransformDecodeError(
 						`for(const [key,value] of Object.entries(validator.cookie.Decode(cookieValue))){` +
-							`c.cookie[key].cookie.value = value` +
+							`c.cookie[key].value = value` +
 							`}`,
 						'cookie',
 						allowUnsafeValidationDetails
@@ -2093,7 +2092,7 @@ export const composeHandler = ({
 					fnLiteral +=
 						`c.response=c.responseValue=er\n` +
 						`mep=e.mapResponse[${i}](c)\n` +
-						`if(mep instanceof Promise)er=await er\n` +
+						`if(mep instanceof Promise)mep=await mep\n` +
 						`if(mep!==undefined)er=mep\n`
 
 					endUnit()
