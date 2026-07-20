@@ -11,13 +11,22 @@ import {
 import type { RouteValidator } from '../../validator/route'
 import type { Validator } from '../../validator'
 
-import { isAsyncFunction, isAsyncLifecycle, mayReturnPromise } from '../utils'
+import {
+	clearCompileAnalysisCaches,
+	isAsyncFunction,
+	isAsyncLifecycle,
+	mayReturnPromise
+} from '../utils'
 
 import { compileCookieConfig } from '../../cookie/config'
 import type { CompiledCookieConfig } from '../../cookie/config'
 import { hasSyncHmac } from '../../cookie/utils'
 
-import { unionTracePhases, type TraceEvent } from '../../trace'
+import {
+	clearTraceAnalysisCaches,
+	unionTracePhases,
+	type TraceEvent
+} from '../../trace'
 import { isDynamicRegex } from '../../constants'
 import { ELYSIA_TYPES } from '../../type/constants'
 import { Capture } from '../aot'
@@ -25,6 +34,10 @@ import { frozenRootOf } from '../../generation'
 import { JITProbe } from '../jit-probe'
 
 import { isNotEmpty, type CompactBeforeHandlePrefix } from '../../utils'
+import {
+	clearHandlerUtilityAnalysisCaches,
+	lowerBeforeHandlePrefix
+} from './utils'
 import type { AnyLocalHook, InferenceOverride, MaybeArray } from '../../types'
 import {
 	contextDefaults,
@@ -106,12 +119,12 @@ export interface RouteDescriptor {
 // Non-serialisable artifacts the JIT still needs, bundled with the descriptor.
 export interface RouteCompileState {
 	descriptor: RouteDescriptor
-	bodyParserHook: AnyLocalHook | undefined
+	bodyParserHooks: readonly unknown[] | undefined
 
 	vali: RouteValidator<any> | undefined
 	cookieConfig: CompiledCookieConfig | undefined
 
-	beforeHandlePrefix: CompactBeforeHandlePrefix | undefined
+	beforeHandlePrefix: readonly Function[] | undefined
 	traceHandlers: Function[] | undefined
 	tracePhases: Set<TraceEvent> | null
 	hasAnyPhase: boolean
@@ -147,7 +160,7 @@ const matchReturnIdentifier =
 	// eslint-disable-next-line sonarjs/regex-complexity
 	/(?:=>\s*|\breturn\s+)(?!(?:true|false|null|undefined|void|new|typeof|async|await|function|class)\b)[A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*\s*(?![\w$([])/
 
-const mayReturnIdentifierCache = new WeakMap<Function, boolean>()
+let mayReturnIdentifierCache = new WeakMap<Function, boolean>()
 
 export function mayReturnIdentifier(fn: Function) {
 	let result = mayReturnIdentifierCache.get(fn)
@@ -176,14 +189,27 @@ export const lifecycleMayReturnPromise = (
 					(observed && mayReturnIdentifier(handlers)))
 		: false
 
-const compactPrefixInference: Record<
+let compactPrefixInference: Record<
 	Sucrose.Implementation,
 	WeakMap<CompactBeforeHandlePrefix, Sucrose.Inference>
 > = {
 	oracle: new WeakMap(),
 	candidate: new WeakMap()
 }
-const compactPrefixAsync = new WeakMap<CompactBeforeHandlePrefix, boolean>()
+let compactPrefixAsync = new WeakMap<CompactBeforeHandlePrefix, boolean>()
+
+export function clearRouteDescriptorAnalysisCaches(root: AnyElysia) {
+	routeDescriptors.delete(root)
+	mayReturnIdentifierCache = new WeakMap()
+	compactPrefixInference = {
+		oracle: new WeakMap(),
+		candidate: new WeakMap()
+	}
+	compactPrefixAsync = new WeakMap()
+	clearCompileAnalysisCaches()
+	clearHandlerUtilityAnalysisCaches()
+	clearTraceAnalysisCaches()
+}
 
 function inferCompactPrefix(
 	prefix: CompactBeforeHandlePrefix,
@@ -725,12 +751,15 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 
 	return {
 		descriptor,
-		bodyParserHook: bodyPlan.mode === 'chain' ? hook : undefined,
+		bodyParserHooks:
+			bodyPlan.mode === 'chain'
+				? (hook?.parse as readonly unknown[] | undefined)
+				: undefined,
 
 		vali,
 		cookieConfig,
 
-		beforeHandlePrefix,
+		beforeHandlePrefix: lowerBeforeHandlePrefix(beforeHandlePrefix),
 		traceHandlers,
 		tracePhases,
 		hasAnyPhase,

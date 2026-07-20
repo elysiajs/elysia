@@ -52,6 +52,29 @@ describe('HTTP routing with WebSocket routes', () => {
 })
 
 describe('WebSocket route hook snapshots', () => {
+	it('upgrades through the sealed runtime server binding', async () => {
+		let connectionData: Record<string, unknown> | undefined
+		const app = new Elysia().ws('/ws', { message() {} })
+		void app.fetch
+
+		app['~generation']!.runtime.server.current = {
+			upgrade(_request: Request, options?: { data?: unknown }) {
+				connectionData = options?.data as Record<string, unknown>
+				return true
+			}
+		} as any
+		Object.defineProperty(app, 'server', {
+			configurable: true,
+			get() {
+				throw new Error('WebSocket runtime read the authoring app')
+			}
+		})
+
+		const response = await app.handle(upgrade())
+		expect(response).toBeUndefined()
+		expect(connectionData?.message).toBeTypeOf('function')
+	})
+
 	it('runs a plugin-local beforeHandle registered before the route', async () => {
 		let ran = 0
 		const plugin = new Elysia()

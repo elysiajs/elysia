@@ -186,7 +186,10 @@ export function buildFindCustomError(
 		if (cached) return cached
 		try {
 			const uc = Compile(node)
-			const fn = (v: unknown) => uc.Check(v)
+			const fn = (uc as any).evaluateResult?.check as
+				| ((v: unknown) => boolean)
+				| undefined
+			if (!fn) return
 			unionCheckCache.set(node, fn)
 			return fn
 		} catch {
@@ -229,7 +232,7 @@ export function buildFindCustomError(
 		else
 			try {
 				const c = Compile(node)
-				check = (v) => c.Check(v)
+				check = (c as any).evaluateResult?.check
 			} catch {}
 
 		if (!check) continue

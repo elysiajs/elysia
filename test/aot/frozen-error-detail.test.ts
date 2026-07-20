@@ -2,7 +2,7 @@ import '../../src/compile/aot-capture'
 import { describe, it, expect, afterEach } from 'bun:test'
 
 import { Elysia, t } from '../../src'
-import { Validator } from '../../src/validator'
+import { detachValidatorCompiler, Validator } from '../../src/validator'
 import { Compiled, type ProgramId } from '../../src/compile/aot'
 import {
 	beginValidatorCapture,
@@ -211,5 +211,26 @@ describe('sealed structural schemas retain full error details', () => {
 		)
 
 		expect(warns.filter((w) => w.includes('[elysia-aot]')).length).toBe(0)
+	})
+
+	it('drops diagnostics in strict production and keeps them for introspection', () => {
+		const schema = t.Object({ age: t.Number() })
+
+		freeze(schema)
+		const strict = bridgeFree(schema)!
+		detachValidatorCompiler(claimed, false)
+		expect((strict.body as any).schema).toBeUndefined()
+		expect(
+			validationError(strict.body, { age: 'x' }).errors[0].instancePath
+		).toBe('/age')
+
+		freeze(schema)
+		const introspect = bridgeFree(schema)!
+		detachValidatorCompiler(claimed, true)
+		expect((introspect.body as any).schema).toBeUndefined()
+		expect(
+			validationError(introspect.body, { age: 'x' }).errors[0]
+				.instancePath
+		).toBe('/age')
 	})
 })

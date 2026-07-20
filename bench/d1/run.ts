@@ -53,6 +53,7 @@ const fixtureIds = [
 	'formdata',
 	'compile-memory',
 	'retained',
+	'retention-seal',
 	'validation',
 	'runtime-lowering',
 	'runtime-http',
@@ -72,12 +73,14 @@ const leafPerfOwners = new Set([
 	'N+1-query',
 	'N+2b',
 	'N+2b-q12',
-	'N+2c'
+	'N+2c',
+	'N+3a'
 ])
 const historicalBaselineByOwner: Record<string, string> = {
 	C4a: '340322120836100ea15f67d6f6b5708e0945d1db',
 	'N+2b': 'f6ed34632a997e17b09b91da1c400a93557b5815',
-	'N+2c': '697c0286'
+	'N+2c': '697c0286',
+	'N+3a': 'd4fb01a3'
 }
 const historicalCandidateByOwner: Record<string, string> = {
 	C4a: 'e8c51e63407ea3f59479db14500f04cca742ba2b'
@@ -108,6 +111,10 @@ function leafPerfEnvironment(owners: Set<string> | undefined) {
 		environment.D1_N2B_CANDIDATE = '1'
 	}
 	if (owners?.has('N+2c')) environment.D1_N2C_CANDIDATE = '1'
+	if (owners?.has('N+3a')) {
+		environment.D1_N3A_IMAGE = 'strict'
+		environment.NODE_ENV = 'production'
+	}
 
 	return environment
 }
@@ -556,6 +563,15 @@ async function runFixtureBlock(
 				'runtime-lowering candidate did not report a compact allocation route'
 			)
 	}
+	if (fixture === 'retention-seal') {
+		const expected = descriptor.env.D1_N3A_IMAGE ?? 'strict'
+		if (output.image !== expected)
+			throw new Error(
+				`retention-seal image mismatch: ${output.image} !== ${expected}`
+			)
+		if (output.build !== 'precompile')
+			throw new Error('retention-seal did not report a precompiled build')
+	}
 	if (
 		fixture === 'cold-start' &&
 		output.fallbackSpawnToFirst2xxNs !== undefined
@@ -624,7 +640,8 @@ function rawMetricSamples(
 		entry.fixture === 'body-presence' ||
 		entry.fixture === 'validation' ||
 		entry.fixture === 'runtime-lowering' ||
-		entry.fixture === 'response-body-cookie'
+		entry.fixture === 'response-body-cookie' ||
+		entry.fixture === 'retention-seal'
 	) {
 		const samples = output.samples?.[entry.metric]
 		if (!Array.isArray(samples) || !samples.length)
@@ -707,6 +724,12 @@ function emptyRecord(
 	}
 }
 
+function routeSizeOrderFor(fixture: FixtureId) {
+	return fixture === 'retention-seal'
+		? [1, 100, 1_000, 10_000]
+		: [defaultRoutes]
+}
+
 async function runRecordBlocks(
 	descriptor: VariantDescriptor,
 	registry: MarginRegistry,
@@ -719,9 +742,13 @@ async function runRecordBlocks(
 		for (const entry of metricsFor(registry, fixture))
 			records.set(
 				key(fixture, entry.metric),
-				emptyRecord(entry, descriptor.label, seed, defaultResamples, [
-					defaultRoutes
-				])
+				emptyRecord(
+					entry,
+					descriptor.label,
+					seed,
+					defaultResamples,
+					routeSizeOrderFor(fixture)
+				)
 			)
 	onPartial?.([...records.values()])
 	for (const fixture of fixtureIds) {
@@ -774,7 +801,7 @@ async function runPairedBlocks(
 				candidate.label,
 				seed,
 				defaultResamples,
-				[defaultRoutes]
+				routeSizeOrderFor(fixture)
 			)
 			record.pairs = []
 			records.set(key(fixture, entry.metric), record)
@@ -1574,7 +1601,9 @@ async function gateMode(
 			baselineCommit,
 			currentFlagOff
 				? currentBaselineEnvironment(dedicatedOwner)
-				: undefined
+				: dedicatedOwner === 'N+3a'
+					? leafPerfEnvironment(owners)
+					: undefined
 		)
 		const b = descriptor(
 			'candidate',

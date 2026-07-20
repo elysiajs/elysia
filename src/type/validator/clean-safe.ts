@@ -45,6 +45,9 @@ export function schemaSome(
 
 	if (schema.not && schemaSome(schema.not, test, seen, prune)) return true
 
+	for (const key of ['if', 'then', 'else'] as const)
+		if (schema[key] && schemaSome(schema[key], test, seen, prune)) return true
+
 	const pp = schema.patternProperties
 	if (pp)
 		for (const k in pp)

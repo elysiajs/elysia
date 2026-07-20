@@ -28,6 +28,17 @@ describe('Native Static Response', () => {
 		await expectResponseText(response, 'Static Content')
 	})
 
+	it('collects only from the prebuilt runtime image after sealing', async () => {
+		const app = new Elysia().get('/static', 'Static Content')
+		void app.fetch
+
+		const generation = app['~generation']!
+		const image = generation.runtime.nativeStatic
+		expect(image).toBeDefined()
+		expect(collect(app)).toBe(image)
+		await expectResponseText(image?.['/static']?.GET, 'Static Content')
+	})
+
 	it('matches mapped content types for literal responses', () => {
 		const app = new Elysia()
 			.get('/string', 'text')

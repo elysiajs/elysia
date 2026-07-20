@@ -6,7 +6,8 @@ import {
 	ADAPTER_BUN_FILTER,
 	IS_PRODUCTION_FILTER,
 	adapterConstantsSource,
-	bunAdapterStubSource
+	bunAdapterStubSource,
+	STUB_SOURCES
 } from '../../src/plugin/aot/core'
 import { aot as bunAot } from '../../src/plugin/aot/bun'
 import { aot as viteAot } from '../../src/plugin/aot/vite'
@@ -284,9 +285,16 @@ describe('Vite plugin: adapter/bun stub parity', () => {
 
 	it('uses the shared Bun adapter stub source', () => {
 		expect(bunAdapterStubSource).toContain('Bun adapter was stripped')
+		expect(bunAdapterStubSource).toContain('buildNativeStaticRoutes')
 		expect(bunAdapterStubSource).toContain('collectStaticRoutes')
 		expect(bunAdapterStubSource).toContain('BunAdapter')
 		expect(bunAdapterStubSource).not.toContain('Bun.serve')
+	})
+
+	it('keeps runtime-image exports in the WebSocket strip stub', () => {
+		const source = STUB_SOURCES.ws[0].source
+		expect(source).toContain('buildWSRoute')
+		expect(source).toContain('buildWebSocketRuntime')
 	})
 
 	it('matches Bun adapter paths handled by the transform', () => {

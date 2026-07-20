@@ -7,6 +7,7 @@ import {
 	localMacroRoot,
 	resolveLocalHook
 } from './compile/handler'
+import { clearAuthoringAnalysisCaches } from './compile/analysis-cache'
 import {
 	beginCompilerSession,
 	Compiled,
@@ -18,25 +19,30 @@ import {
 	type CompilerSession,
 	type ProgramId
 } from './compile/aot'
-import { buildWSRoute } from './ws/route'
+import { buildWebSocketRuntime, buildWSRoute } from './ws/route'
 import type {
 	WSLocalHook,
 	WSMessageHandler,
 	WSHandlerResponse
 } from './ws/types'
 
-import { ListenCallback, Serve, Server } from './universal'
+import { isProduction, ListenCallback, Serve, Server } from './universal'
 import { isBun } from './universal/constants'
 
 import { isDynamicRegex, needEncodeRegex } from './constants'
 import {
 	buildRouteTable,
+	compactRouteTable,
 	routeRow,
 	RouteFlag,
 	type RouteTable
 } from './route-table'
-import type { Generation } from './generation'
-import { BunAdapter } from './adapter/bun'
+import {
+	createRuntimeBindings,
+	type Generation,
+	type RuntimeBindings
+} from './generation'
+import { buildNativeStaticRoutes, BunAdapter } from './adapter/bun'
 import {
 	clonePlainDeep,
 	clonePlainDecorators,
@@ -68,6 +74,7 @@ import type { TRef, TSchema } from 'typebox'
 import type { AnySchema } from './type'
 import { Ref as tRef } from './type/bridge'
 import { snapshotHookSchemas, snapshotSchema } from './schema-snapshot'
+import { detachValidatorCompiler } from './validator'
 
 import type { TraceHandler } from './trace'
 
@@ -155,6 +162,21 @@ export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
 const useNodesBuffer: ChainNode[] = []
 const plainRouteOwner = Object.freeze(nullObject()) as AnyElysia
 const emptyHistory = Object.freeze([]) as readonly HistoryEntry[]
+
+function freezePlainDeep<T>(value: T, seen = new WeakSet<object>()): T {
+	if (!value || typeof value !== 'object') return value
+	if (
+		!Array.isArray(value) &&
+		Object.getPrototypeOf(value) !== null &&
+		Object.getPrototypeOf(value) !== Object.prototype
+	)
+		return value
+	if (seen.has(value)) return value
+
+	seen.add(value)
+	for (const key in value) freezePlainDeep((value as any)[key], seen)
+	return Object.freeze(value)
+}
 
 const canRegisterLoose = (path: string, isDynamic: boolean) =>
 	!isDynamic && (path.length === 0 || path.charCodeAt(path.length - 1) === 47)
@@ -303,9 +325,19 @@ export class Elysia<
 	#declaredRoutes?: InternalRoute[]
 	#routeSources?: (string | undefined)[]
 	#cachedHistory?: readonly HistoryEntry[]
-	server?: Server
+	'~runtimeBindings': RuntimeBindings = createRuntimeBindings()
+
+	get server(): Server | undefined {
+		return this['~runtimeBindings'].server.current
+	}
+
+	set server(value: Server | undefined) {
+		this['~runtimeBindings'].server.current = value
+	}
 
 	get history(): readonly HistoryEntry[] {
+		const retained = this['~generation']?.introspection?.history
+		if (retained) return retained
 		if (this.#cachedHistory) return this.#cachedHistory
 		if (!this.#declaredRoutes?.length) return emptyHistory
 
@@ -416,6 +448,8 @@ export class Elysia<
 	}
 
 	get routes(): PublicRoute[] {
+		const retained = this['~generation']?.introspection?.routes
+		if (retained) return retained as PublicRoute[]
 		if (!this.#declaredRoutes?.length) return []
 
 		if (this.#cachedRoutes) return this.#cachedRoutes
@@ -3922,37 +3956,24 @@ export class Elysia<
 				else ext.error = new Map(error)
 			}
 
-			if (hoc) {
-				if (ext.hoc) {
-					const seen = new Set(ext.hoc)
-					for (const fn of hoc)
-						if (!seen.has(fn)) {
-							seen.add(fn)
-							ext.hoc.push(fn)
-						}
-				} else ext.hoc = hoc.slice()
-			}
+			for (const [key, handlers] of [
+				['hoc', hoc],
+				['setup', setup],
+				['cleanup', cleanup]
+			] as const) {
+				if (!handlers) continue
+				const current = (ext as any)[key] as any[] | undefined
+				if (!current) {
+					;(ext as any)[key] = handlers.slice()
+					continue
+				}
 
-			if (setup) {
-				if (ext.setup) {
-					const seen = new Set(ext.setup)
-					for (const fn of setup)
-						if (!seen.has(fn)) {
-							seen.add(fn)
-							ext.setup.push(fn)
-						}
-				} else ext.setup = setup.slice()
-			}
-
-			if (cleanup) {
-				if (ext.cleanup) {
-					const seen = new Set(ext.cleanup)
-					for (const fn of cleanup)
-						if (!seen.has(fn)) {
-							seen.add(fn)
-							ext.cleanup.push(fn)
-						}
-				} else ext.cleanup = cleanup.slice()
+				const seen = new Set(current)
+				for (const fn of handlers)
+					if (!seen.has(fn)) {
+						seen.add(fn)
+						current.push(fn)
+					}
 			}
 		}
 
@@ -4284,7 +4305,7 @@ export class Elysia<
 		this.#fetchFn = undefined
 		this.#routerBuilt = false
 
-		this.#buildRouter(false)
+		this.#buildRouter()
 	}
 
 	#add(
@@ -4464,7 +4485,11 @@ export class Elysia<
 	 * Registered reusable models (via `.model()`), keyed by name.
 	 */
 	get models(): Definitions['typebox'] {
-		return (this['~ext']?.models ?? nullObject()) as Definitions['typebox']
+		return (
+			this['~generation']?.introspection?.models ??
+			this['~ext']?.models ??
+			nullObject()
+		) as Definitions['typebox']
 	}
 
 	Ref<const Key extends keyof Definitions['typebox'] & string>(key: Key) {
@@ -5602,6 +5627,8 @@ export class Elysia<
 	 * on the config and triggers a fresh build of the fetch handler).
 	 */
 	compile() {
+		if (this['~generation']) return this
+		this.#assertMutable('compile')
 		this['~config'] ??= nullObject()
 		this['~config']!.precompile = true
 		this.#routerBuilt = false
@@ -5631,7 +5658,12 @@ export class Elysia<
 			let handler: CompiledHandler
 
 			try {
-				handler = compileHandler(row, this, precomputedStatic)
+				handler = compileHandler(
+					row,
+					this,
+					precomputedStatic,
+					this['~runtimeBindings'].finalizeError
+				)
 			} catch (error) {
 				throw new Error(
 					`[Elysia] Failed to compile route ${row[0]} ${row[1]}: ${(error as Error)?.message ?? error}`,
@@ -5671,7 +5703,8 @@ export class Elysia<
 				handler = compileHandler(
 					materialized,
 					this,
-					precomputedStatic
+					precomputedStatic,
+					this['~runtimeBindings'].finalizeError
 				)
 			} catch (error) {
 				const routeError = new Error(
@@ -5838,9 +5871,7 @@ export class Elysia<
 
 		// Chain sources: route[5] (appHook), route[6] (inheritedChain)
 		return (
-			this.#chainHasModelRef(
-				table.appHook[i] as ChainNode | undefined
-			) ||
+			this.#chainHasModelRef(table.appHook[i] as ChainNode | undefined) ||
 			this.#chainHasModelRef(
 				table.inheritedChain[i] as ChainNode | undefined
 			) ||
@@ -5905,13 +5936,8 @@ export class Elysia<
 	}
 
 	#routerBuilt = false
-	#buildRouter(seal = false) {
-		if (this.#routerBuilt) {
-			if (seal && this['~generation'] === undefined)
-				this.#publishGeneration()
-
-			return
-		}
+	#buildRouter() {
+		if (this.#routerBuilt) return
 
 		const compilerSession = beginCompilerSession(this)
 
@@ -5952,7 +5978,6 @@ export class Elysia<
 			}
 
 			this.#routerBuilt = true
-			if (seal) this.#publishGeneration()
 
 			buildSucceeded = true
 		} catch (error) {
@@ -5974,33 +5999,134 @@ export class Elysia<
 		}
 	}
 
-	#publishGeneration() {
-		this['~generation'] = {
-			abi: (this['~aotFingerprint'] ??= createAotFingerprint()),
-			routeTable: this['~routeTable']!,
-			introspect:
-				(this['~config'] as { introspect?: boolean } | undefined)
-					?.introspect === true || this['~introspect'] === true,
-			'~config': this['~config'],
-			'~ext': this['~ext'],
-			'~hookChain': this['~hookChain'],
-			'~scopeChildren': this['~scopeChildren'],
-			'~applyMacro': this['~applyMacro'].bind(this),
-			'~programId': this['~programId']
+	#runtimeConfig(): AnyElysia['~config'] {
+		const config = this['~config']
+		if (!config) return
+
+		const runtime: AnyElysia['~config'] = {
+			adapter: config.adapter,
+			serve: freezePlainDeep(clonePlainDeep(config.serve)),
+			strictPath: config.strictPath,
+			websocket: freezePlainDeep(clonePlainDeep(config.websocket)),
+			cookie: freezePlainDeep(clonePlainDeep(config.cookie)),
+			experimental: config.experimental?.cancellation
+				? { cancellation: config.experimental.cancellation }
+				: undefined,
+			handler: freezePlainDeep(clonePlainDeep(config.handler)),
+			nativeStaticResponse: config.nativeStaticResponse,
+			allowUnsafeValidationDetails: config.allowUnsafeValidationDetails
 		}
+
+		return Object.freeze(runtime)
+	}
+
+	#runtimeExt(): AnyElysia['~ext'] {
+		const ext = this['~ext']
+		if (!ext) return
+
+		return Object.freeze({
+			decorator: ext.decorator,
+			store: ext.store,
+			headers: ext.headers,
+			setup: ext.setup,
+			cleanup: ext.cleanup
+		}) as AnyElysia['~ext']
+	}
+
+	#publishGeneration(
+		nativeStatic?: Record<string, Record<string, Response>>
+	) {
+		const introspect =
+			this['~config']?.introspect === true || this['~introspect'] === true
+		const retain = isProduction() && !Capture.isAotBuildEnv()
+		const introspectionRoutes = introspect ? this.routes : undefined
+		const introspectionModels = introspect
+			? Object.freeze({ ...this.models })
+			: undefined
+		if (introspectionRoutes)
+			for (let i = 0; i < introspectionRoutes.length; i++)
+				Object.freeze(introspectionRoutes[i])
+		const routeTable = introspect
+			? compactRouteTable(this['~routeTable']!)
+			: undefined
+		const websocket = this['~hasWS']
+			? buildWebSocketRuntime(this['~config']?.websocket as any)
+			: undefined
+		const runtime = Object.freeze({
+			'~config': this.#runtimeConfig(),
+			'~ext': this.#runtimeExt(),
+			'~programId': this['~programId'],
+			server: this['~runtimeBindings'].server,
+			nativeStatic,
+			websocket
+		})
+		const generation: Generation = Object.freeze({
+			abi: (this['~aotFingerprint'] ??= createAotFingerprint()),
+			runtime,
+			introspect,
+			introspection: introspect
+				? Object.freeze({
+						routes: Object.freeze(introspectionRoutes!),
+						history: this.history,
+						models: introspectionModels!,
+						routeTable: routeTable!
+					})
+				: undefined
+		})
+
+		if (retain) {
+			detachValidatorCompiler(this, introspect)
+			this.#retentionSeal(generation)
+			Compiled.release(this['~programId'])
+			clearAuthoringAnalysisCaches(this)
+		}
+		this['~generation'] = generation
+	}
+
+	#retentionSeal(generation: Generation) {
+		this.#declaredRoutes = undefined
+		this.#routeSources = undefined
+		this.#cachedHistory = undefined
+		this.#cachedRoutes = undefined
+		this.#compiled = undefined
+		this.#chainRefMemo = undefined
+		this.#childrenHash = undefined
+		this.#scopeParent = undefined
+		this.#pluginMacros = undefined
+		this.#macroBaseline = undefined
+		this.#hasPlugin = undefined
+		this.#hasGlobal = undefined
+		this.#hash = undefined
+		this.#ready = undefined
+		this.#error = undefined
+		this['~routeTable'] = undefined
+		this['~hookChain'] = undefined
+		this['~scopeChild'] = undefined
+		this['~scopeChildren'] = undefined
+		this['~introspect'] = undefined
+		this['~aotFingerprint'] = undefined
+		this['~hasTrace'] = undefined
+		this['~hasWS'] = undefined
+		this['~hasDynamicWS'] = undefined
+		this['~finalizeError'] = undefined
+		this['~Prefix'] = undefined as unknown as BasePath
+		this['~config'] = generation.runtime[
+			'~config'
+		] as (typeof this)['~config']
+		this['~ext'] = generation.runtime['~ext'] as (typeof this)['~ext']
 	}
 
 	['~newGeneration']() {
 		this.#fetchFn = undefined
 		this.#routerBuilt = false
 		this['~generation'] = undefined
-		this.#buildRouter(true)
+		void this.fetch
 
 		return this
 	}
 
 	#buildRouterUnsafe() {
-		const precompile = this['~config']?.precompile
+		const precompile = isProduction() || this['~config']?.precompile
 
 		this.#initMap()
 		const methods = this['~map']!
@@ -6056,7 +6182,11 @@ export class Elysia<
 			const routeFlags = flags[i]
 
 			if ((routeFlags & RouteFlag.WS) !== 0) {
-				const ws = buildWSRoute(routeRow(table, i), this)
+				const ws = buildWSRoute(
+					routeRow(table, i),
+					this,
+					this['~runtimeBindings'].server
+				)
 				const handler = ws[0] as unknown as CompiledHandler
 				const options = ws[1]
 
@@ -6189,8 +6319,41 @@ export class Elysia<
 	get fetch() {
 		if (this.#fetchFn) return this.#fetchFn
 
-		this.#buildRouter(!this.#pending)
-		return (this.#fetchFn ??= applyHoc(this, createFetchHandler(this)))
+		this.#buildRouter()
+		const previousFinalize = this['~finalizeError']
+		const previousBoundFinalize = this['~runtimeBindings'].error.current
+
+		try {
+			const fetch = applyHoc(this, createFetchHandler(this))
+			this['~runtimeBindings'].error.current = this['~finalizeError']
+
+			if (this.#pending) return (this.#fetchFn = fetch)
+
+			let nativeStatic:
+				| Record<string, Record<string, Response>>
+				| undefined
+			try {
+				nativeStatic = buildNativeStaticRoutes(
+					this,
+					this['~routeTable']
+				)
+			} catch (error) {
+				console.warn(
+					'[Elysia] Native static promotion was skipped:',
+					error
+				)
+			}
+
+			this.#publishGeneration(nativeStatic)
+			this.#fetchFn = fetch
+
+			return fetch
+		} catch (error) {
+			this.#fetchFn = undefined
+			this['~finalizeError'] = previousFinalize
+			this['~runtimeBindings'].error.current = previousBoundFinalize
+			throw error
+		}
 	}
 
 	#handle?: (

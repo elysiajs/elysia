@@ -5,6 +5,14 @@ import { ELYSIA_TYPES } from '../../type/constants'
 import { isFullyClosedObject } from '../../type/validator/clean-safe'
 import { StandardValidator } from '../../validator'
 import { frozenRootOf } from '../../generation'
+import {
+	createCompactErrorLocator,
+	compactDiagnosticSchema,
+	compactErrors,
+	isCompactDiagnosable,
+	type CompactErrorLocator
+} from '../../validator/compact-errors'
+import { trackValidatorCompiler } from '../../validator'
 
 import {
 	Compiled,
@@ -98,185 +106,7 @@ interface DefaultFastPath {
 	merge?: (value: any) => any
 }
 
-interface CompactError {
-	keyword: string
-	schemaPath: string
-	instancePath: string
-	params: Record<string, unknown>
-	message: string
-}
-
-// TypeBox reports a scalar/type mismatch as `must be <schema.type>`
-// reproduce only the dominant `type`/`required` keywords structurally
-function jsTypeMatches(value: unknown, type: string) {
-	switch (type) {
-		case 'string':
-			return typeof value === 'string'
-
-		case 'number':
-			return typeof value === 'number'
-
-		case 'integer':
-			return typeof value === 'number' && Number.isInteger(value)
-
-		case 'boolean':
-			return typeof value === 'boolean'
-
-		case 'null':
-			return value === null
-
-		case 'array':
-			return Array.isArray(value)
-
-		case 'object':
-			return (
-				typeof value === 'object' &&
-				value !== null &&
-				!Array.isArray(value)
-			)
-
-		default:
-			return true
-	}
-}
-
-const typeError = (
-	schema: any,
-	instancePath: string,
-	schemaPath: string
-): CompactError => ({
-	keyword: 'type',
-	schemaPath,
-	instancePath,
-	params: { type: schema.type },
-	message: `must be ${schema.type}`
-})
-
-/**
- * Best-effort, TypeBox-free structural error walker for the bridge-free covered
- * subset (open objects / scalars / arrays / nesting = no unions, codecs,
- * or custom errors)
- **/
-function walkCompactError(
-	schema: any,
-	value: unknown,
-	instancePath: string,
-	schemaPath: string
-): CompactError | undefined {
-	if (!schema || typeof schema !== 'object') return
-
-	const type = schema.type
-
-	if (type === 'object') {
-		if (typeof value !== 'object' || value === null || Array.isArray(value))
-			return typeError(schema, instancePath, schemaPath)
-
-		const required: string[] | undefined = schema.required
-		if (Array.isArray(required))
-			for (const key of required)
-				if (!(key in (value as object)))
-					return {
-						keyword: 'required',
-						schemaPath,
-						instancePath,
-						params: { requiredProperties: [key] },
-						message: `must have required properties ${key}`
-					}
-
-		const properties = schema.properties
-		if (properties)
-			for (const key in properties) {
-				if (!(key in (value as object))) continue
-				const child = walkCompactError(
-					properties[key],
-					(value as any)[key],
-					`${instancePath}/${key}`,
-					`${schemaPath}/properties/${key}`
-				)
-				if (child) return child
-			}
-
-		return
-	}
-
-	if (type === 'array') {
-		if (!Array.isArray(value))
-			return typeError(schema, instancePath, schemaPath)
-
-		const items = schema.items
-		if (items)
-			for (let i = 0; i < value.length; i++) {
-				const child = walkCompactError(
-					items,
-					value[i],
-					`${instancePath}/${i}`,
-					`${schemaPath}/items`
-				)
-				if (child) return child
-			}
-
-		return
-	}
-
-	if (typeof type === 'string' && !jsTypeMatches(value, type))
-		return typeError(schema, instancePath, schemaPath)
-}
-
-function bestEffortCodecError(schema: any, value: unknown): CompactError {
-	if (
-		schema?.type === 'object' &&
-		typeof value === 'object' &&
-		value !== null &&
-		!Array.isArray(value) &&
-		schema.properties
-	)
-		for (const key in schema.properties) {
-			if (!(key in (value as object))) continue
-			if (isCompactDiagnosable(schema.properties[key])) continue
-
-			return {
-				keyword: 'type',
-				schemaPath: `#/properties/${key}`,
-				instancePath: `/${key}`,
-				params: {},
-				message: `must match ${schema.properties[key]?.['~kind'] ?? 'schema'}`
-			}
-		}
-
-	return {
-		keyword: 'type',
-		schemaPath: '#',
-		instancePath: '',
-		params: {},
-		message: `must match ${schema?.['~kind'] ?? 'schema'}`
-	}
-}
-
-export function isCompactDiagnosable(schema: any) {
-	if (!schema || typeof schema !== 'object') return false
-	if (schema.anyOf || schema.oneOf || schema.allOf) return false
-
-	const type = schema.type
-
-	if (type === 'object') {
-		const properties = schema.properties
-		if (properties)
-			for (const key in properties)
-				if (!isCompactDiagnosable(properties[key])) return false
-
-		return true
-	}
-
-	if (type === 'array') return isCompactDiagnosable(schema.items)
-
-	return (
-		type === 'string' ||
-		type === 'number' ||
-		type === 'integer' ||
-		type === 'boolean' ||
-		type === 'null'
-	)
-}
+export { isCompactDiagnosable }
 
 class FrozenSlotValidator {
 	isAsync = false
@@ -286,11 +116,14 @@ class FrozenSlotValidator {
 	#clean?: (value: unknown) => unknown
 	#decode?: (value: unknown) => unknown
 	schema: unknown
+	#compactSchema?: unknown
+	#errorLocator?: CompactErrorLocator
 
 	#hasDefault: boolean
 	#defaultFastPath?: DefaultFastPath
 
 	#hasOptional: boolean
+	#optionalObject: boolean
 	#noValidate: boolean
 
 	constructor(
@@ -314,13 +147,10 @@ class FrozenSlotValidator {
 			)
 			this.#check = both.check!
 			this.#clean = normalize === false ? undefined : both.clean
-			this.#decode =
-				normalize === false
-					? undefined
-					: reconstruct().instantiateFrozenDecodeMirror(
-							frozen.dm,
-							schema
-						)
+			this.#decode = reconstruct().instantiateFrozenDecodeMirror(
+				frozen.dm,
+				schema
+			)
 		} else {
 			// non-codec covered slot: `e`/`u` are refused, so no externals/unions
 			const both = frozen.cm!(EMPTY_EXTERNALS, undefined)
@@ -329,6 +159,7 @@ class FrozenSlotValidator {
 		}
 
 		this.#hasOptional = !!(schema as any)?.['~optional']
+		this.#optionalObject = (schema as any)?.['~kind'] === 'Object'
 		this.#noValidate =
 			(schema as any)?.['~elyTyp'] === ELYSIA_TYPES.NoValidate
 
@@ -342,15 +173,23 @@ class FrozenSlotValidator {
 			}
 	}
 
+	seal(introspect: boolean) {
+		if (this.schema === undefined) return
+		this.#compactSchema = introspect
+			? compactDiagnosticSchema(this.schema)
+			: undefined
+		this.#errorLocator = createCompactErrorLocator(this.schema)
+		this.schema = undefined
+	}
+
 	Check(value: unknown): boolean {
 		return this.#check(value)
 	}
 
 	Errors(value: unknown): unknown[] {
-		const hit = walkCompactError(this.schema, value, '', '#')
-		if (hit) return [hit]
-
-		return [bestEffortCodecError(this.schema, value)]
+		return this.schema || this.#compactSchema
+			? compactErrors(this.schema ?? this.#compactSchema, value)
+			: (this.#errorLocator?.(value) ?? compactErrors(undefined, value))
 	}
 
 	#error(value: unknown, type?: string): ValidationError {
@@ -389,13 +228,11 @@ class FrozenSlotValidator {
 		}
 
 		if (this.#hasOptional) {
-			const schema = this.schema as any
-
 			if (value === undefined || value === null)
-				return schema['~kind'] === 'Object' ? nullObject() : value
+				return this.#optionalObject ? nullObject() : value
 
 			if (
-				schema['~kind'] === 'Object' &&
+				this.#optionalObject &&
 				typeof value === 'object' &&
 				!Array.isArray(value) &&
 				Object.keys(value as object).length === 0
@@ -548,6 +385,7 @@ export function buildFrozenRouteValidator(
 		out.response = responseOut
 	}
 
+	trackValidatorCompiler(root, out)
 	return out
 }
 

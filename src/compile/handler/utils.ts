@@ -2,7 +2,6 @@ import { isAsyncFunction } from '../utils'
 import {
 	deriveEntryFn,
 	isMapDeriveEntry,
-	type CompactBeforeHandleChunk,
 	type CompactBeforeHandlePrefix,
 	type DeriveEntry
 } from '../../utils'
@@ -80,7 +79,11 @@ export const mapTransform = /*#__PURE__*/ map<
 	return t.begin + call + t.end()
 })
 
-const deriveKeyCache = new WeakMap<Function, string[] | null>()
+let deriveKeyCache = new WeakMap<Function, string[] | null>()
+
+export const clearHandlerUtilityAnalysisCaches = () => {
+	deriveKeyCache = new WeakMap()
+}
 
 export function extractDeriveKeys(fn: Function) {
 	const cached = deriveKeyCache.get(fn)
@@ -513,61 +516,61 @@ export function mapBeforeHandle(
 	return code
 }
 
-const compactBeforeHandleChunks = (prefix: CompactBeforeHandlePrefix) => {
-	const chunks: CompactBeforeHandleChunk[] = []
-	for (let chunk = prefix.tail; chunk; chunk = chunk.parent)
-		chunks.push(chunk)
+export function lowerBeforeHandlePrefix(
+	prefix: CompactBeforeHandlePrefix | undefined
+): readonly Function[] | undefined {
+	if (!prefix) return
 
-	return chunks
+	const values = new Array<Function>(prefix.length)
+	let offset = prefix.length
+	for (let chunk = prefix.tail; chunk; chunk = chunk.parent) {
+		offset -= chunk.values.length
+		for (let i = 0; i < chunk.values.length; i++)
+			values[offset + i] = chunk.values[i]!
+	}
+
+	return values
 }
 
 type BeforeHandleContext = { request: Request }
 
 export function runBeforeHandlePrefix(
-	prefix: CompactBeforeHandlePrefix,
+	prefix: CompactBeforeHandlePrefix | readonly Function[],
 	context: BeforeHandleContext,
 	compat = true
 ) {
-	const chunks = compactBeforeHandleChunks(prefix)
-	let first = true
-
-	for (let i = chunks.length - 1; i >= 0; i--) {
-		const values = chunks[i]!.values
-		for (let j = 0; j < values.length; j++) {
-			if (compat && !first && context.request.signal.aborted) return
-			first = false
-			const result = values[j]!(context)
-			if (result !== undefined) return result
-		}
+	const values = Array.isArray(prefix)
+		? prefix
+		: lowerBeforeHandlePrefix(prefix as CompactBeforeHandlePrefix)!
+	for (let i = 0; i < values.length; i++) {
+		if (compat && i && context.request.signal.aborted) return
+		const result = values[i]!(context)
+		if (result !== undefined) return result
 	}
 }
 
 export async function runBeforeHandlePrefixAsync(
-	prefix: CompactBeforeHandlePrefix,
+	prefix: CompactBeforeHandlePrefix | readonly Function[],
 	context: BeforeHandleContext,
 	compat = true
 ) {
-	const chunks = compactBeforeHandleChunks(prefix)
-	let first = true
-
-	for (let i = chunks.length - 1; i >= 0; i--) {
-		const values = chunks[i]!.values
-		for (let j = 0; j < values.length; j++) {
-			if (compat && !first && context.request.signal.aborted) return
-			first = false
-			let result = values[j]!(context)
-			if (result instanceof Promise) {
-				try {
-					result = await result
-				} catch (error) {
-					if (!compat && context.request.signal.aborted) return
-
-					throw error
-				}
+	const values = Array.isArray(prefix)
+		? prefix
+		: lowerBeforeHandlePrefix(prefix as CompactBeforeHandlePrefix)!
+	for (let i = 0; i < values.length; i++) {
+		if (compat && i && context.request.signal.aborted) return
+		let result = values[i]!(context)
+		if (result instanceof Promise) {
+			try {
+				result = await result
+			} catch (error) {
 				if (!compat && context.request.signal.aborted) return
+
+				throw error
 			}
-			if (result !== undefined) return result
+			if (!compat && context.request.signal.aborted) return
 		}
+		if (result !== undefined) return result
 	}
 }
 

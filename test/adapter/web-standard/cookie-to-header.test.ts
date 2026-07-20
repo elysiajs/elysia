@@ -51,18 +51,6 @@ describe('Web Standard - Cookie to Header', () => {
 		expect(result).toBeUndefined()
 	})
 
-	it('return undefined when the input is an empty object', () => {
-		const cookies = {}
-		const result = serializeCookie(cookies)
-		expect(result).toBeUndefined()
-	})
-
-	it('return undefined when the input is an empty object', () => {
-		const cookies = {}
-		const result = serializeCookie(cookies)
-		expect(result).toBeUndefined()
-	})
-
 	it('return undefined when the input is an object with null values', () => {
 		const cookies = {
 			cookie1: null,
@@ -70,12 +58,6 @@ describe('Web Standard - Cookie to Header', () => {
 		}
 
 		// @ts-ignore
-		const result = serializeCookie(cookies)
-		expect(result).toBeUndefined()
-	})
-
-	it('return undefined when the input is an empty object', () => {
-		const cookies = {}
 		const result = serializeCookie(cookies)
 		expect(result).toBeUndefined()
 	})
@@ -88,24 +70,6 @@ describe('Web Standard - Cookie to Header', () => {
 			key4: [1, 2, 3]
 		}
 		// @ts-ignore
-		const result = serializeCookie(cookies)
-		expect(result).toBeUndefined()
-	})
-
-	it('return undefined when the input is an empty object', () => {
-		const cookies = {}
-		const result = serializeCookie(cookies)
-		expect(result).toBeUndefined()
-	})
-
-	it('return undefined when the input is an empty object', () => {
-		const cookies = {}
-		const result = serializeCookie(cookies)
-		expect(result).toBeUndefined()
-	})
-
-	it('return undefined when the input is an empty object', () => {
-		const cookies = {}
 		const result = serializeCookie(cookies)
 		expect(result).toBeUndefined()
 	})

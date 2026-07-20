@@ -8,9 +8,9 @@ import type {
 	TSchema
 } from 'typebox/type'
 import {
-	Clean,
 	Decode,
 	DecodeUnsafe,
+	Clone,
 	Default,
 	Encode,
 	EncodeUnsafe,
@@ -42,10 +42,10 @@ import {
 import { hasProperty } from '../utils'
 import {
 	collectFileTypeChecks,
+	isAsyncPredicate,
 	takeFileTypeChecks,
 	type PendingFileTypeCheck
-} from '../elysia/file'
-import { isAsyncPredicate } from '../elysia/file-type'
+} from '../elysia/file-type'
 import { nullObject } from '../../utils'
 import { ValidationError } from '../../error'
 import {
@@ -62,8 +62,18 @@ import {
 	schemaContainsRef,
 	schemaHasDangerousProperties
 } from './clean-safe'
+import { createCleanPlan } from './clean-plan'
+import { createDecodePlan, createEncodePlan } from './codec-plan'
+import { createConvertPlan } from './convert-plan'
+import { createDefaultPlan } from './default-plan'
 
 import type { MaybePromise } from '../../types'
+import {
+	createCompactErrorLocator,
+	compactDiagnosticSchema,
+	compactErrors,
+	type CompactErrorLocator
+} from '../../validator/compact-errors'
 
 const moduleCache = new WeakMap<
 	Record<string, TSchema>,
@@ -75,7 +85,6 @@ interface Refinement {
 }
 
 interface RefinementGroup {
-	refinements: Refinement[]
 	checks: Array<(value: unknown) => unknown>
 }
 
@@ -147,7 +156,6 @@ function collectRefinements(
 
 			if (members.length) {
 				group = {
-					refinements: members,
 					checks: members.map((refinement) => refinement.check)
 				}
 				refinementGroups.set(refinements, group)
@@ -401,6 +409,9 @@ export class TypeBoxValidator<
 
 	// build time check, bound eagerly from the frozen manifest at construction
 	reconstructedCheck?: (value: unknown) => boolean
+	// Legacy composition supplies its historical lazy diagnostic enumerator.
+	// It is authoring-only and is discarded by seal().
+	diagnosticErrors?: (value: unknown) => TLocalizedValidationError[]
 
 	schema!: T
 
@@ -409,7 +420,12 @@ export class TypeBoxValidator<
 	hasDefault!: boolean
 
 	#decodeMirror?: (value: unknown) => unknown
+	#decodeOperation?: (value: unknown) => unknown
 	#encodeMirror?: (value: unknown) => unknown
+	#encodeOperation?: (value: unknown) => unknown
+	#encodeDefaultOperation?: (value: unknown) => unknown
+	#encodeConvertOperation?: (value: unknown) => unknown
+	#encodeCleanOperation?: (value: unknown) => unknown
 	#refinements?: Set<RefinementGroup>
 	// Pooled once per validator; #validate resets it via an epoch counter rather than re-allocating
 	// Safe because #validate is synchronous and nesting only ever interleaves different validator
@@ -423,11 +439,16 @@ export class TypeBoxValidator<
 	// grouped runtime state used by FromSync/FromAsync.
 	precomputeSafe = false
 	#defaultFastPath?: DefaultFastPath
+	#defaultFallback?: (value: unknown) => unknown
 
 	#noValidate!: boolean
 	#isForm = false
 	#hasOptional = false
 	#cleanRedundant = false
+	#optionalObject = false
+	#detachedCheck?: (value: unknown) => boolean
+	#compactSchema?: unknown
+	#errorLocator?: CompactErrorLocator
 
 	constructor(
 		schema: T,
@@ -593,12 +614,15 @@ export class TypeBoxValidator<
 			} else {
 				this.precomputeSafe = false
 				this.#defaultFastPath = undefined
+				if (this.hasDefault)
+					this.#defaultFallback = createDefaultPlan(this.schema)
 			}
 		}
 
 		this.#noValidate = originalElyTyp === ELYSIA_TYPES.NoValidate
 		this.#isForm = originalElyTyp === ELYSIA_TYPES.Form
 		this.#hasOptional = !!(this.schema as any)?.['~optional']
+		this.#optionalObject = (this.schema as any)?.['~kind'] === 'Object'
 
 		if (frozen?.ic)
 			reconstruct().reconstructInnerCodecs(frozen.ic, this.schema)
@@ -614,7 +638,7 @@ export class TypeBoxValidator<
 				options?.normalize === false
 					? undefined
 					: schemaHasDangerousProperties(this.schema)
-						? (value) => Clean(this.schema, value)
+						? createCleanPlan(this.schema)
 						: both.clean
 		} else {
 			if (isFrozen)
@@ -629,7 +653,7 @@ export class TypeBoxValidator<
 					options?.normalize === false
 						? undefined
 						: options?.normalize === 'typebox'
-							? (value) => Clean(this.schema, value)
+							? createCleanPlan(this.schema)
 							: this.#setupMirror(schema, options, frozen)
 			} catch (error) {
 				console.warn(
@@ -638,8 +662,9 @@ export class TypeBoxValidator<
 				console.warn(schema)
 				console.warn(error)
 
-				if (options?.normalize !== false)
-					this.Clean = (value) => Clean(this.schema, value)
+				if (options?.normalize !== false) {
+					this.Clean = createCleanPlan(this.schema)
+				}
 			}
 		}
 
@@ -663,21 +688,32 @@ export class TypeBoxValidator<
 				frozen,
 				'decode'
 			)
-
 		if (
 			this.hasCodec &&
 			!this.#isForm &&
-			!this.#noValidate &&
-			options?.slot?.startsWith('r') &&
-			options?.normalize !== false &&
-			options?.normalize !== 'typebox'
+			!options?.slot?.startsWith('r') &&
+			!this.#decodeMirror
 		)
+			this.#decodeOperation = createDecodePlan(this.schema)
+
+		if (this.hasCodec && !this.#isForm && options?.slot?.startsWith('r'))
 			this.#encodeMirror = this.#setupCodecMirror(
 				this.schema as TSchema,
 				options,
 				frozen,
 				'encode'
 			)
+		if (
+			this.hasCodec &&
+			!this.#isForm &&
+			options?.slot?.startsWith('r') &&
+			!this.#encodeMirror
+		) {
+			this.#encodeOperation = createEncodePlan(this.schema)
+			this.#encodeDefaultOperation = createDefaultPlan(this.schema)
+			this.#encodeConvertOperation = createConvertPlan(this.schema)
+			this.#encodeCleanOperation = createCleanPlan(this.schema)
+		}
 
 		if (!this.#noValidate)
 			this.#findCustomError = buildFindCustomError(this.schema, frozen)
@@ -689,6 +725,43 @@ export class TypeBoxValidator<
 			captureImpl
 		)
 			captureImpl.captureBridgeFree(options.aot, options.slot, rawSchema)
+	}
+
+	override seal(introspect: boolean) {
+		if (this.#detachedCheck) return
+		this.#dropCompiledSource()
+
+		if (this.hasDefault && !this.#defaultFastPath && !this.#defaultFallback)
+			throw new Error(
+				'[Elysia] Validator cannot be detached because its default operation is unavailable.'
+			)
+		if (
+			this.hasCodec &&
+			!this.#isForm &&
+			!this.#decodeMirror &&
+			!this.#decodeOperation &&
+			!this.#encodeMirror &&
+			!this.#encodeOperation
+		)
+			throw new Error(
+				'[Elysia] Validator cannot be detached because its codec mirror is unavailable.'
+			)
+
+		this.#detachedCheck =
+			this.reconstructedCheck ?? (this.tb as any)?.evaluateResult?.check
+		if (!this.#detachedCheck)
+			throw new Error(
+				'[Elysia] Validator cannot be detached because its executable check is unavailable.'
+			)
+
+		this.#compactSchema = introspect
+			? compactDiagnosticSchema(this.schema)
+			: undefined
+		this.#errorLocator = createCompactErrorLocator(this.schema)
+		this.tb = undefined
+		this.reconstructedCheck = undefined
+		this.diagnosticErrors = undefined
+		;(this as any).schema = undefined
 	}
 
 	#error(
@@ -743,30 +816,23 @@ export class TypeBoxValidator<
 		options?: ValidatorOptions,
 		frozen?: FrozenValidator
 	): ((value: unknown) => unknown) | undefined {
-		if (schemaHasDangerousProperties(this.schema))
-			return (value) => Clean(this.schema, value)
+		if (schemaHasDangerousProperties(this.schema)) {
+			return createCleanPlan(this.schema)
+		}
 
 		const aot = options?.aot
 		const slot = options?.slot
 
 		if (aot && slot && frozen?.m) {
-			const m = frozen.m
-			let clean: ((value: unknown) => unknown) | undefined
-
-			return (value: unknown) => {
-				if (clean === undefined)
-					try {
-						clean = reconstruct().instantiateFrozenMirror(m, schema)
-					} catch (error) {
-						console.warn(
-							'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
-						)
-						console.warn(schema)
-						console.warn(error)
-						clean = (v) => v
-					}
-
-				return clean(value)
+			try {
+				return reconstruct().instantiateFrozenMirror(frozen.m, schema)
+			} catch (error) {
+				console.warn(
+					'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
+				)
+				console.warn(schema)
+				console.warn(error)
+				return (value) => value
 			}
 		}
 
@@ -794,40 +860,14 @@ export class TypeBoxValidator<
 		const frozenMirror = dir === 'decode' ? frozen?.dm : frozen?.em
 
 		if (aot && slot && frozenMirror) {
-			const m = frozenMirror
-			let run: ((value: unknown) => unknown) | undefined
-
-			return (value: unknown) => {
-				if (run === undefined)
-					try {
-						run = reconstruct().instantiateFrozenDecodeMirror(
-							m,
-							schema,
-							dir
-						)
-					} catch {
-						run =
-							dir === 'decode'
-								? (v) => {
-										// @ts-ignore
-										const decoded = DecodeUnsafe(
-											nullObject(),
-											schema,
-											v
-										)
-										return this.Clean
-											? this.Clean(decoded)
-											: decoded
-									}
-								: (v) => {
-										const out = Encode(schema, v as any)
-										return this.Clean
-											? this.Clean(out)
-											: out
-									}
-					}
-
-				return run(value)
+			try {
+				return reconstruct().instantiateFrozenDecodeMirror(
+					frozenMirror,
+					schema,
+					dir
+				)
+			} catch {
+				return
 			}
 		}
 
@@ -882,6 +922,7 @@ export class TypeBoxValidator<
 	}
 
 	#rawCheck(value: Static<T>): boolean {
+		if (this.#detachedCheck) return this.#detachedCheck(value)
 		if (this.reconstructedCheck) return this.reconstructedCheck(value)
 
 		return this.tb!.Check(value)
@@ -911,15 +952,54 @@ export class TypeBoxValidator<
 	}
 
 	Errors(value: unknown): TLocalizedValidationError[] {
-		return Errors(this.schema, value)
+		return this.diagnosticErrors
+			? this.diagnosticErrors(value)
+			: this.schema
+				? Errors(this.schema, value)
+				: this.#compactSchema
+					? (compactErrors(
+							this.#compactSchema,
+							value
+						) as TLocalizedValidationError[])
+					: (this.#errorLocator?.(
+							value
+						) as TLocalizedValidationError[])
 	}
 
 	Decode(value: Static<T>): StaticDecode<T> {
-		return Decode(this.schema, value)
+		return (
+			this.#decodeMirror
+				? this.#decodeMirror(value)
+				: this.#decodeOperation
+					? this.#decodeOperation(value)
+					: this.schema
+						? Decode(this.schema, value)
+						: value
+		) as StaticDecode<T>
+	}
+
+	#encodeWithOperation(value: unknown): unknown {
+		let out = this.#encodeOperation!(Clone(value))
+		if (this.#encodeDefaultOperation)
+			out = this.#encodeDefaultOperation(out)
+		if (this.#encodeConvertOperation)
+			out = this.#encodeConvertOperation(out)
+		if (this.#encodeCleanOperation) out = this.#encodeCleanOperation(out)
+		return out
 	}
 
 	Encode(value: Static<T>): StaticEncode<T> {
-		return this.hasCodec ? Encode(this.schema, value) : (value as any)
+		return (
+			this.hasCodec
+				? this.#encodeMirror
+					? this.#encodeMirror(value)
+					: this.#encodeOperation
+						? this.#encodeWithOperation(value)
+						: this.schema
+							? Encode(this.schema, value)
+							: value
+				: value
+		) as StaticEncode<T>
 	}
 
 	EncodeFrom(value: Static<T>, type?: string): StaticEncode<T> {
@@ -951,6 +1031,28 @@ export class TypeBoxValidator<
 		try {
 			if (this.#encodeMirror) {
 				const out = this.#encodeMirror(value)
+
+				const errors = this.#noValidate
+					? undefined
+					: this.#validate(out as any)
+				if (errors)
+					throw new ValidationError(
+						type,
+						out,
+						errors.length ? errors : () => this.Errors(out),
+						this.schema
+					)
+
+				return out as any
+			}
+
+			if (this.#encodeOperation) {
+				if (this.#noValidate) {
+					const out = this.#encodeOperation(value)
+					return this.Clean ? (this.Clean(out) as any) : (out as any)
+				}
+
+				const out = this.#encodeWithOperation(value)
 
 				const errors = this.#noValidate
 					? undefined
@@ -1047,19 +1149,18 @@ export class TypeBoxValidator<
 	private optionalBypass(
 		value: Static<T>
 	): { bypass: true; value: Static<T> } | undefined {
-		const schema = this.schema as any
-		if (!schema?.['~optional']) return
+		if (!this.#hasOptional) return
 
 		if (value === undefined || value === null)
 			return {
 				bypass: true,
-				value: (schema['~kind'] === 'Object'
+				value: (this.#optionalObject
 					? nullObject()
 					: value) as Static<T>
 			}
 
 		if (
-			schema['~kind'] === 'Object' &&
+			this.#optionalObject &&
 			typeof value === 'object' &&
 			!Array.isArray(value) &&
 			Object.keys(value as object).length === 0
@@ -1085,7 +1186,12 @@ export class TypeBoxValidator<
 					value = this.#applyPrecomputedObjectDefault(
 						value as any
 					) as any
-			} else value = Default(this.schema, value) as any
+			} else
+				value = (
+					this.#defaultFallback
+						? this.#defaultFallback(value)
+						: Default(this.schema, value)
+				) as any
 		}
 
 		if (this.#hasOptional) {
@@ -1125,6 +1231,8 @@ export class TypeBoxValidator<
 
 				if (this.#decodeMirror)
 					value = this.#decodeMirror(value) as Static<T>
+				else if (this.#decodeOperation)
+					value = this.#decodeOperation(value) as Static<T>
 				else
 					try {
 						value = DecodeUnsafe(
@@ -1197,7 +1305,12 @@ export class TypeBoxValidator<
 					value = this.#applyPrecomputedObjectDefault(
 						value as any
 					) as Static<T>
-			} else value = Default(this.schema, value) as Static<T>
+			} else
+				value = (
+					this.#defaultFallback
+						? this.#defaultFallback(value)
+						: Default(this.schema, value)
+				) as Static<T>
 		}
 
 		if (this.#hasOptional) {
@@ -1222,6 +1335,8 @@ export class TypeBoxValidator<
 
 				if (this.#decodeMirror)
 					value = this.#decodeMirror(value) as Static<T>
+				else if (this.#decodeOperation)
+					value = this.#decodeOperation(value) as Static<T>
 				else
 					try {
 						value = DecodeUnsafe(

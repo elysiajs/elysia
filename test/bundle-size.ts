@@ -4,7 +4,9 @@ const cases = {
 		source: `import Elysia from './dist/index.mjs'; globalThis.app = new Elysia()`
 	},
 	schema: {
-		limit: 406 * 1024,
+		// N+3a's schema-free default/clean/codec/error plans remain executable
+		// after the production seal drops raw schemas and compiler state.
+		limit: 430 * 1024,
 		source: `import { Elysia, t } from './dist/index.mjs'; globalThis.app = new Elysia().get('/', () => 'ok', { query: t.Object({ q: t.String() }) })`
 	}
 } as const

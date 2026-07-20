@@ -217,6 +217,8 @@ export class TypeBoxValidatorCache {
 
 		this.#cache.clear()
 		this.#referenceCache = new WeakMap()
+		this.#lastSchema = undefined
+		this.#lastMeta = undefined
 		deferCoercions()
 	}
 }

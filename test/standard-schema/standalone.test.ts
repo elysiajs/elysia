@@ -681,20 +681,29 @@ describe('Standard Schema single-pass validation', () => {
 	})
 
 	it('MultiValidator.Check keeps lenient decode for codec members and strict Check otherwise', () => {
-		const lenient = Validator.create(
-			counted(z.object({ id: z.coerce.number() })).schema,
-			{
-				schemas: [t.Object({ ok: t.Boolean() })],
-				coerces: coerceQuery()
-			}
-		)!
+		for (const [app, sealed] of [
+			[undefined, false],
+			[undefined, true],
+			[{ '~config': { experimental: { validationPlan } } }, false],
+			[{ '~config': { experimental: { validationPlan } } }, true]
+		]) {
+			const lenient = Validator.create(
+				counted(z.object({ id: z.coerce.number() })).schema,
+				{
+					schemas: [t.Object({ ok: t.Boolean() })],
+					coerces: coerceQuery(),
+					app
+				}
+			)!
+			if (sealed) lenient.seal(false)
 
-		expect(lenient.Check({ id: '1', ok: 'true' })).toBe(true)
-		expect(lenient.From!({ id: '1', ok: 'true' }, 'query')).toEqual({
-			id: 1,
-			ok: true
-		})
-		expect(lenient.Check({ id: '1', ok: 'maybe' })).toBe(false)
+			expect(lenient.Check({ id: '1', ok: 'true' })).toBe(true)
+			expect(lenient.From!({ id: '1', ok: 'true' }, 'query')).toEqual({
+				id: 1,
+				ok: true
+			})
+			expect(lenient.Check({ id: '1', ok: 'maybe' })).toBe(false)
+		}
 
 		const strict = Validator.create(
 			counted(z.object({ id: z.number() })).schema,

@@ -4,10 +4,9 @@ import { WebStandardAdapter } from '../web-standard'
 import { isDynamicRegex, needEncodeRegex } from '../../constants'
 import { buildNativeStaticResponse } from '../../compile/handler'
 import { routeRow } from '../../route-table'
+import { isBun } from '../../universal/constants'
 import { flattenChain, getLoosePath, nullObject } from '../../utils'
 import { frozenRootOf } from '../../generation'
-
-import { buildGlobalWSHandler } from '../../ws/route'
 
 import type { AnyElysia } from '../../base'
 
@@ -21,10 +20,14 @@ const nativeStaticMethods = new Set([
 	'OPTIONS'
 ])
 
-export function collectStaticRoutes(app: AnyElysia) {
-	if (app['~config']?.nativeStaticResponse === false) return
+export type NativeStaticRoutes = Record<string, Record<string, Response>>
 
-	void app.fetch
+export function buildNativeStaticRoutes(
+	app: AnyElysia,
+	table = app['~routeTable']
+) {
+	if (!isBun) return
+	if (app['~config']?.nativeStaticResponse === false) return
 
 	const frozenRoot = frozenRootOf(app)
 	const fetchLevelHook = flattenChain(frozenRoot['~hookChain'])
@@ -35,19 +38,33 @@ export function collectStaticRoutes(app: AnyElysia) {
 	)
 		return
 
-	const table = app['~generation']?.routeTable ?? app['~routeTable']
 	const length = table?.length ?? 0
 	if (!table || !length) return
 
 	const methods = table.method
 	const paths = table.path
+	const handlers = table.handler
+	let hasPossibleStatic = false
 
-	const ready: Record<string, Record<string, Response>> = nullObject()
+	for (let i = 0; i < length; i++) {
+		const handler = handlers[i]
+		if (
+			typeof handler !== 'function' &&
+			!(handler instanceof Error) &&
+			!(handler instanceof Promise)
+		) {
+			hasPossibleStatic = true
+			break
+		}
+	}
+
+	if (!hasPossibleStatic) return
+
+	const ready: NativeStaticRoutes = nullObject()
 	const strictPath = frozenRoot['~config']?.strictPath === true
 	const seen = new Map<string, number>()
 
-	for (let i = 0; i < length; i++)
-		seen.set(methods[i] + ' ' + paths[i], i)
+	for (let i = 0; i < length; i++) seen.set(methods[i] + ' ' + paths[i], i)
 
 	let explicitPaths: Map<string, Set<string>> | undefined
 	if (!strictPath) {
@@ -95,6 +112,15 @@ export function collectStaticRoutes(app: AnyElysia) {
 
 	if (!Object.keys(ready).length) return
 
+	return ready
+}
+
+export function collectStaticRoutes(app: AnyElysia) {
+	void app.fetch
+
+	const ready = app['~generation']?.runtime.nativeStatic
+	if (!ready) return
+
 	return [ready, []] as const
 }
 
@@ -128,6 +154,7 @@ export const BunAdapter = createAdapter({
 
 		const build = () => {
 			const fetch = app.fetch
+			const runtime = app['~generation']?.runtime
 			let routes: ReturnType<typeof collectStaticRoutes>
 
 			try {
@@ -139,18 +166,7 @@ export const BunAdapter = createAdapter({
 				)
 			}
 
-			const hasWs = app['~hasWS']
-			let websocket: ReturnType<typeof buildGlobalWSHandler> | undefined
-			if (hasWs) {
-				const defaultConfig = (frozenRootOf(app)['~config'] as any)
-					?.websocket
-
-				websocket = defaultConfig
-					? Object.assign(buildGlobalWSHandler(), defaultConfig)
-					: buildGlobalWSHandler()
-			}
-
-			return { fetch, routes, websocket }
+			return { fetch, routes, runtime, websocket: runtime?.websocket }
 		}
 
 		let built: ReturnType<typeof build> | undefined

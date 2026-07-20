@@ -143,7 +143,11 @@ function phasesFromMemberAccess(
 	return out
 }
 
-const tracePhaseCache = new WeakMap<Function, Set<TraceEvent> | null>()
+let tracePhaseCache = new WeakMap<Function, Set<TraceEvent> | null>()
+
+export const clearTraceAnalysisCaches = () => {
+	tracePhaseCache = new WeakMap()
+}
 
 function scanTracePhases(fn: Function) {
 	const cached = tracePhaseCache.get(fn)

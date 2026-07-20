@@ -3,7 +3,7 @@ import { describe, it, expect } from 'bun:test'
 import { Elysia, file, form, redirect, status } from '../../../src'
 
 import { mapResponse } from '../../../src/adapter/web-standard/handler'
-import { Passthrough } from './utils'
+import { Passthrough, testCommonResponseMapping } from './utils'
 import { req } from '../../utils'
 
 const createContext = () => ({
@@ -12,78 +12,10 @@ const createContext = () => ({
 	status: 200
 })
 
-class Student {
-	constructor(public name: string) {}
-
-	toString() {
-		return JSON.stringify({
-			name: this.name
-		})
-	}
-}
-
 class CustomResponse extends Response {}
 
 describe('Web Standard - Map Response', () => {
-	it('map string', async () => {
-		const response = mapResponse('Shiroko', createContext())
-
-		expect(response).toBeInstanceOf(Response)
-		await expect(response.text()).resolves.toBe('Shiroko')
-		expect(response.status).toBe(200)
-	})
-
-	it('map number', async () => {
-		const response = mapResponse(1, createContext())
-
-		expect(response).toBeInstanceOf(Response)
-		await expect(response.text()).resolves.toBe('1')
-		expect(response.status).toBe(200)
-	})
-
-	it('map boolean', async () => {
-		const response = mapResponse(true, createContext())
-
-		expect(response).toBeInstanceOf(Response)
-		await expect(response.text()).resolves.toBe('true')
-		expect(response.status).toBe(200)
-	})
-
-	it('map object', async () => {
-		const body = {
-			name: 'Shiroko'
-		}
-
-		const response = mapResponse(body, createContext())
-
-		expect(response).toBeInstanceOf(Response)
-		await expect(response.json()).resolves.toEqual(body)
-		expect(response.status).toBe(200)
-	})
-
-	it('map function', async () => {
-		const response = mapResponse(() => 1, createContext())
-
-		expect(response).toBeInstanceOf(Response)
-		await expect(response.text()).resolves.toBe('1')
-		expect(response.status).toBe(200)
-	})
-
-	it('map undefined', async () => {
-		const response = mapResponse(undefined, createContext())
-
-		expect(response).toBeInstanceOf(Response)
-		await expect(response.text()).resolves.toEqual('')
-		expect(response.status).toBe(200)
-	})
-
-	it('map null', async () => {
-		const response = mapResponse(null, createContext())
-
-		expect(response).toBeInstanceOf(Response)
-		await expect(response.text()).resolves.toEqual('')
-		expect(response.status).toBe(200)
-	})
+	testCommonResponseMapping((value) => mapResponse(value, createContext()))
 
 	it('map undefined to an empty body for 204, 205, and 304', async () => {
 		for (const status of [204, 205, 304] as const) {
@@ -96,78 +28,6 @@ describe('Web Standard - Map Response', () => {
 			expect(response.status).toBe(status)
 			await expect(response.text()).resolves.toEqual('')
 		}
-	})
-
-	it('map Blob', async () => {
-		const file = Bun.file('./test/images/aris-yuzu.jpg')
-
-		const response = mapResponse(file, createContext())
-
-		expect(response).toBeInstanceOf(Response)
-		await expect(response.arrayBuffer()).resolves.toEqual(
-			await file.arrayBuffer()
-		)
-		expect(response.status).toBe(200)
-	})
-
-	it('map File', async () => {
-		const file = new File(['Hello'], 'hello.txt', { type: 'text/plain' })
-
-		const response = mapResponse(file, createContext())
-
-		expect(response).toBeInstanceOf(Response)
-		await expect(response.text()).resolves.toEqual('Hello')
-		expect(response.status).toBe(200)
-	})
-
-	it('map Promise', async () => {
-		const body = {
-			name: 'Shiroko'
-		}
-
-		const response = await mapResponse(
-			new Promise((resolve) => resolve(body)),
-			createContext()
-		)
-
-		expect(response).toBeInstanceOf(Response)
-		await expect(response.json()).resolves.toEqual(body)
-		expect(response.status).toBe(200)
-	})
-
-	it('maps Error to RFC 9457 problem details', async () => {
-		const response = mapResponse(new Error('Hello'), createContext())
-
-		expect(response).toBeInstanceOf(Response)
-		await expect(response.json()).resolves.toMatchObject({
-			type: 'internal-server-error',
-			title: 'Internal Server Error',
-			status: 500,
-			detail: 'Hello'
-		})
-		expect(response.headers.get('content-type')).toBe(
-			'application/problem+json'
-		)
-		expect(response.status).toBe(500)
-	})
-
-	it('map Response', async () => {
-		const response = mapResponse(new Response('Shiroko'), createContext())
-
-		expect(response).toBeInstanceOf(Response)
-		await expect(response.text()).resolves.toEqual('Shiroko')
-		expect(response.status).toBe(200)
-	})
-
-	it('map custom Response', async () => {
-		const response = mapResponse(
-			new CustomResponse('Shiroko'),
-			createContext()
-		)
-
-		expect(response).toBeInstanceOf(Response)
-		await expect(response.text()).resolves.toEqual('Shiroko')
-		expect(response.status).toBe(200)
 	})
 
 	it('map custom Response with custom headers', async () => {
@@ -184,16 +44,6 @@ describe('Web Standard - Map Response', () => {
 		expect(response.headers.get('content-type')).toBe(
 			'text/html; charset=utf8'
 		)
-	})
-
-	it('map custom class', async () => {
-		const response = mapResponse(new Student('Himari'), createContext())
-
-		expect(response).toBeInstanceOf(Response)
-		await expect(response.json()).resolves.toEqual({
-			name: 'Himari'
-		})
-		expect(response.status).toBe(200)
 	})
 
 	it('map primitive with custom context', async () => {

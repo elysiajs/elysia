@@ -11,14 +11,17 @@ import { resolveHandlerParams } from './params'
 import { compileHandlerJit } from './jit'
 export { setCaptureHeaderShorthand } from './jit'
 import {
+	clearRouteDescriptorAnalysisCaches,
 	describeRoute,
 	isEmptyPipelineHook,
 	routeDescriptors
 } from './descriptor'
 import { Reconstrct } from './reconstruct'
 import type { Context } from '../../context'
+import type { RouteErrorFinalizer } from '../../handler/utils'
 import {
 	cloneHook,
+	clearRootHookAnalysisCaches,
 	compactBeforeHandleConflicts,
 	compactBeforeHandlePrefix,
 	eventProperties,
@@ -180,7 +183,7 @@ function dropHooksByOrigin(
 function reconstructNeedsHookState(names: string[]): boolean {
 	for (let i = 0; i < names.length; i++)
 		switch (names[i]) {
-			case 'ho':
+			case 'ph':
 			case 'tf':
 			case 'bf':
 			case 'af':
@@ -311,6 +314,13 @@ export function resolveWSLocalHook(
 // Chain node (a `.guard`/`.group`/`.on` entry, possibly carrying a macro key)
 // is shared by reference across every app that reuses the plugin it lives in
 const chainNodeMemos: ResolutionMemo = new WeakMap()
+
+export function clearHandlerAnalysisCaches(root: AnyElysia) {
+	localHookMemos.delete(root)
+	chainNodeMemos.delete(root)
+	clearRootHookAnalysisCaches(root)
+	clearRouteDescriptorAnalysisCaches(root)
+}
 
 function resolveChainNode(
 	root: AnyElysia,
@@ -606,7 +616,8 @@ export function compileHandler(
 		macroScope
 	]: InternalRoute,
 	root: AnyElysia,
-	precomputedStatic?: Response
+	precomputedStatic?: Response,
+	finalizeError: RouteErrorFinalizer | undefined = root['~finalizeError']
 ): CompiledHandler {
 	const frozenRoot = frozenRootOf(root)
 	const adapter = frozenRoot['~config']?.adapter ?? defaultAdapter
@@ -635,6 +646,7 @@ export function compileHandler(
 			handler,
 			...resolveHandlerParams(reconstructed.a, {
 				root,
+				finalizeError,
 				parse: adapter.parse as any,
 				res: adapter.response as any,
 				hook: nullObject() as any,
@@ -722,6 +734,7 @@ export function compileHandler(
 			handler,
 			...resolveHandlerParams(reconstructed.a, {
 				root,
+				finalizeError,
 				parse: adapter.parse as any,
 				res: adapter.response as any,
 				hook: (hook ?? nullObject()) as any,
@@ -765,7 +778,7 @@ export function compileHandler(
 		path,
 		handler,
 		root: frozenRoot as AnyElysia,
-		errorRoot: root,
+		finalizeError,
 		hook,
 		adapter,
 		state

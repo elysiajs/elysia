@@ -366,6 +366,7 @@ export function rewriteIsProductionCalls(code: string): string {
 export const bunAdapterStubSource =
 	`const e=(t)=>{throw new Error(\`[elysia-aot] Bun adapter was stripped for target 'web-standard' — .listen() is unavailable; use the exported fetch handler or rebuild with a different target.\`)}\n` +
 	`export const BunAdapter={name:'bun',runtime:'bun',isWebStandard:true,parse:{},response:{},listen:e}\n` +
+	`export function buildNativeStaticRoutes(){}\n` +
 	`export function collectStaticRoutes(){}\n`
 
 export const STUB_SOURCES: Record<
@@ -395,6 +396,7 @@ export const STUB_SOURCES: Record<
 				`const e=()=>{throw new Error("[elysia-aot] handler compiler JIT was stripped (strip mode) but a route needed runtime compilation. Rebuild with strip:false.")}\n` +
 				`export function describeRoute(){return e()}\n` +
 				`export const routeDescriptors=new WeakMap()\n` +
+				`export function clearRouteDescriptorAnalysisCaches(root){routeDescriptors.delete(root)}\n` +
 				`export function isEmptyPipelineHook(hook){\n` +
 				`	if(!hook)return true\n` +
 				`	for(const key in hook){\n` +
@@ -404,6 +406,12 @@ export const STUB_SOURCES: Record<
 				`	}\n` +
 				`	return true\n` +
 				`}\n`
+		},
+		{
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]compile[\\/]analysis-cache\.(m?js|ts)$/,
+			source:
+				`import { clearHandlerAnalysisCaches } from './handler/index'\n` +
+				`export function clearAuthoringAnalysisCaches(root){clearHandlerAnalysisCaches(root)}\n`
 		}
 	],
 	ws: [
@@ -412,6 +420,7 @@ export const STUB_SOURCES: Record<
 			source:
 				`const e=()=>{throw new Error("[elysia-aot] WebSocket route builder was stripped (strip mode) but a WS route was used. Rebuild with strip:false.")}\n` +
 				`export function buildWSRoute(){return e()}\n` +
+				`export function buildWebSocketRuntime(){return e()}\n` +
 				`export function buildGlobalWSHandler(){return e()}\n`
 		}
 	],
@@ -455,6 +464,7 @@ export const STUB_SOURCES: Record<
 			source:
 				`const e=()=>{throw new Error("[elysia-aot] trace support was stripped (strip mode) but a route used trace. Rebuild with strip:false.")}\n` +
 				`export function createTracer(){return e()}\n` +
+				`export function clearTraceAnalysisCaches(){}\n` +
 				`export function unionTracePhases(){return new Set()}\n`
 		}
 	],

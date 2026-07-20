@@ -274,6 +274,10 @@ export class ValidationPlanMultiValidator extends Validator {
 		})
 	}
 
+	override seal(introspect: boolean) {
+		for (const { validator } of this.#members) validator.seal(introspect)
+	}
+
 	static #merge(
 		snapshot: any,
 		result: any,
@@ -336,7 +340,7 @@ export class ValidationPlanMultiValidator extends Validator {
 		for (const { validator, typebox } of this.#members) {
 			if (typebox && (validator as any).hasCodec)
 				try {
-					;(validator as any).Decode(this.#cloneForMember(value))
+					;(validator as any).FromSync(this.#cloneForMember(value))
 				} catch {
 					return false
 				}

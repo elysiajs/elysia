@@ -22,6 +22,13 @@ export interface RouteTable {
 	readonly macroScope: Map<number, AnyElysia> // route[7]
 }
 
+export interface RuntimeRouteTable {
+	readonly length: number
+	readonly method: readonly string[]
+	readonly path: readonly string[]
+	readonly flags: readonly number[]
+}
+
 export function buildRouteTable(
 	declaredRoutes: readonly InternalRoute[]
 ): RouteTable {
@@ -78,3 +85,11 @@ export const routeRow = (table: RouteTable, id: number) =>
 		table.inheritedChain[id],
 		table.macroScope.get(id)
 	] as unknown as InternalRoute
+
+export const compactRouteTable = (table: RouteTable): RuntimeRouteTable =>
+	Object.freeze({
+		length: table.length,
+		method: Object.freeze(table.method.slice()),
+		path: Object.freeze(table.path.slice()),
+		flags: Object.freeze(table.flags.slice())
+	})

@@ -44,6 +44,8 @@ describe('AOT reconstruction of named parsers', () => {
 		const validators = endValidatorCapture()
 
 		expect(handlers.length).toBe(1)
+		expect(handlers[0]!.alias.split(',')).toContain('ph')
+		expect(handlers[0]!.alias.split(',')).not.toContain('ho')
 
 		Validator.clear()
 		registerManifest({
@@ -178,7 +180,9 @@ describe('compile rebuild and sealed-app immutability', () => {
 			'after the app was sealed'
 		)
 
-		app.compile()
+		const generation = app['~generation']
+		expect(app.compile()).toBe(app)
+		expect(app['~generation']).toBe(generation)
 		expect((await app.handle(req('/a'))).status).toBe(200)
 	})
 

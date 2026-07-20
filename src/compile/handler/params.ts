@@ -12,11 +12,12 @@ import {
 	buildCookieJar,
 	signCookieValues
 } from '../../cookie/utils'
-import { requestId } from '../../utils'
+import { requestId, type CompactBeforeHandlePrefix } from '../../utils'
 import {
 	finalizeRouteError,
 	forwardError,
-	settleResponse
+	settleResponse,
+	type RouteErrorFinalizer
 } from '../../handler/utils'
 import { fallbackResponse } from '../../handler/error'
 import type { AnyElysia } from '../../base'
@@ -31,7 +32,8 @@ import {
 	emptyResponse,
 	hasRequestBody,
 	replaceDeriveContext,
-	runBeforeHandlePrefix
+	runBeforeHandlePrefix,
+	lowerBeforeHandlePrefix
 } from './utils'
 
 /**
@@ -43,9 +45,12 @@ import {
  */
 interface HandlerParamContext {
 	root: AnyElysia
+	finalizeError?: RouteErrorFinalizer
 	parse: Record<string, unknown>
 	res: { map: unknown; compact?: unknown }
-	hook: Record<string, unknown>
+	hook: Record<string, unknown> & {
+		'~beforeHandlePrefix'?: CompactBeforeHandlePrefix
+	}
 	vali: unknown
 	cookieConfig: unknown
 	tracers: unknown
@@ -96,16 +101,16 @@ export const HANDLER_PARAMS: Record<string, Resolver> = {
 	fe: () => forwardError,
 	// route-level error boundary
 	fre: () => finalizeRouteError,
+	ff: (c) => c.finalizeError,
 	fr: () => fallbackResponse,
 	// Q12 settlement helper; capture emits the one-byte alias to keep generated
 	// resume/JIT source within the bundle budget.
 	s: () => settleResponse,
-	rt: (c) => c.root,
 	// route hook
-	ho: (c) => c.hook,
+	ph: (c) => c.hook.parse,
 	tf: (c) => c.hook.transform,
 	bf: (c) => c.hook.beforeHandle,
-	bp: (c) => c.hook['~beforeHandlePrefix'],
+	bp: (c) => lowerBeforeHandlePrefix(c.hook['~beforeHandlePrefix']),
 	rbp: () => runBeforeHandlePrefix,
 	af: (c) => c.hook.afterHandle,
 	mr: (c) => c.hook.mapResponse,

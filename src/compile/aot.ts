@@ -370,6 +370,10 @@ export abstract class Compiled {
 		return programFor(id)?.planRebuilder
 	}
 
+	static release(id: ProgramId | undefined): boolean {
+		return id ? programs.delete(id) : false
+	}
+
 	/** @internal test isolation */
 	static clear() {
 		registered = undefined

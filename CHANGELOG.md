@@ -11,6 +11,10 @@ Breaking Change:
   `handle`/`fetch`, `.compile()`, or `.listen()`. Register routes, hooks,
   models, decorators, state, parsers, macros, and plugins before that boundary;
   hot reload must publish a new application generation.
+- Production sealing now eagerly binds every route and releases authoring-only
+  routes, owners, hook chains, macros, schema compiler state, and source caches.
+  Set `introspect: true` on the app or an introspection plugin to retain the
+  compact route and diagnostics image used by tooling.
 - Remove `createCookieJar` from `elysia/cookies`. Use `context.cookie`,
   `Cookie`, or `parseCookie` instead.
 - AOT artifacts now bind through an app-local `ProgramId` and framework ABI.

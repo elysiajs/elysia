@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { validationPlan } from '../../src/experimental/validation-plan'
 import { Validator } from '../../src/validator'
-import { Compiled } from '../../src/compile/aot'
+import { Compiled, createAotFingerprint } from '../../src/compile/aot'
+import { JITProbe } from '../../src/compile/jit-probe'
 import {
 	endValidatorCapture,
 	endHandlerCapture
@@ -38,7 +39,97 @@ const build = () =>
 			({ body }: any) => ({ ok: true, n: body.n })
 		)
 
+const registerRetainedHandler = (factory: (handler: unknown) => unknown) =>
+	Compiled.register({
+		bf: 1,
+		fingerprint: createAotFingerprint(),
+		handlers: { GET: { '/release': { a: [], f: factory } } }
+	})
+
+const bindPlainHandler = (handler: unknown) => (context: unknown) =>
+	new Response(String((handler as (context: unknown) => unknown)(context)))
+
+const registerWeakRetainedHandler = () => {
+	const marker = { retained: true }
+	const markerRef = new WeakRef(marker)
+	registerRetainedHandler((handler) => {
+		if (!marker.retained) throw new Error('unreachable')
+		return bindPlainHandler(handler)
+	})
+	return markerRef
+}
+
+describe('AOT runtime program release', () => {
+	it('drops the consumed program before serving cold requests', async () => {
+		delete process.env.ELYSIA_AOT_BUILD
+		const previousNodeEnv = process.env.NODE_ENV
+		process.env.NODE_ENV = 'production'
+
+		try {
+			const markerRef = registerWeakRetainedHandler()
+
+			const app = new Elysia().get('/release', () => 'ok')
+			app.compile()
+
+			JITProbe.begin()
+			const response = await app.handle(req('/release'))
+			expect(JITProbe.end().reasons).toEqual([])
+			await expect(response.text()).resolves.toBe('ok')
+
+			for (let i = 0; i < 20 && markerRef.deref(); i++) {
+				new Uint8Array(1024 * 1024)[0] = i
+				Bun.gc(true)
+				await Bun.sleep(0)
+			}
+			expect(markerRef.deref()).toBeUndefined()
+		} finally {
+			if (previousNodeEnv === undefined) delete process.env.NODE_ENV
+			else process.env.NODE_ENV = previousNodeEnv
+		}
+	})
+
+	it('keeps a claimed program available after a failed build', async () => {
+		delete process.env.ELYSIA_AOT_BUILD
+		const previousNodeEnv = process.env.NODE_ENV
+		process.env.NODE_ENV = 'production'
+		let fail = true
+		let calls = 0
+
+		try {
+			registerRetainedHandler((handler) => {
+				calls++
+				if (fail) throw new Error('factory failed')
+				return bindPlainHandler(handler)
+			})
+
+			const app = new Elysia().get('/release', () => 'ok')
+			expect(() => app.compile()).toThrow('factory failed')
+			fail = false
+			app.compile()
+
+			expect(calls).toBe(2)
+			await expect(
+				(await app.handle(req('/release'))).text()
+			).resolves.toBe('ok')
+		} finally {
+			if (previousNodeEnv === undefined) delete process.env.NODE_ENV
+			else process.env.NODE_ENV = previousNodeEnv
+		}
+	})
+})
+
 describe('AOT handler freeze', () => {
+	it('captures the error finalizer without the authoring root', () => {
+		;(build() as any).compile()
+		const handlers = endHandlerCapture()
+		endValidatorCapture()
+
+		const aliases = handlers[0]!.alias.split(',')
+		expect(aliases).toContain('ff')
+		expect(aliases).toContain('fre')
+		expect(aliases).not.toContain('rt')
+	})
+
 	it('binds the captured Q12 settlement helper', async () => {
 		const buildQ12 = () =>
 			new Elysia().beforeHandle(() => {}).get('/q12', () => 'ok')

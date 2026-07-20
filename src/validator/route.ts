@@ -1,4 +1,9 @@
-import { Validator, ValidatorOptions, type ToSubTypeValidator } from '.'
+import {
+	Validator,
+	ValidatorOptions,
+	trackValidatorCompiler,
+	type ToSubTypeValidator
+} from '.'
 
 import {
 	coerceBody,
@@ -117,6 +122,7 @@ export class RouteValidator<const in out T extends RouteSchema> {
 				coerces
 			})
 			;(this as any)[slot] = validator
+			trackValidatorCompiler(options?.app, validator)
 			if (slot === 'query' && options?.validationPlan)
 				this.queryPlan = createQueryPlan(
 					(validator as any)?.schema,
@@ -135,5 +141,6 @@ export class RouteValidator<const in out T extends RouteSchema> {
 			...options,
 			schemas: responseStandalone
 		}) as any
+		trackValidatorCompiler(options?.app, this.response as any)
 	}
 }

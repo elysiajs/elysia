@@ -2,8 +2,13 @@ import { isAsyncFunction, mayReturnPromise } from '../compile/utils'
 import { isCloudflareWorker } from '../universal/constants'
 import { NotFound, PROBLEM_JSON } from '../error'
 
-import type { AnyElysia } from '../base'
 import type { Context } from '../context'
+import type { MaybePromise } from '../types'
+
+export type RouteErrorFinalizer = (
+	context: Context,
+	error: Error
+) => MaybePromise<Response>
 
 export const emptyResponse = isCloudflareWorker
 	? { clone: () => new Response(null) }
@@ -57,11 +62,10 @@ export function forwardError<T>(value: T): T {
 }
 
 export function finalizeRouteError(
-	app: AnyElysia,
+	finalize: RouteErrorFinalizer | undefined,
 	context: Partial<Context>,
 	error: unknown
 ) {
-	const finalize = app['~finalizeError']
 	if (!finalize) throw error
 
 	return finalize(

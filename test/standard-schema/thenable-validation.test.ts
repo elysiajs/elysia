@@ -82,109 +82,65 @@ const passing = (marker: string): Result => ({ value: { accepted: marker } })
 const failing: Result = { issues: [{ message: 'validation failed' }] }
 
 // Standard Schema accepts Promise-like validation results, not only native Promises.
-describe('request validation with Promise-like results', () => {
-	it('keeps native Promise pass and fail behavior', async () => {
-		const pass = await validateRequest('native', passing('request'))
-		const fail = await validateRequest('native', failing)
+for (const [scope, validate] of [
+	['request', validateRequest],
+	['response', validateResponse]
+] as const)
+	describe(`${scope} validation with Promise-like results`, () => {
+		it('keeps native Promise pass and fail behavior', async () => {
+			const pass = await validate('native', passing(scope))
+			const fail = await validate('native', failing)
 
-		expect(pass.response.status).toBe(200)
-		expect(await pass.response.json()).toEqual({ accepted: 'request' })
-		expect(fail.response.status).toBe(422)
-		expect(pass.calls).toBe(1)
-		expect(fail.calls).toBe(1)
-	})
-
-	it('rejects a failing custom thenable identically to a native Promise', async () => {
-		const native = await validateRequest('native', failing)
-		const custom = await validateRequest('custom', failing)
-
-		expect(custom.response.status).toBe(422)
-		expect(await custom.response.text()).toBe(await native.response.text())
-		expect(custom.calls).toBe(1)
-	})
-
-	it('uses the value from a passing custom thenable', async () => {
-		const { response, calls } = await validateRequest(
-			'custom',
-			passing('request')
-		)
-
-		expect(response.status).toBe(200)
-		expect(await response.json()).toEqual({ accepted: 'request' })
-		expect(calls).toBe(1)
-	})
-
-	it('handles custom thenable rejection like native Promise rejection', async () => {
-		const native = await validateRequest('native-reject')
-		const custom = await validateRequest('custom-reject')
-
-		expect(custom.response.status).toBe(native.response.status)
-		expect(await custom.response.text()).toBe(await native.response.text())
-		expect(custom.calls).toBe(1)
-	})
-
-	it('propagates a throwing then getter instead of silently passing', async () => {
-		const { response, calls } = await validateRequest('throwing-getter')
-
-		expect(response.status).toBe(500)
-		expect(await response.json()).toMatchObject({
-			detail: 'then getter failed'
+			expect(pass.response.status).toBe(200)
+			expect(await pass.response.json()).toEqual({ accepted: scope })
+			expect(fail.response.status).toBe(422)
+			expect(pass.calls).toBe(1)
+			expect(fail.calls).toBe(1)
 		})
-		expect(calls).toBe(1)
-	})
-})
 
-describe('response validation with Promise-like results', () => {
-	it('keeps native Promise pass and fail behavior', async () => {
-		const pass = await validateResponse('native', passing('response'))
-		const fail = await validateResponse('native', failing)
+		it('rejects a failing custom thenable identically to a native Promise', async () => {
+			const native = await validate('native', failing)
+			const custom = await validate('custom', failing)
 
-		expect(pass.response.status).toBe(200)
-		expect(await pass.response.json()).toEqual({ accepted: 'response' })
-		expect(fail.response.status).toBe(422)
-		expect(pass.calls).toBe(1)
-		expect(fail.calls).toBe(1)
-	})
-
-	it('rejects a failing custom thenable identically to a native Promise', async () => {
-		const native = await validateResponse('native', failing)
-		const custom = await validateResponse('custom', failing)
-
-		expect(custom.response.status).toBe(422)
-		expect(await custom.response.text()).toBe(await native.response.text())
-		expect(custom.calls).toBe(1)
-	})
-
-	it('uses the value from a passing custom thenable', async () => {
-		const { response, calls } = await validateResponse(
-			'custom',
-			passing('response')
-		)
-
-		expect(response.status).toBe(200)
-		expect(await response.json()).toEqual({ accepted: 'response' })
-		expect(calls).toBe(1)
-	})
-
-	it('handles custom thenable rejection like native Promise rejection', async () => {
-		const native = await validateResponse('native-reject')
-		const custom = await validateResponse('custom-reject')
-
-		expect(custom.response.status).toBe(native.response.status)
-		expect(await custom.response.text()).toBe(await native.response.text())
-		expect(custom.calls).toBe(1)
-	})
-
-	it('propagates a throwing then getter instead of silently passing', async () => {
-		const { response, calls } = await validateResponse('throwing-getter')
-
-		expect(response.status).toBe(500)
-		expect(await response.json()).toMatchObject({
-			detail: 'then getter failed'
+			expect(custom.response.status).toBe(422)
+			expect(await custom.response.text()).toBe(
+				await native.response.text()
+			)
+			expect(custom.calls).toBe(1)
 		})
-		expect(calls).toBe(1)
+
+		it('uses the value from a passing custom thenable', async () => {
+			const { response, calls } = await validate(
+				'custom',
+				passing(scope)
+			)
+
+			expect(response.status).toBe(200)
+			expect(await response.json()).toEqual({ accepted: scope })
+			expect(calls).toBe(1)
+		})
+
+		it('handles custom thenable rejection like native Promise rejection', async () => {
+			const native = await validate('native-reject')
+			const custom = await validate('custom-reject')
+
+			expect(custom.response.status).toBe(native.response.status)
+			expect(await custom.response.text()).toBe(
+				await native.response.text()
+			)
+			expect(custom.calls).toBe(1)
+		})
+
+		it('propagates a throwing then getter instead of silently passing', async () => {
+			const { response, calls } = await validate('throwing-getter')
+
+			expect(response.status).toBe(500)
+			expect(await response.json()).toMatchObject({
+				detail: 'then getter failed'
+			})
+			expect(calls).toBe(1)
+		})
 	})
-})
 
 it('sync-only Standard and Multi validators reject any thenable', () => {
 	const standard = Validator.create(

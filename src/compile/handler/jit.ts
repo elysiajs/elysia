@@ -24,7 +24,8 @@ import { fallbackResponse } from '../../handler/error'
 import {
 	finalizeRouteError,
 	forwardError,
-	settleResponse
+	settleResponse,
+	type RouteErrorFinalizer
 } from '../../handler/utils'
 import { hasHeaderShorthand } from '../../universal/constants'
 
@@ -87,7 +88,7 @@ export function buildSyncAfterResponse(
 		mapAfterResponse(afterResponse as any, [undefined]) +
 		`})\n` +
 		`const _m=${finalMap}\n` +
-		`return typeof _m?.then==='function'?${compatCancellation ? 'Promise.resolve(_m)' : 's(c.request,_m)'}.catch(e=>fre(rt,c,e)):_m\n` +
+		`return typeof _m?.then==='function'?${compatCancellation ? 'Promise.resolve(_m)' : 's(c.request,_m)'}.catch(e=>fre(ff,c,e)):_m\n` +
 		`}\n`
 	)
 }
@@ -141,7 +142,7 @@ function builtinParser(
 export function emitBodyParse(
 	adapter: ElysiaAdapter['parse'],
 	plan: BodyPlan,
-	parserHook: AnyLocalHook | undefined,
+	parserHooks: readonly unknown[] | undefined,
 	hasHeaders: boolean,
 	link: Link,
 	report?: TraceReporter,
@@ -172,7 +173,7 @@ export function emitBodyParse(
 		)
 	}
 
-	const parsers = parserHook?.parse as any[] | undefined
+	const parsers = parserHooks
 
 	let code =
 		`let ct=((${hasHeaders ? "c.headers['content-type']" : "c.request.headers.get('content-type')"})||'')\n` +
@@ -185,7 +186,7 @@ export function emitBodyParse(
 			const parser = parsers![i]
 
 			if (typeof parser === 'function') {
-				link(parserHook, 'ho')
+				link(parsers, 'ph')
 
 				const child = report?.resolveChild(
 					(parser as any).name || 'anonymous'
@@ -194,8 +195,8 @@ export function emitBodyParse(
 				if (child) code += child.begin
 
 				code += isAsyncFunction(parser as Function)
-					? `c.body=${boundary(`ho.parse[${i}](c,ct)`)}\n`
-					: `_bp=ho.parse[${i}](c,ct)\n` +
+					? `c.body=${boundary(`ph[${i}](c,ct)`)}\n`
+					: `_bp=ph[${i}](c,ct)\n` +
 						`if(_bp instanceof Promise)_bp=${boundary('_bp')}\n` +
 						`c.body=_bp\n`
 				code += 'hasBody=c.body!==undefined\n'
@@ -333,7 +334,7 @@ export interface CompileHandlerJitOptions {
 	path: string
 	handler: unknown
 	root: AnyElysia
-	errorRoot: AnyElysia
+	finalizeError: RouteErrorFinalizer | undefined
 	hook: AnyLocalHook | undefined
 	adapter: ElysiaAdapter
 	/**
@@ -348,14 +349,14 @@ export function compileHandlerJit({
 	path,
 	handler,
 	root,
-	errorRoot,
+	finalizeError,
 	hook,
 	adapter,
 	state
 }: CompileHandlerJitOptions): CompiledHandler {
 	const {
 		vali,
-		bodyParserHook,
+		bodyParserHooks,
 		defaultResponseState,
 		cookieConfig,
 		beforeHandlePrefix,
@@ -410,7 +411,7 @@ export function compileHandlerJit({
 			alias += `${alias ? ',' : ''}${key}`
 		}
 	}
-	link(errorRoot, 'rt')
+	link(finalizeError, 'ff')
 	link(finalizeRouteError, 'fre')
 
 	const compatCancellation =
@@ -591,7 +592,7 @@ export function compileHandlerJit({
 		const parseCode = emitBodyParse(
 			adapter.parse,
 			bodyPlan,
-			bodyParserHook,
+			bodyParserHooks,
 			hasHeaders,
 			link,
 			buildReport('parse'),
@@ -917,7 +918,7 @@ export function compileHandlerJit({
 			)
 
 			code +=
-				`if(_r instanceof Promise)return _r.then(fe).then(v=>{${suspensionAbortCheck}return _fin(c,v)}).catch(e=>fre(rt,c,e))\n` +
+				`if(_r instanceof Promise)return _r.then(fe).then(v=>{${suspensionAbortCheck}return _fin(c,v)}).catch(e=>fre(ff,c,e))\n` +
 				`return _fin(c,_r)\n`
 		} else {
 			code += `if(_r instanceof Error)throw _r\n`
@@ -1014,7 +1015,7 @@ export function compileHandlerJit({
 				const settled = settleAtSuspension('_m')
 				code += syncErrorHook
 					? `return typeof _m?.then==='function'?${settled}.catch(e=>_ce(e,c)):_m\n`
-					: `return typeof _m?.then==='function'?${settled}.catch(e=>fre(rt,c,e)):_m\n`
+					: `return typeof _m?.then==='function'?${settled}.catch(e=>fre(ff,c,e)):_m\n`
 			}
 		}
 	} else if (isHandleFunction) {
@@ -1033,13 +1034,13 @@ export function compileHandlerJit({
 			const settled = settleAtSuspension('_m')
 			code += syncErrorHook
 				? `return typeof _m?.then==='function'?${settled}.catch(e=>_ce(e,c)):_m\n`
-				: `return typeof _m?.then==='function'?${settled}.catch(e=>fre(rt,c,e)):_m\n`
+				: `return typeof _m?.then==='function'?${settled}.catch(e=>fre(ff,c,e)):_m\n`
 		}
 	} else {
 		const settled = settleAtSuspension('_m')
 		code +=
 			`const _m=${mapReturn.trim()}\n` +
-			`return typeof _m?.then==='function'?${settled}.catch(e=>fre(rt,c,e)):_m\n`
+			`return typeof _m?.then==='function'?${settled}.catch(e=>fre(ff,c,e)):_m\n`
 	}
 
 	if (hasErrorHook || hasTrace) {
@@ -1062,7 +1063,7 @@ export function compileHandlerJit({
 
 			if (allowUnsafeDetail) link(ValidationError, 'verr')
 
-			const settleErrorMap = `${settleAtSuspension('_r')}.catch(e=>fre(rt,c,e))`
+			const settleErrorMap = `${settleAtSuspension('_r')}.catch(e=>fre(ff,c,e))`
 			factoryHelpers +=
 				`function _em(c,_r){return typeof _r?.then==='function'?${settleErrorMap}:_r}\n` +
 				`${asyncCookieSign ? 'async ' : ''}function _efb(e,c){${asyncCookieSign ? 'let _sg\n' : ''}let _a=false\nconst _f=fr(c,e,${asyncCookieSign ? 'async ' : ''}v=>{${suspensionAbortCheck ? `if(_a&&${abortExpression})return new Response()\n` : ''}${signPrefix}return ${map}(v,c.set,c.request,true)})\n_a=true\nreturn _em(c,_f)}\n`
@@ -1108,15 +1109,15 @@ export function compileHandlerJit({
 				`return _efb(e,c)\n`
 		} else {
 			body += endTrace('error') + schedule
-			body += `return fre(rt,c,e)\n`
+			body += `return fre(ff,c,e)\n`
 		}
 
 		if (syncErrorHook) {
-			factoryHelpers += `function _ce(e,c){try{\n${body}}catch(x){return fre(rt,c,x)}}\n`
+			factoryHelpers += `function _ce(e,c){try{\n${body}}catch(x){return fre(ff,c,x)}}\n`
 			code += `}catch(e){return _ce(e,c)}\n`
 		} else
-			code += `}catch(e){try{\n${body}}catch(x){${endTraceChild('error', 'x')}${endTrace('error', 'x')}return fre(rt,c,x)}}\n`
-	} else code += `}catch(e){return fre(rt,c,e)}\n`
+			code += `}catch(e){try{\n${body}}catch(x){${endTraceChild('error', 'x')}${endTrace('error', 'x')}return fre(ff,c,x)}}\n`
+	} else code += `}catch(e){return fre(ff,c,e)}\n`
 
 	code += '}'
 
@@ -1126,7 +1127,7 @@ export function compileHandlerJit({
 		code = `(function(){\n${factoryHelpers}return ${code}})()`
 
 	Capture.handler({ method, path, alias, code })
-	const inlineAlias = alias.startsWith('rt,fre,') ? alias.slice(7) : alias
+	const inlineAlias = alias.startsWith('ff,fre,') ? alias.slice(7) : alias
 	const inlineSettle = inlineAlias.endsWith(',s') ? settleResponse : undefined
 	const inlineShape = inlineSettle ? inlineAlias.slice(0, -2) : inlineAlias
 	const isGeneratorHandler =

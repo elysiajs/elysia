@@ -47,19 +47,26 @@ function freeze(schema: any) {
 let claimed: { ['~programId']: ProgramId }
 
 const hook = (schema: any) => ({ body: schema })
-const root = () => claimed as any
+const root = (normalize?: false) =>
+	({ ...claimed, '~config': { normalize }, '~ext': {} }) as any
 
-const wired = (schema: any) =>
+const wired = (schema: any, normalize?: false) =>
 	new RouteValidator(
 		hook(schema) as any,
 		{
 			aot: { method: METHOD, path: PATH },
-			app: claimed
+			app: claimed,
+			normalize
 		} as any
 	)
 
-const bridgeFree = (schema: any) =>
-	buildFrozenRouteValidator(hook(schema) as any, root(), METHOD, PATH)
+const bridgeFree = (schema: any, normalize?: false) =>
+	buildFrozenRouteValidator(
+		hook(schema) as any,
+		root(normalize),
+		METHOD,
+		PATH
+	)
 
 interface Outcome {
 	ok: boolean
@@ -75,11 +82,11 @@ const run = (validator: any, value: unknown): Outcome => {
 	}
 }
 
-function assertParity(schema: any, inputs: unknown[]) {
+function assertParity(schema: any, inputs: unknown[], normalize?: false) {
 	freeze(schema)
 
-	const w = wired(schema)
-	const f = bridgeFree(schema)
+	const w = wired(schema, normalize)
+	const f = bridgeFree(schema, normalize)
 
 	expect(f, 'expected schema to be reconstructed bridge-free').toBeDefined()
 
@@ -142,6 +149,14 @@ describe('frozen validation without TypeBox', () => {
 			{ when: 1704164645000 },
 			{ when: 'garbage' }
 		])
+	})
+
+	it('decodes date values when normalization is disabled', () => {
+		assertParity(
+			t.Object({ when: t.Date() }),
+			[{ when: '2024-01-02T03:04:05.000Z' }, { when: 'garbage' }],
+			false
+		)
 	})
 
 	it('decodes nested objects from string values', () => {

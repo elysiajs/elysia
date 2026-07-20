@@ -127,7 +127,7 @@ const emptyCompactBeforeHandlePrefix: CompactBeforeHandlePrefix = {
 	length: 0,
 	added: []
 }
-const compactBeforeHandleMemos = new WeakMap<
+let compactBeforeHandleMemos = new WeakMap<
 	ChainNode,
 	CompactBeforeHandlePrefix | false
 >()
@@ -339,6 +339,11 @@ const flattenChainMemos = new WeakMap<
 	object,
 	{ e: number; per: WeakMap<ChainNode, Partial<AppHook>> }
 >()
+
+export function clearRootHookAnalysisCaches(root: object) {
+	flattenChainMemos.delete(root)
+	compactBeforeHandleMemos = new WeakMap()
+}
 const emptyFlatten = Object.freeze(nullObject()) as Partial<AppHook>
 
 function flattenChainCached(
@@ -765,14 +770,16 @@ function dedupedMergeArray<
 	return (reverse ? bArr.concat(filtered) : filtered.concat(bArr)) as any
 }
 
-export const schemaProperties = new Set([
+const schemaPropertyKeys = [
 	'body',
 	'headers',
 	'params',
 	'query',
 	'cookie',
 	'response'
-])
+] as const
+
+export const schemaProperties = new Set<string>(schemaPropertyKeys)
 
 export const eventProperties = new Set([
 	'start',
@@ -795,42 +802,14 @@ export function hookToGuard(
 ): Partial<AppHook & Macro> {
 	if (a.schema !== 'standalone') return a
 
-	if (a.body || a.headers || a.params || a.query || a.cookie || a.response) {
-		a.schemas ??= []
-		const schema = Object.create(null)
-
-		if (a.body) {
-			schema.body = a.body
-			a.body = undefined
+	let schema: Record<string, unknown> | undefined
+	for (const key of schemaPropertyKeys)
+		if (a[key]) {
+			;(schema ??= Object.create(null))[key] = a[key]
+			a[key] = undefined
 		}
 
-		if (a.headers) {
-			schema.headers = a.headers
-			a.headers = undefined
-		}
-
-		if (a.params) {
-			schema.params = a.params
-			a.params = undefined
-		}
-
-		if (a.query) {
-			schema.query = a.query
-			a.query = undefined
-		}
-
-		if (a.cookie) {
-			schema.cookie = a.cookie
-			a.cookie = undefined
-		}
-
-		if (a.response) {
-			schema.response = a.response
-			a.response = undefined
-		}
-
-		a.schemas.push(schema)
-	}
+	if (schema) (a.schemas ??= []).push(schema)
 
 	return a
 }

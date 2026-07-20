@@ -36,7 +36,9 @@ describe('frozen handler parameter descriptors', () => {
 	})
 
 	it('resolves params positionally, in alias order', () => {
+		const finalizeError = () => new Response()
 		const ctx = {
+			finalizeError,
 			parse: { json: 'PJ', formData: 'PF' },
 			res: { map: 'RM', compact: 'RC' },
 			hook: { beforeHandle: 'BF', afterHandle: 'AF', error: 'ER' },
@@ -49,6 +51,7 @@ describe('frozen handler parameter descriptors', () => {
 			resolveHandlerParams(['pj', 'va', 'bf', 'rc', 'cc', 'tr'], ctx)
 		).toEqual(['PJ', 'VA', 'BF', 'RC', 'CC', 'TR'])
 		expect(resolveHandlerParams([], ctx)).toEqual([])
+		expect(resolveHandlerParams(['ff'], ctx)).toEqual([finalizeError])
 		expect(
 			resolveHandlerParams(['rc'], { res: { map: 'M' } } as any)
 		).toEqual(['M'])
@@ -58,5 +61,29 @@ describe('frozen handler parameter descriptors', () => {
 		expect(() => resolveHandlerParams(['bogus'], {} as any)).toThrow(
 			/Fail to reconstruct build/
 		)
+	})
+
+	it('lowers compact beforeHandle state to executable callbacks only', () => {
+		const callbacks = Array.from({ length: 65 }, (_, i) => () => i)
+		let tail: any
+		for (let i = 0; i < callbacks.length; i += 16)
+			tail = { parent: tail, values: callbacks.slice(i, i + 16) }
+
+		const [runtime] = resolveHandlerParams(['bp'], {
+			hook: {
+				'~beforeHandlePrefix': {
+					tail,
+					length: callbacks.length,
+					previous: { authoring: true },
+					added: callbacks.slice(-1),
+					inference: { body: true }
+				}
+			}
+		} as any)
+
+		expect(Array.isArray(runtime)).toBe(true)
+		expect(runtime).toEqual(callbacks)
+		expect(runtime).not.toHaveProperty('previous')
+		expect(runtime).not.toHaveProperty('inference')
 	})
 })

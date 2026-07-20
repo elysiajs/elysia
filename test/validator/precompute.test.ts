@@ -5,6 +5,7 @@ import { Default } from 'typebox/value'
 import { Elysia, t, ValidationError } from '../../src'
 import { TypeBoxValidator } from '../../src/type/validator'
 import { setupTypebox } from '../../src/type/compat'
+import { schemaSome } from '../../src/type/validator/clean-safe'
 import { req } from '../utils'
 
 // verifyPreallocatableDefault(schema) validates by default, which requires
@@ -13,6 +14,14 @@ import '../../src/compile/aot-capture'
 
 // Direct validator construction requires initialized custom types.
 setupTypebox()
+
+it('walks conditional schema branches for default analysis', () => {
+	const marker = {}
+	for (const key of ['if', 'then', 'else'])
+		expect(schemaSome({ [key]: marker }, (node) => node === marker)).toBe(
+			true
+		)
+})
 
 describe('TypeBoxValidator default precompute', () => {
 	it('primitive default + undefined input matches Default(schema, undefined)', () => {

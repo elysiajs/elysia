@@ -299,7 +299,8 @@ export function createStreamHandler({
 			})
 		}
 
-		const typedSSE = !skipFormat && generator?.sse === true
+		const typedSSE =
+			!skipFormat && 'sse' in generator && generator.sse === true
 
 		// Since ReadableStream doesn't have next, init might be undefined
 		let init = (

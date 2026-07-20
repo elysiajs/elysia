@@ -20,20 +20,7 @@ import {
 	parseFileUnit
 } from './file-type'
 
-export {
-	ASYNC_REFINE,
-	checkFileExtension,
-	collectFileTypeChecks,
-	fileType,
-	maybeQueueFileTypeCheck,
-	parseFileUnit,
-	setFileTypeDetector,
-	takeFileTypeChecks,
-	type FileTypeDetector,
-	type PendingFileTypeCheck
-} from './file-type'
-
-export let BaseFile: Type.TRefine<Type.TUnsafe<File>>
+let baseFile: Type.TRefine<Type.TUnsafe<File>>
 let emptyFile: Readonly<Type.TRefine<Type.TUnsafe<File>>>
 let sharedFile: ReturnType<
 	typeof createSharedReference<
@@ -42,7 +29,7 @@ let sharedFile: ReturnType<
 	>
 >
 export function File(options?: FileOptions) {
-	BaseFile ??= Refine(
+	baseFile ??= Refine(
 		Unsafe<File>({ '~kind': 'File' }),
 		isBlob,
 		() => 'must be instance of Blob'
@@ -50,7 +37,7 @@ export function File(options?: FileOptions) {
 
 	if (!options || isEmpty(options))
 		return (emptyFile ??= Object.freeze(
-			elyType(ELYSIA_TYPES.File, cloneSchema(BaseFile))
+			elyType(ELYSIA_TYPES.File, cloneSchema(baseFile))
 		))
 
 	sharedFile ??= createSharedReference(FileWithProperty)
@@ -99,7 +86,7 @@ function FileWithProperty(options: FilesOptions) {
 		refines.push([checkType, message])
 	}
 
-	let schema = Refines(BaseFile, refines)
+	let schema = Refines(baseFile, refines)
 	const [, meta] = getMeta(options as any)
 	if (meta) {
 		schema = cloneSchema(schema)

@@ -14,19 +14,32 @@ describe('sealed generation publication', () => {
 	})
 
 	it('the first handle publishes one generation and later handles reuse it', async () => {
-		const app = new Elysia().get('/', () => 'ok')
+		const app = new Elysia({ strictPath: true })
+			.decorate('value', 1)
+			.get('/', () => 'ok')
 
 		await app.handle(req('/'))
 
 		const generation = app['~generation']!
-		expect(generation['~config']).toBe(app['~config'])
-		expect(generation['~ext']).toBe(app['~ext'])
-		expect(generation.routeTable).toBe(app['~routeTable'])
-		expect(frozenRootOf(app)).toBe(generation)
+		expect(generation.runtime['~config']).not.toBe(app['~config'])
+		expect(generation.runtime['~ext']).not.toBe(app['~ext'])
+		expect(generation.introspection).toBeUndefined()
+		expect('routeTable' in generation.runtime).toBeFalse()
+		expect(frozenRootOf(app)).toBe(app)
 
 		const same = app['~generation']
 		await app.handle(req('/'))
 		expect(app['~generation']).toBe(same)
+	})
+
+	it('publishes compact route diagnostics only with introspection', async () => {
+		const app = new Elysia({ introspect: true }).get('/', () => 'ok')
+		await app.handle(req('/'))
+
+		const generation = app['~generation']!
+		expect('routeTable' in generation.runtime).toBeFalse()
+		expect(generation.introspection?.routeTable).toBeDefined()
+		expect(generation.introspection?.routeTable).not.toBe(app['~routeTable'])
 	})
 
 	it('.compile publishes a generation', () => {
@@ -35,6 +48,28 @@ describe('sealed generation publication', () => {
 
 		app.compile()
 		expect(app['~generation']).toBeDefined()
+	})
+
+	it('snapshots nested runtime configuration', () => {
+		const config: any = {
+			serve: { port: 3000 },
+			websocket: { idleTimeout: 10 },
+			handler: { standardHostname: false }
+		}
+		const app = new Elysia(config).get('/', () => 'ok')
+		void app.fetch
+
+		config.serve.port = 4000
+		config.websocket.idleTimeout = 20
+		config.handler.standardHostname = true
+
+		const runtime = app['~generation']!.runtime['~config']!
+		expect(runtime.serve?.port).toBe(3000)
+		expect(runtime.websocket?.idleTimeout).toBe(10)
+		expect(runtime.handler?.standardHostname).toBe(false)
+		expect(Object.isFrozen(runtime.serve)).toBe(true)
+		expect(Object.isFrozen(runtime.websocket)).toBe(true)
+		expect(Object.isFrozen(runtime.handler)).toBe(true)
 	})
 })
 
@@ -72,12 +107,12 @@ describe('sealed generation root isolation', () => {
 		const ga = a['~generation']!
 		const gb = b['~generation']!
 
-		expect(ga['~ext']).not.toBe(gb['~ext'])
-		expect((ga['~ext'] as any).decorator.root).toBe('A')
-		expect((gb['~ext'] as any).decorator.root).toBe('B')
-		expect((ga['~ext'] as any).decorator.who).toBe('shared')
-		expect((gb['~ext'] as any).decorator.who).toBe('shared')
-		expect((ga['~ext'] as any).models.M).toBeDefined()
+		expect(ga.runtime['~ext']).not.toBe(gb.runtime['~ext'])
+		expect((ga.runtime['~ext'] as any).decorator.root).toBe('A')
+		expect((gb.runtime['~ext'] as any).decorator.root).toBe('B')
+		expect((ga.runtime['~ext'] as any).decorator.who).toBe('shared')
+		expect((gb.runtime['~ext'] as any).decorator.who).toBe('shared')
+		expect((ga.runtime['~ext'] as any).models).toBeUndefined()
 	})
 })
 

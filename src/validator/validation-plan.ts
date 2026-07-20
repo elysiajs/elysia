@@ -18,11 +18,18 @@ import { Compile, Decode } from '../type/bridge'
 import { schemaHasDangerousProperties } from '../type/validator/clean-safe'
 import { Validator, type ValidatorOptions } from '.'
 import { ValidationPlanMultiValidator } from './validation-plan-composition'
+import {
+	createCompactErrorLocator,
+	compactDiagnosticSchema,
+	compactErrors,
+	type CompactErrorLocator
+} from './compact-errors'
 
 export type ValidationPlanDomain = 'json' | 'string' | 'encode'
 
-const proxyDetector = (globalThis as any).process?.getBuiltinModule?.('node:util')
-	?.types?.isProxy as ((value: unknown) => boolean) | undefined
+const proxyDetector = (globalThis as any).process?.getBuiltinModule?.(
+	'node:util'
+)?.types?.isProxy as ((value: unknown) => boolean) | undefined
 const isProxy = proxyDetector?.(new Proxy({}, {})) ? proxyDetector : undefined
 
 type Coerce = 0 | 1 | 2 | 3
@@ -835,8 +842,10 @@ export function executeValidationPlan(
 		}
 		case 3:
 			return typeof value === 'string' &&
-				(node.min === undefined || Guard.IsMinLength(value, node.min)) &&
-				(node.max === undefined || Guard.IsMaxLength(value, node.max)) &&
+				(node.min === undefined ||
+					Guard.IsMinLength(value, node.min)) &&
+				(node.max === undefined ||
+					Guard.IsMaxLength(value, node.max)) &&
 				(node.pattern === undefined || node.pattern.test(value))
 				? value
 				: fail(node, scratch)
@@ -918,6 +927,9 @@ export class ValidationPlanValidator<
 
 	#oracle?: any
 	#oracleFactory?: () => any
+	#compactSchema?: unknown
+	#errorLocator?: CompactErrorLocator
+	#sealed = false
 	#jsonFastPath?: {
 		check: (value: unknown) => boolean
 		clean: (value: unknown) => unknown
@@ -951,6 +963,20 @@ export class ValidationPlanValidator<
 			: (value) => this.#getOracle().Clean?.(value) ?? value
 	}
 
+	override seal(introspect: boolean) {
+		if (this.#sealed) return
+		const oracle = this.#jsonFastPath ? undefined : this.#getOracle()
+		oracle?.seal?.(introspect)
+		this.#oracleFactory = undefined
+
+		this.#compactSchema = introspect
+			? compactDiagnosticSchema(this.schema)
+			: undefined
+		this.#errorLocator = createCompactErrorLocator(this.schema)
+		;(this as { schema?: unknown }).schema = undefined
+		this.#sealed = true
+	}
+
 	#getOracle() {
 		if (this.#oracleFactory === undefined) return this.#oracle
 
@@ -973,7 +999,16 @@ export class ValidationPlanValidator<
 
 	Errors(value: unknown): TLocalizedValidationError[] {
 		return this.#jsonFastPath
-			? TypeBoxErrors(this.schema, value)
+			? this.schema
+				? TypeBoxErrors(this.schema, value)
+				: this.#compactSchema
+					? (compactErrors(
+							this.#compactSchema,
+							value
+						) as TLocalizedValidationError[])
+					: (this.#errorLocator?.(
+							value
+						) as TLocalizedValidationError[])
 			: this.#getOracle().Errors(value)
 	}
 
@@ -989,7 +1024,7 @@ export class ValidationPlanValidator<
 			throw new ValidationError(
 				type,
 				value,
-				() => TypeBoxErrors(this.schema, value),
+				() => this.Errors(value),
 				this.schema
 			)
 		}
@@ -1036,8 +1071,7 @@ export class ValidationPlanValidator<
 }
 
 const builtInValidationPlanFrom = ValidationPlanValidator.prototype.From
-const builtInValidationPlanFromSync =
-	ValidationPlanValidator.prototype.FromSync
+const builtInValidationPlanFromSync = ValidationPlanValidator.prototype.FromSync
 
 export const validationPlan: ValidationPlanExtension = {
 	compose(schema, options) {

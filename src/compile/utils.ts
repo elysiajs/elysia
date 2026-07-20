@@ -11,7 +11,11 @@ const matchResponseClone = /=>\s*response\.clone\(/
 const matchFnReturn =
 	/(?:return|=>)\s*(?:new\s+)?[\w$.][\w$.]*\s*\(|a(?:sync|wait)/
 
-const mayReturnPromiseCache = new WeakMap<Function, boolean>()
+let mayReturnPromiseCache = new WeakMap<Function, boolean>()
+
+export const clearCompileAnalysisCaches = () => {
+	mayReturnPromiseCache = new WeakMap()
+}
 
 export function mayReturnPromise(fn: Function): boolean {
 	let result = mayReturnPromiseCache.get(fn)

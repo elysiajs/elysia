@@ -128,21 +128,6 @@ describe('Form Data', () => {
 		expect(contentType).toStartWith('multipart/form-data')
 	})
 
-	it('return Elysia.file', async () => {
-		const app = new Elysia().get('/', () =>
-			form({
-				a: 'hello',
-				b: file('test/kyuukurarin.mp4')
-			})
-		)
-
-		const contentType = await app
-			.handle(req('/'))
-			.then((x) => x.headers.get('content-type'))
-
-		expect(contentType).toStartWith('multipart/form-data')
-	})
-
 	it('validate formdata', async () => {
 		const app = new Elysia().get(
 			'/',

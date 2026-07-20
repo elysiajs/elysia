@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'bun:test'
 
-import { cloneHook, mergeHook } from '../../src/utils'
+import {
+	cloneHook,
+	hookToGuard,
+	mergeHook,
+	schemaProperties
+} from '../../src/utils'
 
 describe('cloneHook collection isolation', () => {
 	it('copies the schemas array', () => {
@@ -28,5 +33,22 @@ describe('cloneHook collection isolation', () => {
 		mergeHook(cloneHook(local), appHook)
 
 		expect(local.schemas).toHaveLength(1)
+	})
+})
+
+describe('hookToGuard schema keys', () => {
+	it('does not depend on mutations to the exported lookup set', () => {
+		const body = { type: 'string' }
+		schemaProperties.delete('body')
+
+		try {
+			const hook = { schema: 'standalone', body } as any
+			hookToGuard(hook)
+
+			expect(hook.body).toBeUndefined()
+			expect(hook.schemas).toEqual([{ body }])
+		} finally {
+			schemaProperties.add('body')
+		}
 	})
 })
