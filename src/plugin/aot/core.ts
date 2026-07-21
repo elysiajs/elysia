@@ -37,6 +37,13 @@ export interface ElysiaAotOptions {
 	reconstructFrom?: string
 
 	/**
+	 * Specifier providing the frozen WebSocket runtime used by emitted WS images.
+	 *
+	 * @default 'elysia/ws/runtime'
+	 */
+	wsRuntimeFrom?: string
+
+	/**
 	 * Split the emitted validator manifest into lazily-materialized groups
 	 *
 	 * Validator entries are registered as grouped thunks: a group's
@@ -126,6 +133,9 @@ export interface StubPlan {
 	/** Stub internal WS route builders when the app declares no WS routes. */
 	ws: boolean
 
+	/** Stub the generic WS route compiler when every WS route has an image. */
+	wsJit: boolean
+
 	/**
 	 * Stub frozen-handler reconstruction (validator `va`, cookie `cc`, trace `tr`)
 	 * when no replayed handler aliases any of them.
@@ -210,6 +220,7 @@ export type BridgeMode = 'sealed' | 'wired' | 'off'
 export const NO_STUB: StubPlan = {
 	jit: false,
 	ws: false,
+	wsJit: false,
 	reconstruct: false,
 	cookie: false,
 	trace: false,
@@ -246,7 +257,8 @@ export function planFromReport(
 	allBridgeFree: boolean,
 	zeroCapture: boolean,
 	adapterStub: 'bun' | 'web-standard' | false = false,
-	productionStub: boolean = true
+	productionStub: boolean = true,
+	wsCovered: boolean = false
 ): { plan: StubPlan; mode: BridgeMode } {
 	const jit = report.jit
 
@@ -271,6 +283,7 @@ export function planFromReport(
 		plan: {
 			jit,
 			ws: !hasWS,
+			wsJit: jit && hasWS && wsCovered,
 			reconstruct:
 				jit &&
 				!aliases.has('va') &&
@@ -425,6 +438,15 @@ export const STUB_SOURCES: Record<
 				`export function buildWSRoute(){return e()}\n` +
 				`export function buildWebSocketRuntime(){return e()}\n` +
 				`export function buildGlobalWSHandler(){return e()}\n`
+		}
+	],
+	wsJit: [
+		{
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]ws[\\/]route\.(m?js|ts)$/,
+			source:
+				`export { buildWebSocketRuntime, buildGlobalWSHandler, buildFrozenWSRoute } from './runtime'\n` +
+				`const e=()=>{throw new Error("[elysia-aot] generic WebSocket route builder was stripped (strip mode) but an uncaptured WS route was used. Rebuild with strip:false.")}\n` +
+				`export function buildWSRoute(){return e()}\n`
 		}
 	],
 	reconstruct: [
@@ -804,6 +826,7 @@ export async function generateCompiledArtifacts(
 			register: true,
 			registerFrom: options?.registerFrom,
 			reconstructFrom: options?.reconstructFrom,
+			wsRuntimeFrom: options?.wsRuntimeFrom,
 			lazy: options?.lazy,
 			target: options?.target
 		}
@@ -836,10 +859,6 @@ export async function generateCompiledArtifacts(
 			if (handler.alias)
 				for (const name of handler.alias.split(',')) aliases.add(name)
 
-		const hasWS =
-			!!(typedApp as { ['~hasWS']?: unknown })['~hasWS'] ||
-			!!typedApp['~routes']?.some((route: any) => route?.[0] === 'WS')
-
 		const history = typedApp['~routes'] ?? []
 
 		const mayTrace =
@@ -856,6 +875,26 @@ export async function generateCompiledArtifacts(
 		const winningRoutes = new Map<string, (typeof history)[number]>()
 		for (const route of history)
 			winningRoutes.set(`${route[0]}\0${route[1]}`, route)
+
+		const expectedWSPaths = new Set<string>()
+		for (const route of winningRoutes.values())
+			if (route[0] === 'WS') expectedWSPaths.add(route[1] as string)
+
+		const capturedWSPaths = new Set<string>()
+		const unsupportedWS = new Map<string, string>()
+		for (const route of artifacts.wsRoutes)
+			if ('source' in route) capturedWSPaths.add(route.path)
+			else unsupportedWS.set(route.path, route.reason)
+
+		const missingWSPaths = [...expectedWSPaths].filter(
+			(path) => !capturedWSPaths.has(path)
+		)
+		const unexpectedWSPaths = [...capturedWSPaths].filter(
+			(path) => !expectedWSPaths.has(path)
+		)
+		const wsCovered =
+			missingWSPaths.length === 0 && unexpectedWSPaths.length === 0
+		const hasWS = expectedWSPaths.size > 0
 
 		for (const route of winningRoutes.values()) {
 			const [method, path, , instance, hook, appHook, inheritedChain, macroScope] =
@@ -918,12 +957,37 @@ export async function generateCompiledArtifacts(
 			capturedSlotKeys.size === expectedSlotKeys.size &&
 			[...expectedSlotKeys].every((key) => capturedSlotKeys.has(key))
 
+		const hasFrozenArtifact =
+			artifacts.handlers.length > 0 ||
+			artifacts.validators.length > 0 ||
+			capturedWSPaths.size > 0
 		const allBridgeFree =
-			(artifacts.handlers.length > 0 ||
-				artifacts.validators.length > 0) &&
+			hasFrozenArtifact &&
 			!routesForbidSeal &&
 			slotKeysMatch &&
 			artifacts.validators.every((v) => v.bridgeFree === true)
+		const wsImageCovered = wsCovered && slotKeysMatch && allBridgeFree
+
+		if (strip === true && hasWS && !wsImageCovered)
+			throw new Error(
+				`[elysia-aot] strip: true requires exact WebSocket route coverage. ` +
+				(missingWSPaths.length
+					? `Missing: ${missingWSPaths
+							.map((path) => {
+								const reason = unsupportedWS.get(path)
+								return reason ? `${path} (${reason})` : path
+							})
+							.join(', ')}. `
+					: '') +
+				(unexpectedWSPaths.length
+					? `Unexpected: ${unexpectedWSPaths.join(', ')}. `
+					: '') +
+				(!slotKeysMatch ? `Validator slots do not match exactly. ` : '') +
+				(!allBridgeFree && slotKeysMatch
+					? `The WebSocket image is not bridge-free. `
+					: '') +
+				`Use strip: 'auto' to retain the generic WebSocket route builder.`
+			)
 
 		const { plan: stub, mode } = planFromReport(
 			strip,
@@ -933,9 +997,11 @@ export async function generateCompiledArtifacts(
 			aliases,
 			allBridgeFree,
 			artifacts.handlers.length === 0 &&
-				artifacts.validators.length === 0,
+				artifacts.validators.length === 0 &&
+				capturedWSPaths.size === 0,
 			adapterStub,
-			productionStub
+			productionStub,
+			wsImageCovered
 		)
 
 		if (options?.target === 'workerd') {

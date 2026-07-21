@@ -292,9 +292,10 @@ describe('Vite plugin: adapter/bun stub parity', () => {
 	})
 
 	it('keeps runtime-image exports in the WebSocket strip stub', () => {
-		const source = STUB_SOURCES.ws[0].source
+		const source = STUB_SOURCES.wsJit[0].source
 		expect(source).toContain('buildWSRoute')
 		expect(source).toContain('buildWebSocketRuntime')
+		expect(source).toContain('buildFrozenWSRoute')
 	})
 
 	it('matches Bun adapter paths handled by the transform', () => {

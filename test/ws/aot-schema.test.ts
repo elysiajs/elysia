@@ -5,7 +5,8 @@ import { Compiled } from '../../src/compile/aot'
 // importing `aot-capture` also installs the build-only capture impl (side effect)
 import {
 	endValidatorCapture,
-	endHandlerCapture
+	endHandlerCapture,
+	endWSCapture
 } from '../../src/compile/aot-capture'
 import { materialise, registerManifest } from '../aot/_manifest'
 import { newWebsocket, wsOpen, wsMessage, wsClosed } from './utils'
@@ -17,6 +18,7 @@ beforeEach(() => {
 	// Shared capture state may contain validators from another AOT test.
 	endValidatorCapture()
 	endHandlerCapture()
+	endWSCapture()
 })
 afterEach(() => {
 	delete process.env.ELYSIA_AOT_BUILD
@@ -56,8 +58,10 @@ const captureManifest = (builder: () => any) => {
 	process.env.ELYSIA_AOT_BUILD = '1'
 	endValidatorCapture()
 	endHandlerCapture()
+	endWSCapture()
 	;(builder() as any).compile()
 	const captured = endValidatorCapture()
+	endWSCapture()
 	delete process.env.ELYSIA_AOT_BUILD
 	return captured
 }

@@ -1,7 +1,12 @@
 import { expect, it } from 'bun:test'
 
 import { metricUnit, recordsAaFloor } from './schema'
-import { compareMetric, compareReportOnlyMetric } from './stats'
+import {
+	absoluteBoundViolation,
+	absoluteVerdict,
+	compareMetric,
+	compareReportOnlyMetric
+} from './stats'
 
 const fixture = new URL('./fixtures/validation.ts', import.meta.url).pathname
 const margins = (await Bun.file(
@@ -178,4 +183,53 @@ it('distinguishes measurable improvement from non-regression', () => {
 			candidateBlocks: [90, 90, 90, 90]
 		}).verdict
 	).toBe('pass')
+
+	const paired = compareMetric({
+		...input,
+		baselineBlocks: [10, 100, 1_000, 10_000],
+		candidateBlocks: [11, 90, 1_100, 9_000],
+		pairedRelative: true,
+		claim: 'non-regression'
+	})
+	expect(paired.baseline).toBe(550)
+	expect(paired.candidate).toBe(595)
+	expect(paired.observedDelta).toBeCloseTo(0)
+})
+
+it('enforces absolute candidate and improvement bounds', () => {
+	expect(
+		absoluteBoundViolation({
+			direction: 'lower',
+			baseline: 1_000,
+			candidate: 650,
+			minimumAbsoluteImprovement: 300
+		})
+	).toBeUndefined()
+	expect(
+		absoluteBoundViolation({
+			direction: 'lower',
+			baseline: 1_000,
+			candidate: 750,
+			minimumAbsoluteImprovement: 300
+		})
+	).toContain('below 300')
+	expect(
+		absoluteBoundViolation({
+			direction: 'equal',
+			baseline: 0,
+			candidate: 1,
+			candidateMaximum: 0
+		})
+	).toContain('exceeds maximum 0')
+	expect(absoluteVerdict('fail', undefined, true)).toBe('pass')
+	expect(absoluteVerdict('pass', 'candidate failed', true)).toBe('fail')
+})
+
+it('labels per-connection memory metrics correctly', () => {
+	expect(
+		metricUnit({
+			kind: 'memory',
+			metric: 'retained-heap-size-bytes-per-connection'
+		})
+	).toBe('bytes-per-connection')
 })

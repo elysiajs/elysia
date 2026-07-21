@@ -41,6 +41,10 @@ export function injectN2bRuntime() {
 	if (injection === 'n2b-runtime') busyWaitNanoseconds(200_000)
 }
 
+export function injectWebSocketRuntime() {
+	if (injection === 'websocket-runtime') busyWaitNanoseconds(200_000)
+}
+
 export function injectN2bRetained(index: number) {
 	if (injection !== 'n2b-retained') return
 	const bytes = new Uint8Array(64 * 1024)

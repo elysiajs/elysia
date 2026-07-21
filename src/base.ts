@@ -20,6 +20,7 @@ import {
 	type ProgramId
 } from './compile/aot'
 import { buildWebSocketRuntime, buildWSRoute } from './ws/route'
+import type { FrozenWSRouteResult } from './ws/runtime'
 import type {
 	WSLocalHook,
 	WSMessageHandler,
@@ -6178,11 +6179,30 @@ export class Elysia<
 			Capture.beginRoute(routeMethod, routePath)
 
 			if ((routeFlags & RouteFlag.WS) !== 0) {
-				const ws = buildWSRoute(
-					routeRow(table, i),
-					this,
-					this['~runtimeBindings'].server
+				const route = routeRow(table, i)
+				const frozenWS = Compiled.getWSRoute(
+					this['~programId'],
+					routePath
 				)
+				const wsRoles = Object.keys((route[4] as object | undefined) ?? {}).sort()
+				const hasFrozenWSLayout =
+					frozenWS?.a.length === wsRoles.length &&
+					frozenWS.a.every((role, index) => role === wsRoles[index])
+				const ws =
+					(hasFrozenWSLayout
+						? (frozenWS!.f(
+						i,
+						routePath,
+						route[4],
+						this,
+						this['~runtimeBindings'].server
+							) as FrozenWSRouteResult | undefined)
+						: undefined) ??
+					buildWSRoute(
+						route,
+						this,
+						this['~runtimeBindings'].server
+					)
 				const handler = ws[0] as unknown as CompiledHandler
 				const options = ws[1]
 

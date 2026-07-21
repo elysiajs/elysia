@@ -328,7 +328,6 @@ export function createFetchHandler(
 	const handleError = createErrorHandler(
 		hook?.error,
 		mapResponse as any,
-		undefined,
 		app['~config']?.allowUnsafeValidationDetails,
 		compatCancellation
 	)

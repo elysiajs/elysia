@@ -28,11 +28,15 @@ import type {
 } from './schema'
 import { metricUnit, recordsAaFloor } from './schema'
 import {
+	absoluteBoundViolation,
+	absoluteVerdict,
+	bootstrapPairedRelativeMedianDelta,
 	bootstrapRelativeMedianDelta,
 	compareReportOnlyMetric,
 	compareMetric,
 	lowerMedian,
 	percentile,
+	seededPrng,
 	summarize
 } from './stats'
 import { busyWaitNanoseconds } from './inject'
@@ -43,6 +47,7 @@ const baselineRoot = resolve(repoRoot, 'bench/d1/baseline')
 const fixtureRoot = resolve(repoRoot, 'bench/d1/fixtures')
 const defaultBlocks = 8
 const n3bBlocks = 16
+const n3cBlocks = 64
 const defaultRoutes = 1_000
 const defaultRequests = 200
 const defaultWarmup = 50
@@ -64,6 +69,7 @@ const fixtureIds = [
 	'validation',
 	'runtime-lowering',
 	'runtime-http',
+	'websocket-runtime',
 	'response-body-cookie',
 	'executables',
 	'native-table'
@@ -82,14 +88,16 @@ const leafPerfOwners = new Set([
 	'N+2b-q12',
 	'N+2c',
 	'N+3a',
-	'N+3b'
+	'N+3b',
+	'N+3c'
 ])
 const historicalBaselineByOwner: Record<string, string> = {
 	C4a: '340322120836100ea15f67d6f6b5708e0945d1db',
 	'N+2b': 'f6ed34632a997e17b09b91da1c400a93557b5815',
 	'N+2c': '697c0286',
 	'N+3a': 'd4fb01a3',
-	'N+3b': '7e70df83b6b778aed80fcabcdc2c283bd5b2929a'
+	'N+3b': '7e70df83b6b778aed80fcabcdc2c283bd5b2929a',
+	'N+3c': '4e6f09509061e182d8cb39adf9da373a3a832c1a'
 }
 const historicalCandidateByOwner: Record<string, string> = {
 	C4a: 'e8c51e63407ea3f59479db14500f04cca742ba2b'
@@ -128,6 +136,7 @@ function leafPerfEnvironment(owners: Set<string> | undefined) {
 		environment.D1_N3B_CANDIDATE = '1'
 		environment.NODE_ENV = 'production'
 	}
+	if (owners?.has('N+3c')) environment.NODE_ENV = 'production'
 
 	return environment
 }
@@ -621,7 +630,11 @@ function metricsFor(registry: MarginRegistry, fixture: FixtureId) {
 function rawMetricSamples(
 	entry: MarginEntry,
 	execution: BlockExecution
-): { samples: number[]; value: number } {
+): {
+	samples: number[]
+	value: number
+	diagnostics?: Record<string, unknown>
+} {
 	const output = execution.output
 	if (entry.fixture === 'cold-start') {
 		if (entry.metric === 'spawn-to-first-2xx-ns') {
@@ -684,6 +697,42 @@ function rawMetricSamples(
 				`${entry.fixture} samples missing for ${entry.metric}`
 			)
 		return { samples, value: percentile(samples, 50) }
+	}
+	if (entry.fixture === 'websocket-runtime') {
+		if (
+			entry.metric === 'retained-current-bytes-per-connection' ||
+			entry.metric === 'retained-rss-bytes-per-connection'
+		) {
+			const field = entry.metric.startsWith('retained-current')
+				? 'current'
+				: 'rss'
+			const fit = output.memorySlope?.[field]
+			if (
+				!fit ||
+				!Number.isFinite(fit.slope) ||
+				!Array.isArray(fit.segments) ||
+				!fit.segments.every(Number.isFinite)
+			)
+				throw new Error(`websocket-runtime ${field} slope missing`)
+			return {
+				samples: fit.segments,
+				value: fit.slope,
+				diagnostics: {
+					connections: output.memorySlope.connections,
+					preload: output.memorySlope.preload,
+					points: output.memorySlope.points,
+					fit
+				}
+			}
+		}
+		const samples = output.samples?.[entry.metric]
+		if (!Array.isArray(samples) || !samples.length)
+			throw new Error(
+				`websocket-runtime samples missing for ${entry.metric}`
+			)
+		const suffix = entry.metric.match(/-(p50|p95|p99)-ns$/)?.[1]
+		const percent = suffix === 'p95' ? 95 : suffix === 'p99' ? 99 : 50
+		return { samples, value: percentile(samples, percent) }
 	}
 	if (entry.fixture === 'runtime-http') {
 		if (!execution.parentSamples)
@@ -802,7 +851,8 @@ async function runRecordBlocks(
 						variant: 'A',
 						pairIndex: index,
 						samples: raw.samples,
-						value: raw.value
+						value: raw.value,
+						diagnostics: raw.diagnostics
 					},
 					'A'
 				)
@@ -817,6 +867,18 @@ function shuffledPairOrder(seed: number, pair: number): 'AB' | 'BA' {
 	value ^= value << 13
 	value ^= value >>> 17
 	return (value & 1) === 0 ? 'AB' : 'BA'
+}
+
+function balancedPairOrders(seed: number, blocks: number) {
+	if (blocks % 2 !== 0)
+		throw new Error('balanced pair order requires an even block count')
+	const random = seededPrng(seed)
+	const orders: Array<'AB' | 'BA'> = []
+	for (let index = 0; index < blocks; index += 2) {
+		const first = random() < 0.5 ? 'AB' : 'BA'
+		orders.push(first, first === 'AB' ? 'BA' : 'AB')
+	}
+	return orders
 }
 
 async function runPairedBlocks(
@@ -843,8 +905,12 @@ async function runPairedBlocks(
 		}
 	onPartial?.([...records.values()])
 	for (const fixture of fixtures) {
+		const pairOrders =
+			fixture === 'websocket-runtime'
+				? balancedPairOrders(seed, blocks)
+				: undefined
 		for (let index = 0; index < blocks; index++) {
-			const order = shuffledPairOrder(seed, index)
+			const order = pairOrders?.[index] ?? shuffledPairOrder(seed, index)
 			const first = order === 'AB' ? baseline : candidate
 			const second = order === 'AB' ? candidate : baseline
 			const firstExecution = await runFixtureBlock(
@@ -867,14 +933,16 @@ async function runPairedBlocks(
 					variant: 'A',
 					pairIndex: index,
 					samples: aRaw.samples,
-					value: aRaw.value
+					value: aRaw.value,
+					diagnostics: aRaw.diagnostics
 				}
 				const b: SampleBlockRecord = {
 					id: `${fixture}-${order}-${index}-B`,
 					variant: 'B',
 					pairIndex: index,
 					samples: bRaw.samples,
-					value: bRaw.value
+					value: bRaw.value,
+					diagnostics: bRaw.diagnostics
 				}
 				const record = records.get(key(fixture, entry.metric))!
 				record.pairs!.push({
@@ -965,6 +1033,18 @@ function validateMargins(value: unknown): MarginRegistry {
 		)
 			throw new Error(
 				`count metric must have a non-negative integer tolerance: ${entry.fixture}/${entry.metric}`
+			)
+		for (const [name, value] of [
+			['candidateMaximum', entry.candidateMaximum],
+			['minimumAbsoluteImprovement', entry.minimumAbsoluteImprovement]
+		] as const)
+			if (value !== undefined && (!Number.isFinite(value) || value < 0))
+				throw new Error(
+					`${name} must be a non-negative finite number: ${entry.fixture}/${entry.metric}`
+				)
+		if (entry.candidateOnly && entry.candidateMaximum === undefined)
+			throw new Error(
+				`candidateOnly requires candidateMaximum: ${entry.fixture}/${entry.metric}`
 			)
 		const entryKey = key(entry.fixture, entry.metric)
 		if (byKey.has(entryKey))
@@ -1225,6 +1305,8 @@ function comparisonForRecord(
 	const values = blockValues(record)
 	if (typeof values !== 'object' || !('baseline' in values))
 		throw new Error(`not a paired record: ${record.metric}`)
+	const pairedRelative =
+		entry.owner === 'N+3c' && values.baseline.every((value) => value > 0)
 	return compareMetric({
 		fixture: record.fixture,
 		metric: record.metric,
@@ -1236,7 +1318,8 @@ function comparisonForRecord(
 		baselineBlocks: values.baseline,
 		candidateBlocks: values.candidate,
 		seed,
-		resamples
+		resamples,
+		pairedRelative
 	})
 }
 
@@ -1259,12 +1342,14 @@ function floorWidth(
 		return Math.abs(
 			lowerMedian(values.candidate) - lowerMedian(values.baseline)
 		)
-	const ci = bootstrapRelativeMedianDelta(
-		values.baseline,
-		values.candidate,
-		seed,
-		resamples
-	)
+	const pairedRelative =
+		entry.owner === 'N+3c' && values.baseline.every((value) => value > 0)
+	const ci = (
+		pairedRelative
+			? bootstrapPairedRelativeMedianDelta
+			: bootstrapRelativeMedianDelta
+	)(values.baseline, values.candidate, seed, resamples)
+	if (pairedRelative) return Math.max(Math.abs(ci.low), Math.abs(ci.high))
 	return ci.width
 }
 
@@ -1340,7 +1425,11 @@ function validateArtifact(value: unknown): asserts value is RawArtifact {
 				!block.id ||
 				!['A', 'B'].includes(block.variant) ||
 				!Array.isArray(block.samples) ||
-				!Number.isFinite(block.value)
+				!Number.isFinite(block.value) ||
+				(block.diagnostics !== undefined &&
+					(!block.diagnostics ||
+						typeof block.diagnostics !== 'object' ||
+						Array.isArray(block.diagnostics)))
 			)
 				throw new Error(
 					`invalid block: ${record.fixture}/${record.metric}`
@@ -1473,10 +1562,7 @@ async function recordMode(
 	if (process.argv.includes('--promote')) {
 		if (git.dirty)
 			throw new Error('refusing baseline promotion from a dirty git tree')
-		pinnedManifest = await ensurePinned(
-			context.environment.machineId,
-			true
-		)
+		pinnedManifest = await ensurePinned(context.environment.machineId, true)
 	}
 	const fixtures = await runRecordBlocks(
 		variant,
@@ -1543,14 +1629,37 @@ async function aaMode(
 	)
 	if (!aaFixtureIds.length)
 		throw new Error(`no D1 fixtures for owners: ${[...owners!].join(', ')}`)
+	const dedicatedOwner = owners?.size === 1 ? [...owners][0] : undefined
 	const n3bLayout = owners?.size === 1 && owners.has('N+3b')
+	const n3cLayout = owners?.size === 1 && owners.has('N+3c')
+	const n3cProductSourceHash = n3cLayout
+		? await productSourceHash(repoRoot)
+		: undefined
 	const prepared = n3bLayout
 		? await prepareN3bAaLayout(git.commit, environment)
-		: {
-				a: descriptor('A', repoRoot, git.commit, environment),
-				b: descriptor('B', repoRoot, git.commit, environment),
-				cleanup: async () => {}
-			}
+		: n3cLayout
+			? {
+					a: descriptor(
+						'A',
+						repoRoot,
+						git.commit,
+						environment,
+						n3cProductSourceHash
+					),
+					b: descriptor(
+						'B',
+						repoRoot,
+						git.commit,
+						environment,
+						n3cProductSourceHash
+					),
+					cleanup: async () => {}
+				}
+			: {
+					a: descriptor('A', repoRoot, git.commit, environment),
+					b: descriptor('B', repoRoot, git.commit, environment),
+					cleanup: async () => {}
+				}
 	const { a, b } = prepared
 	try {
 		capture.variants.push(a, b)
@@ -1566,7 +1675,11 @@ async function aaMode(
 				aaRegistry,
 				seed,
 				aaFixtureIds,
-				n3bLayout ? n3bBlocks : defaultBlocks,
+				dedicatedOwner === 'N+3b'
+					? n3bBlocks
+					: dedicatedOwner === 'N+3c'
+						? n3cBlocks
+						: defaultBlocks,
 				(records) => {
 					captureFixtures(capture, records)
 					captureFixtures(sessionCapture, records)
@@ -1629,11 +1742,13 @@ async function aaMode(
 			}
 		}
 		if (
-			n3bLayout &&
+			(n3bLayout || n3cLayout) &&
 			((await productSourceHash(a.elysiaRoot)) !== a.productSourceHash ||
 				(await productSourceHash(b.elysiaRoot)) !== b.productSourceHash)
 		)
-			throw new Error('N+3b product source changed during A/A sampling')
+			throw new Error(
+				`${dedicatedOwner} product source changed during A/A sampling`
+			)
 
 		const path = floorsPath(context.environment.machineId)
 		let floors: FloorsFile = {
@@ -1760,11 +1875,7 @@ async function gateMode(
 			'baseline benchSourceHash is stale; record and promote a new baseline'
 		)
 	if (owners)
-		assertOwnerBenchSourcePins(
-			manifest,
-			owners,
-			context.benchSourceHash
-		)
+		assertOwnerBenchSourcePins(manifest, owners, context.benchSourceHash)
 	else if (manifest.benchSourceHash !== context.benchSourceHash)
 		throw new Error(
 			'pinned manifest benchSourceHash is stale; run record --promote'
@@ -1830,9 +1941,14 @@ async function gateMode(
 		const candidateRoot = candidateWorktree ?? repoRoot
 		let baselineProductSourceHash: string | undefined
 		let candidateProductSourceHash: string | undefined
-		if (dedicatedOwner === 'N+3b' && baselineWorktree) {
-			await buildN3bPackage(baselineWorktree, 'historical')
-			await buildN3bPackage(candidateRoot, 'candidate')
+		if (
+			(dedicatedOwner === 'N+3b' || dedicatedOwner === 'N+3c') &&
+			baselineWorktree
+		) {
+			if (dedicatedOwner === 'N+3b') {
+				await buildN3bPackage(baselineWorktree, 'historical')
+				await buildN3bPackage(candidateRoot, 'candidate')
+			}
 			baselineProductSourceHash =
 				await productSourceHash(baselineWorktree)
 			candidateProductSourceHash = await productSourceHash(candidateRoot)
@@ -1867,16 +1983,22 @@ async function gateMode(
 			registry,
 			context.seed,
 			gateFixtureIds,
-			dedicatedOwner === 'N+3b' ? n3bBlocks : defaultBlocks,
+			dedicatedOwner === 'N+3b'
+				? n3bBlocks
+				: dedicatedOwner === 'N+3c'
+					? n3cBlocks
+					: defaultBlocks,
 			(records) => captureFixtures(capture, records)
 		)
 		captureFixtures(capture, fixtures)
 		if (
-			dedicatedOwner === 'N+3b' &&
+			(dedicatedOwner === 'N+3b' || dedicatedOwner === 'N+3c') &&
 			((await productSourceHash(a.elysiaRoot)) !== a.productSourceHash ||
 				(await productSourceHash(b.elysiaRoot)) !== b.productSourceHash)
 		)
-			throw new Error('N+3b product source changed during gate sampling')
+			throw new Error(
+				`${dedicatedOwner} product source changed during gate sampling`
+			)
 		const results: ComparisonResult[] = []
 		for (const entry of active) {
 			const entryKey = key(entry.fixture, entry.metric)
@@ -1917,6 +2039,30 @@ async function gateMode(
 				context.seed,
 				context.resamples
 			)
+			const values = blockValues(record)
+			if (typeof values !== 'object' || !('baseline' in values))
+				throw new Error(`not a paired record: ${record.metric}`)
+			const absoluteViolation = absoluteBoundViolation({
+				direction: entry.direction,
+				baseline: result.baseline,
+				candidate: result.candidate,
+				baselineBlocks: values.baseline,
+				candidateBlocks: values.candidate,
+				seed: context.seed,
+				resamples: context.resamples,
+				candidateMaximum: entry.candidateMaximum,
+				minimumAbsoluteImprovement: entry.minimumAbsoluteImprovement
+			})
+			result.verdict = absoluteVerdict(
+				result.verdict,
+				absoluteViolation,
+				entry.candidateOnly
+			)
+			if (absoluteViolation) {
+				console.log(
+					`FAIL ABSOLUTE ${key(entry.fixture, entry.metric)} ${absoluteViolation}`
+				)
+			}
 			results.push(result)
 			capture.comparisons.push(result)
 		}
@@ -2017,10 +2163,31 @@ async function selfTest(
 	context: RunContext,
 	capture: ArtifactCapture
 ) {
-	const control = descriptor('control', repoRoot, context.commit, {
-		D1_INJECT: '',
-		NODE_ENV: 'production'
-	})
+	const selfTestEntries = registry.entries.map((entry) => ({
+		...entry,
+		sampleRule:
+			'8 randomized paired clean child-process self-test blocks; diagnostic protocol only; release-gate protocol is registered in margins.json'
+	}))
+	const selfTestRegistry = {
+		entries: selfTestEntries,
+		byKey: new Map(
+			selfTestEntries.map((entry) => [
+				key(entry.fixture, entry.metric),
+				entry
+			])
+		)
+	}
+	const expectedProductSourceHash = await productSourceHash(repoRoot)
+	const control = descriptor(
+		'control',
+		repoRoot,
+		context.commit,
+		{
+			D1_INJECT: '',
+			NODE_ENV: 'production'
+		},
+		expectedProductSourceHash
+	)
 	capture.variants.push(control)
 	const classes: Array<{
 		injection: string
@@ -2063,6 +2230,11 @@ async function selfTest(
 			targetMetrics: ['integrated-real-socket-mix-p50-ns']
 		},
 		{
+			injection: 'websocket-runtime',
+			fixture: 'websocket-runtime',
+			targetMetrics: ['isolated-dispatch-p50-ns']
+		},
+		{
 			injection: 'n2b-retained',
 			fixture: 'runtime-lowering',
 			targetMetrics: ['blocked-before-release-current-bytes-per-request']
@@ -2073,27 +2245,44 @@ async function selfTest(
 			targetMetrics: ['runtime-FunctionExecutable']
 		}
 	]
+	const owners = selectedOwners()
+	const selectedClasses = owners
+		? classes.filter((item) =>
+				item.targetMetrics.every((metric) => {
+					const entry = selfTestRegistry.byKey.get(
+						key(item.fixture, metric)
+					)
+					return entry && owners.has(entry.owner)
+				})
+			)
+		: classes
+	if (!selectedClasses.length)
+		throw new Error(
+			`no D1 self-test classes for owners: ${[...owners!].join(', ')}`
+		)
 	capture.provenance = {
-		injections: classes.map((item) => item.injection),
+		injections: selectedClasses.map((item) => item.injection),
 		targetMetrics: Object.fromEntries(
-			classes.map((item) => [item.injection, item.targetMetrics])
+			selectedClasses.map((item) => [item.injection, item.targetMetrics])
 		),
 		reportedMetrics: Object.fromEntries(
-			classes.map((item) => [
+			selectedClasses.map((item) => [
 				item.injection,
-				metricsFor(registry, item.fixture).map((entry) => entry.metric)
+				metricsFor(selfTestRegistry, item.fixture).map(
+					(entry) => entry.metric
+				)
 			])
 		),
 		sampleRule:
 			'8 paired blocks; self-test control and injected candidate use the same revision'
 	}
-	for (const item of classes) {
+	for (const item of selectedClasses) {
 		if (!item.targetMetrics.length)
 			throw new Error(
 				`self-test injection has no target metrics: ${item.injection}`
 			)
 		const entries = item.targetMetrics.map((metric) => {
-			const entry = registry.byKey.get(key(item.fixture, metric))
+			const entry = selfTestRegistry.byKey.get(key(item.fixture, metric))
 			if (!entry)
 				throw new Error(
 					`self-test target metric is not registered: ${key(item.fixture, metric)}`
@@ -2103,7 +2292,7 @@ async function selfTest(
 		const controlFixtures = await runPairedBlocks(
 			control,
 			control,
-			registry,
+			selfTestRegistry,
 			effectiveSeed(context.seed + capture.fixtures.length),
 			[item.fixture],
 			defaultBlocks,
@@ -2156,15 +2345,21 @@ async function selfTest(
 			throw new Error(
 				`self-test A/A control was not pass for ${item.injection}: ${controlResults.map((result) => `${result.metric}=${result.verdict}`).join(', ')}`
 			)
-		const injected = descriptor('injected', repoRoot, context.commit, {
-			D1_INJECT: item.injection,
-			NODE_ENV: 'production'
-		})
+		const injected = descriptor(
+			'injected',
+			repoRoot,
+			context.commit,
+			{
+				D1_INJECT: item.injection,
+				NODE_ENV: 'production'
+			},
+			expectedProductSourceHash
+		)
 		capture.variants.push(injected)
 		const injectedFixtures = await runPairedBlocks(
 			control,
 			injected,
-			registry,
+			selfTestRegistry,
 			effectiveSeed(context.seed + 100 + capture.fixtures.length),
 			[item.fixture],
 			defaultBlocks,
@@ -2208,6 +2403,8 @@ async function selfTest(
 			`PASS self-test ${item.injection}: targetMetrics=${item.targetMetrics.join(',')}; injected fail; A/A pass`
 		)
 	}
+	if ((await productSourceHash(repoRoot)) !== expectedProductSourceHash)
+		throw new Error('product source changed during self-test sampling')
 }
 
 async function verifyMode(
@@ -2269,7 +2466,9 @@ async function verifyMode(
 			throw new Error(
 				`committed floors benchmark-source pin is missing or stale: ${machineId}; ` +
 					`run bun run bench:d1:aa${
-						owners ? ` --owners=${[...owners].sort().join(',')}` : ''
+						owners
+							? ` --owners=${[...owners].sort().join(',')}`
+							: ''
 					}`
 			)
 		for (const entry of active) {

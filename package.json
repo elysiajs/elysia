@@ -195,6 +195,11 @@
 			"import": "./dist/ws/index.mjs",
 			"require": "./dist/ws/index.js"
 		},
+		"./ws/runtime": {
+			"types": "./dist/ws/runtime.d.ts",
+			"import": "./dist/ws/runtime.mjs",
+			"require": "./dist/ws/runtime.js"
+		},
 		"./ws/types": {
 			"types": "./dist/ws/types.d.ts",
 			"import": "./dist/ws/types.mjs",

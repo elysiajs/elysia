@@ -12,7 +12,8 @@ import { Compiled } from '../../src/compile/aot'
 import {
 	beginValidatorCapture,
 	endValidatorCapture,
-	endHandlerCapture
+	endHandlerCapture,
+	endWSCapture
 } from '../../src/compile/aot-capture'
 
 /** A child process proves frozen validation works before TypeBox is initialized. */
@@ -77,6 +78,7 @@ function captureWS(schema: any) {
 
 	const captured = endValidatorCapture()
 	endHandlerCapture()
+	endWSCapture()
 	delete process.env.ELYSIA_AOT_BUILD
 
 	return captured.filter((c) => c.method === 'WS' && c.slot === 'body')

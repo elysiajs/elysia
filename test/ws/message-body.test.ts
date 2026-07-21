@@ -3,6 +3,46 @@ import { Elysia, t } from '../../src'
 import { newWebsocket, wsOpen, wsMessage, wsClosed } from './utils'
 
 describe('WebSocket message body', () => {
+	it('keeps ws.body available to later parameter defaults', async () => {
+		const app = new Elysia()
+			.ws('/ws', {
+				message: ((ws: any, _body: unknown, fromView = ws.body) =>
+					ws.send(`default:${fromView}`)) as any
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+		await wsOpen(ws)
+		const message = wsMessage(ws)
+		ws.send('payload')
+
+		expect((await message).data).toBe('default:payload')
+
+		await wsClosed(ws)
+		app.stop()
+	})
+
+	it('retains the upgrade Request for later open parameter defaults', async () => {
+		const app = new Elysia()
+			.ws('/ws', {
+				open: ((ws: any, request = ws.request) =>
+					ws.send(
+						request instanceof Request ? 'request' : 'missing'
+					)) as any,
+				message() {}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+		const message = wsMessage(ws)
+		await wsOpen(ws)
+
+		expect((await message).data).toBe('request')
+
+		await wsClosed(ws)
+		app.stop()
+	})
+
 	it('delivers the positional body when the handler does not read ws.body', async () => {
 		const app = new Elysia()
 			.ws('/ws', {

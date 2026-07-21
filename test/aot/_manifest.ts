@@ -6,7 +6,8 @@ import {
 	type ProgramId,
 	type ValidatorManifest,
 	type CapturedHandler,
-	type HandlerManifest
+	type HandlerManifest,
+	type WSRouteManifest
 } from '../../src/compile/aot'
 import { Source, installReconstructImpl } from '../../src/compile/aot-emit'
 
@@ -22,6 +23,7 @@ import { Hashing } from 'typebox/system'
 interface TestManifest {
 	validators?: ValidatorManifest
 	handlers?: HandlerManifest
+	wsRoutes?: WSRouteManifest
 	lazyGroups?: Array<() => ValidatorManifest>
 	lazyGroupOf?: Record<string, Record<string, number>>
 }

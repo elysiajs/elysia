@@ -55,6 +55,7 @@ export interface SampleBlockRecord {
 	pairIndex?: number
 	samples: number[]
 	value: number
+	diagnostics?: Record<string, unknown>
 }
 
 export interface MetricPairRecord {
@@ -122,6 +123,8 @@ export function metricUnit(entry: Pick<MarginEntry, 'kind' | 'metric'>) {
 	if (entry.metric.endsWith('-bytes-per-request')) return 'bytes-per-request'
 	if (entry.metric.endsWith('-bytes-per-validator'))
 		return 'bytes-per-validator'
+	if (entry.metric.endsWith('-bytes-per-connection'))
+		return 'bytes-per-connection'
 	if (entry.metric.endsWith('-per-validator')) return 'count-per-validator'
 	return 'bytes-per-route'
 }
@@ -170,6 +173,12 @@ export interface MarginEntry {
 	status: 'pending-floor' | 'active' | 'report-only'
 	margin: number | null
 	tolerance?: number
+	/** Absolute candidate ceiling, applied in addition to the statistical gate. */
+	candidateMaximum?: number
+	/** Required absolute median improvement in the preferred direction. */
+	minimumAbsoluteImprovement?: number
+	/** Ignore baseline equality/regression and enforce only candidate bounds. */
+	candidateOnly?: boolean
 }
 
 export interface FloorsSession {

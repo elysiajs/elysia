@@ -12,6 +12,7 @@ import {
 	setCaptureImpl,
 	type CaptureImpl,
 	type CapturedHandler,
+	type CapturedWSRoute,
 	type CapturedValidator,
 	type CheckBuildResult,
 	type CompiledSnapshot,
@@ -478,6 +479,7 @@ export function abortCapture() {
 
 	session.capture = undefined
 	session.handlerCapture = undefined
+	session.wsCapture = undefined
 	session.captureRoutes = undefined
 	session.sucroseCache.clear()
 	CompilerState.session = undefined
@@ -488,7 +490,8 @@ function endCaptureSession(session: CompilerSession) {
 		session.external &&
 		!session.app &&
 		!session.capture &&
-		!session.handlerCapture
+		!session.handlerCapture &&
+		!session.wsCapture
 	) {
 		session.sucroseCache.clear()
 		CompilerState.session = undefined
@@ -522,6 +525,18 @@ export function endHandlerCapture(): CapturedHandler[] {
 	return captured
 }
 
+export function endWSCapture(): CapturedWSRoute[] {
+	const session = CompilerState.session
+	const captured = session?.wsCapture ? [...session.wsCapture.values()] : []
+
+	if (session) {
+		session.wsCapture = undefined
+		endCaptureSession(session)
+	}
+
+	return captured
+}
+
 /** @internal deterministic session/capture assertions. */
 export const getCompilerSessionDiagnostics = () => {
 	const session = CompilerState.session
@@ -531,12 +546,13 @@ export const getCompilerSessionDiagnostics = () => {
 		appAttached: session?.app !== undefined,
 		validators: session?.capture?.size ?? 0,
 		handlers: session?.handlerCapture?.size ?? 0,
+		wsRoutes: session?.wsCapture?.size ?? 0,
 		sucrose: session?.sucroseCache.size ?? 0
 	}
 }
 
 /** @internal preserve registry around in-process AOT analysis */
-export const snapshotCompiled = (): CompiledSnapshot => CompilerState.registry
+export const snapshotCompiled = () => CompilerState.registry
 
 /** @internal restore registry after in-process AOT analysis */
 export function restoreCompiled(snapshot: CompiledSnapshot) {

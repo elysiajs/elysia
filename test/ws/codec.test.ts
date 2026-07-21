@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test'
 import { Elysia, t } from '../../src'
-import { newWebsocket, wsOpen, wsClosed, wsMessage } from './utils'
+import { newWebsocket, wsOpen, wsClosed, wsMessage, wsUpgrade } from './utils'
 
 describe('WebSocket upgrade schema decoding', () => {
 	it('decodes Numeric route parameters before the handler', async () => {
@@ -83,17 +83,7 @@ describe('WebSocket upgrade schema decoding', () => {
 			})
 			.listen(0)
 
-		const res = await fetch(
-			`http://${app.server!.hostname}:${app.server!.port}/ws?page=abc`,
-			{
-				headers: {
-					upgrade: 'websocket',
-					connection: 'Upgrade',
-					'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==',
-					'sec-websocket-version': '13'
-				}
-			}
-		)
+		const res = await wsUpgrade(app.server!, '/ws?page=abc')
 
 		expect(res.status).toBe(422)
 		app.stop()
@@ -216,17 +206,7 @@ describe('WebSocket upgrade schema decoding', () => {
 			})
 			.listen(0)
 
-		const res = await fetch(
-			`http://${app.server!.hostname}:${app.server!.port}/ws`,
-			{
-				headers: {
-					upgrade: 'websocket',
-					connection: 'Upgrade',
-					'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==',
-					'sec-websocket-version': '13'
-				}
-			}
-		)
+		const res = await wsUpgrade(app.server!)
 
 		expect(res.status).toBe(422)
 		app.stop()
@@ -253,17 +233,7 @@ describe('WebSocket upgrade schema decoding', () => {
 			})
 			.listen(0)
 
-		const res = await fetch(
-			`http://${app.server!.hostname}:${app.server!.port}/ws?x=1`,
-			{
-				headers: {
-					upgrade: 'websocket',
-					connection: 'Upgrade',
-					'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==',
-					'sec-websocket-version': '13'
-				}
-			}
-		)
+		const res = await wsUpgrade(app.server!, '/ws?x=1')
 
 		expect(res.status).toBe(500)
 		await expect(res.text()).resolves.toContain(

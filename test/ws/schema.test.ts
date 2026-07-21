@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'bun:test'
 import { Elysia, t, ValidationError } from '../../src'
 import { validationPlan } from '../../src/experimental/validation-plan'
-import { newWebsocket, wsOpen, wsClosed, wsMessage } from './utils'
+import { newWebsocket, wsOpen, wsClosed, wsMessage, wsUpgrade } from './utils'
 
 describe('WebSocket non-body schemas', () => {
 	it('query: success — typed query is accessible inside handler', async () => {
@@ -37,17 +37,7 @@ describe('WebSocket non-body schemas', () => {
 			})
 			.listen(0)
 
-		const upgradeResponse = await fetch(
-			`http://${app.server!.hostname}:${app.server!.port}/ws`,
-			{
-				headers: {
-					upgrade: 'websocket',
-					connection: 'Upgrade',
-					'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==',
-					'sec-websocket-version': '13'
-				}
-			}
-		)
+		const upgradeResponse = await wsUpgrade(app.server!)
 
 		expect(upgradeResponse.status).toBe(422)
 
@@ -117,17 +107,7 @@ describe('WebSocket non-body schemas', () => {
 			})
 			.listen(0)
 
-		const upgradeResponse = await fetch(
-			`http://${app.server!.hostname}:${app.server!.port}/ws`,
-			{
-				headers: {
-					upgrade: 'websocket',
-					connection: 'Upgrade',
-					'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==',
-					'sec-websocket-version': '13'
-				}
-			}
-		)
+		const upgradeResponse = await wsUpgrade(app.server!)
 
 		expect(upgradeResponse.status).toBe(422)
 
@@ -154,17 +134,7 @@ describe('WebSocket non-body schemas', () => {
 			})
 			.listen(0)
 
-		const response = await fetch(
-			`http://${app.server!.hostname}:${app.server!.port}/ws`,
-			{
-				headers: {
-					upgrade: 'websocket',
-					connection: 'Upgrade',
-					'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==',
-					'sec-websocket-version': '13'
-				}
-			}
-		)
+		const response = await wsUpgrade(app.server!)
 
 		expect(response.status).toBe(418)
 		await expect(response.text()).resolves.toBe('caught:query')
@@ -196,17 +166,7 @@ describe('WebSocket non-body schemas', () => {
 
 		await wsClosed(ws)
 
-		const upgradeResponse = await fetch(
-			`http://${app.server!.hostname}:${app.server!.port}/ws`,
-			{
-				headers: {
-					upgrade: 'websocket',
-					connection: 'Upgrade',
-					'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==',
-					'sec-websocket-version': '13'
-				}
-			}
-		)
+		const upgradeResponse = await wsUpgrade(app.server!)
 		expect(upgradeResponse.status).toBe(422)
 
 		app.stop()
@@ -289,17 +249,7 @@ describe('WebSocket non-body schemas', () => {
 		})
 		await wsClosed(ws)
 
-		const invalid = await fetch(
-			`http://${app.server!.hostname}:${app.server!.port}/ws?page=bad&active=true`,
-			{
-				headers: {
-					upgrade: 'websocket',
-					connection: 'Upgrade',
-					'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==',
-					'sec-websocket-version': '13'
-				}
-			}
-		)
+		const invalid = await wsUpgrade(app.server!, '/ws?page=bad&active=true')
 		expect(invalid.status).toBe(422)
 		app.stop()
 	})
@@ -347,17 +297,7 @@ describe('WebSocket non-body schemas', () => {
 		expect((await got).data).toBe('elysia:undefined')
 		await wsClosed(ws)
 
-		const missing = await fetch(
-			`http://${app.server!.hostname}:${app.server!.port}/ws`,
-			{
-				headers: {
-					upgrade: 'websocket',
-					connection: 'Upgrade',
-					'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==',
-					'sec-websocket-version': '13'
-				}
-			}
-		)
+		const missing = await wsUpgrade(app.server!)
 		expect(missing.status).toBe(422)
 		app.stop()
 	})

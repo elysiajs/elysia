@@ -3,7 +3,7 @@ import { nullObject } from '../utils'
 import packageJson from '../../package.json'
 import type { CoercePlan } from '../type/coerce'
 
-export const AOT_MANIFEST_FORMAT = 3
+export const AOT_MANIFEST_FORMAT = 4
 export const AOT_ABI = `${packageJson.version}:${AOT_MANIFEST_FORMAT}`
 
 export interface AotFingerprint {
@@ -28,6 +28,7 @@ export interface CompilerSession {
 	sucroseCacheBytes: number
 	capture?: Map<string, CapturedValidator>
 	handlerCapture?: Map<string, CapturedHandler>
+	wsCapture?: Map<string, CapturedWSRoute>
 	captureRoutes?: Set<string>
 	app?: object
 	external?: true
@@ -75,6 +76,7 @@ export function endCompilerSession(
 	session.sucroseCacheBytes = 0
 	session.capture = undefined
 	session.handlerCapture = undefined
+	session.wsCapture = undefined
 	session.captureRoutes = undefined
 	if (activeSession === session) activeSession = undefined
 }
@@ -188,6 +190,17 @@ export interface HandlerManifest {
 	}
 }
 
+export type WSBindingRole = string
+
+export interface FrozenWSRoute {
+	a: readonly WSBindingRole[]
+	f: (...args: unknown[]) => unknown
+}
+
+export interface WSRouteManifest {
+	[path: string]: FrozenWSRoute
+}
+
 export interface CompiledSnapshot {
 	registered: CompiledProgramRegistration | undefined
 	claimed: boolean
@@ -199,6 +212,7 @@ export interface CompiledProgramRegistration {
 	fingerprint: AotFingerprint
 	validators?: ValidatorManifest
 	handlers?: HandlerManifest
+	wsRoutes?: WSRouteManifest
 	lazyGroups?: Array<() => ValidatorManifest>
 	lazyGroupOf?: Record<string, Record<string, number>>
 	planRebuilder?: (original: unknown, plan: CoercePlan) => any
@@ -304,6 +318,13 @@ export abstract class Compiled {
 		path: string
 	): FrozenHandler | undefined {
 		return programFor(id)?.handlers?.[method]?.[path]
+	}
+
+	static getWSRoute(
+		id: ProgramId | undefined,
+		path: string
+	): FrozenWSRoute | undefined {
+		return programFor(id)?.wsRoutes?.[path]
 	}
 
 	static getValidator(
@@ -500,12 +521,31 @@ export interface CapturedHandler {
 	code: string
 }
 
+export type CapturedWSRoute =
+	| {
+			path: string
+			roles: readonly WSBindingRole[]
+			source: string
+	  }
+	| {
+			path: string
+			reason: string
+	  }
+
 function captureHandler(v: CapturedHandler) {
 	if (!isValidatorCapturing()) return
 
 	const session = activeSession
 	if (!session) return
 	;(session.handlerCapture ??= new Map()).set(`${v.method}\0${v.path}`, v)
+}
+
+function captureWSRoute(v: CapturedWSRoute) {
+	if (!isValidatorCapturing()) return
+
+	const session = activeSession
+	if (!session) return
+	;(session.wsCapture ??= new Map()).set(v.path, v)
 }
 
 function beginCaptureRoute(method: string, path: string) {
@@ -523,6 +563,7 @@ function beginCaptureRoute(method: string, path: string) {
 			session.capture!.delete(key)
 
 	session.handlerCapture?.delete(route)
+	if (method === 'WS') session.wsCapture?.delete(path)
 }
 
 function captureSet(
@@ -562,6 +603,7 @@ export const Capture = {
 	get: captureGet,
 	beginRoute: beginCaptureRoute,
 	handler: captureHandler,
+	ws: captureWSRoute,
 	isCapturing: isValidatorCapturing,
 	isAotBuildEnv: isAotBuildEnv
 } as const

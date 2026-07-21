@@ -1,6 +1,13 @@
 import { describe, it, expect } from 'bun:test'
 import { Elysia, t, status } from '../../src'
-import { newWebsocket, wsOpen, wsClose, wsClosed, wsMessage } from './utils'
+import {
+	newWebsocket,
+	wsOpen,
+	wsClose,
+	wsClosed,
+	wsMessage,
+	wsUpgrade
+} from './utils'
 import { req } from '../utils'
 
 describe('WebSocket connection', () => {
@@ -250,17 +257,7 @@ describe('WebSocket connection', () => {
 			})
 			.listen(0)
 
-		const upgradeResponse = await fetch(
-			`http://${app.server!.hostname}:${app.server!.port}/ws`,
-			{
-				headers: {
-					upgrade: 'websocket',
-					connection: 'Upgrade',
-					'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==',
-					'sec-websocket-version': '13'
-				}
-			}
-		)
+		const upgradeResponse = await wsUpgrade(app.server!)
 
 		expect(upgradeResponse.status).toBe(403)
 		await expect(upgradeResponse.text()).resolves.toBe('forbidden')
@@ -278,17 +275,7 @@ describe('WebSocket connection', () => {
 			})
 			.listen(0)
 
-		const upgradeResponse = await fetch(
-			`http://${app.server!.hostname}:${app.server!.port}/ws`,
-			{
-				headers: {
-					upgrade: 'websocket',
-					connection: 'Upgrade',
-					'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==',
-					'sec-websocket-version': '13'
-				}
-			}
-		)
+		const upgradeResponse = await wsUpgrade(app.server!)
 
 		expect(upgradeResponse.status).toBe(401)
 		await expect(upgradeResponse.text()).resolves.toBe('no')
@@ -309,17 +296,7 @@ describe('WebSocket connection', () => {
 			})
 			.listen(0)
 
-		const upgradeResponse = await fetch(
-			`http://${app.server!.hostname}:${app.server!.port}/ws`,
-			{
-				headers: {
-					upgrade: 'websocket',
-					connection: 'Upgrade',
-					'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==',
-					'sec-websocket-version': '13'
-				}
-			}
-		)
+		const upgradeResponse = await wsUpgrade(app.server!)
 
 		expect(upgradeResponse.status).toBe(401)
 		expect(upgradeResponse.headers.get('x-custom')).toBe('yes')

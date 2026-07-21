@@ -21,6 +21,7 @@ export const BENCH_SOURCE_FILES = [
 	'bench/d1/retention-seal.test.ts',
 	'bench/d1/provenance.test.ts',
 	'bench/d1/validation.test.ts',
+	'bench/d1/websocket-runtime.test.ts',
 	'bench/d1/fixtures/aot-cold-start.ts',
 	'bench/d1/fixtures/cold-start.ts',
 	'bench/d1/fixtures/compile-memory.ts',
@@ -35,6 +36,7 @@ export const BENCH_SOURCE_FILES = [
 	'bench/d1/fixtures/retention-seal.ts',
 	'bench/d1/fixtures/runtime-http.ts',
 	'bench/d1/fixtures/runtime-lowering.ts',
+	'bench/d1/fixtures/websocket-runtime.ts',
 	'bench/d1/fixtures/response-body-cookie.ts',
 	'bench/d1/fixtures/validation.ts',
 	'bench/d1/fixtures/utils.ts',
@@ -299,7 +301,7 @@ async function productSourceFiles(repoRoot: string, path: string) {
 	return files
 }
 
-/** Hashes the exact product and build inputs used by an N+3b variant. */
+/** Hashes the exact product and build inputs used by a benchmark variant. */
 export async function productSourceHash(repoRoot: string) {
 	const files = (
 		await Promise.all(

@@ -55,8 +55,7 @@ export function fallbackResponse(
 		response: unknown,
 		set: Context['set'],
 		context?: Context
-	) => unknown,
-	defaultError?: Response
+	) => unknown
 ): unknown {
 	if (typeof error?.toResponse === 'function')
 		try {
@@ -86,23 +85,12 @@ export function fallbackResponse(
 					(resolved) =>
 						resolved instanceof Response
 							? mapResponse(resolved, context.set, context)
-							: fallbackErrorResponse(
-									context,
-									error,
-									mapResponse,
-									defaultError
-								),
-					() =>
-						fallbackErrorResponse(
-							context,
-							error,
-							mapResponse,
-							defaultError
-						)
+							: fallbackErrorResponse(context, error, mapResponse),
+					() => fallbackErrorResponse(context, error, mapResponse)
 				)
 		} catch {}
 
-	return fallbackErrorResponse(context, error, mapResponse, defaultError)
+	return fallbackErrorResponse(context, error, mapResponse)
 }
 
 function fallbackErrorResponse(
@@ -112,8 +100,7 @@ function fallbackErrorResponse(
 		response: unknown,
 		set: Context['set'],
 		context?: Context
-	) => unknown,
-	defaultError?: Response
+	) => unknown
 ): unknown {
 	if (error instanceof ElysiaStatus)
 		return mapResponse(error, context.set, context)
@@ -141,11 +128,7 @@ function fallbackErrorResponse(
 		)
 	}
 
-	return mapResponse(
-		defaultError ? defaultError.clone() : internalServerErrorResponse(error),
-		context.set,
-		context
-	)
+	return mapResponse(internalServerErrorResponse(error), context.set, context)
 }
 
 function applyErrorStatus(context: Context, error: any): void {
@@ -161,7 +144,6 @@ export function createErrorHandler(
 		set: Context['set'],
 		...any: unknown[]
 	) => unknown,
-	defaultError?: Response,
 	allowUnsafe = false,
 	compatCancellation = false
 ) {
@@ -181,7 +163,7 @@ export function createErrorHandler(
 			parseQuery(context)
 			return settle(
 				context,
-				fallbackResponse(context, error, mapResponse, defaultError)
+				fallbackResponse(context, error, mapResponse)
 			)
 		}
 
@@ -253,7 +235,7 @@ export function createErrorHandler(
 
 			return settle(
 				context,
-				fallbackResponse(context, error, mapResponse, defaultError)
+				fallbackResponse(context, error, mapResponse)
 			)
 		}
 
@@ -292,7 +274,7 @@ export function createErrorHandler(
 
 		return settle(
 			context,
-			fallbackResponse(context, error, mapResponse, defaultError)
+			fallbackResponse(context, error, mapResponse)
 		)
 	}
 }

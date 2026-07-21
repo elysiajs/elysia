@@ -27,8 +27,8 @@ export function memoryUsage() {
 	return process.memoryUsage().heapUsed
 }
 
-export function memorySnapshot() {
-	gc()
+export function memorySnapshot(collectGarbage = true) {
+	if (collectGarbage) gc()
 
 	if (typeof Bun !== 'undefined') {
 		const { heapStats, memoryUsage } = require('bun:jsc')

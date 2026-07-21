@@ -6,7 +6,8 @@ import { Compiled, type ProgramId } from '../../src/compile/aot'
 import {
 	beginValidatorCapture,
 	endValidatorCapture,
-	endHandlerCapture
+	endHandlerCapture,
+	endWSCapture
 } from '../../src/compile/aot-capture'
 import { RouteValidator } from '../../src/validator/route'
 import { buildFrozenRouteValidator } from '../../src/compile/handler/frozen-validator'
@@ -38,6 +39,7 @@ function freezeWS(hook: any) {
 
 	const captured = endValidatorCapture()
 	endHandlerCapture()
+	endWSCapture()
 	delete process.env.ELYSIA_AOT_BUILD
 
 	Compiled.clear()

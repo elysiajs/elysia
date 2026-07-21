@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'bun:test'
 import { Elysia, t, status, ValidationError } from '../../src'
-import { newWebsocket, wsOpen, wsClosed, wsMessage } from './utils'
+import { newWebsocket, wsOpen, wsClosed, wsMessage, wsUpgrade } from './utils'
 
 describe('WebSocket errors thrown by error hooks', () => {
 	it('sends an error frame without an unhandled rejection', async () => {
@@ -186,17 +186,7 @@ describe('WebSocket upgrade validation error responses', () => {
 			})
 			.listen(0)
 
-		const upgradeResponse = await fetch(
-			`http://${app.server!.hostname}:${app.server!.port}/ws`,
-			{
-				headers: {
-					upgrade: 'websocket',
-					connection: 'Upgrade',
-					'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==',
-					'sec-websocket-version': '13'
-				}
-			}
-		)
+		const upgradeResponse = await wsUpgrade(app.server!)
 
 		expect(upgradeResponse.status).toBe(401)
 		await expect(upgradeResponse.text()).resolves.toBe('denied')
@@ -216,17 +206,7 @@ describe('WebSocket upgrade validation error responses', () => {
 			})
 			.listen(0)
 
-		const upgradeResponse = await fetch(
-			`http://${app.server!.hostname}:${app.server!.port}/ws`,
-			{
-				headers: {
-					upgrade: 'websocket',
-					connection: 'Upgrade',
-					'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==',
-					'sec-websocket-version': '13'
-				}
-			}
-		)
+		const upgradeResponse = await wsUpgrade(app.server!)
 
 		expect(upgradeResponse.status).toBe(403)
 		await expect(upgradeResponse.json()).resolves.toEqual({

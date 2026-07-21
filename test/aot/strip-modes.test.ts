@@ -16,6 +16,7 @@ import { post, req } from '../utils'
  */
 
 const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/aot.ts')
+const WS_RUNTIME_FROM = resolve(import.meta.dir, '../../src/ws/runtime.ts')
 
 /** Error markers emitted by stripped runtime modules. */
 const STUB_MARKERS = [
@@ -27,11 +28,22 @@ const STUB_MARKERS = [
 
 const built: string[] = []
 
-async function build(entry: string, strip: boolean | 'auto') {
+async function build(
+	entry: string,
+	strip: boolean | 'auto',
+	minify = false
+) {
 	const result = await Bun.build({
 		entrypoints: [entry],
-		plugins: [bunAot(entry, { registerFrom: REGISTER_FROM, strip })],
-		target: 'bun'
+		plugins: [
+			bunAot(entry, {
+				registerFrom: REGISTER_FROM,
+				wsRuntimeFrom: WS_RUNTIME_FROM,
+				strip
+			})
+		],
+		target: 'bun',
+		minify
 	})
 	if (!result.success)
 		throw new Error(
@@ -95,15 +107,31 @@ describe('AOT strip disabled', () => {
 })
 
 describe('forced AOT stripping', () => {
-	it('strips the JIT graph for a WS-only app but retains the WS runtime', async () => {
-		const text = await build(
-			'test/aot/fixtures/strip-forced-ws-app.ts',
-			true
-		)
-		expect(text).toContain('handler compiler JIT was stripped')
-		expect(text).not.toContain('[Sucrose] warning')
-		expect(text).not.toContain('WebSocket route builder was stripped')
-		expect(text).toContain('class ElysiaWS')
+	it('serves a WS image with the generic route planner stripped', async () => {
+		for (const minify of [false, true]) {
+			const text = await build(
+				'test/aot/fixtures/strip-forced-ws-app.ts',
+				true,
+				minify
+			)
+			expect(text).toContain('generic WebSocket route builder was stripped')
+
+			const app = await load(text)
+			app.listen(0)
+			try {
+				const socket = new WebSocket(
+					`ws://${app.server!.hostname}:${app.server!.port}/ws`
+				)
+				await new Promise<void>((resolve, reject) => {
+					socket.onopen = () => resolve()
+					socket.onerror = () =>
+						reject(new Error('WebSocket image failed'))
+				})
+				socket.close()
+			} finally {
+				await app.stop(true)
+			}
+		}
 	})
 
 	it('builds and serves a fully precompiled app', async () => {
@@ -132,6 +160,7 @@ describe('automatic AOT stripping', () => {
 		expect(stub).toEqual({
 			jit: true,
 			ws: false,
+			wsJit: true,
 			reconstruct: true,
 			cookie: true,
 			trace: true,
@@ -148,7 +177,7 @@ describe('automatic AOT stripping', () => {
 		)
 		expect(text).toContain('handler compiler JIT was stripped')
 		expect(text).not.toContain('[Sucrose] warning')
-		expect(text).not.toContain('WebSocket route builder was stripped')
+		expect(text).toContain('generic WebSocket route builder was stripped')
 
 		const app = await load(text)
 		const ok = await app.handle(req('/'))
@@ -248,6 +277,7 @@ describe('automatic AOT stripping', () => {
 		expect(stub).toEqual({
 			jit: true,
 			ws: true,
+			wsJit: false,
 			reconstruct: true,
 			cookie: true,
 			trace: true,

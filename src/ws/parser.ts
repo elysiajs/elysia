@@ -31,6 +31,15 @@ export function defaultWSParse(message: string | Buffer | Uint8Array): unknown {
 	if (typeof message !== 'string') return message
 
 	const start = message.charCodeAt(0)
+	const letter = start | 32
+	if (
+		letter >= 97 &&
+		letter <= 122 &&
+		letter !== 102 &&
+		letter !== 110 &&
+		letter !== 116
+	)
+		return message
 
 	if (start === 34 || start === 91 || start === 123) {
 		try {
@@ -38,6 +47,18 @@ export function defaultWSParse(message: string | Buffer | Uint8Array): unknown {
 		} catch {
 			return message
 		}
+	}
+	if (
+		(start < 48 || start > 57) &&
+		start !== 43 &&
+		start !== 45 &&
+		start !== 46
+	) {
+		if (start === 116 && message === 'true') return true
+		if (start === 102 && message === 'false') return false
+		if (start === 110 && message === 'null') return null
+
+		return message
 	}
 
 	if (isNumericString(message)) {
@@ -50,10 +71,6 @@ export function defaultWSParse(message: string | Buffer | Uint8Array): unknown {
 
 		return message
 	}
-	if (message === 'true') return true
-	if (message === 'false') return false
-	if (message === 'null') return null
-
 	return message
 }
 
@@ -63,10 +80,7 @@ export function createMessageParser(
 		| undefined
 ) {
 	if (!parsers || parsers.length === 0)
-		return function parse(
-			_ws: unknown,
-			rawMessage: string | Buffer
-		) {
+		return function parse(_ws: unknown, rawMessage: string | Buffer) {
 			return defaultWSParse(rawMessage)
 		}
 
@@ -89,10 +103,7 @@ export function createMessageParser(
 		return value
 	}
 
-	return function parse(
-		ws: unknown,
-		rawMessage: string | Buffer
-	) {
+	return function parse(ws: unknown, rawMessage: string | Buffer) {
 		let value = defaultWSParse(rawMessage)
 
 		for (let i = 0; i < parsers.length; i++) {

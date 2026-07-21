@@ -94,13 +94,13 @@ describe('WebSocket method binding', () => {
 })
 
 describe('WebSocket upgrade context retention', () => {
-	it('releases ws.data.context after the connection context is materialized', async () => {
+	it('releases retained context after the connection view is materialized', async () => {
 		let contextAfterOpen: unknown = Symbol('unset')
 
 		const app = new Elysia()
 			.ws('/ws', {
 				open(ws) {
-					contextAfterOpen = (ws as any).raw.data.context
+					contextAfterOpen = ws.raw.data.retained
 				},
 				message(ws) {
 					ws.send('ok')

@@ -11,6 +11,7 @@ import type {
 import { ValidationError, ElysiaStatus } from '../error'
 import type { RouteSchema } from '../types'
 import { requestId } from '../utils'
+import type { WSRouteRuntime } from './runtime'
 
 function pickValidator(
 	validators:
@@ -28,33 +29,29 @@ function pickValidator(
 }
 
 export interface WSConnectionData {
-	id: string | undefined
-	open?: (elysia: ElysiaWS<any>) => void | Promise<void>
-	message?: (
-		elysia: ElysiaWS<any>,
-		rawMessage: string | Buffer
-	) => void | Promise<void>
-	drain?: (elysia: ElysiaWS<any>) => void | Promise<void>
-	close?: (
-		elysia: ElysiaWS<any>,
-		code: number,
-		reason: string
-	) => void | Promise<void>
-	ping?: (elysia: ElysiaWS<any>, data: Buffer) => void | Promise<void>
-	pong?: (elysia: ElysiaWS<any>, data: Buffer) => void | Promise<void>
-
+	id?: string
+	runtime?: WSRouteRuntime
+	fastMessage?: WSRouteRuntime['fastMessage']
 	closeHandlerInvoked?: boolean
-	elysia?: ElysiaWS<any>
-	context?: Record<string, unknown>
-
+	view?: ElysiaWS<any>
+	retained?: Record<string, unknown>
 	resumeWaiters?: Set<() => void>
-
+	activeGenerators?: Set<Iterator<unknown> | AsyncIterator<unknown>>
+	generatorPumps?: Set<{
+		ws?: ElysiaWS<any>
+		iterator?: Iterator<unknown> | AsyncIterator<unknown>
+		settled: boolean
+		resolve: () => void
+		reject: (error: unknown) => void
+	}>
+	closed?: boolean
+	/** Direct ElysiaWS construction compatibility; live routes use runtime.plan. */
 	validator?: WSResponseValidator
 	defaultValidator?: WSValidatorLike
 }
 
 function memoize<T>(view: ElysiaWS<any>, key: string, value: T): T {
-	const self = view.raw.data.elysia ?? view
+	const self = view.raw.data.view ?? view
 
 	Object.defineProperty(self, key, {
 		value,
@@ -68,19 +65,23 @@ function memoize<T>(view: ElysiaWS<any>, key: string, value: T): T {
 
 export class ElysiaWS<Route extends RouteSchema = {}> {
 	raw: ServerWebSocket<WSConnectionData>
-	body: Route['body'] = undefined as any
+	declare body: Route['body']
 
 	constructor(
 		raw: ServerWebSocket<WSConnectionData>,
-		context?: Record<string, unknown>
+		retained?: Record<string, unknown>,
+		prototype?: object
 	) {
+		if (prototype) Object.setPrototypeOf(this, prototype)
 		this.raw = raw
-
-		if (context)
-			for (const key in context) {
-				if (key === 'ws' || key === 'body') continue
-				;(this as any)[key] = context[key]
-			}
+		if (retained)
+			for (const key of Object.keys(retained))
+				Object.defineProperty(this, key, {
+					value: retained[key],
+					enumerable: true,
+					writable: true,
+					configurable: true
+				})
 	}
 
 	get ws(): this {
@@ -109,21 +110,21 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		data: FlattenResponse<Route['response']> | BufferSource,
 		compress?: boolean
 	) => ServerWebSocketSendStatus {
-		const self = (this.raw.data.elysia as ElysiaWS<Route>) ?? this
+		const self = (this.raw.data.view as ElysiaWS<Route>) ?? this
 		return memoize(this, 'send', self.#send.bind(self))
 	}
 
 	get ping(): (
 		data?: FlattenResponse<Route['response']> | BufferSource
 	) => ServerWebSocketSendStatus {
-		const self = (this.raw.data.elysia as ElysiaWS<Route>) ?? this
+		const self = (this.raw.data.view as ElysiaWS<Route>) ?? this
 		return memoize(this, 'ping', self.#ping.bind(self))
 	}
 
 	get pong(): (
 		data?: FlattenResponse<Route['response']> | BufferSource
 	) => ServerWebSocketSendStatus {
-		const self = (this.raw.data.elysia as ElysiaWS<Route>) ?? this
+		const self = (this.raw.data.view as ElysiaWS<Route>) ?? this
 		return memoize(this, 'pong', self.#pong.bind(self))
 	}
 
@@ -132,12 +133,12 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		data: FlattenResponse<Route['response']> | BufferSource,
 		compress?: boolean
 	) => ServerWebSocketSendStatus {
-		const self = (this.raw.data.elysia as ElysiaWS<Route>) ?? this
+		const self = (this.raw.data.view as ElysiaWS<Route>) ?? this
 		return memoize(this, 'publish', self.#publish.bind(self))
 	}
 
 	get close(): (code?: number, reason?: string) => void {
-		const self = (this.raw.data.elysia as ElysiaWS<Route>) ?? this
+		const self = (this.raw.data.view as ElysiaWS<Route>) ?? this
 		return memoize(this, 'close', self.#close.bind(self))
 	}
 
@@ -173,9 +174,10 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 
 	#encodeOrError(data: unknown): { value: unknown } | { error: string } {
 		const connectionData = this.raw.data
+		const plan = connectionData.runtime?.plan
 		const v = pickValidator(
-			connectionData?.validator as any,
-			connectionData?.defaultValidator,
+			(plan?.responseValidator ?? connectionData.validator) as any,
+			plan?.defaultResponseValidator ?? connectionData.defaultValidator,
 			data
 		)
 
@@ -195,7 +197,7 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		try {
 			const encoded = v.EncodeFrom(value, 'message')
 			if (typeof (encoded as any)?.then === 'function') {
-				Promise.resolve(encoded).catch(() => { })
+				Promise.resolve(encoded).catch(() => {})
 
 				throw new Error(
 					'[Elysia] An asynchronous Standard Schema was used where only synchronous validation is supported.'
@@ -307,20 +309,9 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 	}
 
 	#close(code?: number, reason?: string): void {
-		const data = this.raw.data
-		if (!data.closeHandlerInvoked && data.close) {
-			data.closeHandlerInvoked = true
-			try {
-				const result = data.close(this, code ?? 1000, reason ?? '')
-				if (result instanceof Promise)
-					result
-						.then(() => this.raw.close(code, reason))
-						.catch(() => this.raw.close(code, reason))
-
-				return
-			} catch {}
-		}
-		this.raw.close(code, reason)
+		const runtime = this.raw.data.runtime
+		if (runtime) runtime.close(this, code, reason)
+		else this.raw.close(code, reason)
 	}
 }
 

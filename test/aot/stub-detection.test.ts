@@ -24,6 +24,7 @@ import {
 import { post, req } from '../utils'
 
 const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/aot.ts')
+const WS_RUNTIME_FROM = resolve(import.meta.dir, '../../src/ws/runtime.ts')
 const STRIP_E2E_APP = resolve(import.meta.dir, 'fixtures/strip-e2e-app.ts')
 
 afterEach(() => {
@@ -177,6 +178,7 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 		expect(safe.stub).toEqual({
 			jit: true,
 			ws: true,
+			wsJit: false,
 			reconstruct: false,
 			cookie: true,
 			trace: true,
@@ -193,6 +195,7 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 		expect(inline.stub).toEqual({
 			jit: true,
 			ws: true,
+			wsJit: false,
 			reconstruct: true,
 			cookie: true,
 			trace: true,
@@ -209,25 +212,41 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 		expect(wsOnly.stub).toEqual({
 			jit: true,
 			ws: false,
+			wsJit: true,
 			reconstruct: true,
 			cookie: true,
 			trace: true,
 			sucrose: true,
 			// A schema-less WS app needs neither sealed nor wired TypeBox setup.
-			compat: false,
+			compat: true,
 			bridge: false,
 			adapter: false,
 			isProduction: true
 		})
 	})
 
-	it('strip:true succeeds for a WS-only app (WS reaches no handler JIT)', async () => {
-		const built = await generateCompiledArtifacts(
+	it('strip:true accepts an exactly captured WS route', async () => {
+		const generated = await generateCompiledArtifacts(
 			'test/aot/fixtures/strip-ws.ts',
-			{ strip: true }
+			{ strip: true, wsRuntimeFrom: WS_RUNTIME_FROM }
 		)
-		expect(built.stub.jit).toBe(true)
-		expect(built.stub.ws).toBe(false)
+		expect(generated.stub.wsJit).toBe(true)
+	})
+
+	it('falls back in auto mode and fails loud in forced mode for an unsupported WS route', async () => {
+		const entry = 'test/aot/fixtures/strip-ws-unsupported.ts'
+		const automatic = await generateCompiledArtifacts(entry, {
+			strip: 'auto',
+			wsRuntimeFrom: WS_RUNTIME_FROM
+		})
+		expect(automatic.stub.wsJit).toBe(false)
+
+		await expect(
+			generateCompiledArtifacts(entry, {
+				strip: true,
+				wsRuntimeFrom: WS_RUNTIME_FROM
+			})
+		).rejects.toThrow('ambient lifecycle state')
 	})
 
 	it('a frozen app with stripped handler JIT serves requests from its manifest', async () => {
@@ -394,7 +413,8 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			entrypoints: ['test/aot/fixtures/strip-schema-bundle.ts'],
 			plugins: [
 				bunAot('test/aot/fixtures/strip-schema-bundle.ts', {
-					registerFrom: REGISTER_FROM
+					registerFrom: REGISTER_FROM,
+					wsRuntimeFrom: WS_RUNTIME_FROM
 				})
 			],
 			write: false,
@@ -416,7 +436,8 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			entrypoints: ['test/aot/fixtures/strip-ws-bundle.ts'],
 			plugins: [
 				bunAot('test/aot/fixtures/strip-ws-bundle.ts', {
-					registerFrom: REGISTER_FROM
+					registerFrom: REGISTER_FROM,
+					wsRuntimeFrom: WS_RUNTIME_FROM
 				})
 			],
 			write: false,

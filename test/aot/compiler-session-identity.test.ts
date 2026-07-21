@@ -9,6 +9,7 @@ import {
 } from '../../src/compile/aot-capture'
 import { captureArtifacts } from '../../src/plugin/aot/source'
 import { Validator } from '../../src/validator'
+import { buildFrozenWSRoute } from '../../src/ws/runtime'
 import { post } from '../utils'
 import { materialise, materialiseHandlers } from './_manifest'
 
@@ -109,6 +110,87 @@ describe('AOT manifest ownership and compiler sessions', () => {
 		).toBe('other')
 	})
 
+	it('hydrates matching WS images and falls back on mismatches', async () => {
+		const captured = await captureArtifacts(
+			new Elysia({ precompile: true }).ws('/ws', {
+				message: () => {}
+			})
+		)
+		const route = captured.wsRoutes.find(
+			(entry) => entry.path === '/ws' && 'source' in entry
+		)
+		if (!route || !('source' in route))
+			throw new Error('expected a captured WS image')
+		const factory = new Function(
+			'buildFrozenWSRoute',
+			`return ${route.source}`
+		)(buildFrozenWSRoute) as (...args: unknown[]) => unknown
+
+		let matchingHydrated = false
+		Compiled.register({
+			bf: 1,
+			fingerprint: captured.fingerprint,
+			wsRoutes: {
+				'/ws': {
+					a: route.roles,
+					f: (...args) => {
+						const result = factory(...args)
+						matchingHydrated = result !== undefined
+						return result
+					}
+				}
+			}
+		})
+		void new Elysia({ precompile: true }).ws('/ws', {
+			message: () => {}
+		}).fetch
+		expect(matchingHydrated).toBe(true)
+
+		let roleFactoryCalls = 0
+		Compiled.register({
+			bf: 1,
+			fingerprint: captured.fingerprint,
+			wsRoutes: {
+				'/ws': {
+					a: ['open'],
+					f: (...args) => {
+						roleFactoryCalls++
+						return factory(...args)
+					}
+				}
+			}
+		})
+		void new Elysia({ precompile: true }).ws('/ws', {
+			message: () => {}
+		}).fetch
+		expect(roleFactoryCalls).toBe(0)
+
+		let semanticFactoryCalls = 0
+		let hydrated = true
+		Compiled.register({
+			bf: 1,
+			fingerprint: captured.fingerprint,
+			wsRoutes: {
+				'/ws': {
+					a: route.roles,
+					f: (...args) => {
+						semanticFactoryCalls++
+						const result = factory(...args)
+						hydrated = result !== undefined
+						return result
+					}
+				}
+			}
+		})
+		void new Elysia({ precompile: true }).ws('/ws', {
+			async message(ws) {
+				ws.send('different semantics')
+			}
+		}).fetch
+		expect(semanticFactoryCalls).toBe(1)
+		expect(hydrated).toBe(false)
+	})
+
 	it('uses the manifest for captured routes and JIT for later routes', async () => {
 		const { handlers } = await register()
 		const original = handlers.POST!['/x']!.f
@@ -173,6 +255,7 @@ describe('AOT manifest ownership and compiler sessions', () => {
 			appAttached: false,
 			validators: 0,
 			handlers: 0,
+			wsRoutes: 0,
 			sucrose: 0
 		})
 

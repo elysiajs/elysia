@@ -6,6 +6,15 @@ import type {
 	Verdict
 } from './schema'
 
+export function absoluteVerdict(
+	current: Verdict,
+	violation: string | undefined,
+	candidateOnly = false
+): Verdict {
+	if (violation) return 'fail'
+	return candidateOnly ? 'pass' : current
+}
+
 export interface MetricSummary {
 	median: number
 	p95: number
@@ -34,6 +43,51 @@ export interface CompareInput {
 	candidateBlocks: number[]
 	seed: number
 	resamples?: number
+	pairedRelative?: boolean
+}
+
+export function absoluteBoundViolation(input: {
+	direction: MetricDirection
+	baseline: number
+	candidate: number
+	baselineBlocks?: number[]
+	candidateBlocks?: number[]
+	seed?: number
+	resamples?: number
+	candidateMaximum?: number
+	minimumAbsoluteImprovement?: number
+}) {
+	const seed = input.seed ?? 1
+	const resamples = input.resamples ?? 2_000
+	const candidateHigh = input.candidateBlocks?.length
+		? bootstrapMedianCI(input.candidateBlocks, seed, resamples).high
+		: input.candidate
+	if (
+		input.candidateMaximum !== undefined &&
+		candidateHigh > input.candidateMaximum
+	)
+		return `candidate upper confidence bound ${candidateHigh} exceeds maximum ${input.candidateMaximum}`
+
+	if (input.minimumAbsoluteImprovement !== undefined) {
+		const paired =
+			input.baselineBlocks?.length && input.candidateBlocks?.length
+				? bootstrapPairedMedianDifference(
+						input.baselineBlocks,
+						input.candidateBlocks,
+						seed,
+						resamples
+					)
+				: undefined
+		const improvement = paired
+			? input.direction === 'lower'
+				? -paired.high
+				: paired.low
+			: input.direction === 'lower'
+				? input.baseline - input.candidate
+				: input.candidate - input.baseline
+		if (improvement < input.minimumAbsoluteImprovement)
+			return `conservative absolute improvement ${improvement} is below ${input.minimumAbsoluteImprovement}`
+	}
 }
 
 export function median(values: number[]): number {
@@ -149,6 +203,50 @@ export function bootstrapRelativeMedianDelta(
 	}
 }
 
+export function bootstrapPairedRelativeMedianDelta(
+	baselineBlocks: number[],
+	candidateBlocks: number[],
+	seed: number,
+	resamples = 2_000
+): BootstrapCI {
+	if (baselineBlocks.length !== candidateBlocks.length)
+		throw new Error('paired bootstrap requires equal block counts')
+	if (baselineBlocks.length < 2)
+		throw new Error('paired bootstrap requires at least two blocks')
+	if (resamples < 2_000)
+		throw new Error('paired bootstrap requires at least 2000 resamples')
+	const deltas = baselineBlocks.map((baseline, index) => {
+		if (!Number.isFinite(baseline) || baseline <= 0)
+			throw new Error(
+				'paired relative bootstrap requires positive baselines'
+			)
+		const candidate = candidateBlocks[index]!
+		if (!Number.isFinite(candidate))
+			throw new Error(
+				'paired relative bootstrap requires finite candidates'
+			)
+		return (candidate - baseline) / baseline
+	})
+	const random = seededPrng(seed)
+	const samples = new Array<number>(resamples)
+	for (let sample = 0; sample < resamples; sample++) {
+		const selected = new Array<number>(deltas.length)
+		for (let index = 0; index < deltas.length; index++)
+			selected[index] = deltas[Math.floor(random() * deltas.length)]!
+		samples[sample] = median(selected)
+	}
+	const low = percentile(samples, 2.5)
+	const high = percentile(samples, 97.5)
+	return {
+		medianDelta: median(deltas),
+		low,
+		high,
+		width: high - low,
+		resamples,
+		seed
+	}
+}
+
 export function bootstrapPairedMedianDifference(
 	baselineBlocks: number[],
 	candidateBlocks: number[],
@@ -186,6 +284,26 @@ export function bootstrapPairedMedianDifference(
 		resamples,
 		seed
 	}
+}
+
+export function bootstrapMedianCI(
+	values: number[],
+	seed: number,
+	resamples = 2_000
+) {
+	if (values.length < 2)
+		throw new Error('median bootstrap requires at least two values')
+	if (resamples < 2_000)
+		throw new Error('median bootstrap requires at least 2000 resamples')
+	const random = seededPrng(seed)
+	const medians = new Array<number>(resamples)
+	for (let sample = 0; sample < resamples; sample++) {
+		const selected = new Array<number>(values.length)
+		for (let index = 0; index < values.length; index++)
+			selected[index] = values[Math.floor(random() * values.length)]!
+		medians[sample] = median(selected)
+	}
+	return { low: percentile(medians, 2.5), high: percentile(medians, 97.5) }
 }
 
 function normalizedRegression(
@@ -238,12 +356,11 @@ export function compareMetric(input: CompareInput): ComparisonResult {
 		throw new Error(
 			`timing/memory metric cannot use equal direction: ${input.metric}`
 		)
-	const ci = bootstrapRelativeMedianDelta(
-		input.baselineBlocks,
-		input.candidateBlocks,
-		input.seed,
-		input.resamples
-	)
+	const ci = (
+		input.pairedRelative
+			? bootstrapPairedRelativeMedianDelta
+			: bootstrapRelativeMedianDelta
+	)(input.baselineBlocks, input.candidateBlocks, input.seed, input.resamples)
 	const low = normalizedRegression(ci.low, input.direction)
 	const high = normalizedRegression(ci.high, input.direction)
 	const regressionLow = Math.min(low, high)
