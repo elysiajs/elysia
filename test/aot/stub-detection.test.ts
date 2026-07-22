@@ -41,7 +41,6 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			({ body }) => body
 		)
 		const r = await analyzeStubbability(app as any)
-		expect(r.stubbable).toBe(true)
 		expect(r.jit).toBe(true)
 		expect(r.reasons).toEqual([])
 	})
@@ -51,7 +50,6 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 		// generated factory so a frozen build can reconstruct without sucrose.
 		const app = new Elysia().get('/', () => 'ok')
 		const r = await analyzeStubbability(app as any)
-		expect(r.stubbable).toBe(true)
 		expect(r.jit).toBe(true)
 		expect(r.reasons).toEqual([])
 	})
@@ -66,7 +64,6 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			.get('/g', () => 'ok')
 		const r = await analyzeStubbability(app as any)
 		expect(r.jit).toBe(true)
-		expect(r.stubbable).toBe(true)
 	})
 
 	// WebSocket routes do not call the HTTP handler compiler.
@@ -74,7 +71,6 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 		const app = new Elysia().ws('/ws', { message: () => {} })
 		const r = await analyzeStubbability(app as any)
 		expect(r.jit).toBe(true)
-		expect(r.stubbable).toBe(true)
 		expect(r.reasons).toEqual([])
 	})
 
@@ -89,7 +85,6 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			.ws('/ws', { message: () => {} })
 		const r = await analyzeStubbability(app as any)
 		expect(r.jit).toBe(true)
-		expect(r.stubbable).toBe(true)
 	})
 
 	// Mounted subapps must be built separately or used with strip:false.
@@ -99,7 +94,6 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 
 		const r = await analyzeStubbability(app as any)
 		expect(r.jit).toBe(true)
-		expect(r.stubbable).toBe(true)
 	})
 
 	it('detection is side-effect free (registry restored afterwards)', async () => {
@@ -133,42 +127,6 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 		)
 
 		expect(Compiled.getHandler(id, 'POST', '/')).toBeUndefined()
-	})
-
-	it('replay is side-effect free for unmaterialized lazy validator groups', () => {
-		let built = 0
-		const { '~programId': id } = claimManifest({
-			lazyGroups: [
-				() => {
-					built++
-					return {
-						GET: {
-							'/lazy': {
-								body: { d: 1 }
-							}
-						}
-					} as any
-				}
-			],
-			lazyGroupOf: {
-				GET: {
-					'/lazy': 0
-				}
-			}
-		})
-
-		expect(Compiled.hasValidator('GET', '/lazy', 'body', id)).toBe(true)
-		expect(built).toBe(0)
-
-		const report = replayStubbability(new Elysia() as any, [])
-		expect(report.stubbable).toBe(true)
-
-		// Replay restores both validators and their lazy-group metadata.
-		// The route still looked unmaterialized, but no longer resolved.
-		expect(Compiled.hasValidator('GET', '/lazy', 'body', id)).toBe(true)
-		expect(built).toBe(0)
-		expect(Compiled.getValidator('GET', '/lazy', 'body', id)?.d).toBe(1)
-		expect(built).toBe(1)
 	})
 
 	it("plugin default strip:'auto' stubs only when every route has a frozen handler", async () => {
@@ -495,7 +453,6 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 /** Trace can be stubbed only when no reachable handler can emit trace events. */
 describe('trace stub gate — live-JIT relaxation (planFromReport)', () => {
 	const liveJit = {
-		stubbable: false,
 		jit: false,
 		reasons: ['sucrose']
 	} as any

@@ -55,9 +55,10 @@ import { Capture } from '../aot'
 import { JITProbe } from '../jit-probe'
 
 import { requestId } from '../../utils'
+import { bindRouteProgram } from './program'
+import { planRouteProgram, responseRouteProgram } from './program-plan'
 
 import type { Link } from './utils'
-import type { Context } from '../../context'
 import type { CompiledHandler, AnyLocalHook } from '../../types'
 
 let captureHeaderShorthand: boolean | undefined
@@ -260,75 +261,6 @@ export function emitBodyParse(
 const fromArgs = (type: string, isAsync: boolean) =>
 	`'${type}'${isAsync ? ',true' : ''}`
 
-const settleInline = (
-	handler: CompiledHandler,
-	settle?: typeof settleResponse
-) => {
-	if (!settle) return handler
-
-	return ((c: Context) => {
-		const value = handler(c)
-		return typeof (value as any)?.then === 'function'
-			? settle(c.request, value)
-			: value
-	}) as CompiledHandler
-}
-
-const createInlineHandler = (
-	map: (value: unknown, ...rest: unknown[]) => unknown,
-	h: (context: Context) => unknown
-) =>
-	((c: Context) => {
-		const r = h(c)
-		if (r instanceof Error) throw r
-		if (r instanceof Promise)
-			return r.then((v) => map(forwardError(v), c.request, true))
-
-		return map(r, c.request, true)
-	}) as CompiledHandler
-
-const createInlineHandlerWithSet = (
-	map: (value: unknown, ...rest: unknown[]) => unknown,
-	h: (context: Context) => unknown
-) =>
-	((c: Context) => {
-		const r = h(c)
-		if (r instanceof Error) throw r
-		if (r instanceof Promise)
-			return r.then((v) => map(forwardError(v), c.set, c.request, true))
-
-		return map(r, c.set, c.request, true)
-	}) as CompiledHandler
-
-const createInlineHandlerWithDefaultHeaders = (
-	map: (value: unknown, ...rest: unknown[]) => unknown,
-	h: (context: Context) => unknown
-) =>
-	((c: Context) => {
-		materializeSetHeaders(c.set)
-		const r = h(c)
-
-		if (r instanceof Error) throw r
-		if (r instanceof Promise)
-			return r.then((v) => map(forwardError(v), c.set, c.request, true))
-
-		return map(r, c.set, c.request, true)
-	}) as CompiledHandler
-
-const createInlineHandlerWithDefaultResponseState = (
-	map: (value: unknown, ...rest: unknown[]) => unknown,
-	h: (context: Context) => unknown,
-	set: NonNullable<RouteCompileState['defaultResponseState']>
-) =>
-	((c: Context) => {
-		const r = h(c)
-		if (r instanceof Error) throw r
-		if (r instanceof Promise)
-			return r.then((v) => map(forwardError(v), set, c.request, true))
-
-		return map(r, set, c.request, true)
-	}) as CompiledHandler
-
 export interface CompileHandlerJitOptions {
 	method: string
 	path: string
@@ -400,6 +332,26 @@ export function compileHandlerJit({
 	const hasBody = bodyPlan.enabled
 	const isHandleFunction = handlerKind === 'function'
 	const isPromiseHandler = handlerKind === 'promise'
+	const compatCancellation =
+		root['~config']?.experimental?.cancellation === 'compat'
+	const programPlan = planRouteProgram(
+		state,
+		handler,
+		compatCancellation,
+		root
+	)
+	const legacyRouteProgramLane =
+		'fallback' in programPlan && programPlan.fallback === 'legacy-lane'
+	if ('program' in programPlan) {
+		Capture.handler({ method, path, program: programPlan.program })
+
+		return bindRouteProgram(
+			programPlan.program,
+			handler as Function,
+			adapter.response,
+			defaultResponseState
+		)
+	}
 
 	const seenKeys = new Set<string>()
 	const paramValues: unknown[] = []
@@ -414,8 +366,6 @@ export function compileHandlerJit({
 	link(finalizeError, 'ff')
 	link(finalizeRouteError, 'fre')
 
-	const compatCancellation =
-		root['~config']?.experimental?.cancellation === 'compat'
 	const abortExpression = 'c.request.signal.aborted'
 	const abortCheck =
 		hasLifecycleHook && compatCancellation
@@ -710,7 +660,6 @@ export function compileHandlerJit({
 	if (responseMode === 'default-headers') link(defaultResponseState!, 'dhs')
 
 	const res = adapter.response
-	const responseMap = res.map
 
 	/* eslint-disable sonarjs/no-use-of-empty-return-value */
 	const map = hasSet
@@ -1128,7 +1077,7 @@ export function compileHandlerJit({
 
 	Capture.handler({ method, path, alias, code })
 	const inlineAlias = alias.startsWith('ff,fre,') ? alias.slice(7) : alias
-	const inlineSettle = inlineAlias.endsWith(',s') ? settleResponse : undefined
+	const inlineSettle = inlineAlias.endsWith(',s')
 	const inlineShape = inlineSettle ? inlineAlias.slice(0, -2) : inlineAlias
 	const isGeneratorHandler =
 		isHandleFunction &&
@@ -1139,46 +1088,26 @@ export function compileHandlerJit({
 		isHandleFunction &&
 		!isGeneratorHandler &&
 		!inlineUnsafe &&
-		(compatCancellation || !isAsync)
-	) {
-		if (
-			inlineShape === 'rc' ||
-			(!isAsync && !syncErrorHook && inlineShape === 'rc,fe')
-		)
-			return settleInline(
-				createInlineHandler(
-					res.compact ?? (res.map as any),
-					handler as any
-				),
-				inlineSettle
-			)
-		else if (
+		!legacyRouteProgramLane &&
+		(compatCancellation || !isAsync) &&
+		(inlineShape === 'rc' ||
+			(!isAsync && !syncErrorHook && inlineShape === 'rc,fe') ||
 			inlineShape === 'rm' ||
 			inlineShape === 'msh,rm' ||
 			(!isAsync &&
 				!syncErrorHook &&
-				(inlineShape === 'rm,fe' || inlineShape === 'msh,rm,fe'))
+				(inlineShape === 'rm,fe' || inlineShape === 'msh,rm,fe')))
+	)
+		return bindRouteProgram(
+			responseRouteProgram(
+				responseMode,
+				!!(effectMask & RouteEffect.SetHeaders)
+			),
+			handler as Function,
+			adapter.response,
+			defaultResponseState,
+			inlineSettle
 		)
-			return settleInline(
-				responseMode === 'default-headers'
-					? createInlineHandlerWithDefaultResponseState(
-							responseMap as any,
-							handler as any,
-							defaultResponseState!
-						)
-					: responseMode === 'set-with-default-headers' &&
-						  effectMask & RouteEffect.SetHeaders
-						? createInlineHandlerWithDefaultHeaders(
-								responseMap as any,
-								handler as any
-							)
-						: createInlineHandlerWithSet(
-								responseMap as any,
-								handler as any
-							),
-				inlineSettle
-			)
-	}
 
 	JITProbe.record('handler:new-function')
 

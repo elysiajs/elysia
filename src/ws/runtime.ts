@@ -102,6 +102,167 @@ export interface WSContextAccess {
 	readonly mutates: boolean
 }
 
+interface FunctionAccess {
+	keys: Set<string> | null
+	body: boolean
+	mutates: boolean
+}
+
+function firstParam(
+	source: string
+): { name?: string; bodyStart: number; parameterTail?: string } | undefined {
+	const open = source.indexOf('(')
+	if (open === -1) {
+		const arrow = /^\s*(?:async\s+)?([A-Za-z_$][\w$]*)\s*=>/.exec(source)
+		if (!arrow) return
+		return { name: arrow[1], bodyStart: arrow[0].length }
+	}
+
+	let depth = 0
+	let close = -1
+	for (let i = open; i < source.length; i++) {
+		if (source[i] === '(') depth++
+		else if (source[i] === ')' && --depth === 0) {
+			close = i
+			break
+		}
+	}
+	if (close === -1) return
+	const parameters = source.slice(open + 1, close)
+	const comma = parameters.indexOf(',')
+	const parameter = (
+		comma === -1 ? parameters : parameters.slice(0, comma)
+	).trim()
+	if (!parameter) return { bodyStart: close + 1 }
+	if (!/^[A-Za-z_$][\w$]*$/.test(parameter)) return
+	return {
+		name: parameter,
+		bodyStart: close + 1,
+		parameterTail: comma === -1 ? undefined : parameters.slice(comma + 1)
+	}
+}
+
+/** Conservative: any source ambiguity retains the complete upgrade context. */
+function analyzeFunction(fn: WSAnyFn | undefined): FunctionAccess {
+	const opaque = { keys: null, body: true, mutates: true } as const
+	if (!fn) return { keys: new Set(), body: false, mutates: false }
+	let source: string
+	try {
+		source = Function.prototype.toString.call(fn)
+	} catch {
+		return opaque
+	}
+	if (
+		source.includes('[native code]') ||
+		/\barguments\b|\beval\s*\(/.test(source)
+	)
+		return opaque
+
+	const parameter = firstParam(source)
+	if (!parameter) return opaque
+	if (!parameter.name) return { keys: new Set(), body: false, mutates: false }
+
+	const body = source.slice(parameter.bodyStart)
+	const name = parameter.name.replace(/[$]/g, '\\$&')
+	const occurrence = new RegExp(`(^|[^\\w$])${name}(?![\\w$])`, 'g')
+	if (parameter.parameterTail && occurrence.test(parameter.parameterTail))
+		return opaque
+	occurrence.lastIndex = 0
+	const keys = new Set<string>()
+	let mutates = false
+	let match: RegExpExecArray | null
+
+	while ((match = occurrence.exec(body))) {
+		const index = match.index + match[1].length
+		if (body[index - 1] === '.') continue
+		const tail = body.slice(match.index + match[0].length)
+		const member = /^\s*(?:\?\.)?\.\s*([A-Za-z_$][\w$]*)/.exec(tail)
+		const computed = /^\s*(?:\?\.)?\[\s*(['"])([^'"]+)\1\s*\]/.exec(tail)
+		const property = member?.[1] ?? computed?.[2]
+		if (!property) return opaque
+		keys.add(property)
+
+		const after = tail.slice((member?.[0] ?? computed![0]).length)
+		if (/^\s*(?:\+\+|--|=(?!=)|\+=|-=|\*=|\/=|&&=|\|\|=|\?\?=)/.test(after))
+			mutates = true
+		if (/\bdelete\s*$/.test(body.slice(Math.max(0, index - 8), index)))
+			mutates = true
+	}
+
+	return { keys, body: keys.has('body'), mutates }
+}
+
+function analyzeAccess(
+	functions: readonly (WSAnyFn | undefined)[],
+	root: AnyElysia
+): WSContextAccess {
+	const keys = new Set<string>()
+	let body = false
+	let mutates = false
+	for (const fn of functions) {
+		const access = analyzeFunction(fn)
+		if (access.keys === null)
+			return Object.freeze({ keys: null, body: true, mutates: true })
+		body ||= access.body
+		mutates ||= access.mutates
+		for (const key of access.keys) keys.add(key)
+	}
+	const decorators = frozenRootOf(root)['~ext']?.decorator as
+		| Record<string, unknown>
+		| undefined
+	for (const key of keys)
+		if (typeof decorators?.[key] === 'function')
+			return Object.freeze({ keys: null, body: true, mutates: true })
+	return Object.freeze({ keys: Object.freeze([...keys]), body, mutates })
+}
+
+function handlerCertifiedSync(fn: WSAnyFn | undefined): boolean {
+	if (!fn) return false
+	let source: string
+	try {
+		source = Function.prototype.toString.call(fn)
+	} catch {
+		return false
+	}
+	if (
+		source.includes('[native code]') ||
+		/^\s*async\b/.test(source) ||
+		/^\s*(?:async\s+)?function\s*\*/.test(source) ||
+		/\b(?:await|yield|Promise)\b|\.then\s*\(/.test(source)
+	)
+		return false
+
+	const arrow = source.indexOf('=>')
+	const bodyStart = source.indexOf('{', arrow === -1 ? 0 : arrow)
+	if (bodyStart !== -1) {
+		const body = source.slice(bodyStart + 1, source.lastIndexOf('}'))
+		if (!/\breturn\b/.test(body)) return true
+		return !/\breturn\s+(?!undefined\b|void\b|(?:true|false|null)\b|[-+]?\d)/.test(
+			body
+		)
+	}
+
+	const expression = source.slice(arrow + 2).trim()
+	return /^(?:[-+]?\d+(?:\.\d+)?|true|false|null|undefined|[A-Za-z_$][\w$]*\.(?:send|publish|ping|pong|subscribe|unsubscribe|isSubscribed)\s*\()/.test(
+		expression
+	)
+}
+
+function handlerReturnsVoid(fn: WSAnyFn | undefined): boolean {
+	if (!fn) return false
+	try {
+		const source = Function.prototype.toString.call(fn)
+		const arrow = source.indexOf('=>')
+		const bodyStart = source.indexOf('{', arrow === -1 ? 0 : arrow)
+		return (
+			bodyStart !== -1 &&
+			!/\breturn\b/.test(source.slice(bodyStart + 1, source.lastIndexOf('}')))
+		)
+	} catch {
+		return false
+	}
+}
+
 export interface WSRoutePlan {
 	readonly validators: RouteValidator<any>
 	readonly responseValidator:
@@ -122,10 +283,7 @@ export interface WSRoutePlan {
 	readonly mapResponses: readonly WSAnyFn[]
 	readonly afterResponses: readonly WSAnyFn[]
 	readonly errorHandlers: readonly WSAnyFn[]
-	readonly parseMessage: (
-		context: Context,
-		message: string | Buffer
-	) => unknown
+	readonly parseMessage: (context: Context, message: string | Buffer) => unknown
 	readonly messageHandler: WSAnyFn | undefined
 	readonly openHandler: WSAnyFn | undefined
 	readonly drainHandler: WSAnyFn | undefined
@@ -142,6 +300,73 @@ export interface WSRoutePlan {
 	readonly voidMessageHandler: boolean
 	/** The message pipeline may observe or mutate the per-frame body view. */
 	readonly needsMessageView: boolean
+}
+
+type WSRoutePlanInput = Omit<
+	WSRoutePlan,
+	| 'upgradeDeriveModes'
+	| 'parseMessage'
+	| 'access'
+	| 'certifiedSyncMessage'
+	| 'voidMessageHandler'
+	| 'needsMessageView'
+>
+
+export function createWSRoutePlan(
+	plan: WSRoutePlanInput,
+	parseHooks: readonly WSAnyFn[],
+	deriveEntries: readonly DeriveEntry[],
+	root: AnyElysia
+): WSRoutePlan {
+	const messageLifecycle = [
+		...plan.transforms,
+		...plan.messageBeforeHandles,
+		...plan.afterHandles,
+		...plan.mapResponses,
+		...plan.afterResponses,
+		...plan.errorHandlers,
+		plan.messageHandler
+	]
+	const access = analyzeAccess(
+		[
+			...messageLifecycle,
+			plan.openHandler,
+			plan.drainHandler,
+			plan.closeHandler,
+			plan.pingHandler,
+			plan.pongHandler
+		],
+		root
+	)
+	const messageAccess = analyzeAccess(messageLifecycle, root)
+	const hasMessageHooks =
+		plan.transforms.length !== 0 ||
+		plan.messageBeforeHandles.length !== 0 ||
+		plan.afterHandles.length !== 0 ||
+		plan.mapResponses.length !== 0 ||
+		plan.afterResponses.length !== 0 ||
+		plan.errorHandlers.length !== 0
+	const bodyValidator = plan.validators.body as any
+
+	return Object.freeze({
+		...plan,
+		upgradeDeriveModes: deriveModes(
+			plan.allBeforeHandles as unknown as Function[],
+			deriveEntries as DeriveEntry[]
+		),
+		parseMessage: createMessageParser(parseHooks as any) as any,
+		access,
+		certifiedSyncMessage:
+			parseHooks.length === 0 &&
+			!hasMessageHooks &&
+			(!bodyValidator ||
+				(bodyValidator.isAsync === false &&
+					bodyValidator.mayReturnPromise !== true)) &&
+			handlerCertifiedSync(plan.messageHandler),
+		voidMessageHandler: handlerReturnsVoid(plan.messageHandler),
+		needsMessageView:
+			messageAccess.body || messageAccess.mutates || hasMessageHooks
+	})
 }
 
 export interface WSRouteRuntime {
@@ -219,154 +444,6 @@ export interface FrozenWSRouteDescriptor {
 	readonly [key: string]: unknown
 }
 
-function analyzeFrozenFunction(fn: WSAnyFn | undefined) {
-	const opaque = { keys: null, body: true, mutates: true } as const
-	if (!fn) return { keys: new Set<string>(), body: false, mutates: false }
-	let source: string
-	try {
-		source = Function.prototype.toString.call(fn)
-	} catch {
-		return opaque
-	}
-	if (
-		source.includes('[native code]') ||
-		/\barguments\b|\beval\s*\(/.test(source)
-	)
-		return opaque
-
-	const open = source.indexOf('(')
-	let name: string | undefined
-	let bodyStart: number
-	let parameterTail: string | undefined
-	if (open === -1) {
-		const arrow = /^\s*(?:async\s+)?([A-Za-z_$][\w$]*)\s*=>/.exec(source)
-		if (!arrow) return opaque
-		name = arrow[1]
-		bodyStart = arrow[0].length
-	} else {
-		let depth = 0
-		let close = -1
-		for (let i = open; i < source.length; i++) {
-			if (source[i] === '(') depth++
-			else if (source[i] === ')' && --depth === 0) {
-				close = i
-				break
-			}
-		}
-		if (close === -1) return opaque
-		const parameters = source.slice(open + 1, close)
-		const comma = parameters.indexOf(',')
-		const parameter = (
-			comma === -1 ? parameters : parameters.slice(0, comma)
-		).trim()
-		if (!parameter)
-			return { keys: new Set<string>(), body: false, mutates: false }
-		if (!/^[A-Za-z_$][\w$]*$/.test(parameter)) return opaque
-		name = parameter
-		bodyStart = close + 1
-		parameterTail = comma === -1 ? undefined : parameters.slice(comma + 1)
-	}
-
-	const body = source.slice(bodyStart)
-	const escaped = name.replace(/[$]/g, '\\$&')
-	const occurrence = new RegExp(`(^|[^\\w$])${escaped}(?![\\w$])`, 'g')
-	if (parameterTail && occurrence.test(parameterTail)) return opaque
-	occurrence.lastIndex = 0
-	const keys = new Set<string>()
-	let mutates = false
-	let match: RegExpExecArray | null
-	while ((match = occurrence.exec(body))) {
-		const index = match.index + match[1].length
-		if (body[index - 1] === '.') continue
-		const tail = body.slice(match.index + match[0].length)
-		const member = /^\s*(?:\?\.)?\.\s*([A-Za-z_$][\w$]*)/.exec(tail)
-		const computed = /^\s*(?:\?\.)?\[\s*(['"])([^'"]+)\1\s*\]/.exec(tail)
-		const property = member?.[1] ?? computed?.[2]
-		if (!property) return opaque
-		keys.add(property)
-		const after = tail.slice((member?.[0] ?? computed![0]).length)
-		if (/^\s*(?:\+\+|--|=(?!=)|\+=|-=|\*=|\/=|&&=|\|\|=|\?\?=)/.test(after))
-			mutates = true
-		if (/\bdelete\s*$/.test(body.slice(Math.max(0, index - 8), index)))
-			mutates = true
-	}
-	return { keys, body: keys.has('body'), mutates }
-}
-
-function analyzeFrozenAccess(
-	functions: readonly (WSAnyFn | undefined)[],
-	root: AnyElysia
-): WSContextAccess {
-	const keys = new Set<string>()
-	let body = false
-	let mutates = false
-	for (const fn of functions) {
-		const access = analyzeFrozenFunction(fn)
-		if (access.keys === null)
-			return { keys: null, body: true, mutates: true }
-		body ||= access.body
-		mutates ||= access.mutates
-		for (const key of access.keys) keys.add(key)
-	}
-	const decorators = frozenRootOf(root)['~ext']?.decorator as
-		| Record<string, unknown>
-		| undefined
-	for (const key of keys)
-		if (typeof decorators?.[key] === 'function')
-			return { keys: null, body: true, mutates: true }
-	return { keys: [...keys], body, mutates }
-}
-
-function frozenHandlerCertifiedSync(fn: WSAnyFn | undefined) {
-	if (!fn) return false
-	let source: string
-	try {
-		source = Function.prototype.toString.call(fn)
-	} catch {
-		return false
-	}
-	if (
-		source.includes('[native code]') ||
-		/^\s*async\b/.test(source) ||
-		/^\s*(?:async\s+)?function\s*\*/.test(source) ||
-		/\b(?:await|yield|Promise)\b|\.then\s*\(/.test(source)
-	)
-		return false
-	const arrow = source.indexOf('=>')
-	const bodyStart = source.indexOf('{', arrow === -1 ? 0 : arrow)
-	if (bodyStart !== -1) {
-		const body = source.slice(bodyStart + 1, source.lastIndexOf('}'))
-
-		if (!/\breturn\b/.test(body)) return true
-
-		return !/\breturn\s+(?!undefined\b|void\b|(?:true|false|null)\b|[-+]?\d)/.test(
-			body
-		)
-	}
-	const expression = source.slice(arrow + 2).trim()
-
-	return /^(?:[-+]?\d+(?:\.\d+)?|true|false|null|undefined|[A-Za-z_$][\w$]*\.(?:send|publish|ping|pong|subscribe|unsubscribe|isSubscribed)\s*\()/.test(
-		expression
-	)
-}
-
-function frozenHandlerReturnsVoid(fn: WSAnyFn | undefined) {
-	if (!fn) return false
-	try {
-		const source = Function.prototype.toString.call(fn)
-		const arrow = source.indexOf('=>')
-		const bodyStart = source.indexOf('{', arrow === -1 ? 0 : arrow)
-		return (
-			bodyStart !== -1 &&
-			!/\breturn\b/.test(
-				source.slice(bodyStart + 1, source.lastIndexOf('}'))
-			)
-		)
-	} catch {
-		return false
-	}
-}
-
 function sameAccessKeys(
 	left: readonly string[] | null,
 	right: readonly string[] | null
@@ -425,9 +502,7 @@ export function buildFrozenWSRoute(
 	const asHooks = (value: unknown): readonly WSAnyFn[] =>
 		value == null
 			? Object.freeze([])
-			: Object.freeze(
-					(Array.isArray(value) ? value : [value]) as WSAnyFn[]
-				)
+			: Object.freeze((Array.isArray(value) ? value : [value]) as WSAnyFn[])
 	const parseHooks = asHooks(hook.parse)
 	const transforms = asHooks(hook.transform)
 	const allBeforeHandles = asHooks(hook.beforeHandle)
@@ -453,8 +528,7 @@ export function buildFrozenWSRoute(
 	const queryPlan = frozenRoot['~config']?.experimental?.validationPlan
 		? validators.queryPlan
 		: undefined
-	const fusedQuery =
-		!!queryPlan?.fused && !!(validators.query as any)?.hasCodec
+	const fusedQuery = !!queryPlan?.fused && !!(validators.query as any)?.hasCodec
 	const queryChannels = queryPlan
 		? undefined
 		: getQueryParseChannels((validators.query as any)?.schema)
@@ -464,108 +538,46 @@ export function buildFrozenWSRoute(
 		returnsVoid?: boolean
 	}
 	const messageHandler = hook.message as WSAnyFn | undefined
-	const lifecycle = [
-		...transforms,
-		...messageBeforeHandles,
-		...afterHandles,
-		...mapResponses,
-		...afterResponses,
-		...errorHandlers,
-		messageHandler,
-		hook.open as WSAnyFn | undefined,
-		hook.drain as WSAnyFn | undefined,
-		hook.close as WSAnyFn | undefined,
-		hook.ping as WSAnyFn | undefined,
-		hook.pong as WSAnyFn | undefined
-	]
-	const access = analyzeFrozenAccess(lifecycle, root)
-	const messageAccess = analyzeFrozenAccess(
-		[
-			...transforms,
-			...messageBeforeHandles,
-			...afterHandles,
-			...mapResponses,
-			...afterResponses,
-			...errorHandlers,
-			messageHandler
-		],
+	const plan = createWSRoutePlan(
+		{
+			validators,
+			responseValidator,
+			defaultResponseValidator,
+			queryPlan,
+			fusedQuery,
+			queryArray: queryChannels?.array,
+			queryObject: queryChannels?.object,
+			transforms,
+			allBeforeHandles,
+			messageBeforeHandles,
+			afterHandles,
+			mapResponses,
+			afterResponses,
+			errorHandlers,
+			messageHandler,
+			openHandler: hook.open as WSAnyFn | undefined,
+			drainHandler: hook.drain as WSAnyFn | undefined,
+			closeHandler: hook.close as WSAnyFn | undefined,
+			pingHandler: hook.ping as WSAnyFn | undefined,
+			pongHandler: hook.pong as WSAnyFn | undefined,
+			upgradeHook: hook.upgrade,
+			allowUnsafeValidationDetails:
+				frozenRoot['~config']?.allowUnsafeValidationDetails === true,
+			compatCancellation:
+				frozenRoot['~config']?.experimental?.cancellation === 'compat',
+			serverBinding
+		},
+		parseHooks,
+		deriveEntries,
 		root
 	)
-	const bodyValidator = validators.body as any
-	const certifiedSyncMessage =
-		parseHooks.length === 0 &&
-		transforms.length === 0 &&
-		messageBeforeHandles.length === 0 &&
-		afterHandles.length === 0 &&
-		mapResponses.length === 0 &&
-		afterResponses.length === 0 &&
-		errorHandlers.length === 0 &&
-		(!bodyValidator ||
-			(bodyValidator.isAsync === false &&
-				bodyValidator.mayReturnPromise !== true)) &&
-		frozenHandlerCertifiedSync(messageHandler)
-
-	const voidMessageHandler = frozenHandlerReturnsVoid(messageHandler)
-	const needsMessageView =
-		messageAccess.body ||
-		messageAccess.mutates ||
-		transforms.length !== 0 ||
-		messageBeforeHandles.length !== 0 ||
-		afterHandles.length !== 0 ||
-		mapResponses.length !== 0 ||
-		afterResponses.length !== 0 ||
-		errorHandlers.length !== 0
 	if (
-		!sameAccessKeys(access.keys, descriptor.contextKeys) ||
-		certifiedSyncMessage !== (messageDescriptor.certifiedSync === true) ||
-		voidMessageHandler !== (messageDescriptor.returnsVoid === true) ||
-		needsMessageView !== (messageDescriptor.needsView === true)
+		!sameAccessKeys(plan.access.keys, descriptor.contextKeys) ||
+		plan.certifiedSyncMessage !== (messageDescriptor.certifiedSync === true) ||
+		plan.voidMessageHandler !== (messageDescriptor.returnsVoid === true) ||
+		plan.needsMessageView !== (messageDescriptor.needsView === true)
 	)
 		return
-
-	const frozenAccess = Object.freeze({
-		keys: access.keys === null ? null : Object.freeze(access.keys),
-		body: access.body,
-		mutates: access.mutates
-	})
-
-	const plan: WSRoutePlan = Object.freeze({
-		validators,
-		responseValidator,
-		defaultResponseValidator,
-		queryPlan,
-		fusedQuery,
-		queryArray: queryChannels?.array,
-		queryObject: queryChannels?.object,
-		transforms,
-		allBeforeHandles,
-		upgradeDeriveModes: deriveModes(
-			allBeforeHandles as unknown as Function[],
-			deriveEntries
-		),
-		messageBeforeHandles,
-		afterHandles,
-		mapResponses,
-		afterResponses,
-		errorHandlers,
-		parseMessage: createMessageParser(parseHooks as any) as any,
-		messageHandler,
-		openHandler: hook.open as WSAnyFn | undefined,
-		drainHandler: hook.drain as WSAnyFn | undefined,
-		closeHandler: hook.close as WSAnyFn | undefined,
-		pingHandler: hook.ping as WSAnyFn | undefined,
-		pongHandler: hook.pong as WSAnyFn | undefined,
-		upgradeHook: hook.upgrade,
-		allowUnsafeValidationDetails:
-			frozenRoot['~config']?.allowUnsafeValidationDetails === true,
-		compatCancellation:
-			frozenRoot['~config']?.experimental?.cancellation === 'compat',
-		serverBinding,
-		access: frozenAccess,
-		certifiedSyncMessage,
-		voidMessageHandler,
-		needsMessageView
-	})
 
 	const runtime = createWSRouteRuntime(plan, createWSContextPrototype(root))
 	const options: Partial<WebSocketHandler<any>> = nullObject()
@@ -599,11 +611,7 @@ function retainContext(
 	} else {
 		for (let i = 0; i < access.keys.length; i++) {
 			const key = access.keys[i]
-			if (
-				key === 'ws' ||
-				key === 'body' ||
-				!Object.hasOwn(context as any, key)
-			)
+			if (key === 'ws' || key === 'body' || !Object.hasOwn(context as any, key))
 				continue
 			retained[key] = (context as any)[key]
 			count++
@@ -618,11 +626,7 @@ function getElysia(ws: ServerWebSocket<WSConnectionData>): ElysiaWS<any> {
 	if (!view) {
 		const runtime = ws.data.runtime
 		if (!runtime) return new ElysiaWS(ws as any)
-		view = new ElysiaWS(
-			ws as any,
-			ws.data.retained,
-			runtime.contextPrototype
-		)
+		view = new ElysiaWS(ws as any, ws.data.retained, runtime.contextPrototype)
 		ws.data.view = view
 		ws.data.retained = undefined
 	}
@@ -688,9 +692,6 @@ function detachGeneratorPump(pump: GeneratorPump, data: WSConnectionData) {
 	data.generatorPumps?.delete(pump)
 
 	if (data.generatorPumps?.size === 0) data.generatorPumps = undefined
-	data.activeGenerators?.delete(iterator!)
-
-	if (data.activeGenerators?.size === 0) data.activeGenerators = undefined
 
 	return iterator
 }
@@ -730,7 +731,7 @@ async function runGeneratorPump(
 		if (typeof (iterator as any)?.return === 'function')
 			try {
 				await (iterator as any).return()
-			} catch { }
+			} catch {}
 
 		pump.reject(error)
 		return
@@ -763,7 +764,6 @@ function handleGeneratorResponse(
 		resolve,
 		reject
 	}
-	;(data.activeGenerators ??= new Set()).add(iterator)
 	;(data.generatorPumps ??= new Set()).add(pump)
 	void runGeneratorPump(pump, data, mapResponses)
 	return result
@@ -1092,9 +1092,7 @@ function invokeLifecycle(
 		const result = withBody ? fn(ws, body) : fn(ws)
 		if (isThenable(result))
 			return Promise.resolve(result)
-				.then((resolved) =>
-					handleWSResponse(ws, resolved, plan.mapResponses)
-				)
+				.then((resolved) => handleWSResponse(ws, resolved, plan.mapResponses))
 				.catch((error) => handleError(ws, plan, error))
 		return handleWSResponse(ws, result, plan.mapResponses).catch((error) =>
 			handleError(ws, plan, error)
@@ -1118,9 +1116,7 @@ function invokeClose(
 		const result = plan.closeHandler(ws, code, reason)
 		if (isThenable(result))
 			return Promise.resolve(result)
-				.then((resolved) =>
-					handleWSResponse(ws, resolved, plan.mapResponses)
-				)
+				.then((resolved) => handleWSResponse(ws, resolved, plan.mapResponses))
 				.catch((error) => handleError(ws, plan, error))
 		return handleWSResponse(ws, result, plan.mapResponses).catch((error) =>
 			handleError(ws, plan, error)
@@ -1155,8 +1151,6 @@ function cleanupConnection(data: WSConnectionData) {
 	if (waiters) for (const resolve of waiters) resolve()
 	const pumps = data.generatorPumps
 	data.generatorPumps = undefined
-	const generators = data.activeGenerators
-	data.activeGenerators = undefined
 	if (pumps)
 		for (const pump of pumps) {
 			if (pump.settled) continue
@@ -1167,19 +1161,10 @@ function cleanupConnection(data: WSConnectionData) {
 			if (typeof (generator as any)?.return === 'function')
 				try {
 					const result = (generator as any).return()
-					if (isThenable(result))
-						Promise.resolve(result).catch(() => {})
+					if (isThenable(result)) Promise.resolve(result).catch(() => {})
 				} catch {}
 			pump.resolve()
 		}
-	else if (generators)
-		for (const generator of generators)
-			if (typeof (generator as any).return === 'function')
-				try {
-					const result = (generator as any).return()
-					if (isThenable(result))
-						Promise.resolve(result).catch(() => {})
-				} catch {}
 	const view = data.view
 	if (view)
 		for (const key of Object.keys(view as any))
@@ -1230,10 +1215,7 @@ export function createWSUpgradeHandler(runtime: WSRouteRuntime) {
 			if (plan.validators.query) {
 				const url = request.url
 				const query = plan.fusedQuery
-					? plan.queryPlan.fromURL(
-							url,
-							(context as any).qi ?? url.indexOf('?')
-						)
+					? plan.queryPlan.fromURL(url, (context as any).qi ?? url.indexOf('?'))
 					: plan.queryPlan
 						? plan.queryPlan.parse(
 								url,
@@ -1254,11 +1236,7 @@ export function createWSUpgradeHandler(runtime: WSRouteRuntime) {
 						plan.validators.query
 					)
 				} else {
-					let r = validateUpgradeChannel(
-						plan.validators.query,
-						query,
-						'query'
-					)
+					let r = validateUpgradeChannel(plan.validators.query, query, 'query')
 					if (isThenable(r)) r = await r
 					;(context as any).query = r
 				}
@@ -1286,17 +1264,12 @@ export function createWSUpgradeHandler(runtime: WSRouteRuntime) {
 				const deriveMode = plan.upgradeDeriveModes?.[i]
 				if (deriveMode !== undefined && !(r instanceof ElysiaStatus)) {
 					if (r && typeof r === 'object') {
-						if (deriveMode)
-							context = replaceDeriveContext(context, r)
+						if (deriveMode) context = replaceDeriveContext(context, r)
 						else Object.assign(context as any, r)
 					}
 				} else if (r !== undefined) {
 					if (r instanceof Response) return r
-					return mapResponse(
-						r,
-						(context as any).set,
-						(context as any).request
-					)
+					return mapResponse(r, (context as any).set, (context as any).request)
 				}
 			}
 
@@ -1320,7 +1293,8 @@ export function createWSUpgradeHandler(runtime: WSRouteRuntime) {
 					status: 500,
 					type: 'internal-server-error',
 					title: 'Internal Server Error',
-					detail: 'WebSocket upgrade requires a running server. Call .listen() first.'
+					detail:
+						'WebSocket upgrade requires a running server. Call .listen() first.'
 				})
 
 			const upgraded = server.upgrade(request, {
@@ -1368,28 +1342,20 @@ export function buildGlobalWSHandler(): WebSocketHandler<WSConnectionData> {
 				if (!runtime) return
 				const result = runtime.kernel.message(ws, message, runtime)
 				if (isThenable(result))
-					Promise.resolve(result).catch((error) =>
-						sendErrMsg(ws, error)
-					)
+					Promise.resolve(result).catch((error) => sendErrMsg(ws, error))
 			} catch (error) {
 				const data = ws.data
 				const runtime = data.runtime
 				if (!runtime) return sendErrMsg(ws, error)
-				handleError(
-					data.view ?? getElysia(ws),
-					runtime.plan,
-					error
-				).catch((nestedError) => sendErrMsg(ws, nestedError))
+				handleError(data.view ?? getElysia(ws), runtime.plan, error).catch(
+					(nestedError) => sendErrMsg(ws, nestedError)
+				)
 			}
 		},
 		open(ws) {
 			const runtime = ws.data.runtime
 			if (runtime?.plan.openHandler)
-				invokeLifecycle(
-					getElysia(ws),
-					runtime.plan,
-					runtime.plan.openHandler
-				)
+				invokeLifecycle(getElysia(ws), runtime.plan, runtime.plan.openHandler)
 		},
 		drain(ws) {
 			const runtime = ws.data.runtime
@@ -1422,9 +1388,7 @@ export function buildGlobalWSHandler(): WebSocketHandler<WSConnectionData> {
 			)
 
 			if (isThenable(result))
-				Promise.resolve(result).finally(() =>
-					cleanupConnection(ws.data)
-				)
+				Promise.resolve(result).finally(() => cleanupConnection(ws.data))
 			else cleanupConnection(ws.data)
 		},
 		ping(ws, data) {

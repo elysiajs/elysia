@@ -1,9 +1,9 @@
 import { env } from '../universal'
-import { nullObject } from '../utils'
 import packageJson from '../../package.json'
 import type { CoercePlan } from '../type/coerce'
+import type { RouteProgram } from './handler/program'
 
-export const AOT_MANIFEST_FORMAT = 4
+export const AOT_MANIFEST_FORMAT = 5
 export const AOT_ABI = `${packageJson.version}:${AOT_MANIFEST_FORMAT}`
 
 export interface AotFingerprint {
@@ -177,12 +177,17 @@ export interface ValidatorManifest {
 // compiled handler
 //
 // @see `src/compile/handler/index.ts`
-export interface FrozenHandler {
-	// positional parameter eg. pf,pj
-	a: string[]
-	// Handler factory: `(h, ...params) => composedHandler`
-	f: (...deps: unknown[]) => unknown
-}
+export type FrozenHandler =
+	| {
+			/** Canonical route program, bound by the shared runtime sink. */
+			p: RouteProgram
+	  }
+	| {
+			// positional parameter eg. pf,pj
+			a: string[]
+			// Handler factory: `(h, ...params) => composedHandler`
+			f: (...deps: unknown[]) => unknown
+	  }
 
 export interface HandlerManifest {
 	[method: string]: {
@@ -204,7 +209,7 @@ export interface WSRouteManifest {
 export interface CompiledSnapshot {
 	registered: CompiledProgramRegistration | undefined
 	claimed: boolean
-	programs: WeakMap<ProgramId, CompiledProgram>
+	programs: WeakMap<ProgramId, CompiledProgramRegistration>
 }
 
 export interface CompiledProgramRegistration {
@@ -213,13 +218,7 @@ export interface CompiledProgramRegistration {
 	validators?: ValidatorManifest
 	handlers?: HandlerManifest
 	wsRoutes?: WSRouteManifest
-	lazyGroups?: Array<() => ValidatorManifest>
-	lazyGroupOf?: Record<string, Record<string, number>>
 	planRebuilder?: (original: unknown, plan: CoercePlan) => any
-}
-
-interface CompiledProgram extends CompiledProgramRegistration {
-	builtGroups: Set<number>
 }
 
 /**
@@ -276,7 +275,7 @@ export function reconstruct(): ReconstructImpl {
 // build registry
 let registered: CompiledProgramRegistration | undefined
 let claimed = false
-let programs = new WeakMap<ProgramId, CompiledProgram>()
+let programs = new WeakMap<ProgramId, CompiledProgramRegistration>()
 
 const programFor = (id?: ProgramId) => (id ? programs.get(id) : undefined)
 
@@ -297,10 +296,7 @@ export abstract class Compiled {
 
 		claimed = true
 		registered = undefined
-		programs.set(id, {
-			...manifest,
-			builtGroups: new Set()
-		})
+		programs.set(id, { ...manifest })
 		return true
 	}
 
@@ -336,27 +332,7 @@ export abstract class Compiled {
 		const program = programFor(id)
 		if (!program) return undefined
 
-		let programValidators = program.validators
-		let e = programValidators?.[method]?.[path]?.[slot]
-		if (e !== undefined || !program.lazyGroupOf) return e
-
-		const g = program.lazyGroupOf[method]?.[path]
-		if (g !== undefined && !program.builtGroups.has(g)) {
-			program.builtGroups.add(g)
-			const slice = program.lazyGroups![g]!()
-
-			programValidators ??= program.validators =
-				nullObject() as ValidatorManifest
-
-			for (const m in slice) {
-				const into = (programValidators[m] ??= nullObject() as any)
-				Object.assign(into, slice[m])
-			}
-
-			e = programValidators?.[method]?.[path]?.[slot]
-		}
-
-		return e
+		return program.validators?.[method]?.[path]?.[slot]
 	}
 
 	static hasValidator(
@@ -368,10 +344,7 @@ export abstract class Compiled {
 		const program = programFor(id)
 		if (!program) return false
 
-		return (
-			program.validators?.[method]?.[path]?.[slot] !== undefined ||
-			program.lazyGroupOf?.[method]?.[path] !== undefined
-		)
+		return program.validators?.[method]?.[path]?.[slot] !== undefined
 	}
 
 	static getPlanRebuilder(id?: ProgramId) {
@@ -514,12 +487,18 @@ export const aotActivationError = new Error(
 	'Elysia AOT capture module is not activated.'
 )
 
-export interface CapturedHandler {
-	method: string
-	path: string
-	alias: string
-	code: string
-}
+export type CapturedHandler =
+	| {
+			method: string
+			path: string
+			program: RouteProgram
+	  }
+	| {
+			method: string
+			path: string
+			alias: string
+			code: string
+	  }
 
 export type CapturedWSRoute =
 	| {

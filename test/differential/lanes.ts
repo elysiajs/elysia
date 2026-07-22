@@ -14,6 +14,7 @@ import { captureArtifacts } from '../../src/plugin/aot/source'
 import { Reconstruct } from '../../src/compile/aot-reconstruct'
 import { installReconstructImpl } from '../../src/compile/aot-emit'
 import { buildCoercedFromPlan } from '../../src/type/coerce-plan'
+import { useLegacyRouteProgramLane } from '../../src/compile/handler/program-plan'
 
 export type Define = (app: AnyElysia) => AnyElysia
 
@@ -35,13 +36,15 @@ export interface LaneFactory {
 
 const handleLane = (
 	id: string,
-	config: ConstructorParameters<typeof Elysia>[0]
+	config: ConstructorParameters<typeof Elysia>[0],
+	beforeCompile?: (app: AnyElysia) => void
 ) =>
 	({
 		id,
 		transport: 'handle',
 		async make(define, observe?) {
 			const app = define(new Elysia(config))
+			beforeCompile?.(app)
 			// Compare both configurations after compilation.
 			await (app as any).modules
 			;(app as any).compile()
@@ -54,6 +57,11 @@ const handleLane = (
 	}) satisfies LaneFactory
 
 export const jitHandle = handleLane('jit-handle', {})
+export const legacyJitHandle = handleLane(
+	'legacy-jit-handle',
+	{},
+	useLegacyRouteProgramLane
+)
 export const precompileHandle = handleLane('precompile-handle', {
 	precompile: true
 })
@@ -216,6 +224,11 @@ export interface LanePair {
 }
 
 export const lanePairs: LanePair[] = [
+	{
+		id: 'legacy-jit-vs-canonical-program@handle',
+		oracle: legacyJitHandle,
+		candidate: jitHandle
+	},
 	{
 		id: 'jit-vs-precompile@handle',
 		oracle: jitHandle,

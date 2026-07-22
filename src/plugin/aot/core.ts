@@ -44,19 +44,6 @@ export interface ElysiaAotOptions {
 	wsRuntimeFrom?: string
 
 	/**
-	 * Split the emitted validator manifest into lazily-materialized groups
-	 *
-	 * Validator entries are registered as grouped thunks: a group's
-	 * validators are constructed on the first request to any route in that
-	 * group, trading first-request latency in unbuilt groups for lower
-	 * startup cost. Handlers are always eager. Only validator construction
-	 * is deferred. Pass a number to set the group size explicitly.
-	 *
-	 * @default false
-	 */
-	lazy?: boolean | number
-
-	/**
 	 * Deploy target for build-time-baked codegen consts (the response-header
 	 * path). Set `target: 'workerd'` to build under Bun yet ship a manifest
 	 * valid on Cloudflare Workers / Node.
@@ -827,7 +814,6 @@ export async function generateCompiledArtifacts(
 			registerFrom: options?.registerFrom,
 			reconstructFrom: options?.reconstructFrom,
 			wsRuntimeFrom: options?.wsRuntimeFrom,
-			lazy: options?.lazy,
 			target: options?.target
 		}
 
@@ -852,11 +838,10 @@ export async function generateCompiledArtifacts(
 			}
 
 		const artifacts = await captureArtifacts(typedApp, sourceOptions)
-		const report = replayStubbability(typedApp, artifacts.handlers)
 		const aliases = new Set<string>()
 
 		for (const handler of artifacts.handlers)
-			if (handler.alias)
+			if ('alias' in handler && handler.alias)
 				for (const name of handler.alias.split(',')) aliases.add(name)
 
 		const history = typedApp['~routes'] ?? []
@@ -875,6 +860,32 @@ export async function generateCompiledArtifacts(
 		const winningRoutes = new Map<string, (typeof history)[number]>()
 		for (const route of history)
 			winningRoutes.set(`${route[0]}\0${route[1]}`, route)
+
+		const unsupportedMountedRoutes = [...winningRoutes.values()]
+			.filter((route) => (route[2] as any)?.['~mount'])
+			.map(
+				(route) =>
+					`${route[0]} ${route[1]} (~mount inner handler is outside root AOT capture)`
+			)
+
+		if (
+			unsupportedMountedRoutes.length &&
+			(strip === true || options?.target === 'workerd')
+		)
+			throw new Error(
+				`[elysia-aot] ${
+					options?.target === 'workerd' ? "target 'workerd'" : 'strip: true'
+				} requires exact handler route coverage. Unsupported: ${unsupportedMountedRoutes.join(
+					', '
+				)}.` +
+					(options?.target === 'workerd'
+						? ''
+						: ` Use strip: 'auto' to retain handler JIT.`)
+			)
+
+		const report: StubbabilityReport = unsupportedMountedRoutes.length
+			? { jit: false, reasons: [] }
+			: replayStubbability(typedApp, artifacts.handlers)
 
 		const expectedWSPaths = new Set<string>()
 		for (const route of winningRoutes.values())

@@ -24,8 +24,6 @@ interface TestManifest {
 	validators?: ValidatorManifest
 	handlers?: HandlerManifest
 	wsRoutes?: WSRouteManifest
-	lazyGroups?: Array<() => ValidatorManifest>
-	lazyGroupOf?: Record<string, Record<string, number>>
 }
 
 /**
@@ -62,12 +60,17 @@ const fn = (src: string) =>
 		Hashing
 	)
 
-/** Materialise captured handlers into a frozen `{ a, f }` manifest. */
+/** Materialise captured handlers into the frozen runtime manifest. */
 export const materialiseHandlers = (
 	captured: CapturedHandler[]
 ): HandlerManifest => {
 	const m: HandlerManifest = {}
 	for (const h of captured) {
+		if ('program' in h) {
+			;(m[h.method] ??= {})[h.path] = { p: h.program }
+			continue
+		}
+
 		;(m[h.method] ??= {})[h.path] = {
 			a: h.alias ? h.alias.split(',') : [],
 			f: fn(Source.handlerFactory(h.alias, h.code)) as any

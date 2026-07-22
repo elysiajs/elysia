@@ -22,7 +22,6 @@ import {
 } from '../type/bridge'
 import { isAsyncFunction } from '../compile/utils'
 import { clearSharedReferenceCaches } from '../type/elysia/utils'
-import { hasProperty } from '../type/utils'
 import { VALIDATION_PLAN_BUILTIN } from '../type/constants'
 import type { ValidationPlanExtension } from '../experimental/validation-plan'
 

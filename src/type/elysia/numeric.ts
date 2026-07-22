@@ -21,7 +21,7 @@ type NumericSchema = Type.TUnion<
 >
 let emptyNumeric: Readonly<NumericSchema>
 
-function passesConstraints(n: number, c: TNumberOptions): boolean {
+export function passesConstraints(n: number, c: TNumberOptions) {
 	if (typeof c.minimum === 'number' && n < c.minimum) return false
 	if (typeof c.maximum === 'number' && n > c.maximum) return false
 

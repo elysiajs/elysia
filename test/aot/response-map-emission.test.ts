@@ -2,8 +2,13 @@ import { describe, it, expect, afterEach } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
 import { Compiled } from '../../src/compile/aot'
+import { createAdapter } from '../../src/adapter'
+import { contextDefaults } from '../../src/adapter/default-headers'
+import { WebStandardAdapter } from '../../src/adapter/web-standard'
 import { compileHandler } from '../../src/compile/handler'
+import { captureArtifacts } from '../../src/plugin/aot/source'
 import { req, post } from '../utils'
+import { materialiseHandlers, registerManifest } from './_manifest'
 
 /** Body parsing materializes all headers only when route code needs them. */
 
@@ -182,16 +187,49 @@ describe('header reads and response set handling', () => {
 		expect(res.headers.get('x-y')).toBe('z')
 	})
 
-	it('a route with app default headers uses shared immutable response state', async () => {
-		const app = new Elysia()
-			.headers({ 'x-app': 'default' })
-			.get('/d', () => 'hi')
+	it('a canonical default-header program shares immutable response state', async () => {
+		const seen: unknown[] = []
+		const adapter = createAdapter({
+			...WebStandardAdapter,
+			response: {
+				...WebStandardAdapter.response,
+				map(value: unknown, set: any, ...params: unknown[]) {
+					seen.push(set)
+					return (WebStandardAdapter.response.map as any)(
+						value,
+						set,
+						...params
+					)
+				}
+			}
+		})
+		const build = () =>
+			new Elysia({ adapter })
+				.headers({ 'x-app': 'default' })
+				.get('/d', () => 'hi')
 
-		const { source } = compileRoute(app)
-		expect(source).toContain('dhs')
-		expect(source).not.toContain('c.set')
-		const res = await app.handle(req('/d'))
-		expect(res.headers.get('x-app')).toBe('default')
+		const artifacts = await captureArtifacts(build())
+		expect(artifacts.handlers).toEqual([
+			{ method: 'GET', path: '/d', program: [1, 2] }
+		])
+		registerManifest({ handlers: materialiseHandlers(artifacts.handlers) })
+
+		const app = build()
+		const defaults = contextDefaults(app).response!
+		expect(Object.isFrozen(defaults)).toBeTrue()
+		expect(Object.isFrozen(defaults.headers)).toBeTrue()
+		expect(contextDefaults(app).response).toBe(defaults)
+		;(app as any).compile()
+
+		for (let i = 0; i < 2; i++) {
+			const response = await app.handle(req('/d'))
+			expect(response.headers.get('x-app')).toBe('default')
+			await expect(response.text()).resolves.toBe('hi')
+		}
+		expect(seen).toHaveLength(2)
+		expect(seen[0]).toBe(defaults)
+		expect(seen[1]).toBe(defaults)
+		expect(defaults.headers['x-app']).toBe('default')
 	})
 
 	it('afterResponse observes status writeback', async () => {

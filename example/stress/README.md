@@ -41,25 +41,6 @@ metric. Historical snapshots under `reference/` are diagnostic and non-gating.
 | `retained-per-route.ts`      | full                | Clean-process retained bytes per route      |
 | `throughput.ts`              | full/manual         | Mitata request-path distributions           |
 | `run.ts`                     | support             | Serial structured runner                    |
-| `apply-plugin.ts`            | manual/experimental | Plugin absorption cost                      |
-| `abort-lifecycle.ts`         | manual/experimental | Lifecycle abort-listener overhead           |
-| `cold-start.ts`              | manual/experimental | Warm-module app construction latency        |
-| `compile-distinct-schema.ts` | manual/experimental | Distinct-schema compilation                 |
-| `compile-with-schema.ts`     | manual/experimental | Shared-schema compilation                   |
-| `compile.ts`                 | manual/experimental | Minimal app compilation                     |
-| `composite.ts`               | manual/experimental | Composite realistic route mix               |
-| `decorate.ts`                | manual/experimental | Decoration merge stress                     |
-| `default-precompute.ts`      | manual/experimental | Default-value strategies                    |
-| `encode-mirror-bench.ts`     | manual/experimental | Response encoding strategies                |
-| `flatten-bench.ts`           | manual/experimental | Hook-chain flattening                       |
-| `lifecycle.ts`               | manual/experimental | Lifecycle plugin application                |
-| `query-scan.ts`              | manual/experimental | Query scanner comparison                    |
-| `route-dynamic.ts`           | manual/experimental | Dynamic route registration/build            |
-| `route.ts`                   | manual/experimental | Static route registration                   |
-| `schema.ts`                  | manual/experimental | Large schema construction                   |
-| `string-format-cache.ts`     | manual/experimental | Formatted-string schema cache retention     |
-| `sucrose.ts`                 | manual/experimental | Sucrose inference caching                   |
-| `upsort-bench.ts`            | manual/experimental | TypeBox union priority sorting              |
 | `utils.ts`                   | support             | GC, memory, median, and environment helpers |
 
 `on-error.ts` was removed because it claimed to measure a sync-path closure

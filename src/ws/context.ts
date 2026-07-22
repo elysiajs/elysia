@@ -36,7 +36,6 @@ export interface WSConnectionData {
 	view?: ElysiaWS<any>
 	retained?: Record<string, unknown>
 	resumeWaiters?: Set<() => void>
-	activeGenerators?: Set<Iterator<unknown> | AsyncIterator<unknown>>
 	generatorPumps?: Set<{
 		ws?: ElysiaWS<any>
 		iterator?: Iterator<unknown> | AsyncIterator<unknown>
@@ -187,11 +186,8 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 			return v.Check(value)
 				? { value }
 				: {
-						error: new ValidationError(
-							'message',
-							value,
-							v.Errors(value)
-						).message
+						error: new ValidationError('message', value, v.Errors(value))
+							.message
 					}
 
 		try {
@@ -206,8 +202,7 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 
 			return { value: encoded }
 		} catch (error) {
-			if (error instanceof ValidationError)
-				return { error: error.message }
+			if (error instanceof ValidationError) return { error: error.message }
 
 			throw error
 		}
@@ -226,8 +221,7 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		if ('error' in result) return this.raw.send(result.error)
 		if (
 			!(data instanceof ElysiaStatus) &&
-			(result.value instanceof ArrayBuffer ||
-				ArrayBuffer.isView(result.value))
+			(result.value instanceof ArrayBuffer || ArrayBuffer.isView(result.value))
 		)
 			return this.raw.send(
 				result.value as unknown as BufferSource,
@@ -248,8 +242,7 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		if ('error' in result) return this.raw.send(result.error)
 		if (
 			!(data instanceof ElysiaStatus) &&
-			(result.value instanceof ArrayBuffer ||
-				ArrayBuffer.isView(result.value))
+			(result.value instanceof ArrayBuffer || ArrayBuffer.isView(result.value))
 		)
 			return this.raw.ping(result.value as unknown as BufferSource)
 
@@ -267,8 +260,7 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		if ('error' in result) return this.raw.send(result.error)
 		if (
 			!(data instanceof ElysiaStatus) &&
-			(result.value instanceof ArrayBuffer ||
-				ArrayBuffer.isView(result.value))
+			(result.value instanceof ArrayBuffer || ArrayBuffer.isView(result.value))
 		)
 			return this.raw.pong(result.value as unknown as BufferSource)
 
@@ -292,8 +284,7 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		if ('error' in result) return this.raw.send(result.error)
 		if (
 			!(data instanceof ElysiaStatus) &&
-			(result.value instanceof ArrayBuffer ||
-				ArrayBuffer.isView(result.value))
+			(result.value instanceof ArrayBuffer || ArrayBuffer.isView(result.value))
 		)
 			return this.raw.publish(
 				topic,

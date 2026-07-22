@@ -7,18 +7,9 @@ import { parseQuery } from '../../parse-query'
 import { isBun } from '../../universal/constants'
 import type { Context } from '../../context'
 
-function lowercaseContentType(ct: string) {
-	for (let i = 0; i < ct.length; i++) {
-		const code = ct.charCodeAt(i)
-		if (code >= 65 && code <= 90) return ct.toLowerCase()
-	}
-
-	return ct
-}
-
 function parseFormData(context: Context, flatFastPath = false) {
 	const contentType = context.request.headers.get('content-type') ?? ''
-	const ct = lowercaseContentType(contentType)
+	const ct = contentType.toLowerCase()
 	const convert = flatFastPath ? formDataToObjectFlatFastPath : formDataToObject
 
 	if (isBun && ct !== contentType) {
@@ -27,9 +18,8 @@ function parseFormData(context: Context, flatFastPath = false) {
 		const semi = fullCt.indexOf(';')
 		const fixedCt =
 			semi === -1
-				? lowercaseContentType(fullCt)
-				: lowercaseContentType(fullCt.slice(0, semi)) +
-					fullCt.slice(semi)
+				? fullCt.toLowerCase()
+				: fullCt.slice(0, semi).toLowerCase() + fullCt.slice(semi)
 
 		const headers = new Headers(context.request.headers)
 		headers.set('content-type', fixedCt)

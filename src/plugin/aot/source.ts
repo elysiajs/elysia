@@ -48,19 +48,6 @@ export interface CompileToSourceOptions {
 	target?: AotTarget
 
 	/**
-	 * Split the emitted validator manifest into lazily-materialized groups
-	 *
-	 * Validator entries are registered as grouped thunks: a group's
-	 * validators are constructed on the first request to any route in that
-	 * group, trading first-request latency in unbuilt groups for lower
-	 * startup cost. Handlers are always eager. Only validator construction
-	 * is deferred. Pass a number to set the group size explicitly.
-	 *
-	 * @default false
-	 */
-	lazy?: boolean | number
-
-	/**
 	 * Specifier the generated module imports `Compiled` from
 	 * Must resolve to the same `elysia` instance the app runs
 	 *
@@ -93,17 +80,6 @@ export interface CompileToSourceOptions {
 	 */
 	wsRuntimeFrom?: string
 }
-
-export const autoGroupSize = (routes: number): number =>
-	routes < 64
-		? 1
-		: routes < 256
-			? 2
-			: routes < 2048
-				? 4
-				: routes < 8192
-					? 16
-					: 64
 
 export async function compileToSource(
 	app: AnyElysia,
@@ -172,9 +148,6 @@ export async function captureArtifacts(
 }
 
 export interface StubbabilityReport {
-	/** Handler JIT is provably unused → handler-only strip is safe. */
-	stubbable: boolean
-
 	/** `sucrose` + the handler `new Function` codegen is unused. */
 	jit: boolean
 
@@ -210,6 +183,11 @@ const materialiseHandlersForReplay = (
 ): HandlerManifest => {
 	const manifest: HandlerManifest = {}
 	for (const h of captured) {
+		if ('program' in h) {
+			;(manifest[h.method] ??= {})[h.path] = { p: h.program }
+			continue
+		}
+
 		;(manifest[h.method] ??= {})[h.path] = {
 			a: h.alias ? h.alias.split(',') : [],
 			// eslint-disable-next-line sonarjs/code-eval
@@ -256,7 +234,6 @@ export function replayStubbability(
 				JITProbe.end()
 
 				return {
-					stubbable: false,
 					jit: false,
 					reasons: ['handler:new-function']
 				}
@@ -464,144 +441,34 @@ export function emitModule(
 	}
 
 	let validatorDecls = ''
-	// eslint-disable-next-line no-useless-assignment
-	let validatorExport = ''
-
-	// bucket captured entries by route (all slots of a route share a group)
-	const order: string[] = []
-	const byRoute = new Map<string, CapturedValidator[]>()
+	const factoryRef = new Map<string, string>()
+	const tree = nullObject() as Record<
+		string,
+		Record<string, Record<string, string>>
+	>
 	for (const c of captured) {
-		const key = `${c.method}\0${c.path}`
-		let arr = byRoute.get(key)
-		if (!arr) {
-			byRoute.set(key, (arr = []))
-			order.push(key)
+		const parts = entryParts(c)
+		if (!parts.length) continue
+
+		const entrySrc = `{ ${parts.join(', ')} }`
+
+		let ref = factoryRef.get(entrySrc)
+		if (ref === undefined) {
+			ref = `_c${factoryRef.size}`
+			factoryRef.set(entrySrc, ref)
+			validatorDecls += `const ${ref} = ${entrySrc}\n`
 		}
-		arr.push(c)
+
+		const byPath = (tree[c.method] ??= nullObject() as any)
+		;(byPath[c.path] ??= nullObject() as any)[c.slot] = ref
 	}
 
-	const autoSize = autoGroupSize(order.length)
-	const lazy = options?.lazy ?? false
+	// global slot-object dedup (`_s` consts appended after the `_c`)
+	const treeStr = treeToSource(tree, new Map(), (d) => {
+		validatorDecls += d
+	})
 
-	if (lazy) {
-		const groupSize = typeof lazy === 'number' ? lazy : autoSize
-		const groupCount = Math.ceil(order.length / groupSize)
-		const groupOf = nullObject() as Record<string, Record<string, number>>
-		const groupOfRoute = new Map<string, number>()
-
-		for (let i = 0; i < order.length; i++) {
-			const key = order[i]!
-			const g = Math.floor(i / groupSize)
-
-			groupOfRoute.set(key, g)
-
-			const sep = key.indexOf('\0')
-			;(groupOf[key.slice(0, sep)] ??= nullObject() as any)[
-				key.slice(sep + 1)
-			] = g
-		}
-
-		// Dedup entries globally + track which groups reference each
-		const entries = new Map<string, { ref: string; groups: Set<number> }>()
-		const routeSlots = new Map<string, Array<[string, string]>>()
-
-		for (const [key, cs] of byRoute) {
-			const g = groupOfRoute.get(key)!
-			const slots: Array<[string, string]> = []
-
-			for (const c of cs) {
-				const parts = entryParts(c)
-				if (!parts.length) continue
-
-				const entrySrc = `{ ${parts.join(', ')} }`
-				let e = entries.get(entrySrc)
-				if (!e) {
-					e = { ref: `_c${entries.size}`, groups: new Set() }
-					entries.set(entrySrc, e)
-				}
-
-				e.groups.add(g)
-				slots.push([c.slot, entrySrc])
-			}
-
-			routeSlots.set(key, slots)
-		}
-
-		for (const [src, e] of entries)
-			if (e.groups.size > 1) validatorDecls += `const ${e.ref} = ${src}\n`
-
-		// `_groups`
-		const thunks: string[] = []
-		for (let g = 0; g < groupCount; g++) {
-			let localDecls = ''
-			const emitted = new Set<string>()
-			const slice = nullObject() as Record<
-				string,
-				Record<string, Record<string, string>>
-			>
-
-			const end = Math.min((g + 1) * groupSize, order.length)
-			for (let i = g * groupSize; i < end; i++) {
-				const key = order[i]!
-				const sep = key.indexOf('\0')
-				const method = key.slice(0, sep)
-				const path = key.slice(sep + 1)
-
-				for (const [slot, entrySrc] of routeSlots.get(key)!) {
-					const e = entries.get(entrySrc)!
-					if (e.groups.size === 1 && !emitted.has(entrySrc)) {
-						emitted.add(entrySrc)
-						localDecls += `const ${e.ref} = ${entrySrc}\n`
-					}
-
-					const byPath = (slice[method] ??= nullObject() as any)
-					;(byPath[path] ??= nullObject() as any)[slot] = e.ref
-				}
-			}
-
-			const sliceStr = treeToSource(slice, new Map(), (d) => {
-				localDecls += d
-			})
-
-			thunks.push(`() => {\n${localDecls}return ${sliceStr}\n}`)
-		}
-
-		validatorDecls += `const _groups = [${thunks.join(', ')}]\n`
-		validatorDecls += `const _groupOf = ${JSON.stringify(groupOf)}\n`
-
-		validatorExport = options?.register
-			? ''
-			: 'export const groups = _groups\nexport const groupOf = _groupOf\n'
-	} else {
-		const factoryRef = new Map<string, string>()
-		const tree = nullObject() as Record<
-			string,
-			Record<string, Record<string, string>>
-		>
-		for (const c of captured) {
-			const parts = entryParts(c)
-			if (!parts.length) continue
-
-			const entrySrc = `{ ${parts.join(', ')} }`
-
-			let ref = factoryRef.get(entrySrc)
-			if (ref === undefined) {
-				ref = `_c${factoryRef.size}`
-				factoryRef.set(entrySrc, ref)
-				validatorDecls += `const ${ref} = ${entrySrc}\n`
-			}
-
-			const byPath = (tree[c.method] ??= nullObject() as any)
-			;(byPath[c.path] ??= nullObject() as any)[c.slot] = ref
-		}
-
-		// global slot-object dedup (`_s` consts appended after the `_c`)
-		const treeStr = treeToSource(tree, new Map(), (d) => {
-			validatorDecls += d
-		})
-
-		validatorExport = `export const validators = ${treeStr}\n`
-	}
+	let validatorExport = `export const validators = ${treeStr}\n`
 
 	// wire the reconstruction table before the app can observe a frozen entry
 	if (options?.register && captured.length)
@@ -610,11 +477,27 @@ export function emitModule(
 
 	const aliasRef = new Map<string, string>()
 	const handlerRef = new Map<string, string>()
+	const programRef = new Map<string, string>()
 
 	let handlerDecls = ''
+	let wrapperCount = 0
 	const handlerTree = nullObject() as Record<string, Record<string, string>>
 
 	for (const h of handlers) {
+		if ('program' in h) {
+			const src = JSON.stringify(h.program)
+			let wref = programRef.get(src)
+			if (wref === undefined) {
+				const pref = `_p${programRef.size}`
+				wref = `_w${wrapperCount++}`
+				programRef.set(src, wref)
+				handlerDecls += `const ${pref} = ${src}\nconst ${wref} = { p: ${pref} }\n`
+			}
+
+			;(handlerTree[h.method] ??= {})[h.path] = wref
+			continue
+		}
+
 		const src = Source.handlerFactory(h.alias, h.code)
 
 		let wref = handlerRef.get(src)
@@ -630,7 +513,7 @@ export function emitModule(
 				)}\n`
 			}
 
-			wref = `_w${n}`
+			wref = `_w${wrapperCount++}`
 			handlerRef.set(src, wref)
 			handlerDecls += `const _h${n} = ${src}\nconst ${wref} = { a: ${aref}, f: _h${n} }\n`
 		}
@@ -695,11 +578,7 @@ export function emitModule(
 		? `export const fingerprint = ${JSON.stringify(fingerprint)}\n`
 		: ''
 	const registration = options?.register
-		? `Compiled.register({ bf: 1, fingerprint, ` +
-			(lazy
-				? 'lazyGroups: _groups, lazyGroupOf: _groupOf, '
-				: 'validators, ') +
-			`handlers${wsEntryRef.size ? ', wsRoutes' : ''}${hasCoercePlan ? ', planRebuilder: buildCoercedFromPlan' : ''} })\n`
+		? `Compiled.register({ bf: 1, fingerprint, validators, handlers${wsEntryRef.size ? ', wsRoutes' : ''}${hasCoercePlan ? ', planRebuilder: buildCoercedFromPlan' : ''} })\n`
 		: ''
 
 	let body = '// Generated by Elysia build plugin. Do not edit.\n'
@@ -753,9 +632,7 @@ export function emitModule(
 		fingerprintExport +
 		registration
 
-	// eager keeps the default export (used by `evalManifest` in tests)
-	// lazy has no single `validators` object to default-export
-	if (!lazy) body += '\nexport default validators\n'
+	body += '\nexport default validators\n'
 
 	return body
 }

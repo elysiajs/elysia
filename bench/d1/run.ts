@@ -8,6 +8,7 @@ import {
 	benchSourceHash,
 	captureEnvironment,
 	capturePinnedManifest,
+	command,
 	floorsForBenchSourceHash,
 	gitInfo,
 	pinOwnerBenchSourceHashes,
@@ -57,6 +58,7 @@ const defaultRssBlocks = 4
 const defaultResamples = 2_000
 const fixtureIds = [
 	'cold-start',
+	'canonical-ir',
 	'aot-cold-start',
 	'http',
 	'default-headers',
@@ -89,7 +91,8 @@ const leafPerfOwners = new Set([
 	'N+2c',
 	'N+3a',
 	'N+3b',
-	'N+3c'
+	'N+3c',
+	'N+4'
 ])
 const historicalBaselineByOwner: Record<string, string> = {
 	C4a: '340322120836100ea15f67d6f6b5708e0945d1db',
@@ -97,7 +100,8 @@ const historicalBaselineByOwner: Record<string, string> = {
 	'N+2c': '697c0286',
 	'N+3a': 'd4fb01a3',
 	'N+3b': '7e70df83b6b778aed80fcabcdc2c283bd5b2929a',
-	'N+3c': '4e6f09509061e182d8cb39adf9da373a3a832c1a'
+	'N+3c': '4e6f09509061e182d8cb39adf9da373a3a832c1a',
+	'N+4': '3600912bdd6f01ed6bbe5dd91b3139cd437d9e75'
 }
 const historicalCandidateByOwner: Record<string, string> = {
 	C4a: 'e8c51e63407ea3f59479db14500f04cca742ba2b'
@@ -258,23 +262,6 @@ function errorPayload(error: unknown): NonNullable<RawArtifact['error']> {
 			...(error.stack ? { stack: error.stack } : {})
 		}
 	return { name: 'Error', message: String(error) }
-}
-
-function command(command_: string, args: string[]) {
-	const result = Bun.spawnSync({
-		cmd: [command_, ...args],
-		stdout: 'pipe',
-		stderr: 'pipe'
-	})
-	return {
-		code: result.exitCode ?? 1,
-		stdout: result.stdout
-			? new TextDecoder().decode(result.stdout).trim()
-			: '',
-		stderr: result.stderr
-			? new TextDecoder().decode(result.stderr).trim()
-			: ''
-	}
 }
 
 async function readReady(child: Bun.Subprocess) {
@@ -689,7 +676,8 @@ function rawMetricSamples(
 		entry.fixture === 'validation' ||
 		entry.fixture === 'runtime-lowering' ||
 		entry.fixture === 'response-body-cookie' ||
-		entry.fixture === 'retention-seal'
+		entry.fixture === 'retention-seal' ||
+		entry.fixture === 'canonical-ir'
 	) {
 		const samples = output.samples?.[entry.metric]
 		if (!Array.isArray(samples) || !samples.length)
@@ -811,7 +799,9 @@ function emptyRecord(
 function routeSizeOrderFor(fixture: FixtureId) {
 	return fixture === 'retention-seal'
 		? [1, 100, 1_000, 10_000]
-		: [defaultRoutes]
+		: fixture === 'canonical-ir'
+			? [1_000, 10_000]
+			: [defaultRoutes]
 }
 
 async function runRecordBlocks(
@@ -1172,18 +1162,9 @@ function floorsPath(machineId: string) {
 	return resolve(baselineRoot, machineId, 'floors.json')
 }
 
-async function exists(path: string) {
-	try {
-		await readFile(path)
-		return true
-	} catch {
-		return false
-	}
-}
-
 async function ensurePinned(machineId: string, create: boolean) {
 	const path = manifestPath(machineId)
-	if (!(await exists(path))) {
+	if (!(await Bun.file(path).exists())) {
 		if (!create) throw new Error(`missing pinned manifest: ${path}`)
 		const manifest = await capturePinnedManifest(repoRoot)
 		await writeJson(path, manifest)
@@ -1609,7 +1590,7 @@ async function aaMode(
 	capture: ArtifactCapture
 ) {
 	const manifestFile = manifestPath(context.environment.machineId)
-	const manifest = (await exists(manifestFile))
+	const manifest = (await Bun.file(manifestFile).exists())
 		? await ensurePinned(context.environment.machineId, false)
 		: await capturePinnedManifest(repoRoot)
 	const git = gitInfo(repoRoot)
@@ -1761,7 +1742,7 @@ async function aaMode(
 			floors: {},
 			countDeltas: {}
 		}
-		if (await exists(path)) {
+		if (await Bun.file(path).exists()) {
 			const existing = await readJson<unknown>(path)
 			if ((existing as Partial<FloorsFile>).schemaVersion === 2) {
 				validateFloors(existing)
@@ -2429,7 +2410,7 @@ async function verifyMode(
 		.filter((entry) => entry.isDirectory())
 		.map((entry) => entry.name)
 		.sort()
-	if (!(await exists(baselinePath(environment.machineId))))
+	if (!(await Bun.file(baselinePath(environment.machineId)).exists()))
 		console.warn(
 			`D1 verify: no baseline recorded for this machine (${environment.machineId}); OK with warning`
 		)
@@ -2498,7 +2479,10 @@ async function verifyMode(
 				!currentBaselineOwners.has(entry.owner)
 		)
 		const baselineFile = baselinePath(machineId)
-		if (baselineEntries.length > 0 && (await exists(baselineFile))) {
+		if (
+			baselineEntries.length > 0 &&
+			(await Bun.file(baselineFile).exists())
+		) {
 			const baseline = await readJson<RawArtifact>(baselineFile)
 			validateArtifact(baseline)
 			if (baseline.machineId !== machineId)

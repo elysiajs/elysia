@@ -5,6 +5,7 @@ import type { TNumberOptions } from 'typebox'
 import { isEmpty } from '../../utils'
 import { ELYSIA_TYPES } from '../constants'
 import { Integer } from './integer'
+import { passesConstraints } from './numeric'
 import { NumberType } from './number'
 import { StringType } from './string'
 import { Union } from './union'
@@ -53,25 +54,7 @@ export function IntegerString(property?: TNumberOptions) {
 				if (!/^[+-]?\d+$/.test(value)) return false
 				const n = +value
 
-				if (!Number.isInteger(n)) return false
-				if (typeof c.minimum === 'number' && n < c.minimum) return false
-				if (typeof c.maximum === 'number' && n > c.maximum) return false
-				if (
-					typeof c.exclusiveMinimum === 'number' &&
-					n <= c.exclusiveMinimum
-				)
-					return false
-
-				if (
-					typeof c.exclusiveMaximum === 'number' &&
-					n >= c.exclusiveMaximum
-				)
-					return false
-
-				if (typeof c.multipleOf === 'number' && n % c.multipleOf !== 0)
-					return false
-
-				return true
+				return Number.isInteger(n) && passesConstraints(n, c)
 			},
 			() => 'must be integer'
 		),

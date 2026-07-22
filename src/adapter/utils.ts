@@ -48,24 +48,15 @@ export function handleFile(
 	if (rangeHeader) {
 		const match = /bytes=(\d*)-(\d*)/.exec(rangeHeader)
 		if (match) {
-			if (!match[1] && !match[2])
-				return new Response(null, {
-					status: 416,
-					headers: mergeHeaders(
-						new Headers({ 'content-range': `bytes */${size}` }),
-						set?.headers ?? nullObject()
-					)
-				})
+			let start = 0
+			let end = -1
 
-			let start: number
-			let end: number
-
-			if (!match[1] && match[2]) {
+			if (match[2] && !match[1]) {
 				const suffix = parseInt(match[2])
 				start = Math.max(0, size - suffix)
 				end = size - 1
-			} else {
-				start = match[1] ? parseInt(match[1]) : 0
+			} else if (match[1]) {
+				start = parseInt(match[1])
 				end = match[2]
 					? Math.min(parseInt(match[2]), size - 1)
 					: size - 1

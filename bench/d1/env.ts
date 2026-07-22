@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
-import { readdir, readFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import { cpus, release } from 'node:os'
-import { dirname, extname, relative, resolve } from 'node:path'
+import { dirname, relative, resolve } from 'node:path'
 
 import type {
 	BunManifest,
@@ -19,11 +19,13 @@ export const BENCH_SOURCE_FILES = [
 	'bench/d1/stats.ts',
 	'bench/d1/runtime-lowering.test.ts',
 	'bench/d1/retention-seal.test.ts',
+	'bench/d1/canonical-ir.test.ts',
 	'bench/d1/provenance.test.ts',
 	'bench/d1/validation.test.ts',
 	'bench/d1/websocket-runtime.test.ts',
 	'bench/d1/fixtures/aot-cold-start.ts',
 	'bench/d1/fixtures/cold-start.ts',
+	'bench/d1/fixtures/canonical-ir.ts',
 	'bench/d1/fixtures/compile-memory.ts',
 	'bench/d1/fixtures/crypto-hmac.ts',
 	'bench/d1/fixtures/default-headers.ts',
@@ -63,7 +65,7 @@ function text(value: Uint8Array | undefined) {
 	return value ? new TextDecoder().decode(value).trim() : ''
 }
 
-function command(command_: string, args: string[]) {
+export function command(command_: string, args: string[]) {
 	try {
 		const result = Bun.spawnSync({
 			cmd: [command_, ...args],
@@ -202,14 +204,11 @@ async function benchTypeScriptFiles(
 	directory = 'bench/d1'
 ): Promise<string[]> {
 	const result: string[] = []
-	for (const entry of await readdir(resolve(repoRoot, directory), {
-		withFileTypes: true
-	})) {
-		const path = `${directory}/${entry.name}`
-		if (entry.isDirectory())
-			result.push(...(await benchTypeScriptFiles(repoRoot, path)))
-		else if (extname(entry.name) === '.ts') result.push(path)
-	}
+	for await (const path of new Bun.Glob('**/*.ts').scan({
+		cwd: resolve(repoRoot, directory),
+		onlyFiles: true
+	}))
+		result.push(`${directory}/${path}`)
 	return result.sort()
 }
 
@@ -285,20 +284,14 @@ export async function benchSourceHash(repoRoot: string) {
 
 async function productSourceFiles(repoRoot: string, path: string) {
 	const absolute = resolve(repoRoot, path)
-	const entries = await readdir(absolute, { withFileTypes: true }).catch(
-		() => undefined
-	)
-	if (!entries) return [path]
-
+	if (await Bun.file(absolute).exists()) return [path]
 	const files: string[] = []
-	for (const entry of entries) {
-		if (entry.name.startsWith('.')) continue
-		const child = `${path}/${entry.name}`
-		if (entry.isDirectory())
-			files.push(...(await productSourceFiles(repoRoot, child)))
-		else if (entry.isFile()) files.push(child)
-	}
-	return files
+	for await (const file of new Bun.Glob('**/*').scan({
+		cwd: absolute,
+		onlyFiles: true
+	}))
+		files.push(`${path}/${file}`)
+	return files.length ? files : [path]
 }
 
 /** Hashes the exact product and build inputs used by a benchmark variant. */

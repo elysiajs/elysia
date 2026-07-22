@@ -2,7 +2,13 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { validationPlan } from '../../src/experimental/validation-plan'
 import { Validator } from '../../src/validator'
-import { Compiled, createAotFingerprint } from '../../src/compile/aot'
+import {
+	Compiled,
+	createAotFingerprint,
+	type CapturedHandler,
+	type FrozenHandler,
+	type HandlerManifest
+} from '../../src/compile/aot'
 import { JITProbe } from '../../src/compile/jit-probe'
 import {
 	endValidatorCapture,
@@ -38,6 +44,16 @@ const build = () =>
 			},
 			({ body }: any) => ({ ok: true, n: body.n })
 		)
+
+const legacyCapture = (handler: CapturedHandler) => {
+	if ('program' in handler) throw new Error('Expected legacy handler capture')
+	return handler
+}
+
+const legacyFrozen = (handler: FrozenHandler) => {
+	if ('p' in handler) throw new Error('Expected legacy frozen handler')
+	return handler
+}
 
 const registerRetainedHandler = (factory: (handler: unknown) => unknown) =>
 	Compiled.register({
@@ -119,12 +135,139 @@ describe('AOT runtime program release', () => {
 })
 
 describe('AOT handler freeze', () => {
+	const programs = [
+		{
+			name: 'compact',
+			program: [1, 0],
+			build: () => new Elysia().get('/program', () => 'compact'),
+			verify: async (responses: Response[]) => {
+				const response = responses[0]!
+				expect(response.status).toBe(200)
+				await expect(response.text()).resolves.toBe('compact')
+			}
+		},
+		{
+			name: 'set',
+			program: [1, 1],
+			build: () =>
+				new Elysia().get('/program', ({ set }) => {
+					set.status = 201
+					set.headers['x-route'] = 'set'
+					return 'set'
+				}),
+			verify: async (responses: Response[]) => {
+				const response = responses[0]!
+				expect(response.status).toBe(201)
+				expect(response.headers.get('x-route')).toBe('set')
+				await expect(response.text()).resolves.toBe('set')
+			}
+		},
+		{
+			name: 'default headers',
+			program: [1, 2],
+			build: () =>
+				new Elysia()
+					.headers({ 'x-default': 'base' })
+					.get('/program', () => 'default'),
+			verify: async (responses: Response[]) => {
+				const response = responses[0]!
+				expect(response.status).toBe(200)
+				expect(response.headers.get('x-default')).toBe('base')
+				await expect(response.text()).resolves.toBe('default')
+			}
+		},
+		{
+			name: 'set with default headers',
+			program: [1, 3],
+			requests: 2,
+			build: () => {
+				let request = 0
+				return new Elysia()
+					.headers({ 'x-default': 'base', 'x-remove': 'keep' })
+					.get('/program', ({ set }) => {
+						set.status = 202
+						if (request++ === 0) {
+							set.headers['x-default'] = 'first'
+							set.headers['x-first'] = 'yes'
+							delete set.headers['x-remove']
+						}
+						return 'set-default'
+					})
+			},
+			verify: async ([first, second]: Response[]) => {
+				expect(first!.status).toBe(202)
+				expect(first!.headers.get('x-default')).toBe('first')
+				expect(first!.headers.get('x-first')).toBe('yes')
+				expect(first!.headers.get('x-remove')).toBeNull()
+				await expect(first!.text()).resolves.toBe('set-default')
+
+				expect(second!.status).toBe(202)
+				expect(second!.headers.get('x-default')).toBe('base')
+				expect(second!.headers.get('x-first')).toBeNull()
+				expect(second!.headers.get('x-remove')).toBe('keep')
+				await expect(second!.text()).resolves.toBe('set-default')
+			}
+		}
+	] as const
+
+	for (const { name, program, build, verify, ...options } of programs)
+		it(`reconstructs the canonical ${name} sink without handler JIT`, async () => {
+			;(build() as any).compile()
+			const handlers = endHandlerCapture()
+			endValidatorCapture()
+
+			expect(handlers).toEqual([
+				{ method: 'GET', path: '/program', program }
+			])
+			registerManifest({ handlers: materialiseHandlers(handlers) })
+
+			delete process.env.ELYSIA_AOT_BUILD
+			const app = build()
+			JITProbe.begin()
+			;(app as any).compile()
+			const responses: Response[] = []
+			const requestCount = 'requests' in options ? options.requests : 1
+			for (let i = 0; i < requestCount; i++)
+				responses.push(await app.handle(req('/program')))
+			expect(JITProbe.end().reasons).toEqual([])
+			await verify(responses)
+		})
+
+	it.each([
+		['version', [2, 0]],
+		['sink opcode', [1, 4]]
+	] as const)('fails loud on an unknown route program %s', (_, program) => {
+		registerManifest({
+			handlers: {
+				GET: { '/program': { p: program as any } }
+			} as HandlerManifest
+		})
+
+		delete process.env.ELYSIA_AOT_BUILD
+		expect(() =>
+			(new Elysia().get('/program', () => 'ok') as any).compile()
+		).toThrow(/route program/i)
+	})
+
+	it('validates a route program before checking binding eligibility', () => {
+		registerManifest({
+			handlers: {
+				GET: { '/program': { p: [2, 0] as any } }
+			}
+		})
+
+		delete process.env.ELYSIA_AOT_BUILD
+		expect(() =>
+			(new Elysia().get('/program', 'static') as any).compile()
+		).toThrow(/route program/i)
+	})
+
 	it('captures the error finalizer without the authoring root', () => {
 		;(build() as any).compile()
 		const handlers = endHandlerCapture()
 		endValidatorCapture()
 
-		const aliases = handlers[0]!.alias.split(',')
+		const aliases = legacyCapture(handlers[0]!).alias.split(',')
 		expect(aliases).toContain('ff')
 		expect(aliases).toContain('fre')
 		expect(aliases).not.toContain('rt')
@@ -139,7 +282,7 @@ describe('AOT handler freeze', () => {
 		endValidatorCapture()
 
 		expect(handlers).toHaveLength(1)
-		expect(handlers[0]!.alias.split(',')).toContain('s')
+		expect(legacyCapture(handlers[0]!).alias.split(',')).toContain('s')
 		registerManifest({ handlers: materialiseHandlers(handlers) })
 
 		delete process.env.ELYSIA_AOT_BUILD
@@ -156,12 +299,13 @@ describe('AOT handler freeze', () => {
 		expect(handlers.length).toBe(1)
 		expect(handlers[0]!.method).toBe('POST')
 		expect(handlers[0]!.path).toBe('/x')
-		expect(handlers[0]!.alias.length).toBeGreaterThan(0)
+		expect(legacyCapture(handlers[0]!).alias.length).toBeGreaterThan(0)
 
 		const manifest = materialiseHandlers(handlers)
 		let factoryCalls = 0
-		const realF = manifest.POST!['/x']!.f
-		manifest.POST!['/x']!.f = (...a: unknown[]) => {
+		const frozenHandler = legacyFrozen(manifest.POST!['/x']!)
+		const realF = frozenHandler.f
+		frozenHandler.f = (...a: unknown[]) => {
 			factoryCalls++
 			return realF(...a)
 		}
@@ -209,7 +353,7 @@ describe('AOT handler freeze', () => {
 			endValidatorCapture()
 
 			expect(handlers).toHaveLength(1)
-			expect(handlers[0]!.alias.split(',')).toContain('fr')
+			expect(legacyCapture(handlers[0]!).alias.split(',')).toContain('fr')
 			registerManifest({ handlers: materialiseHandlers(handlers) })
 
 			delete process.env.ELYSIA_AOT_BUILD
@@ -241,7 +385,7 @@ describe('AOT handler freeze', () => {
 
 		// A corrupt alias must fail compilation instead of binding the wrong value.
 		const manifest = materialiseHandlers(handlers)
-		manifest.POST!['/x']!.a = ['bogus']
+		legacyFrozen(manifest.POST!['/x']!).a = ['bogus']
 		Validator.clear()
 		registerManifest({ handlers: manifest })
 
@@ -264,7 +408,7 @@ describe('AOT handler freeze', () => {
 		;(buildQuery() as any).compile()
 		const handlers = endHandlerCapture()
 		const validators = endValidatorCapture()
-		const aliases = handlers[0]!.alias.split(',')
+		const aliases = legacyCapture(handlers[0]!).alias.split(',')
 
 		expect(aliases).toContain('va')
 		expect(aliases).not.toContain('qa')
@@ -287,6 +431,23 @@ describe('AOT handler freeze', () => {
 
 /** Same-shape routes share their factory, aliases, and manifest wrapper. */
 describe('AOT handler emit dedup', () => {
+	it('shares the serialized program and wrapper across same-shape routes', async () => {
+		const src = await compileToSource(
+			new Elysia()
+				.get('/a', () => 'a')
+				.get('/b', () => 'b')
+				.get('/c', () => 'c') as any,
+			{ register: false }
+		)
+
+		expect((src.match(/const _p\d+ =/g) ?? []).length).toBe(1)
+		expect((src.match(/const _w\d+ = \{ p: _p\d+ \}/g) ?? []).length).toBe(
+			1
+		)
+		expect((src.match(/const _h\d+ =/g) ?? []).length).toBe(0)
+		expect((src.match(/: _w0\b/g) ?? []).length).toBe(3)
+	})
+
 	it('shares the factory, alias, and wrapper across same-shape routes', async () => {
 		const app = new Elysia()
 			.beforeHandle(() => {})
@@ -347,8 +508,9 @@ describe('AOT static & promise handler freeze', () => {
 		const manifest = materialiseHandlers(captured)
 		const calls: Record<string, number> = { '/s': 0, '/p': 0 }
 		for (const p of ['/s', '/p'] as const) {
-			const realF = manifest.GET![p]!.f
-			manifest.GET![p]!.f = (...a: unknown[]) => {
+			const frozenHandler = legacyFrozen(manifest.GET![p]!)
+			const realF = frozenHandler.f
+			frozenHandler.f = (...a: unknown[]) => {
 				calls[p]++
 				return realF(...a)
 			}
@@ -393,10 +555,15 @@ describe('sync/async compilation gating', () => {
 	}
 
 	const codeFor = (
-		handlers: { method: string; path: string; code: string }[],
+		handlers: CapturedHandler[],
 		method: string,
 		path: string
-	) => handlers.find((h) => h.method === method && h.path === path)?.code
+	) => {
+		const handler = handlers.find(
+			(h) => h.method === method && h.path === path
+		)
+		return handler && 'code' in handler ? handler.code : undefined
+	}
 
 	const isAsyncRoute = (code: string | undefined) =>
 		!!code && /async\s+function route\(/.test(code)

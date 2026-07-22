@@ -90,6 +90,7 @@ import type {
 	MetadataBase,
 	PublicRoute,
 	RouteBase,
+	RouteSchema,
 	SingletonBase,
 	UnwrapArray,
 	EventFn,
@@ -267,6 +268,47 @@ type GuardSchema<
 	Metadata['schemas'] &
 	Ephemeral['schemas'] &
 	Volatile['schemas']
+
+type GuardBeforeHandle<
+	Schema extends RouteSchema,
+	Singleton extends SingletonBase,
+	Ephemeral extends EphemeralType,
+	Volatile extends EphemeralType,
+	MacroContext
+> = MaybeArray<
+	OptionalHandler<
+		Schema,
+		GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+	>
+>
+
+type GuardAfterHandle<
+	Schema extends RouteSchema,
+	Singleton extends SingletonBase,
+	Ephemeral extends EphemeralType,
+	Volatile extends EphemeralType,
+	MacroContext
+> = MaybeArray<
+	AfterHandler<
+		Schema,
+		GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+	>
+>
+
+type GuardErrorHandle<
+	Definitions extends DefinitionBase,
+	Schema extends RouteSchema,
+	Singleton extends SingletonBase,
+	Ephemeral extends EphemeralType,
+	Volatile extends EphemeralType,
+	MacroContext
+> = MaybeArray<
+	ErrorHandler<
+		Definitions['error'],
+		Schema,
+		GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+	>
+>
 
 export class Elysia<
 	const in out BasePath extends string = '',
@@ -1983,25 +2025,9 @@ export class Elysia<
 			Metadata,
 			Input
 		>,
-		const BeforeHandle extends MaybeArray<
-			OptionalHandler<
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>,
-		const AfterHandle extends MaybeArray<
-			AfterHandler<
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>,
-		const ErrorHandle extends MaybeArray<
-			ErrorHandler<
-				Definitions['error'],
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>
+		const BeforeHandle extends GuardBeforeHandle<Schema, Singleton, Ephemeral, Volatile, MacroContext>,
+		const AfterHandle extends GuardAfterHandle<Schema, Singleton, Ephemeral, Volatile, MacroContext>,
+		const ErrorHandle extends GuardErrorHandle<Definitions, Schema, Singleton, Ephemeral, Volatile, MacroContext>
 	>(
 		hook: GuardLocalHook<
 			Input,
@@ -2060,25 +2086,9 @@ export class Elysia<
 			Metadata,
 			Input
 		>,
-		const BeforeHandle extends MaybeArray<
-			OptionalHandler<
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>,
-		const AfterHandle extends MaybeArray<
-			AfterHandler<
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>,
-		const ErrorHandle extends MaybeArray<
-			ErrorHandler<
-				Definitions['error'],
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>
+		const BeforeHandle extends GuardBeforeHandle<Schema, Singleton, Ephemeral, Volatile, MacroContext>,
+		const AfterHandle extends GuardAfterHandle<Schema, Singleton, Ephemeral, Volatile, MacroContext>,
+		const ErrorHandle extends GuardErrorHandle<Definitions, Schema, Singleton, Ephemeral, Volatile, MacroContext>
 	>(
 		hook: GuardLocalHook<
 			Input,
@@ -2141,25 +2151,9 @@ export class Elysia<
 			Metadata,
 			Input
 		>,
-		const BeforeHandle extends MaybeArray<
-			OptionalHandler<
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>,
-		const AfterHandle extends MaybeArray<
-			AfterHandler<
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>,
-		const ErrorHandle extends MaybeArray<
-			ErrorHandler<
-				Definitions['error'],
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>,
+		const BeforeHandle extends GuardBeforeHandle<Schema, Singleton, Ephemeral, Volatile, MacroContext>,
+		const AfterHandle extends GuardAfterHandle<Schema, Singleton, Ephemeral, Volatile, MacroContext>,
+		const ErrorHandle extends GuardErrorHandle<Definitions, Schema, Singleton, Ephemeral, Volatile, MacroContext>,
 		const NewElysia extends AnyElysia
 	>(
 		hook: GuardLocalHook<
@@ -2231,25 +2225,9 @@ export class Elysia<
 			Metadata,
 			Input
 		>,
-		const BeforeHandle extends MaybeArray<
-			OptionalHandler<
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>,
-		const AfterHandle extends MaybeArray<
-			AfterHandler<
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>,
-		const ErrorHandle extends MaybeArray<
-			ErrorHandler<
-				Definitions['error'],
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>,
+		const BeforeHandle extends GuardBeforeHandle<Schema, Singleton, Ephemeral, Volatile, MacroContext>,
+		const AfterHandle extends GuardAfterHandle<Schema, Singleton, Ephemeral, Volatile, MacroContext>,
+		const ErrorHandle extends GuardErrorHandle<Definitions, Schema, Singleton, Ephemeral, Volatile, MacroContext>,
 		const NewElysia extends AnyElysia
 	>(
 		hook: GuardLocalHook<
@@ -2325,25 +2303,9 @@ export class Elysia<
 			Metadata,
 			Input
 		>,
-		const BeforeHandle extends MaybeArray<
-			OptionalHandler<
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>,
-		const AfterHandle extends MaybeArray<
-			AfterHandler<
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>,
-		const ErrorHandle extends MaybeArray<
-			ErrorHandler<
-				Definitions['error'],
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>
+		const BeforeHandle extends GuardBeforeHandle<Schema, Singleton, Ephemeral, Volatile, MacroContext>,
+		const AfterHandle extends GuardAfterHandle<Schema, Singleton, Ephemeral, Volatile, MacroContext>,
+		const ErrorHandle extends GuardErrorHandle<Definitions, Schema, Singleton, Ephemeral, Volatile, MacroContext>
 	>(
 		scope: 'local',
 		hook: GuardLocalHook<
@@ -2400,25 +2362,9 @@ export class Elysia<
 			Metadata,
 			Input
 		>,
-		const BeforeHandle extends MaybeArray<
-			OptionalHandler<
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>,
-		const AfterHandle extends MaybeArray<
-			AfterHandler<
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>,
-		const ErrorHandle extends MaybeArray<
-			ErrorHandler<
-				Definitions['error'],
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>
+		const BeforeHandle extends GuardBeforeHandle<Schema, Singleton, Ephemeral, Volatile, MacroContext>,
+		const AfterHandle extends GuardAfterHandle<Schema, Singleton, Ephemeral, Volatile, MacroContext>,
+		const ErrorHandle extends GuardErrorHandle<Definitions, Schema, Singleton, Ephemeral, Volatile, MacroContext>
 	>(
 		scope: 'local',
 		hook: GuardLocalHook<
@@ -2480,25 +2426,9 @@ export class Elysia<
 			Metadata,
 			Input
 		>,
-		const BeforeHandle extends MaybeArray<
-			OptionalHandler<
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>,
-		const AfterHandle extends MaybeArray<
-			AfterHandler<
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>,
-		const ErrorHandle extends MaybeArray<
-			ErrorHandler<
-				Definitions['error'],
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>
+		const BeforeHandle extends GuardBeforeHandle<Schema, Singleton, Ephemeral, Volatile, MacroContext>,
+		const AfterHandle extends GuardAfterHandle<Schema, Singleton, Ephemeral, Volatile, MacroContext>,
+		const ErrorHandle extends GuardErrorHandle<Definitions, Schema, Singleton, Ephemeral, Volatile, MacroContext>
 	>(
 		scope: 'plugin',
 		hook: GuardLocalHook<
@@ -2555,25 +2485,9 @@ export class Elysia<
 			Metadata,
 			Input
 		>,
-		const BeforeHandle extends MaybeArray<
-			OptionalHandler<
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>,
-		const AfterHandle extends MaybeArray<
-			AfterHandler<
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>,
-		const ErrorHandle extends MaybeArray<
-			ErrorHandler<
-				Definitions['error'],
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>
+		const BeforeHandle extends GuardBeforeHandle<Schema, Singleton, Ephemeral, Volatile, MacroContext>,
+		const AfterHandle extends GuardAfterHandle<Schema, Singleton, Ephemeral, Volatile, MacroContext>,
+		const ErrorHandle extends GuardErrorHandle<Definitions, Schema, Singleton, Ephemeral, Volatile, MacroContext>
 	>(
 		scope: 'plugin',
 		hook: GuardLocalHook<
@@ -2635,25 +2549,9 @@ export class Elysia<
 			Metadata,
 			Input
 		>,
-		const BeforeHandle extends MaybeArray<
-			OptionalHandler<
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>,
-		const AfterHandle extends MaybeArray<
-			AfterHandler<
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>,
-		const ErrorHandle extends MaybeArray<
-			ErrorHandler<
-				Definitions['error'],
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>
+		const BeforeHandle extends GuardBeforeHandle<Schema, Singleton, Ephemeral, Volatile, MacroContext>,
+		const AfterHandle extends GuardAfterHandle<Schema, Singleton, Ephemeral, Volatile, MacroContext>,
+		const ErrorHandle extends GuardErrorHandle<Definitions, Schema, Singleton, Ephemeral, Volatile, MacroContext>
 	>(
 		scope: 'global',
 		hook: GuardLocalHook<
@@ -2715,25 +2613,9 @@ export class Elysia<
 			Metadata,
 			Input
 		>,
-		const BeforeHandle extends MaybeArray<
-			OptionalHandler<
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>,
-		const AfterHandle extends MaybeArray<
-			AfterHandler<
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>,
-		const ErrorHandle extends MaybeArray<
-			ErrorHandler<
-				Definitions['error'],
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>
+		const BeforeHandle extends GuardBeforeHandle<Schema, Singleton, Ephemeral, Volatile, MacroContext>,
+		const AfterHandle extends GuardAfterHandle<Schema, Singleton, Ephemeral, Volatile, MacroContext>,
+		const ErrorHandle extends GuardErrorHandle<Definitions, Schema, Singleton, Ephemeral, Volatile, MacroContext>
 	>(
 		scope: 'global',
 		hook: GuardLocalHook<
@@ -2887,25 +2769,9 @@ export class Elysia<
 			Metadata,
 			Input
 		>,
-		const BeforeHandle extends MaybeArray<
-			OptionalHandler<
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>,
-		const AfterHandle extends MaybeArray<
-			AfterHandler<
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>,
-		const ErrorHandle extends MaybeArray<
-			ErrorHandler<
-				Definitions['error'],
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>,
+		const BeforeHandle extends GuardBeforeHandle<Schema, Singleton, Ephemeral, Volatile, MacroContext>,
+		const AfterHandle extends GuardAfterHandle<Schema, Singleton, Ephemeral, Volatile, MacroContext>,
+		const ErrorHandle extends GuardErrorHandle<Definitions, Schema, Singleton, Ephemeral, Volatile, MacroContext>,
 		const NewElysia extends AnyElysia
 	>(
 		prefix: Prefix,
@@ -2979,25 +2845,9 @@ export class Elysia<
 			Metadata,
 			Input
 		>,
-		const BeforeHandle extends MaybeArray<
-			OptionalHandler<
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>,
-		const AfterHandle extends MaybeArray<
-			AfterHandler<
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>,
-		const ErrorHandle extends MaybeArray<
-			ErrorHandler<
-				Definitions['error'],
-				Schema,
-				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
-			>
-		>,
+		const BeforeHandle extends GuardBeforeHandle<Schema, Singleton, Ephemeral, Volatile, MacroContext>,
+		const AfterHandle extends GuardAfterHandle<Schema, Singleton, Ephemeral, Volatile, MacroContext>,
+		const ErrorHandle extends GuardErrorHandle<Definitions, Schema, Singleton, Ephemeral, Volatile, MacroContext>,
 		const NewElysia extends AnyElysia
 	>(
 		prefix: Prefix,

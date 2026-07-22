@@ -1,6 +1,7 @@
 import type { AnyElysia } from '../../base'
 
 import { defaultAdapter } from '../../adapter/constants'
+import { contextDefaults } from '../../adapter/default-headers'
 import { borrow } from '../../adapter/response-ownership'
 import { ElysiaFile } from '../../universal/file'
 import { isBun } from '../../universal/constants'
@@ -9,6 +10,7 @@ import { Capture, Compiled } from '../aot'
 import { frozenRootOf } from '../../generation'
 import { resolveHandlerParams } from './params'
 import { compileHandlerJit } from './jit'
+import { assertRouteProgram, bindRouteProgram } from './program'
 export { setCaptureHeaderShorthand } from './jit'
 import {
 	clearRouteDescriptorAnalysisCaches,
@@ -632,6 +634,8 @@ export function compileHandler(
 		method,
 		path
 	)
+	if (reconstructed && 'p' in reconstructed)
+		assertRouteProgram(reconstructed.p)
 
 	if (
 		reconstructed &&
@@ -639,22 +643,31 @@ export function compileHandler(
 		typeof handler === 'function' &&
 		!frozenRoot['~ext']?.macro &&
 		!frozenRootOf(localMacroRoot(macroScope ?? instance, root))['~ext']
-			?.macro &&
-		!reconstructNeedsHookState(reconstructed.a)
-	)
-		return reconstructed.f(
-			handler,
-			...resolveHandlerParams(reconstructed.a, {
-				root,
-				finalizeError,
-				parse: adapter.parse as any,
-				res: adapter.response as any,
-				hook: nullObject() as any,
-				vali: undefined,
-				cookieConfig: undefined,
-				tracers: undefined
-			})
-		) as CompiledHandler
+			?.macro
+	) {
+		if ('p' in reconstructed)
+			return bindRouteProgram(
+				reconstructed.p,
+				handler,
+				adapter.response,
+				contextDefaults(root).response
+			)
+
+		if (!reconstructNeedsHookState(reconstructed.a))
+			return reconstructed.f(
+				handler,
+				...resolveHandlerParams(reconstructed.a, {
+					root,
+					finalizeError,
+					parse: adapter.parse as any,
+					res: adapter.response as any,
+					hook: nullObject() as any,
+					vali: undefined,
+					cookieConfig: undefined,
+					tracers: undefined
+				})
+			) as CompiledHandler
+	}
 
 	const hook = composeRouteHook(
 		instance,
@@ -729,7 +742,7 @@ export function compileHandler(
 			: (resolve(hook.parse) as any)
 	}
 
-	if (reconstructed)
+	if (reconstructed && !('p' in reconstructed)) {
 		return reconstructed.f(
 			handler,
 			...resolveHandlerParams(reconstructed.a, {
@@ -749,6 +762,7 @@ export function compileHandler(
 					: undefined
 			})
 		) as CompiledHandler
+	}
 
 	const state = describeRoute({
 		method,

@@ -107,7 +107,6 @@ describe('AOT WebSocket image emission', () => {
 
 describe('AOT WebSocket strip planning', () => {
 	const report = {
-		stubbable: true,
 		jit: true,
 		reasons: []
 	} as const

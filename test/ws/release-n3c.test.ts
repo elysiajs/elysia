@@ -109,7 +109,7 @@ const closeBackpressuredConnection = async (): Promise<WeakRef<object>[]> => {
 	await Bun.sleep(0)
 
 	const waiter = [...connection.data.resumeWaiters!][0] as unknown as object
-	const generator = [...connection.data.activeGenerators!][0] as object
+	const generator = [...connection.data.generatorPumps!][0].iterator as object
 	const refs = [
 		new WeakRef(retained),
 		new WeakRef(retained.request as object),
@@ -126,7 +126,7 @@ const closeBackpressuredConnection = async (): Promise<WeakRef<object>[]> => {
 		retained: undefined,
 		view: undefined,
 		resumeWaiters: undefined,
-		activeGenerators: undefined,
+		generatorPumps: undefined,
 		runtime: undefined
 	})
 
@@ -136,16 +136,15 @@ const closeBackpressuredConnection = async (): Promise<WeakRef<object>[]> => {
 
 const closeStalledIteratorConnection = async (): Promise<WeakRef<object>[]> => {
 	let marker: object | undefined = { stalled: true }
-	let iterator:
-		| (AsyncIterator<unknown> & AsyncIterable<unknown>)
-		| undefined = {
-		marker,
-		next: () => new Promise(() => {}),
-		return: async () => ({ done: true, value: undefined }),
-		[Symbol.asyncIterator]() {
-			return this
-		}
-	} as AsyncIterator<unknown> & AsyncIterable<unknown>
+	let iterator: (AsyncIterator<unknown> & AsyncIterable<unknown>) | undefined =
+		{
+			marker,
+			next: () => new Promise(() => {}),
+			return: async () => ({ done: true, value: undefined }),
+			[Symbol.asyncIterator]() {
+				return this
+			}
+		} as AsyncIterator<unknown> & AsyncIterable<unknown>
 	const routeRuntime = runtime(() => iterator)
 	const connection = socket(routeRuntime)
 	const kernel = buildGlobalWSHandler()
@@ -161,7 +160,6 @@ const closeStalledIteratorConnection = async (): Promise<WeakRef<object>[]> => {
 		closed: true,
 		view: undefined,
 		generatorPumps: undefined,
-		activeGenerators: undefined,
 		runtime: undefined
 	})
 
@@ -334,9 +332,7 @@ describe('Release N+3c WebSocket runtime image', () => {
 					const previous = (ws as any).frameMarker
 					;(ws as any).frameMarker = body
 					ws.send(
-						previous === undefined
-							? `fresh:${body}`
-							: `leaked:${previous}`
+						previous === undefined ? `fresh:${body}` : `leaked:${previous}`
 					)
 				}
 			})

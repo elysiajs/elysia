@@ -1,7 +1,7 @@
 import { Elysia } from '../../../src'
 
-// Mounted routes compile lazily outside the captured root. Automatic stripping
-// serves the captured route, while the uncaptured mounted route cannot compile.
+// Mounted routes compile lazily outside the captured root, so automatic
+// stripping must retain handler JIT for the uncaptured inner app.
 const inner = new Elysia().get('/hello', () => 'from-inner')
 
 export const app = new Elysia()

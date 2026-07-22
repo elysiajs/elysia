@@ -107,6 +107,27 @@ describe('AOT strip disabled', () => {
 })
 
 describe('forced AOT stripping', () => {
+	it('rejects mounted handlers that need request-time inner compilation', async () => {
+		for (const options of [{ strip: true }, { target: 'workerd' }] as const)
+			await expect(
+				generateCompiledArtifacts(
+					'test/aot/fixtures/strip-auto-mount-app.ts',
+					options
+				)
+			).rejects.toThrow(
+				'* /sub (~mount inner handler is outside root AOT capture)'
+			)
+	})
+
+	it('checks only the last winning handler for exact coverage', async () => {
+		const { stub } = await generateCompiledArtifacts(
+			'test/aot/fixtures/strip-shadowed-mount-app.ts',
+			{ strip: true }
+		)
+
+		expect(stub.jit).toBe(true)
+	})
+
 	it('serves a WS image with the generic route planner stripped', async () => {
 		for (const minify of [false, true]) {
 			const text = await build(
@@ -268,30 +289,19 @@ describe('automatic AOT stripping', () => {
 		await expect(res.text()).resolves.toBe('0,7')
 	})
 
-	it('serves captured routes but rejects an uncaptured mounted sub-app', async () => {
+	it('retains handler JIT and serves a mounted sub-app', async () => {
 		const { stub } = await generateCompiledArtifacts(
 			'test/aot/fixtures/strip-auto-mount-app.ts',
 			{ strip: 'auto' }
 		)
 
-		expect(stub).toEqual({
-			jit: true,
-			ws: true,
-			wsJit: false,
-			reconstruct: true,
-			cookie: true,
-			trace: true,
-			sucrose: true,
-			compat: true,
-			bridge: false,
-			adapter: false,
-			isProduction: true
-		})
+		expect(stub.jit).toBe(false)
 
 		const text = await build(
 			'test/aot/fixtures/strip-auto-mount-app.ts',
 			'auto'
 		)
+		expect(text).not.toContain('handler compiler JIT was stripped')
 
 		const app = await load(text)
 
@@ -300,6 +310,7 @@ describe('automatic AOT stripping', () => {
 		await expect(outer.text()).resolves.toBe('outer')
 
 		const sub = await app.handle(req('/sub/hello'))
-		expect(sub.status).toBe(500)
+		expect(sub.status).toBe(200)
+		await expect(sub.text()).resolves.toBe('from-inner')
 	})
 })

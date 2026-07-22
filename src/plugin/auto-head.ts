@@ -36,15 +36,8 @@ export const autoHead =
 		for (let i = 0; i < routes.length; i++) {
 			const route = routes[i]
 			if (route[0] === 'GET' && !explicitHead.has(route[1]))
-				app['~addRoute']([
-					'HEAD',
-					route[1],
-					route[2],
-					route[3],
-					route[4],
-					route[5],
-					route[6],
-					route[7]
-				] as InternalRoute)
+				app['~addRoute'](
+					['HEAD', ...route.slice(1)] as unknown as InternalRoute
+				)
 		}
 	}

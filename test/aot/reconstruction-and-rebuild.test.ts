@@ -2,7 +2,7 @@ import '../../src/compile/aot-capture'
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
-import { Compiled } from '../../src/compile/aot'
+import { Compiled, type CapturedHandler } from '../../src/compile/aot'
 import {
 	endHandlerCapture,
 	endValidatorCapture
@@ -14,6 +14,11 @@ import {
 	registerManifest
 } from './_manifest'
 import { post, req } from '../utils'
+
+const legacyCapture = (handler: CapturedHandler) => {
+	if ('program' in handler) throw new Error('Expected legacy handler capture')
+	return handler
+}
 
 afterEach(() => {
 	Compiled.clear()
@@ -44,8 +49,8 @@ describe('AOT reconstruction of named parsers', () => {
 		const validators = endValidatorCapture()
 
 		expect(handlers.length).toBe(1)
-		expect(handlers[0]!.alias.split(',')).toContain('ph')
-		expect(handlers[0]!.alias.split(',')).not.toContain('ho')
+		expect(legacyCapture(handlers[0]!).alias.split(',')).toContain('ph')
+		expect(legacyCapture(handlers[0]!).alias.split(',')).not.toContain('ho')
 
 		Validator.clear()
 		registerManifest({
@@ -136,7 +141,7 @@ describe('portable captured header extraction', () => {
 		endValidatorCapture()
 
 		expect(handlers.length).toBe(1)
-		const code = handlers[0]!.code
+		const code = legacyCapture(handlers[0]!).code
 
 		expect(code).toContain('c.headers=')
 		expect(code).not.toContain('headers.toJSON()')

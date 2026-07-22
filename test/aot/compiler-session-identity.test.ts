@@ -2,7 +2,7 @@ import '../../src/compile/aot-capture'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 
 import { Elysia, t } from '../../src'
-import { Compiled } from '../../src/compile/aot'
+import { Compiled, type FrozenHandler } from '../../src/compile/aot'
 import {
 	abortCapture,
 	getCompilerSessionDiagnostics
@@ -12,6 +12,11 @@ import { Validator } from '../../src/validator'
 import { buildFrozenWSRoute } from '../../src/ws/runtime'
 import { post } from '../utils'
 import { materialise, materialiseHandlers } from './_manifest'
+
+const legacyFrozen = (handler: FrozenHandler) => {
+	if ('p' in handler) throw new Error('Expected legacy frozen handler')
+	return handler
+}
 
 const buildA = () =>
 	new Elysia({ precompile: true }).post(
@@ -51,9 +56,10 @@ afterEach(() => {
 describe('AOT manifest ownership and compiler sessions', () => {
 	it('only the first compatible app consumes a registered manifest', async () => {
 		const { handlers } = await register()
-		const original = handlers.POST!['/x']!.f
+		const handler = legacyFrozen(handlers.POST!['/x']!)
+		const original = handler.f
 		let frozenFactoryCalls = 0
-		handlers.POST!['/x']!.f = (...args: unknown[]) => {
+		handler.f = (...args: unknown[]) => {
 			frozenFactoryCalls++
 			return original(...args)
 		}
@@ -193,9 +199,10 @@ describe('AOT manifest ownership and compiler sessions', () => {
 
 	it('uses the manifest for captured routes and JIT for later routes', async () => {
 		const { handlers } = await register()
-		const original = handlers.POST!['/x']!.f
+		const handler = legacyFrozen(handlers.POST!['/x']!)
+		const original = handler.f
 		let frozenFactoryCalls = 0
-		handlers.POST!['/x']!.f = (...args: unknown[]) => {
+		handler.f = (...args: unknown[]) => {
 			frozenFactoryCalls++
 			return original(...args)
 		}
@@ -212,9 +219,10 @@ describe('AOT manifest ownership and compiler sessions', () => {
 
 	it('leaves a registered manifest available after compiling a routeless app', async () => {
 		const { handlers } = await register()
-		const original = handlers.POST!['/x']!.f
+		const handler = legacyFrozen(handlers.POST!['/x']!)
+		const original = handler.f
 		let frozenFactoryCalls = 0
-		handlers.POST!['/x']!.f = (...args: unknown[]) => {
+		handler.f = (...args: unknown[]) => {
 			frozenFactoryCalls++
 			return original(...args)
 		}

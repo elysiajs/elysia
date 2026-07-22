@@ -1,7 +1,5 @@
 import { describe, it, expect, spyOn } from 'bun:test'
 import { resolve } from 'node:path'
-import { rm } from 'node:fs/promises'
-import { post } from '../utils'
 
 const APP = resolve(import.meta.dir, 'fixtures/app.ts')
 // In-repo `Compiled` source (the stale built `dist` can't resolve `elysia/compile`).
@@ -40,7 +38,7 @@ describe('AOT plugin', () => {
 			else process.env.ELYSIA_AOT_BUILD = previous
 		}
 
-		// Small manifests stay eager.
+		// Manifests emit validators eagerly.
 		expect(src).toContain('export const validators')
 		expect(src).toContain('Compiled.register({ bf: 1, fingerprint')
 		// Simple schemas require no TypeBox runtime imports.
@@ -218,39 +216,4 @@ describe('AOT plugin', () => {
 		).resolves.toBeUndefined()
 	})
 
-	it('builds with forced lazy loading and serves a request', async () => {
-		const { aot } = await import('../../src/plugin/aot/bun')
-
-		const result = await Bun.build({
-			entrypoints: [APP],
-			// force lazy (the 3-route fixture would otherwise auto-pick eager)
-			plugins: [aot(APP, { registerFrom: REGISTER_FROM, lazy: true })],
-			target: 'bun'
-		})
-		expect(result.success).toBe(true)
-
-		const text = await result.outputs[0]!.text()
-		expect(text).toContain('lazyGroups') // forced lazy
-
-		// Import the bundle and trigger lazy validator materialization.
-		const tmp = resolve(import.meta.dir, '_built.lazy.mjs')
-		await Bun.write(tmp, text)
-		process.env.ELYSIA_AOT_BUILD = '1' // skip the bundle's app.listen on import
-		try {
-			const mod: any = await import(tmp)
-			// Serve through frozen validators after capture ends.
-			delete process.env.ELYSIA_AOT_BUILD
-
-			const ok = await mod.app.handle(post('/body', { hello: 'world' }))
-			expect(ok.status).toBe(200)
-			await expect(ok.json()).resolves.toEqual({ hello: 'world' })
-
-			// frozen check rejects (the group materialized synchronously on first hit)
-			const bad = await mod.app.handle(post('/body', { hello: 123 }))
-			expect(bad.status).toBe(422)
-		} finally {
-			delete process.env.ELYSIA_AOT_BUILD
-			await rm(tmp, { force: true })
-		}
-	})
 })

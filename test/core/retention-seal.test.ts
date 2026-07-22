@@ -92,7 +92,6 @@ describe('N+3a retention images', () => {
 			extractedWSHandler: 'function'
 		})
 		expect(output.coldProbe).toEqual({
-			stubbable: true,
 			jit: true,
 			reasons: []
 		})
