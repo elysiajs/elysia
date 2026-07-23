@@ -63,12 +63,16 @@ function decodeParams(params: Record<string, string>) {
 	return params
 }
 
+const notFoundBody = Object.freeze({ code: 'NOT_FOUND' })
+
 function finalizeError(
 	context: Context,
 	handleError: (context: Context, error: Error) => unknown,
 	afterResponse: ((context: Context, status?: number) => void) | undefined,
 	error: Error
-): Response | Promise<Response> {
+) {
+	if ((error as unknown) === notFoundBody) error = new NotFound()
+
 	let resp: Response | Promise<Response>
 	try {
 		resp = handleError(context, error) as Response | Promise<Response>
@@ -209,7 +213,19 @@ function findRoute(
 		)
 	}
 
-	if (hasError) throw new NotFound()
+	// Framework miss: propagate the tagged sentinel straight into
+	// `finalizeError` (materialized there) instead of throwing a stackful
+	// NotFound through the caller's catch. The request-phase trace span was
+	// already resolved by the caller before `findRoute`, and the numeric
+	// re-resolve in the old catch path was an idempotent no-op, so no
+	// user-observable trace state is lost by returning instead of throwing.
+	if (hasError)
+		return finalizeError(
+			context,
+			handleError,
+			afterResponse,
+			notFoundBody as unknown as Error
+		)
 
 	afterResponse?.(context, 404)
 	return notFound(context)
@@ -692,8 +708,7 @@ export function createFetchHandler(
 					afterResponse
 				)
 
-			const result =
-				router?.find(method, path) ?? router?.find('*', path)
+			const result = router?.find(method, path) ?? router?.find('*', path)
 
 			if (result) {
 				context.params = decodeParams(result.params)
@@ -719,7 +734,7 @@ export function createFetchHandler(
 				context,
 				handleError,
 				afterResponse,
-				new NotFound()
+				notFoundBody as unknown as Error
 			)
 
 		afterResponse?.(context, 404)

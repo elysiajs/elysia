@@ -25,7 +25,7 @@ import {
 	setCaptureHeaderShorthand,
 	compileHandler
 } from '../../compile/handler'
-import { JITProbe, type JITProbeReason } from '../../compile/jit-probe'
+import { JITProbe, type JITProbeResult } from '../../compile/jit-probe'
 import { Validator } from '../../validator'
 
 export type AotTarget = 'bun' | 'node' | 'workerd'
@@ -65,14 +65,6 @@ export interface CompileToSourceOptions {
 	 * @default 'elysia'
 	 */
 	registerFrom?: string
-
-	/**
-	 * Specifier the generated module imports `buildCoercedFromPlan`
-	 * from only emitted when the manifest carries a coerce plan (`cp`)
-	 *
-	 * @default 'elysia/coerce-plan'
-	 */
-	coercePlanFrom?: string
 
 	/**
 	 * Specifier the generated module imports the `Reconstruct` table from,
@@ -153,40 +145,6 @@ export async function captureArtifacts(
 	}
 }
 
-export interface StubbabilityReport {
-	/** Handler JIT is provably unused → handler-only strip is safe. */
-	stubbable: boolean
-
-	/** `sucrose` + the handler `new Function` codegen is unused. */
-	jit: boolean
-
-	/** Why handler JIT cannot be stripped, if any. */
-	reasons: JITProbeReason[]
-}
-
-/**
- * Decide whether the frozen build can run with handler JIT replaced by a
- * throwing stub
- *
- * Static prediction is unsound
- *
- * eg. an inline-eligible handler (`() => 'ok'`) is never captured into
- * handler manifest and falls through to `sucrose` at runtime
- *
- * So instead of guessing, this captures the manifest, registers it in-process
- * and replays every route through the real `compileHandler` with a tripwire armed
- *
- * Handler JIT is only reported stubbable when no handler-JIT entry point was reached
- */
-export async function analyzeStubbability(
-	app: AnyElysia,
-	options?: CompileToSourceOptions
-): Promise<StubbabilityReport> {
-	const { handlers } = await captureArtifacts(app, options)
-
-	return replayStubbability(app, handlers)
-}
-
 const materialiseHandlersForReplay = (
 	captured: CapturedHandler[]
 ): HandlerManifest => {
@@ -207,7 +165,7 @@ const materialiseHandlersForReplay = (
 export function replayStubbability(
 	app: AnyElysia,
 	handlers: CapturedHandler[]
-): StubbabilityReport {
+): JITProbeResult {
 	const previousCompiled = snapshotCompiled()
 	const previousAotBuild = env.ELYSIA_AOT_BUILD
 
@@ -238,7 +196,6 @@ export function replayStubbability(
 				JITProbe.end()
 
 				return {
-					stubbable: false,
 					jit: false,
 					reasons: ['handler:new-function']
 				}
@@ -648,7 +605,7 @@ function emitModule(
 
 	if (options?.register && hasCoercePlan)
 		body += `import { buildCoercedFromPlan } from ${JSON.stringify(
-			options.coercePlanFrom ?? 'elysia/coerce-plan'
+			'elysia/coerce-plan'
 		)}\n`
 
 	if (options?.register && captured.length)

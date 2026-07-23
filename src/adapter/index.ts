@@ -1,10 +1,7 @@
 import type { ElysiaAdapterOptions } from './types'
 
-export function createAdapter<const T extends ElysiaAdapterOptions>(
-	adapter: ElysiaAdapterOptions
-): T {
-	return adapter as any
-}
+// for type inference and following conventions like most frameworks
+export const createAdapter = (adapter: ElysiaAdapterOptions) => adapter
 
 export type ElysiaAdapter = ReturnType<typeof createAdapter>
 

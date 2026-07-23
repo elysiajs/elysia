@@ -50,6 +50,26 @@ describe('NODE_ENV=production', () => {
 		)
 	})
 
+	// Ported from sennen (commit 3600912b, N+3c) per
+	// design/sennen-salvage/002-salvage-rejected-sennen.md Step 2c. `path` is
+	// a documented public Context field (src/context.ts:197); in production
+	// mode no mutation-warning descriptor is installed (see
+	// test/core/context-readonly.test.ts for the dev-mode getter/setter
+	// case), so it stays a plain own+enumerable data property.
+	it('keeps request-hook path own and enumerable', async () => {
+		let own = false
+		let enumerable = false
+		const app = new Elysia()
+			.request((context) => {
+				own = Object.hasOwn(context, 'path')
+				enumerable = Object.keys(context).includes('path')
+			})
+			.get('/', () => 'ok')
+
+		await app.handle(new Request('http://localhost/'))
+		expect({ own, enumerable }).toEqual({ own: true, enumerable: true })
+	})
+
 	it('masks unhandled generic error messages', async () => {
 		const app = new Elysia().get('/', () => {
 			throw new Error('SECRET: database password leaked from driver')

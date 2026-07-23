@@ -89,6 +89,50 @@ describe('loose path registration', () => {
 	})
 })
 
+// Ported from sennen (commit 7e70df83) per
+// design/sennen-salvage/002-salvage-rejected-sennen.md Step 2a. Only the
+// public-contract cases are ported: embedded parameters, prefix wildcards,
+// empty parameters, encoded aliases, and last-route-wins. The rest of that
+// file's describe blocks are already present above (pre-existing on stable)
+// or out of scope for this slice.
+describe('routing edge contracts', () => {
+	it('preserves embedded params, prefix wildcards, and empty-param rejection', async () => {
+		const app = new Elysia()
+			.get('/time:zone', ({ params }: any) => `zone:${params.zone}`)
+			.get('/asset*', ({ params }: any) => `asset:${params['*']}`)
+			.get('/empty/:id/tail', ({ params }: any) => params.id)
+
+		await expect(
+			app.handle(req('/timeUTC')).then((r) => r.text())
+		).resolves.toBe('zone:UTC')
+		await expect(
+			app.handle(req('/assetfoo/bar')).then((r) => r.text())
+		).resolves.toBe('asset:foo/bar')
+		await expect(
+			app.handle(req('/asset')).then((r) => r.text())
+		).resolves.toBe('asset:')
+		expect((await app.handle(req('/empty//tail'))).status).toBe(404)
+	})
+
+	it('keeps the last raw or encoded alias for both request spellings', async () => {
+		const app = new Elysia()
+			.get('/alias-a/café', () => 'raw-first')
+			.get('/alias-a/caf%C3%A9', () => 'encoded-last')
+			.get('/alias-b/caf%C3%A9', () => 'encoded-first')
+			.get('/alias-b/café', () => 'raw-last')
+
+		for (const path of ['/alias-a/café', '/alias-a/caf%C3%A9'])
+			await expect(
+				app.handle(req(path)).then((r) => r.text())
+			).resolves.toBe('encoded-last')
+
+		for (const path of ['/alias-b/café', '/alias-b/caf%C3%A9'])
+			await expect(
+				app.handle(req(path)).then((r) => r.text())
+			).resolves.toBe('raw-last')
+	})
+})
+
 describe('route introspection', () => {
 	it('exposes inherited guard schemas through .routes and runtime validation', async () => {
 		const inner = new Elysia().get('/x', () => 'ok')

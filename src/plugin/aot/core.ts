@@ -7,9 +7,9 @@ import {
 	compileToSource,
 	captureArtifacts,
 	replayStubbability,
-	type AotTarget,
-	type StubbabilityReport
+	type AotTarget
 } from './source'
+import type { JITProbeResult } from '../../compile/jit-probe'
 import { composeRouteHook } from '../../compile/handler'
 import {
 	isStandardSchema,
@@ -236,7 +236,7 @@ export const NO_STUB: StubPlan = {
  */
 export function planFromReport(
 	strip: boolean | 'auto',
-	report: StubbabilityReport,
+	report: JITProbeResult,
 	hasWS: boolean,
 	mayTrace: boolean,
 	aliases: Set<string>,
@@ -418,16 +418,6 @@ export const STUB_SOURCES: Record<
 				`	}\n` +
 				`	return true\n` +
 				`}\n`
-		},
-		{
-			// The experimental resume-skeleton lane (`plan/plan.ts` + `plan/emit.ts`)
-			// is only reachable when `experimental.resumeEmit` is set
-			filter: /[\\/]elysia[\\/](dist|src)[\\/]compile[\\/]plan[\\/]plan\.(m?js|ts)$/,
-			source: `export function planRoute(){throw new Error("[elysia-aot] resume-emit plan was stripped (strip mode). Rebuild with strip:false.")}\n`
-		},
-		{
-			filter: /[\\/]elysia[\\/](dist|src)[\\/]compile[\\/]plan[\\/]emit\.(m?js|ts)$/,
-			source: `export function emitResume(){throw new Error("[elysia-aot] resume-emit was stripped (strip mode). Rebuild with strip:false.")}\n`
 		}
 	],
 	ws: [
@@ -497,6 +487,16 @@ export const STUB_SOURCES: Record<
 				`export function flushMemory() {\n` +
 				`	clearContextCache()\n` +
 				`	Validator.clear()\n` +
+				`}\n`
+		},
+		{
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]compile[\\/]analysis-cache\.(m?js|ts)$/,
+			source:
+				`import { clearHandlerAnalysisCaches } from './handler/index'\n` +
+				`import { clearFlattenChainMemo } from '../utils'\n` +
+				`export function clearAuthoringAnalysisCaches(root) {\n` +
+				`	clearHandlerAnalysisCaches(root)\n` +
+				`	clearFlattenChainMemo(root)\n` +
 				`}\n`
 		}
 	],
@@ -616,13 +616,6 @@ export async function generateVirtualType(typeSpecifier = 'elysia/type') {
 	return source
 }
 
-export async function generateCompiledModule(
-	file: string,
-	options?: ElysiaAotOptions
-): Promise<string> {
-	return (await generateCompiledArtifacts(file, options)).source
-}
-
 export interface CompiledArtifacts {
 	source: string
 
@@ -658,15 +651,23 @@ export const getAotWorkerDiagnostics = () => ({
 	lastExit: lastGenerationWorkerExit
 })
 
-const workerUrl = (): URL => {
-	const moduleUrl = import.meta.url
-	const extension = moduleUrl.endsWith('.mjs')
+/**
+ * Extension mirroring the running module's own build output, so a sibling
+ * source file can be resolved from `import.meta.url` in `.mjs`/`.js`/`.ts`
+ * builds alike.
+ */
+export function siblingModuleExt(moduleUrl: string): '.mjs' | '.js' | '.ts' {
+	return moduleUrl.endsWith('.mjs')
 		? '.mjs'
 		: moduleUrl.endsWith('.js')
 			? '.js'
 			: '.ts'
+}
 
-	return new URL('./worker' + extension, moduleUrl)
+const workerUrl = (): URL => {
+	const moduleUrl = import.meta.url
+
+	return new URL('./worker' + siblingModuleExt(moduleUrl), moduleUrl)
 }
 
 /** @internal Re-evaluate an entry in a disposable worker for watch rebuilds. */
@@ -960,4 +961,3 @@ export const realPath = (path: string): string => {
 		return path
 	}
 }
-

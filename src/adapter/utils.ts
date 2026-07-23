@@ -1,4 +1,4 @@
-import { isNotEmpty, nullObject } from '../utils'
+import { isByteStream, isNotEmpty, nullObject } from '../utils'
 import { StatusMap } from '../constants'
 
 import { serializeCookie } from '../cookie/serialize'
@@ -275,10 +275,37 @@ export function createStreamHandler({
 		request?: Request,
 		skipFormat?: boolean
 	) => {
+		if (isByteStream(generator)) {
+			if (generator.locked)
+				throw new TypeError(
+					'Cannot transfer a locked or consumed byte stream'
+				)
+
+			if (set) {
+				handleSet(set)
+				const headers = materializeSetHeaders(set)
+
+				if (headers instanceof Headers) {
+					if (!headers.has('content-type'))
+						headers.set('content-type', 'application/octet-stream')
+				} else if (!headers['content-type'])
+					headers['content-type'] = 'application/octet-stream'
+
+				return new Response(generator, set as ResponseInit)
+			}
+
+			return new Response(generator, {
+				headers: { 'content-type': 'application/octet-stream' }
+			})
+		}
+
+		const typedSSE =
+			!skipFormat && 'sse' in generator && (generator as any).sse === true
+
 		// Since ReadableStream doesn't have next, init might be undefined
-		let init = (generator as Generator).next?.() as
-			| IteratorResult<unknown>
-			| undefined
+		let init = (
+			typedSSE ? undefined : (generator as Generator).next?.()
+		) as IteratorResult<unknown> | undefined
 
 		if (set) handleSet(set)
 		if (init instanceof Promise) init = await init
@@ -293,18 +320,19 @@ export function createStreamHandler({
 
 		// Check if stream is from a pre-formatted Response body
 		const isSSE =
-			!skipFormat &&
-			// @ts-ignore First SSE result is wrapped with sse()
-			(init?.value?.sse ??
-				// @ts-ignore ReadableStream is wrapped with sse()
-				generator?.sse ??
-				(set?.headers instanceof Headers
-					? set.headers
-							.get('content-type')
-							?.startsWith('text/event-stream')
-					: set?.headers['content-type']?.startsWith(
-							'text/event-stream'
-						)))
+			typedSSE ||
+			(!skipFormat &&
+				// @ts-ignore First SSE result is wrapped with sse()
+				(init?.value?.sse ??
+					// @ts-ignore ReadableStream is wrapped with sse()
+					generator?.sse ??
+					(set?.headers instanceof Headers
+						? set.headers
+								.get('content-type')
+								?.startsWith('text/event-stream')
+						: set?.headers['content-type']?.startsWith(
+								'text/event-stream'
+							))))
 
 		const format = isSSE ? sseFormat : identityFormat
 
@@ -319,7 +347,7 @@ export function createStreamHandler({
 		if (set) materializeSetHeaders(set)
 		const headers = set?.headers
 		if (headers instanceof Headers) {
-			if (!headers.has('transfer-encoding'))
+			if (!typedSSE && !headers.has('transfer-encoding'))
 				headers.set('transfer-encoding', 'chunked')
 
 			if (!headers.has('content-type'))
@@ -328,11 +356,19 @@ export function createStreamHandler({
 			if (!headers.has('cache-control'))
 				headers.set('cache-control', 'no-cache')
 		} else if (headers) {
-			if (!headers['transfer-encoding'])
+			if (!typedSSE && !headers['transfer-encoding'])
 				headers['transfer-encoding'] = 'chunked'
 			if (!headers['content-type']) headers['content-type'] = contentType
 			if (!headers['cache-control']) headers['cache-control'] = 'no-cache'
-		} else
+		} else if (typedSSE)
+			set = {
+				status: 200,
+				headers: {
+					'content-type': contentType,
+					'cache-control': 'no-cache'
+				}
+			}
+		else
 			set = {
 				status: 200,
 				headers: {
@@ -405,67 +441,70 @@ export function createStreamHandler({
 		}
 
 		return new Response(
-			new ReadableStream({
-				async start(controller) {
-					if (signal) {
-						onAbort = () => {
-							cleanupAbort()
-							end = true
-							safeReturn()
+			new ReadableStream(
+				{
+					async start(controller) {
+						if (signal) {
+							onAbort = () => {
+								cleanupAbort()
+								end = true
+								safeReturn()
 
-							try {
-								controller.close()
-							} catch {}
+								try {
+									controller.close()
+								} catch {}
+							}
+
+							if (signal.aborted) onAbort()
+							else
+								signal.addEventListener('abort', onAbort, {
+									once: true
+								})
 						}
 
-						if (signal.aborted) onAbort()
-						else
-							signal.addEventListener('abort', onAbort, {
-								once: true
-							})
-					}
+						if (
+							!init ||
+							init.value instanceof ReadableStream ||
+							init.value === undefined ||
+							init.value === null
+						)
+							return
 
-					if (
-						!init ||
-						init.value instanceof ReadableStream ||
-						init.value === undefined ||
-						init.value === null
-					)
-						return
+						await enqueueValue(controller, init.value)
+					},
 
-					await enqueueValue(controller, init.value)
-				},
-
-				async pull(controller) {
-					// Respect abort/cancel that happened between pull() calls.
-					if (end) {
-						closeSafely(controller)
-						return
-					}
-
-					try {
-						const { value: chunk, done } = await iterator.next()
-
-						if (done || end) {
+					async pull(controller) {
+						// Respect abort/cancel that happened between pull() calls.
+						if (end) {
 							closeSafely(controller)
 							return
 						}
 
-						if (chunk === undefined || chunk === null) return
+						try {
+							const { value: chunk, done } = await iterator.next()
 
-						await enqueueValue(controller, chunk)
-					} catch (error) {
+							if (done || end) {
+								closeSafely(controller)
+								return
+							}
+
+							if (chunk === undefined || chunk === null) return
+
+							await enqueueValue(controller, chunk)
+						} catch (error) {
+							cleanupAbort()
+							controller.error(error)
+						}
+					},
+
+					cancel() {
+						end = true
 						cleanupAbort()
-						controller.error(error)
+						safeReturn()
 					}
 				},
-
-				cancel() {
-					end = true
-					cleanupAbort()
-					safeReturn()
-				}
-			}),
+				typedSSE ? { highWaterMark: 0 } : undefined
+			),
 			set as any
 		)
 	}

@@ -1,5 +1,4 @@
 import { Elysia, file, t } from 'elysia'
-import { resumeEmit } from 'elysia/experimental/resume'
 import * as adapterUtils from 'elysia/adapter/utils'
 import * as compiled from 'elysia/compiled'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
@@ -22,9 +21,6 @@ if (
 
 if (!('validators' in compiled) || !('handlers' in compiled))
 	throw new Error('❌ ESM Node.js compiled subpath failed')
-
-if (typeof resumeEmit.emitResume !== 'function')
-	throw new Error('❌ ESM Node.js experimental/resume subpath failed')
 
 const app = new Elysia().get(
 	'/',

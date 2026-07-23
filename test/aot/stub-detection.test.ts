@@ -4,10 +4,11 @@ import { rm } from 'node:fs/promises'
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
 import { Compiled } from '../../src/compile/aot'
+import type { AnyElysia } from '../../src/base'
 import {
-	analyzeStubbability,
 	captureArtifacts,
-	replayStubbability
+	replayStubbability,
+	type CompileToSourceOptions
 } from '../../src/plugin/aot/source'
 import {
 	generateCompiledArtifacts,
@@ -26,6 +27,16 @@ import { post, req } from '../utils'
 const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/aot.ts')
 const STRIP_E2E_APP = resolve(import.meta.dir, 'fixtures/strip-e2e-app.ts')
 
+// Inlined former `analyzeStubbability`: capture then replay against the same app.
+const analyzeStubbability = async (
+	app: AnyElysia,
+	options?: CompileToSourceOptions
+) => {
+	const { handlers } = await captureArtifacts(app, options)
+
+	return replayStubbability(app, handlers)
+}
+
 afterEach(() => {
 	Compiled.clear()
 	Validator.clear()
@@ -40,7 +51,6 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			({ body }) => body
 		)
 		const r = await analyzeStubbability(app as any)
-		expect(r.stubbable).toBe(true)
 		expect(r.jit).toBe(true)
 		expect(r.reasons).toEqual([])
 	})
@@ -50,7 +60,6 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 		// generated factory so a frozen build can reconstruct without sucrose.
 		const app = new Elysia().get('/', () => 'ok')
 		const r = await analyzeStubbability(app as any)
-		expect(r.stubbable).toBe(true)
 		expect(r.jit).toBe(true)
 		expect(r.reasons).toEqual([])
 	})
@@ -65,7 +74,6 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			.get('/g', () => 'ok')
 		const r = await analyzeStubbability(app as any)
 		expect(r.jit).toBe(true)
-		expect(r.stubbable).toBe(true)
 	})
 
 	// WebSocket routes do not call the HTTP handler compiler.
@@ -73,7 +81,6 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 		const app = new Elysia().ws('/ws', { message: () => {} })
 		const r = await analyzeStubbability(app as any)
 		expect(r.jit).toBe(true)
-		expect(r.stubbable).toBe(true)
 		expect(r.reasons).toEqual([])
 	})
 
@@ -88,7 +95,6 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			.ws('/ws', { message: () => {} })
 		const r = await analyzeStubbability(app as any)
 		expect(r.jit).toBe(true)
-		expect(r.stubbable).toBe(true)
 	})
 
 	// Mounted subapps must be built separately or used with strip:false.
@@ -98,7 +104,6 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 
 		const r = await analyzeStubbability(app as any)
 		expect(r.jit).toBe(true)
-		expect(r.stubbable).toBe(true)
 	})
 
 	it('detection is side-effect free (registry restored afterwards)', async () => {
@@ -160,7 +165,7 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 		expect(built).toBe(0)
 
 		const report = replayStubbability(new Elysia() as any, [])
-		expect(report.stubbable).toBe(true)
+		expect(report.jit).toBe(true)
 
 		// Replay restores both validators and their lazy-group metadata.
 		// The route still looked unmaterialized, but no longer resolved.
@@ -474,7 +479,6 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 /** Trace can be stubbed only when no reachable handler can emit trace events. */
 describe('trace stub gate — live-JIT relaxation (planFromReport)', () => {
 	const liveJit = {
-		stubbable: false,
 		jit: false,
 		reasons: ['sucrose']
 	} as any

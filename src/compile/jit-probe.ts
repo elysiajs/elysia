@@ -2,8 +2,6 @@
 export type JITProbeReason = 'sucrose' | 'handler:new-function'
 
 export interface JITProbeResult {
-	/** True when the frozen replay never touched handler JIT. */
-	stubbable: boolean
 	/** `sucrose` + the handler `new Function` codegen is unused. */
 	jit: boolean
 	reasons: JITProbeReason[]
@@ -32,7 +30,6 @@ export abstract class JITProbe {
 		const fired = [...reasons]
 		const unused = fired.length === 0
 		const result: JITProbeResult = {
-			stubbable: unused,
 			jit: unused,
 			reasons: fired
 		}

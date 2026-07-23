@@ -23,12 +23,6 @@ describe('AOT plugin source transforms', () => {
 
 		it('uses the type-import source independently of registerFrom', async () => {
 			const userCode = `import { t } from 'elysia'\nt.Number()`
-			expect(
-				await rewriteTypeImport(userCode, {
-					from: '/abs/monorepo/src/compile/index.ts'
-				})
-			).toBe(userCode)
-
 			expect(await rewriteTypeImport(userCode)).toBe(
 				`import * as t from 'elysia/type'\nt.Number()`
 			)

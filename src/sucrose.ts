@@ -1,5 +1,4 @@
 import { fnv1a } from './utils'
-import { isProduction } from './error'
 import { getCompilerSession } from './compile/aot'
 
 import type { Handler, AppHook } from './types'
@@ -253,30 +252,6 @@ export function retrieveRootparameters(parameter: string) {
 	}
 }
 
-/**
- * Find inference from parameter
- *
- * @param parameter stringified parameter
- */
-function findParameterReference(
-	parameter: string,
-	inference: Sucrose.Inference
-) {
-	const { parameters, hasParenthesis } = retrieveRootparameters(parameter)
-
-	// Check if root is an object destructuring
-	if (parameters.query) inference.query = true
-	if (parameters.headers) inference.headers = true
-	if (parameters.body) inference.body = true
-	if (parameters.cookie) inference.cookie = true
-	if (parameters.set) inference.set = true
-	if (parameters.route) inference.route = true
-
-	if (hasParenthesis) return `{ ${Object.keys(parameters).join(', ')} }`
-
-	return Object.keys(parameters).join(', ')
-}
-
 function findEndIndex(
 	type: string,
 	content: string,
@@ -411,220 +386,6 @@ export function findAlias(
 	return aliases
 }
 
-export function extractMainParameter(parameter: string) {
-	if (!parameter) return
-
-	if (parameter.charCodeAt(0) !== 123) return parameter
-
-	parameter = parameter.slice(2, -2)
-
-	const hasComma = parameter.includes(',')
-	if (!hasComma) {
-		const index = parameter.indexOf('...')
-		// This happens when spread operator is used as the only parameter
-		if (index !== -1) return parameter.slice(parameter.indexOf('...') + 3)
-
-		return
-	}
-
-	const spreadIndex = parameter.indexOf('...')
-	if (spreadIndex === -1) return
-
-	// Spread parameter is always the last parameter, no need for further checking
-	return parameter.slice(spreadIndex + 3).trimEnd()
-}
-
-function isIdentifierChar(char: number) {
-	// 0-9
-	return (
-		(char >= 48 && char <= 57) ||
-		// A-Z
-		(char >= 65 && char <= 90) ||
-		// a-z
-		(char >= 97 && char <= 122) ||
-		// _ $
-		char === 95 ||
-		char === 36
-	)
-}
-
-export function hasAmbiguousContextUse(code: string, aliases: string[]) {
-	for (const alias of aliases) {
-		if (!alias || alias.charCodeAt(0) === 123) continue
-
-		let from = 0
-		while (true) {
-			const index = code.indexOf(alias, from)
-			if (index === -1) break
-
-			from = index + alias.length
-
-			// Reject partial identifier matches (e.g. alias `c` inside `abc`)
-			const before = index === 0 ? -1 : code.charCodeAt(index - 1)
-			if (before !== -1 && isIdentifierChar(before)) continue
-
-			let spread = index - 1
-			while (spread >= 0) {
-				const char = code.charCodeAt(spread)
-				if (char !== 32 && char !== 9 && char !== 10) break
-				spread--
-			}
-			if (
-				code.charCodeAt(spread) === 46 &&
-				code.charCodeAt(spread - 1) === 46 &&
-				code.charCodeAt(spread - 2) === 46
-			)
-				return true
-
-			// Look at what immediately follows the alias.
-			let after = from
-
-			// Whitespace between the alias and a member operator
-			// (`c .query`, `c\n.query`, `c [k]`) defeats the exact-string
-			// `access()` matcher → treat as ambiguous once we confirm the
-			// next non-space token is a member operator.
-			let hadSpace = false
-			while (after < code.length) {
-				const char = code.charCodeAt(after)
-				if (char !== 32 && char !== 9 && char !== 10) break
-				hadSpace = true
-				after++
-			}
-
-			// Skip an optional-chaining `?.` so `alias?.[k]` / `alias?.query`
-			// are handled like their plain counterparts.
-			if (
-				code.charCodeAt(after) === 63 && // ?
-				code.charCodeAt(after + 1) === 46 // .
-			)
-				after += 2
-
-			const op = code.charCodeAt(after)
-
-			// `.` member access
-			if (op === 46) {
-				// Spaced access (`c .query`)
-				if (hadSpace) return true
-
-				// Whitespace after the dot (`c.  query`) also defeats the
-				// matcher's exact `alias.query` string.
-				let cursor = after + 1
-				while (cursor < code.length) {
-					const char = code.charCodeAt(cursor)
-					if (char !== 32 && char !== 9 && char !== 10) break
-					cursor++
-				}
-				if (cursor !== after + 1) return true
-
-				continue
-			}
-
-			// Computed `[…]` member access
-			if (op !== 91) continue
-
-			// Skip whitespace inside the bracket.
-			let cursor = after + 1
-			while (cursor < code.length) {
-				const char = code.charCodeAt(cursor)
-				if (char !== 32 && char !== 9 && char !== 10) break
-				cursor++
-			}
-
-			// A string-literal key (`alias["query"]`) is statically clear and is
-			// already handled by `access()`
-			const keyChar = code.charCodeAt(cursor)
-			if (keyChar !== 34 && keyChar !== 39) return true // not " or '
-		}
-	}
-
-	// `arguments` gives the handler the whole context array positionally, which
-	// the alias tracker cannot follow
-	let from = 0
-	while (true) {
-		const index = code.indexOf('arguments', from)
-		if (index === -1) break
-
-		from = index + 9
-
-		const before = index === 0 ? -1 : code.charCodeAt(index - 1)
-		const after = code.charCodeAt(from)
-
-		if (
-			(before === -1 || !isIdentifierChar(before)) &&
-			!isIdentifierChar(after)
-		)
-			return true
-	}
-
-	return false
-}
-
-/**
- * Analyze if context is mentioned in body
- */
-export function inferBodyReference(
-	code: string,
-	aliases: string[],
-	inference: Sucrose.Inference
-) {
-	const access = (type: string, alias: string) =>
-		code.includes(`${alias}.${type}`) ||
-		code.includes(`${alias}?.${type}`) ||
-		code.includes(`${alias}["${type}"]`) ||
-		code.includes(`${alias}?.["${type}"]`) ||
-		code.includes(`${alias}['${type}']`) ||
-		code.includes(`${alias}?.['${type}']`)
-
-	for (const alias of aliases) {
-		if (!alias) continue
-
-		// Scan object destructured property
-		if (alias.charCodeAt(0) === 123) {
-			const parameters = retrieveRootparameters(alias).parameters
-
-			if (parameters.query) inference.query = true
-			if (parameters.headers) inference.headers = true
-			if (parameters.body) inference.body = true
-			if (parameters.cookie) inference.cookie = true
-			if (parameters.set) inference.set = true
-			if (parameters.route) inference.route = true
-
-			continue
-		}
-
-		if (
-			!inference.query &&
-			(access('query', alias) ||
-				code.includes('return ' + alias + '.query'))
-		)
-			inference.query = true
-
-		if (!inference.headers && access('headers', alias))
-			inference.headers = true
-
-		if (!inference.body && access('body', alias)) inference.body = true
-
-		if (!inference.cookie && access('cookie', alias))
-			inference.cookie = true
-
-		if (!inference.set && access('set', alias)) inference.set = true
-
-		if (!inference.route && access('route', alias)) inference.route = true
-
-		if (
-			inference.query &&
-			inference.headers &&
-			inference.body &&
-			inference.cookie &&
-			inference.set &&
-			inference.route
-		)
-			break
-	}
-
-	return aliases
-}
-
 export function removeDefaultParameter(parameter: string) {
 	while (true) {
 		const index = parameter.indexOf('=')
@@ -657,109 +418,6 @@ export function removeDefaultParameter(parameter: string) {
 
 function markAllAccessed(i: Sucrose.Inference) {
 	i.query = i.headers = i.body = i.cookie = i.set = i.route = true
-}
-
-function isContextPassToFunction(
-	context: string,
-	body: string,
-	inference: Sucrose.Inference
-) {
-	if (body.indexOf(context) === -1) return false
-
-	if (body.length > 32_768) {
-		markAllAccessed(inference)
-
-		return true
-	}
-
-	try {
-		const ctxLength = context.length
-		const bodyLength = body.length
-
-		let searchFrom = 0
-		while (true) {
-			const index = body.indexOf(context, searchFrom)
-			if (index === -1) break
-
-			searchFrom = index + ctxLength
-
-			// Whole-token match only.
-			const before = index === 0 ? -1 : body.charCodeAt(index - 1)
-			const afterRaw = body.charCodeAt(searchFrom)
-			if (
-				(before !== -1 && isIdentifierChar(before)) ||
-				(!Number.isNaN(afterRaw) && isIdentifierChar(afterRaw))
-			)
-				continue
-
-			// Right boundary: skip whitespace, must be `)` or `,`.
-			let right = searchFrom
-			while (right < bodyLength) {
-				const char = body.charCodeAt(right)
-				if (char !== 32 && char !== 9 && char !== 10) break
-				right++
-			}
-			const rightChar = body.charCodeAt(right)
-			if (rightChar !== 41 && rightChar !== 44) continue // not `)` or `,`
-
-			// Left boundary: skip whitespace, must be `(` or `,`.
-			let left = index - 1
-			while (left >= 0) {
-				const char = body.charCodeAt(left)
-				if (char !== 32 && char !== 9 && char !== 10) break
-				left--
-			}
-			if (left < 0) continue
-
-			const leftChar = body.charCodeAt(left)
-
-			// `,ctx)` / `,ctx,` — already inside a call's argument list.
-			if (leftChar === 44) {
-				markAllAccessed(inference)
-
-				return true
-			}
-
-			// `(ctx)` / `(ctx,` the `(` must be an invocation paren, i.e.
-			// preceded by an identifier char, `]`, or `)` (`fn(ctx)`,
-			// `obj.method(ctx)`, `arr[0](ctx)`, `f()(ctx)`). A grouping paren
-			// (e.g. `(ctx) => …`, `= (ctx)`) is not a function call.
-			if (leftChar === 40) {
-				let prev = left - 1
-				while (prev >= 0) {
-					const char = body.charCodeAt(prev)
-					if (char !== 32 && char !== 9 && char !== 10) break
-					prev--
-				}
-				if (prev < 0) continue
-
-				const prevChar = body.charCodeAt(prev)
-				if (
-					isIdentifierChar(prevChar) ||
-					prevChar === 93 || // ]
-					prevChar === 41 // )
-				) {
-					markAllAccessed(inference)
-
-					return true
-				}
-			}
-		}
-
-		return false
-	} catch {
-		console.warn(
-			'[Sucrose] warning: isContextPassToFunction failed; conservative all-access fallback used'
-		)
-		if (!isProduction()) {
-			console.log('--- body ---')
-			console.log(body)
-			console.log('--- context ---')
-			console.log(context)
-		}
-
-		return true
-	}
 }
 
 const DEFAULT_CACHE_LIMIT = 1024
@@ -814,7 +472,7 @@ export function mergeInference(a: Sucrose.Inference, b: Sucrose.Inference) {
 	}
 }
 
-const defaultSucrose = () => ({
+const defaultSucrose = (): Sucrose.Inference => ({
 	query: false,
 	headers: false,
 	body: false,
@@ -830,6 +488,602 @@ function push(target: unknown[], array: unknown[]) {
 function pushParse(target: unknown[], array: unknown[]) {
 	for (let i = 0; i < array.length; i++)
 		if (typeof array[i] === 'function') target.push(array[i])
+}
+
+// Single-pass token scanner
+interface ScanToken {
+	k: 'i' | 's' | 'p'
+	value: string
+}
+
+const prefixKeywords = new Set([
+	'await',
+	'case',
+	'delete',
+	'do',
+	'else',
+	'in',
+	'instanceof',
+	'new',
+	'of',
+	'return',
+	'throw',
+	'typeof',
+	'void',
+	'yield'
+])
+
+const isIdentifierStart = (char: number) =>
+	(char >= 65 && char <= 90) ||
+	(char >= 97 && char <= 122) ||
+	char === 36 ||
+	char === 95 ||
+	char >= 128
+
+const isIdentifierPart = (char: number) =>
+	isIdentifierStart(char) || (char >= 48 && char <= 57)
+
+function decodeIdentifier(value: string): string | undefined {
+	if (!value.includes('\\u')) return value
+
+	let decoded = ''
+	for (let i = 0; i < value.length; i++) {
+		if (value.charCodeAt(i) !== 92 || value.charCodeAt(i + 1) !== 117) {
+			decoded += value[i]
+			continue
+		}
+
+		i += 2
+		let hex: string
+		if (value.charCodeAt(i) === 123) {
+			const end = value.indexOf('}', i + 1)
+			if (end === -1) return
+			hex = value.slice(i + 1, end)
+			i = end
+		} else {
+			hex = value.slice(i, i + 4)
+			if (hex.length !== 4) return
+			i += 3
+		}
+
+		const codePoint = Number.parseInt(hex, 16)
+		if (!Number.isFinite(codePoint) || codePoint > 0x10ffff) return
+		decoded += String.fromCodePoint(codePoint)
+	}
+
+	return decoded
+}
+
+function scanTokens(source: string): ScanToken[] | undefined {
+	const tokens: ScanToken[] = []
+	let index = 0
+	let canEndExpression = false
+
+	const scanCode = (templateExpression = false): boolean => {
+		let templateDepth = 0
+
+		while (index < source.length) {
+			const char = source.charCodeAt(index)
+
+			if (char === 32 || char === 9 || char === 10 || char === 13) {
+				index++
+				continue
+			}
+
+			if (char === 92 && source.charCodeAt(index + 1) !== 117)
+				return false
+
+			if (char === 47) {
+				const next = source.charCodeAt(index + 1)
+				if (next === 47) {
+					index += 2
+					while (
+						index < source.length &&
+						source.charCodeAt(index) !== 10 &&
+						source.charCodeAt(index) !== 13
+					)
+						index++
+					continue
+				}
+				if (next === 42) {
+					index += 2
+					while (
+						index + 1 < source.length &&
+						!(
+							source.charCodeAt(index) === 42 &&
+							source.charCodeAt(index + 1) === 47
+						)
+					)
+						index++
+					if (index + 1 >= source.length) return false
+					index += 2
+					continue
+				}
+
+				if (!canEndExpression) {
+					index++
+					let escaped = false
+					let characterClass = false
+					let closed = false
+					while (index < source.length) {
+						const regexChar = source.charCodeAt(index++)
+						if (escaped) {
+							escaped = false
+							continue
+						}
+
+						if (regexChar === 92) {
+							escaped = true
+							continue
+						}
+
+						if (regexChar === 91) characterClass = true
+						else if (regexChar === 93) characterClass = false
+						else if (regexChar === 47 && !characterClass) {
+							closed = true
+							break
+						} else if (regexChar === 10 || regexChar === 13)
+							return false
+					}
+
+					if (!closed) return false
+
+					while (isIdentifierPart(source.charCodeAt(index))) index++
+
+					canEndExpression = true
+					continue
+				}
+
+				tokens.push({ k: 'p', value: '/' })
+				index++
+				canEndExpression = false
+				continue
+			}
+
+			if (char === 34 || char === 39) {
+				const quote = char
+				const start = ++index
+				let escaped = false
+
+				while (index < source.length) {
+					const stringChar = source.charCodeAt(index)
+					if (escaped) escaped = false
+					else if (stringChar === 92) escaped = true
+					else if (stringChar === quote) break
+					else if (stringChar === 10 || stringChar === 13)
+						return false
+					index++
+				}
+
+				if (index >= source.length) return false
+
+				tokens.push({
+					k: 's',
+					value: source.slice(start, index)
+				})
+				index++
+				canEndExpression = true
+
+				continue
+			}
+
+			if (char === 96) {
+				index++
+				let closed = false
+				while (index < source.length) {
+					const templateChar = source.charCodeAt(index)
+					if (templateChar === 92) {
+						index += 2
+						continue
+					}
+
+					if (templateChar === 96) {
+						index++
+						closed = true
+						break
+					}
+
+					if (
+						templateChar === 36 &&
+						source.charCodeAt(index + 1) === 123
+					) {
+						index += 2
+						canEndExpression = false
+						if (!scanCode(true)) return false
+						continue
+					}
+
+					index++
+				}
+
+				if (!closed) return false
+				canEndExpression = true
+
+				continue
+			}
+
+			if (
+				isIdentifierStart(char) ||
+				(char === 92 && source.charCodeAt(index + 1) === 117)
+			) {
+				const start = index
+				if (char === 92) {
+					index += 2
+					if (source.charCodeAt(index) === 123) {
+						const end = source.indexOf('}', index + 1)
+						if (end === -1) return false
+						index = end + 1
+					} else {
+						for (let digit = 0; digit < 4; digit++) {
+							const hex = source.charCodeAt(index + digit)
+							if (
+								!(
+									(hex >= 48 && hex <= 57) ||
+									(hex >= 65 && hex <= 70) ||
+									(hex >= 97 && hex <= 102)
+								)
+							)
+								return false
+						}
+						index += 4
+					}
+				} else index++
+
+				while (index < source.length) {
+					const identifierChar = source.charCodeAt(index)
+					if (isIdentifierPart(identifierChar)) {
+						index++
+						continue
+					}
+
+					if (
+						identifierChar === 92 &&
+						source.charCodeAt(index + 1) === 117
+					) {
+						index += 2
+						if (source.charCodeAt(index) === 123) {
+							const end = source.indexOf('}', index + 1)
+							if (end === -1) return false
+							index = end + 1
+						} else {
+							for (let digit = 0; digit < 4; digit++) {
+								const hex = source.charCodeAt(index + digit)
+								if (
+									!(
+										(hex >= 48 && hex <= 57) ||
+										(hex >= 65 && hex <= 70) ||
+										(hex >= 97 && hex <= 102)
+									)
+								)
+									return false
+							}
+							index += 4
+						}
+						continue
+					}
+					break
+				}
+
+				const value = decodeIdentifier(source.slice(start, index))
+				if (value === undefined) return false
+
+				tokens.push({ k: 'i', value })
+				canEndExpression = !prefixKeywords.has(value)
+
+				continue
+			}
+
+			if (char >= 48 && char <= 57) {
+				index++
+				while (isIdentifierPart(source.charCodeAt(index))) index++
+				canEndExpression = true
+				continue
+			}
+
+			if (templateExpression) {
+				if (char === 123) templateDepth++
+				else if (char === 125) {
+					if (templateDepth === 0) {
+						index++
+						return true
+					}
+					templateDepth--
+				}
+			}
+
+			let value = source[index]
+			const pair = source.slice(index, index + 2)
+			const triple = source.slice(index, index + 3)
+
+			if (triple === '...') value = triple
+			else if (
+				pair === '?.' ||
+				pair === '=>' ||
+				pair === '++' ||
+				pair === '--'
+			)
+				value = pair
+
+			tokens.push({ k: 'p', value })
+			index += value.length
+
+			if (value !== '++' && value !== '--')
+				canEndExpression =
+					value === ')' || value === ']' || value === '}'
+		}
+
+		return !templateExpression
+	}
+
+	return scanCode() ? tokens : undefined
+}
+
+const channel = (value: string): keyof Sucrose.Inference | undefined => {
+	switch (value) {
+		case 'query':
+		case 'headers':
+		case 'body':
+		case 'cookie':
+		case 'set':
+		case 'route':
+			return value
+	}
+}
+
+function computedDestructuringChannel(
+	tokens: ScanToken[],
+	index: number
+): false | keyof Sucrose.Inference {
+	const property = tokens[index + 1]
+
+	return (
+		(property?.k === 's' &&
+			!property.value.includes('\\') &&
+			tokens[index + 2]?.value === ']' &&
+			channel(property.value)) ||
+		false
+	)
+}
+
+function inferFunction(source: string): Sucrose.Inference {
+	const inference = defaultSucrose()
+
+	if (
+		!source ||
+		source.includes('[native code]') ||
+		source.trimStart().startsWith('class')
+	) {
+		markAllAccessed(inference)
+		return inference
+	}
+
+	let tokens: ScanToken[] | undefined
+	try {
+		tokens = scanTokens(source)
+	} catch {
+		markAllAccessed(inference)
+		return inference
+	}
+
+	if (!tokens?.length) {
+		markAllAccessed(inference)
+		return inference
+	}
+
+	let arrow = -1
+	const callableStart = tokens[0].value === 'async' ? 1 : 0
+	if (tokens[callableStart]?.value !== 'function') {
+		let parentheses = 0
+		let brackets = 0
+		let braces = 0
+		for (let i = callableStart; i < tokens.length; i++) {
+			const value = tokens[i].value
+			if (value === '(') parentheses++
+			else if (value === ')') parentheses--
+			else if (value === '[') brackets++
+			else if (value === ']') brackets--
+			else if (value === '{') {
+				if (parentheses === 0 && brackets === 0 && braces === 0) break
+				braces++
+			} else if (value === '}') braces--
+			else if (
+				value === '=>' &&
+				parentheses === 0 &&
+				brackets === 0 &&
+				braces === 0
+			) {
+				arrow = i
+				break
+			}
+		}
+	}
+
+	let parameterStart = -1
+	let parameterEnd = -1
+	let bodyStart = -1
+	if (arrow !== -1) {
+		bodyStart = arrow + 1
+		if (tokens[arrow - 1]?.value === ')') {
+			let depth = 1
+			for (let i = arrow - 2; i >= 0; i--) {
+				if (tokens[i].value === ')') depth++
+				else if (tokens[i].value === '(' && --depth === 0) {
+					parameterStart = i + 1
+					parameterEnd = arrow - 1
+					break
+				}
+			}
+		} else {
+			parameterStart = arrow - 1
+			parameterEnd = arrow
+		}
+	} else {
+		for (let i = 0; i < tokens.length; i++)
+			if (tokens[i].value === '(') {
+				parameterStart = i + 1
+				let depth = 1
+				for (let j = i + 1; j < tokens.length; j++) {
+					if (tokens[j].value === '(') depth++
+					else if (tokens[j].value === ')' && --depth === 0) {
+						parameterEnd = j
+						bodyStart = j + 1
+						break
+					}
+				}
+				break
+			}
+	}
+
+	if (parameterStart < 0 || parameterEnd < parameterStart || bodyStart < 0) {
+		markAllAccessed(inference)
+		return inference
+	}
+
+	const aliases = new Set<string>()
+	const first = tokens[parameterStart]
+	if (parameterStart === parameterEnd) {
+		// A zero-parameter handler cannot name the context except through
+		// `arguments`, which is handled conservatively in the body scan
+	} else if (first?.k === 'i') aliases.add(first.value)
+	else if (first?.value === '{') {
+		let depth = 0
+		for (let i = parameterStart; i < parameterEnd; i++) {
+			const token = tokens[i]
+			if (token.value === '{') depth++
+			else if (token.value === '}') depth--
+			else if (
+				token.value === '[' &&
+				depth === 1 &&
+				(tokens[i - 1]?.value === '{' || tokens[i - 1]?.value === ',')
+			) {
+				const computed = computedDestructuringChannel(tokens, i)
+				if (computed === false) {
+					markAllAccessed(inference)
+					return inference
+				}
+				if (computed) inference[computed] = true
+			} else if (token.value === '...' && depth === 1) {
+				const rest = tokens[i + 1]
+				if (rest?.k === 'i') aliases.add(rest.value)
+			} else if (token.k === 'i' && depth === 1) {
+				const key = channel(token.value)
+				if (key) inference[key] = true
+			}
+		}
+	} else {
+		markAllAccessed(inference)
+		return inference
+	}
+
+	type Pattern = [
+		channels: Set<false | keyof Sucrose.Inference>,
+		rest?: string
+	]
+
+	const patterns: Pattern[] = []
+	let closedPattern: Pattern | undefined
+
+	for (let i = bodyStart; i < tokens.length; i++) {
+		const token = tokens[i]
+		if (token.value === '{') {
+			patterns.push([new Set()])
+			closedPattern = undefined
+			continue
+		}
+
+		if (token.value === '}') {
+			closedPattern = patterns.pop()
+			continue
+		}
+
+		if (patterns.length) {
+			const current = patterns[patterns.length - 1]
+			if (
+				token.value === '[' &&
+				(tokens[i - 1]?.value === '{' || tokens[i - 1]?.value === ',')
+			) {
+				const computed = computedDestructuringChannel(tokens, i)
+				current[0].add(computed)
+			} else if (token.value === '...' && tokens[i + 1]?.k === 'i')
+				current[1] = tokens[i + 1].value
+			else if (token.k === 'i') {
+				const key = channel(token.value)
+				if (key) current[0].add(key)
+			}
+		}
+
+		if (token.value === '=') {
+			const right = tokens[i + 1]
+			let member = i + 2
+			if (tokens[member]?.value === '?.') member++
+			if (
+				right?.k === 'i' &&
+				aliases.has(right.value) &&
+				tokens[member]?.value !== '.' &&
+				tokens[member]?.value !== '[' &&
+				tokens[member]?.k !== 'i'
+			) {
+				const left = tokens[i - 1]
+				if (left?.k === 'i') aliases.add(left.value)
+				else if (left?.value === '}' && closedPattern) {
+					for (const key of closedPattern[0]) {
+						if (key === false) {
+							markAllAccessed(inference)
+							return inference
+						}
+						inference[key] = true
+					}
+					if (closedPattern[1]) aliases.add(closedPattern[1])
+				}
+			}
+			continue
+		}
+
+		if (token.k !== 'i') continue
+		if (token.value === 'arguments' || token.value === 'eval') {
+			markAllAccessed(inference)
+			break
+		}
+		if (!aliases.has(token.value)) continue
+
+		let next = i + 1
+		if (tokens[next]?.value === '?.') next++
+		if (tokens[next]?.value === '.') next++
+
+		if (tokens[next]?.k === 'i' && next > i + 1) {
+			const key = channel(tokens[next].value)
+			if (key) inference[key] = true
+			continue
+		}
+
+		if (tokens[next]?.value === '[') {
+			const property = tokens[next + 1]
+			const key = property?.k === 's' && channel(property.value)
+			if (key && tokens[next + 2]?.value === ']') inference[key] = true
+			else markAllAccessed(inference)
+			if (
+				inference.query &&
+				inference.headers &&
+				inference.body &&
+				inference.cookie &&
+				inference.set &&
+				inference.route
+			)
+				break
+			continue
+		}
+
+		if (
+			tokens[i - 1]?.value === '=' &&
+			(tokens[i - 2]?.k === 'i' || tokens[i - 2]?.value === '}')
+		)
+			continue
+
+		markAllAccessed(inference)
+		break
+	}
+
+	return inference
 }
 
 export function sucrose(
@@ -859,91 +1113,58 @@ export function sucrose(
 		const event = events[i]
 		if (!event) continue
 
-		const memoized = functionCaches.get(event as Function)
-		if (memoized) {
-			inference = inference
-				? mergeInference(inference, memoized)
-				: memoized
-			continue
-		}
-
-		const content = event.toString()
-		const key = fnv1a(content)
-		const cached = caches?.get(key)
-		if (cached && cached.content === content) {
-			const cachedInference = cached.inference
-			caches!.delete(key)
-			caches!.set(key, cached)
-
-			if (typeof event === 'function')
-				functionCaches.set(event, cachedInference)
-			inference = inference
-				? mergeInference(inference, cachedInference)
-				: cachedInference
-			continue
-		}
-
-		inference ??= defaultSucrose()
-
-		const fnInference: Sucrose.Inference = defaultSucrose()
-
-		if (content.includes('[native code]')) {
-			markAllAccessed(fnInference)
-
-			rememberInference(caches, key, cached, content, event, fnInference)
-
-			inference = mergeInference(inference, fnInference)
-			continue
-		}
-
-		const [parameter, body] = separateFunction(content)
-
-		if (body === undefined) {
-			// Unknown case: parser could not extract body, degrade to all-true per contract
-			markAllAccessed(fnInference)
-
-			rememberInference(caches, key, cached, content, event, fnInference)
-
-			inference = mergeInference(inference, fnInference)
-			continue
-		}
-
-		const rootParameters = findParameterReference(parameter, fnInference)
-		const mainParameter = extractMainParameter(rootParameters)
-
-		if (mainParameter) {
-			const aliases = findAlias(mainParameter, body.slice(1, -1))
-			aliases.splice(0, -1, mainParameter)
-
-			let code = body
-
+		let inferred = functionCaches.get(event as Function)
+		if (!inferred) {
 			if (
-				code.charCodeAt(0) === 123
-				// start with { is implied to end with }
-				// && code.charCodeAt(body.length - 1) === 125
-			)
-				code = code.slice(1, -1).trim()
+				typeof event === 'function' &&
+				Object.hasOwn(event, 'toString')
+			) {
+				// An own `toString` is a forged source: the real behavior
+				// cannot be trusted from it, so widen every channel and memo
+				// by identity only, never by content
+				// console.warn(
+				// 	'[Sucrose] warning: handler source is untrusted (own toString). Conservative all-access fallback used'
+				// )
 
-			if (!isContextPassToFunction(mainParameter, code, fnInference)) {
-				inferBodyReference(code, aliases, fnInference)
+				const forged = defaultSucrose()
+				markAllAccessed(forged)
 
-				if (hasAmbiguousContextUse(code, aliases))
-					markAllAccessed(fnInference)
+				inferred = Object.freeze(forged)
+				functionCaches.set(event, inferred)
+			} else {
+				let content: string
+				try {
+					content = Function.prototype.toString.call(event)
+				} catch {
+					content = ''
+				}
+
+				const key = fnv1a(content)
+				const cached = caches?.get(key)
+				if (cached && cached.content === content) {
+					inferred = cached.inference
+					caches!.delete(key)
+					caches!.set(key, cached)
+
+					if (typeof event === 'function')
+						functionCaches.set(event, inferred)
+				} else {
+					inferred = Object.freeze(inferFunction(content))
+					rememberInference(
+						caches,
+						key,
+						cached,
+						content,
+						event,
+						inferred
+					)
+				}
 			}
-
-			if (
-				!fnInference.query &&
-				code.includes(`return ${mainParameter}.query`)
-			)
-				fnInference.query = true
 		}
 
-		rememberInference(caches, key, cached, content, event, fnInference)
-
-		inference = mergeInference(inference, fnInference)
+		inference = inference ? mergeInference(inference, inferred) : inferred
 
 		if (
-			inference &&
 			inference.query &&
 			inference.headers &&
 			inference.body &&
@@ -954,6 +1175,5 @@ export function sucrose(
 			break
 	}
 
-	// Fall back to defaults when no analysable events were found
-	return inference ?? defaultSucrose()
+	return Object.freeze(inference ? { ...inference } : defaultSucrose())
 }

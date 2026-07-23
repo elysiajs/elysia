@@ -85,11 +85,6 @@
 			"import": "./dist/error.mjs",
 			"require": "./dist/error.js"
 		},
-		"./experimental/resume": {
-			"types": "./dist/experimental/resume.d.ts",
-			"import": "./dist/experimental/resume.mjs",
-			"require": "./dist/experimental/resume.js"
-		},
 		"./memory": {
 			"types": "./dist/memory.d.ts",
 			"import": "./dist/memory.mjs",
@@ -255,7 +250,6 @@
 		"arktype": "^2.1.22",
 		"esbuild": "0.25.4",
 		"eslint": "^9.24.0",
-		"eslint-plugin-security": "^4.0.0",
 		"eslint-plugin-sonarjs": "^4.0.2",
 		"expect-type": "^1.2.1",
 		"file-type": "^22.0.0",

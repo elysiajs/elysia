@@ -364,6 +364,14 @@ export abstract class Compiled {
 		return programFor(id)?.planRebuilder
 	}
 
+	/**
+	 * Drop a fully consumed program registration after an eager production
+	 * build publishes. Safe only when every route compiled before publish
+	 */
+	static release(id: ProgramId) {
+		programs.delete(id)
+	}
+
 	/** @internal test isolation */
 	static clear() {
 		registered = undefined

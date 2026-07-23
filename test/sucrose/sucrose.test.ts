@@ -377,28 +377,36 @@ describe('sucrose', () => {
 	it('memoize analysis by function identity', () => {
 		const fn = ({ query }) => query.identityMemoProbe
 
+		// The scanner reads source via `Function.prototype.toString.call`
+		// (an own `toString` property is treated as a forged source and
+		// widens to all-true), so instrument the prototype itself to count
+		// stringification
 		let stringified = 0
-		const original = Function.prototype.toString.bind(fn)
-		fn.toString = () => {
-			stringified++
-			return original()
+		const original = Function.prototype.toString
+		Function.prototype.toString = function () {
+			if (this === fn) stringified++
+			return original.call(this)
 		}
 
-		const first = sucrose(fn, undefined)
-		expect(first.query).toBe(true)
-		expect(stringified).toBe(1)
+		try {
+			const first = sucrose(fn, undefined)
+			expect(first.query).toBe(true)
+			expect(stringified).toBe(1)
 
-		// identity hit: no re-stringify, identical inference
-		const second = sucrose(fn, undefined)
-		expect(second).toEqual(first)
-		expect(stringified).toBe(1)
+			// identity hit: no re-stringify, identical inference
+			const second = sucrose(fn, undefined)
+			expect(second).toEqual(first)
+			expect(stringified).toBe(1)
 
-		// clearing the sucrose cache must also drop the identity memo so
-		// gcTime actually releases the retained inference objects
-		clearSucroseCache(0)
+			// clearing the sucrose cache must also drop the identity memo so
+			// gcTime actually releases the retained inference objects
+			clearSucroseCache(0)
 
-		const third = sucrose(fn, undefined)
-		expect(third).toEqual(first)
-		expect(stringified).toBe(2)
+			const third = sucrose(fn, undefined)
+			expect(third).toEqual(first)
+			expect(stringified).toBe(2)
+		} finally {
+			Function.prototype.toString = original
+		}
 	})
 })

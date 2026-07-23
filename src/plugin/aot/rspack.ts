@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 import { createAotPluginHooks } from './hooks'
 import { registerAotHooks, unregisterAotHooks } from './rspack-loader'
-import { resolveEntry } from './core'
+import { resolveEntry, siblingModuleExt } from './core'
 import type { ElysiaAotOptions } from './core'
 
 
@@ -39,18 +39,12 @@ let tokenCounter = 0
 // Rolldown rewrites `import.meta.url` to `pathToFileURL(__filename).href` in the
 // CJS build, so this resolves the sibling `rspack-loader` file in both the
 // `.mjs` and `.js` outputs (and the `.ts` source under the bun test runtime).
-// Mirrors `core.ts`'s `workerUrl()`.
 function loaderPath() {
 	const moduleUrl = import.meta.url
-	const ext = moduleUrl.endsWith('.mjs')
-		? '.mjs'
-		: moduleUrl.endsWith('.js')
-			? '.js'
-			: '.ts'
 
 	return resolve(
 		dirname(fileURLToPath(moduleUrl)),
-		'rspack-loader' + ext
+		'rspack-loader' + siblingModuleExt(moduleUrl)
 	)
 }
 

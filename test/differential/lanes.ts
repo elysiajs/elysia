@@ -3,7 +3,6 @@
 
 import '../../src/compile/aot-capture' // installs captureImpl (side effect)
 import { Elysia, type AnyElysia } from '../../src'
-import { resumeEmit } from '../../src/experimental/resume'
 import { Compiled, type CompiledSnapshot } from '../../src/compile/aot'
 import {
 	snapshotCompiled,
@@ -56,9 +55,6 @@ const handleLane = (
 export const jitHandle = handleLane('jit-handle', {})
 export const precompileHandle = handleLane('precompile-handle', {
 	precompile: true
-})
-export const resumeHandle = handleLane('resume-handle', {
-	experimental: { resumeEmit }
 })
 
 // Real-socket lanes
@@ -133,9 +129,6 @@ async function assertPortClosed(
 export const jitListen = listenLane('jit-listen', {})
 export const precompileListen = listenLane('precompile-listen', {
 	precompile: true
-})
-export const resumeListen = listenLane('resume-listen', {
-	experimental: { resumeEmit }
 })
 export const nativeStaticOn = listenLane('native-static-on', {
 	nativeStaticResponse: true
@@ -222,16 +215,5 @@ export const lanePairs: LanePair[] = [
 		id: 'jit-vs-aot-reconstruct@handle',
 		oracle: jitHandle,
 		candidate: aotReconstructHandle
-	},
-	{
-		id: 'jit-vs-resume@handle',
-		oracle: jitHandle,
-		candidate: resumeHandle
-	},
-	{
-		id: 'jit-vs-resume@listen',
-		oracle: jitListen,
-		candidate: resumeListen,
-		requiresTag: 'safe-for-socket'
 	}
 ]

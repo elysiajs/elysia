@@ -9,7 +9,7 @@ const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/aot.ts')
 
 describe('AOT plugin', () => {
 	it('generateCompiledModule emits a self-registering manifest', async () => {
-		const { generateCompiledModule } =
+		const { generateCompiledArtifacts } =
 			await import('../../src/plugin/aot/core')
 		const previous = process.env.ELYSIA_AOT_BUILD
 		process.env.ELYSIA_AOT_BUILD = 'keep'
@@ -17,9 +17,11 @@ describe('AOT plugin', () => {
 
 		let src: string
 		try {
-			src = await generateCompiledModule(APP, {
-				registerFrom: REGISTER_FROM
-			})
+			src = (
+				await generateCompiledArtifacts(APP, {
+					registerFrom: REGISTER_FROM
+				})
+			).source
 			expect(process.env.ELYSIA_AOT_BUILD).toBe('keep')
 			expect(log).not.toHaveBeenCalled()
 		} finally {
@@ -173,7 +175,7 @@ describe('AOT plugin', () => {
 		// (Vite just calls these). `resolveEntry` gives the id Vite passes for the entry.
 		const { aot } = await import('../../src/plugin/aot/vite')
 		const { resolveEntry } = await import('../../src/plugin/aot/core')
-		// Own fixture — generateCompiledModule is non-idempotent on a shared app
+		// Own fixture — generateCompiledArtifacts is non-idempotent on a shared app
 		// (memoized compile), and this test calls it directly like the core test.
 		const VITE_APP = resolve(import.meta.dir, 'fixtures/vite-app.ts')
 		const plugin = aot(VITE_APP, { registerFrom: REGISTER_FROM })

@@ -1,6 +1,6 @@
 import { Elysia, t } from '../../../src'
 
-// Use a fresh app because `generateCompiledModule` memoizes `app.compile()`.
+// Use a fresh app because `generateCompiledArtifacts` memoizes `app.compile()`.
 export const app = new Elysia().post(
 	'/v',
 	{

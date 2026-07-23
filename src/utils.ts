@@ -332,6 +332,12 @@ const flattenChainMemos = new WeakMap<
 	object,
 	{ e: number; per: WeakMap<ChainNode, Partial<AppHook>> }
 >()
+
+/** Drop this root's flattened-chain memo. Recomputable on next compile. */
+export function clearFlattenChainMemo(root: object) {
+	flattenChainMemos.delete(root)
+}
+
 const emptyFlatten = Object.freeze(nullObject()) as Partial<AppHook>
 
 function flattenChainCached(
@@ -487,6 +493,25 @@ export const getLoosePath = (path: string) =>
 	path.charCodeAt(path.length - 1) === 47 ? path.slice(0, -1) : path + '/'
 
 import type { SSEPayload, Prettify } from './types'
+
+const byteStreams = new WeakSet<ReadableStream<Uint8Array>>()
+
+/**
+ * Certify a byte stream for direct Response body pass-through.
+ *
+ * The returned Response owns this exact stream. Cancel it through the response
+ * body reader; preserving identity means Elysia does not install a second
+ * request-signal reader after the body is locked.
+ */
+export const bytes = <T extends ReadableStream<Uint8Array>>(stream: T): T => {
+	byteStreams.add(stream)
+	return stream
+}
+
+export const isByteStream = (
+	value: unknown
+): value is ReadableStream<Uint8Array> =>
+	typeof value === 'object' && value !== null && byteStreams.has(value as any)
 
 type FormatSSEPayload<T = unknown> = T extends string
 	? { readonly data: T }

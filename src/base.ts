@@ -18,6 +18,8 @@ import {
 	type CompilerSession,
 	type ProgramId
 } from './compile/aot'
+import { clearAuthoringAnalysisCaches } from './compile/analysis-cache'
+import { isProduction } from './universal/is-production'
 import { buildWSRoute } from './ws/route'
 import type {
 	WSLocalHook,
@@ -6836,6 +6838,19 @@ export class Elysia<
 			'~scopeChildren': this['~scopeChildren'],
 			'~applyMacro': this['~applyMacro'].bind(this),
 			'~programId': this['~programId']
+		}
+
+		// salvage 004-P5: after a production generation publishes, drop
+		// recomputable authoring caches. Dev keeps them (hot-reload rebuilds
+		// need them fast); AOT build capture keeps them (session-owned).
+		if (isProduction() && !Capture.isAotBuildEnv()) {
+			// The frozen program registration is only fully consumed by
+			// publish time under eager compilation — JIT reads it at first
+			// request, so it must survive publish in JIT mode.
+			if (this['~config']?.precompile)
+				Compiled.release(this['~programId'])
+
+			clearAuthoringAnalysisCaches(this)
 		}
 	}
 

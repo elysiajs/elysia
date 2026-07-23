@@ -1,12 +1,5 @@
 import { skipString } from '../../compile/lexer'
 
-export interface RewriteOptions {
-	/** Specifier the app imports `t` from. @default 'elysia' */
-	from?: string
-	/** Specifier to redirect `t` to. @default `${from}/type` */
-	typeFrom?: string
-}
-
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 function nonCodeSpans(code: string): [start: number, end: number][] {
@@ -63,12 +56,9 @@ function nonCodeSpans(code: string): [start: number, end: number][] {
 	return spans
 }
 
-export function rewriteTypeImport(
-	code: string,
-	options: RewriteOptions = {}
-): string {
-	const from = options.from ?? 'elysia'
-	const typeFrom = options.typeFrom ?? `${from}/type`
+export function rewriteTypeImport(code: string): string {
+	const from = 'elysia'
+	const typeFrom = 'elysia/type'
 
 	if (!code.includes(from)) return code
 

@@ -2,6 +2,21 @@
 
 Breaking Change:
 
+- Sucrose handler inference is now a single-pass token scanner instead of the
+  regex/alias walk. Inference output is equal or more conservative on every
+  covered fixture (ambiguity still enables channels, never silent
+  `undefined`), and pathological context-passing handlers now analyze in
+  near-linear time (~31KB handler: ~405ms → ~1.3ms). The dead internal
+  helpers `extractMainParameter`, `inferBodyReference`,
+  `hasAmbiguousContextUse`, `findParameterReference`, and
+  `isContextPassToFunction` are removed from the `elysia/sucrose` subpath
+- `sse()`-marked generators and streams no longer perform an eager first
+  `.next()` pull: the `text/event-stream` response is constructed immediately
+  (`highWaterMark: 0`), so headers flush before the first value resolves, an
+  immediately-throwing generator surfaces as a mid-stream error instead of a
+  pre-response error, and typed SSE responses no longer carry
+  `transfer-encoding: chunked`. Unwrapped/untyped generators keep the previous
+  sniffing behavior byte-for-byte
 - Replace the newly introduced heavyweight `app.history` tuples with
   lightweight declaration entries. Executable routes are exposed internally
   through `~routes`, and `app.routes` contains every declaration. Exact

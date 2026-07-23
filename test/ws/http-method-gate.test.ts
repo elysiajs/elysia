@@ -48,4 +48,29 @@ describe('WebSocket upgrade method routing', () => {
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('ok')
 	})
+
+	// Ported from sennen (commit 3600912b, N+3c) per
+	// design/sennen-salvage/002-salvage-rejected-sennen.md Step 2b: a static
+	// WS route only fires on an actual upgrade request (GET + `upgrade:
+	// websocket`); a plain GET with no upgrade header follows normal HTTP
+	// method-map routing (dynamic route, then all-method route).
+	it('does not let a static WebSocket route shadow dynamic HTTP', async () => {
+		const app = new Elysia()
+			.ws('/thing', { message() {} })
+			.get('/:id', ({ params }) => `get:${params.id}`)
+
+		await expect(
+			app.handle(req('/thing')).then((response) => response.text())
+		).resolves.toBe('get:thing')
+	})
+
+	it('does not let a static WebSocket route shadow an all-method route', async () => {
+		const app = new Elysia()
+			.ws('/thing', { message() {} })
+			.all('/thing', () => 'all')
+
+		await expect(
+			app.handle(req('/thing')).then((response) => response.text())
+		).resolves.toBe('all')
+	})
 })

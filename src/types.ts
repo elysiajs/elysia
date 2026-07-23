@@ -26,7 +26,6 @@ import type {
 	PreContext
 } from './context'
 import type { ChainNode } from './utils'
-import type { ResumeEmit } from './experimental/resume'
 
 export interface ElysiaConfig<
 	in out Prefix extends string | undefined,
@@ -149,23 +148,6 @@ export interface ElysiaConfig<
 	 * @default false
 	 */
 	introspect?: boolean
-
-	/**
-	 * Enable experimental features
-	 */
-	experimental?: {
-		/**
-		 * **Unstable / preview.** Compile route handlers with the resume-skeleton
-		 * emitter imported from `elysia/experimental/resume` (a sync entry + a
-		 * single `__resume` async continuation) instead of the default JIT lane.
-		 * Only a subset of routes are currently supported; unsupported routes
-		 * transparently fall back to the default lane. Never enters AOT builds.
-		 * Behavior and API may change without notice.
-		 *
-		 * @default undefined
-		 */
-		resumeEmit?: ResumeEmit
-	}
 
 	/**
 	 * If enabled, Elysia will attempt to coerce value to defined type on incoming and outgoing bodies.

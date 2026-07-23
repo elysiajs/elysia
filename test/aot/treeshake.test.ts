@@ -54,18 +54,6 @@ describe('AOT tree-shake transform', () => {
 		expect(await rewriteTypeImport(other)).toBe(other)
 	})
 
-	it('honors custom from/typeFrom specifiers', async () => {
-		expect(
-			await rewriteTypeImport(
-				`import { t } from '@scope/api'\nt.Object()`,
-				{
-					from: '@scope/api',
-					typeFrom: '@scope/api/type'
-				}
-			)
-		).toBe(`import * as t from '@scope/api/type'\nt.Object()`)
-	})
-
 	it.each([
 		['side-effect', `import './setup'`],
 		['default', `import Default from './default'`],
