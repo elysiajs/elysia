@@ -41,7 +41,11 @@ export interface RouteValidatorOptions extends Omit<
 	}[]
 }
 
-export const D1_VALIDATION_IMPLEMENTATION = 'candidate' as const
+const ROUTE_QUERY_PLAN = Symbol('elysia.route.query-plan')
+
+/** @internal planner-owned query plan without changing the public field. */
+export const readRouteQueryPlan = (route: RouteValidator<any>) =>
+	route.queryPlan ?? route[ROUTE_QUERY_PLAN]
 
 const isTb = (schema: unknown): schema is AnySchema =>
 	schema != null && typeof schema === 'object' && '~kind' in schema
@@ -78,11 +82,30 @@ const SLOTS: [
 	['cookie', coerceStringToStructure]
 ]
 
+/** @internal Seal one route's executors without draining root tracking. */
+export function sealRouteValidatorExecutors(
+	route: RouteValidator<any>,
+	introspect = false
+): void {
+	const sealed = new Set<Validator>()
+	const seal = (validator: Validator | undefined) => {
+		if (!validator || sealed.has(validator)) return
+
+		sealed.add(validator)
+		validator.seal(introspect)
+	}
+
+	for (const [slot] of SLOTS) seal(route[slot])
+	if (route.response)
+		for (const validator of Object.values(route.response)) seal(validator)
+}
+
 export class RouteValidator<const in out T extends RouteSchema> {
 	body: ToSubTypeValidator<T['body']> | undefined
 	headers: ToSubTypeValidator<T['headers']> | undefined
 	query: ToSubTypeValidator<T['query']> | undefined
-	queryPlan: QueryPlan | undefined
+	queryPlan: QueryPlan | undefined;
+	[ROUTE_QUERY_PLAN]: QueryPlan | undefined
 	params: ToSubTypeValidator<T['params']> | undefined
 	cookie: ToSubTypeValidator<T['cookie']> | undefined
 	response:
@@ -115,21 +138,26 @@ export class RouteValidator<const in out T extends RouteSchema> {
 					? coerce(standalone!.find(isTb) as AnySchema)
 					: undefined
 
-			const validator = Validator.create(route[slot] as any, {
-				...options,
-				slot,
+				const validator = Validator.create(route[slot] as any, {
+					...options,
+					slot,
+					frozen: options?.frozenSlots?.[slot],
 				schemas: standalone,
 				coerces
 			})
 			;(this as any)[slot] = validator
 			trackValidatorCompiler(options?.app, validator)
-			if (slot === 'query' && options?.validationPlan)
-				this.queryPlan = createQueryPlan(
+			if (slot === 'query') {
+				const queryPlan = createQueryPlan(
 					(validator as any)?.schema,
-					validator,
-					(options.validationPlan as any)[VALIDATION_PLAN_BUILTIN] ===
-						true
+					options?.validationPlan ? validator : undefined,
+					(options?.validationPlan as any)?.[
+						VALIDATION_PLAN_BUILTIN
+					] === true
 				)
+				this[ROUTE_QUERY_PLAN] = queryPlan
+				if (options?.validationPlan) this.queryPlan = queryPlan
+			}
 		}
 
 		const responseStandalone = pickStandalone(

@@ -1,4 +1,5 @@
-import { Elysia, t } from 'elysia'
+import { Elysia } from 'elysia'
+import * as t from 'elysia/type'
 
 // The bare import resolves to the dual `.mjs`/`.js` dist layout. Mixed routes
 // keep the adapter path reachable while the bundle verifies one Elysia copy.

@@ -1,9 +1,8 @@
-import { decodeComponent } from 'deuri'
 import { parse } from './lib'
 
 import { Cookie } from './cookie'
 import { dangerousKeys } from '../constants'
-import { nullObject } from '../utils'
+import { decodeURIComponentSafe, nullObject } from '../utils'
 
 import type { Context } from '../context'
 import type { BaseCookie, CookieOptions } from './types'
@@ -27,6 +26,18 @@ import {
 
 export { hasSyncHmac } from './crypto'
 
+function* decodedCookies(cookieString: string | null | undefined) {
+	if (!cookieString) return
+
+	const cookies = parse(cookieString)
+	for (const name in cookies) {
+		if (dangerousKeys.has(name)) continue
+		const raw = cookies[name]
+		if (raw !== undefined)
+			yield [name, decodeURIComponentSafe(raw) ?? raw] as const
+	}
+}
+
 // export for test
 export async function parseCookie(
 	set: Context['set'],
@@ -45,21 +56,8 @@ export function parseCookieRawSync(
 	_config: CompiledCookieConfig
 ): Record<string, unknown> {
 	const out: Record<string, unknown> = nullObject() as any
-	if (!cookieString) return out
-
-	const cookies = parse(cookieString)
-
-	for (const name in cookies) {
-		if (dangerousKeys.has(name)) continue
-
-		const v = cookies[name]
-		if (v === undefined) continue
-
-		// fall back to the raw string on malformed percent-encoding
-		out[name] = maybeJsonDecode(
-			(decodeComponent(v) as unknown as string) ?? v
-		)
-	}
+	for (const [name, value] of decodedCookies(cookieString))
+		out[name] = maybeJsonDecode(value)
 
 	return out
 }
@@ -69,17 +67,7 @@ export function parseCookieRawLazy(
 	config: CompiledCookieConfig
 ): Record<string, unknown> {
 	const out: Record<string, unknown> = nullObject() as any
-	if (!cookieString) return out
-
-	const cookies = parse(cookieString)
-
-	for (const name in cookies) {
-		if (dangerousKeys.has(name)) continue
-
-		const v = cookies[name]
-		if (v === undefined) continue
-
-		const decoded = (decodeComponent(v) as unknown as string) ?? v
+	for (const [name, decoded] of decodedCookies(cookieString)) {
 		out[name] =
 			resolveSignSecrets(name, config) !== undefined
 				? decoded
@@ -97,17 +85,8 @@ export async function parseCookieRaw(
 	if (hasSyncHmac) return parseCookieRawSigned(cookieString, config)
 
 	const out: Record<string, unknown> = nullObject() as any
-	if (!cookieString) return out
-
-	const cookies = parse(cookieString)
-
-	for (const name in cookies) {
-		if (dangerousKeys.has(name)) continue
-
-		const v = cookies[name]
-		if (v === undefined) continue
-
-		let value: unknown = (decodeComponent(v) as unknown as string) ?? v
+	for (const [name, decoded] of decodedCookies(cookieString)) {
+		let value: unknown = decoded
 		const signCheck = resolveSignSecrets(name, config)
 
 		if (signCheck !== undefined)
@@ -126,18 +105,8 @@ export function parseCookieRawSigned(
 	if (!config.hasSign) return parseCookieRawSync(cookieString, config)
 
 	const out: Record<string, unknown> = nullObject() as any
-	if (!cookieString) return out
-
-	const cookies = parse(cookieString)
-
-	for (const name in cookies) {
-		if (dangerousKeys.has(name)) continue
-
-		const v = cookies[name]
-		if (v === undefined) continue
-
-		// fall back to the raw string on malformed percent-encoding
-		let value: unknown = (decodeComponent(v) as unknown as string) ?? v
+	for (const [name, decoded] of decodedCookies(cookieString)) {
+		let value: unknown = decoded
 
 		const signCheck = resolveSignSecrets(name, config)
 

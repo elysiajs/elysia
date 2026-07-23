@@ -1,127 +1,20 @@
 import { createAdapter } from '..'
 import { WebStandardAdapter } from '../web-standard'
 
-import { isDynamicRegex, needEncodeRegex } from '../../constants'
-import { buildNativeStaticResponse } from '../../compile/handler'
-import { routeRow } from '../../route-table'
 import { isBun } from '../../universal/constants'
-import { flattenChain, getLoosePath, nullObject } from '../../utils'
-import { frozenRootOf } from '../../generation'
 
 import type { AnyElysia } from '../../base'
 
-const nativeStaticMethods = new Set([
-	'GET',
-	'POST',
-	'PUT',
-	'DELETE',
-	'PATCH',
-	'HEAD',
-	'OPTIONS'
-])
-
 export type NativeStaticRoutes = Record<string, Record<string, Response>>
 
-export function buildNativeStaticRoutes(
-	app: AnyElysia,
-	table = app['~routeTable']
-) {
-	if (!isBun) return
-	if (app['~config']?.nativeStaticResponse === false) return
-
-	const frozenRoot = frozenRootOf(app)
-	const fetchLevelHook = flattenChain(frozenRoot['~hookChain'])
-	if (
-		fetchLevelHook?.request?.length ||
-		fetchLevelHook?.trace?.length ||
-		frozenRoot['~ext']?.hoc?.length
-	)
-		return
-
-	const length = table?.length ?? 0
-	if (!table || !length) return
-
-	const methods = table.method
-	const paths = table.path
-	const handlers = table.handler
-	let hasPossibleStatic = false
-
-	for (let i = 0; i < length; i++) {
-		const handler = handlers[i]
-		if (
-			typeof handler !== 'function' &&
-			!(handler instanceof Error) &&
-			!(handler instanceof Promise)
-		) {
-			hasPossibleStatic = true
-			break
-		}
-	}
-
-	if (!hasPossibleStatic) return
-
-	const ready: NativeStaticRoutes = nullObject()
-	const strictPath = frozenRoot['~config']?.strictPath === true
-	const seen = new Map<string, number>()
-
-	for (let i = 0; i < length; i++) seen.set(methods[i] + ' ' + paths[i], i)
-
-	let explicitPaths: Map<string, Set<string>> | undefined
-	if (!strictPath) {
-		explicitPaths = new Map()
-
-		for (let i = 0; i < length; i++) {
-			const method = methods[i]
-			const path = paths[i]
-			let set = explicitPaths.get(method)
-
-			if (!set) explicitPaths.set(method, (set = new Set()))
-
-			set.add(path)
-			if (needEncodeRegex.test(path)) {
-				const encoded = encodeURI(path)
-				if (encoded !== path) set.add(encoded)
-			}
-		}
-	}
-
-	const add = (method: string, path: string, value: Response) => {
-		if (needEncodeRegex.test(path)) path = encodeURI(path)
-		;(ready[path] ??= nullObject())[method] = value
-	}
-
-	for (let i = 0; i < length; i++) {
-		const method = methods[i]
-		if (method === 'WS') continue
-
-		const path = paths[i]
-		if (seen.get(method + ' ' + path) !== i) continue
-		if (!nativeStaticMethods.has(method)) continue
-
-		const value = buildNativeStaticResponse(routeRow(table, i), app)
-		if (!value) continue
-
-		add(method, path, value)
-
-		if (!strictPath && !isDynamicRegex.test(path)) {
-			const loose = getLoosePath(path)
-			if (loose !== path && !explicitPaths?.get(method)?.has(loose))
-				add(method, loose, value)
-		}
-	}
-
-	if (!Object.keys(ready).length) return
-
-	return ready
+export function buildNativeStaticRoutes(app: AnyElysia) {
+	void app.fetch
+	return app['~generation']?.runtime.nativeStatic
 }
 
 export function collectStaticRoutes(app: AnyElysia) {
-	void app.fetch
-
-	const ready = app['~generation']?.runtime.nativeStatic
-	if (!ready) return
-
-	return [ready, []] as const
+	const ready = buildNativeStaticRoutes(app)
+	return ready ? ([ready, []] as const) : undefined
 }
 
 export const BunAdapter = createAdapter({

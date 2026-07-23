@@ -11,8 +11,8 @@ const post = (path: string, body: unknown) =>
 	})
 
 describe('routes keep the schema registered at definition time', () => {
-	for (const precompile of [false, true]) {
-		const mode = `precompile: ${precompile}`
+	for (const precompile of [undefined, true] as const) {
+		const mode = precompile ? 'precompile: true' : 'default'
 
 		it(`ignores later body schema mutations (${mode})`, async () => {
 			const schema = t.Object({ name: t.String() })

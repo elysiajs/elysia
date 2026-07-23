@@ -98,17 +98,14 @@ describe('abort short-circuit', () => {
 		await expect(res.text()).resolves.toBe('never')
 	})
 
-	it('keeps pre-abort polling in compat mode', async () => {
-		let handlerCalled = false
+	it('rejects compat cancellation at seal', () => {
 		const app = new Elysia({
 			experimental: { cancellation: 'compat' }
 		})
 			.request(() => {})
-			.get('/', () => {
-				handlerCalled = true
-				return 'never'
-			})
+			.get('/', () => 'never')
 
-		await expectShortCircuit(app, preAborted(), () => handlerCalled)
+		expect(() => void app.fetch).toThrow('compat-cancellation')
+		expect(app['~generation']).toBeUndefined()
 	})
 })

@@ -31,7 +31,6 @@ function pickValidator(
 export interface WSConnectionData {
 	id?: string
 	runtime?: WSRouteRuntime
-	fastMessage?: WSRouteRuntime['fastMessage']
 	closeHandlerInvoked?: boolean
 	view?: ElysiaWS<any>
 	retained?: Record<string, unknown>
@@ -211,92 +210,58 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 	#send(
 		data: FlattenResponse<Route['response']> | BufferSource,
 		compress?: boolean
-	): ServerWebSocketSendStatus {
-		if (data === undefined) return 0
-		if (data instanceof ArrayBuffer || ArrayBuffer.isView(data))
-			return this.raw.send(data as unknown as BufferSource, compress)
-
-		const result = this.#encodeOrError(data)
-
-		if ('error' in result) return this.raw.send(result.error)
-		if (
-			!(data instanceof ElysiaStatus) &&
-			(result.value instanceof ArrayBuffer || ArrayBuffer.isView(result.value))
-		)
-			return this.raw.send(
-				result.value as unknown as BufferSource,
-				compress
-			)
-
-		return this.raw.send(this.#prepare(data, result.value)!, compress)
+	) {
+		return this.#dispatch('send', data, compress)
 	}
 
 	#ping(
 		data?: FlattenResponse<Route['response']> | BufferSource
-	): ServerWebSocketSendStatus {
-		if (data === undefined) return this.raw.ping()
-		if (data instanceof ArrayBuffer || ArrayBuffer.isView(data))
-			return this.raw.ping(data as unknown as BufferSource)
-
-		const result = this.#encodeOrError(data)
-		if ('error' in result) return this.raw.send(result.error)
-		if (
-			!(data instanceof ElysiaStatus) &&
-			(result.value instanceof ArrayBuffer || ArrayBuffer.isView(result.value))
-		)
-			return this.raw.ping(result.value as unknown as BufferSource)
-
-		return this.raw.ping(this.#prepare(data, result.value)!)
+	) {
+		return this.#dispatch('ping', data)
 	}
 
 	#pong(
 		data?: FlattenResponse<Route['response']> | BufferSource
-	): ServerWebSocketSendStatus {
-		if (data === undefined) return this.raw.pong()
-		if (data instanceof ArrayBuffer || ArrayBuffer.isView(data))
-			return this.raw.pong(data as unknown as BufferSource)
-
-		const result = this.#encodeOrError(data)
-		if ('error' in result) return this.raw.send(result.error)
-		if (
-			!(data instanceof ElysiaStatus) &&
-			(result.value instanceof ArrayBuffer || ArrayBuffer.isView(result.value))
-		)
-			return this.raw.pong(result.value as unknown as BufferSource)
-
-		return this.raw.pong(this.#prepare(data, result.value)!)
+	) {
+		return this.#dispatch('pong', data)
 	}
 
 	#publish(
 		topic: string,
 		data: FlattenResponse<Route['response']> | BufferSource,
 		compress?: boolean
+	) {
+		return this.#dispatch('publish', data, compress, topic)
+	}
+
+	#dispatch(
+		method: 'send' | 'ping' | 'pong' | 'publish',
+		data?: FlattenResponse<Route['response']> | BufferSource,
+		compress?: boolean,
+		topic?: string
 	): ServerWebSocketSendStatus {
-		if (data === undefined) return 0
-		if (data instanceof ArrayBuffer || ArrayBuffer.isView(data))
-			return this.raw.publish(
-				topic,
-				data as unknown as BufferSource,
-				compress
-			)
+		const send = (value?: unknown) =>
+			method === 'publish'
+				? this.raw.publish(topic!, value as BufferSource, compress)
+				: method === 'send'
+					? this.raw.send(value as BufferSource, compress)
+					: this.raw[method](value as BufferSource)
 
-		const result = this.#encodeOrError(data)
-		if ('error' in result) return this.raw.send(result.error)
-		if (
-			!(data instanceof ElysiaStatus) &&
-			(result.value instanceof ArrayBuffer || ArrayBuffer.isView(result.value))
-		)
-			return this.raw.publish(
-				topic,
-				result.value as unknown as BufferSource,
-				compress
-			)
+		if (data === undefined)
+			return method === 'ping' || method === 'pong' ? send() : 0
 
-		return this.raw.publish(
-			topic,
-			this.#prepare(data, result.value)!,
-			compress
-		)
+		let value: unknown = data
+		if (!(data instanceof ArrayBuffer) && !ArrayBuffer.isView(data)) {
+			const result = this.#encodeOrError(data)
+			if ('error' in result) return this.raw.send(result.error)
+			value =
+				!(data instanceof ElysiaStatus) &&
+				(result.value instanceof ArrayBuffer || ArrayBuffer.isView(result.value))
+					? result.value
+					: this.#prepare(data, result.value)!
+		}
+
+		return send(value)
 	}
 
 	#close(code?: number, reason?: string): void {

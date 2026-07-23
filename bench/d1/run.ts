@@ -1,4 +1,4 @@
-import { cp, mkdir, readdir, readFile, rename, rm } from 'node:fs/promises'
+import { mkdir, readdir, readFile, rename, rm } from 'node:fs/promises'
 import { dirname, relative, resolve } from 'node:path'
 
 import {
@@ -12,7 +12,8 @@ import {
 	floorsForBenchSourceHash,
 	gitInfo,
 	pinOwnerBenchSourceHashes,
-	PRODUCT_SOURCE_INPUTS,
+	POST_N4_BASELINE_COMMIT,
+	mirrorProductSource,
 	productSourceHash
 } from './env'
 import type {
@@ -49,6 +50,7 @@ const fixtureRoot = resolve(repoRoot, 'bench/d1/fixtures')
 const defaultBlocks = 8
 const n3bBlocks = 16
 const n3cBlocks = 64
+const n4Blocks = 192
 const defaultRoutes = 1_000
 const defaultRequests = 200
 const defaultWarmup = 50
@@ -59,6 +61,7 @@ const defaultResamples = 2_000
 const fixtureIds = [
 	'cold-start',
 	'canonical-ir',
+	'post-n4',
 	'aot-cold-start',
 	'http',
 	'default-headers',
@@ -92,7 +95,8 @@ const leafPerfOwners = new Set([
 	'N+3a',
 	'N+3b',
 	'N+3c',
-	'N+4'
+	'N+4',
+	'Post-N+4'
 ])
 const historicalBaselineByOwner: Record<string, string> = {
 	C4a: '340322120836100ea15f67d6f6b5708e0945d1db',
@@ -101,7 +105,8 @@ const historicalBaselineByOwner: Record<string, string> = {
 	'N+3a': 'd4fb01a3',
 	'N+3b': '7e70df83b6b778aed80fcabcdc2c283bd5b2929a',
 	'N+3c': '4e6f09509061e182d8cb39adf9da373a3a832c1a',
-	'N+4': '3600912bdd6f01ed6bbe5dd91b3139cd437d9e75'
+	'N+4': '3600912bdd6f01ed6bbe5dd91b3139cd437d9e75',
+	'Post-N+4': POST_N4_BASELINE_COMMIT
 }
 const historicalCandidateByOwner: Record<string, string> = {
 	C4a: 'e8c51e63407ea3f59479db14500f04cca742ba2b'
@@ -677,7 +682,8 @@ function rawMetricSamples(
 		entry.fixture === 'runtime-lowering' ||
 		entry.fixture === 'response-body-cookie' ||
 		entry.fixture === 'retention-seal' ||
-		entry.fixture === 'canonical-ir'
+		entry.fixture === 'canonical-ir' ||
+		entry.fixture === 'post-n4'
 	) {
 		const samples = output.samples?.[entry.metric]
 		if (!Array.isArray(samples) || !samples.length)
@@ -799,7 +805,7 @@ function emptyRecord(
 function routeSizeOrderFor(fixture: FixtureId) {
 	return fixture === 'retention-seal'
 		? [1, 100, 1_000, 10_000]
-		: fixture === 'canonical-ir'
+		: fixture === 'canonical-ir' || fixture === 'post-n4'
 			? [1_000, 10_000]
 			: [defaultRoutes]
 }
@@ -1013,9 +1019,13 @@ function validateMargins(value: unknown): MarginRegistry {
 			throw new Error(
 				`active margin must be a non-negative number: ${entry.fixture}/${entry.metric}`
 			)
-		if (entry.kind === 'count' && entry.direction !== 'equal')
+		if (
+			entry.kind === 'count' &&
+			entry.direction !== 'equal' &&
+			!(entry.owner === 'Post-N+4' && entry.direction === 'lower')
+		)
 			throw new Error(
-				`count metric must use equal direction: ${entry.fixture}/${entry.metric}`
+				`count metric direction is unsupported: ${entry.fixture}/${entry.metric}`
 			)
 		if (
 			entry.kind === 'count' &&
@@ -1211,15 +1221,6 @@ async function buildN3bPackage(root: string, label: string) {
 		throw new Error(
 			`${label} N+3b build did not emit dist/type/exports.mjs`
 		)
-}
-
-async function mirrorProductSource(sourceRoot: string, targetRoot: string) {
-	for (const path of PRODUCT_SOURCE_INPUTS) {
-		const target = resolve(targetRoot, path)
-		await rm(target, { recursive: true, force: true })
-		await mkdir(dirname(target), { recursive: true })
-		await cp(resolve(sourceRoot, path), target, { recursive: true })
-	}
 }
 
 async function removeWorktree(worktree: string, parent: string, label: string) {
@@ -1589,12 +1590,14 @@ async function aaMode(
 	context: RunContext,
 	capture: ArtifactCapture
 ) {
+	const owners = selectedOwners()
+	if (owners?.has('Post-N+4') && owners.size !== 1)
+		throw new Error('Post-N+4 A/A must run as the only owner')
 	const manifestFile = manifestPath(context.environment.machineId)
 	const manifest = (await Bun.file(manifestFile).exists())
 		? await ensurePinned(context.environment.machineId, false)
 		: await capturePinnedManifest(repoRoot)
 	const git = gitInfo(repoRoot)
-	const owners = selectedOwners()
 	const environment = leafPerfEnvironment(owners)
 	const aaEntries = registry.entries.filter((entry) =>
 		owners ? owners.has(entry.owner) : !leafPerfOwners.has(entry.owner)
@@ -1611,28 +1614,32 @@ async function aaMode(
 	if (!aaFixtureIds.length)
 		throw new Error(`no D1 fixtures for owners: ${[...owners!].join(', ')}`)
 	const dedicatedOwner = owners?.size === 1 ? [...owners][0] : undefined
+	const canonicalReplacementOwner =
+		dedicatedOwner === 'N+4' || dedicatedOwner === 'Post-N+4'
 	const n3bLayout = owners?.size === 1 && owners.has('N+3b')
 	const n3cLayout = owners?.size === 1 && owners.has('N+3c')
-	const n3cProductSourceHash = n3cLayout
+	const sourceHashedAa =
+		n3cLayout || (owners?.size === 1 && owners.has('Post-N+4'))
+	const aaProductSourceHash = sourceHashedAa
 		? await productSourceHash(repoRoot)
 		: undefined
 	const prepared = n3bLayout
 		? await prepareN3bAaLayout(git.commit, environment)
-		: n3cLayout
+		: sourceHashedAa
 			? {
 					a: descriptor(
 						'A',
 						repoRoot,
 						git.commit,
 						environment,
-						n3cProductSourceHash
+						aaProductSourceHash
 					),
 					b: descriptor(
 						'B',
 						repoRoot,
 						git.commit,
 						environment,
-						n3cProductSourceHash
+						aaProductSourceHash
 					),
 					cleanup: async () => {}
 				}
@@ -1660,7 +1667,9 @@ async function aaMode(
 					? n3bBlocks
 					: dedicatedOwner === 'N+3c'
 						? n3cBlocks
-						: defaultBlocks,
+						: canonicalReplacementOwner
+							? n4Blocks
+							: defaultBlocks,
 				(records) => {
 					captureFixtures(capture, records)
 					captureFixtures(sessionCapture, records)
@@ -1723,7 +1732,7 @@ async function aaMode(
 			}
 		}
 		if (
-			(n3bLayout || n3cLayout) &&
+			(n3bLayout || sourceHashedAa) &&
 			((await productSourceHash(a.elysiaRoot)) !== a.productSourceHash ||
 				(await productSourceHash(b.elysiaRoot)) !== b.productSourceHash)
 		)
@@ -1821,6 +1830,8 @@ async function gateMode(
 		)
 	const manifest = await ensurePinned(context.environment.machineId, false)
 	const dedicatedOwner = owners?.size === 1 ? [...owners][0] : undefined
+	const canonicalReplacementOwner =
+		dedicatedOwner === 'N+4' || dedicatedOwner === 'Post-N+4'
 	const historicalCommit = dedicatedOwner
 		? historicalBaselineByOwner[dedicatedOwner]
 		: undefined
@@ -1923,7 +1934,9 @@ async function gateMode(
 		let baselineProductSourceHash: string | undefined
 		let candidateProductSourceHash: string | undefined
 		if (
-			(dedicatedOwner === 'N+3b' || dedicatedOwner === 'N+3c') &&
+			(dedicatedOwner === 'N+3b' ||
+				dedicatedOwner === 'N+3c' ||
+				dedicatedOwner === 'Post-N+4') &&
 			baselineWorktree
 		) {
 			if (dedicatedOwner === 'N+3b') {
@@ -1968,12 +1981,21 @@ async function gateMode(
 				? n3bBlocks
 				: dedicatedOwner === 'N+3c'
 					? n3cBlocks
-					: defaultBlocks,
+					: canonicalReplacementOwner
+						? n4Blocks
+						: defaultBlocks,
 			(records) => captureFixtures(capture, records)
 		)
 		captureFixtures(capture, fixtures)
 		if (
-			(dedicatedOwner === 'N+3b' || dedicatedOwner === 'N+3c') &&
+			(await capturePinnedManifest(repoRoot)).benchSourceHash !==
+			context.benchSourceHash
+		)
+			throw new Error('D1 benchmark source changed during gate sampling')
+		if (
+			(dedicatedOwner === 'N+3b' ||
+				dedicatedOwner === 'N+3c' ||
+				dedicatedOwner === 'Post-N+4') &&
 			((await productSourceHash(a.elysiaRoot)) !== a.productSourceHash ||
 				(await productSourceHash(b.elysiaRoot)) !== b.productSourceHash)
 		)
@@ -2204,6 +2226,11 @@ async function selfTest(
 			injection: 'executables',
 			fixture: 'executables',
 			targetMetrics: ['FunctionExecutable']
+		},
+		{
+			injection: 'canonical-retained',
+			fixture: 'canonical-ir',
+			targetMetrics: ['covered-1000-current-bytes-per-route']
 		},
 		{
 			injection: 'n2b-runtime',

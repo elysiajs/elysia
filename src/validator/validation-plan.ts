@@ -24,6 +24,15 @@ import {
 	compactErrors,
 	type CompactErrorLocator
 } from './compact-errors'
+import {
+	attachValidatorSemanticSource,
+	readValidatorSemanticSource
+} from './semantic-channel'
+import {
+	validationPlanSemantics,
+	validatorSemanticsWithDiagnostics,
+	type TypeBoxExecutionPolicy
+} from '../compile/validator-semantics'
 
 export type ValidationPlanDomain = 'json' | 'string' | 'encode'
 
@@ -943,7 +952,8 @@ export class ValidationPlanValidator<
 		jsonFastPath?: {
 			check: (value: unknown) => boolean
 			clean: (value: unknown) => unknown
-		}
+		},
+		semanticOptions?: ValidatorOptions
 	) {
 		super()
 		this.schema = query
@@ -961,6 +971,37 @@ export class ValidationPlanValidator<
 		this.Clean = jsonFastPath
 			? jsonFastPath.clean
 			: (value) => this.#getOracle().Clean?.(value) ?? value
+
+		const semanticSlot =
+			semanticOptions?.semanticSlot ??
+			semanticOptions?.slot ??
+			(plan.encode ? 'response:200' : query ? 'query' : 'body')
+		const response = semanticSlot.startsWith('response:')
+		const policy: TypeBoxExecutionPolicy = {
+			normalize:
+				semanticOptions?.normalize === false
+					? 'none'
+					: semanticOptions?.normalize === 'typebox'
+						? 'typebox'
+						: 'exact',
+			sanitize: !!semanticOptions?.sanitize,
+			direction: response ? 'response' : 'request',
+			domain: response ? 'response' : (semanticSlot as any),
+			settlement: 'sync',
+			clean: 'runtime',
+			optional: plan.root.optional
+				? plan.root.kind === 1
+					? 'object'
+					: 'value'
+				: 'none',
+			form: false,
+			noValidate: false,
+			diagnostics: 'locator'
+		}
+		attachValidatorSemanticSource(
+			this,
+			validationPlanSemantics(plan, policy)
+		)
 	}
 
 	override seal(introspect: boolean) {
@@ -969,11 +1010,15 @@ export class ValidationPlanValidator<
 		oracle?.seal?.(introspect)
 		this.#oracleFactory = undefined
 
-		this.#compactSchema = introspect
-			? compactDiagnosticSchema(this.schema)
-			: undefined
+		this.#compactSchema = compactDiagnosticSchema(this.schema)
 		this.#errorLocator = createCompactErrorLocator(this.schema)
 		;(this as { schema?: unknown }).schema = undefined
+		const semantics = readValidatorSemanticSource(this)
+		if (semantics)
+			attachValidatorSemanticSource(
+				this,
+				validatorSemanticsWithDiagnostics(semantics, 'compact')
+			)
 		this.#sealed = true
 	}
 
@@ -1025,7 +1070,7 @@ export class ValidationPlanValidator<
 				type,
 				value,
 				() => this.Errors(value),
-				this.schema
+				this.schema ?? this.#compactSchema
 			)
 		}
 
@@ -1081,7 +1126,7 @@ export const validationPlan: ValidationPlanExtension = {
 			? undefined
 			: new ValidationPlanMultiValidator(schema, options)
 	},
-	create(schema, domain, oracleFactory, query, _options, cached) {
+	create(schema, domain, oracleFactory, query, options, cached) {
 		if (domain === 'json') return
 		if (domain === 'string' && schemaHasDangerousProperties(schema)) return
 		if (Settings.Get().exactOptionalPropertyTypes) return
@@ -1094,7 +1139,9 @@ export const validationPlan: ValidationPlanExtension = {
 				schema,
 				plan,
 				oracleFactory,
-				query
+				query,
+				undefined,
+				options
 			)
 		if (
 			plan.coerced ||
@@ -1107,12 +1154,19 @@ export const validationPlan: ValidationPlanExtension = {
 		const check = compileCheck(schema)
 		if (!check) return
 
-		return new ValidationPlanValidator(schema, plan, undefined, false, {
-			check,
-			clean: createMirror(schema, { Compile }) as (
-				value: unknown
-			) => unknown
-		})
+		return new ValidationPlanValidator(
+			schema,
+			plan,
+			undefined,
+			false,
+			{
+				check,
+				clean: createMirror(schema, { Compile }) as (
+					value: unknown
+				) => unknown
+			},
+			options
+		)
 	}
 }
 

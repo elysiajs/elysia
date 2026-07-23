@@ -43,14 +43,11 @@ describe('AOT response freezing', () => {
 
 		Validator.clear()
 
-		const v = Validator.create(
-			t.Object({ id: t.String(), name: t.String() }),
-			{
-				aot: { method: 'GET', path: '/u' },
-				slot: 'response:200',
-				app: claimManifest({ validators: m })
-			}
-		) as any
+		const v = Validator.create(t.Object({ id: t.String(), name: t.String() }), {
+			aot: { method: 'GET', path: '/u' },
+			slot: 'response:200',
+			frozen: m.GET!['/u']!['response:200']
+		}) as any
 		expect(v.tb).toBeUndefined()
 		expect(v.reconstructedCheck).toBeDefined()
 		expect(v.Check({ id: 'a', name: 'b' })).toBe(true)
@@ -80,7 +77,7 @@ describe('AOT response freezing', () => {
 		const frozen = Validator.create(schema(), {
 			aot: { method: 'GET', path: '/u' },
 			slot: 'response:200',
-			app: claimManifest({ validators: m })
+			frozen: m.GET!['/u']!['response:200']
 		}) as any
 
 		expect(frozen.tb).toBeUndefined()

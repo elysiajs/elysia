@@ -89,40 +89,62 @@ it('registers the exact gated N+2b metrics', () => {
 	}
 })
 
-it('emits finite samples and preserves both cancellation descriptors', () => {
-	for (const lane of ['default', 'compat']) {
-		const result = Bun.spawnSync({
-			cmd: [
-				process.execPath,
-				fixture,
-				'--warmup=1',
-				'--requests=2',
-				'--routes=10'
-			],
-			env: {
-				...process.env,
-				D1_N2B_CANCELLATION: lane,
-				D1_N2B_CANDIDATE: '1'
-			},
-			stdout: 'pipe',
-			stderr: 'pipe'
-		})
-		expect(result.exitCode).toBe(0)
-		const output = JSON.parse(new TextDecoder().decode(result.stdout))
-		expect(output.cancellationLane).toBe(lane)
-		expect(output.allocationContextMode).toBe('compact')
-		expect(output.identityCallbacks).toBe(5)
-		expect(output.blockedWarmups).toBe(1)
-		expect(output.blockedRequests).toBe(10)
-		expect(output.blockedFullGcSnapshots).toBe(5)
-		for (const metric of required)
-			expect(
-				output.samples[metric].length > 0 &&
-					output.samples[metric].every(Number.isFinite),
-				metric
-			).toBeTrue()
-	}
+it('emits finite samples for the published cancellation policy', () => {
+	const result = Bun.spawnSync({
+		cmd: [
+			process.execPath,
+			fixture,
+			'--warmup=1',
+			'--requests=2',
+			'--routes=10'
+		],
+		env: {
+			...process.env,
+			D1_N2B_CANCELLATION: 'default',
+			D1_N2B_CANDIDATE: '1'
+		},
+		stdout: 'pipe',
+		stderr: 'pipe'
+	})
+	if (result.exitCode !== 0)
+		throw new Error(new TextDecoder().decode(result.stderr))
+	const output = JSON.parse(new TextDecoder().decode(result.stdout))
+	expect(output.cancellationLane).toBe('default')
+	expect(output.allocationContextMode).toBe('compact')
+	expect(output.identityCallbacks).toBe(5)
+	expect(output.blockedWarmups).toBe(1)
+	expect(output.blockedRequests).toBe(10)
+	expect(output.blockedFullGcSnapshots).toBe(5)
+	for (const metric of required)
+		expect(
+			output.samples[metric].length > 0 &&
+				output.samples[metric].every(Number.isFinite),
+			metric
+		).toBeTrue()
 }, 30_000)
+
+it('names the removed compat cancellation policy at seal', () => {
+	const result = Bun.spawnSync({
+		cmd: [
+			process.execPath,
+			fixture,
+			'--warmup=1',
+			'--requests=2',
+			'--routes=10'
+		],
+		env: {
+			...process.env,
+			D1_N2B_CANCELLATION: 'compat',
+			D1_N2B_CANDIDATE: '1'
+		},
+		stdout: 'pipe',
+		stderr: 'pipe'
+	})
+	expect(result.exitCode).not.toBe(0)
+	expect(new TextDecoder().decode(result.stderr)).toContain(
+		'compat-cancellation'
+	)
+})
 
 it('runs the integrated runtime mix over a socket or explicit fallback', () => {
 	const result = Bun.spawnSync({

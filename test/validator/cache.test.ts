@@ -59,6 +59,19 @@ describe('TypeBoxValidatorCache eviction', () => {
 
 		expect(cache.get(make(0))).toBeUndefined()
 	})
+
+	it('does not reuse a sealed executor by identity or structure', () => {
+		for (const sameSchema of [true, false]) {
+			Validator.clear()
+			const schema = make(0)
+			const first = Validator.create(schema)
+			first.seal(false)
+
+			const second = Validator.create(sameSchema ? schema : make(0))
+			expect(second).not.toBe(first)
+			expect((second as any).schema).toBeDefined()
+		}
+	})
 })
 
 describe('TypeBoxValidatorCache models identity', () => {

@@ -22,22 +22,13 @@ import { compileCookieConfig } from '../../cookie/config'
 import type { CompiledCookieConfig } from '../../cookie/config'
 import { hasSyncHmac } from '../../cookie/utils'
 
-import {
-	clearTraceAnalysisCaches,
-	unionTracePhases,
-	type TraceEvent
-} from '../../trace'
+import { unionTracePhases, type TraceEvent } from '../../trace'
 import { isDynamicRegex } from '../../constants'
 import { ELYSIA_TYPES } from '../../type/constants'
 import { Capture } from '../aot'
 import { frozenRootOf } from '../../generation'
-import { JITProbe } from '../jit-probe'
 
 import { isNotEmpty, type CompactBeforeHandlePrefix } from '../../utils'
-import {
-	clearHandlerUtilityAnalysisCaches,
-	lowerBeforeHandlePrefix
-} from './utils'
 import type { AnyLocalHook, InferenceOverride, MaybeArray } from '../../types'
 import {
 	contextDefaults,
@@ -124,7 +115,10 @@ export interface RouteCompileState {
 	vali: RouteValidator<any> | undefined
 	cookieConfig: CompiledCookieConfig | undefined
 
-	beforeHandlePrefix: readonly Function[] | undefined
+	beforeHandlePrefix:
+		| CompactBeforeHandlePrefix
+		| readonly Function[]
+		| undefined
 	traceHandlers: Function[] | undefined
 	tracePhases: Set<TraceEvent> | null
 	hasAnyPhase: boolean
@@ -144,15 +138,6 @@ export interface DescribeRouteInput {
 	isStaticResponse: boolean
 	isPromiseHandler: boolean
 }
-
-/**
- * Route descriptors, keyed by root instance → `METHOD path` → descriptor.
- * Populated on each JIT compile for tests, audit, and root-local freeze.
- */
-export const routeDescriptors = new WeakMap<
-	AnyElysia,
-	Map<string, RouteDescriptor>
->()
 
 const matchReturnIdentifier =
 	// `=>` may be minified with no gap (`=>x`); `return` always needs a
@@ -199,7 +184,7 @@ let compactPrefixInference: Record<
 let compactPrefixAsync = new WeakMap<CompactBeforeHandlePrefix, boolean>()
 
 export function clearRouteDescriptorAnalysisCaches(root: AnyElysia) {
-	routeDescriptors.delete(root)
+	void root
 	mayReturnIdentifierCache = new WeakMap()
 	compactPrefixInference = {
 		oracle: new WeakMap(),
@@ -207,8 +192,6 @@ export function clearRouteDescriptorAnalysisCaches(root: AnyElysia) {
 	}
 	compactPrefixAsync = new WeakMap()
 	clearCompileAnalysisCaches()
-	clearHandlerUtilityAnalysisCaches()
-	clearTraceAnalysisCaches()
 }
 
 function inferCompactPrefix(
@@ -400,24 +383,6 @@ function createBodyPlan(
  * Extracted from `buildNativeStaticResponse`'s for-in check so the native
  * static promotion predicate
  */
-export function isEmptyPipelineHook(hook: AnyLocalHook | undefined) {
-	if (!hook) return true
-
-	for (const key in hook) {
-		if (key === 'detail' || key === 'tags' || key === 'inference') continue
-
-		const value = (hook as any)[key]
-		if (
-			value !== undefined &&
-			value !== false &&
-			(!Array.isArray(value) || value.length)
-		)
-			return false
-	}
-
-	return true
-}
-
 export function applyInferenceOverride(
 	inference: Sucrose.Inference,
 	override: InferenceOverride | undefined
@@ -466,7 +431,6 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 		| CompactBeforeHandlePrefix
 		| undefined
 
-	JITProbe.record('sucrose')
 	const inferenceImplementation =
 		frozenRootOf(root)['~config']?.experimental?.inference ??
 		D1_INFERENCE_IMPLEMENTATION
@@ -759,7 +723,7 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 		vali,
 		cookieConfig,
 
-		beforeHandlePrefix: lowerBeforeHandlePrefix(beforeHandlePrefix),
+		beforeHandlePrefix,
 		traceHandlers,
 		tracePhases,
 		hasAnyPhase,

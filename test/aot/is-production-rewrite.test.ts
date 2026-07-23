@@ -3,14 +3,56 @@ import { resolve } from 'node:path'
 import {
 	ELYSIA_MODULE_FILTER,
 	makeIsElysiaModule,
-	rewriteIsProductionCalls,
-	generateCompiledArtifacts
+	rewriteIsProductionCalls
 } from '../../src/plugin/aot/core'
-import { aot as bunAot } from '../../src/plugin/aot/bun'
 import { aot as viteAot } from '../../src/plugin/aot/vite'
 
-const APP = resolve(import.meta.dir, 'fixtures/strip-schema-bundle.ts')
+const APP = resolve(import.meta.dir, 'fixtures/schema-bundle.ts')
 const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/aot.ts')
+const RECONSTRUCT_FROM = resolve(
+	import.meta.dir,
+	'../../src/compile/aot-reconstruct.ts'
+)
+const COERCE_PLAN_FROM = resolve(import.meta.dir, '../../src/type/coerce-plan.ts')
+const BUN_AOT = resolve(import.meta.dir, '../../src/plugin/aot/bun.ts')
+const buildBundle = async (
+	options: Record<string, unknown> = {},
+	minify = false
+) => {
+	const script = `
+const { aot } = await import(${JSON.stringify(BUN_AOT)})
+const result = await Bun.build({
+	entrypoints: [${JSON.stringify(APP)}],
+	plugins: [aot(${JSON.stringify(APP)}, {
+		registerFrom: ${JSON.stringify(REGISTER_FROM)},
+		reconstructFrom: ${JSON.stringify(RECONSTRUCT_FROM)},
+		...${JSON.stringify(options)}
+	}), {
+		name: 'elysia-aot-test-source-subpaths',
+		setup(build) {
+			build.onResolve({ filter: /^elysia\\/coerce-plan$/ }, () => ({ path: ${JSON.stringify(COERCE_PLAN_FROM)} }))
+		}
+	}],
+	write: false,
+	target: 'bun',
+	minify: ${JSON.stringify(minify)}
+})
+if (!result.success) throw new Error(result.logs.map((log) => log.message).join('\\n'))
+console.log(JSON.stringify(await result.outputs[0].text()))
+`
+	const subprocess = Bun.spawn({
+		cmd: [process.execPath, '-e', script],
+		stdout: 'pipe',
+		stderr: 'pipe'
+	})
+	const [stdout, stderr, exitCode] = await Promise.all([
+		new Response(subprocess.stdout).text(),
+		new Response(subprocess.stderr).text(),
+		subprocess.exited
+	])
+	if (exitCode !== 0) throw new Error(stderr || stdout)
+	return JSON.parse(stdout) as string
+}
 
 describe('production call rewriting', () => {
 	it('rewrites a bare isProduction() call to true', () => {
@@ -137,82 +179,45 @@ describe('resolved Elysia package filtering', () => {
 			)
 		).toBe(false)
 	})
-})
 
-describe('generated production stubs', () => {
-	it('enables production mode by default', async () => {
-		const { stub } = await generateCompiledArtifacts(APP, {
-			registerFrom: REGISTER_FROM
-		})
-		expect(stub.isProduction).toBe(true)
-	})
-
-	it('preserves an explicit development mode', async () => {
-		const { stub } = await generateCompiledArtifacts(APP, {
-			registerFrom: REGISTER_FROM,
-			production: false
-		})
-		expect(stub.isProduction).toBe(false)
+	it('does not require the package root directory to be named elysia', () => {
+		const root = '/private/tmp/elysia-post-n4-public-cutover'
+		const pred = makeIsElysiaModule(root)
+		expect(pred(root + '/src/adapter/constants.ts')).toBe(true)
+		expect(pred(root + '/test/app.ts')).toBe(false)
 	})
 })
 
 describe('Bun production builds', () => {
 	it('removes development-only branches by default', async () => {
-		const result = await Bun.build({
-			entrypoints: [APP],
-			plugins: [
-				bunAot(APP, {
-					registerFrom: REGISTER_FROM,
-					strip: false
-				})
-			],
-			write: false,
-			target: 'bun',
-			minify: true
-		})
-		expect(result.success).toBe(true)
-		const out = await result.outputs[0].text()
+		const out = await buildBundle({}, true)
 
 		// This catch variable appears only in development error logging.
 		expect(out).not.toContain('errorPipelineThrow')
 	})
 
 	it('retains development-only branches when production is disabled', async () => {
-		const result = await Bun.build({
-			entrypoints: [APP],
-			plugins: [
-				bunAot(APP, {
-					registerFrom: REGISTER_FROM,
-					strip: false,
-					production: false
-				})
-			],
-			write: false,
-			target: 'bun'
-		})
-		expect(result.success).toBe(true)
-		const out = await result.outputs[0].text()
+		const out = await buildBundle({ production: false })
 
 		// This catch variable appears only in development error logging.
 		expect(out).toContain('errorPipelineThrow')
 	})
 })
 
-const ELYSIA_DIST_FETCH = resolve(
+const ELYSIA_FETCH = resolve(
 	import.meta.dir,
-	'../../dist/handler/fetch.mjs'
+	'../../src/handler/fetch.ts'
 )
 
 describe('Vite production transforms', () => {
 	it('rewrites production calls by default', async () => {
 		const plugin = viteAot(APP, {
-			registerFrom: REGISTER_FROM,
-			strip: false
+			registerFrom: REGISTER_FROM
 		})
 		await plugin.buildStart()
 
-		const fetchSrc = await Bun.file(ELYSIA_DIST_FETCH).text()
-		const result = await plugin.transform(fetchSrc, ELYSIA_DIST_FETCH)
+		const fetchSrc = await Bun.file(ELYSIA_FETCH).text()
+		const result = await plugin.transform(fetchSrc, ELYSIA_FETCH)
 
 		expect(result).toBeDefined()
 		expect(result as string).not.toContain('isProduction()')
@@ -222,13 +227,12 @@ describe('Vite production transforms', () => {
 	it('leaves production calls unchanged when production is disabled', async () => {
 		const plugin = viteAot(APP, {
 			registerFrom: REGISTER_FROM,
-			strip: false,
 			production: false
 		})
 		await plugin.buildStart()
 
-		const fetchSrc = await Bun.file(ELYSIA_DIST_FETCH).text()
-		const result = await plugin.transform(fetchSrc, ELYSIA_DIST_FETCH)
+		const fetchSrc = await Bun.file(ELYSIA_FETCH).text()
+		const result = await plugin.transform(fetchSrc, ELYSIA_FETCH)
 
 		const out = (result ?? fetchSrc) as string
 		expect(out).toContain('isProduction()')
@@ -236,8 +240,7 @@ describe('Vite production transforms', () => {
 
 	it('leaves non-Elysia modules unchanged', async () => {
 		const plugin = viteAot(APP, {
-			registerFrom: REGISTER_FROM,
-			strip: false
+			registerFrom: REGISTER_FROM
 		})
 		await plugin.buildStart()
 
@@ -252,8 +255,7 @@ describe('Vite production transforms', () => {
 
 	it('leaves user modules inside an elysia-named directory unchanged', async () => {
 		const plugin = viteAot(APP, {
-			registerFrom: REGISTER_FROM,
-			strip: false
+			registerFrom: REGISTER_FROM
 		})
 		await plugin.buildStart()
 

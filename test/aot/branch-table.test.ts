@@ -3,6 +3,7 @@ import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
 import { Compiled } from '../../src/compile/aot'
 import { compileToSource } from '../../src/plugin/aot/source'
+import { evaluateAppPlanValidators } from './_manifest'
 
 /** Equivalent codec branch checks are emitted once and shared by every entry. */
 
@@ -17,12 +18,7 @@ afterEach(() => {
 
 // Evaluate a side-effect-free manifest to compare shared runtime objects.
 const evalManifest = (src: string): any =>
-	new Function(
-		src
-			.replace('export const validators', 'const validators')
-			.replace('export const handlers', 'const handlers')
-			.replace('export default validators', 'return validators')
-	)()
+	evaluateAppPlanValidators(src)
 
 describe('shared AOT branch checks', () => {
 	it('reuses one codec branch check across distinct validator entries', async () => {

@@ -27,6 +27,15 @@ export class TypeBoxValidatorCache {
 		return `<fn:${id}>`
 	}
 
+	static #isDetached(validator: unknown) {
+		return (
+			!!validator &&
+			typeof validator === 'object' &&
+			'schema' in validator &&
+			validator.schema === undefined
+		)
+	}
+
 	private static serializeKey(_k: string, v: unknown): any {
 		if (typeof v === 'function') return TypeBoxValidatorCache.fnKey(v)
 
@@ -90,27 +99,17 @@ export class TypeBoxValidatorCache {
 		return schemaSome(schema, (n) => !!n['$ref'], seen)
 	}
 
-	#lastSchema: TSchema | undefined
-	#lastMeta: { special: boolean; key: string; hasRef: boolean } | undefined
-
 	#meta(schema: TSchema): { special: boolean; key: string; hasRef: boolean } {
-		if (this.#lastSchema === schema && this.#lastMeta) return this.#lastMeta
-
 		const special =
 			HasCodec(schema) || TypeBoxValidatorCache.#isOpaqueType(schema)
 
-		const meta = {
+		return {
 			special,
 			hasRef: TypeBoxValidatorCache.#containsRef(schema),
 			key: special
 				? ''
 				: JSON.stringify(schema, TypeBoxValidatorCache.serializeKey)
 		}
-
-		this.#lastSchema = schema
-		this.#lastMeta = meta
-
-		return meta
 	}
 
 	constructor(gcTime: number = DEFAULT_GC_TIME) {
@@ -139,7 +138,10 @@ export class TypeBoxValidatorCache {
 		normalize += TypeBoxValidatorCache.#modelsToken(models, meta.hasRef)
 
 		const refBucket = this.#referenceCache.get(schema)?.get(normalize)
-		if (refBucket?.has(coercions)) return refBucket.get(coercions)
+		if (refBucket?.has(coercions)) {
+			const validator = refBucket.get(coercions)
+			if (!TypeBoxValidatorCache.#isDetached(validator)) return validator
+		}
 
 		if (meta.special) return
 
@@ -149,8 +151,10 @@ export class TypeBoxValidatorCache {
 			this.#cache.delete(key)
 			this.#cache.set(key, coercionsCache)
 
-			if (coercionsCache.has(coercions))
-				return coercionsCache.get(coercions)
+			if (coercionsCache.has(coercions)) {
+				const validator = coercionsCache.get(coercions)
+				if (!TypeBoxValidatorCache.#isDetached(validator)) return validator
+			}
 		}
 	}
 
@@ -217,8 +221,6 @@ export class TypeBoxValidatorCache {
 
 		this.#cache.clear()
 		this.#referenceCache = new WeakMap()
-		this.#lastSchema = undefined
-		this.#lastMeta = undefined
 		deferCoercions()
 	}
 }

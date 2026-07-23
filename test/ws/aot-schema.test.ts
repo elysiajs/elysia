@@ -2,26 +2,24 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
 import { Compiled } from '../../src/compile/aot'
-// importing `aot-capture` also installs the build-only capture impl (side effect)
 import {
-	endValidatorCapture,
-	endHandlerCapture,
-	endWSCapture
-} from '../../src/compile/aot-capture'
-import { materialise, registerManifest } from '../aot/_manifest'
+	createAppPlanAotPayload,
+	type AppPlanAotValidatorManifest
+} from '../../src/compile/app-plan-aot'
+// importing `aot-capture` also installs the build-only capture impl (side effect)
+import '../../src/compile/aot-capture'
+import { captureArtifacts } from '../../src/plugin/aot/source'
+import { materialise } from '../aot/_manifest'
+import { buildFrozenWSRoute } from '../../src/ws/runtime'
 import { newWebsocket, wsOpen, wsMessage, wsClosed } from './utils'
 
 // Frozen WebSocket builds capture and reuse body, query, and response validators.
 
 beforeEach(() => {
-	process.env.ELYSIA_AOT_BUILD = '1'
-	// Shared capture state may contain validators from another AOT test.
-	endValidatorCapture()
-	endHandlerCapture()
-	endWSCapture()
+	Compiled.clear()
+	Validator.clear()
 })
 afterEach(() => {
-	delete process.env.ELYSIA_AOT_BUILD
 	Compiled.clear()
 	Validator.clear()
 })
@@ -54,15 +52,35 @@ const buildCodec = () =>
 	})
 
 // `.ws()` returns AddWSRoute, so builders use the concrete value through `any`.
-const captureManifest = (builder: () => any) => {
-	process.env.ELYSIA_AOT_BUILD = '1'
-	endValidatorCapture()
-	endHandlerCapture()
-	endWSCapture()
-	;(builder() as any).compile()
-	const captured = endValidatorCapture()
-	endWSCapture()
-	delete process.env.ELYSIA_AOT_BUILD
+const captureManifest = async (builder: () => any) => {
+	const artifacts = await captureArtifacts(builder(), { register: true })
+	const plan = artifacts.appPlan!
+	const materialised = materialise(artifacts.validators)
+	const validators: AppPlanAotValidatorManifest = {}
+	for (const route of plan.wsRoutes) {
+		const byPath = (validators.WS ??= {})
+		const bySlot = (byPath[route.path] ??= {})
+		for (const identity of route.validators) {
+			const image = materialised.WS?.[route.path]?.[identity.slot]
+			if (image) bySlot[identity.slot] = { identity, image }
+		}
+	}
+
+	return { artifacts, plan, validators }
+}
+
+const registerManifest = async (builder: () => any) => {
+	const captured = await captureManifest(builder)
+	Compiled.clear()
+	Compiled.register({
+		bf: 1,
+		fingerprint: captured.artifacts.fingerprint,
+		appPlan: {
+			payload: createAppPlanAotPayload(captured.plan),
+			validators: captured.validators,
+			wsRoutes: {}
+		}
+	})
 	return captured
 }
 
@@ -77,9 +95,9 @@ const sendBody = async (app: any, payload: string): Promise<string> => {
 }
 
 describe('AOT WebSocket schemas', () => {
-	it('captures body, query, and response validators for WebSocket routes', () => {
-		;(build() as any).compile()
-		const captured = endValidatorCapture()
+	it('captures exact WS validator identities in the direct AppPlan lane', async () => {
+		const { artifacts, plan } = await captureManifest(build)
+		const captured = artifacts.validators
 
 		const ws = captured.filter((v) => v.method === 'WS' && v.path === '/ws')
 		const slots = ws.map((v) => String(v.slot))
@@ -88,43 +106,86 @@ describe('AOT WebSocket schemas', () => {
 		expect(slots).toContain('body')
 		expect(slots).toContain('query')
 		expect(slots.some((s) => s.startsWith('response'))).toBe(true)
+		expect(plan.wsRoutes[0]!.validators.map((validator) => validator.slot)).toEqual(
+			['body', 'query', 'response:200']
+		)
+		expect(artifacts.source).toContain(
+			'appPlan: { payload: appPlanPayload, validators: appPlanValidators, wsRoutes: appPlanWSRoutes }'
+		)
+		expect(artifacts.source).not.toMatch(/export const handlers|const _h\d+/)
 	})
 
-	it('reuses captured validators instead of recompiling them', () => {
-		const captured = captureManifest(build)
-
+	it('reuses direct WS validator images without retaining the legacy cache', async () => {
+		const captured = await registerManifest(build)
 		Validator.clear()
-		// Register the frozen manifest as a generated module would; the next
-		// build claims it through its own `~programId` (program lane).
-		registerManifest({ validators: materialise(captured) })
-
-		// A successful build alone cannot distinguish reuse from recompilation.
-		const original = Compiled.getValidator
-		const hits: string[] = []
-		;(Compiled as any).getValidator = (
-			m: string,
-			p: string,
-			s: any,
-			id?: any
-		) => {
-			const entry = original.call(Compiled, m, p, s, id)
-			if (m === 'WS' && p === '/ws' && entry !== undefined)
-				hits.push(String(s))
-			return entry
-		}
-		let app: any
-		try {
-			app = build()
-			app.compile()
-		} finally {
-			;(Compiled as any).getValidator = original
+		let imageFactoryCalls = 0
+		for (const image of Object.values(captured.validators.WS!['/ws']!)) {
+			if (!image?.image.cm) continue
+			const original = image.image.cm
+			image.image.cm = (...args) => {
+				imageFactoryCalls++
+				return original(...args)
+			}
 		}
 
-		const id = app['~programId']
-		expect(Compiled.hasValidator('WS', '/ws', 'body', id)).toBe(true)
-		expect(Compiled.hasValidator('WS', '/ws', 'query', id)).toBe(true)
-		expect(hits).toContain('body')
-		expect(hits).toContain('query')
+		const app = build()
+		app.compile()
+
+		expect(imageFactoryCalls).toBe(3)
+		expect(Compiled.pendingAppPlan()).toBeUndefined()
+	})
+
+	it('hydrates each direct WS validator once when a compact WS image is also present', async () => {
+		const captured = await captureManifest(build)
+		const route = captured.artifacts.wsRoutes.find(
+			(entry) => entry.path === '/ws' && 'source' in entry
+		)
+		if (!route || !('source' in route))
+			throw new Error('expected a captured WS image')
+
+		const compactFactory = new Function(
+			'buildFrozenWSRoute',
+			`return ${route.source}`
+		)(buildFrozenWSRoute) as (...args: unknown[]) => unknown
+		let compactFactoryCalls = 0
+		let validatorFactoryCalls = 0
+		for (const entry of Object.values(captured.validators.WS!['/ws']!)) {
+			if (!entry?.image.cm) continue
+			const original = entry.image.cm
+			entry.image.cm = (...args) => {
+				validatorFactoryCalls++
+				return original(...args)
+			}
+		}
+
+		Compiled.clear()
+		Compiled.register({
+			bf: 1,
+			fingerprint: captured.artifacts.fingerprint,
+			appPlan: {
+				payload: createAppPlanAotPayload(captured.plan),
+				validators: captured.validators,
+				wsRoutes: {
+					'/ws': {
+						identity: captured.plan.wsRoutes[0]!.identity,
+						roles: route.roles,
+						image: {
+							a: route.roles,
+							f: (...args: unknown[]) => {
+								compactFactoryCalls++
+								return compactFactory(...args)
+							}
+						}
+					}
+				}
+			}
+		})
+
+		build().compile()
+
+		expect(validatorFactoryCalls).toBe(3)
+		expect(compactFactoryCalls).toBe(0)
+		expect(Compiled.pendingAppPlan()).toBeUndefined()
 	})
 
 	it('frozen and JIT routes validate and decode messages identically', async () => {
@@ -134,20 +195,11 @@ describe('AOT WebSocket schemas', () => {
 		})
 		const INVALID = JSON.stringify({ when: 'not-a-date', n: 'abc' })
 
-		const captured = captureManifest(buildCodec)
+		await registerManifest(buildCodec)
 		Validator.clear()
-		// Register the frozen manifest; `buildCodec()` below claims it.
-		registerManifest({ validators: materialise(captured) })
 
 		const frozenApp = buildCodec().listen(0)
-		expect(
-			Compiled.hasValidator(
-				'WS',
-				'/ws',
-				'body',
-				(frozenApp as any)['~programId']
-			)
-		).toBe(true)
+		expect(Compiled.pendingAppPlan()).toBeUndefined()
 		const frozenValid = await sendBody(frozenApp, VALID)
 		const frozenInvalid = await sendBody(frozenApp, INVALID)
 		frozenApp.stop()

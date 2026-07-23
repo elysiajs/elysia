@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { readFile } from 'node:fs/promises'
+import { cp, mkdir, readFile, rm } from 'node:fs/promises'
 import { cpus, release } from 'node:os'
 import { dirname, relative, resolve } from 'node:path'
 
@@ -26,6 +26,7 @@ export const BENCH_SOURCE_FILES = [
 	'bench/d1/fixtures/aot-cold-start.ts',
 	'bench/d1/fixtures/cold-start.ts',
 	'bench/d1/fixtures/canonical-ir.ts',
+	'bench/d1/fixtures/post-n4.ts',
 	'bench/d1/fixtures/compile-memory.ts',
 	'bench/d1/fixtures/crypto-hmac.ts',
 	'bench/d1/fixtures/default-headers.ts',
@@ -53,6 +54,9 @@ export const PRODUCT_SOURCE_INPUTS = [
 	'bun.lock',
 	'tsconfig.json'
 ] as const
+
+export const POST_N4_BASELINE_COMMIT =
+	'a5831b577e98fd4973c331ebfb075893c9679fd5'
 
 export interface D1Environment {
 	machine: MachineManifest
@@ -315,6 +319,16 @@ export async function productSourceHash(repoRoot: string) {
 		hash.update(bytes)
 	}
 	return hash.digest('hex')
+}
+
+/** Mirrors only product/build inputs while leaving a pinned proof harness intact. */
+export async function mirrorProductSource(sourceRoot: string, targetRoot: string) {
+	for (const path of PRODUCT_SOURCE_INPUTS) {
+		const target = resolve(targetRoot, path)
+		await rm(target, { recursive: true, force: true })
+		await mkdir(dirname(target), { recursive: true })
+		await cp(resolve(sourceRoot, path), target, { recursive: true })
+	}
 }
 
 export async function capturePinnedManifest(

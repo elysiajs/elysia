@@ -10,6 +10,7 @@ import {
 import { buildFrozenCheck } from './frozen-check'
 import { nullObject } from '../../utils'
 import { subValueAt } from '../../error'
+import { snapshotDiagnosticValue } from '../../validator/compact-errors'
 
 interface UnionInfo {
 	node: any
@@ -291,7 +292,14 @@ export function buildFindCustomError(
 			}
 		}
 
-		checks.push({ segments, each, check, gate, path, error: node.error })
+		checks.push({
+			segments,
+			each,
+			check,
+			gate,
+			path,
+			error: snapshotDiagnosticValue(node.error)
+		})
 	}
 
 	if (!checks.length) return

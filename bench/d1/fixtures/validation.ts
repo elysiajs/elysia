@@ -131,7 +131,10 @@ async function main() {
 			validationLane === 'candidate' ? validationPlan : undefined
 	}
 	const implementations = {
-		validation: routeModule.D1_VALIDATION_IMPLEMENTATION ?? 'oracle',
+		validation:
+			typeof ValidationPlanValidator === 'function'
+				? 'candidate'
+				: 'oracle',
 		inference: sucroseModule.D1_INFERENCE_IMPLEMENTATION ?? 'oracle'
 	}
 	if (

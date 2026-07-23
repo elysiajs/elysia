@@ -5,12 +5,8 @@ const { Elysia } = await import('../../src')
 const { trackValidatorCompiler } = await import('../../src/validator')
 const { sucroseOracle } = await import('../../src/sucrose')
 const { mayReturnPromise } = await import('../../src/compile/utils')
-const { mayReturnIdentifier } = await import(
-	'../../src/compile/handler/descriptor'
-)
-const { extractDeriveKeys } = await import(
-	'../../src/compile/handler/utils'
-)
+const { mayReturnIdentifier } =
+	await import('../../src/compile/handler/descriptor')
 const { unionTracePhases } = await import('../../src/trace')
 
 let served = 0
@@ -34,7 +30,6 @@ const exerciseAnalysisCaches = () => {
 	sucroseOracle(analysisProbe, undefined)
 	mayReturnPromise(analysisProbe)
 	mayReturnIdentifier(analysisProbe)
-	extractDeriveKeys(analysisProbe)
 	unionTracePhases([analysisProbe])
 }
 

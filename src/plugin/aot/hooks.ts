@@ -1,5 +1,4 @@
 import {
-	alignStubExtensions,
 	generateCompiledArtifacts,
 	generateCompiledArtifactsIsolated,
 	realPath,
@@ -7,24 +6,30 @@ import {
 	resolveElysiaRoot,
 	makeIsElysiaModule,
 	SOURCE_REGEX,
-	STUB_SOURCES,
 	ADAPTER_CONSTANTS_FILTER,
-	ADAPTER_BUN_FILTER,
 	IS_PRODUCTION_FILTER,
+	TYPE_EXPORTS_FILTER,
 	ELYSIA_MODULE_FILTER,
-	NO_STUB,
 	adapterConstantsSource,
-	bunAdapterStubSource,
+	omitTypeboxSetup,
 	rewriteIsProductionCalls,
-	type StubPlan,
 	type ElysiaAotOptions
 } from './core'
-import { rewriteTypeImport } from './treeshake'
 
 const toPosix = (path: string): string => path.replace(/\\/g, '/')
 
 const VIRTUAL = '\0elysia/compiled'
-const VIRTUAL_TYPE = '\0elysia/type'
+
+const alignModuleExtensions = (source: string, targetPath: string): string => {
+	const ext = targetPath.slice(targetPath.lastIndexOf('.'))
+	if (ext !== '.mjs' && ext !== '.js' && ext !== '.cjs') return source
+
+	return source.replace(
+		/(from ')(\.[^']+)(')/g,
+		(_match, open: string, specifier: string, close: string) =>
+			open + specifier + ext + close
+	)
+}
 
 export interface AotPluginHooks {
 	buildStart(): Promise<void>
@@ -55,11 +60,26 @@ export const createAotPluginHooks = (
 		return toPosix(realPath(id)) === entryRealPosix
 	}
 
-	const treeShake = options?.treeShake ?? true
+	const production = options?.production !== false
+	const adapterTarget =
+		options?.target === 'bun'
+			? 'bun'
+			: options?.target === 'node' || options?.target === 'workerd'
+				? 'web-standard'
+				: undefined
 	let source = ''
-	let virtualType: string | undefined
-	let stub: StubPlan = { ...NO_STUB }
 	let isElysiaModule = (_path: string) => false
+	let elysiaRoot = ''
+
+	const filterMatches = (filter: RegExp, id: string): boolean => {
+		if (filter.test(id)) return true
+		if (!isElysiaModule(id)) return false
+
+		const posix = toPosix(id)
+		if (!posix.startsWith(elysiaRoot + '/')) return false
+
+		return filter.test(`/elysia/${posix.slice(elysiaRoot.length + 1)}`)
+	}
 
 	return {
 		async buildStart() {
@@ -69,9 +89,8 @@ export const createAotPluginHooks = (
 
 			initial = false
 			source = generated.source
-			stub = generated.stub
-			virtualType = generated.virtualType
 			const pkgRoot = resolveElysiaRoot(entryPath)
+			elysiaRoot = toPosix(pkgRoot)
 			isElysiaModule = makeIsElysiaModule(pkgRoot)
 		},
 		buildEnd() {
@@ -84,59 +103,37 @@ export const createAotPluginHooks = (
 		},
 		resolveId(id) {
 			if (id === 'elysia/compiled') return VIRTUAL
-
-			// Serve the virtual `elysia/type` (no `setupTypebox`) so unused `t.*`
-			// tree-shake. Applies in sealed + wired modes; `off` leaves it real.
-			if (id === 'elysia/type' && virtualType !== undefined)
-				return VIRTUAL_TYPE
 		},
 		load(id) {
 			if (id === VIRTUAL) return source
-			if (id === VIRTUAL_TYPE) return virtualType
 		},
 		async transform(code, id) {
 			const cleanId = id.split('?', 1)[0]
 
-			// Stub when every route is compiled
-			for (const key of Object.keys(
-				STUB_SOURCES
-			) as (keyof typeof STUB_SOURCES)[]) {
-				if (!stub[key]) continue
-				for (const { filter, source: stubSource } of STUB_SOURCES[key])
-					if (filter.test(cleanId))
-						return alignStubExtensions(stubSource, cleanId)
-			}
+			if (filterMatches(TYPE_EXPORTS_FILTER, cleanId))
+				return omitTypeboxSetup(code)
 
 			if (
-				stub.adapter !== false &&
-				ADAPTER_CONSTANTS_FILTER.test(cleanId)
+				adapterTarget &&
+				filterMatches(ADAPTER_CONSTANTS_FILTER, cleanId)
 			)
-				return alignStubExtensions(
-					adapterConstantsSource(stub.adapter),
+				return alignModuleExtensions(
+					adapterConstantsSource(adapterTarget),
 					cleanId
 				)
 
 			if (
-				stub.adapter === 'web-standard' &&
-				ADAPTER_BUN_FILTER.test(cleanId)
+				production &&
+				filterMatches(IS_PRODUCTION_FILTER, cleanId)
 			)
-				return alignStubExtensions(bunAdapterStubSource, cleanId)
-
-			if (stub.isProduction && IS_PRODUCTION_FILTER.test(cleanId))
-				return alignStubExtensions(
+				return alignModuleExtensions(
 					`export const isProduction = () => true\n`,
 					cleanId
 				)
 
 			let out = code
-			if (
-				treeShake &&
-				SOURCE_REGEX.test(cleanId) &&
-				!cleanId.includes('node_modules')
-			)
-				out = rewriteTypeImport(out)
 
-			if (stub.isProduction && isElysiaModule(cleanId))
+			if (production && isElysiaModule(cleanId))
 				out = rewriteIsProductionCalls(out)
 
 			if (isEntry(cleanId)) {
@@ -151,20 +148,12 @@ export const createAotPluginHooks = (
 
 			if (isEntry(cleanId)) return true
 			if (
+				isElysiaModule(cleanId) ||
 				ELYSIA_MODULE_FILTER.test(cleanId) ||
-				ADAPTER_CONSTANTS_FILTER.test(cleanId) ||
-				ADAPTER_BUN_FILTER.test(cleanId) ||
-				IS_PRODUCTION_FILTER.test(cleanId)
+					filterMatches(ADAPTER_CONSTANTS_FILTER, cleanId) ||
+					filterMatches(IS_PRODUCTION_FILTER, cleanId) ||
+					filterMatches(TYPE_EXPORTS_FILTER, cleanId)
 			)
-				return true
-
-			for (const key of Object.keys(
-				STUB_SOURCES
-			) as (keyof typeof STUB_SOURCES)[])
-				for (const { filter } of STUB_SOURCES[key])
-					if (filter.test(cleanId)) return true
-
-			if (SOURCE_REGEX.test(cleanId) && !cleanId.includes('node_modules'))
 				return true
 
 			return false
@@ -189,7 +178,7 @@ export interface AotOnLoadAdapterOptions {
 	readText: (path: string) => Promise<string>
 
 	/**
-	 * resolveDir for the manifest/virtual-type module loads.
+	 * resolveDir for the manifest module load.
 	 * esbuild needs `dirname(entryPath)` so relative imports in the manifest
 	 * resolve correctly; Bun does not use it (pass undefined for Bun).
 	 */
@@ -219,17 +208,6 @@ export async function setupAotOnLoad(
 	build.onLoad(
 		{ filter: /.*/, namespace: 'elysia-aot' },
 		virtualLoad(VIRTUAL)
-	)
-
-	build.onResolve({ filter: /^elysia\/type$/ }, () =>
-		hooks.resolveId('elysia/type') !== undefined
-			? { path: 'elysia-type', namespace: 'elysia-aot-type' }
-			: undefined
-	)
-
-	build.onLoad(
-		{ filter: /.*/, namespace: 'elysia-aot-type' },
-		virtualLoad(VIRTUAL_TYPE)
 	)
 
 	build.onLoad({ filter: SOURCE_REGEX }, async (args: { path: string }) => {

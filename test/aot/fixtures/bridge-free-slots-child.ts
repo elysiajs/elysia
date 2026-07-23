@@ -80,6 +80,7 @@ const schema = Object.defineProperty(
 )
 
 const claimed = claimManifest({ validators: materialise(payload.captured) })
+const frozenSlots = claimed.validators[payload.method]![payload.path]!
 
 const hook = { [payload.slot]: schema } as any
 const root = { ...claimed, '~config': {}, '~ext': {} } as any
@@ -88,7 +89,8 @@ const validator = buildFrozenRouteValidator(
 	hook,
 	root,
 	payload.method as any,
-	payload.path
+	payload.path,
+	frozenSlots
 )
 
 const slotValidator = validator && (validator as any)[payload.slot]

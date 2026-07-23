@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'bun:test'
 
 import { Elysia } from '../../src'
-import {
-	runBeforeHandlePrefix,
-	runBeforeHandlePrefixAsync
-} from '../../src/compile/handler/utils'
-import type { CompactBeforeHandlePrefix } from '../../src/utils'
 import { req } from '../utils'
+
+const prefixScaleFixture = new URL(
+	'./fixtures/propagated-prefix-scale.ts',
+	import.meta.url
+).pathname
 
 const compile = <T extends Elysia>(app: T): T => {
 	;(app as any).compile()
@@ -15,8 +15,7 @@ const compile = <T extends Elysia>(app: T): T => {
 
 const abortPrefix = async (
 	asyncHook: boolean,
-	flatFallback: boolean,
-	cancellation: 'compat' | 'suspension' = 'compat'
+	withAfterHandle: boolean
 ) => {
 	const controller = new AbortController()
 	const order: string[] = []
@@ -34,7 +33,7 @@ const abortPrefix = async (
 		.beforeHandle('plugin', abort)
 		.get('/first', () => 'first')
 
-	if (flatFallback)
+	if (withAfterHandle)
 		first = first.afterHandle('plugin', () => {
 			order.push('after')
 		}) as any
@@ -52,13 +51,11 @@ const abortPrefix = async (
 			order.push('handler')
 			return 'target'
 		})
-	const app = new Elysia({
-		experimental: { cancellation }
-	})
+	const app = new Elysia()
 		.use(first)
 		.use(second)
 		.use(target)
-	if (!flatFallback) compile(app)
+	if (!withAfterHandle) compile(app)
 
 	const response = await app.handle(
 		new Request('http://localhost/target', { signal: controller.signal })
@@ -106,16 +103,16 @@ describe('eager propagated-hook prefixes', () => {
 			})
 			.get('/second', () => 'second')
 		const app = compile(new Elysia().use(first).use(second))
-		const routeIndex = app.routes.findIndex(
+		const route = app['~generation']!.plan.httpRoutes.find(
 			({ path }) => path === '/second'
-		)
+		)!
 
 		expect(
-			(app.routes[routeIndex]!.hooks as any)['~beforeHandlePrefix'].length
+			(app.routes.find(({ path }) => path === '/second')!.hooks as any)[
+				'~beforeHandlePrefix'
+			].length
 		).toBe(1)
-		expect((app as any).handler(routeIndex, true).toString()).toContain(
-			'rbp'
-		)
+		expect((route.program.content as any).hooks.beforePrefix).toBe(1)
 		await expect((await app.handle(req('/second'))).text()).resolves.toBe(
 			'second'
 		)
@@ -151,24 +148,11 @@ describe('eager propagated-hook prefixes', () => {
 		expect(order).toEqual(['duplicate', 'duplicate', 'early'])
 	})
 
-	for (const asyncHook of [false, true])
-		it(`stops ${asyncHook ? 'async' : 'sync'} compact prefixes when the request aborts`, async () => {
-			const compact = await abortPrefix(asyncHook, false)
-			const fallback = await abortPrefix(asyncHook, true)
-
-			expect(compact).toEqual(fallback)
-			expect(compact).toEqual({
-				status: 200,
-				body: '',
-				order: ['abort']
-			})
-		})
-
 	it('stops after an async compact-prefix suspension in default mode', async () => {
-		const compact = await abortPrefix(true, false, 'suspension')
-		const fallback = await abortPrefix(true, true, 'suspension')
+		const compact = await abortPrefix(true, false)
+		const withAfterHandle = await abortPrefix(true, true)
 
-		expect(compact).toEqual(fallback)
+		expect(compact).toEqual(withAfterHandle)
 		expect(compact).toEqual({
 			status: 200,
 			body: '',
@@ -176,124 +160,44 @@ describe('eager propagated-hook prefixes', () => {
 		})
 	})
 
-	it('runs all sync compact prefixes for a pre-aborted request in suspension mode', () => {
-		const controller = new AbortController()
-		controller.abort()
-		const order: string[] = []
-		const prefix: CompactBeforeHandlePrefix = {
-			length: 2,
-			added: [],
-			tail: {
-				parent: {
-					values: [
-						() => {
-							order.push('first-prefix')
-						}
-					]
-				},
-				values: [
-					() => {
-						order.push('later-prefix')
-					}
-				]
-			}
-		}
+	it('plans a 1k deep prefix with one direct binding per shared segment', () => {
+		const total = 1_000
+		const result = Bun.spawnSync({
+			cmd: [process.execPath, prefixScaleFixture, String(total)],
+			stdout: 'pipe',
+			stderr: 'pipe'
+		})
+		if (result.exitCode !== 0)
+			throw new Error(new TextDecoder().decode(result.stderr))
 
-		runBeforeHandlePrefix(
-			prefix,
-			{
-				request: new Request('http://localhost', {
-					signal: controller.signal
-				})
-			},
-			false
-		)
-
-		expect(order).toEqual(['first-prefix', 'later-prefix'])
+		const output = JSON.parse(new TextDecoder().decode(result.stdout))
+		expect(output.routes).toBe(total)
+		expect(output.externalBindings).toBeLessThanOrEqual(total * 3)
+		expect(output.lifecycleBindings).toBe(total)
+		expect(output.referencedSegments).toBe(total)
+		expect(output.calls).toBe(total)
+		expect(output.body).toBe(String(total - 1))
 	})
 
-	it('stops after the first async compact-prefix suspension when pre-aborted', async () => {
-		const controller = new AbortController()
-		controller.abort()
-		const order: string[] = []
-		const prefix: CompactBeforeHandlePrefix = {
-			length: 2,
-			added: [],
-			tail: {
-				parent: {
-					values: [
-						async () => {
-							order.push('first-prefix')
-							await Promise.resolve()
-						}
-					]
-				},
-				values: [
-					() => {
-						order.push('later-prefix')
-					}
-				]
-			}
-		}
+	it('keeps a mixed 1k lifecycle population linear', () => {
+		const total = 1_000
+		const result = Bun.spawnSync({
+			cmd: [process.execPath, prefixScaleFixture, String(total), 'mixed'],
+			stdout: 'pipe',
+			stderr: 'pipe'
+		})
+		if (result.exitCode !== 0)
+			throw new Error(new TextDecoder().decode(result.stderr))
 
-		await runBeforeHandlePrefixAsync(
-			prefix,
-			{
-				request: new Request('http://localhost', {
-					signal: controller.signal
-				})
-			},
-			false
-		)
-
-		expect(order).toEqual(['first-prefix'])
+		const output = JSON.parse(new TextDecoder().decode(result.stdout))
+		expect(output.routes).toBe(total)
+		expect(output.lifecycleBindings).toBe(total * 3)
+		expect(output.externalBindings).toBeLessThanOrEqual(total * 5)
+		expect(output.calls).toBe(total * 3)
+		expect(output.body).toBe(String(total - 1))
 	})
 
-	it('observes cancellation when an async compact prefix rejects', async () => {
-		const controller = new AbortController()
-		const prefix: CompactBeforeHandlePrefix = {
-			length: 1,
-			added: [],
-			tail: {
-				values: [() => {
-					controller.abort()
-					return Promise.reject(new Error('cancelled'))
-				}]
-			}
-		}
-
-		await expect(
-			runBeforeHandlePrefixAsync(prefix, {
-				request: new Request('http://localhost/', {
-					signal: controller.signal
-				})
-			}, false)
-		).resolves.toBeUndefined()
-	})
-
-	it('compiles a deep eligible prefix lazily when its final route is hit first', async () => {
-		const total = 30_000
-		const order: number[] = []
-		const app = new Elysia()
-
-		for (let i = 0; i < total; i++)
-			app.use(
-				new Elysia()
-					.beforeHandle('plugin', () => {
-						order.push(i)
-					})
-					.get(`/deep-${i}`, () => i)
-			)
-
-		const response = await app.handle(req(`/deep-${total - 1}`))
-		expect(response.status).toBe(200)
-		expect(await response.text()).toBe(String(total - 1))
-		expect(order).toHaveLength(total)
-		expect(order[0]).toBe(0)
-		expect(order.at(-1)).toBe(total - 1)
-	})
-
-	it('matches lazy fallback behavior for derive, response, and error hooks', async () => {
+	it('matches automatic and explicit sealing for derive, response, and error hooks', async () => {
 		const build = (events: string[]) => {
 			const plugin = new Elysia()
 				.derive('plugin', () => {
@@ -325,21 +229,23 @@ describe('eager propagated-hook prefixes', () => {
 				})
 		}
 
-		const lazyEvents: string[] = []
-		const eagerEvents: string[] = []
-		const lazy = build(lazyEvents)
-		const eager = compile(build(eagerEvents))
+		const automaticEvents: string[] = []
+		const explicitEvents: string[] = []
+		const automatic = build(automaticEvents)
+		const explicit = compile(build(explicitEvents))
 
-		const lazyResponse = await lazy.handle(req('/plugin'))
-		const eagerResponse = await eager.handle(req('/plugin'))
-		expect(eagerResponse.status).toBe(lazyResponse.status)
-		expect(await eagerResponse.text()).toBe(await lazyResponse.text())
+		const automaticResponse = await automatic.handle(req('/plugin'))
+		const explicitResponse = await explicit.handle(req('/plugin'))
+		expect(explicitResponse.status).toBe(automaticResponse.status)
+		expect(await explicitResponse.text()).toBe(
+			await automaticResponse.text()
+		)
 		await Bun.sleep(0)
-		expect(eagerEvents).toEqual(lazyEvents)
+		expect(explicitEvents).toEqual(automaticEvents)
 
-		const lazyError = await lazy.handle(req('/throw'))
-		const eagerError = await eager.handle(req('/throw'))
-		expect(eagerError.status).toBe(lazyError.status)
-		expect(await eagerError.text()).toBe(await lazyError.text())
+		const automaticError = await automatic.handle(req('/throw'))
+		const explicitError = await explicit.handle(req('/throw'))
+		expect(explicitError.status).toBe(automaticError.status)
+		expect(await explicitError.text()).toBe(await automaticError.text())
 	})
 })

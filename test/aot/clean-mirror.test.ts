@@ -89,7 +89,7 @@ describe('frozen codec cleaning', () => {
 			const frozen = Validator.create(make() as any, {
 				aot: { method: 'GET', path },
 				slot: 'query',
-				app: claimManifest({ validators: m })
+				frozen: m.GET![path]!.query
 			}) as any
 
 			expect(frozen.tb).toBeUndefined()
@@ -112,7 +112,7 @@ describe('frozen codec cleaning', () => {
 		build().compile()
 		const m = materialise(endValidatorCapture())
 		Validator.clear()
-		registerManifest({ validators: m })
+		registerManifest({ validators: m }, build())
 
 		const app = build()
 		app.compile()

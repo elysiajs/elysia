@@ -1,5 +1,5 @@
 import { mapCompactResponse, mapResponse } from './handler'
-import { formDataToObject, formDataToObjectFlatFastPath } from './utils'
+import { formDataToObject } from './utils'
 import { normalizeContentType } from '../utils'
 
 import { createAdapter } from '..'
@@ -7,10 +7,9 @@ import { parseQuery } from '../../parse-query'
 import { isBun } from '../../universal/constants'
 import type { Context } from '../../context'
 
-function parseFormData(context: Context, flatFastPath = false) {
+function parseFormData(context: Context) {
 	const contentType = context.request.headers.get('content-type') ?? ''
 	const ct = contentType.toLowerCase()
-	const convert = flatFastPath ? formDataToObjectFlatFastPath : formDataToObject
 
 	if (isBun && ct !== contentType) {
 		const fullCt = context.request.headers.get('content-type') ?? ''
@@ -32,11 +31,11 @@ function parseFormData(context: Context, flatFastPath = false) {
 		})
 
 		// @ts-ignore
-		return rewrapped.formData().then(convert)
+		return rewrapped.formData().then(formDataToObject)
 	}
 
 	// @ts-ignore
-	return context.request.formData().then(convert)
+	return context.request.formData().then(formDataToObject)
 }
 
 export const WebStandardAdapter = createAdapter({
@@ -50,7 +49,7 @@ export const WebStandardAdapter = createAdapter({
 		json: (context) => context.request.json(),
 		text: (context) => context.request.text(),
 		urlencoded: (context) => context.request.text().then(parseQuery),
-		default(context, contentType, normalized, flatFormDataFastPath) {
+		default(context, contentType, normalized) {
 			const ct = normalized
 				? contentType
 				: normalizeContentType(contentType)
@@ -75,7 +74,7 @@ export const WebStandardAdapter = createAdapter({
 
 				case 114:
 					if (ct === 'multipart/form-data')
-						return parseFormData(context, flatFormDataFastPath)
+						return parseFormData(context)
 			}
 
 			if (ct.charCodeAt(0) === 116 && ct.startsWith('text/'))

@@ -225,6 +225,29 @@ it('enforces absolute candidate and improvement bounds', () => {
 	expect(absoluteVerdict('pass', 'candidate failed', true)).toBe('fail')
 })
 
+it('allows one-sided Post-N+4 executable decreases but rejects increases', () => {
+	const input = {
+		fixture: 'post-n4',
+		metric: 'covered-1000-FunctionExecutable',
+		kind: 'count' as const,
+		direction: 'lower' as const,
+		claim: 'non-regression' as const,
+		margin: 0,
+		tolerance: 0,
+		baselineBlocks: [100, 100, 100],
+		seed: 1
+	}
+	expect(
+		compareMetric({ ...input, candidateBlocks: [99, 99, 99] }).verdict
+	).toBe('pass')
+	expect(
+		compareMetric({ ...input, candidateBlocks: [100, 100, 100] }).verdict
+	).toBe('pass')
+	expect(
+		compareMetric({ ...input, candidateBlocks: [101, 101, 101] }).verdict
+	).toBe('fail')
+})
+
 it('labels per-connection memory metrics correctly', () => {
 	expect(
 		metricUnit({

@@ -88,21 +88,6 @@ export interface ElysiaConfig<
 	tags?: DocumentDecoration['tags']
 
 	/**
-	 * Warm up Elysia before starting the server
-	 *
-	 * This will perform Ahead of Time compilation and generate code for route handlers
-	 *
-	 * If set to false, Elysia will perform Just in Time compilation
-	 *
-	 * Only required for root instance (instance which use listen) to effect
-	 *
-	 * ! If performing a benchmark, it's recommended to set this to `true`
-	 *
-	 * @default false
-	 */
-	precompile?: boolean
-
-	/**
 	 * Whether should Elysia tolerate suffix '/' or vice-versa
 	 *
 	 * @default false
@@ -156,20 +141,11 @@ export interface ElysiaConfig<
 		inference?: 'candidate'
 
 		/**
-		 * Observe request cancellation at suspension boundaries by default, or
-		 * retain legacy entry and between-callback polling.
+		 * Observe request cancellation at suspension boundaries.
 		 *
 		 * @default 'suspension'
 		 */
-		cancellation?: 'suspension' | 'compat'
-
-		/**
-		 * **Unstable / preview.** Convert flat FormData without allocating the
-		 * generic grouping map. Duplicate or nested keys use the generic lane.
-		 *
-		 * @default false
-		 */
-		flatFormDataFastPath?: boolean
+		cancellation?: 'suspension'
 
 		/**
 		 * **Unstable / preview.** Enable the fused validation-plan lane imported

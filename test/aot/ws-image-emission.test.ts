@@ -4,15 +4,15 @@ import {
 	Capture,
 	createAotFingerprint
 } from '../../src/compile/aot'
+import { createAppPlan } from '../../src/compile/app-plan'
 import {
 	abortCapture,
 	beginValidatorCapture,
-	endHandlerCapture,
 	endValidatorCapture,
 	endWSCapture
 } from '../../src/compile/aot-capture'
-import { planFromReport } from '../../src/plugin/aot/core'
 import { emitModule } from '../../src/plugin/aot/source'
+import type { WSRoutePlan } from '../../src/ws/runtime'
 
 afterEach(() => {
 	abortCapture()
@@ -34,10 +34,9 @@ describe('AOT WebSocket image emission', () => {
 
 		const routes = endWSCapture()
 		endValidatorCapture()
-		endHandlerCapture()
 
-		const source = emitModule([], [], routes, createAotFingerprint(), {
-			register: true,
+		const source = emitModule([], routes, createAotFingerprint(), {
+			register: false,
 			wsRuntimeFrom: 'custom/ws-runtime'
 		})
 
@@ -50,14 +49,58 @@ describe('AOT WebSocket image emission', () => {
 		expect(source).toContain(
 			'const _wf0 = buildFrozenWSRoute({sync:1})'
 		)
-		expect(source).toContain('export const wsRoutes = {"/chat":_wr0,}')
-		expect(source).toContain('handlers, wsRoutes')
+		expect(source).toContain('const _wr0 = { a: _wa0, f: _wf0 }')
+		expect(source).not.toContain('export const wsRoutes')
+		expect(source).not.toContain('handlers')
 		expect(source).not.toContain('/fallback')
 	})
 
+	it('attaches AppPlan identity while preserving raw WS hook roles', () => {
+		const message = () => undefined
+		const appPlan = createAppPlan({
+			application: {
+				fetch: {},
+				lifecycle: {}
+			},
+			adapter: { target: 'bun' },
+			httpRoutes: [],
+			wsRoutes: [
+				{
+					path: '/chat',
+					plan: {} as WSRoutePlan,
+					version: 1,
+					content: { flags: 1 },
+					bindings: [{ role: 'wsMessage', value: message }]
+				}
+			]
+		})
+		const source = emitModule(
+			[],
+			[
+				{
+					path: '/chat',
+					roles: ['message'],
+					source: 'buildFrozenWSRoute({sync:1})'
+				}
+			],
+			createAotFingerprint(),
+			{ appPlan, register: true }
+		)
+
+		expect(source).toContain('roles: _wa0, image: _wr0')
+		expect(source).toContain(
+			'export const appPlanWSRoutes = {"/chat":_awr0,}'
+		)
+		expect(source).toContain('export const appPlanPayload = {"format":')
+		expect(source).toContain(
+			'appPlan: { payload: appPlanPayload, validators: appPlanValidators, wsRoutes: appPlanWSRoutes }'
+		)
+		expect(source).toContain('"role":"wsMessage"')
+	})
+
 	it('keeps the HTTP-only manifest byte shape free of WS image fields', () => {
-		const source = emitModule([], [], [], createAotFingerprint(), {
-			register: true
+		const source = emitModule([], [], createAotFingerprint(), {
+			register: false
 		})
 
 		expect(source).not.toContain('wsRoutes')
@@ -67,7 +110,6 @@ describe('AOT WebSocket image emission', () => {
 
 	it('imports the default runtime for a non-registering WS module', () => {
 		const source = emitModule(
-			[],
 			[],
 			[
 				{
@@ -101,33 +143,5 @@ describe('AOT WebSocket image emission', () => {
 			{ path: '/chat', reason: 'last route is unsupported' }
 		])
 		endValidatorCapture()
-		endHandlerCapture()
-	})
-})
-
-describe('AOT WebSocket strip planning', () => {
-	const report = {
-		jit: true,
-		reasons: []
-	} as const
-
-	const plan = (hasWS: boolean, covered: boolean) =>
-		planFromReport(
-			'auto',
-			report,
-			hasWS,
-			false,
-			new Set(),
-			true,
-			false,
-			false,
-			true,
-			covered
-		).plan
-
-	it('separates no-WS stripping from covered WS-JIT stripping', () => {
-		expect(plan(false, true)).toMatchObject({ ws: true, wsJit: false })
-		expect(plan(true, true)).toMatchObject({ ws: false, wsJit: true })
-		expect(plan(true, false)).toMatchObject({ ws: false, wsJit: false })
 	})
 })

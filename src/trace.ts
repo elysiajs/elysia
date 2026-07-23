@@ -1,6 +1,4 @@
-import { traceEvents } from './constants'
-import { separateFunction, retrieveRootparameters, findAlias } from './sucrose'
-import { isIdentCharCode } from './compile/lexer'
+import { traceEventIndex, traceEvents } from './constants'
 import type { Context } from './context'
 import type { Prettify, RouteSchema, SingletonBase } from './types'
 
@@ -15,217 +13,13 @@ export type TraceEvent =
 	| 'afterResponse'
 	| 'error'
 
-const phaseGetter: Record<string, TraceEvent> = {
-	onRequest: 'request',
-	onParse: 'parse',
-	onTransform: 'transform',
-	onBeforeHandle: 'beforeHandle',
-	onHandle: 'handle',
-	onAfterHandle: 'afterHandle',
-	onMapResponse: 'mapResponse',
-	onAfterResponse: 'afterResponse',
-	onError: 'error'
-}
-
-function phasesFromDestructure(group: string): Set<TraceEvent> | null {
-	let parameters: Record<string, true>
-	try {
-		;({ parameters } = retrieveRootparameters(group))
-	} catch {
-		return null
-	}
-
-	const out = new Set<TraceEvent>()
-	for (const key in parameters) {
-		// `[` computed key, or spread
-		if (key.charCodeAt(0) === 91 || key.startsWith('...')) return null
-
-		const phase = phaseGetter[key]
-		if (phase) out.add(phase)
-	}
-
-	return out
-}
-
-function phasesFromMemberAccess(
-	p: string,
-	body: string
-): Set<TraceEvent> | null {
-	const out = new Set<TraceEvent>()
-	const len = p.length
-	let i = 0
-
-	while (i < body.length) {
-		const idx = body.indexOf(p, i)
-		if (idx === -1) break
-
-		// word boundary: `p` must be a standalone identifier
-		const before = idx > 0 ? body.charCodeAt(idx - 1) : 0
-		if (
-			isIdentCharCode(before) ||
-			isIdentCharCode(body.charCodeAt(idx + len))
-		) {
-			i = idx + len
-			continue
-		}
-
-		let j = idx + len
-		let optional = false
-		if (body.charCodeAt(j) === 63 /* ? */) {
-			optional = true
-			j++
-		}
-
-		const next = body.charCodeAt(j)
-
-		// `p.onHandle` static member
-		if (next === 46 /* . */) {
-			j++
-			const s = j
-			while (isIdentCharCode(body.charCodeAt(j))) j++
-			const phase = phaseGetter[body.slice(s, j)]
-			if (phase) out.add(phase)
-
-			// non-phase members (`p.context`, `p.set`) expose no getter
-			i = j
-			continue
-		}
-
-		// `p['onHandle']` computed member, only accountable as a string literal
-		if (next === 91 /* [ */) {
-			j++
-			const q = body.charCodeAt(j)
-			if (q !== 34 && q !== 39) return null // not a string literal → dynamic
-			j++
-			const s = j
-			while (j < body.length && body.charCodeAt(j) !== q) {
-				if (body.charCodeAt(j) === 92 /* \ */) return null // escape → bail
-				j++
-			}
-			const name = body.slice(s, j)
-			j++ // closing quote
-			if (body.charCodeAt(j) !== 93 /* ] */) return null
-			j++
-			const phase = phaseGetter[name]
-			if (phase) out.add(phase)
-			i = j
-			continue
-		}
-
-		// `p?` not followed by `.`/`[` → bare reference
-		if (optional) return null
-
-		// bare `p`: accountable ONLY as the RHS of a destructure (`{ … } = p`).
-		// Walk back over `= ` to a `}`.
-		let k = idx - 1
-		while (
-			k >= 0 &&
-			(body.charCodeAt(k) === 32 || body.charCodeAt(k) === 9)
-		)
-			k--
-		if (body.charCodeAt(k) === 61 /* = */) {
-			k--
-			while (
-				k >= 0 &&
-				(body.charCodeAt(k) === 32 || body.charCodeAt(k) === 9)
-			)
-				k--
-			if (body.charCodeAt(k) === 125 /* } */) {
-				i = idx + len
-				continue
-			}
-		}
-
-		// passed to a function, returned, aliased, dynamically indexed → bail
-		return null
-	}
-
-	return out
-}
-
-let tracePhaseCache = new WeakMap<Function, Set<TraceEvent> | null>()
-
-export const clearTraceAnalysisCaches = () => {
-	tracePhaseCache = new WeakMap()
-}
-
-function scanTracePhases(fn: Function) {
-	const cached = tracePhaseCache.get(fn)
-	if (cached !== undefined) return cached
-
-	const result = computeTracePhases(fn)
-	tracePhaseCache.set(fn, result)
-
-	return result
-}
-
-function computeTracePhases(fn: Function): Set<TraceEvent> | null {
-	let src: string
-	try {
-		src = Function.prototype.toString.call(fn)
-	} catch {
-		return null
-	}
-
-	if (src.includes('[native code]')) return null
-
-	let param: string
-	let body: string
-	try {
-		;[param, body] = separateFunction(src)
-	} catch {
-		return null
-	}
-
-	if (!param) return null
-
-	let roots: ReturnType<typeof retrieveRootparameters>
-	try {
-		roots = retrieveRootparameters(param)
-	} catch {
-		return null
-	}
-
-	// destructure form: `({ onHandle, set }) => …`
-	if (roots.hasParenthesis) return phasesFromDestructure(param)
-
-	// bare-identifier form: the lifecycle is the first parameter
-	const first = Object.keys(roots.parameters)[0]
-	if (!first) return null
-
-	const inner = body.charCodeAt(0) === 123 ? body.slice(1, -1) : body
-
-	const phases = phasesFromMemberAccess(first, inner)
-	if (phases === null) return null
-
-	// nested destructure aliases: `const { onHandle } = t`
-	const aliases = findAlias(first, inner)
-	for (const alias of aliases) {
-		// a non-destructure alias (`const a = t`) can reach getters we cannot
-		// re-scan for bail. Destructure aliases (`{ … }`) are accountable.
-		if (alias.charCodeAt(0) !== 123) return null
-
-		const aliasPhases = phasesFromDestructure(alias)
-		if (aliasPhases === null) return null
-		for (const p of aliasPhases) phases.add(p)
-	}
-
-	return phases
-}
+/** Retained for compatibility; trace analysis no longer has a cache. */
+export const clearTraceAnalysisCaches = () => {}
 
 export function unionTracePhases(
 	handlers: readonly Function[] | undefined
 ): Set<TraceEvent> | null {
-	if (!handlers?.length) return new Set()
-
-	const union = new Set<TraceEvent>()
-	for (let i = 0; i < handlers.length; i++) {
-		const phases = scanTracePhases(handlers[i])
-		if (phases === null) return null
-		for (const p of phases) union.add(p)
-	}
-
-	return union
+	return handlers?.length ? null : new Set()
 }
 
 export interface TraceStream {
@@ -754,3 +548,113 @@ export const createTracer =
 
 		return handle
 	}
+
+type TraceToken = number | TraceRecorder | undefined
+
+let runtimeTraceHandles = new WeakMap<
+	object,
+	Map<TraceHandler, TracerHandle[]>
+>()
+
+/** Reuse a listener's request-scoped handle across application and route phases. */
+export function createTraceHandles(
+	context: Context,
+	listeners: readonly TraceHandler[]
+): any[] {
+	let byListener = runtimeTraceHandles.get(context)
+	if (!byListener) {
+		byListener = new Map()
+		runtimeTraceHandles.set(context, byListener)
+	}
+	const occurrences = new Map<TraceHandler, number>()
+	return listeners.map((listener) => {
+		const occurrence = occurrences.get(listener) ?? 0
+		occurrences.set(listener, occurrence + 1)
+		let handles = byListener!.get(listener)
+		if (!handles) {
+			handles = []
+			byListener!.set(listener, handles)
+		}
+		return (handles[occurrence] ??= createTracer(listener)(context))
+	})
+}
+
+/** Shared imperative trace controller for sealed runtimes. */
+export class RuntimeTrace {
+	readonly #context: Context
+	readonly #handles: TracerHandle[]
+	readonly #phaseMask: number
+	readonly #active: TraceToken[][] = new Array(9)
+
+	constructor(
+		context: Context,
+		listeners: readonly TraceHandler[],
+		phaseMask: number
+	) {
+		this.#context = context
+		this.#phaseMask = phaseMask
+		this.#handles = createTraceHandles(context, listeners)
+		const visible = ((context as any).trace ??= []) as TracerHandle[]
+		for (const handle of this.#handles)
+			if (!visible.includes(handle)) visible.push(handle)
+	}
+
+	on(event: TraceEvent) {
+		return !!(this.#phaseMask & (1 << traceEventIndex[event]))
+	}
+
+	begin(event: TraceEvent, total: number, name: string = event) {
+		if (!this.on(event)) return
+		const index = traceEventIndex[event]
+		const process = () => ({
+			id: this.#context.rid as any,
+			event,
+			name,
+			begin: performance.now(),
+			total
+		})
+		this.#active[index] = this.#handles.map(
+			(handle) => handle.b(index, total, name) || handle.begin(index, process())
+		)
+	}
+
+	child(event: TraceEvent, name: string) {
+		if (!this.on(event)) return () => {}
+		const index = traceEventIndex[event]
+		const active = this.#active[index]
+		const end = this.#handles.map((_handle, slot) =>
+			(active?.[slot] as TraceRecorder | undefined)?.resolveChild?.shift?.()?.({
+				id: this.#context.rid as any,
+				event,
+				name,
+				begin: performance.now()
+			})
+		)
+		let settled = false
+		return (error?: unknown) => {
+			if (settled) return
+			settled = true
+			for (let slot = 0; slot < end.length; slot++)
+				if (error instanceof Error) {
+					const resolve = end[slot]
+					if (resolve) resolve(error)
+					else this.#handles[slot]!.gc(active?.[slot], error)
+				} else end[slot]?.()
+		}
+	}
+
+	end(event: TraceEvent, error?: unknown) {
+		if (!this.on(event)) return
+		const index = traceEventIndex[event]
+		const active = this.#active[index]
+		this.#active[index] = []
+		for (let i = 0; i < this.#handles.length; i++)
+			this.#handles[i]!.r(active?.[i], error instanceof Error ? error : null)
+	}
+}
+
+export const createRuntimeTrace = (
+	context: Context,
+	listeners: readonly TraceHandler[],
+	phaseMask: number
+) => new RuntimeTrace(context, listeners, phaseMask)

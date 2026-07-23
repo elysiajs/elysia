@@ -86,8 +86,6 @@ export const aot = (
 	)
 
 	const manifestFile = join(cacheDir, 'compiled.mjs')
-	const typeFile = join(cacheDir, 'type.mjs')
-
 	const apply = (rawCompiler: unknown): void => {
 		const compiler = rawCompiler as RspackCompiler
 
@@ -112,9 +110,6 @@ export const aot = (
 			await hooks.buildStart()
 
 			const source = hooks.load(hooks.resolveId('elysia/compiled')!)
-			const typeId = hooks.resolveId('elysia/type')
-			const virtualType =
-				typeId === undefined ? undefined : hooks.load(typeId)
 
 			mkdirSync(cacheDir, { recursive: true })
 			writeFileSync(manifestFile, source ?? '')
@@ -122,11 +117,6 @@ export const aot = (
 			const resolveOptions = (compiler.options.resolve ??= {})
 			const alias = (resolveOptions.alias ??= {})
 			alias['elysia/compiled$'] = manifestFile
-
-			if (virtualType !== undefined) {
-				writeFileSync(typeFile, virtualType)
-				alias['elysia/type$'] = typeFile
-			} else delete alias['elysia/type$']
 		})
 
 		compiler.hooks.afterCompile.tapPromise(PLUGIN, async () => {

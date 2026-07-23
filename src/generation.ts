@@ -1,13 +1,14 @@
 import type { AnyElysia } from './base'
 import type { AotFingerprint, ProgramId } from './compile/aot'
 import type { RuntimeRouteTable } from './route-table'
-import type { HistoryEntry, PublicRoute } from './types'
+import type { HistoryEntry, MaybePromise, PublicRoute } from './types'
 import type { ChainNode } from './utils'
 import type { Server } from './universal/server'
 import type { RouteErrorFinalizer } from './handler/utils'
 import type { WebSocketHandler } from './ws/types'
 import type { WSConnectionData } from './ws/context'
 import type { AnySchema } from './type'
+import type { AppPlan, AppPlanCoverage } from './compile/app-plan'
 
 export interface RuntimeServerBinding {
 	current?: Server
@@ -19,11 +20,13 @@ export interface RuntimeBindings {
 	readonly finalizeError: RouteErrorFinalizer
 }
 
-export const createRuntimeBindings = (): RuntimeBindings => {
+export const createRuntimeBindings = (
+	server: RuntimeServerBinding = {}
+): RuntimeBindings => {
 	const error: RuntimeBindings['error'] = {}
 
 	return {
-		server: {},
+		server,
 		error,
 		finalizeError(context, cause) {
 			if (!error.current) throw cause
@@ -60,8 +63,14 @@ export interface IntrospectionImage {
 
 export interface Generation {
 	readonly abi: AotFingerprint
+	readonly plan: AppPlan | undefined
+	readonly coverage: AppPlanCoverage
+	readonly fetch: (
+		request: Request,
+		server?: unknown
+	) => MaybePromise<Response>
+	readonly sealed: boolean
 	readonly runtime: RuntimeImage
-	readonly introspect: boolean
 	readonly introspection?: IntrospectionImage
 }
 

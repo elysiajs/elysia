@@ -1,5 +1,9 @@
 import { Elysia } from '../../src'
 import { createContext } from '../../src/context'
+import {
+	createFetchKernel,
+	createFetchRuntimeImage
+} from '../../src/handler/fetch'
 
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
@@ -97,21 +101,23 @@ describe('fetch handler', () => {
 			.get('/id/:id', ({ params }) => params.id)
 
 		void app.fetch
-		const router = (app as any)['~router']
-		const find = router.find
-		router.find = () => {
-			throw new Error('router failed')
-		}
+		const runtime = createFetchRuntimeImage(app)
+		const kernel = createFetchKernel(
+			Object.freeze({
+				...runtime,
+				router: {
+					find() {
+						throw new Error('router failed')
+					}
+				} as any
+			})
+		)
 
 		const request = req('/id/42')
-		try {
-			const response = await app.handle(request)
-			expect(response.status).toBe(500)
-			await expect(response.text()).resolves.toBe('router failed:/id/42')
-			expect(observedRequest).toBe(request)
-		} finally {
-			router.find = find
-		}
+		const response = await kernel.fetch(request)
+		expect(response.status).toBe(500)
+		await expect(response.text()).resolves.toBe('router failed:/id/42')
+		expect(observedRequest).toBe(request)
 	})
 
 	it('runs afterResponse when a sync request hook returns a response', async () => {

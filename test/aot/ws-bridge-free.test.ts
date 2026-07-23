@@ -2,18 +2,17 @@ import { describe, it, expect, afterEach } from 'bun:test'
 
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
-import { Compiled, type ProgramId } from '../../src/compile/aot'
+import { Compiled } from '../../src/compile/aot'
 import {
 	beginValidatorCapture,
 	endValidatorCapture,
-	endHandlerCapture,
 	endWSCapture
 } from '../../src/compile/aot-capture'
 import { RouteValidator } from '../../src/validator/route'
 import { buildFrozenRouteValidator } from '../../src/compile/handler/frozen-validator'
 import { generateCompiledArtifacts } from '../../src/plugin/aot/core'
 
-import { claimManifest, materialise } from './_manifest'
+import { claimManifest, materialise, type ClaimedManifest } from './_manifest'
 
 /** WebSocket validators reconstruct from the manifest without a TypeBox bridge. */
 
@@ -38,7 +37,6 @@ function freezeWS(hook: any) {
 	;(app as any).compile()
 
 	const captured = endValidatorCapture()
-	endHandlerCapture()
 	endWSCapture()
 	delete process.env.ELYSIA_AOT_BUILD
 
@@ -50,7 +48,7 @@ function freezeWS(hook: any) {
 }
 
 // program claimed by the latest `freezeWS()`
-let claimed: { ['~programId']: ProgramId }
+let claimed: ClaimedManifest
 
 afterEach(() => {
 	delete process.env.ELYSIA_AOT_BUILD
@@ -76,14 +74,16 @@ describe('frozen WebSocket validator reconstruction', () => {
 			hook as any,
 			{
 				aot: { method: 'WS', path: PATH },
-				app: claimed
+				app: claimed,
+				frozenSlots: claimed.validators.WS![PATH]!
 			} as any
 		)
 		const frozen = buildFrozenRouteValidator(
 			hook as any,
 			claimed as any,
 			'WS',
-			PATH
+			PATH,
+			claimed.validators.WS![PATH]!
 		)
 
 		expect(frozen).toBeDefined()
@@ -180,14 +180,16 @@ describe('frozen WebSocket validator reconstruction', () => {
 			hook as any,
 			{
 				aot: { method: 'WS', path: PATH },
-				app: claimed
+				app: claimed,
+				frozenSlots: claimed.validators.WS![PATH]!
 			} as any
 		)
 		const frozen = buildFrozenRouteValidator(
 			hook as any,
 			claimed as any,
 			'WS',
-			PATH
+			PATH,
+			claimed.validators.WS![PATH]!
 		)
 		expect(frozen).toBeDefined()
 
@@ -208,13 +210,13 @@ describe('frozen WebSocket validator reconstruction', () => {
 		expect(frozenOut).toEqual({ a: 'hi' })
 	})
 
-	it('seals a schema-only WebSocket app without rerouting the bridge', async () => {
-		const { stub } = await generateCompiledArtifacts(
+	it('uses validator sidecars instead of duplicate compact WS images', async () => {
+		const { source } = await generateCompiledArtifacts(
 			'test/aot/fixtures/mode-ws-app.ts'
 		)
 
-		expect(stub.ws).toBe(false)
-		expect(stub.compat).toBe(true)
-		expect(stub.bridge).toBe(false)
+		expect(source).toContain('export const appPlanValidators')
+		expect(source).toContain('export const appPlanWSRoutes = {}')
+		expect(source).not.toContain('buildFrozenWSRoute')
 	})
 })

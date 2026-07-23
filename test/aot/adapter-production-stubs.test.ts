@@ -1,203 +1,120 @@
 import { describe, it, expect } from 'bun:test'
 import { resolve } from 'node:path'
 import {
-	generateCompiledArtifacts,
-	ADAPTER_CONSTANTS_FILTER,
-	ADAPTER_BUN_FILTER,
 	IS_PRODUCTION_FILTER,
-	adapterConstantsSource,
-	bunAdapterStubSource,
-	STUB_SOURCES
+	TYPE_EXPORTS_FILTER,
+	omitTypeboxSetup
 } from '../../src/plugin/aot/core'
-import { aot as bunAot } from '../../src/plugin/aot/bun'
 import { aot as viteAot } from '../../src/plugin/aot/vite'
 
-const APP = resolve(import.meta.dir, 'fixtures/strip-schema-bundle.ts')
+const APP = resolve(import.meta.dir, 'fixtures/schema-bundle.ts')
 const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/aot.ts')
+const RECONSTRUCT_FROM = resolve(
+	import.meta.dir,
+	'../../src/compile/aot-reconstruct.ts'
+)
+const COERCE_PLAN_FROM = resolve(import.meta.dir, '../../src/type/coerce-plan.ts')
+const BUN_AOT = resolve(import.meta.dir, '../../src/plugin/aot/bun.ts')
+const buildBundle = async (
+	options: Record<string, unknown> = {},
+	minify = false
+) => {
+	const script = `
+const { aot } = await import(${JSON.stringify(BUN_AOT)})
+const result = await Bun.build({
+	entrypoints: [${JSON.stringify(APP)}],
+	plugins: [aot(${JSON.stringify(APP)}, {
+		registerFrom: ${JSON.stringify(REGISTER_FROM)},
+		reconstructFrom: ${JSON.stringify(RECONSTRUCT_FROM)},
+		...${JSON.stringify(options)}
+	}), {
+		name: 'elysia-aot-test-source-subpaths',
+		setup(build) {
+			build.onResolve({ filter: /^elysia\\/coerce-plan$/ }, () => ({
+				path: ${JSON.stringify(COERCE_PLAN_FROM)}
+			}))
+		}
+	}],
+	write: false,
+	target: 'bun',
+	minify: ${JSON.stringify(minify)}
+})
+if (!result.success) throw new Error(result.logs.map((log) => log.message).join('\\n'))
+console.log(JSON.stringify(await result.outputs[0].text()))
+`
+	const subprocess = Bun.spawn({
+		cmd: [process.execPath, '-e', script],
+		stdout: 'pipe',
+		stderr: 'pipe'
+	})
+	const [stdout, stderr, exitCode] = await Promise.all([
+		new Response(subprocess.stdout).text(),
+		new Response(subprocess.stderr).text(),
+		subprocess.exited
+	])
+	if (exitCode !== 0) throw new Error(stderr || stdout)
+	return JSON.parse(stdout) as string
+}
 
-describe('target-gated adapter stubs', () => {
-	it('matches Elysia src and dist Bun adapter paths', () => {
+describe('direct type entry', () => {
+	it('matches only Elysia source and distribution type entries', () => {
+		expect(TYPE_EXPORTS_FILTER.test('/x/elysia/src/type/exports.ts')).toBe(
+			true
+		)
 		expect(
-			ADAPTER_BUN_FILTER.test('/x/elysia/src/adapter/bun/index.ts')
-		).toBe(true)
-		expect(
-			ADAPTER_BUN_FILTER.test(
-				'/x/node_modules/elysia/dist/adapter/bun/index.mjs'
+			TYPE_EXPORTS_FILTER.test(
+				'/x/node_modules/elysia/dist/type/exports.mjs'
 			)
 		).toBe(true)
-		expect(ADAPTER_BUN_FILTER.test('/app/src/adapter/bun/index.ts')).toBe(
+		expect(TYPE_EXPORTS_FILTER.test('/app/src/type/exports.ts')).toBe(false)
+		expect(TYPE_EXPORTS_FILTER.test('/x/elysia/src/type/index.ts')).toBe(
 			false
 		)
-		expect(
-			ADAPTER_BUN_FILTER.test('/x/elysia/src/adapter/constants.ts')
-		).toBe(false)
 	})
 
-	it('matches Elysia src and dist adapter constants paths', () => {
-		expect(
-			ADAPTER_CONSTANTS_FILTER.test('/x/elysia/src/adapter/constants.ts')
-		).toBe(true)
-		expect(
-			ADAPTER_CONSTANTS_FILTER.test(
-				'/x/node_modules/elysia/dist/adapter/constants.mjs'
-			)
-		).toBe(true)
-		expect(
-			ADAPTER_CONSTANTS_FILTER.test(
-				'/x/node_modules/elysia/dist/adapter/constants.js'
-			)
-		).toBe(true)
-		expect(
-			ADAPTER_CONSTANTS_FILTER.test('/app/src/adapter/constants.ts')
-		).toBe(false)
-		expect(
-			ADAPTER_CONSTANTS_FILTER.test(
-				'/x/node_modules/.pnpm/elysia@2.0.0/node_modules/elysia/dist/adapter/constants.mjs'
-			)
-		).toBe(true)
+	it('omits setup from source and built ESM while retaining every export', () => {
+		for (const source of [
+			"import { setupTypebox } from './compat'\n\nsetupTypebox()\n\nexport const String = 1\n",
+			'import { setupTypebox } from "./compat.mjs";\nexport * from "typebox/type"\nsetupTypebox();\nexport const String = 1;\n'
+		]) {
+			const transformed = omitTypeboxSetup(source)
+			expect(transformed).not.toContain('setupTypebox')
+			expect(transformed).toContain('String')
+		}
 	})
 
-	it('selects the Bun adapter for target:bun', async () => {
-		const { stub } = await generateCompiledArtifacts(APP, {
-			target: 'bun'
-		})
-		expect(stub.adapter).toBe('bun')
-	})
-
-	it('selects the web-standard adapter for target:node', async () => {
-		const { stub } = await generateCompiledArtifacts(APP, {
-			target: 'node'
-		})
-		expect(stub.adapter).toBe('web-standard')
-	})
-
-	it('selects the web-standard adapter for target:workerd', async () => {
-		const { stub } = await generateCompiledArtifacts(APP, {
-			target: 'workerd'
-		})
-		expect(stub.adapter).toBe('web-standard')
-	})
-
-	it('leaves adapter selection to the runtime when target is omitted', async () => {
-		const { stub } = await generateCompiledArtifacts(APP)
-		expect(stub.adapter).toBe(false)
-	})
-
-	it('adapterConstantsSource: bun stub exports BunAdapter, no isBun check', () => {
-		const src = adapterConstantsSource('bun')
-		expect(src).toContain("import { BunAdapter } from './bun/index'")
-		expect(src).toContain('export const defaultAdapter = BunAdapter')
-		expect(src).not.toContain('isBun')
-		expect(src).not.toContain('WebStandardAdapter')
-	})
-
-	it('adapterConstantsSource: web-standard stub exports WebStandardAdapter, no isBun check', () => {
-		const src = adapterConstantsSource('web-standard')
-		expect(src).toContain(
-			"import { WebStandardAdapter } from './web-standard/index'"
+	it('omits setup from built CommonJS without changing other requires', () => {
+		const transformed = omitTypeboxSetup(
+			"const require_type_compat = require('./compat.js');\n" +
+				"const type = require('typebox/type');\n" +
+				'require_type_compat.setupTypebox();\n' +
+				'exports.String = type.String;\n'
 		)
-		expect(src).toContain(
-			'export const defaultAdapter = WebStandardAdapter'
+
+		expect(transformed).not.toContain('require_type_compat')
+		expect(transformed).toContain("require('typebox/type')")
+		expect(transformed).toContain('exports.String')
+	})
+
+	it('fails if the public type entry shape drifts', () => {
+		expect(() => omitTypeboxSetup('export const String = 1\n')).toThrow(
+			'does not match the direct-image transform'
 		)
-		expect(src).not.toContain('isBun')
-		expect(src).not.toContain('BunAdapter')
 	})
 
-	it('node bundles remove Bun.serve and include the Bun adapter stub', async () => {
-		const result = await Bun.build({
-			entrypoints: [APP],
-			plugins: [
-				bunAot(APP, {
-					registerFrom: REGISTER_FROM,
-					target: 'node'
-				})
-			],
-			write: false,
-			target: 'bun'
+	it('omits setup from the direct type entry', async () => {
+		const plugin = viteAot(APP, {
+			registerFrom: REGISTER_FROM
 		})
-		expect(result.success).toBe(true)
-		const out = await result.outputs[0].text()
+		await plugin.buildStart()
 
-		expect(out).not.toContain('isBun ? BunAdapter : WebStandardAdapter')
-		expect(out).not.toContain('Bun.serve')
-		expect(out).toContain('Bun adapter was stripped')
-	})
+		const transformed = await plugin.transform(
+			"import { setupTypebox } from './compat.mjs'\nsetupTypebox()\nexport const String = 1\n",
+			'/x/node_modules/elysia/dist/type/exports.mjs'
+		)
 
-	it('workerd bundles remove Bun.serve and include the Bun adapter stub', async () => {
-		const result = await Bun.build({
-			entrypoints: [APP],
-			plugins: [
-				bunAot(APP, {
-					registerFrom: REGISTER_FROM,
-					target: 'workerd'
-				})
-			],
-			write: false,
-			target: 'bun'
-		})
-		expect(result.success).toBe(true)
-		const out = await result.outputs[0].text()
-
-		expect(out).not.toContain('Bun.serve')
-		expect(out).toContain('Bun adapter was stripped')
-	})
-
-	it('Bun bundles select BunAdapter at build time', async () => {
-		const result = await Bun.build({
-			entrypoints: [APP],
-			plugins: [
-				bunAot(APP, {
-					registerFrom: REGISTER_FROM,
-					target: 'bun'
-				})
-			],
-			write: false,
-			target: 'bun'
-		})
-		expect(result.success).toBe(true)
-		const out = await result.outputs[0].text()
-
-		expect(out).toContain('var defaultAdapter = BunAdapter')
-		expect(out).not.toContain('isBun ? BunAdapter : WebStandardAdapter')
-	})
-
-	it('bundles without a target preserve runtime adapter detection', async () => {
-		const result = await Bun.build({
-			entrypoints: [APP],
-			plugins: [
-				bunAot(APP, {
-					registerFrom: REGISTER_FROM
-					// no target
-				})
-			],
-			write: false,
-			target: 'bun'
-		})
-		expect(result.success).toBe(true)
-		const out = await result.outputs[0].text()
-
-		expect(out).toContain('isBun ? BunAdapter : WebStandardAdapter')
-		expect(out).toContain('Bun.serve')
-		expect(out).not.toContain('Bun adapter was stripped')
-	})
-
-	it('Bun bundles retain Bun.serve without the adapter stub', async () => {
-		const result = await Bun.build({
-			entrypoints: [APP],
-			plugins: [
-				bunAot(APP, {
-					registerFrom: REGISTER_FROM,
-					target: 'bun'
-				})
-			],
-			write: false,
-			target: 'bun'
-		})
-		expect(result.success).toBe(true)
-		const out = await result.outputs[0].text()
-
-		expect(out).toContain('Bun.serve')
-		expect(out).not.toContain('Bun adapter was stripped')
+		expect(transformed).not.toContain('setupTypebox')
+		expect(transformed).toContain('export const String = 1')
 	})
 })
 
@@ -218,135 +135,16 @@ describe('build-time production flag', () => {
 		).toBe(false)
 	})
 
-	it('defaults the production stub to true', async () => {
-		const { stub } = await generateCompiledArtifacts(APP)
-		expect(stub.isProduction).toBe(true)
-	})
-
-	it('sets the production stub when production is true', async () => {
-		const { stub } = await generateCompiledArtifacts(APP, {
-			production: true
-		})
-		expect(stub.isProduction).toBe(true)
-	})
-
-	it('disables the production stub when production is false', async () => {
-		const { stub } = await generateCompiledArtifacts(APP, {
-			production: false
-		})
-		expect(stub.isProduction).toBe(false)
-	})
-
 	it('production builds remove runtime environment checks', async () => {
-		const result = await Bun.build({
-			entrypoints: [APP],
-			plugins: [
-				bunAot(APP, {
-					registerFrom: REGISTER_FROM,
-					strip: false
-					// production defaults to true
-				})
-			],
-			write: false,
-			target: 'bun',
-			minify: true
-		})
-		expect(result.success).toBe(true)
-		const out = await result.outputs[0].text()
+		const out = await buildBundle({}, true)
 
 		expect(out).not.toContain('NODE_ENV')
 	})
 
 	it('development builds retain runtime environment checks', async () => {
-		const result = await Bun.build({
-			entrypoints: [APP],
-			plugins: [
-				bunAot(APP, {
-					registerFrom: REGISTER_FROM,
-					strip: false,
-					production: false
-				})
-			],
-			write: false,
-			target: 'bun'
-		})
-		expect(result.success).toBe(true)
-		const out = await result.outputs[0].text()
+		const out = await buildBundle({ production: false })
 
 		expect(out).toContain('NODE_ENV')
 		expect(out).not.toContain('IS_PRODUCTION = true')
-	})
-})
-
-describe('Vite plugin: adapter/bun stub parity', () => {
-	const bunIndexId = '/x/node_modules/elysia/dist/adapter/bun/index.mjs'
-	const bunSrcId = '/x/elysia/src/adapter/bun/index.ts'
-	const unrelatedId = '/app/src/mymodule.ts'
-
-	it('uses the shared Bun adapter stub source', () => {
-		expect(bunAdapterStubSource).toContain('Bun adapter was stripped')
-		expect(bunAdapterStubSource).toContain('buildNativeStaticRoutes')
-		expect(bunAdapterStubSource).toContain('collectStaticRoutes')
-		expect(bunAdapterStubSource).toContain('BunAdapter')
-		expect(bunAdapterStubSource).not.toContain('Bun.serve')
-	})
-
-	it('keeps runtime-image exports in the WebSocket strip stub', () => {
-		const source = STUB_SOURCES.wsJit[0].source
-		expect(source).toContain('buildWSRoute')
-		expect(source).toContain('buildWebSocketRuntime')
-		expect(source).toContain('buildFrozenWSRoute')
-	})
-
-	it('matches Bun adapter paths handled by the transform', () => {
-		expect(ADAPTER_BUN_FILTER.test(bunIndexId)).toBe(true)
-		expect(ADAPTER_BUN_FILTER.test(bunSrcId)).toBe(true)
-		expect(ADAPTER_BUN_FILTER.test(unrelatedId)).toBe(false)
-	})
-
-	it('replaces the Bun adapter for web-standard targets', async () => {
-		const plugin = viteAot(APP, {
-			registerFrom: REGISTER_FROM,
-			target: 'node'
-		})
-
-		await plugin.buildStart()
-
-		const result = await plugin.transform(
-			'// original bun adapter code\nBun.serve({})',
-			bunIndexId
-		)
-		expect(result).toBeDefined()
-		expect(result).toContain('Bun adapter was stripped')
-		expect(result).not.toContain('Bun.serve')
-	})
-
-	it('keeps the Bun adapter for Bun targets', async () => {
-		const plugin = viteAot(APP, {
-			registerFrom: REGISTER_FROM,
-			target: 'bun' // bun target → adapter:'bun', no bun-adapter stub
-		})
-
-		await plugin.buildStart()
-
-		const result = await plugin.transform(
-			'// original bun adapter code\nBun.serve({})',
-			bunIndexId
-		)
-		expect(result ?? '').not.toContain('Bun adapter was stripped')
-	})
-
-	it('keeps the Bun adapter when no target is declared', async () => {
-		const plugin = viteAot(APP, {
-			registerFrom: REGISTER_FROM
-		})
-
-		await plugin.buildStart()
-
-		const result = await plugin.transform(
-			'// original bun adapter code\nBun.serve({})',
-			bunIndexId
-		)
-		expect(result ?? '').not.toContain('Bun adapter was stripped')
 	})
 })

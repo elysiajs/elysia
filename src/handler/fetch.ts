@@ -1,20 +1,28 @@
-import { decodeComponent } from 'deuri'
+import Memoirist, {
+	type Node as MemoiristNode,
+	type ParamNode as MemoiristParamNode
+} from 'memoirist'
 
-import { defaultAdapter } from '../adapter/constants'
+import { getDefaultAdapter } from '../adapter/constants'
 
 import type { AnyElysia } from '../base'
 import {
-	getAsyncIndexes,
-	emptyResponse,
 	NOT_FOUND_BODY,
 	getNotFound,
 	frameworkNotFound,
-	settleResponse
+	settleResponse,
+	assimilateThenable
 } from './utils'
 
 import { createContext, type Context } from '../context'
 import { createErrorHandler } from './error'
-import { requestId, flattenChain, nullObject, isNotEmpty } from '../utils'
+import {
+	requestId,
+	flattenChain,
+	nullObject,
+	isNotEmpty,
+	decodeURIComponentSafe
+} from '../utils'
 import { handleSet, materializeSetHeaders } from '../adapter/utils'
 import {
 	NotFound,
@@ -22,9 +30,210 @@ import {
 	internalServerErrorResponse,
 	isProduction
 } from '../error'
-import { createTracer, unionTracePhases } from '../trace'
+import { createTraceHandles, unionTracePhases } from '../trace'
 
-import type { CompiledHandler, MaybePromise } from '../types'
+import type {
+	AppHook,
+	CompiledHandler,
+	MaybePromise,
+	WrapFn
+} from '../types'
+import type { RouteErrorFinalizer } from './utils'
+
+export type FetchContextConstructor = new (request: Request) => Context
+
+export type FetchRouteMap = Readonly<{
+	[method: string]:
+		| Readonly<{ [path: string]: CompiledHandler }>
+		| undefined
+}>
+
+export interface FetchRuntimeImage {
+	readonly Context: FetchContextConstructor
+	readonly map: FetchRouteMap
+	readonly router?: Memoirist<CompiledHandler>
+	readonly strictPath: boolean
+	readonly pathStart: number
+	readonly hasWS: boolean
+	readonly hasDynamicWS: boolean
+	readonly hasRoutes: boolean
+	readonly hasDefaultHeaders: boolean
+	readonly requestHooks?: AppHook['request']
+	readonly mapResponseHooks?: AppHook['mapResponse']
+	readonly errorHooks?: AppHook['error']
+	readonly afterResponseHooks?: AppHook['afterResponse']
+	readonly traceHooks?: AppHook['trace']
+	readonly hoc?: readonly WrapFn<any>[]
+	readonly allowUnsafeValidationDetails: boolean
+	readonly baseMapResponse: (
+		response: unknown,
+		set: Context['set'],
+		request?: Request,
+		owned?: boolean
+	) => unknown
+	/** Legacy authoring adapter only; AppPlan publication owns its cell separately. */
+	readonly errorFinalizer?: FetchErrorFinalizerCell
+}
+
+export interface FetchErrorFinalizerCell {
+	current?: RouteErrorFinalizer
+}
+
+export interface FetchRuntimeImageInput extends Omit<
+	FetchRuntimeImage,
+	'map' | 'router' | 'hasRoutes' | 'requestHooks' | 'mapResponseHooks' |
+	'errorHooks' | 'afterResponseHooks' | 'traceHooks' | 'hoc'
+> {
+	readonly map: AnyElysia['~map']
+	readonly router: AnyElysia['~router']
+	readonly requestHooks?: AppHook['request']
+	readonly mapResponseHooks?: AppHook['mapResponse']
+	readonly errorHooks?: AppHook['error']
+	readonly afterResponseHooks?: AppHook['afterResponse']
+	readonly traceHooks?: AppHook['trace']
+	readonly hoc?: readonly WrapFn<any>[]
+}
+
+export interface FetchKernel {
+	readonly fetch: FetchHandler
+	readonly finalizeError: RouteErrorFinalizer
+}
+
+type FetchHandler = (
+	request: Request,
+	...rest: any[]
+) => MaybePromise<Response>
+
+const snapshotHooks = <T extends readonly unknown[]>(hooks: T | undefined) =>
+	hooks?.length ? (Object.freeze([...hooks]) as unknown as T) : undefined
+
+function snapshotRouteMap(map: AnyElysia['~map']): FetchRouteMap {
+	const snapshot: Record<
+		string,
+		Readonly<Record<string, CompiledHandler>> | undefined
+	> = nullObject()
+
+	if (map)
+		for (const method in map) {
+			const routes = map[method]
+			if (routes)
+				snapshot[method] = Object.freeze(
+					Object.assign(nullObject(), routes)
+				)
+		}
+
+	return Object.freeze(snapshot)
+}
+
+function snapshotRouter(
+	router: AnyElysia['~router']
+): Memoirist<CompiledHandler> | undefined {
+	if (!router) return
+
+	const cloneParam = (
+		node: MemoiristParamNode<CompiledHandler>
+	): MemoiristParamNode<CompiledHandler> =>
+		Object.freeze({
+			store: node.store,
+			storeNames: node.storeNames
+				? Object.freeze([...node.storeNames]) as string[]
+				: null,
+			inert: node.inert ? cloneNode(node.inert) : null
+		})
+	const cloneNode = (
+		node: MemoiristNode<CompiledHandler>
+	): MemoiristNode<CompiledHandler> => {
+		let inert: Record<number, MemoiristNode<CompiledHandler>> | null = null
+		if (node.inert) {
+			const nextInert = nullObject() as Record<
+				number,
+				MemoiristNode<CompiledHandler>
+			>
+			for (const key in node.inert)
+				nextInert[+key] = cloneNode(node.inert[key])
+			inert = Object.freeze(nextInert)
+		}
+
+		return Object.freeze({
+			part: node.part,
+			store: node.store,
+			storeNames: node.storeNames
+				? Object.freeze([...node.storeNames]) as string[]
+				: null,
+			inert,
+			params: node.params ? cloneParam(node.params) : null,
+			wildcardStore: node.wildcardStore,
+			wildcardStoreNames: node.wildcardStoreNames
+				? Object.freeze([...node.wildcardStoreNames]) as string[]
+				: null
+		})
+	}
+
+	const snapshot = new Memoirist<CompiledHandler>({
+		loosePath: router.loosePath,
+		onParam: router.onParam
+	})
+	const root = nullObject() as typeof snapshot.root
+	for (const method in router.root) root[method] = cloneNode(router.root[method])
+	snapshot.root = Object.freeze(root)
+
+	return Object.freeze(snapshot)
+}
+
+function hasMappedRoute(map: FetchRouteMap) {
+	for (const method in map) {
+		const routes = map[method]
+		if (routes)
+			for (const _path in routes) return true
+	}
+
+	return false
+}
+
+export function createFetchRuntimeImage(app: AnyElysia): FetchRuntimeImage {
+	const hook = flattenChain(app['~hookChain'])
+	return createFetchRuntimeImageFromBindings({
+		Context: createContext(app),
+		map: app['~map'],
+		router: app['~router'],
+		strictPath: !!app['~config']?.strictPath,
+		pathStart:
+			app['~config']?.handler?.standardHostname === false ? 7 : 11,
+		hasWS: !!app['~hasWS'],
+		hasDynamicWS: !!app['~hasWS'] && !!app['~hasDynamicWS'],
+		hasDefaultHeaders: !!app['~ext']?.headers,
+		requestHooks: hook?.request,
+		mapResponseHooks: hook?.mapResponse,
+		errorHooks: hook?.error,
+		afterResponseHooks: hook?.afterResponse,
+		traceHooks: hook?.trace,
+		hoc: app['~ext']?.hoc,
+		allowUnsafeValidationDetails:
+			!!app['~config']?.allowUnsafeValidationDetails,
+		baseMapResponse: (app['~config']?.adapter ?? getDefaultAdapter()).response
+			.map as FetchRuntimeImage['baseMapResponse'],
+		errorFinalizer: app['~runtimeBindings'].error
+	})
+}
+
+export function createFetchRuntimeImageFromBindings(
+	input: FetchRuntimeImageInput
+): FetchRuntimeImage {
+	const map = snapshotRouteMap(input.map)
+	const router = snapshotRouter(input.router)
+	return Object.freeze({
+		...input,
+		map,
+		router,
+		hasRoutes: hasMappedRoute(map) || !!router,
+		requestHooks: snapshotHooks(input.requestHooks),
+		mapResponseHooks: snapshotHooks(input.mapResponseHooks),
+		errorHooks: snapshotHooks(input.errorHooks),
+		afterResponseHooks: snapshotHooks(input.afterResponseHooks),
+		traceHooks: snapshotHooks(input.traceHooks),
+		hoc: snapshotHooks(input.hoc)
+	})
+}
 
 // Extract path and query-index from a full URL string.
 // Scalar params only — monomorphic so V8/JSC can inline at each call site.
@@ -59,7 +268,7 @@ function decodeParams(params: Record<string, string>) {
 	for (const key in params) {
 		const value = params[key]
 		if (value.indexOf('%') !== -1)
-			params[key] = decodeComponent(value) ?? value
+			params[key] = decodeURIComponentSafe(value) ?? value
 	}
 
 	return params
@@ -82,8 +291,9 @@ function finalizeError(
 		resp = internalServerErrorResponse(error as Error)
 	}
 
-	if (resp instanceof Promise)
-		return resp.then(
+	const pending = assimilateThenable(resp)
+	if (pending)
+		return pending.then(
 			(r) => {
 				afterResponse?.(context)
 				return r
@@ -116,13 +326,9 @@ function dispatchResult(
 	handleError: (context: Context, error: Error) => unknown,
 	afterResponse: ((context: Context, status?: number) => void) | undefined
 ): MaybePromise<Response> {
-	if (result instanceof Promise)
-		return result.catch(
-			catchError(context, handleError, afterResponse)
-		) as Promise<Response>
-
-	if (typeof (result as any)?.then === 'function')
-		return Promise.resolve(result).catch(
+	const pending = assimilateThenable(result)
+	if (pending)
+		return pending.catch(
 			catchError(context, handleError, afterResponse)
 		) as Promise<Response>
 
@@ -132,8 +338,8 @@ function dispatchResult(
 function findRoute(
 	context: Context,
 	request: Request,
-	map: NonNullable<AnyElysia['~map']>,
-	router: NonNullable<AnyElysia['~router']>,
+	map: FetchRouteMap,
+	router: FetchRuntimeImage['router'],
 	hasError: boolean,
 	handleError: (context: Context, error: Error) => unknown,
 	afterResponse: ((context: Context, status?: number) => void) | undefined,
@@ -153,22 +359,21 @@ function findRoute(
 		if (handler !== undefined || found) {
 			const upgrade = request.headers.get('upgrade')
 			if (upgrade && upgrade.toLowerCase() === 'websocket') {
-				if (handler) {
-					const r = handler(context)
-					return r instanceof Promise
-						? (r.catch(
-								catchError(context, handleError, afterResponse)
-							) as any)
-						: r
-				}
+				if (handler)
+					return dispatchResult(
+						handler(context),
+						context,
+						handleError,
+						afterResponse
+					)
 
 				context.params = decodeParams(found!.params)
-				const r = found!.store(context)
-				return r instanceof Promise
-					? (r.catch(
-							catchError(context, handleError, afterResponse)
-						) as any)
-					: r
+				return dispatchResult(
+					found!.store(context),
+					context,
+					handleError,
+					afterResponse
+				)
 			}
 		}
 	}
@@ -220,40 +425,37 @@ function findRoute(
 	return notFound(context)
 }
 
-export function createFetchHandler(
-	app: AnyElysia
-): (request: Request) => MaybePromise<Response> {
-	const Context = createContext(app)
-	const map = app['~map']! ?? nullObject()
-	const router = app['~router']!
-	const hasWS = !!app['~hasWS']
-	const hasDynamicWS = hasWS && !!app['~hasDynamicWS']
-	const strictPath = !!app['~config']?.strictPath
-	const compatCancellation =
-		app['~config']?.experimental?.cancellation === 'compat'
-
-	// standard internet hostname is at minimum 11 characters (http://a.bc)
-	const pathStart =
-		app['~config']?.handler?.standardHostname === false ? 7 : 11
-
-	const hook = flattenChain(app['~hookChain'])
-	const hasError = !!hook?.error
-
-	const baseMapResponse = (app['~config']?.adapter ?? defaultAdapter).response
-		.map as (
-		response: unknown,
-		set: Context['set'],
-		request?: Request,
-		owned?: boolean
-	) => unknown
-
-	const mapResponseHooks = hook?.mapResponse as
+export function createFetchKernel(
+	runtime: FetchRuntimeImage
+): FetchKernel {
+	const {
+		Context,
+		map,
+		router,
+		hasWS,
+		hasDynamicWS,
+		hasRoutes,
+		hasDefaultHeaders,
+		strictPath,
+		pathStart,
+		requestHooks,
+		mapResponseHooks: configuredMapResponseHooks,
+		errorHooks,
+		afterResponseHooks,
+		traceHooks,
+		hoc,
+		allowUnsafeValidationDetails,
+		baseMapResponse
+	} = runtime
+	const hasError = !!errorHooks?.length
+	const mapResponseHooks = configuredMapResponseHooks as
 		| ((context: Context) => unknown)[]
 		| undefined
-	const settleMapResponse = (mapped: unknown, request?: Request) =>
-		compatCancellation || !request || !(mapped instanceof Promise)
-			? mapped
-			: settleResponse(request, mapped)
+	const settleMapResponse = (mapped: unknown, request?: Request) => {
+		if (!request) return mapped
+		const pending = assimilateThenable(mapped)
+		return pending ? settleResponse(request, pending) : mapped
+	}
 	const mapResponse = mapResponseHooks?.length
 		? (response: unknown, set: Context['set'], context?: Context) => {
 				if (!context)
@@ -267,15 +469,13 @@ export function createFetchHandler(
 					for (; i < mapResponseHooks.length; i++) {
 						const result = mapResponseHooks[i](context)
 
-						if (result instanceof Promise)
+						const pending = assimilateThenable(result)
+						if (pending)
 							// eslint-disable-next-line sonarjs/function-inside-loop -- promise continuation for the hook at index i
-							return result.then(
+							return pending.then(
 								// eslint-disable-next-line sonarjs/function-inside-loop
 								(resolved) => {
-									if (
-										!compatCancellation &&
-										context.request.signal.aborted
-									)
+								if (context.request.signal.aborted)
 										return new Response()
 
 									if (resolved !== undefined)
@@ -292,10 +492,7 @@ export function createFetchHandler(
 									return run(i + 1)
 								},
 								(error) => {
-									if (
-										!compatCancellation &&
-										context.request.signal.aborted
-									)
+								if (context.request.signal.aborted)
 										return new Response()
 
 									throw error
@@ -326,13 +523,12 @@ export function createFetchHandler(
 			}
 
 	const handleError = createErrorHandler(
-		hook?.error,
+		errorHooks,
 		mapResponse as any,
-		app['~config']?.allowUnsafeValidationDetails,
-		compatCancellation
+		allowUnsafeValidationDetails
 	)
 
-	const traceHandlers = hook?.trace as
+	const traceHandlers = traceHooks as
 		| ((context: any) => unknown)[]
 		| undefined
 
@@ -348,11 +544,7 @@ export function createFetchHandler(
 	const traceAfterResponsePhase =
 		hasTrace && (tracePhases === null || tracePhases.has('afterResponse'))
 
-	const tracerFactories = hasTrace
-		? traceHandlers!.map((fn) => createTracer(fn as any))
-		: undefined
-
-	const afterResponses = hook?.afterResponse
+	const afterResponses = afterResponseHooks
 	const afterResponse =
 		afterResponses?.length || traceAfterResponsePhase
 			? (context: Context, status?: number) => {
@@ -377,10 +569,11 @@ export function createFetchHandler(
 								| any[]
 								| undefined
 
-							if (!cache && tracerFactories) {
+							if (!cache && traceHandlers) {
 								context.rid ??= requestId()
-								cache = tracerFactories.map((f) =>
-									f(context as any)
+								cache = createTraceHandles(
+									context as any,
+									traceHandlers as any
 								)
 								;(context as any).trace = cache
 							}
@@ -411,25 +604,25 @@ export function createFetchHandler(
 					})
 				}
 			: undefined
-	const fast404 = !hasError && !afterResponse && !app['~ext']?.headers
+	const fast404 = !hasError && !afterResponse && !hasDefaultHeaders
 
-	app['~finalizeError'] = (context, error) =>
+	const applicationFinalizeError: RouteErrorFinalizer = (context, error) =>
 		finalizeError(context, handleError, afterResponse, error)
+	const finish = (fetch: FetchHandler): FetchKernel =>
+		Object.freeze({
+			fetch: applyHocFromRuntime(hoc, fetch),
+			finalizeError: applicationFinalizeError
+		})
 
 	if (traceRequestPhase) {
-		const onRequests = hook?.request ?? []
-		const asyncIndexes = onRequests.length
-			? getAsyncIndexes(onRequests)
-			: undefined
+		const onRequests = requestHooks ?? []
 
-		return async (
+		return finish(async (
 			request: Request,
 			server?: unknown
 		): Promise<Response> => {
 			const context = new Context(request)
 			materializeSetHeaders(context.set)
-			if (compatCancellation && request.signal.aborted)
-				return emptyResponse.clone() as Response
 
 			extractPath(request.url, context, pathStart)
 			// @ts-expect-error
@@ -437,10 +630,11 @@ export function createFetchHandler(
 
 			context.rid = requestId()
 
-			const traceLength = tracerFactories!.length
-			const trace: any[] = new Array(traceLength)
-			for (let i = 0; i < traceLength; i++)
-				trace[i] = tracerFactories![i](context as any)
+			const trace = createTraceHandles(
+				context as any,
+				traceHandlers as any
+			)
+			const traceLength = trace.length
 
 			// @ts-expect-error private property
 			context.trace = trace
@@ -470,44 +664,34 @@ export function createFetchHandler(
 							begin: performance.now()
 						})
 
-					let suspended = false
-					let result: unknown
-					if (compatCancellation && asyncIndexes?.[i]) {
-						result = await onRequests[i](context as any)
-						suspended = true
-					} else {
-						result = onRequests[i](context as any)
-						if (result instanceof Promise)
-							try {
-								result = await result
-								suspended = true
-							} catch (error) {
-								if (
-									!compatCancellation &&
-									request.signal.aborted
-								) {
-									for (let j = 0; j < traceLength; j++) {
-										endReports[j]?.()
-										trace[j].r(requestReports[j])
-									}
-
-									return new Response()
+					let result = onRequests[i](context as any)
+					const pending = assimilateThenable(result)
+					if (pending)
+						try {
+							result = await pending
+						} catch (error) {
+							if (request.signal.aborted) {
+								for (let j = 0; j < traceLength; j++) {
+									endReports[j]?.()
+									trace[j].r(requestReports[j])
 								}
 
-								throw error
+								return new Response()
 							}
-					}
+
+							for (let j = 0; j < traceLength; j++)
+								endReports[j]?.(error as Error)
+
+							throw error
+						}
 
 					for (let i = 0; i < traceLength; i++) endReports[i]?.()
 
-					if (
-						(compatCancellation || suspended) &&
-						request.signal.aborted
-					) {
+					if (pending && request.signal.aborted) {
 						for (let j = 0; j < traceLength; j++)
 							trace[j].r(requestReports[j])
 
-						return emptyResponse.clone() as Response
+						return new Response()
 					}
 
 					if (result !== undefined) {
@@ -551,63 +735,61 @@ export function createFetchHandler(
 					error as Error
 				)
 			}
-		}
+		})
 	}
 
-	if (hook?.request) {
-		const onRequests = hook.request
-		const asyncIndexes = getAsyncIndexes(onRequests)
+	if (requestHooks) {
+		const onRequests = requestHooks
 
-		if (asyncIndexes)
-			return async (
-				request: Request,
-				server?: unknown
-			): Promise<Response> => {
-				const context = new Context(request)
-				materializeSetHeaders(context.set)
-				if (compatCancellation && request.signal.aborted)
-					return emptyResponse.clone() as Response
+		return finish((request: Request, server?: unknown): MaybePromise<Response> => {
+			const context = new Context(request)
+			materializeSetHeaders(context.set)
 
-				extractPath(request.url, context, pathStart)
-				// @ts-expect-error
-				context.server = server ?? null
+			extractPath(request.url, context, pathStart)
+			// @ts-expect-error
+			context.server = server ?? null
 
-				try {
-					for (let i = 0; i < onRequests.length; i++) {
-						let suspended = false
-						let result: unknown
-						if (compatCancellation && asyncIndexes?.[i]) {
-							result = await onRequests[i](context)
-							suspended = true
-						} else {
-							result = onRequests[i](context)
-							if (result instanceof Promise)
-								try {
-									result = await result
-									suspended = true
-								} catch (error) {
-									if (
-										!compatCancellation &&
-										request.signal.aborted
+			try {
+				const run = (start: number): MaybePromise<Response> => {
+					for (let i = start; i < onRequests.length; i++) {
+						const result = onRequests[i](context)
+						const pending = assimilateThenable(result)
+						if (pending)
+							return pending
+								.then((resolved) => {
+									if (request.signal.aborted) return new Response()
+									if (resolved === undefined) return run(i + 1)
+
+									return mapResponse(
+										resolved,
+										context.set,
+										context
 									)
-										return new Response()
-
-									throw error
-								}
-						}
-
-						if (
-							(compatCancellation || suspended) &&
-							request.signal.aborted
-						)
-							return emptyResponse.clone() as Response
+								})
+								.then((response) => {
+									afterResponse?.(context)
+									return response as Response
+								})
+								.catch(
+									catchError(context, handleError, afterResponse)
+								)
 
 						if (result !== undefined) {
-							const response = (await mapResponse(
+							const response = mapResponse(
 								result,
 								context.set,
 								context
-							)) as Response
+							) as Response | Promise<Response>
+
+							const mapped = assimilateThenable(response)
+							if (mapped)
+								return mapped.then(
+									(response) => {
+										afterResponse?.(context)
+										return response
+									},
+									catchError(context, handleError, afterResponse)
+								)
 
 							afterResponse?.(context)
 							return response
@@ -626,65 +808,9 @@ export function createFetchHandler(
 						hasWS,
 						hasDynamicWS
 					)
-				} catch (error) {
-					return finalizeError(
-						context,
-						handleError,
-						afterResponse,
-						error as Error
-					)
-				}
-			}
-
-		return (request: Request, server?: unknown): MaybePromise<Response> => {
-			const context = new Context(request)
-			materializeSetHeaders(context.set)
-			if (compatCancellation && request.signal.aborted)
-				return emptyResponse.clone() as Response
-
-			extractPath(request.url, context, pathStart)
-			// @ts-expect-error
-			context.server = server ?? null
-
-			try {
-				for (let i = 0; i < onRequests.length; i++) {
-					const result = onRequests[i](context)
-					if (compatCancellation && request.signal.aborted)
-						return emptyResponse.clone() as Response
-
-					if (result !== undefined) {
-						const response = mapResponse(
-							result,
-							context.set,
-							context
-						) as Response | Promise<Response>
-
-						if (response instanceof Promise)
-							return response.then(
-								(response) => {
-									afterResponse?.(context)
-									return response
-								},
-								catchError(context, handleError, afterResponse)
-							)
-
-						afterResponse?.(context)
-						return response
-					}
 				}
 
-				return findRoute(
-					context,
-					request,
-					map,
-					router,
-					hasError,
-					handleError,
-					afterResponse,
-					strictPath,
-					hasWS,
-					hasDynamicWS
-				)
+				return run(0)
 			} catch (error) {
 				return finalizeError(
 					context,
@@ -693,131 +819,32 @@ export function createFetchHandler(
 					error as Error
 				)
 			}
-		}
+		})
 	}
 
-	if (fast404 && !router && !hasWS && !app['~routes'].length)
-		return () => getNotFound()
+	if (fast404 && !router && !hasWS && !hasRoutes)
+		return finish(() => getNotFound())
 
-	return (request: Request, server?: unknown): MaybePromise<Response> => {
-		const url = request.url
-		const pathIndex = url.indexOf('/', pathStart)
-		const qi = url.indexOf('?', pathIndex)
-		const path = url.substring(pathIndex, qi === -1 ? url.length : qi)
-		const method = request.method
-		let context: Context | undefined
+	return finish((request: Request, server?: unknown): MaybePromise<Response> => {
+		const context = new Context(request)
+		extractPath(request.url, context, pathStart)
+		// @ts-expect-error
+		context.server = server ?? null
 
 		try {
-			if (hasWS && method === 'GET') {
-				const handler = map['WS']?.[path]
-				const found =
-					handler === undefined && hasDynamicWS
-						? router?.find('WS', path)
-						: undefined
-
-				if (handler !== undefined || found) {
-					const upgrade = request.headers.get('upgrade')
-					if (upgrade && upgrade.toLowerCase() === 'websocket') {
-						context = new Context(request)
-						;(context as any).path = path
-						;(context as any).qi = qi
-						// @ts-expect-error
-						context.server = server ?? null
-
-						if (handler) {
-							const r = handler(context)
-							return r instanceof Promise
-								? (r.catch(
-										catchError(
-											context,
-											handleError,
-											afterResponse
-										)
-									) as any)
-								: (r as any)
-						}
-
-						context.params = decodeParams(found!.params)
-						const r = found!.store(context)
-						return r instanceof Promise
-							? (r.catch(
-									catchError(
-										context,
-										handleError,
-										afterResponse
-									)
-								) as any)
-							: (r as any)
-					}
-				}
-			}
-
-			const methodMap = map[method]
-			let handler: CompiledHandler | undefined = methodMap?.[path]
-			if (!handler) {
-				if (
-					!strictPath &&
-					path.length > 1 &&
-					path.charCodeAt(path.length - 1) === 47
-				) {
-					const loose = path.slice(0, -1)
-					handler = methodMap?.[loose]
-					if (!handler) {
-						const anyMap = map['*']
-						handler = anyMap?.[path] ?? anyMap?.[loose]
-					}
-				} else handler = map['*']?.[path]
-			}
-
-			const result = handler
-				? undefined
-				: (router?.find(method, path) ?? router?.find('*', path))
-			if (!handler && !result && fast404) return getNotFound()
-
-			context = new Context(request)
-			;(context as any).path = path
-			;(context as any).qi = qi
-			// @ts-expect-error
-			context.server = server ?? null
-
-			if (handler)
-				return dispatchResult(
-					handler(context),
-					context,
-					handleError,
-					afterResponse
-				)
-
-			if (result) {
-				context.params = decodeParams(result.params)
-
-				return dispatchResult(
-					result.store(context),
-					context,
-					handleError,
-					afterResponse
-				)
-			}
-
-			if (hasError)
-				return finalizeError(
-					context,
-					handleError,
-					afterResponse,
-					frameworkNotFound
-				)
-
-			afterResponse?.(context, 404)
-			return notFound(context)
+			return findRoute(
+				context,
+				request,
+				map,
+				router,
+				hasError,
+				handleError,
+				afterResponse,
+				strictPath,
+				hasWS,
+				hasDynamicWS
+			)
 		} catch (error) {
-			if (!context) {
-				context = new Context(request)
-				;(context as any).path = path
-				;(context as any).qi = qi
-				// @ts-expect-error
-				context.server = server ?? null
-			}
-
 			return finalizeError(
 				context,
 				handleError,
@@ -825,18 +852,37 @@ export function createFetchHandler(
 				error as Error
 			)
 		}
-	}
+	})
 }
 
-export function applyHoc(
-	app: AnyElysia,
-	fetch: (request: Request, ...rest: any[]) => MaybePromise<Response>
-): (request: Request, ...rest: any[]) => MaybePromise<Response> {
-	const hoc = app['~ext']?.hoc
+/** Temporary authoring-state adapter; the returned kernel retains only its image. */
+export function createFetchHandler(
+	app: AnyElysia
+): (request: Request, server?: unknown) => MaybePromise<Response> {
+	const runtime = createFetchRuntimeImage(app)
+	const kernel = createFetchKernel(runtime)
+
+	if (runtime.errorFinalizer)
+		runtime.errorFinalizer.current = kernel.finalizeError
+	app['~runtimeBindings'].error.current = kernel.finalizeError
+	app['~finalizeError'] = kernel.finalizeError
+
+	return kernel.fetch
+}
+
+export function applyHocFromRuntime(
+	hoc: readonly WrapFn<any>[] | undefined,
+	fetch: FetchHandler
+): FetchHandler {
 	if (!hoc?.length) return fetch
 
 	let handler = fetch
-	for (let i = hoc.length - 1; i >= 0; i--) handler = hoc[i](handler)
+	for (let i = hoc.length - 1; i >= 0; i--) {
+		const wrapped = hoc[i](handler)
+		if (typeof wrapped !== 'function')
+			throw new TypeError('[Elysia] HOC must return a fetch function')
+		handler = wrapped
+	}
 
 	return handler
 }

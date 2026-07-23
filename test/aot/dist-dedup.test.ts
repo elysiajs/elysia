@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'bun:test'
-import { resolve } from 'node:path'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 
 import * as esbuild from 'esbuild'
 
@@ -68,13 +70,49 @@ describe('AOT plugin — no duplicate CJS elysia copy', () => {
 		// A surviving .js copy would create a second Elysia runtime instance.
 		expect(cjs).toEqual([])
 
-		// Confirm the bundle includes the ESM runtime and applied stubs.
+		// Confirm the bundle includes the ESM runtime and direct type entry.
 		expect(inputs.some((p) => /(^|[\\/])dist[\\/].*\.mjs$/.test(p))).toBe(
 			true
 		)
 		expect(
 			inputs.some((p) => /(^|[\\/])dist[\\/]sucrose\.mjs$/.test(p))
+		).toBe(true)
+		expect(code).not.toMatch(/handlerFactory|getHandler|Capture\.handler/)
+		expect(code).not.toContain('setupTypebox')
+		expect(
+			inputs.some((path) =>
+				/(^|[\\/])dist[\\/]type[\\/]compat\.mjs$/.test(path)
+			)
 		).toBe(false)
-		expect(code).toContain('[elysia-aot] trace support was stripped')
+	})
+
+	it('keeps the public type constructors executable in the dist image', async () => {
+		const { code } = await buildBundle()
+		const directory = await mkdtemp(join(tmpdir(), 'elysia-aot-dist-'))
+		const output = join(directory, 'bundle.mjs')
+		try {
+			await Bun.write(output, code)
+			const module = await import(output)
+			const valid = await module.app.handle(
+				new Request('http://localhost/u', {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({ name: 'elysia', age: 2 })
+				})
+			)
+			const invalid = await module.app.handle(
+				new Request('http://localhost/u', {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({ name: 'elysia', age: 'two' })
+				})
+			)
+
+			expect(valid.status).toBe(200)
+			expect(await valid.json()).toEqual({ name: 'elysia', age: 2 })
+			expect(invalid.status).toBe(422)
+		} finally {
+			await rm(directory, { recursive: true, force: true })
+		}
 	})
 })

@@ -10,6 +10,17 @@ import {
 	Validator,
 	type ValidatorOptions
 } from './index'
+import {
+	attachValidatorSemanticSource,
+	VALIDATOR_SEMANTIC_MEMBERS,
+	type ValidatorSemanticMemberSource,
+	type ValidatorSemanticProjection
+} from './semantic-channel'
+import {
+	composedValidatorSemantics,
+	compositionProjectionSemantics,
+	validatorSemantics
+} from '../compile/validator-semantics'
 
 const anySibling = Object.freeze(
 	Object.defineProperty({}, '~kind', { value: 'Any' })
@@ -137,6 +148,28 @@ interface CompositionMember {
 	projection?: Projection
 }
 
+function semanticProjection(
+	projection: Projection | undefined
+): ValidatorSemanticProjection | null {
+	if (!projection) return null
+	return Object.freeze({
+		remove: Object.freeze([...(projection.remove ?? [])].sort()),
+		children: Object.freeze(
+			[...(projection.children ?? [])]
+				.sort(([left], [right]) =>
+					left < right ? -1 : left > right ? 1 : 0
+				)
+				.map(
+					([key, child]) =>
+						Object.freeze([
+							key,
+							semanticProjection(child)!
+						]) as readonly [string, ValidatorSemanticProjection]
+				)
+		)
+	})
+}
+
 export class ValidationPlanMultiValidator extends Validator {
 	override isAsync = false
 	hasCodec = false
@@ -233,7 +266,8 @@ export class ValidationPlanMultiValidator extends Validator {
 			...options,
 			schemas: undefined,
 			aot: undefined,
-			slot: undefined
+			slot: undefined,
+			semanticSlot: options.semanticSlot ?? options.slot
 		}
 
 		this.#members = schemas.map((raw) => {
@@ -272,10 +306,33 @@ export class ValidationPlanMultiValidator extends Validator {
 				'Elysia Validator support only TypeBox and Standard Schema'
 			)
 		})
+		this.#captureSemantics()
 	}
 
 	override seal(introspect: boolean) {
 		for (const { validator } of this.#members) validator.seal(introspect)
+		this.#captureSemantics()
+	}
+
+	#captureSemantics() {
+		attachValidatorSemanticSource(
+			this,
+			composedValidatorSemantics(
+				'validation-plan',
+				this.#members.map(({ validator, projection }) => ({
+					semantics: validatorSemantics(validator),
+					projection: compositionProjectionSemantics(projection)
+				}))
+			)
+		)
+	}
+
+	[VALIDATOR_SEMANTIC_MEMBERS](): readonly ValidatorSemanticMemberSource[] {
+		return this.#members.map(({ validator, typebox, projection }) => ({
+			validator,
+			typebox,
+			projection: semanticProjection(projection)
+		}))
 	}
 
 	static #merge(

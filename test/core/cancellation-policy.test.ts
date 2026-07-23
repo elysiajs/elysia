@@ -2,13 +2,13 @@ import { describe, expect, it } from 'bun:test'
 
 import { Elysia } from '../../src'
 
-const emitters = [['jit', {}]] as const
+const emitters = [['balanced', {}]] as const
 
-const policies = ['suspension', 'compat'] as const
+const policies = ['suspension'] as const
 
 const appFor = (
 	emitter: (typeof emitters)[number][1],
-	cancellation: (typeof policies)[number]
+	cancellation: 'suspension' | 'compat'
 ) => new Elysia({ experimental: { ...emitter, cancellation } })
 
 const request = (controller: AbortController, init?: RequestInit) =>
@@ -20,7 +20,7 @@ const request = (controller: AbortController, init?: RequestInit) =>
 describe('Q12 cancellation policy', () => {
 	for (const [emitterName, emitter] of emitters)
 		for (const cancellation of policies) {
-			it(`${emitterName}/${cancellation}: pre-abort polls only in compat`, async () => {
+			it(`${emitterName}/${cancellation}: pre-abort does not create a suspension boundary`, async () => {
 				const controller = new AbortController()
 				controller.abort()
 				const order: string[] = []
@@ -39,12 +39,8 @@ describe('Q12 cancellation policy', () => {
 
 				const response = await app.handle(request(controller))
 
-				expect(order).toEqual(
-					cancellation === 'suspension' ? ['hook', 'handler'] : []
-				)
-				await expect(response.text()).resolves.toBe(
-					cancellation === 'suspension' ? 'ok' : ''
-				)
+				expect(order).toEqual(['hook', 'handler'])
+				await expect(response.text()).resolves.toBe('ok')
 			})
 
 			it(`${emitterName}/${cancellation}: sync abort completes only in suspension mode`, async () => {
@@ -76,14 +72,13 @@ describe('Q12 cancellation policy', () => {
 				const response = await app.handle(request(controller))
 				await Bun.sleep(0)
 
-				expect(order).toEqual(
-					cancellation === 'suspension'
-						? ['abort', 'later', 'handler', 'afterResponse']
-						: ['abort']
-				)
-				await expect(response.text()).resolves.toBe(
-					cancellation === 'suspension' ? 'ok' : ''
-				)
+				expect(order).toEqual([
+					'abort',
+					'later',
+					'handler',
+					'afterResponse'
+				])
+				await expect(response.text()).resolves.toBe('ok')
 			})
 
 			it(`${emitterName}/${cancellation}: abort after await stops the continuation`, async () => {
@@ -136,9 +131,7 @@ describe('Q12 cancellation policy', () => {
 				)
 
 				expect(order).toEqual(['start', 'end'])
-				await expect(response.text()).resolves.toBe(
-					cancellation === 'suspension' ? '' : 'handled'
-				)
+				await expect(response.text()).resolves.toBe('')
 			})
 		}
 
@@ -261,22 +254,23 @@ describe('Q12 cancellation policy', () => {
 				await expect(response.text()).resolves.toBe('')
 			})
 
-		it(`${emitterName}: cancellation does not assimilate handler thenables`, async () => {
-			let thenCalled = false
+		it(`${emitterName}: assimilates a handler thenable exactly once`, async () => {
+			let thenCalled = 0
 			const app = appFor(emitter, 'suspension').get(
 				'/',
 				() =>
 					({
-						then() {
-							thenCalled = true
+						then(resolve: (value: string) => void) {
+							thenCalled++
+							resolve('settled')
 						}
 					}) as any
 			)
 
 			const response = await app.handle(new Request('http://localhost/'))
 
-			expect(thenCalled).toBe(false)
-			await expect(response.text()).resolves.toBe('{}')
+			expect(thenCalled).toBe(1)
+			await expect(response.text()).resolves.toBe('settled')
 		})
 
 		it(`${emitterName}: errors and afterResponse retain lifecycle parity`, async () => {
@@ -533,25 +527,12 @@ describe('Q12 cancellation policy', () => {
 				expect(afterResponse).toBe(1)
 			})
 
-		it(`${emitterName}: compat polls after a synchronous handler`, async () => {
-			const controller = new AbortController()
-			let afterHandle = false
-			const app = appFor(emitter, 'compat')
-				.beforeHandle(() => {})
-				.afterHandle(() => {
-					afterHandle = true
-				})
-				.get('/', () => {
-					controller.abort()
-					return 'ok'
-				})
-
-			const response = await app.handle(request(controller))
-
-			await expect(response.text()).resolves.toBe('')
-			expect(afterHandle).toBe(false)
-		})
 	}
+
+	it('rejects the removed compat policy at seal', () => {
+		const app = appFor({}, 'compat').get('/', () => 'ok')
+		expect(() => void app.fetch).toThrow('compat-cancellation')
+	})
 
 	it('root early-response mapping observes fulfilled and rejected cancellation', async () => {
 		for (const rejects of [false, true]) {

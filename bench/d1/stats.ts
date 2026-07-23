@@ -332,7 +332,13 @@ export function compareMetric(input: CompareInput): ComparisonResult {
 			)
 		const baseline = lowerMedian(input.baselineBlocks)
 		const candidate = lowerMedian(input.candidateBlocks)
-		const observedDelta = Math.abs(candidate - baseline)
+		const delta = candidate - baseline
+		const observedDelta =
+			input.direction === 'equal'
+				? Math.abs(delta)
+				: input.direction === 'lower'
+					? delta
+					: -delta
 		if (!Number.isInteger(observedDelta))
 			throw new Error(
 				`count metric delta is not integral: ${input.fixture}/${input.metric}`

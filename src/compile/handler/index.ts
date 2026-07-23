@@ -1,26 +1,18 @@
 import type { AnyElysia } from '../../base'
 
-import { defaultAdapter } from '../../adapter/constants'
-import { contextDefaults } from '../../adapter/default-headers'
+import { getDefaultAdapter } from '../../adapter/constants'
 import { borrow } from '../../adapter/response-ownership'
 import { ElysiaFile } from '../../universal/file'
 import { isBun } from '../../universal/constants'
 
-import { Capture, Compiled } from '../aot'
+import type { FrozenValidator, ValidatorSlot } from '../aot'
 import { frozenRootOf } from '../../generation'
-import { resolveHandlerParams } from './params'
-import { compileHandlerJit } from './jit'
-import { assertRouteProgram, bindRouteProgram } from './program'
-export { setCaptureHeaderShorthand } from './jit'
-import {
-	clearRouteDescriptorAnalysisCaches,
-	describeRoute,
-	isEmptyPipelineHook,
-	routeDescriptors
-} from './descriptor'
-import { Reconstrct } from './reconstruct'
+import type { HttpHandlerForm } from '../app-plan'
+import { clearRouteDescriptorAnalysisCaches, describeRoute } from './descriptor'
+import type { BalancedHttpRouteInput } from './balanced-program'
+import { reconstructValidator } from './reconstruct'
 import type { Context } from '../../context'
-import type { RouteErrorFinalizer } from '../../handler/utils'
+import { assimilateThenable } from '../../handler/utils'
 import {
 	cloneHook,
 	clearRootHookAnalysisCaches,
@@ -40,12 +32,7 @@ import {
 	type ChainNode
 } from '../../utils'
 
-import type {
-	CompiledHandler,
-	InternalRoute,
-	AnyLocalHook,
-	AppHook
-} from '../../types'
+import type { InternalRoute, AnyLocalHook, AppHook } from '../../types'
 
 interface MountHandlerMeta {
 	handle: (request: Request) => unknown
@@ -180,25 +167,6 @@ function dropHooksByOrigin(
 	}
 
 	return out
-}
-
-function reconstructNeedsHookState(names: string[]): boolean {
-	for (let i = 0; i < names.length; i++)
-		switch (names[i]) {
-			case 'ph':
-			case 'tf':
-			case 'bf':
-			case 'af':
-			case 'mr':
-			case 'er':
-			case 'ar':
-			case 'va':
-			case 'cc':
-			case 'tr':
-				return true
-		}
-
-	return false
 }
 
 function promoteDerive(hook: any) {
@@ -417,69 +385,6 @@ function composeRootHook(
 	return mergeHook(inherited, locals as any)
 }
 
-export function buildNativeStaticResponse(
-	[
-		,
-		,
-		handler,
-		instance,
-		localHook,
-		appHook,
-		inheritedChain,
-		macroScope
-	]: InternalRoute,
-	root: AnyElysia
-) {
-	if (
-		typeof handler === 'function' ||
-		handler instanceof Error ||
-		handler instanceof Promise
-	)
-		return
-
-	const frozenRoot = frozenRootOf(root)
-	const adapter = frozenRoot['~config']?.adapter ?? defaultAdapter
-	const ownedHook = resolveLocalHook(
-		localMacroRoot(macroScope ?? instance, root),
-		localHook,
-		root
-	)
-
-	const flatAppHook = flattenChainMemo(
-		root,
-		appHook as ChainNode,
-		chainResolver(root)
-	)
-	const rootHook =
-		instance !== root
-			? composeRootHook(root, inheritedChain as any)
-			: undefined
-	const hook = applyHook(ownedHook, flatAppHook as any, rootHook, true)
-
-	if (hook && !isEmptyPipelineHook(hook as any)) return
-
-	const rootHeaders = frozenRoot['~ext']?.headers
-	if (handler instanceof Response && !rootHeaders) return handler
-
-	const mapped = (adapter.response.map as Function)(handler, {
-		headers: rootHeaders
-			? Object.assign(nullObject(), rootHeaders)
-			: nullObject()
-	})
-
-	if (mapped instanceof Response) {
-		if (
-			!mapped.headers.has('content-type') &&
-			(typeof handler === 'string' ||
-				typeof handler === 'number' ||
-				typeof handler === 'boolean')
-		)
-			mapped.headers.set('content-type', 'text/plain;charset=utf-8')
-
-		return mapped
-	}
-}
-
 function toArray(name: string, hook: any) {
 	if (typeof hook[name] === 'function') hook[name] = [hook[name]]
 }
@@ -519,8 +424,6 @@ export function composeRouteHook(
 
 	const compactPrefix =
 		instance !== root &&
-		!Capture.isCapturing() &&
-		!Capture.isAotBuildEnv() &&
 		resolve === undefined &&
 		isCompactBeforeHandleOnly(localHook as any) &&
 		isCompactBeforeHandleOnly(flatAppHook as any) &&
@@ -606,7 +509,8 @@ export function composeRouteHook(
 	return hook
 }
 
-export function compileHandler(
+/** Resolve one winning declaration into planner input without emitting a handler. */
+export function prepareBalancedHttpRoute(
 	[
 		_method,
 		path,
@@ -618,56 +522,14 @@ export function compileHandler(
 		macroScope
 	]: InternalRoute,
 	root: AnyElysia,
-	precomputedStatic?: Response,
-	finalizeError: RouteErrorFinalizer | undefined = root['~finalizeError']
-): CompiledHandler {
+	frozenValidators?: Partial<Record<ValidatorSlot, FrozenValidator>>
+): BalancedHttpRouteInput & { handlerForm: HttpHandlerForm } {
 	const frozenRoot = frozenRootOf(root)
-	const adapter = frozenRoot['~config']?.adapter ?? defaultAdapter
+	const adapter = frozenRoot['~config']?.adapter ?? getDefaultAdapter()
 	const method = _method
-
 	const mountMeta =
 		typeof handler === 'function' ? (handler as any)['~mount'] : undefined
 	if (mountMeta) handler = resolveMountHandler(mountMeta, path)
-
-	const reconstructed = Compiled.getHandler(
-		frozenRoot['~programId'],
-		method,
-		path
-	)
-	if (reconstructed && 'p' in reconstructed)
-		assertRouteProgram(reconstructed.p)
-
-	if (
-		reconstructed &&
-		!precomputedStatic &&
-		typeof handler === 'function' &&
-		!frozenRoot['~ext']?.macro &&
-		!frozenRootOf(localMacroRoot(macroScope ?? instance, root))['~ext']
-			?.macro
-	) {
-		if ('p' in reconstructed)
-			return bindRouteProgram(
-				reconstructed.p,
-				handler,
-				adapter.response,
-				contextDefaults(root).response
-			)
-
-		if (!reconstructNeedsHookState(reconstructed.a))
-			return reconstructed.f(
-				handler,
-				...resolveHandlerParams(reconstructed.a, {
-					root,
-					finalizeError,
-					parse: adapter.parse as any,
-					res: adapter.response as any,
-					hook: nullObject() as any,
-					vali: undefined,
-					cookieConfig: undefined,
-					tracers: undefined
-				})
-			) as CompiledHandler
-	}
 
 	const hook = composeRouteHook(
 		instance,
@@ -677,10 +539,8 @@ export function compileHandler(
 		root,
 		macroScope
 	)
-
 	if (hook) {
 		promoteDerive(hook)
-
 		toArray('parse', hook)
 		toArray('transform', hook)
 		toArray('beforeHandle', hook)
@@ -689,9 +549,16 @@ export function compileHandler(
 		toArray('afterResponse', hook)
 		toArray('error', hook)
 	}
-
 	const buildValidator = () =>
-		hook ? Reconstrct.validator(hook as any, root, method, path) : undefined
+		hook
+			? reconstructValidator(
+					hook as any,
+					root,
+					method,
+					path,
+					frozenValidators
+				)
+			: undefined
 
 	if (handler instanceof Error) {
 		const error = handler
@@ -699,71 +566,55 @@ export function compileHandler(
 			throw error
 		}
 	}
-
 	const isHandleFunction = typeof handler === 'function'
-	if (precomputedStatic) handler = precomputedStatic
-	else if (
+	if (
 		!isHandleFunction &&
 		!(handler instanceof Promise) &&
 		!(!isBun && handler instanceof ElysiaFile)
 	) {
-		const rootHeaders = frozenRoot['~ext']?.headers
-
-		const set = {
-			headers: rootHeaders
-				? Object.assign(nullObject(), rootHeaders)
-				: nullObject()
+		let pending: Promise<unknown> | undefined
+		try {
+			pending = assimilateThenable(handler)
+		} catch (error) {
+			pending = Promise.reject(error)
 		}
-
-		const mapped = (adapter.response.map as Function)(handler, set)
-		if (mapped instanceof Response) {
-			if (
-				!mapped.headers.has('content-type') &&
-				(typeof handler === 'string' ||
-					typeof handler === 'number' ||
-					typeof handler === 'boolean')
-			)
-				mapped.headers.set('content-type', 'text/plain;charset=utf-8')
-
-			handler = mapped
+		if (pending) {
+			// A static thenable settles once for every request, like a native Promise.
+			// Observe early rejection without consuming the retained Promise value.
+			void pending.catch(() => {})
+			handler = pending
+		} else {
+			const rootHeaders = frozenRoot['~ext']?.headers
+			const set = {
+				headers: rootHeaders
+					? Object.assign(nullObject(), rootHeaders)
+					: nullObject()
+			}
+			const mapped = (adapter.response.map as Function)(handler, set)
+			if (mapped instanceof Response) {
+				if (
+					!mapped.headers.has('content-type') &&
+					(typeof handler === 'string' ||
+						typeof handler === 'number' ||
+						typeof handler === 'boolean')
+				)
+					mapped.headers.set('content-type', 'text/plain;charset=utf-8')
+				handler = mapped
+			}
 		}
 	}
-
 	const isStaticResponse = !isHandleFunction && handler instanceof Response
 	const isPromiseHandler = !isHandleFunction && handler instanceof Promise
-
 	const namedParsers = frozenRoot['~ext']?.parser
 	if (namedParsers && hook?.parse) {
-		const resolve = (p: any) =>
-			typeof p === 'string' && p in namedParsers ? namedParsers[p] : p
-
+		const resolve = (parser: any) =>
+			typeof parser === 'string' && parser in namedParsers
+				? namedParsers[parser]
+				: parser
 		hook.parse = Array.isArray(hook.parse)
 			? (hook.parse as any[]).map(resolve)
 			: (resolve(hook.parse) as any)
 	}
-
-	if (reconstructed && !('p' in reconstructed)) {
-		return reconstructed.f(
-			handler,
-			...resolveHandlerParams(reconstructed.a, {
-				root,
-				finalizeError,
-				parse: adapter.parse as any,
-				res: adapter.response as any,
-				hook: (hook ?? nullObject()) as any,
-				vali: reconstructed.a.includes('va')
-					? buildValidator()
-					: undefined,
-				cookieConfig: reconstructed.a.includes('cc')
-					? Reconstrct.cookie(hook, root)
-					: undefined,
-				tracers: reconstructed.a.includes('tr')
-					? Reconstrct.trace(hook)
-					: undefined
-			})
-		) as CompiledHandler
-	}
-
 	const state = describeRoute({
 		method,
 		path,
@@ -776,25 +627,21 @@ export function compileHandler(
 		isStaticResponse,
 		isPromiseHandler
 	})
-
-	if (root['~introspect'] === true || root['~config']?.introspect === true) {
-		let descriptors = routeDescriptors.get(root)
-		if (!descriptors) {
-			descriptors = new Map()
-			routeDescriptors.set(root, descriptors)
-		}
-
-		descriptors.set(`${method} ${path}`, state.descriptor)
-	}
-
-	return compileHandlerJit({
+	return {
 		method,
 		path,
 		handler,
+		handlerForm: mountMeta
+			? 'mount'
+			: state.descriptor.handlerKind === 'function'
+				? 'function'
+				: state.descriptor.handlerKind === 'response'
+					? 'response'
+					: state.descriptor.handlerKind === 'promise'
+						? 'promise'
+						: 'static-value',
 		root: frozenRoot as AnyElysia,
-		finalizeError,
 		hook,
-		adapter,
 		state
-	})
+	}
 }

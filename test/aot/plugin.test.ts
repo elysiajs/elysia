@@ -4,20 +4,31 @@ import { resolve } from 'node:path'
 const APP = resolve(import.meta.dir, 'fixtures/app.ts')
 // In-repo `Compiled` source (the stale built `dist` can't resolve `elysia/compile`).
 const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/aot.ts')
+const RECONSTRUCT_FROM = resolve(
+	import.meta.dir,
+	'../../src/compile/aot-reconstruct.ts'
+)
+const COERCE_PLAN_FROM = resolve(import.meta.dir, '../../src/type/coerce-plan.ts')
+
+const bunSourceSubpaths = {
+	name: 'elysia-aot-test-source-subpaths',
+	setup(build: any) {
+		build.onResolve({ filter: /^elysia\/coerce-plan$/ }, () => ({
+			path: COERCE_PLAN_FROM
+		}))
+	}
+}
+
+const esbuildSourceSubpaths = {
+	name: 'elysia-aot-test-source-subpaths',
+	setup(build: any) {
+		build.onResolve({ filter: /^elysia\/coerce-plan$/ }, () => ({
+			path: COERCE_PLAN_FROM
+		}))
+	}
+}
 
 describe('AOT plugin', () => {
-	it('bakes the flat FormData fast path into the captured parser call', async () => {
-		const { Elysia } = await import('../../src')
-		const { captureArtifacts } = await import('../../src/plugin/aot/source')
-		const app = new Elysia({
-			experimental: { flatFormDataFastPath: true }
-		}).post('/', { parse: 'formdata' }, ({ body }) => body)
-
-		const { source } = await captureArtifacts(app, { register: true })
-
-		expect(source).toContain('pf(c,true)')
-	})
-
 	it('generateCompiledModule emits a self-registering manifest', async () => {
 		const { generateCompiledModule } =
 			await import('../../src/plugin/aot/core')
@@ -28,7 +39,8 @@ describe('AOT plugin', () => {
 		let src: string
 		try {
 			src = await generateCompiledModule(APP, {
-				registerFrom: REGISTER_FROM
+				registerFrom: REGISTER_FROM,
+				reconstructFrom: RECONSTRUCT_FROM
 			})
 			expect(process.env.ELYSIA_AOT_BUILD).toBe('keep')
 			expect(log).not.toHaveBeenCalled()
@@ -38,9 +50,13 @@ describe('AOT plugin', () => {
 			else process.env.ELYSIA_AOT_BUILD = previous
 		}
 
-		// Manifests emit validators eagerly.
-		expect(src).toContain('export const validators')
-		expect(src).toContain('Compiled.register({ bf: 1, fingerprint')
+		// The generated module publishes one direct AppPlan image.
+		expect(src).toContain('export const appPlanValidators')
+		expect(src).toContain('export const appPlanPayload')
+		expect(src).toContain(
+			'Compiled.register({ bf: 1, fingerprint, appPlan:'
+		)
+		expect(src).not.toMatch(/export const handlers|handlerFactory|getHandler/)
 		// Simple schemas require no TypeBox runtime imports.
 		expect(src).not.toContain("from 'typebox/")
 		expect(src).not.toContain('function(CheckContext')
@@ -141,7 +157,13 @@ describe('AOT plugin', () => {
 
 		const result = await Bun.build({
 			entrypoints: [APP],
-			plugins: [aot(APP, { registerFrom: REGISTER_FROM })],
+			plugins: [
+				aot(APP, {
+					registerFrom: REGISTER_FROM,
+					reconstructFrom: RECONSTRUCT_FROM
+				}),
+				bunSourceSubpaths
+			],
 			target: 'bun'
 		})
 
@@ -149,6 +171,7 @@ describe('AOT plugin', () => {
 		const out = await result.outputs[0]!.text()
 		// the frozen manifest was inlined and self-registers (zero user wiring)
 		expect(out).toContain('.register({')
+		expect(out).not.toMatch(/handlerFactory|getHandler|\bhandlers\s*:/)
 		expect(out).toContain('"/body"')
 		// a real check factory body, not the `undefined` stub
 		expect(out).toContain('CheckContext')
@@ -166,15 +189,22 @@ describe('AOT plugin', () => {
 			platform: 'node',
 			// No `external: ['bun']` needed — all `'bun'` imports in src are type-only
 			// (erased at build), so esbuild bundles elysia for non-Bun targets cleanly.
-			plugins: [aot(APP, { registerFrom: REGISTER_FROM })]
+			plugins: [
+				aot(APP, {
+					registerFrom: REGISTER_FROM,
+					reconstructFrom: RECONSTRUCT_FROM
+				}),
+				esbuildSourceSubpaths
+			]
 		})
 
 		const out = result.outputFiles![0]!.text
-		// frozen manifest inlined + self-registers (validators AND handlers)
+		// The direct AppPlan image is inlined and self-registers.
 		expect(out).toContain('.register({')
-		expect(out).toMatch(/\.register\(\{[^}]*\bvalidators\b[^}]*\bhandlers\b/)
+		expect(out).toContain('appPlan')
+		expect(out).not.toMatch(/handlerFactory|getHandler|\bhandlers\s*:/)
 		expect(out).toContain('"/body"')
-		// real check + handler factory bodies, not the `undefined` stub
+		// A real frozen check body is present.
 		expect(out).toContain('CheckContext')
 	})
 
@@ -186,7 +216,10 @@ describe('AOT plugin', () => {
 		// Own fixture — generateCompiledModule is non-idempotent on a shared app
 		// (memoized compile), and this test calls it directly like the core test.
 		const VITE_APP = resolve(import.meta.dir, 'fixtures/vite-app.ts')
-		const plugin = aot(VITE_APP, { registerFrom: REGISTER_FROM })
+		const plugin = aot(VITE_APP, {
+			registerFrom: REGISTER_FROM,
+			reconstructFrom: RECONSTRUCT_FROM
+		})
 
 		expect(plugin.enforce).toBe('pre') // inject runs before Vite's transforms
 		expect(plugin.apply).toBe('build') // `vite dev` keeps the JIT path
@@ -199,8 +232,9 @@ describe('AOT plugin', () => {
 		expect(plugin.resolveId('some/other/module')).toBeUndefined()
 
 		const loaded = plugin.load(virtual!)!
-		expect(loaded).toContain('validators')
-		expect(loaded).toContain('handlers')
+		expect(loaded).toContain('appPlanValidators')
+		expect(loaded).toContain('appPlanPayload')
+		expect(loaded).not.toMatch(/handlerFactory|getHandler|export const handlers/)
 		expect(loaded).toContain('function(External')
 		expect(plugin.load('\0not-ours')).toBeUndefined()
 

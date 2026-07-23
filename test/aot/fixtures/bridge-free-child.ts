@@ -2,8 +2,12 @@
 import { readFileSync } from 'node:fs'
 import { validationPlan } from '../../../src/experimental/validation-plan'
 
-import { type CapturedValidator } from '../../../src/compile/aot'
-import { Reconstrct } from '../../../src/compile/handler/reconstruct'
+import { Compiled, type CapturedValidator } from '../../../src/compile/aot'
+import type {
+	AppPlanAotPayload,
+	AppPlanAotValidatorImage
+} from '../../../src/compile/app-plan-aot'
+import { reconstructValidator } from '../../../src/compile/handler/reconstruct'
 import { buildFrozenRouteValidator } from '../../../src/compile/handler/frozen-validator'
 import { hasTypes, isTypeboxInitialized } from '../../../src/type/bridge'
 import { claimManifest, materialise, registerManifest } from '../_manifest'
@@ -28,6 +32,11 @@ const payload = JSON.parse(readFileSync(process.env.PAYLOAD!, 'utf8')) as {
 	method: string
 	path: string
 	slot?: 'body' | 'query'
+	registration?: {
+		fingerprint: Parameters<typeof Compiled.register>[0]['fingerprint']
+		payload: AppPlanAotPayload
+		identity: AppPlanAotValidatorImage['identity']
+	}
 }
 
 const slot = payload.slot ?? 'body'
@@ -46,7 +55,26 @@ const hook = { [slot]: schema } as any
 
 const manifest = { validators: materialise(payload.captured) }
 if (process.env.USE_WS_BUILD === '1') {
-	registerManifest(manifest)
+	if (!payload.registration)
+		throw new Error('missing direct AppPlan registration')
+	Compiled.register({
+		bf: 1,
+		fingerprint: payload.registration.fingerprint,
+		appPlan: {
+			payload: payload.registration.payload,
+			validators: {
+				WS: {
+					[payload.path]: {
+						[slot]: {
+							identity: payload.registration.identity,
+							image: manifest.validators.WS![payload.path]![slot]!
+						}
+					}
+				}
+			},
+			wsRoutes: {}
+		}
+	})
 	const { Elysia } = await import('../../../src/base')
 	out('READY_BEFORE_BUILD', isTypeboxInitialized())
 	const app = new Elysia().ws(payload.path, {
@@ -60,6 +88,7 @@ if (process.env.USE_WS_BUILD === '1') {
 }
 
 const claimed = claimManifest(manifest)
+const frozenSlots = claimed.validators[payload.method]![payload.path]!
 const root = {
 	...claimed,
 	'~config': {
@@ -88,12 +117,19 @@ if (process.env.USE_LIVE_VALIDATOR === '1') {
 
 const validator =
 	process.env.USE_RECONSTRUCT_VALIDATOR === '1'
-		? Reconstrct.validator(hook, root, payload.method as any, payload.path)
+		? reconstructValidator(
+				hook,
+				root,
+				payload.method as any,
+				payload.path,
+				frozenSlots
+			)
 		: buildFrozenRouteValidator(
 				hook,
 				root,
 				payload.method as any,
-				payload.path
+				payload.path,
+				frozenSlots
 			)
 
 const channel = validator?.[slot]

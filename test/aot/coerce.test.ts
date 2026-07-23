@@ -11,10 +11,7 @@ import { claimManifest, materialise, registerManifest } from './_manifest'
 import { req } from '../utils'
 import { Value } from 'typebox/value'
 import { compileToSource } from '../../src/plugin/aot/source'
-import { CheckContext } from 'typebox/schema'
-import { Guard } from 'typebox/guard'
-import { Format } from 'typebox/format'
-import { Hashing } from 'typebox/system'
+import { evaluateAppPlanValidators } from './_manifest'
 
 /** Frozen request validators preserve codec coercion and cleaning. */
 
@@ -54,7 +51,7 @@ describe('frozen request coercion', () => {
 		expect(m.GET?.['/q']?.query).toBeDefined()
 
 		Validator.clear()
-		registerManifest({ validators: m })
+		registerManifest({ validators: m }, build())
 		const app = build()
 		app.compile()
 
@@ -85,7 +82,7 @@ describe('frozen request coercion', () => {
 		const frozen = Validator.create(make() as any, {
 			aot: { method: 'GET', path: '/dm' },
 			slot: 'query',
-			app: claimManifest({ validators: m })
+			frozen: m.GET!['/dm']!.query
 		}) as any
 
 		expect(frozen.tb).toBeUndefined()
@@ -126,7 +123,7 @@ describe('frozen request coercion', () => {
 		const frozen = Validator.create(make() as any, {
 			aot: { method: 'GET', path: '/dmlive' },
 			slot: 'query',
-			app: claimManifest({ validators: m })
+			frozen: m.GET!['/dmlive']!.query
 		}) as any
 
 		frozen.FromSync({ n: '5' })
@@ -163,7 +160,7 @@ describe('frozen request coercion', () => {
 		const frozen = Validator.create(make() as any, {
 			aot: { method: 'GET', path: '/degrade' },
 			slot: 'query',
-			app: claimManifest({ validators: m })
+			frozen: m.GET!['/degrade']!.query
 		}) as any
 
 		const out = frozen.FromSync({ n: '5', extra: 'x' })
@@ -184,7 +181,7 @@ describe('frozen request coercion', () => {
 		const frozen = Validator.create(make() as any, {
 			aot: { method: 'GET', path: '/reorder' },
 			slot: 'query',
-			app: holder
+			frozen: holder.validators.GET!['/reorder']!.query
 		}) as any
 
 		const out = frozen.FromSync({ when: '2024-03-04T05:06:07.000Z' })
@@ -214,17 +211,7 @@ describe('frozen request coercion', () => {
 			delete process.env.ELYSIA_AOT_BUILD
 		}
 
-		const validators = new Function(
-			'CheckContext',
-			'Guard',
-			'Format',
-			'Hashing',
-			src
-				.replace('export const validators', 'const validators')
-				.replace(/export const handlers[\s\S]*$/, '')
-				.replace('export default validators', '') +
-				'\nreturn validators'
-		)(CheckContext, Guard, Format, Hashing)
+		const validators = evaluateAppPlanValidators(src)
 
 		Compiled.clear()
 		Validator.clear()
@@ -234,7 +221,7 @@ describe('frozen request coercion', () => {
 		const frozen = new TypeBoxValidator(make() as any, {
 			aot: { method: 'GET', path: '/q' },
 			slot: 'query',
-			app: claimManifest({ validators })
+			frozen: validators.GET!['/q']!.query
 		}) as any
 
 		expect(frozen.tb).toBeUndefined()
@@ -317,7 +304,7 @@ describe('frozen request coercion', () => {
 			const frozen = Validator.create(make() as any, {
 				aot: { method: 'GET', path },
 				slot: 'query',
-				app: claimManifest({ validators: m })
+				frozen: m.GET![path]!.query
 			}) as any
 
 			expect(frozen.tb).toBeUndefined()

@@ -19,6 +19,18 @@ describe('ElysiaType.NoValidate', () => {
 		await expect(res.text()).resolves.toBe('123')
 	})
 
+	it('keeps validation enabled when its conditional flag is false', async () => {
+		const app = new Elysia().get(
+			'/',
+			{ response: t.NoValidate(t.String(), false) },
+			// @ts-expect-error exercise runtime validation
+			() => 123
+		)
+
+		const res = await app.handle(req('/'))
+		expect(res.status).toBe(422)
+	})
+
 	it('should bypass validation with t.NoValidate(t.Number())', async () => {
 		const app = new Elysia().get(
 			'/',

@@ -72,7 +72,7 @@ describe('WebSocket route hook snapshots', () => {
 
 		const response = await app.handle(upgrade())
 		expect(response).toBeUndefined()
-		expect(connectionData?.message).toBeTypeOf('function')
+		expect(connectionData?.runtime).toBeDefined()
 	})
 
 	it('runs a plugin-local beforeHandle registered before the route', async () => {

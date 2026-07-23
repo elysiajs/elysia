@@ -52,7 +52,7 @@ describe('frozen response encoding', () => {
 		const frozen = Validator.create(make() as any, {
 			aot: { method: 'GET', path: '/em' },
 			slot: 'response:200' as any,
-			app: claimManifest({ validators: m })
+			frozen: m.GET!['/em']!['response:200']
 		}) as any
 
 		expect(frozen.tb).toBeUndefined()
@@ -85,7 +85,7 @@ describe('frozen response encoding', () => {
 		const frozen = Validator.create(make() as any, {
 			aot: { method: 'GET', path: '/emlive' },
 			slot: 'response:200' as any,
-			app: claimManifest({ validators: m })
+			frozen: m.GET!['/emlive']!['response:200']
 		}) as any
 
 		frozen.EncodeFrom(
@@ -105,7 +105,7 @@ describe('frozen response encoding', () => {
 		const frozen = Validator.create(make() as any, {
 			aot: { method: 'GET', path: '/eq' },
 			slot: 'response:200' as any,
-			app: claimManifest({ validators: m })
+			frozen: m.GET!['/eq']!['response:200']
 		}) as any
 
 		const dirty = {
@@ -138,7 +138,7 @@ describe('frozen response encoding', () => {
 		expect(m.GET?.['/u']?.['response:200']?.em).toBeDefined()
 
 		Validator.clear()
-		registerManifest({ validators: m })
+		registerManifest({ validators: m }, build())
 		const app = build()
 		app.compile()
 

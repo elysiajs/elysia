@@ -1,0 +1,152 @@
+{
+	"schemaVersion": 3,
+	"owner": "Post-N+4",
+	"fixture": "post-n4",
+	"baselineCommit": "a5831b577e98fd4973c331ebfb075893c9679fd5",
+	"calibrationCommit": "0503e06e0c265c1099395efbe5e6fc23858a2b06",
+	"productSourceHash": "111b122572316ebb864a4bb639cb7d71198d32665a097db67e9464cf17d25552",
+	"benchSourceHash": "223947d784276e148cb1fed8476498ed96ef43f1873d49070871dfa9db713f32",
+	"machineId": "m1-max-darwin-arm64",
+	"bunVersion": "1.3.14",
+	"bunRevision": "0d9b296af33f2b851fcbf4df3e9ec89751734ba4",
+	"pairedBlocksPerSession": 192,
+	"sessionCount": 3,
+	"dirty": false,
+	"rawArtifactPolicy": "Raw D1 artifacts remain ignored locally and are retained by CI; this tracked summary pins their paths, digests, exact measurements, and provenance.",
+	"sessions": [
+		{
+			"sessionId": "2026-07-22T13:39:54.126Z-0",
+			"startedAt": "2026-07-22T13:39:54.229Z",
+			"seed": 2316166207,
+			"resamples": 2000,
+			"file": "trace/d1/aa-session-0-20260722T133954Z-0503e06e.json",
+			"sha256": "c8f08a1bbe7c5b70ced6b15db46f8f5ec92cb25c9c2f02b79adc0a5d2cc451a1",
+			"widths": {
+				"covered-1000-current-bytes-per-route": 0.011355374715922824,
+				"covered-1000-heap-size-bytes-per-route": 0.0011799621782030967,
+				"covered-10000-current-bytes-per-route": 0.006078903618649704,
+				"covered-10000-heap-size-bytes-per-route": 0.00013267620372490305,
+				"mixed-1000-current-bytes-per-route": 0.008114912974836542,
+				"mixed-1000-heap-size-bytes-per-route": 0.00022966267133904737,
+				"mixed-10000-current-bytes-per-route": 0.004845945005836835,
+				"mixed-10000-heap-size-bytes-per-route": 0.00003075301017414928
+			},
+			"countDeltasAllZero": true
+		},
+		{
+			"sessionId": "2026-07-22T13:39:54.126Z-1",
+			"startedAt": "2026-07-22T13:43:31.420Z",
+			"seed": 2316166208,
+			"resamples": 2000,
+			"file": "trace/d1/aa-session-1-20260722T134331Z-0503e06e.json",
+			"sha256": "49908198da6ee98c8065e88769091941598edab3fdc39bfa65206af10731a240",
+			"widths": {
+				"covered-1000-current-bytes-per-route": 0.013905651466652742,
+				"covered-1000-heap-size-bytes-per-route": 0.0009044107841653852,
+				"covered-10000-current-bytes-per-route": 0.006073866266615872,
+				"covered-10000-heap-size-bytes-per-route": 0.00015534153689372745,
+				"mixed-1000-current-bytes-per-route": 0.010824052490719167,
+				"mixed-1000-heap-size-bytes-per-route": 0.00030236119464840353,
+				"mixed-10000-current-bytes-per-route": 0.004464698391947694,
+				"mixed-10000-heap-size-bytes-per-route": 0.00004048217205631757
+			},
+			"countDeltasAllZero": true
+		},
+		{
+			"sessionId": "2026-07-22T13:39:54.126Z-2",
+			"startedAt": "2026-07-22T13:47:11.155Z",
+			"seed": 2316166209,
+			"resamples": 2000,
+			"file": "trace/d1/aa-session-2-20260722T134711Z-0503e06e.json",
+			"sha256": "99ab86698429423034575712f089ae57a5f89172e1e439da824e52f8dbeba6e0",
+			"widths": {
+				"covered-1000-current-bytes-per-route": 0.014459895096339024,
+				"covered-1000-heap-size-bytes-per-route": 0.0008746028735322859,
+				"covered-10000-current-bytes-per-route": 0.00467913413865039,
+				"covered-10000-heap-size-bytes-per-route": 0.00016660530229500116,
+				"mixed-1000-current-bytes-per-route": 0.008491159861452447,
+				"mixed-1000-heap-size-bytes-per-route": 0.00028413415028853846,
+				"mixed-10000-current-bytes-per-route": 0.004662347739049766,
+				"mixed-10000-heap-size-bytes-per-route": 0.00003314171210977933
+			},
+			"countDeltasAllZero": true
+		}
+	],
+	"artifacts": {
+		"aggregate": {
+			"file": "trace/d1/aa-20260722T133954Z-0503e06e.json",
+			"sha256": "3723bd37f262085b15deaff3093be19481ddae604edac1a116f735e731407d7d",
+			"commit": "0503e06e0c265c1099395efbe5e6fc23858a2b06",
+			"dirty": false,
+			"productSourceHash": "111b122572316ebb864a4bb639cb7d71198d32665a097db67e9464cf17d25552",
+			"benchSourceHash": "223947d784276e148cb1fed8476498ed96ef43f1873d49070871dfa9db713f32"
+		},
+		"floors": {
+			"file": "bench/d1/baseline/m1-max-darwin-arm64/floors.json",
+			"sha256": "931a0e726337f5a0d631806086365ff8a2c81a624a62170e5e479c202f57b763",
+			"commit": "0503e06e0c265c1099395efbe5e6fc23858a2b06",
+			"dirty": false,
+			"productSourceHash": "111b122572316ebb864a4bb639cb7d71198d32665a097db67e9464cf17d25552",
+			"benchSourceHash": "223947d784276e148cb1fed8476498ed96ef43f1873d49070871dfa9db713f32"
+		},
+		"preRemovalVerify": {
+			"file": "trace/d1/verify-20260722T135053Z-0503e06e.json",
+			"sha256": "07b1918fc1a67d7801e3ddba0f375d6205ee790c14e41e1d5607af79088e16a7",
+			"commit": "0503e06e0c265c1099395efbe5e6fc23858a2b06",
+			"dirty": false,
+			"benchSourceHash": "223947d784276e148cb1fed8476498ed96ef43f1873d49070871dfa9db713f32"
+		},
+		"priorRemovalVerifications": [
+			{
+				"file": "trace/d1/verify-20260722T130054Z-dde6f396.json",
+				"sha256": "5ebb855d7209d5e17a2e8d967c0da9f42769c3add222c3be0f91d57263bb7490",
+				"commit": "dde6f396b34e57acebb2a4ad5dabc679be7f8678",
+				"dirty": false,
+				"benchSourceHash": "d29d97a1f3e3d57dd12698af1862117eadeca1a9ef8c8375414a913288023dbd"
+			},
+			{
+				"file": "trace/d1/verify-20260722T133042Z-66ced524.json",
+				"sha256": "99aec5da488f4e5004ebe6dcceda7711d5e27c3f8804831004b71c9e89ba6be9",
+				"commit": "66ced524ce7d1cd3c32828f54b6cd1f7d56f5c1e",
+				"dirty": false,
+				"benchSourceHash": "ac8b238dbc7e909559957c0e32a3109bfbfd3f368154f9462e4b2609aeff14c2"
+			}
+		],
+		"finalRemovalVerify": {
+			"file": "trace/d1/verify-20260722T135514Z-e4a9511d.json",
+			"sha256": "2c64c87b18f603af63d6ecfe90aba235b8239babcdb4880e678218b47bd12e98",
+			"commit": "e4a9511d9b200112156204e5f0e7364279c9d5e3",
+			"dirty": false,
+			"productSourceHash": "8115f787e21b0a17794ada6be42c0c577236f6d25fee118450c8f6b0e03b79e0",
+			"benchSourceHash": "223947d784276e148cb1fed8476498ed96ef43f1873d49070871dfa9db713f32"
+		}
+	},
+	"floors": {
+		"covered-1000-current-bytes-per-route": 0.014459895096339024,
+		"covered-1000-heap-size-bytes-per-route": 0.0011799621782030967,
+		"covered-10000-current-bytes-per-route": 0.006078903618649704,
+		"covered-10000-heap-size-bytes-per-route": 0.00016660530229500116,
+		"mixed-1000-current-bytes-per-route": 0.010824052490719167,
+		"mixed-1000-heap-size-bytes-per-route": 0.00030236119464840353,
+		"mixed-10000-current-bytes-per-route": 0.004845945005836835,
+		"mixed-10000-heap-size-bytes-per-route": 0.00004048217205631757
+	},
+	"countDeltas": {
+		"covered-1000-FunctionExecutable": 0,
+		"covered-1000-FunctionCodeBlock": 0,
+		"covered-1000-UnlinkedFunctionExecutable": 0,
+		"covered-1000-handler-new-function-observed": 0,
+		"covered-10000-FunctionExecutable": 0,
+		"covered-10000-FunctionCodeBlock": 0,
+		"covered-10000-UnlinkedFunctionExecutable": 0,
+		"covered-10000-handler-new-function-observed": 0,
+		"mixed-1000-FunctionExecutable": 0,
+		"mixed-1000-FunctionCodeBlock": 0,
+		"mixed-1000-UnlinkedFunctionExecutable": 0,
+		"mixed-1000-handler-new-function-observed": 0,
+		"mixed-10000-FunctionExecutable": 0,
+		"mixed-10000-FunctionCodeBlock": 0,
+		"mixed-10000-UnlinkedFunctionExecutable": 0,
+		"mixed-10000-handler-new-function-observed": 0
+	}
+}

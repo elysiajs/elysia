@@ -1,9 +1,8 @@
-import { describe, it, expect, afterEach, afterAll } from 'bun:test'
+import { describe, it, expect, afterEach } from 'bun:test'
 import { spawnSync } from 'node:child_process'
 import { writeFileSync, rmSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { gzipSync } from 'node:zlib'
 
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
@@ -12,8 +11,7 @@ import { buildFrozenRouteValidator } from '../../src/compile/handler/frozen-vali
 import { Compiled, type CapturedValidator } from '../../src/compile/aot'
 import {
 	beginValidatorCapture,
-	endValidatorCapture,
-	endHandlerCapture
+	endValidatorCapture
 } from '../../src/compile/aot-capture'
 import { claimManifest, materialise } from './_manifest'
 
@@ -71,7 +69,6 @@ function capture(slot: Slot, schema: any, method: string, path: string) {
 	;(app as any).compile()
 
 	const captured = endValidatorCapture()
-	endHandlerCapture()
 	delete process.env.ELYSIA_AOT_BUILD
 
 	return captured.filter((c) => c.slot === slot)
@@ -87,12 +84,14 @@ function wiredResults(
 ) {
 	Compiled.clear()
 	const claimed = claimManifest({ validators: materialise(captured) })
+	const frozenSlots = claimed.validators[method]![path]!
 
 	const validator = new RouteValidator(
 		{ [slot]: schema } as any,
 		{
 			aot: { method, path },
-			app: claimed
+			app: claimed,
+			frozenSlots
 		} as any
 	)
 
@@ -186,19 +185,22 @@ function assertExactParity(
 
 	Compiled.clear()
 	const claimed = claimManifest({ validators: materialise(captured) })
+	const frozenSlots = claimed.validators[method]![path]!
 
 	const wired = new RouteValidator(
 		{ [slot]: schema } as any,
 		{
 			aot: { method, path },
-			app: claimed
+			app: claimed,
+			frozenSlots
 		} as any
 	) as any
 	const frozen = buildFrozenRouteValidator(
 		{ [slot]: schema } as any,
 		{ ...claimed, '~config': {}, '~ext': {} } as any,
 		method as any,
-		path
+		path,
+		frozenSlots
 	)
 
 	expect(
@@ -349,19 +351,22 @@ describe('exact values from slot coercion', () => {
 
 		Compiled.clear()
 		const claimed = claimManifest({ validators: materialise(captured) })
+		const frozenSlots = claimed.validators.GET!['/d']!
 
 		const wired = new RouteValidator(
 			{ query: schema } as any,
 			{
 				aot: { method: 'GET', path: '/d' },
-				app: claimed
+				app: claimed,
+				frozenSlots
 			} as any
 		) as any
 		const frozen = buildFrozenRouteValidator(
 			{ query: schema } as any,
 			{ ...claimed, '~config': {}, '~ext': {} } as any,
 			'GET' as any,
-			'/d'
+			'/d',
+			frozenSlots
 		) as any
 
 		const input = { d: '2024-01-02T03:04:05.000Z' }
@@ -381,19 +386,22 @@ describe('exact values from slot coercion', () => {
 
 		Compiled.clear()
 		const claimed = claimManifest({ validators: materialise(captured) })
+		const frozenSlots = claimed.validators.GET!['/z']!
 
 		const wired = new RouteValidator(
 			{ query: schema } as any,
 			{
 				aot: { method: 'GET', path: '/z' },
-				app: claimed
+				app: claimed,
+				frozenSlots
 			} as any
 		) as any
 		const frozen = buildFrozenRouteValidator(
 			{ query: schema } as any,
 			{ ...claimed, '~config': {}, '~ext': {} } as any,
 			'GET' as any,
-			'/z'
+			'/z',
+			frozenSlots
 		) as any
 
 		const w = wired.query.From({ n: '-0' }, 'query')
@@ -403,104 +411,5 @@ describe('exact values from slot coercion', () => {
 		expect(Object.is(w.n, -0)).toBe(true)
 
 		Compiled.clear()
-	})
-})
-
-/** Fully supported slot coercion produces a sealed bundle without TypeBox. */
-describe('sealed bundles with slot coercion', () => {
-	const APP = resolve(import.meta.dir, 'fixtures/bridge-free-slots-app.ts')
-	const dragsTypeBox = (source: string): boolean =>
-		/typebox\/(value|compile)/.test(source)
-
-	let esbuildBundle: string | undefined
-	let mode: string | undefined
-	let tmp: string | undefined
-	let appPath: string | undefined
-
-	async function setup() {
-		if (esbuildBundle !== undefined) return
-
-		const distCore = (await import(
-			resolve(import.meta.dir, '../../dist/plugin/aot/core.mjs')
-		)) as typeof import('../../src/plugin/aot/core')
-
-		mode = (await distCore.generateCompiledArtifacts(APP, { strip: true }))
-			.mode
-
-		const esbuild = await import('esbuild')
-		const { aot } = (await import(
-			resolve(import.meta.dir, '../../dist/plugin/aot/esbuild.mjs')
-		)) as typeof import('../../src/plugin/aot/esbuild')
-
-		const previous = process.env.ELYSIA_AOT_BUILD
-		process.env.ELYSIA_AOT_BUILD = '1'
-		try {
-			const result = await esbuild.build({
-				entryPoints: [APP],
-				bundle: true,
-				write: false,
-				format: 'esm',
-				platform: 'neutral',
-				minify: true,
-				external: ['node:*'],
-				logLevel: 'silent',
-				plugins: [aot(APP)]
-			})
-			esbuildBundle = result.outputFiles[0]!.text
-		} finally {
-			if (previous === undefined) delete process.env.ELYSIA_AOT_BUILD
-			else process.env.ELYSIA_AOT_BUILD = previous
-		}
-
-		await esbuild.stop()
-
-		tmp = mkdtempSync(join(tmpdir(), 'ely-slots-sealed-'))
-		appPath = join(tmp, 'sealed.mjs')
-		writeFileSync(appPath, esbuildBundle)
-	}
-
-	afterAll(() => {
-		if (tmp) {
-			rmSync(tmp, { recursive: true, force: true })
-			tmp = undefined
-		}
-	})
-
-	it('selects sealed mode for query and route-parameter coercion', async () => {
-		await setup()
-		expect(mode).toBe('sealed')
-	})
-
-	it('omits TypeBox value, compile, and setup modules', async () => {
-		await setup()
-		expect(dragsTypeBox(esbuildBundle!)).toBe(false)
-		expect(/setupTypebox\(\)/.test(esbuildBundle!)).toBe(false)
-
-		const min = Buffer.byteLength(esbuildBundle!)
-		const gz = gzipSync(esbuildBundle!, { level: 9 }).length
-		expect(min).toBeLessThan(160_000)
-		expect(gz).toBeLessThan(50_000)
-	})
-
-	it('still coerces valid values and rejects invalid values', async () => {
-		await setup()
-
-		const mod = (await import(appPath!)) as { app?: any; default?: any }
-		const app = mod.app ?? mod.default
-
-		const ok = await app.handle(
-			new Request('http://localhost/search?n=1&b=true&s=x')
-		)
-		expect(ok.status).toBe(200)
-		await expect(ok.json()).resolves.toEqual({ n: 1, b: true, s: 'x' })
-
-		const bad = await app.handle(
-			new Request('http://localhost/search?n=abc&b=true&s=x')
-		)
-		expect(bad.status).toBe(422)
-
-		const param = await app.handle(new Request('http://localhost/user/42'))
-		expect(param.status).toBe(200)
-		await expect(param.json()).resolves.toEqual({ id: 42 })
 	})
 })

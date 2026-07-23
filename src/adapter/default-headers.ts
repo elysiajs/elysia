@@ -4,8 +4,6 @@ export const defaultHeaders = '\0'
 
 export type DefaultResponseState = {
 	headers: Record<string, string>
-	status?: number | string
-	cookie?: Record<string, any>
 }
 
 let defaults = new WeakMap<
@@ -18,6 +16,10 @@ let defaults = new WeakMap<
 
 export function clearContextDefaults() {
 	defaults = new WeakMap()
+}
+
+export function invalidateContextDefaults(app: AnyElysia) {
+	defaults.delete(app)
 }
 
 export function contextDefaults(app: AnyElysia) {

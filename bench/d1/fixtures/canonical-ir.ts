@@ -1,6 +1,7 @@
 import { resolve } from 'node:path'
 
 import { gc, memorySnapshot } from '../../../example/stress/utils'
+import { injectCanonicalRetained } from '../inject'
 import { integerArgument } from './utils'
 
 const repoRoot =
@@ -14,6 +15,21 @@ const executableKinds = [
 ] as const
 
 type Population = (typeof populations)[number]
+
+function canonicalCoverage(app: unknown, routes: number) {
+	const exact = process.env.D1_CANONICAL_IR_HISTORICAL
+		? undefined
+		: ((app as any)?.['~generation']?.coverage ??
+			(app as any)?.['~generation']?.plan?.coverage)
+	return exact
+		? { ...exact, coverageEvidence: 'app-plan-exact' }
+		: {
+				declaredHttpRoutes: routes,
+				plannedHttpRoutes: routes,
+				shadowedHttpRoutes: 0,
+				coverageEvidence: 'historical-registered-routes'
+			}
+}
 
 function selectedCounts() {
 	const value = process.argv
@@ -38,9 +54,8 @@ async function measure() {
 	if (!population || !populations.includes(population))
 		throw new Error(`invalid canonical-ir population: ${population}`)
 
-	const [{ Elysia }, { JITProbe }, jsc] = await Promise.all([
+	const [{ Elysia }, jsc] = await Promise.all([
 		import(repoRoot + '/src/index.ts'),
-		import(repoRoot + '/src/compile/jit-probe.ts'),
 		import('bun:jsc')
 	])
 	gc()
@@ -53,26 +68,48 @@ async function measure() {
 	const handler = () => 'ok'
 	const beforeHandle = () => {}
 	const paths: string[] = []
-	let intendedCoveredRoutes = 0
-	let intendedFallbackRoutes = 0
+	let simpleRoutes = 0
+	let hookedRoutes = 0
+	let coverage!: {
+		declaredHttpRoutes: number
+		plannedHttpRoutes: number
+		shadowedHttpRoutes: number
+		coverageEvidence: string
+	}
 
-	JITProbe.begin()
-	let probe: ReturnType<typeof JITProbe.end> | undefined
+	const OriginalFunction = globalThis.Function
+	let functionConstructorCalls = 0
+	;(globalThis as any).Function = new Proxy(OriginalFunction, {
+		apply(target, thisArgument, argumentsList) {
+			functionConstructorCalls++
+			return Reflect.apply(target, thisArgument, argumentsList)
+		},
+		construct(target, argumentsList, newTarget) {
+			functionConstructorCalls++
+			return Reflect.construct(target, argumentsList, newTarget)
+		}
+	})
 	try {
 		for (let index = 0; index < routes; index++) {
+			injectCanonicalRetained(index)
 			const fallback = population === 'mixed' && index % 2 === 1
 			const path = fallback ? `/fallback/${index}` : `/plain/${index}`
 			paths.push(path)
 			if (fallback) {
-				intendedFallbackRoutes++
+				hookedRoutes++
 				app.get(path, { beforeHandle }, handler)
 			} else {
-				intendedCoveredRoutes++
+				simpleRoutes++
 				app.get(path, handler)
 			}
 		}
 
 		void app.fetch
+		coverage = canonicalCoverage(app, routes)
+		if (coverage.plannedHttpRoutes !== routes)
+			throw new Error(
+				`canonical-ir planned ${coverage.plannedHttpRoutes}/${routes} routes`
+			)
 		for (const path of paths) {
 			const response = await app.handle(
 				new Request(`http://localhost${path}`)
@@ -81,7 +118,7 @@ async function measure() {
 				throw new Error(`canonical-ir warmup failed for ${path}`)
 		}
 	} finally {
-		probe = JITProbe.end()
+		;(globalThis as any).Function = OriginalFunction
 	}
 
 	paths.length = 0
@@ -103,12 +140,14 @@ async function measure() {
 			routes,
 			population,
 			build: 'precompile',
-			intendedCoveredRoutes,
-			intendedFallbackRoutes,
-			handlerNewFunctionObserved: probe.reasons.includes(
-				'handler:new-function'
-			),
-			jitProbeReasons: probe.reasons,
+			simpleRoutes,
+			hookedRoutes,
+			declaredHttpRoutes: coverage.declaredHttpRoutes,
+			plannedHttpRoutes: coverage.plannedHttpRoutes,
+			shadowedHttpRoutes: coverage.shadowedHttpRoutes,
+			coverageEvidence: coverage.coverageEvidence,
+			handlerNewFunctionObserved: functionConstructorCalls > 0,
+			functionConstructorCalls,
 			currentBytesPerRoute: (after.current - before.current) / routes,
 			heapSizeBytesPerRoute:
 				((after.heapSize ?? 0) - (before.heapSize ?? 0)) / routes,
@@ -139,10 +178,14 @@ function runMeasure(routes: number, population: Population) {
 	return JSON.parse(new TextDecoder().decode(result.stdout)) as {
 		routes: number
 		population: Population
-		intendedCoveredRoutes: number
-		intendedFallbackRoutes: number
+		simpleRoutes: number
+		hookedRoutes: number
+		declaredHttpRoutes: number
+		plannedHttpRoutes: number
+		shadowedHttpRoutes: number
+		coverageEvidence: string
 		handlerNewFunctionObserved: boolean
-		jitProbeReasons: string[]
+		functionConstructorCalls: number
 		currentBytesPerRoute: number
 		heapSizeBytesPerRoute: number
 		counts: Record<(typeof executableKinds)[number], number>
@@ -182,22 +225,25 @@ function main() {
 			coverage.push({
 				routes,
 				population,
-				intendedCoveredRoutes: result.intendedCoveredRoutes,
-				intendedFallbackRoutes: result.intendedFallbackRoutes,
+				simpleRoutes: result.simpleRoutes,
+				hookedRoutes: result.hookedRoutes,
+				declaredHttpRoutes: result.declaredHttpRoutes,
+				plannedHttpRoutes: result.plannedHttpRoutes,
+				shadowedHttpRoutes: result.shadowedHttpRoutes,
 				handlerNewFunctionObserved: result.handlerNewFunctionObserved,
-				coverageEvidence: 'structural-invariant-only',
-				jitProbeReasons: result.jitProbeReasons
+				coverageEvidence: result.coverageEvidence,
+				functionConstructorCalls: result.functionConstructorCalls
 			})
 		}
 
 	console.log(
 		JSON.stringify({
-			fixture: 'canonical-ir',
-			owner: 'N+4',
+			fixture: process.env.D1_CANONICAL_IR_FIXTURE ?? 'canonical-ir',
+			owner: process.env.D1_CANONICAL_IR_OWNER ?? 'N+4',
 			build: 'precompile',
 			populations,
 			coverageMeasurement:
-				'JITProbe structural invariant only; no exact per-route coverage counter',
+				'AppPlan exact planned-route coverage with a Function-constructor no-fallback invariant',
 			routeSizeOrder: counts,
 			samples,
 			coverage

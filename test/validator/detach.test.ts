@@ -7,8 +7,13 @@ import {
 	trackValidatorCompiler,
 	Validator
 } from '../../src/validator'
-import { RouteValidator } from '../../src/validator/route'
+import {
+	RouteValidator,
+	sealRouteValidatorExecutors
+} from '../../src/validator/route'
 import { validationPlan } from '../../src/validator/validation-plan'
+import { compactDiagnosticSchema } from '../../src/validator/compact-errors'
+import { ELYSIA_TYPES } from '../../src/type/constants'
 
 const fixture = new URL('./detach.fixture.ts', import.meta.url).pathname
 const codecFixture = new URL('./detach-codec.fixture.ts', import.meta.url)
@@ -29,6 +34,62 @@ const build = (schema: any, options: Record<string, unknown> = {}) => {
 }
 
 describe('production validator detachment', () => {
+	it('seals one route without draining unrelated root-tracked executors', () => {
+		const root = {}
+		const sharedResponse: any = Validator.create(
+			t.Object({ ok: t.Boolean() })
+		)
+		const sealSharedResponse = sharedResponse.seal.bind(sharedResponse)
+		let sharedResponseSealCalls = 0
+		sharedResponse.seal = (introspect: boolean) => {
+			sharedResponseSealCalls++
+			sealSharedResponse(introspect)
+		}
+		const selected: any = new RouteValidator(
+			{
+				body: t.Object({ body: t.String() }),
+				headers: t.Object({ header: t.String() }),
+				query: t.Object({ query: t.String() }),
+				params: t.Object({ param: t.String() }),
+				cookie: t.Object({ cookie: t.String() }),
+				response: {
+					200: sharedResponse,
+					201: sharedResponse
+				}
+			},
+			{ app: root }
+		)
+		const unrelated: any = new RouteValidator(
+			{ body: t.Object({ untouched: t.Number() }) },
+			{ app: root }
+		)
+		const selectedExecutors = [
+			selected.body,
+			selected.headers,
+			selected.query,
+			selected.params,
+			selected.cookie,
+			...Object.values(selected.response)
+		] as any[]
+
+		expect(selectedExecutors.every((validator) => validator.schema)).toBeTrue()
+		expect(unrelated.body.schema).toBeDefined()
+
+		sealRouteValidatorExecutors(selected)
+		expect(sharedResponseSealCalls).toBe(1)
+
+		for (const validator of selectedExecutors) {
+			expect(validator.schema).toBeUndefined()
+			expect(validator.tb).toBeUndefined()
+		}
+		expect(unrelated.body.schema).toBeDefined()
+
+		// Local sealing leaves root tracking intact for the eventual global detach.
+		detachValidatorCompiler(root)
+		expect(sharedResponseSealCalls).toBe(2)
+		expect(unrelated.body.schema).toBeUndefined()
+	})
+
 	it('drops the raw schema and compiler while preserving validation and errors', () => {
 		const { root, validator } = build(t.Object({ value: t.Number() }))
 
@@ -44,6 +105,127 @@ describe('production validator detachment', () => {
 		} catch (error: any) {
 			expect(error.errors[0].instancePath).toBe('/value')
 		}
+	})
+
+	it('preserves constrained error details and expected values after sealing', () => {
+		const cases: [any, unknown][] = [
+			[t.Number({ minimum: 5 }), 2],
+			[t.String({ minLength: 3 }), 'a'],
+			[t.Array(t.String(), { minItems: 2 }), []],
+			[t.Date(), 'invalid'],
+			[
+				t.Object({ d: t.Date(), n: t.Number({ minimum: 5 }) }),
+				{ d: new Date('2020-01-01'), n: 2 }
+			],
+			[
+				t.Object({ d: t.Date(), n: t.Number({ minimum: 5 }) }),
+				{ d: '2020-01-01', n: 2 }
+			]
+		]
+
+		for (const [schema, value] of cases) {
+			const validator: any = Validator.create(schema)
+			const payload = () => {
+				try {
+					validator.FromSync(value, 'body')
+				} catch (error: any) {
+					return error.payload
+				}
+			}
+			const before = payload()
+
+			validator.seal(false)
+
+			expect(payload()).toEqual(before)
+		}
+
+		const params: any = new RouteValidator({
+			params: t.Object({
+				id: t.Integer({ minimum: 5 }),
+				d: t.Date()
+			})
+		}).params
+		const payload = () => {
+			try {
+				params.FromSync({ id: '7', d: 'invalid' }, 'params')
+			} catch (error: any) {
+				return error.payload
+			}
+		}
+		const before = payload()
+
+		params.seal(false)
+
+		expect(payload()).toEqual(before)
+	})
+
+	it('keeps structural string codec failures at the root after sealing', () => {
+		const validator: any = new RouteValidator(
+			{
+				query: t.Object({
+					filter: t.ObjectString({
+						min: t.Number(),
+						label: t.String()
+					}),
+					ids: t.ArrayString(t.Number())
+				})
+			},
+			{ normalize: true }
+		).query
+		const property = (value: unknown) => {
+			try {
+				validator.FromSync(value, 'query')
+			} catch (error: any) {
+				return error.payload.property
+			}
+		}
+
+		validator.seal(false)
+		expect(
+			property({
+				filter: '{"min":"x","label":"a"}',
+				ids: '[1,2,3]'
+			})
+		).toBe('root')
+		expect(
+			property({
+				filter: '{"min":1,"label":"a"}',
+				ids: '[1,"x"]'
+			})
+		).toBe('root')
+	})
+
+	it('does not trust a user-supplied coercion type marker', () => {
+		const snapshot: any = compactDiagnosticSchema({
+			type: 'number',
+			'~elyTyp': ELYSIA_TYPES.Numeric
+		})
+
+		expect(snapshot['~coerceRootFallback']).toBeUndefined()
+	})
+
+	it('keeps a later failure at the root after an accepted coercion', () => {
+		const validator: any = new RouteValidator(
+			{
+				body: t.Object({
+					coerced: t.Numeric(),
+					tail: t.Literal('ok')
+				})
+			},
+			{ normalize: true }
+		).body
+		validator.seal(false)
+		const property = (value: unknown) => {
+			try {
+				validator.FromSync(value, 'body')
+			} catch (error: any) {
+				return error.payload.property
+			}
+			throw new Error('expected the invalid value to be rejected')
+		}
+
+		expect(property({ coerced: '1', tail: 'bad' })).toBe('root')
+		expect(property({ coerced: 'bad', tail: 'ok' })).toBe('root')
 	})
 
 	it('preserves defaults, codecs, sanitize, forms, and refinements', async () => {
@@ -219,7 +401,8 @@ describe('production validator detachment', () => {
 		expect(result.exitCode, stderr).toBe(0)
 		expect(JSON.parse(new TextDecoder().decode(result.stdout))).toEqual({
 			reachable: false,
-			valid: { date: true, count: 1, name: 'ok' },
+			annotationReachable: false,
+			valid: { date: true, count: 1, name: 'ok', annotation: 1 },
 			custom: 'name'
 		})
 	})

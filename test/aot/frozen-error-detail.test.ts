@@ -3,17 +3,16 @@ import { describe, it, expect, afterEach } from 'bun:test'
 
 import { Elysia, t } from '../../src'
 import { detachValidatorCompiler, Validator } from '../../src/validator'
-import { Compiled, type ProgramId } from '../../src/compile/aot'
+import { Compiled } from '../../src/compile/aot'
 import {
 	beginValidatorCapture,
 	endValidatorCapture,
-	endHandlerCapture,
 	resetCompactErrorWarnings
 } from '../../src/compile/aot-capture'
 import { RouteValidator } from '../../src/validator/route'
 import { buildFrozenRouteValidator } from '../../src/compile/handler/frozen-validator'
 
-import { claimManifest, materialise } from './_manifest'
+import { claimManifest, materialise, type ClaimedManifest } from './_manifest'
 
 // Sealed and wired validators expose the same field-specific errors.
 
@@ -37,7 +36,6 @@ function freeze(schema: any): { warns: string[] } {
 		)
 		;(app as any).compile()
 		const captured = endValidatorCapture()
-		endHandlerCapture()
 
 		Compiled.clear()
 		Validator.clear()
@@ -51,7 +49,7 @@ function freeze(schema: any): { warns: string[] } {
 }
 
 // program claimed by the latest `freeze()`
-let claimed: { ['~programId']: ProgramId }
+let claimed: ClaimedManifest
 
 const hook = (schema: any) => ({ body: schema })
 const root = () => claimed as any
@@ -61,12 +59,19 @@ const wired = (schema: any) =>
 		hook(schema) as any,
 		{
 			aot: { method: METHOD, path: PATH },
-			app: claimed
+			app: claimed,
+			frozenSlots: claimed.validators[METHOD]![PATH]!
 		} as any
 	)
 
 const bridgeFree = (schema: any) =>
-	buildFrozenRouteValidator(hook(schema) as any, root(), METHOD, PATH)
+	buildFrozenRouteValidator(
+		hook(schema) as any,
+		root(),
+		METHOD,
+		PATH,
+		claimed.validators[METHOD]![PATH]!
+	)
 
 function validationError(validator: any, value: unknown): any {
 	try {
@@ -190,7 +195,6 @@ describe('sealed codec errors remain visible', () => {
 			)
 			expect(() => (app as any).compile()).not.toThrow()
 			endValidatorCapture()
-			endHandlerCapture()
 		} finally {
 			console.warn = original
 			delete process.env.ELYSIA_AOT_BUILD

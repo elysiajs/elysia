@@ -2,6 +2,7 @@ import { Elysia } from '../../src'
 import { describe, it, expect } from 'bun:test'
 import { z } from 'zod'
 import { post, req } from '../utils'
+import { expectValidationMatrix } from './validation-matrix'
 
 describe('Standard Schema Validate', () => {
 	it('validate body', async () => {
@@ -168,33 +169,7 @@ describe('Standard Schema Validate', () => {
 					: status(418, name as any)
 		)
 
-		const responses = await Promise.all(
-			[
-				post('/lilith?limit=1', {
-					id: 1
-				}),
-				post('/fouco?limit=10', {
-					id: 2
-				}),
-				post('/unknown?limit=10', {
-					id: 2
-				}),
-				post('/fouco?limit=a', {
-					id: 2
-				}),
-				post('/fouco?limit=10', {
-					id: '2'
-				}),
-				post('/fouco', {})
-			].map((x) => app.handle(x).then((x) => x.status))
-		)
-
-		expect(responses[0]).toEqual(404)
-		expect(responses[1]).toEqual(418)
-		expect(responses[2]).toEqual(422)
-		expect(responses[3]).toEqual(422)
-		expect(responses[4]).toEqual(422)
-		expect(responses[5]).toEqual(422)
+		await expectValidationMatrix(app.handle)
 	})
 
 	it('merge guard', async () => {
@@ -226,33 +201,7 @@ describe('Standard Schema Validate', () => {
 						: status(418, name as any)
 			)
 
-		const responses = await Promise.all(
-			[
-				post('/lilith?limit=1', {
-					id: 1
-				}),
-				post('/fouco?limit=10', {
-					id: 2
-				}),
-				post('/unknown?limit=10', {
-					id: 2
-				}),
-				post('/fouco?limit=a', {
-					id: 2
-				}),
-				post('/fouco?limit=10', {
-					id: '2'
-				}),
-				post('/fouco', {})
-			].map((x) => app.handle(x).then((x) => x.status))
-		)
-
-		expect(responses[0]).toEqual(404)
-		expect(responses[1]).toEqual(418)
-		expect(responses[2]).toEqual(422)
-		expect(responses[3]).toEqual(422)
-		expect(responses[4]).toEqual(422)
-		expect(responses[5]).toEqual(422)
+		await expectValidationMatrix(app.handle)
 	})
 
 	it('merge plugin', async () => {
@@ -284,33 +233,7 @@ describe('Standard Schema Validate', () => {
 					: status(418, name as any)
 		)
 
-		const responses = await Promise.all(
-			[
-				post('/lilith?limit=1', {
-					id: 1
-				}),
-				post('/fouco?limit=10', {
-					id: 2
-				}),
-				post('/unknown?limit=10', {
-					id: 2
-				}),
-				post('/fouco?limit=a', {
-					id: 2
-				}),
-				post('/fouco?limit=10', {
-					id: '2'
-				}),
-				post('/fouco', {})
-			].map((x) => app.handle(x).then((x) => x.status))
-		)
-
-		expect(responses[0]).toEqual(404)
-		expect(responses[1]).toEqual(418)
-		expect(responses[2]).toEqual(422)
-		expect(responses[3]).toEqual(422)
-		expect(responses[4]).toEqual(422)
-		expect(responses[5]).toEqual(422)
+		await expectValidationMatrix(app.handle)
 	})
 
 	it('handle cookie', async () => {

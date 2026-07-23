@@ -188,7 +188,7 @@ describe('sealed generation introspection', () => {
 	it('copies app config.introspect to the generation', async () => {
 		const app = new Elysia({ introspect: true }).get('/', () => 'ok')
 		await app.handle(req('/'))
-		expect(app['~generation']!.introspect).toBe(true)
+		expect(app['~generation']!.introspection).toBeDefined()
 	})
 
 	it('enables introspection when a plugin requests it', async () => {
@@ -199,13 +199,13 @@ describe('sealed generation introspection', () => {
 
 		const app = new Elysia().use(plugin).get('/', () => 'ok')
 		await app.handle(req('/'))
-		expect(app['~generation']!.introspect).toBe(true)
+		expect(app['~generation']!.introspection).toBeDefined()
 	})
 
 	it('introspect defaults to false', async () => {
 		const app = new Elysia().get('/', () => 'ok')
 		await app.handle(req('/'))
-		expect(app['~generation']!.introspect).toBe(false)
+		expect(app['~generation']!.introspection).toBeUndefined()
 	})
 })
 

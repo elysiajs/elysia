@@ -84,7 +84,7 @@ describe('route registry', () => {
 		])
 	})
 
-	it('does not rebuild the projected route table for every dynamic route', () => {
+	it('projects the route table once before resolving dynamic routes', () => {
 		const app = new Elysia().macro({
 			noop() {
 				return {}
@@ -105,6 +105,6 @@ describe('route registry', () => {
 		})
 
 		void app.fetch
-		expect(reads).toBe(2)
+		expect(reads).toBe(1)
 	})
 })

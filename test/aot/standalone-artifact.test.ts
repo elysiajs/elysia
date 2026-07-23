@@ -7,7 +7,9 @@ const APP = resolve(import.meta.dir, 'fixtures/sealed-app.ts')
 const AUTHORING_ONLY = [
 	/(^|\/)plugin\/aot\//,
 	/(^|\/)compile\/aot-capture\.(m?js|ts)$/,
-	/(^|\/)compile\/aot-emit\.(m?js|ts)$/,
+	/(^|\/)compile\/aot-emit\.(m?js|ts)$/
+]
+const DIRECT_PLANNER = [
 	/(^|\/)compile\/jit-probe\.(m?js|ts)$/,
 	/(^|\/)sucrose\.(m?js|ts)$/
 ]
@@ -15,7 +17,7 @@ const HANDLER_JIT = /(^|\/)compile\/handler\/jit\.(m?js|ts)$/
 const RUNTIME_AOT = /(^|\/)compile\/aot\.(m?js|ts)$/
 
 describe('standalone AOT artifact', () => {
-	it('omits AOT capture, emit, probe, and Sucrose modules while retaining the handler-JIT tripwire', async () => {
+	it('omits authoring modules and the deleted handler compiler', async () => {
 		const { aot } = await import('elysia/plugin/aot/esbuild')
 		const result = await esbuild.build({
 			entryPoints: [APP],
@@ -49,14 +51,13 @@ describe('standalone AOT artifact', () => {
 					AUTHORING_ONLY.some((pattern) => pattern.test(path))
 			)
 			.map(({ path }) => path)
-		const handlerJit = inputs.find(({ path }) => HANDLER_JIT.test(path))
-
 		expect(authoring).toEqual([])
-		// handler/index is the runtime dispatcher. Its JIT import is rewritten to
-		// this small fail-loud tripwire, so the original input path remains.
-		expect(handlerJit?.bytes).toBeLessThan(512)
-		expect(result.outputFiles[0]!.text).toContain(
+		expect(inputs.some(({ path }) => HANDLER_JIT.test(path))).toBe(false)
+		expect(result.outputFiles[0]!.text).not.toContain(
 			'handler compiler JIT was stripped'
+		)
+		expect(result.outputFiles[0]!.text).not.toMatch(
+			/handlerFactory|getHandler|Capture\.handler/
 		)
 		expect(result.outputFiles[0]!.text).not.toContain('new Function')
 		expect(

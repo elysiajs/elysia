@@ -50,9 +50,9 @@ describe('N+3a retention images', () => {
 				}
 			],
 			sealCalls: 3,
-			analysisReadsAfterFailure: 5,
-			analysisReadsAfterSeal: 10,
-			analysisReads: 10,
+			analysisReadsAfterFailure: 3,
+			analysisReadsAfterSeal: 6,
+			analysisReads: 6,
 			served: 1,
 			body: 'served',
 			generation: true
@@ -91,14 +91,14 @@ describe('N+3a retention images', () => {
 			wsUpgradeReturned: false,
 			extractedWSHandler: 'function'
 		})
-		expect(output.coldProbe).toEqual({
-			jit: true,
-			reasons: []
-		})
+		expect(output.runtimeSourceGeneration).toBe(0)
 		expect(output.generation).toMatchObject({
 			hasRuntime: true,
 			hasIntrospection: false,
-			descriptorCacheDropped: true,
+			planRetained: false,
+			planFrozen: true,
+			winningHttpRoutes: 5,
+			plannedHttpRoutes: 5,
 			authoringKeys: [],
 			hasCompactRouteTable: false,
 			compactRouteColumns: [],
@@ -147,7 +147,10 @@ describe('N+3a retention images', () => {
 		expect(output.generation).toMatchObject({
 			hasRuntime: true,
 			hasIntrospection: true,
-			descriptorCacheDropped: true,
+			planRetained: true,
+			planFrozen: true,
+			winningHttpRoutes: 5,
+			plannedHttpRoutes: 5,
 			authoringKeys: [],
 			hasCompactRouteTable: true,
 			compactRouteColumns: ['flags', 'length', 'method', 'path'],

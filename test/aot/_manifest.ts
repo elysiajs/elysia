@@ -1,55 +1,83 @@
 import {
 	Compiled,
-	createAotFingerprint,
 	createProgramId,
 	type CapturedValidator,
 	type ProgramId,
 	type ValidatorManifest,
-	type CapturedHandler,
-	type HandlerManifest,
 	type WSRouteManifest
 } from '../../src/compile/aot'
 import { Source, installReconstructImpl } from '../../src/compile/aot-emit'
+import { createAppPlanAotPayload } from '../../src/compile/app-plan-aot'
+import type { AnyElysia } from '../../src/base'
+import type { AppPlan } from '../../src/compile/app-plan'
+import type { AotFingerprint } from '../../src/compile/aot'
 
 // Reconstruct in-process manifests through the same table as generated modules.
 installReconstructImpl()
 
 import { CheckContext } from 'typebox/schema'
-import { buildCoercedFromPlan } from '../../src/type/coerce-plan'
 import { Guard } from 'typebox/guard'
 import { Format } from 'typebox/format'
 import { Hashing } from 'typebox/system'
 
 interface TestManifest {
 	validators?: ValidatorManifest
-	handlers?: HandlerManifest
 	wsRoutes?: WSRouteManifest
 }
 
 /**
- * Register a materialised manifest on the program lane, like a generated
- * module would. The next app build claims it through its own `~programId`.
+ * Register a materialised manifest through the direct AppPlan lane.
  */
-export const registerManifest = (manifest: TestManifest) =>
+export const registerManifest = (manifest: TestManifest, app: AnyElysia) => {
+	Compiled.clear()
+	app.compile()
+	const generation = app['~generation']!
+	registerCapturedManifest(manifest, generation.plan, generation.abi)
+}
+
+export const registerCapturedManifest = (
+	manifest: TestManifest,
+	plan: AppPlan,
+	fingerprint: AotFingerprint
+) => {
+	const validators: any = {}
+	for (const route of [
+		...plan.fingerprint.httpRoutes,
+		...plan.fingerprint.wsRoutes
+	]) {
+		const method = 'method' in route ? route.method : 'WS'
+		for (const identity of route.validators) {
+			const image = manifest.validators?.[method]?.[route.path]?.[identity.slot]
+			if (!image) continue
+			;((validators[method] ??= {})[route.path] ??= {})[identity.slot] = {
+				identity,
+				image
+			}
+		}
+	}
 	Compiled.register({
 		bf: 1,
-		fingerprint: createAotFingerprint(),
-		planRebuilder: buildCoercedFromPlan,
-		...manifest
+		fingerprint,
+		appPlan: {
+			payload: createAppPlanAotPayload(plan),
+			validators,
+			wsRoutes: {}
+		}
 	})
+}
 
 /**
- * Register + claim under a fresh ProgramId without booting an app. The
- * returned holder threads the id as ValidatorOptions `app` or a frozen root.
+ * Expose materialised images explicitly to low-level reconstruction tests.
  */
-export const claimManifest = (
-	manifest: TestManifest
-): { ['~programId']: ProgramId } => {
-	const id = createProgramId()
-	registerManifest(manifest)
-	Compiled.claim(id, createAotFingerprint())
-	return { '~programId': id }
+export interface ClaimedManifest {
+	['~programId']: ProgramId
+	validators: ValidatorManifest
 }
+
+export const claimManifest = (manifest: TestManifest): ClaimedManifest => ({
+	'~programId': createProgramId(),
+	validators: manifest.validators ?? {}
+})
 
 // `new Function` receives the module globals that generated imports normally bind.
 const fn = (src: string) =>
@@ -60,23 +88,36 @@ const fn = (src: string) =>
 		Hashing
 	)
 
-/** Materialise captured handlers into the frozen runtime manifest. */
-export const materialiseHandlers = (
-	captured: CapturedHandler[]
-): HandlerManifest => {
-	const m: HandlerManifest = {}
-	for (const h of captured) {
-		if ('program' in h) {
-			;(m[h.method] ??= {})[h.path] = { p: h.program }
-			continue
-		}
-
-		;(m[h.method] ??= {})[h.path] = {
-			a: h.alias ? h.alias.split(',') : [],
-			f: fn(Source.handlerFactory(h.alias, h.code)) as any
+/** Evaluate direct AppPlan validator sidecars and expose their frozen images. */
+export const evaluateAppPlanValidators = (
+	source: string
+): ValidatorManifest => {
+	const appPlanValidators = new Function(
+		'CheckContext',
+		'Guard',
+		'Format',
+		'Hashing',
+		source
+			.replace(/^import .*$/gm, '')
+			.replace(/\bexport const /g, 'const ')
+			.replace(/^export default .*$/gm, '') +
+			'\nreturn appPlanValidators'
+	)(CheckContext, Guard, Format, Hashing) as Record<
+		string,
+		Record<string, Record<string, { image: unknown }>>
+	>
+	const validators: ValidatorManifest = {}
+	for (const method in appPlanValidators) {
+		const paths = (validators[method] ??= {})
+		for (const path in appPlanValidators[method]) {
+			const slots = (paths[path] ??= {})
+			for (const slot in appPlanValidators[method]![path]) {
+				;(slots as any)[slot] =
+					appPlanValidators[method]![path]![slot]!.image
+			}
 		}
 	}
-	return m
+	return validators
 }
 
 /** Materialise captured validators into the frozen manifest emitted by builds. */

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'bun:test'
 import { Elysia, t } from '../../../src'
 
 describe('exact content-type dispatch and schema contract', () => {
-	for (const precompile of [false, true]) {
+	for (const precompile of [undefined, true] as const) {
 		describe(precompile ? 'precompiled' : 'default', () => {
 			const request = (contentType: string, body: BodyInit) =>
 				new Request('http://localhost/', {

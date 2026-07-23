@@ -18,7 +18,14 @@ const run = async (label, { Elysia, file, t }, adapterUtils, compiled) => {
 		typeof adapterUtils.createStreamHandler !== 'function'
 	)
 		throw new Error(`${label}: adapter/utils subpath failed`)
-	if (!('validators' in compiled) || !('handlers' in compiled))
+	if (
+		!('appPlanValidators' in compiled) ||
+		!('appPlanWSRoutes' in compiled) ||
+		!('appPlanPayload' in compiled) ||
+		'validators' in compiled ||
+		'wsRoutes' in compiled ||
+		'handlers' in compiled
+	)
 		throw new Error(`${label}: compiled subpath failed`)
 
 	const app = new Elysia().get(

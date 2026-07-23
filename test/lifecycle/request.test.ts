@@ -110,30 +110,15 @@ describe('request hooks', () => {
 		await expect(res.text()).resolves.toBe('NOOP')
 	})
 
-	it('keeps sync request-hook polling in compat mode', async () => {
-		const controller = new AbortController()
-		let secondHookCalled = false
-		let handlerCalled = false
-
+	it('rejects compat cancellation at seal', () => {
 		const app = new Elysia({
 			experimental: { cancellation: 'compat' }
 		})
-			.request([
-				() => controller.abort(),
-				() => {
-					secondHookCalled = true
-				}
-			])
-			.get('/', () => {
-				handlerCalled = true
-				return 'NOOP'
-			})
+			.request(() => {})
+			.get('/', () => 'NOOP')
 
-		const res = await app.handle(req('/', { signal: controller.signal }))
-
-		expect(secondHookCalled).toBe(false)
-		expect(handlerCalled).toBe(false)
-		await expect(res.text()).resolves.toBe('')
+		expect(() => void app.fetch).toThrow('compat-cancellation')
+		expect(app['~generation']).toBeUndefined()
 	})
 
 	it('stops async request hooks on abort', async () => {

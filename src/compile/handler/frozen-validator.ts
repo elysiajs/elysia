@@ -13,19 +13,29 @@ import {
 	type CompactErrorLocator
 } from '../../validator/compact-errors'
 import { trackValidatorCompiler } from '../../validator'
+import {
+	attachValidatorSemanticSource,
+	readValidatorSemanticSource
+} from '../../validator/semantic-channel'
+import {
+	runtimeTypeBoxValidatorSemantics,
+	validatorSemanticsWithDiagnostics,
+	type TypeBoxExecutionPolicy
+} from '../validator-semantics'
 
 import {
-	Compiled,
 	EMPTY_EXTERNALS,
 	reconstruct,
 	type CapturedValidator,
 	type FrozenValidator,
 	type ValidatorSlot
 } from '../aot'
+import { buildCoercedFromPlan } from '../../type/coerce-plan'
 
 import { createQueryPlan, type QueryPlan } from '../../parse-query'
 import type { AnyLocalHook, HTTPMethod } from '../../types'
 import type { AnyElysia } from '../../base'
+import type { AppPlan } from '../app-plan'
 
 function codecCoercionBridgeFree(
 	f: FrozenValidator,
@@ -108,10 +118,12 @@ class FrozenSlotValidator {
 	isAsync = false
 	hasCodec = false
 
-	#check: (value: unknown) => boolean
+	#check!: (value: unknown) => boolean
 	#clean?: (value: unknown) => unknown
 	#decode?: (value: unknown) => unknown
+	#activation?: () => void
 	schema: unknown
+	#diagnosticSchema?: unknown
 	#compactSchema?: unknown
 	#errorLocator?: CompactErrorLocator
 
@@ -127,31 +139,37 @@ class FrozenSlotValidator {
 		// coerced slot schema from `buildFrozenRouteValidator`
 		schema: unknown,
 		raw: unknown,
-		normalize: boolean | 'exactMirror' | 'typebox' | undefined
+		normalize: boolean | 'exactMirror' | 'typebox' | undefined,
+		semanticSlot: ValidatorSlot,
+		sanitize: unknown,
+		retainDiagnosticSchema: boolean
 	) {
 		this.schema = schema
-
-		if (frozen.ic) reconstruct().reconstructInnerCodecs(frozen.ic, schema)
+		if (retainDiagnosticSchema)
+			this.#diagnosticSchema = compactDiagnosticSchema(raw)
 
 		this.hasCodec = frozen.k === 1
+		this.#activation = () => {
+			if (frozen.ic) reconstruct().reconstructInnerCodecs(frozen.ic, schema)
 
-		if (frozen.k === 1 && frozen.dm) {
-			const both = reconstruct().instantiateFrozenBoth(
-				frozen,
-				schema,
-				raw
-			)
-			this.#check = both.check!
-			this.#clean = normalize === false ? undefined : both.clean
-			this.#decode = reconstruct().instantiateFrozenDecodeMirror(
-				frozen.dm,
-				schema
-			)
-		} else {
-			// non-codec covered slot: `e`/`u` are refused, so no externals/unions
-			const both = frozen.cm!(EMPTY_EXTERNALS, undefined)
-			this.#check = both.check!
-			this.#clean = normalize === false ? undefined : both.clean
+			if (frozen.k === 1 && frozen.dm) {
+				const both = reconstruct().instantiateFrozenBoth(
+					frozen,
+					schema,
+					raw
+				)
+				this.#check = both.check!
+				this.#clean = normalize === false ? undefined : both.clean
+				this.#decode = reconstruct().instantiateFrozenDecodeMirror(
+					frozen.dm,
+					schema
+				)
+			} else {
+				// non-codec covered slot: `e`/`u` are refused, so no externals/unions
+				const both = frozen.cm!(EMPTY_EXTERNALS, undefined)
+				this.#check = both.check!
+				this.#clean = normalize === false ? undefined : both.clean
+			}
 		}
 
 		this.#hasOptional = !!(schema as any)?.['~optional']
@@ -167,24 +185,83 @@ class FrozenSlotValidator {
 				clone: frozen.dc,
 				merge: frozen.pm
 			}
+
+		const response = semanticSlot.startsWith('response:')
+		const policy: TypeBoxExecutionPolicy = {
+			normalize:
+				normalize === false
+					? 'none'
+					: normalize === 'typebox'
+						? 'typebox'
+						: 'exact',
+			sanitize: !!sanitize,
+			direction: response ? 'response' : 'request',
+			domain: response ? 'response' : (semanticSlot as any),
+			settlement: frozen.a === 1 ? 'maybe' : 'sync',
+			clean: normalize === false ? 'none' : 'runtime',
+			optional: this.#hasOptional
+				? this.#optionalObject
+					? 'object'
+					: 'value'
+				: 'none',
+			form: (raw as any)?.['~elyTyp'] === ELYSIA_TYPES.Form,
+			noValidate: this.#noValidate,
+			diagnostics: 'locator'
+		}
+		attachValidatorSemanticSource(
+			this,
+			runtimeTypeBoxValidatorSemantics(schema, policy, {
+				hasCodec: this.hasCodec,
+				hasDefault: this.#hasDefault,
+				hasRef: frozen.r === 1,
+				codecDirection: this.hasCodec
+					? response
+						? 'encode'
+						: 'decode'
+					: 'none',
+				sanitize
+			})
+		)
+	}
+
+	activate() {
+		const activation = this.#activation
+		if (!activation) return
+		this.#activation = undefined
+		try {
+			activation()
+		} catch (error) {
+			this.#activation = activation
+			throw error
+		}
 	}
 
 	seal(introspect: boolean) {
 		if (this.schema === undefined) return
-		this.#compactSchema = introspect
+		this.#compactSchema = introspect && !this.#diagnosticSchema
 			? compactDiagnosticSchema(this.schema)
 			: undefined
 		this.#errorLocator = createCompactErrorLocator(this.schema)
 		this.schema = undefined
+		const semantics = readValidatorSemanticSource(this)
+		if (semantics)
+			attachValidatorSemanticSource(
+				this,
+				validatorSemanticsWithDiagnostics(semantics, 'compact')
+			)
 	}
 
 	Check(value: unknown): boolean {
+		this.activate()
 		return this.#check(value)
 	}
 
 	Errors(value: unknown): unknown[] {
-		return this.schema || this.#compactSchema
-			? compactErrors(this.schema ?? this.#compactSchema, value)
+		return this.schema || this.#diagnosticSchema || this.#compactSchema
+			? compactErrors(
+					this.schema ?? this.#diagnosticSchema ?? this.#compactSchema,
+					value
+				)
 			: (this.#errorLocator?.(value) ?? compactErrors(undefined, value))
 	}
 
@@ -193,7 +270,7 @@ class FrozenSlotValidator {
 			type,
 			value,
 			() => this.Errors(value),
-			this.schema
+			this.schema ?? this.#diagnosticSchema
 		)
 	}
 
@@ -206,6 +283,7 @@ class FrozenSlotValidator {
 	}
 
 	From(value: unknown, type?: string): unknown {
+		this.activate()
 		if (this.#hasDefault) {
 			const defaults = this.#defaultFastPath
 			if (defaults) {
@@ -245,9 +323,22 @@ class FrozenSlotValidator {
 	}
 
 	EncodeFrom(value: unknown, type?: string): unknown {
+		this.activate()
 		if (!this.#noValidate && !this.#check(value))
 			throw this.#error(value, type)
 		return this.#clean ? this.#clean(value) : value
+	}
+}
+
+/** Activate snapshotted AOT factories only after the whole AppPlan validates. */
+export function activateFrozenAppPlanValidators(appPlan: AppPlan): void {
+	for (let index = 0; index < appPlan.bindingLayout.length; index++) {
+		if (!appPlan.bindingLayout[index]!.role.endsWith('Validator')) continue
+		const binding = appPlan.externalBindings[index] as
+			| { validator?: unknown }
+			| undefined
+		if (binding?.validator instanceof FrozenSlotValidator)
+			binding.validator.activate()
 	}
 }
 
@@ -315,7 +406,8 @@ export function buildFrozenRouteValidator(
 	hook: AnyLocalHook,
 	root: AnyElysia,
 	method: HTTPMethod,
-	path: string
+	path: string,
+	frozenSlots?: Partial<Record<ValidatorSlot, FrozenValidator>>
 ): FrozenRouteValidatorShape | undefined {
 	const frozenRoot = frozenRootOf(root)
 	if (frozenRoot['~config']?.normalize === 'typebox') return undefined
@@ -337,28 +429,36 @@ export function buildFrozenRouteValidator(
 			continue
 		}
 
-		const frozen = Compiled.getValidator(
-			method,
-			path,
-			slot,
-			root['~programId']
-		)
+		const frozen = frozenSlots?.[slot]
 		if (!frozen) return undefined
 
 		let coerced = schema
 		if (frozen.cp) {
-			const rebuild = Compiled.getPlanRebuilder(root['~programId'])
-			if (!rebuild) return undefined
-			coerced = rebuild(schema, frozen.cp)
+			// The manifest-provided rebuilder is untrusted executable sidecar code.
+			// Use the framework-owned deterministic implementation during planning.
+			coerced = buildCoercedFromPlan(schema, frozen.cp)
 		}
 
 		if (!isBridgeFreeComplete(frozen, coerced, schema)) return undefined
 
-		out[slot] = new FrozenSlotValidator(frozen, coerced, schema, normalize)
+		out[slot] = new FrozenSlotValidator(
+			frozen,
+			coerced,
+			schema,
+			normalize,
+			slot,
+			frozenRoot['~config']?.sanitize,
+			method === 'WS'
+		)
 	}
 
-	if (out.query && !!frozenRoot['~config']?.experimental?.validationPlan)
-		out.queryPlan = createQueryPlan((out.query as any).schema, out.query)
+	if (out.query)
+		out.queryPlan = createQueryPlan(
+			(out.query as any).schema,
+			frozenRoot['~config']?.experimental?.validationPlan
+				? out.query
+				: undefined
+		)
 
 	const response = hook?.response
 	if (response) {
@@ -380,12 +480,7 @@ export function buildFrozenRouteValidator(
 				continue
 			}
 
-			const frozen = Compiled.getValidator(
-				method,
-				path,
-				`response:${status}` as ValidatorSlot,
-				root['~programId']
-			)
+			const frozen = frozenSlots?.[`response:${status}` as ValidatorSlot]
 			// response slots never capture `cp`: raw IS the coerced schema
 			if (!frozen || !isBridgeFreeComplete(frozen, schema, schema))
 				return undefined
@@ -394,7 +489,10 @@ export function buildFrozenRouteValidator(
 				frozen,
 				schema,
 				schema,
-				normalize
+				normalize,
+				`response:${status}` as ValidatorSlot,
+				frozenRoot['~config']?.sanitize,
+				method === 'WS'
 			)
 		}
 

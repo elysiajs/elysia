@@ -1,6 +1,5 @@
-import { isAsyncFunction, mayReturnPromise } from '../compile/utils'
-import { isCloudflareWorker } from '../universal/constants'
 import { NotFound, PROBLEM_JSON } from '../error'
+import { isCloudflareWorker } from '../universal/constants'
 
 import type { Context } from '../context'
 import type { MaybePromise } from '../types'
@@ -9,10 +8,6 @@ export type RouteErrorFinalizer = (
 	context: Context,
 	error: Error
 ) => MaybePromise<Response>
-
-export const emptyResponse = isCloudflareWorker
-	? { clone: () => new Response(null) }
-	: new Response(null)
 
 function cachedResponse(
 	body: string,
@@ -61,6 +56,30 @@ export function forwardError<T>(value: T): T {
 	return value
 }
 
+/** Capture a structural thenable's callback once before suspending. */
+export function assimilateThenable<T>(
+	value: T
+): Promise<Awaited<T>> | undefined {
+	if (
+		value === null ||
+		(typeof value !== 'object' && typeof value !== 'function')
+	)
+		return
+
+	const then = (value as any).then
+	if (typeof then !== 'function') return
+
+	return new Promise<Awaited<T>>((resolve, reject) => {
+		queueMicrotask(() => {
+			try {
+				Reflect.apply(then, value, [resolve, reject])
+			} catch (error) {
+				reject(error)
+			}
+		})
+	})
+}
+
 export function finalizeRouteError(
 	finalize: RouteErrorFinalizer | undefined,
 	context: Partial<Context>,
@@ -68,23 +87,5 @@ export function finalizeRouteError(
 ) {
 	if (!finalize) throw error
 
-	return finalize(
-		context as Context,
-		materializeFrameworkError(error) as Error
-	)
-}
-
-export function getAsyncIndexes(onRequests: Function[]) {
-	let asyncIndexes: (true | undefined)[] | undefined
-	for (let i = 0; i < onRequests.length; i++)
-		// Widen to async whenever the hook is a native async function or its
-		// source may return a Promise. A synchronously-returned thenable must
-		// be awaited before deciding short-circuit vs continue, otherwise a
-		// raw Promise is mapped as a truthy response (empty 200).
-		if (isAsyncFunction(onRequests[i]) || mayReturnPromise(onRequests[i])) {
-			asyncIndexes ??= new Array(onRequests.length)
-			asyncIndexes[i] = true
-		}
-
-	return asyncIndexes
+	return finalize(context as Context, materializeFrameworkError(error) as Error)
 }

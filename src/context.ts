@@ -9,7 +9,8 @@ import type { Cookie } from './cookie'
 import type { BaseCookie } from './cookie/types'
 import {
 	clearContextDefaults,
-	contextDefaults
+	contextDefaults,
+	invalidateContextDefaults
 } from './adapter/default-headers'
 
 import type {
@@ -40,8 +41,10 @@ function buildEmptyDecorator() {
 
 export function createBaseContext(app: AnyElysia) {
 	const ext = app['~ext']
-	const decorator = ext?.decorator
-	const store = ext?.store
+	return createBaseContextFromBindings(ext?.decorator, ext?.store)
+}
+
+function createBaseContextFromBindings(decorator: any, store: unknown) {
 
 	if (!decorator && !store)
 		return (sharedEmptyDecorator ??= buildEmptyDecorator())
@@ -57,11 +60,41 @@ export function createBaseContext(app: AnyElysia) {
 	return Decorator
 }
 
+export interface ContextRuntimeBindings {
+	readonly decorator?: unknown
+	readonly store?: unknown
+	readonly headers: Record<string, string> | null
+	readonly warnPathMutation: boolean
+}
+
+export function createContextFromBindings(
+	bindings: ContextRuntimeBindings
+): new (request: Request) => Context {
+	const { decorator, store, headers, warnPathMutation } = bindings
+	if (headers === null && !decorator && !store) {
+		sharedEmptyDecorator ??= buildEmptyDecorator()
+		return (warnPathMutation
+			? buildEmptyContext(sharedEmptyDecorator, null, true)
+			: (sharedEmptyContext ??= buildEmptyContext(sharedEmptyDecorator))) as any
+	}
+
+	return buildEmptyContext(
+		createBaseContextFromBindings(decorator, store),
+		headers,
+		warnPathMutation
+	) as any
+}
+
 export function clearContextCache() {
 	contextCache = new WeakMap()
 	clearContextDefaults()
 	sharedEmptyDecorator = null
 	sharedEmptyContext = null
+}
+
+export function invalidateContextCache(app: AnyElysia) {
+	contextCache.delete(app)
+	invalidateContextDefaults(app)
 }
 
 const pathValue = Symbol('path')
@@ -151,21 +184,12 @@ export function createContext(
 		!isProduction() && !!flattenChain(app['~hookChain'])?.request?.length
 	const { headers } = contextDefaults(app)
 
-	if (headers === null && !ext?.decorator && !ext?.store) {
-		sharedEmptyDecorator ??= buildEmptyDecorator()
-		const context = warnPathMutation
-			? buildEmptyContext(sharedEmptyDecorator, null, true)
-			: (sharedEmptyContext ??= buildEmptyContext(sharedEmptyDecorator))
-		contextCache.set(app, context)
-
-		return context
-	}
-
-	const context = buildEmptyContext(
-		createBaseContext(app),
+	const context = createContextFromBindings({
+		decorator: ext?.decorator,
+		store: ext?.store,
 		headers,
 		warnPathMutation
-	) as any
+	})
 
 	contextCache.set(app, context)
 	return context

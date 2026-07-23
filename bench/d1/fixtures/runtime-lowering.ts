@@ -42,6 +42,19 @@ const awaitCompletion = async <T>(promise: Promise<T>, label: string) => {
 	}
 }
 
+const awaitCount = async (
+	read: () => number,
+	expected: number,
+	label: string
+) => {
+	for (let attempt = 0; attempt < 32; attempt++) {
+		if (read() === expected) return
+		await Promise.resolve()
+	}
+
+	throw new Error(`${label} did not reach suspension`)
+}
+
 async function consume(response: Response, status = 200) {
 	if (response.status !== status)
 		throw new Error(
@@ -77,11 +90,10 @@ async function main() {
 	const batch = 25
 	const allocationRequests = Math.min(routes, 256)
 	const blockedRequests = Math.min(routes, 128)
-	const [{ Elysia, t }, { createContext }, descriptorModule, jsc] =
+	const [{ Elysia, t }, { createContext }, jsc] =
 		await Promise.all([
 			import(repoRoot + '/src/index.ts'),
 			import(repoRoot + '/src/context.ts'),
-			import(repoRoot + '/src/compile/handler/descriptor.ts'),
 			import('bun:jsc')
 		])
 	const config =
@@ -106,10 +118,10 @@ async function main() {
 			new Request('http://localhost/allocation')
 		)
 	)
-	const allocationDescriptor = descriptorModule.routeDescriptors
-		?.get(contextAllocationApp as any)
-		?.get('GET /allocation')
-	if (candidate && allocationDescriptor?.contextMode !== 'compact')
+	const allocationRoute = (contextAllocationApp as any)['~generation'].plan
+		.httpRoutes[0]
+	const allocationContextMode = allocationRoute?.program.content?.contextMode
+	if (candidate && allocationContextMode !== 'compact')
 		throw new Error(
 			'Context allocation fixture did not compile a compact route'
 		)
@@ -370,10 +382,8 @@ async function main() {
 	const blockedWarmup = blocked.handle(
 		new Request('http://localhost/blocked?warmup=1')
 	)
-	await Promise.resolve()
+	await awaitCount(() => blockedStarted, 1, 'blocked warmup fixture')
 	const blockedWarmups = blockedStarted
-	if (blockedWarmups !== 1)
-		throw new Error('blocked warmup fixture did not reach suspension')
 	gate.resolve()
 	await consume(await blockedWarmup)
 	blockedStarted = 0
@@ -382,9 +392,11 @@ async function main() {
 	const releaseBatch = Array.from({ length: blockedRequests }, (_, index) =>
 		blocked.handle(new Request(`http://localhost/blocked?release=${index}`))
 	)
-	await Promise.resolve()
-	if (blockedStarted !== blockedRequests)
-		throw new Error('blocked completion fixture did not reach suspension')
+	await awaitCount(
+		() => blockedStarted,
+		blockedRequests,
+		'blocked completion fixture'
+	)
 	const blockedBeforeRelease = blockedSnapshot()
 	gate.resolve()
 	for (const response of await Promise.all(releaseBatch))
@@ -405,9 +417,11 @@ async function main() {
 			})
 		)
 	)
-	await Promise.resolve()
-	if (blockedStarted !== abortOffset + blockedRequests)
-		throw new Error('abort fixture did not reach suspension')
+	await awaitCount(
+		() => blockedStarted,
+		abortOffset + blockedRequests,
+		'abort fixture'
+	)
 	for (const controller of controllers) controller.abort()
 	const blockedAfterAbort = blockedSnapshot()
 	gate.resolve()
@@ -465,7 +479,7 @@ async function main() {
 			routes,
 			batch,
 			allocationRequests,
-			allocationContextMode: allocationDescriptor?.contextMode,
+			allocationContextMode,
 			blockedRequests,
 			blockedWarmups,
 			blockedFullGcSnapshots,

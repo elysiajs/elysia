@@ -1,4 +1,4 @@
-import { getAsyncIndexes, getNotFound, settleResponse } from './utils'
+import { assimilateThenable, getNotFound, settleResponse } from './utils'
 import { parseQueryFromURL } from '../parse-query'
 import {
 	NotFound,
@@ -61,24 +61,9 @@ export function fallbackResponse(
 		try {
 			const r = error.toResponse()
 
-			if (r instanceof Response)
-				return mapResponse(r, context.set, context)
+			if (r instanceof Response) return mapResponse(r, context.set, context)
 
-			let pending: Promise<unknown> | undefined
-			if (r instanceof Promise) pending = r
-			else {
-				const then = r?.then
-				if (typeof then === 'function')
-					pending = new Promise((resolve, reject) => {
-						queueMicrotask(() => {
-							try {
-								Reflect.apply(then, r, [resolve, reject])
-							} catch (error) {
-								reject(error)
-							}
-						})
-					})
-			}
+			const pending = assimilateThenable(r)
 
 			if (pending)
 				return pending.then(
@@ -121,11 +106,7 @@ function fallbackErrorResponse(
 		if (context.set.status === undefined || context.set.status === 200)
 			context.set.status = 500
 
-		return mapResponse(
-			internalServerErrorResponse(error),
-			context.set,
-			context
-		)
+		return mapResponse(internalServerErrorResponse(error), context.set, context)
 	}
 
 	return mapResponse(internalServerErrorResponse(error), context.set, context)
@@ -144,13 +125,12 @@ export function createErrorHandler(
 		set: Context['set'],
 		...any: unknown[]
 	) => unknown,
-	allowUnsafe = false,
-	compatCancellation = false
+	allowUnsafe = false
 ) {
-	const settle = (context: Context, value: unknown) =>
-		compatCancellation || typeof (value as any)?.then !== 'function'
-			? value
-			: settleResponse(context.request, value)
+	const settle = (context: Context, value: unknown) => {
+		const pending = assimilateThenable(value)
+		return pending ? settleResponse(context.request, pending) : value
+	}
 
 	if (!onErrors)
 		return (context: Context, error: Error) => {
@@ -161,82 +141,7 @@ export function createErrorHandler(
 			applyErrorStatus(context, error)
 
 			parseQuery(context)
-			return settle(
-				context,
-				fallbackResponse(context, error, mapResponse)
-			)
-		}
-
-	const asyncIndexes = getAsyncIndexes(onErrors)
-	if (asyncIndexes)
-		return async (context: Context, error: Error) => {
-			materializeSetHeaders(context.set)
-			// @ts-expect-error
-			context.error = error
-			if (allowUnsafe && error instanceof ValidationError)
-				error.allowUnsafeValidationDetails = true
-			applyErrorStatus(context, error)
-
-			parseQuery(context)
-
-			for (let i = 0; i < onErrors.length; i++) {
-				let result: unknown
-				let suspended = false
-				try {
-					if (asyncIndexes?.[i]) {
-						suspended = true
-						result = await onErrors[i](context as any)
-					} else {
-						result = onErrors[i](context as any)
-
-						if (result instanceof Promise) {
-							suspended = true
-							result = await result
-						}
-					}
-				} catch (hookError) {
-					if (
-						!compatCancellation &&
-						suspended &&
-						context.request.signal.aborted
-					)
-						return new Response()
-
-					throw hookError
-				}
-
-				if (
-					!compatCancellation &&
-					suspended &&
-					context.request.signal.aborted
-				)
-					return new Response()
-
-				if (result !== undefined) {
-					if (
-						result instanceof ElysiaStatus ||
-						result instanceof Response
-					)
-						context.set.status = result.status
-					else if (
-						context.set.status === undefined ||
-						context.set.status === 200
-					)
-						context.set.status = 500
-
-					return settle(
-						context,
-						mapResponse(result, context.set, context)
-					)
-				}
-			}
-
-			if (isPristineNotFound(context, error)) return getNotFound()
-
-			return settle(
-				context,
-				fallbackResponse(context, error, mapResponse)
-			)
+			return settle(context, fallbackResponse(context, error, mapResponse))
 		}
 
 	return (context: Context, error: Error) => {
@@ -249,32 +154,41 @@ export function createErrorHandler(
 
 		parseQuery(context)
 
-		for (let i = 0; i < onErrors.length; i++) {
-			const result = onErrors[i](context as any)
-			if (result !== undefined) {
-				if (
-					result instanceof ElysiaStatus ||
-					result instanceof Response
-				)
-					context.set.status = (result as any).status
-				else if (
-					context.set.status === undefined ||
-					context.set.status === 200
-				)
-					context.set.status = 500
+		const respond = (result: unknown) => {
+			if (result instanceof ElysiaStatus || result instanceof Response)
+				context.set.status = (result as any).status
+			else if (context.set.status === undefined || context.set.status === 200)
+				context.set.status = 500
 
-				return settle(
-					context,
-					mapResponse(result, context.set, context)
-				)
-			}
+			return settle(context, mapResponse(result, context.set, context))
 		}
 
-		if (isPristineNotFound(context, error)) return getNotFound()
+		const run = (start: number): unknown => {
+			for (let i = start; i < onErrors.length; i++) {
+				const result = onErrors[i](context as any)
+				const pending = assimilateThenable(result)
+				if (pending)
+					return pending.then(
+						(resolved) => {
+							if (context.request.signal.aborted)
+								return new Response()
+							return resolved === undefined ? run(i + 1) : respond(resolved)
+						},
+						(hookError) => {
+							if (context.request.signal.aborted)
+								return new Response()
+							throw hookError
+						}
+					)
 
-		return settle(
-			context,
-			fallbackResponse(context, error, mapResponse)
-		)
+				if (result !== undefined) return respond(result)
+			}
+
+			if (isPristineNotFound(context, error)) return getNotFound()
+
+			return settle(context, fallbackResponse(context, error, mapResponse))
+		}
+
+		return run(0)
 	}
 }

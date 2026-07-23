@@ -27,7 +27,7 @@ describe('AOT unplugin Vite adapter', () => {
 		expect(typeof plugin.transform).toBe('function')
 	})
 
-	it('sealed builds load virtual modules without rerouting the bridge', async () => {
+	it('loads the direct AppPlan module without legacy virtual modules', async () => {
 		const { aotFactory } = await import('../../src/plugin/aot/unplugin')
 		const aot = createUnplugin(aotFactory)
 		const nativeVite = (await import('../../src/plugin/aot/vite')).aot
@@ -45,7 +45,7 @@ describe('AOT unplugin Vite adapter', () => {
 		) as string
 		expect(cid).toBeDefined()
 		const manifest = (plugin.load as any).call(ctx, cid) as string
-		expect(manifest).toContain('validators')
+		expect(manifest).toContain('appPlanValidators')
 		expect(manifest).toContain('.register({')
 		const nativeManifest = native.load(
 			native.resolveId('elysia/compiled')!
@@ -53,23 +53,18 @@ describe('AOT unplugin Vite adapter', () => {
 		expect(manifest).toBe(nativeManifest)
 
 		const vid = (plugin.resolveId as any).call(ctx, 'elysia/type') as string
-		expect(vid).toBeDefined()
-		const vt = (plugin.load as any).call(ctx, vid) as string
-		expect(/setupTypebox/.test(vt)).toBe(false)
-		expect(
-			vt.split('\n').filter((l) => l.startsWith('export')).length
-		).toBe(28)
-		expect(vt).toBe(native.load(native.resolveId('elysia/type')!)!)
+		expect(vid).toBeUndefined()
+		expect(native.resolveId('elysia/type')).toBeUndefined()
 
-		expect(await (plugin.transform as any).call(ctx, 'x', COMPAT)).toBe(
-			'export function setupTypebox(){}\n'
-		)
+		expect(
+			await (plugin.transform as any).call(ctx, 'x', COMPAT)
+		).toBeUndefined()
 		expect(
 			await (plugin.transform as any).call(ctx, 'x', BRIDGE)
 		).toBeUndefined()
 	})
 
-	it('wired builds reroute the bridge like the native plugin', async () => {
+	it('does not reroute the TypeBox bridge', async () => {
 		const { aotFactory } = await import('../../src/plugin/aot/unplugin')
 		const aot = createUnplugin(aotFactory)
 		const nativeVite = (await import('../../src/plugin/aot/vite')).aot
@@ -81,15 +76,13 @@ describe('AOT unplugin Vite adapter', () => {
 		await (plugin.buildStart as any).call(ctx)
 		await native.buildStart()
 
-		expect(await (plugin.transform as any).call(ctx, 'x', COMPAT)).toBe(
-			'export function setupTypebox(){}\n'
-		)
-		expect(await (plugin.transform as any).call(ctx, 'x', BRIDGE)).toBe(
-			"export * from './bridge-live'\n"
-		)
-		expect(await native.transform('x', BRIDGE)).toBe(
-			"export * from './bridge-live'\n"
-		)
+		expect(
+			await (plugin.transform as any).call(ctx, 'x', COMPAT)
+		).toBeUndefined()
+		expect(
+			await (plugin.transform as any).call(ctx, 'x', BRIDGE)
+		).toBeUndefined()
+		expect(await native.transform('x', BRIDGE)).toBeUndefined()
 	})
 
 	it('injects the autoload import into the entry only', async () => {
@@ -131,6 +124,7 @@ describe('AOT unplugin Vite adapter', () => {
 		const { createAotPluginHooks } =
 			await import('../../src/plugin/aot/hooks')
 		const hooks = createAotPluginHooks(SEALED_VITE_APP)
+		await hooks.buildStart()
 
 		expect(hooks.isTransformCandidate(SEALED_VITE_APP)).toBe(true)
 		expect(hooks.isTransformCandidate(COMPAT)).toBe(true)

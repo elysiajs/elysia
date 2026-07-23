@@ -1,0 +1,220 @@
+{
+	"schemaVersion": 2,
+	"policy": "Every frozen handle-corpus case is KEEP unless an exact case is named by a CHANGE row. Other transports and adapters are not claimed by this proof.",
+	"controlSourceHashes": {
+		"test/differential/historical-oracle.ts": "47adee5485b4cf82bc1a594f5cd52b452ca2376948964e04ae2d4445e706527d",
+		"test/differential/replacement-oracle.test.ts": "7380eabbc35b965d6e0869ac8eb3b7574bb996ab627408419162a0fd235ce5cd",
+		"test/differential/compare.ts": "f88726320b60b4d1f508e9a38b33b12bb181cb8cd4a1029a6b801fe925c2a7e6",
+		"test/differential/corpus.ts": "888a9db0224fe1d8bd508c0e374444708a12f03a935a35d86d5b0050b2e8fd89",
+		"test/differential/replacement-corpus.ts": "87521e9c51f13ece0f5068e7478ba918680e658939f448b9d5e2a2ba53fc39ce",
+		"bench/d1/env.ts": "8a6cb3af69326a73902f9af08a6fc26f5d4fa17c3203d8758faf324b8f98192c",
+		"test/differential/post-n4-proof.json": "60c2722af67fad9e0ecde67f8dc0f02c60e7a25fd48749787b5c573494a76289"
+	},
+	"baseline": {
+		"commit": "a5831b577e98fd4973c331ebfb075893c9679fd5",
+		"productSourceHash": "111b122572316ebb864a4bb639cb7d71198d32665a097db67e9464cf17d25552",
+		"d2CaseIdHash": "f804502772c416065ac3bc927fce4994542c763146b57c9a810bf084c3e637fe",
+		"d2Entries": 69,
+		"d2Requests": 157,
+		"d2Runtime": {
+			"bunVersion": "1.3.14",
+			"bunRevision": "0d9b296af33f2b851fcbf4df3e9ec89751734ba4",
+			"platform": "darwin",
+			"arch": "arm64",
+			"osRelease": "27.0.0",
+			"env": {
+				"PATH": "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin",
+				"NODE_ENV": "production",
+				"TZ": "UTC",
+				"LANG": "C",
+				"LC_ALL": "C"
+			}
+		},
+		"d1": {
+			"owner": "Post-N+4",
+			"baselineCommit": "a5831b577e98fd4973c331ebfb075893c9679fd5",
+			"productSourceHash": "111b122572316ebb864a4bb639cb7d71198d32665a097db67e9464cf17d25552",
+			"benchSourceHash": "223947d784276e148cb1fed8476498ed96ef43f1873d49070871dfa9db713f32",
+			"calibrationStatus": "calibrated",
+			"calibrationArtifact": "bench/d1/post-n4-calibration.json",
+			"calibrationArtifactHash": "c9bd7fa8ce41eb21b55c43e3de97fe995212575d04387bb6edaa5c09f6e53a2c"
+		}
+	},
+	"matrix": [
+		{
+			"id": "frozen-handle-corpus",
+			"decision": "keep",
+			"contract": "The 157 source-hashed handle requests and their recorded lifecycle observations remain byte-identical except the three exact custom-thenable cases named by the CHANGE row.",
+			"evidence": [
+				"test/differential/corpus.ts",
+				"test/differential/compare.ts",
+				"test/differential/replacement-oracle.test.ts"
+			]
+		},
+		{
+			"id": "async-plugin-provisional-serving",
+			"decision": "keep",
+			"contract": "Direct handle serves already-resolved routes while plugin routes are pending; nested plugin routes publish only after their drain completes; plugin failure leaves already-resolved routes available.",
+			"evidence": [
+				"test/differential/replacement-corpus.ts",
+				"test/2/extends/async-use.test.ts"
+			]
+		},
+		{
+			"id": "custom-handler-thenables",
+			"decision": "change",
+			"oldContract": "Handler and beforeHandle custom thenables are mapped as plain objects; a throwing then getter enters the error path.",
+			"newContract": "Structurally assimilate handler and beforeHandle thenables exactly once before response mapping; cover fulfillment across all four response sinks, rejection, throwing then getter, and cross-realm native promises.",
+			"candidateContractStatus": "verified-runtime-assertions",
+			"candidateCases": [
+				"handler-fulfillment/compact",
+				"handler-fulfillment/set",
+				"handler-fulfillment/default-headers",
+				"handler-fulfillment/set-with-default-headers",
+				"before-handle-fulfillment/compact",
+				"before-handle-fulfillment/set",
+				"before-handle-fulfillment/default-headers",
+				"before-handle-fulfillment/set-with-default-headers",
+				"handler-rejection",
+				"before-handle-rejection",
+				"handler-throwing-then-getter",
+				"before-handle-throwing-then-getter",
+				"handler-cross-realm-native-promise",
+				"before-handle-cross-realm-native-promise"
+			],
+			"baselineCases": {
+				"async-thenable/handler-thenable": {
+					"status": 200,
+					"contentType": "application/json;charset=utf-8",
+					"body": "{}"
+				},
+				"async-thenable/beforehandle-thenable": {
+					"status": 200,
+					"contentType": "application/json;charset=utf-8",
+					"body": "{}"
+				},
+				"throwing-then-getter/handler-throwing-then": {
+					"status": 500,
+					"contentType": "application/problem+json",
+					"body": "{\"type\":\"internal-server-error\",\"title\":\"Internal Server Error\",\"status\":500}"
+				}
+			},
+			"evidence": [
+				"test/differential/corpus.ts",
+				"test/differential/replacement-corpus.ts",
+				"test/differential/replacement-oracle.test.ts"
+			],
+			"broaderEvidence": [
+				"test/compile/balanced-http-runtime.test.ts:1311",
+				"test/aot/direct-app-plan.test.ts:196"
+			]
+		}
+	],
+	"removalLedger": [
+		{
+			"id": "lazy-precompile-false",
+			"decision": "delete",
+			"api": "ElysiaConfig.precompile: false and first-request handler compilation",
+			"replacement": "The eager seal builds the complete runtime image before publication.",
+			"tests": [
+				"test/types/configuration.ts:5",
+				"test/compile/public-app-plan-cutover.test.ts:198"
+			],
+			"documentation": [
+				"design/post-n4-breaking-changes.md:52",
+				"test/differential/README.md"
+			],
+			"reason": "The replacement forbids first-request compilation and a permanent legacy fallback."
+		},
+		{
+			"id": "compat-cancellation",
+			"decision": "delete",
+			"api": "experimental.cancellation: 'compat' entry and between-callback polling",
+			"replacement": "The default and explicit 'suspension' policy observe cancellation at async and streaming suspension boundaries.",
+			"tests": [
+				"test/types/configuration.ts:9",
+				"test/compile/public-app-plan-cutover.test.ts:198",
+				"test/core/cancellation-policy.test.ts:532"
+			],
+			"documentation": [
+				"design/post-n4-breaking-changes.md:146",
+				"test/differential/README.md"
+			],
+			"reason": "One suspension-boundary model removes compatibility polling and makes cancellation behavior explicit in the route plan."
+		},
+		{
+			"id": "aot-strip-and-fallback-modes",
+			"decision": "delete",
+			"api": "AOTOptions.strip: false | true | 'auto', automatic fallback, and stripped-runtime failure modes",
+			"replacement": "AOT serializes complete AppPlan programs and exact binding layouts.",
+			"tests": [
+				"test/types/aot-options.ts",
+				"test/aot/target.test.ts",
+				"test/aot/direct-app-plan.test.ts",
+				"test/aot/adapter-production-stubs.test.ts",
+				"test/aot/standalone-artifact.test.ts",
+				"test/aot/rspack.test.ts"
+			],
+			"documentation": [
+				"design/post-n4-breaking-changes.md",
+				"test/differential/README.md"
+			],
+			"reason": "One direct AppPlan image replaces keyed/JIT fallback, handler replay, virtual type generation, and strip-time partial runtimes; the accepted bundle exception is recorded with exact measurements."
+		},
+		{
+			"id": "legacy-compiler-fallback-machinery",
+			"decision": "delete",
+			"api": "Internal handler source generation, replay/fallback classification, legacy-lane seam, and JIT probes",
+			"replacement": "Exact plan coverage, shared kernels, direct AOT serialization, and the source-hashed child oracle.",
+			"tests": [
+				"test/compile/post-n4-deletion-contract.test.ts",
+				"test/compile/app-plan-introspection.test.ts",
+				"test/compile/header-inference-runtime.test.ts",
+				"test/compile/post-n4-public-behavior.test.ts",
+				"test/compile/public-app-plan-cutover.test.ts",
+				"test/differential/replacement-oracle.test.ts"
+			],
+			"documentation": ["test/differential/README.md"],
+			"reason": "Exact winner coverage and public behavior replacements permit physical deletion of the legacy HTTP compiler, replay, and JIT-probe modules while validator reconstruction, conservative source analysis, and WebSocket runtime remain."
+		},
+		{
+			"id": "public-handler-index-compiler",
+			"decision": "delete",
+			"api": "Undocumented Elysia.handler(index, ...) access to declaration-indexed legacy compilation",
+			"replacement": "None; sealing publishes exactly one AppPlan HTTP program per winning route and requests use handle/fetch.",
+			"tests": [
+				"test/types/post-n4-deletion.ts",
+				"test/compile/post-n4-deletion-contract.test.ts",
+				"test/compile/public-app-plan-cutover.test.ts"
+			],
+			"documentation": [
+				"design/post-n4-breaking-changes.md",
+				"test/differential/README.md"
+			],
+			"reason": "The method exposed legacy compiler and shadowed declaration-index semantics outside transactional Generation publication."
+		},
+		{
+			"id": "already-absent-aot-lazy-thresholds",
+			"decision": "delete",
+			"api": "Historical AOT lazy:true and numeric threshold modes",
+			"replacement": "None.",
+			"tests": ["test/types/aot-options.ts"],
+			"documentation": ["test/differential/README.md"],
+			"reason": "Recorded to prevent resurrection; these modes were absent at the pinned baseline."
+		}
+	],
+	"d1Gates": {
+		"baselineOwner": "Post-N+4",
+		"fixture": "post-n4",
+		"pairedBlocks": 192,
+		"memoryMargin": 0.02,
+		"executableIncrease": 0,
+		"handlerNewFunctionMaximum": 0,
+		"unregisteredExitGates": [
+			"request performance",
+			"real socket",
+			"default gzip",
+			"cold start"
+		]
+	}
+}

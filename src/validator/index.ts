@@ -7,8 +7,8 @@ import type { ElysiaConfig, MaybePromise } from '../types'
 import type { CoerceOption } from '../type/coerce'
 import { clearCoerceLeafCache } from '../type/coerce'
 import {
-	Compiled,
 	Capture,
+	type FrozenValidator,
 	type ProgramId,
 	type ValidatorSlot
 } from '../compile/aot'
@@ -24,6 +24,25 @@ import { isAsyncFunction } from '../compile/utils'
 import { clearSharedReferenceCaches } from '../type/elysia/utils'
 import { VALIDATION_PLAN_BUILTIN } from '../type/constants'
 import type { ValidationPlanExtension } from '../experimental/validation-plan'
+import {
+	attachValidatorSemanticSource,
+	VALIDATOR_SEMANTIC_MEMBERS,
+	type ValidatorSemanticMemberSource,
+	type ValidatorSemanticProjection
+} from './semantic-channel'
+import {
+	composedValidatorSemantics,
+	runtimeStandardValidatorSemantics,
+	validatorSemantics
+} from '../compile/validator-semantics'
+
+export {
+	VALIDATOR_SEMANTIC_MEMBERS,
+	VALIDATOR_SEMANTIC_SOURCE,
+	readValidatorSemanticSource,
+	type ValidatorSemanticMemberSource,
+	type ValidatorSemanticProjection
+} from './semantic-channel'
 
 export interface ValidatorOptions {
 	app?: {
@@ -39,6 +58,14 @@ export interface ValidatorOptions {
 	sanitize?: ElysiaConfig<any, any>['sanitize']
 	aot?: { method: string; path: string }
 	slot?: ValidatorSlot
+	/** @internal identity slot when runtime slot behavior must remain unchanged. */
+	semanticSlot?: ValidatorSlot
+	/** @internal actual codec lane used by legacy composition. */
+	semanticCodecDirection?: 'decode' | 'encode'
+	/** @internal Exact AppPlan-bound image; never selected by method/path. */
+	frozen?: FrozenValidator
+	/** @internal Route-level exact images indexed by planner slot. */
+	frozenSlots?: Partial<Record<ValidatorSlot, FrozenValidator>>
 	validationPlan?: ValidationPlanExtension
 }
 
@@ -169,17 +196,13 @@ export abstract class Validator {
 
 			const normalizeKey =
 				(options?.normalize === 'typebox' ? 'typebox' : '') +
-				(slot?.startsWith('response') ? '\0r' : '')
+				(slot?.startsWith('response') ? '\0r' : '') +
+				'\0s:' +
+				(options?.semanticSlot?.startsWith('response:')
+					? 'response'
+					: (options?.semanticSlot ?? slot ?? 'unknown'))
 
-			const appHasFrozen =
-				!!aot &&
-				!!slot &&
-				Compiled.hasValidator(
-					aot.method,
-					aot.path,
-					slot,
-					options?.app?.['~programId']
-				)
+			const appHasFrozen = !!options?.frozen
 
 			const appSpecific = appHasFrozen || Capture.isCapturing()
 			const app = options?.app
@@ -325,14 +348,18 @@ export abstract class Validator {
 
 		const responseSlot = (status: number | string) =>
 			options?.aot ? (`response:${status}` as ValidatorSlot) : undefined
+		const responseSemanticSlot = (status: number | string) =>
+			`response:${status}` as ValidatorSlot
 
 		if (isSingleSchema(schema))
 			return {
 				200: Validator.create(
 					schema as TSchema | StandardSchemaV1Like,
 					{
-						...options,
-						slot: responseSlot(200),
+							...options,
+							slot: responseSlot(200),
+							frozen: options?.frozenSlots?.['response:200'],
+						semanticSlot: responseSemanticSlot(200),
 						schemas: options?.schemas
 							?.map((s) => toStatusBased(s)[200])
 							?.filter(Boolean)
@@ -348,8 +375,13 @@ export abstract class Validator {
 				v instanceof Validator
 					? v
 					: Validator.create(v, {
-							...options,
-							slot: responseSlot(k),
+								...options,
+								slot: responseSlot(k),
+								frozen:
+									options?.frozenSlots?.[
+										`response:${k}` as ValidatorSlot
+									],
+							semanticSlot: responseSemanticSlot(k),
 							schemas: options?.schemas
 								?.map((s) => toStatusBased(s)[k as any])
 								?.filter(Boolean)
@@ -447,8 +479,14 @@ export class StandardValidator extends Validator {
 	constructor(schema: StandardSchemaV1Like) {
 		super()
 
-		// @ts-expect-error
-		this.#validate = schema['~standard'].validate
+		// Snapshot the same first record whose callback the executor retains.
+		const standard = schema['~standard'] as any
+		this.#validate = standard.validate
+		attachValidatorSemanticSource(
+			this,
+			runtimeStandardValidatorSemantics(standard)
+		)
+		// Preserve the legacy second property read used by async classification.
 		this.isAsync = isAsyncStandardSchema(schema)
 	}
 
@@ -522,7 +560,9 @@ class LegacyMultiValidator extends Validator {
 				coerces: options.coerces,
 				normalize: options.normalize,
 				models: options.models,
-				sanitize: options.sanitize
+				sanitize: options.sanitize,
+				semanticSlot: options.semanticSlot ?? options.slot,
+				semanticCodecDirection: 'decode'
 			})
 			const diagnostics = Compile(validator.schema as TSchema)
 			validator.diagnosticErrors = (value: unknown) => {
@@ -575,10 +615,33 @@ class LegacyMultiValidator extends Validator {
 		this.#members = schemas as (TypeBoxValidator | StandardValidator)[]
 		for (const member of this.#members)
 			if (member.isAsync) this.isAsync = true
+		this.#captureSemantics()
 	}
 
 	override seal(introspect: boolean) {
 		for (const member of this.#members) member.seal(introspect)
+		this.#captureSemantics()
+	}
+
+	#captureSemantics() {
+		attachValidatorSemanticSource(
+			this,
+			composedValidatorSemantics(
+				'legacy',
+				this.#members.map((validator) => ({
+					semantics: validatorSemantics(validator),
+					projection: null
+				}))
+			)
+		)
+	}
+
+	[VALIDATOR_SEMANTIC_MEMBERS](): readonly ValidatorSemanticMemberSource[] {
+		return this.#members.map((validator) => ({
+			validator,
+			typebox: !(validator instanceof StandardValidator),
+			projection: null
+		}))
 	}
 
 	static #merge(

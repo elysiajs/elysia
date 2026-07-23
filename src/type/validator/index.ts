@@ -31,7 +31,6 @@ import { ELYSIA_TYPES } from '../constants'
 import { Validator, type ValidatorOptions } from '../../validator'
 
 import {
-	Compiled,
 	reconstruct,
 	EMPTY_EXTERNALS,
 	Capture,
@@ -74,6 +73,15 @@ import {
 	compactErrors,
 	type CompactErrorLocator
 } from '../../validator/compact-errors'
+import {
+	attachValidatorSemanticSource,
+	readValidatorSemanticSource
+} from '../../validator/semantic-channel'
+import {
+	runtimeTypeBoxValidatorSemantics,
+	validatorSemanticsWithDiagnostics,
+	type TypeBoxExecutionPolicy
+} from '../../compile/validator-semantics'
 
 const moduleCache = new WeakMap<
 	Record<string, TSchema>,
@@ -469,15 +477,7 @@ export class TypeBoxValidator<
 		// raw (uncoerced) schema, retained for the bridge-free marker
 		const rawSchema: unknown = schema
 
-		const frozen =
-			options?.aot && options.slot
-				? Compiled.getValidator(
-						options.aot.method,
-						options.aot.path,
-						options.slot,
-						options.app?.['~programId']
-					)
-				: undefined
+		const frozen = options?.frozen
 
 		let schemaHasRef = false
 		if (name && options?.models) {
@@ -674,11 +674,17 @@ export class TypeBoxValidator<
 			options?.normalize !== 'typebox' &&
 			isFullyClosedObject(this.schema)
 
+		const codecDirection =
+			options?.semanticCodecDirection ??
+			((options?.semanticSlot ?? options?.slot)?.startsWith('response:')
+				? 'encode'
+				: 'decode')
+
 		if (
 			this.hasCodec &&
 			!this.#isForm &&
 			!this.#noValidate &&
-			!options?.slot?.startsWith('r') &&
+			codecDirection === 'decode' &&
 			options?.normalize !== false &&
 			options?.normalize !== 'typebox'
 		)
@@ -691,12 +697,12 @@ export class TypeBoxValidator<
 		if (
 			this.hasCodec &&
 			!this.#isForm &&
-			!options?.slot?.startsWith('r') &&
+			codecDirection === 'decode' &&
 			!this.#decodeMirror
 		)
 			this.#decodeOperation = createDecodePlan(this.schema)
 
-		if (this.hasCodec && !this.#isForm && options?.slot?.startsWith('r'))
+		if (this.hasCodec && !this.#isForm && codecDirection === 'encode')
 			this.#encodeMirror = this.#setupCodecMirror(
 				this.schema as TSchema,
 				options,
@@ -706,7 +712,7 @@ export class TypeBoxValidator<
 		if (
 			this.hasCodec &&
 			!this.#isForm &&
-			options?.slot?.startsWith('r') &&
+			codecDirection === 'encode' &&
 			!this.#encodeMirror
 		) {
 			this.#encodeOperation = createEncodePlan(this.schema)
@@ -725,6 +731,40 @@ export class TypeBoxValidator<
 			captureImpl
 		)
 			captureImpl.captureBridgeFree(options.aot, options.slot, rawSchema)
+
+		const semanticSlot = options?.semanticSlot ?? options?.slot ?? 'body'
+		const response = semanticSlot.startsWith('response:')
+		const policy: TypeBoxExecutionPolicy = {
+			normalize:
+				options?.normalize === false
+					? 'none'
+					: options?.normalize === 'typebox'
+						? 'typebox'
+						: 'exact',
+			sanitize: !!options?.sanitize,
+			direction: response ? 'response' : 'request',
+			domain: response ? 'response' : (semanticSlot as any),
+			settlement: this.isAsync ? 'maybe' : 'sync',
+			clean: this.Clean ? 'runtime' : 'none',
+			optional: this.#hasOptional
+				? this.#optionalObject
+					? 'object'
+					: 'value'
+				: 'none',
+			form: this.#isForm,
+			noValidate: this.#noValidate,
+			diagnostics: 'locator'
+		}
+		attachValidatorSemanticSource(
+			this,
+			runtimeTypeBoxValidatorSemantics(this.schema, policy, {
+				hasCodec: this.hasCodec,
+				hasDefault: this.hasDefault,
+				hasRef: schemaHasRef || frozen?.r === 1,
+				codecDirection: this.hasCodec ? codecDirection : 'none',
+				sanitize: options?.sanitize
+			})
+		)
 	}
 
 	override seal(introspect: boolean) {
@@ -754,14 +794,18 @@ export class TypeBoxValidator<
 				'[Elysia] Validator cannot be detached because its executable check is unavailable.'
 			)
 
-		this.#compactSchema = introspect
-			? compactDiagnosticSchema(this.schema)
-			: undefined
+		this.#compactSchema = compactDiagnosticSchema(this.schema)
 		this.#errorLocator = createCompactErrorLocator(this.schema)
 		this.tb = undefined
 		this.reconstructedCheck = undefined
 		this.diagnosticErrors = undefined
 		;(this as any).schema = undefined
+		const semantics = readValidatorSemanticSource(this)
+		if (semantics)
+			attachValidatorSemanticSource(
+				this,
+				validatorSemanticsWithDiagnostics(semantics, 'compact')
+			)
 	}
 
 	#error(
@@ -773,7 +817,7 @@ export class TypeBoxValidator<
 			type,
 			value,
 			errors ?? (() => this.Errors(value)),
-			this.schema,
+			this.schema ?? this.#compactSchema,
 			this.#findCustomError
 		)
 	}
@@ -1040,7 +1084,7 @@ export class TypeBoxValidator<
 						type,
 						out,
 						errors.length ? errors : () => this.Errors(out),
-						this.schema
+						this.schema ?? this.#compactSchema
 					)
 
 				return out as any
@@ -1062,7 +1106,7 @@ export class TypeBoxValidator<
 						type,
 						out,
 						errors.length ? errors : () => this.Errors(out),
-						this.schema
+						this.schema ?? this.#compactSchema
 					)
 
 				return out as any
@@ -1086,7 +1130,7 @@ export class TypeBoxValidator<
 				type,
 				value,
 				() => this.Errors(value),
-				this.schema
+				this.schema ?? this.#compactSchema
 			)
 		}
 	}
@@ -1225,7 +1269,7 @@ export class TypeBoxValidator<
 							pendingFile,
 							type,
 							value,
-							this.schema
+							this.schema ?? this.#compactSchema
 						)
 				}
 
@@ -1249,7 +1293,7 @@ export class TypeBoxValidator<
 							type,
 							value,
 							() => this.Errors(value),
-							this.schema
+							this.schema ?? this.#compactSchema
 						)
 					}
 			} else if (!this.#noValidate) {
@@ -1274,7 +1318,7 @@ export class TypeBoxValidator<
 						pendingFile,
 						type,
 						value,
-						this.schema
+						this.schema ?? this.#compactSchema
 					)
 			}
 
@@ -1353,7 +1397,7 @@ export class TypeBoxValidator<
 							type,
 							value,
 							() => this.Errors(value),
-							this.schema
+							this.schema ?? this.#compactSchema
 						)
 					}
 			} else {

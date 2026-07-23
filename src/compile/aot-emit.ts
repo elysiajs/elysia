@@ -42,9 +42,6 @@ function reconstructCheckCode(build: CheckBuildResult) {
 const checkFactorySource = (identifier: string, code: string) =>
 	`function(${identifier}){${code}}`
 
-const handlerFactorySource = (alias: string, code: string) =>
-	`function(h${alias ? ',' + alias : ''}){return ${code}}`
-
 export function externalsMatch(a: unknown[], b: unknown[]) {
 	if (a.length !== b.length) return false
 
@@ -103,7 +100,6 @@ const bothFactorySource = (
 export const Source = {
 	checkFactory: checkFactorySource,
 	checkCode: checkCode,
-	handlerFactory: handlerFactorySource,
 	mirrorFactory: mirrorFactorySource,
 	bothFactory: bothFactorySource
 } as const

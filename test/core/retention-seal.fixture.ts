@@ -9,10 +9,6 @@ if (image !== 'strict' && image !== 'introspect')
 
 const { Elysia, t } = await import('../../src')
 const { collectStaticRoutes } = await import('../../src/adapter/bun')
-const { JITProbe } = await import('../../src/compile/jit-probe')
-const { routeDescriptors } = await import(
-	'../../src/compile/handler/descriptor'
-)
 
 class Boom extends Error {}
 
@@ -87,9 +83,22 @@ async function collect() {
 	const generation = app['~generation'] as any
 	const nativeStatic = collectStaticRoutes(app as any)?.[0]
 
-	JITProbe.begin()
-	const dynamic = await app.handle(new Request('http://e.ly/dynamic/42'))
-	const coldProbe = JITProbe.end()
+	const OriginalFunction = globalThis.Function
+	let runtimeSourceGeneration = 0
+	const fail = () => {
+		runtimeSourceGeneration++
+		throw new Error('request-time source generation')
+	}
+	;(globalThis as any).Function = new Proxy(OriginalFunction, {
+		apply: fail,
+		construct: fail
+	})
+	let dynamic: Response
+	try {
+		dynamic = await app.handle(new Request('http://e.ly/dynamic/42'))
+	} finally {
+		;(globalThis as any).Function = OriginalFunction
+	}
 	const staticResponse = await app.handle(new Request('http://e.ly/static'))
 	const valid = await app.handle(
 		new Request('http://e.ly/validated', {
@@ -154,11 +163,15 @@ async function collect() {
 			wsUpgradeReturned: wsUpgradeResult !== undefined,
 			extractedWSHandler: typeof extractedWS.handler
 		},
-		coldProbe,
+		runtimeSourceGeneration,
 		generation: {
 			hasRuntime: generation.runtime !== undefined,
 			hasIntrospection: generation.introspection !== undefined,
-			descriptorCacheDropped: routeDescriptors.get(app) === undefined,
+			planRetained: generation.plan !== undefined,
+			planFrozen:
+				generation.plan === undefined || Object.isFrozen(generation.plan),
+			winningHttpRoutes: generation.coverage.winningHttpRoutes,
+			plannedHttpRoutes: generation.coverage.plannedHttpRoutes,
 			runtimeKeys: Object.keys(generation.runtime).sort(),
 			introspectionKeys: generation.introspection
 				? Object.keys(generation.introspection).sort()

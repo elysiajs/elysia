@@ -1,9 +1,13 @@
 import { env } from '../universal'
 import packageJson from '../../package.json'
 import type { CoercePlan } from '../type/coerce'
-import type { RouteProgram } from './handler/program'
+import type {
+	AppPlanAotPayload,
+	AppPlanAotValidatorManifest,
+	AppPlanAotWSManifest
+} from './app-plan-aot'
 
-export const AOT_MANIFEST_FORMAT = 5
+export const AOT_MANIFEST_FORMAT = 7
 export const AOT_ABI = `${packageJson.version}:${AOT_MANIFEST_FORMAT}`
 
 export interface AotFingerprint {
@@ -27,7 +31,6 @@ export interface CompilerSession {
 	>
 	sucroseCacheBytes: number
 	capture?: Map<string, CapturedValidator>
-	handlerCapture?: Map<string, CapturedHandler>
 	wsCapture?: Map<string, CapturedWSRoute>
 	captureRoutes?: Set<string>
 	app?: object
@@ -75,7 +78,6 @@ export function endCompilerSession(
 	session.sucroseCache.clear()
 	session.sucroseCacheBytes = 0
 	session.capture = undefined
-	session.handlerCapture = undefined
 	session.wsCapture = undefined
 	session.captureRoutes = undefined
 	if (activeSession === session) activeSession = undefined
@@ -174,27 +176,6 @@ export interface ValidatorManifest {
 	}
 }
 
-// compiled handler
-//
-// @see `src/compile/handler/index.ts`
-export type FrozenHandler =
-	| {
-			/** Canonical route program, bound by the shared runtime sink. */
-			p: RouteProgram
-	  }
-	| {
-			// positional parameter eg. pf,pj
-			a: string[]
-			// Handler factory: `(h, ...params) => composedHandler`
-			f: (...deps: unknown[]) => unknown
-	  }
-
-export interface HandlerManifest {
-	[method: string]: {
-		[path: string]: FrozenHandler
-	}
-}
-
 export type WSBindingRole = string
 
 export interface FrozenWSRoute {
@@ -208,17 +189,16 @@ export interface WSRouteManifest {
 
 export interface CompiledSnapshot {
 	registered: CompiledProgramRegistration | undefined
-	claimed: boolean
-	programs: WeakMap<ProgramId, CompiledProgramRegistration>
 }
 
 export interface CompiledProgramRegistration {
 	bf: 1
 	fingerprint: AotFingerprint
-	validators?: ValidatorManifest
-	handlers?: HandlerManifest
-	wsRoutes?: WSRouteManifest
-	planRebuilder?: (original: unknown, plan: CoercePlan) => any
+	appPlan: {
+		payload: AppPlanAotPayload
+		validators: AppPlanAotValidatorManifest
+		wsRoutes: AppPlanAotWSManifest
+	}
 }
 
 /**
@@ -274,29 +254,32 @@ export function reconstruct(): ReconstructImpl {
 
 // build registry
 let registered: CompiledProgramRegistration | undefined
-let claimed = false
-let programs = new WeakMap<ProgramId, CompiledProgramRegistration>()
-
-const programFor = (id?: ProgramId) => (id ? programs.get(id) : undefined)
 
 export abstract class Compiled {
 	static register(manifest: CompiledProgramRegistration) {
-		registered = manifest
-		claimed = false
-	}
-
-	static claim(id: ProgramId, fingerprint: AotFingerprint): boolean {
-		if (!registered || claimed) return false
-
-		const manifest = registered
-		if (manifest.fingerprint.abi !== fingerprint.abi)
+		if ('handlers' in (manifest as unknown as Record<string, unknown>))
+			throw new Error('[elysia-aot] legacy handler manifests were removed')
+		if ('planRebuilder' in (manifest as unknown as Record<string, unknown>))
+			throw new Error('[elysia-aot] legacy planRebuilder layout was removed')
+		if (!manifest.appPlan)
+			throw new Error('[elysia-aot] direct AppPlan manifest is required')
+		if (manifest.appPlan.payload?.format !== AOT_MANIFEST_FORMAT)
 			throw new Error(
-				`[elysia-aot] Registered manifest fingerprint mismatch: abi (manifest ${manifest.fingerprint.abi}, app ${fingerprint.abi}).`
+				`[elysia-aot] Unsupported AppPlan manifest format: ${String(manifest.appPlan.payload?.format)}.`
 			)
 
-		claimed = true
+		registered = manifest
+	}
+
+	/** @internal Inspect without exposing any keyed sidecar to a live app. */
+	static pendingAppPlan(): CompiledProgramRegistration | undefined {
+		return registered
+	}
+
+	/** @internal Commit only after the direct AppPlan binder validates the whole image. */
+	static claimValidated(manifest: CompiledProgramRegistration): boolean {
+		if (registered !== manifest) return false
 		registered = undefined
-		programs.set(id, { ...manifest })
 		return true
 	}
 
@@ -308,58 +291,9 @@ export abstract class Compiled {
 		reconstructImpl = impl
 	}
 
-	static getHandler(
-		id: ProgramId | undefined,
-		method: string,
-		path: string
-	): FrozenHandler | undefined {
-		return programFor(id)?.handlers?.[method]?.[path]
-	}
-
-	static getWSRoute(
-		id: ProgramId | undefined,
-		path: string
-	): FrozenWSRoute | undefined {
-		return programFor(id)?.wsRoutes?.[path]
-	}
-
-	static getValidator(
-		method: string,
-		path: string,
-		slot: ValidatorSlot,
-		id?: ProgramId
-	): FrozenValidator | undefined {
-		const program = programFor(id)
-		if (!program) return undefined
-
-		return program.validators?.[method]?.[path]?.[slot]
-	}
-
-	static hasValidator(
-		method: string,
-		path: string,
-		slot: ValidatorSlot,
-		id?: ProgramId
-	) {
-		const program = programFor(id)
-		if (!program) return false
-
-		return program.validators?.[method]?.[path]?.[slot] !== undefined
-	}
-
-	static getPlanRebuilder(id?: ProgramId) {
-		return programFor(id)?.planRebuilder
-	}
-
-	static release(id: ProgramId | undefined): boolean {
-		return id ? programs.delete(id) : false
-	}
-
 	/** @internal test isolation */
 	static clear() {
 		registered = undefined
-		claimed = false
-		programs = new WeakMap()
 	}
 }
 
@@ -376,12 +310,10 @@ export const CompilerState = {
 	},
 	newSession: newCompilerSession,
 	get registry(): CompiledSnapshot {
-		return { registered, claimed, programs }
+		return { registered }
 	},
 	set registry(snapshot: CompiledSnapshot) {
 		registered = snapshot.registered
-		claimed = snapshot.claimed
-		programs = snapshot.programs
 	}
 }
 
@@ -487,19 +419,6 @@ export const aotActivationError = new Error(
 	'Elysia AOT capture module is not activated.'
 )
 
-export type CapturedHandler =
-	| {
-			method: string
-			path: string
-			program: RouteProgram
-	  }
-	| {
-			method: string
-			path: string
-			alias: string
-			code: string
-	  }
-
 export type CapturedWSRoute =
 	| {
 			path: string
@@ -510,14 +429,6 @@ export type CapturedWSRoute =
 			path: string
 			reason: string
 	  }
-
-function captureHandler(v: CapturedHandler) {
-	if (!isValidatorCapturing()) return
-
-	const session = activeSession
-	if (!session) return
-	;(session.handlerCapture ??= new Map()).set(`${v.method}\0${v.path}`, v)
-}
 
 function captureWSRoute(v: CapturedWSRoute) {
 	if (!isValidatorCapturing()) return
@@ -541,7 +452,6 @@ function beginCaptureRoute(method: string, path: string) {
 		if (captured.method === method && captured.path === path)
 			session.capture!.delete(key)
 
-	session.handlerCapture?.delete(route)
 	if (method === 'WS') session.wsCapture?.delete(path)
 }
 
@@ -581,7 +491,6 @@ export const Capture = {
 	set: captureSet,
 	get: captureGet,
 	beginRoute: beginCaptureRoute,
-	handler: captureHandler,
 	ws: captureWSRoute,
 	isCapturing: isValidatorCapturing,
 	isAotBuildEnv: isAotBuildEnv

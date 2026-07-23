@@ -2,6 +2,7 @@ const injection = process.env.D1_INJECT
 const retained: Uint8Array[] = []
 const executables: Function[] = []
 const n2bRetained: Uint8Array[] = []
+const canonicalRetained: Uint8Array[] = []
 const coldStartStarted = Bun.nanoseconds()
 
 export function busyWaitNanoseconds(duration: number) {
@@ -30,6 +31,13 @@ export function injectRetained(route: number) {
 	const bytes = new Uint8Array(2_048)
 	bytes[route % bytes.length] = route & 255
 	retained.push(bytes)
+}
+
+export function injectCanonicalRetained(route: number) {
+	if (injection !== 'canonical-retained') return
+	const bytes = new Uint8Array(2_048)
+	bytes[route % bytes.length] = route & 255
+	canonicalRetained.push(bytes)
 }
 
 export function injectExecutable(route: number) {

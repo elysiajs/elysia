@@ -11,7 +11,6 @@ import {
 	CompilerState,
 	setCaptureImpl,
 	type CaptureImpl,
-	type CapturedHandler,
 	type CapturedWSRoute,
 	type CapturedValidator,
 	type CheckBuildResult,
@@ -478,7 +477,6 @@ export function abortCapture() {
 	if (!session?.external) return
 
 	session.capture = undefined
-	session.handlerCapture = undefined
 	session.wsCapture = undefined
 	session.captureRoutes = undefined
 	session.sucroseCache.clear()
@@ -490,7 +488,6 @@ function endCaptureSession(session: CompilerSession) {
 		session.external &&
 		!session.app &&
 		!session.capture &&
-		!session.handlerCapture &&
 		!session.wsCapture
 	) {
 		session.sucroseCache.clear()
@@ -505,20 +502,6 @@ export function endValidatorCapture() {
 	if (session) {
 		session.capture = undefined
 		session.captureRoutes = undefined
-		endCaptureSession(session)
-	}
-
-	return captured
-}
-
-export function endHandlerCapture(): CapturedHandler[] {
-	const session = CompilerState.session
-	const captured = session?.handlerCapture
-		? [...session.handlerCapture.values()]
-		: []
-
-	if (session) {
-		session.handlerCapture = undefined
 		endCaptureSession(session)
 	}
 
@@ -545,7 +528,6 @@ export const getCompilerSessionDiagnostics = () => {
 		active: session !== undefined,
 		appAttached: session?.app !== undefined,
 		validators: session?.capture?.size ?? 0,
-		handlers: session?.handlerCapture?.size ?? 0,
 		wsRoutes: session?.wsCapture?.size ?? 0,
 		sucrose: session?.sucroseCache.size ?? 0
 	}

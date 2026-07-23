@@ -160,8 +160,7 @@ describe('guard', () => {
 	})
 
 	it('apply guard globally', async () => {
-		// @ts-ignore
-		const app = new Elysia({ precompile: false })
+		const app = new Elysia()
 			.guard({
 				response: t.String()
 			})

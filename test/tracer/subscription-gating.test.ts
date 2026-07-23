@@ -1,18 +1,20 @@
 import { Elysia } from '../../src'
+import { traceEventIndex, type TraceEvent } from '../../src/constants'
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
 
-// Known subscriptions instrument only their phases; ambiguous subscriptions
-// conservatively instrument every phase.
-async function routeSource(
+// The plan exposes every phase; TracerHandle subscriptions gate callbacks at runtime.
+async function routeTracePhases(
 	app: any,
 	method = 'GET',
 	path = '/'
-): Promise<string> {
+): Promise<number> {
 	await app.handle(req(path, { method }))
-	const fn = app['~map']?.[method]?.[path]
-	if (typeof fn !== 'function') throw new Error('route not compiled')
-	return fn.toString()
+	const route = app['~generation']?.plan.httpRoutes.find(
+		(route: any) => route.method === method && route.path === path
+	)
+	if (!route) throw new Error('route not planned')
+	return route.program.content.trace?.phases ?? 0
 }
 
 const phaseEvents = [
@@ -26,46 +28,24 @@ const phaseEvents = [
 	'error'
 ] as const
 
-function eventCount(src: string, event: string): number {
-	let n = 0
-	let i = 0
-	const needle = `event:'${event}'`
-	while ((i = src.indexOf(needle, i)) !== -1) {
-		n++
-		i += needle.length
-	}
-	return n
-}
-
-function perfNowCount(src: string): number {
-	let n = 0
-	let i = 0
-	while ((i = src.indexOf('performance.now(', i)) !== -1) {
-		n++
-		i += 'performance.now('.length
-	}
-	return n
-}
+const observes = (phases: number, event: TraceEvent) =>
+	!!(phases & (1 << traceEventIndex[event]))
 
 describe('trace subscription gating', () => {
-	it('instruments only the subscribed phase', async () => {
-		const src = await routeSource(
+	it('uses the full phase mask for a static subscription', async () => {
+		const phases = await routeTracePhases(
 			new Elysia()
 				.trace(({ onHandle }) => onHandle(() => {}))
 				.get('/', () => 'hi')
 		)
 
-		expect(eventCount(src, 'handle')).toBeGreaterThan(0)
-		for (const event of phaseEvents)
-			if (event !== 'handle') expect(eventCount(src, event)).toBe(0)
-
-		expect(perfNowCount(src)).toBeLessThan(4)
+		for (const event of phaseEvents) expect(observes(phases, event)).toBe(true)
 	})
 
-	it('runs a trace without instrumenting unused phases', async () => {
+	it('runs a trace without source-level phase analysis', async () => {
 		let ran = false
 
-		const src = await routeSource(
+		const phases = await routeTracePhases(
 			new Elysia()
 				.trace(({ set }) => {
 					ran = true
@@ -74,8 +54,7 @@ describe('trace subscription gating', () => {
 				.get('/', () => 'hi')
 		)
 
-		for (const event of phaseEvents) expect(eventCount(src, event)).toBe(0)
-		expect(perfNowCount(src)).toBe(0)
+		for (const event of phaseEvents) expect(observes(phases, event)).toBe(true)
 
 		const res = await new Elysia()
 			.trace(({ set }) => {
@@ -89,21 +68,19 @@ describe('trace subscription gating', () => {
 		expect(res.headers.get('x-trace')).toBe('seen')
 	})
 
-	it('a parse-only trace on a POST route instruments only parse', async () => {
-		const src = await routeSource(
+	it('uses the full phase mask for a parse-only subscription', async () => {
+		const phases = await routeTracePhases(
 			new Elysia()
 				.trace(({ onParse }) => onParse(() => {}))
 				.post('/', ({ body }) => 'hi'),
 			'POST'
 		)
 
-		expect(eventCount(src, 'parse')).toBeGreaterThan(0)
-		for (const event of phaseEvents)
-			if (event !== 'parse') expect(eventCount(src, event)).toBe(0)
+		for (const event of phaseEvents) expect(observes(phases, event)).toBe(true)
 	})
 
 	it('instruments every phase for a dynamic subscription', async () => {
-		const src = await routeSource(
+		const phases = await routeTracePhases(
 			new Elysia()
 				.trace((lifecycle: any) => {
 					const phase = (globalThis as any).__tracePick ?? 'Handle'
@@ -112,21 +89,19 @@ describe('trace subscription gating', () => {
 				.get('/', () => 'hi')
 		)
 
-		for (const event of phaseEvents)
-			expect(eventCount(src, event)).toBeGreaterThan(0)
+		for (const event of phaseEvents) expect(observes(phases, event)).toBe(true)
 	})
 
 	it('instruments every phase when the trace context escapes', async () => {
 		const register = (lifecycle: any) => lifecycle.onHandle(() => {})
 
-		const src = await routeSource(
+		const phases = await routeTracePhases(
 			new Elysia()
 				.trace((lifecycle: any) => register(lifecycle))
 				.get('/', () => 'hi')
 		)
 
-		for (const event of phaseEvents)
-			expect(eventCount(src, event)).toBeGreaterThan(0)
+		for (const event of phaseEvents) expect(observes(phases, event)).toBe(true)
 	})
 
 	it('fires the afterResponse span for an unmatched route', async () => {

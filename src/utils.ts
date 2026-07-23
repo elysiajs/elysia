@@ -18,6 +18,14 @@ import type {
 
 export const nullObject = () => Object.create(null)
 
+export function decodeURIComponentSafe(value: string) {
+	try {
+		return decodeURIComponent(value)
+	} catch {
+		return
+	}
+}
+
 export type DeriveEntry = Function | readonly [Function, 'mapDerive']
 
 export const mapDeriveEntry = (fn: Function): DeriveEntry => [fn, 'mapDerive']

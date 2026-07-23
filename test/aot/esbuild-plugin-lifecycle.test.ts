@@ -6,6 +6,12 @@ import * as esbuild from 'esbuild'
 import { aot } from '../../src/plugin/aot/esbuild'
 
 const APP = resolve(import.meta.dir, 'fixtures/esbuild-plugin-lifecycle-app.ts')
+const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/aot.ts')
+const RECONSTRUCT_FROM = resolve(
+	import.meta.dir,
+	'../../src/compile/aot-reconstruct.ts'
+)
+const COERCE_PLAN_FROM = resolve(import.meta.dir, '../../src/type/coerce-plan.ts')
 const state = globalThis as typeof globalThis & {
 	__elysiaEsbuildPluginLifecycleEvaluations?: number
 }
@@ -29,7 +35,21 @@ it('reuses setup artifacts for the initial build and regenerates on rebuild', as
 			platform: 'neutral',
 			external: ['node:*'],
 			logLevel: 'silent',
-			plugins: [aot(APP)]
+			plugins: [
+				aot(APP, {
+					registerFrom: REGISTER_FROM,
+					reconstructFrom: RECONSTRUCT_FROM
+				}),
+				{
+					name: 'elysia-aot-test-source-subpaths',
+					setup(build) {
+						build.onResolve(
+							{ filter: /^elysia\/coerce-plan$/ },
+							() => ({ path: COERCE_PLAN_FROM })
+						)
+					}
+				}
+			]
 		})
 
 		expect(state.__elysiaEsbuildPluginLifecycleEvaluations).toBe(1)

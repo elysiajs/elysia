@@ -9,12 +9,12 @@ import { Elysia, t } from '../../src'
 import { validationPlan } from '../../src/experimental/validation-plan'
 import { Validator } from '../../src/validator'
 import { Compiled } from '../../src/compile/aot'
+import { createAppPlanAotPayload } from '../../src/compile/app-plan-aot'
 import {
 	beginValidatorCapture,
-	endValidatorCapture,
-	endHandlerCapture,
-	endWSCapture
+	endValidatorCapture
 } from '../../src/compile/aot-capture'
+import { captureArtifacts } from '../../src/plugin/aot/source'
 
 /** A child process proves frozen validation works before TypeBox is initialized. */
 
@@ -42,7 +42,6 @@ function capture(schema: any) {
 	;(app as any).compile()
 
 	const captured = endValidatorCapture()
-	endHandlerCapture()
 	delete process.env.ELYSIA_AOT_BUILD
 
 	return captured.filter((c) => c.slot === 'body')
@@ -60,28 +59,27 @@ function captureQuery(schema: any) {
 	;(app as any).compile()
 
 	const captured = endValidatorCapture()
-	endHandlerCapture()
 	delete process.env.ELYSIA_AOT_BUILD
 
 	return captured.filter((c) => c.slot === 'query')
 }
 
-function captureWS(schema: any) {
-	process.env.ELYSIA_AOT_BUILD = '1'
-	beginValidatorCapture()
-
-	const app = new Elysia().ws(PATH, {
+async function captureWS(schema: any) {
+	const artifacts = await captureArtifacts(new Elysia().ws(PATH, {
 		body: schema,
 		message() {}
-	})
-	;(app as any).compile()
-
-	const captured = endValidatorCapture()
-	endHandlerCapture()
-	endWSCapture()
-	delete process.env.ELYSIA_AOT_BUILD
-
-	return captured.filter((c) => c.method === 'WS' && c.slot === 'body')
+	}))
+	const plan = artifacts.appPlan!
+	return {
+		validators: artifacts.validators.filter(
+			(c) => c.method === 'WS' && c.slot === 'body'
+		),
+		registration: {
+			fingerprint: artifacts.fingerprint,
+			payload: createAppPlanAotPayload(plan),
+			identity: plan.wsRoutes[0]!.validators[0]!
+		}
+	}
 }
 
 function writePayload(
@@ -89,13 +87,22 @@ function writePayload(
 	schema: unknown,
 	cases: unknown[],
 	method = METHOD,
-	slot: 'body' | 'query' = 'body'
+	slot: 'body' | 'query' = 'body',
+	registration?: unknown
 ) {
 	dir = mkdtempSync(join(tmpdir(), 'ely-bridge-free-'))
 	const file = join(dir, 'payload.json')
 	writeFileSync(
 		file,
-		JSON.stringify({ captured, schema, cases, method, path: PATH, slot })
+		JSON.stringify({
+			captured,
+			schema,
+			cases,
+			method,
+			path: PATH,
+			slot,
+			registration
+		})
 	)
 	return file
 }
@@ -224,10 +231,10 @@ describe('frozen validation without a TypeBox bridge', () => {
 		})
 	})
 
-	it('builds a WebSocket route before its validator can touch the bridge', () => {
-		const captured = captureWS(t.Object({ message: t.String() }))
+	it('rejects an approximate WS schema before unwired validator construction', async () => {
+		const captured = await captureWS(t.Object({ message: t.String() }))
 		const file = writePayload(
-			captured,
+			captured.validators,
 			{
 				'~kind': 'Object',
 				type: 'object',
@@ -237,19 +244,19 @@ describe('frozen validation without a TypeBox bridge', () => {
 				required: ['message']
 			},
 			[],
-			'WS'
+			'WS',
+			'body',
+			captured.registration
 		)
 
 		const { proc, parsed } = runChild(file, { USE_WS_BUILD: '1' })
 
-		expect(proc.status, proc.stderr).toBe(0)
+		expect(proc.status).not.toBe(0)
+		expect(proc.stderr).toContain('AppPlan fingerprint mismatch')
 		expect(parsed.BRIDGE).toBe('unwired')
 		expect(parsed.READY).toBe(false)
 		expect(parsed.READY_BEFORE_BUILD).toBe(false)
-		expect(parsed.RESULT).toEqual({
-			reconstructed: true,
-			routeValidatorTouched: false
-		})
+		expect(parsed.RESULT).toBeUndefined()
 	})
 
 	it('rebuilds an experimental query plan in an unwired process', () => {

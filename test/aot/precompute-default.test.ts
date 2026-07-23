@@ -8,7 +8,12 @@ import {
 	endValidatorCapture
 } from '../../src/compile/aot-capture'
 import { compileToSource } from '../../src/plugin/aot/source'
-import { claimManifest, materialise, registerManifest } from './_manifest'
+import {
+	claimManifest,
+	evaluateAppPlanValidators,
+	materialise,
+	registerManifest
+} from './_manifest'
 import { req } from '../utils'
 
 /** Frozen defaults must match live validation without runtime TypeBox setup. */
@@ -37,7 +42,7 @@ const makeFrozen = (schema: any, m: any) => {
 	return new TypeBoxValidator(schema, {
 		aot: { method: 'POST', path: PATH },
 		slot: SLOT,
-		app: claimManifest({ validators: m })
+		frozen: m.POST![PATH]![SLOT]
 	}) as any
 }
 
@@ -292,7 +297,7 @@ describe('AOT default preallocation', () => {
 			aot: { method: 'POST', path: PATH },
 			slot: SLOT,
 			normalize: false,
-			app: claimManifest({ validators: m })
+			frozen: m.POST![PATH]![SLOT]
 		}) as any
 		const a = frozen.FromSync(undefined) as any
 		a.tags.push('LEAK')
@@ -469,14 +474,7 @@ describe('AOT default preallocation', () => {
 				)
 				.then((r) => r.text())
 
-		const evalValidators = (src: string): any =>
-			new Function(
-				src
-					.replace('export const validators', 'const validators')
-					.replace('export const handlers', 'const handlers')
-					.replace('export default validators', 'return validators')
-					.replace(/^import .*$/gm, '')
-			)()
+		const evalValidators = evaluateAppPlanValidators
 
 		process.env.ELYSIA_AOT_BUILD = '1'
 		let src: string
@@ -487,7 +485,7 @@ describe('AOT default preallocation', () => {
 		}
 
 		Validator.clear()
-		registerManifest({ validators: evalValidators(src) })
+		registerManifest({ validators: evalValidators(src) }, build())
 		const frozen = build()
 		frozen.compile()
 
@@ -510,14 +508,7 @@ describe('AOT default preallocation', () => {
 
 /** Frozen and live compilation agree on nested and array element defaults. */
 describe('AOT default preallocation — live and frozen parity', () => {
-	const evalManifest = (src: string): any =>
-		new Function(
-			src
-				.replace('export const validators', 'const validators')
-				.replace('export const handlers', 'const handlers')
-				.replace('export default validators', 'return validators')
-				.replace(/^import .*$/gm, '')
-		)()
+	const evalManifest = evaluateAppPlanValidators
 
 	const CASES: Array<{
 		name: string
@@ -662,7 +653,7 @@ describe('AOT default preallocation — live and frozen parity', () => {
 		}
 
 		Validator.clear()
-		registerManifest({ validators: evalManifest(src) })
+		registerManifest({ validators: evalManifest(src) }, build())
 		const frozen = build()
 		frozen.compile()
 
@@ -720,14 +711,7 @@ describe('AOT default preallocation — source emit', () => {
 			({ body }) => body
 		)
 
-	const evalManifest = (src: string): any =>
-		new Function(
-			src
-				.replace('export const validators', 'const validators')
-				.replace('export const handlers', 'const handlers')
-				.replace('export default validators', 'return validators')
-				.replace(/^import .*$/gm, '')
-		)()
+	const evalManifest = evaluateAppPlanValidators
 
 	it('emits valid ps/pd/pod into the manifest', async () => {
 		process.env.ELYSIA_AOT_BUILD = '1'
@@ -773,7 +757,7 @@ describe('AOT default preallocation — source emit', () => {
 		}
 
 		Validator.clear()
-		registerManifest({ validators: evalManifest(src) })
+		registerManifest({ validators: evalManifest(src) }, build())
 		const frozen = build()
 		frozen.compile()
 

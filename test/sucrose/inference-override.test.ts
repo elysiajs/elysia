@@ -2,17 +2,15 @@
 import { describe, expect, it } from 'bun:test'
 
 import { Elysia, t } from '../../src'
-import {
-	RouteEffect,
-	isEmptyPipelineHook,
-	routeDescriptors
-} from '../../src/compile/handler/descriptor'
+import { RouteEffect } from '../../src/compile/handler/descriptor'
 
-const descriptor = (app: Elysia, path: string, method = 'GET') => {
+const program = (app: Elysia, path: string, method = 'GET') => {
 	app.compile()
-	const value = routeDescriptors.get(app as any)?.get(`${method} ${path}`)
-	if (!value) throw new Error(`missing descriptor for ${method} ${path}`)
-	return value
+	const route = app['~generation']!.plan.httpRoutes.find(
+		(route) => route.method === method && route.path === path
+	)
+	if (!route) throw new Error(`missing AppPlan route for ${method} ${path}`)
+	return route.program.content as any
 }
 
 describe('inference overrides', () => {
@@ -42,10 +40,10 @@ describe('inference overrides', () => {
 				body: '{"value":1}'
 			})
 		)
-		const value = descriptor(app, '/override', 'POST')
+		const value = program(app, '/override', 'POST')
 
 		expect(value.effectMask).toBe(0)
-		expect(value.hasBody).toBe(true)
+		expect(value.body.enabled).toBe(true)
 		expect(await response.json()).toEqual({
 			body: { value: 1 }
 		})
@@ -60,13 +58,11 @@ describe('inference overrides', () => {
 				({ query }) => query.q
 			)
 
-		const response = await app.handle(
-			new Request('http://localhost/hook?q=ok')
-		)
-		const value = descriptor(app, '/hook')
+		const response = await app.handle(new Request('http://localhost/hook?q=ok'))
+		const value = program(app, '/hook')
 
 		expect(value.effectMask).toBe(RouteEffect.Query)
-		expect(value.responseMode).toBe('compact')
+		expect(value.contextMode).toBe('compact')
 		expect(await response.text()).toBe('ok')
 	})
 
@@ -93,10 +89,10 @@ describe('inference overrides', () => {
 				body: '{"value":1}'
 			})
 		)
-		const value = descriptor(app as any, '/compact-override', 'POST')
+		const value = program(app as any, '/compact-override', 'POST')
 
 		expect(value.effectMask).toBe(0)
-		expect(value.hasBody).toBe(true)
+		expect(value.body.enabled).toBe(true)
 		expect(observedHeaders).toBeUndefined()
 		expect(await response.json()).toEqual({
 			value: 1
@@ -120,7 +116,7 @@ describe('inference overrides', () => {
 			new Request('http://localhost/validator?id=ok')
 		)
 
-		expect(descriptor(app, '/validator').effectMask).toBe(RouteEffect.Query)
+		expect(program(app, '/validator').effectMask).toBe(RouteEffect.Query)
 		expect(await response.text()).toBe('ok')
 	})
 
@@ -144,19 +140,13 @@ describe('inference overrides', () => {
 				body: '{"value":1}'
 			})
 		)
-		const value = descriptor(app, '/snapshot', 'POST')
+		const value = program(app, '/snapshot', 'POST')
 
 		expect(value.effectMask).toBe(0)
-		expect(value.hasBody).toBe(true)
+		expect(value.body.enabled).toBe(true)
 		expect(await response.json()).toEqual({
 			body: { value: 1 }
 		})
-	})
-
-	it('keeps inference metadata eligible for static promotion', () => {
-		expect(
-			isEmptyPipelineHook({ inference: { query: false } } as any)
-		).toBe(true)
 	})
 
 	it('keeps candidate zero-parameter routes compact', async () => {
@@ -165,13 +155,11 @@ describe('inference overrides', () => {
 			experimental: { inference: 'candidate' }
 		}).get('/compact', () => 'ok')
 
-		const response = await app.handle(
-			new Request('http://localhost/compact')
-		)
-		const value = descriptor(app, '/compact')
-		expect(value.responseMode).toBe('compact')
+		const response = await app.handle(new Request('http://localhost/compact'))
+		const value = program(app, '/compact')
+		expect(value.contextMode).toBe('compact')
 		expect(value.effectMask).toBe(0)
-		expect(value.hasBody).toBe(false)
+		expect(value.body.enabled).toBe(false)
 		expect(value.headerKeys).toEqual([])
 		expect(await response.text()).toBe('ok')
 	})

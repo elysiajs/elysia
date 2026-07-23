@@ -9,13 +9,13 @@ import {
 } from '../../src/compile/aot'
 import {
 	endValidatorCapture,
-	endHandlerCapture,
 	getCompilerSessionDiagnostics
 } from '../../src/compile/aot-capture'
 import { compileToSource } from '../../src/plugin/aot/source'
 import {
 	countTypeBoxValidatorSlots,
-	generateCompiledArtifacts
+	generateCompiledArtifacts,
+	generateCompiledArtifactsIsolated
 } from '../../src/plugin/aot/core'
 
 /** The AOT target selects the runtime-specific header extraction it emits. */
@@ -67,7 +67,6 @@ const WIRED_APP = resolve(import.meta.dir, 'fixtures/wired-vite-app.ts')
 beforeEach(() => {
 	process.env.ELYSIA_AOT_BUILD = '1'
 	endValidatorCapture()
-	endHandlerCapture()
 })
 afterEach(() => {
 	delete process.env.ELYSIA_AOT_BUILD
@@ -89,43 +88,37 @@ describe('AOT target-specific header extraction', () => {
 	})
 
 	it('counts only the last duplicate route when checking workerd coverage', async () => {
-		const { mode, source } = await generateCompiledArtifacts(
+		const { source } = await generateCompiledArtifacts(
 			DUPLICATE_ROUTE_APP,
 			{ target: 'workerd' }
 		)
 
-		expect(mode).toBe('sealed')
 		expect(source).toContain('"winner" in value')
 		expect(source).not.toContain('"stale" in value')
 	})
 
 	it('resolves Standard Schema model refs before checking workerd coverage', async () => {
-		const { mode, stub } = await generateCompiledArtifacts(STANDARD_MODEL_APP, {
-			target: 'workerd'
-		})
-
-		expect(mode).toBe('sealed')
-		expect(stub.bridge).toBe(false)
+		await expect(
+			generateCompiledArtifacts(STANDARD_MODEL_APP, {
+				target: 'workerd'
+			})
+		).resolves.toHaveProperty('source')
 	})
 
 	it('resolves standalone Standard Schema model refs for workerd', async () => {
-		const { mode, stub } = await generateCompiledArtifacts(
-			STANDARD_STANDALONE_MODEL_APP,
-			{ target: 'workerd' }
-		)
-
-		expect(mode).toBe('sealed')
-		expect(stub.bridge).toBe(false)
+		await expect(
+			generateCompiledArtifacts(STANDARD_STANDALONE_MODEL_APP, {
+				target: 'workerd'
+			})
+		).resolves.toHaveProperty('source')
 	})
 
 	it('recognizes standalone Standard Schema response maps for workerd', async () => {
-		const { mode, stub } = await generateCompiledArtifacts(
-			STANDARD_STANDALONE_RESPONSE_APP,
-			{ target: 'workerd' }
-		)
-
-		expect(mode).toBe('sealed')
-		expect(stub.bridge).toBe(false)
+		await expect(
+			generateCompiledArtifacts(STANDARD_STANDALONE_RESPONSE_APP, {
+				target: 'workerd'
+			})
+		).resolves.toHaveProperty('source')
 	})
 
 	it('throws when workerd capture does not exactly cover validator slots', async () => {
@@ -196,9 +189,7 @@ describe('AOT target-specific header extraction', () => {
 			}
 
 			expect(shiftedCalls).toBeGreaterThan(0)
-			expect(String(thrown)).toContain(
-				'Missing: POST /shifted (body). Unexpected: POST /wrong (body).'
-			)
+			expect(String(thrown)).toContain('Validator image layout mismatch')
 		} finally {
 			setCaptureImpl(saved)
 		}
@@ -208,22 +199,28 @@ describe('AOT target-specific header extraction', () => {
 		await expect(
 			generateCompiledArtifacts(WIRED_APP, { target: 'workerd' })
 		).rejects.toThrow(
-			"requires a sealed AOT manifest, but validator reconstruction selected mode 'wired'"
+			'requires every TypeBox validator to have a complete bridge-free AppPlan image'
 		)
 	})
 
-	it('rejects workerd strip:false before importing or capturing', async () => {
+	it('rejects every removed strip value before importing or spawning', async () => {
 		const importCounter = Symbol.for('elysia.test.workerd-eager-imports')
 		delete (globalThis as any)[importCounter]
+		const error =
+			'[elysia-aot] option "strip" was removed; AOT always emits one complete AppPlan image.'
+
+		for (const strip of [false, true, 'auto'] as const)
+			await expect(
+				generateCompiledArtifacts(EAGER_COMPILE_APP, {
+					strip
+				} as any)
+			).rejects.toThrow(error)
 
 		await expect(
-			generateCompiledArtifacts(EAGER_COMPILE_APP, {
-				target: 'workerd',
+			generateCompiledArtifactsIsolated(EAGER_COMPILE_APP, {
 				strip: false
-			})
-		).rejects.toThrow(
-			'cannot disable AOT stripping because runtime handler and validator compilation is unavailable on workerd'
-		)
+			} as any)
+		).rejects.toThrow(error)
 
 		expect((globalThis as any)[importCounter]).toBeUndefined()
 		expect(getCompilerSessionDiagnostics().active).toBe(false)
@@ -240,33 +237,33 @@ describe('AOT target-specific header extraction', () => {
 		).resolves.toBeDefined()
 	})
 
-	it("emits Object.fromEntries for target: 'workerd' even when built on Bun", async () => {
+	it("records web-standard adapter identity for target: 'workerd'", async () => {
 		const src = await compileToSource(build() as any, {
 			register: false,
 			target: 'workerd'
 		})
 
-		expect(src).toInclude(FROM_ENTRIES)
-		expect(src).not.toInclude(TOJSON)
+		expect(src).toInclude('"adapter":{"target":"web-standard"')
+		expect(src).not.toMatch(/export const handlers|const _h\d+/)
 	})
 
-	it("emits Object.fromEntries for target: 'node'", async () => {
+	it("records web-standard adapter identity for target: 'node'", async () => {
 		const src = await compileToSource(build() as any, {
 			register: false,
 			target: 'node'
 		})
 
-		expect(src).toInclude(FROM_ENTRIES)
-		expect(src).not.toInclude(TOJSON)
+		expect(src).toInclude('"adapter":{"target":"web-standard"')
+		expect(src).not.toMatch(/export const handlers|const _h\d+/)
 	})
 
-	it("emits Headers.toJSON for target: 'bun'", async () => {
+	it("records Bun adapter identity for target: 'bun'", async () => {
 		const src = await compileToSource(build() as any, {
 			register: false,
 			target: 'bun'
 		})
 
-		expect(src).toInclude(TOJSON)
-		expect(src).not.toInclude(FROM_ENTRIES)
+		expect(src).toInclude('"adapter":{"target":"bun"')
+		expect(src).not.toMatch(/export const handlers|const _h\d+/)
 	})
 })

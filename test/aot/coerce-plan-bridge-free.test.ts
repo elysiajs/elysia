@@ -3,17 +3,16 @@ import { describe, it, expect, afterEach } from 'bun:test'
 
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
-import { Compiled, type ProgramId } from '../../src/compile/aot'
+import { Compiled } from '../../src/compile/aot'
 import {
 	beginValidatorCapture,
-	endValidatorCapture,
-	endHandlerCapture
+	endValidatorCapture
 } from '../../src/compile/aot-capture'
 import { RouteValidator } from '../../src/validator/route'
 import { buildFrozenRouteValidator } from '../../src/compile/handler/frozen-validator'
 import { clearCoerceLeafCache } from '../../src/type/coerce-plan'
 
-import { claimManifest, materialise } from './_manifest'
+import { claimManifest, materialise, type ClaimedManifest } from './_manifest'
 
 /** Captured coercion plans rebuild query schemas without TypeBox. */
 
@@ -28,7 +27,6 @@ function freeze(schema: any) {
 	;(app as any).compile()
 
 	const captured = endValidatorCapture()
-	endHandlerCapture()
 	delete process.env.ELYSIA_AOT_BUILD
 
 	Compiled.clear()
@@ -39,7 +37,7 @@ function freeze(schema: any) {
 }
 
 // program claimed by the latest `freeze()`/`freezeSlot()`
-let claimed: { ['~programId']: ProgramId }
+let claimed: ClaimedManifest
 
 const hook = (schema: any) => ({ query: schema })
 const root = () => claimed as any
@@ -49,12 +47,19 @@ const wired = (schema: any) =>
 		hook(schema) as any,
 		{
 			aot: { method: METHOD, path: PATH },
-			app: claimed
+			app: claimed,
+			frozenSlots: claimed.validators[METHOD]![PATH]!
 		} as any
 	)
 
 const bridgeFree = (schema: any) =>
-	buildFrozenRouteValidator(hook(schema) as any, root(), METHOD, PATH)
+	buildFrozenRouteValidator(
+		hook(schema) as any,
+		root(),
+		METHOD,
+		PATH,
+		claimed.validators[METHOD]![PATH]!
+	)
 
 interface Outcome {
 	ok: boolean
@@ -242,7 +247,6 @@ function freezeSlot(slot: 'query' | 'body', schema: any) {
 	;(app as any).compile()
 
 	const captured = endValidatorCapture()
-	endHandlerCapture()
 	delete process.env.ELYSIA_AOT_BUILD
 
 	Compiled.clear()
@@ -279,7 +283,8 @@ describe('uncapturable coercion plans', () => {
 					{ [slot]: schema } as any,
 					root(),
 					slot === 'body' ? 'POST' : 'GET',
-					PATH
+					PATH,
+					claimed.validators[slot === 'body' ? 'POST' : 'GET']![PATH]!
 				)
 			}).not.toThrow()
 			expect(result).toBeUndefined()

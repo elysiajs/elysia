@@ -7,7 +7,7 @@ import {
 	beginValidatorCapture,
 	endValidatorCapture
 } from '../../src/compile/aot-capture'
-import { claimManifest, materialise, registerManifest } from './_manifest'
+import { claimManifest, materialise } from './_manifest'
 import { post } from '../utils'
 
 /** Frozen checks are selected by method, path, and validator slot. */
@@ -54,30 +54,6 @@ describe('frozen validator checks', () => {
 		expect(m.GET?.['/q']?.query).toBeDefined()
 	})
 
-	it('binds the captured check before serving requests', async () => {
-		const m = captureManifest(bodyApp)
-		Validator.clear()
-
-		let frozenBound = false
-		const orig = m.POST!['/body']!.body!.cm!
-		m.POST!['/body']!.body!.cm = ((...d: any[]) => {
-			frozenBound = true
-			return (orig as any)(...d)
-		}) as any
-		registerManifest({ validators: m })
-
-		const app = bodyApp()
-		app.compile()
-		expect(frozenBound).toBe(true)
-
-		const ok = await app.handle(post('/body', { hello: 'world' }))
-		expect(ok.status).toBe(200)
-		await expect(ok.json()).resolves.toEqual({ hello: 'world' })
-
-		const bad = await app.handle(post('/body', { hello: 123 }))
-		expect(bad.status).toBe(422)
-	})
-
 	it('validates without a runtime TypeBox compiler', () => {
 		const m = captureManifest(bodyApp)
 		Validator.clear()
@@ -85,7 +61,7 @@ describe('frozen validator checks', () => {
 		const v = Validator.create(t.Object({ hello: t.String() }) as any, {
 			aot: { method: 'POST', path: '/body' },
 			slot: 'body',
-			app: claimManifest({ validators: m })
+			frozen: m.POST!['/body']!.body
 		}) as any
 
 		expect(v.tb).toBeUndefined()

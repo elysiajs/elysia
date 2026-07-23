@@ -1,26 +1,60 @@
-import Memoirist from 'memoirist'
+import Memoirist, {
+	type Node as MemoiristNode,
+	type ParamNode as MemoiristParamNode
+} from 'memoirist'
 
-import { applyHoc, createFetchHandler } from './handler/fetch'
 import {
-	compileHandler,
 	composeRouteHook,
 	localMacroRoot,
+	prepareBalancedHttpRoute,
 	resolveLocalHook
 } from './compile/handler'
+import { compileBalancedHttpRoute } from './compile/handler/runtime'
+import {
+	lowerBalancedHttpAppPlan,
+	planBalancedHttpRoute,
+	sealBalancedHttpRoutes,
+	BalancedHttpUnsupportedError,
+	type BalancedHttpRuntimePlan
+} from './compile/handler/balanced-program'
+import {
+	createAppPlan,
+	type ExternalBindingInput,
+	type ValidatorSlotInput,
+	type WSRoutePlanReferenceInput
+} from './compile/app-plan'
+import {
+	prepareAppPlanAotPlanningInputs,
+	type PendingAppPlanAotClaim
+} from './compile/app-plan-aot'
+import { activateFrozenAppPlanValidators } from './compile/handler/frozen-validator'
+import {
+	lowerApplicationRuntime,
+	planApplicationRuntime
+} from './compile/application-plan'
+import {
+	resolveRouteTable,
+	type ResolvedDynamicRouter
+} from './compile/route-resolution'
 import { clearAuthoringAnalysisCaches } from './compile/analysis-cache'
 import {
 	beginCompilerSession,
-	Compiled,
 	createAotFingerprint,
 	createProgramId,
 	endCompilerSession,
 	Capture,
 	type AotFingerprint,
 	type CompilerSession,
-	type ProgramId
+	type FrozenValidator,
+	type ProgramId,
+	type ValidatorSlot
 } from './compile/aot'
+import {
+	createValidatorSlotInput,
+	validatorSemantics
+} from './compile/validator-semantics'
 import { buildWebSocketRuntime, buildWSRoute } from './ws/route'
-import type { FrozenWSRouteResult } from './ws/runtime'
+import type { FrozenWSRouteResult, WSRoutePlan } from './ws/runtime'
 import type {
 	WSLocalHook,
 	WSMessageHandler,
@@ -30,7 +64,6 @@ import type {
 import { isProduction, ListenCallback, Serve, Server } from './universal'
 import { isBun } from './universal/constants'
 
-import { isDynamicRegex, needEncodeRegex } from './constants'
 import {
 	buildRouteTable,
 	compactRouteTable,
@@ -43,7 +76,7 @@ import {
 	type Generation,
 	type RuntimeBindings
 } from './generation'
-import { buildNativeStaticRoutes, BunAdapter } from './adapter/bun'
+import { BunAdapter } from './adapter/bun'
 import {
 	clonePlainDeep,
 	clonePlainDecorators,
@@ -76,6 +109,10 @@ import type { AnySchema } from './type'
 import { Ref as tRef } from './type/bridge'
 import { snapshotHookSchemas, snapshotSchema } from './schema-snapshot'
 import { detachValidatorCompiler } from './validator'
+import {
+	readRouteQueryPlan,
+	sealRouteValidatorExecutors
+} from './validator/route'
 
 import type { TraceHandler } from './trace'
 
@@ -153,11 +190,15 @@ import type {
 	GlobalHookReturn,
 	ScopedHookReturn,
 	ScopedMapDeriveReturn,
-	GuardHookSingleton,
-	StaticMapAliases
+	GuardHookSingleton
 } from './types'
 import type { ElysiaStatus } from './error'
-import type { Context, LifecycleContext, ErrorContext } from './context'
+import {
+	invalidateContextCache,
+	type Context,
+	type LifecycleContext,
+	type ErrorContext
+} from './context'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
 
@@ -180,8 +221,156 @@ function freezePlainDeep<T>(value: T, seen = new WeakSet<object>()): T {
 	return Object.freeze(value)
 }
 
-const canRegisterLoose = (path: string, isDynamic: boolean) =>
-	!isDynamic && (path.length === 0 || path.charCodeAt(path.length - 1) === 47)
+const wsPlanReference = (
+	path: string,
+	plan: WSRoutePlan,
+	options: Record<string, unknown>
+): WSRoutePlanReferenceInput => {
+	const bindings: ExternalBindingInput[] = []
+	const bind = (role: ExternalBindingInput['role'], value: unknown) => {
+		if (value !== undefined) bindings.push({ role, value })
+	}
+	bind('wsOpen', plan.openHandler)
+	bind('wsMessage', plan.messageHandler)
+	bind('wsDrain', plan.drainHandler)
+	bind('wsClose', plan.closeHandler)
+	bind('wsPing', plan.pingHandler)
+	bind('wsPong', plan.pongHandler)
+	bind('wsUpgrade', plan.upgradeHook)
+	for (const value of plan.transforms) bind('transform', value)
+	for (const value of plan.allBeforeHandles) bind('beforeHandle', value)
+	for (const value of plan.afterHandles) bind('afterHandle', value)
+	for (const value of plan.mapResponses) bind('mapResponse', value)
+	for (const value of plan.afterResponses) bind('afterResponse', value)
+	for (const value of plan.errorHandlers) bind('error', value)
+
+	const validators: ValidatorSlotInput[] = []
+	const addValidator = (slot: ValidatorSlot, validator: object) => {
+		validators.push(
+			createValidatorSlotInput(slot, validatorSemantics(validator), {
+				validator,
+				queryPlan:
+					slot === 'query'
+						? readRouteQueryPlan(plan.validators)
+						: undefined
+			})
+		)
+	}
+	for (const role of ['body', 'headers', 'params', 'query', 'cookie'] as const) {
+		const validator = plan.validators[role]
+		if (validator) addValidator(role, validator)
+	}
+	if (plan.validators.response)
+		for (const status of Object.keys(plan.validators.response).sort(
+			(a, b) => Number(a) - Number(b)
+		)) {
+			addValidator(
+				`response:${status}` as ValidatorSlot,
+				plan.validators.response[Number(status)]!
+			)
+		}
+
+	return {
+		path,
+		plan,
+		version: 1,
+		content: {
+			certifiedSyncMessage: plan.certifiedSyncMessage,
+			needsMessageView: plan.needsMessageView,
+			validators: validators.map((validator) => validator.slot),
+			options: clonePlainDeep(options)
+		},
+		bindings,
+		validators
+	}
+}
+
+const nativeStaticMethods = new Set([
+	'GET',
+	'POST',
+	'PUT',
+	'DELETE',
+	'PATCH',
+	'HEAD',
+	'OPTIONS'
+])
+
+const isNativeStaticPlan = (plan: BalancedHttpRuntimePlan) => {
+	const hooks = plan.program.hooks
+	return (
+		plan.handler instanceof Response &&
+		plan.program.body.enabled === false &&
+		plan.program.validators.length === 0 &&
+		plan.program.cookie === null &&
+		plan.program.trace === null &&
+		hooks.transforms === 0 &&
+		hooks.beforePrefix === 0 &&
+		hooks.before === 0 &&
+		hooks.after === 0 &&
+		hooks.map === 0 &&
+		hooks.afterResponse === 0 &&
+		hooks.error === 0
+	)
+}
+
+interface GenerationCandidate {
+	readonly generation: Generation
+	readonly map: AnyElysia['~map']
+	readonly router: AnyElysia['~router']
+	readonly routeTable: RouteTable
+	readonly hasDynamicWS: boolean
+	readonly aotFingerprint: AotFingerprint
+	readonly runtimeBindings: RuntimeBindings
+	readonly aotClaim: PendingAppPlanAotClaim | undefined
+}
+
+const bindResolvedRouter = (
+	resolved: ResolvedDynamicRouter | undefined,
+	handlers: readonly (CompiledHandler | undefined)[]
+): Memoirist<CompiledHandler> | undefined => {
+	if (!resolved) return
+	const bindStore = (id: number | null) =>
+		id === null ? null : handlers[id]!
+	const cloneParam = (
+		param: MemoiristParamNode<number>
+	): MemoiristParamNode<CompiledHandler> => ({
+		store: bindStore(param.store),
+		storeNames: param.storeNames?.slice() ?? null,
+		inert: param.inert ? cloneNode(param.inert) : null
+	})
+	const cloneNode = (
+		node: MemoiristNode<number>
+	): MemoiristNode<CompiledHandler> => {
+		let inert: Record<number, MemoiristNode<CompiledHandler>> | null = null
+		if (node.inert) {
+			const clonedInert: Record<
+				number,
+				MemoiristNode<CompiledHandler>
+			> = nullObject()
+			for (const key in node.inert)
+				clonedInert[+key] = cloneNode(node.inert[key]!)
+			inert = clonedInert
+		}
+		return {
+			part: node.part,
+			store: bindStore(node.store),
+			storeNames: node.storeNames?.slice() ?? null,
+			inert,
+			params: node.params ? cloneParam(node.params) : null,
+			wildcardStore: bindStore(node.wildcardStore),
+			wildcardStoreNames: node.wildcardStoreNames?.slice() ?? null
+		}
+	}
+	const router = new Memoirist<CompiledHandler>({
+		loosePath: resolved.loosePath,
+		onParam: resolved.onParam
+	})
+	const root = nullObject() as typeof router.root
+	for (const method in resolved.root)
+		root[method] = cloneNode(resolved.root[method]!)
+	router.root = root
+	return router
+}
 
 type WithDecorator<
 	Singleton extends SingletonBase,
@@ -442,8 +631,6 @@ export class Elysia<
 		this.#registerRoute(route)
 		return this
 	}
-
-	#compiled?: CompiledHandler[]
 
 	// Memoized `routes` getter output
 	#cachedRoutes?: PublicRoute[]
@@ -4069,9 +4256,7 @@ export class Elysia<
 			app.#scopeParent !== undefined ||
 			app.#pluginMacros !== undefined ||
 			app.#macroBaseline !== undefined ||
-			app.#compiled !== undefined ||
-			app.#fetchFn !== undefined ||
-			app.#routerBuilt
+			app.#fetchFn !== undefined
 		)
 			return route[3]
 
@@ -4153,10 +4338,17 @@ export class Elysia<
 		if (this.#ready !== sentinel) return
 
 		this.#ready = undefined
-		this.#fetchFn = undefined
-		this.#routerBuilt = false
+		if (this.#error !== undefined) return
 
-		this.#buildRouter()
+		this.#fetchFn = undefined
+
+		try {
+			if (this['~generation']) this.#prepareFetch()
+		} catch (error) {
+			this.#error ??= error
+			console.error(error)
+			throw error
+		}
 	}
 
 	#add(
@@ -4188,7 +4380,7 @@ export class Elysia<
 	}
 
 	#assertMutable(api: string) {
-		if (this['~generation'] === undefined) return
+		if (this['~generation']?.sealed !== true) return
 
 		throw new Error(`[Elysia] .${api}() called after the app was sealed`)
 	}
@@ -4204,9 +4396,7 @@ export class Elysia<
 
 		this.#cachedHistory = undefined
 		this.#cachedRoutes = undefined
-		this.#compiled = undefined
 		this.#fetchFn = undefined
-		this.#routerBuilt = false
 	}
 
 	model<const Name extends string, const Model extends AnySchema>(
@@ -5453,139 +5643,17 @@ export class Elysia<
 		return placeholder as any
 	}
 
-	#initMap() {
-		// monomorphic access is faster, so we ensure the shape of the map is consistent
-		this['~map'] ??= {
-			GET: undefined as any,
-			POST: undefined as any,
-			PUT: undefined as any,
-			DELETE: undefined as any,
-			PATCH: undefined as any,
-			// Cache check, not uncommon
-			HEAD: undefined as any,
-			// CORS preflight, usual
-			OPTIONS: undefined as any
-		}
-	}
-
 	/**
-	 * Force all route handlers to compile immediately (sets `precompile: true`
-	 * on the config and triggers a fresh build of the fetch handler).
+	 * Seal the complete runtime image immediately.
 	 */
 	compile() {
 		if (this['~generation']) return this
 		this.#assertMutable('compile')
-		this['~config'] ??= nullObject()
-		this['~config']!.precompile = true
-		this.#routerBuilt = false
-
-		this.#compiled = undefined
 		this.#fetchFn = undefined
 
 		void this.fetch
 
 		return this
-	}
-
-	handler(
-		index: number,
-		immediate: boolean | undefined = this['~config']?.precompile,
-		route?: InternalRoute,
-		precomputedStatic?: Response,
-		aliases?: StaticMapAliases,
-		table?: RouteTable
-	): CompiledHandler {
-		if (this.#compiled?.[index]) return this.#compiled![index]
-
-		const compiled = (this.#compiled ??= new Array(this['~routes'].length))
-
-		if (immediate) {
-			const row = route ?? this['~routes'][index]
-			let handler: CompiledHandler
-
-			try {
-				handler = compileHandler(
-					row,
-					this,
-					precomputedStatic,
-					this['~runtimeBindings'].finalizeError
-				)
-			} catch (error) {
-				throw new Error(
-					`[Elysia] Failed to compile route ${row[0]} ${row[1]}: ${(error as Error)?.message ?? error}`,
-					{ cause: error }
-				)
-			}
-
-			compiled![index] = handler
-			this.#saveHandler(row[0], row[1], handler)
-
-			return handler
-		}
-
-		return this.#jitHandler(
-			index,
-			route ?? (table ? undefined : this['~routes'][index]),
-			precomputedStatic,
-			aliases,
-			table
-		)
-	}
-
-	#jitHandler(
-		index: number,
-		route: InternalRoute | undefined,
-		precomputedStatic?: Response,
-		aliases?: StaticMapAliases,
-		table?: RouteTable
-	): CompiledHandler {
-		return (context) => {
-			if (this.#compiled![index]) return this.#compiled![index](context)
-
-			const materialized = route ?? routeRow(table!, index)
-
-			let handler: CompiledHandler
-			try {
-				handler = compileHandler(
-					materialized,
-					this,
-					precomputedStatic,
-					this['~runtimeBindings'].finalizeError
-				)
-			} catch (error) {
-				const routeError = new Error(
-					`[Elysia] Failed to compile route ${materialized[0]} ${materialized[1]}: ${(error as Error)?.message ?? error}`,
-					{ cause: error }
-				)
-				const finalize = this['~finalizeError']
-				if (finalize) return finalize(context as Context, routeError)
-
-				throw routeError
-			}
-
-			this.#compiled![index] = handler
-
-			if (aliases) {
-				this.#initMap()
-
-				const map = (this['~map']![aliases.method] ??=
-					nullObject() as any)
-
-				for (let p = 0; p < aliases.paths.length; p++)
-					map[aliases.paths[p]] = handler
-			} else this.#saveHandler(materialized[0], materialized[1], handler)
-
-			return handler(context)
-		}
-	}
-
-	#saveHandler(method: string, path: string, handler: CompiledHandler) {
-		if (isDynamicRegex.test(path)) return
-
-		this.#initMap()
-
-		const map = (this['~map']![method] ??= nullObject() as any)
-		map[path] = handler
 	}
 
 	#chainRefMemo?: WeakMap<ChainNode, boolean>
@@ -5781,71 +5849,7 @@ export class Elysia<
 				checkSlots(schemas[s] as any)
 	}
 
-	#routerBuilt = false
-	#buildRouter() {
-		if (this.#routerBuilt) return
-
-		const compilerSession = beginCompilerSession(this)
-
-		const previousMap = this['~map']
-		const previousRouter = this['~router']
-		const previousCompiled = this.#compiled
-		const previousHasDynamicWS = this['~hasDynamicWS']
-		const config = this['~config'] as any
-		const hadWebsocket = !!config && Object.hasOwn(config, 'websocket')
-		const previousWebsocket = config?.websocket
-		const websocketSnapshot =
-			previousWebsocket && typeof previousWebsocket === 'object'
-				? { ...previousWebsocket }
-				: previousWebsocket
-
-		const previousGeneration = this['~generation']
-
-		this['~map'] = undefined
-		this['~router'] = undefined
-		this.#compiled = previousCompiled?.slice()
-		this['~hasDynamicWS'] = undefined
-		this['~generation'] = undefined
-		let buildSucceeded = false
-
-		try {
-			this.#buildRouterUnsafe()
-
-			const nextMap = this['~map']
-			if (previousMap && nextMap !== previousMap) {
-				Object.assign(previousMap, nextMap)
-				this['~map'] = previousMap
-			}
-
-			const nextRouter = this['~router']
-			if (previousRouter && nextRouter && nextRouter !== previousRouter) {
-				Object.assign(previousRouter, nextRouter)
-				this['~router'] = previousRouter
-			}
-
-			this.#routerBuilt = true
-
-			buildSucceeded = true
-		} catch (error) {
-			this['~map'] = previousMap
-			this['~router'] = previousRouter
-			this.#compiled = previousCompiled
-			this['~hasDynamicWS'] = previousHasDynamicWS
-			this['~generation'] = previousGeneration
-
-			if (config) {
-				this['~config'] = config
-				if (hadWebsocket) config.websocket = websocketSnapshot
-				else delete config.websocket
-			} else this['~config'] = undefined
-
-			throw error
-		} finally {
-			endCompilerSession(this, compilerSession, !buildSucceeded)
-		}
-	}
-
-	#runtimeConfig(): AnyElysia['~config'] {
+	#runtimeConfig(websocket = this['~config']?.websocket): AnyElysia['~config'] {
 		const config = this['~config']
 		if (!config) return
 
@@ -5853,7 +5857,7 @@ export class Elysia<
 			adapter: config.adapter,
 			serve: freezePlainDeep(clonePlainDeep(config.serve)),
 			strictPath: config.strictPath,
-			websocket: freezePlainDeep(clonePlainDeep(config.websocket)),
+			websocket: freezePlainDeep(clonePlainDeep(websocket)),
 			cookie: freezePlainDeep(clonePlainDeep(config.cookie)),
 			experimental: config.experimental?.cancellation
 				? { cancellation: config.experimental.cancellation }
@@ -5879,12 +5883,242 @@ export class Elysia<
 		}) as AnyElysia['~ext']
 	}
 
-	#publishGeneration(
-		nativeStatic?: Record<string, Record<string, Response>>
-	) {
+	#createGenerationCandidate(): GenerationCandidate {
+		invalidateContextCache(this)
+		const sealed = this.#pending === 0
 		const introspect =
 			this['~config']?.introspect === true || this['~introspect'] === true
-		const retain = isProduction() && !Capture.isAotBuildEnv()
+		const routeTable = buildRouteTable(this['~routes'])
+		const resolution = resolveRouteTable(
+			routeTable,
+			this['~config']?.strictPath === true
+		)
+		const runtimeBindings = createRuntimeBindings(
+			this['~runtimeBindings'].server
+		)
+		const aotFingerprint = createAotFingerprint()
+		const aotPlanning = resolution.declarationIds.length
+			? prepareAppPlanAotPlanningInputs()
+			: undefined
+		if ((this['~config'] as any)?.precompile === false)
+			throw new BalancedHttpUnsupportedError(
+				resolution.httpDeclarationIds.length
+					? routeTable.method[resolution.httpDeclarationIds[0]!]!
+					: '*',
+				resolution.httpDeclarationIds.length
+					? routeTable.path[resolution.httpDeclarationIds[0]!]!
+					: '*',
+				'lazy-precompile-false'
+			)
+		if (
+			(this['~config'] as any)?.experimental?.cancellation === 'compat'
+		)
+			throw new BalancedHttpUnsupportedError(
+				resolution.httpDeclarationIds.length
+					? routeTable.method[resolution.httpDeclarationIds[0]!]!
+					: '*',
+				resolution.httpDeclarationIds.length
+					? routeTable.path[resolution.httpDeclarationIds[0]!]!
+					: '*',
+				'compat-cancellation'
+			)
+
+		for (const id of resolution.declarationIds)
+			if (this.#routeMayHaveModelRef(routeTable, id))
+				this.#assertRouteModelRefs(
+					routeRow(routeTable, id),
+					routeTable.method[id]!
+				)
+
+		const httpResults = resolution.httpDeclarationIds.map((id, routeIndex) => {
+			Capture.beginRoute(routeTable.method[id]!, routeTable.path[id]!)
+			try {
+				const prepared = prepareBalancedHttpRoute(
+					routeRow(routeTable, id),
+					this,
+						aotPlanning?.validatorImages(
+							routeIndex,
+							routeTable.method[id]!,
+							routeTable.path[id]!
+						)
+				)
+				if (prepared.state.vali)
+					sealRouteValidatorExecutors(prepared.state.vali, introspect)
+				return planBalancedHttpRoute(prepared)
+			} catch (error) {
+				throw new Error(
+					`[Elysia] Failed to compile route ${routeTable.method[id]} ${routeTable.path[id]}: ${(error as Error)?.message ?? error}`,
+					{ cause: error }
+				)
+			}
+		})
+		const httpRoutes = sealBalancedHttpRoutes(
+			httpResults,
+			resolution.httpDeclarationIds.length
+		)
+
+		let websocketConfig = clonePlainDeep(this['~config']?.websocket) as
+			| Record<string, unknown>
+			| undefined
+		const wsReferences: WSRoutePlanReferenceInput[] = []
+		const wsHandlers = new Map<number, CompiledHandler>()
+		const wsRows = new Map<number, ReturnType<typeof routeRow>>()
+		const wsValidatorImages = new Map<
+			number,
+			Partial<Record<ValidatorSlot, FrozenValidator>>
+		>()
+		for (
+			let wsIndex = 0;
+			wsIndex < resolution.wsDeclarationIds.length;
+			wsIndex++
+		) {
+			const id = resolution.wsDeclarationIds[wsIndex]!
+			const path = routeTable.path[id]!
+			Capture.beginRoute('WS', path)
+			const route = routeRow(routeTable, id)
+			const frozenValidators = aotPlanning?.wsValidatorImages(wsIndex, path)
+			if (frozenValidators) wsValidatorImages.set(id, frozenValidators)
+			const ws = buildWSRoute(
+				route,
+				this,
+				runtimeBindings.server,
+				undefined,
+				frozenValidators
+			)
+			sealRouteValidatorExecutors(ws[2].plan.validators, introspect)
+			const options = ws[1] as Record<string, unknown>
+			wsReferences.push(wsPlanReference(path, ws[2].plan, options))
+			wsHandlers.set(id, ws[0] as unknown as CompiledHandler)
+			wsRows.set(id, route)
+			if (options && isNotEmpty(options)) {
+				if (websocketConfig && isBun)
+					for (const key in options)
+						if (
+							key in websocketConfig &&
+							websocketConfig[key] !== options[key]
+						) {
+							console.warn(
+								`[Elysia] Conflicting per-route WebSocket option '${key}'\nBun uses one global WebSocket config per server, per-route values are not enforced (the last-registered route wins).`
+							)
+							console.warn(new Error().stack)
+						}
+				websocketConfig = Object.assign(
+					websocketConfig ?? nullObject(),
+					options
+				)
+			}
+		}
+
+		const applicationPlan = planApplicationRuntime(this, runtimeBindings, {
+			hasWS: resolution.wsDeclarationIds.length > 0,
+			hasDynamicWS: resolution.wsDeclarationIds.some(
+				(id) => (routeTable.flags[id]! & RouteFlag.Dynamic) !== 0
+			)
+		})
+		const appPlan = createAppPlan({
+			programId: this['~programId'],
+			application: applicationPlan.application,
+			adapter: applicationPlan.adapter,
+			httpRoutes,
+			wsRoutes: wsReferences,
+			declaredRoutes: {
+				http: resolution.coverage.declaredHttpRoutes,
+				ws: resolution.coverage.declaredWSRoutes
+			},
+			runtimeConstants: {
+				notFoundStatus: 404
+			}
+		})
+		const aotClaim = resolution.declarationIds.length
+			? aotPlanning?.claim(appPlan)
+			: undefined
+		if (aotClaim) activateFrozenAppPlanValidators(appPlan)
+		const aotImage = aotClaim?.image
+		if (aotImage)
+			for (
+				let wsIndex = 0;
+				wsIndex < resolution.wsDeclarationIds.length;
+				wsIndex++
+			) {
+				const id = resolution.wsDeclarationIds[wsIndex]!
+				const path = routeTable.path[id]!
+				const frozen = aotImage.wsRoutes[path]?.image
+				if (!frozen || wsValidatorImages.has(id)) continue
+				const ws = frozen.f(
+					id,
+					path,
+					wsRows.get(id)![4],
+					this,
+					runtimeBindings.server
+				) as FrozenWSRouteResult | undefined
+				if (!ws)
+					throw new Error(
+						`[elysia-aot] Failed to bind AppPlan WebSocket image for ${path}.`
+					)
+				wsHandlers.set(id, ws[0] as unknown as CompiledHandler)
+			}
+		const lowered = lowerBalancedHttpAppPlan(appPlan)
+		const compiled = new Array<CompiledHandler>(routeTable.length)
+		for (let i = 0; i < resolution.httpDeclarationIds.length; i++)
+			compiled[resolution.httpDeclarationIds[i]!] =
+				compileBalancedHttpRoute(lowered[i]!)
+		for (const [id, handler] of wsHandlers) compiled[id] = handler
+
+		const map: NonNullable<AnyElysia['~map']> = nullObject()
+		for (const method in resolution.staticRoutes) {
+			const source = resolution.staticRoutes[method]
+			if (!source) continue
+			const routes = (map[method] ??= nullObject() as any)
+			for (const path in source) routes[path] = compiled[source[path]!]!
+		}
+		const router = bindResolvedRouter(resolution.dynamicRouter, compiled)
+		const kernel = lowerApplicationRuntime(appPlan, { map, router })
+		runtimeBindings.error.current = kernel.finalizeError
+
+		let nativeStatic:
+			| Record<string, Record<string, Response>>
+			| undefined
+		try {
+			const lifecycle = appPlan.application.lifecycle as Record<string, number>
+			if (
+				isBun &&
+				this['~config']?.nativeStaticResponse !== false &&
+				lifecycle.request === 0 &&
+				lifecycle.trace === 0 &&
+				lifecycle.hoc === 0
+			) {
+				const byId = new Map<number, BalancedHttpRuntimePlan>()
+				for (let i = 0; i < resolution.httpDeclarationIds.length; i++)
+					byId.set(resolution.httpDeclarationIds[i]!, lowered[i]!)
+				const ready: Record<string, Record<string, Response>> = nullObject()
+				for (const method in resolution.staticRoutes) {
+					if (!nativeStaticMethods.has(method)) continue
+					const routes = resolution.staticRoutes[method]!
+					for (const path in routes) {
+						const plan = byId.get(routes[path]!)
+						if (!plan || !isNativeStaticPlan(plan)) continue
+						;(ready[path] ??= nullObject())[method] =
+							plan.handler as Response
+					}
+				}
+				if (this['~config']?.strictPath !== true)
+					for (const path of Object.keys(ready))
+						for (const method of Object.keys(ready[path]!)) {
+							const loose = getLoosePath(path)
+							if (
+								loose !== path &&
+								resolution.staticRoutes[method]?.[loose] === undefined
+							) {
+								;(ready[loose] ??= nullObject())[method] =
+									ready[path]![method]!
+							}
+						}
+				if (Object.keys(ready).length) nativeStatic = ready
+			}
+		} catch (error) {
+			console.warn('[Elysia] Native static promotion was skipped:', error)
+		}
+
 		const introspectionRoutes = introspect ? this.routes : undefined
 		const introspectionModels = introspect
 			? Object.freeze({ ...this.models })
@@ -5892,41 +6126,77 @@ export class Elysia<
 		if (introspectionRoutes)
 			for (let i = 0; i < introspectionRoutes.length; i++)
 				Object.freeze(introspectionRoutes[i])
-		const routeTable = introspect
-			? compactRouteTable(this['~routeTable']!)
+		const compactTable = introspect
+			? compactRouteTable(routeTable)
 			: undefined
-		const websocket = this['~hasWS']
-			? buildWebSocketRuntime(this['~config']?.websocket as any)
+		const websocket = resolution.wsDeclarationIds.length
+			? buildWebSocketRuntime(websocketConfig as any)
 			: undefined
 		const runtime = Object.freeze({
-			'~config': this.#runtimeConfig(),
+			'~config': this.#runtimeConfig(websocketConfig),
 			'~ext': this.#runtimeExt(),
 			'~programId': this['~programId'],
-			server: this['~runtimeBindings'].server,
+			server: runtimeBindings.server,
 			nativeStatic,
 			websocket
 		})
 		const generation: Generation = Object.freeze({
-			abi: (this['~aotFingerprint'] ??= createAotFingerprint()),
+			abi: aotFingerprint,
+			plan:
+				!sealed || !isProduction() || Capture.isAotBuildEnv() || introspect
+					? appPlan
+					: undefined,
+			coverage: appPlan.coverage,
+			fetch: kernel.fetch,
+			sealed,
 			runtime,
-			introspect,
 			introspection: introspect
 				? Object.freeze({
 						routes: Object.freeze(introspectionRoutes!),
 						history: this.history,
 						models: introspectionModels!,
-						routeTable: routeTable!
+						routeTable: compactTable!
 					})
-				: undefined
+					: undefined
 		})
+		return {
+			generation,
+			map,
+			router,
+			routeTable,
+			hasDynamicWS: resolution.wsDeclarationIds.some(
+				(id) => (routeTable.flags[id]! & RouteFlag.Dynamic) !== 0
+			),
+			aotFingerprint: generation.abi,
+			runtimeBindings,
+			aotClaim
+		}
+	}
+
+	#publishGeneration(candidate: GenerationCandidate) {
+		const retain =
+			candidate.generation.sealed &&
+			isProduction() &&
+			!Capture.isAotBuildEnv()
+		if (retain)
+			detachValidatorCompiler(
+				this,
+				candidate.generation.introspection !== undefined
+			)
+		candidate.aotClaim?.commit()
+
+		this['~map'] = candidate.map
+		this['~router'] = candidate.router
+		this['~routeTable'] = candidate.routeTable
+		this['~hasDynamicWS'] = candidate.hasDynamicWS
+		this['~aotFingerprint'] = candidate.aotFingerprint
+		this['~runtimeBindings'] = candidate.runtimeBindings
+		this['~generation'] = candidate.generation
 
 		if (retain) {
-			detachValidatorCompiler(this, introspect)
-			this.#retentionSeal(generation)
-			Compiled.release(this['~programId'])
+			this.#retentionSeal(candidate.generation)
 			clearAuthoringAnalysisCaches(this)
 		}
-		this['~generation'] = generation
 	}
 
 	#retentionSeal(generation: Generation) {
@@ -5934,7 +6204,6 @@ export class Elysia<
 		this.#routeSources = undefined
 		this.#cachedHistory = undefined
 		this.#cachedRoutes = undefined
-		this.#compiled = undefined
 		this.#chainRefMemo = undefined
 		this.#childrenHash = undefined
 		this.#scopeParent = undefined
@@ -5964,261 +6233,49 @@ export class Elysia<
 
 	['~newGeneration']() {
 		this.#fetchFn = undefined
-		this.#routerBuilt = false
 		this['~generation'] = undefined
-		void this.fetch
+		this.#prepareFetch()
 
 		return this
 	}
 
-	#buildRouterUnsafe() {
-		const precompile = isProduction() || this['~config']?.precompile
+	#fetchFn?: (request: Request, server?: unknown) => MaybePromise<Response>
+	#dispatchFetch?: (
+		request: Request,
+		server?: unknown
+	) => MaybePromise<Response>
 
-		this.#initMap()
-		const methods = this['~map']!
-		const table = (this['~routeTable'] = buildRouteTable(this['~routes']))
-		const method = table.method
-		const path = table.path
-		const flags = table.flags
-		const length = table.length
+	#prepareFetch() {
+		const active = this['~generation']
+		if (
+			active &&
+			(active.sealed || this.#pending > 0 || this.#error !== undefined)
+		)
+			return active.fetch
+		if (this.#fetchFn) return this.#fetchFn
 
-		for (let i = 0; i < length; i++)
-			if (this.#routeMayHaveModelRef(table, i))
-				this.#assertRouteModelRefs(routeRow(table, i), method[i])
+		const compilerSession = beginCompilerSession(this)
+		try {
+			const candidate = this.#createGenerationCandidate()
+			this.#publishGeneration(candidate)
+			this.#fetchFn = candidate.generation.fetch
+			endCompilerSession(this, compilerSession)
 
-		if (length)
-			Compiled.claim(
-				this['~programId'],
-				(this['~aotFingerprint'] = createAotFingerprint())
-			)
-
-		const isLoose = this['~config']?.strictPath !== true
-
-		let hasLooseCandidate = false
-		if (isLoose)
-			for (let i = 0; i < length; i++) {
-				const p = path[i]
-				if (canRegisterLoose(p, (flags[i] & RouteFlag.Dynamic) !== 0)) {
-					hasLooseCandidate = true
-					break
-				}
-			}
-
-		let explicitPaths: Map<string, Set<string>> | undefined
-		if (hasLooseCandidate) explicitPaths = new Map()
-
-		if (explicitPaths)
-			for (let i = 0; i < length; i++) {
-				const m = method[i]
-				const p = path[i]
-
-				let set = explicitPaths.get(m)
-				if (!set) explicitPaths.set(m, (set = new Set()))
-
-				set.add(p)
-				if (needEncodeRegex.test(p)) {
-					const encoded = encodeURI(p)
-					if (encoded !== p) set.add(encoded)
-				}
-			}
-
-		for (let i = 0; i < length; i++) {
-			const routeMethod = method[i]
-			const routePath = path[i]
-			const routeFlags = flags[i]
-			Capture.beginRoute(routeMethod, routePath)
-
-			if ((routeFlags & RouteFlag.WS) !== 0) {
-				const route = routeRow(table, i)
-				const frozenWS = Compiled.getWSRoute(
-					this['~programId'],
-					routePath
-				)
-				const wsRoles = Object.keys((route[4] as object | undefined) ?? {}).sort()
-				const hasFrozenWSLayout =
-					frozenWS?.a.length === wsRoles.length &&
-					frozenWS.a.every((role, index) => role === wsRoles[index])
-				const ws =
-					(hasFrozenWSLayout
-						? (frozenWS!.f(
-						i,
-						routePath,
-						route[4],
-						this,
-						this['~runtimeBindings'].server
-							) as FrozenWSRouteResult | undefined)
-						: undefined) ??
-					buildWSRoute(
-						route,
-						this,
-						this['~runtimeBindings'].server
-					)
-				const handler = ws[0] as unknown as CompiledHandler
-				const options = ws[1]
-
-				if ((routeFlags & RouteFlag.Dynamic) !== 0) {
-					;(this['~router'] ??= new Memoirist<CompiledHandler>({
-						loosePath: isLoose
-					})).add('WS', routePath, handler)
-
-					this['~hasDynamicWS'] = true
-				} else {
-					const wsMap = (this['~map']!['WS'] ??= nullObject() as any)
-					wsMap[routePath] = handler
-
-					if (isLoose) {
-						const loose = getLoosePath(routePath)
-
-						if (
-							loose !== routePath &&
-							!explicitPaths?.get('WS')?.has(loose)
-						)
-							wsMap[loose] = handler
-					}
-				}
-
-				if (options && isNotEmpty(options)) {
-					this['~config'] ??= nullObject()
-					const existing = (this['~config'] as any).websocket
-
-					if (existing && isBun) {
-						for (const key in options)
-							if (
-								key in existing &&
-								(existing as any)[key] !== (options as any)[key]
-							) {
-								console.warn(
-									`[Elysia] Conflicting per-route WebSocket option '${key}'\nBun uses one global WebSocket config per server, per-route values are not enforced (the last-registered route wins).`
-								)
-								console.warn(new Error().stack)
-							}
-
-						Object.assign(existing, options)
-					} else (this['~config'] as any).websocket = options
-				}
-
-				continue
-			}
-
-			const isDynamic = (routeFlags & RouteFlag.Dynamic) !== 0
-			const needsEncode = needEncodeRegex.test(routePath)
-			const registerLoose =
-				isLoose && canRegisterLoose(routePath, isDynamic)
-
-			const explicitMain = registerLoose
-				? explicitPaths?.get(routeMethod)
-				: undefined
-
-			if (!isDynamic && !needsEncode && !registerLoose) {
-				const map = (methods[routeMethod] ??= nullObject() as any)
-
-				const handler = this.handler(
-					i,
-					precompile,
-					undefined,
-					undefined,
-					undefined,
-					table
-				)
-
-				map[routePath] = handler
-
-				continue
-			}
-
-			const variants = [routePath]
-			if (needsEncode) {
-				const encoded = encodeURI(routePath)
-				if (encoded !== routePath) variants.push(encoded)
-			}
-
-			const paths: string[] = []
-			for (let v = 0; v < variants.length; v++) {
-				const p = variants[v]
-				paths.push(p)
-				if (registerLoose) {
-					const loose = getLoosePath(p)
-					if (loose !== p && !explicitMain?.has(loose))
-						paths.push(loose)
-				}
-			}
-
-			if (isDynamic) {
-				const router = (this['~router'] ??=
-					new Memoirist<CompiledHandler>({
-						loosePath: isLoose
-					}))
-
-				const handler = this.handler(
-					i,
-					precompile,
-					undefined,
-					undefined,
-					undefined,
-					table
-				)
-
-				for (let p = 0; p < paths.length; p++)
-					router.add(routeMethod, paths[p], handler)
-			} else {
-				const map = (methods[routeMethod] ??= nullObject() as any)
-
-				const handler = this.handler(
-					i,
-					precompile,
-					undefined,
-					undefined,
-					{
-						method: routeMethod,
-						paths
-					},
-					table
-				)
-
-				for (let p = 0; p < paths.length; p++) map[paths[p]] = handler
-			}
+			return candidate.generation.fetch
+		} catch (error) {
+			this.#fetchFn = undefined
+			endCompilerSession(this, compilerSession, true)
+			throw error
 		}
 	}
 
-	#fetchFn?: (request: Request) => MaybePromise<Response>
 	get fetch() {
-		if (this.#fetchFn) return this.#fetchFn
+		this.#prepareFetch()
 
-		this.#buildRouter()
-		const previousFinalize = this['~finalizeError']
-		const previousBoundFinalize = this['~runtimeBindings'].error.current
-
-		try {
-			const fetch = applyHoc(this, createFetchHandler(this))
-			this['~runtimeBindings'].error.current = this['~finalizeError']
-
-			if (this.#pending) return (this.#fetchFn = fetch)
-
-			let nativeStatic:
-				| Record<string, Record<string, Response>>
-				| undefined
-			try {
-				nativeStatic = buildNativeStaticRoutes(
-					this,
-					this['~routeTable']
-				)
-			} catch (error) {
-				console.warn(
-					'[Elysia] Native static promotion was skipped:',
-					error
-				)
-			}
-
-			this.#publishGeneration(nativeStatic)
-			this.#fetchFn = fetch
-
-			return fetch
-		} catch (error) {
-			this.#fetchFn = undefined
-			this['~finalizeError'] = previousFinalize
-			this['~runtimeBindings'].error.current = previousBoundFinalize
-			throw error
-		}
+		return (this.#dispatchFetch ??= (request, server) => {
+			const generation = this['~generation']
+			return (generation?.fetch ?? this.#prepareFetch())(request, server)
+		})
 	}
 
 	#handle?: (

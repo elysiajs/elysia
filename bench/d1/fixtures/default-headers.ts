@@ -108,9 +108,10 @@ async function main() {
 	const rssBlocks = integerArgument('rss-blocks', 4)
 	const { Elysia } = await import(repoRoot + '/src/index.ts')
 	const { createAdapter } = await import(repoRoot + '/src/adapter/index.ts')
-	const { defaultAdapter } = await import(
+	const { getDefaultAdapter } = await import(
 		repoRoot + '/src/adapter/constants.ts'
 	)
+	const defaultAdapter = getDefaultAdapter()
 	const sinkEnabled = process.env.D1_C1_DEFAULT_HEADER_SINK === '1'
 	const adapter = createAdapter({
 		...defaultAdapter,

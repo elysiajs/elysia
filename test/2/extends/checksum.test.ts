@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test'
-import { Elysia } from '../../../src'
+import { Elysia, t } from '../../../src'
 import { req } from '../../utils'
 import type { MaybeArray } from '../../../src/types'
 
@@ -118,6 +118,101 @@ describe('named plugin deduplication and hook inheritance', () => {
 		expect(
 			Math.abs(length(a.hooks.transform) - length(b.hooks.transform))
 		).toBe(1)
+	})
+
+	it('does not run a diamond-shared plugin hook twice', async () => {
+		let called = 0
+
+		const cookie = (options?: Record<string, unknown>) =>
+			new Elysia({
+				name: '@elysiajs/cookie',
+				seed: options
+			}).transform('global', () => {
+				called++
+			})
+
+		const group = new Elysia().use(cookie()).get('/a', () => 'Hi')
+		const app = new Elysia().use(cookie()).use(group)
+
+		await app.handle(req('/a'))
+
+		expect(called).toBe(1)
+	})
+
+	it('does not run a diamond-shared array-form plugin hook twice', async () => {
+		let called = 0
+
+		const cookie = (options?: Record<string, unknown>) =>
+			new Elysia({
+				name: '@elysiajs/cookie',
+				seed: options
+			}).transform('global', [
+				() => {
+					called++
+				},
+				() => {}
+			])
+
+		const group = new Elysia().use(cookie()).get('/a', () => 'Hi')
+		const app = new Elysia().use(cookie()).use(group)
+
+		await app.handle(req('/a'))
+
+		expect(called).toBe(1)
+	})
+
+	it('deduplicates a guard hook', async () => {
+		const guard = new Elysia({ prefix: '/guard' }).guard(
+			{
+				params: t.Object({ id: t.Number() }),
+				transform({ params }) {
+					const id = +params.id
+					if (!Number.isNaN(id)) params.id = id
+				}
+			},
+			(app) => app.get('/id/:id', ({ params: { id } }) => id)
+		)
+
+		const response = await new Elysia()
+			.use(guard)
+			.handle(req('/guard/id/123'))
+
+		expect(response.status).toBe(200)
+	})
+
+	it('filters global events to routes that inherit them', async () => {
+		let root = 0
+		let parent = 0
+		let child = 0
+
+		const plugin = new Elysia()
+			.beforeHandle('global', () => {
+				root++
+			})
+			.group('/v1', (app) =>
+				app
+					.beforeHandle(() => {
+						parent++
+					})
+					.get('', () => 'A')
+					.group('/v1', (app) =>
+						app
+							.beforeHandle(() => {
+								child++
+							})
+							.get('/', () => 'B')
+					)
+			)
+
+		const app = new Elysia().use(plugin).get('/', () => 'A')
+
+		await Promise.all(
+			['/v1', '/v1/v1', '/'].map((path) => app.handle(req(path)))
+		)
+
+		expect(root).toBe(3)
+		expect(parent).toBe(2)
+		expect(child).toBe(1)
 	})
 
 	it('merges a child global hook after deduplicating a shared plugin', async () => {

@@ -21,11 +21,13 @@ import {
 } from '../error'
 
 import { ElysiaWS, isGeneratorObject, type WSConnectionData } from './context'
-import { createMessageParser, defaultWSParse } from './parser'
+import { createMessageParser } from './parser'
 
 import type { RuntimeServerBinding } from '../generation'
+import type { FrozenValidator, ValidatorSlot } from '../compile/aot'
 import type { AnyElysia } from '../base'
 import type { Context } from '../context'
+import type { AppHook } from '../types'
 import type {
 	ServerWebSocket,
 	WebSocketHandler,
@@ -35,46 +37,8 @@ import type {
 
 export type WSAnyFn = (...args: any[]) => any
 
-export interface WSRuntimeDiagnosticSnapshot {
-	readonly context: number
-	readonly view: number
-	readonly promise: number
-}
-
-let diagnostics: { context: number; view: number; promise: number } | undefined
-
-/** Internal proof seam. Disabled by default so hot paths pay only one branch. */
-export const wsRuntimeDiagnostics = Object.freeze({
-	enable() {
-		diagnostics = { context: 0, view: 0, promise: 0 }
-	},
-	disable() {
-		diagnostics = undefined
-	},
-	reset() {
-		if (diagnostics)
-			diagnostics.context = diagnostics.view = diagnostics.promise = 0
-	},
-	read(): WSRuntimeDiagnosticSnapshot {
-		return diagnostics
-			? { ...diagnostics }
-			: { context: 0, view: 0, promise: 0 }
-	}
-})
-
-const countPromise = () => {
-	if (diagnostics) diagnostics.promise++
-}
-
-const createFrameView = (connection: ElysiaWS<any>): ElysiaWS<any> => {
-	if (diagnostics) diagnostics.view++
-	return Object.create(connection)
-}
-
-const createWSBaseContext = (app: AnyElysia) => {
-	if (diagnostics) diagnostics.context++
-	return createBaseContext(app)
-}
+const createFrameView = (connection: ElysiaWS<any>): ElysiaWS<any> =>
+	Object.create(connection)
 
 type Server = {
 	upgrade(request: Request, options?: { headers?: any; data?: any }): boolean
@@ -94,13 +58,6 @@ const isThenable = (value: unknown): value is PromiseLike<unknown> =>
 	value !== null &&
 	(typeof value === 'object' || typeof value === 'function') &&
 	typeof (value as any).then === 'function'
-
-export interface WSContextAccess {
-	/** `null` means analysis was opaque and all own fields must be retained. */
-	readonly keys: readonly string[] | null
-	readonly body: boolean
-	readonly mutates: boolean
-}
 
 interface FunctionAccess {
 	keys: Set<string> | null
@@ -142,7 +99,6 @@ function firstParam(
 	}
 }
 
-/** Conservative: any source ambiguity retains the complete upgrade context. */
 function analyzeFunction(fn: WSAnyFn | undefined): FunctionAccess {
 	const opaque = { keys: null, body: true, mutates: true } as const
 	if (!fn) return { keys: new Set(), body: false, mutates: false }
@@ -195,14 +151,14 @@ function analyzeFunction(fn: WSAnyFn | undefined): FunctionAccess {
 function analyzeAccess(
 	functions: readonly (WSAnyFn | undefined)[],
 	root: AnyElysia
-): WSContextAccess {
+): FunctionAccess {
 	const keys = new Set<string>()
 	let body = false
 	let mutates = false
 	for (const fn of functions) {
 		const access = analyzeFunction(fn)
 		if (access.keys === null)
-			return Object.freeze({ keys: null, body: true, mutates: true })
+			return { keys: null, body: true, mutates: true }
 		body ||= access.body
 		mutates ||= access.mutates
 		for (const key of access.keys) keys.add(key)
@@ -212,8 +168,8 @@ function analyzeAccess(
 		| undefined
 	for (const key of keys)
 		if (typeof decorators?.[key] === 'function')
-			return Object.freeze({ keys: null, body: true, mutates: true })
-	return Object.freeze({ keys: Object.freeze([...keys]), body, mutates })
+			return { keys: null, body: true, mutates: true }
+	return { keys, body, mutates }
 }
 
 function handlerCertifiedSync(fn: WSAnyFn | undefined): boolean {
@@ -248,21 +204,6 @@ function handlerCertifiedSync(fn: WSAnyFn | undefined): boolean {
 	)
 }
 
-function handlerReturnsVoid(fn: WSAnyFn | undefined): boolean {
-	if (!fn) return false
-	try {
-		const source = Function.prototype.toString.call(fn)
-		const arrow = source.indexOf('=>')
-		const bodyStart = source.indexOf('{', arrow === -1 ? 0 : arrow)
-		return (
-			bodyStart !== -1 &&
-			!/\breturn\b/.test(source.slice(bodyStart + 1, source.lastIndexOf('}')))
-		)
-	} catch {
-		return false
-	}
-}
-
 export interface WSRoutePlan {
 	readonly validators: RouteValidator<any>
 	readonly responseValidator:
@@ -292,13 +233,8 @@ export interface WSRoutePlan {
 	readonly pongHandler: WSAnyFn | undefined
 	readonly upgradeHook: unknown
 	readonly allowUnsafeValidationDetails: boolean
-	readonly compatCancellation: boolean
 	readonly serverBinding: RuntimeServerBinding | undefined
-	readonly access: WSContextAccess
-	/** The parser, validator and handler have all been positively certified sync. */
 	readonly certifiedSyncMessage: boolean
-	readonly voidMessageHandler: boolean
-	/** The message pipeline may observe or mutate the per-frame body view. */
 	readonly needsMessageView: boolean
 }
 
@@ -306,9 +242,7 @@ type WSRoutePlanInput = Omit<
 	WSRoutePlan,
 	| 'upgradeDeriveModes'
 	| 'parseMessage'
-	| 'access'
 	| 'certifiedSyncMessage'
-	| 'voidMessageHandler'
 	| 'needsMessageView'
 >
 
@@ -327,17 +261,6 @@ export function createWSRoutePlan(
 		...plan.errorHandlers,
 		plan.messageHandler
 	]
-	const access = analyzeAccess(
-		[
-			...messageLifecycle,
-			plan.openHandler,
-			plan.drainHandler,
-			plan.closeHandler,
-			plan.pingHandler,
-			plan.pongHandler
-		],
-		root
-	)
 	const messageAccess = analyzeAccess(messageLifecycle, root)
 	const hasMessageHooks =
 		plan.transforms.length !== 0 ||
@@ -355,7 +278,6 @@ export function createWSRoutePlan(
 			deriveEntries as DeriveEntry[]
 		),
 		parseMessage: createMessageParser(parseHooks as any) as any,
-		access,
 		certifiedSyncMessage:
 			parseHooks.length === 0 &&
 			!hasMessageHooks &&
@@ -363,52 +285,23 @@ export function createWSRoutePlan(
 				(bodyValidator.isAsync === false &&
 					bodyValidator.mayReturnPromise !== true)) &&
 			handlerCertifiedSync(plan.messageHandler),
-		voidMessageHandler: handlerReturnsVoid(plan.messageHandler),
 		needsMessageView:
 			messageAccess.body || messageAccess.mutates || hasMessageHooks
 	})
 }
 
 export interface WSRouteRuntime {
-	/** Shared by dispatch mode; contains no route-local state. */
-	readonly kernel: WSRuntimeKernel
 	readonly plan: WSRoutePlan
 	readonly contextPrototype: object
-	readonly fastMessage:
-		| ((connection: ElysiaWS<any>, message: string | Buffer) => void)
-		| undefined
 	readonly close: (ws: ElysiaWS<any>, code?: number, reason?: string) => void
 }
 
-export interface WSRuntimeKernel {
-	readonly close: WSRouteRuntime['close']
-	readonly message: (
-		ws: ServerWebSocket<WSConnectionData>,
-		rawMessage: string | Buffer,
-		runtime: WSRouteRuntime
-	) => void | Promise<void>
-}
-
 const contextPrototypeCache = new WeakMap<AnyElysia, object>()
-const certifiedVoidRuntimeKernel: WSRuntimeKernel = Object.freeze({
-	close: requestClose,
-	message: dispatchCertifiedVoid
-})
-const runtimeKernel: WSRuntimeKernel = Object.freeze({
-	close: requestClose,
-	message: dispatchMessage
-})
-
-const createFastMessage = (plan: WSRoutePlan) => {
-	const messageHandler = plan.messageHandler!
-	return (connection: ElysiaWS<any>, message: string | Buffer) =>
-		messageHandler(connection, defaultWSParse(message))
-}
 
 export function createWSContextPrototype(app: AnyElysia): object {
 	const cached = contextPrototypeCache.get(app)
 	if (cached) return cached
-	const contextPrototype = createWSBaseContext(app).prototype
+	const contextPrototype = createBaseContext(app).prototype
 	const prototype = Object.create(ElysiaWS.prototype)
 	const descriptors = Object.getOwnPropertyDescriptors(contextPrototype)
 	Reflect.deleteProperty(descriptors, 'constructor')
@@ -421,37 +314,20 @@ export function createWSRouteRuntime(
 	plan: WSRoutePlan,
 	contextPrototype: object
 ): WSRouteRuntime {
-	const certifiedVoid =
-		plan.certifiedSyncMessage &&
-		!plan.needsMessageView &&
-		plan.voidMessageHandler &&
-		!plan.validators.body
-	const kernel = certifiedVoid ? certifiedVoidRuntimeKernel : runtimeKernel
 	return Object.freeze({
-		kernel,
 		plan,
 		contextPrototype,
-		fastMessage: certifiedVoid ? createFastMessage(plan) : undefined,
-		close: kernel.close
+		close: requestClose
 	})
 }
 
 export interface FrozenWSRouteDescriptor {
-	readonly flags: number
-	readonly contextKeys: readonly string[] | null
 	readonly roles: readonly string[]
-	readonly message: Readonly<Record<string, unknown>>
+	readonly message: Readonly<{
+		certifiedSync: boolean
+		needsView: boolean
+	}>
 	readonly [key: string]: unknown
-}
-
-function sameAccessKeys(
-	left: readonly string[] | null,
-	right: readonly string[] | null
-) {
-	return left === null || right === null
-		? left === right
-		: left.length === right.length &&
-				left.every((key, index) => key === right[index])
 }
 
 export type FrozenWSRouteResult = readonly [
@@ -462,13 +338,158 @@ export type FrozenWSRouteResult = readonly [
 	runtime: WSRouteRuntime
 ]
 
+const EMPTY_HOOKS: readonly WSAnyFn[] = Object.freeze([]) as any
+
+function concatHooks(
+	...sources: Array<WSAnyFn | readonly WSAnyFn[] | undefined | null>
+): readonly WSAnyFn[] {
+	let result: WSAnyFn[] | undefined
+	for (const source of sources) {
+		if (source == null) continue
+		const values = Array.isArray(source) ? source : [source]
+		if (values.length)
+			result = result ? result.concat(values as WSAnyFn[]) : [...values]
+	}
+	return result ? Object.freeze(result) : EMPTY_HOOKS
+}
+
+export interface BuildWSRoutePlanInput {
+	readonly path: string
+	readonly hook: AnyWSLocalHook
+	readonly flatAppHook?: Partial<AppHook>
+	readonly app: AnyElysia
+	readonly serverBinding?: RuntimeServerBinding
+	readonly contextPrototype?: object
+	readonly frozenSlots?: Partial<Record<ValidatorSlot, FrozenValidator>>
+}
+
+export function buildWSRoutePlan({
+	path,
+	hook,
+	flatAppHook = {},
+	app,
+	serverBinding,
+	contextPrototype = createWSContextPrototype(app),
+	frozenSlots
+}: BuildWSRoutePlanInput): FrozenWSRouteResult {
+	const root = frozenRootOf(app)
+	let validators = frozenSlots || !isTypeboxInitialized()
+		? (buildFrozenRouteValidator(
+				hook as any,
+				app,
+				'WS',
+				path,
+				frozenSlots
+			) as RouteValidator<any> | undefined)
+		: undefined
+	if (!validators)
+		validators = new RouteValidator(hook as any, {
+			models: root['~ext']?.models,
+			app,
+			validationPlan: root['~config']?.experimental?.validationPlan,
+			aot: { method: 'WS', path },
+			frozenSlots
+		})
+
+	const responseValidator = validators.response as
+		| { [status: number]: WSValidatorLike }
+		| undefined
+	const defaultResponseValidator = responseValidator
+		? (responseValidator[200] ??
+			responseValidator[Object.keys(responseValidator)[0] as any])
+		: undefined
+	const queryPlan = root['~config']?.experimental?.validationPlan
+		? validators.queryPlan
+		: undefined
+	const queryChannels = queryPlan
+		? undefined
+		: getQueryParseChannels((validators.query as any)?.schema)
+	const parseHooks = concatHooks(hook.parse as any)
+	const transforms = concatHooks(
+		flatAppHook.transform as any,
+		hook.transform as any
+	)
+	const allBeforeHandles = concatHooks(
+		flatAppHook.beforeHandle as any,
+		hook.beforeHandle as any
+	)
+	const deriveEntries = [
+		...(((flatAppHook as any)['~deriveEntries'] as DeriveEntry[] | undefined) ??
+			[]),
+		...(((hook as any)['~deriveEntries'] as DeriveEntry[] | undefined) ?? [])
+	]
+	const deriveSet = deriveEntries.length
+		? new Set<Function>(deriveEntries.map(deriveEntryFn))
+		: undefined
+	const runtime = createWSRouteRuntime(
+		createWSRoutePlan(
+			{
+				validators,
+				responseValidator,
+				defaultResponseValidator,
+				queryPlan,
+				fusedQuery:
+					!!queryPlan?.fused && !!(validators.query as any)?.hasCodec,
+				queryArray: queryChannels?.array,
+				queryObject: queryChannels?.object,
+				transforms,
+				allBeforeHandles,
+				messageBeforeHandles: Object.freeze(
+					allBeforeHandles.filter((fn) => !deriveSet?.has(fn as Function))
+				),
+				afterHandles: concatHooks(
+					flatAppHook.afterHandle as any,
+					hook.afterHandle as any
+				),
+				mapResponses: concatHooks(
+					flatAppHook.mapResponse as any,
+					hook.mapResponse as any
+				),
+				afterResponses: concatHooks(
+					flatAppHook.afterResponse as any,
+					hook.afterResponse as any
+				),
+				errorHandlers: concatHooks(
+					hook.error as any,
+					flatAppHook.error as any
+				),
+				messageHandler: hook.message as WSAnyFn | undefined,
+				openHandler: hook.open as WSAnyFn | undefined,
+				drainHandler: hook.drain as WSAnyFn | undefined,
+				closeHandler: hook.close as WSAnyFn | undefined,
+				pingHandler: hook.ping as WSAnyFn | undefined,
+				pongHandler: hook.pong as WSAnyFn | undefined,
+				upgradeHook: hook.upgrade,
+				allowUnsafeValidationDetails:
+					root['~config']?.allowUnsafeValidationDetails === true,
+				serverBinding
+			},
+			parseHooks,
+			deriveEntries,
+			app
+		),
+		contextPrototype
+	)
+	const options: Partial<WebSocketHandler<any>> = nullObject()
+	for (const key of WS_OPTIONS)
+		if ((hook as any)[key] !== undefined)
+			(options as any)[key] = (hook as any)[key]
+
+	return Object.freeze([
+		createWSUpgradeHandler(runtime),
+		options,
+		runtime
+	]) as FrozenWSRouteResult
+}
+
 export function buildFrozenWSRoute(
-	routeId: number,
+	_routeId: number,
 	path: string,
 	hook: AnyWSLocalHook,
 	root: AnyElysia,
 	serverBinding: RuntimeServerBinding | undefined,
-	descriptor: FrozenWSRouteDescriptor
+	descriptor: FrozenWSRouteDescriptor,
+	frozenSlots?: Partial<Record<ValidatorSlot, FrozenValidator>>
 ): FrozenWSRouteResult | undefined {
 	if (
 		!descriptor ||
@@ -485,137 +506,33 @@ export function buildFrozenWSRoute(
 	)
 		return
 
-	const frozenRoot = frozenRootOf(root)
-	let validators = !isTypeboxInitialized()
-		? (buildFrozenRouteValidator(hook as any, root, 'WS', path) as
-				| RouteValidator<any>
-				| undefined)
-		: undefined
-	if (!validators)
-		validators = new RouteValidator(hook as any, {
-			models: frozenRoot['~ext']?.models,
-			app: root,
-			validationPlan: frozenRoot['~config']?.experimental?.validationPlan,
-			aot: { method: 'WS', path }
-		})
-
-	const asHooks = (value: unknown): readonly WSAnyFn[] =>
-		value == null
-			? Object.freeze([])
-			: Object.freeze((Array.isArray(value) ? value : [value]) as WSAnyFn[])
-	const parseHooks = asHooks(hook.parse)
-	const transforms = asHooks(hook.transform)
-	const allBeforeHandles = asHooks(hook.beforeHandle)
-	const deriveEntries =
-		((hook as any)['~deriveEntries'] as DeriveEntry[] | undefined) ?? []
-	const deriveSet = deriveEntries.length
-		? new Set<Function>(deriveEntries.map(deriveEntryFn))
-		: undefined
-	const messageBeforeHandles = Object.freeze(
-		allBeforeHandles.filter((fn) => !deriveSet?.has(fn))
-	)
-	const afterHandles = asHooks(hook.afterHandle)
-	const mapResponses = asHooks(hook.mapResponse)
-	const afterResponses = asHooks(hook.afterResponse)
-	const errorHandlers = asHooks(hook.error)
-	const responseValidator = validators.response as
-		| { [status: number]: WSValidatorLike }
-		| undefined
-	const defaultResponseValidator = responseValidator
-		? (responseValidator[200] ??
-			responseValidator[Object.keys(responseValidator)[0] as any])
-		: undefined
-	const queryPlan = frozenRoot['~config']?.experimental?.validationPlan
-		? validators.queryPlan
-		: undefined
-	const fusedQuery = !!queryPlan?.fused && !!(validators.query as any)?.hasCodec
-	const queryChannels = queryPlan
-		? undefined
-		: getQueryParseChannels((validators.query as any)?.schema)
-	const messageDescriptor = descriptor.message as {
-		certifiedSync?: boolean
-		needsView?: boolean
-		returnsVoid?: boolean
-	}
-	const messageHandler = hook.message as WSAnyFn | undefined
-	const plan = createWSRoutePlan(
-		{
-			validators,
-			responseValidator,
-			defaultResponseValidator,
-			queryPlan,
-			fusedQuery,
-			queryArray: queryChannels?.array,
-			queryObject: queryChannels?.object,
-			transforms,
-			allBeforeHandles,
-			messageBeforeHandles,
-			afterHandles,
-			mapResponses,
-			afterResponses,
-			errorHandlers,
-			messageHandler,
-			openHandler: hook.open as WSAnyFn | undefined,
-			drainHandler: hook.drain as WSAnyFn | undefined,
-			closeHandler: hook.close as WSAnyFn | undefined,
-			pingHandler: hook.ping as WSAnyFn | undefined,
-			pongHandler: hook.pong as WSAnyFn | undefined,
-			upgradeHook: hook.upgrade,
-			allowUnsafeValidationDetails:
-				frozenRoot['~config']?.allowUnsafeValidationDetails === true,
-			compatCancellation:
-				frozenRoot['~config']?.experimental?.cancellation === 'compat',
-			serverBinding
-		},
-		parseHooks,
-		deriveEntries,
-		root
-	)
+	const result = buildWSRoutePlan({
+		path,
+		hook,
+		app: root,
+		serverBinding,
+		frozenSlots
+	})
+	const plan = result[2].plan
 	if (
-		!sameAccessKeys(plan.access.keys, descriptor.contextKeys) ||
-		plan.certifiedSyncMessage !== (messageDescriptor.certifiedSync === true) ||
-		plan.voidMessageHandler !== (messageDescriptor.returnsVoid === true) ||
-		plan.needsMessageView !== (messageDescriptor.needsView === true)
+		plan.certifiedSyncMessage !== descriptor.message.certifiedSync ||
+		plan.needsMessageView !== descriptor.message.needsView
 	)
 		return
 
-	const runtime = createWSRouteRuntime(plan, createWSContextPrototype(root))
-	const options: Partial<WebSocketHandler<any>> = nullObject()
-
-	for (const key of WS_OPTIONS)
-		if ((hook as any)[key] !== undefined)
-			(options as any)[key] = (hook as any)[key]
-
-	return Object.freeze([
-		createWSUpgradeHandler(runtime),
-		options,
-		runtime
-	]) as FrozenWSRouteResult
+	return result
 }
 
-function retainContext(
-	context: Context,
-	access: WSContextAccess
-): Record<string, unknown> | undefined {
+function retainContext(context: Context): Record<string, unknown> | undefined {
 	const retained = Object.create(null) as Record<string, unknown>
 	let count = 0
 
-	if (access.keys === null) {
-		const keys = Object.keys(context as any)
-		for (let i = 0; i < keys.length; i++) {
-			const key = keys[i]
-			if (key === 'ws' || key === 'body') continue
-			retained[key] = (context as any)[key]
-			count++
-		}
-	} else {
-		for (let i = 0; i < access.keys.length; i++) {
-			const key = access.keys[i]
-			if (key === 'ws' || key === 'body' || !Object.hasOwn(context as any, key))
-				continue
-			retained[key] = (context as any)[key]
-			count++
-		}
+	const keys = Object.keys(context as any)
+	for (let i = 0; i < keys.length; i++) {
+		const key = keys[i]
+		if (key === 'ws' || key === 'body') continue
+		retained[key] = (context as any)[key]
+		count++
 	}
 
 	return count ? retained : undefined
@@ -639,7 +556,6 @@ async function applyMapResponse(
 	value: unknown,
 	mapResponses: readonly WSAnyFn[]
 ): Promise<unknown> {
-	countPromise()
 	for (let i = 0; i < mapResponses.length; i++) {
 		;(ws as any).responseValue = value
 		const r = mapResponses[i](ws)
@@ -662,8 +578,6 @@ const isEmptyPayload = (payload: unknown) => {
 }
 
 function waitForDrain(ws: ElysiaWS<any>) {
-	countPromise()
-
 	return new Promise<void>((resolve) => {
 		;(ws.raw.data.resumeWaiters ??= new Set()).add(resolve)
 	})
@@ -774,7 +688,6 @@ export async function handleWSResponse(
 	value: unknown,
 	mapResponses: readonly WSAnyFn[]
 ): Promise<void> {
-	countPromise()
 	if (value === undefined) return
 
 	if (isGeneratorObject(value)) {
@@ -879,7 +792,6 @@ async function handleError(
 	plan: WSRoutePlan,
 	error: unknown
 ) {
-	countPromise()
 	const errCtx: any = createFrameView(ws)
 	errCtx.error = error
 	if (plan.allowUnsafeValidationDetails && error instanceof ValidationError)
@@ -967,7 +879,6 @@ async function invokeMessageFull(
 	plan: WSRoutePlan,
 	message: unknown
 ) {
-	countPromise()
 	try {
 		ws.body = message as any
 		for (let i = 0; i < plan.transforms.length; i++) {
@@ -1060,19 +971,6 @@ function dispatchMessage(
 				(error) => handleError(connection, runtime.plan, error)
 			)
 		return dispatchParsed(connection, runtime.plan, parsed)
-	} catch (error) {
-		return handleError(connection, runtime.plan, error)
-	}
-}
-
-function dispatchCertifiedVoid(
-	ws: ServerWebSocket<WSConnectionData>,
-	rawMessage: string | Buffer,
-	runtime: WSRouteRuntime
-): void | Promise<void> {
-	const connection = getElysia(ws)
-	try {
-		runtime.plan.messageHandler!(connection, defaultWSParse(rawMessage))
 	} catch (error) {
 		return handleError(connection, runtime.plan, error)
 	}
@@ -1171,7 +1069,6 @@ function cleanupConnection(data: WSConnectionData) {
 			if (key !== 'raw') delete (view as any)[key]
 	data.retained = undefined
 	data.view = undefined
-	data.fastMessage = undefined
 	data.runtime = undefined
 }
 
@@ -1195,12 +1092,10 @@ export function createWSUpgradeHandler(runtime: WSRouteRuntime) {
 				set,
 				(context as { request?: Request } | undefined)?.request
 			)) as any,
-		plan.allowUnsafeValidationDetails,
-		plan.compatCancellation
+		plan.allowUnsafeValidationDetails
 	)
 
 	return async (context: Context) => {
-		countPromise()
 		const request = context.request
 		try {
 			if (plan.validators.params) {
@@ -1301,8 +1196,7 @@ export function createWSUpgradeHandler(runtime: WSRouteRuntime) {
 				headers: upgradeHeaders,
 				data: {
 					runtime,
-					fastMessage: runtime.fastMessage,
-					retained: retainContext(context, plan.access)
+					retained: retainContext(context)
 				} satisfies WSConnectionData
 			})
 			if (!upgraded)
@@ -1332,15 +1226,9 @@ export function buildGlobalWSHandler(): WebSocketHandler<WSConnectionData> {
 		message(ws, message) {
 			try {
 				const data = ws.data
-				const fastMessage = data.fastMessage
-				if (fastMessage) {
-					const connection = data.view
-					fastMessage(connection || getElysia(ws), message)
-					return
-				}
 				const runtime = data.runtime
 				if (!runtime) return
-				const result = runtime.kernel.message(ws, message, runtime)
+				const result = dispatchMessage(ws, message)
 				if (isThenable(result))
 					Promise.resolve(result).catch((error) => sendErrMsg(ws, error))
 			} catch (error) {

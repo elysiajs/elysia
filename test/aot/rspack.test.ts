@@ -5,12 +5,9 @@ import { tmpdir } from 'node:os'
 
 import { rspack } from '@rspack/core'
 
-// The plugin and bare-import fixture must share the same dist Elysia instance.
-const { aot } = (await import(
-	resolve(import.meta.dir, '../../dist/plugin/aot/rspack.mjs')
-)) as typeof import('../../src/plugin/aot/rspack')
+const { aot } = await import('../../src/plugin/aot/rspack')
 
-const APP = resolve(import.meta.dir, 'fixtures/sealed-app.ts')
+const APP = resolve(import.meta.dir, 'fixtures/direct-mount-app.ts')
 
 const dirs: string[] = []
 
@@ -41,6 +38,9 @@ const buildWithRspack = (entry: string): Promise<{ outFile: string }> => {
 				minimize: false
 			},
 			resolve: {
+				// The isolated worktree links node_modules; preserve lexical paths so
+				// the plugin's generated-module sideEffects rule matches its alias.
+				symlinks: false,
 				extensions: ['.ts', '.tsx', '.js', '.mjs', '.json']
 			},
 			module: {
@@ -101,23 +101,17 @@ describe('AOT Rspack integration', () => {
 		const { outFile } = await buildWithRspack(APP)
 
 		const bundle = readFileSync(outFile, 'utf8')
-		expect(bundle).toContain('.register({')
+		expect(bundle).toContain('appPlanPayload')
+		expect(bundle).not.toMatch(/handlerFactory|getHandler|Capture\.handler/)
 
 		expect(bundle).not.toContain('%00')
 
-		const previous = process.env.ELYSIA_AOT_BUILD
-		process.env.ELYSIA_AOT_BUILD = '1'
-		try {
-			const mod = (await import(outFile)) as { app?: any; default?: any }
-			const app = mod.app ?? mod.default
-			expect(app).toBeDefined()
+		const mod = (await import(outFile)) as { app?: any; default?: any }
+		const app = mod.app ?? mod.default
+		expect(app).toBeDefined()
 
-			const res = await app.handle(new Request('http://localhost/'))
-			expect(res.status).toBe(200)
-			expect(await res.text()).toBe('hi')
-		} finally {
-			if (previous === undefined) delete process.env.ELYSIA_AOT_BUILD
-			else process.env.ELYSIA_AOT_BUILD = previous
-		}
+		const res = await app.handle(new Request('http://localhost/'))
+		expect(res.status).toBe(200)
+		expect(await res.text()).toBe('outer')
 	}, 120_000)
 })

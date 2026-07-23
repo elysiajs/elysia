@@ -1,11 +1,10 @@
-import { decodeComponent } from 'deuri'
-
 import {
 	ELYSIA_TYPES,
 	VALIDATION_PLAN_FUSED_QUERY,
 	VALIDATION_PLAN_ORACLE,
 	VALIDATION_PLAN_QUERY
 } from './type/constants'
+import { decodeURIComponentSafe } from './utils'
 
 // bit flags
 const KEY_HAS_PLUS = 1
@@ -17,7 +16,7 @@ function splitRawParts(raw: string, flags: number) {
 	const parts = raw.split(',')
 	if (flags & VALUE_NEEDS_DECODE)
 		for (let i = 0; i < parts.length; i++)
-			parts[i] = decodeComponent(parts[i]) ?? parts[i]
+			parts[i] = decodeURIComponentSafe(parts[i]) ?? parts[i]
 
 	return parts
 }
@@ -93,7 +92,7 @@ export function parseQueryFromURL(
 		let finalKey = keySlice
 		if (flags & KEY_HAS_PLUS) finalKey = finalKey.replace(/\+/g, ' ')
 		if (flags & KEY_NEEDS_DECODE)
-			finalKey = decodeComponent(finalKey) || finalKey
+			finalKey = decodeURIComponentSafe(finalKey) || finalKey
 
 		let finalValue = ''
 		if (hasBothKeyValuePair) {
@@ -101,7 +100,7 @@ export function parseQueryFromURL(
 			if (flags & VALUE_HAS_PLUS)
 				valueSlice = valueSlice.replace(/\+/g, ' ')
 			if (flags & VALUE_NEEDS_DECODE)
-				valueSlice = decodeComponent(valueSlice) || valueSlice
+				valueSlice = decodeURIComponentSafe(valueSlice) || valueSlice
 			finalValue = valueSlice
 		}
 
@@ -208,6 +207,67 @@ export interface QueryPlan {
 	readonly scalarIndex?: Readonly<Record<string, number>>
 }
 
+const frameworkQueryPlans = new WeakSet<object>()
+const freezeQueryPlan = <T extends QueryPlan>(plan: T): T => {
+	frameworkQueryPlans.add(plan)
+	return Object.freeze(plan)
+}
+
+export const isFrameworkQueryPlan = (value: unknown): value is QueryPlan =>
+	!!value && typeof value === 'object' && frameworkQueryPlans.has(value)
+
+const snapshotQueryChannel = (
+	value: Readonly<Record<string, number>> | undefined
+) => value && Object.freeze(Object.assign(Object.create(null), value))
+
+/** @internal immutable clone that can only derive from a certified plan. */
+export function snapshotQueryPlan(plan: QueryPlan): QueryPlan {
+	if (!isFrameworkQueryPlan(plan))
+		throw new Error('query plan is not planner-owned')
+	if (!plan.fused)
+		return freezeQueryPlan({
+			parse: plan.parse,
+			array: snapshotQueryChannel(plan.array),
+			object: snapshotQueryChannel(plan.object)
+		})
+
+	const root = plan.scalarRoot
+	const required = Object.freeze([...root.required])
+	const requiredLookup = new Set(required)
+	const immutableRequired = Object.freeze({
+		has: (key: string) => requiredLookup.has(key),
+		*[Symbol.iterator]() {
+			yield* required
+		}
+	})
+	const scalarRoot = Object.freeze({
+		additional: root.additional,
+		keys: Object.freeze([...root.keys]),
+		properties: Object.freeze(
+			root.properties.map((node: any) =>
+				Object.freeze({
+					kind: node.kind,
+					integer: !!node.integer,
+					hasDefault: !!node.hasDefault,
+					defaultValue: node.hasDefault
+						? node.defaultValue
+						: undefined
+				})
+			)
+		),
+		required: immutableRequired
+	})
+
+	return freezeQueryPlan({
+		parse: plan.parse,
+		fused: true,
+		fromURL: plan.fromURL,
+		validate: plan.validate,
+		scalarRoot,
+		scalarIndex: snapshotQueryChannel(plan.scalarIndex)
+	})
+}
+
 type QueryOracle = {
 	From(value: unknown, type?: string): unknown
 	[VALIDATION_PLAN_ORACLE](value: unknown, type?: string): unknown
@@ -300,7 +360,7 @@ function scalarQueryPlan(
 	}
 	Object.freeze(index)
 
-	const plan: QueryPlan = Object.freeze({
+	const plan: QueryPlan = freezeQueryPlan({
 		parse: parseQueryFromURL,
 		fused: true as const,
 		fromURL: parseScalarQueryFromURL,
@@ -407,7 +467,8 @@ function parseScalarQueryFromURL(
 		let key = input.slice(startingIndex + 1, equal)
 		if (!hasValue && key.length === 0) return
 		if (flags & KEY_HAS_PLUS) key = key.replace(/\+/g, ' ')
-		if (flags & KEY_NEEDS_DECODE) key = decodeComponent(key) || key
+		if (flags & KEY_NEEDS_DECODE)
+			key = decodeURIComponentSafe(key) || key
 
 		const order = index[key]
 		if (order === undefined) {
@@ -423,7 +484,8 @@ function parseScalarQueryFromURL(
 
 		let value = hasValue ? input.slice(equalityIndex + 1, endIndex) : ''
 		if (flags & VALUE_HAS_PLUS) value = value.replace(/\+/g, ' ')
-		if (flags & VALUE_NEEDS_DECODE) value = decodeComponent(value) || value
+		if (flags & VALUE_NEEDS_DECODE)
+			value = decodeURIComponentSafe(value) || value
 		const node = root.properties[order]
 		result[key] = coerceScalar(
 			node.kind === 4 && node.integer ? 6 : node.kind,
@@ -533,7 +595,7 @@ function collectQueryPlan(
 	}
 }
 
-const emptyQueryPlan: QueryPlan = Object.freeze({ parse: parseQueryFromURL })
+const emptyQueryPlan: QueryPlan = freezeQueryPlan({ parse: parseQueryFromURL })
 export function createQueryPlan(
 	querySchema: any,
 	validator?: any,
@@ -550,7 +612,7 @@ export function createQueryPlan(
 	collectQueryPlan(querySchema, new WeakSet(), state)
 	if (!state.array && !state.object) return emptyQueryPlan
 
-	return Object.freeze({
+	return freezeQueryPlan({
 		parse: parseQueryFromURL,
 		array: state.array ? Object.freeze(state.array) : undefined,
 		object: state.object ? Object.freeze(state.object) : undefined
@@ -630,7 +692,7 @@ export function parseQuery(input: string) {
 		let finalKey = keySlice
 		if (flags & KEY_HAS_PLUS) finalKey = finalKey.replace(/\+/g, ' ')
 		if (flags & KEY_NEEDS_DECODE)
-			finalKey = decodeComponent(finalKey) || finalKey
+			finalKey = decodeURIComponentSafe(finalKey) || finalKey
 
 		let finalValue = ''
 		if (hasBothKeyValuePair) {
@@ -638,7 +700,7 @@ export function parseQuery(input: string) {
 			if (flags & VALUE_HAS_PLUS)
 				valueSlice = valueSlice.replace(/\+/g, ' ')
 			if (flags & VALUE_NEEDS_DECODE)
-				valueSlice = decodeComponent(valueSlice) || valueSlice
+				valueSlice = decodeURIComponentSafe(valueSlice) || valueSlice
 			finalValue = valueSlice
 		}
 

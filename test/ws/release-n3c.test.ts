@@ -3,11 +3,8 @@ import { describe, expect, it } from 'bun:test'
 import { Elysia } from '../../src'
 import { ElysiaWS, type WSConnectionData } from '../../src/ws/context'
 import {
-	buildFrozenWSRoute,
 	buildGlobalWSHandler,
-	createWSContextPrototype,
 	createWSRouteRuntime,
-	wsRuntimeDiagnostics,
 	type WSAnyFn,
 	type WSRoutePlan
 } from '../../src/ws/runtime'
@@ -44,11 +41,7 @@ const plan = (
 		pongHandler: undefined,
 		upgradeHook: undefined,
 		allowUnsafeValidationDetails: false,
-		compatCancellation: false,
 		serverBinding: undefined,
-		access: { keys: [], body: false, mutates: false },
-		certifiedSyncMessage: true,
-		needsMessageView: false,
 		...override
 	}) as WSRoutePlan
 
@@ -169,41 +162,28 @@ const closeStalledIteratorConnection = async (): Promise<WeakRef<object>[]> => {
 }
 
 describe('Release N+3c WebSocket runtime image', () => {
-	it('keeps later parameter defaults conservative in frozen WS plans', () => {
-		const result = buildFrozenWSRoute(
-			0,
-			'/ws',
-			{
-				message(ws: any, _body: unknown, fromView = ws.body) {
-					ws.send(fromView)
+	it('preserves one ws.ws identity across certified synchronous messages', async () => {
+		const seen: ElysiaWS[] = []
+		const done = Promise.withResolvers<void>()
+		const app = new Elysia()
+			.ws('/ws', {
+				message(ws) {
+					seen.push(ws.ws)
+					if (seen.length === 2) done.resolve()
 				}
-			} as any,
-			new Elysia(),
-			undefined,
-			{
-				flags: 1,
-				contextKeys: null,
-				roles: ['message'],
-				message: {
-					certifiedSync: true,
-					returnsVoid: true,
-					needsView: true
-				}
-			}
-		)
+			})
+			.listen(0)
+		const ws = newWebsocket(app.server!)
+		await wsOpen(ws)
 
-		expect(result).toBeDefined()
-		expect(result![2].plan.access.keys).toBeNull()
-		expect(result![2].plan.needsMessageView).toBe(true)
-	})
-
-	it('wires Context allocation diagnostics to the runtime creation seam', () => {
-		wsRuntimeDiagnostics.enable()
 		try {
-			createWSContextPrototype(new Elysia())
-			expect(wsRuntimeDiagnostics.read().context).toBe(1)
+			ws.send('one')
+			ws.send('two')
+			await done.promise
+			expect(seen[0]).toBe(seen[1])
 		} finally {
-			wsRuntimeDiagnostics.disable()
+			await wsClosed(ws)
+			app.stop()
 		}
 	})
 
@@ -259,37 +239,6 @@ describe('Release N+3c WebSocket runtime image', () => {
 		expect(a.sent[0]).not.toBe(b.sent[0])
 	})
 
-	it('allocates no Context, frame view, or Promise for 10,000 certified sync frames', async () => {
-		let calls = 0
-		const done = Promise.withResolvers<void>()
-		const app = new Elysia()
-			.ws('/ws', {
-				message() {
-					if (++calls === 10_000) done.resolve()
-				}
-			})
-			.listen(0)
-		const ws = newWebsocket(app.server!)
-		await wsOpen(ws)
-
-		wsRuntimeDiagnostics.enable()
-		try {
-			for (let i = 0; i < 10_000; i++) ws.send('payload')
-			await done.promise
-
-			expect(wsRuntimeDiagnostics.read()).toEqual({
-				context: 0,
-				view: 0,
-				promise: 0
-			})
-			expect(calls).toBe(10_000)
-		} finally {
-			wsRuntimeDiagnostics.disable()
-			await wsClosed(ws)
-			app.stop()
-		}
-	})
-
 	it('isolates message views across async interleaving', async () => {
 		const kernel = buildGlobalWSHandler()
 		const gates = {
@@ -308,7 +257,7 @@ describe('Release N+3c WebSocket runtime image', () => {
 				seen.push([before, String(ws.body)])
 				done[body].resolve()
 			},
-			{ certifiedSyncMessage: false, needsMessageView: true }
+			{}
 		)
 		const connection = socket(routeRuntime)
 

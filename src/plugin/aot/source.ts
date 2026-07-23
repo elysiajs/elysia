@@ -1,38 +1,34 @@
 import type { AnyElysia } from '../../base'
 import {
 	Capture,
-	Compiled,
 	type CapturedValidator,
-	type CapturedHandler,
 	type CapturedWSRoute,
-	type HandlerManifest,
 	createAotFingerprint,
+	getCompilerSession,
 	type AotFingerprint
 } from '../../compile/aot'
+import { serializeAppPlanAot } from '../../compile/app-plan-aot'
+import type { AppPlan } from '../../compile/app-plan'
 // importing `aot-capture` also installs the capture impl (module side effect)
 import {
 	beginValidatorCapture,
 	endValidatorCapture,
-	endHandlerCapture,
 	endWSCapture,
-	abortCapture,
-	snapshotCompiled,
-	restoreCompiled
+	abortCapture
 } from '../../compile/aot-capture'
 import { Source } from '../../compile/aot-emit'
 import { env } from '../../universal'
 import { nullObject } from '../../utils'
 
-import {
-	setCaptureHeaderShorthand,
-	compileHandler
-} from '../../compile/handler'
-import { JITProbe, type JITProbeReason } from '../../compile/jit-probe'
-import { Validator } from '../../validator'
+import { BunAdapter } from '../../adapter/bun'
+import { WebStandardAdapter } from '../../adapter/web-standard'
 
 export type AotTarget = 'bun' | 'node' | 'workerd'
 
 export interface CompileToSourceOptions {
+	/** @internal Sealed plan that owns direct-AOT sidecar identity emission. */
+	appPlan?: AppPlan
+
 	/** Emit a self-registering fingerprinted program (`Compiled.register(...)`). */
 	register?: boolean
 
@@ -54,14 +50,6 @@ export interface CompileToSourceOptions {
 	 * @default 'elysia'
 	 */
 	registerFrom?: string
-
-	/**
-	 * Specifier the generated module imports `buildCoercedFromPlan`
-	 * from only emitted when the manifest carries a coerce plan (`cp`)
-	 *
-	 * @default 'elysia/coerce-plan'
-	 */
-	coercePlanFrom?: string
 
 	/**
 	 * Specifier the generated module imports the `Reconstruct` table from,
@@ -91,9 +79,9 @@ export async function compileToSource(
 export interface CapturedArtifacts {
 	source: string
 	validators: CapturedValidator[]
-	handlers: CapturedHandler[]
 	wsRoutes: CapturedWSRoute[]
 	fingerprint: AotFingerprint
+	appPlan?: AppPlan
 }
 
 export async function captureArtifacts(
@@ -101,9 +89,17 @@ export async function captureArtifacts(
 	options?: CompileToSourceOptions
 ): Promise<CapturedArtifacts> {
 	const previousAotBuild = env.ELYSIA_AOT_BUILD
+	const config = app['~config'] ?? (app['~config'] = {})
+	const previousAdapter = config.adapter
+	if (options?.target && previousAdapter === undefined)
+		config.adapter =
+			options.target === 'bun' ? BunAdapter : WebStandardAdapter
 	env.ELYSIA_AOT_BUILD = '1'
 
 	try {
+		const hadImplicitCapture = getCompilerSession()?.capture !== undefined
+		if (options?.appPlan && options.appPlan.programId !== app['~programId'])
+			throw new Error('[elysia-aot] AppPlan capture ownership mismatch.')
 		if (!Capture.isCapturing())
 			throw new Error(
 				'[elysia-aot]: ELYSIA_AOT_BUILD=1 must be set to enable AOT capture mode'
@@ -114,12 +110,28 @@ export async function captureArtifacts(
 		const modules = (app as { modules?: Promise<unknown> }).modules
 		if (modules) await modules
 
-		if (options?.target !== undefined)
-			setCaptureHeaderShorthand(options.target === 'bun')
-		;(app as { compile(): unknown }).compile()
+		const generation = (app as { ['~generation']?: { plan?: AppPlan } })[
+			'~generation'
+		]
+		if (generation && !generation.plan)
+			throw new Error(
+				'[elysia-aot] AppPlan unavailable after production retention sealing; capture before compiling or enable introspection.'
+			)
+		if (generation && !hadImplicitCapture)
+			throw new Error(
+				'[elysia-aot] Capture must begin before app compilation; capture a fresh app instead.'
+			)
+		if (generation && generation.plan!.adapter.target !== config.adapter?.name)
+			(app as { ['~newGeneration'](): unknown })['~newGeneration']()
+		else (app as { compile(): unknown }).compile()
 		const captured = endValidatorCapture()
-		const handlers = endHandlerCapture()
 		const wsRoutes = endWSCapture()
+		const appPlan =
+			options?.appPlan ??
+			(app as { ['~generation']?: { plan?: AppPlan } })['~generation']?.plan
+		if (appPlan && appPlan.programId !== app['~programId'])
+			throw new Error('[elysia-aot] AppPlan capture ownership mismatch.')
+		const emitOptions = appPlan ? { ...options, appPlan } : options
 		const fingerprint =
 			(app as { ['~aotFingerprint']?: AotFingerprint })[
 				'~aotFingerprint'
@@ -128,132 +140,27 @@ export async function captureArtifacts(
 		return {
 			source: emitModule(
 				captured,
-				handlers,
 				wsRoutes,
 				fingerprint,
-				options
+				emitOptions
 			),
 			validators: captured,
-			handlers,
 			wsRoutes,
-			fingerprint
+			fingerprint,
+			appPlan
 		}
 	} finally {
-		setCaptureHeaderShorthand(undefined)
 		abortCapture()
+		config.adapter = previousAdapter
 
 		if (previousAotBuild === undefined) delete env.ELYSIA_AOT_BUILD
 		else env.ELYSIA_AOT_BUILD = previousAotBuild
 	}
 }
 
-export interface StubbabilityReport {
-	/** `sucrose` + the handler `new Function` codegen is unused. */
-	jit: boolean
-
-	/** Why handler JIT cannot be stripped, if any. */
-	reasons: JITProbeReason[]
-}
-
-/**
- * Decide whether the frozen build can run with handler JIT replaced by a
- * throwing stub
- *
- * Static prediction is unsound
- *
- * eg. an inline-eligible handler (`() => 'ok'`) is never captured into
- * handler manifest and falls through to `sucrose` at runtime
- *
- * So instead of guessing, this captures the manifest, registers it in-process
- * and replays every route through the real `compileHandler` with a tripwire armed
- *
- * Handler JIT is only reported stubbable when no handler-JIT entry point was reached
- */
-export async function analyzeStubbability(
-	app: AnyElysia,
-	options?: CompileToSourceOptions
-): Promise<StubbabilityReport> {
-	const { handlers } = await captureArtifacts(app, options)
-
-	return replayStubbability(app, handlers)
-}
-
-const materialiseHandlersForReplay = (
-	captured: CapturedHandler[]
-): HandlerManifest => {
-	const manifest: HandlerManifest = {}
-	for (const h of captured) {
-		if ('program' in h) {
-			;(manifest[h.method] ??= {})[h.path] = { p: h.program }
-			continue
-		}
-
-		;(manifest[h.method] ??= {})[h.path] = {
-			a: h.alias ? h.alias.split(',') : [],
-			// eslint-disable-next-line sonarjs/code-eval
-			f: new Function(
-				`return ${Source.handlerFactory(h.alias, h.code)}`
-			)() as any
-		}
-	}
-
-	return manifest
-}
-
-export function replayStubbability(
-	app: AnyElysia,
-	handlers: CapturedHandler[]
-): StubbabilityReport {
-	const previousCompiled = snapshotCompiled()
-	const previousAotBuild = env.ELYSIA_AOT_BUILD
-
-	if (previousAotBuild !== undefined) delete env.ELYSIA_AOT_BUILD
-
-	try {
-		Compiled.clear()
-		// replay on the program lane: `compileHandler` looks up the replayed
-		// app's own `~programId`
-		const fingerprint = createAotFingerprint()
-		Compiled.register({
-			bf: 1,
-			fingerprint,
-			handlers: materialiseHandlersForReplay(handlers)
-		})
-		Compiled.claim(app['~programId'], fingerprint)
-		Validator.clear()
-
-		const history = app['~routes'] ?? []
-
-		JITProbe.begin()
-
-		for (const route of history) {
-			try {
-				if ((route[0] as unknown) === 'WS') continue
-				compileHandler(route, app)
-			} catch {
-				JITProbe.end()
-
-				return {
-					jit: false,
-					reasons: ['handler:new-function']
-				}
-			}
-		}
-
-		return JITProbe.end()
-	} finally {
-		restoreCompiled(previousCompiled)
-
-		Validator.clear()
-		if (previousAotBuild !== undefined)
-			env.ELYSIA_AOT_BUILD = previousAotBuild
-	}
-}
-
 /** @internal deterministic manifest source emitter. */
 export function emitModule(
 	captured: CapturedValidator[],
-	handlers: CapturedHandler[],
 	wsRoutes: CapturedWSRoute[],
 	fingerprint: AotFingerprint,
 	options?: CompileToSourceOptions
@@ -295,7 +202,6 @@ export function emitModule(
 	let unionDecls = ''
 
 	// any emitted `cp:` needs the coerce-plan rebuilder registered at runtime
-	let hasCoercePlan = false
 	const unionTable = (u: { identifier: string; code: string }[][]) => {
 		const str = branchTable(u)
 		let ref = unionRef.get(str)
@@ -403,7 +309,6 @@ export function emitModule(
 		}
 
 		if (c.coercePlan) {
-			hasCoercePlan = true
 			parts.push(`cp: ${JSON.stringify(c.coercePlan)}`)
 		}
 
@@ -415,7 +320,8 @@ export function emitModule(
 	const treeToSource = (
 		tree: Record<string, Record<string, Record<string, string>>>,
 		slotRef: Map<string, string>,
-		sink: (decl: string) => void
+		sink: (decl: string) => void,
+		prefix = '_s'
 	): string => {
 		const methods: string[] = []
 		for (const method in tree) {
@@ -429,7 +335,7 @@ export function emitModule(
 					'}'
 				let ref = slotRef.get(slotObj)
 				if (ref === undefined) {
-					ref = `_s${slotRef.size}`
+					ref = `${prefix}${slotRef.size}`
 					slotRef.set(slotObj, ref)
 					sink(`const ${ref} = ${slotObj}\n`)
 				}
@@ -442,10 +348,23 @@ export function emitModule(
 
 	let validatorDecls = ''
 	const factoryRef = new Map<string, string>()
-	const tree = nullObject() as Record<
+	const appPlanValidatorTree = nullObject() as Record<
 		string,
 		Record<string, Record<string, string>>
 	>
+	const appPlanValidatorIdentities = new Map<string, unknown>()
+	for (const route of [
+		...(options?.appPlan?.fingerprint.httpRoutes ?? []),
+		...(options?.appPlan?.fingerprint.wsRoutes ?? [])
+	]) {
+		const method = 'method' in route ? route.method : 'WS'
+		for (const validator of route.validators)
+			appPlanValidatorIdentities.set(
+				`${method}\0${route.path}\0${validator.slot}`,
+				validator
+			)
+	}
+	const emittedAppPlanValidators = new Set<string>()
 	for (const c of captured) {
 		const parts = entryParts(c)
 		if (!parts.length) continue
@@ -459,86 +378,58 @@ export function emitModule(
 			validatorDecls += `const ${ref} = ${entrySrc}\n`
 		}
 
-		const byPath = (tree[c.method] ??= nullObject() as any)
-		;(byPath[c.path] ??= nullObject() as any)[c.slot] = ref
+		if (options?.appPlan) {
+			const slotKey = `${c.method}\0${c.path}\0${c.slot}`
+			const identity = appPlanValidatorIdentities.get(slotKey)
+			if (!identity || emittedAppPlanValidators.has(slotKey))
+				throw new Error('[elysia-aot] Validator image layout mismatch.')
+			const wrapperRef = `_av${emittedAppPlanValidators.size}`
+			validatorDecls += `const ${wrapperRef} = { identity: ${JSON.stringify(identity)}, image: ${ref} }\n`
+			const appPlanByPath = (appPlanValidatorTree[c.method] ??=
+				nullObject() as any)
+			;(appPlanByPath[c.path] ??= nullObject() as any)[c.slot] = wrapperRef
+			emittedAppPlanValidators.add(slotKey)
+		}
 	}
 
-	// global slot-object dedup (`_s` consts appended after the `_c`)
-	const treeStr = treeToSource(tree, new Map(), (d) => {
-		validatorDecls += d
-	})
-
-	let validatorExport = `export const validators = ${treeStr}\n`
+	let appPlanValidatorExport = ''
+	if (options?.appPlan) {
+		const appPlanTree = treeToSource(
+			appPlanValidatorTree,
+			new Map(),
+			(d) => {
+				validatorDecls += d
+			},
+			'_as'
+		)
+		appPlanValidatorExport = `export const appPlanValidators = ${appPlanTree}\n`
+	}
 
 	// wire the reconstruction table before the app can observe a frozen entry
 	if (options?.register && captured.length)
-		validatorExport =
-			'Compiled.reconstruct = Reconstruct\n' + validatorExport
-
-	const aliasRef = new Map<string, string>()
-	const handlerRef = new Map<string, string>()
-	const programRef = new Map<string, string>()
-
-	let handlerDecls = ''
-	let wrapperCount = 0
-	const handlerTree = nullObject() as Record<string, Record<string, string>>
-
-	for (const h of handlers) {
-		if ('program' in h) {
-			const src = JSON.stringify(h.program)
-			let wref = programRef.get(src)
-			if (wref === undefined) {
-				const pref = `_p${programRef.size}`
-				wref = `_w${wrapperCount++}`
-				programRef.set(src, wref)
-				handlerDecls += `const ${pref} = ${src}\nconst ${wref} = { p: ${pref} }\n`
-			}
-
-			;(handlerTree[h.method] ??= {})[h.path] = wref
-			continue
-		}
-
-		const src = Source.handlerFactory(h.alias, h.code)
-
-		let wref = handlerRef.get(src)
-		if (wref === undefined) {
-			const n = handlerRef.size
-
-			let aref = aliasRef.get(h.alias)
-			if (aref === undefined) {
-				aref = `_a${aliasRef.size}`
-				aliasRef.set(h.alias, aref)
-				handlerDecls += `const ${aref} = ${JSON.stringify(
-					h.alias ? h.alias.split(',') : []
-				)}\n`
-			}
-
-			wref = `_w${wrapperCount++}`
-			handlerRef.set(src, wref)
-			handlerDecls += `const _h${n} = ${src}\nconst ${wref} = { a: ${aref}, f: _h${n} }\n`
-		}
-
-		;(handlerTree[h.method] ??= {})[h.path] = wref
-	}
-
-	let handlerExport = 'export const handlers = {\n'
-	for (const method in handlerTree) {
-		handlerExport += `\t${JSON.stringify(method)}: {\n`
-		for (const path in handlerTree[method])
-			handlerExport += `\t\t${JSON.stringify(path)}: ${handlerTree[method]![path]},\n`
-		handlerExport += '\t},\n'
-	}
-
-	handlerExport += '}\n'
+		appPlanValidatorExport =
+			'Compiled.reconstruct = Reconstruct\n' + appPlanValidatorExport
 
 	const wsRoleRef = new Map<string, string>()
 	const wsFactoryRef = new Map<string, string>()
 	const wsEntryRef = new Map<string, string>()
-	const wsTree: Record<string, string> = nullObject()
+	const appPlanWSTree: Record<string, string> = nullObject()
+	const appPlanWSIdentities = new Map(
+		(options?.appPlan?.fingerprint.wsRoutes ?? []).map((route) => [
+			route.path,
+			route.identity
+		] as const)
+	)
+	const emittedAppPlanWS = new Set<string>()
+	const schemaWSPaths = new Set(
+		Object.keys(appPlanValidatorTree.WS ?? {})
+	)
 	let wsDecls = ''
 
 	for (const route of wsRoutes) {
 		if (!('source' in route)) continue
+		if (options?.appPlan && schemaWSPaths.has(route.path))
+			continue
 
 		const roles = JSON.stringify(route.roles)
 		let aref = wsRoleRef.get(roles)
@@ -563,22 +454,33 @@ export function emitModule(
 			wsDecls += `const ${ref} = ${entry}\n`
 		}
 
-		wsTree[route.path] = ref
+		if (options?.appPlan) {
+			const identity = appPlanWSIdentities.get(route.path)
+			if (!identity || emittedAppPlanWS.has(route.path))
+				throw new Error('[elysia-aot] WebSocket image path mismatch.')
+			const wrapperRef = `_awr${emittedAppPlanWS.size}`
+			wsDecls += `const ${wrapperRef} = { identity: ${JSON.stringify(identity)}, roles: ${aref}, image: ${ref} }\n`
+			appPlanWSTree[route.path] = wrapperRef
+			emittedAppPlanWS.add(route.path)
+		}
 	}
 
-	let wsExport = ''
-	if (wsEntryRef.size) {
-		wsExport = 'export const wsRoutes = {'
-		for (const path in wsTree)
-			wsExport += `${JSON.stringify(path)}:${wsTree[path]},`
-		wsExport += '}\n'
+	let appPlanWSExport = ''
+	if (options?.appPlan) {
+		appPlanWSExport = 'export const appPlanWSRoutes = {'
+		for (const path in appPlanWSTree)
+			appPlanWSExport += `${JSON.stringify(path)}:${appPlanWSTree[path]},`
+		appPlanWSExport += '}\n'
 	}
+	const appPlanPayloadExport = options?.appPlan
+		? `export const appPlanPayload = ${serializeAppPlanAot(options.appPlan)}\n`
+		: ''
 
 	const fingerprintExport = options?.register
 		? `export const fingerprint = ${JSON.stringify(fingerprint)}\n`
 		: ''
 	const registration = options?.register
-		? `Compiled.register({ bf: 1, fingerprint, validators, handlers${wsEntryRef.size ? ', wsRoutes' : ''}${hasCoercePlan ? ', planRebuilder: buildCoercedFromPlan' : ''} })\n`
+		? 'Compiled.register({ bf: 1, fingerprint, appPlan: { payload: appPlanPayload, validators: appPlanValidators, wsRoutes: appPlanWSRoutes } })\n'
 		: ''
 
 	let body = '// Generated by Elysia build plugin. Do not edit.\n'
@@ -586,11 +488,6 @@ export function emitModule(
 	if (options?.register)
 		body += `import { Compiled } from ${JSON.stringify(
 			options.registerFrom ?? 'elysia'
-		)}\n`
-
-	if (options?.register && hasCoercePlan)
-		body += `import { buildCoercedFromPlan } from ${JSON.stringify(
-			options.coercePlanFrom ?? 'elysia/coerce-plan'
 		)}\n`
 
 	if (options?.register && captured.length)
@@ -603,8 +500,7 @@ export function emitModule(
 			options?.wsRuntimeFrom ?? 'elysia/ws/runtime'
 		)}\n`
 
-	const generated =
-		branchDecls + unionDecls + validatorDecls + handlerDecls + wsDecls
+	const generated = branchDecls + unionDecls + validatorDecls + wsDecls
 	const needs = (symbol: string) =>
 		new RegExp(`\\b${symbol}\\b`).test(generated)
 
@@ -621,18 +517,16 @@ export function emitModule(
 		unionDecls +
 		(unionDecls && '\n') +
 		validatorDecls +
-		handlerDecls +
 		wsDecls +
 		'\n' +
-		validatorExport +
+		appPlanValidatorExport +
+		(appPlanWSExport ? '\n' + appPlanWSExport : '') +
 		'\n' +
-		handlerExport +
-		(wsExport ? '\n' + wsExport : '') +
-		'\n' +
+		appPlanPayloadExport +
 		fingerprintExport +
 		registration
 
-	body += '\nexport default validators\n'
+	if (options?.appPlan) body += '\nexport default appPlanValidators\n'
 
 	return body
 }

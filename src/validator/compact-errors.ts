@@ -1,9 +1,61 @@
+import { Guard } from 'typebox/guard'
+
+import { ELYSIA_BUILTIN, ELYSIA_TYPES } from '../type/constants'
+
 interface CompactError {
 	keyword: string
 	schemaPath: string
 	instancePath: string
 	params: Record<string, unknown>
 	message: string
+}
+
+const compactCoercionTypes = new Set<number>([
+	ELYSIA_TYPES.Numeric,
+	ELYSIA_TYPES.Integer,
+	ELYSIA_TYPES.BooleanString,
+	ELYSIA_TYPES.ObjectString,
+	ELYSIA_TYPES.ArrayString
+])
+
+export const snapshotDiagnosticValue = (
+	value: unknown,
+	seen = new WeakMap<object, unknown>()
+): unknown => {
+	if (value === null || typeof value !== 'object') return value
+	if ('~kind' in value || '~elyTyp' in value) return
+	const cached = seen.get(value)
+	if (cached !== undefined) return cached
+	if (value instanceof Date) return new Date(value)
+	if (value instanceof RegExp) return new RegExp(value)
+
+	const out: any = Array.isArray(value)
+		? []
+		: Object.create(Object.getPrototypeOf(value))
+	seen.set(value, out)
+	for (const key of Reflect.ownKeys(value)) {
+		const descriptor = Object.getOwnPropertyDescriptor(value, key)
+		if (!descriptor || !('value' in descriptor)) continue
+		Object.defineProperty(out, key, {
+			...descriptor,
+			value: snapshotDiagnosticValue(descriptor.value, seen)
+		})
+	}
+
+	return out
+}
+
+const acceptsDate = (value: unknown) => {
+	if (value instanceof Date) return !Number.isNaN(value.getTime())
+	if (typeof value === 'number') return Number.isFinite(value)
+	if (typeof value !== 'string') return false
+	if (!Number.isNaN(new Date(value).getTime())) return true
+	return (
+		/T\d{2}:\d{2}(?::\d{2})? \d{2}:\d{2}$/.test(value) &&
+		!Number.isNaN(
+			new Date(value.replace(/ (\d{2}:\d{2})$/, '+$1')).getTime()
+		)
+	)
 }
 
 export type CompactErrorLocator = (value: unknown) => CompactError[]
@@ -172,6 +224,43 @@ export function compactDiagnosticSchema(
 	}
 	seen.set(schema, out)
 
+	const builtin = schema[ELYSIA_BUILTIN]
+	if (
+		builtin &&
+		builtin.type === schema['~elyTyp'] &&
+		compactCoercionTypes.has(builtin.type)
+	) {
+		out['~coerceCheck'] = builtin.check
+		out['~coerceRootFallback'] = true
+	} else if (
+		schema['~elyTyp'] === ELYSIA_TYPES.Date &&
+		schema['~kind'] === 'Union'
+	)
+		out['~builtinDiagnostic'] = 'Date'
+
+	if (schema.error !== undefined)
+		out.error = snapshotDiagnosticValue(schema.error)
+	if (schema.default !== undefined)
+		out.default = snapshotDiagnosticValue(schema.default)
+	if (schema.const !== undefined)
+		out.const = snapshotDiagnosticValue(schema.const)
+	if (Array.isArray(schema.enum))
+		out.enum = schema.enum.map(snapshotDiagnosticValue)
+	for (const key of [
+		'pattern',
+		'minLength',
+		'maxLength',
+		'minimum',
+		'maximum',
+		'exclusiveMinimum',
+		'exclusiveMaximum',
+		'multipleOf',
+		'minItems',
+		'maxItems',
+		'minProperties',
+		'maxProperties'
+	] as const)
+		if (schema[key] !== undefined) out[key] = schema[key]
 	if (Array.isArray(schema.required)) out.required = schema.required.slice()
 	if (schema.properties) {
 		out.properties = Object.create(null)
@@ -187,9 +276,16 @@ export function compactDiagnosticSchema(
 					compactDiagnosticSchema(item, seen)
 				)
 			: compactDiagnosticSchema(schema.items, seen)
-	if (schema.anyOf) out.anyOf = true
-	if (schema.oneOf) out.oneOf = true
-	if (schema.allOf) out.allOf = true
+	for (const key of ['anyOf', 'oneOf', 'allOf'] as const)
+		if (Array.isArray(schema[key]))
+			out[key] = schema[key].map((item: unknown) =>
+				compactDiagnosticSchema(item, seen)
+			)
+	if (
+		compactCoercionTypes.has(schema['~elyTyp']) &&
+		out.anyOf?.some((item: any) => item?.['~coerceRootFallback'])
+	)
+		out['~coerceRootFallback'] = true
 
 	return out
 }
@@ -199,9 +295,9 @@ function jsTypeMatches(value: unknown, type: string) {
 		case 'string':
 			return typeof value === 'string'
 		case 'number':
-			return typeof value === 'number'
+			return Guard.IsNumber(value)
 		case 'integer':
-			return typeof value === 'number' && Number.isInteger(value)
+			return Guard.IsInteger(value)
 		case 'boolean':
 			return typeof value === 'boolean'
 		case 'null':
@@ -231,6 +327,20 @@ const typeError = (
 	message: `must be ${schema.type}`
 })
 
+const limitError = (
+	keyword: string,
+	limit: number,
+	message: string,
+	instancePath: string,
+	schemaPath: string
+): CompactError => ({
+	keyword,
+	schemaPath,
+	instancePath,
+	params: { limit },
+	message
+})
+
 function walkCompactError(
 	schema: any,
 	value: unknown,
@@ -238,6 +348,32 @@ function walkCompactError(
 	schemaPath: string
 ): CompactError | undefined {
 	if (!schema || typeof schema !== 'object') return
+	if (schema['~builtinDiagnostic'] === 'Date')
+		return acceptsDate(value)
+			? undefined
+			: {
+					keyword: 'type',
+					schemaPath,
+					instancePath,
+					params: {},
+					message: 'must be Date'
+				}
+	if (
+		typeof schema['~coerceCheck'] === 'function' &&
+		Array.isArray(schema.anyOf) &&
+		schema.anyOf[0]
+	) {
+		if (schema['~coerceRootFallback']) return
+		const first = walkCompactError(
+			schema.anyOf[0],
+			value,
+			instancePath,
+			schemaPath
+		)
+		if (!first || (typeof value === 'string' && schema['~coerceCheck'](value)))
+			return
+		return first
+	}
 
 	const type = schema.type
 	if (type === 'object') {
@@ -254,7 +390,24 @@ function walkCompactError(
 						instancePath,
 						params: { requiredProperties: [key] },
 						message: `must have required properties ${key}`
-					}
+						}
+		const size = Object.keys(value as object).length
+		if (typeof schema.minProperties === 'number' && size < schema.minProperties)
+			return limitError(
+				'minProperties',
+				schema.minProperties,
+				`must not have fewer than ${schema.minProperties} properties`,
+				instancePath,
+				schemaPath
+			)
+		if (typeof schema.maxProperties === 'number' && size > schema.maxProperties)
+			return limitError(
+				'maxProperties',
+				schema.maxProperties,
+				`must not have more than ${schema.maxProperties} properties`,
+				instancePath,
+				schemaPath
+			)
 
 		const properties = schema.properties
 		if (properties)
@@ -276,6 +429,23 @@ function walkCompactError(
 		if (!Array.isArray(value))
 			return typeError(schema, instancePath, schemaPath)
 
+		if (typeof schema.minItems === 'number' && value.length < schema.minItems)
+			return limitError(
+				'minItems',
+				schema.minItems,
+				`must not have fewer than ${schema.minItems} items`,
+				instancePath,
+				schemaPath
+			)
+		if (typeof schema.maxItems === 'number' && value.length > schema.maxItems)
+			return limitError(
+				'maxItems',
+				schema.maxItems,
+				`must not have more than ${schema.maxItems} items`,
+				instancePath,
+				schemaPath
+			)
+
 		if (schema.items)
 			for (let i = 0; i < value.length; i++) {
 				const child = walkCompactError(
@@ -290,8 +460,83 @@ function walkCompactError(
 		return
 	}
 
-	if (typeof type === 'string' && !jsTypeMatches(value, type))
-		return typeError(schema, instancePath, schemaPath)
+	if (typeof type === 'string') {
+		if (!jsTypeMatches(value, type))
+			return typeError(schema, instancePath, schemaPath)
+		if (type === 'number' || type === 'integer') {
+			for (const [keyword, comparison, invalid] of [
+				['minimum', '>=', (input: number, limit: number) => input < limit],
+				['maximum', '<=', (input: number, limit: number) => input > limit],
+				[
+					'exclusiveMinimum',
+					'>',
+					(input: number, limit: number) => input <= limit
+				],
+				[
+					'exclusiveMaximum',
+					'<',
+					(input: number, limit: number) => input >= limit
+				]
+			] as const) {
+				const limit = schema[keyword]
+				if (typeof limit === 'number' && invalid(value as number, limit))
+					return {
+						keyword,
+						schemaPath,
+						instancePath,
+						params: { comparison, limit },
+						message: `must be ${comparison} ${limit}`
+					}
+			}
+			if (
+				typeof schema.multipleOf === 'number' &&
+				!Guard.IsMultipleOf(value as number, schema.multipleOf)
+			)
+				return {
+					keyword: 'multipleOf',
+					schemaPath,
+					instancePath,
+					params: { multipleOf: schema.multipleOf },
+					message: `must be multiple of ${schema.multipleOf}`
+				}
+		}
+		if (
+			type === 'string' &&
+			typeof schema.minLength === 'number' &&
+			!Guard.IsMinLength(value as string, schema.minLength)
+		)
+			return limitError(
+				'minLength',
+				schema.minLength,
+				`must not have fewer than ${schema.minLength} characters`,
+				instancePath,
+				schemaPath
+			)
+		if (
+			type === 'string' &&
+			typeof schema.maxLength === 'number' &&
+			!Guard.IsMaxLength(value as string, schema.maxLength)
+		)
+			return limitError(
+				'maxLength',
+				schema.maxLength,
+				`must not have more than ${schema.maxLength} characters`,
+				instancePath,
+				schemaPath
+			)
+		if (
+			type === 'string' &&
+			typeof schema.pattern === 'string' &&
+			!new RegExp(schema.pattern).test(value as string)
+		)
+			return {
+				keyword: 'pattern',
+				schemaPath,
+				instancePath,
+				params: { pattern: schema.pattern },
+				message: `must match pattern "${schema.pattern}"`
+			}
+	}
 }
 
 function bestEffortError(schema: any, value: unknown): CompactError {
@@ -304,14 +549,23 @@ function bestEffortError(schema: any, value: unknown): CompactError {
 	)
 		for (const key in schema.properties) {
 			if (!(key in (value as object))) continue
-			if (isCompactDiagnosable(schema.properties[key])) continue
+			const child = schema.properties[key]
+			const childValue = (value as any)[key]
+			if (
+				typeof child?.['~coerceCheck'] === 'function' &&
+				typeof childValue === 'string' &&
+				child['~coerceCheck'](childValue)
+			)
+				continue
+			if (isCompactDiagnosable(child)) continue
+			if (child?.['~coerceRootFallback']) break
 
 			return {
 				keyword: 'type',
 				schemaPath: `#/properties/${key}`,
 				instancePath: `/${key}`,
 				params: {},
-				message: `must match ${schema.properties[key]?.['~kind'] ?? 'schema'}`
+				message: `must match ${child?.['~kind'] ?? 'schema'}`
 			}
 		}
 

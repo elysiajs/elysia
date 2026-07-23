@@ -3,11 +3,10 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
-import { Compiled, type ProgramId } from '../../src/compile/aot'
+import { Compiled } from '../../src/compile/aot'
 import {
 	beginValidatorCapture,
-	endValidatorCapture,
-	endHandlerCapture
+	endValidatorCapture
 } from '../../src/compile/aot-capture'
 import { RouteValidator } from '../../src/validator/route'
 import {
@@ -15,7 +14,7 @@ import {
 	isCapturedBridgeFree
 } from '../../src/compile/handler/frozen-validator'
 
-import { claimManifest, materialise } from './_manifest'
+import { claimManifest, materialise, type ClaimedManifest } from './_manifest'
 
 /** Frozen validators must match wired validation without using TypeBox. */
 
@@ -30,7 +29,6 @@ function freeze(schema: any) {
 	;(app as any).compile()
 
 	const captured = endValidatorCapture()
-	endHandlerCapture()
 	delete process.env.ELYSIA_AOT_BUILD
 
 	Compiled.clear()
@@ -43,7 +41,7 @@ function freeze(schema: any) {
 }
 
 // program claimed by the latest `freeze()`/`freezeModelRef()`
-let claimed: { ['~programId']: ProgramId }
+let claimed: ClaimedManifest
 
 const hook = (schema: any) => ({ body: schema })
 const root = (normalize?: false) =>
@@ -55,6 +53,7 @@ const wired = (schema: any, normalize?: false) =>
 		{
 			aot: { method: METHOD, path: PATH },
 			app: claimed,
+			frozenSlots: claimed.validators[METHOD]![PATH]!,
 			normalize
 		} as any
 	)
@@ -64,7 +63,8 @@ const bridgeFree = (schema: any, normalize?: false) =>
 		hook(schema) as any,
 		root(normalize),
 		METHOD,
-		PATH
+		PATH,
+		claimed.validators[METHOD]![PATH]!
 	)
 
 interface Outcome {
@@ -224,7 +224,6 @@ describe('model references without TypeBox', () => {
 		;(app as any).compile()
 
 		const captured = endValidatorCapture()
-		endHandlerCapture()
 		delete process.env.ELYSIA_AOT_BUILD
 
 		Compiled.clear()
@@ -252,7 +251,8 @@ describe('model references without TypeBox', () => {
 				{ body: 'closed' } as any,
 				root,
 				METHOD as any,
-				PATH
+				PATH,
+				claimed.validators[METHOD]![PATH]!
 			)
 		).toBeUndefined()
 	})
@@ -267,14 +267,16 @@ describe('model references without TypeBox', () => {
 			{
 				models,
 				aot: { method: METHOD, path: PATH },
-				app: claimed
+				app: claimed,
+				frozenSlots: claimed.validators[METHOD]![PATH]!
 			} as any
 		)
 		const f = buildFrozenRouteValidator(
 			{ body: 'open' } as any,
 			root,
 			METHOD as any,
-			PATH
+			PATH,
+			claimed.validators[METHOD]![PATH]!
 		)
 
 		expect(f, 'open model ref should build bridge-free').toBeDefined()
@@ -300,7 +302,8 @@ describe('model references without TypeBox', () => {
 				{ body: 'missing' } as any,
 				root,
 				METHOD as any,
-				PATH
+				PATH,
+				claimed.validators[METHOD]![PATH]!
 			)
 		).toBeUndefined()
 	})

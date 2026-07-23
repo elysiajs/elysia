@@ -4,10 +4,14 @@ import { borrow, Elysia } from '../../src'
 import { createAdapter } from '../../src/adapter'
 import { materializeSetHeaders } from '../../src/adapter/utils'
 import { WebStandardAdapter } from '../../src/adapter/web-standard'
-import { routeDescriptors } from '../../src/compile/handler/descriptor'
 import { createContext } from '../../src/context'
 import { ElysiaStatus } from '../../src/error'
 import { req } from '../utils'
+
+const programOf = (app: Elysia<any, any>, path: string) =>
+	app['~generation']!.plan.httpRoutes.find(
+		(route) => route.method === 'GET' && route.path === path
+	)!.program.content as any
 
 describe('application default headers', () => {
 	it('recognizes immutable defaults created by another package copy', () => {
@@ -142,9 +146,10 @@ describe('application default headers', () => {
 		const response = await app.handle(req('/'))
 		expect(response.status).toBe(200)
 		expect(response.headers.get('x-opaque')).toBe('yes')
-		expect(
-			routeDescriptors.get(app as any)?.get('GET /')?.responseMode
-		).toBe('set-with-default-headers')
+		expect(programOf(app, '/')).toMatchObject({
+			contextMode: 'set',
+			defaultHeaders: [['x-default', 'base']]
+		})
 	})
 
 	it('preserves header mutations made by error hooks', async () => {
@@ -236,13 +241,14 @@ describe('application default headers', () => {
 		await app.handle(req('/default'))
 		await app.handle(req('/set'))
 
-		const descriptors = routeDescriptors.get(app as any)!
-		expect(descriptors.get('GET /default')?.responseMode).toBe(
-			'default-headers'
-		)
-		expect(descriptors.get('GET /set')?.responseMode).toBe(
-			'set-with-default-headers'
-		)
+		expect(programOf(app, '/default')).toMatchObject({
+			contextMode: 'compact',
+			defaultHeaders: [['x-default', 'base']]
+		})
+		expect(programOf(app, '/set')).toMatchObject({
+			contextMode: 'set',
+			defaultHeaders: [['x-default', 'base']]
+		})
 	})
 
 	it('keeps routes without declared defaults on the compact response path', async () => {
@@ -250,8 +256,9 @@ describe('application default headers', () => {
 			.headers({})
 			.get('/', () => 'ok')
 		await app.handle(req('/'))
-		expect(
-			routeDescriptors.get(app as any)?.get('GET /')?.responseMode
-		).toBe('compact')
+		expect(programOf(app, '/')).toMatchObject({
+			contextMode: 'compact',
+			defaultHeaders: null
+		})
 	})
 })

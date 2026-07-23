@@ -1,14 +1,6 @@
-import '../../src/compile/aot-capture'
-import { describe, expect, it, afterEach } from 'bun:test'
+import { describe, expect, it } from 'bun:test'
 
 import { Elysia, t } from '../../src'
-import { Validator } from '../../src/validator'
-import { Compiled, Capture } from '../../src/compile/aot'
-import {
-	endValidatorCapture,
-	endHandlerCapture
-} from '../../src/compile/aot-capture'
-import { compileHandler } from '../../src/compile/handler'
 import { req } from '../utils'
 
 import {
@@ -176,18 +168,7 @@ describe('cookie HMAC sync and WebCrypto parity', () => {
 	})
 })
 
-describe('compiled signed-cookie handlers', () => {
-	afterEach(() => {
-		Compiled.clear()
-		Validator.clear()
-	})
-
-	const compileRoute = (app: any, index = 0) => {
-		const route = (app as Elysia)['~routes']![index]
-		const fn = compileHandler(route as any, app)
-		return { fn, name: fn.constructor.name, source: fn.toString() }
-	}
-
+describe('signed-cookie routes', () => {
 	const signedApp = () =>
 		new Elysia().get(
 			'/',
@@ -203,17 +184,6 @@ describe('compiled signed-cookie handlers', () => {
 			}
 		)
 
-	it('uses a synchronous Function when sync HMAC is available', () => {
-		expect(hasSyncHmac).toBe(true)
-
-		const { name, source } = compileRoute(signedApp())
-
-		expect(name).toBe('Function')
-		expect(source.includes('pcrsg(')).toBe(true)
-		expect(source.includes('scvs(')).toBe(true)
-		expect(source.includes('await pcr(')).toBe(false)
-	})
-
 	it('signed-cookie route round-trips correctly through app.handle', async () => {
 		const app = signedApp()
 
@@ -227,28 +197,5 @@ describe('compiled signed-cookie handlers', () => {
 			req('/', { headers: { cookie: `name=${value}` } })
 		)
 		expect(echo.status).toBe(200)
-	})
-
-	it('stays async for WebCrypto portability under AOT capture', () => {
-		expect(Capture.isCapturing()).toBe(false)
-
-		const prev = process.env.ELYSIA_AOT_BUILD
-		process.env.ELYSIA_AOT_BUILD = '1'
-		try {
-			expect(Capture.isCapturing()).toBe(true)
-
-			const { name, source } = compileRoute(signedApp())
-
-			expect(name).toBe('AsyncFunction')
-			expect(source.includes('await pcr(')).toBe(true)
-			expect(source.includes('_sg=scv(')).toBe(true)
-			expect(source.includes('pcrsg(')).toBe(false)
-			expect(source.includes('scvs(')).toBe(false)
-		} finally {
-			if (prev === undefined) delete process.env.ELYSIA_AOT_BUILD
-			else process.env.ELYSIA_AOT_BUILD = prev
-			endValidatorCapture()
-			endHandlerCapture()
-		}
 	})
 })
