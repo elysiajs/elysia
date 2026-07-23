@@ -96,8 +96,6 @@ describe('columnar route table', () => {
 
 		for (const value of table.macroScope.values())
 			expect(tuples.has(value)).toBe(false)
-		for (const value of table.source.values())
-			expect(tuples.has(value)).toBe(false)
 	})
 
 	it('builds an empty table from an empty declaration list', () => {

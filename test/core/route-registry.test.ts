@@ -105,6 +105,6 @@ describe('route registry', () => {
 		})
 
 		void app.fetch
-		expect(reads).toBe(2)
+		expect(reads).toBe(1)
 	})
 })

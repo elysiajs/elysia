@@ -11,6 +11,7 @@ import {
 	parseCookieRawSync,
 	parseCookieRawSigned,
 	parseCookieRawLazy,
+	parseCookieRawDeferred,
 	buildCookieJar,
 	signCookieValues,
 	signCookieValuesSync
@@ -658,9 +659,18 @@ export function compileHandlerJit({
 			code += `let _ck=pcrl(${cookieHeaderExpr},cc)\n`
 			code += `c.cookie=bcj(c.set,_ck,cc,1)\n`
 		} else {
+			// unsigned + unvalidated lane: defer per-cookie decode to first
+			// access in the jar (no validator/signing observes the raw record)
+			let deferDecode = false
 			if (!hasCookieSign && !cookieValidIsAsync) {
-				link(parseCookieRawSync, 'pcrs')
-				code += `let _ck=pcrs(${cookieHeaderExpr},cc)\n`
+				if (!vali?.cookie) {
+					link(parseCookieRawDeferred, 'pcrd')
+					code += `let _ck=pcrd(${cookieHeaderExpr},cc)\n`
+					deferDecode = true
+				} else {
+					link(parseCookieRawSync, 'pcrs')
+					code += `let _ck=pcrs(${cookieHeaderExpr},cc)\n`
+				}
 			} else if (syncCookieSign && !cookieValidIsAsync) {
 				link(parseCookieRawSigned, 'pcrsg')
 				code += `let _ck=pcrsg(${cookieHeaderExpr},cc)\n`
@@ -679,7 +689,7 @@ export function compileHandlerJit({
 				else code += validateExpr
 			}
 
-			code += `c.cookie=bcj(c.set,_ck,cc)\n`
+			code += `c.cookie=bcj(c.set,_ck,cc${deferDecode ? ',undefined,1' : ''})\n`
 		}
 	}
 

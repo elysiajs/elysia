@@ -91,9 +91,15 @@ export class TypeBoxValidatorCache {
 	}
 
 	#lastSchema: TSchema | undefined
-	#lastMeta: { special: boolean; key: string; hasRef: boolean } | undefined
+	#lastMeta:
+		| { special: boolean; key: string | undefined; hasRef: boolean }
+		| undefined
 
-	#meta(schema: TSchema): { special: boolean; key: string; hasRef: boolean } {
+	#meta(schema: TSchema): {
+		special: boolean
+		key: string | undefined
+		hasRef: boolean
+	} {
 		if (this.#lastSchema === schema && this.#lastMeta) return this.#lastMeta
 
 		const special =
@@ -102,15 +108,30 @@ export class TypeBoxValidatorCache {
 		const meta = {
 			special,
 			hasRef: TypeBoxValidatorCache.#containsRef(schema),
-			key: special
-				? ''
-				: JSON.stringify(schema, TypeBoxValidatorCache.serializeKey)
+			// stringifying is deferred to #metaKey — only paid when the
+			// identity (#referenceCache) lookup misses
+			key: special ? '' : undefined
 		}
 
 		this.#lastSchema = schema
 		this.#lastMeta = meta
 
 		return meta
+	}
+
+	// fills-or-returns meta.key; the memoized `meta` object (shared with
+	// #lastMeta for the same schema) makes this a stringify-once operation
+	#metaKey(
+		schema: TSchema,
+		meta: { special: boolean; key: string | undefined; hasRef: boolean }
+	) {
+		if (meta.key === undefined)
+			meta.key = JSON.stringify(
+				schema,
+				TypeBoxValidatorCache.serializeKey
+			)
+
+		return meta.key
 	}
 
 	constructor(gcTime: number = DEFAULT_GC_TIME) {
@@ -143,7 +164,7 @@ export class TypeBoxValidatorCache {
 
 		if (meta.special) return
 
-		const key = meta.key + '\0' + normalize
+		const key = this.#metaKey(schema, meta) + '\0' + normalize
 		if (this.#cache.has(key)) {
 			const coercionsCache = this.#cache.get(key)!
 			this.#cache.delete(key)
@@ -186,7 +207,7 @@ export class TypeBoxValidatorCache {
 			return
 		}
 
-		const key = meta.key + '\0' + normalize
+		const key = this.#metaKey(schema, meta) + '\0' + normalize
 		if (this.#cache.has(key)) {
 			const cache = this.#cache.get(key)!.set(coercions, validator!)
 			const byNormalize = this.#refBucket(schema)

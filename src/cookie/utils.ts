@@ -38,13 +38,14 @@ export async function parseCookie(
 ) {
 	const config = compileCookieConfig(undefined, options)
 	const raw = await parseCookieRaw(cookieString, config)
+
 	return buildCookieJar(set, raw, config)
 }
 
 export function parseCookieRawSync(
 	cookieString: string | null | undefined,
 	_config: CompiledCookieConfig
-): Record<string, unknown> {
+) {
 	const out: Record<string, unknown> = nullObject() as any
 	if (!cookieString) return out
 
@@ -65,10 +66,37 @@ export function parseCookieRawSync(
 	return out
 }
 
+/**
+ * Unsigned + unvalidated lane only
+ *
+ * Safe to skip decode here because no cookie validator and no signing observes
+ * the raw record before the handler touches a name.
+ */
+export function parseCookieRawDeferred(
+	cookieString: string | null | undefined,
+	_config: CompiledCookieConfig
+) {
+	const out: Record<string, unknown> = nullObject() as any
+	if (!cookieString) return out
+
+	const cookies = parse(cookieString)
+
+	for (const name in cookies) {
+		if (dangerousKeys.has(name)) continue
+
+		const v = cookies[name]
+		if (v === undefined) continue
+
+		out[name] = v
+	}
+
+	return out
+}
+
 export function parseCookieRawLazy(
 	cookieString: string | null | undefined,
 	config: CompiledCookieConfig
-): Record<string, unknown> {
+) {
 	const out: Record<string, unknown> = nullObject() as any
 	if (!cookieString) return out
 
@@ -93,7 +121,7 @@ export function parseCookieRawLazy(
 export async function parseCookieRaw(
 	cookieString: string | null | undefined,
 	config: CompiledCookieConfig
-): Promise<Record<string, unknown>> {
+) {
 	if (!config.hasSign) return parseCookieRawSync(cookieString, config)
 	if (hasSyncHmac) return parseCookieRawSigned(cookieString, config)
 
@@ -155,18 +183,39 @@ export function buildCookieJar(
 	set: Context['set'],
 	raw: Record<string, unknown>,
 	config: CompiledCookieConfig,
-	lazySign?: 1
+	lazySign?: 1,
+	// unsigned + unvalidated lane: `raw` holds still-URL-encoded strings
+	// (parseCookieRawDeferred), so decode per-name on first access too.
+	deferDecode?: 1
 ) {
-	const store: Record<string, BaseCookie> = nullObject() as any
+	// `raw` is a fresh, per-request record (nullObject) that the caller
+	// discards after this call, so we own it as the placeholder store: each
+	// name still maps to its raw value until first access. The per-name entry
+	// — Object.assign of defaults, expires-clone, and ~raw/~unsign markers — is
+	// deferred to first access so a handler reading one cookie of many pays
+	// only for that name.
+	const store = raw as Record<string, BaseCookie>
 
-	for (const name in raw) {
+	const materialized: Record<string, 1> = nullObject()
+
+	function materializeEntry(name: string): BaseCookie {
+		if (materialized[name]) return store[name]!
+
+		const rawValue = store[name] as unknown
 		const fieldDefaults = config.fields[name]?.defaults
 		const entry = Object.assign(
 			nullObject(),
 			config.defaults,
 			fieldDefaults,
 			{
-				value: raw[name]
+				value: deferDecode
+					? // fall back to the raw string on malformed percent-encoding
+						maybeJsonDecode(
+							(decodeComponent(
+								rawValue as string
+							) as unknown as string) ?? rawValue
+						)
+					: rawValue
 			}
 		)
 
@@ -187,6 +236,9 @@ export function buildCookieJar(
 		}
 
 		store[name] = entry
+		materialized[name] = 1
+
+		return entry
 	}
 
 	const cache: Record<string, Cookie<unknown>> = nullObject()
@@ -197,7 +249,7 @@ export function buildCookieJar(
 				key,
 				set,
 				key in store
-					? store[key]
+					? materializeEntry(key)
 					: Object.assign(
 							nullObject(),
 							config.defaults,
@@ -206,6 +258,8 @@ export function buildCookieJar(
 			))
 		},
 		getOwnPropertyDescriptor(target, key) {
+			if (typeof key === 'string' && key in target) materializeEntry(key)
+
 			const descriptor = Reflect.getOwnPropertyDescriptor(target, key)
 			const entry = descriptor?.value
 

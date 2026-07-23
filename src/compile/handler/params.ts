@@ -11,6 +11,7 @@ import {
 	parseCookieRawSync,
 	parseCookieRawSigned,
 	parseCookieRawLazy,
+	parseCookieRawDeferred,
 	buildCookieJar,
 	signCookieValues,
 	signCookieValuesSync
@@ -75,8 +76,6 @@ export const HANDLER_PARAMS: Record<string, Resolver> = {
 	rdc: () => replaceDeriveContext,
 	ise: () => internalServerErrorResponse,
 	emp: () => emptyResponse,
-	// H22 runtime 5xx-message mask: resolves to the isProduction FUNCTION so the
-	// codegen's `isprod()` reflects runtime NODE_ENV (not baked at build time).
 	isprod: () => isProduction,
 	// allowUnsafeValidationDetails opt-in: `e instanceof verr` in the error catch
 	verr: () => ValidationError,
@@ -87,6 +86,7 @@ export const HANDLER_PARAMS: Record<string, Resolver> = {
 	pcrs: () => parseCookieRawSync,
 	pcrsg: () => parseCookieRawSigned,
 	pcrl: () => parseCookieRawLazy,
+	pcrd: () => parseCookieRawDeferred,
 	bcj: () => buildCookieJar,
 	// `scv` async WebCrypto sign; `scvs` H3 sync `node:crypto` sign.
 	scv: () => signCookieValues,

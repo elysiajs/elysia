@@ -6475,10 +6475,13 @@ export class Elysia<
 	): CompiledHandler {
 		if (this.#compiled?.[index]) return this.#compiled![index]
 
-		const compiled = (this.#compiled ??= new Array(this['~routes'].length))
+		const compiled = (this.#compiled ??= new Array(
+			table?.length ?? this['~routes'].length
+		))
 
 		if (immediate) {
-			const row = route ?? this['~routes'][index]
+			const row =
+				route ?? (table ? routeRow(table, index) : this['~routes'][index])
 			let handler: CompiledHandler
 
 			try {
@@ -6868,10 +6871,7 @@ export class Elysia<
 
 		this.#initMap()
 		const methods = this['~map']!
-		const table = (this['~routeTable'] = buildRouteTable(
-			this['~routes'],
-			this.#routeSources
-		))
+		const table = (this['~routeTable'] = buildRouteTable(this['~routes']))
 		const method = table.method
 		const path = table.path
 		const flags = table.flags

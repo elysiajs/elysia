@@ -452,6 +452,7 @@ export const STUB_SOURCES: Record<
 				`export function parseCookieRawSync(){return e()}\n` +
 				`export function parseCookieRawSigned(){return e()}\n` +
 				`export function parseCookieRawLazy(){return e()}\n` +
+				`export function parseCookieRawDeferred(){return e()}\n` +
 				`export function buildCookieJar(){return e()}\n` +
 				`export function signCookieValues(){return e()}\n` +
 				`export function signCookieValuesSync(){return e()}\n` +

@@ -94,9 +94,17 @@ export const keyCache = new Map<string, Promise<CryptoKey>>()
 
 export function importSecretKey(secret: string): Promise<CryptoKey> {
 	let key = keyCache.get(secret)
-	if (key) return key
+	if (key) {
+		keyCache.delete(secret)
+		keyCache.set(secret, key)
 
-	if (keyCache.size >= 256) keyCache.clear()
+		return key
+	}
+
+	if (keyCache.size >= 256) {
+		const oldest = keyCache.keys().next().value
+		if (oldest !== undefined) keyCache.delete(oldest)
+	}
 
 	key = crypto.subtle.importKey(
 		'raw',
