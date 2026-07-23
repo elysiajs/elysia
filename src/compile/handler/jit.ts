@@ -294,9 +294,9 @@ const createInlineHandler = (
 		const r = h(c)
 		if (r instanceof Error) throw r
 		if (r instanceof Promise)
-			return r.then((v) => map(forwardError(v), c.request))
+			return r.then((v) => map(forwardError(v), c.request, true))
 
-		return map(r, c.request)
+		return map(r, c.request, true)
 	}) as CompiledHandler
 
 const createInlineHandlerWithSet = (
@@ -307,9 +307,9 @@ const createInlineHandlerWithSet = (
 		const r = h(c)
 		if (r instanceof Error) throw r
 		if (r instanceof Promise)
-			return r.then((v) => map(forwardError(v), c.set, c.request))
+			return r.then((v) => map(forwardError(v), c.set, c.request, true))
 
-		return map(r, c.set, c.request)
+		return map(r, c.set, c.request, true)
 	}) as CompiledHandler
 
 const createInlineHandlerWithDefaultHeaders = (
@@ -322,9 +322,9 @@ const createInlineHandlerWithDefaultHeaders = (
 
 		if (r instanceof Error) throw r
 		if (r instanceof Promise)
-			return r.then((v) => map(forwardError(v), c.set, c.request))
+			return r.then((v) => map(forwardError(v), c.set, c.request, true))
 
-		return map(r, c.set, c.request)
+		return map(r, c.set, c.request, true)
 	}) as CompiledHandler
 
 export interface CompileHandlerJitOptions {
@@ -704,8 +704,8 @@ export function compileHandlerJit({
 				: 'h'
 
 	const mapReturn = hasSet
-		? `rm(${handleInstruction},c.set,c.request)\n`
-		: `rc(${handleInstruction},c.request)\n`
+		? `rm(${handleInstruction},c.set,c.request,true)\n`
+		: `rc(${handleInstruction},c.request,true)\n`
 
 	if (hasAfterResponse) link(hook!.afterResponse!, 'ar')
 
@@ -880,7 +880,7 @@ export function compileHandlerJit({
 				`function _fin2(c,_r,_stl){\n` +
 				`c.responseValue=_r\n` +
 				scheduleAfterResponse +
-				`const _m=${hasSet ? `${map}(_r,c.set,c.request)` : `${map}(_r,c.request)`}\n` +
+				`const _m=${hasSet ? `${map}(_r,c.set,c.request,true)` : `${map}(_r,c.request,true)`}\n` +
 				`return typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>fre(rt,c,_e)):_m\n` +
 				`}\n`
 
@@ -962,8 +962,8 @@ export function compileHandlerJit({
 			code += schedule
 			code += signPrefix
 			const finalMap = hasSet
-				? `${map}(_r,c.set,c.request)`
-				: `${map}(_r,c.request)`
+				? `${map}(_r,c.set,c.request,true)`
+				: `${map}(_r,c.request,true)`
 
 			if (isAsync) code += `return await ${finalMap}\n`
 			else {
@@ -975,7 +975,7 @@ export function compileHandlerJit({
 		}
 	} else if (isHandleFunction) {
 		if (!isAsync) link(forwardError, 'fe')
-		const mapArgs = hasSet ? 'c.set,c.request' : 'c.request'
+		const mapArgs = hasSet ? 'c.set,c.request,true' : 'c.request,true'
 		code +=
 			(callHandlerSyncOnAsync
 				? `let _r=h(c)\nif(_r instanceof Promise)_r=await _r\n`
@@ -1018,11 +1018,11 @@ export function compileHandlerJit({
 				`function _em(c,_r){return typeof _r?.then==='function'?Promise.resolve(_r).catch((_e)=>fre(rt,c,_e)):_r}\n` +
 				`${asyncCookieSign ? 'async ' : ''}function _efb(e,c){\n` +
 				(asyncCookieSign ? `let _sg\n` : ``) +
-				`if(e instanceof es){${signPrefix}return _em(c,${map}(e,c.set,c.request))}\n` +
-				`if(e?.status){${signPrefix}return _em(c,${map}(e?.response!==undefined?e.response:(isprod()&&e.status>=500?'Internal Server Error':(e?.message??'')),c.set,c.request))}\n` +
+				`if(e instanceof es){${signPrefix}return _em(c,${map}(e,c.set,c.request,true))}\n` +
+				`if(e?.status){${signPrefix}return _em(c,${map}(e?.response!==undefined?e.response:(isprod()&&e.status>=500?'Internal Server Error':(e?.message??'')),c.set,c.request,true))}\n` +
 				`c.set.status=500\n` +
 				signPrefix +
-				`return _em(c,${map}(ise(e),c.set,c.request))\n` +
+				`return _em(c,${map}(ise(e),c.set,c.request,true))\n` +
 				`}\n`
 
 			body +=
@@ -1062,8 +1062,8 @@ export function compileHandlerJit({
 				`if(typeof e?.toResponse==='function')` +
 				`try{\n` +
 				`const _er=e.toResponse()\n` +
-				`if(typeof _er?.then==='function')return Promise.resolve(_er).then(${asyncCookieSign ? 'async ' : ''}(_v)=>{if(_v instanceof Response){${signPrefix}return _em(c,${map}(_v,c.set,c.request))}return _efb(e,c)},()=>_efb(e,c)).catch((_e)=>fre(rt,c,_e))\n` +
-				`if(_er instanceof Response){${signPrefix}return _em(c,${map}(_er,c.set,c.request))}\n` +
+				`if(typeof _er?.then==='function')return Promise.resolve(_er).then(${asyncCookieSign ? 'async ' : ''}(_v)=>{if(_v instanceof Response){${signPrefix}return _em(c,${map}(_v,c.set,c.request,true))}return _efb(e,c)},()=>_efb(e,c)).catch((_e)=>fre(rt,c,_e))\n` +
+				`if(_er instanceof Response){${signPrefix}return _em(c,${map}(_er,c.set,c.request,true))}\n` +
 				`}catch{}\n` +
 				`return _efb(e,c)\n`
 		} else {

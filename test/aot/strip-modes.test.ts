@@ -75,7 +75,11 @@ describe('AOT strip disabled', () => {
 		)
 		for (const marker of STUB_MARKERS) expect(text).not.toContain(marker)
 
-		expect(text).toContain('[Sucrose] warning')
+		// live sucrose code must be retained (the previous marker,
+		// '[Sucrose] warning', only survives as a comment since the
+		// console.warn was commented out — comment retention is
+		// bundler-transform-order trivia, not a strip signal)
+		expect(text).toContain('function separateFunction')
 	})
 
 	it('the unstripped bundle still validates (200 valid / 422 invalid)', async () => {

@@ -590,7 +590,7 @@ export const mapError = /*#__PURE__*/ map<
 		`else if(c.set.status===undefined||c.set.status===200)c.set.status=500\n` +
 		schedule +
 		sign +
-		`return _em(c,${map}(_r,c.set,c.request))\n` +
+		`return _em(c,${map}(_r,c.set,c.request,true))\n` +
 		`}\n`
 	)
 })

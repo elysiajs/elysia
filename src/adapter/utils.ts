@@ -7,6 +7,7 @@ import type { ElysiaFile } from '../universal/file'
 import type { Context } from '../context'
 
 import { skipClone } from './skip-clone'
+import { isBorrowedResponse } from './response-ownership'
 import { defaultHeaders } from './default-headers'
 
 const setCookie = 'set-cookie' as const
@@ -230,9 +231,14 @@ interface CreateHandlerParameter {
 	mapResponse(
 		response: unknown,
 		set: Context['set'],
-		request?: Request
+		request?: Request,
+		owned?: boolean
 	): Response
-	mapCompactResponse(response: unknown, request?: Request): Response
+	mapCompactResponse(
+		response: unknown,
+		request?: Request,
+		owned?: boolean
+	): Response
 }
 
 function enqueueBinaryChunk(
@@ -273,7 +279,8 @@ export function createStreamHandler({
 		generator: Generator | AsyncGenerator | ReadableStream,
 		set?: Context['set'],
 		request?: Request,
-		skipFormat?: boolean
+		skipFormat?: boolean,
+		owned = false
 	) => {
 		if (isByteStream(generator)) {
 			if (generator.locked)
@@ -314,8 +321,8 @@ export function createStreamHandler({
 			// @ts-ignore
 			generator = init.value
 		else if (init && (typeof init?.done === 'undefined' || init?.done)) {
-			if (set) return mapResponse(init.value, set, request)
-			return mapCompactResponse(init.value, request)
+			if (set) return mapResponse(init.value, set, request, owned)
+			return mapCompactResponse(init.value, request, owned)
 		}
 
 		// Check if stream is from a pre-formatted Response body
@@ -606,8 +613,9 @@ function mergeStatus(
 
 function cancelPropagatingBody(
 	clonedBody: ReadableStream,
-	orphanedBranch: ReadableStream
-): ReadableStream {
+	orphanedBranch: ReadableStream,
+	preserveOrphan = false
+) {
 	const reader = clonedBody.getReader()
 
 	return new ReadableStream({
@@ -618,6 +626,13 @@ function cancelPropagatingBody(
 			else controller.enqueue(value)
 		},
 		cancel(reason) {
+			if (preserveOrphan) {
+				// Tee waits for every branch before resolving cancellation
+				// Detach this response while leaving the owner reusable branch intact
+				reader.cancel(reason).catch(() => {})
+				return
+			}
+
 			orphanedBranch.cancel(reason)
 			return reader.cancel(reason)
 		}
@@ -627,25 +642,61 @@ function cancelPropagatingBody(
 export function createResponseHandler(handler: CreateHandlerParameter) {
 	const handleStream = createStreamHandler(handler)
 
-	return (response: Response, set?: Context['set'], request?: Request) => {
+	return (
+		response: Response,
+		set?: Context['set'],
+		request?: Request,
+		owned = false
+	) => {
+		// Framework-fresh Response (error/static clone-at-source): single-owner
+		if (skipClone.has(response) && !response.bodyUsed) {
+			skipClone.delete(response)
+			owned = true
+		}
+
+		const explicitlyBorrowed = isBorrowedResponse(response)
+		const borrowed = !owned || explicitlyBorrowed
+		const mustClone = owned && explicitlyBorrowed
+
+		if (!borrowed && response.bodyUsed)
+			throw new TypeError(
+				'Cannot reuse a consumed Response across requests — a returned Response is request-owned; call borrow(response) to mark it reusable'
+			)
+
 		if (set) {
 			const status = mergeStatus(response.status, set.status)
 			const statusUnchanged =
 				status === undefined || status === response.status
 
-			if (statusUnchanged && !set.cookie && !isNotEmpty(set.headers))
+			if (
+				!mustClone &&
+				statusUnchanged &&
+				!set.cookie &&
+				!isNotEmpty(set.headers)
+			)
 				return response
-		}
+		} else if (!mustClone) return response
+
+		// Probing `.body` materializes a lazy in-memory body into a
+		// stream-backed one (degrading the runtime serve path), so the locked
+		// probe only runs once patching is actually required — on this path
+		// the body is about to be accessed anyway
+		if (!borrowed && response.body?.locked)
+			throw new TypeError(
+				'Cannot patch a Response whose body is locked — release the reader, or call borrow(response) if it must be reused'
+			)
 
 		let body = response.body
 
-		if (skipClone.has(response) && !response.bodyUsed)
-			skipClone.delete(response)
-		else {
+		if (borrowed) {
 			const cloned = response.clone()
 			body =
 				cloned.body && response.body
-					? cancelPropagatingBody(cloned.body, response.body)
+					? cancelPropagatingBody(
+							cloned.body,
+							response.body,
+							explicitlyBorrowed
+						)
 					: cloned.body
 		}
 
@@ -665,6 +716,7 @@ export function createResponseHandler(handler: CreateHandlerParameter) {
 		)
 
 		if (
+			borrowed &&
 			!(newResponse as Response).headers.has('content-length') &&
 			(newResponse as Response).headers.get('transfer-encoding') ===
 				'chunked'

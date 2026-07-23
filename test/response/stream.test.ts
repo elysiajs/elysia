@@ -793,7 +793,7 @@ describe('Stream', () => {
 		expect(result).toEqual(expected)
 	})
 
-	it('preserves exact bytes when re-streaming a chunked Response', async () => {
+	it('preserves exact bytes when transferring an owned chunked Response', async () => {
 		const app = new Elysia().get('/', ({ set }) => {
 			set.headers['x-touch'] = '1'
 
@@ -814,9 +814,9 @@ describe('Stream', () => {
 		const result = new Uint8Array(await response.arrayBuffer())
 
 		expect(response.headers.get('x-touch')).toBe('1')
-		expect(response.headers.get('content-type')).toBe(
-			'application/octet-stream'
-		)
+		// Owned Responses transfer their body directly. Preserve the source
+		// metadata instead of inferring a type through the generic stream pump.
+		expect(response.headers.get('content-type')).toBeNull()
 		expect(result).toEqual(new Uint8Array([0xe2, 0x82, 0xac, 0xff, 0x00]))
 	})
 

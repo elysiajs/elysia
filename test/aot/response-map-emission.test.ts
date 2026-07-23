@@ -36,7 +36,7 @@ describe('body parsing without full header access', () => {
 		expect(source).not.toContain('c.contentType=ct')
 		expect(source).not.toContain('c.headers=')
 		expect(source).not.toContain('.toJSON()')
-		expect(source).toContain('rc(_r,c.request)')
+		expect(source).toContain('rc(_r,c.request,true)')
 		expect(source).not.toContain('rm(')
 	})
 
@@ -161,7 +161,7 @@ describe('header reads and response set handling', () => {
 
 		const { source } = compileRoute(app)
 		expect(source).toContain('c.headers=')
-		expect(source).toContain('rc(_r,c.request)')
+		expect(source).toContain('rc(_r,c.request,true)')
 		expect(source).not.toContain('c.set')
 
 		const res = await app.handle(req('/h', { headers: { 'x-foo': 'baz' } }))
@@ -219,6 +219,6 @@ describe('header reads and response set handling', () => {
 		await expect(
 			writes.handle(req('/w')).then((r) => r.status)
 		).resolves.toBe(418)
-		expect(compileRoute(reads).source).toContain('rc(_r,c.request)')
+		expect(compileRoute(reads).source).toContain('rc(_r,c.request,true)')
 	})
 })

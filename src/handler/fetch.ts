@@ -252,7 +252,8 @@ export function createFetchHandler(
 		.map as (
 		response: unknown,
 		set: Context['set'],
-		request?: Request
+		request?: Request,
+		owned?: boolean
 	) => unknown
 
 	const mapResponseHooks = hook?.mapResponse as
@@ -260,7 +261,8 @@ export function createFetchHandler(
 		| undefined
 	const mapResponse = mapResponseHooks?.length
 		? (response: unknown, set: Context['set'], context?: Context) => {
-				if (!context) return baseMapResponse(response, set)
+				if (!context)
+					return baseMapResponse(response, set, undefined, true)
 				;(context as { responseValue?: unknown }).responseValue =
 					response
 
@@ -277,17 +279,18 @@ export function createFetchHandler(
 									return baseMapResponse(
 										resolved,
 										set,
-										request
+										request,
+										true
 									)
 
 								return run(i + 1)
 							})
 
 						if (result !== undefined)
-							return baseMapResponse(result, set, request)
+							return baseMapResponse(result, set, request, true)
 					}
 
-					return baseMapResponse(response, set, request)
+					return baseMapResponse(response, set, request, true)
 				}
 
 				return run(0)
@@ -296,7 +299,8 @@ export function createFetchHandler(
 				baseMapResponse(
 					response,
 					set,
-					(context as { request?: Request } | undefined)?.request
+					(context as { request?: Request } | undefined)?.request,
+					true
 				)
 
 	const handleError = createErrorHandler(
