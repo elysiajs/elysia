@@ -71,6 +71,18 @@ describe('Path', () => {
 		await expect(res.text()).resolves.toBe('123')
 	})
 
+	it('decode percent-encoded param', async () => {
+		const app = new Elysia().get('/user/:id', ({ params: { id } }) => id)
+
+		const [encoded, plain] = await Promise.all([
+			app.handle(req('/user/hello%20world')).then((x) => x.text()),
+			app.handle(req('/user/plain')).then((x) => x.text())
+		])
+
+		expect(encoded).toBe('hello world')
+		expect(plain).toBe('plain')
+	})
+
 	it('parse multiple params', async () => {
 		const app = new Elysia().get(
 			'/id/:id/:name',

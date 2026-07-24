@@ -36,7 +36,9 @@ export abstract class Reconstrct {
 				normalize: frozenRoot['~config']?.normalize,
 				sanitize: frozenRoot['~config']?.sanitize,
 				schemas: hook?.schemas,
-				aot: { method, path }
+				aot: { method, path },
+				// precompile / .compile() ⇒ eager validator JIT (§10.3)
+				eager: frozenRoot['~config']?.precompile
 			})
 		} catch (error) {
 			if (!isBridgeNotInitialized(error)) throw error

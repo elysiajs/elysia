@@ -397,7 +397,9 @@ export function buildWSRoute(
 			validators = new RouteValidator(hook as any, {
 				models: frozenRootOf(app)['~ext']?.models,
 				app,
-				aot: { method: 'WS', path: route[1] }
+				aot: { method: 'WS', path: route[1] },
+				// precompile / .compile() ⇒ eager validator JIT (§10.3)
+				eager: frozenRootOf(app)['~config']?.precompile
 			})
 		} catch (error) {
 			if (!isBridgeNotInitialized(error)) throw error

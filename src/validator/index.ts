@@ -38,6 +38,9 @@ export interface ValidatorOptions {
 	sanitize?: ElysiaConfig<any, any>['sanitize']
 	aot?: { method: string; path: string }
 	slot?: ValidatorSlot
+	// Force eager typebox Compile instead of lazy-JIT deferral. Set from
+	// `precompile` / `.compile()` (design/lazy-jit-validator.md §10.3).
+	eager?: boolean
 }
 
 export interface ResponseValidatorOptions
@@ -145,7 +148,11 @@ export abstract class Validator {
 
 			const normalizeKey =
 				(options?.normalize === 'typebox' ? 'typebox' : '') +
-				(slot?.startsWith('response') ? '\0r' : '')
+				(slot?.startsWith('response') ? '\0r' : '') +
+				// Eager (precompile) validators occupy a distinct cache bucket so a
+				// deferred instance cached by a non-precompile app is never handed
+				// to a precompile app, which must be eager (lazy-jit §10.3).
+				(options?.eager ? '\0e' : '')
 
 			const appHasFrozen =
 				!!aot &&
