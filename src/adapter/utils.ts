@@ -639,6 +639,8 @@ function cancelPropagatingBody(
 	})
 }
 
+const warnedStreamBorrows = new WeakSet<Response>()
+
 export function createResponseHandler(handler: CreateHandlerParameter) {
 	const handleStream = createStreamHandler(handler)
 
@@ -689,7 +691,30 @@ export function createResponseHandler(handler: CreateHandlerParameter) {
 		let body = response.body
 
 		if (borrowed) {
+			// pre-clone body identity — a borrowed buffered body keeps the same
+			// stream object across clones, a stream-backed one is re-teed (and
+			// retained whole) on every serve
+			const bodyBefore = body
 			const cloned = response.clone()
+
+			if (
+				explicitlyBorrowed &&
+				bodyBefore &&
+				response.body !== bodyBefore &&
+				!warnedStreamBorrows.has(response)
+			) {
+				warnedStreamBorrows.add(response)
+
+				console.warn(
+					'[elysia] borrow() was called on a stream-backed Response — ' +
+						'its entire body will stay buffered in memory for as long ' +
+						'as the borrowed object lives, and every reuse adds a tee ' +
+						'layer. Borrow only buffered Responses (string / ' +
+						'ArrayBuffer / Blob bodies), or construct a fresh Response ' +
+						'per request.'
+				)
+			}
+
 			body =
 				cloned.body && response.body
 					? cancelPropagatingBody(

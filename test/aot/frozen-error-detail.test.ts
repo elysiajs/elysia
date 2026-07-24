@@ -198,6 +198,52 @@ describe('sealed codec errors remain visible', () => {
 
 		expect(warns.filter((w) => w.includes('[elysia-aot]')).length).toBe(1)
 	})
+
+	it('bounds warn-dedup memory across builds instead of growing forever', () => {
+		process.env.ELYSIA_AOT_BUILD = '1'
+		resetCompactErrorWarnings()
+
+		const warns: string[] = []
+		const original = console.warn
+		console.warn = (...args: unknown[]) => warns.push(args.join(' '))
+
+		const compileAt = (path: string) => {
+			beginValidatorCapture()
+			const app = new Elysia().post(
+				path,
+				{ body: t.Object({ when: t.Date() }) },
+				({ body }) => body
+			)
+			;(app as any).compile()
+			endValidatorCapture()
+			endHandlerCapture()
+			Compiled.clear()
+			Validator.clear()
+		}
+
+		try {
+			// fill the dedup set past its cap with distinct slots, never
+			// resetting - mirrors a long-lived watch/dev server compiling
+			// many routes across the process lifetime
+			for (let i = 0; i < 1025; i++) compileAt(`/cap-${i}`)
+
+			const firstRoundWarns = warns.length
+			warns.length = 0
+
+			// the first key should have been evicted once the set grew past
+			// its bound, so recompiling it must warn again instead of the
+			// set (and its warning) leaking forever
+			compileAt('/cap-0')
+
+			expect(firstRoundWarns).toBe(1025)
+			expect(
+				warns.filter((w) => w.includes('[elysia-aot]')).length
+			).toBe(1)
+		} finally {
+			console.warn = original
+			delete process.env.ELYSIA_AOT_BUILD
+		}
+	})
 })
 
 describe('sealed structural schemas retain full error details', () => {

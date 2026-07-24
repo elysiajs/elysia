@@ -90,6 +90,96 @@ describe('publish-time authoring-cache release (004-P5)', () => {
 		})
 	})
 
+	it('releases the program in JIT mode once every route has warmed up', async () => {
+		await withEnv({ NODE_ENV: 'production' }, async () => {
+			registerProbeManifest()
+
+			const app = new Elysia()
+				.get('/a', () => 'a')
+				.get('/b', () => 'b')
+				.get('/c', () => 'c')
+			// JIT publish (no precompile): arms the cold-route countdown
+			void app.fetch
+
+			expect(programAlive(app)).toBe(true)
+
+			expect((await app.handle(req('/a'))).status).toBe(200)
+			expect(programAlive(app)).toBe(true)
+			expect((await app.handle(req('/b'))).status).toBe(200)
+			expect(programAlive(app)).toBe(true)
+
+			// last cold route compiles → program fully consumed → released
+			expect((await app.handle(req('/c'))).status).toBe(200)
+			expect(programAlive(app)).toBe(false)
+
+			// released, but every route keeps serving from compiled handlers
+			expect(await (await app.handle(req('/a'))).text()).toBe('a')
+			expect(await (await app.handle(req('/c'))).text()).toBe('c')
+		})
+	})
+
+	it('keeps the JIT program alive until the LAST cold route compiles', async () => {
+		await withEnv({ NODE_ENV: 'production' }, async () => {
+			registerProbeManifest()
+
+			const app = new Elysia()
+				.get('/a', () => 'a')
+				.get('/b', () => 'b')
+				.get('/c', () => 'c')
+			void app.fetch
+
+			// hit only one route (repeatedly): the countdown must not
+			// double-decrement on the thunk's warm early-return
+			expect((await app.handle(req('/a'))).status).toBe(200)
+			expect((await app.handle(req('/a'))).status).toBe(200)
+			expect((await app.handle(req('/a'))).status).toBe(200)
+
+			// two routes still cold → program must stay alive
+			expect(programAlive(app)).toBe(true)
+		})
+	})
+
+	it('disarms on a sealed-generation rebuild and re-arms for the new generation', async () => {
+		await withEnv({ NODE_ENV: 'production' }, async () => {
+			registerProbeManifest()
+
+			const app = new Elysia().get('/a', () => 'a').get('/b', () => 'b')
+			void app.fetch
+			await app.handle(req('/a')) // partial warmup: one route still cold
+			expect(programAlive(app)).toBe(true)
+
+			// force a sealed-generation rebuild (mirror generation.test.ts):
+			// registerRoute disarms, ~newGeneration re-claims + re-arms
+			;(app as any)['~generation'] = undefined
+			registerProbeManifest()
+			app.get('/c', () => 'c')
+			app['~newGeneration']()
+
+			expect(programAlive(app)).toBe(true)
+
+			// warm every route in the new generation → release again
+			expect(await (await app.handle(req('/a'))).text()).toBe('a')
+			expect(await (await app.handle(req('/b'))).text()).toBe('b')
+			expect(await (await app.handle(req('/c'))).text()).toBe('c')
+			expect(programAlive(app)).toBe(false)
+		})
+	})
+
+	it('never releases in JIT mode outside production even after full warmup', async () => {
+		await withEnv({ NODE_ENV: 'test' }, async () => {
+			registerProbeManifest()
+
+			const app = new Elysia().get('/a', () => 'a').get('/b', () => 'b')
+			void app.fetch
+
+			expect((await app.handle(req('/a'))).status).toBe(200)
+			expect((await app.handle(req('/b'))).status).toBe(200)
+
+			// dev keeps the program: no countdown is armed outside production
+			expect(programAlive(app)).toBe(true)
+		})
+	})
+
 	it('keeps the program alive outside production (dev hot-reload rebuilds need caches)', async () => {
 		await withEnv({ NODE_ENV: 'test' }, async () => {
 			registerProbeManifest()

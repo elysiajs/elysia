@@ -223,6 +223,8 @@ export class Elysia<
 
 	get history(): readonly HistoryEntry[] {
 		if (this.#cachedHistory) return this.#cachedHistory
+		if (this.#declaredRoutes === undefined && this['~routeTable']?.length)
+			this.#materializeDeclaredRoutes()
 		if (!this.#declaredRoutes?.length) return emptyHistory
 
 		const history = new Array<HistoryEntry>(this.#declaredRoutes.length)
@@ -246,6 +248,8 @@ export class Elysia<
 	}
 
 	get ['~routes'](): readonly InternalRoute[] {
+		if (this.#declaredRoutes === undefined && this['~routeTable']?.length)
+			this.#materializeDeclaredRoutes()
 		if (!this.#declaredRoutes?.length) return []
 
 		const routes = this.#declaredRoutes
@@ -285,6 +289,12 @@ export class Elysia<
 	}
 
 	#compiled?: CompiledHandler[]
+
+	#jitColdRemaining?: number
+	#jitTable?: RouteTable
+	#jitRoute?: (InternalRoute | undefined)[]
+	#jitStatic?: (Response | undefined)[]
+	#jitAliases?: (StaticMapAliases | undefined)[]
 
 	// Memoized `routes` getter output
 	#cachedRoutes?: PublicRoute[]
@@ -330,9 +340,10 @@ export class Elysia<
 	}
 
 	get routes(): PublicRoute[] {
-		if (!this.#declaredRoutes?.length) return []
-
 		if (this.#cachedRoutes) return this.#cachedRoutes
+		if (this.#declaredRoutes === undefined && this['~routeTable']?.length)
+			this.#materializeDeclaredRoutes()
+		if (!this.#declaredRoutes?.length) return []
 
 		const routes = this['~routes'].map(
 			([
@@ -4325,6 +4336,9 @@ export class Elysia<
 
 		if (app['~hasTrace']) this['~hasTrace'] = true
 
+		if (app.#declaredRoutes === undefined && app['~routeTable']?.length)
+			app.#materializeDeclaredRoutes()
+
 		if (app.#declaredRoutes?.length) {
 			if (app['~hasWS']) this['~hasWS'] = true
 
@@ -4562,6 +4576,8 @@ export class Elysia<
 					;(target as any)[key] = (added as any)[key]
 				}
 			}
+
+			nodes.length = 0
 
 			if (globalEvents)
 				this['~hookChain'] = {
@@ -4821,10 +4837,22 @@ export class Elysia<
 		throw new Error(`[Elysia] .${api}() called after the app was sealed`)
 	}
 
+	#materializeDeclaredRoutes(): InternalRoute[] {
+		if (this.#declaredRoutes !== undefined) return this.#declaredRoutes
+
+		const table = this['~routeTable']
+		if (!table) return (this.#declaredRoutes = [])
+
+		const routes = new Array<InternalRoute>(table.length)
+		for (let i = 0; i < table.length; i++) routes[i] = routeRow(table, i)
+
+		return (this.#declaredRoutes = routes)
+	}
+
 	#registerRoute(route: InternalRoute, source?: string) {
 		this.#assertMutable('route')
 
-		const routes = (this.#declaredRoutes ??= [])
+		const routes = this.#materializeDeclaredRoutes()
 		const sequence = routes.length
 		routes.push(route)
 
@@ -4833,6 +4861,11 @@ export class Elysia<
 		this.#cachedHistory = undefined
 		this.#cachedRoutes = undefined
 		this.#compiled = undefined
+		this.#jitColdRemaining = undefined
+		this.#jitTable = undefined
+		this.#jitRoute = undefined
+		this.#jitStatic = undefined
+		this.#jitAliases = undefined
 		this.#fetchFn = undefined
 		this.#routerBuilt = false
 	}
@@ -6458,6 +6491,11 @@ export class Elysia<
 		this.#routerBuilt = false
 
 		this.#compiled = undefined
+		this.#jitColdRemaining = undefined
+		this.#jitTable = undefined
+		this.#jitRoute = undefined
+		this.#jitStatic = undefined
+		this.#jitAliases = undefined
 		this.#fetchFn = undefined
 
 		void this.fetch
@@ -6481,9 +6519,10 @@ export class Elysia<
 
 		if (immediate) {
 			const row =
-				route ?? (table ? routeRow(table, index) : this['~routes'][index])
-			let handler: CompiledHandler
+				route ??
+				(table ? routeRow(table, index) : this['~routes'][index])
 
+			let handler: CompiledHandler
 			try {
 				handler = compileHandler(row, this, precomputedStatic)
 			} catch (error) {
@@ -6515,43 +6554,70 @@ export class Elysia<
 		aliases?: StaticMapAliases,
 		table?: RouteTable
 	): CompiledHandler {
-		return (context) => {
-			if (this.#compiled![index]) return this.#compiled![index](context)
+		if (table !== undefined) this.#jitTable = table
+		if (route !== undefined) (this.#jitRoute ??= [])[index] = route
+		if (precomputedStatic !== undefined)
+			(this.#jitStatic ??= [])[index] = precomputedStatic
+		if (aliases !== undefined) (this.#jitAliases ??= [])[index] = aliases
 
-			const materialized = route ?? routeRow(table!, index)
+		return (context) => this.#jitDispatch(index, context)
+	}
 
-			let handler: CompiledHandler
-			try {
-				handler = compileHandler(
-					materialized,
-					this,
-					precomputedStatic
-				)
-			} catch (error) {
-				const routeError = new Error(
-					`[Elysia] Failed to compile route ${materialized[0]} ${materialized[1]}: ${(error as Error)?.message ?? error}`,
-					{ cause: error }
-				)
-				const finalize = this['~finalizeError']
-				if (finalize) return finalize(context as Context, routeError)
+	#jitDispatch(index: number, context: any) {
+		if (this.#compiled![index]) return this.#compiled![index](context)
 
-				throw routeError
-			}
+		const route = this.#jitRoute?.[index]
+		const materialized = route ?? routeRow(this.#jitTable!, index)
 
-			this.#compiled![index] = handler
+		let handler: CompiledHandler
+		try {
+			handler = compileHandler(
+				materialized,
+				this,
+				this.#jitStatic?.[index]
+			)
+		} catch (error) {
+			const routeError = new Error(
+				`[Elysia] Failed to compile route ${materialized[0]} ${materialized[1]}: ${(error as Error)?.message ?? error}`,
+				{ cause: error }
+			)
+			const finalize = this['~finalizeError']
+			if (finalize) return finalize(context as Context, routeError)
 
-			if (aliases) {
-				this.#initMap()
-
-				const map = (this['~map']![aliases.method] ??=
-					nullObject() as any)
-
-				for (let p = 0; p < aliases.paths.length; p++)
-					map[aliases.paths[p]] = handler
-			} else this.#saveHandler(materialized[0], materialized[1], handler)
-
-			return handler(context)
+			throw routeError
 		}
+
+		this.#compiled![index] = handler
+
+		// Last cold route just compiled: the AOT program is now fully
+		// consumed for this generation — release it. Reaching this line
+		// means #compiled[index] was undefined (past the early-return at
+		// the top of the thunk), so each route decrements exactly once.
+		if (
+			this.#jitColdRemaining !== undefined &&
+			--this.#jitColdRemaining === 0
+		) {
+			Compiled.release(this['~programId'])
+			this.#jitColdRemaining = undefined
+		}
+
+		const aliases = this.#jitAliases?.[index]
+		if (aliases) {
+			this.#initMap()
+
+			const map = (this['~map']![aliases.method] ??= nullObject() as any)
+
+			for (let p = 0; p < aliases.paths.length; p++)
+				map[aliases.paths[p]] = handler
+		} else this.#saveHandler(materialized[0], materialized[1], handler)
+
+		// Release this route's materialization now that it's baked into the
+		// compiled handler (matches the wholesale reset done with #compiled).
+		if (this.#jitRoute) this.#jitRoute[index] = undefined
+		if (this.#jitStatic) this.#jitStatic[index] = undefined
+		if (this.#jitAliases) this.#jitAliases[index] = undefined
+
+		return handler(context)
 	}
 
 	#saveHandler(method: string, path: string, handler: CompiledHandler) {
@@ -6692,9 +6758,7 @@ export class Elysia<
 
 		// Chain sources: route[5] (appHook), route[6] (inheritedChain)
 		return (
-			this.#chainHasModelRef(
-				table.appHook[i] as ChainNode | undefined
-			) ||
+			this.#chainHasModelRef(table.appHook[i] as ChainNode | undefined) ||
 			this.#chainHasModelRef(
 				table.inheritedChain[i] as ChainNode | undefined
 			) ||
@@ -6772,6 +6836,10 @@ export class Elysia<
 		const previousMap = this['~map']
 		const previousRouter = this['~router']
 		const previousCompiled = this.#compiled
+		const previousJitTable = this.#jitTable
+		const previousJitRoute = this.#jitRoute
+		const previousJitStatic = this.#jitStatic
+		const previousJitAliases = this.#jitAliases
 		const previousHasDynamicWS = this['~hasDynamicWS']
 		const config = this['~config'] as any
 		const hadWebsocket = !!config && Object.hasOwn(config, 'websocket')
@@ -6786,6 +6854,11 @@ export class Elysia<
 		this['~map'] = undefined
 		this['~router'] = undefined
 		this.#compiled = previousCompiled?.slice()
+		this.#jitColdRemaining = undefined
+		this.#jitTable = undefined
+		this.#jitRoute = undefined
+		this.#jitStatic = undefined
+		this.#jitAliases = undefined
 		this['~hasDynamicWS'] = undefined
 		this['~generation'] = undefined
 		let buildSucceeded = false
@@ -6813,6 +6886,11 @@ export class Elysia<
 			this['~map'] = previousMap
 			this['~router'] = previousRouter
 			this.#compiled = previousCompiled
+			this.#jitColdRemaining = undefined
+			this.#jitTable = previousJitTable
+			this.#jitRoute = previousJitRoute
+			this.#jitStatic = previousJitStatic
+			this.#jitAliases = previousJitAliases
 			this['~hasDynamicWS'] = previousHasDynamicWS
 			this['~generation'] = previousGeneration
 
@@ -6852,8 +6930,39 @@ export class Elysia<
 			// request, so it must survive publish in JIT mode.
 			if (this['~config']?.precompile)
 				Compiled.release(this['~programId'])
+			else {
+				// JIT mode: every route reads the program exactly once, at
+				// its first-request compile. Arm a countdown of the routes
+				// still cold at publish; the last JIT compile releases the
+				// program (see #jitHandler). Releasing a program that was
+				// never registered (plain apps) is a no-op, so arming
+				// unconditionally is harmless.
+				const routeCount =
+					this['~routeTable']?.length ?? this['~routes'].length
+
+				let cold = routeCount
+				const compiled = this.#compiled
+				if (compiled)
+					for (let i = 0; i < routeCount; i++)
+						if (compiled[i] !== undefined) cold--
+
+				if (cold <= 0) Compiled.release(this['~programId'])
+				else this.#jitColdRemaining = cold
+			}
 
 			clearAuthoringAnalysisCaches(this)
+
+			// salvage 007: route metadata lives in two shapes — the
+			// `#declaredRoutes` tuple array and the columnar `~routeTable`. For
+			// fast-path (non-macro, non-scope-child) apps the tuple CONTENTS are
+			// reference-shared with the table columns, so the N tuple containers
+			// are pure duplication after the table is built. Release them; every
+			// consumer rebuilds on demand via #materializeDeclaredRoutes (from the
+			// table, `#routeSources` is kept for history). Macro/scope-child apps
+			// keep the raw hooks (their table column is macro-RESOLVED), so no
+			// release. See plan 007.
+			if (!this['~ext']?.macro && !this['~scopeChildren'])
+				this.#declaredRoutes = undefined
 		}
 	}
 

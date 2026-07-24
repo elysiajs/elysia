@@ -471,12 +471,14 @@ export function compileHandlerJit({
 						`rpc${i}=rp${i}.resolveChild?.shift?.()?.({` +
 						`id:c.rid,event:'${phase}',name:${JSON.stringify(name)},` +
 						`begin:performance.now()` +
-						`})\n`
+					`})\n`
+
 				return {
 					begin,
 					end(errBinding?: string) {
 						let close = ''
-						for (let i = 0; i < traceCount; i++) {
+
+						for (let i = 0; i < traceCount; i++)
 							if (errBinding)
 								close +=
 									`if(${errBinding} instanceof Error){` +
@@ -486,7 +488,7 @@ export function compileHandlerJit({
 									`rpc${i}?.()` +
 									`}\n`
 							else close += `rpc${i}?.()\n`
-						}
+
 						return close
 					}
 				}
@@ -603,7 +605,7 @@ export function compileHandlerJit({
 		code +=
 			'try{\n' +
 			parseCode +
-			`}catch(e){${preserveParseStatus ? 'if(e instanceof es)throw e;' : ''}throw new pe(e)}\n`
+			`}catch(e){${preserveParseStatus ? 'if(e instanceof es)throw e\n' : ''}throw new pe(e)}\n`
 
 		if (hasTrace) code += endTrace('parse')
 		if (hasLifecycleHook) code += abortCheck
@@ -1122,10 +1124,7 @@ export function compileHandlerJit({
 						responseMap as any,
 						handler as any
 					)
-				: createInlineHandlerWithSet(
-						responseMap as any,
-						handler as any
-					)
+				: createInlineHandlerWithSet(responseMap as any, handler as any)
 	}
 
 	JITProbe.record('handler:new-function')

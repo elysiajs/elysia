@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 
 import { borrow, Elysia } from '../../src'
 import { req } from '../utils'
@@ -403,5 +403,74 @@ describe('Response ownership', () => {
 
 		const response = await app.handle(req('/'))
 		expect(response.status).toBe(500)
+	})
+
+	// borrow's retention contract is "body bytes stay resident" — a borrowed
+	// stream retains its whole body and chains a tee per reuse, so serving
+	// one must warn (once), while buffered borrows must stay silent
+	describe('borrow stream guard', () => {
+		const originalWarn = console.warn
+		let warnings: unknown[][]
+
+		beforeEach(() => {
+			warnings = []
+			console.warn = (...args: unknown[]) => {
+				warnings.push(args)
+			}
+		})
+
+		afterEach(() => {
+			console.warn = originalWarn
+		})
+
+		const streamed = () =>
+			new ReadableStream({
+				start(controller) {
+					controller.enqueue(new TextEncoder().encode('streamed'))
+					controller.close()
+				}
+			})
+
+		it('warns once for a borrowed streaming response', async () => {
+			const shared = borrow(new Response(streamed()))
+			const app = new Elysia().get('/', ({ set }) => {
+				set.headers['x-marker'] = 'yes'
+				return shared
+			})
+
+			await app.handle(req('/'))
+			await app.handle(req('/'))
+
+			const borrowWarnings = warnings.filter((args) =>
+				String(args[0]).includes('borrow()')
+			)
+			expect(borrowWarnings).toHaveLength(1)
+		})
+
+		it('does not warn for a borrowed buffered response', async () => {
+			const shared = borrow(new Response('hello'))
+			const app = new Elysia().get('/', ({ set }) => {
+				set.headers['x-marker'] = 'yes'
+				return shared
+			})
+
+			const first = await app.handle(req('/'))
+			const second = await app.handle(req('/'))
+
+			expect(warnings).toHaveLength(0)
+			await expect(first.text()).resolves.toBe('hello')
+			await expect(second.text()).resolves.toBe('hello')
+		})
+
+		it('still serves the first read of a borrowed streaming response', async () => {
+			const shared = borrow(new Response(streamed()))
+			const app = new Elysia().get('/', ({ set }) => {
+				set.headers['x-marker'] = 'yes'
+				return shared
+			})
+
+			const first = await app.handle(req('/'))
+			await expect(first.text()).resolves.toBe('streamed')
+		})
 	})
 })

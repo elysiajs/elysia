@@ -425,6 +425,12 @@ function warnCompactErrorLoss(
 ) {
 	const key = `${aot.method}\0${aot.path}\0${slot}`
 	if (compactErrorWarned.has(key)) return
+
+	if (compactErrorWarned.size >= 1024) {
+		const oldest = compactErrorWarned.keys().next().value
+		if (oldest !== undefined) compactErrorWarned.delete(oldest)
+	}
+
 	compactErrorWarned.add(key)
 
 	console.warn(

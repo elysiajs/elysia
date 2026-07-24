@@ -41,10 +41,8 @@ export interface ValidatorOptions {
 	slot?: ValidatorSlot
 }
 
-export interface ResponseValidatorOptions extends Omit<
-	ValidatorOptions,
-	'schemas'
-> {
+export interface ResponseValidatorOptions
+	extends Omit<ValidatorOptions, 'schemas'> {
 	schemas?: Record<number, AnySchema>[]
 }
 

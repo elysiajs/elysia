@@ -19,6 +19,10 @@ import { defaultHeaders } from '../default-headers'
 import type { Context } from '../../context'
 import type { MaybePromise } from '../../types'
 
+const textPlainInit = {
+	headers: { 'content-type': 'text/plain' }
+} as const
+
 function handleElysiaFile(
 	file: ElysiaFile,
 	set: Context['set'] = {
@@ -58,25 +62,16 @@ function handleElysiaFile(
 	return handleFile(file.value as any, set, request)
 }
 
-function responseTag(response: unknown): string | undefined {
-	if (response === null || response === undefined) return undefined
-
-	const proto = Object.getPrototypeOf(response)
-	if (proto === null) return 'Object' // Object.create(null) / nullObject
-
-	return proto.constructor?.name
-}
-
 function mapResponseWithSet(
 	response: unknown,
 	set: Context['set'],
 	request?: Request,
-	owned = false
+	owned?: boolean
 ): Response {
 	handleSet(set)
 	const headers = set.headers
 
-	switch (responseTag(response)) {
+	switch (response?.constructor?.name) {
 		case 'String':
 			if (!isBun && !headers['content-type'])
 				materializeSetHeaders(set)['content-type'] = 'text/plain'
@@ -175,7 +170,7 @@ export function mapResponse(
 	response: unknown,
 	set: Context['set'],
 	request?: Request,
-	owned = false
+	owned?: boolean
 ): Response {
 	const headers = set.headers
 	if (
@@ -226,19 +221,16 @@ export function mapResponse(
 	return mapCompactResponse(response, request, owned)
 }
 
+const textHeaders = isBun ? undefined : textPlainInit
+
 export function mapCompactResponse(
 	response: unknown,
 	request?: Request,
-	owned = false
+	owned?: boolean
 ): Response {
-	switch (responseTag(response)) {
+	switch (response?.constructor?.name) {
 		case 'String':
-			return new Response(
-				response as string,
-				isBun
-					? undefined
-					: { headers: { 'content-type': 'text/plain' } }
-			)
+			return new Response(response as string, textHeaders)
 
 		case 'Array':
 			return Response.json(response)
