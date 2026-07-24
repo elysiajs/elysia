@@ -1,4 +1,5 @@
 import { Elysia, t } from '../../src'
+import { websocket } from '../../src/plugin/websocket'
 import { autoHead } from '../../src/plugin/auto-head'
 
 import { describe, expect, it } from 'bun:test'
@@ -256,7 +257,7 @@ describe('Edge Case', () => {
 			.use(autoHead())
 			.get('/a', () => 'a')
 			.get('/c/:id', ({ params }) => params.id)
-			.ws('/ws', { message() {} })
+			.use(websocket()).ws('/ws', { message() {} })
 		await app.modules
 
 		const before = app.routes

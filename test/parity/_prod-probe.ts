@@ -2,6 +2,7 @@
 // Prints one JSON payload for its caller.
 
 import { Elysia, t } from '../../src'
+import { websocket } from '../../src/plugin/websocket'
 
 async function main() {
 	const http = new Elysia()
@@ -32,23 +33,23 @@ async function main() {
 	const httpThrowObject = await r.text()
 
 	const app = new Elysia()
-		.ws('/v', {
+		.use(websocket()).ws('/v', {
 			body: t.Object({ n: t.Number() }),
 			message(ws: any) {
 				ws.send('ok')
 			}
 		})
-		.ws('/e', {
+		.use(websocket()).ws('/e', {
 			message() {
 				throw new Error('secret-detail')
 			}
 		})
-		.ws('/str', {
+		.use(websocket()).ws('/str', {
 			message() {
 				throw 'secret-string'
 			}
 		})
-		.ws('/obj', {
+		.use(websocket()).ws('/obj', {
 			message() {
 				throw { password: 'secret-object' }
 			}

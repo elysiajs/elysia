@@ -1,20 +1,21 @@
 import { describe, expect, it } from 'bun:test'
 
-import { Elysia, t } from '../../src'
+import { Elysia, t, type AnyElysia } from '../../src'
+import { websocket } from '../../src/plugin/websocket'
 import type { InternalRoute } from '../../src/types'
 import { req } from '../utils'
 
-const route = (app: Elysia, path: string): InternalRoute => {
+const route = (app: AnyElysia, path: string): InternalRoute => {
 	const found = app['~routes']?.find((entry) => entry[1] === path)
 	if (!found) throw new Error(`Missing route ${path}`)
 
 	return found
 }
 
-const expectFullOwner = (root: Elysia, path: string, owner: Elysia) =>
+const expectFullOwner = (root: AnyElysia, path: string, owner: AnyElysia) =>
 	expect(route(root, path)[3]).toBe(owner)
 
-const expectCompactOwner = (root: Elysia, path: string, owner: Elysia) => {
+const expectCompactOwner = (root: AnyElysia, path: string, owner: AnyElysia) => {
 	const compact = route(root, path)[3]
 	expect(compact).not.toBe(owner)
 	expect(compact).not.toBe(root)
@@ -158,7 +159,7 @@ describe('absorbed route owner compaction', () => {
 	})
 
 	it('keeps websocket, mount, configured, and AOT-build owners full', () => {
-		const websocket = new Elysia({ websocket: {} as any }).ws(
+		const wsPlugin = new Elysia().use(websocket({} as any)).ws(
 			'/ws',
 			() => undefined
 		)
@@ -169,7 +170,7 @@ describe('absorbed route owner compaction', () => {
 		)
 		const previous = process.env.ELYSIA_AOT_BUILD
 		const aot = new Elysia().get('/aot', () => 'aot')
-		let aotRoot: Elysia
+		let aotRoot: AnyElysia
 		try {
 			process.env.ELYSIA_AOT_BUILD = '1'
 			aotRoot = new Elysia().use(aot)
@@ -178,7 +179,7 @@ describe('absorbed route owner compaction', () => {
 			else process.env.ELYSIA_AOT_BUILD = previous
 		}
 
-		expectFullOwner(new Elysia().use(websocket), '/ws', websocket)
+		expectFullOwner(new Elysia().use(wsPlugin), '/ws', wsPlugin)
 		for (const entry of mounted['~routes'] ?? [])
 			expectFullOwner(new Elysia().use(mounted), entry[1], mounted)
 		expectFullOwner(new Elysia().use(configured), '/configured', configured)

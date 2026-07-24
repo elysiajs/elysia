@@ -5,7 +5,12 @@ import {
 	isBridgeNotInitialized
 } from '../compile/handler/frozen-validator'
 import { isBridgeLive } from '../type/bridge'
-import { deriveEntryFn, nullObject, type DeriveEntry } from '../utils'
+import {
+	deriveEntryFn,
+	isNotEmpty,
+	nullObject,
+	type DeriveEntry
+} from '../utils'
 import { frozenRootOf } from '../generation'
 import { parseQueryFromURL } from '../parse-query'
 import {
@@ -42,7 +47,9 @@ import type {
 	AnyWSLocalHook,
 	WSValidatorLike,
 	ServerWebSocket,
-	WebSocketHandler
+	WebSocketHandler,
+	WSOptions,
+	WSOptionsEntry
 } from './types'
 import type { InternalRoute, AppHook } from '../types'
 
@@ -870,6 +877,61 @@ export function buildWSRoute(
 			(options as any)[k] = (hook as any)[k]
 
 	return [fetchHandler, options] as const
+}
+
+export function resolveWSOptions(
+	entries: WSOptionsEntry[]
+): WSOptions | undefined {
+	if (!entries || entries.length === 0) return undefined
+	if (entries.length === 1) return { ...entries[0].value }
+
+	const ordered = entries
+		.map((entry, index) => ({ entry, index }))
+		.sort((a, b) => b.entry.depth - a.entry.depth || a.index - b.index)
+
+	const result = {} as WSOptions
+	let warned: Set<string> | undefined
+
+	for (const { entry } of ordered)
+		for (const key in entry.value) {
+			const incoming = (entry.value as any)[key]
+			if (
+				key in result &&
+				(result as any)[key] !== incoming &&
+				!warned?.has(key)
+			) {
+				;(warned ??= new Set()).add(key)
+				console.warn(
+					`[Elysia] Conflicting WebSocket option '${key}' across .use(websocket()) registrations; the shallowest (nearest-root) registration wins.`
+				)
+			}
+
+			;(result as any)[key] = incoming
+		}
+
+	return result
+}
+
+export function accumulateWSOptions(
+	target: WSOptions,
+	routeOptions: WSOptions,
+	_path: string
+): void {
+	if (!isNotEmpty(routeOptions)) return
+
+	if (isBun)
+		for (const key in routeOptions)
+			if (
+				key in target &&
+				(target as any)[key] !== (routeOptions as any)[key]
+			) {
+				console.warn(
+					`[Elysia] Conflicting per-route WebSocket option '${key}'\nBun uses one global WebSocket config per server, per-route values are not enforced (the last-registered route wins).`
+				)
+				console.warn(new Error().stack)
+			}
+
+	Object.assign(target, routeOptions)
 }
 
 export function buildGlobalWSHandler(): WebSocketHandler<WSConnectionData> {

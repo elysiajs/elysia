@@ -1,8 +1,8 @@
 import type { Instruction as ExactMirrorInstruction } from 'exact-mirror'
 import type { OpenAPIV3 } from 'openapi-types'
 
-import type { ElysiaFile } from './universal/file'
 import { TraceHandler } from './trace'
+import type { ElysiaFile } from './universal/file'
 import { type StatusMapBack } from './constants'
 import type { ElysiaError, ElysiaStatus } from './error'
 import type { TypeBoxSchema, AnySchema, StandardSchemaV1Like } from './type'
@@ -107,22 +107,6 @@ export interface ElysiaConfig<
 	 * @default false
 	 */
 	strictPath?: boolean
-
-	/**
-	 * App-wide WebSocket configuration. Provides defaults for the Bun
-	 * server-level `websocket: {...}` options `maxPayloadLength`,
-	 * `idleTimeout`, `perMessageDeflate`, etc. Per-route values set via
-	 * `.ws(path, { idleTimeout: 60, ... })` override these.
-	 *
-	 * Lifecycle handlers (`open`/`close`/`message`/`drain`/`ping`/`pong`)
-	 * are per-route only and not accepted here.
-	 *
-	 * @see https://bun.com/docs/runtime/http/websockets
-	 */
-	websocket?: Omit<
-		import('./ws/types').WebSocketHandler<any>,
-		'open' | 'close' | 'message' | 'drain' | 'ping' | 'pong'
-	>
 
 	cookie?: CookieOptions & {
 		/**

@@ -53,7 +53,8 @@ import {
 	tee
 } from '../../adapter/utils'
 import { ELYSIA_TYPES } from '../../type/constants'
-import { createTracer, type TraceEvent } from '../../trace'
+import type { TraceEvent } from '../../trace'
+import { resolvedTraceOf, traceCapabilityRequired } from '../../generation'
 import { Capture } from '../aot'
 import { JITProbe } from '../jit-probe'
 
@@ -520,8 +521,15 @@ export function compileHandlerJit({
 	if (asyncCookieSign) code += 'let _sg\n'
 
 	if (hasTrace) {
-		// fetch handler should already handle trace but fallback just in case
-		const wrappedTracers = traceHandlers!.map((fn: any) => createTracer(fn))
+		// fetch handler should already handle trace but fallback just in case.
+		// `root` is the frozen generation; `errorRoot` the live instance —
+		// resolve through the capability channel from whichever carries it.
+		const traceProvider = resolvedTraceOf(root) ?? resolvedTraceOf(errorRoot)
+		if (!traceProvider) throw new Error(traceCapabilityRequired)
+
+		const wrappedTracers = traceHandlers!.map((fn: any) =>
+			traceProvider.createTracer(fn)
+		)
 		link(wrappedTracers, 'tr')
 		link(requestId, 'rid')
 

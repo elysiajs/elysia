@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'bun:test'
 import { Elysia } from '../../src'
+import { websocket } from '../../src/plugin/websocket'
 import { newWebsocket, wsOpen, wsClosed, wsMessage } from './utils'
 
 describe('WebSocket subscriptions getter', () => {
@@ -7,7 +8,7 @@ describe('WebSocket subscriptions getter', () => {
 		let snapshot: string[] = []
 
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				open(ws: any) {
 					ws.subscribe('a')
 					ws.subscribe('b')
@@ -39,7 +40,7 @@ describe('WebSocket subscriptions getter', () => {
 describe('WebSocket destructuring', () => {
 	it('should destructure', async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				async open(ws) {
 					const {
 						subscribe,

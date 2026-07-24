@@ -1,4 +1,5 @@
 import { Elysia, t } from '../../src'
+import { websocket } from '../../src/plugin/websocket'
 
 import { describe, expect, it } from 'bun:test'
 import { req, post } from '../utils'
@@ -169,8 +170,8 @@ describe('registration input ownership', () => {
 		const hB = () => {}
 
 		expect(() => {
-			new Elysia().ws('/a', opts, hA)
-			new Elysia().ws('/b', opts, hB)
+			new Elysia().use(websocket()).ws('/a', opts, hA)
+			new Elysia().use(websocket()).ws('/b', opts, hB)
 		}).not.toThrow()
 
 		expect(opts.message).toBeUndefined()

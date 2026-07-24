@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'bun:test'
 import { Elysia, t, status, ValidationError } from '../../src'
+import { websocket } from '../../src/plugin/websocket'
 import { newWebsocket, wsOpen, wsClosed, wsMessage } from './utils'
 
 describe('WebSocket errors thrown by error hooks', () => {
@@ -14,7 +15,7 @@ describe('WebSocket errors thrown by error hooks', () => {
 			.error((_ctx: any) => {
 				throw new Error('secondary hook failure')
 			})
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				message() {
 					throw new Error('original error')
 				}
@@ -52,7 +53,7 @@ describe('WebSocket rejected message handlers', () => {
 		process.on('unhandledRejection', onUnhandled)
 
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				async message() {
 					await Promise.reject(new Error('dispatch rejected'))
 				}
@@ -77,7 +78,7 @@ describe('WebSocket rejected message handlers', () => {
 
 	it('sends an error frame after the handler rejects', async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				async message() {
 					throw new Error('boom async')
 				}
@@ -109,7 +110,7 @@ describe('WebSocket production validation errors without error hooks', () => {
 		process.env.NODE_ENV = 'production'
 
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				body: t.Object({ x: t.Number() }),
 				message() {}
 			})
@@ -142,7 +143,7 @@ describe('WebSocket production validation errors without error hooks', () => {
 		process.env.NODE_ENV = 'production'
 
 		const app = new Elysia({ allowUnsafeValidationDetails: true })
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				body: t.Object({ x: t.Number() }),
 				message() {}
 			})
@@ -180,7 +181,7 @@ describe('WebSocket upgrade validation error responses', () => {
 				if (error instanceof ValidationError)
 					return status(401, 'denied')
 			})
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				query: t.Object({ name: t.String() }),
 				message() {}
 			})
@@ -210,7 +211,7 @@ describe('WebSocket upgrade validation error responses', () => {
 				if (error instanceof ValidationError)
 					return status(403, { msg: 'forbidden' })
 			})
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				query: t.Object({ name: t.String() }),
 				message() {}
 			})

@@ -1,12 +1,13 @@
 import { describe, it, expect } from 'bun:test'
 import { Elysia, t } from '../../src'
+import { websocket } from '../../src/plugin/websocket'
 import { newWebsocket, wsOpen, wsMessage, wsClosed } from './utils'
 import z from 'zod'
 
 describe('WebSocket message', () => {
 	it('should send & receive', async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				message(ws, message) {
 					ws.send(message)
 				}
@@ -32,7 +33,7 @@ describe('WebSocket message', () => {
 
 	it('should respond with remoteAddress', async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				message(ws) {
 					ws.send(ws.remoteAddress)
 				}
@@ -58,7 +59,7 @@ describe('WebSocket message', () => {
 
 	it('should subscribe & publish', async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				open(ws) {
 					ws.subscribe('asdf')
 				},
@@ -93,7 +94,7 @@ describe('WebSocket message', () => {
 
 	it('should unsubscribe', async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				open(ws) {
 					ws.subscribe('asdf')
 				},
@@ -135,7 +136,7 @@ describe('WebSocket message', () => {
 
 	it('should validate success', async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				body: t.Object({
 					message: t.String()
 				}),
@@ -164,7 +165,7 @@ describe('WebSocket message', () => {
 
 	it('should validate fail', async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				body: t.Object({
 					message: t.String()
 				}),
@@ -195,7 +196,7 @@ describe('WebSocket message', () => {
 
 	it('should validate standard schema success', async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				body: z.object({
 					message: z.string()
 				}),
@@ -224,7 +225,7 @@ describe('WebSocket message', () => {
 
 	it('should validate standard schema fail', async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				body: z.object({
 					message: z.string()
 				}),
@@ -255,7 +256,7 @@ describe('WebSocket message', () => {
 
 	it('should parse objects', async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				message(ws, raw) {
 					ws.send(raw)
 				}
@@ -280,7 +281,7 @@ describe('WebSocket message', () => {
 
 	it('should parse arrays', async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				message(ws, raw) {
 					ws.send(JSON.stringify(raw))
 				}
@@ -305,7 +306,7 @@ describe('WebSocket message', () => {
 
 	it('should parse strings', async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				message(ws, raw) {
 					ws.send(JSON.stringify(raw))
 				}
@@ -330,7 +331,7 @@ describe('WebSocket message', () => {
 
 	it('should parse numbers', async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				message(ws, raw) {
 					ws.send(JSON.stringify(raw))
 				}
@@ -355,7 +356,7 @@ describe('WebSocket message', () => {
 
 	it('should parse true', async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				message(ws, raw) {
 					ws.send(JSON.stringify(raw))
 				}
@@ -380,7 +381,7 @@ describe('WebSocket message', () => {
 
 	it('should parse false', async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				message(ws, raw) {
 					ws.send(JSON.stringify(raw))
 				}
@@ -405,7 +406,7 @@ describe('WebSocket message', () => {
 
 	it('should parse null', async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				message(ws, raw) {
 					ws.send(JSON.stringify(raw))
 				}
@@ -430,7 +431,7 @@ describe('WebSocket message', () => {
 
 	it('should parse not parse /hello', async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				message(ws, raw) {
 					ws.send(JSON.stringify(raw))
 				}
@@ -454,7 +455,7 @@ describe('WebSocket message', () => {
 	})
 
 	it('should send from plugin', async () => {
-		const plugin = new Elysia().ws('/ws', {
+		const plugin = new Elysia().use(websocket()).ws('/ws', {
 			message(ws, message) {
 				ws.send(message)
 			}
@@ -480,7 +481,7 @@ describe('WebSocket message', () => {
 	})
 
 	it('should be able to receive binary data', async () => {
-		const plugin = new Elysia().ws('/ws', {
+		const plugin = new Elysia().use(websocket()).ws('/ws', {
 			message(ws, message) {
 				ws.send(message)
 			}
@@ -508,7 +509,7 @@ describe('WebSocket message', () => {
 
 	it('should send & receive', async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				message(ws, message) {
 					ws.send(message)
 				}
@@ -527,7 +528,7 @@ describe('WebSocket message', () => {
 
 	it('handle error', async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				error() {
 					return 'caught'
 				},
@@ -559,7 +560,7 @@ describe('WebSocket message', () => {
 			.error(() => {
 				return 'caught'
 			})
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				message(ws, message) {
 					throw new Error('A')
 				}
@@ -588,7 +589,7 @@ describe('WebSocket message', () => {
 			.error(() => {
 				return 'caught'
 			})
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				body: t.Object({
 					name: t.String()
 				}),
@@ -621,7 +622,7 @@ describe('WebSocket message', () => {
 
 	it('keeps WebSocket upgrade working after .compile()', async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				message(ws, message) {
 					ws.send(message)
 				}
@@ -649,7 +650,7 @@ describe('WebSocket message', () => {
 describe('WebSocket sync dispatch path', () => {
 	it("raw '/'-prefixed frame arrives as the raw string", async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				message(ws, message) {
 					ws.send(
 						JSON.stringify({ got: message, type: typeof message })
@@ -675,7 +676,7 @@ describe('WebSocket sync dispatch path', () => {
 
 	it('async parse hook is awaited before the handler runs', async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				parse: async (_ws, message) => {
 					await Bun.sleep(5)
 					return `${message}-parsed`
@@ -700,7 +701,7 @@ describe('WebSocket sync dispatch path', () => {
 
 	it('throwing sync parse hook reaches error handling', async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				parse() {
 					throw new Error('parse-boom')
 				},
@@ -739,7 +740,7 @@ describe('WebSocket sync dispatch path', () => {
 		try {
 			const app = new Elysia()
 				.error(() => 'sync-throw-caught')
-				.ws('/ws', {
+				.use(websocket()).ws('/ws', {
 					message() {
 						throw new Error('boom')
 					}
@@ -767,7 +768,7 @@ describe('WebSocket sync dispatch path', () => {
 
 	it('async handler return value on a hook-free route is awaited and sent', async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				async message(_ws, message) {
 					await Bun.sleep(5)
 					return `async-${message}`
@@ -789,7 +790,7 @@ describe('WebSocket sync dispatch path', () => {
 
 	it('mapResponse still applies when it is the only hook', async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				message(_ws, message) {
 					return `m-${message}`
 				},
@@ -814,7 +815,7 @@ describe('WebSocket sync dispatch path', () => {
 	// Without a 200 schema, plain responses use the first registered validator.
 	it('uses the first response schema when no 200 schema is registered', async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				response: {
 					201: t.Object({ ok: t.Boolean() })
 				},

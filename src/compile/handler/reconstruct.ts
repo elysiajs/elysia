@@ -1,7 +1,10 @@
 import { RouteValidator } from '../../validator/route'
 import { compileCookieConfig } from '../../cookie/config'
-import { createTracer } from '../../trace'
-import { frozenRootOf } from '../../generation'
+import {
+	frozenRootOf,
+	resolvedTraceOf,
+	traceCapabilityRequired
+} from '../../generation'
 import { isBridgeLive } from '../../type/bridge'
 import {
 	buildFrozenRouteValidator,
@@ -53,7 +56,15 @@ export abstract class Reconstrct {
 	}
 
 	// need to be any because of private type error something something
-	static trace(hook: AnyLocalHook): any {
-		return (hook?.trace as any[] | undefined)?.map(createTracer)
+	static trace(hook: AnyLocalHook, root: AnyElysia): any {
+		const traceHandlers = hook?.trace as any[] | undefined
+		if (!traceHandlers) return
+
+		if (!traceHandlers.length) return traceHandlers
+
+		const provider = resolvedTraceOf(root)
+		if (!provider) throw new Error(traceCapabilityRequired)
+
+		return traceHandlers.map((fn) => provider.createTracer(fn))
 	}
 }

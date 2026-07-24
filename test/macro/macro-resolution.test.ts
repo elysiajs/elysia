@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { describe, it, expect } from 'bun:test'
 import { Elysia, t } from '../../src'
+import { websocket } from '../../src/plugin/websocket'
 import { req } from '../utils'
 import { newWebsocket, wsOpen, wsMessage, wsClosed } from '../ws/utils'
 
@@ -228,7 +229,7 @@ describe('Macro resolution isolation', () => {
 					}
 				}
 			})
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				user: true,
 				auth: true,
 				message(ws: any) {
@@ -365,13 +366,13 @@ describe('Macro derive behavior', () => {
 		new Elysia().derive(gate as any)
 
 		const app = new Elysia()
-			.ws('/gated', {
+			.use(websocket()).ws('/gated', {
 				beforeHandle: gate,
 				message(ws: any) {
 					ws.send('pong')
 				}
 			} as any)
-			.ws('/open', {
+			.use(websocket()).ws('/open', {
 				message(ws: any) {
 					ws.send('pong')
 				}
@@ -430,13 +431,13 @@ describe('Macro derive behavior', () => {
 
 	it('rejects a WebSocket upgrade when derive returns a status', async () => {
 		const app = new Elysia()
-			.ws('/gated', {
+			.use(websocket()).ws('/gated', {
 				derive: ({ status }: any) => status(401, 'no'),
 				message(ws: any) {
 					ws.send('pong')
 				}
 			} as any)
-			.ws('/open', {
+			.use(websocket()).ws('/open', {
 				message(ws: any) {
 					ws.send('pong')
 				}
@@ -1087,7 +1088,7 @@ describe('Scoped macro resolution after composition', () => {
 						}
 					})
 					.get('/h', { auth: true } as any, () => 'HTTP')
-					.ws('/ws', { auth: true, message() {} } as any)
+					.use(websocket()).ws('/ws', { auth: true, message() {} } as any)
 			)
 			.listen(0)
 

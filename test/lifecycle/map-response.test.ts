@@ -1,4 +1,5 @@
 import { Elysia, form } from '../../src'
+import { trace } from '../../src/plugin/trace'
 
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
@@ -302,7 +303,7 @@ describe('Map Response', () => {
 				if (mode === 'asynchronous') app.request(async () => 'early')
 				else {
 					if (mode === 'traced')
-						app.trace(({ onRequest }) => onRequest(() => {}))
+						app.use(trace()).trace(({ onRequest }) => onRequest(() => {}))
 					app.request(() => 'early')
 				}
 
@@ -351,7 +352,7 @@ describe('Map Response', () => {
 
 				if (mode === 'asynchronous') app.request(async () => {})
 				else if (mode === 'traced')
-					app.trace(({ onRequest }) => onRequest(() => {}))
+					app.use(trace()).trace(({ onRequest }) => onRequest(() => {}))
 
 				app.request(() => 'early')
 					.mapResponse(async ({ responseValue }) => {

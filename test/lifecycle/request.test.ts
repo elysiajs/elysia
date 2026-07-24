@@ -1,4 +1,5 @@
 import { Elysia } from '../../src'
+import { trace } from '../../src/plugin/trace'
 
 import { describe, expect, it } from 'bun:test'
 import { req, delay } from '../utils'
@@ -144,7 +145,7 @@ describe('request hooks', () => {
 		let handlerCalled = false
 
 		const app = new Elysia()
-			.trace(({ onRequest }) => {
+			.use(trace()).trace(({ onRequest }) => {
 				onRequest(() => {})
 			})
 			.request([

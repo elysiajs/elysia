@@ -603,6 +603,10 @@ export function compileHandler(
 	root: AnyElysia,
 	precomputedStatic?: Response
 ): CompiledHandler {
+	// Resolve capabilities before reading the frozen root, so direct-compiler
+	// paths (no prior seal) still throw when `.trace()` lacks `.use(trace())`.
+	root['~resolvedCapability']?.('trace')
+
 	const frozenRoot = frozenRootOf(root)
 	const adapter = frozenRoot['~config']?.adapter ?? defaultAdapter
 	const method = _method
@@ -717,7 +721,7 @@ export function compileHandler(
 					? Reconstrct.cookie(hook, root)
 					: undefined,
 				tracers: reconstructed.a.includes('tr')
-					? Reconstrct.trace(hook)
+					? Reconstrct.trace(hook, root)
 					: undefined
 			})
 		) as CompiledHandler

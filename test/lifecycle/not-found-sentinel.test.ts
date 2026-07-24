@@ -10,6 +10,7 @@
  * constructing `new NotFound()` eagerly.
  */
 import { Elysia, NotFound } from '../../src'
+import { trace } from '../../src/plugin/trace'
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
 
@@ -151,7 +152,7 @@ describe('NotFound miss sentinel', () => {
 		let hookError: unknown
 
 		const app = new Elysia()
-			.trace(({ onRequest }) => {
+			.use(trace()).trace(({ onRequest }) => {
 				traced = true
 				onRequest(({ onStop }) => {
 					onStop(() => {})

@@ -59,7 +59,7 @@ describe('AOT plugin — no duplicate CJS elysia copy', () => {
 	})
 
 	it('pulls zero CommonJS (.js) elysia dist modules into an ESM bundle', async () => {
-		const { inputs, code } = await buildBundle()
+		const { inputs } = await buildBundle()
 
 		const cjs = inputs.filter(
 			(path) => isElysiaDist(path) && path.endsWith('.js')
@@ -75,6 +75,11 @@ describe('AOT plugin — no duplicate CJS elysia copy', () => {
 		expect(
 			inputs.some((p) => /(^|[\\/])dist[\\/]sucrose\.mjs$/.test(p))
 		).toBe(false)
-		expect(code).toContain('[elysia-aot] trace support was stripped')
+		// Trace is severed into `elysia/trace`: a traceless app never pulls the
+		// trace runtime, so there is nothing to stub. Assert its absence directly
+		// — a stronger guarantee than the former throwing-stub marker.
+		expect(
+			inputs.some((p) => /(^|[\\/])dist[\\/]trace\.mjs$/.test(p))
+		).toBe(false)
 	})
 })

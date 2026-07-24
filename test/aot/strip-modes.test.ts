@@ -75,11 +75,12 @@ describe('AOT strip disabled', () => {
 		)
 		for (const marker of STUB_MARKERS) expect(text).not.toContain(marker)
 
-		// live sucrose code must be retained (the previous marker,
-		// '[Sucrose] warning', only survives as a comment since the
-		// console.warn was commented out — comment retention is
-		// bundler-transform-order trivia, not a strip signal)
-		expect(text).toContain('function separateFunction')
+		// live sucrose code must be retained. `separateFunction` used to be the
+		// marker, but it is imported ONLY by the trace subsystem, which is now
+		// severed into `elysia/trace` — a traceless app no longer bundles it.
+		// `sucrose` itself (parameter inference) is still core-live, so it is the
+		// correct strip-disabled sucrose signal.
+		expect(text).toContain('function sucrose')
 	})
 
 	it('the unstripped bundle still validates (200 valid / 422 invalid)', async () => {

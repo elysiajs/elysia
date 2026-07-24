@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'bun:test'
 import { Elysia } from '../../src'
+import { trace } from '../../src/plugin/trace'
 import { Validator } from '../../src/validator'
 import { Compiled } from '../../src/compile/aot'
 import { compileHandler } from '../../src/compile/handler'
@@ -24,7 +25,7 @@ const count = (haystack: string, needle: string) =>
 describe('schedule block emission', () => {
 	it('shares one schedule block across trace and error paths', () => {
 		const app = new Elysia()
-			.trace(() => {})
+			.use(trace()).trace(() => {})
 			.get(
 				'/',
 				{

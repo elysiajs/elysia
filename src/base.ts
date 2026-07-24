@@ -20,11 +20,13 @@ import {
 } from './compile/aot'
 import { clearAuthoringAnalysisCaches } from './compile/analysis-cache'
 import { isProduction } from './universal/is-production'
-import { buildWSRoute } from './ws/route'
 import type {
 	WSLocalHook,
 	WSMessageHandler,
-	WSHandlerResponse
+	WSHandlerResponse,
+	WSCapability,
+	WSOptions,
+	WSOptionsEntry
 } from './ws/types'
 
 import { ListenCallback, Serve, Server } from './universal'
@@ -37,6 +39,7 @@ import {
 	RouteFlag,
 	type RouteTable
 } from './route-table'
+import { traceCapabilityRequired, wsCapabilityRequired } from './generation'
 import type { Generation } from './generation'
 import { BunAdapter } from './adapter/bun'
 import {
@@ -71,7 +74,7 @@ import type { AnySchema } from './type'
 import { Ref as tRef } from './type/bridge'
 import { snapshotHookSchemas, snapshotSchema } from './schema-snapshot'
 
-import type { TraceHandler } from './trace'
+import type { TraceHandler, TraceCapability } from './trace'
 
 import type {
 	CompiledHandler,
@@ -212,9 +215,23 @@ export class Elysia<
 		hoc?: WrapFn<any>[]
 		setup?: GracefulHandler<any>[]
 		cleanup?: GracefulHandler<any>[]
+		// Severable capability channel. Populated by registrar plugins
+		// (`elysia/trace`, `elysia/websocket`) so the severed subsystem is
+		// reachable only through its dedicated entrypoint.
+		capability?: {
+			trace?: { provider: TraceCapability }
+			ws?: { provider: WSCapability; options?: WSOptionsEntry[] }
+		}
 	}
 
 	'~hookChain'?: ChainNode
+
+	// Resolved WebSocket server-tuning config (base options + per-route
+	// accumulation), committed at the end of a successful router build and
+	// copied into `Generation` at publish. Read by the Bun adapter via
+	// `resolvedWsOf`. Build-local until the atomic commit, so a failed rebuild
+	// leaves no partial WS residue.
+	'~wsConfig'?: WSOptions
 
 	#declaredRoutes?: InternalRoute[]
 	#routeSources?: (string | undefined)[]
@@ -255,12 +272,12 @@ export class Elysia<
 		const routes = this.#declaredRoutes
 		if (!this['~ext']?.macro && !this['~scopeChildren']) return routes
 
-		return routes.map((route) => {
-			const localHook = route[4]
-			if (!localHook) return route
+		return routes.map((r) => {
+			const localHook = r[4]
+			if (!localHook) return r
 
 			const localRoot = localMacroRoot(
-				(route[7] as AnyElysia) ?? (route[3] as AnyElysia) ?? this,
+				(r[7] as AnyElysia) ?? (r[3] as AnyElysia) ?? this,
 				this as unknown as AnyElysia
 			)
 			const resolved = resolveLocalHook(
@@ -268,17 +285,17 @@ export class Elysia<
 				localHook,
 				this as unknown as AnyElysia
 			)
-			if (resolved === localHook) return route
+			if (resolved === localHook) return r
 
 			return [
-				route[0],
-				route[1],
-				route[2],
-				route[3],
+				r[0],
+				r[1],
+				r[2],
+				r[3],
 				resolved,
-				route[5],
-				route[6],
-				route[7]
+				r[5],
+				r[6],
+				r[7]
 			] as unknown as InternalRoute
 		})
 	}
@@ -3578,6 +3595,17 @@ export class Elysia<
 
 			if (src.macro) ext.macro = Object.create(src.macro)
 			if (src.parser) ext.parser = Object.assign(nullObject(), src.parser)
+
+			// Read-through visibility for resolution: a scope child may build
+			// before it merges back (async grouped routes). It gets its OWN
+			// container (copy-on-write) sharing the parent's immutable provider
+			// slots, so the child registering its own capability never mutates
+			// the parent; merge-back then carries the child's slots up.
+			if (src.capability) {
+				const cap = (ext.capability = nullObject())
+				if (src.capability.trace) cap.trace = src.capability.trace
+				if (src.capability.ws) cap.ws = src.capability.ws
+			}
 		}
 
 		if (isSchema) child.guard({ ...schemaOrRun } as Partial<AnyLocalHook>)
@@ -3594,6 +3622,54 @@ export class Elysia<
 
 	get #ext(): NonNullable<this['~ext']> {
 		return (this['~ext'] ??= nullObject())
+	}
+
+	/**
+	 * Single idempotent capability resolver-accessor (README rev 2.1). Reads
+	 * the merged `~ext.capability` channel — never mutated during a build — and
+	 * throws when a capability is used but its provider was never registered.
+	 * For `trace` the resolved view IS the nearest-root provider (merge already
+	 * keeps it); for `ws` it additionally resolves the depth-precedence base
+	 * options. Called at the start of every router build and by `compileHandler`
+	 * before it reads the frozen root, so direct-compiler paths resolve without
+	 * a prior seal.
+	 */
+	['~resolvedCapability'](kind: 'trace'): TraceCapability | undefined
+	['~resolvedCapability'](
+		kind: 'ws'
+	): { provider: WSCapability; options: WSOptions | undefined } | undefined
+	['~resolvedCapability'](
+		kind: 'trace' | 'ws'
+	):
+		| TraceCapability
+		| { provider: WSCapability; options: WSOptions | undefined }
+		| undefined {
+		if (kind === 'ws') {
+			const ws = this['~ext']?.capability?.ws
+			const provider = ws?.provider
+
+			if (this['~hasWS'] && !provider)
+				throw new Error(wsCapabilityRequired)
+
+			if (!provider) return
+
+			// Resolve base options only when WS routes exist (avoids spurious
+			// precedence warnings for a bare `.use(websocket())`). Result is a
+			// FRESH object the build-local config folds route options into.
+			const options =
+				this['~hasWS'] && ws!.options?.length
+					? provider.resolveOptions(ws!.options)
+					: undefined
+
+			return { provider, options }
+		}
+
+		const provider = this['~ext']?.capability?.trace?.provider
+
+		if (this['~hasTrace'] && !provider)
+			throw new Error(traceCapabilityRequired)
+
+		return provider
 	}
 
 	#ensureMacroTable(): NonNullable<NonNullable<this['~ext']>['macro']> {
@@ -4363,7 +4439,8 @@ export class Elysia<
 				error,
 				hoc,
 				setup,
-				cleanup
+				cleanup,
+				capability
 			} = app['~ext']
 
 			const ext: NonNullable<(typeof this)['~ext']> = (this['~ext'] ??=
@@ -4467,6 +4544,84 @@ export class Elysia<
 							ext.cleanup.push(fn)
 						}
 				} else ext.cleanup = cleanup.slice()
+			}
+
+			if (capability) {
+				// Each instance owns its `capability` container (scope children
+				// get an own container at creation, below), so writing here never
+				// bleeds into a shared parent. Slots hold immutable provider
+				// singletons; a child's own registration replaces its slot object
+				// rather than mutating the shared one.
+				const target = (ext.capability ??= nullObject())
+
+				if (capability.trace) {
+					const incoming = capability.trace.provider
+					if (!target.trace) target.trace = { provider: incoming }
+					else if (target.trace.provider !== incoming)
+						// Dual-package: a second, non-identical provider. Nearest
+						// root (existing) wins; name both copies so the duplicate
+						// install is actionable. Identical singletons never reach
+						// here (name+seed checksum dedups first).
+						console.warn(
+							`[Elysia] Duplicate trace capability providers detected:\n  ${target.trace.provider.id}\n  ${incoming.id}\nUsing the first; ensure a single copy of 'elysia/trace' is installed.`
+						)
+				}
+
+				if (capability.ws) {
+					const incoming = capability.ws.provider
+					const existing = target.ws
+					const incomingOptions = capability.ws.options
+
+					if (!existing)
+						// Fresh slot: clone incoming entries at depth + 1 (one more
+						// `.use()` hop). Never alias the source app's entry objects.
+						target.ws = {
+							provider: incoming,
+							options: incomingOptions?.length
+								? incomingOptions.map((entry) => ({
+										depth: entry.depth + 1,
+										value: entry.value,
+										origin: entry.origin
+									}))
+								: undefined
+						}
+					else {
+						if (existing.provider !== incoming)
+							// Dual-package (see trace above): nearest root wins.
+							console.warn(
+								`[Elysia] Duplicate WebSocket capability providers detected:\n  ${existing.provider.id}\n  ${incoming.id}\nUsing the first; ensure a single copy of 'elysia/websocket' is installed.`
+							)
+
+						if (incomingOptions?.length) {
+							// Copy-on-write: a scope child shares the parent's ws
+							// slot by reference (read-through copy at creation), so
+							// pushing in place would corrupt the parent. Dedup by
+							// deterministic `origin` (diamond deps, merge-back).
+							const base: WSOptionsEntry[] =
+								existing.options ?? []
+							const seen = new Set(
+								base.map((e: WSOptionsEntry) => e.origin)
+							)
+							let next: WSOptionsEntry[] | undefined
+
+							for (const entry of incomingOptions) {
+								if (seen.has(entry.origin)) continue
+								seen.add(entry.origin)
+								;(next ??= base.slice()).push({
+									depth: entry.depth + 1,
+									value: entry.value,
+									origin: entry.origin
+								})
+							}
+
+							if (next)
+								target.ws = {
+									provider: existing.provider,
+									options: next
+								}
+						}
+					}
+				}
 			}
 		}
 
@@ -6853,13 +7008,6 @@ export class Elysia<
 		const previousJitStatic = this.#jitStatic
 		const previousJitAliases = this.#jitAliases
 		const previousHasDynamicWS = this['~hasDynamicWS']
-		const config = this['~config'] as any
-		const hadWebsocket = !!config && Object.hasOwn(config, 'websocket')
-		const previousWebsocket = config?.websocket
-		const websocketSnapshot =
-			previousWebsocket && typeof previousWebsocket === 'object'
-				? { ...previousWebsocket }
-				: previousWebsocket
 
 		const previousGeneration = this['~generation']
 
@@ -6905,12 +7053,9 @@ export class Elysia<
 			this.#jitAliases = previousJitAliases
 			this['~hasDynamicWS'] = previousHasDynamicWS
 			this['~generation'] = previousGeneration
-
-			if (config) {
-				this['~config'] = config
-				if (hadWebsocket) config.websocket = websocketSnapshot
-				else delete config.websocket
-			} else this['~config'] = undefined
+			// `~wsConfig` needs no restore: it is committed atomically at the end
+			// of a successful `#buildRouterUnsafe`, so a throw here leaves the
+			// prior value intact (matching the restored `~generation`).
 
 			throw error
 		} finally {
@@ -6930,7 +7075,11 @@ export class Elysia<
 			'~hookChain': this['~hookChain'],
 			'~scopeChildren': this['~scopeChildren'],
 			'~applyMacro': this['~applyMacro'].bind(this),
-			'~programId': this['~programId']
+			'~programId': this['~programId'],
+			// Freeze the resolved WS config so post-seal consumers (Bun adapter
+			// via `resolvedWsOf`) read the build output even when publication
+			// happens without a rebuild (async drain: `#routerBuilt` already true).
+			'~wsConfig': this['~wsConfig']
 		}
 
 		// salvage 004-P5: after a production generation publishes, drop
@@ -6997,6 +7146,17 @@ export class Elysia<
 	#buildRouterUnsafe() {
 		const precompile = this['~config']?.precompile
 
+		// Resolve capabilities before any route consumer runs. Throws here when a
+		// capability (trace / ws) is used but its provider was never registered —
+		// this is the "first-router-build throw" (normally seal / first fetch /
+		// .compile()) the README specifies.
+		this['~resolvedCapability']('trace')
+		const wsCap = this['~resolvedCapability']('ws')
+
+		// Build-local WS config (base options + per-route accumulation), seeded
+		// on the first WS route and committed to `~wsConfig` only on success.
+		let wsConfig: WSOptions | undefined
+
 		this.#initMap()
 		const methods = this['~map']!
 		const table = (this['~routeTable'] = buildRouteTable(this['~routes']))
@@ -7051,9 +7211,20 @@ export class Elysia<
 			const routeFlags = flags[i]
 
 			if ((routeFlags & RouteFlag.WS) !== 0) {
-				const ws = buildWSRoute(routeRow(table, i), this)
+				// `~hasWS` is true whenever a WS route exists, so the resolve
+				// above already threw if the provider was missing: `wsCap` is set.
+				const ws = wsCap!.provider.buildWSRoute(
+					routeRow(table, i),
+					this
+				)
 				const handler = ws[0] as unknown as CompiledHandler
 				const options = ws[1]
+
+				// Seed the build-local config from the resolved base options on
+				// the first WS route (so app-wide defaults apply even when no
+				// route carries per-route options).
+				if (wsConfig === undefined && wsCap!.options)
+					wsConfig = wsCap!.options
 
 				if ((routeFlags & RouteFlag.Dynamic) !== 0) {
 					;(this['~router'] ??= new Memoirist<CompiledHandler>({
@@ -7078,23 +7249,12 @@ export class Elysia<
 				}
 
 				if (options && isNotEmpty(options)) {
-					this['~config'] ??= nullObject()
-					const existing = (this['~config'] as any).websocket
-
-					if (existing && isBun) {
-						for (const key in options)
-							if (
-								key in existing &&
-								(existing as any)[key] !== (options as any)[key]
-							) {
-								console.warn(
-									`[Elysia] Conflicting per-route WebSocket option '${key}'\nBun uses one global WebSocket config per server, per-route values are not enforced (the last-registered route wins).`
-								)
-								console.warn(new Error().stack)
-							}
-
-						Object.assign(existing, options)
-					} else (this['~config'] as any).websocket = options
+					wsConfig ??= nullObject() as WSOptions
+					wsCap!.provider.accumulateOptions(
+						wsConfig,
+						options as WSOptions,
+						routePath
+					)
 				}
 
 				continue
@@ -7178,6 +7338,12 @@ export class Elysia<
 				for (let p = 0; p < paths.length; p++) map[paths[p]] = handler
 			}
 		}
+
+		// Atomic commit: only reached when the build fully succeeds (any throw
+		// above propagates), so a failed rebuild leaves the prior `~wsConfig`
+		// intact. Always assign (including `undefined`) so a rebuild that drops
+		// all WS routes clears stale config.
+		this['~wsConfig'] = wsConfig
 	}
 
 	#fetchFn?: (request: Request) => MaybePromise<Response>

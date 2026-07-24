@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import { Elysia, type TraceProcess, type TraceEvent } from '../../src'
+import { trace } from '../../src/plugin/trace'
 import { delay, req } from '../utils'
 
 describe('trace', () => {
@@ -8,7 +9,7 @@ describe('trace', () => {
 			throw new Error('Trace stuck')
 		}, 1000)
 
-		const a = new Elysia().trace('global', async ({ set }) => {
+		const a = new Elysia().use(trace()).trace('global', async ({ set }) => {
 			set.headers['X-Powered-By'] = 'elysia'
 			clearTimeout(timeout)
 		})
@@ -26,7 +27,7 @@ describe('trace', () => {
 			throw new Error('Trace stuck')
 		}, 1000)
 
-		const a = new Elysia().trace('global', async ({ set }) => {
+		const a = new Elysia().use(trace()).trace('global', async ({ set }) => {
 			set.headers['X-Powered-By'] = 'elysia'
 			clearTimeout(timeout)
 		})
@@ -55,7 +56,7 @@ describe('trace', () => {
 				})
 			}
 
-		const plugin = new Elysia().trace(
+		const plugin = new Elysia().use(trace()).trace(
 			'plugin',
 			({
 				onRequest,
@@ -125,7 +126,7 @@ describe('trace', () => {
 			.request(() => {})
 			.transform(() => {})
 			.error(() => {})
-			.trace(
+			.use(trace()).trace(
 				'plugin',
 				({
 					onRequest,
@@ -183,7 +184,7 @@ describe('trace', () => {
 	it('handle local scope', async () => {
 		let called = false
 
-		const plugin = new Elysia().trace(() => {
+		const plugin = new Elysia().use(trace()).trace(() => {
 			called = true
 		})
 
@@ -203,7 +204,7 @@ describe('trace', () => {
 	it('handle scoped scope', async () => {
 		let called = false
 
-		const plugin = new Elysia().trace('plugin', () => {
+		const plugin = new Elysia().use(trace()).trace('plugin', () => {
 			called = true
 		})
 
@@ -223,7 +224,7 @@ describe('trace', () => {
 	it('handle global scope', async () => {
 		let called = false
 
-		const plugin = new Elysia().trace('global', () => {
+		const plugin = new Elysia().use(trace()).trace('global', () => {
 			called = true
 		})
 
@@ -243,7 +244,7 @@ describe('trace', () => {
 	it('handle as cast', async () => {
 		let called = false
 
-		const plugin = new Elysia().trace('plugin', () => {
+		const plugin = new Elysia().use(trace()).trace('plugin', () => {
 			called = true
 		})
 
@@ -261,7 +262,7 @@ describe('trace', () => {
 	})
 
 	it('deduplicate plugin when name is provided', () => {
-		const a = new Elysia({ name: 'a' }).trace('global', () => {})
+		const a = new Elysia({ name: 'a' }).use(trace()).trace('global', () => {})
 		const b = new Elysia().use(a)
 
 		const app = new Elysia()
@@ -278,7 +279,7 @@ describe('trace', () => {
 		let isCalled = false
 
 		const app = new Elysia()
-			.trace(({ onBeforeHandle }) => {
+			.use(trace()).trace(({ onBeforeHandle }) => {
 				onBeforeHandle(({ onEvent }) => {
 					onEvent(({ onStop }) => {
 						onStop(({ error }) => {
@@ -307,7 +308,7 @@ describe('trace', () => {
 		let isCalled = false
 
 		const app = new Elysia()
-			.trace(({ onBeforeHandle }) => {
+			.use(trace()).trace(({ onBeforeHandle }) => {
 				onBeforeHandle(({ onEvent }) => {
 					onEvent(({ onStop }) => {
 						onStop(({ error }) => {
@@ -336,7 +337,7 @@ describe('trace', () => {
 		let isCalled = false
 
 		const app = new Elysia()
-			.trace(({ onBeforeHandle }) => {
+			.use(trace()).trace(({ onBeforeHandle }) => {
 				onBeforeHandle(({ onStop }) => {
 					onStop(({ error }) => {
 						if (error) isCalled = true
@@ -363,7 +364,7 @@ describe('trace', () => {
 		let isCalled = false
 
 		const app = new Elysia()
-			.trace(({ onBeforeHandle }) => {
+			.use(trace()).trace(({ onBeforeHandle }) => {
 				onBeforeHandle(async ({ error: err }) => {
 					const error = await err
 					if (error) isCalled = true
@@ -389,7 +390,7 @@ describe('trace', () => {
 		let isCalled = false
 
 		const app = new Elysia()
-			.trace(({ onBeforeHandle }) => {
+			.use(trace()).trace(({ onBeforeHandle }) => {
 				onBeforeHandle(({ onStop }) => {
 					onStop(({ error }) => {
 						if (error) isCalled = true
@@ -416,7 +417,7 @@ describe('trace', () => {
 		let isCalled = false
 
 		const app = new Elysia()
-			.trace(({ onHandle }) => {
+			.use(trace()).trace(({ onHandle }) => {
 				onHandle(({ onStop }) => {
 					onStop(({ error }) => {
 						if (error) isCalled = true
@@ -437,7 +438,7 @@ describe('trace', () => {
 		let isCalled = false
 
 		const app = new Elysia()
-			.trace(({ onHandle }) => {
+			.use(trace()).trace(({ onHandle }) => {
 				onHandle(({ onStop }) => {
 					onStop(({ error }) => {
 						if (error) isCalled = true
@@ -458,7 +459,7 @@ describe('trace', () => {
 		let isCalled = false
 
 		const app = new Elysia()
-			.trace(({ onHandle }) => {
+			.use(trace()).trace(({ onHandle }) => {
 				onHandle(({ onStop }) => {
 					onStop(({ error }) => {
 						if (error) isCalled = true
@@ -479,7 +480,7 @@ describe('trace', () => {
 		let route: string | undefined
 
 		const app = new Elysia()
-			.trace(({ onHandle, context }) => {
+			.use(trace()).trace(({ onHandle, context }) => {
 				onHandle(({ onStop }) => {
 					onStop(({ error }) => {
 						route = context.route
@@ -504,7 +505,7 @@ describe('trace', () => {
 		let resolvedError: Error | null | undefined
 
 		const app = new Elysia()
-			.trace(async (t) => {
+			.use(trace()).trace(async (t) => {
 				// Late subscribers read the recorded event after the request finishes.
 				await new Promise((resolve) => setTimeout(resolve, 20))
 
@@ -535,7 +536,7 @@ describe('trace', () => {
 		let resolvedError: Error | null | undefined
 
 		const app = new Elysia()
-			.trace(async (t) => {
+			.use(trace()).trace(async (t) => {
 				await new Promise((resolve) => setTimeout(resolve, 20))
 
 				// the error returned by a child lifecycle must still reach a
@@ -564,7 +565,7 @@ describe('trace', () => {
 		const order = <string[]>[]
 
 		const app = new Elysia()
-			.trace(({ onHandle, onAfterResponse }) => {
+			.use(trace()).trace(({ onHandle, onAfterResponse }) => {
 				onHandle(({ onStop }) => {
 					onStop(({ error }) => {
 						order.push('HANDLE')
@@ -595,7 +596,7 @@ describe('trace', () => {
 		let elapsed = -1
 
 		const app = new Elysia()
-			.trace(({ onHandle }) =>
+			.use(trace()).trace(({ onHandle }) =>
 				onHandle(({ onStop }) =>
 					onStop(({ elapsed: e }) => {
 						elapsed = e
@@ -614,7 +615,7 @@ describe('trace', () => {
 		let errored = false
 
 		const app = new Elysia()
-			.trace(({ onError }) =>
+			.use(trace()).trace(({ onError }) =>
 				onError(() => {
 					errored = true
 				})
@@ -629,7 +630,7 @@ describe('trace', () => {
 
 	it('streams async generator when trace + app-level headers are set', async () => {
 		const app = new Elysia()
-			.trace(() => {})
+			.use(trace()).trace(() => {})
 			.headers({ 'x-powered-by': 'elysia' })
 			.post('/', async function* () {
 				yield '1'
@@ -649,7 +650,7 @@ describe('trace', () => {
 
 	it('streams async generator when trace + set.headers mutation in handler', async () => {
 		const app = new Elysia()
-			.trace(() => {})
+			.use(trace()).trace(() => {})
 			.post('/', async function* ({ set }) {
 				set.headers['x-custom'] = 'yes'
 				yield '1'

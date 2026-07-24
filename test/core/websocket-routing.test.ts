@@ -1,4 +1,6 @@
 import { Elysia } from '../../src'
+import { websocket } from '../../src/plugin/websocket'
+import { trace } from '../../src/plugin/trace'
 
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
@@ -9,7 +11,7 @@ const upgrade = () =>
 describe('HTTP routing with WebSocket routes', () => {
 	it('resolves a static HTTP route when a request hook is registered', async () => {
 		const app = new Elysia()
-			.ws('/ws', { message() {} })
+			.use(websocket()).ws('/ws', { message() {} })
 			.request(() => {})
 			.get('/ok', () => 'ok')
 
@@ -20,8 +22,8 @@ describe('HTTP routing with WebSocket routes', () => {
 
 	it('resolves a static HTTP route when tracing is registered', async () => {
 		const app = new Elysia()
-			.trace(() => {})
-			.ws('/ws', { message() {} })
+			.use(trace()).trace(() => {})
+			.use(websocket()).ws('/ws', { message() {} })
 			.get('/ok', () => 'ok')
 
 		const res = await app.handle(req('/ok'))
@@ -31,7 +33,7 @@ describe('HTTP routing with WebSocket routes', () => {
 
 	it('resolves a dynamic HTTP route when a request hook is registered', async () => {
 		const app = new Elysia()
-			.ws('/ws', { message() {} })
+			.use(websocket()).ws('/ws', { message() {} })
 			.request(() => {})
 			.get('/id/:id', ({ params }) => params.id)
 
@@ -42,7 +44,7 @@ describe('HTTP routing with WebSocket routes', () => {
 
 	it('returns 404 for an unmatched HTTP path', async () => {
 		const app = new Elysia()
-			.ws('/ws', { message() {} })
+			.use(websocket()).ws('/ws', { message() {} })
 			.request(() => {})
 			.get('/ok', () => 'ok')
 
@@ -59,7 +61,7 @@ describe('WebSocket route hook snapshots', () => {
 				ran++
 				return new Response('blocked', { status: 403 })
 			})
-			.ws('/ws', { message() {} })
+			.use(websocket()).ws('/ws', { message() {} })
 
 		const app = new Elysia().use(plugin)
 
@@ -72,7 +74,7 @@ describe('WebSocket route hook snapshots', () => {
 	it('ignores a beforeHandle registered after the route', async () => {
 		let leaked = 0
 		const app = new Elysia()
-			.ws('/ws', { message() {} })
+			.use(websocket()).ws('/ws', { message() {} })
 			.beforeHandle(() => {
 				leaked++
 				return new Response('blocked', { status: 403 })
@@ -91,7 +93,7 @@ describe('WebSocket route hook snapshots', () => {
 					ran++
 					return new Response('nope', { status: 401 })
 				})
-				.ws('/ws', { message() {} })
+				.use(websocket()).ws('/ws', { message() {} })
 		)
 
 		const res = await app.handle(

@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'bun:test'
 import { Elysia } from '../../src'
+import { websocket } from '../../src/plugin/websocket'
 import { newWebsocket, wsOpen, wsClosed } from './utils'
 
 describe('WebSocket interleaved messages', () => {
 	it('each async message sees its own body across an await', async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				async message(ws) {
 					const before = ws.body as unknown as string
 					// Complete out of order to expose shared message context.
@@ -59,8 +60,8 @@ describe('WebSocket per-route option conflict', () => {
 	it('warns when per-route websocket options conflict (last wins)', () => {
 		const warnings = captureWarn(() => {
 			const app = new Elysia()
-				.ws('/a', { message() {}, maxPayloadLength: 1024 })
-				.ws('/b', { message() {}, maxPayloadLength: 4096 })
+				.use(websocket()).ws('/a', { message() {}, maxPayloadLength: 1024 })
+				.use(websocket()).ws('/b', { message() {}, maxPayloadLength: 4096 })
 				.compile()
 			void app
 		})
@@ -75,8 +76,8 @@ describe('WebSocket per-route option conflict', () => {
 	it('does not warn when per-route options agree', () => {
 		const warnings = captureWarn(() => {
 			const app = new Elysia()
-				.ws('/a', { message() {}, maxPayloadLength: 1024 })
-				.ws('/b', { message() {}, maxPayloadLength: 1024 })
+				.use(websocket()).ws('/a', { message() {}, maxPayloadLength: 1024 })
+				.use(websocket()).ws('/b', { message() {}, maxPayloadLength: 1024 })
 				.compile()
 			void app
 		})

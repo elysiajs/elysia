@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from 'bun:test'
 
 import { Elysia, t } from '../../src'
+import { websocket } from '../../src/plugin/websocket'
 import { Compiled, createAotFingerprint } from '../../src/compile/aot'
 import {
 	abortCapture,
@@ -216,7 +217,7 @@ describe('publish-time authoring-cache release (004-P5)', () => {
 			registerProbeManifest()
 
 			const app = new Elysia()
-				.ws('/ws', { message: () => {} })
+				.use(websocket()).ws('/ws', { message: () => {} })
 				.get('/a', () => 'a')
 			// JIT publish (no precompile): arms the cold-route countdown.
 			// The WS row is consumed eagerly at build time and must be
@@ -236,8 +237,8 @@ describe('publish-time authoring-cache release (004-P5)', () => {
 			registerProbeManifest()
 
 			const app = new Elysia()
-				.ws('/a', { message: () => {} })
-				.ws('/b', { message: () => {} })
+				.use(websocket()).ws('/a', { message: () => {} })
+				.use(websocket()).ws('/b', { message: () => {} })
 			// no HTTP route ever cold-compiles, so every row must be
 			// excluded from the count at arming time -> released at publish
 			void app.fetch

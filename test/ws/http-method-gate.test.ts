@@ -1,4 +1,5 @@
 import { Elysia } from '../../src'
+import { websocket } from '../../src/plugin/websocket'
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
 
@@ -8,7 +9,7 @@ import { req } from '../utils'
 describe('WebSocket upgrade method routing', () => {
 	const build = () =>
 		new Elysia()
-			.ws('/chat/:room', { message() {} })
+			.use(websocket()).ws('/chat/:room', { message() {} })
 			.get('/api/data', () => 'get')
 			.post('/api/data', () => 'post')
 
@@ -41,7 +42,7 @@ describe('WebSocket upgrade method routing', () => {
 
 	it('keeps HTTP routes reachable beside dynamic WebSocket routes', async () => {
 		const app = new Elysia()
-			.ws('/socket/:id', { message() {} })
+			.use(websocket()).ws('/socket/:id', { message() {} })
 			.post('/submit', () => 'ok')
 
 		const res = await app.handle(req('/submit', { method: 'POST' }))
@@ -56,7 +57,7 @@ describe('WebSocket upgrade method routing', () => {
 	// method-map routing (dynamic route, then all-method route).
 	it('does not let a static WebSocket route shadow dynamic HTTP', async () => {
 		const app = new Elysia()
-			.ws('/thing', { message() {} })
+			.use(websocket()).ws('/thing', { message() {} })
 			.get('/:id', ({ params }) => `get:${params.id}`)
 
 		await expect(
@@ -66,7 +67,7 @@ describe('WebSocket upgrade method routing', () => {
 
 	it('does not let a static WebSocket route shadow an all-method route', async () => {
 		const app = new Elysia()
-			.ws('/thing', { message() {} })
+			.use(websocket()).ws('/thing', { message() {} })
 			.all('/thing', () => 'all')
 
 		await expect(

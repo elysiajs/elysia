@@ -705,3 +705,9 @@ export const createTracer =
 
 		return handle
 	}
+
+export interface TraceCapability {
+	readonly id: string
+	readonly createTracer: typeof createTracer
+	readonly unionTracePhases: typeof unionTracePhases
+}

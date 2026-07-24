@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'bun:test'
 import { Elysia } from '../../src'
+import { websocket } from '../../src/plugin/websocket'
 import { newWebsocket, wsOpen, wsClosed, wsMessage } from './utils'
 
 describe('WebSocket method binding', () => {
 	it('a detached method (const { send } = ws) keeps its receiver', async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				message(ws) {
 					// Detached methods must retain the WebSocket receiver.
 					const {
@@ -42,7 +43,7 @@ describe('WebSocket method binding', () => {
 		const identities: unknown[] = []
 
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				message(ws) {
 					identities.push((ws as any).send)
 					;(ws as any).send('ok')
@@ -70,7 +71,7 @@ describe('WebSocket method binding', () => {
 	it('an error handler can send when open throws', async () => {
 		// Throw before any bound method is materialized.
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				open() {
 					throw new Error('boom')
 				},
@@ -98,7 +99,7 @@ describe('WebSocket upgrade context retention', () => {
 		let contextAfterOpen: unknown = Symbol('unset')
 
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				open(ws) {
 					contextAfterOpen = (ws as any).raw.data.context
 				},

@@ -1,10 +1,11 @@
 import { describe, it, expect, afterEach } from 'bun:test'
 import { Elysia, status } from '../../src'
+import { websocket } from '../../src/plugin/websocket'
 import { newWebsocket, wsOpen, wsMessage, wsClosed } from './utils'
 
 // Unexpected errors must not expose their messages to production clients.
 const frameFor = async (message: () => unknown): Promise<string> => {
-	const app = new Elysia().ws('/ws', { message }).listen(0)
+	const app = new Elysia().use(websocket()).ws('/ws', { message }).listen(0)
 
 	const ws = newWebsocket(app.server!)
 	await wsOpen(ws)

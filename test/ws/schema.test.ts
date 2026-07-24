@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'bun:test'
 import { Elysia, t, ValidationError } from '../../src'
+import { websocket } from '../../src/plugin/websocket'
 import { newWebsocket, wsOpen, wsClosed, wsMessage } from './utils'
 
 describe('WebSocket non-body schemas', () => {
 	it('query: success — typed query is accessible inside handler', async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				query: t.Object({ name: t.String() }),
 				message({ ws, query }: any) {
 					ws.send(`hi-${query.name}`)
@@ -28,7 +29,7 @@ describe('WebSocket non-body schemas', () => {
 
 	it('query: failure — upgrade is rejected with HTTP 422', async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				query: t.Object({ name: t.String() }),
 				message({ ws }: any) {
 					ws.send('ok')
@@ -55,7 +56,7 @@ describe('WebSocket non-body schemas', () => {
 
 	it('params: dynamic path param validated at upgrade', async () => {
 		const app = new Elysia()
-			.ws('/ws/:id', {
+			.use(websocket()).ws('/ws/:id', {
 				params: t.Object({ id: t.String() }),
 				message({ ws, params }: any) {
 					ws.send(`id=${params.id}`)
@@ -76,7 +77,7 @@ describe('WebSocket non-body schemas', () => {
 
 	it('headers: success — typed headers usable in handler', async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				headers: t.Object({
 					'x-token': t.String()
 				}),
@@ -106,7 +107,7 @@ describe('WebSocket non-body schemas', () => {
 
 	it('headers: failure — upgrade rejected when required header missing', async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				headers: t.Object({
 					'x-token': t.String()
 				}),
@@ -145,7 +146,7 @@ describe('WebSocket non-body schemas', () => {
 					status: 418
 				})
 			})
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				query: t.Object({ name: t.String() }),
 				message({ ws }: any) {
 					ws.send('ok')
@@ -176,7 +177,7 @@ describe('WebSocket non-body schemas', () => {
 	it('query: Standard Schema (zod) success and failure both honored', async () => {
 		const z = await import('zod')
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				query: z.object({ name: z.string() }),
 				message({ ws, query }: any) {
 					ws.send(`hi-${query.name}`)
@@ -213,7 +214,7 @@ describe('WebSocket non-body schemas', () => {
 
 	it('query: preserves duplicate values when the schema expects an array', async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				query: t.Object({ id: t.Array(t.String()) }),
 				message({ ws, query }: any) {
 					ws.send(JSON.stringify(query))
@@ -238,7 +239,7 @@ describe('WebSocket non-body schemas', () => {
 
 	it('query: passes an empty object when the upgrade has no query string', async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				query: t.Object({ name: t.Optional(t.String()) }),
 				message({ ws, query }: any) {
 					ws.send(JSON.stringify(query))

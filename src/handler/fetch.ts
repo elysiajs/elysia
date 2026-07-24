@@ -20,7 +20,6 @@ import {
 	internalServerErrorResponse,
 	isProduction
 } from '../error'
-import { createTracer, unionTracePhases } from '../trace'
 
 import type { CompiledHandler, MaybePromise } from '../types'
 
@@ -316,8 +315,12 @@ export function createFetchHandler(
 
 	const hasTrace = !!traceHandlers?.length
 
+	const traceProvider = hasTrace
+		? app['~resolvedCapability']('trace')!
+		: undefined
+
 	const tracePhases = hasTrace
-		? unionTracePhases(traceHandlers as unknown as Function[])
+		? traceProvider!.unionTracePhases(traceHandlers as unknown as Function[])
 		: null
 
 	const traceRequestPhase =
@@ -327,7 +330,7 @@ export function createFetchHandler(
 		hasTrace && (tracePhases === null || tracePhases.has('afterResponse'))
 
 	const tracerFactories = hasTrace
-		? traceHandlers!.map((fn) => createTracer(fn as any))
+		? traceHandlers!.map((fn) => traceProvider!.createTracer(fn as any))
 		: undefined
 
 	const afterResponses = hook?.afterResponse

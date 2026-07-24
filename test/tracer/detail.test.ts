@@ -1,11 +1,12 @@
 import { Elysia } from '../../src'
+import { trace } from '../../src/plugin/trace'
 import { describe, expect, it } from 'bun:test'
 import { post, req } from '../utils'
 
 describe('Trace Detail', async () => {
 	it('report parse units name', async () => {
 		const app = new Elysia()
-			.trace(({ onParse, set }) => {
+			.use(trace()).trace(({ onParse, set }) => {
 				onParse(({ onEvent, onStop }) => {
 					const names = <string[]>[]
 
@@ -34,7 +35,7 @@ describe('Trace Detail', async () => {
 
 	it('report transform units name', async () => {
 		const app = new Elysia()
-			.trace(({ onTransform, set }) => {
+			.use(trace()).trace(({ onTransform, set }) => {
 				onTransform(({ onEvent, onStop }) => {
 					const names = <string[]>[]
 
@@ -63,7 +64,7 @@ describe('Trace Detail', async () => {
 
 	it('report beforeHandle units name', async () => {
 		const app = new Elysia()
-			.trace(({ onBeforeHandle, set }) => {
+			.use(trace()).trace(({ onBeforeHandle, set }) => {
 				onBeforeHandle(({ onEvent, onStop }) => {
 					const names = <string[]>[]
 
@@ -92,7 +93,7 @@ describe('Trace Detail', async () => {
 
 	it('report afterHandle units name', async () => {
 		const app = new Elysia()
-			.trace(({ onAfterHandle, set }) => {
+			.use(trace()).trace(({ onAfterHandle, set }) => {
 				onAfterHandle(({ onEvent, onStop }) => {
 					const names = <string[]>[]
 
@@ -121,7 +122,7 @@ describe('Trace Detail', async () => {
 
 	it('report mapResponse units name', async () => {
 		const app = new Elysia()
-			.trace(({ onMapResponse, set }) => {
+			.use(trace()).trace(({ onMapResponse, set }) => {
 				onMapResponse(({ onEvent, onStop }) => {
 					const names = <string[]>[]
 
@@ -150,7 +151,7 @@ describe('Trace Detail', async () => {
 
 	it('report afterResponse units name', async () => {
 		const app = new Elysia()
-			.trace(({ onAfterResponse, set }) => {
+			.use(trace()).trace(({ onAfterResponse, set }) => {
 				onAfterResponse(({ onEvent, onStop }) => {
 					const names = <string[]>[]
 

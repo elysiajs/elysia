@@ -1,11 +1,12 @@
 import { describe, it } from 'bun:test'
 import { Elysia } from '../../src'
+import { websocket } from '../../src/plugin/websocket'
 import { newWebsocket, wsOpen, wsClosed } from './utils'
 
 describe('WebSocket connection', () => {
 	it('should connect and close', async () => {
 		const app = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				message() {}
 			})
 			.listen(0)

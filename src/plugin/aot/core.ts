@@ -143,6 +143,19 @@ export interface StubPlan {
 	 * + history sweep; a mount forbids it). Every call site (fetch, JIT
 	 * codegen, frozen reconstruct) only calls in when trace handlers exist, so
 	 * a throwing stub is unreachable once detection proves trace is unused
+	 *
+	 * NOT moot after the `elysia/trace` capability severance. The reachable
+	 * post-severance case is: an app that `.use(trace())` (so the capability
+	 * is registered and `dist/trace.mjs` IS in the bundle graph via
+	 * `dist/plugin/trace.mjs`) but never attaches `.trace(fn)` (no trace
+	 * hooks, so `tr` is unaliased and `mayTrace` is false). Under the frozen
+	 * path (`jit`) this flag is still `true`, so the stub replaces the real
+	 * trace module with the non-throwing `unionTracePhases(){return new Set()}`
+	 * fallback (+ throwing `createTracer`, unreachable with zero hooks).
+	 * Measured saving for that shape: ~18KB — severing trace also tree-shakes
+	 * sucrose's `separateFunction`, which trace is the sole importer of. A
+	 * traceless app that never imports the capability (Fixture B) has no
+	 * trace module in the graph, so the stub is a no-op there.
 	 */
 	trace: boolean
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 
 import { Elysia, t } from '../../src'
+import { trace } from '../../src/plugin/trace'
 import {
 	routeDescriptors,
 	type RouteDescriptor
@@ -215,7 +216,7 @@ describe('route descriptor', () => {
 
 	it('classifies a traced route', async () => {
 		const app = new Elysia({ introspect: true })
-			.trace(({ onHandle }) => {
+			.use(trace()).trace(({ onHandle }) => {
 				onHandle(() => {})
 			})
 			.get('/tr', () => 'hi')

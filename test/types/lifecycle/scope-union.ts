@@ -1,4 +1,5 @@
 import { Elysia } from '../../../src'
+import { trace } from '../../../src/plugin/trace'
 import { expectTypeOf } from 'expect-type'
 
 const withBeforeHandle = <Scope extends 'local' | 'plugin' | 'global'>(
@@ -40,7 +41,7 @@ const withLifecycleHooks = <Scope extends 'local' | 'plugin' | 'global'>(
 		.mapResponse(scope, () => {})
 		.afterResponse(scope, () => {})
 		.error(scope, () => {})
-		.trace(scope, () => {})
+		.use(trace()).trace(scope, () => {})
 
 const globalLifecycle = withLifecycleHooks('global')
 const pluginLifecycle = withLifecycleHooks('plugin')

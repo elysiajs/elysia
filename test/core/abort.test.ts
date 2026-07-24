@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'bun:test'
 import { Elysia } from '../../src'
+import { trace } from '../../src/plugin/trace'
 
 const preAborted = () => {
 	const controller = new AbortController()
@@ -60,7 +61,7 @@ describe('abort short-circuit', () => {
 		let handlerCalled = false
 
 		const app = new Elysia()
-			.trace(() => {})
+			.use(trace()).trace(() => {})
 			.get('/', () => {
 				handlerCalled = true
 

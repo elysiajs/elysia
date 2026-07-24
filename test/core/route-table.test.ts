@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { Elysia, t } from '../../src'
+import { websocket } from '../../src/plugin/websocket'
 import { buildRouteTable, routeRow, RouteFlag } from '../../src/route-table'
 import { collectStaticRoutes } from '../../src/adapter/bun'
 import { describe, expect, it } from 'bun:test'
@@ -7,7 +8,7 @@ import { describe, expect, it } from 'bun:test'
 const buildFixture = () => {
 	const child = new Elysia({ prefix: '/child' })
 		.get('/a', { query: t.Object({ q: t.String() }) }, () => 'a')
-		.ws('/socket', { message() {} })
+		.use(websocket()).ws('/socket', { message() {} })
 
 	const guarded = new Elysia()
 		.guard({ beforeHandle() {} })
@@ -172,7 +173,7 @@ describe('columnar route table', () => {
 		})
 
 		it('registers a WebSocket upgrade route', async () => {
-			const app = new Elysia().ws('/ws', { message() {} })
+			const app = new Elysia().use(websocket()).ws('/ws', { message() {} })
 			void app.fetch
 
 			expect(app['~map']?.['WS']?.['/ws']).toBeTypeOf('function')

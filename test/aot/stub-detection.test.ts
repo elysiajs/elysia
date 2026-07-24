@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach } from 'bun:test'
 import { resolve } from 'node:path'
 import { rm } from 'node:fs/promises'
 import { Elysia, t } from '../../src'
+import { websocket } from '../../src/plugin/websocket'
 import { Validator } from '../../src/validator'
 import { Compiled } from '../../src/compile/aot'
 import type { AnyElysia } from '../../src/base'
@@ -78,7 +79,7 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 
 	// WebSocket routes do not call the HTTP handler compiler.
 	it('WS-only app: handler JIT is stubbable (WS never reaches sucrose)', async () => {
-		const app = new Elysia().ws('/ws', { message: () => {} })
+		const app = new Elysia().use(websocket()).ws('/ws', { message: () => {} })
 		const r = await analyzeStubbability(app as any)
 		expect(r.jit).toBe(true)
 		expect(r.reasons).toEqual([])
@@ -92,7 +93,7 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 				({ body }) => body
 			)
 			.get('/g', () => 'ok')
-			.ws('/ws', { message: () => {} })
+			.use(websocket()).ws('/ws', { message: () => {} })
 		const r = await analyzeStubbability(app as any)
 		expect(r.jit).toBe(true)
 	})

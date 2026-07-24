@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
 
 import { Elysia, sse } from '../../src'
+import { trace } from '../../src/plugin/trace'
 import { streamResponse } from '../../src/adapter/utils'
 import { requestId } from '../../src/utils'
 
@@ -651,7 +652,7 @@ describe('Stream', () => {
 				.setup(() => {})
 				.cleanup(() => {})
 				.request(() => {})
-				.trace(() => {})
+				.use(trace()).trace(() => {})
 				.as('global')
 
 		const app = new Elysia().use(PluginA()).get('/sse', async function* () {

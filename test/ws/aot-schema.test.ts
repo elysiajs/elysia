@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 import { Elysia, t } from '../../src'
+import { websocket } from '../../src/plugin/websocket'
 import { Validator } from '../../src/validator'
 import { Compiled } from '../../src/compile/aot'
 // importing `aot-capture` also installs the build-only capture impl (side effect)
@@ -25,7 +26,7 @@ afterEach(() => {
 })
 
 const build = () =>
-	new Elysia().ws('/ws', {
+	new Elysia().use(websocket()).ws('/ws', {
 		body: t.Object({ n: t.Number() }),
 		query: t.Object({ token: t.String() }),
 		response: t.Object({ ok: t.Boolean() }),
@@ -34,7 +35,7 @@ const build = () =>
 
 // Echo decoded types so frozen and JIT validators can be compared.
 const buildCodec = () =>
-	new Elysia().ws('/ws', {
+	new Elysia().use(websocket()).ws('/ws', {
 		body: t.Object({ when: t.Date(), n: t.Numeric() }),
 		message(ws, body: any) {
 			ws.send(
@@ -51,7 +52,7 @@ const buildCodec = () =>
 		}
 	})
 
-// `.ws()` returns AddWSRoute, so builders use the concrete value through `any`.
+// `.use(websocket()).ws()` returns AddWSRoute, so builders use the concrete value through `any`.
 const captureManifest = (builder: () => any) => {
 	process.env.ELYSIA_AOT_BUILD = '1'
 	endValidatorCapture()

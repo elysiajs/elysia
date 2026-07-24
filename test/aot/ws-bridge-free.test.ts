@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from 'bun:test'
 
 import { Elysia, t } from '../../src'
+import { websocket } from '../../src/plugin/websocket'
 import { Validator } from '../../src/validator'
 import { Compiled, type ProgramId } from '../../src/compile/aot'
 import {
@@ -28,7 +29,7 @@ function freezeWS(hook: any) {
 	process.env.ELYSIA_AOT_BUILD = '1'
 	beginValidatorCapture()
 
-	const app = new Elysia().ws(PATH, {
+	const app = new Elysia().use(websocket()).ws(PATH, {
 		...hook,
 		message(ws: any, body: any) {
 			ws.send({ echo: body.message })

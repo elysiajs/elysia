@@ -1,7 +1,7 @@
 {
 	"name": "elysia",
 	"description": "Ergonomic Framework for Human",
-	"version": "2.0.0-exp.47",
+	"version": "2.0.0-exp.49",
 	"author": {
 		"name": "saltyAom",
 		"url": "https://github.com/SaltyAom",
@@ -120,7 +120,7 @@
 			"import": "./dist/plugin/aot/rspack.mjs",
 			"require": "./dist/plugin/aot/rspack.js"
 		},
-		"./plugin/auto-head": {
+		"./auto-head": {
 			"types": "./dist/plugin/auto-head.d.ts",
 			"import": "./dist/plugin/auto-head.mjs",
 			"require": "./dist/plugin/auto-head.js"
@@ -131,9 +131,9 @@
 			"require": "./dist/sucrose.js"
 		},
 		"./trace": {
-			"types": "./dist/trace.d.ts",
-			"import": "./dist/trace.mjs",
-			"require": "./dist/trace.js"
+			"types": "./dist/plugin/trace.d.ts",
+			"import": "./dist/plugin/trace.mjs",
+			"require": "./dist/plugin/trace.js"
 		},
 		"./type": {
 			"types": "./dist/type/exports.d.ts",
@@ -184,6 +184,11 @@
 			"types": "./dist/utils.d.ts",
 			"import": "./dist/utils.mjs",
 			"require": "./dist/utils.js"
+		},
+		"./websocket": {
+			"types": "./dist/plugin/websocket.d.ts",
+			"import": "./dist/plugin/websocket.mjs",
+			"require": "./dist/plugin/websocket.js"
 		},
 		"./ws": {
 			"types": "./dist/ws/index.d.ts",

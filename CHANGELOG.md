@@ -2,6 +2,25 @@
 
 Breaking Change:
 
+- Tracing is now an opt-in capability. `.trace()` (and any guard-carried or
+  inherited trace hook) requires registering the trace plugin once:
+  `import { trace } from 'elysia/trace'` then `.use(trace())`. Without it, the
+  app throws on its first router build (seal / first fetch / `.compile()`) with
+  the exact fix line. This lets the trace subsystem (`dist/trace.mjs`, ~5.7KB
+  plus its sucrose helpers) stay out of the default bundle — apps that never
+  trace no longer pay for it. The `elysia/trace` subpath still exports the same
+  symbols (`createTracer`, `unionTracePhases`, trace types) as before, so
+  existing importers keep working; it now also exports the `trace()` registrar.
+- WebSocket is now an opt-in capability. `.ws()` (and any inherited/scoped WS
+  route) requires registering the WebSocket plugin once:
+  `import { websocket } from 'elysia/websocket'` then `.use(websocket())`.
+  Without it, the app throws on its first router build (seal / first fetch /
+  `.compile()`) with the exact fix line. This lets the WebSocket subsystem
+  (~11.9KB) stay out of the default bundle — apps that never use WebSockets no
+  longer pay for it. The app-wide `new Elysia({ websocket: {...} })` config
+  option is removed; pass those server-tuning defaults to the registrar instead:
+  `.use(websocket({ idleTimeout: 60, maxPayloadLength: 1024 }))`. Per-route
+  `.ws(path, { idleTimeout, ... })` values still override the app-wide defaults.
 - Sucrose handler inference is now a single-pass token scanner instead of the
   regex/alias walk. Inference output is equal or more conservative on every
   covered fixture (ambiguity still enables channels, never silent

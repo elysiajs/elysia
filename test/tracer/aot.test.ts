@@ -1,4 +1,5 @@
 import { Context, Elysia } from '../../src'
+import { trace } from '../../src/plugin/trace'
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
 
@@ -33,7 +34,7 @@ describe('Trace AoT', async () => {
 		let called = 0
 
 		const plugin = new Elysia()
-			.trace(({ onHandle }) => {
+			.use(trace()).trace(({ onHandle }) => {
 				onHandle(() => {
 					called++
 				})

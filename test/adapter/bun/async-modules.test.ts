@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import { Elysia } from '../../../src'
+import { websocket } from '../../../src/plugin/websocket'
 
 describe('Bun async modules', () => {
 	it('queues requests until async modules resolve', async () => {
@@ -122,7 +123,7 @@ describe('Bun async modules', () => {
 			release = resolve
 		})
 		const plugin = gate.then(() =>
-			new Elysia().ws('/ws', {
+			new Elysia().use(websocket()).ws('/ws', {
 				message(ws, message) {
 					ws.send(`echo:${message}`)
 				}

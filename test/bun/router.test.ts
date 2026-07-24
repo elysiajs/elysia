@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'bun:test'
 import { Elysia } from '../../src'
+import { trace as traceCap } from '../../src/plugin/trace'
 import { req } from '../utils'
 
 describe('Bun router', () => {
@@ -10,7 +11,7 @@ describe('Bun router', () => {
 		let traceOnRequest = false
 
 		const app = new Elysia()
-			.trace(({ onHandle, onRequest }) => {
+			.use(traceCap()).trace(({ onHandle, onRequest }) => {
 				onRequest(() => {
 					traceOnRequest = true
 				})
@@ -143,7 +144,7 @@ describe('Bun router', () => {
 		let hasRequestId = false
 
 		const app = new Elysia()
-			.trace((a) => {
+			.use(traceCap()).trace((a) => {
 				a.onHandle(() => {
 					url = a.context.request.url
 					hasRequestId = !!a.context.rid
@@ -188,7 +189,7 @@ describe('Bun router', () => {
 
 				return fn
 			})
-			.trace((a) => {
+			.use(traceCap()).trace((a) => {
 				a.onHandle(() => {
 					url = a.context.request.url
 
@@ -216,7 +217,7 @@ describe('Bun router', () => {
 
 				return fn
 			})
-			.trace((a) => {
+			.use(traceCap()).trace((a) => {
 				a.onHandle(() => {
 					url = a.context.request.url
 

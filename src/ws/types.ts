@@ -1,9 +1,11 @@
+import type { AnyElysia } from '../base'
 import type { Context } from '../context'
 import type {
 	BaseMacro,
 	DocumentDecoration,
 	ErrorHandler,
 	InlineHandlerResponse,
+	InternalRoute,
 	MaybeArray,
 	MaybePromise,
 	OptionalHandler,
@@ -254,3 +256,64 @@ export interface WSValidatorLike {
 export type WSResponseValidator =
 	| { [status: number]: WSValidatorLike }
 	| undefined
+
+/**
+ * App-wide WebSocket server-tuning options — the Bun server-level
+ * `websocket: {...}` knobs (`maxPayloadLength`, `idleTimeout`,
+ * `perMessageDeflate`, …). Lifecycle handlers are per-route only, so they are
+ * omitted here. Formerly `ElysiaConfig.websocket`; now carried by the severable
+ * WebSocket capability (`elysia/websocket`).
+ */
+export type WSOptions = Omit<
+	WebSocketHandler<any>,
+	'open' | 'close' | 'message' | 'drain' | 'ping' | 'pong'
+>
+
+/**
+ * A single `websocket(options)` registration, tagged with its merge `depth`
+ * (0 = registered directly on the consuming app; +1 per `.use()` hop) and a
+ * DETERMINISTIC `origin` key (registrar name + module url + options checksum)
+ * used to dedup diamond-dependency re-appends. See `plans/severability`.
+ */
+export interface WSOptionsEntry {
+	depth: number
+	value: WSOptions
+	origin: string
+}
+
+/**
+ * Runtime WebSocket capability provider — an immutable module-level singleton
+ * produced by `elysia/websocket` and stored on `~ext.capability.ws.provider`.
+ * Core reaches WS route construction and the global handler exclusively through
+ * this object, so `src/ws/route` stays statically unreachable from the default
+ * bundle. Signatures are declared explicitly here (never `typeof buildWSRoute`
+ * at a core import site) so `import type { WSCapability }` in core is fully
+ * erased and never re-pins the severed module.
+ */
+export interface WSCapability {
+	readonly id: string
+	buildWSRoute(
+		route: InternalRoute,
+		app: AnyElysia
+	): [
+		fetch: (
+			context: Context
+		) => Promise<Response | undefined> | Response | undefined,
+		options: Partial<WebSocketHandler<any>>
+	]
+	buildGlobalWSHandler(): WebSocketHandler<any>
+	/**
+	 * Depth-precedence merge of registration entries (shallower wins per key;
+	 * ties resolve to the last-registered; one warning per overridden key).
+	 */
+	resolveOptions(entries: WSOptionsEntry[]): WSOptions | undefined
+	/**
+	 * Fold a single route's server-tuning options into the build-local config,
+	 * warning on conflicting keys (Bun uses one global config per server).
+	 */
+	accumulateOptions(
+		target: WSOptions,
+		routeOptions: WSOptions,
+		path: string
+	): void
+}

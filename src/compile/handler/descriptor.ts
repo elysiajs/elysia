@@ -11,9 +11,13 @@ import { compileCookieConfig } from '../../cookie/config'
 import type { CompiledCookieConfig } from '../../cookie/config'
 import { hasSyncHmac } from '../../cookie/utils'
 
-import { unionTracePhases, type TraceEvent } from '../../trace'
+import type { TraceEvent } from '../../trace'
 import { Capture } from '../aot'
-import { frozenRootOf } from '../../generation'
+import {
+	frozenRootOf,
+	resolvedTraceOf,
+	traceCapabilityRequired
+} from '../../generation'
 import { JITProbe } from '../jit-probe'
 
 import { isNotEmpty, type CompactBeforeHandlePrefix } from '../../utils'
@@ -341,8 +345,11 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 		hasErrorHook ||
 		hasAfterResponse
 
+	const traceProvider = hasTrace ? resolvedTraceOf(root) : undefined
+	if (hasTrace && !traceProvider) throw new Error(traceCapabilityRequired)
+
 	const tracePhases = hasTrace
-		? unionTracePhases(traceHandlers as Function[])
+		? traceProvider!.unionTracePhases(traceHandlers as Function[])
 		: new Set<TraceEvent>()
 
 	const phaseOn = (phase: TraceEvent) =>

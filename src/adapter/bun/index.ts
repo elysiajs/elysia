@@ -5,9 +5,7 @@ import { isDynamicRegex, needEncodeRegex } from '../../constants'
 import { buildNativeStaticResponse } from '../../compile/handler'
 import { routeRow } from '../../route-table'
 import { flattenChain, getLoosePath, nullObject } from '../../utils'
-import { frozenRootOf } from '../../generation'
-
-import { buildGlobalWSHandler } from '../../ws/route'
+import { frozenRootOf, resolvedWsOf } from '../../generation'
 
 import type { AnyElysia } from '../../base'
 
@@ -165,15 +163,26 @@ export const BunAdapter = createAdapter({
 				)
 			}
 
-			const hasWs = app['~hasWS']
-			let websocket: ReturnType<typeof buildGlobalWSHandler> | undefined
-			if (hasWs) {
-				const defaultConfig = (frozenRootOf(app)['~config'] as any)
-					?.websocket
+			let websocket:
+				| (NonNullable<
+						ReturnType<typeof resolvedWsOf>
+				  >['provider'] extends { buildGlobalWSHandler(): infer R }
+						? R
+						: never)
+				| undefined
+			if (app['~hasWS']) {
+				const resolved = resolvedWsOf(app as AnyElysia)
+				if (!resolved)
+					throw new Error(
+						'[Elysia] internal: WebSocket routes are present but no capability provider was resolved.'
+					)
 
-				websocket = defaultConfig
-					? Object.assign(buildGlobalWSHandler(), defaultConfig)
-					: buildGlobalWSHandler()
+				websocket = resolved.config
+					? Object.assign(
+							resolved.provider.buildGlobalWSHandler(),
+							resolved.config
+						)
+					: resolved.provider.buildGlobalWSHandler()
 			}
 
 			return { fetch, routes, websocket }

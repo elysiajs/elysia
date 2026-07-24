@@ -3,6 +3,7 @@
 
 import { describe, it, expect } from 'bun:test'
 import { Elysia, t } from '../../src'
+import { websocket } from '../../src/plugin/websocket'
 import { newWebsocket, wsOpen, wsMessage, wsClosed, wsClose } from './utils'
 
 function collectN(ws: WebSocket, n: number): Promise<string[]> {
@@ -20,7 +21,7 @@ const noopAfterResponse = () => undefined
 describe('plain string dispatch', () => {
 	it('sync and async pipelines echo identical strings', async () => {
 		const syncApp = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				message(ws, message) {
 					ws.send(message as string)
 				}
@@ -28,7 +29,7 @@ describe('plain string dispatch', () => {
 			.listen(0)
 
 		const asyncApp = new Elysia()
-			.ws('/ws', {
+			.use(websocket()).ws('/ws', {
 				afterResponse: noopAfterResponse,
 				message(ws, message) {
 					ws.send(message as string)
@@ -62,7 +63,7 @@ describe('codec body dispatch', () => {
 	it('sync and async pipelines decode codec fields identically', async () => {
 		const makeApp = (forceAsync: boolean) =>
 			new Elysia()
-				.ws('/ws', {
+				.use(websocket()).ws('/ws', {
 					body: t.Object({ when: t.Date(), n: t.Numeric() }),
 					...(forceAsync ? { afterResponse: noopAfterResponse } : {}),
 					message(ws, body: any) {
@@ -121,7 +122,7 @@ describe('error dispatch', () => {
 	it('sync and async pipelines produce identical error frames on throw', async () => {
 		const makeApp = (forceAsync: boolean) =>
 			new Elysia()
-				.ws('/ws', {
+				.use(websocket()).ws('/ws', {
 					...(forceAsync ? { afterResponse: noopAfterResponse } : {}),
 					error() {
 						return 'caught-error'
@@ -162,7 +163,7 @@ describe('generator dispatch', () => {
 	it('sync and async pipelines stream identical generator yield sequences', async () => {
 		const makeApp = (forceAsync: boolean) =>
 			new Elysia()
-				.ws('/ws', {
+				.use(websocket()).ws('/ws', {
 					...(forceAsync ? { afterResponse: noopAfterResponse } : {}),
 					// @ts-ignore generator return type accepted at runtime
 					message: function* (_ws: any, body: any) {
@@ -203,7 +204,7 @@ describe('async handler dispatch', () => {
 	it('sync and async pipelines await and send identical resolved values', async () => {
 		const makeApp = (forceAsync: boolean) =>
 			new Elysia()
-				.ws('/ws', {
+				.use(websocket()).ws('/ws', {
 					...(forceAsync ? { afterResponse: noopAfterResponse } : {}),
 					async message(_ws: any, body: any) {
 						await Bun.sleep(5)
@@ -242,7 +243,7 @@ describe('validation error dispatch', () => {
 	it('sync and async pipelines send identical frames on body validation failure', async () => {
 		const makeApp = (forceAsync: boolean) =>
 			new Elysia()
-				.ws('/ws', {
+				.use(websocket()).ws('/ws', {
 					body: t.Object({ name: t.String() }),
 					...(forceAsync ? { afterResponse: noopAfterResponse } : {}),
 					message(ws: any, body: any) {
