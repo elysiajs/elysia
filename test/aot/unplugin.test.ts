@@ -46,7 +46,7 @@ describe('AOT unplugin Vite adapter', () => {
 		expect(cid).toBeDefined()
 		const manifest = (plugin.load as any).call(ctx, cid) as string
 		expect(manifest).toContain('validators')
-		expect(manifest).toContain('.register({')
+		expect(manifest).toContain('.register((() => {')
 		const nativeManifest = native.load(
 			native.resolveId('elysia/compiled')!
 		)!

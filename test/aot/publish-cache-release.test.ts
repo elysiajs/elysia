@@ -211,6 +211,41 @@ describe('publish-time authoring-cache release (004-P5)', () => {
 		)
 	})
 
+	it('WS routes do not pin the AOT program after warmup (mixed WS + HTTP)', async () => {
+		await withEnv({ NODE_ENV: 'production' }, async () => {
+			registerProbeManifest()
+
+			const app = new Elysia()
+				.ws('/ws', { message: () => {} })
+				.get('/a', () => 'a')
+			// JIT publish (no precompile): arms the cold-route countdown.
+			// The WS row is consumed eagerly at build time and must be
+			// excluded from the count, or `cold` never reaches 0.
+			void app.fetch
+
+			expect(programAlive(app)).toBe(true)
+
+			// only the HTTP route ever reaches #jitDispatch
+			expect((await app.handle(req('/a'))).status).toBe(200)
+			expect(programAlive(app)).toBe(false)
+		})
+	})
+
+	it('WS routes do not pin the AOT program after warmup (all-WS app releases at publish)', async () => {
+		await withEnv({ NODE_ENV: 'production' }, async () => {
+			registerProbeManifest()
+
+			const app = new Elysia()
+				.ws('/a', { message: () => {} })
+				.ws('/b', { message: () => {} })
+			// no HTTP route ever cold-compiles, so every row must be
+			// excluded from the count at arming time -> released at publish
+			void app.fetch
+
+			expect(programAlive(app)).toBe(false)
+		})
+	})
+
 	it('recompiles correctly after the release (caches are recomputable, just cold)', async () => {
 		await withEnv({ NODE_ENV: 'production' }, async () => {
 			const app = new Elysia()

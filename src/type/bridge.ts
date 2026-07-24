@@ -105,6 +105,8 @@ export let Ref: typeof RefType = stub('Ref')
 
 export let Clone: typeof CloneType = stub('Clone')
 
+export const isBridgeLive = (): boolean => live !== undefined
+
 export function useTypebox(mod: TypeboxModule) {
 	live = mod
 

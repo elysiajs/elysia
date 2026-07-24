@@ -414,9 +414,13 @@ function captureCodecMirror(
 // sealed slots whose schema carries a coercion/codec node
 const compactErrorWarned = new Set<string>()
 
+const DETAIL_LIMIT = 5
+let compactErrorSuppressed = 0
+
 // @internal test isolation
 export function resetCompactErrorWarnings() {
 	compactErrorWarned.clear()
+	compactErrorSuppressed = 0
 }
 
 function warnCompactErrorLoss(
@@ -433,11 +437,27 @@ function warnCompactErrorLoss(
 
 	compactErrorWarned.add(key)
 
-	console.warn(
-		`[elysia-aot]: sealed validator for ${aot.method} ${aot.path} (${slot}) ` +
-			`carries a coercion/codec schema; its 422 error detail will name the ` +
-			`offending field coarsely (best-effort) instead.`
-	)
+	if (compactErrorWarned.size <= DETAIL_LIMIT) {
+		console.warn(
+			`[elysia-aot]: sealed validator for ${aot.method} ${aot.path} (${slot}) ` +
+				`carries a coercion/codec schema; its 422 error detail will name the ` +
+				`offending field coarsely (best-effort) instead.`
+		)
+	} else {
+		compactErrorSuppressed++
+	}
+}
+
+// @internal flush the aggregated compact-error summary at capture end
+function flushCompactErrorWarnings() {
+	if (compactErrorSuppressed > 0)
+		console.warn(
+			`[elysia-aot]: ${compactErrorSuppressed} more sealed validator slot(s) ` +
+				`carry coercion/codec schemas (422 details will be coarse). First ` +
+				`${DETAIL_LIMIT} shown above.`
+		)
+
+	resetCompactErrorWarnings()
 }
 
 function captureBridgeFree(
@@ -504,6 +524,8 @@ export function abortCapture() {
 	session.handlerCapture = undefined
 	session.sucroseCache.clear()
 	CompilerState.session = undefined
+
+	flushCompactErrorWarnings()
 }
 
 function endCaptureSession(session: CompilerSession) {
@@ -526,6 +548,8 @@ export function endValidatorCapture() {
 		session.capture = undefined
 		endCaptureSession(session)
 	}
+
+	flushCompactErrorWarnings()
 
 	return captured
 }

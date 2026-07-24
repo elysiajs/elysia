@@ -4,6 +4,7 @@ import {
 	buildFrozenRouteValidator,
 	isBridgeNotInitialized
 } from '../compile/handler/frozen-validator'
+import { isBridgeLive } from '../type/bridge'
 import { deriveEntryFn, nullObject, type DeriveEntry } from '../utils'
 import { frozenRootOf } from '../generation'
 import { parseQueryFromURL } from '../parse-query'
@@ -376,25 +377,34 @@ export function buildWSRoute(
 	) ?? nullObject()) as AnyWSLocalHook
 
 	let validators: RouteValidator<any>
-	try {
-		validators = new RouteValidator(hook as any, {
-			models: frozenRootOf(app)['~ext']?.models,
-			app,
-			aot: { method: 'WS', path: route[1] }
-		})
-	} catch (error) {
-		if (!isBridgeNotInitialized(error)) throw error
 
-		const frozen = buildFrozenRouteValidator(
-			hook as any,
-			app,
-			'WS',
-			route[1] as string
-		)
-		if (!frozen) throw error
+	// fall through to RouteValidator when no frozen validator exists
+	// so the error surfaces as today
+	const frozenEager = isBridgeLive()
+		? undefined
+		: buildFrozenRouteValidator(hook as any, app, 'WS', route[1] as string)
 
-		validators = frozen as any
-	}
+	if (frozenEager) validators = frozenEager as any
+	else
+		try {
+			validators = new RouteValidator(hook as any, {
+				models: frozenRootOf(app)['~ext']?.models,
+				app,
+				aot: { method: 'WS', path: route[1] }
+			})
+		} catch (error) {
+			if (!isBridgeNotInitialized(error)) throw error
+
+			const frozen = buildFrozenRouteValidator(
+				hook as any,
+				app,
+				'WS',
+				route[1] as string
+			)
+			if (!frozen) throw error
+
+			validators = frozen as any
+		}
 
 	const responseValidator = validators.response as
 		| { [status: number]: WSValidatorLike }

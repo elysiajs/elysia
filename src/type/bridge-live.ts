@@ -22,6 +22,8 @@ Settings.Set({ unionPrioritySort: false })
 
 export function useTypebox(_mod?: Parameters<typeof bridgeUseTypebox>[0]) {}
 
+export const isBridgeLive = () => true
+
 export {
 	Compile,
 	Create,

@@ -106,6 +106,7 @@ describe('frozen validation without a TypeBox bridge', () => {
 
 		expect(proc.status, proc.stderr).toBe(0)
 		expect(parsed.BRIDGE).toBe('unwired')
+		expect(parsed.LIVE).toBe(false)
 
 		const result = parsed.RESULT as {
 			reconstructed: boolean
@@ -125,6 +126,10 @@ describe('frozen validation without a TypeBox bridge', () => {
 		expect(result.results[2]!.status).toBe(422)
 		expect(result.results[3]!.ok).toBe(false)
 		expect(result.results[3]!.status).toBe(422)
+
+		// the liveness fast path returns a frozen validator at the detour
+		// site itself, without wiring the bridge as a side effect
+		expect(parsed.RECONSTRUCT).toEqual({ frozen: true, liveAfter: false })
 	})
 
 	it('confirms the ordinary validator requires an initialized bridge', () => {
@@ -137,6 +142,7 @@ describe('frozen validation without a TypeBox bridge', () => {
 
 		expect(proc.status, proc.stderr).toBe(0)
 		expect(parsed.BRIDGE).toBe('unwired')
+		expect(parsed.LIVE).toBe(false)
 
 		const result = parsed.RESULT as {
 			liveValidatorThrew: boolean

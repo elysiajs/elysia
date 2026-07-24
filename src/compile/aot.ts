@@ -330,6 +330,9 @@ export abstract class Compiled {
 		if (g !== undefined && !program.builtGroups.has(g)) {
 			program.builtGroups.add(g)
 			const slice = program.lazyGroups![g]!()
+			// drop the consumed thunk: `builtGroups` guards re-entry, so the
+			// materialized copy below is the only owner from here on
+			program.lazyGroups![g] = undefined as any
 
 			programValidators ??= program.validators =
 				nullObject() as ValidatorManifest

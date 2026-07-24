@@ -104,4 +104,28 @@ describe('shared AOT branch checks', () => {
 		expect((src.match(/u: _u0\b/g) ?? []).length).toBe(6)
 		expect(src).not.toMatch(/u: \[\[/)
 	})
+
+	it('dedups entries for one coerced schema shared across routes', async () => {
+		const schema = t.Object({ page: t.Numeric() })
+		const app = new Elysia()
+			.get('/a', { query: schema }, ({ query }) => query)
+			.get('/b', { query: schema }, ({ query }) => query)
+			.get('/c', { query: schema }, ({ query }) => query)
+
+		const src = await compileToSource(app, { register: false })
+
+		// TypeBox names its compiled check by content hash, and the hash is
+		// not stable across captures of the same logical schema — if it ever
+		// leaks back into dedup keys, the shared schema splits into
+		// duplicate entries again
+		expect((src.match(/^const _c\d+ =/gm) ?? []).length).toBe(1)
+		expect(src).not.toMatch(/\bcheck_[0-9a-f]+\b/)
+
+		// renamed identifiers must still execute: declaration and every
+		// reference stay aligned within each source unit
+		const v = evalManifest(src)
+		const check = v.GET['/a'].query.u[0][0]([])
+		expect(check(1)).toBe(true)
+		expect(check('x')).toBe(false)
+	})
 })

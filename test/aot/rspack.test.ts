@@ -101,7 +101,7 @@ describe('AOT Rspack integration', () => {
 		const { outFile } = await buildWithRspack(APP)
 
 		const bundle = readFileSync(outFile, 'utf8')
-		expect(bundle).toContain('.register({')
+		expect(bundle).toContain('.register((() => {')
 
 		expect(bundle).not.toContain('%00')
 

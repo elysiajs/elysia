@@ -2,6 +2,7 @@ import { RouteValidator } from '../../validator/route'
 import { compileCookieConfig } from '../../cookie/config'
 import { createTracer } from '../../trace'
 import { frozenRootOf } from '../../generation'
+import { isBridgeLive } from '../../type/bridge'
 import {
 	buildFrozenRouteValidator,
 	isBridgeNotInitialized
@@ -18,6 +19,13 @@ export abstract class Reconstrct {
 		path: string
 	) {
 		const frozenRoot = frozenRootOf(root)
+
+		if (!isBridgeLive()) {
+			const frozen = buildFrozenRouteValidator(hook, root, method, path)
+			if (frozen) return frozen as any
+			// fall through to RouteValidator so the error surfaces as today
+		}
+
 		try {
 			return new RouteValidator(hook, {
 				models: frozenRoot['~ext']?.models,

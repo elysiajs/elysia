@@ -182,7 +182,8 @@ describe('lazy AOT validators', () => {
 		expect(src).not.toMatch(/\bnew Function\b/)
 		expect(src).not.toMatch(/\beval\s*\(/)
 		expect(src).not.toMatch(/\bimport\s*\(/)
-		expect(src).toContain('Compiled.register({ bf: 1, fingerprint')
+		expect(src).toContain('Compiled.register((() => {')
+		expect(src).toContain('return { bf: 1, fingerprint')
 	})
 
 	it('preserves request validation and coercion', async () => {

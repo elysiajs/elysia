@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 
 import { type CapturedValidator } from '../../../src/compile/aot'
 import { buildFrozenRouteValidator } from '../../../src/compile/handler/frozen-validator'
-import { hasTypes } from '../../../src/type/bridge'
+import { hasTypes, isBridgeLive } from '../../../src/type/bridge'
 import { claimManifest, materialise } from '../_manifest'
 
 const out = (tag: string, data: unknown) =>
@@ -17,6 +17,9 @@ try {
 } catch {
 	out('BRIDGE', 'unwired')
 }
+
+// The liveness fast path must report a dead bridge here
+out('LIVE', isBridgeLive())
 
 const payload = JSON.parse(readFileSync(process.env.PAYLOAD!, 'utf8')) as {
 	captured: CapturedValidator[]
@@ -70,3 +73,20 @@ const results = payload.cases.map((value) => {
 })
 
 out('RESULT', { reconstructed: true, results })
+
+// Exercise the actual detour site: with a dead bridge `Reconstrct.validator`
+// must return a frozen validator without throwing, and must not wire the
+// bridge as a side effect
+const { Reconstrct } = await import(
+	'../../../src/compile/handler/reconstruct'
+)
+const detour = Reconstrct.validator(
+	hook,
+	root,
+	payload.method as any,
+	payload.path
+)
+out('RECONSTRUCT', {
+	frozen: !!detour && !!(detour as any).body,
+	liveAfter: isBridgeLive()
+})

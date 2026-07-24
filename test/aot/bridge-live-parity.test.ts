@@ -40,6 +40,25 @@ describe('statically wired TypeBox bridge', () => {
 		}
 	})
 
+	it('exports isBridgeLive from both modules, true once wired', async () => {
+		const { setupTypebox } = await import('../../src/type/compat')
+		setupTypebox()
+
+		const bridge = (await import('../../src/type/bridge')) as Record<
+			string,
+			any
+		>
+		const live = (await import('../../src/type/bridge-live')) as Record<
+			string,
+			any
+		>
+
+		expect(typeof bridge.isBridgeLive).toBe('function')
+		expect(typeof live.isBridgeLive).toBe('function')
+		expect(bridge.isBridgeLive()).toBe(true)
+		expect(live.isBridgeLive()).toBe(true)
+	})
+
 	it('keeps useTypebox idempotent', async () => {
 		const { setupTypebox } = await import('../../src/type/compat')
 		setupTypebox()

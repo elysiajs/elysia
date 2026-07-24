@@ -30,9 +30,12 @@ describe('AOT plugin', () => {
 			else process.env.ELYSIA_AOT_BUILD = previous
 		}
 
-		// Small manifests stay eager.
-		expect(src).toContain('export const validators')
-		expect(src).toContain('Compiled.register({ bf: 1, fingerprint')
+		// Small manifests stay eager; the tree is scoped inside the
+		// registration IIFE so `Compiled.release` can actually free it.
+		expect(src).toContain('const validators')
+		expect(src).not.toContain('export const validators')
+		expect(src).toContain('Compiled.register((() => {')
+		expect(src).toContain('return { bf: 1, fingerprint')
 		// Simple schemas require no TypeBox runtime imports.
 		expect(src).not.toContain("from 'typebox/")
 		expect(src).not.toContain('function(CheckContext')
@@ -140,7 +143,8 @@ describe('AOT plugin', () => {
 		expect(result.success).toBe(true)
 		const out = await result.outputs[0]!.text()
 		// the frozen manifest was inlined and self-registers (zero user wiring)
-		expect(out).toContain('.register({')
+		expect(out).toContain('.register((() => {')
+		expect(out).toMatch(/return \{ bf: 1, fingerprint,[^}]*\bvalidators\b[^}]*\bhandlers\b/)
 		expect(out).toContain('"/body"')
 		// a real check factory body, not the `undefined` stub
 		expect(out).toContain('CheckContext')
@@ -163,8 +167,9 @@ describe('AOT plugin', () => {
 
 		const out = result.outputFiles![0]!.text
 		// frozen manifest inlined + self-registers (validators AND handlers)
-		expect(out).toContain('.register({')
-		expect(out).toMatch(/\.register\(\{[^}]*\bvalidators\b[^}]*\bhandlers\b/)
+		// (esbuild auto-annotates the scoping IIFE with /* @__PURE__ */)
+		expect(out).toMatch(/\.register\((?:\/\* @__PURE__ \*\/ )?\(\(\) => \{/)
+		expect(out).toMatch(/return \{ bf: 1, fingerprint,[^}]*\bvalidators\b[^}]*\bhandlers\b/)
 		expect(out).toContain('"/body"')
 		// real check + handler factory bodies, not the `undefined` stub
 		expect(out).toContain('CheckContext')

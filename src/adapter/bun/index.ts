@@ -41,13 +41,31 @@ export function collectStaticRoutes(app: AnyElysia) {
 
 	const methods = table.method
 	const paths = table.path
+	const handlers = table.handler
+
+	let hasCandidate = false
+	for (let i = 0; i < length; i++) {
+		const h = handlers[i]
+
+		if (
+			typeof h === 'function' ||
+			h instanceof Error ||
+			h instanceof Promise
+		)
+			continue
+
+		if (!nativeStaticMethods.has(methods[i])) continue
+		hasCandidate = true
+
+		break
+	}
+	if (!hasCandidate) return
 
 	const ready: Record<string, Record<string, Response>> = nullObject()
 	const strictPath = frozenRoot['~config']?.strictPath === true
 	const seen = new Map<string, number>()
 
-	for (let i = 0; i < length; i++)
-		seen.set(methods[i] + ' ' + paths[i], i)
+	for (let i = 0; i < length; i++) seen.set(methods[i] + ' ' + paths[i], i)
 
 	let explicitPaths: Map<string, Set<string>> | undefined
 	if (!strictPath) {
@@ -80,6 +98,14 @@ export function collectStaticRoutes(app: AnyElysia) {
 		const path = paths[i]
 		if (seen.get(method + ' ' + path) !== i) continue
 		if (!nativeStaticMethods.has(method)) continue
+
+		const h = handlers[i]
+		if (
+			typeof h === 'function' ||
+			h instanceof Error ||
+			h instanceof Promise
+		)
+			continue
 
 		const value = buildNativeStaticResponse(routeRow(table, i), app)
 		if (!value) continue

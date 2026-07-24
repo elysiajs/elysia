@@ -6593,12 +6593,14 @@ export class Elysia<
 		// consumed for this generation — release it. Reaching this line
 		// means #compiled[index] was undefined (past the early-return at
 		// the top of the thunk), so each route decrements exactly once.
+		let releasedNow = false
 		if (
 			this.#jitColdRemaining !== undefined &&
 			--this.#jitColdRemaining === 0
 		) {
 			Compiled.release(this['~programId'])
 			this.#jitColdRemaining = undefined
+			releasedNow = true
 		}
 
 		const aliases = this.#jitAliases?.[index]
@@ -6613,9 +6615,19 @@ export class Elysia<
 
 		// Release this route's materialization now that it's baked into the
 		// compiled handler (matches the wholesale reset done with #compiled).
-		if (this.#jitRoute) this.#jitRoute[index] = undefined
-		if (this.#jitStatic) this.#jitStatic[index] = undefined
-		if (this.#jitAliases) this.#jitAliases[index] = undefined
+		// If this compile just released the program, every other route is
+		// already cold-warm too (the countdown hit 0) — free the whole
+		// staging containers instead of nulling just this slot.
+		if (releasedNow) {
+			this.#jitRoute = undefined
+			this.#jitStatic = undefined
+			this.#jitAliases = undefined
+			this.#jitTable = undefined
+		} else {
+			if (this.#jitRoute) this.#jitRoute[index] = undefined
+			if (this.#jitStatic) this.#jitStatic[index] = undefined
+			if (this.#jitAliases) this.#jitAliases[index] = undefined
+		}
 
 		return handler(context)
 	}
@@ -6936,15 +6948,22 @@ export class Elysia<
 				// still cold at publish; the last JIT compile releases the
 				// program (see #jitHandler). Releasing a program that was
 				// never registered (plain apps) is a no-op, so arming
-				// unconditionally is harmless.
-				const routeCount =
-					this['~routeTable']?.length ?? this['~routes'].length
+				// unconditionally is harmless. WS routes are excluded: they
+				// consume the program eagerly during router build (never
+				// enter #jitDispatch), so they'd otherwise pin `cold` >= 1
+				// forever.
+				const table = this['~routeTable']
+				const routeCount = table?.length ?? this['~routes'].length
 
 				let cold = routeCount
 				const compiled = this.#compiled
-				if (compiled)
-					for (let i = 0; i < routeCount; i++)
-						if (compiled[i] !== undefined) cold--
+				for (let i = 0; i < routeCount; i++)
+					if (
+						(table !== undefined &&
+							(table.flags[i] & RouteFlag.WS) !== 0) ||
+						compiled?.[i] !== undefined
+					)
+						cold--
 
 				if (cold <= 0) Compiled.release(this['~programId'])
 				else this.#jitColdRemaining = cold
