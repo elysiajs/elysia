@@ -147,7 +147,7 @@ describe('AOT plugin', () => {
 		expect(out).toMatch(/return \{ bf: 1, fingerprint,[^}]*\bvalidators\b[^}]*\bhandlers\b/)
 		expect(out).toContain('"/body"')
 		// a real check factory body, not the `undefined` stub
-		expect(out).toContain('CheckContext')
+		expect(out).toContain('function(External')
 	})
 
 	it('esbuild (Wrangler toolchain) inlines the manifest + injects the autoload', async () => {
@@ -172,7 +172,7 @@ describe('AOT plugin', () => {
 		expect(out).toMatch(/return \{ bf: 1, fingerprint,[^}]*\bvalidators\b[^}]*\bhandlers\b/)
 		expect(out).toContain('"/body"')
 		// real check + handler factory bodies, not the `undefined` stub
-		expect(out).toContain('CheckContext')
+		expect(out).toContain('function(External')
 	})
 
 	it('vite plugin generates the manifest + redirects + injects via its hooks', async () => {

@@ -4,6 +4,7 @@ import type { Static, TSchema } from 'typebox'
 import { fnv1a } from '../../utils'
 import type { BaseSchema } from '../types'
 import type { ELYSIA_TYPES } from '../constants'
+import { referenceCache, SHARED_REFERENCE_CACHE_LIMIT } from '../shared'
 
 export function copyNonEnumerable(
 	src: object,
@@ -44,20 +45,7 @@ export function elyType<T extends TSchema>(
 	return target
 }
 
-/** @internal */
-export const SHARED_REFERENCE_CACHE_LIMIT = 1024
-
-const sharedReferenceCaches = new Set<Map<number, any> | Map<string, any>>()
-
-/** @internal */
-export function referenceCache(cache: Map<number, any> | Map<string, any>) {
-	sharedReferenceCaches.add(cache)
-}
-
-/** @internal */
-export function clearSharedReferenceCaches() {
-	for (const cache of sharedReferenceCaches) cache.clear()
-}
+export { clearSharedReferenceCaches } from '../shared'
 
 export function createSharedReference<
 	const P extends Record<keyof any, unknown>,

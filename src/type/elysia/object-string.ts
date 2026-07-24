@@ -1,6 +1,6 @@
 import { Decode, Refine } from 'typebox/type'
+import { Check, Decode as decodeValue } from '../bridge'
 import type { TObjectOptions, TProperties } from 'typebox'
-import { Check, Decode as decodeValue } from 'typebox/value'
 
 import { ELYSIA_TYPES } from '../constants'
 import { ObjectType } from './object'

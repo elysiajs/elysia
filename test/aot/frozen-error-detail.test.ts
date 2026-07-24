@@ -20,8 +20,12 @@ import { claimManifest, materialise } from './_manifest'
 const METHOD = 'POST'
 const PATH = '/x'
 
+// this file asserts the per-slot warning text/dedup mechanics directly, so
+// it opts into the verbose per-route detail output (see
+// test/aot/compact-error-summary.test.ts for the default, non-verbose form)
 function freeze(schema: any): { warns: string[] } {
 	process.env.ELYSIA_AOT_BUILD = '1'
+	process.env.ELYSIA_AOT_VERBOSE = '1'
 	resetCompactErrorWarnings()
 
 	const warns: string[] = []
@@ -45,6 +49,7 @@ function freeze(schema: any): { warns: string[] } {
 	} finally {
 		console.warn = original
 		delete process.env.ELYSIA_AOT_BUILD
+		delete process.env.ELYSIA_AOT_VERBOSE
 	}
 
 	return { warns }
@@ -175,6 +180,7 @@ describe('sealed codec errors remain visible', () => {
 
 	it('warns once per slot within a build', () => {
 		process.env.ELYSIA_AOT_BUILD = '1'
+		process.env.ELYSIA_AOT_VERBOSE = '1'
 		resetCompactErrorWarnings()
 
 		const warns: string[] = []
@@ -194,6 +200,7 @@ describe('sealed codec errors remain visible', () => {
 		} finally {
 			console.warn = original
 			delete process.env.ELYSIA_AOT_BUILD
+			delete process.env.ELYSIA_AOT_VERBOSE
 		}
 
 		expect(warns.filter((w) => w.includes('[elysia-aot]')).length).toBe(1)
@@ -201,6 +208,7 @@ describe('sealed codec errors remain visible', () => {
 
 	it('bounds warn-dedup memory across builds instead of growing forever', () => {
 		process.env.ELYSIA_AOT_BUILD = '1'
+		process.env.ELYSIA_AOT_VERBOSE = '1'
 		resetCompactErrorWarnings()
 
 		const warns: string[] = []
@@ -242,6 +250,7 @@ describe('sealed codec errors remain visible', () => {
 		} finally {
 			console.warn = original
 			delete process.env.ELYSIA_AOT_BUILD
+			delete process.env.ELYSIA_AOT_VERBOSE
 		}
 	})
 })

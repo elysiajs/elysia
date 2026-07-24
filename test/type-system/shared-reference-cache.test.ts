@@ -4,10 +4,8 @@ import { Check } from 'typebox/value'
 import { t } from '../../src'
 import { flushMemory } from '../../src/memory'
 import { Validator } from '../../src/validator'
-import {
-	propertyChecksum,
-	SHARED_REFERENCE_CACHE_LIMIT
-} from '../../src/type/elysia/utils'
+import { propertyChecksum } from '../../src/type/elysia/utils'
+import { SHARED_REFERENCE_CACHE_LIMIT } from '../../src/type/shared'
 
 describe('shared schema reference cache', () => {
 	beforeEach(() => Validator.clear())

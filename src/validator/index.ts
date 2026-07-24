@@ -7,7 +7,7 @@ import { type AnySchema, type StandardSchemaV1Like } from '../type'
 
 import type { ElysiaConfig, MaybePromise } from '../types'
 import type { CoerceOption } from '../type/coerce'
-import { clearCoerceLeafCache, nonAdditionalProperties } from '../type/coerce'
+import { clearCoerceLeafCache, clearSharedReferenceCaches, nonAdditionalProperties } from '../type/shared'
 import {
 	Compiled,
 	Capture,
@@ -27,7 +27,6 @@ import {
 } from '../type/bridge'
 import { isAsyncFunction } from '../compile/utils'
 import { isAsyncPredicate } from '../type/elysia/file-type'
-import { clearSharedReferenceCaches } from '../type/elysia/utils'
 import { hasProperty } from '../type/utils'
 
 export interface ValidatorOptions {

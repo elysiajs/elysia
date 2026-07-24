@@ -2,6 +2,7 @@ import { Decode, Refine } from 'typebox/type'
 
 import { ELYSIA_TYPES } from './constants'
 import { nullObject } from '../utils'
+import { coerceLeafCache } from './shared'
 
 import { Numeric } from './elysia/numeric'
 import { BooleanString } from './elysia/boolean-string'
@@ -161,11 +162,6 @@ function rebuildUnion(
 /** @internal */
 export const COERCE_LEAF_CACHE_LIMIT = 1024
 
-const coerceLeafCache = new Map<string, any>()
-
-/** @internal test isolation */
-export const coerceLeafCacheSize = () => coerceLeafCache.size
-
 function coerceLeaf(leaf: CoerceLeaf, seen: Set<string>) {
 	const key = leaf.e + (leaf.c ? JSON.stringify(leaf.c) : '')
 
@@ -228,7 +224,4 @@ export function buildCoercedFromPlan(
 	return out
 }
 
-/** @internal test isolation */
-export function clearCoerceLeafCache() {
-	coerceLeafCache.clear()
-}
+export { clearCoerceLeafCache, coerceLeafCacheSize } from './shared'

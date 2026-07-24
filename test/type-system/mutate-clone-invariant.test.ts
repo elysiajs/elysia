@@ -2,7 +2,7 @@ import Elysia, { t } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { Value } from 'typebox/value'
 import { flushMemory } from '../../src/memory'
-import { SHARED_REFERENCE_CACHE_LIMIT } from '../../src/type/elysia/utils'
+import { SHARED_REFERENCE_CACHE_LIMIT } from '../../src/type/shared'
 import { req } from '../utils'
 
 // Reusing a schema or options object must not let one constructor call change

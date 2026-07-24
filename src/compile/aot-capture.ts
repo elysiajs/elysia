@@ -38,6 +38,7 @@ import {
 } from './handler/frozen-validator'
 import { isAsyncPredicate } from '../type/elysia/file-type'
 import { nullObject } from '../utils'
+import { env } from '../universal'
 import { collectExternals } from './aot-reconstruct'
 import {
 	captureMirrorCodecs,
@@ -414,13 +415,13 @@ function captureCodecMirror(
 // sealed slots whose schema carries a coercion/codec node
 const compactErrorWarned = new Set<string>()
 
-const DETAIL_LIMIT = 5
-let compactErrorSuppressed = 0
+let compactErrorTotal = 0
+const isVerboseAotWarnings = () => !!env.ELYSIA_AOT_VERBOSE
 
 // @internal test isolation
 export function resetCompactErrorWarnings() {
 	compactErrorWarned.clear()
-	compactErrorSuppressed = 0
+	compactErrorTotal = 0
 }
 
 function warnCompactErrorLoss(
@@ -436,26 +437,27 @@ function warnCompactErrorLoss(
 	}
 
 	compactErrorWarned.add(key)
+	compactErrorTotal++
 
-	if (compactErrorWarned.size <= DETAIL_LIMIT) {
+	if (isVerboseAotWarnings())
 		console.warn(
 			`[elysia-aot]: sealed validator for ${aot.method} ${aot.path} (${slot}) ` +
 				`carries a coercion/codec schema; its 422 error detail will name the ` +
 				`offending field coarsely (best-effort) instead.`
 		)
-	} else {
-		compactErrorSuppressed++
-	}
 }
 
 // @internal flush the aggregated compact-error summary at capture end
 function flushCompactErrorWarnings() {
-	if (compactErrorSuppressed > 0)
+	if (compactErrorTotal > 0 && !isVerboseAotWarnings()) {
+		const plural = compactErrorTotal === 1 ? '' : 's'
+		const verb = compactErrorTotal === 1 ? 'carries' : 'carry'
 		console.warn(
-			`[elysia-aot]: ${compactErrorSuppressed} more sealed validator slot(s) ` +
-				`carry coercion/codec schemas (422 details will be coarse). First ` +
-				`${DETAIL_LIMIT} shown above.`
+			`[elysia-aot]: ${compactErrorTotal} sealed validator slot${plural} ` +
+				`${verb} a coercion/codec schema; 422 error details will be coarse ` +
+				`(best-effort). Set ELYSIA_AOT_VERBOSE=1 for per-route detail.`
 		)
+	}
 
 	resetCompactErrorWarnings()
 }

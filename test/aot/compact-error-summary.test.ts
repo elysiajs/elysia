@@ -15,12 +15,14 @@ import {
 
 afterEach(() => {
 	delete process.env.ELYSIA_AOT_BUILD
+	delete process.env.ELYSIA_AOT_VERBOSE
 	Compiled.clear()
 	Validator.clear()
 })
 
-function captureRouteCount(count: number): string[] {
+function captureRouteCount(count: number, verbose = false): string[] {
 	process.env.ELYSIA_AOT_BUILD = '1'
+	if (verbose) process.env.ELYSIA_AOT_VERBOSE = '1'
 	resetCompactErrorWarnings()
 
 	const warns: string[] = []
@@ -44,26 +46,39 @@ function captureRouteCount(count: number): string[] {
 	} finally {
 		console.warn = original
 		delete process.env.ELYSIA_AOT_BUILD
+		delete process.env.ELYSIA_AOT_VERBOSE
 	}
 
 	return warns.filter((w) => w.includes('[elysia-aot]'))
 }
 
 describe('compact-error warning aggregation', () => {
-	it('collapses 8 coerced-query routes into 5 details + 1 summary', () => {
+	it('collapses any number of coerced-query routes into a single summary line by default', () => {
 		const warns = captureRouteCount(8)
 
-		expect(warns.length).toBe(6)
-		expect(warns.slice(0, 5).every((w) => w.includes('best-effort'))).toBe(
-			true
-		)
-		expect(warns[5]).toContain('3 more')
+		expect(warns.length).toBe(1)
+		expect(warns[0]).toContain('8 sealed validator slots')
+		expect(warns[0]).toContain('ELYSIA_AOT_VERBOSE=1')
 	})
 
-	it('prints only detail lines when under the limit (3 routes)', () => {
-		const warns = captureRouteCount(3)
+	it('prints no warning at all when no route is affected', () => {
+		const warns = captureRouteCount(0)
 
-		expect(warns.length).toBe(3)
+		expect(warns.length).toBe(0)
+	})
+
+	it('prints a singular summary line for exactly one affected route', () => {
+		const warns = captureRouteCount(1)
+
+		expect(warns.length).toBe(1)
+		expect(warns[0]).toContain('1 sealed validator slot ')
+		expect(warns[0]).toContain('carries')
+	})
+
+	it('prints one detail line per route when ELYSIA_AOT_VERBOSE is set, and no summary', () => {
+		const warns = captureRouteCount(8, true)
+
+		expect(warns.length).toBe(8)
 		expect(warns.every((w) => w.includes('best-effort'))).toBe(true)
 	})
 })

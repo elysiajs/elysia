@@ -5,7 +5,8 @@ import type {
 	Decode as DecodeType,
 	HasCodec as HasCodecType,
 	Default as DefaultType,
-	Clone as CloneType
+	Clone as CloneType,
+	Check as CheckType
 } from 'typebox/value'
 
 import type { applyCoercions as applyCoercionsType } from './coerce'
@@ -42,6 +43,7 @@ interface TypeboxModule {
 	Default: typeof DefaultType
 	Ref: typeof RefType
 	Clone: typeof CloneType
+	Check: typeof CheckType
 }
 
 const error = new Error(
@@ -105,6 +107,8 @@ export let Ref: typeof RefType = stub('Ref')
 
 export let Clone: typeof CloneType = stub('Clone')
 
+export let Check: typeof CheckType = stub('Check')
+
 export const isBridgeLive = (): boolean => live !== undefined
 
 export function useTypebox(mod: TypeboxModule) {
@@ -127,4 +131,5 @@ export function useTypebox(mod: TypeboxModule) {
 	Default = mod.Default
 	Ref = mod.Ref
 	Clone = mod.Clone
+	Check = mod.Check
 }

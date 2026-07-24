@@ -151,11 +151,11 @@ const compactBeforeHandleValues = (
 
 export const isCompactBeforeHandleOnly = (
 	hook: Partial<AppHook> | undefined
-): boolean => compactBeforeHandleValues(hook) !== false
+) => compactBeforeHandleValues(hook) !== false
 
 export const compactBeforeHandleConflicts = (
 	hook: Partial<AppHook> | undefined
-): boolean => {
+)=> {
 	const values = compactBeforeHandleValues(hook)
 	if (values === false) return true
 
@@ -503,8 +503,9 @@ const byteStreams = new WeakSet<ReadableStream<Uint8Array>>()
  * body reader; preserving identity means Elysia does not install a second
  * request-signal reader after the body is locked.
  */
-export const bytes = <T extends ReadableStream<Uint8Array>>(stream: T): T => {
+export function bytes<T extends ReadableStream<Uint8Array>>(stream: T): T {
 	byteStreams.add(stream)
+
 	return stream
 }
 

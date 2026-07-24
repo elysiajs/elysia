@@ -98,6 +98,19 @@ export interface ElysiaAotOptions {
 	 * @default true
 	 */
 	production?: boolean
+
+	/**
+	 * Log one detail line per affected route when a sealed validator carries
+	 * a coercion/codec schema (its 422 error detail can only name the
+	 * offending field coarsely, best-effort).
+	 *
+	 * - `false` (default): collapse all affected routes into a single
+	 *   build-end summary line (none if no route is affected)
+	 * - `true`: also print the per-route detail line as each one is found
+	 *
+	 * @default false
+	 */
+	verbose?: boolean
 }
 
 function findPackageRoot(from: string = process.cwd()) {
@@ -764,6 +777,10 @@ export async function generateCompiledArtifacts(
 	const previousAotBuild = process.env.ELYSIA_AOT_BUILD
 	process.env.ELYSIA_AOT_BUILD = '1'
 
+	const previousAotVerbose = process.env.ELYSIA_AOT_VERBOSE
+	if (options?.verbose) process.env.ELYSIA_AOT_VERBOSE = '1'
+	else delete process.env.ELYSIA_AOT_VERBOSE
+
 	try {
 		const entry = resolveEntry(file)
 		const entryReal = realPath(entry)
@@ -962,6 +979,10 @@ export async function generateCompiledArtifacts(
 	} finally {
 		if (previousAotBuild === undefined) delete process.env.ELYSIA_AOT_BUILD
 		else process.env.ELYSIA_AOT_BUILD = previousAotBuild
+
+		if (previousAotVerbose === undefined)
+			delete process.env.ELYSIA_AOT_VERBOSE
+		else process.env.ELYSIA_AOT_VERBOSE = previousAotVerbose
 	}
 }
 

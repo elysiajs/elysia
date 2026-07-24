@@ -2,7 +2,7 @@ import { String } from 'typebox/type'
 import type { TString, TStringOptions } from 'typebox'
 
 import { noEnumerable } from '../constants'
-import { referenceCache, SHARED_REFERENCE_CACHE_LIMIT } from './utils'
+import { referenceCache, SHARED_REFERENCE_CACHE_LIMIT } from '../shared'
 
 const emptyString = Object.freeze(String())
 const stringFormatCache = new Map<string, TString>()
