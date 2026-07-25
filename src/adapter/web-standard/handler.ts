@@ -157,12 +157,7 @@ function mapResponseWithSet(
 			return new Response(response as FormData, set as ResponseInit)
 
 		default:
-			return mapResponseFallback(
-				response,
-				set,
-				request,
-				owned
-			) as Response
+			return mapFallback(response, set, request, owned) as Response
 	}
 }
 
@@ -294,12 +289,7 @@ export function mapCompactResponse(
 			return new Response(response as FormData)
 
 		default:
-			return mapCompactResponseFallback(
-				response,
-				undefined,
-				request,
-				owned
-			) as Response
+			return mapFallback(response, undefined, request, owned) as Response
 	}
 }
 
@@ -338,94 +328,84 @@ export function errorToResponse(
 	return new Response(JSON.stringify(body), { status, headers })
 }
 
+// `set` presence decides the re-entry mapper: mapResponseWithSet always passes
+// a set, mapCompactResponse never does — keeping calls direct instead of
+// through a captured `map` parameter
 function mapFallback(
-	map: (
-		response: unknown,
-		set: Context['set'],
-		request?: Request,
-		owned?: boolean
-	) => Response | undefined
-) {
-	return (
-		response: unknown,
-		set?: Context['set'],
-		request?: Request,
-		owned = false
-	): Response | undefined => {
-		// recheck Response, Promise, Error because some library may extends Response
-		if (response instanceof Response)
-			return handleResponse(response, set, request, owned)
+	response: unknown,
+	set?: Context['set'],
+	request?: Request,
+	owned = false
+): Response | undefined {
+	// recheck Response, Promise, Error because some library may extends Response
+	if (response instanceof Response)
+		return handleResponse(response, set, request, owned)
 
-		if (response instanceof Promise)
-			return response.then((x) =>
-				map(x, set as Context['set'], request, owned)
-			) as any
+	if (response instanceof Promise)
+		return response.then((x) =>
+			set
+				? mapResponse(x, set, request, owned)
+				: mapCompactResponse(x, request, owned)
+		) as any
 
-		if (response instanceof Error)
-			return errorToResponse(response as Error, set, request, owned)
+	if (response instanceof Error)
+		return errorToResponse(response as Error, set, request, owned)
 
-		if (response instanceof ElysiaStatus) {
-			if (set) {
-				set.status = response.code
-				if (response.headers)
-					set.headers = { ...set.headers, ...response.headers }
-				return map(response.response, set, request, owned)
-			} else
-				return mapResponse(
-					(response as ElysiaStatus<200>).response,
-					{
-						status: (response as ElysiaStatus<200>).code,
-						headers: response.headers ? { ...response.headers } : {}
-					} as Context['set'],
-					request,
-					owned
-				)
-		}
-
-		if (
-			// @ts-expect-error
-			typeof response?.next === 'function' ||
-			response instanceof ReadableStream
-		)
-			return handleStream(
-				response as any,
-				set,
-				request,
-				undefined,
-				owned
-			) as any
-
-		if (typeof (response as Promise<unknown>)?.then === 'function')
-			return (response as Promise<unknown>).then((x) =>
-				map(x, set as Context['set'], request, owned)
-			) as any
-
-		// custom class with an array-like value
-		// eg. Bun.sql`` result
-		if (Array.isArray(response)) return Response.json(response) as any
-
-		// @ts-expect-error
-		if (typeof response?.toResponse === 'function')
-			return map(
-				(response as any).toResponse(),
-				set as Context['set'],
+	if (response instanceof ElysiaStatus) {
+		if (set) {
+			set.status = response.code
+			if (response.headers)
+				set.headers = { ...set.headers, ...response.headers }
+			return mapResponse(response.response, set, request, owned)
+		} else
+			return mapResponse(
+				(response as ElysiaStatus<200>).response,
+				{
+					status: (response as ElysiaStatus<200>).code,
+					headers: response.headers ? { ...response.headers } : {}
+				} as Context['set'],
 				request,
 				owned
 			)
-
-		// @ts-expect-error
-		if (response?.constructor?.name === 'Cookie' && response.jar)
-			// @ts-expect-error
-			return new Response(response.value, set as ResponseInit)
-
-		return new Response(response as any, set as ResponseInit)
 	}
-}
 
-const mapResponseFallback = mapFallback(mapResponse)
-const mapCompactResponseFallback = mapFallback((response, _, request, owned) =>
-	mapCompactResponse(response, request, owned)
-)
+	if (
+		// @ts-expect-error
+		typeof response?.next === 'function' ||
+		response instanceof ReadableStream
+	)
+		return handleStream(
+			response as any,
+			set,
+			request,
+			undefined,
+			owned
+		) as any
+
+	if (typeof (response as Promise<unknown>)?.then === 'function')
+		return (response as Promise<unknown>).then((x) =>
+			set
+				? mapResponse(x, set, request, owned)
+				: mapCompactResponse(x, request, owned)
+		) as any
+
+	// custom class with an array-like value
+	// eg. Bun.sql`` result
+	if (Array.isArray(response)) return Response.json(response) as any
+
+	// @ts-expect-error
+	if (typeof response?.toResponse === 'function')
+		return set
+			? mapResponse((response as any).toResponse(), set, request, owned)
+			: mapCompactResponse((response as any).toResponse(), request, owned)
+
+	// @ts-expect-error
+	if (response?.constructor?.name === 'Cookie' && response.jar)
+		// @ts-expect-error
+		return new Response(response.value, set as ResponseInit)
+
+	return new Response(response as any, set as ResponseInit)
+}
 
 const handleResponse = createResponseHandler({
 	mapResponse,

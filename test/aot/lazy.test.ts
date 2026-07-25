@@ -260,3 +260,114 @@ describe('lazy AOT group sizing', () => {
 		)
 	})
 })
+
+describe('lazy AOT cross-group slot hoist', () => {
+	// Lever A: a slot object (e.g. `{"body":_c0}`) shared by routes spread
+	// across many lazy groups used to be re-declared once per group thunk.
+	// It must now collapse to one shared top-level `_sN`, tracking distinct
+	// slot shapes rather than group count × shapes.
+	it('hoists a repeated slot object to one shared _sN across many lazy groups', async () => {
+		const routes = 100
+		const shapes = 5
+
+		const make = () => {
+			const app = new Elysia()
+			for (let i = 0; i < routes; i++) {
+				const shape = i % shapes
+				app.post(
+					`/r${i}`,
+					{
+						body: t.Object({ [`k${shape}`]: t.String() })
+					},
+					({ body }: any) => body
+				)
+			}
+			return app
+		}
+
+		const src = await compileToSource(make() as any, {
+			register: false,
+			lazy: 5
+		})
+		delete process.env.ELYSIA_AOT_BUILD
+
+		const firstThunk = src.indexOf('_groups')
+		const topLevel = src.slice(0, firstThunk)
+
+		// distinct entries stay at K (existing entry-level dedup)
+		expect((topLevel.match(/const _c\d+ =/g) ?? []).length).toBe(shapes)
+		// distinct slot objects also collapse to K, not groupCount * K
+		expect((src.match(/const _s\d+ =/g) ?? []).length).toBe(shapes)
+		expect((topLevel.match(/const _s\d+ =/g) ?? []).length).toBe(shapes)
+
+		const { groups, groupOf, handlers } = evalLazy(src)
+		Validator.clear()
+		registerManifest({
+			lazyGroups: groups,
+			lazyGroupOf: groupOf,
+			handlers
+		})
+		const app = make()
+		const ok = await app.handle(post('/r42', { k2: 'hi' }))
+		expect(ok.status).toBe(200)
+		await expect(ok.json()).resolves.toEqual({ k2: 'hi' })
+	})
+
+	// Scope-safety guard: a hoisted `_sN` sits at the IIFE top level, so it
+	// may only close over entry refs (`_cN`) that are themselves top-level.
+	// An entry still declared inside a single group's thunk cannot be
+	// referenced from a const outside that thunk — that would be a
+	// TDZ/scope leak. Verify the invariant holds over the emitted source.
+	it('never hoists a slot object that would close over a thunk-local entry', async () => {
+		const routes = 200
+		const shapes = 7
+
+		const make = () => {
+			const app = new Elysia()
+			for (let i = 0; i < routes; i++) {
+				const shape = i % shapes
+				app.post(
+					`/r${i}`,
+					{
+						body: t.Object({ [`k${shape}`]: t.String() })
+					},
+					({ body }: any) => body
+				)
+			}
+			return app
+		}
+
+		const src = await compileToSource(make() as any, {
+			register: false,
+			lazy: 3
+		})
+		delete process.env.ELYSIA_AOT_BUILD
+
+		const firstThunk = src.indexOf('_groups')
+		const topLevel = src.slice(0, firstThunk)
+
+		const topLevelEntryRefs = new Set(
+			(topLevel.match(/const _c\d+(?= =)/g) ?? []).map((d) => d.slice(6))
+		)
+
+		const slotDecls = topLevel.match(/const _s\d+ = \{[^}]*\}/g) ?? []
+		expect(slotDecls.length).toBeGreaterThan(0)
+
+		for (const decl of slotDecls)
+			for (const ref of decl.match(/_c\d+/g) ?? [])
+				expect(topLevelEntryRefs.has(ref)).toBe(true)
+
+		// and the manifest still behaves correctly end to end
+		const { groups, groupOf, handlers } = evalLazy(src)
+		Validator.clear()
+		registerManifest({
+			lazyGroups: groups,
+			lazyGroupOf: groupOf,
+			handlers
+		})
+		const app = make()
+		const ok = await app.handle(post('/r13', { k6: 'v' }))
+		expect(ok.status).toBe(200)
+		await expect(ok.json()).resolves.toEqual({ k6: 'v' })
+	})
+})

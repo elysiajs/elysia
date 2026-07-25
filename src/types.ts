@@ -121,11 +121,6 @@ export interface ElysiaConfig<
 	}
 
 	/**
-	 * Capture more detail information for each dependencies
-	 */
-	analytic?: boolean
-
-	/**
 	 * Retain the metadata required by introspection tooling after sealing.
 	 * Plugins that provide introspection may enable this for their host.
 	 *

@@ -1,16 +1,15 @@
 import { Elysia, t } from '../../src'
-import { generationOf, frozenRootOf } from '../../src/generation'
+import { frozenRootOf } from '../../src/generation'
 import { describe, expect, it } from 'bun:test'
 
 const req = (path: string, init?: RequestInit) =>
 	new Request(`http://e.ly${path}`, init)
 
 describe('sealed generation publication', () => {
-	it('generationOf throws before sealing and frozenRootOf returns the live app', () => {
+	it('frozenRootOf returns the live app before sealing', () => {
 		const app = new Elysia().get('/', () => 'ok')
 
 		expect(app['~generation']).toBeUndefined()
-		expect(() => generationOf(app)).toThrow('before the app was sealed')
 		expect(frozenRootOf(app)).toBe(app)
 	})
 
@@ -19,15 +18,15 @@ describe('sealed generation publication', () => {
 
 		await app.handle(req('/'))
 
-		const generation = generationOf(app)
+		const generation = app['~generation']!
 		expect(generation['~config']).toBe(app['~config'])
 		expect(generation['~ext']).toBe(app['~ext'])
 		expect(generation.routeTable).toBe(app['~routeTable'])
 		expect(frozenRootOf(app)).toBe(generation)
 
-		const same = generationOf(app)
+		const same = app['~generation']
 		await app.handle(req('/'))
-		expect(generationOf(app)).toBe(same)
+		expect(app['~generation']).toBe(same)
 	})
 
 	it('.compile publishes a generation', () => {
@@ -35,7 +34,7 @@ describe('sealed generation publication', () => {
 		expect(app['~generation']).toBeUndefined()
 
 		app.compile()
-		expect(generationOf(app)).toBe(app['~generation'])
+		expect(app['~generation']).toBeDefined()
 	})
 })
 
@@ -52,7 +51,7 @@ describe('sealed generation plugin resolution', () => {
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('late')
 
-		expect(generationOf(app)).toBe(app['~generation'])
+		expect(app['~generation']).toBeDefined()
 	})
 })
 
@@ -70,8 +69,8 @@ describe('sealed generation root isolation', () => {
 		await a.handle(req('/p'))
 		await b.handle(req('/p'))
 
-		const ga = generationOf(a)
-		const gb = generationOf(b)
+		const ga = a['~generation']!
+		const gb = b['~generation']!
 
 		expect(ga['~ext']).not.toBe(gb['~ext'])
 		expect((ga['~ext'] as any).decorator.root).toBe('A')
@@ -86,13 +85,13 @@ describe('sealed generation replacement', () => {
 	it('~newGeneration publishes routes added since the previous generation', async () => {
 		const app = new Elysia().get('/a', () => 'a')
 		await app.handle(req('/a'))
-		const previous = generationOf(app)
+		const previous = app['~generation']
 
 		;(app as any)['~generation'] = undefined
 		app.get('/b', () => 'b')
 		app['~newGeneration']()
 
-		expect(generationOf(app)).not.toBe(previous)
+		expect(app['~generation']).not.toBe(previous)
 		expect((await app.handle(req('/b'))).status).toBe(200)
 		expect((await app.handle(req('/a'))).status).toBe(200)
 	})
@@ -100,7 +99,7 @@ describe('sealed generation replacement', () => {
 	it('requests around a swap observe complete old or new generations', async () => {
 		const app = new Elysia().get('/a', () => 'a')
 		await app.handle(req('/a'))
-		const previous = generationOf(app)
+		const previous = app['~generation']
 
 		const before = Promise.all(
 			Array.from({ length: 8 }, () => app.handle(req('/a')))
@@ -114,7 +113,7 @@ describe('sealed generation replacement', () => {
 
 		for (const r of await before) expect(r.status).toBe(200)
 		for (const r of await after) expect(r.status).toBe(200)
-		expect(generationOf(app)).not.toBe(previous)
+		expect(app['~generation']).not.toBe(previous)
 	})
 })
 
@@ -150,11 +149,17 @@ describe('sealed generation setup failure', () => {
 	})
 })
 
+// mirrors the `config.introspect === true || app['~introspect'] === true`
+// check base.ts used to snapshot onto the (now-removed, write-only)
+// `Generation.introspect` field at seal time
+const isIntrospectResolved = (app: any) =>
+	app['~config']?.introspect === true || app['~introspect'] === true
+
 describe('sealed generation introspection', () => {
-	it('copies app config.introspect to the generation', async () => {
+	it('copies app config.introspect to the resolved introspect flag', async () => {
 		const app = new Elysia({ introspect: true }).get('/', () => 'ok')
 		await app.handle(req('/'))
-		expect(generationOf(app).introspect).toBe(true)
+		expect(isIntrospectResolved(app)).toBe(true)
 	})
 
 	it('enables introspection when a plugin requests it', async () => {
@@ -165,13 +170,13 @@ describe('sealed generation introspection', () => {
 
 		const app = new Elysia().use(plugin).get('/', () => 'ok')
 		await app.handle(req('/'))
-		expect(generationOf(app).introspect).toBe(true)
+		expect(isIntrospectResolved(app)).toBe(true)
 	})
 
 	it('introspect defaults to false', async () => {
 		const app = new Elysia().get('/', () => 'ok')
 		await app.handle(req('/'))
-		expect(generationOf(app).introspect).toBe(false)
+		expect(isIntrospectResolved(app)).toBe(false)
 	})
 })
 

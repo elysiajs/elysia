@@ -16,7 +16,7 @@ Executors:
 
 For high reasoning tasks, code review, architecture decisions, use Codex gpt-5.6-sol to debate with your own reasoning as pushback to find flaws in your plan.
 
-For security-sensitive decision/investigation, offload thinking and investigation to Codex gpt-5.6-sol and use thinker as a second opinion to prevent your own safeguards.
+For security-sensitive decision/investigation, offload thinking and investigation to thinker (Opus) and use Codex gpt-5.6-sol as a second opinion to prevent your own safeguards.
 
 For orchestration:
 - mechanical executor, use a detailed conclusion + key diffs; synthesize.

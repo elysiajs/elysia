@@ -1,14 +1,13 @@
 // ! This module must be typebox free
-import { ValidationError } from '../../error'
-import { nullObject } from '../../utils'
-import { ELYSIA_TYPES } from '../../type/constants'
 import { isFullyClosedObject } from '../../type/validator/clean-safe'
 import { StandardValidator } from '../../validator'
 import { frozenRootOf } from '../../generation'
+import { ValidationError } from '../../error'
+import { nullObject } from '../../utils'
+import { ELYSIA_TYPES } from '../../type/constants'
 
 import {
 	Compiled,
-	EMPTY_EXTERNALS,
 	reconstruct,
 	type CapturedValidator,
 	type FrozenValidator,
@@ -90,6 +89,10 @@ function isBridgeFreeComplete(
 	return true
 }
 
+// Local empty externals — avoids importing `compile/aot`'s runtime const
+// Non-codec `cm` never reads its `External` arg, so any empty frozen array works
+const EMPTY_EXTERNALS = Object.freeze([]) as unknown as unknown[]
+
 interface DefaultFastPath {
 	value: unknown
 	appliesToNull: boolean
@@ -105,8 +108,13 @@ interface CompactError {
 	message: string
 }
 
-// TypeBox reports a scalar/type mismatch as `must be <schema.type>`
-// reproduce only the dominant `type`/`required` keywords structurally
+/** `{ check, clean?, decode? }` — the slot's compiled predicate + cleaner. */
+interface SlotCheckClean {
+	check: (value: unknown) => boolean
+	clean?: (value: unknown) => unknown
+	decode?: (value: unknown) => unknown
+}
+
 function jsTypeMatches(value: unknown, type: string) {
 	switch (type) {
 		case 'string':
@@ -300,32 +308,16 @@ class FrozenSlotValidator {
 		normalize: boolean | 'exactMirror' | 'typebox' | undefined
 	) {
 		this.schema = schema
-
-		if (frozen.ic) reconstruct().reconstructInnerCodecs(frozen.ic, schema)
-
 		this.hasCodec = frozen.k === 1
 
-		if (frozen.k === 1 && frozen.dm) {
-			const both = reconstruct().instantiateFrozenBoth(
-				frozen,
-				schema,
-				raw
-			)
-			this.#check = both.check!
-			this.#clean = normalize === false ? undefined : both.clean
-			this.#decode =
-				normalize === false
-					? undefined
-					: reconstruct().instantiateFrozenDecodeMirror(
-							frozen.dm,
-							schema
-						)
-		} else {
-			// non-codec covered slot: `e`/`u` are refused, so no externals/unions
-			const both = frozen.cm!(EMPTY_EXTERNALS, undefined)
-			this.#check = both.check!
-			this.#clean = normalize === false ? undefined : both.clean
-		}
+		// Overridable seam: the base is the non-codec (helper-free `cm`) path;
+		// the codec subclass below overrides to add the reconstruct-based
+		// codec/inner-codec path. Private `#check`/`#clean`/`#decode` are
+		// assigned here so the subclass only supplies the values.
+		const built = this.buildCheckClean(frozen, schema, raw, normalize)
+		this.#check = built.check
+		this.#clean = built.clean
+		this.#decode = built.decode
 
 		this.#hasOptional = !!(schema as any)?.['~optional']
 		this.#noValidate =
@@ -339,6 +331,22 @@ class FrozenSlotValidator {
 				clone: frozen.dc,
 				merge: frozen.pm
 			}
+	}
+
+	protected buildCheckClean(
+		frozen: FrozenValidator,
+		schema: unknown,
+		raw: unknown,
+		normalize: boolean | 'exactMirror' | 'typebox' | undefined
+	): SlotCheckClean {
+		void schema
+		void raw
+		// non-codec covered slot: `e`/`u` are refused, so no externals/unions
+		const both = frozen.cm!(EMPTY_EXTERNALS, undefined)
+		return {
+			check: both.check!,
+			clean: normalize === false ? undefined : both.clean
+		}
 	}
 
 	Check(value: unknown): boolean {
@@ -418,6 +426,42 @@ class FrozenSlotValidator {
 		if (!this.#noValidate && !this.#check(value))
 			throw this.#error(value, type)
 		return this.#clean ? this.#clean(value) : value
+	}
+}
+
+/**
+ * The JIT/frozen slot validator: the reconstruct-free `FrozenSlotValidator`
+ * base plus the codec/inner-codec branch re-added via the `buildCheckClean`
+ * override.
+ * The only reorder — `this.hasCodec` is set by the base ctor before this runs,
+ * where the original set it after the `frozen.ic` side-effect — is unobservable
+ * (`reconstructInnerCodecs` neither reads nor sets `hasCodec`).
+ */
+class CodecFrozenSlotValidator extends FrozenSlotValidator {
+	protected buildCheckClean(
+		frozen: FrozenValidator,
+		schema: unknown,
+		raw: unknown,
+		normalize: boolean | 'exactMirror' | 'typebox' | undefined
+	): SlotCheckClean {
+		if (frozen.ic) reconstruct().reconstructInnerCodecs(frozen.ic, schema)
+
+		if (frozen.k === 1 && frozen.dm) {
+			const both = reconstruct().instantiateFrozenBoth(frozen, schema, raw)
+			return {
+				check: both.check!,
+				clean: normalize === false ? undefined : both.clean,
+				decode:
+					normalize === false
+						? undefined
+						: reconstruct().instantiateFrozenDecodeMirror(
+								frozen.dm,
+								schema
+							)
+			}
+		}
+
+		return super.buildCheckClean(frozen, schema, raw, normalize)
 	}
 }
 
@@ -503,7 +547,12 @@ export function buildFrozenRouteValidator(
 
 		if (!isBridgeFreeComplete(frozen, coerced, schema)) return undefined
 
-		out[slot] = new FrozenSlotValidator(frozen, coerced, schema, normalize)
+		out[slot] = new CodecFrozenSlotValidator(
+			frozen,
+			coerced,
+			schema,
+			normalize
+		)
 	}
 
 	const response = hook?.response
@@ -536,12 +585,8 @@ export function buildFrozenRouteValidator(
 			if (!frozen || !isBridgeFreeComplete(frozen, schema, schema))
 				return undefined
 
-			responseOut[status as unknown as number] = new FrozenSlotValidator(
-				frozen,
-				schema,
-				schema,
-				normalize
-			)
+			responseOut[status as unknown as number] =
+				new CodecFrozenSlotValidator(frozen, schema, schema, normalize)
 		}
 
 		out.response = responseOut

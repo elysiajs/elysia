@@ -128,4 +128,31 @@ describe('shared AOT branch checks', () => {
 		expect(check(1)).toBe(true)
 		expect(check('x')).toBe(false)
 	})
+
+	// Regression guard: entry dedup keys on the check's *content*, not the
+	// route. A manifest with many routes repeating a small number of
+	// distinct schema shapes must emit one `_cN` per distinct shape — if
+	// dedup regresses to per-route (or per-check-hash, which isn't stable
+	// across captures, see the coerced-schema test above), the manifest
+	// scales linearly with route count instead of staying flat.
+	it('emits exactly K entries for N routes sharing K distinct schema shapes (repeated shapes must not scale the manifest linearly)', async () => {
+		const routes = 100
+		const shapes = 5
+
+		const app = new Elysia()
+		for (let i = 0; i < routes; i++) {
+			const shape = i % shapes
+			app.get(
+				`/r${i}`,
+				{
+					query: t.Object({ [`k${shape}`]: t.Numeric() })
+				},
+				({ query }) => query
+			)
+		}
+
+		const src = await compileToSource(app, { register: false })
+
+		expect((src.match(/const _c\d+ =/g) ?? []).length).toBe(shapes)
+	})
 })

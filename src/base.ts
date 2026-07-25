@@ -226,11 +226,6 @@ export class Elysia<
 
 	'~hookChain'?: ChainNode
 
-	// Resolved WebSocket server-tuning config (base options + per-route
-	// accumulation), committed at the end of a successful router build and
-	// copied into `Generation` at publish. Read by the Bun adapter via
-	// `resolvedWsOf`. Build-local until the atomic commit, so a failed rebuild
-	// leaves no partial WS residue.
 	'~wsConfig'?: WSOptions
 
 	#declaredRoutes?: InternalRoute[]
@@ -3807,7 +3802,6 @@ export class Elysia<
 
 	macro(macro: Macro) {
 		this.#assertMutable('macro')
-		// `.macro(fn)` has no name to register under, and TS can't reject it
 		if (typeof macro === 'function')
 			throw new Error(
 				'use `.macro({ name: fn })` instead of `.macro(fn)`'
@@ -7064,12 +7058,9 @@ export class Elysia<
 	}
 
 	#publishGeneration() {
+		this['~aotFingerprint'] ??= createAotFingerprint()
 		this['~generation'] = {
-			abi: (this['~aotFingerprint'] ??= createAotFingerprint()),
 			routeTable: this['~routeTable']!,
-			introspect:
-				(this['~config'] as { introspect?: boolean } | undefined)
-					?.introspect === true || this['~introspect'] === true,
 			'~config': this['~config'],
 			'~ext': this['~ext'],
 			'~hookChain': this['~hookChain'],

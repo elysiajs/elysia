@@ -415,13 +415,11 @@ function captureCodecMirror(
 // sealed slots whose schema carries a coercion/codec node
 const compactErrorWarned = new Set<string>()
 
-let compactErrorTotal = 0
 const isVerboseAotWarnings = () => !!env.ELYSIA_AOT_VERBOSE
 
 // @internal test isolation
 export function resetCompactErrorWarnings() {
 	compactErrorWarned.clear()
-	compactErrorTotal = 0
 }
 
 function warnCompactErrorLoss(
@@ -431,13 +429,7 @@ function warnCompactErrorLoss(
 	const key = `${aot.method}\0${aot.path}\0${slot}`
 	if (compactErrorWarned.has(key)) return
 
-	if (compactErrorWarned.size >= 1024) {
-		const oldest = compactErrorWarned.keys().next().value
-		if (oldest !== undefined) compactErrorWarned.delete(oldest)
-	}
-
 	compactErrorWarned.add(key)
-	compactErrorTotal++
 
 	if (isVerboseAotWarnings())
 		console.warn(
@@ -449,11 +441,12 @@ function warnCompactErrorLoss(
 
 // @internal flush the aggregated compact-error summary at capture end
 function flushCompactErrorWarnings() {
-	if (compactErrorTotal > 0 && !isVerboseAotWarnings()) {
-		const plural = compactErrorTotal === 1 ? '' : 's'
-		const verb = compactErrorTotal === 1 ? 'carries' : 'carry'
+	const total = compactErrorWarned.size
+	if (total > 0 && !isVerboseAotWarnings()) {
+		const plural = total === 1 ? '' : 's'
+		const verb = total === 1 ? 'carries' : 'carry'
 		console.warn(
-			`[elysia-aot]: ${compactErrorTotal} sealed validator slot${plural} ` +
+			`[elysia-aot]: ${total} sealed validator slot${plural} ` +
 				`${verb} a coercion/codec schema; 422 error details will be coarse ` +
 				`(best-effort). Set ELYSIA_AOT_VERBOSE=1 for per-route detail.`
 		)

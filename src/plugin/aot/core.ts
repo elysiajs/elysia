@@ -335,11 +335,13 @@ export const IS_PRODUCTION_FILTER =
 	/[\\/]elysia[\\/](dist|src)[\\/]universal[\\/]is-production\.(m?js|ts)$/
 
 /**
- * Loose fallback filter — matches the `/elysia/(dist|src)/` segment anywhere in
- * a path (node_modules layouts, monorepos, linked installs). Used by esbuild as
- * a broad pre-filter; the caller must further check that the path is under the
- * resolved elysia package root to avoid matching user code in a directory that
- * happens to be named "elysia".
+ * Loose fallback filter
+ *
+ * Matches the `/elysia/(dist|src)/` segment anywhere in a path (node_modules layouts,
+ * monorepos, linked installs). Used by esbuild as a broad pre-filter
+ *
+ * The caller must further check that the path is under the resolved elysia package root
+ * to avoid matching user code in a directory that happens to be named "elysia"
  *
  * @internal
  */
@@ -481,7 +483,6 @@ export const STUB_SOURCES: Record<
 				`export function parseCookieRawDeferred(){return e()}\n` +
 				`export function buildCookieJar(){return e()}\n` +
 				`export function signCookieValues(){return e()}\n` +
-				`export function signCookieValuesSync(){return e()}\n` +
 				`export function signCookie(){return e()}\n` +
 				`export function signCookieSubtle(){return e()}\n` +
 				`export function signCookieSync(){return e()}\n` +
@@ -785,9 +786,6 @@ export async function generateCompiledArtifacts(
 		const entry = resolveEntry(file)
 		const entryReal = realPath(entry)
 
-		// Repeated in-process build of the same entry: a plain re-import would
-		// hand back the module-cached, already-captured app. Re-evaluate in an
-		// isolated worker instead (same path watch rebuilds use).
 		if (_importedEntries.has(entryReal))
 			return generateCompiledArtifactsIsolated(file, options)
 

@@ -228,12 +228,15 @@ const normalizeCheckIdentifiers = (src: string): string => {
 	})
 }
 
-function emitModule(
-	captured: CapturedValidator[],
-	handlers: CapturedHandler[],
-	fingerprint: AotFingerprint,
-	options?: CompileToSourceOptions
-): string {
+interface EntryEncoder {
+	unionTable: (u: { identifier: string; code: string }[][]) => string
+	setCoercePlan: () => void
+	readonly branchDecls: string
+	readonly unionDecls: string
+	readonly hasCoercePlan: boolean
+}
+
+function createEntryEncoder(): EntryEncoder {
 	// Codec branch-checks (`u`) are universal boilerplate, hoist to shared `_b`
 	const branchRef = new Map<string, string>()
 	let branchDecls = ''
@@ -282,111 +285,131 @@ function emitModule(
 		return ref
 	}
 
-	const entryParts = (c: CapturedValidator) => {
-		const parts: string[] = []
-		const flags: string[] = []
-
-		if (c.checkValue) {
-			if (c.external) flags.push('e:1')
-			if (c.async) flags.push('a:1')
-			if (c.hasDefault) flags.push('d:1')
-			if (c.hasCodec) flags.push('k:1')
-			if (c.hasRef) flags.push('r:1')
-		}
-
-		if (c.checkValue && c.mirror) {
-			const m = c.mirror
-			parts.push(
-				`cm: ${Source.bothFactory(c.identifier!, c.checkDefs!, c.checkValue, m.source, m.hasExternals)}`,
-				...flags
-			)
-			if (m.u) parts.push(`u: ${unionTable(m.u)}`)
-		} else if (c.checkValue) {
-			parts.push(
-				`c: ${Source.checkFactory(c.identifier!, Source.checkCode(c.checkDefs!, c.checkValue))}`,
-				...flags
-			)
-		} else if (c.mirror) {
-			const m = c.mirror
-			let ms = `s: ${Source.mirrorFactory(m.source, m.hasExternals)}`
-			if (m.u) ms += `, u: ${unionTable(m.u)}`
-			parts.push(`m: { ${ms} }`)
-		}
-
-		if (c.decodeMirror) {
-			const dm = c.decodeMirror
-			let dms = `s: ${Source.mirrorFactory(dm.source, true)}`
-			if (dm.u) dms += `, u: ${unionTable(dm.u)}`
-			parts.push(`dm: { ${dms} }`)
-		}
-
-		if (c.encodeMirror) {
-			const em = c.encodeMirror
-			let ems = `s: ${Source.mirrorFactory(em.source, true)}`
-			if (em.u) ems += `, u: ${unionTable(em.u)}`
-			parts.push(`em: { ${ems} }`)
-		}
-
-		// preallocated defaults (JSON ⊂ JS literal; emittability vetted at capture)
-		if (c.precomputeSafe) {
-			parts.push('ps: 1')
-			if (c.precomputedDefault !== undefined)
-				parts.push(`pd: ${JSON.stringify(c.precomputedDefault)}`)
-			if (c.precomputeNull) parts.push('pn: 1')
-			if (c.precomputedObjectDefault !== undefined)
-				parts.push(`pod: ${JSON.stringify(c.precomputedObjectDefault)}`)
-			if (c.defaultCloner) parts.push(`dc: ${c.defaultCloner}`)
-			if (c.objectDefaultMerger)
-				parts.push(`pm: ${c.objectDefaultMerger}`)
-		}
-
-		// per-field custom-error checks
-		if (c.customErrors?.length) {
-			const ce = c.customErrors
-				.map(
-					(e) =>
-						`{ p: ${JSON.stringify(e.path)}, c: ${Source.checkFactory(
-							e.identifier,
-							Source.checkCode(e.checkDefs, e.checkValue)
-						)}${e.external ? ', e: 1' : ''} }`
-				)
-				.join(', ')
-			parts.push(`ce: [${ce}]`)
-		}
-
-		// inner codecs (t.ObjectString / t.ArrayString): per node, open char +
-		// inner check factory + inner decode mirror
-		if (c.innerCodecs?.length) {
-			const ic = c.innerCodecs
-				.map((e) => {
-					let s = `o: ${e.open}, c: ${Source.checkFactory(
-						e.identifier,
-						Source.checkCode(e.checkDefs, e.checkValue)
-					)}`
-					if (e.external) s += ', e: 1'
-					let ds = `s: ${Source.mirrorFactory(
-						e.decode.source,
-						e.decode.hasExternals
-					)}`
-					if (e.decode.u) ds += `, u: ${unionTable(e.decode.u)}`
-					if (e.decode.hasExternals) ds += ', x: 1'
-					s += `, d: { ${ds} }`
-					return `{ ${s} }`
-				})
-				.join(', ')
-			parts.push(`ic: [${ic}]`)
-		}
-
-		if (c.coercePlan) {
+	return {
+		unionTable,
+		setCoercePlan() {
 			hasCoercePlan = true
-			parts.push(`cp: ${JSON.stringify(c.coercePlan)}`)
+		},
+		get branchDecls() {
+			return branchDecls
+		},
+		get unionDecls() {
+			return unionDecls
+		},
+		get hasCoercePlan() {
+			return hasCoercePlan
 		}
+	}
+}
 
-		return parts
+function entryParts(c: CapturedValidator, enc: EntryEncoder) {
+	const parts: string[] = []
+	const flags: string[] = []
+
+	if (c.checkValue) {
+		if (c.external) flags.push('e:1')
+		if (c.async) flags.push('a:1')
+		if (c.hasDefault) flags.push('d:1')
+		if (c.hasCodec) flags.push('k:1')
+		if (c.hasRef) flags.push('r:1')
 	}
 
-	// Serialize a method→path→slot tree to source, deduping the per-path
-	// slot-object (`{ body: _c0, query: _c1 }`) into `_sN` consts
+	if (c.checkValue && c.mirror) {
+		const m = c.mirror
+		parts.push(
+			`cm: ${Source.bothFactory(c.identifier!, c.checkDefs!, c.checkValue, m.source, m.hasExternals)}`,
+			...flags
+		)
+		if (m.u) parts.push(`u: ${enc.unionTable(m.u)}`)
+	} else if (c.checkValue) {
+		parts.push(
+			`c: ${Source.checkFactory(c.identifier!, Source.checkCode(c.checkDefs!, c.checkValue))}`,
+			...flags
+		)
+	} else if (c.mirror) {
+		const m = c.mirror
+		let ms = `s: ${Source.mirrorFactory(m.source, m.hasExternals)}`
+		if (m.u) ms += `, u: ${enc.unionTable(m.u)}`
+		parts.push(`m: { ${ms} }`)
+	}
+
+	if (c.decodeMirror) {
+		const dm = c.decodeMirror
+		let dms = `s: ${Source.mirrorFactory(dm.source, true)}`
+		if (dm.u) dms += `, u: ${enc.unionTable(dm.u)}`
+		parts.push(`dm: { ${dms} }`)
+	}
+
+	if (c.encodeMirror) {
+		const em = c.encodeMirror
+		let ems = `s: ${Source.mirrorFactory(em.source, true)}`
+		if (em.u) ems += `, u: ${enc.unionTable(em.u)}`
+		parts.push(`em: { ${ems} }`)
+	}
+
+	if (c.precomputeSafe) {
+		parts.push('ps: 1')
+		if (c.precomputedDefault !== undefined)
+			parts.push(`pd: ${JSON.stringify(c.precomputedDefault)}`)
+		if (c.precomputeNull) parts.push('pn: 1')
+		if (c.precomputedObjectDefault !== undefined)
+			parts.push(`pod: ${JSON.stringify(c.precomputedObjectDefault)}`)
+		if (c.defaultCloner) parts.push(`dc: ${c.defaultCloner}`)
+		if (c.objectDefaultMerger) parts.push(`pm: ${c.objectDefaultMerger}`)
+	}
+
+	if (c.customErrors?.length) {
+		const ce = c.customErrors
+			.map(
+				(e) =>
+					`{ p: ${JSON.stringify(e.path)}, c: ${Source.checkFactory(
+						e.identifier,
+						Source.checkCode(e.checkDefs, e.checkValue)
+					)}${e.external ? ', e: 1' : ''} }`
+			)
+			.join(', ')
+
+		parts.push(`ce: [${ce}]`)
+	}
+
+	if (c.innerCodecs?.length) {
+		const ic = c.innerCodecs
+			.map((e) => {
+				let s = `o: ${e.open}, c: ${Source.checkFactory(
+					e.identifier,
+					Source.checkCode(e.checkDefs, e.checkValue)
+				)}`
+				if (e.external) s += ', e: 1'
+				let ds = `s: ${Source.mirrorFactory(
+					e.decode.source,
+					e.decode.hasExternals
+				)}`
+				if (e.decode.u) ds += `, u: ${enc.unionTable(e.decode.u)}`
+				if (e.decode.hasExternals) ds += ', x: 1'
+				s += `, d: { ${ds} }`
+				return `{ ${s} }`
+			})
+			.join(', ')
+
+		parts.push(`ic: [${ic}]`)
+	}
+
+	if (c.coercePlan) {
+		enc.setCoercePlan()
+		parts.push(`cp: ${JSON.stringify(c.coercePlan)}`)
+	}
+
+	return parts
+}
+
+function emitModule(
+	captured: CapturedValidator[],
+	handlers: CapturedHandler[],
+	fingerprint: AotFingerprint,
+	options?: CompileToSourceOptions
+): string {
+	const enc = createEntryEncoder()
+
 	const treeToSource = (
 		tree: Record<string, Record<string, Record<string, string>>>,
 		slotRef: Map<string, string>,
@@ -402,16 +425,20 @@ function emitModule(
 						.map(([slot, ref]) => `${JSON.stringify(slot)}:${ref}`)
 						.join(',') +
 					'}'
+
 				let ref = slotRef.get(slotObj)
 				if (ref === undefined) {
 					ref = `_s${slotRef.size}`
 					slotRef.set(slotObj, ref)
 					sink(`const ${ref} = ${slotObj}\n`)
 				}
+
 				paths.push(`${JSON.stringify(path)}:${ref}`)
 			}
+
 			methods.push(`${JSON.stringify(method)}:{${paths.join(',')}}`)
 		}
+
 		return `{${methods.join(',')}}`
 	}
 
@@ -422,6 +449,7 @@ function emitModule(
 	// bucket captured entries by route (all slots of a route share a group)
 	const order: string[] = []
 	const byRoute = new Map<string, CapturedValidator[]>()
+
 	for (const c of captured) {
 		const key = `${c.method}\0${c.path}`
 		let arr = byRoute.get(key)
@@ -462,7 +490,7 @@ function emitModule(
 			const slots: Array<[string, string]> = []
 
 			for (const c of cs) {
-				const parts = entryParts(c)
+				const parts = entryParts(c, enc)
 				if (!parts.length) continue
 
 				const entrySrc = normalizeCheckIdentifiers(
@@ -485,37 +513,114 @@ function emitModule(
 			if (e.groups.size > 1) validatorDecls += `const ${e.ref} = ${src}\n`
 
 		// `_groups`
+		//
+		// Cross-group slot-object hoist: identical slot objects (e.g. `{"body":_c0}`)
+		// recur across many lazy-group thunks whenever routes in different groups share a schema
+		//
+		// Dedup them the same way entries are deduped above, a slot object used by
+		// >1 group is hoisted to a shared top-level `_sN` const
+		//
+		// one used by a single group stays thunk-local. A slot may only be hoisted if every entry
+		// ref it closes over is itself top-level (an entry that's still thunk-local can't be
+		// referenced from outside its own thunk)
+		let slotCounter = 0
+		const groupRouteKeys: string[][] = []
+		const keySlotSrc = new Map<string, string>()
+		const slotStat = new Map<
+			string,
+			{ groups: Set<number>; safe: boolean }
+		>()
+
+		for (let g = 0; g < groupCount; g++) {
+			const keys: string[] = []
+			const end = Math.min((g + 1) * groupSize, order.length)
+
+			for (let i = g * groupSize; i < end; i++) {
+				const key = order[i]!
+				const slots = routeSlots.get(key)!
+				if (!slots.length) continue
+
+				keys.push(key)
+
+				let safe = true
+				const slotSrc =
+					'{' +
+					slots
+						.map(([slot, entrySrc]) => {
+							const e = entries.get(entrySrc)!
+							if (e.groups.size === 1) safe = false
+							return `${JSON.stringify(slot)}:${e.ref}`
+						})
+						.join(',') +
+					'}'
+
+				keySlotSrc.set(key, slotSrc)
+
+				let stat = slotStat.get(slotSrc)
+				if (!stat) {
+					stat = { groups: new Set(), safe }
+					slotStat.set(slotSrc, stat)
+				}
+				stat.groups.add(g)
+				if (!safe) stat.safe = false
+			}
+
+			groupRouteKeys.push(keys)
+		}
+
+		const hoistedSlotRef = new Map<string, string>()
+		for (const [src, stat] of slotStat)
+			if (stat.groups.size > 1 && stat.safe) {
+				const ref = `_s${slotCounter++}`
+				hoistedSlotRef.set(src, ref)
+				validatorDecls += `const ${ref} = ${src}\n`
+			}
+
 		const thunks: string[] = []
 		for (let g = 0; g < groupCount; g++) {
 			let localDecls = ''
 			const emitted = new Set<string>()
-			const slice = nullObject() as Record<
-				string,
-				Record<string, Record<string, string>>
-			>
+			const localSlotRef = new Map<string, string>()
+			const byMethod = new Map<string, string[]>()
 
-			const end = Math.min((g + 1) * groupSize, order.length)
-			for (let i = g * groupSize; i < end; i++) {
-				const key = order[i]!
+			for (const key of groupRouteKeys[g]!) {
 				const sep = key.indexOf('\0')
 				const method = key.slice(0, sep)
 				const path = key.slice(sep + 1)
 
-				for (const [slot, entrySrc] of routeSlots.get(key)!) {
+				for (const [, entrySrc] of routeSlots.get(key)!) {
 					const e = entries.get(entrySrc)!
 					if (e.groups.size === 1 && !emitted.has(entrySrc)) {
 						emitted.add(entrySrc)
 						localDecls += `const ${e.ref} = ${entrySrc}\n`
 					}
-
-					const byPath = (slice[method] ??= nullObject() as any)
-					;(byPath[path] ??= nullObject() as any)[slot] = e.ref
 				}
+
+				const slotSrc = keySlotSrc.get(key)!
+				let ref = hoistedSlotRef.get(slotSrc)
+				if (ref === undefined) {
+					ref = localSlotRef.get(slotSrc)
+					if (ref === undefined) {
+						ref = `_s${slotCounter++}`
+						localSlotRef.set(slotSrc, ref)
+						localDecls += `const ${ref} = ${slotSrc}\n`
+					}
+				}
+
+				let paths = byMethod.get(method)
+				if (!paths) byMethod.set(method, (paths = []))
+				paths.push(`${JSON.stringify(path)}:${ref}`)
 			}
 
-			const sliceStr = treeToSource(slice, new Map(), (d) => {
-				localDecls += d
-			})
+			const sliceStr =
+				'{' +
+				[...byMethod.entries()]
+					.map(
+						([method, paths]) =>
+							`${JSON.stringify(method)}:{${paths.join(',')}}`
+					)
+					.join(',') +
+				'}'
 
 			thunks.push(`() => {\n${localDecls}return ${sliceStr}\n}`)
 		}
@@ -533,7 +638,7 @@ function emitModule(
 			Record<string, Record<string, string>>
 		>
 		for (const c of captured) {
-			const parts = entryParts(c)
+			const parts = entryParts(c, enc)
 			if (!parts.length) continue
 
 			const entrySrc = normalizeCheckIdentifiers(
@@ -556,9 +661,6 @@ function emitModule(
 			validatorDecls += d
 		})
 
-		// register mode scopes the tree inside the registration IIFE — the ES
-		// module is a process-lifetime GC root, so a top-level binding would
-		// pin the graph after `Compiled.release`
 		validatorExport = options?.register
 			? `const validators = ${treeStr}\n`
 			: `export const validators = ${treeStr}\n`
@@ -617,7 +719,7 @@ function emitModule(
 			options.registerFrom ?? 'elysia'
 		)}\n`
 
-	if (options?.register && hasCoercePlan)
+	if (options?.register && enc.hasCoercePlan)
 		body += `import { buildCoercedFromPlan } from ${JSON.stringify(
 			'elysia/coerce-plan'
 		)}\n`
@@ -627,7 +729,8 @@ function emitModule(
 			options.reconstructFrom ?? 'elysia/reconstruct'
 		)}\n`
 
-	const generated = branchDecls + unionDecls + validatorDecls + handlerDecls
+	const generated =
+		enc.branchDecls + enc.unionDecls + validatorDecls + handlerDecls
 	const needs = (symbol: string) =>
 		new RegExp(`\\b${symbol}\\b`).test(generated)
 
@@ -649,10 +752,10 @@ function emitModule(
 		body +=
 			fingerprintExport +
 			'Compiled.register((() => {\n' +
-			branchDecls +
-			(branchDecls && '\n') +
-			unionDecls +
-			(unionDecls && '\n') +
+			enc.branchDecls +
+			(enc.branchDecls && '\n') +
+			enc.unionDecls +
+			(enc.unionDecls && '\n') +
 			validatorDecls +
 			handlerDecls +
 			'\n' +
@@ -664,15 +767,15 @@ function emitModule(
 			(lazy
 				? 'lazyGroups: _groups, lazyGroupOf: _groupOf, '
 				: 'validators, ') +
-			`handlers${hasCoercePlan ? ', planRebuilder: buildCoercedFromPlan' : ''} }\n` +
+			`handlers${enc.hasCoercePlan ? ', planRebuilder: buildCoercedFromPlan' : ''} }\n` +
 			'})())\n'
 	} else {
 		body +=
 			'\n' +
-			branchDecls +
-			(branchDecls && '\n') +
-			unionDecls +
-			(unionDecls && '\n') +
+			enc.branchDecls +
+			(enc.branchDecls && '\n') +
+			enc.unionDecls +
+			(enc.unionDecls && '\n') +
 			validatorDecls +
 			handlerDecls +
 			'\n' +
@@ -681,8 +784,6 @@ function emitModule(
 			handlerExport +
 			'\n'
 
-		// eager keeps the default export (used by `evalManifest` in tests)
-		// lazy has no single `validators` object to default-export
 		if (!lazy) body += '\nexport default validators\n'
 	}
 

@@ -13,8 +13,7 @@ import {
 	parseCookieRawLazy,
 	parseCookieRawDeferred,
 	buildCookieJar,
-	signCookieValues,
-	signCookieValuesSync
+	signCookieValues
 } from '../../cookie/utils'
 import { requestId } from '../../utils'
 import { finalizeRouteError, forwardError } from '../../handler/utils'
@@ -88,9 +87,9 @@ export const HANDLER_PARAMS: Record<string, Resolver> = {
 	pcrl: () => parseCookieRawLazy,
 	pcrd: () => parseCookieRawDeferred,
 	bcj: () => buildCookieJar,
-	// `scv` async WebCrypto sign; `scvs` H3 sync `node:crypto` sign.
+	// `scv` cookie sign (async WebCrypto path; sync `node:crypto` path when
+	// `hasSyncHmac`, resolved internally by `signCookieValues`).
 	scv: () => signCookieValues,
-	scvs: () => signCookieValuesSync,
 	// validator
 	va: (c) => c.vali,
 	// returned-error forwarder

@@ -119,7 +119,8 @@ describe('compiled signed-cookie handlers', () => {
 
 		expect(name).toBe('Function')
 		expect(source.includes('pcrsg(')).toBe(true)
-		expect(source.includes('scvs(')).toBe(true)
+		expect(source.includes('scv(c.set.cookie,cc)')).toBe(true)
+		expect(source.includes('_sg=scv(')).toBe(false)
 		expect(source.includes('await pcr(')).toBe(false)
 	})
 

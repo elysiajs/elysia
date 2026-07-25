@@ -144,7 +144,7 @@ function findRoute(
 	strictPath: boolean,
 	hasWS?: boolean,
 	hasDynamicWS?: boolean
-): Response | Promise<Response> {
+) {
 	const path = context.path
 
 	if (hasWS && request.method === 'GET') {
@@ -222,12 +222,6 @@ function findRoute(
 		)
 	}
 
-	// Framework miss: propagate the tagged sentinel straight into
-	// `finalizeError` (materialized there) instead of throwing a stackful
-	// NotFound through the caller's catch. The request-phase trace span was
-	// already resolved by the caller before `findRoute`, and the numeric
-	// re-resolve in the old catch path was an idempotent no-op, so no
-	// user-observable trace state is lost by returning instead of throwing.
 	if (hasError)
 		return finalizeError(
 			context,

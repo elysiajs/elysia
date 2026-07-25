@@ -13,8 +13,7 @@ import {
 	parseCookieRawLazy,
 	parseCookieRawDeferred,
 	buildCookieJar,
-	signCookieValues,
-	signCookieValuesSync
+	signCookieValues
 } from '../../cookie/utils'
 
 import type { RouteCompileState } from './descriptor'
@@ -777,13 +776,12 @@ export function compileHandlerJit({
 	const schedule = dedupSchedule ? `_sc()\n` : scheduleAfterResponse
 
 	const signPrefix = syncCookieSign
-		? `scvs(c.set.cookie,cc)\n`
+		? `scv(c.set.cookie,cc)\n`
 		: asyncCookieSign
 			? `_sg=scv(c.set.cookie,cc)\nif(_sg)await _sg\n`
 			: ''
 
-	if (syncCookieSign) link(signCookieValuesSync, 'scvs')
-	else if (asyncCookieSign) link(signCookieValues, 'scv')
+	if (syncCookieSign || asyncCookieSign) link(signCookieValues, 'scv')
 
 	let factoryHelpers = ''
 
