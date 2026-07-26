@@ -178,11 +178,15 @@ describe('eager propagated-hook prefixes', () => {
 			}
 		}
 
-		runBeforeHandlePrefix(prefix, {
-			request: new Request('http://localhost', {
-				signal: controller.signal
-			})
+		// the sync runner cannot suspend, so it peeks at the abort slot instead
+		// of materializing `request.signal` — the fetch lane arms the slot for
+		// any request it cannot prove is the untouched Bun original, which is
+		// exactly the case a user-supplied signal falls into
+		const request = new Request('http://localhost', {
+			signal: controller.signal
 		})
+
+		runBeforeHandlePrefix(prefix, { request, '~sig': request.signal }, 1)
 
 		expect(order).toEqual(['first-prefix'])
 	})
@@ -211,11 +215,17 @@ describe('eager propagated-hook prefixes', () => {
 			}
 		}
 
-		await runBeforeHandlePrefixAsync(prefix, {
-			request: new Request('http://localhost', {
-				signal: controller.signal
-			})
-		})
+		// the async runner arms the slot itself at the suspension, so it needs
+		// no pre-armed context
+		await runBeforeHandlePrefixAsync(
+			prefix,
+			{
+				request: new Request('http://localhost', {
+					signal: controller.signal
+				})
+			},
+			1
+		)
 
 		expect(order).toEqual(['first-prefix'])
 	})

@@ -11,6 +11,7 @@ import {
 } from './utils'
 
 import { createContext, type Context } from '../context'
+import { origin } from '../adapter/origin'
 import { createErrorHandler } from './error'
 import { requestId, flattenChain, nullObject, isNotEmpty } from '../utils'
 import { handleSet, materializeSetHeaders } from '../adapter/utils'
@@ -23,8 +24,6 @@ import {
 
 import type { CompiledHandler, MaybePromise } from '../types'
 
-// Extract path and query-index from a full URL string.
-// Scalar params only — monomorphic so V8/JSC can inline at each call site.
 function extractPath(url: string, context: any, pathStart: number): string {
 	const s = url.indexOf('/', pathStart)
 	return (context.path = url.substring(
@@ -251,6 +250,33 @@ export function createFetchHandler(
 	const hook = flattenChain(app['~hookChain'])
 	const hasError = !!hook?.error
 
+	const abortSignal = app['~config']?.abortSignal !== false
+
+	/**
+	 * Arm `context['~sig']` unless this request is provably the untouched
+	 * `Request` the Bun adapter received, in which case materializing
+	 * `request.signal` is deferred to the first suspension
+	 * @see `../adapter/origin`
+	 *
+	 * Anything without provenance, `app.handle`, every non-Bun adapter, or a
+	 * `.wrap()` HOC that substituted or delayed the request, falls back to
+	 * today's eager behaviour
+	 */
+	const armEager = (request: Request, context: Context) => {
+		if (!abortSignal || request === origin.request) return false
+
+		return ((context as any)['~sig'] = request.signal).aborted
+	}
+
+	/**
+	 * Post-suspension check: arm if nobody has yet, then read. Only emitted on
+	 * lanes that actually awaited, so a deferred request that never suspends
+	 * never reaches it.
+	 */
+	const armedAbort = (request: Request, context: Context): boolean =>
+		abortSignal &&
+		((context as any)['~sig'] ??= request.signal).aborted === true
+
 	const baseMapResponse = (app['~config']?.adapter ?? defaultAdapter).response
 		.map as (
 		response: unknown,
@@ -324,7 +350,9 @@ export function createFetchHandler(
 		: undefined
 
 	const tracePhases = hasTrace
-		? traceProvider!.unionTracePhases(traceHandlers as unknown as Function[])
+		? traceProvider!.unionTracePhases(
+				traceHandlers as unknown as Function[]
+			)
 		: null
 
 	const traceRequestPhase =
@@ -412,7 +440,8 @@ export function createFetchHandler(
 		): Promise<Response> => {
 			const context = new Context(request)
 			materializeSetHeaders(context.set)
-			if (request.signal.aborted) return emptyResponse.clone() as Response
+			if (armEager(request, context))
+				return emptyResponse.clone() as Response
 
 			extractPath(request.url, context, pathStart)
 			// @ts-expect-error
@@ -459,7 +488,7 @@ export function createFetchHandler(
 
 					for (let i = 0; i < traceLength; i++) endReports[i]?.()
 
-					if (request.signal.aborted) {
+					if (armedAbort(request, context)) {
 						for (let j = 0; j < traceLength; j++)
 							trace[j].r(requestReports[j])
 
@@ -521,7 +550,7 @@ export function createFetchHandler(
 			): Promise<Response> => {
 				const context = new Context(request)
 				materializeSetHeaders(context.set)
-				if (request.signal.aborted)
+				if (armEager(request, context))
 					return emptyResponse.clone() as Response
 
 				extractPath(request.url, context, pathStart)
@@ -536,7 +565,7 @@ export function createFetchHandler(
 
 						if (result instanceof Promise) result = await result
 
-						if (request.signal.aborted)
+						if (armedAbort(request, context))
 							return emptyResponse.clone() as Response
 
 						if (result !== undefined) {
@@ -576,7 +605,8 @@ export function createFetchHandler(
 		return (request: Request, server?: unknown): MaybePromise<Response> => {
 			const context = new Context(request)
 			materializeSetHeaders(context.set)
-			if (request.signal.aborted) return emptyResponse.clone() as Response
+			if (armEager(request, context))
+				return emptyResponse.clone() as Response
 
 			extractPath(request.url, context, pathStart)
 			// @ts-expect-error
@@ -585,7 +615,9 @@ export function createFetchHandler(
 			try {
 				for (let i = 0; i < onRequests.length; i++) {
 					const result = onRequests[i](context)
-					if (request.signal.aborted)
+					// sync lane: nothing suspended, so only an already-armed
+					// slot can have flipped
+					if (abortSignal && (context as any)['~sig']?.aborted)
 						return emptyResponse.clone() as Response
 
 					if (result !== undefined) {
@@ -634,6 +666,11 @@ export function createFetchHandler(
 
 	return (request: Request, server?: unknown): MaybePromise<Response> => {
 		const context = new Context(request)
+		// no request hook to short-circuit here, so only arm: compiled routes
+		// peek at the slot at their own entry
+		if (abortSignal && request !== origin.request)
+			(context as any)['~sig'] = request.signal
+
 		const path = extractPath(request.url, context, pathStart)
 		// @ts-expect-error
 		context.server = server ?? null

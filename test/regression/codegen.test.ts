@@ -291,7 +291,7 @@ describe('request abort short-circuits lifecycle hooks', () => {
 		).toString()
 
 		expect(plainSrc).not.toContain('c.request.signal')
-		expect(plainSrc).not.toContain('sig.aborted')
+		expect(plainSrc).not.toContain("c['~sig']")
 		expect(plainSrc).not.toContain("addEventListener('abort'")
 		expect(plainSrc).not.toContain('emp.clone()')
 
@@ -304,13 +304,68 @@ describe('request abort short-circuits lifecycle hooks', () => {
 		).toString()
 
 		// polled, never subscribed: `addEventListener('abort')` would allocate a
-		// listener per request. The `signal` getter is bound once and every
-		// later check reads the binding, not the getter.
-		expect(hookedSrc).toContain('const sig=c.request.signal')
-		expect(hookedSrc).toContain('sig.aborted')
-		expect(hookedSrc.match(/c\.request\.signal/g)).toHaveLength(1)
-		expect(hookedSrc).not.toContain("addEventListener('abort'")
+		// listener per request.
+		expect(hookedSrc).toContain("c['~sig']?.aborted")
 		expect(hookedSrc).toContain('emp.clone()')
+		expect(hookedSrc).not.toContain("addEventListener('abort'")
+	})
+
+	it('a fully synchronous route never materializes request.signal', () => {
+		// the whole point of the deferred arming: a pipeline that cannot
+		// suspend cannot observe an abort either, so it must not pay the
+		// (lazy, ~214ns on Bun) `request.signal` getter.
+		const app = new Elysia()
+			.derive(() => ({ user: 'a' }))
+			.guard({ beforeHandle: () => {} })
+			.beforeHandle(() => {})
+			.get('/sync', () => 'ok')
+
+		const src = compileHandler(app['~routes']![0] as any, app).toString()
+
+		expect(src).toContain("c['~sig']?.aborted")
+		expect(src).not.toContain('c.request.signal')
+	})
+
+	it('arms at each suspension boundary in an async route', () => {
+		const app = new Elysia()
+			.transform(async () => {})
+			.beforeHandle(() => {})
+			.get('/async', () => 'ok')
+
+		const src = compileHandler(app['~routes']![0] as any, app).toString()
+
+		// entry check is still a peek (nothing has suspended yet), every check
+		// after the awaited transform arms the slot and caches it in `_as`
+		expect(src).toContain("if(c['~sig']?.aborted)return emp.clone()")
+		expect(src).toContain(
+			"if((_as??=(c['~sig']??=c.request.signal)).aborted)return emp.clone()"
+		)
+		expect(src).toContain('let _as')
+	})
+
+	it('emits no abort machinery at all when `abortSignal` is disabled', () => {
+		const withAbort = new Elysia()
+			.beforeHandle(() => {})
+			.get('/x', () => 'ok')
+		const without = new Elysia({ abortSignal: false })
+			.beforeHandle(() => {})
+			.get('/x', () => 'ok')
+
+		const src = compileHandler(
+			without['~routes']![0] as any,
+			without
+		).toString()
+
+		expect(src).not.toContain('~sig')
+		expect(src).not.toContain('signal')
+		expect(src).not.toContain('emp.clone()')
+		expect(src).not.toContain('_as')
+		expect(src.length).toBeLessThan(
+			compileHandler(
+				withAbort['~routes']![0] as any,
+				withAbort
+			).toString().length
+		)
 	})
 
 	it('returns an empty response instead of running the next hook after abort', async () => {

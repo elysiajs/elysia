@@ -83,6 +83,9 @@ export function replaceDeriveContext(context: any, derivative: any) {
 	Object.assign(next, derivative)
 
 	next.request = context.request
+	// abort slot is per-request state, not per-context — losing it here would
+	// re-materialize (or worse, silently un-arm) the signal after a mapped derive
+	next['~sig'] = context['~sig']
 	next.store = context.store
 	next.set = context.set
 	next.body = context.body
@@ -472,11 +475,13 @@ const compactBeforeHandleChunks = (prefix: CompactBeforeHandlePrefix) => {
 	return chunks
 }
 
-type BeforeHandleContext = { request: Request }
+type BeforeHandleContext = { request: Request; '~sig'?: AbortSignal }
 
 export function runBeforeHandlePrefix(
 	prefix: CompactBeforeHandlePrefix,
-	context: BeforeHandleContext
+	context: BeforeHandleContext,
+	// Elysia config: abortSignal
+	abort?: 1
 ) {
 	const chunks = compactBeforeHandleChunks(prefix)
 	let first = true
@@ -484,7 +489,7 @@ export function runBeforeHandlePrefix(
 	for (let i = chunks.length - 1; i >= 0; i--) {
 		const values = chunks[i]!.values
 		for (let j = 0; j < values.length; j++) {
-			if (!first && context.request.signal.aborted) return
+			if (!first && abort && context['~sig']?.aborted) return
 			first = false
 			const result = values[j]!(context)
 			if (result !== undefined) return result
@@ -494,7 +499,8 @@ export function runBeforeHandlePrefix(
 
 export async function runBeforeHandlePrefixAsync(
 	prefix: CompactBeforeHandlePrefix,
-	context: BeforeHandleContext
+	context: BeforeHandleContext,
+	abort?: 1
 ) {
 	const chunks = compactBeforeHandleChunks(prefix)
 	let first = true
@@ -502,10 +508,14 @@ export async function runBeforeHandlePrefixAsync(
 	for (let i = chunks.length - 1; i >= 0; i--) {
 		const values = chunks[i]!.values
 		for (let j = 0; j < values.length; j++) {
-			if (!first && context.request.signal.aborted) return
+			if (!first && abort && context['~sig']?.aborted) return
 			first = false
 			let result = values[j]!(context)
-			if (result instanceof Promise) result = await result
+			if (result instanceof Promise) {
+				result = await result
+				// arm at the suspension so the next iteration's peek is exact
+				if (abort) context['~sig'] ??= context.request.signal
+			}
 			if (result !== undefined) return result
 		}
 	}

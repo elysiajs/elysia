@@ -1,5 +1,5 @@
 import { Elysia, t } from '../../src'
-import { run, bench, group, summary } from 'mitata'
+import { runCases } from './harness'
 import { profile } from './utils'
 
 const auth = new Elysia({ name: 'auth' }).decorate('auth', {
@@ -66,12 +66,8 @@ const postUsers = new Request('http://e.ly/users', {
 	body
 })
 
-summary(() => {
-	group('composite throughput', () => {
-		bench('GET / (derive+guard+global)', () => handle(getRoot))
-		bench('GET /res/3/:id (dynamic+params)', () => handle(getRes))
-		bench('POST /users (body+response)', () => handle(postUsers.clone()))
-	})
+await runCases(import.meta.path, {
+	'GET / (derive+guard+global)': () => handle(getRoot),
+	'GET /res/3/:id (dynamic+params)': () => handle(getRes),
+	'POST /users (body+response)': () => handle(postUsers.clone())
 })
-
-await run()

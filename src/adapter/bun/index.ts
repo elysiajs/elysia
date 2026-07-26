@@ -6,8 +6,33 @@ import { buildNativeStaticResponse } from '../../compile/handler'
 import { routeRow } from '../../route-table'
 import { flattenChain, getLoosePath, nullObject } from '../../utils'
 import { frozenRootOf, resolvedWsOf } from '../../generation'
+import { origin } from '../origin'
 
 import type { AnyElysia } from '../../base'
+
+/**
+ * ! This may looks like it would cause race condition, but it is not
+ * Bun is single-threaded and synchronous, so the `finally` block will
+ * always run before the next request comes in
+ * @see ../origin.ts
+ *
+ * Publish the request `Bun.serve` handed us so `createFetchHandler` can prove,
+ * before its first suspension, that it holds the untouched original and may
+ * defer materializing `request.signal`
+ *
+ * `finally` runs on the synchronous return of `fetch` (the returned promise is
+ * not awaited), so the slot is live only for the handler's synchronous prologue.
+ */
+const withOrigin =
+	(fetch: (request: Request, server: unknown) => unknown) =>
+	(request: Request, server: unknown) => {
+		origin.request = request
+		try {
+			return fetch(request, server)
+		} finally {
+			origin.request = undefined
+		}
+	}
 
 const nativeStaticMethods = new Set([
 	'GET',
@@ -194,7 +219,11 @@ export const BunAdapter = createAdapter({
 		if (needsGate)
 			serve.fetch = (request: Request, server: unknown) =>
 				ready!.then(() => app.fetch(request, server))
-		else serve.fetch = built!.fetch
+		// the gated lane dispatches across a promise boundary, so it cannot
+		// claim the request is still un-aborted at entry — left eager on
+		// purpose. `publish()` swaps in the deferred-capable fetch once setup
+		// resolves.
+		else serve.fetch = withOrigin(built!.fetch)
 
 		const server = (app.server = Bun.serve(serve))
 		const reload = () => {
@@ -272,7 +301,7 @@ export const BunAdapter = createAdapter({
 			if (app.server !== server) return
 			built ??= build()
 
-			serve.fetch = built!.fetch
+			serve.fetch = withOrigin(built!.fetch)
 			if (built!.websocket) serve.websocket = built!.websocket
 			if (built!.routes) serve.routes = built!.routes[0]
 

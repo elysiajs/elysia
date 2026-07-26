@@ -420,11 +420,35 @@ export function compileHandlerJit({
 		}
 	}
 
-	const abortExpression = 'sig.aborted'
-	const abortCheck = hasLifecycleHook
-		? `if(${abortExpression})return emp.clone()\n`
-		: ''
-	const hoistSignal = 'const sig=c.request.signal\n'
+	// Abort short-circuit.
+	//
+	// `request.signal` is materialized lazily by the runtime, so arming is
+	// deferred to the first suspension: before any `await`, the slot can only
+	// have been armed by someone upstream (the eager fetch lane, or an awaited
+	// request hook), so those sites just peek at it. After a suspension the
+	// route arms the slot itself and caches it route-locally in `_as`
+	// Sound because the cache is only ever populated by this route's own arming
+	const abortOn = hasLifecycleHook && root['~config']?.abortSignal !== false
+	const abortPeek = "c['~sig']?.aborted"
+	const abortArm = "(_as??=(c['~sig']??=c.request.signal)).aborted"
+
+	let suspended = false
+	const abortExpression = () => {
+		if (!suspended && code.includes('await ')) suspended = true
+		return suspended ? abortArm : abortPeek
+	}
+
+	const abortCheck = () =>
+		abortOn ? `if(${abortExpression()})return emp.clone()\n` : ''
+
+	// Guards emitted *between* hooks of one chain: in an async route every hook
+	// call is a potential suspension, so the following guard must arm.
+	const abortChainGuard = () =>
+		abortOn ? (isAsync ? abortArm : abortExpression()) : undefined
+
+	// The error lane is also reached from a rejected promise continuation
+	// (`_ce`), i.e. after a suspension the try-block never saw — always arm.
+	const abortCatch = abortOn ? `if(${abortArm})return emp.clone()\n` : ''
 
 	const phaseOn = (phase: TraceEvent) =>
 		hasTrace && (tracePhases === null || tracePhases.has(phase))
@@ -509,9 +533,9 @@ export function compileHandlerJit({
 	// va,rm,rc,re,pa,pf,pj,pt,pu,er,ar
 	let code = `${isAsync ? 'async ' : ''}function route(c){\n`
 
-	if (hasLifecycleHook) {
+	if (abortOn) {
 		link(emptyResponse, 'emp')
-		code += hoistSignal + abortCheck
+		code += abortCheck()
 	}
 
 	if ((hasAfterResponse || hasTrace) && !syncAfterResponse)
@@ -615,7 +639,7 @@ export function compileHandlerJit({
 			`}catch(e){${preserveParseStatus ? 'if(e instanceof es)throw e\n' : ''}throw new pe(e)}\n`
 
 		if (hasTrace) code += endTrace('parse')
-		if (hasLifecycleHook) code += abortCheck
+		code += abortCheck()
 	} else if (hasTrace) code += beginTrace('parse', 0) + endTrace('parse')
 
 	if (hook?.transform?.length || hasTrace) {
@@ -627,11 +651,11 @@ export function compileHandlerJit({
 			code += mapTransform(
 				hook!.transform!,
 				[isAsync, buildReport('transform')],
-				abortExpression
+				abortChainGuard()
 			)
 		}
 		code += endTrace('transform')
-		if (transformLen) code += abortCheck
+		if (transformLen) code += abortCheck()
 	}
 
 	if (vali?.body) {
@@ -804,12 +828,13 @@ export function compileHandlerJit({
 			if (hasBeforeHandle) {
 				if (beforeHandlePrefix) {
 					link(beforeHandlePrefix, 'bp')
+					const rbpAbort = abortOn ? ',1' : ''
 					if (isAsync) {
 						link(runBeforeHandlePrefixAsync, 'rbp')
-						code += `tmp=await rbp(bp,c)\n`
+						code += `tmp=await rbp(bp,c${rbpAbort})\n`
 					} else {
 						link(runBeforeHandlePrefix, 'rbp')
-						code += `tmp=rbp(bp,c)\n`
+						code += `tmp=rbp(bp,c${rbpAbort})\n`
 					}
 					code += `if(tmp!==undefined)_r=tmp\n`
 				}
@@ -821,22 +846,23 @@ export function compileHandlerJit({
 						hook as { '~deriveEntries'?: any[] }
 					)['~deriveEntries']
 
+					const chainGuard = abortChainGuard()
 					const mapped = mapBeforeHandle(
 						hook.beforeHandle,
 						deriveEntries,
 						link,
 						isAsync,
 						buildReport('beforeHandle'),
-						abortExpression
+						chainGuard
 					)
 					code += beforeHandlePrefix
-						? `if(!${abortExpression}&&_r===undefined){\n${mapped}}\n`
+						? `if(${chainGuard ? `!${chainGuard}&&` : ''}_r===undefined){\n${mapped}}\n`
 						: mapped
 				}
 			}
 
 			code += endTrace('beforeHandle')
-			if (hasBeforeHandle) code += abortCheck
+			if (hasBeforeHandle) code += abortCheck()
 		}
 
 		if (hasAfterResponse || traceHandleOn) link(tee, 'tee')
@@ -881,7 +907,7 @@ export function compileHandlerJit({
 			code += `if(_r===undefined){\n${callHandler}${teeBlock}}\n`
 		else code += callHandler + teeBlock
 
-		if (hasLifecycleHook) code += abortCheck
+		code += abortCheck()
 
 		if (syncAfterResponse) {
 			link(forwardError, 'fe')
@@ -929,11 +955,11 @@ export function compileHandlerJit({
 						hook!.afterHandle!,
 						isAsync,
 						buildReport('afterHandle'),
-						abortExpression
+						abortChainGuard()
 					)
 				}
 				code += endTrace('afterHandle')
-				if (hasAfterHandle) code += abortCheck
+				if (hasAfterHandle) code += abortCheck()
 			}
 
 			if (hasMapResponse || hasTrace) {
@@ -945,11 +971,11 @@ export function compileHandlerJit({
 						hook!.mapResponse!,
 						isAsync,
 						buildReport('mapResponse'),
-						abortExpression
+						abortChainGuard()
 					)
 				}
 				code += endTrace('mapResponse')
-				if (hasMapResponse) code += abortCheck
+				if (hasMapResponse) code += abortCheck()
 			}
 
 			if (hasResponseValidator) {
@@ -974,7 +1000,7 @@ export function compileHandlerJit({
 					`const _vr=va.response[c.set.status??200]\n` +
 					`if(_vr)_r=${awaitStr}${encodeBody}\n` +
 					`}\n`
-				if (hasLifecycleHook) code += abortCheck
+				code += abortCheck()
 			}
 
 			code += schedule
@@ -994,11 +1020,14 @@ export function compileHandlerJit({
 	} else if (isHandleFunction) {
 		if (!isAsync) link(forwardError, 'fe')
 		const mapArgs = hasSet ? 'c.set,c.request,true' : 'c.request,true'
+		// append the handler call first: `abortCheck()` classifies the site by
+		// scanning what has been emitted so far
+		code += callHandlerSyncOnAsync
+			? `let _r=h(c)\nif(_r instanceof Promise)_r=await _r\n`
+			: `let _r=${isAsync ? 'await ' : ''}h(c)\n`
+
 		code +=
-			(callHandlerSyncOnAsync
-				? `let _r=h(c)\nif(_r instanceof Promise)_r=await _r\n`
-				: `let _r=${isAsync ? 'await ' : ''}h(c)\n`) +
-			abortCheck +
+			abortCheck() +
 			`if(_r instanceof Error)throw _r\n` +
 			(isAsync
 				? `return await ${map}(_r,${mapArgs})\n`
@@ -1063,19 +1092,19 @@ export function compileHandlerJit({
 									hook!.mapResponse!,
 									isAsync,
 									undefined,
-									abortExpression
+									abortOn ? abortArm : undefined
 								)
 							: '') +
 							endTrace('error') +
-							abortCheck +
+							abortCatch +
 							schedule,
 						signPrefix,
 						isAsync
 					],
-					abortExpression
+					abortOn ? abortArm : undefined
 				) +
 				endTrace('error') +
-				abortCheck +
+				abortCatch +
 				schedule +
 				`if(typeof e?.toResponse==='function')` +
 				`try{\n` +
@@ -1090,9 +1119,9 @@ export function compileHandlerJit({
 		}
 
 		if (syncErrorHook) {
-			// `_ce` is hoisted out of `route`, so it cannot see `route`'s `sig`
-			// binding and must rebind it from its own context parameter
-			factoryHelpers += `function _ce(e,c){${hoistSignal}try{\n${body}}catch(_ee){return fre(rt,c,_ee)}}\n`
+			// `_ce` is hoisted out of `route`, so it cannot see `route`'s `_as`
+			// cache and declares its own
+			factoryHelpers += `function _ce(e,c){${abortOn ? 'let _as\n' : ''}try{\n${body}}catch(_ee){return fre(rt,c,_ee)}}\n`
 			code += `}catch(e){return _ce(e,c)}\n`
 		} else
 			code += `}catch(e){try{\n${body}}catch(_ee){return fre(rt,c,_ee)}}\n`
@@ -1100,7 +1129,11 @@ export function compileHandlerJit({
 
 	code += '}'
 
-	code = head + scheduleDecl + code
+	code =
+		head +
+		(abortOn && code.includes('_as') ? 'let _as\n' : '') +
+		scheduleDecl +
+		code
 
 	if (factoryHelpers)
 		code = `(function(){\n${factoryHelpers}return ${code}})()`

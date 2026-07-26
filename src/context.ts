@@ -99,6 +99,16 @@ function buildEmptyContext(
 		declare route?: string
 		declare trace?: any[]
 
+		/**
+		 * Materialized `request.signal`, or `undefined` while unarmed.
+		 *
+		 * Left uninitialized on purpose: a request that never suspends never
+		 * pays for `request.signal`. Armed eagerly by `createFetchHandler` for
+		 * any request whose provenance is not the Bun original, and lazily at
+		 * each suspension boundary otherwise.
+		 */
+		declare '~sig'?: AbortSignal
+
 		constructor(public request: Request) {
 			super()
 			if (pathDescriptor)

@@ -6,10 +6,8 @@ import { profile } from './utils'
 const total = 100_000
 const stacks = <any[]>Array(total)
 
-const stop = profile('Elysia 2 schema with 45 types x100,000')
-
-for (let i = 0; i <= total; i++)
-	stacks[i] = t.Array(
+const build = () =>
+	t.Array(
 		t.Object({
 			id: t.Number(),
 			name: t.String(),
@@ -55,6 +53,15 @@ for (let i = 0; i <= total; i++)
 			)
 		})
 	)
+
+// warm builder/lazy-init paths and sweep so the profile window measures
+// construction, not cold-heap growth hysteresis
+for (let i = 0; i < 100; i++) build()
+Bun.gc(true)
+
+const stop = profile('Elysia 2 schema with 45 types x100,000')
+
+for (let i = 0; i < total; i++) stacks[i] = build()
 
 stop()
 

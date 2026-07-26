@@ -1,5 +1,5 @@
 import { Elysia, t } from '../../src'
-import { run, bench, group, summary } from 'mitata'
+import { runCases } from './harness'
 
 const app = new Elysia()
 	.get('/', () => 'ok')
@@ -67,40 +67,26 @@ const getMe = new Request('http://e.ly/me', {
 	headers: { cookie: 'session=abc' }
 })
 
-await handle(getRoot)
-await handle(getUser)
-await handle(post())
-await handle(postDefault())
-await handle(getSearch)
-await handle(getMe)
+// Mixed traffic: rotate across all 6 routes per op so the radix lookup +
+// compiled handlers can't stay perfectly monomorphic — closer to a server
+// fielding varied paths (additive, not a replacement for the isolated ones).
+const gets = [getRoot, getUser, getSearch, getMe]
+let i = 0
+const rotate = () => {
+	const n = i++ % 6
+	return n === 4
+		? handle(post())
+		: n === 5
+			? handle(postDefault())
+			: handle(gets[n])
+}
 
-summary(() => {
-	group('throughput (per-route, isolated)', () => {
-		bench('GET / (plain)', () => handle(getRoot))
-		bench('GET /user/:id (dynamic)', () => handle(getUser))
-		bench('POST /json (body validate)', () => handle(post()))
-		bench('POST /json-default (body + defaults)', () =>
-			handle(postDefault())
-		)
-		bench('GET /search (query coerce)', () => handle(getSearch))
-		bench('GET /me (cookie)', () => handle(getMe))
-	})
-
-	// Mixed traffic: rotate across all 6 routes per op so the radix lookup +
-	// compiled handlers can't stay perfectly monomorphic — closer to a server
-	// fielding varied paths (additive, not a replacement for the isolated ones).
-	group('throughput (mixed traffic)', () => {
-		const gets = [getRoot, getUser, getSearch, getMe]
-		let i = 0
-		bench('rotate all 6 routes', () => {
-			const n = i++ % 6
-			return n === 4
-				? handle(post())
-				: n === 5
-					? handle(postDefault())
-					: handle(gets[n])
-		})
-	})
+await runCases(import.meta.path, {
+	'GET / (plain)': () => handle(getRoot),
+	'GET /user/:id (dynamic)': () => handle(getUser),
+	'POST /json (body validate)': () => handle(post()),
+	'POST /json-default (body + defaults)': () => handle(postDefault()),
+	'GET /search (query coerce)': () => handle(getSearch),
+	'GET /me (cookie)': () => handle(getMe),
+	'rotate all 6 routes': rotate
 })
-
-await run()

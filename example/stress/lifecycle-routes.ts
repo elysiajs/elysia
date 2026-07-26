@@ -160,7 +160,7 @@ if (eagerSampleIndex !== -1) {
 	)
 	const app = build(30_000, plugins)
 
-	app.handle('/r0')
+	app.fetch
 
 	stop()
 }

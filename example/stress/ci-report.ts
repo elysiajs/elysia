@@ -201,6 +201,133 @@ async function runBench(name: string): Promise<BenchRow> {
 	}
 }
 
+interface ThroughputRow {
+	name: string
+	medianNs: number
+	minNs: number
+}
+
+interface ThroughputSection {
+	file: string
+	status: 'ok' | 'error'
+	cases: ThroughputRow[]
+	durationMs: number
+	error?: string
+}
+
+// The throughput files are driver processes: they re-spawn themselves once per
+// case (example/stress/harness.ts), so they're slower than a plain bench and
+// get a wider timeout. Their only contract with us is the `case` line — the
+// composite file also prints a build timing, which we ignore.
+async function runThroughput(file: string): Promise<ThroughputSection> {
+	const started = performance.now()
+	try {
+		const result = await spawn(
+			[process.execPath, 'run', resolve(import.meta.dir, file)],
+			120_000
+		)
+
+		const cases: ThroughputRow[] = []
+		for (const match of result.stdout.matchAll(
+			/^case (.+): ([\d.]+) ns\/op \(min ([\d.]+)/gm
+		))
+			cases.push({
+				name: match[1]!,
+				medianNs: Number(match[2]),
+				minNs: Number(match[3])
+			})
+
+		if (!cases.length)
+			return {
+				file,
+				status: 'error',
+				cases,
+				durationMs: result.durationMs,
+				error: `no case lines parsed (exit ${result.exitCode}): ${head(result.stderr || result.stdout) || 'no output'}`
+			}
+
+		// Partial output still carries signal, so a non-zero exit with parsed
+		// cases is reported as ok-with-note rather than discarded.
+		return {
+			file,
+			status: 'ok',
+			cases,
+			durationMs: result.durationMs,
+			error:
+				result.exitCode === 0
+					? undefined
+					: `exit ${result.exitCode}: ${head(result.stderr)}`
+		}
+	} catch (cause) {
+		return {
+			file,
+			status: 'error',
+			cases: [],
+			durationMs: performance.now() - started,
+			error: cause instanceof Error ? cause.message : String(cause)
+		}
+	}
+}
+
+interface EmittedRow {
+	label: string
+	bytes: number | null
+	error?: string
+}
+
+interface EmittedSection {
+	status: 'ok' | 'error'
+	routes: EmittedRow[]
+	durationMs: number
+	error?: string
+}
+
+async function runEmittedSize(): Promise<EmittedSection> {
+	const started = performance.now()
+	try {
+		const result = await spawn([
+			process.execPath,
+			'run',
+			resolve(import.meta.dir, 'emitted-size.ts')
+		])
+
+		const routes: EmittedRow[] = []
+		for (const match of result.stdout.matchAll(
+			/^emitted (.+): (?:(\d+) bytes|error (.*))$/gm
+		))
+			routes.push(
+				match[2] === undefined
+					? { label: match[1]!, bytes: null, error: match[3] }
+					: { label: match[1]!, bytes: Number(match[2]) }
+			)
+
+		if (!routes.length)
+			return {
+				status: 'error',
+				routes,
+				durationMs: result.durationMs,
+				error: `no emitted lines parsed (exit ${result.exitCode}): ${head(result.stderr || result.stdout) || 'no output'}`
+			}
+
+		return {
+			status: 'ok',
+			routes,
+			durationMs: result.durationMs,
+			error:
+				result.exitCode === 0
+					? undefined
+					: `exit ${result.exitCode}: ${head(result.stderr)}`
+		}
+	} catch (cause) {
+		return {
+			status: 'error',
+			routes: [],
+			durationMs: performance.now() - started,
+			error: cause instanceof Error ? cause.message : String(cause)
+		}
+	}
+}
+
 const bundle = await measureBundle()
 for (const row of bundle.results)
 	console.log(
@@ -227,11 +354,36 @@ for (const name of benches) {
 	)
 }
 
+// Sequential — these are steady-state timers, and a concurrent sibling would
+// manufacture the tail spikes the harness exists to avoid.
+const throughput: ThroughputSection[] = []
+for (const file of ['throughput.ts', 'composite.ts']) {
+	const section = await runThroughput(file)
+	throughput.push(section)
+
+	for (const row of section.cases)
+		console.log(
+			`case ${row.name}: ${row.medianNs.toFixed(1)} ns/op (min ${row.minNs.toFixed(1)})`
+		)
+	if (section.error) console.log(`throughput ${file} error: ${section.error}`)
+}
+
+const emittedSize = await runEmittedSize()
+for (const row of emittedSize.routes)
+	console.log(
+		row.bytes === null
+			? `emitted ${row.label}: error ${row.error}`
+			: `emitted ${row.label}: ${row.bytes} bytes`
+	)
+if (emittedSize.error) console.log(`emitted-size error: ${emittedSize.error}`)
+
 const report = {
 	commit: process.env.GITHUB_SHA,
 	bundle,
 	invariants,
-	benches: benchRows
+	benches: benchRows,
+	throughput,
+	emittedSize
 }
 
 const cell = (text: string) => head(text, 120).replace(/\|/g, '\\|')
@@ -267,9 +419,36 @@ for (const row of benchRows)
 			: `| ${row.name} | error: ${cell(row.error ?? '')} | n/a |`
 	)
 
+markdown.push('', '### Throughput (in-process)', '')
+markdown.push('| case | ns/op (median) | min |')
+markdown.push('| --- | ---: | ---: |')
+for (const section of throughput) {
+	for (const row of section.cases)
+		markdown.push(
+			`| ${row.name} | ${row.medianNs.toFixed(1)} | ${row.minNs.toFixed(1)} |`
+		)
+	if (section.status === 'error')
+		markdown.push(`| ${section.file} | error | n/a |`)
+}
+for (const section of throughput)
+	if (section.error)
+		markdown.push('', `> Throughput ${section.file}: ${cell(section.error)}`)
+
+markdown.push('', '### Emitted route size', '')
+markdown.push('| route | bytes |')
+markdown.push('| --- | ---: |')
+for (const row of emittedSize.routes)
+	markdown.push(
+		row.bytes === null
+			? `| ${row.label} | error: ${cell(row.error ?? '')} |`
+			: `| ${row.label} | ${row.bytes} |`
+	)
+if (emittedSize.error)
+	markdown.push('', `> Emitted-size error: ${cell(emittedSize.error)}`)
+
 markdown.push(
 	'',
-	'> Timings and invariants are informational (shared-runner noise). Bundle size vs cap/baseline is the gate.',
+	'> Timings and throughput are informational (shared-runner noise). Bundle size and emitted route size are the deterministic signals; the bundle delta is the gate.',
 	''
 )
 

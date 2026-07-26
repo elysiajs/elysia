@@ -108,6 +108,17 @@ export interface ElysiaConfig<
 	 */
 	strictPath?: boolean
 
+	/**
+	 * Abort processing when request is aborted
+	 *
+	 * When enabled, Elysia checks the abort state after each lifecycle stage
+	 * and returns an empty response instead of running the remaining hooks and
+	 * handler.
+	 *
+	 * @default true
+	 */
+	abortSignal?: boolean
+
 	cookie?: CookieOptions & {
 		/**
 		 * Specified cookie name to be signed globally
