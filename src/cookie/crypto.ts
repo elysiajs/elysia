@@ -103,8 +103,10 @@ export const keyCache = new Map<string, Promise<CryptoKey>>()
 export function importSecretKey(secret: string): Promise<CryptoKey> {
 	let key = keyCache.get(secret)
 	if (key) {
-		keyCache.delete(secret)
-		keyCache.set(secret, key)
+		if (keyCache.size >= 256) {
+			keyCache.delete(secret)
+			keyCache.set(secret, key)
+		}
 
 		return key
 	}

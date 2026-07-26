@@ -470,16 +470,14 @@ export function clearSucroseCache(delay?: number | null) {
 	clearCache()
 }
 
-export function mergeInference(a: Sucrose.Inference, b: Sucrose.Inference) {
-	return {
-		body: a.body || b.body,
-		cookie: a.cookie || b.cookie,
-		headers: a.headers || b.headers,
-		query: a.query || b.query,
-		set: a.set || b.set,
-		route: a.route || b.route
-	}
-}
+export const mergeInference = (a: Sucrose.Inference, b: Sucrose.Inference) => ({
+	body: a.body || b.body,
+	cookie: a.cookie || b.cookie,
+	headers: a.headers || b.headers,
+	query: a.query || b.query,
+	set: a.set || b.set,
+	route: a.route || b.route
+})
 
 const defaultSucrose = (): Sucrose.Inference => ({
 	query: false,
@@ -1047,6 +1045,7 @@ function inferFunction(source: string): Sucrose.Inference {
 					if (closedPattern[1]) aliases.add(closedPattern[1])
 				}
 			}
+
 			continue
 		}
 
@@ -1070,8 +1069,10 @@ function inferFunction(source: string): Sucrose.Inference {
 		if (tokens[next]?.value === '[') {
 			const property = tokens[next + 1]
 			const key = property?.k === 's' && channel(property.value)
+
 			if (key && tokens[next + 2]?.value === ']') inference[key] = true
 			else markAllAccessed(inference)
+
 			if (
 				inference.query &&
 				inference.headers &&
@@ -1081,6 +1082,7 @@ function inferFunction(source: string): Sucrose.Inference {
 				inference.route
 			)
 				break
+
 			continue
 		}
 
@@ -1155,19 +1157,16 @@ export function sucrose(
 					inferred = Object.freeze(forged)
 					functionCaches.set(event, inferred)
 				} else {
-					let content: string
-					try {
-						content = Function.prototype.toString.call(event)
-					} catch {
-						content = ''
-					}
-
+					const content = event.toString()
 					const key = fnv1a(content)
 					const cached = caches.get(key)
+
 					if (cached && cached.content === content) {
 						inferred = cached.inference
-						caches.delete(key)
-						caches.set(key, cached)
+						if (caches.size >= DEFAULT_CACHE_LIMIT) {
+							caches.delete(key)
+							caches.set(key, cached)
+						}
 
 						if (typeof event === 'function')
 							functionCaches.set(event, inferred)

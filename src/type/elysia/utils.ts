@@ -63,8 +63,13 @@ export function createSharedReference<
 		const bucket = shared.get(h)
 
 		if (bucket?.key === canonicalKey) {
-			shared.delete(h)
-			shared.set(h, bucket)
+			// LRU-touch only at cap: per-hit delete+set permanently grows the
+			// JSC heap (bucket churn survives gc/clear)
+			if (shared.size >= SHARED_REFERENCE_CACHE_LIMIT) {
+				shared.delete(h)
+				shared.set(h, bucket)
+			}
+
 			return bucket.schema
 		}
 

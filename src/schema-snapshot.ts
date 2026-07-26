@@ -339,8 +339,10 @@ function internSchema<T>(schema: T, intern: boolean): T {
 		const shared = interned.get(key)
 
 		if (shared !== undefined) {
-			interned.delete(key)
-			interned.set(key, shared)
+			if (interned.size >= INTERN_LIMIT) {
+				interned.delete(key)
+				interned.set(key, shared)
+			}
 			hookSnapshots.set(object, shared)
 
 			return shared as T

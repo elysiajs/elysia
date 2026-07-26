@@ -17,8 +17,11 @@ export function StringType(options?: TStringOptions): TString {
 	if (totalOptions === 1 && options.format) {
 		const cached = stringFormatCache.get(options.format)
 		if (cached) {
-			stringFormatCache.delete(options.format)
-			stringFormatCache.set(options.format, cached)
+			if (stringFormatCache.size >= SHARED_REFERENCE_CACHE_LIMIT) {
+				stringFormatCache.delete(options.format)
+				stringFormatCache.set(options.format, cached)
+			}
+
 			return cached
 		}
 

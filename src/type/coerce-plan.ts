@@ -182,7 +182,7 @@ function coerceLeaf(leaf: CoerceLeaf, seen: Set<string>) {
 			}
 
 			coerceLeafCache.set(key, node)
-		} else {
+		} else if (coerceLeafCache.size >= COERCE_LEAF_CACHE_LIMIT) {
 			coerceLeafCache.delete(key)
 			coerceLeafCache.set(key, node)
 		}

@@ -374,8 +374,10 @@ export class TypeBoxValidatorCache {
 		const coercionsCache = this.#cache.get(key)
 
 		if (coercionsCache) {
-			this.#cache.delete(key)
-			this.#cache.set(key, coercionsCache)
+			if (this.#cache.size >= DEFAULT_CACHE_LIMIT) {
+				this.#cache.delete(key)
+				this.#cache.set(key, coercionsCache)
+			}
 
 			if (coercionsCache.has(coercions))
 				return coercionsCache.get(coercions)
