@@ -46,3 +46,35 @@ jobs:
       - name: 'Publish'
         run: |
           NODE_AUTH_TOKEN="" npm publish --provenance --access=public
+
+  benchmark:
+    name: Benchmark
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v4
+
+      - name: 'Setup Bun'
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install packages
+        run: bun install
+
+      - name: Benchmark report
+        run: bun run example/stress/ci-report.ts --json-out trace/bench-report.json --md-out trace/bench-report.md
+
+      - name: Append report to step summary
+        if: always()
+        run: cat trace/bench-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload benchmark report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-${{ github.event.release.tag_name || github.sha }}
+          path: |
+            trace/bench-report.json
+            trace/bench-report.md
