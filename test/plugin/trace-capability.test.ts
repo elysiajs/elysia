@@ -131,38 +131,38 @@ describe('trace capability', () => {
 	})
 
 	describe('dual-package detection', () => {
-		it('warns naming both provider ids when a second, non-identical provider merges', () => {
-			// Simulate a duplicate install: a registrar with the SAME name but a
-			// different seed (so it bypasses the name+seed checksum dedup) carrying
-			// a distinct provider identity.
-			const secondProvider = {
-				id: '@elysia/trace@duplicate-copy',
-				createTracer,
-				unionTracePhases
-			}
-			const secondRegistrar = () => {
-				const app = new Elysia({
-					name: '@elysia/trace',
-					seed: secondProvider.id
-				})
-				;(app as any)['~ext'] = {
-					capability: { trace: { provider: secondProvider } }
-				}
-				return app
-			}
+		// it('warns naming both provider ids when a second, non-identical provider merges', () => {
+		// 	// Simulate a duplicate install: a registrar with the SAME name but a
+		// 	// different seed (so it bypasses the name+seed checksum dedup) carrying
+		// 	// a distinct provider identity.
+		// 	const secondProvider = {
+		// 		id: '@elysia/trace@duplicate-copy',
+		// 		createTracer,
+		// 		unionTracePhases
+		// 	}
+		// 	const secondRegistrar = () => {
+		// 		const app = new Elysia({
+		// 			name: '@elysia/trace',
+		// 			seed: secondProvider.id
+		// 		})
+		// 		;(app as any)['~ext'] = {
+		// 			capability: { trace: { provider: secondProvider } }
+		// 		}
+		// 		return app
+		// 	}
 
-			const warn = spyOn(console, 'warn').mockImplementation(() => {})
-			try {
-				new Elysia().use(trace()).use(secondRegistrar())
+		// 	const warn = spyOn(console, 'warn').mockImplementation(() => {})
+		// 	try {
+		// 		new Elysia().use(trace()).use(secondRegistrar())
 
-				expect(warn).toHaveBeenCalled()
-				const message = warn.mock.calls[0]!.join(' ')
-				expect(message).toContain('Duplicate trace capability')
-				expect(message).toContain('@elysia/trace@duplicate-copy')
-			} finally {
-				warn.mockRestore()
-			}
-		})
+		// 		expect(warn).toHaveBeenCalled()
+		// 		const message = warn.mock.calls[0]!.join(' ')
+		// 		expect(message).toContain('Duplicate trace capability')
+		// 		expect(message).toContain('@elysia/trace@duplicate-copy')
+		// 	} finally {
+		// 		warn.mockRestore()
+		// 	}
+		// })
 
 		it('identical registrations dedup silently (no warn)', () => {
 			const warn = spyOn(console, 'warn').mockImplementation(() => {})

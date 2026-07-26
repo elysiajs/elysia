@@ -79,8 +79,8 @@ function isImmutableNode(value: object): boolean {
 }
 
 // set during a hook-path clone: owned nodes freeze on the way out (what makes
-// cross-route/cross-app sharing safe). Borrowed nodes stay unfrozen — freezing
-// a `Date` the user still holds would be a write to their object
+// cross-route/cross-app sharing safe)
+// Borrowed nodes stay unfrozen, freezing a `Date` the user still holds would be a write to their object
 let freezeClones = false
 
 function deepCloneSchema(
@@ -108,7 +108,6 @@ function deepCloneSchema(
 		return freezeClones ? Object.freeze(out) : out
 	}
 
-	// an immutable node is already isolated from later writes — keep it
 	if (canShare && isImmutableNode(value)) return value
 
 	const proto = Object.getPrototypeOf(value)
@@ -174,19 +173,9 @@ function deepCloneSchema(
 	return freezeClones ? Object.freeze(out) : out
 }
 
-// ── structural fingerprint ───────────────────────────────────────────────────
-//
-// Mirrors `deepCloneSchema` branch for branch: same fingerprint only when the
-// clones would be indistinguishable. Deliberately FINER than the validator
-// cache's JSON.stringify-shaped key, which is blind to prototype /
-// non-enumerable markers / symbols (`t.String()` vs `t.Unsafe({type:'string'})`
-// collide there). Finer only ever costs a share, never soundness.
 const refIds = new WeakMap<object | Function, number>()
 let nextRefId = 0
 
-// by-reference nodes (`Date`, callback, foreign instance, frozen singleton)
-// key on identity — two schemas with different `error`/`~codec` members must
-// never share a snapshot
 function refKey(value: object | Function): string {
 	let id = refIds.get(value)
 	if (id === undefined) refIds.set(value, (id = ++nextRefId))
@@ -194,8 +183,7 @@ function refKey(value: object | Function): string {
 	return 'r' + id + ';'
 }
 
-// symbol-keyed members can't be keyed structurally — a node holding one just
-// opts out of sharing
+// symbol-keyed members can't be keyed structurally, a node holding one opts out of sharing
 let fingerprintBail = false
 
 const byRefKey = (value: any): string =>
@@ -258,7 +246,11 @@ function fingerprint(
 	// different prototypes (`~kind` lives there) = different snapshots
 	let out =
 		'{' +
-		(proto === null ? 'p;' : proto === Object.prototype ? 'q;' : refKey(proto))
+		(proto === null
+			? 'p;'
+			: proto === Object.prototype
+				? 'q;'
+				: refKey(proto))
 
 	const keys = Object.getOwnPropertyNames(value)
 	const allEnumerable = Object.keys(value).length === keys.length
@@ -291,8 +283,6 @@ export function snapshotSchema<T>(schema: T): T {
 	const object = schema as unknown as object
 
 	if ('~standard' in object) return schema
-	// a frozen snapshot came from the intern table; handing it back would make
-	// `$id ??=` throw — fall through to a mutable clone
 	if (produced.has(object) && !Object.isFrozen(object)) return schema
 
 	const existing = modelSnapshots.get(object)
@@ -328,8 +318,6 @@ function internSchema<T>(schema: T, intern: boolean): T {
 	if ('~standard' in object) return schema
 	if (produced.has(object)) return schema
 
-	// the `.model()` clone carries the `$id` OpenAPI references — it keeps
-	// precedence over a shared snapshot
 	const model = modelSnapshots.get(object)
 	if (model) return model as T
 
@@ -342,9 +330,7 @@ function internSchema<T>(schema: T, intern: boolean): T {
 
 		try {
 			key = fingerprint(object, undefined, false)
-		} catch {
-			// too deep to walk: still snapshotted, just not shared
-		}
+		} catch {}
 
 		if (fingerprintBail) key = undefined
 	}

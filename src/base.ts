@@ -4317,12 +4317,8 @@ export class Elysia<
 		if (existingMacro) for (const k in existingMacro) baseline.add(k)
 		this.#macroBaseline = baseline
 
-		let result: unknown
-		try {
-			result = app(this)
-		} finally {
-			this.#macroBaseline = prevBaseline
-		}
+		const result = app(this)
+		this.#macroBaseline = prevBaseline
 
 		if (result && typeof (result as any).then === 'function') {
 			const beforeMacro = new Map(
