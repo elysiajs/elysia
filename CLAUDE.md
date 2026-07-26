@@ -9,10 +9,9 @@ Never assume the user's intent. Ask for clarification for ambiguous situations.
 Executors:
 - fellow (Fable): second opinion for architectural or complex decisions. For hardest problem only.
 - mechanical (Sonnet): mechanical for fast/small redundant tasks.
-- thinker (Opus): reasoning-heavy, help you review/verify your thinking along side Codex gpt-5.6-sol below.
-- Codex (/codex:rescue --background): peer engineer, different perspective. Second-opinion, executor reviewer/verifier.
-	- gpt-5.6-sol model with high effort: writing general-purpose code, good at following detailed instructions.
-	- gpt-5.6-sol model with xhigh effort: reasoning-heavy, treat as peer engineer with second opinion for code review, debugging, and complex problem solving.
+- thinker (Opus): reasoning-heavy, write code and help review/verify your thinking along side Codex gpt-5.6-sol below.
+- Codex (/codex:rescue --background): peer engineer, different perspective. Second-opinion, reviewer/verifier.
+	- gpt-5.6-sol model with high effort: reasoning-heavy, treat as peer engineer with second opinion for code review, debugging, and complex problem solving.
 
 For high reasoning tasks, code review, architecture decisions, use Codex gpt-5.6-sol to debate with your own reasoning as pushback to find flaws in your plan.
 
@@ -61,13 +60,12 @@ Use me for: classification, drafting, summarization, extraction.
 Do NOT use me for: routing, retries, deterministic transforms.
 If code can answer, code answers.
 
-## Rule 6 — Token budgets are not advisory
+## Rule 6 — Stay in Scope
 
-(skip for this session)
-
-Per-task: 350,000 tokens. Per-session: 1,000,000 tokens.
-If approaching budget, summarize and start fresh.
-Surface the breach. Do not silently overrun.
+Stick to the plan. Don't add features or change scope without discussion.
+Don't wander. Don't speculate.
+Use sub-agents to verify your idea and reasoning before raising it.
+If new idea emerges, surface it for discussion. Don't implement it without agreement.
 
 ## Rule 7 — Surface conflicts, don't average them
 

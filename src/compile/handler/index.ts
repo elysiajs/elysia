@@ -7,7 +7,7 @@ import { isBun } from '../../universal/constants'
 import { Capture, Compiled } from '../aot'
 import { frozenRootOf } from '../../generation'
 import { resolveHandlerParams } from './params'
-import { compileHandlerJit } from './jit'
+import { compileHandlerJit, createInlineHandler } from './jit'
 export { setCaptureHeaderShorthand } from './jit'
 import {
 	describeRoute,
@@ -27,6 +27,7 @@ import {
 	fnOrigin,
 	isCompactBeforeHandleOnly,
 	isLocalScope,
+	isNotEmpty,
 	macroEpoch,
 	mergeHook,
 	nullObject,
@@ -104,9 +105,9 @@ function applyHook(
 
 function collectHookOrigins(
 	hook: Partial<AnyLocalHook> | undefined,
-	into: Set<number>
-): void {
-	if (!hook) return
+	into: Set<number> | undefined
+): Set<number> | undefined {
+	if (!hook) return into
 
 	for (const key in hook) {
 		if (!eventProperties.has(key)) continue
@@ -117,13 +118,15 @@ function collectHookOrigins(
 		if (Array.isArray(v))
 			for (const fn of v) {
 				const origin = fnOrigin.get(fn as Function)
-				if (origin !== undefined) into.add(origin)
+				if (origin !== undefined) (into ??= new Set()).add(origin)
 			}
 		else {
 			const origin = fnOrigin.get(v as Function)
-			if (origin !== undefined) into.add(origin)
+			if (origin !== undefined) (into ??= new Set()).add(origin)
 		}
 	}
+
+	return into
 }
 
 function dropHooksByOrigin(
@@ -518,13 +521,12 @@ export function composeRouteHook(
 			? compactBeforeHandlePrefix(inheritedChain)
 			: undefined
 
-	const present = new Set<number>()
-	collectHookOrigins(localHook, present)
-	collectHookOrigins(flatAppHook as any, present)
+	let present = collectHookOrigins(localHook, undefined)
+	present = collectHookOrigins(flatAppHook as any, present)
 
 	if (
 		compactPrefix &&
-		present.size === 0 &&
+		!present?.size &&
 		!compactBeforeHandleConflicts(localHook as any) &&
 		!compactBeforeHandleConflicts(flatAppHook as any) &&
 		!compactBeforeHandleConflicts(locals as any)
@@ -548,7 +550,7 @@ export function composeRouteHook(
 				) as Partial<AppHook> | undefined)
 			: undefined
 
-	if ((inherited || locals) && (flatAppHook || localHook) && present.size) {
+	if ((inherited || locals) && (flatAppHook || localHook) && present?.size) {
 		if (inherited) inherited = dropHooksByOrigin(inherited, present)
 		if (locals) locals = dropHooksByOrigin(locals, present)
 	}
@@ -589,6 +591,18 @@ export function composeRouteHook(
 	return hook
 }
 
+const isBareArrow = /^(?:async\s*)?\(\s*\)\s*=>/
+const isSucroseOpaque = /arguments|eval|\[native code\]/
+
+function isContextFreeHandler(handler: Function) {
+	// A forged own `toString` makes sucrose widen every channel (sucrose.ts:1148)
+	if (Object.hasOwn(handler, 'toString')) return false
+
+	const source = Function.prototype.toString.call(handler)
+
+	return isBareArrow.test(source) && !isSucroseOpaque.test(source)
+}
+
 export function compileHandler(
 	[
 		_method,
@@ -603,10 +617,6 @@ export function compileHandler(
 	root: AnyElysia,
 	precomputedStatic?: Response
 ): CompiledHandler {
-	// Resolve capabilities before reading the frozen root, so direct-compiler
-	// paths (no prior seal) still throw when `.trace()` lacks `.use(trace())`.
-	root['~resolvedCapability']?.('trace')
-
 	const frozenRoot = frozenRootOf(root)
 	const adapter = frozenRoot['~config']?.adapter ?? defaultAdapter
 	const method = _method
@@ -725,6 +735,29 @@ export function compileHandler(
 					: undefined
 			})
 		) as CompiledHandler
+
+	// Bare-route fast path.
+	if (
+		hook === undefined &&
+		isHandleFunction &&
+		// the replacement at `if (precomputedStatic)` runs *after*
+		// `isHandleFunction` is computed, so the flag alone does not imply the
+		// handler is still callable
+		!precomputedStatic &&
+		!mountMeta &&
+		(method === 'GET' || method === 'HEAD') &&
+		!root['~hasTrace'] &&
+		root['~introspect'] !== true &&
+		root['~config']?.introspect !== true &&
+		!isNotEmpty(frozenRoot['~ext']?.headers) &&
+		!Capture.isAotBuildEnv() &&
+		!Capture.isCapturing() &&
+		isContextFreeHandler(handler as Function)
+	)
+		return createInlineHandler(
+			(adapter.response.compact ?? adapter.response.map) as any,
+			handler as any
+		)
 
 	const state = describeRoute({
 		method,

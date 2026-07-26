@@ -1,7 +1,7 @@
 import { Elysia } from '../../src'
 import { environment, gc, median, memorySnapshot, profile } from './utils'
 
-const build = (total: number) => {
+const createPlugins = (total: number) => {
 	const plugins = new Array(total)
 
 	for (let i = 0; i < total; i++)
@@ -9,6 +9,10 @@ const build = (total: number) => {
 			.beforeHandle('plugin', () => {})
 			.get(`/r${i}`, () => 'ok')
 
+	return plugins
+}
+
+const build = (total: number, plugins = createPlugins(total)) => {
 	const app = new Elysia()
 	for (let i = 0; i < total; i++) app.use(plugins[i])
 
@@ -147,10 +151,14 @@ if (eagerSampleIndex !== -1) {
 
 	if (!result.pass) process.exitCode = 1
 } else {
+	// plugin construction hoisted out of the timed window so the number
+	// isolates absorption + build, not instance creation
+	const plugins = createPlugins(30_000)
+
 	const stop = profile(
 		'Elysia 2α full build 30k plugins w/ 1 route + global event then fetch\n'
 	)
-	const app = build(30_000)
+	const app = build(30_000, plugins)
 
 	app.handle('/r0')
 

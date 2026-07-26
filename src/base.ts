@@ -32,7 +32,7 @@ import type {
 import { ListenCallback, Serve, Server } from './universal'
 import { isBun } from './universal/constants'
 
-import { isDynamicRegex, needEncodeRegex } from './constants'
+import { needEncodeRegex } from './constants'
 import {
 	buildRouteTable,
 	routeRow,
@@ -158,7 +158,6 @@ import type { Context, LifecycleContext, ErrorContext } from './context'
 export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
 
 const useNodesBuffer: ChainNode[] = []
-const plainRouteOwner = Object.freeze(nullObject()) as AnyElysia
 const emptyHistory = Object.freeze([]) as readonly HistoryEntry[]
 
 const canRegisterLoose = (path: string, isDynamic: boolean) =>
@@ -217,7 +216,7 @@ export class Elysia<
 		cleanup?: GracefulHandler<any>[]
 		// Severable capability channel. Populated by registrar plugins
 		// (`elysia/trace`, `elysia/websocket`) so the severed subsystem is
-		// reachable only through its dedicated entrypoint.
+		// reachable only through its dedicated entrypoint
 		capability?: {
 			trace?: { provider: TraceCapability }
 			ws?: { provider: WSCapability; options?: WSOptionsEntry[] }
@@ -593,7 +592,8 @@ export class Elysia<
 		name: string,
 		value: unknown
 	): this {
-		this.#assertMutable(field === 'store' ? 'state' : 'decorate')
+		if (this['~generation'] !== undefined)
+			this.#assertMutable(field === 'store' ? 'state' : 'decorate')
 		const ext = this.#ext
 		const fresh = !ext[field]
 		const target = (ext[field] ??= nullObject()) as Record<string, unknown>
@@ -861,9 +861,14 @@ export class Elysia<
 
 		if (type === 'trace') this['~hasTrace'] = true
 
+		const parent = this['~hookChain']
+
 		this['~hookChain'] = {
 			added,
-			parent: this['~hookChain'],
+			parent,
+			refs:
+				(parent !== undefined && parent.refs) ||
+				Elysia.#hookHasString(added as Record<string, unknown>),
 			scope,
 			owner: this
 		}
@@ -3255,7 +3260,7 @@ export class Elysia<
 		Volatile
 	>
 
-	guard(): any {
+	guard() {
 		if (arguments.length === 1)
 			return this.#guard('local', arguments[0] as Partial<AnyWSLocalHook>)
 
@@ -3718,9 +3723,14 @@ export class Elysia<
 
 		if (hook.trace) this['~hasTrace'] = true
 
+		const parent = this['~hookChain']
+
 		this['~hookChain'] = {
 			added: hook,
-			parent: this['~hookChain'],
+			parent,
+			refs:
+				(parent !== undefined && parent.refs) ||
+				Elysia.#hookHasString(hook as Record<string, unknown>),
 			scope,
 			owner: this
 		}
@@ -4277,45 +4287,9 @@ export class Elysia<
 
 	use(app: any): any {
 		if (!app) return this
-		this.#assertMutable('use')
+		if (this['~generation'] !== undefined) this.#assertMutable('use')
 
-		if (typeof app === 'function') {
-			const prevBaseline = this.#macroBaseline
-			const baseline = new Set<string>()
-			const existingMacro = this['~ext']?.macro
-
-			if (existingMacro) for (const k in existingMacro) baseline.add(k)
-			this.#macroBaseline = baseline
-
-			let result: unknown
-			try {
-				result = app(this)
-			} finally {
-				this.#macroBaseline = prevBaseline
-			}
-
-			if (result && typeof (result as any).then === 'function') {
-				const beforeMacro = new Map(
-					Object.entries(this['~ext']?.macro ?? nullObject())
-				)
-
-				return this.#useAsync(
-					(result as Promise<any>).then((value) => {
-						const after = this['~ext']?.macro
-						if (after)
-							for (const [k, def] of Object.entries(after))
-								if (beforeMacro.get(k) !== def)
-									throw new Error(
-										`Macro ${k} can only run in sync plugin`
-									)
-
-						return value
-					})
-				)
-			}
-
-			return this
-		}
+		if (typeof app === 'function') return this.#useFn(app)
 
 		if (typeof app.then === 'function') return this.#useAsync(app)
 
@@ -4324,13 +4298,7 @@ export class Elysia<
 			return this
 		}
 
-		// import default from ESM module
-		if (
-			typeof app === 'object' &&
-			'default' in app &&
-			app.default &&
-			!('~config' in app)
-		)
+		if (typeof app === 'object' && app.default && !('~config' in app))
 			return this.use(app.default)
 
 		if (app === this) return this
@@ -4341,13 +4309,52 @@ export class Elysia<
 		return this
 	}
 
+	#useFn(app: (app: any) => unknown): any {
+		const prevBaseline = this.#macroBaseline
+		const baseline = new Set<string>()
+		const existingMacro = this['~ext']?.macro
+
+		if (existingMacro) for (const k in existingMacro) baseline.add(k)
+		this.#macroBaseline = baseline
+
+		let result: unknown
+		try {
+			result = app(this)
+		} finally {
+			this.#macroBaseline = prevBaseline
+		}
+
+		if (result && typeof (result as any).then === 'function') {
+			const beforeMacro = new Map(
+				Object.entries(this['~ext']?.macro ?? nullObject())
+			)
+
+			return this.#useAsync(
+				(result as Promise<any>).then((value) => {
+					const after = this['~ext']?.macro
+					if (after)
+						for (const [k, def] of Object.entries(after))
+							if (beforeMacro.get(k) !== def)
+								throw new Error(
+									`Macro ${k} can only run in sync plugin`
+								)
+
+					return value
+				})
+			)
+		}
+
+		return this
+	}
+
 	#use(app: AnyElysia) {
 		let addedByThisCall: Set<number> | undefined
 
-		if (app['~introspect'] || app['~config']?.introspect)
-			this['~introspect'] = true
+		const config = app['~config']
 
-		const name = app['~config']?.name
+		if (app['~introspect'] || config?.introspect) this['~introspect'] = true
+
+		const name = config?.name
 		if (name) {
 			const hash = app.#hash!
 			if (this.#childrenHash?.has(hash)) return
@@ -4359,20 +4366,63 @@ export class Elysia<
 
 		this.#cachedRoutes = undefined
 
-		if (app.#childrenHash) {
-			if (this.#childrenHash) {
-				for (const h of app.#childrenHash) {
-					if (this.#childrenHash.has(h)) continue
-					this.#childrenHash.add(h)
-					;(addedByThisCall ??= new Set()).add(h)
-				}
-			} else {
-				this.#childrenHash = new Set(app.#childrenHash)
-				addedByThisCall ??= new Set()
-				for (const h of app.#childrenHash) addedByThisCall.add(h)
-			}
+		if (app.#childrenHash)
+			addedByThisCall = this.#absorbChildrenHash(app, addedByThisCall)
+
+		if (app['~ext']) this.#assertMacroUnique(app, addedByThisCall)
+		if (app['~hasTrace']) this['~hasTrace'] = true
+
+		if (app.#declaredRoutes === undefined && app['~routeTable']?.length)
+			app.#materializeDeclaredRoutes()
+
+		if (app.#declaredRoutes?.length) {
+			if (app['~hasWS']) this['~hasWS'] = true
+
+			this.#emitChildRoutes(app, this['~hookChain'], name)
 		}
 
+		if (app['~scopeChildren']) {
+			const children = (this['~scopeChildren'] ??= [])
+			for (const child of app['~scopeChildren']) children.push(child)
+		}
+
+		const hookChain = app['~hookChain']
+
+		if (app['~ext']) this.#absorbExt(app)
+
+		if (app.#hasPlugin || app.#hasGlobal || hookChain)
+			this.#propagateHooks(app, hookChain, addedByThisCall)
+	}
+
+	#absorbChildrenHash(
+		app: AnyElysia,
+		addedByThisCall: Set<number> | undefined
+	) {
+		const incoming = app.#childrenHash!
+
+		if (this.#childrenHash)
+			for (const h of incoming) {
+				if (this.#childrenHash.has(h)) continue
+
+				this.#childrenHash.add(h)
+				;(addedByThisCall ??= new Set()).add(h)
+			}
+		else {
+			this.#childrenHash = new Set(incoming)
+			addedByThisCall = new Set(incoming)
+		}
+
+		return addedByThisCall
+	}
+
+	/**
+	 * Reject a second, unrelated definition of an already-registered macro.
+	 * Split out of `#use` for the same reason as `#absorbExt`.
+	 */
+	#assertMacroUnique(
+		app: AnyElysia,
+		addedByThisCall: Set<number> | undefined
+	) {
 		const incomingMacro = app['~ext']?.macro as
 			| Record<string, unknown>
 			| undefined
@@ -4403,348 +4453,373 @@ export class Elysia<
 					`[Elysia] Macro "${macroName}" can be only define once`
 				)
 			}
+	}
 
-		if (app['~hasTrace']) this['~hasTrace'] = true
+	/**
+	 * Merge the absorbed app's `~ext` container into this one.
+	 *
+	 * `#use` needed a frame wide enoughfor every local in this block + `#propagateHooks`
+	 * JSC pays that width on *entry*, before a single field is read
+	 *
+	 * Keep the cold blocks in their own frames.
+	 */
+	#absorbExt(app: AnyElysia) {
+		const {
+			decorator,
+			store,
+			headers,
+			models,
+			parser,
+			macro,
+			error,
+			hoc,
+			setup,
+			cleanup,
+			capability
+		} = app['~ext']!
 
-		if (app.#declaredRoutes === undefined && app['~routeTable']?.length)
-			app.#materializeDeclaredRoutes()
+		const ext: NonNullable<(typeof this)['~ext']> = (this['~ext'] ??=
+			nullObject())
 
-		if (app.#declaredRoutes?.length) {
-			if (app['~hasWS']) this['~hasWS'] = true
-
-			this.#emitChildRoutes(app, this['~hookChain'], name)
+		if (decorator) {
+			if (ext.decorator)
+				mergeDeep(
+					ext.decorator,
+					decorator,
+					undefined,
+					true,
+					false,
+					undefined,
+					{ map: undefined }
+				)
+			else ext.decorator = clonePlainDecorators(decorator)
 		}
 
-		if (app['~scopeChildren']) {
-			const children = (this['~scopeChildren'] ??= [])
-			for (const child of app['~scopeChildren']) children.push(child)
+		if (store) {
+			if (ext.store) mergeDeep(ext.store, store)
+			else ext.store = Object.assign(nullObject(), store)
 		}
 
-		const hookChain = app['~hookChain']
+		if (headers) {
+			if (ext.headers) Object.assign(ext.headers, headers)
+			else ext.headers = Object.assign(nullObject(), headers)
+		}
 
-		if (app['~ext']) {
-			const {
-				decorator,
-				store,
-				headers,
-				models,
-				parser,
-				macro,
-				error,
-				hoc,
-				setup,
-				cleanup,
-				capability
-			} = app['~ext']
+		if (models) {
+			if (ext.models) Object.assign(ext.models, models)
+			else ext.models = Object.assign(nullObject(), models)
+		}
 
-			const ext: NonNullable<(typeof this)['~ext']> = (this['~ext'] ??=
-				nullObject())
+		if (parser) {
+			if (ext.parser) Object.assign(ext.parser, parser)
+			else ext.parser = Object.assign(nullObject(), parser)
+		}
 
-			if (decorator) {
-				const cloned = clonePlainDecorators(decorator)
-				if (ext.decorator) mergeDeep(ext.decorator, cloned)
-				else ext.decorator = Object.assign(nullObject(), cloned)
-			}
+		if (macro) {
+			if (app['~scopeChild']) {
+				const pluginMacros = app.#pluginMacros
+				let changed = false
 
-			if (store) {
-				if (ext.store) mergeDeep(ext.store, store)
-				else ext.store = Object.assign(nullObject(), store)
-			}
+				if (pluginMacros?.size) {
+					const target = this.#ensureMacroTable() as any
+					for (const [name, def] of pluginMacros)
+						if (!(name in target)) {
+							;(target as any)[name] = def
+							changed = true
 
-			if (headers) {
-				if (ext.headers) Object.assign(ext.headers, headers)
-				else ext.headers = Object.assign(nullObject(), headers)
-			}
-
-			if (models) {
-				if (ext.models) Object.assign(ext.models, models)
-				else ext.models = Object.assign(nullObject(), models)
-			}
-
-			if (parser) {
-				if (ext.parser) Object.assign(ext.parser, parser)
-				else ext.parser = Object.assign(nullObject(), parser)
-			}
-
-			if (macro) {
-				if (app['~scopeChild']) {
-					const pluginMacros = app.#pluginMacros
-					let changed = false
-
-					if (pluginMacros?.size) {
-						const target = this.#ensureMacroTable() as any
-						for (const [name, def] of pluginMacros)
-							if (!(name in target)) {
-								;(target as any)[name] = def
-								changed = true
-
-								if (this['~scopeChild'])
-									(this.#pluginMacros ??= new Map()).set(
-										name,
-										def
-									)
-							}
-					}
-					if (changed) invalidateMacroEpoch()
-				} else {
-					Object.assign(this.#ensureMacroTable(), macro)
-
-					if (this['~scopeChild']) {
-						const pluginMacros = (this.#pluginMacros ??= new Map())
-
-						for (const name in macro)
-							pluginMacros.set(name, (macro as any)[name])
-					}
-
-					invalidateMacroEpoch()
+							if (this['~scopeChild'])
+								(this.#pluginMacros ??= new Map()).set(
+									name,
+									def
+								)
+						}
 				}
-			}
+				if (changed) invalidateMacroEpoch()
+			} else {
+				Object.assign(this.#ensureMacroTable(), macro)
 
-			if (error) {
-				if (ext.error)
-					for (const [code, handler] of error)
-						ext.error.set(code, handler)
-				else ext.error = new Map(error)
-			}
+				if (this['~scopeChild']) {
+					const pluginMacros = (this.#pluginMacros ??= new Map())
 
-			if (hoc) {
-				if (ext.hoc) {
-					const seen = new Set(ext.hoc)
-					for (const fn of hoc)
-						if (!seen.has(fn)) {
-							seen.add(fn)
-							ext.hoc.push(fn)
-						}
-				} else ext.hoc = hoc.slice()
-			}
-
-			if (setup) {
-				if (ext.setup) {
-					const seen = new Set(ext.setup)
-					for (const fn of setup)
-						if (!seen.has(fn)) {
-							seen.add(fn)
-							ext.setup.push(fn)
-						}
-				} else ext.setup = setup.slice()
-			}
-
-			if (cleanup) {
-				if (ext.cleanup) {
-					const seen = new Set(ext.cleanup)
-					for (const fn of cleanup)
-						if (!seen.has(fn)) {
-							seen.add(fn)
-							ext.cleanup.push(fn)
-						}
-				} else ext.cleanup = cleanup.slice()
-			}
-
-			if (capability) {
-				// Each instance owns its `capability` container (scope children
-				// get an own container at creation, below), so writing here never
-				// bleeds into a shared parent. Slots hold immutable provider
-				// singletons; a child's own registration replaces its slot object
-				// rather than mutating the shared one.
-				const target = (ext.capability ??= nullObject())
-
-				if (capability.trace) {
-					const incoming = capability.trace.provider
-					if (!target.trace) target.trace = { provider: incoming }
-					else if (target.trace.provider !== incoming)
-						// Dual-package: a second, non-identical provider. Nearest
-						// root (existing) wins; name both copies so the duplicate
-						// install is actionable. Identical singletons never reach
-						// here (name+seed checksum dedups first).
-						console.warn(
-							`[Elysia] Duplicate trace capability providers detected:\n  ${target.trace.provider.id}\n  ${incoming.id}\nUsing the first; ensure a single copy of 'elysia/trace' is installed.`
-						)
+					for (const name in macro)
+						pluginMacros.set(name, (macro as any)[name])
 				}
 
-				if (capability.ws) {
-					const incoming = capability.ws.provider
-					const existing = target.ws
-					const incomingOptions = capability.ws.options
+				invalidateMacroEpoch()
+			}
+		}
 
-					if (!existing)
-						// Fresh slot: clone incoming entries at depth + 1 (one more
-						// `.use()` hop). Never alias the source app's entry objects.
-						target.ws = {
-							provider: incoming,
-							options: incomingOptions?.length
-								? incomingOptions.map((entry) => ({
-										depth: entry.depth + 1,
-										value: entry.value,
-										origin: entry.origin
-									}))
-								: undefined
-						}
-					else {
-						if (existing.provider !== incoming)
-							// Dual-package (see trace above): nearest root wins.
-							console.warn(
-								`[Elysia] Duplicate WebSocket capability providers detected:\n  ${existing.provider.id}\n  ${incoming.id}\nUsing the first; ensure a single copy of 'elysia/websocket' is installed.`
-							)
+		if (error) {
+			if (ext.error)
+				for (const [code, handler] of error)
+					ext.error.set(code, handler)
+			else ext.error = new Map(error)
+		}
 
-						if (incomingOptions?.length) {
-							// Copy-on-write: a scope child shares the parent's ws
-							// slot by reference (read-through copy at creation), so
-							// pushing in place would corrupt the parent. Dedup by
-							// deterministic `origin` (diamond deps, merge-back).
-							const base: WSOptionsEntry[] =
-								existing.options ?? []
-							const seen = new Set(
-								base.map((e: WSOptionsEntry) => e.origin)
-							)
-							let next: WSOptionsEntry[] | undefined
+		if (hoc) {
+			if (ext.hoc) {
+				const seen = new Set(ext.hoc)
+				for (const fn of hoc)
+					if (!seen.has(fn)) {
+						seen.add(fn)
+						ext.hoc.push(fn)
+					}
+			} else ext.hoc = hoc.slice()
+		}
 
-							for (const entry of incomingOptions) {
-								if (seen.has(entry.origin)) continue
-								seen.add(entry.origin)
-								;(next ??= base.slice()).push({
+		if (setup) {
+			if (ext.setup) {
+				const seen = new Set(ext.setup)
+				for (const fn of setup)
+					if (!seen.has(fn)) {
+						seen.add(fn)
+						ext.setup.push(fn)
+					}
+			} else ext.setup = setup.slice()
+		}
+
+		if (cleanup) {
+			if (ext.cleanup) {
+				const seen = new Set(ext.cleanup)
+				for (const fn of cleanup)
+					if (!seen.has(fn)) {
+						seen.add(fn)
+						ext.cleanup.push(fn)
+					}
+			} else ext.cleanup = cleanup.slice()
+		}
+
+		if (capability) {
+			const target = (ext.capability ??= nullObject())
+
+			if (capability.trace) {
+				const incoming = capability.trace.provider
+
+				if (!target.trace) target.trace = { provider: incoming }
+				// ? Doesn't really need
+				// else if (target.trace.provider !== incoming)
+				// 	console.warn(
+				// 		`[Elysia] Duplicate trace capability providers detected:\n  ${target.trace.provider.id}\n  ${incoming.id}\nUsing the first; ensure a single copy of 'elysia/trace' is installed.`
+				// 	)
+			}
+
+			if (capability.ws) {
+				const incoming = capability.ws.provider
+				const existing = target.ws
+				const incomingOptions = capability.ws.options
+
+				if (!existing)
+					target.ws = {
+						provider: incoming,
+						options: incomingOptions?.length
+							? incomingOptions.map((entry) => ({
 									depth: entry.depth + 1,
 									value: entry.value,
 									origin: entry.origin
-								})
-							}
+								}))
+							: undefined
+					}
+				else {
+					// ? Doesn't really need
+					// if (existing.provider !== incoming)
+					// 	// Dual-package (see trace above): nearest root wins.
+					// 	console.warn(
+					// 		`[Elysia] Duplicate WebSocket capability providers detected:\n  ${existing.provider.id}\n  ${incoming.id}\nUsing the first; ensure a single copy of 'elysia/websocket' is installed.`
+					// 	)
 
-							if (next)
-								target.ws = {
-									provider: existing.provider,
-									options: next
-								}
+					if (incomingOptions?.length) {
+						const base: WSOptionsEntry[] = existing.options ?? []
+						const seen = new Set(
+							base.map((e: WSOptionsEntry) => e.origin)
+						)
+						let next: WSOptionsEntry[] | undefined
+
+						for (const entry of incomingOptions) {
+							if (seen.has(entry.origin)) continue
+							seen.add(entry.origin)
+							;(next ??= base.slice()).push({
+								depth: entry.depth + 1,
+								value: entry.value,
+								origin: entry.origin
+							})
 						}
+
+						if (next)
+							target.ws = {
+								provider: existing.provider,
+								options: next
+							}
 					}
 				}
 			}
 		}
+	}
 
-		if (app.#hasPlugin || app.#hasGlobal || hookChain) {
-			let pluginEvents: Partial<AppHook> | undefined
-			let globalEvents: Partial<AppHook> | undefined
+	/**
+	 * Republish the absorbed app's plugin/global hooks onto this instance's chain.
+	 * Split out from #use, see #absorbExt
+	 */
+	#propagateHooks(
+		app: AnyElysia,
+		hookChain: ChainNode | undefined,
+		addedByThisCall: Set<number> | undefined
+	) {
+		let pluginEvents: Partial<AppHook> | undefined
+		let globalEvents: Partial<AppHook> | undefined
 
-			if (app.#hasGlobal) this.#hasGlobal = true
+		let pluginMayRef = false
+		let globalMayRef = false
 
-			const nodes = useNodesBuffer
-			nodes.length = 0
-			let current: ChainNode | undefined = hookChain
+		if (app.#hasGlobal) this.#hasGlobal = true
 
-			while (current) {
-				if ('combine' in current) {
-					current = current.over
-					continue
-				}
+		const nodes = useNodesBuffer
+		nodes.length = 0
+		let current: ChainNode | undefined = hookChain
 
-				nodes.push(current)
-				current = current.parent
+		while (current) {
+			if ('combine' in current) {
+				current = current.over
+				continue
 			}
 
-			for (let i = nodes.length - 1; i >= 0; i--) {
-				const node = nodes[i] as {
-					added: Partial<AppHook>
-					scope?: EventScope
-					propagated?: boolean
-				}
-				const nodeScope = node.scope
-				if (nodeScope !== 'plugin' && nodeScope !== 'global') continue
+			nodes.push(current)
+			current = current.parent
+		}
 
-				if (nodeScope === 'plugin' && node.propagated) continue
+		for (let i = nodes.length - 1; i >= 0; i--) {
+			const node = nodes[i] as {
+				added: Partial<AppHook>
+				scope?: EventScope
+				propagated?: boolean
+			}
+			const nodeScope = node.scope
+			if (nodeScope !== 'plugin' && nodeScope !== 'global') continue
 
-				const isGlobal = nodeScope === 'global'
-				const added = node.added
+			if (nodeScope === 'plugin' && node.propagated) continue
 
-				for (const key in added) {
-					if (key === 'schemas') {
-						const schemas = (added as any).schemas as
-							| any[]
-							| undefined
+			const isGlobal = nodeScope === 'global'
+			const added = node.added
 
-						if (!schemas) continue
+			const keys = Object.keys(added)
+			for (let k = 0; k < keys.length; k++) {
+				const key = keys[k]
 
-						const target = isGlobal
-							? (globalEvents ??= nullObject())
-							: (pluginEvents ??= nullObject())
+				if (key === 'schemas') {
+					const schemas = (added as any).schemas as any[] | undefined
 
-						for (const s of schemas) {
-							;((target as any).schemas ??= []).push(s)
-							if (isGlobal) this.#hasGlobal = true
-						}
-
-						continue
-					}
-
-					if (key === 'schema') continue
-
-					if (eventProperties.has(key)) {
-						const raw = (added as any)[key] as Function | Function[]
-
-						const fns: Function[] = Array.isArray(raw)
-							? raw
-							: [raw as Function]
-
-						for (const fn of fns) {
-							const origin = fnOrigin.get(fn)
-							if (
-								origin !== undefined &&
-								this.#childrenHash?.has(origin) &&
-								!addedByThisCall?.has(origin)
-							)
-								continue
-
-							const target = isGlobal
-								? (globalEvents ??= nullObject())
-								: (pluginEvents ??= nullObject())
-
-							pushField(target, key, fn)
-							if (isGlobal) this.#hasGlobal = true
-						}
-						continue
-					}
-
-					if (key === '~deriveEntries') {
-						// turning them into early-returning guards). Over-inclusion
-						// is harmless: codegen consults it only for fns actually in
-						// `beforeHandle`, so no origin-dedup is needed here.
-						const entries = (added as any)[key] as
-							| unknown[]
-							| undefined
-						if (!entries) continue
-
-						const target = isGlobal
-							? (globalEvents ??= nullObject())
-							: (pluginEvents ??= nullObject())
-						const list = ((target as any)[key] ??= [])
-						for (let j = 0; j < entries.length; j++)
-							list.push(entries[j])
-						continue
-					}
+					if (!schemas) continue
 
 					const target = isGlobal
 						? (globalEvents ??= nullObject())
 						: (pluginEvents ??= nullObject())
-					;(target as any)[key] = (added as any)[key]
+
+					if (isGlobal) globalMayRef = true
+					else pluginMayRef = true
+
+					for (const s of schemas) {
+						;((target as any).schemas ??= []).push(s)
+						if (isGlobal) this.#hasGlobal = true
+					}
+
+					continue
 				}
+
+				if (key === 'schema') continue
+
+				if (eventProperties.has(key)) {
+					const raw = (added as any)[key] as Function | Function[]
+
+					const many = Array.isArray(raw)
+					const count = many ? (raw as Function[]).length : 1
+
+					for (let f = 0; f < count; f++) {
+						const fn = many
+							? (raw as Function[])[f]
+							: (raw as Function)
+
+						const childrenHash = this.#childrenHash
+						if (childrenHash !== undefined) {
+							const origin = fnOrigin.get(fn)
+							if (
+								origin !== undefined &&
+								childrenHash.has(origin) &&
+								!addedByThisCall?.has(origin)
+							)
+								continue
+						}
+
+						const target = isGlobal
+							? (globalEvents ??= nullObject())
+							: (pluginEvents ??= nullObject())
+
+						pushField(target, key, fn)
+						if (isGlobal) this.#hasGlobal = true
+					}
+
+					continue
+				}
+
+				if (key === '~deriveEntries') {
+					const entries = (added as any)[key] as unknown[] | undefined
+					if (!entries) continue
+
+					const target = isGlobal
+						? (globalEvents ??= nullObject())
+						: (pluginEvents ??= nullObject())
+
+					const list = ((target as any)[key] ??= [])
+					for (let j = 0; j < entries.length; j++)
+						list.push(entries[j])
+
+					continue
+				}
+
+				const target = isGlobal
+					? (globalEvents ??= nullObject())
+					: (pluginEvents ??= nullObject())
+
+				if (isGlobal) globalMayRef = true
+				else pluginMayRef = true
+				;(target as any)[key] = (added as any)[key]
 			}
+		}
 
-			nodes.length = 0
+		nodes.length = 0
 
-			if (globalEvents)
-				this['~hookChain'] = {
-					added: globalEvents,
-					parent: this['~hookChain'],
-					scope: 'global',
-					propagated: true,
-					owner: app
-				}
+		if (globalEvents) {
+			const parent = this['~hookChain']
 
-			if (pluginEvents)
-				this['~hookChain'] = {
-					added: pluginEvents,
-					parent: this['~hookChain'],
-					scope: 'plugin',
-					propagated: true,
-					owner: app
-				}
+			this['~hookChain'] = {
+				added: globalEvents,
+				parent,
+				refs:
+					(parent !== undefined && parent.refs) ||
+					(globalMayRef &&
+						Elysia.#hookHasString(
+							globalEvents as Record<string, unknown>
+						)),
+				scope: 'global',
+				propagated: true,
+				owner: app
+			}
+		}
+
+		if (pluginEvents) {
+			const parent = this['~hookChain']
+
+			this['~hookChain'] = {
+				added: pluginEvents,
+				parent,
+				refs:
+					(parent !== undefined && parent.refs) ||
+					(pluginMayRef &&
+						Elysia.#hookHasString(
+							pluginEvents as Record<string, unknown>
+						)),
+				scope: 'plugin',
+				propagated: true,
+				owner: app
+			}
 		}
 	}
 
@@ -4774,13 +4849,13 @@ export class Elysia<
 				lastChildChain = childChain
 				inheritedChain = lastCombined = {
 					combine: childChain,
-					over: preChain
+					over: preChain,
+					refs: childChain.refs || preChain.refs
 				}
 			}
 
 			this.#emitRoute(
 				route,
-				app,
 				this['~scopeChild'] ? this : undefined,
 				this['~Prefix'],
 				inheritedChain,
@@ -4791,13 +4866,11 @@ export class Elysia<
 
 	#emitRoute(
 		route: InternalRoute,
-		owner: AnyElysia,
 		macroScope: AnyElysia | undefined,
 		prefix: string | undefined,
 		inheritedChain: ChainNode | undefined,
 		source: string | undefined
 	) {
-		owner = this.#compactRouteOwner(owner, route)
 		const path = prefix ? joinPath(prefix, route[1]) : route[1]
 		macroScope =
 			route[7] ??
@@ -4806,17 +4879,17 @@ export class Elysia<
 				? macroScope
 				: undefined)
 
+		// The owner is carried over untouched, so an unprefixed fan-in that
+		// neither combines a hook chain nor inherits a macro scope reuses the
+		// child's tuple object outright — no copy, no allocation.
 		this.#registerRoute(
-			inheritedChain === route[6] &&
-				!prefix &&
-				macroScope === route[7] &&
-				owner === route[3]
+			inheritedChain === route[6] && !prefix && macroScope === route[7]
 				? route
 				: ([
 						route[0],
 						path,
 						route[2],
-						owner,
+						route[3],
 						route[4],
 						route[5],
 						inheritedChain,
@@ -4824,56 +4897,6 @@ export class Elysia<
 					] as unknown as InternalRoute),
 			source
 		)
-	}
-
-	#compactRouteOwner(app: AnyElysia, route: InternalRoute): AnyElysia {
-		if (route[3] !== app) return route[3]
-
-		if (
-			route[0] === 'WS' ||
-			route[4] !== undefined ||
-			route[7] !== undefined ||
-			typeof route[2] !== 'function' ||
-			(route[2] as any)['~mount']
-		)
-			return route[3]
-
-		if (Capture.isAotBuildEnv() || Capture.isCapturing()) return route[3]
-
-		// compiler safety boundary
-		if (
-			app['~ext'] !== undefined ||
-			app['~hookChain'] !== undefined ||
-			app['~Prefix'] !== undefined ||
-			app['~scopeChild'] === true ||
-			app['~scopeChildren'] !== undefined ||
-			app['~hasWS'] === true ||
-			app['~hasDynamicWS'] === true ||
-			app['~hasTrace'] === true ||
-			app['~router'] !== undefined ||
-			app['~map'] !== undefined ||
-			app.server !== undefined ||
-			app.#hasPlugin === true ||
-			app.#hasGlobal === true ||
-			app.#ready !== undefined ||
-			app.#pending !== 0 ||
-			app.#error !== undefined ||
-			app.#childrenHash !== undefined ||
-			app.#scopeParent !== undefined ||
-			app.#pluginMacros !== undefined ||
-			app.#macroBaseline !== undefined ||
-			app.#compiled !== undefined ||
-			app.#fetchFn !== undefined ||
-			app.#routerBuilt
-		)
-			return route[3]
-
-		const config = app['~config'] as Record<string, unknown> | undefined
-		if (config)
-			for (const key in config)
-				if (key !== 'name' && key !== 'seed') return route[3]
-
-		return plainRouteOwner
 	}
 
 	get modules(): Promise<void> {
@@ -4969,13 +4992,42 @@ export class Elysia<
 
 		const appHook = this['~hookChain']
 
-		this.#registerRoute(
+		// `#registerRoute`'s body, minus the `source` half it can never reach
+		// from here — `#add` has no plugin name to record. JSC does not inline
+		// the call at this depth (`.get()` → `#add` → `#registerRoute`), and
+		// that one frame is ~2ns of the ~15ns a bare `.get()` costs, which the
+		// 100k-route startup bench feels (-0.5ms/100k). Factoring the clear
+		// storm below into a shared method shrinks `#registerRoute` enough to
+		// deduplicate this, but the extra call then lands on the `.use()`
+		// fan-in path and costs more there than it saves here — hence the
+		// copy. Keep it in step with `#registerRoute`;
+		// test/core/registration-invariants.test.ts pins the two together.
+		if (this['~generation'] !== undefined) this.#assertMutable('route')
+		;(this.#declaredRoutes ?? this.#materializeDeclaredRoutes()).push(
 			(appHook
 				? [method, path, handler, this, hook, appHook]
 				: hook
 					? [method, path, handler, this, hook]
 					: [method, path, handler, this]) as unknown as InternalRoute
 		)
+
+		if (
+			this.#routerBuilt ||
+			this.#compiled !== undefined ||
+			this.#cachedRoutes !== undefined ||
+			this.#cachedHistory !== undefined
+		) {
+			this.#cachedHistory = undefined
+			this.#cachedRoutes = undefined
+			this.#compiled = undefined
+			this.#jitColdRemaining = undefined
+			this.#jitTable = undefined
+			this.#jitRoute = undefined
+			this.#jitStatic = undefined
+			this.#jitAliases = undefined
+			this.#fetchFn = undefined
+			this.#routerBuilt = false
+		}
 
 		return this
 	}
@@ -4999,24 +5051,38 @@ export class Elysia<
 	}
 
 	#registerRoute(route: InternalRoute, source?: string) {
-		this.#assertMutable('route')
+		if (this['~generation'] !== undefined) this.#assertMutable('route')
 
-		const routes = this.#materializeDeclaredRoutes()
+		const routes = this.#declaredRoutes ?? this.#materializeDeclaredRoutes()
 		const sequence = routes.length
 		routes.push(route)
 
 		if (source) (this.#routeSources ??= [])[sequence] = source
 
-		this.#cachedHistory = undefined
-		this.#cachedRoutes = undefined
-		this.#compiled = undefined
-		this.#jitColdRemaining = undefined
-		this.#jitTable = undefined
-		this.#jitRoute = undefined
-		this.#jitStatic = undefined
-		this.#jitAliases = undefined
-		this.#fetchFn = undefined
-		this.#routerBuilt = false
+		// Everything below is derived state, populated only by a router build,
+		// an explicit `.handler()` call, or the `history` / `routes` getters.
+		// `#routerBuilt` covers `#fetchFn` and `#jitColdRemaining` (both are only
+		// ever set with a built router), and `#compiled` covers the four `#jit*`
+		// staging arrays (`#jitHandler` is only reachable through `handler()`,
+		// which allocates `#compiled` first). On the `.use()` fan-in path none of
+		// them is populated, so the clear storm is pure per-route overhead.
+		if (
+			this.#routerBuilt ||
+			this.#compiled !== undefined ||
+			this.#cachedRoutes !== undefined ||
+			this.#cachedHistory !== undefined
+		) {
+			this.#cachedHistory = undefined
+			this.#cachedRoutes = undefined
+			this.#compiled = undefined
+			this.#jitColdRemaining = undefined
+			this.#jitTable = undefined
+			this.#jitRoute = undefined
+			this.#jitStatic = undefined
+			this.#jitAliases = undefined
+			this.#fetchFn = undefined
+			this.#routerBuilt = false
+		}
 	}
 
 	model<const Name extends string, const Model extends AnySchema>(
@@ -6782,7 +6848,9 @@ export class Elysia<
 	}
 
 	#saveHandler(method: string, path: string, handler: CompiledHandler) {
-		if (isDynamicRegex.test(path)) return
+		// Matches `isDynamicRegex = /[:*]/` (src/constants.ts) without the
+		// regex-engine call overhead on this per-route hot path.
+		if (path.indexOf(':') !== -1 || path.indexOf('*') !== -1) return
 
 		this.#initMap()
 
@@ -6790,27 +6858,36 @@ export class Elysia<
 		map[path] = handler
 	}
 
-	#chainRefMemo?: WeakMap<ChainNode, boolean>
-
+	// Slots are spelled out instead of looped over `schemaProperties` because
+	// this runs once per hook-chain node creation and once per route during the
+	// router build: a dynamic `h[key]` is a generic `get_by_val` on a
+	// megamorphic hook object, while the constant keys below are inline-cached
+	// `get_by_id`.
+	// Keep in sync with `schemaProperties` (src/utils.ts).
 	static #slotHasString(h: Record<string, unknown> | undefined) {
 		if (!h || typeof h !== 'object') return false
 
-		for (const key of schemaProperties) {
-			const v = h[key]
-			if (typeof v === 'string') return true
+		if (
+			typeof h.body === 'string' ||
+			typeof h.headers === 'string' ||
+			typeof h.params === 'string' ||
+			typeof h.query === 'string' ||
+			typeof h.cookie === 'string'
+		)
+			return true
 
-			if (key === 'response' && v && typeof v === 'object') {
-				const record = v as Record<string, unknown>
-				if (
-					'~kind' in record ||
-					'~elyAcl' in record ||
-					'~standard' in record
-				)
-					continue
+		const response = h.response
+		if (typeof response === 'string') return true
 
+		if (response && typeof response === 'object') {
+			const record = response as Record<string, unknown>
+			if (
+				!('~kind' in record) &&
+				!('~elyAcl' in record) &&
+				!('~standard' in record)
+			)
 				for (const status in record)
 					if (typeof record[status] === 'string') return true
-			}
 		}
 
 		return false
@@ -6832,73 +6909,15 @@ export class Elysia<
 		return false
 	}
 
-	#chainHasModelRef(start: ChainNode | undefined): boolean {
-		if (!start) return false
-
-		const memo = (this.#chainRefMemo ??= new WeakMap())
-		const cached = memo.get(start)
-		if (cached !== undefined) return cached
-
-		const nodes: ChainNode[] = [start]
-		const phases = [0]
-
-		while (nodes.length) {
-			const node = nodes.pop()!
-			const phase = phases.pop()!
-
-			if (memo.get(node) !== undefined) continue
-
-			if (phase === 0) {
-				if (
-					'added' in node &&
-					Elysia.#hookHasString(
-						node.added as Record<string, unknown> | undefined
-					)
-				) {
-					memo.set(node, true)
-					continue
-				}
-
-				nodes.push(node)
-				phases.push(1)
-
-				if ('combine' in node) {
-					if (memo.get(node.combine) === undefined) {
-						nodes.push(node.combine)
-						phases.push(0)
-					}
-					if (node.over && memo.get(node.over) === undefined) {
-						nodes.push(node.over)
-						phases.push(0)
-					}
-				} else if (node.parent && memo.get(node.parent) === undefined) {
-					nodes.push(node.parent)
-					phases.push(0)
-				}
-
-				continue
-			}
-
-			memo.set(
-				node,
-				'combine' in node
-					? (memo.get(node.combine) ?? false) ||
-							(node.over ? (memo.get(node.over) ?? false) : false)
-					: node.parent
-						? (memo.get(node.parent) ?? false)
-						: false
-			)
-		}
-
-		return memo.get(start)!
-	}
-
 	// Reads the needed columns directly off the columnar table so the gate
 	// loop never materializes an 8-slot row for a route that has no model ref.
+	//
+	// The app-level sources (`~ext.macro`, `~scopeChildren` and the app hook
+	// chain) are identical for every route, so `#buildRouterUnsafe` resolves
+	// them once before the loop and only calls this when all three came back
+	// clean — this checks the per-route sources alone.
 	#routeMayHaveModelRef(table: RouteTable, i: number): boolean {
-		if (this['~ext']?.macro || this['~scopeChildren']) return true
-
-		const macroScope = table.macroScope.get(i) // route[7]
+		const macroScope = table.macroScope?.get(i) // route[7]
 		const owner = table.owner[i] // route[3]
 
 		const localRoot = localMacroRoot(
@@ -6917,14 +6936,16 @@ export class Elysia<
 		)
 			return true
 
-		// Chain sources: route[5] (appHook), route[6] (inheritedChain)
-		return (
-			this.#chainHasModelRef(table.appHook[i] as ChainNode | undefined) ||
-			this.#chainHasModelRef(
-				table.inheritedChain[i] as ChainNode | undefined
-			) ||
-			this.#chainHasModelRef(this['~hookChain'])
-		)
+		// Chain sources: route[5] (appHook), route[6] (inheritedChain).
+		// `~hookChain` is the caller's hoisted third source. Every node carries
+		// the answer for its whole ancestry (`refs`, computed at creation), so
+		// no walk is needed here.
+		const appHook = table.appHook[i] as ChainNode | undefined
+		if (appHook !== undefined && appHook.refs) return true
+
+		const inheritedChain = table.inheritedChain[i] as ChainNode | undefined
+
+		return inheritedChain !== undefined && inheritedChain.refs
 	}
 
 	#assertRouteModelRefs(route: InternalRoute, method: string) {
@@ -7065,7 +7086,15 @@ export class Elysia<
 			'~ext': this['~ext'],
 			'~hookChain': this['~hookChain'],
 			'~scopeChildren': this['~scopeChildren'],
-			'~applyMacro': this['~applyMacro'].bind(this),
+			// Every consumer (src/compile/handler/index.ts:274,281,355,362)
+			// reads `~applyMacro` off the same frozen view it just found a
+			// truthy `~ext.macro` on, so a macro-less app never calls it — and
+			// `.macro()` / `.use()` both `#assertMutable`, so `~ext.macro`
+			// cannot appear after publish without a re-publish recomputing this.
+			// Keep the slot present so the generation shape stays monomorphic.
+			'~applyMacro': (this['~ext']?.macro
+				? this['~applyMacro'].bind(this)
+				: undefined) as AnyElysia['~applyMacro'],
 			'~programId': this['~programId'],
 			// Freeze the resolved WS config so post-seal consumers (Bun adapter
 			// via `resolvedWsOf`) read the build output even when publication
@@ -7156,9 +7185,24 @@ export class Elysia<
 		const flags = table.flags
 		const length = table.length
 
-		for (let i = 0; i < length; i++)
-			if (this.#routeMayHaveModelRef(table, i))
+		// Model-ref gate. Three of its sources are app-level and therefore the
+		// same answer for every route, so resolve them once here: a 30k-route
+		// fan-in used to re-walk the (30k node deep) app hook chain head per
+		// route. When any of them carries a string every route is a candidate
+		// anyway, which is exactly what the per-route gate used to report.
+		const appChain = this['~hookChain']
+
+		if (
+			this['~ext']?.macro ||
+			this['~scopeChildren'] ||
+			(appChain !== undefined && appChain.refs)
+		) {
+			for (let i = 0; i < length; i++)
 				this.#assertRouteModelRefs(routeRow(table, i), method[i])
+		} else
+			for (let i = 0; i < length; i++)
+				if (this.#routeMayHaveModelRef(table, i))
+					this.#assertRouteModelRefs(routeRow(table, i), method[i])
 
 		if (length)
 			Compiled.claim(

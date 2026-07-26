@@ -4,6 +4,7 @@ import type { TNumberOptions } from 'typebox'
 
 import { isEmpty } from '../../utils'
 import { ELYSIA_TYPES } from '../constants'
+import { pureRefine } from '../shared'
 import { Integer } from './integer'
 import { NumberType } from './number'
 import { StringType } from './string'
@@ -17,20 +18,23 @@ type IntegerStringSchema = Type.TUnion<
 >
 let emptyIntegerString: Readonly<IntegerStringSchema>
 export function IntegerString(property?: TNumberOptions) {
-	// Decimal-only integer grammar: optional sign + digits, no hex/scientific/whitespace (L14)
-	StringifiedInteger ??= Decode(
-		Refine(
-			StringType(),
-			(value) => /^[+-]?\d+$/.test(value) && Number.isInteger(+value),
-			() => 'must be integer'
-		),
-		(value) => +value
+	StringifiedInteger ??= pureRefine(
+		Decode(
+			Refine(
+				StringType(),
+				(value) => /^[+-]?\d+$/.test(value) && Number.isInteger(+value),
+				() => 'must be integer'
+			),
+			(value) => +value
+		)
 	)
 
-	StrictInteger ??= Refine(
-		NumberType(),
-		(value) => Number.isInteger(value),
-		() => 'must be integer'
+	StrictInteger ??= pureRefine(
+		Refine(
+			NumberType(),
+			(value) => Number.isInteger(value),
+			() => 'must be integer'
+		)
 	)
 
 	if (!property || isEmpty(property))
@@ -77,6 +81,9 @@ export function IntegerString(property?: TNumberOptions) {
 		),
 		(value) => +value
 	)
+
+	// pure: reads only `c`, which is never mutated after `getMeta`
+	pureRefine(stringified)
 
 	return elyType(
 		ELYSIA_TYPES.Integer,

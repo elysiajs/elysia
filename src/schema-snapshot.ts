@@ -1,8 +1,29 @@
-// original user object -> our snapshot
-const snapshots = new WeakMap<object, object>()
+import { env } from './universal'
+
+const modelSnapshots = new WeakMap<object, object>()
+const hookSnapshots = new WeakMap<object, object>()
+
+// structural fingerprint -> shared frozen snapshot. Process-wide is safe:
+// functions/Dates/foreign instances are keyed by identity in `fingerprint`,
+// so apps holding different callbacks can never land on the same entry
+const interned = new Map<string, object>()
+
+// insertion-order LRU, same policy as `TypeBoxValidatorCache`
+const INTERN_LIMIT = 1024
 
 // set of snapshots produced for idempotency (snapshot fed back in)
 const produced = new WeakSet<object>()
+
+// prototype -> `isClonableProto` verdict (one walk per shared `~kind` proto)
+const clonableProtos = new WeakMap<object, boolean>()
+
+// node -> may the snapshot keep it by reference? A frozen node whose own
+// properties are all primitive data can never change again, so cloning it
+// (e.g. the `t.String()` singleton, once per route) only produces a slower
+// equal. Roots are excluded, see `canShare`
+const immutableNodes = new WeakMap<object, boolean>()
+
+const isEnumerable = Object.prototype.propertyIsEnumerable
 
 const schemaProtoMarkers = new Set(['~kind', '~standard', '~unsafe'])
 const schemaSlots = ['body', 'query', 'params', 'headers', 'cookie'] as const
@@ -10,61 +31,276 @@ const schemaSlots = ['body', 'query', 'params', 'headers', 'cookie'] as const
 function isClonableProto(proto: object | null): boolean {
 	if (proto === null || proto === Object.prototype) return true
 
+	const memo = clonableProtos.get(proto)
+	if (memo !== undefined) return memo
+
+	let clonable = true
+
 	for (const key of Object.getOwnPropertyNames(proto))
-		if (!schemaProtoMarkers.has(key)) return false
+		if (!schemaProtoMarkers.has(key)) {
+			clonable = false
+			break
+		}
 
-	if (Object.getOwnPropertySymbols(proto).length) return false
+	if (clonable && Object.getOwnPropertySymbols(proto).length) clonable = false
+	if (clonable) clonable = isClonableProto(Object.getPrototypeOf(proto))
 
-	return isClonableProto(Object.getPrototypeOf(proto))
+	clonableProtos.set(proto, clonable)
+
+	return clonable
 }
 
-function deepCloneSchema(value: any, seen: WeakMap<object, object>): any {
+function isImmutableNode(value: object): boolean {
+	const memo = immutableNodes.get(value)
+	if (memo !== undefined) return memo
+
+	// unfrozen = fresh per-route object; memoising it would only churn the map
+	if (!Object.isFrozen(value)) return false
+
+	let immutable = true
+
+	for (const key of Reflect.ownKeys(value)) {
+		const descriptor = Object.getOwnPropertyDescriptor(value, key)!
+
+		// an accessor may answer differently on every read, and an object value
+		// stays mutable behind the frozen node holding it
+		if (
+			!('value' in descriptor) ||
+			(descriptor.value !== null && typeof descriptor.value === 'object')
+		) {
+			immutable = false
+			break
+		}
+	}
+
+	immutableNodes.set(value, immutable)
+
+	return immutable
+}
+
+// set during a hook-path clone: owned nodes freeze on the way out (what makes
+// cross-route/cross-app sharing safe). Borrowed nodes stay unfrozen — freezing
+// a `Date` the user still holds would be a write to their object
+let freezeClones = false
+
+function deepCloneSchema(
+	value: any,
+	// plain Map on purpose: call-scoped, WeakMap is ~40% slower per entry on JSC
+	seen?: Map<object, object>,
+	// callers write to the returned root (`.model()` stamps `$id`), so a root
+	// is always a private, mutable clone
+	canShare = true
+): any {
 	if (value === null || typeof value !== 'object') return value
 
-	const cached = seen.get(value)
+	const cached = seen?.get(value)
 	if (cached) return cached
 
 	if (Array.isArray(value)) {
 		const out: any[] = []
+
+		seen ??= new Map()
 		seen.set(value, out)
+
 		for (let i = 0; i < value.length; i++)
 			out[i] = deepCloneSchema(value[i], seen)
-		return out
+
+		return freezeClones ? Object.freeze(out) : out
 	}
+
+	// an immutable node is already isolated from later writes — keep it
+	if (canShare && isImmutableNode(value)) return value
 
 	const proto = Object.getPrototypeOf(value)
 	if (!isClonableProto(proto)) return value
 
 	const out: Record<keyof any, any> = Object.create(proto)
+
+	seen ??= new Map()
 	seen.set(value, out)
 
-	const descriptors = Object.getOwnPropertyDescriptors(value)
-	for (const key of Reflect.ownKeys(descriptors)) {
-		const desc = (descriptors as any)[key]
-		if (desc.enumerable && 'value' in desc)
-			desc.value = deepCloneSchema(desc.value, seen)
+	const keys = Object.getOwnPropertyNames(value)
 
-		Object.defineProperty(out, key, desc)
+	// one length compare stands in for a `propertyIsEnumerable` call per key
+	const allEnumerable = Object.keys(value).length === keys.length
+
+	for (let i = 0; i < keys.length; i++) {
+		const key = keys[i]!
+		const property = value[key]
+
+		// non-enumerable markers (`~kind`, `~optional`, ...) are copied by
+		// reference, matching `copyNonEnumerable`
+		if (!allEnumerable && !isEnumerable.call(value, key)) {
+			Object.defineProperty(out, key, {
+				value: property,
+				enumerable: false,
+				writable: true,
+				configurable: true
+			})
+
+			continue
+		}
+
+		const cloned = deepCloneSchema(property, seen)
+
+		// `out.__proto__ = x` reaches the `Object.prototype` setter and
+		// re-parents `out` instead of creating an own property
+		if (key === '__proto__')
+			Object.defineProperty(out, key, {
+				value: cloned,
+				enumerable: true,
+				writable: true,
+				configurable: true
+			})
+		else out[key] = cloned
 	}
 
-	return out
+	const symbols = Object.getOwnPropertySymbols(value)
+	for (let i = 0; i < symbols.length; i++) {
+		const key = symbols[i]!
+		const property = value[key]
+
+		if (isEnumerable.call(value, key))
+			out[key] = deepCloneSchema(property, seen)
+		else
+			Object.defineProperty(out, key, {
+				value: property,
+				enumerable: false,
+				writable: true,
+				configurable: true
+			})
+	}
+
+	return freezeClones ? Object.freeze(out) : out
 }
 
+// ── structural fingerprint ───────────────────────────────────────────────────
+//
+// Mirrors `deepCloneSchema` branch for branch: same fingerprint only when the
+// clones would be indistinguishable. Deliberately FINER than the validator
+// cache's JSON.stringify-shaped key, which is blind to prototype /
+// non-enumerable markers / symbols (`t.String()` vs `t.Unsafe({type:'string'})`
+// collide there). Finer only ever costs a share, never soundness.
+const refIds = new WeakMap<object | Function, number>()
+let nextRefId = 0
+
+// by-reference nodes (`Date`, callback, foreign instance, frozen singleton)
+// key on identity — two schemas with different `error`/`~codec` members must
+// never share a snapshot
+function refKey(value: object | Function): string {
+	let id = refIds.get(value)
+	if (id === undefined) refIds.set(value, (id = ++nextRefId))
+
+	return 'r' + id + ';'
+}
+
+// symbol-keyed members can't be keyed structurally — a node holding one just
+// opts out of sharing
+let fingerprintBail = false
+
+const byRefKey = (value: any): string =>
+	value !== null && (typeof value === 'object' || typeof value === 'function')
+		? refKey(value)
+		: fingerprint(value, undefined)
+
+function fingerprint(
+	value: any,
+	seen: Map<object, number> | undefined,
+	canShare = true
+): string {
+	if (value === null) return 'z;'
+
+	const type = typeof value
+	if (type !== 'object') {
+		switch (type) {
+			// length-prefixed so `{a:'b',c:''}` and `{a:'b,c'}` cannot collide
+			case 'string':
+				return 's' + value.length + ':' + value
+			case 'number':
+				return 'n' + value + ';'
+			case 'boolean':
+				return value ? 'T;' : 'F;'
+			case 'function':
+				return refKey(value)
+			case 'undefined':
+				return 'u;'
+			case 'bigint':
+				return 'g' + value + ';'
+			default:
+				fingerprintBail = true
+
+				return 'y;'
+		}
+	}
+
+	const backReference = seen?.get(value)
+	if (backReference !== undefined) return 'b' + backReference + ';'
+
+	if (Array.isArray(value)) {
+		seen ??= new Map()
+		seen.set(value, seen.size)
+
+		let out = '['
+		for (let i = 0; i < value.length; i++)
+			out += fingerprint(value[i], seen)
+
+		return out + '];'
+	}
+
+	if (canShare && isImmutableNode(value)) return refKey(value)
+
+	const proto = Object.getPrototypeOf(value)
+	if (!isClonableProto(proto)) return refKey(value)
+
+	seen ??= new Map()
+	seen.set(value, seen.size)
+
+	// different prototypes (`~kind` lives there) = different snapshots
+	let out =
+		'{' +
+		(proto === null ? 'p;' : proto === Object.prototype ? 'q;' : refKey(proto))
+
+	const keys = Object.getOwnPropertyNames(value)
+	const allEnumerable = Object.keys(value).length === keys.length
+
+	for (let i = 0; i < keys.length; i++) {
+		const key = keys[i]!
+		const property = value[key]
+
+		out += 'k' + key.length + ':' + key
+
+		// non-enumerable markers clone by reference, so they key by identity
+		out +=
+			!allEnumerable && !isEnumerable.call(value, key)
+				? '!' + byRefKey(property)
+				: '=' + fingerprint(property, seen)
+	}
+
+	if (Object.getOwnPropertySymbols(value).length) fingerprintBail = true
+
+	return out + '};'
+}
+
+/**
+ * The `.model()` snapshot: a private, MUTABLE clone. `base.ts` stamps `$id` onto
+ * the node this returns, so it is never frozen and never interned.
+ */
 export function snapshotSchema<T>(schema: T): T {
-	// undefined / null / strings (model refs) / non-objects pass through
 	if (schema === null || typeof schema !== 'object') return schema
 
 	const object = schema as unknown as object
 
 	if ('~standard' in object) return schema
-	if (produced.has(object)) return schema
+	// a frozen snapshot came from the intern table; handing it back would make
+	// `$id ??=` throw — fall through to a mutable clone
+	if (produced.has(object) && !Object.isFrozen(object)) return schema
 
-	const existing = snapshots.get(object)
+	const existing = modelSnapshots.get(object)
 	if (existing) return existing as T
 
 	let cloned: object
 	try {
-		cloned = deepCloneSchema(object, new WeakMap()) as object
+		cloned = deepCloneSchema(object, undefined, false) as object
 	} catch (error) {
 		console.warn(
 			'[Elysia] schema snapshot failed; schema kept by reference:',
@@ -74,20 +310,91 @@ export function snapshotSchema<T>(schema: T): T {
 		return schema
 	}
 
-	snapshots.set(object, cloned)
+	modelSnapshots.set(object, cloned)
 	produced.add(cloned)
 
 	return cloned as T
 }
 
-function snapshotSlots(target: Record<string, any>): boolean {
-	let touched = false
+/**
+ * The route/guard hook snapshot: deep-frozen, and shared with every
+ * structurally identical schema in the process.
+ */
+function internSchema<T>(schema: T, intern: boolean): T {
+	if (schema === null || typeof schema !== 'object') return schema
 
-	for (const slot of schemaSlots)
-		if (target[slot] != null) {
-			target[slot] = snapshotSchema(target[slot])
-			touched = true
+	const object = schema as unknown as object
+
+	if ('~standard' in object) return schema
+	if (produced.has(object)) return schema
+
+	// the `.model()` clone carries the `$id` OpenAPI references — it keeps
+	// precedence over a shared snapshot
+	const model = modelSnapshots.get(object)
+	if (model) return model as T
+
+	const existing = hookSnapshots.get(object)
+	if (existing) return existing as T
+
+	let key: string | undefined
+	if (intern) {
+		fingerprintBail = false
+
+		try {
+			key = fingerprint(object, undefined, false)
+		} catch {
+			// too deep to walk: still snapshotted, just not shared
 		}
+
+		if (fingerprintBail) key = undefined
+	}
+
+	if (key !== undefined) {
+		const shared = interned.get(key)
+
+		if (shared !== undefined) {
+			interned.delete(key)
+			interned.set(key, shared)
+			hookSnapshots.set(object, shared)
+
+			return shared as T
+		}
+	}
+
+	let cloned: object
+	freezeClones = true
+	try {
+		cloned = deepCloneSchema(object, undefined, false) as object
+	} catch (error) {
+		console.warn(
+			'[Elysia] schema snapshot failed; schema kept by reference:',
+			error
+		)
+
+		return schema
+	} finally {
+		freezeClones = false
+	}
+
+	hookSnapshots.set(object, cloned)
+	produced.add(cloned)
+
+	if (key !== undefined) {
+		if (interned.size >= INTERN_LIMIT) {
+			const oldest = interned.keys().next().value
+			if (oldest !== undefined) interned.delete(oldest)
+		}
+
+		interned.set(key, cloned)
+	}
+
+	return cloned as T
+}
+
+function snapshotSlots(target: Record<string, any>, intern: boolean): void {
+	for (const slot of schemaSlots)
+		if (target[slot] != null)
+			target[slot] = internSchema(target[slot], intern)
 
 	const response = target.response
 	if (response != null) {
@@ -98,14 +405,10 @@ function snapshotSlots(target: Record<string, any>): boolean {
 		) {
 			const next: Record<string, any> = {}
 			for (const status in response)
-				next[status] = snapshotSchema(response[status])
+				next[status] = internSchema(response[status], intern)
 			target.response = next
-		} else target.response = snapshotSchema(response)
-
-		touched = true
+		} else target.response = internSchema(response, intern)
 	}
-
-	return touched
 }
 
 function isStatusMap(response: Record<string, any>): boolean {
@@ -145,12 +448,18 @@ export function snapshotHookSchemas<T extends Record<string, any> | undefined>(
 
 	if (!needsCopy) return hook
 
+	// an AOT build must see one snapshot per registration, not the intern
+	// table's shared graph. `ELYSIA_AOT_BUILD` (unlike `Capture.isCapturing()`)
+	// cannot throw on this every-route path. Freezing is NOT gated: writes must
+	// fail identically in both modes.
+	const intern = !env.ELYSIA_AOT_BUILD
+
 	const copy: Record<string, any> = Object.assign(
 		Object.create(Object.getPrototypeOf(hook)),
 		hook
 	)
 
-	snapshotSlots(copy)
+	snapshotSlots(copy, intern)
 
 	if (Array.isArray(schemas)) {
 		copy.schemas = schemas.map((entry) => {
@@ -160,7 +469,7 @@ export function snapshotHookSchemas<T extends Record<string, any> | undefined>(
 				Object.create(Object.getPrototypeOf(entry)),
 				entry
 			)
-			snapshotSlots(entryCopy)
+			snapshotSlots(entryCopy, intern)
 
 			return entryCopy
 		})

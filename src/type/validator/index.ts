@@ -29,6 +29,7 @@ import {
 } from '../coerce'
 
 import { ELYSIA_TYPES } from '../constants'
+import { isPureRefinement } from '../shared'
 import { Validator, type ValidatorOptions } from '../../validator'
 
 import {
@@ -57,7 +58,7 @@ import {
 	verifyPreallocatableDefault
 } from './default-precompute'
 import { buildFindCustomError } from './custom-error'
-export { TypeBoxValidatorCache } from './validator-cache'
+export { TypeBoxValidatorCache, mayHaveFileType } from './validator-cache'
 import {
 	isFullyClosedObject,
 	schemaContainsRef,
@@ -77,8 +78,22 @@ interface Refinement {
 }
 
 interface RefinementGroup {
-	refinements: Refinement[]
 	checks: Array<(value: unknown) => unknown>
+	/**
+	 * Every member is a framework-owned predicate tagged by `pureRefine`
+	 * (the Numeric / IntegerString / BooleanString coercion grammars). Those are
+	 * pure and stateless, so the recording pool — which exists solely to keep a
+	 * USER refinement single-evaluated across the check pass and the failure
+	 * path `Errors()` walk — buys nothing: re-running the predicate during
+	 * `Errors()` is guaranteed to return the same verdict. A pure group installs
+	 * no wrapper and is left out of `#refinements`, so a schema whose only
+	 * refinements are pure keeps `#validate`'s no-pool fast path.
+	 *
+	 * A group with ANY non-pure member (including a user `t.Refine` stacked on
+	 * top of a framework one, which yields a mixed `~refine` array) is `false`
+	 * and keeps the recording behaviour verbatim.
+	 */
+	pure: boolean
 }
 
 interface RefineSlot {
@@ -149,60 +164,65 @@ function collectRefinements(
 
 			if (members.length) {
 				group = {
-					refinements: members,
-					checks: members.map((refinement) => refinement.check)
+					checks: members.map((refinement) => refinement.check),
+					pure: members.every(isPureRefinement)
 				}
 				refinementGroups.set(refinements, group)
 
-				for (let index = 0; index < members.length; index++) {
-					const refinement = members[index]
-					refinement.check = function (value: unknown) {
-						const validation = activeRefineValidation
-						const slot = validation?.slots.get(group!)
-						if (slot === undefined)
-							return group!.checks[index].call(this, value)
+				if (!group.pure)
+					for (let index = 0; index < members.length; index++) {
+						const refinement = members[index]
+						refinement.check = function (value: unknown) {
+							const validation = activeRefineValidation
+							const slot = validation?.slots.get(group!)
+							if (slot === undefined)
+								return group!.checks[index].call(this, value)
 
-						if (!validation!.replay) {
-							if (slot.epoch !== validation!.epoch) {
-								slot.epoch = validation!.epoch
+							if (!validation!.replay) {
+								if (slot.epoch !== validation!.epoch) {
+									slot.epoch = validation!.epoch
+									slot.occurrences = 0
+									slot.recorded = 0
+								}
+
+								if (index === 0) {
+									const occurrence = slot.occurrences++
+									slot.recorded = slot.occurrences
+
+									let results = slot.verdicts[occurrence]
+									if (results === undefined)
+										slot.verdicts[occurrence] = results = []
+
+									const checks = group!.checks
+									for (let i = 0; i < checks.length; i++)
+										results[i] = Boolean(
+											checks[i].call(this, value)
+										)
+								}
+
+								return slot.verdicts[slot.occurrences - 1]![
+									index
+								]
+							}
+
+							if (slot.replayEpoch !== validation!.replayEpoch) {
+								slot.replayEpoch = validation!.replayEpoch
 								slot.occurrences = 0
-								slot.recorded = 0
 							}
 
-							if (index === 0) {
-								const occurrence = slot.occurrences++
-								slot.recorded = slot.occurrences
+							if (index === 0) slot.occurrences++
 
-								let results = slot.verdicts[occurrence]
-								if (results === undefined)
-									slot.verdicts[occurrence] = results = []
+							if (slot.occurrences > slot.recorded) return true
 
-								const checks = group!.checks
-								for (let i = 0; i < checks.length; i++)
-									results[i] = Boolean(
-										checks[i].call(this, value)
-									)
-							}
-
-							return slot.verdicts[slot.occurrences - 1]![index]
+							return slot.verdicts[slot.occurrences - 1][index]
 						}
-
-						if (slot.replayEpoch !== validation!.replayEpoch) {
-							slot.replayEpoch = validation!.replayEpoch
-							slot.occurrences = 0
-						}
-
-						if (index === 0) slot.occurrences++
-
-						if (slot.occurrences > slot.recorded) return true
-
-						return slot.verdicts[slot.occurrences - 1][index]
 					}
-				}
 			}
 		}
 
-		if (group) out.add(group)
+		// pure groups need no verdict slot — leaving them out is what keeps
+		// `#refinements` (and therefore the pool) empty for a coerced query
+		if (group && !group.pure) out.add(group)
 	}
 
 	const maps = [

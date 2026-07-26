@@ -427,20 +427,27 @@ type SourceCache = Map<
 	{ content: string; inference: Sucrose.Inference }
 >
 
-const sourceCache = () =>
-	getCompilerSession()?.sucroseCache as SourceCache | undefined
+const globalSourceCache: SourceCache = new Map()
+
+function sourceCache() {
+	const session = getCompilerSession()
+
+	return session?.external
+		? (session.sucroseCache as SourceCache)
+		: globalSourceCache
+}
 
 let functionCaches = new WeakMap<Function, Sucrose.Inference>()
 
 function rememberInference(
-	caches: SourceCache | undefined,
+	caches: SourceCache,
 	key: number,
 	cached: { content: string; inference: Sucrose.Inference } | undefined,
 	content: string,
 	event: unknown,
 	inference: Sucrose.Inference
 ) {
-	if (caches && (!cached || cached.content !== content)) {
+	if (!cached || cached.content !== content) {
 		if (caches.size >= DEFAULT_CACHE_LIMIT) {
 			const oldest = caches.keys().next().value
 			if (oldest !== undefined) caches.delete(oldest)
@@ -448,11 +455,13 @@ function rememberInference(
 
 		caches.set(key, { content, inference })
 	}
+
 	if (typeof event === 'function') functionCaches.set(event, inference)
 }
 
 function clearCache() {
-	sourceCache()?.clear()
+	globalSourceCache.clear()
+	getCompilerSession()?.sucroseCache.clear()
 	functionCaches = new WeakMap()
 }
 
@@ -480,6 +489,8 @@ const defaultSucrose = (): Sucrose.Inference => ({
 	set: false,
 	route: false
 })
+
+const emptyInference = Object.freeze(defaultSucrose())
 
 function push(target: unknown[], array: unknown[]) {
 	for (let i = 0; i < array.length; i++) target.push(array[i])
@@ -1086,94 +1097,117 @@ function inferFunction(source: string): Sucrose.Inference {
 	return inference
 }
 
+// Reuse buffer instead of reallocated per call
+const eventsBuffer: Handler[] = []
+let eventsBufferInUse = false
+
 export function sucrose(
 	handler: Handler | undefined,
 	lifeCycle: Sucrose.LifeCycle | undefined
 ): Sucrose.Inference {
 	let inference: Sucrose.Inference | undefined
+	let merged = false
 
-	const events: Handler[] = []
+	const reentrant = eventsBufferInUse
+	const events: Handler[] = reentrant ? [] : eventsBuffer
+	eventsBufferInUse = true
 
-	if (handler && typeof handler === 'function') events.push(handler)
-	if (lifeCycle) {
-		if (lifeCycle.request?.length) push(events, lifeCycle.request)
-		if (lifeCycle.beforeHandle?.length) push(events, lifeCycle.beforeHandle)
-		if (lifeCycle.parse?.length) pushParse(events, lifeCycle.parse)
-		if (lifeCycle.error?.length) push(events, lifeCycle.error)
-		if (lifeCycle.transform?.length) push(events, lifeCycle.transform)
-		if (lifeCycle.afterHandle?.length) push(events, lifeCycle.afterHandle)
-		if (lifeCycle.mapResponse?.length) push(events, lifeCycle.mapResponse)
-		if (lifeCycle.afterResponse?.length)
-			push(events, lifeCycle.afterResponse)
-	}
+	try {
+		if (handler && typeof handler === 'function') events.push(handler)
+		if (lifeCycle) {
+			if (lifeCycle.request?.length) push(events, lifeCycle.request)
 
-	const caches = sourceCache()
+			if (lifeCycle.beforeHandle?.length)
+				push(events, lifeCycle.beforeHandle)
 
-	for (let i = 0; i < events.length; i++) {
-		const event = events[i]
-		if (!event) continue
+			if (lifeCycle.parse?.length) pushParse(events, lifeCycle.parse)
+			if (lifeCycle.error?.length) push(events, lifeCycle.error)
+			if (lifeCycle.transform?.length) push(events, lifeCycle.transform)
 
-		let inferred = functionCaches.get(event as Function)
-		if (!inferred) {
-			if (
-				typeof event === 'function' &&
-				Object.hasOwn(event, 'toString')
-			) {
-				// An own `toString` is a forged source: the real behavior
-				// cannot be trusted from it, so widen every channel and memo
-				// by identity only, never by content
-				// console.warn(
-				// 	'[Sucrose] warning: handler source is untrusted (own toString). Conservative all-access fallback used'
-				// )
+			if (lifeCycle.afterHandle?.length)
+				push(events, lifeCycle.afterHandle)
 
-				const forged = defaultSucrose()
-				markAllAccessed(forged)
+			if (lifeCycle.mapResponse?.length)
+				push(events, lifeCycle.mapResponse)
 
-				inferred = Object.freeze(forged)
-				functionCaches.set(event, inferred)
-			} else {
-				let content: string
-				try {
-					content = Function.prototype.toString.call(event)
-				} catch {
-					content = ''
-				}
-
-				const key = fnv1a(content)
-				const cached = caches?.get(key)
-				if (cached && cached.content === content) {
-					inferred = cached.inference
-					caches!.delete(key)
-					caches!.set(key, cached)
-
-					if (typeof event === 'function')
-						functionCaches.set(event, inferred)
-				} else {
-					inferred = Object.freeze(inferFunction(content))
-					rememberInference(
-						caches,
-						key,
-						cached,
-						content,
-						event,
-						inferred
-					)
-				}
-			}
+			if (lifeCycle.afterResponse?.length)
+				push(events, lifeCycle.afterResponse)
 		}
 
-		inference = inference ? mergeInference(inference, inferred) : inferred
+		const caches = sourceCache()
 
-		if (
-			inference.query &&
-			inference.headers &&
-			inference.body &&
-			inference.cookie &&
-			inference.set &&
-			inference.route
-		)
-			break
+		for (let i = 0; i < events.length; i++) {
+			const event = events[i]
+			if (!event) continue
+
+			let inferred = functionCaches.get(event as Function)
+			if (!inferred) {
+				if (
+					typeof event === 'function' &&
+					Object.hasOwn(event, 'toString')
+				) {
+					// An own `toString` is a forged source: the real behavior
+					// cannot be trusted from it, so widen every channel and memo
+					// by identity only, never by content
+					const forged = defaultSucrose()
+					markAllAccessed(forged)
+
+					inferred = Object.freeze(forged)
+					functionCaches.set(event, inferred)
+				} else {
+					let content: string
+					try {
+						content = Function.prototype.toString.call(event)
+					} catch {
+						content = ''
+					}
+
+					const key = fnv1a(content)
+					const cached = caches.get(key)
+					if (cached && cached.content === content) {
+						inferred = cached.inference
+						caches.delete(key)
+						caches.set(key, cached)
+
+						if (typeof event === 'function')
+							functionCaches.set(event, inferred)
+					} else {
+						inferred = Object.freeze(inferFunction(content))
+						rememberInference(
+							caches,
+							key,
+							cached,
+							content,
+							event,
+							inferred
+						)
+					}
+				}
+			}
+
+			if (inference) {
+				inference = mergeInference(inference, inferred)
+				merged = true
+			} else inference = inferred
+
+			if (
+				inference.query &&
+				inference.headers &&
+				inference.body &&
+				inference.cookie &&
+				inference.set &&
+				inference.route
+			)
+				break
+		}
+	} finally {
+		events.length = 0
+		eventsBufferInUse = reentrant
 	}
 
-	return Object.freeze(inference ? { ...inference } : defaultSucrose())
+	// every `inferred` is already frozen, so a single-event result is returned as-is
+	// Only new allocations still need sealing
+	if (!inference) return emptyInference
+
+	return merged ? Object.freeze(inference) : inference
 }

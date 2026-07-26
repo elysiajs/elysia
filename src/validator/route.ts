@@ -6,7 +6,8 @@ import {
 	coerceQuery,
 	coerceRoot,
 	coerceStringToStructure,
-	hasTypes
+	hasTypes,
+	mayHaveFileType
 } from '../type/bridge'
 import { ELYSIA_TYPES } from '../type/constants'
 
@@ -52,8 +53,10 @@ function pickStandalone<K extends keyof RouteSchema>(
 	return result
 }
 
+const FILE_TYPES = [ELYSIA_TYPES.File, ELYSIA_TYPES.Files]
+
 const coerceFile = (schema: AnySchema) =>
-	hasTypes([ELYSIA_TYPES.File, ELYSIA_TYPES.Files], schema)
+	mayHaveFileType(schema) && hasTypes(FILE_TYPES, schema)
 		? coerceFormData()
 		: coerceBody()
 

@@ -1,7 +1,8 @@
 import { Elysia } from '../../src'
+import { websocket } from '../../src/plugin/websocket'
 import { memorySnapshot } from './utils'
 
-const app = new Elysia().ws('/ws', {
+const app = new Elysia().use(websocket()).ws('/ws', {
 	message(ws, message) {
 		ws.send(message)
 	}

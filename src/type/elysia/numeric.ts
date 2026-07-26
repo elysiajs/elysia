@@ -4,6 +4,7 @@ import type { TNumberOptions } from 'typebox'
 
 import { isEmpty } from '../../utils'
 import { ELYSIA_TYPES } from '../constants'
+import { pureRefine } from '../shared'
 import { NumberType } from './number'
 import { StringType } from './string'
 import { Union } from './union'
@@ -11,9 +12,46 @@ import { elyType, getMeta } from './utils'
 
 // A finite decimal numeric string: optional sign + digits/decimal point
 // Rejects hex (`0x10`), binary/octal, scientific (`1e3`) and `Infinity`/`NaN`
-// Non-backtracking: the two digit runs are made mutually exclusive so an
-// all-digit-then-nondigit input fails linearly instead of O(n²)
-const decimalNumber = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/
+// Single-pass charCode scan of `/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/`, which is
+// hot on every query/params coercion. `\d` without `u` is ASCII `[0-9]`, so
+// fullwidth/arabic-indic digits stay rejected
+function isDecimalString(value: string): boolean {
+	const length = value.length
+
+	let index = 0
+	const sign = value.charCodeAt(0)
+	// '+' '-'
+	if (sign === 43 || sign === 45) index = 1
+
+	let digits = 0
+	while (index < length) {
+		const char = value.charCodeAt(index)
+		if (char < 48 || char > 57) break
+
+		index++
+		digits++
+	}
+
+	// '.'
+	if (index < length && value.charCodeAt(index) === 46) {
+		index++
+
+		let fractions = 0
+		while (index < length) {
+			const char = value.charCodeAt(index)
+			if (char < 48 || char > 57) break
+
+			index++
+			fractions++
+		}
+
+		// a lone '.', '+.' or '-.'
+		if (!digits && !fractions) return false
+	} else if (!digits) return false
+
+	// anything left over is garbage: '1e5', '0x10', '1 ', '1.2.3'
+	return index === length
+}
 
 let StringifiedNumber: Type.TCodec<Type.TRefine<Type.TString>, number>
 type NumericSchema = Type.TUnion<
@@ -37,15 +75,11 @@ function passesConstraints(n: number, c: TNumberOptions): boolean {
 }
 
 export function Numeric(property?: TNumberOptions) {
-	StringifiedNumber ??= Decode(
-		Refine(
-			StringType(),
-			// only a finite decimal string (also rejects empty/blank, since
-			// `+'' === 0` would otherwise silently pass)
-			(value) => decimalNumber.test(value),
-			() => 'must be number'
-		),
-		(value) => +value
+	StringifiedNumber ??= pureRefine(
+		Decode(
+			Refine(StringType(), isDecimalString, () => 'must be number'),
+			(value) => +value
+		)
 	)
 
 	if (!property || isEmpty(property))
@@ -62,13 +96,15 @@ export function Numeric(property?: TNumberOptions) {
 		Refine(
 			StringType(),
 			(value) => {
-				if (!decimalNumber.test(value)) return false
+				if (!isDecimalString(value)) return false
 				return passesConstraints(+value, constraints as any)
 			},
 			() => 'must be number'
 		),
 		(value) => +value
 	)
+
+	pureRefine(stringified)
 
 	return elyType(
 		ELYSIA_TYPES.Numeric,

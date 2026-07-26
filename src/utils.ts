@@ -16,10 +16,9 @@ import type {
 	AnySchema
 } from './types'
 
-export const nullObject = () => Object.create(null)
-
 export type DeriveEntry = Function | readonly [Function, 'mapDerive']
 
+export const nullObject = () => Object.create(null)
 export const mapDeriveEntry = (fn: Function): DeriveEntry => [fn, 'mapDerive']
 
 export const deriveEntryFn = (entry: DeriveEntry) =>
@@ -28,19 +27,13 @@ export const deriveEntryFn = (entry: DeriveEntry) =>
 export const isMapDeriveEntry = (entry: DeriveEntry) =>
 	Array.isArray(entry) && entry[1] === 'mapDerive'
 
-export function isEmpty<T extends Object>(obj: T): boolean {
+export function isEmpty<T extends Object>(obj: T) {
 	for (const _ in obj) return false
 
 	return true
 }
 
-export function isNotEmpty(obj?: Object): boolean {
-	if (!obj) return false
-
-	for (const _ in obj) return true
-
-	return false
-}
+export const isNotEmpty = <T extends Object>(obj?: T) => obj && !isEmpty(obj)
 
 const FNV_OFFSET_BASIS = 2166136261
 const FNV_PRIME = 16777619
@@ -100,6 +93,8 @@ export type ChainNode =
 	| {
 			added: Partial<AppHook>
 			parent: ChainNode | undefined
+			// self or anchestor carry string ref
+			refs: boolean
 			// Scope this node was registered at (`#on` / `#guard`).
 			scope?: EventScope
 			// True if this node was created by `#use`
@@ -107,7 +102,7 @@ export type ChainNode =
 			// Instance this node was registered on
 			owner?: object
 	  }
-	| { combine: ChainNode; over: ChainNode | undefined }
+	| { combine: ChainNode; over: ChainNode | undefined; refs: boolean }
 
 export interface CompactBeforeHandleChunk {
 	parent?: CompactBeforeHandleChunk
@@ -149,13 +144,12 @@ const compactBeforeHandleValues = (
 	return value.slice() as Function[]
 }
 
-export const isCompactBeforeHandleOnly = (
-	hook: Partial<AppHook> | undefined
-) => compactBeforeHandleValues(hook) !== false
+export const isCompactBeforeHandleOnly = (hook: Partial<AppHook> | undefined) =>
+	compactBeforeHandleValues(hook) !== false
 
-export const compactBeforeHandleConflicts = (
+export function compactBeforeHandleConflicts(
 	hook: Partial<AppHook> | undefined
-)=> {
+) {
 	const values = compactBeforeHandleValues(hook)
 	if (values === false) return true
 
@@ -165,10 +159,10 @@ export const compactBeforeHandleConflicts = (
 	return false
 }
 
-const appendCompactBeforeHandle = (
+function appendCompactBeforeHandle(
 	previous: CompactBeforeHandlePrefix,
 	added: readonly Function[]
-): CompactBeforeHandlePrefix => {
+): CompactBeforeHandlePrefix {
 	if (!added.length) return previous
 
 	let tail = previous.tail
@@ -195,15 +189,14 @@ const appendCompactBeforeHandle = (
 	}
 }
 
-export function compactBeforeHandlePrefix(
-	start: ChainNode | undefined
-): CompactBeforeHandlePrefix | undefined {
+export function compactBeforeHandlePrefix(start: ChainNode | undefined) {
 	if (!start) return
 
 	const pending: Array<{
 		node: Extract<ChainNode, { added: Partial<AppHook> }>
 		values: readonly Function[]
 	}> = []
+
 	let node: ChainNode | undefined = start
 	let prefix = emptyCompactBeforeHandlePrefix
 
@@ -281,6 +274,7 @@ export function flattenChain(
 			const added = resolveAdded
 				? resolveAdded(node)
 				: (node as { added: Partial<AppHook> }).added
+
 			if (added)
 				appendInto(
 					result,
@@ -288,14 +282,15 @@ export function flattenChain(
 					keep,
 					(node as { scope?: EventScope }).scope
 				)
+
 			continue
 		}
 
 		if (stopAt && node === stopAt) continue
 		if ('combine' in node) {
-			// Tail-first: visit `over` (older), then `combine` (newer).
 			nodes.push(node.combine)
 			phases.push(0)
+
 			if (node.over) {
 				nodes.push(node.over)
 				phases.push(0)
@@ -394,7 +389,7 @@ function appendInto(
 	src: Partial<AppHook>,
 	keep?: (s: EventScope | undefined) => boolean,
 	nodeScope?: EventScope
-): void {
+) {
 	if (keep && !keep(nodeScope)) return
 
 	for (const key in src) {
@@ -591,50 +586,54 @@ export const sse = <
 	return payload as any
 }
 
-const _nodeCryptoTimingSafe = (() => {
+const _enc = new TextEncoder()
+
+// Materialising `node:crypto` costs ~565 KB / 5.2k objects of native module
+// only allocate when need
+let _constantTimeEqual: ((a: string, b: string) => boolean) | undefined
+
+const _resolveConstantTimeEqual = (): ((a: string, b: string) => boolean) => {
+	let native: ((a: Uint8Array, b: Uint8Array) => boolean) | undefined
+
 	try {
 		const _crypto = (globalThis.process as any)?.getBuiltinModule?.(
 			'node:crypto'
 		)
 
 		if (typeof _crypto?.timingSafeEqual === 'function')
-			return _crypto.timingSafeEqual as (
+			native = _crypto.timingSafeEqual as (
 				a: Uint8Array,
 				b: Uint8Array
 			) => boolean
 	} catch {}
-})()
 
-const _enc = new TextEncoder()
+	if (!native && typeof (crypto as any)?.timingSafeEqual === 'function')
+		native = (a: Uint8Array, b: Uint8Array) =>
+			(crypto as any).timingSafeEqual(a, b)
 
-export const constantTimeEqual: (a: string, b: string) => boolean =
-	_nodeCryptoTimingSafe
-		? (a: string, b: string) => {
-				const ab = _enc.encode(a)
-				const bb = _enc.encode(b)
+	if (!native)
+		return (a: string, b: string) => {
+			if (a.length !== b.length) return false
 
-				return ab.length !== bb.length
-					? false
-					: _nodeCryptoTimingSafe(ab, bb)
-			}
-		: typeof (crypto as any)?.timingSafeEqual === 'function'
-			? (a: string, b: string) => {
-					const ab = _enc.encode(a)
-					const bb = _enc.encode(b)
+			let mismatch = 0
+			for (let i = 0; i < a.length; i++)
+				mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i)
 
-					return ab.length !== bb.length
-						? false
-						: (crypto as any).timingSafeEqual(ab, bb)
-				}
-			: (a: string, b: string) => {
-					if (a.length !== b.length) return false
+			return mismatch === 0
+		}
 
-					let mismatch = 0
-					for (let i = 0; i < a.length; i++)
-						mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i)
+	const compare = native
 
-					return mismatch === 0
-				}
+	return (a: string, b: string) => {
+		const ab = _enc.encode(a)
+		const bb = _enc.encode(b)
+
+		return ab.length !== bb.length ? false : compare(ab, bb)
+	}
+}
+
+export const constantTimeEqual = (a: string, b: string): boolean =>
+	(_constantTimeEqual ??= _resolveConstantTimeEqual())(a, b)
 
 export const isRecordNumber = (
 	x: Record<keyof object, unknown> | undefined
@@ -829,10 +828,7 @@ export function hookToGuard(
 	return a
 }
 
-export function coalesceStandaloneSchemas(
-	existing: any[],
-	incoming: any[]
-): void {
+export function coalesceStandaloneSchemas(existing: any[], incoming: any[]) {
 	for (const entry of incoming) {
 		if (!entry || typeof entry !== 'object') continue
 
@@ -916,8 +912,8 @@ export function mergeHook(
 	return a
 }
 
-export function createErrorEventHandler(fn: EventFn<'error'>, error: Error) {
-	return (context: Context) => {
+export const createErrorEventHandler =
+	(fn: EventFn<'error'>, error: Error) => (context: Context) => {
 		if (
 			// @ts-expect-error
 			context.error instanceof
@@ -926,7 +922,6 @@ export function createErrorEventHandler(fn: EventFn<'error'>, error: Error) {
 		)
 			return fn!(context as any)
 	}
-}
 
 const isObject = (item: any): item is Object =>
 	item && typeof item === 'object' && !Array.isArray(item)
@@ -953,13 +948,30 @@ export function mergeDeep<
 	skipKeys?: string[],
 	override: boolean = true,
 	mergeArray: boolean = false,
-	seen?: WeakSet<object>
+	seen?: WeakSet<object>,
+	// Opt-in clone-on-adopt. When set, a plain-object value that is adopted
+	// wholesale (no counterpart on `target`) is deep-cloned instead of aliased,
+	// which lets `.use()` skip cloning the whole decorator tree up front
+	//
+	// every subtree that already exists on `target` is recursed into and its leaves
+	// copied by reference, so an eager clone of those is pure waste
+	//
+	// One holder threads through the entire call so a source object reached
+	// twice (repeated or circular reference) maps to a single clone, matching
+	// what the eager `clonePlainDecorators` pass produced
+	//
+	// The WeakMap itself is allocated only when an adoption actually happens,
+	// most merges adopt nothing, `undefined` (every other caller) keeps aliasing
+	cloneAdopt?: { map?: WeakMap<object, any> }
 ): A & B {
 	if (!isObject(target) || !isObject(source)) return target as A & B
 	if (seen?.has(source)) return target as A & B
 
-	for (const key in source) {
-		if (!Object.hasOwn(source, key)) continue
+	const keys = Object.keys(source)
+	const targetFrozen = Object.isFrozen(target)
+
+	for (let i = 0; i < keys.length; i++) {
+		const key = keys[i]
 
 		const value = source[key]
 		if (skipKeys?.includes(key) || dangerousKeys.has(key as any)) continue
@@ -967,9 +979,6 @@ export function mergeDeep<
 		if (mergeArray && Array.isArray(value)) {
 			const existing = (target as any)[key]
 
-			// Allocate a fresh array on merge - `existing` may be aliased to a
-			// shared source (e.g. an object-macro's `detail.tags`), so pushing
-			// into it in place would leak across every reuse of that source.
 			target[key as keyof typeof target] = (
 				Array.isArray(existing) ? existing.concat(value) : value
 			) as any
@@ -977,10 +986,21 @@ export function mergeDeep<
 			continue
 		}
 
-		if (!isObject(value) || !(key in target) || isClass(value)) {
-			if ((override || !(key in target)) && !Object.isFrozen(target))
+		const valueIsObject = isObject(value)
+
+		if (!valueIsObject || !(key in target) || isClass(value)) {
+			if ((override || !(key in target)) && !targetFrozen)
 				try {
-					target[key as keyof typeof target] = value as any
+					target[key as keyof typeof target] = (
+						valueIsObject &&
+						cloneAdopt !== undefined &&
+						isPlainObject(value)
+							? clonePlainDecorators(
+									value,
+									(cloneAdopt.map ??= new WeakMap())
+								)
+							: value
+					) as any
 				} catch {}
 
 			continue
@@ -996,7 +1016,8 @@ export function mergeDeep<
 					skipKeys,
 					override,
 					mergeArray,
-					seen
+					seen,
+					cloneAdopt
 				)
 			} catch {}
 		}
@@ -1125,19 +1146,24 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 
 export function clonePlainDecorators<T extends Record<string, unknown>>(
 	source: T,
-	seen: WeakMap<object, any> = new WeakMap()
+	seen?: WeakMap<object, any>
 ): T {
-	const existing = seen.get(source)
-	if (existing) return existing
+	if (seen !== undefined) {
+		const existing = seen.get(source)
+		if (existing) return existing
+	}
 
 	const out: Record<string, unknown> = nullObject()
-	seen.set(source, out)
+	if (seen !== undefined) seen.set(source, out)
 
 	for (const key in source) {
 		const value = source[key]
-		out[key] = isPlainObject(value)
-			? clonePlainDecorators(value, seen)
-			: value
+
+		if (isPlainObject(value)) {
+			if (seen === undefined) (seen = new WeakMap()).set(source, out)
+
+			out[key] = clonePlainDecorators(value, seen)
+		} else out[key] = value
 	}
 
 	return out as T
@@ -1152,7 +1178,6 @@ function prefix<T extends string, Models extends Record<string, AnySchema>>(
 	[k in keyof Models as `${T}.${k & string}`]: Models[k]
 } {
 	const prefixed: Record<string, AnySchema> = nullObject()
-
 	for (const key in models) prefixed[`${prefix}.${key}`] = models[key]
 
 	return prefixed as any
@@ -1184,7 +1209,7 @@ function macroSeedRefId(ref: object): number {
 	return id
 }
 
-export function serializeMacroSeed(_key: string, value: unknown): unknown {
+export function serializeMacroSeed(_key: string, value: unknown) {
 	switch (typeof value) {
 		case 'function':
 			return '\0fn:' + macroSeedRefId(value as unknown as object)

@@ -19,6 +19,7 @@ export function ArrayType<T extends TSchema>(
 		const schema = Object.create(arrayProto) as TArray<T>
 		;(schema as any).type = 'array'
 		;(schema as any).items = items
+
 		return schema
 	}
 

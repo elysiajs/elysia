@@ -21,6 +21,9 @@ const linkedNames = () => {
 	for (const m of SRC.matchAll(/\blink\([^,]+,\s*'([a-z0-9]+)'\)/g))
 		names.add(m[1]!)
 	if (SRC.includes("seenKeys.add('ho')")) names.add('ho')
+	// `rt`/`fre` are seeded into `seenKeys`/`paramValues` rather than linked
+	for (const m of SRC.matchAll(/\bnew Set<string>\(\[([^\]]+)\]\)/g))
+		for (const n of m[1]!.matchAll(/'([a-z0-9]+)'/g)) names.add(n[1]!)
 	return names
 }
 

@@ -31,8 +31,6 @@ describe('route descriptor', () => {
 		const descriptor = await descriptorOf(app, 'GET /s', get('/s'))
 
 		expect(descriptor).toEqual({
-			method: 'GET',
-			path: '/s',
 			handlerKind: 'response',
 			async: false,
 			responseMode: 'compact',
@@ -56,7 +54,6 @@ describe('route descriptor', () => {
 			syncCookieSign: false,
 			asyncCookieSign: false,
 			lazyCookieVerify: false,
-			inferenceSet: false,
 			handlerIsAsync: false,
 			callHandlerSyncOnAsync: false,
 			syncErrorHook: false,

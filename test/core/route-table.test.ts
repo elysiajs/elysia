@@ -50,7 +50,7 @@ describe('columnar route table', () => {
 			expect(table.inheritedChain[i]).toBe(t[6])
 
 			if (t[7] === undefined)
-				expect(table.macroScope.has(i)).toBe(false)
+				expect(table.macroScope?.has(i) ?? false).toBe(false)
 			else expect(table.macroScope.get(i)).toBe(t[7])
 
 			expect(!!(table.flags[i] & RouteFlag.WS)).toBe(t[0] === 'WS')
@@ -95,7 +95,7 @@ describe('columnar route table', () => {
 			for (const value of column)
 				expect(tuples.has(value)).toBe(false)
 
-		for (const value of table.macroScope.values())
+		for (const value of table.macroScope?.values() ?? [])
 			expect(tuples.has(value)).toBe(false)
 	})
 

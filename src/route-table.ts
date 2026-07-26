@@ -19,7 +19,7 @@ export interface RouteTable {
 	readonly appHook: (ChainNode | undefined)[]
 	readonly inheritedChain: (ChainNode | undefined)[]
 	readonly flags: number[]
-	readonly macroScope: Map<number, AnyElysia> // route[7]
+	readonly macroScope?: Map<number, AnyElysia> // route[7]
 }
 
 export function buildRouteTable(
@@ -34,7 +34,7 @@ export function buildRouteTable(
 	const appHook: (ChainNode | undefined)[] = []
 	const inheritedChain: (ChainNode | undefined)[] = []
 	const flags: number[] = []
-	const macroScope = new Map<number, AnyElysia>()
+	let macroScope: Map<number, AnyElysia> | undefined
 
 	for (let i = 0; i < length; i++) {
 		const route = declaredRoutes[i]
@@ -50,7 +50,11 @@ export function buildRouteTable(
 			(route[0] === 'WS' ? RouteFlag.WS : 0) |
 			(isDynamicRegex.test(p) ? RouteFlag.Dynamic : 0)
 
-		if (route[7]) macroScope.set(i, route[7] as AnyElysia)
+		if (route[7])
+			(macroScope ??= new Map<number, AnyElysia>()).set(
+				i,
+				route[7] as AnyElysia
+			)
 	}
 
 	return {
@@ -76,5 +80,5 @@ export const routeRow = (table: RouteTable, id: number) =>
 		table.localHook[id],
 		table.appHook[id],
 		table.inheritedChain[id],
-		table.macroScope.get(id)
+		table.macroScope?.get(id)
 	] as unknown as InternalRoute

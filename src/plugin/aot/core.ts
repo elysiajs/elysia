@@ -420,6 +420,7 @@ export const STUB_SOURCES: Record<
 			source:
 				`const e=()=>{throw new Error("[elysia-aot] handler compiler JIT was stripped (strip mode) but a route needed runtime compilation. Rebuild with strip:false.")}\n` +
 				`export function compileHandlerJit(){return e()}\n` +
+				`export function createInlineHandler(){return e()}\n` +
 				`export function setCaptureHeaderShorthand(){}\n`
 		},
 		{

@@ -6,7 +6,11 @@ import { Create, Decode, HasCodec, Default, Clone, Check } from 'typebox/value'
 import { Settings } from 'typebox/system'
 
 import { applyCoercions } from './coerce'
-import { TypeBoxValidator, TypeBoxValidatorCache } from './validator'
+import {
+	TypeBoxValidator,
+	TypeBoxValidatorCache,
+	mayHaveFileType
+} from './validator'
 
 import { Intersect } from './elysia/intersect'
 import {
@@ -37,6 +41,7 @@ export {
 	coerceStringToStructure,
 	coerceBody,
 	hasTypes,
+	mayHaveFileType,
 	HasCodec,
 	Intersect,
 	Default,

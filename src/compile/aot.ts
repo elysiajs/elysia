@@ -16,8 +16,10 @@ export interface ProgramId {
 
 export const createProgramId = (): ProgramId => ({}) as ProgramId
 
+const sharedAotFingerprint: AotFingerprint = Object.freeze({ abi: AOT_ABI })
+
 export function createAotFingerprint(): AotFingerprint {
-	return { abi: AOT_ABI }
+	return sharedAotFingerprint
 }
 
 export interface CompilerSession {

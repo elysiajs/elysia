@@ -290,7 +290,8 @@ describe('request abort short-circuits lifecycle hooks', () => {
 			plain
 		).toString()
 
-		expect(plainSrc).not.toContain('.signal.aborted')
+		expect(plainSrc).not.toContain('c.request.signal')
+		expect(plainSrc).not.toContain('sig.aborted')
 		expect(plainSrc).not.toContain("addEventListener('abort'")
 		expect(plainSrc).not.toContain('emp.clone()')
 
@@ -302,7 +303,12 @@ describe('request abort short-circuits lifecycle hooks', () => {
 			hooked
 		).toString()
 
-		expect(hookedSrc).toContain('.signal.aborted')
+		// polled, never subscribed: `addEventListener('abort')` would allocate a
+		// listener per request. The `signal` getter is bound once and every
+		// later check reads the binding, not the getter.
+		expect(hookedSrc).toContain('const sig=c.request.signal')
+		expect(hookedSrc).toContain('sig.aborted')
+		expect(hookedSrc.match(/c\.request\.signal/g)).toHaveLength(1)
 		expect(hookedSrc).not.toContain("addEventListener('abort'")
 		expect(hookedSrc).toContain('emp.clone()')
 	})

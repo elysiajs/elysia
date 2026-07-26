@@ -3,17 +3,25 @@ import { type BaseSchema, type AnySchema } from '.'
 import { ELYSIA_TYPES, primitiveElysiaTypes } from './constants'
 import { schemaSome } from './validator/clean-safe'
 
-// primitive Elysia types bake their constraints into internal members —
-// don't descend below them (their own node is still tested)
 const prunePrimitive = (node: any) =>
 	'~elyTyp' in node && primitiveElysiaTypes.has(node['~elyTyp'])
 
-// import-style `$ref` + `$defs` (typebox 1.x `Type.Module` / Cyclic);
-// bare inner `$ref` without `$defs` is deliberately not followed
 const refTarget = (node: any) =>
 	node.$ref && node.$defs
 		? node.$defs[node.$ref as keyof typeof node.$defs]
 		: undefined
+
+const typeSets = new WeakMap<object, Set<unknown>>()
+
+function typeSetOf(types: (string | ELYSIA_TYPES[keyof ELYSIA_TYPES])[]) {
+	let set = typeSets.get(types)
+	if (set === undefined) {
+		set = new Set<unknown>(types)
+		typeSets.set(types, set)
+	}
+
+	return set
+}
 
 export function hasTypes(
 	types: (string | ELYSIA_TYPES[keyof ELYSIA_TYPES])[],
@@ -21,7 +29,7 @@ export function hasTypes(
 ) {
 	if ('~standard' in schema) return false
 
-	const set = new Set<unknown>(types)
+	const set = typeSetOf(types)
 	const seen = new WeakSet<object>()
 	const wantsFiles = set.has(ELYSIA_TYPES.Files)
 
@@ -51,7 +59,7 @@ export function hasTypes(
 export function hasProperty(
 	key: string | ELYSIA_TYPES[keyof ELYSIA_TYPES],
 	schema: BaseSchema
-): boolean {
+) {
 	if (!schema) return false
 
 	const seen = new WeakSet<object>()

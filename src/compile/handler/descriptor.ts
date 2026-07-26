@@ -24,9 +24,6 @@ import { isNotEmpty, type CompactBeforeHandlePrefix } from '../../utils'
 import type { AnyLocalHook, MaybeArray } from '../../types'
 
 export interface RouteDescriptor {
-	method: string
-	path: string
-
 	handlerKind: 'function' | 'response' | 'promise' | 'static-value'
 	async: boolean
 	responseMode:
@@ -62,9 +59,6 @@ export interface RouteDescriptor {
 	asyncCookieSign: boolean
 	lazyCookieVerify: boolean
 
-	// sucrose
-	inferenceSet: boolean // consumed by emit.ts
-
 	// async + sync fast-path facts
 	handlerIsAsync: boolean
 	callHandlerSyncOnAsync: boolean
@@ -82,7 +76,7 @@ export interface RouteCompileState {
 
 	beforeHandlePrefix: CompactBeforeHandlePrefix | undefined
 	traceHandlers: Function[] | undefined
-	tracePhases: Set<TraceEvent> | null
+	tracePhases: ReadonlySet<TraceEvent> | null
 	hasAnyPhase: boolean
 	traceHandleOn: boolean
 }
@@ -101,17 +95,18 @@ export interface DescribeRouteInput {
 }
 
 /**
- * Route descriptors, keyed by root instance → `METHOD path` → descriptor.
- * Populated on each JIT compile for tests, audit, and root-local freeze.
+ * Route descriptors, keyed by root instance → `METHOD path` → descriptor
+ * Populated on each JIT compile, and read only by tests and introspection
  */
 export const routeDescriptors = new WeakMap<
 	AnyElysia,
 	Map<string, RouteDescriptor>
 >()
 
+// Read-only: consumers only call `.has` (`jit.ts` `phaseOn`, `descriptor.ts` `phaseOn`)
+const noTracePhases: ReadonlySet<TraceEvent> = new Set<TraceEvent>()
+
 const matchReturnIdentifier =
-	// `=>` may be minified with no gap (`=>x`); `return` always needs a
-	// separator or it fuses into a different identifier (`returnx`).
 	// eslint-disable-next-line sonarjs/regex-complexity
 	/(?:=>\s*|\breturn\s+)(?!(?:true|false|null|undefined|void|new|typeof|async|await|function|class)\b)[A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*\s*(?![\w$([])/
 
@@ -245,7 +240,6 @@ export function isEmptyPipelineHook(hook: AnyLocalHook | undefined) {
 export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 	const {
 		method,
-		path,
 		handler,
 		root,
 		adapter,
@@ -322,9 +316,7 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 	const asyncCookieSign = hasCookieSign && !syncCookieSign
 
 	const lazyCookieVerify =
-		syncCookieSign &&
-		cookieConfig?.verify === 'lazy' &&
-		!vali?.cookie
+		syncCookieSign && cookieConfig?.verify === 'lazy' && !vali?.cookie
 
 	const hasErrorHook = !!hook?.error?.length
 	const hasAfterResponse = !!hook?.afterResponse?.length
@@ -350,7 +342,7 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 
 	const tracePhases = hasTrace
 		? traceProvider!.unionTracePhases(traceHandlers as Function[])
-		: new Set<TraceEvent>()
+		: noTracePhases
 
 	const phaseOn = (phase: TraceEvent) =>
 		hasTrace && (tracePhases === null || tracePhases.has(phase))
@@ -471,8 +463,6 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 			: 'compact'
 
 	const descriptor: RouteDescriptor = {
-		method,
-		path,
 		handlerKind,
 		async: !!isAsync,
 		responseMode,
@@ -500,8 +490,6 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 		syncCookieSign,
 		asyncCookieSign,
 		lazyCookieVerify,
-
-		inferenceSet: inference.set,
 
 		handlerIsAsync,
 		callHandlerSyncOnAsync: !!callHandlerSyncOnAsync,

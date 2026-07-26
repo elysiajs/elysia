@@ -237,6 +237,153 @@ describe('schema snapshot helpers', () => {
 		expect(snapshotHookSchemas(hook)).toBe(hook)
 	})
 
+	it('shares one frozen snapshot between structurally identical schemas', () => {
+		// the point of interning: 40k routes built from a fresh but identical
+		// `t.Object` per route must converge on ONE snapshot, which is what makes
+		// the validator cache's identity memos (`#metaCache`) hit after the first
+		const app = new Elysia()
+			.post('/a', { body: t.Object({ name: t.String() }) }, () => '')
+			.post('/b', { body: t.Object({ name: t.String() }) }, () => '')
+			.post('/c', { body: t.Object({ other: t.Number() }) }, () => '')
+
+		const body = (path: string) =>
+			(app.routes.find((route) => route.path === path) as any).hooks.body
+
+		expect(body('/a')).toBe(body('/b'))
+		expect(body('/a')).not.toBe(body('/c'))
+	})
+
+	it('shares a snapshot across apps', () => {
+		// the intern table is process-wide, so a snapshot outlives the app that
+		// minted it. It may: it holds schema data only, and every function it
+		// keeps is keyed by identity, so no app-scoped closure can be crossed in
+		const one = new Elysia().post(
+			'/',
+			{ body: t.Object({ shared: t.String() }) },
+			() => ''
+		)
+		const two = new Elysia().post(
+			'/',
+			{ body: t.Object({ shared: t.String() }) },
+			() => ''
+		)
+
+		expect((one.routes[0] as any).hooks.body).toBe(
+			(two.routes[0] as any).hooks.body
+		)
+	})
+
+	it('deep-freezes a hook snapshot so a shared node cannot be rewritten', () => {
+		// sharing is only sound while nobody can mutate the shared object, and
+		// `app.routes[*].hooks` hands it to user code
+		const app = new Elysia().post(
+			'/',
+			{ body: t.Object({ name: t.String() }) },
+			() => ''
+		)
+		const body = (app.routes[0] as any).hooks.body
+
+		expect(Object.isFrozen(body)).toBe(true)
+		expect(Object.isFrozen(body.properties)).toBe(true)
+		expect(Object.isFrozen(body.required)).toBe(true)
+		expect(() => {
+			body.required = ['nope']
+		}).toThrow(TypeError)
+	})
+
+	it('never shares schemas holding different callbacks', () => {
+		// two schemas that are structurally identical apart from an `error`
+		// callback must stay apart, or app A's route would answer with app B's
+		// error function. Identity keying is what guarantees it
+		const errorA = () => 'a'
+		const errorB = () => 'b'
+		const make = (error: () => string) =>
+			t.Object({ name: t.String({ error }) })
+
+		const a = snapshotHookSchemas({ body: make(errorA) })!.body
+		const b = snapshotHookSchemas({ body: make(errorB) })!.body
+		const sameA = snapshotHookSchemas({ body: make(errorA) })!.body
+
+		expect(a).not.toBe(b)
+		expect(a).toBe(sameA)
+	})
+
+	it('never shares schemas whose only difference is on the prototype', () => {
+		// `t.String()` and `t.Unsafe({ type: 'string' })` are byte-identical to
+		// `JSON.stringify` — which is exactly what the validator cache keys on —
+		// yet carry a different `~kind`. Reusing that key here would hand one
+		// route the other's kind, so the snapshot fingerprint has to be finer
+		const string = snapshotHookSchemas({ body: t.String() })!.body
+		const unsafe = snapshotHookSchemas({
+			body: t.Unsafe<string>({ type: 'string' })
+		})!.body
+
+		expect(string).not.toBe(unsafe)
+		expect((string as any)['~kind']).toBe('String')
+		expect((unsafe as any)['~kind']).toBeUndefined()
+	})
+
+	it('stops sharing while an AOT build captures, but still freezes', () => {
+		// an AOT build must see the same object graph it would have seen without
+		// the intern table — one snapshot per registration, in registration
+		// order. Freezing is NOT gated: a write to a snapshot has to fail the
+		// same way in both modes or the AOT suite could never catch it
+		const one = t.Object({ gated: t.String() })
+		const two = t.Object({ gated: t.String() })
+
+		const previous = process.env.ELYSIA_AOT_BUILD
+		process.env.ELYSIA_AOT_BUILD = '1'
+		let a: unknown
+		let b: unknown
+		try {
+			a = snapshotHookSchemas({ body: one })!.body
+			b = snapshotHookSchemas({ body: two })!.body
+		} finally {
+			if (previous === undefined) delete process.env.ELYSIA_AOT_BUILD
+			else process.env.ELYSIA_AOT_BUILD = previous
+		}
+
+		expect(a).not.toBe(b)
+		expect(Object.isFrozen(a as object)).toBe(true)
+	})
+
+	it('keeps .model() roots mutable so $id can still be stamped', () => {
+		// `base.ts` does `value.$id ??= key` on whatever `snapshotSchema` returns.
+		// A route interning the same source first must not leave `.model()` with
+		// a frozen root, or registration would throw
+		const source = t.Object({ name: t.String() })
+
+		const app = new Elysia()
+			.post('/', { body: source }, () => '')
+			.model({ user: source })
+
+		expect((app.models as any).user.$id).toBe('user')
+		expect(Object.isFrozen((app.models as any).user)).toBe(false)
+		expect(Object.isFrozen((app.routes[0] as any).hooks.body)).toBe(true)
+	})
+
+	it('keeps a model registered before its routes shared with them', () => {
+		// the pre-existing contract: a source used as both a model and a hook is
+		// ONE object, so the `$id` an OpenAPI document references survives
+		const source = t.Object({ name: t.String() })
+
+		const app = new Elysia()
+			.model({ user: source })
+			.post('/', { body: source }, () => '')
+
+		expect((app.routes[0] as any).hooks.body).toBe((app.models as any).user)
+		expect((app.routes[0] as any).hooks.body.$id).toBe('user')
+	})
+
+	it('keeps the .model() dedup quirk: one source, one $id', () => {
+		const source = t.Object({ v: t.String() })
+		const app = new Elysia().model({ a: source, b: source })
+
+		expect((app.models as any).a).toBe((app.models as any).b)
+		expect((app.models as any).a.$id).toBe('a')
+		expect((app.models as any).b.$id).toBe('a')
+	})
+
 	it('does not corrupt a schema whose property key is __proto__', () => {
 		const inner = t.String()
 		const props = Object.defineProperty({}, '__proto__', {

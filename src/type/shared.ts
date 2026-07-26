@@ -2,8 +2,6 @@
 // `coerce.ts` and `coerce-plan.ts` (and the elysia string/utils caches).
 // Imports NOTHING from coerce, coerce-plan, validator, or type/elysia
 // keep it a leaf so `validator/index.ts` doesn't drag `typebox/type` in eagerly
-import type { TSchema } from 'typebox'
-
 import { noEnumerable } from './constants'
 import type { BaseSchema } from '.'
 
@@ -21,6 +19,34 @@ export function referenceCache(cache: Map<number, any> | Map<string, any>) {
 export function clearSharedReferenceCaches() {
 	for (const cache of sharedReferenceCaches) cache.clear()
 }
+
+// Elysia-owned refinement predicates
+// They are pure and stateless, this let `collectRefinements` skip the single-evaluation recording pool
+// the failure-path `Errors()` walk can simply call the predicate again
+//
+// Not a cache, provenance, never cleared
+const pureRefinements = new WeakSet<object>()
+
+/**
+ * @internal Tag every `~refine` entry of a framework-built node as pure.
+ * Only ever call this on nodes whose predicates are self-contained: a predicate
+ * that can transitively reach a USER refinement (e.g. ObjectString, which runs
+ * `Check` over the inner schema) is NOT pure and must keep the pool.
+ */
+export function pureRefine<T>(node: T): T {
+	const refinements = (node as any)?.['~refine']
+
+	if (Array.isArray(refinements))
+		for (const refinement of refinements)
+			if (refinement && typeof refinement === 'object')
+				pureRefinements.add(refinement)
+
+	return node
+}
+
+/** @internal */
+export const isPureRefinement = (refinement: object): boolean =>
+	pureRefinements.has(refinement)
 
 /** @internal */
 export const coerceLeafCache = new Map<string, any>()

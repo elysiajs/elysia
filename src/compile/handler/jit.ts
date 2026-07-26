@@ -287,7 +287,7 @@ export function schemaMediaKind(schema: any): number | undefined {
 const fromArgs = (type: string, isAsync: boolean) =>
 	`'${type}'${isAsync ? ',true' : ''}`
 
-const createInlineHandler = (
+export const createInlineHandler = (
 	map: (value: unknown, ...rest: unknown[]) => unknown,
 	h: (context: Context) => unknown
 ) =>
@@ -398,15 +398,16 @@ export function compileHandlerJit({
 		}
 	} = state
 
-	const seenKeys = new Set<string>()
-	const paramValues: unknown[] = []
-	let alias = ''
+	const seenKeys = new Set<string>(['rt', 'fre'])
+	const paramValues: unknown[] = [errorRoot, finalizeRouteError]
+
+	const aliasKeys: string[] = []
 	function link(v: unknown, key: string) {
 		if (v === 0) {
 			if (!seenKeys.has('ho')) {
 				seenKeys.add('ho')
 				paramValues.push(hook)
-				alias += `${alias ? ',' : ''}ho`
+				aliasKeys.push('ho')
 			}
 
 			return
@@ -415,16 +416,15 @@ export function compileHandlerJit({
 		if (!seenKeys.has(key)) {
 			seenKeys.add(key)
 			paramValues.push(v)
-			alias += `${alias ? ',' : ''}${key}`
+			aliasKeys.push(key)
 		}
 	}
-	link(errorRoot, 'rt')
-	link(finalizeRouteError, 'fre')
 
-	const abortExpression = 'c.request.signal.aborted'
+	const abortExpression = 'sig.aborted'
 	const abortCheck = hasLifecycleHook
 		? `if(${abortExpression})return emp.clone()\n`
 		: ''
+	const hoistSignal = 'const sig=c.request.signal\n'
 
 	const phaseOn = (phase: TraceEvent) =>
 		hasTrace && (tracePhases === null || tracePhases.has(phase))
@@ -511,7 +511,7 @@ export function compileHandlerJit({
 
 	if (hasLifecycleHook) {
 		link(emptyResponse, 'emp')
-		code += abortCheck
+		code += hoistSignal + abortCheck
 	}
 
 	if ((hasAfterResponse || hasTrace) && !syncAfterResponse)
@@ -1090,7 +1090,9 @@ export function compileHandlerJit({
 		}
 
 		if (syncErrorHook) {
-			factoryHelpers += `function _ce(e,c){try{\n${body}}catch(_ee){return fre(rt,c,_ee)}}\n`
+			// `_ce` is hoisted out of `route`, so it cannot see `route`'s `sig`
+			// binding and must rebind it from its own context parameter
+			factoryHelpers += `function _ce(e,c){${hoistSignal}try{\n${body}}catch(_ee){return fre(rt,c,_ee)}}\n`
 			code += `}catch(e){return _ce(e,c)}\n`
 		} else
 			code += `}catch(e){try{\n${body}}catch(_ee){return fre(rt,c,_ee)}}\n`
@@ -1103,27 +1105,28 @@ export function compileHandlerJit({
 	if (factoryHelpers)
 		code = `(function(){\n${factoryHelpers}return ${code}})()`
 
-	Capture.handler({ method, path, alias, code })
-	const inlineAlias = alias.startsWith('rt,fre,') ? alias.slice(7) : alias
+	const alias = aliasKeys.join(',')
+	const fullAlias = alias ? `rt,fre,${alias}` : 'rt,fre'
+	Capture.handler({ method, path, alias: fullAlias, code })
 	const isGeneratorHandler =
 		isHandleFunction &&
 		(handler as Function).constructor.name.endsWith('GeneratorFunction')
 
 	if (!hasTrace && isHandleFunction && !isGeneratorHandler && !inlineUnsafe) {
 		if (
-			inlineAlias === 'rc' ||
-			(!isAsync && !syncErrorHook && inlineAlias === 'rc,fe')
+			alias === 'rc' ||
+			(!isAsync && !syncErrorHook && alias === 'rc,fe')
 		)
 			return createInlineHandler(
 				res.compact ?? (res.map as any),
 				handler as any
 			)
 		else if (
-			inlineAlias === 'rm' ||
-			inlineAlias === 'msh,rm' ||
+			alias === 'rm' ||
+			alias === 'msh,rm' ||
 			(!isAsync &&
 				!syncErrorHook &&
-				(inlineAlias === 'rm,fe' || inlineAlias === 'msh,rm,fe'))
+				(alias === 'rm,fe' || alias === 'msh,rm,fe'))
 		)
 			return responseMode === 'set-with-default-headers' && inference.set
 				? createInlineHandlerWithDefaultHeaders(
@@ -1136,5 +1139,5 @@ export function compileHandlerJit({
 	JITProbe.record('handler:new-function')
 
 	// eslint-disable-next-line sonarjs/code-eval -- AOT codegen is the architecture
-	return new Function('h', alias, `return ${code}`)(handler, ...paramValues)
+	return new Function('h', fullAlias, `return ${code}`)(handler, ...paramValues)
 }

@@ -12,7 +12,8 @@ import type {
 import type { applyCoercions as applyCoercionsType } from './coerce'
 import type {
 	TypeBoxValidator as TypeBoxValidatorType,
-	TypeBoxValidatorCache as TypeBoxValidatorCacheType
+	TypeBoxValidatorCache as TypeBoxValidatorCacheType,
+	mayHaveFileType as mayHaveFileTypeType
 } from './validator'
 
 import type { Intersect as IntersectType } from './elysia/intersect'
@@ -38,6 +39,7 @@ interface TypeboxModule {
 	coerceStringToStructure: typeof coerceStringToStructureType
 	coerceBody: typeof coerceBodyType
 	hasTypes: typeof hasTypesType
+	mayHaveFileType: typeof mayHaveFileTypeType
 	HasCodec: typeof HasCodecType
 	Intersect: typeof IntersectType
 	Default: typeof DefaultType
@@ -98,6 +100,7 @@ export let coerceStringToStructure: typeof coerceStringToStructureType = stub(
 export let coerceBody: typeof coerceBodyType = stub('coerceBody')
 
 export let hasTypes: typeof hasTypesType = stub('hasTypes')
+export let mayHaveFileType: typeof mayHaveFileTypeType = stub('mayHaveFileType')
 export let HasCodec: typeof HasCodecType = stub('HasCodec')
 
 export let Intersect: typeof IntersectType = stub('Intersect')
@@ -126,6 +129,7 @@ export function useTypebox(mod: TypeboxModule) {
 	coerceStringToStructure = mod.coerceStringToStructure
 	coerceBody = mod.coerceBody
 	hasTypes = mod.hasTypes
+	mayHaveFileType = mod.mayHaveFileType
 	HasCodec = mod.HasCodec
 	Intersect = mod.Intersect
 	Default = mod.Default

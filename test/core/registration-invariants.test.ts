@@ -206,3 +206,105 @@ describe('registration input ownership', () => {
 		expect((parent['~ext'] as any)?.decorator?.db).toBe(instance)
 	})
 })
+
+describe('inlined route registration parity', () => {
+	// `#add` no longer calls `#registerRoute` — it carries its own copy of that
+	// body, because the extra call frame is ~2ns of the ~15ns a bare `.get()`
+	// costs and 100k-route startup benches feel it. That copy is only
+	// defensible while the verb path and the `~addRoute`/`#registerRoute` path
+	// stay observationally identical, so pin the three things the copy
+	// reproduces: the push target, rematerialisation of a released tuple array,
+	// and the derived-state invalidation. A drift here is silent — the app
+	// keeps answering, it just serves a stale compiled router.
+	const handler = () => 'ok'
+	const entry = (app: any, path: string) =>
+		['GET', path, handler, app] as unknown as Elysia['~routes'][number]
+
+	it('builds the same route entry as ~addRoute', () => {
+		const viaVerb = new Elysia().get('/x', handler)
+
+		const viaRegister = new Elysia()
+		viaRegister['~addRoute'](entry(viaRegister, '/x'))
+
+		const a = viaVerb['~routes'][0]
+		const b = viaRegister['~routes'][0]
+
+		expect(a.length).toBe(b.length)
+		expect(a[0]).toBe(b[0])
+		expect(a[1]).toBe(b[1])
+		expect(a[2]).toBe(b[2])
+		expect(a[3]).toBe(viaVerb as any)
+		expect(b[3]).toBe(viaRegister as any)
+	})
+
+	it('interleaves both paths into one sequence', () => {
+		const app = new Elysia().get('/first', handler)
+		app['~addRoute'](entry(app, '/second'))
+		app.get('/third', handler)
+
+		expect(app['~routes'].map((entry) => entry[1])).toEqual([
+			'/first',
+			'/second',
+			'/third'
+		])
+	})
+
+	it('keeps the hook and hook-chain tuple shapes', () => {
+		const hookless = new Elysia().get('/a', handler)['~routes'][0]
+		expect(hookless.length).toBe(4)
+		expect(hookless[4]).toBeUndefined()
+
+		const hooked = new Elysia().get('/a', { detail: {} }, handler)[
+			'~routes'
+		][0]
+		expect(hooked.length).toBe(5)
+		expect(hooked[4]).toBeDefined()
+
+		const chained = new Elysia()
+			.beforeHandle(() => {})
+			.get('/a', handler)['~routes'][0]
+		expect(chained.length).toBe(6)
+		expect(chained[4]).toBeUndefined()
+		expect(chained[5]).toBeDefined()
+	})
+
+	it('drops the memoized routes/history views on both paths', async () => {
+		const verb = new Elysia().get('/a', handler)
+		expect(verb.routes.length).toBe(1)
+		expect(verb.history.length).toBe(1)
+		verb.get('/b', handler)
+		expect(verb.routes.length).toBe(2)
+		expect(verb.history.length).toBe(2)
+
+		const registered = new Elysia().get('/a', handler)
+		expect(registered.routes.length).toBe(1)
+		expect(registered.history.length).toBe(1)
+		registered['~addRoute'](entry(registered, '/b'))
+		expect(registered.routes.length).toBe(2)
+		expect(registered.history.length).toBe(2)
+	})
+
+	it('serves a route registered after the views were memoized', async () => {
+		const app = new Elysia().get('/a', handler)
+		expect(app.routes.length).toBe(1)
+		expect(app.history.length).toBe(1)
+
+		app.get('/late', () => 'late')
+
+		expect(await (await app.handle(req('/late'))).text()).toBe('late')
+	})
+
+	it('refuses both paths once the app is sealed', async () => {
+		const verb = new Elysia().get('/a', handler)
+		verb.compile()
+		expect(() => verb.get('/late', handler)).toThrow(
+			'[Elysia] .route() called after the app was sealed'
+		)
+
+		const registered = new Elysia().get('/a', handler)
+		registered.compile()
+		expect(() => registered['~addRoute'](entry(registered, '/late'))).toThrow(
+			'[Elysia] .route() called after the app was sealed'
+		)
+	})
+})

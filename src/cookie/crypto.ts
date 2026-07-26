@@ -22,35 +22,43 @@ type BunCryptoHasher = new (
 	update: (data: string) => { digest: (encoding: 'base64') => string }
 }
 
-const nodeCrypto = (() => {
-	try {
-		return (globalThis.process as any)?.getBuiltinModule?.(
-			'node:crypto'
-		) as NodeCrypto
-	} catch {
-		return undefined
+// Materialising `node:crypto` costs ~565 KB / 5.2k objects of native module
+// surface at import. Resolve it on demand: under Bun the keyed-hasher probe
+// below settles the provider without it, so it is never touched.
+let _nodeCrypto: NodeCrypto | undefined
+let _nodeCryptoResolved = false
+
+function nodeCrypto() {
+	if (!_nodeCryptoResolved) {
+		_nodeCryptoResolved = true
+
+		try {
+			_nodeCrypto = (globalThis.process as any)?.getBuiltinModule?.(
+				'node:crypto'
+			) as NodeCrypto
+		} catch {}
 	}
-})()
+
+	return _nodeCrypto
+}
+
+// Known-answer test for `Bun.CryptoHasher`: base64 HMAC-SHA256 of 'probe'
+// keyed with 'elysia'. This is the exact value `node:crypto` produces for the
+// same input, so the probe still asserts byte parity with the node provider —
+// it just does so against a pinned reference instead of instantiating one.
+const HMAC_PROBE_DIGEST = 'bzs6y9cVmkYub8fplSKaOuuqMqJlDwhMypFT/jSdCEk='
 
 const bunCryptoHasher = (() => {
 	const hasher = (globalThis as any).Bun?.CryptoHasher as
 		| BunCryptoHasher
 		| undefined
 
-	if (
-		typeof hasher !== 'function' ||
-		typeof nodeCrypto?.createHmac !== 'function'
-	)
-		return undefined
+	if (typeof hasher !== 'function') return undefined
 
 	try {
 		return new hasher('sha256', 'elysia')
 			.update('probe')
-			.digest('base64') ===
-			nodeCrypto
-				.createHmac('sha256', 'elysia')
-				.update('probe')
-				.digest('base64')
+			.digest('base64') === HMAC_PROBE_DIGEST
 			? hasher
 			: undefined
 	} catch {
@@ -60,7 +68,7 @@ const bunCryptoHasher = (() => {
 
 export const hmacProvider: 'bun' | 'node' | 'subtle' = bunCryptoHasher
 	? 'bun'
-	: typeof nodeCrypto?.createHmac === 'function'
+	: typeof nodeCrypto()?.createHmac === 'function'
 		? 'node'
 		: 'subtle'
 
@@ -80,7 +88,7 @@ export const signCookieBun = (val: string, secret: string) =>
 		.replace(removeTrailingEquals, '')}`
 
 export const signCookieNode = (val: string, secret: string) =>
-	`${val}.${nodeCrypto!
+	`${val}.${nodeCrypto()!
 		.createHmac('sha256', secret)
 		.update(val)
 		.digest('base64')
