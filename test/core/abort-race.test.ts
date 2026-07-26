@@ -6,10 +6,12 @@ import { origin } from '../../src/adapter/origin'
 //
 // `src/adapter/origin.ts` is a *module-level* slot: the Bun adapter's
 // `withOrigin` wrapper writes the request `Bun.serve` handed it, calls
-// `app.fetch`, and clears the slot in `finally`. The fetch prologue
-// (`armEager` in `src/handler/fetch.ts`) compares `request === origin.request`
-// — a match defers materializing `request.signal` (leaving `context['~sig']`
-// undefined), a mismatch arms eagerly (pre-feature semantics).
+// `app.fetch`, and clears the slot in `finally`. Whoever classifies first
+// compares `request === origin.request` — a match defers materializing
+// `request.signal` (leaving `context['~sig']` undefined), a mismatch arms
+// eagerly (pre-feature semantics). That is `armEager` in
+// `src/handler/fetch.ts` on the request-hook lanes, and the compiled route's
+// entry probe (`armEntryAbort`) on the lane where `fetch` has no hook to run.
 //
 // The safety argument is run-to-completion: set → check → clear is one
 // synchronous frame, so no second request can ever observe a foreign window.
@@ -17,10 +19,11 @@ import { origin } from '../../src/adapter/origin'
 // every scenario below runs real `Bun.serve` traffic and tries to break it.
 //
 // Probe points, and why they are the honest ones:
-//   * A request-lane hook (`.request()`) or the FIRST route-chain hook
-//     (`.derive()`) runs before any codegen-emitted arming site, so
-//     `context['~sig'] === undefined` there means, and only means, "the
-//     prologue classified this request as deferred".
+//   * A request-lane hook (`.request()`) runs before any codegen-emitted site,
+//     and the FIRST route-chain hook (`.derive()`) runs immediately after the
+//     route's entry probe and before every other one, so
+//     `context['~sig'] === undefined` there means, and only means, "this
+//     request was classified as deferred".
 //   * Later observation points are NOT classification: an async route's chain
 //     guards arm the slot themselves after a suspension
 //     (`abortChainGuard` in `src/compile/handler/jit.ts`), which is the
@@ -76,7 +79,7 @@ afterEach(() => {
 
 const idOf = (request: Request) => request.headers.get('x-id') ?? '?'
 
-/** the slot as the prologue left it: undefined ⇒ deferred, armed ⇒ eager */
+/** the slot as classification left it: undefined ⇒ deferred, armed ⇒ eager */
 const classify = (context: any) =>
 	context['~sig'] === undefined ? 'deferred' : 'eager'
 
@@ -105,8 +108,9 @@ describe('abort provenance window under concurrency', () => {
 		const asyncArmedOwnSignal = new Map<string, boolean>()
 
 		const app = new Elysia()
-			// first hook in the chain: runs ahead of every emitted arming site,
-			// so it reads the prologue's verdict verbatim
+			// first hook in the chain: runs right after the route's entry probe
+			// and ahead of every other emitted arming site, so it reads the
+			// classification verdict verbatim
 			.derive((context: any) => {
 				classified.set(idOf(context.request), classify(context))
 

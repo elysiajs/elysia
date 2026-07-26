@@ -32,6 +32,7 @@ import { hasHeaderShorthand } from '../../universal/constants'
 import { parseQueryFromURL } from '../../parse-query'
 
 import {
+	armEntryAbort,
 	cloneResponse,
 	emptyResponse,
 	getQueryParseChannels,
@@ -535,7 +536,8 @@ export function compileHandlerJit({
 
 	if (abortOn) {
 		link(emptyResponse, 'emp')
-		code += abortCheck()
+		link(armEntryAbort, 'ea')
+		code += `if(ea(c))return emp.clone()\n`
 	}
 
 	if ((hasAfterResponse || hasTrace) && !syncAfterResponse)

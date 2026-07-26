@@ -10,7 +10,9 @@
  * and therefore must be observed synchronously.
  *
  * The Bun adapter publishes the untouched original here for the *synchronous*
- * prologue of `app.fetch` and clears it in `finally`, so the window closes
+ * prologue of `app.fetch` and, on the lane where `fetch` has no request hook
+ * to run, for the compiled route's own entry probe, which is still inside that
+ * same synchronous frame, then clears it in `finally`, so the window closes
  * before the first suspension and cannot leak across concurrent requests.
  * A `.wrap()` HOC that replaces the request or defers calling `next()` past a
  * microtask simply misses the window, fetch handler falls back to eager check
@@ -22,7 +24,9 @@
  * JavaScript only ever does ONE thing at a time. When a request comes in, the
  * adapter writes its name on the whiteboard (`origin.request = request`),
  * walks it down the hall (`fetch(request)` the synchronous part, where the
- * one and only identity check happens), and erases the whiteboard (`finally`)
+ * one and only identity check happens, in `fetch`'s prologue, or at the
+ * compiled route's entry when `fetch` had no hook to run first), and erases
+ * the whiteboard `finally`
  * all in one uninterruptible turn. The next request's turn CANNOT start
  * until this turn is completely finished, because that is how the event loop
  * works: run-to-completion, no preemption. So request B can never see request

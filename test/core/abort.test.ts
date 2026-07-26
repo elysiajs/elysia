@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test'
-import { Elysia } from '../../src'
+import { Elysia, t } from '../../src'
 import { trace } from '../../src/plugin/trace'
 import { origin } from '../../src/adapter/origin'
 
@@ -257,6 +257,85 @@ describe('abort signal arming', () => {
 		})
 
 		expect(secondHookCalled).toBe(false)
+	})
+})
+
+describe('hook-less routes never observe abort', () => {
+	// `abortOn` is `hasLifecycleHook`: a route with no lifecycle hook has no
+	// stage at which an abort could be observed (`types.ts`), so arming its
+	// slot buys nothing and costs a `request.signal` materialization on every
+	// request. These pin that the cost is gone AND that removing it did not
+	// quietly change what such a route does with an aborted signal.
+
+	class SpyRequest extends Request {
+		// `Request.prototype.signal` is an unconfigurable native getter on Bun,
+		// so a subclass is the only way to count reads
+		static reads = 0
+
+		get signal() {
+			SpyRequest.reads++
+
+			return super.signal
+		}
+	}
+
+	it('reads request.signal zero times for a hook-less, schema-only route', async () => {
+		SpyRequest.reads = 0
+
+		const app = new Elysia().get(
+			'/',
+			{ query: t.Object({ name: t.String() }) },
+			({ query }) => query.name
+		)
+
+		// no provenance: `app.handle` is exactly the lane that used to arm
+		// eagerly for every request, hook or not
+		const res = await app.handle(new SpyRequest('http://localhost/?name=a'))
+
+		expect(res.status).toBe(200)
+		expect(await res.text()).toBe('a')
+		expect(SpyRequest.reads).toBe(0)
+	})
+
+	it('runs a hook-less route to completion for a pre-aborted request', async () => {
+		let handlerCalled = false
+
+		const app = new Elysia().get('/', () => {
+			handlerCalled = true
+
+			return 'ran'
+		})
+
+		const res = await app.handle(
+			new Request('http://localhost/', { signal: preAborted().signal })
+		)
+
+		// the contract, unchanged by the arming move: abort is only ever
+		// observed at a lifecycle stage, and this route has none
+		expect(handlerCalled).toBe(true)
+		expect(res.status).toBe(200)
+		expect(await res.text()).toBe('ran')
+	})
+
+	it('still short-circuits the same route once it has a beforeHandle', async () => {
+		// the contrast that makes the test above a decision and not an
+		// accident: adding one hook restores eager arming at route entry, on
+		// the same in-process lane, with no `.request()` hook to arm ahead of it
+		let handlerCalled = false
+
+		const app = new Elysia().beforeHandle(() => {}).get('/', () => {
+			handlerCalled = true
+
+			return 'ran'
+		})
+
+		const res = await app.handle(
+			new Request('http://localhost/', { signal: preAborted().signal })
+		)
+
+		expect(handlerCalled).toBe(false)
+		expect(res.status).toBe(200)
+		expect(await res.text()).toBe('')
 	})
 })
 

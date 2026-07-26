@@ -7,6 +7,7 @@ import {
 	type DeriveEntry
 } from '../../utils'
 import { skipClone } from '../../adapter/skip-clone'
+import { origin } from '../../adapter/origin'
 import { ElysiaStatus } from '../../error'
 import { ELYSIA_TYPES } from '../../type/constants'
 import { isSpace, isIdentChar, skipString } from '../lexer'
@@ -47,6 +48,21 @@ export function hasRequestBody(request: Request) {
 	if (request.headers.get('transfer-encoding') !== null) return true
 
 	return request.body != null
+}
+
+/**
+ * Route-entry abort probe. Mirrors `createFetchHandler`'s `armEager`, but is
+ * paid only by routes that can actually observe an abort, so a hook-less
+ * route never materializes `request.signal` on any lane.
+ *
+ * @see `../../adapter/origin` for the provenance channel
+ */
+export function armEntryAbort(context: any) {
+	const sig = context['~sig']
+	if (sig !== undefined) return sig.aborted === true
+	if (context.request === origin.request) return false
+
+	return (context['~sig'] = context.request.signal).aborted
 }
 
 const trace = (report: TraceReporter | undefined, fn: Function) =>

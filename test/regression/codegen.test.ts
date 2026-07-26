@@ -294,6 +294,9 @@ describe('request abort short-circuits lifecycle hooks', () => {
 		expect(plainSrc).not.toContain("c['~sig']")
 		expect(plainSrc).not.toContain("addEventListener('abort'")
 		expect(plainSrc).not.toContain('emp.clone()')
+		// no entry probe either: the fetch lane stopped arming, so a hook-less
+		// route must not materialize `request.signal` anywhere
+		expect(plainSrc).not.toContain('ea(c)')
 
 		const hooked = new Elysia()
 			.beforeHandle(() => {})
@@ -303,8 +306,10 @@ describe('request abort short-circuits lifecycle hooks', () => {
 			hooked
 		).toString()
 
-		// polled, never subscribed: `addEventListener('abort')` would allocate a
-		// listener per request.
+		// entry probe classifies provenance and arms; the checks between hooks
+		// are polled, never subscribed: `addEventListener('abort')` would
+		// allocate a listener per request.
+		expect(hookedSrc).toContain('if(ea(c))return emp.clone()')
 		expect(hookedSrc).toContain("c['~sig']?.aborted")
 		expect(hookedSrc).toContain('emp.clone()')
 		expect(hookedSrc).not.toContain("addEventListener('abort'")
@@ -334,9 +339,9 @@ describe('request abort short-circuits lifecycle hooks', () => {
 
 		const src = compileHandler(app['~routes']![0] as any, app).toString()
 
-		// entry check is still a peek (nothing has suspended yet), every check
-		// after the awaited transform arms the slot and caches it in `_as`
-		expect(src).toContain("if(c['~sig']?.aborted)return emp.clone()")
+		// entry check is the provenance probe (nothing has suspended yet), every
+		// check after the awaited transform arms the slot and caches it in `_as`
+		expect(src).toContain('if(ea(c))return emp.clone()')
 		expect(src).toContain(
 			"if((_as??=(c['~sig']??=c.request.signal)).aborted)return emp.clone()"
 		)

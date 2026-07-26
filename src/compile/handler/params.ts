@@ -29,7 +29,8 @@ import {
 	getQueryParseChannels,
 	hasRequestBody,
 	replaceDeriveContext,
-	runBeforeHandlePrefix
+	runBeforeHandlePrefix,
+	armEntryAbort
 } from './utils'
 
 /**
@@ -75,6 +76,8 @@ export const HANDLER_PARAMS: Record<string, Resolver> = {
 	rdc: () => replaceDeriveContext,
 	ise: () => internalServerErrorResponse,
 	emp: () => emptyResponse,
+	// route-entry abort probe
+	ea: () => armEntryAbort,
 	isprod: () => isProduction,
 	// allowUnsafeValidationDetails opt-in: `e instanceof verr` in the error catch
 	verr: () => ValidationError,

@@ -666,10 +666,6 @@ export function createFetchHandler(
 
 	return (request: Request, server?: unknown): MaybePromise<Response> => {
 		const context = new Context(request)
-		// no request hook to short-circuit here, so only arm: compiled routes
-		// peek at the slot at their own entry
-		if (abortSignal && request !== origin.request)
-			(context as any)['~sig'] = request.signal
 
 		const path = extractPath(request.url, context, pathStart)
 		// @ts-expect-error

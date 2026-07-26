@@ -16,9 +16,11 @@ import type { AnyElysia } from '../../base'
  * always run before the next request comes in
  * @see ../origin.ts
  *
- * Publish the request `Bun.serve` handed us so `createFetchHandler` can prove,
- * before its first suspension, that it holds the untouched original and may
- * defer materializing `request.signal`
+ * Publish the request `Bun.serve` handed us so the pipeline can prove, before
+ * its first suspension, that it holds the untouched original and may defer
+ * materializing `request.signal`. The proof happens in `createFetchHandler`'s
+ * prologue when there is a request hook, and at the compiled route's entry
+ * probe otherwise — both inside the same synchronous frame.
  *
  * `finally` runs on the synchronous return of `fetch` (the returned promise is
  * not awaited), so the slot is live only for the handler's synchronous prologue.

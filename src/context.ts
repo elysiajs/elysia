@@ -2,12 +2,12 @@ import { status, type SelectiveStatus } from './error'
 import { flattenChain, isNotEmpty, nullObject, redirect } from './utils'
 import { isProduction } from './universal/is-production'
 
+import { defaultHeaders } from './adapter/default-headers'
 import type { AnyElysia } from './base'
 import type { Server } from './universal/server'
 import type { StatusMap } from './constants'
 import type { Cookie } from './cookie'
 import type { BaseCookie } from './cookie/types'
-import { defaultHeaders } from './adapter/default-headers'
 
 import type {
 	RouteSchema,
@@ -98,19 +98,11 @@ function buildEmptyContext(
 		declare rid?: string
 		declare route?: string
 		declare trace?: any[]
-
-		/**
-		 * Materialized `request.signal`, or `undefined` while unarmed.
-		 *
-		 * Left uninitialized on purpose: a request that never suspends never
-		 * pays for `request.signal`. Armed eagerly by `createFetchHandler` for
-		 * any request whose provenance is not the Bun original, and lazily at
-		 * each suspension boundary otherwise.
-		 */
 		declare '~sig'?: AbortSignal
 
 		constructor(public request: Request) {
 			super()
+
 			if (pathDescriptor)
 				Object.defineProperty(this, 'path', pathDescriptor)
 
@@ -175,10 +167,10 @@ export function createContext(
 	return context
 }
 
-type ContextBase<
+interface ContextBase<
 	in out Route extends RouteSchema,
 	in out Singleton extends SingletonBase
-> = {
+> {
 	server: Server | null
 	redirect: redirect
 
