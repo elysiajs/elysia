@@ -21,9 +21,11 @@ import {
 	coerceBody
 } from './coerce'
 import { hasTypes } from './utils'
+import { setExactMirror, type CreateMirror } from './validator/exact-mirror'
 
 let setup = false
-export function setupTypebox() {
+export function setupTypebox(options?: { exactMirror?: CreateMirror }) {
+	if (options?.exactMirror) setExactMirror(options.exactMirror)
 	if (setup) return
 
 	setup = true

@@ -2,7 +2,6 @@
 import { Compile, Build } from 'typebox/schema'
 import type { TSchema } from 'typebox/type'
 import { Default } from 'typebox/value'
-import createMirror from 'exact-mirror'
 
 import {
 	aotActivationError,
@@ -45,6 +44,7 @@ import {
 	captureMirrorUnions,
 	installReconstructImpl
 } from './aot-emit'
+import { getExactMirror } from '../type/validator/exact-mirror'
 
 // ─── capture-only default-precompute probes ────────────────────────────────
 // Moved out of src/type/validator/default-precompute.ts (runtime graph) and
@@ -322,6 +322,9 @@ function captureMirror(
 	slot: ValidatorSlot,
 	sanitize: unknown
 ) {
+	const createMirror = getExactMirror()
+	if (!createMirror) return
+
 	try {
 		const emitted = createMirror(schema, {
 			Compile,
@@ -368,6 +371,9 @@ function captureCodecMirror(
 	sanitize: unknown,
 	dir: 'decode' | 'encode'
 ) {
+	const createMirror = getExactMirror()
+	if (!createMirror) return
+
 	const dirOpt = dir === 'decode' ? { decode: true } : { encode: true }
 
 	try {

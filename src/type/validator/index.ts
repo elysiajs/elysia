@@ -20,8 +20,6 @@ import {
 } from 'typebox/value'
 import type { TLocalizedValidationError } from 'typebox/error'
 
-import createMirror from 'exact-mirror'
-
 import {
 	applyCoercions,
 	buildCoercedFromPlan,
@@ -58,6 +56,7 @@ import {
 	verifyPreallocatableDefault
 } from './default-precompute'
 import { buildFindCustomError } from './custom-error'
+import { exactMirrorRequired, getExactMirror } from './exact-mirror'
 export { TypeBoxValidatorCache, mayHaveFileType } from './validator-cache'
 import {
 	isFullyClosedObject,
@@ -692,6 +691,18 @@ export class TypeBoxValidator<
 						: EMPTY_EXTERNALS
 				)
 
+			if (
+				!getExactMirror() &&
+				!frozen?.m &&
+				!schemaHasDangerousProperties(this.schema) &&
+				options?.normalize !== false &&
+				options?.normalize !== 'typebox' &&
+				(options?.normalize === true ||
+					options?.normalize === 'exactMirror' ||
+					!!options?.sanitize)
+			)
+				throw exactMirrorRequired()
+
 			try {
 				this.Clean =
 					options?.normalize === false
@@ -841,6 +852,9 @@ export class TypeBoxValidator<
 		if (aot && slot && Capture.isCapturing() && captureImpl)
 			captureImpl.captureMirror(schema, aot, slot, options?.sanitize)
 
+		const createMirror = getExactMirror()
+		if (!createMirror) return (value) => Clean(this.schema, value)
+
 		return createMirror(schema, {
 			Compile,
 			sanitize: options?.sanitize
@@ -915,6 +929,9 @@ export class TypeBoxValidator<
 				options?.sanitize,
 				dir
 			)
+
+		const createMirror = getExactMirror()
+		if (!createMirror) return
 
 		try {
 			return createMirror(schema, {

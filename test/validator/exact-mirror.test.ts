@@ -1,7 +1,81 @@
-import { Elysia, t } from '../../src'
+import { Elysia, setupTypebox, t } from '../../src'
 
-import { describe, expect, it } from 'bun:test'
+import { afterEach, describe, expect, it } from 'bun:test'
 import { post, req } from '../utils'
+import { TypeBoxValidator } from '../../src/type/validator'
+import {
+	getExactMirror,
+	setExactMirror
+} from '../../src/type/validator/exact-mirror'
+import { Validator } from '../../src/validator'
+
+const installedMirror = getExactMirror()
+
+afterEach(() => {
+	setExactMirror(installedMirror)
+	Validator.clear()
+})
+
+describe('without exact-mirror', () => {
+	it('keeps TypeBox normalization available through Value.Clean', () => {
+		setExactMirror(undefined)
+
+		const validator = new TypeBoxValidator(t.Object({ value: t.String() }))
+
+		expect(validator.Clean!({ value: 'ok', extra: true })).toEqual({
+			value: 'ok'
+		})
+	})
+
+	it('keeps TypeBox codec encode available', () => {
+		setExactMirror(undefined)
+
+		const validator = new TypeBoxValidator(t.Object({ at: t.Date() }), {
+			slot: 'response:200'
+		})
+
+		expect(validator.EncodeFrom({ at: new Date(0) })).toEqual({
+			at: '1970-01-01T00:00:00.000Z'
+		})
+	})
+
+	it('keeps TypeBox codec decode available', () => {
+		setExactMirror(undefined)
+
+		const validator = new TypeBoxValidator(t.Object({ at: t.Date() }))
+		const decoded = validator.FromSync({
+			at: '1970-01-01T00:00:00.000Z'
+		} as any)
+
+		expect(decoded).toEqual({ at: new Date(0) })
+	})
+
+	it('fails loud when exact-mirror behavior is explicitly requested', () => {
+		setExactMirror(undefined)
+		const schema = t.Object({ value: t.String() })
+
+		expect(
+			() => new TypeBoxValidator(schema, { normalize: 'exactMirror' })
+		).toThrow('exact-mirror is required')
+		expect(
+			() => new TypeBoxValidator(schema, { normalize: true })
+		).toThrow('exact-mirror is required')
+		expect(
+			() =>
+				new TypeBoxValidator(schema, {
+					sanitize: (value) => value
+				})
+		).toThrow('exact-mirror is required')
+	})
+
+	it('allows explicit registration in runtimes without require', () => {
+		expect(typeof installedMirror).toBe('function')
+		setExactMirror(undefined)
+		setupTypebox({ exactMirror: installedMirror })
+
+		expect(getExactMirror()).toBe(installedMirror)
+	})
+})
 
 describe('Exact Mirror', () => {
 	it('normalize when t.Codec is provided', async () => {

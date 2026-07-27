@@ -1,6 +1,5 @@
 import { Compile, Build } from 'typebox/schema'
 import type { TSchema } from 'typebox/type'
-import createMirror from 'exact-mirror'
 
 import { hasProperty } from '../utils'
 import { buildFrozenCheck } from './frozen-check'
@@ -16,6 +15,7 @@ import {
 	captureMirrorUnions
 } from '../../compile/aot-emit'
 import type { ValidatorOptions } from '../../validator'
+import { getExactMirror } from './exact-mirror'
 
 // Build time: freeze one ObjectString/ArrayString inner schema into a check
 function captureInnerCodec(
@@ -24,6 +24,8 @@ function captureInnerCodec(
 	sanitize: ValidatorOptions['sanitize']
 ): NonNullable<CapturedValidator['innerCodecs']>[number] | undefined {
 	if (schemaHasDangerousProperties(inner)) return
+	const createMirror = getExactMirror()
+	if (!createMirror) return
 
 	let cf: ReturnType<typeof buildFrozenCheck>
 	try {

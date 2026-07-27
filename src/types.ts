@@ -1,4 +1,3 @@
-import type { Instruction as ExactMirrorInstruction } from 'exact-mirror'
 import type { OpenAPIV3 } from 'openapi-types'
 
 import type { TraceHandler } from './trace'
@@ -189,7 +188,7 @@ export interface ElysiaConfig<
 	 * @default true
 	 * @since 1.3.0
 	 */
-	sanitize?: ExactMirrorInstruction['sanitize']
+	sanitize?: ((value: string) => string) | ((value: string) => string)[]
 
 	/**
 	 * Allow unsafe validation details in errors thrown by Elysia's schema validator (422 status code)
