@@ -86,7 +86,7 @@ function setNested(
 	path: string,
 	value: unknown,
 	budget: { left: number }
-): void {
+) {
 	let current: any = body
 	let i = 0
 	let depth = 0

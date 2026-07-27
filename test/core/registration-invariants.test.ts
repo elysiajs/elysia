@@ -90,12 +90,6 @@ describe('loose path registration', () => {
 	})
 })
 
-// Ported from sennen (commit 7e70df83) per
-// design/sennen-salvage/002-salvage-rejected-sennen.md Step 2a. Only the
-// public-contract cases are ported: embedded parameters, prefix wildcards,
-// empty parameters, encoded aliases, and last-route-wins. The rest of that
-// file's describe blocks are already present above (pre-existing on stable)
-// or out of scope for this slice.
 describe('routing edge contracts', () => {
 	it('preserves embedded params, prefix wildcards, and empty-param rejection', async () => {
 		const app = new Elysia()

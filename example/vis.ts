@@ -179,7 +179,7 @@ export function writeCpuProfile(
 	stackTraces: JSCStackTraces,
 	outPath: string,
 	options?: Parameters<typeof convertToCpuProfile>[1]
-): void {
+) {
 	const profile = convertToCpuProfile(stackTraces, options)
 	if (existsSync(outPath)) unlinkSync(outPath)
 	writeFileSync(outPath, JSON.stringify(profile))
@@ -188,8 +188,7 @@ export function writeCpuProfile(
 
 // ─── Quick stats helper ───────────────────────────────────────────────────────
 
-/** Prints the top N hottest frames by hit count — handy for a quick sanity check. */
-export function printHotFrames(profile: CpuProfile, topN = 10): void {
+export function printHotFrames(profile: CpuProfile, topN = 10) {
 	const sorted = [...profile.nodes]
 		.filter((n) => n.hitCount > 0)
 		.sort((a, b) => b.hitCount - a.hitCount)

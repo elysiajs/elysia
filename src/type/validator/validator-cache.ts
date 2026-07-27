@@ -32,7 +32,7 @@ export function fnKey(fn: Function) {
 }
 
 // `mode` tracks whether a value sits on the structural path that isOpaque and
-// hasRef are defined over — the same child set `schemaSome` descends:
+// hasRef are defined over the same child set `schemaSome` descends:
 //   NODE       a schema node; its flags count
 //   CONTAINER  holds schema nodes as its members (`properties`, `anyOf`, …)
 //   OFF        ordinary JSON data (`required`, `enum`, `$defs`, `default`, …)

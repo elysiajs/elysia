@@ -599,7 +599,7 @@ function emitMerger(
 						? `if(${vk}!==undefined)out[${access}]=${tmp};`
 						: `out[${access}]=${vk}===undefined?${expr.absent}:${tmp};`
 			} else {
-				// Identity child — no merger call; retain the original approach.
+				// Identity child, no merger call so retain the original approach
 				mergeBody += `x=${vk};`
 				mergeBody +=
 					expr.absent === undefined

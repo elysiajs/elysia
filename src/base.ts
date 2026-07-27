@@ -176,16 +176,16 @@ export class Elysia<
 	const in out Ephemeral extends EphemeralType = DefaultEphemeral,
 	const in out Volatile extends EphemeralType = DefaultEphemeral
 > {
-	'~config'?: ElysiaConfig<BasePath, Scope>
+	declare '~config'?: ElysiaConfig<BasePath, Scope>
 
 	'~Prefix': BasePath
-	'~Scope': Scope
-	'~Singleton': Singleton
-	'~Definitions': Definitions
-	'~Metadata': Metadata
-	'~Ephemeral': Ephemeral
-	'~Volatile': Volatile
-	'~Routes': Routes
+	declare '~Scope': Scope
+	declare '~Singleton': Singleton
+	declare '~Definitions': Definitions
+	declare '~Metadata': Metadata
+	declare '~Ephemeral': Ephemeral
+	declare '~Volatile': Volatile
+	declare '~Routes': Routes
 
 	#hasPlugin?: true
 	#hasGlobal?: true
@@ -202,7 +202,7 @@ export class Elysia<
 	#pluginMacros?: Map<string, unknown>
 	#macroBaseline?: Set<string>
 
-	'~ext'?: {
+	declare '~ext'?: {
 		decorator?: Singleton['decorator']
 		store?: Singleton['store']
 		headers?: Record<string, string>
@@ -222,12 +222,12 @@ export class Elysia<
 		}
 	}
 
-	'~hookChain'?: ChainNode
-	'~wsConfig'?: WSOptions
+	declare '~hookChain'?: ChainNode
+	declare '~wsConfig'?: WSOptions
 
 	#declaredRoutes?: InternalRoute[]
 	#routeSources?: (string | undefined)[]
-	server?: Server
+	declare server?: Server
 
 	get history(): readonly HistoryEntry[] {
 		if (this.#declaredRoutes === undefined && this['~routeTable']?.length)
@@ -304,49 +304,100 @@ export class Elysia<
 	#jitStatic?: (Response | undefined)[]
 	#jitAliases?: (StaticMapAliases | undefined)[]
 
-	'~router'?: Memoirist<CompiledHandler>
-	'~map'?: {
+	declare '~router'?: Memoirist<CompiledHandler>
+	declare '~map'?: {
 		[method: string]: { [path: string]: CompiledHandler } | undefined
 	}
 
-	'~routeTable'?: RouteTable
+	declare '~routeTable'?: RouteTable
 
-	'~hasWS'?: boolean
-	'~hasDynamicWS'?: boolean
-	'~hasTrace'?: boolean
-	'~finalizeError'?: (
+	declare '~hasWS'?: boolean
+	declare '~hasDynamicWS'?: boolean
+	declare '~hasTrace'?: boolean
+	declare '~finalizeError'?: (
 		context: Context,
 		error: Error
 	) => MaybePromise<Response>
 	'~programId': ProgramId
-	'~aotFingerprint'?: AotFingerprint
-	'~compilerSession'?: CompilerSession
+	declare '~aotFingerprint'?: AotFingerprint
+	declare '~compilerSession'?: CompilerSession
 
-	'~generation'?: Generation
+	declare '~generation'?: Generation
 
-	'~introspect'?: boolean
+	declare '~introspect'?: boolean
 
-	'~scopeChild'?: boolean
-	'~scopeChildren'?: AnyElysia[]
+	declare '~scopeChild'?: boolean
+	declare '~scopeChildren'?: AnyElysia[]
 
 	constructor(config?: ElysiaConfig<BasePath, Scope>) {
-		this['~programId'] = createProgramId()
+		/**
+		 * ! Don't tune
+		 *
+		 * Interesting JSC internal: These `= undefined` are load-bearing
+		 *
+		 * Inline slots live inside the object cell, so JSC must pick their
+		 * count at allocation before any initializer runs
+		 *
+		 * Its only signal is counting `this.x =` in the ctor body;
+		 * class-field initializers compile into a separate hidden function
+		 * the guess never sees
+		 *
+		 * The cell can't grow afterwards, so once inline slots run out every
+		 * later property spills into the butterfly, and capacity is by n^2
+		 *
+		 * Fields run first before ctor (here), so they take the inline slots
+		 * these assignments reserve
+		 *
+		 * Don't omitted field either for monomorphic access
+		 *
+		 * @see test/memory/instance-footprint.test.ts
+		 * Est. Overflow 37 -> 21 = butterfly 64 -> 32 slots = 738B -> 450B/instance
+		 **/
 		this['~config'] = config
-		this['~Prefix'] = config?.prefix as BasePath
-		if (this['~Prefix'] && !this['~Prefix'].startsWith('/'))
-			this['~Prefix'] = `/${this['~Prefix']}` as BasePath
+		this['~ext'] = undefined
+		this['~hookChain'] = undefined
+		this['~wsConfig'] = undefined
+		this.server = undefined
+		this['~router'] = undefined
+		this['~map'] = undefined
+		this['~routeTable'] = undefined
+		this['~hasWS'] = undefined
+		this['~hasDynamicWS'] = undefined
+		this['~hasTrace'] = undefined
+		this['~finalizeError'] = undefined
+		this['~aotFingerprint'] = undefined
+		this['~compilerSession'] = undefined
+		this['~generation'] = undefined
+		this['~introspect'] = undefined
+		this['~scopeChild'] = undefined
+		this['~scopeChildren'] = undefined
 
-		if (config?.name)
-			this.#hash = fnv1a(
-				config.seed
-					? `${config.name}_${typeof config.seed === 'object' ? JSON.stringify(config.seed, serializeMacroSeed) : config.seed}`
-					: config.name
-			)
+		this['~programId'] = createProgramId()
+
+		if (config) {
+			const { prefix, name, seed } = config
+
+			this['~Prefix'] = (
+				prefix
+					? prefix.charCodeAt(0) === 47
+						? prefix
+						: `/${prefix}`
+					: undefined
+			) as BasePath
+
+			if (name)
+				this.#hash = fnv1a(
+					seed
+						? `${name}_${typeof seed === 'object' ? JSON.stringify(seed, serializeMacroSeed) : seed}`
+						: name
+				)
+		} else this['~Prefix'] = undefined as any
 	}
 
-	get routes(): PublicRoute[] {
+	get routes() {
 		if (this.#declaredRoutes === undefined && this['~routeTable']?.length)
 			this.#materializeDeclaredRoutes()
+
 		if (!this.#declaredRoutes?.length) return []
 
 		const routes = this['~routes'].map(
@@ -2333,7 +2384,7 @@ export class Elysia<
 		return this
 	}
 
-	#as(node: ChainNode | undefined, scope: EventScope): void {
+	#as(node: ChainNode | undefined, scope: EventScope) {
 		while (node) {
 			if ('combine' in node) {
 				this.#as(node.combine, scope)
@@ -3585,11 +3636,6 @@ export class Elysia<
 			if (src.macro) ext.macro = Object.create(src.macro)
 			if (src.parser) ext.parser = Object.assign(nullObject(), src.parser)
 
-			// Read-through visibility for resolution: a scope child may build
-			// before it merges back (async grouped routes). It gets its OWN
-			// container (copy-on-write) sharing the parent's immutable provider
-			// slots, so the child registering its own capability never mutates
-			// the parent; merge-back then carries the child's slots up.
 			if (src.capability) {
 				const cap = (ext.capability = nullObject())
 				if (src.capability.trace) cap.trace = src.capability.trace
@@ -3613,16 +3659,6 @@ export class Elysia<
 		return (this['~ext'] ??= nullObject())
 	}
 
-	/**
-	 * Single idempotent capability resolver-accessor (README rev 2.1). Reads
-	 * the merged `~ext.capability` channel — never mutated during a build — and
-	 * throws when a capability is used but its provider was never registered.
-	 * For `trace` the resolved view IS the nearest-root provider (merge already
-	 * keeps it); for `ws` it additionally resolves the depth-precedence base
-	 * options. Called at the start of every router build and by `compileHandler`
-	 * before it reads the frozen root, so direct-compiler paths resolve without
-	 * a prior seal.
-	 */
 	['~resolvedCapability'](kind: 'trace'): TraceCapability | undefined
 	['~resolvedCapability'](
 		kind: 'ws'
@@ -3642,9 +3678,6 @@ export class Elysia<
 
 			if (!provider) return
 
-			// Resolve base options only when WS routes exist (avoids spurious
-			// precedence warnings for a bare `.use(websocket())`). Result is a
-			// FRESH object the build-local config folds route options into.
 			const options =
 				this['~hasWS'] && ws!.options?.length
 					? provider.resolveOptions(ws!.options)
@@ -4862,7 +4895,7 @@ export class Elysia<
 
 		// The owner is carried over untouched, so an unprefixed fan-in that
 		// neither combines a hook chain nor inherits a macro scope reuses the
-		// child's tuple object outright — no copy, no allocation.
+		// child's tuple object outright. no copy, no allocation.
 		this.#registerRoute(
 			inheritedChain === route[6] && !prefix && macroScope === route[7]
 				? route
@@ -4973,16 +5006,6 @@ export class Elysia<
 
 		const appHook = this['~hookChain']
 
-		// `#registerRoute`'s body, minus the `source` half it can never reach
-		// from here — `#add` has no plugin name to record. JSC does not inline
-		// the call at this depth (`.get()` → `#add` → `#registerRoute`), and
-		// that one frame is ~2ns of the ~15ns a bare `.get()` costs, which the
-		// 100k-route startup bench feels (-0.5ms/100k). Factoring the clear
-		// storm below into a shared method shrinks `#registerRoute` enough to
-		// deduplicate this, but the extra call then lands on the `.use()`
-		// fan-in path and costs more there than it saves here — hence the
-		// copy. Keep it in step with `#registerRoute`;
-		// test/core/registration-invariants.test.ts pins the two together.
 		if (this['~generation'] !== undefined) this.#assertMutable('route')
 		;(this.#declaredRoutes ?? this.#materializeDeclaredRoutes()).push(
 			(appHook
@@ -6772,9 +6795,9 @@ export class Elysia<
 		this.#compiled![index] = handler
 
 		// Last cold route just compiled: the AOT program is now fully
-		// consumed for this generation — release it. Reaching this line
-		// means #compiled[index] was undefined (past the early-return at
-		// the top of the thunk), so each route decrements exactly once.
+		// consumed for this generation so release it
+		// Reaching this line means #compiled[index] was undefined (past the
+		// early-return at the top of the thunk), so each route decrements exactly once
 		let releasedNow = false
 		if (
 			this.#jitColdRemaining !== undefined &&
@@ -6795,11 +6818,6 @@ export class Elysia<
 				map[aliases.paths[p]] = handler
 		} else this.#saveHandler(materialized[0], materialized[1], handler)
 
-		// Release this route's materialization now that it's baked into the
-		// compiled handler (matches the wholesale reset done with #compiled).
-		// If this compile just released the program, every other route is
-		// already cold-warm too (the countdown hit 0) — free the whole
-		// staging containers instead of nulling just this slot.
 		if (releasedNow) {
 			this.#jitRoute = undefined
 			this.#jitStatic = undefined
@@ -6876,13 +6894,6 @@ export class Elysia<
 		return false
 	}
 
-	// Reads the needed columns directly off the columnar table so the gate
-	// loop never materializes an 8-slot row for a route that has no model ref.
-	//
-	// The app-level sources (`~ext.macro`, `~scopeChildren` and the app hook
-	// chain) are identical for every route, so `#buildRouterUnsafe` resolves
-	// them once before the loop and only calls this when all three came back
-	// clean — this checks the per-route sources alone.
 	#routeMayHaveModelRef(table: RouteTable, i: number): boolean {
 		const macroScope = table.macroScope?.get(i) // route[7]
 		const owner = table.owner[i] // route[3]
@@ -7053,41 +7064,17 @@ export class Elysia<
 			'~ext': this['~ext'],
 			'~hookChain': this['~hookChain'],
 			'~scopeChildren': this['~scopeChildren'],
-			// Every consumer (src/compile/handler/index.ts:274,281,355,362)
-			// reads `~applyMacro` off the same frozen view it just found a
-			// truthy `~ext.macro` on, so a macro-less app never calls it — and
-			// `.macro()` / `.use()` both `#assertMutable`, so `~ext.macro`
-			// cannot appear after publish without a re-publish recomputing this.
-			// Keep the slot present so the generation shape stays monomorphic.
 			'~applyMacro': (this['~ext']?.macro
 				? this['~applyMacro'].bind(this)
 				: undefined) as AnyElysia['~applyMacro'],
 			'~programId': this['~programId'],
-			// Freeze the resolved WS config so post-seal consumers (Bun adapter
-			// via `resolvedWsOf`) read the build output even when publication
-			// happens without a rebuild (async drain: `#routerBuilt` already true).
 			'~wsConfig': this['~wsConfig']
 		}
 
-		// salvage 004-P5: after a production generation publishes, drop
-		// recomputable authoring caches. Dev keeps them (hot-reload rebuilds
-		// need them fast); AOT build capture keeps them (session-owned).
 		if (isProduction() && !Capture.isAotBuildEnv()) {
-			// The frozen program registration is only fully consumed by
-			// publish time under eager compilation — JIT reads it at first
-			// request, so it must survive publish in JIT mode.
 			if (this['~config']?.precompile)
 				Compiled.release(this['~programId'])
 			else {
-				// JIT mode: every route reads the program exactly once, at
-				// its first-request compile. Arm a countdown of the routes
-				// still cold at publish; the last JIT compile releases the
-				// program (see #jitHandler). Releasing a program that was
-				// never registered (plain apps) is a no-op, so arming
-				// unconditionally is harmless. WS routes are excluded: they
-				// consume the program eagerly during router build (never
-				// enter #jitDispatch), so they'd otherwise pin `cold` >= 1
-				// forever.
 				const table = this['~routeTable']
 				const routeCount = table?.length ?? this['~routes'].length
 
@@ -7107,15 +7094,6 @@ export class Elysia<
 
 			clearAuthoringAnalysisCaches(this)
 
-			// salvage 007: route metadata lives in two shapes — the
-			// `#declaredRoutes` tuple array and the columnar `~routeTable`. For
-			// fast-path (non-macro, non-scope-child) apps the tuple CONTENTS are
-			// reference-shared with the table columns, so the N tuple containers
-			// are pure duplication after the table is built. Release them; every
-			// consumer rebuilds on demand via #materializeDeclaredRoutes (from the
-			// table, `#routeSources` is kept for history). Macro/scope-child apps
-			// keep the raw hooks (their table column is macro-RESOLVED), so no
-			// release. See plan 007.
 			if (!this['~ext']?.macro && !this['~scopeChildren'])
 				this.#declaredRoutes = undefined
 		}
@@ -7133,15 +7111,9 @@ export class Elysia<
 	#buildRouterUnsafe() {
 		const precompile = this['~config']?.precompile
 
-		// Resolve capabilities before any route consumer runs. Throws here when a
-		// capability (trace / ws) is used but its provider was never registered —
-		// this is the "first-router-build throw" (normally seal / first fetch /
-		// .compile()) the README specifies.
 		this['~resolvedCapability']('trace')
 		const wsCap = this['~resolvedCapability']('ws')
 
-		// Build-local WS config (base options + per-route accumulation), seeded
-		// on the first WS route and committed to `~wsConfig` only on success.
 		let wsConfig: WSOptions | undefined
 
 		this.#initMap()
@@ -7152,11 +7124,6 @@ export class Elysia<
 		const flags = table.flags
 		const length = table.length
 
-		// Model-ref gate. Three of its sources are app-level and therefore the
-		// same answer for every route, so resolve them once here: a 30k-route
-		// fan-in used to re-walk the (30k node deep) app hook chain head per
-		// route. When any of them carries a string every route is a candidate
-		// anyway, which is exactly what the per-route gate used to report.
 		const appChain = this['~hookChain']
 
 		if (
@@ -7213,8 +7180,6 @@ export class Elysia<
 			const routeFlags = flags[i]
 
 			if ((routeFlags & RouteFlag.WS) !== 0) {
-				// `~hasWS` is true whenever a WS route exists, so the resolve
-				// above already threw if the provider was missing: `wsCap` is set.
 				const ws = wsCap!.provider.buildWSRoute(
 					routeRow(table, i),
 					this
@@ -7222,9 +7187,6 @@ export class Elysia<
 				const handler = ws[0] as unknown as CompiledHandler
 				const options = ws[1]
 
-				// Seed the build-local config from the resolved base options on
-				// the first WS route (so app-wide defaults apply even when no
-				// route carries per-route options).
 				if (wsConfig === undefined && wsCap!.options)
 					wsConfig = wsCap!.options
 
@@ -7341,8 +7303,6 @@ export class Elysia<
 			}
 		}
 
-		// Always assign (including `undefined`) so a rebuild that drops
-		// all WS routes clears stale config.
 		this['~wsConfig'] = wsConfig
 	}
 

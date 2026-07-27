@@ -79,15 +79,16 @@ interface Refinement {
 
 interface RefinementGroup {
 	checks: Array<(value: unknown) => unknown>
+
 	/**
 	 * Every member is a framework-owned predicate tagged by `pureRefine`
 	 * (the Numeric / IntegerString / BooleanString coercion grammars). Those are
-	 * pure and stateless, so the recording pool — which exists solely to keep a
-	 * USER refinement single-evaluated across the check pass and the failure
-	 * path `Errors()` walk — buys nothing: re-running the predicate during
-	 * `Errors()` is guaranteed to return the same verdict. A pure group installs
-	 * no wrapper and is left out of `#refinements`, so a schema whose only
-	 * refinements are pure keeps `#validate`'s no-pool fast path.
+	 * pure and stateless, so the recording pool exists only for user refinement
+	 * single-evaluated across the check pass and the failure path `Errors()` walk
+	 *
+	 * `Errors()` is guaranteed to return the same verdict
+	 * A pure group installs no wrapper and is left out of `#refinements`,
+	 * so a schema whose only refinements are pure keeps `#validate`'s no-pool fast path
 	 *
 	 * A group with ANY non-pure member (including a user `t.Refine` stacked on
 	 * top of a framework one, which yields a mixed `~refine` array) is `false`
@@ -220,8 +221,6 @@ function collectRefinements(
 			}
 		}
 
-		// pure groups need no verdict slot — leaving them out is what keeps
-		// `#refinements` (and therefore the pool) empty for a coerced query
 		if (group && !group.pure) out.add(group)
 	}
 
@@ -355,11 +354,11 @@ export function schemaMayHaveAsyncRefine(
 
 	for (const key of Object.keys(node)) {
 		const value = node[key]
-		if (isAsyncPredicate(value)) return true
 		if (
-			value &&
-			typeof value === 'object' &&
-			schemaMayHaveAsyncRefine(value, seen)
+			isAsyncPredicate(value) ||
+			(value &&
+				typeof value === 'object' &&
+				schemaMayHaveAsyncRefine(value, seen))
 		)
 			return true
 	}
@@ -367,11 +366,7 @@ export function schemaMayHaveAsyncRefine(
 	return false
 }
 
-// Any custom-`error` node forces eager: `buildFindCustomError` Compiles union
-// checks (custom-error.ts:188/:231) regardless of deferral, so deferring saves
-// nothing and risks message parity (§4.3). `schemaSome` over-approximates the
-// traversal in `collectCustomErrorNodes`, which is safe (force-eager).
-const schemaHasCustomError = (schema: any): boolean =>
+const schemaHasCustomError = (schema: any) =>
 	schemaSome(schema, (node) => node.error !== undefined)
 
 async function enforceFileTypeChecks(
@@ -483,16 +478,7 @@ export class TypeBoxValidator<
 	#hasOptional = false
 	#cleanRedundant = false
 
-	// Lazy-JIT deferral state (design/lazy-jit-validator.md, as amended by the
-	// implementation note below). While `#deferred`, `this.tb` is undefined and
-	// `#rawCheck` uses the interpreted `Check` — byte-identical verdicts, no
-	// `new Function` JIT retained. The validator materializes the compiled `tb`
-	// once `#hits` reaches LAZY_JIT_THRESHOLD. Only the typebox `Compile` is
-	// deferred; the exact-mirror Clean and codec mirrors are built eagerly (they
-	// cost ~0 extra bytes measured, and the interpreted mirror cannot handle
-	// Union/codec schemas), so nothing but `#rawCheck` differs across the swap
-	// and Clean/Decode/Encode parity is guaranteed by construction. Post-
-	// construction mutation of the public `schema` field is UNSUPPORTED (§10.6).
+	// Lazy-JIT deferral state
 	#deferred = false
 	#hits = 0
 
@@ -578,13 +564,6 @@ export class TypeBoxValidator<
 			this.hasCodec = HasCodec(this.schema)
 			this.hasDefault = hasProperty('default', this.schema as any)
 
-			// Deferrable when nothing forces eager JIT (§4 as amended by §10.3):
-			// - capture reads `this.tb.buildResult` for the AOT manifest;
-			// - precompile / `.compile()` request eager compilation (`eager`);
-			// - an async refine needs the file-check queue AND the exact
-			//   `isAsync` from Build (deferred is `isAsync === false` by proof);
-			// - a custom-error node makes `buildFindCustomError` Compile union
-			//   checks anyway, so deferring saves nothing and risks parity.
 			const deferrable =
 				!capturing &&
 				!options?.eager &&
@@ -597,7 +576,9 @@ export class TypeBoxValidator<
 			} else {
 				this.tb =
 					capturing && captureImpl
-						? captureImpl.sourceOnlyValidator(this.schema as TSchema)
+						? captureImpl.sourceOnlyValidator(
+								this.schema as TSchema
+							)
 						: Compile(this.schema as TSchema)
 
 				this.isAsync =
@@ -947,7 +928,7 @@ export class TypeBoxValidator<
 	Check(value: Static<T>): boolean {
 		// Every request-facing validation routes through Check (directly, or via
 		// #validate from FromSync/FromAsync, or WS outbound response validation);
-		// tick here so all of them count toward materialization (§10.4).
+		// tick here so all of them count toward materialization
 		this.#tick()
 
 		const pool = this.#refineScratch
@@ -980,27 +961,19 @@ export class TypeBoxValidator<
 		return this.tb!.Check(value)
 	}
 
-	// Increment the hit counter and materialize once the threshold is crossed.
-	// A no-op after materialization (`#deferred` is false).
-	#tick(): void {
+	// Increment the hit counter and materialize once the threshold is crossed
+	// A no-op after materialization (`#deferred` is false)
+	#tick() {
 		if (this.#deferred && ++this.#hits >= LAZY_JIT_THRESHOLD)
 			this.#materialize()
 	}
 
 	/**
-	 * Promote a deferred validator to the compiled `Check` fast path. Runs
-	 * synchronously inside a Check/EncodeFrom call; single-threaded, so no torn
-	 * reads. Builds the compiled `tb` into a local and commits at the end, so a
-	 * mid-materialize throw leaves the interpreted state fully intact. Only
-	 * `#rawCheck`'s behaviour changes — Clean and codec mirrors were already
-	 * built eagerly at construction, so their output is unchanged. `isAsync`
-	 * stays false (proven at construction via `schemaMayHaveAsyncRefine`), so the
-	 * descriptor's baked codegen remains correct across the swap.
+	 * Promote a deferred validator to the compiled `Check` fast path
 	 */
-	#materialize(): void {
+	#materialize() {
 		const tb = Compile(this.schema as TSchema)
 
-		// Commit — only reached when Compile succeeded.
 		this.tb = tb
 		this.#dropCompiledSource()
 		this.#deferred = false
@@ -1022,7 +995,7 @@ export class TypeBoxValidator<
 		return true
 	}
 
-	#dropCompiledSource(): void {
+	#dropCompiledSource() {
 		const tb = this.tb as any
 		if (!tb) return
 		if (tb.evaluateResult) tb.evaluateResult.code = undefined
@@ -1042,10 +1015,8 @@ export class TypeBoxValidator<
 	}
 
 	EncodeFrom(value: Static<T>, type?: string): StaticEncode<T> {
-		// The codec encode path (Encode → Clean) never touches Check, so tick
-		// here too or a deferred response-codec validator would never materialize
-		// (§10.4). Redundant with Check's tick on the non-codec path (harmless —
-		// materialization is idempotent).
+		// The codec encode path never touches Check, so tick here too
+		// or a deferred response-codec validator would never materialize
 		this.#tick()
 
 		if (this.#isForm) {

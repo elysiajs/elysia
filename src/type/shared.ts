@@ -45,7 +45,7 @@ export function pureRefine<T>(node: T): T {
 }
 
 /** @internal */
-export const isPureRefinement = (refinement: object): boolean =>
+export const isPureRefinement = (refinement: object) =>
 	pureRefinements.has(refinement)
 
 /** @internal */

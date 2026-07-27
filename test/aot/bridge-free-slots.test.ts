@@ -409,7 +409,7 @@ describe('exact values from slot coercion', () => {
 /** Fully supported slot coercion produces a sealed bundle without TypeBox. */
 describe('sealed bundles with slot coercion', () => {
 	const APP = resolve(import.meta.dir, 'fixtures/bridge-free-slots-app.ts')
-	const dragsTypeBox = (source: string): boolean =>
+	const dragsTypeBox = (source: string) =>
 		/typebox\/(value|compile)/.test(source)
 
 	let esbuildBundle: string | undefined

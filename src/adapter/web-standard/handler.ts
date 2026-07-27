@@ -328,9 +328,6 @@ export function errorToResponse(
 	return new Response(JSON.stringify(body), { status, headers })
 }
 
-// `set` presence decides the re-entry mapper: mapResponseWithSet always passes
-// a set, mapCompactResponse never does — keeping calls direct instead of
-// through a captured `map` parameter
 function mapFallback(
 	response: unknown,
 	set?: Context['set'],

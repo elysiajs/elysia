@@ -30,8 +30,6 @@ function buildEmptyDecorator() {
 	return Decorator
 }
 
-// Only reachable on a `contextCache` miss, so it runs at most once per app
-// per cache generation — no per-app cache of its own is needed.
 export function createBaseContext(app: AnyElysia) {
 	const ext = app['~ext']
 	const decorator = ext?.decorator

@@ -17,7 +17,7 @@ import {
 import type { AnyLocalHook, HTTPMethod } from '../../types'
 import type { AnyElysia } from '../../base'
 
-export const isBridgeNotInitialized = (error: unknown): boolean =>
+export const isBridgeNotInitialized = (error: unknown) =>
 	error instanceof Error &&
 	error.message.startsWith("Typebox module isn't initialized")
 
@@ -89,7 +89,7 @@ function isBridgeFreeComplete(
 	return true
 }
 
-// Local empty externals — avoids importing `compile/aot`'s runtime const
+// Local empty externals, avoids importing `compile/aot`'s runtime const
 // Non-codec `cm` never reads its `External` arg, so any empty frozen array works
 const EMPTY_EXTERNALS = Object.freeze([]) as unknown as unknown[]
 
@@ -108,7 +108,7 @@ interface CompactError {
 	message: string
 }
 
-/** `{ check, clean?, decode? }` — the slot's compiled predicate + cleaner. */
+/** `{ check, clean?, decode? }` the slot's compiled predicate + cleaner. */
 interface SlotCheckClean {
 	check: (value: unknown) => boolean
 	clean?: (value: unknown) => unknown
@@ -432,10 +432,7 @@ class FrozenSlotValidator {
 /**
  * The JIT/frozen slot validator: the reconstruct-free `FrozenSlotValidator`
  * base plus the codec/inner-codec branch re-added via the `buildCheckClean`
- * override.
- * The only reorder — `this.hasCodec` is set by the base ctor before this runs,
- * where the original set it after the `frozen.ic` side-effect — is unobservable
- * (`reconstructInnerCodecs` neither reads nor sets `hasCodec`).
+ * override
  */
 class CodecFrozenSlotValidator extends FrozenSlotValidator {
 	protected buildCheckClean(
@@ -447,7 +444,12 @@ class CodecFrozenSlotValidator extends FrozenSlotValidator {
 		if (frozen.ic) reconstruct().reconstructInnerCodecs(frozen.ic, schema)
 
 		if (frozen.k === 1 && frozen.dm) {
-			const both = reconstruct().instantiateFrozenBoth(frozen, schema, raw)
+			const both = reconstruct().instantiateFrozenBoth(
+				frozen,
+				schema,
+				raw
+			)
+
 			return {
 				check: both.check!,
 				clean: normalize === false ? undefined : both.clean,
@@ -595,7 +597,7 @@ export function buildFrozenRouteValidator(
 	return out
 }
 
-const isResponseMap = (schema: any): boolean =>
+const isResponseMap = (schema: any) =>
 	!('~kind' in schema || '~elyAcl' in schema || '~standard' in schema)
 
 // truthy `cm` stand-in: the adapter below only feeds the acceptance gate,

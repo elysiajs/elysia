@@ -19,7 +19,7 @@ export abstract class JITProbe {
 		reasons.add(reason)
 	}
 
-	static begin(): void {
+	static begin() {
 		armed = true
 		reasons.clear()
 	}

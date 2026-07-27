@@ -565,7 +565,7 @@ function scanTokens(source: string): ScanToken[] | undefined {
 	let index = 0
 	let canEndExpression = false
 
-	const scanCode = (templateExpression = false): boolean => {
+	const scanCode = (templateExpression = false) => {
 		let templateDepth = 0
 
 		while (index < source.length) {

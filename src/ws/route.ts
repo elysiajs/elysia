@@ -321,10 +321,7 @@ function wsErrorFrameFallback(error: any): string {
 	return internalServerErrorBodyString(error)
 }
 
-function sendErrorFrame(
-	ws: ElysiaWS<any>,
-	error: unknown
-): void | Promise<void> {
+function sendErrorFrame(ws: ElysiaWS<any>, error: unknown) {
 	const frame = wsErrorFrame(error)
 	if (typeof frame === 'string') {
 		try {
@@ -398,7 +395,6 @@ export function buildWSRoute(
 				models: frozenRootOf(app)['~ext']?.models,
 				app,
 				aot: { method: 'WS', path: route[1] },
-				// precompile / .compile() ⇒ eager validator JIT (§10.3)
 				eager: frozenRootOf(app)['~config']?.precompile
 			})
 		} catch (error) {
@@ -559,10 +555,7 @@ export function buildWSRoute(
 		return bodyValidator.EncodeFrom(message, 'body')
 	}
 
-	function onMessageValidationError(
-		ws: ElysiaWS<any>,
-		error: unknown
-	): void | Promise<void> {
+	function onMessageValidationError(ws: ElysiaWS<any>, error: unknown) {
 		if (errorHandlers.length === 0) {
 			if (
 				frozenRootOf(app)['~config']?.allowUnsafeValidationDetails &&
@@ -588,10 +581,7 @@ export function buildWSRoute(
 		afterResponses.length === 0 &&
 		mapResponses.length === 0
 
-	function finishMessageResult(
-		ws: ElysiaWS<any>,
-		value: unknown
-	): void | Promise<void> {
+	function finishMessageResult(ws: ElysiaWS<any>, value: unknown) {
 		if (value === undefined) return
 
 		if (isGeneratorObject(value))
@@ -606,10 +596,7 @@ export function buildWSRoute(
 		}
 	}
 
-	function dispatchParsedSync(
-		ws: ElysiaWS<any>,
-		message: unknown
-	): void | Promise<void> {
+	function dispatchParsedSync(ws: ElysiaWS<any>, message: unknown) {
 		if (bodyValidator) {
 			let decoded: unknown
 
@@ -631,10 +618,7 @@ export function buildWSRoute(
 		return runMessage(ws, message)
 	}
 
-	function runMessageSync(
-		ws: ElysiaWS<any>,
-		message: unknown
-	): void | Promise<void> {
+	function runMessageSync(ws: ElysiaWS<any>, message: unknown) {
 		try {
 			if (messageHandlerTouchesBody) ws.body = message as any
 
@@ -695,7 +679,7 @@ export function buildWSRoute(
 	function dispatchMessageSync(
 		connection: ElysiaWS<any>,
 		rawMessage: string | Buffer
-	): void | Promise<void> {
+	) {
 		const ws: ElysiaWS<any> = Object.create(connection)
 
 		try {
@@ -918,7 +902,7 @@ export function accumulateWSOptions(
 	target: WSOptions,
 	routeOptions: WSOptions,
 	_path: string
-): void {
+) {
 	if (!isNotEmpty(routeOptions)) return
 
 	if (isBun)
@@ -959,7 +943,7 @@ export function buildGlobalWSHandler(): WebSocketHandler<WSConnectionData> {
 
 	return {
 		message(ws, message) {
-			let result: void | Promise<void>
+			let result
 			try {
 				result = ws.data.message?.(getElysia(ws), message)
 			} catch (error) {

@@ -9,18 +9,6 @@ import {
 } from '../../src/compile/aot-capture'
 import { req } from '../utils'
 
-/**
- * salvage 004-P5 — publish-time authoring-cache release.
- *
- * WHY these tests exist: releasing caches at `#publishGeneration` must only
- * ever trade speed (an uncached recompile), never correctness. The one
- * non-recomputable store is the frozen `Compiled` program registration —
- * JIT compiles read it at FIRST REQUEST, i.e. after publish, so releasing
- * it in JIT mode would silently break sealed apps. These tests pin the
- * exact gate matrix: release fires only under production + eager build +
- * not AOT-build capture, and behavior is identical either way.
- */
-
 const PROBE_PATH = '/__p5-probe'
 
 /** Register a claimable manifest carrying a probe entry on an unused path. */

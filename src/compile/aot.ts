@@ -536,7 +536,7 @@ const captureGet = (loc: {
 
 const isAotBuildEnv = () => !!env.ELYSIA_AOT_BUILD
 
-const isValidatorCapturing = (): boolean => {
+const isValidatorCapturing = () => {
 	if (activeSession?.capture !== undefined) {
 		if (captureImpl === undefined) throw aotActivationError()
 

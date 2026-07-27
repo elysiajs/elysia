@@ -6,11 +6,11 @@ import { corpus, type ObservableCorpusEntry } from './corpus'
 import { lanePairs, type LanePair, type Observe } from './lanes'
 import { snapshot, comparators, formatMismatch } from './compare'
 
-const entryInPair = (entry: ObservableCorpusEntry, pair: LanePair): boolean =>
+const entryInPair = (entry: ObservableCorpusEntry, pair: LanePair) =>
 	!pair.requiresTag || entry.tags.includes(pair.requiresTag)
 
 // Socket lanes skip responses that include the lane-specific port.
-const requestInPair = (request: { tags?: string[] }, pair: LanePair): boolean =>
+const requestInPair = (request: { tags?: string[] }, pair: LanePair) =>
 	pair.oracle.transport === 'handle' ||
 	!(request.tags ?? []).includes('handle-only')
 

@@ -51,12 +51,6 @@ function notFound(context: Context): Response {
 	return getNotFound()
 }
 
-// decodeComponent only rewrites strings containing '%' (no plus-to-space,
-// unlike decodeURIComponent), and every param value is a substring of the
-// matched `path` (memoirist matches against it; the loose-path retry only
-// strips a trailing slash, so params stay substrings). So when
-// `path.indexOf('%') === -1`, no param can contain '%' either, and calling
-// this is a guaranteed no-op — call sites skip it in that case.
 function decodeParams(params: Record<string, string>) {
 	for (const key in params) {
 		const value = params[key]
@@ -273,7 +267,7 @@ export function createFetchHandler(
 	 * lanes that actually awaited, so a deferred request that never suspends
 	 * never reaches it.
 	 */
-	const armedAbort = (request: Request, context: Context): boolean =>
+	const armedAbort = (request: Request, context: Context) =>
 		abortSignal &&
 		((context as any)['~sig'] ??= request.signal).aborted === true
 

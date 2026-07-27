@@ -258,7 +258,7 @@ export type WSResponseValidator =
 	| undefined
 
 /**
- * App-wide WebSocket server-tuning options — the Bun server-level
+ * App-wide WebSocket server-tuning options, the Bun server-level
  * `websocket: {...}` knobs (`maxPayloadLength`, `idleTimeout`,
  * `perMessageDeflate`, …). Lifecycle handlers are per-route only, so they are
  * omitted here. Formerly `ElysiaConfig.websocket`; now carried by the severable
@@ -282,7 +282,7 @@ export interface WSOptionsEntry {
 }
 
 /**
- * Runtime WebSocket capability provider — an immutable module-level singleton
+ * Runtime WebSocket capability provider, an immutable module-level singleton
  * produced by `elysia/websocket` and stored on `~ext.capability.ws.provider`.
  * Core reaches WS route construction and the global handler exclusively through
  * this object, so `src/ws/route` stays statically unreachable from the default

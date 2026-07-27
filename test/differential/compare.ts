@@ -65,27 +65,27 @@ const truncate = (s: string) =>
 	s.length > MAX ? s.slice(0, MAX) + `…(+${s.length - MAX})` : s
 
 const decoder = new TextDecoder('utf-8', { fatal: false })
-// Render valid UTF-8 as text and arbitrary bytes as hex.
-const renderBody = (bytes: Uint8Array): string => {
+
+function renderBody(bytes: Uint8Array) {
 	const text = decoder.decode(bytes)
 	if (new TextEncoder().encode(text).length === bytes.length)
 		return JSON.stringify(text)
+
 	return `<${bytes.length} bytes: ${[...bytes.slice(0, 32)].map((b) => b.toString(16).padStart(2, '0')).join(' ')}${bytes.length > 32 ? '…' : ''}>`
 }
 
-const bytesEqual = (a: Uint8Array, b: Uint8Array): boolean => {
+function bytesEqual(a: Uint8Array, b: Uint8Array) {
 	if (a.length !== b.length) return false
 	for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
+
 	return true
 }
 
-const headersEqual = (
-	a: Array<[string, string]>,
-	b: Array<[string, string]>
-): boolean => {
+function headersEqual(a: Array<[string, string]>, b: Array<[string, string]>) {
 	if (a.length !== b.length) return false
 	for (let i = 0; i < a.length; i++)
 		if (a[i][0] !== b[i][0] || a[i][1] !== b[i][1]) return false
+
 	return true
 }
 
@@ -97,7 +97,7 @@ const nativeStaticCandidateHeaders = (
 		? headers.filter(([name]) => name !== 'etag')
 		: headers
 
-const arrayEqual = (a: string[], b: string[]): boolean =>
+const arrayEqual = (a: string[], b: string[]) =>
 	a.length === b.length && a.every((v, i) => v === b[i])
 
 const fmtHeaders = (h: Array<[string, string]>) =>

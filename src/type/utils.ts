@@ -33,7 +33,7 @@ export function hasTypes(
 	const seen = new WeakSet<object>()
 	const wantsFiles = set.has(ELYSIA_TYPES.Files)
 
-	const test = (node: any): boolean => {
+	const test = (node: any) => {
 		if (
 			(node['~kind'] !== undefined && set.has(node['~kind'])) ||
 			('~elyTyp' in node && set.has(node['~elyTyp']))
@@ -64,7 +64,7 @@ export function hasProperty(
 
 	const seen = new WeakSet<object>()
 
-	const test = (node: any): boolean => {
+	const test = (node: any) => {
 		if (key in node) return true
 
 		const target = refTarget(node)

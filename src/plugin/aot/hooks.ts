@@ -48,7 +48,7 @@ export const createAotPluginHooks = (
 	let entryMatched = false
 	let initial = true
 
-	const isEntry = (id: string): boolean => {
+	const isEntry = (id: string) => {
 		const posix = toPosix(id)
 		if (posix === entryPosix || posix === entryRealPosix) return true
 

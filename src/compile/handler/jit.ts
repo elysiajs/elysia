@@ -73,7 +73,7 @@ import type {
 const parseFormData = 'c.body=await pf(c)\n'
 
 let captureHeaderShorthand: boolean | undefined
-export const setCaptureHeaderShorthand = (value: boolean | undefined): void => {
+export const setCaptureHeaderShorthand = (value: boolean | undefined) => {
 	captureHeaderShorthand = value
 }
 
@@ -442,13 +442,9 @@ export function compileHandlerJit({
 	const abortCheck = () =>
 		abortOn ? `if(${abortExpression()})return emp.clone()\n` : ''
 
-	// Guards emitted *between* hooks of one chain: in an async route every hook
-	// call is a potential suspension, so the following guard must arm.
 	const abortChainGuard = () =>
 		abortOn ? (isAsync ? abortArm : abortExpression()) : undefined
 
-	// The error lane is also reached from a rejected promise continuation
-	// (`_ce`), i.e. after a suspension the try-block never saw — always arm.
 	const abortCatch = abortOn ? `if(${abortArm})return emp.clone()\n` : ''
 
 	const phaseOn = (phase: TraceEvent) =>
@@ -496,7 +492,7 @@ export function compileHandlerJit({
 						`rpc${i}=rp${i}.resolveChild?.shift?.()?.({` +
 						`id:c.rid,event:'${phase}',name:${JSON.stringify(name)},` +
 						`begin:performance.now()` +
-					`})\n`
+						`})\n`
 
 				return {
 					begin,
@@ -546,10 +542,8 @@ export function compileHandlerJit({
 	if (asyncCookieSign) code += 'let _sg\n'
 
 	if (hasTrace) {
-		// fetch handler should already handle trace but fallback just in case.
-		// `root` is the frozen generation; `errorRoot` the live instance —
-		// resolve through the capability channel from whichever carries it.
-		const traceProvider = resolvedTraceOf(root) ?? resolvedTraceOf(errorRoot)
+		const traceProvider =
+			resolvedTraceOf(root) ?? resolvedTraceOf(errorRoot)
 		if (!traceProvider) throw new Error(traceCapabilityRequired)
 
 		const wrappedTracers = traceHandlers!.map((fn: any) =>
@@ -1148,10 +1142,7 @@ export function compileHandlerJit({
 		(handler as Function).constructor.name.endsWith('GeneratorFunction')
 
 	if (!hasTrace && isHandleFunction && !isGeneratorHandler && !inlineUnsafe) {
-		if (
-			alias === 'rc' ||
-			(!isAsync && !syncErrorHook && alias === 'rc,fe')
-		)
+		if (alias === 'rc' || (!isAsync && !syncErrorHook && alias === 'rc,fe'))
 			return createInlineHandler(
 				res.compact ?? (res.map as any),
 				handler as any
@@ -1174,5 +1165,8 @@ export function compileHandlerJit({
 	JITProbe.record('handler:new-function')
 
 	// eslint-disable-next-line sonarjs/code-eval -- AOT codegen is the architecture
-	return new Function('h', fullAlias, `return ${code}`)(handler, ...paramValues)
+	return new Function('h', fullAlias, `return ${code}`)(
+		handler,
+		...paramValues
+	)
 }

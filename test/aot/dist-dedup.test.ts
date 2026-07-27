@@ -8,7 +8,7 @@ import * as esbuild from 'esbuild'
 const APP = resolve(import.meta.dir, 'fixtures/dist-dedup-app.ts')
 
 // Metafile input paths are relative to the repository root.
-const isElysiaDist = (path: string): boolean =>
+const isElysiaDist = (path: string) =>
 	/(^|[\\/])dist[\\/].*\.(m?js)$/.test(path) && !path.includes('typebox')
 
 async function buildBundle() {

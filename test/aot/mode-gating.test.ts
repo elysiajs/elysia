@@ -150,7 +150,7 @@ async function loadApp(label: string) {
 }
 
 // TypeBox codec/value engine markers remain only in wired output.
-const dragsTypeBox = (source: string): boolean =>
+const dragsTypeBox = (source: string) =>
 	/typebox\/(value|compile)/.test(source)
 
 describe('AOT mode selection', () => {

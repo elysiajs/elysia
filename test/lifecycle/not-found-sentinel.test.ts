@@ -1,14 +1,3 @@
-/**
- * Framework 404-miss sentinel (salvage 004-P6)
- *
- * A framework route miss propagates a module-private frozen
- * `{ code: 'NOT_FOUND' }` record internally and materializes a real
- * `NotFound` Error only at the boundary where user error hooks can
- * observe it. These tests pin the WHY: the sentinel must never leak to
- * user code or into any response, and everything user-observable
- * (Error identity, fields, stack, response bytes) must be identical to
- * constructing `new NotFound()` eagerly.
- */
 import { Elysia, NotFound } from '../../src'
 import { trace } from '../../src/plugin/trace'
 import { describe, expect, it } from 'bun:test'

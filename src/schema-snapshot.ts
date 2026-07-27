@@ -377,7 +377,7 @@ function internSchema<T>(schema: T, intern: boolean): T {
 	return cloned as T
 }
 
-function snapshotSlots(target: Record<string, any>, intern: boolean): void {
+function snapshotSlots(target: Record<string, any>, intern: boolean) {
 	for (const slot of schemaSlots)
 		if (target[slot] != null)
 			target[slot] = internSchema(target[slot], intern)

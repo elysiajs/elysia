@@ -187,14 +187,7 @@ export function buildCookieJar(
 	// (parseCookieRawDeferred), so decode per-name on first access too.
 	deferDecode?: 1
 ) {
-	// `raw` is a fresh, per-request record (nullObject) that the caller
-	// discards after this call, so we own it as the placeholder store: each
-	// name still maps to its raw value until first access. The per-name entry
-	// — Object.assign of defaults, expires-clone, and ~raw/~unsign markers — is
-	// deferred to first access so a handler reading one cookie of many pays
-	// only for that name.
 	const store = raw as Record<string, BaseCookie>
-
 	const materialized: Record<string, 1> = nullObject()
 
 	function materializeEntry(name: string): BaseCookie {

@@ -50,12 +50,6 @@ describe('NODE_ENV=production', () => {
 		)
 	})
 
-	// Ported from sennen (commit 3600912b, N+3c) per
-	// design/sennen-salvage/002-salvage-rejected-sennen.md Step 2c. `path` is
-	// a documented public Context field (src/context.ts:197); in production
-	// mode no mutation-warning descriptor is installed (see
-	// test/core/context-readonly.test.ts for the dev-mode getter/setter
-	// case), so it stays a plain own+enumerable data property.
 	it('keeps request-hook path own and enumerable', async () => {
 		let own = false
 		let enumerable = false

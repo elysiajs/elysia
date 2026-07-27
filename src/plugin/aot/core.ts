@@ -27,7 +27,7 @@ export interface ElysiaAotOptions {
 
 	/**
 	 * Specifier the generated module imports the `Reconstruct` table from.
-	 * Pure — any elysia copy works (registration goes through `Compiled`)
+	 * Pure so any elysia copy works (registration goes through `Compiled`)
 	 *
 	 * @default 'elysia/reconstruct'
 	 */
@@ -151,8 +151,8 @@ export interface StubPlan {
 
 	/**
 	 * Stub the trace runtime (`trace.ts` `createTracer` + recorder machinery)
-	 * when no replayed handler aliases trace (`tr`), or — even under live
-	 * handler JIT — when the app registers no trace handler at all (`~hasTrace`
+	 * when no replayed handler aliases trace (`tr`), or even under live
+	 * handler JIT when the app registers no trace handler at all (`~hasTrace`
 	 * + history sweep; a mount forbids it). Every call site (fetch, JIT
 	 * codegen, frozen reconstruct) only calls in when trace handlers exist, so
 	 * a throwing stub is unreachable once detection proves trace is unused
@@ -165,7 +165,7 @@ export interface StubPlan {
 	 * path (`jit`) this flag is still `true`, so the stub replaces the real
 	 * trace module with the non-throwing `unionTracePhases(){return new Set()}`
 	 * fallback (+ throwing `createTracer`, unreachable with zero hooks).
-	 * Measured saving for that shape: ~18KB — severing trace also tree-shakes
+	 * Measured saving for that shape: ~18KB severing trace also tree-shakes
 	 * sucrose's `separateFunction`, which trace is the sole importer of. A
 	 * traceless app that never imports the capability (Fixture B) has no
 	 * trace module in the graph, so the stub is a no-op there.
@@ -406,7 +406,7 @@ export function rewriteIsProductionCalls(code: string): string {
 }
 
 export const bunAdapterStubSource =
-	`const e=(t)=>{throw new Error(\`[elysia-aot] Bun adapter was stripped for target 'web-standard' — .listen() is unavailable; use the exported fetch handler or rebuild with a different target.\`)}\n` +
+	`const e=(t)=>{throw new Error(\`[elysia-aot] Bun adapter was stripped for target 'web-standard' .listen() is unavailable; use the exported fetch handler or rebuild with a different target.\`)}\n` +
 	`export const BunAdapter={name:'bun',runtime:'bun',isWebStandard:true,parse:{},response:{},listen:e}\n` +
 	`export function collectStaticRoutes(){}\n`
 
@@ -925,8 +925,6 @@ export async function generateCompiledArtifacts(
 			routesForbidSeal = true
 
 		const frozenSlots = artifacts.validators.length
-		// `expectedSlots` is computed by the loop above (typebox slots per
-		// route) — the fingerprint no longer carries a slot count.
 
 		const allBridgeFree =
 			(artifacts.handlers.length > 0 ||

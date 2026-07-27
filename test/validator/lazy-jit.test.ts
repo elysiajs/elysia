@@ -25,7 +25,7 @@ import { isAsyncPredicate } from '../../src/type/elysia/file-type'
 
 const LAZY_JIT_THRESHOLD = 16
 
-const buildIsAsync = (schema: any): boolean => {
+function buildIsAsync(schema: any) {
 	const tb: any = Compile(schema)
 	return tb.buildResult.external.variables.some(isAsyncPredicate) ?? false
 }

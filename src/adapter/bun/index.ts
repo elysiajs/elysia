@@ -16,14 +16,8 @@ import type { AnyElysia } from '../../base'
  * always run before the next request comes in
  * @see ../origin.ts
  *
- * Publish the request `Bun.serve` handed us so the pipeline can prove, before
- * its first suspension, that it holds the untouched original and may defer
- * materializing `request.signal`. The proof happens in `createFetchHandler`'s
- * prologue when there is a request hook, and at the compiled route's entry
- * probe otherwise — both inside the same synchronous frame.
- *
  * `finally` runs on the synchronous return of `fetch` (the returned promise is
- * not awaited), so the slot is live only for the handler's synchronous prologue.
+ * not awaited), so the slot is live only for the handler's synchronous prologue
  */
 const withOrigin =
 	(fetch: (request: Request, server: unknown) => unknown) =>
@@ -221,10 +215,6 @@ export const BunAdapter = createAdapter({
 		if (needsGate)
 			serve.fetch = (request: Request, server: unknown) =>
 				ready!.then(() => app.fetch(request, server))
-		// the gated lane dispatches across a promise boundary, so it cannot
-		// claim the request is still un-aborted at entry — left eager on
-		// purpose. `publish()` swaps in the deferred-capable fetch once setup
-		// resolves.
 		else serve.fetch = withOrigin(built!.fetch)
 
 		const server = (app.server = Bun.serve(serve))

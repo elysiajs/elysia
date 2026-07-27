@@ -44,8 +44,8 @@ function nodeCrypto() {
 
 // Known-answer test for `Bun.CryptoHasher`: base64 HMAC-SHA256 of 'probe'
 // keyed with 'elysia'. This is the exact value `node:crypto` produces for the
-// same input, so the probe still asserts byte parity with the node provider —
-// it just does so against a pinned reference instead of instantiating one.
+// same input, so the probe still asserts byte parity with the node provider
+// it just does so against a pinned reference instead of instantiating one
 const HMAC_PROBE_DIGEST = 'bzs6y9cVmkYub8fplSKaOuuqMqJlDwhMypFT/jSdCEk='
 
 const bunCryptoHasher = (() => {
@@ -279,7 +279,7 @@ export function resolvePendingCookie(entry: Record<string, any>, name: string) {
 	if (typeof value !== 'string') throw InvalidCookie.signature(name)
 	if (!hasSyncHmac)
 		throw new Error(
-			`resolvePendingCookie called without sync HMAC — unreachable under correct lane gating (cookie: "${name}")`
+			`resolvePendingCookie called without sync HMAC. Unreachable under correct lane gating (cookie: "${name}")`
 		)
 
 	const decoded = unsignWithSecretsSync(

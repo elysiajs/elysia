@@ -130,7 +130,7 @@ function fallbackErrorResponse(
 		: internalServerErrorResponse(error)
 }
 
-function applyErrorStatus(context: Context, error: any): void {
+function applyErrorStatus(context: Context, error: any) {
 	if (error?.status) context.set.status = error.status
 	else if (context.set.status === undefined || context.set.status === 200)
 		context.set.status = 500

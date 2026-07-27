@@ -39,7 +39,7 @@ const FNV_OFFSET_BASIS = 2166136261
 const FNV_PRIME = 16777619
 
 /**
- * @internal Generational cache eviction — at cap, drop the oldest half.
+ * @internal Generational cache eviction at cap, drop the oldest half.
  *
  * `map.delete(oldest)` per insert leaks ~1KB/eviction on JSC in ~1/3 of
  * processes (churned bucket cells permanently grow the heap and are never
@@ -646,7 +646,7 @@ const _resolveConstantTimeEqual = (): ((a: string, b: string) => boolean) => {
 	}
 }
 
-export const constantTimeEqual = (a: string, b: string): boolean =>
+export const constantTimeEqual = (a: string, b: string) =>
 	(_constantTimeEqual ??= _resolveConstantTimeEqual())(a, b)
 
 export const isRecordNumber = (

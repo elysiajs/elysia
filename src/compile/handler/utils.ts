@@ -99,8 +99,6 @@ export function replaceDeriveContext(context: any, derivative: any) {
 	Object.assign(next, derivative)
 
 	next.request = context.request
-	// abort slot is per-request state, not per-context — losing it here would
-	// re-materialize (or worse, silently un-arm) the signal after a mapped derive
 	next['~sig'] = context['~sig']
 	next.store = context.store
 	next.set = context.set
@@ -698,7 +696,7 @@ function getQueryParseArgsCollect(
 	node: any,
 	seen: WeakSet<object>,
 	state: QueryWalkState
-): void {
+) {
 	if (!node || typeof node !== 'object' || seen.has(node)) return
 	seen.add(node)
 

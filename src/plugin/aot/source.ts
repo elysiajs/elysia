@@ -69,7 +69,7 @@ export interface CompileToSourceOptions {
 	/**
 	 * Specifier the generated module imports the `Reconstruct` table from,
 	 * only emitted when the manifest carries validators. The table is pure,
-	 * so unlike `registerFrom` it may resolve to any elysia copy — the
+	 * so unlike `registerFrom` it may resolve to any elysia copy the
 	 * registration itself goes through `Compiled` (from `registerFrom`)
 	 *
 	 * @default 'elysia/reconstruct'
@@ -746,7 +746,7 @@ function emitModule(
 		body += '\n'
 
 		// wire the reconstruction table before the app can observe a frozen
-		// entry — top-level, ahead of the register call
+		// entry top-level, ahead of the register call
 		if (captured.length) body += 'Compiled.reconstruct = Reconstruct\n'
 
 		body +=

@@ -662,7 +662,7 @@ export function createResponseHandler(handler: CreateHandlerParameter) {
 
 		if (!borrowed && response.bodyUsed)
 			throw new TypeError(
-				'Cannot reuse a consumed Response across requests — a returned Response is request-owned; call borrow(response) to mark it reusable'
+				'Cannot reuse a consumed Response across requests'
 			)
 
 		if (set) {
@@ -679,21 +679,12 @@ export function createResponseHandler(handler: CreateHandlerParameter) {
 				return response
 		} else if (!mustClone) return response
 
-		// Probing `.body` materializes a lazy in-memory body into a
-		// stream-backed one (degrading the runtime serve path), so the locked
-		// probe only runs once patching is actually required — on this path
-		// the body is about to be accessed anyway
 		if (!borrowed && response.body?.locked)
-			throw new TypeError(
-				'Cannot patch a Response whose body is locked — release the reader, or call borrow(response) if it must be reused'
-			)
+			throw new TypeError('Cannot patch a Response whose body is locked')
 
 		let body = response.body
 
 		if (borrowed) {
-			// pre-clone body identity — a borrowed buffered body keeps the same
-			// stream object across clones, a stream-backed one is re-teed (and
-			// retained whole) on every serve
 			const bodyBefore = body
 			const cloned = response.clone()
 
@@ -706,12 +697,13 @@ export function createResponseHandler(handler: CreateHandlerParameter) {
 				warnedStreamBorrows.add(response)
 
 				console.warn(
-					'[elysia] borrow() was called on a stream-backed Response — ' +
-						'its entire body will stay buffered in memory for as long ' +
-						'as the borrowed object lives, and every reuse adds a tee ' +
-						'layer. Borrow only buffered Responses (string / ' +
-						'ArrayBuffer / Blob bodies), or construct a fresh Response ' +
-						'per request.'
+					'[elysia] borrow() was called on a stream-backed Response'
+					// +
+					// 	'its entire body will stay buffered in memory for as long ' +
+					// 	'as the borrowed object lives, and every reuse adds a tee ' +
+					// 	'layer. Borrow only buffered Responses (string / ' +
+					// 	'ArrayBuffer / Blob bodies), or construct a fresh Response ' +
+					// 	'per request.'
 				)
 			}
 

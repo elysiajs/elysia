@@ -23,9 +23,9 @@ export interface ElysiaAotUnpluginFactoryResult {
 	) => string | undefined | Promise<string | undefined>
 	/** Vite-specific override (`apply: 'build'` keeps dev on runtime JIT). */
 	vite?: { apply?: 'build' | 'serve' }
-	/** rspack compiler hook — forces the manifest module side-effectful. */
+	/** rspack compiler hook: forces the manifest module side-effectful. */
 	rspack?: (compiler: unknown) => void
-	/** webpack compiler hook — forces the manifest module side-effectful. */
+	/** webpack compiler hook: forces the manifest module side-effectful. */
 	webpack?: (compiler: unknown) => void
 }
 
@@ -37,7 +37,7 @@ interface RulesCompiler {
 	options: { module: { rules: unknown[] } }
 }
 
-const forceManifestSideEffect = (compiler: RulesCompiler): void => {
+const forceManifestSideEffect = (compiler: RulesCompiler) => {
 	compiler.options.module.rules.push({
 		test: VIRTUAL_MANIFEST_RESOURCE,
 		sideEffects: true
@@ -47,11 +47,7 @@ const forceManifestSideEffect = (compiler: RulesCompiler): void => {
 /**
  * Elysia AOT build plugin factory (universal)
  *
- * Run Elysia JIT compilation in build time instead of runtime.
- *
- * This is the RAW factory — Elysia no longer depends on `unplugin`. Wrap it
- * yourself with `createUnplugin` (from your own `unplugin` install) to target
- * any unplugin-supported bundler:
+ * Run Elysia JIT compilation in build time instead of runtime
  *
  * ```ts
  * import { createUnplugin } from 'unplugin'
@@ -64,8 +60,8 @@ const forceManifestSideEffect = (compiler: RulesCompiler): void => {
  * // farm.config.ts     → aot.farm({ entry: 'src/index.ts' })
  * ```
  *
- * For rspack, prefer the native `elysia/plugin/aot/rspack` plugin (no
- * `unplugin` needed); for Vite prefer `elysia/plugin/aot/vite`.
+ * For rspack, prefer the native `elysia/plugin/aot/rspack` plugin
+ * (no `unplugin` needed); for Vite prefer `elysia/plugin/aot/vite`
  */
 export const aotFactory = (
 	options: ElysiaAotUnpluginOptions
@@ -100,7 +96,7 @@ export const aotFactory = (
 		// manifest import unless a module rule marks it side-effectful. These
 		// per-bundler hooks fire after unplugin has installed its own load rule
 		// (so the rule ordering is fine) and only touch the compiled-manifest
-		// virtual resource — vite/esbuild/bun never run these keys, so their
+		// virtual resource vite/esbuild/bun never run these keys, so their
 		// injected import stays byte-identical.
 		rspack(compiler) {
 			forceManifestSideEffect(compiler as RulesCompiler)

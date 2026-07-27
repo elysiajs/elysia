@@ -225,7 +225,7 @@ export function collectStringCodecNodes(
 export function reconstructInnerCodecs(
 	ic: NonNullable<FrozenValidator['ic']>,
 	schema: any
-): void {
+) {
 	const nodes = collectStringCodecNodes(schema)
 
 	for (let i = nodes.length - 1; i >= 0; i--) {

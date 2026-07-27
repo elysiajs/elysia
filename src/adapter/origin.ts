@@ -33,7 +33,7 @@
  * A's name on the board, by the time B's turn starts, the board was already
  * erased at the end of A's turn.
  *
- * "But the handler is async!" — the `await`s inside it run LATER, in separate
+ * "But the handler is async!" the `await`s inside it run LATER, in separate
  * turns. That is fine, because the check already happened: the verdict was
  * copied onto that request's own context (`'~sig'`) during the synchronous
  * part, and the code that runs after an `await` only ever reads the context,
