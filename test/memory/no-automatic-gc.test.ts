@@ -39,6 +39,7 @@ describe('no automatic GC', () => {
 		})) as typeof Bun.serve
 		new Elysia().get('/reload', 'ok').listen(0)
 
+		await Bun.sleep(0)
 		expect(calls).toBe(0)
 		expect(reloads).toBe(1)
 	})

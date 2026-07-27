@@ -42,30 +42,24 @@ describe('Bun transactional startup', () => {
 		}
 	}
 
-	it('builds before opening a server', async () => {
-		let calls = 0
-		const serve = Bun.serve
-		;(Bun as any).serve = () => {
-			calls++
-		}
+	it('rolls back when the deferred build fails', () =>
+		withServer(async (getOptions, server) => {
+			const app = new Elysia()
+				.get('/x', { body: 'DoesNotExist' }, () => 'first')
+				.listen(0)
 
-		try {
-			const app = new Elysia().get(
-				'/x',
-				{ body: 'DoesNotExist' },
-				() => 'first'
+			const response = getOptions().fetch(
+				new Request('http://localhost/x'),
+				server
 			)
 
-			expect(() => app.listen(0)).toThrow('Unknown model reference')
-			expect(calls).toBe(0)
+			await expect(response).rejects.toThrow('Unknown model reference')
+			expect(server.stopped).toBe(true)
 			expect(app.server).toBeUndefined()
-		} finally {
-			;(Bun as any).serve = serve
-		}
-	})
+		}))
 
-	it('rolls back a synchronous setup failure in LIFO order', () =>
-		withServer((_getOptions, server) => {
+	it('rolls back a setup failure in LIFO order', () =>
+		withServer(async (_getOptions, server) => {
 			const order: string[] = []
 			let callbackCalled = false
 			const app = new Elysia()
@@ -76,10 +70,9 @@ describe('Bun transactional startup', () => {
 					throw new Error('setup failed')
 				})
 				.get('/', 'ok')
+				.listen(0, () => (callbackCalled = true))
 
-			expect(() => app.listen(0, () => (callbackCalled = true))).toThrow(
-				'setup failed'
-			)
+			await Bun.sleep(0)
 			expect(server.stopped).toBe(true)
 			expect(app.server).toBeUndefined()
 			expect(callbackCalled).toBe(false)
@@ -135,11 +128,11 @@ describe('Bun transactional startup', () => {
 		}))
 
 	it('rolls back when promotion cannot reload or fall back', () =>
-		withServer((_getOptions, server) => {
+		withServer(async (_getOptions, server) => {
 			server.reloadError = new Error('reload failed')
-			const app = new Elysia().get('/', 'static')
+			const app = new Elysia().get('/', 'static').listen(0)
 
-			expect(() => app.listen(0)).toThrow('reload failed')
+			await Bun.sleep(0)
 			expect(server.reloads).toBe(2)
 			expect(server.stopped).toBe(true)
 			expect(app.server).toBeUndefined()
@@ -167,14 +160,17 @@ describe('Bun transactional startup', () => {
 			expect(app.server).toBeUndefined()
 		}))
 
-	it('keeps successful synchronous listen behavior', () =>
-		withServer((_getOptions, server) => {
+	it('keeps successful listen behavior with a deferred callback', () =>
+		withServer(async (_getOptions, server) => {
 			let callbackServer: unknown
 			const app = new Elysia().get('/', 'ok').listen(0, (value) => {
 				callbackServer = value
 			})
 
 			expect(app.server).toBe(server as any)
+			expect(callbackServer).toBeUndefined()
+
+			await Bun.sleep(0)
 			expect(callbackServer).toBe(server)
 			expect(server.stopped).toBe(false)
 		}))

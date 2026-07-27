@@ -31,11 +31,12 @@ describe('trace capability', () => {
 			expect(() => void app.fetch).toThrow(MISSING)
 		})
 
-		it('throws on listen()', () => {
+		it('rolls back listen()', async () => {
 			const app = new Elysia().trace(() => {}).get('/', () => 'ok')
-			let server: unknown
 			try {
-				expect(() => (server = app.listen(0))).toThrow(MISSING)
+				app.listen(0)
+				await Bun.sleep(0)
+				expect(app.server).toBeUndefined()
 			} finally {
 				;(app as any).server?.stop?.()
 			}

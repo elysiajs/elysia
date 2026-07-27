@@ -137,6 +137,7 @@ describe('AOT WebSocket schemas', () => {
 		registerManifest({ validators: materialise(captured) })
 
 		const frozenApp = buildCodec().listen(0)
+		await Bun.sleep(0)
 		expect(
 			Compiled.hasValidator(
 				'WS',
@@ -152,6 +153,7 @@ describe('AOT WebSocket schemas', () => {
 		Compiled.clear()
 		Validator.clear()
 		const jitApp = buildCodec().listen(0)
+		await Bun.sleep(0)
 		const jitValid = await sendBody(jitApp, VALID)
 		const jitInvalid = await sendBody(jitApp, INVALID)
 		jitApp.stop()

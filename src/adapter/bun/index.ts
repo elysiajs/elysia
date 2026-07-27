@@ -153,22 +153,31 @@ export const BunAdapter = createAdapter({
 		const _config = (app['~config'] as any)?.serve
 		const optionsIsObject = typeof options === 'object'
 
+		let live: ((request: Request, server: unknown) => unknown) | undefined
+
+		const gatedFetch = (request: Request, server: unknown) =>
+			live
+				? live(request, server)
+				: Promise.resolve(ready).then(() => {
+						if (!live)
+							throw new Error(
+								'[Elysia] Server was stopped before it was ready'
+							)
+
+						return live(request, server)
+					})
+
 		const _options = optionsIsObject
 			? { ...(options as object) }
 			: // monomorphic
 				{
 					port: +options,
-					fetch: (request: Request, server: unknown) =>
-						app.fetch(request, server)
+					fetch: gatedFetch
 				}
 
-		if (optionsIsObject)
-			_options.fetch = (request: Request, server: unknown) =>
-				app.fetch(request, server)
+		if (optionsIsObject) _options.fetch = gatedFetch
 
 		const serve = _config ? { ..._config, ..._options } : _options
-		const onSetup = app['~ext']?.setup
-		const needsGate = app.pending || !!onSetup?.length
 		let ready: Promise<unknown> | undefined
 
 		const build = () => {
@@ -196,7 +205,7 @@ export const BunAdapter = createAdapter({
 				const resolved = resolvedWsOf(app as AnyElysia)
 				if (!resolved)
 					throw new Error(
-						'[Elysia] internal: WebSocket routes are present but no capability provider was resolved.'
+						'[Elysia] internal: WebSocket routes are present but no capability provider was resolved'
 					)
 
 				websocket = resolved.config
@@ -288,11 +297,11 @@ export const BunAdapter = createAdapter({
 			if (app.server !== server) return
 			built ??= build()
 
-			serve.fetch = withOrigin(built!.fetch)
+			live = serve.fetch = withOrigin(built!.fetch)
 			if (built!.websocket) serve.websocket = built!.websocket
 			if (built!.routes) serve.routes = built!.routes[0]
 
-			if (needsGate || built!.websocket || built!.routes) reload()
+			reload()
 
 			if (callback) callback(server)
 		}
@@ -312,20 +321,15 @@ export const BunAdapter = createAdapter({
 
 		try {
 			if (app.pending) ready = app.modules.then(start)
-			else
-				// defer building app so it doesn't block main thread and allow other synchronous code to run first
-				Promise.resolve().then(() => {
-					const result = start()
+			// defer building app so it doesn't block main thread and allow other synchronous code to run first
+			else ready = Promise.resolve().then(start)
 
-					if (
-						result &&
-						typeof (result as Promise<unknown>).then === 'function'
-					)
-						ready = result as Promise<unknown>
-					else if (needsGate) ready = Promise.resolve()
-				})
+			ready.catch((error) => {
+				// build is deferred, so listen() cannot throw: fail loud
+				console.error('[Elysia] listen() failed:', error)
 
-			ready?.catch(rollback)
+				return rollback(error)
+			})
 		} catch (error) {
 			rollback(error)
 

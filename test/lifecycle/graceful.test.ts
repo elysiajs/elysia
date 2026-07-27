@@ -12,6 +12,7 @@ describe('Setup and cleanup', () => {
 			.get('/', 'hi')
 			.listen(0)
 
+		await Bun.sleep(0)
 		expect(order).toEqual(['setup'])
 
 		await app.stop()
@@ -31,6 +32,7 @@ describe('Setup and cleanup', () => {
 			.setup(() => order.push('app-setup'))
 			.listen(0)
 
+		await Bun.sleep(0)
 		expect(order).toEqual(['plugin-setup', 'app-setup'])
 
 		await app.stop()
@@ -45,6 +47,7 @@ describe('Setup and cleanup', () => {
 			.setup([() => order.push('a'), () => order.push('b')])
 			.listen(0)
 
+		await Bun.sleep(0)
 		expect(order).toEqual(['a', 'b'])
 
 		await app.stop()
