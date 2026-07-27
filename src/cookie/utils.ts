@@ -1,4 +1,4 @@
-import { decodeComponent } from 'deuri'
+import decodeComponent from 'deuri'
 import { parse } from './lib'
 
 import { Cookie } from './cookie'

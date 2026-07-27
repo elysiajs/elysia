@@ -1,4 +1,4 @@
-import { decodeComponent } from 'deuri'
+import decodeComponent from 'deuri'
 
 // bit flags
 const KEY_HAS_PLUS = 1

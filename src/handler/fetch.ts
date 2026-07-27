@@ -1,4 +1,4 @@
-import { decodeComponent } from 'deuri'
+import decodeComponent from 'deuri'
 
 import { defaultAdapter } from '../adapter/constants'
 

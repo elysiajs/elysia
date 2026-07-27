@@ -241,7 +241,7 @@
 		"./dist/type/bridge-live.js"
 	],
 	"dependencies": {
-		"deuri": "^2.0.1",
+		"deuri": "^3.0.0",
 		"exact-mirror": "1.2.2",
 		"memoirist": "1.2.1"
 	},
