@@ -3,6 +3,7 @@ import type { Context } from './context'
 import { parseCookie } from './cookies'
 import {
 	ElysiaCustomStatusResponse,
+	mapTransformDecodeError,
 	type ElysiaErrors,
 	NotFoundError,
 	status,
@@ -38,6 +39,21 @@ export type DynamicHandler = {
  */
 const ARRAY_INDEX_REGEX = /^(.+)\[(\d+)\]$/
 const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
+
+const decodeValidator = (
+	type: string,
+	validator: ElysiaTypeCheck<any>,
+	value: unknown
+) => {
+	try {
+		return validator.Decode(value)
+	} catch (error) {
+		if (error instanceof TransformDecodeError)
+			throw mapTransformDecodeError(error, type, validator, value)
+
+		throw error
+	}
+}
 
 const isDangerousKey = (key: string): boolean => {
 	if (DANGEROUS_KEYS.has(key)) return true
@@ -559,7 +575,11 @@ export const createDynamicHandler = (app: AnyElysia) => {
 						)
 				} else if (validator.headers?.Decode)
 					// @ts-ignore
-					context.headers = validator.headers.Decode(context.headers)
+					context.headers = decodeValidator(
+						'header',
+						validator.headers,
+						context.headers
+					)
 
 				if (paramsValidator?.Check(context.params) === false) {
 					throw new ValidationError(
@@ -569,7 +589,11 @@ export const createDynamicHandler = (app: AnyElysia) => {
 					)
 				} else if (validator.params?.Decode)
 					// @ts-ignore
-					context.params = validator.params.Decode(context.params)
+					context.params = decodeValidator(
+						'params',
+						validator.params,
+						context.params
+					)
 
 				if (validator.query?.schema) {
 					let schema = validator.query.schema
@@ -602,7 +626,11 @@ export const createDynamicHandler = (app: AnyElysia) => {
 						context.query
 					)
 				else if (validator.query?.Decode)
-					context.query = validator.query.Decode(context.query) as any
+					context.query = decodeValidator(
+						'query',
+						validator.query,
+						context.query
+					) as any
 
 				if (validator.createCookie?.()) {
 					let cookieValue: Record<string, unknown> = {}
@@ -616,7 +644,9 @@ export const createDynamicHandler = (app: AnyElysia) => {
 							cookieValue
 						)
 					else if (validator.cookie?.Decode)
-						cookieValue = validator.cookie.Decode(
+						cookieValue = decodeValidator(
+							'cookie',
+							validator.cookie,
 							cookieValue
 						) as any
 				}
@@ -624,12 +654,15 @@ export const createDynamicHandler = (app: AnyElysia) => {
 				if (validator.createBody?.()?.Check(body) === false)
 					throw new ValidationError('body', validator.body!, body)
 				else if (validator.body?.Decode) {
-						let decoded = validator.body.Decode(body) as any
-						if (decoded instanceof Promise)
-							decoded = await decoded
+					let decoded = decodeValidator(
+						'body',
+						validator.body,
+						body
+					) as any
+					if (decoded instanceof Promise) decoded = await decoded
 
-						// Zod returns { value: ... } wrapper
-						context.body = decoded?.value ?? decoded
+					// Zod returns { value: ... } wrapper
+					context.body = decoded?.value ?? decoded
 				}
 			}
 
