@@ -1,7 +1,7 @@
 import { Elysia } from '../src'
 
-const app = new Elysia().get(
-			'/bad',
-			{ headers: { 'x-a': '1' } },
-			'hello' as any
-		)
+const app = new Elysia().get('/', () => 'hello' as any)
+
+console.log("A")
+app.listen(3000)
+console.log("B")

@@ -191,6 +191,7 @@ export const BunAdapter = createAdapter({
 						? R
 						: never)
 				| undefined
+
 			if (app['~hasWS']) {
 				const resolved = resolvedWsOf(app as AnyElysia)
 				if (!resolved)
@@ -210,12 +211,6 @@ export const BunAdapter = createAdapter({
 		}
 
 		let built: ReturnType<typeof build> | undefined
-		if (!needsGate) built = build()
-
-		if (needsGate)
-			serve.fetch = (request: Request, server: unknown) =>
-				ready!.then(() => app.fetch(request, server))
-		else serve.fetch = withOrigin(built!.fetch)
 
 		const server = (app.server = Bun.serve(serve))
 		const reload = () => {
@@ -317,20 +312,23 @@ export const BunAdapter = createAdapter({
 
 		try {
 			if (app.pending) ready = app.modules.then(start)
-			else {
-				const result = start()
+			else
+				// defer building app so it doesn't block main thread and allow other synchronous code to run first
+				Promise.resolve().then(() => {
+					const result = start()
 
-				if (
-					result &&
-					typeof (result as Promise<unknown>).then === 'function'
-				)
-					ready = result as Promise<unknown>
-				else if (needsGate) ready = Promise.resolve()
-			}
+					if (
+						result &&
+						typeof (result as Promise<unknown>).then === 'function'
+					)
+						ready = result as Promise<unknown>
+					else if (needsGate) ready = Promise.resolve()
+				})
 
 			ready?.catch(rollback)
 		} catch (error) {
 			rollback(error)
+
 			throw error
 		}
 	}
