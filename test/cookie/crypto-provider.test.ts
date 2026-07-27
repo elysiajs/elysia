@@ -158,8 +158,8 @@ describe('cookie HMAC provider selection', () => {
 		expect(usages?.length).toBe(2)
 		expect(source).not.toContain('expectedInput === input')
 		expect(source).not.toContain('input === expectedInput')
-		expect(source).toContain(
-			"import { constantTimeEqual } from '../utils'"
+		expect(source).toMatch(
+			/import \{[^}]*\bconstantTimeEqual\b[^}]*\} from '\.\.\/utils'/
 		)
 	})
 })

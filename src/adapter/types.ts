@@ -2,7 +2,7 @@ import type { AnyElysia } from '../base'
 import type { Serve, ListenCallback } from '../universal'
 
 import type { Context } from '../context'
-import { MaybePromise } from '../types'
+import type { MaybePromise } from '../types'
 
 /**
  * Elysia adapter 2

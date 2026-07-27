@@ -488,7 +488,7 @@ function captureBridgeFree(
 
 // @internal test isolation
 export function beginValidatorCapture() {
-	if (captureImpl === undefined) throw aotActivationError
+	if (captureImpl === undefined) throw aotActivationError()
 
 	const active = CompilerState.session
 	if (active?.capture !== undefined) {

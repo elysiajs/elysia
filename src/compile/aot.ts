@@ -242,12 +242,9 @@ export interface ReconstructImpl {
 
 let reconstructImpl: ReconstructImpl | undefined
 
-const reconstructActivationError = new Error(
-	'Elysia AOT reconstruct module is not activated.'
-)
-
-export function reconstruct(): ReconstructImpl {
-	if (reconstructImpl === undefined) throw reconstructActivationError
+export function reconstruct() {
+	if (reconstructImpl === undefined)
+		throw new Error('Elysia AOT reconstruct module is not activated')
 
 	return reconstructImpl
 }
@@ -505,9 +502,8 @@ function captureEntry({
 }
 
 /** @internal shared with `aot-capture.ts` (`beginValidatorCapture`). */
-export const aotActivationError = new Error(
-	'Elysia AOT capture module is not activated.'
-)
+export const aotActivationError = () =>
+	new Error('Elysia AOT capture module is not activated.')
 
 export interface CapturedHandler {
 	method: string
@@ -542,13 +538,13 @@ const isAotBuildEnv = () => !!env.ELYSIA_AOT_BUILD
 
 const isValidatorCapturing = (): boolean => {
 	if (activeSession?.capture !== undefined) {
-		if (captureImpl === undefined) throw aotActivationError
+		if (captureImpl === undefined) throw aotActivationError()
 
 		return true
 	}
 
 	if (isAotBuildEnv()) {
-		if (captureImpl === undefined) throw aotActivationError
+		if (captureImpl === undefined) throw aotActivationError()
 
 		return true
 	}

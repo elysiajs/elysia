@@ -1,7 +1,7 @@
 import type { Instruction as ExactMirrorInstruction } from 'exact-mirror'
 import type { OpenAPIV3 } from 'openapi-types'
 
-import { TraceHandler } from './trace'
+import type { TraceHandler } from './trace'
 import type { ElysiaFile } from './universal/file'
 import { type StatusMapBack } from './constants'
 import type { ElysiaError, ElysiaStatus } from './error'

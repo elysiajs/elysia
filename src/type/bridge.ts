@@ -48,14 +48,13 @@ interface TypeboxModule {
 	Check: typeof CheckType
 }
 
-const error = new Error(
-	"Typebox module isn't initialized yet. Import `t` from 'elysia' so the TypeBox bridge can register before TypeBox schemas are used."
-)
-
 let live: TypeboxModule | undefined
 
-function ensure(): TypeboxModule {
-	if (!live) throw error
+function ensure() {
+	if (!live)
+		throw new Error(
+			"Typebox module isn't initialized yet. Import `t` from 'elysia' so the TypeBox bridge can register before TypeBox schemas are used."
+		)
 
 	return live
 }

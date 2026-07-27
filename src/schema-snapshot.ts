@@ -1,4 +1,5 @@
 import { env } from './universal'
+import { evictOldestHalf } from './utils'
 
 const modelSnapshots = new WeakMap<object, object>()
 const hookSnapshots = new WeakMap<object, object>()
@@ -368,10 +369,7 @@ function internSchema<T>(schema: T, intern: boolean): T {
 	produced.add(cloned)
 
 	if (key !== undefined) {
-		if (interned.size >= INTERN_LIMIT) {
-			const oldest = interned.keys().next().value
-			if (oldest !== undefined) interned.delete(oldest)
-		}
+		if (interned.size >= INTERN_LIMIT) evictOldestHalf(interned)
 
 		interned.set(key, cloned)
 	}

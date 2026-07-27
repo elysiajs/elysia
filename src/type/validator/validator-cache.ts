@@ -6,7 +6,7 @@ import type { Validator as BaseTypeBoxValidator } from 'typebox/schema'
 import { deferCoercions, type CoerceOption } from '../coerce'
 import { ELYSIA_TYPES } from '../constants'
 
-import { nullObject } from '../../utils'
+import { nullObject, evictOldestHalf } from '../../utils'
 import { isCloudflareWorker } from '../../universal/constants'
 
 const DEFAULT_CACHE_LIMIT = 1024
@@ -430,10 +430,8 @@ export class TypeBoxValidatorCache {
 			return
 		}
 
-		if (this.#cache.size >= DEFAULT_CACHE_LIMIT) {
-			const oldest = this.#cache.keys().next().value
-			if (oldest !== undefined) this.#cache.delete(oldest)
-		}
+		if (this.#cache.size >= DEFAULT_CACHE_LIMIT)
+			evictOldestHalf(this.#cache)
 
 		const cache = new WeakMap().set(coercions, validator) as WeakMap<
 			CoerceOption[] | typeof TypeBoxValidatorCache.EMPTY,

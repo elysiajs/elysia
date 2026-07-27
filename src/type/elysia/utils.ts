@@ -1,7 +1,7 @@
 import { Refine } from 'typebox/type'
 import type { Static, TSchema } from 'typebox'
 
-import { fnv1a } from '../../utils'
+import { fnv1a, evictOldestHalf } from '../../utils'
 import type { BaseSchema } from '../types'
 import type { ELYSIA_TYPES } from '../constants'
 import { referenceCache, SHARED_REFERENCE_CACHE_LIMIT } from '../shared'
@@ -74,11 +74,10 @@ export function createSharedReference<
 		}
 
 		const schema = Object.freeze(createType(property))
-		if (bucket) shared.delete(h)
-		else if (shared.size >= SHARED_REFERENCE_CACHE_LIMIT) {
-			const oldest = shared.keys().next().value
-			if (oldest !== undefined) shared.delete(oldest)
-		}
+
+		// hash-collision replace overwrites in place, no delete needed
+		if (!bucket && shared.size >= SHARED_REFERENCE_CACHE_LIMIT)
+			evictOldestHalf(shared)
 		shared.set(h, { key: canonicalKey, schema })
 
 		return schema

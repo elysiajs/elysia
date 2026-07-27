@@ -52,8 +52,13 @@ interface HandlerParamContext {
 
 type Resolver = (c: HandlerParamContext) => unknown
 
+// Built on first AOT manifest reconstruction
+// non-AOT apps never pay for the 47 resolver closures
+let _handlerParams: Record<string, Resolver> | undefined
+
 /** @internal exported for test/aot/param-descriptor.test.ts */
-export const HANDLER_PARAMS: Record<string, Resolver> = {
+export const handlerParams = (): Record<string, Resolver> =>
+	(_handlerParams ??= {
 	// parse adapter
 	pf: (c) => c.parse.formData,
 	pj: (c) => c.parse.json,
@@ -114,16 +119,17 @@ export const HANDLER_PARAMS: Record<string, Resolver> = {
 	// per route compute
 	tr: (c) => c.tracers,
 	cc: (c) => c.cookieConfig
-} as const
+	})
 
 export function resolveHandlerParams(names: string[], c: HandlerParamContext) {
 	const length = names.length
 	if (!length) return []
 
 	const out: unknown[] = new Array(length)
+	const params = handlerParams()
 
 	for (let i = 0; i < length; i++) {
-		const resolve = HANDLER_PARAMS[names[i]!]
+		const resolve = params[names[i]!]
 		if (!resolve)
 			throw new Error(
 				`[elysia-aot]: Fail to reconstruct build, missing "${names[i]}" param`

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import {
-	HANDLER_PARAMS,
+	handlerParams,
 	resolveHandlerParams
 } from '../../src/compile/handler/params'
 
@@ -32,8 +32,10 @@ describe('frozen handler parameter descriptors', () => {
 		const linked = linkedNames()
 		expect(linked.size).toBeGreaterThan(20)
 
-		const missing = [...linked].filter((n) => !(n in HANDLER_PARAMS))
-		const stale = Object.keys(HANDLER_PARAMS).filter((n) => !linked.has(n))
+		const missing = [...linked].filter((n) => !(n in handlerParams()))
+		const stale = Object.keys(handlerParams()).filter(
+			(n) => !linked.has(n)
+		)
 
 		expect(missing).toEqual([])
 		expect(stale).toEqual([])

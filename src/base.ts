@@ -69,11 +69,11 @@ import {
 	serializeMacroSeed
 } from './utils'
 
-import type { TRef, TSchema } from 'typebox'
-import type { AnySchema } from './type'
 import { Ref as tRef } from './type/bridge'
 import { snapshotHookSchemas, snapshotSchema } from './schema-snapshot'
 
+import type { TRef, TSchema } from 'typebox'
+import type { AnySchema } from './type'
 import type { TraceHandler, TraceCapability } from './trace'
 
 import type {
@@ -197,7 +197,6 @@ export class Elysia<
 	#hash?: number
 	#childrenHash?: Set<number>
 
-	// Group/guard macro-scope internals used ONLY within Elysia (base.ts)
 	#scopeParent?: AnyElysia
 	// Macro defs a scope-child absorbed via a nested plugin `.use()` (name → def)
 	#pluginMacros?: Map<string, unknown>
@@ -224,18 +223,16 @@ export class Elysia<
 	}
 
 	'~hookChain'?: ChainNode
-
 	'~wsConfig'?: WSOptions
 
 	#declaredRoutes?: InternalRoute[]
 	#routeSources?: (string | undefined)[]
-	#cachedHistory?: readonly HistoryEntry[]
 	server?: Server
 
 	get history(): readonly HistoryEntry[] {
-		if (this.#cachedHistory) return this.#cachedHistory
 		if (this.#declaredRoutes === undefined && this['~routeTable']?.length)
 			this.#materializeDeclaredRoutes()
+
 		if (!this.#declaredRoutes?.length) return emptyHistory
 
 		const history = new Array<HistoryEntry>(this.#declaredRoutes.length)
@@ -255,7 +252,7 @@ export class Elysia<
 			})
 		}
 
-		return (this.#cachedHistory = Object.freeze(history))
+		return Object.freeze(history)
 	}
 
 	get ['~routes'](): readonly InternalRoute[] {
@@ -307,9 +304,6 @@ export class Elysia<
 	#jitStatic?: (Response | undefined)[]
 	#jitAliases?: (StaticMapAliases | undefined)[]
 
-	// Memoized `routes` getter output
-	#cachedRoutes?: PublicRoute[]
-
 	'~router'?: Memoirist<CompiledHandler>
 	'~map'?: {
 		[method: string]: { [path: string]: CompiledHandler } | undefined
@@ -351,7 +345,6 @@ export class Elysia<
 	}
 
 	get routes(): PublicRoute[] {
-		if (this.#cachedRoutes) return this.#cachedRoutes
 		if (this.#declaredRoutes === undefined && this['~routeTable']?.length)
 			this.#materializeDeclaredRoutes()
 		if (!this.#declaredRoutes?.length) return []
@@ -396,8 +389,6 @@ export class Elysia<
 				} as PublicRoute
 			}
 		)
-
-		this.#cachedRoutes = routes
 
 		return routes
 	}
@@ -872,7 +863,6 @@ export class Elysia<
 			scope,
 			owner: this
 		}
-		this.#cachedRoutes = undefined
 
 		if (scope === 'plugin') this.#hasPlugin = true
 		else if (scope === 'global') this.#hasGlobal = true
@@ -2339,7 +2329,6 @@ export class Elysia<
 	as(target: 'plugin' | 'global'): any {
 		this.#assertMutable('as')
 		this.#as(this['~hookChain'], target === 'global' ? 'global' : 'plugin')
-		this.#cachedRoutes = undefined
 
 		return this
 	}
@@ -3734,7 +3723,6 @@ export class Elysia<
 			scope,
 			owner: this
 		}
-		this.#cachedRoutes = undefined
 
 		return this
 	}
@@ -3840,7 +3828,6 @@ export class Elysia<
 
 		Object.assign(m, macro)
 
-		this.#cachedRoutes = undefined
 		invalidateMacroEpoch()
 
 		return this as any
@@ -4359,8 +4346,6 @@ export class Elysia<
 			this.#childrenHash.add(hash)
 			;(addedByThisCall ??= new Set()).add(hash)
 		}
-
-		this.#cachedRoutes = undefined
 
 		if (app.#childrenHash)
 			addedByThisCall = this.#absorbChildrenHash(app, addedByThisCall)
@@ -5007,14 +4992,7 @@ export class Elysia<
 					: [method, path, handler, this]) as unknown as InternalRoute
 		)
 
-		if (
-			this.#routerBuilt ||
-			this.#compiled !== undefined ||
-			this.#cachedRoutes !== undefined ||
-			this.#cachedHistory !== undefined
-		) {
-			this.#cachedHistory = undefined
-			this.#cachedRoutes = undefined
+		if (this.#routerBuilt || this.#compiled !== undefined) {
 			this.#compiled = undefined
 			this.#jitColdRemaining = undefined
 			this.#jitTable = undefined
@@ -5062,14 +5040,7 @@ export class Elysia<
 		// staging arrays (`#jitHandler` is only reachable through `handler()`,
 		// which allocates `#compiled` first). On the `.use()` fan-in path none of
 		// them is populated, so the clear storm is pure per-route overhead.
-		if (
-			this.#routerBuilt ||
-			this.#compiled !== undefined ||
-			this.#cachedRoutes !== undefined ||
-			this.#cachedHistory !== undefined
-		) {
-			this.#cachedHistory = undefined
-			this.#cachedRoutes = undefined
+		if (this.#routerBuilt || this.#compiled !== undefined) {
 			this.#compiled = undefined
 			this.#jitColdRemaining = undefined
 			this.#jitTable = undefined
@@ -7370,9 +7341,7 @@ export class Elysia<
 			}
 		}
 
-		// Atomic commit: only reached when the build fully succeeds (any throw
-		// above propagates), so a failed rebuild leaves the prior `~wsConfig`
-		// intact. Always assign (including `undefined`) so a rebuild that drops
+		// Always assign (including `undefined`) so a rebuild that drops
 		// all WS routes clears stale config.
 		this['~wsConfig'] = wsConfig
 	}

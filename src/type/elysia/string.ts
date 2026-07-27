@@ -2,6 +2,7 @@ import { String } from 'typebox/type'
 import type { TString, TStringOptions } from 'typebox'
 
 import { noEnumerable } from '../constants'
+import { evictOldestHalf } from '../../utils'
 import { referenceCache, SHARED_REFERENCE_CACHE_LIMIT } from '../shared'
 
 const emptyString = Object.freeze(String())
@@ -25,10 +26,8 @@ export function StringType(options?: TStringOptions): TString {
 			return cached
 		}
 
-		if (stringFormatCache.size >= SHARED_REFERENCE_CACHE_LIMIT) {
-			const oldest = stringFormatCache.keys().next()
-			if (!oldest.done) stringFormatCache.delete(oldest.value)
-		}
+		if (stringFormatCache.size >= SHARED_REFERENCE_CACHE_LIMIT)
+			evictOldestHalf(stringFormatCache)
 
 		const schema = Object.freeze(
 			Object.defineProperty(

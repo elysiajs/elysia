@@ -1,7 +1,7 @@
 import { Decode, Refine } from 'typebox/type'
 
 import { ELYSIA_TYPES } from './constants'
-import { nullObject } from '../utils'
+import { nullObject, evictOldestHalf } from '../utils'
 import { coerceLeafCache } from './shared'
 
 import { Numeric } from './elysia/numeric'
@@ -176,10 +176,8 @@ function coerceLeaf(leaf: CoerceLeaf, seen: Set<string>) {
 			// @ts-expect-error
 			node = COERCE_LEAF_CTOR[leaf.e]!(leaf.c)
 
-			if (coerceLeafCache.size >= COERCE_LEAF_CACHE_LIMIT) {
-				const oldest = coerceLeafCache.keys().next().value
-				if (oldest !== undefined) coerceLeafCache.delete(oldest)
-			}
+			if (coerceLeafCache.size >= COERCE_LEAF_CACHE_LIMIT)
+				evictOldestHalf(coerceLeafCache)
 
 			coerceLeafCache.set(key, node)
 		} else if (coerceLeafCache.size >= COERCE_LEAF_CACHE_LIMIT) {

@@ -1,4 +1,4 @@
-import { constantTimeEqual } from '../utils'
+import { constantTimeEqual, evictOldestHalf } from '../utils'
 import { InvalidCookie } from './error'
 
 // eslint-disable-next-line sonarjs/slow-regex -- anchored, single-char class over base64 padding (<=2 chars); linear
@@ -111,10 +111,7 @@ export function importSecretKey(secret: string): Promise<CryptoKey> {
 		return key
 	}
 
-	if (keyCache.size >= 256) {
-		const oldest = keyCache.keys().next().value
-		if (oldest !== undefined) keyCache.delete(oldest)
-	}
+	if (keyCache.size >= 256) evictOldestHalf(keyCache)
 
 	key = crypto.subtle.importKey(
 		'raw',

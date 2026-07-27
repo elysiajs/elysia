@@ -1,4 +1,4 @@
-import { fnv1a } from './utils'
+import { fnv1a, evictOldestHalf } from './utils'
 import { getCompilerSession } from './compile/aot'
 
 import type { Handler, AppHook } from './types'
@@ -448,10 +448,7 @@ function rememberInference(
 	inference: Sucrose.Inference
 ) {
 	if (!cached || cached.content !== content) {
-		if (caches.size >= DEFAULT_CACHE_LIMIT) {
-			const oldest = caches.keys().next().value
-			if (oldest !== undefined) caches.delete(oldest)
-		}
+		if (caches.size >= DEFAULT_CACHE_LIMIT) evictOldestHalf(caches)
 
 		caches.set(key, { content, inference })
 	}

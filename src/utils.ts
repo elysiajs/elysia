@@ -38,6 +38,20 @@ export const isNotEmpty = <T extends Object>(obj?: T) => obj && !isEmpty(obj)
 const FNV_OFFSET_BASIS = 2166136261
 const FNV_PRIME = 16777619
 
+/**
+ * @internal Generational cache eviction — at cap, drop the oldest half.
+ *
+ * `map.delete(oldest)` per insert leaks ~1KB/eviction on JSC in ~1/3 of
+ * processes (churned bucket cells permanently grow the heap and are never
+ * reclaimed); clear + reinsert of the newest half measures clean and
+ * amortizes to O(1) per insertion.
+ */
+export function evictOldestHalf(cache: Map<any, any>) {
+	const keep = [...cache].slice(cache.size >> 1)
+	cache.clear()
+	for (const entry of keep) cache.set(entry[0], entry[1])
+}
+
 export function fnv1a(str: string): number {
 	let hash = FNV_OFFSET_BASIS
 	const len = str.length

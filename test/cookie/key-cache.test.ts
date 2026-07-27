@@ -6,14 +6,18 @@ beforeEach(() => {
 })
 
 describe('cookie key cache eviction', () => {
-	it('evicts only the oldest entry instead of flushing on the 257th secret', async () => {
+	// generational eviction: at cap the oldest HALF is dropped in one rebuild.
+	// per-insert `delete(oldest)` leaks ~1KB/eviction on JSC (bimodal bucket
+	// churn), and a full flush would force re-importing every live key —
+	// half-retention avoids both
+	it('drops the oldest half instead of flushing on the 257th secret', async () => {
 		for (let i = 0; i < 256; i++) await importSecretKey(`secret-${i}`)
 
 		await importSecretKey('secret-256')
 
-		expect(keyCache.size).toBe(256)
+		expect(keyCache.size).toBe(129)
 		expect(keyCache.has('secret-0')).toBe(false)
-		for (let i = 1; i < 256; i++)
+		for (let i = 128; i < 256; i++)
 			expect(keyCache.has(`secret-${i}`)).toBe(true)
 		expect(keyCache.has('secret-256')).toBe(true)
 	})

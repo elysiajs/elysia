@@ -214,18 +214,21 @@ describe('Edge Case', () => {
 		expect(forA.length).toBeGreaterThan(0)
 	})
 
-	it('memoizes the routes getter until registration changes', () => {
+	// `routes` is recomputed per access (the memo pinned every composed hook
+	// per route for the app's lifetime); the contract is stable CONTENT, not
+	// object identity
+	it('recomputes the routes getter with stable content', () => {
 		const app = new Elysia().get('/a', () => 'a')
 
 		const first = app.routes
-		expect(app.routes).toBe(first)
+		expect(app.routes).toEqual(first)
 
 		app.get('/b', () => 'b')
 
 		const second = app.routes
-		expect(second).not.toBe(first)
+		expect(second).not.toEqual(first)
 		expect(second.length).toBe(2)
-		expect(app.routes).toBe(second)
+		expect(app.routes).toEqual(second)
 
 		const plugin = new Elysia()
 			.macro({
@@ -238,7 +241,6 @@ describe('Edge Case', () => {
 		app.use(plugin)
 
 		const third = app.routes
-		expect(third).not.toBe(second)
 		expect(third.length).toBe(3)
 		expect(
 			third.find((route) => route.path === '/c')!.hooks.transform!.length
@@ -246,13 +248,15 @@ describe('Edge Case', () => {
 
 		app.compile()
 		const fourth = app.routes
-		expect(fourth).toBe(third)
+		expect(fourth.map((r) => `${r.method} ${r.path}`)).toEqual(
+			third.map((r) => `${r.method} ${r.path}`)
+		)
 		expect(
 			fourth.find((route) => route.path === '/c')!.hooks.transform!.length
 		).toBe(1)
 	})
 
-	it('retains the routes cache across a JIT compile', async () => {
+	it('keeps routes content stable across a JIT compile', async () => {
 		const app = new Elysia()
 			.use(autoHead())
 			.get('/a', () => 'a')
@@ -269,7 +273,6 @@ describe('Edge Case', () => {
 
 		const after = app.routes
 
-		expect(after).toBe(before)
 		expect(after.map((r) => `${r.method} ${r.path}`).sort()).toEqual(
 			beforeSnapshot
 		)
