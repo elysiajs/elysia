@@ -32,7 +32,6 @@ import type {
 import { ListenCallback, Serve, Server } from './universal'
 import { isBun } from './universal/constants'
 
-import { needEncodeRegex } from './constants'
 import {
 	buildRouteTable,
 	routeRow,
@@ -6836,8 +6835,6 @@ export class Elysia<
 	}
 
 	#saveHandler(method: string, path: string, handler: CompiledHandler) {
-		// Matches `isDynamicRegex = /[:*]/` (src/constants.ts) without the
-		// regex-engine call overhead on this per-route hot path.
 		if (path.indexOf(':') !== -1 || path.indexOf('*') !== -1) return
 
 		this.#initMap()
@@ -6846,12 +6843,6 @@ export class Elysia<
 		map[path] = handler
 	}
 
-	// Slots are spelled out instead of looped over `schemaProperties` because
-	// this runs once per hook-chain node creation and once per route during the
-	// router build: a dynamic `h[key]` is a generic `get_by_val` on a
-	// megamorphic hook object, while the constant keys below are inline-cached
-	// `get_by_id`.
-	// Keep in sync with `schemaProperties` (src/utils.ts).
 	static #slotHasString(h: Record<string, unknown> | undefined) {
 		if (!h || typeof h !== 'object') return false
 
@@ -6901,12 +6892,16 @@ export class Elysia<
 		const macroScope = table.macroScope?.get(i) // route[7]
 		const owner = table.owner[i] // route[3]
 
-		const localRoot = localMacroRoot(
-			((macroScope as AnyElysia) ??
-				(owner as AnyElysia) ??
-				this) as AnyElysia,
-			this as unknown as AnyElysia
+		const candidate = ((macroScope as AnyElysia) ??
+			(owner as AnyElysia) ??
+			this) as AnyElysia
+
+		const localRoot = (
+			candidate === (this as unknown as AnyElysia)
+				? this
+				: localMacroRoot(candidate, this as unknown as AnyElysia)
 		) as unknown as { '~ext'?: { macro?: unknown } }
+
 		if (localRoot['~ext']?.macro) return true
 
 		// route[4]: localHook (per-route)
@@ -7049,9 +7044,6 @@ export class Elysia<
 			this.#jitAliases = previousJitAliases
 			this['~hasDynamicWS'] = previousHasDynamicWS
 			this['~generation'] = previousGeneration
-			// `~wsConfig` needs no restore: it is committed atomically at the end
-			// of a successful `#buildRouterUnsafe`, so a throw here leaves the
-			// prior value intact (matching the restored `~generation`).
 
 			throw error
 		} finally {
@@ -7149,20 +7141,10 @@ export class Elysia<
 
 		const isLoose = this['~config']?.strictPath !== true
 
-		let hasLooseCandidate = false
-		if (isLoose)
-			for (let i = 0; i < length; i++) {
-				const p = path[i]
-				if (canRegisterLoose(p, (flags[i] & RouteFlag.Dynamic) !== 0)) {
-					hasLooseCandidate = true
-					break
-				}
-			}
-
 		let explicitPaths: Map<string, Set<string>> | undefined
-		if (hasLooseCandidate) explicitPaths = new Map()
+		if (isLoose && table.hasLoose) {
+			explicitPaths = new Map()
 
-		if (explicitPaths)
 			for (let i = 0; i < length; i++) {
 				const m = method[i]
 				const p = path[i]
@@ -7171,11 +7153,12 @@ export class Elysia<
 				if (!set) explicitPaths.set(m, (set = new Set()))
 
 				set.add(p)
-				if (needEncodeRegex.test(p)) {
+				if ((flags[i] & RouteFlag.Encode) !== 0) {
 					const encoded = encodeURI(p)
 					if (encoded !== p) set.add(encoded)
 				}
 			}
+		}
 
 		for (let i = 0; i < length; i++) {
 			const routeMethod = method[i]
@@ -7228,7 +7211,7 @@ export class Elysia<
 			}
 
 			const isDynamic = (routeFlags & RouteFlag.Dynamic) !== 0
-			const needsEncode = needEncodeRegex.test(routePath)
+			const needsEncode = (routeFlags & RouteFlag.Encode) !== 0
 			const registerLoose =
 				isLoose && canRegisterLoose(routePath, isDynamic)
 

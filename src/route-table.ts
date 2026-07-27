@@ -1,4 +1,4 @@
-import { isDynamicRegex } from './constants'
+import { needEncodeRegex } from './constants'
 
 import type { AnyElysia } from './base'
 import type { AnyLocalHook, InternalRoute } from './types'
@@ -6,7 +6,8 @@ import type { ChainNode } from './utils'
 
 export const RouteFlag = {
 	WS: 1,
-	Dynamic: 2
+	Dynamic: 2,
+	Encode: 4
 } as const
 
 export interface RouteTable {
@@ -19,6 +20,8 @@ export interface RouteTable {
 	readonly appHook: (ChainNode | undefined)[]
 	readonly inheritedChain: (ChainNode | undefined)[]
 	readonly flags: number[]
+	/** any static route path is '' or ends with '/' (loose-alias candidate) */
+	readonly hasLoose: boolean
 	readonly macroScope?: Map<number, AnyElysia> // route[7]
 }
 
@@ -26,14 +29,15 @@ export function buildRouteTable(
 	declaredRoutes: readonly InternalRoute[]
 ): RouteTable {
 	const length = declaredRoutes.length
-	const method: string[] = []
-	const path: string[] = []
-	const handler: unknown[] = []
-	const owner: AnyElysia[] = []
-	const localHook: (AnyLocalHook | undefined)[] = []
-	const appHook: (ChainNode | undefined)[] = []
-	const inheritedChain: (ChainNode | undefined)[] = []
-	const flags: number[] = []
+	const method = new Array<string>(length)
+	const path = new Array<string>(length)
+	const handler = new Array<unknown>(length)
+	const owner = new Array<AnyElysia>(length)
+	const localHook = new Array<AnyLocalHook | undefined>(length)
+	const appHook = new Array<ChainNode | undefined>(length)
+	const inheritedChain = new Array<ChainNode | undefined>(length)
+	const flags = new Array<number>(length)
+	let hasLoose = false
 	let macroScope: Map<number, AnyElysia> | undefined
 
 	for (let i = 0; i < length; i++) {
@@ -46,9 +50,19 @@ export function buildRouteTable(
 		localHook[i] = route[4]
 		appHook[i] = route[5]
 		inheritedChain[i] = route[6]
+
+		const isDynamic = p.indexOf(':') !== -1 || p.indexOf('*') !== -1
+
 		flags[i] =
 			(route[0] === 'WS' ? RouteFlag.WS : 0) |
-			(isDynamicRegex.test(p) ? RouteFlag.Dynamic : 0)
+			(isDynamic ? RouteFlag.Dynamic : 0) |
+			(needEncodeRegex.test(p) ? RouteFlag.Encode : 0)
+
+		if (
+			!isDynamic &&
+			(p.length === 0 || p.charCodeAt(p.length - 1) === 47)
+		)
+			hasLoose = true
 
 		if (route[7])
 			(macroScope ??= new Map<number, AnyElysia>()).set(
@@ -67,6 +81,7 @@ export function buildRouteTable(
 		appHook,
 		inheritedChain,
 		flags,
+		hasLoose,
 		macroScope
 	}
 }
