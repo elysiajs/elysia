@@ -293,6 +293,7 @@ export class Elysia<
 
 	['~addRoute'](route: InternalRoute) {
 		this.#registerRoute(route)
+
 		return this
 	}
 
@@ -897,7 +898,9 @@ export class Elysia<
 		fn: UnwrapArray<AppHook[Event]>,
 		scope: EventScope = this['~config']?.as as EventScope
 	): this {
-		this.#assertMutable('on' + (type[0].toUpperCase() + type.slice(1)))
+		if (this['~generation'] !== undefined)
+			this.#assertMutable('on' + (type[0].toUpperCase() + type.slice(1)))
+
 		const added: Partial<AppHook> = nullObject()
 		;(added as any)[type] = fn
 
