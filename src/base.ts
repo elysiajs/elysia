@@ -5038,7 +5038,7 @@ export class Elysia<
 		throw new Error(`[Elysia] .${api}() called after the app was sealed`)
 	}
 
-	#materializeDeclaredRoutes(): InternalRoute[] {
+	#materializeDeclaredRoutes() {
 		if (this.#declaredRoutes !== undefined) return this.#declaredRoutes
 
 		const table = this['~routeTable']
