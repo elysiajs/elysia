@@ -366,6 +366,9 @@ function mapFallback(
 			)
 	}
 
+	if (response instanceof ElysiaFile)
+		return handleElysiaFile(response as ElysiaFile, undefined, request)
+
 	if (
 		// @ts-expect-error
 		typeof response?.next === 'function' ||
