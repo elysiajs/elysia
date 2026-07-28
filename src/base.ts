@@ -212,9 +212,6 @@ export class Elysia<
 		hoc?: WrapFn<any>[]
 		setup?: GracefulHandler<any>[]
 		cleanup?: GracefulHandler<any>[]
-		// Severable capability channel. Populated by registrar plugins
-		// (`elysia/trace`, `elysia/websocket`) so the severed subsystem is
-		// reachable only through its dedicated entrypoint
 		capability?: {
 			trace?: { provider: TraceCapability }
 			ws?: { provider: WSCapability; options?: WSOptionsEntry[] }
@@ -6571,13 +6568,6 @@ export class Elysia<
 	ws(path: string, optionsOrHandler: unknown, handler?: unknown): any {
 		this['~hasWS'] = true
 
-		const adapter = this['~config']?.adapter
-
-		if (!adapter?.websocket && !isBun)
-			throw new Error(
-				`[Elysia] WebSocket is not supported on '${adapter?.name ?? 'web-standard'}' adapter.`
-			)
-
 		let opts: any
 		if (handler !== undefined) {
 			// 3-arg form: (path, options, handler)
@@ -6896,11 +6886,12 @@ export class Elysia<
 			(owner as AnyElysia) ??
 			this) as AnyElysia
 
-		const localRoot = (
-			candidate === (this as unknown as AnyElysia)
-				? this
-				: localMacroRoot(candidate, this as unknown as AnyElysia)
-		) as unknown as { '~ext'?: { macro?: unknown } }
+		const localRoot = (candidate === (this as unknown as AnyElysia)
+			? this
+			: localMacroRoot(
+					candidate,
+					this as unknown as AnyElysia
+				)) as unknown as { '~ext'?: { macro?: unknown } }
 
 		if (localRoot['~ext']?.macro) return true
 
@@ -7166,6 +7157,11 @@ export class Elysia<
 			const routeFlags = flags[i]
 
 			if ((routeFlags & RouteFlag.WS) !== 0) {
+				if (!wsCap)
+					throw new Error(
+						`[Elysia] WebSocket route ${routeMethod} ${routePath} defined, but no WS capability is available. Ensure that .use(websocket()) is applied.`
+					)
+
 				const ws = wsCap!.provider.buildWSRoute(
 					routeRow(table, i),
 					this
@@ -7316,7 +7312,7 @@ export class Elysia<
 			this.fetch(
 				typeof requestOrUrl === 'string'
 					? new Request(
-							requestOrUrl.startsWith('/')
+							requestOrUrl.charCodeAt(0) === 47
 								? `http://e.ly${requestOrUrl}`
 								: requestOrUrl,
 							options
