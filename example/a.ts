@@ -1,7 +1,15 @@
 import { Elysia } from '../src'
+import { WebStandardAdapter } from '../src/adapter/web-standard'
 
-const app = new Elysia().get('/', () => 'hello' as any)
+const subapp = new Elysia({
+	adapter: WebStandardAdapter
+}).ws('/', function* () {
+	yield 'OK'
+	yield 'Hello WebSocket'
+})
 
-console.log("A")
-app.listen(3000)
-console.log("B")
+const app = new Elysia({
+	adapter: WebStandardAdapter
+})
+	.get('/', 'ok')
+	.use(subapp)

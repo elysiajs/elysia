@@ -28,7 +28,8 @@ import type { ChainNode } from './utils'
 
 export interface ElysiaConfig<
 	in out Prefix extends string | undefined,
-	in out Scope extends EventScope
+	in out Scope extends EventScope,
+	in out Adapter extends ElysiaAdapter = ElysiaAdapter
 > {
 	/**
 	 * Define event scope for the instance
@@ -38,10 +39,10 @@ export interface ElysiaConfig<
 	as?: Scope
 
 	/**
-	 * @default BunAdapter
-	 * @since 1.1.11
+	 * @default BunAdapter v2
+	 * @since 2.0.0
 	 */
-	adapter?: ElysiaAdapter
+	adapter?: Adapter
 
 	/**
 	 * Path prefix of the instance

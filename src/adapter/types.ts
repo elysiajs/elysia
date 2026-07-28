@@ -9,7 +9,7 @@ import type { MaybePromise } from '../types'
  *
  * @since 2.0.0
  */
-export interface ElysiaAdapterOptions {
+export interface ElysiaAdapterOptions<App extends AnyElysia | void = void> {
 	/**
 	 * Name of the adapter, preferably runtime
 	 */
@@ -82,4 +82,7 @@ export interface ElysiaAdapterOptions {
 		 */
 		compact?(response: unknown, ...params: unknown[]): unknown
 	}
+
+	// basically to Elysia.use(app => app)
+	setup?(app: AnyElysia): App
 }

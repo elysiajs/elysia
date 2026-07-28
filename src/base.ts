@@ -372,7 +372,7 @@ export class Elysia<
 		this['~programId'] = createProgramId()
 
 		if (config) {
-			const { prefix, name, seed } = config
+			const { prefix, name, seed, adapter } = config
 
 			this['~Prefix'] = (
 				prefix
@@ -388,6 +388,8 @@ export class Elysia<
 						? `${name}_${typeof seed === 'object' ? JSON.stringify(seed, serializeMacroSeed) : seed}`
 						: name
 				)
+
+			if (adapter?.setup) this.#useFn(adapter.setup)
 		} else this['~Prefix'] = undefined as any
 	}
 
@@ -7157,11 +7159,6 @@ export class Elysia<
 			const routeFlags = flags[i]
 
 			if ((routeFlags & RouteFlag.WS) !== 0) {
-				if (!wsCap)
-					throw new Error(
-						`[Elysia] WebSocket route ${routeMethod} ${routePath} defined, but no WS capability is available. Ensure that .use(websocket()) is applied.`
-					)
-
 				const ws = wsCap!.provider.buildWSRoute(
 					routeRow(table, i),
 					this
