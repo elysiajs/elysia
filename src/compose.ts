@@ -14,6 +14,7 @@ import {
 	parseQueryFromURL,
 	parseQueryStandardSchema
 } from './parse-query'
+import { ELYSIA_STRUCTURED_FORM, parseFormData } from './parse-form-data'
 
 import {
 	ELYSIA_REQUEST_ID,
@@ -1176,6 +1177,12 @@ export const composeHandler = ({
 		}
 
 		fnLiteral += '}catch(error){throw new ParseError(error)}'
+
+		// Without validation the structured multipart interpretation is
+		// adopted as-is, otherwise body validation decides which
+		// interpretation matches the schema
+		if (!validator.body || validator.body.schema?.noValidate === true)
+			fnLiteral += `\nif(c[ELYSIA_STRUCTURED_FORM]!==undefined)c.body=c[ELYSIA_STRUCTURED_FORM]\n`
 	}
 
 	parseReporter.resolve()
@@ -1391,6 +1398,22 @@ export const composeHandler = ({
 			const hasUnion = isUnion(validator.body.schema)
 			let hasNonUnionFileWithDefault = false
 
+			// When the submitted body fails validation, retry against the
+			// structured multipart interpretation so schemas expecting
+			// objects or arrays keep accepting JSON-serialized fields
+			const structuredFormFallback = (applyDefault = '') =>
+				`{let vsb=c[ELYSIA_STRUCTURED_FORM]\n` +
+				`if(vsb===undefined){${validation.validate('body')}}\n` +
+				applyDefault +
+				composeCleaner({
+					name: 'vsb',
+					schema: validator.body!,
+					type: 'body',
+					normalize
+				}) +
+				`if(validator.body.Check(vsb)===false){${validation.validate('body')}}\n` +
+				`c.body=vsb}`
+
 			if (validator.body.hasDefault) {
 				let value = Value.Default(
 					validator.body.schema,
@@ -1441,24 +1464,35 @@ export const composeHandler = ({
 					normalize
 				})
 
+				const structuredDefault =
+					value !== undefined &&
+					value !== null &&
+					typeof value === 'object' &&
+					!Array.isArray(value)
+						? `vsb=Object.assign(${parsed},vsb)\n`
+						: ''
+
 				if (validator.body.provider === 'standard') {
 					fnLiteral +=
 						`let vab=validator.body.Check(c.body)\n` +
 						`if(vab instanceof Promise)vab=await vab\n` +
+						`if(vab.issues&&c[ELYSIA_STRUCTURED_FORM]!==undefined){` +
+						`let vsb=validator.body.Check(c[ELYSIA_STRUCTURED_FORM])\n` +
+						`if(vsb instanceof Promise)vsb=await vsb\n` +
+						`if(!vsb.issues)vab=vsb` +
+						`}\n` +
 						`if(vab.issues){` +
 						validation.validate('body', undefined, 'vab.issues') +
 						'}else{c.body=vab.value}\n'
 				} else if (validator.body?.schema?.noValidate !== true) {
 					if (validator.body.isOptional)
 						fnLiteral +=
-							`if(isNotEmptyObject&&validator.body.Check(c.body)===false){` +
-							validation.validate('body') +
-							'}'
+							`if(isNotEmptyObject&&validator.body.Check(c.body)===false)` +
+							structuredFormFallback(structuredDefault)
 					else
 						fnLiteral +=
-							`if(validator.body.Check(c.body)===false){` +
-							validation.validate('body') +
-							`}`
+							`if(validator.body.Check(c.body)===false)` +
+							structuredFormFallback(structuredDefault)
 				}
 			} else {
 				fnLiteral += composeCleaner({
@@ -1472,20 +1506,23 @@ export const composeHandler = ({
 					fnLiteral +=
 						`let vab=validator.body.Check(c.body)\n` +
 						`if(vab instanceof Promise)vab=await vab\n` +
+						`if(vab.issues&&c[ELYSIA_STRUCTURED_FORM]!==undefined){` +
+						`let vsb=validator.body.Check(c[ELYSIA_STRUCTURED_FORM])\n` +
+						`if(vsb instanceof Promise)vsb=await vsb\n` +
+						`if(!vsb.issues)vab=vsb` +
+						`}\n` +
 						`if(vab.issues){` +
 						validation.validate('body', undefined, 'vab.issues') +
 						'}else{c.body=vab.value}\n'
 				} else if (validator.body?.schema?.noValidate !== true) {
 					if (validator.body.isOptional)
 						fnLiteral +=
-							`if(isNotEmptyObject&&validator.body.Check(c.body)===false){` +
-							validation.validate('body') +
-							'}'
+							`if(isNotEmptyObject&&validator.body.Check(c.body)===false)` +
+							structuredFormFallback()
 					else
 						fnLiteral +=
-							`if(validator.body.Check(c.body)===false){` +
-							validation.validate('body') +
-							'}'
+							`if(validator.body.Check(c.body)===false)` +
+							structuredFormFallback()
 				}
 			}
 
@@ -2137,6 +2174,7 @@ export const composeHandler = ({
 		`isNotEmpty,` +
 		`utils:{` +
 		allocateIf(`parseQuery,`, hasBody) +
+		allocateIf(`parseFormData,`, hasBody) +
 		allocateIf(`parseQueryFromURL,`, hasQuery) +
 		`},` +
 		`error:{` +
@@ -2154,6 +2192,7 @@ export const composeHandler = ({
 		`ElysiaCustomStatusResponse,` +
 		allocateIf(`ELYSIA_TRACE,`, hasTrace) +
 		allocateIf(`ELYSIA_REQUEST_ID,`, hasTrace) +
+		allocateIf(`ELYSIA_STRUCTURED_FORM,`, hasBody) +
 		allocateIf('parser,', hooks.parse?.length) +
 		allocateIf(`getServer,`, inference.server) +
 		allocateIf(`fileUnions,`, fileUnions.length) +
@@ -2187,6 +2226,7 @@ export const composeHandler = ({
 			isNotEmpty,
 			utils: {
 				parseQuery: hasBody ? parseQuery : undefined,
+				parseFormData: hasBody ? parseFormData : undefined,
 				parseQueryFromURL: hasQuery
 					? validator.query?.provider === 'standard'
 						? parseQueryStandardSchema
@@ -2210,6 +2250,9 @@ export const composeHandler = ({
 			ElysiaCustomStatusResponse,
 			ELYSIA_TRACE: hasTrace ? ELYSIA_TRACE : undefined,
 			ELYSIA_REQUEST_ID: hasTrace ? ELYSIA_REQUEST_ID : undefined,
+			ELYSIA_STRUCTURED_FORM: hasBody
+				? ELYSIA_STRUCTURED_FORM
+				: undefined,
 			// @ts-expect-error private property
 			getServer: inference.server ? () => app.getServer() : undefined,
 			fileUnions: fileUnions.length ? fileUnions : undefined,
