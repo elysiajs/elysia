@@ -161,9 +161,9 @@ describe('model references', () => {
 		expect(() => app.compile()).toThrow(/GET \//)
 	})
 
-	it('unknown standalone guard ref throws during compilation', () => {
+	it('unknown merge guard ref throws during compilation', () => {
 		const app = new Elysia()
-			.guard({ schema: 'standalone', query: 'GuardGhost' as any })
+			.guard({ schema: 'merge', query: 'GuardGhost' as any })
 			.get('/', () => 'x')
 
 		expect(() => app.compile()).toThrow(

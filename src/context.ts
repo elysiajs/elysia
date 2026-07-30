@@ -16,7 +16,9 @@ import type {
 	ResolvePath,
 	HTTPHeaders,
 	InputSchema,
-	DefaultSingleton
+	DefaultSingleton,
+	AfterResponseHandler,
+	MaybePromise
 } from './types'
 
 let contextCache = new WeakMap<AnyElysia, new (request: Request) => any>()
@@ -24,9 +26,21 @@ let contextCache = new WeakMap<AnyElysia, new (request: Request) => any>()
 let sharedEmptyDecorator: any = null
 let sharedEmptyContext: any = null
 
+const defer = {
+	configurable: true,
+	get(this: any) {
+		const queue = (this['~afterResponse'] ??= [])
+		const append = (fn: Function) => queue.push(fn)
+		Object.defineProperty(this, 'defer', { value: append })
+
+		return append
+	}
+}
+
 function buildEmptyDecorator() {
 	class Decorator {}
 	Object.assign(Decorator.prototype, { status, redirect })
+	Object.defineProperty(Decorator.prototype, 'defer', defer)
 	return Decorator
 }
 
@@ -45,6 +59,7 @@ export function createBaseContext(app: AnyElysia) {
 		status,
 		redirect
 	})
+	Object.defineProperty(Decorator.prototype, 'defer', defer)
 
 	return Decorator
 }
@@ -186,6 +201,11 @@ interface ContextBase<
 	status: {} extends Route['response']
 		? typeof status
 		: SelectiveStatus<Route['response']>
+
+	/**
+	 * Append a callback to run after the response is sent
+	 */
+	defer(fn: AfterResponseHandler<Route, Singleton>): MaybePromise<void>
 
 	/**
 	 * Path extracted from incoming URL

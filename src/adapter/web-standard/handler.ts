@@ -103,7 +103,11 @@ function mapResponseWithSet(
 		case 'Number':
 		case 'Boolean':
 			return new Response(
-				(response as number | boolean).toString(),
+				typeof response === 'boolean'
+					? response
+						? 'true'
+						: 'false'
+					: (response as number).toString(),
 				set as ResponseInit
 			)
 
@@ -240,7 +244,13 @@ export function mapCompactResponse(
 
 		case 'Number':
 		case 'Boolean':
-			return new Response((response as number | boolean).toString())
+			return new Response(
+				typeof response === 'boolean'
+					? response
+						? 'true'
+						: 'false'
+					: (response as number).toString()
+			)
 
 		case 'ElysiaFile':
 			return handleElysiaFile(response as ElysiaFile, undefined, request)

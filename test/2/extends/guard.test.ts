@@ -76,9 +76,9 @@ describe('guard(scope, hook) bulk registration', () => {
 		expect(missingA.status).not.toBe(200)
 	})
 
-	it('standalone global guard schema stays additive on consumer routes', async () => {
+	it('merge global guard schema stays additive on consumer routes', async () => {
 		const a = new Elysia().guard('global', {
-			schema: 'standalone',
+			schema: 'merge',
 			query: t.Object({ b: t.String() })
 		})
 

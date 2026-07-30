@@ -558,7 +558,7 @@ describe('Scoped macro resolution', () => {
 	it('does not leak macro schemas between apps sharing a plugin', async () => {
 		const shared = new Elysia({ name: 'shared' })
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				headers: t.Object({ 'x-h': t.String() }),
 				tagged: true
 			} as any)

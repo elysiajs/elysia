@@ -57,6 +57,76 @@ describe('afterResponse', () => {
 		expect(order).toEqual(['A', 'B'])
 	})
 
+	it('appends callbacks from context in registration order', async () => {
+		const order: string[] = []
+		const app = new Elysia()
+			.afterResponse(() => order.push('hook'))
+			.get('/', ({ defer }) => {
+				defer(async ({ responseValue }) => {
+					await Promise.resolve()
+					order.push(`first:${responseValue}`)
+				})
+				defer(() => order.push('second'))
+				order.push('handler')
+
+				return 'ok'
+			})
+
+		await app.handle(req('/'))
+		await Bun.sleep(1)
+
+		expect(order).toEqual(['handler', 'hook', 'first:ok', 'second'])
+	})
+
+	it('runs a context callback without a registered hook', async () => {
+		let responseValue: unknown
+		const app = new Elysia().get('/', ({ defer }) => {
+			defer((context) => {
+				responseValue = context.responseValue
+			})
+
+			return 'ok'
+		})
+
+		await app.handle(req('/'))
+		await Bun.sleep(1)
+
+		expect(responseValue).toBe('ok')
+	})
+
+	it('runs response hooks before a context callback', async () => {
+		const order: string[] = []
+		const app = new Elysia().get(
+			'/',
+			{
+				afterHandle: () => {
+					order.push('afterHandle')
+				},
+				mapResponse: () => {
+					order.push('mapResponse')
+					return new Response('mapped')
+				}
+			},
+			({ defer }) => {
+				defer(() => order.push('afterResponse'))
+				order.push('handler')
+
+				return 'ok'
+			}
+		)
+
+		const response = await app.handle(req('/'))
+		await Bun.sleep(1)
+
+		expect(await response.text()).toBe('mapped')
+		expect(order).toEqual([
+			'handler',
+			'afterHandle',
+			'mapResponse',
+			'afterResponse'
+		])
+	})
+
 	it('receives a typed responseValue through a global plugin hook', async () => {
 		let type = ''
 

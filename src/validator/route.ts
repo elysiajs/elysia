@@ -37,7 +37,7 @@ export interface RouteValidatorOptions
 // @ts-expect-error
 const isTb = (schema: unknown): schema is AnySchema => '~kind' in schema
 
-function pickStandalone<K extends keyof RouteSchema>(
+function pickMerge<K extends keyof RouteSchema>(
 	schemas: NonNullable<RouteValidatorOptions['schemas']> | undefined,
 	key: K
 ): AnySchema[] | undefined {
@@ -88,41 +88,41 @@ export class RouteValidator<const in out T extends RouteSchema> {
 	constructor(route: T, options?: RouteValidatorOptions) {
 		if (!route) return
 
-		const standaloneSchemas = options?.schemas
+		const mergeSchemas = options?.schemas
 
 		for (const [slot, coerce] of SLOTS) {
-			const standalone = pickStandalone(standaloneSchemas, slot) as
+			const merge = pickMerge(mergeSchemas, slot) as
 				| AnySchema[]
 				| undefined
-			if (!route[slot] && !standalone?.length) continue
+			if (!route[slot] && !merge?.length) continue
 
 			const reference = Validator.reference(
-				(route[slot] ?? standalone![0]) as AnySchema,
+				(route[slot] ?? merge![0]) as AnySchema,
 				options?.models
 			)
 
 			const coerces = isTb(reference)
 				? coerce(reference)
-				: (standalone?.find(isTb) as AnySchema | undefined)
-					? coerce(standalone!.find(isTb) as AnySchema)
+				: (merge?.find(isTb) as AnySchema | undefined)
+					? coerce(merge!.find(isTb) as AnySchema)
 					: undefined
 
 			;(this as any)[slot] = Validator.create(route[slot] as any, {
 				...options,
 				slot,
-				schemas: standalone,
+				schemas: merge,
 				coerces
 			})
 		}
 
-		const responseStandalone = pickStandalone(
-			standaloneSchemas,
+		const responseMerge = pickMerge(
+			mergeSchemas,
 			'response'
 		) as Record<number, AnySchema>[] | undefined
 
 		this.response = Validator.response(route.response, {
 			...options,
-			schemas: responseStandalone
+			schemas: responseMerge
 		}) as any
 	}
 }

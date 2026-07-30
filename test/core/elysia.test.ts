@@ -719,7 +719,7 @@ describe('Edge Case', () => {
 	it('prototype pollution from input', () => {
 		const app = new Elysia()
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: z.object({
 					data: z.any()
 				})

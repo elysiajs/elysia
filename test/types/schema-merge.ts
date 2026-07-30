@@ -4,11 +4,11 @@ import { Cookie } from '../../src/cookie'
 
 // Local scope
 {
-	// Standalone guards constrain handlers.
+	// Merge guards constrain handlers.
 	{
 		new Elysia()
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
 			})
@@ -24,11 +24,11 @@ import { Cookie } from '../../src/cookie'
 			})
 	}
 
-	// Route schemas intersect standalone guard schemas.
+	// Route schemas intersect merge guard schemas.
 	{
 		new Elysia()
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
 			})
@@ -52,16 +52,16 @@ import { Cookie } from '../../src/cookie'
 			)
 	}
 
-	// Multiple standalone guard schemas intersect with the route schema.
+	// Multiple merge guard schemas intersect with the route schema.
 	{
 		new Elysia()
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
 			})
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ separated: t.Literal(true) })
 			})
 			.post(
@@ -85,11 +85,11 @@ import { Cookie } from '../../src/cookie'
 			)
 	}
 
-	// Route schemas replace ordinary guards but intersect standalone guards.
+	// Route schemas replace ordinary guards but intersect merge guards.
 	{
 		new Elysia()
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
 			})
@@ -116,11 +116,11 @@ import { Cookie } from '../../src/cookie'
 			)
 	}
 
-	// Standalone guards constrain handlers.
+	// Merge guards constrain handlers.
 	{
 		new Elysia()
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
 			})
@@ -136,11 +136,11 @@ import { Cookie } from '../../src/cookie'
 			})
 	}
 
-	// Route schemas intersect standalone guard schemas.
+	// Route schemas intersect merge guard schemas.
 	{
 		new Elysia()
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
 			})
@@ -164,16 +164,16 @@ import { Cookie } from '../../src/cookie'
 			)
 	}
 
-	// Multiple standalone guard schemas intersect with the route schema.
+	// Multiple merge guard schemas intersect with the route schema.
 	{
 		new Elysia()
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
 			})
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ separated: t.Literal(true) })
 			})
 			.post(
@@ -197,16 +197,16 @@ import { Cookie } from '../../src/cookie'
 			)
 	}
 
-	// Route schemas replace ordinary guards but intersect standalone guards.
+	// Route schemas replace ordinary guards but intersect merge guards.
 	{
 		const local = new Elysia()
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
 			})
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ separated: t.Literal(true) })
 			})
 			.post(
@@ -251,11 +251,11 @@ import { Cookie } from '../../src/cookie'
 
 // Plugin scope
 {
-	// Standalone guards constrain handlers.
+	// Merge guards constrain handlers.
 	{
 		new Elysia()
 			.guard('plugin', {
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
 			})
@@ -271,11 +271,11 @@ import { Cookie } from '../../src/cookie'
 			})
 	}
 
-	// Route schemas intersect standalone guard schemas.
+	// Route schemas intersect merge guard schemas.
 	{
 		new Elysia()
 			.guard('plugin', {
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
 			})
@@ -299,16 +299,16 @@ import { Cookie } from '../../src/cookie'
 			)
 	}
 
-	// Multiple standalone guard schemas intersect with the route schema.
+	// Multiple merge guard schemas intersect with the route schema.
 	{
 		new Elysia()
 			.guard('plugin', {
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
 			})
 			.guard('plugin', {
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ separated: t.Literal(true) })
 			})
 			.post(
@@ -332,11 +332,11 @@ import { Cookie } from '../../src/cookie'
 			)
 	}
 
-	// Route schemas replace ordinary guards but intersect standalone guards.
+	// Route schemas replace ordinary guards but intersect merge guards.
 	{
 		new Elysia()
 			.guard('plugin', {
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
 			})
@@ -363,11 +363,11 @@ import { Cookie } from '../../src/cookie'
 			)
 	}
 
-	// Standalone guards constrain handlers.
+	// Merge guards constrain handlers.
 	{
 		new Elysia()
 			.guard('plugin', {
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
 			})
@@ -383,11 +383,11 @@ import { Cookie } from '../../src/cookie'
 			})
 	}
 
-	// Route schemas intersect standalone guard schemas.
+	// Route schemas intersect merge guard schemas.
 	{
 		new Elysia()
 			.guard('plugin', {
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
 			})
@@ -411,16 +411,16 @@ import { Cookie } from '../../src/cookie'
 			)
 	}
 
-	// Multiple standalone guard schemas intersect with the route schema.
+	// Multiple merge guard schemas intersect with the route schema.
 	{
 		new Elysia()
 			.guard('plugin', {
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
 			})
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ separated: t.Literal(true) })
 			})
 			.post(
@@ -444,16 +444,16 @@ import { Cookie } from '../../src/cookie'
 			)
 	}
 
-	// Route schemas replace ordinary guards but intersect standalone guards.
+	// Route schemas replace ordinary guards but intersect merge guards.
 	{
 		const local = new Elysia()
 			.guard('plugin', {
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
 			})
 			.guard('plugin', {
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ separated: t.Literal(true) })
 			})
 			.post(
@@ -540,11 +540,11 @@ import { Cookie } from '../../src/cookie'
 
 // Global scope
 {
-	// Standalone guards constrain handlers.
+	// Merge guards constrain handlers.
 	{
 		new Elysia()
 			.guard('global', {
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
 			})
@@ -560,11 +560,11 @@ import { Cookie } from '../../src/cookie'
 			})
 	}
 
-	// Route schemas intersect standalone guard schemas.
+	// Route schemas intersect merge guard schemas.
 	{
 		new Elysia()
 			.guard('global', {
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
 			})
@@ -588,16 +588,16 @@ import { Cookie } from '../../src/cookie'
 			)
 	}
 
-	// Multiple standalone guard schemas intersect with the route schema.
+	// Multiple merge guard schemas intersect with the route schema.
 	{
 		new Elysia()
 			.guard('global', {
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
 			})
 			.guard('global', {
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ separated: t.Literal(true) })
 			})
 			.post(
@@ -621,11 +621,11 @@ import { Cookie } from '../../src/cookie'
 			)
 	}
 
-	// Route schemas replace ordinary guards but intersect standalone guards.
+	// Route schemas replace ordinary guards but intersect merge guards.
 	{
 		new Elysia()
 			.guard('global', {
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
 			})
@@ -652,11 +652,11 @@ import { Cookie } from '../../src/cookie'
 			)
 	}
 
-	// Standalone guards constrain handlers.
+	// Merge guards constrain handlers.
 	{
 		new Elysia()
 			.guard('global', {
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
 			})
@@ -672,11 +672,11 @@ import { Cookie } from '../../src/cookie'
 			})
 	}
 
-	// Route schemas intersect standalone guard schemas.
+	// Route schemas intersect merge guard schemas.
 	{
 		new Elysia()
 			.guard('global', {
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
 			})
@@ -700,16 +700,16 @@ import { Cookie } from '../../src/cookie'
 			)
 	}
 
-	// Multiple standalone guard schemas intersect with the route schema.
+	// Multiple merge guard schemas intersect with the route schema.
 	{
 		new Elysia()
 			.guard('global', {
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
 			})
 			.guard('plugin', {
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ separated: t.Literal(true) })
 			})
 			.post(
@@ -733,16 +733,16 @@ import { Cookie } from '../../src/cookie'
 			)
 	}
 
-	// Route schemas replace ordinary guards but intersect standalone guards.
+	// Route schemas replace ordinary guards but intersect merge guards.
 	{
 		const local = new Elysia()
 			.guard('global', {
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ success: t.Boolean() })
 			})
 			.guard('global', {
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ separated: t.Literal(true) })
 			})
 			.post(
@@ -815,7 +815,7 @@ import { Cookie } from '../../src/cookie'
 	{
 		const local = new Elysia()
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ family: t.String() }),
 				headers: t.Object({ family: t.String() }),
 				query: t.Object({ family: t.String() }),
@@ -947,7 +947,7 @@ import { Cookie } from '../../src/cookie'
 	{
 		const local = new Elysia()
 			.guard('plugin', {
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ family: t.String() }),
 				headers: t.Object({ family: t.String() }),
 				query: t.Object({ family: t.String() }),
@@ -1084,7 +1084,7 @@ import { Cookie } from '../../src/cookie'
 	{
 		const local = new Elysia()
 			.guard('global', {
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ family: t.String() }),
 				headers: t.Object({ family: t.String() }),
 				query: t.Object({ family: t.String() }),

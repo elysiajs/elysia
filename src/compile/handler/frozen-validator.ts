@@ -481,7 +481,7 @@ const REQUEST_SLOTS = ['body', 'headers', 'query', 'params', 'cookie'] as const
 export const isStandardSchema = (schema: unknown) =>
 	schema != null && typeof schema === 'object' && '~standard' in schema
 
-export function standaloneAllStandard(
+export function mergeSchemasAllStandard(
 	schemas: Array<Record<string, unknown>> | undefined
 ) {
 	if (!schemas || schemas.length === 0) return true

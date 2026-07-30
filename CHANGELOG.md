@@ -1,228 +1,103 @@
 # DayDream
 
-Breaking Change:
+https://elysiajs.com/blog/elysia-20.html
+ 
+Feature:
+- tree-shake typebox
+- support difference params prefix in dynamic path
+- validator pre-computes default snapshot at construction for safe schema
+- use RFC 9457 by default with `problem` function
+- `t.Cookie(schema, opts)` field-form, wrap individual properties of `t.Object` for per-field cookie attributes/secrets, replacing the need for top-level `sign: ['name']` arrays
+- programmatic `defer` API
 
-- Tracing is now an opt-in capability. `.trace()` (and any guard-carried or
-  inherited trace hook) requires registering the trace plugin once:
-  `import { trace } from 'elysia/trace'` then `.use(trace())`. Without it, the
-  app throws on its first router build (seal / first fetch / `.compile()`) with
-  the exact fix line. This lets the trace subsystem (`dist/trace.mjs`, ~5.7KB
-  plus its sucrose helpers) stay out of the default bundle — apps that never
-  trace no longer pay for it. The `elysia/trace` subpath still exports the same
-  symbols (`createTracer`, `unionTracePhases`, trace types) as before, so
-  existing importers keep working; it now also exports the `trace()` registrar.
-- WebSocket is now an opt-in capability. `.ws()` (and any inherited/scoped WS
-  route) requires registering the WebSocket plugin once:
-  `import { websocket } from 'elysia/websocket'` then `.use(websocket())`.
-  Without it, the app throws on its first router build (seal / first fetch /
-  `.compile()`) with the exact fix line. This lets the WebSocket subsystem
-  (~11.9KB) stay out of the default bundle — apps that never use WebSockets no
-  longer pay for it. The app-wide `new Elysia({ websocket: {...} })` config
-  option is removed; pass those server-tuning defaults to the registrar instead:
-  `.use(websocket({ idleTimeout: 60, maxPayloadLength: 1024 }))`. Per-route
-  `.ws(path, { idleTimeout, ... })` values still override the app-wide defaults.
-- Sucrose handler inference is now a single-pass token scanner instead of the
-  regex/alias walk. Inference output is equal or more conservative on every
-  covered fixture (ambiguity still enables channels, never silent
-  `undefined`), and pathological context-passing handlers now analyze in
-  near-linear time (~31KB handler: ~405ms → ~1.3ms). The dead internal
-  helpers `extractMainParameter`, `inferBodyReference`,
-  `hasAmbiguousContextUse`, `findParameterReference`, and
-  `isContextPassToFunction` are removed from the `elysia/sucrose` subpath
-- `sse()`-marked generators and streams no longer perform an eager first
-  `.next()` pull: the `text/event-stream` response is constructed immediately
-  (`highWaterMark: 0`), so headers flush before the first value resolves, an
-  immediately-throwing generator surfaces as a mid-stream error instead of a
-  pre-response error, and typed SSE responses no longer carry
-  `transfer-encoding: chunked`. Unwrapped/untyped generators keep the previous
-  sniffing behavior byte-for-byte
-- Replace the newly introduced heavyweight `app.history` tuples with
-  lightweight declaration entries. Executable routes are exposed internally
-  through `~routes`, and `app.routes` contains every declaration. Exact
-  duplicate method/path declarations are the user's responsibility; the last
-  registration wins across static, dynamic, and AOT dispatch.
-- Authoring APIs now throw after the application is sealed by its first
-  `handle`/`fetch`, `.compile()`, or `.listen()`. Register routes, hooks,
-  models, decorators, state, parsers, macros, and plugins before that boundary;
-  hot reload must publish a new application generation.
-- Remove `createCookieJar` from `elysia/cookies`. Use `context.cookie`,
-  `Cookie`, or `parseCookie` instead.
-- AOT artifacts now bind through an app-local `ProgramId` and framework ABI.
-  Keep sealed AOT deployments to one application per process; co-hosting
-  multiple sealed AOT applications in one process is unsupported.
-- Move opt-in automatic HEAD handling from `{ autoHead: true }` to the
-  first-party async `autoHead()` plugin from `elysia/plugin/auto-head`. It
-  registers GET routes declared on the app where it is installed, including
-  routes declared later in the same synchronous chain. Generated HEAD routes
-  are ordinary declarations visible through `history` and `routes`. Await
-  `app.modules` before calling `app.handle` or `app.fetch` directly.
-- Move the AOT bundler plugins under `elysia/plugin/aot`: import Bun, esbuild,
-  and Vite integrations from `elysia/plugin/aot/bun`,
-  `elysia/plugin/aot/esbuild`, and `elysia/plugin/aot/vite` respectively.
-- route handler argument order is now **hook-first**: the verb methods (`get`/`post`/`put`/`patch`/`delete`/`options`/`head`/`all`/`method`) take the hook/schema object **before** the handler — `.get('/', { query }, handler)` instead of `.get('/', handler, { query })`. The hookless form is unchanged (`.get('/', handler)`). `.ws()` matches: its 3-arg form is now `.ws('/ws', options, handler)` (the 2-arg `.ws('/ws', handler)` / `.ws('/ws', options)` forms are unchanged). Declaring the schema first lets the handler's context (`body`/`query`/`params`/…) infer from it, and surfaces an invalid option or handler return at the exact property/handler rather than at the whole call. Migration: move the options/hook object from the last argument to the second.
-- [Internal] remove ArrayQuery
-- [Internal] remove format: `numeric`, `integer`, `objectString`, `booleanString`
+Breaking Change:
+- see for migration guide https://github.com/elysiajs/elysia/pull/1873#issuecomment-4734573873
+- swap route hook and handler parameter position
+- soft deprecated APIs and remove
+- websocket/trace/autohead is now opt-in
+- change several internal exports
 - `getSchemaValidator` renamed to `Validator.create`
-- `NotFoundError` renamed to `NotFound` — import `NotFound` (a thrown 404 is `instanceof NotFound`)
-- remove `context.contentType` from `Context` in `parse`
-- drop `config.encodeSchema` as always enabled. Can't support both in a type safe manner.
-- `derive` now run in `beforeHandle` (after validation) — it does **not** run when validation fails (a 422 short-circuits before `beforeHandle`). If you need logic that runs before validation, use `transform` instead.
-- removed `on<event>()` lifecycle methods — use the bare `<event>()` method instead (`onRequest`→`request`, `onParse`→`parse`, `onTransform`→`transform`, `onBeforeHandle`→`beforeHandle`, `onAfterHandle`→`afterHandle`, `onAfterResponse`→`afterResponse`, `onError`→`error`)
-- `onStart` renamed to `setup` and `onStop` renamed to `cleanup`. `setup(fn)`
-- removed `.onError()` — use `error()`: `error(Error, fn)` registers a per-class handler, `error(fn)` registers the general error handler
-- removed `resolve` / `.resolve()` — use `derive` / `.derive()`
-- removed the `{ as: 'scope' }` object form for lifecycle scope and `.guard()`: pass a bare-string scope as the first argument, matching every other lifecycle method: `.beforeHandle('plugin', fn)`, `.trace('global', fn)`, and `.guard('plugin', { … })` instead of `.guard({ as: 'plugin', … })`. The local `.guard({ … })` and the sandboxed `.guard(hook, run)` forms are unchanged
-- removed `.on` due to unsound type safety
-- renamed the `'scoped'` scope to `'plugin'` — `.as('plugin')`, `.derive('plugin', fn)`, `.guard('plugin', { … })`
-- removed deprecated `set.redirect` — use the `redirect()` context helper (`({ redirect }) => redirect('/')`)
-- removed the deprecated `response` context field on `mapResponse`/`afterResponse` handlers — use `responseValue`
-- removed the deprecated `contentType` second parameter of the `parse`/`parser` handler — use `context.contentType`
-- removed the `{ as: 'append' | 'override' }` object form of `.decorate()` / `.state()` — use the bare-string form `.decorate('append' | 'override', …)` / `.state('append' | 'override', …)`
+- `NotFoundError` renamed to `NotFound`
+- `config.encodeSchema` as always enabled. Can't support both in a type safe manner.
+- `derive` now run in `beforeHandle`. `resolve` is removed
+- rename `on<event>()` lifecycle methods to `<event>()` method instea
+- `onStart` renamed to `setup`, `onStop` renamed to `cleanup`.
+- rename `.onError()` `error()`. `error(Error, fn)` registers a per-class handler, `error(fn)` registers the general error handler
+- inline `{ as: 'global' }` to literal instead
+- rename `scoped` scope to `plugin`
+- remove `.on` due to unsound type safety
+- remove deprecated `set.redirect`, use `redirect()` instead
+- remove deprecated `response`, use `responseValue`
+- remove deprecated `contentType`, use `context.contentType`
+- remove the `{ as: 'append' | 'override' }` object form of `.decorate()` / `.state()`, use the literal instead
 - `t.Transform` renamed to `t.Codec` (TypeBox 1.0 alignment)
-- removed `t.Recursive`, `t.Not`, `t.RegExp` (TypeBox 1.0 alignment) — use `t.Ref`/self-reference for recursion and `t.String({ pattern })` for regex constraints
-- `t.NoValidate` semantics: now skips `Check` only — `Default`/`Convert`/`Decode`/`Encode` still run. Unidirectional codecs (`t.BooleanString`, `t.Numeric`) under `NoValidate` will surface as `ValidationError` if Encode is invoked
-- Cookie `sign` without matching `secrets` now throws at app construction time (was silent before — cookies shipped unsigned)
+- removed `t.Recursive`, `t.Not`, `t.RegExp` (TypeBox 1.0 alignment), use `t.Ref`/self-reference for recursion and `t.String({ pattern })` for regex constraints
+- `t.NoValidate` semantics now skips `Check` only, `Default`/`Convert`/`Decode`/`Encode` still run.
+- Cookie `sign` without matching `secrets` now throws at app construction time
 - deprecated passing Elysia instance to `.mount`, use `.use` instead
-- removed v1 instance methods `.route()`, `.connect()`, `.env()`, `.affix()`/`.prefix()`/`.suffix()` and the `.store`/`.decorator`/`.config` instance getters — use the explicit method handlers (`.get`/`.post`/…), plugin naming via `new Elysia({ name, prefix })`, and the in-handler `context.store`/`context.decorator`
-- functional macro must be named via the object form `.macro({ name: fn })`. A bare `.macro(fn)` is now a type error and throws at runtime instead of silently doing nothing
-- removed `.macro(name, definition)` — use `.macro({ [name]: definition })`. The named form existed only because the object form couldn't type `resolve`/`derive` ("Due to TypeScript's limitation" in the macro docs); the object form is now fully inferred: a definition's own `beforeHandle`/`derive` see the definition's own schema typed, derive results and schema reach the consuming route, the function form `(arg) => ({ … })` types its call-site argument, and typo'd definition keys are rejected at the type level. Two semantic notes: (1) a macro's declared `response` types the consuming route's contract but no longer constrains the macro's OWN handlers — their actual returns (values and `status()`) are collected additively into the route's response union; (2) cross-macro context (a definition applying another macro via `{ auth: true }`) reaches the consuming route but is not visible to the definition's own handlers — annotate the ctx parameter if needed. Macro definition inference requires TypeScript >= 5.7 (older versions degrade the own-handler ctx to defaults)
+- remove v1 instance methods `.route()`, `.env()`, `.affix()`/`.prefix()`/`.suffix()` and the `.store`/`.decorator`/`.config` instance getters.
+- `.guard()` and `.group()` form now defaults to the 'override' channel instead of 'standalone'
+- rename `schema: standalone` to `schema: 'merge'`
+- wrap API v2
+- remove `.macro(fn)`, use functional macro must be named via the object form `.macro({ name: fn })`
+- remove `.macro(name, definition)`, use `.macro({ [name]: definition })`
+- recommended minimum TypeScript version is 5.7
 
 Behavior Change:
 
-- `context.path` is now readonly. During Release N, assignment still reroutes
-  for compatibility but warns in development when request hooks are present;
-  the field remains enumerable for spreads and serialization.
-- Validation error `payload.expected` values that can be safely snapshotted are
-  cached per schema as shared, deeply frozen values. Error hooks must treat
-  them as readonly; objects returned by user default functions are cloned
-  before caching.
-- Schemas are cloned on first registration and reused by identity. Mutating the
-  original schema object afterward no longer changes an already registered
-  route; register a new schema in a new application generation instead.
-- Signed-cookie verification now defaults to `verify: 'lazy'`.
-  On runtimes with synchronous HMAC, signed cookies are verified on first
-  value-bearing access, so an invalid signed cookie that the route never reads
-  no longer returns 400. Async-only runtimes and cookie-validator routes remain
-  eager; set `verify: 'eager'` to require eager ingress-time verification.
-- Values returned early from `request()` hooks now pass through `mapResponse`
-  before they are sent.
-- EVERY `.guard()` and `.group()` form now defaults to the OVERRIDE channel — the closer to the route, the more power: a nearer guard's schema or the route-local schema replaces an inherited one per field (response per status code). Additive validation (every visible validator runs as its own pass) requires an explicit `schema: 'standalone'` opt-in. Previously the string-scope forms (`.guard('local' | 'plugin' | 'global', …)`) and the sandboxed run forms (`.guard(hook, run)` / `.group(prefix, hook, run)`) forced `standalone` implicitly (the run forms even ignored an explicit `schema: 'override'`) while the object forms defaulted to override — the same method defaulted differently depending on call shape
-- [Type] guard schemas are typed by channel, matching the runtime: override-channel guard schemas land in the scope's `schema` channel (replaced by nearer schemas), `schema: 'standalone'` schemas land in the additive `schemas` channel (intersect). Previously the types treated every guard schema as standalone-intersect
-- [Type] `params` follows the same whole-field override rule as every other input field: the nearest DECLARED params schema's static is the params shape (the runtime validator strips keys outside it, including path-derived ones); path-derived params (`ResolvePath`) apply only when no schema is declared. Previously the types merged guard and route params per-key, claiming keys the runtime had stripped
+- `context.path` is now readonly
+- Validation error `payload.expected` values are shared and deeply froze
+- Schemas are cloned on first registration and reused by identity
+- Signed-cookie verification now defaults to `verify: 'lazy'`
+- Values returned early from `request()` hooks now pass through `mapResponse` before they are sent.
 - [Type] instance-level `.parse()` and `.transform()` no longer inherit ANY guard input schema — its context is typed as raw, pre-validation values (path params from the instance prefix are kept)
 - `afterHandle` will skip the rest when short-circuit
 - `Error.summary` now use default TypeBox message instead
 - `Error.summary` now support for Standard Schema
-- Validator runs `Convert` and reorders to `Convert → Check → DecodeUnsafe` for codec schemas (matches TypeBox 1.0 standard `Decode` pipeline). Fixes `t.Numeric({ minimum, maximum })` and `t.Codec(...).Decode(...)` against wire-form input
-- `streamResponse` (adapter utils) now yields raw body chunks (`Uint8Array` — or strings for JS-`ReadableStream`-backed bodies on Bun) instead of UTF-8-decoding every chunk; decoding corrupted non-UTF-8 bytes and multi-byte characters split across chunk boundaries, so re-streamed `Response` bodies now pass through byte-identical. A headerless chunked re-stream whose first chunk is a binary view now defaults to `content-type: application/octet-stream` (was `application/json`)
-- a bodyless `GET`/`HEAD` route no longer runs `parse` lifecycle hooks (it has no body to parse) — they only fire on routes that read a body, which keeps bodyless reads off the async path. Matches v1; a `parse` hook that must run on every request belongs in `request`/`transform`
-- the default validation (422) response now scopes the echoed `found` value: a request body whose JSON exceeds 4KB is no longer reflected back in full (it was 1:1 egress amplification) — `found` carries the failing sub-value, or a marker when that too is large. Bodies ≤4KB are byte-identical to before. `error.value` / `error.all[i].value` still expose the full value to custom error handlers
-- a WebSocket `'/'`-prefixed text message is no longer speculatively `JSON.parse`d (it can never be JSON, so this was a guaranteed throw per message); WS upgrade query parsing now uses the same parser as HTTP routes (duplicate keys form arrays instead of last-wins; query records are null-prototype)
-- a multipart/urlencoded form field starting with `{`/`[` is only `JSON.parse`d when it also ends with the matching `}`/`]` (was: every brace/bracket-prefixed field, so unclosed garbage paid a full failed parse); a trailing-whitespace-padded JSON field now stays a string
-- Bun native static-route dispatch is no longer disabled by the presence of an `error` hook (a precomputed static `Response` runs no user code, so the hook is unreachable on a native hit; it still fires on misses and non-static routes). Static-value routes that carry a `mapResponse` hook or a request schema now correctly fall through to the JS path instead of being served natively unmapped/unvalidated
-- a handler-returned `Response` is now passed through by reference when nothing about `set` would change it (untouched status/headers/cookie), instead of always being rewrapped into a fresh `Response` — this preserves an in-memory body and its `content-length` (previously a rewrap converted it to a stream-backed body and dropped `content-length`). Beyond that, an ordinary returned `Response` is now **request-owned and single-use**: when `set` state (default headers, `set.headers`, `set.status`, cookies) must be applied, the framework patches/rewraps the owned `Response` by reference — the body is transferred, never cloned or re-pumped, and the response's own headers/status win on a conflict. This applies to handler returns, `mapResponse`/`error` hook returns, and mounted/inner `fetch`-handler results (each `fetch` call yields a fresh `Response`, so these are owned too). Consequences: (1) returning the **same** `Response` object across requests (e.g. a module-level constant) without marking it is broken by contract and now fails **loudly** — the second request throws a `TypeError` naming `borrow()` as the remedy, which routes through `error` hooks — instead of silently leaking per-request headers into the shared object; (2) returning an owned `Response` whose body was already **consumed** throws the same loud `TypeError`; a **locked but unread** body throws only when `set` state must be patched in — when nothing needs patching the response passes through byte-untouched, locked body and all (the framework does not probe `.body` on the pass-through path because that probe would materialize lazy in-memory bodies and degrade native serving for every well-behaved response). To intentionally share one `Response` across requests, mark it with the new **`borrow()`** export (`import { borrow } from 'elysia'`): a borrowed `Response` always takes the conservative clone/tee path, so its body stays reusable, per-request `set` state never mutates it, and a client cancelling the served copy does not cancel the shared body. A borrowed `Response` is never rewrapped directly around its raw body (that would transfer a one-shot stream). Ownership is never inferred from construction timing; framework-cached static/error responses are cloned at their source and never mutated. This supersedes the earlier in-place Bun header merge described here and **resolves** its shared-`Response` header-leak caveat
-- signed cookies are always signed with the **first** secret in the rotation list (`secrets[0]`) — index 0 is the active signing key, the remaining entries are accepted for verification only (rotation). Previously the active key was the first **non-null** entry, so a list whose index 0 was `null` (e.g. `[null, 'key']`) silently signed with a later secret than the one declared first. A `null` at index 0 now means there is no active key and signing throws (`Cookie field "<name>" is signed but no secrets is provided.`) instead of silently signing with a different secret. The common form `['new', 'old']` is unchanged; verification against every secret in the list is unchanged
-- unhandled errors no longer leak their `message` to the client when `NODE_ENV=production`: a thrown/returned generic `Error` (and any `ElysiaError` with status >= 500 that has no explicit `response`) now responds with `Internal Server Error` instead of the raw error message. Development (non-production) responses are unchanged and still surface the message for debugging. Custom `error()` handlers and `toResponse()` are unaffected
-- the JSON error response produced by the response mapper for a returned/mapped `Error` no longer includes the `cause` field, and its `message` is replaced with `Internal Server Error`, when `NODE_ENV=production` (`cause` commonly wraps the original low-level failure). Non-production output is unchanged (`{ name, message, cause }`)
-- `file()` responses resolve their `content-type` from the file extension case-insensitively — an uppercase or mixed-case extension (e.g. `photo.PNG`, `report.PDF`) now maps to the correct MIME type instead of falling back to `application/octet-stream` (which forced a download). Lowercase extensions are unaffected
-- synchronous Standard Schema validators no longer force async route emission. Body routes are already async and still await promise-returning Standard Schema results; on otherwise-sync channels, declare `validate` as `async` if it can return a `Promise`, otherwise Elysia fails loudly instead of silently putting a pending promise into the request context
-- Bun native static-route `Response` objects are no longer retained on the base Elysia instance during router build. The Bun adapter still collects eligible native static routes for `Bun.serve.routes` during `listen()`, but `app.fetch`/`app.handle` no longer keep the extra base-level static route table alive
-- `autoHead` remains opt-in and cancels the mapped GET response body without buffering it; an existing `content-length` is preserved, but no missing length is synthesized
+- Validator runs `Convert` and reorders to `Convert -> Check -> DecodeUnsafe` for codec schemas
+- `streamResponse` (adapter utils) now yields raw body chunks
+- a bodyless `GET`/`HEAD` route no longer runs `parse` lifecycle hooks
+- the default validation (422) response now scopes the echoed `found` value: a request body whose JSON exceeds 4KB is no longer reflected back in full
+- only register static content to Bun.serve.routes
+- Bun native static-route dispatch is no longer disabled by the presence of an `error` hook
+- `mapResponse` hook or a request schema now correctly fall through to the JS path instead of being served natively unmapped/unvalidated in Bun.serve.routes
+- unhandled errors no longer leak their `message` to the client when `NODE_ENV=production`
+- thrown/returned generic `Error` or any `ElysiaError` with status >= 500 without explicit `response`, now responds with `Internal Server Error` instead of the raw error message for security reason
+- the JSON error response produced by the response mapper for a returned/mapped `Error` no longer includes the `cause` field, and its `message` is replaced with `Internal Server Error` when `NODE_ENV=production`. Non-production output is unchanged (`{ name, message, cause }`)
+- `file()` responses resolve their `content-type` from case-insensitively file extension
+- synchronous Standard Schema validators no longer force async route emission
+- Bun native static-route `Response` objects are no longer retained on the base Elysia instance during router build
 
-Feature:
-
-- Add top-level `{ introspect: true }` so apps and introspection plugins can
-  retain the metadata needed after sealing.
-- Add the preview resume emitter as an opt-in capability from
-  `elysia/experimental/resume`; default bundles no longer include its compiler
-  code.
-- Add opt-in `experimental.lazyCompose` to defer synchronous route-copy work
-  until build time for deeply nested plugin graphs. Async plugins, promises,
-  and cyclic graphs fail loudly under the flag.
+Improvement:
 - `t.File({ type })` / `t.Files({ type })` content-detection failures now report the offending property path (`property: '/avatar'`, `/files/0`) instead of an empty path — the validated value is identity-walked only when a detection fails
-- Adapter v2
+- adapter v2
 - sub type validator
 - shared validator cached
 - shared schema reference
 - Cookie schema field
-- `t.Cookie(schema, opts)` field-form — wrap individual properties of `t.Object` for per-field cookie attributes/secrets, replacing the need for top-level `sign: ['name']` arrays
-- plain `t.File()` / `t.Files()` (no `type` option) no longer force the async validation path — only schemas that can actually enqueue content detection go through `FromAsync`
-- Validator pre-computes default snapshot at construction for safe schemas (no Union/Codec/Refine/nested-Object-without-default), eliminating per-request `Default()` walk for the common case
-
-Performance:
-
-- Default headers now use a private shared record and materialize a
-  request-local copy only when response state is exposed. Behavior and
-  cross-request isolation are covered; no runtime improvement is claimed until
-  the D1 latency and retained-RSS A/A floors are valid.
+- plain `t.File()` / `t.Files()` (no `type` option) no longer force the async validation path
 
 Bug fix:
-
-- Body parsing now confirms an exact normalized media type (including `+json`)
-  and returns 415 when it unambiguously conflicts with a route body schema;
-  schema-less, custom-parser, and ambiguous-schema routes remain lenient.
-- `context.server` now receives the active Bun server for socket requests and
-  is `null` for direct `app.handle()` calls; it was previously always
-  `undefined` in handlers.
-- on non-Bun (Node / web-standard) adapters, a plain-string response now sets `content-type: text/plain` again — a stray header literally named `type` (a typo) had replaced it, so the compact-path string response shipped with a wrong header and the auto-derived `text/plain;charset=UTF-8` instead of the intended `text/plain`
-- macro routes had process-order-dependent validation: a one-shot iterator in the macro's schema-lift made the lift a no-op after the first call per process, so two identical routes under a guard could validate differently depending on registration/dispatch order. The lift (which predated the override-channel ruling and contradicted it) is removed — route-local schemas now consistently override an inherited guard schema regardless of order
-- typebox is tree-shakable again: `Elysia` itself no longer holds a static value-edge into the `t`/typebox graph (`.Ref()` now goes through the typebox-free bridge), so bundling an app that never uses `t` drops typebox entirely (esbuild probe: 737KB → 204KB, 0 typebox bytes; schema users unchanged). `import { Elysia } from 'elysia/base'` is now typebox-free at runtime too (~8ms cold import vs ~60ms for the main barrel)
-- a raw `typebox` schema (importing `Type` from `typebox` directly, never touching Elysia's `t`) threw `Typebox module isn't initialized yet` on every request — bridge stubs now self-initialize via the `t` module's setup trigger
-- prefixed `.use()` dropped the absorbed plugin's inherited hook chain — guards/`beforeHandle`/auth applied through composition silently stopped running once mounted under `new Elysia({ prefix })`
-- an instance-level `.onError` on a plugin clobbered route-level and inherited error handlers, leaking the raw `Error.message` with a 500 instead of the mapped response
-- cookie values were percent-decoded twice (`parse()` already decodes), corrupting any value that decodes to something still containing `%xx` (e.g. `100%2520off` → `100 off` instead of `100%20off`)
+- return 415 when unsure about content-type
+- `context.server` now receives the active Bun server for socket requests and is `null` for direct `app.handle()`
+- non-Bun (Node / web-standard) adapters, a plain-string response now sets `content-type: text/plain`
+- cookie values were percent-decoded twice (`parse()` already decodes), corrupting any value that decodes to something still containing `%xx` (e.g. `100%2520off` -> `100 off` instead of `100%20off`)
 - `.compile()` overwrote WebSocket upgrade handlers with a generic HTTP handler, breaking upgrades after eager/AOT compilation
 - `normalize: false` returned the precomputed default object by reference, so one request's handler mutation of a defaulted body/query leaked into subsequent requests
-- a standalone `response` schema without a `200` entry threw `'~kind' in undefined`, 500-ing every request on the route
-- dynamic (parameterized) routes did not match a trailing slash under the default `strictPath: false` (static routes already did)
-- the per-app `loosePath`/decoded-path caches grew without bound on attacker-controlled request paths — an unauthenticated memory-exhaustion DoS
-- `parseQueryFromURL` scanned the whole URL from index 0, corrupting the query when the matched path contained `&`/`%`/`+`/`=` (reachable via path params)
-- an `onError` returning a `File`/`Blob` threw a `TypeError` (the Context was passed where the adapter expected a `Request`); Range requests are now honoured on the error path
+- a standalone `response` schema without a `200` entry threw `'~kind' in undefined`
+- dynamic (parameterized) routes did not match a trailing slash under the default `strictPath: false`
+- per-app `loosePath`/decoded-path caches grew without bound on attacker-controlled request paths
+- an `onError` returning a `File`/`Blob` threw a `TypeError`
 - response headers were dropped on non-Bun runtimes when re-streaming a returned `Response`
-- a `wrap()` HOC was skipped for native static routes on Bun (it now serves through `fetch` so the HOC always runs)
+- a `wrap()` HOC was skipped for native static routes on Bun
 - signed-cookie HMAC comparison fell back to a non-constant-time `===` off Bun (timing side channel)
 - cookie secret rotation with a `null` ("allow unsigned") entry threw `Secret key must be provided` for any value containing a dot
-- `application/xml` was parsed as `x-www-form-urlencoded` (both share `'x'` at index 12 of the content type)
-- handlers using optional chaining on the context (`ctx?.query`) did not infer the field, so it was never parsed and read back `undefined`
+- `application/xml` was parsed as `x-www-form-urlencoded`
+- Sucrose: handlers using optional chaining on the context (`ctx?.query`) did not infer the field
 - an unguarded `JSON.parse` in query array parsing turned malformed input into a request-controlled 500
-- Bun native static routes were never installed when every static response was synchronous (the optimization was dead in its common case)
-- error-path `mapResponse` codegen assigned an undeclared `tmp`, leaking the mapped response onto `globalThis` (and crashing under AOT strict-mode modules)
-- `Cookie` was no longer exported from the package entry, so `import { Cookie } from 'elysia'` (used to type the `cookie` context) failed to resolve
+- Bun native static routes were never installed when every static response was synchronous
+- error-path `mapResponse` codegen assigned an undeclared `tmp`, leaking the mapped response onto `globalThis`
 - schema-less body routes now treat `Transfer-Encoding` as body-present before touching `request.body`, preserving the fast framing-header path for chunked/proxy-framed requests without `Content-Length`
-
-Type:
-
-- restored `.derive()` / `.resolve()` context inference — resolved properties now flow into subsequent handler/Eden context types, with `local` / `scoped` / `global` scope propagation (was untyped, returning `this`)
-- restored `.guard()` / `.as()` schema inference — `.guard({ body })` now accumulates standalone schemas (body/headers/query/params/cookie/response) into subsequent handler/Eden context; `.guard('plugin' | 'global', { … })` accumulates into the Ephemeral / Singleton+Metadata channel (so a guarded macro `resolve` propagates one level / everywhere); `.guard(hook, app => …)` types the sandboxed builder and merges its routes back; `.as('plugin' | 'global')` promotes the locally-accumulated schema / resolve / response / error one scope outward (all were untyped, returning `this`)
-- a standalone guard `response` schema now type-constrains route handlers and **intersects with the route's own `response` per status code** (object schemas at a shared code merge their fields — guard `{ 404: { name } }` + route `{ 404: { q } }` → `{ 404: { name, q } }`; status codes declared by only one side survive — route `{ 200 }` + guard `{ 418 }` → `{ 200, 418 }`; a non-object/literal clash at the same code keeps the route's instead of intersecting to `never`), resolved object-aware in `IntersectIfObjectSchema`; across standalone scopes `MergeScopedSchemas` still prefers the nearer scope per status code (local > scoped > global), so a plugin-local `{ 401 }` keeps an inherited global `{ 402 }`
-- a string model reference in a status-mapped `response` (`response: { 404: 'MyModel' }`) now resolves to the referenced model's type — `InputSchema['response']`'s status-map value was typed `string` rather than the model `Name`, so the reference widened away and resolved to `unknown`, rejecting valid `status(404, …)` returns
-- lifecycle hooks now infer scope-aware `params` — `parse` / `transform` / `mapResponse` / `afterResponse` were typed via the un-parameterized `EventFn`, so their context `params` resolved to `never`; they now use the instance-typed handlers (`BodyHandler` / `TransformHandler` / `MapResponse` / `AfterResponseHandler`) like `beforeHandle`. A dedicated `LifecycleContext` type (a thin wrapper over the route-handler `Context` that overrides only `params`) makes a `'global'` / `'plugin'` (scoped) hook's `params` an open `{ [name: string]: string | undefined }` — a scoped hook applies to any route, so it can't assume the current route's path params — while a `'local'` hook keeps the path-resolved params (`new Elysia({ prefix: '/:id' }).transform(({ params }) => …)` → `{ id: string }`). The route-handler `Context` is unchanged (no scope parameter leaks into it)
-- a **primitive** standalone guard schema now threads into the handler context — `.guard({ body: t.String() })` then `.get('/', ({ body }) => …)` now types `body` as `string` (was `unknown`); `IntersectIfObject` dropped a non-object standalone schema when the route side was absent
-- `.derive()` / `.resolve()` now see a preceding `.guard()`'s standalone schema — `.guard({ query: t.Object({ id: t.Number() }) })` then `.derive(({ query }) => …)` types `query` as `{ id: number }` (was `Record<string, string>`); the derive overloads were missing the standalone `schemas` channel that `beforeHandle`/`parse` already intersect
-- handler context now unwraps a schema's **decoded** type, not its encoded/input type — `t.ArrayString(t.String())` body is `string[]` and `t.Codec(t.String()).Decode(v => …number)` query is `number` (were `string | string[]` / `string`); `StaticCyclic` now uses `StaticDecode` instead of `Static`
-- a void-possible `.derive()` / `.resolve()` (one that conditionally returns) now types its fields as optional — `derive(() => { if (x) return { stuff: 'a' } })` yields `stuff: 'a' | undefined` (was `'a'`, which was unsound for the not-returned path); `ExcludeElysiaResponse` makes fields `Partial` when the return includes `undefined` rather than stripping it
-- `.request()` context is now the derive-free `PreContext` — a `.derive`/`.resolve` value no longer appears in an `onRequest` handler (it was typed via the un-parameterized `EventFn` and leaked the whole context as `any`)
-- `.transform()` context now reflects the transform stage: a prior `.derive` value IS visible (transform/derive share the transform stage in registration order), but a guard's standalone input schemas are NOT inherited (`body`/`params`/`query` stay pre-validation `unknown`/`Record`) — `TransformHandler` no longer empties the derive channel, and the transform overloads no longer intersect the standalone `schemas` channel
-- a named macro's own lifecycle handlers are now typed — `.macro('a', { body: t.Object({ a: … }), beforeHandle({ body }) {} })` types `body` from the macro's own schema (and a macro that applies another via `{ other: true }` inherits the other's schema/derive), instead of `any`. A redundant `.macro(name, …)` overload was shadowing the `MacroProperty`-typed one, so named-macro handler context was never inferred
-- `.ws()` routes are now typed — a ws route registers in `~Routes` under `subscribe` (so Eden can see it: `app['~Routes']['…']['subscribe']` is `{ body, params, query, headers, response }`), and its handler context (`open`/`message`/…) is the typed `ElysiaWS` instance: route data (`params`/`query`/`headers`/derive) and applied macro values are top-level (`ws.params`, not `ws.data.params`), alongside the ws methods (`send`/`publish`/`subscribe`/…), matching the runtime. `.ws()` previously returned `this` with an untyped (`any`) context
-- a ws object-form `message` handler now types `ws.body` (and the destructured `{ body }`) from the `body` schema — `.ws('/', { body: t.Object({ name }), message(ws) { ws.body } })` types `ws.body` as `{ name: string }` (the 3-arg `.ws(path, handler)` form already did; the object form inherited a shared `body: never` ctx across all handlers). Non-message handlers (`open`/`close`/`drain`/`ping`/`pong`) keep `ws.body` as `never` — they carry no inbound payload
-- a ws lifecycle handler may now `return status(code, value)` against a status-keyed `response` — `.ws('/', { response: { 200, 400 }, message(ws) { return ws.status(400, …) } })` is validated against `response[400]` and accepted, mirroring HTTP handlers (`WSHandlerResult` excluded `ElysiaStatus`, so the idiomatic typed error return fell through to the untyped overload)
-- the 3-arg `.ws(path, handler, options?)` form is now typed, and the handler's contribution flows into the Eden `subscribe` response — a generator/async-generator handler's `yield` type, or a plain handler's return type — `.ws('/chat', function* (ws) { yield { tick: 1 } })` types `~Routes['chat']['subscribe']['response'][200]` as `{ tick: number }` (so a client streams typed messages), with the handler context (`ws.body`/`ws.params`/…) typed from any schema passed in `options`. Previously the 3-arg form fell to the untyped overload (returning `this`)
-- a handler may now `return form(...)` against a `response: t.Form(...)` schema — the response-return type is now the `ElysiaFormData` wrapper that `form()` produces (and that the wire passthrough sends), instead of the codec's decoded plain object (which also leaked raw `t.File()` schema nodes). Response typing recomputes the form wrapper from the inner field schemas; request bodies (`body: t.Form(...)`) keep the decoded object — an encode/decode directional split
-- `t.Form(...)` now works as a request `body` — a multipart request validated against `body: t.Form({...})` previously 422'd ("must be instance of Elysia.form") because the schema's `~ely-form` refine (meant to validate `form()` RESPONSE output) rejected incoming bodies that lack the marker; the request-decode path now satisfies the refine internally without leaking the marker, and `ctx.body` types/decodes to the clean field object (`{ name: string; file: File }`, leaked `t.File()` schema nodes fixed)
-- restored lifecycle-hook response inference — `.onBeforeHandle` / `.onAfterHandle` / `.onError` now accept `MaybeArray` handlers and fold each handler's `status(...)` returns into the response union, channeled by scope (local→Volatile, `{ as: 'scoped' }`→Ephemeral, `{ as: 'global' }`→Metadata), matching `.guard`'s lifecycle handlers (were untyped single-handler, returning `this`)
-- macro lifecycle `status(...)` returns now surface in the route response type — `MergeResponseStatus` read a non-existent `['res']` field on `ElysiaStatus` (the field is `['response']`), so e.g. a macro `beforeHandle` returning `status(410)` resolved to `unknown` instead of `'Gone'`
-- `resolve` / macro `resolve` handlers may now `return status(...)` — `ResolveHandler` previously allowed only `Record | ElysiaError | void`, rejecting `ElysiaStatus`; the status return short-circuits to the response union
-- `t.UnionEnum([...])` now infers as the union of its values (`'a' | 'b'`) in handler/Eden context — it was `Type.Unsafe<TUnionEnum<T>>`, surfacing the schema interface instead of the value union
-- `t.ArrayString(t.String())` now accepts an element schema and infers `string[]` — the parameter was wrongly constrained to `TProperties` and the element type was erased with an `as any`
-- restored `Elysia.Ref(name)` for referencing a registered `.model(...)` as a schema (the method was missing)
-- model `$ref` types now resolve in handler/Eden context — `StaticCyclic` had an inverted `Definitions extends {}` check (always true) that skipped ref resolution, leaving `Model.Ref('x')` typed as `unknown`
-
-Internal:
-
-- route matching: percent-encoded paths are now matched via build-time `encodeURI` keys stored alongside `~map`/the router, instead of decoding the path per request — dynamic param values are still decoded at match time
-- `error.code` removed — dispatch on the error class with `instanceof` (or register via `error(Error, () => {})`)
-- dual CJS + ESM build (the previous ESM-only output left `require('elysia')` resolving to non-existent `.js` files); `exports` map reconciled against the real `dist/`, and `files: ["dist"]` keeps `src-old`/`design`/dev artifacts out of the published tarball
 
 # 1.4.28 - 17 Mar 2025
 

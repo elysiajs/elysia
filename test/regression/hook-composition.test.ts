@@ -4,14 +4,14 @@ import { Elysia, t } from '../../src'
 import { req } from '../utils'
 
 describe('hook composition', () => {
-	it('enforces every standalone schema propagated by a plugin', async () => {
+	it('enforces every merge schema propagated by a plugin', async () => {
 		const plugin = new Elysia()
 			.guard('plugin', {
-				schema: 'standalone',
+				schema: 'merge',
 				query: t.Object({ q: t.String() })
 			})
 			.guard('plugin', {
-				schema: 'standalone',
+				schema: 'merge',
 				headers: t.Object({ 'x-test': t.String() })
 			})
 		const app = new Elysia().use(plugin).get('/', () => 'ok')

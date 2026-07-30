@@ -3,7 +3,7 @@ import { Elysia, t } from '../../src'
 import { post, req } from '../utils'
 
 describe('group', () => {
-	// Route schemas override inherited fields unless the group is standalone.
+	// Route schemas override inherited fields unless the group is merge.
 	it('delegate onRequest', async () => {
 		const app = new Elysia()
 			.get('/', () => 'A')
@@ -260,11 +260,11 @@ describe('group', () => {
 		await expect(invalid).resolves.toBe(200)
 	})
 
-	it("group schema with schema: 'standalone' stays additive", async () => {
+	it("group schema with schema: 'merge' stays additive", async () => {
 		const app = new Elysia().group(
 			'/group/:id',
 			{
-				schema: 'standalone',
+				schema: 'merge',
 				params: t.Object({ id: t.Number() })
 			},
 			(app) =>
@@ -356,11 +356,11 @@ describe('group', () => {
 		expect(error).toBe(200)
 	})
 
-	it('nested standalone group schemas stay additive', async () => {
+	it('nested merge group schemas stay additive', async () => {
 		const app = new Elysia().group(
 			'',
 			{
-				schema: 'standalone',
+				schema: 'merge',
 				query: t.Object({
 					name: t.Literal('lilith')
 				})
@@ -369,7 +369,7 @@ describe('group', () => {
 				app.group(
 					'',
 					{
-						schema: 'standalone',
+						schema: 'merge',
 						query: t.Object({
 							limit: t.Number()
 						})

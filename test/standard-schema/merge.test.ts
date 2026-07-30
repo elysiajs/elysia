@@ -25,11 +25,11 @@ const counted = <T extends { '~standard': any }>(schema: T) => {
 	}
 }
 
-describe('Standard Schema Standalone', () => {
+describe('Standard Schema Merge', () => {
 	it('validate and normalize body', async () => {
 		const app = new Elysia()
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: z.object({
 					id: z.number()
 				})
@@ -70,7 +70,7 @@ describe('Standard Schema Standalone', () => {
 	it('validate query', async () => {
 		const app = new Elysia()
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				query: z.object({
 					id: z.coerce.number()
 				})
@@ -99,7 +99,7 @@ describe('Standard Schema Standalone', () => {
 	it('validate and normalize params', async () => {
 		const app = new Elysia()
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				params: z.object({
 					id: z.coerce.number()
 				})
@@ -125,7 +125,7 @@ describe('Standard Schema Standalone', () => {
 	it('validate and normalize headers', async () => {
 		const app = new Elysia()
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				headers: z.object({
 					id: z.coerce.number()
 				})
@@ -169,7 +169,7 @@ describe('Standard Schema Standalone', () => {
 	it('validate and normalize single response', async () => {
 		const app = new Elysia()
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				response: z.object({
 					id: z.number()
 				})
@@ -200,7 +200,7 @@ describe('Standard Schema Standalone', () => {
 	it('validate and normalize multiple response', async () => {
 		const app = new Elysia()
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				response: {
 					404: z.object({
 						id: z.number()
@@ -254,7 +254,7 @@ describe('Standard Schema Standalone', () => {
 				if (!(error instanceof ValidationError)) console.log(error)
 			})
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: z.object({
 					name: z.string()
 				}),
@@ -347,7 +347,7 @@ describe('Standard Schema Standalone', () => {
 
 	it('merge plugin', async () => {
 		const plugin = new Elysia().guard('plugin', {
-			schema: 'standalone',
+			schema: 'merge',
 			response: {
 				404: z.object({
 					id: z.number()
@@ -399,7 +399,7 @@ describe('Standard Schema Standalone', () => {
 	it('validate non-typebox schema', async () => {
 		const app = new Elysia()
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: z.object({
 					name: z.string()
 				}),
@@ -497,7 +497,7 @@ describe('Standard Schema Standalone', () => {
 	it('validate 3 schema validators without TypeBox', async () => {
 		const app = new Elysia()
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: z.object({
 					name: z.string()
 				}),
@@ -517,7 +517,7 @@ describe('Standard Schema Standalone', () => {
 				}
 			})
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: type({
 					world: '"fantasy"'
 				}),
@@ -719,12 +719,12 @@ describe('Standard Schema single-pass validation', () => {
 		expect(input).toEqual({ id: 1, name: 'lilith', extra: false })
 	})
 
-	it('validates a mixed standalone route with a single validate call per request', async () => {
+	it('validates a mixed merge route with a single validate call per request', async () => {
 		const id = counted(z.object({ id: z.number() }))
 
 		const app = new Elysia()
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: id.schema
 			})
 			.post(
@@ -753,7 +753,7 @@ describe('Standard Schema single-pass validation', () => {
 	it('materializes typebox defaults for codec members on the multi path', async () => {
 		const app = new Elysia()
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				query: z.object({
 					id: z.coerce.number()
 				})
@@ -774,7 +774,7 @@ describe('Standard Schema single-pass validation', () => {
 	})
 })
 
-describe('asynchronous Standard Schema standalone guards', () => {
+describe('asynchronous Standard Schema merge guards', () => {
 	const asyncNumberId = {
 		'~standard': {
 			version: 1,
@@ -788,7 +788,7 @@ describe('asynchronous Standard Schema standalone guards', () => {
 
 	it('rejects input that an async standard member fails', async () => {
 		const app = new Elysia()
-			.guard({ schema: 'standalone', body: asyncNumberId })
+			.guard({ schema: 'merge', body: asyncNumberId })
 			.post(
 				'/',
 				{ body: t.Object({ name: t.Literal('lilith') }) },
@@ -803,7 +803,7 @@ describe('asynchronous Standard Schema standalone guards', () => {
 
 	it('accepts valid input and returns the merged decoded value', async () => {
 		const app = new Elysia()
-			.guard({ schema: 'standalone', body: asyncNumberId })
+			.guard({ schema: 'merge', body: asyncNumberId })
 			.post(
 				'/',
 				{ body: t.Object({ name: t.Literal('lilith') }) },

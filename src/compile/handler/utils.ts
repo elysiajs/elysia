@@ -100,6 +100,7 @@ export function replaceDeriveContext(context: any, derivative: any) {
 
 	next.request = context.request
 	next['~sig'] = context['~sig']
+	next['~afterResponse'] = context['~afterResponse']
 	next.store = context.store
 	next.set = context.set
 	next.body = context.body

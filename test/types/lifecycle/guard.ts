@@ -44,11 +44,11 @@ import { expectTypeOf } from 'expect-type'
 		.post('/', () => ({ name: 'cantarella' as const }))
 }
 
-// Standalone guard and route response schemas both constrain the handler.
+// Merge guard and route response schemas both constrain the handler.
 {
 	new Elysia()
 		.guard({
-			schema: 'standalone',
+			schema: 'merge',
 			response: t.Object({ name: t.Literal('cantarella') })
 		})
 		.post(
@@ -56,7 +56,7 @@ import { expectTypeOf } from 'expect-type'
 			{
 				response: t.Object({ id: t.Number() })
 			},
-			// @ts-expect-error handler must also satisfy the standalone guard response
+			// @ts-expect-error handler must also satisfy the merge guard response
 			() => ({ id: 1 })
 		)
 }

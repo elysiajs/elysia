@@ -800,7 +800,7 @@ export function hookToGuard(
 		schema?: GuardSchemaType
 	}
 ): Partial<AppHook & Macro> {
-	if (a.schema !== 'standalone') return a
+	if (a.schema !== 'merge') return a
 
 	if (a.body || a.headers || a.params || a.query || a.cookie || a.response) {
 		a.schemas ??= []
@@ -842,7 +842,7 @@ export function hookToGuard(
 	return a
 }
 
-export function coalesceStandaloneSchemas(existing: any[], incoming: any[]) {
+export function coalesceSchemas(existing: any[], incoming: any[]) {
 	for (const entry of incoming) {
 		if (!entry || typeof entry !== 'object') continue
 

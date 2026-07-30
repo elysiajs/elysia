@@ -10,7 +10,8 @@ const allContextProperties = {
 	body: true,
 	cookie: true,
 	set: true,
-	route: true
+	route: true,
+	afterResponse: true
 }
 
 const queryOnly = {

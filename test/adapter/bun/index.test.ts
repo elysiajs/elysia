@@ -24,11 +24,11 @@ describe('Bun adapter', () => {
 		expect(query2).toEqual('Works without')
 	})
 
-	it('handle standalone query guard', async () => {
+	it('handle merge query guard', async () => {
 		const app = new Elysia()
 			.guard({
 				query: t.Object({ a: t.String() }),
-				schema: 'standalone'
+				schema: 'merge'
 			})
 			.get('/works-with', ({ query }) => 'Works' + query.a)
 			.get('/works-without', () => 'Works without')

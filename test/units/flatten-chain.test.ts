@@ -9,14 +9,14 @@ describe('flattenChain schema fields', () => {
 			parent: undefined
 		}
 		const child: ChainNode = {
-			added: { schema: 'standalone' as any },
+			added: { schema: 'merge' as any },
 			parent
 		}
 
 		const flat = flattenChain(child) as any
 
 		expect(Array.isArray(flat.schema)).toBe(false)
-		expect(flat.schema).toBe('standalone')
+		expect(flat.schema).toBe('merge')
 	})
 
 	it('accumulates schemas from each chain node', () => {

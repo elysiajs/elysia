@@ -260,9 +260,9 @@ describe('route descriptor', () => {
 		})
 	})
 
-	it('classifies a standalone-schema (additive guard) route', async () => {
+	it('classifies a merge-schema (additive guard) route', async () => {
 		const guard = new Elysia().guard('global', {
-			schema: 'standalone',
+			schema: 'merge',
 			query: t.Object({ b: t.String() })
 		})
 		const app = new Elysia({ introspect: true })

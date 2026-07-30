@@ -1829,7 +1829,7 @@ import { Prettify } from '../../../src/types'
 {
 	new Elysia()
 		.guard({
-			schema: 'standalone',
+			schema: 'merge',
 			body: t.Object({
 				id: t.Number()
 			})
@@ -1849,7 +1849,7 @@ import { Prettify } from '../../../src/types'
 {
 	const app = new Elysia().guard(
 		{
-			schema: 'standalone',
+			schema: 'merge',
 			query: t.Object({
 				name: t.Literal('lilith')
 			}),
@@ -1860,7 +1860,7 @@ import { Prettify } from '../../../src/types'
 		(app) =>
 			app.guard(
 				{
-					schema: 'standalone',
+					schema: 'merge',
 					query: t.Object({
 						limit: t.Number()
 					}),
@@ -1894,7 +1894,7 @@ import { Prettify } from '../../../src/types'
 {
 	const app = new Elysia().guard(
 		{
-			schema: 'standalone',
+			schema: 'merge',
 			query: t.Object({
 				name: t.Literal('lilith')
 			}),
@@ -1905,7 +1905,7 @@ import { Prettify } from '../../../src/types'
 		(app) =>
 			app.guard(
 				{
-					schema: 'standalone',
+					schema: 'merge',
 					query: t.Object({
 						limit: t.Number()
 					}),
@@ -1958,7 +1958,7 @@ import { Prettify } from '../../../src/types'
 {
 	const app = new Elysia().guard(
 		{
-			schema: 'standalone',
+			schema: 'merge',
 			query: t.Object({
 				name: t.Literal('lilith')
 			}),
@@ -1969,7 +1969,7 @@ import { Prettify } from '../../../src/types'
 		(app) =>
 			app.guard(
 				{
-					schema: 'standalone',
+					schema: 'merge',
 					query: t.Object({
 						limit: t.Number()
 					}),

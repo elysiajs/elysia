@@ -398,6 +398,8 @@ export function compileHandlerJit({
 			syncAfterResponse
 		}
 	} = state
+	const hasStaticAfterResponse = !!hook?.afterResponse?.length
+	const hasDynamicAfterResponse = !!inference.afterResponse
 
 	const seenKeys = new Set<string>(['rt', 'fre'])
 	const paramValues: unknown[] = [errorRoot, finalizeRouteError]
@@ -746,7 +748,7 @@ export function compileHandlerJit({
 		? `rm(${handleInstruction},c.set,c.request,true)\n`
 		: `rc(${handleInstruction},c.request,true)\n`
 
-	if (hasAfterResponse) link(hook!.afterResponse!, 'ar')
+	if (hasStaticAfterResponse) link(hook!.afterResponse!, 'ar')
 
 	const drainTraceStream = traceHandleOn
 		? `let _ser\nif(_trs){try{for await(const v of _trs){}}catch(_te){_ser=_te}}\n`
@@ -774,10 +776,13 @@ export function compileHandlerJit({
 				drainTraceStream +
 				resolveHandlePostDrain +
 				beginTrace('afterResponse', hook?.afterResponse?.length ?? 0) +
-				(hasAfterResponse
+				(hasStaticAfterResponse
 					? mapAfterResponse(hook!.afterResponse!, [
 							buildReport('afterResponse')
 						])
+					: '') +
+				(hasDynamicAfterResponse
+					? `if(c['~afterResponse'])for(let i=0;i<c['~afterResponse'].length;i++){try{await c['~afterResponse'][i](c)}catch{}}\n`
 					: '') +
 				endTrace('afterResponse') +
 				`})\n`

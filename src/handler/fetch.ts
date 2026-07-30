@@ -24,12 +24,11 @@ import {
 
 import type { CompiledHandler, MaybePromise } from '../types'
 
-function extractPath(url: string, context: any, pathStart: number): string {
+function extractPath(url: string, context: any, pathStart: number) {
 	const s = url.indexOf('/', pathStart)
-	return (context.path = url.substring(
-		s,
-		(context.qi = url.indexOf('?', s)) === -1 ? url.length : context.qi
-	))
+	const q = (context.qi = url.indexOf('?', s))
+
+	return (context.path = q === -1 ? url.slice(s) : url.substring(s, q))
 }
 
 // Default 404 that still emits `Elysia.headers` defaults / hook-set headers + cookies.
@@ -360,64 +359,72 @@ export function createFetchHandler(
 		: undefined
 
 	const afterResponses = hook?.afterResponse
-	const afterResponse =
-		afterResponses?.length || traceAfterResponsePhase
-			? (context: Context, status?: number) => {
-					if ((context as any)._arf) return
-					;(context as any)._arf = true
+	const afterResponse = (context: Context, status?: number) => {
+		if ((context as any)._arf) return
 
-					if (status !== undefined) context.set.status = status
+		const queue = (context as any)['~afterResponse'] as
+			| ((context: Context) => unknown)[]
+			| undefined
+		if (
+			!afterResponses?.length &&
+			!traceAfterResponsePhase &&
+			!queue?.length
+		)
+			return
+		;(context as any)._arf = true
+		if (status !== undefined) context.set.status = status
 
-					queueMicrotask(async () => {
-						if (afterResponses) {
-							materializeSetHeaders(context.set)
-							for (let i = 0; i < afterResponses.length; i++)
-								try {
-									await afterResponses[i](context as any)
-								} catch (e) {
-									console.error(e)
-								}
-						}
+		queueMicrotask(async () => {
+			if (afterResponses?.length || queue?.length)
+				materializeSetHeaders(context.set)
 
-						if (traceAfterResponsePhase) {
-							let cache = (context as any).trace as
-								| any[]
-								| undefined
+			if (afterResponses)
+				for (let i = 0; i < afterResponses.length; i++)
+					try {
+						await afterResponses[i](context as any)
+					} catch (e) {
+						console.error(e)
+					}
 
-							if (!cache && tracerFactories) {
-								context.rid ??= requestId()
-								cache = tracerFactories.map((f) =>
-									f(context as any)
-								)
-								;(context as any).trace = cache
-							}
+			if (queue)
+				for (let i = 0; i < queue.length; i++)
+					try {
+						await queue[i](context)
+					} catch (e) {
+						console.error(e)
+					}
 
-							if (cache)
-								for (let i = 0; i < cache.length; i++) {
-									// subscription-gated: unsubscribed = flat
-									// timestamps only (no recorder/literal)
-									const fast = cache[i].b(
-										7,
-										afterResponses?.length ?? 0
-									)
-									if (fast) {
-										cache[i].r(fast)
-										continue
-									}
+			if (traceAfterResponsePhase) {
+				let cache = (context as any).trace as any[] | undefined
 
-									const r = cache[i].begin(7, {
-										id: context.rid ?? '',
-										event: 'afterResponse',
-										name: 'afterResponse',
-										begin: performance.now(),
-										total: afterResponses?.length ?? 0
-									})
-									r.resolve()
-								}
-						}
-					})
+				if (!cache && tracerFactories) {
+					context.rid ??= requestId()
+					cache = tracerFactories.map((f) => f(context as any))
+					;(context as any).trace = cache
 				}
-			: undefined
+
+				if (cache)
+					for (let i = 0; i < cache.length; i++) {
+						// subscription-gated: unsubscribed = flat
+						// timestamps only (no recorder/literal)
+						const fast = cache[i].b(7, afterResponses?.length ?? 0)
+						if (fast) {
+							cache[i].r(fast)
+							continue
+						}
+
+						const r = cache[i].begin(7, {
+							id: context.rid ?? '',
+							event: 'afterResponse',
+							name: 'afterResponse',
+							begin: performance.now(),
+							total: afterResponses?.length ?? 0
+						})
+						r.resolve()
+					}
+			}
+		})
+	}
 
 	app['~finalizeError'] = (context, error) =>
 		finalizeError(context, handleError, afterResponse, error)

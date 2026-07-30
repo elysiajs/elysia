@@ -110,7 +110,8 @@ describe('Sucrose scanner parity', () => {
 			body: true,
 			cookie: true,
 			set: true,
-			route: true
+			route: true,
+			afterResponse: true
 		})
 	})
 

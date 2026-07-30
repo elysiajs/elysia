@@ -247,7 +247,7 @@ export type Replace<Original, Target, With> =
 				: Original
 
 export type EventScope = 'global' | 'local' | 'plugin'
-export type GuardSchemaType = 'override' | 'standalone'
+export type GuardSchemaType = 'override' | 'merge'
 
 export type ElysiaFormData<T extends Record<keyof any, unknown>> = FormData & {
 	['~ely-form']: Replace<T, Blob | ElysiaFile, File> extends infer A
@@ -443,7 +443,7 @@ export type GuardLocalHook<
 	BeforeHandle extends MaybeArray<OptionalHandler<any, any>>,
 	AfterHandle extends MaybeArray<AfterHandler<any, any>>,
 	ErrorHandle extends MaybeArray<ErrorHandler<any, any, any>>,
-	GuardType extends GuardSchemaType = 'standalone'
+	GuardType extends GuardSchemaType = 'merge'
 > = (Input extends any ? Input : Prettify<Input>) & {
 	/**
 	 * @default 'override'
@@ -1336,11 +1336,11 @@ export interface IntersectIfObjectSchema<
 	params: IntersectIfObject<A['params'], B['params']>
 	cookie: IntersectIfObject<A['cookie'], B['cookie']>
 	// `response` merges the override side (A: route-local + override-channel
-	// schemas) with the standalone side (B: `schema: 'standalone'` guards) PER
-	// STATUS CODE. Standalone schemas INTERSECT, so a status code declared by both
-	// sides merges its object fields (route `{ 404: { q } }` + standalone
+	// schemas) with the merge channel (B: `schema: 'merge'` guards) PER
+	// STATUS CODE. Merge schemas INTERSECT, so a status code declared by both
+	// sides merges its object fields (route `{ 404: { q } }` + merge guard
 	// `{ 404: { name } }` → `{ 404: { q, name } }`); codes declared by only one
-	// side survive (route `{ 200 }` + standalone `{ 418 }` → `{ 200, 418 }`).
+	// side survive (route `{ 200 }` + merge guard `{ 418 }` → `{ 200, 418 }`).
 	// `IntersectIfObject` keeps this safe for non-object (literal) responses: a
 	// same-code literal clash picks A (route) rather than intersecting to `never`.
 	// When neither side declares a response, A (`unknown | void`) leaves the
@@ -1367,10 +1367,10 @@ export interface IntersectIfObjectSchema<
 				}
 }
 
-// Merge the standalone (`schemas`) channels across scopes for a route's input
+// Merge the `schema: 'merge'` (`schemas`) channels across scopes for a route's input
 // constraint. Input fields are additive (intersected across global / scoped /
 // local), but `response` uses OVERRIDE by scope precedence (local > scoped >
-// global): a nearer scope's standalone response replaces an inherited one
+// global): a nearer scope's merged response replaces an inherited one
 // rather than intersecting to `never` (e.g. a plugin-local `guard` response
 // overriding a response inherited from a globally-promoted guard).
 export interface MergeScopedSchemas<
@@ -1387,7 +1387,7 @@ export interface MergeScopedSchemas<
 	// a given status replaces the inherited one, but statuses only declared by
 	// an outer scope survive (e.g. local `{ 401 }` over global `{ 401, 402 }`
 	// keeps 402). When no scope declares a response, `keyof` is `never` → `{}`,
-	// which `IntersectIfObjectSchema` treats as "no standalone response".
+	// which `IntersectIfObjectSchema` treats as "no merged response".
 	response: {
 		[K in
 			| keyof Global['response']

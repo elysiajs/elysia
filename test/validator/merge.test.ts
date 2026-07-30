@@ -2,11 +2,11 @@ import { Elysia, t } from '../../src'
 import { describe, it, expect } from 'bun:test'
 import { post } from '../utils'
 
-describe('standalone validator', () => {
+describe('merge validator', () => {
 	it('handle guard without local schema', async () => {
 		const app = new Elysia()
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ name: t.Literal('cantarella') })
 			})
@@ -35,7 +35,7 @@ describe('standalone validator', () => {
 	it('merge guard with local schema', async () => {
 		const app = new Elysia()
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ name: t.Literal('cantarella') })
 			})
@@ -74,7 +74,7 @@ describe('standalone validator', () => {
 	it('merge multiple guard without local schema', async () => {
 		const app = new Elysia()
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() }),
 				response: t.Object({ name: t.Literal('cantarella') })
 			})
@@ -103,11 +103,11 @@ describe('standalone validator', () => {
 	it('merge multiple guard with local schema', async () => {
 		const app = new Elysia()
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				response: t.Object({ name: t.Literal('cantarella') })
 			})
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() })
 			})
 			.post(
@@ -153,7 +153,7 @@ describe('standalone validator', () => {
 				)
 			})
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() })
 			})
 			.post('/name/:name', ({ params: { name } }) => ({
@@ -186,7 +186,7 @@ describe('standalone validator', () => {
 				response: t.Object({ name: t.Literal('cantarella') })
 			})
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() })
 			})
 			.post(
@@ -220,11 +220,11 @@ describe('standalone validator', () => {
 			normalize: false
 		})
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				response: t.Object({ name: t.Literal('cantarella') })
 			})
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object(
 					{ id: t.Number() },
 					{
@@ -275,7 +275,7 @@ describe('standalone validator', () => {
 	it('override additionalProperties while merging guards', async () => {
 		const app = new Elysia({ normalize: false })
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object(
 					{ id: t.Number() },
 					{
@@ -327,7 +327,7 @@ describe('standalone validator', () => {
 	it('handle local scope', async () => {
 		const local = new Elysia()
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() })
 			})
 			.post(
@@ -387,7 +387,7 @@ describe('standalone validator', () => {
 	it('handle local scope', async () => {
 		const local = new Elysia()
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() })
 			})
 			.post(
@@ -457,7 +457,7 @@ describe('standalone validator', () => {
 	it('handle local scope with parent schema', async () => {
 		const local = new Elysia()
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() })
 			})
 			.post(
@@ -474,7 +474,7 @@ describe('standalone validator', () => {
 		const app = new Elysia()
 			.use(local)
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() })
 			})
 			.post(
@@ -536,7 +536,7 @@ describe('standalone validator', () => {
 	it('handle scoped scope', async () => {
 		const local = new Elysia()
 			.guard('plugin', {
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() })
 			})
 			.post(
@@ -624,7 +624,7 @@ describe('standalone validator', () => {
 	it('handle global scope', async () => {
 		const local = new Elysia()
 			.guard('global', {
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ id: t.Number() })
 			})
 			.post(
@@ -709,7 +709,7 @@ describe('standalone validator', () => {
 	it('handle every schema type on local scope', async () => {
 		const app = new Elysia()
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ family: t.String() }),
 				headers: t.Object({ family: t.String() }),
 				query: t.Object({ family: t.String() }),
@@ -772,7 +772,7 @@ describe('standalone validator', () => {
 	it('handle every schema type on scoped scope', async () => {
 		const local = new Elysia()
 			.guard('plugin', {
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ family: t.String() }),
 				headers: t.Object({ family: t.String() }),
 				query: t.Object({ family: t.String() }),
@@ -861,7 +861,7 @@ describe('standalone validator', () => {
 	it('handle every schema type on global scope', async () => {
 		const local = new Elysia()
 			.guard('global', {
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ family: t.String() }),
 				headers: t.Object({ family: t.String() }),
 				query: t.Object({ family: t.String() }),
@@ -991,10 +991,10 @@ describe('standalone validator', () => {
 		expect(incorrect3.status).toBe(422)
 	})
 
-	it('accepts a standalone response schema without a 200 entry', async () => {
+	it('accepts a merge response schema without a 200 entry', async () => {
 		const app = new Elysia()
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				response: { 404: t.String() }
 			})
 			.get('/ok', () => 'fine')
@@ -1005,14 +1005,14 @@ describe('standalone validator', () => {
 		await expect(res.text()).resolves.toBe('fine')
 	})
 
-	it('resolves a model reference passed as a standalone schema', async () => {
+	it('resolves a model reference passed as a merge schema', async () => {
 		const app = new Elysia()
 			.model({ sign: t.Object({ id: t.Number() }) })
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: t.Object({ name: t.String() })
 			})
-			.guard({ schema: 'standalone', body: 'sign' })
+			.guard({ schema: 'merge', body: 'sign' })
 			.post('/', ({ body }) => body)
 
 		const correct = await app.handle(post('/', { name: 'a', id: 1 }))

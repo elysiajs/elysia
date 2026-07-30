@@ -96,7 +96,7 @@ describe('MultiValidator decoding matches TypeBox decoding', () => {
 	it('coerces query strings when a Standard Schema guard is merged', async () => {
 		const app = new Elysia()
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				query: {
 					'~standard': {
 						version: 1,
@@ -121,7 +121,7 @@ describe('MultiValidator decoding matches TypeBox decoding', () => {
 	it('strips excess request body properties when validators are merged', async () => {
 		const app = new Elysia()
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: {
 					'~standard': {
 						version: 1,

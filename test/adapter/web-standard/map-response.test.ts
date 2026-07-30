@@ -42,11 +42,13 @@ describe('Web Standard - Map Response', () => {
 	})
 
 	it('map boolean', async () => {
-		const response = mapResponse(true, createContext())
+		for (const value of [true, false]) {
+			const response = mapResponse(value, createContext())
 
-		expect(response).toBeInstanceOf(Response)
-		await expect(response.text()).resolves.toBe('true')
-		expect(response.status).toBe(200)
+			expect(response).toBeInstanceOf(Response)
+			await expect(response.text()).resolves.toBe(String(value))
+			expect(response.status).toBe(200)
+		}
 	})
 
 	it('map object', async () => {

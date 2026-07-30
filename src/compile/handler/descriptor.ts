@@ -268,14 +268,14 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 
 	const parseLength = Array.isArray(hook?.parse) ? hook.parse.length : 0
 	const parseFirst = Array.isArray(hook?.parse) ? hook.parse[0] : hook?.parse
-	const hasStandaloneBody = !!(hook as any)?.schemas?.some(
+	const hasMergeBody = !!(hook as any)?.schemas?.some(
 		(s: any) => s?.body
 	)
 
 	const bodylessMethod = method === 'GET' || method === 'HEAD'
 	const hasBody =
 		!!hook?.body ||
-		hasStandaloneBody ||
+		hasMergeBody ||
 		(!bodylessMethod &&
 			(parseLength > 0 || inference.body) &&
 			parseFirst !== 'none')
@@ -319,7 +319,8 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 		syncCookieSign && cookieConfig?.verify === 'lazy' && !vali?.cookie
 
 	const hasErrorHook = !!hook?.error?.length
-	const hasAfterResponse = !!hook?.afterResponse?.length
+	const hasStaticAfterResponse = !!hook?.afterResponse?.length
+	const hasAfterResponse = hasStaticAfterResponse || !!inference.afterResponse
 	const hasBeforeHandle =
 		!!beforeHandlePrefix?.length || !!hook?.beforeHandle?.length
 	const hasAfterHandle = !!hook?.afterHandle?.length
@@ -375,12 +376,12 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 			lifecycleMayReturnPromise(hook?.error, false))
 
 	const afterResponseForcesAsync =
-		hasAfterResponse &&
-		(isAsyncLifecycle(hook?.afterResponse) ||
-			hasAfterHandle ||
-			hasMapResponse ||
-			hasResponseValidator ||
-			hasErrorHook)
+		(hasStaticAfterResponse && isAsyncLifecycle(hook?.afterResponse)) ||
+		(hasAfterResponse &&
+			(hasAfterHandle ||
+				hasMapResponse ||
+				hasResponseValidator ||
+				hasErrorHook))
 
 	const traceForcesAsync =
 		(traceHandleOn || phaseOn('error') || phaseOn('afterResponse')) &&

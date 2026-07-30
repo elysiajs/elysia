@@ -66,11 +66,11 @@ describe('routes keep the schema registered at definition time', () => {
 			expect(await res.json()).toEqual({ ok: true })
 		})
 
-		it(`ignores later mutations to a standalone guard schema (${mode})`, async () => {
+		it(`ignores later mutations to a merge guard schema (${mode})`, async () => {
 			const schema = t.Object({ name: t.String() })
 
 			const app = new Elysia({ precompile })
-				.guard({ schema: 'standalone', body: schema })
+				.guard({ schema: 'merge', body: schema })
 				.post('/', ({ body }) => body)
 
 			;(schema.properties as any).extra = t.String()

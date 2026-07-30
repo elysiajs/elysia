@@ -9,23 +9,23 @@ describe('MultiValidator array merging', () => {
 	})
 
 	it('concatenates member results in schema order', () => {
-		const standalone = {
+		const mergeSchema = {
 			'~standard': {
 				version: 1,
 				vendor: 'test',
-				validate: () => ({ value: ['FROM_STANDALONE'] })
+				validate: () => ({ value: ['FROM_MERGE'] })
 			}
 		}
 
 		const mv: any = Validator.create(t.Array(t.String()), {
-			schemas: [standalone as any]
+			schemas: [mergeSchema as any]
 		})
 
 		expect(mv.constructor.name).toBe('MultiValidator')
 
 		const out = mv.From(['a', 'b', 'c'], 'body') as unknown[]
 
-		expect(out).toEqual(['a', 'b', 'c', 'FROM_STANDALONE'])
+		expect(out).toEqual(['a', 'b', 'c', 'FROM_MERGE'])
 		expect(out.length).toBe(4)
 	})
 })

@@ -298,11 +298,11 @@ import { Cookie } from '../../../src/cookie'
 		)
 }
 
-// ? merge standalone standard schema
+// ? merge standard schemas
 {
 	new Elysia()
 		.guard({
-			schema: 'standalone',
+			schema: 'merge',
 			body: z.object({
 				name: z.literal('fouco').or(z.literal('lilith'))
 			}),
@@ -417,10 +417,10 @@ import { Cookie } from '../../../src/cookie'
 		)
 }
 
-// ? merge standalone standard schema from plugin
+// ? merge standard schemas from plugin
 {
 	const plugin = new Elysia().guard('plugin', {
-		schema: 'standalone',
+		schema: 'merge',
 		body: z.object({
 			name: z.literal('fouco').or(z.literal('lilith'))
 		}),

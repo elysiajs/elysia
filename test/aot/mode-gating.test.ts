@@ -20,7 +20,7 @@ const { Elysia } = (await import('elysia')) as typeof import('../../src')
 // Validator dependencies determine whether a build is sealed or wired.
 const SEALED_APP = resolve(import.meta.dir, 'fixtures/sealed-app.ts')
 const WIRED_APP = resolve(import.meta.dir, 'fixtures/wired-app.ts')
-const STANDALONE_SCHEMA_APP = resolve(
+const MERGE_SCHEMA_APP = resolve(
 	import.meta.dir,
 	'fixtures/mode-guard-app.ts'
 )
@@ -36,17 +36,17 @@ const STANDARD_SCHEMA_APP = resolve(
 	'fixtures/mode-standard-app.ts'
 )
 const MIXED_SCHEMA_APP = resolve(import.meta.dir, 'fixtures/mode-mixed-app.ts')
-const STANDARD_STANDALONE_APP = resolve(
+const STANDARD_MERGE_APP = resolve(
 	import.meta.dir,
-	'fixtures/mode-standard-standalone-app.ts'
+	'fixtures/mode-standard-merge-app.ts'
 )
-const MIXED_STANDALONE_APP = resolve(
+const MIXED_MERGE_APP = resolve(
 	import.meta.dir,
-	'fixtures/mode-mixed-standalone-app.ts'
+	'fixtures/mode-mixed-merge-app.ts'
 )
-const STANDALONE_MIXED_RESPONSE_APP = resolve(
+const MERGE_MIXED_RESPONSE_APP = resolve(
 	import.meta.dir,
-	'fixtures/mode-standalone-mixed-response-app.ts'
+	'fixtures/mode-merge-mixed-response-app.ts'
 )
 const PLAIN_MIXED_RESPONSE_APP = resolve(
 	import.meta.dir,
@@ -114,13 +114,13 @@ beforeAll(async () => {
 	code.esbuildSealed = await buildEsbuild(SEALED_APP)
 	code.esbuildWired = await buildEsbuild(WIRED_APP)
 	code.bunWired = await buildBun(WIRED_APP)
-	code.esbuildGuard = await buildEsbuild(STANDALONE_SCHEMA_APP)
+	code.esbuildGuard = await buildEsbuild(MERGE_SCHEMA_APP)
 	code.esbuildMacro = await buildEsbuild(MACRO_SCHEMA_APP)
 	code.esbuildLate = await buildEsbuild(LATE_ROUTE_APP)
 	code.esbuildNormalize = await buildEsbuild(TYPEBOX_NORMALIZE_APP)
 	code.esbuildStandard = await buildEsbuild(STANDARD_SCHEMA_APP)
 	code.esbuildMixed = await buildEsbuild(MIXED_SCHEMA_APP)
-	code.esbuildStandardStandalone = await buildEsbuild(STANDARD_STANDALONE_APP)
+	code.esbuildStandardMerge = await buildEsbuild(STANDARD_MERGE_APP)
 	code.esbuildPlainMixedResponse = await buildEsbuild(
 		PLAIN_MIXED_RESPONSE_APP
 	)
@@ -173,9 +173,9 @@ describe('AOT mode selection', () => {
 
 /** Seal eligibility must match the runtime reconstruction limits. */
 describe('AOT seal eligibility', () => {
-	it('keeps standalone guard schemas wired', async () => {
+	it('keeps merge guard schemas wired', async () => {
 		const { mode, stub } = await generateCompiledArtifacts(
-			STANDALONE_SCHEMA_APP
+			MERGE_SCHEMA_APP
 		)
 		expect(mode).toBe('wired')
 		expect(stub.compat).toBe(true)
@@ -188,7 +188,7 @@ describe('AOT seal eligibility', () => {
 		expect(stub.bridge).toBe(true)
 	})
 
-	it('enforces standalone schemas in wired bundles', async () => {
+	it('enforces merge schemas in wired bundles', async () => {
 		expect(/setupTypebox\(\)/.test(code.esbuildGuard!)).toBe(false)
 
 		const dir2 = mkdtempSync(join(tmpdir(), 'ely-guard-'))
@@ -320,16 +320,16 @@ describe('AOT sealing with Standard Schema', () => {
 		expect(stub.bridge).toBe(false)
 	})
 
-	it('a standalone Standard Schema app seals', async () => {
+	it('a merge Standard Schema app seals', async () => {
 		const { mode } = await generateCompiledArtifacts(
-			STANDARD_STANDALONE_APP
+			STANDARD_MERGE_APP
 		)
 		expect(mode).toBe('sealed')
 	})
 
-	it('keeps a Standard standalone route wired when it also has a TypeBox slot', async () => {
+	it('keeps a Standard merge route wired when it also has a TypeBox slot', async () => {
 		const { mode, stub } =
-			await generateCompiledArtifacts(MIXED_STANDALONE_APP)
+			await generateCompiledArtifacts(MIXED_MERGE_APP)
 		expect(mode).toBe('wired')
 		expect(stub.bridge).toBe(true)
 	})
@@ -393,10 +393,10 @@ describe('AOT sealing with Standard Schema', () => {
 		expect(badQuery.status).toBe(422)
 	})
 
-	it('enforces a standalone Standard Schema in a sealed bundle', async () => {
-		expect(dragsTypeBox(code.esbuildStandardStandalone!)).toBe(false)
+	it('enforces a merge Standard Schema in a sealed bundle', async () => {
+		expect(dragsTypeBox(code.esbuildStandardMerge!)).toBe(false)
 
-		const app = await loadApp('esbuildStandardStandalone')
+		const app = await loadApp('esbuildStandardMerge')
 
 		const valid = await app.handle(
 			new Request('http://localhost/u', {
@@ -420,9 +420,9 @@ describe('AOT sealing with Standard Schema', () => {
 
 /** Mixed Standard Schema and TypeBox response maps follow route seal eligibility. */
 describe('AOT sealing with mixed response schemas', () => {
-	it('keeps a standalone route with a mixed response map wired', async () => {
+	it('keeps a merge route with a mixed response map wired', async () => {
 		const { mode, stub } = await generateCompiledArtifacts(
-			STANDALONE_MIXED_RESPONSE_APP
+			MERGE_MIXED_RESPONSE_APP
 		)
 		expect(mode).toBe('wired')
 		expect(stub.bridge).toBe(true)

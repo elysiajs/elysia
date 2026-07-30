@@ -27,10 +27,10 @@ describe('TypeBox query coercion with Standard Schema guards', () => {
 		expect(res.page).toBe(5)
 	})
 
-	it('coerces numeric strings with a standalone Standard Schema guard', async () => {
+	it('coerces numeric strings with a merge Standard Schema guard', async () => {
 		const app = new Elysia()
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				query: passthrough
 			})
 			.get(
@@ -44,9 +44,9 @@ describe('TypeBox query coercion with Standard Schema guards', () => {
 		expect(res.page).toBe(5)
 	})
 
-	it('rejects non-numeric strings with a standalone Standard Schema guard', async () => {
+	it('rejects non-numeric strings with a merge Standard Schema guard', async () => {
 		const app = new Elysia()
-			.guard({ schema: 'standalone', query: passthrough })
+			.guard({ schema: 'merge', query: passthrough })
 			.get(
 				'/',
 				{ query: t.Object({ page: t.Number() }) },
@@ -70,9 +70,9 @@ describe('TypeBox defaults with Standard Schema guards', () => {
 		expect(res).toEqual({ page: 1 })
 	})
 
-	it('applies defaults with a standalone Standard Schema guard', async () => {
+	it('applies defaults with a merge Standard Schema guard', async () => {
 		const app = new Elysia()
-			.guard({ schema: 'standalone', query: passthrough })
+			.guard({ schema: 'merge', query: passthrough })
 			.get(
 				'/',
 				{ query: t.Object({ page: t.Number({ default: 1 }) }) },
@@ -85,7 +85,7 @@ describe('TypeBox defaults with Standard Schema guards', () => {
 
 	it('keeps provided values instead of applying defaults', async () => {
 		const app = new Elysia()
-			.guard({ schema: 'standalone', query: passthrough })
+			.guard({ schema: 'merge', query: passthrough })
 			.get(
 				'/',
 				{ query: t.Object({ page: t.Number({ default: 1 }) }) },
@@ -128,9 +128,9 @@ describe('TypeBox normalization with Standard Schema guards', () => {
 		expect(res.status).toBe(422)
 	})
 
-	it('rejects extra fields with a standalone guard when normalize is false', async () => {
+	it('rejects extra fields with a merge guard when normalize is false', async () => {
 		const app = new Elysia({ normalize: false })
-			.guard({ schema: 'standalone', body: passthrough })
+			.guard({ schema: 'merge', body: passthrough })
 			.post(
 				'/',
 				{ body: t.Object({ name: t.String() }) },
@@ -141,9 +141,9 @@ describe('TypeBox normalization with Standard Schema guards', () => {
 		expect(res.status).toBe(422)
 	})
 
-	it('accepts declared fields with a standalone guard', async () => {
+	it('accepts declared fields with a merge guard', async () => {
 		const app = new Elysia({ normalize: false })
-			.guard({ schema: 'standalone', body: passthrough })
+			.guard({ schema: 'merge', body: passthrough })
 			.post(
 				'/',
 				{ body: t.Object({ name: t.String() }) },
@@ -188,9 +188,9 @@ describe('TypeBox file validation with Standard Schema guards', () => {
 		expect(v!.isAsync).toBe(true)
 	})
 
-	it('rejects a mismatched MIME type with a standalone guard', async () => {
+	it('rejects a mismatched MIME type with a merge guard', async () => {
 		const app = new Elysia()
-			.guard({ schema: 'standalone', body: passthrough })
+			.guard({ schema: 'merge', body: passthrough })
 			.post(
 				'/',
 				{ body: t.File({ type: 'image/jpeg' }) },

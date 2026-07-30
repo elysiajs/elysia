@@ -862,7 +862,7 @@ app.group(
 app.group(
 	'/:a',
 	{
-		schema: 'standalone',
+		schema: 'merge',
 		body: t.Object({
 			username: t.String()
 		}),
@@ -879,7 +879,7 @@ app.group(
 		app.group(
 			'/:c',
 			{
-				schema: 'standalone',
+				schema: 'merge',
 				beforeHandle({ body, query }) {
 					expectTypeOf<typeof body>().toEqualTypeOf<{
 						username: string

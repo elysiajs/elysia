@@ -34,11 +34,13 @@ describe('Web Standard - Map Compact Response', () => {
 	})
 
 	it('map boolean', async () => {
-		const response = mapCompactResponse(true)
+		for (const value of [true, false]) {
+			const response = mapCompactResponse(value)
 
-		expect(response).toBeInstanceOf(Response)
-		await expect(response.text()).resolves.toBe('true')
-		expect(response.status).toBe(200)
+			expect(response).toBeInstanceOf(Response)
+			await expect(response.text()).resolves.toBe(String(value))
+			expect(response.status).toBe(200)
+		}
 	})
 
 	it('map object', async () => {

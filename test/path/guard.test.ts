@@ -4,7 +4,7 @@ import { describe, expect, it } from 'bun:test'
 import { post, req } from '../utils'
 
 describe('guard', () => {
-	// Nearer schemas override inherited fields unless a guard is standalone.
+	// Nearer schemas override inherited fields unless a guard is merge.
 	it('inherits global', async () => {
 		const app = new Elysia().state('counter', 0).guard(
 			{
@@ -433,10 +433,10 @@ describe('guard', () => {
 		await expect(invalid).resolves.toBe(200)
 	})
 
-	it("wrapper schema with schema: 'standalone' stays additive", async () => {
+	it("wrapper schema with schema: 'merge' stays additive", async () => {
 		const app = new Elysia().guard(
 			{
-				schema: 'standalone',
+				schema: 'merge',
 				params: t.Object({ id: t.Number() })
 			},
 			(app) =>
@@ -500,10 +500,10 @@ describe('guard', () => {
 		expect(error).toBe(200)
 	})
 
-	it('nested standalone guard schemas stay additive', async () => {
+	it('nested merge guard schemas stay additive', async () => {
 		const app = new Elysia().guard(
 			{
-				schema: 'standalone',
+				schema: 'merge',
 				query: t.Object({
 					name: t.Literal('lilith')
 				})
@@ -511,7 +511,7 @@ describe('guard', () => {
 			(app) =>
 				app.guard(
 					{
-						schema: 'standalone',
+						schema: 'merge',
 						query: t.Object({
 							limit: t.Number()
 						})

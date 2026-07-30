@@ -44,7 +44,7 @@ import { BunAdapter } from './adapter/bun'
 import {
 	clonePlainDeep,
 	clonePlainDecorators,
-	coalesceStandaloneSchemas,
+	coalesceSchemas,
 	createErrorEventHandler,
 	eventProperties,
 	fnOrigin,
@@ -2483,7 +2483,7 @@ export class Elysia<
 			BeforeHandle,
 			AfterHandle,
 			ErrorHandle
-		> & { schema: 'standalone' }
+		> & { schema: 'merge' }
 	): Elysia<
 		BasePath,
 		Scope,
@@ -2497,8 +2497,8 @@ export class Elysia<
 				// @ts-ignore
 				MacroContext['resolve']
 			schema: Volatile['schema']
-			// Standalone input + response accumulate here; a route's own local
-			// response overrides this standalone response via the OVERRIDE
+			// `schema: 'merge'` input + response schemas accumulate here; a route's
+			// own response overrides the merged response via the OVERRIDE
 			// semantics in `IntersectIfObjectSchema`.
 			schemas: Volatile['schemas'] &
 				UnwrapRoute<Input, Definitions['typebox']> &
@@ -2652,7 +2652,7 @@ export class Elysia<
 			BeforeHandle,
 			AfterHandle,
 			ErrorHandle
-		> & { schema: 'standalone' },
+		> & { schema: 'merge' },
 		run: (
 			group: Elysia<
 				BasePath,
@@ -2846,7 +2846,7 @@ export class Elysia<
 			BeforeHandle,
 			AfterHandle,
 			ErrorHandle
-		> & { schema: 'standalone' }
+		> & { schema: 'merge' }
 	): Elysia<
 		BasePath,
 		Scope,
@@ -3011,7 +3011,7 @@ export class Elysia<
 			BeforeHandle,
 			AfterHandle,
 			ErrorHandle
-		> & { schema: 'standalone' }
+		> & { schema: 'merge' }
 	): Elysia<
 		BasePath,
 		Scope,
@@ -3176,7 +3176,7 @@ export class Elysia<
 			BeforeHandle,
 			AfterHandle,
 			ErrorHandle
-		> & { schema: 'standalone' }
+		> & { schema: 'merge' }
 	): Elysia<
 		BasePath,
 		Scope,
@@ -3443,7 +3443,7 @@ export class Elysia<
 			BeforeHandle,
 			AfterHandle,
 			ErrorHandle
-		> & { schema: 'standalone' },
+		> & { schema: 'merge' },
 		run: (
 			group: Elysia<
 				JoinPath<BasePath, Prefix>,
@@ -3965,7 +3965,7 @@ export class Elysia<
 					const incoming: any[] = Array.isArray(v) ? v : [v]
 					if (!input.schemas) (input as any).schemas = []
 
-					coalesceStandaloneSchemas(
+					coalesceSchemas(
 						(input as any).schemas as any[],
 						incoming
 					)
@@ -3980,7 +3980,7 @@ export class Elysia<
 						continue
 					}
 					;(input as any).schemas ??= []
-					coalesceStandaloneSchemas((input as any).schemas as any[], [
+					coalesceSchemas((input as any).schemas as any[], [
 						{ [k]: v }
 					])
 					delete input[key]

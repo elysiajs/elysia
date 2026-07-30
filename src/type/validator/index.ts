@@ -287,7 +287,7 @@ const materializeModels = (models: Record<string, TSchema>) => {
 	return out
 }
 
-// Fast path for the standalone-guard merge when every member is plain object
+// Fast path for `schema: 'merge'` when every member is a plain object
 function divergesFromEvaluate(node: any, seen: WeakSet<object>) {
 	if (!node || typeof node !== 'object' || seen.has(node)) return false
 	seen.add(node)

@@ -11,6 +11,7 @@ export namespace Sucrose {
 		cookie: boolean
 		set: boolean
 		route: boolean
+		afterResponse?: boolean
 	}
 
 	export type LifeCycle = Partial<Partial<AppHook>>
@@ -418,6 +419,7 @@ export function removeDefaultParameter(parameter: string) {
 
 function markAllAccessed(i: Sucrose.Inference) {
 	i.query = i.headers = i.body = i.cookie = i.set = i.route = true
+	i.afterResponse = true
 }
 
 const DEFAULT_CACHE_LIMIT = 1024
@@ -467,13 +469,17 @@ export function clearSucroseCache(delay?: number | null) {
 	clearCache()
 }
 
-export const mergeInference = (a: Sucrose.Inference, b: Sucrose.Inference) => ({
+export const mergeInference = (
+	a: Sucrose.Inference,
+	b: Sucrose.Inference
+): Sucrose.Inference => ({
 	body: a.body || b.body,
 	cookie: a.cookie || b.cookie,
 	headers: a.headers || b.headers,
 	query: a.query || b.query,
 	set: a.set || b.set,
-	route: a.route || b.route
+	route: a.route || b.route,
+	...(a.afterResponse || b.afterResponse ? { afterResponse: true } : {})
 })
 
 const defaultSucrose = (): Sucrose.Inference => ({
@@ -833,6 +839,8 @@ const channel = (value: string): keyof Sucrose.Inference | undefined => {
 		case 'set':
 		case 'route':
 			return value
+		case 'defer':
+			return 'afterResponse'
 	}
 }
 
@@ -1076,7 +1084,8 @@ function inferFunction(source: string): Sucrose.Inference {
 				inference.body &&
 				inference.cookie &&
 				inference.set &&
-				inference.route
+				inference.route &&
+				inference.afterResponse
 			)
 				break
 
@@ -1192,7 +1201,8 @@ export function sucrose(
 				inference.body &&
 				inference.cookie &&
 				inference.set &&
-				inference.route
+				inference.route &&
+				inference.afterResponse
 			)
 				break
 		}

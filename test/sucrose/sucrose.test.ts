@@ -172,7 +172,8 @@ describe('sucrose', () => {
 			body: true,
 			cookie: true,
 			set: true,
-			route: true
+			route: true,
+			afterResponse: true
 		})
 	})
 
@@ -202,7 +203,8 @@ describe('sucrose', () => {
 			body: true,
 			cookie: true,
 			set: true,
-			route: true
+			route: true,
+			afterResponse: true
 		})
 	})
 
@@ -327,7 +329,8 @@ describe('sucrose', () => {
 			body: true,
 			cookie: true,
 			set: true,
-			route: true
+			route: true,
+			afterResponse: true
 		})
 	})
 

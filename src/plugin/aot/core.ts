@@ -13,7 +13,7 @@ import type { JITProbeResult } from '../../compile/jit-probe'
 import { composeRouteHook } from '../../compile/handler'
 import {
 	isStandardSchema,
-	standaloneAllStandard
+	mergeSchemasAllStandard
 } from '../../compile/handler/frozen-validator'
 
 export interface ElysiaAotOptions {
@@ -905,12 +905,12 @@ export async function generateCompiledArtifacts(
 				expectedSlots++
 			}
 
-			const standalone = (hooks as { schemas?: unknown[] }).schemas
-			if (Array.isArray(standalone) && standalone.length > 0) {
+			const mergeSchemas = (hooks as { schemas?: unknown[] }).schemas
+			if (Array.isArray(mergeSchemas) && mergeSchemas.length > 0) {
 				if (
 					routeHasTypeBoxDirectSlot ||
-					!standaloneAllStandard(
-						standalone as Array<Record<string, unknown>>
+					!mergeSchemasAllStandard(
+						mergeSchemas as Array<Record<string, unknown>>
 					)
 				)
 					routesForbidSeal = true
