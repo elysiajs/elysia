@@ -9,13 +9,15 @@ import {
 } from '@sinclair/typebox'
 
 import fastDecodeURIComponent from 'fast-decode-uri-component'
-import type { Context, PreContext } from './context'
-
-import { t } from './type-system'
-import { mergeInference, sucrose, type Sucrose } from './sucrose'
-
-import type { WSLocalHook } from './ws/types'
-
+  .onError(({ code, error }) => {
+    switch (code) {
+      case "VALIDATION":
+        console.log(error.all);
+        return formatErrorAsJSON(error);
+      default:
+        return formatErrorAsJSON(error);
+    }
+  })
 import { BunAdapter } from './adapter/bun/index'
 import { WebStandardAdapter } from './adapter/web-standard/index'
 import type { ElysiaAdapter } from './adapter/types'
