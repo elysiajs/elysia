@@ -82,32 +82,65 @@ describe('formatErrorAsJSON', () => {
     });
   });
 
-  it('should format an undefined error correctly', () => {
-    const undefinedError = undefined;
-    const formattedError = formatErrorAsJSON(undefinedError);
-    expect(formattedError).toEqual({
-      name: undefined,
-      message: undefined
     });
-  });
 
-  it('should format a validation error with nested arrays correctly', () => {
-    const nestedArrayValidationError = {
-      code: 'VALIDATION',
-      all: [
-        { message: 'Nested array is invalid', path: ['nested', 'array'] }
-      ]
-    };
-    const formattedError = formatErrorAsJSON(nestedArrayValidationError);
-    expect(formattedError).toEqual({
-      errors: [
-        { message: 'Nested array is invalid', path: ['nested', 'array'] }
-      ]
+    it('should format a validation error with nested arrays correctly', () => {
+      const nestedArrayValidationError = {
+        code: 'VALIDATION',
+        all: [
+          { message: 'Nested array is invalid', path: ['nested', 'array'] }
+        ]
+      };
+      const formattedError = formatErrorAsJSON(nestedArrayValidationError);
+      expect(formattedError).toEqual({
+        errors: [
+          { message: 'Nested array is invalid', path: ['nested', 'array'] }
+        ]
+      });
     });
-  });
 
-  it('should format a validation error with nested objects correctly', () => {
-    const nestedObjectValidationError = {
+    it('should format a null error correctly', () => {
+it('should format a null error correctly', () => {
+  const nullError = null;
+  const formattedError = formatErrorAsJSON(nullError);
+  expect(formattedError).toEqual({});
+});
+
+it('should format an undefined error correctly', () => {
+  const undefinedError = undefined;
+  const formattedError = formatErrorAsJSON(undefinedError);
+  expect(formattedError).toEqual({});
+});
+      const unexpectedPropertiesError = {
+        code: 'UNKNOWN_ERROR',
+        message: 'An unexpected error occurred',
+        unexpectedField: 'value'
+      };
+      const formattedError = formatErrorAsJSON(unexpectedPropertiesError);
+      expect(formattedError).toEqual({
+        code: 'UNKNOWN_ERROR',
+        message: 'An unexpected error occurred'
+      });
+    });
+
+    it('should format a malformed error structure correctly', () => {
+      const malformedError = {
+        invalidProperty: 'value'
+      };
+      const formattedError = formatErrorAsJSON(malformedError);
+      expect(formattedError).toEqual({});
+    });
+      });
+    });
+      expect(formattedError).toEqual({
+        errors: [
+          { message: 'Nested object is invalid', path: ['object', 'nested', 'property'] }
+        ]
+      });
+       const formattedError = formatErrorAsJSON(unexpectedPropertiesError);
+        expect(formattedError).toEqual({
+        code: 'UNKNOWN_ERROR',
+        message: 'An unexpected error occurred'
       code: 'VALIDATION',
       all: [
         { message: 'Nested object is invalid', path: ['object', 'nested', 'property'] }
@@ -130,16 +163,16 @@ describe('formatErrorAsJSON', () => {
       message: 'Malformed error'
     });
   });
-});
-  it('should format an error with malformed structure correctly', () => {
-    const malformedError = {};
-    const formattedError = formatErrorAsJSON(malformedError);
+
+  it('should format an empty error object correctly', () => {
+    const emptyError = {};
+    const formattedError = formatErrorAsJSON(emptyError);
     expect(formattedError).toEqual({
       name: undefined,
       message: undefined
     });
   });
-         { message: 'Nested array is invalid', path: ['nested', 'array'] }
+});
        ]
     });
   });
