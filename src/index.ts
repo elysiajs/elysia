@@ -1,4 +1,44 @@
-import { Memoirist } from 'memoirist'
+import { Elysia, t } from 'elysia';
+import { PrismaClient } from '@prisma/client';
+import { formatErrorAsJSON } from './utils/errorFormatter.js';
+import config from '../config/default.json';
+
+const db = new PrismaClient();
+
+const app = new Elysia()
+  .post(
+    '/sign-up',
+    async ({ body }) =>
+      db.user.create({
+        data: body,
+      }),
+    {
+      body: t.Object({
+        username: t.String(),
+        password: t.String({
+          minLength: 8,
+        }),
+      }),
+    }
+  )
+  .onError(({ code, error }) => {
+    if (config.returnErrorsAsJSON) {
+      return formatErrorAsJSON({ code, error });
+    }
+    switch (code) {
+      case 'VALIDATION':
+        console.log(error.all);
+        return error.all;
+      default:
+        return {
+          name: error.name,
+          message: error.message,
+        };
+    }
+  })
+  .listen(3000);
+
+console.log(`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`);
 import {
 	Kind,
 	type TObject,
@@ -8,14 +48,110 @@ import {
 	type TAnySchema
 } from '@sinclair/typebox'
 
-import fastDecodeURIComponent from 'fast-decode-uri-component'
-  .onError(({ code, error }) => {
+.onError(({ code, error }, { returnErrorsAsJSON }) => {
+.onError(({ code, error }, { returnErrorsAsJSON }) => {
+			switch (code) {
+				case 'VALIDATION':
+					return returnErrorsAsJSON ? formatErrorAsJSON(error.all) : error.all;
+				default:
+					return returnErrorsAsJSON ? formatErrorAsJSON({ name: error.name, message: error.message }) : { name: error.name, message: error.message };
+			}
+		})
+			switch (code) {
+				case "VALIDATION":
+					return returnErrorsAsJSON ? formatErrorAsJSON(error) : error.all;
+				default:
+					return returnErrorsAsJSON ? formatErrorAsJSON(error) : { name: error.name, message: error.message };
+			}
+		}),
+		switch (code) {
+			case 'VALIDATION':
+				return returnErrorsAsJSON ? formatErrorAsJSON(error.all) : error.all;
+			default:
+				return returnErrorsAsJSON ? formatErrorAsJSON({ name: error.name, message: error.message }) : { name: error.name, message: error.message };
+		}
+	}),
+      case "VALIDATION":
+        return returnErrorsAsJSON ? formatErrorAsJSON(error) : error.all;
+      default:
+        return returnErrorsAsJSON ? formatErrorAsJSON(error) : { name: error.name, message: error.message };
+    }
+  })
+				return returnErrorsAsJSON ? formatErrorAsJSON({ name: error.name, message: error.message }) : { name: error.name, message: error.message };
+		}
+	})
+		if (returnErrorsAsJSON) {
+			return formatErrorAsJSON(error);
+		} else {
+			switch (code) {
+				case "VALIDATION":
+					return error.all;
+				default:
+					return {
+						name: error.name,
+						message: error.message,
+					};
+			}
+		}
+	}),
+  if (returnErrorsAsJSON) {
+    return formatErrorAsJSON(error);
+  }
+  switch (code) {
+    case "VALIDATION":
+      console.log(error.all);
+      return error.all;
+    default:
+      return {
+        name: error.name,
+        message: error.message,
+      };
+  }
+})
+		})
+        if (returnErrorsAsJSON) {
+          return formatErrorAsJSON({ code, error });
+        }
+        switch (code) {
+          case "VALIDATION":
+            console.log(error.all);
+            return error.all;
+          default:
+            return {
+              name: error.name,
+              message: error.message,
+            };
+        }
+      })
+    if (returnErrorsAsJSON) {
+      return formatErrorAsJSON({ code, error });
+    } else {
+      switch (code) {
+        case "VALIDATION":
+          console.log(error.all);
+          return error.all;
+        default:
+          return {
+            name: error.name,
+            message: error.message,
+          };
+      }
+    }
+  })
+    if (returnErrorsAsJSON) {
+      return formatErrorAsJSON(error);
+    }
     switch (code) {
       case "VALIDATION":
         console.log(error.all);
-        return formatErrorAsJSON(error);
+        return error.all;
       default:
-        return formatErrorAsJSON(error);
+        return {
+          name: error.name,
+          message: error.message,
+        };
+    }
+  })
     }
   })
 import { BunAdapter } from './adapter/bun/index'
