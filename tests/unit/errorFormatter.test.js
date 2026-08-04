@@ -96,58 +96,14 @@ describe('formatErrorAsJSON', () => {
     });
   });
 
-  it('should format a null error correctly', () => {
-  });
-
   it('should format a validation error with an empty `all` property correctly', () => {
-    const emptyArrayValidationError = {
+    const emptyAllValidationError = {
       code: 'VALIDATION',
       all: []
     };
-    const formattedError = formatErrorAsJSON(emptyArrayValidationError);
+    const formattedError = formatErrorAsJSON(emptyAllValidationError);
     expect(formattedError).toEqual({
       errors: []
-    });
-  });
-    const emptyArrayValidationError = {
-      code: 'VALIDATION',
-      all: []
-    };
-    const formattedError = formatErrorAsJSON(emptyArrayValidationError);
-    expect(formattedError).toEqual({ errors: [] });
-    const formattedError = formatErrorAsJSON(emptyError);
-    expect(formattedError).to.be.null;
-  });
-      const emptyArrayValidationError = {
-        code: 'VALIDATION',
-        all: []
-      };
-      const formattedError = formatErrorAsJSON(emptyArrayValidationError);
-      expect(formattedError).toEqual({
-        errors: []
-      });
-    });
-
-    it('should format a validation error with a malformed `all` property correctly', () => {
-      const malformedArrayValidationError = {
-        code: 'VALIDATION',
-        all: 'not an array'
-      };
-      const formattedError = formatErrorAsJSON(malformedArrayValidationError);
-      expect(formattedError).toEqual({
-        errors: []
-      });
-    });
-
-    it('should format an error with unexpected structure correctly', () => {
-      const unexpectedStructureError = {
-        unexpectedKey: 'unexpectedValue'
-      };
-      const formattedError = formatErrorAsJSON(unexpectedStructureError);
-      expect(formattedError).toEqual({});
-    });
-      message: 'An unexpected error occurred',
-      unexpectedField: 'value'
     });
   });
 
@@ -162,7 +118,164 @@ describe('formatErrorAsJSON', () => {
     const formattedError = formatErrorAsJSON(undefinedError);
     expect(formattedError).toEqual({});
   });
-    const notFoundError = {
+});
+
+  it('should format a deeply nested error correctly', () => {
+    const deeplyNestedError = {
+      code: 'VALIDATION',
+      all: [
+        {
+          message: 'Deeply nested error',
+          path: ['deep', 'nested', 'error']
+        }
+      ]
+    };
+    const formattedError = formatErrorAsJSON(deeplyNestedError);
+    expect(formattedError).toEqual({
+      errors: [
+        {
+          message: 'Deeply nested error',
+          path: ['deep', 'nested', 'error']
+        }
+      ]
+    });
+  });
+
+  it('should format an error with a non-string message correctly', () => {
+    const nonStringMessageError = {
+      name: 'TypeError',
+      message: 12345
+    };
+    const formattedError = formatErrorAsJSON(nonStringMessageError);
+    expect(formattedError).toEqual({
+      name: 'TypeError',
+      message: '12345'
+    });
+  });
+
+  it('should format an error with a non-array `all` property correctly', () => {
+    const nonArrayAllError = {
+      code: 'VALIDATION',
+      all: 'not an array'
+    };
+    const formattedError = formatErrorAsJSON(nonArrayAllError);
+    expect(formattedError).toEqual({
+      errors: []
+    });
+  });
+
+  it('should format a null error correctly', () => {
+    const nullError = null;
+    const formattedError = formatErrorAsJSON(nullError);
+    expect(formattedError).toEqual({});
+  });
+
+  it('should format an undefined error correctly', () => {
+    const undefinedError = undefined;
+    const formattedError = formatErrorAsJSON(undefinedError);
+    expect(formattedError).toEqual({});
+  });
+
+  it('should format an error with unexpected structure correctly', () => {
+    const unexpectedStructureError = {
+      unexpectedKey: 'unexpectedValue'
+    };
+    const formattedError = formatErrorAsJSON(unexpectedStructureError);
+    expect(formattedError).toEqual({});
+  });
+});
+    const nonStringMessageError = {
+      code: 'UNKNOWN_ERROR',
+      message: 12345
+    };
+    const formattedError = formatErrorAsJSON(nonStringMessageError);
+    expect(formattedError).toEqual({
+      code: 'UNKNOWN_ERROR',
+      message: '12345'
+    });
+  });
+
+  it('should format a deeply nested error correctly', () => {
+    const deeplyNestedError = {
+      code: 'VALIDATION',
+      all: [
+        { message: 'Deeply nested error', path: ['deeply', 'nested', 'error'] }
+      ]
+    };
+    const formattedError = formatErrorAsJSON(deeplyNestedError);
+    expect(formattedError).toEqual({
+      errors: [
+        { message: 'Deeply nested error', path: ['deeply', 'nested', 'error'] }
+      ]
+    });
+  });
+
+  it('should format a validation error with empty all array correctly', () => {
+    const validationErrorWithEmptyAll = {
+      code: 'VALIDATION',
+      all: []
+    };
+    const formattedError = formatErrorAsJSON(validationErrorWithEmptyAll);
+    expect(formattedError).toEqual({
+      errors: []
+    });
+  });
+
+  it('should format an unexpected structure error correctly', () => {
+    const unexpectedStructureError = {
+      unexpectedKey: 'unexpectedValue'
+    };
+    const formattedError = formatErrorAsJSON(unexpectedStructureError);
+    expect(formattedError).toEqual({
+      unexpectedKey: 'unexpectedValue'
+    });
+  });
+});
+  it('should format a deeply nested error correctly', () => {
+    const deeplyNestedError = {
+      code: 'VALIDATION',
+      all: [
+        {
+          message: 'Deeply nested error',
+          path: ['level1', 'level2', 'level3']
+        }
+      ]
+    };
+    const formattedError = formatErrorAsJSON(deeplyNestedError);
+    expect(formattedError).toEqual({
+      errors: [
+        {
+          message: 'Deeply nested error',
+          path: ['level1', 'level2', 'level3']
+        }
+      ]
+    });
+  });
+});
+  it('should format a validation error with an empty `all` property correctly', () => {
+    const emptyArrayValidationError = {
+      code: 'VALIDATION',
+      all: []
+    };
+    const formattedError = formatErrorAsJSON(emptyArrayValidationError);
+    expect(formattedError).toEqual({ errors: [] });
+  });
+
+  it('should format an unexpected structure error correctly', () => {
+    const unexpectedStructureError = { unexpected: 'structure' };
+    const formattedError = formatErrorAsJSON(unexpectedStructureError);
+    expect(formattedError).toEqual({});
+  });
+
+  it('should format a validation error with a malformed `all` property correctly', () => {
+    const malformedArrayValidationError = {
+      code: 'VALIDATION',
+      all: 'not an array'
+    };
+    const formattedError = formatErrorAsJSON(malformedArrayValidationError);
+    expect(formattedError).toEqual({});
+  });
+});
       code: 'NOT_FOUND',
       message: 'Resource not found'
     };
