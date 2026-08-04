@@ -120,26 +120,6 @@ describe('formatErrorAsJSON', () => {
   });
 });
 
-  it('should format a deeply nested error correctly', () => {
-    const deeplyNestedError = {
-      code: 'VALIDATION',
-      all: [
-        {
-          message: 'Deeply nested error',
-          path: ['deep', 'nested', 'error']
-        }
-      ]
-    };
-    const formattedError = formatErrorAsJSON(deeplyNestedError);
-    expect(formattedError).toEqual({
-      errors: [
-        {
-          message: 'Deeply nested error',
-          path: ['deep', 'nested', 'error']
-        }
-      ]
-    });
-  });
 
   it('should format an error with a non-string message correctly', () => {
     const nonStringMessageError = {
@@ -184,18 +164,6 @@ describe('formatErrorAsJSON', () => {
     expect(formattedError).toEqual({});
   });
 });
-    const nonStringMessageError = {
-      code: 'UNKNOWN_ERROR',
-      message: 12345
-    };
-    const formattedError = formatErrorAsJSON(nonStringMessageError);
-    expect(formattedError).toEqual({
-      code: 'UNKNOWN_ERROR',
-      message: '12345'
-    });
-  });
-
-  it('should format a deeply nested error correctly', () => {
     const deeplyNestedError = {
       code: 'VALIDATION',
       all: [
@@ -216,17 +184,6 @@ describe('formatErrorAsJSON', () => {
       all: []
     };
     const formattedError = formatErrorAsJSON(validationErrorWithEmptyAll);
-    expect(formattedError).toEqual({
-      errors: []
-    });
-  });
-
-  it('should format an unexpected structure error correctly', () => {
-    const unexpectedStructureError = {
-      unexpectedKey: 'unexpectedValue'
-    };
-    const formattedError = formatErrorAsJSON(unexpectedStructureError);
-    expect(formattedError).toEqual({
       unexpectedKey: 'unexpectedValue'
     });
   });
@@ -238,22 +195,6 @@ describe('formatErrorAsJSON', () => {
         {
           message: 'Deeply nested error',
           path: ['level1', 'level2', 'level3']
-        }
-      ]
-    };
-    const formattedError = formatErrorAsJSON(deeplyNestedError);
-    expect(formattedError).toEqual({
-      errors: [
-        {
-          message: 'Deeply nested error',
-          path: ['level1', 'level2', 'level3']
-        }
-      ]
-    });
-  });
-});
-  it('should format a validation error with an empty `all` property correctly', () => {
-    const emptyArrayValidationError = {
       code: 'VALIDATION',
       all: []
     };
