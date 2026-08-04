@@ -2498,6 +2498,36 @@ type a = keyof {}
 	})
 }
 
+// onError should map plain return value to 500 status in routes response metadata
+{
+	const app = new Elysia()
+		.onError(() => {
+			return { failure: 'error' }
+		})
+		.get('/', () => 'hello')
+
+	type ResponseSchema = (typeof app)['~Routes']['get']['response']
+	expectTypeOf<ResponseSchema>().toEqualTypeOf<{
+		200: string
+		500: { failure: string }
+	}>()
+}
+
+// onError should map async plain return value to 500 status in routes response metadata
+{
+	const app = new Elysia()
+		.onError(async () => {
+			return { failure: 'async error' }
+		})
+		.get('/', () => 'hello')
+
+	type ResponseSchema = (typeof app)['~Routes']['get']['response']
+	expectTypeOf<ResponseSchema>().toEqualTypeOf<{
+		200: string
+		500: { failure: string }
+	}>()
+}
+
 // onAfterHandle should have response
 {
 	new Elysia().onAfterHandle(
