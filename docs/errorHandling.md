@@ -34,6 +34,4 @@ const app = new Elysia()
 console.log(`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`);
 ```
 
-Ensure that the `formatErrorAsJSON` function is imported and used in your `onError` callback as shown in the example above.
-
-This setup ensures that all errors are returned in JSON format, making it easier to handle them on the client side. Ensure that the `formatErrorAsJSON` function is imported and used in your `onError` callback as shown in the example above.
+To enable JSON error formatting, ensure that the `formatErrorAsJSON` function is imported and used in your `onError` callback as shown in the example above. This setup ensures that all errors are returned in JSON format, making it easier to handle them on the client side.
