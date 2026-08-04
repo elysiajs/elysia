@@ -6,6 +6,95 @@ import config from '../config/default.json';
 const db = new PrismaClient();
 
 const app = new Elysia()
+  .decorate('config', {
+    returnErrorsAsJSON: import.meta.env.RETURN_ERRORS_AS_JSON === 'true'
+  })
+  .post(
+    "/sign-up",
+    async ({ body }) => db.user.create({ data: body }),
+    {
+      body: t.Object({
+        username: t.String(),
+        password: t.String({ minLength: 8 }),
+      }),
+    }
+  )
+  .onError(({ code, error }) => {
+    const returnErrorsAsJSON = import.meta.env.VITE_RETURN_ERRORS_AS_JSON === 'true';
+    if (returnErrorsAsJSON) {
+      return new Response(JSON.stringify(error), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    }
+    switch (code) {
+      case "VALIDATION":
+        console.log(error.all);
+        return error.all;
+      default:
+        return {
+          name: error.name,
+          message: error.message,
+        };
+    }
+  })
+  .listen(3000);
+
+console.log(`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`);
+      body: t.Object({
+        username: t.String(),
+        password: t.String({ minLength: 8 }),
+      }),
+    }
+  )
+  .onError(({ code, error }) => {
+    const returnErrorsAsJSON = app.config.returnErrorsAsJSON;
+    if (returnErrorsAsJSON) {
+      return formatErrorAsJSON(code, error);
+    }
+    switch (code) {
+      case "VALIDATION":
+        console.log(error.all);
+        return error.all;
+      default:
+        return {
+          name: error.name,
+          message: error.message,
+        };
+    }
+  })
+  .listen(3000);
+
+console.log(`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`);
+      return { errors: error.all || [{ message: error.message }] };
+    }
+    switch (code) {
+      case 'VALIDATION':
+        return error.all;
+      default:
+        return {
+          name: error.name,
+          message: error.message,
+        };
+    }
+  })
+  .post(
+    '/sign-up',
+    async ({ body }) =>
+      db.user.create({
+        data: body,
+      }),
+    {
+      body: t.Object({
+        username: t.String(),
+        password: t.String({
+          minLength: 8,
+        }),
+      }),
+    }
+  )
+  .listen(3000);
+
+console.log(
+  `🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`
+);
   .post(
     '/sign-up',
     async ({ body }) =>
@@ -48,7 +137,32 @@ import {
 	type TAnySchema
 } from '@sinclair/typebox'
 
-.onError(({ code, error }, { returnErrorsAsJSON }) => {
+.onError(({ code, error }, { config }) => {
+		const returnErrorsAsJSON = config.returnErrorsAsJSON;
+		switch (code) {
+			case 'VALIDATION':
+				return returnErrorsAsJSON ? formatErrorAsJSON(error.all) : error.all;
+			default:
+				return returnErrorsAsJSON ? formatErrorAsJSON({ name: error.name, message: error.message }) : { name: error.name, message: error.message };
+		}
+	})
+    if (returnErrorsAsJSON) {
+        return formatErrorAsJSON(error);
+    }
+    switch (code) {
+        case 'VALIDATION':
+            console.log(error.all);
+            return error.all;
+        default:
+            return {
+                name: error.name,
+                message: error.message,
+            };
+    }
+        return { name: error.name, message: error.message };
+    }
+  }
+}
 .onError(({ code, error }, { returnErrorsAsJSON }) => {
 			switch (code) {
 				case 'VALIDATION':
