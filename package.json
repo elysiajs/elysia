@@ -9,7 +9,7 @@
 	},
 	"main": "./dist/index.js",
 	"module": "./dist/index.mjs",
-	"types": "./dist/index.d.ts",
+    "test": "bun run test:functionality && bun run test:types && bun run test:node",
 	"exports": {
 		"./package.json": "./package.json",
 		".": {

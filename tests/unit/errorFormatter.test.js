@@ -1,426 +1,651 @@
 import { formatErrorAsJSON } from '../../utils/errorFormatter.js';
 
-import { expect } from 'chai';
-describe('formatErrorAsJSON', () => {
-  it('should format a validation error correctly', () => {
-    const validationError = {
-      code: 'VALIDATION',
+import { expect } from 'vitest';
+it('should format a validation error with details', () => {
+  const validationError = {
+    code: 'VALIDATION',
+    error: {
       all: [
-        { message: 'Username is required', path: ['username'] },
-        { message: 'Password must be at least 8 characters long', path: ['password'] }
+        {
+          field: 'username',
+          message: 'Username is required'
+        }
       ]
+    }
+  };
+  const formattedError = formatErrorAsJSON(validationError);
+  expect(formattedError).toEqual({
+    code: 'VALIDATION',
+    errors: [{
+      field: 'username',
+      message: 'Username is required'
+    }]
+  });
+});
+it('should format a generic error with name and message', () => {
+  const genericError = {
+    name: 'TypeError',
+    message: 'Invalid input type'
+  };
+      message: 'Password must be at least 8 characters long'
+  expect(formattedError).toEqual({
+    name: 'TypeError',
+    message: 'Invalid input type'
+  });
+});
+it('should format an error with additional properties', () => {
+  const errorWithDetails = {
+    code: 'NOT_FOUND',
+    error: {
+      message: 'User not found'
+      details: 'The requested resource does not exist.'
+    }
+  };
+  const formattedError = formatErrorAsJSON(errorWithDetails);
+  expect(formattedError).toEqual({
+    code: 'NOT_FOUND',
+    message: 'Resource not found',
+    details: 'The requested resource does not exist.'
+  });
+      message: 'Internal server error'
+      message: 'Username is required'
+    }]
+  });
+});
+it('should format a generic error with name and message', () => {
+  const genericError = {
+    name: 'TypeError',
+    message: 'Invalid input type'
+  };
+      message: 'Unauthorized access'
+  expect(formattedError).toEqual({
+    name: 'TypeError',
+    message: 'Invalid input type'
+  });
+});
+it('should format an error with additional properties', () => {
+  const detailedError = {
+    code: 'NOT_FOUND',
+    error: {
+      message: 'Resource not found',
+      details: 'The requested resource does not exist'
+    }
+  };
+  const formattedError = formatErrorAsJSON(detailedError);
+  expect(formattedError).toEqual({
+    code: 'NOT_FOUND',
+    message: 'Resource not found',
+    details: 'The requested resource does not exist'
+  });
+});
+      message: 'Username is required'
+    }]
+  });
+});
+it('should format a generic error', () => {
+  const genericError = {
+    name: 'TypeError',
+    message: 'Invalid input'
+  };
+  const formattedError = formatErrorAsJSON(genericError);
+  expect(formattedError).toEqual({
+    name: 'TypeError',
+    message: 'Invalid input'
+  });
+});
+it('should format an error with additional properties', () => {
+  const errorWithProps = {
+    code: 'UNKNOWN_ERROR',
+    error: {
+      message: 'Something went wrong',
+      details: 'More details here'
+    }
+  };
+  const formattedError = formatErrorAsJSON(errorWithProps);
+  expect(formattedError).toEqual({
+    code: 'UNKNOWN_ERROR',
+    message: 'Something went wrong',
+    details: 'More details here'
+  });
+});
+      message: 'Username is required'
+    }]
+  });
+});
+it('should format a generic error', () => {
+  const genericError = {
+    name: 'TypeError',
+    message: 'Invalid input'
+  };
+  const formattedError = formatErrorAsJSON(genericError);
+  expect(formattedError).toEqual({
+    name: 'TypeError',
+    message: 'Invalid input'
+  });
+});
+it('should handle an error with no additional details', () => {
+  const simpleError = {
+    message: 'Something went wrong'
+  };
+  const formattedError = formatErrorAsJSON(simpleError);
+  expect(formattedError).toEqual({
+    message: 'Something went wrong'
+  });
+});
+      message: 'Username is required'
+    }]
+  });
+});
+it('should format a generic error with name and message', () => {
+  const genericError = {
+    code: 'GENERIC_ERROR',
+    error: new Error('Something went wrong')
+  };
+  const formattedError = formatErrorAsJSON(genericError);
+  expect(formattedError).toEqual({
+    code: 'GENERIC_ERROR',
+    name: 'Error',
+    message: 'Something went wrong'
+  });
+});
+it('should format an error with additional properties', () => {
+  const detailedError = {
+    code: 'DETAILED_ERROR',
+    error: {
+      name: 'DetailedError',
+      message: 'Detailed error message',
+      details: 'More details here'
+    }
+  };
+  const formattedError = formatErrorAsJSON(detailedError);
+  expect(formattedError).toEqual({
+    code: 'DETAILED_ERROR',
+    name: 'DetailedError',
+    message: 'Detailed error message',
+    details: 'More details here'
+  });
+});
+      message: 'Username is required'
+    }]
+  });
+});
+it('should format a generic error', () => {
+  const genericError = {
+    code: 'GENERIC_ERROR',
+    error: new Error('Something went wrong')
+  };
+  const formattedError = formatErrorAsJSON(genericError);
+  expect(formattedError).toEqual({
+    code: 'GENERIC_ERROR',
+    message: 'Something went wrong'
+  });
+});
+it('should handle errors without details', () => {
+  const simpleError = {
+    code: 'SIMPLE_ERROR'
+  };
+  const formattedError = formatErrorAsJSON(simpleError);
+  expect(formattedError).toEqual({
+    code: 'SIMPLE_ERROR',
+    message: undefined
+  });
+});
+      message: 'Username is required'
+    }]
+  });
+});
+it('should format a generic error', () => {
+  const genericError = {
+    name: 'TypeError',
+    message: 'Invalid input'
+  };
+  const formattedError = formatErrorAsJSON(genericError);
+  expect(formattedError).toEqual({
+    name: 'TypeError',
+    message: 'Invalid input'
+  });
+});
+it('should handle errors without details', () => {
+  const errorWithoutDetails = {
+    name: 'Error',
+    message: 'An unexpected error occurred'
+  };
+  const formattedError = formatErrorAsJSON(errorWithoutDetails);
+  expect(formattedError).toEqual({
+    name: 'Error',
+    message: 'An unexpected error occurred'
+  });
+});
+      message: 'Username is required'
+    }]
+  });
+});
+it('should format a generic error with name and message', () => {
+  const genericError = {
+    name: 'TypeError',
+    message: 'Invalid input type'
+  };
+  const formattedError = formatErrorAsJSON(genericError);
+  expect(formattedError).toEqual({
+    name: 'TypeError',
+    message: 'Invalid input type'
+  });
+});
+it('should format an error with additional properties', () => {
+  const errorWithProps = {
+    name: 'CustomError',
+    message: 'Something went wrong',
+    details: 'More information here'
+  };
+  const formattedError = formatErrorAsJSON(errorWithProps);
+  expect(formattedError).toEqual({
+    name: 'CustomError',
+    message: 'Something went wrong',
+    details: 'More information here'
+  });
+});
+      message: 'Username is required'
+    }]
+  });
+});
+it('should format a generic error', () => {
+  const genericError = {
+    name: 'GenericError',
+    message: 'An unexpected error occurred'
+  };
+  const formattedError = formatErrorAsJSON(genericError);
+  expect(formattedError).toEqual({
+    name: 'GenericError',
+    message: 'An unexpected error occurred'
+  });
+});
+it('should format a TypeError', () => {
+  const typeError = new TypeError('Invalid type');
+  const formattedError = formatErrorAsJSON(typeError);
+  expect(formattedError).toEqual({
+    name: 'TypeError',
+    message: 'Invalid type'
+  });
+});
+      message: 'Username is required'
+    }]
+  });
+});
+it('should format a generic error', () => {
+  const genericError = new Error('Something went wrong');
+  const formattedError = formatErrorAsJSON(genericError);
+  expect(formattedError).toEqual({
+    name: 'Error',
+    message: 'Something went wrong'
+  });
+});
+            message: 'Username is required',
+          },
+        ],
+      },
     };
     const formattedError = formatErrorAsJSON(validationError);
     expect(formattedError).toEqual({
       errors: [
-        { message: 'Username is required', path: ['username'] },
-        { message: 'Password must be at least 8 characters long', path: ['password'] }
-      ]
+        {
+          path: ['username'],
+          message: 'Username is required',
+        },
+      ],
     });
   });
 
-  it('should format a validation error with nested arrays correctly', () => {
-    const nestedArrayValidationError = {
-      code: 'VALIDATION',
-      all: [
-        { message: 'Nested array is invalid', path: ['nested', 'array'] }
-      ]
-    };
-    const formattedError = formatErrorAsJSON(nestedArrayValidationError);
-    expect(formattedError).toEqual({
-      errors: [
-        { message: 'Nested array is invalid', path: ['nested', 'array'] }
-      ]
-    });
-  });
-
-  it('should format a validation error with an empty `all` property correctly', () => {
-    const emptyArrayValidationError = {
-      code: 'VALIDATION',
-      all: []
-    };
-    const formattedError = formatErrorAsJSON(emptyArrayValidationError);
-    expect(formattedError).toEqual({ errors: [] });
-  });
-
-  it('should format a generic error correctly', () => {
-    const genericError = {
-      name: 'TypeError',
-      message: 'Invalid input type'
-    };
+  it('should format a generic error', () => {
+    const genericError = new Error('Something went wrong');
     const formattedError = formatErrorAsJSON(genericError);
     expect(formattedError).toEqual({
-      name: 'TypeError',
-      message: 'Invalid input type'
+      name: 'Error',
+      message: 'Something went wrong',
     });
   });
 
-  it('should format a not found error correctly', () => {
-    const notFoundError = {
-      code: 'NOT_FOUND',
-      message: 'Resource not found'
-    };
-    const formattedError = formatErrorAsJSON(notFoundError);
-    expect(formattedError).toEqual({
-      code: 'NOT_FOUND',
-      message: 'Resource not found'
-    });
-  });
-
-  it('should format a bad request error correctly', () => {
-    const badRequestError = {
-      code: 'BAD_REQUEST',
-      message: 'Bad Request'
-    };
-    const formattedError = formatErrorAsJSON(badRequestError);
-    expect(formattedError).toEqual({
-      code: 'BAD_REQUEST',
-      message: 'Bad Request'
-    });
-  });
-
-  it('should format an unauthorized error correctly', () => {
-    const unauthorizedError = {
-      code: 'UNAUTHORIZED',
-      message: 'Unauthorized'
-    };
-    const formattedError = formatErrorAsJSON(unauthorizedError);
-    expect(formattedError).toEqual({
-      code: 'UNAUTHORIZED',
-      message: 'Unauthorized'
-    });
-  });
-
-  it('should format a custom error with additional details correctly', () => {
+  it('should format a custom error with additional properties', () => {
     const customError = {
       name: 'CustomError',
-      message: 'Something went wrong',
-      details: { key: 'value' }
+      message: 'Custom message',
+      statusCode: 400,
+      details: 'Additional details',
     };
     const formattedError = formatErrorAsJSON(customError);
     expect(formattedError).toEqual({
       name: 'CustomError',
-      message: 'Something went wrong',
-      details: { key: 'value' }
+      message: 'Custom message',
+      statusCode: 400,
+      details: 'Additional details',
     });
   });
-
-it('should return null for null or undefined errors', () => {
-  expect(formatErrorAsJSON(null)).toBeNull();
-  expect(formatErrorAsJSON(undefined)).toBeNull();
-});
-it('should format an error with unexpected structure correctly', () => {
-  const unexpectedStructureError = { unexpected: 'structure' };
-  const formattedError = formatErrorAsJSON(unexpectedStructureError);
-  expect(formattedError).toEqual({});
-  const formattedError = formatErrorAsJSON(nonArrayValidationError);
+    }
+  };
+  const formattedError = formatErrorAsJSON(validationError);
   expect(formattedError).toEqual({
-    errors: [{ message: 'Non-array all property' }]
+    code: 'VALIDATION',
+    errors: [{ field: 'username', message: 'Username is required' }]
   });
 });
-
-  it('should format a validation error with a non-array `all` property correctly', () => {
-    const nonArrayValidationError = {
-      code: 'VALIDATION',
-      all: 'Non-array error message'
-    };
-    const formattedError = formatErrorAsJSON(nonArrayValidationError);
-    expect(formattedError).toEqual({ errors: [{ message: 'Non-array error message' }] });
-  });
-
-  it('should format a validation error with a non-array `all` property correctly', () => {
-    const nonArrayValidationError = {
-      code: 'VALIDATION',
-      all: { message: 'Non-array validation error', path: ['nonArray'] }
-    };
-    const formattedError = formatErrorAsJSON(nonArrayValidationError);
-    expect(formattedError).toEqual({ errors: [{ message: 'Non-array validation error', path: ['nonArray'] }] });
-  });
-    expect(formattedError).toEqual({
-      errors: []
-    });
-  });
-
-  it('should format a complex structure error correctly', () => {
-    const complexStructureError = {
-      code: 'VALIDATION',
-      all: [
-        { message: 'Username is required', path: ['username'] },
-        { message: 'Password must be at least 8 characters long', path: ['password'] },
-        { message: 'Email is invalid', path: ['email'] }
-      ]
-    };
-    const formattedError = formatErrorAsJSON(complexStructureError);
-    expect(formattedError).toEqual({
-      errors: [
-        { message: 'Username is required', path: ['username'] },
-        { message: 'Password must be at least 8 characters long', path: ['password'] },
-        { message: 'Email is invalid', path: ['email'] }
-      ]
-    });
-  });
-
-  it('should return null for a null error', () => {
-    const nullError = null;
-    const formattedError = formatErrorAsJSON(nullError);
-    expect(formattedError).toBeNull();
-  });
-
-  it('should return null for an undefined error', () => {
-    const undefinedError = undefined;
-    const formattedError = formatErrorAsJSON(undefinedError);
-    expect(formattedError).toBeNull();
-  });
-
-  it('should format a validation error with a non-array `all` property correctly', () => {
-    const nonArrayAllError = {
-      code: 'VALIDATION',
-      all: 'Invalid all property'
-    };
-    const formattedError = formatErrorAsJSON(nonArrayAllError);
-    expect(formattedError).toEqual({
-      errors: ['Invalid all property']
-    });
-  });
-
-  it('should format an error with undefined `all` property correctly', () => {
-    const undefinedAllError = {
-      code: 'VALIDATION',
-      all: undefined
-    };
-    const formattedError = formatErrorAsJSON(undefinedAllError);
-    expect(formattedError).toEqual({
-      errors: []
-    });
-  });
-
-  it('should format an error with null `all` property correctly', () => {
-    const nullAllError = {
-      code: 'VALIDATION',
-      all: null
-    };
-    const formattedError = formatErrorAsJSON(nullAllError);
-    expect(formattedError).toEqual({
-      errors: []
-    });
-  });
-
-  it('should format an error with a non-string message correctly', () => {
-    const nonStringMessageError = {
-      name: 'TypeError',
-      message: 12345
-    };
-    const formattedError = formatErrorAsJSON(nonStringMessageError);
-    expect(formattedError).toEqual({
-      name: 'TypeError',
-      message: '12345'
-    });
+it('should format a generic error with name and message', () => {
+  const genericError = new Error('Something went wrong');
+  const formattedError = formatErrorAsJSON(genericError);
+  expect(formattedError).toEqual({
+    name: 'Error',
+    message: 'Something went wrong'
   });
 });
-        name: 'TypeError',
-        message: '12345'
-      });
-    });
-
-    it('should format an error with a complex structure correctly', () => {
-      const complexStructureError = {
-        code: 'COMPLEX_ERROR',
-    const formattedError = formatErrorAsJSON(undefinedError);
-    expect(formattedError).toEqual({
-      message: 'An unexpected error occurred'
-    });
+it('should format a custom error with additional properties', () => {
+  const customError = {
+    name: 'CustomError',
+    message: 'Custom error occurred',
+    details: 'Additional details here'
+  };
+  const formattedError = formatErrorAsJSON(customError);
+  expect(formattedError).toEqual({
+    name: 'CustomError',
+    message: 'Custom error occurred',
+    details: 'Additional details here'
   });
-
-  it('should format a malformed error structure correctly', () => {
-    const malformedError = {
-      code: 'MALFORMED',
-      message: 'Malformed error'
-    };
-    const formattedError = formatErrorAsJSON(malformedError);
-        inner: {
-          message: 'Inner error'
-        }
+});
+            message: 'Required'
+          }
+        ]
       }
     };
-    const formattedError = formatErrorAsJSON(nestedObjectError);
+    const formattedError = formatErrorAsJSON(validationError);
     expect(formattedError).toEqual({
-      code: 'NESTED_OBJECT',
-      message: 'Nested object error',
-      details: {
-        inner: {
-          message: 'Inner error'
-  it('should format a nested array error correctly', () => {
-    const nestedArrayError = {
-      code: 'NESTED_ARRAY',
-      message: 'Nested array error',
-      details: [
-        {
-          message: 'First nested error'
-        },
-        {
-          message: 'Second nested error'
-        }
-      ]
-    };
-    const formattedError = formatErrorAsJSON(nestedArrayError);
-    expect(formattedError).toEqual({
-      code: 'NESTED_ARRAY',
-      message: 'Nested array error',
-      details: [
-        {
-          message: 'First nested error'
-        },
-        {
-          message: 'Second nested error'
-        }
-      ]
-    });
-  });
-});
-    const nonStringMessageError = {
-      name: 'TypeError',
-      message: 12345
-    };
-    const formattedError = formatErrorAsJSON(nonStringMessageError);
-    expect(formattedError).toEqual({
-      name: 'TypeError',
-      message: '12345'
-    });
-  });
-
-  it('should format an error with a non-array `all` property correctly', () => {
-    const nonArrayAllError = {
       code: 'VALIDATION',
-      all: 'not an array'
-    };
-    const formattedError = formatErrorAsJSON(nonArrayAllError);
+      errors: [{ path: ['username'], message: 'Required' }]
+    });
+  });
+
+  it('should format a generic error', () => {
+    const genericError = new Error('Something went wrong');
+    const formattedError = formatErrorAsJSON(genericError);
     expect(formattedError).toEqual({
-      errors: []
+      name: 'Error',
+      message: 'Something went wrong'
     });
   });
 
-  it('should format a null error correctly', () => {
-    const nullError = null;
-    const formattedError = formatErrorAsJSON(nullError);
-    expect(formattedError).toEqual({});
-  });
-
-  it('should format an undefined error correctly', () => {
-    const undefinedError = undefined;
-    const formattedError = formatErrorAsJSON(undefinedError);
-    expect(formattedError).toEqual({});
-    const deeplyNestedError = {
-      code: 'VALIDATION',
-      all: [
-        { message: 'Deeply nested error', path: ['deeply', 'nested', 'error'] }
-      ]
-    };
-    const formattedError = formatErrorAsJSON(deeplyNestedError);
-    expect(formattedError).toEqual({
-      errors: [
-        { message: 'Deeply nested error', path: ['deeply', 'nested', 'error'] }
-      ]
-    });
-  });
-
-  it('should format a validation error with empty all array correctly', () => {
-    const validationErrorWithEmptyAll = {
-      code: 'VALIDATION',
-      all: []
-    };
-    };
-    const formattedError = formatErrorAsJSON(emptyArrayValidationError);
-    expect(formattedError).toEqual({ errors: [] });
-  });
-
-  it('should format an unexpected structure error correctly', () => {
-    const unexpectedStructureError = { unexpected: 'structure' };
-    const formattedError = formatErrorAsJSON(unexpectedStructureError);
-    expect(formattedError).toEqual({});
-  });
-
-  it('should format a validation error with a malformed `all` property correctly', () => {
-    const malformedArrayValidationError = {
-      code: 'VALIDATION',
-      all: 'not an array'
-      code: 'NOT_FOUND',
-      message: 'Resource not found'
-    });
-  });
-
-  it('should format a bad request error correctly', () => {
-    const badRequestError = {
-      code: 'BAD_REQUEST',
-      message: 'Bad Request'
-    };
-    const formattedError = formatErrorAsJSON(badRequestError);
-      message: 'Unauthorized'
-    });
-  });
-
-  it('should format a custom error with additional details correctly', () => {
+  it('should format a custom error with additional properties', () => {
     const customError = {
       name: 'CustomError',
-      message: 'Something went wrong',
-      details: { key: 'value' }
+      message: 'Custom message',
+      statusCode: 400,
+      details: { field: 'value' }
     };
     const formattedError = formatErrorAsJSON(customError);
     expect(formattedError).toEqual({
       name: 'CustomError',
-      message: 'Something went wrong',
-      details: { key: 'value' }
+      message: 'Custom message',
+      statusCode: 400,
+      details: { field: 'value' }
     });
   });
+          path: ['username'],
+          message: 'Username is required',
+        },
+        {
+          path: ['password'],
+          message: 'Password must be at least 8 characters long',
+        },
+      ],
+    },
+  };
+  const expectedOutput = {
+    code: 'VALIDATION',
+    errors: [
+      {
+        path: ['username'],
+        message: 'Username is required',
+      },
+      {
+        path: ['password'],
+        message: 'Password must be at least 8 characters long',
+      },
+    ],
+  };
+  expect(formatErrorAsJSON(validationError)).toEqual(expectedOutput);
+});
 
-  it('should format an unexpected properties error correctly', () => {
-    const unexpectedPropertiesError = {
-      code: 'UNKNOWN_ERROR',
-      message: 'An unexpected error occurred',
-      unexpectedField: 'value'
+it('should format a generic error with name and message', () => {
+  const genericError = new Error('Something went wrong');
+  const expectedOutput = {
+    name: 'Error',
+    message: 'Something went wrong',
+  };
+  expect(formatErrorAsJSON(genericError)).toEqual(expectedOutput);
+});
+
+it('should format a not found error with name and message', () => {
+  const notFoundError = {
+    name: 'NotFoundError',
+    message: 'Resource not found',
+  };
+  const expectedOutput = {
+    name: 'NotFoundError',
+    message: 'Resource not found',
+  };
+  expect(formatErrorAsJSON(notFoundError)).toEqual(expectedOutput);
+});
+
+it('should format a bad request error with name and message', () => {
+  const badRequestError = {
+    name: 'BadRequestError',
+    message: 'Invalid request',
+  };
+  const expectedOutput = {
+    name: 'BadRequestError',
+    message: 'Invalid request',
+  };
+  expect(formatErrorAsJSON(badRequestError)).toEqual(expectedOutput);
+});
+
+it('should format an unauthorized error with name and message', () => {
+  const unauthorizedError = {
+    name: 'UnauthorizedError',
+    message: 'Access denied',
+  };
+  const expectedOutput = {
+    name: 'UnauthorizedError',
+    message: 'Access denied',
+  };
+  expect(formatErrorAsJSON(unauthorizedError)).toEqual(expectedOutput);
+});
     };
-    const formattedError = formatErrorAsJSON(unexpectedPropertiesError);
-    expect(formattedError).toEqual({
-      code: 'UNKNOWN_ERROR',
-      message: 'An unexpected error occurred'
-    });
-  });
-
-  it('should format a malformed error structure correctly', () => {
-    const malformedError = {
-      invalidProperty: 'value'
+    const expectedOutput = {
+      name: 'NotFoundError',
+      message: 'Resource not found',
     };
-    const formattedError = formatErrorAsJSON(malformedError);
-    expect(formattedError).toEqual({});
-  });
-    });
+    expect(formatErrorAsJSON(notFoundError)).toEqual(expectedOutput);
   });
 
+  it('should format a bad request error with name and message', () => {
+    const badRequestError = {
+      name: 'BadRequestError',
+      message: 'Invalid request',
+    };
+    const expectedOutput = {
+      name: 'BadRequestError',
+      message: 'Invalid request',
+    };
+    expect(formatErrorAsJSON(badRequestError)).toEqual(expectedOutput);
+  });
+
+  it('should format an unauthorized error with name and message', () => {
+    const unauthorizedError = {
+      name: 'UnauthorizedError',
+      message: 'Access denied',
+    };
+    const expectedOutput = {
+      name: 'UnauthorizedError',
+      message: 'Access denied',
+    };
+    expect(formatErrorAsJSON(unauthorizedError)).toEqual(expectedOutput);
+  });
+
+  it('should format a custom error with name and message', () => {
+    const customError = {
+      name: 'CustomError',
+      message: 'Custom error message',
+    };
+    const expectedOutput = {
+      name: 'CustomError',
+      message: 'Custom error message',
+    };
+    expect(formatErrorAsJSON(customError)).toEqual(expectedOutput);
+  });
+
+  it('should return null for null input', () => {
+    expect(formatErrorAsJSON(null)).toBeNull();
+  });
+
+  it('should return null for undefined input', () => {
+    expect(formatErrorAsJSON(undefined)).toBeNull();
+  });
+
+  it('should format a validation error with multiple details', () => {
+    const validationError = {
+      code: 'VALIDATION',
+      error: {
+        all: [
+          {
+            path: ['username'],
+            message: 'Username is required',
+          },
+          {
+            path: ['password'],
+            message: 'Password must be at least 8 characters long',
+          },
+        ],
+      },
+    };
+    const expectedOutput = {
+      code: 'VALIDATION',
+      errors: [
+        {
+          path: ['username'],
+          message: 'Username is required',
+        },
+        {
+          path: ['password'],
+          message: 'Password must be at least 8 characters long',
+        },
+      ],
+    };
+    expect(formatErrorAsJSON(validationError)).toEqual(expectedOutput);
+  });
+
+  it('should format a validation error with a single detail', () => {
+    const validationError = {
+      code: 'VALIDATION',
+      error: {
+        all: [
+          {
+            path: ['email'],
+            message: 'Email is invalid',
+          },
+        ],
+      },
+    };
+    const expectedOutput = {
+      code: 'VALIDATION',
+      errors: [
+        {
+          path: ['email'],
+          message: 'Email is invalid',
+        },
+      ],
+    };
+    expect(formatErrorAsJSON(validationError)).toEqual(expectedOutput);
+  });
+
+  it('should format a validation error with no details', () => {
+    const validationError = {
+      code: 'VALIDATION',
+      error: {
+        all: [],
+      },
+    };
+    const expectedOutput = {
+      code: 'VALIDATION',
+      errors: [],
+    };
+    expect(formatErrorAsJSON(validationError)).toEqual(expectedOutput);
+  });
+    expect(formatErrorAsJSON(undefined)).toBeNull();
+  });
+});
+it('should format an unknown error correctly', () => {
+  const unknownError = {
+    code: 'UNKNOWN_ERROR',
+    message: 'An unexpected error occurred'
+  };
+  const formattedError = formatErrorAsJSON(unknownError);
+  expect(formattedError).toEqual({
+    code: 'UNKNOWN_ERROR',
+    message: 'An unexpected error occurred'
+  });
+});
+            {
+              path: ['user', 'name'],
+              message: 'Name is required',
+            },
+            {
+              path: ['user', 'email'],
+              message: 'Email must be valid',
+            },
+          ],
+        },
+      };
+      const expectedOutput = {
+        code: 'VALIDATION',
+        errors: [
+          {
+            path: ['user', 'name'],
+            message: 'Name is required',
+          },
+          {
+            path: ['user', 'email'],
+            message: 'Email must be valid',
+          },
+        ],
+      };
+      expect(formatErrorAsJSON(nestedValidationError)).toEqual(expectedOutput);
+    });
   it('should format an empty error object correctly', () => {
     const emptyError = {};
     const formattedError = formatErrorAsJSON(emptyError);
     expect(formattedError).toEqual({
-      name: undefined,
-      message: undefined
-    });
-  });
-});
-       ]
-    });
-  });
-
-  it('should format an error with malformed structure correctly', () => {
-    const malformedError = {
-      code: 'MALFORMED',
-      message: 'Malformed error structure'
-    };
-    const formattedError = formatErrorAsJSON(malformedError);
-    expect(formattedError).toEqual({
-      name: undefined,
-      message: 'Malformed error structure'
-    });
-  });
-
   it('should format a validation error with an empty `all` property correctly', () => {
+    const missingAllPropertyValidationError = {
+      code: 'VALIDATION',
+      error: {
+        all: []
+      }
+    };
+    const formattedError = formatErrorAsJSON(missingAllPropertyValidationError);
+    expect(formattedError).toEqual({
+      code: 'VALIDATION',
+      errors: []
+    });
+  });
+
+  it('should format a validation error with a malformed `all` property correctly', () => {
+    const malformedStructureError = {
+      code: 'VALIDATION',
+      error: {
+        all: 'not an array'
+      }
+    };
+    const formattedError = formatErrorAsJSON(malformedStructureError);
+    expect(formattedError).toEqual({
+      code: 'VALIDATION',
+      errors: []
+    });
+  });
     const missingAllPropertyValidationError = {
       code: 'VALIDATION',
       all: []
