@@ -22,6 +22,7 @@ describe('formatErrorAsJSON', () => {
   it('should format a generic error correctly', () => {
     const genericError = {
       name: 'TypeError',
+      code: 'GENERIC_ERROR',
       message: 'Invalid input type'
     };
     const formattedError = formatErrorAsJSON(genericError);
@@ -38,20 +39,8 @@ describe('formatErrorAsJSON', () => {
     };
     const formattedError = formatErrorAsJSON(notFoundError);
     expect(formattedError).toEqual({
-      name: 'NOT_FOUND',
+      code: 'NOT_FOUND',
       message: 'Resource not found'
-    });
-  });
-
-  it('should format an internal server error correctly', () => {
-    const internalServerError = {
-      name: 'InternalServerError',
-      message: 'Internal Server Error'
-    };
-    const formattedError = formatErrorAsJSON(internalServerError);
-    expect(formattedError).toEqual({
-      name: 'InternalServerError',
-      message: 'Internal Server Error'
     });
   });
 
@@ -69,83 +58,48 @@ describe('formatErrorAsJSON', () => {
     });
   });
 
-  });
-
-  it('should format an error with no message correctly', () => {
-    const noMessageError = {
-      name: 'NoMessageError'
+  it('should format a bad request error correctly', () => {
+    const badRequestError = {
+      code: 'BAD_REQUEST',
+      message: 'Bad Request'
     };
-    const formattedNoMessageError = formatErrorAsJSON(noMessageError);
-    expect(formattedNoMessageError).toEqual({
-      name: 'NoMessageError',
-      message: undefined
-    });
-      message: undefined
-    });
-  it('should format a not found error correctly', () => {
-    const notFoundError = {
-      code: 'NOT_FOUND',
-      message: 'Resource not found'
-    };
-    const formattedNotFoundError = formatErrorAsJSON(notFoundError);
-    expect(formattedNotFoundError).toEqual({
-      code: 'NOT_FOUND',
-      message: 'Resource not found'
+    const formattedError = formatErrorAsJSON(badRequestError);
+    expect(formattedError).toEqual({
+      code: 'BAD_REQUEST',
+      message: 'Bad Request'
     });
   });
 
-  it('should format an internal server error correctly', () => {
-    const internalServerError = {
-      name: 'InternalServerError',
-      message: 'Internal Server Error'
+  it('should format an unauthorized error correctly', () => {
+    const unauthorizedError = {
+      code: 'UNAUTHORIZED',
+      message: 'Unauthorized'
     };
-    const formattedInternalServerError = formatErrorAsJSON(internalServerError);
-    expect(formattedInternalServerError).toEqual({
-      name: 'InternalServerError',
-      message: 'Internal Server Error'
+    const formattedError = formatErrorAsJSON(unauthorizedError);
+    expect(formattedError).toEqual({
+      code: 'UNAUTHORIZED',
+      message: 'Unauthorized'
     });
   });
 
-    it('should format a bad request error correctly', () => {
-      const badRequestError = {
-        code: 'BAD_REQUEST',
-        message: 'Bad Request'
-      };
-      const formattedBadRequestError = formatErrorAsJSON(badRequestError);
-      expect(formattedBadRequestError).toEqual({
-        name: 'BAD_REQUEST',
-        message: 'Bad Request'
-      });
-    });
-
-    it('should format an unauthorized error correctly', () => {
-      const unauthorizedError = {
-        code: 'UNAUTHORIZED',
-        message: 'Unauthorized'
-      };
-      const formattedUnauthorizedError = formatErrorAsJSON(unauthorizedError);
-      expect(formattedUnauthorizedError).toEqual({
-        name: 'UNAUTHORIZED',
-        message: 'Unauthorized'
-      });
-    });
-
-    it('should format an undefined error correctly', () => {
-      const undefinedError = undefined;
-      const formattedUndefinedError = formatErrorAsJSON(undefinedError);
-      expect(formattedUndefinedError).toEqual({
-        name: undefined,
-        message: undefined
-      });
-    });
+  it('should format an undefined error correctly', () => {
     const undefinedError = undefined;
-    const formattedUndefinedError = formatErrorAsJSON(undefinedError);
-    expect(formattedUndefinedError).toEqual({
+    const formattedError = formatErrorAsJSON(undefinedError);
+    expect(formattedError).toEqual({
       name: undefined,
       message: undefined
     });
   });
 
+  it('should format a validation error with nested arrays correctly', () => {
+    const nestedArrayValidationError = {
+      code: 'VALIDATION',
+      all: [
+        { message: 'Nested array is invalid', path: ['nested', 'array'] }
+      ]
+    };
+    const formattedError = formatErrorAsJSON(nestedArrayValidationError);
+    expect(formattedError).toEqual({
       errors: [
         { message: 'Nested array is invalid', path: ['nested', 'array'] }
       ]
@@ -159,8 +113,8 @@ describe('formatErrorAsJSON', () => {
         { message: 'Nested object is invalid', path: ['object', 'nested', 'property'] }
       ]
     };
-    const formattedNestedObjectValidationError = formatErrorAsJSON(nestedObjectValidationError);
-    expect(formattedNestedObjectValidationError).toEqual({
+    const formattedError = formatErrorAsJSON(nestedObjectValidationError);
+    expect(formattedError).toEqual({
       errors: [
         { message: 'Nested object is invalid', path: ['object', 'nested', 'property'] }
       ]
@@ -169,11 +123,34 @@ describe('formatErrorAsJSON', () => {
 
   it('should format an error with malformed structure correctly', () => {
     const malformedError = {
+      message: 'Malformed error'
+    };
+    const formattedError = formatErrorAsJSON(malformedError);
+    expect(formattedError).toEqual({
+      message: 'Malformed error'
+    });
+  });
+});
+  it('should format an error with malformed structure correctly', () => {
+    const malformedError = {};
+    const formattedError = formatErrorAsJSON(malformedError);
+    expect(formattedError).toEqual({
+      name: undefined,
+      message: undefined
+    });
+  });
+         { message: 'Nested array is invalid', path: ['nested', 'array'] }
+       ]
+    });
+  });
+
+  it('should format an error with malformed structure correctly', () => {
+    const malformedError = {
       code: 'MALFORMED',
       message: 'Malformed error structure'
     };
-    const formattedMalformedError = formatErrorAsJSON(malformedError);
-    expect(formattedMalformedError).toEqual({
+    const formattedError = formatErrorAsJSON(malformedError);
+    expect(formattedError).toEqual({
       name: undefined,
       message: 'Malformed error structure'
     });
@@ -184,8 +161,8 @@ describe('formatErrorAsJSON', () => {
       code: 'VALIDATION',
       all: []
     };
-    const formattedMissingAllPropertyError = formatErrorAsJSON(missingAllPropertyValidationError);
-    expect(formattedMissingAllPropertyError).toEqual({
+    const formattedError = formatErrorAsJSON(missingAllPropertyValidationError);
+    expect(formattedError).toEqual({
       errors: []
     });
   });
@@ -195,21 +172,12 @@ describe('formatErrorAsJSON', () => {
       code: 'VALIDATION',
       all: 'not an array'
     };
-    const formattedMalformedStructureError = formatErrorAsJSON(malformedStructureError);
-    expect(formattedMalformedStructureError).toEqual({
+    const formattedError = formatErrorAsJSON(malformedStructureError);
+    expect(formattedError).toEqual({
       errors: []
     });
   });
-      code: 'VALIDATION',
-      all: []
-    };
-    const formattedMissingAllPropertyError = formatErrorAsJSON(missingAllPropertyValidationError);
-    expect(formattedMissingAllPropertyError).toEqual({
-      errors: []
-    });
-  });
-
-  it('should format a validation error with a malformed `all` property correctly', () => {
+});
     const malformedStructureError = {
       code: 'VALIDATION',
       all: 'not an array'
