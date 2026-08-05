@@ -765,13 +765,16 @@ type ProblemStatus<P> = P extends {
 	? NumericStatus<S>
 	: 500
 
-type ProblemResponseBody<Status extends number, P> = {
-	type: string
-	title: string
-	status: Status
-	detail?: string
-	instance?: string
-} & Omit<P, keyof Problem>
+type ProblemResponseBody<Status extends number, P> = Omit<
+	{
+		type: string
+		title: string
+		detail?: string
+		instance?: string
+	},
+	keyof P
+> &
+	Omit<P, 'status'> & { status: Status }
 
 export function problemBody(
 	p: Problem

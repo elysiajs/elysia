@@ -540,6 +540,46 @@ describe('Macro derive behavior', () => {
 		)
 	})
 
+	it('runs a shared inherited derive once before its inheriting derives', async () => {
+		const order: string[] = []
+		const app = new Elysia()
+			.macro({
+				auth: {
+					derive: () => {
+						order.push('auth')
+
+						return { user: { role: 'admin' } }
+					}
+				}
+			})
+			.macro({
+				rbac: (roles: string[]) => ({
+					auth: true,
+					derive: ({ user }) => {
+						order.push('rbac')
+
+						return { allowed: roles.includes(user.role) }
+					}
+				}),
+				rbac2: (roles: string[]) => ({
+					auth: true,
+					derive: ({ user }) => {
+						order.push('rbac2')
+
+						return { allowed2: roles.includes(user.role) }
+					}
+				})
+			})
+			.get(
+				'/',
+				{ rbac: ['admin'], rbac2: ['admin'] },
+				({ allowed, allowed2 }) => allowed && allowed2
+			)
+
+		expect(await app.handle(req('/')).then((r) => r.json())).toBe(true)
+		expect(order).toEqual(['auth', 'rbac', 'rbac2'])
+	})
+
 	it('runs duplicate route hooks when a macro contributes to the same channel', async () => {
 		let n = 0
 		const f = () => {

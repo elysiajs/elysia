@@ -57,13 +57,65 @@ class OtherError extends Error {
 	}>()
 }
 
-// Unhandled returned errors remain in the route's error type.
+// Each returned error maps to its registered handler response.
+{
+	class FirstError extends Error {
+		readonly kind = 'first'
+	}
+	class SecondError extends Error {
+		readonly kind = 'second'
+	}
+
+	const app = new Elysia()
+		.error(FirstError, () => problem(400, { detail: 'first' }))
+		.error(SecondError, () => problem(401, { detail: 'second' }))
+		.get('/', () => {
+			if (Math.random() > 0.5) return new FirstError()
+			if (Math.random() > 0.5) return new SecondError()
+
+			return 'ok'
+		})
+
+	expectTypeOf<
+		keyof (typeof app)['~Routes']['get']['response']
+	>().toEqualTypeOf<200 | 400 | 401>()
+
+	const firstOnly = new Elysia()
+		.error(FirstError, () => problem(400, { detail: 'first' }))
+		.error(SecondError, () => problem(401, { detail: 'second' }))
+		.get('/', () =>
+			Math.random() > 0.5 ? new FirstError() : ('ok' as const)
+		)
+
+	expectTypeOf<
+		keyof (typeof firstOnly)['~Routes']['get']['response']
+	>().toEqualTypeOf<200 | 400>()
+}
+
+// Unhandled returned errors become 500 responses and remain resolvable.
 {
 	const app = new Elysia().get('/', () => new OtherError('x'))
 
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		500: OtherError
+	}>()
 	expectTypeOf<
-		(typeof app)['~Routes']['get']['response']
-	>().toEqualTypeOf<{}>()
+		(typeof app)['~Routes']['get']['error']
+	>().toEqualTypeOf<OtherError>()
+}
+
+// Resolving one returned error keeps the remaining error at 500.
+{
+	const app = new Elysia()
+		.get('/', () =>
+			Math.random() > 0.5 ? new MyError('x') : new OtherError('x')
+		)
+		.error(MyError, ({ error }) => status(404, { message: error.message }))
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		404: { readonly message: string }
+		500: OtherError
+	}>()
 	expectTypeOf<
 		(typeof app)['~Routes']['get']['error']
 	>().toEqualTypeOf<OtherError>()
@@ -117,7 +169,7 @@ class OtherError extends Error {
 
 	expectTypeOf<
 		(typeof app)['~Routes']['outer']['get']['response']
-	>().toEqualTypeOf<{}>()
+	>().toEqualTypeOf<{ 500: MyError }>()
 	expectTypeOf<
 		(typeof app)['~Routes']['outer']['get']['error']
 	>().toEqualTypeOf<MyError>()
@@ -143,7 +195,7 @@ class OtherError extends Error {
 
 	expectTypeOf<
 		(typeof grandparent)['~Routes']['get']['response']
-	>().toEqualTypeOf<{}>()
+	>().toEqualTypeOf<{ 500: MyError }>()
 	expectTypeOf<
 		(typeof grandparent)['~Routes']['get']['error']
 	>().toEqualTypeOf<MyError>()
@@ -320,9 +372,14 @@ class OtherError extends Error {
 
 // The status-first overload maps to the numeric response key.
 {
-	const app = new Elysia().get('/', () => problem(409, { sku: 42 }))
+	const app = new Elysia().get('/', () =>
+		problem(409, { detail: 'literal detail', sku: 42 })
+	)
 
 	expectTypeOf<
 		(typeof app)['~Routes']['get']['response'][409]
 	>().toMatchTypeOf<{ status: 409; sku: number }>()
+	expectTypeOf<
+		(typeof app)['~Routes']['get']['response'][409]['detail']
+	>().toEqualTypeOf<'literal detail'>()
 }

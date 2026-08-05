@@ -3871,7 +3871,8 @@ export class Elysia<
 		input: Partial<AnyLocalHook>,
 		toApply: Partial<AnyLocalHook> = input,
 		iteration = 0,
-		seen = new Set<string | Partial<AnyLocalHook>>()
+		seen = new Set<string | Partial<AnyLocalHook>>(),
+		insertions = new Map<string, number>()
 	): Partial<AnyLocalHook> {
 		if (iteration >= 16) return input
 		const macro = this['~ext']?.macro
@@ -3955,7 +3956,13 @@ export class Elysia<
 				}
 
 				if (k in macro) {
-					this['~applyMacro'](input, { [k]: v }, iteration + 1, seen)
+					this['~applyMacro'](
+						input,
+						{ [k]: v },
+						iteration + 1,
+						seen,
+						insertions
+					)
 
 					delete input[key]
 					continue
@@ -3965,10 +3972,7 @@ export class Elysia<
 					const incoming: any[] = Array.isArray(v) ? v : [v]
 					if (!input.schemas) (input as any).schemas = []
 
-					coalesceSchemas(
-						(input as any).schemas as any[],
-						incoming
-					)
+					coalesceSchemas((input as any).schemas as any[], incoming)
 
 					delete input[key]
 					continue
@@ -3987,28 +3991,29 @@ export class Elysia<
 					continue
 				}
 
-				if (k in input) {
-					if (eventProperties.has(k) || k === 'derive') {
-						const macroFns = Array.isArray(v) ? v : [v]
-						const existing = Array.isArray(input[k])
-							? input[k]
-							: [input[k]]
+				if (eventProperties.has(k) || k === 'derive') {
+					const incoming = Array.isArray(v) ? v : [v]
+					const existing =
+						k in input
+							? Array.isArray(input[k])
+								? input[k]
+								: [input[k]]
+							: []
+					const added: any[] = []
 
-						const merged: any[] = []
+					for (const fn of incoming)
+						if (!existing.includes(fn) && !added.includes(fn))
+							added.push(fn)
 
-						// Track only the macro fns actually placed
-						const seen = new Set<any>()
-						for (const fn of macroFns)
-							if (!existing.includes(fn) && !seen.has(fn)) {
-								seen.add(fn)
-								merged.push(fn)
-							}
-
-						for (const fn of existing)
-							if (!seen.has(fn)) merged.push(fn)
-
-						input[k] = merged
-					} else if (Array.isArray(input[k])) {
+					const at = insertions.get(k) ?? 0
+					input[k] = [
+						...existing.slice(0, at),
+						...added,
+						...existing.slice(at)
+					]
+					insertions.set(k, at + added.length)
+				} else if (k in input) {
+					if (Array.isArray(input[k])) {
 						if (Array.isArray(v)) {
 							for (const item of v)
 								if (!input[k].some((e: any) => e === item))
@@ -7333,6 +7338,21 @@ export class Elysia<
 		return this
 	}
 
+	/**
+	 * Add a higher order function over Elysia.fetch
+	 *
+	 * @example
+	 * ```ts
+	 * const ctx = new AsyncLocalStorage<{ counter: number }>()
+	 *
+	 * new Elysia()
+	 *	.wrap(
+	 *		(fetch) => (request) =>
+	 *			ctx.run({ counter: 0 }, () => fetch(request))
+	 *	)
+	 *	.get('/', () => ctx.getStore())
+	 * ```
+	 */
 	wrap<
 		T extends (...params: any) => MaybePromise<Response> = (
 			request: Request,

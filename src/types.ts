@@ -1829,6 +1829,8 @@ type _CreateEden<
 				[x in Path]: Property
 			}
 
+type UnhandledErrorResponse<E> = [E] extends [never] ? {} : { 500: E }
+
 export type CreateEdenResponse<
 	Path extends string,
 	Schema extends RouteSchema,
@@ -1844,7 +1846,9 @@ export type CreateEdenResponse<
 				: Schema['params']
 			query: Schema['query']
 			headers: Schema['headers']
-			response: Prettify<Res>
+			response: Prettify<
+				UnionResponseStatus<Res, UnhandledErrorResponse<Err>>
+			>
 			error: Err
 		}
 	: {
@@ -1856,7 +1860,9 @@ export type CreateEdenResponse<
 				: Prettify<Schema['params'] & MacroContext['params']>
 			query: Prettify<Schema['query'] & MacroContext['query']>
 			headers: Prettify<Schema['headers'] & MacroContext['headers']>
-			response: Prettify<Res>
+			response: Prettify<
+				UnionResponseStatus<Res, UnhandledErrorResponse<Err>>
+			>
 			error: Err
 		}
 
@@ -2050,7 +2056,7 @@ type MatchRegisteredError<
 	infer Head extends ErrorDefinition,
 	...infer Rest extends ErrorDefinition[]
 ]
-	? [V] extends [Head['error']]
+	? V extends Head['error']
 		? Head['response']
 		: MatchRegisteredError<V, Rest>
 	: never
@@ -2084,6 +2090,15 @@ export type UnhandledReturnedErrorOf<
 	? UnhandledReturnedError<R, Errors>
 	: UnhandledReturnedError<T, Errors>
 
+type WithoutUnhandledErrorResponse<Response, Err> = Omit<Response, 500> &
+	(500 extends keyof Response
+		? Exclude<Response[500], Err> extends infer Body
+			? IsNever<Body> extends true
+				? {}
+				: { 500: Body }
+			: {}
+		: {})
+
 export type ResolveRouteErrors<
 	Routes,
 	Errors extends ErrorDefinition[]
@@ -2102,10 +2117,21 @@ export type ResolveRouteErrors<
 					: Omit<Routes[K], 'response' | 'error'> & {
 							response: Prettify<
 								UnionResponseStatus<
-									Routes[K]['response'],
-									ExtractReturnedError<
-										Routes[K]['error'],
-										Errors
+									WithoutUnhandledErrorResponse<
+										Routes[K]['response'],
+										Routes[K]['error']
+									>,
+									UnionResponseStatus<
+										ExtractReturnedError<
+											Routes[K]['error'],
+											Errors
+										>,
+										UnhandledErrorResponse<
+											UnhandledReturnedError<
+												Routes[K]['error'],
+												Errors
+											>
+										>
 									>
 								>
 							>
