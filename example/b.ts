@@ -1,4 +1,4 @@
-import Elysia from '../src'
+import { HTTPError } from '../src'
 
 const a = new Elysia()
 	.macro({

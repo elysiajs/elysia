@@ -18,14 +18,9 @@ import {
 
 import type { RouteCompileState } from './descriptor'
 
-import {
-	ElysiaStatus,
-	ParseError,
-	ValidationError,
-	internalServerErrorResponse,
-	isProduction
-} from '../../error'
+import { ElysiaStatus, ParseError, ValidationError } from '../../error'
 import { isDynamicRegex, traceEventIndex } from '../../constants'
+import { fallbackResponse } from '../../handler/error'
 import { finalizeRouteError, forwardError } from '../../handler/utils'
 import { hasHeaderShorthand } from '../../universal/constants'
 
@@ -1053,24 +1048,24 @@ export function compileHandlerJit({
 
 		if (hasErrorHook) {
 			link(hook!.error!, 'er')
-			link(ElysiaStatus, 'es')
-			link(internalServerErrorResponse, 'ise')
-			link(isProduction, 'isprod')
+			link(fallbackResponse, 'fbr')
 
 			const allowUnsafeDetail =
 				!!root['~config']?.allowUnsafeValidationDetails
 
 			if (allowUnsafeDetail) link(ValidationError, 'verr')
 
+			// The hook-less lane reaches `fallbackResponse` through `fre`.
+			// This lane has already run the hooks, so it calls the same
+			// function directly — inlining a second copy of it here is what
+			// let the self-describing error contract silently rot
 			factoryHelpers +=
 				`function _em(c,_r){return typeof _r?.then==='function'?Promise.resolve(_r).catch((_e)=>fre(rt,c,_e)):_r}\n` +
+				`function _fbm(_r,_s,_c){return ${map}(_r,_s,_c.request,true)}\n` +
 				`${asyncCookieSign ? 'async ' : ''}function _efb(e,c){\n` +
 				(asyncCookieSign ? `let _sg\n` : ``) +
-				`if(e instanceof es){${signPrefix}return _em(c,${map}(e,c.set,c.request,true))}\n` +
-				`if(e?.status){${signPrefix}return _em(c,${map}(e?.response!==undefined?e.response:(isprod()&&e.status>=500?'Internal Server Error':(e?.message??'')),c.set,c.request,true))}\n` +
-				`c.set.status=500\n` +
 				signPrefix +
-				`return _em(c,${map}(ise(e),c.set,c.request,true))\n` +
+				`return _em(c,fbr(c,e,_fbm))\n` +
 				`}\n`
 
 			body +=
@@ -1107,12 +1102,6 @@ export function compileHandlerJit({
 				endTrace('error') +
 				abortCatch +
 				schedule +
-				`if(typeof e?.toResponse==='function')` +
-				`try{\n` +
-				`const _er=e.toResponse()\n` +
-				`if(typeof _er?.then==='function')return Promise.resolve(_er).then(${asyncCookieSign ? 'async ' : ''}(_v)=>{if(_v instanceof Response){${signPrefix}return _em(c,${map}(_v,c.set,c.request,true))}return _efb(e,c)},()=>_efb(e,c)).catch((_e)=>fre(rt,c,_e))\n` +
-				`if(_er instanceof Response){${signPrefix}return _em(c,${map}(_er,c.set,c.request,true))}\n` +
-				`}catch{}\n` +
 				`return _efb(e,c)\n`
 		} else {
 			body += endTrace('error') + schedule

@@ -85,6 +85,8 @@ describe('AOT handler freeze', () => {
 		await expect(jit.json()).resolves.toEqual({ ok: true, n: 5 })
 	})
 
+	// The production mask lives in the shared `fallbackResponse` (`fbr`), so a
+	// manifest frozen in development must still mask a 5xx once NODE_ENV flips
 	it('binds runtime isProduction when reconstructing the error tail', async () => {
 		const previousNodeEnv = process.env.NODE_ENV
 		const buildError = () =>
@@ -103,7 +105,7 @@ describe('AOT handler freeze', () => {
 			endValidatorCapture()
 
 			expect(handlers).toHaveLength(1)
-			expect(handlers[0]!.alias.split(',')).toContain('isprod')
+			expect(handlers[0]!.alias.split(',')).toContain('fbr')
 			registerManifest({ handlers: materialiseHandlers(handlers) })
 
 			delete process.env.ELYSIA_AOT_BUILD

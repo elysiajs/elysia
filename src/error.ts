@@ -765,7 +765,7 @@ type ProblemStatus<P> = P extends {
 	? NumericStatus<S>
 	: 500
 
-type ProblemResponseBody<Status extends number, P> = Omit<
+export type ProblemResponseBody<Status extends number, P> = Omit<
 	{
 		type: string
 		title: string
@@ -940,3 +940,165 @@ export type SelectiveStatus<in out Res> = <
 	Code,
 	T
 >
+
+/**
+ * Class returned by {@link tag}
+ */
+export type TaggedHTTPError<Type extends string, Annotation = {}> = {
+	new (
+		message?: string,
+		options?: ErrorOptions
+	): HTTPError<Type> & { type: Type } & Annotation
+	prototype: HTTPError<Type>
+}
+
+/**
+ * Self-describing HTTP error
+ *
+ * Annotate `status`, `headers` and `value` on the subclass and Elysia maps
+ * the instance to a response on its own, no `.error(Class, handler)` needed
+ *
+ * Everything an owned `HTTPError` serves is an RFC 9457 problem document:
+ * `type` is the problem type carried on the wire, an annotated object body
+ * merges into the envelope, and any other body (or the error message, when
+ * there is none) becomes `detail`
+ *
+ * - `detail()` - the common case. Whatever it returns becomes the `detail`
+ *   member of the problem document, verbatim, objects included. The envelope
+ *   still carries `type`, `status` and an auto-filled `title`
+ * - `value()` - the escape hatch. Whatever it returns replaces the *whole*
+ *   response: no envelope, no `application/problem+json`. The annotated
+ *   `status` and `headers` still apply, only the content is yours
+ *
+ * `value` wins over `detail`, `detail` over the error message. A knob
+ * returning `undefined` falls through to the next one.
+ *
+ * @example
+ * ```ts
+ * class OutOfCredit extends HTTPError<'OUT_OF_CREDIT'> {
+ * 	type = 'OUT_OF_CREDIT' as const
+ * 	override readonly status = 402
+ *
+ * 	detail() {
+ * 		return { balance: 0, currency: 'usd' }
+ * 	}
+ * }
+ * // → { type: 'OUT_OF_CREDIT', title: 'Payment Required', status: 402,
+ * //     detail: { balance: 0, currency: 'usd' } }
+ *
+ * class Overdrawn extends HTTPError<'OVERDRAWN'> {
+ * 	type = 'OVERDRAWN' as const
+ * 	override readonly status = 402
+ *
+ * 	async detail() {
+ * 		return await describeBalance()
+ * 	}
+ * }
+ *
+ * class Legacy extends HTTPError<'LEGACY'> {
+ * 	type = 'LEGACY' as const
+ * 	override readonly status = 402
+ *
+ * 	// full control, served as-is
+ * 	value() {
+ * 		return { code: 'OUT_OF_CREDIT', ok: false }
+ * 	}
+ * }
+ * ```
+ *
+ * @see https://www.rfc-editor.org/info/rfc9457
+ * @since 2.0.0
+ */
+export abstract class HTTPError<
+	const in out T extends string = string
+> extends Error {
+	/**
+	 * RFC 9457 problem type served in the `type` member, a URI or a slug.
+	 * Doubles as the tag that discriminates one error class from another
+	 */
+	abstract type: T
+
+	/**
+	 * HTTP status served when the error reaches the error pipeline,
+	 * as a number or a status name (`'Payment Required'`)
+	 */
+	declare readonly status?: number | keyof StatusMap
+
+	/** Headers merged into `set.headers` when the error is served */
+	declare readonly headers?: Record<string, string>
+}
+
+/**
+ * Create a concrete `HTTPError` subclass carrying `type`
+ *
+ * `type` carries no status annotation, annotate `status` in the subclass
+ * body as a number or a status name
+ *
+ * @example
+ * ```ts
+ * class OutOfCredit extends tag('OUT_OF_CREDIT', 402) {
+ *     headers = {
+ *         'x-powered-by': 'Elysia'
+ *     }
+ * }
+ * ```
+ */
+export function tag<const Type extends string>(
+	type: Type
+): TaggedHTTPError<Type>
+
+/**
+ * Create a concrete `HTTPError` subclass carrying `type`, annotated with
+ * `status` as a number or a status name
+ *
+ * Annotate what is served with `detail()` (problem `detail` member) or
+ * `value()` (whole-response override), either of which may be `async`
+ *
+ * @example
+ * ```ts
+ * class OutOfCredit extends tag('OUT_OF_CREDIT', 402) {}
+ * class Denied extends tag('https://example.com/denied', 'Payment Required') {
+ *     async detail() {
+ *         return await describeBalance()
+ *     }
+ * }
+ * ```
+ */
+export function tag<
+	const Type extends string,
+	const S extends number | keyof StatusMap
+>(
+	type: Type,
+	status: S
+): TaggedHTTPError<
+	Type,
+	{ readonly status: S extends keyof StatusMap ? StatusMap[S] : S }
+>
+
+export function tag<const Type extends string>(
+	type: Type,
+	status?: number | keyof StatusMap
+): TaggedHTTPError<Type> {
+	const Tagged = class extends HTTPError<string> {
+		declare type: Type
+		declare status?: number
+		declare readonly headers?: Record<string, string>
+	}
+
+	Tagged.prototype.type = type
+	Tagged.prototype.name = type
+
+	Object.defineProperty(Tagged, 'name', {
+		value: type,
+		configurable: true
+	})
+
+	const resolved =
+		typeof status === 'string'
+			? StatusMap[status as keyof StatusMap]
+			: status
+
+	if (typeof resolved === 'number') Tagged.prototype.status = resolved
+
+	return Tagged
+}

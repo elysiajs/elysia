@@ -2,8 +2,8 @@ import type { OpenAPIV3 } from 'openapi-types'
 
 import type { TraceHandler } from './trace'
 import type { ElysiaFile } from './universal/file'
-import { type StatusMapBack } from './constants'
-import type { ElysiaError, ElysiaStatus } from './error'
+import { type StatusMap, type StatusMapBack } from './constants'
+import type { ElysiaError, ElysiaStatus, ProblemResponseBody } from './error'
 import type { TypeBoxSchema, AnySchema, StandardSchemaV1Like } from './type'
 
 import type {
@@ -1829,7 +1829,171 @@ type _CreateEden<
 				[x in Path]: Property
 			}
 
-type UnhandledErrorResponse<E> = [E] extends [never] ? {} : { 500: E }
+/**
+ * Value an annotation knob resolves to, `never` when it annotates nothing.
+ *
+ * Both knobs are canonically methods, so what they *return* is the
+ * annotation. A value or getter reads as the value itself. An `unknown`
+ * declaration claims nothing, and `undefined` is excluded — it falls through
+ * to the next tier rather than being served
+ */
+type ResolveAnnotation<V> = (
+	V extends (...args: any) => infer Returned ? Returned : V
+) extends infer Value
+	? Exclude<Awaited<Value>, undefined> extends infer Resolved
+		? IsNever<Resolved> extends true
+			? never
+			: unknown extends Resolved
+				? never
+				: Resolved
+		: never
+	: never
+
+/** Whether a knob may resolve `undefined` and fall through to the next tier */
+type AnnotationFallsThrough<V> =
+	undefined extends Awaited<
+		V extends (...args: any) => infer Returned ? Returned : V
+	>
+		? true
+		: false
+
+/**
+ * Numeric literal `status` an error annotates, written as a number or a
+ * status name. `never` when it's absent or widened
+ */
+type LiteralErrorStatus<E> = E extends { status: infer S }
+	? // The base declaration is `number | keyof StatusMap`, a widened
+		// annotation claims no particular status
+		number extends S
+		? never
+		: keyof StatusMap extends S
+			? never
+			: S extends keyof StatusMap
+				? StatusMap[S]
+				: S extends number
+					? S
+					: never
+	: never
+
+/**
+ * An owned `HTTPError` carries a *literal* `type`. Wild errors often carry a
+ * wide-string one (`ErrorEvent.type`, SDK errors), which claims nothing
+ */
+type OwnedError<E> = E extends { type: infer T extends string }
+	? string extends T
+		? false
+		: true
+	: false
+
+/**
+ * RFC 9457 problem type an error contributes. `problemBody` defaults an
+ * absent one to `'about:blank'`
+ */
+type ErrorProblemType<E> =
+	OwnedError<E> extends true
+		? E extends { type: infer T extends string }
+			? T
+			: 'about:blank'
+		: 'about:blank'
+
+/**
+ * Problem document served for a `detail` annotation. `detail` is carried
+ * verbatim, objects included — it is never spread into the envelope
+ */
+type ProblemOf<E, Detail> = ProblemResponseBody<
+	ErrorFallbackStatus<E>,
+	{ type: ErrorProblemType<E>; detail: Detail }
+>
+
+/**
+ * Tier 3 — nothing annotated. An error that claimed a problem serves its
+ * message as `detail`, anything else keeps the legacy raw lane
+ */
+type MessageTier<E> =
+	OwnedError<E> extends true
+		? ProblemOf<E, string>
+		: E extends { response: infer R }
+			? unknown extends R
+				? string
+				: R
+			: string
+
+/** Tier 2 — `detail` fills the `detail` member of a problem document */
+type DetailTier<E> = E extends { detail: infer V }
+	? // an unclaimed foreign error never invokes a function annotation
+		[OwnedError<E>, V] extends [false, (...args: any) => any]
+		? MessageTier<E>
+		: IsNever<ResolveAnnotation<V>> extends true
+			? MessageTier<E>
+			: AnnotationFallsThrough<V> extends true
+				? ProblemOf<E, ResolveAnnotation<V>> | MessageTier<E>
+				: ProblemOf<E, ResolveAnnotation<V>>
+	: MessageTier<E>
+
+/**
+ * Tier 1 — `value` replaces the whole response, so it is served raw: no
+ * envelope, no problem+json
+ */
+type ValueTier<E> = E extends { value: infer V }
+	? [OwnedError<E>, V] extends [false, (...args: any) => any]
+		? DetailTier<E>
+		: IsNever<ResolveAnnotation<V>> extends true
+			? DetailTier<E>
+			: AnnotationFallsThrough<V> extends true
+				? ResolveAnnotation<V> | DetailTier<E>
+				: ResolveAnnotation<V>
+	: DetailTier<E>
+
+/**
+ * Key a served value by the status it actually reaches.
+ *
+ * `value()` may hand back a `status()` or `problem()`, which the mapResponse
+ * lane serves at the status *it* carries, not the one the error annotated —
+ * so those members escape to their own keys. Everything else stays under
+ * `Fallback`. The unwrapping is `MergeResponseStatus`, the same one a route
+ * handler's returned `status()` goes through
+ */
+type ServedAtStatus<Served, Fallback extends number> = UnionResponseStatus<
+	IsNever<Extract<Served, AnyElysiaStatus>> extends true
+		? {}
+		: MergeResponseStatus<Extract<Served, AnyElysiaStatus>>,
+	Exclude<Served, AnyElysiaStatus> extends infer Plain
+		? IsNever<Plain> extends true
+			? {}
+			: { [Status in Fallback]: Plain }
+		: {}
+>
+
+/**
+ * Response an error describes for itself, resolved through the three tiers:
+ * a raw `value`, else a problem document built from `detail`, else its message
+ */
+type SelfDescribedResponse<E> = ServedAtStatus<
+	ValueTier<E>,
+	ErrorFallbackStatus<E>
+>
+
+/**
+ * Response of an error that reached the error pipeline without a matching
+ * `.error(Class, handler)`.
+ *
+ * A self-describing error maps to its annotated `status` and knobs,
+ * anything else is served as an unhandled 500
+ */
+type UnhandledErrorResponse<E> = [E] extends [never]
+	? {}
+	: MergeStatusUnion<
+			E extends unknown
+				? // Gated like the runtime: an owned `HTTPError` always
+					// self-describes, a foreign error needs a literal status to
+					// be served at all
+					OwnedError<E> extends true
+					? SelfDescribedResponse<E>
+					: IsNever<LiteralErrorStatus<E>> extends true
+						? { 500: E }
+						: SelfDescribedResponse<E>
+				: never
+		>
 
 export type CreateEdenResponse<
 	Path extends string,
@@ -2008,21 +2172,15 @@ export type ExtractErrorFromHandle<in out Handle> = {
  * Status used when an error handler returns a plain value (or falls through):
  * the error's declared literal `status`, otherwise 500
  */
-type ErrorFallbackStatus<E> = E extends { status: infer S extends number }
-	? number extends S
-		? 500
-		: S
-	: 500
+type ErrorFallbackStatus<E> =
+	IsNever<LiteralErrorStatus<E>> extends true ? 500 : LiteralErrorStatus<E>
 
 /**
- * Body produced when no error handler returns a value:
- * the error's declared `response`, otherwise its message (string)
+ * Body produced when no error handler returns a value. Falling through lands
+ * on exactly the lane an unhandled error takes, so it resolves the same three
+ * tiers — `MessageTier` already carries the foreign `response` fallback
  */
-type ErrorFallbackBody<E> = E extends { response: infer R }
-	? unknown extends R
-		? string
-		: R
-	: string
+type ErrorFallbackBody<E> = ValueTier<E>
 
 /**
  * `Definitions['error']` / `EphemeralType['error']` entry registered by an
@@ -2039,14 +2197,15 @@ export type ErrorDefinitionEntry<
 export type ErrorHandlerResponseSchema<R, E> = ExtractErrorFromHandle<
 	Exclude<R, Error>
 > &
+	// The handler's own `status()` returns are extracted above. What is left is
+	// its plain return plus, when it may fall through, whatever the error
+	// self-describes — which can itself carry a `status()` that escapes
 	(
 		| Exclude<R, Extract<Exclude<R, Error>, AnyElysiaStatus> | undefined>
 		| (undefined extends R
 				? ErrorFallbackBody<E>
-				: never) extends infer Plain
-		? IsNever<Plain> extends true
-			? {}
-			: { [S in ErrorFallbackStatus<E>]: Plain }
+				: never) extends infer Served
+		? ServedAtStatus<Served, ErrorFallbackStatus<E>>
 		: {})
 
 type MatchRegisteredError<
@@ -2090,14 +2249,25 @@ export type UnhandledReturnedErrorOf<
 	? UnhandledReturnedError<R, Errors>
 	: UnhandledReturnedError<T, Errors>
 
-type WithoutUnhandledErrorResponse<Response, Err> = Omit<Response, 500> &
-	(500 extends keyof Response
-		? Exclude<Response[500], Err> extends infer Body
-			? IsNever<Body> extends true
-				? {}
-				: { 500: Body }
-			: {}
-		: {})
+/**
+ * Strip what `UnhandledErrorResponse` contributed for `Err` from a route's
+ * response, so a now-handled error doesn't leave a stale status behind.
+ *
+ * A response that merely shares the same status survives, unless it's
+ * indistinguishable from the error's own body
+ */
+type WithoutUnhandledErrorResponse<Response, Err> =
+	UnhandledErrorResponse<Err> extends infer Contributed
+		? {
+				[K in keyof Response as K extends keyof Contributed
+					? IsNever<Exclude<Response[K], Contributed[K]>> extends true
+						? never
+						: K
+					: K]: K extends keyof Contributed
+					? Exclude<Response[K], Contributed[K]>
+					: Response[K]
+			}
+		: never
 
 export type ResolveRouteErrors<
 	Routes,

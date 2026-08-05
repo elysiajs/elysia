@@ -9,6 +9,7 @@ import {
 import { skipClone } from '../../adapter/skip-clone'
 import { origin } from '../../adapter/origin'
 import { ElysiaStatus } from '../../error'
+import { adoptErrorType } from '../../handler/error'
 import { ELYSIA_TYPES } from '../../type/constants'
 import { isSpace, isIdentChar, skipString } from '../lexer'
 export { emptyResponse } from '../../handler/utils'
@@ -140,7 +141,10 @@ function deriveModeQueues(entries?: readonly DeriveEntry[]) {
 	return queues
 }
 
-export function deriveModes(hooks: Function[], entries?: readonly DeriveEntry[]) {
+export function deriveModes(
+	hooks: Function[],
+	entries?: readonly DeriveEntry[]
+) {
 	const queues = deriveModeQueues(entries)
 	if (!queues) return
 
@@ -260,7 +264,6 @@ function topLevelArrowIndex(src: string): number {
 	return -1
 }
 
-
 function scanReturns(src: string): { count: number; firstIndex: number } {
 	let count = 0
 	let firstIndex = -1
@@ -301,7 +304,6 @@ function scanReturns(src: string): { count: number; firstIndex: number } {
 	}
 	return { count, firstIndex }
 }
-
 
 function scanObjectLiteralKeys(src: string, open: number): string[] | null {
 	const keys: string[] = []
@@ -607,6 +609,7 @@ export const mapError = /*#__PURE__*/ map<
 	]
 >((i, fn, [map, link, mapResponse, schedule, sign, isAsync]) => {
 	link(mapResponse, 'rm')
+	link(adoptErrorType, 'aet')
 	return (
 		`_r=${Await(fn)}er${at(i)}(c)\n` +
 		awaitGuard(fn, isAsync, '_r') +
@@ -615,7 +618,7 @@ export const mapError = /*#__PURE__*/ map<
 		`else if(c.set.status===undefined||c.set.status===200)c.set.status=500\n` +
 		schedule +
 		sign +
-		`return _em(c,${map}(_r,c.set,c.request,true))\n` +
+		`return _em(c,${map}(aet(_r,e),c.set,c.request,true))\n` +
 		`}\n`
 	)
 })

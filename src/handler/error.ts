@@ -4,9 +4,13 @@ import {
 	NotFound,
 	ValidationError,
 	ElysiaStatus,
+	HTTPError,
 	isProduction,
-	internalServerErrorResponse
+	internalServerErrorResponse,
+	problemBody,
+	PROBLEM_JSON
 } from '../error'
+import { StatusMap } from '../constants'
 import { isNotEmpty } from '../utils'
 import { materializeSetHeaders } from '../adapter/utils'
 
@@ -48,7 +52,41 @@ const isPristineNotFound = (context: Context, error: any) =>
 	!context.set.cookie &&
 	!isNotEmpty(context.set.headers)
 
-function fallbackResponse(
+/**
+ * Adopt the intercepted error's `type` into a problem the hook produced
+ * without one.
+ *
+ * `'about:blank'` is RFC 9457's "unspecified" default, so it's the only value
+ * worth replacing — an explicit type the handler set always wins.
+ *
+ * The result is copied rather than mutated: `.error(Class, value)` wraps a
+ * non-function into `() => value`, so the very same `ElysiaStatus` is replayed
+ * on every request and an in-place write would leak across requests
+ */
+export function adoptErrorType(result: any, error: any) {
+	const body = result?.response
+
+	if (
+		typeof error?.type !== 'string' ||
+		body?.type !== 'about:blank' ||
+		result.headers?.['content-type'] !== PROBLEM_JSON
+	)
+		return result
+
+	return new ElysiaStatus(
+		result.code,
+		{ ...body, type: error.type },
+		result.headers
+	)
+}
+
+/**
+ * Response served once every error hook has declined the error.
+ *
+ * Exported for the JIT: a route with error hooks emits its own catch block,
+ * which must land on *this* function rather than re-implementing it
+ */
+export function fallbackResponse(
 	context: Context,
 	error: any,
 	mapResponse: (
@@ -89,6 +127,69 @@ function fallbackResponse(
 	return fallbackErrorResponse(context, error, mapResponse, defaultError)
 }
 
+/**
+ * Numeric form of an annotated status, which may be written as a name.
+ * A numeric string keeps coercing so the production mask below can't be
+ * slipped past with `'502'`
+ */
+const resolveStatus = (status: unknown) =>
+	typeof status === 'string'
+		? (StatusMap[status as keyof StatusMap] ?? +status)
+		: status
+
+/**
+ * Body served by an error that carries a status but no usable body:
+ * its declared `response`, otherwise its message
+ */
+const statusFallbackBody = (error: any, status: unknown) =>
+	error.response !== undefined
+		? error.response
+		: // safe guard unintentional error
+			isProduction() && (status as number) >= 500
+			? 'Internal Server Error'
+			: (error.message ?? '')
+
+/**
+ * RFC 9457 problem document carrying `detail` verbatim, mirroring `problem()`.
+ *
+ * `detail` is served exactly as annotated — objects included — it is never
+ * spread into the envelope. `problemBody` only defaults `type` when the key is
+ * *absent*, so an error without one has to supply `'about:blank'` itself
+ */
+const problemOf = (self: any, detail: unknown, status: number) =>
+	new ElysiaStatus(
+		status as any,
+		problemBody({
+			type: self.type ?? 'about:blank',
+			detail: detail as string,
+			status
+		}),
+		{ 'content-type': PROBLEM_JSON }
+	)
+
+/**
+ * Read one annotation knob.
+ *
+ * Both knobs are canonically methods, so they're evaluated per serve and may
+ * be `async`. Running a stranger's function is side-effect surface (it may
+ * consume a stream or do IO), so it takes the same problem claim the shaping
+ * does — an unclaimed duck error never invokes one. A *value* annotation stays
+ * inert data and keeps duck-participating as it always has
+ */
+const readAnnotation = (
+	self: any,
+	key: 'value' | 'detail',
+	claimsProblem: boolean
+) => {
+	const annotation = self[key]
+
+	return typeof annotation === 'function'
+		? claimsProblem
+			? annotation.call(self)
+			: undefined
+		: annotation
+}
+
 function fallbackErrorResponse(
 	context: Context,
 	error: any,
@@ -102,32 +203,151 @@ function fallbackErrorResponse(
 	if (error instanceof ElysiaStatus)
 		return mapResponse(error, context.set, context)
 
-	if (error?.status) {
-		const body =
-			error.response !== undefined
-				? error.response
-				: // safe guard unintentional error
-					isProduction() && error.status >= 500
-					? 'Internal Server Error'
-					: (error.message ?? '')
-
-		return mapResponse(body, context.set, context)
+	// Self-describing error, `status` is already applied by applyErrorStatus.
+	// A foreign error that merely looks self-describing (undici, node-fetch)
+	// keeps the production mask below, only an owned HTTPError bypasses it.
+	// A malformed status (NaN, 0, negative) is not a claim of self-description
+	const self = error as HTTPError & {
+		readonly value?: unknown
+		readonly detail?: unknown
 	}
+	const status = resolveStatus(self.status)
+	// An owned error opted into the whole contract, everything it serves is a
+	// problem document. A foreign duck error only claims one by carrying a value
+	const owned = error instanceof HTTPError
+	// Naming a problem `type` is the claim, which an `implements HTTPError`
+	// class can make without extending it
+	const claimsProblem = owned || typeof self.type === 'string'
+	// `status` is what the error annotated, `served` is what actually goes out
+	// once `applyErrorStatus` has had its say
+	const served = (
+		typeof status === 'number' ? status : resolveStatus(context.set.status)
+	) as number
 
-	if (error?.message != null) {
-		if (context.set.status === undefined || context.set.status === 200)
-			context.set.status = 500
+	// An error inside the error path has nowhere left to fall
+	const failed = (cause: unknown) => {
+		context.set.status = 500
 
 		return mapResponse(
-			internalServerErrorResponse(error),
+			internalServerErrorResponse(cause),
 			context.set,
 			context
 		)
 	}
 
-	return defaultError
-		? defaultError.clone()
-		: internalServerErrorResponse(error)
+	// Headers are merged only once a body is known good, a rejecting or empty
+	// annotation must not leak them onto the fallback response
+	const mergeHeaders = () => {
+		if (self.headers)
+			Object.assign(materializeSetHeaders(context.set), self.headers)
+	}
+
+	// Legacy lane: what an error that never self-described has always served
+	const legacy = (): unknown => {
+		if (error?.status)
+			return mapResponse(
+				statusFallbackBody(error, status),
+				context.set,
+				context
+			)
+
+		if (error?.message != null) {
+			if (context.set.status === undefined || context.set.status === 200)
+				context.set.status = 500
+
+			return mapResponse(
+				internalServerErrorResponse(error),
+				context.set,
+				context
+			)
+		}
+
+		return defaultError
+			? defaultError.clone()
+			: internalServerErrorResponse(error)
+	}
+
+	// Tier 3: nothing annotated, the message is the problem `detail`.
+	// A duck error that claimed nothing falls back to the legacy lane
+	const serveMessage = () =>
+		claimsProblem
+			? mapResponse(
+					problemOf(self, statusFallbackBody(error, served), served),
+					context.set,
+					context
+				)
+			: legacy()
+
+	// Tier 2: `detail` fills the `detail` member of a problem document
+	const serveDetail = (): unknown => {
+		let detail: unknown
+
+		try {
+			detail = readAnnotation(self, 'detail', claimsProblem)
+		} catch (cause) {
+			return failed(cause)
+		}
+
+		if (detail === undefined) return serveMessage()
+
+		if (detail instanceof Promise)
+			return detail.then((resolved: unknown) => {
+				// Resolving `undefined` annotates nothing, fall to the message
+				if (resolved === undefined) return serveMessage()
+
+				mergeHeaders()
+
+				return mapResponse(
+					problemOf(self, resolved, served),
+					context.set,
+					context
+				)
+			}, failed)
+
+		mergeHeaders()
+
+		return mapResponse(
+			problemOf(self, detail, served),
+			context.set,
+			context
+		)
+	}
+
+	if (
+		owned ||
+		(error instanceof Error &&
+			typeof status === 'number' &&
+			status >= 100 &&
+			!(isProduction() && status >= 500))
+	) {
+		// Tier 1: `value` replaces the whole response. No envelope and no
+		// problem+json — the annotated `status` and `headers` still apply,
+		// only the content is the error's to choose
+		let value: unknown
+
+		try {
+			value = readAnnotation(self, 'value', claimsProblem)
+		} catch (cause) {
+			return failed(cause)
+		}
+
+		if (value === undefined) return serveDetail()
+
+		if (value instanceof Promise)
+			return value.then((resolved: unknown) => {
+				if (resolved === undefined) return serveDetail()
+
+				mergeHeaders()
+
+				return mapResponse(resolved, context.set, context)
+			}, failed)
+
+		mergeHeaders()
+
+		return mapResponse(value, context.set, context)
+	}
+
+	return legacy()
 }
 
 function applyErrorStatus(context: Context, error: any) {
@@ -192,7 +412,11 @@ export function createErrorHandler(
 					)
 						context.set.status = 500
 
-					return mapResponse(result, context.set, context)
+					return mapResponse(
+						adoptErrorType(result, error),
+						context.set,
+						context
+					)
 				}
 			}
 
@@ -225,7 +449,11 @@ export function createErrorHandler(
 				)
 					context.set.status = 500
 
-				return mapResponse(result, context.set, context)
+				return mapResponse(
+					adoptErrorType(result, error),
+					context.set,
+					context
+				)
 			}
 		}
 

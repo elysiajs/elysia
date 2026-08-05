@@ -2,8 +2,6 @@ import {
 	ElysiaStatus,
 	ParseError,
 	ValidationError,
-	internalServerErrorResponse,
-	isProduction
 } from '../../error'
 import { parseQueryFromURL } from '../../parse-query'
 import {
@@ -16,6 +14,7 @@ import {
 	signCookieValues
 } from '../../cookie/utils'
 import { requestId } from '../../utils'
+import { adoptErrorType, fallbackResponse } from '../../handler/error'
 import { finalizeRouteError, forwardError } from '../../handler/utils'
 import type { AnyElysia } from '../../base'
 import {
@@ -79,11 +78,9 @@ export const handlerParams = (): Record<string, Resolver> =>
 	pe: () => ParseError,
 	es: () => ElysiaStatus,
 	rdc: () => replaceDeriveContext,
-	ise: () => internalServerErrorResponse,
 	emp: () => emptyResponse,
 	// route-entry abort probe
 	ea: () => armEntryAbort,
-	isprod: () => isProduction,
 	// allowUnsafeValidationDetails opt-in: `e instanceof verr` in the error catch
 	verr: () => ValidationError,
 	tee: () => tee,
@@ -104,6 +101,10 @@ export const handlerParams = (): Record<string, Resolver> =>
 	fe: () => forwardError,
 	// route-level error boundary
 	fre: () => finalizeRouteError,
+	// shared error fallback, reached once every error hook has declined
+	fbr: () => fallbackResponse,
+	// adopts the error's `type` into an unspecified problem a hook returned
+	aet: () => adoptErrorType,
 	rt: (c) => c.root,
 	// route hook
 	// `link(0, '')`
