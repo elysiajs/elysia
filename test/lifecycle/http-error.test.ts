@@ -1,4 +1,4 @@
-import { Elysia, HTTPError, NotFound, problem, status, t, tag } from '../../src'
+import { Elysia, HTTPError, NotFound, problem, status, t } from '../../src'
 import { describe, expect, it } from 'bun:test'
 
 class OutOfCredit extends HTTPError<'OUT_OF_CREDIT'> {
@@ -427,15 +427,15 @@ describe('HTTPError', () => {
 	// unmatched error was served through the legacy `error.status` lane —
 	// status only, empty body, no content-type
 	describe('self-description survives an error-hook chain', () => {
-		class Unmatched extends tag('UNMATCHED', "I'm a teapot") {}
+		class Unmatched extends HTTPError.id('UNMATCHED', "I'm a teapot") {}
 
-		class Bodied extends tag('BODIED', 409) {
+		class Bodied extends HTTPError.id('BODIED', 409) {
 			detail() {
 				return 'annotated'
 			}
 		}
 
-		class Registered extends tag('REGISTERED', 400) {}
+		class Registered extends HTTPError.id('REGISTERED', 400) {}
 
 		const matrix = [
 			['bare', (app: Elysia) => app],
@@ -496,8 +496,8 @@ describe('HTTPError', () => {
 		// A handler returning `problem()` leaves `type` at RFC 9457's
 		// "unspecified" default, so the error it intercepted names it
 		describe('the error type reaches a handler-produced problem', () => {
-			class First extends tag('first', 400) {}
-			class Second extends tag('second', 400) {}
+			class First extends HTTPError.id('first', 400) {}
+			class Second extends HTTPError.id('second', 400) {}
 
 			it('adopts the tag of the error the handler intercepted', async () => {
 				const app = new Elysia()
@@ -575,8 +575,8 @@ describe('HTTPError', () => {
 		// registered errors and a bare `Error`: each registered class is served
 		// by its handler, the bare one falls to the unhandled 500
 		it('serves registered siblings beside a bare Error', async () => {
-			class First extends tag('first') {}
-			class Second extends tag('second') {
+			class First extends HTTPError.id('first') {}
+			class Second extends HTTPError.id('second') {
 				value() {
 					return problem(418, { detail: 'never reached' })
 				}
@@ -662,7 +662,7 @@ describe('HTTPError', () => {
 	// promise but cannot be declared `async get`
 	describe('the detail and value knobs', () => {
 		it('runs the method per serve, with `this` bound to the error', async () => {
-			class Owed extends tag('OWED', 402) {
+			class Owed extends HTTPError.id('OWED', 402) {
 				constructor(readonly who: string) {
 					super('owed')
 				}
@@ -690,7 +690,7 @@ describe('HTTPError', () => {
 		})
 
 		it('awaits an async method', async () => {
-			class Deferred extends tag('DEFERRED', 409) {
+			class Deferred extends HTTPError.id('DEFERRED', 409) {
 				async detail() {
 					await Bun.sleep(1)
 					return { deferred: true }
@@ -707,24 +707,6 @@ describe('HTTPError', () => {
 			await expect(response.json()).resolves.toMatchObject({
 				type: 'DEFERRED',
 				detail: { deferred: true }
-			})
-		})
-
-		// An already-known value needs no method
-		it('accepts an eagerly assigned value detail', async () => {
-			class Eager extends tag('EAGER', 410) {
-				detail = 'known upfront'
-			}
-
-			const app = new Elysia().get('/', () => {
-				throw new Eager()
-			})
-
-			await expect((await app.handle('/')).json()).resolves.toEqual({
-				type: 'EAGER',
-				title: 'Gone',
-				detail: 'known upfront',
-				status: 410
 			})
 		})
 
@@ -779,7 +761,7 @@ describe('HTTPError', () => {
 		})
 
 		it('serves 500 when the method throws', async () => {
-			class Exploding extends tag('EXPLODING', 402) {
+			class Exploding extends HTTPError.id('EXPLODING', 402) {
 				value(): unknown {
 					throw new Error('method failed')
 				}
@@ -799,7 +781,7 @@ describe('HTTPError', () => {
 		})
 
 		it('serves a string value verbatim, without an envelope', async () => {
-			class Plain extends tag('PLAIN', 409) {
+			class Plain extends HTTPError.id('PLAIN', 409) {
 				value() {
 					return 'just text'
 				}
@@ -818,22 +800,8 @@ describe('HTTPError', () => {
 			)
 		})
 
-		it('accepts an eagerly assigned `value` knob', async () => {
-			class Eager extends tag('EAGER', 410) {
-				value = { eager: true }
-			}
-
-			const app = new Elysia().get('/', () => {
-				throw new Eager()
-			})
-
-			await expect((await app.handle('/')).json()).resolves.toEqual({
-				eager: true
-			})
-		})
-
 		it('prefers `value` over `detail`', async () => {
-			class Both extends tag('BOTH', 402) {
+			class Both extends HTTPError.id('BOTH', 402) {
 				value() {
 					return { winner: 'value' }
 				}
@@ -855,7 +823,7 @@ describe('HTTPError', () => {
 		// `undefined` is the fall-through signal at every tier, and the chain
 		// has to survive both knobs being async
 		it('falls from an undefined value through to detail', async () => {
-			class Falls extends tag('FALLS', 402) {
+			class Falls extends HTTPError.id('FALLS', 402) {
 				value() {
 					return undefined
 				}
@@ -865,7 +833,7 @@ describe('HTTPError', () => {
 				}
 			}
 
-			class AsyncFalls extends tag('ASYNC_FALLS', 402) {
+			class AsyncFalls extends HTTPError.id('ASYNC_FALLS', 402) {
 				async value() {
 					return undefined
 				}
@@ -937,7 +905,7 @@ describe('HTTPError', () => {
 		})
 
 		it('serves 500 when `detail` throws', async () => {
-			class Exploding extends tag('EXPLODING', 402) {
+			class Exploding extends HTTPError.id('EXPLODING', 402) {
 				detail(): unknown {
 					throw new Error('detail failed')
 				}
@@ -960,7 +928,7 @@ describe('HTTPError', () => {
 		// `problem()` is served at the status *it* carries, overriding the
 		// annotated one entirely
 		it('serves a problem returned from `value` at its own status', async () => {
-			class Flaky extends tag('FLAKY', 402) {
+			class Flaky extends HTTPError.id('FLAKY', 402) {
 				value() {
 					return problem(503, { detail: 'downstream dead' })
 				}
@@ -985,7 +953,7 @@ describe('HTTPError', () => {
 		})
 
 		it('serves a status returned from an async `value` raw', async () => {
-			class Made extends tag('MADE', 402) {
+			class Made extends HTTPError.id('MADE', 402) {
 				async value() {
 					return status(201, { made: 'it' })
 				}
@@ -1005,7 +973,7 @@ describe('HTTPError', () => {
 		})
 
 		it('escapes to the returned status through the error-hook lane', async () => {
-			class Flaky extends tag('FLAKY', 402) {
+			class Flaky extends HTTPError.id('FLAKY', 402) {
 				value() {
 					return problem(503, { detail: 'downstream dead' })
 				}
@@ -1028,7 +996,7 @@ describe('HTTPError', () => {
 
 		// The JIT emits a separate catch block for routes carrying error hooks
 		it('serves method bodies through the error-hook lane', async () => {
-			class Async extends tag('ASYNC', 409) {
+			class Async extends HTTPError.id('ASYNC', 409) {
 				async detail() {
 					return 'via hooks'
 				}
@@ -1049,9 +1017,9 @@ describe('HTTPError', () => {
 		})
 	})
 
-	describe('tag', () => {
+	describe('HTTPError.id', () => {
 		it('carry the tag as `type` and name the class after it', async () => {
-			class OutOfCredit extends tag('OUT_OF_CREDIT') {
+			class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT') {
 				override readonly status = 402
 			}
 
@@ -1069,12 +1037,12 @@ describe('HTTPError', () => {
 			expect(new OutOfCredit().type).toBe('OUT_OF_CREDIT')
 			expect(new OutOfCredit().name).toBe('OUT_OF_CREDIT')
 			// the factory result itself, a subclass keeps its own class name
-			expect(tag('TAGGED').name).toBe('TAGGED')
+			expect(HTTPError.id('TAGGED').name).toBe('TAGGED')
 		})
 
 		// `id` is a pure tag factory, it makes no status claim
 		it('annotate no status', async () => {
-			class Bare extends tag('OUT_OF_CREDIT') {}
+			class Bare extends HTTPError.id('OUT_OF_CREDIT') {}
 
 			expect(new Bare().status).toBeUndefined()
 		})
@@ -1082,7 +1050,7 @@ describe('HTTPError', () => {
 		// A numeric second argument annotates `status` without a class-body
 		// override, and the error still serves a full problem envelope
 		it('annotate a numeric status via the second argument', async () => {
-			class OutOfCredit extends tag('OUT_OF_CREDIT', 402) {}
+			class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT', 402) {}
 
 			expect(new OutOfCredit().status).toBe(402)
 
@@ -1103,7 +1071,7 @@ describe('HTTPError', () => {
 
 		// A status name resolves to the same numeric literal as the number
 		it('resolve a status name via the second argument', async () => {
-			class Denied extends tag('DENIED', 'Payment Required') {}
+			class Denied extends HTTPError.id('DENIED', 'Payment Required') {}
 
 			expect(new Denied().status).toBe(402)
 
@@ -1121,13 +1089,13 @@ describe('HTTPError', () => {
 		// A garbage status name must not resolve through `Object.prototype`
 		// (e.g. `.constructor`) and land a function on `.status`
 		it('leave `status` undefined when the name does not resolve', () => {
-			class Garbage extends tag('GARBAGE', 'constructor' as any) {}
+			class Garbage extends HTTPError.id('GARBAGE', 'constructor' as any) {}
 
 			expect(new Garbage().status).toBeUndefined()
 		})
 
 		it('register through .error', async () => {
-			const Teapot = tag('TEAPOT')
+			const Teapot = HTTPError.id('TEAPOT')
 
 			const app = new Elysia()
 				.get('/', () => {
@@ -1142,7 +1110,7 @@ describe('HTTPError', () => {
 		})
 
 		it('register a class annotated through the second argument via .error', async () => {
-			const Teapot = tag('TEAPOT', 418)
+			const Teapot = HTTPError.id('TEAPOT', 418)
 
 			const app = new Elysia()
 				.get('/', () => {
@@ -1156,14 +1124,12 @@ describe('HTTPError', () => {
 			await expect(response.text()).resolves.toBe('handled')
 		})
 
-		// The tag lives on the prototype, an own property would shadow a
-		// subclass accessor (which can't be expressed as an instance field).
-		// This class also pins the legacy `get value()` form: the method is the
-		// documented shape now, but a getter still reads as its value — don't
-		// convert this one
+		// `HTTPError.id` writes the tag onto the prototype, never as an
+		// instance field — an own property would shadow a subclass accessor,
+		// which is the only way to compute `status` per instance
 		it('let a subclass accessor override the annotation', async () => {
-			class Dynamic extends tag('DYNAMIC') {
-				get value() {
+			class Dynamic extends HTTPError.id('DYNAMIC') {
+				value() {
 					return { dynamic: true }
 				}
 			}

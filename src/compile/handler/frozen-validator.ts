@@ -172,6 +172,30 @@ function walkCompactError(
 ): CompactError | undefined {
 	if (!schema || typeof schema !== 'object') return
 
+	const elyTyp = schema['~elyTyp']
+	if (
+		schema.anyOf &&
+		(elyTyp === ELYSIA_TYPES.ObjectString ||
+			elyTyp === ELYSIA_TYPES.ArrayString)
+	) {
+		let decoded = value
+
+		if (typeof value === 'string')
+			try {
+				decoded = JSON.parse(value)
+			} catch {
+				return
+			}
+		else if (value === undefined) return
+
+		return walkCompactError(
+			schema.anyOf[0],
+			decoded,
+			instancePath,
+			`${schemaPath}/anyOf/0`
+		)
+	}
+
 	const type = schema.type
 
 	if (type === 'object') {
@@ -179,16 +203,22 @@ function walkCompactError(
 			return typeError(schema, instancePath, schemaPath)
 
 		const required: string[] | undefined = schema.required
-		if (Array.isArray(required))
+		if (Array.isArray(required)) {
+			// every missing key lands in one error, like TypeBox reports it
+			let missing: string[] | undefined
+
 			for (const key of required)
-				if (!(key in (value as object)))
-					return {
-						keyword: 'required',
-						schemaPath,
-						instancePath,
-						params: { requiredProperties: [key] },
-						message: `must have required properties ${key}`
-					}
+				if (!(key in (value as object))) (missing ??= []).push(key)
+
+			if (missing)
+				return {
+					keyword: 'required',
+					schemaPath,
+					instancePath,
+					params: { requiredProperties: missing },
+					message: `must have required properties ${missing.join(', ')}`
+				}
+		}
 
 		const properties = schema.properties
 		if (properties)
@@ -275,6 +305,41 @@ export function isCompactDiagnosable(schema: any) {
 	}
 
 	if (type === 'array') return isCompactDiagnosable(schema.items)
+
+	return (
+		type === 'string' ||
+		type === 'number' ||
+		type === 'integer' ||
+		type === 'boolean' ||
+		type === 'null'
+	)
+}
+
+export function isCompactWalkable(schema: any) {
+	if (!schema || typeof schema !== 'object') return false
+
+	const elyTyp = schema['~elyTyp']
+	if (
+		schema.anyOf &&
+		(elyTyp === ELYSIA_TYPES.ObjectString ||
+			elyTyp === ELYSIA_TYPES.ArrayString)
+	)
+		return isCompactWalkable(schema.anyOf[0])
+
+	if (schema.anyOf || schema.oneOf || schema.allOf) return false
+
+	const type = schema.type
+
+	if (type === 'object') {
+		const properties = schema.properties
+		if (properties)
+			for (const key in properties)
+				if (!isCompactWalkable(properties[key])) return false
+
+		return true
+	}
+
+	if (type === 'array') return isCompactWalkable(schema.items)
 
 	return (
 		type === 'string' ||

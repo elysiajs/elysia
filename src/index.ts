@@ -14,7 +14,6 @@ export {
 	ValidationError,
 	validationDetail,
 	HTTPError,
-	tag,
 	type TaggedHTTPError,
 	type SelectiveStatus
 } from './error'

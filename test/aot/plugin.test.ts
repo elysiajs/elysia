@@ -131,6 +131,40 @@ describe('AOT plugin', () => {
 		}
 	})
 
+	it('generateCompiledArtifacts honors ELYSIA_AOT_VERBOSE when the verbose option is unset', async () => {
+		const { generateCompiledArtifacts } =
+			await import('../../src/plugin/aot/core')
+		const previous = process.env.ELYSIA_AOT_VERBOSE
+		process.env.ELYSIA_AOT_VERBOSE = '1'
+
+		const warns: string[] = []
+		const warn = spyOn(console, 'warn').mockImplementation(
+			(...args: unknown[]) => {
+				warns.push(args.join(' '))
+			}
+		)
+
+		try {
+			await generateCompiledArtifacts(
+				resolve(import.meta.dir, 'fixtures/verbose-env-app.ts'),
+				{ registerFrom: REGISTER_FROM }
+			)
+
+			// Per-route detail, not the aggregate summary telling the user
+			// to set the very env var they already set.
+			const detail = warns.filter((w) =>
+				w.includes('carries a coercion/codec schema')
+			)
+			expect(detail.length).toBe(1)
+			expect(detail[0]).toContain('/coerced')
+			expect(process.env.ELYSIA_AOT_VERBOSE).toBe('1')
+		} finally {
+			warn.mockRestore()
+			if (previous === undefined) delete process.env.ELYSIA_AOT_VERBOSE
+			else process.env.ELYSIA_AOT_VERBOSE = previous
+		}
+	})
+
 	it('Bun.build inlines the manifest + injects the autoload import', async () => {
 		const { aot } = await import('../../src/plugin/aot/bun')
 

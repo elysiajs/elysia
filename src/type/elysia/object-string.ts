@@ -1,5 +1,5 @@
 import { Decode, Refine } from 'typebox/type'
-import { Check, Decode as decodeValue } from '../bridge'
+import { Check, Compile, Decode as decodeValue } from '../bridge'
 import type { TObjectOptions, TProperties } from 'typebox'
 
 import { ELYSIA_TYPES } from '../constants'
@@ -9,6 +9,10 @@ import { Union } from './union'
 import { elyType, getMeta } from './utils'
 import { nullObject } from '../../utils'
 
+// Largest encoded payload the parse memo will hold. Past this, re-parsing in
+// decode costs less than pinning the payload until the next successful decode.
+const MEMO_LIMIT = 8192
+
 export function ObjectString<T extends TProperties>(
 	property: T,
 	_options?: TObjectOptions
@@ -17,22 +21,62 @@ export function ObjectString<T extends TProperties>(
 		(_options ?? nullObject()) as any
 	)
 	const object = ObjectType(property, constraints)
+	let check: ((value: unknown) => boolean) | undefined
+
+	// one-slot memo so `Decode` reuses the parse the refine already paid for
+	let raw: string | undefined
+	let parsed: unknown
 
 	const objectString = Decode(
 		Refine(
 			StringType(),
 			(value) => {
 				if (value.charCodeAt(0) !== 123) return false
+				if (value === raw) return true
 
 				try {
-					return Check(object, JSON.parse(value))
+					const next = JSON.parse(value)
+
+					if (!check)
+						try {
+							const compiled = Compile(object) as any
+
+							// the refine runs more than once per validation; only values
+							// that already passed are memoized, so a hit is still a pass
+							if (compiled.evaluateResult)
+								compiled.evaluateResult.code = undefined
+
+							if (compiled.buildResult)
+								compiled.buildResult.functions = undefined
+
+							check = (v) => compiled.Check(v)
+						} catch {
+							check = (v) => Check(object, v)
+						}
+
+					if (!check(next)) return false
+
+					// a request rejected after this point never reaches decode,
+					// so the memo outlives it; cap what that can pin
+					if (value.length <= MEMO_LIMIT) {
+						raw = value
+						parsed = next
+					}
+
+					return true
 				} catch {
 					return false
 				}
 			},
 			() => 'must be an object'
 		),
-		(value) => decodeValue(object, JSON.parse(value))
+		(value) => {
+			const decoded = value === raw ? parsed : JSON.parse(value)
+			raw = undefined
+			parsed = undefined
+
+			return decodeValue(object, decoded)
+		}
 	)
 
 	return elyType(

@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { Elysia, HTTPError, problem, status, tag } from '../../src'
+import { Elysia, HTTPError, problem, status } from '../../src'
 import type { TaggedHTTPError } from '../../src'
 import type { ElysiaStatus } from '../../src/error'
 import type { StatusMap } from '../../src/constants'
@@ -245,9 +245,9 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	}>()
 }
 
-// `tag` carries a literal `type` and makes no status claim.
+// `HTTPError.id` carries a literal `type` and makes no status claim.
 {
-	class OutOfCredit extends tag('OUT_OF_CREDIT') {}
+	class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT') {}
 
 	const app = new Elysia().get('/', () => new OutOfCredit())
 
@@ -268,9 +268,9 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	>().toEqualTypeOf<OutOfCredit>()
 }
 
-// A `tag` subclass annotating a status serves it.
+// An `HTTPError.id` subclass annotating a status serves it.
 {
-	class OutOfCredit extends tag('OUT_OF_CREDIT') {
+	class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT') {
 		override readonly status = 402
 
 		detail() {
@@ -290,10 +290,10 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	}>()
 }
 
-// `tag`'s second argument annotates a numeric status on the returned class,
+// `HTTPError.id`'s second argument annotates a numeric status on the returned class,
 // no class-body override needed.
 {
-	class OutOfCredit extends tag('OUT_OF_CREDIT', 402) {
+	class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT', 402) {
 		detail() {
 			return { remaining: 0 }
 		}
@@ -312,10 +312,10 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	expectTypeOf(new OutOfCredit().status).toEqualTypeOf<402>()
 }
 
-// `tag`'s second argument accepts a status name and resolves it to the same
+// `HTTPError.id`'s second argument accepts a status name and resolves it to the same
 // numeric literal, both on the class annotation and the response key.
 {
-	class Denied extends tag('DENIED', 'Payment Required') {
+	class Denied extends HTTPError.id('DENIED', 'Payment Required') {
 		detail() {
 			return 'denied'
 		}
@@ -370,7 +370,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 
 // `value` wins over `detail` when both are annotated.
 {
-	class Both extends tag('BOTH', 402) {
+	class Both extends HTTPError.id('BOTH', 402) {
 		value() {
 			return { winner: 'value' as const }
 		}
@@ -389,7 +389,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 
 // A `value` that may resolve `undefined` falls through, so both tiers appear.
 {
-	class Falls extends tag('FALLS', 402) {
+	class Falls extends HTTPError.id('FALLS', 402) {
 		value(): { raw: true } | undefined {
 			return Math.random() > 0.5 ? { raw: true } : undefined
 		}
@@ -431,8 +431,8 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	}>()
 }
 
-// There's no base `value` member to override, `implements` type-checks with
-// only `type` supplied — and naming a `type` is itself the problem claim.
+// Both knobs are declared *optional* on the base, so `implements` type-checks
+// with only `type` supplied — and naming a `type` is itself the problem claim.
 {
 	class ImplNoValue extends Error implements HTTPError<'IMPL_NO_VALUE'> {
 		type = 'IMPL_NO_VALUE' as const
@@ -451,12 +451,39 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	}>()
 }
 
+// `implements` checks assignability, not member kind, so a method satisfies
+// the declared knob. A plain value no longer does.
+{
+	class ImplMethod extends Error implements HTTPError<'IMPL_METHOD'> {
+		type = 'IMPL_METHOD' as const
+		readonly status = 403
+
+		detail() {
+			return 'forbidden by policy'
+		}
+	}
+
+	class ImplValue extends Error implements HTTPError<'IMPL_VALUE'> {
+		type = 'IMPL_VALUE' as const
+		readonly status = 403
+
+		// @ts-expect-error a knob is a method, not a value
+		detail = 'forbidden by policy'
+	}
+
+	const app = new Elysia().get('/', () => new ImplMethod())
+
+	expectTypeOf<
+		(typeof app)['~Routes']['get']['response'][403]['detail']
+	>().toEqualTypeOf<string>()
+}
+
 // A registered handler's `problem()` keeps a wide `type` at the type level.
 // The runtime narrows it to the intercepted error's tag, which `string` still
 // describes truthfully — threading the literal through the registered-handler
 // response machinery is left undone deliberately.
 {
-	class Denied extends tag('DENIED', 400) {}
+	class Denied extends HTTPError.id('DENIED', 400) {}
 
 	const app = new Elysia()
 		.error(Denied, () => problem(400, { detail: 'q' }))
@@ -467,38 +494,38 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	>().toEqualTypeOf<string>()
 }
 
-// Eagerly assigned values annotate the same as their method forms.
+// The base declares both knobs as methods, so a method is the only form an
+// owned class can annotate them with — an eagerly assigned value is rejected.
 {
-	class EagerDetail extends tag('EAGER_DETAIL', 410) {
+	class EagerDetail extends HTTPError.id('EAGER_DETAIL', 410) {
+		// @ts-expect-error a knob is a method, not a value
 		detail = 'known upfront'
 	}
 
-	class EagerValue extends tag('EAGER_VALUE', 410) {
+	class EagerValue extends HTTPError.id('EAGER_VALUE', 410) {
+		// @ts-expect-error a knob is a method, not a value
 		value = { eager: true }
 	}
 
-	const app = new Elysia()
-		.get('/detail', () => new EagerDetail())
-		.get('/value', () => new EagerValue())
-
-	expectTypeOf<
-		(typeof app)['~Routes']['detail']['get']['response'][410]['detail']
-	>().toEqualTypeOf<string>()
-	expectTypeOf<
-		(typeof app)['~Routes']['value']['get']['response']
-	>().toEqualTypeOf<{ 410: { eager: boolean } }>()
+	// An accessor reads as its value, so it is rejected for the same reason
+	class DynamicValue extends HTTPError.id('DYNAMIC_VALUE', 410) {
+		// @ts-expect-error a knob is a method, not an accessor
+		get value() {
+			return { dynamic: true }
+		}
+	}
 }
 
 // Either knob declared to return `unknown` annotates nothing — the message
 // fallback is served instead.
 {
-	class OpaqueValue extends tag('OPAQUE_VALUE', 409) {
+	class OpaqueValue extends HTTPError.id('OPAQUE_VALUE', 409) {
 		value(): unknown {
 			return { whatever: true }
 		}
 	}
 
-	class OpaqueDetail extends tag('OPAQUE_DETAIL', 409) {
+	class OpaqueDetail extends HTTPError.id('OPAQUE_DETAIL', 409) {
 		detail(): unknown {
 			return { whatever: true }
 		}
@@ -520,7 +547,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 // status *it* carries — so it escapes to its own response key instead of
 // being trapped under the annotated one.
 {
-	class Flaky extends tag('FLAKY', 402) {
+	class Flaky extends HTTPError.id('FLAKY', 402) {
 		value() {
 			return problem(503, { detail: 'downstream dead' })
 		}
@@ -542,7 +569,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 
 // An async `status()` return escapes the same way, carrying its raw value.
 {
-	class Made extends tag('MADE', 402) {
+	class Made extends HTTPError.id('MADE', 402) {
 		async value() {
 			return status(201, { made: 'it' as const })
 		}
@@ -560,7 +587,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 // A mixed union composes all three tiers: the escaped status, the plain value
 // under the annotated status, and the `detail` fall-through beside it.
 {
-	class Mixed extends tag('MIXED', 402) {
+	class Mixed extends HTTPError.id('MIXED', 402) {
 		value(): ElysiaStatus<503, { esc: true }> | { plain: true } | undefined {
 			return undefined
 		}
@@ -586,7 +613,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 
 // A handler that falls through inherits the escape too.
 {
-	class Flaky extends tag('FLAKY', 402) {
+	class Flaky extends HTTPError.id('FLAKY', 402) {
 		value() {
 			return problem(503, { detail: 'downstream dead' })
 		}
@@ -604,7 +631,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 
 // Registering a real handler still reshapes away the escaped entry.
 {
-	class Flaky extends tag('FLAKY', 402) {
+	class Flaky extends HTTPError.id('FLAKY', 402) {
 		value() {
 			return problem(503, { detail: 'downstream dead' })
 		}
@@ -632,8 +659,8 @@ class Deferred extends HTTPError<'DEFERRED'> {
 // plain `Error | …`, with `Error1` absorbed before Elysia sees it. The
 // absorption is pinned below.
 {
-	class Error1 extends tag('error1') {}
-	class Error2 extends tag('error2') {
+	class Error1 extends HTTPError.id('error1') {}
+	class Error2 extends HTTPError.id('error2') {
 		value() {
 			return problem(418, { detail: 'a' })
 		}
@@ -664,7 +691,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 
 // The same holds for the function registration form.
 {
-	class Error1 extends tag('error1') {}
+	class Error1 extends HTTPError.id('error1') {}
 
 	const app = new Elysia()
 		.error(Error1, () => problem(400, { detail: 'q' }))
@@ -695,7 +722,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 // A bare `Error` beside an *unregistered* self-described class: the
 // self-described entry keeps its own status, the bare one keeps 500.
 {
-	class Denied extends tag('denied', 402) {
+	class Denied extends HTTPError.id('denied', 402) {
 		detail() {
 			return 'no funds'
 		}
@@ -716,7 +743,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 
 // And beside one whose `value()` escapes to a different status.
 {
-	class Flaky extends tag('flaky', 402) {
+	class Flaky extends HTTPError.id('flaky', 402) {
 		value() {
 			return problem(503, { detail: 'downstream dead' })
 		}
@@ -739,7 +766,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 // type runs. If TypeScript ever stops reducing here, this flips and the
 // annotation requirement can be dropped from the docs.
 {
-	class Error1 extends tag('error1') {}
+	class Error1 extends HTTPError.id('error1') {}
 
 	const handler = () => {
 		if (Math.random() > 0.5) return new Error1()
@@ -757,14 +784,14 @@ class Deferred extends HTTPError<'DEFERRED'> {
 // `HTTPError` states the contract, it never serves as an error itself — the
 // `type` that discriminates one class from another is the subclass's to name.
 {
-	// @ts-expect-error HTTPError is abstract, subclass it or use `tag`
+	// @ts-expect-error HTTPError is abstract, subclass it or use `HTTPError.id`
 	new HTTPError()
 }
 
-// What `tag` hands back is concrete, and keeps `Error`'s own constructor, so
+// What `HTTPError.id` hands back is concrete, and keeps `Error`'s own constructor, so
 // a message and a cause pass through.
 {
-	class Denied extends tag('DENIED', 402) {}
+	class Denied extends HTTPError.id('DENIED', 402) {}
 
 	expectTypeOf(new Denied()).toMatchTypeOf<Error>()
 	expectTypeOf(new Denied('no funds')).toMatchTypeOf<Error>()
@@ -777,7 +804,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 // `TaggedHTTPError` names that class, so one can be held in an annotated
 // binding and still construct to its tagged instance.
 {
-	const Denied: TaggedHTTPError<'DENIED'> = tag('DENIED')
+	const Denied: TaggedHTTPError<'DENIED'> = HTTPError.id('DENIED')
 
 	expectTypeOf(new Denied().type).toEqualTypeOf<'DENIED'>()
 	expectTypeOf(new Denied('no funds')).toMatchTypeOf<Error>()
@@ -786,7 +813,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 // `headers` annotates the wire, not the document — it rides along on the
 // response without joining the body the error describes.
 {
-	class Denied extends tag('DENIED', 402) {
+	class Denied extends HTTPError.id('DENIED', 402) {
 		override readonly headers = { 'x-reason': 'no-funds' }
 
 		detail() {

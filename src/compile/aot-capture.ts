@@ -33,7 +33,7 @@ import {
 } from '../type/validator/default-precompute'
 import {
 	isCapturedBridgeFree,
-	isCompactDiagnosable
+	isCompactWalkable
 } from './handler/frozen-validator'
 import { isAsyncPredicate } from '../type/elysia/file-type'
 import { nullObject } from '../utils'
@@ -485,7 +485,7 @@ function captureBridgeFree(
 			{ bridgeFree }
 		)
 
-		if (bridgeFree && !isCompactDiagnosable(coerced))
+		if (bridgeFree && !isCompactWalkable(coerced))
 			warnCompactErrorLoss(aot, slot)
 	}
 }

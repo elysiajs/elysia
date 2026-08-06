@@ -1,5 +1,6 @@
 import { Create } from './type/bridge'
 
+import type { MaybePromise } from './types'
 import { isProduction } from './universal/is-production'
 import { StatusMap, StatusMapBack } from './constants'
 import { primitiveElysiaTypes } from './type/constants'
@@ -944,7 +945,7 @@ export type SelectiveStatus<in out Res> = <
 >
 
 /**
- * Class returned by {@link tag}
+ * Class returned by {@link HTTPError.id}
  */
 export type TaggedHTTPError<Type extends string, Annotation = {}> = {
 	new (
@@ -1028,79 +1029,92 @@ export abstract class HTTPError<
 
 	/** Headers merged into `set.headers` when the error is served */
 	declare readonly headers?: Record<string, string>
-}
 
-/**
- * Create a concrete `HTTPError` subclass carrying `type`
- *
- * `type` carries no status annotation, annotate `status` in the subclass
- * body as a number or a status name
- *
- * @example
- * ```ts
- * class OutOfCredit extends tag('OUT_OF_CREDIT', 402) {
- *     headers = {
- *         'x-powered-by': 'Elysia'
- *     }
- * }
- * ```
- */
-export function tag<const Type extends string>(
-	type: Type
-): TaggedHTTPError<Type>
+	/**
+	 * Return a value to serve as the whole response
+	 *
+	 * Supports `status()`/`problem()` for status-based Eden response
+	 */
+	value?(): MaybePromise<unknown>
 
-/**
- * Create a concrete `HTTPError` subclass carrying `type`, annotated with
- * `status` as a number or a status name
- *
- * Annotate what is served with `detail()` (problem `detail` member) or
- * `value()` (whole-response override), either of which may be `async`
- *
- * @example
- * ```ts
- * class OutOfCredit extends tag('OUT_OF_CREDIT', 402) {}
- * class Denied extends tag('https://example.com/denied', 'Payment Required') {
- *     async detail() {
- *         return await describeBalance()
- *     }
- * }
- * ```
- */
-export function tag<
-	const Type extends string,
-	const S extends number | keyof StatusMap
->(
-	type: Type,
-	status: S
-): TaggedHTTPError<
-	Type,
-	{ readonly status: S extends keyof StatusMap ? StatusMap[S] : S }
->
+	/**
+	 * Return the `detail` member of the RFC 9457 problem document,
+	 * similar to `problem()`
+	 *
+	 * Use `value()` to override the entire response
+	 */
+	detail?(): MaybePromise<unknown>
 
-export function tag<const Type extends string>(
-	type: Type,
-	status?: number | keyof StatusMap
-): TaggedHTTPError<Type> {
-	const Tagged = class extends HTTPError<string> {
-		declare type: Type
-		declare status?: number
-		declare readonly headers?: Record<string, string>
+	/**
+	 * Create a concrete `HTTPError` subclass carrying `type`
+	 *
+	 * `type` carries no status annotation, annotate `status` in the subclass
+	 * body as a number or a status name
+	 *
+	 * @example
+	 * ```ts
+	 * class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT', 402) {
+	 *     headers = {
+	 *         'x-powered-by': 'Elysia'
+	 *     }
+	 * }
+	 * ```
+	 */
+	static id<const Type extends string>(type: Type): TaggedHTTPError<Type>
+
+	/**
+	 * Create a concrete `HTTPError` subclass carrying `type`, annotated with
+	 * `status` as a number or a status name
+	 *
+	 * Annotate what is served with `detail()` (problem `detail` member) or
+	 * `value()` (whole-response override), either of which may be `async`
+	 *
+	 * @example
+	 * ```ts
+	 * class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT', 402) {}
+	 * class Denied extends HTTPError.id('https://example.com/denied', 'Payment Required') {
+	 *     async detail() {
+	 *         return await describeBalance()
+	 *     }
+	 * }
+	 * ```
+	 */
+	static id<
+		const Type extends string,
+		const S extends number | keyof StatusMap
+	>(
+		type: Type,
+		status: S
+	): TaggedHTTPError<
+		Type,
+		{ readonly status: S extends keyof StatusMap ? StatusMap[S] : S }
+	>
+
+	static id<const Type extends string>(
+		type: Type,
+		status?: number | keyof StatusMap
+	): TaggedHTTPError<Type> {
+		const Tagged = class extends HTTPError<string> {
+			declare type: Type
+			declare status?: number
+			declare readonly headers?: Record<string, string>
+		}
+
+		Tagged.prototype.type = type
+		Tagged.prototype.name = type
+
+		Object.defineProperty(Tagged, 'name', {
+			value: type,
+			configurable: true
+		})
+
+		const resolved =
+			typeof status === 'string'
+				? StatusMap[status as keyof StatusMap]
+				: status
+
+		if (typeof resolved === 'number') Tagged.prototype.status = resolved
+
+		return Tagged
 	}
-
-	Tagged.prototype.type = type
-	Tagged.prototype.name = type
-
-	Object.defineProperty(Tagged, 'name', {
-		value: type,
-		configurable: true
-	})
-
-	const resolved =
-		typeof status === 'string'
-			? StatusMap[status as keyof StatusMap]
-			: status
-
-	if (typeof resolved === 'number') Tagged.prototype.status = resolved
-
-	return Tagged
 }

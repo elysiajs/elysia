@@ -104,11 +104,12 @@ export interface ElysiaAotOptions {
 	 * a coercion/codec schema (its 422 error detail can only name the
 	 * offending field coarsely, best-effort).
 	 *
-	 * - `false` (default): collapse all affected routes into a single
-	 *   build-end summary line (none if no route is affected)
+	 * - unset (default): follow the `ELYSIA_AOT_VERBOSE` environment variable
+	 * - `false`: collapse all affected routes into a single build-end
+	 *   summary line (none if no route is affected)
 	 * - `true`: also print the per-route detail line as each one is found
 	 *
-	 * @default false
+	 * @default undefined
 	 */
 	verbose?: boolean
 }
@@ -781,7 +782,9 @@ export async function generateCompiledArtifacts(
 
 	const previousAotVerbose = process.env.ELYSIA_AOT_VERBOSE
 	if (options?.verbose) process.env.ELYSIA_AOT_VERBOSE = '1'
-	else delete process.env.ELYSIA_AOT_VERBOSE
+	// unset option: leave ELYSIA_AOT_VERBOSE as the user set it
+	else if (options?.verbose === false)
+		delete process.env.ELYSIA_AOT_VERBOSE
 
 	try {
 		const entry = resolveEntry(file)

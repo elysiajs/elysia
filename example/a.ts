@@ -1,7 +1,7 @@
-import { Elysia, problem, tag } from '../src'
+import { Elysia, problem, HTTPError } from '../src'
 
-class Error2 extends tag('error2') {
-	body() {
+class Error2 extends HTTPError.id('error2') {
+	value() {
 		return problem(418, {
 			detail: "I'm a teapot"
 		})
